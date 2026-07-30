@@ -218,20 +218,31 @@ mod tests {
             println!("Rede: {} — {}", nome, caminho);
         }
 
-        // Nada de WAN Miniport, Hyper-V ou depurador de kernel: eles aparecem na
-        // mesma classe do Windows e não têm energia para economizar.
+        // A conferência é pelo ComponentId, não pelo nome do driver.
+        //
+        // A primeira versão deste teste rejeitava qualquer nome contendo
+        // "virtual", e quebrou numa máquina virtual da Azure: a placa de lá se
+        // chama "Mellanox ConnectX Virtual Ethernet Adapter" e é um dispositivo
+        // PCI de verdade, com energia real para gerenciar. Nome é marketing;
+        // o barramento é fato — a mesma lição do `TIPO_DE_INÍCIO`.
         for caminho in &caminhos {
-            let nome = registry::read_text("HKLM", caminho, "DriverDesc")
+            let componente = registry::read_text("HKLM", caminho, "ComponentId")
                 .unwrap_or_default()
                 .to_lowercase();
 
-            for virtual_conhecido in ["wan miniport", "hyper-v", "kernel debug", "virtual"] {
-                assert!(
-                    !nome.contains(virtual_conhecido),
-                    "adaptador virtual entrou na lista: {}",
-                    nome
-                );
-            }
+            assert!(
+                componente.starts_with("pci\\") || componente.starts_with("usb\\"),
+                "entrou na lista algo que não está num barramento físico: {}",
+                componente
+            );
+
+            // Os que motivaram o filtro — WAN Miniport de VPN, comutador do
+            // Hyper-V, depurador de kernel — são todos `ms_*` ou `vms_*`.
+            assert!(
+                !componente.starts_with("ms_") && !componente.starts_with("vms_"),
+                "adaptador virtual da Microsoft entrou na lista: {}",
+                componente
+            );
         }
     }
 
