@@ -73,12 +73,64 @@ jobs:
         working-directory: pc-optimizer
         run: npx tsc --noEmit
 
-      # A esteira roda os testes antes de empacotar. Versão que não passa nos
-      # testes não vira instalador — é a diferença entre publicar e publicar com
-      # responsabilidade.
-      - name: Rodar os testes
+      # Os testes rodam antes de empacotar: versão que não passa não vira
+      # instalador. E rodam SEPARADOS POR ÁREA de propósito — o log detalhado de
+      # uma execução só é acessível com autenticação, então a divisão em passos
+      # faz o próprio painel do GitHub apontar onde quebrou.
+      - name: Testes — núcleo e dados
         working-directory: pc-optimizer/src-tauri
-        run: cargo test --lib
+        continue-on-error: true
+        id: t_nucleo
+        run: "cargo test --lib -- core:: modules::changelog:: modules::preferences:: modules::safety:: modules::diagnostic::"
+
+      - name: Testes — medição
+        working-directory: pc-optimizer/src-tauri
+        continue-on-error: true
+        id: t_medicao
+        run: "cargo test --lib -- modules::benchmark:: modules::jitter::"
+
+      - name: Testes — catálogo e serviços
+        working-directory: pc-optimizer/src-tauri
+        continue-on-error: true
+        id: t_catalogo
+        run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::services:: modules::windows::startup::"
+
+      - name: Testes — registro e dispositivos
+        working-directory: pc-optimizer/src-tauri
+        continue-on-error: true
+        id: t_dispositivos
+        run: "cargo test --lib -- modules::windows::registry:: modules::windows::devices:: modules::windows::hardware::"
+
+      - name: Testes — sistema e limpeza
+        working-directory: pc-optimizer/src-tauri
+        continue-on-error: true
+        id: t_sistema
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware::"
+
+      - name: Testes — motor de otimização
+        working-directory: pc-optimizer/src-tauri
+        continue-on-error: true
+        id: t_motor
+        run: "cargo test --lib -- modules::windows::tests::"
+
+      - name: Barrar publicação se algum teste falhou
+        shell: bash
+        run: |
+          falhas=""
+          for r in "núcleo:${{ steps.t_nucleo.outcome }}" \
+                   "medição:${{ steps.t_medicao.outcome }}" \
+                   "catálogo:${{ steps.t_catalogo.outcome }}" \
+                   "dispositivos:${{ steps.t_dispositivos.outcome }}" \
+                   "sistema:${{ steps.t_sistema.outcome }}" \
+                   "motor:${{ steps.t_motor.outcome }}"; do
+            case "$r" in *:failure) falhas="$falhas ${r%%:*}";; esac
+          done
+
+          if [ -n "$falhas" ]; then
+            echo "Áreas com teste falhando:$falhas"
+            exit 1
+          fi
+          echo "Todas as áreas passaram."
 
       # A descrição vive num arquivo versionado, não escondida no YAML: assim ela
       # passa por revisão como qualquer outro texto do produto.
