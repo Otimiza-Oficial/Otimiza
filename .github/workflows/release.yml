@@ -93,9 +93,17 @@ jobs:
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::catalog:: modules::windows::power:: modules::windows::services:: modules::windows::startup::"
 
-      - name: Testes — registro e dispositivos
+      - name: Testes — registro
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::registry:: modules::windows::devices:: modules::windows::hardware::"
+        run: "cargo test --lib -- modules::windows::registry::"
+
+      - name: Testes — dispositivos
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::devices::"
+
+      - name: Testes — perfil de hardware
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::hardware::"
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
