@@ -61,6 +61,10 @@ pub enum ChangeRecord {
     BootLimits {
         removed: Vec<(String, String)>,
     },
+    /// Armazenamento Reservado do Windows ligado ou desligado.
+    ReservedStorage {
+        previously_enabled: bool,
+    },
     /// Tarefa agendada ligada ou desligada.
     ScheduledTask {
         path: String,
@@ -91,6 +95,9 @@ impl ChangeRecord {
                 format!("energia · ajuste {} (antes: {})", short, previous.describe())
             }
             ChangeRecord::MemoryCompression { .. } => "compressão de memória desligada".to_string(),
+            ChangeRecord::ReservedStorage { .. } => {
+                "armazenamento reservado liberado".to_string()
+            }
             ChangeRecord::ScheduledTask { name, previously_enabled, .. } => format!(
                 "tarefa agendada · {} (antes: {})",
                 name,

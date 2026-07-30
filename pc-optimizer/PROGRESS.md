@@ -8,8 +8,8 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 120 testes unitários passam, zero avisos | `cargo test --lib` |
-| Instalador gerado | `Otimiza_0.2.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
+| 121 testes unitários passam, zero avisos | `cargo test --lib` |
+| Instalador gerado | `Otimiza_0.3.0_x64-setup.exe` e `.msi`, compilados pela esteira do GitHub |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
 | Esteira do GitHub compila e testa em máquina limpa | Oito áreas de teste verdes; instaladores anexados ao release |
@@ -269,6 +269,32 @@ apagada, só marcada como desligada.
   diálogo de administrador
 - Entram no histórico com id próprio (`startup:HKCU:Discord`), então "Desfazer
   tudo" também devolve a inicialização ao estado original
+
+### Sete otimizações da 0.3.0
+
+| Otimização | O que faz |
+|---|---|
+| Liberar o Armazenamento Reservado | Devolve de 7 a 10 GB guardados só para atualizações |
+| Impedir instalação automática de apps | Sem isso, o que se desinstala hoje volta na próxima atualização |
+| Remover relógio de plataforma forçado (HPET) | Conserta uma das dicas de FPS mais repetidas e mais erradas |
+| Perfil de multimídia para jogos | Prioridade de CPU, vídeo e disco para o jogo em primeiro plano |
+| Desligar Widgets | Painel de notícias que carrega conteúdo em segundo plano |
+| Desligar o Copilot | Processo que fica pronto esperando |
+| Fixar a coleta de dados no mínimo | Faz a desativação da telemetria sobreviver a atualizações |
+
+Duas delas não são ajustes, são **consertos**: remover o HPET forçado desfaz
+estrago de tutorial ruim, e impedir a instalação automática é o que faz a limpeza
+de bloatware durar mais que a próxima atualização grande.
+
+**Correção de honestidade encontrada nesta rodada.** Três verificações dependem
+de comandos que o Windows só responde com elevação — Armazenamento Reservado,
+HPET forçado e limites de boot. Sem administrador a leitura voltava vazia, e o
+código concluía "já otimizado" ou "não se aplica a esta máquina". Era afirmar o
+que não foi verificado, exatamente o que este produto existe para não fazer.
+
+Agora esses itens aparecem como disponíveis com o aviso *"só dá para conferir o
+estado atual como administrador"*, e há teste travando a regra. O caso dos
+limites de boot estava errado desde que foi escrito.
 
 ### Detector de programas de fábrica
 

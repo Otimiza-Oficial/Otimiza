@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.2.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.2.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.3.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.3.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
@@ -15,33 +15,54 @@ Windows 10 ou 11, 64 bits.
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
 
-Boa parte das otimizações mexe em configurações protegidas do sistema e precisa
-de administrador. O Otimiza avisa quando isso acontece e reabre com permissão, se
+Boa parte do que o Otimiza faz mexe em configurações protegidas e precisa de
+administrador. O programa avisa quando isso acontece e reabre com permissão, se
 você deixar — nunca por conta própria.
 
-## Novidades desta versão
+## Esta versão é sobre PC fraco
 
-**Interface em cinco abas.** Painel, Otimizações, Diagnóstico, Resultado e
-Sistema. Os sinais vitais de CPU, memória e disco ficam fixos no topo: trocar de
-aba não faz você perder de vista o que a máquina está fazendo.
+Cinco sistemas novos, todos pensados para a máquina que mais precisa de ajuda.
 
-**Gerenciador de inicialização.** Mostra o que sobe junto com o Windows e permite
-desligar, escrevendo no mesmo lugar que o Gerenciador de Tarefas usa. Nada é
-apagado — e desfazer restaura o valor anterior byte a byte.
+**Liberador de espaço.** Em PC fraco, disco cheio é o problema que mais se
+disfarça de "PC lento": abaixo de 10% livre o Windows perde folga e a culpa cai
+no processador. Varre categoria por categoria — temporários, instaladores de
+atualização, relatórios de erro, registros — mostrando quanto cada uma ocupa e
+explicando o que é.
 
-**Quem está pesando agora.** Lista ao vivo dos programas que mais consomem, com o
-selo de quem volta sozinho no próximo boot.
+**Memória e paginação.** Em PC de 4 a 8 GB, quase todo "o computador congela" é
+memória acabando. O culpado mais comum é alguém ter desativado o arquivo de
+paginação seguindo tutorial ruim — o que não ganha desempenho e faz programa
+fechar sozinho. O Otimiza detecta e corrige num clique.
 
-**Ponto de restauração antes de otimizar.** E, se não der para criar, o Otimiza
-diz o motivo real em vez de fingir que criou.
+**Detector de conflitos.** PC lento raramente é culpa de um programa só: é de
+dois fazendo a mesma coisa. Dois antivírus varrendo um ao outro. Três
+sobreposições injetando código no mesmo jogo. Dois otimizadores desfazendo a
+configuração um do outro. Ele mostra o conflito com nome e sobrenome.
 
-**Firmware e hardware.** Detecta memória em canal único, XMP desligado, limites de
-núcleo no boot e queda de desempenho por temperatura. Cada achado diz onde se
-resolve: software, BIOS ou troca de peça.
+**Auditor de tarefas agendadas.** O Windows executa dezenas de tarefas em
+segundo plano em horários que ninguém escolheu. Mostra as que chegaram com
+programas instalados e permite desligar — reversível, como tudo aqui.
 
-**Sete otimizações novas**, incluindo interrupções diretas da placa de vídeo,
-impedir que a placa de rede durma, tirar a busca da internet do menu Iniciar e
-parar de compartilhar atualizações do Windows pela sua banda de subida.
+**Detector de programas de fábrica.** Notebook de loja chega com utilitário do
+fabricante, antivírus em teste e joguinho patrocinado. Aqui a regra de segurança
+vem primeiro: driver, runtime e biblioteca de sistema **nunca** são marcados,
+aconteça o que acontecer.
+
+## Sete otimizações novas
+
+| Otimização | O que faz |
+|---|---|
+| Liberar o Armazenamento Reservado | Devolve de 7 a 10 GB que o Windows guarda só para atualizações |
+| Impedir instalação automática de apps | Sem isso, o que você desinstalar hoje volta na próxima atualização |
+| Remover relógio de plataforma forçado | Conserta uma das "dicas de FPS" mais repetidas e mais erradas da internet |
+| Perfil de multimídia para jogos | Prioridade de processador, vídeo e disco para o jogo em primeiro plano |
+| Desligar Widgets | Tira o painel de notícias que carrega conteúdo em segundo plano |
+| Desligar o Copilot | Libera o processo que fica pronto esperando |
+| Fixar a coleta de dados no mínimo | Faz a desativação da telemetria sobreviver às atualizações |
+
+São **35 otimizações** no total, e o Otimiza marca quais **pesam na sua máquina**
+em particular — pouca memória, disco mecânico ou poucos núcleos mudam o que vale
+a pena.
 
 ## O que o Otimiza não faz
 
@@ -64,8 +85,9 @@ sozinhas para provar qualquer coisa.
 ## Tudo é reversível
 
 Cada mudança grava o valor anterior antes de escrever. "Desfazer tudo" restaura o
-que existia, não algo parecido. A única exceção é apagar arquivos temporários,
-que é marcada como **sem volta** e nunca entra no "Otimizar agora".
+que existia, não algo parecido — inclusive programas de inicialização e tarefas
+agendadas. As duas exceções são apagar arquivos e limpar o cache de
+atualizações, ambas marcadas como **sem volta** e fora do "Otimizar agora".
 
 ## Ainda não há versão para macOS e Linux
 

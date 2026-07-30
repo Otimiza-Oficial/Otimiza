@@ -168,6 +168,51 @@ pub fn set_memory_compression(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Se o Armazenamento Reservado está ligado.
+///
+/// O Windows 10 e 11 reservam vários GB do disco para atualizações. Em SSD
+/// pequeno isso pesa. `Get-WindowsReservedStorageState` devolve `Enabled` ou
+/// `Disabled` em inglês em qualquer idioma do sistema.
+pub fn reserved_storage_enabled() -> Option<bool> {
+    let output = shell::run(
+        "powershell",
+        &[
+            "-NoProfile",
+            "-Command",
+            "(Get-WindowsReservedStorageState -ErrorAction SilentlyContinue).ReservedStorageState",
+        ],
+    )
+    .ok()?;
+
+    if !output.success {
+        return None;
+    }
+
+    match output.stdout.trim() {
+        "Enabled" => Some(true),
+        "Disabled" => Some(false),
+        _ => None,
+    }
+}
+
+pub fn set_reserved_storage(enabled: bool) -> Result<(), String> {
+    let estado = if enabled { "Enabled" } else { "Disabled" };
+    let script = format!(
+        "Set-WindowsReservedStorageState -State {} -ErrorAction Stop",
+        estado
+    );
+
+    shell::run_checked("powershell", &["-NoProfile", "-Command", &script]).map_err(|e| {
+        format!(
+            "O Windows recusou alterar o Armazenamento Reservado. \
+             Isso costuma acontecer quando há atualização em andamento: {}",
+            e
+        )
+    })?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

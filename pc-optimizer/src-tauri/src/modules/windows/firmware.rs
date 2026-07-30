@@ -252,6 +252,27 @@ pub fn parse_boot_limits(output: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Se alguém forçou o relógio de plataforma (HPET) na configuração de boot.
+///
+/// É uma das "dicas de FPS" mais repetidas da internet e uma das mais erradas:
+/// forçar o HPET obriga o Windows a usar um temporizador mais lento que o
+/// escolhido automaticamente, e o efeito comum é engasgo, não ganho. Quando a
+/// opção está presente, o certo é remover — não é otimizar, é desfazer estrago.
+pub fn forced_platform_clock() -> Option<String> {
+    let output = shell::run("bcdedit", &["/enum", "{current}"]).ok()?;
+
+    if !output.success {
+        return None;
+    }
+
+    output
+        .stdout
+        .lines()
+        .map(|line| line.trim().to_lowercase())
+        .find(|line| line.starts_with("useplatformclock"))
+        .map(|line| line.split_whitespace().nth(1).unwrap_or("sim").to_string())
+}
+
 pub fn boot_limits() -> Vec<(String, String)> {
     match shell::run("bcdedit", &["/enum", "{current}"]) {
         Ok(output) if output.success => parse_boot_limits(&output.stdout),

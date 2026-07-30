@@ -112,6 +112,19 @@ impl WindowsOptimizer {
                 let bytes = cleanup::estimate_update_cache();
                 Some(format!("{} para liberar", cleanup::format_size(bytes)))
             }
+
+            // Sem elevação não conseguimos sequer LER estas configurações. Dizer
+            // isso é obrigatório: o usuário precisa saber que o item aparece
+            // como disponível porque não foi possível conferir, não porque
+            // sabemos que falta aplicar.
+            Action::ReservedStorage { .. }
+            | Action::RemoveForcedPlatformClock
+            | Action::ClearBootLimits
+                if !registry::is_elevated() =>
+            {
+                Some("Só dá para conferir o estado atual como administrador.".to_string())
+            }
+
             _ => None,
         }
     }
@@ -208,7 +221,16 @@ impl WindowsOptimizer {
                 }
             }
 
+            // As três verificações abaixo dependem de comandos que o Windows só
+            // responde com elevação. Sem ela, a leitura volta vazia — e concluir
+            // "está tudo certo" a partir de uma leitura que não aconteceu seria
+            // afirmar o que não foi verificado. Nesses casos oferecemos o item e
+            // dizemos, no detalhe, que a conferência exige administrador.
             Action::ClearBootLimits => {
+                if !registry::is_elevated() {
+                    return ActionState::Pending;
+                }
+
                 if firmware::boot_limits().is_empty() {
                     ActionState::Satisfied
                 } else {
@@ -241,6 +263,33 @@ impl WindowsOptimizer {
 
             Action::CleanUpdateCache => {
                 if cleanup::estimate_update_cache() > 0 {
+                    ActionState::Pending
+                } else {
+                    ActionState::Satisfied
+                }
+            }
+
+            Action::ReservedStorage { enabled } => {
+                if !registry::is_elevated() {
+                    return ActionState::Pending;
+                }
+
+                match power::reserved_storage_enabled() {
+                    Some(current) if current == *enabled => ActionState::Satisfied,
+                    Some(_) => ActionState::Pending,
+                    // Elevados e ainda sem resposta: este Windows não tem o recurso.
+                    None => ActionState::NotApplicable,
+                }
+            }
+
+            // Só aparece como disponível se alguém realmente forçou o relógio.
+            // Num PC saudável esta linha nunca é oferecida.
+            Action::RemoveForcedPlatformClock => {
+                if !registry::is_elevated() {
+                    return ActionState::Pending;
+                }
+
+                if firmware::forced_platform_clock().is_some() {
                     ActionState::Pending
                 } else {
                     ActionState::Satisfied
@@ -748,6 +797,40 @@ impl WindowsOptimizer {
                 Ok(None)
             }
 
+            Action::ReservedStorage { enabled } => {
+                let anterior = power::reserved_storage_enabled()
+                    .ok_or("Este Windows não tem Armazenamento Reservado.")?;
+
+                if anterior == *enabled {
+                    return Ok(None);
+                }
+
+                power::set_reserved_storage(*enabled)?;
+                changes.push(ChangeRecord::ReservedStorage {
+                    previously_enabled: anterior,
+                });
+                Ok(Some("Espaço reservado devolvido ao disco.".to_string()))
+            }
+
+            Action::RemoveForcedPlatformClock => {
+                let Some(valor) = firmware::forced_platform_clock() else {
+                    return Ok(None);
+                };
+
+                shell::run_checked("bcdedit", &["/deletevalue", "{current}", "useplatformclock"])?;
+
+                // Reaproveita o registro de limites de boot: a reversão dele já
+                // sabe devolver um valor do bcdedit ao que estava.
+                changes.push(ChangeRecord::BootLimits {
+                    removed: vec![("useplatformclock".to_string(), valor.clone())],
+                });
+
+                Ok(Some(format!(
+                    "Relógio de plataforma forçado removido (estava em {}).",
+                    valor
+                )))
+            }
+
             Action::CleanUpdateCache => {
                 let result = cleanup::run_update_cache()?;
 
@@ -887,6 +970,10 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 power::set_memory_compression(*previously_enabled)
             }
 
+            ChangeRecord::ReservedStorage { previously_enabled } => {
+                power::set_reserved_storage(*previously_enabled)
+            }
+
             ChangeRecord::ScheduledTask {
                 path,
                 name,
@@ -957,6 +1044,43 @@ mod tests {
             .collect();
 
         assert!(!batch.contains(&"clean_temp_files"));
+    }
+
+    /// Sem elevação, o Windows nega a leitura de algumas configurações. Nesses
+    /// casos o produto não pode dizer "já otimizado" — isso seria afirmar o que
+    /// não foi verificado, que é exatamente o que ele existe para não fazer.
+    #[test]
+    fn nao_afirma_estar_otimizado_o_que_nao_conseguiu_conferir() {
+        // Com elevação a leitura funciona e a regra não se aplica.
+        if registry::is_elevated() {
+            return;
+        }
+
+        let optimizer = WindowsOptimizer::new();
+        let log = ChangeLog::load();
+
+        for id in ["disable_reserved_storage", "remove_forced_hpet", "clear_boot_limits"] {
+            let spec = catalog::find(id).expect("otimização deveria existir");
+
+            // Já aplicada por nós é outra história: aí o histórico é a prova.
+            if log.is_applied(id) {
+                continue;
+            }
+
+            assert_ne!(
+                optimizer.inspect(spec, &log),
+                OptimizationState::AlreadyOptimal,
+                "{} afirma estar otimizado sem ter conseguido conferir",
+                id
+            );
+
+            let detalhe = optimizer.detail(spec).unwrap_or_default();
+            assert!(
+                detalhe.contains("administrador"),
+                "{} não explica que a conferência exige administrador",
+                id
+            );
+        }
     }
 
     /// "Otimizar Agora" nunca pode abrir mão de segurança por conta própria.
