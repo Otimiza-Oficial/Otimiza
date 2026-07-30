@@ -97,3 +97,11 @@ público-alvo.
 
 O `PROGRESS.md` registra apenas o que foi **verificado**. Funcionalidade que
 existe no código mas nunca foi executada aparece como pendente.
+
+## Licença
+
+Código aberto à leitura, não ao uso. Veja [`LICENSE`](LICENSE).
+
+O código está público porque um programa que altera configurações do seu sistema
+deveria poder ser auditado por quem instala. Isso não é o mesmo que licença de
+uso: copiar, redistribuir ou usar comercialmente exige autorização por escrito.
