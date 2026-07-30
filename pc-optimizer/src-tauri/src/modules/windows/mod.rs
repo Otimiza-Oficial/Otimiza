@@ -918,6 +918,101 @@ mod tests {
         println!("bytes após o ciclo: {:?}", restored);
     }
 
+    /// Ciclo real de TODAS as otimizações que exigem administrador.
+    ///
+    /// Cada uma é aplicada, conferida contra o sistema e desfeita, e no fim o
+    /// estado precisa estar idêntico ao do começo. É o teste que faltava: até
+    /// aqui só o que roda sem elevação tinha sido executado de verdade.
+    ///
+    /// Exige sessão elevada:
+    /// `cargo test --lib -- --ignored --nocapture real_admin_optimizations`
+    #[test]
+    #[ignore]
+    fn real_admin_optimizations_apply_and_revert() {
+        assert!(
+            registry::is_elevated(),
+            "este teste precisa de uma sessão como administrador"
+        );
+
+        let optimizer = WindowsOptimizer::new();
+        let mut log = ChangeLog::load();
+
+        // Só as que exigem elevação, são reversíveis e não trocam segurança por
+        // desempenho. `AlreadyOptimal` fica de fora: testá-la exigiria
+        // desconfigurar a máquina de quem está rodando o teste.
+        let alvos: Vec<&OptimizationSpec> = catalog::CATALOG
+            .iter()
+            .filter(|spec| spec.requires_admin && spec.reversible && !spec.security_tradeoff)
+            .filter(|spec| {
+                matches!(
+                    optimizer.inspect(spec, &log),
+                    OptimizationState::Available | OptimizationState::Applied
+                )
+            })
+            .collect();
+
+        println!("otimizações a testar: {}", alvos.len());
+        let mut testadas = 0;
+
+        for spec in alvos {
+            let estado_inicial = optimizer.inspect(spec, &log);
+
+            // Cada uma percorre o ciclo completo e termina exatamente no estado em
+            // que começou. Quem já está aplicada percorre o caminho inverso —
+            // mesmos códigos, ordem trocada — em vez de ficar sem cobertura.
+            let (primeiro, segundo, esperado_no_meio) = match estado_inicial {
+                OptimizationState::Applied => ("desfazer", "aplicar", OptimizationState::Available),
+                _ => ("aplicar", "desfazer", OptimizationState::Applied),
+            };
+
+            let executar = |acao: &str, log: &mut ChangeLog| match acao {
+                "aplicar" => optimizer.apply(spec.id, log),
+                _ => optimizer.revert(spec.id, log),
+            };
+
+            let meio = executar(primeiro, &mut log)
+                .unwrap_or_else(|erro| panic!("{} `{}` falhou: {}", primeiro, spec.id, erro));
+
+            println!(
+                "  {} → {} ({} mudança(s)){}",
+                spec.id,
+                primeiro,
+                meio.changes_count,
+                if meio.changes.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", meio.changes.join(" | "))
+                }
+            );
+
+            let estado_meio = optimizer.inspect(spec, &log);
+            assert_eq!(
+                estado_meio, esperado_no_meio,
+                "{} ficou em {:?} depois de {}",
+                spec.id, estado_meio, primeiro
+            );
+
+            executar(segundo, &mut log)
+                .unwrap_or_else(|erro| panic!("{} `{}` falhou: {}", segundo, spec.id, erro));
+
+            assert_eq!(
+                optimizer.inspect(spec, &log),
+                estado_inicial,
+                "{} não voltou ao estado em que estava antes do teste",
+                spec.id
+            );
+
+            println!("  {} → {}, sistema no estado original", spec.id, segundo);
+            testadas += 1;
+        }
+
+        assert!(
+            testadas > 0,
+            "nenhuma otimização de administrador estava disponível para testar"
+        );
+        println!("ciclo completo em {} otimização(ões)", testadas);
+    }
+
     /// Fluxo completo do produto: medir → otimizar → medir de novo → comparar → desfazer.
     ///
     /// Valida o encadeamento inteiro contra o sistema real. Leva ~20 segundos.

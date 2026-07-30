@@ -30,4 +30,11 @@ sysinfo = "0.33"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+# Já vem na árvore por causa do winreg e do Tauri. Usado só para perguntar ao
+# Windows se o processo está elevado — a única resposta confiável.
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Threading",
+] }
 

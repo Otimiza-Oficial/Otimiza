@@ -149,6 +149,34 @@ pub fn subkeys(hive: &str, path: &str) -> Result<Vec<String>, String> {
     Ok(key.enum_keys().filter_map(|k| k.ok()).collect())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Confere a detecção de elevação contra uma fonte independente do nosso
+    /// código: o nível de integridade do token, informado pelo próprio Windows.
+    ///
+    /// Os SIDs são iguais em qualquer idioma — S-1-16-12288 é "alto"
+    /// (administrador) e S-1-16-16384 é "sistema". Este teste existe porque a
+    /// implementação anterior errava silenciosamente, e um erro aqui trava o
+    /// usuário num pedido de permissão que ele já tem.
+    #[test]
+    fn elevation_matches_the_token_integrity_level() {
+        let saida = super::super::shell::run("whoami", &["/groups"])
+            .expect("whoami falhou");
+
+        let alto = saida.stdout.contains("S-1-16-12288");
+        let sistema = saida.stdout.contains("S-1-16-16384");
+        let esperado = alto || sistema;
+
+        assert_eq!(
+            is_elevated(),
+            esperado,
+            "detecção de elevação discorda do nível de integridade do token"
+        );
+    }
+}
+
 /// Nomes dos valores de uma chave. Lista vazia quando a chave não existe.
 pub fn value_names(hive: &str, path: &str) -> Vec<String> {
     match root(hive).and_then(|root| {
@@ -180,10 +208,42 @@ pub fn key_exists(hive: &str, path: &str) -> bool {
 
 /// Verifica se o processo tem privilégios de administrador.
 ///
-/// Testa abrindo para escrita uma chave de HKLM que só administradores podem alterar.
-/// Sem elevação, praticamente nenhuma otimização de sistema pode ser aplicada.
+/// Pergunta ao próprio Windows, lendo o token do processo. A versão anterior
+/// tentava abrir `HKLM\SOFTWARE` para escrita e concluía elevação a partir disso
+/// — e estava errada: essa chave tem permissões restritas em parte das máquinas,
+/// então falhava MESMO com administrador. O sintoma seria o pior possível: o app
+/// pedindo elevação para quem já é administrador, num laço sem saída.
+///
+/// A lição vale além daqui: permissão de chave é um palpite sobre elevação; o
+/// token é a resposta.
 pub fn is_elevated() -> bool {
-    RegKey::predef(HKEY_LOCAL_MACHINE)
-        .open_subkey_with_flags("SOFTWARE", KEY_WRITE)
-        .is_ok()
+    use std::mem;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows_sys::Win32::Security::{
+        GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+    };
+    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+    unsafe {
+        let mut token: HANDLE = std::ptr::null_mut();
+
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+            return false;
+        }
+
+        let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+        let mut returned = 0u32;
+
+        let ok = GetTokenInformation(
+            token,
+            TokenElevation,
+            &mut elevation as *mut _ as *mut _,
+            mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut returned,
+        );
+
+        CloseHandle(token);
+
+        ok != 0 && elevation.TokenIsElevated != 0
+    }
 }
