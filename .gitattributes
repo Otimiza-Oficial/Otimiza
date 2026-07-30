@@ -1,0 +1,17 @@
+# Normaliza fim de linha: LF no repositório, CRLF no Windows ao trabalhar.
+# Sem isso, cada arquivo aparece como modificado logo depois de commitado, e o
+# `git status` vira ruído que esconde as mudanças de verdade.
+* text=auto
+
+# Arquivos que precisam manter CRLF sempre
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binários — nunca normalizar
+*.png binary
+*.ico binary
+*.icns binary
+*.svg text
+*.exe binary
+*.msi binary
