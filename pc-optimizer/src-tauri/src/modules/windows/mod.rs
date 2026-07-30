@@ -8,6 +8,7 @@
 
 pub mod catalog;
 pub mod cleanup;
+pub mod devices;
 pub mod firmware;
 pub mod hardware;
 pub mod power;
@@ -205,6 +206,20 @@ impl WindowsOptimizer {
                     ActionState::Pending
                 }
             }
+
+            Action::GpuMsiMode => match devices::msi_ja_ativo() {
+                Some(true) => ActionState::Satisfied,
+                Some(false) => ActionState::Pending,
+                // Sem placa reconhecida, não há o que ajustar — e chutar qual
+                // dispositivo é a GPU seria mexer em interrupção alheia.
+                None => ActionState::NotApplicable,
+            },
+
+            Action::NicPowerSaving => match devices::economia_de_energia_da_rede_desligada() {
+                Some(true) => ActionState::Satisfied,
+                Some(false) => ActionState::Pending,
+                None => ActionState::NotApplicable,
+            },
 
             // Só faz sentido oferecer a limpeza se houver algo a limpar.
             Action::CleanTempFiles => {
@@ -650,6 +665,16 @@ impl WindowsOptimizer {
                 let count = removed.len();
                 changes.push(ChangeRecord::BootLimits { removed });
                 Ok(Some(format!("{} limite(s) removido(s).", count)))
+            }
+
+            Action::GpuMsiMode => {
+                changes.extend(devices::ativar_msi()?);
+                Ok(None)
+            }
+
+            Action::NicPowerSaving => {
+                changes.extend(devices::desligar_economia_de_energia_da_rede()?);
+                Ok(None)
             }
 
             Action::CleanTempFiles => {

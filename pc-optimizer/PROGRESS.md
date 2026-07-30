@@ -50,6 +50,28 @@ Catálogo em `src-tauri/src/modules/windows/catalog.rs`, todas reversíveis:
 | Desativar hibernação | Situacional |
 | Limpar arquivos temporários | Resposta do sistema — **irreversível** |
 
+**Otimizações de hardware** — exigem descobrir o dispositivo no registro, porque
+o identificador muda de PC para PC:
+
+| Otimização | O que ataca |
+|---|---|
+| Interrupções diretas da placa de vídeo (MSI) | A GPU avisa a CPU por fila própria em vez de disputar uma compartilhada. É latência, não FPS médio |
+| Impedir que a placa de rede durma | O Windows desliga a placa e o primeiro pacote depois atrasa — causa real de pico de ping |
+
+O filtro de placa de rede foi o que mais deu trabalho acertar: a classe de rede do
+Windows lista WAN Miniports de VPN, adaptadores do Hyper-V e o do depurador de
+kernel junto com as placas reais. O primeiro teste pegou **onze** dispositivos,
+dez deles virtuais. O `ComponentId` separa os dois mundos — físico começa com o
+barramento (`pci\`, `usb\`).
+
+**Otimizações de consumo de fundo:**
+
+| Otimização | O que ataca |
+|---|---|
+| Desligar aplicativos em segundo plano | Apps da Store rodando sem você usar |
+| Tirar a busca na internet do menu Iniciar | O menu espera resposta da web para achar programa já instalado |
+| Parar de compartilhar atualizações | O Windows usa sua banda de subida para servir outras máquinas |
+
 **Otimizações profundas** (as que separam o produto de uma lista de tweaks
 copiada da internet):
 
@@ -321,9 +343,10 @@ altera nada.
 
 ### Cobertura real das otimizações de administrador
 
-O ciclo com elevação foi executado. O resultado honesto é que **a máquina de
-desenvolvimento só conseguiu exercitar 1 das 14**: as outras já estão no estado
-final, e testá-las exigiria desconfigurar o PC de quem roda o teste.
+O ciclo com elevação aplica cada otimização, confere contra o sistema, desfaz e
+exige que o estado final seja idêntico ao inicial. **4 otimizações percorreram o
+ciclo completo** na máquina de desenvolvimento. As demais já estão no estado
+final aqui, e testá-las exigiria desconfigurar o PC de quem roda o teste.
 
 Tipos de ação já executados contra um sistema real:
 
@@ -332,14 +355,17 @@ Tipos de ação já executados contra um sistema real:
 | Valor de registro (DWORD e texto) | sim |
 | Valor de registro binário (inicialização) | sim, com reversão byte-exata |
 | Enumeração de interfaces de rede (Nagle) | sim, com elevação |
+| Enumeração de classe de dispositivo (placa de rede) | sim, com elevação |
+| Política de máquina em `HKLM\SOFTWARE\Policies` | sim, com elevação |
 | Desativar serviço | **não** |
 | Trocar plano de energia | **não** |
 | Ajuste fino de energia (estacionamento de núcleos) | **não** |
+| MSI da placa de vídeo | **não** — já estava ativo aqui |
 | Hibernação, limites de boot, compressão de memória | **não** — indisponíveis aqui |
 
-As três primeiras lacunas são as otimizações de maior impacto do catálogo. Elas
-funcionam segundo o código e os testes de unidade, mas nunca foram vistas
-aplicando e revertendo numa máquina.
+As três primeiras lacunas são otimizações de alto impacto. Elas funcionam segundo
+o código e os testes de unidade, mas nunca foram vistas aplicando e revertendo
+numa máquina.
 
 ### Antes de vender
 1. **Fechar as lacunas acima numa máquina de teste** — de preferência uma que
