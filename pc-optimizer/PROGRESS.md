@@ -50,6 +50,23 @@ Catálogo em `src-tauri/src/modules/windows/catalog.rs`, todas reversíveis:
 | Desativar hibernação | Situacional |
 | Limpar arquivos temporários | Resposta do sistema — **irreversível** |
 
+**O que pesa NESTA máquina.** Cada otimização declara em que tipo de hardware ela
+vale muito mais que a média — pouca RAM, disco mecânico, poucos núcleos. O
+produto cruza isso com o hardware detectado e marca as que importam para aquele
+PC, subindo-as na lista.
+
+Não é promessa de milagre. É reconhecer que desligar efeito visual muda pouco num
+PC forte e muda muito num de 4 GB, e dizer isso ao cliente em vez de entregar a
+mesma lista de vinte itens para todo mundo.
+
+**Otimizações para máquina modesta:**
+
+| Otimização | O que ataca |
+|---|---|
+| Desligar indexação de busca | O indexador lê disco e gasta CPU sem hora marcada — pesa em HD e em CPU fraca |
+| Desligar transparência das janelas | O efeito é redesenhado a cada quadro pela GPU; em vídeo integrado aparece |
+| Limpar instaladores de atualizações | A limpeza que mais devolve espaço, geralmente vários GB |
+
 **Otimizações de hardware** — exigem descobrir o dispositivo no registro, porque
 o identificador muda de PC para PC:
 
@@ -186,6 +203,21 @@ desligada**. Era exatamente a armadilha prevista.
 O "Otimizar agora" tenta criar um ponto antes de mexer em qualquer coisa, informa
 o resultado real no registro ao vivo, e segue mesmo se não der — porque o
 histórico já reverte item por item.
+
+### Publicação de versões
+
+`.github/workflows/release.yml` compila em máquina limpa do GitHub ao empurrar
+uma tag `v*`, roda os testes antes de empacotar e anexa os instaladores ao
+release. Versão que não passa nos testes não vira instalador.
+
+A descrição fica em `.github/release-notes.md`, versionada como qualquer outro
+texto do produto — passa por revisão, não fica escondida dentro do YAML.
+
+**macOS e Linux estão desligados de propósito.** Todo o motor de otimização é
+exclusivo do Windows: são 27 pontos de código com `cfg(windows)`, e fora dele
+cada comando responde "não implementado". Publicar esses instaladores entregaria
+um programa que abre, mostra painéis vazios e não faz nada, carregando a marca.
+Os blocos estão prontos no workflow, comentados, aguardando motor próprio.
 
 ### Instalador
 

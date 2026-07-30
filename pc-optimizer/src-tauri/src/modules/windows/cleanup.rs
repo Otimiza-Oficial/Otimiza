@@ -113,6 +113,70 @@ fn clean_directory(dir: &Path, result: &mut CleanupResult) {
     }
 }
 
+/// Pasta onde o Windows guarda os instaladores já usados das atualizações.
+///
+/// Depois que uma atualização é instalada, o instalador continua ali ocupando
+/// espaço. Em PC com SSD pequeno isso vira gigabytes parados — e é a limpeza que
+/// mais devolve espaço sem risco nenhum.
+fn update_cache_dir() -> Option<PathBuf> {
+    let windows = std::env::var("SystemRoot").ok()?;
+    Some(PathBuf::from(windows).join("SoftwareDistribution").join("Download"))
+}
+
+pub fn estimate_update_cache() -> u64 {
+    update_cache_dir()
+        .filter(|dir| dir.exists())
+        .map(|dir| directory_size(&dir))
+        .unwrap_or(0)
+}
+
+/// Limpa o cache de atualizações do Windows.
+///
+/// Os serviços de atualização precisam parar antes: apagar com eles rodando
+/// deixaria arquivos travados para trás e, pior, poderia confundir uma
+/// atualização em andamento. Eles voltam ao final, sempre — mesmo se a limpeza
+/// falhar no meio.
+pub fn run_update_cache() -> Result<CleanupResult, String> {
+    let dir = update_cache_dir().ok_or("Não foi possível localizar a pasta do Windows.")?;
+
+    if !dir.exists() {
+        return Ok(CleanupResult {
+            bytes_freed: 0,
+            files_removed: 0,
+            files_skipped: 0,
+        });
+    }
+
+    // Guardar o estado anterior de cada serviço evita deixar desligado o que já
+    // estava desligado por decisão do usuário.
+    let servicos = ["wuauserv", "bits"];
+    let mut estavam_rodando = Vec::new();
+
+    for servico in servicos {
+        let rodando = super::services::is_running(servico);
+        estavam_rodando.push(rodando);
+
+        if rodando {
+            let _ = super::services::stop(servico);
+        }
+    }
+
+    let mut result = CleanupResult {
+        bytes_freed: 0,
+        files_removed: 0,
+        files_skipped: 0,
+    };
+    clean_directory(&dir, &mut result);
+
+    for (servico, estava_rodando) in servicos.iter().zip(estavam_rodando) {
+        if estava_rodando {
+            let _ = super::services::start(servico);
+        }
+    }
+
+    Ok(result)
+}
+
 /// Formata bytes para exibição ao usuário.
 pub fn format_size(bytes: u64) -> String {
     const GB: f64 = 1_073_741_824.0;

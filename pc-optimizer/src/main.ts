@@ -19,6 +19,7 @@ interface OptimizationInfo {
   requires_restart: boolean;
   reversible: boolean;
   security_tradeoff: boolean;
+  recommended: boolean;
   state: State;
   detail: string | null;
 }
@@ -620,13 +621,19 @@ function renderGroup(category: Category, items: OptimizationInfo[]): string {
   const open = collapsedGroups.has(category) ? "" : " open";
   const summary = pending > 0 ? `${pending} a aplicar` : "tudo certo";
 
+  // O que pesa nesta máquina sobe: quem abre o grupo vê primeiro o que vale a
+  // pena para o hardware dele, não a ordem em que escrevemos o catálogo.
+  const ordenados = [...items].sort(
+    (a, b) => Number(b.recommended) - Number(a.recommended)
+  );
+
   return `
     <details class="opt-group"${open} data-category="${category}">
       <summary class="group-head">
         <span>${CATEGORY_LABELS[category]}</span>
         <span class="group-count">${summary} · ${items.length}</span>
       </summary>
-      ${items.map(renderOptimization).join("")}
+      ${ordenados.map(renderOptimization).join("")}
     </details>
   `;
 }
@@ -640,6 +647,8 @@ function renderOptimization(item: OptimizationInfo): string {
     `<span class="chip">${GAIN_LABELS[item.expected_gain]}</span>`,
   ];
 
+  if (item.recommended)
+    chips.push(`<span class="chip" data-recommended="true">pesa nesta máquina</span>`);
   if (item.requires_restart) chips.push(`<span class="chip">exige reiniciar</span>`);
   if (item.requires_admin) chips.push(`<span class="chip">administrador</span>`);
   if (!item.reversible) chips.push(`<span class="chip" data-warn="true">sem volta</span>`);
@@ -651,7 +660,7 @@ function renderOptimization(item: OptimizationInfo): string {
   return `
     <details class="optimization" data-state="${item.state}">
       <summary class="opt-row">
-        <span class="gain-dot" data-gain="${item.expected_gain}"></span>
+        <span class="gain-dot" data-gain="${item.expected_gain}" ${item.recommended ? 'data-recommended="true"' : ""}></span>
         <span class="opt-name">${escapeHtml(item.name)}</span>
         ${actionControl(item)}
       </summary>

@@ -51,7 +51,7 @@ impl WindowsOptimizer {
             .iter()
             .map(|spec| {
                 let state = self.inspect(spec, log);
-                spec.to_info(state, self.detail(spec))
+                spec.to_info(state, self.detail(spec), pesa_nesta_maquina(spec))
             })
             .collect()
     }
@@ -101,6 +101,10 @@ impl WindowsOptimizer {
         match spec.actions.first()? {
             Action::CleanTempFiles => {
                 let bytes = cleanup::estimate();
+                Some(format!("{} para liberar", cleanup::format_size(bytes)))
+            }
+            Action::CleanUpdateCache => {
+                let bytes = cleanup::estimate_update_cache();
                 Some(format!("{} para liberar", cleanup::format_size(bytes)))
             }
             _ => None,
@@ -224,6 +228,14 @@ impl WindowsOptimizer {
             // Só faz sentido oferecer a limpeza se houver algo a limpar.
             Action::CleanTempFiles => {
                 if cleanup::estimate() > 0 {
+                    ActionState::Pending
+                } else {
+                    ActionState::Satisfied
+                }
+            }
+
+            Action::CleanUpdateCache => {
+                if cleanup::estimate_update_cache() > 0 {
                     ActionState::Pending
                 } else {
                     ActionState::Satisfied
@@ -677,6 +689,15 @@ impl WindowsOptimizer {
                 Ok(None)
             }
 
+            Action::CleanUpdateCache => {
+                let result = cleanup::run_update_cache()?;
+
+                Ok(Some(format!(
+                    "{} liberados dos instaladores de atualização.",
+                    cleanup::format_size(result.bytes_freed)
+                )))
+            }
+
             Action::CleanTempFiles => {
                 let result = cleanup::run();
 
@@ -733,6 +754,26 @@ impl Default for WindowsOptimizer {
 /// entre um programa chamado "SysMain" e a otimização de mesmo nome.
 fn startup_change_id(hive: &str, name: &str) -> String {
     format!("startup:{}:{}", hive.to_uppercase(), name)
+}
+
+/// Se esta otimização pesa muito mais nesta máquina do que na média.
+///
+/// É o que permite dizer ao dono de um PC de 4 GB quais ajustes valem a pena
+/// para ELE, em vez de entregar a mesma lista de vinte itens para todo mundo e
+/// deixar a pessoa adivinhar.
+fn pesa_nesta_maquina(spec: &OptimizationSpec) -> bool {
+    use catalog::Boost;
+    use hardware::StorageKind;
+
+    let perfil = hardware::profile();
+
+    spec.highlight_when.iter().any(|condicao| match condicao {
+        // 8 GB é a fronteira prática: abaixo disso o Windows já começa a
+        // comprimir memória e a paginar em uso comum.
+        Boost::LowRam => perfil.total_ram_gb <= 8.5,
+        Boost::MechanicalDisk => perfil.system_storage == StorageKind::Hdd,
+        Boost::FewCores => perfil.logical_cores <= 4,
+    })
 }
 
 /// Se esta máquina atende à condição de hardware da otimização.

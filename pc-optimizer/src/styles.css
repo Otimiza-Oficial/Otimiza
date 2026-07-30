@@ -1492,3 +1492,13 @@ button {
   gap: 4px;
   flex: none;
 }
+
+/* O que pesa mais nesta máquina em particular */
+.chip[data-recommended="true"] {
+  color: var(--green);
+  border-color: rgba(95, 211, 154, 0.45);
+}
+
+.gain-dot[data-recommended="true"] {
+  box-shadow: 0 0 0 3px rgba(95, 211, 154, 0.22);
+}

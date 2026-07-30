@@ -51,6 +51,24 @@ pub enum Action {
     NicPowerSaving,
     /// Apaga arquivos temporários. A única ação irreversível do catálogo.
     CleanTempFiles,
+    /// Apaga instaladores de atualizações já aplicadas. Também irreversível.
+    CleanUpdateCache,
+}
+
+/// Condição de hardware em que uma otimização pesa MUITO mais que a média.
+///
+/// Não é promessa de milagre: é reconhecer que desligar efeito visual muda pouco
+/// num PC forte e muda muito num PC de 4 GB. O produto usa isso para dizer ao
+/// cliente o que vale a pena na máquina dele, em vez de entregar a mesma lista
+/// para todo mundo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Boost {
+    /// Pouca memória RAM.
+    LowRam,
+    /// Disco mecânico, onde qualquer leitura extra custa caro.
+    MechanicalDisk,
+    /// Poucos núcleos, onde cada processo de fundo disputa espaço de verdade.
+    FewCores,
 }
 
 /// Condição de hardware para uma otimização fazer sentido.
@@ -98,11 +116,19 @@ pub struct OptimizationSpec {
     /// de proteção é decisão consciente do dono do PC, não efeito colateral de um
     /// clique genérico.
     pub security_tradeoff: bool,
+    /// Em que tipo de máquina esta otimização pesa muito mais que a média.
+    /// Vazio significa que o ganho não depende do porte do hardware.
+    pub highlight_when: &'static [Boost],
     pub actions: &'static [Action],
 }
 
 impl OptimizationSpec {
-    pub fn to_info(&self, state: OptimizationState, detail: Option<String>) -> OptimizationInfo {
+    pub fn to_info(
+        &self,
+        state: OptimizationState,
+        detail: Option<String>,
+        recommended: bool,
+    ) -> OptimizationInfo {
         OptimizationInfo {
             id: self.id.to_string(),
             name: self.name.to_string(),
@@ -114,6 +140,7 @@ impl OptimizationSpec {
             requires_restart: self.requires_restart,
             reversible: self.reversible,
             security_tradeoff: self.security_tradeoff,
+            recommended,
             state,
             detail,
         }
@@ -140,6 +167,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::HighPerformancePowerPlan],
     },
     OptimizationSpec {
@@ -154,6 +182,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[
             Action::Registry {
                 hive: "HKCU",
@@ -187,6 +216,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::Registry {
             hive: "HKLM",
             path: r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
@@ -206,6 +236,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::FewCores],
         actions: &[
             Action::Registry {
                 hive: "HKLM",
@@ -233,6 +264,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::LowRam, Boost::FewCores, Boost::MechanicalDisk],
         actions: &[
             Action::DisableService { name: "DiagTrack" },
             Action::DisableService { name: "dmwappushservice" },
@@ -250,6 +282,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::LowRam, Boost::FewCores, Boost::MechanicalDisk],
         actions: &[
             Action::Registry {
                 hive: "HKCU",
@@ -283,6 +316,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::MechanicalDisk],
         actions: &[Action::Registry {
             hive: "HKCU",
             path: r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize",
@@ -302,6 +336,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::DisableNagle],
     },
     OptimizationSpec {
@@ -316,6 +351,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[
             Action::Registry {
                 hive: "HKCU",
@@ -349,6 +385,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::FewCores],
         actions: &[Action::Registry {
             hive: "HKLM",
             path: r"SYSTEM\CurrentControlSet\Control\PriorityControl",
@@ -368,6 +405,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::LowRam],
         actions: &[
             Action::DisableService { name: "XblAuthManager" },
             Action::DisableService { name: "XblGameSave" },
@@ -386,6 +424,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: Some(Requirement::SsdSystemDrive),
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::DisableService { name: "SysMain" }],
     },
     OptimizationSpec {
@@ -400,6 +439,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::DisableHibernation],
     },
     OptimizationSpec {
@@ -414,6 +454,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::PowerSetting {
             subgroup: SUB_PROCESSOR,
             setting: CPMINCORES,
@@ -432,6 +473,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::PowerSetting {
             subgroup: SUB_PROCESSOR,
             setting: PROCTHROTTLEMIN,
@@ -450,6 +492,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::Registry {
             hive: "HKLM",
             path: r"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
@@ -469,6 +512,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: Some(Requirement::MinRamGb(12.0)),
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::MemoryCompression { enabled: false }],
     },
     OptimizationSpec {
@@ -483,6 +527,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::GpuMsiMode],
     },
     OptimizationSpec {
@@ -497,6 +542,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::NicPowerSaving],
     },
     OptimizationSpec {
@@ -511,6 +557,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[Boost::LowRam, Boost::FewCores],
         actions: &[
             Action::Registry {
                 hive: "HKCU",
@@ -538,6 +585,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[
             Action::Registry {
                 hive: "HKCU",
@@ -565,6 +613,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::Registry {
             hive: "HKLM",
             path: r"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization",
@@ -584,6 +633,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::ClearBootLimits],
     },
     OptimizationSpec {
@@ -598,6 +648,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: true,
         requirement: None,
         security_tradeoff: true,
+        highlight_when: &[],
         actions: &[
             Action::Registry {
                 hive: "HKLM",
@@ -614,6 +665,56 @@ pub static CATALOG: &[OptimizationSpec] = &[
         ],
     },
     OptimizationSpec {
+        id: "disable_search_indexing",
+        name: "Desligar a indexação de busca do Windows",
+        description: "Para o serviço que fica lendo seus arquivos em segundo plano para montar o índice de busca.",
+        honest_effect: "Em PC fraco e em disco mecânico é das mudanças que mais aliviam, porque o indexador lê disco e gasta CPU sem hora marcada. Em troca, procurar arquivo pelo Explorador fica lento — ele passa a varrer as pastas na hora. Se você usa muito a busca do Windows, não vale.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[Boost::MechanicalDisk, Boost::FewCores],
+        actions: &[Action::DisableService { name: "WSearch" }],
+    },
+    OptimizationSpec {
+        id: "disable_transparency",
+        name: "Desligar a transparência das janelas",
+        description: "Remove o efeito de vidro fosco do menu Iniciar, da barra de tarefas e das janelas.",
+        honest_effect: "O efeito é desenhado pela placa de vídeo a cada quadro. Em vídeo integrado e em PC fraco isso aparece: menus e janelas abrem sem arrastar. Em PC com placa dedicada, o ganho é próximo de zero.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[Boost::LowRam, Boost::FewCores],
+        actions: &[Action::Registry {
+            hive: "HKCU",
+            path: r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            name: "EnableTransparency",
+            value: RegValue::Dword(0),
+        }],
+    },
+    OptimizationSpec {
+        id: "clean_update_cache",
+        name: "Limpar instaladores de atualizações já aplicadas",
+        description: "Apaga os instaladores que o Windows guarda depois de instalar cada atualização.",
+        honest_effect: "É a limpeza que mais devolve espaço em disco, e costuma render vários GB. Não aumenta FPS: o ganho é espaço, que num SSD pequeno e cheio faz muita diferença. Os serviços de atualização param durante a limpeza e voltam em seguida. NÃO PODE SER DESFEITA — arquivo apagado não volta.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: false,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::CleanUpdateCache],
+    },
+    OptimizationSpec {
         id: "clean_temp_files",
         name: "Limpar arquivos temporários",
         description: "Apaga o conteúdo das pastas de temporários do Windows e do seu usuário.",
@@ -625,6 +726,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         reversible: false,
         requirement: None,
         security_tradeoff: false,
+        highlight_when: &[],
         actions: &[Action::CleanTempFiles],
     },
 ];
@@ -677,15 +779,18 @@ mod tests {
 
     #[test]
     fn only_file_deletion_is_irreversible() {
-        // Qualquer nova otimização irreversível precisa ser uma decisão consciente:
-        // este teste falha e obriga a revisão.
-        let irreversible: Vec<&str> = CATALOG
+        // Qualquer nova otimização irreversível precisa ser decisão consciente:
+        // este teste falha e obriga a revisão. As duas que existem apagam
+        // arquivo, e arquivo apagado não volta — nenhuma outra pode entrar aqui
+        // sem alguém decidir que ela merece.
+        let mut irreversible: Vec<&str> = CATALOG
             .iter()
             .filter(|spec| !spec.reversible)
             .map(|spec| spec.id)
             .collect();
+        irreversible.sort();
 
-        assert_eq!(irreversible, vec!["clean_temp_files"]);
+        assert_eq!(irreversible, vec!["clean_temp_files", "clean_update_cache"]);
     }
 
     #[test]

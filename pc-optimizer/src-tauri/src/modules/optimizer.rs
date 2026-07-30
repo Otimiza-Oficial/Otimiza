@@ -60,6 +60,9 @@ pub struct OptimizationInfo {
     /// Troca segurança por desempenho. A interface avisa em vermelho e o lote
     /// automático não inclui.
     pub security_tradeoff: bool,
+    /// Pesa muito mais nesta máquina do que na média, segundo o hardware detectado.
+    /// Não é promessa de milagre — é dizer o que vale a pena AQUI.
+    pub recommended: bool,
     pub state: OptimizationState,
     /// Informação medida agora nesta máquina, quando existir.
     /// Ex.: "1,4 GB de temporários para limpar".

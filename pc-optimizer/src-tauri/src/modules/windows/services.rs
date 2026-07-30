@@ -35,6 +35,38 @@ fn service_key(service: &str) -> String {
     format!("{}\\{}", SERVICES_KEY, service)
 }
 
+/// Se um serviço está em execução agora.
+///
+/// O `sc query` traduz o rótulo do estado, mas o número ao lado é o mesmo em
+/// qualquer idioma: 4 significa em execução.
+pub fn is_running(service: &str) -> bool {
+    match super::shell::run("sc", &["query", service]) {
+        Ok(output) if output.success => output
+            .stdout
+            .lines()
+            .find(|line| line.contains("STATE") || line.contains("ESTADO"))
+            .map(|line| line.split(':').nth(1).unwrap_or("").trim().starts_with('4'))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+/// Inicia um serviço. Um serviço já em execução não é tratado como erro.
+pub fn start(service: &str) -> Result<(), String> {
+    let output = super::shell::run("sc", &["start", service])?;
+
+    // 1056 = já está em execução.
+    if output.success || output.stdout.contains("1056") || output.stderr.contains("1056") {
+        Ok(())
+    } else {
+        Err(format!(
+            "Não foi possível iniciar o serviço `{}`: {}",
+            service,
+            output.stdout.trim()
+        ))
+    }
+}
+
 /// Verifica se um serviço existe nesta instalação do Windows.
 pub fn exists(service: &str) -> bool {
     registry::key_exists("HKLM", &service_key(service))

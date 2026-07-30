@@ -1,0 +1,107 @@
+# Publicação de versões
+#
+# Dispara ao empurrar uma tag `v*` — por exemplo `v0.2.0`. O GitHub compila os
+# instaladores em máquina limpa e anexa ao release, o que também serve de prova
+# de que o projeto compila fora do PC de quem desenvolve.
+#
+# SOBRE MACOS E LINUX
+#
+# Os blocos das duas plataformas estão prontos abaixo, mas desligados de
+# propósito. Todo o motor de otimização é exclusivo do Windows: fora dele o
+# aplicativo abre, mostra painéis vazios e responde "não implementado" em cada
+# botão. Publicar esses instaladores seria entregar um programa que não faz nada
+# carregando a marca Otimiza.
+#
+# Para ligar, quando existir motor para a plataforma: mova a entrada
+# correspondente de `nao_publicadas` para `matrix.include`.
+
+name: Publicar versão
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Permite disparar manualmente pela aba Actions, para testar sem criar tag.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compilar:
+    name: Compilar em ${{ matrix.plataforma }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            plataforma: Windows
+            alvo: ""
+
+          # Prontas para uso, aguardando motor de otimização próprio:
+          #
+          # nao_publicadas:
+          #   - runner: macos-latest    → precisa de assinatura e notarização da Apple
+          #   - runner: ubuntu-22.04    → precisa de libwebkit2gtk-4.1-dev e patchelf
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: pc-optimizer/package-lock.json
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Reaproveitar compilações anteriores
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc-optimizer/src-tauri
+
+      - name: Instalar dependências do frontend
+        working-directory: pc-optimizer
+        run: npm ci
+
+      - name: Conferir tipos do frontend
+        working-directory: pc-optimizer
+        run: npx tsc --noEmit
+
+      # A esteira roda os testes antes de empacotar. Versão que não passa nos
+      # testes não vira instalador — é a diferença entre publicar e publicar com
+      # responsabilidade.
+      - name: Rodar os testes
+        working-directory: pc-optimizer/src-tauri
+        run: cargo test --lib
+
+      # A descrição vive num arquivo versionado, não escondida no YAML: assim ela
+      # passa por revisão como qualquer outro texto do produto.
+      - name: Ler a descrição da versão
+        id: notas
+        shell: bash
+        run: |
+          {
+            echo 'corpo<<FIM_DAS_NOTAS'
+            cat .github/release-notes.md
+            echo FIM_DAS_NOTAS
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compilar e publicar
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: pc-optimizer
+          tagName: ${{ github.ref_name }}
+          releaseName: Otimiza ${{ github.ref_name }}
+          releaseBody: ${{ steps.notas.outputs.corpo }}
+          # Sai como rascunho para a descrição ser conferida antes de ficar
+          # visível. Trocar para `false` publica direto.
+          releaseDraft: true
+          prerelease: false
