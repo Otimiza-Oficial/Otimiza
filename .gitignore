@@ -1,0 +1,38 @@
+# Dependências
+node_modules/
+
+# Saída de build
+dist/
+pc-optimizer/dist/
+
+# Rust / Tauri — `target` chega a 11 GB, nunca entra no repositório
+target/
+pc-optimizer/src-tauri/target/
+pc-optimizer/src-tauri/gen/
+pc-optimizer/src-tauri/WixTools/
+**/*.rs.bk
+*.pdb
+
+# Ferramentas baixadas pelo empacotador
+WixTools/
+
+# Editores
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Segredos e certificados de assinatura — nunca versionar
+.env
+.env.local
+*.pfx
+*.p12
+*.snk

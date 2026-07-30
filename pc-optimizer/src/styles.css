@@ -1,0 +1,1445 @@
+/*
+  Otimiza — console de desempenho
+
+  A direção é instrumento, não painel de marketing: fundo quase preto, molduras
+  de fio de cabelo com cantoneiras, tipografia monoespaçada e números tabulares.
+  A cor só aparece onde carrega significado — carga, veredito, aviso.
+*/
+
+:root {
+  --bg: #0b0b0b;
+  --panel: #121212;
+  --panel-raised: #191919;
+  --hairline: #242424;
+  --hairline-strong: #363636;
+
+  --text: #e9e7e3;
+  --text-dim: #a6a29c;
+  --text-muted: #726e69;
+
+  --accent: #f5f3f0;
+  --green: #5fd39a;
+  --amber: #e8b23a;
+  --red: #ff5c73;
+
+  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  --gap: 14px;
+  --pad: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg);
+  /* Malha técnica de fundo: densa o suficiente para dar textura, fraca o
+     suficiente para nunca competir com os dados. */
+  background-image:
+    linear-gradient(rgba(245, 243, 240, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 243, 240, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- estrutura */
+
+.console {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: var(--gap);
+  gap: var(--gap);
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+/*
+  Grades por aba em vez de três colunas fixas para tudo. Cada seção recebe o
+  espaço que o conteúdo dela pede, e some o aperto de empilhar dez painéis numa
+  tela só.
+*/
+.grid {
+  display: grid;
+  gap: var(--gap);
+  align-items: start;
+}
+
+.grid-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-hero {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+
+/* -------------------------------------------------------------------- abas */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s, border-color 0.18s;
+}
+
+.tab:hover {
+  color: var(--text-dim);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* O selo diz que a aba tem algo esperando — a navegação carrega informação,
+   não é só um rótulo. */
+.tab-badge {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.tab-badge[data-tone="warn"] {
+  background: var(--amber);
+}
+
+.tab-badge[data-tone="bad"] {
+  background: var(--red);
+  color: var(--bg);
+}
+
+/* ------------------------------------------------------------------ painéis */
+
+/*
+  Cantoneiras nos cantos opostos, desenhadas no próprio painel. Sem elemento
+  extra no HTML: a moldura é do painel, não um enfeite colado por cima.
+*/
+.panel {
+  position: relative;
+  background-color: var(--panel);
+  border: 1px solid var(--hairline);
+  padding: var(--pad);
+  min-width: 0;
+}
+
+.panel::before,
+.panel::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-color: var(--accent);
+  border-style: solid;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.panel::before {
+  top: -1px;
+  left: -1px;
+  border-width: 1px 0 0 1px;
+}
+
+.panel::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 1px 1px 0;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.panel-head h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.panel-tag {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.panel-tall {
+  min-height: 100%;
+}
+
+/* ---------------------------------------------------------------------- topo */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 12px var(--pad);
+  border: 1px solid var(--hairline);
+  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/*
+  A marca entra como máscara CSS, não como imagem colorida: assim a estrela
+  herda a cor do tema e continua nítida em qualquer densidade de tela.
+*/
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  background-color: var(--accent);
+  -webkit-mask: url(/logo.svg) center / contain no-repeat;
+  mask: url(/logo.svg) center / contain no-repeat;
+}
+
+.brand-logo-small {
+  width: 13px;
+  height: 13px;
+  background-color: var(--text-muted);
+}
+
+.brand-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+}
+
+.brand-sub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ident {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 34px;
+  margin-bottom: 12px;
+}
+
+.ident dt {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ident dd {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.access {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--hairline-strong);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.access-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex: none;
+}
+
+.access[data-level="admin"] {
+  border-color: rgba(95, 211, 154, 0.4);
+  color: var(--green);
+}
+
+.access[data-level="admin"] .access-dot {
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+}
+
+.access[data-level="limited"] {
+  border-color: rgba(232, 178, 58, 0.4);
+  color: var(--amber);
+}
+
+.access[data-level="limited"] .access-dot {
+  background: var(--amber);
+}
+
+/* ---------------------------------------------------- instrumento: núcleos */
+
+.core-matrix {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 96px;
+}
+
+.core {
+  flex: 1;
+  min-width: 4px;
+  height: 100%;
+  background: rgba(245, 243, 240, 0.07);
+  display: flex;
+  align-items: flex-end;
+}
+
+.core i {
+  display: block;
+  width: 100%;
+  background: var(--accent);
+  height: 0;
+  transition: height 0.45s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.core[data-load="high"] i {
+  background: var(--amber);
+}
+
+.core[data-load="critical"] i {
+  background: var(--red);
+}
+
+.core-legend {
+  margin-top: 10px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+/* -------------------------------------------------- instrumento: histórico */
+
+.sparkline {
+  width: 100%;
+  height: 70px;
+  display: block;
+}
+
+#cpu-history-line {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+#cpu-history-area {
+  fill: rgba(245, 243, 240, 0.1);
+}
+
+/* ---------------------------------------------------- instrumento principal */
+
+.panel-hero {
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(245, 243, 240, 0.06), transparent 65%),
+    var(--panel);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.gauge {
+  position: relative;
+  width: 220px;
+  height: 220px;
+}
+
+.gauge svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.gauge-track {
+  fill: none;
+  stroke: rgba(245, 243, 240, 0.1);
+  stroke-width: 6;
+}
+
+.gauge-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-linecap: butt;
+  stroke-dasharray: 540;
+  stroke-dashoffset: 540;
+  transition: stroke-dashoffset 0.5s ease, stroke 0.5s ease;
+}
+
+.gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.gauge-value {
+  font-size: 52px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.gauge-unit {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gauge-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.readouts {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.readout {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+}
+
+.readout-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.readout-value {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: rgba(233, 231, 227, 0.09);
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.5s ease, background 0.5s ease;
+}
+
+.readout-note {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+/* ------------------------------------------------------------------ botões */
+
+.btn {
+  padding: 8px 14px;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: rgba(245, 243, 240, 0.55);
+  color: var(--accent);
+  background: rgba(245, 243, 240, 0.06);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: rgba(245, 243, 240, 0.14);
+}
+
+.btn-ghost {
+  padding: 5px 10px;
+  font-size: 10px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ------------------------------------------------------------------ textos */
+
+.lead,
+.hint {
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.hint {
+  font-size: 11px;
+  border-left: 2px solid var(--hairline-strong);
+  padding-left: 10px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+}
+
+.status {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  margin: 10px 0;
+  min-height: 1.2em;
+  color: var(--text-dim);
+}
+
+.status.ok {
+  color: var(--green);
+}
+
+.status.error {
+  color: var(--red);
+}
+
+.status.progress {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------- diagnóstico */
+
+.health {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.health-score {
+  font-size: 38px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.health-max {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.health-bar {
+  height: 3px;
+  background: rgba(233, 231, 227, 0.09);
+  margin-bottom: 14px;
+}
+
+.health-bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.5s ease;
+}
+
+.bottleneck {
+  border-left: 2px solid var(--hairline-strong);
+  padding: 8px 0 8px 10px;
+  margin-bottom: 8px;
+}
+
+.bottleneck-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.bottleneck-detail {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.bottleneck[data-severity="Critical"] {
+  border-left-color: var(--red);
+}
+
+.bottleneck[data-severity="High"] {
+  border-left-color: var(--amber);
+}
+
+.bottleneck[data-severity="Medium"],
+.bottleneck[data-severity="Low"] {
+  border-left-color: var(--accent);
+}
+
+/* ------------------------------------------------------------- otimizações */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.filter {
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.filter:hover {
+  color: var(--text-dim);
+}
+
+.filter[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/*
+  A lista rola dentro do próprio painel. Antes ela empurrava a página inteira
+  para baixo e obrigava a percorrer a tela toda para chegar num item.
+*/
+.optimization-list {
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+}
+
+.optimization-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.optimization-list::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+.optimization-list::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+}
+
+/* Grupos por categoria, recolhíveis. */
+.opt-group {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.opt-group:last-child {
+  border-bottom: none;
+}
+
+.opt-group > summary,
+.optimization > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.opt-group > summary::-webkit-details-marker,
+.optimization > summary::-webkit-details-marker {
+  display: none;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--panel-raised);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.group-head::before {
+  content: "+";
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  width: 10px;
+}
+
+.opt-group[open] > .group-head::before {
+  content: "−";
+}
+
+.group-count {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* Linha compacta: uma otimização cabe em 34px e continua legível. */
+.optimization {
+  border-top: 1px solid var(--hairline);
+  background: var(--panel);
+}
+
+.opt-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-left: 2px solid transparent;
+}
+
+.opt-row:hover {
+  background: var(--panel-raised);
+}
+
+.optimization[data-state="Applied"] .opt-row {
+  border-left-color: var(--green);
+}
+
+.optimization[data-state="Available"] .opt-row {
+  border-left-color: var(--accent);
+}
+
+.optimization[data-state="AlreadyOptimal"] .opt-row {
+  border-left-color: var(--hairline-strong);
+}
+
+.optimization[data-state="Unavailable"] {
+  opacity: 0.45;
+}
+
+.gain-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.gain-dot[data-gain="Measurable"] {
+  background: var(--green);
+}
+
+.gain-dot[data-gain="Situational"] {
+  background: var(--amber);
+}
+
+.opt-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.opt-body {
+  padding: 2px 12px 14px 32px;
+  border-left: 2px solid transparent;
+}
+
+.optimization-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-muted);
+}
+
+.chip[data-warn="true"] {
+  color: var(--red);
+  border-color: rgba(255, 92, 115, 0.4);
+}
+
+.optimization .effect {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.optimization .detail {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
+.state-label {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.state-label[data-state="Applied"] {
+  color: var(--green);
+}
+
+/* ------------------------------------------------------- pedido de elevação */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(11, 11, 11, 0.82);
+  padding: 20px;
+  z-index: 10;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal-card {
+  position: relative;
+  max-width: 420px;
+  background: var(--panel);
+  border: 1px solid var(--hairline-strong);
+  padding: 26px;
+  text-align: center;
+}
+
+.modal-logo {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 16px;
+}
+
+.modal-card h2 {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.modal-card p {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 20px 0 12px;
+}
+
+.modal-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.statusbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* -------------------------------------------------------------- comparação */
+
+.benchmark-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.benchmark-table th {
+  text-align: left;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px;
+  border-bottom: 1px solid var(--hairline);
+  font-weight: 500;
+}
+
+.benchmark-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: top;
+}
+
+.benchmark-table .value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.benchmark-table .metric-note {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 3px;
+  max-width: 30ch;
+}
+
+.verdict {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.verdict[data-verdict="Improved"] {
+  color: var(--green);
+}
+
+.verdict[data-verdict="Worsened"] {
+  color: var(--red);
+}
+
+.verdict[data-verdict="NoMeasurableChange"] {
+  color: var(--text-muted);
+}
+
+.verdict[data-verdict="TooNoisyToJudge"] {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* ------------------------------------------------------------------ rodapé */
+
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px var(--pad);
+  border: 1px solid var(--hairline);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- responsivo */
+
+@media (max-width: 1100px) {
+  .grid-two,
+  .grid-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .vitals {
+    order: 3;
+    width: 100%;
+  }
+
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .readouts {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+/* O que não fazemos — a lista de recusas é argumento de venda, não rodapé. */
+.refusals {
+  border: 1px solid var(--hairline);
+  border-left: 2px solid var(--red);
+  margin-bottom: 12px;
+  background: var(--panel-raised);
+}
+
+.refusals > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 12px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.refusals > summary::-webkit-details-marker {
+  display: none;
+}
+
+.refusals > summary::before {
+  content: "+ ";
+  color: var(--text-muted);
+}
+
+.refusals[open] > summary::before {
+  content: "− ";
+}
+
+.refusals ul {
+  margin: 0;
+  padding: 0 14px 14px 28px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.refusals li {
+  margin-bottom: 8px;
+}
+
+.refusals strong {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* Achados de firmware e hardware */
+.finding {
+  border-left: 2px solid var(--hairline-strong);
+  padding: 10px 0 10px 12px;
+  margin-top: 12px;
+}
+
+.finding[data-severity="Critical"] {
+  border-left-color: var(--red);
+}
+
+.finding[data-severity="Important"] {
+  border-left-color: var(--amber);
+}
+
+.finding[data-severity="Ok"] {
+  border-left-color: var(--green);
+}
+
+.finding-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.finding h3 {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.finding-measured {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.finding-advice {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 6px;
+}
+
+/* Onde o problema se resolve é a informação mais importante do achado:
+   um cliente que entende que precisa trocar peça não espera milagre de software. */
+.chip[data-fix="Hardware"] {
+  color: var(--red);
+  border-color: rgba(255, 92, 115, 0.4);
+}
+
+.chip[data-fix="Bios"] {
+  color: var(--amber);
+  border-color: rgba(232, 178, 58, 0.4);
+}
+
+.chip[data-fix="Software"] {
+  color: var(--green);
+  border-color: rgba(95, 211, 154, 0.4);
+}
+
+.chip[data-fix="None"] {
+  display: none;
+}
+
+/* Quem está pesando agora */
+.process-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.process-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.process-name {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.process-cpu {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.startup-flag {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border: 1px solid rgba(232, 178, 58, 0.5);
+  color: var(--amber);
+  flex: none;
+}
+
+.process-bar {
+  height: 2px;
+  background: rgba(233, 231, 227, 0.09);
+  margin: 4px 0 2px;
+}
+
+.process-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.5s ease;
+}
+
+.process-ram {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Registro ao vivo */
+.live-log {
+  border: 1px solid var(--hairline);
+  background: var(--bg);
+  margin-bottom: 12px;
+}
+
+.live-log-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.live-log ol {
+  margin: 0;
+  padding: 6px 10px;
+  list-style: none;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.log-line {
+  padding: 5px 0 5px 14px;
+  border-bottom: 1px solid var(--hairline);
+  position: relative;
+  font-size: 11px;
+}
+
+.log-line:last-child {
+  border-bottom: none;
+}
+
+/* O marcador à esquerda conta o estado antes de qualquer texto ser lido. */
+.log-line::before {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  font-size: 10px;
+}
+
+.log-line.running::before {
+  content: "·";
+  color: var(--accent);
+}
+
+.log-line.done::before {
+  content: "✓";
+  color: var(--green);
+}
+
+.log-line.failed::before {
+  content: "✕";
+  color: var(--red);
+}
+
+.log-name {
+  color: var(--text-dim);
+}
+
+.log-message {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.log-changes {
+  margin: 4px 0 0;
+  padding-left: 12px;
+  list-style: none;
+}
+
+.log-changes li {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 1px 0;
+}
+
+.log-changes li::before {
+  content: "→ ";
+  color: var(--hairline-strong);
+}
+
+/* Inicialização */
+.startup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.startup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--panel);
+  border-left: 2px solid var(--hairline-strong);
+}
+
+.startup[data-enabled="true"] {
+  border-left-color: var(--amber);
+}
+
+.startup-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.startup-name {
+  display: block;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.startup-exe {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.startup[data-enabled="false"] .startup-name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--hairline-strong);
+}
+
+/* --------------------------------------------------------- sinais vitais */
+
+/*
+  Ficam no topo, visíveis em qualquer aba. A troca de aba não pode custar o
+  contato com o que a máquina está fazendo agora — é isso que separa um console
+  de um formulário com páginas.
+*/
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(84px, 128px));
+  gap: 22px;
+  flex: 1;
+  justify-content: center;
+}
+
+.vital {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 8px;
+  min-width: 0;
+}
+
+.vital-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.vital-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text);
+}
+
+.vital-bar {
+  grid-column: 1 / -1;
+  height: 2px;
+  background: rgba(233, 231, 227, 0.09);
+}
+
+.vital-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.5s ease, background 0.5s ease;
+}

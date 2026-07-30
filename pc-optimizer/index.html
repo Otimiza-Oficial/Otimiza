@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Otimiza — Console de Desempenho</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body>
+    <div class="console">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-logo" aria-hidden="true"></div>
+          <div>
+            <h1 class="brand-name">OTIMIZA</h1>
+            <p class="brand-sub">Console de desempenho</p>
+          </div>
+        </div>
+
+        <!--
+          Sinais vitais fixos: seguem visíveis em qualquer aba. Trocar de aba não
+          pode significar perder de vista o que a máquina está fazendo agora.
+        -->
+        <div class="vitals" id="vitals">
+          <div class="vital">
+            <span class="vital-label">CPU</span>
+            <span class="vital-value" id="vital-cpu">—</span>
+            <div class="vital-bar"><i id="vital-cpu-bar"></i></div>
+          </div>
+          <div class="vital">
+            <span class="vital-label">Memória</span>
+            <span class="vital-value" id="vital-ram">—</span>
+            <div class="vital-bar"><i id="vital-ram-bar"></i></div>
+          </div>
+          <div class="vital">
+            <span class="vital-label">Disco</span>
+            <span class="vital-value" id="vital-disk">—</span>
+            <div class="vital-bar"><i id="vital-disk-bar"></i></div>
+          </div>
+        </div>
+
+        <div class="access" id="access-badge" data-level="checking">
+          <span class="access-dot"></span>
+          <span class="access-text">Verificando acesso</span>
+        </div>
+      </header>
+
+      <nav class="tabs" role="tablist" aria-label="Seções do console">
+        <button class="tab" role="tab" data-tab="painel" aria-selected="true" aria-controls="tab-painel" id="tabbtn-painel">
+          Painel
+        </button>
+        <button class="tab" role="tab" data-tab="otimizacoes" aria-selected="false" aria-controls="tab-otimizacoes" id="tabbtn-otimizacoes">
+          Otimizações
+          <span class="tab-badge" id="badge-otimizacoes" hidden></span>
+        </button>
+        <button class="tab" role="tab" data-tab="diagnostico" aria-selected="false" aria-controls="tab-diagnostico" id="tabbtn-diagnostico">
+          Diagnóstico
+          <span class="tab-badge" id="badge-diagnostico" hidden></span>
+        </button>
+        <button class="tab" role="tab" data-tab="resultado" aria-selected="false" aria-controls="tab-resultado" id="tabbtn-resultado">
+          Resultado
+        </button>
+        <button class="tab" role="tab" data-tab="sistema" aria-selected="false" aria-controls="tab-sistema" id="tabbtn-sistema">
+          Sistema
+          <span class="tab-badge" id="badge-sistema" hidden></span>
+        </button>
+      </nav>
+
+      <main class="stage">
+        <!-- ============================================================ PAINEL -->
+        <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
+          <div class="grid grid-hero">
+            <section class="panel panel-hero">
+              <div class="panel-head">
+                <h2>Uso agora</h2>
+                <span class="panel-tag" id="tick-clock">—</span>
+              </div>
+
+              <div class="hero">
+                <div class="gauge">
+                  <svg viewBox="0 0 200 200" aria-hidden="true">
+                    <circle class="gauge-track" cx="100" cy="100" r="86" />
+                    <circle class="gauge-fill" id="gauge-cpu" cx="100" cy="100" r="86" />
+                  </svg>
+                  <div class="gauge-center">
+                    <span class="gauge-value" id="cpu-value">—</span>
+                    <span class="gauge-unit">% CPU</span>
+                    <span class="gauge-note" id="cpu-freq">—</span>
+                  </div>
+                </div>
+
+                <div class="readouts">
+                  <div class="readout">
+                    <span class="readout-label">Memória</span>
+                    <span class="readout-value" id="ram-value">—</span>
+                    <div class="bar"><i id="ram-bar"></i></div>
+                    <span class="readout-note" id="ram-note">—</span>
+                  </div>
+                  <div class="readout">
+                    <span class="readout-label">Disco</span>
+                    <span class="readout-value" id="disk-value">—</span>
+                    <div class="bar"><i id="disk-bar"></i></div>
+                    <span class="readout-note">espaço ocupado</span>
+                  </div>
+                  <div class="readout">
+                    <span class="readout-label">Rede recebida</span>
+                    <span class="readout-value" id="net-value">—</span>
+                    <div class="bar"><i id="net-bar" style="width: 0%"></i></div>
+                    <span class="readout-note">desde que o PC ligou</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Quem está pesando agora</h2>
+                <span class="panel-tag">ao vivo</span>
+              </div>
+              <div id="process-list" class="process-list">
+                <p class="empty">Medindo…</p>
+              </div>
+              <p class="core-legend">
+                Porcentagem da CPU total da máquina. O selo indica que o programa
+                volta sozinho no próximo boot.
+              </p>
+            </section>
+          </div>
+
+          <div class="grid grid-two">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Carga por núcleo</h2>
+                <span class="panel-tag" id="core-count">—</span>
+              </div>
+              <div class="core-matrix" id="core-matrix"></div>
+              <p class="core-legend">
+                Cada barra é um núcleo lógico. Um núcleo saturado enquanto os
+                outros dormem é o que trava um jogo — e a média esconde isso.
+              </p>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Histórico de CPU</h2>
+                <span class="panel-tag">últimos 2 min</span>
+              </div>
+              <svg class="sparkline" id="cpu-history" viewBox="0 0 300 70" preserveAspectRatio="none">
+                <polyline id="cpu-history-line" fill="none" />
+                <polygon id="cpu-history-area" />
+              </svg>
+            </section>
+          </div>
+        </section>
+
+        <!-- ======================================================= OTIMIZAÇÕES -->
+        <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
+          <div class="grid grid-two">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Aplicar</h2>
+                <span class="panel-tag" id="optimization-count">—</span>
+              </div>
+
+              <div class="row-actions">
+                <button id="optimize-now" class="btn btn-primary">Otimizar agora</button>
+                <button id="revert-all" class="btn">Desfazer tudo</button>
+              </div>
+
+              <p class="hint">
+                "Otimizar agora" aplica só o que é reversível e ainda não está no
+                seu PC. Limpeza de arquivos e o que reduz segurança ficam de fora —
+                essas exigem sua escolha item a item.
+              </p>
+
+              <p id="optimization-status" class="status"></p>
+
+              <!-- Registro ao vivo: o cliente vê cada mudança acontecendo, com o
+                   valor que existia antes. É o oposto de uma barra de progresso. -->
+              <div id="live-log" class="live-log" hidden>
+                <div class="live-log-head">
+                  <span id="live-log-title">Aplicando</span>
+                  <span id="live-log-count"></span>
+                </div>
+                <ol id="live-log-lines"></ol>
+              </div>
+
+              <details class="refusals">
+                <summary>O que nos recusamos a fazer</summary>
+                <ul>
+                  <li>
+                    <strong>Desativar as proteções da CPU (Spectre/Meltdown).</strong>
+                    Rende FPS de verdade em processadores antigos, e por isso muito
+                    "otimizador" faz isso calado. É abrir seu PC para uma falha de
+                    segurança conhecida. Não fazemos.
+                  </li>
+                  <li>
+                    <strong>Desligar o Windows Update, o Defender ou o firewall.</strong>
+                    Some com uns processos de fundo e deixa a máquina exposta. O ganho
+                    não paga o risco.
+                  </li>
+                  <li>
+                    <strong>"Limpeza de registro".</strong> Não existe ganho de
+                    desempenho medível em apagar chaves órfãs. O que existe é risco de
+                    quebrar programa instalado.
+                  </li>
+                  <li>
+                    <strong>Liberar RAM à força.</strong> Esvaziar o cache do Windows
+                    deixa o gráfico bonito e o PC mais lento — ele terá que reler tudo
+                    do disco.
+                  </li>
+                </ul>
+              </details>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Catálogo</h2>
+                <span class="panel-tag">por categoria</span>
+              </div>
+              <div class="filters" id="filters"></div>
+              <div id="optimization-list" class="optimization-list">
+                <p class="empty">Lendo o estado da máquina…</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- ======================================================== DIAGNÓSTICO -->
+        <section class="tab-panel" id="tab-diagnostico" role="tabpanel" aria-labelledby="tabbtn-diagnostico" hidden>
+          <div class="grid grid-two">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Saúde do sistema</h2>
+                <button id="run-diagnostic" class="btn btn-ghost">Analisar</button>
+              </div>
+              <div id="diagnostic-result" class="diagnostic">
+                <p class="empty">Rode a análise para ver os gargalos desta máquina.</p>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Firmware e hardware</h2>
+                <span class="panel-tag" id="firmware-board">—</span>
+              </div>
+
+              <p class="lead">
+                Não escrevemos na BIOS: em placa de consumo as configurações ficam
+                num bloco proprietário da NVRAM, e errar ali não trava o Windows —
+                inutiliza a placa-mãe. O que fazemos é ler o que a BIOS e o hardware
+                estão fazendo com o seu desempenho, e dizer onde se resolve.
+              </p>
+
+              <button id="analyze-firmware" class="btn btn-primary">Analisar firmware</button>
+              <p id="firmware-status" class="status"></p>
+              <div id="firmware-result"></div>
+            </section>
+          </div>
+        </section>
+
+        <!-- =========================================================== RESULTADO -->
+        <section class="tab-panel" id="tab-resultado" role="tabpanel" aria-labelledby="tabbtn-resultado" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Prova de resultado</h2>
+              <span class="panel-tag" id="baseline-tag">sem medição inicial</span>
+            </div>
+
+            <p class="lead">
+              Meça, otimize, meça de novo. Se o ganho não aparecer nos números,
+              este painel vai dizer isso na sua cara — inclusive que não houve ganho.
+            </p>
+
+            <div class="row-actions">
+              <button id="measure-baseline" class="btn btn-primary">1. Medir antes</button>
+              <button id="measure-compare" class="btn">2. Medir depois e comparar</button>
+            </div>
+
+            <p id="benchmark-status" class="status"></p>
+            <div id="benchmark-result"></div>
+          </section>
+        </section>
+
+        <!-- ============================================================= SISTEMA -->
+        <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
+          <div class="grid grid-two">
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Inicialização</h2>
+                <span class="panel-tag" id="startup-count">—</span>
+              </div>
+
+              <p class="hint">
+                Desligar aqui não apaga nada: escrevemos no mesmo lugar que o
+                Gerenciador de Tarefas do Windows, e o valor anterior vai para o
+                histórico. "Desfazer tudo" traz de volta.
+              </p>
+
+              <p id="startup-status" class="status"></p>
+              <div id="startup-list" class="startup-list">
+                <p class="empty">Lendo a inicialização…</p>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Rede de segurança</h2>
+                <span class="panel-tag" id="restore-tag">—</span>
+              </div>
+
+              <p class="hint">
+                O histórico do Otimiza desfaz cada mudança com o valor exato que
+                existia antes. O ponto de restauração do Windows é a camada abaixo
+                dessa: serve para o que a gente não previu.
+              </p>
+
+              <div class="row-actions">
+                <button id="create-restore" class="btn">Criar ponto agora</button>
+                <button id="enable-protection" class="btn" hidden>Ativar proteção</button>
+              </div>
+
+              <p id="restore-status" class="status"></p>
+              <div id="restore-list"></div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Esta máquina</h2>
+              <span class="panel-tag">detectado automaticamente</span>
+            </div>
+            <dl class="ident" id="machine-ident">
+              <div><dt>Sistema</dt><dd id="ident-os">—</dd></div>
+              <div><dt>Processador</dt><dd id="ident-cpu">—</dd></div>
+              <div><dt>Memória</dt><dd id="ident-ram">—</dd></div>
+              <div><dt>Armazenamento</dt><dd id="ident-storage">—</dd></div>
+              <div><dt>Vídeo</dt><dd id="ident-gpu">—</dd></div>
+            </dl>
+            <p class="core-legend">
+              É este perfil que decide o que o Otimiza oferece — e o que ele se
+              recusa a oferecer para não piorar a sua máquina.
+            </p>
+          </section>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <span class="statusbar-brand">
+          <span class="brand-logo brand-logo-small" aria-hidden="true"></span>
+          <span id="status-left">Otimiza · tudo roda no seu PC</span>
+        </span>
+        <span id="status-right">—</span>
+      </footer>
+    </div>
+
+    <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
+         então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
+    <div class="modal" id="admin-modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="brand-logo modal-logo" aria-hidden="true"></div>
+        <h2 id="modal-title">Esta otimização precisa de administrador</h2>
+        <p id="modal-text">
+          Mexer em serviços, energia e registro do sistema exige permissão elevada.
+          Podemos reabrir o Otimiza como administrador?
+        </p>
+        <div class="modal-actions">
+          <button id="modal-confirm" class="btn btn-primary">Reabrir como administrador</button>
+          <button id="modal-cancel" class="btn">Agora não</button>
+        </div>
+        <p class="modal-note">
+          O Windows vai mostrar o aviso de permissão. Se você recusar, nada é
+          alterado no seu PC.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>
