@@ -9,7 +9,7 @@
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
 | 102 testes unitários passam, zero avisos | `cargo test --lib` |
-| Instalador gerado | `Otimiza_0.1.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
+| Instalador gerado | `Otimiza_0.2.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
 | Esteira do GitHub compila e testa em máquina limpa | Oito áreas de teste verdes; instaladores anexados ao release |
