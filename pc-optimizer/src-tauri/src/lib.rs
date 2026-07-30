@@ -36,6 +36,8 @@ pub fn run() {
             commands::get_hardware_profile,
             commands::analyze_firmware,
             commands::top_processes,
+            commands::get_preferences,
+            commands::set_preferences,
             commands::restore_status,
             commands::create_restore_point,
             commands::enable_system_protection,

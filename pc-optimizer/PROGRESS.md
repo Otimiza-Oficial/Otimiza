@@ -253,6 +253,22 @@ O medidor de estrangulamento não pergunta a frequência ao Windows (que reporta
 nominal, não o real): mede a **consequência**, comparando o trabalho entregue no
 primeiro e nos últimos segundos de carga.
 
+### Preferências
+
+Três, e cada uma muda comportamento real. Interruptor que não altera nada é
+enfeite, e enfeite numa ferramenta de sistema é o começo da desconfiança: se um
+botão mente, por que os números não mentiriam?
+
+| Preferência | Padrão | O que muda |
+|---|---|---|
+| Ponto de restauração antes de otimizar | ligado | O lote pula a criação, que leva dezenas de segundos |
+| Mostrar o que não se aplica | ligado | Some da lista o que a máquina não comporta |
+| Intervalo das medições | 2s | Ler mais rápido custa CPU do próprio programa |
+
+Gravadas em `%APPDATA%\pc-optimizer\preferences.json`. Valor fora da faixa é
+corrigido na leitura e na gravação — o arquivo pode ter sido editado à mão, e um
+intervalo de zero ocuparia justamente a CPU que o programa deveria liberar.
+
 ### Interface em abas (0.2.0)
 
 A tela única com dez painéis não escalava — e agora há usuários reais. Passou a
@@ -303,15 +319,36 @@ altera nada.
 
 ## Pendente
 
+### Cobertura real das otimizações de administrador
+
+O ciclo com elevação foi executado. O resultado honesto é que **a máquina de
+desenvolvimento só conseguiu exercitar 1 das 14**: as outras já estão no estado
+final, e testá-las exigiria desconfigurar o PC de quem roda o teste.
+
+Tipos de ação já executados contra um sistema real:
+
+| Tipo de ação | Executada de verdade |
+|---|---|
+| Valor de registro (DWORD e texto) | sim |
+| Valor de registro binário (inicialização) | sim, com reversão byte-exata |
+| Enumeração de interfaces de rede (Nagle) | sim, com elevação |
+| Desativar serviço | **não** |
+| Trocar plano de energia | **não** |
+| Ajuste fino de energia (estacionamento de núcleos) | **não** |
+| Hibernação, limites de boot, compressão de memória | **não** — indisponíveis aqui |
+
+As três primeiras lacunas são as otimizações de maior impacto do catálogo. Elas
+funcionam segundo o código e os testes de unidade, mas nunca foram vistas
+aplicando e revertendo numa máquina.
+
 ### Antes de vender
-1. **Testar as otimizações que exigem administrador** — `disable_startup_delay` e o
-   ciclo de inicialização foram executados de ponta a ponta. Plano de energia,
-   telemetria, Game DVR, agendamento de GPU e os ajustes de energia do processador
-   ainda não rodaram contra um sistema, por falta de sessão elevada
+1. **Fechar as lacunas acima numa máquina de teste** — de preferência uma que
+   ainda não tenha sido otimizada, onde as 14 apareçam como disponíveis
 2. **Instalar o pacote gerado numa máquina limpa** — o instalador compila, mas
    nunca foi instalado e aberto de fato
-3. Assinatura digital do executável — sem ela o Windows mostra aviso de editor
-   desconhecido na primeira execução, o que assusta cliente pagante
+3. Assinatura digital do executável — ver
+   [`docs/ASSINATURA.md`](docs/ASSINATURA.md). Depende de compra de certificado e
+   verificação de identidade; a configuração de build já está preparada
 4. `icons/icon.icns` continua sendo o ícone antigo do Tauri — só afeta empacotamento
    para macOS, que ainda não é alvo
 

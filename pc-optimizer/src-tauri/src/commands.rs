@@ -6,6 +6,7 @@ use crate::modules::benchmark::{
     self, BaselineResult, BaselineStore, Benchmark, BenchmarkComparison, BenchmarkSnapshot,
 };
 use crate::modules::changelog::ChangeLog;
+use crate::modules::preferences::Preferences;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::firmware::FirmwareReport;
 use crate::modules::optimizer::{OptimizationInfo, OptimizationOutcome};
@@ -206,6 +207,21 @@ pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpa
         let _ = state;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
+}
+
+/// Comando: Preferências gravadas.
+#[tauri::command]
+pub fn get_preferences() -> Preferences {
+    Preferences::load()
+}
+
+/// Comando: Grava as preferências.
+#[tauri::command]
+pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> {
+    preferences.save()?;
+    // Devolve o que ficou de fato gravado: valores fora da faixa são corrigidos
+    // na gravação, e a interface precisa refletir o valor real, não o pedido.
+    Ok(Preferences::load())
 }
 
 /// Comando: Estado dos pontos de restauração do Windows.
@@ -462,25 +478,27 @@ pub async fn optimize_now(
         // Rede de segurança antes de qualquer mudança. Não bloqueia o lote se
         // falhar — nosso histórico já reverte item por item — mas o cliente é
         // informado do que aconteceu de verdade, inclusive quando não deu.
-        let (message, success) = match crate::modules::windows::restore::create(
-            "Otimiza - antes de otimizar",
-        ) {
-            Ok(message) => (message, true),
-            Err(error) => (error, false),
-        };
+        if Preferences::load().restore_point_before_batch {
+            let (message, success) = match crate::modules::windows::restore::create(
+                "Otimiza - antes de otimizar",
+            ) {
+                Ok(message) => (message, true),
+                Err(error) => (error, false),
+            };
 
-        let _ = app.emit(
-            "optimize:step",
-            BatchStep {
-                index: 0,
-                total: 0,
-                name: "Ponto de restauração do Windows".to_string(),
-                stage: "finished",
-                message,
-                changes: Vec::new(),
-                success,
-            },
-        );
+            let _ = app.emit(
+                "optimize:step",
+                BatchStep {
+                    index: 0,
+                    total: 0,
+                    name: "Ponto de restauração do Windows".to_string(),
+                    stage: "finished",
+                    message,
+                    changes: Vec::new(),
+                    success,
+                },
+            );
+        }
 
         // Cada passo é emitido na hora que acontece: a interface mostra o que
         // está sendo mexido, em vez de uma barra de progresso sem informação.

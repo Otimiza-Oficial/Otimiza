@@ -6,6 +6,7 @@ pub mod changelog;
 pub mod diagnostic;
 pub mod jitter;
 pub mod optimizer;
+pub mod preferences;
 pub mod safety;
 pub mod monitor;
 

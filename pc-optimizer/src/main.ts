@@ -31,6 +31,12 @@ interface ProcessImpact {
   in_startup: boolean;
 }
 
+interface Preferences {
+  restore_point_before_batch: boolean;
+  metrics_interval_seconds: number;
+  show_unavailable: boolean;
+}
+
 interface RestorePoint {
   sequence: number;
   description: string;
@@ -132,6 +138,13 @@ const cpuHistory: number[] = [];
 let optimizations: OptimizationInfo[] = [];
 let activeCategory: Category | "Todas" = "Todas";
 let isElevated = false;
+let preferences: Preferences = {
+  restore_point_before_batch: true,
+  metrics_interval_seconds: 2,
+  show_unavailable: true,
+};
+/** Handle do laço de medição, para poder trocar o intervalo sem recarregar. */
+let metricsTimer: number | null = null;
 /** Categorias recolhidas pelo usuário, preservadas entre recarregamentos da lista. */
 const collapsedGroups = new Set<string>();
 
@@ -169,6 +182,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   wireControls();
 
   await listenToBatchProgress();
+  // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
+  // que a lista mostra.
+  await loadPreferences();
+
   await Promise.all([
     loadIdentity(),
     checkAccess(),
@@ -280,7 +297,19 @@ async function startMonitoring() {
   }
 
   await tick();
-  window.setInterval(tick, 2000);
+  restartMetricsLoop();
+}
+
+/**
+ * (Re)inicia o laço de medição com o intervalo escolhido nas preferências.
+ * Trocar o intervalo não recarrega a tela: só troca o relógio.
+ */
+function restartMetricsLoop() {
+  if (metricsTimer !== null) {
+    window.clearInterval(metricsTimer);
+  }
+
+  metricsTimer = window.setInterval(tick, preferences.metrics_interval_seconds * 1000);
 }
 
 async function tick() {
@@ -563,9 +592,9 @@ function renderFilters() {
 }
 
 function renderOptimizations() {
-  const visible = optimizations.filter(
-    (item) => activeCategory === "Todas" || item.category === activeCategory
-  );
+  const visible = optimizations
+    .filter((item) => preferences.show_unavailable || item.state !== "Unavailable")
+    .filter((item) => activeCategory === "Todas" || item.category === activeCategory);
 
   const available = optimizations.filter((item) => item.state === "Available").length;
   const applied = optimizations.filter((item) => item.state === "Applied").length;
@@ -821,6 +850,46 @@ async function runBatch(command: string, progress: string) {
   }
 }
 
+// ---------------------------------------------------------------- preferências
+
+async function loadPreferences() {
+  try {
+    preferences = await invoke<Preferences>("get_preferences");
+    renderPreferences();
+  } catch (error) {
+    console.error("Erro ao ler preferências:", error);
+  }
+}
+
+function renderPreferences() {
+  element<HTMLInputElement>("pref-restore").checked = preferences.restore_point_before_batch;
+  element<HTMLInputElement>("pref-unavailable").checked = preferences.show_unavailable;
+
+  document.querySelectorAll<HTMLButtonElement>("#pref-interval button").forEach((button) => {
+    const chosen = Number(button.dataset.interval) === preferences.metrics_interval_seconds;
+    button.setAttribute("aria-pressed", String(chosen));
+  });
+}
+
+/**
+ * Grava e adota o que o backend devolveu, não o que foi pedido: valores fora da
+ * faixa são corrigidos na gravação, e a tela precisa mostrar o valor real.
+ */
+async function savePreferences(change: Partial<Preferences>) {
+  const wanted = { ...preferences, ...change };
+
+  try {
+    preferences = await invoke<Preferences>("set_preferences", { preferences: wanted });
+    text("preferences-status", "salvo");
+    renderPreferences();
+    restartMetricsLoop();
+    renderOptimizations();
+  } catch (error) {
+    text("preferences-status", "erro ao salvar");
+    console.error(error);
+  }
+}
+
 // ------------------------------------------------------------ rede de segurança
 
 async function loadRestoreStatus() {
@@ -1056,6 +1125,25 @@ function wireControls() {
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
+
+  element("pref-restore").addEventListener("change", (event) =>
+    savePreferences({
+      restore_point_before_batch: (event.target as HTMLInputElement).checked,
+    })
+  );
+
+  element("pref-unavailable").addEventListener("change", (event) =>
+    savePreferences({ show_unavailable: (event.target as HTMLInputElement).checked })
+  );
+
+  element("pref-interval").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest("button[data-interval]");
+    if (!button) return;
+
+    savePreferences({
+      metrics_interval_seconds: Number((button as HTMLElement).dataset.interval),
+    });
+  });
 
   element("create-restore").addEventListener("click", () =>
     runRestoreAction("create_restore_point")

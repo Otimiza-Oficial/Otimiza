@@ -1443,3 +1443,52 @@ button {
   background: var(--accent);
   transition: width 0.5s ease, background 0.5s ease;
 }
+
+/* ----------------------------------------------------------- preferências */
+
+.prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pref {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.pref input[type="checkbox"] {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  flex: none;
+  cursor: pointer;
+}
+
+.pref-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.pref-name {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pref-note {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-top: 3px;
+}
+
+.pref-choices {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}

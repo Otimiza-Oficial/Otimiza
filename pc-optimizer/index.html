@@ -328,6 +328,52 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Preferências</h2>
+              <span class="panel-tag" id="preferences-status">—</span>
+            </div>
+
+            <div class="prefs">
+              <label class="pref">
+                <input type="checkbox" id="pref-restore" />
+                <span class="pref-text">
+                  <span class="pref-name">Criar ponto de restauração antes de otimizar</span>
+                  <span class="pref-note">
+                    Leva algumas dezenas de segundos. Quem otimiza várias máquinas
+                    por dia costuma desligar.
+                  </span>
+                </span>
+              </label>
+
+              <label class="pref">
+                <input type="checkbox" id="pref-unavailable" />
+                <span class="pref-text">
+                  <span class="pref-name">Mostrar o que não se aplica a esta máquina</span>
+                  <span class="pref-note">
+                    Saber que o Otimiza se recusou a oferecer algo, e por quê, é
+                    parte do que ele faz. Desligue se preferir a lista enxuta.
+                  </span>
+                </span>
+              </label>
+
+              <div class="pref">
+                <span class="pref-text">
+                  <span class="pref-name">Atualizar as medições a cada</span>
+                  <span class="pref-note">
+                    Ler mais rápido custa CPU do próprio Otimiza. Num PC fraco
+                    isso conta.
+                  </span>
+                </span>
+                <div class="pref-choices" id="pref-interval">
+                  <button class="filter" data-interval="1">1s</button>
+                  <button class="filter" data-interval="2">2s</button>
+                  <button class="filter" data-interval="5">5s</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Esta máquina</h2>
               <span class="panel-tag">detectado automaticamente</span>
             </div>
