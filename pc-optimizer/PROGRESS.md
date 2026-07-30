@@ -213,6 +213,20 @@ release. Versão que não passa nos testes não vira instalador.
 A descrição fica em `.github/release-notes.md`, versionada como qualquer outro
 texto do produto — passa por revisão, não fica escondida dentro do YAML.
 
+O release sai como **rascunho**: a descrição é conferida antes de ficar visível.
+Para publicar direto, trocar `releaseDraft` para `false` no workflow.
+
+**Os testes rodam separados por área** porque o log detalhado de uma execução só
+é acessível com autenticação. Dividido em passos, o próprio painel do GitHub
+aponta onde quebrou. E sem `continue-on-error`: com ele o resultado do passo é
+reescrito para "sucesso" e o painel passa a mentir sobre o que aconteceu.
+
+A primeira execução em máquina limpa encontrou um teste ruim: ele rejeitava
+adaptador de rede cujo nome contivesse "virtual", e os runners são máquinas
+virtuais da Azure, onde a placa se chama "Mellanox ConnectX Virtual Ethernet
+Adapter" — dispositivo PCI de verdade. O filtro do código estava certo; o teste
+é que conferia o nome em vez do critério. Agora confere o `ComponentId`.
+
 **macOS e Linux estão desligados de propósito.** Todo o motor de otimização é
 exclusivo do Windows: são 27 pontos de código com `cfg(windows)`, e fora dele
 cada comando responde "não implementado". Publicar esses instaladores entregaria
