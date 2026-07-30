@@ -9,8 +9,10 @@
 pub mod catalog;
 pub mod cleanup;
 pub mod devices;
+pub mod diskspace;
 pub mod firmware;
 pub mod hardware;
+pub mod memory;
 pub mod power;
 pub mod processes;
 pub mod registry;

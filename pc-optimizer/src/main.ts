@@ -68,6 +68,47 @@ interface BatchStep {
   success: boolean;
 }
 
+interface SpaceFinding {
+  id: string;
+  name: string;
+  explanation: string;
+  bytes: number;
+  formatted: string;
+  cleanable: boolean;
+  requires_admin: boolean;
+  warning: string | null;
+}
+
+interface DiskReport {
+  drive: string;
+  total_bytes: number;
+  free_bytes: number;
+  free_percent: number;
+  pressure: string | null;
+  recoverable_bytes: number;
+  findings: SpaceFinding[];
+}
+
+interface MemoryFinding {
+  id: string;
+  title: string;
+  measured: string;
+  advice: string;
+  severity: Severity;
+  fix_location: FixLocation;
+}
+
+interface MemoryReport {
+  total_ram_gb: number;
+  available_ram_gb: number;
+  committed_gb: number;
+  pagefile_automatic: boolean;
+  pagefile_size_gb: number;
+  pagefile_peak_gb: number;
+  pagefile_location: string;
+  findings: MemoryFinding[];
+}
+
 type Severity = "Critical" | "Important" | "Ok";
 type FixLocation = "Software" | "Bios" | "Hardware" | "None";
 
@@ -564,6 +605,148 @@ function renderFinding(finding: FirmwareFinding): string {
       ${advice}
     </article>
   `;
+}
+
+// ------------------------------------------------------------ espaço em disco
+
+async function scanDiskSpace() {
+  const button = element<HTMLButtonElement>("scan-disk");
+  button.disabled = true;
+  setStatus("disk-status", "Somando pastas… pode levar alguns segundos.", "progress");
+
+  try {
+    const report = await invoke<DiskReport>("scan_disk_space");
+    renderDiskReport(report);
+  } catch (error) {
+    setStatus("disk-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderDiskReport(report: DiskReport) {
+  const gb = (bytes: number) => (bytes / 1_073_741_824).toFixed(1);
+  const usedPercent = 100 - report.free_percent;
+
+  text("disk-summary", `${gb(report.free_bytes)} GB livres de ${gb(report.total_bytes)} GB`);
+
+  element("disk-meter").hidden = false;
+  setBar("disk-used-bar", usedPercent);
+  text(
+    "disk-meter-note",
+    `${report.drive} · ${usedPercent.toFixed(0)}% ocupado · ${report.free_percent.toFixed(0)}% livre`
+  );
+
+  // O aviso de disco cheio vem antes de qualquer oferta de limpeza: é o que
+  // explica a lentidão que o cliente está sentindo.
+  if (report.pressure) {
+    setStatus("disk-status", report.pressure, "error");
+  } else {
+    const recuperavel = (report.recoverable_bytes / 1_048_576).toFixed(0);
+    setStatus("disk-status", `${recuperavel} MB podem ser liberados por aqui.`, "ok");
+  }
+
+  setBadge("badge-espaco", report.pressure ? 1 : 0, "bad");
+
+  element("disk-result").innerHTML = report.findings.map(renderSpaceFinding).join("");
+}
+
+function renderSpaceFinding(item: SpaceFinding): string {
+  const aviso = item.warning
+    ? `<p class="finding-advice">${escapeHtml(item.warning)}</p>`
+    : "";
+
+  // Categoria vazia não ganha botão: oferecer limpeza de zero byte é encher a
+  // tela de ação inútil.
+  const acao = item.cleanable
+    ? `<button class="btn btn-ghost" data-space="${item.id}">Limpar</button>`
+    : `<span class="state-label">${item.bytes === 0 ? "vazio" : "pela Limpeza de Disco"}</span>`;
+
+  return `
+    <article class="finding" data-severity="${item.bytes === 0 ? "Ok" : "Important"}">
+      <div class="finding-top">
+        <h3>${escapeHtml(item.name)}</h3>
+        <span class="finding-size">${escapeHtml(item.formatted)}</span>
+        ${acao}
+      </div>
+      <p class="finding-advice">${escapeHtml(item.explanation)}</p>
+      ${aviso}
+    </article>
+  `;
+}
+
+async function cleanDiskCategory(id: string, button: HTMLButtonElement) {
+  button.disabled = true;
+  setStatus("disk-status", "Limpando…", "progress");
+
+  try {
+    const outcome = await invoke<{ message: string }>("clean_disk_category", { id });
+    setStatus("disk-status", outcome.message, "ok");
+  } catch (error) {
+    setStatus("disk-status", String(error), "error");
+  } finally {
+    await scanDiskSpace();
+  }
+}
+
+// -------------------------------------------------------- memória e paginação
+
+async function analyzeMemory() {
+  const button = element<HTMLButtonElement>("analyze-memory");
+  button.disabled = true;
+  setStatus("memory-status", "Lendo memória e paginação…", "progress");
+
+  try {
+    const report = await invoke<MemoryReport>("analyze_memory");
+    renderMemoryReport(report);
+  } catch (error) {
+    setStatus("memory-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderMemoryReport(report: MemoryReport) {
+  text(
+    "memory-summary",
+    `${report.total_ram_gb.toFixed(1)} GB · paginação ${report.pagefile_size_gb.toFixed(1)} GB`
+  );
+
+  // O botão de correção só aparece quando há o que corrigir.
+  const precisaCorrigir = report.findings.some(
+    (f) => f.id === "pagefile_off" || f.id === "pagefile_manual" || f.id === "pagefile_small"
+  );
+  element("fix-pagefile").hidden = !precisaCorrigir;
+
+  const problemas = report.findings.filter((f) => f.severity !== "Ok").length;
+  const critico = report.findings.some((f) => f.severity === "Critical");
+
+  setStatus(
+    "memory-status",
+    problemas === 0
+      ? "Memória e paginação sem problemas."
+      : `${problemas} ponto(s) afetando o desempenho.`,
+    problemas === 0 ? "ok" : "error"
+  );
+
+  element("memory-result").innerHTML = report.findings
+    .map(
+      (f) => `
+      <article class="finding" data-severity="${f.severity}">
+        <div class="finding-top">
+          <h3>${escapeHtml(f.title)}</h3>
+          <span class="chip" data-fix="${f.fix_location}">${FIX_LABELS[f.fix_location]}</span>
+        </div>
+        <p class="finding-measured">${escapeHtml(f.measured)}</p>
+        ${f.advice ? `<p class="finding-advice">${escapeHtml(f.advice)}</p>` : ""}
+      </article>`
+    )
+    .join("");
+
+  // O selo do Diagnóstico soma firmware e memória: é a aba inteira que precisa
+  // de atenção, não um painel só.
+  const firmwareBadge = Number(element("badge-diagnostico").textContent) || 0;
+  setBadge("badge-diagnostico", firmwareBadge + problemas, critico ? "bad" : "warn");
 }
 
 // -------------------------------------------------------------- otimizações
@@ -1134,6 +1317,46 @@ function wireControls() {
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
+
+  element("scan-disk").addEventListener("click", scanDiskSpace);
+
+  element("disk-result").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-space]"
+    ) as HTMLButtonElement | null;
+    if (button) cleanDiskCategory(button.dataset.space!, button);
+  });
+
+  element("empty-recycle").addEventListener("click", async () => {
+    const button = element<HTMLButtonElement>("empty-recycle");
+    button.disabled = true;
+
+    try {
+      const message = await invoke<string>("empty_recycle_bin");
+      setStatus("disk-status", message, "ok");
+    } catch (error) {
+      setStatus("disk-status", String(error), "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  element("analyze-memory").addEventListener("click", analyzeMemory);
+
+  element("fix-pagefile").addEventListener("click", async () => {
+    const button = element<HTMLButtonElement>("fix-pagefile");
+    button.disabled = true;
+
+    try {
+      const message = await invoke<string>("set_automatic_pagefile");
+      setStatus("memory-status", message, "ok");
+      await analyzeMemory();
+    } catch (error) {
+      setStatus("memory-status", String(error), "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
 
   element("pref-restore").addEventListener("change", (event) =>
     savePreferences({

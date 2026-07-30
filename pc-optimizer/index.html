@@ -58,6 +58,10 @@
           Diagnóstico
           <span class="tab-badge" id="badge-diagnostico" hidden></span>
         </button>
+        <button class="tab" role="tab" data-tab="espaco" aria-selected="false" aria-controls="tab-espaco" id="tabbtn-espaco">
+          Espaço
+          <span class="tab-badge" id="badge-espaco" hidden></span>
+        </button>
         <button class="tab" role="tab" data-tab="resultado" aria-selected="false" aria-controls="tab-resultado" id="tabbtn-resultado">
           Resultado
         </button>
@@ -258,6 +262,56 @@
               <div id="firmware-result"></div>
             </section>
           </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Memória e paginação</h2>
+              <span class="panel-tag" id="memory-summary">—</span>
+            </div>
+
+            <p class="lead">
+              Em PC de 4 a 8 GB, a maioria dos travamentos que o dono descreve como
+              "o PC congela" é memória acabando — não falta de processador. E o
+              culpado mais comum é alguém ter desativado o arquivo de paginação
+              seguindo tutorial ruim.
+            </p>
+
+            <div class="row-actions">
+              <button id="analyze-memory" class="btn btn-primary">Analisar memória</button>
+              <button id="fix-pagefile" class="btn" hidden>Deixar o Windows gerenciar</button>
+            </div>
+
+            <p id="memory-status" class="status"></p>
+            <div id="memory-result"></div>
+          </section>
+        </section>
+
+        <!-- ============================================================== ESPAÇO -->
+        <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Liberador de espaço</h2>
+              <span class="panel-tag" id="disk-summary">—</span>
+            </div>
+
+            <p class="lead">
+              Em PC fraco, disco cheio é o problema que mais se disfarça de "PC
+              lento". Abaixo de 10% livre o Windows perde folga para o arquivo de
+              paginação e para atualizações — e a culpa cai no processador.
+            </p>
+
+            <div class="row-actions">
+              <button id="scan-disk" class="btn btn-primary">Verificar espaço</button>
+              <button id="empty-recycle" class="btn">Esvaziar Lixeira</button>
+            </div>
+
+            <p id="disk-status" class="status"></p>
+            <div id="disk-meter" hidden>
+              <div class="bar"><i id="disk-used-bar"></i></div>
+              <p class="readout-note" id="disk-meter-note"></p>
+            </div>
+            <div id="disk-result"></div>
+          </section>
         </section>
 
         <!-- =========================================================== RESULTADO -->

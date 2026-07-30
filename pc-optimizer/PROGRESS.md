@@ -8,10 +8,13 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 77 testes unitários passam, zero avisos | `cargo test --lib` |
+| 102 testes unitários passam, zero avisos | `cargo test --lib` |
 | Instalador gerado | `Otimiza_0.1.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
+| Esteira do GitHub compila e testa em máquina limpa | Oito áreas de teste verdes; instaladores anexados ao release |
+| Liberador de espaço varre esta máquina | 971 MB recuperáveis, por categoria |
+| Diagnóstico de memória acha problema real aqui | 11,3 GB prometidos para 7,9 GB físicos |
 | Ícone da barra de tarefas é a nossa logo | Extraído do `.exe` compilado e conferido visualmente |
 | Perfil de hardware desta máquina | SSD, 7,9 GB de RAM, 8 núcleos lógicos |
 | Benchmark produz números reais | Executado nesta máquina: 669 Mops/s em 1 núcleo, 4450 em todos, 3600 MHz sob carga |
@@ -263,6 +266,50 @@ apagada, só marcada como desligada.
   diálogo de administrador
 - Entram no histórico com id próprio (`startup:HKCU:Discord`), então "Desfazer
   tudo" também devolve a inicialização ao estado original
+
+### Liberador de espaço
+
+Em PC fraco, disco cheio é o problema que mais se disfarça de "PC lento". Abaixo
+de 10% livre o Windows perde folga para o arquivo de paginação e para
+atualizações — e a culpa cai no processador.
+
+Varre **categoria por categoria**, mostrando quanto cada uma ocupa e explicando o
+que ela é: temporários, instaladores de atualização, relatórios de erro, cache de
+compartilhamento, registros de atualização e instalação anterior do Windows.
+
+Duas regras:
+
+- **O total recuperável só conta o que limpamos por aqui.** Somar o que não
+  removemos seria prometer espaço que o usuário não vai ver
+- **`Windows.old` é reportado, não removido.** A pasta pertence ao
+  TrustedInstaller e resiste a remoção comum; apagar metade é pior que apontar a
+  ferramenta certa. O produto mostra o tamanho e manda usar a Limpeza de Disco
+
+Teste automatizado impede que alguém acrescente uma categoria apontando para
+fora das pastas conhecidas — a barreira contra apagar algo que importa.
+
+### Memória e arquivo de paginação
+
+Em PC de 4 a 8 GB, a maioria dos travamentos que o dono descreve como "o PC
+congela" é memória acabando, não falta de processador. O culpado mais comum é
+alguém ter **desativado o arquivo de paginação** seguindo tutorial ruim — o que
+não ganha desempenho nenhum e faz programa fechar sozinho.
+
+Diagnostica e explica:
+
+| Achado | Severidade |
+|---|---|
+| Paginação desativada com pouca RAM | Crítico — causa de "o programa fechou sozinho" |
+| Paginação perto do limite já atingido | Importante |
+| Tamanho fixo definido à mão | Importante |
+| Memória prometida acima da física | Crítico — **aponta para hardware** |
+| RAM abaixo do confortável | Importante — **aponta para hardware** |
+
+Os dois últimos dizem explicitamente que nenhum ajuste de software cria memória.
+A correção que existe — devolver o gerenciamento ao Windows — está a um clique.
+
+As regras de diagnóstico ficam separadas da leitura do sistema, então são
+testadas sem depender da máquina onde rodam.
 
 ### Transparência ao vivo
 

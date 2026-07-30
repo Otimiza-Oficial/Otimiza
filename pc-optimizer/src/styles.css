@@ -1502,3 +1502,15 @@ button {
 .gain-dot[data-recommended="true"] {
   box-shadow: 0 0 0 3px rgba(95, 211, 154, 0.22);
 }
+
+/* Liberador de espaço */
+.finding-size {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+#disk-meter {
+  margin: 4px 0 14px;
+}

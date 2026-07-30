@@ -17,6 +17,10 @@ use crate::modules::windows::startup::StartupEntry;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::restore::RestoreStatus;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::diskspace::{CleanOutcome, DiskReport};
+#[cfg(target_os = "windows")]
+use crate::modules::windows::memory::MemoryReport;
+#[cfg(target_os = "windows")]
 use crate::modules::optimizer::BatchStep;
 use tauri::{Emitter, Manager};
 use crate::modules::{DiagnosticEngine, DiagnosticReport, PerformanceMonitor, PerformanceMetrics};
@@ -222,6 +226,99 @@ pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> 
     // Devolve o que ficou de fato gravado: valores fora da faixa são corrigidos
     // na gravação, e a interface precisa refletir o valor real, não o pedido.
     Ok(Preferences::load())
+}
+
+// ---------------------------------------------------------------------------
+// Espaço em disco
+//
+// Num PC fraco, disco cheio é o problema que mais se disfarça de "PC lento".
+// ---------------------------------------------------------------------------
+
+/// Comando: Varre o disco por categoria de espaço recuperável. Não apaga nada.
+#[tauri::command]
+pub async fn scan_disk_space() -> Result<DiskReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // A varredura percorre pastas grandes; fora do runtime para não travar
+        // a interface enquanto soma.
+        tokio::task::spawn_blocking(crate::modules::windows::diskspace::scan)
+            .await
+            .map_err(|e| format!("Falha na varredura: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Limpa uma categoria de espaço.
+#[tauri::command]
+pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || crate::modules::windows::diskspace::clean(&id))
+            .await
+            .map_err(|e| format!("Falha na limpeza: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = id;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Esvazia a Lixeira.
+#[tauri::command]
+pub async fn empty_recycle_bin() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::diskspace::empty_recycle_bin)
+            .await
+            .map_err(|e| format!("Falha ao esvaziar a Lixeira: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Memória e paginação
+// ---------------------------------------------------------------------------
+
+/// Comando: Diagnostica memória e arquivo de paginação.
+#[tauri::command]
+pub async fn analyze_memory() -> Result<MemoryReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::memory::analyze)
+            .await
+            .map_err(|e| format!("Falha na análise de memória: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Devolve ao Windows o gerenciamento do arquivo de paginação.
+#[tauri::command]
+pub async fn set_automatic_pagefile() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::memory::set_automatic_pagefile)
+            .await
+            .map_err(|e| format!("Falha ao alterar a paginação: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 /// Comando: Estado dos pontos de restauração do Windows.
