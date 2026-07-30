@@ -1514,3 +1514,15 @@ button {
 #disk-meter {
   margin: 4px 0 14px;
 }
+
+/* Lista de programas em conflito */
+.conflict-list {
+  margin: 6px 0 8px;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.conflict-list li {
+  padding: 1px 0;
+}

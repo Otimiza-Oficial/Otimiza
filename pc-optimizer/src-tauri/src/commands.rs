@@ -21,6 +21,10 @@ use crate::modules::windows::diskspace::{CleanOutcome, DiskReport};
 #[cfg(target_os = "windows")]
 use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::conflicts::ConflictReport;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::tasks::ScheduledTask;
+#[cfg(target_os = "windows")]
 use crate::modules::optimizer::BatchStep;
 use tauri::{Emitter, Manager};
 use crate::modules::{DiagnosticEngine, DiagnosticReport, PerformanceMonitor, PerformanceMetrics};
@@ -317,6 +321,69 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Conflitos entre programas e tarefas agendadas
+// ---------------------------------------------------------------------------
+
+/// Comando: Procura programas que brigam entre si.
+#[tauri::command]
+pub async fn analyze_conflicts() -> Result<ConflictReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Percorre o registro de programas instalados e a lista de processos;
+        // fora do runtime para não travar a interface.
+        tokio::task::spawn_blocking(crate::modules::windows::conflicts::analyze)
+            .await
+            .map_err(|e| format!("Falha ao procurar conflitos: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Tarefas agendadas de terceiros.
+#[tauri::command]
+pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::tasks::listar_de_terceiros)
+            .await
+            .map_err(|e| format!("Falha ao listar tarefas: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Liga ou desliga uma tarefa agendada.
+///
+/// Entra no histórico com id próprio, então "Desfazer tudo" também devolve as
+/// tarefas ao estado original.
+#[tauri::command]
+pub async fn set_scheduled_task(
+    path: String,
+    name: String,
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new()
+            .set_scheduled_task(&path, &name, enabled, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (path, name, enabled, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

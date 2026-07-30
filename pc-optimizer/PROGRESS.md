@@ -8,13 +8,15 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 102 testes unitários passam, zero avisos | `cargo test --lib` |
+| 112 testes unitários passam, zero avisos | `cargo test --lib` |
 | Instalador gerado | `Otimiza_0.2.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
 | Esteira do GitHub compila e testa em máquina limpa | Oito áreas de teste verdes; instaladores anexados ao release |
 | Liberador de espaço varre esta máquina | 971 MB recuperáveis, por categoria |
 | Diagnóstico de memória acha problema real aqui | 11,3 GB prometidos para 7,9 GB físicos |
+| Detector de conflitos acha problema real aqui | Driver Booster 13, entre 253 programas examinados |
+| Auditor de tarefas lê o agendador desta máquina | 203 tarefas, 17 de terceiros |
 | Ícone da barra de tarefas é a nossa logo | Extraído do `.exe` compilado e conferido visualmente |
 | Perfil de hardware desta máquina | SSD, 7,9 GB de RAM, 8 núcleos lógicos |
 | Benchmark produz números reais | Executado nesta máquina: 669 Mops/s em 1 núcleo, 4450 em todos, 3600 MHz sob carga |
@@ -266,6 +268,48 @@ apagada, só marcada como desligada.
   diálogo de administrador
 - Entram no histórico com id próprio (`startup:HKCU:Discord`), então "Desfazer
   tudo" também devolve a inicialização ao estado original
+
+### Detector de conflitos
+
+O sistema que nenhum concorrente tem — e por um motivo simples: metade do que ele
+denuncia são os próprios concorrentes.
+
+PC lento raramente é culpa de um programa só. É de dois fazendo a mesma coisa ao
+mesmo tempo. Detecta quatro brigas:
+
+| Conflito | Por que custa caro |
+|---|---|
+| Dois antivírus com proteção em tempo real | Cada leitura de disco é verificada duas vezes, e um passa a inspecionar o outro |
+| Outro otimizador instalado | Duas ferramentas desfazem a configuração uma da outra |
+| Três ou mais sobreposições de jogo | Cada uma injeta código no mesmo ponto de entrada — causa conhecida de engasgo |
+| Vários sincronizadores de nuvem | Cada um vigia pastas e lê disco continuamente |
+
+**Não desinstala nada.** Desinstalar é decisão do dono da máquina, e
+desinstalador de terceiro é interativo. O que se faz é mostrar o conflito com
+nome e sobrenome.
+
+Achado na máquina de desenvolvimento, entre 253 programas: **Driver Booster 13**
+— que, aliás, é quem trocou o plano de energia desta máquina por um próprio.
+
+O bit de proteção em tempo real quase passou errado: a primeira versão comparava
+igualdade com `0x10` no byte do meio do `productState`, e falhava com `0x061100`,
+que é o valor do próprio Defender **ativo**. Concluiria que um antivírus ligado
+está desligado — e nunca apontaria o conflito. É teste de bit, não de igualdade.
+
+### Auditor de tarefas agendadas
+
+O Windows executa dezenas de tarefas em segundo plano em horários que ninguém
+escolheu. As de terceiros — atualizadores, utilitários de fabricante — acordam
+sozinhas o dia inteiro.
+
+Lista **só as de terceiros**, com ligar/desligar reversível gravado no histórico.
+Tarefas do próprio Windows são recusadas: desligar tarefa do sistema é da mesma
+família de desligar serviço do sistema. O critério é o caminho `\Microsoft\`, que
+é estrutura fixa em qualquer idioma — não o autor, que vem em branco ou traduzido.
+
+Na máquina de desenvolvimento: **203 tarefas no total, 17 de terceiros**, entre
+elas `IObit SUM2026Sale` e `iTopML SUM2026 Task` — tarefas de promoção de venda
+agendadas no PC do cliente.
 
 ### Liberador de espaço
 

@@ -61,6 +61,12 @@ pub enum ChangeRecord {
     BootLimits {
         removed: Vec<(String, String)>,
     },
+    /// Tarefa agendada ligada ou desligada.
+    ScheduledTask {
+        path: String,
+        name: String,
+        previously_enabled: bool,
+    },
 }
 
 impl ChangeRecord {
@@ -85,6 +91,11 @@ impl ChangeRecord {
                 format!("energia · ajuste {} (antes: {})", short, previous.describe())
             }
             ChangeRecord::MemoryCompression { .. } => "compressão de memória desligada".to_string(),
+            ChangeRecord::ScheduledTask { name, previously_enabled, .. } => format!(
+                "tarefa agendada · {} (antes: {})",
+                name,
+                if *previously_enabled { "ligada" } else { "desligada" }
+            ),
             ChangeRecord::BootLimits { removed } => {
                 let keys: Vec<&str> = removed.iter().map(|(key, _)| key.as_str()).collect();
                 format!("boot · limites removidos: {}", keys.join(", "))

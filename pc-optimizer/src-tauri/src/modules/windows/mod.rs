@@ -8,6 +8,7 @@
 
 pub mod catalog;
 pub mod cleanup;
+pub mod conflicts;
 pub mod devices;
 pub mod diskspace;
 pub mod firmware;
@@ -20,6 +21,7 @@ pub mod restore;
 pub mod services;
 pub mod shell;
 pub mod startup;
+pub mod tasks;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState};
@@ -373,6 +375,60 @@ impl WindowsOptimizer {
             requires_restart,
             changes_count,
             changes: described,
+        })
+    }
+
+    /// Liga ou desliga uma tarefa agendada de terceiros.
+    ///
+    /// Segue o mesmo desenho da inicialização: desligar grava no histórico com
+    /// id próprio, ligar de volta desfaz esse registro. Assim "Desfazer tudo"
+    /// devolve também as tarefas ao estado em que estavam.
+    pub fn set_scheduled_task(
+        &self,
+        path: &str,
+        name: &str,
+        enabled: bool,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = format!("task:{}{}", path, name);
+
+        if enabled {
+            if log.is_applied(&id) {
+                return self.revert(&id, log);
+            }
+
+            let change = tasks::definir_estado(path, name, true)?;
+            return Ok(OptimizationOutcome {
+                id,
+                name: name.to_string(),
+                success: true,
+                applied: false,
+                message: format!("`{}` volta a ser executada pelo agendador.", name),
+                requires_restart: false,
+                changes_count: 1,
+                changes: vec![change.describe()],
+            });
+        }
+
+        let change = tasks::definir_estado(path, name, false)?;
+        let described = change.describe();
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} (tarefa agendada)", name),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        })?;
+
+        Ok(OptimizationOutcome {
+            id,
+            name: name.to_string(),
+            success: true,
+            applied: true,
+            message: format!("`{}` não é mais executada pelo agendador.", name),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
         })
     }
 
@@ -829,6 +885,12 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
             ChangeRecord::MemoryCompression { previously_enabled } => {
                 power::set_memory_compression(*previously_enabled)
             }
+
+            ChangeRecord::ScheduledTask {
+                path,
+                name,
+                previously_enabled,
+            } => tasks::definir_estado(path, name, *previously_enabled).map(|_| ()),
 
             ChangeRecord::BootLimits { removed } => {
                 let mut failures = Vec::new();

@@ -68,6 +68,28 @@ interface BatchStep {
   success: boolean;
 }
 
+interface Conflict {
+  id: string;
+  title: string;
+  found: string[];
+  explanation: string;
+  advice: string;
+  severity: Severity;
+}
+
+interface ConflictReport {
+  conflicts: Conflict[];
+  programs_scanned: number;
+}
+
+interface ScheduledTask {
+  name: string;
+  path: string;
+  author: string;
+  enabled: boolean;
+  microsoft: boolean;
+}
+
 interface SpaceFinding {
   id: string;
   name: string;
@@ -235,6 +257,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     loadOptimizations(),
     loadStartup(),
     loadRestoreStatus(),
+    loadScheduledTasks(),
   ]);
 
   await startMonitoring();
@@ -604,6 +627,83 @@ function renderFinding(finding: FirmwareFinding): string {
       <p class="finding-measured">${escapeHtml(finding.measured)}</p>
       ${advice}
     </article>
+  `;
+}
+
+// ------------------------------------------------------ conflitos e tarefas
+
+async function analyzeConflicts() {
+  const button = element<HTMLButtonElement>("analyze-conflicts");
+  button.disabled = true;
+  setStatus("conflicts-status", "Lendo programas instalados e processos…", "progress");
+
+  try {
+    const report = await invoke<ConflictReport>("analyze_conflicts");
+    text("conflicts-summary", `${report.programs_scanned} programas examinados`);
+
+    const problemas = report.conflicts.filter((c) => c.severity !== "Ok").length;
+    setStatus(
+      "conflicts-status",
+      problemas === 0
+        ? "Nenhum programa disputando função com outro."
+        : `${problemas} conflito(s) custando desempenho.`,
+      problemas === 0 ? "ok" : "error"
+    );
+
+    element("conflicts-result").innerHTML = report.conflicts
+      .map(
+        (c) => `
+        <article class="finding" data-severity="${c.severity}">
+          <div class="finding-top"><h3>${escapeHtml(c.title)}</h3></div>
+          ${
+            c.found.length
+              ? `<ul class="conflict-list">${c.found
+                  .map((f) => `<li>${escapeHtml(f)}</li>`)
+                  .join("")}</ul>`
+              : ""
+          }
+          <p class="finding-advice">${escapeHtml(c.explanation)}</p>
+          ${c.advice ? `<p class="finding-advice">${escapeHtml(c.advice)}</p>` : ""}
+        </article>`
+      )
+      .join("");
+  } catch (error) {
+    setStatus("conflicts-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function loadScheduledTasks() {
+  try {
+    const tasks = await invoke<ScheduledTask[]>("list_scheduled_tasks");
+    const ligadas = tasks.filter((t) => t.enabled).length;
+    text("tasks-count", `${ligadas} de ${tasks.length} ligadas`);
+
+    element("tasks-list").innerHTML = tasks.length
+      ? tasks.map(renderTask).join("")
+      : `<p class="empty">Nenhuma tarefa de terceiros neste PC.</p>`;
+  } catch (error) {
+    element("tasks-list").innerHTML = `<p class="status error">${escapeHtml(String(error))}</p>`;
+  }
+}
+
+function renderTask(task: ScheduledTask): string {
+  const autor = task.author.trim() || "autor não informado";
+
+  return `
+    <div class="startup" data-enabled="${task.enabled}">
+      <div class="startup-info">
+        <span class="startup-name">${escapeHtml(task.name)}</span>
+        <span class="startup-exe">${escapeHtml(autor)}</span>
+      </div>
+      <button class="btn btn-ghost"
+              data-task="${escapeHtml(task.name)}"
+              data-taskpath="${escapeHtml(task.path)}"
+              data-enable="${!task.enabled}">
+        ${task.enabled ? "Desligar" : "Ligar"}
+      </button>
+    </div>
   `;
 }
 
@@ -1317,6 +1417,39 @@ function wireControls() {
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
+
+  element("analyze-conflicts").addEventListener("click", analyzeConflicts);
+
+  element("tasks-list").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-task]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    // Mexer no agendador exige elevação; pedir antes evita erro seco na tela.
+    if (!isElevated) {
+      askForAdmin(
+        `Ligar e desligar tarefas agendadas exige permissão de administrador. ` +
+          `Podemos reabrir o Otimiza com essa permissão?`
+      );
+      return;
+    }
+
+    button.disabled = true;
+
+    try {
+      const outcome = await invoke<OptimizationOutcome>("set_scheduled_task", {
+        path: button.dataset.taskpath,
+        name: button.dataset.task,
+        enabled: button.dataset.enable === "true",
+      });
+      setStatus("tasks-status", outcome.message, outcome.success ? "ok" : "error");
+    } catch (error) {
+      setStatus("tasks-status", String(error), "error");
+    } finally {
+      await loadScheduledTasks();
+    }
+  });
 
   element("scan-disk").addEventListener("click", scanDiskSpace);
 

@@ -265,6 +265,24 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Conflitos entre programas</h2>
+              <span class="panel-tag" id="conflicts-summary">—</span>
+            </div>
+
+            <p class="lead">
+              PC lento raramente é culpa de um programa só. É de dois fazendo a
+              mesma coisa ao mesmo tempo: dois antivírus varrendo um ao outro,
+              três sobreposições injetando código no mesmo jogo, dois otimizadores
+              desfazendo a configuração um do outro.
+            </p>
+
+            <button id="analyze-conflicts" class="btn btn-primary">Procurar conflitos</button>
+            <p id="conflicts-status" class="status"></p>
+            <div id="conflicts-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Memória e paginação</h2>
               <span class="panel-tag" id="memory-summary">—</span>
             </div>
@@ -355,6 +373,24 @@
               <p id="startup-status" class="status"></p>
               <div id="startup-list" class="startup-list">
                 <p class="empty">Lendo a inicialização…</p>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head">
+                <h2>Tarefas agendadas</h2>
+                <span class="panel-tag" id="tasks-count">—</span>
+              </div>
+
+              <p class="hint">
+                Só as que chegaram com programas instalados. As do próprio Windows
+                ficam de fora: desligar tarefa do sistema é da mesma família de
+                desligar serviço do sistema, e não é o que o Otimiza faz.
+              </p>
+
+              <p id="tasks-status" class="status"></p>
+              <div id="tasks-list" class="startup-list">
+                <p class="empty">Lendo o agendador…</p>
               </div>
             </section>
 
