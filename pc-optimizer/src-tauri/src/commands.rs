@@ -25,6 +25,8 @@ use crate::modules::windows::conflicts::ConflictReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::bloatware::BloatReport;
+#[cfg(target_os = "windows")]
 use crate::modules::optimizer::BatchStep;
 use tauri::{Emitter, Manager};
 use crate::modules::{DiagnosticEngine, DiagnosticReport, PerformanceMonitor, PerformanceMetrics};
@@ -384,6 +386,72 @@ pub async fn set_scheduled_task(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (path, name, enabled, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Programas de fábrica
+// ---------------------------------------------------------------------------
+
+/// Comando: Procura utilitário de fabricante, antivírus em teste e app da Loja
+/// pré-instalado.
+#[tauri::command]
+pub async fn analyze_bloatware() -> Result<BloatReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::bloatware::analyze)
+            .await
+            .map_err(|e| format!("Falha ao examinar programas: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Remove um aplicativo da Microsoft Store.
+///
+/// Só aplicativos da Loja: eles voltam pela Loja quando o usuário quiser.
+/// Programa comum nunca é desinstalado por nós — para esses, abrimos a tela
+/// oficial do Windows.
+#[tauri::command]
+pub async fn remove_store_app(package: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::bloatware::remover_app_da_loja(&package)
+        })
+        .await
+        .map_err(|e| format!("Falha ao remover: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = package;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Abre a tela de programas instalados do Windows.
+///
+/// Desinstalar programa comum é feito pelo desinstalador do próprio fabricante,
+/// que costuma fazer perguntas. Levar o usuário até a tela oficial é mais seguro
+/// que imitar esse processo e arriscar deixar instalação pela metade.
+#[tauri::command]
+pub fn open_apps_settings() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::shell::run_checked(
+            "cmd",
+            &["/c", "start", "", "ms-settings:appsfeatures"],
+        )?;
+        Ok("Tela de aplicativos do Windows aberta.".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

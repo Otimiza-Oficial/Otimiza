@@ -8,7 +8,7 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 112 testes unitários passam, zero avisos | `cargo test --lib` |
+| 120 testes unitários passam, zero avisos | `cargo test --lib` |
 | Instalador gerado | `Otimiza_0.2.0_x64-setup.exe` (2,2 MB) e `.msi` (3,3 MB) |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
@@ -17,6 +17,7 @@
 | Diagnóstico de memória acha problema real aqui | 11,3 GB prometidos para 7,9 GB físicos |
 | Detector de conflitos acha problema real aqui | Driver Booster 13, entre 253 programas examinados |
 | Auditor de tarefas lê o agendador desta máquina | 203 tarefas, 17 de terceiros |
+| Detector de fábrica não marca driver como lixo | Teste com 7 drivers reais (NVIDIA, Realtek, Intel, AMD, Visual C++, .NET, DirectX) |
 | Ícone da barra de tarefas é a nossa logo | Extraído do `.exe` compilado e conferido visualmente |
 | Perfil de hardware desta máquina | SSD, 7,9 GB de RAM, 8 núcleos lógicos |
 | Benchmark produz números reais | Executado nesta máquina: 669 Mops/s em 1 núcleo, 4450 em todos, 3600 MHz sob carga |
@@ -268,6 +269,37 @@ apagada, só marcada como desligada.
   diálogo de administrador
 - Entram no histórico com id próprio (`startup:HKCU:Discord`), então "Desfazer
   tudo" também devolve a inicialização ao estado original
+
+### Detector de programas de fábrica
+
+Notebook de loja chega com vários GB de utilitário do fabricante, antivírus em
+teste e joguinho patrocinado. É justamente a máquina mais fraca que vem com mais
+peso morto — e o dono nem sabe que aquilo está lá.
+
+**Aqui o risco é invertido.** No resto do projeto, errar significa não otimizar.
+Aqui, errar significa marcar o driver de vídeo como lixo e o cliente
+desinstalar. Por isso a ordem das regras é: **primeiro o que nunca pode ser
+marcado**, depois o que pode.
+
+A lista de proteção — driver, chipset, áudio, runtime, redistribuível,
+framework, `.NET`, Visual C++, DirectX — é consultada antes de qualquer regra de
+detecção, e vence sempre. Um driver de firewall da McAfee casaria com o padrão
+"mcafee"; a proteção impede. Há teste com sete drivers reais garantindo isso.
+
+**Nada é desinstalado às escondidas:**
+
+- Aplicativo da Loja sai pela chamada do Windows e **volta pela Loja** quando o
+  usuário quiser
+- Programa comum **não é desinstalado por nós**: abre-se a tela oficial do
+  Windows, porque desinstalador de fabricante faz perguntas e imitá-lo é o
+  caminho para deixar instalação pela metade
+
+O identificador do pacote entra num comando do PowerShell, então é validado
+caractere a caractere antes — com teste tentando injetar comando.
+
+**Tamanho desconhecido não vira zero.** Apps da Loja ficam em pasta protegida e o
+tamanho não é legível; mostrar "0 MB" passaria a impressão de que não ocupam
+espaço. O relatório diz "tamanho não informado" e o total avisa que é parcial.
 
 ### Detector de conflitos
 

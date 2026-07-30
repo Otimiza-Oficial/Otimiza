@@ -6,6 +6,7 @@
 // 2. Se uma ação falhar no meio de uma otimização, as ações já aplicadas são
 //    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
 
+pub mod bloatware;
 pub mod catalog;
 pub mod cleanup;
 pub mod conflicts;

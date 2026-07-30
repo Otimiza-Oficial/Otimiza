@@ -90,6 +90,25 @@ interface ScheduledTask {
   microsoft: boolean;
 }
 
+type BloatKind = "OemUtility" | "TrialSecurity" | "Sponsored" | "StoreApp";
+
+interface BloatItem {
+  name: string;
+  publisher: string;
+  kind: BloatKind;
+  size_mb: number | null;
+  reason: string;
+  package: string | null;
+  removable_here: boolean;
+}
+
+interface BloatReport {
+  items: BloatItem[];
+  total_mb: number;
+  unmeasured: number;
+  programs_scanned: number;
+}
+
 interface SpaceFinding {
   id: string;
   name: string;
@@ -626,6 +645,76 @@ function renderFinding(finding: FirmwareFinding): string {
       </div>
       <p class="finding-measured">${escapeHtml(finding.measured)}</p>
       ${advice}
+    </article>
+  `;
+}
+
+// ------------------------------------------------------- programas de fábrica
+
+const BLOAT_LABELS: Record<BloatKind, string> = {
+  OemUtility: "utilitário do fabricante",
+  TrialSecurity: "segurança em teste",
+  Sponsored: "patrocinado",
+  StoreApp: "app da Loja",
+};
+
+async function analyzeBloatware() {
+  const button = element<HTMLButtonElement>("analyze-bloat");
+  button.disabled = true;
+  setStatus("bloat-status", "Lendo programas instalados e apps da Loja…", "progress");
+
+  try {
+    const report = await invoke<BloatReport>("analyze_bloatware");
+    renderBloatReport(report);
+  } catch (error) {
+    setStatus("bloat-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderBloatReport(report: BloatReport) {
+  text("bloat-summary", `${report.programs_scanned} programas examinados`);
+
+  if (report.items.length === 0) {
+    setStatus("bloat-status", "Nenhum programa de fábrica encontrado.", "ok");
+    element("bloat-result").innerHTML = "";
+    return;
+  }
+
+  // O total só menciona espaço quando algo foi realmente medido, e diz que é
+  // parcial quando parte dos itens não tem tamanho legível.
+  const medido = report.items.length - report.unmeasured;
+  const espaco =
+    medido > 0
+      ? ` Pelo menos ${report.total_mb.toFixed(0)} MB${
+          report.unmeasured > 0 ? ` (${report.unmeasured} sem tamanho informado)` : ""
+        }.`
+      : "";
+
+  setStatus("bloat-status", `${report.items.length} encontrados.${espaco}`, "error");
+  element("bloat-result").innerHTML = report.items.map(renderBloatItem).join("");
+}
+
+function renderBloatItem(item: BloatItem): string {
+  const tamanho =
+    item.size_mb === null
+      ? `<span class="state-label">tamanho não informado</span>`
+      : `<span class="finding-size">${item.size_mb.toFixed(0)} MB</span>`;
+
+  const acao = item.removable_here
+    ? `<button class="btn btn-ghost" data-bloat="${escapeHtml(item.package ?? "")}">Remover</button>`
+    : "";
+
+  return `
+    <article class="finding" data-severity="Important">
+      <div class="finding-top">
+        <h3>${escapeHtml(item.name)}</h3>
+        <span class="chip">${BLOAT_LABELS[item.kind]}</span>
+        ${tamanho}
+        ${acao}
+      </div>
+      <p class="finding-advice">${escapeHtml(item.reason)}</p>
     </article>
   `;
 }
@@ -1419,6 +1508,37 @@ function wireControls() {
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
 
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
+
+  element("analyze-bloat").addEventListener("click", analyzeBloatware);
+
+  element("open-apps").addEventListener("click", async () => {
+    try {
+      const message = await invoke<string>("open_apps_settings");
+      setStatus("bloat-status", message, "ok");
+    } catch (error) {
+      setStatus("bloat-status", String(error), "error");
+    }
+  });
+
+  element("bloat-result").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-bloat]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    button.disabled = true;
+
+    try {
+      const message = await invoke<string>("remove_store_app", {
+        package: button.dataset.bloat,
+      });
+      setStatus("bloat-status", message, "ok");
+    } catch (error) {
+      setStatus("bloat-status", String(error), "error");
+    } finally {
+      await analyzeBloatware();
+    }
+  });
 
   element("tasks-list").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(
