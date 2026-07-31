@@ -2043,3 +2043,14 @@ button {
 .tab {
   margin-bottom: -1px;
 }
+
+/* Subtítulo dentro de painel. Faltava um degrau entre o título da seção e o
+   texto corrido — os blocos de resultado longos vinham todos no mesmo nível. */
+.sub {
+  margin: var(--s5) 0 var(--s3);
+  font-size: var(--t-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}

@@ -785,6 +785,215 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
   `;
 }
 
+// ------------------------------------------- tempo de inicialização
+
+type BootType = "Full" | "FastStartup" | "Resume";
+
+interface BootMeasurement {
+  when: string;
+  total_ms: number;
+  main_path_ms: number;
+  post_boot_ms: number;
+  instance: number;
+  degraded: boolean;
+}
+
+interface BootCulprit {
+  name: string;
+  path: string;
+  total_ms: number;
+  degradation_ms: number;
+}
+
+interface BootReport {
+  needs_admin: boolean;
+  last: BootMeasurement | null;
+  history: BootMeasurement[];
+  culprits: BootCulprit[];
+  recent_types: [string, BootType][];
+  note: string;
+}
+
+const BOOT_TYPE_LABELS: Record<BootType, string> = {
+  Full: "boot completo",
+  FastStartup: "inicialização rápida",
+  Resume: "retomada de hibernação",
+};
+
+/** Milissegundos em texto que uma pessoa lê sem converter na cabeça. */
+function duracao(ms: number): string {
+  const s = ms / 1000;
+  if (s >= 60) return `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
+  return `${s.toFixed(1)} s`;
+}
+
+async function analyzeBoot() {
+  const button = element<HTMLButtonElement>("analyze-boot");
+  button.disabled = true;
+  setStatus("boot-status", "Lendo o registro de inicialização do Windows…", "progress");
+
+  try {
+    const report = await invoke<BootReport>("analyze_boot");
+    renderBootReport(report);
+  } catch (error) {
+    setStatus("boot-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderBootReport(report: BootReport) {
+  const partes: string[] = [];
+
+  if (report.last) {
+    const b = report.last;
+    text("boot-tag", duracao(b.total_ms));
+
+    // A divisão importa mais que o total: pós-boot alto significa que a área de
+    // trabalho apareceu mas a máquina ainda não dava para usar, que é o que o
+    // dono sente e não sabe nomear.
+    partes.push(`
+      <div class="readouts readouts-row">
+        <div class="readout">
+          <span class="readout-label">Boot completo</span>
+          <span class="readout-value">${duracao(b.total_ms)}</span>
+          <span class="readout-note">até dar para usar</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Até a área de trabalho</span>
+          <span class="readout-value">${duracao(b.main_path_ms)}</span>
+          <span class="readout-note">o Windows subindo</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Depois disso</span>
+          <span class="readout-value">${duracao(b.post_boot_ms)}</span>
+          <span class="readout-note">programas de inicialização</span>
+        </div>
+      </div>
+    `);
+  } else {
+    text("boot-tag", report.needs_admin ? "precisa de administrador" : "sem medição");
+  }
+
+  if (report.culprits.length > 0) {
+    partes.push(`<h3 class="sub">O que mais atrasou</h3>`);
+    partes.push(
+      report.culprits
+        .map(
+          (c, i) => `
+      <article class="folder" style="--i:${i}">
+        <div class="folder-top">
+          <span class="folder-name">${escapeHtml(c.name)}</span>
+          <span class="folder-size">${duracao(c.total_ms)}</span>
+        </div>
+        <span class="folder-path">${escapeHtml(c.path)}</span>
+      </article>`
+        )
+        .join("")
+    );
+    partes.push(
+      `<p class="hint">Programa que atrasa o boot quase sempre está na aba
+       Sistema, em Inicialização — desligar lá é reversível.</p>`
+    );
+  }
+
+  if (report.recent_types.length > 0) {
+    const resumo = report.recent_types
+      .map(([quando, tipo]) => `${quando.slice(0, 10)} · ${BOOT_TYPE_LABELS[tipo]}`)
+      .slice(0, 6)
+      .join("<br />");
+    partes.push(`<h3 class="sub">Últimas inicializações</h3><p class="hint">${resumo}</p>`);
+  }
+
+  element("boot-result").innerHTML = partes.join("");
+
+  // A nota carrega a honestidade do painel: ela explica o que não deu para
+  // medir e por quê. Nunca fica vazia.
+  setStatus(
+    "boot-status",
+    report.note,
+    report.last ? "ok" : report.needs_admin ? "warn" : "warn"
+  );
+}
+
+// --------------------------------------- limitação do processador
+
+type Culprit =
+  | "Nenhum"
+  | "Bateria"
+  | "PlanoDeEnergia"
+  | "Calor"
+  | "LimiteEletrico"
+  | "NaoIdentificado";
+
+interface ThermalReport {
+  culprit: Culprit;
+  summary: string;
+  advice: string;
+  percent_of_max: number | null;
+  power_cap_percent: number | null;
+  on_battery: boolean;
+  thermal_events: number;
+  last_thermal_event: string | null;
+}
+
+async function analyzeThermal() {
+  const button = element<HTMLButtonElement>("analyze-thermal");
+  button.disabled = true;
+  setStatus("thermal-status", "Medindo o processador e lendo o registro térmico…", "progress");
+
+  try {
+    const report = await invoke<ThermalReport>("analyze_thermal");
+    renderThermalReport(report);
+  } catch (error) {
+    setStatus("thermal-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderThermalReport(report: ThermalReport) {
+  // Só calor e limite elétrico são problema de peça. Plano de energia é
+  // conserto de um clique, e bateria é comportamento correto do Windows —
+  // pintar os quatro de vermelho ensinaria a ignorar o alarme.
+  const gravidade: Record<Culprit, Severity> = {
+    Nenhum: "Ok",
+    Bateria: "Ok",
+    PlanoDeEnergia: "Important",
+    Calor: "Critical",
+    LimiteEletrico: "Critical",
+    NaoIdentificado: "Important",
+  };
+
+  text(
+    "thermal-tag",
+    report.percent_of_max === null
+      ? "sem leitura"
+      : `${report.percent_of_max.toFixed(0)}% da velocidade`
+  );
+
+  const conselho = report.advice
+    ? `<p class="finding-advice">${escapeHtml(report.advice)}</p>`
+    : "";
+
+  element("thermal-result").innerHTML = `
+    <article class="finding" data-severity="${gravidade[report.culprit]}" style="--i:0">
+      <div class="finding-top">
+        <h3>${escapeHtml(report.summary)}</h3>
+      </div>
+      ${conselho}
+    </article>
+  `;
+
+  setStatus(
+    "thermal-status",
+    report.culprit === "Nenhum"
+      ? "Nada está segurando o processador."
+      : report.summary,
+    report.culprit === "Nenhum" || report.culprit === "Bateria" ? "ok" : "error"
+  );
+}
+
 // ------------------------------------------------------- saúde do hardware
 
 interface HealthReport {
@@ -2057,6 +2266,8 @@ function wireControls() {
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
 
+  element("analyze-boot").addEventListener("click", analyzeBoot);
+  element("analyze-thermal").addEventListener("click", analyzeThermal);
   element("analyze-health").addEventListener("click", analyzeHealth);
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
 

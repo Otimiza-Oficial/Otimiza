@@ -117,6 +117,10 @@ jobs:
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::conflicts:: modules::windows::tasks:: modules::windows::bloatware::"
 
+      - name: Testes — inicialização e limitação do processador
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::boot:: modules::windows::thermal::"
+
       - name: Testes — saúde do hardware e relatório
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::health:: modules::report:: modules::monitor::"

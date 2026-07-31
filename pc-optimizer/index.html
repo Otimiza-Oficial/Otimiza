@@ -322,6 +322,48 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Quanto o seu PC demora para ligar</h2>
+              <span class="panel-tag" id="boot-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Ninguém percebe 5% de FPS. Todo mundo percebe um PC que ligava em
+              dois minutos e passa a ligar em quarenta segundos. O Windows mede
+              isso sozinho a cada inicialização e guarda o nome de cada programa
+              que atrasou, com os segundos de cada um — e nenhum otimizador do
+              mercado mostra isso. Não é promessa nossa: é o registro do próprio
+              Windows.
+            </p>
+
+            <button id="analyze-boot" class="btn btn-primary">Ler tempo de inicialização</button>
+            <p id="boot-status" class="status"></p>
+            <div id="boot-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Por que o processador não entrega tudo</h2>
+              <span class="panel-tag" id="thermal-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Um notebook empoeirado a 95 graus corta o processador para uma
+              fração da velocidade, e nenhum ajuste de software resolve isso.
+              Mas plano de energia mal configurado causa exatamente o mesmo
+              sintoma e se resolve num clique. Aqui a gente elimina causa por
+              causa — bateria, plano de energia, registro térmico do Windows — e
+              só fala em calor quando o próprio Windows registrou o evento, com
+              data. Quando não dá para saber, dizemos que não sabemos: chute
+              aqui faz você trocar peça à toa.
+            </p>
+
+            <button id="analyze-thermal" class="btn btn-primary">Verificar o processador</button>
+            <p id="thermal-status" class="status"></p>
+            <div id="thermal-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Saúde física do disco e da bateria</h2>
               <span class="panel-tag" id="health-summary">—</span>
             </div>

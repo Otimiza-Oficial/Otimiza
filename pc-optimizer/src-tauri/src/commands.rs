@@ -27,6 +27,10 @@ use crate::modules::windows::foldermap::FolderMap;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::health::HealthReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::boot::BootReport;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::thermal::ThermalReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -390,6 +394,47 @@ pub async fn export_report(
 ) -> Result<crate::modules::report::ReportSaved, String> {
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref())
+}
+
+// ---------------------------------------------------------------------------
+// Inicialização e limitação do processador
+// ---------------------------------------------------------------------------
+
+/// Comando: Quanto o PC demora para ligar, e quem atrasa.
+///
+/// É a medição que o cliente percebe. Ajuste de registro rende pouco que se
+/// sinta; boot que cai de dois minutos para quarenta segundos, todo mundo nota.
+#[tauri::command]
+pub async fn analyze_boot() -> Result<BootReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::boot::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler o tempo de inicialização: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Por que o processador não está entregando tudo.
+#[tauri::command]
+pub async fn analyze_thermal() -> Result<ThermalReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Amostra contadores e varre o log térmico; fora do runtime porque a
+        // consulta WMI custa mais de um segundo.
+        tokio::task::spawn_blocking(crate::modules::windows::thermal::analyze)
+            .await
+            .map_err(|e| format!("Falha ao medir o processador: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

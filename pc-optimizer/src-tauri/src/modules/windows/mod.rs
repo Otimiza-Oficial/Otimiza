@@ -7,6 +7,7 @@
 //    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
 
 pub mod bloatware;
+pub mod boot;
 pub mod catalog;
 pub mod cleanup;
 pub mod conflicts;
@@ -27,6 +28,7 @@ pub mod servicesaudit;
 pub mod shell;
 pub mod startup;
 pub mod tasks;
+pub mod thermal;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState};
