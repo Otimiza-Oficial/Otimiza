@@ -1,3 +1,4 @@
+mod ci_coverage;
 // PC Performance Optimizer - Main Library
 // Tauri + Rust implementation
 
@@ -42,6 +43,8 @@ pub fn run() {
             commands::remove_store_app,
             commands::open_apps_settings,
             commands::analyze_conflicts,
+            commands::analyze_health,
+            commands::export_report,
             commands::list_scheduled_tasks,
             commands::set_scheduled_task,
             commands::scan_disk_space,

@@ -23,6 +23,8 @@ use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::conflicts::ConflictReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::health::HealthReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::bloatware::BloatReport;
@@ -319,6 +321,49 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
         tokio::task::spawn_blocking(crate::modules::windows::memory::set_automatic_pagefile)
             .await
             .map_err(|e| format!("Falha ao alterar a paginação: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Relatório de atendimento
+// ---------------------------------------------------------------------------
+
+/// Comando: Gera o relatório entregável e grava na Área de Trabalho.
+///
+/// A comparação vem da interface porque ela já tem o resultado da última
+/// medição em mãos. Refazer o benchmark aqui custaria vários segundos e, pior,
+/// mediria um momento diferente daquele que o usuário está vendo na tela.
+#[tauri::command]
+pub async fn export_report(
+    state: State<'_, AppState>,
+    comparison: Option<BenchmarkComparison>,
+) -> Result<crate::modules::report::ReportSaved, String> {
+    let changes = state.changes.lock().await;
+    crate::modules::report::save(&changes, comparison.as_ref())
+}
+
+// ---------------------------------------------------------------------------
+// Saúde do hardware
+// ---------------------------------------------------------------------------
+
+/// Comando: Lê a saúde física do disco e da bateria.
+///
+/// É a checagem que evita o pior desperdício de tempo do técnico: otimizar por
+/// uma tarde uma máquina cujo problema é peça morrendo.
+#[tauri::command]
+pub async fn analyze_health() -> Result<HealthReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Consulta WMI de armazenamento e bateria; fora do runtime porque
+        // `Get-StorageReliabilityCounter` conversa com o disco e demora.
+        tokio::task::spawn_blocking(crate::modules::windows::health::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler a saúde do hardware: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]

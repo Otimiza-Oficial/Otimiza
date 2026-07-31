@@ -156,6 +156,44 @@
               </svg>
             </section>
           </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Movimento agora</h2>
+              <span class="panel-tag" id="flow-tag">ao vivo</span>
+            </div>
+
+            <p class="lead">
+              Em PC fraco, a maioria das travadas não é a CPU: é o disco ocupado
+              enquanto tudo espera. Aqui você vê o quanto está sendo lido e
+              gravado neste instante — se esse número fica alto com a máquina
+              parada, há algo trabalhando em segundo plano, e é isso que precisa
+              ser resolvido antes de qualquer ajuste.
+            </p>
+
+            <div class="readouts readouts-row">
+              <div class="readout">
+                <span class="readout-label">Disco lendo</span>
+                <span class="readout-value" id="flow-read">—</span>
+                <span class="readout-note">agora</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Disco gravando</span>
+                <span class="readout-value" id="flow-write">—</span>
+                <span class="readout-note">agora</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Rede</span>
+                <span class="readout-value" id="flow-net">—</span>
+                <span class="readout-note">baixando · enviando</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Ligado há</span>
+                <span class="readout-value" id="flow-uptime">—</span>
+                <span class="readout-note" id="flow-uptime-note">desde o último boot</span>
+              </div>
+            </div>
+          </section>
         </section>
 
         <!-- ======================================================= OTIMIZAÇÕES -->
@@ -265,6 +303,26 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Saúde física do disco e da bateria</h2>
+              <span class="panel-tag" id="health-summary">—</span>
+            </div>
+
+            <p class="lead">
+              Existe um caso que otimizador nenhum detecta e que explica boa parte
+              dos "otimizei e não melhorou": a peça está morrendo. SSD no fim da
+              vida e HD com setor com defeito ficam lentos de um jeito que nenhum
+              ajuste conserta. Em notebook, bateria muito gasta faz o Windows
+              limitar o processador — e o dono jura que ficou lento do nada.
+              Antes de otimizar, vale saber se o problema é físico.
+            </p>
+
+            <button id="analyze-health" class="btn btn-primary">Ler saúde do hardware</button>
+            <p id="health-status" class="status"></p>
+            <div id="health-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Conflitos entre programas</h2>
               <span class="panel-tag" id="conflicts-summary">—</span>
             </div>
@@ -352,6 +410,27 @@
 
             <p id="benchmark-status" class="status"></p>
             <div id="benchmark-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Relatório para entregar ao cliente</h2>
+              <span class="panel-tag" id="report-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Quem faz manutenção para os outros tem um problema que otimização
+              nenhuma resolve: provar o serviço. O cliente entrega um PC lento,
+              recebe um PC melhor e não tem como saber o que foi feito — o que
+              coloca o técnico honesto no mesmo balaio de quem só reinicia a
+              máquina e cobra. Este arquivo lista cada mudança pelo nome, com o
+              valor que existia antes, junto com a medição de antes e depois se
+              ela tiver sido feita. Abre em qualquer navegador, sem internet, e
+              dá para imprimir.
+            </p>
+
+            <button id="export-report" class="btn btn-primary">Gerar relatório</button>
+            <p id="report-status" class="status"></p>
           </section>
         </section>
 

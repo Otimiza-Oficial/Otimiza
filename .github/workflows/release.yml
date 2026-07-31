@@ -83,7 +83,7 @@ jobs:
       # Parar no primeiro erro mostra menos de uma vez, mas mostra a verdade.
       - name: Testes — núcleo e dados
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- core:: modules::changelog:: modules::preferences:: modules::safety:: modules::diagnostic::"
+        run: "cargo test --lib -- ci_coverage:: core:: modules::changelog:: modules::preferences:: modules::safety:: modules::diagnostic::"
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
@@ -108,6 +108,18 @@ jobs:
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware::"
+
+      - name: Testes — espaço e memória
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::diskspace:: modules::windows::memory::"
+
+      - name: Testes — conflitos, tarefas e programas de fábrica
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::conflicts:: modules::windows::tasks:: modules::windows::bloatware::"
+
+      - name: Testes — saúde do hardware e relatório
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::health:: modules::report:: modules::monitor::"
 
       - name: Testes — motor de otimização
         working-directory: pc-optimizer/src-tauri

@@ -168,6 +168,36 @@ interface FirmwareReport {
   findings: FirmwareFinding[];
 }
 
+interface PerformanceMetrics {
+  timestamp: number;
+  cpu: {
+    overall: number;
+    per_core: number[];
+    temperature: number;
+    frequency: number;
+  };
+  ram: {
+    total_gb: number;
+    used_gb: number;
+    available_gb: number;
+    cached_gb: number;
+    usage_percent: number;
+  };
+  disk: {
+    read_speed_mbps: number;
+    write_speed_mbps: number;
+    /** Espaço ocupado, não atividade. */
+    usage_percent: number;
+  };
+  network: {
+    download_speed_mbps: number;
+    upload_speed_mbps: number;
+    total_received_gb: number;
+    total_transmitted_gb: number;
+  };
+  uptime_hours: number;
+}
+
 interface OptimizationOutcome {
   id: string;
   name: string;
@@ -398,7 +428,7 @@ function restartMetricsLoop() {
 
 async function tick() {
   try {
-    const metrics = await invoke<any>("get_performance_metrics");
+    const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
     renderMetrics(metrics);
   } catch (error) {
     console.error("Erro ao coletar métricas:", error);
@@ -450,7 +480,7 @@ function renderProcesses(processes: ProcessImpact[]) {
     .join("");
 }
 
-function renderMetrics(metrics: any) {
+function renderMetrics(metrics: PerformanceMetrics) {
   const cpu = Math.min(100, Math.max(0, metrics.cpu.overall));
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
@@ -484,7 +514,51 @@ function renderMetrics(metrics: any) {
 
   text("net-value", `${metrics.network.total_received_gb.toFixed(1)} GB`);
 
+  renderFlow(metrics);
+
   text("status-right", `atualizado às ${new Date().toLocaleTimeString("pt-BR")}`);
+}
+
+/**
+ * Taxa em unidade legível. Abaixo de 1 MB/s a leitura em MB vira "0,0" e some;
+ * em KB/s o mesmo valor aparece como 340 e se enxerga.
+ */
+function formatRate(mbPerSecond: number): string {
+  if (mbPerSecond >= 1) return `${mbPerSecond.toFixed(1)} MB/s`;
+  if (mbPerSecond >= 0.01) return `${(mbPerSecond * 1024).toFixed(0)} KB/s`;
+  return "parado";
+}
+
+function renderFlow(metrics: PerformanceMetrics) {
+  text("flow-read", formatRate(metrics.disk.read_speed_mbps));
+  text("flow-write", formatRate(metrics.disk.write_speed_mbps));
+  text(
+    "flow-net",
+    `${formatRate(metrics.network.download_speed_mbps)} · ${formatRate(
+      metrics.network.upload_speed_mbps
+    )}`
+  );
+
+  const horas = metrics.uptime_hours;
+  const dias = Math.floor(horas / 24);
+
+  text(
+    "flow-uptime",
+    dias >= 1 ? `${dias}d ${Math.floor(horas % 24)}h` : `${horas.toFixed(1)}h`
+  );
+
+  // Muitos dias sem reiniciar é uma causa real de lentidão que não aparece em
+  // lugar nenhum: memória vazada por programas e drivers vai se acumulando, e o
+  // PC melhora sozinho com um reinício. Vale dizer antes de otimizar qualquer
+  // coisa — seria constrangedor cobrar por um ajuste que um reinício resolveria.
+  const noteBar = element("flow-uptime-note");
+  if (dias >= 7) {
+    noteBar.textContent = "muitos dias sem reiniciar — reinicie antes de otimizar";
+    noteBar.className = "readout-note warn";
+  } else {
+    noteBar.textContent = "desde o último boot";
+    noteBar.className = "readout-note";
+  }
 }
 
 function loadColor(percent: number): string {
@@ -647,6 +721,57 @@ function renderFinding(finding: FirmwareFinding): string {
       ${advice}
     </article>
   `;
+}
+
+// ------------------------------------------------------- saúde do hardware
+
+interface HealthReport {
+  findings: FirmwareFinding[];
+  needs_admin: boolean;
+}
+
+async function analyzeHealth() {
+  const button = element<HTMLButtonElement>("analyze-health");
+  button.disabled = true;
+  setStatus("health-status", "Consultando o disco e a bateria…", "progress");
+
+  try {
+    const report = await invoke<HealthReport>("analyze_health");
+    element("health-result").innerHTML = report.findings.map(renderFinding).join("");
+
+    const problemas = report.findings.filter((f) => f.severity !== "Ok").length;
+    const critico = report.findings.some((f) => f.severity === "Critical");
+
+    text("health-summary", problemas === 0 ? "nada a corrigir" : `${problemas} a ver`);
+
+    // Faltar permissão não é o mesmo que estar tudo bem, e a diferença aqui é
+    // séria: sem elevação não lemos desgaste nem contagem de erro, justamente
+    // os dois números que dizem se o disco está indo embora.
+    if (report.needs_admin) {
+      setStatus(
+        "health-status",
+        "Estado geral lido, mas desgaste e contagem de erros do disco exigem " +
+          "administrador. Reabra como administrador para a leitura completa.",
+        "warn"
+      );
+    } else {
+      setStatus(
+        "health-status",
+        problemas === 0
+          ? "Disco e bateria sem sinal de desgaste preocupante."
+          : `${problemas} ponto(s) de saúde física — troca de peça, não otimização.`,
+        problemas === 0 ? "ok" : "error"
+      );
+    }
+
+    if (problemas > 0) {
+      setBadge("badge-diagnostico", problemas, critico ? "bad" : "warn");
+    }
+  } catch (error) {
+    setStatus("health-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 // ------------------------------------------------------- programas de fábrica
@@ -1379,6 +1504,43 @@ async function loadBaselineState() {
   }
 }
 
+// ------------------------------------------------------ relatório entregável
+
+interface ReportSaved {
+  path: string;
+  optimizations: number;
+  changes: number;
+}
+
+/** Última comparação medida nesta sessão, ou nada se ainda não houve. */
+let lastComparison: BenchmarkComparison | null = null;
+
+async function exportReport() {
+  const button = element<HTMLButtonElement>("export-report");
+  button.disabled = true;
+  setStatus("report-status", "Montando o relatório…", "progress");
+
+  try {
+    const saved = await invoke<ReportSaved>("export_report", {
+      comparison: lastComparison,
+    });
+
+    // O caminho completo importa: o técnico precisa achar o arquivo para
+    // anexar num e-mail ou copiar para um pendrive.
+    setStatus(
+      "report-status",
+      `Salvo em ${saved.path} — ${saved.optimizations} otimização(ões), ` +
+        `${saved.changes} alteração(ões)` +
+        (lastComparison ? "." : ", sem medição de antes e depois."),
+      "ok"
+    );
+  } catch (error) {
+    setStatus("report-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function runBenchmark(command: "measure_baseline" | "measure_and_compare") {
   const buttons = document.querySelectorAll<HTMLButtonElement>(
     "#measure-baseline, #measure-compare"
@@ -1405,6 +1567,12 @@ async function runBenchmark(command: "measure_baseline" | "measure_and_compare")
       const comparison = await invoke<BenchmarkComparison>(command);
       element("benchmark-result").innerHTML = renderComparison(comparison);
       setStatus("benchmark-status", comparison.summary, toneOf(comparison));
+
+      // Guardado para o relatório. Refazer a medição na hora de exportar
+      // custaria mais 12 segundos e mediria um momento diferente daquele que o
+      // usuário está vendo na tela.
+      lastComparison = comparison;
+      text("report-tag", "com medição de antes e depois");
     }
   } catch (error) {
     setStatus("benchmark-status", String(error), "error");
@@ -1476,7 +1644,7 @@ function renderComparison(comparison: BenchmarkComparison): string {
   `;
 }
 
-function setStatus(id: string, message: string, kind: "ok" | "error" | "progress") {
+function setStatus(id: string, message: string, kind: "ok" | "warn" | "error" | "progress") {
   const status = element(id);
   status.textContent = message;
   status.className = `status ${kind}`;
@@ -1507,6 +1675,7 @@ function wireControls() {
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);
 
+  element("analyze-health").addEventListener("click", analyzeHealth);
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
 
   element("analyze-bloat").addEventListener("click", analyzeBloatware);
@@ -1639,6 +1808,7 @@ function wireControls() {
 
   element("measure-baseline").addEventListener("click", () => runBenchmark("measure_baseline"));
   element("measure-compare").addEventListener("click", () => runBenchmark("measure_and_compare"));
+  element("export-report").addEventListener("click", exportReport);
 
   element("optimize-now").addEventListener("click", () =>
     runBatch("optimize_now", "Aplicando o que falta…")

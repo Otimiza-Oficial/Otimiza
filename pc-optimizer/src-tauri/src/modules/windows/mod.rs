@@ -14,6 +14,7 @@ pub mod devices;
 pub mod diskspace;
 pub mod firmware;
 pub mod hardware;
+pub mod health;
 pub mod memory;
 pub mod power;
 pub mod processes;

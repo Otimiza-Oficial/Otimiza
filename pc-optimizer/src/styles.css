@@ -495,6 +495,23 @@ button {
   min-width: 0;
 }
 
+/* A versão em coluna nasceu para a coluna estreita ao lado do medidor. Num
+   painel de largura inteira ela vira quatro linhas soltas com muito vazio à
+   direita, então aqui as leituras ficam lado a lado e quebram sozinhas quando
+   não couberem. */
+.readouts-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.readouts-row .readout {
+  flex: 1 1 150px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft, rgba(255, 255, 255, 0.02));
+}
+
 .readout {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -533,6 +550,12 @@ button {
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-sans);
+}
+
+/* A nota vira aviso quando o próprio número é o problema — hoje, muitos dias
+   sem reiniciar. Sem destaque ela some entre as outras legendas. */
+.readout-note.warn {
+  color: var(--amber);
 }
 
 /* ------------------------------------------------------------------ botões */
@@ -626,6 +649,14 @@ button {
 
 .status.progress {
   color: var(--accent);
+}
+
+/* Nem tudo que não deu certo é erro. "Faltou permissão para ler" precisa de cor
+   própria: pintar de verde esconderia que a checagem ficou incompleta, e pintar
+   de vermelho faria parecer que a máquina tem um problema que não temos como
+   afirmar que existe. */
+.status.warn {
+  color: var(--amber);
 }
 
 /* ------------------------------------------------------------- diagnóstico */

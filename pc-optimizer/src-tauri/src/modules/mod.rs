@@ -7,6 +7,7 @@ pub mod diagnostic;
 pub mod jitter;
 pub mod optimizer;
 pub mod preferences;
+pub mod report;
 pub mod safety;
 pub mod monitor;
 
