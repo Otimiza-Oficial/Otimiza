@@ -785,6 +785,152 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
   `;
 }
 
+// ----------------------------------------------------------- navegador
+
+interface BrowserExtension {
+  id: string;
+  name: string;
+  version: string;
+  size_mb: number;
+  permissions: number;
+  from_webstore: boolean | null;
+  stale_versions: number;
+}
+
+interface BrowserProfile {
+  name: string;
+  extensions: BrowserExtension[];
+  cache_bytes: number;
+  app_data_bytes: number;
+}
+
+interface BrowserInfo {
+  name: string;
+  executable: string;
+  is_default: boolean;
+  running: boolean;
+  ram_mb: number;
+  profiles: BrowserProfile[];
+}
+
+interface BrowserReport {
+  browsers: BrowserInfo[];
+  total_cache_mb: number;
+  total_app_data_mb: number;
+  total_ram_mb: number;
+  ram_percent: number;
+  total_extensions: number;
+  note: string;
+}
+
+async function analyzeBrowsers() {
+  const button = element<HTMLButtonElement>("analyze-browsers");
+  button.disabled = true;
+  setStatus("browser-status", "Lendo perfis e somando cache…", "progress");
+
+  try {
+    const report = await invoke<BrowserReport>("analyze_browsers");
+    renderBrowserReport(report);
+  } catch (error) {
+    setStatus("browser-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderBrowserReport(report: BrowserReport) {
+  if (report.browsers.length === 0) {
+    text("browser-tag", "nenhum encontrado");
+    setStatus("browser-status", report.note, "ok");
+    element("browser-result").innerHTML = "";
+    return;
+  }
+
+  text("browser-tag", `${report.total_ram_mb.toFixed(0)} MB em uso`);
+
+  // O número que o cliente sente ao fechar o navegador. É do navegador
+  // inteiro, e não por extensão — ver o comentário no módulo em Rust.
+  const resumo = `
+    <div class="readouts readouts-row">
+      <div class="readout">
+        <span class="readout-label">Memória agora</span>
+        <span class="readout-value">${report.ram_percent.toFixed(1)}%</span>
+        <span class="readout-note">${report.total_ram_mb.toFixed(0)} MB da sua RAM</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Cache</span>
+        <span class="readout-value">${report.total_cache_mb.toFixed(0)} MB</span>
+        <span class="readout-note">dá para apagar</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Dado de aplicativo</span>
+        <span class="readout-value">${report.total_app_data_mb.toFixed(0)} MB</span>
+        <span class="readout-note warn">não é lixo — não apagamos</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Extensões</span>
+        <span class="readout-value">${report.total_extensions}</span>
+        <span class="readout-note">instaladas</span>
+      </div>
+    </div>
+  `;
+
+  element("browser-result").innerHTML =
+    resumo + report.browsers.map(renderBrowser).join("");
+
+  setStatus("browser-status", report.note, "warn");
+}
+
+function renderBrowser(browser: BrowserInfo, indice: number): string {
+  const extensoes = browser.profiles.flatMap((p) => p.extensions);
+  const cacheMb =
+    browser.profiles.reduce((soma, p) => soma + p.cache_bytes, 0) / 1_048_576;
+
+  // Limpar só faz sentido com o navegador fechado, e o botão precisa dizer o
+  // motivo em vez de simplesmente não funcionar.
+  const acao =
+    cacheMb < 1
+      ? ""
+      : browser.running
+        ? `<span class="state-label">feche para poder limpar</span>`
+        : `<button class="btn btn-ghost" data-browser="${escapeHtml(
+            browser.executable
+          )}">Limpar ${cacheMb.toFixed(0)} MB de cache</button>`;
+
+  const lista = extensoes.length
+    ? extensoes
+        .map(
+          (e) => `
+      <div class="startup">
+        <div class="startup-info">
+          <span class="startup-name">${escapeHtml(e.name)}</span>
+          <span class="startup-exe">v${escapeHtml(e.version)} · ${
+            e.permissions
+          } permissão(ões)${
+            e.stale_versions > 0
+              ? ` · ${e.stale_versions} versão(ões) antiga(s) ocupando disco`
+              : ""
+          }</span>
+        </div>
+        <span class="finding-size">${e.size_mb.toFixed(1)} MB</span>
+      </div>`
+        )
+        .join("")
+    : `<p class="empty">Nenhuma extensão instalada.</p>`;
+
+  return `
+    <article class="finding" data-severity="Ok" style="--i:${indice}">
+      <div class="finding-top">
+        <h3>${escapeHtml(browser.name)}${browser.is_default ? " · padrão" : ""}</h3>
+        <span class="chip">${browser.running ? "aberto" : "fechado"}</span>
+        <span class="finding-size">${browser.ram_mb.toFixed(0)} MB</span>
+        ${acao}
+      </div>
+      ${lista}
+    </article>
+  `;
+}
+
 // ------------------------------------------- tempo de inicialização
 
 type BootType = "Full" | "FastStartup" | "Resume";
@@ -2364,6 +2510,38 @@ function wireControls() {
 
   element("scan-disk").addEventListener("click", scanDiskSpace);
   element("map-folders").addEventListener("click", mapFolders);
+  element("analyze-browsers").addEventListener("click", analyzeBrowsers);
+
+  element("browser-result").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-browser]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    // Apagar cache não tem volta. O aviso vem antes, com a contrapartida
+    // escrita: limpar deixa o primeiro carregamento mais lento.
+    const ok = window.confirm(
+      "Isto apaga o cache do navegador e não tem volta.\n\n" +
+        "Nada de histórico, senha ou favorito é tocado — só arquivos que o " +
+        "navegador baixa de novo sozinho. A contrapartida é que os sites que " +
+        "você usa vão carregar mais devagar na primeira visita.\n\nContinuar?"
+    );
+    if (!ok) return;
+
+    button.disabled = true;
+
+    try {
+      const outcome = await invoke<{ freed_mb: number; message: string }>(
+        "clean_browser_cache",
+        { executable: button.dataset.browser }
+      );
+      setStatus("browser-status", outcome.message, "ok");
+    } catch (error) {
+      setStatus("browser-status", String(error), "error");
+    } finally {
+      await analyzeBrowsers();
+    }
+  });
 
   element("disk-result").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest(

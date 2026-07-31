@@ -44,6 +44,8 @@ pub fn run() {
             commands::open_apps_settings,
             commands::analyze_conflicts,
             commands::analyze_health,
+            commands::analyze_browsers,
+            commands::clean_browser_cache,
             commands::analyze_boot,
             commands::analyze_thermal,
             commands::export_report,

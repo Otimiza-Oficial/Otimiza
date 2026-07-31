@@ -29,6 +29,8 @@ use crate::modules::windows::health::HealthReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::boot::BootReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::browsers::{BrowserReport, CleanOutcome as BrowserCleanOutcome};
+#[cfg(target_os = "windows")]
 use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
@@ -394,6 +396,50 @@ pub async fn export_report(
 ) -> Result<crate::modules::report::ReportSaved, String> {
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref())
+}
+
+// ---------------------------------------------------------------------------
+// Navegador
+// ---------------------------------------------------------------------------
+
+/// Comando: O que o navegador está consumindo, e o que dá para recuperar.
+#[tauri::command]
+pub async fn analyze_browsers() -> Result<BrowserReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Percorre as pastas de perfil somando tamanho: fora do runtime, senão
+        // trava a interface durante a varredura.
+        tokio::task::spawn_blocking(crate::modules::windows::browsers::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler os navegadores: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Limpa o cache descartável de um navegador.
+///
+/// Não tem volta, e recusa se o navegador estiver aberto. Dado de aplicativo —
+/// IndexedDB e afins — nunca é tocado.
+#[tauri::command]
+pub async fn clean_browser_cache(executable: String) -> Result<BrowserCleanOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::browsers::limpar_cache(&executable)
+        })
+        .await
+        .map_err(|e| format!("Falha ao limpar: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = executable;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

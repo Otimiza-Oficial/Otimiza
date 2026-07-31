@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.4.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.4.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.5.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
@@ -15,13 +15,48 @@ Windows 10 ou 11, 64 bits.
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
 
-## Esta versão responde a uma reclamação
+## O navegador, que ninguém olha
+
+Em PC fraco o navegador costuma consumir mais memória que todo o resto junto, e
+nenhum otimizador do mercado abre essa porta. Esta versão abre.
+
+Você vê quanto o navegador está usando **agora**, em MB e em porcentagem da sua
+memória — o número que a pessoa sente ao fechar. Vê as extensões instaladas com
+**o nome real de cada uma**, quantas permissões cada uma pede, quanto ocupam em
+disco, e quantas versões antigas ficaram para trás ocupando espaço à toa. E vê
+quanto de cache dá para recuperar, com um botão para limpar.
+
+Três decisões que valem ser explicadas.
+
+**Não mostramos memória por extensão.** Era a ideia original, e não se sustenta:
+de fora do navegador não existe como saber quanto cada extensão gasta — várias
+dividem o mesmo processo e ele não diz quais. O Gerenciador de Tarefas do próprio
+Chrome consegue porque roda por dentro. Qualquer número por extensão aqui seria
+inventado, então não tem.
+
+**Cache e dado de aplicativo são coisas diferentes, e a diferença é cara.** Numa
+máquina de teste, a maior pasta do perfil tinha 1,7 GB e o nome `IndexedDB` —
+alvo óbvio de quem varre por tamanho. Só que ali mora conversa de WhatsApp Web,
+e-mail guardado para uso sem internet, arquivo de editor online. Apagar desloga a
+pessoa de tudo e o que estiver lá some. O Otimiza mede, mostra e **não oferece
+limpar**.
+
+**Limpar cache não é ganho puro.** Os sites que você usa carregam mais devagar na
+primeira visita depois da limpeza, porque baixam tudo de novo. Está escrito no
+aviso antes de você confirmar.
+
+Sobre privacidade: o programa lê manifesto de extensão, tradução de extensão e
+**tamanho** de pastas. Não abre histórico, senhas, cookies, favoritos, sessões
+nem nada de navegação — nem para contar. Ao medir o dado de aplicativo soma
+apenas o total, porque os nomes das subpastas revelariam quais sites você usa.
+
+## A versão anterior respondeu a uma reclamação
 
 Quem usa o Otimiza para atender cliente trouxe o problema: as otimizações
 funcionam, mas o cliente **não sente** a diferença. E é verdade — ajuste de
 registro rende pouco que uma pessoa perceba no dia a dia.
 
-Então esta versão foi atrás do que a pessoa realmente percebe.
+A versão 0.4.0 foi atrás do que a pessoa realmente percebe, e continua valendo.
 
 **Quanto o seu PC demora para ligar.** Ninguém nota 5% de FPS. Todo mundo nota um
 PC que ligava em dois minutos e passa a ligar em quarenta segundos. O Windows
@@ -105,8 +140,9 @@ tela cita o registro do Windows com data, em vez de afirmar por conta própria.
 
 Cada mudança grava o valor anterior antes de escrever. "Desfazer tudo" restaura o
 que existia, não algo parecido — inclusive programas de inicialização, tarefas
-agendadas e serviços. As duas exceções são apagar arquivos e limpar o cache de
-atualizações, ambas marcadas como **sem volta** e fora do "Otimizar agora".
+agendadas e serviços. As exceções são apagar arquivos, limpar o cache de
+atualizações e limpar o cache do navegador: as três são marcadas como **sem
+volta**, ficam fora do "Otimizar agora" e pedem confirmação antes.
 
 ## Ainda não há versão para macOS e Linux
 

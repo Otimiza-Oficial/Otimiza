@@ -8,6 +8,7 @@
 
 pub mod bloatware;
 pub mod boot;
+pub mod browsers;
 pub mod catalog;
 pub mod cleanup;
 pub mod conflicts;
