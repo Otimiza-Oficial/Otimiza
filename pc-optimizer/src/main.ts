@@ -294,6 +294,7 @@ const VERDICT_LABELS: Record<Verdict, string> = {
 window.addEventListener("DOMContentLoaded", async () => {
   wireControls();
 
+  await ajustarMovimento();
   await listenToBatchProgress();
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
@@ -313,6 +314,37 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await startMonitoring();
 });
+
+/**
+ * Decide se a interface pode se mexer.
+ *
+ * Duas fontes, e qualquer uma delas basta para desligar tudo: a preferencia do
+ * sistema operacional, e o proprio hardware desta maquina — que o Otimiza ja
+ * mede para outra finalidade.
+ *
+ * O motivo nao e estetico. Este programa e vendido com a promessa de deixar PC
+ * fraco mais rapido; se a interface dele engasgar no PC que ele deveria estar
+ * consertando, ele se desmente na frente do cliente antes de aplicar a primeira
+ * otimizacao. Animacao e a primeira coisa a ser cortada, nao a ultima.
+ */
+async function ajustarMovimento() {
+  const sistemaPedeCalma = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  let maquinaFraca = false;
+  try {
+    const perfil = await invoke<{ total_ram_gb: number; logical_cores: number }>(
+      "get_hardware_profile"
+    );
+    // Os limites sao o proprio publico-alvo do produto: 4 GB e 2 nucleos e a
+    // maquina que o dono descreve como "PC fraco".
+    maquinaFraca = perfil.total_ram_gb <= 4.5 || perfil.logical_cores <= 2;
+  } catch {
+    // Sem perfil, o padrao e animar. Errar para o lado de nao piorar a
+    // aparencia de quem tem maquina boa.
+  }
+
+  document.body.classList.toggle("sem-animacao", sistemaPedeCalma || maquinaFraca);
+}
 
 function element<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -487,6 +519,17 @@ function renderMetrics(metrics: PerformanceMetrics) {
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
   const gauge = element<SVGCircleElement & HTMLElement>("gauge-cpu");
+
+  // Na primeira leitura o anel subia de 540 direto para o valor, sem gesto
+  // nenhum. Agora ele sobe devagar uma unica vez, como instrumento ligando —
+  // e volta a velocidade normal em seguida, porque um medidor que reinicia a
+  // cada 2 segundos pareceria quebrado, nao caro.
+  const aro = gauge.closest(".gauge") as HTMLElement | null;
+  if (aro && !aro.dataset.iniciado) {
+    aro.dataset.iniciado = "sim";
+    aro.dataset.entrada = "true";
+    window.setTimeout(() => delete aro.dataset.entrada, 1000);
+  }
   gauge.style.strokeDashoffset = String(540 - (540 * cpu) / 100);
   gauge.style.stroke = loadColor(cpu);
 
@@ -583,16 +626,33 @@ function setBar(id: string, percent: number) {
 function renderCores(perCore: number[]) {
   const matrix = element("core-matrix");
 
-  if (matrix.children.length !== perCore.length) {
-    matrix.innerHTML = perCore.map(() => `<div class="core"><i></i></div>`).join("");
+  const primeiraVez = matrix.children.length !== perCore.length;
+
+  if (primeiraVez) {
+    // O índice vai para o CSS como variável: é ele que escalona a cascata de
+    // entrada sem precisar de um temporizador por barra em JavaScript.
+    matrix.innerHTML = perCore
+      .map((_, i) => `<div class="core" style="--i:${i}"><i></i></div>`)
+      .join("");
+    matrix.dataset.entrada = "true";
   }
 
   perCore.forEach((load, index) => {
     const core = matrix.children[index] as HTMLElement;
     const fill = core.firstElementChild as HTMLElement;
-    fill.style.height = `${Math.min(100, Math.max(0, load))}%`;
+
+    // `scaleY` em vez de `height`: não força relayout. Ver o comentário longo
+    // em `.core i` no styles.css — esta linha era o maior desperdício da
+    // interface, repetido a cada 2 segundos.
+    fill.style.transform = `scaleY(${Math.min(100, Math.max(0, load)) / 100})`;
     core.dataset.load = load >= 85 ? "critical" : load >= 60 ? "high" : "normal";
   });
+
+  // A cascata é só da entrada. Deixá-la ligada faria cada atualização chegar
+  // escalonada, e o painel pareceria atrasado em vez de vivo.
+  if (primeiraVez) {
+    window.setTimeout(() => delete matrix.dataset.entrada, perCore.length * 14 + 500);
+  }
 }
 
 function pushHistory(cpu: number) {
@@ -708,13 +768,13 @@ async function analyzeFirmware() {
   }
 }
 
-function renderFinding(finding: FirmwareFinding): string {
+function renderFinding(finding: FirmwareFinding, indice = 0): string {
   const advice = finding.advice
     ? `<p class="finding-advice">${escapeHtml(finding.advice)}</p>`
     : "";
 
   return `
-    <article class="finding" data-severity="${finding.severity}">
+    <article class="finding" data-severity="${finding.severity}" style="--i:${indice}">
       <div class="finding-top">
         <h3>${escapeHtml(finding.title)}</h3>
         <span class="chip" data-fix="${finding.fix_location}">${FIX_LABELS[finding.fix_location]}</span>
@@ -997,7 +1057,7 @@ function renderFolderMap(map: FolderMap) {
   element("map-result").innerHTML = map.folders.map(renderFolder).join("");
 }
 
-function renderFolder(folder: FolderEntry): string {
+function renderFolder(folder: FolderEntry, indice = 0): string {
   const explicacao = folder.explanation
     ? `<p class="finding-advice">${escapeHtml(folder.explanation)}</p>`
     : "";
@@ -1009,7 +1069,7 @@ function renderFolder(folder: FolderEntry): string {
     : folder.formatted;
 
   return `
-    <article class="folder" data-partial="${folder.partial}">
+    <article class="folder" data-partial="${folder.partial}" style="--i:${indice}">
       <div class="folder-top">
         <span class="folder-name">${escapeHtml(folder.name)}</span>
         <span class="folder-size">${escapeHtml(tamanho)}</span>

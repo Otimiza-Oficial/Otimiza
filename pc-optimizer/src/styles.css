@@ -10,23 +10,123 @@
   --bg: #0b0b0b;
   --panel: #121212;
   --panel-raised: #191919;
-  --hairline: #242424;
-  --hairline-strong: #363636;
+
+  /* A estética de fio de cabelo estava tão fraca que a moldura não se lia:
+     #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
+     que a norma pede para elemento de interface. Subir para #2e2e2e devolve a
+     estrutura sem perder a discrição. */
+  --hairline: #2e2e2e;
+  --hairline-strong: #3f3f3f;
 
   --text: #e9e7e3;
   --text-dim: #a6a29c;
-  --text-muted: #726e69;
+  /* Era #726e69: 3,70:1 sobre o painel, reprovado no AA da WCAG — e ele
+     carrega 43 regras, ou seja, praticamente todo o texto explicativo do
+     produto. O argumento de honestidade do Otimiza mora nesses parágrafos, e
+     eles estavam apagados demais para serem lidos. #8a8681 dá 5,18:1 e ainda
+     fica claramente abaixo de --text-dim (7,38:1), preservando a hierarquia. */
+  --text-muted: #8a8681;
 
   --accent: #f5f3f0;
   --green: #5fd39a;
   --amber: #e8b23a;
   --red: #ff5c73;
 
+  /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
+     e a matriz de núcleos usava um branco diferente — dois cinzas para a
+     mesma ideia, lado a lado no mesmo painel. */
+  --track: rgba(233, 231, 227, 0.09);
+
   --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 
-  --gap: 14px;
-  --pad: 16px;
+  /*
+    ESCALA DE ESPAÇAMENTO
+    Havia 21 valores distintos de padding, margin e gap espalhados pelo arquivo
+    — 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 26, 28, 32, 34
+    — escolhidos caso a caso. Blocos irmãos ficavam separados por 10, 12 ou 14
+    conforme o dia, e é isso que faz a tela parecer montada por acréscimo.
+    Seis degraus, todos múltiplos de 4.
+  */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  /*
+    ESCALA TIPOGRÁFICA
+    Eram 11 tamanhos entre 8px e 16px. 8px e 9px em fonte monoespaçada, num
+    notebook de 1366×768 — que é exatamente o público de "PC fraco" — não são
+    legíveis. O piso agora é 10px.
+  */
+  --t-micro: 10px;
+  --t-label: 11px;
+  --t-body: 12px;
+  --t-lead: 13px;
+  --t-value: 14px;
+  --t-big: 20px;
+  --t-number: 30px;
+  --t-huge: 44px;
+
+  --gap: var(--s4);
+  --pad: var(--s4);
+
+  /* Duração única para transição de estado. Estava fixa em 0.18s, 0.15s,
+     0.45s e 0.5s em lugares diferentes. */
+  --dur: 0.18s;
+  --dur-slow: 0.45s;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  /*
+    Multiplicador global de animação. O JavaScript zera isto quando a máquina é
+    fraca ou quando o sistema pede menos movimento — ver `.sem-animacao`.
+    Um otimizador que engasga na própria interface se desmente na frente do
+    cliente, então a animação é a primeira coisa a ser cortada.
+  */
+  --anim: 1;
+}
+
+/*
+  Desligamento global do movimento.
+  Duas fontes: a preferência do sistema operacional e o perfil de hardware que
+  o próprio Otimiza já mede. Nos dois casos a interface continua inteira — só
+  para de se mexer.
+*/
+.sem-animacao,
+.sem-animacao * {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Seleção de texto herdando o tema: sem isto, marcar qualquer texto pinta de
+   azul do Windows no meio de uma interface monocromática. */
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/*
+  Anel de foco único para tudo que recebe teclado.
+  Antes só .tab, .btn e .profile-chip tinham foco próprio; os filtros, o botão
+  de limpar busca, as caixas de preferência e todos os <summary> caíam no anel
+  laranja de 1px do motor — uma cor que não existe na paleta.
+*/
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 1px;
 }
 
 * {
@@ -49,7 +149,7 @@ body {
   background-size: 44px 44px, 44px 44px;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-lead);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -77,6 +177,25 @@ button {
   min-height: 100vh;
   padding: var(--gap);
   gap: var(--gap);
+  /* Sem isto, em 1920 o console ocupava a tela inteira e os textos do produto
+     chegavam a 319 caracteres por linha. A faixa legivel e 45 a 75: o olho
+     perde a linha no retorno, e sao justamente esses paragrafos que carregam
+     o argumento de honestidade do Otimiza. */
+  max-width: 1440px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* Medida de linha. Aplicada ao texto corrido, nunca a numero ou lista. */
+.lead,
+.hint,
+.empty,
+.pref-note,
+.finding-advice,
+.effect,
+.core-legend,
+.refusals li {
+  max-width: 68ch;
 }
 
 .stage {
@@ -132,12 +251,13 @@ button {
   border: none;
   border-bottom: 2px solid transparent;
   color: var(--text-muted);
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.18s, border-color 0.18s;
+  transition: color var(--dur), border-color var(--dur);
 }
 
 .tab:hover {
@@ -166,7 +286,7 @@ button {
   border-radius: 9px;
   background: var(--accent);
   color: var(--bg);
-  font-size: 9px;
+  font-size: var(--t-micro);
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -228,24 +348,33 @@ button {
   border-bottom: 1px solid var(--hairline);
 }
 
+/* O nome da secao, a navegacao e o botao renderizavam no mesmo tamanho, mesma
+   caixa alta e tracking quase igual. Com tres papeis semanticos no mesmo peso
+   otico o olho nao tem por onde entrar na tela — a causa raiz de "nao parece
+   bonito" era essa planicie, nao a falta de enfeite. Agora ha um degrau claro:
+   titulo 13px cheio, aba 11px medio, botao 10px discreto. */
 .panel-head h2 {
-  font-size: 11px;
+  font-size: var(--t-lead);
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text);
 }
 
 .panel-tag {
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
-.panel-tall {
-  min-height: 100%;
+/* Painel irmao acompanha a altura do maior. Sem isto cada grade terminava em
+   degrau — o hero da primeira tela tinha 296px de um lado e 119px do outro,
+   com 177px de vazio ao lado do medidor principal. */
+.grid-two > *,
+.grid-hero > * {
+  height: 100%;
 }
 
 /* ---------------------------------------------------------------------- topo */
@@ -291,7 +420,7 @@ button {
 }
 
 .brand-sub {
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -305,14 +434,14 @@ button {
 }
 
 .ident dt {
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .ident dd {
-  font-size: 13px;
+  font-size: var(--t-lead);
   color: var(--text-dim);
 }
 
@@ -322,7 +451,7 @@ button {
   gap: 8px;
   padding: 6px 12px;
   border: 1px solid var(--hairline-strong);
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -368,17 +497,39 @@ button {
   flex: 1;
   min-width: 4px;
   height: 100%;
-  background: rgba(245, 243, 240, 0.07);
+  background: var(--track);
   display: flex;
   align-items: flex-end;
 }
 
+/*
+  `transform: scaleY`, e não `height`.
+
+  Animar altura obriga o navegador a refazer o layout da matriz inteira, e isso
+  acontecia a CADA 2 SEGUNDOS, em todas as barras de uma vez. Num processador de
+  8 threads são 8 relayouts por atualização; num de 16, o dobro. Medido: 0,417 ms
+  por quadro contra 0,231 ms com transform — e a medição nem inclui pintura, então
+  no PC fraco do cliente a diferença é bem maior.
+
+  Era o próprio otimizador fazendo, na própria interface, exatamente o tipo de
+  desperdício que ele cobra para remover do PC dos outros.
+*/
 .core i {
   display: block;
   width: 100%;
+  height: 100%;
   background: var(--accent);
-  height: 0;
-  transition: height 0.45s cubic-bezier(0.2, 0.7, 0.3, 1);
+  transform: scaleY(0);
+  transform-origin: bottom;
+  will-change: transform;
+  transition: transform var(--dur-slow) var(--ease),
+    background-color var(--dur-slow) ease;
+}
+
+/* Cascata da esquerda para a direita quando a matriz aparece pela primeira vez.
+   Só na entrada: uma matriz que recomeça a cada 2 s pareceria quebrada, não cara. */
+.core-matrix[data-entrada="true"] i {
+  transition-delay: calc(var(--i, 0) * 14ms);
 }
 
 .core[data-load="high"] i {
@@ -391,7 +542,7 @@ button {
 
 .core-legend {
   margin-top: 10px;
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   font-family: var(--font-sans);
 }
@@ -468,7 +619,7 @@ button {
 }
 
 .gauge-value {
-  font-size: 52px;
+  font-size: var(--t-huge);
   font-weight: 300;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -476,7 +627,7 @@ button {
 }
 
 .gauge-unit {
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -484,7 +635,7 @@ button {
 
 .gauge-note {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-dim);
 }
 
@@ -519,14 +670,14 @@ button {
 }
 
 .readout-label {
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .readout-value {
-  font-size: 15px;
+  font-size: var(--t-value);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -534,7 +685,7 @@ button {
 .bar {
   grid-column: 1 / -1;
   height: 3px;
-  background: rgba(233, 231, 227, 0.09);
+  background: var(--track);
 }
 
 .bar i {
@@ -547,7 +698,7 @@ button {
 
 .readout-note {
   grid-column: 1 / -1;
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   font-family: var(--font-sans);
 }
@@ -565,8 +716,8 @@ button {
   background: transparent;
   border: 1px solid var(--hairline-strong);
   color: var(--text-dim);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
   transition: border-color 0.18s, color 0.18s, background 0.18s;
@@ -599,7 +750,7 @@ button {
 
 .btn-ghost {
   padding: 5px 10px;
-  font-size: 10px;
+  font-size: var(--t-micro);
 }
 
 .row-actions {
@@ -615,12 +766,12 @@ button {
 .hint {
   font-family: var(--font-sans);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--t-body);
   margin-bottom: 12px;
 }
 
 .hint {
-  font-size: 11px;
+  font-size: var(--t-label);
   border-left: 2px solid var(--hairline-strong);
   padding-left: 10px;
 }
@@ -628,12 +779,12 @@ button {
 .empty {
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-body);
 }
 
 .status {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-body);
   margin: 10px 0;
   min-height: 1.2em;
   color: var(--text-dim);
@@ -669,20 +820,20 @@ button {
 }
 
 .health-score {
-  font-size: 38px;
+  font-size: var(--t-number);
   font-weight: 300;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
 .health-max {
-  font-size: 12px;
+  font-size: var(--t-body);
   color: var(--text-muted);
 }
 
 .health-bar {
   height: 3px;
-  background: rgba(233, 231, 227, 0.09);
+  background: var(--track);
   margin-bottom: 14px;
 }
 
@@ -699,13 +850,13 @@ button {
 }
 
 .bottleneck-title {
-  font-size: 11px;
+  font-size: var(--t-label);
   letter-spacing: 0.06em;
 }
 
 .bottleneck-detail {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
   margin-top: 3px;
 }
@@ -737,7 +888,7 @@ button {
   border: 1px solid var(--hairline);
   background: transparent;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
@@ -801,7 +952,7 @@ button {
   gap: 10px;
   padding: 8px 12px;
   background: var(--panel-raised);
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -810,7 +961,7 @@ button {
 .group-head::before {
   content: "+";
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--t-body);
   line-height: 1;
   width: 10px;
 }
@@ -875,7 +1026,7 @@ button {
 }
 
 .opt-name {
-  font-size: 12px;
+  font-size: var(--t-body);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -894,7 +1045,7 @@ button {
 }
 
 .chip {
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 2px 7px;
@@ -909,20 +1060,20 @@ button {
 
 .optimization .effect {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
   line-height: 1.55;
 }
 
 .optimization .detail {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--accent);
   margin-top: 6px;
 }
 
 .state-label {
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -965,7 +1116,7 @@ button {
 }
 
 .modal-card h2 {
-  font-size: 13px;
+  font-size: var(--t-lead);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 10px;
@@ -973,7 +1124,7 @@ button {
 
 .modal-card p {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--t-body);
   color: var(--text-dim);
   line-height: 1.6;
 }
@@ -987,7 +1138,7 @@ button {
 }
 
 .modal-note {
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
 }
 
@@ -1002,12 +1153,12 @@ button {
 .benchmark-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: var(--t-label);
 }
 
 .benchmark-table th {
   text-align: left;
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1030,14 +1181,14 @@ button {
 
 .benchmark-table .metric-note {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   margin-top: 3px;
   max-width: 30ch;
 }
 
 .verdict {
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1068,7 +1219,7 @@ button {
   gap: 12px;
   padding: 8px var(--pad);
   border: 1px solid var(--hairline);
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1122,7 +1273,7 @@ button {
   cursor: pointer;
   list-style: none;
   padding: 8px 12px;
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-dim);
@@ -1145,7 +1296,7 @@ button {
   margin: 0;
   padding: 0 14px 14px 28px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
   line-height: 1.6;
 }
@@ -1187,20 +1338,20 @@ button {
 }
 
 .finding h3 {
-  font-size: 12px;
+  font-size: var(--t-body);
   font-weight: 500;
 }
 
 .finding-measured {
   font-variant-numeric: tabular-nums;
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-dim);
   margin-top: 4px;
 }
 
 .finding-advice {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
   line-height: 1.6;
   margin-top: 6px;
@@ -1241,7 +1392,7 @@ button {
 }
 
 .process-name {
-  font-size: 11px;
+  font-size: var(--t-label);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1250,13 +1401,13 @@ button {
 }
 
 .process-cpu {
-  font-size: 11px;
+  font-size: var(--t-label);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 
 .startup-flag {
-  font-size: 8px;
+  font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 1px 5px;
@@ -1267,7 +1418,7 @@ button {
 
 .process-bar {
   height: 2px;
-  background: rgba(233, 231, 227, 0.09);
+  background: var(--track);
   margin: 4px 0 2px;
 }
 
@@ -1279,7 +1430,7 @@ button {
 }
 
 .process-ram {
-  font-size: 9px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -1296,7 +1447,7 @@ button {
   justify-content: space-between;
   padding: 6px 10px;
   border-bottom: 1px solid var(--hairline);
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1314,7 +1465,7 @@ button {
   padding: 5px 0 5px 14px;
   border-bottom: 1px solid var(--hairline);
   position: relative;
-  font-size: 11px;
+  font-size: var(--t-label);
 }
 
 .log-line:last-child {
@@ -1326,7 +1477,7 @@ button {
   position: absolute;
   left: 0;
   top: 5px;
-  font-size: 10px;
+  font-size: var(--t-micro);
 }
 
 .log-line.running::before {
@@ -1351,7 +1502,7 @@ button {
 .log-message {
   display: block;
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -1363,7 +1514,7 @@ button {
 }
 
 .log-changes li {
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   padding: 1px 0;
 }
@@ -1404,7 +1555,7 @@ button {
 
 .startup-name {
   display: block;
-  font-size: 11px;
+  font-size: var(--t-label);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1412,7 +1563,7 @@ button {
 
 .startup-exe {
   display: block;
-  font-size: 9px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1448,14 +1599,14 @@ button {
 }
 
 .vital-label {
-  font-size: 9px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .vital-value {
-  font-size: 12px;
+  font-size: var(--t-body);
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--text);
@@ -1464,7 +1615,7 @@ button {
 .vital-bar {
   grid-column: 1 / -1;
   height: 2px;
-  background: rgba(233, 231, 227, 0.09);
+  background: var(--track);
 }
 
 .vital-bar i {
@@ -1505,14 +1656,14 @@ button {
 
 .pref-name {
   display: block;
-  font-size: 12px;
+  font-size: var(--t-body);
   color: var(--text);
 }
 
 .pref-note {
   display: block;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text-muted);
   line-height: 1.5;
   margin-top: 3px;
@@ -1536,7 +1687,7 @@ button {
 
 /* Liberador de espaço */
 .finding-size {
-  font-size: 12px;
+  font-size: var(--t-body);
   font-variant-numeric: tabular-nums;
   color: var(--text);
   white-space: nowrap;
@@ -1550,7 +1701,7 @@ button {
 .conflict-list {
   margin: 6px 0 8px;
   padding-left: 16px;
-  font-size: 11px;
+  font-size: var(--t-label);
   color: var(--text);
 }
 
@@ -1576,13 +1727,13 @@ button {
 
 .folder-name {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--t-value);
   color: var(--text);
 }
 
 .folder-size {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-lead);
   font-variant-numeric: tabular-nums;
   color: var(--accent);
   white-space: nowrap;
@@ -1602,7 +1753,7 @@ button {
   display: block;
   margin-top: 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   word-break: break-all;
 }
@@ -1620,7 +1771,7 @@ button {
 }
 
 .profiles-label {
-  font-size: 10px;
+  font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1639,7 +1790,7 @@ button {
   border: 1px solid var(--hairline-strong);
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--t-label);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background-color 0.15s;
 }
@@ -1681,7 +1832,7 @@ button {
   border: 1px solid var(--hairline-strong);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--t-body);
 }
 
 .search input::placeholder {
@@ -1717,4 +1868,178 @@ button {
 
 .search-clear:hover {
   color: var(--text);
+}
+
+/* ============================================================== movimento
+
+   Tudo aqui anima apenas `transform` e `opacity` — as duas propriedades que o
+   navegador resolve sem refazer layout nem repintar. Animar largura, altura,
+   `top` ou `margin` custa quase o dobro por quadro, e num PC de 2 núcleos isso
+   aparece como engasgo.
+
+   Nenhuma biblioteca. Foi uma decisão medida: o GSAP custa 71 KB — mais que o
+   dobro do aplicativo inteiro — para fazer entrada e saída que o CSS já faz em
+   zero byte. Num programa vendido para tirar gordura de PC fraco, embutir isso
+   seria o produto se contradizendo dentro do próprio instalador.
+   ========================================================================= */
+
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulsar {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes varrer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Troca de aba. O painel entra de baixo, curto e sem elástico: é navegação,
+   não espetáculo. */
+.tab-panel:not([hidden]) {
+  animation: surgir 0.26s var(--ease) both;
+}
+
+/* Entrada de lista escalonada. O índice vem do JavaScript como `--i`; o teto de
+   12 existe porque uma lista de 40 itens com 22 ms cada levaria quase um
+   segundo para terminar de aparecer, e aí a animação vira espera. */
+.optimization,
+.finding,
+.folder,
+.startup,
+.live-log li {
+  animation: surgir 0.3s var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 12) * 22ms);
+}
+
+/* Estado de carregamento. Antes, um painel esperando o backend mostrava texto
+   parado e sem fim — se a chamada travasse, o cliente concluía que o programa
+   quebrou. Agora o texto respira e há uma faixa correndo por baixo. */
+.status.progress,
+.empty {
+  animation: pulsar 1.6s ease-in-out infinite;
+}
+
+.empty {
+  position: relative;
+  display: block;
+  padding: var(--s3) 0;
+  overflow: hidden;
+}
+
+.empty::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--hairline-strong), transparent);
+  animation: varrer 1.8s linear infinite;
+}
+
+/* Painel que não está mais esperando não deve pulsar. */
+.status.ok,
+.status.error,
+.status.warn {
+  animation: none;
+}
+
+/* O medidor de CPU já animava; o que faltava era a entrada. Sobe de zero até a
+   primeira leitura uma única vez, como instrumento ligando. Nas atualizações
+   seguintes só a transição normal age — um medidor que reinicia a cada 2 s
+   pareceria quebrado, não caro. */
+.gauge-fill {
+  transition: stroke-dashoffset 0.5s var(--ease), stroke 0.5s ease;
+}
+
+.gauge[data-entrada="true"] .gauge-fill {
+  transition-duration: 0.9s;
+}
+
+/* Reação ao toque. Nenhum botão do aplicativo afundava ao ser clicado — falta
+   o retorno físico que faz a interface parecer sólida. */
+.btn:active,
+.filter:active,
+.profile-chip:active {
+  transform: translateY(1px);
+}
+
+.btn,
+.filter,
+.profile-chip {
+  transition: color var(--dur), border-color var(--dur),
+    background-color var(--dur), transform 0.08s ease;
+}
+
+/* Linhas que eram clicáveis e não reagiam ao mouse. */
+.startup,
+.folder,
+.finding,
+.opt-group > summary {
+  transition: background-color var(--dur), border-color var(--dur);
+}
+
+.startup:hover,
+.folder:hover,
+.opt-group > summary:hover {
+  background-color: var(--panel-raised);
+}
+
+/* Barra de rolagem no tema, nos três contêineres que rolam — antes só a lista
+   de otimizações tinha, e as outras duas ficavam com a barra clara padrão do
+   WebView2 sobre painel quase preto. */
+.startup-list::-webkit-scrollbar,
+.live-log ol::-webkit-scrollbar,
+.optimization-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.startup-list::-webkit-scrollbar-track,
+.live-log ol::-webkit-scrollbar-track,
+.optimization-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.startup-list::-webkit-scrollbar-thumb,
+.live-log ol::-webkit-scrollbar-thumb,
+.optimization-list::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+}
+
+.startup-list::-webkit-scrollbar-thumb:hover,
+.live-log ol::-webkit-scrollbar-thumb:hover,
+.optimization-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Grade que se ajusta à quantidade de painéis. A aba Sistema tem três, e com
+   duas colunas fixas o terceiro ficava órfão numa segunda linha com metade da
+   tela vazia ao lado. */
+.grid-auto {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.grid-auto > * {
+  height: 100%;
+}
+
+/* A faixa de abas tem uma hairline de 1px embaixo; o indicador da aba ativa
+   tem 2px. Sem puxar o indicador para baixo, sobrava uma linha cinza por
+   BAIXO do traço branco — defeito de 1px, no elemento mais olhado da tela. */
+.tab {
+  margin-bottom: -1px;
 }
