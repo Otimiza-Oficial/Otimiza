@@ -51,7 +51,7 @@ pub fn listar() -> Vec<ScheduledTask> {
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-ScheduledTask | \
                   Select-Object TaskName,TaskPath,Author,@{n='State';e={$_.State.ToString()}})";
 
-    let saida = match shell::run("powershell", &["-NoProfile", "-Command", script]) {
+    let saida = match shell::powershell(script) {
         Ok(o) if o.success && !o.stdout.trim().is_empty() => o.stdout,
         _ => return Vec::new(),
     };
@@ -117,7 +117,7 @@ pub fn definir_estado(path: &str, name: &str, ligar: bool) -> Result<ChangeRecor
         name.replace('\'', "''")
     );
 
-    shell::run_checked("powershell", &["-NoProfile", "-Command", &script])
+    shell::powershell_checked(&script)
         .map_err(|e| format!("Não foi possível alterar `{}`: {}", name, e))?;
 
     Ok(ChangeRecord::ScheduledTask {

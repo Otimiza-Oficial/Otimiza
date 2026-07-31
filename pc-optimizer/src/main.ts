@@ -307,6 +307,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     loadStartup(),
     loadRestoreStatus(),
     loadScheduledTasks(),
+    loadThirdPartyServices(),
+    loadProfiles(),
   ]);
 
   await startMonitoring();
@@ -921,6 +923,191 @@ function renderTask(task: ScheduledTask): string {
   `;
 }
 
+// --------------------------------------------------- mapa de pastas
+
+interface FolderEntry {
+  name: string;
+  path: string;
+  bytes: number;
+  formatted: string;
+  percent: number;
+  explanation: string;
+  partial: boolean;
+}
+
+interface FolderMap {
+  root: string;
+  total_bytes: number;
+  total_formatted: string;
+  folders: FolderEntry[];
+  unreadable: number;
+  timed_out: boolean;
+}
+
+async function mapFolders() {
+  const button = element<HTMLButtonElement>("map-folders");
+  button.disabled = true;
+  setStatus(
+    "map-status",
+    "Somando pastas… pode levar até um minuto num disco cheio.",
+    "progress"
+  );
+
+  try {
+    const map = await invoke<FolderMap>("map_folders");
+    renderFolderMap(map);
+  } catch (error) {
+    setStatus("map-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderFolderMap(map: FolderMap) {
+  text("map-summary", map.root);
+
+  if (map.folders.length === 0) {
+    setStatus("map-status", "Nenhuma subpasta encontrada no seu perfil.", "ok");
+    element("map-result").innerHTML = "";
+    return;
+  }
+
+  // Quando a varredura não terminou, isso é a primeira coisa que a pessoa
+  // precisa ler — antes de qualquer número. Um piso apresentado como total
+  // manda o técnico limpar a pasta errada.
+  if (map.timed_out) {
+    setStatus(
+      "map-status",
+      `Pelo menos ${map.total_formatted} no seu perfil. A varredura não terminou ` +
+        `dentro do tempo, então as pastas marcadas como "não terminou" têm mais ` +
+        `do que o mostrado — e são justamente as maiores.`,
+      "warn"
+    );
+  } else {
+    setStatus(
+      "map-status",
+      `${map.total_formatted} no seu perfil.` +
+        (map.unreadable > 0
+          ? ` ${map.unreadable} pasta(s) sem permissão de leitura ficaram de fora.`
+          : ""),
+      "ok"
+    );
+  }
+
+  element("map-result").innerHTML = map.folders.map(renderFolder).join("");
+}
+
+function renderFolder(folder: FolderEntry): string {
+  const explicacao = folder.explanation
+    ? `<p class="finding-advice">${escapeHtml(folder.explanation)}</p>`
+    : "";
+
+  // "pelo menos" no lugar do número seco: é a diferença entre informar e
+  // enganar quando a soma foi cortada.
+  const tamanho = folder.partial
+    ? `pelo menos ${folder.formatted}`
+    : folder.formatted;
+
+  return `
+    <article class="folder" data-partial="${folder.partial}">
+      <div class="folder-top">
+        <span class="folder-name">${escapeHtml(folder.name)}</span>
+        <span class="folder-size">${escapeHtml(tamanho)}</span>
+      </div>
+      <div class="bar"><i style="width:${Math.min(100, folder.percent)}%"></i></div>
+      <span class="folder-path">${escapeHtml(folder.path)}${
+        folder.partial ? " · não terminou" : ""
+      }</span>
+      ${explicacao}
+    </article>
+  `;
+}
+
+// ------------------------------------- serviços deixados por programas
+
+type StartMode = "Automatic" | "Manual" | "Disabled" | "Kernel";
+
+interface ServiceEntry {
+  name: string;
+  display_name: string;
+  path: string;
+  start_mode: StartMode;
+  running: boolean;
+  ram_mb: number | null;
+  protected: string | null;
+}
+
+const START_MODE_LABELS: Record<StartMode, string> = {
+  Automatic: "sobe no boot",
+  Manual: "sob demanda",
+  Disabled: "desativado",
+  Kernel: "driver",
+};
+
+async function loadThirdPartyServices() {
+  try {
+    const services = await invoke<ServiceEntry[]>("list_third_party_services");
+    const noBoot = services.filter(
+      (s) => s.start_mode === "Automatic" && !s.protected
+    ).length;
+
+    text("services-count", `${noBoot} de ${services.length} sobem no boot`);
+
+    element("services-list").innerHTML = services.length
+      ? services.map(renderService).join("")
+      : `<p class="empty">Nenhum serviço de terceiros neste PC.</p>`;
+
+    if (noBoot > 0) setBadge("badge-sistema", noBoot, "warn");
+  } catch (error) {
+    element("services-list").innerHTML = `<p class="status error">${escapeHtml(
+      String(error)
+    )}</p>`;
+  }
+}
+
+function renderService(service: ServiceEntry): string {
+  // Memória só aparece quando foi medida de verdade. Serviço hospedado num
+  // processo compartilhado não tem número atribuível, e "0 MB" seria mentira.
+  const memoria =
+    service.ram_mb === null
+      ? ""
+      : `<span class="finding-size">${service.ram_mb.toFixed(0)} MB</span>`;
+
+  // Protegido é informação, não botão: mostrar o motivo ensina mais do que
+  // esconder a linha, e responde de véspera o "por que não aparece meu antivírus".
+  if (service.protected) {
+    return `
+      <div class="startup" data-enabled="false">
+        <div class="startup-info">
+          <span class="startup-name">${escapeHtml(service.display_name)}</span>
+          <span class="startup-exe">${escapeHtml(service.protected)}</span>
+        </div>
+        <span class="state-label">protegido</span>
+      </div>
+    `;
+  }
+
+  const noBoot = service.start_mode === "Automatic";
+  const situacao = `${START_MODE_LABELS[service.start_mode]}${
+    service.running ? " · rodando agora" : ""
+  }`;
+
+  return `
+    <div class="startup" data-enabled="${noBoot}">
+      <div class="startup-info">
+        <span class="startup-name">${escapeHtml(service.display_name)}</span>
+        <span class="startup-exe">${escapeHtml(situacao)}</span>
+      </div>
+      ${memoria}
+      <button class="btn btn-ghost"
+              data-service="${escapeHtml(service.name)}"
+              data-auto="${!noBoot}">
+        ${noBoot ? "Deixar sob demanda" : "Voltar ao boot"}
+      </button>
+    </div>
+  `;
+}
+
 // ------------------------------------------------------------ espaço em disco
 
 async function scanDiskSpace() {
@@ -1076,6 +1263,95 @@ async function loadOptimizations() {
   }
 }
 
+// ---------------------------------------------------------------- perfis
+
+interface ProfileInfo {
+  id: string;
+  name: string;
+  description: string;
+  tradeoff: string;
+  optimization_ids: string[];
+}
+
+let profiles: ProfileInfo[] = [];
+let activeProfile: string | null = null;
+/** Texto digitado na busca do catálogo. */
+let searchTerm = "";
+
+async function loadProfiles() {
+  try {
+    profiles = await invoke<ProfileInfo[]>("list_profiles");
+    renderProfileChips();
+  } catch {
+    // Sem perfis a lista continua inteira e utilizável: eles são um atalho,
+    // não um pré-requisito.
+    element("profile-chips").innerHTML = "";
+  }
+}
+
+function renderProfileChips() {
+  element("profile-chips").innerHTML = profiles
+    .map(
+      (p) =>
+        `<button class="profile-chip" data-profile="${p.id}" aria-pressed="${
+          activeProfile === p.id
+        }">${escapeHtml(p.name)}</button>`
+    )
+    .join("");
+}
+
+/**
+ * Aplica um perfil marcando os itens dele na lista — sem executar nada.
+ *
+ * A diferença entre isto e o "otimizar tudo" do mercado é essa: o perfil é uma
+ * sugestão visível e editável. A pessoa vê o que foi marcado, lê o que o perfil
+ * abre mão, e desmarca o que não quiser antes de apertar qualquer botão.
+ */
+function selectProfile(id: string) {
+  // Clicar de novo no mesmo perfil desmarca: o atalho tem volta.
+  if (activeProfile === id) {
+    activeProfile = null;
+    element("profile-detail").hidden = true;
+    renderProfileChips();
+    renderOptimizations();
+    return;
+  }
+
+  activeProfile = id;
+  renderProfileChips();
+  renderOptimizations();
+
+  const perfil = profiles.find((p) => p.id === id);
+  if (!perfil) return;
+
+  const alvo = new Set(perfil.optimization_ids);
+  const doPerfil = optimizations.filter((o) => alvo.has(o.id));
+  const aAplicar = doPerfil.filter((o) => o.state === "Available");
+  const jaTem = doPerfil.filter(
+    (o) => o.state === "Applied" || o.state === "AlreadyOptimal"
+  ).length;
+
+  // O que o perfil deixa de fazer aparece junto com o que ele faz. Um perfil
+  // que só se elogia é propaganda, não recomendação.
+  const detalhe = element("profile-detail");
+  detalhe.hidden = false;
+  detalhe.innerHTML = `
+    ${escapeHtml(perfil.description)}
+    <br /><br />
+    <strong>O que este perfil abre mão:</strong> ${escapeHtml(perfil.tradeoff)}
+    <br /><br />
+    <strong>${aAplicar.length} a aplicar${
+      jaTem > 0 ? `, ${jaTem} que o seu PC já tem` : ""
+    }.</strong>
+    A lista ao lado está mostrando só os itens deste perfil — confira antes de aplicar.
+    ${
+      aAplicar.length > 0
+        ? `<br /><br /><button id="apply-profile" class="btn btn-primary">Aplicar os ${aAplicar.length} deste perfil</button>`
+        : ""
+    }
+  `;
+}
+
 function renderFilters() {
   const categories = Array.from(new Set(optimizations.map((item) => item.category)));
   const options: (Category | "Todas")[] = ["Todas", ...categories];
@@ -1089,15 +1365,56 @@ function renderFilters() {
     .join("");
 }
 
+/**
+ * Casa o texto buscado com uma otimização.
+ *
+ * Procura no nome, na descrição, no efeito honesto e no id. O efeito honesto
+ * entra de propósito: é onde estão as palavras que a pessoa lembra ("boot",
+ * "travada", "memória") quando não lembra o nome do ajuste.
+ */
+function matchesSearch(item: OptimizationInfo, termo: string): boolean {
+  if (!termo) return true;
+
+  const alvo = `${item.name} ${item.description} ${item.honest_effect} ${item.id}`;
+
+  // Sem acento dos dois lados: quem digita "memoria" precisa achar "memória".
+  const normalizar = (t: string) =>
+    t.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+  return normalizar(alvo).includes(normalizar(termo));
+}
+
 function renderOptimizations() {
+  const termo = searchTerm.trim();
+
   const visible = optimizations
     .filter((item) => preferences.show_unavailable || item.state !== "Unavailable")
-    .filter((item) => activeCategory === "Todas" || item.category === activeCategory);
+    .filter((item) => activeCategory === "Todas" || item.category === activeCategory)
+    .filter((item) => matchesSearch(item, termo))
+    // Perfil escolhido reduz a lista ao que ele recomenda. É o que transforma
+    // 35 itens numa decisão possível — sem esconder nada: basta desmarcar o
+    // perfil para a lista inteira voltar.
+    .filter((item) => {
+      if (!activeProfile) return true;
+      const perfil = profiles.find((p) => p.id === activeProfile);
+      return perfil ? perfil.optimization_ids.includes(item.id) : true;
+    });
 
   const available = optimizations.filter((item) => item.state === "Available").length;
   const applied = optimizations.filter((item) => item.state === "Applied").length;
   text("optimization-count", `${available} a aplicar · ${applied} ativas`);
   setBadge("badge-otimizacoes", available);
+
+  // Busca sem resultado precisa dizer isso. Uma lista vazia e silenciosa faz a
+  // pessoa achar que o programa travou.
+  if (visible.length === 0) {
+    element("optimization-list").innerHTML = termo
+      ? `<p class="empty">Nada encontrado para "${escapeHtml(termo)}".</p>`
+      : activeProfile
+        ? `<p class="empty">Nenhum item deste perfil aparece nesta categoria.</p>`
+        : `<p class="empty">Nenhuma otimização nesta categoria.</p>`;
+    return;
+  }
 
   // Agrupar por categoria mantém a lista curta: cada grupo pode ser recolhido, e
   // percorrer 14 itens deixa de exigir rolar a tela inteira.
@@ -1300,7 +1617,7 @@ function pendingAdminCount(): number {
   ).length;
 }
 
-async function runBatch(command: string, progress: string) {
+async function runBatch(command: string, progress: string, only?: string[]) {
   if (command === "optimize_now" && !isElevated) {
     const count = pendingAdminCount();
 
@@ -1320,7 +1637,12 @@ async function runBatch(command: string, progress: string) {
   resetLog(command === "optimize_now" ? "Aplicando" : "Desfazendo");
 
   try {
-    const outcomes = await invoke<OptimizationOutcome[]>(command);
+    // `only` só existe no lote de aplicar; passar em outros comandos seria
+    // ruído no IPC.
+    const outcomes = await invoke<OptimizationOutcome[]>(
+      command,
+      only ? { only } : undefined
+    );
 
     if (outcomes.length === 0) {
       setStatus(
@@ -1740,7 +2062,37 @@ function wireControls() {
     }
   });
 
+  element("services-list").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-service]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    if (!isElevated) {
+      askForAdmin(
+        `Mudar o início de um serviço exige permissão de administrador. ` +
+          `Podemos reabrir o Otimiza com essa permissão?`
+      );
+      return;
+    }
+
+    button.disabled = true;
+
+    try {
+      const outcome = await invoke<OptimizationOutcome>("set_service_start", {
+        name: button.dataset.service,
+        automatic: button.dataset.auto === "true",
+      });
+      setStatus("services-status", outcome.message, outcome.success ? "ok" : "error");
+    } catch (error) {
+      setStatus("services-status", String(error), "error");
+    } finally {
+      await loadThirdPartyServices();
+    }
+  });
+
   element("scan-disk").addEventListener("click", scanDiskSpace);
+  element("map-folders").addEventListener("click", mapFolders);
 
   element("disk-result").addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest(
@@ -1813,6 +2165,55 @@ function wireControls() {
   element("optimize-now").addEventListener("click", () =>
     runBatch("optimize_now", "Aplicando o que falta…")
   );
+
+  element("profile-chips").addEventListener("click", (event) => {
+    const chip = (event.target as HTMLElement).closest(
+      "button[data-profile]"
+    ) as HTMLButtonElement | null;
+    if (chip) selectProfile(chip.dataset.profile!);
+  });
+
+  // O botão de aplicar o perfil é redesenhado a cada escolha, então a escuta
+  // fica no painel que sobrevive, não no botão.
+  element("profile-detail").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest("#apply-profile");
+    if (!button) return;
+
+    const perfil = profiles.find((p) => p.id === activeProfile);
+    if (!perfil) return;
+
+    runBatch(
+      "optimize_now",
+      `Aplicando o perfil ${perfil.name}…`,
+      perfil.optimization_ids
+    );
+  });
+
+  const busca = element<HTMLInputElement>("optimization-search");
+  busca.addEventListener("input", () => {
+    searchTerm = busca.value;
+    element("search-clear").hidden = searchTerm.length === 0;
+    renderOptimizations();
+  });
+
+  // Esc limpa a busca: é o gesto que a pessoa já tem na mão vindo de qualquer
+  // outro programa.
+  busca.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      busca.value = "";
+      searchTerm = "";
+      element("search-clear").hidden = true;
+      renderOptimizations();
+    }
+  });
+
+  element("search-clear").addEventListener("click", () => {
+    busca.value = "";
+    searchTerm = "";
+    element("search-clear").hidden = true;
+    busca.focus();
+    renderOptimizations();
+  });
   element("revert-all").addEventListener("click", () =>
     runBatch("revert_all_optimizations", "Desfazendo…")
   );

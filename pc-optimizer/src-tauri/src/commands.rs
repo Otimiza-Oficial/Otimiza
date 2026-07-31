@@ -23,9 +23,13 @@ use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::conflicts::ConflictReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::foldermap::FolderMap;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::health::HealthReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::servicesaudit::ServiceEntry;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::bloatware::BloatReport;
 #[cfg(target_os = "windows")]
@@ -329,6 +333,47 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
     }
 }
 
+/// Comando: Perfis de otimização recomendados por tipo de uso.
+///
+/// Perfil aqui é sugestão que marca caixas na lista, não pacote fechado: a
+/// pessoa continua vendo e podendo desmarcar cada item.
+#[tauri::command]
+pub fn list_profiles() -> Vec<crate::modules::windows::profiles::ProfileInfo> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::profiles::PROFILES.to_vec()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
+/// Comando: Mapa das maiores pastas do perfil do usuário.
+///
+/// Responde a pergunta que vem antes do liberador de espaço: não "o que dá para
+/// apagar", mas "cadê o meu disco".
+#[tauri::command]
+pub async fn map_folders() -> Result<FolderMap, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Percorre centenas de milhares de arquivos: fora do runtime async,
+        // senão trava a interface inteira durante a varredura.
+        tokio::task::spawn_blocking(|| {
+            use crate::modules::windows::foldermap;
+            foldermap::mapear(&foldermap::perfil_do_usuario(), 12)
+        })
+        .await
+        .map_err(|e| format!("Falha ao mapear pastas: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Relatório de atendimento
 // ---------------------------------------------------------------------------
@@ -431,6 +476,43 @@ pub async fn set_scheduled_task(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (path, name, enabled, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Serviços deixados por programas instalados.
+#[tauri::command]
+pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::servicesaudit::listar_de_terceiros)
+            .await
+            .map_err(|e| format!("Falha ao listar serviços: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Leva um serviço para Manual, ou devolve para Automático.
+#[tauri::command]
+pub async fn set_service_start(
+    name: String,
+    automatic: bool,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new()
+            .set_service_start(&name, automatic, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (name, automatic, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -742,11 +824,15 @@ pub async fn revert_optimization(
     }
 }
 
-/// Comando: "Otimizar agora" — aplica todo o catálogo de uma vez
+/// Comando: "Otimizar agora" — aplica todo o catálogo de uma vez.
+///
+/// `only` restringe o lote a uma lista de ids: é como um perfil aplica só o que
+/// recomenda. Os filtros de segurança do motor valem igual nos dois casos.
 #[tauri::command]
 pub async fn optimize_now(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
+    only: Option<Vec<String>>,
 ) -> Result<Vec<OptimizationOutcome>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -779,14 +865,18 @@ pub async fn optimize_now(
 
         // Cada passo é emitido na hora que acontece: a interface mostra o que
         // está sendo mexido, em vez de uma barra de progresso sem informação.
-        Ok(crate::modules::windows::WindowsOptimizer::new().apply_all(&mut log, |step| {
-            let _ = app.emit("optimize:step", step);
-        }))
+        Ok(crate::modules::windows::WindowsOptimizer::new().apply_selection(
+            only.as_deref(),
+            &mut log,
+            |step| {
+                let _ = app.emit("optimize:step", step);
+            },
+        ))
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, state);
+        let _ = (app, state, only);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

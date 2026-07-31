@@ -121,6 +121,16 @@ jobs:
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::health:: modules::report:: modules::monitor::"
 
+      - name: Testes — serviços de terceiros, perfis e execução
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell::"
+
+      # O mapa de pastas varre o disco de verdade e leva perto de um minuto.
+      # Fica num passo próprio para não parecer que outra área travou.
+      - name: Testes — mapa de pastas
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::foldermap::"
+
       - name: Testes — motor de otimização
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::tests::"

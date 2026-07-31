@@ -42,7 +42,7 @@ pub struct MemoryReport {
 }
 
 fn powershell(script: &str) -> Option<String> {
-    let output = shell::run("powershell", &["-NoProfile", "-Command", script]).ok()?;
+    let output = shell::powershell(script).ok()?;
 
     if output.success && !output.stdout.trim().is_empty() {
         Some(output.stdout.trim().to_string())
@@ -293,7 +293,7 @@ pub fn set_automatic_pagefile() -> Result<String, String> {
                     Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } \
                   }";
 
-    shell::run_checked("powershell", &["-NoProfile", "-Command", script])
+    shell::powershell_checked(script)
         .map_err(|e| format!("Não foi possível alterar o arquivo de paginação: {}", e))?;
 
     Ok("O Windows voltou a gerenciar o arquivo de paginação. Reinicie o PC para valer.".to_string())

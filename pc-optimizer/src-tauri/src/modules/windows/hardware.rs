@@ -54,7 +54,7 @@ fn detect_system_storage() -> StorageKind {
     let script = "$n = (Get-Partition -DriveLetter C | Get-Disk).Number; \
                   (Get-PhysicalDisk | Where-Object DeviceId -eq $n).MediaType";
 
-    let output = match shell::run("powershell", &["-NoProfile", "-Command", script]) {
+    let output = match shell::powershell(script) {
         Ok(output) if output.success => output.stdout,
         _ => return StorageKind::Unknown,
     };

@@ -79,7 +79,7 @@ struct MemoryModule {
 /// ao contrário do texto formatado de quase todo comando do sistema. Serializar
 /// para JSON evita depender de alinhamento de colunas.
 fn query_json(script: &str) -> Option<String> {
-    let output = shell::run("powershell", &["-NoProfile", "-Command", script]).ok()?;
+    let output = shell::powershell(script).ok()?;
 
     if output.success && !output.stdout.trim().is_empty() {
         Some(output.stdout)

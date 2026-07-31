@@ -13,14 +13,17 @@ pub mod conflicts;
 pub mod devices;
 pub mod diskspace;
 pub mod firmware;
+pub mod foldermap;
 pub mod hardware;
 pub mod health;
 pub mod memory;
 pub mod power;
 pub mod processes;
+pub mod profiles;
 pub mod registry;
 pub mod restore;
 pub mod services;
+pub mod servicesaudit;
 pub mod shell;
 pub mod startup;
 pub mod tasks;
@@ -483,6 +486,63 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Leva um serviço de terceiro para Manual, ou devolve para Automático.
+    ///
+    /// Segue o mesmo desenho das tarefas agendadas: o id próprio faz a mudança
+    /// entrar no "Desfazer tudo" junto com o resto, e voltar para Automático
+    /// desfaz o registro em vez de criar um segundo.
+    pub fn set_service_start(
+        &self,
+        name: &str,
+        automatic: bool,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = format!("service:{}", name);
+
+        if automatic {
+            if log.is_applied(&id) {
+                return self.revert(&id, log);
+            }
+
+            let change = servicesaudit::definir_inicio(name, true)?;
+            return Ok(OptimizationOutcome {
+                id,
+                name: name.to_string(),
+                success: true,
+                applied: false,
+                message: format!("`{}` volta a subir junto com o Windows.", name),
+                requires_restart: false,
+                changes_count: 1,
+                changes: vec![change.describe()],
+            });
+        }
+
+        let change = servicesaudit::definir_inicio(name, false)?;
+        let described = change.describe();
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} (serviço em Manual)", name),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        })?;
+
+        Ok(OptimizationOutcome {
+            id,
+            name: name.to_string(),
+            success: true,
+            applied: true,
+            // A frase importa: o usuário precisa entender que não quebrou nada.
+            message: format!(
+                "`{}` não sobe mais sozinho no boot. Ele ainda sobe quando o programa pedir.",
+                name
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
     /// Liga ou desliga um programa de inicialização.
     ///
     /// Desligar grava no histórico com um id próprio, então "Desfazer tudo"
@@ -546,20 +606,36 @@ impl WindowsOptimizer {
         })
     }
 
-    /// "Otimizar agora": aplica o que é seguro aplicar sem o usuário escolher item a item.
+    /// Aplica um lote do que é seguro aplicar sem o usuário escolher item a item.
     ///
-    /// Duas exclusões deliberadas:
+    /// `only` restringe a lista: `Some(ids)` é o caminho dos perfis, que aplicam
+    /// só o que recomendam, e `None` é o "Otimizar agora", que pega tudo que
+    /// está pendente.
+    ///
+    /// Duas exclusões deliberadas, e elas vêm DEPOIS do filtro de ids — um
+    /// perfil não pode arrastar nenhuma das duas só porque citou o id:
     /// - o que não é reversível (apagar arquivo nunca acontece por um clique genérico)
-    /// - o que já está aplicado ou já é o padrão da máquina
+    /// - o que troca segurança por desempenho
+    ///
+    /// Já aplicado ou já padrão da máquina também fica de fora, pela inspeção.
     ///
     /// A falha de uma otimização não interrompe as demais — cada uma é independente
     /// e já se desfez sozinha antes de reportar o erro.
-    pub fn apply_all<F>(&self, log: &mut ChangeLog, mut on_step: F) -> Vec<OptimizationOutcome>
+    pub fn apply_selection<F>(
+        &self,
+        only: Option<&[String]>,
+        log: &mut ChangeLog,
+        mut on_step: F,
+    ) -> Vec<OptimizationOutcome>
     where
         F: FnMut(BatchStep),
     {
         let pending: Vec<&OptimizationSpec> = catalog::CATALOG
             .iter()
+            .filter(|spec| match only {
+                Some(ids) => ids.iter().any(|id| id == spec.id),
+                None => true,
+            })
             .filter(|spec| spec.reversible)
             .filter(|spec| !spec.security_tradeoff)
             .filter(|spec| self.inspect(spec, log) == OptimizationState::Available)
@@ -1033,7 +1109,7 @@ mod tests {
 
     /// "Otimizar Agora" nunca pode apagar arquivos do cliente sem ele escolher isso.
     #[test]
-    fn apply_all_never_includes_irreversible_operations() {
+    fn lote_nunca_inclui_operacao_sem_volta() {
         let optimizer = WindowsOptimizer::new();
         let log = ChangeLog::load();
 
@@ -1086,7 +1162,7 @@ mod tests {
 
     /// "Otimizar Agora" nunca pode abrir mão de segurança por conta própria.
     #[test]
-    fn apply_all_never_trades_security_for_performance() {
+    fn lote_nunca_troca_seguranca_por_desempenho() {
         let optimizer = WindowsOptimizer::new();
         let log = ChangeLog::load();
 

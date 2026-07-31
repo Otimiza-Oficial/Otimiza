@@ -508,8 +508,8 @@ button {
 .readouts-row .readout {
   flex: 1 1 150px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
-  background: var(--panel-soft, rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--hairline);
+  background: var(--panel-raised);
 }
 
 .readout {
@@ -1556,4 +1556,165 @@ button {
 
 .conflict-list li {
   padding: 1px 0;
+}
+
+/* --------------------------------------------------------- mapa de pastas */
+
+.folder {
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  margin-bottom: 8px;
+}
+
+.folder-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.folder-name {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text);
+}
+
+.folder-size {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* Pasta cortada pelo prazo tem número que é piso, não total. A barra âmbar
+   diz isso antes de a pessoa ler a legenda. */
+.folder[data-partial="true"] .folder-size {
+  color: var(--amber);
+}
+
+.folder[data-partial="true"] .bar i {
+  background: var(--amber);
+}
+
+.folder-path {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.folder .finding-advice {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------------- perfis e busca */
+
+.profiles {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+
+.profiles-label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.profile-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.profile-chip {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--hairline-strong);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+}
+
+.profile-chip:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* O perfil escolhido é o único estado de cor cheia da tela. Ele muda o que a
+   lista ao lado mostra, e essa consequência precisa estar visível. */
+.profile-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.profile-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#profile-detail {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-left: 2px solid var(--accent);
+  background: var(--panel-raised);
+}
+
+.search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.search input {
+  width: 100%;
+  padding: 9px 32px 9px 12px;
+  background: var(--bg);
+  border: 1px solid var(--hairline-strong);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.search input::placeholder {
+  color: var(--text-muted);
+}
+
+.search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* O X nativo do type=search não aparece em todos os motores e não herda o
+   tema; o nosso é previsível. */
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: var(--text);
 }

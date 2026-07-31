@@ -36,7 +36,7 @@ pub struct HealthReport {
 }
 
 fn powershell(script: &str) -> Option<String> {
-    let output = shell::run("powershell", &["-NoProfile", "-Command", script]).ok()?;
+    let output = shell::powershell(script).ok()?;
 
     if output.success && !output.stdout.trim().is_empty() {
         Some(output.stdout)

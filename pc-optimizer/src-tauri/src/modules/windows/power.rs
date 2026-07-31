@@ -140,11 +140,7 @@ pub fn restore_power_setting(
 /// `Get-MMAgent` devolve nomes de propriedade em inglês em qualquer idioma do
 /// Windows, então `True`/`False` são estáveis.
 pub fn memory_compression_enabled() -> Option<bool> {
-    let output = shell::run(
-        "powershell",
-        &["-NoProfile", "-Command", "(Get-MMAgent).MemoryCompression"],
-    )
-    .ok()?;
+    let output = shell::powershell("(Get-MMAgent).MemoryCompression").ok()?;
 
     if !output.success {
         return None;
@@ -164,7 +160,7 @@ pub fn set_memory_compression(enabled: bool) -> Result<(), String> {
         "Disable-MMAgent -mc"
     };
 
-    shell::run_checked("powershell", &["-NoProfile", "-Command", command])?;
+    shell::powershell_checked(command)?;
     Ok(())
 }
 
@@ -174,13 +170,8 @@ pub fn set_memory_compression(enabled: bool) -> Result<(), String> {
 /// pequeno isso pesa. `Get-WindowsReservedStorageState` devolve `Enabled` ou
 /// `Disabled` em inglês em qualquer idioma do sistema.
 pub fn reserved_storage_enabled() -> Option<bool> {
-    let output = shell::run(
-        "powershell",
-        &[
-            "-NoProfile",
-            "-Command",
-            "(Get-WindowsReservedStorageState -ErrorAction SilentlyContinue).ReservedStorageState",
-        ],
+    let output = shell::powershell(
+        "(Get-WindowsReservedStorageState -ErrorAction SilentlyContinue).ReservedStorageState",
     )
     .ok()?;
 
@@ -202,7 +193,7 @@ pub fn set_reserved_storage(enabled: bool) -> Result<(), String> {
         estado
     );
 
-    shell::run_checked("powershell", &["-NoProfile", "-Command", &script]).map_err(|e| {
+    shell::powershell_checked(&script).map_err(|e| {
         format!(
             "O Windows recusou alterar o Armazenamento Reservado. \
              Isso costuma acontecer quando há atualização em andamento: {}",

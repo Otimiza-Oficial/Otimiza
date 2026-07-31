@@ -197,7 +197,7 @@ fn ler_apps_da_loja() -> Vec<RawAppx> {
     let script = "ConvertTo-Json -Compress -Depth 2 -InputObject @(Get-AppxPackage \
                   -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName)";
 
-    match shell::run("powershell", &["-NoProfile", "-Command", script]) {
+    match shell::powershell(script) {
         Ok(o) if o.success && !o.stdout.trim().is_empty() => {
             serde_json::from_str(&o.stdout).unwrap_or_default()
         }
@@ -303,7 +303,7 @@ pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
         package
     );
 
-    shell::run_checked("powershell", &["-NoProfile", "-Command", &script])
+    shell::powershell_checked(&script)
         .map_err(|e| format!("Não foi possível remover: {}", e))?;
 
     Ok("Aplicativo removido. Ele pode ser reinstalado pela Microsoft Store.".to_string())

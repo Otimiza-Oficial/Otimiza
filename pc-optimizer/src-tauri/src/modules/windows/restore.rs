@@ -39,7 +39,7 @@ pub struct RestoreStatus {
 /// Consulta o WMI devolvendo JSON. Nomes de propriedade do WMI são estáveis em
 /// qualquer idioma, ao contrário do texto formatado dos comandos.
 fn query(script: &str) -> Option<String> {
-    let output = shell::run("powershell", &["-NoProfile", "-Command", script]).ok()?;
+    let output = shell::powershell(script).ok()?;
 
     if output.success {
         Some(output.stdout)
@@ -116,7 +116,7 @@ pub fn create(description: &str) -> Result<String, String> {
         "Checkpoint-Computer -Description '{}' -RestorePointType MODIFY_SETTINGS",
         description.replace('\'', "''")
     );
-    let _ = shell::run("powershell", &["-NoProfile", "-Command", &script]);
+    let _ = shell::powershell(&script);
 
     let after = list();
     let highest_after = after.first().map(|point| point.sequence).unwrap_or(0);
@@ -154,14 +154,7 @@ pub fn enable_protection() -> Result<String, String> {
 
     let system_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
 
-    shell::run_checked(
-        "powershell",
-        &[
-            "-NoProfile",
-            "-Command",
-            &format!("Enable-ComputerRestore -Drive '{}\\'", system_drive),
-        ],
-    )?;
+    shell::powershell_checked(&format!("Enable-ComputerRestore -Drive '{}\\'", system_drive))?;
 
     Ok(format!(
         "Proteção do Sistema ativada em {}. Agora dá para criar pontos de restauração.",

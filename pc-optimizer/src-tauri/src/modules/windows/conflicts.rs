@@ -103,7 +103,7 @@ pub fn antivirus_ativos() -> Vec<String> {
                   -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct \
                   -ErrorAction SilentlyContinue | Select-Object displayName,productState)";
 
-    let saida = match shell::run("powershell", &["-NoProfile", "-Command", script]) {
+    let saida = match shell::powershell(script) {
         Ok(o) if o.success && !o.stdout.trim().is_empty() => o.stdout,
         _ => return Vec::new(),
     };

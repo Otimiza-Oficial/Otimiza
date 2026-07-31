@@ -216,6 +216,15 @@
                 essas exigem sua escolha item a item.
               </p>
 
+              <!-- Perfis: a pergunta certa não é "quer otimizar?", é "para que
+                   serve este PC?". Desligar a indexação de busca é ótimo num PC
+                   de jogos e péssimo num de escritório. -->
+              <div class="profiles">
+                <p class="profiles-label">Para que serve este PC?</p>
+                <div class="profile-chips" id="profile-chips"></div>
+                <p class="hint" id="profile-detail" hidden></p>
+              </div>
+
               <p id="optimization-status" class="status"></p>
 
               <!-- Registro ao vivo: o cliente vê cada mudança acontecendo, com o
@@ -262,6 +271,16 @@
                 <span class="panel-tag">por categoria</span>
               </div>
               <div class="filters" id="filters"></div>
+
+              <!-- Busca: com 35 itens, rolar a lista atrás de um nome específico
+                   é o gesto mais repetido de quem usa isto todo dia. -->
+              <div class="search">
+                <input type="search" id="optimization-search"
+                       placeholder="Buscar por nome, efeito ou id…"
+                       autocomplete="off" spellcheck="false" />
+                <button id="search-clear" class="search-clear" hidden aria-label="Limpar busca">×</button>
+              </div>
+
               <div id="optimization-list" class="optimization-list">
                 <p class="empty">Lendo o estado da máquina…</p>
               </div>
@@ -388,6 +407,27 @@
             </div>
             <div id="disk-result"></div>
           </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Cadê o meu disco?</h2>
+              <span class="panel-tag" id="map-summary">—</span>
+            </div>
+
+            <p class="lead">
+              O liberador acima responde "o que dá para apagar com segurança".
+              Esta é a pergunta que vem antes, e é a que o dono do PC realmente
+              faz: "tenho 500 GB, não baixei nada, cadê o espaço?". Sem essa
+              resposta dá para limpar 2 GB de temporários num disco que tem 400 GB
+              de jogo esquecido e backup de celular — e o cliente continua sem
+              espaço. Aqui <strong>nada é apagado</strong>: só mostramos onde
+              está, com o caminho exato, para você decidir.
+            </p>
+
+            <button id="map-folders" class="btn btn-primary">Mapear minhas pastas</button>
+            <p id="map-status" class="status"></p>
+            <div id="map-result"></div>
+          </section>
         </section>
 
         <!-- =========================================================== RESULTADO -->
@@ -494,6 +534,39 @@
                 <p class="empty">Lendo o agendador…</p>
               </div>
             </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Serviços de programas instalados</h2>
+              <span class="panel-tag" id="services-count">—</span>
+            </div>
+
+            <p class="lead">
+              Programa instalado quase nunca se contenta em ser um programa: ele
+              deixa um serviço para trás — atualizador, licenciamento,
+              "assistente" — que sobe junto com o Windows, antes mesmo de você
+              fazer login. É a terceira perna do problema, junto com
+              inicialização e tarefas agendadas.
+            </p>
+
+            <p class="hint">
+              Aqui o botão leva para <strong>Manual</strong>, não para
+              desativado. Desativar é o que os tutoriais mandam fazer e é errado:
+              quando o programa precisa do serviço ele não sobe, e o programa
+              quebra semanas depois sem ninguém ligar ao otimizador que rodou.
+              Em Manual, o serviço para de subir sozinho no boot mas ainda sobe
+              quando alguém pede — você ganha o boot e não quebra nada. Serviço
+              do Windows, antivírus, áudio e vídeo nunca aparecem como ação.
+            </p>
+
+            <p id="services-status" class="status"></p>
+            <div id="services-list" class="startup-list">
+              <p class="empty">Lendo os serviços…</p>
+            </div>
+          </section>
+
+          <div class="grid grid-two">
 
             <section class="panel">
               <div class="panel-head">

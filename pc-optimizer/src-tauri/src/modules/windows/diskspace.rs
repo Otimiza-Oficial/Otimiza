@@ -393,10 +393,7 @@ fn limpar_conteudo(dir: &std::path::Path) -> (u64, usize) {
 /// varre: o Windows tem chamada própria para isso, e usá-la respeita as regras
 /// dele em vez de sair apagando `$Recycle.Bin` na unha.
 pub fn empty_recycle_bin() -> Result<String, String> {
-    shell::run_checked(
-        "powershell",
-        &["-NoProfile", "-Command", "Clear-RecycleBin -Force -ErrorAction Stop"],
-    )
+    shell::powershell_checked("Clear-RecycleBin -Force -ErrorAction Stop")
     .map_err(|_| "Não foi possível esvaziar a Lixeira (ela pode já estar vazia).".to_string())?;
 
     Ok("Lixeira esvaziada.".to_string())
