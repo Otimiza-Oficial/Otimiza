@@ -33,6 +33,8 @@ use crate::modules::windows::browsers::{BrowserReport, CleanOutcome as BrowserCl
 #[cfg(target_os = "windows")]
 use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -430,6 +432,63 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
+}
+
+// ---------------------------------------------------------------------------
+// FiveM
+// ---------------------------------------------------------------------------
+
+/// Comando: Levantamento da instalação do FiveM.
+#[tauri::command]
+pub async fn analyze_fivem() -> Result<FiveMReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // A pasta de cache tem dezenas de milhares de arquivos: somar tudo
+        // leva segundos e não pode travar a interface.
+        tokio::task::spawn_blocking(crate::modules::windows::fivem::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler a instalação do FiveM: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Apaga uma pasta descartável do FiveM.
+///
+/// Recusa pasta protegida e recusa com o jogo aberto. Não tem volta.
+#[tauri::command]
+pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || crate::modules::windows::fivem::limpar(&id))
+            .await
+            .map_err(|e| format!("Falha ao limpar: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = id;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Prioridade alta no processador para o jogo.
+#[tauri::command]
+pub async fn prioritize_fivem() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::fivem::priorizar_jogo)
+            .await
+            .map_err(|e| format!("Falha ao ajustar a prioridade: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

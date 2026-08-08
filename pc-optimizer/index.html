@@ -65,6 +65,10 @@
         <button class="tab" role="tab" data-tab="resultado" aria-selected="false" aria-controls="tab-resultado" id="tabbtn-resultado">
           Resultado
         </button>
+        <button class="tab" role="tab" data-tab="jogos" aria-selected="false" aria-controls="tab-jogos" id="tabbtn-jogos">
+          Jogos
+          <span class="tab-badge" id="badge-jogos" hidden></span>
+        </button>
         <button class="tab" role="tab" data-tab="sistema" aria-selected="false" aria-controls="tab-sistema" id="tabbtn-sistema">
           Sistema
           <span class="tab-badge" id="badge-sistema" hidden></span>
@@ -542,6 +546,49 @@
 
             <button id="export-report" class="btn btn-primary">Gerar relatório em PDF</button>
             <p id="report-status" class="status"></p>
+          </section>
+        </section>
+
+        <!-- ============================================================== JOGOS -->
+        <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
+          <section class="panel">
+            <div class="panel-head">
+              <h2>FiveM</h2>
+              <span class="panel-tag" id="fivem-tag">—</span>
+            </div>
+
+            <p class="lead">
+              O FiveM guarda em disco tudo que baixa de cada servidor em que
+              você entra — mapas, scripts, sons, texturas. Isso cresce sem
+              limite e é a causa mais comum de três problemas ao mesmo tempo:
+              disco cheio sem explicação, travada no meio da partida e crash ao
+              entrar num servidor. Nada disso precisa ficar guardado: o servidor
+              reenvia na próxima conexão.
+            </p>
+
+            <p class="hint">
+              <strong>Cuidado que tomamos:</strong> a segunda maior pasta da
+              instalação guarda o seu perfil do jogo e a sua sessão da Rockstar.
+              Ela aparece aqui medida e marcada como protegida — apagar
+              deslogaria você da conta e jogaria fora os seus ajustes. Tamanho
+              não decide o que é lixo.
+            </p>
+
+            <p class="hint">
+              <strong>O que não fazemos:</strong> não colocamos overlay dentro
+              do jogo. Overlay exige injetar código no processo, e o anticheat
+              do FiveM trata injeção como ameaça — o ganho seria um número na
+              tela e o risco seria a sua conta. Também não "liberamos memória"
+              antes de jogar: isso melhora o gráfico e piora o desempenho real.
+            </p>
+
+            <div class="row-actions">
+              <button id="analyze-fivem" class="btn btn-primary">Analisar FiveM</button>
+              <button id="prioritize-fivem" class="btn">Priorizar o jogo</button>
+            </div>
+
+            <p id="fivem-status" class="status"></p>
+            <div id="fivem-result"></div>
           </section>
         </section>
 

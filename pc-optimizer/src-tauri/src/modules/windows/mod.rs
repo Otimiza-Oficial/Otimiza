@@ -15,6 +15,7 @@ pub mod conflicts;
 pub mod devices;
 pub mod diskspace;
 pub mod firmware;
+pub mod fivem;
 pub mod foldermap;
 pub mod hardware;
 pub mod health;

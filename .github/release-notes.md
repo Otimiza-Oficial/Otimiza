@@ -6,14 +6,53 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.5.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.6.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## FiveM
+
+Esta versão tem uma aba nova, e ela existe porque o público real deste programa
+joga FiveM.
+
+O FiveM guarda em disco tudo que baixa de cada servidor em que você entra:
+mapas, scripts, sons, texturas. Isso cresce sem limite e é a causa mais comum de
+três problemas ao mesmo tempo — disco cheio sem explicação, travada no meio da
+partida e crash ao entrar num servidor. Nada disso precisa ficar guardado,
+porque o servidor reenvia na próxima conexão.
+
+Na instalação usada para desenvolver isto, essa pasta tinha **10 GB em 21.584
+arquivos**.
+
+**A armadilha, e é a mesma do navegador.** A segunda maior pasta da instalação
+tinha 3,2 GB e é justamente a que não se pode apagar: ali ficam o seu perfil do
+jogo e os dados de sessão da Rockstar Social Club. Apagar deslogaria você da
+conta e jogaria fora os seus ajustes. Ela aparece na lista, medida, marcada como
+protegida e com o motivo escrito. Tamanho não decide o que é lixo — cada pasta
+foi aberta e classificada uma a uma.
+
+Também dá para colocar o jogo em prioridade alta no processador enquanto ele
+está rodando. Duas coisas ditas na própria tela: a prioridade some quando o jogo
+fecha, então precisa ser aplicada a cada sessão; e é **alta**, nunca "tempo
+real" — tempo real coloca o jogo acima do próprio sistema operacional, incluindo
+o que cuida de som, mouse e teclado, e o resultado prático costuma ser travar a
+máquina inteira.
+
+**Duas coisas que decidimos não fazer, e o motivo.**
+
+Não colocamos overlay de FPS dentro do jogo. Overlay exige injetar código no
+processo, e o anticheat do FiveM trata injeção como ameaça. O ganho seria um
+número bonito na tela; o risco seria a conta do cliente.
+
+Não "liberamos memória" antes de jogar. Essa função esvazia o conjunto de
+trabalho dos processos: o gráfico melhora e o desempenho real piora, porque tudo
+precisa ser relido do disco. Já estava na nossa lista de recusas, e não passou a
+valer só porque o assunto agora é jogo.
 
 ## O navegador, que ninguém olha
 

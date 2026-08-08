@@ -785,6 +785,130 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
   `;
 }
 
+// --------------------------------------------------------------- FiveM
+
+interface FiveMFolder {
+  id: string;
+  name: string;
+  path: string;
+  bytes: number;
+  formatted: string;
+  cleanable: boolean;
+  explanation: string;
+  tradeoff: string | null;
+}
+
+interface FiveMReport {
+  installed: boolean;
+  running: boolean;
+  game_running: boolean;
+  folders: FiveMFolder[];
+  cleanable_bytes: number;
+  protected_bytes: number;
+  note: string;
+}
+
+async function analyzeFiveM() {
+  const button = element<HTMLButtonElement>("analyze-fivem");
+  button.disabled = true;
+  setStatus("fivem-status", "Somando a instalação do FiveM…", "progress");
+
+  try {
+    const report = await invoke<FiveMReport>("analyze_fivem");
+    renderFiveM(report);
+  } catch (error) {
+    setStatus("fivem-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderFiveM(report: FiveMReport) {
+  if (!report.installed) {
+    text("fivem-tag", "não instalado");
+    setStatus("fivem-status", report.note, "ok");
+    element("fivem-result").innerHTML = "";
+    return;
+  }
+
+  const gb = (bytes: number) => (bytes / 1_073_741_824).toFixed(1);
+  text("fivem-tag", `${gb(report.cleanable_bytes)} GB a recuperar`);
+
+  const resumo = `
+    <div class="readouts readouts-row">
+      <div class="readout">
+        <span class="readout-label">Dá para recuperar</span>
+        <span class="readout-value">${gb(report.cleanable_bytes)} GB</span>
+        <span class="readout-note">o servidor reenvia</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Protegido</span>
+        <span class="readout-value">${gb(report.protected_bytes)} GB</span>
+        <span class="readout-note warn">seu perfil e sua conta</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">FiveM</span>
+        <span class="readout-value">${report.running ? "aberto" : "fechado"}</span>
+        <span class="readout-note">${
+          report.game_running ? "jogo rodando" : "jogo fechado"
+        }</span>
+      </div>
+    </div>
+  `;
+
+  element("fivem-result").innerHTML =
+    resumo + report.folders.map(renderFiveMFolder).join("");
+
+  // Amarelo, não verde: há espaço a recuperar e há uma contrapartida a ler.
+  setStatus("fivem-status", report.note, "warn");
+
+  if (report.cleanable_bytes > 1_073_741_824) {
+    setBadge("badge-jogos", Math.round(report.cleanable_bytes / 1_073_741_824), "warn");
+  }
+}
+
+function renderFiveMFolder(folder: FiveMFolder, indice: number): string {
+  const preco = folder.tradeoff
+    ? `<p class="finding-advice"><strong>Ao limpar:</strong> ${escapeHtml(
+        folder.tradeoff
+      )}</p>`
+    : "";
+
+  // Pasta protegida não ganha botão. Ela existe na lista para explicar por que
+  // o espaço não foi recuperado — omitir faria parecer que estamos escondendo.
+  const acao = folder.cleanable
+    ? `<button class="btn btn-ghost" data-fivem="${escapeHtml(folder.id)}">Limpar</button>`
+    : `<span class="state-label">protegido</span>`;
+
+  return `
+    <article class="finding" data-severity="${
+      folder.cleanable ? "Ok" : "Important"
+    }" style="--i:${indice}">
+      <div class="finding-top">
+        <h3>${escapeHtml(folder.name)}</h3>
+        <span class="finding-size">${escapeHtml(folder.formatted)}</span>
+        ${acao}
+      </div>
+      <p class="finding-advice">${escapeHtml(folder.explanation)}</p>
+      ${preco}
+    </article>
+  `;
+}
+
+async function prioritizeFiveM() {
+  const button = element<HTMLButtonElement>("prioritize-fivem");
+  button.disabled = true;
+
+  try {
+    const mensagem = await invoke<string>("prioritize_fivem");
+    setStatus("fivem-status", mensagem, "ok");
+  } catch (error) {
+    setStatus("fivem-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ----------------------------------------------------------- navegador
 
 interface BrowserExtension {
@@ -2520,6 +2644,39 @@ function wireControls() {
   element("scan-disk").addEventListener("click", scanDiskSpace);
   element("map-folders").addEventListener("click", mapFolders);
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
+  element("analyze-fivem").addEventListener("click", analyzeFiveM);
+  element("prioritize-fivem").addEventListener("click", prioritizeFiveM);
+
+  element("fivem-result").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-fivem]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    // Não tem volta, e a contrapartida vai antes da confirmação: em servidor de
+    // RP grande, rebaixar tudo leva vários minutos.
+    const ok = window.confirm(
+      "Isto apaga o cache do FiveM e não tem volta.\n\n" +
+        "Seu perfil do jogo, sua conta da Rockstar e seus mods não são tocados. " +
+        "O que sai é o conteúdo que os servidores reenviam sozinhos — e é por " +
+        "isso que, na primeira vez que você entrar em cada servidor depois " +
+        "disso, ele vai baixar tudo de novo.\n\nContinuar?"
+    );
+    if (!ok) return;
+
+    button.disabled = true;
+
+    try {
+      const outcome = await invoke<{ freed_mb: number; message: string }>("clean_fivem", {
+        id: button.dataset.fivem,
+      });
+      setStatus("fivem-status", outcome.message, "ok");
+    } catch (error) {
+      setStatus("fivem-status", String(error), "error");
+    } finally {
+      await analyzeFiveM();
+    }
+  });
 
   element("browser-result").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(
