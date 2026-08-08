@@ -2245,8 +2245,11 @@ async function loadBaselineState() {
 
 interface ReportSaved {
   path: string;
+  /** Falso quando o Edge não estava disponível e só saiu o HTML. */
+  is_pdf: boolean;
   optimizations: number;
   changes: number;
+  note: string;
 }
 
 /** Última comparação medida nesta sessão, ou nada se ainda não houve. */
@@ -2255,7 +2258,12 @@ let lastComparison: BenchmarkComparison | null = null;
 async function exportReport() {
   const button = element<HTMLButtonElement>("export-report");
   button.disabled = true;
-  setStatus("report-status", "Montando o relatório…", "progress");
+  // O levantamento consulta WMI e log de eventos; passa de dez segundos.
+  setStatus(
+    "report-status",
+    "Levantando o estado da máquina e montando o PDF… pode levar meio minuto.",
+    "progress"
+  );
 
   try {
     const saved = await invoke<ReportSaved>("export_report", {
@@ -2266,10 +2274,11 @@ async function exportReport() {
     // anexar num e-mail ou copiar para um pendrive.
     setStatus(
       "report-status",
-      `Salvo em ${saved.path} — ${saved.optimizations} otimização(ões), ` +
-        `${saved.changes} alteração(ões)` +
-        (lastComparison ? "." : ", sem medição de antes e depois."),
-      "ok"
+      `${saved.is_pdf ? "PDF" : "Arquivo"} salvo em ${saved.path} — ` +
+        `${saved.optimizations} otimização(ões), ${saved.changes} alteração(ões)` +
+        (lastComparison ? "." : ", sem medição de antes e depois.") +
+        (saved.note ? ` ${saved.note}` : ""),
+      saved.is_pdf ? "ok" : "warn"
     );
   } catch (error) {
     setStatus("report-status", String(error), "error");

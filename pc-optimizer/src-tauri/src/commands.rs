@@ -384,6 +384,33 @@ pub async fn map_folders() -> Result<FolderMap, String> {
 // Relatório de atendimento
 // ---------------------------------------------------------------------------
 
+/// Levanta o estado da máquina para o relatório.
+///
+/// Cada análise é independente e nenhuma derruba as outras: se a leitura do
+/// boot falhar, o documento sai sem essa seção e diz que ela não estava
+/// disponível — em vez de o relatório inteiro deixar de existir.
+///
+/// O mapa de pastas e a varredura de espaço ficam de fora de propósito: levam
+/// quase um minuto cada, e o relatório é gerado com o cliente esperando.
+#[cfg(target_os = "windows")]
+fn coletar_para_relatorio() -> crate::modules::report::ReportData {
+    use crate::modules::windows;
+
+    crate::modules::report::ReportData {
+        boot: Some(windows::boot::analyze()),
+        thermal: Some(windows::thermal::analyze()),
+        health: Some(windows::health::analyze()),
+        memory: Some(windows::memory::analyze()),
+        browsers: Some(windows::browsers::analyze()),
+        startup: windows::startup::entries(),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn coletar_para_relatorio() -> crate::modules::report::ReportData {
+    crate::modules::report::ReportData::default()
+}
+
 /// Comando: Gera o relatório entregável e grava na Área de Trabalho.
 ///
 /// A comparação vem da interface porque ela já tem o resultado da última
@@ -394,8 +421,15 @@ pub async fn export_report(
     state: State<'_, AppState>,
     comparison: Option<BenchmarkComparison>,
 ) -> Result<crate::modules::report::ReportSaved, String> {
+    // O levantamento roda fora do runtime: são várias consultas ao WMI e ao
+    // log de eventos, e juntas passam de dez segundos. Feito aqui dentro,
+    // travaria a interface enquanto o técnico espera.
+    let dados = tokio::task::spawn_blocking(coletar_para_relatorio)
+        .await
+        .map_err(|e| format!("Falha ao levantar os dados da maquina: {}", e))?;
+
     let changes = state.changes.lock().await;
-    crate::modules::report::save(&changes, comparison.as_ref())
+    crate::modules::report::save(&changes, comparison.as_ref(), &dados)
 }
 
 // ---------------------------------------------------------------------------
