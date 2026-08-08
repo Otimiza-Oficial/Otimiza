@@ -368,6 +368,38 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Rede e DNS</h2>
+              <span class="panel-tag" id="net-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Esta é a área com mais promessa falsa do mercado, então vamos
+              começar pelo que <strong>não</strong> é possível: nenhum ajuste no
+              seu PC reduz o ping. Ping é distância física mais roteamento —
+              quem promete encurtar isso com um botão está vendendo o que não
+              existe.
+            </p>
+
+            <p class="hint">
+              O que existe de verdade: trocar o servidor de DNS acelera achar o
+              endereço de um site, o que aparece em carregar página, abrir lista
+              de servidores e começar um download. Em vez de afirmar que um DNS
+              é mais rápido, aqui a gente <strong>mede</strong> — faz consultas
+              reais a cada um e mostra os tempos lado a lado. Se o que você já
+              usa for o melhor, é isso que vai aparecer.
+            </p>
+
+            <div class="row-actions">
+              <button id="analyze-network" class="btn btn-primary">Medir os DNS</button>
+              <button id="flush-dns" class="btn">Limpar cache de nomes</button>
+            </div>
+
+            <p id="net-status" class="status"></p>
+            <div id="net-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Saúde física do disco e da bateria</h2>
               <span class="panel-tag" id="health-summary">—</span>
             </div>
@@ -589,6 +621,39 @@
 
             <p id="fivem-status" class="status"></p>
             <div id="fivem-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Quadros por segundo</h2>
+              <span class="panel-tag" id="fps-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Conta os quadros que o jogo está realmente entregando, para o
+              antes e depois falar a língua de quem joga. A medição é feita
+              <strong>de fora</strong>: o Windows publica um aviso a cada quadro
+              enviado para a tela, e nós escutamos esse canal. Nada é injetado
+              no processo do jogo — é a mesma decisão do overlay, e pelo mesmo
+              motivo.
+            </p>
+
+            <p class="hint">
+              Precisa de administrador: o canal de eventos do Windows só abre
+              com essa permissão. Cobre jogos em Direct3D 10 ou mais novo, o que
+              inclui o GTA V e portanto o FiveM. Se nenhum quadro for contado, o
+              programa diz que não mediu — nunca mostra zero.
+            </p>
+
+            <div class="row-actions">
+              <input type="text" id="fps-process" class="fps-input"
+                     value="FiveM" placeholder="nome do processo"
+                     autocomplete="off" spellcheck="false" />
+              <button id="measure-frames" class="btn btn-primary">Medir 8 segundos</button>
+            </div>
+
+            <p id="fps-status" class="status"></p>
+            <div id="fps-result"></div>
           </section>
         </section>
 

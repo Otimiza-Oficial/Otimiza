@@ -35,6 +35,10 @@ use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
 #[cfg(target_os = "windows")]
+use crate::modules::windows::network::NetworkReport;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::frames::FrameMeasurement;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -432,6 +436,97 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
+}
+
+// ---------------------------------------------------------------------------
+// Rede e quadros
+// ---------------------------------------------------------------------------
+
+/// Comando: Mede os resolvedores de DNS e mostra o que a máquina usa.
+#[tauri::command]
+pub async fn analyze_network() -> Result<NetworkReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // São várias consultas de DNS cronometradas; leva alguns segundos.
+        tokio::task::spawn_blocking(crate::modules::windows::network::analyze)
+            .await
+            .map_err(|e| format!("Falha ao medir a rede: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Troca o DNS de um adaptador, com registro para reversão.
+#[tauri::command]
+pub async fn set_dns(
+    guid: String,
+    servers: String,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().set_dns(&guid, &servers, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (guid, servers, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Limpa o cache de resolução de nomes.
+#[tauri::command]
+pub async fn flush_dns() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::network::limpar_cache_dns)
+            .await
+            .map_err(|e| format!("Falha ao limpar: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Conta os quadros que um jogo está entregando.
+///
+/// Mede de fora, escutando o canal de eventos do Windows — nada é injetado no
+/// processo do jogo.
+#[tauri::command]
+pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasurement, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // A medição bloqueia pelo tempo pedido: precisa sair do runtime.
+        tokio::task::spawn_blocking(move || {
+            use crate::modules::windows::frames;
+
+            let (pid, nome) = frames::encontrar_processo(&process).ok_or_else(|| {
+                format!(
+                    "Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de medir.",
+                    process
+                )
+            })?;
+
+            // Entre 3 e 30 segundos: menos que isso não estabiliza, mais que
+            // isso é o técnico parado olhando a tela.
+            frames::medir(pid, &nome, seconds.clamp(3, 30))
+        })
+        .await
+        .map_err(|e| format!("Falha ao medir os quadros: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (process, seconds);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

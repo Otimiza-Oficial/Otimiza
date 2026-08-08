@@ -785,6 +785,167 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
   `;
 }
 
+// ------------------------------------------------------- rede e DNS
+
+interface DnsMeasurement {
+  id: string;
+  name: string;
+  servers: string;
+  median_ms: number | null;
+  failures: number;
+  current: boolean;
+}
+
+interface NetAdapter {
+  guid: string;
+  name: string;
+  dns: string;
+  automatic: boolean;
+}
+
+interface NetworkReport {
+  adapters: NetAdapter[];
+  measurements: DnsMeasurement[];
+  gain_ms: number | null;
+  note: string;
+}
+
+let lastNetwork: NetworkReport | null = null;
+
+async function analyzeNetwork() {
+  const button = element<HTMLButtonElement>("analyze-network");
+  button.disabled = true;
+  setStatus("net-status", "Consultando cada servidor de DNS e cronometrando…", "progress");
+
+  try {
+    const report = await invoke<NetworkReport>("analyze_network");
+    lastNetwork = report;
+    renderNetwork(report);
+  } catch (error) {
+    setStatus("net-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderNetwork(report: NetworkReport) {
+  const medidos = report.measurements.filter((m) => m.median_ms !== null);
+  const maisRapido = medidos.reduce<DnsMeasurement | null>(
+    (melhor, m) => (!melhor || m.median_ms! < melhor.median_ms! ? m : melhor),
+    null
+  );
+
+  text(
+    "net-tag",
+    report.gain_ms !== null && report.gain_ms >= 5
+      ? `${report.gain_ms.toFixed(0)} ms a ganhar`
+      : "sem ganho relevante"
+  );
+
+  const linhas = report.measurements
+    .map((m, i) => {
+      const tempo =
+        m.median_ms === null
+          ? `<span class="state-label">sem resposta</span>`
+          : `<span class="finding-size">${m.median_ms.toFixed(0)} ms</span>`;
+
+      // Só oferece trocar quando há ganho que valha, e nunca para o que já
+      // está em uso. Botão para ganhar 2 ms seria venda, não conserto.
+      const vale =
+        !m.current &&
+        m.failures === 0 &&
+        m.median_ms !== null &&
+        report.gain_ms !== null &&
+        report.gain_ms >= 5 &&
+        m === maisRapido;
+
+      const acao = vale
+        ? `<button class="btn btn-ghost" data-dns="${escapeHtml(m.servers)}">Usar este</button>`
+        : m.current
+          ? `<span class="state-label">em uso</span>`
+          : "";
+
+      return `
+        <div class="startup" data-enabled="${m.current}" style="--i:${i}">
+          <div class="startup-info">
+            <span class="startup-name">${escapeHtml(m.name)}</span>
+            <span class="startup-exe">${escapeHtml(m.servers)}${
+              m.failures > 0 ? ` · ${m.failures} consulta(s) sem resposta` : ""
+            }</span>
+          </div>
+          ${tempo}
+          ${acao}
+        </div>`;
+    })
+    .join("");
+
+  element("net-result").innerHTML = linhas;
+  setStatus("net-status", report.note, "warn");
+}
+
+// ------------------------------------------------- quadros por segundo
+
+interface FrameMeasurement {
+  fps: number;
+  frames: number;
+  seconds: number;
+  process: string;
+  pid: number;
+}
+
+async function measureFrames() {
+  const button = element<HTMLButtonElement>("measure-frames");
+  const processo = element<HTMLInputElement>("fps-process").value.trim();
+
+  if (!processo) {
+    setStatus("fps-status", "Diga o nome do processo do jogo.", "error");
+    return;
+  }
+
+  button.disabled = true;
+  setStatus("fps-status", `Contando quadros de ${processo} por 8 segundos…`, "progress");
+
+  try {
+    const m = await invoke<FrameMeasurement>("measure_frames", {
+      process: processo,
+      seconds: 8,
+    });
+
+    text("fps-tag", `${m.fps.toFixed(0)} FPS`);
+    element("fps-result").innerHTML = `
+      <div class="readouts readouts-row">
+        <div class="readout">
+          <span class="readout-label">Quadros por segundo</span>
+          <span class="readout-value">${m.fps.toFixed(1)}</span>
+          <span class="readout-note">média da janela medida</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Quadros contados</span>
+          <span class="readout-value">${m.frames}</span>
+          <span class="readout-note">em ${m.seconds.toFixed(1)} s</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Processo</span>
+          <span class="readout-value">${escapeHtml(m.process)}</span>
+          <span class="readout-note">pid ${m.pid}</span>
+        </div>
+      </div>`;
+
+    setStatus(
+      "fps-status",
+      `${m.frames} quadros em ${m.seconds.toFixed(1)} segundos. Meça de novo depois de ` +
+        `otimizar, na mesma cena do jogo — comparar cena diferente não diz nada.`,
+      "ok"
+    );
+  } catch (error) {
+    // O módulo devolve erro em vez de zero quando não consegue contar. A
+    // mensagem já explica o motivo, então vai inteira para a tela.
+    setStatus("fps-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // --------------------------------------------------------------- FiveM
 
 interface FiveMFolder {
@@ -2645,6 +2806,65 @@ function wireControls() {
   element("map-folders").addEventListener("click", mapFolders);
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
+  element("analyze-network").addEventListener("click", analyzeNetwork);
+  element("measure-frames").addEventListener("click", measureFrames);
+
+  element("flush-dns").addEventListener("click", async () => {
+    const button = element<HTMLButtonElement>("flush-dns");
+    button.disabled = true;
+
+    try {
+      setStatus("net-status", await invoke<string>("flush_dns"), "ok");
+    } catch (error) {
+      setStatus("net-status", String(error), "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  element("net-result").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest(
+      "button[data-dns]"
+    ) as HTMLButtonElement | null;
+    if (!button) return;
+
+    if (!isElevated) {
+      askForAdmin(
+        "Trocar o servidor de DNS exige permissao de administrador. " +
+          "Podemos reabrir o Otimiza com essa permissao?"
+      );
+      return;
+    }
+
+    // Um adaptador de cada vez seria pior: a maquina usa o DNS do adaptador
+    // ativo, e trocar so um deixaria o resultado dependendo de qual conexao
+    // esta em uso na hora.
+    const adaptadores = lastNetwork?.adapters ?? [];
+    if (adaptadores.length === 0) {
+      setStatus("net-status", "Nenhum adaptador ativo para configurar.", "error");
+      return;
+    }
+
+    button.disabled = true;
+
+    try {
+      for (const adaptador of adaptadores) {
+        await invoke<unknown>("set_dns", {
+          guid: adaptador.guid,
+          servers: button.dataset.dns,
+        });
+      }
+      setStatus(
+        "net-status",
+        "DNS trocado. A troca fica no historico e o botao Desfazer tudo devolve o anterior.",
+        "ok"
+      );
+    } catch (error) {
+      setStatus("net-status", String(error), "error");
+    } finally {
+      await analyzeNetwork();
+    }
+  });
   element("prioritize-fivem").addEventListener("click", prioritizeFiveM);
 
   element("fivem-result").addEventListener("click", async (event) => {

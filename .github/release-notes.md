@@ -6,14 +6,50 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.6.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.7.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.7.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## Quadros por segundo, medidos de fora
+
+Faltava a única medida que quem joga realmente olha. Agora ela existe, e a
+forma como foi feita importa: o Windows publica um aviso a cada quadro que um
+programa manda para a tela, e o Otimiza escuta esse canal **de fora**. Nada é
+injetado no processo do jogo — a mesma decisão do overlay, e pelo mesmo motivo.
+
+Precisa de administrador, porque o canal só abre com essa permissão. Cobre jogos
+em Direct3D 10 ou mais novo, o que inclui o GTA V e portanto o FiveM. Se nenhum
+quadro for contado, o programa diz que não conseguiu medir — **nunca mostra
+zero**, porque zero seria um número inventado disfarçado de medição.
+
+## Rede e DNS, com a promessa falsa desmentida na tela
+
+Esta é a área com mais propaganda enganosa do mercado, então a primeira coisa
+que o painel diz é o que **não** dá para fazer: nenhum ajuste no seu PC reduz o
+ping. Ping é distância física mais roteamento. Quem promete encurtar isso com um
+botão está vendendo o que não existe, e agora isso está escrito dentro do
+programa.
+
+O que existe de verdade é trocar o servidor de DNS, que acelera achar o endereço
+de um site — carregar página, abrir lista de servidores, começar um download.
+Não muda o ping em jogo, porque depois de conectado a conversa é direta com o
+servidor.
+
+E em vez de afirmar que um DNS é mais rápido, o Otimiza **mede**: faz consultas
+reais a cada servidor, cronometra e mostra os tempos lado a lado, incluindo o
+que a sua máquina já usa. O botão de trocar só aparece quando a diferença passa
+de 5 ms. Na máquina onde isto foi desenvolvido a diferença foi de 6 ms, e o
+programa chamou isso de "real, mas pequena" — que é o que era.
+
+A troca entra no histórico e o "Desfazer tudo" devolve o DNS anterior. E só
+aceita resolvedores públicos conhecidos: apontar o DNS de uma máquina para um
+endereço arbitrário é o mecanismo clássico de sequestro de navegação, e o
+comando recusa mesmo que peçam.
 
 ## FiveM
 

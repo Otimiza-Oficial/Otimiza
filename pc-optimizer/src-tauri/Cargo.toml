@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "0.6.0"
+version = "0.7.0"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -36,5 +36,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Security",
     "Win32_System_Threading",
+    # Rastreamento de eventos do Windows. Usado para contar quadros
+    # apresentados por um jogo sem injetar nada no processo dele.
+    "Win32_System_Diagnostics_Etw",
+    # Exigida pela estrutura de sessão do ETW, que carrega fuso horário.
+    "Win32_System_Time",
 ] }
 
