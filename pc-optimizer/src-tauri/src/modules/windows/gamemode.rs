@@ -149,6 +149,101 @@ pub fn status(log: &ChangeLog) -> GameModeStatus {
     }
 }
 
+// ------------------------------------------------- prioridade persistente
+
+/// Onde o Windows guarda ajustes por executável.
+const IFEO: &str =
+    r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
+
+/// Prioridade alta. NUNCA 4, que é tempo real.
+///
+/// A escala aqui não é a mesma da API de processos: 1 é baixa, 2 normal, 3
+/// alta, 4 tempo real, 5 abaixo do normal, 6 acima do normal. Tempo real
+/// colocaria o jogo acima do próprio sistema operacional, incluindo o que cuida
+/// de som, mouse e teclado, e o resultado prático é travar a máquina inteira.
+const PRIORIDADE_ALTA: u32 = 3;
+
+/// Ajusta a prioridade de um executável de forma permanente.
+///
+/// A prioridade dada ao processo em execução some quando ele fecha, e isso está
+/// documentado em `fivem::priorizar_jogo`. Aqui ela passa a valer em toda
+/// abertura, porque o Windows lê este ajuste ao criar o processo.
+///
+/// A ARMADILHA DE SEGURANÇA DESTE LUGAR
+///
+/// A mesma chave aceita um valor chamado `Debugger`, e quem escreve ali faz o
+/// Windows abrir OUTRO programa no lugar do que foi pedido. É um mecanismo
+/// clássico de sequestro de execução, usado por malware há décadas.
+///
+/// Por isso este código só escreve `CpuPriorityClass`, só dentro de
+/// `PerfOptions`, e só para executável cujo nome bate com a lista de jogos
+/// conhecidos. O comando é exposto por IPC: aceitar nome de arquivo vindo de
+/// fora transformaria o Otimiza na ferramenta de sequestro.
+pub fn definir_prioridade_persistente(
+    executavel: &str,
+    ativar: bool,
+) -> Result<ChangeRecord, String> {
+    if !super::registry::is_elevated() {
+        return Err("Fixar a prioridade de um jogo exige executar como administrador.".to_string());
+    }
+
+    let nome = executavel.to_lowercase();
+
+    // Nome de arquivo, e nada além disso. Barra ou dois-pontos aqui seria
+    // tentativa de escrever fora do lugar previsto.
+    if nome.contains(['\\', '/', ':']) || !nome.ends_with(".exe") {
+        return Err("Nome de executável inválido.".to_string());
+    }
+
+    if !JOGOS.iter().any(|(chave, _)| nome.contains(chave)) {
+        return Err(format!(
+            "`{}` não está na lista de jogos conhecidos do Otimiza. Esta chave do registro é \
+             um mecanismo conhecido de sequestro de execução, e por isso só aceita executável \
+             que o programa reconhece.",
+            executavel
+        ));
+    }
+
+    let caminho = format!("{}\\{}\\PerfOptions", IFEO, executavel);
+    let anterior = super::registry::read("HKLM", &caminho, "CpuPriorityClass")
+        .unwrap_or(crate::modules::changelog::PreviousValue::AbsentKey);
+
+    if ativar {
+        super::registry::set_dword("HKLM", &caminho, "CpuPriorityClass", PRIORIDADE_ALTA)?;
+    } else {
+        super::registry::restore("HKLM", &caminho, "CpuPriorityClass", &anterior)?;
+    }
+
+    Ok(ChangeRecord::RegistryValue {
+        hive: "HKLM".to_string(),
+        path: caminho,
+        name: "CpuPriorityClass".to_string(),
+        previous: anterior,
+    })
+}
+
+/// Nome do executável do jogo em execução, quando há um.
+///
+/// É preciso pegar o nome real porque o processo do FiveM carrega o número da
+/// compilação: `FiveM_b3570_GTAProcess.exe`. Isso tem uma consequência que a
+/// interface precisa dizer — quando o FiveM atualiza, o nome muda e o ajuste
+/// precisa ser aplicado de novo.
+pub fn executavel_do_jogo() -> Option<String> {
+    use sysinfo::System;
+
+    let mut sistema = System::new();
+    sistema.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    sistema
+        .processes()
+        .values()
+        .map(|p| p.name().to_string_lossy().to_string())
+        .find(|nome| {
+            let minusculo = nome.to_lowercase();
+            JOGOS.iter().any(|(chave, _)| minusculo.contains(chave))
+        })
+}
+
 /// Um passo do vigia: liga quando o jogo abre, desliga quando ele fecha.
 ///
 /// Devolve a mensagem quando alguma coisa mudou, e `None` quando não havia o
@@ -203,6 +298,54 @@ mod tests {
                 "`{}` precisa estar em minúsculas para casar com o nome do processo",
                 chave
             );
+        }
+    }
+
+    #[test]
+    fn nunca_escreve_tempo_real_nem_depurador() {
+        // As duas travas deste módulo. Tempo real põe o jogo acima do sistema
+        // operacional; `Debugger` na mesma chave faz o Windows abrir outro
+        // programa no lugar do pedido, que é sequestro de execução.
+        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+
+        assert_eq!(PRIORIDADE_ALTA, 3);
+        assert!(!producao.contains("PRIORIDADE_ALTA: u32 = 4"));
+        assert!(
+            !producao.contains("\"Debugger\""),
+            "escrita de Debugger no IFEO nunca pode entrar aqui"
+        );
+    }
+
+    #[test]
+    fn executavel_de_fora_da_lista_e_recusado() {
+        // O comando é exposto por IPC. Aceitar nome arbitrário transformaria o
+        // Otimiza na ferramenta de sequestro.
+        for tentativa in [
+            "notepad.exe",
+            r"..\..\malicioso.exe",
+            r"C:\jogos\gtaprocess.exe",
+            "gtaprocess",
+        ] {
+            let erro = definir_prioridade_persistente(tentativa, true).unwrap_err();
+
+            assert!(
+                erro.contains("não está na lista")
+                    || erro.contains("inválido")
+                    || erro.contains("administrador"),
+                "recusa inesperada para `{}`: {}",
+                tentativa,
+                erro
+            );
+        }
+    }
+
+    #[test]
+    fn nome_do_executavel_do_jogo() {
+        let nome = executavel_do_jogo();
+        println!("executável do jogo agora: {:?}", nome);
+
+        if let Some(n) = nome {
+            assert!(n.to_lowercase().ends_with(".exe"));
         }
     }
 

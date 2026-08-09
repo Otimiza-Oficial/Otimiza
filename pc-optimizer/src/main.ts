@@ -909,6 +909,176 @@ function renderNetwork(report: NetworkReport) {
   setStatus("net-status", report.note, "warn");
 }
 
+// --------------------------------------------- cache de shader
+
+interface ShaderCache {
+  id: string;
+  name: string;
+  path: string;
+  bytes: number;
+  formatted: string;
+  files: number;
+  oldest: string | null;
+  stale: boolean;
+}
+
+interface ShaderReport {
+  caches: ShaderCache[];
+  total_bytes: number;
+  total_formatted: string;
+  gpu: string | null;
+  driver_version: string | null;
+  driver_date: string | null;
+  driver_age_days: number | null;
+  note: string;
+}
+
+async function analyzeShaders() {
+  const button = element<HTMLButtonElement>("analyze-shaders");
+  button.disabled = true;
+  setStatus("shader-status", "Somando os caches de shader…", "progress");
+
+  try {
+    const r = await invoke<ShaderReport>("analyze_shaders");
+    renderShaders(r);
+  } catch (error) {
+    setStatus("shader-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderShaders(r: ShaderReport) {
+  text("shader-tag", r.total_bytes > 0 ? r.total_formatted : "nada encontrado");
+
+  const placa = r.gpu
+    ? `<p class="hint">${escapeHtml(r.gpu)} · driver ${escapeHtml(
+        r.driver_version ?? "?"
+      )} de ${escapeHtml(r.driver_date ?? "?")}${
+        r.driver_age_days !== null ? ` (${r.driver_age_days} dias)` : ""
+      }</p>`
+    : "";
+
+  element("shader-result").innerHTML =
+    placa +
+    r.caches
+      .map(
+        (c, i) => `
+    <article class="finding" data-severity="${c.stale ? "Important" : "Ok"}" style="--i:${i}">
+      <div class="finding-top">
+        <h3>${escapeHtml(c.name)}</h3>
+        <span class="finding-size">${escapeHtml(c.formatted)}</span>
+        <button class="btn btn-ghost" data-shader="${escapeHtml(c.id)}">Limpar</button>
+      </div>
+      <p class="finding-advice">${c.files} arquivo(s)${
+        c.oldest ? `, mais antigo de ${escapeHtml(c.oldest)}` : ""
+      }.${
+        c.stale
+          ? " <strong>Tem entrada anterior ao driver instalado</strong> — foi compilada por um driver que não existe mais nesta máquina."
+          : ""
+      }</p>
+    </article>`
+      )
+      .join("");
+
+  setStatus("shader-status", r.note, r.total_bytes > 0 ? "warn" : "ok");
+}
+
+// ------------------------------------------ prioridade permanente
+
+async function fixPriority(enable: boolean) {
+  const botoes = document.querySelectorAll<HTMLButtonElement>(
+    "#fix-priority, #unfix-priority"
+  );
+  botoes.forEach((b) => (b.disabled = true));
+
+  try {
+    const executavel = await invoke<string | null>("running_game_executable");
+
+    if (!executavel) {
+      setStatus(
+        "prio-status",
+        "Nenhum jogo conhecido aberto. Abra o jogo primeiro — o ajuste é por nome " +
+          "do executável, e é preciso saber qual é.",
+        "error"
+      );
+      return;
+    }
+
+    const outcome = await invoke<OptimizationOutcome>("set_persistent_priority", {
+      executable: executavel,
+      enable,
+    });
+
+    text("prio-tag", enable ? "fixada" : "não fixada");
+    setStatus("prio-status", outcome.message, "ok");
+  } catch (error) {
+    setStatus("prio-status", String(error), "error");
+  } finally {
+    botoes.forEach((b) => (b.disabled = false));
+  }
+}
+
+// ----------------------------------------------- prontidão
+
+interface ReadinessFinding {
+  id: string;
+  title: string;
+  measured: string;
+  advice: string;
+  severity: Severity;
+  fix_location: FixLocation;
+  actionable: boolean;
+}
+
+interface ReadinessReport {
+  findings: ReadinessFinding[];
+  note: string;
+}
+
+async function analyzeReadiness() {
+  const button = element<HTMLButtonElement>("analyze-readiness");
+  button.disabled = true;
+  setStatus("prontidao-status", "Verificando as condições do sistema…", "progress");
+
+  try {
+    const r = await invoke<ReadinessReport>("analyze_readiness");
+    renderReadiness(r);
+  } catch (error) {
+    setStatus("prontidao-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderReadiness(r: ReadinessReport) {
+  const problemas = r.findings.filter((f) => f.severity !== "Ok").length;
+  text("prontidao-tag", problemas === 0 ? "nada atrapalhando" : `${problemas} a resolver`);
+
+  element("prontidao-result").innerHTML = r.findings.length
+    ? r.findings
+        .map(
+          (f, i) => `
+    <article class="finding" data-severity="${f.severity}" style="--i:${i}">
+      <div class="finding-top">
+        <h3>${escapeHtml(f.title)}</h3>
+        ${
+          f.actionable
+            ? `<button class="btn btn-ghost" data-readiness="${escapeHtml(f.id)}">Corrigir</button>`
+            : ""
+        }
+      </div>
+      <p class="finding-measured">${escapeHtml(f.measured)}</p>
+      <p class="finding-advice">${escapeHtml(f.advice)}</p>
+    </article>`
+        )
+        .join("")
+    : "";
+
+  setStatus("prontidao-status", r.note, problemas === 0 ? "ok" : "warn");
+  if (problemas > 0) setBadge("badge-diagnostico", problemas, "warn");
+}
+
 // ------------------------------------------------- gargalo
 
 type Limite =
@@ -3194,6 +3364,69 @@ function wireControls() {
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
+  element("analyze-shaders").addEventListener("click", analyzeShaders);
+  element("analyze-readiness").addEventListener("click", analyzeReadiness);
+  element("fix-priority").addEventListener("click", () => fixPriority(true));
+  element("unfix-priority").addEventListener("click", () => fixPriority(false));
+
+  element("shader-result").addEventListener("click", async (event) => {
+    const botao = (event.target as HTMLElement).closest(
+      "button[data-shader]"
+    ) as HTMLButtonElement | null;
+    if (!botao) return;
+
+    // A contrapartida vem antes da confirmação: a primeira partida recompila.
+    const ok = window.confirm(
+      "Isto apaga o cache de shader e não tem volta.\n\n" +
+        "Nada se perde além de tempo: o conteúdo é resultado de compilação e o " +
+        "jogo refaz sozinho. A primeira partida depois da limpeza vai compilar " +
+        "de novo e pode engasgar; da segunda em diante fica melhor.\n\nContinuar?"
+    );
+    if (!ok) return;
+
+    botao.disabled = true;
+
+    try {
+      const outcome = await invoke<{ freed_mb: number; message: string }>(
+        "clean_shader_cache",
+        { id: botao.dataset.shader }
+      );
+      setStatus("shader-status", outcome.message, "ok");
+    } catch (error) {
+      setStatus("shader-status", String(error), "error");
+    } finally {
+      await analyzeShaders();
+    }
+  });
+
+  element("prontidao-result").addEventListener("click", async (event) => {
+    const botao = (event.target as HTMLElement).closest(
+      "button[data-readiness]"
+    ) as HTMLButtonElement | null;
+    if (!botao) return;
+
+    if (!isElevated) {
+      askForAdmin(
+        "Corrigir esta condição do sistema exige permissão de administrador. " +
+          "Podemos reabrir o Otimiza com essa permissão?"
+      );
+      return;
+    }
+
+    botao.disabled = true;
+
+    try {
+      setStatus(
+        "prontidao-status",
+        await invoke<string>("fix_readiness", { id: botao.dataset.readiness }),
+        "ok"
+      );
+    } catch (error) {
+      setStatus("prontidao-status", String(error), "error");
+    } finally {
+      await analyzeReadiness();
+    }
+  });
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
   element("measure-frames").addEventListener("click", measureFrames);

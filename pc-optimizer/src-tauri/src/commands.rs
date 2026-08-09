@@ -43,6 +43,10 @@ use crate::modules::windows::gamemode::GameModeStatus;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::bottleneck::BottleneckReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::shaders::{ShaderReport, CleanOutcome as ShaderCleanOutcome};
+#[cfg(target_os = "windows")]
+use crate::modules::windows::readiness::ReadinessReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -440,6 +444,119 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
+}
+
+// ---------------------------------------------------------------------------
+// Cache de shader, prontidão e prioridade permanente
+// ---------------------------------------------------------------------------
+
+/// Comando: Cache de shader e idade do driver de vídeo.
+#[tauri::command]
+pub async fn analyze_shaders() -> Result<ShaderReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::shaders::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler o cache de shader: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Apaga um cache de shader.
+#[tauri::command]
+pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || crate::modules::windows::shaders::limpar(&id))
+            .await
+            .map_err(|e| format!("Falha ao limpar: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = id;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Condições que atrapalham antes de otimizar.
+#[tauri::command]
+pub async fn analyze_readiness() -> Result<ReadinessReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::readiness::analyze)
+            .await
+            .map_err(|e| format!("Falha ao verificar o sistema: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Corrige um item de prontidão que o Otimiza sabe resolver.
+#[tauri::command]
+pub async fn fix_readiness(id: String) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            use crate::modules::windows::readiness;
+
+            match id.as_str() {
+                "trim" => readiness::ligar_trim(),
+                "plano_maximo" => readiness::criar_plano_maximo(),
+                outro => Err(format!("`{}` não é corrigível pelo Otimiza.", outro)),
+            }
+        })
+        .await
+        .map_err(|e| format!("Falha ao corrigir: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = id;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Executável do jogo aberto agora, para fixar a prioridade dele.
+#[tauri::command]
+pub fn running_game_executable() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::gamemode::executavel_do_jogo()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// Comando: Fixa ou remove a prioridade alta permanente de um jogo.
+#[tauri::command]
+pub async fn set_persistent_priority(
+    executable: String,
+    enable: bool,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new()
+            .set_persistent_priority(&executable, enable, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (executable, enable, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -27,10 +27,12 @@ pub mod network;
 pub mod power;
 pub mod processes;
 pub mod profiles;
+pub mod readiness;
 pub mod registry;
 pub mod restore;
 pub mod services;
 pub mod servicesaudit;
+pub mod shaders;
 pub mod shell;
 pub mod startup;
 pub mod tasks;
@@ -488,6 +490,55 @@ impl WindowsOptimizer {
             success: true,
             applied: true,
             message: format!("`{}` não é mais executada pelo agendador.", name),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
+    /// Fixa a prioridade alta de um jogo, valendo em toda abertura.
+    ///
+    /// Entra no histórico, então "Desfazer tudo" remove o ajuste junto com o
+    /// resto — inclusive se o programa fechar no meio.
+    pub fn set_persistent_priority(
+        &self,
+        executable: &str,
+        enable: bool,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = format!("prioridade:{}", executable.to_lowercase());
+
+        if !enable {
+            if log.is_applied(&id) {
+                return self.revert(&id, log);
+            }
+
+            return Err("Este jogo não tem prioridade fixada.".to_string());
+        }
+
+        if log.is_applied(&id) {
+            return Err("Este jogo já está com prioridade fixada.".to_string());
+        }
+
+        let change = gamemode::definir_prioridade_persistente(executable, true)?;
+        let described = change.describe();
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} em prioridade alta permanente", executable),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        })?;
+
+        Ok(OptimizationOutcome {
+            id,
+            name: executable.to_string(),
+            success: true,
+            applied: true,
+            message: format!(
+                "`{}` passa a abrir sempre em prioridade alta. Atenção: quando o jogo                  atualizar, o nome do executável muda e este ajuste precisa ser aplicado de                  novo — o Otimiza avisa quando isso acontecer.",
+                executable
+            ),
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],

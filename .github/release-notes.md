@@ -6,14 +6,66 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.11.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.11.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.12.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.12.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## Cache de shader: 8,8 GB na máquina de teste
+
+Todo jogo compila pedaços do próprio código gráfico na primeira vez que precisa
+deles e guarda o resultado em disco — é por isso que a primeira partida engasga
+e a segunda não.
+
+Só que esse cache **não é limpo quando o driver de vídeo é atualizado**. Entrada
+compilada por um driver que já nem existe mais continua lá, e o driver novo às
+vezes recompila no meio da partida. É a explicação mais comum para *"atualizei o
+driver e começou a travar"* — queixa quase sempre atribuída ao driver novo,
+quando o culpado é o cache velho.
+
+Na máquina onde isto foi desenvolvido havia **8,8 GB**, com arquivos de fevereiro
+sobre um driver instalado em julho. O Otimiza compara a data da entrada mais
+antiga com a data do driver e marca o cache como obsoleto quando ela é anterior
+— que é exatamente o caso que causa o problema.
+
+Apagar é seguro: o conteúdo é recalculável por definição. A contrapartida está
+escrita no aviso — a primeira partida depois da limpeza compila de novo e pode
+engasgar, e da segunda em diante fica melhor que estava.
+
+## Antes de otimizar
+
+Um painel novo no Diagnóstico, com verificações que **não são otimizações**: são
+condições que, quando erradas, fazem o atendimento inteiro parecer sem efeito.
+
+A que motivou o painel é reinício pendente. Parte das mudanças de sistema só
+passa a valer depois de reiniciar; o técnico aplica tudo, mede, não vê ganho e
+conclui que o produto não funciona. O motivo estava lá desde o começo, numa
+chave de registro que ninguém olha. A máquina de desenvolvimento tinha um.
+
+Também verifica **TRIM desligado num SSD** — que degrada a velocidade de escrita
+aos poucos, de um jeito que ninguém associa à causa —, **arquivo de paginação
+num disco mecânico** numa máquina que tem SSD, e a ausência do **plano de
+desempenho máximo**, que o Windows tem escondido e não cria sozinho.
+
+## Prioridade que não some quando o jogo fecha
+
+O "Priorizar o jogo" valia só para a sessão, e isso estava documentado como
+limitação. Agora dá para fixar de vez: o Windows passa a criar o processo já em
+prioridade alta, em toda abertura.
+
+A chave do registro usada para isso é a mesma que malware usa há décadas para
+sequestrar execução — quem escreve um valor chamado `Debugger` ali faz o Windows
+abrir outro programa no lugar do pedido. Por isso o Otimiza só escreve o valor de
+prioridade, só na subchave certa, e só para executável que ele reconhece como
+jogo. Nome vindo de fora é recusado.
+
+Ressalva dita na tela: o ajuste é por nome de arquivo, e o processo do FiveM
+carrega o número da compilação. Quando o FiveM atualiza, o nome muda e é preciso
+aplicar de novo.
 
 ## O visual mudou
 

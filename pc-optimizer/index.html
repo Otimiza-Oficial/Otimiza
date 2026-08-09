@@ -441,6 +441,26 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Antes de otimizar</h2>
+              <span class="panel-tag" id="prontidao-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Estas verificações não são otimizações: são condições que, quando
+              estão erradas, fazem o atendimento inteiro parecer sem efeito. O
+              caso mais comum é máquina com reinício pendente — parte das
+              mudanças não fixa até reiniciar, o técnico aplica tudo, mede, não
+              vê ganho e conclui que o produto não funciona. O motivo estava lá
+              desde o começo, numa chave que ninguém olha.
+            </p>
+
+            <button id="analyze-readiness" class="btn btn-primary">Verificar</button>
+            <p id="prontidao-status" class="status"></p>
+            <div id="prontidao-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Rede e DNS</h2>
               <span class="panel-tag" id="net-tag">—</span>
             </div>
@@ -694,6 +714,61 @@
 
             <p id="fivem-status" class="status"></p>
             <div id="fivem-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Cache de shader</h2>
+              <span class="panel-tag" id="shader-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Todo jogo compila pedaços do próprio código gráfico na primeira vez
+              que precisa deles e guarda o resultado em disco — é por isso que a
+              primeira partida engasga e a segunda não. Só que esse cache
+              <strong>não é limpo quando o driver de vídeo é atualizado</strong>.
+              Entrada compilada por um driver que já nem existe mais continua
+              lá, e o driver novo às vezes recompila no meio da partida.
+            </p>
+
+            <p class="hint">
+              É a explicação mais comum para "atualizei o driver e começou a
+              travar" — uma queixa que quase sempre é atribuída ao driver novo,
+              quando o culpado é o cache velho. Apagar é seguro: o conteúdo é
+              recalculável por definição. A contrapartida é que a primeira
+              partida depois da limpeza compila de novo e engasga um pouco.
+            </p>
+
+            <button id="analyze-shaders" class="btn btn-primary">Verificar cache de shader</button>
+            <p id="shader-status" class="status"></p>
+            <div id="shader-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Prioridade fixa do jogo</h2>
+              <span class="panel-tag" id="prio-tag">—</span>
+            </div>
+
+            <p class="lead">
+              O botão "Priorizar o jogo" acima vale só para a sessão: quando o
+              jogo fecha, a prioridade some. Aqui ela é fixada de vez — o Windows
+              passa a criar o processo já em prioridade alta, em toda abertura.
+            </p>
+
+            <p class="hint">
+              <strong>Uma ressalva importante:</strong> o ajuste é por nome de
+              arquivo, e o processo do FiveM carrega o número da compilação. Ao
+              atualizar o FiveM o nome muda, e isto precisa ser aplicado de novo.
+              É reversível e entra no histórico como qualquer outra mudança.
+            </p>
+
+            <div class="row-actions">
+              <button id="fix-priority" class="btn btn-primary">Fixar prioridade do jogo aberto</button>
+              <button id="unfix-priority" class="btn">Remover</button>
+            </div>
+
+            <p id="prio-status" class="status"></p>
           </section>
 
           <section class="panel">

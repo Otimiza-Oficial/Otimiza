@@ -127,7 +127,7 @@ jobs:
 
       - name: Testes — serviços de terceiros, perfis e execução
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::bottleneck::"
+        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
 
       # O mapa de pastas varre o disco de verdade e leva perto de um minuto.
       # Fica num passo próprio para não parecer que outra área travou.
