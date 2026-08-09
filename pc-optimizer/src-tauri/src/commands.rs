@@ -41,6 +41,8 @@ use crate::modules::windows::frames::FrameMeasurement;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::gamemode::GameModeStatus;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::bottleneck::BottleneckReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -438,6 +440,35 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
+}
+
+// ---------------------------------------------------------------------------
+// Analisador de gargalo
+// ---------------------------------------------------------------------------
+
+/// Comando: Descobre qual recurso está limitando o desempenho.
+///
+/// Não otimiza nada — só explica. É a resposta para "por que meu FPS é baixo",
+/// e a resposta honesta quase nunca é "falta otimizar".
+#[tauri::command]
+pub async fn analyze_bottleneck(seconds: u64) -> Result<BottleneckReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Amostra contadores em laço pelo tempo pedido: bloqueia, então sai do
+        // runtime. Entre 4 e 30 segundos — menos não dá amostra suficiente,
+        // mais é o técnico parado olhando a tela.
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::bottleneck::analisar(seconds.clamp(4, 30))
+        })
+        .await
+        .map_err(|e| format!("Falha ao analisar o gargalo: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = seconds;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

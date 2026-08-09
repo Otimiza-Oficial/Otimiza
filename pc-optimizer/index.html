@@ -625,6 +625,40 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Por que o FPS está baixo</h2>
+              <span class="panel-tag" id="gargalo-tag">—</span>
+            </div>
+
+            <p class="lead">
+              A pergunta que todo cliente faz e que nenhum otimizador responde.
+              A resposta honesta quase nunca é "falta otimizar" — é uma peça
+              específica que chegou no limite enquanto as outras estão sobrando.
+              Aqui a gente mede as cinco durante alguns segundos e diz qual
+              travou. Este painel não otimiza nada: ele explica.
+            </p>
+
+            <p class="hint">
+              O caso mais comum em FiveM e GTA V é o mais mal interpretado: o
+              jogo depende muito de <strong>um núcleo só</strong>. Numa máquina
+              de oito núcleos é normal ver um a 100% e o Gerenciador de Tarefas
+              mostrando "CPU 25%" — o dono conclui que sobra máquina e não
+              entende por que trava. Sobra, mas na parte errada. Mais núcleos
+              não resolvem; núcleo mais rápido resolve.
+            </p>
+
+            <p class="hint">
+              <strong>Meça com o jogo rodando de verdade</strong>, numa cena
+              pesada. Com o PC parado não existe limite a encontrar, e nesse
+              caso o painel diz que não dá para julgar em vez de chutar.
+            </p>
+
+            <button id="analyze-bottleneck" class="btn btn-primary">Analisar por 10 segundos</button>
+            <p id="gargalo-status" class="status"></p>
+            <div id="gargalo-result"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Modo jogo</h2>
               <span class="panel-tag" id="gamemode-tag">—</span>
             </div>

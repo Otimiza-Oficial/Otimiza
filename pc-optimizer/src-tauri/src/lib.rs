@@ -44,6 +44,7 @@ pub fn run() {
             commands::open_apps_settings,
             commands::analyze_conflicts,
             commands::analyze_health,
+            commands::analyze_bottleneck,
             commands::game_mode_status,
             commands::set_game_mode,
             commands::analyze_network,

@@ -896,6 +896,131 @@ function renderNetwork(report: NetworkReport) {
   setStatus("net-status", report.note, "warn");
 }
 
+// ------------------------------------------------- gargalo
+
+type Limite =
+  | "CpuUmNucleo"
+  | "CpuTodos"
+  | "Gpu"
+  | "MemoriaVideo"
+  | "MemoriaRam"
+  | "Disco"
+  | "NaoIdentificado"
+  | "SemCarga";
+
+interface BottleneckReport {
+  limite: Limite;
+  summary: string;
+  advice: string;
+  cpu_total: number;
+  cpu_max_core: number;
+  gpu_percent: number;
+  vram_used_mb: number;
+  vram_total_mb: number | null;
+  ram_available_gb: number;
+  ram_total_gb: number;
+  disk_percent: number;
+  samples: number;
+  seconds: number;
+}
+
+const LIMITE_ROTULO: Record<Limite, string> = {
+  CpuUmNucleo: "processador, um núcleo",
+  CpuTodos: "processador",
+  Gpu: "placa de vídeo",
+  MemoriaVideo: "memória de vídeo",
+  MemoriaRam: "memória",
+  Disco: "disco",
+  NaoIdentificado: "não identificado",
+  SemCarga: "sem carga",
+};
+
+async function analyzeBottleneck() {
+  const button = element<HTMLButtonElement>("analyze-bottleneck");
+  button.disabled = true;
+  setStatus(
+    "gargalo-status",
+    "Medindo processador, placa de vídeo, memória e disco por 10 segundos…",
+    "progress"
+  );
+
+  try {
+    const r = await invoke<BottleneckReport>("analyze_bottleneck", { seconds: 10 });
+    renderBottleneck(r);
+  } catch (error) {
+    setStatus("gargalo-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderBottleneck(r: BottleneckReport) {
+  text("gargalo-tag", LIMITE_ROTULO[r.limite]);
+
+  // Só é problema quando há um limite identificado que dá para agir. Placa no
+  // talo é boa notícia em jogo, e sem carga não é diagnóstico nenhum.
+  const gravidade: Record<Limite, Severity> = {
+    CpuUmNucleo: "Important",
+    CpuTodos: "Important",
+    Gpu: "Ok",
+    MemoriaVideo: "Critical",
+    MemoriaRam: "Critical",
+    Disco: "Critical",
+    NaoIdentificado: "Ok",
+    SemCarga: "Ok",
+  };
+
+  const vram =
+    r.vram_total_mb === null
+      ? `${r.vram_used_mb.toFixed(0)} MB`
+      : `${r.vram_used_mb.toFixed(0)} de ${r.vram_total_mb.toFixed(0)} MB`;
+
+  element("gargalo-result").innerHTML = `
+    <article class="finding" data-severity="${gravidade[r.limite]}" style="--i:0">
+      <div class="finding-top"><h3>${escapeHtml(r.summary)}</h3></div>
+      <p class="finding-advice">${escapeHtml(r.advice).replace(/\n\n/g, "<br /><br />")}</p>
+    </article>
+
+    <div class="readouts readouts-row">
+      <div class="readout">
+        <span class="readout-label">Processador</span>
+        <span class="readout-value">${r.cpu_total.toFixed(0)}%</span>
+        <span class="readout-note">pico de um núcleo: ${r.cpu_max_core.toFixed(0)}%</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Placa de vídeo</span>
+        <span class="readout-value">${r.gpu_percent.toFixed(0)}%</span>
+        <span class="readout-note">memória: ${vram}</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Memória livre</span>
+        <span class="readout-value">${r.ram_available_gb.toFixed(1)} GB</span>
+        <span class="readout-note">de ${r.ram_total_gb.toFixed(1)} GB</span>
+      </div>
+      <div class="readout">
+        <span class="readout-label">Disco</span>
+        <span class="readout-value">${r.disk_percent.toFixed(0)}%</span>
+        <span class="readout-note">ocupado</span>
+      </div>
+    </div>
+
+    <p class="hint">${r.samples} amostra(s) em ${r.seconds.toFixed(
+      1
+    )} segundos. O pico de um núcleo usa o maior valor visto, não a média —
+    gargalo de um núcleo só aparece em rajadas, e a média esconderia.</p>
+  `;
+
+  setStatus(
+    "gargalo-status",
+    r.summary,
+    r.limite === "MemoriaRam" || r.limite === "MemoriaVideo" || r.limite === "Disco"
+      ? "error"
+      : r.limite === "SemCarga" || r.limite === "NaoIdentificado"
+        ? "warn"
+        : "ok"
+  );
+}
+
 // ------------------------------------------------------ modo jogo
 
 interface GameModeStatus {
@@ -2870,6 +2995,7 @@ function wireControls() {
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);
+  element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
   element("measure-frames").addEventListener("click", measureFrames);

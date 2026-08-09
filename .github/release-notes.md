@@ -6,14 +6,40 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.8.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.8.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.9.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.9.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## Por que o seu FPS está baixo
+
+A pergunta que todo cliente faz e que nenhum otimizador responde. A resposta
+honesta quase nunca é "falta otimizar" — é uma peça específica que chegou no
+limite enquanto as outras estão sobrando.
+
+O painel mede processador, placa de vídeo, memória de vídeo, memória do sistema
+e disco durante dez segundos e diz qual travou. **Ele não otimiza nada: ele
+explica.** E explicar é o que permite a próxima decisão ser certa, seja mexer
+numa configuração, trocar uma peça, ou não fazer nada.
+
+**O caso mais comum em FiveM é o mais mal interpretado.** O jogo depende muito de
+um único núcleo. Numa máquina de oito núcleos é normal ver um a 100% e os outros
+sete quase parados, com a placa de vídeo a 40%. O dono abre o Gerenciador de
+Tarefas, lê "CPU 25%", conclui que sobra máquina e não entende por que trava.
+
+Sobra máquina — na parte errada. Comprar um processador com mais núcleos não
+resolve nada; um com núcleo mais rápido resolve. Placa de vídeo melhor também
+não, porque ela já está esperando. Essa é uma informação cara de descobrir
+errado, e agora ela aparece com o número na mão.
+
+O painel também sabe quando **não** deve responder. Com o PC parado não existe
+limite a encontrar, e ele diz isso em vez de apontar um culpado. Quando nada
+chega perto do limite, o veredito é "não identificamos" — nunca o palpite mais
+vendável.
 
 ## Modo jogo, e por que ele desliga sozinho
 
