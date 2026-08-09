@@ -46,36 +46,83 @@
         </div>
       </header>
 
-      <nav class="tabs" role="tablist" aria-label="Seções do console">
-        <button class="tab" role="tab" data-tab="painel" aria-selected="true" aria-controls="tab-painel" id="tabbtn-painel">
-          Painel
-        </button>
-        <button class="tab" role="tab" data-tab="otimizacoes" aria-selected="false" aria-controls="tab-otimizacoes" id="tabbtn-otimizacoes">
-          Otimizações
-          <span class="tab-badge" id="badge-otimizacoes" hidden></span>
-        </button>
-        <button class="tab" role="tab" data-tab="diagnostico" aria-selected="false" aria-controls="tab-diagnostico" id="tabbtn-diagnostico">
-          Diagnóstico
-          <span class="tab-badge" id="badge-diagnostico" hidden></span>
-        </button>
-        <button class="tab" role="tab" data-tab="espaco" aria-selected="false" aria-controls="tab-espaco" id="tabbtn-espaco">
-          Espaço
-          <span class="tab-badge" id="badge-espaco" hidden></span>
-        </button>
-        <button class="tab" role="tab" data-tab="resultado" aria-selected="false" aria-controls="tab-resultado" id="tabbtn-resultado">
-          Resultado
-        </button>
-        <button class="tab" role="tab" data-tab="jogos" aria-selected="false" aria-controls="tab-jogos" id="tabbtn-jogos">
-          Jogos
-          <span class="tab-badge" id="badge-jogos" hidden></span>
-        </button>
-        <button class="tab" role="tab" data-tab="sistema" aria-selected="false" aria-controls="tab-sistema" id="tabbtn-sistema">
-          Sistema
-          <span class="tab-badge" id="badge-sistema" hidden></span>
-        </button>
-      </nav>
+      <div class="corpo">
+        <!--
+          Navegação lateral, no lugar das abas no topo.
 
-      <main class="stage">
+          Com sete seções a faixa de abas já vivia apertada, e cada painel novo
+          piorava. A lateral cresce para baixo sem disputar espaço, agrupa por
+          assunto e ainda dá lugar para a contagem de cada área — o número na
+          navegação é informação, não enfeite: dá para saber que há algo
+          esperando sem abrir a seção.
+        -->
+        <nav class="lateral" role="tablist" aria-label="Seções do console">
+          <button class="lateral-recolher" id="toggle-lateral"
+                  aria-label="Recolher a barra lateral" aria-expanded="true">
+            <span class="lateral-recolher-icone" aria-hidden="true"></span>
+          </button>
+
+          <p class="lateral-grupo">Monitorar</p>
+
+          <button class="nav" role="tab" data-tab="painel" aria-selected="true"
+                  aria-controls="tab-painel" id="tabbtn-painel">
+            <span class="nav-icone" data-icone="painel" aria-hidden="true"></span>
+            <span class="nav-rotulo">Painel</span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="diagnostico" aria-selected="false"
+                  aria-controls="tab-diagnostico" id="tabbtn-diagnostico">
+            <span class="nav-icone" data-icone="diagnostico" aria-hidden="true"></span>
+            <span class="nav-rotulo">Diagnóstico</span>
+            <span class="tab-badge" id="badge-diagnostico" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="resultado" aria-selected="false"
+                  aria-controls="tab-resultado" id="tabbtn-resultado">
+            <span class="nav-icone" data-icone="resultado" aria-hidden="true"></span>
+            <span class="nav-rotulo">Resultado</span>
+          </button>
+
+          <p class="lateral-grupo">Agir</p>
+
+          <button class="nav" role="tab" data-tab="otimizacoes" aria-selected="false"
+                  aria-controls="tab-otimizacoes" id="tabbtn-otimizacoes">
+            <span class="nav-icone" data-icone="otimizacoes" aria-hidden="true"></span>
+            <span class="nav-rotulo">Otimizações</span>
+            <span class="tab-badge" id="badge-otimizacoes" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="jogos" aria-selected="false"
+                  aria-controls="tab-jogos" id="tabbtn-jogos">
+            <span class="nav-icone" data-icone="jogos" aria-hidden="true"></span>
+            <span class="nav-rotulo">Jogos</span>
+            <span class="tab-badge" id="badge-jogos" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="espaco" aria-selected="false"
+                  aria-controls="tab-espaco" id="tabbtn-espaco">
+            <span class="nav-icone" data-icone="espaco" aria-hidden="true"></span>
+            <span class="nav-rotulo">Espaço</span>
+            <span class="tab-badge" id="badge-espaco" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="sistema" aria-selected="false"
+                  aria-controls="tab-sistema" id="tabbtn-sistema">
+            <span class="nav-icone" data-icone="sistema" aria-hidden="true"></span>
+            <span class="nav-rotulo">Sistema</span>
+            <span class="tab-badge" id="badge-sistema" hidden></span>
+          </button>
+
+          <div class="lateral-rodape">
+            <button class="nav nav-secundario" id="abrir-comandos">
+              <span class="nav-icone" data-icone="comandos" aria-hidden="true"></span>
+              <span class="nav-rotulo">Buscar ação</span>
+              <kbd class="nav-atalho">Ctrl K</kbd>
+            </button>
+          </div>
+        </nav>
+
+        <main class="stage">
         <!-- ============================================================ PAINEL -->
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
           <div class="grid grid-hero">
@@ -919,7 +966,23 @@
             </p>
           </section>
         </section>
-      </main>
+        </main>
+      </div>
+
+      <!--
+        Paleta de comandos. Ctrl K abre de qualquer lugar.
+        Fica fora do corpo porque cobre a tela toda.
+      -->
+      <div class="comandos" id="comandos" hidden>
+        <div class="comandos-caixa" role="dialog" aria-modal="true" aria-label="Buscar ação">
+          <input type="text" id="comandos-busca" class="comandos-busca"
+                 placeholder="Buscar ação ou seção…" autocomplete="off" spellcheck="false" />
+          <div id="comandos-lista" class="comandos-lista"></div>
+          <p class="comandos-dica">
+            Setas para escolher, Enter para ir, Esc para fechar.
+          </p>
+        </div>
+      </div>
 
       <footer class="statusbar">
         <span class="statusbar-brand">

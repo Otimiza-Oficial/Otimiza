@@ -234,11 +234,10 @@ button {
 
 /* -------------------------------------------------------------------- abas */
 
+/* A faixa de abas do topo foi substituída pela barra lateral. A regra fica
+   porque `.tab` ainda descreve o estado selecionado usado pelo JavaScript. */
 .tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--hairline);
-  overflow-x: auto;
+  display: none;
 }
 
 .tab {
@@ -2069,4 +2068,350 @@ button {
 .fps-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* ==================================================== navegação lateral
+
+   Substituiu a faixa de abas no topo. Com sete seções aquela faixa já vivia
+   apertada e cada painel novo piorava; a lateral cresce para baixo sem disputar
+   espaço, agrupa por assunto e tem lugar para a contagem de cada área.
+   ===================================================================== */
+
+.corpo {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: var(--gap);
+  flex: 1;
+  min-height: 0;
+}
+
+.corpo[data-recolhida="true"] {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.lateral {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s3) var(--s2);
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  align-self: start;
+  position: sticky;
+  top: var(--gap);
+}
+
+.lateral-grupo {
+  padding: var(--s4) var(--s3) var(--s2);
+  font-size: var(--t-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.lateral-grupo:first-of-type {
+  padding-top: var(--s2);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--dur), background-color var(--dur), border-color var(--dur);
+}
+
+.nav:hover {
+  color: var(--text);
+  background: var(--panel-raised);
+}
+
+/* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
+   saber onde está sem ler. */
+.nav[aria-selected="true"] {
+  color: var(--bg);
+  background: var(--accent);
+  border-left-color: var(--accent);
+}
+
+.nav[aria-selected="true"] .nav-icone {
+  background-color: var(--bg);
+}
+
+.nav-rotulo {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+  Ícones desenhados em CSS, sem arquivo externo.
+
+  Cada um é um quadrado com máscara de gradiente formando a silhueta. Some a
+  necessidade de biblioteca de ícones, de requisição de rede e de manter arquivo
+  em sincronia — num aplicativo que precisa funcionar sem internet, isso conta.
+*/
+.nav-icone {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  background-color: currentColor;
+  opacity: 0.9;
+}
+
+.nav-icone[data-icone="painel"] {
+  clip-path: polygon(0 0, 45% 0, 45% 60%, 0 60%, 0 0, 55% 0, 100% 0, 100% 35%, 55% 35%,
+    55% 0, 55% 45%, 100% 45%, 100% 100%, 55% 100%, 55% 45%, 0 70%, 45% 70%, 45% 100%, 0 100%);
+}
+
+.nav-icone[data-icone="diagnostico"] {
+  clip-path: polygon(0 55%, 22% 55%, 34% 12%, 50% 88%, 64% 45%, 74% 55%, 100% 55%,
+    100% 72%, 66% 72%, 52% 100%, 34% 30%, 26% 72%, 0 72%);
+}
+
+.nav-icone[data-icone="resultado"] {
+  clip-path: polygon(0 62%, 24% 62%, 24% 100%, 0 100%, 0 62%, 38% 30%, 62% 30%,
+    62% 100%, 38% 100%, 38% 30%, 76% 0, 100% 0, 100% 100%, 76% 100%);
+}
+
+.nav-icone[data-icone="otimizacoes"] {
+  clip-path: polygon(52% 0, 20% 56%, 46% 56%, 40% 100%, 78% 42%, 52% 42%);
+}
+
+.nav-icone[data-icone="jogos"] {
+  border-radius: 40% 40% 30% 30%;
+  clip-path: polygon(0 25%, 100% 25%, 100% 82%, 78% 82%, 62% 60%, 38% 60%, 22% 82%, 0 82%);
+}
+
+.nav-icone[data-icone="espaco"] {
+  border-radius: 50%;
+  clip-path: polygon(50% 50%, 50% 0, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0);
+}
+
+.nav-icone[data-icone="sistema"] {
+  clip-path: polygon(42% 0, 58% 0, 62% 14%, 76% 20%, 88% 12%, 98% 28%, 88% 38%,
+    88% 62%, 98% 72%, 88% 88%, 76% 80%, 62% 86%, 58% 100%, 42% 100%, 38% 86%,
+    24% 80%, 12% 88%, 2% 72%, 12% 62%, 12% 38%, 2% 28%, 12% 12%, 24% 20%, 38% 14%);
+}
+
+.nav-icone[data-icone="comandos"] {
+  clip-path: polygon(0 0, 100% 0, 100% 22%, 0 22%, 0 0, 0 39%, 100% 39%, 100% 61%,
+    0 61%, 0 39%, 0 78%, 70% 78%, 70% 100%, 0 100%);
+}
+
+.lateral .tab-badge {
+  flex: none;
+}
+
+.nav[aria-selected="true"] .tab-badge {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+.lateral-rodape {
+  margin-top: var(--s5);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--hairline);
+}
+
+.nav-secundario {
+  color: var(--text-muted);
+}
+
+.nav-atalho {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid var(--hairline-strong);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Botão de recolher. Fica no canto da lateral, discreto. */
+.lateral-recolher {
+  position: absolute;
+  top: var(--s2);
+  right: var(--s2);
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--dur), border-color var(--dur);
+}
+
+.lateral-recolher:hover {
+  color: var(--text);
+  border-color: var(--hairline-strong);
+}
+
+.lateral-recolher-icone {
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid currentColor;
+  border-top: 2px solid currentColor;
+  transform: rotate(-45deg) translate(1px, 1px);
+}
+
+/* Recolhida: só os ícones. O rótulo some sem tirar o elemento do fluxo de
+   acessibilidade — leitor de tela continua lendo o nome da seção. */
+.corpo[data-recolhida="true"] .nav-rotulo,
+.corpo[data-recolhida="true"] .lateral-grupo,
+.corpo[data-recolhida="true"] .nav-atalho {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.corpo[data-recolhida="true"] .nav {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.corpo[data-recolhida="true"] .lateral-recolher-icone {
+  transform: rotate(135deg) translate(-1px, -1px);
+}
+
+.corpo[data-recolhida="true"] .lateral-grupo {
+  padding: 0;
+}
+
+/* Em tela estreita a lateral vira uma faixa de ícones, e não some: perder a
+   navegação inteira num notebook de 1366 seria pior que apertar. */
+@media (max-width: 900px) {
+  .corpo {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .corpo .nav-rotulo,
+  .corpo .lateral-grupo,
+  .corpo .nav-atalho {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .corpo .nav {
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .lateral-recolher {
+    display: none;
+  }
+}
+
+/* ================================================== paleta de comandos
+
+   O aplicativo passou de quarenta botões espalhados por sete seções. Quem usa
+   isto todo dia sabe o nome do que quer e não deveria precisar lembrar em qual
+   aba mora — caçar botão é o gesto mais repetido de um console cheio.
+   ===================================================================== */
+
+.comandos {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(11, 11, 11, 0.72);
+  animation: surgir 0.14s var(--ease) both;
+}
+
+.comandos[hidden] {
+  display: none;
+}
+
+.comandos-caixa {
+  width: min(560px, 92vw);
+  max-height: 62vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--hairline-strong);
+}
+
+.comandos-busca {
+  padding: var(--s4);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--t-value);
+}
+
+.comandos-busca:focus {
+  outline: none;
+}
+
+.comandos-busca::placeholder {
+  color: var(--text-muted);
+}
+
+.comandos-lista {
+  overflow-y: auto;
+  padding: var(--s2);
+}
+
+.comando {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.comando:hover,
+.comando[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.comando-secao {
+  flex: none;
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.comandos-dica {
+  padding: var(--s2) var(--s4);
+  border-top: 1px solid var(--hairline);
+  font-family: var(--font-sans);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
 }

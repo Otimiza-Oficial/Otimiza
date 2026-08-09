@@ -374,8 +374,8 @@ function showTab(name: string) {
     panel.hidden = panel.id !== `tab-${name}`;
   });
 
-  document.querySelectorAll<HTMLButtonElement>(".tab").forEach((tab) => {
-    tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
+  document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]").forEach((item) => {
+    item.setAttribute("aria-selected", String(item.dataset.tab === name));
   });
 }
 
@@ -2869,27 +2869,211 @@ function setStatus(id: string, message: string, kind: "ok" | "warn" | "error" | 
   status.className = `status ${kind}`;
 }
 
+// ------------------------------------------------------ paleta de comandos
+
+/**
+ * Toda ação do programa, buscável por nome.
+ *
+ * O aplicativo passou de quarenta botões espalhados por sete seções. Quem usa
+ * isto todos os dias sabe o nome do que quer e não deveria precisar lembrar em
+ * qual aba ele mora — caçar botão é o gesto mais repetido e mais chato de um
+ * console cheio.
+ *
+ * A lista é montada a partir do próprio HTML, e não escrita à mão: um botão
+ * novo entra na paleta sozinho, e nenhum fica para trás porque alguém esqueceu
+ * de cadastrar.
+ */
+interface Comando {
+  rotulo: string;
+  secao: string;
+  executar: () => void;
+}
+
+function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
+  const nomeDaSecao = new Map<string, string>();
+
+  for (const item of secoes) {
+    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
+    nomeDaSecao.set(item.dataset.tab!, rotulo);
+  }
+
+  const comandos: Comando[] = secoes.map((item) => ({
+    rotulo: `Ir para ${nomeDaSecao.get(item.dataset.tab!)}`,
+    secao: "Navegação",
+    executar: () => showTab(item.dataset.tab!),
+  }));
+
+  // Todo botão de ação de dentro dos painéis. Os botões que a interface gera
+  // por linha — limpar esta pasta, desligar este serviço — ficam de fora de
+  // propósito: eles só fazem sentido junto do item a que pertencem.
+  document.querySelectorAll<HTMLButtonElement>(".tab-panel .btn").forEach((botao) => {
+    const rotulo = botao.textContent?.trim();
+    const painel = botao.closest<HTMLElement>(".tab-panel");
+
+    if (!rotulo || !painel || botao.hasAttribute("data-fivem")) return;
+
+    const aba = painel.id.replace("tab-", "");
+
+    comandos.push({
+      rotulo,
+      secao: nomeDaSecao.get(aba) ?? aba,
+      executar: () => {
+        showTab(aba);
+        botao.scrollIntoView({ block: "center" });
+        botao.focus();
+      },
+    });
+  });
+
+  return comandos;
+}
+
+function wireComandos(secoes: HTMLButtonElement[]) {
+  const caixa = element("comandos");
+  const campo = element<HTMLInputElement>("comandos-busca");
+  const lista = element("comandos-lista");
+
+  let comandos: Comando[] = [];
+  let visiveis: Comando[] = [];
+  let escolhido = 0;
+
+  const abrir = () => {
+    // Montada na hora de abrir: painéis carregam conteúdo depois do início, e
+    // uma lista montada uma vez só ficaria desatualizada.
+    comandos = montarComandos(secoes);
+    caixa.hidden = false;
+    campo.value = "";
+    filtrar("");
+    campo.focus();
+  };
+
+  const fechar = () => {
+    caixa.hidden = true;
+  };
+
+  function filtrar(termo: string) {
+    const normalizar = (t: string) =>
+      t.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+    const alvo = normalizar(termo.trim());
+
+    visiveis = comandos
+      .filter((c) => !alvo || normalizar(`${c.rotulo} ${c.secao}`).includes(alvo))
+      .slice(0, 40);
+
+    escolhido = 0;
+    desenhar();
+  }
+
+  function desenhar() {
+    lista.innerHTML = visiveis.length
+      ? visiveis
+          .map(
+            (c, i) => `
+        <button class="comando" data-indice="${i}" aria-selected="${i === escolhido}">
+          <span class="comando-rotulo">${escapeHtml(c.rotulo)}</span>
+          <span class="comando-secao">${escapeHtml(c.secao)}</span>
+        </button>`
+          )
+          .join("")
+      : `<p class="empty">Nada encontrado.</p>`;
+  }
+
+  element("abrir-comandos").addEventListener("click", abrir);
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      caixa.hidden ? abrir() : fechar();
+      return;
+    }
+
+    if (caixa.hidden) return;
+
+    if (event.key === "Escape") {
+      fechar();
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const passo = event.key === "ArrowDown" ? 1 : visiveis.length - 1;
+      escolhido = (escolhido + passo) % Math.max(1, visiveis.length);
+      desenhar();
+      return;
+    }
+
+    if (event.key === "Enter" && visiveis[escolhido]) {
+      event.preventDefault();
+      visiveis[escolhido].executar();
+      fechar();
+    }
+  });
+
+  campo.addEventListener("input", () => filtrar(campo.value));
+
+  lista.addEventListener("click", (event) => {
+    const alvo = (event.target as HTMLElement).closest<HTMLElement>("[data-indice]");
+    if (!alvo) return;
+
+    visiveis[Number(alvo.dataset.indice)]?.executar();
+    fechar();
+  });
+
+  // Clicar fora fecha. Sem isso a paleta vira uma janela presa que só some
+  // com o teclado.
+  caixa.addEventListener("click", (event) => {
+    if (event.target === caixa) fechar();
+  });
+}
+
 // ---------------------------------------------------------------- controles
 
 function wireControls() {
-  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>(".tab"));
+  const secoes = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]")
+  );
 
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => showTab(tab.dataset.tab!));
+  secoes.forEach((item) => {
+    item.addEventListener("click", () => showTab(item.dataset.tab!));
   });
 
-  // Setas navegam entre abas, como manda o padrão de acessibilidade para
-  // barras de abas — e é como quem usa teclado espera que funcione.
-  document.querySelector(".tabs")!.addEventListener("keydown", (event) => {
+  // Setas percorrem as seções, como manda o padrão de acessibilidade para
+  // navegação em abas — e é como quem usa teclado espera que funcione. Agora
+  // é cima e baixo, porque a lista virou vertical.
+  document.querySelector(".lateral")!.addEventListener("keydown", (event) => {
     const key = (event as KeyboardEvent).key;
-    if (key !== "ArrowRight" && key !== "ArrowLeft") return;
+    if (key !== "ArrowDown" && key !== "ArrowUp") return;
 
-    const current = tabs.findIndex((tab) => tab.getAttribute("aria-selected") === "true");
-    const next = (current + (key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+    event.preventDefault();
 
-    showTab(tabs[next].dataset.tab!);
-    tabs[next].focus();
+    const atual = secoes.findIndex((s) => s.getAttribute("aria-selected") === "true");
+    const proxima =
+      (atual + (key === "ArrowDown" ? 1 : secoes.length - 1)) % secoes.length;
+
+    showTab(secoes[proxima].dataset.tab!);
+    secoes[proxima].focus();
   });
+
+  // Recolher a lateral. A escolha fica guardada: quem trabalha em tela pequena
+  // não quer refazer isso toda vez que abre o programa.
+  const corpo = document.querySelector<HTMLElement>(".corpo")!;
+  const alternar = element<HTMLButtonElement>("toggle-lateral");
+
+  if (localStorage.getItem("lateral-recolhida") === "sim") {
+    corpo.dataset.recolhida = "true";
+    alternar.setAttribute("aria-expanded", "false");
+  }
+
+  alternar.addEventListener("click", () => {
+    const recolhida = corpo.dataset.recolhida === "true";
+
+    corpo.dataset.recolhida = String(!recolhida);
+    alternar.setAttribute("aria-expanded", String(recolhida));
+    localStorage.setItem("lateral-recolhida", recolhida ? "nao" : "sim");
+  });
+
+  wireComandos(secoes);
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);

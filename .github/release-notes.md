@@ -6,14 +6,43 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.9.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.9.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.10.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.10.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## A navegação mudou de lugar
+
+As sete seções viviam numa faixa de abas no topo, e cada painel novo apertava
+mais. Agora existe uma **barra lateral**, agrupada por assunto — Monitorar e
+Agir — que cresce para baixo sem disputar espaço e tem lugar para a contagem de
+cada área.
+
+Ela recolhe para uma faixa de ícones quando você quer mais espaço, e a escolha
+fica guardada. Em tela de 1366 ou menor ela recolhe sozinha: perder a navegação
+inteira num notebook pequeno seria pior que apertar.
+
+Os ícones são desenhados em CSS, sem arquivo externo. Não há biblioteca de
+ícones nem requisição de rede — num programa que precisa abrir sem internet,
+isso conta.
+
+## Buscar ação, com Ctrl K
+
+O Otimiza passou de quarenta botões espalhados por sete seções. Quem usa isto
+todo dia sabe o nome do que quer e não deveria precisar lembrar em qual aba
+mora.
+
+Agora **Ctrl K** abre uma busca de ações: digite "relatório", "cache",
+"memória", e vá direto. Funciona sem acento — quem digita "memoria" acha
+"memória". Setas escolhem, Enter vai, Esc fecha.
+
+A lista é montada a partir da própria interface, e não escrita à mão: cada
+botão novo entra na busca sozinho, e nenhum fica de fora porque alguém esqueceu
+de cadastrar.
 
 ## Por que o seu FPS está baixo
 
