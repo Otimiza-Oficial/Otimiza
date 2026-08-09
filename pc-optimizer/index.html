@@ -625,6 +625,44 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Modo jogo</h2>
+              <span class="panel-tag" id="gamemode-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Liga o plano de alto desempenho quando um jogo abre e
+              <strong>desliga quando ele fecha</strong>. Essa segunda metade é o
+              ponto: deixar a máquina em desempenho máximo o dia inteiro por
+              causa de duas horas de jogo à noite gasta bateria e esquenta o
+              notebook à toa. Aplicar só na hora que importa entrega o mesmo
+              ganho sem cobrar o resto do dia.
+            </p>
+
+            <p class="hint">
+              <strong>Não fechamos nenhum programa.</strong> "Encerrar processos
+              desnecessários" é a forma mais rápida de alguém perder trabalho não
+              salvo. O que pesa em segundo plano já está listado nas abas Painel
+              e Sistema, com nome, para você decidir.
+            </p>
+
+            <p class="hint">
+              O modo automático vem <strong>desligado</strong> e fica na aba
+              Sistema, em Preferências. Um programa que muda a configuração do
+              seu PC sozinho, sem você pedir, é justamente o que criticamos nos
+              outros — mesmo quando a mudança é boa. Tudo o que ele faz entra no
+              histórico e volta com "Desfazer tudo".
+            </p>
+
+            <div class="row-actions">
+              <button id="gamemode-on" class="btn btn-primary">Ligar agora</button>
+              <button id="gamemode-off" class="btn">Desligar</button>
+            </div>
+
+            <p id="gamemode-status" class="status"></p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Quadros por segundo</h2>
               <span class="panel-tag" id="fps-tag">—</span>
             </div>
@@ -780,6 +818,16 @@
             </div>
 
             <div class="prefs">
+              <label class="pref">
+                <input type="checkbox" id="pref-gamemode" />
+                <span>Ligar o modo jogo sozinho quando um jogo abrir</span>
+                <span class="pref-note">
+                  Desligado por padrão. Quando ligado, o Otimiza troca o plano de
+                  energia ao detectar um jogo conhecido e devolve o plano
+                  anterior quando o jogo fecha. Nenhum programa é encerrado, e a
+                  troca entra no histórico como qualquer outra mudança.
+                </span>
+              </label>
               <label class="pref">
                 <input type="checkbox" id="pref-restore" />
                 <span class="pref-text">

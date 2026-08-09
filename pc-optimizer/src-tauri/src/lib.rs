@@ -44,6 +44,8 @@ pub fn run() {
             commands::open_apps_settings,
             commands::analyze_conflicts,
             commands::analyze_health,
+            commands::game_mode_status,
+            commands::set_game_mode,
             commands::analyze_network,
             commands::set_dns,
             commands::flush_dns,
@@ -86,7 +88,47 @@ pub fn run() {
             }
             
             utils::Logger::info("PC Performance Optimizer iniciado");
-            
+
+            // Vigia do modo jogo.
+            //
+            // Roda sempre, mas só age quando a preferência está ligada — e ela
+            // vem desligada de fábrica. A preferência é lida a cada volta, e
+            // não uma vez só: assim ligar e desligar na tela vale na hora, sem
+            // reiniciar o programa.
+            //
+            // Seis segundos é de propósito. Mais rápido que isso gasta CPU do
+            // próprio otimizador para vigiar, o que num PC fraco é o oposto do
+            // trabalho; mais devagar e o jogo já está carregando quando o modo
+            // entra.
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+
+                tauri::async_runtime::spawn(async move {
+                    use tauri::{Emitter, Manager};
+
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+
+                        if !modules::preferences::Preferences::load().auto_game_mode {
+                            continue;
+                        }
+
+                        let estado = handle.state::<commands::AppState>();
+                        let mut log = estado.changes.lock().await;
+
+                        // `passo` não faz nada quando não há mudança, então o
+                        // caso comum desta volta é não tocar em nada.
+                        if let Some(mensagem) =
+                            modules::windows::gamemode::passo(&mut log)
+                        {
+                            utils::Logger::info(&format!("Modo jogo: {}", mensagem));
+                            let _ = handle.emit("gamemode:changed", mensagem);
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .run(tauri::generate_context!())

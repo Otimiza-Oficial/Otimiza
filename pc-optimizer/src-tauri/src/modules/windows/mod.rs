@@ -18,6 +18,7 @@ pub mod firmware;
 pub mod fivem;
 pub mod foldermap;
 pub mod frames;
+pub mod gamemode;
 pub mod hardware;
 pub mod health;
 pub mod memory;

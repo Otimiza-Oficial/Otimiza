@@ -34,6 +34,8 @@ interface ProcessImpact {
 
 interface Preferences {
   restore_point_before_batch: boolean;
+  /** Ligar o modo jogo sozinho. Desligado de fábrica, de propósito. */
+  auto_game_mode: boolean;
   metrics_interval_seconds: number;
   show_unavailable: boolean;
 }
@@ -253,6 +255,7 @@ let activeCategory: Category | "Todas" = "Todas";
 let isElevated = false;
 let preferences: Preferences = {
   restore_point_before_batch: true,
+  auto_game_mode: false,
   metrics_interval_seconds: 2,
   show_unavailable: true,
 };
@@ -296,6 +299,15 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   await ajustarMovimento();
   await listenToBatchProgress();
+
+  // O vigia do modo jogo age sozinho em segundo plano. Quando ele mexe em
+  // alguma coisa, a tela precisa contar — mudança silenciosa no sistema é
+  // exatamente o que este produto critica nos outros.
+  await listen<string>("gamemode:changed", (evento) => {
+    setStatus("gamemode-status", evento.payload, "ok");
+    void loadGameMode();
+    void loadOptimizations();
+  });
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
@@ -310,6 +322,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     loadScheduledTasks(),
     loadThirdPartyServices(),
     loadProfiles(),
+    loadGameMode(),
   ]);
 
   await startMonitoring();
@@ -881,6 +894,55 @@ function renderNetwork(report: NetworkReport) {
 
   element("net-result").innerHTML = linhas;
   setStatus("net-status", report.note, "warn");
+}
+
+// ------------------------------------------------------ modo jogo
+
+interface GameModeStatus {
+  game_running: boolean;
+  game: string | null;
+  active: boolean;
+  applied: string[];
+}
+
+async function loadGameMode() {
+  try {
+    const s = await invoke<GameModeStatus>("game_mode_status");
+
+    text(
+      "gamemode-tag",
+      s.active ? "ligado" : s.game_running ? `${s.game} aberto` : "desligado"
+    );
+
+    if (!element("gamemode-status").textContent) {
+      setStatus(
+        "gamemode-status",
+        s.game_running
+          ? `${s.game} está aberto agora.`
+          : "Nenhum jogo conhecido aberto no momento.",
+        "ok"
+      );
+    }
+  } catch {
+    // Sem backend o painel continua utilizável; só não mostra a situação.
+  }
+}
+
+async function setGameMode(active: boolean) {
+  const botoes = document.querySelectorAll<HTMLButtonElement>(
+    "#gamemode-on, #gamemode-off"
+  );
+  botoes.forEach((b) => (b.disabled = true));
+
+  try {
+    const mensagem = await invoke<string>("set_game_mode", { active });
+    setStatus("gamemode-status", mensagem, "ok");
+  } catch (error) {
+    setStatus("gamemode-status", String(error), "error");
+  } finally {
+    botoes.forEach((b) => (b.disabled = false));
+    await loadGameMode();
+  }
 }
 
 // ------------------------------------------------- quadros por segundo
@@ -2392,6 +2454,7 @@ async function loadPreferences() {
 function renderPreferences() {
   element<HTMLInputElement>("pref-restore").checked = preferences.restore_point_before_batch;
   element<HTMLInputElement>("pref-unavailable").checked = preferences.show_unavailable;
+  element<HTMLInputElement>("pref-gamemode").checked = preferences.auto_game_mode;
 
   document.querySelectorAll<HTMLButtonElement>("#pref-interval button").forEach((button) => {
     const chosen = Number(button.dataset.interval) === preferences.metrics_interval_seconds;
@@ -2807,6 +2870,8 @@ function wireControls() {
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);
+  element("gamemode-on").addEventListener("click", () => setGameMode(true));
+  element("gamemode-off").addEventListener("click", () => setGameMode(false));
   element("measure-frames").addEventListener("click", measureFrames);
 
   element("flush-dns").addEventListener("click", async () => {
@@ -2971,6 +3036,10 @@ function wireControls() {
     savePreferences({
       restore_point_before_batch: (event.target as HTMLInputElement).checked,
     })
+  );
+
+  element("pref-gamemode").addEventListener("change", (event) =>
+    savePreferences({ auto_game_mode: (event.target as HTMLInputElement).checked })
   );
 
   element("pref-unavailable").addEventListener("change", (event) =>

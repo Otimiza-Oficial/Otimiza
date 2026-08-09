@@ -6,14 +6,39 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.7.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.7.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.8.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.8.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## Modo jogo, e por que ele desliga sozinho
+
+Liga o plano de alto desempenho quando um jogo abre e **desliga quando ele
+fecha**. Essa segunda metade é o ponto inteiro.
+
+Os "modos turbo" do mercado ligam e deixam ligado. Em notebook isso significa
+gastar bateria e esquentar o dia todo por causa de duas horas de jogo à noite —
+e, ironicamente, calor sustentado é uma das causas de perda de desempenho que
+este mesmo programa detecta na aba Diagnóstico. Aplicar só na hora que importa
+entrega o mesmo ganho sem cobrar o resto do dia.
+
+O modo automático vem **desligado**, e fica em Preferências. Um programa que
+muda a configuração do seu PC sozinho, sem você pedir, é justamente o que
+criticamos nos outros — mesmo quando a mudança é boa. Quem quiser, liga sabendo
+o que vai acontecer.
+
+Tudo o que ele faz entra no histórico. Se o Otimiza fechar no meio, travar ou o
+PC desligar na tomada com o modo ligado, a mudança continua registrada e o
+"Desfazer tudo" devolve o plano de energia anterior.
+
+**Ele não fecha nenhum programa.** "Encerrar processos desnecessários" aparece em
+toda lista de ideias de otimizador e é a forma mais rápida de alguém perder
+trabalho não salvo. O que pesa em segundo plano já está listado nas abas Painel
+e Sistema, com nome, para você decidir.
 
 ## Quadros por segundo, medidos de fora
 

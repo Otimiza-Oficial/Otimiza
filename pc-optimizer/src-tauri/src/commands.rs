@@ -39,6 +39,8 @@ use crate::modules::windows::network::NetworkReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::frames::FrameMeasurement;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::gamemode::GameModeStatus;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -436,6 +438,52 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
+}
+
+// ---------------------------------------------------------------------------
+// Modo jogo
+// ---------------------------------------------------------------------------
+
+/// Comando: Situação do modo jogo.
+#[tauri::command]
+pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStatus, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let log = state.changes.lock().await;
+        Ok(crate::modules::windows::gamemode::status(&log))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Liga ou desliga o modo jogo na mão.
+#[tauri::command]
+pub async fn set_game_mode(
+    active: bool,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::gamemode;
+
+        let mut log = state.changes.lock().await;
+
+        if active {
+            gamemode::ativar(&mut log).map(|feito| feito.join(" "))
+        } else {
+            gamemode::desativar(&mut log)
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (active, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

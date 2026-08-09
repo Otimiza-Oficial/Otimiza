@@ -26,6 +26,16 @@ pub struct Preferences {
     /// Ler mais rápido custa CPU do próprio programa — num PC fraco isso conta.
     pub metrics_interval_seconds: u32,
 
+    /// Ligar o plano de alto desempenho sozinho quando um jogo abre, e
+    /// desligar quando ele fecha.
+    ///
+    /// DESLIGADO por padrão, e é importante que continue assim. Um programa que
+    /// muda configuração do sistema por conta própria, sem a pessoa pedir, é
+    /// exatamente o que este produto critica nos outros — mesmo quando a
+    /// mudança é boa. Quem quiser, liga aqui sabendo o que vai acontecer.
+    #[serde(default)]
+    pub auto_game_mode: bool,
+
     /// Mostrar na lista o que não se aplica a esta máquina.
     ///
     /// Ligado por padrão: saber que o programa se recusou a oferecer algo, e por
@@ -38,6 +48,8 @@ impl Default for Preferences {
         Preferences {
             restore_point_before_batch: true,
             metrics_interval_seconds: 2,
+            // Desligado: mexer no sistema sem a pessoa pedir precisa ser escolha dela.
+            auto_game_mode: false,
             show_unavailable: true,
         }
     }
