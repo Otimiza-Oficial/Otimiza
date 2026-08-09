@@ -75,6 +75,17 @@
 
   /* Duração única para transição de estado. Estava fixa em 0.18s, 0.15s,
      0.45s e 0.5s em lugares diferentes. */
+  /*
+    ARREDONDAMENTO
+    Tudo era canto vivo. Canto vivo é uma escolha estética legítima e passa
+    seriedade, mas em quantidade vira dureza: uma tela com quarenta retângulos
+    de canto reto parece um formulário, não um produto. Três degraus, do
+    controle pequeno ao painel.
+  */
+  --r1: 6px;
+  --r2: 9px;
+  --r3: 14px;
+
   --dur: 0.18s;
   --dur-slow: 0.45s;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -305,36 +316,18 @@ button {
   Cantoneiras nos cantos opostos, desenhadas no próprio painel. Sem elemento
   extra no HTML: a moldura é do painel, não um enfeite colado por cima.
 */
+/*
+  As cantoneiras nos cantos opostos saíram junto com o canto vivo. Elas eram
+  duas marcas de 9px em cantos diagonais — assimétricas de propósito — e não
+  convivem com borda arredondada: viravam dois riscos soltos fora da curva.
+*/
 .panel {
   position: relative;
   background-color: var(--panel);
   border: 1px solid var(--hairline);
-  padding: var(--pad);
+  border-radius: var(--r3);
+  padding: var(--s5);
   min-width: 0;
-}
-
-.panel::before,
-.panel::after {
-  content: "";
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border-color: var(--accent);
-  border-style: solid;
-  opacity: 0.75;
-  pointer-events: none;
-}
-
-.panel::before {
-  top: -1px;
-  left: -1px;
-  border-width: 1px 0 0 1px;
-}
-
-.panel::after {
-  bottom: -1px;
-  right: -1px;
-  border-width: 0 1px 1px 0;
 }
 
 .panel-head {
@@ -2414,4 +2407,285 @@ button {
   font-family: var(--font-sans);
   font-size: var(--t-micro);
   color: var(--text-muted);
+}
+
+/* ============================================ arredondamento e respiro
+
+   Passe final sobre os elementos que já existiam com canto vivo. Fica no fim
+   do arquivo de propósito: assim a mudança de linguagem visual é uma coisa só,
+   legível de uma vez, em vez de ficar espalhada por trinta regras antigas.
+   ===================================================================== */
+
+.topbar,
+.lateral,
+.comandos-caixa,
+.statusbar,
+.folder,
+.finding,
+.startup,
+.mud,
+.readouts-row .readout,
+.live-log,
+.optimization,
+.opt-group {
+  border-radius: var(--r3);
+}
+
+.btn,
+.filter,
+.profile-chip,
+.search input,
+.fps-input,
+.comandos-busca,
+.access,
+.nav-atalho,
+.chip,
+.state-label,
+.comando {
+  border-radius: var(--r1);
+}
+
+.nav,
+.busca-topo,
+.lateral-recolher {
+  border-radius: var(--r2);
+}
+
+.bar,
+.bar i,
+.vital-bar,
+.vital-bar i,
+.core,
+.core i,
+.process-bar,
+.process-bar i,
+.health-bar {
+  border-radius: 999px;
+}
+
+/* O item da lateral vira pastilha inteira, e não uma faixa com traço à
+   esquerda: com canto redondo, a barra lateral de 2px fica torta na curva. */
+.nav {
+  border-left: none;
+  margin-bottom: 2px;
+}
+
+.nav[aria-selected="true"] {
+  border-left-color: transparent;
+}
+
+/* ------------------------------------------------ marca dentro da lateral */
+
+.lateral-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3) var(--s4);
+  margin-bottom: var(--s2);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.lateral-marca .brand-logo {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+.lateral-marca-nome {
+  flex: 1;
+  font-size: var(--t-value);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.lateral-recolher {
+  position: static;
+  flex: none;
+}
+
+.corpo[data-recolhida="true"] .lateral-marca {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.corpo[data-recolhida="true"] .lateral-marca-nome,
+.corpo[data-recolhida="true"] .lateral-recolher {
+  display: none;
+}
+
+/* ------------------------------------------------------- busca no topo */
+
+.busca-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 260px;
+  padding: var(--s2) var(--s3);
+  background: var(--bg);
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  cursor: pointer;
+  transition: border-color var(--dur), color var(--dur);
+}
+
+.busca-topo:hover {
+  border-color: var(--hairline-strong);
+  color: var(--text-dim);
+}
+
+.busca-topo-texto {
+  flex: 1;
+  text-align: left;
+}
+
+/* Lupa desenhada em CSS: um anel e um cabo. */
+.busca-topo-icone {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  position: relative;
+}
+
+.busca-topo-icone::after {
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 6px;
+  height: 1.5px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+
+/* -------------------------------------------------------------- respiro */
+
+/*
+  A referência que orientou este passe é bem mais espaçada que a tela antiga.
+  Densidade alta serve para tabela de números; para texto explicativo — que é
+  onde vive o argumento deste produto — ela cansa.
+*/
+.topbar {
+  padding: var(--s3) var(--s5);
+  gap: var(--s5);
+}
+
+.panel-head {
+  padding-bottom: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+.statusbar {
+  padding: var(--s3) var(--s5);
+}
+
+.lateral {
+  padding: var(--s3);
+}
+
+.row-actions {
+  gap: var(--s2);
+}
+
+/* --------------------------------------------------- cabeçalho de seção */
+
+.palco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+.secao-cabecalho {
+  padding: var(--s2) var(--s1) 0;
+}
+
+.trilha {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.trilha-sep {
+  opacity: 0.5;
+}
+
+.secao-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s2);
+}
+
+/* O ícone da seção reaproveita as mesmas silhuetas da navegação, num quadrado
+   de destaque — mesma linguagem, escala maior. */
+.secao-icone {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--panel-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  position: relative;
+}
+
+.secao-icone::after {
+  content: "";
+  width: 15px;
+  height: 15px;
+  background-color: var(--accent);
+}
+
+.secao-icone[data-icone="painel"]::after {
+  clip-path: polygon(0 0, 45% 0, 45% 60%, 0 60%, 0 0, 55% 0, 100% 0, 100% 35%, 55% 35%,
+    55% 0, 55% 45%, 100% 45%, 100% 100%, 55% 100%, 55% 45%, 0 70%, 45% 70%, 45% 100%, 0 100%);
+}
+
+.secao-icone[data-icone="diagnostico"]::after {
+  clip-path: polygon(0 55%, 22% 55%, 34% 12%, 50% 88%, 64% 45%, 74% 55%, 100% 55%,
+    100% 72%, 66% 72%, 52% 100%, 34% 30%, 26% 72%, 0 72%);
+}
+
+.secao-icone[data-icone="resultado"]::after {
+  clip-path: polygon(0 62%, 24% 62%, 24% 100%, 0 100%, 0 62%, 38% 30%, 62% 30%,
+    62% 100%, 38% 100%, 38% 30%, 76% 0, 100% 0, 100% 100%, 76% 100%);
+}
+
+.secao-icone[data-icone="otimizacoes"]::after {
+  clip-path: polygon(52% 0, 20% 56%, 46% 56%, 40% 100%, 78% 42%, 52% 42%);
+}
+
+.secao-icone[data-icone="jogos"]::after {
+  border-radius: 40% 40% 30% 30%;
+  clip-path: polygon(0 25%, 100% 25%, 100% 82%, 78% 82%, 62% 60%, 38% 60%, 22% 82%, 0 82%);
+}
+
+.secao-icone[data-icone="espaco"]::after {
+  border-radius: 50%;
+  clip-path: polygon(50% 50%, 50% 0, 100% 0, 100% 100%, 0 100%, 0 0, 50% 0);
+}
+
+.secao-icone[data-icone="sistema"]::after {
+  clip-path: polygon(42% 0, 58% 0, 62% 14%, 76% 20%, 88% 12%, 98% 28%, 88% 38%,
+    88% 62%, 98% 72%, 88% 88%, 76% 80%, 62% 86%, 58% 100%, 42% 100%, 38% 86%,
+    24% 80%, 12% 88%, 2% 72%, 12% 62%, 12% 38%, 2% 28%, 12% 12%, 24% 20%, 38% 14%);
+}
+
+.secao-titulo h2 {
+  font-size: var(--t-big);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }

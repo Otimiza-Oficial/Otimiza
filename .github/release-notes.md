@@ -6,14 +6,37 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.10.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.10.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.11.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.11.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
 **Na primeira execução o Windows vai mostrar "editor desconhecido".** É esperado:
 o instalador ainda não tem assinatura digital. Clique em *Mais informações* e
 depois em *Executar assim mesmo*.
+
+## O visual mudou
+
+Tudo era canto vivo. Canto vivo passa seriedade e era uma escolha deliberada,
+mas em quantidade vira dureza — uma tela com quarenta retângulos de canto reto
+parece um formulário, não um produto. Agora há arredondamento em três degraus,
+do controle pequeno ao painel, e as barras de carga são cápsulas.
+
+As cantoneiras que marcavam dois cantos de cada painel saíram junto. Elas eram
+duas marcas de 9px em cantos diagonais, assimétricas de propósito, e não
+convivem com borda curva: viravam dois riscos soltos fora da curva.
+
+A marca subiu para o topo da barra lateral, e no lugar dela apareceu uma
+**busca no topo** — clicar nela abre a mesma paleta do Ctrl K, então existe um
+só caminho para achar qualquer ação.
+
+Cada seção ganhou um **cabeçalho com trilha e ícone**, no lugar de começar
+direto nos painéis. O nome e o ícone vêm da própria navegação lateral, e não de
+uma segunda lista: assim eles nunca divergem.
+
+E os painéis respiram mais. A referência que orientou este passe é bem mais
+espaçada, e densidade alta serve para tabela de números — para texto
+explicativo, que é onde vive o argumento deste produto, ela cansa.
 
 ## A navegação mudou de lugar
 

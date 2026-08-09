@@ -10,13 +10,16 @@
   <body>
     <div class="console">
       <header class="topbar">
-        <div class="brand">
-          <div class="brand-logo" aria-hidden="true"></div>
-          <div>
-            <h1 class="brand-name">OTIMIZA</h1>
-            <p class="brand-sub">Console de desempenho</p>
-          </div>
-        </div>
+        <!--
+          Busca no topo, do jeito que a pessoa espera encontrar. É a mesma
+          paleta do Ctrl K: clicar aqui abre a mesma coisa, então existe um só
+          caminho para achar qualquer ação do programa.
+        -->
+        <button class="busca-topo" id="abrir-comandos-topo">
+          <span class="busca-topo-icone" aria-hidden="true"></span>
+          <span class="busca-topo-texto">Buscar ação…</span>
+          <kbd class="nav-atalho">Ctrl K</kbd>
+        </button>
 
         <!--
           Sinais vitais fixos: seguem visíveis em qualquer aba. Trocar de aba não
@@ -57,10 +60,14 @@
           esperando sem abrir a seção.
         -->
         <nav class="lateral" role="tablist" aria-label="Seções do console">
-          <button class="lateral-recolher" id="toggle-lateral"
-                  aria-label="Recolher a barra lateral" aria-expanded="true">
-            <span class="lateral-recolher-icone" aria-hidden="true"></span>
-          </button>
+          <div class="lateral-marca">
+            <span class="brand-logo" aria-hidden="true"></span>
+            <span class="lateral-marca-nome">Otimiza</span>
+            <button class="lateral-recolher" id="toggle-lateral"
+                    aria-label="Recolher a barra lateral" aria-expanded="true">
+              <span class="lateral-recolher-icone" aria-hidden="true"></span>
+            </button>
+          </div>
 
           <p class="lateral-grupo">Monitorar</p>
 
@@ -121,6 +128,25 @@
             </button>
           </div>
         </nav>
+
+        <div class="palco">
+          <!--
+            Cabeçalho da seção. O conteúdo vem do JavaScript a partir da própria
+            navegação, então nome e ícone nunca divergem do item da lateral —
+            duplicar isso em sete blocos de HTML seria pedir para eles saírem de
+            sincronia na primeira renomeação.
+          -->
+          <header class="secao-cabecalho">
+            <nav class="trilha" aria-label="Trilha">
+              <span>Otimiza</span>
+              <span class="trilha-sep" aria-hidden="true">/</span>
+              <span id="trilha-atual">Painel</span>
+            </nav>
+            <div class="secao-titulo">
+              <span class="secao-icone" id="secao-icone" aria-hidden="true"></span>
+              <h2 id="secao-nome">Painel</h2>
+            </div>
+          </header>
 
         <main class="stage">
         <!-- ============================================================ PAINEL -->
@@ -967,6 +993,7 @@
           </section>
         </section>
         </main>
+        </div>
       </div>
 
       <!--

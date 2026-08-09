@@ -375,7 +375,20 @@ function showTab(name: string) {
   });
 
   document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]").forEach((item) => {
-    item.setAttribute("aria-selected", String(item.dataset.tab === name));
+    const escolhida = item.dataset.tab === name;
+    item.setAttribute("aria-selected", String(escolhida));
+
+    // Nome e ícone do cabeçalho vêm do próprio item da navegação. Escrever
+    // isso duas vezes faria os dois saírem de sincronia na primeira vez que
+    // alguém renomeasse uma seção.
+    if (!escolhida) return;
+
+    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
+    const icone = item.querySelector<HTMLElement>(".nav-icone")?.dataset.icone ?? "";
+
+    text("secao-nome", rotulo);
+    text("trilha-atual", rotulo);
+    element("secao-icone").dataset.icone = icone;
   });
 }
 
@@ -2980,6 +2993,7 @@ function wireComandos(secoes: HTMLButtonElement[]) {
   }
 
   element("abrir-comandos").addEventListener("click", abrir);
+  element("abrir-comandos-topo").addEventListener("click", abrir);
 
   document.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
