@@ -265,8 +265,8 @@ button {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 11px 18px;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -299,7 +299,7 @@ button {
 .tab-badge {
   min-width: 17px;
   height: 17px;
-  padding: 0 5px;
+  padding: 0 var(--s1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -344,9 +344,9 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 10px;
-  margin-bottom: 14px;
+  gap: var(--s3);
+  padding-bottom: var(--s3);
+  margin-bottom: var(--s4);
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -384,8 +384,8 @@ button {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 12px var(--pad);
+  gap: var(--s6);
+  padding: var(--s3) var(--pad);
   border: 1px solid var(--hairline);
   background: linear-gradient(180deg, var(--panel-raised), var(--panel));
 }
@@ -393,7 +393,7 @@ button {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--s3);
 }
 
 /*
@@ -418,8 +418,8 @@ button {
 .ident {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 34px;
-  margin-bottom: 12px;
+  gap: var(--s4) var(--s6);
+  margin-bottom: var(--s3);
 }
 
 .ident dt {
@@ -437,8 +437,8 @@ button {
 .access {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
   border: 1px solid var(--hairline-strong);
   font-size: var(--t-micro);
   letter-spacing: 0.12em;
@@ -530,7 +530,7 @@ button {
 }
 
 .core-legend {
-  margin-top: 10px;
+  margin-top: var(--s3);
   font-size: var(--t-micro);
   color: var(--text-muted);
   font-family: var(--font-sans);
@@ -565,7 +565,7 @@ button {
 .hero {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  gap: 28px;
+  gap: var(--s6);
   align-items: center;
 }
 
@@ -623,7 +623,7 @@ button {
 }
 
 .gauge-note {
-  margin-top: 6px;
+  margin-top: var(--s2);
   font-size: var(--t-label);
   color: var(--text-dim);
 }
@@ -631,7 +631,7 @@ button {
 .readouts {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--s4);
   min-width: 0;
 }
 
@@ -642,12 +642,12 @@ button {
 .readouts-row {
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--s3);
 }
 
 .readouts-row .readout {
   flex: 1 1 150px;
-  padding: 12px 14px;
+  padding: var(--s3) var(--s4);
   border: 1px solid var(--hairline);
   background: var(--panel-raised);
 }
@@ -655,7 +655,7 @@ button {
 .readout {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4px 12px;
+  gap: var(--s1) var(--s3);
 }
 
 .readout-label {
@@ -701,7 +701,7 @@ button {
 /* ------------------------------------------------------------------ botões */
 
 .btn {
-  padding: 8px 14px;
+  padding: var(--s2) var(--s4);
   background: transparent;
   border: 1px solid var(--hairline-strong);
   color: var(--text-dim);
@@ -738,15 +738,15 @@ button {
 }
 
 .btn-ghost {
-  padding: 5px 10px;
+  padding: var(--s1) var(--s3);
   font-size: var(--t-micro);
 }
 
 .row-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--s2);
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: var(--s3);
 }
 
 /* ------------------------------------------------------------------ textos */
@@ -756,13 +756,13 @@ button {
   font-family: var(--font-sans);
   color: var(--text-muted);
   font-size: var(--t-body);
-  margin-bottom: 12px;
+  margin-bottom: var(--s3);
 }
 
 .hint {
   font-size: var(--t-label);
   border-left: 2px solid var(--hairline-strong);
-  padding-left: 10px;
+  padding-left: var(--s3);
 }
 
 .empty {
@@ -774,7 +774,7 @@ button {
 .status {
   font-family: var(--font-sans);
   font-size: var(--t-body);
-  margin: 10px 0;
+  margin: var(--s3) 0;
   min-height: 1.2em;
   color: var(--text-dim);
 }
@@ -810,8 +810,8 @@ button {
 
 .bottleneck {
   border-left: 2px solid var(--hairline-strong);
-  padding: 8px 0 8px 10px;
-  margin-bottom: 8px;
+  padding: var(--s2) 0 var(--s2) var(--s3);
+  margin-bottom: var(--s2);
 }
 
 .bottleneck-title {
@@ -844,12 +844,12 @@ button {
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
 }
 
 .filter {
-  padding: 4px 10px;
+  padding: var(--s1) var(--s3);
   border: 1px solid var(--hairline);
   background: transparent;
   color: var(--text-muted);
@@ -914,8 +914,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
   background: var(--panel-raised);
   font-size: var(--t-micro);
   letter-spacing: 0.14em;
@@ -950,8 +950,8 @@ button {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
   border-left: 2px solid transparent;
 }
 
@@ -998,22 +998,22 @@ button {
 }
 
 .opt-body {
-  padding: 2px 12px 14px 32px;
+  padding: 2px var(--s3) var(--s4) var(--s6);
   border-left: 2px solid transparent;
 }
 
 .optimization-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
 }
 
 .chip {
   font-size: var(--t-micro);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 2px var(--s2);
   border: 1px solid var(--hairline-strong);
   color: var(--text-muted);
 }
@@ -1034,7 +1034,7 @@ button {
   font-family: var(--font-sans);
   font-size: var(--t-label);
   color: var(--accent);
-  margin-top: 6px;
+  margin-top: var(--s2);
 }
 
 .state-label {
@@ -1057,7 +1057,7 @@ button {
   display: grid;
   place-items: center;
   background: rgba(var(--bg-rgb), 0.82);
-  padding: 20px;
+  padding: var(--s5);
   z-index: 10;
 }
 
@@ -1070,21 +1070,21 @@ button {
   max-width: 420px;
   background: var(--panel);
   border: 1px solid var(--hairline-strong);
-  padding: 26px;
+  padding: var(--s5);
   text-align: center;
 }
 
 .modal-logo {
   width: 42px;
   height: 42px;
-  margin: 0 auto 16px;
+  margin: 0 auto var(--s4);
 }
 
 .modal-card h2 {
   font-size: var(--t-lead);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  margin-bottom: 10px;
+  margin-bottom: var(--s3);
 }
 
 .modal-card p {
@@ -1096,10 +1096,10 @@ button {
 
 .modal-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--s2);
   justify-content: center;
   flex-wrap: wrap;
-  margin: 20px 0 12px;
+  margin: var(--s5) 0 var(--s3);
 }
 
 .modal-note {
@@ -1110,7 +1110,7 @@ button {
 .statusbar-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--s2);
 }
 
 /* -------------------------------------------------------------- comparação */
@@ -1127,13 +1127,13 @@ button {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
-  padding: 6px;
+  padding: var(--s2);
   border-bottom: 1px solid var(--hairline);
   font-weight: 500;
 }
 
 .benchmark-table td {
-  padding: 8px 6px;
+  padding: var(--s2) var(--s2);
   border-bottom: 1px solid var(--hairline);
   vertical-align: top;
 }
@@ -1181,8 +1181,8 @@ button {
 .statusbar {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px var(--pad);
+  gap: var(--s3);
+  padding: var(--s2) var(--pad);
   border: 1px solid var(--hairline);
   font-size: var(--t-micro);
   letter-spacing: 0.1em;
@@ -1202,7 +1202,7 @@ button {
 @media (max-width: 900px) {
   .topbar {
     flex-wrap: wrap;
-    gap: 14px;
+    gap: var(--s4);
   }
 
   .vitals {
@@ -1230,14 +1230,14 @@ button {
 .refusals {
   border: 1px solid var(--hairline);
   border-left: 2px solid var(--red);
-  margin-bottom: 12px;
+  margin-bottom: var(--s3);
   background: var(--panel-raised);
 }
 
 .refusals > summary {
   cursor: pointer;
   list-style: none;
-  padding: 8px 12px;
+  padding: var(--s2) var(--s3);
   font-size: var(--t-micro);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1259,7 +1259,7 @@ button {
 
 .refusals ul {
   margin: 0;
-  padding: 0 14px 14px 28px;
+  padding: 0 var(--s4) var(--s4) var(--s6);
   font-family: var(--font-sans);
   font-size: var(--t-label);
   color: var(--text-muted);
@@ -1267,7 +1267,7 @@ button {
 }
 
 .refusals li {
-  margin-bottom: 8px;
+  margin-bottom: var(--s2);
 }
 
 .refusals strong {
@@ -1278,8 +1278,8 @@ button {
 /* Achados de firmware e hardware */
 .finding {
   border-left: 2px solid var(--hairline-strong);
-  padding: 10px 0 10px 12px;
-  margin-top: 12px;
+  padding: var(--s3) 0 var(--s3) var(--s3);
+  margin-top: var(--s3);
 }
 
 .finding[data-severity="Critical"] {
@@ -1298,7 +1298,7 @@ button {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--s3);
   flex-wrap: wrap;
 }
 
@@ -1311,7 +1311,7 @@ button {
   font-variant-numeric: tabular-nums;
   font-size: var(--t-label);
   color: var(--text-dim);
-  margin-top: 4px;
+  margin-top: var(--s1);
 }
 
 .finding-advice {
@@ -1319,7 +1319,7 @@ button {
   font-size: var(--t-label);
   color: var(--text-muted);
   line-height: 1.6;
-  margin-top: 6px;
+  margin-top: var(--s2);
 }
 
 /* Onde o problema se resolve é a informação mais importante do achado:
@@ -1347,13 +1347,13 @@ button {
 .process-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--s3);
 }
 
 .process-top {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--s2);
 }
 
 .process-name {
@@ -1375,7 +1375,7 @@ button {
   font-size: var(--t-micro);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 1px 5px;
+  padding: 1px var(--s1);
   border: 1px solid rgba(var(--amber-rgb), 0.5);
   color: var(--amber);
   flex: none;
@@ -1384,7 +1384,7 @@ button {
 .process-bar {
   height: 2px;
   background: var(--track);
-  margin: 4px 0 2px;
+  margin: var(--s1) 0 2px;
 }
 
 .process-bar i {
@@ -1404,13 +1404,13 @@ button {
 .live-log {
   border: 1px solid var(--hairline);
   background: var(--bg);
-  margin-bottom: 12px;
+  margin-bottom: var(--s3);
 }
 
 .live-log-head {
   display: flex;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: var(--s2) var(--s3);
   border-bottom: 1px solid var(--hairline);
   font-size: var(--t-micro);
   letter-spacing: 0.14em;
@@ -1420,14 +1420,14 @@ button {
 
 .live-log ol {
   margin: 0;
-  padding: 6px 10px;
+  padding: var(--s2) var(--s3);
   list-style: none;
   max-height: 190px;
   overflow-y: auto;
 }
 
 .log-line {
-  padding: 5px 0 5px 14px;
+  padding: var(--s1) 0 var(--s1) var(--s4);
   border-bottom: 1px solid var(--hairline);
   position: relative;
   font-size: var(--t-label);
@@ -1473,8 +1473,8 @@ button {
 }
 
 .log-changes {
-  margin: 4px 0 0;
-  padding-left: 12px;
+  margin: var(--s1) 0 0;
+  padding-left: var(--s3);
   list-style: none;
 }
 
@@ -1503,8 +1503,8 @@ button {
 .startup {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
   background: var(--panel);
   border-left: 2px solid var(--hairline-strong);
 }
@@ -1551,7 +1551,7 @@ button {
 .vitals {
   display: grid;
   grid-template-columns: repeat(3, minmax(84px, 128px));
-  gap: 22px;
+  gap: var(--s5);
   flex: 1;
   justify-content: center;
 }
@@ -1559,7 +1559,7 @@ button {
 .vital {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 3px 8px;
+  gap: 3px var(--s2);
   min-width: 0;
 }
 
@@ -1596,13 +1596,13 @@ button {
 .prefs {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--s4);
 }
 
 .pref {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--s3);
 }
 
 .pref input[type="checkbox"] {
@@ -1636,7 +1636,7 @@ button {
 
 .pref-choices {
   display: flex;
-  gap: 4px;
+  gap: var(--s1);
   flex: none;
 }
 
@@ -1659,13 +1659,13 @@ button {
 }
 
 #disk-meter {
-  margin: 4px 0 14px;
+  margin: var(--s1) 0 var(--s4);
 }
 
 /* Lista de programas em conflito */
 .conflict-list {
-  margin: 6px 0 8px;
-  padding-left: 16px;
+  margin: var(--s2) 0 var(--s2);
+  padding-left: var(--s4);
   font-size: var(--t-label);
   color: var(--text);
 }
@@ -1677,17 +1677,17 @@ button {
 /* --------------------------------------------------------- mapa de pastas */
 
 .folder {
-  padding: 14px 16px;
+  padding: var(--s4) var(--s4);
   border: 1px solid var(--hairline);
-  margin-bottom: 8px;
+  margin-bottom: var(--s2);
 }
 
 .folder-top {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: var(--s3);
+  margin-bottom: var(--s2);
 }
 
 .folder-name {
@@ -1716,7 +1716,7 @@ button {
 
 .folder-path {
   display: block;
-  margin-top: 6px;
+  margin-top: var(--s2);
   font-family: var(--font-mono);
   font-size: var(--t-micro);
   color: var(--text-muted);
@@ -1724,14 +1724,14 @@ button {
 }
 
 .folder .finding-advice {
-  margin-top: 8px;
+  margin-top: var(--s2);
 }
 
 /* --------------------------------------------------- perfis e busca */
 
 .profiles {
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: var(--s4);
+  padding-top: var(--s4);
   border-top: 1px solid var(--hairline);
 }
 
@@ -1740,17 +1740,17 @@ button {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: 10px;
+  margin-bottom: var(--s3);
 }
 
 .profile-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--s2);
 }
 
 .profile-chip {
-  padding: 7px 14px;
+  padding: var(--s2) var(--s4);
   background: transparent;
   border: 1px solid var(--hairline-strong);
   color: var(--text-dim);
@@ -1779,20 +1779,20 @@ button {
 }
 
 #profile-detail {
-  margin-top: 12px;
-  padding: 12px 14px;
+  margin-top: var(--s3);
+  padding: var(--s3) var(--s4);
   border-left: 2px solid var(--accent);
   background: var(--panel-raised);
 }
 
 .search {
   position: relative;
-  margin-bottom: 12px;
+  margin-bottom: var(--s3);
 }
 
 .search input {
   width: 100%;
-  padding: 9px 32px 9px 12px;
+  padding: var(--s3) var(--s6) var(--s3) var(--s3);
   background: var(--bg);
   border: 1px solid var(--hairline-strong);
   color: var(--text);
@@ -1995,7 +1995,11 @@ button {
    duas colunas fixas o terceiro ficava órfão numa segunda linha com metade da
    tela vazia ao lado. */
 .grid-auto {
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  /* `min(300px, 100%)` e não `300px` direto: numa janela estreita, uma coluna
+     de largura mínima fixa é maior que o espaço disponível, e a grade empurra
+     o conteúdo para fora da tela. Acontecia na aba Sistema abaixo de ~420px de
+     largura útil. */
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
 }
 
 .grid-auto > * {
@@ -2022,7 +2026,7 @@ button {
 
 /* Campo de texto ao lado de um botão, na mesma linha de ação. */
 .fps-input {
-  padding: 8px 12px;
+  padding: var(--s2) var(--s3);
   background: var(--bg);
   border: 1px solid var(--hairline-strong);
   color: var(--text);
@@ -2198,7 +2202,7 @@ button {
 
 .nav-atalho {
   flex: none;
-  padding: 2px 6px;
+  padding: 2px var(--s2);
   border: 1px solid var(--hairline-strong);
   font-family: var(--font-mono);
   font-size: 9px;
