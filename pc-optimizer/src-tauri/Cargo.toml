@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "0.14.0"
+version = "0.14.1"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -41,6 +41,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_Etw",
     # Exigida pela estrutura de sessão do ETW, que carrega fuso horário.
     "Win32_System_Time",
+    # Frequência do contador de alta resolução, para converter o carimbo de
+    # tempo de cada quadro em milissegundos.
+    "Win32_System_Performance",
     # Descobrir qual janela está em primeiro plano e quanto do monitor ela
     # cobre — metade da detecção de jogo sem lista de nomes.
     "Win32_UI_WindowsAndMessaging",

@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.14.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.14.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.14.1_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.14.1_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 

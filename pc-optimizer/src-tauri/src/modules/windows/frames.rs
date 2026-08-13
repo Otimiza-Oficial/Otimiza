@@ -32,6 +32,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, ERROR_SUCCESS};
 use windows_sys::Win32::System::Diagnostics::Etw::{
@@ -73,6 +74,23 @@ pub struct FrameMeasurement {
     /// Nome do processo medido.
     pub process: String,
     pub pid: u32,
+
+    // --- o que a média esconde ---
+    //
+    // FPS médio é a métrica errada para o que este produto conserta. Quando o
+    // problema é disputa de memória ou de processador, a média mal se move e o
+    // jogo engasga do mesmo jeito — e engasgo é o que o cliente sente.
+    //
+    /// Tempo entre quadros, no meio da distribuição. Em milissegundos.
+    pub frametime_mediano_ms: f64,
+    /// Média dos 1% piores quadros, convertida em FPS. É o número que os
+    /// analistas usam, e o que representa os momentos ruins da partida.
+    pub low_1pct: f64,
+    /// Quadros que demoraram mais que o dobro da mediana, por minuto.
+    pub engasgos_por_minuto: f64,
+    /// Verdadeiro quando houve amostra suficiente para os números acima
+    /// significarem alguma coisa.
+    pub detalhe_confiavel: bool,
 }
 
 // ------------------------------------------------------- estado do callback
@@ -84,6 +102,23 @@ pub struct FrameMeasurement {
 static MEDINDO: AtomicBool = AtomicBool::new(false);
 static CONTADOR: AtomicU64 = AtomicU64::new(0);
 static PID_ALVO: AtomicU32 = AtomicU32::new(0);
+
+/// Instante de cada quadro, em unidades do relógio de alta resolução.
+///
+/// O dado já passava pela função de retorno e era jogado fora: o cabeçalho do
+/// evento carrega o carimbo de tempo porque a sessão é criada com
+/// `ClientContext = 1`. Contar sem guardar era descartar de graça tudo que
+/// permite falar de engasgo.
+///
+/// O vetor é PRÉ-ALOCADO antes de a sessão começar. Alocar dentro da função de
+/// retorno seria pedir para o coletor travar num momento em que ele não pode
+/// travar — e o custo apareceria como engasgo na própria medição.
+static INSTANTES: Mutex<Vec<i64>> = Mutex::new(Vec::new());
+
+/// Teto de amostras. Trinta minutos a 500 quadros por segundo cabem aqui, e o
+/// vetor ocupa uns 7 MB — barato o bastante para não pesar, grande o bastante
+/// para nenhuma medição real encostar no limite.
+const MAXIMO_DE_AMOSTRAS: usize = 900_000;
 
 unsafe extern "system" fn ao_receber_evento(registro: *mut EVENT_RECORD) {
     if registro.is_null() {
@@ -103,6 +138,69 @@ unsafe extern "system" fn ao_receber_evento(registro: *mut EVENT_RECORD) {
     }
 
     CONTADOR.fetch_add(1, Ordering::Relaxed);
+
+    // `try_lock` e não `lock`: se por qualquer motivo o cadeado estiver
+    // ocupado, perder uma amostra é muito melhor do que segurar a função de
+    // retorno do rastreamento do Windows.
+    if let Ok(mut instantes) = INSTANTES.try_lock() {
+        if instantes.len() < MAXIMO_DE_AMOSTRAS {
+            instantes.push(cabecalho.TimeStamp);
+        }
+    }
+}
+
+/// Quantos quadros são necessários para o 1% pior significar alguma coisa.
+///
+/// Com 600 quadros, o "1% pior" são seis quadros — e seis quadros não
+/// descrevem uma partida. Abaixo disto o produto mostra a média e DIZ que não
+/// tem amostra para o resto, em vez de imprimir um número frágil.
+const AMOSTRAS_PARA_DETALHE: usize = 2_000;
+
+/// Estatística dos intervalos entre quadros.
+///
+/// **Função pura.** Recebe os intervalos já em milissegundos, para poder ser
+/// testada sem abrir jogo nenhum.
+pub fn estatistica(mut intervalos_ms: Vec<f64>) -> (f64, f64, f64, bool) {
+    if intervalos_ms.is_empty() {
+        return (0.0, 0.0, 0.0, false);
+    }
+
+    intervalos_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mediana = intervalos_ms[intervalos_ms.len() / 2];
+
+    // 1% low é a MÉDIA do 1% pior, e não o percentil 99. As duas contas dão
+    // números diferentes, e trocá-las é a forma mais comum de publicar um
+    // número que não corresponde ao que os outros publicam.
+    let quantos_piores = (intervalos_ms.len() / 100).max(1);
+    let piores = &intervalos_ms[intervalos_ms.len() - quantos_piores..];
+    let media_dos_piores = piores.iter().sum::<f64>() / quantos_piores as f64;
+
+    let low_1pct = if media_dos_piores > 0.0 {
+        1000.0 / media_dos_piores
+    } else {
+        0.0
+    };
+
+    // Engasgo é o quadro que demorou muito mais que o normal DAQUELA partida.
+    // Um limiar fixo trataria um jogo a 30 quadros como engasgo permanente, e
+    // um jogo a 240 nunca acusaria nada.
+    let limiar = (mediana * 2.0).max(50.0);
+    let engasgos = intervalos_ms.iter().filter(|ms| **ms > limiar).count();
+    let duracao_minutos = intervalos_ms.iter().sum::<f64>() / 60_000.0;
+
+    let por_minuto = if duracao_minutos > 0.0 {
+        engasgos as f64 / duracao_minutos
+    } else {
+        0.0
+    };
+
+    (
+        (mediana * 100.0).round() / 100.0,
+        (low_1pct * 10.0).round() / 10.0,
+        (por_minuto * 10.0).round() / 10.0,
+        intervalos_ms.len() >= AMOSTRAS_PARA_DETALHE,
+    )
 }
 
 // --------------------------------------------------------------- utilitários
@@ -296,6 +394,14 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
         Ok(())
     });
 
+    if let Ok(mut instantes) = INSTANTES.lock() {
+        instantes.clear();
+        // Pré-alocação generosa: alocar durante a medição faria o coletor
+        // parar para crescer o vetor, e esse custo apareceria como engasgo na
+        // própria conta de engasgos.
+        instantes.reserve(segundos as usize * 600);
+    }
+
     let cronometro = std::time::Instant::now();
     std::thread::sleep(std::time::Duration::from_secs(segundos));
     let decorrido = cronometro.elapsed().as_secs_f64();
@@ -321,13 +427,46 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
         ));
     }
 
+    let (mediana, low_1pct, engasgos, confiavel) = estatistica(intervalos_em_ms());
+
     Ok(FrameMeasurement {
         fps: frames as f64 / decorrido,
         frames,
         seconds: decorrido,
         process: nome.to_string(),
         pid,
+        frametime_mediano_ms: mediana,
+        low_1pct,
+        engasgos_por_minuto: engasgos,
+        detalhe_confiavel: confiavel,
     })
+}
+
+/// Converte os instantes coletados em intervalos, em milissegundos.
+///
+/// O carimbo de tempo do evento vem em unidades do contador de alta resolução,
+/// cuja frequência varia de máquina para máquina — tratá-lo como se fosse
+/// microssegundo daria números plausíveis e errados.
+fn intervalos_em_ms() -> Vec<f64> {
+    use windows_sys::Win32::System::Performance::QueryPerformanceFrequency;
+
+    let mut frequencia: i64 = 0;
+    unsafe {
+        if QueryPerformanceFrequency(&mut frequencia) == 0 || frequencia <= 0 {
+            return Vec::new();
+        }
+    }
+
+    let Ok(instantes) = INSTANTES.lock() else {
+        return Vec::new();
+    };
+
+    instantes
+        .windows(2)
+        .map(|par| (par[1] - par[0]) as f64 * 1000.0 / frequencia as f64)
+        // Intervalo negativo ou absurdo é reordenação de evento, não quadro.
+        .filter(|ms| *ms > 0.0 && *ms < 10_000.0)
+        .collect()
 }
 
 fn parar_sessao() {
@@ -347,6 +486,58 @@ fn parar_sessao() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_um_por_cento_pior_e_media_e_nao_percentil() {
+        // As duas contas dão números diferentes, e trocá-las é a forma mais
+        // comum de publicar um número que não bate com o de ninguém.
+        //
+        // 1000 quadros: 990 a 10 ms (100 FPS) e 10 a 100 ms (10 FPS). A média
+        // dos 1% piores são exatamente os dez de 100 ms, logo 10 FPS.
+        let mut intervalos = vec![10.0; 990];
+        intervalos.extend(vec![100.0; 10]);
+
+        let (mediana, low, _, _) = estatistica(intervalos);
+
+        assert_eq!(mediana, 10.0);
+        assert_eq!(low, 10.0);
+    }
+
+    #[test]
+    fn engasgo_e_relativo_a_partida_e_nao_a_um_numero_fixo() {
+        // Limiar fixo trataria um jogo a 30 quadros como engasgo permanente e
+        // nunca acusaria nada num jogo a 240.
+        //
+        // Jogo a 30 FPS (33 ms), sem nenhum quadro fora do padrão.
+        let (_, _, engasgos, _) = estatistica(vec![33.0; 3000]);
+        assert_eq!(engasgos, 0.0, "jogo estável a 30 FPS não tem engasgo");
+
+        // Mesmo jogo, agora com quadros de 200 ms no meio.
+        let mut com_travada = vec![33.0; 2900];
+        com_travada.extend(vec![200.0; 100]);
+        let (_, _, engasgos, _) = estatistica(com_travada);
+        assert!(engasgos > 0.0, "travada de 200 ms tem que contar como engasgo");
+    }
+
+    #[test]
+    fn amostra_pequena_nao_sustenta_o_detalhe() {
+        // Com 600 quadros, o "1% pior" são seis quadros. Seis quadros não
+        // descrevem uma partida, e imprimir aquilo como número seria dar
+        // aparência de medida a um palpite.
+        let (_, _, _, confiavel) = estatistica(vec![16.7; 600]);
+        assert!(!confiavel);
+
+        let (_, _, _, confiavel) = estatistica(vec![16.7; 5000]);
+        assert!(confiavel);
+    }
+
+    #[test]
+    fn sem_amostra_nenhuma_devolve_zero_e_diz_que_nao_confia() {
+        let (mediana, low, engasgos, confiavel) = estatistica(Vec::new());
+
+        assert_eq!((mediana, low, engasgos), (0.0, 0.0, 0.0));
+        assert!(!confiavel);
+    }
 
     #[test]
     fn nao_ha_injecao_no_processo_do_jogo() {

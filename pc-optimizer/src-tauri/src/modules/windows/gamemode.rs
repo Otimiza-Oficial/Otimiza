@@ -590,6 +590,26 @@ mod tests {
     }
 
     #[test]
+    fn a_recusa_por_origem_esta_escrita_no_texto_da_mensagem() {
+        // Conferência que NÃO depende de privilégio, e por isso roda igual na
+        // máquina de quem desenvolve e na esteira.
+        //
+        // O teste acima só alcança a recusa por origem quando roda elevado; se
+        // a mensagem mudar de novo, ele passa verde localmente e quebra no
+        // release — que foi exatamente o que aconteceu na versão 0.14.0.
+        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+
+        assert!(
+            producao.contains("pasta de jogo instalado"),
+            "a mensagem de recusa do IFEO mudou sem o teste acompanhar"
+        );
+        assert!(
+            producao.contains("dentro_de_biblioteca"),
+            "a trava do IFEO precisa conferir a pasta de origem do executável"
+        );
+    }
+
+    #[test]
     fn nunca_escreve_tempo_real_nem_depurador() {
         // As duas travas deste módulo. Tempo real põe o jogo acima do sistema
         // operacional; `Debugger` na mesma chave faz o Windows abrir outro
@@ -616,8 +636,13 @@ mod tests {
         ] {
             let erro = definir_prioridade_persistente(tentativa, true).unwrap_err();
 
+            // A recusa por ORIGEM ("não está numa pasta de jogo instalado") é a
+            // que vale: ela só é exercitada com privilégio de administrador,
+            // porque sem ele a função para antes, no primeiro if. Foi assim que
+            // este teste passou verde na máquina de quem desenvolve e quebrou
+            // na esteira, que roda elevada — o teste conferia o caminho fácil.
             assert!(
-                erro.contains("não está na lista")
+                erro.contains("pasta de jogo instalado")
                     || erro.contains("inválido")
                     || erro.contains("administrador"),
                 "recusa inesperada para `{}`: {}",
