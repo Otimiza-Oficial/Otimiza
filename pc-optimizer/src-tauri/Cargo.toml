@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "0.12.0"
+version = "0.13.0"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -41,5 +41,10 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_Etw",
     # Exigida pela estrutura de sessão do ETW, que carrega fuso horário.
     "Win32_System_Time",
+    # Percorrer as threads de um processo para suspendê-lo durante o jogo.
+    # O Windows não expõe "suspender processo" em API pública documentada: a
+    # forma suportada é suspender cada thread, e é preciso listar as threads
+    # para isso.
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 

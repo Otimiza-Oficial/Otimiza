@@ -138,6 +138,7 @@ pub fn analyze() -> MemoryReport {
         pagefile_peak_gb,
         pagefile_automatic,
         committed_gb,
+        crate::modules::monitor::uptime_hours(),
     );
 
     MemoryReport {
@@ -152,6 +153,14 @@ pub fn analyze() -> MemoryReport {
     }
 }
 
+/// Metade da RAM física já paginada em algum momento significa que a demanda
+/// real da máquina passou de uma vez e meia o que ela tem instalado. Abaixo
+/// disso o pico é rotina do Windows e não prova nada.
+const PICO_QUE_PROVA_ESGOTAMENTO: f64 = 0.5;
+
+/// Antes disto, um pico pequeno não é boa notícia — é falta de observação.
+const HORAS_PARA_OBSERVAR: f64 = 1.0;
+
 /// Regras de diagnóstico, separadas da leitura para poderem ser testadas sem
 /// depender da máquina em que rodam.
 pub fn diagnosticar(
@@ -160,6 +169,7 @@ pub fn diagnosticar(
     peak_gb: f64,
     automatico: bool,
     committed_gb: f64,
+    uptime_horas: f64,
 ) -> Vec<MemoryFinding> {
     let mut findings = Vec::new();
     let pouca_ram = total_ram_gb <= 8.5;
@@ -235,7 +245,74 @@ pub fn diagnosticar(
         }
     }
 
+    // --- a máquina JÁ esgotou memória desde que ligou ---
+    //
+    // Este é o achado que faltava, e o motivo de o produto ter dito "sem
+    // problemas" para uma máquina que travava. `over_committed`, logo abaixo, é
+    // uma foto do instante do clique: com o jogo fechado ele não dispara, e é
+    // justamente com o jogo fechado que o cliente abre o Otimiza.
+    //
+    // O pico de paginação, ao contrário, é marca d'água — o maior uso desde o
+    // boot. Ele registra o travamento de ontem à noite mesmo com o PC calmo
+    // agora. O dado já era lido e serializado; só era comparado ao tamanho do
+    // arquivo de paginação, nunca à RAM física, que é onde mora o sinal.
+    let pico_prova_esgotamento =
+        total_ram_gb > 0.0 && peak_gb >= total_ram_gb * PICO_QUE_PROVA_ESGOTAMENTO;
+
+    if pico_prova_esgotamento {
+        findings.push(MemoryFinding {
+            id: "memoria_esgotada_historico".to_string(),
+            title: "Esta máquina já ficou sem memória".to_string(),
+            measured: format!(
+                "Pico de {:.1} GB de paginação desde que o PC ligou, com {:.1} GB de \
+                 memória física: a demanda chegou a cerca de {:.1} GB.",
+                peak_gb,
+                total_ram_gb,
+                total_ram_gb + peak_gb
+            ),
+            advice: if pouca_ram {
+                "Quando a memória acaba, não é só o jogo que trava: tudo para junto \
+                 esperando o disco — o jogo, o navegador, o programa de voz, o Windows. \
+                 É esta a causa de \"o PC inteiro congela\", e nenhum ajuste de software \
+                 resolve, porque não existe ajuste que crie memória. Fechar programas \
+                 durante o jogo alivia; acrescentar um pente resolve."
+                    .to_string()
+            } else {
+                "A máquina tem memória folgada, então isto foi provavelmente um pico de \
+                 uso pesado e não a rotina. Vale acompanhar: se voltar a acontecer com \
+                 frequência, o caminho é reduzir o que roda junto, não ajustar o Windows."
+                    .to_string()
+            },
+            severity: if pouca_ram {
+                FindingSeverity::Critical
+            } else {
+                FindingSeverity::Important
+            },
+            fix_location: FixLocation::Hardware,
+        });
+    } else if uptime_horas < HORAS_PARA_OBSERVAR {
+        // Pico pequeno com o PC recém-ligado não é boa notícia: é ausência de
+        // informação. Dizer "sem problemas" aqui seria inventar um resultado.
+        findings.push(MemoryFinding {
+            id: "memoria_sem_observacao".to_string(),
+            title: "Ainda não deu para observar o uso de memória".to_string(),
+            measured: format!(
+                "PC ligado há {:.0} minutos. O pico de memória é contado desde o boot e \
+                 zera a cada reinício.",
+                uptime_horas * 60.0
+            ),
+            advice: "Deixe o PC ligado durante o uso normal — inclusive jogando — e volte \
+                     aqui depois. Só assim dá para afirmar se falta memória nesta máquina."
+                .to_string(),
+            severity: FindingSeverity::Ok,
+            fix_location: FixLocation::None,
+        });
+    }
+
     // --- memória prometida acima da física ---
+    //
+    // Corroboração, nunca a única chance de detectar o problema: ver o achado
+    // histórico acima.
     if committed_gb > total_ram_gb && total_ram_gb > 0.0 {
         findings.push(MemoryFinding {
             id: "over_committed".to_string(),
@@ -255,7 +332,13 @@ pub fn diagnosticar(
     }
 
     // --- pouca RAM para o Windows atual ---
-    if total_ram_gb > 0.0 && total_ram_gb < 6.0 {
+    //
+    // O limiar é o `pouca_ram` do topo desta função. Até a versão 0.12 esta
+    // regra escrevia `< 6.0` à mão, e o mesmo arquivo passava a chamar uma
+    // máquina de 8 GB de "pouca RAM" numa regra e de "confortável" na outra —
+    // com o resultado de a tela dizer "memória sem problemas" para o PC que
+    // travava. Um limiar só, com nome, para não divergir de novo.
+    if total_ram_gb > 0.0 && pouca_ram {
         findings.push(MemoryFinding {
             id: "low_ram".to_string(),
             title: "Memória abaixo do confortável para o Windows".to_string(),
@@ -310,7 +393,7 @@ mod tests {
     #[test]
     fn paginacao_desligada_com_pouca_ram_e_critico() {
         // O erro mais comum de tutorial ruim, e o mais caro num PC de 4 GB.
-        let f = diagnosticar(4.0, 0.0, 0.0, false, 3.0);
+        let f = diagnosticar(4.0, 0.0, 0.0, false, 3.0, 5.0);
 
         assert!(tem(&f, "pagefile_off"));
         let achado = f.iter().find(|f| f.id == "pagefile_off").unwrap();
@@ -321,14 +404,14 @@ mod tests {
     #[test]
     fn paginacao_desligada_com_muita_ram_e_so_importante() {
         // Com 32 GB o risco existe, mas não é a mesma emergência.
-        let f = diagnosticar(32.0, 0.0, 0.0, false, 10.0);
+        let f = diagnosticar(32.0, 0.0, 0.0, false, 10.0, 5.0);
         let achado = f.iter().find(|f| f.id == "pagefile_off").unwrap();
         assert_eq!(achado.severity, FindingSeverity::Important);
     }
 
     #[test]
     fn paginacao_gerenciada_pelo_windows_nao_vira_problema() {
-        let f = diagnosticar(16.0, 4.0, 0.5, true, 8.0);
+        let f = diagnosticar(16.0, 4.0, 0.5, true, 8.0, 5.0);
         assert!(tem(&f, "pagefile_ok"));
         assert!(!tem(&f, "pagefile_manual"));
     }
@@ -336,19 +419,19 @@ mod tests {
     #[test]
     fn paginacao_que_quase_encheu_e_apontada() {
         // Chegou a 3,6 de 4 GB: faltou pouco para o programa fechar sozinho.
-        let f = diagnosticar(8.0, 4.0, 3.6, true, 7.0);
+        let f = diagnosticar(8.0, 4.0, 3.6, true, 7.0, 5.0);
         assert!(tem(&f, "pagefile_small"));
     }
 
     #[test]
     fn tamanho_fixo_e_apontado_como_risco() {
-        let f = diagnosticar(16.0, 2.0, 0.2, false, 8.0);
+        let f = diagnosticar(16.0, 2.0, 0.2, false, 8.0, 5.0);
         assert!(tem(&f, "pagefile_manual"));
     }
 
     #[test]
     fn memoria_prometida_acima_da_fisica_aponta_para_hardware() {
-        let f = diagnosticar(8.0, 8.0, 1.0, true, 11.0);
+        let f = diagnosticar(8.0, 8.0, 1.0, true, 11.0, 5.0);
         let achado = f.iter().find(|f| f.id == "over_committed").unwrap();
 
         assert_eq!(achado.severity, FindingSeverity::Critical);
@@ -358,16 +441,79 @@ mod tests {
 
     #[test]
     fn pouca_ram_nao_promete_solucao_por_software() {
-        let f = diagnosticar(4.0, 4.0, 1.0, true, 3.0);
+        let f = diagnosticar(4.0, 4.0, 1.0, true, 3.0, 5.0);
         let achado = f.iter().find(|f| f.id == "low_ram").unwrap();
 
         assert_eq!(achado.fix_location, FixLocation::Hardware);
         assert!(achado.advice.contains("Nenhum ajuste de software cria memória"));
     }
 
+    /// O PC que o produto reprovou.
+    ///
+    /// Números medidos na máquina do dono em 12/08/2026, com o jogo FECHADO:
+    /// 7,9 GB de RAM num único pente, 9,5 GB prometidos a programas, pico de
+    /// 8,6 GB de paginação desde o boot, paginação automática. O Windows já
+    /// tinha registrado esgotamento de memória no evento 2004 e o FiveM já
+    /// tinha parado de responder no evento 1002.
+    ///
+    /// E o Otimiza mostrava "Memória e paginação sem problemas", porque
+    /// `low_ram` exigia menos de 6 GB e `over_committed` só olhava o instante
+    /// do clique. Este teste existe para que isso não volte.
+    #[test]
+    fn a_maquina_que_travava_nao_pode_mais_passar_como_saudavel() {
+        let f = diagnosticar(7.9, 9.0, 8.6, true, 9.5, 30.0);
+
+        let critico: Vec<&MemoryFinding> = f
+            .iter()
+            .filter(|f| f.severity == FindingSeverity::Critical)
+            .collect();
+        assert!(
+            !critico.is_empty(),
+            "máquina de 7,9 GB com pico de 8,6 GB de paginação não pode sair sem achado crítico"
+        );
+
+        // O achado histórico é o que precisa disparar: é o único que não depende
+        // de o jogo estar aberto na hora do clique.
+        let historico = f
+            .iter()
+            .find(|f| f.id == "memoria_esgotada_historico")
+            .expect("pico de paginação acima de metade da RAM tem que virar achado");
+        assert_eq!(historico.severity, FindingSeverity::Critical);
+        assert_eq!(historico.fix_location, FixLocation::Hardware);
+
+        // E a máquina de 8 GB precisa ser reconhecida como pouca memória.
+        assert!(tem(&f, "low_ram"), "8 GB não pode mais passar por confortável");
+        assert!(!tem(&f, "memoria_sem_observacao"));
+    }
+
+    #[test]
+    fn pc_recem_ligado_admite_que_nao_sabe_em_vez_de_aprovar() {
+        // Cinco minutos de ligado, pico baixo. Não é "sem problemas" — é cedo
+        // demais para afirmar qualquer coisa.
+        let f = diagnosticar(7.9, 9.0, 0.2, true, 5.0, 0.08);
+
+        let lacuna = f
+            .iter()
+            .find(|f| f.id == "memoria_sem_observacao")
+            .expect("pico baixo com PC recém-ligado tem que virar falta de observação");
+        assert!(lacuna.measured.contains("zera a cada reinício"));
+        assert!(!tem(&f, "memoria_esgotada_historico"));
+    }
+
+    #[test]
+    fn maquina_folgada_com_pico_alto_nao_vira_emergencia() {
+        // 32 GB com pico de 20 GB: aconteceu, mas quem tem essa memória
+        // aguenta. Apontar como crítico seria inventar urgência.
+        let f = diagnosticar(32.0, 16.0, 20.0, true, 18.0, 30.0);
+        let historico = f.iter().find(|f| f.id == "memoria_esgotada_historico").unwrap();
+
+        assert_eq!(historico.severity, FindingSeverity::Important);
+        assert!(!tem(&f, "low_ram"));
+    }
+
     #[test]
     fn problemas_vem_antes_do_que_esta_certo() {
-        let f = diagnosticar(4.0, 0.0, 0.0, false, 6.0);
+        let f = diagnosticar(4.0, 0.0, 0.0, false, 6.0, 5.0);
         let ordem: Vec<u8> = f
             .iter()
             .map(|f| match f.severity {

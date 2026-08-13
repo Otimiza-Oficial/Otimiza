@@ -16,29 +16,12 @@
 use super::shell;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FindingSeverity {
-    /// Custa desempenho de forma grande e comprovada.
-    Critical,
-    /// Vale corrigir, com ganho menor ou dependente do caso.
-    Important,
-    /// Está correto. Dizer o que está certo evita vender conserto de coisa boa.
-    Ok,
-}
-
-/// Onde o problema se resolve. Serve para o produto não fingir que conserta o
-/// que só se resolve trocando peça ou entrando na BIOS.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FixLocation {
-    /// Dá para corrigir por software, aqui mesmo.
-    Software,
-    /// Só na configuração da BIOS/UEFI, na mão, com o PC reiniciando.
-    Bios,
-    /// Só trocando ou acrescentando peça.
-    Hardware,
-    /// Nada a corrigir.
-    None,
-}
+// Severidade e local de conserto nasceram aqui e hoje servem ao produto
+// inteiro — meia dúzia de módulos importa os dois deste arquivo. Passaram a
+// morar em `achados.rs`, junto do resto do vocabulário comum. A reexportação
+// mantém todos os `use super::firmware::{FindingSeverity, FixLocation}` que já
+// existem funcionando sem alteração.
+pub use super::achados::{FindingSeverity, FixLocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirmwareFinding {
@@ -149,6 +132,21 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
     } else {
         channels.len()
     }
+}
+
+/// Só o que o firmware sabe sobre a MEMÓRIA: canal único, slots livres e XMP.
+///
+/// Existe separado do `analyze()` completo por causa do diagnóstico automático
+/// da tela inicial. O `analyze()` mede queda de desempenho sob carga sustentada
+/// e leva perto de doze segundos — rodar isso ao abrir o programa seria
+/// inaceitável. Isto aqui é uma consulta ao WMI e volta em milissegundos.
+///
+/// E é justamente aqui que mora o achado de canal único, que precisa aparecer
+/// junto do diagnóstico de memória logo na primeira tela.
+pub fn analyze_memory_only() -> Vec<FirmwareFinding> {
+    let mut findings = Vec::new();
+    analyze_memory(&mut findings);
+    findings
 }
 
 fn analyze_memory(findings: &mut Vec<FirmwareFinding>) {
@@ -327,19 +325,67 @@ pub fn vbs_running() -> Option<bool> {
     Some(value == 2)
 }
 
+/// Quantos serviços de segurança estão realmente USANDO o VBS.
+///
+/// `SecurityServicesRunning` lista o que roda em cima da virtualização:
+/// 1 = Credential Guard (protege as senhas do Windows), 2 = integridade de
+/// código imposta pelo hypervisor, 3 = System Guard.
+///
+/// A distinção é o ponto todo deste bloco. O VBS pode estar LIGADO E VAZIO:
+/// cobrando o custo de desempenho da virtualização sem nenhuma proteção
+/// rodando em cima dela. Nesse caso desligar não é trocar segurança por FPS —
+/// é parar de pagar por proteção que não existe. É uma conversa diferente com
+/// o cliente, e o produto precisa saber diferenciar as duas.
+pub fn vbs_servicos_ativos() -> Option<usize> {
+    let script = "$g = Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard \
+                  -ClassName Win32_DeviceGuard; \
+                  @($g.SecurityServicesRunning | Where-Object { $_ -gt 0 }).Count";
+
+    query_json(script)?.trim().parse().ok()
+}
+
 fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
     match vbs_running() {
-        Some(true) => findings.push(FirmwareFinding {
-            id: "vbs_running".to_string(),
-            title: "Virtualização de segurança ligada".to_string(),
-            measured: "VBS ativa e em execução.".to_string(),
-            advice: "Custa desempenho em jogos, mais em processadores de 8ª a 10ª geração. \
-                     A otimização \"Desligar virtualização de segurança\" desliga — leia o \
-                     aviso de segurança antes, porque você perde proteção real."
-                .to_string(),
-            severity: FindingSeverity::Important,
-            fix_location: FixLocation::Software,
-        }),
+        Some(true) => {
+            let servicos = vbs_servicos_ativos().unwrap_or(1);
+
+            // Ligado e vazio: custo sem contrapartida.
+            if servicos == 0 {
+                findings.push(FirmwareFinding {
+                    id: "vbs_sem_uso".to_string(),
+                    title: "Virtualização de segurança ligada sem nada usando".to_string(),
+                    measured: "VBS ativa e em execução, com 0 serviços de segurança \
+                               rodando em cima dela."
+                        .to_string(),
+                    advice: "Este é o caso incomum em que desligar o VBS não custa \
+                             proteção: nenhum serviço está usando a virtualização, então \
+                             a máquina paga o preço em desempenho sem receber nada em \
+                             troca. Ainda assim é você quem decide — se você usa ou \
+                             pretende usar Hyper-V, WSL ou Sandbox, eles dependem disto."
+                        .to_string(),
+                    severity: FindingSeverity::Important,
+                    fix_location: FixLocation::Software,
+                });
+
+                return;
+            }
+
+            findings.push(FirmwareFinding {
+                id: "vbs_running".to_string(),
+                title: "Virtualização de segurança ligada".to_string(),
+                measured: format!(
+                    "VBS ativa e em execução, com {} serviço(s) de segurança usando.",
+                    servicos
+                ),
+                advice: "Custa desempenho em jogos, mais em processadores de 8ª a 10ª \
+                         geração. A otimização \"Desligar virtualização de segurança\" \
+                         desliga — leia o aviso de segurança antes, porque aqui você \
+                         perde proteção real que está em uso."
+                    .to_string(),
+                severity: FindingSeverity::Important,
+                fix_location: FixLocation::Software,
+            })
+        }
         Some(false) => findings.push(FirmwareFinding {
             id: "vbs_off".to_string(),
             title: "Virtualização de segurança desligada".to_string(),

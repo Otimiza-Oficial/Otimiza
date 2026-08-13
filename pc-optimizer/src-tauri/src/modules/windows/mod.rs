@@ -6,6 +6,7 @@
 // 2. Se uma ação falhar no meio de uma otimização, as ações já aplicadas são
 //    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
 
+pub mod achados;
 pub mod bloatware;
 pub mod boot;
 pub mod bottleneck;
@@ -15,6 +16,7 @@ pub mod cleanup;
 pub mod conflicts;
 pub mod devices;
 pub mod diskspace;
+pub mod exhaustion;
 pub mod firmware;
 pub mod fivem;
 pub mod foldermap;
@@ -25,6 +27,7 @@ pub mod health;
 pub mod memory;
 pub mod network;
 pub mod power;
+pub mod pressao;
 pub mod processes;
 pub mod profiles;
 pub mod readiness;
@@ -35,8 +38,10 @@ pub mod servicesaudit;
 pub mod shaders;
 pub mod shell;
 pub mod startup;
+pub mod suspend;
 pub mod tasks;
 pub mod thermal;
+pub mod veredito;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState};

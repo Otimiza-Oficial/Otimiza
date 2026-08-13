@@ -24,6 +24,8 @@ pub struct HardwareProfile {
     pub system_storage: StorageKind,
     pub total_ram_gb: f64,
     pub logical_cores: usize,
+    pub cpu_name: String,
+    pub gpu_name: String,
 }
 
 static PROFILE: OnceLock<HardwareProfile> = OnceLock::new();
@@ -39,10 +41,37 @@ fn detect() -> HardwareProfile {
     let mut system = sysinfo::System::new();
     system.refresh_memory();
 
+    system.refresh_cpu_all();
+
     HardwareProfile {
         system_storage: detect_system_storage(),
         total_ram_gb: system.total_memory() as f64 / 1_073_741_824.0,
         logical_cores: num_cpus::get(),
+        cpu_name: system
+            .cpus()
+            .first()
+            .map(|cpu| cpu.brand().trim().to_string())
+            .filter(|nome| !nome.is_empty())
+            .unwrap_or_else(|| "processador não identificado".to_string()),
+        gpu_name: detect_gpu(),
+    }
+}
+
+/// Nome da placa de vídeo.
+///
+/// `Win32_VideoController` traz também adaptadores virtuais (área de trabalho
+/// remota, captura de tela); o filtro por `AdapterRAM` maior que zero descarta
+/// a maioria deles sem precisar de lista de nomes, que envelheceria.
+fn detect_gpu() -> String {
+    let script = "@(Get-CimInstance Win32_VideoController | \
+                  Where-Object { $_.AdapterRAM -gt 0 } | \
+                  Select-Object -ExpandProperty Name) -join ' + '";
+
+    match shell::powershell(script) {
+        Ok(output) if output.success && !output.stdout.trim().is_empty() => {
+            output.stdout.trim().to_string()
+        }
+        _ => "placa de vídeo não identificada".to_string(),
     }
 }
 

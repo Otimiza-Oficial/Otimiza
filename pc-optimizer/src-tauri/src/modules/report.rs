@@ -64,6 +64,11 @@ pub struct ReportData {
     pub browsers: Option<crate::modules::windows::browsers::BrowserReport>,
     #[cfg(target_os = "windows")]
     pub startup: Vec<crate::modules::windows::startup::StartupEntry>,
+    /// O mesmo veredito que a tela mostra. Vem pronto de fora em vez de ser
+    /// coletado aqui: se o relatório recolhesse por conta própria, o papel e o
+    /// programa poderiam discordar sobre a mesma máquina.
+    #[cfg(target_os = "windows")]
+    pub veredito: Option<crate::modules::windows::veredito::Veredito>,
 }
 
 /// Escapa texto para HTML.
@@ -118,6 +123,95 @@ fn duracao(ms: u64) -> String {
 
 // ------------------------------------------------------------------ seções
 
+/// A conclusão, antes de qualquer dado.
+///
+/// Vem primeiro de propósito, e contra a intuição de quem escreve laudo: o
+/// cliente que paga por um atendimento quer saber o que há de errado com a
+/// máquina dele, não percorrer onze seções de medição até descobrir. As
+/// medições continuam todas aqui, logo abaixo, para quem quiser conferir cada
+/// afirmação — mas a afirmação vem primeiro.
+///
+/// O texto sai do MESMO veredito que a tela mostra. Coletar de novo aqui faria
+/// o papel e o programa poderem discordar sobre a mesma máquina, e é o tipo de
+/// contradição que destrói a confiança num laudo.
+#[cfg(target_os = "windows")]
+fn secao_veredito(dados: &ReportData) -> String {
+    use crate::modules::windows::achados::FindingSeverity;
+
+    let Some(v) = &dados.veredito else {
+        return secao(
+            1,
+            "Conclusão",
+            aviso("O diagnóstico automático não pôde ser concluído nesta máquina."),
+        );
+    };
+
+    let mut corpo = format!(
+        "<p class=\"veredicto\"><b>{}</b></p><p>{}</p>",
+        escape(&v.frase),
+        escape(&v.detalhe)
+    );
+
+    if let Some(principal) = &v.principal {
+        if !principal.advice.is_empty() {
+            corpo.push_str(&format!("<p>{}</p>", escape(&principal.advice)));
+        }
+    }
+
+    if !v.corroboracoes.is_empty() {
+        corpo.push_str(
+            "<p>Outras medições desta máquina apontam para a mesma causa:</p>\
+             <table class=\"dados\"><tbody>",
+        );
+
+        for c in &v.corroboracoes {
+            corpo.push_str(&format!(
+                "<tr><th>{}</th><td>{}</td></tr>",
+                escape(&c.title),
+                escape(&c.measured)
+            ));
+        }
+
+        corpo.push_str("</tbody></table>");
+    }
+
+    // O que NÃO foi verificado entra na conclusão, e não numa nota de rodapé.
+    // Um laudo que omite o próprio alcance é um laudo que engana por seleção.
+    if !v.lacunas.is_empty() {
+        corpo.push_str(
+            "<p><b>Limites deste levantamento.</b> Os itens abaixo não puderam ser \
+             verificados. A ausência de achado neles não significa conformidade.</p>\
+             <table class=\"dados\"><tbody>",
+        );
+
+        for l in &v.lacunas {
+            corpo.push_str(&format!(
+                "<tr><th>{}</th><td>{}</td></tr>",
+                escape(&l.o_que),
+                escape(&l.por_que)
+            ));
+        }
+
+        corpo.push_str("</tbody></table>");
+    }
+
+    let conferidos = v
+        .achados
+        .iter()
+        .filter(|a| a.severity == FindingSeverity::Ok)
+        .count();
+
+    if conferidos > 0 {
+        corpo.push_str(&format!(
+            "<p>{} verificação(oes) desta máquina passaram sem apontamento. \
+             Estão listadas nas seções seguintes.</p>",
+            conferidos
+        ));
+    }
+
+    secao(1, "Conclusão", corpo)
+}
+
 fn secao_maquina() -> String {
     #[cfg(target_os = "windows")]
     {
@@ -131,7 +225,7 @@ fn secao_maquina() -> String {
         };
 
         secao(
-            1,
+            2,
             "Identificação da máquina",
             format!(
                 "<table class=\"dados\"><tbody>\
@@ -155,7 +249,7 @@ fn secao_boot(dados: &ReportData) -> String {
     use crate::modules::windows::boot::BootType;
 
     let Some(r) = &dados.boot else {
-        return secao(2, "Tempo de inicialização", aviso("Não foi possível ler."));
+        return secao(3, "Tempo de inicialização", aviso("Não foi possível ler."));
     };
 
     let mut corpo = String::new();
@@ -219,7 +313,7 @@ fn secao_boot(dados: &ReportData) -> String {
         corpo.push_str(&aviso(&r.note));
     }
 
-    secao(2, "Tempo de inicialização", corpo)
+    secao(3, "Tempo de inicialização", corpo)
 }
 
 #[cfg(target_os = "windows")]
@@ -264,7 +358,7 @@ fn secao_processador(dados: &ReportData) -> String {
         );
     }
 
-    secao(3, "Desempenho do processador", corpo)
+    secao(4, "Desempenho do processador", corpo)
 }
 
 #[cfg(target_os = "windows")]
@@ -334,7 +428,7 @@ fn secao_saude(dados: &ReportData) -> String {
         return String::new();
     }
 
-    secao(4, "Saúde física do disco e da bateria", corpo)
+    secao(5, "Saúde física do disco e da bateria", corpo)
 }
 
 #[cfg(target_os = "windows")]
@@ -375,7 +469,7 @@ fn secao_memoria(dados: &ReportData) -> String {
         ));
     }
 
-    secao(5, "Memória e paginação", corpo)
+    secao(6, "Memória e paginação", corpo)
 }
 
 #[cfg(target_os = "windows")]
@@ -433,7 +527,7 @@ fn secao_navegador(dados: &ReportData) -> String {
          documento não apresenta estimativas como medições.</p>",
     );
 
-    secao(6, "Navegadores", corpo)
+    secao(7, "Navegadores", corpo)
 }
 
 #[cfg(target_os = "windows")]
@@ -456,7 +550,7 @@ fn secao_inicializacao(dados: &ReportData) -> String {
         .collect();
 
     secao(
-        7,
+        8,
         "Programas de inicialização",
         format!(
             "<table><thead><tr><th>Nome</th><th>Comando</th><th>Estado</th></tr></thead>\
@@ -489,7 +583,7 @@ fn secao_medicao(comparison: Option<&BenchmarkComparison>) -> String {
         // dizer isso em voz alta — é exatamente aqui que um produto desonesto
         // colocaria "desempenho melhorado em 40%".
         return secao(
-            8,
+            9,
             "Medição de desempenho",
             aviso(
                 "Não foi realizada medição comparativa antes e depois neste atendimento. Sem \
@@ -502,7 +596,7 @@ fn secao_medicao(comparison: Option<&BenchmarkComparison>) -> String {
     let linhas: String = c.metrics.iter().map(linha_metrica).collect();
 
     secao(
-        8,
+        9,
         "Medição de desempenho",
         format!(
             "<p>{}</p>\
@@ -524,7 +618,7 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
     if aplicadas.is_empty() {
         return (
             secao(
-                9,
+                10,
                 "Alterações aplicadas",
                 aviso("Nenhuma otimização do Otimiza está aplicada nesta máquina no momento."),
             ),
@@ -553,7 +647,7 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
     }
 
     let html = secao(
-        9,
+        10,
         "Alterações aplicadas",
         format!(
             "<p>{} otimização(oes), {} alteração(oes) no total. Cada item indica o valor que \
@@ -570,7 +664,7 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
 
 fn secao_recusas() -> String {
     secao(
-        10,
+        11,
         "Procedimentos deliberadamente não executados",
         "<p>As práticas abaixo produzem ganho de desempenho e são adotadas por parte do \
          mercado. O Otimiza não as executa, e o motivo de cada uma consta a seguir para \
@@ -647,6 +741,9 @@ td.cam { font-family: "Consolas", monospace; font-size: 7.5pt; color: #55524b;
 
 .achado { border-left: 2.5pt solid #14130f; padding: 2.5mm 0 2.5mm 4mm; margin: 4mm 0 }
 .aviso { border-left: 2.5pt solid #8a6212; background: #fbf7ec; padding: 3mm 4mm; margin: 3mm 0 }
+/* A conclusão do laudo. Único texto do documento acima do corpo normal — se
+   mais alguma coisa crescer para este tamanho, ela deixa de ser a conclusão. */
+.veredicto { font-size: 13pt; line-height: 1.35; margin: 0 0 3mm }
 .nota { font-size: 9pt; color: #55524b }
 .mud { margin: 3mm 0; padding: 3mm 4mm; background: #f7f6f3; break-inside: avoid }
 .mud ul { margin: 0; padding-left: 5mm }
@@ -676,8 +773,15 @@ pub fn build_html(
     #[allow(unused_mut)]
     let mut diagnostico = String::new();
 
+    // A conclusão é a seção 1 e vai antes de tudo, inclusive da identificação
+    // da máquina. Fica em variável própria e não dentro de `diagnostico`
+    // porque a identificação (seção 2) precisa aparecer ENTRE as duas.
+    #[allow(unused_mut)]
+    let mut conclusao = String::new();
+
     #[cfg(target_os = "windows")]
     {
+        conclusao.push_str(&secao_veredito(dados));
         diagnostico.push_str(&secao_boot(dados));
         diagnostico.push_str(&secao_processador(dados));
         diagnostico.push_str(&secao_saude(dados));
@@ -704,7 +808,7 @@ pub fn build_html(
          Todos os valores deste documento foram lidos do sistema operacional no momento da \
          emissao. Nenhum foi estimado.</p>\
          </header>\
-         {}{}{}{}{}\
+         {}{}{}{}{}{}\
          <footer class=\"fim\">\
          <p><b>Reversibilidade.</b> Cada alteração registra o valor anterior antes da escrita. \
          A funcao de desfazer restaura exatamente o valor original, e não um valor equivalente. \
@@ -719,6 +823,7 @@ pub fn build_html(
         ESTILO,
         escape(data),
         escape(data),
+        conclusao,
         secao_maquina(),
         diagnostico,
         secao_medicao(comparison),
@@ -1040,6 +1145,7 @@ mod inspecao {
             memory: Some(windows::memory::analyze()),
             browsers: Some(windows::browsers::analyze()),
             startup: windows::startup::entries(),
+            veredito: Some(windows::veredito::diagnostico_rapido()),
         };
 
         let saida = std::path::PathBuf::from(

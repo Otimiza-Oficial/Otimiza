@@ -47,6 +47,8 @@ use crate::modules::windows::shaders::{ShaderReport, CleanOutcome as ShaderClean
 #[cfg(target_os = "windows")]
 use crate::modules::windows::readiness::ReadinessReport;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::veredito::Veredito;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -55,7 +57,7 @@ use crate::modules::windows::bloatware::BloatReport;
 #[cfg(target_os = "windows")]
 use crate::modules::optimizer::BatchStep;
 use tauri::{Emitter, Manager};
-use crate::modules::{DiagnosticEngine, DiagnosticReport, PerformanceMonitor, PerformanceMetrics};
+use crate::modules::{PerformanceMonitor, PerformanceMetrics};
 
 #[cfg(not(target_os = "windows"))]
 const UNSUPPORTED_PLATFORM: &str =
@@ -96,13 +98,6 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
         arch: info.arch,
         version: info.version,
     })
-}
-
-/// Comando: Executar diagnóstico completo
-#[tauri::command]
-pub async fn run_diagnostic() -> Result<DiagnosticReport, String> {
-    let mut diagnostic_engine = DiagnosticEngine::new();
-    diagnostic_engine.run_full_diagnostic().await
 }
 
 /// Comando: Obter métricas de performance em tempo real
@@ -198,6 +193,8 @@ pub struct HardwareProfileResponse {
     pub storage: String,
     pub total_ram_gb: f64,
     pub logical_cores: usize,
+    pub cpu_name: String,
+    pub gpu_name: String,
 }
 
 /// Comando: Perfil de hardware desta máquina.
@@ -217,6 +214,8 @@ pub fn get_hardware_profile() -> Result<HardwareProfileResponse, String> {
             },
             total_ram_gb: hardware.total_ram_gb,
             logical_cores: hardware.logical_cores,
+            cpu_name: hardware.cpu_name.clone(),
+            gpu_name: hardware.gpu_name.clone(),
         })
     }
 
@@ -417,6 +416,9 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
         memory: Some(windows::memory::analyze()),
         browsers: Some(windows::browsers::analyze()),
         startup: windows::startup::entries(),
+        // O mesmo veredito que a tela mostra, para que o papel e o programa
+        // não possam discordar sobre a mesma máquina.
+        veredito: Some(windows::veredito::diagnostico_rapido()),
     }
 }
 
@@ -479,6 +481,30 @@ pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String
     #[cfg(not(target_os = "windows"))]
     {
         let _ = id;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: O veredito da máquina.
+///
+/// É o diagnóstico que roda sozinho ao abrir o programa, antes de qualquer
+/// botão de otimizar. Recolhe só o que é barato e devolve UMA frase com o
+/// número que a sustenta — o resto dos diagnósticos continua sob demanda.
+///
+/// Existe porque o produto foi testado em máquina que travava e disse que
+/// estava tudo bem: os achados estavam corretos, mas espalhados por cinco abas,
+/// e nenhum deles era o veredito.
+#[tauri::command]
+pub async fn diagnostico_rapido() -> Result<Veredito, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::veredito::diagnostico_rapido)
+            .await
+            .map_err(|e| format!("Falha ao diagnosticar a máquina: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

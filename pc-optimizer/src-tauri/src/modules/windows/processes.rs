@@ -95,6 +95,36 @@ impl ProcessMonitor {
     }
 }
 
+/// Processos vivos: identificador, nome do executável e instante de início.
+///
+/// Existe para a suspensão durante o jogo. Não agrupa por nome, ao contrário do
+/// `top()` acima, porque suspender exige o PID de cada processo — um Chrome com
+/// quinze abas são quinze processos, e todos precisam parar.
+///
+/// O instante de início vai junto porque o Windows RECICLA identificadores. Sem
+/// essa assinatura, o Otimiza poderia retomar um processo novo que nunca
+/// suspendeu, mexendo num programa que não é o dele.
+pub fn listar_para_suspensao() -> Vec<(u32, String, u64)> {
+    let mut sistema = System::new();
+    sistema.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+
+    sistema
+        .processes()
+        .iter()
+        .map(|(pid, processo)| {
+            (
+                pid.as_u32(),
+                processo.name().to_string_lossy().to_string(),
+                processo.start_time(),
+            )
+        })
+        .collect()
+}
+
 impl Default for ProcessMonitor {
     fn default() -> Self {
         Self::new()

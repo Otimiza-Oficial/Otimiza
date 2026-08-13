@@ -49,6 +49,22 @@
         </div>
       </header>
 
+      <!--
+        O AVISO QUE NÃO SAI DA TELA
+
+        Só aparece quando o veredito é crítico. Existe porque a máquina que
+        motivou este trabalho travava por falta de memória, e o cliente podia
+        passar a sessão inteira na aba de Otimizações aplicando itens de
+        higiene sem nunca ver o achado que explicava o travamento.
+
+        Clicar leva ao Painel, onde está o veredito com os números.
+      -->
+      <button class="alerta-global" id="alerta-global" hidden>
+        <span class="alerta-marca" aria-hidden="true"></span>
+        <span class="alerta-texto" id="alerta-global-texto"></span>
+        <span class="alerta-ir">ver no Painel</span>
+      </button>
+
       <div class="corpo">
         <!--
           Navegação lateral, no lugar das abas no topo.
@@ -151,6 +167,44 @@
         <main class="stage">
         <!-- ============================================================ PAINEL -->
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
+          <!--
+            O VEREDITO
+
+            Vem antes de qualquer botão de otimizar, e é de propósito. A versão
+            anterior deste produto abria com números de uso e dezessete botões
+            de análise: o cliente aplicava trinta otimizações sem nunca saber
+            qual era o problema da máquina dele. Numa que travava o PC inteiro,
+            a tela chegou a dizer que a memória estava sem problemas.
+
+            Aqui é uma frase só, com o número que a sustenta.
+          -->
+          <section class="panel panel-veredito" id="veredito" aria-live="polite">
+            <div class="veredito-marca" id="veredito-marca" aria-hidden="true"></div>
+            <div class="veredito-corpo">
+              <p class="veredito-rotulo" id="veredito-rotulo">Analisando esta máquina…</p>
+              <h2 class="veredito-frase" id="veredito-frase">
+                Um momento — estamos medindo antes de dizer qualquer coisa.
+              </h2>
+              <p class="veredito-detalhe" id="veredito-detalhe"></p>
+              <p class="veredito-conselho" id="veredito-conselho"></p>
+
+              <!-- Só aparece quando o Otimiza sabe consertar sozinho. Falta de
+                   memória e disco morrendo não ganham botão: nenhum programa
+                   acrescenta um pente. -->
+              <div class="veredito-acao" id="veredito-acao" hidden>
+                <button id="veredito-corrigir" class="btn btn-primary"></button>
+                <span class="veredito-acao-nota" id="veredito-acao-nota"></span>
+              </div>
+
+              <!-- Achados da mesma causa, que antes moravam em abas diferentes. -->
+              <ul class="veredito-junto" id="veredito-junto" hidden></ul>
+
+              <!-- O que não deu para verificar. Nunca fica escondido: silêncio
+                   aqui seria indistinguível de aprovação. -->
+              <ul class="veredito-lacunas" id="veredito-lacunas" hidden></ul>
+            </div>
+          </section>
+
           <div class="grid grid-hero">
             <section class="panel panel-hero">
               <div class="panel-head">
@@ -282,6 +336,17 @@
                 <span class="panel-tag" id="optimization-count">—</span>
               </div>
 
+              <!--
+                O que esperar, antes de clicar.
+
+                Sem esta linha o cliente conta itens: aplica trinta e espera
+                trinta vezes o resultado. Das 35 do catálogo, 7 tocam FPS de
+                forma mensurável e 17 são higiene de Windows que não muda FPS.
+                Dizer isso ANTES é o que separa este produto dos outros — e é
+                mais barato de sustentar do que a decepção depois.
+              -->
+              <p class="expectativa" id="optimization-expectativa"></p>
+
               <div class="row-actions">
                 <button id="optimize-now" class="btn btn-primary">Otimizar agora</button>
                 <button id="revert-all" class="btn">Desfazer tudo</button>
@@ -370,11 +435,24 @@
           <div class="grid grid-two">
             <section class="panel">
               <div class="panel-head">
-                <h2>Saúde do sistema</h2>
+                <h2>Achados desta máquina</h2>
                 <button id="run-diagnostic" class="btn btn-ghost">Analisar</button>
               </div>
+              <!--
+                Aqui havia uma nota de saúde de 0 a 100.
+
+                Ela foi removida na versão 0.13. O número não consultava nenhum
+                dos módulos que realmente medem esta máquina — nem a memória,
+                nem o disco, nem o firmware — e ainda assim era a coisa mais
+                visível da tela. Um cliente fotografa uma nota; ninguém
+                fotografa um parágrafo. Manter as duas coisas lado a lado
+                significava deixar a mais chamativa ser a menos verdadeira.
+
+                No lugar dela vai a lista de achados, cada um com o que foi
+                medido para sustentá-lo.
+              -->
               <div id="diagnostic-result" class="diagnostic">
-                <p class="empty">Rode a análise para ver os gargalos desta máquina.</p>
+                <p class="empty">Rode a análise para ver todos os achados desta máquina.</p>
               </div>
             </section>
 

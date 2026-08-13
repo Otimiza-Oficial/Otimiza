@@ -79,6 +79,44 @@ interface Conflict {
   severity: Severity;
 }
 
+// ------------------------------------------------------------- o veredito
+
+interface Achado {
+  id: string;
+  origem: string;
+  causa: string;
+  title: string;
+  measured: string;
+  advice: string;
+  severity: Severity;
+  fix_location: string;
+  confianca: string;
+  // Preenchido só quando o Otimiza sabe consertar sozinho.
+  acao: Acao | null;
+}
+
+interface Lacuna {
+  origem: string;
+  o_que: string;
+  por_que: string;
+}
+
+interface Acao {
+  comando: string;
+  argumento: string | null;
+  rotulo: string;
+  exige_admin: boolean;
+}
+
+interface Veredito {
+  frase: string;
+  detalhe: string;
+  principal: Achado | null;
+  corroboracoes: Achado[];
+  achados: Achado[];
+  lacunas: Lacuna[];
+}
+
 interface ConflictReport {
   conflicts: Conflict[];
   programs_scanned: number;
@@ -264,10 +302,26 @@ let metricsTimer: number | null = null;
 /** Categorias recolhidas pelo usuário, preservadas entre recarregamentos da lista. */
 const collapsedGroups = new Set<string>();
 
+/**
+ * O que cada nível de ganho significa, dito sem eufemismo.
+ *
+ * "resposta do sistema" era o rótulo antigo de `Responsiveness`, e o próprio
+ * comentário do enum no backend define esse nível como "não muda FPS". Um
+ * cliente que aplica dezessete itens rotulados "resposta do sistema" espera
+ * dezessete melhoras — e não recebe nenhuma no jogo, porque não é isso que
+ * eles fazem. O rótulo agora diz o que o código sempre soube.
+ */
 const GAIN_LABELS: Record<Gain, string> = {
-  Measurable: "ganho mensurável",
-  Situational: "ganho situacional",
-  Responsiveness: "resposta do sistema",
+  Measurable: "muda o FPS",
+  Situational: "depende da máquina",
+  Responsiveness: "não muda FPS",
+};
+
+/** Menor vem primeiro. O que muda o jogo aparece antes do que não muda. */
+const GAIN_ORDER: Record<Gain, number> = {
+  Measurable: 0,
+  Situational: 1,
+  Responsiveness: 2,
 };
 
 const CATEGORY_LABELS: Record<Category, string> = {
@@ -296,6 +350,15 @@ const VERDICT_LABELS: Record<Verdict, string> = {
 
 window.addEventListener("DOMContentLoaded", async () => {
   wireControls();
+
+  // O VEREDITO VEM PRIMEIRO — e sem `await`, de propósito.
+  //
+  // Ele é a coisa mais importante da tela: é o que responde "o que há de errado
+  // com este PC" sem exigir um clique. Se entrasse na fila de carregamento
+  // abaixo, seria a última coisa a aparecer, atrás de dez chamadas que o
+  // cliente nem estava esperando. Disparar aqui e deixar solto faz o cartão se
+  // preencher enquanto o resto da tela monta.
+  void carregarVeredito();
 
   await ajustarMovimento();
   await listenToBatchProgress();
@@ -396,6 +459,40 @@ function showTab(name: string) {
  * Selo numérico na aba. Mostrar o número aqui transforma a navegação em
  * informação: dá para saber que há algo esperando sem abrir a seção.
  */
+/**
+ * Quantos problemas cada diagnóstico encontrou.
+ *
+ * POR QUE ISTO EXISTE
+ *
+ * O selo da aba Diagnóstico era escrito por quatro lugares diferentes, e três
+ * deles SOBRESCREVIAM o valor em vez de somar. Quem carregasse por último
+ * ganhava: um achado crítico de memória era apagado por um aviso menor de
+ * prontidão, e a aba passava a exibir o número do último painel que respondeu
+ * — que muda a cada abertura, conforme a ordem em que as chamadas voltam.
+ *
+ * O quarto lugar tentava somar lendo o próprio texto do selo de volta, o que
+ * dependia de o firmware ter carregado antes e de ninguém ter zerado o selo no
+ * meio. Também errado, só que de forma mais difícil de enxergar.
+ *
+ * Agora cada diagnóstico declara o que encontrou, com nome, e o selo é sempre
+ * a soma de todos. Ordem de carregamento deixa de importar.
+ */
+const problemasPorFonte = new Map<string, { n: number; critico: boolean }>();
+
+function registrarProblemas(fonte: string, n: number, critico: boolean) {
+  problemasPorFonte.set(fonte, { n, critico });
+
+  let total = 0;
+  let algumCritico = false;
+
+  for (const { n: quantos, critico: grave } of problemasPorFonte.values()) {
+    total += quantos;
+    if (grave && quantos > 0) algumCritico = true;
+  }
+
+  setBadge("badge-diagnostico", total, algumCritico ? "bad" : "warn");
+}
+
 function setBadge(id: string, count: number, tone?: "warn" | "bad") {
   const badge = element(id);
   badge.hidden = count <= 0;
@@ -432,16 +529,26 @@ async function loadIdentity() {
   }
 
   try {
+    // Processador e placa de vídeo passaram a vir daqui na versão 0.13. Antes
+    // só apareciam depois que o cliente clicasse em "Analisar" no diagnóstico
+    // legado — que foi removido. A identidade da máquina não pode depender de
+    // um clique: é o cabeçalho da tela.
     const hardware = await invoke<{
       storage: string;
       total_ram_gb: number;
       logical_cores: number;
+      cpu_name: string;
+      gpu_name: string;
     }>("get_hardware_profile");
 
     text("ident-storage", hardware.storage);
     text("ident-ram", `${hardware.total_ram_gb.toFixed(1)} GB`);
+    text("ident-cpu", hardware.cpu_name);
+    text("ident-gpu", hardware.gpu_name);
   } catch (error) {
     text("ident-storage", "indisponível");
+    text("ident-cpu", "indisponível");
+    text("ident-gpu", "indisponível");
     console.error(error);
   }
 }
@@ -704,6 +811,17 @@ function pushHistory(cpu: number) {
 
 // -------------------------------------------------------------- diagnóstico
 
+/**
+ * A lista completa de achados, com o que foi medido em cada um.
+ *
+ * Substitui a nota de saúde de 0 a 100 que existia até a versão 0.12. Aquele
+ * número era calculado por um módulo legado que não consultava nenhum dos
+ * diagnósticos de verdade desta máquina, e era a coisa mais visível da tela —
+ * a menos verdadeira ocupando o lugar de maior destaque.
+ *
+ * O cartão do Painel mostra o achado que decide; aqui ficam todos, para quem
+ * quiser conferir item a item.
+ */
 async function runDiagnostic() {
   const button = element<HTMLButtonElement>("run-diagnostic");
   const target = element("diagnostic-result");
@@ -712,8 +830,11 @@ async function runDiagnostic() {
   target.innerHTML = `<p class="empty">Analisando…</p>`;
 
   try {
-    const report = await invoke<any>("run_diagnostic");
-    renderDiagnostic(report);
+    const v = await invoke<Veredito>("diagnostico_rapido");
+    renderDiagnostic(v);
+    // O cartão do Painel e esta lista saem da mesma coleta, então não podem
+    // divergir na tela.
+    aplicarVeredito(v);
   } catch (error) {
     target.innerHTML = `<p class="status error">${escapeHtml(String(error))}</p>`;
   } finally {
@@ -721,36 +842,47 @@ async function runDiagnostic() {
   }
 }
 
-function renderDiagnostic(report: any) {
-  const info = report.system_info;
-  text("ident-cpu", info.cpu_name);
-  text("ident-ram", `${info.total_ram_gb.toFixed(1)} GB`);
-  text("ident-gpu", info.gpu_name);
+function renderDiagnostic(v: Veredito) {
+  const problemas = v.achados.filter((a) => a.severity !== "Ok");
+  const conferidos = v.achados.filter((a) => a.severity === "Ok");
 
-  const score: number = report.health_score;
-  const color = score >= 80 ? "var(--green)" : score >= 60 ? "var(--amber)" : "var(--red)";
+  const linhas = problemas
+    .map(
+      (a) => `
+        <div class="bottleneck" data-severity="${a.severity}">
+          <div class="bottleneck-title">${escapeHtml(a.title)}</div>
+          <div class="bottleneck-detail">${escapeHtml(a.measured)}</div>
+          ${a.advice ? `<div class="bottleneck-detail">${escapeHtml(a.advice)}</div>` : ""}
+        </div>`
+    )
+    .join("");
 
-  const bottlenecks: string = report.bottlenecks.length
-    ? report.bottlenecks
-        .map(
-          (item: any) => `
-            <div class="bottleneck" data-severity="${item.severity}">
-              <div class="bottleneck-title">${escapeHtml(item.description)}</div>
-              <div class="bottleneck-detail">${escapeHtml(item.suggested_fix)}</div>
-            </div>`
-        )
-        .join("")
-    : `<p class="empty">Nenhum gargalo acima do limite. Isso não quer dizer que o
-       PC é rápido — quer dizer que CPU, memória e disco não estão saturados agora.</p>`;
+  // "Nada encontrado" precisa vir com os números que sustentam a afirmação.
+  // Sem eles é só uma tela vazia, e tela vazia parece programa quebrado.
+  const nada = `<p class="empty">Nenhum problema encontrado — e isso é um
+    resultado, não uma tela vazia. ${conferidos.length} verificações passaram
+    nesta máquina.</p>`;
 
-  element("diagnostic-result").innerHTML = `
-    <div class="health">
-      <span class="health-score" style="color:${color}">${score}</span>
-      <span class="health-max">/ 100 saúde</span>
-    </div>
-    <div class="health-bar"><i style="width:${score}%;background:${color}"></i></div>
-    ${bottlenecks}
-  `;
+  const lacunas = v.lacunas.length
+    ? `<div class="bottleneck" data-severity="Ok">
+         <div class="bottleneck-title">O que não deu para verificar</div>
+         ${v.lacunas
+           .map(
+             (l) =>
+               `<div class="bottleneck-detail">${escapeHtml(l.o_que)}: ${escapeHtml(l.por_que)}</div>`
+           )
+           .join("")}
+       </div>`
+    : "";
+
+  element("diagnostic-result").innerHTML =
+    (problemas.length ? linhas : nada) + lacunas;
+
+  registrarProblemas(
+    "veredito",
+    problemas.length,
+    problemas.some((a) => a.severity === "Critical")
+  );
 }
 
 // --------------------------------------------------------- firmware e hardware
@@ -778,7 +910,7 @@ async function analyzeFirmware() {
 
     const problems = report.findings.filter((f) => f.severity !== "Ok").length;
     const critical = report.findings.some((f) => f.severity === "Critical");
-    setBadge("badge-diagnostico", problems, critical ? "bad" : "warn");
+    registrarProblemas("firmware", problems, critical);
 
     setStatus(
       "firmware-status",
@@ -1076,7 +1208,7 @@ function renderReadiness(r: ReadinessReport) {
     : "";
 
   setStatus("prontidao-status", r.note, problemas === 0 ? "ok" : "warn");
-  if (problemas > 0) setBadge("badge-diagnostico", problemas, "warn");
+  registrarProblemas("prontidao", problemas, false);
 }
 
 // ------------------------------------------------- gargalo
@@ -1836,9 +1968,7 @@ async function analyzeHealth() {
       );
     }
 
-    if (problemas > 0) {
-      setBadge("badge-diagnostico", problemas, critico ? "bad" : "warn");
-    }
+    registrarProblemas("saude", problemas, critico);
   } catch (error) {
     setStatus("health-status", String(error), "error");
   } finally {
@@ -2314,13 +2444,149 @@ function renderMemoryReport(report: MemoryReport) {
     )
     .join("");
 
-  // O selo do Diagnóstico soma firmware e memória: é a aba inteira que precisa
-  // de atenção, não um painel só.
-  const firmwareBadge = Number(element("badge-diagnostico").textContent) || 0;
-  setBadge("badge-diagnostico", firmwareBadge + problemas, critico ? "bad" : "warn");
+  registrarProblemas("memoria", problemas, critico);
 }
 
 // -------------------------------------------------------------- otimizações
+
+/**
+ * O veredito da máquina.
+ *
+ * Roda sozinho ao abrir, sem clique, e é a primeira coisa que o cliente lê.
+ *
+ * A versão anterior do produto exigia dezessete botões de análise espalhados
+ * por cinco abas para montar essa resposta na cabeça do usuário — e ele nunca
+ * montava. Numa máquina de 8 GB que travava o PC inteiro ao abrir o jogo, a
+ * tela dizia "memória e paginação sem problemas", porque cada pedaço da
+ * verdade morava num painel diferente e nenhum deles era o veredito.
+ */
+async function carregarVeredito() {
+  try {
+    aplicarVeredito(await invoke<Veredito>("diagnostico_rapido"));
+  } catch (error) {
+    // Falhar aqui também é uma informação. O cartão não pode ficar dizendo
+    // "analisando" para sempre, nem passar a impressão de que deu tudo certo.
+    const cartao = element("veredito");
+    delete cartao.dataset.nivel;
+    text("veredito-rotulo", "Não foi possível diagnosticar");
+    text("veredito-frase", "O diagnóstico automático não completou.");
+    text("veredito-detalhe", String(error));
+    text("veredito-conselho", "");
+    mostrarAcaoDoVeredito(null);
+  }
+}
+
+/**
+ * Pinta o cartão do veredito.
+ *
+ * Separado da busca porque duas telas usam o mesmo resultado — o cartão do
+ * Painel e a lista da aba Diagnóstico. Se cada uma coletasse por conta própria,
+ * elas poderiam mostrar coisas diferentes sobre a mesma máquina, no mesmo
+ * momento, e o cliente não teria como saber em qual acreditar.
+ */
+function aplicarVeredito(v: Veredito) {
+  const cartao = element("veredito");
+
+  const nivel = v.principal
+    ? v.principal.severity === "Critical"
+      ? "critico"
+      : "importante"
+    : "ok";
+
+  cartao.dataset.nivel = nivel;
+
+  text(
+    "veredito-rotulo",
+    v.principal
+      ? nivel === "critico"
+        ? "O que está travando este PC"
+        : "Vale corrigir"
+      : "Diagnóstico concluído"
+  );
+  text("veredito-frase", v.frase);
+  text("veredito-detalhe", v.detalhe);
+  text("veredito-conselho", v.principal?.advice ?? "");
+
+  // Os achados da mesma causa, juntos. Antes viviam em abas separadas e
+  // nunca se encontravam na tela — é isto que estava quebrado no produto.
+  const junto = element("veredito-junto");
+  junto.hidden = v.corroboracoes.length === 0;
+  junto.innerHTML = v.corroboracoes
+    .map(
+      (c) =>
+        `<li><strong>${escapeHtml(c.title)}</strong> — ${escapeHtml(c.measured)}</li>`
+    )
+    .join("");
+
+  mostrarAcaoDoVeredito(v.principal?.acao ?? null);
+
+  // O aviso que segue visível em qualquer aba. Só para crítico: se aparecesse
+  // também nos importantes, viraria enfeite permanente e pararia de ser lido —
+  // que é o destino de todo alerta que está sempre ligado.
+  const alerta = element("alerta-global");
+  alerta.hidden = nivel !== "critico";
+
+  if (nivel === "critico") {
+    text("alerta-global-texto", v.frase);
+    alerta.onclick = () => showTab("painel");
+  }
+
+  // E o que não deu para verificar, dito em voz alta. Silêncio aqui seria
+  // indistinguível de aprovação.
+  const lacunas = element("veredito-lacunas");
+  lacunas.hidden = v.lacunas.length === 0;
+  lacunas.innerHTML = v.lacunas
+    .map(
+      (l) => `<li>${escapeHtml(l.o_que)}: ${escapeHtml(l.por_que)}</li>`
+    )
+    .join("");
+}
+
+/**
+ * O botão de conserto do veredito.
+ *
+ * Aparece só quando o Otimiza sabe resolver aquilo sozinho — o que, neste
+ * produto, é a minoria dos casos. Falta de memória, disco morrendo e
+ * configuração de BIOS não ganham botão: nenhum programa acrescenta um pente,
+ * e inventar um botão ali seria prometer o que não se cumpre.
+ */
+function mostrarAcaoDoVeredito(acao: Acao | null) {
+  const bloco = element("veredito-acao");
+  const botao = element<HTMLButtonElement>("veredito-corrigir");
+
+  bloco.hidden = acao === null;
+  if (!acao) return;
+
+  botao.textContent = acao.rotulo;
+  botao.disabled = false;
+
+  // Dizer que exige administrador ANTES do clique. Descobrir depois, por uma
+  // mensagem de erro, faz o cliente achar que o programa não funciona.
+  text(
+    "veredito-acao-nota",
+    acao.exige_admin && !isElevated
+      ? "Exige abrir o Otimiza como administrador."
+      : ""
+  );
+
+  botao.onclick = async () => {
+    botao.disabled = true;
+
+    try {
+      const mensagem = acao.argumento
+        ? await invoke<string>(acao.comando, { id: acao.argumento })
+        : await invoke<string>(acao.comando);
+
+      text("veredito-acao-nota", mensagem);
+      // Rediagnostica: o cartão precisa refletir o que acabou de mudar, e não
+      // continuar mostrando um problema que já foi resolvido.
+      await carregarVeredito();
+    } catch (error) {
+      text("veredito-acao-nota", String(error));
+      botao.disabled = false;
+    }
+  };
+}
 
 async function loadOptimizations() {
   try {
@@ -2475,6 +2741,27 @@ function renderOptimizations() {
   text("optimization-count", `${available} a aplicar · ${applied} ativas`);
   setBadge("badge-otimizacoes", available);
 
+  // O QUE ESPERAR DA LISTA, ANTES DE APLICAR NADA.
+  //
+  // Sem isto, o cliente conta itens: aplica trinta e espera trinta vezes o
+  // resultado. Só sete tocam FPS de forma mensurável — e é melhor ele saber
+  // disso antes de clicar do que depois de jogar.
+  const mudamFps = optimizations.filter(
+    (item) => item.expected_gain === "Measurable" && item.state === "Available"
+  ).length;
+  const naoMudamFps = optimizations.filter(
+    (item) => item.expected_gain === "Responsiveness" && item.state === "Available"
+  ).length;
+
+  text(
+    "optimization-expectativa",
+    available === 0
+      ? "Nada a aplicar: este PC já está com tudo que o Otimiza sabe fazer."
+      : `Das ${available} a aplicar, ${mudamFps} mudam o FPS de forma mensurável. ` +
+        `Outras ${naoMudamFps} liberam recursos de fundo e não mudam FPS — ` +
+        `valem pela limpeza, não pelo jogo.`
+  );
+
   // Busca sem resultado precisa dizer isso. Uma lista vazia e silenciosa faz a
   // pessoa achar que o programa travou.
   if (visible.length === 0) {
@@ -2505,10 +2792,19 @@ function renderGroup(category: Category, items: OptimizationInfo[]): string {
   const open = collapsedGroups.has(category) ? "" : " open";
   const summary = pending > 0 ? `${pending} a aplicar` : "tudo certo";
 
-  // O que pesa nesta máquina sobe: quem abre o grupo vê primeiro o que vale a
-  // pena para o hardware dele, não a ordem em que escrevemos o catálogo.
+  // Duas ordens, nesta sequência:
+  //
+  // 1. O que muda o FPS vem antes do que não muda. Das 35 otimizações do
+  //    catálogo, 17 são higiene de Windows que devolve algumas centenas de MB
+  //    e não toca em FPS — e antes apareciam misturadas com as 7 que mudam,
+  //    todas com o mesmo peso visual. Um cliente que aplica 30 itens espera 30
+  //    vezes o resultado, e recebe o de 7. A ordem agora conta essa verdade
+  //    antes de ele clicar.
+  // 2. Dentro do mesmo nível, o que pesa NESTA máquina sobe.
   const ordenados = [...items].sort(
-    (a, b) => Number(b.recommended) - Number(a.recommended)
+    (a, b) =>
+      GAIN_ORDER[a.expected_gain] - GAIN_ORDER[b.expected_gain] ||
+      Number(b.recommended) - Number(a.recommended)
   );
 
   return `

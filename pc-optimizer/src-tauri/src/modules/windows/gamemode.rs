@@ -254,10 +254,38 @@ pub fn passo(log: &mut ChangeLog) -> Option<String> {
 
     match (jogo, aplicado) {
         (Some(nome), false) => {
-            let feito = ativar(log).ok()?;
+            let mut feito = ativar(log).ok()?;
+
+            // Suspender o segundo plano é o que devolve memória ao jogo — e é
+            // a razão de este vigia existir numa máquina que trava por falta
+            // de RAM. Falhar aqui não pode impedir o resto do modo jogo.
+            if let Ok(suspensos) = super::suspend::suspender_fundo() {
+                if !suspensos.is_empty() {
+                    let nomes: Vec<&str> =
+                        suspensos.iter().map(|s| s.visivel.as_str()).collect();
+                    feito.push(format!(
+                        "Pausei {} — voltam quando o jogo fechar.",
+                        nomes.join(", ")
+                    ));
+                }
+            }
+
             Some(format!("{} aberto. {}", nome, feito.join(" ")))
         }
-        (None, true) => desativar(log).ok(),
+        (None, true) => {
+            // A ordem importa: devolver os programas ANTES de desfazer o resto.
+            // Se algo falhar no meio, o cliente prefere ter o Discord de volta
+            // com o plano de energia errado do que o contrário.
+            let devolvidos = super::suspend::retomar_tudo().unwrap_or_default();
+            let texto = desativar(log).ok()?;
+
+            if devolvidos.is_empty() {
+                Some(texto)
+            } else {
+                let nomes: Vec<&str> = devolvidos.iter().map(|s| s.visivel.as_str()).collect();
+                Some(format!("{} {} de volta.", texto, nomes.join(", ")))
+            }
+        }
         _ => None,
     }
 }

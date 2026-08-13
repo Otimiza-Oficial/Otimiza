@@ -25,7 +25,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
-            commands::run_diagnostic,
             commands::get_performance_metrics,
             commands::start_monitoring,
             commands::stop_monitoring,
@@ -47,6 +46,7 @@ pub fn run() {
             commands::analyze_shaders,
             commands::clean_shader_cache,
             commands::analyze_readiness,
+            commands::diagnostico_rapido,
             commands::fix_readiness,
             commands::running_game_executable,
             commands::set_persistent_priority,
@@ -96,6 +96,32 @@ pub fn run() {
             
             utils::Logger::info("PC Performance Optimizer iniciado");
 
+            // REDE DE SEGURANÇA DA SUSPENSÃO — antes de qualquer outra coisa.
+            //
+            // O modo jogo suspende Discord, navegador e afins para devolver
+            // memória ao jogo, e os devolve quando o jogo fecha. Se o Otimiza
+            // morrer no meio disso — travamento, fechamento à força, queda de
+            // energia — esses programas ficariam congelados até o cliente
+            // reiniciar o PC, sem qualquer pista do motivo.
+            //
+            // Os identificadores vão para disco ANTES de a primeira thread ser
+            // suspensa. Esta chamada é o outro lado dessa garantia, e por isso
+            // roda de forma síncrona, na frente de tudo: um Discord congelado
+            // por nossa causa é um defeito pior do que o que viemos resolver.
+            #[cfg(target_os = "windows")]
+            {
+                let devolvidos = modules::windows::suspend::retomar_pendentes();
+
+                if !devolvidos.is_empty() {
+                    let nomes: Vec<&str> =
+                        devolvidos.iter().map(|s| s.visivel.as_str()).collect();
+                    utils::Logger::info(&format!(
+                        "Devolvi programas que tinham ficado pausados: {}",
+                        nomes.join(", ")
+                    ));
+                }
+            }
+
             // Vigia do modo jogo.
             //
             // Roda sempre, mas só age quando a preferência está ligada — e ela
@@ -116,6 +142,14 @@ pub fn run() {
 
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+
+                        // A amostragem de pressão roda SEMPRE, independente do
+                        // modo jogo, porque a pergunta que ela responde é sobre
+                        // a rotina da máquina e não sobre o jogo. É de graça:
+                        // uma leitura de memória em memória, sub-milissegundo.
+                        // Nunca PowerShell aqui — a cada seis segundos isso
+                        // seria o próprio otimizador pesando no PC do cliente.
+                        modules::windows::pressao::amostrar();
 
                         if !modules::preferences::Preferences::load().auto_game_mode {
                             continue;

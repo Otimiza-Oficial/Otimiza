@@ -2689,3 +2689,242 @@ button {
   letter-spacing: -0.01em;
   color: var(--text);
 }
+
+/* ============================================================== O VEREDITO
+
+   O primeiro bloco da tela, e o único que fala em voz de gente. Todo o resto
+   do painel é número; aqui é uma frase.
+
+   A regra visual é uma só: o peso vem da COR DA MARCA lateral e do tamanho da
+   frase, não de caixa colorida. Um cartão vermelho inteiro grita o tempo todo,
+   inclusive quando a notícia é boa — e este cartão tem de conseguir dizer
+   "está tudo bem" com a mesma naturalidade com que diz "sua memória acabou".
+*/
+.panel-veredito {
+  display: flex;
+  gap: var(--s5);
+  align-items: stretch;
+  padding: var(--s5) var(--s5) var(--s5) 0;
+  margin-bottom: var(--s5);
+  overflow: hidden;
+}
+
+/* A marca lateral carrega a severidade sozinha. Largura fixa, altura cheia:
+   lida antes da leitura, como a lombada de uma pasta. */
+.veredito-marca {
+  flex: 0 0 4px;
+  border-radius: 0 var(--r1) var(--r1) 0;
+  background-color: var(--track);
+  transition: background-color var(--dur) var(--ease);
+}
+
+.panel-veredito[data-nivel="critico"] .veredito-marca { background-color: var(--red); }
+.panel-veredito[data-nivel="importante"] .veredito-marca { background-color: var(--amber); }
+.panel-veredito[data-nivel="ok"] .veredito-marca { background-color: var(--green); }
+
+.veredito-corpo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.veredito-rotulo {
+  font-size: var(--t-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 var(--s2);
+}
+
+.panel-veredito[data-nivel="critico"] .veredito-rotulo { color: var(--red); }
+.panel-veredito[data-nivel="importante"] .veredito-rotulo { color: var(--amber); }
+.panel-veredito[data-nivel="ok"] .veredito-rotulo { color: var(--green); }
+
+/* O único texto grande do produto inteiro. Se mais alguma coisa crescer para
+   este tamanho, o veredito deixa de ser o veredito. */
+.veredito-frase {
+  font-size: var(--t-big);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0;
+}
+
+/* O número que sustenta a frase. Fica em mono porque é medição, e porque a
+   diferença de fonte é o que impede o leitor de confundir afirmação com dado. */
+.veredito-detalhe {
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin: var(--s3) 0 0;
+}
+
+.veredito-conselho {
+  font-size: var(--t-lead);
+  line-height: 1.6;
+  color: var(--text-dim);
+  margin: var(--s3) 0 0;
+  max-width: 78ch;
+}
+
+.veredito-conselho:empty { display: none; }
+
+/* Os achados da mesma causa, que antes moravam em abas diferentes e nunca se
+   encontravam na tela. Esta lista é, literalmente, o conserto do produto. */
+.veredito-junto,
+.veredito-lacunas {
+  list-style: none;
+  margin: var(--s4) 0 0;
+  padding: var(--s3) 0 0;
+  border-top: 1px solid var(--hairline);
+  display: grid;
+  gap: var(--s2);
+}
+
+.veredito-junto li,
+.veredito-lacunas li {
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+  padding-left: var(--s4);
+  position: relative;
+}
+
+.veredito-junto li::before,
+.veredito-lacunas li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+}
+
+.veredito-junto strong {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* Lacuna não é achado: é o produto admitindo que não olhou. Fica em itálico
+   para não se confundir com medição, e nunca some da tela. */
+.veredito-lacunas li {
+  font-style: italic;
+}
+
+.veredito-lacunas li::before {
+  background-color: transparent;
+  border: 1px solid var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .panel-veredito { gap: var(--s4); }
+  .veredito-frase { font-size: var(--t-value); }
+}
+
+/* O conserto do veredito, quando existe.
+
+   A maior parte dos achados deste produto NÃO tem botão — falta de memória e
+   disco morrendo se resolvem com peça, não com clique. Por isso este bloco é
+   discreto: ele não pode dar a impressão de que todo problema tem um botão,
+   que é justamente a mentira que os outros otimizadores vendem. */
+.veredito-acao {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s4);
+}
+
+.veredito-acao[hidden] {
+  display: none;
+}
+
+.veredito-acao-nota {
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.veredito-acao-nota:empty {
+  display: none;
+}
+
+/* O que esperar da lista de otimizações, antes de aplicar qualquer coisa.
+
+   Fica em mono e discreto de propósito: é uma constatação medida, não uma
+   chamada de venda. O cliente precisa ler isto antes de contar itens e esperar
+   um resultado proporcional à contagem. */
+.expectativa {
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  border-left: 2px solid var(--track);
+  background-color: rgba(233, 231, 227, 0.03);
+  border-radius: 0 var(--r1) var(--r1) 0;
+}
+
+.expectativa:empty {
+  display: none;
+}
+
+/* O aviso que não sai da tela.
+
+   Só para crítico. Um alerta que está sempre ligado deixa de ser lido em uma
+   semana — e o que sobra é um produto que grita o tempo todo, que é
+   exatamente o comportamento dos otimizadores que o Otimiza não quer imitar. */
+.alerta-global {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s5);
+  border: none;
+  border-bottom: 1px solid var(--hairline);
+  background-color: rgba(255, 92, 115, 0.08);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease);
+}
+
+.alerta-global[hidden] {
+  display: none;
+}
+
+.alerta-global:hover {
+  background-color: rgba(255, 92, 115, 0.13);
+}
+
+.alerta-marca {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--red);
+}
+
+.alerta-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.alerta-ir {
+  flex: 0 0 auto;
+  font-size: var(--t-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}

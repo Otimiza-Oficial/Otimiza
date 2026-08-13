@@ -83,7 +83,7 @@ jobs:
       # Parar no primeiro erro mostra menos de uma vez, mas mostra a verdade.
       - name: Testes — núcleo e dados
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- ci_coverage:: core:: modules::changelog:: modules::preferences:: modules::safety:: modules::diagnostic::"
+        run: "cargo test --lib -- ci_coverage:: core:: modules::changelog:: modules::preferences:: modules::safety::"
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
@@ -107,11 +107,18 @@ jobs:
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware::"
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend::"
 
       - name: Testes — espaço e memória
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::windows::diskspace:: modules::windows::memory::"
+
+      # O veredito é o que a tela inicial mostra antes de qualquer botão. Fica
+      # em passo próprio porque é a área que decide o que o cliente lê primeiro:
+      # quebra aqui é quebra na primeira impressão do produto.
+      - name: Testes — veredito da máquina
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao::"
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri
