@@ -194,7 +194,9 @@ fn causa_de(origem: Origem, id: &str) -> Causa {
             }
         }
 
-        Origem::Gargalo | Origem::Boot => Causa::Configuracao,
+        Origem::Monitor | Origem::PlacaDeVideo | Origem::Gargalo | Origem::Boot => {
+            Causa::Configuracao
+        }
     }
 }
 
@@ -387,6 +389,44 @@ impl EmAchados for super::readiness::ReadinessReport {
     }
 }
 
+impl EmAchados for super::gpupref::GpuPrefReport {
+    fn achados(&self) -> Vec<Achado> {
+        self.findings
+            .iter()
+            .map(|f| {
+                montar(
+                    Origem::PlacaDeVideo,
+                    f.id.clone(),
+                    f.title.clone(),
+                    f.measured.clone(),
+                    f.advice.clone(),
+                    f.severity,
+                    f.fix_location,
+                )
+            })
+            .collect()
+    }
+}
+
+impl EmAchados for super::display::DisplayReport {
+    fn achados(&self) -> Vec<Achado> {
+        self.findings
+            .iter()
+            .map(|f| {
+                montar(
+                    Origem::Monitor,
+                    f.id.clone(),
+                    f.title.clone(),
+                    f.measured.clone(),
+                    f.advice.clone(),
+                    f.severity,
+                    f.fix_location,
+                )
+            })
+            .collect()
+    }
+}
+
 impl EmAchados for super::pressao::PressaoReport {
     fn achados(&self) -> Vec<Achado> {
         self.findings
@@ -506,6 +546,14 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // diagnóstico mais barato do produto, e o único que vê o que aconteceu
         // enquanto o cliente jogava, com o Otimiza aberto em segundo plano.
         (Origem::Pressao, || Ok(super::pressao::analyze().achados())),
+        // Monitor rodando abaixo da taxa que aceita é a maior diferença de
+        // fluidez que existe num PC, e some do diagnóstico de todo mundo. Custa
+        // uma enumeração de modos de vídeo, que é local e barata.
+        (Origem::Monitor, || Ok(super::display::analyze().achados())),
+        // Jogo rodando na placa fraca é o maior ganho de FPS que o produto
+        // consegue entregar — e só existe em máquina com duas placas, que é
+        // praticamente todo notebook. Num desktop de placa única, fica calado.
+        (Origem::PlacaDeVideo, || Ok(super::gpupref::analyze().achados())),
         // A evidência mais forte que temos, e a mais barata: o Windows já
         // anotou o esgotamento de memória e o programa que travou. Fica no
         // grupo automático porque é justamente o que responde a pergunta do
@@ -570,6 +618,8 @@ fn nome_da_origem(origem: Origem) -> &'static str {
         Origem::Boot => "Tempo de inicialização",
         Origem::Disco => "Espaço em disco",
         Origem::Esgotamento => "Registro de eventos do Windows",
+        Origem::Monitor => "Monitor e taxa de atualização",
+        Origem::PlacaDeVideo => "Placa de vídeo por jogo",
         Origem::Pressao => "Observação dos últimos dias",
     }
 }

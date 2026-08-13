@@ -107,7 +107,7 @@ jobs:
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend::"
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat::"
 
       - name: Testes — espaço e memória
         working-directory: pc-optimizer/src-tauri
@@ -118,7 +118,7 @@ jobs:
       # quebra aqui é quebra na primeira impressão do produto.
       - name: Testes — veredito da máquina
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao::"
+        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::gpupref::"
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri
@@ -134,7 +134,7 @@ jobs:
 
       - name: Testes — serviços de terceiros, perfis e execução
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
+        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::deteccao:: modules::windows::jogos:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
 
       # O mapa de pastas varre o disco de verdade e leva perto de um minuto.
       # Fica num passo próprio para não parecer que outra área travou.

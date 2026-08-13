@@ -47,6 +47,8 @@ pub fn run() {
             commands::clean_shader_cache,
             commands::analyze_readiness,
             commands::diagnostico_rapido,
+            commands::analyze_gpu_preference,
+            commands::set_gpu_preference,
             commands::fix_readiness,
             commands::running_game_executable,
             commands::set_persistent_priority,

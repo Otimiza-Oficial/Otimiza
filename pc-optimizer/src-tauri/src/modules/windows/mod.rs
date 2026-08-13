@@ -7,6 +7,7 @@
 //    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
 
 pub mod achados;
+pub mod anticheat;
 pub mod bloatware;
 pub mod boot;
 pub mod bottleneck;
@@ -14,15 +15,19 @@ pub mod browsers;
 pub mod catalog;
 pub mod cleanup;
 pub mod conflicts;
+pub mod deteccao;
 pub mod devices;
 pub mod diskspace;
+pub mod display;
 pub mod exhaustion;
 pub mod firmware;
 pub mod fivem;
 pub mod foldermap;
 pub mod frames;
 pub mod gamemode;
+pub mod gpupref;
 pub mod hardware;
+pub mod jogos;
 pub mod health;
 pub mod memory;
 pub mod network;
@@ -543,6 +548,57 @@ impl WindowsOptimizer {
             message: format!(
                 "`{}` passa a abrir sempre em prioridade alta. Atenção: quando o jogo                  atualizar, o nome do executável muda e este ajuste precisa ser aplicado de                  novo — o Otimiza avisa quando isso acontecer.",
                 executable
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
+    /// Escolhe qual placa de vídeo um jogo deve usar.
+    ///
+    /// Entra no histórico com id próprio por jogo, então "Desfazer tudo"
+    /// devolve a preferência que existia antes — inclusive a ausência dela.
+    pub fn set_gpu_preference(
+        &self,
+        caminho: &str,
+        preferencia: gpupref::Preferencia,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = format!("placa:{}", caminho.to_lowercase());
+
+        if log.is_applied(&id) {
+            // Reaplicar por cima perderia o valor original: o histórico
+            // guardaria como "anterior" aquilo que nós mesmos escrevemos.
+            self.revert(&id, log)?;
+        }
+
+        let arquivo = std::path::Path::new(caminho);
+        let change = gpupref::definir(arquivo, preferencia)?;
+        let described = change.describe();
+
+        let nome_curto = arquivo
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| caminho.to_string());
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} na {}", nome_curto, preferencia.nome()),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        })?;
+
+        Ok(OptimizationOutcome {
+            id,
+            name: nome_curto.clone(),
+            success: true,
+            applied: true,
+            message: format!(
+                "`{}` passa a usar a {}. Vale na próxima vez que o jogo abrir — se ele \
+                 estiver aberto agora, feche e abra de novo.",
+                nome_curto,
+                preferencia.nome()
             ),
             requires_restart: false,
             changes_count: 1,

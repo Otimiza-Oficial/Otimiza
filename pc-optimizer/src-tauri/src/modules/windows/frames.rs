@@ -194,6 +194,23 @@ pub fn medir(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, St
         );
     }
 
+    // Medir quadros é seguro com QUALQUER anticheat rodando, e a consulta está
+    // aqui para deixar isso escrito onde alguém vai ler.
+    //
+    // O motivo: este módulo não encosta no processo do jogo. Ele assina um
+    // canal de eventos que o próprio Windows publica sobre a entrega de
+    // quadros — nada de handle, nada de leitura de memória, nada de injeção.
+    // É por isso que a medição continua funcionando no Valorant, enquanto a
+    // suspensão de programas e a prioridade são recusadas.
+    if let Some(recusa) = super::anticheat::permite(
+        super::anticheat::Acao::MedirQuadros,
+        &super::anticheat::detectar_agora(),
+    )
+    .motivo()
+    {
+        return Err(recusa.to_string());
+    }
+
     if MEDINDO.swap(true, Ordering::SeqCst) {
         return Err("Já existe uma medição de quadros em andamento.".to_string());
     }

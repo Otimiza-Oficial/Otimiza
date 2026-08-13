@@ -59,6 +59,10 @@ pub enum Origem {
     Termico,
     Boot,
     Disco,
+    /// Monitor: resolução e taxa de atualização.
+    Monitor,
+    /// Qual placa de vídeo cada jogo usa. Só existe em máquina com duas placas.
+    PlacaDeVideo,
     /// A janela de observação contínua dos últimos dias, amostrada pelo próprio
     /// Otimiza enquanto fica aberto.
     Pressao,

@@ -49,6 +49,8 @@ use crate::modules::windows::readiness::ReadinessReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::veredito::Veredito;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::gpupref::GpuPrefReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::tasks::ScheduledTask;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
@@ -505,6 +507,54 @@ pub async fn diagnostico_rapido() -> Result<Veredito, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Qual placa de vídeo cada jogo usa.
+#[tauri::command]
+pub async fn analyze_gpu_preference() -> Result<GpuPrefReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::gpupref::analyze)
+            .await
+            .map_err(|e| format!("Falha ao ler as placas de vídeo: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Fixa qual placa de vídeo um jogo deve usar.
+///
+/// Em notebook com duas placas, é o maior ganho de FPS que este produto tem
+/// para dar — e não exige administrador nem reiniciar o PC.
+#[tauri::command]
+pub async fn set_gpu_preference(
+    caminho: String,
+    desempenho: bool,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::gpupref::Preferencia;
+
+        let preferencia = if desempenho {
+            Preferencia::Desempenho
+        } else {
+            Preferencia::Automatica
+        };
+
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new()
+            .set_gpu_preference(&caminho, preferencia, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (caminho, desempenho, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

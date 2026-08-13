@@ -32,10 +32,26 @@
   --amber: #e8b23a;
   --red: #ff5c73;
 
+  /*
+    AS MESMAS CORES, EM COMPONENTES — para quando é preciso transparência.
+
+    `rgba()` não aceita uma variável de cor inteira, só os três números. Sem
+    estes tokens, cada lugar que queria um vermelho a 8% reescrevia
+    `rgba(255, 92, 115, .08)` à mão — e eram 23 dessas espalhadas pelo arquivo,
+    recriando cores que já existiam logo acima. Trocar o vermelho da marca
+    exigia caçar todas.
+  */
+  --accent-rgb: 245, 243, 240;
+  --green-rgb: 95, 211, 154;
+  --amber-rgb: 232, 178, 58;
+  --red-rgb: 255, 92, 115;
+  --bg-rgb: 11, 11, 11;
+  --text-rgb: 233, 231, 227;
+
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
      e a matriz de núcleos usava um branco diferente — dois cinzas para a
      mesma ideia, lado a lado no mesmo painel. */
-  --track: rgba(233, 231, 227, 0.09);
+  --track: rgba(var(--text-rgb), 0.09);
 
   --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -155,8 +171,8 @@ body {
   /* Malha técnica de fundo: densa o suficiente para dar textura, fraca o
      suficiente para nunca competir com os dados. */
   background-image:
-    linear-gradient(rgba(245, 243, 240, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 243, 240, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(var(--accent-rgb), 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.035) 1px, transparent 1px);
   background-size: 44px 44px, 44px 44px;
   color: var(--text);
   font-family: var(--font-mono);
@@ -244,12 +260,6 @@ button {
 }
 
 /* -------------------------------------------------------------------- abas */
-
-/* A faixa de abas do topo foi substituída pela barra lateral. A regra fica
-   porque `.tab` ainda descreve o estado selecionado usado pelo JavaScript. */
-.tabs {
-  display: none;
-}
 
 .tab {
   position: relative;
@@ -405,19 +415,6 @@ button {
   background-color: var(--text-muted);
 }
 
-.brand-name {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-}
-
-.brand-sub {
-  font-size: var(--t-micro);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
 .ident {
   display: flex;
   flex-wrap: wrap;
@@ -458,7 +455,7 @@ button {
 }
 
 .access[data-level="admin"] {
-  border-color: rgba(95, 211, 154, 0.4);
+  border-color: rgba(var(--green-rgb), 0.4);
   color: var(--green);
 }
 
@@ -468,7 +465,7 @@ button {
 }
 
 .access[data-level="limited"] {
-  border-color: rgba(232, 178, 58, 0.4);
+  border-color: rgba(var(--amber-rgb), 0.4);
   color: var(--amber);
 }
 
@@ -554,14 +551,14 @@ button {
 }
 
 #cpu-history-area {
-  fill: rgba(245, 243, 240, 0.1);
+  fill: rgba(var(--accent-rgb), 0.1);
 }
 
 /* ---------------------------------------------------- instrumento principal */
 
 .panel-hero {
   background:
-    radial-gradient(120% 90% at 50% 0%, rgba(245, 243, 240, 0.06), transparent 65%),
+    radial-gradient(120% 90% at 50% 0%, rgba(var(--accent-rgb), 0.06), transparent 65%),
     var(--panel);
 }
 
@@ -586,7 +583,7 @@ button {
 
 .gauge-track {
   fill: none;
-  stroke: rgba(245, 243, 240, 0.1);
+  stroke: rgba(var(--accent-rgb), 0.1);
   stroke-width: 6;
 }
 
@@ -731,13 +728,13 @@ button {
 }
 
 .btn-primary {
-  border-color: rgba(245, 243, 240, 0.55);
+  border-color: rgba(var(--accent-rgb), 0.55);
   color: var(--accent);
-  background: rgba(245, 243, 240, 0.06);
+  background: rgba(var(--accent-rgb), 0.06);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: rgba(245, 243, 240, 0.14);
+  background: rgba(var(--accent-rgb), 0.14);
 }
 
 .btn-ghost {
@@ -804,36 +801,12 @@ button {
 
 /* ------------------------------------------------------------- diagnóstico */
 
-.health {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.health-score {
-  font-size: var(--t-number);
-  font-weight: 300;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.health-max {
-  font-size: var(--t-body);
-  color: var(--text-muted);
-}
-
-.health-bar {
-  height: 3px;
-  background: var(--track);
-  margin-bottom: 14px;
-}
-
-.health-bar i {
-  display: block;
-  height: 100%;
-  transition: width 0.5s ease;
-}
+/* A nota de saúde de 0 a 100 morava aqui, e foi removida na versão 0.13
+   junto com o módulo que a calculava: aquele número não consultava nenhum dos
+   diagnósticos que medem a máquina de verdade, e mesmo assim era o elemento
+   mais visível da tela. O estilo dela ficou para trás por mais uma versão —
+   trinta linhas de CSS mantendo viva uma ideia que o produto já tinha
+   abandonado. */
 
 .bottleneck {
   border-left: 2px solid var(--hairline-strong);
@@ -1047,7 +1020,7 @@ button {
 
 .chip[data-warn="true"] {
   color: var(--red);
-  border-color: rgba(255, 92, 115, 0.4);
+  border-color: rgba(var(--red-rgb), 0.4);
 }
 
 .optimization .effect {
@@ -1083,7 +1056,7 @@ button {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(11, 11, 11, 0.82);
+  background: rgba(var(--bg-rgb), 0.82);
   padding: 20px;
   z-index: 10;
 }
@@ -1353,17 +1326,17 @@ button {
    um cliente que entende que precisa trocar peça não espera milagre de software. */
 .chip[data-fix="Hardware"] {
   color: var(--red);
-  border-color: rgba(255, 92, 115, 0.4);
+  border-color: rgba(var(--red-rgb), 0.4);
 }
 
 .chip[data-fix="Bios"] {
   color: var(--amber);
-  border-color: rgba(232, 178, 58, 0.4);
+  border-color: rgba(var(--amber-rgb), 0.4);
 }
 
 .chip[data-fix="Software"] {
   color: var(--green);
-  border-color: rgba(95, 211, 154, 0.4);
+  border-color: rgba(var(--green-rgb), 0.4);
 }
 
 .chip[data-fix="None"] {
@@ -1403,7 +1376,7 @@ button {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   padding: 1px 5px;
-  border: 1px solid rgba(232, 178, 58, 0.5);
+  border: 1px solid rgba(var(--amber-rgb), 0.5);
   color: var(--amber);
   flex: none;
 }
@@ -1670,11 +1643,11 @@ button {
 /* O que pesa mais nesta máquina em particular */
 .chip[data-recommended="true"] {
   color: var(--green);
-  border-color: rgba(95, 211, 154, 0.45);
+  border-color: rgba(var(--green-rgb), 0.45);
 }
 
 .gain-dot[data-recommended="true"] {
-  box-shadow: 0 0 0 3px rgba(95, 211, 154, 0.22);
+  box-shadow: 0 0 0 3px rgba(var(--green-rgb), 0.22);
 }
 
 /* Liberador de espaço */
@@ -2331,7 +2304,7 @@ button {
   display: flex;
   justify-content: center;
   padding-top: 12vh;
-  background: rgba(11, 11, 11, 0.72);
+  background: rgba(var(--bg-rgb), 0.72);
   animation: surgir 0.14s var(--ease) both;
 }
 
@@ -2423,7 +2396,6 @@ button {
 .folder,
 .finding,
 .startup,
-.mud,
 .readouts-row .readout,
 .live-log,
 .optimization,
@@ -2458,8 +2430,7 @@ button {
 .core,
 .core i,
 .process-bar,
-.process-bar i,
-.health-bar {
+.process-bar i {
   border-radius: 999px;
 }
 
@@ -2866,7 +2837,7 @@ button {
   margin: 0 0 var(--s4);
   padding: var(--s3) var(--s4);
   border-left: 2px solid var(--track);
-  background-color: rgba(233, 231, 227, 0.03);
+  background-color: rgba(var(--text-rgb), 0.03);
   border-radius: 0 var(--r1) var(--r1) 0;
 }
 
@@ -2887,7 +2858,7 @@ button {
   padding: var(--s3) var(--s5);
   border: none;
   border-bottom: 1px solid var(--hairline);
-  background-color: rgba(255, 92, 115, 0.08);
+  background-color: rgba(var(--red-rgb), 0.08);
   color: var(--text);
   font-family: inherit;
   font-size: var(--t-body);
@@ -2901,7 +2872,7 @@ button {
 }
 
 .alerta-global:hover {
-  background-color: rgba(255, 92, 115, 0.13);
+  background-color: rgba(var(--red-rgb), 0.13);
 }
 
 .alerta-marca {

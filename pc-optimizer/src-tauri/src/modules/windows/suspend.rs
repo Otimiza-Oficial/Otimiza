@@ -66,6 +66,17 @@ pub const SUSPENSIVEIS: &[(&str, &str)] = &[
 /// o próprio Otimiza deixaria os processos suspensos para sempre, porque quem
 /// os devolve é ele.
 pub const NUNCA_SUSPENDER: &[&str] = &[
+    // Anticheat. Já não entrariam por inclusão, mas a lista de proibidos é o
+    // que o próximo mantenedor lê — e suspender um anticheat é a forma mais
+    // rápida de fazer um cliente perder a conta.
+    "vgc.exe",
+    "vgtray.exe",
+    "easyanticheat.exe",
+    "easyanticheat_eos.exe",
+    "beservice.exe",
+    "bedaisy.exe",
+    "faceitclient.exe",
+    "faceitservice.exe",
     // O próprio Otimiza e o motor da interface.
     "pc-optimizer.exe",
     "otimiza.exe",
@@ -183,6 +194,28 @@ impl Registro {
     }
 }
 
+/// Lançadores de loja.
+///
+/// Separados do resto porque o anticheat conversa com eles durante a partida:
+/// suspender a Steam com Counter-Strike aberto derruba a sessão do VAC, e
+/// suspender o lançador da Epic com Fortnite aberto atrapalha o Easy
+/// Anti-Cheat. Fora de partida, suspendê-los é seguro e devolve memória — que
+/// é por que eles continuam na lista de suspensíveis.
+pub const LANCADORES: &[&str] = &[
+    "steam.exe",
+    "steamwebhelper.exe",
+    "epicgameslauncher.exe",
+    "riotclientservices.exe",
+    "battle.net.exe",
+    "eadesktop.exe",
+    "upc.exe",
+];
+
+pub fn e_lancador(nome: &str) -> bool {
+    let minusculo = nome.trim().to_lowercase();
+    LANCADORES.iter().any(|l| minusculo == *l)
+}
+
 /// Decide se um processo pode ser suspenso.
 ///
 /// Função pura, separada da varredura, para poder ser testada sem suspender
@@ -202,10 +235,7 @@ pub fn pode_suspender(nome: &str) -> Option<&'static str> {
     }
 
     // O jogo em execução nunca é suspenso — seria o oposto do objetivo.
-    if super::gamemode::JOGOS
-        .iter()
-        .any(|(chave, _)| minusculo.contains(chave))
-    {
+    if super::gamemode::nome_do_jogo(&minusculo).is_some() {
         return None;
     }
 
@@ -324,11 +354,37 @@ mod api {
 /// Devolve o que foi suspenso, para a interface poder dizer o que fez. Mudança
 /// silenciosa no sistema é exatamente o que este produto critica nos outros.
 pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
+    use super::anticheat::{self, Acao};
+
     let candidatos = super::processes::listar_para_suspensao();
+
+    // ANTICHEAT PRIMEIRO, ANTES DE QUALQUER THREAD PARAR.
+    //
+    // Suspender thread de processo alheio é primitiva clássica de trapaça.
+    // Enquanto a lista de jogos tinha cinco nomes e três eram GTA, isso quase
+    // nunca encostava num anticheat. Com Valorant, Fortnite e PUBG na lista,
+    // encosta — e um cliente banido por causa do Otimiza é pior do que um
+    // cliente com o PC travando: travamento se conserta, conta não volta.
+    let nomes: Vec<String> = candidatos.iter().map(|(_, nome, _)| nome.clone()).collect();
+    let presencas = anticheat::detectar(&nomes);
+
+    let permissao = anticheat::permite(Acao::SuspenderFundo, &presencas);
+    if let Some(motivo) = permissao.motivo() {
+        return Err(motivo.to_string());
+    }
+
+    // O lançador da loja tem regra própria: o anticheat conversa com ele
+    // durante a partida, então suspendê-lo derruba a sessão mesmo quando
+    // suspender o resto é seguro.
+    let pode_lancador = anticheat::permite(Acao::SuspenderLancador, &presencas).pode();
 
     let alvos: Vec<Suspenso> = candidatos
         .into_iter()
         .filter_map(|(pid, nome, inicio)| {
+            if !pode_lancador && e_lancador(&nome) {
+                return None;
+            }
+
             pode_suspender(&nome).map(|visivel| Suspenso {
                 pid,
                 nome,
@@ -437,8 +493,15 @@ mod tests {
 
     #[test]
     fn o_jogo_em_execucao_nunca_e_suspenso() {
-        for (chave, _) in super::super::gamemode::JOGOS {
-            let nome = format!("{}.exe", chave);
+        for jogo in super::super::gamemode::JOGOS {
+            // As chaves por pedaço não são nome de arquivo — carregam o número
+            // da compilação no meio. Monta-se um nome plausível para elas.
+            let nome = if jogo.por_pedaco {
+                format!("{}b0000_GTAProcess.exe", jogo.chave)
+            } else {
+                jogo.chave.to_string()
+            };
+
             assert_eq!(
                 pode_suspender(&nome),
                 None,

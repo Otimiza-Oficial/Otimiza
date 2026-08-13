@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.13.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.13.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.14.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.14.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
@@ -17,140 +17,118 @@ depois em *Executar assim mesmo*.
 
 ---
 
-# Esta versão nasceu de uma falha nossa
+# O Otimiza deixou de ser um otimizador de FiveM
 
-O Otimiza foi testado em duas máquinas reais e falhou nas duas. Num notebook que
-travava, e num PC onde o FiveM congelava o computador inteiro — o jogo, o
-Discord, o sistema, tudo ao mesmo tempo.
+A versão anterior reconhecia cinco jogos, e três eram da família GTA. Fortnite,
+Minecraft, LoL, Roblox, qualquer lançamento novo — nenhum existia para o
+programa. O modo jogo nunca ligava, o segundo plano nunca era pausado.
 
-A causa não era falta de otimização agressiva. Era pior: **o produto já tinha
-medido o problema e disse que estava tudo bem.**
+Esta versão troca a lista por medição.
 
-Numa máquina de 8 GB que travava por falta de memória, a tela do Otimiza
-mostrava *"Memória e paginação sem problemas"*. O motivo cabe numa linha de
-código: a regra que avisa sobre pouca memória exigia menos de 6 GB para
-disparar. E o limiar certo já estava no mesmo arquivo, a noventa linhas de
-distância, usado por outra regra.
+## Reconhece qualquer jogo, mesmo o que ninguém cadastrou
 
-Esta versão conserta isso e o que estava por trás disso.
+Um programa é jogo quando três coisas valem ao mesmo tempo: a janela em
+primeiro plano cobre o monitor, **o mesmo processo** está consumindo o motor 3D
+da placa, e está aberto há tempo suficiente.
 
-## O veredito
+Os três juntos, não pontuação somada. É o par janela+3D que carrega o peso, e
+ele resolve de uma vez o caso que derruba todo detector ingênuo: num navegador,
+quem desenha é um processo auxiliar que **não tem janela**, e o processo que tem
+a janela não consome 3D. Isso cobre Chrome, Discord, Spotify e Teams sem
+precisar citar nenhum deles. Vídeo em tela cheia também não passa, porque
+consome o motor de decodificação e não o 3D.
 
-O Otimiza abria com números de uso e dezessete botões de análise espalhados por
-cinco abas. Para saber o que havia de errado com o PC, o cliente tinha que
-clicar em todos e montar a resposta na cabeça. Ninguém monta.
+O OBS é o único caso que a medição não separa — usa 3D pesado em tela cheia
+igual a um jogo. Esse entra numa lista de recusa, com o motivo escrito. E
+recusar é o certo: ligar o modo jogo porque alguém começou a gravar seria mexer
+na máquina pelo motivo errado.
 
-Agora, ao abrir, o programa analisa sozinho e responde com **uma frase**, com o
-número que a sustenta:
+A lista de nomes continua, com outro papel: dar nome bonito. Passou de 5 para 15
+jogos. Um jogo fora dela é reconhecido do mesmo jeito, só aparece pelo nome do
+executável.
 
-> **O Windows já registrou falta de memória nesta máquina**
-> 3 registros nos últimos 30 dias — o mais recente em 16/07 às 21:21, com 31,7 GB
-> comprometidos para 7,9 GB de memória física.
+## Seu monitor pode estar rodando a um terço do que aguenta
 
-Não é uma nota de 0 a 100. Uma nota é fácil de fotografar e impossível de
-conferir; a frase acima o cliente confere sozinho no Visualizador de Eventos do
-Windows.
+Monitor de 144 ou 180 Hz configurado em 60 Hz é comum — acontece depois de troca
+de driver ou de cabo, e ninguém percebe. É a maior diferença de fluidez que
+existe num PC.
 
-Quando não há nada de errado, o veredito diz isso — com os números que
-sustentam a afirmação. Inventar um problema para justificar a compra é o oposto
-deste produto.
+Na máquina onde esta versão foi desenvolvida, **dois monitores de 180 Hz estavam
+os dois em 60 Hz**, e o dono vinha reclamando que o jogo não parecia fluido.
 
-## O que o Windows já sabia e ninguém lia
+O Otimiza passa a ler isso e avisar. E não promete o que não entrega: subir a
+taxa do monitor **não aumenta o FPS**. Ela não cria quadros — deixa de segurar
+os que a placa já entrega. O jogo fica mais suave e o contador continua onde
+estava. Está escrito assim na tela, e há um teste que quebra se alguém mudar
+esse texto para prometer FPS.
 
-Quando a memória acaba, o Windows grava um evento com o nome e o tamanho dos
-processos que estavam segurando memória naquele instante. Quando um programa
-para de responder, grava outro com o nome e a hora.
+## Jogo rodando na placa de vídeo errada
 
-O Otimiza passa a ler os dois. Na máquina de teste isso produziu:
+Em notebook com duas placas, o Windows às vezes abre o jogo na placa integrada.
+O jogo abre normalmente e só roda mal, e o dono conclui que o PC é fraco —
+quando muitas vezes a placa boa está parada do lado. Quando esse é o caso,
+corrigir vale de duas a cinco vezes mais FPS.
 
-```
-16/07 21:21 — falta de memória
-  claude.exe 9,8 GB · HuntinBuddies 4,4 GB · Arc.exe 2,2 GB
-11/08 14:13 — FiveM parou de responder
-16/07 21:26 — Discord parou de responder
-```
+Em máquina com uma placa só, o ganho é exatamente zero, e o Otimiza não mostra
+nada. Também há teste para isso.
 
-É a diferença entre dizer "você precisa de mais memória" e mostrar a data, a
-hora e o nome.
+## Anticheat: onde o produto tira a mão
 
-## Achados que agora se encontram
+Esta é a mudança da qual mais me orgulho, e ela **reduz** o que o programa faz.
 
-"Memória em canal único" era medido pelo diagnóstico de firmware. "Programas
-pedindo mais memória do que existe" era medido pelo diagnóstico de memória. As
-duas coisas são a mesma causa, e viviam em abas diferentes — o cliente nunca via
-as duas juntas.
+O Otimiza suspende programas de segundo plano durante o jogo e escreve numa
+chave do registro que fixa prioridade. Enquanto a lista tinha cinco jogos e três
+eram GTA, isso quase nunca encostava num anticheat. Com Valorant, Fortnite e
+PUBG reconhecidos, encosta.
 
-Agora aparecem sob a mesma frase, agrupadas pela causa.
+Agora o programa detecta Vanguard, Easy Anti-Cheat, BattlEye, VAC e FACEIT — e
+quando encontra um deles ativo, **se recusa a trabalhar**, dizendo por quê:
 
-## Discord e navegador pausados durante o jogo — e devolvidos depois
+> Não pausei nenhum programa: o Riot Vanguard está rodando agora. Pausar
+> programas com um anticheat de núcleo ativo é risco de banimento, e nenhum
+> ganho de FPS compensa perder a sua conta.
 
-Todo otimizador do mercado responde à falta de memória **matando** processos.
-O Otimiza não faz isso: fechar o Discord no meio de uma conversa, ou o navegador
-com quinze abas de trabalho, é a forma mais rápida de alguém perder o que não
-salvou.
+Um detalhe que exigiu cuidado: o Vanguard sobe junto com o Windows e fica
+vigiando com o Valorant fechado. Olhar só os programas abertos daria "nenhum
+anticheat" numa máquina onde a Riot está observando desde que o PC ligou.
 
-Em vez disso, com o modo jogo ligado, o Otimiza **suspende** o que está em
-segundo plano. O programa para de consumir processador e devolve memória ao
-jogo; quando o jogo fecha, ele volta exatamente de onde parou.
+Também saiu de circulação a suspensão da Steam e do lançador da Epic enquanto há
+partida: o anticheat conversa com eles durante o jogo.
 
-Há uma lista explícita do que nunca é suspenso: áudio, antivírus, núcleo do
-Windows, o próprio jogo e o próprio Otimiza. E se o Otimiza for fechado à força
-ou o PC perder energia com programas pausados, **a próxima abertura os devolve**
-— os identificadores vão para disco antes de qualquer coisa ser pausada.
+## Dois defeitos que a versão anterior tinha
 
-## A lista de otimizações parou de deixar você contar errado
+**A prioridade só funcionava no FiveM.** O modo jogo detectava Counter-Strike,
+pedia a prioridade a uma função que procurava o processo por um filtro literal
+`FiveM*GTAProcess*`, e ela respondia *"o jogo não está aberto"* — com o jogo
+aberto na frente do cliente.
 
-São 35 otimizações no catálogo. Sete mudam o FPS de forma mensurável; dezessete
-são higiene de Windows que devolve algumas centenas de megabytes e **não muda
-FPS**. Todas apareciam lado a lado, com o mesmo peso visual — e quem aplica
-trinta espera trinta vezes o resultado.
+**A detecção casava com o que não devia.** A comparação era por pedaço do nome,
+então a chave `cs2` reconhecia `docs2pdf.exe` como Counter-Strike e mudava o
+plano de energia da máquina. Agora é por nome completo, com exceção declarada e
+testada só para os jogos cujo executável carrega número de compilação.
 
-Agora a lista diz isso antes de você clicar, e o que muda o jogo aparece
-primeiro. Uma das etiquetas dizia "resposta do sistema"; passou a dizer "não
-muda FPS", que é o que o próprio código sempre significou.
+## A trava do registro mudou de base
 
-## A nota de saúde foi removida
+A chave que fixa prioridade de processo é a mesma usada por programas que
+sequestram a execução de outros. Quem autorizava a escrita era a lista de nomes
+de jogo — e com a detecção genérica ela deixou de servir.
 
-Havia um número de 0 a 100 na aba Diagnóstico. Ele não consultava nenhum dos
-módulos que realmente medem a máquina — nem a memória, nem o disco, nem o
-firmware — e ainda assim era a coisa mais visível da tela.
+A nova trava não é o detector: heurística não pode virar autoridade de
+segurança. É o **caminho**. O executável precisa estar dentro de uma biblioteca
+de jogo declarada pela Steam ou pela Epic. `cmd.exe` e `sethc.exe` nunca vão
+estar.
 
-Foi removido. No lugar ficou a lista de achados, cada um com o que foi medido
-para sustentá-lo.
+## Limpeza na interface
 
-## O relatório em PDF começa pela conclusão
-
-Antes, o laudo abria com a identificação do hardware e o cliente percorria onze
-seções até descobrir o que havia de errado. A conclusão passou a ser a seção 1 —
-com o que não pôde ser verificado dito ali mesmo, e não numa nota de rodapé.
-
-## Observação contínua
-
-Enquanto fica aberto, o Otimiza amostra a pressão de memória e guarda um resumo
-por hora, por catorze dias. Isso permite dizer "a memória viveu no limite por
-seis horas nesta semana, e na pior delas o FiveM segurava 7,2 GB" — o estado
-anterior ao travamento, que não gera evento nenhum e sumia do diagnóstico.
-
-O arquivo inteiro ocupa poucos kilobytes: um otimizador que engorda o disco do
-cliente seria uma piada de mau gosto.
-
-## VBS: agora sabemos diferenciar dois casos
-
-Desligar a virtualização de segurança rende FPS, e custa proteção real. Mas
-existe um caso em que ela está **ligada sem nenhum serviço de segurança usando**
-— pagando o preço em desempenho sem entregar nada em troca.
-
-O Otimiza passa a diferenciar os dois, e diz qual é o seu. Continua fora do
-botão "Otimizar agora": abrir mão de proteção é decisão consciente, não efeito
-colateral de um clique genérico.
+Saíram 45 linhas de estilo que mantinham viva a nota de saúde de 0 a 100
+removida na versão passada, e 23 cores que eram reescritas à mão recriando
+cores que já existiam como token — trocar o vermelho da marca exigia caçar
+todas. Zero classes sem uso no arquivo.
 
 ---
 
 ## O que esta versão não promete
 
-A máquina de teste tem 8 GB num único pente, com quatro encaixes livres na placa.
-Nada aqui faz o FiveM caber confortavelmente em 8 GB. Pausar o segundo plano
-devolve talvez 1,5 a 2 GB — ajuda, e não resolve.
-
-O segundo pente resolve. O produto passa a dizer isso na primeira tela, que é o
-que deveria ter feito desde o começo.
+Nada aqui inventa FPS onde falta hardware. Numa máquina de 8 GB em canal único
+o teto continua sendo o teto, e o produto continua dizendo isso na primeira
+tela — antes de qualquer botão.

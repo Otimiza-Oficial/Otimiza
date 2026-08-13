@@ -27,7 +27,7 @@
 //    em segundo plano já está listado nas abas Sistema e Painel, com nome, para
 //    a pessoa decidir.
 
-use super::{fivem, power};
+use super::power;
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord};
 use serde::{Deserialize, Serialize};
 
@@ -37,18 +37,73 @@ use serde::{Deserialize, Serialize};
 /// execução encontra o que ficou aplicado.
 const ID: &str = "gamemode:energia";
 
-/// Jogos reconhecidos.
+/// Um jogo que o Otimiza sabe chamar pelo nome.
+pub struct Jogo {
+    /// Nome do executável, em minúsculas.
+    pub chave: &'static str,
+    pub nome: &'static str,
+    /// Verdadeiro só quando o executável carrega o número da compilação no meio
+    /// do nome e não há como comparar por igualdade.
+    ///
+    /// É a exceção, não a regra: comparação por pedaço casa com programa que
+    /// não tem nada a ver. Ver o teste `nome_parecido_nao_e_jogo`.
+    pub por_pedaco: bool,
+}
+
+/// Jogos reconhecidos pelo nome.
 ///
-/// Pedaço do nome do processo e nome visível. A lista é curta e explícita — um
-/// detector genérico de "parece um jogo" erraria, e errar aqui significa mexer
-/// na energia da máquina porque alguém abriu um programa qualquer.
-pub const JOGOS: &[(&str, &str)] = &[
-    ("gtaprocess", "FiveM"),
-    ("redm", "RedM"),
-    ("gta5", "GTA V"),
-    ("cs2", "Counter-Strike 2"),
-    ("valorant", "Valorant"),
+/// ATENÇÃO — esta lista NÃO é mais o gatilho do modo jogo, e sim o catálogo de
+/// nome bonito. Até a versão 0.13 ela era a única forma de o produto saber que
+/// um jogo abriu, o que deixava de fora tudo que não fosse GTA: das cinco
+/// entradas de então, três eram da mesma família.
+///
+/// Um jogo fora desta lista continua sendo reconhecido pelos sinais medidos
+/// (uso do motor 3D, janela em primeiro plano) — só não tem nome próprio.
+pub const JOGOS: &[Jogo] = &[
+    // Os dois da Cfx.re não têm nome fixo: o processo é
+    // `FiveM_b3570_GTAProcess.exe` e muda a cada compilação. As chaves incluem
+    // o sublinhado para não casar com o lançador (`FiveM.exe`), que não é o
+    // processo que desenha.
+    Jogo { chave: "fivem_", nome: "FiveM", por_pedaco: true },
+    Jogo { chave: "redm_", nome: "RedM", por_pedaco: true },
+
+    Jogo { chave: "gta5.exe", nome: "GTA V", por_pedaco: false },
+    Jogo { chave: "cs2.exe", nome: "Counter-Strike 2", por_pedaco: false },
+    Jogo { chave: "valorant-win64-shipping.exe", nome: "Valorant", por_pedaco: false },
+    Jogo { chave: "fortniteclient-win64-shipping.exe", nome: "Fortnite", por_pedaco: false },
+    Jogo { chave: "robloxplayerbeta.exe", nome: "Roblox", por_pedaco: false },
+    Jogo { chave: "minecraft.windows.exe", nome: "Minecraft", por_pedaco: false },
+    Jogo { chave: "league of legends.exe", nome: "League of Legends", por_pedaco: false },
+    Jogo { chave: "rocketleague.exe", nome: "Rocket League", por_pedaco: false },
+    Jogo { chave: "r5apex.exe", nome: "Apex Legends", por_pedaco: false },
+    Jogo { chave: "rainbowsix.exe", nome: "Rainbow Six Siege", por_pedaco: false },
+    Jogo { chave: "tslgame.exe", nome: "PUBG", por_pedaco: false },
+    Jogo { chave: "dota2.exe", nome: "Dota 2", por_pedaco: false },
+    Jogo { chave: "csgo.exe", nome: "CS:GO", por_pedaco: false },
 ];
+
+/// O nome do jogo, se este executável for um jogo conhecido.
+///
+/// Função pura, separada da varredura de processos para poder ser testada sem
+/// depender do que está aberto na máquina.
+pub fn nome_do_jogo(executavel: &str) -> Option<&'static str> {
+    let nome = executavel.trim().to_lowercase();
+
+    if nome.is_empty() {
+        return None;
+    }
+
+    JOGOS
+        .iter()
+        .find(|jogo| {
+            if jogo.por_pedaco {
+                nome.contains(jogo.chave)
+            } else {
+                nome == jogo.chave
+            }
+        })
+        .map(|jogo| jogo.nome)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameModeStatus {
@@ -63,20 +118,39 @@ pub struct GameModeStatus {
 }
 
 /// Procura um jogo conhecido entre os processos.
+pub fn jogo_aberto() -> Option<String> {
+    jogo_aberto_com_pid().map(|(nome, _)| nome)
+}
+
+/// O jogo aberto e o identificador do processo dele.
 ///
-/// A comparação é por pedaço do nome porque o processo do FiveM carrega o
-/// número da compilação: `FiveM_b3570_GTAProcess.exe`.
-pub fn jogo_aberto() -> Option<&'static str> {
+/// O PID é o que permite dar prioridade ao jogo certo. Até a versão 0.13 a
+/// prioridade era pedida a `fivem::priorizar_jogo()`, que procurava o processo
+/// por um filtro literal `FiveM*GTAProcess*` — então o modo jogo detectava
+/// Counter-Strike, chamava aquela função, e ela respondia "o jogo não está
+/// aberto" com o jogo aberto na frente do cliente.
+pub fn jogo_aberto_com_pid() -> Option<(String, u32)> {
+    // PRIMEIRO os sinais medidos: janela cobrindo o monitor, motor 3D em uso,
+    // tempo de vida. É o que reconhece jogo que ninguém cadastrou — Palworld,
+    // um indie que saiu ontem, um emulador.
+    if let Some(detectado) = super::deteccao::procurar() {
+        return Some((detectado.nome, detectado.pid));
+    }
+
+    // DEPOIS a lista de nomes, como rede de apoio. Ela pega o caso em que o
+    // jogo está aberto mas não em primeiro plano — o cliente deu alt-tab para
+    // olhar o Discord —, situação em que os sinais de janela não fecham e o
+    // modo jogo não deveria desligar por isso.
     use sysinfo::System;
 
     let mut sistema = System::new();
     sistema.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
-    for processo in sistema.processes().values() {
-        let nome = processo.name().to_string_lossy().to_lowercase();
+    for (pid, processo) in sistema.processes() {
+        let executavel = processo.name().to_string_lossy().to_string();
 
-        if let Some((_, visivel)) = JOGOS.iter().find(|(chave, _)| nome.contains(chave)) {
-            return Some(visivel);
+        if let Some(nome) = nome_do_jogo(&executavel) {
+            return Some((nome.to_string(), pid.as_u32()));
         }
     }
 
@@ -96,6 +170,21 @@ pub fn ativar(log: &mut ChangeLog) -> Result<Vec<String>, String> {
 
     // Plano de energia: o único ajuste do modo que muda o sistema e precisa
     // voltar depois.
+    //
+    // A consulta ao anticheat aqui sempre autoriza, e a chamada existe de
+    // propósito: plano de energia é configuração da máquina e não encosta em
+    // processo nenhum. Deixar a decisão escrita no mesmo lugar das outras
+    // impede que alguém, no futuro, endureça a política sem perceber que este
+    // caminho existe — ou afrouxe achando que ele nunca foi avaliado.
+    if let Some(recusa) = super::anticheat::permite(
+        super::anticheat::Acao::PlanoDeEnergia,
+        &super::anticheat::detectar_agora(),
+    )
+    .motivo()
+    {
+        return Err(recusa.to_string());
+    }
+
     let anterior = power::active_scheme()?;
 
     if anterior != power::HIGH_PERFORMANCE_GUID {
@@ -114,12 +203,79 @@ pub fn ativar(log: &mut ChangeLog) -> Result<Vec<String>, String> {
 
     // Prioridade é por sessão e some com o processo. Falhar aqui não derruba o
     // modo: o plano de energia já vale por si.
-    match fivem::priorizar_jogo() {
-        Ok(_) => feito.push("Jogo em prioridade alta no processador.".to_string()),
-        Err(motivo) => feito.push(format!("Prioridade não aplicada: {}", motivo)),
+    match jogo_aberto_com_pid() {
+        Some((nome, pid)) => {
+            // Mudar a prioridade abre um handle NO PROCESSO DO JOGO — é a coisa
+            // mais visível que o Otimiza faz para um anticheat. E o ganho é
+            // pequeno: prioridade alta só muda alguma coisa quando há disputa
+            // real de processador. Trocar risco de banimento por isso seria um
+            // mau negócio para o cliente.
+            let presencas = super::anticheat::detectar_agora();
+            let permissao =
+                super::anticheat::permite(super::anticheat::Acao::PrioridadeNoJogo, &presencas);
+
+            match permissao.motivo() {
+                Some(recusa) => feito.push(recusa.to_string()),
+                None => match priorizar_pid(pid) {
+                    Ok(_) => feito.push(format!("{} em prioridade alta no processador.", nome)),
+                    Err(motivo) => feito.push(format!("Prioridade não aplicada: {}", motivo)),
+                },
+            }
+        }
+        None => feito.push(
+            "Prioridade não aplicada: o jogo fechou entre a detecção e o ajuste.".to_string(),
+        ),
     }
 
     Ok(feito)
+}
+
+/// Onde está, no disco, o executável com este nome — se ele estiver rodando.
+///
+/// Serve à trava do IFEO: o nome sozinho não diz nada sobre a origem do
+/// programa, e é o caminho que separa o jogo instalado pela Steam de um
+/// arquivo qualquer que alguém batizou com o mesmo nome.
+fn caminho_do_executavel(nome: &str) -> Option<std::path::PathBuf> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+
+    let mut sistema = System::new();
+    sistema.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing(),
+    );
+
+    sistema
+        .processes()
+        .values()
+        .find(|p| p.name().to_string_lossy().to_lowercase() == nome)
+        .and_then(|p| p.exe().map(std::path::PathBuf::from))
+}
+
+/// Põe um processo em prioridade alta, pelo identificador.
+///
+/// Alta, e nunca tempo real: prioridade de tempo real põe o processo acima do
+/// próprio Windows, e um jogo travado nessa faixa deixa a máquina sem teclado e
+/// sem mouse. É a mesma recusa que `definir_prioridade_persistente` já faz.
+///
+/// Vale só para a sessão: some quando o processo fecha, então não há o que
+/// registrar no histórico de mudanças.
+pub fn priorizar_pid(pid: u32) -> Result<(), String> {
+    // O PID entra formatado como número, nunca como texto vindo de fora — é o
+    // que impede alguém de fazer o script executar outra coisa.
+    let script = format!(
+        "$p = Get-Process -Id {} -ErrorAction SilentlyContinue; \
+         if ($p) {{ $p.PriorityClass = 'High'; 1 }} else {{ 0 }}",
+        pid
+    );
+
+    let saida = super::shell::powershell(&script)?;
+
+    if saida.stdout.trim() == "1" {
+        Ok(())
+    } else {
+        Err("Reabra o Otimiza como administrador para ajustar a prioridade do jogo.".to_string())
+    }
 }
 
 /// Desliga o modo, devolvendo o plano de energia que existia antes.
@@ -195,13 +351,42 @@ pub fn definir_prioridade_persistente(
         return Err("Nome de executável inválido.".to_string());
     }
 
-    if !JOGOS.iter().any(|(chave, _)| nome.contains(chave)) {
+    // A TRAVA, E POR QUE ELA MUDOU
+    //
+    // Até a versão 0.13 quem autorizava esta escrita era a lista de nomes de
+    // jogo. Com a detecção genérica, a lista deixou de ser a fonte da verdade —
+    // e usar o detector no lugar dela seria pior ainda: detector é heurística,
+    // e heurística não pode virar autoridade de segurança numa chave que serve
+    // para sequestrar a execução de programas.
+    //
+    // A trava agora é o CAMINHO: o executável precisa estar dentro de uma
+    // biblioteca de jogo de verdade, declarada pela Steam ou pela Epic. Um
+    // `sethc.exe` ou um `cmd.exe` nunca vai estar.
+    let biblioteca = super::jogos::varrer();
+    let dentro = caminho_do_executavel(&nome)
+        .map(|caminho| super::jogos::dentro_de_biblioteca(&caminho, &biblioteca.raizes))
+        .unwrap_or(false);
+
+    if !dentro && nome_do_jogo(&nome).is_none() {
         return Err(format!(
-            "`{}` não está na lista de jogos conhecidos do Otimiza. Esta chave do registro é \
-             um mecanismo conhecido de sequestro de execução, e por isso só aceita executável \
-             que o programa reconhece.",
+            "`{}` não está numa pasta de jogo instalado nem na lista de jogos conhecidos do \
+             Otimiza. Esta chave do registro é um mecanismo conhecido de sequestro de \
+             execução, e por isso só aceita executável cuja origem o programa consegue \
+             confirmar.",
             executavel
         ));
+    }
+
+    // Esta escrita deixa marca PERMANENTE no registro, na mesma chave usada
+    // por programas que sequestram a execução de outros. Um anticheat de
+    // núcleo tem todo o direito de estranhar — e ao contrário da prioridade de
+    // sessão, aqui não adianta esperar o jogo fechar: a marca continua lá
+    // quando ele abrir.
+    let presencas = super::anticheat::detectar_agora();
+    if let Some(recusa) =
+        super::anticheat::permite(super::anticheat::Acao::EscreverIfeo, &presencas).motivo()
+    {
+        return Err(recusa.to_string());
     }
 
     let caminho = format!("{}\\{}\\PerfOptions", IFEO, executavel);
@@ -238,10 +423,7 @@ pub fn executavel_do_jogo() -> Option<String> {
         .processes()
         .values()
         .map(|p| p.name().to_string_lossy().to_string())
-        .find(|nome| {
-            let minusculo = nome.to_lowercase();
-            JOGOS.iter().any(|(chave, _)| minusculo.contains(chave))
-        })
+        .find(|nome| nome_do_jogo(nome).is_some())
 }
 
 /// Um passo do vigia: liga quando o jogo abre, desliga quando ele fecha.
@@ -313,20 +495,98 @@ mod tests {
 
     #[test]
     fn a_lista_de_jogos_e_explicita() {
-        // Um detector genérico de "parece um jogo" erraria, e errar aqui
-        // significa mexer na energia da máquina porque alguém abriu um
-        // programa qualquer.
-        assert!(JOGOS.iter().any(|(chave, _)| *chave == "gtaprocess"));
-
-        for (chave, visivel) in JOGOS {
-            assert!(!chave.is_empty() && !visivel.is_empty());
+        for jogo in JOGOS {
+            assert!(!jogo.chave.is_empty() && !jogo.nome.is_empty());
             assert_eq!(
-                *chave,
-                chave.to_lowercase(),
+                jogo.chave,
+                jogo.chave.to_lowercase(),
                 "`{}` precisa estar em minúsculas para casar com o nome do processo",
-                chave
+                jogo.chave
+            );
+
+            // Comparação por pedaço é a exceção perigosa: ela casa com
+            // qualquer programa que contenha aquele texto no nome. Só é
+            // aceitável quando o executável carrega número de compilação, e
+            // nesses casos a chave termina em sublinhado justamente para não
+            // casar com o lançador nem com nome solto.
+            if jogo.por_pedaco {
+                assert!(
+                    jogo.chave.ends_with('_'),
+                    "`{}` compara por pedaço sem terminar em sublinhado — cedo demais para casar",
+                    jogo.chave
+                );
+            } else {
+                assert!(
+                    jogo.chave.ends_with(".exe"),
+                    "`{}` compara por igualdade e precisa ser o nome completo do executável",
+                    jogo.chave
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn nome_parecido_nao_e_jogo() {
+        // O defeito que este teste tranca: até a versão 0.13 a comparação era
+        // `nome.contains(chave)` com a chave `cs2`, então QUALQUER programa com
+        // "cs2" no nome ligava o modo jogo — e ligar o modo jogo muda o plano
+        // de energia da máquina do cliente.
+        for impostor in [
+            "docs2pdf.exe",
+            "nvcs2.exe",
+            "redmine.exe",
+            "redmond-sync.exe",
+            "gta5-mod-manager-installer.exe",
+            "fivem.exe", // o lançador não é o processo que desenha
+        ] {
+            assert_eq!(
+                nome_do_jogo(impostor),
+                None,
+                "`{}` não é jogo e foi reconhecido como tal",
+                impostor
             );
         }
+    }
+
+    #[test]
+    fn reconhece_os_jogos_de_verdade() {
+        assert_eq!(nome_do_jogo("cs2.exe"), Some("Counter-Strike 2"));
+        assert_eq!(nome_do_jogo("CS2.exe"), Some("Counter-Strike 2"));
+        assert_eq!(
+            nome_do_jogo("FortniteClient-Win64-Shipping.exe"),
+            Some("Fortnite")
+        );
+        assert_eq!(nome_do_jogo("RobloxPlayerBeta.exe"), Some("Roblox"));
+
+        // Os dois da Cfx.re carregam o número da compilação no meio do nome, e
+        // precisam continuar sendo distinguidos um do outro.
+        assert_eq!(nome_do_jogo("FiveM_b3570_GTAProcess.exe"), Some("FiveM"));
+        assert_eq!(nome_do_jogo("RedM_b1491_GTAProcess.exe"), Some("RedM"));
+
+        assert_eq!(nome_do_jogo(""), None);
+        assert_eq!(nome_do_jogo("   "), None);
+    }
+
+    #[test]
+    fn a_prioridade_nao_e_mais_exclusiva_do_fivem() {
+        // O defeito: `ativar()` pedia a prioridade a `fivem::priorizar_jogo()`,
+        // cujo filtro era o literal `FiveM*GTAProcess*`. O modo jogo detectava
+        // Counter-Strike, chamava aquela função, e ela respondia "o jogo não
+        // está aberto" — com o jogo aberto na frente do cliente.
+        // A verificação é pela IMPORTAÇÃO, e não pelo texto: o comentário que
+        // documenta o defeito precisa continuar citando o nome da função
+        // antiga, senão daqui a um ano ninguém entende por que este teste
+        // existe.
+        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+
+        assert!(
+            !producao.contains("use super::{fivem"),
+            "o modo jogo voltou a importar o módulo do FiveM"
+        );
+        assert!(
+            producao.contains("fn priorizar_pid"),
+            "a prioridade precisa ser dada pelo identificador do processo detectado"
+        );
     }
 
     #[test]
