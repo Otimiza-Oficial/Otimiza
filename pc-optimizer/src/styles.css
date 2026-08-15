@@ -3139,3 +3139,62 @@ button {
   text-transform: uppercase;
   color: var(--text-muted);
 }
+
+/* Exames que já rodaram sozinhos, recolhidos.
+
+   A aba Diagnóstico tinha nove cartões, e quatro deles remediam o que o
+   veredito já mede na abertura do programa. Não foram apagados: continuam
+   inteiros aqui dentro, só deixaram de disputar a atenção com o que a pessoa
+   abriu a aba para ver. */
+.exames-detalhados {
+  margin-top: var(--s5);
+}
+
+.exames-detalhados > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s4);
+  border: 1px dashed rgba(var(--text-rgb), 0.11);
+  border-radius: var(--r2);
+  color: var(--text-dim);
+  font-size: var(--t-body);
+  cursor: pointer;
+  list-style: none;
+}
+
+.exames-detalhados > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* O triângulo é desenhado à mão para poder girar sem depender do marcador
+   padrão, que muda de forma entre navegadores. */
+.exames-detalhados > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--dur) var(--ease);
+}
+
+.exames-detalhados[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.exames-detalhados > summary:hover {
+  border-color: rgba(var(--text-rgb), 0.2);
+  color: var(--text);
+}
+
+.exames-nota {
+  font-size: var(--t-label);
+  color: var(--text-muted);
+}
+
+/* Os cartões de dentro respiram no mesmo ritmo do resto da aba. */
+.exames-detalhados[open] > .panel {
+  margin-top: var(--s4);
+}

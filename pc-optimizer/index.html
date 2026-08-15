@@ -439,8 +439,7 @@
 
         <!-- ======================================================== DIAGNÓSTICO -->
         <section class="tab-panel" id="tab-diagnostico" role="tabpanel" aria-labelledby="tabbtn-diagnostico" hidden>
-          <div class="grid grid-two">
-            <section class="panel">
+<section class="panel">
               <div class="panel-head">
                 <h2>Achados desta máquina</h2>
                 <button id="run-diagnostic" class="btn btn-ghost">Analisar</button>
@@ -463,26 +462,7 @@
               </div>
             </section>
 
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Firmware e hardware</h2>
-                <span class="panel-tag" id="firmware-board">—</span>
-              </div>
-
-              <p class="lead">
-                Não escrevemos na BIOS: em placa de consumo as configurações ficam
-                num bloco proprietário da NVRAM, e errar ali não trava o Windows —
-                inutiliza a placa-mãe. O que fazemos é ler o que a BIOS e o hardware
-                estão fazendo com o seu desempenho, e dizer onde se resolve.
-              </p>
-
-              <button id="analyze-firmware" class="btn" data-custo="~12 s">Analisar</button>
-              <p id="firmware-status" class="status"></p>
-              <div id="firmware-result" class="resultado" data-vazio="Lê a memória instalada, o arranque e a segurança da BIOS, e mede queda de desempenho sob carga sustentada. Leva cerca de 12 segundos e não altera nada."></div>
-            </section>
-          </div>
-
-          <section class="panel">
+<section class="panel">
             <div class="panel-head">
               <h2>Quanto o seu PC demora para ligar</h2>
               <span class="panel-tag" id="boot-tag">—</span>
@@ -502,7 +482,7 @@
             <div id="boot-result" class="resultado" data-vazio="Lê o registro que o próprio Windows já mantém: quanto o PC demorou no último boot e quais programas atrasaram, com os segundos de cada um. Cerca de 3 segundos, e não altera nada."></div>
           </section>
 
-          <section class="panel">
+<section class="panel">
             <div class="panel-head">
               <h2>Por que o processador não entrega tudo</h2>
               <span class="panel-tag" id="thermal-tag">—</span>
@@ -524,27 +504,7 @@
             <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador está sendo limitado, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Cerca de 5 segundos, e não altera nada."></div>
           </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Antes de otimizar</h2>
-              <span class="panel-tag" id="prontidao-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Estas verificações não são otimizações: são condições que, quando
-              estão erradas, fazem o atendimento inteiro parecer sem efeito. O
-              caso mais comum é máquina com reinício pendente — parte das
-              mudanças não fixa até reiniciar, o técnico aplica tudo, mede, não
-              vê ganho e conclui que o produto não funciona. O motivo estava lá
-              desde o começo, numa chave que ninguém olha.
-            </p>
-
-            <button id="analyze-readiness" class="btn" data-custo="~4 s">Analisar</button>
-            <p id="prontidao-status" class="status"></p>
-            <div id="prontidao-result" class="resultado" data-vazio="Confere o que atrapalha antes de qualquer otimização: reinício pendente, TRIM do SSD, paginação em disco mecânico, plano de energia. Cerca de 4 segundos, e não altera nada."></div>
-          </section>
-
-          <section class="panel">
+<section class="panel">
             <div class="panel-head">
               <h2>Rede e DNS</h2>
               <span class="panel-tag" id="net-tag">—</span>
@@ -576,7 +536,82 @@
             <div id="net-result" class="resultado" data-vazio="Mede o tempo de resposta dos servidores de nome, resolvendo domínios reais três vezes cada. Cerca de 8 segundos, usa a rede, e não altera nada."></div>
           </section>
 
-          <section class="panel">
+<section class="panel">
+            <div class="panel-head">
+              <h2>Conflitos entre programas</h2>
+              <span class="panel-tag" id="conflicts-summary">—</span>
+            </div>
+
+            <p class="lead">
+              PC lento raramente é culpa de um programa só. É de dois fazendo a
+              mesma coisa ao mesmo tempo: dois antivírus varrendo um ao outro,
+              três sobreposições injetando código no mesmo jogo, dois otimizadores
+              desfazendo a configuração um do outro.
+            </p>
+
+            <button id="analyze-conflicts" class="btn" data-custo="~4 s">Analisar</button>
+            <p id="conflicts-status" class="status"></p>
+            <div id="conflicts-result" class="resultado" data-vazio="Procura programas que fazem a mesma coisa e brigam entre si: dois antivírus, dois otimizadores, sobreposições de jogo. Cerca de 4 segundos, e não altera nada."></div>
+          </section>
+
+          <!--
+            OS EXAMES QUE JÁ RODARAM SOZINHOS
+
+            Estes quatro painéis não são exames novos: firmware, prontidão,
+            saúde e memória já foram medidos na abertura do programa, por
+            `veredito::coletar_rapido()`, e os achados deles estão na lista
+            acima. Clicar em "Analisar" aqui remede o que já foi medido.
+
+            Ficavam abertos ocupando quatro cartões inteiros, cada um com um
+            parágrafo de explicação, numa aba que já tinha nove. Continuam
+            inteiros e acessíveis — só deixaram de disputar a atenção com o
+            que a pessoa veio ver.
+          -->
+          <details class="exames-detalhados">
+            <summary>
+              Ver cada exame em detalhe
+              <span class="exames-nota">firmware, prontidão, saúde do disco e memória — já medidos na abertura</span>
+            </summary>
+
+<section class="panel">
+              <div class="panel-head">
+                <h2>Firmware e hardware</h2>
+                <span class="panel-tag" id="firmware-board">—</span>
+              </div>
+
+              <p class="lead">
+                Não escrevemos na BIOS: em placa de consumo as configurações ficam
+                num bloco proprietário da NVRAM, e errar ali não trava o Windows —
+                inutiliza a placa-mãe. O que fazemos é ler o que a BIOS e o hardware
+                estão fazendo com o seu desempenho, e dizer onde se resolve.
+              </p>
+
+              <button id="analyze-firmware" class="btn" data-custo="~12 s">Analisar</button>
+              <p id="firmware-status" class="status"></p>
+              <div id="firmware-result" class="resultado" data-vazio="Lê a memória instalada, o arranque e a segurança da BIOS, e mede queda de desempenho sob carga sustentada. Leva cerca de 12 segundos e não altera nada."></div>
+            </section>
+
+<section class="panel">
+            <div class="panel-head">
+              <h2>Antes de otimizar</h2>
+              <span class="panel-tag" id="prontidao-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Estas verificações não são otimizações: são condições que, quando
+              estão erradas, fazem o atendimento inteiro parecer sem efeito. O
+              caso mais comum é máquina com reinício pendente — parte das
+              mudanças não fixa até reiniciar, o técnico aplica tudo, mede, não
+              vê ganho e conclui que o produto não funciona. O motivo estava lá
+              desde o começo, numa chave que ninguém olha.
+            </p>
+
+            <button id="analyze-readiness" class="btn" data-custo="~4 s">Analisar</button>
+            <p id="prontidao-status" class="status"></p>
+            <div id="prontidao-result" class="resultado" data-vazio="Confere o que atrapalha antes de qualquer otimização: reinício pendente, TRIM do SSD, paginação em disco mecânico, plano de energia. Cerca de 4 segundos, e não altera nada."></div>
+          </section>
+
+<section class="panel">
             <div class="panel-head">
               <h2>Saúde física do disco e da bateria</h2>
               <span class="panel-tag" id="health-summary">—</span>
@@ -596,25 +631,7 @@
             <div id="health-result" class="resultado" data-vazio="Lê os contadores de desgaste do disco e a saúde da bateria, direto do que o hardware informa. Cerca de 5 segundos e não altera nada. Exige administrador."></div>
           </section>
 
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Conflitos entre programas</h2>
-              <span class="panel-tag" id="conflicts-summary">—</span>
-            </div>
-
-            <p class="lead">
-              PC lento raramente é culpa de um programa só. É de dois fazendo a
-              mesma coisa ao mesmo tempo: dois antivírus varrendo um ao outro,
-              três sobreposições injetando código no mesmo jogo, dois otimizadores
-              desfazendo a configuração um do outro.
-            </p>
-
-            <button id="analyze-conflicts" class="btn" data-custo="~4 s">Analisar</button>
-            <p id="conflicts-status" class="status"></p>
-            <div id="conflicts-result" class="resultado" data-vazio="Procura programas que fazem a mesma coisa e brigam entre si: dois antivírus, dois otimizadores, sobreposições de jogo. Cerca de 4 segundos, e não altera nada."></div>
-          </section>
-
-          <section class="panel">
+<section class="panel">
             <div class="panel-head">
               <h2>Memória e paginação</h2>
               <span class="panel-tag" id="memory-summary">—</span>
@@ -636,6 +653,9 @@
             <div id="memory-result" class="resultado" data-vazio="Lê a memória instalada, a prometida a programas e o pico de paginação desde que o PC ligou. Cerca de 3 segundos, e não altera nada."></div>
           </section>
         </section>
+
+          </details>
+
 
         <!-- ============================================================== ESPAÇO -->
         <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
