@@ -47,8 +47,200 @@ const FORCAR_UTF8: &str = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF
 /// É por aqui que todo PowerShell do projeto passa. Chamar `run("powershell", …)`
 /// direto funciona, mas devolve acento quebrado — ver `FORCAR_UTF8`.
 pub fn powershell(script: &str) -> Result<CommandOutput, String> {
+    // Tenta a sessão viva; se ela não estiver disponível por qualquer motivo,
+    // cai para o processo de uma vez só, que sempre funciona.
+    if let Some(saida) = sessao::executar(script) {
+        return Ok(saida);
+    }
+
+    powershell_avulso(script)
+}
+
+/// Um processo do PowerShell por chamada. O caminho de reserva.
+fn powershell_avulso(script: &str) -> Result<CommandOutput, String> {
     let completo = format!("{} {}", FORCAR_UTF8, script);
     run("powershell", &["-NoProfile", "-Command", &completo])
+}
+
+/// Uma sessão do PowerShell viva, reaproveitada entre consultas.
+///
+/// POR QUE ISTO EXISTE
+///
+/// Medido nesta máquina: abrir um `powershell.exe` VAZIO — um processo que só
+/// executa `1` e sai — custa **2,26 segundos**. Não é a consulta que é cara: é
+/// o processo. Os módulos que fazem uma única chamada custavam exatamente
+/// isso, e o diagnóstico inicial abria dez processos.
+///
+/// Vinte e dois dos trinta e um segundos de abertura eram só o Windows subindo
+/// o PowerShell, dez vezes.
+///
+/// A alternativa óbvia era juntar as consultas num script gigante, o que
+/// obrigaria a reescrever dez módulos. Manter UM processo vivo paga o custo uma
+/// vez e não pede mudança em nenhum chamador: `powershell()` continua com a
+/// mesma assinatura, e quem chama nem sabe que a sessão existe.
+///
+/// COMO SE SABE ONDE ACABA UMA RESPOSTA
+///
+/// O processo lê comandos da entrada padrão e nunca termina, então não há
+/// código de saída nem fim de arquivo para esperar. Depois de cada script a
+/// sessão imprime uma marca com um número que só aquela consulta conhece, e a
+/// leitura para ali. A marca carrega também se o script deu erro, que é o que
+/// `success` significa no caminho de reserva.
+///
+/// QUANDO A SESSÃO NÃO SERVE
+///
+/// Se ela morrer, travar ou não subir, `executar` devolve `None` e a chamada
+/// segue pelo processo avulso. Um diagnóstico lento é muito melhor que um
+/// diagnóstico que não acontece.
+mod sessao {
+    use super::{CommandOutput, CREATE_NO_WINDOW, FORCAR_UTF8};
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::windows::process::CommandExt;
+    use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::Mutex;
+
+    struct Viva {
+        processo: Child,
+        entrada: ChildStdin,
+        saida: BufReader<ChildStdout>,
+    }
+
+    static SESSAO: Mutex<Option<Viva>> = Mutex::new(None);
+    static CONTADOR: AtomicU64 = AtomicU64::new(0);
+
+    /// Uma sessão que morreu no meio de uma resposta não é reaproveitável, e
+    /// insistir nela transformaria um diagnóstico lento num que não termina.
+    static DESISTIMOS: AtomicBool = AtomicBool::new(false);
+
+    fn abrir() -> Option<Viva> {
+        let mut processo = Command::new("powershell")
+            .args(["-NoProfile", "-NoLogo", "-NonInteractive", "-Command", "-"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .ok()?;
+
+        let entrada = processo.stdin.take()?;
+        let saida = BufReader::new(processo.stdout.take()?);
+
+        let mut viva = Viva {
+            processo,
+            entrada,
+            saida,
+        };
+
+        // A codificação é acertada UMA vez, na abertura — no processo avulso
+        // ela era reenviada em cada chamada.
+        viva.entrada.write_all(FORCAR_UTF8.as_bytes()).ok()?;
+        viva.entrada.write_all(b"
+").ok()?;
+        viva.entrada.flush().ok()?;
+
+        Some(viva)
+    }
+
+    /// Roda o script na sessão viva. `None` significa "use o caminho avulso".
+    pub fn executar(script: &str) -> Option<CommandOutput> {
+        if DESISTIMOS.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        // SCRIPT COM ACENTO NÃO PASSA POR AQUI.
+        //
+        // A codificação tem dois lados, e a sessão só resolve um. A SAÍDA vem
+        // certa: `[Console]::OutputEncoding` é acertado na abertura, e os bytes
+        // de "Ação" chegam como UTF-8 válido — foi medido.
+        //
+        // A ENTRADA não. O PowerShell lê a entrada padrão usando a página de
+        // código do console, e não há como acertar isso de dentro do próprio
+        // fluxo: quando a primeira linha chega, ele já leu com a página errada.
+        // Um script contendo "Ação" chegava lá dentro como "A├º├úo", e o erro
+        // acontecia ANTES de o script rodar.
+        //
+        // O processo avulso não sofre disso, porque ali o script viaja como
+        // argumento da linha de comando e não pela entrada padrão.
+        //
+        // Então a regra é simples e não depende de auditar os scripts de hoje:
+        // qualquer coisa fora do ASCII vai pelo caminho lento. Custa a
+        // lentidão de um processo nos poucos casos em que isso acontece, e
+        // remove por construção uma classe inteira de corrupção silenciosa.
+        if !script.is_ascii() {
+            return None;
+        }
+
+        let mut guarda = SESSAO.lock().ok()?;
+
+        if guarda.is_none() {
+            *guarda = abrir();
+        }
+
+        let viva = guarda.as_mut()?;
+        let marca = format!(
+            "<<<OTIMIZA-FIM-{}>>>",
+            CONTADOR.fetch_add(1, Ordering::Relaxed)
+        );
+
+        // `$global:LASTEXITCODE` não serve: nem todo script chama programa
+        // externo. O que interessa é se o script LANÇOU erro, e é isso que o
+        // `try/catch` captura.
+        let bloco = format!(
+            "$ErrorActionPreference='Continue'; $__ok=$true;              try {{ {} }} catch {{ $__ok=$false }};              Write-Output ('{}' + $__ok)
+",
+            script, marca
+        );
+
+        if viva.entrada.write_all(bloco.as_bytes()).is_err() || viva.entrada.flush().is_err() {
+            derrubar(&mut guarda);
+            return None;
+        }
+
+        let mut coletado = String::new();
+        let sucesso;
+
+        loop {
+            let mut linha = String::new();
+
+            match viva.saida.read_line(&mut linha) {
+                // Fim de arquivo sem a marca: a sessão morreu no meio.
+                Ok(0) => {
+                    derrubar(&mut guarda);
+                    return None;
+                }
+                Ok(_) => {}
+                Err(_) => {
+                    derrubar(&mut guarda);
+                    return None;
+                }
+            }
+
+            if let Some(resto) = linha.trim_end().strip_prefix(marca.as_str()) {
+                sucesso = !resto.trim().eq_ignore_ascii_case("False");
+                break;
+            }
+
+            coletado.push_str(&linha);
+        }
+
+        Some(CommandOutput {
+            success: sucesso,
+            stdout: coletado,
+            stderr: String::new(),
+        })
+    }
+
+    fn derrubar(guarda: &mut Option<Viva>) {
+        if let Some(mut viva) = guarda.take() {
+            let _ = viva.processo.kill();
+            let _ = viva.processo.wait();
+        }
+
+        // Uma sessão que caiu costuma cair de novo. Desistir de vez custa a
+        // lentidão do caminho avulso; insistir custa uma falha por consulta.
+        DESISTIMOS.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Igual a `powershell`, mas devolve `Err` quando o script falha.
@@ -122,6 +314,45 @@ mod tests {
     fn script_que_falha_devolve_erro() {
         let erro = powershell_checked("throw 'falhou de proposito'");
         assert!(erro.is_err());
+    }
+
+    #[test]
+    fn a_sessao_viva_recusa_script_com_acento() {
+        // A armadilha que este teste tranca é silenciosa: um script com acento
+        // passando pela sessão não FALHA, ele devolve o resultado errado.
+        //
+        // O PowerShell lê a entrada padrão na página de código do console, e
+        // "Ação" chega lá dentro como "A├º├úo" — antes de o script rodar. O
+        // processo avulso não sofre disso porque o script viaja na linha de
+        // comando.
+        assert!(super::sessao::executar("Write-Output 'Ação'").is_none());
+
+        // E o caminho completo continua entregando o texto certo, porque cai
+        // no avulso sozinho.
+        let saida = powershell("Write-Output 'Ação de Manutenção'").unwrap();
+        assert!(saida.stdout.contains("Ação de Manutenção"), "veio: {}", saida.stdout);
+    }
+
+    #[test]
+    fn a_sessao_viva_devolve_o_mesmo_que_o_processo_avulso() {
+        // O ganho de velocidade não vale nada se a resposta mudar. Um script
+        // ASCII precisa dar exatamente o mesmo resultado pelos dois caminhos.
+        let script = "ConvertTo-Json -Compress -InputObject ([ordered]@{ a = 1; b = 'dois' })";
+
+        let pela_sessao = super::sessao::executar(script).expect("script ASCII usa a sessão");
+        let avulso = super::powershell_avulso(script).unwrap();
+
+        assert_eq!(pela_sessao.stdout.trim(), avulso.stdout.trim());
+        assert_eq!(pela_sessao.success, avulso.success);
+    }
+
+    #[test]
+    fn script_que_lanca_erro_e_reportado_como_falha_pela_sessao() {
+        // Sem isto, a sessão diria "deu certo" para tudo, e quem chama deixaria
+        // de perceber a diferença entre "não há dado" e "a consulta quebrou" —
+        // que é a distinção que este produto inteiro se apoia.
+        let saida = super::sessao::executar("throw 'quebrou'").expect("script ASCII usa a sessão");
+        assert!(!saida.success);
     }
 
     #[test]

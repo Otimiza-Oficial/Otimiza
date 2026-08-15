@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.16.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.16.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.17.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.17.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
@@ -17,88 +17,69 @@ depois em *Executar assim mesmo*.
 
 ---
 
-# A tela
+# O diagnóstico ficou 5 vezes mais rápido
 
-Esta versão é sobre o que você olha. Fundo novo, cartões com profundidade, e
-bastante coisa que estava à mostra sem precisar.
+A versão passada abria em 31 segundos e as notas diziam, com todas as letras,
+que aquilo ainda era muito. **Agora são 6.**
 
-## Um interruptor que estava furado desde sempre
+## O que estava acontecendo
 
-O produto tem um interruptor que desliga toda animação em máquina fraca — um
-otimizador que engasga na própria interface se desmente na frente do cliente.
+A suspeita era que as consultas ao Windows fossem lentas. Medimos, e não eram.
 
-Ele estava escrito assim:
+Abrir um `powershell.exe` **vazio** — um processo que só executa `1` e termina —
+custava **2,26 segundos** nesta máquina de teste. E o programa abria dez deles
+para montar o diagnóstico inicial.
 
-```css
-.sem-animacao, .sem-animacao * { animation: none }
-```
+Vinte e dois dos trinta e um segundos eram o Windows subindo o PowerShell, dez
+vezes seguidas. A consulta em si era praticamente de graça: os módulos que
+faziam uma única chamada custavam exatamente os 2,26 segundos do processo, nem
+um décimo a mais.
 
-E o `*` **não alcança `::before` nem `::after`**. Qualquer animação declarada
-num pseudo-elemento continuava rodando no PC de 4 GB, com o interruptor ligado.
+## O conserto
 
-Como o fundo bonito naturalmente mora num pseudo-elemento, escrever o fundo
-antes de achar isso teria posto o programa a gastar GPU exatamente na máquina
-que ele foi contratado para aliviar. Corrigido antes do primeiro pixel.
+Em vez de um processo por consulta, o programa mantém **um** vivo e conversa com
+ele. O custo é pago uma vez.
 
-E o multiplicador de movimento (`--anim`), que existia desde a primeira versão
-com um comentário dizendo "o JavaScript zera isto", era lido zero vezes e
-escrito zero vezes — um token morto fingindo ser um sistema. Agora vale: em
-máquina intermediária o fundo desacelera de 90 para 257 segundos por ciclo, em
-vez de simplesmente parar.
+| | Antes | Agora |
+|---|---|---|
+| Saúde do disco e bateria | 11,5 s | 0,59 s |
+| Memória e paginação | 5,4 s | 0,23 s |
+| Firmware e memória instalada | 4,7 s | 0,06 s |
+| Registro de eventos | 3,8 s | 0,50 s |
+| Monitor | 2,3 s | 0,15 s |
+| Placa de vídeo por jogo | 2,3 s | 0,04 s |
+| **Diagnóstico completo** | **31 s** | **6 s** |
 
-## O fundo
+Nenhum módulo precisou ser reescrito para isso. A mudança vive num arquivo só,
+e quem chama nem sabe que a sessão existe.
 
-Malha técnica, manchas de luz à deriva e granulação. Tudo em CSS.
+## Uma armadilha que o conserto criou, e que foi trancada
 
-A referência pedida desenha fundos assim com shader em WebGL, a 60 quadros por
-segundo, continuamente. Num otimizador de PC isso é o produto gastando placa de
-vídeo para se enfeitar — e num notebook, gastando bateria. É o mesmo motivo
-pelo qual este projeto recusou uma biblioteca de animação que pesava mais que o
-aplicativo inteiro.
+A codificação de texto tem dois lados, e a sessão só resolvia um.
 
-O que anima aqui é só `transform`, que o navegador resolve sem repintar nada.
-Foram recusados por medição de custo o desfoque animado (força repintura de
-tela cheia, e gradiente radial já nasce difuso) e o gradiente cônico girando
-(regera a imagem a cada quadro).
+A **saída** vem certa. A **entrada** não: o PowerShell lê o que recebe usando a
+página de código do console, e não há como corrigir isso de dentro — quando a
+primeira linha chega, ele já leu com a página errada. Um script contendo
+"Ação" chegava lá dentro como "A├º├úo", e o estrago acontecia antes de o script
+rodar.
 
-## Menos coisa gritando por atenção
+O pior dessa falha é que ela **não quebra**: devolve um resultado errado com
+cara de certo.
 
-**Dezenove botões usavam o destaque mais forte da tela** — o mesmo de "Otimizar
-agora" — para ações que **não mudam nada** na sua máquina. Sobraram cinco, e
-todos alteram alguma coisa. Medir virou botão comum.
+Qualquer script com acento passa agora pelo caminho antigo, mais lento e
+correto. Custa a lentidão de um processo nos poucos casos em que isso acontece,
+e elimina a classe inteira de corrupção por construção — não por auditoria dos
+scripts de hoje, que poderia envelhecer.
 
-**Seis verbos viraram um.** Analisar, Verificar, Ler, Medir, Procurar e Mapear
-faziam a mesma coisa em painéis diferentes. Agora é "Analisar", com o tempo
-estimado no próprio botão.
-
-**Dezoito caixas de resultado ficavam completamente vazias** — sem texto, sem
-contorno — até alguém clicar. Você precisava clicar para descobrir o que o
-botão fazia. Agora cada uma diz o que o exame lê, quanto demora e **se altera
-alguma coisa**. Esse terceiro item é o argumento do produto, e até agora não era
-dito em lugar nenhum antes do clique.
-
-**A aba Diagnóstico encolheu 44%.** Ela tinha nove cartões, e quatro deles
-remediam o que o programa já mede sozinho na abertura. Continuam inteiros,
-recolhidos atrás de "ver cada exame em detalhe".
-
-## O programa abriu mais rápido, e ainda não o bastante
-
-O diagnóstico inicial caiu de 47 para 31 segundos nesta máquina de teste.
-
-Duas causas foram consertadas: o exame de prontidão abria dois `powershell.exe`
-para responder uma pergunta só, e a lista de planos de energia era consultada
-três vezes por análise — três processos para a mesma resposta.
-
-**Trinta e um segundos ainda é muito**, e vale dizer em vez de esconder. O que
-sobra é a arquitetura: cada módulo de diagnóstico abre o seu próprio processo
-do PowerShell, e cada um custa memória na máquina que estamos justamente
-medindo por falta dela. Consertar isso de verdade é trocar essas chamadas por
-leitura direta dos contadores do Windows, e é a próxima versão.
+Três testes novos trancam isso: que script com acento não usa a sessão, que a
+sessão devolve exatamente o mesmo que o processo avulso, e que um script que
+quebra continua sendo reportado como falha — porque a diferença entre "não há
+dado" e "a consulta falhou" é a distinção em que este produto inteiro se apoia.
 
 ---
 
 ## O que esta versão não promete
 
-A tela ficou melhor; a tela não cria FPS. O que move o número continua sendo a
-configuração do próprio jogo e o hardware — e o programa continua dizendo isso
-na primeira coisa que você lê.
+Velocidade de abertura não é FPS. O que move o número no jogo continua sendo a
+configuração dele e o hardware — e o programa continua dizendo isso na primeira
+coisa que você lê, agora cinco vezes mais rápido.
