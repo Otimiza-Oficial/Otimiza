@@ -107,13 +107,8 @@ pub fn trim_ligado() -> Option<bool> {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-struct RawPagefile {
+struct RawPaginacao {
     name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "PascalCase")]
-struct RawDisco {
     mecanico: Option<bool>,
 }
 
@@ -123,37 +118,24 @@ struct RawDisco {
 /// paginação no HD faz o Windows usar a peça mais lenta justamente quando a
 /// memória acaba, que é o pior momento possível.
 fn paginacao_em_disco_lento() -> Option<(String, bool)> {
-    let script = "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_PageFileUsage \
-                  -ErrorAction SilentlyContinue | Select-Object Name)";
+    // UMA chamada, não duas.
+    //
+    // Até a versão 0.15 este diagnóstico abria dois `powershell.exe`: um para
+    // descobrir onde está o arquivo de paginação, outro para descobrir se
+    // aquele disco é mecânico. Cada processo custa uns 200 a 400 ms e cerca de
+    // 40 MB de memória prometida — na máquina que estamos diagnosticando
+    // justamente por falta de memória.
+    //
+    // Eram dois porque o segundo dependia do resultado do primeiro. Aqui a
+    // dependência vira uma variável dentro do mesmo script.
+    let script = "$p = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue |                     Select-Object -First 1;                   if ($p) {                     $letra = $p.Name.Substring(0,1);                     $part = Get-Partition -ErrorAction SilentlyContinue |                             Where-Object DriveLetter -eq $letra | Select-Object -First 1;                     $mec = $false;                     if ($part) {                       $d = Get-PhysicalDisk -ErrorAction SilentlyContinue |                            Where-Object DeviceId -eq (Get-Disk -Number $part.DiskNumber).Number;                       $mec = ($d.MediaType -eq 'HDD') };                     ConvertTo-Json -Compress -InputObject ([ordered]@{                       Name = $p.Name; Mecanico = [bool]$mec }) }";
 
-    let arquivos: Vec<RawPagefile> = shell::powershell(script)
+    let bruto: RawPaginacao = shell::powershell(script)
         .ok()
         .filter(|s| s.success && !s.stdout.trim().is_empty())
-        .and_then(|s| serde_json::from_str(&s.stdout).ok())
-        .unwrap_or_default();
+        .and_then(|s| serde_json::from_str(&s.stdout).ok())?;
 
-    let caminho = arquivos.first()?.name.clone()?;
-    let letra = caminho.chars().next()?.to_uppercase().to_string();
-
-    // O tipo de mídia vem do subsistema de armazenamento, que responde em
-    // número — 3 é disco mecânico, 4 é SSD — e não em texto traduzido.
-    let script = format!(
-        "ConvertTo-Json -Compress -InputObject @(Get-Partition -ErrorAction SilentlyContinue | \
-         Where-Object DriveLetter -eq '{}' | ForEach-Object {{ \
-           $d = Get-PhysicalDisk -ErrorAction SilentlyContinue | \
-                Where-Object DeviceId -eq (Get-Disk -Number $_.DiskNumber).Number; \
-           [ordered]@{{ Mecanico = ($d.MediaType -eq 'HDD') }} }})",
-        letra
-    );
-
-    let discos: Vec<RawDisco> = shell::powershell(&script)
-        .ok()
-        .filter(|s| s.success && !s.stdout.trim().is_empty())
-        .and_then(|s| serde_json::from_str(&s.stdout).ok())
-        .unwrap_or_default();
-
-    let disco = discos.first()?;
-    Some((caminho, disco.mecanico.unwrap_or(false)))
+    Some((bruto.name?, bruto.mecanico.unwrap_or(false)))
 }
 
 // ------------------------------------------------------------- montagem
@@ -332,12 +314,41 @@ fn sem_acento(texto: &str) -> String {
 }
 
 /// Todos os planos de energia da máquina: identificador e nome.
+///
+/// O resultado é guardado por alguns segundos porque UMA análise consulta esta
+/// lista três vezes — para dizer se o plano ativo é de terceiro, para saber se
+/// o de desempenho máximo existe, e de novo dentro da primeira. Eram três
+/// processos `powercfg` para responder a mesma pergunta, e o diagnóstico
+/// inteiro já custa caro demais na máquina fraca que é o público do produto.
+///
+/// A validade é curta de propósito: plano de energia muda quando o cliente
+/// clica em alguma coisa, e uma lista velha faria a tela mentir.
 pub fn planos_instalados() -> Vec<(String, String)> {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    static CACHE: Mutex<Option<(Instant, Vec<(String, String)>)>> = Mutex::new(None);
+    const VALIDADE: Duration = Duration::from_secs(10);
+
+    if let Ok(guarda) = CACHE.lock() {
+        if let Some((quando, lista)) = guarda.as_ref() {
+            if quando.elapsed() < VALIDADE {
+                return lista.clone();
+            }
+        }
+    }
+
     let Ok(saida) = shell::run("powercfg", &["/list"]) else {
         return Vec::new();
     };
 
-    analisar_lista_de_planos(&saida.stdout)
+    let lista = analisar_lista_de_planos(&saida.stdout);
+
+    if let Ok(mut guarda) = CACHE.lock() {
+        *guarda = Some((Instant::now(), lista.clone()));
+    }
+
+    lista
 }
 
 /// Extrai os planos da saída do `powercfg /list`.

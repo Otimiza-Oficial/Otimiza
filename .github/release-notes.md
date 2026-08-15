@@ -6,8 +6,8 @@ resultado é que não mudou nada.
 
 | Arquivo | Quando usar |
 |---|---|
-| `Otimiza_0.15.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_0.15.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_0.16.0_x64-setup.exe` | **Comece por este.** Instalador comum, em português |
+| `Otimiza_0.16.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits.
 
@@ -17,97 +17,88 @@ depois em *Executar assim mesmo*.
 
 ---
 
-# Onde o FPS realmente está
+# A tela
 
-Um cliente aplicou todas as otimizações do Otimiza e disse que o jogo continuou
-igual. Estava certo — e o motivo é desconfortável para qualquer programa deste
-tipo, inclusive o nosso.
+Esta versão é sobre o que você olha. Fundo novo, cartões com profundidade, e
+bastante coisa que estava à mostra sem precisar.
 
-Fomos olhar a configuração gráfica do jogo dele:
+## Um interruptor que estava furado desde sempre
 
-```
-TextureQuality 0 · GrassQuality 0 · ShaderQuality 0 · WaterQuality 0
-ParticleQuality 0 · PostFX 0 · ReflectionQuality 0 · CityDensity 0.0
-MSAA 4          ← quatro vezes
-```
+O produto tem um interruptor que desliga toda animação em máquina fraca — um
+otimizador que engasga na própria interface se desmente na frente do cliente.
 
-Ele tinha baixado **tudo** ao mínimo e deixado a suavização de serrilhado em 4x.
-Numa placa de entrada, essa é a configuração mais cara que existe no GTA V:
-análises independentes medem entre 30% e 50% dos quadros só nela. Tudo o que ele
-desligou junto vale menos que aquela linha.
+Ele estava escrito assim:
 
-A hierarquia real, para quem quer FPS num PC fraco:
-
-```
-uma configuração de jogo mal escolhida ..... dezenas de por cento
-memória insuficiente ....................... o teto da máquina
-ajustes de Windows, todos somados .......... alguns por cento
+```css
+.sem-animacao, .sem-animacao * { animation: none }
 ```
 
-## O Otimiza agora lê a configuração do jogo — e não mexe nela
+E o `*` **não alcança `::before` nem `::after`**. Qualquer animação declarada
+num pseudo-elemento continuava rodando no PC de 4 GB, com o interruptor ligado.
 
-Esta versão passa a ler a configuração gráfica do GTA V e do FiveM, cruzar com a
-placa de vídeo que a máquina tem, e dizer o que está pesando à toa, com o
-caminho do menu para mudar.
+Como o fundo bonito naturalmente mora num pseudo-elemento, escrever o fundo
+antes de achar isso teria posto o programa a gastar GPU exatamente na máquina
+que ele foi contratado para aliviar. Corrigido antes do primeiro pixel.
 
-**O programa não escreve nesse arquivo.** Nunca. Quem decide como o jogo se
-parece é quem joga, e há um teste que reprova a compilação se alguém acrescentar
-uma escrita nesse módulo.
+E o multiplicador de movimento (`--anim`), que existia desde a primeira versão
+com um comentário dizendo "o JavaScript zera isto", era lido zero vezes e
+escrito zero vezes — um token morto fingindo ser um sistema. Agora vale: em
+máquina intermediária o fundo desacelera de 90 para 257 segundos por ciclo, em
+vez de simplesmente parar.
 
-Mas ficar calado sobre 40% de FPS por causa de uma regra de escopo seria
-esconder do cliente a coisa mais valiosa que o programa sabe. Então ele conta —
-exatamente como já faz com a taxa de atualização do monitor.
+## O fundo
 
-E não fala onde não deve: a mesma configuração numa placa boa não vira alerta
-nenhum, e quando não dá para ler a memória da placa, o programa fica quieto em
-vez de chutar.
+Malha técnica, manchas de luz à deriva e granulação. Tudo em CSS.
 
-## Seu plano de energia pode não ser do Windows
+A referência pedida desenha fundos assim com shader em WebGL, a 60 quadros por
+segundo, continuamente. Num otimizador de PC isso é o produto gastando placa de
+vídeo para se enfeitar — e num notebook, gastando bateria. É o mesmo motivo
+pelo qual este projeto recusou uma biblioteca de animação que pesava mais que o
+aplicativo inteiro.
 
-Programas de otimização e fabricantes de notebook criam planos de energia
-próprios e os deixam ativos. Na máquina onde esta versão foi desenvolvida, o
-plano em uso era o **"Driver Booster Power Plan"**, do IObit — e o dono não
-sabia.
+O que anima aqui é só `transform`, que o navegador resolve sem repintar nada.
+Foram recusados por medição de custo o desfoque animado (força repintura de
+tela cheia, e gradiente radial já nasce difuso) e o gradiente cônico girando
+(regera a imagem a cada quadro).
 
-Alguns desses planos são bons. Outros limitam o processador para economizar
-bateria, e quem instalou desinstalou o programa faz tempo. O Otimiza não mexe
-nele sem você mandar, mas passa a dizer que o plano em uso não é nenhum dos que
-o Windows traz.
+## Menos coisa gritando por atenção
 
-## Dois defeitos nossos, encontrados na mesma máquina
+**Dezenove botões usavam o destaque mais forte da tela** — o mesmo de "Otimizar
+agora" — para ações que **não mudam nada** na sua máquina. Sobraram cinco, e
+todos alteram alguma coisa. Medir virou botão comum.
 
-**O produto não enxergava um plano que existia.** A verificação do "Desempenho
-Máximo" procurava um identificador fixo — mas o `powercfg` dá identificador novo
-a cada cópia, e o original nunca aparece na lista. Resultado: numa máquina que
-já tinha o plano, o Otimiza dizia que não existia e oferecia criar um segundo.
+**Seis verbos viraram um.** Analisar, Verificar, Ler, Medir, Procurar e Mapear
+faziam a mesma coisa em painéis diferentes. Agora é "Analisar", com o tempo
+estimado no próprio botão.
 
-**E o acento derrubava a segunda tentativa de conserto.** Ao passar a comparar
-pelo nome, o plano "Desempenho Máximo" chegava como `M` + caractere de lixo +
-`ximo`: o `powercfg` não é PowerShell, então não passa pelo trecho do programa
-que força UTF-8, e a saída vem no código de página do console. A comparação
-agora descarta tudo que não é ASCII nos dois lados — funciona com o acento
-inteiro e funciona com ele corrompido.
+**Dezoito caixas de resultado ficavam completamente vazias** — sem texto, sem
+contorno — até alguém clicar. Você precisava clicar para descobrir o que o
+botão fazia. Agora cada uma diz o que o exame lê, quanto demora e **se altera
+alguma coisa**. Esse terceiro item é o argumento do produto, e até agora não era
+dito em lugar nenhum antes do clique.
+
+**A aba Diagnóstico encolheu 44%.** Ela tinha nove cartões, e quatro deles
+remediam o que o programa já mede sozinho na abertura. Continuam inteiros,
+recolhidos atrás de "ver cada exame em detalhe".
+
+## O programa abriu mais rápido, e ainda não o bastante
+
+O diagnóstico inicial caiu de 47 para 31 segundos nesta máquina de teste.
+
+Duas causas foram consertadas: o exame de prontidão abria dois `powershell.exe`
+para responder uma pergunta só, e a lista de planos de energia era consultada
+três vezes por análise — três processos para a mesma resposta.
+
+**Trinta e um segundos ainda é muito**, e vale dizer em vez de esconder. O que
+sobra é a arquitetura: cada módulo de diagnóstico abre o seu próprio processo
+do PowerShell, e cada um custa memória na máquina que estamos justamente
+medindo por falta dela. Consertar isso de verdade é trocar essas chamadas por
+leitura direta dos contadores do Windows, e é a próxima versão.
 
 ---
 
-## O que esta versão continua recusando
-
-Um concorrente popular oferece trinta interruptores: notificações,
-transparência, tarefas de diagnóstico, telemetria, UAC, Firewall, Windows
-Update. **Nenhum deles muda FPS em jogo.** Eles mudam a sensação de que muita
-coisa foi feita.
-
-Três da lista são reais, e o Otimiza já tinha: Game Bar, agendamento de GPU por
-hardware e plano de energia.
-
-Continuam fora, com o motivo escrito no programa: desligar o Defender, o
-Firewall ou o UAC (vender a segurança do cliente por alguns quadros), desligar o
-Windows Update (zero FPS e o cliente sem correção de falha), e aumentar o
-`TdrDelay` (não dá um quadro; só transforma uma recuperação de driver num
-congelamento mais longo, e esconde defeito de hardware).
-
 ## O que esta versão não promete
 
-Nada aqui inventa FPS onde falta hardware. Depois da configuração do jogo, o
-teto é a memória — e o programa continua dizendo isso na primeira tela, antes de
-qualquer botão.
+A tela ficou melhor; a tela não cria FPS. O que move o número continua sendo a
+configuração do próprio jogo e o hardware — e o programa continua dizendo isso
+na primeira coisa que você lê.

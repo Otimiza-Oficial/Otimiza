@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "0.15.0"
+version = "0.16.0"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
