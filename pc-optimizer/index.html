@@ -8,6 +8,13 @@
     <script type="module" src="/src/main.ts" defer></script>
   </head>
   <body>
+    <!--
+      O fundo. Elemento real, e não `body::before`, por um motivo concreto: o
+      interruptor de movimento do produto (`.sem-animacao`) precisa alcançá-lo,
+      e o seletor universal não casa com pseudo-elemento do próprio `body`.
+    -->
+    <div class="fundo" aria-hidden="true"></div>
+
     <div class="console">
       <header class="topbar">
         <!--
@@ -469,9 +476,9 @@
                 estão fazendo com o seu desempenho, e dizer onde se resolve.
               </p>
 
-              <button id="analyze-firmware" class="btn btn-primary">Analisar firmware</button>
+              <button id="analyze-firmware" class="btn" data-custo="~12 s">Analisar</button>
               <p id="firmware-status" class="status"></p>
-              <div id="firmware-result"></div>
+              <div id="firmware-result" class="resultado" data-vazio="Lê a memória instalada, o arranque e a segurança da BIOS, e mede queda de desempenho sob carga sustentada. Leva cerca de 12 segundos e não altera nada."></div>
             </section>
           </div>
 
@@ -490,9 +497,9 @@
               Windows.
             </p>
 
-            <button id="analyze-boot" class="btn btn-primary">Ler tempo de inicialização</button>
+            <button id="analyze-boot" class="btn" data-custo="~3 s">Analisar</button>
             <p id="boot-status" class="status"></p>
-            <div id="boot-result"></div>
+            <div id="boot-result" class="resultado" data-vazio="Lê o registro que o próprio Windows já mantém: quanto o PC demorou no último boot e quais programas atrasaram, com os segundos de cada um. Cerca de 3 segundos, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -512,9 +519,9 @@
               aqui faz você trocar peça à toa.
             </p>
 
-            <button id="analyze-thermal" class="btn btn-primary">Verificar o processador</button>
+            <button id="analyze-thermal" class="btn" data-custo="~5 s">Analisar</button>
             <p id="thermal-status" class="status"></p>
-            <div id="thermal-result"></div>
+            <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador está sendo limitado, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Cerca de 5 segundos, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -532,9 +539,9 @@
               desde o começo, numa chave que ninguém olha.
             </p>
 
-            <button id="analyze-readiness" class="btn btn-primary">Verificar</button>
+            <button id="analyze-readiness" class="btn" data-custo="~4 s">Analisar</button>
             <p id="prontidao-status" class="status"></p>
-            <div id="prontidao-result"></div>
+            <div id="prontidao-result" class="resultado" data-vazio="Confere o que atrapalha antes de qualquer otimização: reinício pendente, TRIM do SSD, paginação em disco mecânico, plano de energia. Cerca de 4 segundos, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -561,12 +568,12 @@
             </p>
 
             <div class="row-actions">
-              <button id="analyze-network" class="btn btn-primary">Medir os DNS</button>
+              <button id="analyze-network" class="btn" data-custo="~8 s">Analisar</button>
               <button id="flush-dns" class="btn">Limpar cache de nomes</button>
             </div>
 
             <p id="net-status" class="status"></p>
-            <div id="net-result"></div>
+            <div id="net-result" class="resultado" data-vazio="Mede o tempo de resposta dos servidores de nome, resolvendo domínios reais três vezes cada. Cerca de 8 segundos, usa a rede, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -584,9 +591,9 @@
               Antes de otimizar, vale saber se o problema é físico.
             </p>
 
-            <button id="analyze-health" class="btn btn-primary">Ler saúde do hardware</button>
+            <button id="analyze-health" class="btn" data-custo="~5 s">Analisar</button>
             <p id="health-status" class="status"></p>
-            <div id="health-result"></div>
+            <div id="health-result" class="resultado" data-vazio="Lê os contadores de desgaste do disco e a saúde da bateria, direto do que o hardware informa. Cerca de 5 segundos e não altera nada. Exige administrador."></div>
           </section>
 
           <section class="panel">
@@ -602,9 +609,9 @@
               desfazendo a configuração um do outro.
             </p>
 
-            <button id="analyze-conflicts" class="btn btn-primary">Procurar conflitos</button>
+            <button id="analyze-conflicts" class="btn" data-custo="~4 s">Analisar</button>
             <p id="conflicts-status" class="status"></p>
-            <div id="conflicts-result"></div>
+            <div id="conflicts-result" class="resultado" data-vazio="Procura programas que fazem a mesma coisa e brigam entre si: dois antivírus, dois otimizadores, sobreposições de jogo. Cerca de 4 segundos, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -621,12 +628,12 @@
             </p>
 
             <div class="row-actions">
-              <button id="analyze-memory" class="btn btn-primary">Analisar memória</button>
+              <button id="analyze-memory" class="btn" data-custo="~3 s">Analisar</button>
               <button id="fix-pagefile" class="btn" hidden>Deixar o Windows gerenciar</button>
             </div>
 
             <p id="memory-status" class="status"></p>
-            <div id="memory-result"></div>
+            <div id="memory-result" class="resultado" data-vazio="Lê a memória instalada, a prometida a programas e o pico de paginação desde que o PC ligou. Cerca de 3 segundos, e não altera nada."></div>
           </section>
         </section>
 
@@ -645,7 +652,7 @@
             </p>
 
             <div class="row-actions">
-              <button id="scan-disk" class="btn btn-primary">Verificar espaço</button>
+              <button id="scan-disk" class="btn" data-custo="~10 s">Analisar</button>
               <button id="empty-recycle" class="btn">Esvaziar Lixeira</button>
             </div>
 
@@ -654,7 +661,7 @@
               <div class="bar"><i id="disk-used-bar"></i></div>
               <p class="readout-note" id="disk-meter-note"></p>
             </div>
-            <div id="disk-result"></div>
+            <div id="disk-result" class="resultado" data-vazio="Soma o que dá para liberar por categoria, dizendo o que é descartável e o que só parece. Cerca de 10 segundos, e não apaga nada sem você confirmar."></div>
           </section>
 
           <section class="panel">
@@ -673,9 +680,9 @@
               está, com o caminho exato, para você decidir.
             </p>
 
-            <button id="map-folders" class="btn btn-primary">Mapear minhas pastas</button>
+            <button id="map-folders" class="btn" data-custo="~45 s">Analisar</button>
             <p id="map-status" class="status"></p>
-            <div id="map-result"></div>
+            <div id="map-result" class="resultado" data-vazio="Percorre as suas pastas e mostra quais ocupam mais espaço, com um prazo de 45 segundos para não travar. Não apaga nada."></div>
           </section>
 
           <section class="panel">
@@ -700,9 +707,9 @@
               seria inventado.
             </p>
 
-            <button id="analyze-browsers" class="btn btn-primary">Analisar navegadores</button>
+            <button id="analyze-browsers" class="btn" data-custo="~6 s">Analisar</button>
             <p id="browser-status" class="status"></p>
-            <div id="browser-result"></div>
+            <div id="browser-result" class="resultado" data-vazio="Lista as extensões instaladas e separa cache descartável de dado de aplicativo — que parece cache e não é. Cerca de 6 segundos, e não apaga nada sem você confirmar."></div>
           </section>
         </section>
 
@@ -720,12 +727,12 @@
             </p>
 
             <div class="row-actions">
-              <button id="measure-baseline" class="btn btn-primary">1. Medir antes</button>
+              <button id="measure-baseline" class="btn">1. Medir antes</button>
               <button id="measure-compare" class="btn">2. Medir depois e comparar</button>
             </div>
 
             <p id="benchmark-status" class="status"></p>
-            <div id="benchmark-result"></div>
+            <div id="benchmark-result" class="resultado" data-vazio="Ocupa o processador por alguns segundos para medir o desempenho e guardar como ponto de partida. Não altera configuração nenhuma."></div>
           </section>
 
           <section class="panel">
@@ -786,12 +793,12 @@
             </p>
 
             <div class="row-actions">
-              <button id="analyze-fivem" class="btn btn-primary">Analisar FiveM</button>
+              <button id="analyze-fivem" class="btn" data-custo="~15 s">Analisar</button>
               <button id="prioritize-fivem" class="btn">Priorizar o jogo</button>
             </div>
 
             <p id="fivem-status" class="status"></p>
-            <div id="fivem-result"></div>
+            <div id="fivem-result" class="resultado" data-vazio="Mede as pastas do FiveM e separa o cache que dá para apagar do que guarda a sua sessão. Cerca de 15 segundos, e não apaga nada sem você confirmar."></div>
           </section>
 
           <section class="panel">
@@ -817,9 +824,9 @@
               partida depois da limpeza compila de novo e engasga um pouco.
             </p>
 
-            <button id="analyze-shaders" class="btn btn-primary">Verificar cache de shader</button>
+            <button id="analyze-shaders" class="btn" data-custo="~5 s">Analisar</button>
             <p id="shader-status" class="status"></p>
-            <div id="shader-result"></div>
+            <div id="shader-result" class="resultado" data-vazio="Mede o cache de shader das placas de vídeo e diz qual ficou obsoleto depois de uma troca de driver. Cerca de 5 segundos, e não apaga nada sem você confirmar."></div>
           </section>
 
           <section class="panel">
@@ -878,9 +885,9 @@
               caso o painel diz que não dá para julgar em vez de chutar.
             </p>
 
-            <button id="analyze-bottleneck" class="btn btn-primary">Analisar por 10 segundos</button>
+            <button id="analyze-bottleneck" class="btn" data-custo="10 s">Analisar</button>
             <p id="gargalo-status" class="status"></p>
-            <div id="gargalo-result"></div>
+            <div id="gargalo-result" class="resultado" data-vazio="Observa processador, placa de vídeo, memória e disco durante dez segundos e aponta qual deles está segurando os outros. Precisa do jogo aberto para valer, e não altera nada."></div>
           </section>
 
           <section class="panel">
@@ -947,11 +954,11 @@
               <input type="text" id="fps-process" class="fps-input"
                      value="FiveM" placeholder="nome do processo"
                      autocomplete="off" spellcheck="false" />
-              <button id="measure-frames" class="btn btn-primary">Medir 8 segundos</button>
+              <button id="measure-frames" class="btn" data-custo="8 s">Analisar</button>
             </div>
 
             <p id="fps-status" class="status"></p>
-            <div id="fps-result"></div>
+            <div id="fps-result" class="resultado" data-vazio="Conta os quadros que o jogo entrega, ouvindo o canal de eventos do próprio Windows — sem tocar no processo do jogo. Exige administrador e não altera nada."></div>
           </section>
         </section>
 
@@ -990,12 +997,12 @@
               </p>
 
               <div class="row-actions">
-                <button id="analyze-bloat" class="btn btn-primary">Procurar</button>
+                <button id="analyze-bloat" class="btn" data-custo="~8 s">Analisar</button>
                 <button id="open-apps" class="btn">Abrir programas do Windows</button>
               </div>
 
               <p id="bloat-status" class="status"></p>
-              <div id="bloat-result"></div>
+              <div id="bloat-result" class="resultado" data-vazio="Procura programas que vieram de fábrica com o Windows e que você provavelmente nunca abriu. Cerca de 8 segundos, e não remove nada sem você confirmar."></div>
             </section>
 
             <section class="panel">
@@ -1067,7 +1074,7 @@
               </div>
 
               <p id="restore-status" class="status"></p>
-              <div id="restore-list"></div>
+              <div id="restore-list" class="resultado" data-vazio="Lista os pontos de restauração que existem nesta máquina. Leitura imediata, e não altera nada."></div>
             </section>
           </div>
 

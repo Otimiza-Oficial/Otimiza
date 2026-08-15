@@ -121,8 +121,23 @@
   o próprio Otimiza já mede. Nos dois casos a interface continua inteira — só
   para de se mexer.
 */
+/*
+  ATENÇÃO AO `::before` E `::after`.
+
+  Até a versão 0.15 esta regra era só `.sem-animacao, .sem-animacao *`. O
+  seletor universal NÃO casa com pseudo-elemento — o bloco de
+  `prefers-reduced-motion` logo abaixo sempre soube disso e lista os dois
+  explicitamente; este aqui não.
+
+  Na prática: qualquer animação declarada num `::before` continuava rodando na
+  máquina fraca, com o interruptor ligado. Como o fundo do produto mora num
+  pseudo-elemento, isso seria o otimizador gastando GPU para se enfeitar
+  exatamente no PC que ele foi contratado para aliviar.
+*/
 .sem-animacao,
-.sem-animacao * {
+.sem-animacao *,
+.sem-animacao *::before,
+.sem-animacao *::after {
   animation: none !important;
   transition: none !important;
 }
@@ -167,18 +182,167 @@ body {
 }
 
 body {
+  /* A pintura do fundo mudou de casa: agora mora em `.fundo`, um elemento
+     fixo atrás de tudo. Aqui fica só a cor de base, que é o que aparece
+     enquanto o resto carrega. */
   background-color: var(--bg);
-  /* Malha técnica de fundo: densa o suficiente para dar textura, fraca o
-     suficiente para nunca competir com os dados. */
-  background-image:
-    linear-gradient(rgba(var(--accent-rgb), 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--accent-rgb), 0.035) 1px, transparent 1px);
-  background-size: 44px 44px, 44px 44px;
   color: var(--text);
   font-family: var(--font-mono);
   font-size: var(--t-lead);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+
+/* ============================================================== O FUNDO
+
+   Três camadas empilhadas num elemento só, atrás de toda a interface.
+
+   POR QUE NÃO É WEBGL
+
+   A referência que o dono trouxe (reactbits.dev) desenha fundos assim com
+   shader em WebGL2, rodando a 60 quadros por segundo. Num otimizador de PC
+   isso é o produto gastando GPU para se enfeitar — e no notebook fraco, que é
+   justamente o público, gastando bateria também. É o mesmo argumento pelo qual
+   este projeto recusou o GSAP.
+
+   O que se anima aqui é `transform`, e só. O navegador resolve isso no
+   compositor, sem repintar nada: os gradientes são desenhados UMA vez numa
+   textura e depois só deslizam. Custo por quadro em CPU: zero.
+
+   O QUE FOI RECUSADO, E POR QUÊ
+
+   `filter: blur()` — a tentação óbvia para deixar as manchas difusas. Ele
+   força repintura de tela cheia, e num PC sem aceleração vira custo por
+   quadro. `radial-gradient` já nasce difuso: o desfoque seria pagar caro por
+   algo que a ferramenta certa dá de graça.
+
+   `conic-gradient` girando por `@property` — anima o ângulo, o que invalida a
+   imagem de fundo e obriga o navegador a regerar o gradiente inteiro a cada
+   quadro. Bonito em área pequena; caro em tela cheia.
+*/
+.fundo {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: var(--bg);
+
+  /* Malha técnica: densa o suficiente para dar textura, fraca o suficiente
+     para nunca competir com os dados. Estava no `body` até a versão 0.15. */
+  background-image:
+    linear-gradient(rgba(var(--accent-rgb), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.03) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* As manchas de luz. `inset` negativo dá folga para a deriva nunca revelar a
+   borda da camada. */
+.fundo::before {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  background:
+    radial-gradient(38% 34% at 22% 16%, rgba(var(--green-rgb), 0.10), transparent 70%),
+    radial-gradient(42% 38% at 82% 10%, rgba(var(--accent-rgb), 0.055), transparent 72%),
+    radial-gradient(52% 46% at 62% 96%, rgba(var(--amber-rgb), 0.04), transparent 70%);
+  will-change: transform;
+
+  /* `--anim` é o multiplicador global de movimento, e aqui ele finalmente é
+     lido — até a versão 0.15 a variável existia e ninguém a usava. Dividir a
+     duração por ele permite um degrau intermediário: em 0.35 o ciclo passa de
+     90s para 257s, um movimento que existe e não chama atenção. */
+  animation: derivar-fundo calc(90s / var(--anim, 1)) linear infinite alternate;
+}
+
+@keyframes derivar-fundo {
+  to {
+    transform: translate3d(3%, -2.5%, 0) scale(1.06);
+  }
+}
+
+/* O grão.
+
+   `feTurbulence` é ruído calculado pixel a pixel. Gerar isso em tela cheia
+   custa dezenas de milissegundos de processador na abertura; gerar num bloco
+   de 160 pixels e deixar a repetição cuidar do resto custa uma fração disso, e
+   ninguém distingue a olho — grão não tem forma reconhecível.
+
+   `stitchTiles='stitch'` não é enfeite: sem ele a emenda entre os blocos
+   aparece como uma grade. */
+.fundo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.45;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='.32'/%3E%3C/svg%3E");
+}
+
+/* Parado, o fundo continua inteiro — as manchas ficam onde estão e o grão não
+   depende de movimento nenhum. Segurar uma camada de GPU para algo que não se
+   mexe mais é desperdício, então `will-change` sai junto. */
+.sem-animacao .fundo::before {
+  will-change: auto;
+}
+
+
+/* A ÊNFASE PRIMÁRIA É PARA O QUE ALTERA A MÁQUINA.
+
+   Até a versão 0.15 dezenove botões de MEDIR usavam `.btn-primary` — a mesma
+   ênfase de "Otimizar agora". A tela gritava dezenove vezes por atenção para
+   ações que não mudam nada no PC do cliente, e o botão que de fato altera o
+   sistema se perdia no meio.
+
+   Sobraram seis: otimizar, gerar o relatório, fixar prioridade, ligar o modo
+   jogo, reabrir como administrador, e o conserto do veredito. Todos alteram
+   alguma coisa. Medir é botão comum.
+
+   Se algum dia a contagem passar de oito, a ênfase deixou de ser ênfase — há
+   uma verificação disso em `main.ts`, no modo de desenvolvimento.
+*/
+
+/* ================================== O QUE VAI APARECER AQUI, ANTES DO CLIQUE
+
+   Dezoito caixas de resultado ficavam completamente vazias — sem texto, sem
+   contorno, sem nada — até alguém clicar. A pessoa precisava clicar para
+   descobrir o que o botão fazia, e depois esperar para descobrir quanto
+   demorava.
+
+   A solução não custa uma linha de TypeScript: o texto mora num atributo e o
+   CSS o mostra enquanto a caixa estiver vazia. `:empty` casa exatamente
+   enquanto não há filho, e todo caminho de desenho do produto escreve
+   `innerHTML` — então o texto some sozinho no primeiro resultado e VOLTA
+   sozinho se alguém limpar. Nenhum estado para sincronizar.
+
+   Cada texto diz três coisas, nesta ordem: o que o exame lê, quanto demora, e
+   se altera alguma coisa. O terceiro item é o argumento do produto, e até
+   agora não era dito em lugar nenhum antes do clique.
+
+   Contorno tracejado, e não sólido: diz "aqui vai aparecer coisa" sem fingir
+   que já apareceu. É o oposto de um esqueleto de carregamento, que simula um
+   conteúdo que ainda não existe.
+*/
+.resultado:empty::before {
+  content: attr(data-vazio);
+  display: block;
+  max-width: 68ch;
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--text-muted);
+  padding: var(--s4);
+  border: 1px dashed rgba(var(--text-rgb), 0.09);
+  border-radius: var(--r2);
+}
+
+/* O custo também no botão, para quem não lê o parágrafo. */
+.btn[data-custo]::after {
+  content: attr(data-custo);
+  margin-left: var(--s2);
+  opacity: 0.55;
+  font-size: var(--t-micro);
 }
 
 h1,
@@ -331,23 +495,95 @@ button {
   duas marcas de 9px em cantos diagonais — assimétricas de propósito — e não
   convivem com borda arredondada: viravam dois riscos soltos fora da curva.
 */
+/* ============================================================== O CARTÃO
+
+   Até a versão 0.15 era cor chapada mais uma borda de 1px. Sem profundidade,
+   sem direção de luz, e nada distinguindo o cartão que importa dos outros 34.
+
+   TRÊS PINTURAS NA MESMA CAIXA
+
+   A borda vira `transparent` e é preenchida por gradiente. São três camadas
+   com recorte diferente:
+
+     1. a queda de luz no topo do corpo   (recortada no padding)
+     2. a cor do painel                   (recortada no padding)
+     3. a moldura                         (recortada na borda)
+
+   Isso dá moldura em gradiente sem elemento extra e sem pseudo-elemento — que
+   importa porque são 35 cartões, e um nó de pintura a mais em cada um é custo
+   real de composição.
+
+   O QUE FOI RECUSADO
+
+   `backdrop-filter`. É a tentação óbvia com um fundo bonito atrás, e a mais
+   cara que existe nesta tela: obriga o compositor a reler e desfocar a região
+   atrás de CADA cartão, a cada rolagem. Trinta e cinco vezes. O cartão é
+   opaco, e continua opaco.
+*/
 .panel {
   position: relative;
-  background-color: var(--panel);
-  border: 1px solid var(--hairline);
+  isolation: isolate;
+  border: 1px solid transparent;
   border-radius: var(--r3);
   padding: var(--s5);
   min-width: 0;
+
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(var(--text-rgb), 0.032) 0%,
+      rgba(var(--text-rgb), 0.008) 88px,
+      rgba(var(--text-rgb), 0) 100%
+    ),
+    linear-gradient(var(--panel), var(--panel)),
+    /* A moldura escurece de cima para baixo, na mesma direção de luz do fio
+       interno. Moldura uniforme lê como contorno; com queda, lê como volume. */
+      linear-gradient(
+        165deg,
+        rgba(var(--text-rgb), 0.13) 0%,
+        rgba(var(--text-rgb), 0.05) 34%,
+        rgba(var(--text-rgb), 0.02) 62%,
+        rgba(var(--bg-rgb), 0.6) 100%
+      );
+  background-origin: padding-box, padding-box, border-box;
+  background-clip: padding-box, padding-box, border-box;
+
+  box-shadow:
+    /* fio de luz na aresta de cima */
+    inset 0 1px 0 rgba(var(--text-rgb), 0.055),
+    /* contato curto: é o que assenta o cartão na superfície */
+    0 1px 2px rgba(var(--bg-rgb), 0.55),
+    /* difusa, com espalhamento NEGATIVO — sem isso a sombra invade o cartão
+       vizinho no `gap` e o conjunto vira sujeira */
+    0 10px 26px -14px rgba(var(--bg-rgb), 0.85);
 }
 
+/* Um único degrau de ênfase, e ele só vale enquanto for raro: no momento em
+   que o terceiro cartão receber destaque, nenhum tem destaque. */
+.panel[data-realce] {
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.085),
+    0 1px 2px rgba(var(--bg-rgb), 0.6),
+    0 16px 40px -18px rgba(var(--bg-rgb), 0.95);
+}
+
+/* O cabeçalho sangra até a borda do cartão e carrega o degrau de luz, para o
+   resto do corpo poder ficar quieto. A margem negativa desfaz o `padding` do
+   `.panel` nos três lados de cima. */
 .panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s3);
-  padding-bottom: var(--s3);
-  margin-bottom: var(--s4);
-  border-bottom: 1px solid var(--hairline);
+  margin: calc(var(--s5) * -1) calc(var(--s5) * -1) var(--s5);
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid rgba(var(--text-rgb), 0.055);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--text-rgb), 0.022),
+    rgba(var(--text-rgb), 0)
+  );
+  border-radius: var(--r3) var(--r3) 0 0;
 }
 
 /* O nome da secao, a navegacao e o botao renderizavam no mesmo tamanho, mesma

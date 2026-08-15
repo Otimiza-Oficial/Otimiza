@@ -348,8 +348,43 @@ const VERDICT_LABELS: Record<Verdict, string> = {
 
 // ------------------------------------------------------------------- início
 
+/**
+ * Três invariantes de tela, conferidos só em desenvolvimento.
+ *
+ * A folha de estilo deste produto tem um comentário explicando que 58% dela
+ * foi anexada depois do que era o fim do arquivo, em camadas sucessivas — e é
+ * exatamente assim que uma tela limpa vira uma tela poluída: nunca de uma vez,
+ * sempre por acréscimo.
+ *
+ * Estas três linhas custam nada em produção e reclamam no console no dia em
+ * que alguém acrescentar o painel de número 22, o décimo botão de ênfase, ou
+ * uma caixa de resultado que não diz o que vai aparecer nela.
+ */
+function conferirInvariantesDaTela() {
+  // `import.meta.env` do Vite não está nos tipos deste projeto, e acrescentar
+  // a referência de tipos só para isto não se paga. O endereço basta: em
+  // produção o app roda de `tauri://`, nunca de `localhost`.
+  if (!location.hostname.startsWith("localhost")) return;
+
+  const paineis = document.querySelectorAll(".panel").length;
+  const enfase = document.querySelectorAll(".palco .btn-primary").length;
+  const caixasMudas = [...document.querySelectorAll(".resultado")].filter(
+    (caixa) => !(caixa as HTMLElement).dataset.vazio
+  );
+
+  console.assert(paineis <= 35, `painéis demais na tela: ${paineis}`);
+  console.assert(enfase <= 8, `ênfase primária demais: ${enfase} botões`);
+  console.assert(
+    caixasMudas.length === 0,
+    `caixa de resultado sem dizer o que vai aparecer: ${caixasMudas
+      .map((c) => c.id)
+      .join(", ")}`
+  );
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   wireControls();
+  conferirInvariantesDaTela();
 
   // O VEREDITO VEM PRIMEIRO — e sem `await`, de propósito.
   //
@@ -407,6 +442,8 @@ async function ajustarMovimento() {
   const sistemaPedeCalma = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   let maquinaFraca = false;
+  let maquinaApertada = false;
+
   try {
     const perfil = await invoke<{ total_ram_gb: number; logical_cores: number }>(
       "get_hardware_profile"
@@ -414,12 +451,31 @@ async function ajustarMovimento() {
     // Os limites sao o proprio publico-alvo do produto: 4 GB e 2 nucleos e a
     // maquina que o dono descreve como "PC fraco".
     maquinaFraca = perfil.total_ram_gb <= 4.5 || perfil.logical_cores <= 2;
+
+    // O degrau do meio: maquina que aguenta movimento, mas nao merece um
+    // fundo deslizando na velocidade cheia enquanto o cliente joga.
+    maquinaApertada = !maquinaFraca && (perfil.total_ram_gb <= 8.5 || perfil.logical_cores <= 4);
   } catch {
     // Sem perfil, o padrao e animar. Errar para o lado de nao piorar a
     // aparencia de quem tem maquina boa.
   }
 
-  document.body.classList.toggle("sem-animacao", sistemaPedeCalma || maquinaFraca);
+  const parado = sistemaPedeCalma || maquinaFraca;
+  document.body.classList.toggle("sem-animacao", parado);
+
+  // O multiplicador global de movimento.
+  //
+  // Ele existia desde a primeira versao da folha de estilo, com um comentario
+  // dizendo que "o JavaScript zera isto" — e nada escrevia nele, nem nenhuma
+  // regra o lia. Era um token morto fingindo ser um sistema.
+  //
+  // Agora ele vale de verdade: o fundo divide a duracao da propria animacao
+  // por este numero, entao 0,35 transforma um ciclo de 90 segundos em um de
+  // 257. O movimento continua existindo e para de chamar atencao.
+  document.documentElement.style.setProperty(
+    "--anim",
+    parado ? "0" : maquinaApertada ? "0.35" : "1"
+  );
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -3393,8 +3449,17 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
 
     const aba = painel.id.replace("tab-", "");
 
+    // O rótulo do BOTÃO e o rótulo do COMANDO deixaram de ser a mesma coisa.
+    //
+    // Os dezoito botões de exame passaram a se chamar todos "Analisar", porque
+    // o título do painel logo acima já diz o assunto e repetir a palavra a
+    // quarenta pixels de distância era ruído. Na paleta, porém, dezoito linhas
+    // idênticas seriam inúteis — lá o assunto precisa vir junto.
+    const painelPai = botao.closest<HTMLElement>(".panel");
+    const assunto = painelPai?.querySelector(".panel-head h2")?.textContent?.trim();
+
     comandos.push({
-      rotulo,
+      rotulo: assunto && assunto !== rotulo ? `${rotulo} — ${assunto}` : rotulo,
       secao: nomeDaSecao.get(aba) ?? aba,
       executar: () => {
         showTab(aba);
