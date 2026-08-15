@@ -125,6 +125,12 @@ fn amostrar_wmi() -> RawContadores {
 /// `Win32_VideoController.AdapterRAM` é um campo de 32 bits e estoura em placa
 /// de 4 GB ou mais, devolvendo número errado. O valor real fica no registro,
 /// gravado pelo driver, e não depende de idioma.
+/// Memória da placa de vídeo, em GB. Zero quando não deu para ler — e zero
+/// aqui significa "não sabemos", nunca "placa fraca".
+pub fn vram_total_gb() -> f64 {
+    vram_total_mb().map(|mb| mb / 1024.0).unwrap_or(0.0)
+}
+
 fn vram_total_mb() -> Option<f64> {
     let base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
 

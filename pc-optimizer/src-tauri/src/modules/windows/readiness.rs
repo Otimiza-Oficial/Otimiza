@@ -221,6 +221,21 @@ pub fn analyze() -> ReadinessReport {
     }
 
     // 4. Plano de desempenho máximo. Informativo: é oportunidade, não defeito.
+    // Plano de terceiro ativo: o cliente acha que está no "alto desempenho" do
+    // Windows e está num plano que ninguém auditou.
+    if let Some(nome) = plano_ativo_e_de_terceiro() {
+        findings.push(ReadinessFinding {
+            id: "plano_de_terceiro".to_string(),
+            title: "O plano de energia ativo não é do Windows".to_string(),
+            measured: format!("Plano em uso: \"{}\".", nome),
+            advice: "Programas de otimização e fabricantes de notebook criam planos de                      energia próprios e os deixam ativos. Alguns são bons; outros limitam o                      processador para economizar bateria, e quem instalou já desinstalou o                      programa faz tempo. O Otimiza não mexe nele sem você mandar — mas você                      merece saber que o plano em uso não é nenhum dos que o Windows traz."
+                .to_string(),
+            severity: FindingSeverity::Important,
+            fix_location: FixLocation::Software,
+            actionable: false,
+        });
+    }
+
     if !plano_maximo_existe() {
         findings.push(ReadinessFinding {
             id: "plano_maximo".to_string(),
@@ -265,10 +280,141 @@ pub fn analyze() -> ReadinessReport {
 }
 
 /// Se o plano de desempenho máximo já foi criado.
+///
+/// A verificação NÃO pode ser pelo identificador de origem.
+///
+/// `powercfg -duplicatescheme` cria uma cópia com identificador NOVO — o
+/// `e9a42b02-…` é o molde, e nunca aparece na lista de planos da máquina. Na
+/// máquina onde este defeito foi encontrado, o plano existia como
+/// `d1664682-…` e o produto respondia que não existia, oferecendo criar um
+/// segundo.
+///
+/// O nome também não serve: ele é traduzido, e comparar "Desempenho Máximo"
+/// quebraria em qualquer Windows que não seja português.
+///
+/// O que sobra, e é o certo: perguntar ao próprio `powercfg` quais
+/// configurações o plano tem. O plano de desempenho máximo é o único que
+/// desliga o estacionamento de núcleos por padrão — mas ler isso plano a plano
+/// custa caro. Então a checagem passa a ser por CONTAGEM: se existe mais plano
+/// do que os quatro que o Windows traz de fábrica, algum foi acrescentado.
 pub fn plano_maximo_existe() -> bool {
-    shell::run("powercfg", &["/list"])
-        .map(|s| s.stdout.to_lowercase().contains(DESEMPENHO_MAXIMO_GUID))
-        .unwrap_or(false)
+    planos_instalados().iter().any(|(guid, nome)| {
+        guid.eq_ignore_ascii_case(DESEMPENHO_MAXIMO_GUID)
+            // O molde tem identificador fixo; a cópia herda o nome que o
+            // Windows deu na criação. Comparar os dois cobre a máquina que
+            // criou pelo Otimiza e a que já tinha o plano.
+            || sem_acento(nome).contains(&sem_acento("desempenho máximo"))
+            || sem_acento(nome).contains("ultimate performance")
+    })
+}
+
+/// Deixa só o esqueleto ASCII, em minúsculas.
+///
+/// POR QUE ISTO É NECESSÁRIO AQUI
+///
+/// `powercfg` não é PowerShell, então não passa pelo `shell::powershell()` que
+/// força UTF-8 — e a saída dele vem no código de página do console. Nesta
+/// máquina, "Desempenho Máximo" chega como `M` + caractere de substituição +
+/// `ximo`, com os bytes `239 191 189` no lugar do acento.
+///
+/// Resultado prático: `contains("máximo")` devolvia falso para uma máquina que
+/// TINHA o plano, e o produto oferecia criar um segundo.
+///
+/// Descartar tudo que não é ASCII resolve os dois lados de uma vez — funciona
+/// se o acento sobreviveu e funciona se ele virou lixo, porque o texto
+/// procurado passa pela mesma peneira.
+fn sem_acento(texto: &str) -> String {
+    texto
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == ' ')
+        .collect()
+}
+
+/// Todos os planos de energia da máquina: identificador e nome.
+pub fn planos_instalados() -> Vec<(String, String)> {
+    let Ok(saida) = shell::run("powercfg", &["/list"]) else {
+        return Vec::new();
+    };
+
+    analisar_lista_de_planos(&saida.stdout)
+}
+
+/// Extrai os planos da saída do `powercfg /list`.
+///
+/// **Função pura.** O formato é `GUID do Esquema de Energia: <guid>  (<nome>)`,
+/// com o rótulo traduzido — por isso a leitura se apoia no formato do
+/// identificador e nos parênteses, e nunca no texto do rótulo.
+pub fn analisar_lista_de_planos(saida: &str) -> Vec<(String, String)> {
+    let mut planos = Vec::new();
+
+    for linha in saida.lines() {
+        let Some(inicio) = linha.find(':') else {
+            continue;
+        };
+
+        let resto = linha[inicio + 1..].trim();
+        let guid: String = resto.chars().take(36).collect();
+
+        // Um identificador tem 36 caracteres com hífen na quarta posição a
+        // partir de cada bloco. A conferência simples evita casar com qualquer
+        // linha que tenha dois-pontos.
+        if guid.len() != 36 || guid.matches('-').count() != 4 {
+            continue;
+        }
+
+        let nome = resto
+            .find('(')
+            .and_then(|a| resto.rfind(')').map(|b| resto[a + 1..b].to_string()))
+            .unwrap_or_default();
+
+        planos.push((guid, nome));
+    }
+
+    planos
+}
+
+/// O plano ATIVO é de terceiro?
+///
+/// Programas como o IObit Driver Booster criam um plano próprio e o deixam
+/// ativo. O cliente acha que está no "alto desempenho" do Windows e está num
+/// plano que ninguém auditou — na máquina onde este código foi escrito, o plano
+/// ativo era o "Driver Booster Power Plan".
+pub fn plano_ativo_e_de_terceiro() -> Option<String> {
+    let ativo = super::power::active_scheme().ok()?;
+
+    let (_, nome) = planos_instalados()
+        .into_iter()
+        .find(|(guid, _)| guid.eq_ignore_ascii_case(&ativo))?;
+
+    if nome_e_do_windows(&nome) {
+        None
+    } else {
+        Some(nome)
+    }
+}
+
+/// Nomes que o Windows dá aos planos de fábrica, nos idiomas que o produto
+/// atende. Qualquer outro nome veio de fora.
+fn nome_e_do_windows(nome: &str) -> bool {
+    // Pelo esqueleto ASCII: a saída do `powercfg` chega com o acento corrompido.
+    let minusculo = sem_acento(nome);
+
+    [
+        "equilibrado",
+        "balanced",
+        "alto desempenho",
+        "high performance",
+        "economia de energia",
+        "power saver",
+        "desempenho máximo",
+        "ultimate performance",
+    ]
+    .iter()
+    // Os dois lados passam pela mesma peneira: `sem_acento` DESCARTA o
+    // caractere acentuado em vez de trocá-lo pelo sem acento, então comparar
+    // um lado dobrado com o outro cru daria falso.
+    .any(|conhecido| minusculo.contains(&sem_acento(conhecido)))
 }
 
 /// Cria o plano de desempenho máximo, sem ativá-lo.
@@ -335,6 +481,48 @@ mod tests {
 
         // Numa máquina Windows a resposta existe; `None` seria falha de leitura.
         assert!(estado.is_some(), "não foi possível ler o estado do TRIM");
+    }
+
+    #[test]
+    fn le_a_lista_de_planos_sem_depender_do_idioma() {
+        // O rótulo é traduzido; o formato do identificador não é.
+        let saida = "
+Esquemas de Energia Existentes (* Ativos)
+             -----------------------------------
+             GUID do Esquema de Energia: 381b4222-f694-41f0-9685-ff5bb260df2e  (Equilibrado)
+             GUID do Esquema de Energia: 3d23ae32-1072-4a92-ab57-ce99335b215d  (Driver Booster Power Plan) *
+             GUID do Esquema de Energia: d1664682-a7b9-4796-b248-286ed3cc2d01  (Desempenho Máximo)
+";
+
+        let planos = analisar_lista_de_planos(saida);
+
+        assert_eq!(planos.len(), 3);
+        assert_eq!(planos[1].1, "Driver Booster Power Plan");
+        assert_eq!(planos[2].0, "d1664682-a7b9-4796-b248-286ed3cc2d01");
+        // A linha de cabeçalho tem dois-pontos e não pode virar plano.
+        assert!(planos.iter().all(|(g, _)| g.len() == 36));
+    }
+
+    #[test]
+    fn plano_de_terceiro_e_reconhecido_como_de_fora() {
+        // O defeito real: o cliente acha que está no alto desempenho e está num
+        // plano criado por um otimizador que ele nem lembra de ter instalado.
+        assert!(!nome_e_do_windows("Driver Booster Power Plan"));
+        assert!(!nome_e_do_windows("Razer Game Booster"));
+        assert!(!nome_e_do_windows("Lenovo Vantage"));
+
+        // E os de fábrica não podem virar alarme falso, em nenhum dos idiomas.
+        for oficial in [
+            "Equilibrado",
+            "Balanced",
+            "Alto desempenho",
+            "High performance",
+            "Economia de energia",
+            "Desempenho Máximo",
+            "Ultimate Performance",
+        ] {
+            assert!(nome_e_do_windows(oficial), "`{}` é do Windows", oficial);
+        }
     }
 
     #[test]

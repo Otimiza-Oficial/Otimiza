@@ -118,7 +118,7 @@ jobs:
       # quebra aqui é quebra na primeira impressão do produto.
       - name: Testes — veredito da máquina
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::gpupref::"
+        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::gpupref:: modules::windows::configjogo::"
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri

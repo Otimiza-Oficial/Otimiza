@@ -194,9 +194,11 @@ fn causa_de(origem: Origem, id: &str) -> Causa {
             }
         }
 
-        Origem::Monitor | Origem::PlacaDeVideo | Origem::Gargalo | Origem::Boot => {
-            Causa::Configuracao
-        }
+        Origem::Monitor
+        | Origem::PlacaDeVideo
+        | Origem::ConfigDoJogo
+        | Origem::Gargalo
+        | Origem::Boot => Causa::Configuracao,
     }
 }
 
@@ -389,6 +391,25 @@ impl EmAchados for super::readiness::ReadinessReport {
     }
 }
 
+impl EmAchados for super::configjogo::ConfigJogoReport {
+    fn achados(&self) -> Vec<Achado> {
+        self.findings
+            .iter()
+            .map(|f| {
+                montar(
+                    Origem::ConfigDoJogo,
+                    f.id.clone(),
+                    f.title.clone(),
+                    f.measured.clone(),
+                    f.advice.clone(),
+                    f.severity,
+                    f.fix_location,
+                )
+            })
+            .collect()
+    }
+}
+
 impl EmAchados for super::gpupref::GpuPrefReport {
     fn achados(&self) -> Vec<Achado> {
         self.findings
@@ -554,6 +575,11 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // consegue entregar — e só existe em máquina com duas placas, que é
         // praticamente todo notebook. Num desktop de placa única, fica calado.
         (Origem::PlacaDeVideo, || Ok(super::gpupref::analyze().achados())),
+        // A configuração do próprio jogo. É de longe o maior lever que existe
+        // num PC fraco — uma linha dela custa mais que todos os ajustes de
+        // Windows somados. O módulo só LÊ: quem decide como o jogo se parece é
+        // quem joga. Custa uma leitura de arquivo.
+        (Origem::ConfigDoJogo, || Ok(super::configjogo::analyze().achados())),
         // A evidência mais forte que temos, e a mais barata: o Windows já
         // anotou o esgotamento de memória e o programa que travou. Fica no
         // grupo automático porque é justamente o que responde a pergunta do
@@ -620,6 +646,7 @@ fn nome_da_origem(origem: Origem) -> &'static str {
         Origem::Esgotamento => "Registro de eventos do Windows",
         Origem::Monitor => "Monitor e taxa de atualização",
         Origem::PlacaDeVideo => "Placa de vídeo por jogo",
+        Origem::ConfigDoJogo => "Configuração gráfica do jogo",
         Origem::Pressao => "Observação dos últimos dias",
     }
 }

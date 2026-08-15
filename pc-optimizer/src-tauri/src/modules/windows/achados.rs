@@ -61,6 +61,8 @@ pub enum Origem {
     Disco,
     /// Monitor: resolução e taxa de atualização.
     Monitor,
+    /// A configuração gráfica do próprio jogo. Lida, nunca escrita.
+    ConfigDoJogo,
     /// Qual placa de vídeo cada jogo usa. Só existe em máquina com duas placas.
     PlacaDeVideo,
     /// A janela de observação contínua dos últimos dias, amostrada pelo próprio

@@ -14,6 +14,7 @@ pub mod bottleneck;
 pub mod browsers;
 pub mod catalog;
 pub mod cleanup;
+pub mod configjogo;
 pub mod conflicts;
 pub mod deteccao;
 pub mod devices;
