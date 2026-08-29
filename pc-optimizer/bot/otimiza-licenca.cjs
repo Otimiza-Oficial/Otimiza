@@ -211,7 +211,74 @@ function base64url(buffer) {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-module.exports = { novoPar, emitir, conferir };
+/**
+ * Gera um par e ESCREVE a privada direto no .env do bot.
+ *
+ * POR QUE ISTO EXISTE
+ *
+ * A versao anterior imprimia as duas metades na tela e mandava o dono copiar
+ * cada uma para o seu lugar. Ele colou a privada em `.env.example` — o arquivo
+ * VERSIONADO, nao o `.env` — duas vezes em quinze minutos, e nas duas ela
+ * apareceu numa captura de tela.
+ *
+ * Duas vezes seguidas nao e desatencao: e um projeto que pede a coisa errada.
+ * Um segredo que precisa passar pela tela e pela area de transferencia ate um
+ * arquivo de nome quase identico ao errado vai parar no arquivo errado.
+ *
+ * Aqui a privada nunca e impressa. Ela vai do gerador direto para o arquivo, e
+ * so a publica aparece — que e a unica que precisa ser vista, copiada e
+ * enviada.
+ *
+ * @param {string} caminhoDoEnv  O `.env` do bot.
+ * @returns {{publica: string, criou: boolean}}
+ */
+function instalar(caminhoDoEnv) {
+  const fs = require("fs");
+  const path = require("path");
+
+  const alvo = path.resolve(String(caminhoDoEnv || "").trim());
+  const nome = path.basename(alvo);
+
+  // A CONFERENCIA QUE MOTIVOU ESTA FUNCAO.
+  //
+  // `.env.example` e o molde que vai para o repositorio. Escrever segredo nele
+  // e o erro exato que aconteceu, entao ele e recusado pelo nome — nao por
+  // aviso em documentacao que ninguem rele.
+  if (nome !== ".env") {
+    throw new Error(
+      `"${nome}" nao e o arquivo certo. A chave privada vai no ".env", que o ` +
+        "git ignora. Qualquer outro — em especial \".env.example\" — vai para o " +
+        "repositorio e levaria o segredo junto."
+    );
+  }
+
+  if (!fs.existsSync(path.dirname(alvo))) {
+    throw new Error(`A pasta "${path.dirname(alvo)}" nao existe.`);
+  }
+
+  const par = novoPar();
+  const existia = fs.existsSync(alvo);
+  const atual = existia ? fs.readFileSync(alvo, "utf8") : "";
+
+  const escrever = (texto, chave, valor) => {
+    const linha = `${chave}=${valor}`;
+    const achou = new RegExp(`^\s*${chave}\s*=.*$`, "m");
+    return achou.test(texto)
+      ? texto.replace(achou, linha)
+      : `${texto.replace(/\s*$/, "")}
+${linha}
+`;
+  };
+
+  let novo = escrever(atual, "OTIMIZA_CHAVE_PRIVADA", par.privada);
+  novo = escrever(novo, "OTIMIZA_CHAVE_PUBLICA", par.publica);
+
+  fs.writeFileSync(alvo, novo, "utf8");
+
+  return { publica: par.publica, criou: !existia };
+}
+
+module.exports = { novoPar, emitir, conferir, instalar };
 
 // ----------------------------------------------------------- linha de comando
 
@@ -228,6 +295,19 @@ if (require.main === module) {
       console.log(par.privada);
       console.log();
       console.log("Perder a privada obriga a reemitir a licença de todos os clientes.");
+    } else if (comando === "instalar") {
+      const { publica } = instalar(resto[0]);
+      console.log("Par gerado.");
+      console.log();
+      console.log("A chave PRIVADA foi escrita direto no .env do bot.");
+      console.log("Ela nao aparece aqui de proposito: o que passa pela tela acaba");
+      console.log("no arquivo errado ou numa captura de tela.");
+      console.log();
+      console.log("A PUBLICA, que pode ser vista por qualquer um, e esta:");
+      console.log();
+      console.log("    " + publica);
+      console.log();
+      console.log("Mande ela para colar em CHAVE_PUBLICA, em licenca.rs.");
     } else if (comando === "emitir") {
       const [privada, maquina, comprador, expira] = resto;
       console.log(emitir({ privada, maquina, comprador, expira: expira || null }));
@@ -236,6 +316,7 @@ if (require.main === module) {
         [
           "Emissor de licença do Otimiza",
           "",
+          "  node otimiza-licenca.cjs instalar <caminho do .env do bot>",
           "  node otimiza-licenca.cjs novo-par",
           "  node otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX \"Nome\" [AAAA-MM-DD]",
         ].join("\n")

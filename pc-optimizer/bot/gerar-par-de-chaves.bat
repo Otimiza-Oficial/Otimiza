@@ -2,18 +2,22 @@
 rem ===========================================================================
 rem  Gera o par de chaves do Otimiza. Clique duas vezes neste arquivo.
 rem
-rem  POR QUE ISTO EXISTE
+rem  A CHAVE PRIVADA NAO APARECE NA TELA. Ela vai do gerador direto para o
+rem  .env do bot.
 rem
-rem  O manual mandava digitar um caminho relativo num terminal, e caminho
-rem  relativo so funciona se a pessoa estiver exatamente na pasta certa. Como
-rem  existem duas pastas de nome parecido na maquina do dono, isso falhou duas
-rem  vezes seguidas.
+rem  POR QUE ASSIM
 rem
-rem  O `cd /d "%~dp0"` abaixo resolve de vez: `%~dp0` e a pasta DESTE arquivo,
-rem  entao o script sempre roda no lugar certo, seja de onde for chamado.
+rem  A primeira versao imprimia as duas metades e mandava copiar cada uma para
+rem  o seu lugar. A privada foi parar em `.env.example` — o arquivo VERSIONADO,
+rem  nao o `.env` — duas vezes em quinze minutos, e nas duas apareceu numa
+rem  captura de tela.
+rem
+rem  Duas vezes seguidas nao e desatencao: e um projeto que pede a coisa
+rem  errada. Um segredo que precisa passar pela tela e pela area de
+rem  transferencia ate um arquivo de nome quase identico ao errado vai parar no
+rem  arquivo errado. Entao ele deixou de passar pela tela.
 rem ===========================================================================
 
-rem Pagina de codigo 65001 = UTF-8. Sem isto os acentos saem quebrados.
 chcp 65001 >nul
 cd /d "%~dp0"
 
@@ -23,15 +27,12 @@ echo   ==================================
 echo.
 echo   Isto roda UMA vez na vida do produto.
 echo.
-echo   Nao rode com alguem olhando a tela, nem com gravacao ligada:
-echo   a chave PRIVADA vai aparecer aqui, e ela nao pode ser vista
-echo   por mais ninguem.
+echo   A chave PRIVADA vai direto para o .env do bot e nao aparece aqui.
+echo   So a PUBLICA e mostrada, e ela pode ser vista por qualquer um.
 echo.
-pause
 
 where node >nul 2>nul
 if errorlevel 1 (
-    echo.
     echo   O Node nao foi encontrado neste computador.
     echo   Instale em https://nodejs.org e rode este arquivo de novo.
     echo.
@@ -39,18 +40,39 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo   Arraste a pasta do bot para esta janela e tecle Enter.
+echo   (ou digite o caminho, por exemplo: C:\Users\Voce\Downloads\T\qrbot)
 echo.
-node "%~dp0otimiza-licenca.cjs" novo-par
+set /p PASTA="   Pasta do bot: "
+
+rem Aspas atrapalham quando a pasta e arrastada; saem aqui.
+set PASTA=%PASTA:"=%
+
+if not exist "%PASTA%" (
+    echo.
+    echo   Nao achei a pasta "%PASTA%".
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
+node "%~dp0otimiza-licenca.cjs" instalar "%PASTA%\.env"
+
+if errorlevel 1 (
+    echo.
+    echo   Nada foi gerado.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo   ---------------------------------------------------------------
-echo   A PUBLICA vai para CHAVE_PUBLICA em:
-echo   src-tauri\src\modules\licenca.rs
+echo   A PRIVADA ja esta no .env do bot. Nao procure por ela, nao copie,
+echo   e nao mande para ninguem — nem para mim.
 echo.
-echo   A PRIVADA vai para o .env do bot (OTIMIZA_CHAVE_PRIVADA) e para
-echo   um segundo lugar seguro. Ela NUNCA entra no repositorio e nunca
-echo   e colada em conversa nenhuma.
-echo.
-echo   Perder a privada obriga a reemitir a licenca de todos os clientes.
+echo   Guarde uma copia do .env num lugar seguro: perder a privada
+echo   obriga a reemitir a licenca de todos os clientes.
 echo   ---------------------------------------------------------------
 echo.
 pause

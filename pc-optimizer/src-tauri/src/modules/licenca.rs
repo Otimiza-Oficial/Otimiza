@@ -52,13 +52,20 @@ use std::path::PathBuf;
 /// e nenhuma outra as reconhece. Trocar antes da primeira venda não custa
 /// nada; depois, obriga a reemitir a chave de todo mundo.
 ///
-/// A anterior — `aB1QLYzIxihq…` — durou algumas horas e foi trocada porque a
-/// privada dela vazou: foi colada em `.env.example`, que é arquivo versionado,
-/// e apareceu numa captura de tela. Ninguém tinha comprado ainda, então o
-/// prejuízo foi zero. Fica registrado porque a lição não é "tomar cuidado": é
-/// que `.env` e `.env.example` têm nomes parecidos demais para um segredo
-/// depender de alguém lembrar da diferença.
-const CHAVE_PUBLICA: &str = "vm3tTHaiuuyr/4wskxAah2u4kma1rDK6xtMD+8FdM38=";
+/// Esta é a TERCEIRA. As duas anteriores vazaram do mesmo jeito, com quinze
+/// minutos de diferença: a privada foi colada em `.env.example` — arquivo
+/// versionado, ao contrário do `.env` — e apareceu numa captura de tela.
+///
+/// Duas vezes seguidas não é desatenção; é projeto que pede a coisa errada. O
+/// gerador imprimia as duas metades e mandava copiar cada uma para o seu
+/// lugar, e um segredo que passa pela tela e pela área de transferência até um
+/// arquivo de nome quase idêntico ao errado vai parar no arquivo errado.
+///
+/// Por isso o gerador mudou: a privada agora é escrita direto no `.env` do bot
+/// e nunca é impressa. Só esta pública aparece — e ela pode ser vista por
+/// qualquer um. Nenhuma venda tinha acontecido, então as duas trocas custaram
+/// zero.
+const CHAVE_PUBLICA: &str = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
 /// O que a licença afirma.
 ///
