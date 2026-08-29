@@ -211,12 +211,6 @@
             <span class="tab-badge" id="badge-diagnostico" hidden></span>
           </button>
 
-          <button class="nav" role="tab" data-tab="resultado" aria-selected="false"
-                  aria-controls="tab-resultado" id="tabbtn-resultado">
-            <span class="nav-icone" data-icone="resultado" aria-hidden="true"></span>
-            <span class="nav-rotulo">Resultado</span>
-          </button>
-
           <p class="lateral-grupo">Agir</p>
 
           <button class="nav" role="tab" data-tab="otimizacoes" aria-selected="false"
@@ -365,7 +359,7 @@
                 <span class="panel-tag">ao vivo</span>
               </div>
               <div id="process-list" class="process-list">
-                <p class="empty">Medindo…</p>
+                <p class="empty carregando">Medindo…</p>
               </div>
               <p class="core-legend">
                 Porcentagem da CPU total da máquina. O selo indica que o programa
@@ -440,6 +434,38 @@
 
         <!-- ======================================================= OTIMIZAÇÕES -->
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
+          <!--
+            A PROVA DE GANHO, NO LUGAR ONDE A OTIMIZAÇÃO ACONTECE
+
+            Ela morava numa aba própria chamada "Resultado", e uma aba própria
+            para dois painéis é o que faz um produto crescer em largura sem
+            crescer em utilidade. Pior: quem aplicava otimização estava AQUI, e
+            a prova de que aquilo funcionou ficava a um clique de distância que
+            quase ninguém dava.
+
+            A sequência dos botões — medir antes, aplicar, medir depois — só faz
+            sentido junto do que se aplica.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Prova de resultado</h2>
+              <span class="panel-tag" id="baseline-tag">sem medição inicial</span>
+            </div>
+
+            <p class="lead">
+              Meça, otimize, meça de novo. Se o ganho não aparecer nos números,
+              este painel vai dizer isso na sua cara — inclusive que não houve ganho.
+            </p>
+
+            <div class="row-actions">
+              <button id="measure-baseline" class="btn">1. Medir antes</button>
+              <button id="measure-compare" class="btn">2. Medir depois e comparar</button>
+            </div>
+
+            <p id="benchmark-status" class="status"></p>
+            <div id="benchmark-result" class="resultado" data-vazio="Ocupa o processador por alguns segundos para medir o desempenho e guardar como ponto de partida. Não altera configuração nenhuma."></div>
+          </section>
+
           <div class="grid grid-two">
             <section class="panel">
               <div class="panel-head">
@@ -535,7 +561,7 @@
               </div>
 
               <div id="optimization-list" class="optimization-list">
-                <p class="empty">Lendo o estado da máquina…</p>
+                <p class="empty carregando">Lendo o estado da máquina…</p>
               </div>
             </section>
           </div>
@@ -756,6 +782,34 @@
             <p id="memory-status" class="status"></p>
             <div id="memory-result" class="resultado" data-vazio="Lê a memória instalada, a prometida a programas e o pico de paginação desde que o PC ligou. Cerca de 3 segundos, e não altera nada."></div>
           </section>
+          <!--
+            O relatório sai daqui porque é isto que ele exporta: o levantamento
+            da máquina que está nesta aba, mais cada mudança aplicada com o
+            valor que existia antes.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Relatório para entregar ao cliente</h2>
+              <span class="panel-tag" id="report-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Quem faz manutenção para os outros tem um problema que otimização
+              nenhuma resolve: provar o serviço. O cliente entrega um PC lento,
+              recebe um PC melhor e não tem como saber o que foi feito — o que
+              coloca o técnico honesto no mesmo balaio de quem só reinicia a
+              máquina e cobra. Este arquivo lista cada mudança pelo nome, com o
+              valor que existia antes, junto com o levantamento completo da
+              máquina: tempo de inicialização, estado do processador, saúde do
+              disco, memória, navegadores e programas de inicialização. Sai em
+              PDF, pronto para anexar a uma nota de serviço — sem enfeite, sem
+              símbolo decorativo, e sem número que não tenha sido medido.
+            </p>
+
+            <button id="export-report" class="btn btn-primary">Gerar relatório em PDF</button>
+            <p id="report-status" class="status"></p>
+          </section>
+
         </section>
 
           </details>
@@ -838,51 +892,6 @@
         </section>
 
         <!-- =========================================================== RESULTADO -->
-        <section class="tab-panel" id="tab-resultado" role="tabpanel" aria-labelledby="tabbtn-resultado" hidden>
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Prova de resultado</h2>
-              <span class="panel-tag" id="baseline-tag">sem medição inicial</span>
-            </div>
-
-            <p class="lead">
-              Meça, otimize, meça de novo. Se o ganho não aparecer nos números,
-              este painel vai dizer isso na sua cara — inclusive que não houve ganho.
-            </p>
-
-            <div class="row-actions">
-              <button id="measure-baseline" class="btn">1. Medir antes</button>
-              <button id="measure-compare" class="btn">2. Medir depois e comparar</button>
-            </div>
-
-            <p id="benchmark-status" class="status"></p>
-            <div id="benchmark-result" class="resultado" data-vazio="Ocupa o processador por alguns segundos para medir o desempenho e guardar como ponto de partida. Não altera configuração nenhuma."></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Relatório para entregar ao cliente</h2>
-              <span class="panel-tag" id="report-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Quem faz manutenção para os outros tem um problema que otimização
-              nenhuma resolve: provar o serviço. O cliente entrega um PC lento,
-              recebe um PC melhor e não tem como saber o que foi feito — o que
-              coloca o técnico honesto no mesmo balaio de quem só reinicia a
-              máquina e cobra. Este arquivo lista cada mudança pelo nome, com o
-              valor que existia antes, junto com o levantamento completo da
-              máquina: tempo de inicialização, estado do processador, saúde do
-              disco, memória, navegadores e programas de inicialização. Sai em
-              PDF, pronto para anexar a uma nota de serviço — sem enfeite, sem
-              símbolo decorativo, e sem número que não tenha sido medido.
-            </p>
-
-            <button id="export-report" class="btn btn-primary">Gerar relatório em PDF</button>
-            <p id="report-status" class="status"></p>
-          </section>
-        </section>
-
         <!-- ============================================================== JOGOS -->
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <section class="panel">
@@ -1088,13 +1097,51 @@
 
         <!-- ============================================================= SISTEMA -->
         <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
-          <div class="grid grid-auto">
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Inicialização</h2>
-                <span class="panel-tag" id="startup-count">—</span>
-              </div>
+          <!--
+            TRÊS CARTÕES QUE ERAM A MESMA PERGUNTA
 
+            Inicialização, Tarefas agendadas e Serviços viviam como três painéis
+            lado a lado, cada um com o seu próprio título, o seu próprio texto e
+            a sua própria contagem. E o texto do painel de Serviços já dizia, em
+            voz alta, que eram a mesma coisa: "é a terceira perna do problema,
+            junto com inicialização e tarefas agendadas".
+
+            Três respostas para uma pergunta só, apresentadas como três
+            assuntos, obrigam o cliente a fazer sozinho a soma que o produto já
+            sabia fazer. Agora é um painel com a pergunta no título e três
+            guias — e a contagem de cada uma fica na própria guia, então dá para
+            ver onde está o peso sem abrir nenhuma.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O que sobe junto com o Windows</h2>
+            </div>
+
+            <p class="lead">
+              Programa instalado quase nunca se contenta em ser um programa. Ele
+              deixa coisa para trás que sobe sozinha: um atalho na
+              inicialização, uma tarefa no agendador, um serviço que começa
+              antes mesmo de você fazer login. São três lugares diferentes para
+              o mesmo hábito, e é por isso que desligar só um resolve pela
+              metade.
+            </p>
+
+            <div class="subabas" role="tablist" aria-label="Onde procurar">
+              <button class="subaba" role="tab" data-sub="startup" aria-selected="true">
+                <span>Inicialização</span>
+                <span class="panel-tag" id="startup-count">—</span>
+              </button>
+              <button class="subaba" role="tab" data-sub="tarefas" aria-selected="false">
+                <span>Tarefas agendadas</span>
+                <span class="panel-tag" id="tasks-count">—</span>
+              </button>
+              <button class="subaba" role="tab" data-sub="servicos" aria-selected="false">
+                <span>Serviços</span>
+                <span class="panel-tag" id="services-count">—</span>
+              </button>
+            </div>
+
+            <div class="subpainel" data-sub="startup">
               <p class="hint">
                 Desligar aqui não apaga nada: escrevemos no mesmo lugar que o
                 Gerenciador de Tarefas do Windows, e o valor anterior vai para o
@@ -1103,10 +1150,42 @@
 
               <p id="startup-status" class="status"></p>
               <div id="startup-list" class="startup-list">
-                <p class="empty">Lendo a inicialização…</p>
+                <p class="empty carregando">Lendo a inicialização…</p>
               </div>
-            </section>
+            </div>
 
+            <div class="subpainel" data-sub="tarefas" hidden>
+              <p class="hint">
+                Só as que chegaram com programas instalados. As do próprio Windows
+                ficam de fora: desligar tarefa do sistema é da mesma família de
+                desligar serviço do sistema, e não é o que o Otimiza faz.
+              </p>
+
+              <p id="tasks-status" class="status"></p>
+              <div id="tasks-list" class="startup-list">
+                <p class="empty carregando">Lendo o agendador…</p>
+              </div>
+            </div>
+
+            <div class="subpainel" data-sub="servicos" hidden>
+              <p class="hint">
+                Aqui o botão leva para <strong>Manual</strong>, não para
+                desativado. Desativar é o que os tutoriais mandam fazer e é errado:
+                quando o programa precisa do serviço ele não sobe, e o programa
+                quebra semanas depois sem ninguém ligar ao otimizador que rodou.
+                Em Manual, o serviço para de subir sozinho no boot mas ainda sobe
+                quando alguém pede — você ganha o boot e não quebra nada. Serviço
+                do Windows, antivírus, áudio e vídeo nunca aparecem como ação.
+              </p>
+
+              <p id="services-status" class="status"></p>
+              <div id="services-list" class="startup-list">
+                <p class="empty carregando">Lendo os serviços…</p>
+              </div>
+            </div>
+          </section>
+
+          <div class="grid grid-auto">
             <section class="panel">
               <div class="panel-head">
                 <h2>Programas de fábrica</h2>
@@ -1128,55 +1207,7 @@
               <p id="bloat-status" class="status"></p>
               <div id="bloat-result" class="resultado" data-vazio="Procura programas que vieram de fábrica com o Windows e que você provavelmente nunca abriu. Cerca de 8 segundos, e não remove nada sem você confirmar."></div>
             </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Tarefas agendadas</h2>
-                <span class="panel-tag" id="tasks-count">—</span>
-              </div>
-
-              <p class="hint">
-                Só as que chegaram com programas instalados. As do próprio Windows
-                ficam de fora: desligar tarefa do sistema é da mesma família de
-                desligar serviço do sistema, e não é o que o Otimiza faz.
-              </p>
-
-              <p id="tasks-status" class="status"></p>
-              <div id="tasks-list" class="startup-list">
-                <p class="empty">Lendo o agendador…</p>
-              </div>
-            </section>
           </div>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Serviços de programas instalados</h2>
-              <span class="panel-tag" id="services-count">—</span>
-            </div>
-
-            <p class="lead">
-              Programa instalado quase nunca se contenta em ser um programa: ele
-              deixa um serviço para trás — atualizador, licenciamento,
-              "assistente" — que sobe junto com o Windows, antes mesmo de você
-              fazer login. É a terceira perna do problema, junto com
-              inicialização e tarefas agendadas.
-            </p>
-
-            <p class="hint">
-              Aqui o botão leva para <strong>Manual</strong>, não para
-              desativado. Desativar é o que os tutoriais mandam fazer e é errado:
-              quando o programa precisa do serviço ele não sobe, e o programa
-              quebra semanas depois sem ninguém ligar ao otimizador que rodou.
-              Em Manual, o serviço para de subir sozinho no boot mas ainda sobe
-              quando alguém pede — você ganha o boot e não quebra nada. Serviço
-              do Windows, antivírus, áudio e vídeo nunca aparecem como ação.
-            </p>
-
-            <p id="services-status" class="status"></p>
-            <div id="services-list" class="startup-list">
-              <p class="empty">Lendo os serviços…</p>
-            </div>
-          </section>
 
           <div class="grid">
 

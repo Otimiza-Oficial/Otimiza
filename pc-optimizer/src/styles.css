@@ -2128,14 +2128,6 @@ button {
   animation-delay: calc(min(var(--i, 0), 12) * 22ms);
 }
 
-/* Estado de carregamento. Antes, um painel esperando o backend mostrava texto
-   parado e sem fim — se a chamada travasse, o cliente concluía que o programa
-   quebrou. Agora o texto respira e há uma faixa correndo por baixo. */
-.status.progress,
-.empty {
-  animation: pulsar 1.6s ease-in-out infinite;
-}
-
 .empty {
   position: relative;
   display: block;
@@ -2143,7 +2135,31 @@ button {
   overflow: hidden;
 }
 
-.empty::after {
+/* Estado de carregamento. Antes, um painel esperando o backend mostrava texto
+   parado e sem fim — se a chamada travasse, o cliente concluía que o programa
+   quebrou. Agora o texto respira e há uma faixa correndo por baixo.
+   
+   PRECISA DA CLASSE `carregando`, E ISSO É UM CONSERTO.
+
+   O pulso estava em `.empty` inteiro, e `.empty` é a classe de TODA mensagem
+   sem lista — inclusive das que já terminaram: "Nada encontrado", "Nenhuma
+   otimização nesta categoria", "Nenhum problema encontrado". Onze das
+   dezessete usavam a classe para dizer um resultado final, e todas ficavam
+   piscando para sempre.
+
+   Duas coisas erradas de uma vez. A pessoa lia "movimento" como "ainda está
+   trabalhando" e esperava por algo que nunca ia chegar. E uma animação
+   infinita, com uma faixa varrendo por baixo, consumia GPU sem parar — no PC
+   fraco que este produto foi contratado para aliviar.
+
+   As irmãs de `.status` já tinham interruptor (`.status.ok`, `.error`,
+   `.warn` desligam o pulso). `.empty` não tinha nenhum. */
+.status.progress,
+.empty.carregando {
+  animation: pulsar 1.6s ease-in-out infinite;
+}
+
+.empty.carregando::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
@@ -2385,11 +2401,6 @@ button {
 .nav-icone[data-icone="diagnostico"] {
   clip-path: polygon(0 55%, 22% 55%, 34% 12%, 50% 88%, 64% 45%, 74% 55%, 100% 55%,
     100% 72%, 66% 72%, 52% 100%, 34% 30%, 26% 72%, 0 72%);
-}
-
-.nav-icone[data-icone="resultado"] {
-  clip-path: polygon(0 62%, 24% 62%, 24% 100%, 0 100%, 0 62%, 38% 30%, 62% 30%,
-    62% 100%, 38% 100%, 38% 30%, 76% 0, 100% 0, 100% 100%, 76% 100%);
 }
 
 .nav-icone[data-icone="otimizacoes"] {
@@ -2867,11 +2878,6 @@ button {
 .secao-icone[data-icone="diagnostico"]::after {
   clip-path: polygon(0 55%, 22% 55%, 34% 12%, 50% 88%, 64% 45%, 74% 55%, 100% 55%,
     100% 72%, 66% 72%, 52% 100%, 34% 30%, 26% 72%, 0 72%);
-}
-
-.secao-icone[data-icone="resultado"]::after {
-  clip-path: polygon(0 62%, 24% 62%, 24% 100%, 0 100%, 0 62%, 38% 30%, 62% 30%,
-    62% 100%, 38% 100%, 38% 30%, 76% 0, 100% 0, 100% 100%, 76% 100%);
 }
 
 .secao-icone[data-icone="otimizacoes"]::after {
@@ -3519,4 +3525,63 @@ button {
   font-size: var(--t-body);
   line-height: 1.5;
   color: var(--text-muted);
+}
+
+/* ==========================================================================
+   GUIAS DENTRO DE UM PAINEL
+
+   Servem quando um painel responde uma pergunta em mais de um lugar — "o que
+   sobe junto com o Windows" tem três. Não são uma segunda navegação: a
+   pergunta continua sendo uma só, no título do painel.
+
+   A contagem mora na própria guia. É o que permite ver onde está o peso sem
+   precisar abrir nenhuma delas.
+   ========================================================================== */
+
+.subabas {
+  display: flex;
+  gap: var(--s1);
+  margin: var(--s4) 0 var(--s4);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+
+.subaba {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--t-body);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.subaba:hover {
+  color: var(--text-dim);
+  background: var(--panel-raised);
+}
+
+/* A guia ativa é a única com fundo e com texto cheio. Sublinhado ou negrito
+   sozinhos não bastam num painel que já tem título, etiqueta e texto de apoio
+   competindo por atenção. */
+.subaba[aria-selected="true"] {
+  color: var(--text);
+  background: var(--panel-raised);
+  border-color: var(--hairline-strong);
+}
+
+.subaba .panel-tag {
+  /* A etiqueta herda o tom da guia em vez de ter o seu: numa guia apagada ela
+     precisa apagar junto, senão o número salta mais que o nome. */
+  color: inherit;
+  opacity: 0.75;
+}
+
+.subpainel[hidden] {
+  display: none;
 }

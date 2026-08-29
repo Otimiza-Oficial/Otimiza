@@ -382,6 +382,27 @@ function conferirInvariantesDaTela() {
       .map((c) => c.id)
       .join(", ")}`
   );
+
+  // MENSAGEM QUE PISCA É MENSAGEM QUE AINDA ESTÁ ESPERANDO.
+  //
+  // A classe `.empty` serve para dois casos opostos: "Lendo os serviços…" e
+  // "Nada encontrado". O pulso vale só para o primeiro. Quando ele vale para
+  // os dois, a pessoa fica esperando um resultado que já chegou.
+  //
+  // A regra que dá para conferir sozinha: reticências e pulso andam juntos.
+  const desencontradas = [...document.querySelectorAll<HTMLElement>(".empty")].filter(
+    (caixa) => {
+      const esperando = (caixa.textContent ?? "").trim().endsWith("…");
+      return esperando !== caixa.classList.contains("carregando");
+    }
+  );
+
+  console.assert(
+    desencontradas.length === 0,
+    `mensagem vazia com pulso e texto em desacordo: ${desencontradas
+      .map((c) => `"${c.textContent?.trim()}"`)
+      .join(", ")}`
+  );
 }
 
 /* ==========================================================================
@@ -593,6 +614,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await montarPortao();
 
   wireControls();
+  ligarSubabas();
   conferirInvariantesDaTela();
 
   // O VEREDITO VEM PRIMEIRO — e sem `await`, de propósito.
@@ -697,6 +719,42 @@ function element<T extends HTMLElement>(id: string): T {
  * Troca de aba. Só a seção escolhida fica visível; o cabeçalho com os sinais
  * vitais e o rodapé permanecem, então nunca se perde o contato com a máquina.
  */
+/**
+ * Guias dentro de um painel.
+ *
+ * Genérico de propósito: qualquer painel que precise responder a mesma
+ * pergunta em mais de um lugar declara `.subabas` com botões `data-sub` e
+ * blocos `.subpainel` com o mesmo `data-sub`, e funciona. O alternativo seria
+ * uma função por painel, que é como uma tela ganha cinco jeitos diferentes de
+ * trocar de conteúdo.
+ *
+ * O escopo é o painel, e não o documento: dois painéis com guias na mesma aba
+ * não podem apagar as guias um do outro.
+ */
+function ligarSubabas() {
+  document.querySelectorAll<HTMLElement>(".subabas").forEach((barra) => {
+    const painel = barra.closest(".panel");
+    if (!painel) return;
+
+    barra.addEventListener("click", (evento) => {
+      const botao = (evento.target as HTMLElement).closest<HTMLButtonElement>(
+        "button[data-sub]"
+      );
+      if (!botao) return;
+
+      const escolhida = botao.dataset.sub;
+
+      barra.querySelectorAll<HTMLButtonElement>("button[data-sub]").forEach((item) => {
+        item.setAttribute("aria-selected", String(item.dataset.sub === escolhida));
+      });
+
+      painel.querySelectorAll<HTMLElement>(".subpainel[data-sub]").forEach((bloco) => {
+        bloco.hidden = bloco.dataset.sub !== escolhida;
+      });
+    });
+  });
+}
+
 function showTab(name: string) {
   document.querySelectorAll<HTMLElement>(".tab-panel").forEach((panel) => {
     panel.hidden = panel.id !== `tab-${name}`;
@@ -1092,7 +1150,7 @@ async function runDiagnostic() {
   const target = element("diagnostic-result");
 
   button.disabled = true;
-  target.innerHTML = `<p class="empty">Analisando…</p>`;
+  target.innerHTML = `<p class="empty carregando">Analisando…</p>`;
 
   try {
     const v = await invoke<Veredito>("diagnostico_rapido");
