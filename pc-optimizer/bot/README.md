@@ -150,6 +150,24 @@ module.exports = {
 };
 ```
 
+## A metade trocada
+
+A privada e a pública saem juntas do gerador, mas vão para lugares diferentes,
+coladas por mão humana: a pública no código do Otimiza, a privada no `.env` do
+bot. Rodar o gerador duas vezes e colar metades de pares diferentes é um erro
+fácil, silencioso e caríssimo — tudo parece funcionar, o cliente paga, e a
+chave não abre. Você descobre pela reclamação, com o dinheiro já recebido.
+
+Por isso o `emitir()` aceita a pública, e quando ela vem a chave recém-assinada
+é conferida contra ela **antes de sair**:
+
+```js
+emitir({ privada, maquina, comprador, publica });
+```
+
+Custa microssegundos e transforma um defeito que aparece no cliente num erro
+que aparece em você, na hora.
+
 ## Conferir uma chave que o cliente diz que não funciona
 
 Sem pedir o PC dele:

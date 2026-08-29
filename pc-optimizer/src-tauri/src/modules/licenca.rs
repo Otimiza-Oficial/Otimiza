@@ -45,19 +45,12 @@ use std::path::PathBuf;
 /// confere assinatura, não o que cria. A chave privada correspondente vive na
 /// máquina do dono e no segredo do bot, e nunca entra neste repositório.
 ///
-/// Trocar este valor invalida TODAS as licenças já emitidas.
-/// ATENÇÃO — ESTA É UMA CHAVE DE TESTE E PRECISA SER TROCADA ANTES DE VENDER.
+/// Instalada em 29/08/2026, gerada pelo dono. É a chave de produção.
 ///
-/// A privada correspondente foi impressa num terminal durante o
-/// desenvolvimento, o que a torna pública para efeitos práticos. Quem a tiver
-/// consegue emitir licença.
-///
-/// Antes da primeira venda:
-///
-///     cargo run --example gerar_chave -- novo-par
-///
-/// e cole aqui a PÚBLICA que sair, num terminal que só você vê.
-const CHAVE_PUBLICA: &str = "C0fmvRgj2Sb01AfppfzEx7VTlhc3VnvNF3qqYbq8nLA=";
+/// Trocar este valor invalida TODAS as licenças já emitidas: as assinaturas
+/// que estão com os clientes foram feitas pela privada correspondente a esta,
+/// e nenhuma outra as reconhece.
+const CHAVE_PUBLICA: &str = "aB1QLYzIxihqUoili2obXVlw47vKl24bNhaGy07YUrQ=";
 
 /// O que a licença afirma.
 ///

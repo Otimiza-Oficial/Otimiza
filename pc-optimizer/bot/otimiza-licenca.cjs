@@ -79,9 +79,11 @@ const FORMA_DA_MAQUINA = /^OTZ-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
  * @param {string} pedido.comprador  Quem comprou. Só para você saber de quem é.
  * @param {string} [pedido.expira]   "AAAA-MM-DD". Sem isto, a licença é vitalícia.
  * @param {string} [pedido.emitida]  "AAAA-MM-DD". Padrão: hoje.
+ * @param {string} [pedido.publica]  Se vier, a chave é conferida contra ela
+ *   antes de sair. Ver "O par trocado" abaixo.
  * @returns {string} A chave, para mandar ao cliente.
  */
-function emitir({ privada, maquina, comprador, expira = null, emitida = null }) {
+function emitir({ privada, maquina, comprador, expira = null, emitida = null, publica = null }) {
   if (!privada) {
     throw new Error(
       "Faltou a chave privada. No bot ela vem de variável de ambiente " +
@@ -142,8 +144,34 @@ function emitir({ privada, maquina, comprador, expira = null, emitida = null }) 
   });
 
   const assinatura = crypto.sign(null, corpo, chavePrivada);
+  const chave = `${base64url(corpo)}.${base64url(assinatura)}`;
 
-  return `${base64url(corpo)}.${base64url(assinatura)}`;
+  // O PAR TROCADO
+  //
+  // A privada e a pública saem juntas do gerador, mas são coladas em lugares
+  // diferentes por mãos humanas: a pública no código do Otimiza, a privada no
+  // .env do bot. Rodar o gerador duas vezes e colar metades de pares
+  // diferentes é um erro fácil, silencioso, e caríssimo — tudo parece
+  // funcionar, o cliente paga, e a chave não abre. Você só descobre pela
+  // reclamação, com o dinheiro já recebido.
+  //
+  // Quando a pública é informada, a chave recém-assinada é conferida contra
+  // ela antes de sair daqui. Custa microssegundos e transforma um defeito que
+  // aparece no cliente num erro que aparece em você.
+  if (publica) {
+    const prova = conferir(chave, publica);
+
+    if (!prova.valida) {
+      throw new Error(
+        "A chave privada e a chave pública não são do mesmo par. Tudo " +
+          "funcionaria até o cliente tentar ativar, e aí não abriria. " +
+          "Rode o gerador de novo e cole as DUAS metades da MESMA saída: " +
+          "a pública em licenca.rs, a privada no .env."
+      );
+    }
+  }
+
+  return chave;
 }
 
 /**

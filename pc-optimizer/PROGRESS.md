@@ -34,6 +34,9 @@
 | Sem licença, o produto fica trancado | Arquivo apagado; `ativa: false` |
 | Caminho da taxa do monitor funciona no driver | Ensaio com `CDS_TEST` nos dois AOC 24G4: driver aprovou 144 Hz e 120 Hz sem nada ser alterado |
 | Chaves de registro do Firewall batem com o `netsh` | Os três perfis conferidos contra `netsh advfirewall show allprofiles state` |
+| Chave pública de produção instalada | Conferida como Ed25519 de 32 bytes antes de entrar no código |
+| Bot do dono emite chave que o produto aceita | `/licenca` carregado no bot real (8 comandos); chave assinada em JavaScript conferida pelo Rust |
+| Metade de par trocada é recusada na emissão | Privada de um par com pública de outro: o emissor recusa antes de a chave sair |
 
 ## O que existe hoje
 
@@ -560,8 +563,8 @@ O emissor de chaves vive em `examples/`, que o `cargo build --release` não
 compila — é a única peça que toca na chave privada e ela fica do lado de cá da
 cerca. O manual está em [`docs/LICENCA.md`](docs/LICENCA.md).
 
-**A chave pública que está no código é de TESTE e precisa ser trocada antes da
-primeira venda.**
+A chave pública de produção foi instalada em 29/08/2026. A privada
+correspondente está com o dono e no segredo do bot.
 
 ### O portão
 
@@ -603,16 +606,14 @@ numa máquina.
    ainda não tenha sido otimizada, onde as 14 apareçam como disponíveis
 2. **Instalar o pacote gerado numa máquina limpa** — o instalador compila, mas
    nunca foi instalado e aberto de fato
-3. **Trocar a chave pública de licença** por um par gerado pelo dono — a que
-   está no código é de teste, e a privada dela foi impressa num terminal
-4. **Trocar o convite do Discord por um permanente** — o que está no código
+3. **Trocar o convite do Discord por um permanente** — o que está no código
    (`discord.gg/fmeQVJphC`) foi conferido na API e **vence em 28/09/2026**. O
    produto não tem camada de rede, então convite morto no executável não tem
    conserto remoto: quem já instalou fica sem caminho até o dono
-5. Assinatura digital do executável — ver
+4. Assinatura digital do executável — ver
    [`docs/ASSINATURA.md`](docs/ASSINATURA.md). Depende de compra de certificado e
    verificação de identidade; a configuração de build já está preparada
-6. `icons/icon.icns` continua sendo o ícone antigo do Tauri — só afeta empacotamento
+5. `icons/icon.icns` continua sendo o ícone antigo do Tauri — só afeta empacotamento
    para macOS, que ainda não é alvo
 
 ### Faxina feita nesta rodada
