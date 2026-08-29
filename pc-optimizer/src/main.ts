@@ -382,7 +382,204 @@ function conferirInvariantesDaTela() {
   );
 }
 
+/* ==========================================================================
+   O PORTÃO — a licença
+
+   Duas regras que valem escrever:
+
+   1. Esta tela NÃO é o bloqueio. Ela é HTML dentro de uma janela que tem
+      ferramentas de desenvolvedor, e qualquer pessoa a remove em dez segundos.
+      O bloqueio de verdade está no Rust, na primeira linha dos 21 comandos que
+      alteram o computador. Aqui é conforto: explicar, e não vigiar.
+
+   2. O diagnóstico continua rodando por trás. Uma tela de compra que diz "seu
+      PC pode estar lento" é propaganda; uma que diz o que ESTA máquina tem, com
+      número medido agora, é outra conversa.
+   ========================================================================== */
+
+/**
+ * O convite do Discord.
+ *
+ * TROCAR ANTES DE VENDER. É o único endereço que a tela de compra oferece, e
+ * um convite errado aqui é uma venda perdida sem que ninguém fique sabendo.
+ */
+const CONVITE_DISCORD = "https://discord.gg/otimiza";
+
+interface EstadoLicenca {
+  ativa: boolean;
+  maquina: string;
+  origem: string;
+  sobrevive_formatacao: boolean;
+  comprador: string | null;
+  expira: string | null;
+  motivo: string | null;
+}
+
+/** Guardado para o resto da tela saber se o portão está de pé. */
+let portaoAberto = false;
+
+/**
+ * Decide se o portão aparece, e monta o que ele mostra.
+ *
+ * Roda antes de tudo no arranque. Se a chamada falhar — coisa que não deveria
+ * acontecer, porque o comando não toca em nada do sistema —, o portão fica
+ * fechado e o programa abre normal: o backend continua recusando o que altera
+ * a máquina, então errar para o lado de deixar entrar não solta nada.
+ */
+async function montarPortao() {
+  let estado: EstadoLicenca;
+
+  try {
+    estado = await invoke<EstadoLicenca>("licenca_estado");
+  } catch {
+    return;
+  }
+
+  ligarBotoesDoPortao();
+
+  if (estado.ativa) return;
+
+  abrirPortao(estado);
+}
+
+function abrirPortao(estado: EstadoLicenca) {
+  const portao = element("portao");
+  portao.hidden = false;
+  portaoAberto = true;
+
+  // O console atrás fica inalcançável pelo teclado. Sem isto, o Tab passeia
+  // por trás da tela e o foco some da vista de quem navega sem mouse.
+  document.querySelector(".console")?.setAttribute("inert", "");
+
+  text("portao-id", estado.maquina || "não identificado");
+  text(
+    "portao-nota",
+    estado.maquina
+      ? `Vem do ${estado.origem}. ` +
+          (estado.sobrevive_formatacao
+            ? "Formatar o Windows não muda este código; trocar a placa-mãe muda."
+            : "Formatar o Windows muda este código, e nesse caso a chave precisa " +
+              "ser reemitida no Discord — é sem custo.")
+      : "Não foi possível identificar este computador, o que costuma acontecer " +
+          "em máquina virtual. Fale no Discord antes de comprar."
+  );
+
+  const convite = element("portao-discord") as HTMLAnchorElement;
+  convite.href = CONVITE_DISCORD;
+  text("portao-discord-endereco", CONVITE_DISCORD.replace(/^https?:\/\//, ""));
+
+  // Uma chave gravada que parou de valer — máquina trocada, prazo vencido —
+  // precisa dizer o motivo. Sem isso, o cliente que pagou vê a mesma tela de
+  // quem nunca comprou e conclui que foi enganado.
+  if (estado.motivo) {
+    const erro = element("portao-erro");
+    erro.hidden = false;
+    erro.textContent = estado.motivo;
+  }
+
+  element("portao-chave").focus();
+}
+
+function fecharPortao() {
+  element("portao").hidden = true;
+  portaoAberto = false;
+  document.querySelector(".console")?.removeAttribute("inert");
+}
+
+function ligarBotoesDoPortao() {
+  const campo = element("portao-chave") as HTMLTextAreaElement;
+  const botao = element("portao-ativar-btn") as HTMLButtonElement;
+  const erro = element("portao-erro");
+
+  element("portao-copiar").addEventListener("click", async () => {
+    const copiar = element("portao-copiar");
+
+    try {
+      await navigator.clipboard.writeText(element("portao-id").textContent ?? "");
+      copiar.textContent = "Copiado";
+      window.setTimeout(() => (copiar.textContent = "Copiar"), 1600);
+    } catch {
+      // A área de transferência pode ser negada. O código continua
+      // selecionável no próprio elemento (`user-select: all`), então dizer o
+      // que fazer resolve melhor do que um erro genérico.
+      copiar.textContent = "Selecione e copie";
+      window.setTimeout(() => (copiar.textContent = "Copiar"), 2600);
+    }
+  });
+
+  const ativar = async () => {
+    const chave = campo.value.trim();
+
+    if (!chave) {
+      erro.hidden = false;
+      erro.textContent = "Cole a chave que você recebeu no Discord.";
+      campo.focus();
+      return;
+    }
+
+    botao.disabled = true;
+    botao.textContent = "Conferindo…";
+    erro.hidden = true;
+
+    try {
+      const estado = await invoke<EstadoLicenca>("licenca_ativar", { chave });
+      botao.textContent = "Ativado";
+      fecharPortao();
+
+      setStatus(
+        "optimization-status",
+        `Otimiza ativado${estado.comprador ? ` para ${estado.comprador}` : ""}.`,
+        "ok"
+      );
+    } catch (falha) {
+      erro.hidden = false;
+      erro.textContent = String(falha);
+      botao.disabled = false;
+      botao.textContent = "Ativar o Otimiza";
+      campo.focus();
+    }
+  };
+
+  botao.addEventListener("click", () => void ativar());
+
+  // Enter ativa; Shift+Enter continua quebrando linha, porque o campo é uma
+  // caixa de várias linhas e a chave colada de uma mensagem vem partida.
+  campo.addEventListener("keydown", (evento) => {
+    if (evento.key === "Enter" && !evento.shiftKey) {
+      evento.preventDefault();
+      void ativar();
+    }
+  });
+}
+
+/**
+ * Leva o achado do diagnóstico para a tela de compra.
+ *
+ * Só o principal, e só quando existe. Repetir a lista inteira ali viraria
+ * catálogo de defeitos — o que é assustar para vender, exatamente o que este
+ * produto não faz.
+ */
+function mostrarAchadoNoPortao(v: Veredito) {
+  if (!portaoAberto) return;
+
+  const caixa = element("portao-achado");
+
+  if (!v.principal) {
+    caixa.hidden = true;
+    return;
+  }
+
+  caixa.hidden = false;
+  text("portao-achado-titulo", v.frase);
+  text("portao-achado-detalhe", v.detalhe);
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
+  // O portão primeiro, e com `await`: se este computador não está ativado, a
+  // tela de compra precisa estar de pé antes de o console aparecer por um
+  // quadro que seja.
+  await montarPortao();
+
   wireControls();
   conferirInvariantesDaTela();
 
@@ -2575,6 +2772,9 @@ function aplicarVeredito(v: Veredito) {
     .join("");
 
   mostrarAcaoDoVeredito(v.principal?.acao ?? null);
+
+  // E, quando o portão está de pé, o mesmo achado aparece na tela de compra.
+  mostrarAchadoNoPortao(v);
 
   // O aviso que segue visível em qualquer aba. Só para crítico: se aparecesse
   // também nos importantes, viraria enfeite permanente e pararia de ser lido —

@@ -15,6 +15,110 @@
     -->
     <div class="fundo" aria-hidden="true"></div>
 
+    <!--
+      O PORTÃO
+
+      A primeira coisa que a pessoa vê depois de instalar. Ocupa a janela
+      inteira e some assim que a licença é aceita.
+
+      A esquerda é a única parte do produto que pode soar como venda; a direita
+      é o trabalho de ativar. Separar as duas evita a tela mista em que o
+      cliente que já comprou tem que caçar o campo da chave no meio da
+      propaganda.
+
+      O diagnóstico roda por trás enquanto ele lê. O que aparece em
+      `portao-achado` é o problema real desta máquina, medido agora — vale mais
+      que qualquer frase de vitrine, porque é sobre o computador dele.
+    -->
+    <section class="portao" id="portao" hidden aria-labelledby="portao-titulo">
+      <div class="portao-caixa">
+        <div class="portao-colunas">
+          <div class="portao-vitrine">
+            <span class="portao-marca">Otimiza</span>
+
+            <h1 class="portao-titulo" id="portao-titulo">
+              Este computador ainda não está ativado.
+            </h1>
+
+            <p class="portao-sub">
+              O diagnóstico é livre e já está rodando aqui atrás. O que a chave
+              libera são as correções.
+            </p>
+
+            <!--
+              Nasce escondido e só aparece quando o veredito volta com alguma
+              coisa. Cartão vazio prometendo conteúdo é ruído.
+            -->
+            <div class="portao-achado" id="portao-achado" hidden>
+              <span class="portao-achado-marca" aria-hidden="true"></span>
+              <div>
+                <strong id="portao-achado-titulo"></strong>
+                <span id="portao-achado-detalhe"></span>
+              </div>
+            </div>
+
+            <ol class="portao-passos">
+              <li>Copie o código deste computador, aqui do lado.</li>
+              <li>Entre no Discord e mande o código junto com o pagamento.</li>
+              <li>Cole aqui a chave que você receber.</li>
+            </ol>
+
+            <a class="portao-discord" id="portao-discord" href="#" target="_blank" rel="noreferrer">
+              <span class="portao-discord-marca" aria-hidden="true"></span>
+              <span>
+                <strong>Comprar no Discord</strong>
+                <small id="portao-discord-endereco"></small>
+              </span>
+            </a>
+
+            <p class="portao-honesto">
+              A chave vale em um computador só. É o que impede que ela seja
+              repassada — e é por isso que o código acima faz parte da compra.
+            </p>
+          </div>
+
+          <div class="portao-ativar">
+            <label class="portao-rotulo" for="portao-id">O código deste computador</label>
+
+            <div class="portao-id">
+              <code id="portao-id">…</code>
+              <button type="button" class="portao-copiar" id="portao-copiar">Copiar</button>
+            </div>
+
+            <p class="portao-nota" id="portao-nota"></p>
+
+            <label class="portao-rotulo" for="portao-chave">A sua chave</label>
+            <textarea
+              id="portao-chave"
+              class="portao-campo"
+              rows="4"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="Cole aqui a chave que você recebeu"
+            ></textarea>
+
+            <button type="button" class="btn-primary portao-botao" id="portao-ativar-btn">
+              Ativar o Otimiza
+            </button>
+
+            <p class="portao-erro" id="portao-erro" hidden></p>
+
+            <!--
+              O rodapé da coluna. Existe por dois motivos: enche o vazio que
+              sobrava sob o botão, e responde as duas perguntas que aparecem
+              logo depois de pagar — "preciso digitar isso toda vez?" e
+              "e se eu trocar de PC?".
+            -->
+            <p class="portao-depois">
+              A chave fica gravada neste computador; você não digita de novo.
+              Trocou de placa-mãe ou formatou? Fale no Discord com o código
+              acima — a chave é reemitida sem custo.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <div class="console">
       <header class="topbar">
         <!--

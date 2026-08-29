@@ -92,6 +92,9 @@ público-alvo.
 
 - [`pc-optimizer/PROGRESS.md`](pc-optimizer/PROGRESS.md) — o que está pronto, o
   que foi verificado e como, e o que falta
+- [`pc-optimizer/docs/LICENCA.md`](pc-optimizer/docs/LICENCA.md) — como o
+  sistema de chave funciona, o que fazer antes da primeira venda, e o que
+  responder em cada caso que aparece no suporte
 - [`pc-optimizer/docs/ASSINATURA.md`](pc-optimizer/docs/ASSINATURA.md) —
   assinatura digital do instalador
 

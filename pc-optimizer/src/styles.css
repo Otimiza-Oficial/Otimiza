@@ -3198,3 +3198,325 @@ button {
 .exames-detalhados[open] > .panel {
   margin-top: var(--s4);
 }
+
+/* ==========================================================================
+   O PORTÃO — a tela de licença
+
+   Cobre a janela inteira antes de qualquer outra coisa. Não usa nenhuma cor,
+   espaço ou raio fora da escala: uma tela de venda que inventa a própria
+   identidade visual faz o produto parecer dois programas colados.
+
+   O fundo do console continua visível por trás, borrado. É de propósito — a
+   pessoa vê que existe um programa ali, e não uma tela de bloqueio avulsa.
+   ========================================================================== */
+
+.portao {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--s5);
+  overflow: auto;
+
+  background: rgba(var(--bg-rgb), 0.82);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
+.portao[hidden] {
+  display: none;
+}
+
+.portao-caixa {
+  width: min(1020px, 100%);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3);
+  background: var(--panel);
+
+  /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
+     aquele halo escuro que denuncia caixa flutuante mal feita. */
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.portao-colunas {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+}
+
+/* A vitrine ganha um degrau de luz e a coluna de ativar fica no tom do painel.
+   É o único sinal de que uma é para ler e a outra é para usar — não precisa de
+   título dizendo isso. */
+.portao-vitrine {
+  padding: var(--s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  background: var(--panel-raised);
+  border-right: 1px solid var(--hairline);
+}
+
+.portao-marca {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.portao-titulo {
+  margin: 0;
+  font-size: var(--t-big);
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.portao-sub {
+  margin: 0;
+  font-size: var(--t-lead);
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* O achado do diagnóstico. Âmbar, e não vermelho: é uma informação sobre a
+   máquina, não um erro do programa. */
+.portao-achado {
+  display: flex;
+  gap: var(--s3);
+  align-items: flex-start;
+  padding: var(--s3) var(--s4);
+  border: 1px solid rgba(var(--amber-rgb), 0.28);
+  border-radius: var(--r2);
+  background: rgba(var(--amber-rgb), 0.07);
+}
+
+.portao-achado[hidden] {
+  display: none;
+}
+
+.portao-achado-marca {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.portao-achado strong {
+  display: block;
+  font-size: var(--t-body);
+  color: var(--text);
+}
+
+.portao-achado span {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.portao-passos {
+  margin: 0;
+  padding-left: 1.15em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Para quem ainda não comprou, ESTE é o botão da tela — não o "Ativar" do
+   outro lado. Ele estava mais apagado que o de ativar, o que invertia a
+   hierarquia justamente para o público que a tela existe para atender. */
+.portao-discord {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid rgba(var(--green-rgb), 0.35);
+  border-radius: var(--r2);
+  background: rgba(var(--green-rgb), 0.06);
+  text-decoration: none;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.portao-discord:hover {
+  border-color: var(--green);
+  background: rgba(var(--green-rgb), 0.11);
+}
+
+.portao-discord-marca {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.portao-discord strong {
+  display: block;
+  font-size: var(--t-value);
+  color: var(--text);
+}
+
+.portao-discord small {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  color: var(--text-muted);
+}
+
+.portao-honesto {
+  margin: auto 0 0;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------- ativar */
+
+.portao-ativar {
+  padding: var(--s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.portao-rotulo {
+  font-size: var(--t-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.portao-id {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s2);
+  margin-bottom: var(--s1);
+}
+
+.portao-id code {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--s3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r1);
+  background: var(--bg);
+
+  font-family: var(--font-mono);
+  font-size: var(--t-value);
+  letter-spacing: 0.08em;
+  color: var(--text);
+
+  /* O cliente precisa poder selecionar com o mouse mesmo tendo o botão de
+     copiar: em máquina sem área de transferência acessível, é a saída. */
+  user-select: all;
+}
+
+.portao-copiar {
+  flex: none;
+  padding: 0 var(--s4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r1);
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  font-size: var(--t-body);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.portao-copiar:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.portao-nota {
+  margin: 0 0 var(--s4);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.portao-campo {
+  width: 100%;
+  padding: var(--s3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r1);
+  background: var(--bg);
+
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text);
+  resize: vertical;
+
+  /* A chave é longa e vem numa linha só. Sem isto ela some para a direita e a
+     pessoa não vê o que colou. */
+  word-break: break-all;
+}
+
+.portao-campo:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.portao-botao {
+  margin-top: var(--s3);
+  width: 100%;
+  justify-content: center;
+}
+
+.portao-erro {
+  margin: var(--s3) 0 0;
+  padding: var(--s3);
+  border: 1px solid rgba(var(--red-rgb), 0.3);
+  border-radius: var(--r1);
+  background: rgba(var(--red-rgb), 0.08);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.portao-erro[hidden] {
+  display: none;
+}
+
+/*
+  Uma coluna em janela estreita. O produto roda em notebook de 1366×768, e
+  duas colunas de 500px ali deixariam a chave num campo de meia palavra.
+*/
+@media (max-width: 900px) {
+  .portao-colunas {
+    grid-template-columns: 1fr;
+  }
+
+  .portao-vitrine {
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .portao-vitrine,
+  .portao-ativar {
+    padding: var(--s5);
+  }
+}
+
+.portao-depois {
+  /* `auto` no topo empurra para o rodapé da coluna. É o que fecha o vazio que
+     sobrava embaixo do botão quando a vitrine ao lado era mais alta. */
+  margin: auto 0 0;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
