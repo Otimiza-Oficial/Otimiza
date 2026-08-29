@@ -400,10 +400,20 @@ function conferirInvariantesDaTela() {
 /**
  * O convite do Discord.
  *
- * TROCAR ANTES DE VENDER. É o único endereço que a tela de compra oferece, e
- * um convite errado aqui é uma venda perdida sem que ninguém fique sabendo.
+ * É o único endereço que a tela de compra oferece. Um convite errado ou
+ * vencido aqui é uma venda perdida sem que ninguém fique sabendo — e o cliente
+ * não tem outro caminho para chegar até o dono.
+ *
+ * ATENÇÃO — CONFERIDO EM 2026-08-29 E ESTE CONVITE VENCE EM 2026-09-28.
+ *
+ * Convite do Discord expira por padrão. Este produto não tem camada de rede
+ * nenhuma — zero dependências HTTP, por decisão de projeto —, então um convite
+ * vencido aqui não tem conserto remoto: quem instalou antes fica com um link
+ * morto e sem nenhum caminho até o dono.
+ *
+ * Trocar por um convite com "Expira em: Nunca" e "Usos: Sem limite".
  */
-const CONVITE_DISCORD = "https://discord.gg/otimiza";
+const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
 
 interface EstadoLicenca {
   ativa: boolean;
