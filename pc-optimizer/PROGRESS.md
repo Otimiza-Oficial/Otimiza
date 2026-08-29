@@ -8,7 +8,7 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 121 testes unitários passam, zero avisos | `cargo test --lib` |
+| 388 testes unitários passam, zero avisos | `cargo test --lib` |
 | Instalador gerado | `Otimiza_0.3.0_x64-setup.exe` e `.msi`, compilados pela esteira do GitHub |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
@@ -27,6 +27,13 @@
 | Frontend compila | `npx tsc --noEmit` e `npm run build` |
 | Leitura de serviços independe do idioma | Teste lê `RpcSs` do registro nesta máquina |
 | Parsing do `powercfg` funciona em português | Conferido contra a saída real deste Windows |
+| Identificador desta máquina é estável e único | `OTZ-WPYY-0J4F-77AB`, tirado do número de série da placa-mãe. `ProcessorId` foi medido (`BFEBFBFF000A0653`) e RECUSADO: é igual em todo processador do mesmo modelo |
+| Chave de licença assinada é aceita | Chave emitida para o ID desta máquina ativou o produto |
+| Chave adulterada é recusada | Um caractere trocado nos dados, e outro na assinatura; os dois recusados. Chave assinada por outro par também |
+| Chave de outra máquina não ativa aqui | Emitida para `OTZ-AAAA-BBBB-CCCC`, recusada nesta máquina |
+| Sem licença, o produto fica trancado | Arquivo apagado; `ativa: false` |
+| Caminho da taxa do monitor funciona no driver | Ensaio com `CDS_TEST` nos dois AOC 24G4: driver aprovou 144 Hz e 120 Hz sem nada ser alterado |
+| Chaves de registro do Firewall batem com o `netsh` | Os três perfis conferidos contra `netsh advfirewall show allprofiles state` |
 
 ## O que existe hoje
 
@@ -534,6 +541,35 @@ altera nada.
 - "Desfazer Tudo" restaura o estado original
 - Otimizações que exigem administrador falham com mensagem clara em vez de silenciosamente
 
+### Licença
+
+Assinatura Ed25519 de chave pública. O dono assina com uma chave privada que
+nunca sai da máquina dele; o programa carrega só a pública, que **só confere** e
+não cria. Extraí-la do executável não permite forjar nada.
+
+Sem servidor, a chave nasce presa à máquina: o identificador vem do número de
+série da placa-mãe (sobrevive à formatação) com o `MachineGuid` do Windows como
+reserva. Quem repassa a chave descobre que ela não abre no PC do outro.
+
+O bloqueio mora no backend, não na tela. Vinte e dois comandos que alteram o
+computador conferem a licença na primeira linha. Ler e desfazer continuam
+livres, de propósito: o diagnóstico alimenta a tela de compra, e trancar o
+"reverter" deixaria o PC de quem pagou alterado sem caminho de volta.
+
+O emissor de chaves vive em `examples/`, que o `cargo build --release` não
+compila — é a única peça que toca na chave privada e ela fica do lado de cá da
+cerca. O manual está em [`docs/LICENCA.md`](docs/LICENCA.md).
+
+**A chave pública que está no código é de TESTE e precisa ser trocada antes da
+primeira venda.**
+
+### O portão
+
+Primeira tela de quem instala. Ocupa a janela inteira, some quando a licença é
+aceita. À esquerda a compra, à direita a ativação. O diagnóstico roda por trás,
+e o achado principal aparece na tela de compra — o problema real daquela
+máquina, medido na hora, em vez de texto de propaganda.
+
 ## Pendente
 
 ### Cobertura real das otimizações de administrador
@@ -567,10 +603,16 @@ numa máquina.
    ainda não tenha sido otimizada, onde as 14 apareçam como disponíveis
 2. **Instalar o pacote gerado numa máquina limpa** — o instalador compila, mas
    nunca foi instalado e aberto de fato
-3. Assinatura digital do executável — ver
+3. **Trocar a chave pública de licença** por um par gerado pelo dono — a que
+   está no código é de teste, e a privada dela foi impressa num terminal
+4. **Trocar o convite do Discord por um permanente** — o que está no código
+   (`discord.gg/fmeQVJphC`) foi conferido na API e **vence em 28/09/2026**. O
+   produto não tem camada de rede, então convite morto no executável não tem
+   conserto remoto: quem já instalou fica sem caminho até o dono
+5. Assinatura digital do executável — ver
    [`docs/ASSINATURA.md`](docs/ASSINATURA.md). Depende de compra de certificado e
    verificação de identidade; a configuração de build já está preparada
-4. `icons/icon.icns` continua sendo o ícone antigo do Tauri — só afeta empacotamento
+6. `icons/icon.icns` continua sendo o ícone antigo do Tauri — só afeta empacotamento
    para macOS, que ainda não é alvo
 
 ### Faxina feita nesta rodada
@@ -587,7 +629,6 @@ avisos de compilação**, de 18 que havia.
 ### Depois
 - Limpeza de arquivos temporários
 - Gerenciamento de programas de inicialização
-- Licenciamento / versão PRO
 - Otimizações para Linux e macOS
 
 ## Como rodar
