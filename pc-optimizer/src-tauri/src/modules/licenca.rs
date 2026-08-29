@@ -49,8 +49,16 @@ use std::path::PathBuf;
 ///
 /// Trocar este valor invalida TODAS as licenças já emitidas: as assinaturas
 /// que estão com os clientes foram feitas pela privada correspondente a esta,
-/// e nenhuma outra as reconhece.
-const CHAVE_PUBLICA: &str = "aB1QLYzIxihqUoili2obXVlw47vKl24bNhaGy07YUrQ=";
+/// e nenhuma outra as reconhece. Trocar antes da primeira venda não custa
+/// nada; depois, obriga a reemitir a chave de todo mundo.
+///
+/// A anterior — `aB1QLYzIxihq…` — durou algumas horas e foi trocada porque a
+/// privada dela vazou: foi colada em `.env.example`, que é arquivo versionado,
+/// e apareceu numa captura de tela. Ninguém tinha comprado ainda, então o
+/// prejuízo foi zero. Fica registrado porque a lição não é "tomar cuidado": é
+/// que `.env` e `.env.example` têm nomes parecidos demais para um segredo
+/// depender de alguém lembrar da diferença.
+const CHAVE_PUBLICA: &str = "vm3tTHaiuuyr/4wskxAah2u4kma1rDK6xtMD+8FdM38=";
 
 /// O que a licença afirma.
 ///
