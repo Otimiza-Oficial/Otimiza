@@ -88,6 +88,7 @@ pub fn run() {
             commands::revert_optimization,
             commands::optimize_now,
             commands::revert_all_optimizations,
+            commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
         ])

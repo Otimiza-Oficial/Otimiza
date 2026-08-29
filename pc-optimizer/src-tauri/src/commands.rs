@@ -1496,6 +1496,34 @@ pub async fn revert_all_optimizations(
     }
 }
 
+/// Coloca um monitor na maior taxa de atualização que ele aceita.
+///
+/// O parâmetro chama-se `id` porque é assim que o botão do diagnóstico manda o
+/// argumento — um só, sempre com esse nome. Aqui ele é o dispositivo, no
+/// formato `\.\DISPLAY1`.
+#[tauri::command]
+pub async fn set_max_refresh_rate(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+
+        crate::modules::windows::WindowsOptimizer::new()
+            .set_max_refresh_rate(&id, &mut log)
+            .map(|resultado| resultado.message)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (id, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -1603,6 +1631,7 @@ mod tests {
         "set_startup_enabled",
         "apply_optimization",
         "optimize_now",
+        "set_max_refresh_rate",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as

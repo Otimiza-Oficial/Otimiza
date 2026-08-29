@@ -65,6 +65,15 @@ pub enum ChangeRecord {
     ReservedStorage {
         previously_enabled: bool,
     },
+    /// Taxa de atualização de um monitor.
+    ///
+    /// Guarda o dispositivo e a frequência anterior. Sem isto o cliente que
+    /// não gostou do resultado — ou cuja tela ficou instável — não teria
+    /// caminho de volta pelo produto.
+    RefreshRate {
+        device: String,
+        previous_hz: u32,
+    },
     /// Tarefa agendada ligada ou desligada.
     ScheduledTask {
         path: String,
@@ -103,6 +112,10 @@ impl ChangeRecord {
                 name,
                 if *previously_enabled { "ligada" } else { "desligada" }
             ),
+            ChangeRecord::RefreshRate { device, previous_hz } => {
+                let curto = device.rsplit('\\').next().unwrap_or(device);
+                format!("monitor · {} (antes: {} Hz)", curto, previous_hz)
+            }
             ChangeRecord::BootLimits { removed } => {
                 let keys: Vec<&str> = removed.iter().map(|(key, _)| key.as_str()).collect();
                 format!("boot · limites removidos: {}", keys.join(", "))

@@ -434,7 +434,7 @@ impl EmAchados for super::display::DisplayReport {
         self.findings
             .iter()
             .map(|f| {
-                montar(
+                let mut achado = montar(
                     Origem::Monitor,
                     f.id.clone(),
                     f.title.clone(),
@@ -442,7 +442,24 @@ impl EmAchados for super::display::DisplayReport {
                     f.advice.clone(),
                     f.severity,
                     f.fix_location,
-                )
+                );
+
+                // O único achado do produto que o Otimiza resolve com um
+                // clique e que muda o que a tela mostra na hora.
+                //
+                // Até aqui ele só apontava: "seu monitor está em 60 Hz e
+                // aceita 180". O cliente tinha que ir sozinho nas
+                // configurações do Windows, num caminho que quase ninguém
+                // conhece — e é exatamente por isso que tanta gente joga a
+                // 60 Hz num monitor de 180.
+                achado.acao = Some(Acao {
+                    comando: "set_max_refresh_rate".to_string(),
+                    argumento: Some(f.dispositivo.clone()),
+                    rotulo: format!("Colocar em {} Hz", f.hz_alvo),
+                    exige_admin: false,
+                });
+
+                achado
             })
             .collect()
     }
@@ -890,6 +907,92 @@ mod tests {
                 acao_de(origem, id).is_none(),
                 "{} não pode ter botão: não é software que resolve",
                 id
+            );
+        }
+    }
+
+    #[test]
+    fn todo_botao_do_diagnostico_chama_comando_que_existe() {
+        // O defeito que este teste existe para pegar não aparece em nenhum
+        // outro lugar: um botão que chama comando não registrado compila,
+        // passa em tudo, e só falha no clique do cliente — com uma mensagem
+        // de erro que ele não entende, num momento em que ele acabou de
+        // confiar no diagnóstico.
+        let fonte = include_str!("veredito.rs");
+        let lib = include_str!("../../lib.rs");
+
+        let producao = fonte
+            .split("#[cfg(test)]")
+            .next()
+            .expect("split devolve ao menos um pedaço");
+
+        assert!(
+            producao.len() < fonte.len(),
+            "não achei onde a produção termina"
+        );
+
+        let mut comandos: Vec<&str> = Vec::new();
+
+        // Duas formas no arquivo: a tabela do `acao_de`, que abre a tupla logo
+        // depois da seta, e o achado do monitor, que monta o `Acao` à mão
+        // porque precisa do dispositivo e da frequência, que não cabem no id.
+        // A tabela do `acao_de`, e SÓ ela. Procurar "=> (" no arquivo inteiro
+        // pegava toda tupla de qualquer outro `match` — o primeiro texto que
+        // apareceu foi uma frase do veredito.
+        //
+        // O recorte é por linha, e não por "\n}": este arquivo usa quebra de
+        // linha do Windows, e um padrão com "\n" dentro nunca casaria — a
+        // guarda passaria a não achar nada e viraria enfeite.
+        let tabela: String = producao
+            .lines()
+            .skip_while(|l| !l.contains("fn acao_de("))
+            .take_while(|l| l.trim_end() != "}")
+            .collect::<Vec<_>>()
+            .join("
+");
+
+        assert!(
+            tabela.contains("match (origem, id)"),
+            "não achei a tabela do `acao_de` — o formato mudou"
+        );
+
+        for (texto, marca) in [(tabela.as_str(), "=> ("), (producao, "comando: ")] {
+            for pedaco in texto.split(marca).skip(1) {
+                let Some((antes, resto)) = pedaco.split_once('"') else {
+                    continue;
+                };
+
+                // Entre a marca e a aspa só pode haver espaço em branco. Sem
+                // isto, um braço que devolve algo que não é texto arrastaria a
+                // aspa de outra linha para dentro da lista.
+                if !antes.trim().is_empty() {
+                    continue;
+                }
+
+                if let Some(nome) = resto.split('"').next() {
+                    comandos.push(nome);
+                }
+            }
+        }
+
+        comandos.sort_unstable();
+        comandos.dedup();
+
+        // Três comandos distintos hoje. O piso existe para que uma mudança de
+        // formato que faça a varredura parar de enxergar apareça como teste
+        // vermelho, e não como uma lista vazia passando calada.
+        assert!(
+            comandos.len() >= 3,
+            "achei só {} comando(s) — o formato do arquivo mudou e esta guarda              parou de enxergar: {:?}",
+            comandos.len(),
+            comandos
+        );
+
+        for comando in comandos {
+            assert!(
+                lib.contains(&format!("commands::{},", comando)),
+                "o diagnóstico oferece um botão que chama `{}`, e esse comando                  não está registrado em lib.rs. O clique do cliente falharia.",
+                comando
             );
         }
     }

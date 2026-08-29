@@ -73,6 +73,11 @@ impl Monitor {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayFinding {
     pub id: String,
+    /// O monitor a corrigir, no formato `\.\DISPLAY1`. É o que a API pede de
+    /// volta na hora de mudar o modo, e é o que vai no botão do diagnóstico.
+    pub dispositivo: String,
+    /// A frequência que o botão vai aplicar.
+    pub hz_alvo: u32,
     pub title: String,
     pub measured: String,
     pub advice: String,
@@ -236,6 +241,8 @@ pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
 
         findings.push(DisplayFinding {
             id: format!("hz_abaixo_{}", monitor.dispositivo.replace(['\\', '.'], "")),
+            dispositivo: monitor.dispositivo.clone(),
+            hz_alvo: maximo,
             title: "Monitor rodando abaixo da taxa que ele aceita".to_string(),
             measured: format!(
                 "{} está em {} Hz e aceita até {} Hz em {}x{}.",
@@ -264,6 +271,162 @@ pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
     findings
 }
 
+// ------------------------------------------------------------------ aplicar
+
+/// Coloca um monitor na maior frequência que ele aceita na resolução atual.
+///
+/// Devolve a frequência ANTERIOR, que é o que o histórico precisa guardar para
+/// saber voltar.
+///
+/// POR QUE O TESTE ANTES
+///
+/// Errar um modo de vídeo apaga a tela, e uma tela apagada é o pior defeito que
+/// um otimizador pode causar: o cliente não consegue nem desfazer, porque não
+/// enxerga o botão. Por isso são duas chamadas.
+///
+/// A primeira, com `CDS_TEST`, pergunta ao driver se o modo é aceito e não muda
+/// nada. Só depois de ela aprovar é que a segunda aplica de verdade. É a mesma
+/// sequência que a janela de configuração do próprio Windows usa.
+///
+/// A segurança de fundo é a mesma do módulo inteiro: só é oferecida frequência
+/// que veio de `EnumDisplaySettingsExW` na resolução e profundidade de cor
+/// atuais. A função que lista é a mesma que aplica — se ela listou, o modo
+/// existe.
+#[cfg(target_os = "windows")]
+pub fn aplicar_hz(dispositivo: &str, hz: u32) -> Result<u32, String> {
+    mudar_hz(dispositivo, hz, false)
+}
+
+/// Faz tudo que [`aplicar_hz`] faz — inclusive perguntar ao driver se o modo é
+/// aceito — e para antes de mexer na tela.
+///
+/// Existe para que o caminho inteiro possa ser conferido numa máquina de
+/// verdade sem apagar a tela de ninguém.
+///
+/// Só em compilação de teste: nada em produção chama, e código que existe "por
+/// via das dúvidas" é código que ninguém executa e ninguém mantém. No dia em
+/// que a tela quiser conferir antes de oferecer o botão, o `cfg` sai.
+#[cfg(all(test, target_os = "windows"))]
+pub fn ensaiar_hz(dispositivo: &str, hz: u32) -> Result<u32, String> {
+    mudar_hz(dispositivo, hz, true)
+}
+
+#[cfg(target_os = "windows")]
+fn mudar_hz(dispositivo: &str, hz: u32, apenas_ensaio: bool) -> Result<u32, String> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        ChangeDisplaySettingsExW, EnumDisplaySettingsExW, CDS_TEST, CDS_UPDATEREGISTRY, DEVMODEW,
+        DISP_CHANGE_SUCCESSFUL, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH,
+        ENUM_CURRENT_SETTINGS,
+    };
+
+    let alvo = monitores()
+        .into_iter()
+        .find(|m| m.dispositivo == dispositivo)
+        .ok_or_else(|| {
+            format!(
+                "Não encontrei o monitor `{}`. Ele pode ter sido desconectado \
+                 depois do diagnóstico.",
+                dispositivo
+            )
+        })?;
+
+    if alvo.hz_atual == hz {
+        return Ok(hz);
+    }
+
+    // A conferência que impede o produto de pedir ao driver um modo que ele não
+    // ofereceu. Sem ela, uma mudança de cabo entre o diagnóstico e o clique
+    // viraria uma tentativa de aplicar frequência inexistente.
+    if !alvo.hz_disponiveis.contains(&hz) {
+        return Err(format!(
+            "{} não aceita {} Hz em {}x{}. As taxas disponíveis agora são: {}.",
+            alvo.descricao,
+            hz,
+            alvo.largura,
+            alvo.altura,
+            alvo
+                .hz_disponiveis
+                .iter()
+                .map(|v| format!("{} Hz", v))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
+    let mut nome: Vec<u16> = dispositivo.encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        let mut modo: DEVMODEW = std::mem::zeroed();
+        modo.dmSize = std::mem::size_of::<DEVMODEW>() as u16;
+
+        if EnumDisplaySettingsExW(nome.as_mut_ptr(), ENUM_CURRENT_SETTINGS, &mut modo, 0) == 0 {
+            return Err("Não consegui ler o modo de vídeo atual deste monitor.".to_string());
+        }
+
+        let anterior = modo.dmDisplayFrequency;
+
+        modo.dmDisplayFrequency = hz;
+        modo.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL | DM_DISPLAYFREQUENCY;
+
+        let teste = ChangeDisplaySettingsExW(
+            nome.as_mut_ptr(),
+            &modo,
+            std::ptr::null_mut(),
+            CDS_TEST,
+            std::ptr::null(),
+        );
+
+        if teste != DISP_CHANGE_SUCCESSFUL {
+            return Err(explicar_recusa(teste, hz));
+        }
+
+        if apenas_ensaio {
+            return Ok(anterior);
+        }
+
+        let feito = ChangeDisplaySettingsExW(
+            nome.as_mut_ptr(),
+            &modo,
+            std::ptr::null_mut(),
+            CDS_UPDATEREGISTRY,
+            std::ptr::null(),
+        );
+
+        if feito != DISP_CHANGE_SUCCESSFUL {
+            return Err(explicar_recusa(feito, hz));
+        }
+
+        Ok(anterior)
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn aplicar_hz(_dispositivo: &str, _hz: u32) -> Result<u32, String> {
+    Err("Mudar a taxa do monitor só existe no Windows.".to_string())
+}
+
+/// Traduz o código de recusa do Windows para o que o cliente precisa saber.
+///
+/// O valor cru (`-2`, `-4`) não ajuda ninguém, e é o que a maioria dos
+/// programas mostra.
+#[cfg(target_os = "windows")]
+fn explicar_recusa(codigo: i32, hz: u32) -> String {
+    let motivo = match codigo {
+        -1 => "a placa de vídeo recusou o modo",
+        -2 => "este monitor não aceita esta combinação",
+        -3 => "não foi possível gravar a configuração no registro do Windows",
+        -4 => "o driver de vídeo devolveu um erro",
+        -5 => "o modo exige reiniciar o computador",
+        _ => "o Windows recusou a mudança",
+    };
+
+    format!(
+        "Não deu para colocar em {} Hz: {}. Nada foi alterado — a tela continua \
+         como estava.",
+        hz, motivo
+    )
+}
+
 pub fn analyze() -> DisplayReport {
     let monitores = monitores();
     let findings = diagnosticar(&monitores);
@@ -287,6 +450,59 @@ mod tests {
             altura: 1080,
             hz_atual,
             hz_disponiveis: disponiveis.to_vec(),
+        }
+    }
+
+    /// Ensaio na máquina de quem roda o teste. Ignorado por padrão porque
+    /// depende do monitor que estiver ligado ali.
+    ///
+    ///     cargo test --lib -- --ignored ensaio_de_taxa --nocapture
+    ///
+    /// Ele NÃO muda a tela: para no `CDS_TEST`, que é a pergunta ao driver.
+    /// Serve para provar que o caminho inteiro — encontrar o monitor, montar o
+    /// modo, falar com o Windows — funciona antes de alguém clicar no botão.
+    #[test]
+    #[ignore]
+    #[cfg(target_os = "windows")]
+    fn ensaio_de_taxa_nesta_maquina() {
+        for m in monitores() {
+            println!(
+                "  {} [{}]  {}x{} @ {} Hz   disponíveis: {:?}",
+                m.descricao, m.dispositivo, m.largura, m.altura, m.hz_atual, m.hz_disponiveis
+            );
+
+            // Numa máquina já ajustada — que é o caso depois que o produto
+            // funciona — pedir o máximo sai pelo atalho e não exercita nada.
+            // Então o ensaio pergunta por OUTRA frequência da lista. A chamada
+            // ao driver é a mesma; só o número muda, e nada é aplicado.
+            let alvo = if m.abaixo_do_maximo() {
+                m.hz_maximo()
+            } else {
+                match m.hz_disponiveis.iter().rev().find(|hz| **hz != m.hz_atual) {
+                    Some(outra) => {
+                        println!(
+                            "     já está no máximo; ensaiando {} Hz só para conferir                              a chamada",
+                            outra
+                        );
+                        *outra
+                    }
+                    None => {
+                        println!("     só existe uma frequência aqui
+");
+                        continue;
+                    }
+                }
+            };
+
+            match ensaiar_hz(&m.dispositivo, alvo) {
+                Ok(anterior) => println!(
+                    "     o driver ACEITA {} Hz (está em {}) — nada foi alterado
+",
+                    alvo, anterior
+                ),
+                Err(erro) => println!("     recusado: {}
+", erro),
+            }
         }
     }
 

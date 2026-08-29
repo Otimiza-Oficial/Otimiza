@@ -560,6 +560,76 @@ impl WindowsOptimizer {
     ///
     /// Entra no histórico com id próprio por jogo, então "Desfazer tudo"
     /// devolve a preferência que existia antes — inclusive a ausência dela.
+    /// Coloca um monitor na maior taxa que ele aceita na resolução atual.
+    ///
+    /// É a única ação do produto que muda o que a tela mostra na hora, e por
+    /// isso é a que mais precisa de caminho de volta: entra no histórico com a
+    /// frequência anterior, e o "Desfazer" a devolve.
+    pub fn set_max_refresh_rate(
+        &self,
+        dispositivo: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = format!("monitor:{}", dispositivo.to_lowercase());
+
+        let alvo = display::monitores()
+            .into_iter()
+            .find(|m| m.dispositivo == dispositivo)
+            .ok_or_else(|| {
+                format!(
+                    "Não encontrei o monitor `{}`. Ele pode ter sido desconectado.",
+                    dispositivo
+                )
+            })?;
+
+        let maximo = alvo.hz_maximo();
+
+        if !alvo.abaixo_do_maximo() {
+            return Err(format!(
+                "{} já está em {} Hz, que é o máximo desta resolução. Nada a fazer.",
+                alvo.descricao, alvo.hz_atual
+            ));
+        }
+
+        if log.is_applied(&id) {
+            // Reaplicar por cima perderia o valor original: o histórico
+            // guardaria como "anterior" aquilo que nós mesmos escrevemos.
+            self.revert(&id, log)?;
+        }
+
+        let anterior = display::aplicar_hz(dispositivo, maximo)?;
+
+        let change = ChangeRecord::RefreshRate {
+            device: dispositivo.to_string(),
+            previous_hz: anterior,
+        };
+        let described = change.describe();
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} em {} Hz", alvo.descricao, maximo),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        })?;
+
+        Ok(OptimizationOutcome {
+            id,
+            name: alvo.descricao.clone(),
+            success: true,
+            applied: true,
+            // A honestidade que o achado já dizia, repetida no momento em que
+            // ela mais importa: o cliente acabou de clicar e vai olhar o
+            // contador de FPS esperando um número maior.
+            message: format!(
+                "{} passou de {} para {} Hz. O jogo fica visivelmente mais suave, e o                  contador de FPS continua onde estava — a taxa do monitor não cria                  quadros, ela deixa de segurar os que a placa já entrega.",
+                alvo.descricao, anterior, maximo
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
@@ -1224,6 +1294,11 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 name,
                 previously_enabled,
             } => tasks::definir_estado(path, name, *previously_enabled).map(|_| ()),
+
+            ChangeRecord::RefreshRate {
+                device,
+                previous_hz,
+            } => display::aplicar_hz(device, *previous_hz).map(|_| ()),
 
             ChangeRecord::BootLimits { removed } => {
                 let mut failures = Vec::new();
