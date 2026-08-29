@@ -32,7 +32,7 @@ Se preferir o terminal, use o caminho completo — caminho relativo só funciona
 você estiver exatamente na pasta certa, e é aí que costuma dar errado:
 
 ```
-node "C:\caminhote\o\projeto\pc-optimizerot\otimiza-licenca.cjs" novo-par
+node "C:\Users\Purple\Downloads\Otimiza-main\Otimiza\pc-optimizer\bot\otimiza-licenca.cjs" novo-par
 ```
 
 No PowerShell do Windows o separador de comandos é `;`, nunca `&&` — o `&&` só

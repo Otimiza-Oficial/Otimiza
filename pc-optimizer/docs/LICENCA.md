@@ -61,7 +61,7 @@ cd pc-optimizer\src-tauri; cargo run --example gerar_chave -- novo-par
 Ou, mais simples, pelo Node — que não precisa compilar nada e leva um segundo:
 
 ```bash
-node pc-optimizerot\otimiza-licenca.cjs novo-par
+node pc-optimizer\bot\otimiza-licenca.cjs novo-par
 ```
 
 Os dois geram o mesmo tipo de par. Use o que for mais rápido para você.
@@ -106,7 +106,7 @@ forma é `OTZ-XXXX-XXXX-XXXX` — e manda no Discord junto com o pagamento.
 Você emite:
 
 ```bash
-node pc-optimizerot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX "Nome do comprador"
+node pc-optimizer\bot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX "Nome do comprador"
 ```
 
 Sai uma linha longa. É a chave. Manda para ele, ele cola no campo, e pronto.
@@ -114,7 +114,7 @@ Sai uma linha longa. É a chave. Manda para ele, ele cola no campo, e pronto.
 **Com prazo**, se um dia você vender assinatura, basta um argumento a mais:
 
 ```bash
-node pc-optimizerot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-... "Nome" 2027-08-29
+node pc-optimizer\bot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-... "Nome" 2027-08-29
 ```
 
 Sem esse argumento a licença é vitalícia.
