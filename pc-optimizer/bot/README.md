@@ -21,6 +21,24 @@ o bot chama emitir()
 o bot responde com a chave  →  cliente cola  →  abre
 ```
 
+## Gerar o par de chaves (uma vez na vida)
+
+**Clique duas vezes em `gerar-par-de-chaves.bat`.**
+
+É só isso. Não precisa de terminal, não precisa acertar pasta, não precisa de
+`npm install`.
+
+Se preferir o terminal, use o caminho completo — caminho relativo só funciona se
+você estiver exatamente na pasta certa, e é aí que costuma dar errado:
+
+```
+node "C:\caminhote\o\projeto\pc-optimizerot\otimiza-licenca.cjs" novo-par
+```
+
+No PowerShell do Windows o separador de comandos é `;`, nunca `&&` — o `&&` só
+existe no PowerShell 7 e no Prompt de Comando, e no 5.1 que vem com o Windows
+ele dá erro de sintaxe antes de rodar qualquer coisa.
+
 ## Instalar
 
 Copie **um arquivo** para dentro do projeto do bot:
@@ -29,7 +47,7 @@ Copie **um arquivo** para dentro do projeto do bot:
 otimiza-licenca.cjs
 ```
 
-Sem `npm install`. Sem dependência. O Node faz Ed25519 nativo desde a versão 12,
+**Não precisa de `npm install`.** Sem dependência nenhuma. O Node faz Ed25519 nativo desde a versão 12,
 e um emissor de licença é a última coisa do mundo que deveria puxar biblioteca
 de terceiros: cada pacote no meio é mais alguém com acesso potencial à sua chave
 privada.
