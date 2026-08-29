@@ -40,7 +40,30 @@ mod tests {
         (!partes.is_empty()).then(|| partes.join("::"))
     }
 
-    /// Todos os arquivos-fonte que declaram `mod tests`.
+    /// O arquivo declara algum módulo de teste?
+    ///
+    /// Procurar pelo texto `mod tests` não bastava: um módulo de teste com
+    /// outro nome — `mod classificacao`, por exemplo — ficava invisível para
+    /// esta trava, e os testes dele nunca entrariam na esteira. É o mesmo
+    /// esquecimento que este arquivo existe para pegar, só que uma camada
+    /// acima.
+    ///
+    /// O que vale é a estrutura: um `#[cfg(test)]` seguido de uma declaração
+    /// de módulo, com qualquer nome.
+    fn tem_modulo_de_teste(conteudo: &str) -> bool {
+        conteudo.split("#[cfg(test)]").skip(1).any(|depois| {
+            depois
+                .lines()
+                .map(str::trim_start)
+                // Entre o `#[cfg(test)]` e o `mod` cabem outros atributos e
+                // comentários — `#[path = "..."]`, por exemplo.
+                .find(|l| !l.is_empty() && !l.starts_with("//") && !l.starts_with("#["))
+                .map(|l| l.starts_with("mod ") || l.starts_with("pub mod "))
+                .unwrap_or(false)
+        })
+    }
+
+    /// Todos os arquivos-fonte que declaram um módulo de teste.
     fn modulos_com_teste(dir: &Path, src_root: &Path, achados: &mut BTreeSet<String>) {
         let Ok(entradas) = std::fs::read_dir(dir) else {
             return;
@@ -68,7 +91,7 @@ mod tests {
                 continue;
             }
 
-            if conteudo.contains("mod tests") {
+            if tem_modulo_de_teste(&conteudo) {
                 if let Some(caminho_modulo) = module_path(src_root, &caminho) {
                     achados.insert(caminho_modulo);
                 }

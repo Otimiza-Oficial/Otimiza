@@ -288,6 +288,8 @@ pub async fn scan_disk_space() -> Result<DiskReport, String> {
 /// Comando: Limpa uma categoria de espaço.
 #[tauri::command]
 pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || crate::modules::windows::diskspace::clean(&id))
@@ -305,6 +307,8 @@ pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
 /// Comando: Esvazia a Lixeira.
 #[tauri::command]
 pub async fn empty_recycle_bin() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(crate::modules::windows::diskspace::empty_recycle_bin)
@@ -341,6 +345,8 @@ pub async fn analyze_memory() -> Result<MemoryReport, String> {
 /// Comando: Devolve ao Windows o gerenciamento do arquivo de paginação.
 #[tauri::command]
 pub async fn set_automatic_pagefile() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(crate::modules::windows::memory::set_automatic_pagefile)
@@ -473,6 +479,8 @@ pub async fn analyze_shaders() -> Result<ShaderReport, String> {
 /// Comando: Apaga um cache de shader.
 #[tauri::command]
 pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || crate::modules::windows::shaders::limpar(&id))
@@ -537,6 +545,8 @@ pub async fn set_gpu_preference(
     desempenho: bool,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         use crate::modules::windows::gpupref::Preferencia;
@@ -578,6 +588,8 @@ pub async fn analyze_readiness() -> Result<ReadinessReport, String> {
 /// Comando: Corrige um item de prontidão que o Otimiza sabe resolver.
 #[tauri::command]
 pub async fn fix_readiness(id: String) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
@@ -621,6 +633,8 @@ pub async fn set_persistent_priority(
     enable: bool,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -690,6 +704,8 @@ pub async fn set_game_mode(
     active: bool,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         use crate::modules::windows::gamemode;
@@ -738,6 +754,8 @@ pub async fn set_dns(
     servers: String,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -754,6 +772,8 @@ pub async fn set_dns(
 /// Comando: Limpa o cache de resolução de nomes.
 #[tauri::command]
 pub async fn flush_dns() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(crate::modules::windows::network::limpar_cache_dns)
@@ -828,6 +848,8 @@ pub async fn analyze_fivem() -> Result<FiveMReport, String> {
 /// Recusa pasta protegida e recusa com o jogo aberto. Não tem volta.
 #[tauri::command]
 pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || crate::modules::windows::fivem::limpar(&id))
@@ -845,6 +867,8 @@ pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
 /// Comando: Prioridade alta no processador para o jogo.
 #[tauri::command]
 pub async fn prioritize_fivem() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(crate::modules::windows::fivem::priorizar_jogo)
@@ -886,6 +910,8 @@ pub async fn analyze_browsers() -> Result<BrowserReport, String> {
 /// IndexedDB e afins — nunca é tocado.
 #[tauri::command]
 pub async fn clean_browser_cache(executable: String) -> Result<BrowserCleanOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
@@ -1017,6 +1043,8 @@ pub async fn set_scheduled_task(
     enabled: bool,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -1054,6 +1082,8 @@ pub async fn set_service_start(
     automatic: bool,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -1096,6 +1126,8 @@ pub async fn analyze_bloatware() -> Result<BloatReport, String> {
 /// oficial do Windows.
 #[tauri::command]
 pub async fn remove_store_app(package: String) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
@@ -1154,6 +1186,8 @@ pub async fn restore_status() -> Result<RestoreStatus, String> {
 /// Pode levar dezenas de segundos: o Windows tira um instantâneo do volume.
 #[tauri::command]
 pub async fn create_restore_point() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(|| {
@@ -1172,6 +1206,8 @@ pub async fn create_restore_point() -> Result<String, String> {
 /// Comando: Liga a Proteção do Sistema no disco do Windows.
 #[tauri::command]
 pub async fn enable_system_protection() -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(crate::modules::windows::restore::enable_protection)
@@ -1210,6 +1246,8 @@ pub async fn set_startup_enabled(
     enabled: bool,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -1343,6 +1381,8 @@ pub async fn apply_optimization(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -1385,6 +1425,8 @@ pub async fn optimize_now(
     state: State<'_, AppState>,
     only: Option<Vec<String>>,
 ) -> Result<Vec<OptimizationOutcome>, String> {
+    crate::modules::licenca::exigir()?;
+
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
@@ -1451,5 +1493,252 @@ pub async fn revert_all_optimizations(
     {
         let _ = (app, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// =========================================================== LICENÇA
+
+/// O estado da licença desta máquina.
+///
+/// Livre de propósito: é o comando que alimenta a tela de compra, e uma tela
+/// de compra que precisa de licença para abrir não faria sentido nenhum.
+#[tauri::command]
+pub fn licenca_estado() -> crate::modules::licenca::Estado {
+    crate::modules::licenca::estado()
+}
+
+/// Ativa uma chave. Confere ANTES de gravar.
+#[tauri::command]
+pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, String> {
+    crate::modules::licenca::ativar(&chave)?;
+    Ok(crate::modules::licenca::estado())
+}
+
+// ==================================================== A GUARDA DA GUARDA
+
+/// Confere que todo comando está classificado e que os que alteram o sistema
+/// pedem licença.
+///
+/// Existe porque a falha mais provável deste sistema não é alguém quebrar a
+/// assinatura — é alguém acrescentar um comando novo daqui a seis meses e
+/// esquecer a linha da guarda. Um comando esquecido é uma porta aberta que
+/// ninguém percebe, e revisão de código não pega isso de forma confiável.
+///
+/// Com este teste, comando novo sem classificação REPROVA O BUILD.
+#[cfg(test)]
+mod tests {
+    /// Rodam sem licença: leitura, medição, e o desfazer.
+    ///
+    /// O desfazer está aqui de propósito. Se a licença vencer, o cliente
+    /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
+    /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
+    const LIVRES: &[&str] = &[
+        "get_platform_info",
+        "get_performance_metrics",
+        "start_monitoring",
+        "stop_monitoring",
+        "measure_baseline",
+        "get_baseline",
+        "measure_and_compare",
+        "is_elevated",
+        "relaunch_as_admin",
+        "get_hardware_profile",
+        "analyze_firmware",
+        "top_processes",
+        "get_preferences",
+        "set_preferences",
+        "analyze_bloatware",
+        "open_apps_settings",
+        "analyze_conflicts",
+        "analyze_health",
+        "analyze_shaders",
+        "analyze_readiness",
+        "diagnostico_rapido",
+        "analyze_gpu_preference",
+        "running_game_executable",
+        "analyze_bottleneck",
+        "game_mode_status",
+        "analyze_network",
+        "measure_frames",
+        "analyze_fivem",
+        "analyze_browsers",
+        "analyze_boot",
+        "analyze_thermal",
+        "export_report",
+        "map_folders",
+        "list_profiles",
+        "list_third_party_services",
+        "list_scheduled_tasks",
+        "scan_disk_space",
+        "analyze_memory",
+        "restore_status",
+        "list_startup",
+        "list_optimizations",
+        "revert_optimization",
+        "revert_all_optimizations",
+        "licenca_estado",
+        "licenca_ativar",
+    ];
+
+    /// Alteram o computador. Sem licença, recusam.
+    const EXIGEM_LICENCA: &[&str] = &[
+        "clean_disk_category",
+        "empty_recycle_bin",
+        "set_automatic_pagefile",
+        "clean_shader_cache",
+        "set_gpu_preference",
+        "fix_readiness",
+        "set_persistent_priority",
+        "set_game_mode",
+        "set_dns",
+        "flush_dns",
+        "clean_fivem",
+        "prioritize_fivem",
+        "clean_browser_cache",
+        "set_scheduled_task",
+        "set_service_start",
+        "remove_store_app",
+        "create_restore_point",
+        "enable_system_protection",
+        "set_startup_enabled",
+        "apply_optimization",
+        "optimize_now",
+    ];
+
+    /// Só a parte de produção do arquivo. O código de teste também contém as
+    /// palavras que estamos procurando, e olhar o arquivo inteiro faria a
+    /// guarda se encontrar sozinha.
+    fn producao() -> &'static str {
+        let fonte = include_str!("commands.rs");
+
+        let corte = fonte
+            .split("#[cfg(test)]")
+            .next()
+            .expect("split devolve ao menos um pedaço");
+
+        assert!(
+            corte.len() < fonte.len(),
+            "não achei onde a produção termina; a guarda estaria olhando o \
+             arquivo errado"
+        );
+
+        corte
+    }
+
+    /// Os nomes de todos os comandos, lidos do próprio fonte.
+    fn comandos() -> Vec<&'static str> {
+        let marca = concat!("#[tauri::", "command]");
+
+        producao()
+            .split(marca)
+            .skip(1)
+            .map(|bloco| {
+                let assinatura = bloco
+                    .lines()
+                    .find(|l| l.contains("pub fn ") || l.contains("pub async fn "))
+                    .expect("todo comando tem uma assinatura logo abaixo da marca");
+
+                assinatura
+                    .split("fn ")
+                    .nth(1)
+                    .and_then(|resto| resto.split('(').next())
+                    .expect("nome do comando")
+                    .trim()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn nenhum_comando_fica_sem_classificacao() {
+        for nome in comandos() {
+            let livre = LIVRES.contains(&nome);
+            let paga = EXIGEM_LICENCA.contains(&nome);
+
+            assert!(
+                livre || paga,
+                "o comando `{}` não está classificado. Decida: ele LÊ o \
+                 computador (vai para LIVRES) ou ALTERA (vai para \
+                 EXIGEM_LICENCA e ganha a linha `licenca::exigir()?`)?",
+                nome
+            );
+
+            assert!(
+                !(livre && paga),
+                "`{}` está nas duas listas",
+                nome
+            );
+        }
+    }
+
+    #[test]
+    fn quem_altera_o_computador_pede_licenca() {
+        let fonte = producao();
+
+        for nome in EXIGEM_LICENCA {
+            let inicio = fonte
+                .find(&format!("fn {}(", nome))
+                .unwrap_or_else(|| panic!("comando `{}` sumiu do arquivo", nome));
+
+            let corpo = &fonte[inicio..];
+            let abre = corpo.find('{').expect("corpo do comando");
+
+            // A guarda precisa ser a PRIMEIRA coisa do corpo. Depois de
+            // qualquer trabalho já é tarde: o comando já teria começado a
+            // mexer no computador de quem não pagou.
+            let primeiras = corpo[abre + 1..]
+                .lines()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("");
+
+            assert!(
+                primeiras.contains("licenca::exigir()?"),
+                "`{}` altera o computador e não confere a licença na primeira \
+                 linha. Achei: `{}`",
+                nome,
+                primeiras.trim()
+            );
+        }
+    }
+
+    #[test]
+    fn quem_so_le_nao_pede_licenca() {
+        // O outro lado do erro. Se o diagnóstico passar a exigir licença, a
+        // tela de compra fica vazia — e o argumento de venda do produto é
+        // justamente mostrar o problema real da máquina antes de cobrar.
+        let fonte = producao();
+
+        for nome in LIVRES {
+            let Some(inicio) = fonte.find(&format!("fn {}(", nome)) else {
+                continue;
+            };
+
+            // O fim da função é a primeira linha que é só `}`. Procurar por
+            // "\n}\n" direto NÃO serve: este arquivo tem quebra de linha do
+            // Windows, e a busca nunca acha — a fatia iria até o fim do
+            // arquivo e o teste acusaria todo mundo de exigir licença.
+            let corpo: String = fonte[inicio..]
+                .lines()
+                .take_while(|l| l.trim_end() != "}")
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            assert!(
+                !corpo.contains("licenca::exigir()?"),
+                "`{}` está na lista dos livres e mesmo assim exige licença",
+                nome
+            );
+        }
+    }
+
+    #[test]
+    fn as_duas_listas_cobrem_todos_os_comandos() {
+        let achados = comandos().len();
+        let classificados = LIVRES.len() + EXIGEM_LICENCA.len();
+
+        assert_eq!(
+            achados, classificados,
+            "{} comandos no arquivo, {} nas listas",
+            achados, classificados
+        );
     }
 }

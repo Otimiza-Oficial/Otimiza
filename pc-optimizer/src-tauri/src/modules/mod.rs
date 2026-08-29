@@ -12,6 +12,8 @@
 pub mod benchmark;
 pub mod changelog;
 pub mod jitter;
+pub mod licenca;
+pub mod maquina;
 pub mod optimizer;
 pub mod preferences;
 pub mod report;

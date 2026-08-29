@@ -24,8 +24,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 num_cpus = "1.16"
-uuid = { version = "1.11", features = ["v4", "serde"] }
 chrono = "0.4"
+
+# Assinatura de licença.
+#
+# O produto guarda só a chave PÚBLICA, que consegue conferir uma assinatura e
+# não consegue criar nenhuma. Extrair essa chave do executável não permite
+# forjar licença — é ter a fechadura sem a chave.
+#
+# `default-features = false` deixa de fora a geração de chave aleatória, que só
+# a ferramenta de emitir licença precisa. O que vai para o cliente carrega
+# apenas o necessário para conferir.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+base64 = "0.22"
 sysinfo = "0.33"
 
 [target.'cfg(windows)'.dependencies]
@@ -57,3 +68,16 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Diagnostics_ToolHelp",
 ] }
 
+
+# A ferramenta que EMITE licença vive em `examples/gerar_chave.rs`.
+#
+# Exemplo, e não binário, por um motivo de segurança: `cargo build --release`
+# NÃO compila exemplos, então essa ferramenta nunca entra no instalador. Ela é
+# a única peça do projeto que toca na chave privada.
+#
+# Rodar com:  cargo run --example gerar_chave -- ...
+[dev-dependencies]
+# Só para sortear a chave privada, uma vez na vida. Fica em dev-dependencies
+# porque o produto não precisa de aleatoriedade — conferir assinatura é
+# determinístico.
+getrandom = "0.2"

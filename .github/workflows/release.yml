@@ -85,6 +85,10 @@ jobs:
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- ci_coverage:: core:: modules::changelog:: modules::preferences:: modules::safety::"
 
+      - name: Testes — licença e comandos
+        working-directory: pc-optimizer/src-tauri
+        run: "cargo test --lib -- commands:: modules::licenca:: modules::maquina::"
+
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
         run: "cargo test --lib -- modules::benchmark:: modules::jitter::"
