@@ -180,6 +180,65 @@ fn maquina_nao_identificada_nunca_libera() {
     );
 }
 
+// --------------------------------------------- o bot fala a mesma língua
+
+/// Um par e uma licença emitidos pelo `bot/otimiza-licenca.cjs`.
+///
+/// Nada de segredo: este par existe só para este teste e nunca abriu nada.
+///
+/// POR QUE ISTO É UM VALOR FIXO, E NÃO GERADO NA HORA
+///
+/// Gerar aqui provaria que o Rust conversa com o Rust, que é o que os outros
+/// testes deste arquivo já fazem. O que precisa ser provado é OUTRA coisa: que
+/// a chave saída do bot, em JavaScript, abre o produto escrito em Rust.
+///
+/// São duas implementações independentes do mesmo formato, e elas podem
+/// divergir de um jeito que nenhum lado percebe sozinho — uma vírgula a mais no
+/// JSON, um base64 com `+` em vez de `-`, um byte de padding. O prejuízo desse
+/// erro é o pior que este produto pode ter: o cliente paga, recebe a chave, e
+/// ela não abre.
+const PUBLICA_DO_BOT: &str = "0g5yK2+hntwcBt/QTqD1gtkWJD9YNpG5DhNnZednrTk=";
+
+const LICENCA_DO_BOT: &str = "eyJtYXF1aW5hIjoiT1RaLVRFU1QtQjBUMC0wMDAxIiwiY29tcHJhZG9yIjoiUHJvdmEgZGUgY29tcGF0aWJpbGlkYWRlIiwiZW1pdGlkYSI6IjIwMjYtMDEtMDEiLCJleHBpcmEiOm51bGx9.MKtQhvO4EKP_onlDTG68381zNsIOiPF2wdKB4FrFJlVtliYfWBYUGFmZiHam_CHTVI5aSzn690ioD0Q6RjUrCQ";
+
+#[test]
+fn a_chave_emitida_pelo_bot_abre_o_produto() {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(PUBLICA_DO_BOT)
+        .expect("a pública do bot é base64");
+
+    let publica = VerifyingKey::from_bytes(&bytes.try_into().expect("32 bytes"))
+        .expect("chave pública válida");
+
+    let dados = conferir_com(
+        publica,
+        LICENCA_DO_BOT,
+        "OTZ-TEST-B0T0-0001",
+        "2026-08-29",
+    )
+    .expect("o Rust precisa aceitar o que o bot em JavaScript assinou");
+
+    assert_eq!(dados.maquina, "OTZ-TEST-B0T0-0001");
+    assert_eq!(dados.comprador, "Prova de compatibilidade");
+    assert_eq!(dados.emitida, "2026-01-01");
+    assert_eq!(dados.expira, None);
+}
+
+#[test]
+fn a_chave_do_bot_tambem_e_presa_a_uma_maquina() {
+    // O bot não é uma porta dos fundos: a chave que ele emite obedece à mesma
+    // regra de uma máquina só.
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(PUBLICA_DO_BOT)
+        .unwrap();
+    let publica = VerifyingKey::from_bytes(&bytes.try_into().unwrap()).unwrap();
+
+    assert!(matches!(
+        conferir_com(publica, LICENCA_DO_BOT, "OTZ-WPYY-0J4F-77AB", "2026-08-29"),
+        Err(Recusa::OutraMaquina { .. })
+    ));
+}
+
 // ---------------------------------------------------------------- guarda
 
 #[test]

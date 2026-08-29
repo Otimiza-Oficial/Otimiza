@@ -50,9 +50,21 @@ portanto deixou de ser secreta. Vender com ela é vender com a porta destrancada
 
 **Passo 1 — gerar o seu par**, num terminal que só você está vendo:
 
+No PowerShell do Windows — que é o terminal padrão — o separador é `;`, e não
+`&&`. O `&&` só existe no PowerShell 7 e no Prompt de Comando; no 5.1, que vem
+com o Windows, ele dá erro de sintaxe antes de rodar qualquer coisa:
+
 ```bash
-cd pc-optimizer/src-tauri && cargo run --example gerar_chave -- novo-par
+cd pc-optimizer\src-tauri; cargo run --example gerar_chave -- novo-par
 ```
+
+Ou, mais simples, pelo Node — que não precisa compilar nada e leva um segundo:
+
+```bash
+node pc-optimizerot\otimiza-licenca.cjs novo-par
+```
+
+Os dois geram o mesmo tipo de par. Use o que for mais rápido para você.
 
 Sai algo assim:
 
@@ -94,7 +106,7 @@ forma é `OTZ-XXXX-XXXX-XXXX` — e manda no Discord junto com o pagamento.
 Você emite:
 
 ```bash
-cargo run --example gerar_chave -- emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX "Nome do comprador"
+node pc-optimizerot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX "Nome do comprador"
 ```
 
 Sai uma linha longa. É a chave. Manda para ele, ele cola no campo, e pronto.
@@ -102,10 +114,25 @@ Sai uma linha longa. É a chave. Manda para ele, ele cola no campo, e pronto.
 **Com prazo**, se um dia você vender assinatura, basta um argumento a mais:
 
 ```bash
-cargo run --example gerar_chave -- emitir <PRIVADA> OTZ-... "Nome" 2027-08-29
+node pc-optimizerot\otimiza-licenca.cjs emitir <PRIVADA> OTZ-... "Nome" 2027-08-29
 ```
 
 Sem esse argumento a licença é vitalícia.
+
+### Pelo bot do Discord, que é como vai ser no dia a dia
+
+Rodar `cargo` a cada venda não escala. O mesmo emissor existe em JavaScript, sem
+dependência nenhuma, para viver dentro do seu bot:
+
+    pc-optimizer/bot/otimiza-licenca.cjs
+
+Um arquivo, copiado para dentro do projeto do bot. O passo a passo está em
+[`bot/README.md`](../bot/README.md).
+
+O bot **não se conecta** ao Otimiza — não há porta nem servidor entre os dois. O
+que liga os dois é o par de chaves: o bot assina, o produto confere. Um teste do
+lado do Rust guarda uma chave emitida de verdade pelo JavaScript e quebra o
+build se os dois formatos divergirem.
 
 ### O emissor nunca entra no instalador
 
@@ -171,7 +198,7 @@ Isto é decisão de produto, não descuido:
   que era. Trancar o "reverter" deixaria a máquina dele alterada sem caminho de
   volta pela nossa tela — seria sequestrar o computador de quem pagou.
 
-Os 21 comandos que **alteram** o computador conferem a licença na primeira
+Os 22 comandos que **alteram** o computador conferem a licença na primeira
 linha, no Rust. A tela é conforto; o bloqueio é lá.
 
 ---
