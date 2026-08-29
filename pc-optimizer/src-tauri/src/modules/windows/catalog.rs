@@ -888,6 +888,213 @@ pub static CATALOG: &[OptimizationSpec] = &[
             value: RegValue::Dword(0),
         }],
     },
+    // ======================================================================
+    // O CATÁLOGO DO MERCADO
+    //
+    // Itens que todo otimizador concorrente oferece. Entram porque o cliente
+    // compara lista com lista, e sair perdendo numa comparação de catálogo
+    // custa venda mesmo quando o catálogo do outro é feito de nada.
+    //
+    // A condição é a que o produto já tinha: cada um entra com a classificação
+    // honesta. A maioria é `NoGain` — higiene e privacidade, não desempenho —
+    // e a tela conta quantos são, em voz alta, antes de o cliente clicar.
+    // ======================================================================
+
+    OptimizationSpec {
+        id: "notifications_off",
+        name: "Desligar notificações do Windows",
+        description: "Impede que avisos do sistema e de aplicativos apareçam no canto da tela.",
+        honest_effect: "Não muda FPS e não libera memória. O que resolve é a notificação que rouba o foco durante um jogo em tela cheia sem bordas — que causa engasgo, mas não é perda de desempenho contínua.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::Registry {
+            hive: "HKCU",
+            path: r"Software\Microsoft\Windows\CurrentVersion\PushNotifications",
+            name: "ToastEnabled",
+            value: RegValue::Dword(0),
+        }],
+    },
+    OptimizationSpec {
+        id: "store_auto_download_off",
+        name: "Desligar atualização automática da Microsoft Store",
+        description: "A Store baixa e instala atualização de aplicativo sozinha, em segundo plano.",
+        honest_effect: "Não muda FPS. Pesa de verdade em disco mecânico e em internet lenta, onde uma atualização baixando no meio da partida disputa o disco com o jogo. Em SSD com internet boa a diferença é imperceptível.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Situational,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[Boost::MechanicalDisk],
+        actions: &[Action::Registry {
+            hive: "HKLM",
+            path: r"SOFTWARE\Policies\Microsoft\WindowsStore",
+            name: "AutoDownload",
+            value: RegValue::Dword(2),
+        }],
+    },
+    OptimizationSpec {
+        id: "maps_auto_update_off",
+        name: "Desligar atualização automática de mapas",
+        description: "O aplicativo Mapas do Windows baixa atualização de mapa em segundo plano.",
+        honest_effect: "Praticamente ninguém usa o Mapas do Windows. Se você nunca abriu esse aplicativo, não há mapa nenhum sendo baixado e desligar isto não muda absolutamente nada. Está aqui porque o mercado oferece.",
+        category: Category::System,
+        expected_gain: ExpectedGain::NoGain,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::Registry {
+            hive: "HKLM",
+            path: r"SYSTEM\Maps",
+            name: "AutoUpdateEnabled",
+            value: RegValue::Dword(0),
+        }],
+    },
+    OptimizationSpec {
+        id: "settings_sync_off",
+        name: "Desligar sincronização de configurações",
+        description: "Impede o Windows de copiar tema, senha e preferências para a conta Microsoft.",
+        honest_effect: "Não muda desempenho. É privacidade: as suas configurações param de subir para a nuvem. Em conta local isto já não fazia nada.",
+        category: Category::Privacy,
+        expected_gain: ExpectedGain::NoGain,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[
+            Action::Registry {
+                hive: "HKLM",
+                path: r"SOFTWARE\Policies\Microsoft\Windows\SettingSync",
+                name: "DisableSettingSync",
+                value: RegValue::Dword(2),
+            },
+            Action::Registry {
+                hive: "HKLM",
+                path: r"SOFTWARE\Policies\Microsoft\Windows\SettingSync",
+                name: "DisableSettingSyncUserOverride",
+                value: RegValue::Dword(1),
+            },
+        ],
+    },
+    OptimizationSpec {
+        id: "remote_assistance_off",
+        name: "Desligar Assistência Remota",
+        description: "Impede que alguém peça acesso remoto a este PC pelo recurso nativo do Windows.",
+        honest_effect: "Não muda desempenho. É segurança: fecha um caminho de acesso remoto que quase ninguém usa e que golpista de suporte falso usa. O acesso remoto do TeamViewer, AnyDesk e afins não é afetado.",
+        category: Category::Privacy,
+        expected_gain: ExpectedGain::NoGain,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::Registry {
+            hive: "HKLM",
+            path: r"SYSTEM\CurrentControlSet\Control\Remote Assistance",
+            name: "fAllowToGetHelp",
+            value: RegValue::Dword(0),
+        }],
+    },
+    OptimizationSpec {
+        id: "uac_off",
+        name: "Desligar o Controle de Conta de Usuário (UAC)",
+        description: "Remove a janela que pergunta \"deseja permitir que este aplicativo faça alterações\".",
+        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA. Não ganha um quadro por segundo. Zero. O que ele faz é tirar a última barreira entre um programa qualquer e o seu Windows: com o UAC desligado, qualquer coisa que você abrir por engano ganha poder de administrador sem perguntar nada. É a troca mais cara desta lista e o ganho é nenhum. Está aqui porque os concorrentes oferecem e você pediu paridade.",
+        category: Category::System,
+        expected_gain: ExpectedGain::NoGain,
+        requires_admin: true,
+        requires_restart: true,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: true,
+        highlight_when: &[],
+        actions: &[Action::Registry {
+            hive: "HKLM",
+            path: r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System",
+            name: "EnableLUA",
+            value: RegValue::Dword(0),
+        }],
+    },
+
+    OptimizationSpec {
+        id: "firewall_off",
+        name: "Desligar o Firewall do Windows",
+        description: "Desliga o filtro de rede do Windows nos três perfis: domínio, particular e público.",
+        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA, E A PIOR DA LISTA. Não muda desempenho: nem um quadro por segundo, nem um milissegundo de ping. O filtro roda dentro do núcleo do Windows e custa microssegundos. O que muda é que este PC passa a aceitar conexão de qualquer máquina da rede — e num servidor de jogo você está numa rede com desconhecidos. O ganho é zero e o risco é real.",
+        category: Category::Network,
+        expected_gain: ExpectedGain::NoGain,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: true,
+        highlight_when: &[],
+        // Três perfis, três chaves. O estado do firewall mora aqui de verdade:
+        // conferido nesta máquina contra `netsh advfirewall show allprofiles
+        // state`, e os dois concordam.
+        //
+        // Fazer pelo registro em vez de chamar o `netsh` não é preguiça: o
+        // sistema de reversão do produto já sabe desfazer alteração de
+        // registro, guardando o valor anterior. Uma ação nova de linha de
+        // comando precisaria de um caminho de volta escrito à mão, e caminho de
+        // volta escrito à mão é o que costuma nunca ser testado.
+        actions: &[
+            Action::Registry {
+                hive: "HKLM",
+                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile",
+                name: "EnableFirewall",
+                value: RegValue::Dword(0),
+            },
+            Action::Registry {
+                hive: "HKLM",
+                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile",
+                name: "EnableFirewall",
+                value: RegValue::Dword(0),
+            },
+            Action::Registry {
+                hive: "HKLM",
+                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile",
+                name: "EnableFirewall",
+                value: RegValue::Dword(0),
+            },
+        ],
+    },
+
+    // ======================================================================
+    // POR QUE NÃO EXISTE "DESLIGAR O WINDOWS DEFENDER" NESTA LISTA
+    //
+    // Não é escrúpulo: é que não funciona, e um botão que não funciona é pior
+    // que a ausência dele.
+    //
+    // Desde o Windows 10 versão 1903, a Proteção contra Adulteração vem ligada
+    // de fábrica. Com ela ligada, o Windows IGNORA a chave `DisableAntiSpyware`,
+    // recusa parar o serviço `WinDefend` e reverte sozinho o que for escrito.
+    // Só o próprio usuário desliga isso, à mão, na janela de Segurança do
+    // Windows — nenhum programa consegue por ele.
+    //
+    // Ou seja: todo concorrente que oferece "desativar Defender" ou escreve
+    // chave que o Windows descarta, ou avisa em letra miúda que o cliente
+    // precisa desligar a Proteção antes. No primeiro caso o botão mente; no
+    // segundo, quem faz o trabalho é o cliente.
+    //
+    // Este produto não tem um botão que finge. Se um dia a Proteção contra
+    // Adulteração puder ser lida de forma confiável, o caminho honesto é um
+    // aviso explicando o que fazer — não um interruptor.
+    // ======================================================================
+
     OptimizationSpec {
         id: "clean_temp_files",
         name: "Limpar arquivos temporários",
@@ -974,6 +1181,45 @@ mod tests {
             assert!(
                 text.contains("não pode ser desfeita") || text.contains("não volta"),
                 "{} não avisa que é irreversível",
+                spec.id
+            );
+        }
+    }
+
+    #[test]
+    fn quem_nao_promete_ganho_diz_isso_na_cara() {
+        // A tentação de um catálogo pago é crescer. Cada item novo faz a lista
+        // parecer maior que a do concorrente, e o jeito silencioso de crescer é
+        // acrescentar ajuste de higiene com texto que soa como desempenho.
+        //
+        // Um item marcado `NoGain` precisa dizer, no texto que o cliente lê,
+        // que não muda desempenho. Sem isto o nível vira uma etiqueta interna
+        // que ninguém fora do código enxerga.
+        for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
+            let texto = spec.honest_effect.to_lowercase();
+
+            assert!(
+                texto.contains("não muda desempenho")
+                    || texto.contains("não muda absolutamente nada")
+                    || texto.contains("não ganha um quadro"),
+                "`{}` está marcado como sem ganho e não diz isso ao cliente: {:?}",
+                spec.id,
+                spec.honest_effect
+            );
+        }
+    }
+
+    #[test]
+    fn nada_que_promete_fps_entra_como_sem_ganho() {
+        // O erro contrário: classificar como `NoGain` alguma coisa que a
+        // própria descrição diz que acelera. Aí o produto está escondendo um
+        // ganho real, e o cliente deixa de aplicar o que funcionaria.
+        for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
+            let texto = format!("{} {}", spec.description, spec.honest_effect).to_lowercase();
+
+            assert!(
+                !texto.contains("mais fps") && !texto.contains("aumenta o fps"),
+                "`{}` promete FPS e está classificado como sem ganho",
                 spec.id
             );
         }

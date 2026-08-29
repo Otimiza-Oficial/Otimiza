@@ -25,6 +25,19 @@ pub enum ExpectedGain {
     Situational,
     /// Não muda FPS: melhora a sensação de resposta ou libera recursos de fundo.
     Responsiveness,
+    /// Não muda desempenho nenhum.
+    ///
+    /// Existe porque o cliente compara lista com lista, e boa parte do que o
+    /// mercado chama de "otimização" é isto: desligar sincronização,
+    /// atualização automática de mapa, notificação. São ajustes legítimos de
+    /// higiene e privacidade, e não devolvem um quadro por segundo.
+    ///
+    /// Sem este nível, esses itens teriam que entrar como `Responsiveness`, e
+    /// aí o rótulo "não muda FPS" passaria a cobrir duas coisas diferentes:
+    /// "libera recurso de fundo" e "não faz nada de desempenho". Um cliente que
+    /// aplica trinta itens e não sente diferença precisa conseguir saber, antes
+    /// de clicar, quantos deles nunca prometeram diferença.
+    NoGain,
 }
 
 /// Situação de uma otimização nesta máquina.

@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 
 type Verdict = "Improved" | "Worsened" | "NoMeasurableChange" | "TooNoisyToJudge";
 type State = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable";
-type Gain = "Measurable" | "Situational" | "Responsiveness";
+type Gain = "Measurable" | "Situational" | "Responsiveness" | "NoGain";
 type Category = "System" | "Gaming" | "Network" | "Startup" | "Privacy";
 
 interface OptimizationInfo {
@@ -315,6 +315,7 @@ const GAIN_LABELS: Record<Gain, string> = {
   Measurable: "muda o FPS",
   Situational: "depende da máquina",
   Responsiveness: "não muda FPS",
+  NoGain: "não muda desempenho",
 };
 
 /** Menor vem primeiro. O que muda o jogo aparece antes do que não muda. */
@@ -322,6 +323,7 @@ const GAIN_ORDER: Record<Gain, number> = {
   Measurable: 0,
   Situational: 1,
   Responsiveness: 2,
+  NoGain: 3,
 };
 
 const CATEGORY_LABELS: Record<Category, string> = {
@@ -3019,13 +3021,26 @@ function renderOptimizations() {
     (item) => item.expected_gain === "Responsiveness" && item.state === "Available"
   ).length;
 
+  // Os que não prometem desempenho nenhum são contados à parte, e em voz alta.
+  // Eles existem na lista porque o cliente compara catálogo com catálogo, e
+  // esconder que não fazem nada seria usar o tamanho da lista como argumento de
+  // venda — que é exatamente o que os concorrentes fazem.
+  const semGanho = optimizations.filter(
+    (item) => item.expected_gain === "NoGain" && item.state === "Available"
+  ).length;
+
   text(
     "optimization-expectativa",
     available === 0
       ? "Nada a aplicar: este PC já está com tudo que o Otimiza sabe fazer."
       : `Das ${available} a aplicar, ${mudamFps} mudam o FPS de forma mensurável. ` +
         `Outras ${naoMudamFps} liberam recursos de fundo e não mudam FPS — ` +
-        `valem pela limpeza, não pelo jogo.`
+        `valem pela limpeza, não pelo jogo.` +
+        (semGanho > 0
+          ? ` E ${semGanho} não mudam desempenho nenhum: são higiene e ` +
+            `privacidade, e estão aqui porque você pode querer, não porque ` +
+            `deixam o PC rápido.`
+          : "")
   );
 
   // Busca sem resultado precisa dizer isso. Uma lista vazia e silenciosa faz a
