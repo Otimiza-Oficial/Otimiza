@@ -974,8 +974,18 @@ function registrarProblemas(fonte: string, n: number, critico: boolean) {
 
 function setBadge(id: string, count: number, tone?: "warn" | "bad") {
   const badge = element(id);
-  badge.hidden = count <= 0;
-  badge.textContent = String(count);
+
+  // CONTAGEM QUE NÃO É NÚMERO ESCONDE A BOLINHA, EM VEZ DE VIRAR "NaN".
+  //
+  // `count <= 0` é falso para `NaN`, então uma medição que não veio passava
+  // direto pela guarda e a bolinha aparecia com o texto "NaN" — ou, na lateral
+  // recolhida, como uma bola sem nada dentro. Bolinha acesa é uma afirmação:
+  // "esta seção tem tantos itens esperando por você". Sem número, ela afirma o
+  // quê? O caminho honesto para uma contagem que falhou é não desenhar nada.
+  const valido = Number.isFinite(count) && count > 0;
+
+  badge.hidden = !valido;
+  badge.textContent = valido ? String(Math.round(count)) : "";
 
   if (tone) {
     badge.dataset.tone = tone;

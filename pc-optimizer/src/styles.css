@@ -202,6 +202,32 @@
   box-sizing: border-box;
 }
 
+/* ==========================================================================
+   `hidden` TEM QUE VENCER, SEMPRE.
+
+   O navegador esconde `[hidden]` por uma regra da folha padrão, e ela tem
+   especificidade quase nula. QUALQUER regra nossa que declare `display` — e há
+   dezenas, porque quase todo componente é `flex` ou `grid` — a derrota. O
+   elemento continua desenhado com o atributo `hidden` posto nele.
+
+   O efeito é traiçoeiro porque o código que esconde está certo: `elemento.hidden
+   = true` faz exatamente o que promete. Some o conteúdo, fica a casca — uma
+   bolinha acesa e vazia, uma lista sem itens ocupando espaço. E ninguém
+   desconfia do `hidden`, que é a coisa mais básica que existe; a suspeita vai
+   para o JavaScript, que não tem culpa nenhuma.
+
+   Aconteceu em três lugares antes de alguém perceber: as bolinhas de contagem
+   da lateral e as duas listas do cartão de veredito. Foram encontrados varrendo
+   a interface atrás de `[hidden]` com `display` diferente de `none` — não um
+   por um, porque um por um não termina.
+
+   `!important` aqui é o uso legítimo dele: `hidden` significa "isto não é
+   relevante agora", e não existe caso em que uma regra de aparência deva
+   discordar disso. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -2587,6 +2613,52 @@ button {
   padding: 0;
 }
 
+/* ==========================================================================
+   A BOLINHA DE CONTAGEM NA LATERAL RECOLHIDA
+
+   O DEFEITO NÃO ERA A BOLINHA ESTAR TORTA: ERA ELA EMPURRANDO O ÍCONE.
+
+   Recolhida, o rótulo some mas a bolinha continuava sendo IRMÃ do ícone dentro
+   de um `justify-content: center`. Os dois passavam a dividir os 56px, e o
+   resultado é o que se vê: nenhum ícone no centro, cada linha deslocada de um
+   tanto diferente conforme o número tivesse um ou dois dígitos, e as bolinhas
+   encostando na borda direita. Uma coluna de ícones que não se alinham entre si
+   parece defeito de montagem, e era.
+
+   Além de torta, ali ela não informava: um número de 17px espremido ao lado de
+   um ícone, sem o nome da seção do lado, não se lê nem se sabe do que é.
+
+   Então ela sai do fluxo e vira um PONTO no canto do ícone. O ícone volta ao
+   centro, e o sinal que sobrevive é o único que cabe naquele tamanho: "tem
+   alguma coisa aqui, e a cor diz a gravidade". O número continua inteiro na
+   lateral aberta, que é onde ele tem contexto para significar algo.
+
+   O anel escuro em volta não é enfeite: sem ele o ponto encosta no traço do
+   ícone e os dois viram uma mancha só.
+   ========================================================================== */
+
+.corpo[data-recolhida="true"] .nav {
+  position: relative;
+}
+
+.corpo[data-recolhida="true"] .tab-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+
+  min-width: 0;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+
+  /* Esconde o número sem esconder a bolinha. `display: none` mataria o sinal
+     junto com o texto. */
+  font-size: 0;
+  line-height: 0;
+}
+
 /* Em tela estreita a lateral vira uma faixa de ícones, e não some: perder a
    navegação inteira num notebook de 1366 seria pior que apertar. */
 @media (max-width: 900px) {
@@ -2605,8 +2677,26 @@ button {
   }
 
   .corpo .nav {
+    position: relative;
     justify-content: center;
     padding-inline: 0;
+  }
+
+  /* Mesmo tratamento da lateral recolhida, e pelo mesmo motivo: aqui os
+     rótulos também sumiram, então a bolinha voltaria a empurrar o ícone para
+     fora do centro. A explicação longa está no bloco lá de cima. */
+  .corpo .tab-badge {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    min-width: 0;
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid var(--panel);
+    font-size: 0;
+    line-height: 0;
   }
 
   .lateral-recolher {
