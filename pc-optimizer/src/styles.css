@@ -7,9 +7,28 @@
 */
 
 :root {
-  --bg: #0b0b0b;
-  --panel: #121212;
-  --panel-raised: #191919;
+  /* PRETO DE VERDADE, E NÃO QUASE-PRETO.
+
+     As três superfícies eram tons diferentes de cinza muito escuro, e o degrau
+     entre elas era o que separava fundo, cartão e cartão em relevo. Agora as
+     três são a mesma: #000. Quem separa passa a ser só o fio de cabelo.
+
+     É mais limpo e é mais honesto com a escala de cor do produto — a regra
+     sempre foi que cor só aparece onde carrega significado, e um cinza a mais
+     ou a menos no fundo não carregava nenhum. De quebra, todo texto de apoio
+     ganha contraste: os tons foram calibrados contra #121212, e contra preto
+     eles só melhoram.
+
+     Nos monitores OLED, que é o que boa parte do público de jogo usa, preto
+     puro é pixel desligado: a moldura some de verdade. */
+  --bg: #000000;
+  --panel: #000000;
+  --panel-raised: #000000;
+
+  /* O fundo dos campos onde se digita ou se copia.
+     Existe como token porque ele NÃO deve seguir o painel: um campo tem que
+     ser encontrável, e num fundo todo preto quem o desenha é a borda. */
+  --campo: #000000;
 
   /* A estética de fio de cabelo estava tão fraca que a moldura não se lia:
      #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
@@ -45,7 +64,7 @@
   --green-rgb: 95, 211, 154;
   --amber-rgb: 232, 178, 58;
   --red-rgb: 255, 92, 115;
-  --bg-rgb: 11, 11, 11;
+  --bg-rgb: 0, 0, 0;
   --text-rgb: 233, 231, 227;
 
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
@@ -3303,7 +3322,12 @@ button {
 }
 
 .portao-caixa {
-  width: min(1020px, 100%);
+  width: min(1180px, 100%);
+
+  /* Alta o bastante para a esfera ser cortada em cima e embaixo. É o corte que
+     transforma um ícone redondo em um lugar. */
+  height: min(780px, calc(100vh - var(--s5) * 2));
+
   border: 1px solid var(--hairline);
   border-radius: var(--r3);
   background: var(--panel);
@@ -3314,21 +3338,39 @@ button {
   overflow: hidden;
 }
 
+/* A PROPORÇÃO É O DESENHO INTEIRO.
+
+   Duas colunas de peso igual faziam nada parecer importante. Aqui o formulário
+   fica em pouco mais de um terço e o resto é a esfera: a diferença de escala é
+   o que diz onde olhar, sem precisar de nenhum enfeite para apontar. */
 .portao-colunas {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
+  grid-template-columns: minmax(360px, 0.56fr) 1fr;
+  height: 100%;
 }
 
-/* A vitrine ganha um degrau de luz e a coluna de ativar fica no tom do painel.
-   É o único sinal de que uma é para ler e a outra é para usar — não precisa de
-   título dizendo isso. */
-.portao-vitrine {
+.portao-forma {
+  display: grid;
+
+  /* Centrado na altura, e é daí que vem o ar. A coluna não estica para
+     preencher: fica do tamanho do conteúdo, no meio, com vazio em cima e
+     embaixo. */
+  align-content: center;
+
   padding: var(--s6);
+  border-right: 1px solid var(--hairline);
+  overflow: auto;
+}
+
+.portao-forma-miolo {
   display: flex;
   flex-direction: column;
-  gap: var(--s4);
-  background: var(--panel-raised);
-  border-right: 1px solid var(--hairline);
+
+  /* Largura de leitura curta. Linha longa ao lado de um campo estreito é o que
+     fazia a coluna antiga parecer um documento em vez de um formulário. */
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto;
 }
 
 .portao-marca {
@@ -3340,30 +3382,32 @@ button {
 }
 
 .portao-titulo {
-  margin: 0;
-  font-size: var(--t-big);
-  font-weight: 600;
-  line-height: 1.25;
+  margin: var(--s4) 0 0;
+  font-size: var(--t-h2);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 
 .portao-sub {
-  margin: 0;
-  font-size: var(--t-lead);
+  margin: var(--s3) 0 0;
+  font-size: var(--t-body);
   line-height: 1.55;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
-/* O achado do diagnóstico. Âmbar, e não vermelho: é uma informação sobre a
-   máquina, não um erro do programa. */
+/* O ACHADO — UMA LINHA, E NÃO UM CARTÃO.
+
+   Como cartão, com moldura e fundo próprios, ele disputava com o formulário.
+   Como linha com um ponto na frente, informa sem virar um segundo bloco. */
 .portao-achado {
   display: flex;
-  gap: var(--s3);
-  align-items: flex-start;
-  padding: var(--s3) var(--s4);
-  border: 1px solid rgba(var(--amber-rgb), 0.28);
-  border-radius: var(--r2);
-  background: rgba(var(--amber-rgb), 0.07);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--s2);
+  margin: var(--s4) 0 0;
+  font-size: var(--t-body);
+  line-height: 1.5;
 }
 
 .portao-achado[hidden] {
@@ -3372,151 +3416,88 @@ button {
 
 .portao-achado-marca {
   flex: none;
+  align-self: center;
   width: 6px;
   height: 6px;
-  margin-top: 7px;
   border-radius: 50%;
-  background: var(--amber);
+
+  /* A cor vem do nível do achado, posto por `mostrarAchadoNoPortao`. Fixa em
+     âmbar, ela punha um ponto de "atenção" ao lado de uma frase que diz que a
+     máquina está no limite. */
+  background: var(--aviso);
+}
+
+.portao-achado[data-nivel="critico"] .portao-achado-marca {
+  background: var(--erro);
 }
 
 .portao-achado strong {
-  display: block;
-  font-size: var(--t-body);
   color: var(--text);
+  font-weight: 600;
 }
 
-.portao-achado span {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--t-body);
-  line-height: 1.5;
-  color: var(--text-dim);
-}
-
-.portao-passos {
-  margin: 0;
-  padding-left: 1.15em;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  font-size: var(--t-body);
-  line-height: 1.5;
-  color: var(--text-dim);
-}
-
-/* Para quem ainda não comprou, ESTE é o botão da tela — não o "Ativar" do
-   outro lado. Ele estava mais apagado que o de ativar, o que invertia a
-   hierarquia justamente para o público que a tela existe para atender. */
-.portao-discord {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  padding: var(--s4);
-  border: 1px solid rgba(var(--green-rgb), 0.35);
-  border-radius: var(--r2);
-  background: rgba(var(--green-rgb), 0.06);
-  text-decoration: none;
-  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease);
-}
-
-.portao-discord:hover {
-  border-color: var(--green);
-  background: rgba(var(--green-rgb), 0.11);
-}
-
-.portao-discord-marca {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-}
-
-.portao-discord strong {
-  display: block;
-  font-size: var(--t-value);
-  color: var(--text);
-}
-
-.portao-discord small {
-  display: block;
-  margin-top: 1px;
-  font-family: var(--font-mono);
-  font-size: var(--t-body);
+.portao-achado span:not(.portao-achado-marca) {
   color: var(--text-muted);
 }
 
-.portao-honesto {
-  margin: auto 0 0;
-  padding-top: var(--s3);
-  border-top: 1px solid var(--hairline);
-  font-size: var(--t-body);
-  line-height: 1.5;
-  color: var(--text-muted);
-}
-
-/* ------------------------------------------------------------- ativar */
-
-.portao-ativar {
-  padding: var(--s6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
+.portao-campos {
+  margin-top: var(--s5);
 }
 
 .portao-rotulo {
+  display: block;
+  margin-bottom: var(--s2);
   font-size: var(--t-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  font-weight: 600;
+  color: var(--text);
 }
 
 .portao-id {
   display: flex;
   align-items: stretch;
   gap: var(--s2);
-  margin-bottom: var(--s1);
 }
 
 .portao-id code {
   flex: 1;
-  display: grid;
-  place-items: center;
+  min-width: 0;
   padding: var(--s3);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r1);
-  background: var(--bg);
-
   font-family: var(--font-mono);
-  font-size: var(--t-value);
+  font-size: var(--t-body);
   letter-spacing: 0.08em;
+  text-align: center;
   color: var(--text);
 
-  /* O cliente precisa poder selecionar com o mouse mesmo tendo o botão de
-     copiar: em máquina sem área de transferência acessível, é a saída. */
-  user-select: all;
+  background: var(--campo);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+
+  /* O código é para copiar, não para digitar: selecionável, mas sem quebrar
+     no meio de um bloco. */
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .portao-copiar {
   flex: none;
   padding: 0 var(--s4);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r1);
-  background: var(--panel-raised);
-  color: var(--text-dim);
   font-size: var(--t-body);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
   cursor: pointer;
-  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: color var(--anim-rapida), border-color var(--anim-rapida);
 }
 
 .portao-copiar:hover {
   color: var(--text);
-  border-color: var(--accent);
+  border-color: var(--borda-forte);
 }
 
 .portao-nota {
-  margin: 0 0 var(--s4);
-  font-size: var(--t-body);
+  margin: var(--s2) 0 0;
+  font-size: var(--t-nota);
   line-height: 1.5;
   color: var(--text-muted);
 }
@@ -3524,45 +3505,149 @@ button {
 .portao-campo {
   width: 100%;
   padding: var(--s3);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--r1);
-  background: var(--bg);
-
   font-family: var(--font-mono);
-  font-size: var(--t-body);
+  font-size: var(--t-nota);
   line-height: 1.5;
   color: var(--text);
   resize: vertical;
 
-  /* A chave é longa e vem numa linha só. Sem isto ela some para a direita e a
-     pessoa não vê o que colou. */
-  word-break: break-all;
+  background: var(--campo);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  transition: border-color var(--anim-rapida);
 }
 
 .portao-campo:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--borda-forte);
 }
 
+/* A AÇÃO PRINCIPAL É A ÚNICA COISA BRANCA DA TELA.
+
+   Onde tudo é cinza sobre preto, contraste puro é mais barato e mais claro que
+   qualquer cor de destaque. */
 .portao-botao {
-  margin-top: var(--s3);
   width: 100%;
+  margin-top: var(--s5);
+  padding: var(--s3) var(--s4);
   justify-content: center;
 }
 
 .portao-erro {
   margin: var(--s3) 0 0;
-  padding: var(--s3);
-  border: 1px solid rgba(var(--red-rgb), 0.3);
-  border-radius: var(--r1);
-  background: rgba(var(--red-rgb), 0.08);
-  font-size: var(--t-body);
+  font-size: var(--t-nota);
   line-height: 1.5;
-  color: var(--text);
+  color: var(--erro);
 }
 
 .portao-erro[hidden] {
   display: none;
+}
+
+/* O separador. A palavra no meio existe porque um "ou" solto não diz para quem
+   é a segunda opção — e quem chegou aqui sem chave precisa ser endereçado. */
+.portao-ou {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: var(--s5) 0 var(--s4);
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.portao-ou::before,
+.portao-ou::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* A AÇÃO SECUNDÁRIA. Mesma largura e mesma altura da principal, cor invertida:
+   quem já tem chave usa a de cima, quem não tem usa a de baixo, e as duas
+   parecem igualmente possíveis. */
+.portao-discord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  font-size: var(--t-body);
+  text-decoration: none;
+  color: var(--text);
+
+  background: var(--campo);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  transition: border-color var(--anim-rapida), background var(--anim-rapida);
+}
+
+.portao-discord:hover {
+  border-color: var(--borda-forte);
+  background: var(--panel-raised);
+}
+
+.portao-discord-marca {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.portao-discord strong {
+  font-weight: 600;
+}
+
+.portao-discord small {
+  font-family: var(--font-mono);
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.portao-depois {
+  margin: var(--s5) 0 0;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--hairline);
+  font-size: var(--t-nota);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   OS TRÊS PILARES
+
+   Nas referências que o dono trouxe, a imagem pontilhada não é um quadro
+   pendurado ao lado do texto: ela É o material da página, grande e cortada
+   pela moldura. É o que separa uma tela de produto de um formulário com
+   ilustração.
+
+   E ela tem uma vantagem que ilustração comprada não tem: é o computador da
+   pessoa. Cada coluna se desfaz pela medição da peça que representa.
+   ========================================================================== */
+
+.portao-arte {
+  position: relative;
+  overflow: hidden;
+  background: var(--panel-raised);
+}
+
+.portao-pilares {
+  position: absolute;
+
+  /* Cortada pelas bordas do cartão, sem máscara nenhuma. O corte reto é o que
+     faz a imagem parecer parte da página em vez de um adesivo colado nela. */
+  top: 50%;
+  left: 50%;
+  width: 780px;
+  height: 800px;
+  transform: translate(-50%, -50%);
+
+  pointer-events: none;
+
+  /* A grade é desenhada em pixels inteiros; sem isto o navegador suaviza os
+     quadrados e o meio-tom vira borrão. */
+  image-rendering: pixelated;
 }
 
 /*
@@ -3570,30 +3655,23 @@ button {
   duas colunas de 500px ali deixariam a chave num campo de meia palavra.
 */
 @media (max-width: 900px) {
+  .portao-caixa {
+    height: auto;
+  }
+
   .portao-colunas {
     grid-template-columns: 1fr;
   }
 
-  .portao-vitrine {
+  .portao-forma {
     border-right: none;
-    border-bottom: 1px solid var(--hairline);
-  }
-
-  .portao-vitrine,
-  .portao-ativar {
     padding: var(--s5);
   }
-}
 
-.portao-depois {
-  /* `auto` no topo empurra para o rodapé da coluna. É o que fecha o vazio que
-     sobrava embaixo do botão quando a vitrine ao lado era mais alta. */
-  margin: auto 0 0;
-  padding-top: var(--s4);
-  border-top: 1px solid var(--hairline);
-  font-size: var(--t-body);
-  line-height: 1.5;
-  color: var(--text-muted);
+  /* Em uma coluna a esfera roubaria a altura que o texto precisa. */
+  .portao-arte {
+    display: none;
+  }
 }
 
 /* ==========================================================================
@@ -3747,65 +3825,17 @@ body.janela-cheia {
 }
 
 /* ==========================================================================
-   A ESFERA NO PORTÃO
-
-   Ela vive atrás da coluna da vitrine, sangrando para fora do cartão. É o
-   recurso das referências que o dono trouxe: a imagem em pontos não é um
-   quadro pendurado ao lado do texto, ela é o material da página.
-
-   Fica ATRÁS e apagada porque o texto é que precisa ser lido. Uma imagem que
-   compete com a frase de venda faz as duas perderem.
-   ========================================================================== */
-
-.portao-vitrine {
-  position: relative;
-  overflow: hidden;
-}
-
-.portao-esfera {
-  position: absolute;
-  /* SANGRA PARA FORA DO CARTÃO, e essa é a decisão inteira do
-     posicionamento. Inteira e centrada, ela virava um segundo assunto
-     disputando atenção com o preço e o botão. Cortada pela quina, lê-se como
-     fundo: o cliente registra que tem alguma coisa viva ali sem parar de ler.
-     Só um quarto dela fica dentro. */
-  right: -230px;
-  bottom: -210px;
-  width: 460px;
-  height: 460px;
-  z-index: 0;
-
-  /* Apagada o bastante para o texto passar por cima sem esforço, viva o
-     bastante para se notar que ela se mexe. */
-  opacity: 0.32;
-  pointer-events: none;
-  image-rendering: pixelated;
-
-  /* Some para dentro do cartão, em vez de terminar num corte reto. A borda
-     dura entregaria que é um retângulo colado. */
-  mask-image: radial-gradient(circle at 50% 50%, #000 40%, transparent 70%);
-  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 40%, transparent 70%);
-}
-
-/* O conteúdo da vitrine passa por cima da esfera. */
-.portao-vitrine > *:not(.portao-esfera) {
-  position: relative;
-  z-index: 1;
-}
-
-@media (max-width: 900px) {
-  /* Em uma coluna a esfera roubaria a altura que o texto precisa. */
-  .portao-esfera { display: none; }
-}
-
-/* ==========================================================================
    A CHEGADA
 
    O instante entre colar a chave e usar o programa.
 
-   Tudo aqui é grande, quieto e curto. É a única tela do produto que não tem
-   nada para o cliente decidir — e por isso é a única que pode se dar ao luxo
-   de ser só uma frase e um botão.
+   O DESENHO É O DA REFERÊNCIA QUE O DONO TROUXE: a imagem ocupa a esquerda
+   inteira, sangrando pelas bordas, e o texto fica num bloco estreito à direita.
+   Não é uma ilustração ao lado de um parágrafo — a imagem é metade da página.
+
+   Tudo aqui é curto. É a única tela do produto que não tem nada para o cliente
+   decidir, e por isso a única que pode se dar ao luxo de ser uma frase e um
+   botão.
    ========================================================================== */
 
 .chegada {
@@ -3813,7 +3843,8 @@ body.janela-cheia {
   inset: 0;
   z-index: 65;
   display: grid;
-  place-items: center;
+  grid-template-columns: 1fr minmax(340px, 0.85fr);
+  align-items: center;
   background: var(--bg);
   overflow: hidden;
 }
@@ -3822,42 +3853,39 @@ body.janela-cheia {
   display: none;
 }
 
-.chegada-esfera {
-  position: absolute;
-  width: 520px;
-  height: 520px;
+.chegada-arte {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
 
-  /* Atrás do texto, e apagada. Ela é o pano de fundo do agradecimento, não o
-     assunto dele. */
-  opacity: 0.28;
+.chegada-pilares {
+  position: absolute;
+
+  /* SANGRA PELAS TRÊS BORDAS. Colunas cortadas pela moldura continuam para
+     fora da tela; colunas inteiras e centradas viram um adesivo. */
+  top: 50%;
+  left: 0;
+  width: 900px;
+  height: 900px;
+  transform: translateY(-50%);
+
   pointer-events: none;
   image-rendering: pixelated;
-  mask-image: radial-gradient(circle, #000 40%, transparent 72%);
-  -webkit-mask-image: radial-gradient(circle, #000 40%, transparent 72%);
 }
 
 .chegada-texto {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s4);
-  text-align: center;
-  padding: var(--s6);
-}
-
-.chegada-marca {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  letter-spacing: 0.34em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  padding: var(--s6) var(--s6) var(--s6) var(--s5);
+  max-width: 46ch;
 }
 
 .chegada-titulo {
   margin: 0;
+
   /* O maior tamanho do produto inteiro, usado uma vez só. Guardar o extremo
      da escala para um momento único é o que faz ele significar alguma coisa. */
   font-size: var(--t-huge);
@@ -3869,10 +3897,16 @@ body.janela-cheia {
 
 .chegada-frase {
   margin: 0;
-  max-width: 46ch;
   font-size: var(--t-lead);
   line-height: 1.6;
   color: var(--text-dim);
+}
+
+.chegada-nota {
+  margin: 0;
+  font-size: var(--t-body);
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 .chegada-botao {
@@ -3884,12 +3918,29 @@ body.janela-cheia {
   animation: chegar 0.7s var(--ease) both;
 }
 
-.chegada-marca { animation-delay: 0.05s; }
-.chegada-titulo { animation-delay: 0.15s; }
-.chegada-frase { animation-delay: 0.3s; }
-.chegada-botao { animation-delay: 0.45s; }
+.chegada-titulo { animation-delay: 0.1s; }
+.chegada-frase { animation-delay: 0.25s; }
+.chegada-nota { animation-delay: 0.4s; }
+.chegada-botao { animation-delay: 0.55s; }
 
 @keyframes chegar {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
+
+/* Em janela estreita a imagem some: o agradecimento é o que precisa caber. */
+@media (max-width: 900px) {
+  .chegada {
+    grid-template-columns: 1fr;
+    place-items: center;
+  }
+
+  .chegada-arte {
+    display: none;
+  }
+
+  .chegada-texto {
+    padding: var(--s5);
+  }
+}
+

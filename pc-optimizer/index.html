@@ -33,101 +33,109 @@
     <section class="portao" id="portao" hidden aria-labelledby="portao-titulo">
       <div class="portao-caixa">
         <div class="portao-colunas">
-          <div class="portao-vitrine">
-            <!--
-                A ESFERA COMO HERÓI DA TELA DE ATIVAÇÃO.
+          <!--
+            A COLUNA ESTREITA, E A ESTREITEZA É A DECISÃO.
 
-              É a mesma do painel, com as mesmas medições: enquanto a pessoa lê a
-              oferta, o diagnóstico já rodou e ela está vendo o próprio
-              computador desenhado — não uma ilustração de estoque.
+            Antes esta tela tinha duas colunas de peso igual, e o resultado era
+            que nada parecia importante. Aqui o formulário ocupa pouco mais de
+            um terço e fica centrado na altura: o vazio em volta é o que faz o
+            olho cair nos dois campos.
 
-              Foi de propósito que ela ficou no LADO DA COMPRA, e não no da chave.
-              Quem chega aqui sem ter comprado precisa entender que o programa já
-              olhou a máquina dele; quem já tem a chave só quer o campo.
-            -->
-            <canvas class="portao-esfera" id="portao-esfera"
-                    width="420" height="420" aria-hidden="true"></canvas>
+            A ORDEM É A DA VIDA REAL, e não a de um formulário de cadastro.
+            Copia o código, vai ao Discord, volta e cola a chave. Por isso o
+            código vem antes do campo da chave, e o botão do Discord fica entre
+            o que a pessoa acabou de fazer e o que ela vai fazer depois.
+          -->
+          <div class="portao-forma">
+            <div class="portao-forma-miolo">
+              <span class="portao-marca">Otimiza</span>
 
-            <span class="portao-marca">Otimiza</span>
+              <h1 class="portao-titulo" id="portao-titulo">
+                Este computador ainda não está ativado.
+              </h1>
 
-            <h1 class="portao-titulo" id="portao-titulo">
-              Este computador ainda não está ativado.
-            </h1>
+              <p class="portao-sub">
+                O diagnóstico é livre e já rodou. O que a chave libera são as
+                correções.
+              </p>
 
-            <p class="portao-sub">
-              O diagnóstico é livre e já está rodando aqui atrás. O que a chave
-              libera são as correções.
-            </p>
+              <!--
+                Nasce escondido e só aparece quando o veredito volta com alguma
+                coisa. Cartão vazio prometendo conteúdo é ruído.
 
-            <!--
-              Nasce escondido e só aparece quando o veredito volta com alguma
-              coisa. Cartão vazio prometendo conteúdo é ruído.
-            -->
-            <div class="portao-achado" id="portao-achado" hidden>
-              <span class="portao-achado-marca" aria-hidden="true"></span>
-              <div>
+                É o argumento de venda mais forte da tela, e o único que não
+                foi escrito por ninguém: é o PC da pessoa falando.
+              -->
+              <p class="portao-achado" id="portao-achado" hidden>
+                <span class="portao-achado-marca" aria-hidden="true"></span>
                 <strong id="portao-achado-titulo"></strong>
                 <span id="portao-achado-detalhe"></span>
+              </p>
+
+              <div class="portao-campos">
+                <label class="portao-rotulo" for="portao-id">O código deste computador</label>
+
+                <div class="portao-id">
+                  <code id="portao-id">…</code>
+                  <button type="button" class="portao-copiar" id="portao-copiar">Copiar</button>
+                </div>
+
+                <p class="portao-nota" id="portao-nota"></p>
               </div>
-            </div>
 
-            <ol class="portao-passos">
-              <li>Copie o código deste computador, aqui do lado.</li>
-              <li>Entre no Discord e mande o código junto com o pagamento.</li>
-              <li>Cole aqui a chave que você receber.</li>
-            </ol>
+              <div class="portao-campos">
+                <label class="portao-rotulo" for="portao-chave">A sua chave</label>
+                <textarea
+                  id="portao-chave"
+                  class="portao-campo"
+                  rows="3"
+                  spellcheck="false"
+                  autocomplete="off"
+                  placeholder="Cole aqui a chave que você recebeu"
+                ></textarea>
+              </div>
 
-            <a class="portao-discord" id="portao-discord" href="#" target="_blank" rel="noreferrer">
-              <span class="portao-discord-marca" aria-hidden="true"></span>
-              <span>
+              <button type="button" class="btn-primary portao-botao" id="portao-ativar-btn">
+                Ativar o Otimiza
+              </button>
+
+              <p class="portao-erro" id="portao-erro" hidden></p>
+
+              <p class="portao-ou"><span>ainda não tem uma chave</span></p>
+
+              <a class="portao-discord" id="portao-discord" href="#" target="_blank" rel="noreferrer">
+                <span class="portao-discord-marca" aria-hidden="true"></span>
                 <strong>Comprar no Discord</strong>
                 <small id="portao-discord-endereco"></small>
-              </span>
-            </a>
+              </a>
 
-            <p class="portao-honesto">
-              A chave vale em um computador só. É o que impede que ela seja
-              repassada — e é por isso que o código acima faz parte da compra.
-            </p>
+              <!--
+                Uma frase, e só. A segunda metade disto — o que fazer se trocar
+                de placa-mãe — saiu daqui porque a nota embaixo do código já
+                responde isso, e com a informação certa para ESTA máquina:
+                nem todo PC perde o código ao formatar.
+              -->
+              <p class="portao-depois">
+                A chave vale em um computador só, e fica gravada aqui — você não
+                digita de novo.
+              </p>
+            </div>
           </div>
 
-          <div class="portao-ativar">
-            <label class="portao-rotulo" for="portao-id">O código deste computador</label>
+          <!--
+            OS TRÊS PILARES.
 
-            <div class="portao-id">
-              <code id="portao-id">…</code>
-              <button type="button" class="portao-copiar" id="portao-copiar">Copiar</button>
-            </div>
+            Uma coluna para cada peça que sustenta o desempenho — processador,
+            memória e disco —, e cada uma se desfazendo de cima para baixo pela
+            SUA medição. Enquanto a pessoa lê a oferta, o diagnóstico já rodou:
+            ela está vendo o próprio computador, e não uma ilustração de estoque.
 
-            <p class="portao-nota" id="portao-nota"></p>
-
-            <label class="portao-rotulo" for="portao-chave">A sua chave</label>
-            <textarea
-              id="portao-chave"
-              class="portao-campo"
-              rows="4"
-              spellcheck="false"
-              autocomplete="off"
-              placeholder="Cole aqui a chave que você recebeu"
-            ></textarea>
-
-            <button type="button" class="btn-primary portao-botao" id="portao-ativar-btn">
-              Ativar o Otimiza
-            </button>
-
-            <p class="portao-erro" id="portao-erro" hidden></p>
-
-            <!--
-              O rodapé da coluna. Existe por dois motivos: enche o vazio que
-              sobrava sob o botão, e responde as duas perguntas que aparecem
-              logo depois de pagar — "preciso digitar isso toda vez?" e
-              "e se eu trocar de PC?".
-            -->
-            <p class="portao-depois">
-              A chave fica gravada neste computador; você não digita de novo.
-              Trocou de placa-mãe ou formatou? Fale no Discord com o código
-              acima — a chave é reemitida sem custo.
-            </p>
+            É desenho, não imagem carregada: geometria passada por um meio-tom
+            de grade grossa. Nada entra no instalador por causa disto.
+          -->
+          <div class="portao-arte" aria-hidden="true">
+            <canvas class="portao-pilares" id="portao-pilares"
+                    width="780" height="800"></canvas>
           </div>
         </div>
       </div>
@@ -186,13 +194,31 @@
       de emitir — não há consulta a lugar nenhum.
     -->
     <section class="chegada" id="chegada" hidden aria-live="polite">
-      <canvas class="chegada-esfera" id="chegada-esfera"
-              width="520" height="520" aria-hidden="true"></canvas>
+      <!--
+        A imagem ocupa a esquerda inteira, sangrando pelas três bordas, e se
+        dissolve em direção ao texto — sem borda reta separando os dois, que
+        entregaria dois retângulos colados em vez de uma página só.
+      -->
+      <div class="chegada-arte" aria-hidden="true">
+        <canvas class="chegada-pilares" id="chegada-pilares"
+                width="900" height="900"></canvas>
+      </div>
 
       <div class="chegada-texto">
-        <p class="chegada-marca">Otimiza</p>
         <h1 class="chegada-titulo" id="chegada-titulo">Obrigado.</h1>
         <p class="chegada-frase" id="chegada-frase"></p>
+
+        <!--
+          A segunda frase não muda e diz a coisa que precisa ficar clara antes
+          de qualquer botão: NADA foi alterado na máquina ainda. Uma tela de
+          agradecimento que soasse como "pronto, seu PC foi otimizado" seria a
+          primeira mentira do produto, logo depois do pagamento.
+        -->
+        <p class="chegada-nota">
+          Nada foi alterado neste computador ainda. O Otimiza mede primeiro,
+          mostra o que achou, e só mexe no que você mandar.
+        </p>
+
         <button class="btn btn-primary chegada-botao" id="chegada-entrar" type="button">
           Ver o que este PC precisa
         </button>

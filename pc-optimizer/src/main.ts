@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Esfera } from "./esfera";
+import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 
 // ---------------------------------------------------------------- contratos
@@ -639,6 +640,15 @@ function mostrarAchadoNoPortao(v: Veredito) {
   }
 
   caixa.hidden = false;
+
+  // O PONTO TEM A COR DO ACHADO, E NÃO UMA COR FIXA.
+  //
+  // Ele nasceu sempre âmbar. Numa máquina com a memória estourada isso punha
+  // um ponto de "atenção" ao lado de uma frase que diz que o computador está
+  // no limite — o mesmo desencontro que a esfera já teve, e o tipo de coisa
+  // que faz o cliente duvidar do diagnóstico inteiro logo na tela da compra.
+  caixa.dataset.nivel = v.principal.severity === "Critical" ? "critico" : "importante";
+
   text("portao-achado-titulo", v.frase);
   text("portao-achado-detalhe", v.detalhe);
 }
@@ -652,14 +662,23 @@ function mostrarAchadoNoPortao(v: Veredito) {
 let esfera: Esfera | null = null;
 
 /**
- * As outras duas esferas: a do portão e a da chegada.
+ * AS DUAS TELAS GRANDES NÃO USAM A ESFERA, E SIM OS PILARES.
  *
- * São instâncias separadas e não a mesma reaproveitada, porque um `<canvas>`
- * desenha num lugar só. O custo é o mesmo desenho três vezes — mas só uma
- * delas está visível de cada vez, e as outras nem são ligadas.
+ * A esfera continua sendo o medidor do painel: pequena, ao lado do veredito,
+ * girando com o uso de CPU. Ela funciona ali porque é um instrumento.
+ *
+ * Nas telas de ativação e de chegada a imagem é quase mil pixels e tem outro
+ * trabalho — ser a primeira coisa que a pessoa vê do produto. Ampliada, a
+ * esfera não aguentava esse papel: virava uma bola de pontinhos, e a diferença
+ * entre uma máquina saudável e uma sufocada ficava invisível.
+ *
+ * As colunas aguentam, e informam MAIS: são três, uma para cada peça que
+ * sustenta o desempenho — processador, memória e disco —, cada uma se
+ * desfazendo pela sua própria leitura. A esfera dizia "a máquina está mal";
+ * os pilares dizem QUAL delas está.
  */
-let esferaDoPortao: Esfera | null = null;
-let esferaDaChegada: Esfera | null = null;
+let pilaresDoPortao: Pilares | null = null;
+let pilaresDaChegada: Pilares | null = null;
 
 /**
  * Repassa uma medição para todas as esferas que existirem.
@@ -669,10 +688,20 @@ let esferaDaChegada: Esfera | null = null;
  * diferentes.
  */
 function alimentarEsferas(leitura: Parameters<Esfera["atualizar"]>[0]) {
-  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) {
-    e?.atualizar(leitura);
-    e?.redesenhar();
-  }
+  esfera?.atualizar(leitura);
+  esfera?.redesenhar();
+}
+
+/**
+ * Repassa uma medição para as duas telas grandes.
+ *
+ * Elas recebem uma leitura DIFERENTE da esfera, e não a mesma: a esfera precisa
+ * de núcleos e de CPU para semear e tremer, os pilares precisam de disco — que
+ * a esfera não usa — porque a terceira coluna é o disco.
+ */
+function alimentarPilares(leitura: Parameters<Pilares["atualizar"]>[0]) {
+  pilaresDoPortao?.atualizar(leitura);
+  pilaresDaChegada?.atualizar(leitura);
 }
 
 /**
@@ -703,9 +732,27 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   ligarBarraDaJanela();
 
+  // A DO PAINEL GIRA; AS DUAS GRANDES NÃO.
+  //
+  // No painel a esfera é um medidor pequeno ao lado do veredito, e o giro dela
+  // carrega o uso de CPU. Nas telas de ativação e de chegada ela é imagem
+  // grande, quase mil pixels, e ali quem informa é a EROSÃO — o casco furado
+  // pela memória ocupada. Erosão não precisa de movimento para ser vista.
+  //
+  // Trocar o giro pela densidade foi a única forma de a imagem grande ler como
+  // pedra em vez de chuvisco sem pôr um laço de sessenta quadros por segundo
+  // com dezenas de milhares de pontos na máquina fraca que o Otimiza existe
+  // para consertar. Parada, ela é redesenhada uma vez por medição.
   esfera = new Esfera(element<HTMLCanvasElement>("veredito-esfera"));
-  esferaDoPortao = new Esfera(element<HTMLCanvasElement>("portao-esfera"));
-  esferaDaChegada = new Esfera(element<HTMLCanvasElement>("chegada-esfera"));
+
+  // As duas imagens grandes. `dissolve` diz para que lado a imagem some no
+  // preto: na chegada ela ocupa a esquerda e precisa se desfazer na direção do
+  // texto, para os dois não ficarem separados por uma borda reta.
+  pilaresDoPortao = new Pilares(element<HTMLCanvasElement>("portao-pilares"));
+
+  pilaresDaChegada = new Pilares(element<HTMLCanvasElement>("chegada-pilares"), {
+    dissolve: "direita",
+  });
 
   // Em desenvolvimento a esfera fica alcancavel pelo console, para dar para
   // conferir o desenho com valores escolhidos a mao. Em producao o app roda de
@@ -800,7 +847,8 @@ async function ajustarMovimento() {
   // Num PC fraco ela desenha um quadro e para. É a mesma imagem, e o custo é
   // pago uma vez — um otimizador que engasga na própria interface se desmente
   // antes de aplicar a primeira otimização.
-  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) e?.ligar();
+  // Só a esfera tem laço para ligar. Os pilares são desenhados por medição.
+  esfera?.ligar();
 
   // O multiplicador global de movimento.
   //
@@ -1110,11 +1158,25 @@ function renderMetrics(metrics: PerformanceMetrics) {
   // É o que separa ela de um enfeite: cada propriedade do desenho — quantos
   // pontos, o quanto vibram, quantos buracos, a cor — sai de um número que
   // acabou de ser lido desta máquina.
+  const nivelAgora =
+    (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok";
+
   alimentarEsferas({
     nucleos: metrics.cpu.per_core.length,
     cpu,
     memoria: metrics.ram.usage_percent,
-    nivel: (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok",
+    nivel: nivelAgora,
+  });
+
+  // OS TRÊS PILARES RECEBEM AS TRÊS MEDIÇÕES.
+  //
+  // É o que separa a imagem de um enfeite: a altura de cada ruína sai de um
+  // número que acabou de ser lido desta máquina, e não de um gosto nosso.
+  alimentarPilares({
+    cpu,
+    memoria: metrics.ram.usage_percent,
+    disco: metrics.disk.usage_percent,
+    nivel: nivelAgora,
   });
 
   text("cpu-value", cpu.toFixed(0));
@@ -2988,10 +3050,11 @@ function aplicarVeredito(v: Veredito) {
   // próxima leitura do monitor — o diagnóstico é a informação mais importante
   // da tela e não pode chegar em duas velocidades, e uma frase vermelha ao lado
   // de uma esfera neutra faz o cliente duvidar das duas.
-  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) {
-    e?.definirNivel(nivel as "ok" | "importante" | "critico");
-    e?.redesenhar();
-  }
+  esfera?.definirNivel(nivel as "ok" | "importante" | "critico");
+  esfera?.redesenhar();
+
+  pilaresDoPortao?.definirNivel(nivel as "ok" | "importante" | "critico");
+  pilaresDaChegada?.definirNivel(nivel as "ok" | "importante" | "critico");
 
   // O aviso que segue visível em qualquer aba. Só para crítico: se aparecesse
   // também nos importantes, viraria enfeite permanente e pararia de ser lido —
