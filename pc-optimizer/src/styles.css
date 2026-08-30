@@ -3847,23 +3847,66 @@ button {
 }
 
 .janela-botao {
+  position: relative;
   width: 12px;
   height: 12px;
   padding: 0;
   border: none;
   border-radius: 50%;
   cursor: pointer;
+  transition: filter var(--dur) var(--ease);
 
-  /* Apagados até o ponteiro chegar na fileira. Três bolinhas coloridas gritando
-     no canto competiriam com os indicadores de status do produto, que são a
-     única coisa aqui que a cor deveria estar dizendo. */
-  background: var(--hairline-strong);
-  transition: background var(--dur) var(--ease);
+  /* COLORIDOS SEMPRE, E ISSO DESFAZ UMA DECISÃO ANTERIOR DE PROPÓSITO.
+
+     Eles nasciam cinzas e só acendiam quando o ponteiro chegava na faixa. O
+     argumento era de disciplina de cor: três bolinhas coloridas competiriam
+     com os indicadores de status, que são a única coisa aqui que a cor
+     deveria estar dizendo. O argumento continua correto e mesmo assim perde.
+
+     Como a decoração do Windows está desligada, estes botões são o ÚNICO jeito
+     de fechar o programa com o mouse. Escondidos até o hover, num canto onde
+     quem usa Windows nem olha — porque no Windows o X fica em cima à direita —,
+     o dono do produto precisou perguntar como sair. Se o autor não acha, o
+     cliente não acha.
+
+     Colorido é também o comportamento de verdade do sistema em que eles foram
+     inspirados: lá as bolinhas ficam acesas enquanto a janela está em foco, e
+     apagam quando ela vai para trás. */
+  background: var(--cor-botao);
 }
 
-.janela:hover .janela-fechar { background: #ff5f57; }
-.janela:hover .janela-minimizar { background: #febc2e; }
-.janela:hover .janela-maximizar { background: #28c840; }
+.janela-fechar { --cor-botao: #ff5f57; }
+.janela-minimizar { --cor-botao: #febc2e; }
+.janela-maximizar { --cor-botao: #28c840; }
+
+.janela-botao:hover { filter: brightness(1.25); }
+
+/* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
+
+   Doze pixels é o tamanho certo para a bolinha e é pequeno demais para o alvo:
+   a norma de acessibilidade pede 24 no mínimo, e mesmo sem norma, errar o botão
+   de fechar três vezes seguidas é uma experiência ruim de programa pago.
+
+   O `::after` estica a área sensível sem mexer no que se vê. O crescimento é
+   DESIGUAL de propósito: 6px em cima e embaixo, 4px nas laterais.
+
+   O motivo saiu de um teste de acerto, não de estimativa. Com 6px em todos os
+   lados as áreas invadiam a do vizinho — o vão entre as bolinhas é de 8, e
+   6+6 passa disso. O resultado era pior que o defeito original: quem mirasse
+   em Fechar acertava Minimizar, porque a área de quem vem depois no HTML fica
+   por cima. Errar o botão de fechar é ruim; apertar minimizar achando que
+   fechou é ruim de um jeito que a pessoa nem entende o que houve.
+
+   Com 4px na lateral, 4+4 fecha exatamente os 8 do vão: as áreas encostam e
+   nunca se sobrepõem. Em cima e embaixo não há vizinho nenhum, então os 6px
+   são de graça — e é dali que vem a altura de 24px que a norma de
+   acessibilidade pede. */
+.janela-botao::after {
+  content: "";
+  position: absolute;
+  inset: -6px -4px;
+  border-radius: 50%;
+}
 
 .janela-botao:focus-visible {
   outline: 2px solid var(--accent);
