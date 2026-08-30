@@ -3654,3 +3654,242 @@ button {
 .subpainel[hidden] {
   display: none;
 }
+
+/* ==========================================================================
+   A BARRA DA JANELA
+
+   O Windows desenha a dele com botões grandes no canto direito, numa cor que
+   não é a nossa. Desenhar a própria é o que faz o programa parecer um produto
+   em vez de uma página dentro de uma moldura emprestada.
+
+   Os três círculos à esquerda vêm do macOS de propósito: é a convenção que
+   mais gente reconhece sem legenda, e a ordem — fechar, minimizar, maximizar —
+   é a de lá, não a do Windows. Trocar a ordem para agradar os dois lados
+   deixaria a fileira estranha nos dois.
+   ========================================================================== */
+
+.janela {
+  position: relative;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 var(--s4);
+  flex: none;
+
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+
+  /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
+  user-select: none;
+}
+
+.janela-botoes {
+  display: flex;
+  gap: var(--s2);
+  width: 84px;
+}
+
+.janela-botao {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+
+  /* Apagados até o ponteiro chegar na fileira. Três bolinhas coloridas gritando
+     no canto competiriam com os indicadores de status do produto, que são a
+     única coisa aqui que a cor deveria estar dizendo. */
+  background: var(--hairline-strong);
+  transition: background var(--dur) var(--ease);
+}
+
+.janela:hover .janela-fechar { background: #ff5f57; }
+.janela:hover .janela-minimizar { background: #febc2e; }
+.janela:hover .janela-maximizar { background: #28c840; }
+
+.janela-botao:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.janela-titulo {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Espelha a largura dos botões, para o título ficar centrado de verdade e não
+   deslocado pela fileira da esquerda. */
+.janela-espaco {
+  width: 84px;
+}
+
+/*
+  O CANTO ARREDONDADO, E POR QUE ELE SOME MAXIMIZADO.
+
+  Canto redondo colado na borda do monitor deixa quatro triângulos da área de
+  trabalho aparecendo, e o efeito é de janela mal encaixada.
+*/
+body {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+body.janela-cheia {
+  border-radius: 0;
+}
+
+/* ==========================================================================
+   A ESFERA NO PORTÃO
+
+   Ela vive atrás da coluna da vitrine, sangrando para fora do cartão. É o
+   recurso das referências que o dono trouxe: a imagem em pontos não é um
+   quadro pendurado ao lado do texto, ela é o material da página.
+
+   Fica ATRÁS e apagada porque o texto é que precisa ser lido. Uma imagem que
+   compete com a frase de venda faz as duas perderem.
+   ========================================================================== */
+
+.portao-vitrine {
+  position: relative;
+  overflow: hidden;
+}
+
+.portao-esfera {
+  position: absolute;
+  /* SANGRA PARA FORA DO CARTÃO, e essa é a decisão inteira do
+     posicionamento. Inteira e centrada, ela virava um segundo assunto
+     disputando atenção com o preço e o botão. Cortada pela quina, lê-se como
+     fundo: o cliente registra que tem alguma coisa viva ali sem parar de ler.
+     Só um quarto dela fica dentro. */
+  right: -230px;
+  bottom: -210px;
+  width: 460px;
+  height: 460px;
+  z-index: 0;
+
+  /* Apagada o bastante para o texto passar por cima sem esforço, viva o
+     bastante para se notar que ela se mexe. */
+  opacity: 0.32;
+  pointer-events: none;
+  image-rendering: pixelated;
+
+  /* Some para dentro do cartão, em vez de terminar num corte reto. A borda
+     dura entregaria que é um retângulo colado. */
+  mask-image: radial-gradient(circle at 50% 50%, #000 40%, transparent 70%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 40%, transparent 70%);
+}
+
+/* O conteúdo da vitrine passa por cima da esfera. */
+.portao-vitrine > *:not(.portao-esfera) {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 900px) {
+  /* Em uma coluna a esfera roubaria a altura que o texto precisa. */
+  .portao-esfera { display: none; }
+}
+
+/* ==========================================================================
+   A CHEGADA
+
+   O instante entre colar a chave e usar o programa.
+
+   Tudo aqui é grande, quieto e curto. É a única tela do produto que não tem
+   nada para o cliente decidir — e por isso é a única que pode se dar ao luxo
+   de ser só uma frase e um botão.
+   ========================================================================== */
+
+.chegada {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.chegada[hidden] {
+  display: none;
+}
+
+.chegada-esfera {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+
+  /* Atrás do texto, e apagada. Ela é o pano de fundo do agradecimento, não o
+     assunto dele. */
+  opacity: 0.28;
+  pointer-events: none;
+  image-rendering: pixelated;
+  mask-image: radial-gradient(circle, #000 40%, transparent 72%);
+  -webkit-mask-image: radial-gradient(circle, #000 40%, transparent 72%);
+}
+
+.chegada-texto {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s4);
+  text-align: center;
+  padding: var(--s6);
+}
+
+.chegada-marca {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.chegada-titulo {
+  margin: 0;
+  /* O maior tamanho do produto inteiro, usado uma vez só. Guardar o extremo
+     da escala para um momento único é o que faz ele significar alguma coisa. */
+  font-size: var(--t-huge);
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.chegada-frase {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--t-lead);
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.chegada-botao {
+  margin-top: var(--s3);
+}
+
+/* A entrada. Uma vez, devagar, e nada mais se mexe na tela. */
+.chegada-texto > * {
+  animation: chegar 0.7s var(--ease) both;
+}
+
+.chegada-marca { animation-delay: 0.05s; }
+.chegada-titulo { animation-delay: 0.15s; }
+.chegada-frase { animation-delay: 0.3s; }
+.chegada-botao { animation-delay: 0.45s; }
+
+@keyframes chegar {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}

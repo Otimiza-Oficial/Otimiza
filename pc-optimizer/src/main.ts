@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Esfera } from "./esfera";
+import { ligarBarraDaJanela } from "./janela";
 
 // ---------------------------------------------------------------- contratos
 
@@ -514,6 +515,45 @@ function abrirPortao(estado: EstadoLicenca) {
   element("portao-chave").focus();
 }
 
+/**
+ * A chegada: o instante entre colar a chave e usar o programa.
+ *
+ * Sem isto o portão simplesmente sumia e a pessoa caía no painel — que
+ * funciona, e trata a compra como um formulário que passou.
+ *
+ * O nome vem da própria licença, do campo que o bot preencheu ao emitir. Não há
+ * consulta a lugar nenhum: a chave que ela colou já carrega quem ela é.
+ */
+function mostrarChegada(estado: EstadoLicenca) {
+  const nome = primeiroNome(estado.comprador);
+  const tela = element("chegada");
+
+  text("chegada-titulo", nome ? `Obrigado, ${nome}.` : "Obrigado.");
+
+  text(
+    "chegada-frase",
+    "O Otimiza está liberado neste computador. O diagnóstico já rodou enquanto "
+    + "você ativava — o que ele encontrou está do outro lado deste botão."
+  );
+
+  tela.hidden = false;
+
+  // O console fica inalcançável pelo teclado enquanto esta tela está de pé,
+  // pelo mesmo motivo do portão: o foco não pode passear atrás dela.
+  document.querySelector(".console")?.setAttribute("inert", "");
+
+  element<HTMLButtonElement>("chegada-entrar").focus();
+
+  element("chegada-entrar").onclick = () => {
+    tela.hidden = true;
+    document.querySelector(".console")?.removeAttribute("inert");
+
+    // A pessoa acabou de comprar por causa de um problema. Levar direto ao
+    // Painel é levar ao veredito — a resposta pela qual ela pagou.
+    showTab("painel");
+  };
+}
+
 function fecharPortao() {
   element("portao").hidden = true;
   portaoAberto = false;
@@ -559,12 +599,7 @@ function ligarBotoesDoPortao() {
       const estado = await invoke<EstadoLicenca>("licenca_ativar", { chave });
       botao.textContent = "Ativado";
       fecharPortao();
-
-      setStatus(
-        "optimization-status",
-        `Otimiza ativado${estado.comprador ? ` para ${estado.comprador}` : ""}.`,
-        "ok"
-      );
+      mostrarChegada(estado);
     } catch (falha) {
       erro.hidden = false;
       erro.textContent = String(falha);
@@ -616,13 +651,61 @@ function mostrarAchadoNoPortao(v: Veredito) {
  */
 let esfera: Esfera | null = null;
 
+/**
+ * As outras duas esferas: a do portão e a da chegada.
+ *
+ * São instâncias separadas e não a mesma reaproveitada, porque um `<canvas>`
+ * desenha num lugar só. O custo é o mesmo desenho três vezes — mas só uma
+ * delas está visível de cada vez, e as outras nem são ligadas.
+ */
+let esferaDoPortao: Esfera | null = null;
+let esferaDaChegada: Esfera | null = null;
+
+/**
+ * Repassa uma medição para todas as esferas que existirem.
+ *
+ * Sem isto, a do portão ficaria parada no estado "não medido" enquanto a do
+ * painel já mostrava a máquina — e as duas telas mostrariam computadores
+ * diferentes.
+ */
+function alimentarEsferas(leitura: Parameters<Esfera["atualizar"]>[0]) {
+  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) {
+    e?.atualizar(leitura);
+    e?.redesenhar();
+  }
+}
+
+/**
+ * Tira o nome de quem comprou, do jeito que o bot gravou na licença.
+ *
+ * O bot emite com `comprador` no formato `fulano#1234 (1234567890)`. O
+ * identificador numérico não diz nada para a pessoa — ela quer ver o nome
+ * dela, não o número dela.
+ */
+function primeiroNome(comprador: string | null): string | null {
+  if (!comprador) return null;
+
+  const semId = comprador.replace(/\s*\([0-9]+\)\s*$/, "").trim();
+  const semTag = semId.replace(/#\d{4}$/, "").trim();
+
+  // Nome de teste, ou vazio, não vira saudação. "Obrigado, conferencia" seria
+  // pior do que só "Obrigado".
+  if (!semTag || semTag.length < 2 || /^conferencia$/i.test(semTag)) return null;
+
+  return semTag.split(/\s+/)[0];
+}
+
 window.addEventListener("DOMContentLoaded", async () => {
   // O portão primeiro, e com `await`: se este computador não está ativado, a
   // tela de compra precisa estar de pé antes de o console aparecer por um
   // quadro que seja.
   await montarPortao();
 
+  ligarBarraDaJanela();
+
   esfera = new Esfera(element<HTMLCanvasElement>("veredito-esfera"));
+  esferaDoPortao = new Esfera(element<HTMLCanvasElement>("portao-esfera"));
+  esferaDaChegada = new Esfera(element<HTMLCanvasElement>("chegada-esfera"));
 
   // Em desenvolvimento a esfera fica alcancavel pelo console, para dar para
   // conferir o desenho com valores escolhidos a mao. Em producao o app roda de
@@ -717,7 +800,7 @@ async function ajustarMovimento() {
   // Num PC fraco ela desenha um quadro e para. É a mesma imagem, e o custo é
   // pago uma vez — um otimizador que engasga na própria interface se desmente
   // antes de aplicar a primeira otimização.
-  esfera?.ligar();
+  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) e?.ligar();
 
   // O multiplicador global de movimento.
   //
@@ -1027,13 +1110,12 @@ function renderMetrics(metrics: PerformanceMetrics) {
   // É o que separa ela de um enfeite: cada propriedade do desenho — quantos
   // pontos, o quanto vibram, quantos buracos, a cor — sai de um número que
   // acabou de ser lido desta máquina.
-  esfera?.atualizar({
+  alimentarEsferas({
     nucleos: metrics.cpu.per_core.length,
     cpu,
     memoria: metrics.ram.usage_percent,
     nivel: (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok",
   });
-  esfera?.redesenhar();
 
   text("cpu-value", cpu.toFixed(0));
   text("cpu-freq", `${metrics.cpu.frequency.toFixed(0)} MHz · ${metrics.cpu.per_core.length} núcleos`);
@@ -2906,8 +2988,10 @@ function aplicarVeredito(v: Veredito) {
   // próxima leitura do monitor — o diagnóstico é a informação mais importante
   // da tela e não pode chegar em duas velocidades, e uma frase vermelha ao lado
   // de uma esfera neutra faz o cliente duvidar das duas.
-  esfera?.definirNivel(nivel as "ok" | "importante" | "critico");
-  esfera?.redesenhar();
+  for (const e of [esfera, esferaDoPortao, esferaDaChegada]) {
+    e?.definirNivel(nivel as "ok" | "importante" | "critico");
+    e?.redesenhar();
+  }
 
   // O aviso que segue visível em qualquer aba. Só para crítico: se aparecesse
   // também nos importantes, viraria enfeite permanente e pararia de ser lido —

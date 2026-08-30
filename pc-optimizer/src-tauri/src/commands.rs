@@ -1770,4 +1770,41 @@ mod tests {
             achados, classificados
         );
     }
+
+    /// A BARRA DA JANELA É DESENHADA POR NÓS, E ISSO TEM UM PREÇO EM PERMISSÃO.
+    ///
+    /// Com `decorations: false` o Windows não desenha mais fechar, minimizar e
+    /// maximizar: quem faz isso é o nosso HTML, chamando comandos do Tauri. E
+    /// no Tauri 2 todo comando precisa estar declarado em
+    /// `capabilities/default.json` — o que não está declarado falha CALADO, sem
+    /// erro na tela.
+    ///
+    /// Foi exatamente assim que o duplo-clique para maximizar nasceu quebrado:
+    /// ele fala por um comando separado (`internal_toggle_maximize`), e a
+    /// permissão dele não é a mesma do botão de maximizar.
+    ///
+    /// Um botão de janela que não faz nada é o tipo de defeito que ninguém
+    /// reporta e todo mundo sente. Esta guarda existe para ele não voltar.
+    #[test]
+    fn a_barra_da_janela_tem_todas_as_permissoes_que_usa() {
+        let permissoes = include_str!("../capabilities/default.json");
+
+        for comando in [
+            // Os três botões.
+            "core:window:allow-close",
+            "core:window:allow-minimize",
+            "core:window:allow-toggle-maximize",
+            // Arrastar a barra, e o duplo-clique nela.
+            "core:window:allow-start-dragging",
+            "core:window:allow-internal-toggle-maximize",
+            // Saber se está maximizada, para tirar o canto arredondado.
+            "core:window:allow-is-maximized",
+        ] {
+            assert!(
+                permissoes.contains(comando),
+                "a barra da janela usa `{}` e a permissão não está declarada;                  o botão vai falhar sem dizer nada",
+                comando
+            );
+        }
+    }
 }

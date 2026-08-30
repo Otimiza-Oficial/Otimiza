@@ -34,6 +34,20 @@
       <div class="portao-caixa">
         <div class="portao-colunas">
           <div class="portao-vitrine">
+            <!--
+                A ESFERA COMO HERÓI DA TELA DE ATIVAÇÃO.
+
+              É a mesma do painel, com as mesmas medições: enquanto a pessoa lê a
+              oferta, o diagnóstico já rodou e ela está vendo o próprio
+              computador desenhado — não uma ilustração de estoque.
+
+              Foi de propósito que ela ficou no LADO DA COMPRA, e não no da chave.
+              Quem chega aqui sem ter comprado precisa entender que o programa já
+              olhou a máquina dele; quem já tem a chave só quer o campo.
+            -->
+            <canvas class="portao-esfera" id="portao-esfera"
+                    width="420" height="420" aria-hidden="true"></canvas>
+
             <span class="portao-marca">Otimiza</span>
 
             <h1 class="portao-titulo" id="portao-titulo">
@@ -116,6 +130,72 @@
             </p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!--
+      A BARRA DA JANELA.
+
+      O Windows desenha a dele com botões enormes no canto direito, numa cor
+      que não é a nossa. Desligar a decoração (`decorations: false`) e desenhar
+      a própria é o que faz o programa parecer um produto e não uma página
+      dentro de uma moldura emprestada.
+
+      O preço: arrastar, minimizar, maximizar e fechar passam a ser nossa
+      responsabilidade. É pouco código e está todo em `janela.ts`.
+
+      `data-tauri-drag-region` é o que transforma a faixa em área de arrastar —
+      sem ele a janela ficaria presa no lugar.
+
+      O valor é `deep`, e não o atributo pelado, por um motivo medido no código
+      do próprio Tauri: pelado, ele só arrasta em cliques DIRETOS no elemento.
+      Os vãos entre os botões e a faixa vazia da direita — que é justamente
+      onde se pega uma janela — ficariam mortos. Com `deep` a barra inteira
+      arrasta, e os botões continuam clicando porque o Tauri desiste do arrasto
+      assim que encontra um `<button>` no caminho do clique.
+
+      O duplo-clique para maximizar também vem do Tauri, e ele fala por um
+      comando SEPARADO (`internal_toggle_maximize`), com permissão própria em
+      `capabilities/default.json`. Sem ela o duplo-clique falha calado.
+    -->
+    <header class="janela" data-tauri-drag-region="deep">
+      <div class="janela-botoes">
+        <button class="janela-botao janela-fechar" id="janela-fechar"
+                type="button" title="Fechar" aria-label="Fechar"></button>
+        <button class="janela-botao janela-minimizar" id="janela-minimizar"
+                type="button" title="Minimizar" aria-label="Minimizar"></button>
+        <button class="janela-botao janela-maximizar" id="janela-maximizar"
+                type="button" title="Maximizar" aria-label="Maximizar"></button>
+      </div>
+
+      <span class="janela-titulo">Otimiza</span>
+
+      <!-- Espelha a largura dos botões, para o título ficar no meio de verdade. -->
+      <div class="janela-espaco" aria-hidden="true"></div>
+    </header>
+
+    <!--
+      A CHEGADA.
+
+      O instante entre colar a chave e usar o programa. Sem isto, o portão
+      simplesmente some e a pessoa cai no painel — que funciona, mas trata a
+      compra como um formulário que passou.
+
+      Ela pagou. O mínimo é o programa reconhecer quem chegou, pelo nome, uma
+      vez. O nome vem da própria licença, no campo que o bot preencheu na hora
+      de emitir — não há consulta a lugar nenhum.
+    -->
+    <section class="chegada" id="chegada" hidden aria-live="polite">
+      <canvas class="chegada-esfera" id="chegada-esfera"
+              width="520" height="520" aria-hidden="true"></canvas>
+
+      <div class="chegada-texto">
+        <p class="chegada-marca">Otimiza</p>
+        <h1 class="chegada-titulo" id="chegada-titulo">Obrigado.</h1>
+        <p class="chegada-frase" id="chegada-frase"></p>
+        <button class="btn btn-primary chegada-botao" id="chegada-entrar" type="button">
+          Ver o que este PC precisa
+        </button>
       </div>
     </section>
 
