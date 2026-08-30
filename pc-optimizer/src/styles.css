@@ -232,67 +232,43 @@ body {
   pointer-events: none;
   overflow: hidden;
   background-color: var(--bg);
-
-  /* Malha técnica: densa o suficiente para dar textura, fraca o suficiente
-     para nunca competir com os dados. Estava no `body` até a versão 0.15. */
-  background-image:
-    linear-gradient(rgba(var(--accent-rgb), 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--accent-rgb), 0.025) 1px, transparent 1px);
-  background-size: 48px 48px;
 }
 
-/* As manchas de luz. `inset` negativo dá folga para a deriva nunca revelar a
+/* As manchas de luz sutis. `inset` negativo dá folga para a deriva nunca revelar a
    borda da camada. */
 .fundo::before {
   content: "";
   position: absolute;
   inset: -30%;
   background:
-    radial-gradient(circle at 25% 20%, rgba(var(--green-rgb), 0.14), transparent 55%),
-    radial-gradient(circle at 75% 15%, rgba(var(--accent-rgb), 0.08), transparent 60%),
-    radial-gradient(ellipse at 65% 85%, rgba(var(--amber-rgb), 0.06), transparent 65%),
-    radial-gradient(ellipse at 35% 75%, rgba(var(--green-rgb), 0.05), transparent 70%);
+    radial-gradient(ellipse at 20% 30%, rgba(var(--accent-rgb), 0.12), transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(var(--amber-rgb), 0.08), transparent 55%),
+    radial-gradient(ellipse at 60% 80%, rgba(var(--accent-rgb), 0.06), transparent 60%);
   will-change: transform;
-
-  /* `--anim` é o multiplicador global de movimento, e aqui ele finalmente é
-     lido — até a versão 0.15 a variável existia e ninguém a usava. Dividir a
-     duração por ele permite um degrau intermediário: em 0.35 o ciclo passa de
-     90s para 257s, um movimento que existe e não chama atenção. */
-  animation: derivar-fundo calc(120s / var(--anim, 1)) ease-in-out infinite alternate;
+  animation: derivar-fundo calc(140s / var(--anim, 1)) ease-in-out infinite alternate;
 }
 
 @keyframes derivar-fundo {
   0% {
-    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    transform: translate3d(0, 0, 0) scale(1);
   }
-  33% {
-    transform: translate3d(4%, -3%, 0) scale(1.08) rotate(1deg);
-  }
-  66% {
-    transform: translate3d(-3%, 2%, 0) scale(1.05) rotate(-0.5deg);
+  50% {
+    transform: translate3d(3%, -2%, 0) scale(1.05);
   }
   100% {
-    transform: translate3d(2%, -2.5%, 0) scale(1.06) rotate(0.5deg);
+    transform: translate3d(-2%, 2%, 0) scale(1.03);
   }
 }
 
-/* O grão.
-
-   `feTurbulence` é ruído calculado pixel a pixel. Gerar isso em tela cheia
-   custa dezenas de milissegundos de processador na abertura; gerar num bloco
-   de 160 pixels e deixar a repetição cuidar do resto custa uma fração disso, e
-   ninguém distingue a olho — grão não tem forma reconhecível.
-
-   `stitchTiles='stitch'` não é enfeite: sem ele a emenda entre os blocos
-   aparece como uma grade. */
+/* O grão sutil para dar textura sem criar grade. */
 .fundo::after {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.35;
-  background-size: 180px 180px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='.28'/%3E%3C/svg%3E");
-  mix-blend-mode: soft-light;
+  opacity: 0.25;
+  background-size: 200px 200px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)' opacity='.2'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
 }
 
 /* Parado, o fundo continua inteiro — as manchas ficam onde estão e o grão não
