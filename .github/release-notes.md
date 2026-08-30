@@ -18,69 +18,80 @@ depois em *Executar assim mesmo*.
 
 ---
 
-# O diagnóstico ficou 5 vezes mais rápido
+# 0.28.0 — o Otimiza virou um produto
 
-A versão passada abria em 31 segundos e as notas diziam, com todas as letras,
-que aquilo ainda era muito. **Agora são 6.**
+Esta página cobre tudo o que mudou desde a 0.17.
 
-## O que estava acontecendo
+## A chave
 
-A suspeita era que as consultas ao Windows fossem lentas. Medimos, e não eram.
+O diagnóstico continua livre. Ele roda inteiro, mede tudo e mostra o que achou
+sem pedir nada. **O que a chave libera são as correções.**
 
-Abrir um `powershell.exe` **vazio** — um processo que só executa `1` e termina —
-custava **2,26 segundos** nesta máquina de teste. E o programa abria dez deles
-para montar o diagnóstico inicial.
+A chave é presa a um computador só. O código dele — `OTZ-XXXX-XXXX-XXXX` —
+nasce do número de série da placa-mãe, e aparece na primeira tela do programa
+com um botão de copiar ao lado.
 
-Vinte e dois dos trinta e um segundos eram o Windows subindo o PowerShell, dez
-vezes seguidas. A consulta em si era praticamente de graça: os módulos que
-faziam uma única chamada custavam exatamente os 2,26 segundos do processo, nem
-um décimo a mais.
+**Formatar o Windows não muda esse código.** Trocar a placa-mãe muda; nesse caso
+a chave é reemitida sem custo.
 
-## O conserto
+### O que a chave não faz
 
-Em vez de um processo por consulta, o programa mantém **um** vivo e conversa com
-ele. O custo é pago uma vez.
+Ela não impede pirataria. Nenhuma licença que roda no computador do cliente
+impede — quem editar o executável passa, e isso vale para qualquer programa
+vendido assim. O que ela impede é o repasse casual: a chave que abre o seu PC
+não abre o do vizinho.
 
-| | Antes | Agora |
-|---|---|---|
-| Saúde do disco e bateria | 11,5 s | 0,59 s |
-| Memória e paginação | 5,4 s | 0,23 s |
-| Firmware e memória instalada | 4,7 s | 0,06 s |
-| Registro de eventos | 3,8 s | 0,50 s |
-| Monitor | 2,3 s | 0,15 s |
-| Placa de vídeo por jogo | 2,3 s | 0,04 s |
-| **Diagnóstico completo** | **31 s** | **6 s** |
+Vale dizer isso agora e não deixar você descobrir depois.
 
-Nenhum módulo precisou ser reescrito para isso. A mudança vive num arquivo só,
-e quem chama nem sabe que a sessão existe.
+## A interface, refeita
 
-## Uma armadilha que o conserto criou, e que foi trancada
+O programa passou a desenhar a própria janela, com os botões no canto e o título
+no meio. O fundo é preto de verdade — em monitor OLED, que é o que boa parte de
+quem joga usa, preto puro é pixel desligado.
 
-A codificação de texto tem dois lados, e a sessão só resolvia um.
+A tela de ativação e a de agradecimento são novas. As duas mostram **os três
+pilares**: uma coluna para o processador, uma para a memória e uma para o disco,
+cada uma se desfazendo conforme a medição da peça que ela representa. Não é
+enfeite — é o seu computador desenhado com os números que acabaram de ser lidos.
 
-A **saída** vem certa. A **entrada** não: o PowerShell lê o que recebe usando a
-página de código do console, e não há como corrigir isso de dentro — quando a
-primeira linha chega, ele já leu com a página errada. Um script contendo
-"Ação" chegava lá dentro como "A├º├úo", e o estrago acontecia antes de o script
-rodar.
+Sete abas viraram seis e três cartões que respondiam a mesma pergunta viraram
+um.
 
-O pior dessa falha é que ela **não quebra**: devolve um resultado errado com
-cara de certo.
+## Correções
 
-Qualquer script com acento passa agora pelo caminho antigo, mais lento e
-correto. Custa a lentidão de um processo nos poucos casos em que isso acontece,
-e elimina a classe inteira de corrupção por construção — não por auditoria dos
-scripts de hoje, que poderia envelhecer.
+| O que estava errado | O que acontecia |
+|---|---|
+| Os botões da janela tinham 12px e ficavam cinzas | Não se achava como fechar o programa |
+| O número dos medidores ficava longe do rótulo | Lia-se "19% MEMÓRIA" como par, e cada número parecia do vizinho |
+| A bolinha de contagem empurrava o ícone da lateral | Nenhum ícone ficava no centro |
+| `hidden` não escondia nada no CSS | Elementos escondidos apareciam vazios, como bolas brancas soltas |
+| A rolagem estava travada | Conteúdo longo não descia |
+| O nome do comprador saía com o código da compra colado | A tela de agradecimento mostrava "Obrigado, fulano.." |
 
-Três testes novos trancam isso: que script com acento não usa a sessão, que a
-sessão devolve exatamente o mesmo que o processo avulso, e que um script que
-quebra continua sendo reportado como falha — porque a diferença entre "não há
-dado" e "a consulta falhou" é a distinção em que este produto inteiro se apoia.
+O catálogo cresceu para o tamanho do que o mercado oferece, e cada item novo
+entrou com a etiqueta honesta: o que muda FPS está marcado como tal, e o que é
+higiene de Windows diz que é higiene de Windows. Os itens que trocam segurança
+por desempenho ficam fora do botão automático, com o risco escrito e confirmação
+própria.
+
+## Atualizações
+
+Quem comprou tem direito às versões seguintes — a chave não vence e não está
+presa a versão nenhuma. Quando sair uma nova, o bot do Discord avisa por mensagem
+direta com o link.
+
+O instalador tem agora um endereço fixo que sempre aponta para a versão mais
+nova, então o link que você guardar hoje continua valendo daqui a seis meses.
 
 ---
 
 ## O que esta versão não promete
 
-Velocidade de abertura não é FPS. O que move o número no jogo continua sendo a
-configuração dele e o hardware — e o programa continua dizendo isso na primeira
-coisa que você lê, agora cinco vezes mais rápido.
+**O catálogo maior não cria FPS.** A maior parte dos itens que entraram é higiene
+de Windows, e cada linha continua dizendo isso sobre si mesma. O que move o
+número no jogo continua sendo a configuração dele e o hardware.
+
+**O "editor desconhecido" continua aparecendo.** O aviso do SmartScreen, lá em
+cima, não é frescura do Windows: é ele dizendo, com razão, que não sabe quem
+publicou este instalador. Resolver isso é comprar um certificado de assinatura,
+e essa compra ainda não foi feita.
