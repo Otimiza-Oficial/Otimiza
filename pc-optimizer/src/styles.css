@@ -383,27 +383,6 @@ button {
 .stage {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--hairline-strong) transparent;
-}
-
-.stage::-webkit-scrollbar {
-  width: 10px;
-}
-
-.stage::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.stage::-webkit-scrollbar-thumb {
-  background: var(--hairline-strong);
-  border-radius: 5px;
-}
-
-.stage::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
 }
 
 .tab-panel {
@@ -2378,7 +2357,6 @@ button {
   gap: var(--gap);
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 .corpo[data-recolhida="true"] {
@@ -2928,8 +2906,6 @@ button {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
-  flex: 1;
-  overflow: hidden;
 }
 
 .secao-cabecalho {
@@ -3898,7 +3874,6 @@ button {
 */
 body {
   border-radius: 10px;
-  overflow: hidden;
 }
 
 body.janela-cheia {
