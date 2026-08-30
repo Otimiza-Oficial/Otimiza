@@ -1784,19 +1784,37 @@ button {
   contato com o que a máquina está fazendo agora — é isso que separa um console
   de um formulário com páginas.
 */
+/*
+  OS MEDIDORES DO TOPO
+
+  Eles seguem visíveis em qualquer aba: trocar de seção não pode significar
+  perder de vista o que a máquina está fazendo agora.
+
+  DUAS COISAS ESTAVAM ERRADAS, e as duas eram a mesma causa — os medidores
+  eram tratados como texto, e não como instrumento:
+
+  1. A largura vinha do conteúdo, então cada barra tinha um comprimento
+     diferente. Três barras de comprimentos diferentes não se comparam de
+     relance, que é a única coisa que elas existem para permitir.
+
+  2. Ficavam centralizados, flutuando num vão entre a busca e o selo de acesso.
+     Instrumento se lê na borda, ancorado, não no meio do nada.
+*/
 .vitals {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(84px, 128px));
+  display: flex;
   gap: var(--s5);
-  flex: 1;
-  justify-content: center;
+  margin-left: auto;
 }
 
 .vital {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 3px var(--s2);
-  min-width: 0;
+  align-items: baseline;
+  gap: 5px var(--s3);
+
+  /* LARGURA FIXA. É o que faz as três barras serem comparáveis, e é o que
+     impede o número mais longo de empurrar os vizinhos. */
+  width: 124px;
 }
 
 .vital-label {
@@ -1804,19 +1822,26 @@ button {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .vital-value {
+  font-family: var(--font-mono);
   font-size: var(--t-body);
+  /* Dígito de largura fixa: sem isto o valor treme a cada leitura, e número
+     que treme parece instável mesmo com a medição estável. */
   font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
   color: var(--text);
 }
 
 .vital-bar {
   grid-column: 1 / -1;
-  height: 2px;
+  height: 3px;
   background: var(--track);
+  border-radius: 2px;
+  overflow: hidden;
 }
 
 .vital-bar i {
@@ -1824,7 +1849,23 @@ button {
   height: 100%;
   width: 0;
   background: var(--accent);
-  transition: width 0.5s ease, background 0.5s ease;
+  transition: width 0.5s var(--ease), background 0.5s var(--ease);
+}
+
+/*
+  A COR DIZ O ESTADO, E SÓ QUANDO HÁ ESTADO A DIZER.
+
+  Abaixo de 75% a barra fica neutra. Pintar tudo — inclusive o normal — faz a
+  cor perder o significado justamente quando ela precisa avisar.
+*/
+.vital[data-nivel="atencao"] .vital-bar i { background: var(--amber); }
+.vital[data-nivel="critico"] .vital-bar i { background: var(--red); }
+.vital[data-nivel="critico"] .vital-value { color: var(--red); }
+
+@media (max-width: 1180px) {
+  /* Em janela estreita o disco sai primeiro: é o que muda mais devagar, e
+     portanto o que menos se perde deixando de ver. */
+  .vital:last-child { display: none; }
 }
 
 /* ----------------------------------------------------------- preferências */
@@ -2938,6 +2979,34 @@ button {
 .panel-veredito[data-nivel="critico"] .veredito-marca { background-color: var(--red); }
 .panel-veredito[data-nivel="importante"] .veredito-marca { background-color: var(--amber); }
 .panel-veredito[data-nivel="ok"] .veredito-marca { background-color: var(--green); }
+
+/*
+  A ESFERA — a máquina desenhada com as próprias medições.
+
+  Fica à ESQUERDA do texto e não à direita, e a ordem importa: em português se
+  lê da esquerda para a direita, então ela é a primeira coisa que o olho
+  encontra ao entrar no painel. É a abertura da frase, não a ilustração no fim
+  dela.
+
+  Ela some em janela estreita. Não por ser supérflua, mas porque a frase do
+  veredito é o que precisa ser lido — e num notebook de 1366 de largura, dividir
+  a linha com uma imagem de 220 pixels espremeria o texto que carrega o número.
+*/
+.veredito-esfera {
+  flex: 0 0 220px;
+  width: 220px;
+  height: 220px;
+  align-self: center;
+  margin-left: var(--s5);
+
+  /* O ponto é desenhado como retângulo de 1 a 2 pixels. Suavizar transformaria
+     a nuvem num borrão cinza. */
+  image-rendering: pixelated;
+}
+
+@media (max-width: 1240px) {
+  .veredito-esfera { display: none; }
+}
 
 .veredito-corpo {
   flex: 1 1 auto;

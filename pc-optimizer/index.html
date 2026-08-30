@@ -241,13 +241,16 @@
             <span class="tab-badge" id="badge-sistema" hidden></span>
           </button>
 
-          <div class="lateral-rodape">
-            <button class="nav nav-secundario" id="abrir-comandos">
-              <span class="nav-icone" data-icone="comandos" aria-hidden="true"></span>
-              <span class="nav-rotulo">Buscar ação</span>
-              <kbd class="nav-atalho">Ctrl K</kbd>
-            </button>
-          </div>
+          <!--
+            A BUSCA SAIU DAQUI.
+
+            Ela existia em dois lugares ao mesmo tempo: aqui e no topo. Mesma
+            ação, mesmo atalho, duas portas — e a tela toda inteira dizia, em
+            dois pontos diferentes, a mesma coisa.
+
+            Ficou a do topo, porque é onde as pessoas procuram busca. O Ctrl K
+            continua funcionando de qualquer lugar.
+          -->
         </nav>
 
         <div class="palco">
@@ -285,6 +288,25 @@
           -->
           <section class="panel panel-veredito" id="veredito" aria-live="polite">
             <div class="veredito-marca" id="veredito-marca" aria-hidden="true"></div>
+
+            <!--
+              A MÁQUINA, DESENHADA COM AS PRÓPRIAS MEDIÇÕES.
+
+              Uma nuvem de pontos em forma de esfera, onde cada propriedade sai
+              de uma leitura de verdade: quantos pontos vêm dos núcleos, o quanto
+              vibram vem do uso de CPU, os buracos no casco vêm da memória
+              ocupada, e a cor vem do veredito.
+
+              Não é enfeite, e não podia ser: numa tela cuja regra fundadora é
+              nunca mostrar número que não foi medido, uma imagem inventada
+              contradiz o produto em silêncio.
+
+              `aria-hidden` porque ela não acrescenta informação que o texto ao
+              lado já não diga — quem usa leitor de tela não perde nada.
+            -->
+            <canvas class="veredito-esfera" id="veredito-esfera"
+                    width="260" height="260" aria-hidden="true"></canvas>
+
             <div class="veredito-corpo">
               <p class="veredito-rotulo" id="veredito-rotulo">Analisando esta máquina…</p>
               <h2 class="veredito-frase" id="veredito-frase">

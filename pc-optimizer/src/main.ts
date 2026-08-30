@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Esfera } from "./esfera";
 
 // ---------------------------------------------------------------- contratos
 
@@ -607,11 +608,28 @@ function mostrarAchadoNoPortao(v: Veredito) {
   text("portao-achado-detalhe", v.detalhe);
 }
 
+/**
+ * A esfera do veredito — a máquina desenhada com as próprias medições.
+ *
+ * Uma só instância: ela vive enquanto o programa vive, e recebe cada leitura
+ * nova do monitor.
+ */
+let esfera: Esfera | null = null;
+
 window.addEventListener("DOMContentLoaded", async () => {
   // O portão primeiro, e com `await`: se este computador não está ativado, a
   // tela de compra precisa estar de pé antes de o console aparecer por um
   // quadro que seja.
   await montarPortao();
+
+  esfera = new Esfera(element<HTMLCanvasElement>("veredito-esfera"));
+
+  // Em desenvolvimento a esfera fica alcancavel pelo console, para dar para
+  // conferir o desenho com valores escolhidos a mao. Em producao o app roda de
+  // `tauri://`, e esta linha nao acontece.
+  if (location.hostname.startsWith("localhost")) {
+    (window as unknown as { esfera?: Esfera }).esfera = esfera;
+  }
 
   wireControls();
   ligarSubabas();
@@ -693,6 +711,13 @@ async function ajustarMovimento() {
 
   const parado = sistemaPedeCalma || maquinaFraca;
   document.body.classList.toggle("sem-animacao", parado);
+
+  // A ESFERA OBEDECE AO MESMO INTERRUPTOR.
+  //
+  // Num PC fraco ela desenha um quadro e para. É a mesma imagem, e o custo é
+  // pago uma vez — um otimizador que engasga na própria interface se desmente
+  // antes de aplicar a primeira otimização.
+  esfera?.ligar();
 
   // O multiplicador global de movimento.
   //
@@ -997,6 +1022,19 @@ function renderMetrics(metrics: PerformanceMetrics) {
   text("vital-disk", `${metrics.disk.usage_percent.toFixed(0)}%`);
   setBar("vital-disk-bar", metrics.disk.usage_percent);
 
+  // A ESFERA RECEBE A MEDIÇÃO.
+  //
+  // É o que separa ela de um enfeite: cada propriedade do desenho — quantos
+  // pontos, o quanto vibram, quantos buracos, a cor — sai de um número que
+  // acabou de ser lido desta máquina.
+  esfera?.atualizar({
+    nucleos: metrics.cpu.per_core.length,
+    cpu,
+    memoria: metrics.ram.usage_percent,
+    nivel: (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok",
+  });
+  esfera?.redesenhar();
+
   text("cpu-value", cpu.toFixed(0));
   text("cpu-freq", `${metrics.cpu.frequency.toFixed(0)} MHz · ${metrics.cpu.per_core.length} núcleos`);
   text("core-count", `${metrics.cpu.per_core.length} lógicos`);
@@ -1068,10 +1106,28 @@ function loadColor(percent: number): string {
   return "var(--cyan)";
 }
 
+/**
+ * Atualiza um medidor do topo.
+ *
+ * A COR VEM DO CSS, e nao de um `style.background` daqui. O motivo e concreto:
+ * pintar tudo — inclusive o normal — fazia a cor perder o significado
+ * justamente quando ela precisava avisar. Agora so o âmbar e o vermelho
+ * carregam informacao, e quem decide isso e uma regra de folha de estilo que
+ * da para ler num lugar so.
+ */
 function setBar(id: string, percent: number) {
   const bar = element(id);
-  bar.style.width = `${Math.min(100, Math.max(0, percent))}%`;
-  bar.style.background = loadColor(percent);
+  const valor = Math.min(100, Math.max(0, percent));
+
+  bar.style.width = `${valor}%`;
+
+  const medidor = bar.closest(".vital") as HTMLElement | null;
+  if (!medidor) return;
+
+  // Os mesmos degraus do resto do produto: 75 e 90.
+  if (valor >= 90) medidor.dataset.nivel = "critico";
+  else if (valor >= 75) medidor.dataset.nivel = "atencao";
+  else delete medidor.dataset.nivel;
 }
 
 /**
@@ -2846,6 +2902,13 @@ function aplicarVeredito(v: Veredito) {
   // E, quando o portão está de pé, o mesmo achado aparece na tela de compra.
   mostrarAchadoNoPortao(v);
 
+  // A esfera acompanha o veredito: neutra, âmbar ou vermelha. Sem esperar a
+  // próxima leitura do monitor — o diagnóstico é a informação mais importante
+  // da tela e não pode chegar em duas velocidades, e uma frase vermelha ao lado
+  // de uma esfera neutra faz o cliente duvidar das duas.
+  esfera?.definirNivel(nivel as "ok" | "importante" | "critico");
+  esfera?.redesenhar();
+
   // O aviso que segue visível em qualquer aba. Só para crítico: se aparecesse
   // também nos importantes, viraria enfeite permanente e pararia de ser lido —
   // que é o destino de todo alerta que está sempre ligado.
@@ -3806,7 +3869,8 @@ function wireComandos(secoes: HTMLButtonElement[]) {
       : `<p class="empty">Nada encontrado.</p>`;
   }
 
-  element("abrir-comandos").addEventListener("click", abrir);
+  // Um caminho so para a busca. O botao da lateral saiu: a mesma acao em dois
+  // lugares da tela obriga a pessoa a escolher entre portas identicas.
   element("abrir-comandos-topo").addEventListener("click", abrir);
 
   document.addEventListener("keydown", (event) => {
