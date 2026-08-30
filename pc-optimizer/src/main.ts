@@ -714,14 +714,30 @@ function alimentarPilares(leitura: Parameters<Pilares["atualizar"]>[0]) {
 function primeiroNome(comprador: string | null): string | null {
   if (!comprador) return null;
 
-  const semId = comprador.replace(/\s*\([0-9]+\)\s*$/, "").trim();
-  const semTag = semId.replace(/#\d{4}$/, "").trim();
+  // O QUE VEM ENTRE PARÊNTESES É O CÓDIGO DA COMPRA, E ELE NÃO É SÓ NÚMERO.
+  //
+  // Esta limpeza procurava `(só dígitos)`, supondo o identificador do Discord.
+  // O bot emite outra coisa: `fulano (CMP-2026-000004)`. Com letras e traços no
+  // meio, a expressão nunca casava e o código ficava colado no nome. O que
+  // salvava era o `split` lá embaixo, por acidente — e ele deixaria de salvar
+  // no dia em que alguém se chamasse "Ana Paula".
+  const semCodigo = comprador.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const semTag = semCodigo.replace(/#\d{4}$/, "").trim();
 
   // Nome de teste, ou vazio, não vira saudação. "Obrigado, conferencia" seria
   // pior do que só "Obrigado".
   if (!semTag || semTag.length < 2 || /^conferencia$/i.test(semTag)) return null;
 
-  return semTag.split(/\s+/)[0];
+  const primeiro = semTag.split(/\s+/)[0];
+
+  // PONTUAÇÃO NO FIM DO NOME SAI, SENÃO A FRASE GANHA DOIS PONTOS.
+  //
+  // A tela monta "Obrigado, {nome}." — e apelido do Discord pode terminar em
+  // pontuação. Um comprador de verdade chamado "exaggerateyourdreams." vira
+  // "Obrigado, exaggerateyourdreams..", que parece defeito porque é.
+  const limpo = primeiro.replace(/[.,;:!?]+$/, "");
+
+  return limpo.length >= 2 ? limpo : null;
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
