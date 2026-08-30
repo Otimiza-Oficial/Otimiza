@@ -221,32 +221,9 @@ body {
 }
 
 
-/* ============================================================== O FUNDO
-
-   Três camadas empilhadas num elemento só, atrás de toda a interface.
-
-   POR QUE NÃO É WEBGL
-
-   A referência que o dono trouxe (reactbits.dev) desenha fundos assim com
-   shader em WebGL2, rodando a 60 quadros por segundo. Num otimizador de PC
-   isso é o produto gastando GPU para se enfeitar — e no notebook fraco, que é
-   justamente o público, gastando bateria também. É o mesmo argumento pelo qual
-   este projeto recusou o GSAP.
-
-   O que se anima aqui é `transform`, e só. O navegador resolve isso no
-   compositor, sem repintar nada: os gradientes são desenhados UMA vez numa
-   textura e depois só deslizam. Custo por quadro em CPU: zero.
-
-   O QUE FOI RECUSADO, E POR QUÊ
-
-   `filter: blur()` — a tentação óbvia para deixar as manchas difusas. Ele
-   força repintura de tela cheia, e num PC sem aceleração vira custo por
-   quadro. `radial-gradient` já nasce difuso: o desfoque seria pagar caro por
-   algo que a ferramenta certa dá de graça.
-
-   `conic-gradient` girando por `@property` — anima o ângulo, o que invalida a
-   imagem de fundo e obriga o navegador a regerar o gradiente inteiro a cada
-   quadro. Bonito em área pequena; caro em tela cheia.
+/* O fundo. Elemento real, e não `body::before`, por um motivo concreto: o
+   interruptor de movimento do produto (`.sem-animacao`) precisa alcançá-lo,
+   e o seletor universal não casa com pseudo-elemento do próprio `body`.
 */
 .fundo {
   position: fixed;
@@ -259,9 +236,9 @@ body {
   /* Malha técnica: densa o suficiente para dar textura, fraca o suficiente
      para nunca competir com os dados. Estava no `body` até a versão 0.15. */
   background-image:
-    linear-gradient(rgba(var(--accent-rgb), 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--accent-rgb), 0.03) 1px, transparent 1px);
-  background-size: 44px 44px;
+    linear-gradient(rgba(var(--accent-rgb), 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 
 /* As manchas de luz. `inset` negativo dá folga para a deriva nunca revelar a
@@ -271,21 +248,31 @@ body {
   position: absolute;
   inset: -30%;
   background:
-    radial-gradient(38% 34% at 22% 16%, rgba(var(--green-rgb), 0.10), transparent 70%),
-    radial-gradient(42% 38% at 82% 10%, rgba(var(--accent-rgb), 0.055), transparent 72%),
-    radial-gradient(52% 46% at 62% 96%, rgba(var(--amber-rgb), 0.04), transparent 70%);
+    radial-gradient(circle at 25% 20%, rgba(var(--green-rgb), 0.14), transparent 55%),
+    radial-gradient(circle at 75% 15%, rgba(var(--accent-rgb), 0.08), transparent 60%),
+    radial-gradient(ellipse at 65% 85%, rgba(var(--amber-rgb), 0.06), transparent 65%),
+    radial-gradient(ellipse at 35% 75%, rgba(var(--green-rgb), 0.05), transparent 70%);
   will-change: transform;
 
   /* `--anim` é o multiplicador global de movimento, e aqui ele finalmente é
      lido — até a versão 0.15 a variável existia e ninguém a usava. Dividir a
      duração por ele permite um degrau intermediário: em 0.35 o ciclo passa de
      90s para 257s, um movimento que existe e não chama atenção. */
-  animation: derivar-fundo calc(90s / var(--anim, 1)) linear infinite alternate;
+  animation: derivar-fundo calc(120s / var(--anim, 1)) ease-in-out infinite alternate;
 }
 
 @keyframes derivar-fundo {
-  to {
-    transform: translate3d(3%, -2.5%, 0) scale(1.06);
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate3d(4%, -3%, 0) scale(1.08) rotate(1deg);
+  }
+  66% {
+    transform: translate3d(-3%, 2%, 0) scale(1.05) rotate(-0.5deg);
+  }
+  100% {
+    transform: translate3d(2%, -2.5%, 0) scale(1.06) rotate(0.5deg);
   }
 }
 
@@ -302,9 +289,10 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.45;
-  background-size: 160px 160px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='.32'/%3E%3C/svg%3E");
+  opacity: 0.35;
+  background-size: 180px 180px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='.28'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
 }
 
 /* Parado, o fundo continua inteiro — as manchas ficam onde estão e o grão não
@@ -393,7 +381,6 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  height: 100vh;
   padding: var(--gap);
   gap: var(--gap);
   /* Sem isto, em 1920 o console ocupava a tela inteira e os textos do produto
@@ -403,7 +390,6 @@ button {
   max-width: 1440px;
   width: 100%;
   margin-inline: auto;
-  overflow: hidden;
 }
 
 /* Medida de linha. Aplicada ao texto corrido, nunca a numero ou lista. */
@@ -2416,6 +2402,7 @@ button {
   gap: var(--gap);
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .corpo[data-recolhida="true"] {
@@ -2965,6 +2952,8 @@ button {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .secao-cabecalho {
