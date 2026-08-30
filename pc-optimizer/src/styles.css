@@ -50,6 +50,11 @@
   --green: #5fd39a;
   --amber: #e8b23a;
   --red: #ff5c73;
+  --ok: #5fd39a;
+  --aviso: #e8b23a;
+  --erro: #ff5c73;
+  --borda-forte: #3f3f3f;
+  --anim-rapida: 0.18s;
 
   /*
     AS MESMAS CORES, EM COMPONENTES — para quando é preciso transparência.
@@ -66,6 +71,7 @@
   --red-rgb: 255, 92, 115;
   --bg-rgb: 0, 0, 0;
   --text-rgb: 233, 231, 227;
+  --panel-rgb: 0, 0, 0;
 
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
      e a matriz de núcleos usava um branco diferente — dois cinzas para a
@@ -104,6 +110,8 @@
   --t-big: 20px;
   --t-number: 30px;
   --t-huge: 44px;
+  --t-h2: 18px;
+  --t-nota: 11px;
 
   --gap: var(--s4);
   --pad: var(--s4);
@@ -385,6 +393,7 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  height: 100vh;
   padding: var(--gap);
   gap: var(--gap);
   /* Sem isto, em 1920 o console ocupava a tela inteira e os textos do produto
@@ -394,6 +403,7 @@ button {
   max-width: 1440px;
   width: 100%;
   margin-inline: auto;
+  overflow: hidden;
 }
 
 /* Medida de linha. Aplicada ao texto corrido, nunca a numero ou lista. */
@@ -411,6 +421,27 @@ button {
 .stage {
   flex: 1;
   min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+.stage::-webkit-scrollbar {
+  width: 10px;
+}
+
+.stage::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.stage::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 5px;
+}
+
+.stage::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .tab-panel {
@@ -640,9 +671,29 @@ button {
   display: flex;
   align-items: center;
   gap: var(--s6);
-  padding: var(--s3) var(--pad);
-  border: 1px solid var(--hairline);
-  background: linear-gradient(180deg, var(--panel-raised), var(--panel));
+  padding: var(--s4) var(--s5);
+  border: 1px solid transparent;
+  border-radius: var(--r2);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(var(--text-rgb), 0.045) 0%,
+      rgba(var(--text-rgb), 0.015) 100%
+    ),
+    linear-gradient(var(--panel), var(--panel)),
+    linear-gradient(
+      165deg,
+      rgba(var(--text-rgb), 0.16) 0%,
+      rgba(var(--text-rgb), 0.08) 34%,
+      rgba(var(--text-rgb), 0.04) 62%,
+      rgba(var(--bg-rgb), 0.6) 100%
+    );
+  background-origin: padding-box, padding-box, border-box;
+  background-clip: padding-box, padding-box, border-box;
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.08),
+    0 2px 4px rgba(var(--bg-rgb), 0.6),
+    0 12px 32px -16px rgba(var(--bg-rgb), 0.9);
 }
 
 .brand {
@@ -2804,20 +2855,46 @@ button {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  min-width: 260px;
-  padding: var(--s2) var(--s3);
-  background: var(--bg);
-  border: 1px solid var(--hairline);
+  min-width: 280px;
+  padding: var(--s3) var(--s4);
+  background: rgba(var(--bg-rgb), 0.4);
+  border: 1px solid transparent;
+  border-radius: var(--r2);
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: var(--t-body);
   cursor: pointer;
-  transition: border-color var(--dur), color var(--dur);
+  background-image:
+    linear-gradient(rgba(var(--bg-rgb), 0.4), rgba(var(--bg-rgb), 0.4)),
+    linear-gradient(
+      135deg,
+      rgba(var(--text-rgb), 0.12) 0%,
+      rgba(var(--text-rgb), 0.06) 50%,
+      rgba(var(--text-rgb), 0.03) 100%
+    );
+  background-origin: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  backdrop-filter: blur(8px);
+  transition: all var(--dur) var(--ease);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.05),
+    0 2px 6px rgba(var(--bg-rgb), 0.4);
 }
 
 .busca-topo:hover {
-  border-color: var(--hairline-strong);
+  background-image:
+    linear-gradient(rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.5)),
+    linear-gradient(
+      135deg,
+      rgba(var(--accent-rgb), 0.2) 0%,
+      rgba(var(--text-rgb), 0.1) 50%,
+      rgba(var(--text-rgb), 0.05) 100%
+    );
   color: var(--text-dim);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.08),
+    0 4px 12px rgba(var(--bg-rgb), 0.6);
+  transform: translateY(-1px);
 }
 
 .busca-topo-texto {
@@ -2833,6 +2910,12 @@ button {
   border: 1.5px solid currentColor;
   border-radius: 50%;
   position: relative;
+  opacity: 0.7;
+  transition: opacity var(--dur);
+}
+
+.busca-topo:hover .busca-topo-icone {
+  opacity: 1;
 }
 
 .busca-topo-icone::after {
@@ -3313,8 +3396,11 @@ button {
   padding: var(--s5);
   overflow: auto;
 
-  background: rgba(var(--bg-rgb), 0.82);
-  backdrop-filter: blur(18px) saturate(120%);
+  background: 
+    radial-gradient(ellipse at 30% 40%, rgba(var(--accent-rgb), 0.08), transparent 50%),
+    radial-gradient(ellipse at 70% 60%, rgba(var(--green-rgb), 0.06), transparent 50%),
+    rgba(var(--bg-rgb), 0.92);
+  backdrop-filter: blur(24px) saturate(130%);
 }
 
 .portao[hidden] {
@@ -3328,14 +3414,33 @@ button {
      transforma um ícone redondo em um lugar. */
   height: min(780px, calc(100vh - var(--s5) * 2));
 
-  border: 1px solid var(--hairline);
+  border: 1px solid transparent;
   border-radius: var(--r3);
-  background: var(--panel);
+  overflow: hidden;
+  
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(var(--text-rgb), 0.035) 0%,
+      rgba(var(--text-rgb), 0.012) 100%
+    ),
+    linear-gradient(var(--panel), var(--panel)),
+    linear-gradient(
+      165deg,
+      rgba(var(--text-rgb), 0.14) 0%,
+      rgba(var(--text-rgb), 0.07) 34%,
+      rgba(var(--text-rgb), 0.03) 62%,
+      rgba(var(--bg-rgb), 0.7) 100%
+    );
+  background-origin: padding-box, padding-box, border-box;
+  background-clip: padding-box, padding-box, border-box;
 
   /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
      aquele halo escuro que denuncia caixa flutuante mal feita. */
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.55);
-  overflow: hidden;
+  box-shadow: 
+    inset 0 1px 0 rgba(var(--text-rgb), 0.06),
+    0 4px 12px rgba(var(--bg-rgb), 0.5),
+    0 32px 80px rgba(0, 0, 0, 0.65);
 }
 
 /* A PROPORÇÃO É O DESENHO INTEIRO.
@@ -3629,7 +3734,18 @@ button {
 .portao-arte {
   position: relative;
   overflow: hidden;
-  background: var(--panel-raised);
+  background: 
+    linear-gradient(
+      90deg,
+      rgba(var(--bg-rgb), 0.3) 0%,
+      transparent 25%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--text-rgb), 0.02) 0%,
+      rgba(var(--bg-rgb), 0.5) 100%
+    ),
+    var(--panel-raised);
 }
 
 .portao-pilares {
@@ -3845,7 +3961,10 @@ body.janela-cheia {
   display: grid;
   grid-template-columns: 1fr minmax(340px, 0.85fr);
   align-items: center;
-  background: var(--bg);
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(var(--green-rgb), 0.08), transparent 45%),
+    radial-gradient(ellipse at 80% 50%, rgba(var(--accent-rgb), 0.06), transparent 45%),
+    var(--bg);
   overflow: hidden;
 }
 
@@ -3857,6 +3976,13 @@ body.janela-cheia {
   position: relative;
   height: 100%;
   overflow: hidden;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(var(--bg-rgb), 0.4) 85%,
+      rgba(var(--bg-rgb), 0.9) 100%
+    );
 }
 
 .chegada-pilares {
@@ -3881,6 +4007,28 @@ body.janela-cheia {
   gap: var(--s4);
   padding: var(--s6) var(--s6) var(--s6) var(--s5);
   max-width: 46ch;
+  position: relative;
+  z-index: 1;
+}
+
+/* Cartão com profundidade por trás do texto */
+.chegada-texto::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--s5) * -1);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(0, 0, 0, 0.6) 0%,
+      rgba(0, 0, 0, 0.4) 100%
+    );
+  backdrop-filter: blur(12px);
+  border-radius: var(--r3);
+  border: 1px solid rgba(var(--text-rgb), 0.08);
+  z-index: -1;
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.04),
+    0 8px 24px rgba(var(--bg-rgb), 0.5);
 }
 
 .chegada-titulo {
