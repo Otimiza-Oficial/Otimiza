@@ -1819,9 +1819,30 @@ button {
 
 .vital {
   display: grid;
-  grid-template-columns: 1fr auto;
+
+  /* O RÓTULO E O NÚMERO ANDAM JUNTOS, E ISSO ERA UM DEFEITO DE VERDADE.
+
+     Antes eram `1fr auto`: o rótulo grudava na esquerda e o número era
+     empurrado para a direita da caixa de 124px, deixando uns setenta pixels de
+     vazio no meio. Só que a distância até o vital SEGUINTE era de vinte e
+     quatro.
+
+     O olho agrupa pela proximidade, não pela intenção de quem desenhou: com o
+     vazio de dentro maior que o de fora, lia-se "19% MEMÓRIA" como um par, e
+     cada número parecia pertencer ao rótulo do vizinho. Numa barra que existe
+     para dizer quanto de memória está em uso, ler o número errado não é
+     desconforto — é informação trocada.
+
+     A terceira coluna é VAZIA de propósito, e é ela que resolve o conflito
+     com a regra de baixo. Só `auto auto` juntava o texto, mas encolhia a
+     caixa até o tamanho dele — e aí as três barras ficavam com larguras
+     diferentes, que é exatamente o que a largura fixa existe para impedir:
+     barras de tamanhos diferentes não são comparáveis entre si. A coluna
+     vazia come a sobra, o texto fica junto à esquerda, e a barra continua
+     atravessando os 124px inteiros. */
+  grid-template-columns: auto auto 1fr;
   align-items: baseline;
-  gap: 5px var(--s3);
+  gap: 5px var(--s2);
 
   /* LARGURA FIXA. É o que faz as três barras serem comparáveis, e é o que
      impede o número mais longo de empurrar os vizinhos. */
