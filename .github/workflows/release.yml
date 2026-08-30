@@ -179,3 +179,48 @@ jobs:
           # Para voltar a revisar antes de publicar, trocar para `true`.
           releaseDraft: false
           prerelease: false
+
+      # ---------------------------------------------------------------------
+      # UMA CÓPIA COM NOME FIXO, PARA O LINK QUE O BOT MANDA NUNCA ENVELHECER.
+      #
+      # Os instaladores saem com a versão no nome — `Otimiza_0.26.0_x64-setup.exe`
+      # —, e é assim que deve ser: quem baixa sabe o que baixou. Mas isso torna
+      # impossível ter um endereço fixo de download, porque o nome muda a cada
+      # publicação.
+      #
+      # A alternativa era mandar o cliente para a PÁGINA do release, e ali ele
+      # encontra dois arquivos parecidos (.exe e .msi) mais os códigos-fonte, e
+      # tem que adivinhar qual serve. Numa etapa de compra, cada escolha que a
+      # pessoa não sabe fazer é uma desistência possível.
+      #
+      # Com esta cópia, o endereço abaixo vale para sempre e baixa direto o
+      # instalador da versão mais nova:
+      #
+      #   github.com/Otimiza-Oficial/Otimiza/releases/latest/download/Otimiza-instalador.exe
+      #
+      # É esse o link que o bot manda para quem vai comprar. Se este passo
+      # deixar de rodar, aquele link quebra — por isso ele falha alto quando não
+      # acha o arquivo, em vez de seguir em silêncio.
+      - name: Publicar cópia de nome fixo para o link do bot
+        if: matrix.plataforma == 'Windows'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # `ls` com glob, e não `find`: no runner do Windows o `find` do sistema
+          # tem outra sintaxe e pode vencer o do Git Bash no PATH, dependendo da
+          # ordem. O glob é resolvido pelo próprio shell e não tem essa dúvida.
+          instalador=$(ls pc-optimizer/src-tauri/target/release/bundle/nsis/*-setup.exe 2>/dev/null | head -1)
+
+          if [ -z "$instalador" ]; then
+            echo "Não achei o instalador NSIS. O link fixo do bot ficaria quebrado."
+            exit 1
+          fi
+
+          cp "$instalador" Otimiza-instalador.exe
+
+          # `--clobber` porque republicar a mesma tag tem que substituir, e não
+          # falhar com "asset já existe".
+          gh release upload "${{ github.ref_name }}" Otimiza-instalador.exe --clobber
