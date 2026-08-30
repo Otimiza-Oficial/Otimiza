@@ -50,6 +50,56 @@ jobs:
       - name: Baixar o código
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------------------
+      # AS NOTAS PRECISAM FALAR DESTA VERSÃO.
+      #
+      # `.github/release-notes.md` é o texto que vai para a página da versão e,
+      # a partir de agora, para o anúncio que o bot publica no Discord. Ele é um
+      # arquivo fixo: se ninguém atualizar, a versão nova sai contando a
+      # história da antiga.
+      #
+      # Foi o que aconteceu. Da 0.18 à 0.27 todas as publicações saíram com o
+      # texto da 0.17 — inclusive a tabela que manda baixar
+      # `Otimiza_0.17.0_x64-setup.exe`, um arquivo que não existe nelas. Dez
+      # versões com a instrução errada, e ninguém percebeu porque nada quebra:
+      # o instalador certo está lá do lado, e o texto errado é só texto.
+      #
+      # Esta guarda roda ANTES de compilar, de propósito. Descobrir isto depois
+      # de dez minutos de build, com a tag já empurrada, seria pagar caro por um
+      # erro que se vê em um segundo.
+      #
+      # A regra é mínima: as notas têm que citar o número desta versão. Não
+      # tenta julgar se o texto está bom — isso é trabalho de quem escreve.
+      # ---------------------------------------------------------------------
+      - name: Conferir se as notas falam desta versão
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          notas=.github/release-notes.md
+          versao="${GITHUB_REF_NAME#v}"
+
+          if [ ! -s "$notas" ]; then
+            echo "::error::$notas está vazio ou não existe."
+            exit 1
+          fi
+
+          if ! grep -qF "$versao" "$notas"; then
+            echo "::error::As notas de versão não mencionam $versao."
+            echo ""
+            echo "  $notas é o texto que vai para a página da versão e para o"
+            echo "  anúncio no Discord. Ele não muda sozinho: sem atualizar,"
+            echo "  esta versão sai contando a história da anterior."
+            echo ""
+            echo "  Versões citadas hoje no arquivo:"
+            grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$notas" | sort -u | sed 's/^/    /' || echo "    (nenhuma)"
+            echo ""
+            echo "  Atualize o arquivo, faça o commit, apague a tag e crie de novo."
+            exit 1
+          fi
+
+          echo "As notas mencionam $versao."
+
       - name: Instalar Node
         uses: actions/setup-node@v4
         with:
