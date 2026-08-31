@@ -4392,3 +4392,81 @@ circle.placa-parafuso {
   .memoria-corpo { grid-template-columns: 1fr; }
   .memoria-arte { max-width: 300px; }
 }
+
+
+/* ==========================================================================
+   OS MONITORES, DESENHADOS
+
+   "60 Hz num monitor que aceita 180" e uma frase que passa batida porque nao
+   doi. Com o numero DENTRO da tela desenhada, ele deixa de ser um detalhe no
+   meio de um parágrafo.
+   ========================================================================== */
+
+.monitores-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--s4);
+}
+
+.monitor {
+  display: grid;
+  gap: var(--s3);
+  justify-items: center;
+  text-align: center;
+}
+
+.monitor svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+
+.monitor-moldura {
+  fill: #0a0a0a;
+  stroke: var(--hairline-strong);
+  stroke-width: 1.5;
+}
+
+.monitor-tela {
+  fill: #000;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.monitor-pe,
+.monitor-base {
+  fill: #141414;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.monitor-hz {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  text-anchor: middle;
+  fill: var(--text);
+}
+
+.monitor-unidade {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-anchor: middle;
+  fill: var(--text-muted);
+  letter-spacing: 0.16em;
+}
+
+/* ABAIXO DO MÁXIMO, O NÚMERO FICA ÂMBAR — e é o único momento em que ele muda
+   de cor. É a mesma regra do resto do produto: cor só onde ela informa. */
+.monitor[data-abaixo="true"] .monitor-hz { fill: var(--amber); }
+.monitor[data-abaixo="true"] .monitor-moldura { stroke: var(--amber); }
+
+.monitor-nome {
+  font-size: var(--t-body);
+  color: var(--text);
+}
+
+.monitor-detalhe {
+  font-family: var(--font-mono);
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}

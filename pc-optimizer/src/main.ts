@@ -4108,6 +4108,79 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 // ---------------------------------------------------------------- controles
 
 
+/* -------------------------------------------------- os monitores, desenhados */
+
+interface MonitorLido {
+  dispositivo: string;
+  descricao: string;
+  principal: boolean;
+  largura: number;
+  altura: number;
+  hz_atual: number;
+  hz_disponiveis: number[];
+}
+
+/**
+ * Desenha cada monitor com a taxa dele DENTRO da tela.
+ *
+ * "60 Hz num monitor que aceita 180" é o achado mais fácil de ignorar do
+ * produto: passa batido porque não dói. Só que é a maior diferença de fluidez
+ * que existe num PC, e a única que se sente antes de abrir qualquer jogo.
+ *
+ * Numa máquina com dois monitores, a frase sozinha nunca dizia QUAL estava
+ * errado. Desenhados lado a lado, isso deixa de ser um problema.
+ */
+async function carregarMonitores() {
+  const lista = element("monitores-lista");
+
+  try {
+    const monitores = await invoke<MonitorLido[]>("monitores");
+
+    if (monitores.length === 0) {
+      lista.innerHTML = '<p class="hint">Não consegui ler nenhum monitor.</p>';
+      return;
+    }
+
+    const abaixo = monitores.filter(
+      (m) => Math.max(...m.hz_disponiveis, 0) > m.hz_atual,
+    ).length;
+
+    text(
+      "monitores-tag",
+      abaixo > 0
+        ? `${abaixo} abaixo do máximo`
+        : `${monitores.length} no máximo`,
+    );
+
+    lista.innerHTML = monitores
+      .map((m) => {
+        const maximo = Math.max(...m.hz_disponiveis, m.hz_atual);
+        const estaAbaixo = maximo > m.hz_atual;
+
+        return `
+          <div class="monitor" data-abaixo="${estaAbaixo}">
+            <svg viewBox="0 0 200 150" aria-hidden="true">
+              <rect class="monitor-moldura" x="6" y="6" width="188" height="112" rx="7" />
+              <rect class="monitor-tela" x="14" y="14" width="172" height="96" rx="3" />
+              <text class="monitor-hz" x="100" y="66">${m.hz_atual}</text>
+              <text class="monitor-unidade" x="100" y="82">HZ</text>
+              <rect class="monitor-pe" x="88" y="118" width="24" height="16" rx="2" />
+              <rect class="monitor-base" x="62" y="134" width="76" height="8" rx="4" />
+            </svg>
+            <div>
+              <p class="monitor-nome">${escapeHtml(m.descricao)}${m.principal ? " · principal" : ""}</p>
+              <p class="monitor-detalhe">${m.largura}×${m.altura}${
+                estaAbaixo ? ` · aceita ${maximo} Hz` : " · no máximo"
+              }</p>
+            </div>
+          </div>`;
+      })
+      .join("");
+  } catch {
+    lista.innerHTML = '<p class="hint">Não consegui ler os monitores.</p>';
+  }
+}
+
 /* --------------------------------------------------- a memória, desenhada */
 
 interface MemoriaInstalada {
@@ -4756,6 +4829,7 @@ function wireControls() {
 
   void carregarPlaca();
   void carregarMemoria();
+  void carregarMonitores();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));

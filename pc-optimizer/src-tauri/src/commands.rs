@@ -1396,6 +1396,26 @@ pub async fn apply_optimization(
     }
 }
 
+/// Comando: os monitores, para a tela desenhá-los.
+///
+/// `display::monitores()` já existia e só alimentava o veredito. A tela nunca
+/// via a lista — então o cliente lia "seu monitor está em 60 Hz e aceita 180"
+/// sem nunca ver QUAL monitor, numa máquina com dois.
+///
+/// Fica em `LIVRES`: é leitura.
+#[tauri::command]
+pub async fn monitores() -> Result<Vec<crate::modules::windows::display::Monitor>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::display::monitores())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: a memória instalada, para a tela desenhá-la slot a slot.
 ///
 /// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que faz o cliente
@@ -1833,6 +1853,7 @@ mod tests {
     const LIVRES: &[&str] = &[
         "placa_de_video",
         "memoria_instalada",
+        "monitores",
         "analyze_game_config",
         "preview_game_profile",
         "medir_antes",
