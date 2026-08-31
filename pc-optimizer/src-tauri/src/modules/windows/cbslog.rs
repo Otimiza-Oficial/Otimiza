@@ -16,6 +16,16 @@ use std::path::PathBuf;
 pub enum ResultadoSfc {
     SemCorrupcao,
     Corrigiu { quantos: usize },
+    /// Reparo misto: parte dos arquivos corrompidos foi consertada, mas
+    /// sobrou corrupção sem conserto.
+    ///
+    /// Existe porque devolver `Corrigiu` aqui contaria um resultado que não
+    /// foi alcançado — a mesma regra que o módulo de comparação já aplica ao
+    /// se recusar a chamar ruído de medição de ganho. Um cliente que recebe
+    /// "corrigido" quando ainda há corrupção na máquina não sabe que precisa
+    /// seguir para o reparo da imagem do Windows; `CorrigiuEmParte` deixa
+    /// isso visível.
+    CorrigiuEmParte { corrigidos: usize, restantes: usize },
     NaoConseguiu { quantos: usize },
     /// Log ausente, vazio ou ilegível.
     ///
@@ -58,11 +68,26 @@ pub fn interpretar(conteudo: &str) -> ResultadoSfc {
         .filter(|l| l.contains("Repairing corrupted file"))
         .count();
 
-    if reparados > 0 {
-        ResultadoSfc::Corrigiu { quantos: reparados }
-    } else {
+    // `nao_reparados` conta toda linha "Cannot repair member file", e essa
+    // linha aparece SEMPRE que o CBS tenta primeiro a fonte local — inclusive
+    // para os arquivos que depois são consertados por uma fonte secundária
+    // (é o que a linha "Repairing corrupted file" registra na sequência). Ou
+    // seja, um arquivo que termina reparado também soma em `nao_reparados`;
+    // por isso `nao_reparados - reparados` é a contagem de quem ficou para
+    // trás, não um dobro de quem foi consertado — não é uma subtração ingênua
+    // que dobra a contagem, é a leitura correta do formato do log.
+    let restantes = nao_reparados.saturating_sub(reparados);
+
+    if reparados == 0 {
         ResultadoSfc::NaoConseguiu {
             quantos: nao_reparados,
+        }
+    } else if restantes == 0 {
+        ResultadoSfc::Corrigiu { quantos: reparados }
+    } else {
+        ResultadoSfc::CorrigiuEmParte {
+            corrigidos: reparados,
+            restantes,
         }
     }
 }
@@ -88,6 +113,17 @@ mod tests {
 2026-08-31 12:00:01, Info CSI 00000001 [SR] Cannot repair member file [l:20]'ntdll.dll'
 2026-08-31 12:00:02, Info CSI 00000002 [SR] Cannot repair member file [l:18]'user32.dll'";
 
+    /// Duas famílias de arquivos diferentes: kernel32/gdi32 completam o ciclo
+    /// "Cannot repair" seguido de "Repairing corrupted" (foram consertados),
+    /// e user32 fica só com o "Cannot repair" (não sobrou registro de
+    /// conserto). O resultado não pode ser `Corrigiu` — sobrou corrupção.
+    const CORRIGIU_PARCIAL: &str = "\
+2026-08-31 12:00:01, Info CSI 00000001 [SR] Cannot repair member file [l:20]'kernel32.dll'
+2026-08-31 12:00:02, Info CSI 00000002 [SR] Repairing corrupted file \\??\\C:\\Windows\\kernel32.dll
+2026-08-31 12:00:03, Info CSI 00000003 [SR] Cannot repair member file [l:18]'gdi32.dll'
+2026-08-31 12:00:04, Info CSI 00000004 [SR] Repairing corrupted file \\??\\C:\\Windows\\gdi32.dll
+2026-08-31 12:00:05, Info CSI 00000005 [SR] Cannot repair member file [l:18]'user32.dll'";
+
     #[test]
     fn log_limpo_e_sem_corrupcao() {
         assert_eq!(interpretar(SEM_CORRUPCAO), ResultadoSfc::SemCorrupcao);
@@ -103,6 +139,20 @@ mod tests {
         assert_eq!(
             interpretar(NAO_CONSEGUIU),
             ResultadoSfc::NaoConseguiu { quantos: 2 }
+        );
+    }
+
+    #[test]
+    fn reparo_misto_nunca_vira_corrigiu_total() {
+        // Contar "corrigido" quando ainda sobra corrupção é o mesmo defeito
+        // que o módulo de comparação evita ao se recusar a chamar ruído de
+        // medição de ganho: reportar um resultado que não foi alcançado.
+        assert_eq!(
+            interpretar(CORRIGIU_PARCIAL),
+            ResultadoSfc::CorrigiuEmParte {
+                corrigidos: 2,
+                restantes: 1
+            }
         );
     }
 
