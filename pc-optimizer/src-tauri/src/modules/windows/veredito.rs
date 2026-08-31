@@ -524,6 +524,162 @@ impl EmAchados for super::conflicts::ConflictReport {
     }
 }
 
+impl EmAchados for super::thermal::ThermalReport {
+    fn achados(&self) -> Vec<Achado> {
+        use super::thermal::Culprit;
+
+        // NADA SEGURANDO O PROCESSADOR NÃO VIRA ACHADO.
+        //
+        // E `Bateria` também não: um notebook na bateria é limitado de
+        // propósito pelo Windows, e chamar isso de problema seria vender
+        // conserto para o comportamento correto do aparelho.
+        let (id, titulo, severidade, onde) = match self.culprit {
+            Culprit::Nenhum | Culprit::Bateria => return Vec::new(),
+
+            // A ÚNICA SITUAÇÃO EM QUE O MÓDULO DIZ A PALAVRA CALOR.
+            //
+            // E é a que mais importa para este produto: um processador em
+            // throttling térmico entrega uma fração do que pode, nenhum ajuste
+            // de software resolve, e o técnico otimiza, mede, e não melhora
+            // nada — porque o problema é físico.
+            Culprit::Calor => (
+                "throttling_termico",
+                "O processador está sendo segurado por temperatura",
+                FindingSeverity::Critical,
+                FixLocation::Hardware,
+            ),
+
+            // Teto no plano de energia é software, e o produto conserta.
+            Culprit::PlanoDeEnergia => (
+                "teto_no_plano_de_energia",
+                "O plano de energia está segurando o processador",
+                FindingSeverity::Important,
+                FixLocation::Software,
+            ),
+
+            // Limite elétrico é outra conversa, e não pode ser vendido como
+            // sujeira no cooler.
+            Culprit::LimiteEletrico => (
+                "limite_eletrico",
+                "O processador está limitado por energia, não por temperatura",
+                FindingSeverity::Important,
+                FixLocation::Hardware,
+            ),
+
+            // Frequência baixa sem causa conhecida: o fato é medido, a causa
+            // não. `Indefinida` existe exatamente para isso.
+            Culprit::NaoIdentificado => (
+                "frequencia_baixa_sem_causa",
+                "O processador está abaixo do que pode, e não sei dizer por quê",
+                FindingSeverity::Important,
+                FixLocation::None,
+            ),
+        };
+
+        vec![montar(
+            Origem::Termico,
+            id.to_string(),
+            titulo.to_string(),
+            self.summary.clone(),
+            self.advice.clone(),
+            severidade,
+            onde,
+        )]
+    }
+}
+
+/// Driver de vídeo velho demais para o jogo que o cliente joga.
+///
+/// Não é sobre "atualizar sempre": driver novo às vezes regride. É sobre a
+/// distância — um driver de dois anos não conhece as otimizações que a placa
+/// ganhou desde então, e para jogo recente isso é perda de quadros de graça.
+const DIAS_QUE_TORNAM_O_DRIVER_VELHO: i64 = 365;
+
+impl EmAchados for super::shaders::ShaderReport {
+    fn achados(&self) -> Vec<Achado> {
+        let Some(dias) = self.driver_age_days else {
+            return Vec::new();
+        };
+
+        if dias < DIAS_QUE_TORNAM_O_DRIVER_VELHO {
+            return Vec::new();
+        }
+
+        let placa = self.gpu.clone().unwrap_or_else(|| "A placa de vídeo".to_string());
+
+        vec![montar(
+            Origem::Disco,
+            "driver_de_video_velho".to_string(),
+            "O driver de vídeo tem mais de um ano".to_string(),
+            format!(
+                "{} está com o driver {} de {}, publicado há {} dias.",
+                placa,
+                self.driver_version.clone().unwrap_or_else(|| "?".into()),
+                self.driver_date.clone().unwrap_or_else(|| "?".into()),
+                dias
+            ),
+            "Driver mais novo costuma trazer ganho em jogo recente. Baixe pelo site \
+             do fabricante da placa — não pelo Windows Update, que entrega versões \
+             mais antigas."
+                .to_string(),
+            FindingSeverity::Important,
+            // `None` porque o Otimiza NÃO conserta isto: instalar driver baixa
+            // da internet e troca componente de vídeo, e errar aí deixa a
+            // máquina sem imagem. Marcar como `Software` faria a interface
+            // oferecer um botão que não existe.
+            FixLocation::None,
+        )]
+    }
+}
+
+/// Abaixo disto o Windows passa a falhar de formas que ninguém associa a disco:
+/// atualização que não instala, jogo que não salva, arquivo temporário que não
+/// cabe.
+const GB_LIVRES_QUE_JA_E_PROBLEMA: f64 = 10.0;
+
+impl EmAchados for super::diskspace::DiskReport {
+    fn achados(&self) -> Vec<Achado> {
+        let livres_gb = self.free_bytes as f64 / 1_073_741_824.0;
+
+        if livres_gb >= GB_LIVRES_QUE_JA_E_PROBLEMA {
+            return Vec::new();
+        }
+
+        // O QUE DÁ PARA LIMPAR ENTRA NA FRASE.
+        //
+        // "Seu disco está cheio" sem dizer quanto o produto consegue devolver é
+        // uma reclamação; com o número, é uma ação.
+        let limpavel = self
+            .findings
+            .iter()
+            .filter(|f| f.cleanable)
+            .map(|f| f.bytes)
+            .sum::<u64>() as f64
+            / 1_073_741_824.0;
+
+        vec![montar(
+            Origem::Disco,
+            "disco_quase_cheio".to_string(),
+            "O disco do sistema está quase sem espaço".to_string(),
+            format!("Restam {:.1} GB livres no disco do Windows.", livres_gb),
+            if limpavel >= 1.0 {
+                format!(
+                    "A aba Espaço encontrou cerca de {:.1} GB de lixo que dá para \
+                     apagar aqui mesmo.",
+                    limpavel
+                )
+            } else {
+                "Libere espaço apagando arquivos grandes ou desinstalando o que não \
+                 usa. Abaixo de 10 GB o Windows começa a falhar de formas que \
+                 ninguém associa a disco cheio."
+                    .to_string()
+            },
+            FindingSeverity::Critical,
+            FixLocation::Software,
+        )]
+    }
+}
+
 // ------------------------------------------------------------ coleta rápida
 
 /// Quantos diagnósticos podem rodar ao mesmo tempo.
@@ -612,6 +768,29 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Firmware, || {
             Ok(achados_de_firmware(&super::firmware::analyze_memory_only()))
         }),
+        // QUATRO MÓDULOS QUE MEDIAM E NÃO CHEGAVAM À FRASE.
+        //
+        // Cada um tinha painel próprio e ficava fora da eleição — exatamente o
+        // defeito que este arquivo foi criado para consertar, metade resolvido.
+        //
+        // O custo foi medido nesta máquina em 31/08/2026 antes de entrarem:
+        // térmico 1,33 s · disco 0,44 s · shaders 0,13 s · conflitos 0,14 s.
+        // Todos abaixo do `readiness`, que já custa 4,38 s e domina a fila — o
+        // diagnóstico rápido continua limitado por ele, e não por estes.
+        //
+        // BOOT E BLOATWARE FICARAM DE FORA DE PROPÓSITO, e a razão importa: o
+        // veredito elege UMA frase. Inicialização lenta e programa de fábrica
+        // são higiene, não causa de travamento — e disputando a eleição com a
+        // causa real, o que fariam é empurrar a resposta certa para baixo. Eles
+        // continuam nos painéis deles, onde respondem a pergunta que são.
+        //
+        // Um processador em throttling térmico entrega uma fração do que pode,
+        // nenhum ajuste de software resolve, e é a resposta que falta em todo
+        // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
+        (Origem::Termico, || Ok(super::thermal::analyze().achados())),
+        (Origem::Disco, || Ok(super::diskspace::scan().achados())),
+        (Origem::Disco, || Ok(super::shaders::analyze().achados())),
+        (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
     ];
 
     // Fila de trabalho, e não lotes fixos: com lotes, um módulo rápido esperaria
@@ -865,6 +1044,49 @@ mod tests {
         // por pressão de memória.
         assert!(limite_de_simultaneos() <= DIAGNOSTICOS_SIMULTANEOS);
         assert!(limite_de_simultaneos() >= 1);
+    }
+
+    /// O DIAGNÓSTICO RÁPIDO NÃO PODE CHAMAR OS MÓDULOS QUE MEDEM POR SEGUNDOS.
+    ///
+    /// A versão 0.17 levou o diagnóstico de 31 s para 6 s, e o ganho não veio de
+    /// otimizar consulta: veio de parar de abrir dez processos do PowerShell.
+    /// É um ganho fácil de desfazer sem perceber — basta acrescentar um módulo
+    /// útil que por acaso mede durante alguns segundos, e a primeira tela do
+    /// produto volta a demorar meio minuto.
+    ///
+    /// Os quatro abaixo são úteis e ficam FORA de propósito, cada um por medir
+    /// com o relógio: gargalo amostra a máquina por segundos, rede cronometra
+    /// consultas de DNS, e FiveM e navegadores percorrem dezenas de milhares de
+    /// arquivos em disco. Eles rodam quando o cliente aperta o botão deles.
+    ///
+    /// Guarda por leitura do fonte e não por cronômetro: teste que mede tempo
+    /// numa esteira compartilhada falha por vizinho barulhento, e teste que
+    /// falha sozinho é teste que alguém desliga.
+    #[test]
+    fn o_diagnostico_rapido_nao_chama_quem_mede_por_segundos() {
+        let fonte = include_str!("veredito.rs");
+
+        let coleta = fonte
+            .split("pub fn coletar_rapido")
+            .nth(1)
+            .expect("coletar_rapido precisa existir");
+
+        // Só o corpo da função: a explicação acima cita os nomes de propósito,
+        // e sem este corte a guarda se encontraria sozinha.
+        let corpo: String = coleta
+            .lines()
+            .take_while(|l| !l.starts_with('}'))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for caro in ["bottleneck::", "network::", "fivem::", "browsers::"] {
+            assert!(
+                !corpo.contains(caro),
+                "`{}` entrou no diagnóstico rápido; ele mede por segundos e a \
+                 primeira tela do produto volta a demorar",
+                caro
+            );
+        }
     }
 
     #[test]
