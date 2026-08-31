@@ -16,6 +16,7 @@ pub mod licenca;
 pub mod maquina;
 pub mod optimizer;
 pub mod preferences;
+pub mod prova;
 pub mod report;
 pub mod safety;
 pub mod monitor;

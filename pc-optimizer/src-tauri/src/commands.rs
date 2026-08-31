@@ -1396,6 +1396,66 @@ pub async fn apply_optimization(
     }
 }
 
+/// Comando: mede o jogo agora e guarda como o "antes".
+///
+/// O jogo precisa estar ABERTO — é o contrário de `apply_game_profile`, que
+/// exige o jogo fechado. Não é contradição: mede-se o que está rodando, e
+/// escreve-se no arquivo de quem não está.
+///
+/// Fica em `LIVRES`: medir é diagnóstico, e o diagnóstico do produto é livre.
+/// Um cliente sem chave pode medir o próprio PC — e é justamente isso que faz
+/// ele querer a chave.
+#[tauri::command]
+pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
+    let medicao = measure_frames(process, seconds).await?;
+
+    let prova = crate::modules::prova::Prova {
+        jogo: medicao.process,
+        quando: crate::modules::changelog::now_timestamp(),
+        fps: medicao.fps,
+        low_1pct: medicao.low_1pct,
+        engasgos_por_minuto: medicao.engasgos_por_minuto,
+        segundos: medicao.seconds,
+        confiavel: medicao.detalhe_confiavel,
+    };
+
+    crate::modules::prova::guardar(&prova)?;
+    Ok(prova)
+}
+
+/// Comando: mede de novo e compara com o "antes".
+#[tauri::command]
+pub async fn medir_depois(
+    process: String,
+    seconds: u64,
+) -> Result<crate::modules::prova::Comparacao, String> {
+    use crate::modules::prova;
+
+    let antes = prova::guardada().ok_or(
+        "Não há medição inicial. Meça com o jogo aberto ANTES de aplicar as mudanças.",
+    )?;
+
+    let medicao = measure_frames(process, seconds).await?;
+
+    let depois = prova::Prova {
+        jogo: medicao.process,
+        quando: crate::modules::changelog::now_timestamp(),
+        fps: medicao.fps,
+        low_1pct: medicao.low_1pct,
+        engasgos_por_minuto: medicao.engasgos_por_minuto,
+        segundos: medicao.seconds,
+        confiavel: medicao.detalhe_confiavel,
+    };
+
+    Ok(prova::comparar(&antes, &depois))
+}
+
+/// Comando: a medição do "antes" que estiver guardada.
+#[tauri::command]
+pub fn prova_guardada() -> Option<crate::modules::prova::Prova> {
+    crate::modules::prova::guardada()
+}
+
 /// Comando: mostra o que um perfil MUDARIA na configuração do jogo.
 ///
 /// Não escreve nada. Existe para a tela poder listar chave por chave, com o
@@ -1665,6 +1725,9 @@ mod tests {
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
     const LIVRES: &[&str] = &[
         "preview_game_profile",
+        "medir_antes",
+        "medir_depois",
+        "prova_guardada",
         "get_platform_info",
         "get_performance_metrics",
         "start_monitoring",
