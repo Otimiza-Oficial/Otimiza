@@ -773,6 +773,51 @@
 
         <!-- ======================================================== DIAGNÓSTICO -->
         <section class="tab-panel" id="tab-diagnostico" role="tabpanel" aria-labelledby="tabbtn-diagnostico" hidden>
+          <!--
+            A MEMÓRIA, DESENHADA SLOT A SLOT.
+
+            Este é o desenho que mais explica neste produto. "Canal único" é
+            jargão: ninguém que não monta PC sabe o que significa, e a frase
+            sozinha some no meio do diagnóstico. Quatro encaixes com um ocupado
+            e três vazios não precisam de tradução — quem olha entende que falta
+            alguma coisa ali, mesmo sem saber o nome.
+
+            É também o achado mais valioso da máquina que motivou o produto: um
+            pente de 8 GB sozinho, em quatro slots. Metade da banda de memória
+            parada, e nenhum ajuste de software devolve isso.
+          -->
+          <section class="panel memoria" id="memoria-painel" data-estado="lendo">
+            <div class="panel-head">
+              <h2>Memória instalada</h2>
+              <span class="panel-tag" id="memoria-tag">—</span>
+            </div>
+
+            <div class="memoria-corpo">
+              <div class="memoria-arte" aria-hidden="true">
+                <svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg">
+                  <!-- A placa-mãe atrás, só para os slots terem onde morar -->
+                  <rect class="memoria-placa" x="4" y="6" width="292" height="120" rx="6" />
+                  <g class="memoria-trilhas">
+                    <path d="M14 116 h60 M14 110 h48 M14 104 h72" />
+                    <path d="M226 116 h60 M238 110 h48 M214 104 h72" />
+                  </g>
+
+                  <!-- Os quatro encaixes. `data-slot` diz qual está ocupado. -->
+                  <g id="memoria-slots"></g>
+                </svg>
+              </div>
+
+              <div class="memoria-info">
+                <p class="lead" id="memoria-frase">Lendo os pentes de memória…</p>
+                <dl class="placa-dados">
+                  <div><dt>Instalado</dt><dd id="memoria-total">—</dd></div>
+                  <div><dt>Encaixes usados</dt><dd id="memoria-usados">—</dd></div>
+                  <div><dt>Velocidade real</dt><dd id="memoria-mhz">—</dd></div>
+                </dl>
+              </div>
+            </div>
+          </section>
+
 <section class="panel">
               <div class="panel-head">
                 <h2>Achados desta máquina</h2>

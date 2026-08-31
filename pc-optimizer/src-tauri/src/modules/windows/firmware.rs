@@ -82,6 +82,50 @@ fn memory_modules() -> Vec<MemoryModule> {
         .unwrap_or_default()
 }
 
+/// A memória instalada, do jeito que a tela precisa para desenhá-la.
+///
+/// Existe porque o relatório de firmware só devolve ACHADOS — frases sobre o
+/// que está errado. Para desenhar quatro slots com um ocupado é preciso o dado
+/// cru, e ele já era lido aqui dentro, sem sair.
+///
+/// Um desenho de slots explica canal único melhor que qualquer frase: quem vê
+/// três encaixes vazios entende na hora, mesmo sem saber o que é um canal.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MemoriaInstalada {
+    /// Slots que a placa-mãe tem. `None` quando não deu para ler.
+    pub slots: Option<u32>,
+    /// Um por pente instalado, em GB.
+    pub pentes_gb: Vec<f64>,
+    /// Canais distintos em uso. Um só, com dois ou mais slots livres, é o
+    /// achado que mais aparece em PC de jogo montado barato.
+    pub canais: usize,
+    /// Velocidade em que os pentes estão REALMENTE rodando.
+    pub mhz: Option<u32>,
+}
+
+#[cfg(target_os = "windows")]
+pub fn memoria_instalada() -> MemoriaInstalada {
+    let modules = memory_modules();
+
+    MemoriaInstalada {
+        slots: memory_slots(),
+        pentes_gb: modules
+            .iter()
+            .filter_map(|m| m.capacity)
+            .map(|bytes| bytes as f64 / 1_073_741_824.0)
+            .collect(),
+        canais: occupied_channels(&modules),
+        // A configurada, e não a nominal: um pente de 3200 rodando a 2133 é
+        // exatamente o caso que o cliente não vê e paga.
+        mhz: modules.iter().filter_map(|m| m.configured_clock_speed).max(),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn memoria_instalada() -> MemoriaInstalada {
+    MemoriaInstalada { slots: None, pentes_gb: Vec::new(), canais: 0, mhz: None }
+}
+
 /// Total de slots de memória da placa.
 fn memory_slots() -> Option<u32> {
     let script = "(Get-CimInstance Win32_PhysicalMemoryArray).MemoryDevices";

@@ -4108,6 +4108,114 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 // ---------------------------------------------------------------- controles
 
 
+/* --------------------------------------------------- a memória, desenhada */
+
+interface MemoriaInstalada {
+  slots: number | null;
+  pentes_gb: number[];
+  canais: number;
+  mhz: number | null;
+}
+
+/**
+ * Desenha os encaixes de memória da placa-mãe, cheios e vazios.
+ *
+ * "Canal único" é jargão: ninguém que não monta PC sabe o que significa, e a
+ * frase sozinha some no meio do diagnóstico. Quatro encaixes com um ocupado e
+ * três vazios não precisam de tradução.
+ *
+ * Os slots são desenhados aqui, e não fixos no HTML, porque a quantidade vem da
+ * máquina — duas em notebook, quatro na maioria dos desktops. Desenhar quatro e
+ * esconder os que sobram mostraria encaixes que aquela placa não tem.
+ */
+function desenharMemoria(m: MemoriaInstalada) {
+  const total = m.slots ?? Math.max(m.pentes_gb.length, 1);
+  const grupo = element("memoria-slots");
+
+  // A largura de cada encaixe sai do espaço disponível dividido pelo número
+  // real de slots: dois encaixes largos numa placa de notebook, quatro
+  // estreitos num desktop, e nunca um desenho que estoura a moldura.
+  const margem = 16;
+  const vao = 8;
+  const largura = (268 - (total - 1) * vao) / total;
+
+  grupo.innerHTML = "";
+
+  for (let i = 0; i < total; i += 1) {
+    const x = margem + i * (largura + vao);
+    const gb = m.pentes_gb[i];
+    const ocupado = gb !== undefined;
+
+    const partes: string[] = [];
+
+    if (ocupado) {
+      partes.push(`<rect class="memoria-pente" x="${x}" y="18" width="${largura}" height="66" rx="2" />`);
+
+      // Os chips do pente. Quatro por lado é o que cabe legível nesta escala —
+      // não é a contagem real, e não pretende ser: é a silhueta de um pente.
+      for (let c = 0; c < 4; c += 1) {
+        const cw = (largura - 10) / 4 - 2;
+        partes.push(
+          `<rect class="memoria-chip" x="${x + 5 + c * (cw + 2)}" y="${34 + (c % 2 === 0 ? 0 : 0)}" width="${cw}" height="14" rx="1" />`,
+        );
+      }
+
+      partes.push(`<rect class="memoria-contato" x="${x + 3}" y="80" width="${largura - 6}" height="4" rx="1" />`);
+      partes.push(
+        `<text class="memoria-gb" x="${x + largura / 2}" y="28">${gb.toFixed(0)} GB</text>`,
+      );
+    } else {
+      partes.push(`<rect class="memoria-slot-vazio" x="${x}" y="30" width="${largura}" height="54" rx="2" />`);
+    }
+
+    // As travas das pontas existem nos dois casos: é o que faz o vazio parecer
+    // um encaixe esperando um pente, e não um retângulo qualquer.
+    partes.push(`<rect class="memoria-trava" x="${x - 3}" y="26" width="5" height="12" rx="1.5" />`);
+    partes.push(`<rect class="memoria-trava" x="${x + largura - 2}" y="26" width="5" height="12" rx="1.5" />`);
+
+    grupo.insertAdjacentHTML("beforeend", partes.join(""));
+  }
+}
+
+async function carregarMemoria() {
+  const painel = element("memoria-painel");
+
+  try {
+    const m = await invoke<MemoriaInstalada>("memoria_instalada");
+
+    desenharMemoria(m);
+
+    const totalGb = m.pentes_gb.reduce((soma, gb) => soma + gb, 0);
+    const slots = m.slots ?? m.pentes_gb.length;
+    const livres = Math.max(0, slots - m.pentes_gb.length);
+
+    text("memoria-total", totalGb > 0 ? `${totalGb.toFixed(0)} GB` : "não sei dizer");
+    text("memoria-usados", slots > 0 ? `${m.pentes_gb.length} de ${slots}` : "—");
+    text("memoria-mhz", m.mhz ? `${m.mhz} MHz` : "não sei dizer");
+    text("memoria-tag", m.canais > 1 ? `${m.canais} canais` : "canal único");
+
+    // CANAL ÚNICO COM ENCAIXE LIVRE É O ACHADO, e é o único caso em que o
+    // desenho muda de cor. Um pente sozinho numa placa que só tem um slot não
+    // é problema — é o máximo que aquela máquina aceita, e acusar seria vender
+    // conserto de coisa que não tem conserto.
+    const canalUnico = m.canais <= 1 && livres > 0;
+    painel.dataset.estado = canalUnico ? "canal-unico" : "ok";
+
+    text(
+      "memoria-frase",
+      canalUnico
+        ? `Um pente só, e ${livres} encaixe(s) livre(s). A memória trabalha em metade da `
+          + `largura que a placa aceita — acrescentar um segundo pente igual devolve a outra metade.`
+        : m.pentes_gb.length === 0
+          ? "Não consegui ler os pentes de memória desta máquina."
+          : `${m.pentes_gb.length} pentes em ${m.canais} canal(is). A memória está trabalhando na largura cheia.`,
+    );
+  } catch {
+    painel.dataset.estado = "ok";
+    text("memoria-frase", "Não consegui ler a memória instalada.");
+  }
+}
+
 /* ------------------------------------------------------ a placa de vídeo */
 
 interface PlacaDeVideo {
@@ -4647,6 +4755,7 @@ function wireControls() {
   }
 
   void carregarPlaca();
+  void carregarMemoria();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));

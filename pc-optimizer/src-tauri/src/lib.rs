@@ -86,6 +86,7 @@ pub fn run() {
             commands::list_optimizations,
             commands::apply_optimization,
             commands::placa_de_video,
+            commands::memoria_instalada,
             commands::analyze_game_config,
             commands::medir_antes,
             commands::medir_depois,

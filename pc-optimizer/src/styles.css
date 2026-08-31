@@ -4298,3 +4298,97 @@ circle.placa-parafuso {
   .placa { grid-template-columns: 1fr; }
   .placa-arte { max-width: 260px; }
 }
+
+/* ==========================================================================
+   A MEMÓRIA, DESENHADA SLOT A SLOT
+
+   "Canal único" é jargão. Quatro encaixes com um ocupado e três vazios não
+   precisam de tradução: quem olha entende que falta alguma coisa ali, mesmo sem
+   saber o nome.
+
+   Os slots são desenhados pelo JavaScript porque a quantidade vem da máquina —
+   duas em notebook, quatro na maioria dos desktops, oito em placa de entusiasta.
+   Desenhar quatro fixos e esconder os que sobram mostraria encaixes que aquela
+   placa não tem.
+   ========================================================================== */
+
+.memoria-corpo {
+  display: grid;
+  grid-template-columns: minmax(200px, 340px) 1fr;
+  gap: var(--s5);
+  align-items: center;
+}
+
+.memoria-arte svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.memoria-placa {
+  fill: #070707;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.memoria-trilhas path {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  fill: none;
+  opacity: 0.7;
+}
+
+/* O encaixe vazio: só o contorno e as travas das pontas. */
+.memoria-slot-vazio {
+  fill: #0b0b0b;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.memoria-trava {
+  fill: #1a1a1a;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+/* O pente encaixado. */
+.memoria-pente {
+  fill: #161616;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.memoria-chip {
+  fill: #060606;
+  stroke: var(--hairline);
+  stroke-width: 0.8;
+}
+
+.memoria-contato {
+  fill: #b8952f;
+}
+
+/* A etiqueta de capacidade em cima do pente. */
+.memoria-gb {
+  fill: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-anchor: middle;
+}
+
+/* ENCAIXE VAZIO NUM PC DE CANAL ÚNICO GANHA DESTAQUE.
+
+   É o único lugar do desenho que muda de cor, e ele muda para âmbar — o mesmo
+   âmbar de "vale corrigir" do resto do produto. Sem isso, três retângulos
+   vazios são só três retângulos vazios. */
+.memoria[data-estado="canal-unico"] .memoria-slot-vazio {
+  stroke: var(--amber);
+  stroke-dasharray: 4 3;
+}
+
+.memoria-info .lead { margin-top: 0; }
+
+@media (max-width: 900px) {
+  .memoria-corpo { grid-template-columns: 1fr; }
+  .memoria-arte { max-width: 300px; }
+}

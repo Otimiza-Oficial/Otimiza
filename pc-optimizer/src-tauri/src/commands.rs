@@ -1396,6 +1396,24 @@ pub async fn apply_optimization(
     }
 }
 
+/// Comando: a memória instalada, para a tela desenhá-la slot a slot.
+///
+/// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que faz o cliente
+/// entender por que o PC dele trava — sem pagar nada para descobrir.
+#[tauri::command]
+pub async fn memoria_instalada(
+) -> Result<crate::modules::windows::firmware::MemoriaInstalada, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::firmware::memoria_instalada())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// A placa de vídeo desta máquina, para a tela desenhar.
 #[derive(serde::Serialize)]
 pub struct PlacaDeVideo {
@@ -1814,6 +1832,7 @@ mod tests {
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
     const LIVRES: &[&str] = &[
         "placa_de_video",
+        "memoria_instalada",
         "analyze_game_config",
         "preview_game_profile",
         "medir_antes",
