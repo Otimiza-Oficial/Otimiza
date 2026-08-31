@@ -85,6 +85,8 @@ pub fn run() {
             commands::set_startup_enabled,
             commands::list_optimizations,
             commands::apply_optimization,
+            commands::preview_game_profile,
+            commands::apply_game_profile,
             commands::revert_optimization,
             commands::optimize_now,
             commands::revert_all_optimizations,

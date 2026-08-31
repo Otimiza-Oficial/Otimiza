@@ -80,6 +80,35 @@ pub enum ChangeRecord {
         name: String,
         previously_enabled: bool,
     },
+
+    /// Um arquivo de configuração de jogo, guardado INTEIRO antes de ser
+    /// alterado.
+    ///
+    /// POR QUE O ARQUIVO INTEIRO, E NÃO AS CHAVES QUE MUDARAM
+    ///
+    /// Todas as outras variantes guardam o valor anterior de uma coisa só, e
+    /// isso funciona porque registro e serviço são pares de chave e valor com
+    /// dono conhecido. Um arquivo de configuração de jogo não é: o próprio jogo
+    /// reescreve o arquivo quando quer, reordena as linhas, acrescenta chaves
+    /// que não existiam na versão passada e muda o formato entre atualizações.
+    ///
+    /// Guardando só as chaves mexidas, "desfazer" depois de o jogo ter
+    /// reescrito o arquivo devolveria um valor antigo para dentro de uma
+    /// estrutura nova — e o resultado seria um arquivo que nem é o de antes nem
+    /// o de agora. O arquivo inteiro é a única coisa que garante que voltar
+    /// significa voltar.
+    ///
+    /// Custa alguns kilobytes por mudança. É o preço mais barato deste projeto.
+    GameConfig {
+        /// Caminho completo, para o desfazer não depender de reencontrar a
+        /// pasta do jogo — que pode ter sido movida ou desinstalada.
+        caminho: String,
+        /// O conteúdo que existia antes. `None` quando o arquivo não existia:
+        /// desfazer, nesse caso, é apagá-lo.
+        anterior: Option<String>,
+        /// Nome do jogo, só para a descrição que o cliente lê.
+        jogo: String,
+    },
 }
 
 impl ChangeRecord {
@@ -120,6 +149,15 @@ impl ChangeRecord {
                 let keys: Vec<&str> = removed.iter().map(|(key, _)| key.as_str()).collect();
                 format!("boot · limites removidos: {}", keys.join(", "))
             }
+            ChangeRecord::GameConfig { jogo, anterior, .. } => format!(
+                "{} · configuração alterada ({})",
+                jogo,
+                match anterior {
+                    // O tamanho é a prova visível de que há para onde voltar.
+                    Some(texto) => format!("cópia de {} bytes guardada", texto.len()),
+                    None => "o arquivo não existia".to_string(),
+                }
+            ),
         }
     }
 }

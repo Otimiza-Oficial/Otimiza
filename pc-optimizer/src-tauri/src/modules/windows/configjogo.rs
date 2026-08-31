@@ -91,6 +91,39 @@ fn numero(conteudo: &str, chave: &str) -> Option<f64> {
     valor(conteudo, chave)?.trim().parse().ok()
 }
 
+/// Troca o valor de UMA chave, sem tocar em mais nada do arquivo.
+///
+/// **Função pura**: recebe o texto e devolve o texto. Não abre arquivo, não
+/// decide nada. É o que permite provar a substituição com o arquivo real do
+/// dono, num teste, sem nada em disco.
+///
+/// POR QUE SUBSTITUIÇÃO CIRÚRGICA, E NÃO REESCREVER O ARQUIVO
+///
+/// A tentação é ler tudo, montar uma estrutura, e gravar de volta. Isso perde o
+/// que não foi entendido: comentários, chaves de versões futuras, a ordem das
+/// linhas, a indentação, o cabeçalho XML. O jogo escreveu aquele arquivo do
+/// jeito dele, e devolver "equivalente" é como devolver um texto reescrito com
+/// as mesmas palavras — pode funcionar, e não é a mesma coisa.
+///
+/// Aqui só os caracteres entre as aspas daquela chave mudam. Todo o resto do
+/// arquivo sai byte a byte igual ao que entrou.
+///
+/// Devolve `None` quando a chave não existe: nesse caso não há o que trocar, e
+/// inventar a linha seria escrever no arquivo do jogo uma configuração que o
+/// jogo talvez nem leia naquela versão.
+pub fn trocar(conteudo: &str, chave: &str, novo: &str) -> Option<String> {
+    let abertura = format!("<{} value=\"", chave);
+    let inicio = conteudo.find(&abertura)? + abertura.len();
+    let fim = inicio + conteudo[inicio..].find('"')?;
+
+    let mut saida = String::with_capacity(conteudo.len() + novo.len());
+    saida.push_str(&conteudo[..inicio]);
+    saida.push_str(novo);
+    saida.push_str(&conteudo[fim..]);
+
+    Some(saida)
+}
+
 /// Placas com esta memória de vídeo ou menos não têm folga para gastar com
 /// suavização de serrilhado.
 ///
@@ -189,14 +222,18 @@ pub fn diagnosticar(conteudo: &str, vram_gb: f64) -> (Vec<AjusteCaro>, Vec<Confi
             "Isto pesa muito mais do que qualquer ajuste do Windows. Análises \
              independentes medem entre 30% e 50% de quadros só na suavização de \
              serrilhado — mais do que tudo que este programa consegue fazer no \
-             sistema, somado. O Otimiza NÃO mexe na configuração do seu jogo: quem \
-             decide como o jogo se parece é você. Para mudar, no menu do próprio \
-             jogo: {}.",
+             sistema, somado. O Otimiza consegue mudar isto para você, mostrando \
+             antes o que muda e guardando o arquivo para desfazer a qualquer \
+             momento. Se preferir fazer à mão, no menu do próprio jogo: {}.",
             passos.join("; ")
         ),
-        // Não é `Software`: o Otimiza não conserta isto, e marcar como se
-        // consertasse faria a interface oferecer um botão que não existe.
-        fix_location: FixLocation::None,
+        // MUDOU DE `None` PARA `Software`, e a mudança é o Pilar 1 inteiro.
+        //
+        // Enquanto o produto não escrevia no jogo, marcar como `Software` faria
+        // a interface oferecer um botão que não existia. Agora o botão existe —
+        // e manter `None` faria o contrário: esconder do cliente a correção que
+        // mais vale, justamente a que ele veio buscar.
+        fix_location: FixLocation::Software,
         severity: FindingSeverity::Critical,
     };
 
@@ -254,6 +291,142 @@ fn caminhos() -> Vec<(PathBuf, &'static str)> {
     lista
 }
 
+/// O que cada perfil faz com o arquivo do jogo.
+///
+/// A ORDEM DENTRO DE CADA PERFIL SEGUE O CUSTO REAL, e não o menu do jogo. O
+/// MSAA vem primeiro em todos porque sozinho ele custa mais que todos os outros
+/// somados numa placa de entrada.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Perfil {
+    /// Só tira os tetos. Não mexe em nada que mude como o jogo se parece.
+    ///
+    /// É o perfil que deveria ser o padrão da conversa com o cliente: o ganho
+    /// costuma ser o maior de todos, e o preço visual é exatamente zero.
+    SemTeto,
+    /// Tira os tetos e desliga o que é caro e pouco visível.
+    Equilibrado,
+    /// Tira os tetos e derruba tudo que custa quadro.
+    Competitivo,
+}
+
+/// Uma chave e o valor que o perfil quer nela.
+pub struct Mudanca {
+    pub chave: &'static str,
+    pub valor: &'static str,
+    /// O que o cliente perde, em português. Vazio quando não perde nada.
+    pub custo: &'static str,
+}
+
+/// AS DUAS CHAVES QUE FAZEM 200 VIRAR 500.
+///
+/// Um jogo travado em 200 quadros não está travado pela placa: está travado por
+/// um número escrito num arquivo. Tirar o teto devolve o que a máquina já era
+/// capaz de fazer, e devolve na hora.
+///
+/// É a diferença entre as duas coisas que este produto faz: as outras
+/// otimizações tentam melhorar o que a máquina entrega; esta remove uma trava
+/// que estava escondendo o que ela já entregava.
+///
+/// `VSyncMode` e `FPSLimit` só existem em parte das versões e configurações. A
+/// substituição devolve `None` quando a chave não está no arquivo, e o perfil
+/// simplesmente segue para a próxima — nunca cria a linha.
+const SEM_TETO: &[Mudanca] = &[
+    Mudanca { chave: "VSync", valor: "0", custo: "" },
+    Mudanca { chave: "VSyncMode", valor: "0", custo: "" },
+    Mudanca { chave: "FPSLimit", valor: "0", custo: "" },
+    Mudanca { chave: "MaxFPS", valor: "0", custo: "" },
+];
+
+const CAROS_E_POUCO_VISIVEIS: &[Mudanca] = &[
+    Mudanca { chave: "MSAA", valor: "0", custo: "serrilhado nas bordas" },
+    Mudanca { chave: "Tessellation", valor: "0", custo: "relevo em algumas superfícies" },
+    Mudanca { chave: "SSAO", valor: "0", custo: "sombra suave nos cantos" },
+];
+
+const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
+    Mudanca { chave: "ReflectionQuality", valor: "0", custo: "reflexos mais simples" },
+    Mudanca { chave: "ShadowQuality", valor: "0", custo: "sombras mais duras" },
+    Mudanca { chave: "WaterQuality", valor: "0", custo: "água mais simples" },
+    Mudanca { chave: "ParticleQuality", valor: "0", custo: "efeitos mais simples" },
+    Mudanca { chave: "PostFX", valor: "0", custo: "menos brilho e desfoque" },
+];
+
+impl Perfil {
+    pub fn mudancas(self) -> Vec<&'static Mudanca> {
+        let mut lista: Vec<&Mudanca> = SEM_TETO.iter().collect();
+
+        if matches!(self, Perfil::Equilibrado | Perfil::Competitivo) {
+            lista.extend(CAROS_E_POUCO_VISIVEIS.iter());
+        }
+
+        if matches!(self, Perfil::Competitivo) {
+            lista.extend(O_RESTO_QUE_CUSTA.iter());
+        }
+
+        lista
+    }
+}
+
+/// O que um perfil FARIA neste arquivo, sem escrever nada.
+///
+/// Existe para a tela poder mostrar exatamente o que vai mudar antes de o
+/// cliente decidir — e para a decisão dele ser sobre chaves com nome e valor,
+/// não sobre a palavra "otimizar".
+///
+/// Só entram as chaves que EXISTEM no arquivo e cujo valor é diferente do que o
+/// perfil quer. Uma chave que já está no valor certo não é mudança, e listá-la
+/// faria a tela prometer um ganho que não vai acontecer.
+pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'static str)> {
+    let mut previsto = Vec::new();
+
+    for m in perfil.mudancas() {
+        let Some(atual) = valor(conteudo, m.chave) else {
+            continue;
+        };
+
+        if atual.trim() == m.valor {
+            continue;
+        }
+
+        previsto.push((
+            m.chave.to_string(),
+            atual,
+            m.valor.to_string(),
+            m.custo,
+        ));
+    }
+
+    previsto
+}
+
+/// Aplica o perfil ao TEXTO. Continua sem tocar em disco.
+///
+/// Devolve o conteúdo novo e a lista do que mudou. Quando nada muda, devolve o
+/// conteúdo idêntico e uma lista vazia — e quem chama precisa tratar isso como
+/// "não havia o que fazer", em vez de gravar um arquivo igual e registrar uma
+/// mudança que não houve.
+pub fn aplicar_no_texto(conteudo: &str, perfil: Perfil) -> (String, Vec<String>) {
+    let mut saida = conteudo.to_string();
+    let mut mexidas = Vec::new();
+
+    for m in perfil.mudancas() {
+        let Some(atual) = valor(&saida, m.chave) else {
+            continue;
+        };
+
+        if atual.trim() == m.valor {
+            continue;
+        }
+
+        if let Some(novo) = trocar(&saida, m.chave, m.valor) {
+            mexidas.push(format!("{}: {} → {}", m.chave, atual, m.valor));
+            saida = novo;
+        }
+    }
+
+    (saida, mexidas)
+}
+
 pub fn analyze() -> ConfigJogoReport {
     let vram = vram_gb();
 
@@ -288,6 +461,78 @@ fn vram_gb() -> f64 {
     super::bottleneck::vram_total_gb()
 }
 
+/// O resultado de aplicar um perfil no jogo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AplicacaoNoJogo {
+    pub jogo: String,
+    pub arquivo: PathBuf,
+    /// Cada linha no formato "MSAA: 4 → 0". Vazio quando não havia o que mudar.
+    pub mudou: Vec<String>,
+    /// O arquivo inteiro como estava, para o registro de desfazer.
+    pub anterior: String,
+}
+
+/// Escreve o perfil no arquivo do jogo.
+///
+/// ESTA É A ÚNICA FUNÇÃO DO PRODUTO QUE ESCREVE NUM ARQUIVO DO CLIENTE.
+///
+/// Todas as outras otimizações mexem no Windows — registro, serviço, plano de
+/// energia — que é território do sistema. Este arquivo é do jogo, e mexer nele
+/// muda como o jogo se parece para quem joga. Por isso as três garantias
+/// abaixo, e nenhuma delas é opcional.
+///
+/// 1. RECUSA COM O JOGO ABERTO. O GTA V e o FiveM mantêm a configuração em
+///    memória e reescrevem o arquivo ao fechar. Escrever com ele aberto é
+///    trabalho que o jogo apaga ao sair — e o cliente veria "aplicado" seguido
+///    de nada acontecendo, que é pior que não aplicar.
+///
+/// 2. DEVOLVE O ARQUIVO INTEIRO como estava, para o `ChangeRecord::GameConfig`.
+///    O desfazer não recompõe: ele reescreve o que estava lá.
+///
+/// 3. NÃO ESCREVE QUANDO NÃO HÁ O QUE MUDAR. Gravar um arquivo idêntico
+///    registraria uma mudança que não houve, e o cliente teria um item no
+///    histórico de desfazer que não desfaz nada.
+pub fn aplicar_perfil(perfil: Perfil) -> Result<AplicacaoNoJogo, String> {
+    let (jogo_aberto, _) = super::fivem::processos_abertos();
+
+    if jogo_aberto {
+        return Err(
+            "O jogo está aberto. Feche-o antes: ele guarda a configuração em memória e \
+             reescreve o arquivo ao sair, apagando o que for mudado agora."
+                .to_string(),
+        );
+    }
+
+    for (caminho, jogo) in caminhos() {
+        let Ok(conteudo) = std::fs::read_to_string(&caminho) else {
+            continue;
+        };
+
+        let (novo, mudou) = aplicar_no_texto(&conteudo, perfil);
+
+        if mudou.is_empty() {
+            return Ok(AplicacaoNoJogo {
+                jogo: jogo.to_string(),
+                arquivo: caminho,
+                mudou,
+                anterior: conteudo,
+            });
+        }
+
+        std::fs::write(&caminho, &novo)
+            .map_err(|e| format!("não consegui escrever em {}: {}", caminho.display(), e))?;
+
+        return Ok(AplicacaoNoJogo {
+            jogo: jogo.to_string(),
+            arquivo: caminho,
+            mudou,
+            anterior: conteudo,
+        });
+    }
+
+    Err("Não encontrei a configuração de nenhum jogo conhecido neste computador.".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,29 +552,145 @@ mod tests {
   </graphics>
 </Settings>"#;
 
+    /// A guarda que proibia escrever virou a guarda que exige guardar antes.
+    ///
+    /// A regra antiga era do dono: "o Otimiza mexe no PC, não no jogo". Ele a
+    /// removeu, e removeu por um bom motivo — a configuração do jogo vale
+    /// dezenas de por cento, enquanto os quarenta e dois ajustes de Windows
+    /// somados valem alguns.
+    ///
+    /// Mas o RISCO que aquela regra cobria não desapareceu junto: escrever no
+    /// arquivo do cliente sem ter como voltar continua sendo a pior coisa que
+    /// este módulo pode fazer. Então a guarda não foi apagada, foi virada do
+    /// avesso: em vez de proibir a escrita, ela exige que toda escrita venha
+    /// acompanhada do conteúdo anterior.
+    ///
+    /// Apagar a guarda junto com a regra teria sido perder a lição junto com a
+    /// restrição.
     #[test]
-    fn este_modulo_nunca_escreve() {
-        // A regra do dono do produto: o Otimiza mexe no PC, não no jogo. Como o
-        // arquivo lido aqui é do cliente e descreve a experiência dele, uma
-        // escrita acidental seria mudar como o jogo dele se parece sem ele
-        // pedir. O teste tranca isso no nível do arquivo.
-        let producao = include_str!("configjogo.rs").split("#[cfg(test)]").next().unwrap();
+    fn toda_escrita_guarda_o_arquivo_anterior() {
+        let producao = include_str!("configjogo.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
 
-        for proibido in [
-            "fs::write",
-            "fs::remove",
-            "File::create",
-            "OpenOptions",
-            "write_all",
-            "set_dword",
-            "set_string",
-        ] {
+        let escritas = producao.matches("fs::write").count();
+
+        assert_eq!(
+            escritas, 1,
+            "há {} escritas neste módulo; só `aplicar_perfil` pode escrever, \
+             porque só ela guarda o arquivo anterior",
+            escritas
+        );
+
+        // O conteúdo anterior tem que sair da função, senão não há desfazer.
+        assert!(
+            producao.contains("pub anterior: String"),
+            "a aplicação parou de devolver o arquivo anterior; o desfazer morre com isso"
+        );
+
+        // E a recusa com o jogo aberto não pode sumir numa refatoração: sem
+        // ela, o jogo apaga o trabalho ao fechar e o cliente vê "aplicado"
+        // seguido de nada.
+        assert!(
+            producao.contains("processos_abertos"),
+            "a recusa de escrever com o jogo aberto sumiu"
+        );
+    }
+
+    /// Trocar uma chave não pode mexer em mais nada do arquivo.
+    #[test]
+    fn trocar_mexe_so_na_chave_pedida() {
+        let novo = trocar(CONFIG_REAL, "MSAA", "0").expect("MSAA existe no arquivo");
+
+        assert_eq!(valor(&novo, "MSAA").as_deref(), Some("0"));
+
+        // Todo o resto sai idêntico: mesmo tamanho de diferença que a troca de
+        // "4" por "0" justifica, e nenhuma outra chave mexida.
+        assert_eq!(novo.len(), CONFIG_REAL.len());
+        assert_eq!(
+            valor(&novo, "Tessellation"),
+            valor(CONFIG_REAL, "Tessellation")
+        );
+        assert_eq!(valor(&novo, "ShadowQuality"), valor(CONFIG_REAL, "ShadowQuality"));
+
+        // O cabeçalho e os comentários continuam onde estavam.
+        assert!(novo.starts_with("<?xml"));
+    }
+
+    /// Chave que não existe no arquivo não é inventada.
+    #[test]
+    fn trocar_nao_cria_chave_que_o_jogo_nao_tem() {
+        assert!(trocar(CONFIG_REAL, "NaoExisteEssaChave", "0").is_none());
+    }
+
+    /// O perfil que não mexe no visual só tira teto.
+    #[test]
+    fn sem_teto_nao_toca_em_nada_visual() {
+        for m in Perfil::SemTeto.mudancas() {
             assert!(
-                !producao.contains(proibido),
-                "`{}` apareceu num módulo que só pode ler",
-                proibido
+                m.custo.is_empty(),
+                "`{}` está no perfil sem custo visual e cobra `{}`",
+                m.chave,
+                m.custo
             );
         }
+
+        // E o MSAA, que é o mais caro de todos, NÃO entra nele: quem escolhe
+        // "não quero mudar como o jogo se parece" não pode perder serrilhado.
+        assert!(
+            !Perfil::SemTeto.mudancas().iter().any(|m| m.chave == "MSAA"),
+            "o MSAA entrou no perfil que promete não mexer no visual"
+        );
+    }
+
+    /// Aplicar no arquivo real do dono: o MSAA 4x cai, e nada mais se perde.
+    #[test]
+    fn aplicar_no_arquivo_real_derruba_o_msaa() {
+        let (novo, mudou) = aplicar_no_texto(CONFIG_REAL, Perfil::Equilibrado);
+
+        assert_eq!(valor(&novo, "MSAA").as_deref(), Some("0"));
+        assert!(
+            mudou.iter().any(|m| m.starts_with("MSAA: 4 → 0")),
+            "o que mudou não foi relatado: {:?}",
+            mudou
+        );
+
+        // As chaves que já estavam no mínimo não entram na lista: contá-las
+        // faria a tela prometer um ganho que não vai acontecer.
+        assert!(
+            !mudou.iter().any(|m| m.starts_with("ShaderQuality")),
+            "relatou mudança numa chave que já estava no valor certo"
+        );
+    }
+
+    /// Aplicar duas vezes seguidas não muda nada na segunda.
+    #[test]
+    fn aplicar_e_idempotente() {
+        let (uma, _) = aplicar_no_texto(CONFIG_REAL, Perfil::Competitivo);
+        let (duas, mudou) = aplicar_no_texto(&uma, Perfil::Competitivo);
+
+        assert_eq!(uma, duas);
+        assert!(
+            mudou.is_empty(),
+            "a segunda aplicação achou o que mudar: {:?}",
+            mudou
+        );
+    }
+
+    /// A previsão mostra ao cliente exatamente o que vai mudar, antes.
+    #[test]
+    fn prever_lista_chave_valor_e_custo() {
+        let previsto = prever(CONFIG_REAL, Perfil::Equilibrado);
+
+        let msaa = previsto
+            .iter()
+            .find(|(chave, ..)| chave == "MSAA")
+            .expect("o MSAA precisa aparecer na previsão");
+
+        assert_eq!(msaa.1, "4", "o valor atual saiu errado");
+        assert_eq!(msaa.2, "0", "o valor novo saiu errado");
+        assert!(!msaa.3.is_empty(), "o cliente precisa saber o que perde");
     }
 
     #[test]
@@ -347,15 +708,28 @@ mod tests {
     }
 
     #[test]
-    fn o_produto_diz_que_nao_vai_mexer_e_onde_clicar() {
-        // Sem isto, o achado vira uma reclamação sem saída.
+    fn o_achado_oferece_o_conserto_e_o_caminho_a_mao() {
+        // Este teste mudou junto com o produto. Ele afirmava que o conselho
+        // dizia "o Otimiza NÃO mexe na configuração do seu jogo" e que o achado
+        // não podia fingir que o produto consertava.
+        //
+        // O produto passou a consertar. Manter a afirmação antiga esconderia do
+        // cliente a correção que mais vale — mas as duas outras metades
+        // continuam valendo, e continuam trancadas aqui: o achado nunca pode
+        // virar reclamação sem saída, e o caminho manual não pode sumir só
+        // porque agora existe um botão.
         let (_, findings) = diagnosticar(CONFIG_REAL, 4.0);
         let conselho = &findings[0].advice;
 
-        assert!(conselho.contains("NÃO mexe na configuração do seu jogo"));
-        assert!(conselho.contains("Gráficos → MSAA → Desligado"));
-        // E o achado não pode fingir que o Otimiza conserta.
-        assert_eq!(findings[0].fix_location, FixLocation::None);
+        assert!(
+            conselho.contains("desfazer"),
+            "oferecer mexer no jogo sem falar em desfazer é a metade errada da oferta"
+        );
+        assert!(
+            conselho.contains("Gráficos → MSAA → Desligado"),
+            "o caminho manual sumiu; quem prefere fazer à mão ficou sem saída"
+        );
+        assert_eq!(findings[0].fix_location, FixLocation::Software);
     }
 
     #[test]

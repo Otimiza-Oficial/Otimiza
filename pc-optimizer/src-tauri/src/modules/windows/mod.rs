@@ -1315,6 +1315,23 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                     Err(failures.join("; "))
                 }
             }
+
+            // O arquivo do jogo volta INTEIRO ao que era.
+            //
+            // Sem `anterior`, o arquivo não existia antes de o Otimiza mexer, e
+            // desfazer é apagá-lo. Apagar um arquivo que já não está lá não é
+            // falha: o estado desejado — ele não existir — já é o estado atual.
+            ChangeRecord::GameConfig {
+                caminho, anterior, ..
+            } => match anterior {
+                Some(conteudo) => std::fs::write(caminho, conteudo)
+                    .map_err(|e| format!("não consegui devolver {}: {}", caminho, e)),
+                None => match std::fs::remove_file(caminho) {
+                    Ok(()) => Ok(()),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                    Err(e) => Err(format!("não consegui apagar {}: {}", caminho, e)),
+                },
+            },
         };
 
         if let Err(error) = result {
@@ -1335,6 +1352,74 @@ mod tests {
     use crate::modules::changelog::PreviousValue;
 
     const STARTUP_DELAY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
+
+    /// Desfazer a configuração de um jogo tem que devolver o arquivo BYTE A BYTE.
+    ///
+    /// É o teste que sustenta o produto passar a escrever no jogo. Enquanto ele
+    /// só mexia no registro, cada mudança era um par de chave e valor com dono
+    /// conhecido; um arquivo de configuração é do jogo, e devolver "quase" o que
+    /// era deixaria o cliente com um arquivo que não é nem o de antes nem o de
+    /// agora.
+    #[test]
+    fn desfazer_a_configuracao_do_jogo_devolve_o_arquivo_inteiro() {
+        let dir = std::env::temp_dir().join(format!("otz-conf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("criar pasta de teste");
+        let alvo = dir.join("settings.xml");
+
+        // Um arquivo com acento, aspas e quebra de linha do Windows: se a volta
+        // passar por alguma conversão de texto, é aqui que aparece.
+        let original = "<Settings>\r\n  <MSAA value=\"4\" />\r\n  <!-- resolução -->\r\n</Settings>\r\n";
+        std::fs::write(&alvo, original).expect("escrever o original");
+
+        let registro = ChangeRecord::GameConfig {
+            caminho: alvo.to_string_lossy().to_string(),
+            anterior: Some(original.to_string()),
+            jogo: "FiveM".to_string(),
+        };
+
+        // O "jogo" é alterado, como o Pilar 1 fará.
+        std::fs::write(&alvo, "<Settings><MSAA value=\"0\" /></Settings>").expect("alterar");
+        assert_ne!(std::fs::read_to_string(&alvo).unwrap(), original);
+
+        revert_changes(&[registro]).expect("a reversão não podia falhar");
+
+        assert_eq!(
+            std::fs::read_to_string(&alvo).unwrap(),
+            original,
+            "o arquivo voltou diferente do que era"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Arquivo que não existia antes: desfazer é apagá-lo, e apagar duas vezes
+    /// não é falha.
+    ///
+    /// O segundo caso importa porque `revert_all` pode passar pelo mesmo
+    /// registro depois de uma reversão parcial que já tinha limpado o arquivo.
+    /// Tratar "já não está lá" como erro faria a tela acusar falha de uma
+    /// reversão que deu certo.
+    #[test]
+    fn desfazer_apaga_o_arquivo_que_o_otimiza_criou() {
+        let dir = std::env::temp_dir().join(format!("otz-conf-novo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("criar pasta de teste");
+        let alvo = dir.join("settings.xml");
+
+        std::fs::write(&alvo, "<Settings/>").expect("criar o arquivo");
+
+        let registro = ChangeRecord::GameConfig {
+            caminho: alvo.to_string_lossy().to_string(),
+            anterior: None,
+            jogo: "FiveM".to_string(),
+        };
+
+        revert_changes(&[registro.clone()]).expect("a reversão não podia falhar");
+        assert!(!alvo.exists(), "o arquivo continuou existindo");
+
+        revert_changes(&[registro]).expect("desfazer duas vezes não é falha");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// A inspeção lê o sistema real: nenhuma otimização pode aparecer com estado
     /// errado por causa de exceção não tratada.

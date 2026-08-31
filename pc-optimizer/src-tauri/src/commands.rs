@@ -1396,6 +1396,109 @@ pub async fn apply_optimization(
     }
 }
 
+/// Comando: mostra o que um perfil MUDARIA na configuração do jogo.
+///
+/// Não escreve nada. Existe para a tela poder listar chave por chave, com o
+/// valor de agora, o valor novo e o que se perde — antes de o cliente decidir.
+///
+/// Fica em `LIVRES`: é leitura, e o diagnóstico do produto é livre.
+#[tauri::command]
+pub async fn preview_game_profile(
+    perfil: String,
+) -> Result<Vec<(String, String, String, String)>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::configjogo;
+
+        let escolhido = perfil_por_nome(&perfil)?;
+        let relatorio = configjogo::analyze();
+
+        let Some(caminho) = relatorio.arquivo else {
+            return Err("Não encontrei a configuração de nenhum jogo conhecido.".to_string());
+        };
+
+        let conteudo = std::fs::read_to_string(&caminho)
+            .map_err(|e| format!("não consegui ler {}: {}", caminho.display(), e))?;
+
+        Ok(configjogo::prever(&conteudo, escolhido)
+            .into_iter()
+            .map(|(chave, atual, novo, custo)| (chave, atual, novo, custo.to_string()))
+            .collect())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = perfil;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: aplica um perfil na configuração do jogo.
+///
+/// É A ÚNICA COISA DO PRODUTO QUE ESCREVE NUM ARQUIVO DO CLIENTE, e por isso
+/// registra no histórico de desfazer como qualquer outra otimização — só que
+/// guardando o arquivo INTEIRO em vez de um valor de registro.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador.
+#[cfg(target_os = "windows")]
+fn perfil_por_nome(nome: &str) -> Result<crate::modules::windows::configjogo::Perfil, String> {
+    use crate::modules::windows::configjogo::Perfil;
+
+    match nome {
+        "sem_teto" => Ok(Perfil::SemTeto),
+        "equilibrado" => Ok(Perfil::Equilibrado),
+        "competitivo" => Ok(Perfil::Competitivo),
+        outro => Err(format!("perfil desconhecido: {}", outro)),
+    }
+}
+
+#[tauri::command]
+pub async fn apply_game_profile(
+    perfil: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+        use crate::modules::windows::configjogo;
+
+        let escolhido = perfil_por_nome(&perfil)?;
+        let feito = configjogo::aplicar_perfil(escolhido)?;
+
+        // NADA MUDOU, NADA É REGISTRADO.
+        //
+        // Gravar um registro de desfazer para uma mudança que não houve daria
+        // ao cliente um item no histórico que não desfaz nada — e a sensação de
+        // que algo foi mexido quando não foi.
+        if feito.mudou.is_empty() {
+            return Ok(feito.mudou);
+        }
+
+        let mut log = state.changes.lock().await;
+
+        log.record(AppliedOptimization {
+            optimization_id: format!("config_jogo_{}", perfil),
+            name: format!("Configuração do {} · perfil {}", feito.jogo, perfil),
+            timestamp: now_timestamp(),
+            changes: vec![ChangeRecord::GameConfig {
+                caminho: feito.arquivo.to_string_lossy().to_string(),
+                anterior: Some(feito.anterior),
+                jogo: feito.jogo,
+            }],
+        })?;
+
+        Ok(feito.mudou)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (perfil, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: Desfaz uma otimização específica
 #[tauri::command]
 pub async fn revert_optimization(
@@ -1561,6 +1664,7 @@ mod tests {
     /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
     const LIVRES: &[&str] = &[
+        "preview_game_profile",
         "get_platform_info",
         "get_performance_metrics",
         "start_monitoring",
@@ -1629,6 +1733,7 @@ mod tests {
         "create_restore_point",
         "enable_system_protection",
         "set_startup_enabled",
+        "apply_game_profile",
         "apply_optimization",
         "optimize_now",
         "set_max_refresh_rate",
