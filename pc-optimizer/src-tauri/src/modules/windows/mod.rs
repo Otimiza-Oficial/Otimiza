@@ -39,6 +39,7 @@ pub mod processes;
 pub mod profiles;
 pub mod readiness;
 pub mod registry;
+pub mod reparo;
 pub mod restore;
 pub mod services;
 pub mod servicesaudit;
