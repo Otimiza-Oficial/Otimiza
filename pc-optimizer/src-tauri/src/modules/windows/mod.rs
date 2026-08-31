@@ -45,6 +45,7 @@ pub mod shaders;
 pub mod shell;
 pub mod startup;
 pub mod suspend;
+pub mod tarefa_longa;
 pub mod tasks;
 pub mod thermal;
 pub mod veredito;

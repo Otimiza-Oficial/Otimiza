@@ -176,7 +176,7 @@ jobs:
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::conflicts:: modules::windows::tasks:: modules::windows::bloatware::"
+        run: "cargo test --lib -- modules::windows::conflicts:: modules::windows::tasks:: modules::windows::bloatware:: modules::windows::tarefa_longa::"
 
       - name: Testes — inicialização e limitação do processador
         working-directory: pc-optimizer/src-tauri
