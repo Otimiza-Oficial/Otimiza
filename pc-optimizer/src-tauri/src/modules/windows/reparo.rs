@@ -13,6 +13,13 @@
 // Este módulo só descreve as ferramentas — programa, argumentos, duração
 // típica, se cancelar é seguro. Ele não sabe rodar processo nem ler log; quem
 // executa e quem interpreta a saída são módulos à parte.
+//
+// A trava do disco importa `health` (o tipo `HealthReport`, e nada além
+// disso). Isso não quebra a separação acima: ler o diagnóstico já pronto para
+// decidir se um argumento pode existir ainda é DESCREVER, não executar
+// processo nem interpretar log — essas duas coisas continuam de fora.
+
+use super::health::{FindingSeverity, HealthReport};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Ferramenta {
@@ -118,6 +125,9 @@ pub fn receita(f: &Ferramenta) -> Receita {
                 programa: "DISM",
                 args: lista,
                 minutos_tipicos: (5, 25),
+                // Mexe no WinSxS mesmo sem `/ResetBase`: uma limpeza cortada no
+                // meio pode deixar o componente pela metade, do mesmo jeito que
+                // o `/RestoreHealth` acima — cancelar não é de graça aqui também.
                 cancelar_e_seguro: false,
                 aviso: if *resetar_base {
                     Some(
@@ -133,13 +143,56 @@ pub fn receita(f: &Ferramenta) -> Receita {
     }
 }
 
+/// Prova de que um disco foi lido e passou no exame — não um bool solto.
+///
+/// O campo é privado de propósito. Um `bool` na assinatura de
+/// `consertar_disco_e_permitido` podia vir de qualquer lugar: um valor fixo, um
+/// `unwrap_or(true)` esquecido, uma inversão de sinal — o compilador não via
+/// diferença entre isso e uma leitura real do disco. Sem um construtor que
+/// exige o `HealthReport`, não existe caminho para produzir um `DiscoSaudavel`
+/// que não tenha vindo de um diagnóstico de verdade.
+pub struct DiscoSaudavel(bool);
+
+impl DiscoSaudavel {
+    /// Único jeito de obter um `DiscoSaudavel`: a partir do relatório real.
+    ///
+    /// Duas leituras reprovam o disco:
+    ///
+    /// - `needs_admin`: a checagem não conseguiu ler o disco. "Não sei" não
+    ///   pode virar "está bem" — é a mesma regra do `NaoSei` do `cbslog`, que
+    ///   nunca colapsa em `SemCorrupcao`, e do monitor de pagamento, que separa
+    ///   "não sei se pagou" de "não pagou".
+    /// - Um achado `disk_status_*` com severidade diferente de `Ok`. O
+    ///   `chkdsk /f` reescreve estrutura por cima de setores do disco; a
+    ///   pergunta que importa não é "o problema já é grave o bastante para
+    ///   preocupar o cliente" (isso é o que a severidade mede para a TELA), é
+    ///   "o Windows já viu algo de errado neste disco" — e `Important` já é
+    ///   isso. Não existe leitura de `disk_status_*` que hoje produza
+    ///   `Important` (o mapeamento em `avaliar_estado` só devolve `Critical`
+    ///   ou `Ok`), mas a trava não deveria depender desse detalhe de outro
+    ///   módulo para continuar segura se ele mudar amanhã. Por isso o corte
+    ///   aqui é "qualquer coisa que não seja `Ok`", não "só `Critical`".
+    pub fn a_partir_do_relatorio(relatorio: &HealthReport) -> DiscoSaudavel {
+        if relatorio.needs_admin {
+            return DiscoSaudavel(false);
+        }
+
+        let disco_com_problema = relatorio.findings.iter().any(|achado| {
+            achado.id.starts_with("disk_status_") && achado.severity != FindingSeverity::Ok
+        });
+
+        DiscoSaudavel(!disco_com_problema)
+    }
+}
+
 /// Se `chkdsk /f` pode ser oferecido.
 ///
 /// Num disco em más condições, o `chkdsk` é justamente o que costuma matá-lo de
-/// vez: ele reescreve estrutura em setores que já estão falhando. O `health.rs`
-/// já sabe reconhecer esse disco, e esta é a trava que usa essa leitura.
-pub fn consertar_disco_e_permitido(disco_saudavel: bool) -> bool {
-    disco_saudavel
+/// vez: ele reescreve estrutura em setores que já estão falhando. `DiscoSaudavel`
+/// só existe quando veio de um `HealthReport` de verdade, então esta trava não
+/// tem como ser furada por um bool inventado na chamada.
+pub fn consertar_disco_e_permitido(disco: &DiscoSaudavel) -> bool {
+    disco.0
 }
 
 #[cfg(test)]
@@ -157,12 +210,58 @@ mod tests {
         assert!(r.cancelar_e_seguro, "o /scan só lê; cancelar tem que ser seguro");
     }
 
+    fn achado_de_disco(severidade: FindingSeverity) -> super::super::health::HealthFinding {
+        use super::super::health::FixLocation;
+
+        super::super::health::HealthFinding {
+            id: "disk_status_0".to_string(),
+            title: "Disco: Teste".to_string(),
+            measured: "SSD de 500 GB, estado relatado pelo Windows.".to_string(),
+            advice: "achado de teste".to_string(),
+            severity: severidade,
+            fix_location: if severidade == FindingSeverity::Ok {
+                FixLocation::None
+            } else {
+                FixLocation::Hardware
+            },
+        }
+    }
+
     #[test]
-    fn disco_reprovado_nao_recebe_consertar() {
+    fn relatorio_sem_permissao_nao_recebe_consertar() {
+        // `needs_admin` é "não sei", não "está bem" — não sei não pode virar
+        // sim, do mesmo jeito que o NaoSei do cbslog nunca vira SemCorrupcao.
+        let relatorio = HealthReport {
+            findings: Vec::new(),
+            needs_admin: true,
+        };
+
+        let disco = DiscoSaudavel::a_partir_do_relatorio(&relatorio);
+        assert!(!consertar_disco_e_permitido(&disco));
+    }
+
+    #[test]
+    fn disco_reprovado_no_relatorio_nao_recebe_consertar() {
         // Num disco morrendo, o chkdsk é justamente o que costuma matá-lo de
         // vez — e o health.rs já sabe reconhecer esse disco.
-        assert!(!consertar_disco_e_permitido(false));
-        assert!(consertar_disco_e_permitido(true));
+        let relatorio = HealthReport {
+            findings: vec![achado_de_disco(FindingSeverity::Critical)],
+            needs_admin: false,
+        };
+
+        let disco = DiscoSaudavel::a_partir_do_relatorio(&relatorio);
+        assert!(!consertar_disco_e_permitido(&disco));
+    }
+
+    #[test]
+    fn disco_limpo_e_legivel_recebe_consertar() {
+        let relatorio = HealthReport {
+            findings: vec![achado_de_disco(FindingSeverity::Ok)],
+            needs_admin: false,
+        };
+
+        let disco = DiscoSaudavel::a_partir_do_relatorio(&relatorio);
+        assert!(consertar_disco_e_permitido(&disco));
     }
 
     #[test]
@@ -189,8 +288,22 @@ mod tests {
 
     #[test]
     fn o_dism_pede_saida_estavel() {
-        // `/English` dá uma saída que não muda com o idioma do Windows.
-        let r = receita(&Ferramenta::RepararImagem);
-        assert!(r.args.iter().any(|a| a == "/English"), "args: {:?}", r.args);
+        // `/English` dá uma saída que não muda com o idioma do Windows. As três
+        // ferramentas rodam DISM, e as três precisam do argumento — uma
+        // regressão que tirasse `/English` só de uma delas ficaria invisível
+        // se o teste checasse uma única variante.
+        for ferramenta in [
+            Ferramenta::RepararImagem,
+            Ferramenta::AnalisarWinSxS,
+            Ferramenta::LimparWinSxS { resetar_base: false },
+        ] {
+            let r = receita(&ferramenta);
+            assert!(
+                r.args.iter().any(|a| a == "/English"),
+                "{:?} saiu sem /English: {:?}",
+                ferramenta,
+                r.args
+            );
+        }
     }
 }
