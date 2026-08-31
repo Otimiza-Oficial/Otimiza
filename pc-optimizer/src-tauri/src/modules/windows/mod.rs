@@ -1413,10 +1413,10 @@ mod tests {
             jogo: "FiveM".to_string(),
         };
 
-        revert_changes(&[registro.clone()]).expect("a reversão não podia falhar");
+        revert_changes(std::slice::from_ref(&registro)).expect("a reversão não podia falhar");
         assert!(!alvo.exists(), "o arquivo continuou existindo");
 
-        revert_changes(&[registro]).expect("desfazer duas vezes não é falha");
+        revert_changes(std::slice::from_ref(&registro)).expect("desfazer duas vezes não é falha");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
