@@ -4206,3 +4206,128 @@ body.janela-cheia {
   }
 }
 
+
+/* ==========================================================================
+   A PLACA DE VÍDEO, DESENHADA
+
+   O concorrente pede para a pessoa escolher entre AMD e NVIDIA. Aqui a placa é
+   reconhecida e mostrada — a escolha manual só aparece quando a leitura falha.
+
+   A COR VEM DO FABRICANTE, e é a única cor de marca em todo o produto. Ela se
+   justifica porque é informação: o verde diz "NVIDIA" antes de qualquer texto
+   ser lido, do mesmo jeito que o vermelho da barra de memória diz "crítico".
+   Enquanto a placa não é conhecida, o desenho fica no cinza do resto da
+   interface — em vez de chutar uma cor e acertar por sorte.
+   ========================================================================== */
+
+.placa {
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) 1fr;
+  gap: var(--s5);
+  align-items: center;
+}
+
+.placa-arte svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Cada fabricante traz a sua cor. Desconhecido continua cinza. */
+.placa[data-marca="nvidia"] { --marca: #76b900; }
+.placa[data-marca="amd"]    { --marca: #ed1c24; }
+.placa[data-marca="intel"]  { --marca: #0071c5; }
+.placa[data-marca="desconhecida"] { --marca: var(--hairline-strong); }
+
+.placa-tras     { fill: #000; opacity: 0.55; }
+.placa-pcb      { fill: #0d0d0d; stroke: var(--hairline); stroke-width: 1; }
+.placa-carenagem{ fill: #151515; stroke: var(--hairline); stroke-width: 1; }
+.placa-chapa    { fill: #1c1c1c; stroke: var(--hairline); stroke-width: 1; }
+.placa-saidas rect { fill: #000; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-pinos rect  { fill: #b8952f; }
+
+.placa-aletas path {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+  fill: none;
+}
+
+/* As pás giram devagar. É o único movimento da tela, e ele diz "a máquina está
+   viva" sem custar quase nada: uma transformação por elemento, sem repintura de
+   layout. */
+.placa-ventilador {
+  fill: #1f1f1f;
+  stroke: var(--hairline);
+  stroke-width: 1;
+  transform-origin: center;
+}
+
+.placa-aro {
+  fill: #0a0a0a;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.placa-pas path {
+  fill: none;
+  stroke: #2e2e2e;
+  stroke-width: 6.5;
+  stroke-linecap: round;
+}
+
+.placa-cubo { fill: var(--marca); stroke: none; }
+
+.placa-tarja {
+  fill: var(--marca);
+  /* A tarja acesa demais viraria o assunto da tela. Ela é assinatura, não
+     anúncio. */
+  opacity: 0.85;
+}
+
+.placa-energia rect { fill: #101010; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-energia path { stroke: var(--hairline-strong); stroke-width: 1; }
+
+.placa-marca {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--marca);
+}
+
+.placa-nome {
+  margin: var(--s2) 0 var(--s4);
+  font-size: var(--t-h2);
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.placa-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--s3);
+  margin: 0;
+}
+
+.placa-dados dt {
+  font-size: var(--t-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.placa-dados dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  color: var(--text);
+}
+
+.placa-escolha { margin-top: var(--s4); }
+
+/* Em janela estreita o desenho sai da frente: o nome da placa e o driver é que
+   precisam caber. */
+@media (max-width: 900px) {
+  .placa { grid-template-columns: 1fr; }
+  .placa-arte { max-width: 260px; }
+}

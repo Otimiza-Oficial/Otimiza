@@ -85,6 +85,7 @@ pub fn run() {
             commands::set_startup_enabled,
             commands::list_optimizations,
             commands::apply_optimization,
+            commands::placa_de_video,
             commands::analyze_game_config,
             commands::medir_antes,
             commands::medir_depois,

@@ -4095,6 +4095,63 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 // ---------------------------------------------------------------- controles
 
 
+/* ------------------------------------------------------ a placa de vídeo */
+
+interface PlacaDeVideo {
+  marca: string;
+  nome: string | null;
+  driver: string | null;
+  driver_data: string | null;
+  driver_dias: number | null;
+  vram_gb: number;
+}
+
+/**
+ * Desenha a placa que a máquina TEM, em vez de perguntar qual é.
+ *
+ * O concorrente abre pedindo para escolher entre AMD e NVIDIA. Perguntar o que
+ * o produto já leu é fazer o cliente trabalhar de graça, e ainda arrisca ele
+ * escolher errado — e a partir daí tudo que a tela mostrar estará baseado numa
+ * escolha ruim.
+ *
+ * A escolha manual existe, escondida, e só aparece quando a leitura falha. Aí
+ * ela deixa de ser trabalho inútil e passa a ser a única saída.
+ */
+async function carregarPlaca() {
+  const painel = element("placa-painel");
+
+  try {
+    const p = await invoke<PlacaDeVideo>("placa_de_video");
+
+    painel.dataset.marca = p.marca;
+    text("placa-marca", p.marca === "desconhecida" ? "placa de vídeo" : p.marca);
+    text("placa-nome", p.nome ?? "Não consegui identificar a placa");
+    text("placa-driver", p.driver ?? "—");
+
+    // A IDADE DO DRIVER VEM COM A DATA, e não sozinha.
+    //
+    // "41 dias" sem a data obriga o cliente a confiar na nossa conta. Com as
+    // duas, ele confere no Gerenciador de Dispositivos em dez segundos.
+    text(
+      "placa-driver-idade",
+      p.driver_data
+        ? `${p.driver_data}${p.driver_dias !== null ? ` · há ${p.driver_dias} dias` : ""}`
+        : "—",
+    );
+
+    text("placa-vram", p.vram_gb > 0 ? `${p.vram_gb.toFixed(0)} GB` : "não sei dizer");
+
+    // Só pergunta quando não sabe.
+    element("placa-escolha").hidden = p.marca !== "desconhecida";
+  } catch {
+    // Falhar aqui não pode derrubar a aba: o painel é contexto, e os dois
+    // painéis abaixo dele — que são os que mudam FPS — continuam funcionando.
+    painel.dataset.marca = "desconhecida";
+    text("placa-nome", "Não consegui ler a placa de vídeo");
+    element("placa-escolha").hidden = false;
+  }
+}
+
 /* ===========================================================================
    A CONFIGURAÇÃO DO JOGO, E A PROVA
 
@@ -4566,6 +4623,17 @@ function wireControls() {
   element("analyze-network").addEventListener("click", analyzeNetwork);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
+  for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
+    botao.addEventListener("click", () => {
+      // A escolha manual pinta o desenho e mais nada. O produto não muda
+      // NENHUM ajuste por causa dela: tudo que ele decide sobre vídeo vem de
+      // medição, e um clique num botão não é medição.
+      element("placa-painel").dataset.marca = botao.dataset.marcaManual ?? "desconhecida";
+      text("placa-marca", botao.dataset.marcaManual ?? "placa de vídeo");
+    });
+  }
+
+  void carregarPlaca();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));

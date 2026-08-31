@@ -1396,6 +1396,76 @@ pub async fn apply_optimization(
     }
 }
 
+/// A placa de vídeo desta máquina, para a tela desenhar.
+#[derive(serde::Serialize)]
+pub struct PlacaDeVideo {
+    /// `nvidia`, `amd`, `intel` ou `desconhecida`. É o que escolhe a cor.
+    pub marca: String,
+    pub nome: Option<String>,
+    pub driver: Option<String>,
+    pub driver_data: Option<String>,
+    pub driver_dias: Option<i64>,
+    pub vram_gb: f64,
+}
+
+/// Deduz o fabricante pelo nome que o Windows dá à placa.
+///
+/// Pelo NOME e não por identificador de fornecedor no PCI: o nome é o que já
+/// está lido e disponível de graça, e é o mesmo texto que o cliente vê no
+/// Gerenciador de Dispositivos — então quando erra, ele consegue perceber que
+/// errou. Um número de fornecedor certo mas invisível não daria a ele essa
+/// chance.
+///
+/// Na dúvida devolve `desconhecida`, e a tela pergunta em vez de chutar.
+pub fn marca_da_placa(nome: &str) -> &'static str {
+    let n = nome.to_lowercase();
+
+    if n.contains("nvidia") || n.contains("geforce") || n.contains("quadro") || n.contains("rtx") {
+        "nvidia"
+    } else if n.contains("amd") || n.contains("radeon") || n.contains("ati ") {
+        "amd"
+    } else if n.contains("intel") || n.contains("arc ") || n.contains("iris") {
+        "intel"
+    } else {
+        "desconhecida"
+    }
+}
+
+/// Comando: a placa de vídeo, para o painel que a desenha.
+///
+/// Junta o que três módulos já sabiam separados — o nome vem de `shaders`, que
+/// já lia driver e data para decidir se o cache estava obsoleto, e a memória vem
+/// de `bottleneck`, que já a lia do registro porque o valor do WMI satura em
+/// 4 GB e mentiria justamente na faixa que interessa.
+///
+/// Fica em `LIVRES`: é leitura.
+#[tauri::command]
+pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let s = crate::modules::windows::shaders::analyze();
+        let nome = s.gpu.clone();
+
+        Ok(PlacaDeVideo {
+            marca: nome
+                .as_deref()
+                .map(marca_da_placa)
+                .unwrap_or("desconhecida")
+                .to_string(),
+            nome,
+            driver: s.driver_version.clone(),
+            driver_data: s.driver_date.clone(),
+            driver_dias: s.driver_age_days,
+            vram_gb: crate::modules::windows::bottleneck::vram_total_gb(),
+        })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: lê a configuração do jogo instalado e diz o que está pesando.
 ///
 /// Só lê. Fica em `LIVRES` pelo mesmo motivo que todo o diagnóstico fica: o
@@ -1743,6 +1813,7 @@ mod tests {
     /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
     const LIVRES: &[&str] = &[
+        "placa_de_video",
         "analyze_game_config",
         "preview_game_profile",
         "medir_antes",
@@ -1863,6 +1934,33 @@ mod tests {
                     .trim()
             })
             .collect()
+    }
+
+    /// A marca sai do nome que o Windows dá à placa.
+    ///
+    /// Na dúvida, `desconhecida` — e a tela pergunta em vez de chutar. Chutar
+    /// aqui pintaria a placa de verde para quem tem uma Radeon, que é o tipo de
+    /// erro que faz o cliente duvidar de todo o resto que a tela afirma.
+    #[test]
+    fn a_marca_da_placa_sai_do_nome() {
+        for (nome, esperado) in [
+            ("NVIDIA GeForce GTX 1650", "nvidia"),
+            ("NVIDIA GeForce RTX 4070 Ti", "nvidia"),
+            ("AMD Radeon RX 6600", "amd"),
+            ("Radeon(TM) Graphics", "amd"),
+            ("Intel(R) UHD Graphics 630", "intel"),
+            ("Intel(R) Arc(TM) A750", "intel"),
+            // Uma placa que nenhum dos três nomes cobre não vira chute.
+            ("Microsoft Basic Display Adapter", "desconhecida"),
+            ("", "desconhecida"),
+        ] {
+            assert_eq!(
+                super::marca_da_placa(nome),
+                esperado,
+                "`{}` foi classificada errado",
+                nome
+            );
+        }
     }
 
     #[test]

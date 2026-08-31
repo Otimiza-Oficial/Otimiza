@@ -1023,6 +1023,128 @@
         <!-- ============================================================== JOGOS -->
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <!--
+            A PLACA DE VÍDEO, DESENHADA.
+
+            O concorrente pede para a pessoa ESCOLHER entre AMD e NVIDIA. Isso é
+            um passo para trás: o Otimiza já lê a placa, o driver e a memória de
+            vídeo — perguntar o que o produto já sabe é fazer o cliente trabalhar
+            de graça, e ainda arrisca ele escolher errado.
+
+            Então aqui não há escolha: há reconhecimento. A placa aparece
+            desenhada, com o nome dela e a cor do fabricante. A escolha manual só
+            existe quando a detecção falha, que é quando ela realmente ajuda.
+
+            O desenho é SVG inline, e isso não é detalhe: o produto não busca
+            imagem na internet e não carrega arquivo externo. São vinte linhas de
+            geometria que escalam em qualquer tela e mudam de cor com o
+            fabricante.
+          -->
+          <section class="panel placa" id="placa-painel" data-marca="desconhecida">
+            <div class="placa-arte" aria-hidden="true">
+              <svg viewBox="0 0 320 150" xmlns="http://www.w3.org/2000/svg">
+                <!-- A chapa traseira, que aparece como uma sombra atrás -->
+                <rect class="placa-tras" x="26" y="26" width="286" height="96" rx="6" />
+
+                <!-- A placa de circuito -->
+                <rect class="placa-pcb" x="20" y="20" width="286" height="96" rx="5" />
+
+                <!-- Os dentes do conector PCIe, embaixo -->
+                <g class="placa-pinos">
+                  <rect x="86" y="116" width="52" height="9" rx="1.5" />
+                  <rect x="146" y="116" width="104" height="9" rx="1.5" />
+                </g>
+
+                <!-- A carenagem do cooler -->
+                <rect class="placa-carenagem" x="34" y="27" width="258" height="80" rx="4" />
+
+                <!-- As aletas do dissipador, aparecendo na borda de cima -->
+                <g class="placa-aletas">
+                  <path d="M40 27 h248" />
+                  <path d="M44 31 h240" />
+                  <path d="M48 35 h232" />
+                </g>
+
+                <!-- Os dois ventiladores -->
+                <!--
+                  AS PÁS SÃO TRAÇOS CURVOS, E NÃO FATIAS PREENCHIDAS.
+
+                  A primeira tentativa desenhou cada pá como um setor do
+                  círculo. Preenchidas, elas convergiam para o centro e viravam
+                  seis fatias finas de pizza — que a esta escala não lê como
+                  ventilador nenhum. Um traço curvo com ponta arredondada lê
+                  como pá em qualquer tamanho, e custa metade dos pontos.
+                -->
+                <g class="placa-ventilador">
+                  <circle class="placa-aro" cx="105" cy="67" r="31" />
+                  <g class="placa-pas">
+                    <path d="M116.5 67.0 Q126.6 76.2 125.4 85.4" />
+                    <path d="M110.8 77.0 Q107.8 90.3 99.3 93.9" />
+                    <path d="M99.2 77.0 Q86.2 81.1 78.8 75.5" />
+                    <path d="M93.5 67.0 Q83.4 57.8 84.6 48.6" />
+                    <path d="M99.2 57.0 Q102.2 43.7 110.7 40.1" />
+                    <path d="M110.8 57.0 Q123.8 52.9 131.2 58.5" />
+                  </g>
+                  <circle class="placa-cubo" cx="105" cy="67" r="9" />
+                </g>
+
+                <g class="placa-ventilador">
+                  <circle class="placa-aro" cx="221" cy="67" r="31" />
+                  <g class="placa-pas">
+                    <path d="M232.5 67.0 Q242.6 76.2 241.4 85.4" />
+                    <path d="M226.8 77.0 Q223.8 90.3 215.3 93.9" />
+                    <path d="M215.2 77.0 Q202.2 81.1 194.8 75.5" />
+                    <path d="M209.5 67.0 Q199.4 57.8 200.6 48.6" />
+                    <path d="M215.2 57.0 Q218.2 43.7 226.7 40.1" />
+                    <path d="M226.8 57.0 Q239.8 52.9 247.2 58.5" />
+                  </g>
+                  <circle class="placa-cubo" cx="221" cy="67" r="9" />
+                </g>
+
+                <!-- O conector de energia, no canto de cima -->
+                <g class="placa-energia">
+                  <rect x="256" y="14" width="36" height="14" rx="2" />
+                  <path d="M262 18 v6 M269 18 v6 M276 18 v6 M283 18 v6" />
+                </g>
+
+                <!-- A tarja do fabricante: é ela que muda de cor -->
+                <rect class="placa-tarja" x="34" y="99" width="258" height="5" rx="2.5" />
+
+                <!-- A chapa de encaixe e as saídas de vídeo -->
+                <rect class="placa-chapa" x="8" y="14" width="12" height="108" rx="2" />
+                <g class="placa-saidas">
+                  <rect x="10" y="30" width="8" height="14" rx="1.5" />
+                  <rect x="10" y="52" width="8" height="14" rx="1.5" />
+                  <rect x="10" y="74" width="8" height="14" rx="1.5" />
+                </g>
+              </svg>
+            </div>
+
+            <div class="placa-info">
+              <span class="placa-marca" id="placa-marca">—</span>
+              <h2 class="placa-nome" id="placa-nome">Procurando a placa de vídeo…</h2>
+              <dl class="placa-dados">
+                <div><dt>Driver</dt><dd id="placa-driver">—</dd></div>
+                <div><dt>Publicado</dt><dd id="placa-driver-idade">—</dd></div>
+                <div><dt>Memória de vídeo</dt><dd id="placa-vram">—</dd></div>
+              </dl>
+
+              <!--
+                Nasce escondido. Só aparece quando a leitura falha — e aí a
+                escolha manual deixa de ser trabalho inútil e passa a ser a
+                única saída.
+              -->
+              <div class="placa-escolha" id="placa-escolha" hidden>
+                <p class="hint">Não consegui ler a sua placa. Qual delas é?</p>
+                <div class="row-actions">
+                  <button class="btn" data-marca-manual="nvidia">NVIDIA</button>
+                  <button class="btn" data-marca-manual="amd">AMD</button>
+                  <button class="btn" data-marca-manual="intel">Intel</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!--
             O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
 
             A ordem aqui não é estética: é a hierarquia do ganho, medida.
