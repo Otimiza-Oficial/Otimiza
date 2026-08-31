@@ -260,50 +260,26 @@ body {
   background-color: var(--bg);
 }
 
-/* As manchas de luz sutis. `inset` negativo dá folga para a deriva nunca revelar a
-   borda da camada. */
-.fundo::before {
-  content: "";
-  position: absolute;
-  inset: -30%;
-  background:
-    radial-gradient(ellipse at 20% 30%, rgba(var(--accent-rgb), 0.12), transparent 50%),
-    radial-gradient(circle at 80% 20%, rgba(var(--amber-rgb), 0.08), transparent 55%),
-    radial-gradient(ellipse at 60% 80%, rgba(var(--accent-rgb), 0.06), transparent 60%);
-  will-change: transform;
-  animation: derivar-fundo calc(140s / var(--anim, 1)) ease-in-out infinite alternate;
-}
-
-@keyframes derivar-fundo {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(3%, -2%, 0) scale(1.05);
-  }
-  100% {
-    transform: translate3d(-2%, 2%, 0) scale(1.03);
-  }
-}
-
-/* O grão sutil para dar textura sem criar grade. */
-.fundo::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  opacity: 0.25;
-  background-size: 200px 200px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.65' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)' opacity='.2'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
-}
-
-/* Parado, o fundo continua inteiro — as manchas ficam onde estão e o grão não
-   depende de movimento nenhum. Segurar uma camada de GPU para algo que não se
-   mexe mais é desperdício, então `will-change` sai junto. */
-.sem-animacao .fundo::before {
-  will-change: auto;
-}
-
+/* PRETO, E MAIS NADA.
+ *
+ * Aqui moravam três camadas: manchas de luz em gradiente radial, uma animação
+ * de 140 segundos que as fazia derivar para sempre, e uma textura de grão em
+ * SVG com ruído fractal.
+ *
+ * Saíram todas, e não é só gosto do dono. Aquilo era uma camada de composição
+ * que a placa de vídeo repintava o tempo inteiro — num produto que promete não
+ * pesar na máquina fraca que veio consertar, o próprio fundo da janela era
+ * trabalho constante em troca de um brilho que ninguém olha. O `will-change:
+ * transform` chegava a pedir uma camada de GPU dedicada para isso.
+ *
+ * O que sobra é `background-color: var(--bg)` na regra acima, que é #000. Em
+ * monitor OLED, que é o que boa parte do público de jogo usa, isso é pixel
+ * desligado: zero energia e preto absoluto, em vez de um cinza muito escuro
+ * fingindo ser preto.
+ *
+ * A hierarquia da tela passa a vir inteira do fio de cabelo e do espaço, que é
+ * de onde ela já vinha — as manchas nunca separaram nada.
+ */
 
 /* A ÊNFASE PRIMÁRIA É PARA O QUE ALTERA A MÁQUINA.
 
@@ -4262,17 +4238,58 @@ body.janela-cheia {
   transform-origin: center;
 }
 
+/* Dois aros: o de fora é o rebaixo da carenagem, o de dentro é a boca do
+   ventilador. É esse par que dá a impressão de profundidade — sem ele, o
+   ventilador fica colado na superfície como um adesivo. */
 .placa-aro {
-  fill: #0a0a0a;
+  fill: #090909;
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+.placa-aro-interno {
+  fill: #050505;
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .placa-pas path {
   fill: none;
-  stroke: #2e2e2e;
-  stroke-width: 6.5;
+  stroke: #303030;
+  stroke-width: 6;
   stroke-linecap: round;
+}
+
+.placa-vinco {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  fill: none;
+}
+
+.placa-parafuso circle,
+circle.placa-parafuso {
+  fill: #050505;
+  stroke: var(--hairline-strong);
+  stroke-width: 0.8;
+}
+
+.placa-furos circle {
+  fill: #000;
+  stroke: var(--hairline-strong);
+  stroke-width: 0.8;
+}
+
+.placa-grelha path {
+  stroke: var(--hairline-strong);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+/* A luz do logotipo. Acesa na cor do fabricante, apagada quando ele é
+   desconhecido — como o resto do desenho. */
+.placa-luz {
+  fill: var(--marca);
+  opacity: 0.9;
 }
 
 .placa-cubo { fill: var(--marca); stroke: none; }

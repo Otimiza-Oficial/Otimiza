@@ -1041,80 +1041,100 @@
           -->
           <section class="panel placa" id="placa-painel" data-marca="desconhecida">
             <div class="placa-arte" aria-hidden="true">
-              <svg viewBox="0 0 320 150" xmlns="http://www.w3.org/2000/svg">
-                <!-- A chapa traseira, que aparece como uma sombra atrás -->
-                <rect class="placa-tras" x="26" y="26" width="286" height="96" rx="6" />
+              <svg viewBox="0 0 330 152" xmlns="http://www.w3.org/2000/svg">
+                <!--
+                  A placa vista de frente, um pouco de cima. Tudo em geometria:
+                  nenhuma imagem, nada baixado, e escala em qualquer tela.
+                -->
+
+                <!-- A chapa traseira, deslocada, que dá a espessura -->
+                <rect class="placa-tras" x="28" y="30" width="292" height="92" rx="7" />
 
                 <!-- A placa de circuito -->
-                <rect class="placa-pcb" x="20" y="20" width="286" height="96" rx="5" />
+                <rect class="placa-pcb" x="22" y="22" width="292" height="96" rx="6" />
 
-                <!-- Os dentes do conector PCIe, embaixo -->
+                <!-- Os dentes do conector PCIe -->
                 <g class="placa-pinos">
-                  <rect x="86" y="116" width="52" height="9" rx="1.5" />
-                  <rect x="146" y="116" width="104" height="9" rx="1.5" />
+                  <rect x="88" y="118" width="50" height="10" rx="1.5" />
+                  <rect x="146" y="118" width="108" height="10" rx="1.5" />
+                </g>
+
+                <!-- As aletas do dissipador, aparecendo por cima da carenagem -->
+                <g class="placa-aletas">
+                  <path d="M46 26 h242" /><path d="M46 29 h242" />
+                  <path d="M46 32 h242" /><path d="M46 35 h242" />
                 </g>
 
                 <!-- A carenagem do cooler -->
-                <rect class="placa-carenagem" x="34" y="27" width="258" height="80" rx="4" />
+                <rect class="placa-carenagem" x="36" y="30" width="262" height="80" rx="5" />
 
-                <!-- As aletas do dissipador, aparecendo na borda de cima -->
-                <g class="placa-aletas">
-                  <path d="M40 27 h248" />
-                  <path d="M44 31 h240" />
-                  <path d="M48 35 h232" />
-                </g>
+                <!-- Um vinco na carenagem, entre os dois ventiladores -->
+                <path class="placa-vinco" d="M163 32 L172 108" />
 
-                <!-- Os dois ventiladores -->
-                <!--
-                  AS PÁS SÃO TRAÇOS CURVOS, E NÃO FATIAS PREENCHIDAS.
-
-                  A primeira tentativa desenhou cada pá como um setor do
-                  círculo. Preenchidas, elas convergiam para o centro e viravam
-                  seis fatias finas de pizza — que a esta escala não lê como
-                  ventilador nenhum. Um traço curvo com ponta arredondada lê
-                  como pá em qualquer tamanho, e custa metade dos pontos.
-                -->
+                <!-- Os dois ventiladores, de sete pás -->
                 <g class="placa-ventilador">
-                  <circle class="placa-aro" cx="105" cy="67" r="31" />
+                  <circle class="placa-aro" cx="104" cy="68" r="32" />
+                  <circle class="placa-aro-interno" cx="104" cy="68" r="29" />
                   <g class="placa-pas">
-                    <path d="M116.5 67.0 Q126.6 76.2 125.4 85.4" />
-                    <path d="M110.8 77.0 Q107.8 90.3 99.3 93.9" />
-                    <path d="M99.2 77.0 Q86.2 81.1 78.8 75.5" />
-                    <path d="M93.5 67.0 Q83.4 57.8 84.6 48.6" />
-                    <path d="M99.2 57.0 Q102.2 43.7 110.7 40.1" />
-                    <path d="M110.8 57.0 Q123.8 52.9 131.2 58.5" />
+                    <path d="M114.5 68.0 Q126.2 78.5 123.8 88.5" />
+                    <path d="M110.5 76.2 Q109.6 91.8 100.3 96.3" />
+                    <path d="M101.7 78.2 Q88.9 87.3 79.6 82.7" />
+                    <path d="M94.5 72.6 Q79.5 68.2 77.3 58.1" />
+                    <path d="M94.5 63.4 Q88.6 49.0 95.1 40.9" />
+                    <path d="M101.7 57.8 Q109.3 44.1 119.6 44.1" />
+                    <path d="M110.5 59.8 Q126.0 57.2 132.4 65.3" />
                   </g>
-                  <circle class="placa-cubo" cx="105" cy="67" r="9" />
+                  <circle class="placa-cubo" cx="104" cy="68" r="9.5" />
+                  <circle class="placa-parafuso" cx="104" cy="68" r="2.5" />
                 </g>
 
                 <g class="placa-ventilador">
-                  <circle class="placa-aro" cx="221" cy="67" r="31" />
+                  <circle class="placa-aro" cx="222" cy="68" r="32" />
+                  <circle class="placa-aro-interno" cx="222" cy="68" r="29" />
                   <g class="placa-pas">
-                    <path d="M232.5 67.0 Q242.6 76.2 241.4 85.4" />
-                    <path d="M226.8 77.0 Q223.8 90.3 215.3 93.9" />
-                    <path d="M215.2 77.0 Q202.2 81.1 194.8 75.5" />
-                    <path d="M209.5 67.0 Q199.4 57.8 200.6 48.6" />
-                    <path d="M215.2 57.0 Q218.2 43.7 226.7 40.1" />
-                    <path d="M226.8 57.0 Q239.8 52.9 247.2 58.5" />
+                    <path d="M232.5 68.0 Q244.2 78.5 241.8 88.5" />
+                    <path d="M228.5 76.2 Q227.6 91.8 218.3 96.3" />
+                    <path d="M219.7 78.2 Q206.9 87.3 197.6 82.7" />
+                    <path d="M212.5 72.6 Q197.5 68.2 195.3 58.1" />
+                    <path d="M212.5 63.4 Q206.6 49.0 213.1 40.9" />
+                    <path d="M219.7 57.8 Q227.3 44.1 237.6 44.1" />
+                    <path d="M228.5 59.8 Q244.0 57.2 250.4 65.3" />
                   </g>
-                  <circle class="placa-cubo" cx="221" cy="67" r="9" />
+                  <circle class="placa-cubo" cx="222" cy="68" r="9.5" />
+                  <circle class="placa-parafuso" cx="222" cy="68" r="2.5" />
                 </g>
 
-                <!-- O conector de energia, no canto de cima -->
+                <!-- Os parafusos da carenagem -->
+                <g class="placa-parafuso">
+                  <circle cx="43" cy="37" r="2" />
+                  <circle cx="291" cy="37" r="2" />
+                  <circle cx="43" cy="103" r="2" />
+                  <circle cx="291" cy="103" r="2" />
+                </g>
+
+                <!-- O conector de energia de 8 pinos -->
                 <g class="placa-energia">
-                  <rect x="256" y="14" width="36" height="14" rx="2" />
-                  <path d="M262 18 v6 M269 18 v6 M276 18 v6 M283 18 v6" />
+                  <rect x="258" y="14" width="40" height="16" rx="2.5" />
+                  <path d="M264 18 v8 M271 18 v8 M278 18 v8 M285 18 v8 M292 18 v8" />
                 </g>
 
                 <!-- A tarja do fabricante: é ela que muda de cor -->
-                <rect class="placa-tarja" x="34" y="99" width="258" height="5" rx="2.5" />
+                <rect class="placa-tarja" x="36" y="101" width="262" height="6" rx="3" />
+                <circle class="placa-luz" cx="296" cy="104" r="3.5" />
 
                 <!-- A chapa de encaixe e as saídas de vídeo -->
-                <rect class="placa-chapa" x="8" y="14" width="12" height="108" rx="2" />
+                <rect class="placa-chapa" x="8" y="14" width="14" height="112" rx="2.5" />
+                <g class="placa-furos">
+                  <circle cx="15" cy="20" r="2" />
+                  <circle cx="15" cy="120" r="2" />
+                </g>
                 <g class="placa-saidas">
-                  <rect x="10" y="30" width="8" height="14" rx="1.5" />
-                  <rect x="10" y="52" width="8" height="14" rx="1.5" />
-                  <rect x="10" y="74" width="8" height="14" rx="1.5" />
+                  <rect x="10" y="32" width="10" height="15" rx="1.5" />
+                  <rect x="10" y="55" width="10" height="15" rx="1.5" />
+                  <rect x="10" y="78" width="10" height="15" rx="1.5" />
+                </g>
+                <g class="placa-grelha">
+                  <path d="M10 100 h10 M10 104 h10 M10 108 h10 M10 112 h10" />
                 </g>
               </svg>
             </div>
