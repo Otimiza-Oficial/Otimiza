@@ -10,8 +10,9 @@
 use std::io::{BufRead, BufReader};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 /// Sem isto, cada comando abre um console preto piscando na tela do cliente.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -99,7 +100,7 @@ impl TarefaLonga {
         &self,
         programa: &str,
         args: &[&str],
-        mut ao_progredir: F,
+        ao_progredir: F,
     ) -> Result<Desfecho, String>
     where
         F: FnMut(Andamento) + Send + 'static,
@@ -149,18 +150,53 @@ impl TarefaLonga {
             });
         }
 
+        // O `stderr` é canalizado (`Stdio::piped()`) e não pode ficar sem
+        // leitor: o cano do Windows tem um buffer pequeno, e um `DISM` que
+        // escreve o bastante ali trava para sempre esperando alguém drenar —
+        // o mesmo travamento que o comentário abaixo descreve para o stdout,
+        // só que no duto que ninguém olhava. Descartar essa saída não é
+        // opção: é nela que mora o motivo de um `DISM` falhar ("precisa de
+        // internet" vs. "a imagem está corrompida"), e sem esse texto a
+        // falha fica muda para o cliente. A solução é uma thread dedicada,
+        // lendo o stderr e alimentando o MESMO callback — a UI não distingue
+        // de onde veio a linha, só precisa vê-la.
+        let ao_progredir = Arc::new(Mutex::new(ao_progredir));
+        let numero = Arc::new(AtomicUsize::new(0));
+
+        let leitor_stderr = filho.stderr.take().map(|saida| {
+            let callback = ao_progredir.clone();
+            let numero = numero.clone();
+            thread::spawn(move || {
+                for linha in BufReader::new(saida).lines().map_while(Result::ok) {
+                    let numero = numero.fetch_add(1, Ordering::SeqCst) + 1;
+                    if let Ok(mut callback) = callback.lock() {
+                        callback(Andamento { linha, numero });
+                    }
+                }
+            })
+        });
+
         // A saída é lida ENQUANTO o processo roda. Guardar para ler no fim
         // seria o mesmo que não ter andamento nenhum — e pior, encheria o cano
         // do sistema até o processo travar esperando alguém ler.
         if let Some(saida) = filho.stdout.take() {
-            let mut numero = 0;
             for linha in BufReader::new(saida).lines().map_while(Result::ok) {
-                numero += 1;
-                ao_progredir(Andamento { linha, numero });
+                let numero = numero.fetch_add(1, Ordering::SeqCst) + 1;
+                if let Ok(mut callback) = ao_progredir.lock() {
+                    callback(Andamento { linha, numero });
+                }
             }
         }
 
         let status = filho.wait().map_err(|e| format!("o processo sumiu: {}", e))?;
+
+        // O processo já terminou, então o stderr dele já fechou — a thread
+        // sai do laço sozinha. Ainda assim é preciso esperar por ela: sem o
+        // `join`, uma linha de stderr que chegou por último podia nunca ser
+        // entregue antes de `rodar` devolver o desfecho.
+        if let Some(leitor_stderr) = leitor_stderr {
+            let _ = leitor_stderr.join();
+        }
 
         if let Ok(mut atual) = self.atual.lock() {
             *atual = None;
@@ -203,5 +239,35 @@ mod tests {
         // arquivos, e o resultado é imprevisível para as duas.
         let tarefa = TarefaLonga::nova();
         assert!(!tarefa.ocupada(), "nasceu ocupada");
+    }
+
+    /// Um `stderr` canalizado e nunca lido enche o buffer do cano do Windows
+    /// e trava o processo filho para sempre — exatamente a classe de
+    /// travamento que o comentário acima do laço do stdout já evitava lá,
+    /// só que no duto vizinho. Roda `rodar` numa thread à parte e usa um
+    /// prazo: se o `stderr` não for drenado, o `recv_timeout` estoura antes
+    /// da tarefa terminar, e o teste falha em vez de travar o CI para sempre.
+    #[test]
+    fn stderr_nao_trava_a_tarefa() {
+        let tarefa = std::sync::Arc::new(TarefaLonga::nova());
+        let dentro = tarefa.clone();
+        let (envia, recebe) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            // Mais que o buffer do cano (uns 4 KB): sem drenar, o `cmd`
+            // trava na primeira escrita que não coube.
+            let resultado = dentro.rodar(
+                "cmd",
+                &["/c", "for /l %i in (1,1,5000) do @echo linha%i 1>&2"],
+                |_| {},
+            );
+            let _ = envia.send(resultado);
+        });
+
+        let resultado = recebe
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .expect("a tarefa travou — o stderr não está sendo drenado");
+
+        assert!(matches!(resultado, Ok(Desfecho::Terminou { codigo: 0 })));
     }
 }
