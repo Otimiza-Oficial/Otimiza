@@ -942,11 +942,24 @@ function showTab(name: string) {
     if (!escolhida) return;
 
     const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
-    const icone = item.querySelector<HTMLElement>(".nav-icone")?.dataset.icone ?? "";
+
+    // O TÍTULO COPIA O DESENHO DA LATERAL, e não um nome que os dois teriam de
+    // combinar. Antes cada lado tinha a sua cópia da forma em CSS: renomear ou
+    // redesenhar um ícone exigia lembrar do outro, e esquecer não quebrava
+    // nada — só deixava a tela mostrando dois desenhos diferentes para a mesma
+    // seção. Copiando a referência, é impossível saírem de sincronia.
+    const referencia = item
+      .querySelector(".nav-icone use")
+      ?.getAttribute("href");
 
     text("secao-nome", rotulo);
     text("trilha-atual", rotulo);
-    element("secao-icone").dataset.icone = icone;
+
+    if (referencia) {
+      document
+        .getElementById("secao-icone-uso")
+        ?.setAttribute("href", referencia);
+    }
   });
 }
 

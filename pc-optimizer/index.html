@@ -9,6 +9,82 @@
   </head>
   <body>
     <!--
+      OS ÍCONES, DEFINIDOS UMA VEZ.
+
+      Antes cada um era um quadrado sólido recortado por `clip-path: polygon()`.
+      A ideia era boa e resolvia o problema certo — nenhum arquivo externo, nada
+      baixado, e um aplicativo que precisa funcionar sem internet não pode
+      depender de biblioteca de ícone. O limite é que forma recortada não tem
+      TRAÇO: é sempre uma silhueta cheia, sem espessura constante e sem detalhe
+      interno. A 15 pixels isso vira mancha.
+
+      Ícone de traço é o que se usa em ferramenta profissional, e pela mesma
+      razão: a espessura constante mantém o peso visual igual entre um ícone
+      simples e um cheio de detalhe, e o vazado deixa a forma legível no
+      tamanho pequeno.
+
+      A troca não custa nada do que a solução antiga protegia: continua tudo
+      dentro do HTML, sem requisição e sem arquivo para manter em sincronia.
+      `currentColor` faz cada ícone herdar a cor de onde ele está — o mesmo
+      desenho serve à lateral, ao título da seção e ao que vier depois.
+    -->
+    <svg class="sprite-icones" aria-hidden="true">
+      <defs>
+        <!-- Painel: uma coluna alta e dois blocos, que é a forma da própria tela -->
+        <symbol id="i-painel" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7.5" height="18" rx="1.5" />
+          <rect x="14.5" y="3" width="6.5" height="7" rx="1.5" />
+          <rect x="14.5" y="14" width="6.5" height="7" rx="1.5" />
+        </symbol>
+
+        <!-- Diagnóstico: o traçado de um monitor cardíaco -->
+        <symbol id="i-diagnostico" viewBox="0 0 24 24">
+          <path d="M2 12h4l2.5-7 4 14 3-9 2 2h4.5" />
+        </symbol>
+
+        <!-- Otimizações: o raio -->
+        <symbol id="i-otimizacoes" viewBox="0 0 24 24">
+          <path d="M13.5 2 4 13.5h6.5L10 22l9.5-11.5H13z" />
+        </symbol>
+
+        <!-- Jogos: o controle -->
+        <symbol id="i-jogos" viewBox="0 0 24 24">
+          <path d="M7.5 7h9a5.5 5.5 0 0 1 5.4 4.4l.8 4.2A3 3 0 0 1 19 19a3 3 0 0 1-2.3-1.1L15.4 16H8.6l-1.3 1.9A3 3 0 0 1 5 19a3 3 0 0 1-3.7-3.4l.8-4.2A5.5 5.5 0 0 1 7.5 7Z" />
+          <path d="M7 11v3M5.5 12.5h3" />
+          <circle cx="16" cy="11.5" r="1" />
+          <circle cx="18.5" cy="14" r="1" />
+        </symbol>
+
+        <!-- Espaço: o disco, com a fatia que indica ocupação -->
+        <symbol id="i-espaco" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 12V3a9 9 0 0 1 7.8 4.5Z" />
+          <circle cx="12" cy="12" r="2.5" />
+        </symbol>
+
+        <!-- Sistema: os controles deslizantes -->
+        <symbol id="i-sistema" viewBox="0 0 24 24">
+          <path d="M3 7h6M15 7h6M3 12h12M20 12h1M3 17h3M12 17h9" />
+          <circle cx="12" cy="7" r="2.2" />
+          <circle cx="17.5" cy="12" r="2.2" />
+          <circle cx="9" cy="17" r="2.2" />
+        </symbol>
+
+        <!-- Busca: a lupa -->
+        <symbol id="i-busca" viewBox="0 0 24 24">
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="M15.5 15.5 21 21" />
+        </symbol>
+
+        <!-- Comandos: o cursor do terminal -->
+        <symbol id="i-comandos" viewBox="0 0 24 24">
+          <rect x="2.5" y="4" width="19" height="16" rx="2.5" />
+          <path d="M7 10l3 2.5L7 15M12.5 15.5h5" />
+        </symbol>
+      </defs>
+    </svg>
+
+    <!--
       O fundo. Elemento real, e não `body::before`, por um motivo concreto: o
       interruptor de movimento do produto (`.sem-animacao`) precisa alcançá-lo,
       e o seletor universal não casa com pseudo-elemento do próprio `body`.
@@ -233,7 +309,7 @@
           caminho para achar qualquer ação do programa.
         -->
         <button class="busca-topo" id="abrir-comandos-topo">
-          <span class="busca-topo-icone" aria-hidden="true"></span>
+          <svg class="busca-topo-icone" aria-hidden="true"><use href="#i-busca" /></svg>
           <span class="busca-topo-texto">Buscar ação…</span>
           <kbd class="nav-atalho">Ctrl K</kbd>
         </button>
@@ -306,13 +382,13 @@
 
           <button class="nav" role="tab" data-tab="painel" aria-selected="true"
                   aria-controls="tab-painel" id="tabbtn-painel">
-            <span class="nav-icone" data-icone="painel" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-painel" /></svg>
             <span class="nav-rotulo">Painel</span>
           </button>
 
           <button class="nav" role="tab" data-tab="diagnostico" aria-selected="false"
                   aria-controls="tab-diagnostico" id="tabbtn-diagnostico">
-            <span class="nav-icone" data-icone="diagnostico" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-diagnostico" /></svg>
             <span class="nav-rotulo">Diagnóstico</span>
             <span class="tab-badge" id="badge-diagnostico" hidden></span>
           </button>
@@ -321,28 +397,28 @@
 
           <button class="nav" role="tab" data-tab="otimizacoes" aria-selected="false"
                   aria-controls="tab-otimizacoes" id="tabbtn-otimizacoes">
-            <span class="nav-icone" data-icone="otimizacoes" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-otimizacoes" /></svg>
             <span class="nav-rotulo">Otimizações</span>
             <span class="tab-badge" id="badge-otimizacoes" hidden></span>
           </button>
 
           <button class="nav" role="tab" data-tab="jogos" aria-selected="false"
                   aria-controls="tab-jogos" id="tabbtn-jogos">
-            <span class="nav-icone" data-icone="jogos" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-jogos" /></svg>
             <span class="nav-rotulo">Jogos</span>
             <span class="tab-badge" id="badge-jogos" hidden></span>
           </button>
 
           <button class="nav" role="tab" data-tab="espaco" aria-selected="false"
                   aria-controls="tab-espaco" id="tabbtn-espaco">
-            <span class="nav-icone" data-icone="espaco" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-espaco" /></svg>
             <span class="nav-rotulo">Espaço</span>
             <span class="tab-badge" id="badge-espaco" hidden></span>
           </button>
 
           <button class="nav" role="tab" data-tab="sistema" aria-selected="false"
                   aria-controls="tab-sistema" id="tabbtn-sistema">
-            <span class="nav-icone" data-icone="sistema" aria-hidden="true"></span>
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-sistema" /></svg>
             <span class="nav-rotulo">Sistema</span>
             <span class="tab-badge" id="badge-sistema" hidden></span>
           </button>
@@ -373,7 +449,7 @@
               <span id="trilha-atual">Painel</span>
             </nav>
             <div class="secao-titulo">
-              <span class="secao-icone" id="secao-icone" aria-hidden="true"></span>
+              <span class="secao-icone" aria-hidden="true"><svg><use id="secao-icone-uso" href="#i-painel" /></svg></span>
               <h2 id="secao-nome">Painel</h2>
             </div>
           </header>
