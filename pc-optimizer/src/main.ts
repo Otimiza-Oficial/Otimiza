@@ -4094,6 +4094,326 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 
 // ---------------------------------------------------------------- controles
 
+
+/* ===========================================================================
+   A CONFIGURAÇÃO DO JOGO, E A PROVA
+
+   Este par de painéis é o que separa o produto do resto do mercado, e a razão
+   é a hierarquia do ganho — medida, não achada:
+
+       uma configuração de jogo mal escolhida ... dezenas de por cento
+       memória insuficiente ..................... o teto da máquina
+       ajustes de Windows, todos somados ........ alguns por cento
+
+   O primeiro painel mexe onde o ganho mora. O segundo prova que mexeu.
+   =========================================================================== */
+
+interface AjusteCaro {
+  chave: string;
+  valor: string;
+  onde: string;
+  ganho: string;
+}
+
+interface ConfigJogoReport {
+  arquivo: string | null;
+  jogo: string;
+  caros: AjusteCaro[];
+  findings: Achado[];
+}
+
+/** chave, valor de agora, valor novo, o que se perde. */
+type MudancaPrevista = [string, string, string, string];
+
+interface Prova {
+  jogo: string;
+  quando: number;
+  fps: number;
+  low_1pct: number;
+  engasgos_por_minuto: number;
+  segundos: number;
+  confiavel: boolean;
+}
+
+interface ComparacaoDaProva {
+  antes: Prova;
+  depois: Prova;
+  fps_delta: number;
+  fps_pct: number;
+  low_delta: number;
+  low_pct: number;
+  engasgos_delta: number;
+  veredito: string;
+  ressalvas: string[];
+  vale_como_prova: boolean;
+}
+
+const PERFIS: Record<string, { botao: string; nome: string; aviso: string }> = {
+  sem_teto: {
+    botao: "cfgjogo-sem-teto",
+    nome: "Tirar o limite de FPS",
+    // Este perfil não pede confirmação de perda porque não há perda nenhuma.
+    aviso: "",
+  },
+  equilibrado: {
+    botao: "cfgjogo-equilibrado",
+    nome: "Equilibrado",
+    aviso: "Isto muda como o jogo se parece.",
+  },
+  competitivo: {
+    botao: "cfgjogo-competitivo",
+    nome: "Competitivo",
+    aviso: "Isto muda bastante como o jogo se parece.",
+  },
+};
+
+async function analisarConfigJogo() {
+  const botao = element<HTMLButtonElement>("cfgjogo-analisar");
+  botao.disabled = true;
+  setStatus("cfgjogo-status", "Lendo a configuração do jogo…", "progress");
+
+  try {
+    const r = await invoke<ConfigJogoReport>("analyze_game_config");
+    renderConfigJogo(r);
+    setStatus(
+      "cfgjogo-status",
+      r.caros.length
+        ? `${r.caros.length} ajuste(s) pesando na sua placa.`
+        : "Nada de caro ficou ligado.",
+      r.caros.length ? "warn" : "ok",
+    );
+  } catch (error) {
+    setStatus("cfgjogo-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderConfigJogo(r: ConfigJogoReport) {
+  if (!r.arquivo) {
+    text("cfgjogo-tag", "nenhum jogo encontrado");
+    element("cfgjogo-result").innerHTML =
+      '<p class="hint">Não encontrei a configuração de nenhum jogo conhecido neste computador.</p>';
+    return;
+  }
+
+  text("cfgjogo-tag", r.jogo);
+
+  // A lista do que está caro sai do diagnóstico que já existia — ele ranqueia
+  // por custo real, e o MSAA vem primeiro porque sozinho custa mais que o
+  // resto somado.
+  const caros = r.caros.length
+    ? `<ul class="lista">${r.caros
+        .map(
+          (c) =>
+            `<li><strong>${escapeHtml(c.chave)}</strong> em ${escapeHtml(
+              c.valor
+            )} · custa ${escapeHtml(c.ganho)} dos quadros</li>`
+        )
+        .join("")}</ul>`
+    : '<p class="hint">Nada de caro ficou ligado nesta configuração.</p>';
+
+  element("cfgjogo-result").innerHTML =
+    `<p class="hint">Arquivo: <code>${escapeHtml(r.arquivo)}</code></p>${caros}`;
+}
+
+/**
+ * Mostra o que o perfil MUDARIA, e só aplica depois do "sim".
+ *
+ * A confirmação lista chave, valor de agora, valor novo e o que se perde. É a
+ * diferença entre o cliente aceitar uma mudança e aceitar a palavra "otimizar":
+ * ele decide sobre linhas com nome e número, não sobre um botão.
+ */
+async function aplicarPerfilDoJogo(perfil: string) {
+  const meta = PERFIS[perfil];
+  const botao = element<HTMLButtonElement>(meta.botao);
+
+  botao.disabled = true;
+  setStatus("cfgjogo-status", "Vendo o que mudaria…", "progress");
+
+  let previsto: MudancaPrevista[];
+
+  try {
+    previsto = await invoke<MudancaPrevista[]>("preview_game_profile", { perfil });
+  } catch (error) {
+    setStatus("cfgjogo-status", String(error), "error");
+    botao.disabled = false;
+    return;
+  }
+
+  if (previsto.length === 0) {
+    // NADA A MUDAR NÃO É ERRO, E NÃO PODE PARECER UM.
+    //
+    // A configuração já estar do jeito que o perfil quer é a melhor notícia
+    // possível: não há ganho escondido ali. Dizer isso é mais honesto que
+    // aplicar e mostrar "pronto!" sem nada ter acontecido.
+    setStatus(
+      "cfgjogo-status",
+      "A configuração já está assim. Não há nada para mudar neste perfil.",
+      "ok"
+    );
+    botao.disabled = false;
+    return;
+  }
+
+  const linhas = previsto
+    .map(
+      ([chave, atual, novo, custo]) =>
+        `${chave}: ${atual} → ${novo}${custo ? `  (${custo})` : ""}`
+    )
+    .join("\n");
+
+  const perdas = previsto.filter(([, , , custo]) => custo).length;
+
+  const confirmado = confirm(
+    `${meta.nome}\n\n` +
+      `${linhas}\n\n` +
+      (perdas === 0
+        ? "Nenhuma dessas mudanças altera como o jogo se parece.\n\n"
+        : `${meta.aviso}\n\n`) +
+      "O arquivo é guardado inteiro antes, e dá para desfazer a qualquer momento.\n\n" +
+      "Aplicar?"
+  );
+
+  if (!confirmado) {
+    setStatus("cfgjogo-status", "Nada foi alterado.", "ok");
+    botao.disabled = false;
+    return;
+  }
+
+  setStatus("cfgjogo-status", "Aplicando…", "progress");
+
+  try {
+    const mudou = await invoke<string[]>("apply_game_profile", { perfil });
+
+    setStatus(
+      "cfgjogo-status",
+      mudou.length
+        ? `Pronto: ${mudou.join(" · ")}. Abra o jogo e meça de novo abaixo.`
+        : "A configuração já estava assim; nada mudou.",
+      "ok"
+    );
+
+    await analisarConfigJogo();
+    await loadOptimizations();
+  } catch (error) {
+    setStatus("cfgjogo-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------ a prova */
+
+function segundosDaMedicao(): number {
+  // Vinte segundos: menos que isso não dá amostra para o 1% pior significar
+  // alguma coisa, e mais que isso o cliente não espera parado.
+  return 20;
+}
+
+async function medirAntes() {
+  const botao = element<HTMLButtonElement>("prova-antes");
+  const processo = element<HTMLInputElement>("prova-processo").value.trim();
+
+  if (!processo) {
+    setStatus("prova-status", "Diga o nome do jogo antes de medir.", "error");
+    return;
+  }
+
+  botao.disabled = true;
+  setStatus("prova-status", `Medindo ${processo} por 20 segundos… jogue normalmente.`, "progress");
+
+  try {
+    const p = await invoke<Prova>("medir_antes", {
+      process: processo,
+      seconds: segundosDaMedicao(),
+    });
+
+    text("prova-tag", `antes: ${p.fps.toFixed(0)} FPS`);
+
+    element("prova-result").innerHTML =
+      `<p><strong>Medição guardada.</strong></p>` +
+      `<ul class="lista">
+         <li>Média: <strong>${p.fps.toFixed(0)} FPS</strong></li>
+         <li>1% piores quadros: <strong>${p.low_1pct.toFixed(0)} FPS</strong></li>
+         <li>Engasgos: <strong>${p.engasgos_por_minuto.toFixed(0)} por minuto</strong></li>
+       </ul>` +
+      `<p class="hint">Agora feche o jogo, aplique as mudanças no painel acima, abra o jogo de novo <strong>no mesmo lugar</strong>, e meça outra vez.</p>` +
+      (p.confiavel
+        ? ""
+        : `<p class="hint">A amostra ficou curta: os detalhes acima são pouco confiáveis. Vale medir de novo com o jogo em movimento.</p>`);
+
+    setStatus("prova-status", "Medição guardada. Agora feche o jogo e aplique as mudanças.", "ok");
+  } catch (error) {
+    setStatus("prova-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function medirDepois() {
+  const botao = element<HTMLButtonElement>("prova-depois");
+  const processo = element<HTMLInputElement>("prova-processo").value.trim();
+
+  botao.disabled = true;
+  setStatus("prova-status", `Medindo ${processo} por 20 segundos… jogue normalmente.`, "progress");
+
+  try {
+    const c = await invoke<ComparacaoDaProva>("medir_depois", {
+      process: processo,
+      seconds: segundosDaMedicao(),
+    });
+
+    renderComparacao(c);
+
+    // O ESTADO DO STATUS SEGUE O RESULTADO, e não a vontade de comemorar.
+    // Uma medição que piorou não pode sair verde.
+    setStatus(
+      "prova-status",
+      c.vale_como_prova
+        ? "Ganho medido e confirmado."
+        : "Leia as ressalvas antes de tirar conclusão.",
+      c.vale_como_prova ? "ok" : "warn",
+    );
+  } catch (error) {
+    setStatus("prova-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderComparacao(c: ComparacaoDaProva) {
+  // A ETIQUETA NUNCA MENTE SOBRE O SINAL.
+  //
+  // Um produto que só mostra ganho não está medindo, está anunciando — e o
+  // cliente que confere sozinho descobre isso na pior hora.
+  const sinal = c.fps_delta > 0 ? "+" : "";
+  text("prova-tag", `${sinal}${c.fps_delta.toFixed(0)} FPS`);
+
+  const linha = (rotulo: string, antes: number, depois: number, unidade = "FPS") => {
+    const d = depois - antes;
+    const seta = d > 0 ? "↑" : d < 0 ? "↓" : "=";
+    return `<li>${rotulo}: <strong>${antes.toFixed(0)}</strong> → <strong>${depois.toFixed(
+      0
+    )}</strong> ${unidade} ${seta}</li>`;
+  };
+
+  const ressalvas = c.ressalvas.length
+    ? `<p class="hint"><strong>Antes de tirar conclusão:</strong></p><ul class="lista">${c.ressalvas
+        .map((r) => `<li>${escapeHtml(r)}</li>`)
+        .join("")}</ul>`
+    : "";
+
+  element("prova-result").innerHTML =
+    `<p class="lead">${escapeHtml(c.veredito)}</p>` +
+    `<ul class="lista">
+       ${linha("Média", c.antes.fps, c.depois.fps)}
+       ${linha("1% piores", c.antes.low_1pct, c.depois.low_1pct)}
+       ${linha("Engasgos", c.antes.engasgos_por_minuto, c.depois.engasgos_por_minuto, "por minuto")}
+     </ul>` +
+    ressalvas;
+}
+
 function wireControls() {
   const secoes = Array.from(
     document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]")
@@ -4246,6 +4566,12 @@ function wireControls() {
   element("analyze-network").addEventListener("click", analyzeNetwork);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
+  element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
+  element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
+  element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
+  element("cfgjogo-competitivo").addEventListener("click", () => aplicarPerfilDoJogo("competitivo"));
+  element("prova-antes").addEventListener("click", medirAntes);
+  element("prova-depois").addEventListener("click", medirDepois);
   element("analyze-readiness").addEventListener("click", analyzeReadiness);
   element("fix-priority").addEventListener("click", () => fixPriority(true));
   element("unfix-priority").addEventListener("click", () => fixPriority(false));

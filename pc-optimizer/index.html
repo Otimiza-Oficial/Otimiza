@@ -1022,6 +1022,96 @@
         <!-- =========================================================== RESULTADO -->
         <!-- ============================================================== JOGOS -->
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
+          <!--
+            O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
+
+            A ordem aqui não é estética: é a hierarquia do ganho, medida.
+            Uma configuração de jogo mal escolhida custa dezenas de por cento;
+            os quarenta e dois ajustes de Windows deste produto, somados, valem
+            alguns. Pôr a limpeza de cache antes disto seria pôr o menor ganho
+            na frente do maior porque ele existe há mais tempo.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Configuração do jogo</h2>
+              <span class="panel-tag" id="cfgjogo-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Esta é a parte que mais muda o seu FPS, e a que quase nenhum
+              otimizador toca. Numa placa de entrada, a suavização de serrilhado
+              sozinha custa entre <strong>30% e 50% dos quadros</strong> — mais
+              do que tudo que este programa faz no Windows, somado.
+            </p>
+
+            <p class="hint">
+              <strong>E existe uma trava que não custa nada tirar.</strong> Se o
+              jogo está limitado a um número de quadros — por VSync ou por
+              limitador —, ele não está travado pela sua placa: está travado por
+              um número escrito num arquivo. Tirar isso devolve o que a máquina
+              já era capaz de fazer, sem mudar nada de como o jogo se parece.
+            </p>
+
+            <p class="hint">
+              <strong>Cuidados que tomamos:</strong> o arquivo inteiro é
+              guardado antes de qualquer mudança, e o botão de desfazer devolve
+              ele byte a byte. Mostramos chave por chave o que vai mudar
+              <em>antes</em> de você confirmar. E recusamos escrever com o jogo
+              aberto — ele guarda a configuração em memória e reescreve o
+              arquivo ao sair, apagando o que fizermos agora.
+            </p>
+
+            <div class="row-actions">
+              <button id="cfgjogo-analisar" class="btn" data-custo="~1 s">Analisar</button>
+              <button id="cfgjogo-sem-teto" class="btn btn-primary">Tirar o limite de FPS</button>
+              <button id="cfgjogo-equilibrado" class="btn">Equilibrado</button>
+              <button id="cfgjogo-competitivo" class="btn">Competitivo</button>
+            </div>
+
+            <p id="cfgjogo-status" class="status"></p>
+            <div id="cfgjogo-result" class="resultado" data-vazio="Lê a configuração do jogo instalado e mostra o que está pesando. Nada é alterado sem você confirmar o que vai mudar."></div>
+          </section>
+
+          <!--
+            A PROVA.
+
+            O concorrente vende "até +300 FPS" e empurra a medição para o
+            cliente. Este painel mede sozinho, nos dois momentos, e diz o número
+            — inclusive quando ele não mudou, e inclusive quando piorou.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Antes e depois, medido</h2>
+              <span class="panel-tag" id="prova-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Mede os quadros do seu jogo agora, guarda, e compara depois das
+              mudanças. Mostra a média, os <strong>1% piores quadros</strong> —
+              que é o que se sente como travada — e quantos engasgos por minuto.
+            </p>
+
+            <p class="hint">
+              <strong>A ordem importa:</strong> meça com o jogo <em>aberto</em>,
+              feche o jogo, aplique as mudanças, abra de novo e meça outra vez.
+              As duas medições precisam ser feitas <strong>no mesmo lugar do
+              jogo</strong> — menu e rua movimentada dão números muito
+              diferentes na mesma máquina, e comparar um com o outro produz um
+              ganho que ninguém fez.
+            </p>
+
+            <div class="row-actions">
+              <input id="prova-processo" class="campo-inline" type="text"
+                     value="FiveM" spellcheck="false"
+                     aria-label="Nome do processo do jogo" />
+              <button id="prova-antes" class="btn" data-custo="~20 s">Medir agora (antes)</button>
+              <button id="prova-depois" class="btn btn-primary" data-custo="~20 s">Medir de novo (depois)</button>
+            </div>
+
+            <p id="prova-status" class="status"></p>
+            <div id="prova-result" class="resultado" data-vazio="Nenhuma medição guardada. Abra o jogo, entre numa partida, e meça."></div>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>FiveM</h2>

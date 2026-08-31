@@ -1396,6 +1396,25 @@ pub async fn apply_optimization(
     }
 }
 
+/// Comando: lê a configuração do jogo instalado e diz o que está pesando.
+///
+/// Só lê. Fica em `LIVRES` pelo mesmo motivo que todo o diagnóstico fica: o
+/// cliente pode descobrir de graça que o MSAA dele custa 40% dos quadros. É
+/// essa descoberta que faz ele querer a chave.
+#[tauri::command]
+pub async fn analyze_game_config(
+) -> Result<crate::modules::windows::configjogo::ConfigJogoReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::configjogo::analyze())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: mede o jogo agora e guarda como o "antes".
 ///
 /// O jogo precisa estar ABERTO — é o contrário de `apply_game_profile`, que
@@ -1724,6 +1743,7 @@ mod tests {
     /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
     const LIVRES: &[&str] = &[
+        "analyze_game_config",
         "preview_game_profile",
         "medir_antes",
         "medir_depois",

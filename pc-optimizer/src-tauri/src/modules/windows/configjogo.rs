@@ -23,19 +23,37 @@
 //     memória insuficiente ..................... o teto da máquina
 //     ajustes de Windows, todos somados ........ alguns por cento
 //
-// ESTE MÓDULO NÃO ESCREVE. NUNCA.
+// ESTE MÓDULO PASSOU A ESCREVER, E A REGRA QUE O PROIBIA ERA DO DONO.
 //
-// A regra é do dono do produto: o Otimiza mexe no PC, não no jogo. Mexer na
+// Ela dizia: "o Otimiza mexe no PC, não no jogo". Fazia sentido — mexer na
 // configuração de um jogo é mexer em como ele se parece, e essa escolha é de
-// quem joga.
+// quem joga. O dono a removeu, e removeu certo: ficar calado sobre dezenas de
+// por cento de FPS por causa de uma regra de escopo era o produto escondendo do
+// cliente a coisa mais valiosa que ele sabe.
 //
-// Mas ficar CALADO sobre 40% de FPS por causa de uma regra de escopo seria o
-// produto escondendo do cliente a coisa mais valiosa que ele sabe. Então aqui
-// se lê, se explica, e se diz onde clicar — igual o produto já faz com a taxa
-// de atualização do monitor.
+// O RISCO QUE A REGRA COBRIA NÃO DESAPARECEU COM ELA.
 //
-// A ausência de escrita é garantida por teste (`este_modulo_nunca_escreve`),
-// no mesmo espírito da guarda que impede a suspensão de virar "matar processo".
+// Escrever no arquivo do cliente sem caminho de volta continua sendo a pior
+// coisa que este módulo pode fazer. Então três coisas seguram isso, e nenhuma é
+// opcional:
+//
+//   1. Uma escrita só, em `aplicar_perfil`, e ela devolve o arquivo INTEIRO
+//      como estava — é o que o desfazer reescreve.
+//   2. Recusa de escrever com o jogo aberto: ele guarda a configuração em
+//      memória e reescreve ao sair, apagando o que fizermos agora.
+//   3. `trocar()` mexe só nos caracteres entre as aspas daquela chave. O resto
+//      do arquivo — comentários, ordem, indentação — sai byte a byte igual.
+//
+// A guarda antiga não foi apagada: virou `toda_escrita_guarda_o_arquivo_anterior`,
+// que exige as três. Apagar a guarda junto com a regra teria sido perder a lição
+// junto com a restrição.
+//
+// A TERCEIRA TRAVA, ENCONTRADA NA MÁQUINA DO DONO
+//
+// Além das configurações caras, o arquivo dele tinha `RefreshRate = 60` num
+// monitor de 180 Hz — o jogo pedindo ao Windows um terço da velocidade que a
+// tela entrega. Isso não muda nada de como o jogo se parece, e por isso entra
+// até no perfil que promete não mexer no visual.
 
 use super::achados::{FindingSeverity, FixLocation};
 use serde::{Deserialize, Serialize};
@@ -351,6 +369,35 @@ const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
     Mudanca { chave: "PostFX", valor: "0", custo: "menos brilho e desfoque" },
 ];
 
+/// A taxa de atualização que o jogo vai pedir, lida do monitor de verdade.
+///
+/// ESTA É A TERCEIRA TRAVA, E FOI ENCONTRADA NA MÁQUINA DO DONO.
+///
+/// O arquivo dele tinha `RefreshRate = 60` num monitor de 180 Hz. Não é uma
+/// configuração de qualidade: é o jogo avisando ao Windows a que velocidade
+/// quer a tela. Em tela cheia exclusiva, esse número é um teto — o jogo não
+/// passa dali por mais placa que exista.
+///
+/// Não entra na tabela fixa como as outras porque o valor certo depende do
+/// monitor: escrever "180" num monitor de 60 Hz pediria um modo que não existe,
+/// e o jogo cairia para algum padrão. O valor sai de `display::hz_maximo()`,
+/// que é o mesmo que o produto já usa para a taxa do Windows.
+///
+/// Devolve `None` quando não há monitor legível ou quando ele já está no
+/// máximo — e nesse caso não há trava para tirar.
+fn hz_do_monitor() -> Option<u32> {
+    let monitores = super::display::monitores();
+    let melhor = monitores.iter().map(|m| m.hz_maximo()).max()?;
+
+    // Abaixo disto não vale mexer: a diferença não se sente e a mudança pediria
+    // um modo de vídeo por um ganho que ninguém percebe.
+    if melhor >= 60 {
+        Some(melhor)
+    } else {
+        None
+    }
+}
+
 impl Perfil {
     pub fn mudancas(self) -> Vec<&'static Mudanca> {
         let mut lista: Vec<&Mudanca> = SEM_TETO.iter().collect();
@@ -367,6 +414,34 @@ impl Perfil {
     }
 }
 
+/// A taxa que está no arquivo e a que o monitor aguenta, quando diferem.
+///
+/// Devolve `None` quando o arquivo não tem a chave, quando não dá para ler o
+/// monitor, ou quando já estão iguais.
+fn taxa_a_corrigir(conteudo: &str) -> Option<(String, u32)> {
+    let alvo = hz_do_monitor()?;
+    taxa_a_corrigir_com(conteudo, alvo)
+}
+
+/// A decisão, separada da leitura do monitor.
+///
+/// **Função pura**, e é ela que os testes usam: a máquina que roda o teste tem
+/// o monitor que tem, e um teste que dependesse disso passaria aqui e falharia
+/// na esteira.
+fn taxa_a_corrigir_com(conteudo: &str, hz_do_monitor: u32) -> Option<(String, u32)> {
+    let atual = valor(conteudo, "RefreshRate")?;
+    let numero: u32 = atual.trim().parse().ok()?;
+
+    // Só sobe. Se o arquivo pede MAIS do que o monitor faz, quem está errado
+    // pode ser a nossa leitura do monitor — e baixar seria estragar uma
+    // configuração que talvez esteja certa.
+    if numero >= hz_do_monitor {
+        return None;
+    }
+
+    Some((atual, hz_do_monitor))
+}
+
 /// O que um perfil FARIA neste arquivo, sem escrever nada.
 ///
 /// Existe para a tela poder mostrar exatamente o que vai mudar antes de o
@@ -378,6 +453,18 @@ impl Perfil {
 /// faria a tela prometer um ganho que não vai acontecer.
 pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'static str)> {
     let mut previsto = Vec::new();
+
+    // A taxa de atualização entra em TODOS os perfis, inclusive no que promete
+    // não mexer no visual: pedir ao jogo a velocidade real do monitor não muda
+    // nada de como ele se parece.
+    if let Some((atual, alvo)) = taxa_a_corrigir(conteudo) {
+        previsto.push((
+            "RefreshRate".to_string(),
+            atual,
+            alvo.to_string(),
+            "",
+        ));
+    }
 
     for m in perfil.mudancas() {
         let Some(atual) = valor(conteudo, m.chave) else {
@@ -408,6 +495,13 @@ pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'
 pub fn aplicar_no_texto(conteudo: &str, perfil: Perfil) -> (String, Vec<String>) {
     let mut saida = conteudo.to_string();
     let mut mexidas = Vec::new();
+
+    if let Some((atual, alvo)) = taxa_a_corrigir(&saida) {
+        if let Some(novo) = trocar(&saida, "RefreshRate", &alvo.to_string()) {
+            mexidas.push(format!("RefreshRate: {} → {}", atual, alvo));
+            saida = novo;
+        }
+    }
 
     for m in perfil.mudancas() {
         let Some(atual) = valor(&saida, m.chave) else {
@@ -622,6 +716,50 @@ mod tests {
     #[test]
     fn trocar_nao_cria_chave_que_o_jogo_nao_tem() {
         assert!(trocar(CONFIG_REAL, "NaoExisteEssaChave", "0").is_none());
+    }
+
+    /// A trava encontrada na máquina do dono: jogo em 60 Hz, monitor em 180.
+    ///
+    /// Não é configuração de qualidade — é o jogo avisando ao Windows a que
+    /// velocidade quer a tela. Em tela cheia exclusiva vira teto: o jogo não
+    /// passa dali por mais placa que exista.
+    #[test]
+    fn jogo_em_60hz_com_monitor_de_180_e_corrigido() {
+        const ARQUIVO: &str = r#"<Settings>
+  <video>
+    <RefreshRate value="60" />
+  </video>
+</Settings>"#;
+
+        let (atual, alvo) = taxa_a_corrigir_com(ARQUIVO, 180).expect("60 num monitor de 180 é trava");
+
+        assert_eq!(atual, "60");
+        assert_eq!(alvo, 180);
+    }
+
+    /// Já no máximo: não há trava para tirar, e o produto não inventa mudança.
+    #[test]
+    fn jogo_ja_na_taxa_do_monitor_nao_vira_mudanca() {
+        const ARQUIVO: &str = r#"<RefreshRate value="180" />"#;
+
+        assert!(taxa_a_corrigir_com(ARQUIVO, 180).is_none());
+    }
+
+    /// O arquivo pede MAIS do que lemos do monitor: não mexemos.
+    ///
+    /// Quem pode estar errado nesse caso é a NOSSA leitura do monitor, e baixar
+    /// a taxa estragaria uma configuração que talvez esteja certa. Só subimos.
+    #[test]
+    fn nunca_baixa_a_taxa_do_jogo() {
+        const ARQUIVO: &str = r#"<RefreshRate value="240" />"#;
+
+        assert!(taxa_a_corrigir_com(ARQUIVO, 60).is_none());
+    }
+
+    /// Arquivo sem a chave não ganha uma linha nova.
+    #[test]
+    fn arquivo_sem_taxa_nao_recebe_a_chave() {
+        assert!(taxa_a_corrigir_com("<Settings/>", 180).is_none());
     }
 
     /// O perfil que não mexe no visual só tira teto.

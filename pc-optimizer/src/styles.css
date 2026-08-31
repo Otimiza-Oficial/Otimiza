@@ -1022,6 +1022,26 @@ button {
   margin-bottom: var(--s3);
 }
 
+/* Campo de texto que fica na mesma linha dos botões — hoje só o nome do
+   processo a medir. Toma a altura do botão para a linha não ficar torta. */
+.campo-inline {
+  min-width: 140px;
+  padding: var(--s2) var(--s3);
+  font-family: var(--font-mono);
+  font-size: var(--t-body);
+  color: var(--text);
+
+  background: var(--campo);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  transition: border-color var(--anim-rapida);
+}
+
+.campo-inline:focus {
+  outline: none;
+  border-color: var(--borda-forte);
+}
+
 /* ------------------------------------------------------------------ textos */
 
 .lead,
