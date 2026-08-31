@@ -13,6 +13,7 @@ pub mod boot;
 pub mod bottleneck;
 pub mod browsers;
 pub mod catalog;
+pub mod cbslog;
 pub mod cleanup;
 pub mod configjogo;
 pub mod conflicts;
