@@ -18,78 +18,108 @@ depois em *Executar assim mesmo*.
 
 ---
 
-# 0.28.0 — o Otimiza virou um produto
+# 1.0.0 — o Otimiza passa a mexer no jogo
 
-Esta página cobre tudo o que mudou desde a 0.17.
+Até aqui o produto mexia no Windows. A partir desta versão ele mexe também na
+configuração do jogo — e é lá que mora a maior parte do FPS que você está
+deixando na mesa.
 
-## A chave
+A ordem de grandeza, medida:
 
-O diagnóstico continua livre. Ele roda inteiro, mede tudo e mostra o que achou
-sem pedir nada. **O que a chave libera são as correções.**
+```
+uma configuração de jogo mal escolhida ... dezenas de por cento
+memória insuficiente ..................... o teto da máquina
+ajustes de Windows, todos somados ........ alguns por cento
+```
 
-A chave é presa a um computador só. O código dele — `OTZ-XXXX-XXXX-XXXX` —
-nasce do número de série da placa-mãe, e aparece na primeira tela do programa
-com um botão de copiar ao lado.
+Os 42 ajustes de Windows continuam aqui, e continuam valendo o que valem. O que
+mudou é que agora existe a parte grande.
 
-**Formatar o Windows não muda esse código.** Trocar a placa-mãe muda; nesse caso
-a chave é reemitida sem custo.
+## A trava que não custa nada tirar
 
-### O que a chave não faz
+Se o seu jogo está limitado a um número de quadros — por VSync ou por limitador
+—, ele não está travado pela sua placa: está travado por **um número escrito num
+arquivo**. Tirar isso devolve o que a máquina já era capaz de fazer, sem mudar
+nada de como o jogo se parece.
 
-Ela não impede pirataria. Nenhuma licença que roda no computador do cliente
-impede — quem editar o executável passa, e isso vale para qualquer programa
-vendido assim. O que ela impede é o repasse casual: a chave que abre o seu PC
-não abre o do vizinho.
+O perfil **Tirar o limite de FPS** faz só isso. Nenhuma configuração visual é
+tocada.
 
-Vale dizer isso agora e não deixar você descobrir depois.
+Os outros dois — **Equilibrado** e **Competitivo** — desligam o que é caro,
+começando pela suavização de serrilhado, que numa placa de entrada custa sozinha
+entre 30% e 50% dos quadros. Mais do que tudo que este programa faz no Windows,
+somado.
 
-## A interface, refeita
+**Antes de aplicar, você vê exatamente o que muda:** chave por chave, o valor de
+agora, o valor novo e o que se perde. O arquivo inteiro é guardado antes, e
+desfazer devolve ele byte a byte.
 
-O programa passou a desenhar a própria janela, com os botões no canto e o título
-no meio. O fundo é preto de verdade — em monitor OLED, que é o que boa parte de
-quem joga usa, preto puro é pixel desligado.
+## Antes e depois, medido
 
-A tela de ativação e a de agradecimento são novas. As duas mostram **os três
-pilares**: uma coluna para o processador, uma para a memória e uma para o disco,
-cada uma se desfazendo conforme a medição da peça que ela representa. Não é
-enfeite — é o seu computador desenhado com os números que acabaram de ser lidos.
+O Otimiza mede o FPS do seu jogo, guarda, e compara depois das mudanças. Mostra
+a média, os **1% piores quadros** — que é o que se sente como travada — e
+quantos engasgos por minuto.
 
-Sete abas viraram seis e três cartões que respondiam a mesma pergunta viraram
-um.
+E se recusa a chamar ruído de ganho:
 
-## Correções
+- Diferença abaixo de 3% é ruído de medição, não melhora. Duas medições seguidas
+  sem mexer em nada já variam isso.
+- Medição curta demais não vale como prova.
+- **Se piorou, ele diz que piorou** e sugere desfazer.
 
-| O que estava errado | O que acontecia |
+Toda comparação avisa que as duas medições precisam ser feitas no mesmo lugar do
+jogo. Menu e rua movimentada dão números muito diferentes na mesma máquina, e
+comparar um com o outro produz um ganho que ninguém fez.
+
+## O diagnóstico enxerga mais
+
+A frase principal passou a considerar quatro coisas que antes só apareciam em
+abas separadas:
+
+| | |
 |---|---|
-| Os botões da janela tinham 12px e ficavam cinzas | Não se achava como fechar o programa |
-| O número dos medidores ficava longe do rótulo | Lia-se "19% MEMÓRIA" como par, e cada número parecia do vizinho |
-| A bolinha de contagem empurrava o ícone da lateral | Nenhum ícone ficava no centro |
-| `hidden` não escondia nada no CSS | Elementos escondidos apareciam vazios, como bolas brancas soltas |
-| A rolagem estava travada | Conteúdo longo não descia |
-| O nome do comprador saía com o código da compra colado | A tela de agradecimento mostrava "Obrigado, fulano.." |
+| **Temperatura** | Um processador em throttling entrega uma fração do que pode, e nenhum ajuste de software resolve. É a resposta que falta em todo atendimento: o técnico limpa, otimiza, mede, e nada melhora porque o problema é físico. |
+| **Disco cheio** | Abaixo de 10 GB o Windows falha de formas que ninguém associa a disco. |
+| **Driver de vídeo** | Com mais de um ano, jogo recente perde quadros de graça. |
+| **Programas em conflito** | Dois antivírus disputando o mesmo arquivo. |
 
-O catálogo cresceu para o tamanho do que o mercado oferece, e cada item novo
-entrou com a etiqueta honesta: o que muda FPS está marcado como tal, e o que é
-higiene de Windows diz que é higiene de Windows. Os itens que trocam segurança
-por desempenho ficam fora do botão automático, com o risco escrito e confirmação
-própria.
+## A máquina, desenhada
 
-## Atualizações
+Três coisas que o programa já media e nunca mostrava:
 
-Quem comprou tem direito às versões seguintes — a chave não vence e não está
-presa a versão nenhuma. Quando sair uma nova, o bot do Discord avisa por mensagem
-direta com o link.
+- **A sua placa de vídeo**, com o driver, a data e a memória. Ele reconhece —
+  não pergunta qual é.
+- **Os encaixes de memória**, cheios e vazios. "Canal único" é jargão; quatro
+  encaixes com um ocupado não precisa de tradução.
+- **Os seus monitores**, cada um com a taxa dentro da tela. Numa máquina com
+  dois, agora dá para ver qual está abaixo do máximo.
 
-O instalador tem agora um endereço fixo que sempre aponta para a versão mais
-nova, então o link que você guardar hoje continua valendo daqui a seis meses.
+## Também nesta versão
+
+- Ícones redesenhados em traço
+- Fundo preto de verdade — sem camadas animadas pesando na máquina o tempo todo
+- Um endereço de download que não muda a cada versão
+- Aviso de versão nova por mensagem direta para quem comprou
 
 ---
 
 ## O que esta versão não promete
 
-**O catálogo maior não cria FPS.** A maior parte dos itens que entraram é higiene
-de Windows, e cada linha continua dizendo isso sobre si mesma. O que move o
-número no jogo continua sendo a configuração dele e o hardware.
+**Não existe número mágico.** Você vai ver por aí "até +300 FPS" e coisas do
+tipo. O "até" é a palavra que torna a frase impossível de contestar.
+
+O ganho real depende do que está segurando a **sua** máquina, e são três coisas
+diferentes:
+
+- Se o seu jogo está com teto de quadros, tirar o teto pode dobrar ou triplicar
+  o número — e é instantâneo.
+- Se está com as configurações gráficas pesadas para a sua placa, o ganho é de
+  dezenas de por cento.
+- Se o teto é a memória ou a temperatura, **nenhum software resolve**, e o
+  Otimiza vai dizer isso em vez de vender ajuste que não vai adiantar.
+
+Por isso ele mede antes e depois: o número que importa é o da sua máquina, e é
+ele que a tela mostra — inclusive quando é zero.
 
 **O "editor desconhecido" continua aparecendo.** O aviso do SmartScreen, lá em
 cima, não é frescura do Windows: é ele dizendo, com razão, que não sabe quem
