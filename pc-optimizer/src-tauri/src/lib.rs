@@ -22,6 +22,8 @@ pub fn run() {
             changes: Mutex::new(ChangeLog::load()),
             #[cfg(target_os = "windows")]
             processes: Mutex::new(modules::windows::processes::ProcessMonitor::new()),
+            #[cfg(target_os = "windows")]
+            reparo: modules::windows::tarefa_longa::TarefaLonga::nova(),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
@@ -100,6 +102,10 @@ pub fn run() {
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
+            commands::reparo_disponivel,
+            commands::reparo_ultimo_resultado,
+            commands::reparo_executar,
+            commands::reparo_cancelar,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

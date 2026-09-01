@@ -80,6 +80,10 @@ pub struct AppState {
     /// sempre zero.
     #[cfg(target_os = "windows")]
     pub processes: Mutex<crate::modules::windows::processes::ProcessMonitor>,
+    /// Sem `Mutex`: `TarefaLonga` já guarda o próprio estado internamente, e
+    /// é o que impede duas ferramentas de reparo de rodar ao mesmo tempo.
+    #[cfg(target_os = "windows")]
+    pub reparo: crate::modules::windows::tarefa_longa::TarefaLonga,
 }
 
 #[derive(Serialize)]
@@ -1814,6 +1818,186 @@ pub async fn set_max_refresh_rate(
     }
 }
 
+// =========================================================== REPARO
+
+/// Monta a trava do disco a partir de um diagnóstico de verdade.
+///
+/// Só existe no Windows: `HealthReport` e `DiscoSaudavel` vêm de
+/// `modules::windows`, que nem compila fora dele.
+#[cfg(target_os = "windows")]
+fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
+    let relatorio = crate::modules::windows::health::analyze();
+    crate::modules::windows::reparo::DiscoSaudavel::a_partir_do_relatorio(&relatorio)
+}
+
+/// O que dá para oferecer nesta máquina.
+///
+/// Fica em `LIVRES`: é leitura, e é o diagnóstico que mostra ao cliente que o
+/// problema dele existe antes de qualquer cobrança.
+///
+/// O disco NÃO chega como parâmetro da tela — o comando lê o `HealthReport`
+/// aqui dentro e monta o próprio `DiscoSaudavel`. Um `bool` vindo do
+/// frontend reabriria exatamente o buraco que `DiscoSaudavel` foi criado
+/// para fechar: a mesma regra do fluxo de compra, em que só um código de
+/// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
+#[tauri::command]
+pub fn reparo_disponivel() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::reparo;
+
+        let mut lista = vec![
+            "VerificarArquivos".to_string(),
+            "RepararImagem".to_string(),
+            "VerificarDisco".to_string(),
+            "AnalisarWinSxS".to_string(),
+            "LimparWinSxS".to_string(),
+        ];
+
+        let disco = disco_saudavel_agora();
+        if reparo::consertar_disco_e_permitido(&disco) {
+            lista.push("ConsertarDisco".to_string());
+        }
+
+        lista
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
+/// O resultado da última verificação de arquivos de sistema.
+///
+/// Fica em `LIVRES`: é leitura de um registro que o Windows já escreveu.
+#[tauri::command]
+pub fn reparo_ultimo_resultado() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::cbslog::{self, ResultadoSfc};
+
+        let conteudo = std::fs::read_to_string(cbslog::caminho_do_log()).unwrap_or_default();
+
+        match cbslog::interpretar(&conteudo) {
+            // Este é o resultado mais comum, e é um resultado BOM. A tela diz
+            // isso com todas as letras, sem inventar benefício — mesma regra
+            // do `prova.rs`, que se recusa a chamar ruído de ganho.
+            ResultadoSfc::SemCorrupcao => "Nenhuma corrupção encontrada.".into(),
+            ResultadoSfc::Corrigiu { quantos } => {
+                format!("Corrigiu {} arquivo(s) corrompido(s).", quantos)
+            }
+            // Misto: parte foi consertada, parte não. Isto NÃO é sucesso —
+            // ainda sobra corrupção na máquina, e dizer só "corrigiu" faria o
+            // cliente achar que o problema acabou quando não acabou.
+            ResultadoSfc::CorrigiuEmParte {
+                corrigidos,
+                restantes,
+            } => format!(
+                "Corrigiu {} arquivo(s), mas {} continuam corrompidos e sem \
+                 conserto. O próximo passo é reparar a imagem do Windows.",
+                corrigidos, restantes
+            ),
+            ResultadoSfc::NaoConseguiu { quantos } => format!(
+                "Encontrou {} arquivo(s) corrompido(s) e não conseguiu corrigir. \
+                 O próximo passo é reparar a imagem do Windows.",
+                quantos
+            ),
+            ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        "Disponível apenas no Windows.".to_string()
+    }
+}
+
+/// Roda uma ferramenta de reparo, transmitindo o andamento pelo evento
+/// `reparo-andamento`.
+///
+/// Exige licença: é correção, como todas as outras.
+#[tauri::command]
+pub fn reparo_executar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    ferramenta: String,
+    resetar_base: bool,
+) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::reparo::{self, Ferramenta};
+        use crate::modules::windows::tarefa_longa::Desfecho;
+        use tauri::Emitter;
+
+        let escolhida = match ferramenta.as_str() {
+            "VerificarArquivos" => Ferramenta::VerificarArquivos,
+            "RepararImagem" => Ferramenta::RepararImagem,
+            "VerificarDisco" => Ferramenta::VerificarDisco,
+            "ConsertarDisco" => {
+                // A trava do disco é conferida AQUI TAMBÉM, e não só na tela
+                // que chamou `reparo_disponivel`: a tela pode ser contornada,
+                // esta chamada não — o `DiscoSaudavel` é lido de novo, na
+                // hora, e não confia em nada que veio do cliente.
+                let disco = disco_saudavel_agora();
+                if !reparo::consertar_disco_e_permitido(&disco) {
+                    return Err(
+                        "O disco desta máquina não está em condições para isso. \
+                         Consertar a estrutura num disco que já falha costuma \
+                         terminar de estragá-lo."
+                            .into(),
+                    );
+                }
+                Ferramenta::ConsertarDisco
+            }
+            "AnalisarWinSxS" => Ferramenta::AnalisarWinSxS,
+            "LimparWinSxS" => Ferramenta::LimparWinSxS { resetar_base },
+            outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
+        };
+
+        let r = reparo::receita(&escolhida);
+        let args: Vec<&str> = r.args.iter().map(|s| s.as_str()).collect();
+
+        let desfecho = state.reparo.rodar(r.programa, &args, move |a| {
+            let _ = app.emit("reparo-andamento", a.linha);
+        })?;
+
+        Ok(match desfecho {
+            Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),
+            Desfecho::Terminou { codigo } => format!("Terminou com o código {}.", codigo),
+            Desfecho::Cancelada => "Interrompida por você.".into(),
+            Desfecho::NaoComecou { motivo } => motivo,
+        })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state, ferramenta, resetar_base);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Interrompe a ferramenta de reparo em andamento.
+///
+/// Fica em `LIVRES` DE PROPÓSITO, pelo mesmo motivo que `revert` fica: uma
+/// licença que vence no meio de um `DISM` de vinte minutos não pode deixar o
+/// cliente preso nele.
+#[tauri::command]
+pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        state.reparo.cancelar()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        false
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -1904,6 +2088,9 @@ mod tests {
         "revert_all_optimizations",
         "licenca_estado",
         "licenca_ativar",
+        "reparo_disponivel",
+        "reparo_ultimo_resultado",
+        "reparo_cancelar",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
@@ -1931,6 +2118,7 @@ mod tests {
         "apply_optimization",
         "optimize_now",
         "set_max_refresh_rate",
+        "reparo_executar",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as
@@ -2095,6 +2283,20 @@ mod tests {
             "{} comandos no arquivo, {} nas listas",
             achados, classificados
         );
+    }
+
+    #[test]
+    fn verificar_e_livre_e_consertar_pede_licenca() {
+        // A regra da casa: diagnóstico livre, correção paga. Se a verificação
+        // passar a exigir licença, o cliente não consegue nem descobrir que o
+        // problema dele existe — e é justamente esse achado que vende.
+        assert!(LIVRES.contains(&"reparo_disponivel"));
+        assert!(LIVRES.contains(&"reparo_ultimo_resultado"));
+        assert!(EXIGEM_LICENCA.contains(&"reparo_executar"));
+
+        // Cancelar é livre DE PROPÓSITO, pelo mesmo motivo que `revert` é: uma
+        // licença vencida no meio de um DISM não pode prender a pessoa nele.
+        assert!(LIVRES.contains(&"reparo_cancelar"));
     }
 
     /// A BARRA DA JANELA É DESENHADA POR NÓS, E ISSO TEM UM PREÇO EM PERMISSÃO.
