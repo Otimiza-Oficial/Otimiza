@@ -80,6 +80,19 @@ pub struct AppState {
     /// sempre zero.
     #[cfg(target_os = "windows")]
     pub processes: Mutex<crate::modules::windows::processes::ProcessMonitor>,
+    /// Sem `Mutex`: `TarefaLonga` já guarda o próprio estado internamente, e
+    /// é o que impede duas ferramentas de reparo de rodar ao mesmo tempo.
+    #[cfg(target_os = "windows")]
+    pub reparo: crate::modules::windows::tarefa_longa::TarefaLonga,
+    /// O que se sabe sobre o disco desta máquina nesta sessão — é isto que
+    /// autoriza (ou não) agendar o `chkdsk`.
+    ///
+    /// `std::sync::Mutex`, e não o `tokio::sync::Mutex` dos vizinhos: os
+    /// comandos de reparo são funções SÍNCRONAS marcadas `(async)`, então
+    /// nenhum guarda daqui atravessa um `.await` — e um `blocking_lock()` do
+    /// tokio chamado de dentro do runtime entraria em pânico.
+    #[cfg(target_os = "windows")]
+    pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
 }
 
 #[derive(Serialize)]
@@ -1814,6 +1827,432 @@ pub async fn set_max_refresh_rate(
     }
 }
 
+// =========================================================== REPARO
+//
+// OS QUATRO COMANDOS DESTA SECAO LEVAM O ATRIBUTO `async` NA MARCA DE COMANDO
+// DO TAURI, E ISSO NAO E DECORACAO. (A marca nao aparece escrita neste
+// comentario de proposito: a guarda do fim do arquivo conta comandos
+// procurando por ela no proprio fonte, e contaria um fantasma.)
+//
+// Sem o atributo, o Tauri classifica a funcao como `ExecutionContext::Blocking`
+// (tauri-macros-2.6.3, `src/command/wrapper.rs`: o contexto so vira `Async` se
+// `function.sig.asyncness.is_some()` ou se o atributo estiver escrito), e o
+// corpo roda EM LINHA dentro do manipulador de invoke — que o wry chama de
+// forma sincrona a partir do callback de IPC, na thread do laco de eventos.
+// Um `DISM` de trinta minutos ali para de repintar a janela, o Windows marca
+// "Nao Responde", o `app.emit("reparo-andamento")` enfileira trabalho para o
+// mesmo laco travado (o painel de andamento fica vazio) e — o pior — o
+// `reparo_cancelar`, que tambem e uma mensagem de IPC, so consegue executar
+// depois que a tarefa que ele deveria interromper ja terminou. O botao
+// Interromper existiria sem funcionar, e a unica saida do cliente seria matar
+// o programa no meio de uma escrita do DISM: exatamente o que
+// `cancelar_e_seguro: false` existe para evitar.
+//
+// O atributo e valido numa funcao SINCRONA que recebe `State<'_, AppState>`:
+// a restricao do Tauri contra referencias na entrada (`wrapper.rs`, o bloco
+// `async_command_check`) so e emitida quando `asyncness.is_some()`. Com a
+// funcao sincrona e o atributo presente, o Tauri gera o corpo assincrono e
+// chama a funcao dentro dele — o que o proprio macro rotula `sync_threadpool`.
+
+/// Monta a trava do disco a partir de um diagnóstico de verdade.
+///
+/// Só existe no Windows: `HealthReport` e `DiscoSaudavel` vêm de
+/// `modules::windows`, que nem compila fora dele.
+#[cfg(target_os = "windows")]
+fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
+    let relatorio = crate::modules::windows::health::analyze();
+    crate::modules::windows::reparo::DiscoSaudavel::a_partir_do_relatorio(&relatorio)
+}
+
+/// Uma ferramenta de reparo oferecida nesta máquina, com tudo que a tela
+/// precisa para avisar ANTES do clique — duração típica, se cancelar é
+/// seguro e os avisos de segurança — lido de `Receita`
+/// (`modules::windows::reparo`) e nunca reescrito à mão na tela.
+///
+/// NÃO leva `programa` nem `args`: são detalhe de execução, não informação
+/// que o cliente precisa ver, e expô-los sem necessidade só aumentaria a
+/// superfície que alguém poderia tentar forjar numa chamada direta.
+/// `titulo`/`descricao` também ficam de fora de propósito — continuam sendo
+/// texto de apresentação escrito pela própria tela, e não um FATO DE
+/// SEGURANÇA como o aviso do `/ResetBase`; só o que muda o risco de um clique
+/// tem que ter dono único no backend.
+#[derive(Serialize)]
+pub struct FerramentaDeReparo {
+    /// O mesmo nome que `reparo_executar` espera no campo `ferramenta`.
+    pub nome: String,
+    pub minutos_tipicos: (u32, u32),
+    pub cancelar_e_seguro: bool,
+    pub aviso: Option<String>,
+    /// Só `true` em `LimparWinSxS`: só ela oferece o interruptor do
+    /// `/ResetBase`.
+    pub oferece_reset_base: bool,
+    /// O aviso de que ligar o `/ResetBase` tira a capacidade de desinstalar
+    /// atualizações já aplicadas. Vem de `Receita` com `resetar_base: true`,
+    /// e não de um texto próprio da tela — é a mesma garantia de fonte única
+    /// que o aviso comum acima já tem.
+    pub aviso_reset_base: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+fn descrever_ferramenta(
+    f: crate::modules::windows::reparo::Ferramenta,
+    nome: &str,
+) -> FerramentaDeReparo {
+    use crate::modules::windows::reparo::{self, Ferramenta};
+
+    let r = reparo::receita(&f);
+
+    let (oferece_reset_base, aviso_reset_base) = match f {
+        Ferramenta::LimparWinSxS { .. } => {
+            let com_reset = reparo::receita(&Ferramenta::LimparWinSxS { resetar_base: true });
+            (true, com_reset.aviso.map(str::to_string))
+        }
+        _ => (false, None),
+    };
+
+    FerramentaDeReparo {
+        nome: nome.to_string(),
+        minutos_tipicos: r.minutos_tipicos,
+        cancelar_e_seguro: r.cancelar_e_seguro,
+        aviso: r.aviso.map(str::to_string),
+        oferece_reset_base,
+        aviso_reset_base,
+    }
+}
+
+/// O que dá para oferecer nesta máquina.
+///
+/// Fica em `LIVRES`: é leitura, e é o diagnóstico que mostra ao cliente que o
+/// problema dele existe antes de qualquer cobrança.
+///
+/// O disco NÃO chega como parâmetro da tela — o comando lê o `HealthReport`
+/// aqui dentro e monta o próprio `DiscoSaudavel`. Um `bool` vindo do
+/// frontend reabriria exatamente o buraco que `DiscoSaudavel` foi criado
+/// para fechar: a mesma regra do fluxo de compra, em que só um código de
+/// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
+#[tauri::command(async)]
+pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::reparo::{self, Ferramenta};
+
+        let mut lista = vec![
+            descrever_ferramenta(Ferramenta::VerificarArquivos, "VerificarArquivos"),
+            descrever_ferramenta(Ferramenta::RepararImagem, "RepararImagem"),
+            descrever_ferramenta(Ferramenta::VerificarDisco, "VerificarDisco"),
+            descrever_ferramenta(Ferramenta::AnalisarWinSxS, "AnalisarWinSxS"),
+            descrever_ferramenta(
+                Ferramenta::LimparWinSxS { resetar_base: false },
+                "LimparWinSxS",
+            ),
+        ];
+
+        let medicao = estado_do_disco(&state);
+
+        // DUAS PROVAS, E NÃO UMA. `DiscoSaudavel` diz que o disco aguenta a
+        // operação; `EstadoDoDisco` diz que houve MEDIÇÃO que a justifique.
+        // Faltando qualquer uma, o botão não existe — e é assim que ele deixa
+        // de ser um clique disponível para quem tem um NTFS limpo.
+        let disco = disco_saudavel_agora();
+        if reparo::consertar_disco_e_permitido(&disco) && medicao.autoriza_consertar() {
+            lista.push(descrever_ferramenta(Ferramenta::ConsertarDisco, "ConsertarDisco"));
+        }
+
+        if medicao.tem_conserto_agendado() {
+            lista.push(descrever_ferramenta(
+                Ferramenta::DesmarcarConsertoDoDisco,
+                "DesmarcarConsertoDoDisco",
+            ));
+        }
+
+        lista
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Vec::new()
+    }
+}
+
+/// Lê o que se sabe do disco nesta sessão.
+///
+/// Tranca envenenada devolve `SemVerificacao`, que é o estado que NÃO autoriza
+/// nada: aqui "não sei" fecha a porta, como em todo o resto deste caminho.
+#[cfg(target_os = "windows")]
+fn estado_do_disco(state: &State<'_, AppState>) -> crate::modules::windows::reparo::EstadoDoDisco {
+    state.disco.lock().map(|d| *d).unwrap_or_default()
+}
+
+/// O tom com que a tela deve colorir `UltimoResultadoReparo` — "ok",
+/// "atencao" ou "erro" na borda do IPC.
+///
+/// Existe para a tela nunca precisar decidir isso sozinha. A versão anterior
+/// devolvia só a frase, e a tela escolhia a cor comparando o INÍCIO do texto
+/// (`resultado.startsWith("Corrigiu ")`) — só que a frase de
+/// `CorrigiuEmParte` ("Corrigiu 2 arquivo(s), mas 1 continua...") também
+/// começa com "Corrigiu ", e a tela pintava de verde um resultado que o
+/// próprio comentário deste arquivo já dizia que NÃO é sucesso. A cor agora
+/// nasce de `ResultadoSfc::severidade()` — do dado estruturado, não da
+/// prosa — então essa colisão de vocabulário deixou de ser possível.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TomResultado {
+    Ok,
+    Atencao,
+    Erro,
+}
+
+#[cfg(target_os = "windows")]
+impl From<crate::modules::windows::cbslog::Severidade> for TomResultado {
+    fn from(s: crate::modules::windows::cbslog::Severidade) -> Self {
+        use crate::modules::windows::cbslog::Severidade;
+
+        match s {
+            Severidade::Ok => TomResultado::Ok,
+            Severidade::Atencao => TomResultado::Atencao,
+            Severidade::Erro => TomResultado::Erro,
+        }
+    }
+}
+
+/// O resultado da última verificação de arquivos de sistema, com o tom já
+/// decidido — a tela lê `tom`, nunca a prosa de `texto`.
+#[derive(Serialize)]
+pub struct UltimoResultadoReparo {
+    pub tom: TomResultado,
+    pub texto: String,
+}
+
+/// O resultado da última verificação de arquivos de sistema.
+///
+/// Fica em `LIVRES`: é leitura de um registro que o Windows já escreveu.
+#[tauri::command(async)]
+pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::cbslog::{self, ResultadoSfc};
+
+        // O `unwrap_or_default()` que estava aqui ENGOLIA o erro de leitura e
+        // entregava uma string vazia ao `interpretar`, que respondia "o
+        // registro do Windows não trouxe nenhuma verificação". Num programa
+        // aberto sem elevação — o CBS.log só abre como administrador — essa
+        // frase nomeia a causa errada: não é que o Windows não verificou, é
+        // que nós não conseguimos ler. O cliente então clicava em Executar e
+        // recebia um vermelho seco "Terminou com o código 1".
+        let resultado = match std::fs::read_to_string(cbslog::caminho_do_log()) {
+            Ok(conteudo) => cbslog::interpretar(&conteudo),
+            Err(e) => ResultadoSfc::NaoSei {
+                motivo: match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => {
+                        "o registro do Windows só abre com permissão de administrador".to_string()
+                    }
+                    std::io::ErrorKind::NotFound => {
+                        "o registro do Windows ainda não existe nesta máquina".to_string()
+                    }
+                    _ => format!("não consegui abrir o registro do Windows ({})", e),
+                },
+            },
+        };
+        let tom = TomResultado::from(resultado.severidade());
+
+        let texto = match resultado {
+            // Este é o resultado mais comum, e é um resultado BOM. A tela diz
+            // isso com todas as letras, sem inventar benefício — mesma regra
+            // do `prova.rs`, que se recusa a chamar ruído de ganho.
+            ResultadoSfc::SemCorrupcao => "Nenhuma corrupção encontrada.".into(),
+            ResultadoSfc::Corrigiu { quantos } => {
+                format!("Corrigiu {} arquivo(s) corrompido(s).", quantos)
+            }
+            // Misto: parte foi consertada, parte não. Isto NÃO é sucesso —
+            // ainda sobra corrupção na máquina, e dizer só "corrigiu" faria o
+            // cliente achar que o problema acabou quando não acabou. O tom
+            // (`Atencao`, não `Ok`) já carrega essa distinção sozinho.
+            ResultadoSfc::CorrigiuEmParte {
+                corrigidos,
+                restantes,
+            } => format!(
+                "Corrigiu {} arquivo(s), mas {} continuam corrompidos e sem \
+                 conserto. O próximo passo é reparar a imagem do Windows.",
+                corrigidos, restantes
+            ),
+            ResultadoSfc::NaoConseguiu { quantos } => format!(
+                "Encontrou {} arquivo(s) corrompido(s) e não conseguiu corrigir. \
+                 O próximo passo é reparar a imagem do Windows.",
+                quantos
+            ),
+            ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
+        };
+
+        UltimoResultadoReparo { tom, texto }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        UltimoResultadoReparo {
+            tom: TomResultado::Atencao,
+            texto: "Disponível apenas no Windows.".to_string(),
+        }
+    }
+}
+
+/// Roda uma ferramenta de reparo, transmitindo o andamento pelo evento
+/// `reparo-andamento`.
+///
+/// Exige licença: é correção, como todas as outras.
+///
+/// O parâmetro chama `resetbase`, uma palavra só, e não `reset_base` — a
+/// tela chamaria isto de `resetbase` (sem separador) ou dependeria da
+/// conversão automática de nome que o Tauri faz entre camelCase no
+/// JavaScript e snake_case no Rust. A conversão provavelmente está certa,
+/// mas o `/ResetBase` é consequente demais (custa a capacidade de
+/// desinstalar atualizações já aplicadas, sem volta) para valer a pena
+/// alguém ter que raciocinar sobre ela. Uma palavra só fecha essa dúvida de
+/// vez — a mesma lógica que fez `DiscoSaudavel` virar tipo em vez de `bool`.
+#[tauri::command(async)]
+pub fn reparo_executar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    ferramenta: String,
+    resetbase: bool,
+) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::reparo::{self, Ferramenta};
+        use crate::modules::windows::tarefa_longa::Desfecho;
+        use tauri::Emitter;
+
+        let escolhida = match ferramenta.as_str() {
+            "VerificarArquivos" => Ferramenta::VerificarArquivos,
+            "RepararImagem" => Ferramenta::RepararImagem,
+            "VerificarDisco" => Ferramenta::VerificarDisco,
+            "ConsertarDisco" => {
+                // AS DUAS TRAVAS SÃO CONFERIDAS AQUI TAMBÉM, e não só na tela
+                // que chamou `reparo_disponivel`: a tela pode ser contornada,
+                // esta chamada não — tudo é lido de novo, na hora, e nada do
+                // que veio do cliente é levado em conta.
+                let disco = disco_saudavel_agora();
+                if !reparo::consertar_disco_e_permitido(&disco) {
+                    return Err(
+                        "O disco desta máquina não está em condições para isso. \
+                         Consertar a estrutura num disco que já falha costuma \
+                         terminar de estragá-lo."
+                            .into(),
+                    );
+                }
+
+                if !estado_do_disco(&state).autoriza_consertar() {
+                    return Err(
+                        "Nada foi encontrado no disco para consertar. Rode antes \
+                         \"Verificar o disco\": sem achado, não há motivo para \
+                         reiniciar a sua máquina."
+                            .into(),
+                    );
+                }
+
+                Ferramenta::ConsertarDisco
+            }
+            "DesmarcarConsertoDoDisco" => {
+                if !estado_do_disco(&state).tem_conserto_agendado() {
+                    return Err("Não há conserto de disco agendado para desmarcar.".into());
+                }
+                Ferramenta::DesmarcarConsertoDoDisco
+            }
+            "AnalisarWinSxS" => Ferramenta::AnalisarWinSxS,
+            "LimparWinSxS" => Ferramenta::LimparWinSxS {
+                resetar_base: resetbase,
+            },
+            outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
+        };
+
+        // O `ConsertarDisco` sozinho pode mentir: se uma sessão anterior
+        // desmarcou um conserto (`DesmarcarConsertoDoDisco`, `chkntfs /X`),
+        // o volume fica EXCLUÍDO do boot check para sempre — não só naquela
+        // vez. Sem reincluir agora, o `fsutil dirty set` abaixo sai 0, o
+        // retorno diz "agendado", e o `autochk` pula o volume no próximo
+        // boot mesmo assim. `receita_reinclusao_do_disco` (reparo.rs) desfaz
+        // isso, e quem sequencia as duas chamadas é este executor — não
+        // `reparo.rs`, que só descreve receitas, e não `Receita`, que carrega
+        // um programa só. Rodar a reinclusão sempre, mesmo sem `/X` anterior,
+        // é seguro: ela só restaura o padrão do Windows.
+        if escolhida == Ferramenta::ConsertarDisco {
+            let reinclusao = reparo::receita_reinclusao_do_disco();
+            let args_reinclusao: Vec<&str> =
+                reinclusao.args.iter().map(|s| s.as_str()).collect();
+            let app_reinclusao = app.clone();
+            let desfecho_reinclusao =
+                state
+                    .reparo
+                    .rodar(reinclusao.programa, &args_reinclusao, move |a| {
+                        let _ = app_reinclusao.emit("reparo-andamento", a.linha);
+                    })?;
+
+            // Falhar aqui e seguir para o `fsutil` mesmo assim seria recriar
+            // a mentira que esta reinclusão existe para fechar: o bit sujo
+            // marcado (o `fsutil` quase sempre funciona) enquanto o volume
+            // continua fora do boot check porque a reinclusão não pegou. O
+            // cliente não pode ouvir "agendado" nesse caso — não seria
+            // verdade.
+            if !reparo::reinclusao_deu_certo(&desfecho_reinclusao) {
+                return Err(
+                    "Não consegui preparar o disco para o conserto (a \
+                     reinclusão no boot check falhou). Nada foi agendado."
+                        .into(),
+                );
+            }
+        }
+
+        let r = reparo::receita(&escolhida);
+        let args: Vec<&str> = r.args.iter().map(|s| s.as_str()).collect();
+
+        let desfecho = state.reparo.rodar(r.programa, &args, move |a| {
+            let _ = app.emit("reparo-andamento", a.linha);
+        })?;
+
+        // O QUE ACABOU DE ACONTECER É A ÚNICA FONTE DA PRÓXIMA OFERTA.
+        // Registrado a partir do desfecho real, e não de um `true` posto à mão
+        // depois de um clique: um `/scan` cancelado, ou que devolveu "não
+        // consegui verificar", apaga a autorização em vez de deixá-la de pé.
+        if let Ok(mut atual) = state.disco.lock() {
+            *atual = atual.apos_execucao(&escolhida, &desfecho);
+        }
+
+        Ok(match desfecho {
+            Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),
+            Desfecho::Terminou { codigo } => format!("Terminou com o código {}.", codigo),
+            Desfecho::Cancelada => "Interrompida por você.".into(),
+            Desfecho::NaoComecou { motivo } => motivo,
+        })
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state, ferramenta, resetbase);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Interrompe a ferramenta de reparo em andamento.
+///
+/// Fica em `LIVRES` DE PROPÓSITO, pelo mesmo motivo que `revert` fica: uma
+/// licença que vence no meio de um `DISM` de vinte minutos não pode deixar o
+/// cliente preso nele.
+#[tauri::command(async)]
+pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        state.reparo.cancelar()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        false
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -1904,6 +2343,9 @@ mod tests {
         "revert_all_optimizations",
         "licenca_estado",
         "licenca_ativar",
+        "reparo_disponivel",
+        "reparo_ultimo_resultado",
+        "reparo_cancelar",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
@@ -1931,6 +2373,7 @@ mod tests {
         "apply_optimization",
         "optimize_now",
         "set_max_refresh_rate",
+        "reparo_executar",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as
@@ -1955,11 +2398,17 @@ mod tests {
 
     /// Os nomes de todos os comandos, lidos do próprio fonte.
     fn comandos() -> Vec<&'static str> {
-        let marca = concat!("#[tauri::", "command]");
+        let marca = concat!("#[tauri::", "command");
 
         producao()
             .split(marca)
             .skip(1)
+            // A marca aceita argumento: os comandos de reparo sao
+            // `(async)` para nao rodarem na thread da interface. Procurar
+            // so pela forma sem argumento deixaria os quatro invisiveis
+            // para a guarda — que existe justamente para nenhum comando
+            // escapar da classificacao.
+            .filter(|bloco| bloco.starts_with(']') || bloco.starts_with("(async)]"))
             .map(|bloco| {
                 let assinatura = bloco
                     .lines()
@@ -2095,6 +2544,20 @@ mod tests {
             "{} comandos no arquivo, {} nas listas",
             achados, classificados
         );
+    }
+
+    #[test]
+    fn verificar_e_livre_e_consertar_pede_licenca() {
+        // A regra da casa: diagnóstico livre, correção paga. Se a verificação
+        // passar a exigir licença, o cliente não consegue nem descobrir que o
+        // problema dele existe — e é justamente esse achado que vende.
+        assert!(LIVRES.contains(&"reparo_disponivel"));
+        assert!(LIVRES.contains(&"reparo_ultimo_resultado"));
+        assert!(EXIGEM_LICENCA.contains(&"reparo_executar"));
+
+        // Cancelar é livre DE PROPÓSITO, pelo mesmo motivo que `revert` é: uma
+        // licença vencida no meio de um DISM não pode prender a pessoa nele.
+        assert!(LIVRES.contains(&"reparo_cancelar"));
     }
 
     /// A BARRA DA JANELA É DESENHADA POR NÓS, E ISSO TEM UM PREÇO EM PERMISSÃO.
