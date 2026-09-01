@@ -84,6 +84,15 @@ pub struct AppState {
     /// é o que impede duas ferramentas de reparo de rodar ao mesmo tempo.
     #[cfg(target_os = "windows")]
     pub reparo: crate::modules::windows::tarefa_longa::TarefaLonga,
+    /// O que se sabe sobre o disco desta máquina nesta sessão — é isto que
+    /// autoriza (ou não) agendar o `chkdsk`.
+    ///
+    /// `std::sync::Mutex`, e não o `tokio::sync::Mutex` dos vizinhos: os
+    /// comandos de reparo são funções SÍNCRONAS marcadas `(async)`, então
+    /// nenhum guarda daqui atravessa um `.await` — e um `blocking_lock()` do
+    /// tokio chamado de dentro do runtime entraria em pânico.
+    #[cfg(target_os = "windows")]
+    pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
 }
 
 #[derive(Serialize)]
@@ -1922,7 +1931,7 @@ fn descrever_ferramenta(
 /// para fechar: a mesma regra do fluxo de compra, em que só um código de
 /// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
 #[tauri::command(async)]
-pub fn reparo_disponivel() -> Vec<FerramentaDeReparo> {
+pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> {
     #[cfg(target_os = "windows")]
     {
         use crate::modules::windows::reparo::{self, Ferramenta};
@@ -1938,9 +1947,22 @@ pub fn reparo_disponivel() -> Vec<FerramentaDeReparo> {
             ),
         ];
 
+        let medicao = estado_do_disco(&state);
+
+        // DUAS PROVAS, E NÃO UMA. `DiscoSaudavel` diz que o disco aguenta a
+        // operação; `EstadoDoDisco` diz que houve MEDIÇÃO que a justifique.
+        // Faltando qualquer uma, o botão não existe — e é assim que ele deixa
+        // de ser um clique disponível para quem tem um NTFS limpo.
         let disco = disco_saudavel_agora();
-        if reparo::consertar_disco_e_permitido(&disco) {
+        if reparo::consertar_disco_e_permitido(&disco) && medicao.autoriza_consertar() {
             lista.push(descrever_ferramenta(Ferramenta::ConsertarDisco, "ConsertarDisco"));
+        }
+
+        if medicao.tem_conserto_agendado() {
+            lista.push(descrever_ferramenta(
+                Ferramenta::DesmarcarConsertoDoDisco,
+                "DesmarcarConsertoDoDisco",
+            ));
         }
 
         lista
@@ -1948,8 +1970,18 @@ pub fn reparo_disponivel() -> Vec<FerramentaDeReparo> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = state;
         Vec::new()
     }
+}
+
+/// Lê o que se sabe do disco nesta sessão.
+///
+/// Tranca envenenada devolve `SemVerificacao`, que é o estado que NÃO autoriza
+/// nada: aqui "não sei" fecha a porta, como em todo o resto deste caminho.
+#[cfg(target_os = "windows")]
+fn estado_do_disco(state: &State<'_, AppState>) -> crate::modules::windows::reparo::EstadoDoDisco {
+    state.disco.lock().map(|d| *d).unwrap_or_default()
 }
 
 /// O tom com que a tela deve colorir `UltimoResultadoReparo` — "ok",
@@ -2001,8 +2033,27 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
     {
         use crate::modules::windows::cbslog::{self, ResultadoSfc};
 
-        let conteudo = std::fs::read_to_string(cbslog::caminho_do_log()).unwrap_or_default();
-        let resultado = cbslog::interpretar(&conteudo);
+        // O `unwrap_or_default()` que estava aqui ENGOLIA o erro de leitura e
+        // entregava uma string vazia ao `interpretar`, que respondia "o
+        // registro do Windows não trouxe nenhuma verificação". Num programa
+        // aberto sem elevação — o CBS.log só abre como administrador — essa
+        // frase nomeia a causa errada: não é que o Windows não verificou, é
+        // que nós não conseguimos ler. O cliente então clicava em Executar e
+        // recebia um vermelho seco "Terminou com o código 1".
+        let resultado = match std::fs::read_to_string(cbslog::caminho_do_log()) {
+            Ok(conteudo) => cbslog::interpretar(&conteudo),
+            Err(e) => ResultadoSfc::NaoSei {
+                motivo: match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => {
+                        "o registro do Windows só abre com permissão de administrador".to_string()
+                    }
+                    std::io::ErrorKind::NotFound => {
+                        "o registro do Windows ainda não existe nesta máquina".to_string()
+                    }
+                    _ => format!("não consegui abrir o registro do Windows ({})", e),
+                },
+            },
+        };
         let tom = TomResultado::from(resultado.severidade());
 
         let texto = match resultado {
@@ -2078,10 +2129,10 @@ pub fn reparo_executar(
             "RepararImagem" => Ferramenta::RepararImagem,
             "VerificarDisco" => Ferramenta::VerificarDisco,
             "ConsertarDisco" => {
-                // A trava do disco é conferida AQUI TAMBÉM, e não só na tela
+                // AS DUAS TRAVAS SÃO CONFERIDAS AQUI TAMBÉM, e não só na tela
                 // que chamou `reparo_disponivel`: a tela pode ser contornada,
-                // esta chamada não — o `DiscoSaudavel` é lido de novo, na
-                // hora, e não confia em nada que veio do cliente.
+                // esta chamada não — tudo é lido de novo, na hora, e nada do
+                // que veio do cliente é levado em conta.
                 let disco = disco_saudavel_agora();
                 if !reparo::consertar_disco_e_permitido(&disco) {
                     return Err(
@@ -2091,7 +2142,23 @@ pub fn reparo_executar(
                             .into(),
                     );
                 }
+
+                if !estado_do_disco(&state).autoriza_consertar() {
+                    return Err(
+                        "Nada foi encontrado no disco para consertar. Rode antes \
+                         \"Verificar o disco\": sem achado, não há motivo para \
+                         reiniciar a sua máquina."
+                            .into(),
+                    );
+                }
+
                 Ferramenta::ConsertarDisco
+            }
+            "DesmarcarConsertoDoDisco" => {
+                if !estado_do_disco(&state).tem_conserto_agendado() {
+                    return Err("Não há conserto de disco agendado para desmarcar.".into());
+                }
+                Ferramenta::DesmarcarConsertoDoDisco
             }
             "AnalisarWinSxS" => Ferramenta::AnalisarWinSxS,
             "LimparWinSxS" => Ferramenta::LimparWinSxS {
@@ -2106,6 +2173,14 @@ pub fn reparo_executar(
         let desfecho = state.reparo.rodar(r.programa, &args, move |a| {
             let _ = app.emit("reparo-andamento", a.linha);
         })?;
+
+        // O QUE ACABOU DE ACONTECER É A ÚNICA FONTE DA PRÓXIMA OFERTA.
+        // Registrado a partir do desfecho real, e não de um `true` posto à mão
+        // depois de um clique: um `/scan` cancelado, ou que devolveu "não
+        // consegui verificar", apaga a autorização em vez de deixá-la de pé.
+        if let Ok(mut atual) = state.disco.lock() {
+            *atual = atual.apos_execucao(&escolhida, &desfecho);
+        }
 
         Ok(match desfecho {
             Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),

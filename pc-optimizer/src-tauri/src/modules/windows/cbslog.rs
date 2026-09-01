@@ -80,8 +80,45 @@ pub fn caminho_do_log() -> PathBuf {
     PathBuf::from(raiz).join("Logs").join("CBS").join("CBS.log")
 }
 
+/// A marca que o CBS escreve no INÍCIO de cada passagem do `sfc`.
+///
+/// Como as demais marcas `[SR]`, ela não é traduzida.
+const INICIO_DA_PASSAGEM: &str = "Beginning Verify and Repair transaction";
+
+/// A ÚLTIMA execução do `sfc`, e não o arquivo inteiro.
+///
+/// O CBS.log só cresce: ele guarda todas as execuções, através de rotações.
+/// Contar as marcas `[SR]` do arquivo todo somava execuções diferentes umas
+/// nas outras — um cliente que rodou o `sfc` há três meses (dois arquivos sem
+/// conserto), depois o `DISM`, e depois o `sfc` de novo (tudo consertado)
+/// recebia contagens que não correspondiam a execução nenhuma. E a tela
+/// chamava isso de "a última verificação".
+///
+/// Recortar pela marca de início resolve isso sem guardar estado: a última
+/// passagem do arquivo é sempre a última que rodou, tenha ela sido disparada
+/// por este produto, pelo prompt do cliente ou por outra ferramenta.
+fn ultima_passagem(conteudo: &str) -> Option<&str> {
+    conteudo.rfind(INICIO_DA_PASSAGEM).map(|inicio| &conteudo[inicio..])
+}
+
 pub fn interpretar(conteudo: &str) -> ResultadoSfc {
-    let marcas: Vec<&str> = conteudo
+    let Some(passagem) = ultima_passagem(conteudo) else {
+        // Duas causas, e a frase precisa nomear a certa: um log que nunca viu
+        // um `sfc` e um log em que não dá para saber onde a última execução
+        // começa são situações diferentes para quem lê a tela. As duas são
+        // `NaoSei` — nenhuma delas pode virar `SemCorrupcao`.
+        let motivo = if conteudo.contains("[SR]") {
+            "o registro do Windows não marca onde a última verificação começou"
+        } else {
+            "o registro do Windows não trouxe nenhuma verificação"
+        };
+
+        return ResultadoSfc::NaoSei {
+            motivo: motivo.into(),
+        };
+    };
+
+    let marcas: Vec<&str> = passagem
         .lines()
         .filter(|l| l.contains("[SR]"))
         .collect();
@@ -140,16 +177,19 @@ mod tests {
     /// mesmo num Windows em português. É por isso que a leitura vem daqui e
     /// não do texto do console.
     const SEM_CORRUPCAO: &str = "\
+2026-08-31 11:59:59, Info CSI 00000000 [SR] Beginning Verify and Repair transaction
 2026-08-31 12:00:01, Info CSI 00000001 [SR] Verifying 100 (0x00000064) components
 2026-08-31 12:00:02, Info CSI 00000002 [SR] Verify complete
 2026-08-31 12:00:03, Info CSI 00000003 [SR] Repairing 0 components";
 
     const CORRIGIU: &str = "\
+2026-08-31 11:59:59, Info CSI 00000000 [SR] Beginning Verify and Repair transaction
 2026-08-31 12:00:01, Info CSI 00000001 [SR] Cannot repair member file [l:20]'ntdll.dll'
 2026-08-31 12:00:02, Info CSI 00000002 [SR] Repairing corrupted file \\??\\C:\\Windows\\ntdll.dll
 2026-08-31 12:00:03, Info CSI 00000003 [SR] Repair complete";
 
     const NAO_CONSEGUIU: &str = "\
+2026-08-31 11:59:59, Info CSI 00000000 [SR] Beginning Verify and Repair transaction
 2026-08-31 12:00:01, Info CSI 00000001 [SR] Cannot repair member file [l:20]'ntdll.dll'
 2026-08-31 12:00:02, Info CSI 00000002 [SR] Cannot repair member file [l:18]'user32.dll'";
 
@@ -158,6 +198,7 @@ mod tests {
     /// e user32 fica só com o "Cannot repair" (não sobrou registro de
     /// conserto). O resultado não pode ser `Corrigiu` — sobrou corrupção.
     const CORRIGIU_PARCIAL: &str = "\
+2026-08-31 11:59:59, Info CSI 00000000 [SR] Beginning Verify and Repair transaction
 2026-08-31 12:00:01, Info CSI 00000001 [SR] Cannot repair member file [l:20]'kernel32.dll'
 2026-08-31 12:00:02, Info CSI 00000002 [SR] Repairing corrupted file \\??\\C:\\Windows\\kernel32.dll
 2026-08-31 12:00:03, Info CSI 00000003 [SR] Cannot repair member file [l:18]'gdi32.dll'
@@ -194,6 +235,49 @@ mod tests {
                 restantes: 1
             }
         );
+    }
+
+    #[test]
+    fn duas_execucoes_no_mesmo_log_contam_so_a_ultima() {
+        // O CBS.log so cresce. O cliente rodou o `sfc` ha tres meses e sobrou
+        // corrupcao; rodou o `DISM`; rodou o `sfc` de novo e desta vez o
+        // conserto foi completo. Somando o arquivo inteiro, a tela reportava
+        // uma contagem que nao correspondia a execucao nenhuma — e chamava
+        // isso de "a ultima verificacao".
+        let historico = format!("{}\n{}", NAO_CONSEGUIU, CORRIGIU);
+
+        assert_eq!(
+            interpretar(&historico),
+            ResultadoSfc::Corrigiu { quantos: 1 },
+            "somou a execucao de tres meses atras na de agora"
+        );
+    }
+
+    #[test]
+    fn a_passagem_anterior_nao_contamina_a_atual_no_sentido_contrario() {
+        // E o inverso tambem: uma execucao limpa NAO pode apagar o fato de a
+        // ultima ter deixado corrupcao para tras.
+        let historico = format!("{}\n{}", CORRIGIU, NAO_CONSEGUIU);
+
+        assert_eq!(
+            interpretar(&historico),
+            ResultadoSfc::NaoConseguiu { quantos: 2 }
+        );
+    }
+
+    #[test]
+    fn log_com_marcas_mas_sem_inicio_de_passagem_e_nao_sei() {
+        // Sem a marca de inicio nao da para saber a que execucao as linhas
+        // pertencem. Isso e "nao sei", e a frase nomeia a causa certa em vez
+        // de dizer que nao houve verificacao nenhuma.
+        let orfao = "2026-08-31 12:00:01, Info CSI 00000001 [SR] Verify complete";
+
+        match interpretar(orfao) {
+            ResultadoSfc::NaoSei { motivo } => {
+                assert!(motivo.contains("começou"), "motivo errado: {}", motivo);
+            }
+            outro => panic!("esperava NaoSei, veio {:?}", outro),
+        }
     }
 
     #[test]

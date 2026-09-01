@@ -24,6 +24,8 @@ pub fn run() {
             processes: Mutex::new(modules::windows::processes::ProcessMonitor::new()),
             #[cfg(target_os = "windows")]
             reparo: modules::windows::tarefa_longa::TarefaLonga::nova(),
+            #[cfg(target_os = "windows")]
+            disco: std::sync::Mutex::new(Default::default()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
