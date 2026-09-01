@@ -927,7 +927,29 @@ function ligarSubabas() {
   });
 }
 
+/**
+ * A ABA DE REPARO SÓ CARREGA QUANDO É ABERTA.
+ *
+ * Abrir custa `health::analyze()` (duas consultas que o produto anuncia em
+ * outro lugar como "cerca de 5 segundos") e a leitura de um CBS.log que
+ * costuma ter dezenas de megabytes. Na montagem, isso era cobrado de TODO
+ * mundo que inicia o programa, inclusive de quem nunca abre a aba.
+ *
+ * O gancho fica em `showTab`, e não num ouvinte de clique no item da lateral,
+ * porque a aba também se abre pelas setas do teclado e pela paleta de
+ * comandos — e as três precisam carregar.
+ *
+ * Uma vez só: `carregarReparo` registra ouvintes de evento, e registrá-los de
+ * novo a cada abertura duplicaria cada linha de andamento na tela.
+ */
+let reparoCarregado = false;
+
 function showTab(name: string) {
+  if (name === "reparo" && !reparoCarregado) {
+    reparoCarregado = true;
+    void carregarReparo();
+  }
+
   document.querySelectorAll<HTMLElement>(".tab-panel").forEach((panel) => {
     panel.hidden = panel.id !== `tab-${name}`;
   });
@@ -4176,9 +4198,21 @@ const TEXTOS_REPARO: Record<string, TextoReparo> = {
     descricao:
       "Procura erros de estrutura no disco sem consertar nada, rodando com o Windows ligado — não reinicia a máquina (chkdsk /scan).",
   },
+  // Este item SÓ APARECE depois de "Verificar o disco" ter achado alguma
+  // coisa — quem decide isso é o backend, em `EstadoDoDisco`. A descrição
+  // antiga ("Corrige os erros que a verificação encontrou no disco") ficava na
+  // tela desde a primeira abertura, afirmando uma medição que nunca tinha
+  // acontecido, num produto cuja regra fundadora é não mostrar número que não
+  // foi medido.
   ConsertarDisco: {
     titulo: "Consertar a estrutura do disco",
-    descricao: "Corrige os erros que a verificação encontrou no disco (chkdsk /f).",
+    descricao:
+      "Agenda o conserto dos erros que a verificação encontrou para a próxima vez que você ligar o computador. O conserto acontece antes de o Windows abrir.",
+  },
+  DesmarcarConsertoDoDisco: {
+    titulo: "Desmarcar o conserto do disco",
+    descricao:
+      "Cancela o conserto agendado, enquanto você ainda não reiniciou. Depois do reinício não há mais o que desmarcar.",
   },
   AnalisarWinSxS: {
     titulo: "Analisar componentes do Windows (WinSxS)",
@@ -4249,29 +4283,83 @@ async function carregarReparo() {
 
   const ferramentasPorNome = new Map<string, FerramentaDeReparo>();
 
+  /** A ferramenta em execução, ou `null`. Quem responde se cancelar é seguro. */
+  let rodandoAgora: FerramentaDeReparo | null = null;
+
   /**
    * "Nenhuma corrupção encontrada" é o resultado mais comum, e é um resultado
    * BOM — a tela precisa dizer isso com a mesma cor que usa para sucesso, e
    * não com o cinza neutro que usaria para "não sei dizer". O tom vem pronto
    * do backend (`UltimoResultadoReparo.tom`); a tela só traduz para a classe
    * CSS que `setStatus` espera.
+   *
+   * ESTA LINHA FALA DO `sfc`, E DE MAIS NADA. Ela era repintada no `finally`
+   * de TODA execução: o cliente rodava "Reparar a imagem do Windows", o DISM
+   * falhava por falta de internet, e a linha mais destacada do painel
+   * repintava em verde "Nenhuma corrupção encontrada" — um veredito do `sfc`,
+   * lido naturalmente como o resultado do que acabara de rodar. Agora só o
+   * `VerificarArquivos` a atualiza, e a legenda ao lado dela (no `index.html`)
+   * diz de que verificação ela está falando.
    */
   async function atualizarUltimoResultado() {
     const resultado = await invoke<UltimoResultadoReparo>("reparo_ultimo_resultado");
     setStatus("reparo-resultado", resultado.texto, tomParaStatus(resultado.tom));
   }
 
-  function definirRodando(rodando: boolean) {
-    cancelar.hidden = !rodando;
+  /**
+   * Redesenha a lista a partir do que o backend oferece AGORA.
+   *
+   * Precisa acontecer depois de cada execução, e não só na abertura: o
+   * "Consertar a estrutura do disco" só existe depois de um `/scan` ter achado
+   * alguma coisa, e o "Desmarcar" só existe enquanto há conserto agendado.
+   * Quem decide os dois é o backend — a tela apenas volta a perguntar.
+   */
+  async function recarregarLista() {
+    try {
+      const disponiveis = await invoke<FerramentaDeReparo[]>("reparo_disponivel");
+      ferramentasPorNome.clear();
+      disponiveis.forEach((f) => ferramentasPorNome.set(f.nome, f));
+
+      lista.innerHTML = disponiveis.length
+        ? disponiveis.map(desenharItemReparo).join("")
+        : '<p class="hint">Nenhuma ferramenta de reparo disponível nesta máquina.</p>';
+
+      text("reparo-tag", disponiveis.length ? "pronto" : "indisponível");
+    } catch {
+      lista.innerHTML =
+        '<p class="hint">Não consegui ler as ferramentas de reparo disponíveis.</p>';
+      text("reparo-tag", "falhou");
+    }
+  }
+
+  function definirRodando(f: FerramentaDeReparo | null) {
+    rodandoAgora = f;
+
+    // O Interromper só aparece para quem tem o que interromper. Antes ele
+    // aparecia para toda ferramenta, inclusive as que já tinham terminado o
+    // trabalho no primeiro segundo.
+    cancelar.hidden = f === null;
     lista.querySelectorAll<HTMLButtonElement>("[data-reparo]").forEach((botao) => {
-      botao.disabled = rodando;
+      botao.disabled = f !== null;
     });
-    text("reparo-tag", rodando ? "rodando…" : "pronto");
+    text("reparo-tag", f !== null ? "rodando…" : "pronto");
   }
 
   async function executarFerramenta(nome: string) {
     const f = ferramentasPorNome.get(nome);
     const titulo = TEXTOS_REPARO[nome]?.titulo ?? nome;
+
+    // `sfc`, `DISM`, `fsutil`, `chkntfs` e a leitura do CBS.log exigem
+    // administrador. Sem isto o cliente recebia um vermelho seco "Terminou com
+    // o código 1", sem explicação e sem oferta de reabrir com permissão — e o
+    // produto já tem o padrão da casa para isso.
+    if (!isElevated) {
+      askForAdmin(
+        `As ferramentas de reparo do Windows só rodam com permissão de administrador. ` +
+          `Podemos reabrir o Otimiza com essa permissão?`
+      );
+      return;
+    }
 
     const campoResetarBase = f?.oferece_reset_base
       ? document.getElementById("reparo-resetar-base") as HTMLInputElement | null
@@ -4280,7 +4368,7 @@ async function carregarReparo() {
 
     saida.hidden = true;
     saida.textContent = "";
-    definirRodando(true);
+    definirRodando(f ?? null);
     setStatus("reparo-execucao", `Rodando: ${titulo}…`, "progress");
 
     try {
@@ -4300,8 +4388,15 @@ async function carregarReparo() {
     } catch (error) {
       setStatus("reparo-execucao", String(error), "error");
     } finally {
-      definirRodando(false);
-      await atualizarUltimoResultado();
+      definirRodando(null);
+
+      // Só o `sfc` escreve o veredito que esta linha mostra. Ver o comentário
+      // de `atualizarUltimoResultado`.
+      if (nome === "VerificarArquivos") {
+        await atualizarUltimoResultado();
+      }
+
+      await recarregarLista();
     }
   }
 
@@ -4321,23 +4416,26 @@ async function carregarReparo() {
   });
 
   cancelar.addEventListener("click", () => {
+    // `cancelar_e_seguro` atravessava o IPC e não era lido em lugar nenhum: o
+    // clique cancelava sem perguntar, inclusive no DISM e na limpeza do
+    // WinSxS, onde uma interrupção no meio de uma escrita pode deixar operação
+    // pendente. A especificação é explícita: "O botão de cancelar diz isso
+    // antes de aceitar o clique."
+    if (rodandoAgora && !rodandoAgora.cancelar_e_seguro) {
+      const titulo = TEXTOS_REPARO[rodandoAgora.nome]?.titulo ?? rodandoAgora.nome;
+      const ok = window.confirm(
+        `Interromper "${titulo}" no meio não é de graça.\n\n` +
+          `Uma escrita cortada pela metade pode deixar uma operação pendente, que só ` +
+          `se resolve rodando esta mesma ferramenta de novo até o fim.\n\n` +
+          `Interromper mesmo assim?`
+      );
+      if (!ok) return;
+    }
+
     void invoke("reparo_cancelar");
   });
 
-  try {
-    const disponiveis = await invoke<FerramentaDeReparo[]>("reparo_disponivel");
-    disponiveis.forEach((f) => ferramentasPorNome.set(f.nome, f));
-
-    lista.innerHTML = disponiveis.length
-      ? disponiveis.map(desenharItemReparo).join("")
-      : '<p class="hint">Nenhuma ferramenta de reparo disponível nesta máquina.</p>';
-
-    text("reparo-tag", disponiveis.length ? "pronto" : "indisponível");
-  } catch {
-    lista.innerHTML = '<p class="hint">Não consegui ler as ferramentas de reparo disponíveis.</p>';
-    text("reparo-tag", "falhou");
-  }
-
+  await recarregarLista();
   await atualizarUltimoResultado();
 }
 
@@ -5063,7 +5161,6 @@ function wireControls() {
   void carregarPlaca();
   void carregarMemoria();
   void carregarMonitores();
-  void carregarReparo();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));

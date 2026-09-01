@@ -1844,6 +1844,18 @@
               <span class="panel-tag" id="reparo-tag">—</span>
             </div>
 
+            <!--
+              A LEGENDA NAO E ENFEITE.
+
+              Esta linha mostra o veredito do `sfc`, lido do CBS.log — e so
+              dele. Sem legenda, um cliente que acabou de rodar "Reparar a
+              imagem do Windows" e viu o DISM falhar lia o verde de "Nenhuma
+              corrupcao encontrada" logo acima como se fosse o resultado do que
+              ele tinha acabado de fazer. A legenda diz de que verificacao a
+              linha esta falando; a tela so a repinta depois do
+              `VerificarArquivos`.
+            -->
+            <p class="reparo-resultado-legenda">Última verificação de arquivos do sistema:</p>
             <p class="status" id="reparo-resultado">Lendo o registro do Windows…</p>
 
             <p class="hint reparo-aviso-geral">

@@ -4485,6 +4485,15 @@ circle.placa-parafuso {
   color: var(--text);
 }
 
+/* A legenda da linha de resultado. Menor e mais apagada que a propria linha:
+   ela nomeia o assunto, e quem responde e o texto colorido logo abaixo. */
+.reparo-resultado-legenda {
+  margin-bottom: var(--s1);
+  font-family: var(--font-sans);
+  font-size: var(--t-label);
+  color: var(--text-muted);
+}
+
 .reparo-lista {
   display: flex;
   flex-direction: column;
