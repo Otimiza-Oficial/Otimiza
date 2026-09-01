@@ -106,6 +106,11 @@ where
 
     let entregar = |pedaco: &[u8]| {
         let linha = decodificar(pedaco);
+
+        // Pedaço vazio não vira linha. Quebrando no retorno de carro E na
+        // quebra de linha, todo par "CR LF" produz um pedaço vazio entre os
+        // dois — sem este descarte, a tela receberia uma linha em branco a
+        // cada linha de verdade.
         if linha.is_empty() {
             return;
         }
@@ -151,7 +156,7 @@ where
 /// legível sem estragar a saída CP-850 ou UTF-8 de ninguém. Não é uma
 /// decodificação de UTF-16 completa — acento em UTF-16 continua chegando
 /// substituído — e não precisa ser: o veredito do `sfc` vem do CBS.log, e
-/// esta saída serve de sinal de vida.
+/// está saída serve de sinal de vida.
 fn decodificar(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .chars()
@@ -396,7 +401,7 @@ mod tests {
         assert!(matches!(resultado, Ok(Desfecho::Terminou { codigo: 0 })));
     }
 
-    /// Junta o que `drenar` entregou, para os testes de decodificacao.
+    /// Junta o que `drenar` entregou, para os testes de decodificação.
     fn drenado(bytes: &[u8]) -> Vec<String> {
         let colhidas = Arc::new(Mutex::new(Vec::new()));
         let dentro = colhidas.clone();
@@ -413,10 +418,10 @@ mod tests {
 
     #[test]
     fn byte_invalido_nao_interrompe_a_drenagem() {
-        // Num Windows em portugues o primeiro "c cedilha" do `chkdsk` chega em
-        // CP-850 (0xE7), que nao e UTF-8 valido. Com `lines()` + `map_while`, o
-        // iterador ENCERRAVA ali: ninguem drenava mais o cano, o filho travava
-        // na primeira escrita que nao coubesse, e o `wait()` nunca voltava.
+        // Num Windows em português o primeiro "c cedilha" do `chkdsk` chega em
+        // CP-850 (0xE7), que não e UTF-8 válido. Com `lines()` + `map_while`, o
+        // iterador ENCERRAVA ali: ninguém drenava mais o cano, o filho travava
+        // na primeira escrita que não coubesse, e o `wait()` nunca voltava.
         let bytes = b"comecou\nservi\xE7o quebrado\nterminou\n";
         let linhas = drenado(bytes);
 
@@ -431,9 +436,9 @@ mod tests {
 
     #[test]
     fn retorno_de_carro_tambem_quebra_linha() {
-        // O `sfc` e o `DISM` redesenham a MESMA linha com retorno de carro. So
-        // quebrando em `\n`, o "20%... 40%... 100%" — o numero que impede o
-        // cliente de desistir no meio — chegaria como uma linha so, no fim.
+        // O `sfc` e o `DISM` redesenham a MESMA linha com retorno de carro. Só
+        // quebrando em `\n`, o "20%... 40%... 100%" — o número que impede o
+        // cliente de desistir no meio — chegaria como uma linha só, no fim.
         let linhas = drenado(b"20%\r40%\r100%\r\nPronto\n");
 
         assert_eq!(linhas, vec!["20%", "40%", "100%", "Pronto"]);
@@ -441,16 +446,16 @@ mod tests {
 
     #[test]
     fn nul_do_utf16_nao_vira_buraco_no_texto() {
-        // O `sfc` escreve a saida canalizada em UTF-16: "ok" viaja como
-        // `6F 00 6B 00`. O `00` e UTF-8 valido, entao sobreviveria a
-        // decodificacao e a tela mostraria letra e buraco alternados.
+        // O `sfc` escreve a saída canalizada em UTF-16: "ok" viaja como
+        // `6F 00 6B 00`. O `00` e UTF-8 válido, então sobreviveria a
+        // decodificação e a tela mostraria letra e buraco alternados.
         let linhas = drenado(b"o\0k\0\n\0");
         assert_eq!(linhas, vec!["ok"]);
     }
 
     #[test]
     fn saida_sem_quebra_no_fim_ainda_e_entregue() {
-        // A ultima linha do `DISM` — a que diz se deu certo — costuma chegar
+        // A última linha do `DISM` — a que diz se deu certo — costuma chegar
         // sem quebra depois dela.
         assert_eq!(
             drenado(b"A operacao foi concluida"),
@@ -459,8 +464,8 @@ mod tests {
     }
 
     /// A prova de ponta a ponta do mesmo defeito: um processo DE VERDADE que
-    /// escreve bytes invalidos no meio e continua escrevendo depois. Se a
-    /// drenagem parar na sequencia invalida, o `cmd` trava esperando alguem
+    /// escreve bytes inválidos no meio e continua escrevendo depois. Se a
+    /// drenagem parar na sequência inválida, o `cmd` trava esperando alguém
     /// ler o resto e o prazo estoura — em vez de o CI ficar preso para sempre.
     #[test]
     fn processo_com_saida_invalida_termina_e_nao_trunca() {
@@ -517,9 +522,9 @@ mod tests {
 
     #[test]
     fn a_reserva_volta_mesmo_quando_o_programa_nao_existe() {
-        // Sem a guarda `Drop`, qualquer saida por erro deixava a reserva
-        // presa: todo reparo seguinte respondia "Ja existe uma tarefa em
-        // andamento" pelo resto da sessao.
+        // Sem a guarda `Drop`, qualquer saída por erro deixava a reserva
+        // presa: todo reparo seguinte respondia "Já existe uma tarefa em
+        // andamento" pelo resto da sessão.
         let tarefa = TarefaLonga::nova();
         let erro = tarefa.rodar("programa_que_nao_existe_no_windows", &[], |_| {});
 
@@ -529,15 +534,15 @@ mod tests {
 
     #[test]
     fn panico_no_callback_devolve_a_reserva_e_limpa_o_veneno() {
-        // Um panico dentro do callback de emissao envenenava a tranca. A
+        // Um pânico dentro do callback de emissão envenenava a tranca. A
         // partir dali `ocupada()` respondia OCIOSO (por causa de um
         // `unwrap_or(false)`) enquanto `rodar` respondia ocupado para sempre:
-        // um "nao sei" respondido como "esta tudo bem" dentro do executor.
+        // um "não sei" respondido como "está tudo bem" dentro do executor.
         let tarefa = Arc::new(TarefaLonga::nova());
         let dentro = tarefa.clone();
 
-        // O panico do callback e esperado: sem silenciar o relator, ele suja a
-        // saida do teste com um rastro de pilha que nao e falha nenhuma.
+        // O pânico do callback e esperado: sem silenciar o relator, ele suja a
+        // saída do teste com um rastro de pilha que não e falha nenhuma.
         let relator = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let panico = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -561,10 +566,10 @@ mod tests {
 
     #[test]
     fn cancelar_sem_nada_rodando_nao_levanta_a_bandeira() {
-        // A bandeira era gravada ANTES da morte, e o retorno era so "o
+        // A bandeira era gravada ANTES da morte, e o retorno era só "o
         // taskkill conseguiu nascer". Uma morte que falha ("Acesso negado" ao
-        // matar filho elevado) deixava a bandeira de pe, o `DISM` terminava
-        // inteiro com sucesso, e o desfecho ainda saia `Cancelada` — o cliente
+        // matar filho elevado) deixava a bandeira de pé, o `DISM` terminava
+        // inteiro com sucesso, e o desfecho ainda saía `Cancelada` — o cliente
         // informado com certeza de que o reparo foi interrompido quando ele
         // terminou.
         let tarefa = TarefaLonga::nova();

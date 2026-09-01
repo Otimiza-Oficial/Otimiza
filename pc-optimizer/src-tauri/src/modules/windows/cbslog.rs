@@ -239,11 +239,11 @@ mod tests {
 
     #[test]
     fn duas_execucoes_no_mesmo_log_contam_so_a_ultima() {
-        // O CBS.log so cresce. O cliente rodou o `sfc` ha tres meses e sobrou
-        // corrupcao; rodou o `DISM`; rodou o `sfc` de novo e desta vez o
+        // O CBS.log só cresce. O cliente rodou o `sfc` há três meses e sobrou
+        // corrupção; rodou o `DISM`; rodou o `sfc` de novo e desta vez o
         // conserto foi completo. Somando o arquivo inteiro, a tela reportava
-        // uma contagem que nao correspondia a execucao nenhuma — e chamava
-        // isso de "a ultima verificacao".
+        // uma contagem que não correspondia a execução nenhuma — e chamava
+        // isso de "a última verificação".
         let historico = format!("{}\n{}", NAO_CONSEGUIU, CORRIGIU);
 
         assert_eq!(
@@ -255,8 +255,8 @@ mod tests {
 
     #[test]
     fn a_passagem_anterior_nao_contamina_a_atual_no_sentido_contrario() {
-        // E o inverso tambem: uma execucao limpa NAO pode apagar o fato de a
-        // ultima ter deixado corrupcao para tras.
+        // E o inverso também: uma execução limpa NÃO pode apagar o fato de a
+        // última ter deixado corrupção para trás.
         let historico = format!("{}\n{}", CORRIGIU, NAO_CONSEGUIU);
 
         assert_eq!(
@@ -267,9 +267,9 @@ mod tests {
 
     #[test]
     fn log_com_marcas_mas_sem_inicio_de_passagem_e_nao_sei() {
-        // Sem a marca de inicio nao da para saber a que execucao as linhas
-        // pertencem. Isso e "nao sei", e a frase nomeia a causa certa em vez
-        // de dizer que nao houve verificacao nenhuma.
+        // Sem a marca de início não da para saber a que execução as linhas
+        // pertencem. Isso e "não sei", e a frase nomeia a causa certa em vez
+        // de dizer que não houve verificação nenhuma.
         let orfao = "2026-08-31 12:00:01, Info CSI 00000001 [SR] Verify complete";
 
         match interpretar(orfao) {
