@@ -4108,6 +4108,234 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 // ---------------------------------------------------------------- controles
 
 
+/* -------------------------------------------------- a aba de reparo */
+
+/**
+ * O que a tela precisa saber sobre cada ferramenta ANTES de oferecer o botão:
+ * o que ela faz, quanto costuma levar, e o aviso — quando existe um.
+ *
+ * DUPLICA O QUE O BACKEND JÁ SABE, DE PROPÓSITO TEMPORÁRIO. `reparo_disponivel`
+ * devolve só os NOMES das ferramentas que esta máquina pode oferecer — a
+ * duração típica, o aviso e se cancelar é seguro continuam presos em
+ * `Receita`, do lado do Rust (`src-tauri/src/modules/windows/reparo.rs`), e
+ * mudar aquela assinatura ficou fora do escopo desta tela. Até o dia em que
+ * `Receita` viajar inteira para o frontend, esta tabela é uma SEGUNDA fonte de
+ * verdade: qualquer ajuste de tempo, texto de aviso ou ferramenta nova em
+ * `reparo.rs` precisa ser repetido aqui à mão, ou a tela passa a prometer um
+ * tempo ou um aviso que o programa não cumpre.
+ */
+interface DescricaoReparo {
+  titulo: string;
+  descricao: string;
+  minutos: readonly [number, number];
+  aviso?: string;
+  ofereceResetarBase?: boolean;
+}
+
+const DESCRICOES_REPARO: Record<string, DescricaoReparo> = {
+  VerificarArquivos: {
+    titulo: "Verificar arquivos do sistema",
+    descricao:
+      "Confere os arquivos do Windows contra o original e corrige o que estiver corrompido (sfc /scannow).",
+    minutos: [5, 15],
+  },
+  RepararImagem: {
+    titulo: "Reparar a imagem do Windows",
+    descricao:
+      "Busca arquivos originais no Windows Update para substituir os que a verificação sozinha não conseguiu corrigir (DISM /RestoreHealth).",
+    minutos: [10, 30],
+    aviso:
+      "Fica parado em 20% por vários minutos, e isso é normal — não é travamento. Precisa de internet: os arquivos bons vêm do Windows Update.",
+  },
+  VerificarDisco: {
+    titulo: "Verificar o disco",
+    descricao:
+      "Procura erros de estrutura no disco sem consertar nada, rodando com o Windows ligado — não reinicia a máquina (chkdsk /scan).",
+    minutos: [2, 20],
+  },
+  ConsertarDisco: {
+    titulo: "Consertar a estrutura do disco",
+    descricao: "Corrige os erros que a verificação encontrou no disco (chkdsk /f).",
+    minutos: [10, 60],
+    aviso:
+      "Exige reiniciar o computador. O conserto acontece antes de o Windows abrir, e não dá para usar a máquina durante ele.",
+  },
+  AnalisarWinSxS: {
+    titulo: "Analisar componentes do Windows (WinSxS)",
+    descricao:
+      "Mede quanto espaço as versões antigas de componentes do Windows estão ocupando, sem apagar nada (DISM /AnalyzeComponentStore).",
+    minutos: [1, 5],
+  },
+  LimparWinSxS: {
+    titulo: "Limpar componentes antigos do Windows",
+    descricao:
+      "Remove versões antigas de componentes que o Windows já não usa mais (DISM /StartComponentCleanup).",
+    minutos: [5, 25],
+    ofereceResetarBase: true,
+  },
+};
+
+/**
+ * Monta um item da lista de reparo: título, duração típica, o que a
+ * ferramenta faz, o aviso quando existe, e — só em `LimparWinSxS` — o
+ * interruptor do `/ResetBase`, DESLIGADO por padrão e com o aviso ao lado
+ * dele, não numa nota de rodapé.
+ */
+function desenharItemReparo(nome: string): string {
+  const d = DESCRICOES_REPARO[nome];
+
+  if (!d) {
+    // Ferramenta nova no backend que esta tabela ainda não conhece. Ainda
+    // oferece o botão — não é razão para escondê-la — só sem os detalhes que
+    // dependem da tabela duplicada acima.
+    return `
+      <article class="reparo-item">
+        <div class="reparo-item-cabecalho">
+          <h3>${escapeHtml(nome)}</h3>
+        </div>
+        <div class="reparo-item-rodape">
+          <button class="btn" data-reparo="${escapeHtml(nome)}">Executar</button>
+        </div>
+      </article>`;
+  }
+
+  const aviso = d.aviso
+    ? `<p class="reparo-item-aviso">${escapeHtml(d.aviso)}</p>`
+    : "";
+
+  const resetarBase = d.ofereceResetarBase
+    ? `
+      <label class="pref reparo-resetbase">
+        <input type="checkbox" id="reparo-resetar-base" />
+        <span class="pref-text">
+          <span class="pref-name">Também aplicar o /ResetBase</span>
+          <span class="pref-note">
+            Desligado por padrão. Ligar libera mais espaço, mas em troca você
+            perde a capacidade de desinstalar qualquer atualização do Windows
+            já aplicada até hoje — e isso não tem volta.
+          </span>
+        </span>
+      </label>`
+    : "";
+
+  return `
+    <article class="reparo-item">
+      <div class="reparo-item-cabecalho">
+        <h3>${escapeHtml(d.titulo)}</h3>
+        <span class="reparo-item-duracao">${d.minutos[0]}–${d.minutos[1]} minutos, tipicamente</span>
+      </div>
+      <p class="reparo-item-descricao">${escapeHtml(d.descricao)}</p>
+      ${aviso}
+      ${resetarBase}
+      <div class="reparo-item-rodape">
+        <button class="btn" data-reparo="${escapeHtml(nome)}">Executar</button>
+      </div>
+    </article>`;
+}
+
+/**
+ * O andamento vem por evento, e não como retorno da chamada.
+ *
+ * Um `DISM` leva de dez a trinta minutos. Esperar o retorno para só então
+ * mostrar alguma coisa é o mesmo que não ter andamento — e é no minuto oito,
+ * parado em 20%, que o cliente conclui que travou e desliga a máquina.
+ */
+async function carregarReparo() {
+  const lista = element("reparo-lista");
+  const saida = element("reparo-saida");
+  const cancelar = element<HTMLButtonElement>("reparo-cancelar");
+
+  /**
+   * "Nenhuma corrupção encontrada" é o resultado mais comum, e é um resultado
+   * BOM — a tela precisa dizer isso com a mesma cor que usa para sucesso, e
+   * não com o cinza neutro que usaria para "não sei dizer".
+   */
+  async function atualizarUltimoResultado() {
+    const resultado = await invoke<string>("reparo_ultimo_resultado");
+
+    const tom = resultado.startsWith("Nenhuma corrupção") || resultado.startsWith("Corrigiu ")
+      ? "ok"
+      : resultado.startsWith("Não consegui")
+        ? "warn"
+        : "warn";
+
+    setStatus("reparo-resultado", resultado, tom);
+  }
+
+  function definirRodando(rodando: boolean) {
+    cancelar.hidden = !rodando;
+    lista.querySelectorAll<HTMLButtonElement>("[data-reparo]").forEach((botao) => {
+      botao.disabled = rodando;
+    });
+    text("reparo-tag", rodando ? "rodando…" : "pronto");
+  }
+
+  async function executarFerramenta(nome: string) {
+    const d = DESCRICOES_REPARO[nome];
+    const campoResetarBase = d?.ofereceResetarBase
+      ? document.getElementById("reparo-resetar-base") as HTMLInputElement | null
+      : null;
+    const resetarBase = campoResetarBase?.checked ?? false;
+
+    saida.hidden = true;
+    saida.textContent = "";
+    definirRodando(true);
+    setStatus("reparo-execucao", `Rodando: ${d?.titulo ?? nome}…`, "progress");
+
+    try {
+      const desfecho = await invoke<string>("reparo_executar", {
+        ferramenta: nome,
+        resetarBase,
+      });
+
+      setStatus(
+        "reparo-execucao",
+        desfecho,
+        desfecho === "Terminou." ? "ok" : desfecho === "Interrompida por você." ? "warn" : "error"
+      );
+    } catch (error) {
+      setStatus("reparo-execucao", String(error), "error");
+    } finally {
+      definirRodando(false);
+      await atualizarUltimoResultado();
+    }
+  }
+
+  lista.addEventListener("click", (evento) => {
+    const botao = (evento.target as HTMLElement).closest<HTMLButtonElement>(
+      "button[data-reparo]"
+    );
+    if (!botao || botao.disabled) return;
+
+    void executarFerramenta(botao.dataset.reparo!);
+  });
+
+  await listen<string>("reparo-andamento", (evento) => {
+    saida.hidden = false;
+    saida.textContent = `${saida.textContent ?? ""}${evento.payload}\n`;
+    saida.scrollTop = saida.scrollHeight;
+  });
+
+  cancelar.addEventListener("click", () => {
+    void invoke("reparo_cancelar");
+  });
+
+  try {
+    const disponiveis = await invoke<string[]>("reparo_disponivel");
+
+    lista.innerHTML = disponiveis.length
+      ? disponiveis.map(desenharItemReparo).join("")
+      : '<p class="hint">Nenhuma ferramenta de reparo disponível nesta máquina.</p>';
+
+    text("reparo-tag", disponiveis.length ? "pronto" : "indisponível");
+  } catch {
+    lista.innerHTML = '<p class="hint">Não consegui ler as ferramentas de reparo disponíveis.</p>';
+    text("reparo-tag", "falhou");
+  }
+
+  await atualizarUltimoResultado();
+}
+
 /* -------------------------------------------------- os monitores, desenhados */
 
 interface MonitorLido {
@@ -4830,6 +5058,7 @@ function wireControls() {
   void carregarPlaca();
   void carregarMemoria();
   void carregarMonitores();
+  void carregarReparo();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));

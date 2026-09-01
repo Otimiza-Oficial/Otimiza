@@ -70,6 +70,12 @@
           <circle cx="9" cy="17" r="2.2" />
         </symbol>
 
+        <!-- Reparo: a chave de fenda consertando o que quebrou -->
+        <symbol id="i-reparo" viewBox="0 0 24 24">
+          <path d="M14.7 9.3a3.7 3.7 0 0 1-4.9 4.9L4 20l-1-1 5.8-5.8a3.7 3.7 0 0 1 4.9-4.9l-2.6 2.6 1 1Z" />
+          <path d="M17.5 3.5 21 7l-2.2 2.2-3.5-3.5Z" />
+        </symbol>
+
         <!-- Busca: a lupa -->
         <symbol id="i-busca" viewBox="0 0 24 24">
           <circle cx="10.5" cy="10.5" r="6.5" />
@@ -421,6 +427,12 @@
             <svg class="nav-icone" aria-hidden="true"><use href="#i-sistema" /></svg>
             <span class="nav-rotulo">Sistema</span>
             <span class="tab-badge" id="badge-sistema" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="reparo" aria-selected="false"
+                  aria-controls="tab-reparo" id="tabbtn-reparo">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-reparo" /></svg>
+            <span class="nav-rotulo">Reparo</span>
           </button>
 
           <!--
@@ -1809,6 +1821,46 @@
               É este perfil que decide o que o Otimiza oferece — e o que ele se
               recusa a oferecer para não piorar a sua máquina.
             </p>
+          </section>
+        </section>
+
+        <!-- ============================================================ REPARO -->
+        <section class="tab-panel" id="tab-reparo" role="tabpanel" aria-labelledby="tabbtn-reparo" hidden>
+          <!--
+            A ABA DE REPARO.
+
+            Ela existe separada do catálogo porque aqui NÃO EXISTE DESFAZER — e não
+            por descuido: estas ferramentas não mudam ajuste nenhum, elas devolvem
+            um arquivo do sistema danificado ao original. Não há valor anterior a
+            guardar, e desfazer significaria recorromper de propósito.
+
+            O aviso disso vem ANTES da lista de ferramentas, e antes de qualquer
+            botão — é a única forma de garantir que o cliente leia antes de clicar,
+            e não depois de já ter clicado.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Reparo do Windows</h2>
+              <span class="panel-tag" id="reparo-tag">—</span>
+            </div>
+
+            <p class="status" id="reparo-resultado">Lendo o registro do Windows…</p>
+
+            <p class="hint reparo-aviso-geral">
+              <strong>Aqui não existe desfazer.</strong> Diferente do resto do
+              Otimiza, estas ferramentas não mudam ajuste nenhum — elas devolvem
+              arquivos do sistema danificados ao estado original. Não existe um
+              valor anterior para guardar, e desfazer significaria corromper o
+              arquivo de propósito.
+            </p>
+
+            <div class="reparo-lista" id="reparo-lista">
+              <p class="hint">Lendo o que esta máquina pode oferecer…</p>
+            </div>
+
+            <p class="status" id="reparo-execucao"></p>
+            <pre class="reparo-saida" id="reparo-saida" hidden></pre>
+            <button class="btn" id="reparo-cancelar" hidden>Interromper</button>
           </section>
         </section>
         </main>

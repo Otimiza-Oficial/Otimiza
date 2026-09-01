@@ -4470,3 +4470,112 @@ circle.placa-parafuso {
   font-size: var(--t-nota);
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   O REPARO DO WINDOWS
+
+   Aqui não existe desfazer, e a tela precisa dizer isso antes de qualquer
+   botão — por isso `.reparo-aviso-geral` usa a borda âmbar em vez da cinza
+   comum do `.hint`: é o único aviso do produto que precisa ser lido antes de
+   agir, não depois.
+   ========================================================================== */
+
+.reparo-aviso-geral {
+  border-left-color: var(--amber);
+  color: var(--text);
+}
+
+.reparo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.reparo-item {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  padding: var(--s4);
+}
+
+.reparo-item-cabecalho {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+.reparo-item-cabecalho h3 {
+  font-size: var(--t-value);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* A DURAÇÃO TÍPICA FICA NO CABEÇALHO, ANTES DE QUALQUER BOTÃO.
+   Quem não sabe que um DISM leva de dez a trinta minutos conclui, no minuto
+   oito parado em 20%, que travou — e desliga a máquina no meio de uma
+   escrita. Este número é o que evita essa conclusão. */
+.reparo-item-duracao {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.reparo-item-descricao {
+  margin-top: var(--s2);
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* O aviso de cada ferramenta — o "parado em 20% é normal" do RepararImagem, o
+   "exige reiniciar" do ConsertarDisco — mora junto do item, e não numa nota
+   de rodapé geral que ninguém associa à ferramenta certa. */
+.reparo-item-aviso {
+  margin-top: var(--s3);
+  padding-left: var(--s3);
+  border-left: 2px solid var(--amber);
+  font-family: var(--font-sans);
+  font-size: var(--t-label);
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* O /ResetBase fica DESLIGADO por padrão (o HTML não marca `checked`), e o
+   aviso de que a atualização já aplicada some para sempre mora ao lado do
+   próprio interruptor — reaproveita `.pref`, o mesmo padrão das preferências
+   da aba Sistema. */
+.reparo-resetbase {
+  margin-top: var(--s4);
+  padding: var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+}
+
+.reparo-item-rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+
+/* A saída bruta do programa (sfc, DISM, chkdsk), linha a linha, à medida que
+   chega pelo evento `reparo-andamento`. É o que prova, pra quem está
+   olhando, que a ferramenta continua viva mesmo parada em 20%. */
+.reparo-saida {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--hairline);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
