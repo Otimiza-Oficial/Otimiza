@@ -2167,6 +2167,43 @@ pub fn reparo_executar(
             outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
         };
 
+        // O `ConsertarDisco` sozinho pode mentir: se uma sessão anterior
+        // desmarcou um conserto (`DesmarcarConsertoDoDisco`, `chkntfs /X`),
+        // o volume fica EXCLUÍDO do boot check para sempre — não só naquela
+        // vez. Sem reincluir agora, o `fsutil dirty set` abaixo sai 0, o
+        // retorno diz "agendado", e o `autochk` pula o volume no próximo
+        // boot mesmo assim. `receita_reinclusao_do_disco` (reparo.rs) desfaz
+        // isso, e quem sequencia as duas chamadas é este executor — não
+        // `reparo.rs`, que só descreve receitas, e não `Receita`, que carrega
+        // um programa só. Rodar a reinclusão sempre, mesmo sem `/X` anterior,
+        // é seguro: ela só restaura o padrão do Windows.
+        if escolhida == Ferramenta::ConsertarDisco {
+            let reinclusao = reparo::receita_reinclusao_do_disco();
+            let args_reinclusao: Vec<&str> =
+                reinclusao.args.iter().map(|s| s.as_str()).collect();
+            let app_reinclusao = app.clone();
+            let desfecho_reinclusao =
+                state
+                    .reparo
+                    .rodar(reinclusao.programa, &args_reinclusao, move |a| {
+                        let _ = app_reinclusao.emit("reparo-andamento", a.linha);
+                    })?;
+
+            // Falhar aqui e seguir para o `fsutil` mesmo assim seria recriar
+            // a mentira que esta reinclusão existe para fechar: o bit sujo
+            // marcado (o `fsutil` quase sempre funciona) enquanto o volume
+            // continua fora do boot check porque a reinclusão não pegou. O
+            // cliente não pode ouvir "agendado" nesse caso — não seria
+            // verdade.
+            if !reparo::reinclusao_deu_certo(&desfecho_reinclusao) {
+                return Err(
+                    "Não consegui preparar o disco para o conserto (a \
+                     reinclusão no boot check falhou). Nada foi agendado."
+                        .into(),
+                );
+            }
+        }
+
         let r = reparo::receita(&escolhida);
         let args: Vec<&str> = r.args.iter().map(|s| s.as_str()).collect();
 

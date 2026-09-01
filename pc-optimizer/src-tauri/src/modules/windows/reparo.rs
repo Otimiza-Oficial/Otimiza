@@ -110,6 +110,18 @@ pub fn receita(f: &Ferramenta) -> Receita {
         // pergunta nenhuma e com código de saída que dá para conferir. É o
         // MESMO mecanismo, acionado pela porta que não depende de um diálogo
         // que não existe.
+        // ESTA RECEITA SOZINHA NÃO BASTA. `fsutil dirty set` marca o bit; o
+        // `autochk` só olha esse bit se o volume não estiver na lista de
+        // exclusão que `chkntfs /X` cria (ver `DesmarcarConsertoDoDisco`
+        // abaixo). Se uma sessão anterior desmarcou um conserto, o volume
+        // continua nessa lista PARA SEMPRE — `/X` não é "cancele o próximo
+        // boot", é "pare de checar este volume", e nada nesta receita desfaz
+        // isso. Quem chama precisa rodar `receita_reinclusao_do_disco()`
+        // ANTES desta, ou o `fsutil` sai 0, a tela diz "agendado", e o
+        // conserto simplesmente não acontece — a mentira exata que este
+        // módulo existe para impedir. O executor (`reparo_executar`, em
+        // `commands.rs`) é quem sequencia as duas: esta receita continua
+        // descrevendo um comando só.
         Ferramenta::ConsertarDisco => Receita {
             programa: "fsutil",
             args: args(&["dirty", "set", "C:"]),
@@ -133,6 +145,17 @@ pub fn receita(f: &Ferramenta) -> Receita {
         // produto que não dá para cancelar depois de começar; poder desmarcar
         // antes do reinício é o que impede o aviso "não dá para voltar atrás"
         // de virar uma porta trancada.
+        //
+        // `chkntfs /X` NÃO É "cancele o check agendado". É "acrescente este
+        // volume à lista de exclusão do boot check, e deixe-o lá". A lista é
+        // persistente — sobrevive ao reinício, à sessão, ao próprio produto
+        // fechando — e é consultada em TODO boot daqui em diante, não só no
+        // próximo. Um cliente que desmarca uma vez e, meses depois, tem o
+        // `/scan` achando erro de novo: o `fsutil dirty set` roda, sai 0, a
+        // tela diz "agendado" — e o `autochk` pula o volume no boot seguinte
+        // porque ele nunca saiu daquela lista. É por isso que
+        // `Ferramenta::ConsertarDisco` precisa reincluir o volume antes de
+        // marcar: ver `receita_reinclusao_do_disco` e o comentário acima.
         Ferramenta::DesmarcarConsertoDoDisco => Receita {
             programa: "chkntfs",
             args: args(&["/X", "C:"]),
@@ -186,6 +209,46 @@ pub fn receita(f: &Ferramenta) -> Receita {
             }
         }
     }
+}
+
+/// O passo que precisa rodar ANTES de `receita(&Ferramenta::ConsertarDisco)`,
+/// toda vez.
+///
+/// `chkntfs /C C:` devolve o volume à lista de "verificar no boot" —
+/// desfazendo um `/X` de qualquer sessão passada, inclusive uma de antes
+/// desta função existir. NÃO é uma `Ferramenta` do catálogo: ninguém pede
+/// "reincluir o disco" na tela, `reparo_disponivel` nunca a oferece, e ela
+/// não tem estado próprio em `EstadoDoDisco` — é sempre um passo interno do
+/// agendamento, nunca uma escolha do cliente.
+///
+/// NÃO É DESTRUTIVO. `/C` só restaura o comportamento padrão do Windows para
+/// o volume; rodar num volume que nunca foi excluído não muda nada. Por isso
+/// dá para chamar sempre, sem precisar saber se um `/X` aconteceu antes —
+/// saber isso exigiria um registro que este produto não guarda hoje, e
+/// exigiria confiar nesse registro sobre o que o Windows realmente tem
+/// gravado no volume.
+pub fn receita_reinclusao_do_disco() -> Receita {
+    Receita {
+        programa: "chkntfs",
+        args: args(&["/C", "C:"]),
+        minutos_tipicos: (0, 1),
+        cancelar_e_seguro: true,
+        aviso: None,
+    }
+}
+
+/// Se a reinclusão deu certo — a condição que autoriza o executor a seguir
+/// para o `fsutil dirty set`.
+///
+/// Função pura pelo mesmo motivo de `EstadoDoDisco::apos_execucao`: é a
+/// regra que decide se o cliente pode ouvir "agendado" depois do
+/// `ConsertarDisco`, e precisa ser conferível sem rodar `chkntfs` de
+/// verdade. Só o código 0 conta — o mesmo corte que `EstadoDoDisco` já usa
+/// para o `fsutil` e para o próprio `chkntfs /X`: um `Cancelada`, um
+/// `NaoComecou` ou um código diferente de zero são "não sei se reincluiu", e
+/// "não sei" não pode virar "pode marcar sujo".
+pub fn reinclusao_deu_certo(desfecho: &Desfecho) -> bool {
+    matches!(desfecho, Desfecho::Terminou { codigo: 0 })
 }
 
 /// O que se sabe sobre o disco DESTA MÁQUINA, nesta sessão.
@@ -636,6 +699,76 @@ mod tests {
         let volta = receita(&Ferramenta::DesmarcarConsertoDoDisco);
         assert_eq!(volta.programa, "chkntfs");
         assert!(volta.cancelar_e_seguro);
+    }
+
+    #[test]
+    fn a_reinclusao_desfaz_exatamente_o_que_o_x_faz() {
+        // `chkntfs /X` exclui o volume do boot check PARA SEMPRE, não só uma
+        // vez. `/C` é o comando documentado pela Microsoft para desfazer
+        // isso — e precisa ser ESTE volume (`C:`), com ESTE programa
+        // (`chkntfs`), ou não reverte nada.
+        let reinclusao = receita_reinclusao_do_disco();
+        let desmarcar = receita(&Ferramenta::DesmarcarConsertoDoDisco);
+
+        assert_eq!(reinclusao.programa, "chkntfs");
+        assert_eq!(desmarcar.programa, "chkntfs");
+        assert!(reinclusao.args.iter().any(|a| a == "/C"));
+        assert!(reinclusao.args.iter().any(|a| a == "C:"));
+        assert!(desmarcar.args.iter().any(|a| a == "/X"));
+
+        // Não é a mesma receita do `DesmarcarConsertoDoDisco`: uma exclui, a
+        // outra reinclui, e confundi-las apagaria o efeito uma da outra.
+        assert_ne!(reinclusao.args, desmarcar.args);
+
+        // Não é destrutiva: cancelar no meio não deixa nada pela metade,
+        // então oferecer cancelamento dela nunca seria arriscado (mesmo que
+        // hoje ela não seja oferecida como botão nenhum).
+        assert!(reinclusao.cancelar_e_seguro);
+    }
+
+    #[test]
+    fn conserto_do_disco_nao_marca_sujo_sem_reincluir_antes() {
+        // A receita do `ConsertarDisco`, sozinha, continua sendo só o
+        // `fsutil dirty set` — `Receita` carrega um programa só de propósito.
+        // A reinclusão é um passo À PARTE, que o executor roda ANTES desta
+        // receita (ver `reparo_executar` em commands.rs); este teste prova
+        // que a receita e o passo de reinclusão continuam sendo comandos
+        // DIFERENTES, para o dia em que alguém tentar "simplificar" fundindo
+        // os dois numa `Receita` só e apagando a reinclusão sem perceber.
+        let marcar = receita(&Ferramenta::ConsertarDisco);
+        let reinclusao = receita_reinclusao_do_disco();
+
+        assert_eq!(marcar.programa, "fsutil");
+        assert_eq!(reinclusao.programa, "chkntfs");
+        assert_ne!(marcar.programa, reinclusao.programa);
+    }
+
+    #[test]
+    fn reinclusao_que_terminou_com_erro_nao_autoriza_marcar_sujo() {
+        // O cenário do achado: `/C` falha (permissão, volume ocupado, o que
+        // for) e o executor segue para o `fsutil` mesmo assim. O `fsutil`
+        // quase sempre funciona — ele só grava um bit — então o desfecho
+        // final sai 0 e a tela diria "agendado" sobre um volume que
+        // continua fora do boot check. `reinclusao_deu_certo` é o freio que
+        // impede o executor de seguir nesse caso.
+        for desfecho in [
+            Desfecho::Terminou { codigo: 1 },
+            Desfecho::Cancelada,
+            Desfecho::NaoComecou {
+                motivo: "Já existe uma tarefa em andamento.".into(),
+            },
+        ] {
+            assert!(
+                !reinclusao_deu_certo(&desfecho),
+                "desfecho {:?} autorizou marcar sujo sem reincluir de verdade",
+                desfecho
+            );
+        }
+    }
+
+    #[test]
+    fn reinclusao_que_terminou_limpa_autoriza_marcar_sujo() {
+        assert!(reinclusao_deu_certo(&Desfecho::Terminou { codigo: 0 }));
     }
 
     #[test]
