@@ -35,6 +35,46 @@ pub enum ResultadoSfc {
     NaoSei { motivo: String },
 }
 
+/// O quão preocupante é o resultado — decidido AQUI, a partir do dado
+/// estruturado, e nunca por uma frase que a tela teria que reconhecer por
+/// prefixo.
+///
+/// Existe porque a tela chegou a colorir `CorrigiuEmParte` de verde: a frase
+/// dele também começa com "Corrigiu ", igual à de `Corrigiu`, e um
+/// `startsWith("Corrigiu ")` no frontend não via diferença entre "corrigiu
+/// tudo" e "corrigiu metade e sobrou corrupção". É exatamente o defeito que
+/// este arquivo já evita dentro do Rust — só que ele tinha voltado a
+/// acontecer do lado de fora, na tela, porque o dado que chegava lá era
+/// texto solto, e texto solto convida a ser lido por prefixo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severidade {
+    Ok,
+    Atencao,
+    Erro,
+}
+
+impl ResultadoSfc {
+    /// `CorrigiuEmParte` e `NaoConseguiu` SIGNIFICAM A MESMA COISA — sobrou
+    /// corrupção na máquina — mas diferem em progresso: `CorrigiuEmParte`
+    /// corrigiu ao menos um arquivo, `NaoConseguiu` corrigiu zero. É essa
+    /// diferença de progresso, e não a coincidência de vocabulário nas duas
+    /// frases, que separa `Atencao` de `Erro` abaixo. Sem progresso nenhum, o
+    /// próximo passo (reparar a imagem do Windows) deixa de ser sugestão e
+    /// passa a ser o único caminho.
+    pub fn severidade(&self) -> Severidade {
+        match self {
+            ResultadoSfc::SemCorrupcao | ResultadoSfc::Corrigiu { .. } => Severidade::Ok,
+            ResultadoSfc::CorrigiuEmParte { .. } => Severidade::Atencao,
+            ResultadoSfc::NaoConseguiu { .. } => Severidade::Erro,
+            // "Não sei" não é "está ruim" — é incerteza. Recebe o mesmo tom
+            // intermediário do parcial, nunca o pior: a mesma regra que
+            // impede `NaoSei` de colapsar em `SemCorrupcao` também impede que
+            // ele colapse no tom mais grave sem prova nenhuma disso.
+            ResultadoSfc::NaoSei { .. } => Severidade::Atencao,
+        }
+    }
+}
+
 pub fn caminho_do_log() -> PathBuf {
     let raiz = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     PathBuf::from(raiz).join("Logs").join("CBS").join("CBS.log")
@@ -161,6 +201,53 @@ mod tests {
         // "não consegui ler" virando "está tudo bem" é o mesmo defeito que o
         // vigia de pagamento evita ao separar "não sei" de "não pago".
         assert!(matches!(interpretar(""), ResultadoSfc::NaoSei { .. }));
+    }
+
+    #[test]
+    fn corrigiu_em_parte_nunca_recebe_o_tom_de_sucesso() {
+        // Este é o defeito que voltou na tela: a frase de `CorrigiuEmParte`
+        // também começa com "Corrigiu ", e um `startsWith` no frontend
+        // pintava os dois de verde. Aqui a severidade não vem de texto — vem
+        // do variante em si, e o teste prende exatamente essa garantia.
+        let parcial = ResultadoSfc::CorrigiuEmParte {
+            corrigidos: 2,
+            restantes: 1,
+        };
+
+        assert_ne!(parcial.severidade(), Severidade::Ok);
+        assert_eq!(parcial.severidade(), Severidade::Atencao);
+    }
+
+    #[test]
+    fn nao_conseguiu_e_mais_grave_que_corrigiu_em_parte() {
+        // Os dois significam "sobrou corrupção" — mas `NaoConseguiu`
+        // corrigiu zero arquivos, e é essa ausência de progresso que separa
+        // `Erro` de `Atencao`, não a semelhança de vocabulário entre as duas
+        // frases.
+        assert_eq!(
+            ResultadoSfc::NaoConseguiu { quantos: 3 }.severidade(),
+            Severidade::Erro
+        );
+    }
+
+    #[test]
+    fn sucesso_total_e_ausencia_de_corrupcao_recebem_o_tom_de_sucesso() {
+        assert_eq!(ResultadoSfc::SemCorrupcao.severidade(), Severidade::Ok);
+        assert_eq!(
+            ResultadoSfc::Corrigiu { quantos: 4 }.severidade(),
+            Severidade::Ok
+        );
+    }
+
+    #[test]
+    fn nao_sei_recebe_o_tom_intermediario_e_nao_o_pior() {
+        // "Não sei" é incerteza, não "está ruim" — não pode colapsar no tom
+        // mais grave sem nenhuma prova de que a máquina está mal.
+        let ns = ResultadoSfc::NaoSei {
+            motivo: "teste".into(),
+        };
+
+        assert_eq!(ns.severidade(), Severidade::Atencao);
     }
 
     #[test]

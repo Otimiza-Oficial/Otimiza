@@ -4111,109 +4111,111 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 /* -------------------------------------------------- a aba de reparo */
 
 /**
- * O que a tela precisa saber sobre cada ferramenta ANTES de oferecer o botão:
- * o que ela faz, quanto costuma levar, e o aviso — quando existe um.
- *
- * DUPLICA O QUE O BACKEND JÁ SABE, DE PROPÓSITO TEMPORÁRIO. `reparo_disponivel`
- * devolve só os NOMES das ferramentas que esta máquina pode oferecer — a
- * duração típica, o aviso e se cancelar é seguro continuam presos em
- * `Receita`, do lado do Rust (`src-tauri/src/modules/windows/reparo.rs`), e
- * mudar aquela assinatura ficou fora do escopo desta tela. Até o dia em que
- * `Receita` viajar inteira para o frontend, esta tabela é uma SEGUNDA fonte de
- * verdade: qualquer ajuste de tempo, texto de aviso ou ferramenta nova em
- * `reparo.rs` precisa ser repetido aqui à mão, ou a tela passa a prometer um
- * tempo ou um aviso que o programa não cumpre.
+ * O que o backend devolve para cada ferramenta oferecida nesta máquina —
+ * `FerramentaDeReparo`, em `commands.rs`. Duração típica, se cancelar é
+ * seguro, e os dois avisos de segurança (`aviso` e `aviso_reset_base`) têm
+ * UMA fonte só: `Receita`, do lado do Rust
+ * (`src-tauri/src/modules/windows/reparo.rs`). A tela não reescreve nenhum
+ * deles — só lê.
  */
-interface DescricaoReparo {
-  titulo: string;
-  descricao: string;
-  minutos: readonly [number, number];
-  aviso?: string;
-  ofereceResetarBase?: boolean;
+interface FerramentaDeReparo {
+  nome: string;
+  minutos_tipicos: readonly [number, number];
+  cancelar_e_seguro: boolean;
+  aviso: string | null;
+  oferece_reset_base: boolean;
+  aviso_reset_base: string | null;
 }
 
-const DESCRICOES_REPARO: Record<string, DescricaoReparo> = {
+/**
+ * O tom de `UltimoResultadoReparo`, já decidido pelo backend a partir do
+ * dado estruturado (`ResultadoSfc::severidade()`), nunca por um prefixo de
+ * texto — é o que fecha o buraco em que `CorrigiuEmParte` (que ainda deixa
+ * corrupção na máquina) e `Corrigiu` (sucesso total) tinham a mesma cor
+ * porque as duas frases começam com "Corrigiu ".
+ */
+type TomResultado = "ok" | "atencao" | "erro";
+
+interface UltimoResultadoReparo {
+  tom: TomResultado;
+  texto: string;
+}
+
+function tomParaStatus(tom: TomResultado): "ok" | "warn" | "error" {
+  if (tom === "ok") return "ok";
+  if (tom === "erro") return "error";
+  return "warn";
+}
+
+/**
+ * Título e descrição de cada ferramenta — texto de APRESENTAÇÃO, escrito
+ * pela própria tela. Isto fica aqui de propósito, e não é a mesma dívida que
+ * os avisos de segurança tinham: nenhum destes dois campos muda o risco de
+ * um clique, então não precisam de dono único no backend — só a duração, o
+ * aviso e o `/ResetBase` precisavam, e esses três agora vêm de
+ * `reparo_disponivel()`.
+ */
+interface TextoReparo {
+  titulo: string;
+  descricao: string;
+}
+
+const TEXTOS_REPARO: Record<string, TextoReparo> = {
   VerificarArquivos: {
     titulo: "Verificar arquivos do sistema",
     descricao:
       "Confere os arquivos do Windows contra o original e corrige o que estiver corrompido (sfc /scannow).",
-    minutos: [5, 15],
   },
   RepararImagem: {
     titulo: "Reparar a imagem do Windows",
     descricao:
       "Busca arquivos originais no Windows Update para substituir os que a verificação sozinha não conseguiu corrigir (DISM /RestoreHealth).",
-    minutos: [10, 30],
-    aviso:
-      "Fica parado em 20% por vários minutos, e isso é normal — não é travamento. Precisa de internet: os arquivos bons vêm do Windows Update.",
   },
   VerificarDisco: {
     titulo: "Verificar o disco",
     descricao:
       "Procura erros de estrutura no disco sem consertar nada, rodando com o Windows ligado — não reinicia a máquina (chkdsk /scan).",
-    minutos: [2, 20],
   },
   ConsertarDisco: {
     titulo: "Consertar a estrutura do disco",
     descricao: "Corrige os erros que a verificação encontrou no disco (chkdsk /f).",
-    minutos: [10, 60],
-    aviso:
-      "Exige reiniciar o computador. O conserto acontece antes de o Windows abrir, e não dá para usar a máquina durante ele.",
   },
   AnalisarWinSxS: {
     titulo: "Analisar componentes do Windows (WinSxS)",
     descricao:
       "Mede quanto espaço as versões antigas de componentes do Windows estão ocupando, sem apagar nada (DISM /AnalyzeComponentStore).",
-    minutos: [1, 5],
   },
   LimparWinSxS: {
     titulo: "Limpar componentes antigos do Windows",
     descricao:
       "Remove versões antigas de componentes que o Windows já não usa mais (DISM /StartComponentCleanup).",
-    minutos: [5, 25],
-    ofereceResetarBase: true,
   },
 };
 
 /**
- * Monta um item da lista de reparo: título, duração típica, o que a
- * ferramenta faz, o aviso quando existe, e — só em `LimparWinSxS` — o
- * interruptor do `/ResetBase`, DESLIGADO por padrão e com o aviso ao lado
- * dele, não numa nota de rodapé.
+ * Monta um item da lista de reparo: título e descrição (texto da tela),
+ * duração típica e avisos (dados do backend), e — só quando
+ * `oferece_reset_base` vem `true` — o interruptor do `/ResetBase`, DESLIGADO
+ * por padrão e com o aviso ao lado dele, não numa nota de rodapé.
  */
-function desenharItemReparo(nome: string): string {
-  const d = DESCRICOES_REPARO[nome];
-
-  if (!d) {
-    // Ferramenta nova no backend que esta tabela ainda não conhece. Ainda
-    // oferece o botão — não é razão para escondê-la — só sem os detalhes que
-    // dependem da tabela duplicada acima.
-    return `
-      <article class="reparo-item">
-        <div class="reparo-item-cabecalho">
-          <h3>${escapeHtml(nome)}</h3>
-        </div>
-        <div class="reparo-item-rodape">
-          <button class="btn" data-reparo="${escapeHtml(nome)}">Executar</button>
-        </div>
-      </article>`;
-  }
-
-  const aviso = d.aviso
-    ? `<p class="reparo-item-aviso">${escapeHtml(d.aviso)}</p>`
+function desenharItemReparo(f: FerramentaDeReparo): string {
+  const texto = TEXTOS_REPARO[f.nome];
+  const titulo = texto?.titulo ?? f.nome;
+  const descricao = texto?.descricao
+    ? `<p class="reparo-item-descricao">${escapeHtml(texto.descricao)}</p>`
     : "";
 
-  const resetarBase = d.ofereceResetarBase
+  const aviso = f.aviso
+    ? `<p class="reparo-item-aviso">${escapeHtml(f.aviso)}</p>`
+    : "";
+
+  const resetarBase = f.oferece_reset_base
     ? `
       <label class="pref reparo-resetbase">
         <input type="checkbox" id="reparo-resetar-base" />
         <span class="pref-text">
           <span class="pref-name">Também aplicar o /ResetBase</span>
-          <span class="pref-note">
-            Desligado por padrão. Ligar libera mais espaço, mas em troca você
-            perde a capacidade de desinstalar qualquer atualização do Windows
-            já aplicada até hoje — e isso não tem volta.
-          </span>
+          <span class="pref-note">${escapeHtml(f.aviso_reset_base ?? "")}</span>
         </span>
       </label>`
     : "";
@@ -4221,14 +4223,14 @@ function desenharItemReparo(nome: string): string {
   return `
     <article class="reparo-item">
       <div class="reparo-item-cabecalho">
-        <h3>${escapeHtml(d.titulo)}</h3>
-        <span class="reparo-item-duracao">${d.minutos[0]}–${d.minutos[1]} minutos, tipicamente</span>
+        <h3>${escapeHtml(titulo)}</h3>
+        <span class="reparo-item-duracao">${f.minutos_tipicos[0]}–${f.minutos_tipicos[1]} minutos, tipicamente</span>
       </div>
-      <p class="reparo-item-descricao">${escapeHtml(d.descricao)}</p>
+      ${descricao}
       ${aviso}
       ${resetarBase}
       <div class="reparo-item-rodape">
-        <button class="btn" data-reparo="${escapeHtml(nome)}">Executar</button>
+        <button class="btn" data-reparo="${escapeHtml(f.nome)}">Executar</button>
       </div>
     </article>`;
 }
@@ -4245,21 +4247,18 @@ async function carregarReparo() {
   const saida = element("reparo-saida");
   const cancelar = element<HTMLButtonElement>("reparo-cancelar");
 
+  const ferramentasPorNome = new Map<string, FerramentaDeReparo>();
+
   /**
    * "Nenhuma corrupção encontrada" é o resultado mais comum, e é um resultado
    * BOM — a tela precisa dizer isso com a mesma cor que usa para sucesso, e
-   * não com o cinza neutro que usaria para "não sei dizer".
+   * não com o cinza neutro que usaria para "não sei dizer". O tom vem pronto
+   * do backend (`UltimoResultadoReparo.tom`); a tela só traduz para a classe
+   * CSS que `setStatus` espera.
    */
   async function atualizarUltimoResultado() {
-    const resultado = await invoke<string>("reparo_ultimo_resultado");
-
-    const tom = resultado.startsWith("Nenhuma corrupção") || resultado.startsWith("Corrigiu ")
-      ? "ok"
-      : resultado.startsWith("Não consegui")
-        ? "warn"
-        : "warn";
-
-    setStatus("reparo-resultado", resultado, tom);
+    const resultado = await invoke<UltimoResultadoReparo>("reparo_ultimo_resultado");
+    setStatus("reparo-resultado", resultado.texto, tomParaStatus(resultado.tom));
   }
 
   function definirRodando(rodando: boolean) {
@@ -4271,8 +4270,10 @@ async function carregarReparo() {
   }
 
   async function executarFerramenta(nome: string) {
-    const d = DESCRICOES_REPARO[nome];
-    const campoResetarBase = d?.ofereceResetarBase
+    const f = ferramentasPorNome.get(nome);
+    const titulo = TEXTOS_REPARO[nome]?.titulo ?? nome;
+
+    const campoResetarBase = f?.oferece_reset_base
       ? document.getElementById("reparo-resetar-base") as HTMLInputElement | null
       : null;
     const resetarBase = campoResetarBase?.checked ?? false;
@@ -4280,12 +4281,15 @@ async function carregarReparo() {
     saida.hidden = true;
     saida.textContent = "";
     definirRodando(true);
-    setStatus("reparo-execucao", `Rodando: ${d?.titulo ?? nome}…`, "progress");
+    setStatus("reparo-execucao", `Rodando: ${titulo}…`, "progress");
 
     try {
+      // `resetbase`, uma palavra só — o mesmo nome que `reparo_executar`
+      // espera do lado do Rust, sem depender da conversão de caixa entre
+      // JavaScript e Rust para um interruptor desta consequência.
       const desfecho = await invoke<string>("reparo_executar", {
         ferramenta: nome,
-        resetarBase,
+        resetbase: resetarBase,
       });
 
       setStatus(
@@ -4321,7 +4325,8 @@ async function carregarReparo() {
   });
 
   try {
-    const disponiveis = await invoke<string[]>("reparo_disponivel");
+    const disponiveis = await invoke<FerramentaDeReparo[]>("reparo_disponivel");
+    disponiveis.forEach((f) => ferramentasPorNome.set(f.nome, f));
 
     lista.innerHTML = disponiveis.length
       ? disponiveis.map(desenharItemReparo).join("")

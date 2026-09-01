@@ -1830,6 +1830,62 @@ fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
     crate::modules::windows::reparo::DiscoSaudavel::a_partir_do_relatorio(&relatorio)
 }
 
+/// Uma ferramenta de reparo oferecida nesta máquina, com tudo que a tela
+/// precisa para avisar ANTES do clique — duração típica, se cancelar é
+/// seguro e os avisos de segurança — lido de `Receita`
+/// (`modules::windows::reparo`) e nunca reescrito à mão na tela.
+///
+/// NÃO leva `programa` nem `args`: são detalhe de execução, não informação
+/// que o cliente precisa ver, e expô-los sem necessidade só aumentaria a
+/// superfície que alguém poderia tentar forjar numa chamada direta.
+/// `titulo`/`descricao` também ficam de fora de propósito — continuam sendo
+/// texto de apresentação escrito pela própria tela, e não um FATO DE
+/// SEGURANÇA como o aviso do `/ResetBase`; só o que muda o risco de um clique
+/// tem que ter dono único no backend.
+#[derive(Serialize)]
+pub struct FerramentaDeReparo {
+    /// O mesmo nome que `reparo_executar` espera no campo `ferramenta`.
+    pub nome: String,
+    pub minutos_tipicos: (u32, u32),
+    pub cancelar_e_seguro: bool,
+    pub aviso: Option<String>,
+    /// Só `true` em `LimparWinSxS`: só ela oferece o interruptor do
+    /// `/ResetBase`.
+    pub oferece_reset_base: bool,
+    /// O aviso de que ligar o `/ResetBase` tira a capacidade de desinstalar
+    /// atualizações já aplicadas. Vem de `Receita` com `resetar_base: true`,
+    /// e não de um texto próprio da tela — é a mesma garantia de fonte única
+    /// que o aviso comum acima já tem.
+    pub aviso_reset_base: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+fn descrever_ferramenta(
+    f: crate::modules::windows::reparo::Ferramenta,
+    nome: &str,
+) -> FerramentaDeReparo {
+    use crate::modules::windows::reparo::{self, Ferramenta};
+
+    let r = reparo::receita(&f);
+
+    let (oferece_reset_base, aviso_reset_base) = match f {
+        Ferramenta::LimparWinSxS { .. } => {
+            let com_reset = reparo::receita(&Ferramenta::LimparWinSxS { resetar_base: true });
+            (true, com_reset.aviso.map(str::to_string))
+        }
+        _ => (false, None),
+    };
+
+    FerramentaDeReparo {
+        nome: nome.to_string(),
+        minutos_tipicos: r.minutos_tipicos,
+        cancelar_e_seguro: r.cancelar_e_seguro,
+        aviso: r.aviso.map(str::to_string),
+        oferece_reset_base,
+        aviso_reset_base,
+    }
+}
+
 /// O que dá para oferecer nesta máquina.
 ///
 /// Fica em `LIVRES`: é leitura, e é o diagnóstico que mostra ao cliente que o
@@ -1841,22 +1897,25 @@ fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
 /// para fechar: a mesma regra do fluxo de compra, em que só um código de
 /// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
 #[tauri::command]
-pub fn reparo_disponivel() -> Vec<String> {
+pub fn reparo_disponivel() -> Vec<FerramentaDeReparo> {
     #[cfg(target_os = "windows")]
     {
-        use crate::modules::windows::reparo;
+        use crate::modules::windows::reparo::{self, Ferramenta};
 
         let mut lista = vec![
-            "VerificarArquivos".to_string(),
-            "RepararImagem".to_string(),
-            "VerificarDisco".to_string(),
-            "AnalisarWinSxS".to_string(),
-            "LimparWinSxS".to_string(),
+            descrever_ferramenta(Ferramenta::VerificarArquivos, "VerificarArquivos"),
+            descrever_ferramenta(Ferramenta::RepararImagem, "RepararImagem"),
+            descrever_ferramenta(Ferramenta::VerificarDisco, "VerificarDisco"),
+            descrever_ferramenta(Ferramenta::AnalisarWinSxS, "AnalisarWinSxS"),
+            descrever_ferramenta(
+                Ferramenta::LimparWinSxS { resetar_base: false },
+                "LimparWinSxS",
+            ),
         ];
 
         let disco = disco_saudavel_agora();
         if reparo::consertar_disco_e_permitido(&disco) {
-            lista.push("ConsertarDisco".to_string());
+            lista.push(descrever_ferramenta(Ferramenta::ConsertarDisco, "ConsertarDisco"));
         }
 
         lista
@@ -1868,18 +1927,60 @@ pub fn reparo_disponivel() -> Vec<String> {
     }
 }
 
+/// O tom com que a tela deve colorir `UltimoResultadoReparo` — "ok",
+/// "atencao" ou "erro" na borda do IPC.
+///
+/// Existe para a tela nunca precisar decidir isso sozinha. A versão anterior
+/// devolvia só a frase, e a tela escolhia a cor comparando o INÍCIO do texto
+/// (`resultado.startsWith("Corrigiu ")`) — só que a frase de
+/// `CorrigiuEmParte` ("Corrigiu 2 arquivo(s), mas 1 continua...") também
+/// começa com "Corrigiu ", e a tela pintava de verde um resultado que o
+/// próprio comentário deste arquivo já dizia que NÃO é sucesso. A cor agora
+/// nasce de `ResultadoSfc::severidade()` — do dado estruturado, não da
+/// prosa — então essa colisão de vocabulário deixou de ser possível.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TomResultado {
+    Ok,
+    Atencao,
+    Erro,
+}
+
+#[cfg(target_os = "windows")]
+impl From<crate::modules::windows::cbslog::Severidade> for TomResultado {
+    fn from(s: crate::modules::windows::cbslog::Severidade) -> Self {
+        use crate::modules::windows::cbslog::Severidade;
+
+        match s {
+            Severidade::Ok => TomResultado::Ok,
+            Severidade::Atencao => TomResultado::Atencao,
+            Severidade::Erro => TomResultado::Erro,
+        }
+    }
+}
+
+/// O resultado da última verificação de arquivos de sistema, com o tom já
+/// decidido — a tela lê `tom`, nunca a prosa de `texto`.
+#[derive(Serialize)]
+pub struct UltimoResultadoReparo {
+    pub tom: TomResultado,
+    pub texto: String,
+}
+
 /// O resultado da última verificação de arquivos de sistema.
 ///
 /// Fica em `LIVRES`: é leitura de um registro que o Windows já escreveu.
 #[tauri::command]
-pub fn reparo_ultimo_resultado() -> String {
+pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
     #[cfg(target_os = "windows")]
     {
         use crate::modules::windows::cbslog::{self, ResultadoSfc};
 
         let conteudo = std::fs::read_to_string(cbslog::caminho_do_log()).unwrap_or_default();
+        let resultado = cbslog::interpretar(&conteudo);
+        let tom = TomResultado::from(resultado.severidade());
 
-        match cbslog::interpretar(&conteudo) {
+        let texto = match resultado {
             // Este é o resultado mais comum, e é um resultado BOM. A tela diz
             // isso com todas as letras, sem inventar benefício — mesma regra
             // do `prova.rs`, que se recusa a chamar ruído de ganho.
@@ -1889,7 +1990,8 @@ pub fn reparo_ultimo_resultado() -> String {
             }
             // Misto: parte foi consertada, parte não. Isto NÃO é sucesso —
             // ainda sobra corrupção na máquina, e dizer só "corrigiu" faria o
-            // cliente achar que o problema acabou quando não acabou.
+            // cliente achar que o problema acabou quando não acabou. O tom
+            // (`Atencao`, não `Ok`) já carrega essa distinção sozinho.
             ResultadoSfc::CorrigiuEmParte {
                 corrigidos,
                 restantes,
@@ -1904,12 +2006,17 @@ pub fn reparo_ultimo_resultado() -> String {
                 quantos
             ),
             ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
-        }
+        };
+
+        UltimoResultadoReparo { tom, texto }
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        "Disponível apenas no Windows.".to_string()
+        UltimoResultadoReparo {
+            tom: TomResultado::Atencao,
+            texto: "Disponível apenas no Windows.".to_string(),
+        }
     }
 }
 
@@ -1917,12 +2024,21 @@ pub fn reparo_ultimo_resultado() -> String {
 /// `reparo-andamento`.
 ///
 /// Exige licença: é correção, como todas as outras.
+///
+/// O parâmetro chama `resetbase`, uma palavra só, e não `reset_base` — a
+/// tela chamaria isto de `resetbase` (sem separador) ou dependeria da
+/// conversão automática de nome que o Tauri faz entre camelCase no
+/// JavaScript e snake_case no Rust. A conversão provavelmente está certa,
+/// mas o `/ResetBase` é consequente demais (custa a capacidade de
+/// desinstalar atualizações já aplicadas, sem volta) para valer a pena
+/// alguém ter que raciocinar sobre ela. Uma palavra só fecha essa dúvida de
+/// vez — a mesma lógica que fez `DiscoSaudavel` virar tipo em vez de `bool`.
 #[tauri::command]
 pub fn reparo_executar(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     ferramenta: String,
-    resetar_base: bool,
+    resetbase: bool,
 ) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
@@ -1953,7 +2069,9 @@ pub fn reparo_executar(
                 Ferramenta::ConsertarDisco
             }
             "AnalisarWinSxS" => Ferramenta::AnalisarWinSxS,
-            "LimparWinSxS" => Ferramenta::LimparWinSxS { resetar_base },
+            "LimparWinSxS" => Ferramenta::LimparWinSxS {
+                resetar_base: resetbase,
+            },
             outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
         };
 
@@ -1974,7 +2092,7 @@ pub fn reparo_executar(
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, state, ferramenta, resetar_base);
+        let _ = (app, state, ferramenta, resetbase);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
