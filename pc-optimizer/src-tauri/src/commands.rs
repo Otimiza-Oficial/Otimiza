@@ -1819,6 +1819,31 @@ pub async fn set_max_refresh_rate(
 }
 
 // =========================================================== REPARO
+//
+// OS QUATRO COMANDOS DESTA SECAO LEVAM O ATRIBUTO `async` NA MARCA DE COMANDO
+// DO TAURI, E ISSO NAO E DECORACAO. (A marca nao aparece escrita neste
+// comentario de proposito: a guarda do fim do arquivo conta comandos
+// procurando por ela no proprio fonte, e contaria um fantasma.)
+//
+// Sem o atributo, o Tauri classifica a funcao como `ExecutionContext::Blocking`
+// (tauri-macros-2.6.3, `src/command/wrapper.rs`: o contexto so vira `Async` se
+// `function.sig.asyncness.is_some()` ou se o atributo estiver escrito), e o
+// corpo roda EM LINHA dentro do manipulador de invoke — que o wry chama de
+// forma sincrona a partir do callback de IPC, na thread do laco de eventos.
+// Um `DISM` de trinta minutos ali para de repintar a janela, o Windows marca
+// "Nao Responde", o `app.emit("reparo-andamento")` enfileira trabalho para o
+// mesmo laco travado (o painel de andamento fica vazio) e — o pior — o
+// `reparo_cancelar`, que tambem e uma mensagem de IPC, so consegue executar
+// depois que a tarefa que ele deveria interromper ja terminou. O botao
+// Interromper existiria sem funcionar, e a unica saida do cliente seria matar
+// o programa no meio de uma escrita do DISM: exatamente o que
+// `cancelar_e_seguro: false` existe para evitar.
+//
+// O atributo e valido numa funcao SINCRONA que recebe `State<'_, AppState>`:
+// a restricao do Tauri contra referencias na entrada (`wrapper.rs`, o bloco
+// `async_command_check`) so e emitida quando `asyncness.is_some()`. Com a
+// funcao sincrona e o atributo presente, o Tauri gera o corpo assincrono e
+// chama a funcao dentro dele — o que o proprio macro rotula `sync_threadpool`.
 
 /// Monta a trava do disco a partir de um diagnóstico de verdade.
 ///
@@ -1896,7 +1921,7 @@ fn descrever_ferramenta(
 /// frontend reabriria exatamente o buraco que `DiscoSaudavel` foi criado
 /// para fechar: a mesma regra do fluxo de compra, em que só um código de
 /// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reparo_disponivel() -> Vec<FerramentaDeReparo> {
     #[cfg(target_os = "windows")]
     {
@@ -1970,7 +1995,7 @@ pub struct UltimoResultadoReparo {
 /// O resultado da última verificação de arquivos de sistema.
 ///
 /// Fica em `LIVRES`: é leitura de um registro que o Windows já escreveu.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
     #[cfg(target_os = "windows")]
     {
@@ -2033,7 +2058,7 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
 /// desinstalar atualizações já aplicadas, sem volta) para valer a pena
 /// alguém ter que raciocinar sobre ela. Uma palavra só fecha essa dúvida de
 /// vez — a mesma lógica que fez `DiscoSaudavel` virar tipo em vez de `bool`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reparo_executar(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -2102,7 +2127,7 @@ pub fn reparo_executar(
 /// Fica em `LIVRES` DE PROPÓSITO, pelo mesmo motivo que `revert` fica: uma
 /// licença que vence no meio de um `DISM` de vinte minutos não pode deixar o
 /// cliente preso nele.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -2261,11 +2286,17 @@ mod tests {
 
     /// Os nomes de todos os comandos, lidos do próprio fonte.
     fn comandos() -> Vec<&'static str> {
-        let marca = concat!("#[tauri::", "command]");
+        let marca = concat!("#[tauri::", "command");
 
         producao()
             .split(marca)
             .skip(1)
+            // A marca aceita argumento: os comandos de reparo sao
+            // `(async)` para nao rodarem na thread da interface. Procurar
+            // so pela forma sem argumento deixaria os quatro invisiveis
+            // para a guarda — que existe justamente para nenhum comando
+            // escapar da classificacao.
+            .filter(|bloco| bloco.starts_with(']') || bloco.starts_with("(async)]"))
             .map(|bloco| {
                 let assinatura = bloco
                     .lines()
