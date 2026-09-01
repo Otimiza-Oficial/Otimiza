@@ -31,7 +31,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Programas que faz sentido suspender durante o jogo.
 ///
@@ -145,6 +145,11 @@ pub struct Registro {
 }
 
 impl Registro {
+    /// Onde o registro fica na máquina do cliente.
+    ///
+    /// Caminho único, porque o produto tem um registro só. Os testes não
+    /// passam por aqui: cada um chama as variantes `_de`/`_em` com um arquivo
+    /// próprio. Ver `caminho_de_teste`, na seção de testes, para o porquê.
     fn path() -> PathBuf {
         let base = std::env::var("APPDATA")
             .or_else(|_| std::env::var("HOME"))
@@ -155,7 +160,11 @@ impl Registro {
     }
 
     pub fn load() -> Self {
-        fs::read_to_string(Self::path())
+        Self::load_de(&Self::path())
+    }
+
+    fn load_de(path: &Path) -> Self {
+        fs::read_to_string(path)
             .ok()
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default()
@@ -168,8 +177,10 @@ impl Registro {
     /// Gravar antes pode, no pior caso, mandar retomar algo que não chegou a
     /// ser suspenso — e retomar um processo que já roda não faz nada.
     pub fn save(&self) -> Result<(), String> {
-        let path = Self::path();
+        self.save_em(&Self::path())
+    }
 
+    fn save_em(&self, path: &Path) -> Result<(), String> {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)
                 .map_err(|e| format!("Não foi possível criar a pasta de dados: {}", e))?;
@@ -178,19 +189,22 @@ impl Registro {
         let json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Não foi possível gravar o registro: {}", e))?;
 
-        fs::write(&path, json)
-            .map_err(|e| format!("Não foi possível gravar o registro: {}", e))
+        fs::write(path, json).map_err(|e| format!("Não foi possível gravar o registro: {}", e))
     }
 
     pub fn limpar() -> Result<(), String> {
-        let path = Self::path();
+        Self::limpar_em(&Self::path())
+    }
 
-        if path.exists() {
-            fs::remove_file(&path)
-                .map_err(|e| format!("Não foi possível limpar o registro: {}", e))?;
+    fn limpar_em(path: &Path) -> Result<(), String> {
+        // Registro ausente é o estado que se queria alcançar, não um erro.
+        // Perguntar `exists()` antes de apagar abriria uma janela entre a
+        // pergunta e a resposta; deixar o próprio apagar responder não abre.
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(format!("Não foi possível limpar o registro: {}", e)),
         }
-
-        Ok(())
     }
 }
 
@@ -443,7 +457,11 @@ pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
 /// Retomar um processo que já roda é inofensivo, mas mexer num programa que
 /// não é o nosso não é uma coisa que este produto faça.
 pub fn retomar_pendentes() -> Vec<Suspenso> {
-    let registro = Registro::load();
+    retomar_pendentes_em(&Registro::path())
+}
+
+fn retomar_pendentes_em(caminho: &Path) -> Vec<Suspenso> {
+    let registro = Registro::load_de(caminho);
 
     if registro.suspensos.is_empty() {
         return Vec::new();
@@ -462,13 +480,33 @@ pub fn retomar_pendentes() -> Vec<Suspenso> {
         }
     }
 
-    let _ = Registro::limpar();
+    let _ = Registro::limpar_em(caminho);
     devolvidos
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Um registro só deste teste, em pasta própria.
+    ///
+    /// O `cargo test` roda os testes em threads paralelas do MESMO processo, e
+    /// o registro do produto é um caminho único em %APPDATA%. Enquanto os
+    /// testes usavam esse caminho, um apagava o arquivo no exato intervalo em
+    /// que o outro gravava e relia — e a suíte reprovava uma publicação sem
+    /// existir defeito no produto.
+    ///
+    /// O nome do processo entra no caminho porque duas execuções de `cargo
+    /// test` ao mesmo tempo na mesma máquina disputariam a pasta de novo.
+    ///
+    /// De quebra, teste nenhum encosta mais no registro real: rodar a suíte
+    /// com o Otimiza aberto e processos suspensos apagava a rede de segurança
+    /// que devolve esses processos.
+    fn caminho_de_teste(nome: &str) -> PathBuf {
+        std::env::temp_dir()
+            .join(format!("otimiza-suspend-{}-{}", std::process::id(), nome))
+            .join("suspensos.json")
+    }
 
     #[test]
     fn o_discord_pode_ser_suspenso_e_o_audio_nunca() {
@@ -579,8 +617,10 @@ mod tests {
     fn retomar_sem_nada_pendente_nao_faz_nada() {
         // O caminho que roda em toda abertura do programa. Não pode explodir
         // nem mexer em processo nenhum quando o registro está vazio.
-        let _ = Registro::limpar();
-        assert!(retomar_pendentes().is_empty());
+        let caminho = caminho_de_teste("retomar-sem-nada");
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+        assert!(retomar_pendentes_em(&caminho).is_empty());
     }
 
     /// Suspende e devolve um processo de verdade.
@@ -668,11 +708,13 @@ mod tests {
             }],
         };
 
-        registro.save().expect("gravar o registro");
-        let lido = Registro::load();
+        let caminho = caminho_de_teste("ida-e-volta");
+
+        registro.save_em(&caminho).expect("gravar o registro");
+        let lido = Registro::load_de(&caminho);
         assert_eq!(lido.suspensos, registro.suspensos);
 
-        Registro::limpar().expect("limpar o registro");
-        assert!(Registro::load().suspensos.is_empty());
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+        assert!(Registro::load_de(&caminho).suspensos.is_empty());
     }
 }
