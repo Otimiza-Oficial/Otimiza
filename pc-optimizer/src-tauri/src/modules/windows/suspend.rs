@@ -32,6 +32,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, TryLockError};
+use std::time::{Duration, Instant};
 
 /// Programas que faz sentido suspender durante o jogo.
 ///
@@ -142,6 +144,16 @@ pub struct Suspenso {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Registro {
     pub suspensos: Vec<Suspenso>,
+    /// Quando este registro foi gravado, em segundos desde a época Unix.
+    ///
+    /// `#[serde(default)]` porque um registro gravado por uma versão anterior
+    /// do Otimiza não tem este campo — e um registro antigo sem data precisa
+    /// ser tratado como "há muito tempo", não travar a leitura. É o que
+    /// permite à rede de segurança por prazo (ver `retomar_se_expirado`)
+    /// saber que algo ficou suspenso tempo demais mesmo sem jogo nenhum
+    /// rodando.
+    #[serde(default)]
+    pub quando: u64,
 }
 
 impl Registro {
@@ -363,6 +375,63 @@ mod api {
 
 // ------------------------------------------------------------------- ações
 
+/// Serializa suspender e devolver.
+///
+/// `suspender_fundo` grava o registro em disco ANTES de suspender e só depois
+/// percorre os alvos suspendendo um a um — de propósito, para nunca ter um
+/// processo suspenso sem registro (ver o comentário no topo do arquivo).
+/// Antes deste conserto, quem devolvia (`retomar_tudo`) só corria depois que
+/// o jogo fechava ou na abertura seguinte do Otimiza — nunca no meio desse
+/// laço. Agora que `retomar_tudo` também pode ser disparado pelo gancho de
+/// fim de sessão do Windows e pelo fechamento do Otimiza, as duas coisas
+/// podem correr ao mesmo tempo, em threads diferentes: o laço de devolução lê
+/// o registro, retoma o que já foi suspenso até ali (inofensivo) e APAGA o
+/// arquivo — e o laço de suspensão, ainda no meio, suspende o restante sem
+/// registro nenhum. É o mesmo defeito que este conserto inteiro existe para
+/// fechar, só que numa janela de milissegundos em vez de minutos.
+///
+/// A tranca não guarda nada além do direito de andar sozinho.
+static TRANCA: Mutex<()> = Mutex::new(());
+
+/// Tempo máximo que um caminho de devolução espera pela tranca antes de
+/// seguir sem ela.
+///
+/// O gancho de fim de sessão roda na thread da janela, sob o orçamento curto
+/// que o Windows dá antes de considerar o processo travado e matá-lo. Ficar
+/// preso esperando uma tranca que a thread de fundo está segurando é pior do
+/// que devolver sem ela: o cenário sem tranca é a corrida rara descrita
+/// acima, que na pior das hipóteses deixa ALGO suspenso — o defeito que este
+/// conserto já reduziu de "sempre que o Otimiza morre" para "raríssimo, só
+/// com coincidência de milissegundos". Travar o desligamento do cliente, em
+/// troca, afeta TODO cliente que desligar com qualquer coisa suspensa,
+/// corrida ou não. Por isso: tenta por um tempo curto, e se não conseguir,
+/// segue em frente sem a tranca — retomar sem ela é pior do que com ela, mas
+/// é muito melhor do que segurar o logoff.
+const PRAZO_TRANCA: Duration = Duration::from_millis(300);
+
+/// Tenta segurar `TRANCA` até `prazo`, tentando a cada 10ms.
+///
+/// Devolve `None` tanto por prazo esgotado quanto por tranca envenenada
+/// (alguém entrou em pânico segurando-a): nos dois casos a resposta certa
+/// para quem chama é a mesma — seguir sem a tranca —, e distinguir os dois
+/// motivos não mudaria nada.
+fn tentar_travar(prazo: Duration) -> Option<MutexGuard<'static, ()>> {
+    let comeco = Instant::now();
+
+    loop {
+        match TRANCA.try_lock() {
+            Ok(guarda) => return Some(guarda),
+            Err(TryLockError::Poisoned(_)) => return None,
+            Err(TryLockError::WouldBlock) => {
+                if comeco.elapsed() >= prazo {
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+}
+
 /// Suspende o que estiver rodando em segundo plano e puder ser suspenso.
 ///
 /// Devolve o que foi suspenso, para a interface poder dizer o que fez. Mudança
@@ -412,6 +481,15 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
         return Ok(Vec::new());
     }
 
+    // Tranca o intervalo inteiro entre gravar e suspender — ver o comentário
+    // de `TRANCA`. Bloqueia sem prazo, e de propósito: quem chama está numa
+    // thread de fundo, não na thread da janela sob orçamento do Windows, e
+    // encurtar essa espera é o que reabriria a corrida que esta tranca
+    // existe para fechar. Uma tranca envenenada (chamador anterior entrou em
+    // pânico no meio) não pode travar a suspensão para sempre — por isso
+    // `unwrap_or_else` recupera a tranca em vez de propagar o pânico alheio.
+    let _guarda = TRANCA.lock().unwrap_or_else(|env| env.into_inner());
+
     // GRAVA ANTES DE SUSPENDER. Ver a explicação em `Registro::save`.
     let mut registro = Registro::load();
     for alvo in &alvos {
@@ -419,6 +497,10 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
             registro.suspensos.push(alvo.clone());
         }
     }
+    // Marca agora como o instante da suspensão. É o relógio que a rede de
+    // segurança por prazo usa para saber que algo ficou suspenso tempo
+    // demais — ver `retomar_se_expirado`.
+    registro.quando = agora_epoch();
     registro.save()?;
 
     let mut feitos = Vec::new();
@@ -432,19 +514,160 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
     Ok(feitos)
 }
 
+/// Segundos desde a época Unix, agora.
+///
+/// `UNIX_EPOCH` é sempre anterior a `now()`, então o `unwrap_or` só entraria
+/// com relógio do sistema quebrado — situação em que "zero" é uma resposta
+/// segura: no pior caso a rede de segurança por prazo age cedo demais, nunca
+/// tarde demais.
+fn agora_epoch() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// O PID ainda é o mesmo processo que o Otimiza suspendeu?
+///
+/// Separada da chamada ao Windows de propósito: é lógica pura, testável sem
+/// sistema real, e é exatamente o ponto onde um descuido devolveria memória
+/// de um programa que nunca suspendemos. O Windows recicla PIDs — sem esta
+/// conferência, `retomar_tudo` (e qualquer outro caminho de devolução)
+/// poderia "retomar" um processo novo que por acaso nasceu com o mesmo
+/// número de um Discord que já tinha fechado.
+fn ainda_e_o_mesmo_processo(suspenso: &Suspenso, vivos: &HashSet<(u32, u64)>) -> bool {
+    vivos.contains(&(suspenso.pid, suspenso.inicio))
+}
+
 /// Devolve tudo que o Otimiza suspendeu.
+///
+/// Usa a MESMA conferência de PID que `retomar_pendentes`: até esta correção,
+/// este era o único dos dois caminhos de devolução que confiava só no
+/// número do PID, e o Windows recicla PIDs constantemente. Um cliente que
+/// abrisse um programa novo bem na hora em que o jogo fechasse corria o
+/// risco de o Otimiza mexer num processo que nunca suspendeu.
 pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
     let registro = Registro::load();
+
+    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Esta é a função
+    // chamada pelo gancho de fim de sessão do Windows e pelo fechamento do
+    // Otimiza, então NUNCA pode esperar indefinidamente.
+    let _guarda = tentar_travar(PRAZO_TRANCA);
+
+    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
+        .into_iter()
+        .map(|(pid, _, inicio)| (pid, inicio))
+        .collect();
+
     let mut devolvidos = Vec::new();
 
     for suspenso in registro.suspensos {
-        if api::retomar(suspenso.pid) > 0 {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
             devolvidos.push(suspenso);
         }
     }
 
     Registro::limpar()?;
     Ok(devolvidos)
+}
+
+/// O registro está parado tempo demais sem nenhum jogo por perto?
+///
+/// Função pura — o relógio e a resposta do detector de jogo entram como
+/// parâmetro — para não depender de sistema real nos testes.
+fn tempo_esgotado(quando: u64, agora: u64, limite_segundos: u64) -> bool {
+    agora.saturating_sub(quando) >= limite_segundos
+}
+
+/// Rede de segurança por PRAZO: nada fica suspenso indefinidamente.
+///
+/// As outras duas redes de segurança (`retomar_pendentes` na abertura do
+/// programa, e a devolução ao fechar o Otimiza ou ao encerrar a sessão do
+/// Windows) cobrem "o programa não está mais rodando". Esta cobre o caso em
+/// que o Otimiza CONTINUA rodando, mas por alguma falha de estado — o
+/// registro de mudanças e o registro de suspensão são dois arquivos
+/// separados, e podem, em tese, sair de sincronia — o modo jogo não percebe
+/// que deveria devolver os processos.
+///
+/// Por isso a decisão de agir aqui não depende do estado do modo jogo, só de
+/// dois fatos observáveis: há processos suspensos, e não há jogo nenhum
+/// rodando agora. Enquanto um jogo estiver aberto, o prazo nunca vence — por
+/// mais longa que seja a partida — porque a pergunta "há jogo agora" é
+/// checada de novo a cada chamada.
+///
+/// Dez minutos: tempo generoso para não competir com o caminho normal (que
+/// devolve na hora que o jogo fecha, a cada passo de seis segundos do vigia)
+/// e ainda assim curto o suficiente para o cliente não conviver com um
+/// Discord congelado por uma tarde inteira quando alguma coisa deu errado.
+pub const PRAZO_MAXIMO_SEGUNDOS: u64 = 10 * 60;
+
+pub fn retomar_se_expirado(limite_segundos: u64) -> Vec<Suspenso> {
+    retomar_se_expirado_com(
+        &Registro::path(),
+        limite_segundos,
+        agora_epoch(),
+        super::gamemode::jogo_aberto().is_some(),
+    )
+}
+
+/// A MESMA fiação de `retomar_se_expirado`, com o caminho do registro
+/// trocável.
+///
+/// Existe só para o teste `a_fiacao_publica_usa_o_jogo_de_verdade`. Sem esta
+/// costura, testar a fiação de verdade — a linha `jogo_aberto().is_some()`,
+/// e não um booleano escolhido à mão como todo teste de `retomar_se_expirado_com`
+/// já faz — exigiria escrever no `suspensos.json` do PRODUTO, e este módulo
+/// não toca nele nos testes (ver `caminho_de_teste`, na seção de testes, para
+/// o porquê). O detector de jogo continua sendo o de verdade: só o arquivo
+/// muda.
+#[cfg(test)]
+fn retomar_se_expirado_no_caminho(caminho: &Path, limite_segundos: u64) -> Vec<Suspenso> {
+    retomar_se_expirado_com(
+        caminho,
+        limite_segundos,
+        agora_epoch(),
+        super::gamemode::jogo_aberto().is_some(),
+    )
+}
+
+fn retomar_se_expirado_com(
+    caminho: &Path,
+    limite_segundos: u64,
+    agora: u64,
+    jogo_rodando: bool,
+) -> Vec<Suspenso> {
+    let registro = Registro::load_de(caminho);
+
+    if registro.suspensos.is_empty() || jogo_rodando {
+        return Vec::new();
+    }
+
+    if !tempo_esgotado(registro.quando, agora, limite_segundos) {
+        return Vec::new();
+    }
+
+    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Roda no mesmo vigia
+    // de seis segundos que já chama `suspender_fundo`/`retomar_tudo`, então
+    // o bloqueio nunca é o caso comum; é só a rede de segurança para o dia em
+    // que essas chamadas migrarem de thread.
+    let _guarda = tentar_travar(PRAZO_TRANCA);
+
+    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
+        .into_iter()
+        .map(|(pid, _, inicio)| (pid, inicio))
+        .collect();
+
+    let mut devolvidos = Vec::new();
+
+    for suspenso in registro.suspensos {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
+            devolvidos.push(suspenso);
+        }
+    }
+
+    let _ = Registro::limpar_em(caminho);
+    devolvidos
 }
 
 /// Roda na abertura do programa, antes de qualquer outra coisa.
@@ -475,7 +698,7 @@ fn retomar_pendentes_em(caminho: &Path) -> Vec<Suspenso> {
     let mut devolvidos = Vec::new();
 
     for suspenso in registro.suspensos {
-        if vivos.contains(&(suspenso.pid, suspenso.inicio)) && api::retomar(suspenso.pid) > 0 {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
             devolvidos.push(suspenso);
         }
     }
@@ -706,6 +929,7 @@ mod tests {
                 visivel: "Discord".to_string(),
                 inicio: 133_000_000,
             }],
+            quando: 1_700_000_000,
         };
 
         let caminho = caminho_de_teste("ida-e-volta");
@@ -713,8 +937,198 @@ mod tests {
         registro.save_em(&caminho).expect("gravar o registro");
         let lido = Registro::load_de(&caminho);
         assert_eq!(lido.suspensos, registro.suspensos);
+        assert_eq!(lido.quando, registro.quando);
 
         Registro::limpar_em(&caminho).expect("limpar o registro");
         assert!(Registro::load_de(&caminho).suspensos.is_empty());
+    }
+
+    #[test]
+    fn registro_antigo_sem_data_carrega_como_zero() {
+        // Um registro gravado por uma versão anterior do Otimiza não tem o
+        // campo `quando`. Sem `#[serde(default)]` a leitura falharia inteira
+        // — inclusive para os PIDs suspensos, que são o que realmente
+        // importa devolver.
+        let caminho = caminho_de_teste("registro-sem-data");
+
+        if let Some(dir) = caminho.parent() {
+            std::fs::create_dir_all(dir).expect("criar pasta de teste");
+        }
+        std::fs::write(&caminho, r#"{"suspensos":[]}"#).expect("gravar registro antigo");
+
+        let lido = Registro::load_de(&caminho);
+        assert_eq!(lido.quando, 0);
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_tudo_recusa_pid_reciclado() {
+        // O defeito que esta trava fecha: `retomar_tudo` confiava só no PID.
+        // Se o Windows reciclou o número para um processo novo — o cliente
+        // abriu outro programa bem na hora em que o jogo fechou —, o Otimiza
+        // não pode mexer nele. É a mesma conferência que `retomar_pendentes`
+        // já fazia; agora as duas passam pela mesma função.
+        let suspenso = Suspenso {
+            pid: 4242,
+            nome: "discord.exe".to_string(),
+            visivel: "Discord".to_string(),
+            inicio: 133_000_000,
+        };
+
+        // PID igual, mas o processo vivo agora começou em outro instante:
+        // não é o mesmo Discord que suspendemos.
+        let mut vivos = HashSet::new();
+        vivos.insert((4242u32, 999_000_000u64));
+        assert!(
+            !ainda_e_o_mesmo_processo(&suspenso, &vivos),
+            "aceitou um PID reciclado como se fosse o processo suspenso"
+        );
+
+        // PID e instante de início batem: é o mesmo processo, e a devolução
+        // pode prosseguir.
+        let mut vivos = HashSet::new();
+        vivos.insert((4242u32, 133_000_000u64));
+        assert!(
+            ainda_e_o_mesmo_processo(&suspenso, &vivos),
+            "recusou o próprio processo que suspendemos"
+        );
+
+        // PID nem sequer está mais na lista de processos vivos.
+        let vivos = HashSet::new();
+        assert!(!ainda_e_o_mesmo_processo(&suspenso, &vivos));
+    }
+
+    #[test]
+    fn tempo_esgotado_respeita_o_limite() {
+        // Antes do limite, nada de forçar devolução.
+        assert!(!tempo_esgotado(1_000, 1_000 + 599, 600));
+        // No limite exato e depois dele, sim.
+        assert!(tempo_esgotado(1_000, 1_000 + 600, 600));
+        assert!(tempo_esgotado(1_000, 1_000 + 700, 600));
+        // Relógio andando para trás (registro do futuro, relógio ajustado)
+        // não pode subtrair estourando: `saturating_sub` é o que impede
+        // isso de virar um número gigante por overflow.
+        assert!(!tempo_esgotado(2_000, 1_000, 600));
+    }
+
+    #[test]
+    fn retomar_se_expirado_nao_mexe_com_jogo_rodando() {
+        // A garantia mais importante desta rede de segurança: por mais longa
+        // que seja a partida, o prazo nunca vence enquanto há jogo aberto.
+        let caminho = caminho_de_teste("prazo-com-jogo");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 0,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        // Prazo estourado há muito tempo (quando=0, agora=um milhão de
+        // segundos depois), mas com jogo_rodando=true nada pode acontecer.
+        let devolvidos = retomar_se_expirado_com(&caminho, 600, 1_000_000, true);
+        assert!(devolvidos.is_empty());
+        assert!(
+            !Registro::load_de(&caminho).suspensos.is_empty(),
+            "o registro foi apagado mesmo com um jogo rodando"
+        );
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_se_expirado_nao_mexe_antes_do_prazo() {
+        let caminho = caminho_de_teste("prazo-ainda-nao");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 1_000,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        // Sem jogo rodando, mas ainda dentro do prazo: não é hora de agir.
+        let devolvidos = retomar_se_expirado_com(&caminho, 600, 1_000 + 100, false);
+        assert!(devolvidos.is_empty());
+        assert!(!Registro::load_de(&caminho).suspensos.is_empty());
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_se_expirado_sem_nada_suspenso_nao_faz_nada() {
+        let caminho = caminho_de_teste("prazo-vazio");
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+
+        assert!(retomar_se_expirado_com(&caminho, 600, 1_000_000, false).is_empty());
+    }
+
+    #[test]
+    fn a_fiacao_publica_usa_o_jogo_de_verdade() {
+        // Todo teste acima passa pelo `_com`, com o booleano do jogo
+        // escolhido à mão — nenhum deles pegaria uma inversão na fiação real
+        // de `retomar_se_expirado` (`.is_none()` no lugar de `.is_some()`,
+        // ou os argumentos trocados). Este teste chama a MESMA linha que a
+        // função pública chama — só o caminho do arquivo é de teste, o
+        // detector de jogo é o de verdade.
+        //
+        // A conferência é o ESTADO DO ARQUIVO depois da chamada, não a lista
+        // devolvida: o PID gravado abaixo é inventado, então nenhum processo
+        // vivo de verdade vai bater com ele, e `ainda_e_o_mesmo_processo`
+        // vai recusar — como deve ser, esse é o assunto de outro teste. O
+        // que esta conferência isola é só o portão de entrada da função:
+        // com `jogo_rodando` errado, `retomar_se_expirado_com` devolve cedo
+        // (ver o primeiro `if` do corpo dela) e NUNCA chega a limpar o
+        // arquivo; com `jogo_rodando` certo, ela passa do portão e limpa.
+        //
+        // A esteira roda sem sessão gráfica: não há jogo para detectar, e
+        // `jogo_aberto()` de verdade devolve `None` — a mesma suposição que
+        // `gamemode::tests::detecta_jogo_nesta_maquina` já faz. Com a fiação
+        // certa, "nenhum jogo" vira `jogo_rodando = false`, passa o portão, e
+        // o arquivo é limpo; com a fiação invertida, o mesmo "nenhum jogo"
+        // viraria `jogo_rodando = true`, o portão barraria, e o arquivo
+        // continuaria com o registro vencido — é essa inversão que este
+        // teste tranca.
+        let caminho = caminho_de_teste("fiacao-prazo");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 0,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        if super::super::gamemode::jogo_aberto().is_some() {
+            // Máquina de quem desenvolve pode ter um jogo de verdade aberto.
+            // Sem controle sobre isso o teste não pode afirmar nada — e não
+            // deve reprovar por um motivo alheio à fiação.
+            Registro::limpar_em(&caminho).expect("limpar o registro");
+            return;
+        }
+
+        // Prazo zero: com `quando = 0`, qualquer relógio atual já esgotou.
+        retomar_se_expirado_no_caminho(&caminho, 0);
+
+        assert!(
+            Registro::load_de(&caminho).suspensos.is_empty(),
+            "o registro vencido continuou no arquivo mesmo sem jogo nenhum rodando — \
+             confira se `retomar_se_expirado` ainda passa `jogo_aberto().is_some()`, e não \
+             `.is_none()` nem os argumentos fora de ordem"
+        );
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
     }
 }

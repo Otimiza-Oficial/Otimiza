@@ -161,7 +161,7 @@ jobs:
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat::"
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat:: modules::windows::sessao::"
 
       - name: Testes — espaço e memória
         working-directory: pc-optimizer/src-tauri
