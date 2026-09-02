@@ -101,6 +101,58 @@ tem como saber qual delas é a razão da falha.
 Trinta minutos de DISM acumulam a saída inteira num único elemento da página.
 Passa a ter teto, mantendo o fim — que é onde está o resultado.
 
+### 7. "Não consegui medir" para de virar "está tudo bem"
+
+Esta é a regra fundadora do produto, e a varredura achou **duas leituras de
+saúde que a quebram em silêncio**. As duas foram encontradas procurando o padrão
+de propósito, não por acaso.
+
+**Contador de erro do disco** — `health.rs:203`
+
+```rust
+let erros = contador.read_errors_total.unwrap_or(0)
+          + contador.write_errors_total.unwrap_or(0);
+if erros > 0 { /* avisa o cliente */ }
+```
+
+Muitos SSDs não publicam esse contador, e a consulta também falha sem
+administrador. Nos dois casos o valor vira `0`, o `if` não entra, e **nenhum
+achado é emitido** — o disco recebe atestado de saúde que ninguém mediu.
+
+Pior pela vizinhança: é esta leitura que alimenta o `DiscoSaudavel`, que decide
+se o `chkdsk /f` pode ser oferecido. O `DiscoSaudavel` já recusa quando não há
+evidência nenhuma, então a trava não caiu — mas o cliente lê "disco bem" quando
+o certo era "não consegui conferir".
+
+**Limite térmico** — `thermal.rs:301`
+
+```rust
+let flags = contadores.performance_limit_flags.unwrap_or(0);
+```
+
+`0` significa "nenhum limite ativo". Se a leitura falhar, o produto conclui que
+não há limitação térmica — e o argumento de venda deste módulo é justamente
+"seu processador está em throttling e nenhum ajuste de software resolve".
+Dizer que não está, sem ter medido, é o defeito no lugar mais caro.
+
+**Nos dois:** o que falta é a terceira resposta. `Some(0)` é "medi e deu zero";
+`None` é "não consegui medir"; e hoje os dois viram a mesma coisa. É a mesma
+correção que o `cbslog::NaoSei` e o `DiscoSaudavel` já receberam.
+
+### 8. Um módulo que falha não pode derrubar o diagnóstico inteiro
+
+`veredito.rs` roda o diagnóstico rápido em paralelo, e usa `.lock().unwrap()` em
+três pontos (`:807`, `:812`, `:828`). Se **qualquer** uma das tarefas entrar em
+pânico, a tranca fica envenenada e todos os outros trabalhadores morrem no
+`unwrap` seguinte.
+
+O resultado é que um módulo instável derruba a tela que o cliente vê primeiro —
+e ela é a parte livre, a que vende o produto antes de qualquer cobrança.
+
+Tranca envenenada passa a ser tratada, e uma tarefa que falha vira lacuna
+declarada em vez de queda geral. O produto já sabe mostrar lacuna: o
+`ReadinessReport` tem campo para isso.
+
 ---
 
 ## Os microajustes
@@ -111,6 +163,19 @@ Passa a ter teto, mantendo o fim — que é onde está o resultado.
 | **A paleta de comandos** enumera os botões na montagem: não enxerga os do reparo, que nascem depois, e enxerga o "Interromper" escondido |
 | **O `numero` do andamento** é calculado por duas threads e nunca atravessa para a tela. Ou serve para alguma coisa, ou sai |
 | **O `restantes` do CBS.log** conta marcas brutas sem deduplicar por arquivo: se o `sfc` registrar duas tentativas falhas do mesmo arquivo antes de consertá-lo, ele reporta como quebrado um arquivo que foi consertado |
+| **`TarefaLonga::ocupada` não é usada em lugar nenhum.** O `clippy` acusa, e o único chamador é um teste. Ou a exclusão volta a ser conferida por ela, ou o método sai — método público que só existe para um teste passar é teste medindo a si mesmo |
+| **O `#[derive]` de `Andamento` carrega `numero`, que nunca é lido.** O `clippy` também acusa. Sai junto com a decisão do item acima |
+
+### O que a varredura encontrou e NÃO é bug
+
+Registrado para ninguém "consertar" depois sem motivo:
+
+- `lib.rs:115` tem um `unwrap()` no `get_webview_window`, mas está dentro de
+  `#[cfg(debug_assertions)]`: não existe na versão que o cliente instala.
+- `monitor.rs:111` faz `duration_since(UNIX_EPOCH).unwrap()`. Só falha com o
+  relógio da máquina antes de 1970. Fica.
+- Os onze testes `#[ignore]` são deliberados — tocam o sistema de verdade e
+  seriam instáveis na esteira. Não são cobertura faltando.
 
 ---
 
