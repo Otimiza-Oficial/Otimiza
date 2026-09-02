@@ -142,6 +142,16 @@ pub struct Suspenso {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Registro {
     pub suspensos: Vec<Suspenso>,
+    /// Quando este registro foi gravado, em segundos desde a época Unix.
+    ///
+    /// `#[serde(default)]` porque um registro gravado por uma versão anterior
+    /// do Otimiza não tem este campo — e um registro antigo sem data precisa
+    /// ser tratado como "há muito tempo", não travar a leitura. É o que
+    /// permite à rede de segurança por prazo (ver `retomar_se_expirado`)
+    /// saber que algo ficou suspenso tempo demais mesmo sem jogo nenhum
+    /// rodando.
+    #[serde(default)]
+    pub quando: u64,
 }
 
 impl Registro {
@@ -419,6 +429,10 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
             registro.suspensos.push(alvo.clone());
         }
     }
+    // Marca agora como o instante da suspensão. É o relógio que a rede de
+    // segurança por prazo usa para saber que algo ficou suspenso tempo
+    // demais — ver `retomar_se_expirado`.
+    registro.quando = agora_epoch();
     registro.save()?;
 
     let mut feitos = Vec::new();
@@ -432,19 +446,129 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
     Ok(feitos)
 }
 
+/// Segundos desde a época Unix, agora.
+///
+/// `UNIX_EPOCH` é sempre anterior a `now()`, então o `unwrap_or` só entraria
+/// com relógio do sistema quebrado — situação em que "zero" é uma resposta
+/// segura: no pior caso a rede de segurança por prazo age cedo demais, nunca
+/// tarde demais.
+fn agora_epoch() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// O PID ainda é o mesmo processo que o Otimiza suspendeu?
+///
+/// Separada da chamada ao Windows de propósito: é lógica pura, testável sem
+/// sistema real, e é exatamente o ponto onde um descuido devolveria memória
+/// de um programa que nunca suspendemos. O Windows recicla PIDs — sem esta
+/// conferência, `retomar_tudo` (e qualquer outro caminho de devolução)
+/// poderia "retomar" um processo novo que por acaso nasceu com o mesmo
+/// número de um Discord que já tinha fechado.
+fn ainda_e_o_mesmo_processo(suspenso: &Suspenso, vivos: &HashSet<(u32, u64)>) -> bool {
+    vivos.contains(&(suspenso.pid, suspenso.inicio))
+}
+
 /// Devolve tudo que o Otimiza suspendeu.
+///
+/// Usa a MESMA conferência de PID que `retomar_pendentes`: até esta correção,
+/// este era o único dos dois caminhos de devolução que confiava só no
+/// número do PID, e o Windows recicla PIDs constantemente. Um cliente que
+/// abrisse um programa novo bem na hora em que o jogo fechasse corria o
+/// risco de o Otimiza mexer num processo que nunca suspendeu.
 pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
     let registro = Registro::load();
+
+    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
+        .into_iter()
+        .map(|(pid, _, inicio)| (pid, inicio))
+        .collect();
+
     let mut devolvidos = Vec::new();
 
     for suspenso in registro.suspensos {
-        if api::retomar(suspenso.pid) > 0 {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
             devolvidos.push(suspenso);
         }
     }
 
     Registro::limpar()?;
     Ok(devolvidos)
+}
+
+/// O registro está parado tempo demais sem nenhum jogo por perto?
+///
+/// Função pura — o relógio e a resposta do detector de jogo entram como
+/// parâmetro — para não depender de sistema real nos testes.
+fn tempo_esgotado(quando: u64, agora: u64, limite_segundos: u64) -> bool {
+    agora.saturating_sub(quando) >= limite_segundos
+}
+
+/// Rede de segurança por PRAZO: nada fica suspenso indefinidamente.
+///
+/// As outras duas redes de segurança (`retomar_pendentes` na abertura do
+/// programa, e a devolução ao fechar o Otimiza ou ao encerrar a sessão do
+/// Windows) cobrem "o programa não está mais rodando". Esta cobre o caso em
+/// que o Otimiza CONTINUA rodando, mas por alguma falha de estado — o
+/// registro de mudanças e o registro de suspensão são dois arquivos
+/// separados, e podem, em tese, sair de sincronia — o modo jogo não percebe
+/// que deveria devolver os processos.
+///
+/// Por isso a decisão de agir aqui não depende do estado do modo jogo, só de
+/// dois fatos observáveis: há processos suspensos, e não há jogo nenhum
+/// rodando agora. Enquanto um jogo estiver aberto, o prazo nunca vence — por
+/// mais longa que seja a partida — porque a pergunta "há jogo agora" é
+/// checada de novo a cada chamada.
+///
+/// Dez minutos: tempo generoso para não competir com o caminho normal (que
+/// devolve na hora que o jogo fecha, a cada passo de seis segundos do vigia)
+/// e ainda assim curto o suficiente para o cliente não conviver com um
+/// Discord congelado por uma tarde inteira quando alguma coisa deu errado.
+pub const PRAZO_MAXIMO_SEGUNDOS: u64 = 10 * 60;
+
+pub fn retomar_se_expirado(limite_segundos: u64) -> Vec<Suspenso> {
+    retomar_se_expirado_com(
+        &Registro::path(),
+        limite_segundos,
+        agora_epoch(),
+        super::gamemode::jogo_aberto().is_some(),
+    )
+}
+
+fn retomar_se_expirado_com(
+    caminho: &Path,
+    limite_segundos: u64,
+    agora: u64,
+    jogo_rodando: bool,
+) -> Vec<Suspenso> {
+    let registro = Registro::load_de(caminho);
+
+    if registro.suspensos.is_empty() || jogo_rodando {
+        return Vec::new();
+    }
+
+    if !tempo_esgotado(registro.quando, agora, limite_segundos) {
+        return Vec::new();
+    }
+
+    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
+        .into_iter()
+        .map(|(pid, _, inicio)| (pid, inicio))
+        .collect();
+
+    let mut devolvidos = Vec::new();
+
+    for suspenso in registro.suspensos {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
+            devolvidos.push(suspenso);
+        }
+    }
+
+    let _ = Registro::limpar_em(caminho);
+    devolvidos
 }
 
 /// Roda na abertura do programa, antes de qualquer outra coisa.
@@ -475,7 +599,7 @@ fn retomar_pendentes_em(caminho: &Path) -> Vec<Suspenso> {
     let mut devolvidos = Vec::new();
 
     for suspenso in registro.suspensos {
-        if vivos.contains(&(suspenso.pid, suspenso.inicio)) && api::retomar(suspenso.pid) > 0 {
+        if ainda_e_o_mesmo_processo(&suspenso, &vivos) && api::retomar(suspenso.pid) > 0 {
             devolvidos.push(suspenso);
         }
     }
@@ -706,6 +830,7 @@ mod tests {
                 visivel: "Discord".to_string(),
                 inicio: 133_000_000,
             }],
+            quando: 1_700_000_000,
         };
 
         let caminho = caminho_de_teste("ida-e-volta");
@@ -713,8 +838,138 @@ mod tests {
         registro.save_em(&caminho).expect("gravar o registro");
         let lido = Registro::load_de(&caminho);
         assert_eq!(lido.suspensos, registro.suspensos);
+        assert_eq!(lido.quando, registro.quando);
 
         Registro::limpar_em(&caminho).expect("limpar o registro");
         assert!(Registro::load_de(&caminho).suspensos.is_empty());
+    }
+
+    #[test]
+    fn registro_antigo_sem_data_carrega_como_zero() {
+        // Um registro gravado por uma versão anterior do Otimiza não tem o
+        // campo `quando`. Sem `#[serde(default)]` a leitura falharia inteira
+        // — inclusive para os PIDs suspensos, que são o que realmente
+        // importa devolver.
+        let caminho = caminho_de_teste("registro-sem-data");
+
+        if let Some(dir) = caminho.parent() {
+            std::fs::create_dir_all(dir).expect("criar pasta de teste");
+        }
+        std::fs::write(&caminho, r#"{"suspensos":[]}"#).expect("gravar registro antigo");
+
+        let lido = Registro::load_de(&caminho);
+        assert_eq!(lido.quando, 0);
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_tudo_recusa_pid_reciclado() {
+        // O defeito que esta trava fecha: `retomar_tudo` confiava só no PID.
+        // Se o Windows reciclou o número para um processo novo — o cliente
+        // abriu outro programa bem na hora em que o jogo fechou —, o Otimiza
+        // não pode mexer nele. É a mesma conferência que `retomar_pendentes`
+        // já fazia; agora as duas passam pela mesma função.
+        let suspenso = Suspenso {
+            pid: 4242,
+            nome: "discord.exe".to_string(),
+            visivel: "Discord".to_string(),
+            inicio: 133_000_000,
+        };
+
+        // PID igual, mas o processo vivo agora começou em outro instante:
+        // não é o mesmo Discord que suspendemos.
+        let mut vivos = HashSet::new();
+        vivos.insert((4242u32, 999_000_000u64));
+        assert!(
+            !ainda_e_o_mesmo_processo(&suspenso, &vivos),
+            "aceitou um PID reciclado como se fosse o processo suspenso"
+        );
+
+        // PID e instante de início batem: é o mesmo processo, e a devolução
+        // pode prosseguir.
+        let mut vivos = HashSet::new();
+        vivos.insert((4242u32, 133_000_000u64));
+        assert!(
+            ainda_e_o_mesmo_processo(&suspenso, &vivos),
+            "recusou o próprio processo que suspendemos"
+        );
+
+        // PID nem sequer está mais na lista de processos vivos.
+        let vivos = HashSet::new();
+        assert!(!ainda_e_o_mesmo_processo(&suspenso, &vivos));
+    }
+
+    #[test]
+    fn tempo_esgotado_respeita_o_limite() {
+        // Antes do limite, nada de forçar devolução.
+        assert!(!tempo_esgotado(1_000, 1_000 + 599, 600));
+        // No limite exato e depois dele, sim.
+        assert!(tempo_esgotado(1_000, 1_000 + 600, 600));
+        assert!(tempo_esgotado(1_000, 1_000 + 700, 600));
+        // Relógio andando para trás (registro do futuro, relógio ajustado)
+        // não pode subtrair estourando: `saturating_sub` é o que impede
+        // isso de virar um número gigante por overflow.
+        assert!(!tempo_esgotado(2_000, 1_000, 600));
+    }
+
+    #[test]
+    fn retomar_se_expirado_nao_mexe_com_jogo_rodando() {
+        // A garantia mais importante desta rede de segurança: por mais longa
+        // que seja a partida, o prazo nunca vence enquanto há jogo aberto.
+        let caminho = caminho_de_teste("prazo-com-jogo");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 0,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        // Prazo estourado há muito tempo (quando=0, agora=um milhão de
+        // segundos depois), mas com jogo_rodando=true nada pode acontecer.
+        let devolvidos = retomar_se_expirado_com(&caminho, 600, 1_000_000, true);
+        assert!(devolvidos.is_empty());
+        assert!(
+            !Registro::load_de(&caminho).suspensos.is_empty(),
+            "o registro foi apagado mesmo com um jogo rodando"
+        );
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_se_expirado_nao_mexe_antes_do_prazo() {
+        let caminho = caminho_de_teste("prazo-ainda-nao");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 1_000,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        // Sem jogo rodando, mas ainda dentro do prazo: não é hora de agir.
+        let devolvidos = retomar_se_expirado_com(&caminho, 600, 1_000 + 100, false);
+        assert!(devolvidos.is_empty());
+        assert!(!Registro::load_de(&caminho).suspensos.is_empty());
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn retomar_se_expirado_sem_nada_suspenso_nao_faz_nada() {
+        let caminho = caminho_de_teste("prazo-vazio");
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+
+        assert!(retomar_se_expirado_com(&caminho, 600, 1_000_000, false).is_empty());
     }
 }

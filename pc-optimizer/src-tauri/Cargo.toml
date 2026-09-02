@@ -66,6 +66,12 @@ windows-sys = { version = "0.59", features = [
     # forma suportada é suspender cada thread, e é preciso listar as threads
     # para isso.
     "Win32_System_Diagnostics_ToolHelp",
+    # `SetWindowSubclass`/`DefSubclassProc`, do comctl32. É como o módulo de
+    # fim de sessão (`sessao.rs`) escuta WM_QUERYENDSESSION/WM_ENDSESSION na
+    # janela principal sem substituir o subclasse que o Tauri já usa — as
+    # duas funções vivem no namespace Shell dos metadados do Win32, apesar
+    # de a API em si não ter nada de shell.
+    "Win32_UI_Shell",
 ] }
 
 

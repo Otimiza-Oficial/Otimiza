@@ -115,10 +115,41 @@ pub fn run() {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
-            
+
             utils::Logger::info("PC Performance Optimizer iniciado");
 
-            // REDE DE SEGURANÇA DA SUSPENSÃO — antes de qualquer outra coisa.
+            // TERCEIRA REDE DE SEGURANÇA DA SUSPENSÃO: fim de sessão do Windows.
+            //
+            // As outras duas (mais abaixo, e `retomar_pendentes` acima) cobrem
+            // "o Otimiza não está mais rodando". Esta cobre o intervalo entre o
+            // Otimiza morrer e o cliente desligar ou fazer logoff: uma thread
+            // suspensa não responde à mensagem de fim de sessão, o Windows não
+            // descarrega a colmeia de registro do usuário, e o Explorer para de
+            // abrir na sessão seguinte. Foi exatamente essa cadeia que originou
+            // este conserto — ver o comentário de `modules::windows::sessao`
+            // para a investigação completa de por que é janela e não console.
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(janela) = app.get_webview_window("main") {
+                    match janela.hwnd() {
+                        Ok(hwnd) => {
+                            if !modules::windows::sessao::instalar(hwnd.0) {
+                                utils::Logger::info(
+                                    "Não consegui ligar a devolução por fim de sessão do \
+                                     Windows — as outras redes de segurança continuam de pé.",
+                                );
+                            }
+                        }
+                        Err(e) => utils::Logger::info(&format!(
+                            "Não consegui obter a janela para a devolução por fim de sessão: {}",
+                            e
+                        )),
+                    }
+                }
+            }
+
+            // PRIMEIRA REDE DE SEGURANÇA DA SUSPENSÃO — antes de qualquer outra
+            // coisa.
             //
             // O modo jogo suspende Discord, navegador e afins para devolver
             // memória ao jogo, e os devolve quando o jogo fecha. Se o Otimiza
@@ -173,6 +204,29 @@ pub fn run() {
                         // seria o próprio otimizador pesando no PC do cliente.
                         modules::windows::pressao::amostrar();
 
+                        // QUARTA REDE DE SEGURANÇA DA SUSPENSÃO: prazo máximo.
+                        //
+                        // Roda ANTES da checagem da preferência, de propósito: o
+                        // cliente pode ter desligado o modo jogo automático
+                        // depois que algo já ficou suspenso, e mesmo assim os
+                        // programas precisam voltar. `retomar_se_expirado` só
+                        // faz alguma coisa quando há suspenso pendente E não há
+                        // jogo algum rodando agora — nunca interrompe uma
+                        // partida em andamento, por mais longa que seja. Ver a
+                        // justificativa do prazo em `suspend::PRAZO_MAXIMO_SEGUNDOS`.
+                        let expirados = modules::windows::suspend::retomar_se_expirado(
+                            modules::windows::suspend::PRAZO_MAXIMO_SEGUNDOS,
+                        );
+                        if !expirados.is_empty() {
+                            let nomes: Vec<&str> =
+                                expirados.iter().map(|s| s.visivel.as_str()).collect();
+                            utils::Logger::info(&format!(
+                                "Devolvi programas que ficaram suspensos além do prazo, sem \
+                                 jogo nenhum rodando: {}",
+                                nomes.join(", ")
+                            ));
+                        }
+
                         if !modules::preferences::Preferences::load().auto_game_mode {
                             continue;
                         }
@@ -194,6 +248,31 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app_handle, event| {
+            // SEGUNDA REDE DE SEGURANÇA DA SUSPENSÃO: fechar o Otimiza.
+            //
+            // `ExitRequested` cobre o caminho comum — o cliente fechou a
+            // janela, ou pediu para sair pelo tray — e `Exit` cobre o
+            // instante final do laço de eventos, de propósito redundante com
+            // o de cima: `retomar_tudo` devolver um processo que já está
+            // rodando não faz nada (ver o comentário em
+            // `suspend::api::retomar`), então chamar duas vezes não tem
+            // custo, e cobre o caso de o primeiro evento não chegar a rodar
+            // por algum motivo do próprio Tauri.
+            #[cfg(target_os = "windows")]
+            if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                let devolvidos = modules::windows::suspend::retomar_tudo().unwrap_or_default();
+
+                if !devolvidos.is_empty() {
+                    let nomes: Vec<&str> =
+                        devolvidos.iter().map(|s| s.visivel.as_str()).collect();
+                    utils::Logger::info(&format!(
+                        "Devolvi programas suspensos antes de fechar: {}",
+                        nomes.join(", ")
+                    ));
+                }
+            }
+        });
 }

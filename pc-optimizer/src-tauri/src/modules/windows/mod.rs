@@ -43,6 +43,7 @@ pub mod reparo;
 pub mod restore;
 pub mod services;
 pub mod servicesaudit;
+pub mod sessao;
 pub mod shaders;
 pub mod shell;
 pub mod startup;
