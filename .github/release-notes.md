@@ -18,6 +18,51 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.1.1 — conserto urgente: programa suspenso quebrava o Explorador
+
+**Se o seu Explorador de Arquivos parou de abrir, ou se clicar num programa
+na barra de tarefas não abre nada, esta versão conserta a causa. Atualize e
+reinicie o computador.**
+
+## O que estava acontecendo
+
+Durante o jogo, o Otimiza **suspende** programas de segundo plano em vez de
+fechá-los — para que a memória volte para o jogo sem você perder nada. Essa
+parte continua igual, e é de propósito: fechar o navegador de alguém com
+quinze abas abertas é pior que o problema que viemos resolver.
+
+O erro estava em **quando eles voltavam**. Só havia dois momentos: quando o
+jogo fechava, e quando você abria o Otimiza de novo. Se o programa fosse
+fechado antes disso, os processos ficavam suspensos.
+
+E aí, ao desligar o computador: um programa suspenso não consegue responder
+ao aviso de desligamento do Windows. O Windows então não consegue guardar
+direito uma parte do seu perfil — justamente a parte que diz ao Explorador
+como abrir cada coisa. No login seguinte, o Explorador e os atalhos da barra
+de tarefas param de funcionar.
+
+## O que mudou
+
+Agora os programas voltam em três momentos, e não em um:
+
+- **Ao fechar o Otimiza**
+- **Ao desligar ou sair do Windows** — mesmo que o Otimiza tenha sido
+  encerrado à força
+- **Depois de 10 minutos** sem nenhum jogo aberto, como última rede
+
+O aviso de desligamento é respondido na hora, com prazo curto: **o Otimiza
+nunca segura o desligamento do seu computador.**
+
+## Se a sua máquina já está com esse problema
+
+Instale esta versão e **reinicie o computador**. O reinício limpo é o que
+devolve o Explorador. Não precisa mexer em nada à mão.
+
+Se depois de reiniciar ainda não abrir, fale com a gente no servidor —
+nesse caso o perfil do Windows precisa de um reparo, e a gente acompanha.
+
+---
+
 # 1.1.0 — o Otimiza passa a consertar, não só a ajustar
 
 Até aqui o produto sabia **ajustar**: 42 mudanças de configuração do Windows,
