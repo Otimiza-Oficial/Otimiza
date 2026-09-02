@@ -177,6 +177,28 @@ pub const LIMITE_ELETRICO: u64 = 0x2;
 /// colado no teto transformaria ruído em diagnóstico.
 pub const FREQUENCIA_BAIXA: f64 = 90.0;
 
+/// O que se sabe sobre os bits de limite de desempenho do processador.
+///
+/// Mesma razão do `ErrosDoDisco` em `health.rs`: `Some(0)` é "medi e não há
+/// limite ativo"; `None` é "não consegui ler". O código antigo usava
+/// `unwrap_or(0)`, e uma consulta que falhasse virava exatamente a mesma coisa
+/// que um processador livre — dizer que não há throttling é o defeito no lugar
+/// mais caro, porque detectar throttling é o que este módulo vende.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LimitesDoProcessador {
+    Nenhum,
+    Ativos(u64),
+    NaoSei,
+}
+
+pub fn avaliar_limites(flags: Option<u64>) -> LimitesDoProcessador {
+    match flags {
+        None => LimitesDoProcessador::NaoSei,
+        Some(0) => LimitesDoProcessador::Nenhum,
+        Some(f) => LimitesDoProcessador::Ativos(f),
+    }
+}
+
 /// Decide o culpado, eliminando causas em ordem.
 ///
 /// A ordem é o produto inteiro deste módulo. Cada passo elimina uma explicação
@@ -298,12 +320,34 @@ pub fn analyze() -> ThermalReport {
     let termicos = eventos_termicos();
 
     let percentual = contadores.percentof_maximum_frequency;
-    let flags = contadores.performance_limit_flags.unwrap_or(0);
+    let limites = avaliar_limites(contadores.performance_limit_flags);
+    let flags = match limites {
+        LimitesDoProcessador::Ativos(f) => f,
+        // `Nenhum` e `NaoSei` entram como 0 na decisão por bit — mas só `Nenhum`
+        // é fato medido. Para `NaoSei` a diferença é corrigida abaixo, no texto.
+        LimitesDoProcessador::Nenhum | LimitesDoProcessador::NaoSei => 0,
+    };
 
     let culprit = decidir(bateria, teto, percentual, flags, termicos.len());
     let ultimo = termicos.first().and_then(|t| t.when.clone());
 
-    let (summary, advice) = explicar(culprit, teto, ultimo.as_deref());
+    let (summary, advice) = if matches!(limites, LimitesDoProcessador::NaoSei)
+        && culprit == Culprit::Nenhum
+    {
+        // Sem os outros sinais (bateria, teto, evento térmico) explicando nada,
+        // o veredito só chegou a "livre" porque o bit de limite virou 0 na falta
+        // de leitura. Isso não é "livre" — é "não conseguimos checar", e dizer
+        // que está tudo bem aqui é precisamente o defeito que este módulo existe
+        // para evitar.
+        (
+            "Não foi possível medir se o processador está sendo limitado agora.".to_string(),
+            "A leitura desse contador falhou ou exige permissão de administrador. Isso não \
+             significa que o processador está liberado — significa que não deu para checar."
+                .to_string(),
+        )
+    } else {
+        explicar(culprit, teto, ultimo.as_deref())
+    };
 
     ThermalReport {
         culprit,
@@ -417,6 +461,19 @@ mod tests {
     fn plano_limitado_diz_a_porcentagem() {
         let (resumo, _) = explicar(Culprit::PlanoDeEnergia, Some(50), None);
         assert!(resumo.contains("50%"));
+    }
+
+    #[test]
+    fn limite_nao_lido_nao_vira_sem_throttling() {
+        // Zero significa "nenhum limite ativo". Falha de leitura virando zero faz o
+        // produto dizer que não há throttling num módulo cujo argumento de venda é
+        // justamente detectar throttling.
+        assert!(matches!(avaliar_limites(None), LimitesDoProcessador::NaoSei));
+        assert!(matches!(avaliar_limites(Some(0)), LimitesDoProcessador::Nenhum));
+        assert!(matches!(
+            avaliar_limites(Some(4)),
+            LimitesDoProcessador::Ativos(4)
+        ));
     }
 
     #[test]

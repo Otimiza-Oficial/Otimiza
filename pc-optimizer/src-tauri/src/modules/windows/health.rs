@@ -140,6 +140,32 @@ pub fn avaliar_desgaste(wear: u32) -> (FindingSeverity, String) {
     }
 }
 
+/// O que se sabe sobre os erros acumulados de um disco.
+///
+/// TRÊS RESPOSTAS, E NÃO DUAS. `Some(0)` é "medi e deu zero"; `None` é "não
+/// consegui medir". O código antigo somava com `unwrap_or(0)` e os dois viravam
+/// a mesma coisa — um SSD que não publica o contador (ou uma consulta sem
+/// administrador) recebia atestado de saúde que ninguém tinha medido.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrosDoDisco {
+    Nenhum,
+    Contados(u64),
+    NaoSei,
+}
+
+pub fn avaliar_erros(leitura: Option<u64>, gravacao: Option<u64>) -> ErrosDoDisco {
+    // Um lado ausente já impede saber o total: somar o que se tem com zero
+    // seria inventar a metade que falta.
+    let (Some(l), Some(g)) = (leitura, gravacao) else {
+        return ErrosDoDisco::NaoSei;
+    };
+
+    match l + g {
+        0 => ErrosDoDisco::Nenhum,
+        total => ErrosDoDisco::Contados(total),
+    }
+}
+
 fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
     let lista = discos();
     let mut faltou_permissao = false;
@@ -200,18 +226,38 @@ fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
             });
         }
 
-        let erros = contador.read_errors_total.unwrap_or(0) + contador.write_errors_total.unwrap_or(0);
-        if erros > 0 {
-            findings.push(HealthFinding {
-                id: format!("disk_errors_{}", id),
-                title: format!("Erros de leitura ou gravação no disco {}", id),
-                measured: format!("{} erros acumulados desde a fabricação.", erros),
-                advice: "Erro de leitura faz o Windows tentar de novo, e é isso que aparece \
-                         como travada de segundos. Faça backup e considere a troca."
-                    .to_string(),
-                severity: FindingSeverity::Critical,
-                fix_location: FixLocation::Hardware,
-            });
+        match avaliar_erros(contador.read_errors_total, contador.write_errors_total) {
+            ErrosDoDisco::Contados(erros) => {
+                findings.push(HealthFinding {
+                    id: format!("disk_errors_{}", id),
+                    title: format!("Erros de leitura ou gravação no disco {}", id),
+                    measured: format!("{} erros acumulados desde a fabricação.", erros),
+                    advice: "Erro de leitura faz o Windows tentar de novo, e é isso que aparece \
+                             como travada de segundos. Faça backup e considere a troca."
+                        .to_string(),
+                    severity: FindingSeverity::Critical,
+                    fix_location: FixLocation::Hardware,
+                });
+            }
+            ErrosDoDisco::Nenhum => {}
+            // Contador ausente não é o mesmo que contador zerado. Muitos SSDs não
+            // publicam ReadErrorsTotal/WriteErrorsTotal, e a consulta também falha
+            // sem administrador — nos dois casos o valor virava 0 e o disco recebia
+            // um atestado de saúde que ninguém mediu. O achado avisa a lacuna em vez
+            // de preenchê-la com "está tudo bem".
+            ErrosDoDisco::NaoSei => {
+                findings.push(HealthFinding {
+                    id: format!("disk_errors_naosei_{}", id),
+                    title: format!("Erros de leitura ou gravação no disco {}", id),
+                    measured: "Não foi possível ler o contador de erros deste disco.".to_string(),
+                    advice: "Isso não é o mesmo que o disco estar sem erro — apenas não deu \
+                             para confirmar por aqui. Pode faltar permissão de administrador, \
+                             ou o fabricante simplesmente não publica esse contador."
+                        .to_string(),
+                    severity: FindingSeverity::Ok,
+                    fix_location: FixLocation::None,
+                });
+            }
         }
 
         // Acima de 60 °C um SSD começa a reduzir a própria velocidade para
@@ -420,6 +466,25 @@ mod tests {
     #[test]
     fn capacidade_de_fabrica_zerada_nao_vira_divisao_por_zero() {
         assert!(avaliar_bateria(0, 1000).is_none());
+    }
+
+    #[test]
+    fn contador_de_erro_ausente_nao_vira_disco_sem_erro() {
+        // Muitos SSDs não publicam o contador, e a consulta falha sem
+        // administrador. Nos dois casos o valor chegava como zero e NENHUM achado
+        // era emitido — o disco recebia atestado de saúde que ninguém mediu.
+        let sem_leitura = avaliar_erros(None, None);
+        assert!(
+            matches!(sem_leitura, ErrosDoDisco::NaoSei),
+            "leitura ausente virou {:?}",
+            sem_leitura
+        );
+
+        assert_eq!(avaliar_erros(Some(0), Some(0)), ErrosDoDisco::Nenhum);
+        assert_eq!(avaliar_erros(Some(3), Some(2)), ErrosDoDisco::Contados(5));
+
+        // Um lado ausente ainda é não saber o total.
+        assert!(matches!(avaliar_erros(Some(3), None), ErrosDoDisco::NaoSei));
     }
 
     #[test]
