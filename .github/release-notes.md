@@ -18,6 +18,46 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.1.2 — a Steam nunca mais é congelada, e a tela diz o que faz
+
+**Se voce viu "Suspenso" ao lado da Steam, do Discord ou do navegador no
+gerenciador de tarefas: nao era defeito da sua maquina. Era o modo jogo
+automatico do Otimiza, e esta versao conserta os dois motivos de isso ter
+assustado.**
+
+## A Steam nunca mais e congelada
+
+O modo jogo congela programas de segundo plano para devolver a memoria ao
+jogo. Ate agora a Steam entrava nessa lista quando nao havia partida com
+anticheat rodando.
+
+Na pratica isso e ruim mesmo com o jogo fechado: **Steam congelada nao abre
+jogo, nao baixa e nao responde** — e ela e justamente o programa que voce usa
+para comecar a jogar. A memoria que se ganha nao paga isso.
+
+A partir desta versao, nenhum lancador de loja e congelado: Steam, Epic,
+Battle.net, Riot, EA e Ubisoft.
+
+## E a tela passou a dizer o que a opcao faz
+
+O texto da opcao **"Ligar o modo jogo sozinho quando um jogo abrir"** falava
+so de plano de energia, e terminava com "nenhum programa e encerrado".
+
+Era verdade e enganoso ao mesmo tempo. Ele nao dizia que o Discord e o
+navegador sao **congelados** — e quem ligou aquilo esperando uma troca de
+plano de energia viu o navegador parar sem ter como ligar uma coisa a outra.
+
+Agora a opcao diz, com todas as letras: congela programas de segundo plano,
+quais, que nada se perde, e que **enquanto o jogo estiver aberto esses
+programas nao respondem**.
+
+## Se algo ficou congelado na sua maquina
+
+**Abra o Otimiza.** So abrir ja descongela tudo na hora, sem reiniciar nada.
+Se nao quiser mais esse comportamento, desligue a opcao em **Preferencias**.
+
+---
+
 # 1.1.1 — conserto urgente: programa suspenso quebrava o Explorador
 
 **Se o seu Explorador de Arquivos parou de abrir, ou se clicar num programa

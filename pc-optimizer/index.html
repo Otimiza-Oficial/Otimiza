@@ -1759,11 +1759,25 @@
               <label class="pref">
                 <input type="checkbox" id="pref-gamemode" />
                 <span>Ligar o modo jogo sozinho quando um jogo abrir</span>
+                <!--
+                  ESTE TEXTO FALAVA SÓ DO PLANO DE ENERGIA, E ISSO CUSTOU CARO.
+                  Ele dizia "nenhum programa é encerrado" e não dizia que o
+                  Discord e o navegador são CONGELADOS. Um cliente ligou isto
+                  achando que era troca de plano de energia, viu o Chrome parar,
+                  e concluiu que o produto tinha quebrado a máquina dele — sem
+                  ter como ligar uma coisa à outra. "Não encerra" era verdade e
+                  enganoso ao mesmo tempo: congelado não é encerrado, mas para
+                  quem está usando é a mesma coisa.
+                -->
                 <span class="pref-note">
-                  Desligado por padrão. Quando ligado, o Otimiza troca o plano de
-                  energia ao detectar um jogo conhecido e devolve o plano
-                  anterior quando o jogo fecha. Nenhum programa é encerrado, e a
-                  troca entra no histórico como qualquer outra mudança.
+                  Desligado por padrão. Quando um jogo abre, o Otimiza troca o
+                  plano de energia e <strong>congela programas de segundo
+                  plano</strong> — Discord, navegador, Spotify — para devolver a
+                  memória deles ao jogo. Congelado não é fechado: nada se perde,
+                  e eles voltam de onde estavam quando o jogo fecha.
+                  <strong>Enquanto o jogo estiver aberto, esses programas não
+                  respondem.</strong> Lançadores como a Steam nunca são
+                  congelados.
                 </span>
               </label>
               <label class="pref">

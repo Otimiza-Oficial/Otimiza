@@ -50,9 +50,7 @@ pub const SUSPENSIVEIS: &[(&str, &str)] = &[
     ("opera.exe", "Opera"),
     ("brave.exe", "Brave"),
     ("arc.exe", "Arc"),
-    ("steam.exe", "Steam"),
-    ("steamwebhelper.exe", "Steam (navegador interno)"),
-    ("epicgameslauncher.exe", "Epic Games"),
+    // OS LANÇADORES SAÍRAM DAQUI. Ver `LANCADORES` e `pode_suspender`.
     ("spotify.exe", "Spotify"),
     ("slack.exe", "Slack"),
     ("teams.exe", "Microsoft Teams"),
@@ -262,6 +260,22 @@ pub fn pode_suspender(nome: &str) -> Option<&'static str> {
 
     // O jogo em execução nunca é suspenso — seria o oposto do objetivo.
     if super::gamemode::nome_do_jogo(&minusculo).is_some() {
+        return None;
+    }
+
+    // LANÇADOR DE LOJA NUNCA É SUSPENSO, E ISSO MUDOU DEPOIS DE DOER.
+    //
+    // A regra antiga era mais fina: fora de partida com anticheat, suspender a
+    // Steam era considerado seguro e devolvia memória. Na prática o cliente
+    // abriu o gerenciador de tarefas, viu "Steam — Suspenso", e concluiu que o
+    // programa que ele comprou tinha quebrado a máquina dele. Ele estava certo
+    // em concluir isso: a Steam congelada não abre jogo, não baixa, não
+    // responde. E é o programa que ele usa para começar a jogar — justamente o
+    // que o Otimiza deveria estar ajudando a fazer.
+    //
+    // A memória que se ganha congelando um lançador não paga um cliente
+    // achando que o produto o quebrou.
+    if e_lancador(&minusculo) {
         return None;
     }
 
@@ -742,6 +756,38 @@ mod tests {
         assert_eq!(pode_suspender("MsMpEng.exe"), None);
         // Suspender o explorador congela a barra de tarefas.
         assert_eq!(pode_suspender("explorer.exe"), None);
+    }
+
+    #[test]
+    fn nenhum_lancador_de_loja_e_suspenso() {
+        // Um cliente abriu o gerenciador de tarefas, viu "Steam — Suspenso", e
+        // concluiu que o produto tinha quebrado a máquina dele. Estava certo:
+        // Steam congelada não abre jogo, não baixa e não responde — e é o
+        // programa que ele usa para COMEÇAR a jogar, que é o que este produto
+        // deveria estar ajudando a fazer.
+        for lancador in LANCADORES {
+            assert_eq!(
+                pode_suspender(lancador),
+                None,
+                "o lançador {} voltou a ser suspensível",
+                lancador
+            );
+        }
+
+        // E em maiúsculas, que é como o Windows costuma devolver.
+        assert_eq!(pode_suspender("Steam.exe"), None);
+        assert_eq!(pode_suspender("EpicGamesLauncher.exe"), None);
+
+        // A lista de suspensíveis não pode voltar a citá-los: a proibição acima
+        // já venceria, mas ter o nome nos dois lugares é um convite a alguém
+        // "consertar" a duplicidade tirando a proibição.
+        for (exe, _) in SUSPENSIVEIS {
+            assert!(
+                !e_lancador(exe),
+                "{} está na lista de suspensíveis E é lançador",
+                exe
+            );
+        }
     }
 
     #[test]
