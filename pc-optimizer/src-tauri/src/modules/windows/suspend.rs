@@ -32,6 +32,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, TryLockError};
+use std::time::{Duration, Instant};
 
 /// Programas que faz sentido suspender durante o jogo.
 ///
@@ -373,6 +375,63 @@ mod api {
 
 // ------------------------------------------------------------------- ações
 
+/// Serializa suspender e devolver.
+///
+/// `suspender_fundo` grava o registro em disco ANTES de suspender e só depois
+/// percorre os alvos suspendendo um a um — de propósito, para nunca ter um
+/// processo suspenso sem registro (ver o comentário no topo do arquivo).
+/// Antes deste conserto, quem devolvia (`retomar_tudo`) só corria depois que
+/// o jogo fechava ou na abertura seguinte do Otimiza — nunca no meio desse
+/// laço. Agora que `retomar_tudo` também pode ser disparado pelo gancho de
+/// fim de sessão do Windows e pelo fechamento do Otimiza, as duas coisas
+/// podem correr ao mesmo tempo, em threads diferentes: o laço de devolução lê
+/// o registro, retoma o que já foi suspenso até ali (inofensivo) e APAGA o
+/// arquivo — e o laço de suspensão, ainda no meio, suspende o restante sem
+/// registro nenhum. É o mesmo defeito que este conserto inteiro existe para
+/// fechar, só que numa janela de milissegundos em vez de minutos.
+///
+/// A tranca não guarda nada além do direito de andar sozinho.
+static TRANCA: Mutex<()> = Mutex::new(());
+
+/// Tempo máximo que um caminho de devolução espera pela tranca antes de
+/// seguir sem ela.
+///
+/// O gancho de fim de sessão roda na thread da janela, sob o orçamento curto
+/// que o Windows dá antes de considerar o processo travado e matá-lo. Ficar
+/// preso esperando uma tranca que a thread de fundo está segurando é pior do
+/// que devolver sem ela: o cenário sem tranca é a corrida rara descrita
+/// acima, que na pior das hipóteses deixa ALGO suspenso — o defeito que este
+/// conserto já reduziu de "sempre que o Otimiza morre" para "raríssimo, só
+/// com coincidência de milissegundos". Travar o desligamento do cliente, em
+/// troca, afeta TODO cliente que desligar com qualquer coisa suspensa,
+/// corrida ou não. Por isso: tenta por um tempo curto, e se não conseguir,
+/// segue em frente sem a tranca — retomar sem ela é pior do que com ela, mas
+/// é muito melhor do que segurar o logoff.
+const PRAZO_TRANCA: Duration = Duration::from_millis(300);
+
+/// Tenta segurar `TRANCA` até `prazo`, tentando a cada 10ms.
+///
+/// Devolve `None` tanto por prazo esgotado quanto por tranca envenenada
+/// (alguém entrou em pânico segurando-a): nos dois casos a resposta certa
+/// para quem chama é a mesma — seguir sem a tranca —, e distinguir os dois
+/// motivos não mudaria nada.
+fn tentar_travar(prazo: Duration) -> Option<MutexGuard<'static, ()>> {
+    let comeco = Instant::now();
+
+    loop {
+        match TRANCA.try_lock() {
+            Ok(guarda) => return Some(guarda),
+            Err(TryLockError::Poisoned(_)) => return None,
+            Err(TryLockError::WouldBlock) => {
+                if comeco.elapsed() >= prazo {
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+}
+
 /// Suspende o que estiver rodando em segundo plano e puder ser suspenso.
 ///
 /// Devolve o que foi suspenso, para a interface poder dizer o que fez. Mudança
@@ -421,6 +480,15 @@ pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
     if alvos.is_empty() {
         return Ok(Vec::new());
     }
+
+    // Tranca o intervalo inteiro entre gravar e suspender — ver o comentário
+    // de `TRANCA`. Bloqueia sem prazo, e de propósito: quem chama está numa
+    // thread de fundo, não na thread da janela sob orçamento do Windows, e
+    // encurtar essa espera é o que reabriria a corrida que esta tranca
+    // existe para fechar. Uma tranca envenenada (chamador anterior entrou em
+    // pânico no meio) não pode travar a suspensão para sempre — por isso
+    // `unwrap_or_else` recupera a tranca em vez de propagar o pânico alheio.
+    let _guarda = TRANCA.lock().unwrap_or_else(|env| env.into_inner());
 
     // GRAVA ANTES DE SUSPENDER. Ver a explicação em `Registro::save`.
     let mut registro = Registro::load();
@@ -482,6 +550,11 @@ fn ainda_e_o_mesmo_processo(suspenso: &Suspenso, vivos: &HashSet<(u32, u64)>) ->
 pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
     let registro = Registro::load();
 
+    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Esta é a função
+    // chamada pelo gancho de fim de sessão do Windows e pelo fechamento do
+    // Otimiza, então NUNCA pode esperar indefinidamente.
+    let _guarda = tentar_travar(PRAZO_TRANCA);
+
     let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
         .into_iter()
         .map(|(pid, _, inicio)| (pid, inicio))
@@ -538,6 +611,26 @@ pub fn retomar_se_expirado(limite_segundos: u64) -> Vec<Suspenso> {
     )
 }
 
+/// A MESMA fiação de `retomar_se_expirado`, com o caminho do registro
+/// trocável.
+///
+/// Existe só para o teste `a_fiacao_publica_usa_o_jogo_de_verdade`. Sem esta
+/// costura, testar a fiação de verdade — a linha `jogo_aberto().is_some()`,
+/// e não um booleano escolhido à mão como todo teste de `retomar_se_expirado_com`
+/// já faz — exigiria escrever no `suspensos.json` do PRODUTO, e este módulo
+/// não toca nele nos testes (ver `caminho_de_teste`, na seção de testes, para
+/// o porquê). O detector de jogo continua sendo o de verdade: só o arquivo
+/// muda.
+#[cfg(test)]
+fn retomar_se_expirado_no_caminho(caminho: &Path, limite_segundos: u64) -> Vec<Suspenso> {
+    retomar_se_expirado_com(
+        caminho,
+        limite_segundos,
+        agora_epoch(),
+        super::gamemode::jogo_aberto().is_some(),
+    )
+}
+
 fn retomar_se_expirado_com(
     caminho: &Path,
     limite_segundos: u64,
@@ -553,6 +646,12 @@ fn retomar_se_expirado_com(
     if !tempo_esgotado(registro.quando, agora, limite_segundos) {
         return Vec::new();
     }
+
+    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Roda no mesmo vigia
+    // de seis segundos que já chama `suspender_fundo`/`retomar_tudo`, então
+    // o bloqueio nunca é o caso comum; é só a rede de segurança para o dia em
+    // que essas chamadas migrarem de thread.
+    let _guarda = tentar_travar(PRAZO_TRANCA);
 
     let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
         .into_iter()
@@ -971,5 +1070,65 @@ mod tests {
         Registro::limpar_em(&caminho).expect("limpar o registro");
 
         assert!(retomar_se_expirado_com(&caminho, 600, 1_000_000, false).is_empty());
+    }
+
+    #[test]
+    fn a_fiacao_publica_usa_o_jogo_de_verdade() {
+        // Todo teste acima passa pelo `_com`, com o booleano do jogo
+        // escolhido à mão — nenhum deles pegaria uma inversão na fiação real
+        // de `retomar_se_expirado` (`.is_none()` no lugar de `.is_some()`,
+        // ou os argumentos trocados). Este teste chama a MESMA linha que a
+        // função pública chama — só o caminho do arquivo é de teste, o
+        // detector de jogo é o de verdade.
+        //
+        // A conferência é o ESTADO DO ARQUIVO depois da chamada, não a lista
+        // devolvida: o PID gravado abaixo é inventado, então nenhum processo
+        // vivo de verdade vai bater com ele, e `ainda_e_o_mesmo_processo`
+        // vai recusar — como deve ser, esse é o assunto de outro teste. O
+        // que esta conferência isola é só o portão de entrada da função:
+        // com `jogo_rodando` errado, `retomar_se_expirado_com` devolve cedo
+        // (ver o primeiro `if` do corpo dela) e NUNCA chega a limpar o
+        // arquivo; com `jogo_rodando` certo, ela passa do portão e limpa.
+        //
+        // A esteira roda sem sessão gráfica: não há jogo para detectar, e
+        // `jogo_aberto()` de verdade devolve `None` — a mesma suposição que
+        // `gamemode::tests::detecta_jogo_nesta_maquina` já faz. Com a fiação
+        // certa, "nenhum jogo" vira `jogo_rodando = false`, passa o portão, e
+        // o arquivo é limpo; com a fiação invertida, o mesmo "nenhum jogo"
+        // viraria `jogo_rodando = true`, o portão barraria, e o arquivo
+        // continuaria com o registro vencido — é essa inversão que este
+        // teste tranca.
+        let caminho = caminho_de_teste("fiacao-prazo");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 0,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        if super::super::gamemode::jogo_aberto().is_some() {
+            // Máquina de quem desenvolve pode ter um jogo de verdade aberto.
+            // Sem controle sobre isso o teste não pode afirmar nada — e não
+            // deve reprovar por um motivo alheio à fiação.
+            Registro::limpar_em(&caminho).expect("limpar o registro");
+            return;
+        }
+
+        // Prazo zero: com `quando = 0`, qualquer relógio atual já esgotou.
+        retomar_se_expirado_no_caminho(&caminho, 0);
+
+        assert!(
+            Registro::load_de(&caminho).suspensos.is_empty(),
+            "o registro vencido continuou no arquivo mesmo sem jogo nenhum rodando — \
+             confira se `retomar_se_expirado` ainda passa `jogo_aberto().is_some()`, e não \
+             `.is_none()` nem os argumentos fora de ordem"
+        );
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
     }
 }

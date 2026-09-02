@@ -150,3 +150,92 @@ teste fora da esteira não acusa nada.
 ## Commits
 
 Ver histórico do branch `conserto-suspensos` para os hashes.
+
+## Revisão pós-aprovação: dois achados fechados antes de subir
+
+### Achado 1 (Important) — corrida entre suspender e retomar, sem tranca
+
+Depois de `retomar_tudo()` passar a ser chamável pela thread da janela
+(gancho de fim de sessão e fechamento do Otimiza), ela podia correr junto
+com `suspender_fundo()` — que grava o registro, depois suspende um a um numa
+thread de fundo. Cenário: jogo abre, `suspender_fundo` já gravou e está no
+meio do laço de suspensão, cliente desliga nesse instante; o gancho de fim de
+sessão lê o registro, retoma o que já tinha sido suspenso (inofensivo) e
+APAGA o arquivo; o laço de suspensão, ainda no meio, suspende o resto sem
+registro nenhum — o mesmo defeito deste conserto inteiro, numa janela de
+milissegundos.
+
+Fechado com um `static TRANCA: Mutex<()>` em `suspend.rs`, segurado:
+
+- Por `suspender_fundo`, do início da gravação até o fim do laço de
+  suspensão — **bloqueio sem prazo**, porque quem chama está numa thread de
+  fundo (o vigia do modo jogo), sem orçamento de tempo do Windows para
+  respeitar.
+- Por `retomar_tudo` e por `retomar_se_expirado` — **bloqueio com prazo**,
+  via `tentar_travar(PRAZO_TRANCA)`.
+
+**Como resolvi a espera com prazo:** `tentar_travar` tenta `TRANCA.try_lock()`
+a cada 10ms, até um teto de 300ms (`PRAZO_TRANCA`). Se conseguir, segura a
+tranca normalmente; se o prazo vencer (ou a tranca estiver envenenada por um
+pânico anterior), devolve `None` e quem chamou segue SEM a tranca — nunca
+espera para sempre. A justificativa está no comentário de `PRAZO_TRANCA`: o
+gancho de fim de sessão roda na thread da janela, sob o orçamento curto que o
+Windows dá antes de considerar o processo travado e matá-lo; travar o
+desligamento do cliente esperando a tranca afetaria TODO cliente que
+desligasse com algo suspenso, corrida ou não, enquanto seguir sem a tranca só
+reabre a janela rara da corrida — pior que fechá-la de vez, mas
+infinitamente melhor que nunca devolver, que era o defeito original. 300ms é
+folgado frente ao trabalho real que a tranca protege (gravar um JSON pequeno
+e suspender até ~15 threads, sem PowerShell nem rede), então na prática o
+prazo quase nunca é atingido — ele só existe para o caso raro em que atinge.
+
+`retomar_pendentes` (a rede de segurança que roda na abertura do programa,
+antes do laço de eventos começar) não foi alterada: ela roda sozinha, antes
+de qualquer suspensão ou gancho de sessão poder disparar, então não há
+corrida nenhuma para fechar ali — mexer nela seria alargar o diff sem
+reduzir risco nenhum.
+
+### Achado 2 (Minor) — nada exercitava a fiação de `retomar_se_expirado()`
+
+Todos os testes do prazo passavam pelo `_com`, com o booleano do jogo
+escolhido à mão; a linha que liga a função pública ao detector de verdade —
+`super::gamemode::jogo_aberto().is_some()` — não tinha teste nenhum, e uma
+inversão de uma linha ali (`.is_none()`, ou os argumentos fora de ordem)
+derrubaria a garantia de "nunca no meio da partida" sem que nada acusasse.
+
+**Escolha: costura `#[cfg(test)]` que reusa a fiação real, trocando só o
+caminho do arquivo — não um teste de integração puro, e não um detector
+injetado por parâmetro.** `retomar_se_expirado_no_caminho` (nova, só em
+teste) chama exatamente a mesma linha `super::gamemode::jogo_aberto().is_some()`
+que a função pública chama, mudando apenas o `Registro::path()` real por um
+caminho de teste — o mesmo padrão `_de`/`_em` que o resto do arquivo já usa
+para nunca tocar no `suspensos.json` do produto durante os testes. Preferi
+isto a um parâmetro de detector injetável porque um detector trocável
+permitiria a um teste futuro continuar passando mesmo com a fiação de
+produção invertida — o parâmetro de teste vira o que é exercitado, não a
+linha real. Aqui, a linha real de produção é literalmente a que roda no
+teste.
+
+O teste novo, `a_fiacao_publica_usa_o_jogo_de_verdade`, grava um registro já
+vencido (`quando = 0`, prazo `0`) e chama a costura. A conferência é o
+ESTADO DO ARQUIVO depois — não a lista devolvida, porque o PID gravado no
+teste é inventado e nenhum processo vivo de verdade bate com ele (assunto de
+outro teste, `retomar_tudo_recusa_pid_reciclado`). O que importa é o portão
+de entrada de `retomar_se_expirado_com`: com `jogo_rodando` errado, ela
+devolve cedo e NUNCA limpa o arquivo; com `jogo_rodando` certo, ela passa do
+portão e limpa. Na esteira (sem sessão gráfica, sem jogo nenhum rodando de
+verdade) `jogo_aberto()` de verdade devolve `None`; com a fiação certa isso
+vira `jogo_rodando = false`, o portão libera, e o arquivo some — é essa
+consequência observável que o teste tranca. Numa máquina de desenvolvimento
+com um jogo de verdade aberto, o teste se abstém (limpa o arquivo de teste e
+retorna) em vez de reprovar por um motivo alheio à fiação.
+
+### Verificação
+
+`cargo test --lib`: **471 passaram, 0 falharam, 11 ignorados** (eram 470
+antes desta rodada; 1 teste novo, `a_fiacao_publica_usa_o_jogo_de_verdade` —
+os outros ajustes do Achado 1 não precisaram de teste novo, só reusaram os
+testes de `retomar_tudo`/`retomar_se_expirado` já existentes, que continuam
+passando com a tranca no meio do caminho). `cargo build` (binário completo)
+também compila sem erro. `cargo test --lib -- ci_coverage::` continua
+passando.
