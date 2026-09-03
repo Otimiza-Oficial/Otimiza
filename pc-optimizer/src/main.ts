@@ -4135,14 +4135,27 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
     const rotulo = botao.textContent?.trim();
     const painel = botao.closest<HTMLElement>(".tab-panel");
 
-    // `botao.hidden` — só o botão, nunca a aba em volta: painéis inteiros
-    // ficam `hidden` quando não são a aba ativa (ver `showTab`), e filtrar
-    // por isso esvaziaria a paleta para toda aba que não seja a de cima.
-    // O que precisa ser pulado é o botão que o CLIENTE não vê mesmo com a
-    // aba dele aberta — "Interromper" antes de haver o que interromper,
-    // "Deixar o Windows gerenciar" antes de haver o que corrigir. Sem este
-    // filtro a paleta oferecia um clique num botão invisível na tela.
-    if (!rotulo || !painel || botao.hasAttribute("data-fivem") || botao.hidden) return;
+    // `botao.hidden` sozinho só vê o próprio atributo do botão — o bloco de
+    // congelados esconde por um `hidden` no DIV que envolve o botão
+    // (`#congelados`), não no botão em si, então "Descongelar agora" passava
+    // ileso mesmo sem nada congelado. A correção é subir do botão pelos
+    // ancestrais procurando `hidden` — mas PARAR ao chegar no painel: o
+    // painel inteiro fica `hidden` sempre que a aba não é a ativa (ver
+    // `showTab`), e isso é normal, não um botão escondido dentro de uma aba
+    // visível — o comando troca de aba antes de focar o botão, então
+    // `hidden` no painel não pode derrubar nada dali. Sem subir a árvore, a
+    // paleta oferecia um clique num botão que não existe na tela; subindo
+    // até o painel (e não além), ela também não fica vazia para as
+    // dezessete abas que não são a de cima agora.
+    let escondido = false;
+    for (let el: HTMLElement | null = botao; el && el !== painel; el = el.parentElement) {
+      if (el.hidden) {
+        escondido = true;
+        break;
+      }
+    }
+
+    if (!rotulo || !painel || botao.hasAttribute("data-fivem") || escondido) return;
 
     const aba = painel.id.replace("tab-", "");
 
