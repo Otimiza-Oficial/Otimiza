@@ -158,6 +158,15 @@ pub fn interpretar(conteudo: &str) -> ResultadoSfc {
         };
     }
 
+    // As linhas BRUTAS de falha, antes de tentar extrair nome nenhuma —
+    // guardadas à parte porque a pergunta "existe alguma linha de falha?" e a
+    // pergunta "quantos arquivos distintos ela nomeia?" têm respostas
+    // diferentes quando o nome não sai. Ver abaixo.
+    let falhas_brutas: Vec<&&str> = marcas
+        .iter()
+        .filter(|l| l.contains("Cannot repair member file"))
+        .collect();
+
     // Deduplicado por NOME DE ARQUIVO, não por linha. O `sfc` pode registrar
     // "Cannot repair member file" duas vezes para o MESMO arquivo antes de
     // consertá-lo por uma fonte secundária — contar marcas brutas relatava
@@ -165,14 +174,33 @@ pub fn interpretar(conteudo: &str) -> ResultadoSfc {
     // nome não pôde ser extraído com segurança são descartadas (ver as duas
     // funções de extração acima) em vez de contadas por marca ou de receber
     // um nome inventado.
-    let nao_reparados_set: HashSet<&str> = marcas
+    let nao_reparados_set: HashSet<&str> = falhas_brutas
         .iter()
-        .filter(|l| l.contains("Cannot repair member file"))
         .filter_map(|l| nome_do_arquivo_nao_reparado(l))
         .collect();
 
-    if nao_reparados_set.is_empty() {
+    // Nenhuma linha de falha no log: aí sim está limpo.
+    if falhas_brutas.is_empty() {
         return ResultadoSfc::SemCorrupcao;
+    }
+
+    // Havia linha de falha, mas NENHUMA pôde ser interpretada — um log
+    // truncado, ou uma variante de formato do CBS que as duas funções de
+    // extração acima não preveem. `nao_reparados_set` vazio aqui não
+    // significa "sem corrupção", significa "não consegui nomear a
+    // corrupção que o log mostra". Deixar cair para `SemCorrupcao` seria o
+    // mesmo colapso que este arquivo documenta no topo — só que por um
+    // caminho novo, que `filter_map` abriu ao descartar em vez de propagar
+    // a falha de extração. O caso MISTO (algumas linhas nomeiam, outras
+    // não) não entra aqui: `nao_reparados_set` já não está vazio, e as
+    // linhas não nomeadas seguem subcontadas como o comentário da função de
+    // extração já assume — subcontar um reparo é o comportamento seguro
+    // documentado ali; o que este bloco fecha é só a via para "máquina
+    // limpa" quando ela não está.
+    if nao_reparados_set.is_empty() {
+        return ResultadoSfc::NaoSei {
+            motivo: "o registro do Windows mostra arquivos sem reparo, mas nenhuma linha veio no formato esperado para dizer qual".into(),
+        };
     }
 
     // "Repairing corrupted file" é o registro de que o conserto aconteceu. Sem
@@ -405,6 +433,26 @@ mod tests {
             ResultadoSfc::NaoConseguiu { quantos: 1 },
             "linha sem nome extraivel foi contada como arquivo distinto"
         );
+    }
+
+    #[test]
+    fn falha_sem_nenhum_nome_extraivel_nunca_vira_sem_corrupcao() {
+        // As DUAS linhas de falha vêm sem o par de aspas — nenhuma nomeia um
+        // arquivo. Antes desta correção, `nao_reparados_set` ficava vazio e a
+        // função devolvia `SemCorrupcao`: o log mostra corrupção, e a tela
+        // diria "máquina limpa". É o mesmo colapso que o comentário no topo
+        // do arquivo proíbe, só que por uma porta que a deduplicação abriu.
+        let log = "\
+2026-09-02 10:00:00, Info CSI 00000001 [SR] Beginning Verify and Repair transaction
+2026-09-02 10:00:01, Info CSI 00000002 [SR] Cannot repair member file sem aspas nenhuma
+2026-09-02 10:00:02, Info CSI 00000003 [SR] Cannot repair member file tambem sem aspas";
+
+        match interpretar(log) {
+            ResultadoSfc::NaoSei { motivo } => {
+                assert!(!motivo.is_empty(), "motivo vazio nao ajuda o cliente");
+            }
+            outro => panic!("esperava NaoSei, veio {:?} — log com falha virou 'sem corrupcao'", outro),
+        }
     }
 
     #[test]
