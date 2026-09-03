@@ -407,6 +407,21 @@ impl DiscoSaudavel {
     ///   é "isto já é grave o bastante para preocupar o cliente" (isso é o que
     ///   a severidade mede para a TELA), é "o Windows já viu algo de errado
     ///   neste disco" — e `Important` já é isso.
+    ///
+    /// UMA LACUNA TOLERADA DE PROPÓSITO: `disk_errors_naosei_*` — o achado que
+    /// `health.rs` emite quando `ReadErrorsTotal`/`WriteErrorsTotal` não vêm
+    /// do Windows para aquele disco — sai com severidade `Ok`, então passa por
+    /// este filtro e a trava continua liberando o `chkdsk /f`. Isto é decisão,
+    /// não descuido: a evidência que esta trava exige é que a SAÚDE do disco
+    /// tenha sido lida, e `disco_foi_lido` já comprova isso via
+    /// `disk_status_*`. O contador de erros é um dado A MAIS, que boa parte
+    /// dos SSDs simplesmente não publica — recusar o reparo a todo SSD sem
+    /// esse contador seria negar o conserto pela falta de um dado que a
+    /// maioria dos discos nunca teve. A lacuna que a trava NÃO tolera continua
+    /// sendo não saber a saúde (`needs_admin`, ausência de `disk_status_*`) ou
+    /// saber que algo está errado (severidade diferente de `Ok`); não saber
+    /// sobre um contador específico e pouco publicado é outra categoria — mais
+    /// estreita, e aceita.
     pub fn a_partir_do_relatorio(relatorio: &HealthReport) -> DiscoSaudavel {
         if relatorio.needs_admin {
             return DiscoSaudavel(false);
