@@ -309,6 +309,62 @@ tranquilidade quando o quadro é incerto.
 | `congelados()` não tem teste de fiação, ao contrário da convenção do próprio módulo |
 | O teto de 500 linhas da saída do reparo limita número de nós, não volume de caracteres: uma linha gigante não é despejada |
 
+## Vereditos das duas investigações
+
+Feitas contra documentação oficial, não contra memória. As duas deram respostas
+diferentes, e é por isso que valiam ser investigações e não tarefas.
+
+### Driver de vídeo — **VIÁVEL na NVIDIA, indefinido na AMD**
+
+A NVIDIA publica a **NVAPI**, com um subsistema de configuração de driver (DRS)
+que existe exatamente para isto: ler e escrever as opções do painel, inclusive
+por aplicativo. É oficial, documentado, com SDK público.
+
+E — o que decide o pilar para este produto — **tem chamada para restaurar o
+padrão de uma opção**. Ou seja: reversível de verdade, não "reversível se a
+gente anotar direitinho".
+
+Detalhe que tira o obstáculo prático: a `nvapi64.dll` vem junto com o driver.
+Dá para carregá-la em tempo de execução, sem acrescentar dependência ao
+instalador — a mesma escolha que o relatório em PDF já faz ao usar o Edge que
+todo Windows tem.
+
+**A AMD é outra história.** O equivalente é a ADL, e a superfície de
+configuração 3D dela não tem documentação equiparável. Isso precisa de
+investigação própria antes de qualquer promessa.
+
+**Recomendação:** entrar com a NVIDIA e **dizer na tela que a AMD ainda não é
+coberta**, em vez de fazer meia coisa nas duas. Metade dos clientes atendida com
+honestidade vale mais que todos atendidos com um recurso que não funciona
+direito em metade das máquinas.
+
+### Qual driver está travando — **NÃO ENTRA na 1.5**
+
+Medir latência de DPC e **atribuir a um driver** depende do Windows Performance
+Toolkit — `xperf`, `WPR`, `WPA`. Ele **não vem no Windows**: faz parte do ADK,
+que é um pacote de desenvolvedor de perto de um gigabyte.
+
+Isso colide de frente com uma regra que este produto segue desde o começo: não
+depender do que o cliente não tem. É a mesma razão pela qual o relatório usa o
+Edge e as medições usam PowerShell.
+
+Existe o caminho de consumir ETW direto, sem o toolkit. É possível, e é caro:
+exige abrir sessão de rastreamento do núcleo, interpretar os eventos de DPC e
+ISR, e — a parte difícil — resolver o endereço da rotina até o módulo carregado
+para saber de quem é a culpa.
+
+**E é justamente essa última parte que decide.** O risco escrito na
+especificação é real: acusar o driver errado faz o cliente desinstalar algo que
+funcionava. A atribuição depende inteira de acertar esse mapeamento, e errar
+nele é errar com confiança — o pior tipo de erro que este produto pode cometer.
+
+**Veredito: fica para depois.** Não porque é difícil, mas porque a chance de
+acusar errado é alta demais para o que o produto promete. Se voltar, volta como
+"achei latência alta e não consigo atribuir" — que já é mais do que o cliente
+sabia — antes de qualquer tentativa de nomear culpado.
+
+---
+
 ## O que esta versão NÃO promete
 
 **Não promete FPS.** Nenhum dos três pilares é um ajuste que aumenta quadro. O
