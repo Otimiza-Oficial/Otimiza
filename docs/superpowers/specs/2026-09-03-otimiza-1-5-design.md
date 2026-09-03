@@ -117,6 +117,97 @@ achou latência alta sem conseguir atribuir — que já é mais do que ele sabia
 
 ---
 
+---
+
+## Pilar 4 — O relatório que o cliente cola no atendimento
+
+**Este nasceu de uma coisa que aconteceu esta semana, duas vezes.**
+
+Um cliente relatou que programas não abriam. O dono não tinha como ver a máquina
+dele e ofereceu AnyDesk. E foi preciso escrever um script de PowerShell **à mão**
+para diagnosticar a máquina de alguém que já tinha o produto instalado.
+
+O Otimiza estava naquela máquina, sabia tudo o que era preciso saber, e não tinha
+como contar.
+
+### O que ele faz
+
+Um botão que copia para a área de transferência um bloco de texto curto com o
+que o atendimento precisa: versão instalada, o que está congelado agora, quais
+mudanças o produto aplicou, o que a leitura de saúde diz, e o que ele **não
+conseguiu** ler.
+
+O cliente cola no Discord ou no WhatsApp. Acabou o AnyDesk para 90% dos casos.
+
+### O que já existe e NÃO serve
+
+O `report.rs` gera um PDF para o técnico entregar ao cliente, provando o serviço.
+É outra coisa, e continua. PDF não se cola numa conversa.
+
+### As regras que decidem o formato
+
+- **Cabe numa mensagem.** Se não couber, não é colável, e ninguém vai anexar
+  arquivo no meio de um atendimento.
+- **Não leva dado pessoal.** Nem nome de usuário, nem caminho com o nome da
+  pessoa, nem nada que identifique além da máquina. O produto já guarda só o
+  código da placa-mãe na tabela de compras, e este relatório segue a mesma
+  regra.
+- **Diz o que não conseguiu ler**, com a mesma voz das leituras de saúde: não
+  conseguir medir não é o mesmo que estar bem.
+
+---
+
+## Pilar 5 — O aviso de versão nova dentro do programa
+
+**Este é uma lacuna que a venda por WhatsApp acabou de criar.**
+
+Hoje quem descobre que saiu versão nova é quem está no Discord: o bot avisa por
+mensagem direta. Mas o produto passou a ser vendido **fora** do Discord, e quem
+compra por WhatsApp pode nunca entrar no servidor.
+
+Para essa pessoa, o Otimiza é um programa que **nunca atualiza**. Ela vai ficar
+na versão do dia da compra para sempre, inclusive quando essa versão tiver um
+defeito que já foi consertado — e foi exatamente isso que aconteceu esta semana,
+com um cliente relatando um problema já corrigido numa versão que ele não sabia
+que existia.
+
+### O que ele faz
+
+O programa pergunta ao GitHub qual é a versão mais nova e, quando for maior que
+a instalada, mostra um aviso discreto com o que mudou e o link para baixar.
+
+### As regras
+
+- **Pergunta, não é avisado.** O produto não abre porta nem fala com servidor
+  nosso — a consulta é anônima e ao GitHub, como o bot já faz.
+- **Não interrompe.** Não é caixa modal no meio do trabalho: é uma faixa que o
+  cliente vê e fecha.
+- **Falha de rede é silêncio, não erro.** Não conseguir perguntar não é
+  problema do cliente e não vira alarme na tela dele.
+- **Não instala nada sozinho.** Baixar e instalar continua sendo escolha dele.
+
+---
+
+## Os bugs que ficaram
+
+**O único real, e ele é de honestidade.** No `cbslog.rs`, quando o registro do
+`sfc` tem cinco arquivos com falha e só um deles pode ser interpretado — e esse
+um foi consertado —, o produto devolve `Corrigiu { quantos: 1 }`. Isso se lê como
+sucesso sem ressalva, enquanto quatro linhas de falha de estado desconhecido
+foram descartadas em silêncio.
+
+A 1.3 fechou o caso extremo (nenhuma linha interpretável passou a virar "não
+sei", nunca mais "sem corrupção"). O caso **misto** ficou, e ele lê como
+tranquilidade quando o quadro é incerto.
+
+## Os microajustes que atravessaram da 1.3
+
+| | |
+|---|---|
+| O texto de pânico do `veredito` usa um prefixo próprio que nenhum outro `Err` do arquivo usa |
+| `congelados()` não tem teste de fiação, ao contrário da convenção do próprio módulo |
+| O teto de 500 linhas da saída do reparo limita número de nós, não volume de caracteres: uma linha gigante não é despejada |
+
 ## O que esta versão NÃO promete
 
 **Não promete FPS.** Nenhum dos três pilares é um ajuste que aumenta quadro. O
@@ -129,11 +220,22 @@ e a versão sai com o que ficou de pé, dizendo o que não deu.
 
 ---
 
-## Ordem
+## Ordem, e ela não é a ordem de tamanho
 
-1. **Perda de pacote** — o mais barato, o mais alinhado, e o que serve ao público que já compra
-2. **Driver de vídeo** — o que o concorrente vende, com a moldura que ele não tem
-3. **Qual driver trava** — investigação primeiro, decisão depois
+1. **O relatório colável** — é o menor dos cinco e o que devolve tempo já na
+   semana que vem. Cada atendimento que ele encurta paga a implementação.
+2. **O aviso de versão nova** — fecha a lacuna que a venda por WhatsApp abriu, e
+   é pré-requisito para tudo o mais: não adianta consertar defeito em versão que
+   o cliente nunca vai instalar.
+3. **Perda de pacote** — o mais alinhado ao produto, e o número que ninguém
+   mostra.
+4. **Driver de vídeo** — o que o concorrente vende, com a moldura que ele não
+   tem. Investigação antes de decidir.
+5. **Qual driver trava** — o mais difícil. Investigação primeiro, decisão depois.
+
+Os bugs e os microajustes entram junto do pilar que toca o mesmo arquivo, e não
+como fatia separada no fim — fatia de limpeza no fim é a que sempre cai quando o
+prazo aperta.
 
 ## Verificação
 
