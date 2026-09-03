@@ -153,13 +153,16 @@ fn rank(severidade: health::FindingSeverity) -> u8 {
 /// Não compara texto: decide pelo `id` (que é vocabulário interno, não prosa
 /// de tela — `disk_errors_naosei_*` é a mesma convenção que `health.rs` já
 /// usa para marcar o achado de leitura ausente) e pela `severity` tipada de
-/// cada achado.
+/// cada achado. `starts_with`, não `contains`: um achado futuro qualquer
+/// cujo `id` contenha "naosei" por outro motivo (ex.: bateria, memória) não
+/// deve herdar o texto "contador de erros do disco" só por coincidência de
+/// substring.
 fn resumir_disco(relatorio: &health::HealthReport) -> (String, Vec<String>) {
     let mut lacunas = Vec::new();
     let mut pior: Option<health::FindingSeverity> = None;
 
     for achado in &relatorio.findings {
-        if achado.id.contains("naosei") {
+        if achado.id.starts_with("disk_errors_naosei") {
             lacunas.push("contador de erros do disco".to_string());
             continue;
         }
@@ -361,6 +364,16 @@ mod tests {
 
         // O produto guarda só o código da placa-mãe na tabela de compras. Este
         // relatório segue a mesma regra: nada que identifique a PESSOA.
+        //
+        // A garantia "nada que identifique a pessoa" hoje é verdadeira POR
+        // CONSTRUÇÃO: `resumir_disco` só lê `id`/`severity` do achado, nunca
+        // `title` nem `measured` (onde nome comercial e número de série do
+        // disco moram); `congelados` vem da lista fixa `SUSPENSIVEIS`, nunca
+        // de título de janela; monitores entram só como contagem. Mas uma
+        // trava que só confere `%USERNAME%` não pega alguém acrescentando o
+        // nome do computador ou um caminho de perfil a `Entrada` amanhã — o
+        // teste continuaria verde e a garantia cairia em silêncio. Por isso
+        // as três checagens abaixo, não só a de usuário.
         let usuario = std::env::var("USERNAME").unwrap_or_default();
         if !usuario.is_empty() {
             assert!(
@@ -368,6 +381,44 @@ mod tests {
                 "o relatório carrega o nome do usuário do Windows"
             );
         }
+
+        // Nome da máquina: outro identificador de dono, do mesmo jeito que
+        // `%USERNAME%` — muita gente batiza o PC com o próprio nome ou apelido.
+        let maquina = std::env::var("COMPUTERNAME").unwrap_or_default();
+        if !maquina.is_empty() {
+            assert!(
+                !texto.contains(&maquina),
+                "o relatório carrega o nome do computador"
+            );
+        }
+
+        // Caminho de perfil: `C:\Users\<nome>\...` (e a variante com barra
+        // normal, que aparece em log e em texto colado de outras fontes)
+        // vaza o nome de usuário mesmo que ele nunca apareça sozinho no
+        // texto. Não depende de `%USERNAME%` existir na esteira.
+        assert!(
+            !texto.contains(r"C:\Users\"),
+            "o relatório carrega um caminho de perfil (contrabarra)"
+        );
+        assert!(
+            !texto.contains("C:/Users/"),
+            "o relatório carrega um caminho de perfil (barra normal)"
+        );
+
+        // O que NÃO está aqui: um padrão para "parece número de série do
+        // Windows/placa-mãe". Não existe um formato único e estável para
+        // isso — chave de produto, service tag e serial de BIOS têm formatos
+        // diferentes entre fabricantes, e um regex frouxo o bastante para
+        // pegar todos pegaria também números de versão e contagens legítimas
+        // do próprio relatório (build do Windows, GB de RAM). A garantia
+        // real aqui não é um filtro de saída — é que nenhuma função deste
+        // módulo lê `SerialNumber`/`ProductId`/campo equivalente em lugar
+        // nenhum: `gerar()` só chama `memory::analyze`, `display::monitores`,
+        // `suspend::congelados`, `changelog::ChangeLog::load`,
+        // `health::analyze`, `thermal::analyze` e o CIM de
+        // `Win32_OperatingSystem` (Caption/BuildNumber, nunca SerialNumber).
+        // Um teste que tentasse simular essa garantia com regex seria mais
+        // frágil do que a garantia que já existe por não ler o campo.
     }
 
     #[test]
