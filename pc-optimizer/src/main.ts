@@ -4444,13 +4444,16 @@ function desenharItemReparo(f: FerramentaDeReparo): string {
  * Um `DISM /RestoreHealth` de trinta minutos redesenha a mesma linha de
  * percentagem centenas de vezes (0%, 1%, 2%, ... cada `\r` vira uma linha —
  * ver `drenar` em `tarefa_longa.rs`), e ainda tem mais de um estágio. Sem
- * teto, esse elemento único acumularia milhares de nós de texto na memória
- * da aba pelo resto da execução, para nada: ninguém rola de volta para ver
- * "43%" de novo. 500 sobra até para as duas barras de progresso do DISM
- * (scan + restore, uns 200 cada) mais as linhas de texto de verdade em volta,
- * e ainda cabe folgado numa área de rolagem de 220px sem virar um arquivo de
- * log. O corte é sempre do INÍCIO — mantém o FIM, que é onde o resultado
- * está.
+ * teto, esse elemento único acumularia milhares de NÓS de DOM na aba pelo
+ * resto da execução, para nada: ninguém rola de volta para ver "43%" de
+ * novo. O teto limita a QUANTIDADE de nós, não o volume de caracteres — uma
+ * única linha gigante não é cortada por ele, e o `<pre>` continuaria
+ * crescendo com ela. Isso é aceitável aqui: `sfc` e `DISM` não escrevem
+ * linha gigante, escrevem muitas linhas curtas. 500 sobra até para as duas
+ * barras de progresso do DISM (scan + restore, uns 200 cada) mais as linhas
+ * de texto de verdade em volta, e ainda cabe folgado numa área de rolagem de
+ * 220px sem virar um arquivo de log. O corte é sempre do INÍCIO — mantém o
+ * FIM, que é onde o resultado está.
  */
 const MAX_LINHAS_SAIDA = 500;
 

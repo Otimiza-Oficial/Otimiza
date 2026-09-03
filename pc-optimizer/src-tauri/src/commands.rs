@@ -2793,6 +2793,106 @@ mod tests {
             || c.trim_start().ends_with("case")
     }
 
+    /// Tira `//` até o fim da linha e `/* ... */` (mesmo cruzando linha) do
+    /// texto, ANTES da varredura de literais.
+    ///
+    /// Sem isto a guarda reprova por CITAÇÃO, não por defeito: esta base
+    /// explica no comentário justamente os defeitos que já consertou — e
+    /// `desfecho === "Terminou."`, o antipadrão desta própria tarefa, é
+    /// exatamente o tipo de frase que um comentário de "antes era assim"
+    /// cita entre aspas normais. Achar essa citação não prova nada sobre o
+    /// código.
+    ///
+    /// Caminha o MESMO estado de aspas que `literais_com_contexto` usa —
+    /// comentário é o terceiro estado da mesma máquina — para não confundir
+    /// `//` ou `/*` que apareçam DENTRO de uma string (`"https://..."`) com
+    /// o início de um comentário de verdade.
+    ///
+    /// Cada caractere de comentário vira espaço, mas toda quebra de linha do
+    /// original sobrevive: é o que mantém os números de linha que a guarda
+    /// relata batendo com o arquivo de verdade, mesmo depois da limpeza.
+    fn remover_comentarios(fonte: &str) -> String {
+        let chars: Vec<char> = fonte.chars().collect();
+        let mut saida = String::with_capacity(chars.len());
+        let mut i = 0;
+        let mut aspas: Option<char> = None;
+
+        while i < chars.len() {
+            let c = chars[i];
+
+            if let Some(abre) = aspas {
+                saida.push(c);
+                if c == '\\' && i + 1 < chars.len() {
+                    saida.push(chars[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if c == abre {
+                    aspas = None;
+                }
+                i += 1;
+                continue;
+            }
+
+            if c == '"' || c == '\'' || c == '`' {
+                aspas = Some(c);
+                saida.push(c);
+                i += 1;
+                continue;
+            }
+
+            if c == '/' && chars.get(i + 1) == Some(&'/') {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            if c == '/' && chars.get(i + 1) == Some(&'*') {
+                i += 2;
+                while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
+                    if chars[i] == '\n' {
+                        saida.push('\n');
+                    }
+                    i += 1;
+                }
+                i = (i + 2).min(chars.len());
+                continue;
+            }
+
+            saida.push(c);
+            i += 1;
+        }
+
+        saida
+    }
+
+    /// A varredura completa: tira comentário, depois procura literal de
+    /// prosa comparado por operador de decisão. Compartilhada pela guarda de
+    /// verdade (que lê `main.ts` do disco) e pelo teste que prova, com
+    /// fontes sintéticas, que comentário não dispara e código equivalente
+    /// dispara.
+    fn achados_de_prosa_comparada(fonte: &str) -> Vec<String> {
+        let sem_comentarios = remover_comentarios(fonte);
+        let mut achados = Vec::new();
+
+        for (numero, linha) in sem_comentarios.lines().enumerate() {
+            for (contexto, literal) in literais_com_contexto(linha) {
+                if termina_em_operador_de_decisao(&contexto) && parece_prosa_do_backend(&literal)
+                {
+                    achados.push(format!(
+                        "linha {}: `{}\"{}\"…`",
+                        numero + 1,
+                        contexto.trim_start(),
+                        literal
+                    ));
+                }
+            }
+        }
+
+        achados
+    }
+
     #[test]
     fn a_tela_nao_decide_cor_comparando_texto_do_backend() {
         // ESTE DEFEITO JÁ VOLTOU TRÊS VEZES:
@@ -2822,20 +2922,7 @@ mod tests {
         let fonte = std::fs::read_to_string(&caminho)
             .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
 
-        let mut achados = Vec::new();
-        for (numero, linha) in fonte.lines().enumerate() {
-            for (contexto, literal) in literais_com_contexto(linha) {
-                if termina_em_operador_de_decisao(&contexto) && parece_prosa_do_backend(&literal)
-                {
-                    achados.push(format!(
-                        "linha {}: `{}\"{}\"…`",
-                        numero + 1,
-                        contexto.trim_start(),
-                        literal
-                    ));
-                }
-            }
-        }
+        let achados = achados_de_prosa_comparada(&fonte);
 
         assert!(
             achados.is_empty(),
@@ -2860,5 +2947,62 @@ mod tests {
         assert!(termina_em_operador_de_decisao("resultado.startsWith("));
         assert!(termina_em_operador_de_decisao("    case "));
         assert!(!termina_em_operador_de_decisao("const titulo = "));
+    }
+
+    /// O conserto do fix round 1: um comentário CITANDO o antipadrão antigo
+    /// entre aspas normais (não entre crases — o defeito que fez o próprio
+    /// `main.ts:4312` passar por acidente) não pode reprovar a guarda, mas o
+    /// mesmo texto fora de comentário, como código de verdade, precisa
+    /// continuar disparando. Sem este par, um "conserto" na guarda que só
+    /// afrouxasse a heurística de prosa passaria despercebido.
+    #[test]
+    fn comentario_que_cita_prosa_do_backend_nao_dispara_mas_o_codigo_equivalente_dispara() {
+        let comentado = "// antes era: desfecho === \"Terminou.\"\n\
+             // devolve \"Corrigiu 2 arquivos.\" quando conserta em parte\n\
+             const x = 1;\n";
+        assert!(
+            achados_de_prosa_comparada(comentado).is_empty(),
+            "um comentário citando a prosa antiga não pode reprovar a guarda"
+        );
+
+        let codigo = "const cor = desfecho === \"Terminou.\" ? \"ok\" : \"error\";\n";
+        assert!(
+            !achados_de_prosa_comparada(codigo).is_empty(),
+            "o mesmo texto, fora de comentário, precisa continuar disparando"
+        );
+    }
+
+    /// `//` e `/*` dentro de uma string não abrem comentário — sem isso uma
+    /// URL como `"https://..."` perderia metade dela, apagada como se fosse
+    /// comentário.
+    #[test]
+    fn remover_comentarios_nao_confunde_barra_dentro_de_string() {
+        let fonte =
+            "const url = \"https://exemplo.com/caminho\"; // comentario de verdade\nconst y = 2;";
+        let limpo = remover_comentarios(fonte);
+
+        assert!(
+            limpo.contains("https://exemplo.com/caminho"),
+            "apagou parte da string, tratando a barra dela como comentário: {:?}",
+            limpo
+        );
+        assert!(
+            !limpo.contains("comentario de verdade"),
+            "não tirou o comentário de linha de verdade: {:?}",
+            limpo
+        );
+    }
+
+    /// A limpeza troca comentário por espaço, mas as quebras de linha do
+    /// arquivo original têm que sobreviver — inclusive as que estão DENTRO
+    /// de um bloco `/* */` de várias linhas — porque são elas que mantêm o
+    /// número de linha que a guarda relata batendo com o arquivo de
+    /// verdade.
+    #[test]
+    fn remover_comentarios_preserva_a_contagem_de_linhas() {
+        let fonte = "linha1\n/* bloco\nde duas\nlinhas */\nlinha5";
+        let limpo = remover_comentarios(fonte);
+
+        assert_eq!(limpo.lines().count(), fonte.lines().count());
     }
 }
