@@ -47,6 +47,7 @@ pub mod sessao;
 pub mod shaders;
 pub mod shell;
 pub mod startup;
+pub mod suporte;
 pub mod suspend;
 pub mod tarefa_longa;
 pub mod tasks;

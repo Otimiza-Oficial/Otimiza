@@ -78,6 +78,15 @@ pub struct ThermalReport {
     pub thermal_events: usize,
     /// Data do evento térmico mais recente, para o texto poder citá-la.
     pub last_thermal_event: Option<String>,
+    /// Se o contador de limite do processador foi lido de verdade.
+    ///
+    /// Sem este campo, `suporte.rs` (o relatório de atendimento) teria que
+    /// adivinhar a lacuna comparando o texto de `summary` — e este projeto
+    /// tem uma trava contra decidir qualquer coisa comparando prosa que o
+    /// backend escreveu para a tela. `false` só no caso em que
+    /// `LimitesDoProcessador::NaoSei` acabou virando `Culprit::Nenhum` por
+    /// falta de leitura, e não porque o processador está de fato livre.
+    pub medido: bool,
 }
 
 // -------------------------------------------------------------- leituras
@@ -337,9 +346,9 @@ fn montar_relatorio(
 
     let culprit = decidir(bateria, teto, percentual, flags, eventos_termicos);
 
-    let (summary, advice) = if matches!(limites, LimitesDoProcessador::NaoSei)
-        && culprit == Culprit::Nenhum
-    {
+    let nao_medido = matches!(limites, LimitesDoProcessador::NaoSei) && culprit == Culprit::Nenhum;
+
+    let (summary, advice) = if nao_medido {
         // Sem os outros sinais (bateria, teto, evento térmico) explicando nada,
         // o veredito só chegou a "livre" porque o bit de limite virou 0 na falta
         // de leitura. Isso não é "livre" — é "não conseguimos checar", e dizer
@@ -364,6 +373,7 @@ fn montar_relatorio(
         on_battery: bateria,
         thermal_events: eventos_termicos,
         last_thermal_event: ultimo_evento,
+        medido: !nao_medido,
     }
 }
 
@@ -515,6 +525,9 @@ mod tests {
             "resumo não avisou a lacuna: {}",
             r.summary
         );
+        // `medido` é o campo que `suporte.rs` usa para saber da lacuna sem
+        // comparar a prosa acima — os dois precisam concordar.
+        assert!(!r.medido);
     }
 
     #[test]
@@ -527,6 +540,7 @@ mod tests {
         assert_eq!(r.culprit, Culprit::Nenhum);
         assert!(r.summary.contains("livre"));
         assert!(!r.summary.to_lowercase().contains("não foi possível"));
+        assert!(r.medido);
     }
 
     #[test]
@@ -537,6 +551,7 @@ mod tests {
         let r = montar_relatorio(true, None, None, None, 0, None);
         assert_eq!(r.culprit, Culprit::Bateria);
         assert!(!r.summary.to_lowercase().contains("não foi possível"));
+        assert!(r.medido);
     }
 
     #[test]

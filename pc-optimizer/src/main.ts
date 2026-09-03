@@ -2114,6 +2114,36 @@ async function descongelarAgora() {
   }
 }
 
+// ---------------------------------------------- diagnóstico de atendimento
+
+/**
+ * Busca o relatório de `relatorio_de_suporte` e põe na área de transferência.
+ *
+ * A história por trás deste botão: um cliente com o Otimiza JÁ INSTALADO
+ * precisou de acesso remoto (AnyDesk) e de um script de PowerShell escrito à
+ * mão só para alguém entender o que estava acontecendo na máquina dele — com
+ * o produto sentado bem ali, sabendo a resposta e sem jeito de contá-la. Este
+ * botão é essa resposta: o cliente cola no Discord ou no WhatsApp em vez de
+ * abrir a máquina para outra pessoa mexer.
+ */
+async function copiarDiagnostico() {
+  const botao = element<HTMLButtonElement>("copiar-diagnostico");
+  botao.disabled = true;
+
+  try {
+    const texto = await invoke<string>("relatorio_de_suporte");
+    await navigator.clipboard.writeText(texto);
+    setStatus("diagnostico-status", "Copiado. Cole no atendimento.", "ok");
+  } catch (error) {
+    // Cobre tanto a falha do comando (plataforma sem suporte) quanto a
+    // recusa da área de transferência pelo navegador — nos dois casos o
+    // cliente precisa de uma frase, não de um erro técnico calado.
+    setStatus("diagnostico-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 // ------------------------------------------------- quadros por segundo
 
 interface FrameMeasurement {
@@ -5466,6 +5496,7 @@ function wireControls() {
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
   element("descongelar-agora").addEventListener("click", () => descongelarAgora());
+  element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
   element("flush-dns").addEventListener("click", async () => {

@@ -110,6 +110,7 @@ pub fn run() {
             commands::reparo_cancelar,
             commands::congelados_agora,
             commands::descongelar_agora,
+            commands::relatorio_de_suporte,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

@@ -2340,6 +2340,32 @@ pub fn descongelar_agora() -> Result<usize, String> {
     }
 }
 
+// ========================================================== ATENDIMENTO
+
+/// O relatório que o cliente cola no atendimento — versão, Windows, RAM,
+/// congelados, mudanças aplicadas, disco e térmico, e o que não deu para ler.
+///
+/// Fica em `LIVRES`: é leitura, e é o diagnóstico que o produto já dá de
+/// graça — inclusive porque é justamente esta a informação que faltou
+/// quando um cliente com o produto JÁ INSTALADO precisou de um script de
+/// PowerShell escrito à mão para alguém entender o que estava acontecendo
+/// na máquina dele. Ver `modules::windows::suporte` para o porquê de cada
+/// regra que o texto obedece.
+#[tauri::command]
+pub fn relatorio_de_suporte() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::suporte::montar(
+            &crate::modules::windows::suporte::gerar(),
+        ))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -2435,6 +2461,7 @@ mod tests {
         "reparo_cancelar",
         "congelados_agora",
         "descongelar_agora",
+        "relatorio_de_suporte",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
