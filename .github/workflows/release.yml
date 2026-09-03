@@ -180,7 +180,7 @@ jobs:
 
       - name: Testes — inicialização e limitação do processador
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::boot:: modules::windows::thermal:: modules::windows::browsers:: modules::windows::fivem::"
+        run: "cargo test --lib -- modules::windows::boot:: modules::windows::thermal:: modules::windows::browsers:: modules::windows::fivem:: modules::windows::citizenfx::"
 
       - name: Testes — saúde do hardware e relatório
         working-directory: pc-optimizer/src-tauri

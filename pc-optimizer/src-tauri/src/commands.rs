@@ -35,6 +35,8 @@ use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
 #[cfg(target_os = "windows")]
+use crate::modules::windows::citizenfx::CitizenFxReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::network::NetworkReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::frames::FrameMeasurement;
@@ -857,6 +859,29 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (process, seconds);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: lê o `CitizenFX.ini` e mostra o que está em `PoolSizesIncrease`.
+///
+/// SÓ LEITURA. Não escreve nada, e não sugere aumentar nada — só mostra o que
+/// já está configurado, quando há algo. Ver `modules::windows::citizenfx`
+/// para o porquê: aumentar pool sem evidência de estouro no registro do
+/// FiveM é o "aplique e torça" que o produto recusa, e ninguém viu esse
+/// registro ainda.
+///
+/// Fica em `LIVRES`: é leitura, e nem exige o cliente ter licença para saber
+/// o que já está configurado na máquina dele.
+#[tauri::command]
+pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::citizenfx::analyze())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -2528,6 +2553,7 @@ mod tests {
         "medir_perda_de_pacote",
         "measure_frames",
         "analyze_fivem",
+        "analyze_citizenfx",
         "analyze_browsers",
         "analyze_boot",
         "analyze_thermal",

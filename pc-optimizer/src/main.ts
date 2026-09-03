@@ -2434,6 +2434,10 @@ async function analyzeFiveM() {
   } finally {
     button.disabled = false;
   }
+
+  // Bloco à parte, com o próprio try/catch: uma falha aqui não pode apagar
+  // o levantamento de pastas que acabou de renderizar acima.
+  await analyzeCitizenFx();
 }
 
 function renderFiveM(report: FiveMReport) {
@@ -2520,6 +2524,82 @@ async function prioritizeFiveM() {
   } finally {
     button.disabled = false;
   }
+}
+
+// ---------------------------------------------------- CitizenFX.ini (Pilar 6)
+
+interface PoolAjustado {
+  nome: string;
+  aumento: number;
+  teto_conhecido: number | null;
+}
+
+/**
+ * Espelha `PoolSizesIncrease` de `citizenfx.rs`. `#[serde(tag = "status")]`
+ * é o que permite decidir por CAMPO ESTRUTURADO (`pool_sizes.status`) e
+ * nunca comparando a prosa de `note` — a guarda
+ * `a_tela_nao_decide_cor_comparando_texto_do_backend`, em `commands.rs`,
+ * reprova o build se este arquivo voltar a decidir assim.
+ */
+type PoolSizesIncrease =
+  | { status: "Vazio" }
+  | { status: "Configurado"; pools: PoolAjustado[] }
+  | { status: "Invalido"; bruto: string };
+
+interface CitizenFxReport {
+  existe: boolean;
+  caminho: string | null;
+  /** `null` quando o arquivo não existe ou não pôde ser lido — "não sei". */
+  pool_sizes: PoolSizesIncrease | null;
+  note: string;
+}
+
+/**
+ * Só leitura, e chamada junto de `analyzeFiveM`: o cliente não precisa saber
+ * que são dois comandos diferentes por trás de um clique só em "Analisar".
+ */
+async function analyzeCitizenFx() {
+  try {
+    const report = await invoke<CitizenFxReport>("analyze_citizenfx");
+    renderCitizenFx(report);
+  } catch (error) {
+    text("citizenfx-note", String(error));
+    element("citizenfx-result").innerHTML = "";
+  }
+}
+
+function renderCitizenFx(report: CitizenFxReport) {
+  text("citizenfx-note", report.note);
+
+  const resultado = element("citizenfx-result");
+
+  // Só há lista para desenhar quando há pool configurado. Vazio, ausente,
+  // inválido ou "não sei ler" — todos ficam só com a frase de `note` acima,
+  // que já diz o que precisa.
+  if (!report.pool_sizes || report.pool_sizes.status !== "Configurado") {
+    resultado.innerHTML = "";
+    return;
+  }
+
+  resultado.innerHTML = `
+    <div class="readouts readouts-row">
+      ${report.pool_sizes.pools
+        .map(
+          (p) => `
+            <div class="readout">
+              <span class="readout-label">${escapeHtml(p.nome)}</span>
+              <span class="readout-value">${p.aumento}</span>
+              <span class="readout-note">${
+                p.teto_conhecido !== null
+                  ? `teto conhecido: ${p.teto_conhecido}`
+                  : "teto não conferido"
+              }</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 // ----------------------------------------------------------- navegador
