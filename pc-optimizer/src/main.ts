@@ -41,6 +41,8 @@ interface Preferences {
   auto_game_mode: boolean;
   metrics_interval_seconds: number;
   show_unavailable: boolean;
+  /** Se a pessoa já viu a tela que explica que o modo jogo congela programas. */
+  game_mode_avisado: boolean;
 }
 
 interface RestorePoint {
@@ -299,6 +301,7 @@ let preferences: Preferences = {
   auto_game_mode: false,
   metrics_interval_seconds: 2,
   show_unavailable: true,
+  game_mode_avisado: false,
 };
 /** Handle do laço de medição, para poder trocar o intervalo sem recarregar. */
 let metricsTimer: number | null = null;
@@ -800,10 +803,17 @@ window.addEventListener("DOMContentLoaded", async () => {
     setStatus("gamemode-status", evento.payload, "ok");
     void loadGameMode();
     void loadOptimizations();
+    // O vigia é quem suspende e devolve programas em segundo plano; é ele
+    // quem sabe quando o bloco precisa aparecer ou sumir sozinho.
+    void carregarCongelados();
   });
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
+
+  // Depois das preferências carregadas, porque a decisão de mostrar depende
+  // dos dois campos que acabaram de chegar do backend.
+  checarReconsentimentoDoModoJogo();
 
   await Promise.all([
     loadIdentity(),
@@ -1966,6 +1976,132 @@ async function setGameMode(active: boolean) {
   } finally {
     botoes.forEach((b) => (b.disabled = false));
     await loadGameMode();
+    // Ligar ou desligar o modo jogo pode ter devolvido tudo que estava
+    // congelado (desligar sempre devolve), então o bloco precisa acompanhar
+    // sem esperar o próximo evento do vigia.
+    await carregarCongelados();
+  }
+}
+
+// ------------------------------------------- reconsentimento do modo jogo
+
+/**
+ * Mostra, uma única vez, o que o modo jogo automático realmente faz —
+ * congela programas em segundo plano — para quem ligou a opção antes de o
+ * texto explicar isso (o texto mudou na 1.1.2; quem ligou antes nunca leu a
+ * versão nova). Sem isso, a primeira notícia que essa pessoa tem é abrir o
+ * Gerenciador de Tarefas e ver "Suspenso" ao lado do Discord.
+ *
+ * As duas condições precisam se encontrar: `auto_game_mode` ligado E
+ * `game_mode_avisado` ainda desligado. Instalação nova nunca bate as duas —
+ * `auto_game_mode` já nasce desligado — então a tela nunca aparece nela.
+ */
+function checarReconsentimentoDoModoJogo() {
+  if (preferences.auto_game_mode && !preferences.game_mode_avisado) {
+    element("gamemode-reconsent-modal").hidden = false;
+    element<HTMLButtonElement>("reconsent-manter").focus();
+  }
+}
+
+function fecharReconsentimentoDoModoJogo() {
+  element("gamemode-reconsent-modal").hidden = true;
+}
+
+/** "Manter": a opção continua ligada, só registra que a pessoa já viu o aviso. */
+async function reconsentirMantendo() {
+  await savePreferences({ game_mode_avisado: true });
+  fecharReconsentimentoDoModoJogo();
+}
+
+/**
+ * "Desligar": desliga a opção e devolve, agora, qualquer programa que esteja
+ * congelado neste exato momento — sem isso a pessoa desligaria o modo jogo e
+ * o Discord continuaria "Suspenso" até o jogo fechar sozinho, o que
+ * contradiz o próprio botão que ela acabou de apertar. Reaproveita
+ * `descongelar_agora`, o mesmo comando do botão "Descongelar agora" da aba
+ * Sistema — é o único caminho do produto que já faz exatamente isso.
+ */
+async function reconsentirDesligando() {
+  await savePreferences({ auto_game_mode: false, game_mode_avisado: true });
+
+  try {
+    await invoke<number>("descongelar_agora");
+  } catch {
+    // Sem backend (ou nada congelado) a tela segue utilizável; o painel de
+    // congelados abaixo reflete o estado real de qualquer jeito.
+  }
+
+  await loadGameMode();
+  await carregarCongelados();
+  fecharReconsentimentoDoModoJogo();
+}
+
+// ---------------------------------------------- congelados pelo modo jogo
+
+interface Congelado {
+  pid: number;
+  nome: string;
+  visivel: string;
+  inicio: number;
+}
+
+/**
+ * Mostra o que está congelado agora, e some sozinho quando não há nada.
+ *
+ * Existe porque um cliente abriu o Gerenciador de Tarefas, viu "Steam —
+ * Suspenso", depois Discord, depois Chrome — e a tela do Otimiza não
+ * mostrava nada disso e não tinha botão nenhum. Ele concluiu que o produto
+ * tinha quebrado a máquina dele; não estava errado. Segue o mesmo padrão de
+ * `carregarMonitores`: busca, e o próprio resultado decide se o bloco
+ * aparece.
+ */
+async function carregarCongelados() {
+  const bloco = element("congelados");
+  const lista = element("congelados-lista");
+
+  try {
+    const congelados = await invoke<Congelado[]>("congelados_agora");
+
+    // Nada congelado é o caso comum — o jogo nem sempre está aberto, e
+    // muitos jogos não têm nada para suspender. Um bloco vazio permanente é
+    // ruído, e ruído é o que faz o cliente parar de ler a tela.
+    bloco.hidden = congelados.length === 0;
+
+    if (congelados.length === 0) {
+      return;
+    }
+
+    lista.innerHTML = congelados
+      .map((c) => `<li class="congelados-item">${escapeHtml(c.visivel)}</li>`)
+      .join("");
+  } catch {
+    // Sem backend o painel continua utilizável; o bloco só não aparece.
+    bloco.hidden = true;
+  }
+}
+
+/**
+ * Descongela tudo agora, sem esperar o jogo fechar e sem mexer no plano de
+ * energia — descongelar não é a mesma coisa que desligar o modo jogo.
+ */
+async function descongelarAgora() {
+  const botao = element<HTMLButtonElement>("descongelar-agora");
+  botao.disabled = true;
+
+  try {
+    const quantos = await invoke<number>("descongelar_agora");
+    setStatus(
+      "gamemode-status",
+      quantos > 0
+        ? `Descongelei ${quantos} programa${quantos === 1 ? "" : "s"}.`
+        : "Não havia nada congelado.",
+      "ok"
+    );
+  } catch (error) {
+    setStatus("gamemode-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+    await carregarCongelados();
   }
 }
 
@@ -3999,7 +4135,27 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
     const rotulo = botao.textContent?.trim();
     const painel = botao.closest<HTMLElement>(".tab-panel");
 
-    if (!rotulo || !painel || botao.hasAttribute("data-fivem")) return;
+    // `botao.hidden` sozinho só vê o próprio atributo do botão — o bloco de
+    // congelados esconde por um `hidden` no DIV que envolve o botão
+    // (`#congelados`), não no botão em si, então "Descongelar agora" passava
+    // ileso mesmo sem nada congelado. A correção é subir do botão pelos
+    // ancestrais procurando `hidden` — mas PARAR ao chegar no painel: o
+    // painel inteiro fica `hidden` sempre que a aba não é a ativa (ver
+    // `showTab`), e isso é normal, não um botão escondido dentro de uma aba
+    // visível — o comando troca de aba antes de focar o botão, então
+    // `hidden` no painel não pode derrubar nada dali. Sem subir a árvore, a
+    // paleta oferecia um clique num botão que não existe na tela; subindo
+    // até o painel (e não além), ela também não fica vazia para as
+    // dezessete abas que não são a de cima agora.
+    let escondido = false;
+    for (let el: HTMLElement | null = botao; el && el !== painel; el = el.parentElement) {
+      if (el.hidden) {
+        escondido = true;
+        break;
+      }
+    }
+
+    if (!rotulo || !painel || botao.hasAttribute("data-fivem") || escondido) return;
 
     const aba = painel.id.replace("tab-", "");
 
@@ -4170,6 +4326,31 @@ function tomParaStatus(tom: TomResultado): "ok" | "warn" | "error" {
 }
 
 /**
+ * O desfecho de `reparo_executar`, mesma forma de `UltimoResultadoReparo` e
+ * pelo mesmo motivo: o tom nasce no backend, a partir da variante de
+ * `Desfecho` (Rust), nunca da frase de `texto`. A tela costumava decidir a
+ * cor comparando o texto formatado (`desfecho === "Terminou."`) — e, como
+ * `CorrigiuEmParte` já provou uma vez, frase e cor divergem. Não existe mais
+ * essa comparação: só o `tom` é lido.
+ */
+type DesfechoReparo = UltimoResultadoReparo;
+
+/**
+ * De onde uma linha de andamento veio: `stdout` ou `stderr` do processo.
+ *
+ * O `stderr` é drenado numa thread separada, no Rust, e caía misturado ao
+ * progresso: a razão de uma falha do DISM — "precisa de internet" contra "a
+ * imagem está corrompida" — chegava embaralhada no meio de centenas de
+ * linhas de percentagem, e nada na tela permitia diferenciar uma da outra.
+ */
+type OrigemAndamento = "saida" | "erro";
+
+interface Andamento {
+  linha: string;
+  origem: OrigemAndamento;
+}
+
+/**
  * Título e descrição de cada ferramenta — texto de APRESENTAÇÃO, escrito
  * pela própria tela. Isto fica aqui de propósito, e não é a mesma dívida que
  * os avisos de segurança tinham: nenhum destes dois campos muda o risco de
@@ -4276,10 +4457,55 @@ function desenharItemReparo(f: FerramentaDeReparo): string {
  * mostrar alguma coisa é o mesmo que não ter andamento — e é no minuto oito,
  * parado em 20%, que o cliente conclui que travou e desliga a máquina.
  */
+/**
+ * Quantas linhas de saída `#reparo-saida` guarda, no máximo.
+ *
+ * Um `DISM /RestoreHealth` de trinta minutos redesenha a mesma linha de
+ * percentagem centenas de vezes (0%, 1%, 2%, ... cada `\r` vira uma linha —
+ * ver `drenar` em `tarefa_longa.rs`), e ainda tem mais de um estágio. Sem
+ * teto, esse elemento único acumularia milhares de NÓS de DOM na aba pelo
+ * resto da execução, para nada: ninguém rola de volta para ver "43%" de
+ * novo. O teto limita a QUANTIDADE de nós, não o volume de caracteres — uma
+ * única linha gigante não é cortada por ele, e o `<pre>` continuaria
+ * crescendo com ela. Isso é aceitável aqui: `sfc` e `DISM` não escrevem
+ * linha gigante, escrevem muitas linhas curtas. 500 sobra até para as duas
+ * barras de progresso do DISM (scan + restore, uns 200 cada) mais as linhas
+ * de texto de verdade em volta, e ainda cabe folgado numa área de rolagem de
+ * 220px sem virar um arquivo de log. O corte é sempre do INÍCIO — mantém o
+ * FIM, que é onde o resultado está.
+ */
+const MAX_LINHAS_SAIDA = 500;
+
 async function carregarReparo() {
   const lista = element("reparo-lista");
   const saida = element("reparo-saida");
   const cancelar = element<HTMLButtonElement>("reparo-cancelar");
+
+  /**
+   * Acrescenta uma linha de andamento a `#reparo-saida`, destacando as que
+   * vieram do `stderr` — ver `OrigemAndamento`. Cada linha é um `<span>`
+   * seguido de uma quebra: um `<pre>` preserva essa quebra como texto, e o
+   * `<span>` é o que permite colorir só aquela linha sem tocar nas outras.
+   */
+  function acrescentarLinhaSaida(a: Andamento) {
+    const linha = document.createElement("span");
+    linha.textContent = a.linha;
+    if (a.origem === "erro") {
+      linha.className = "reparo-linha-erro";
+    }
+    saida.appendChild(linha);
+    saida.appendChild(document.createTextNode("\n"));
+
+    // Mantém só as últimas `MAX_LINHAS_SAIDA`, cortando do início — ver o
+    // comentário da constante. Cada linha é dois nós (o `<span>` e a
+    // quebra), então os dois somem juntos.
+    while (saida.children.length > MAX_LINHAS_SAIDA) {
+      saida.removeChild(saida.firstChild!);
+      if (saida.firstChild) {
+        saida.removeChild(saida.firstChild);
+      }
+    }
+  }
 
   const ferramentasPorNome = new Map<string, FerramentaDeReparo>();
 
@@ -4375,16 +4601,12 @@ async function carregarReparo() {
       // `resetbase`, uma palavra só — o mesmo nome que `reparo_executar`
       // espera do lado do Rust, sem depender da conversão de caixa entre
       // JavaScript e Rust para um interruptor desta consequência.
-      const desfecho = await invoke<string>("reparo_executar", {
+      const desfecho = await invoke<DesfechoReparo>("reparo_executar", {
         ferramenta: nome,
         resetbase: resetarBase,
       });
 
-      setStatus(
-        "reparo-execucao",
-        desfecho,
-        desfecho === "Terminou." ? "ok" : desfecho === "Interrompida por você." ? "warn" : "error"
-      );
+      setStatus("reparo-execucao", desfecho.texto, tomParaStatus(desfecho.tom));
     } catch (error) {
       setStatus("reparo-execucao", String(error), "error");
     } finally {
@@ -4409,9 +4631,9 @@ async function carregarReparo() {
     void executarFerramenta(botao.dataset.reparo!);
   });
 
-  await listen<string>("reparo-andamento", (evento) => {
+  await listen<Andamento>("reparo-andamento", (evento) => {
     saida.hidden = false;
-    saida.textContent = `${saida.textContent ?? ""}${evento.payload}\n`;
+    acrescentarLinhaSaida(evento.payload);
     saida.scrollTop = saida.scrollHeight;
   });
 
@@ -5161,6 +5383,7 @@ function wireControls() {
   void carregarPlaca();
   void carregarMemoria();
   void carregarMonitores();
+  void carregarCongelados();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
@@ -5231,6 +5454,7 @@ function wireControls() {
   });
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
+  element("descongelar-agora").addEventListener("click", () => descongelarAgora());
   element("measure-frames").addEventListener("click", measureFrames);
 
   element("flush-dns").addEventListener("click", async () => {
@@ -5492,6 +5716,13 @@ function wireControls() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAdminModal();
   });
+
+  // Reconsentimento do modo jogo. Sem botão "fechar" nem clique fora: as
+  // únicas duas saídas são "Manter" e "Desligar" — ambas gravam que a
+  // pessoa já viu, então não existe um terceiro caminho que deixaria a tela
+  // reaparecendo sem registrar nada.
+  element("reconsent-manter").addEventListener("click", reconsentirMantendo);
+  element("reconsent-desligar").addEventListener("click", reconsentirDesligando);
 
   element("startup-list").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(

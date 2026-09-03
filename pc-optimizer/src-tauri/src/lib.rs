@@ -108,6 +108,8 @@ pub fn run() {
             commands::reparo_ultimo_resultado,
             commands::reparo_executar,
             commands::reparo_cancelar,
+            commands::congelados_agora,
+            commands::descongelar_agora,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
@@ -220,11 +222,23 @@ pub fn run() {
                         if !expirados.is_empty() {
                             let nomes: Vec<&str> =
                                 expirados.iter().map(|s| s.visivel.as_str()).collect();
-                            utils::Logger::info(&format!(
+                            let mensagem = format!(
                                 "Devolvi programas que ficaram suspensos além do prazo, sem \
                                  jogo nenhum rodando: {}",
                                 nomes.join(", ")
-                            ));
+                            );
+                            utils::Logger::info(&mensagem);
+
+                            // A tela só sabe que algo foi devolvido através deste
+                            // evento — é o mesmo que o vigia normal emite ao
+                            // suspender e ao devolver. Sem ele aqui, o bloco de
+                            // congelados continuaria mostrando um programa que já
+                            // voltou até algum OUTRO evento forçar a atualização:
+                            // a própria tela mentindo sobre o estado que ela existe
+                            // para mostrar direito. Só entra neste `if` — emitir a
+                            // cada seis segundos sem nada ter mudado faria a tela
+                            // recarregar à toa o tempo todo.
+                            let _ = handle.emit("gamemode:changed", mensagem);
                         }
 
                         if !modules::preferences::Preferences::load().auto_game_mode {

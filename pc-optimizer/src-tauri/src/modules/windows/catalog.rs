@@ -1012,7 +1012,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "uac_off",
         name: "Desligar o Controle de Conta de Usuário (UAC)",
         description: "Remove a janela que pergunta \"deseja permitir que este aplicativo faça alterações\".",
-        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA. Não ganha um quadro por segundo. Zero. O que ele faz é tirar a última barreira entre um programa qualquer e o seu Windows: com o UAC desligado, qualquer coisa que você abrir por engano ganha poder de administrador sem perguntar nada. É a troca mais cara desta lista e o ganho é nenhum. Está aqui porque os concorrentes oferecem e você pediu paridade.",
+        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA. Não ganha um quadro por segundo. Zero. O que ele faz é tirar a última barreira entre um programa qualquer e o seu Windows: com o UAC desligado, qualquer coisa que você abrir por engano ganha poder de administrador sem perguntar nada. É a troca mais cara desta lista e o ganho é nenhum. E tem uma consequência que você vai sentir na hora: com o UAC desligado, aplicativo baixado da Loja da Microsoft se recusa a abrir — no Windows 10 e no Windows 11. Está aqui porque os concorrentes oferecem e você pediu paridade.",
         category: Category::System,
         expected_gain: ExpectedGain::NoGain,
         requires_admin: true,
@@ -1137,6 +1137,26 @@ mod tests {
                 spec.id
             );
         }
+    }
+
+    #[test]
+    fn o_aviso_do_uac_diz_que_quebra_aplicativo_da_loja() {
+        // O texto já dizia que o ganho é zero e que é troca de segurança —
+        // isso fica. O que faltava era a consequência que o cliente SENTE:
+        // com o UAC desligado, aplicativo da Loja da Microsoft se recusa a
+        // abrir, no Windows 10 e no Windows 11. "aplicativo" sozinho não
+        // basta como prova — a descrição já usa essa palavra para outra
+        // coisa ("...que este aplicativo faça alterações"), então esse teste
+        // passaria mesmo sem o aviso novo. "loja" é a palavra que só existe
+        // depois da correção.
+        let item = CATALOG.iter().find(|o| o.id == "uac_off").expect("achei o uac_off");
+        let texto = format!("{} {}", item.description, item.honest_effect).to_lowercase();
+
+        assert!(
+            texto.contains("loja"),
+            "o aviso não diz que quebra aplicativo da Loja: {}",
+            item.honest_effect
+        );
     }
 
     #[test]

@@ -140,6 +140,125 @@ pub fn avaliar_desgaste(wear: u32) -> (FindingSeverity, String) {
     }
 }
 
+/// O que se sabe sobre os erros acumulados de um disco.
+///
+/// TRÊS RESPOSTAS, E NÃO DUAS. `Some(0)` é "medi e deu zero"; `None` é "não
+/// consegui medir". O código antigo somava com `unwrap_or(0)` e os dois viravam
+/// a mesma coisa — um SSD que não publica o contador (ou uma consulta sem
+/// administrador) recebia atestado de saúde que ninguém tinha medido.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrosDoDisco {
+    Nenhum,
+    Contados(u64),
+    NaoSei,
+}
+
+pub fn avaliar_erros(leitura: Option<u64>, gravacao: Option<u64>) -> ErrosDoDisco {
+    // Um lado ausente já impede saber o total: somar o que se tem com zero
+    // seria inventar a metade que falta.
+    let (Some(l), Some(g)) = (leitura, gravacao) else {
+        return ErrosDoDisco::NaoSei;
+    };
+
+    match l + g {
+        0 => ErrosDoDisco::Nenhum,
+        total => ErrosDoDisco::Contados(total),
+    }
+}
+
+/// Constrói os achados de um único disco a partir do contador de
+/// confiabilidade já lido.
+///
+/// Extraída de `analisar_discos` para que a COSTURA entre `avaliar_erros` e o
+/// achado que ela produz seja testável sem hardware — sem esta função, um
+/// teste só provava que o ajudante puro decidia certo, e nada garantia que
+/// `analisar_discos` de fato usasse a decisão dele em vez de, por exemplo,
+/// voltar a somar com `unwrap_or(0)`.
+fn achados_de_confiabilidade(contador: &RawReliability) -> Vec<HealthFinding> {
+    let mut findings = Vec::new();
+    let id = contador.device_id.clone().unwrap_or_default();
+
+    if let Some(wear) = contador.wear {
+        let (severidade, conselho) = avaliar_desgaste(wear);
+        findings.push(HealthFinding {
+            id: format!("disk_wear_{}", id),
+            title: format!("Desgaste do disco {}", id),
+            measured: format!("{}% da vida projetada consumida.", wear),
+            advice: conselho,
+            severity: severidade,
+            fix_location: if severidade == FindingSeverity::Ok {
+                FixLocation::None
+            } else {
+                FixLocation::Hardware
+            },
+        });
+    }
+
+    match avaliar_erros(contador.read_errors_total, contador.write_errors_total) {
+        ErrosDoDisco::Contados(erros) => {
+            findings.push(HealthFinding {
+                id: format!("disk_errors_{}", id),
+                title: format!("Erros de leitura ou gravação no disco {}", id),
+                measured: format!("{} erros acumulados desde a fabricação.", erros),
+                advice: "Erro de leitura faz o Windows tentar de novo, e é isso que aparece \
+                         como travada de segundos. Faça backup e considere a troca."
+                    .to_string(),
+                severity: FindingSeverity::Critical,
+                fix_location: FixLocation::Hardware,
+            });
+        }
+        ErrosDoDisco::Nenhum => {}
+        // Contador ausente não é o mesmo que contador zerado. Se chegamos aqui
+        // é porque `Get-StorageReliabilityCounter` respondeu para este disco —
+        // a ausência total já foi interceptada antes, em `analisar_discos`,
+        // pelo `contadores.is_empty()` que liga `needs_admin`. O que acontece
+        // aqui é mais estreito: este SSD específico não publica
+        // ReadErrorsTotal/WriteErrorsTotal, algo comum no mercado. O achado
+        // avisa a lacuna em vez de preenchê-la com "está tudo bem".
+        ErrosDoDisco::NaoSei => {
+            findings.push(HealthFinding {
+                id: format!("disk_errors_naosei_{}", id),
+                title: format!("Erros de leitura ou gravação no disco {}", id),
+                measured: "Não foi possível ler o contador de erros deste disco.".to_string(),
+                advice: "Isso não é o mesmo que o disco estar sem erro — apenas não deu \
+                         para confirmar por aqui. Pode faltar permissão de administrador, \
+                         ou o fabricante simplesmente não publica esse contador."
+                    .to_string(),
+                severity: FindingSeverity::Ok,
+                fix_location: FixLocation::None,
+            });
+        }
+    }
+
+    // Acima de 60 °C um SSD começa a reduzir a própria velocidade para
+    // não se danificar.
+    if let Some(temp) = contador.temperature.filter(|t| *t >= 60) {
+        findings.push(HealthFinding {
+            id: format!("disk_temp_{}", id),
+            title: format!("Disco {} quente", id),
+            measured: format!("{} °C.", temp),
+            advice: "Acima de 60 °C o disco reduz a própria velocidade para se proteger. \
+                     Verifique a ventilação do gabinete ou do notebook."
+                .to_string(),
+            severity: FindingSeverity::Important,
+            fix_location: FixLocation::Hardware,
+        });
+    }
+
+    if let Some(horas) = contador.power_on_hours.filter(|h| *h > 0) {
+        findings.push(HealthFinding {
+            id: format!("disk_hours_{}", id),
+            title: format!("Tempo de uso do disco {}", id),
+            measured: format!("{} horas ligado ({:.1} anos de uso contínuo).", horas, horas as f64 / 8760.0),
+            advice: String::new(),
+            severity: FindingSeverity::Ok,
+            fix_location: FixLocation::None,
+        });
+    }
+
+    findings
+}
+
 fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
     let lista = discos();
     let mut faltou_permissao = false;
@@ -181,64 +300,8 @@ fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
         return faltou_permissao;
     }
 
-    for contador in contadores {
-        let id = contador.device_id.clone().unwrap_or_default();
-
-        if let Some(wear) = contador.wear {
-            let (severidade, conselho) = avaliar_desgaste(wear);
-            findings.push(HealthFinding {
-                id: format!("disk_wear_{}", id),
-                title: format!("Desgaste do disco {}", id),
-                measured: format!("{}% da vida projetada consumida.", wear),
-                advice: conselho,
-                severity: severidade,
-                fix_location: if severidade == FindingSeverity::Ok {
-                    FixLocation::None
-                } else {
-                    FixLocation::Hardware
-                },
-            });
-        }
-
-        let erros = contador.read_errors_total.unwrap_or(0) + contador.write_errors_total.unwrap_or(0);
-        if erros > 0 {
-            findings.push(HealthFinding {
-                id: format!("disk_errors_{}", id),
-                title: format!("Erros de leitura ou gravação no disco {}", id),
-                measured: format!("{} erros acumulados desde a fabricação.", erros),
-                advice: "Erro de leitura faz o Windows tentar de novo, e é isso que aparece \
-                         como travada de segundos. Faça backup e considere a troca."
-                    .to_string(),
-                severity: FindingSeverity::Critical,
-                fix_location: FixLocation::Hardware,
-            });
-        }
-
-        // Acima de 60 °C um SSD começa a reduzir a própria velocidade para
-        // não se danificar.
-        if let Some(temp) = contador.temperature.filter(|t| *t >= 60) {
-            findings.push(HealthFinding {
-                id: format!("disk_temp_{}", id),
-                title: format!("Disco {} quente", id),
-                measured: format!("{} °C.", temp),
-                advice: "Acima de 60 °C o disco reduz a própria velocidade para se proteger. \
-                         Verifique a ventilação do gabinete ou do notebook."
-                    .to_string(),
-                severity: FindingSeverity::Important,
-                fix_location: FixLocation::Hardware,
-            });
-        }
-
-        if let Some(horas) = contador.power_on_hours.filter(|h| *h > 0) {
-            findings.push(HealthFinding {
-                id: format!("disk_hours_{}", id),
-                title: format!("Tempo de uso do disco {}", id),
-                measured: format!("{} horas ligado ({:.1} anos de uso contínuo).", horas, horas as f64 / 8760.0),
-                advice: String::new(),
-                severity: FindingSeverity::Ok,
-                fix_location: FixLocation::None,
-            });
-        }
+    for contador in &contadores {
+        findings.extend(achados_de_confiabilidade(contador));
     }
 
     faltou_permissao
@@ -420,6 +483,82 @@ mod tests {
     #[test]
     fn capacidade_de_fabrica_zerada_nao_vira_divisao_por_zero() {
         assert!(avaliar_bateria(0, 1000).is_none());
+    }
+
+    #[test]
+    fn contador_de_erro_ausente_nao_vira_disco_sem_erro() {
+        // Muitos SSDs não publicam o contador, e a consulta falha sem
+        // administrador. Nos dois casos o valor chegava como zero e NENHUM achado
+        // era emitido — o disco recebia atestado de saúde que ninguém mediu.
+        let sem_leitura = avaliar_erros(None, None);
+        assert!(
+            matches!(sem_leitura, ErrosDoDisco::NaoSei),
+            "leitura ausente virou {:?}",
+            sem_leitura
+        );
+
+        assert_eq!(avaliar_erros(Some(0), Some(0)), ErrosDoDisco::Nenhum);
+        assert_eq!(avaliar_erros(Some(3), Some(2)), ErrosDoDisco::Contados(5));
+
+        // Um lado ausente ainda é não saber o total.
+        assert!(matches!(avaliar_erros(Some(3), None), ErrosDoDisco::NaoSei));
+    }
+
+    #[test]
+    fn contador_sem_leitura_de_erro_gera_o_achado_naosei_e_nao_o_critico() {
+        // Este teste é a costura que faltava: `avaliar_erros` sozinho não prova
+        // que `analisar_discos` de fato o usa. Se alguém reverter a chamada de
+        // volta para `unwrap_or(0) + unwrap_or(0)`, este teste falha — nenhum
+        // achado de erro nasce (0 não é > 0), e o `assert` abaixo não encontra
+        // nem o achado NaoSei nem o Crítico.
+        let contador = RawReliability {
+            device_id: Some("0".to_string()),
+            wear: None,
+            temperature: None,
+            read_errors_total: None,
+            write_errors_total: None,
+            power_on_hours: None,
+        };
+
+        let achados = achados_de_confiabilidade(&contador);
+        let achado = achados
+            .iter()
+            .find(|a| a.id == "disk_errors_naosei_0")
+            .expect("esperava achado disk_errors_naosei_0");
+
+        assert_eq!(achado.severity, FindingSeverity::Ok);
+        assert_eq!(achado.fix_location, FixLocation::None);
+        assert!(achado.measured.to_lowercase().contains("não foi possível"));
+
+        // E nenhum achado `disk_errors_0` (o crítico) pode coexistir com o
+        // NaoSei — são mutuamente exclusivos pela própria definição de
+        // `ErrosDoDisco`.
+        assert!(!achados.iter().any(|a| a.id == "disk_errors_0"));
+    }
+
+    #[test]
+    fn contador_com_erros_lidos_ainda_gera_o_achado_critico() {
+        // O espelho do teste acima: números de verdade continuam produzindo o
+        // achado Crítico de sempre — a extração da função não pode ter mudado
+        // esse caminho.
+        let contador = RawReliability {
+            device_id: Some("0".to_string()),
+            wear: None,
+            temperature: None,
+            read_errors_total: Some(3),
+            write_errors_total: Some(2),
+            power_on_hours: None,
+        };
+
+        let achados = achados_de_confiabilidade(&contador);
+        let achado = achados
+            .iter()
+            .find(|a| a.id == "disk_errors_0")
+            .expect("esperava achado disk_errors_0");
+
+        assert_eq!(achado.severity, FindingSeverity::Critical);
+        assert!(achado.measured.contains('5'));
+        assert!(!achados.iter().any(|a| a.id == "disk_errors_naosei_0"));
     }
 
     #[test]

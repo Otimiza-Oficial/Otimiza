@@ -3260,6 +3260,49 @@ button {
   display: none;
 }
 
+/* O que está congelado agora, dentro do painel do modo jogo.
+
+   Fica escondido com `[hidden]` até haver algo congelado de verdade — um
+   bloco vazio permanente é ruído, e é ruído que faz o cliente parar de ler a
+   tela. Foi exatamente a ausência deste bloco que fez um cliente ver
+   "Steam — Suspenso" no Gerenciador de Tarefas, sem nenhum aviso aqui, e
+   concluir que o produto tinha quebrado a máquina dele. `display` não é
+   declarado aqui de propósito: quem mostra e esconde este bloco é o atributo
+   `hidden`, coberto pela regra global `[hidden] { display: none !important; }`
+   — uma segunda regra de `display` aqui só criaria outra disputa entre CSS. */
+.congelados {
+  margin-top: var(--s4);
+  padding: var(--s3) var(--s4);
+  border-left: 2px solid var(--amber);
+  background-color: rgba(var(--amber-rgb), 0.06);
+  border-radius: 0 var(--r1) var(--r1) 0;
+}
+
+.congelados-titulo {
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin: 0 0 var(--s3);
+}
+
+.congelados-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+  padding: 0;
+  list-style: none;
+}
+
+.congelados-item {
+  font-family: var(--font-mono);
+  font-size: var(--t-label);
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r1);
+  color: var(--text);
+}
+
 /* O aviso que não sai da tela.
 
    Só para crítico. Um alerta que está sempre ligado deixa de ser lido em uma
@@ -4587,4 +4630,15 @@ circle.placa-parafuso {
   color: var(--text-dim);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* A origem de cada linha vem do backend (`Origem::Saida`/`Origem::Erro`,
+   ver `tarefa_longa.rs`) — a tela só traduz para cor, nunca decide olhando
+   o texto. O `stderr` do DISM é onde mora o motivo de uma falha ("precisa
+   de internet" vs. "a imagem está corrompida"), embaralhado no meio de
+   centenas de linhas de percentagem do `stdout`; sem destaque, essa linha
+   se perdia. */
+.reparo-linha-erro {
+  color: var(--red);
+  background: rgba(var(--red-rgb), 0.12);
 }

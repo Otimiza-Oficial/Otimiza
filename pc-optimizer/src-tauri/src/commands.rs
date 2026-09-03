@@ -2016,6 +2016,38 @@ impl From<crate::modules::windows::cbslog::Severidade> for TomResultado {
     }
 }
 
+/// O mesmo princípio, agora para o desfecho de uma EXECUÇÃO de reparo — este
+/// é o defeito da vez: a tela decidia a cor comparando a frase formatada
+/// (`desfecho === "Terminou."`), e `CorrigiuEmParte` já provou que prosa e
+/// cor divergem. O tom nasce aqui, da variante de `Desfecho`, antes de a
+/// frase existir.
+#[cfg(target_os = "windows")]
+impl From<&crate::modules::windows::tarefa_longa::Desfecho> for TomResultado {
+    fn from(d: &crate::modules::windows::tarefa_longa::Desfecho) -> Self {
+        use crate::modules::windows::tarefa_longa::Desfecho;
+
+        match d {
+            Desfecho::Terminou { codigo: 0 } => TomResultado::Ok,
+            // Código diferente de zero é falha do programa — mesmo tom que
+            // "não consegui verificar" já usa em `UltimoResultadoReparo`.
+            Desfecho::Terminou { codigo: _ } => TomResultado::Erro,
+            // Cancelar foi uma escolha do cliente, não uma falha: nem verde
+            // (nada terminou) nem vermelho (ninguém errou).
+            Desfecho::Cancelada => TomResultado::Atencao,
+            Desfecho::NaoComecou { .. } => TomResultado::Erro,
+        }
+    }
+}
+
+/// O desfecho de `reparo_executar`, com o tom já decidido — mesma forma de
+/// `UltimoResultadoReparo`, pelo mesmo motivo: a tela lê `tom`, nunca
+/// compara a prosa de `texto`.
+#[derive(Serialize)]
+pub struct DesfechoReparo {
+    pub tom: TomResultado,
+    pub texto: String,
+}
+
 /// O resultado da última verificação de arquivos de sistema, com o tom já
 /// decidido — a tela lê `tom`, nunca a prosa de `texto`.
 #[derive(Serialize)]
@@ -2115,7 +2147,7 @@ pub fn reparo_executar(
     state: State<'_, AppState>,
     ferramenta: String,
     resetbase: bool,
-) -> Result<String, String> {
+) -> Result<DesfechoReparo, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
@@ -2186,7 +2218,7 @@ pub fn reparo_executar(
                 state
                     .reparo
                     .rodar(reinclusao.programa, &args_reinclusao, move |a| {
-                        let _ = app_reinclusao.emit("reparo-andamento", a.linha);
+                        let _ = app_reinclusao.emit("reparo-andamento", &a);
                     })?;
 
             // Falhar aqui e seguir para o `fsutil` mesmo assim seria recriar
@@ -2208,7 +2240,7 @@ pub fn reparo_executar(
         let args: Vec<&str> = r.args.iter().map(|s| s.as_str()).collect();
 
         let desfecho = state.reparo.rodar(r.programa, &args, move |a| {
-            let _ = app.emit("reparo-andamento", a.linha);
+            let _ = app.emit("reparo-andamento", &a);
         })?;
 
         // O QUE ACABOU DE ACONTECER É A ÚNICA FONTE DA PRÓXIMA OFERTA.
@@ -2219,12 +2251,20 @@ pub fn reparo_executar(
             *atual = atual.apos_execucao(&escolhida, &desfecho);
         }
 
-        Ok(match desfecho {
+        // O tom é lido da VARIANTE, antes de `desfecho` ser consumido pelo
+        // `match` que monta a frase — é a mesma ordem de
+        // `reparo_ultimo_resultado`, e existe pelo mesmo motivo: se o tom
+        // nascesse depois, olhando para `texto`, seria a prosa decidindo de
+        // novo, só que num lugar mais difícil de notar.
+        let tom = TomResultado::from(&desfecho);
+        let texto = match desfecho {
             Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),
             Desfecho::Terminou { codigo } => format!("Terminou com o código {}.", codigo),
             Desfecho::Cancelada => "Interrompida por você.".into(),
             Desfecho::NaoComecou { motivo } => motivo,
-        })
+        };
+
+        Ok(DesfechoReparo { tom, texto })
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2250,6 +2290,53 @@ pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
     {
         let _ = state;
         false
+    }
+}
+
+// ============================================================ SUSPENSÃO
+
+/// O que está congelado agora.
+///
+/// Fica em `LIVRES`: é leitura, e é a informação que faltava. Um cliente
+/// abriu o gerenciador de tarefas, viu "Steam — Suspenso" (depois "Discord",
+/// depois "Chrome"), e escreveu para o dono dizendo que o PC dele tinha
+/// ficado "mt bugado" — porque a tela do Otimiza não mostrava nada disso e
+/// não tinha botão nenhum para desfazer. Ele estava certo em concluir que
+/// algo estava errado: o defeito não era ter suspendido, era não ter
+/// avisado. Este comando é o aviso.
+#[tauri::command]
+pub fn congelados_agora() -> Vec<crate::modules::windows::suspend::Suspenso> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::suspend::congelados()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
+/// Devolve todos os congelados, agora — sem esperar o jogo fechar.
+///
+/// Fica em `LIVRES` pelo mesmo motivo que `revert_optimization` e
+/// `reparo_cancelar` ficam: desfazer o que o próprio produto fez nunca pode
+/// depender de licença. Antes deste comando, socorrer o cliente do
+/// incidente acima exigiu um script de PowerShell escrito à mão para
+/// alguém que JÁ TINHA o produto instalado — e que já tinha, portanto,
+/// tudo que precisava para se ajudar sozinho, se a tela tivesse oferecido.
+/// Esta é a função que substitui aquele script.
+#[tauri::command]
+pub fn descongelar_agora() -> Result<usize, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let devolvidos = crate::modules::windows::suspend::retomar_tudo()?;
+        Ok(devolvidos.len())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(0)
     }
 }
 
@@ -2346,6 +2433,8 @@ mod tests {
         "reparo_disponivel",
         "reparo_ultimo_resultado",
         "reparo_cancelar",
+        "congelados_agora",
+        "descongelar_agora",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
@@ -2595,5 +2684,325 @@ mod tests {
                 comando
             );
         }
+    }
+
+    /// O tom de `DesfechoReparo` nasce da VARIANTE de `Desfecho`, nunca da
+    /// frase formatada — é a mesma regra de `UltimoResultadoReparo`, agora
+    /// no vizinho que ainda não tinha essa proteção.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn o_tom_do_desfecho_vem_da_variante_nao_da_prosa() {
+        use crate::modules::windows::tarefa_longa::Desfecho;
+
+        assert!(matches!(
+            super::TomResultado::from(&Desfecho::Terminou { codigo: 0 }),
+            super::TomResultado::Ok
+        ));
+        assert!(matches!(
+            super::TomResultado::from(&Desfecho::Terminou { codigo: 1 }),
+            super::TomResultado::Erro
+        ));
+        assert!(matches!(
+            super::TomResultado::from(&Desfecho::Cancelada),
+            super::TomResultado::Atencao
+        ));
+        assert!(matches!(
+            super::TomResultado::from(&Desfecho::NaoComecou {
+                motivo: "Já existe uma tarefa em andamento.".into()
+            }),
+            super::TomResultado::Erro
+        ));
+    }
+
+    // =============================== A TELA NÃO DECIDE COR COMPARANDO PROSA
+
+    /// Extrai, de uma linha de TypeScript, cada literal de string (aspas
+    /// simples, duplas ou template sem interpolação) junto com o texto que
+    /// vem ANTES dela — é nesse texto anterior que mora o operador de
+    /// comparação que denuncia o defeito.
+    ///
+    /// Trabalha em `char`, não em byte: este arquivo tem acento
+    /// ("não", "código"), e indexar por byte cortaria um caractere
+    /// multibyte ao meio.
+    fn literais_com_contexto(linha: &str) -> Vec<(String, String)> {
+        let chars: Vec<char> = linha.chars().collect();
+        let mut achados = Vec::new();
+        let mut i = 0;
+
+        while i < chars.len() {
+            let abre = chars[i];
+            if abre == '"' || abre == '\'' || abre == '`' {
+                let contexto: String = chars[..i].iter().collect();
+                let mut j = i + 1;
+                let mut conteudo = String::new();
+
+                while j < chars.len() {
+                    if chars[j] == '\\' && j + 1 < chars.len() {
+                        j += 2;
+                        continue;
+                    }
+                    if chars[j] == abre {
+                        break;
+                    }
+                    conteudo.push(chars[j]);
+                    j += 1;
+                }
+
+                let resto: String = chars.get(j + 1..).unwrap_or(&[]).iter().collect();
+                achados.push((contexto, conteudo, resto));
+                i = j + 1;
+            } else {
+                i += 1;
+            }
+        }
+
+        achados
+            .into_iter()
+            .map(|(contexto, conteudo, _resto)| (contexto, conteudo))
+            .collect()
+    }
+
+    /// A impressão digital de prosa do backend: tem espaço, ou termina em
+    /// pontuação de frase. Um rótulo que a PRÓPRIA tela inventou — um id de
+    /// aba, o nome de uma ferramenta, um `data-state` — é uma palavra só,
+    /// sem espaço e sem ponto final: "Applied", "VerificarArquivos",
+    /// "localhost". "Terminou.", "Corrigiu ", "Interrompida por você." não
+    /// são: nasceram como frase, no backend, para gente ler — não para a
+    /// tela comparar.
+    fn parece_prosa_do_backend(literal: &str) -> bool {
+        if literal.trim().is_empty() {
+            return false;
+        }
+        literal.contains(' ') || literal.trim_end().ends_with(['.', '!', '?'])
+    }
+
+    /// O contexto termina com um operador que decide alguma coisa a partir
+    /// do valor: igualdade, prefixo, substring, posição, ou um `case` de
+    /// `switch`. Estes são os únicos jeitos que este arquivo tem de tomar
+    /// uma decisão comparando uma string — e é exatamente o repertório que
+    /// já causou o defeito três vezes (igualdade exata, `startsWith`,
+    /// prefixo por acidente).
+    fn termina_em_operador_de_decisao(contexto: &str) -> bool {
+        let c = contexto.trim_end();
+        c.ends_with("===")
+            || c.ends_with("!==")
+            || c.ends_with(".startsWith(")
+            || c.ends_with(".endsWith(")
+            || c.ends_with(".includes(")
+            || c.ends_with(".indexOf(")
+            || c.trim_start().ends_with("case")
+    }
+
+    /// Tira `//` até o fim da linha e `/* ... */` (mesmo cruzando linha) do
+    /// texto, ANTES da varredura de literais.
+    ///
+    /// Sem isto a guarda reprova por CITAÇÃO, não por defeito: esta base
+    /// explica no comentário justamente os defeitos que já consertou — e
+    /// `desfecho === "Terminou."`, o antipadrão desta própria tarefa, é
+    /// exatamente o tipo de frase que um comentário de "antes era assim"
+    /// cita entre aspas normais. Achar essa citação não prova nada sobre o
+    /// código.
+    ///
+    /// Caminha o MESMO estado de aspas que `literais_com_contexto` usa —
+    /// comentário é o terceiro estado da mesma máquina — para não confundir
+    /// `//` ou `/*` que apareçam DENTRO de uma string (`"https://..."`) com
+    /// o início de um comentário de verdade.
+    ///
+    /// Cada caractere de comentário vira espaço, mas toda quebra de linha do
+    /// original sobrevive: é o que mantém os números de linha que a guarda
+    /// relata batendo com o arquivo de verdade, mesmo depois da limpeza.
+    fn remover_comentarios(fonte: &str) -> String {
+        let chars: Vec<char> = fonte.chars().collect();
+        let mut saida = String::with_capacity(chars.len());
+        let mut i = 0;
+        let mut aspas: Option<char> = None;
+
+        while i < chars.len() {
+            let c = chars[i];
+
+            if let Some(abre) = aspas {
+                saida.push(c);
+                if c == '\\' && i + 1 < chars.len() {
+                    saida.push(chars[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if c == abre {
+                    aspas = None;
+                }
+                i += 1;
+                continue;
+            }
+
+            if c == '"' || c == '\'' || c == '`' {
+                aspas = Some(c);
+                saida.push(c);
+                i += 1;
+                continue;
+            }
+
+            if c == '/' && chars.get(i + 1) == Some(&'/') {
+                while i < chars.len() && chars[i] != '\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            if c == '/' && chars.get(i + 1) == Some(&'*') {
+                i += 2;
+                while i < chars.len() && !(chars[i] == '*' && chars.get(i + 1) == Some(&'/')) {
+                    if chars[i] == '\n' {
+                        saida.push('\n');
+                    }
+                    i += 1;
+                }
+                i = (i + 2).min(chars.len());
+                continue;
+            }
+
+            saida.push(c);
+            i += 1;
+        }
+
+        saida
+    }
+
+    /// A varredura completa: tira comentário, depois procura literal de
+    /// prosa comparado por operador de decisão. Compartilhada pela guarda de
+    /// verdade (que lê `main.ts` do disco) e pelo teste que prova, com
+    /// fontes sintéticas, que comentário não dispara e código equivalente
+    /// dispara.
+    fn achados_de_prosa_comparada(fonte: &str) -> Vec<String> {
+        let sem_comentarios = remover_comentarios(fonte);
+        let mut achados = Vec::new();
+
+        for (numero, linha) in sem_comentarios.lines().enumerate() {
+            for (contexto, literal) in literais_com_contexto(linha) {
+                if termina_em_operador_de_decisao(&contexto) && parece_prosa_do_backend(&literal)
+                {
+                    achados.push(format!(
+                        "linha {}: `{}\"{}\"…`",
+                        numero + 1,
+                        contexto.trim_start(),
+                        literal
+                    ));
+                }
+            }
+        }
+
+        achados
+    }
+
+    #[test]
+    fn a_tela_nao_decide_cor_comparando_texto_do_backend() {
+        // ESTE DEFEITO JÁ VOLTOU TRÊS VEZES:
+        //   1. `Corrigiu` escondendo arquivos não reparados
+        //   2. a tela pintando `CorrigiuEmParte` de verde por prefixo
+        //   3. o desfecho da execução, por igualdade exata
+        // Da terceira vez vira regra, não conserto.
+        //
+        // A guarda não procura as três strings de hoje — isso só provaria
+        // que ninguém vai escrever "desfecho === \"Terminou.\"" de novo,
+        // e a quarta vez viria com outro nome de variável. Ela procura a
+        // FORMA do defeito: um literal que parece PROSA (tem espaço, ou
+        // termina em pontuação de frase — ninguém escreve um id de aba ou
+        // um nome de ferramenta assim) comparado por igualdade, prefixo,
+        // substring, posição, ou `case`. Um id, um nome de aba, um
+        // `custom_id` — a própria tela inventou essas palavras, e elas não
+        // têm espaço nem ponto final, então não acionam a guarda.
+        //
+        // `../src/main.ts` relativo ao diretório de trabalho do teste
+        // funciona hoje, mas depende de onde `cargo test` é chamado —
+        // `CARGO_MANIFEST_DIR` não depende disso: aponta sempre para
+        // `src-tauri`, e o `main.ts` mora um nível acima, em `src/`.
+        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("src")
+            .join("main.ts");
+        let fonte = std::fs::read_to_string(&caminho)
+            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+
+        let achados = achados_de_prosa_comparada(&fonte);
+
+        assert!(
+            achados.is_empty(),
+            "a tela voltou a decidir por texto do backend:\n{}",
+            achados.join("\n")
+        );
+    }
+
+    #[test]
+    fn a_guarda_da_prosa_reconhece_o_defeito_original() {
+        // Canário da própria guarda: se `parece_prosa_do_backend` ou
+        // `termina_em_operador_de_decisao` regredirem a ponto de não
+        // reconhecer mais o defeito que motivou esta tarefa, este teste
+        // acusa antes que o guarda de verdade fique cego.
+        assert!(parece_prosa_do_backend("Terminou."));
+        assert!(parece_prosa_do_backend("Interrompida por você."));
+        assert!(parece_prosa_do_backend("Corrigiu "));
+        assert!(!parece_prosa_do_backend("Applied"));
+        assert!(!parece_prosa_do_backend("VerificarArquivos"));
+
+        assert!(termina_em_operador_de_decisao("desfecho === "));
+        assert!(termina_em_operador_de_decisao("resultado.startsWith("));
+        assert!(termina_em_operador_de_decisao("    case "));
+        assert!(!termina_em_operador_de_decisao("const titulo = "));
+    }
+
+    /// O conserto do fix round 1: um comentário CITANDO o antipadrão antigo
+    /// entre aspas normais (não entre crases — o defeito que fez o próprio
+    /// `main.ts:4312` passar por acidente) não pode reprovar a guarda, mas o
+    /// mesmo texto fora de comentário, como código de verdade, precisa
+    /// continuar disparando. Sem este par, um "conserto" na guarda que só
+    /// afrouxasse a heurística de prosa passaria despercebido.
+    #[test]
+    fn comentario_que_cita_prosa_do_backend_nao_dispara_mas_o_codigo_equivalente_dispara() {
+        let comentado = "// antes era: desfecho === \"Terminou.\"\n\
+             // devolve \"Corrigiu 2 arquivos.\" quando conserta em parte\n\
+             const x = 1;\n";
+        assert!(
+            achados_de_prosa_comparada(comentado).is_empty(),
+            "um comentário citando a prosa antiga não pode reprovar a guarda"
+        );
+
+        let codigo = "const cor = desfecho === \"Terminou.\" ? \"ok\" : \"error\";\n";
+        assert!(
+            !achados_de_prosa_comparada(codigo).is_empty(),
+            "o mesmo texto, fora de comentário, precisa continuar disparando"
+        );
+    }
+
+    /// `//` e `/*` dentro de uma string não abrem comentário — sem isso uma
+    /// URL como `"https://..."` perderia metade dela, apagada como se fosse
+    /// comentário.
+    #[test]
+    fn remover_comentarios_nao_confunde_barra_dentro_de_string() {
+        let fonte =
+            "const url = \"https://exemplo.com/caminho\"; // comentario de verdade\nconst y = 2;";
+        let limpo = remover_comentarios(fonte);
+
+        assert!(
+            limpo.contains("https://exemplo.com/caminho"),
+            "apagou parte da string, tratando a barra dela como comentário: {:?}",
+            limpo
+        );
+        assert!(
+            !limpo.contains("comentario de verdade"),
+            "não tirou o comentário de linha de verdade: {:?}",
+            limpo
+        );
+    }
+
+    /// A limpeza troca comentário por espaço, mas as quebras de linha do
+    /// arquivo original têm que sobreviver — inclusive as que estão DENTRO
+    /// de um bloco `/* */` de várias linhas — porque são elas que mantêm o
+    /// número de linha que a guarda relata batendo com o arquivo de
+    /// verdade.
+    #[test]
+    fn remover_comentarios_preserva_a_contagem_de_linhas() {
+        let fonte = "linha1\n/* bloco\nde duas\nlinhas */\nlinha5";
+        let limpo = remover_comentarios(fonte);
+
+        assert_eq!(limpo.lines().count(), fonte.lines().count());
     }
 }

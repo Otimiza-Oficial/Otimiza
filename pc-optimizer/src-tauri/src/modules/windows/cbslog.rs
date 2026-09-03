@@ -10,6 +10,7 @@
 // As marcas `[SR]` do CBS.log não são traduzidas. Elas são o mesmo texto em
 // qualquer instalação do Windows, e é por isso que a leitura vem daqui.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,6 +102,34 @@ fn ultima_passagem(conteudo: &str) -> Option<&str> {
     conteudo.rfind(INICIO_DA_PASSAGEM).map(|inicio| &conteudo[inicio..])
 }
 
+/// Extrai o nome do arquivo de uma linha "Cannot repair member file
+/// [l:NN]'nome.dll'". O nome vem entre o ÚLTIMO par de aspas simples da
+/// linha.
+///
+/// Devolve `None` quando a linha não tem esse par de aspas — e nesse caso
+/// quem chama NÃO deve inventar um nome nem contar a linha como arquivo
+/// distinto. Subcontar é melhor que fabricar: um nome inventado poderia por
+/// coincidência colidir com outro arquivo real e esconder uma falha, ou
+/// nunca colidir e inflar `restantes` para sempre.
+fn nome_do_arquivo_nao_reparado(linha: &str) -> Option<&str> {
+    let fim = linha.rfind('\'')?;
+    let inicio = linha[..fim].rfind('\'')?;
+    let nome = &linha[inicio + 1..fim];
+    (!nome.is_empty()).then_some(nome)
+}
+
+/// Extrai o nome do arquivo de uma linha "Repairing corrupted file
+/// \\??\\C:\\Windows\\nome.dll" — o último trecho depois da última barra
+/// (invertida ou não; o CBS.log usa barra invertida, mas nada garante isso
+/// em todas as versões).
+///
+/// Mesma regra da função acima: sem um trecho final não vazio, `None`, e a
+/// linha não conta.
+fn nome_do_arquivo_reparado(linha: &str) -> Option<&str> {
+    let nome = linha.trim_end().rsplit(['\\', '/']).next()?;
+    (!nome.is_empty()).then_some(nome)
+}
+
 pub fn interpretar(conteudo: &str) -> ResultadoSfc {
     let Some(passagem) = ultima_passagem(conteudo) else {
         // Duas causas, e a frase precisa nomear a certa: um log que nunca viu
@@ -129,35 +158,70 @@ pub fn interpretar(conteudo: &str) -> ResultadoSfc {
         };
     }
 
-    let nao_reparados = marcas
+    // As linhas BRUTAS de falha, antes de tentar extrair nome nenhuma —
+    // guardadas à parte porque a pergunta "existe alguma linha de falha?" e a
+    // pergunta "quantos arquivos distintos ela nomeia?" têm respostas
+    // diferentes quando o nome não sai. Ver abaixo.
+    let falhas_brutas: Vec<&&str> = marcas
         .iter()
         .filter(|l| l.contains("Cannot repair member file"))
-        .count();
+        .collect();
 
-    if nao_reparados == 0 {
+    // Deduplicado por NOME DE ARQUIVO, não por linha. O `sfc` pode registrar
+    // "Cannot repair member file" duas vezes para o MESMO arquivo antes de
+    // consertá-lo por uma fonte secundária — contar marcas brutas relatava
+    // como quebrado um arquivo que já tinha sido corrigido. Linhas de onde o
+    // nome não pôde ser extraído com segurança são descartadas (ver as duas
+    // funções de extração acima) em vez de contadas por marca ou de receber
+    // um nome inventado.
+    let nao_reparados_set: HashSet<&str> = falhas_brutas
+        .iter()
+        .filter_map(|l| nome_do_arquivo_nao_reparado(l))
+        .collect();
+
+    // Nenhuma linha de falha no log: aí sim está limpo.
+    if falhas_brutas.is_empty() {
         return ResultadoSfc::SemCorrupcao;
+    }
+
+    // Havia linha de falha, mas NENHUMA pôde ser interpretada — um log
+    // truncado, ou uma variante de formato do CBS que as duas funções de
+    // extração acima não preveem. `nao_reparados_set` vazio aqui não
+    // significa "sem corrupção", significa "não consegui nomear a
+    // corrupção que o log mostra". Deixar cair para `SemCorrupcao` seria o
+    // mesmo colapso que este arquivo documenta no topo — só que por um
+    // caminho novo, que `filter_map` abriu ao descartar em vez de propagar
+    // a falha de extração. O caso MISTO (algumas linhas nomeiam, outras
+    // não) não entra aqui: `nao_reparados_set` já não está vazio, e as
+    // linhas não nomeadas seguem subcontadas como o comentário da função de
+    // extração já assume — subcontar um reparo é o comportamento seguro
+    // documentado ali; o que este bloco fecha é só a via para "máquina
+    // limpa" quando ela não está.
+    if nao_reparados_set.is_empty() {
+        return ResultadoSfc::NaoSei {
+            motivo: "o registro do Windows mostra arquivos sem reparo, mas nenhuma linha veio no formato esperado para dizer qual".into(),
+        };
     }
 
     // "Repairing corrupted file" é o registro de que o conserto aconteceu. Sem
     // ele, o que ficou foi só a lista do que não deu para consertar.
-    let reparados = marcas
+    let reparados_set: HashSet<&str> = marcas
         .iter()
         .filter(|l| l.contains("Repairing corrupted file"))
-        .count();
+        .filter_map(|l| nome_do_arquivo_reparado(l))
+        .collect();
 
-    // `nao_reparados` conta toda linha "Cannot repair member file", e essa
-    // linha aparece SEMPRE que o CBS tenta primeiro a fonte local — inclusive
-    // para os arquivos que depois são consertados por uma fonte secundária
-    // (é o que a linha "Repairing corrupted file" registra na sequência). Ou
-    // seja, um arquivo que termina reparado também soma em `nao_reparados`;
-    // por isso `nao_reparados - reparados` é a contagem de quem ficou para
-    // trás, não um dobro de quem foi consertado — não é uma subtração ingênua
-    // que dobra a contagem, é a leitura correta do formato do log.
-    let restantes = nao_reparados.saturating_sub(reparados);
+    // `reparados` é a interseção: arquivos que apareceram como "não
+    // consegui" E depois como "reparando" — o mesmo arquivo, consertado.
+    // `restantes` é o que sobrou em `nao_reparados_set` sem esse par, e por
+    // isso nunca precisa de `saturating_sub`: interseção nunca é maior que o
+    // conjunto que a contém.
+    let reparados = nao_reparados_set.intersection(&reparados_set).count();
+    let restantes = nao_reparados_set.len() - reparados;
 
     if reparados == 0 {
         ResultadoSfc::NaoConseguiu {
-            quantos: nao_reparados,
+            quantos: nao_reparados_set.len(),
         }
     } else if restantes == 0 {
         ResultadoSfc::Corrigiu { quantos: reparados }
@@ -332,6 +396,63 @@ mod tests {
         };
 
         assert_eq!(ns.severidade(), Severidade::Atencao);
+    }
+
+    #[test]
+    fn o_mesmo_arquivo_falhando_duas_vezes_conta_uma() {
+        // O `sfc` pode registrar duas tentativas falhas do MESMO arquivo antes de
+        // consertá-lo de outra fonte. Contando marcas brutas, `restantes` reportava
+        // como quebrado um arquivo que foi consertado.
+        let log = "\
+2026-09-02 10:00:00, Info CSI 00000001 [SR] Beginning Verify and Repair transaction
+2026-09-02 10:00:01, Info CSI 00000002 [SR] Cannot repair member file [l:10]'ntdll.dll'
+2026-09-02 10:00:02, Info CSI 00000003 [SR] Cannot repair member file [l:10]'ntdll.dll'
+2026-09-02 10:00:03, Info CSI 00000004 [SR] Repairing corrupted file \\??\\C:\\Windows\\ntdll.dll
+2026-09-02 10:00:04, Info CSI 00000005 [SR] Repair complete";
+
+        assert_eq!(
+            interpretar(log),
+            ResultadoSfc::Corrigiu { quantos: 1 },
+            "duas tentativas do mesmo arquivo viraram um arquivo ainda quebrado"
+        );
+    }
+
+    #[test]
+    fn linha_sem_nome_extraivel_nao_e_contada_nem_inventada() {
+        // Uma linha "Cannot repair member file" sem o par de aspas (log
+        // truncado, formato inesperado) não pode virar um arquivo fantasma.
+        // Subcontar é o comportamento seguro; inventar um nome poderia tanto
+        // esconder uma falha real quanto inflar `restantes` para sempre.
+        let log = "\
+2026-09-02 10:00:00, Info CSI 00000001 [SR] Beginning Verify and Repair transaction
+2026-09-02 10:00:01, Info CSI 00000002 [SR] Cannot repair member file sem aspas nenhuma
+2026-09-02 10:00:02, Info CSI 00000003 [SR] Cannot repair member file [l:20]'ntdll.dll'";
+
+        assert_eq!(
+            interpretar(log),
+            ResultadoSfc::NaoConseguiu { quantos: 1 },
+            "linha sem nome extraivel foi contada como arquivo distinto"
+        );
+    }
+
+    #[test]
+    fn falha_sem_nenhum_nome_extraivel_nunca_vira_sem_corrupcao() {
+        // As DUAS linhas de falha vêm sem o par de aspas — nenhuma nomeia um
+        // arquivo. Antes desta correção, `nao_reparados_set` ficava vazio e a
+        // função devolvia `SemCorrupcao`: o log mostra corrupção, e a tela
+        // diria "máquina limpa". É o mesmo colapso que o comentário no topo
+        // do arquivo proíbe, só que por uma porta que a deduplicação abriu.
+        let log = "\
+2026-09-02 10:00:00, Info CSI 00000001 [SR] Beginning Verify and Repair transaction
+2026-09-02 10:00:01, Info CSI 00000002 [SR] Cannot repair member file sem aspas nenhuma
+2026-09-02 10:00:02, Info CSI 00000003 [SR] Cannot repair member file tambem sem aspas";
+
+        match interpretar(log) {
+            ResultadoSfc::NaoSei { motivo } => {
+                assert!(!motivo.is_empty(), "motivo vazio nao ajuda o cliente");
+            }
+            outro => panic!("esperava NaoSei, veio {:?} — log com falha virou 'sem corrupcao'", outro),
+        }
     }
 
     #[test]

@@ -7,25 +7,49 @@
 // conforme elas saem, e aceita ser interrompido — e é isso que o torna útil
 // também para a limpeza do WinSxS e para o que vier depois.
 
+use serde::Serialize;
 use std::io::{BufReader, Read};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 /// Sem isto, cada comando abre um console preto piscando na tela do cliente.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Uma linha de saída, com a posição dela.
+/// De onde a linha veio.
 ///
-/// O número existe para a tela poder dizer "parado há 4 minutos na mesma
-/// linha" — que é diferente de "travado", e é a informação que impede o
-/// cliente de desistir no meio do `DISM`.
-#[derive(Debug, Clone)]
+/// O `stderr` é drenado numa thread separada e caía no mesmo lugar do
+/// progresso: a razão da falha do DISM — "precisa de internet" contra "a
+/// imagem está corrompida" — chegava embaralhada no meio de centenas de
+/// linhas de percentagem, e o cliente não tinha como saber qual era qual.
+/// Com a origem viajando junto de cada linha, quem decide destacar isso na
+/// tela é o dado, não uma adivinhação por palavra-chave no texto — a mesma
+/// regra que tirou a tela de decidir cor comparando prosa em todo o resto
+/// deste caminho.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Origem {
+    Saida,
+    Erro,
+}
+
+/// Uma linha de saída, com de onde ela veio.
+///
+/// Chegou a carregar um `numero` de posição, pensado para a tela dizer
+/// "parado há 4 minutos na mesma linha". Nunca ganhou o outro lado — nem
+/// timer, nem leitura na tela — e atravessava o IPC por sessão nenhuma:
+/// `grep` no frontend confirma que só `linha` e `origem` são lidos. A mesma
+/// regra que tirou `ocupada()` daqui do lado do Rust ("ou serve para alguma
+/// coisa, ou sai") tirou este campo: implementar o timer de verdade é
+/// funcionalidade nova, não correção, e não dá para verificar na tela sem
+/// sessão de desktop — não é o tipo de coisa para entrar no último portão
+/// antes do release.
+#[derive(Debug, Clone, Serialize)]
 pub struct Andamento {
     pub linha: String,
-    pub numero: usize,
+    pub origem: Origem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +81,11 @@ struct Reserva<'a> {
 
 impl Drop for Reserva<'_> {
     fn drop(&mut self) {
-        // Se a saída foi um pânico, a tranca fica envenenada. `ocupada()`
-        // passa a responder OCUPADO, que é a resposta certa para "não sei" —
-        // mas responder isso PARA SEMPRE seria trocar um defeito por outro.
+        // Se a saída foi um pânico, a tranca fica envenenada. Um `rodar`
+        // seguinte que tentasse o lock aqui receberia esse veneno como
+        // "estado corrompido" e recusaria rodar — a resposta certa para
+        // "não sei" — mas responder isso PARA SEMPRE seria trocar um
+        // defeito por outro.
         // Aqui a reserva é limpa mesmo com veneno e o veneno é retirado em
         // seguida: o estado que ele protege é um `Option<Estado>` que acabou
         // de ser zerado, e não sobra nada pela metade para contaminar a
@@ -95,7 +121,7 @@ impl Drop for Reserva<'_> {
 /// com retorno de carro, redesenhando a MESMA linha: quebrando só em `\n`, o
 /// "fica parado em 20%" — o número que a especificação diz ser o que impede o
 /// cliente de desistir — nunca chegaria à tela.
-fn drenar<L, F>(saida: L, numero: &AtomicUsize, ao_progredir: &Mutex<F>)
+fn drenar<L, F>(saida: L, origem: Origem, ao_progredir: &Mutex<F>)
 where
     L: Read,
     F: FnMut(Andamento),
@@ -114,9 +140,8 @@ where
         if linha.is_empty() {
             return;
         }
-        let numero = numero.fetch_add(1, Ordering::SeqCst) + 1;
         if let Ok(mut callback) = ao_progredir.lock() {
-            callback(Andamento { linha, numero });
+            callback(Andamento { linha, origem });
         }
     };
 
@@ -183,20 +208,6 @@ impl TarefaLonga {
         Self {
             atual: Mutex::new(None),
             cancelar_pedido: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    /// Se há tarefa reservada. Uma tranca envenenada responde OCUPADO.
-    ///
-    /// Envenenada significa que alguma thread entrou em pânico segurando o
-    /// estado: não dá para saber se sobrou processo rodando. Responder
-    /// "está livre" aí seria a mesma troca que este produto proíbe em todo
-    /// lugar — "não sei" virando "está tudo bem" — e o preço dela aqui é
-    /// deixar um segundo `DISM` nascer por cima do primeiro.
-    pub fn ocupada(&self) -> bool {
-        match self.atual.lock() {
-            Ok(atual) => atual.is_some(),
-            Err(_) => true,
         }
     }
 
@@ -307,19 +318,17 @@ impl TarefaLonga {
         // lendo o stderr e alimentando o MESMO callback — a UI não distingue
         // de onde veio a linha, só precisa vê-la.
         let ao_progredir = Arc::new(Mutex::new(ao_progredir));
-        let numero = Arc::new(AtomicUsize::new(0));
 
         let leitor_stderr = filho.stderr.take().map(|saida| {
             let callback = ao_progredir.clone();
-            let numero = numero.clone();
-            thread::spawn(move || drenar(saida, &numero, &callback))
+            thread::spawn(move || drenar(saida, Origem::Erro, &callback))
         });
 
         // A saída é lida ENQUANTO o processo roda. Guardar para ler no fim
         // seria o mesmo que não ter andamento nenhum — e pior, encheria o cano
         // do sistema até o processo travar esperando alguém ler.
         if let Some(saida) = filho.stdout.take() {
-            drenar(saida, &numero, &ao_progredir);
+            drenar(saida, Origem::Saida, &ao_progredir);
         }
 
         let status = filho.wait().map_err(|e| format!("o processo sumiu: {}", e))?;
@@ -363,12 +372,84 @@ mod tests {
         assert!(matches!(desfecho, Desfecho::Terminou { codigo: 0 }));
     }
 
+    /// A origem viaja com a linha, e é ela — não uma adivinhação de palavra
+    /// no texto — que diz se a linha veio do `stdout` ou do `stderr`. Sem
+    /// isso a tela não tem como destacar a razão de uma falha do DISM no
+    /// meio de centenas de linhas de percentagem.
+    #[test]
+    fn a_origem_da_linha_e_a_do_cano_de_onde_ela_veio() {
+        let tarefa = TarefaLonga::nova();
+        let colhidas = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let dentro = colhidas.clone();
+
+        tarefa
+            .rodar(
+                "cmd",
+                &["/c", "echo do_stdout&&echo do_stderr 1>&2"],
+                move |a| dentro.lock().unwrap().push(a),
+            )
+            .expect("a tarefa não chegou a rodar");
+
+        let linhas = colhidas.lock().unwrap().clone();
+        let da_saida = linhas
+            .iter()
+            .find(|a| a.linha == "do_stdout")
+            .expect("a linha do stdout não chegou");
+        let do_erro = linhas
+            .iter()
+            .find(|a| a.linha == "do_stderr")
+            .expect("a linha do stderr não chegou");
+
+        assert_eq!(da_saida.origem, Origem::Saida);
+        assert_eq!(do_erro.origem, Origem::Erro);
+    }
+
     #[test]
     fn uma_de_cada_vez() {
         // Duas ferramentas de reparo ao mesmo tempo disputam os mesmos
-        // arquivos, e o resultado é imprevisível para as duas.
-        let tarefa = TarefaLonga::nova();
-        assert!(!tarefa.ocupada(), "nasceu ocupada");
+        // arquivos, e o resultado é imprevisível para as duas. Este teste
+        // prende o comportamento real — `rodar` recusando uma segunda
+        // chamada enquanto a primeira está de pé — e não um método (`ocupada`)
+        // que só existia para um teste ler o estado interno; um método
+        // público que existe só para um teste passar é teste medindo a si
+        // mesmo, e a exclusão que ele tentava provar é a de `rodar`, não a
+        // de um getter.
+        let tarefa = Arc::new(TarefaLonga::nova());
+        let dentro = tarefa.clone();
+        let (comecou_envia, comecou_recebe) = std::sync::mpsc::channel();
+
+        let primeira = std::thread::spawn(move || {
+            dentro.rodar(
+                "cmd",
+                // A saída de "echo" garante que o callback dispare assim que
+                // o processo nasce — e a reserva é feita ANTES do `spawn`,
+                // então nesse ponto ela já existe havia tempo. O `ping`
+                // segura o processo vivo tempo suficiente para a segunda
+                // chamada, abaixo, encontrá-lo ainda reservado.
+                &["/c", "echo comecei&ping -n 3 127.0.0.1 >nul"],
+                move |_| {
+                    let _ = comecou_envia.send(());
+                },
+            )
+        });
+
+        comecou_recebe
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("a primeira tarefa não chegou a começar");
+
+        let segunda = tarefa.rodar("cmd", &["/c", "echo nunca deveria rodar"], |_| {});
+        assert!(
+            matches!(segunda, Ok(Desfecho::NaoComecou { .. })),
+            "a segunda chamada devia ser recusada enquanto a primeira roda: {:?}",
+            segunda
+        );
+
+        let resultado_primeira = primeira.join().expect("a primeira thread entrou em pânico");
+        assert!(
+            matches!(resultado_primeira, Ok(Desfecho::Terminou { .. })),
+            "a primeira tarefa não terminou normalmente: {:?}",
+            resultado_primeira
+        );
     }
 
     /// Um `stderr` canalizado e nunca lido enche o buffer do cano do Windows
@@ -405,12 +486,11 @@ mod tests {
     fn drenado(bytes: &[u8]) -> Vec<String> {
         let colhidas = Arc::new(Mutex::new(Vec::new()));
         let dentro = colhidas.clone();
-        let numero = AtomicUsize::new(0);
         let callback = Mutex::new(move |a: Andamento| {
             dentro.lock().unwrap().push(a.linha);
         });
 
-        drenar(std::io::Cursor::new(bytes.to_vec()), &numero, &callback);
+        drenar(std::io::Cursor::new(bytes.to_vec()), Origem::Saida, &callback);
 
         let saida = colhidas.lock().unwrap().clone();
         saida
@@ -527,17 +607,25 @@ mod tests {
         // andamento" pelo resto da sessão.
         let tarefa = TarefaLonga::nova();
         let erro = tarefa.rodar("programa_que_nao_existe_no_windows", &[], |_| {});
-
         assert!(erro.is_err(), "esperava falha ao iniciar: {:?}", erro);
-        assert!(!tarefa.ocupada(), "a reserva ficou presa depois do erro");
+
+        // A prova real de que a reserva voltou não é ler um campo interno —
+        // é uma segunda chamada CONSEGUIR rodar. Se a reserva tivesse ficado
+        // presa, esta receberia `NaoComecou`.
+        let depois = tarefa.rodar("cmd", &["/c", "echo ok"], |_| {});
+        assert!(
+            matches!(depois, Ok(Desfecho::Terminou { codigo: 0 })),
+            "a reserva ficou presa depois do erro: {:?}",
+            depois
+        );
     }
 
     #[test]
     fn panico_no_callback_devolve_a_reserva_e_limpa_o_veneno() {
         // Um pânico dentro do callback de emissão envenenava a tranca. A
-        // partir dali `ocupada()` respondia OCIOSO (por causa de um
-        // `unwrap_or(false)`) enquanto `rodar` respondia ocupado para sempre:
-        // um "não sei" respondido como "está tudo bem" dentro do executor.
+        // prova de que a `Reserva` limpa esse veneno no `Drop` não é ler um
+        // campo interno — é uma chamada seguinte de `rodar` CONSEGUIR
+        // rodar de novo, em vez de ficar recusando para sempre.
         let tarefa = Arc::new(TarefaLonga::nova());
         let dentro = tarefa.clone();
 
@@ -553,8 +641,6 @@ mod tests {
         std::panic::set_hook(relator);
 
         assert!(panico.is_err(), "o panico de teste nao aconteceu");
-        assert!(!tarefa.ocupada(), "a reserva sobreviveu ao panico");
-
         // E o executor volta a funcionar, em vez de ficar ocupado para sempre.
         let depois = tarefa.rodar("cmd", &["/c", "echo depois"], |_| {});
         assert!(
