@@ -1725,6 +1725,94 @@ function renderNetwork(report: NetworkReport) {
   setStatus("net-status", report.note, "warn");
 }
 
+// ------------------------------------------- perda de pacote até o servidor
+
+/**
+ * Espelha `Perda` de `rede.rs`. `#[serde(tag = "tipo")]` — internamente
+ * marcada — é o que permite o TypeScript decidir por CAMPO ESTRUTURADO
+ * (`tipo`, `perdidos`, `enviados`) e nunca por comparar a prosa da `nota`. A
+ * guarda `a_tela_nao_decide_cor_comparando_texto_do_backend`, em
+ * `commands.rs`, reprova o build se este arquivo comparar por igualdade ou
+ * substring um texto que parece prosa — por isso o estado da tela abaixo só
+ * olha para `perda.tipo`, `perda.perdidos` e `medida.alvo`.
+ */
+type Perda = { tipo: "Medida"; enviados: number; perdidos: number } | { tipo: "NaoMedi" };
+
+interface MedidaDeRede {
+  alvo: string | null;
+  perda: Perda;
+  jitter_ms: number | null;
+  tempo_ms: number | null;
+  nota: string;
+}
+
+async function medirPerdaDePacote() {
+  const button = element<HTMLButtonElement>("medir-perda");
+  button.disabled = true;
+  setStatus("perda-status", "Sondando o servidor do jogo…", "progress");
+
+  try {
+    const medida = await invoke<MedidaDeRede>("medir_perda_de_pacote");
+    renderPerdaDePacote(medida);
+  } catch (error) {
+    setStatus("perda-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderPerdaDePacote(medida: MedidaDeRede) {
+  const semAlvo = medida.alvo === null;
+  const perdaTotal = medida.perda.tipo === "Medida" && medida.perda.perdidos === medida.perda.enviados;
+  const comPerda = medida.perda.tipo === "Medida" && medida.perda.perdidos > 0;
+
+  text(
+    "perda-tag",
+    semAlvo
+      ? "servidor não identificado"
+      : medida.perda.tipo === "NaoMedi"
+        ? "medição não rodou"
+        : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
+  );
+
+  const linhas: string[] = [];
+
+  if (medida.alvo !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:0">
+        <div class="startup-info">
+          <span class="startup-name">Servidor</span>
+          <span class="startup-exe">${escapeHtml(medida.alvo)}</span>
+        </div>
+      </div>`);
+  }
+
+  if (medida.tempo_ms !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:1">
+        <div class="startup-info">
+          <span class="startup-name">Tempo de resposta</span>
+        </div>
+        <span class="finding-size">${medida.tempo_ms.toFixed(0)} ms</span>
+      </div>`);
+  }
+
+  if (medida.jitter_ms !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:2">
+        <div class="startup-info">
+          <span class="startup-name">Jitter de rede</span>
+        </div>
+        <span class="finding-size">${medida.jitter_ms.toFixed(0)} ms</span>
+      </div>`);
+  }
+
+  element("perda-result").innerHTML = linhas.join("");
+
+  const nivel = semAlvo || medida.perda.tipo === "NaoMedi" ? "warn" : perdaTotal ? "error" : comPerda ? "warn" : "ok";
+  setStatus("perda-status", medida.nota, nivel);
+}
+
 // --------------------------------------------- cache de shader
 
 interface ShaderCache {
@@ -5490,6 +5578,7 @@ function wireControls() {
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);
+  element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {

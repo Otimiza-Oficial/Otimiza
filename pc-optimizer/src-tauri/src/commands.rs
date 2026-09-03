@@ -800,6 +800,33 @@ pub async fn flush_dns() -> Result<String, String> {
     }
 }
 
+/// Comando: mede perda de pacote, jitter de rede e tempo de resposta contra o
+/// servidor em que o cliente está jogando agora.
+///
+/// O alvo sai das conexões ativas do processo do jogo — ver
+/// `modules::windows::rede::servidor_do_jogo`. Não descobrir o servidor não é
+/// erro: é o próprio resultado, escrito na nota (regra 1 do módulo).
+///
+/// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que evita o
+/// cliente concluir, errado, que o produto o enganou quando otimiza o PC e a
+/// travada continua — porque a travada era de rede, não de FPS.
+#[tauri::command]
+pub async fn medir_perda_de_pacote() -> Result<crate::modules::windows::rede::MedidaDeRede, String>
+{
+    #[cfg(target_os = "windows")]
+    {
+        // São até vinte pings sequenciais; leva alguns segundos.
+        tokio::task::spawn_blocking(crate::modules::windows::rede::medir_agora)
+            .await
+            .map_err(|e| format!("Falha ao medir a perda de pacote: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: Conta os quadros que um jogo está entregando.
 ///
 /// Mede de fora, escutando o canal de eventos do Windows — nada é injetado no
@@ -2495,6 +2522,7 @@ mod tests {
         "analyze_bottleneck",
         "game_mode_status",
         "analyze_network",
+        "medir_perda_de_pacote",
         "measure_frames",
         "analyze_fivem",
         "analyze_browsers",

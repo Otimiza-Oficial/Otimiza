@@ -38,6 +38,7 @@ pub mod pressao;
 pub mod processes;
 pub mod profiles;
 pub mod readiness;
+pub mod rede;
 pub mod registry;
 pub mod reparo;
 pub mod restore;

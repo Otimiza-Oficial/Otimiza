@@ -62,6 +62,7 @@ pub fn run() {
             commands::analyze_network,
             commands::set_dns,
             commands::flush_dns,
+            commands::medir_perda_de_pacote,
             commands::measure_frames,
             commands::analyze_fivem,
             commands::clean_fivem,
