@@ -2150,7 +2150,10 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
             } => format!(
                 "Corrigiu {} arquivo(s) corrompido(s), mas o registro do Windows tinha \
                  {} linha(s) de falha que não deram para identificar — não dá para \
-                 garantir que não sobrou corrupção nelas.",
+                 garantir que não sobrou corrupção nelas. O próximo passo é rodar a \
+                 verificação de novo: se a corrupção que sobrou já foi consertada, a \
+                 próxima passagem do `sfc` escreve um registro limpo e legível; se não \
+                 foi, ela aparece de novo, desta vez nomeada.",
                 quantos, linhas_ilegiveis
             ),
             ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
