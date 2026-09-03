@@ -3376,19 +3376,39 @@ button {
    Diferente de `.alerta-global`, que é sobre a saúde do PC e nunca fecha,
    esta é sobre o próprio Otimiza e o cliente decide se quer vê-la de novo —
    por isso tem botão de fechar e não é vermelha: não é um problema na
-   máquina, é um aviso neutro. */
+   máquina, é um aviso neutro.
+
+   FORA DO FLUXO DO DOCUMENTO DE PROPÓSITO — `position: fixed`, e não um
+   lugar reservado lá em cima perto do `.alerta-global`.
+
+   `alerta-global` é preenchido por um comando LOCAL, que responde antes de a
+   pessoa conseguir clicar em qualquer coisa. Esta faixa depende de uma
+   consulta ao GitHub que pode levar até dez segundos — o cliente já pode
+   estar com o mouse em cima de um "Aplicar" quando a resposta chega. Se ela
+   ocupasse espaço no fluxo normal (mesmo que reservado desde o início vazio),
+   aparecer empurraria tudo que vem depois, e o clique que estava mirado num
+   botão acertaria outro. Fixa no canto inferior direito, sobreposta e fora do
+   fluxo, ela nunca desloca nada que já esteja na tela — o pior que acontece é
+   cobrir um canto que, nesta tela, não tem nenhum controle. */
 .atualizacao-faixa {
+  position: fixed;
+  right: var(--s5);
+  bottom: var(--s5);
+  z-index: 40;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--s3);
-  width: 100%;
-  padding: var(--s3) var(--s5);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r1);
-  background-color: rgba(var(--accent-rgb), 0.08);
+  width: min(420px, calc(100vw - var(--s5) * 2));
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r2);
+  background-color: var(--panel);
   color: var(--text);
   font-size: var(--t-body);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.055),
+    0 1px 2px rgba(var(--bg-rgb), 0.55),
+    0 10px 26px -14px rgba(var(--bg-rgb), 0.85);
 }
 
 .atualizacao-faixa[hidden] {
