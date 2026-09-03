@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Esfera } from "./esfera";
 import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
@@ -55,6 +56,21 @@ interface RestoreStatus {
   available: boolean;
   message: string;
   points: RestorePoint[];
+}
+
+/**
+ * O que a tela decide a partir de — nunca do texto de `versaoPublicada`, que
+ * é só para EXIBIR. Comparar por igualdade uma dessas três palavras é seguro
+ * porque elas são vocabulário do backend (sem espaço, sem ponto final); a
+ * guarda em `commands.rs` reprova o build se este arquivo comparar por
+ * prosa em vez de por essas variantes.
+ */
+type Comparacao = "Igual" | "HaVersaoNova" | "NaoSei";
+
+interface AvisoDeVersao {
+  comparacao: Comparacao;
+  versao_publicada: string | null;
+  pagina: string | null;
 }
 
 interface StartupEntry {
@@ -802,6 +818,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // preencher enquanto o resto da tela monta.
   void carregarVeredito();
 
+  // Também sem `await`: é uma pergunta ao GitHub que pode levar segundos, e
+  // não interrompe — a faixa aparece quando (e se) a resposta chegar.
+  void verificarAtualizacao();
+
   await ajustarMovimento();
   await listenToBatchProgress();
 
@@ -1125,6 +1145,67 @@ async function checkAccess() {
     badge.dataset.level = "limited";
     badge.querySelector(".access-text")!.textContent = "Acesso desconhecido";
   }
+}
+
+// ------------------------------------------------------------- atualização
+
+/**
+ * Guarda a última versão para a qual esta faixa já foi fechada, para não
+ * reaparecer sozinha depois de o cliente já ter visto e dispensado.
+ *
+ * A CHAVE MUDA JUNTO COM A VERSÃO PUBLICADA, DE PROPÓSITO.
+ *
+ * Se a chave fosse fixa, fechar a faixa uma vez a calaria para sempre — e uma
+ * versão nova publicada meses depois nunca apareceria, porque o "fechei" de
+ * hoje não deveria valer para um lançamento que ainda nem existe.
+ */
+const CHAVE_VERSAO_DISPENSADA = "atualizacao-dispensada";
+
+/**
+ * Pergunta ao backend se existe versão nova, e mostra a faixa quando existir.
+ *
+ * SEM `await` NA CHAMADA — quem chama isto dispara e segue em frente. A
+ * pergunta ao GitHub pode demorar até dez segundos (ver `TIMEOUT_SEGUNDOS`
+ * em `atualizacao.rs`), e nada na tela pode esperar por ela: o programa abriu
+ * para medir o PC do cliente, não para checar se ele mesmo está desatualizado.
+ *
+ * Falha de rede chega aqui como `NaoSei` — nunca como exceção — então não há
+ * `catch`: o backend já decidiu que silêncio é a resposta certa.
+ */
+async function verificarAtualizacao() {
+  const aviso = await invoke<AvisoDeVersao>("versao_mais_nova");
+
+  // A tela decide pela VARIANTE, nunca pelo texto de `versao_publicada` —
+  // esse texto é só para exibir. Comparar por igualdade com `"HaVersaoNova"`
+  // é seguro porque é vocabulário do backend (uma palavra, sem pontuação),
+  // não a prosa que a guarda em `commands.rs` proíbe.
+  if (aviso.comparacao !== "HaVersaoNova" || !aviso.versao_publicada) return;
+
+  if (localStorage.getItem(CHAVE_VERSAO_DISPENSADA) === aviso.versao_publicada) return;
+
+  const faixa = element("atualizacao-faixa");
+  text(
+    "atualizacao-texto",
+    `Uma nova versão do Otimiza está disponível (${aviso.versao_publicada}).`
+  );
+
+  const botaoBaixar = element<HTMLButtonElement>("atualizacao-baixar");
+  botaoBaixar.hidden = !aviso.pagina;
+  if (aviso.pagina) {
+    const pagina = aviso.pagina;
+    // Abre no navegador padrão do cliente, nunca dentro do próprio Otimiza —
+    // o programa não instala nada sozinho, e nem finge que instala.
+    botaoBaixar.onclick = () => {
+      void openUrl(pagina);
+    };
+  }
+
+  element("atualizacao-fechar").onclick = () => {
+    localStorage.setItem(CHAVE_VERSAO_DISPENSADA, aviso.versao_publicada!);
+    faixa.hidden = true;
+  };
+
+  faixa.hidden = false;
 }
 
 // ------------------------------------------------------------ monitoramento

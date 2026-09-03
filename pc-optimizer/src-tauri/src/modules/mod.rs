@@ -9,6 +9,7 @@
 // Quem responde "o que há de errado com este PC" agora é
 // `windows::veredito`, que elege uma frase a partir dos módulos que medem.
 
+pub mod atualizacao;
 pub mod benchmark;
 pub mod changelog;
 pub mod jitter;

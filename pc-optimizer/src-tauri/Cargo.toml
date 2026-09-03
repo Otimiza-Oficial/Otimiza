@@ -26,6 +26,12 @@ tokio = { version = "1", features = ["full"] }
 num_cpus = "1.16"
 chrono = "0.4"
 
+# Consulta anônima ao GitHub perguntando a versão publicada mais nova
+# (`modules/atualizacao.rs`). Já mora na árvore como dependência transitiva do
+# próprio Tauri — tornar explícita não baixa nada de novo, só nomeia o que já
+# estava lá.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+
 # Assinatura de licença.
 #
 # O produto guarda só a chave PÚBLICA, que consegue conferir uma assinatura e

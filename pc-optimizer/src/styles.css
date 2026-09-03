@@ -3371,6 +3371,64 @@ button {
   color: var(--text-muted);
 }
 
+/* A faixa de versão nova.
+
+   Diferente de `.alerta-global`, que é sobre a saúde do PC e nunca fecha,
+   esta é sobre o próprio Otimiza e o cliente decide se quer vê-la de novo —
+   por isso tem botão de fechar e não é vermelha: não é um problema na
+   máquina, é um aviso neutro. */
+.atualizacao-faixa {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s3) var(--s5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r1);
+  background-color: rgba(var(--accent-rgb), 0.08);
+  color: var(--text);
+  font-size: var(--t-body);
+}
+
+.atualizacao-faixa[hidden] {
+  display: none;
+}
+
+.atualizacao-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.atualizacao-acoes {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.atualizacao-fechar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--r1);
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.atualizacao-fechar:hover {
+  background-color: rgba(var(--text-rgb), 0.08);
+  color: var(--text);
+}
+
 /* Exames que já rodaram sozinhos, recolhidos.
 
    A aba Diagnóstico tinha nove cartões, e quatro deles remediam o que o

@@ -364,6 +364,28 @@
         <span class="alerta-ir">ver no Painel</span>
       </button>
 
+      <!--
+        A FAIXA DE VERSÃO NOVA.
+
+        O Otimiza não se atualiza sozinho e não abre porta nenhuma: este texto
+        só aparece porque o programa PERGUNTOU ao GitHub na abertura da tela.
+        Diferente do `alerta-global` acima, esta faixa é dispensável — o
+        cliente vê e fecha, e o clique em "Baixar" abre o navegador para ele
+        escolher instalar quando quiser. O programa não baixa nem instala nada
+        por conta própria.
+      -->
+      <div class="atualizacao-faixa" id="atualizacao-faixa" hidden role="status" aria-live="polite">
+        <span class="atualizacao-texto" id="atualizacao-texto"></span>
+        <div class="atualizacao-acoes">
+          <button class="btn btn-ghost atualizacao-baixar" id="atualizacao-baixar" type="button" hidden>
+            Baixar atualização
+          </button>
+          <button class="atualizacao-fechar" id="atualizacao-fechar" type="button" aria-label="Fechar aviso">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      </div>
+
       <div class="corpo">
         <!--
           Navegação lateral, no lugar das abas no topo.

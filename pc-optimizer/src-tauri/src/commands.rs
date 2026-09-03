@@ -2366,6 +2366,51 @@ pub fn relatorio_de_suporte() -> Result<String, String> {
     }
 }
 
+// ========================================================= ATUALIZAÇÃO
+
+/// O que a tela precisa para decidir se mostra a faixa de versão nova.
+///
+/// `comparacao` é a única coisa que a tela decide a partir de — nunca
+/// `versao_publicada`, que é texto solto para exibir, não para comparar. Ver
+/// a guarda `a_tela_nao_decide_cor_comparando_texto_do_backend`, que reprova
+/// o build se `main.ts` comparar por igualdade ou substring um texto que
+/// parece prosa.
+#[derive(Debug, Clone, Serialize)]
+pub struct AvisoDeVersao {
+    pub comparacao: crate::modules::atualizacao::Comparacao,
+    pub versao_publicada: Option<String>,
+    pub pagina: Option<String>,
+}
+
+/// Pergunta ao GitHub se existe versão publicada mais nova que a instalada.
+///
+/// Fica em `LIVRES`: é leitura — pergunta ao GitHub e não altera nada neste
+/// computador. Não instala nada sozinho: a resposta é só a faixa que o
+/// cliente vê e, se quiser, clica para baixar por conta própria.
+///
+/// A versão instalada vem de `CARGO_PKG_VERSION`, o mesmo número que já
+/// alimenta `relatorio_de_suporte` — não é hardcoded aqui de novo.
+#[tauri::command]
+pub async fn versao_mais_nova() -> AvisoDeVersao {
+    let instalada = env!("CARGO_PKG_VERSION");
+
+    match crate::modules::atualizacao::consultar_ultima().await {
+        Some(ultima) => AvisoDeVersao {
+            comparacao: crate::modules::atualizacao::comparar(instalada, &ultima.versao),
+            versao_publicada: Some(ultima.versao),
+            pagina: ultima.pagina,
+        },
+        // Falha de rede é silêncio, não alarme: `NaoSei` faz a tela não
+        // mostrar nada, em vez de arriscar um "atualize" sem versão nenhuma
+        // por trás.
+        None => AvisoDeVersao {
+            comparacao: crate::modules::atualizacao::Comparacao::NaoSei,
+            versao_publicada: None,
+            pagina: None,
+        },
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -2462,6 +2507,7 @@ mod tests {
         "congelados_agora",
         "descongelar_agora",
         "relatorio_de_suporte",
+        "versao_mais_nova",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

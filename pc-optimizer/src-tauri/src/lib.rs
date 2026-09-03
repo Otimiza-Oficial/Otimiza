@@ -111,6 +111,7 @@ pub fn run() {
             commands::congelados_agora,
             commands::descongelar_agora,
             commands::relatorio_de_suporte,
+            commands::versao_mais_nova,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
