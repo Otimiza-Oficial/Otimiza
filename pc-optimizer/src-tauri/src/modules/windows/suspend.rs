@@ -586,6 +586,43 @@ pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
     Ok(devolvidos)
 }
 
+/// Filtra o registro para o que ainda está vivo, de verdade.
+///
+/// Pura, e recebe `vivos` pronto, pela mesma razão de `retomar_tudo`: é a
+/// peça que a tela usa para desenhar a lista, e um teste que precisasse de
+/// processos reais para provar esta conta não provaria nada de confiável.
+/// Reusa `ainda_e_o_mesmo_processo` — a MESMA conferência de PID que
+/// `retomar_tudo` já faz — porque a lista mostrada na tela e a lista que o
+/// botão "descongelar agora" efetivamente devolve têm que ser a mesma coisa;
+/// duas contas separadas divergiriam cedo ou tarde e voltariam a mostrar
+/// "Discord" numa tela que na verdade não tem mais nada para devolver.
+fn congelados_de(registro: &Registro, vivos: &HashSet<(u32, u64)>) -> Vec<Suspenso> {
+    registro
+        .suspensos
+        .iter()
+        .filter(|s| ainda_e_o_mesmo_processo(s, vivos))
+        .cloned()
+        .collect()
+}
+
+/// O que está congelado agora, para a tela mostrar.
+///
+/// Existe porque um cliente abriu o gerenciador de tarefas, viu "Steam —
+/// Suspenso" sem nenhum aviso na tela do Otimiza e nenhum botão para
+/// desfazer, e concluiu — com razão — que o produto tinha quebrado a máquina
+/// dele. Esta função é o que faltava: a mesma verdade que `retomar_tudo` usa
+/// para devolver, só que para MOSTRAR antes de qualquer clique.
+pub fn congelados() -> Vec<Suspenso> {
+    let registro = Registro::load();
+
+    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
+        .into_iter()
+        .map(|(pid, _, inicio)| (pid, inicio))
+        .collect();
+
+    congelados_de(&registro, &vivos)
+}
+
 /// O registro está parado tempo demais sem nenhum jogo por perto?
 ///
 /// Função pura — o relógio e a resposta do detector de jogo entram como
@@ -1116,6 +1153,39 @@ mod tests {
         Registro::limpar_em(&caminho).expect("limpar o registro");
 
         assert!(retomar_se_expirado_com(&caminho, 600, 1_000_000, false).is_empty());
+    }
+
+    #[test]
+    fn so_lista_os_que_ainda_estao_vivos() {
+        // O registro guarda PID e instante de início. O Windows recicla PID:
+        // sem conferir os dois, a tela mostraria congelado um programa que já
+        // fechou, e o botão "descongelar" mexeria num processo que não é
+        // nosso. É o mesmo cliente do incidente descrito no topo do arquivo —
+        // a tela precisa mostrar exatamente o que ainda está congelado, nem
+        // mais nem menos.
+        let registro = Registro {
+            suspensos: vec![
+                Suspenso {
+                    pid: 1,
+                    nome: "chrome.exe".into(),
+                    visivel: "Google Chrome".into(),
+                    inicio: 10,
+                },
+                Suspenso {
+                    pid: 2,
+                    nome: "discord.exe".into(),
+                    visivel: "Discord".into(),
+                    inicio: 20,
+                },
+            ],
+            ..Default::default()
+        };
+
+        let vivos: HashSet<(u32, u64)> = [(1u32, 10u64)].into_iter().collect();
+        let lista = congelados_de(&registro, &vivos);
+
+        assert_eq!(lista.len(), 1);
+        assert_eq!(lista[0].visivel, "Google Chrome", "mostrou o nome do executável");
     }
 
     #[test]

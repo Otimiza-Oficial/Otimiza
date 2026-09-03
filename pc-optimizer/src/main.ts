@@ -800,6 +800,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     setStatus("gamemode-status", evento.payload, "ok");
     void loadGameMode();
     void loadOptimizations();
+    // O vigia é quem suspende e devolve programas em segundo plano; é ele
+    // quem sabe quando o bloco precisa aparecer ou sumir sozinho.
+    void carregarCongelados();
   });
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
@@ -1966,6 +1969,79 @@ async function setGameMode(active: boolean) {
   } finally {
     botoes.forEach((b) => (b.disabled = false));
     await loadGameMode();
+    // Ligar ou desligar o modo jogo pode ter devolvido tudo que estava
+    // congelado (desligar sempre devolve), então o bloco precisa acompanhar
+    // sem esperar o próximo evento do vigia.
+    await carregarCongelados();
+  }
+}
+
+// ---------------------------------------------- congelados pelo modo jogo
+
+interface Congelado {
+  pid: number;
+  nome: string;
+  visivel: string;
+  inicio: number;
+}
+
+/**
+ * Mostra o que está congelado agora, e some sozinho quando não há nada.
+ *
+ * Existe porque um cliente abriu o Gerenciador de Tarefas, viu "Steam —
+ * Suspenso", depois Discord, depois Chrome — e a tela do Otimiza não
+ * mostrava nada disso e não tinha botão nenhum. Ele concluiu que o produto
+ * tinha quebrado a máquina dele; não estava errado. Segue o mesmo padrão de
+ * `carregarMonitores`: busca, e o próprio resultado decide se o bloco
+ * aparece.
+ */
+async function carregarCongelados() {
+  const bloco = element("congelados");
+  const lista = element("congelados-lista");
+
+  try {
+    const congelados = await invoke<Congelado[]>("congelados_agora");
+
+    // Nada congelado é o caso comum — o jogo nem sempre está aberto, e
+    // muitos jogos não têm nada para suspender. Um bloco vazio permanente é
+    // ruído, e ruído é o que faz o cliente parar de ler a tela.
+    bloco.hidden = congelados.length === 0;
+
+    if (congelados.length === 0) {
+      return;
+    }
+
+    lista.innerHTML = congelados
+      .map((c) => `<li class="congelados-item">${escapeHtml(c.visivel)}</li>`)
+      .join("");
+  } catch {
+    // Sem backend o painel continua utilizável; o bloco só não aparece.
+    bloco.hidden = true;
+  }
+}
+
+/**
+ * Descongela tudo agora, sem esperar o jogo fechar e sem mexer no plano de
+ * energia — descongelar não é a mesma coisa que desligar o modo jogo.
+ */
+async function descongelarAgora() {
+  const botao = element<HTMLButtonElement>("descongelar-agora");
+  botao.disabled = true;
+
+  try {
+    const quantos = await invoke<number>("descongelar_agora");
+    setStatus(
+      "gamemode-status",
+      quantos > 0
+        ? `Descongelei ${quantos} programa${quantos === 1 ? "" : "s"}.`
+        : "Não havia nada congelado.",
+      "ok"
+    );
+  } catch (error) {
+    setStatus("gamemode-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+    await carregarCongelados();
   }
 }
 
@@ -5161,6 +5237,7 @@ function wireControls() {
   void carregarPlaca();
   void carregarMemoria();
   void carregarMonitores();
+  void carregarCongelados();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
@@ -5231,6 +5308,7 @@ function wireControls() {
   });
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
+  element("descongelar-agora").addEventListener("click", () => descongelarAgora());
   element("measure-frames").addEventListener("click", measureFrames);
 
   element("flush-dns").addEventListener("click", async () => {

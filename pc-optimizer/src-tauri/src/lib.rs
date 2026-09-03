@@ -108,6 +108,8 @@ pub fn run() {
             commands::reparo_ultimo_resultado,
             commands::reparo_executar,
             commands::reparo_cancelar,
+            commands::congelados_agora,
+            commands::descongelar_agora,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
