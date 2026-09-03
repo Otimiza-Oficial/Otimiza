@@ -55,6 +55,27 @@ reinstalando driver e uma otimização paga que não ia adiantar.
 Isto é a mesma promessa da aba de reparo, invertida: lá o produto conserta o que
 ninguém conserta; aqui ele mede o que ninguém mede, e admite que não conserta.
 
+### A descoberta que muda o argumento de venda deste pilar
+
+A pesquisa trouxe uma frase que vale mais que o recurso:
+
+> *A instabilidade muitas vezes vem do roteamento instável. Quando a conexão
+> oscila, os quadros podem congelar, produzindo um engasgo **que parece
+> idêntico a perda de desempenho**.*
+
+Ou seja: **travamento de rede é indistinguível de FPS baixo para quem está
+jogando.** O carro que anda sozinho, o tiro que não registra, a travada de meio
+segundo — tudo isso o jogador chama de "PC ruim".
+
+O que isso significa comercialmente: **parte dos clientes que compram um
+otimizador de FPS têm um problema que nunca foi FPS.** Eles vão otimizar, medir,
+não ver diferença, e pedir reembolso — com razão, porque o produto não podia
+resolver o problema deles.
+
+Medir perda de pacote não é só um recurso a mais. É o que separa "não adiantou"
+de "não era isso, e aqui está a prova" — e é a diferença entre um reembolso e um
+cliente que confia.
+
 ### A parte difícil, e ela é real
 
 Descobrir contra QUEM medir. O FiveM se conecta a um servidor cujo endereço não
@@ -188,6 +209,41 @@ a instalada, mostra um aviso discreto com o que mudou e o link para baixar.
 
 ---
 
+## Pilar 6 — O `CitizenFX.ini`, que é do público que já compra
+
+O produto já lê o `gta5_settings.xml` — a configuração **gráfica** do jogo. Nunca
+tocou no `CitizenFX.ini`, em `%APPDATA%\CitizenFX\`, que é a configuração do
+**motor do cliente FiveM**. Verificado: nenhuma ocorrência no projeto.
+
+### O que há lá
+
+`PoolSize` controla o limite interno de veículos que o GTA V mantém. Em servidor
+de RP com muito carro personalizado — que é exatamente onde o público deste
+produto joga — estourar esse limite produz **engasgo repentino**: a travada que
+acontece quando muita coisa aparece de uma vez, e que nenhum ajuste gráfico
+resolve porque não é a placa de vídeo que está no limite.
+
+É a mesma família do que a 1.0 já faz com a configuração do jogo: um número
+escrito num arquivo, que segura a máquina sem que ninguém saiba.
+
+### A ressalva que precisa vir junto
+
+**Aumentar o pool custa memória.** Numa máquina com pouca RAM, subir esse número
+piora — troca um engasgo por outro. O produto já sabe quanta memória a máquina
+tem e quantos encaixes estão ocupados; essa leitura tem que **gatilhar a
+decisão**, não ficar de enfeite.
+
+Regra: só oferece quando a memória sustenta, e diz o que está trocando. Sem isso
+vira o "aumente seu FPS" de sempre, com um número diferente.
+
+### Por que ele entra
+
+É a única coisa da 1.5 que serve **especificamente** ao FiveM, que é onde estão
+os clientes de hoje. Os outros cinco pilares valem para qualquer jogo — este
+vale para o que eles jogam.
+
+---
+
 ## Os bugs que ficaram
 
 **O único real, e ele é de honestidade.** No `cbslog.rs`, quando o registro do
@@ -222,16 +278,18 @@ e a versão sai com o que ficou de pé, dizendo o que não deu.
 
 ## Ordem, e ela não é a ordem de tamanho
 
-1. **O relatório colável** — é o menor dos cinco e o que devolve tempo já na
+1. **O relatório colável** — é o menor dos seis e o que devolve tempo já na
    semana que vem. Cada atendimento que ele encurta paga a implementação.
 2. **O aviso de versão nova** — fecha a lacuna que a venda por WhatsApp abriu, e
    é pré-requisito para tudo o mais: não adianta consertar defeito em versão que
    o cliente nunca vai instalar.
 3. **Perda de pacote** — o mais alinhado ao produto, e o número que ninguém
    mostra.
-4. **Driver de vídeo** — o que o concorrente vende, com a moldura que ele não
+4. **O `CitizenFX.ini`** — o único que serve especificamente ao FiveM, que é
+   onde os clientes de hoje estão.
+5. **Driver de vídeo** — o que o concorrente vende, com a moldura que ele não
    tem. Investigação antes de decidir.
-5. **Qual driver trava** — o mais difícil. Investigação primeiro, decisão depois.
+6. **Qual driver trava** — o mais difícil. Investigação primeiro, decisão depois.
 
 Os bugs e os microajustes entram junto do pilar que toca o mesmo arquivo, e não
 como fatia separada no fim — fatia de limpeza no fim é a que sempre cai quando o
