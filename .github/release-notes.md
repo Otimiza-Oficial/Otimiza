@@ -18,6 +18,72 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.3.0 — o congelamento deixa de ser invisivel
+
+Versao de conserto. Nasceu de um caso concreto: um cliente abriu o
+gerenciador de tarefas, viu **"Steam — Suspenso"**, depois o Discord, depois
+o Chrome, e concluiu que o Otimiza tinha quebrado a maquina dele.
+
+Ele nao estava errado em concluir isso. O produto congelava programas de
+propósito, e **nao mostrava nada disso na tela nem oferecia como desfazer**.
+
+## Agora voce ve o que esta congelado, e desfaz com um clique
+
+Enquanto houver programa congelado, a tela mostra quais sao e um botao
+**Descongelar agora**. Ele devolve tudo na hora, sem fechar o jogo.
+
+O bloco so aparece quando ha algo congelado, e some sozinho quando nao ha.
+
+E ele diz a frase que faltava: **no Gerenciador de Tarefas isso aparece como
+"Suspenso", e e proposital.** Era essa ponte que nao existia entre o que voce
+ve no Windows e o que a gente explica aqui.
+
+**Descongelar nao precisa de licenca.** Desfazer o que o produto fez nunca vai
+depender de licenca — uma que vence nao pode deixar voce com o Discord parado.
+
+## Quem ja tinha o modo jogo ligado vai ser avisado
+
+O texto dessa opcao foi corrigido na 1.1.2 para dizer que ela congela
+programas. Quem ligou ANTES disso nunca leu o texto novo — e e exatamente
+esse cliente que se assustou.
+
+Na primeira vez que voce abrir a 1.3 com a opcao ligada, ela explica uma vez
+o que faz, com **Manter** e **Desligar**. Desligar tambem devolve na hora o
+que estiver congelado.
+
+## "Nao consegui medir" para de virar "esta tudo bem"
+
+Duas leituras de saude diziam que estava tudo bem quando, na verdade, nao
+tinham conseguido medir:
+
+- **O contador de erros do disco.** Muitos SSDs nao publicam esse numero, e a
+  leitura tambem falha sem administrador. Nos dois casos o produto concluia
+  "zero erros" e nao dizia nada.
+- **O limite termico do processador.** Falha de leitura virava "nao ha
+  throttling" — no modulo cuja funcao e justamente detectar throttling.
+
+Agora os dois dizem, com todas as letras, quando nao foi possivel conferir. E
+a frase deixa claro o que isso **nao** significa: nao conseguir medir nao e o
+mesmo que estar bem.
+
+## E o diagnostico nao cai mais por causa de um modulo
+
+Se um dos modulos do diagnostico rapido falhar, ele agora vira uma lacuna
+declarada — o produto diz o que nao conseguiu ver. Antes, um modulo com
+problema derrubava a tela inteira.
+
+## Tambem nesta versao
+
+- O aviso do "Desligar o Controle de Conta de Usuario" passa a dizer que, com
+  ele desligado, **aplicativo da Loja da Microsoft nao abre**. O ganho dessa
+  opcao continua sendo zero, e agora o custo esta escrito por inteiro.
+- O conserto do disco para de mostrar "10 a 60 minutos" ao lado de um clique
+  que volta em segundos: esse tempo e o da verificacao no proximo boot.
+- Durante o reparo, as linhas de erro ficam destacadas das de progresso — a
+  razao de uma falha do DISM nao se perde mais no meio da percentagem.
+
+---
+
 # 1.1.2 — a Steam nunca mais é congelada, e a tela diz o que faz
 
 **Se voce viu "Suspenso" ao lado da Steam, do Discord ou do navegador no
