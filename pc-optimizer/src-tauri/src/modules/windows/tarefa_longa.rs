@@ -76,9 +76,11 @@ struct Reserva<'a> {
 
 impl Drop for Reserva<'_> {
     fn drop(&mut self) {
-        // Se a saída foi um pânico, a tranca fica envenenada. `ocupada()`
-        // passa a responder OCUPADO, que é a resposta certa para "não sei" —
-        // mas responder isso PARA SEMPRE seria trocar um defeito por outro.
+        // Se a saída foi um pânico, a tranca fica envenenada. Um `rodar`
+        // seguinte que tentasse o lock aqui receberia esse veneno como
+        // "estado corrompido" e recusaria rodar — a resposta certa para
+        // "não sei" — mas responder isso PARA SEMPRE seria trocar um
+        // defeito por outro.
         // Aqui a reserva é limpa mesmo com veneno e o veneno é retirado em
         // seguida: o estado que ele protege é um `Option<Estado>` que acabou
         // de ser zerado, e não sobra nada pela metade para contaminar a
@@ -206,20 +208,6 @@ impl TarefaLonga {
         Self {
             atual: Mutex::new(None),
             cancelar_pedido: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    /// Se há tarefa reservada. Uma tranca envenenada responde OCUPADO.
-    ///
-    /// Envenenada significa que alguma thread entrou em pânico segurando o
-    /// estado: não dá para saber se sobrou processo rodando. Responder
-    /// "está livre" aí seria a mesma troca que este produto proíbe em todo
-    /// lugar — "não sei" virando "está tudo bem" — e o preço dela aqui é
-    /// deixar um segundo `DISM` nascer por cima do primeiro.
-    pub fn ocupada(&self) -> bool {
-        match self.atual.lock() {
-            Ok(atual) => atual.is_some(),
-            Err(_) => true,
         }
     }
 
@@ -421,9 +409,49 @@ mod tests {
     #[test]
     fn uma_de_cada_vez() {
         // Duas ferramentas de reparo ao mesmo tempo disputam os mesmos
-        // arquivos, e o resultado é imprevisível para as duas.
-        let tarefa = TarefaLonga::nova();
-        assert!(!tarefa.ocupada(), "nasceu ocupada");
+        // arquivos, e o resultado é imprevisível para as duas. Este teste
+        // prende o comportamento real — `rodar` recusando uma segunda
+        // chamada enquanto a primeira está de pé — e não um método (`ocupada`)
+        // que só existia para um teste ler o estado interno; um método
+        // público que existe só para um teste passar é teste medindo a si
+        // mesmo, e a exclusão que ele tentava provar é a de `rodar`, não a
+        // de um getter.
+        let tarefa = Arc::new(TarefaLonga::nova());
+        let dentro = tarefa.clone();
+        let (comecou_envia, comecou_recebe) = std::sync::mpsc::channel();
+
+        let primeira = std::thread::spawn(move || {
+            dentro.rodar(
+                "cmd",
+                // A saída de "echo" garante que o callback dispare assim que
+                // o processo nasce — e a reserva é feita ANTES do `spawn`,
+                // então nesse ponto ela já existe havia tempo. O `ping`
+                // segura o processo vivo tempo suficiente para a segunda
+                // chamada, abaixo, encontrá-lo ainda reservado.
+                &["/c", "echo comecei&ping -n 3 127.0.0.1 >nul"],
+                move |_| {
+                    let _ = comecou_envia.send(());
+                },
+            )
+        });
+
+        comecou_recebe
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("a primeira tarefa não chegou a começar");
+
+        let segunda = tarefa.rodar("cmd", &["/c", "echo nunca deveria rodar"], |_| {});
+        assert!(
+            matches!(segunda, Ok(Desfecho::NaoComecou { .. })),
+            "a segunda chamada devia ser recusada enquanto a primeira roda: {:?}",
+            segunda
+        );
+
+        let resultado_primeira = primeira.join().expect("a primeira thread entrou em pânico");
+        assert!(
+            matches!(resultado_primeira, Ok(Desfecho::Terminou { .. })),
+            "a primeira tarefa não terminou normalmente: {:?}",
+            resultado_primeira
+        );
     }
 
     /// Um `stderr` canalizado e nunca lido enche o buffer do cano do Windows
@@ -587,17 +615,25 @@ mod tests {
         // andamento" pelo resto da sessão.
         let tarefa = TarefaLonga::nova();
         let erro = tarefa.rodar("programa_que_nao_existe_no_windows", &[], |_| {});
-
         assert!(erro.is_err(), "esperava falha ao iniciar: {:?}", erro);
-        assert!(!tarefa.ocupada(), "a reserva ficou presa depois do erro");
+
+        // A prova real de que a reserva voltou não é ler um campo interno —
+        // é uma segunda chamada CONSEGUIR rodar. Se a reserva tivesse ficado
+        // presa, esta receberia `NaoComecou`.
+        let depois = tarefa.rodar("cmd", &["/c", "echo ok"], |_| {});
+        assert!(
+            matches!(depois, Ok(Desfecho::Terminou { codigo: 0 })),
+            "a reserva ficou presa depois do erro: {:?}",
+            depois
+        );
     }
 
     #[test]
     fn panico_no_callback_devolve_a_reserva_e_limpa_o_veneno() {
         // Um pânico dentro do callback de emissão envenenava a tranca. A
-        // partir dali `ocupada()` respondia OCIOSO (por causa de um
-        // `unwrap_or(false)`) enquanto `rodar` respondia ocupado para sempre:
-        // um "não sei" respondido como "está tudo bem" dentro do executor.
+        // prova de que a `Reserva` limpa esse veneno no `Drop` não é ler um
+        // campo interno — é uma chamada seguinte de `rodar` CONSEGUIR
+        // rodar de novo, em vez de ficar recusando para sempre.
         let tarefa = Arc::new(TarefaLonga::nova());
         let dentro = tarefa.clone();
 
@@ -613,8 +649,6 @@ mod tests {
         std::panic::set_hook(relator);
 
         assert!(panico.is_err(), "o panico de teste nao aconteceu");
-        assert!(!tarefa.ocupada(), "a reserva sobreviveu ao panico");
-
         // E o executor volta a funcionar, em vez de ficar ocupado para sempre.
         let depois = tarefa.rodar("cmd", &["/c", "echo depois"], |_| {});
         assert!(

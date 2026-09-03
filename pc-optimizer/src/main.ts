@@ -4135,7 +4135,14 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
     const rotulo = botao.textContent?.trim();
     const painel = botao.closest<HTMLElement>(".tab-panel");
 
-    if (!rotulo || !painel || botao.hasAttribute("data-fivem")) return;
+    // `botao.hidden` — só o botão, nunca a aba em volta: painéis inteiros
+    // ficam `hidden` quando não são a aba ativa (ver `showTab`), e filtrar
+    // por isso esvaziaria a paleta para toda aba que não seja a de cima.
+    // O que precisa ser pulado é o botão que o CLIENTE não vê mesmo com a
+    // aba dele aberta — "Interromper" antes de haver o que interromper,
+    // "Deixar o Windows gerenciar" antes de haver o que corrigir. Sem este
+    // filtro a paleta oferecia um clique num botão invisível na tela.
+    if (!rotulo || !painel || botao.hasAttribute("data-fivem") || botao.hidden) return;
 
     const aba = painel.id.replace("tab-", "");
 
