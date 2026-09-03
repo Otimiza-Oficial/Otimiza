@@ -4347,7 +4347,6 @@ type OrigemAndamento = "saida" | "erro";
 
 interface Andamento {
   linha: string;
-  numero: number;
   origem: OrigemAndamento;
 }
 

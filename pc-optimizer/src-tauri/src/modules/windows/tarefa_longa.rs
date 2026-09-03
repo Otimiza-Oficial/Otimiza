@@ -11,7 +11,7 @@ use serde::Serialize;
 use std::io::{BufReader, Read};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -35,15 +35,20 @@ pub enum Origem {
     Erro,
 }
 
-/// Uma linha de saída, com a posição dela e de onde ela veio.
+/// Uma linha de saída, com de onde ela veio.
 ///
-/// O número existe para a tela poder dizer "parado há 4 minutos na mesma
-/// linha" — que é diferente de "travado", e é a informação que impede o
-/// cliente de desistir no meio do `DISM`.
+/// Chegou a carregar um `numero` de posição, pensado para a tela dizer
+/// "parado há 4 minutos na mesma linha". Nunca ganhou o outro lado — nem
+/// timer, nem leitura na tela — e atravessava o IPC por sessão nenhuma:
+/// `grep` no frontend confirma que só `linha` e `origem` são lidos. A mesma
+/// regra que tirou `ocupada()` daqui do lado do Rust ("ou serve para alguma
+/// coisa, ou sai") tirou este campo: implementar o timer de verdade é
+/// funcionalidade nova, não correção, e não dá para verificar na tela sem
+/// sessão de desktop — não é o tipo de coisa para entrar no último portão
+/// antes do release.
 #[derive(Debug, Clone, Serialize)]
 pub struct Andamento {
     pub linha: String,
-    pub numero: usize,
     pub origem: Origem,
 }
 
@@ -116,7 +121,7 @@ impl Drop for Reserva<'_> {
 /// com retorno de carro, redesenhando a MESMA linha: quebrando só em `\n`, o
 /// "fica parado em 20%" — o número que a especificação diz ser o que impede o
 /// cliente de desistir — nunca chegaria à tela.
-fn drenar<L, F>(saida: L, origem: Origem, numero: &AtomicUsize, ao_progredir: &Mutex<F>)
+fn drenar<L, F>(saida: L, origem: Origem, ao_progredir: &Mutex<F>)
 where
     L: Read,
     F: FnMut(Andamento),
@@ -135,13 +140,8 @@ where
         if linha.is_empty() {
             return;
         }
-        let numero = numero.fetch_add(1, Ordering::SeqCst) + 1;
         if let Ok(mut callback) = ao_progredir.lock() {
-            callback(Andamento {
-                linha,
-                numero,
-                origem,
-            });
+            callback(Andamento { linha, origem });
         }
     };
 
@@ -318,19 +318,17 @@ impl TarefaLonga {
         // lendo o stderr e alimentando o MESMO callback — a UI não distingue
         // de onde veio a linha, só precisa vê-la.
         let ao_progredir = Arc::new(Mutex::new(ao_progredir));
-        let numero = Arc::new(AtomicUsize::new(0));
 
         let leitor_stderr = filho.stderr.take().map(|saida| {
             let callback = ao_progredir.clone();
-            let numero = numero.clone();
-            thread::spawn(move || drenar(saida, Origem::Erro, &numero, &callback))
+            thread::spawn(move || drenar(saida, Origem::Erro, &callback))
         });
 
         // A saída é lida ENQUANTO o processo roda. Guardar para ler no fim
         // seria o mesmo que não ter andamento nenhum — e pior, encheria o cano
         // do sistema até o processo travar esperando alguém ler.
         if let Some(saida) = filho.stdout.take() {
-            drenar(saida, Origem::Saida, &numero, &ao_progredir);
+            drenar(saida, Origem::Saida, &ao_progredir);
         }
 
         let status = filho.wait().map_err(|e| format!("o processo sumiu: {}", e))?;
@@ -488,17 +486,11 @@ mod tests {
     fn drenado(bytes: &[u8]) -> Vec<String> {
         let colhidas = Arc::new(Mutex::new(Vec::new()));
         let dentro = colhidas.clone();
-        let numero = AtomicUsize::new(0);
         let callback = Mutex::new(move |a: Andamento| {
             dentro.lock().unwrap().push(a.linha);
         });
 
-        drenar(
-            std::io::Cursor::new(bytes.to_vec()),
-            Origem::Saida,
-            &numero,
-            &callback,
-        );
+        drenar(std::io::Cursor::new(bytes.to_vec()), Origem::Saida, &callback);
 
         let saida = colhidas.lock().unwrap().clone();
         saida
