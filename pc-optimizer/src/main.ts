@@ -41,6 +41,8 @@ interface Preferences {
   auto_game_mode: boolean;
   metrics_interval_seconds: number;
   show_unavailable: boolean;
+  /** Se a pessoa já viu a tela que explica que o modo jogo congela programas. */
+  game_mode_avisado: boolean;
 }
 
 interface RestorePoint {
@@ -299,6 +301,7 @@ let preferences: Preferences = {
   auto_game_mode: false,
   metrics_interval_seconds: 2,
   show_unavailable: true,
+  game_mode_avisado: false,
 };
 /** Handle do laço de medição, para poder trocar o intervalo sem recarregar. */
 let metricsTimer: number | null = null;
@@ -807,6 +810,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
+
+  // Depois das preferências carregadas, porque a decisão de mostrar depende
+  // dos dois campos que acabaram de chegar do backend.
+  checarReconsentimentoDoModoJogo();
 
   await Promise.all([
     loadIdentity(),
@@ -1974,6 +1981,59 @@ async function setGameMode(active: boolean) {
     // sem esperar o próximo evento do vigia.
     await carregarCongelados();
   }
+}
+
+// ------------------------------------------- reconsentimento do modo jogo
+
+/**
+ * Mostra, uma única vez, o que o modo jogo automático realmente faz —
+ * congela programas em segundo plano — para quem ligou a opção antes de o
+ * texto explicar isso (o texto mudou na 1.1.2; quem ligou antes nunca leu a
+ * versão nova). Sem isso, a primeira notícia que essa pessoa tem é abrir o
+ * Gerenciador de Tarefas e ver "Suspenso" ao lado do Discord.
+ *
+ * As duas condições precisam se encontrar: `auto_game_mode` ligado E
+ * `game_mode_avisado` ainda desligado. Instalação nova nunca bate as duas —
+ * `auto_game_mode` já nasce desligado — então a tela nunca aparece nela.
+ */
+function checarReconsentimentoDoModoJogo() {
+  if (preferences.auto_game_mode && !preferences.game_mode_avisado) {
+    element("gamemode-reconsent-modal").hidden = false;
+    element<HTMLButtonElement>("reconsent-manter").focus();
+  }
+}
+
+function fecharReconsentimentoDoModoJogo() {
+  element("gamemode-reconsent-modal").hidden = true;
+}
+
+/** "Manter": a opção continua ligada, só registra que a pessoa já viu o aviso. */
+async function reconsentirMantendo() {
+  await savePreferences({ game_mode_avisado: true });
+  fecharReconsentimentoDoModoJogo();
+}
+
+/**
+ * "Desligar": desliga a opção e devolve, agora, qualquer programa que esteja
+ * congelado neste exato momento — sem isso a pessoa desligaria o modo jogo e
+ * o Discord continuaria "Suspenso" até o jogo fechar sozinho, o que
+ * contradiz o próprio botão que ela acabou de apertar. Reaproveita
+ * `descongelar_agora`, o mesmo comando do botão "Descongelar agora" da aba
+ * Sistema — é o único caminho do produto que já faz exatamente isso.
+ */
+async function reconsentirDesligando() {
+  await savePreferences({ auto_game_mode: false, game_mode_avisado: true });
+
+  try {
+    await invoke<number>("descongelar_agora");
+  } catch {
+    // Sem backend (ou nada congelado) a tela segue utilizável; o painel de
+    // congelados abaixo reflete o estado real de qualquer jeito.
+  }
+
+  await loadGameMode();
+  await carregarCongelados();
+  fecharReconsentimentoDoModoJogo();
 }
 
 // ---------------------------------------------- congelados pelo modo jogo
@@ -5634,6 +5694,13 @@ function wireControls() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAdminModal();
   });
+
+  // Reconsentimento do modo jogo. Sem botão "fechar" nem clique fora: as
+  // únicas duas saídas são "Manter" e "Desligar" — ambas gravam que a
+  // pessoa já viu, então não existe um terceiro caminho que deixaria a tela
+  // reaparecendo sem registrar nada.
+  element("reconsent-manter").addEventListener("click", reconsentirMantendo);
+  element("reconsent-desligar").addEventListener("click", reconsentirDesligando);
 
   element("startup-list").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(

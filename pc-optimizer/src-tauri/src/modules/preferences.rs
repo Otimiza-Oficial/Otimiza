@@ -41,6 +41,23 @@ pub struct Preferences {
     /// Ligado por padrão: saber que o programa se recusou a oferecer algo, e por
     /// quê, é parte do valor. Quem já entendeu pode desligar para reduzir ruído.
     pub show_unavailable: bool,
+
+    /// Se a pessoa já viu a tela que explica que o modo jogo automático
+    /// congela programas em segundo plano (Discord, navegador — aparecem
+    /// como "Suspenso" no Gerenciador de Tarefas).
+    ///
+    /// Começa DESLIGADO sempre, mesmo para quem já tinha `auto_game_mode`
+    /// ligado antes de este campo existir — na verdade É para essa pessoa
+    /// que ele existe. A tela só mostra o reconsentimento quando as duas
+    /// condições se encontram: `auto_game_mode` ligado E este campo
+    /// desligado. Numa instalação nova `auto_game_mode` já nasce desligado,
+    /// então a tela nunca aparece ali, sem precisar de um default especial
+    /// aqui. Numa instalação antiga que já tinha o modo jogo ligado, o
+    /// arquivo salvo não tem esta chave, `#[serde(default)]` completa com
+    /// `false`, e é exatamente essa pessoa — que ligou a opção antes do
+    /// aviso de congelamento existir — quem precisa ver a tela uma vez.
+    #[serde(default)]
+    pub game_mode_avisado: bool,
 }
 
 impl Default for Preferences {
@@ -51,6 +68,10 @@ impl Default for Preferences {
             // Desligado: mexer no sistema sem a pessoa pedir precisa ser escolha dela.
             auto_game_mode: false,
             show_unavailable: true,
+            // Ver o comentário do campo: instalação nova nunca mostra a
+            // tela mesmo com isto em `false`, porque `auto_game_mode` já
+            // nasce desligado.
+            game_mode_avisado: false,
         }
     }
 }
@@ -151,5 +172,33 @@ mod tests {
         assert!(serde_json::from_str::<Preferences>("{isso nao e json}").is_err());
         // `load` engole o erro e devolve o padrão; o teste acima garante que o
         // erro existe para ser engolido.
+    }
+
+    #[test]
+    fn instalacao_nova_nunca_mostra_o_reconsentimento_do_modo_jogo() {
+        // A tela só mostra o reconsentimento quando `auto_game_mode` está
+        // ligado e `game_mode_avisado` ainda está desligado. Numa instalação
+        // nova as duas vêm em `false` — e é o próprio `auto_game_mode`
+        // desligado que fecha a porta, não uma regra especial no default
+        // deste campo novo.
+        let novo = Preferences::default();
+        assert!(!novo.auto_game_mode);
+        assert!(!novo.game_mode_avisado);
+    }
+
+    #[test]
+    fn instalacao_antiga_com_modo_jogo_ligado_ainda_nao_foi_avisada() {
+        // Um arquivo salvo antes desta versão não tem a chave nova no disco.
+        // `#[serde(default)]` preenche `game_mode_avisado` com `false` — e é
+        // exatamente essa pessoa, que ligou o modo jogo antes de o aviso de
+        // congelamento existir, quem precisa ver a tela uma vez.
+        let antigo: Preferences =
+            serde_json::from_str(r#"{"auto_game_mode": true}"#).unwrap();
+
+        assert!(antigo.auto_game_mode);
+        assert!(
+            !antigo.game_mode_avisado,
+            "instalação antiga já nasceu avisada, e nunca foi"
+        );
     }
 }

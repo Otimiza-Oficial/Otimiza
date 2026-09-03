@@ -134,10 +134,11 @@ pub fn receita(f: &Ferramenta) -> Receita {
             // enquanto a máquina não reiniciou.
             cancelar_e_seguro: false,
             aviso: Some(
-                "Agenda o conserto para a próxima vez que você ligar o \
-                 computador — ele acontece antes de o Windows abrir, e não dá \
-                 para usar a máquina durante ele. Enquanto você não reiniciar, \
-                 dá para desmarcar aqui mesmo.",
+                "Este clique volta em segundos — só marca o agendamento. Os \
+                 minutos aí em cima são de outra hora: a próxima vez que você \
+                 ligar o computador, o conserto roda antes de o Windows abrir, \
+                 e a máquina fica indisponível enquanto isso dura. Enquanto \
+                 você não reiniciar, dá para desmarcar aqui mesmo.",
             ),
         },
 
@@ -714,6 +715,27 @@ mod tests {
         let volta = receita(&Ferramenta::DesmarcarConsertoDoDisco);
         assert_eq!(volta.programa, "chkntfs");
         assert!(volta.cancelar_e_seguro);
+    }
+
+    #[test]
+    fn consertar_disco_diz_de_quem_e_o_tempo() {
+        // O clique volta em segundos; o "10 a 60 minutos" mostrado do lado
+        // dele (`minutos_tipicos`, lido em `main.ts`) é o do conserto no
+        // próximo boot. O aviso já mencionava "reiniciar", mas não dizia que
+        // o clique em si é rápido — sem isso, quem lê os dois números juntos
+        // (o rótulo de minutos e o clique) ainda pode achar que vai esperar
+        // aqui. "reinici" sozinho não é prova: já existia antes desta tarefa.
+        // A prova é dizer explicitamente que a espera deste clique é de
+        // segundos, não dos minutos ao lado.
+        let r = receita(&Ferramenta::ConsertarDisco);
+        let aviso = r.aviso.unwrap_or_default().to_lowercase();
+
+        assert!(
+            aviso.contains("segundos") && aviso.contains("reinici"),
+            "o aviso não diz que ESTE clique volta em segundos e que os \
+             minutos são do próximo boot: {}",
+            aviso
+        );
     }
 
     #[test]

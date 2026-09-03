@@ -1927,6 +1927,32 @@
       </footer>
     </div>
 
+    <!-- Reconsentimento do modo jogo. Aparece uma vez, só para quem já tinha a
+         opção ligada de antes de o texto explicar que ela congela programas —
+         é a única chance de contar isso para quem nunca leu o texto novo. -->
+    <div class="modal" id="gamemode-reconsent-modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="reconsent-title">
+        <div class="brand-logo modal-logo" aria-hidden="true"></div>
+        <h2 id="reconsent-title">O modo jogo automático congela programas</h2>
+        <p id="reconsent-text">
+          Esta opção já está ligada na sua instalação. Quando um jogo abre, o
+          Discord, o navegador e outros programas em segundo plano são
+          <strong>congelados</strong> para sobrar memória para o jogo — no
+          Gerenciador de Tarefas isso aparece como "Suspenso". Eles voltam do
+          jeito que estavam quando o jogo fechar, ou a qualquer momento pelo
+          botão "Descongelar agora" na aba Sistema.
+        </p>
+        <div class="modal-actions">
+          <button id="reconsent-manter" class="btn btn-primary">Manter</button>
+          <button id="reconsent-desligar" class="btn">Desligar</button>
+        </div>
+        <p class="modal-note">
+          "Desligar" desliga o modo jogo automático agora e devolve qualquer
+          programa que esteja congelado neste momento.
+        </p>
+      </div>
+    </div>
+
     <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
          então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
     <div class="modal" id="admin-modal" hidden>
