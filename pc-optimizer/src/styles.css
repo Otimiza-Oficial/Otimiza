@@ -4631,3 +4631,14 @@ circle.placa-parafuso {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* A origem de cada linha vem do backend (`Origem::Saida`/`Origem::Erro`,
+   ver `tarefa_longa.rs`) — a tela só traduz para cor, nunca decide olhando
+   o texto. O `stderr` do DISM é onde mora o motivo de uma falha ("precisa
+   de internet" vs. "a imagem está corrompida"), embaralhado no meio de
+   centenas de linhas de percentagem do `stdout`; sem destaque, essa linha
+   se perdia. */
+.reparo-linha-erro {
+  color: var(--red);
+  background: rgba(var(--red-rgb), 0.12);
+}

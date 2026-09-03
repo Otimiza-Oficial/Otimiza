@@ -7,6 +7,7 @@
 // conforme elas saem, e aceita ser interrompido — e é isso que o torna útil
 // também para a limpeza do WinSxS e para o que vier depois.
 
+use serde::Serialize;
 use std::io::{BufReader, Read};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
@@ -17,15 +18,33 @@ use std::thread;
 /// Sem isto, cada comando abre um console preto piscando na tela do cliente.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Uma linha de saída, com a posição dela.
+/// De onde a linha veio.
+///
+/// O `stderr` é drenado numa thread separada e caía no mesmo lugar do
+/// progresso: a razão da falha do DISM — "precisa de internet" contra "a
+/// imagem está corrompida" — chegava embaralhada no meio de centenas de
+/// linhas de percentagem, e o cliente não tinha como saber qual era qual.
+/// Com a origem viajando junto de cada linha, quem decide destacar isso na
+/// tela é o dado, não uma adivinhação por palavra-chave no texto — a mesma
+/// regra que tirou a tela de decidir cor comparando prosa em todo o resto
+/// deste caminho.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Origem {
+    Saida,
+    Erro,
+}
+
+/// Uma linha de saída, com a posição dela e de onde ela veio.
 ///
 /// O número existe para a tela poder dizer "parado há 4 minutos na mesma
 /// linha" — que é diferente de "travado", e é a informação que impede o
 /// cliente de desistir no meio do `DISM`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Andamento {
     pub linha: String,
     pub numero: usize,
+    pub origem: Origem,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +114,7 @@ impl Drop for Reserva<'_> {
 /// com retorno de carro, redesenhando a MESMA linha: quebrando só em `\n`, o
 /// "fica parado em 20%" — o número que a especificação diz ser o que impede o
 /// cliente de desistir — nunca chegaria à tela.
-fn drenar<L, F>(saida: L, numero: &AtomicUsize, ao_progredir: &Mutex<F>)
+fn drenar<L, F>(saida: L, origem: Origem, numero: &AtomicUsize, ao_progredir: &Mutex<F>)
 where
     L: Read,
     F: FnMut(Andamento),
@@ -116,7 +135,11 @@ where
         }
         let numero = numero.fetch_add(1, Ordering::SeqCst) + 1;
         if let Ok(mut callback) = ao_progredir.lock() {
-            callback(Andamento { linha, numero });
+            callback(Andamento {
+                linha,
+                numero,
+                origem,
+            });
         }
     };
 
@@ -312,14 +335,14 @@ impl TarefaLonga {
         let leitor_stderr = filho.stderr.take().map(|saida| {
             let callback = ao_progredir.clone();
             let numero = numero.clone();
-            thread::spawn(move || drenar(saida, &numero, &callback))
+            thread::spawn(move || drenar(saida, Origem::Erro, &numero, &callback))
         });
 
         // A saída é lida ENQUANTO o processo roda. Guardar para ler no fim
         // seria o mesmo que não ter andamento nenhum — e pior, encheria o cano
         // do sistema até o processo travar esperando alguém ler.
         if let Some(saida) = filho.stdout.take() {
-            drenar(saida, &numero, &ao_progredir);
+            drenar(saida, Origem::Saida, &numero, &ao_progredir);
         }
 
         let status = filho.wait().map_err(|e| format!("o processo sumiu: {}", e))?;
@@ -361,6 +384,38 @@ mod tests {
         let linhas = colhidas.lock().unwrap().clone();
         assert_eq!(linhas.len(), 2, "linhas transmitidas: {:?}", linhas);
         assert!(matches!(desfecho, Desfecho::Terminou { codigo: 0 }));
+    }
+
+    /// A origem viaja com a linha, e é ela — não uma adivinhação de palavra
+    /// no texto — que diz se a linha veio do `stdout` ou do `stderr`. Sem
+    /// isso a tela não tem como destacar a razão de uma falha do DISM no
+    /// meio de centenas de linhas de percentagem.
+    #[test]
+    fn a_origem_da_linha_e_a_do_cano_de_onde_ela_veio() {
+        let tarefa = TarefaLonga::nova();
+        let colhidas = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let dentro = colhidas.clone();
+
+        tarefa
+            .rodar(
+                "cmd",
+                &["/c", "echo do_stdout&&echo do_stderr 1>&2"],
+                move |a| dentro.lock().unwrap().push(a),
+            )
+            .expect("a tarefa não chegou a rodar");
+
+        let linhas = colhidas.lock().unwrap().clone();
+        let da_saida = linhas
+            .iter()
+            .find(|a| a.linha == "do_stdout")
+            .expect("a linha do stdout não chegou");
+        let do_erro = linhas
+            .iter()
+            .find(|a| a.linha == "do_stderr")
+            .expect("a linha do stderr não chegou");
+
+        assert_eq!(da_saida.origem, Origem::Saida);
+        assert_eq!(do_erro.origem, Origem::Erro);
     }
 
     #[test]
@@ -410,7 +465,12 @@ mod tests {
             dentro.lock().unwrap().push(a.linha);
         });
 
-        drenar(std::io::Cursor::new(bytes.to_vec()), &numero, &callback);
+        drenar(
+            std::io::Cursor::new(bytes.to_vec()),
+            Origem::Saida,
+            &numero,
+            &callback,
+        );
 
         let saida = colhidas.lock().unwrap().clone();
         saida

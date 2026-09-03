@@ -4246,6 +4246,32 @@ function tomParaStatus(tom: TomResultado): "ok" | "warn" | "error" {
 }
 
 /**
+ * O desfecho de `reparo_executar`, mesma forma de `UltimoResultadoReparo` e
+ * pelo mesmo motivo: o tom nasce no backend, a partir da variante de
+ * `Desfecho` (Rust), nunca da frase de `texto`. A tela costumava decidir a
+ * cor comparando o texto formatado (`desfecho === "Terminou."`) — e, como
+ * `CorrigiuEmParte` já provou uma vez, frase e cor divergem. Não existe mais
+ * essa comparação: só o `tom` é lido.
+ */
+type DesfechoReparo = UltimoResultadoReparo;
+
+/**
+ * De onde uma linha de andamento veio: `stdout` ou `stderr` do processo.
+ *
+ * O `stderr` é drenado numa thread separada, no Rust, e caía misturado ao
+ * progresso: a razão de uma falha do DISM — "precisa de internet" contra "a
+ * imagem está corrompida" — chegava embaralhada no meio de centenas de
+ * linhas de percentagem, e nada na tela permitia diferenciar uma da outra.
+ */
+type OrigemAndamento = "saida" | "erro";
+
+interface Andamento {
+  linha: string;
+  numero: number;
+  origem: OrigemAndamento;
+}
+
+/**
  * Título e descrição de cada ferramenta — texto de APRESENTAÇÃO, escrito
  * pela própria tela. Isto fica aqui de propósito, e não é a mesma dívida que
  * os avisos de segurança tinham: nenhum destes dois campos muda o risco de
@@ -4352,10 +4378,52 @@ function desenharItemReparo(f: FerramentaDeReparo): string {
  * mostrar alguma coisa é o mesmo que não ter andamento — e é no minuto oito,
  * parado em 20%, que o cliente conclui que travou e desliga a máquina.
  */
+/**
+ * Quantas linhas de saída `#reparo-saida` guarda, no máximo.
+ *
+ * Um `DISM /RestoreHealth` de trinta minutos redesenha a mesma linha de
+ * percentagem centenas de vezes (0%, 1%, 2%, ... cada `\r` vira uma linha —
+ * ver `drenar` em `tarefa_longa.rs`), e ainda tem mais de um estágio. Sem
+ * teto, esse elemento único acumularia milhares de nós de texto na memória
+ * da aba pelo resto da execução, para nada: ninguém rola de volta para ver
+ * "43%" de novo. 500 sobra até para as duas barras de progresso do DISM
+ * (scan + restore, uns 200 cada) mais as linhas de texto de verdade em volta,
+ * e ainda cabe folgado numa área de rolagem de 220px sem virar um arquivo de
+ * log. O corte é sempre do INÍCIO — mantém o FIM, que é onde o resultado
+ * está.
+ */
+const MAX_LINHAS_SAIDA = 500;
+
 async function carregarReparo() {
   const lista = element("reparo-lista");
   const saida = element("reparo-saida");
   const cancelar = element<HTMLButtonElement>("reparo-cancelar");
+
+  /**
+   * Acrescenta uma linha de andamento a `#reparo-saida`, destacando as que
+   * vieram do `stderr` — ver `OrigemAndamento`. Cada linha é um `<span>`
+   * seguido de uma quebra: um `<pre>` preserva essa quebra como texto, e o
+   * `<span>` é o que permite colorir só aquela linha sem tocar nas outras.
+   */
+  function acrescentarLinhaSaida(a: Andamento) {
+    const linha = document.createElement("span");
+    linha.textContent = a.linha;
+    if (a.origem === "erro") {
+      linha.className = "reparo-linha-erro";
+    }
+    saida.appendChild(linha);
+    saida.appendChild(document.createTextNode("\n"));
+
+    // Mantém só as últimas `MAX_LINHAS_SAIDA`, cortando do início — ver o
+    // comentário da constante. Cada linha é dois nós (o `<span>` e a
+    // quebra), então os dois somem juntos.
+    while (saida.children.length > MAX_LINHAS_SAIDA) {
+      saida.removeChild(saida.firstChild!);
+      if (saida.firstChild) {
+        saida.removeChild(saida.firstChild);
+      }
+    }
+  }
 
   const ferramentasPorNome = new Map<string, FerramentaDeReparo>();
 
@@ -4451,16 +4519,12 @@ async function carregarReparo() {
       // `resetbase`, uma palavra só — o mesmo nome que `reparo_executar`
       // espera do lado do Rust, sem depender da conversão de caixa entre
       // JavaScript e Rust para um interruptor desta consequência.
-      const desfecho = await invoke<string>("reparo_executar", {
+      const desfecho = await invoke<DesfechoReparo>("reparo_executar", {
         ferramenta: nome,
         resetbase: resetarBase,
       });
 
-      setStatus(
-        "reparo-execucao",
-        desfecho,
-        desfecho === "Terminou." ? "ok" : desfecho === "Interrompida por você." ? "warn" : "error"
-      );
+      setStatus("reparo-execucao", desfecho.texto, tomParaStatus(desfecho.tom));
     } catch (error) {
       setStatus("reparo-execucao", String(error), "error");
     } finally {
@@ -4485,9 +4549,9 @@ async function carregarReparo() {
     void executarFerramenta(botao.dataset.reparo!);
   });
 
-  await listen<string>("reparo-andamento", (evento) => {
+  await listen<Andamento>("reparo-andamento", (evento) => {
     saida.hidden = false;
-    saida.textContent = `${saida.textContent ?? ""}${evento.payload}\n`;
+    acrescentarLinhaSaida(evento.payload);
     saida.scrollTop = saida.scrollHeight;
   });
 
