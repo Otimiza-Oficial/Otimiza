@@ -1736,7 +1736,14 @@ function renderNetwork(report: NetworkReport) {
  * substring um texto que parece prosa — por isso o estado da tela abaixo só
  * olha para `perda.tipo`, `perda.perdidos` e `medida.alvo`.
  */
-type Perda = { tipo: "Medida"; enviados: number; perdidos: number } | { tipo: "NaoMedi" };
+type Perda =
+  | { tipo: "Medida"; enviados: number; perdidos: number }
+  | { tipo: "NaoMedi" }
+  // Nenhum ping voltou, MAS a porta do jogo aceitou conexão. Não é perda:
+  // servidor de jogo bloqueia ping por segurança o tempo todo, e pintar
+  // isso de vermelho diria a um cliente com a rede boa que ela está
+  // destruída.
+  | { tipo: "NaoRespondePing"; enviados: number };
 
 interface MedidaDeRede {
   alvo: string | null;
@@ -1772,7 +1779,12 @@ function renderPerdaDePacote(medida: MedidaDeRede) {
       ? "servidor não identificado"
       : medida.perda.tipo === "NaoMedi"
         ? "medição não rodou"
-        : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
+        : medida.perda.tipo === "NaoRespondePing"
+          // NÃO diz "perdidos": a porta respondeu, então não se perdeu nada.
+          // A etiqueta antiga dizia "20/20 perdidos" para este caso, e era
+          // ela — não a prosa — que o cliente lia.
+          ? "não responde a ping"
+          : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
   );
 
   const linhas: string[] = [];
@@ -1809,7 +1821,17 @@ function renderPerdaDePacote(medida: MedidaDeRede) {
 
   element("perda-result").innerHTML = linhas.join("");
 
-  const nivel = semAlvo || medida.perda.tipo === "NaoMedi" ? "warn" : perdaTotal ? "error" : comPerda ? "warn" : "ok";
+  // `NaoRespondePing` entra como aviso, e nunca como erro: a conexão do
+  // cliente está boa, e o que não deu foi medir. Vermelho aqui seria o
+  // alarme falso que esta resposta existe para eliminar.
+  const nivel =
+    semAlvo || medida.perda.tipo === "NaoMedi" || medida.perda.tipo === "NaoRespondePing"
+      ? "warn"
+      : perdaTotal
+        ? "error"
+        : comPerda
+          ? "warn"
+          : "ok";
   setStatus("perda-status", medida.nota, nivel);
 }
 

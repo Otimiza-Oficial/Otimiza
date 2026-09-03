@@ -95,7 +95,8 @@
 
 use super::{gamemode, shell};
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::time::Duration;
 
 /// Quantas vezes o servidor é sondado numa medição.
 ///
@@ -147,6 +148,25 @@ pub enum Perda {
     /// A checagem em si não rodou — nenhum pacote saiu. Não é 0% de perda
     /// nem 100%: é ausência de dado.
     NaoMedi,
+    /// Nenhum ping voltou, MAS a porta do jogo aceitou conexão.
+    ///
+    /// ESTA VARIANTE EXISTE PARA O PRODUTO NÃO MENTIR, E O MOTIVO É CONCRETO.
+    ///
+    /// Hospedagem de FiveM é alvo conhecido de ataque, e boa parte dos
+    /// servidores fica atrás de filtragem anti-DDoS que descarta ICMP e deixa
+    /// a porta do jogo passar intacta. Vários firewalls de nuvem também
+    /// bloqueiam ICMP por padrão.
+    ///
+    /// Sem esta resposta, esse servidor — perfeitamente saudável — apareceria
+    /// como "20 de 20 perdidos, rede fora do ar". O produto estaria dizendo a
+    /// um cliente pagante que a conexão dele está destruída quando ela está
+    /// perfeita, e numa versão cujo argumento é medir sem mentir isso seria
+    /// pior do que não ter o recurso.
+    ///
+    /// A prova de que não é perda vem do aperto de mão TCP na porta que a
+    /// descoberta já achou: se o serviço com que o jogo fala aceita conexão, o
+    /// que não voltou foi só o ping.
+    NaoRespondePing { enviados: u32 },
 }
 
 /// Resume enviados/recebidos em `Perda`. Pura, testável sem PowerShell.
@@ -158,6 +178,27 @@ pub fn resumir(enviados: u32, recebidos: u32) -> Perda {
     Perda::Medida {
         enviados,
         perdidos: enviados.saturating_sub(recebidos),
+    }
+}
+
+/// Decide o desfecho quando NENHUM ping voltou, usando a porta como testemunha.
+///
+/// Pura de propósito: a decisão que separa "sua rede está ruim" de "este
+/// servidor não responde a ping" é a mais cara de errar do módulo, e precisa
+/// poder ser testada sem rede nenhuma.
+///
+/// `porta_respondeu`:
+///   - `Some(true)`  — o serviço do jogo aceitou conexão. Não é perda.
+///   - `Some(false)` — nem ping nem porta. Aí a perda total é real.
+///   - `None`        — não deu para tentar a porta (a descoberta não trouxe
+///                     uma). Sem testemunha, fica a medição crua do ping.
+pub fn avaliar_perda_total(enviados: u32, porta_respondeu: Option<bool>) -> Perda {
+    match porta_respondeu {
+        Some(true) => Perda::NaoRespondePing { enviados },
+        _ => Perda::Medida {
+            enviados,
+            perdidos: enviados,
+        },
     }
 }
 
@@ -355,11 +396,19 @@ fn montar_nota(perda: &Perda, sem_alvo: bool) -> String {
             Perda::NaoMedi => "A checagem não rodou desta vez — não é 0% de perda nem 100%, é \
                 que nenhum pacote chegou a sair. Tente de novo."
                 .to_string(),
+            // A PORTA JÁ RESPONDEU. Isto NÃO é perda, e a frase não pode
+            // soar como se fosse: quem lê aqui está com a conexão boa.
+            Perda::NaoRespondePing { enviados } => format!(
+                "Este servidor não responde a ping — as {} tentativas ficaram sem resposta —, \
+                 mas a porta do jogo aceitou conexão normalmente. Ou seja: **não é perda de \
+                 pacote**. Bloquear ping é comum em servidor de jogo, por segurança. Não dá \
+                 para medir perda contra este servidor, e isso não é problema na sua rede.",
+                enviados
+            ),
             Perda::Medida { enviados, perdidos } if *perdidos == *enviados => format!(
-                "Nenhuma das {} tentativas voltou: é uma medição real, e aponta rede fora do ar \
-                 entre você e o servidor. (Alguns servidores de jogo bloqueiam ping por \
-                 segurança e continuam respondendo normalmente na porta do jogo — se você sabe \
-                 que este servidor está de pé, pode ser isso, e não perda de verdade.)",
+                "Nenhuma das {} tentativas voltou, e a porta do jogo também não respondeu. \
+                 As duas coisas juntas apontam o servidor fora do ar, ou algo entre você e \
+                 ele bloqueando a conexão inteira.",
                 enviados
             ),
             Perda::Medida { enviados, perdidos } if *perdidos == 0 => format!(
@@ -407,7 +456,22 @@ pub fn medir(alvo: Option<String>, amostras: u32) -> MedidaDeRede {
             }
 
             let respostas = sondar(host, amostras.max(1));
-            let perda = calcular_perda(&respostas);
+            let mut perda = calcular_perda(&respostas);
+
+            // NENHUM PING VOLTOU? PERGUNTE À PORTA ANTES DE ACUSAR A REDE.
+            //
+            // A descoberta já achou a porta, e o `medir` a jogava fora. Um
+            // aperto de mão TCP nela é respondido pelo serviço com que o jogo
+            // realmente fala, e NÃO é engolido por regra de firewall que só
+            // vale para ICMP — que é o caso comum em servidor de FiveM atrás
+            // de filtragem anti-DDoS.
+            //
+            // Só roda no caso 100%: com qualquer resposta de ping, a medição
+            // já se sustenta e uma conexão a mais seria ruído.
+            if matches!(&perda, Perda::Medida { enviados, perdidos } if perdidos == enviados) {
+                let enviados = respostas.len() as u32;
+                perda = avaliar_perda_total(enviados, porta_responde(&destino));
+            }
 
             MedidaDeRede {
                 alvo: Some(destino),
@@ -418,6 +482,26 @@ pub fn medir(alvo: Option<String>, amostras: u32) -> MedidaDeRede {
             }
         }
     }
+}
+
+/// Quanto se espera pelo aperto de mão TCP antes de desistir.
+///
+/// Dois segundos: é confirmação, não medição. Se a porta não respondeu nesse
+/// tempo, o produto simplesmente não tem a testemunha e volta para a medição
+/// crua do ping — esperar mais só atrasaria a tela para o cliente.
+const PRAZO_DA_PORTA: Duration = Duration::from_secs(2);
+
+/// Se a porta do jogo aceita conexão.
+///
+/// `None` quando não há porta para tentar: a descoberta pode devolver só o
+/// endereço, e sem porta não existe testemunha — que é diferente de a
+/// testemunha ter dito não.
+fn porta_responde(destino: &str) -> Option<bool> {
+    let (host, porta) = destino.rsplit_once(':')?;
+    let porta: u16 = porta.parse().ok()?;
+    let ip: IpAddr = host.parse().ok()?;
+
+    Some(TcpStream::connect_timeout(&SocketAddr::new(ip, porta), PRAZO_DA_PORTA).is_ok())
 }
 
 /// Medição com a quantidade de amostras padrão do produto.
@@ -438,6 +522,57 @@ mod tests {
             decidir_alvo(Some("203.0.113.10:30120".into())),
             AlvoDaMedida::Servidor(_)
         ));
+    }
+
+    #[test]
+    fn ping_bloqueado_nao_e_apresentado_como_perda_de_pacote() {
+        // A DECISÃO MAIS CARA DE ERRAR DO MÓDULO.
+        //
+        // Hospedagem de FiveM é alvo de ataque, e boa parte fica atrás de
+        // filtragem anti-DDoS que descarta ICMP e passa a porta do jogo
+        // intacta. Sem esta separação, esse servidor — saudável — apareceria
+        // como "20 de 20 perdidos, rede fora do ar", e o produto estaria
+        // dizendo a um cliente pagante que a conexão dele está destruída
+        // quando ela está perfeita.
+        assert_eq!(
+            avaliar_perda_total(20, Some(true)),
+            Perda::NaoRespondePing { enviados: 20 },
+            "porta respondendo continuou virando perda total"
+        );
+
+        // Nem ping nem porta: aí a perda total é real, e dizer isso é o certo.
+        assert_eq!(
+            avaliar_perda_total(20, Some(false)),
+            Perda::Medida { enviados: 20, perdidos: 20 }
+        );
+
+        // Sem porta para tentar não há testemunha — e ausência de testemunha
+        // não é testemunho a favor. Fica a medição crua do ping.
+        assert_eq!(
+            avaliar_perda_total(20, None),
+            Perda::Medida { enviados: 20, perdidos: 20 }
+        );
+    }
+
+    #[test]
+    fn a_frase_do_ping_bloqueado_nega_a_perda_em_vez_de_ressalvar() {
+        // A ressalva antiga vivia entre parênteses no fim de uma frase que
+        // começava com "rede fora do ar" — e quem lê etiqueta vermelha e
+        // "20/20 perdidos" não chega ao parêntese. A negação tem que estar na
+        // frase, não depois dela.
+        let nota = montar_nota(&Perda::NaoRespondePing { enviados: 20 }, false);
+        let minuscula = nota.to_lowercase();
+
+        assert!(
+            minuscula.contains("não é perda de pacote"),
+            "a frase não nega a perda: {}",
+            nota
+        );
+        assert!(
+            !minuscula.contains("fora do ar"),
+            "a frase ainda fala em rede fora do ar: {}",
+            nota
+        );
     }
 
     #[test]
@@ -498,12 +633,34 @@ mod tests {
     }
 
     #[test]
-    fn nota_de_perda_total_avisa_do_ponto_cego_do_icmp() {
-        // Perda de 100% pode ser bloqueio de ping, não rede destruída — quem lê
-        // a tela precisa saber que ping bloqueado existe antes de tirar
-        // conclusão errada sobre o próprio provedor.
+    fn perda_total_confirmada_pela_porta_nao_ressalva_o_que_nao_ha() {
+        // ESTE TESTE MUDOU DE SENTIDO, E A MUDANÇA É A CORREÇÃO.
+        //
+        // Ele exigia que a nota de 100% carregasse a ressalva "alguns
+        // servidores bloqueiam ping" — ou seja, exigia o DEFEITO: a dúvida
+        // entre parênteses, no fim de uma frase que começava com "rede fora do
+        // ar", ao lado de uma etiqueta vermelha e "20/20 perdidos". Quem lê
+        // isso não chega ao parêntese.
+        //
+        // A dúvida deixou de morar na prosa e passou a morar na RESPOSTA: se o
+        // ping não volta, o produto pergunta à porta do jogo antes de concluir
+        // qualquer coisa. Quando ela responde, o desfecho é outro
+        // (`NaoRespondePing`) e a frase NEGA a perda em vez de ressalvá-la.
+        //
+        // Então esta nota — perda total COM a porta também muda —, não precisa
+        // mais de ressalva: as duas testemunhas disseram a mesma coisa.
         let nota = montar_nota(&Perda::Medida { enviados: 20, perdidos: 20 }, false);
-        assert!(nota.contains("bloqueiam ping"));
+
+        assert!(
+            nota.contains("a porta do jogo também não respondeu"),
+            "a nota não diz que a porta foi consultada: {}",
+            nota
+        );
+        assert!(
+            !nota.contains("bloqueiam ping"),
+            "a ressalva voltou para uma nota que não precisa mais dela: {}",
+            nota
+        );
     }
 
     #[test]
