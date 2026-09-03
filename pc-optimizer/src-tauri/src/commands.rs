@@ -2113,6 +2113,19 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
                  O próximo passo é reparar a imagem do Windows.",
                 quantos
             ),
+            // Corrigiu tudo que deu para nomear, mas o registro também
+            // tinha linha de falha sem nome legível — não dá para garantir
+            // que não sobrou corrupção nelas. O tom (`Atencao`, não `Ok`)
+            // já carrega essa ressalva sozinho.
+            ResultadoSfc::CorrigiuComRessalva {
+                quantos,
+                linhas_ilegiveis,
+            } => format!(
+                "Corrigiu {} arquivo(s) corrompido(s), mas o registro do Windows tinha \
+                 {} linha(s) de falha que não deram para identificar — não dá para \
+                 garantir que não sobrou corrupção nelas.",
+                quantos, linhas_ilegiveis
+            ),
             ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
         };
 

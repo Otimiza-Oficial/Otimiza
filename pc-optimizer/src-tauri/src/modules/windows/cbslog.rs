@@ -28,6 +28,18 @@ pub enum ResultadoSfc {
     /// isso visível.
     CorrigiuEmParte { corrigidos: usize, restantes: usize },
     NaoConseguiu { quantos: usize },
+    /// Reparo que, PELOS NOMES QUE DERAM PARA LER, terminou completo — mas o
+    /// log também tinha linhas de falha sem nome extraível, então não dá
+    /// para dizer se sobrou corrupção nelas ou não.
+    ///
+    /// Existe porque descartar essas linhas (ver `nome_do_arquivo_nao_reparado`)
+    /// é o comportamento certo para não inventar um arquivo — mas descartar
+    /// em silêncio fazia a soma dar `Corrigiu`, sucesso sem ressalva, quando
+    /// o log mostrava corrupção de estado desconhecido. É a mesma regra que
+    /// fechou o caso em que NENHUMA linha lê (vira `NaoSei`, nunca
+    /// `SemCorrupcao`): aqui parte lê, e a parte que leu foi mesmo
+    /// consertada, mas isso não apaga a parte que não deu para ler.
+    CorrigiuComRessalva { quantos: usize, linhas_ilegiveis: usize },
     /// Log ausente, vazio ou ilegível.
     ///
     /// NUNCA vira `SemCorrupcao`. "Não consegui conferir" virando "está tudo
@@ -72,6 +84,11 @@ impl ResultadoSfc {
             // impede `NaoSei` de colapsar em `SemCorrupcao` também impede que
             // ele colapse no tom mais grave sem prova nenhuma disso.
             ResultadoSfc::NaoSei { .. } => Severidade::Atencao,
+            // Mesmo raciocínio: as linhas ilegíveis são incerteza, não prova
+            // de que algo está errado, então o tom fica no intermediário —
+            // nunca no `Ok` que a contagem de nomes legíveis, sozinha,
+            // sugeriria.
+            ResultadoSfc::CorrigiuComRessalva { .. } => Severidade::Atencao,
         }
     }
 }
@@ -219,12 +236,35 @@ pub fn interpretar(conteudo: &str) -> ResultadoSfc {
     let reparados = nao_reparados_set.intersection(&reparados_set).count();
     let restantes = nao_reparados_set.len() - reparados;
 
+    // Quantas linhas BRUTAS de falha não deram nome nenhum — a mesma conta
+    // que esvaziaria `nao_reparados_set` no caso extremo já fechado acima,
+    // só que aqui ela não fica sozinha: sobra pelo menos um nome legível ao
+    // lado dela. Essas linhas continuam fora de `restantes` (subcontar
+    // continua sendo o certo — ver as funções de extração), mas não podem
+    // ficar mudas quando a conta fecha em "tudo consertado": ver abaixo.
+    let linhas_ilegiveis = falhas_brutas
+        .iter()
+        .filter(|l| nome_do_arquivo_nao_reparado(l).is_none())
+        .count();
+
     if reparados == 0 {
         ResultadoSfc::NaoConseguiu {
             quantos: nao_reparados_set.len(),
         }
     } else if restantes == 0 {
-        ResultadoSfc::Corrigiu { quantos: reparados }
+        // Pelos nomes que deram para ler, fechou: todo mundo que apareceu
+        // como "não consegui" também apareceu como "reparando". Mas se
+        // sobrou linha de falha sem nome extraível, essa conta é sobre o que
+        // deu para NOMEAR, não sobre o log inteiro — `Corrigiu` sem ressalva
+        // afirmaria mais do que os dados sustentam.
+        if linhas_ilegiveis > 0 {
+            ResultadoSfc::CorrigiuComRessalva {
+                quantos: reparados,
+                linhas_ilegiveis,
+            }
+        } else {
+            ResultadoSfc::Corrigiu { quantos: reparados }
+        }
     } else {
         ResultadoSfc::CorrigiuEmParte {
             corrigidos: reparados,
@@ -453,6 +493,31 @@ mod tests {
             }
             outro => panic!("esperava NaoSei, veio {:?} — log com falha virou 'sem corrupcao'", outro),
         }
+    }
+
+    #[test]
+    fn reparo_com_falhas_ilegiveis_nao_le_como_sucesso() {
+        // Cinco arquivos falharam; só um deu para interpretar, e esse foi
+        // consertado. `Corrigiu { quantos: 1 }` lê como sucesso sem ressalva
+        // enquanto quatro linhas de estado desconhecido foram descartadas.
+        //
+        // A 1.3 fechou o caso extremo (nenhuma legível vira `NaoSei`). O MISTO
+        // ficou, e ele lê como tranquilidade quando o quadro é incerto.
+        let log = "\
+[SR] Beginning Verify and Repair transaction
+[SR] Cannot repair member file [l:10]'ntdll.dll'
+[SR] Cannot repair member file
+[SR] Cannot repair member file
+[SR] Cannot repair member file
+[SR] Cannot repair member file
+[SR] Repairing corrupted file \\??\\C:\\Windows\\ntdll.dll";
+
+        let r = interpretar(log);
+        assert!(
+            !matches!(r, ResultadoSfc::Corrigiu { .. }),
+            "quatro falhas ilegíveis viraram sucesso limpo: {:?}",
+            r
+        );
     }
 
     #[test]
