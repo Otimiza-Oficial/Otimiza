@@ -793,6 +793,16 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
     ];
 
+    coletar_em_paralelo(tarefas)
+}
+
+/// O laço paralelo em si, separado de `coletar_rapido` só para poder receber
+/// uma tarefa que entra em pânico de propósito no teste — sem isolar isto,
+/// não há como provar que o efeito dominó de uma tranca envenenada foi
+/// corrigido, só confiar na leitura do código.
+fn coletar_em_paralelo(
+    tarefas: Vec<(Origem, fn() -> Result<Vec<Achado>, String>)>,
+) -> (Vec<Achado>, Vec<Lacuna>) {
     // Fila de trabalho, e não lotes fixos: com lotes, um módulo rápido esperaria
     // o lote inteiro terminar antes de o próximo começar, e o diagnóstico
     // passaria a custar a SOMA dos mais lentos de cada lote em vez do mais lento
@@ -804,12 +814,40 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
     std::thread::scope(|escopo| {
         for _ in 0..limite_de_simultaneos() {
             escopo.spawn(|| loop {
-                let Some((origem, tarefa)) = fila.lock().unwrap().next() else {
+                // TRANCA ENVENENADA NÃO PODE DERRUBAR O DIAGNÓSTICO.
+                //
+                // `lock().unwrap()` entra em pânico quando outra thread entrou em
+                // pânico segurando a tranca. Numa coleta paralela isso vira efeito
+                // dominó: um módulo instável mata todos os trabalhadores e o
+                // cliente perde a tela inteira — justamente a que é livre e a que
+                // vende o produto.
+                //
+                // `unwrap_or_else(|e| e.into_inner())` segue com o dado que estava
+                // lá. Ele pode estar pela metade, e é por isso que a tarefa que
+                // falhou vira LACUNA DECLARADA logo abaixo: o produto diz o que
+                // não conseguiu ver, em vez de calar.
+                let proximo = fila.lock().unwrap_or_else(|e| e.into_inner()).next();
+                let Some((origem, tarefa)) = proximo else {
                     return;
                 };
 
-                let resultado = tarefa();
-                let (achados, lacunas) = &mut *coletado.lock().unwrap();
+                // Isola o pânico de UMA tarefa dentro da própria tarefa: sem
+                // `catch_unwind`, o pânico atravessa o `spawn` e derruba a thread
+                // inteira, envenenando a tranca de `coletado` para todo mundo que
+                // ainda não terminou. Com ele, o pânico vira o mesmo tipo de
+                // lacuna que um `Err` normal já produz — nunca silêncio, nunca
+                // queda do diagnóstico inteiro.
+                let resultado = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(tarefa)) {
+                    Ok(resultado) => resultado,
+                    // `payload.as_ref()`, e não `&payload`: `Box<dyn Any + Send>`
+                    // também implementa `Any` (impl geral para todo `T: 'static`),
+                    // então `&payload` faz `downcast_ref` checar o tipo da CAIXA em
+                    // vez do conteúdo dela, e nunca casa com `&str`/`String`.
+                    Err(payload) => Err(mensagem_de_panico(payload.as_ref())),
+                };
+
+                let mut guarda = coletado.lock().unwrap_or_else(|e| e.into_inner());
+                let (achados, lacunas) = &mut *guarda;
 
                 match resultado {
                     Ok(mut novos) => achados.append(&mut novos),
@@ -825,7 +863,21 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         }
     });
 
-    coletado.into_inner().unwrap()
+    coletado.into_inner().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Extrai um texto legível do que `catch_unwind` capturou. A maioria dos
+/// pânicos em Rust carrega `&str` (literal) ou `String` (formatado); qualquer
+/// outra coisa vira um aviso genérico em vez de travar tentando formatar algo
+/// que não sabemos formatar.
+fn mensagem_de_panico(payload: &(dyn std::any::Any + Send)) -> String {
+    let texto = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "motivo desconhecido".to_string());
+
+    format!("O diagnóstico travou de forma inesperada (pânico): {texto}")
 }
 
 fn nome_da_origem(origem: Origem) -> &'static str {
@@ -1108,6 +1160,45 @@ mod tests {
         assert!(
             !v.achados.is_empty() || !v.lacunas.is_empty(),
             "o diagnóstico não pode voltar vazio e calado"
+        );
+    }
+
+    #[test]
+    fn uma_tarefa_em_panico_nao_derruba_o_diagnostico() {
+        // As tarefas rodam em paralelo com trancas compartilhadas. Um pânico em
+        // qualquer uma envenenava a tranca, e todos os outros trabalhadores
+        // morriam no `unwrap` seguinte — um módulo instável derrubava a tela
+        // que o cliente vê PRIMEIRO, que é a parte livre e a que vende.
+        //
+        // O painel silencia o hook de pânico padrão do processo enquanto este
+        // teste roda: sem isso, `catch_unwind` continua funcionando, mas o
+        // Rust ainda imprime a mensagem do pânico no stderr por conta própria,
+        // e quem lê o resultado do teste vê um "panicked at" no meio de uma
+        // suíte que passou — parece falha sem ser.
+        let hook_original = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+
+        let tarefas: Vec<(Origem, fn() -> Result<Vec<Achado>, String>)> = vec![
+            (Origem::Prontidao, || Ok(vec![])),
+            (Origem::Conflitos, || panic!("explode de proposito")),
+            (Origem::Monitor, || Ok(vec![])),
+        ];
+
+        let resultado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            coletar_em_paralelo(tarefas)
+        }));
+
+        std::panic::set_hook(hook_original);
+
+        let (achados, lacunas) = resultado.expect(
+            "o pânico de uma tarefa não pode escapar de coletar_em_paralelo",
+        );
+        let _ = achados;
+
+        assert!(
+            lacunas.iter().any(|l| l.por_que.contains("explode")),
+            "a tarefa que entrou em pânico não virou lacuna declarada: {:?}",
+            lacunas
         );
     }
 
