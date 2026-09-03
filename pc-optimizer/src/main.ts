@@ -444,6 +444,15 @@ function conferirInvariantesDaTela() {
  */
 const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
 
+/**
+ * O video do dono ensinando a usar o Otimiza.
+ *
+ * Fica no rodapé do console (e não só na mensagem de entrega do bot) porque
+ * quem compra vê aquela mensagem uma vez; quem fica confuso semanas depois
+ * está com o programa aberto, não com o histórico do Discord.
+ */
+const TUTORIAL_URL = "https://youtu.be/6bmxhhEJGoo";
+
 interface EstadoLicenca {
   ativa: boolean;
   maquina: string;
@@ -5263,6 +5272,8 @@ function wireControls() {
   });
 
   wireComandos(secoes);
+
+  (element("statusbar-tutorial") as HTMLAnchorElement).href = TUTORIAL_URL;
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);

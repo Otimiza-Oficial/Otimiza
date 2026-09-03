@@ -1382,6 +1382,19 @@ button {
   gap: var(--s2);
 }
 
+.statusbar-tutorial {
+  color: var(--text-muted);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.statusbar-tutorial:hover,
+.statusbar-tutorial:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
 /* -------------------------------------------------------------- comparação */
 
 .benchmark-table {
