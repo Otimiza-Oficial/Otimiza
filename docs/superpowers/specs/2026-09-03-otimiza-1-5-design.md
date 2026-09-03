@@ -215,9 +215,54 @@ O produto já lê o `gta5_settings.xml` — a configuração **gráfica** do jog
 tocou no `CitizenFX.ini`, em `%APPDATA%\CitizenFX\`, que é a configuração do
 **motor do cliente FiveM**. Verificado: nenhuma ocorrência no projeto.
 
+### CORREÇÃO: a pesquisa original estava errada em quase tudo
+
+Verificado na máquina do dono, contra as fontes oficiais. O que eu havia escrito
+veio de blog de hospedagem, e três dos quatro detalhes estavam errados:
+
+| O que a pesquisa dizia | O que é |
+|---|---|
+| `%APPDATA%\CitizenFX\CitizenFX.ini` | `%LOCALAPPDATA%\FiveM\FiveM.app\CitizenFX.ini` |
+| A chave se chama `PoolSize` | Chama-se **`PoolSizesIncrease`** |
+| Valor único (`PoolSize=6000`) | Um **JSON** de pool para acréscimo |
+| É do cliente | Isso estava certo |
+
+O arquivo existe na máquina do dono, na seção `[Game]`, e o campo está **vazio**.
+Ou seja: o pilar é real; o que estava errado eram os detalhes.
+
+A lista autoritativa de pools e de quanto cada um aceita está publicada pela
+Cfx.re e é um mapa simples — `"FragmentStore": 30000`, `"CMoveObject": 600`.
+
+### E a correção que importa mais: NÃO aumentar às cegas
+
+Aumentar pool sem evidência é exatamente o que os blogs mandam fazer, e é o
+"aplique 42 ajustes e torça" que este produto recusa. O sintoma tem nome
+próprio, aparece no registro do FiveM, e **diz qual pool estourou**.
+
+Então o desenho certo é: **ler, procurar evidência, e só oferecer o aumento do
+pool que de fato estourou** — com o teto que a lista oficial permite.
+
+Nos registros da máquina do dono, hoje, **não há nenhum estouro**. O produto vai
+dizer isso: não há o que aumentar. É o resultado mais comum e é um bom
+resultado, igual ao "nenhuma corrupção encontrada" do reparo.
+
+### O que ficou sem poder verificar
+
+Não há estouro nos registros desta máquina, então **não vi o texto real de um
+erro de pool cheio**. Escrever um detector para uma frase que nunca observei é
+adivinhar — e adivinhar aqui significa ou não detectar nunca, ou detectar
+errado e mexer num arquivo do jogo do cliente sem motivo.
+
+**Portanto o pilar entra em duas partes**, e a segunda depende de evidência:
+
+1. **Agora, com certeza:** ler o `CitizenFX.ini`, mostrar o que está configurado
+   e o que a lista oficial permite. Só leitura, risco zero.
+2. **Quando houver um registro real com estouro:** a detecção e a oferta de
+   aumento. Basta um cliente com o problema mandar o registro.
+
 ### O que há lá
 
-`PoolSize` controla o limite interno de veículos que o GTA V mantém. Em servidor
+`PoolSizesIncrease` controla quanto cada pool interno do GTA V pode crescer. Em servidor
 de RP com muito carro personalizado — que é exatamente onde o público deste
 produto joga — estourar esse limite produz **engasgo repentino**: a travada que
 acontece quando muita coisa aparece de uma vez, e que nenhum ajuste gráfico
