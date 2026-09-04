@@ -870,6 +870,18 @@ fn coletar_em_paralelo(
 /// pânicos em Rust carrega `&str` (literal) ou `String` (formatado); qualquer
 /// outra coisa vira um aviso genérico em vez de travar tentando formatar algo
 /// que não sabemos formatar.
+///
+/// O prefixo "(pânico)" é DELIBERADO, e é a única mensagem deste arquivo que
+/// tem um — os outros `Err` (ex.: "Ler a saúde do disco exige..." em
+/// `coletar_rapido`) são frases soltas porque o módulo que as escreveu sabia
+/// o que estava dizendo. `texto`, aqui, não: ele é o que `catch_unwind`
+/// pescou de um crash, muitas vezes uma mensagem de asserção do Rust nunca
+/// escrita para o cliente ler. Sem o prefixo, essa frase crua se misturaria
+/// com as lacunas normais do painel como se fosse mais uma explicação
+/// educada — quando na verdade é o sintoma de um bug. O prefixo marca a
+/// diferença para quem for investigar (e para quem cola isto num ticket de
+/// suporte), sem inventar um tom próprio: a severidade continua vindo de
+/// `Lacuna`, nunca desta frase.
 fn mensagem_de_panico(payload: &(dyn std::any::Any + Send)) -> String {
     let texto = payload
         .downcast_ref::<&str>()

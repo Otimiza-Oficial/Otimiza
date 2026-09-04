@@ -364,6 +364,28 @@
         <span class="alerta-ir">ver no Painel</span>
       </button>
 
+      <!--
+        A FAIXA DE VERSÃO NOVA.
+
+        O Otimiza não se atualiza sozinho e não abre porta nenhuma: este texto
+        só aparece porque o programa PERGUNTOU ao GitHub na abertura da tela.
+        Diferente do `alerta-global` acima, esta faixa é dispensável — o
+        cliente vê e fecha, e o clique em "Baixar" abre o navegador para ele
+        escolher instalar quando quiser. O programa não baixa nem instala nada
+        por conta própria.
+      -->
+      <div class="atualizacao-faixa" id="atualizacao-faixa" hidden role="status" aria-live="polite">
+        <span class="atualizacao-texto" id="atualizacao-texto"></span>
+        <div class="atualizacao-acoes">
+          <button class="btn btn-ghost atualizacao-baixar" id="atualizacao-baixar" type="button" hidden>
+            Baixar atualização
+          </button>
+          <button class="atualizacao-fechar" id="atualizacao-fechar" type="button" aria-label="Fechar aviso">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      </div>
+
       <div class="corpo">
         <!--
           Navegação lateral, no lugar das abas no topo.
@@ -952,6 +974,34 @@
 
 <section class="panel">
             <div class="panel-head">
+              <h2>Perda de pacote até o servidor</h2>
+              <span class="panel-tag" id="perda-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Uma rede que engasga sente <strong>exatamente igual a FPS
+              baixo</strong>: o carro que teleporta, o tiro que não registra,
+              a tela que congela por um instante. Se você já otimizou o PC e
+              não sentiu diferença, o problema pode estar aqui — e não no seu
+              computador.
+            </p>
+
+            <p class="hint">
+              Perda de pacote é quase sempre do provedor, do cabo, do Wi-Fi
+              ou do servidor do jogo — nunca do PC. O Otimiza mede contra o
+              servidor em que você está jogando agora e mostra onde está o
+              problema, sem prometer consertar o que não está aqui. Se não
+              der para identificar o servidor com confiança, a tela diz isso
+              em vez de inventar um número.
+            </p>
+
+            <button id="medir-perda" class="btn" data-custo="~10 s">Medir agora</button>
+            <p id="perda-status" class="status"></p>
+            <div id="perda-result" class="resultado" data-vazio="Precisa do jogo aberto: o servidor sai das conexões ativas do processo. Cerca de 10 segundos, usa a rede, e não altera nada."></div>
+          </section>
+
+<section class="panel">
+            <div class="panel-head">
               <h2>Conflitos entre programas</h2>
               <span class="panel-tag" id="conflicts-summary">—</span>
             </div>
@@ -1448,6 +1498,18 @@
 
             <p id="fivem-status" class="status"></p>
             <div id="fivem-result" class="resultado" data-vazio="Mede as pastas do FiveM e separa o cache que dá para apagar do que guarda a sua sessão. Cerca de 15 segundos, e não apaga nada sem você confirmar."></div>
+
+            <div class="citizenfx-block">
+              <p class="hint">
+                <strong>CitizenFX.ini — PoolSizesIncrease:</strong> só leitura.
+                O Otimiza mostra o que já está configurado nesse arquivo e não
+                sugere aumentar nada — não há, hoje, evidência de que algum
+                limite estourou nesta máquina, e mexer sem essa evidência é o
+                "aplique e torça" que este produto recusa.
+              </p>
+              <p id="citizenfx-note" class="hint"></p>
+              <div id="citizenfx-result"></div>
+            </div>
           </section>
 
           <section class="panel">
@@ -1845,6 +1907,27 @@
               É este perfil que decide o que o Otimiza oferece — e o que ele se
               recusa a oferecer para não piorar a sua máquina.
             </p>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Diagnóstico para o atendimento</h2>
+            </div>
+
+            <p class="lead">
+              Um resumo curto desta máquina — versão do Otimiza, Windows, RAM,
+              o que está congelado agora, quantas mudanças o produto já
+              aplicou, e o que a leitura de disco e temperatura mostram. Cole
+              no Discord ou no WhatsApp do atendimento: na maioria dos casos
+              substitui pedir acesso remoto ao seu PC. Nada aqui identifica
+              você — sem nome de usuário, sem caminho de pasta.
+            </p>
+
+            <div class="row-actions">
+              <button id="copiar-diagnostico" class="btn" data-custo="~15 s">Copiar diagnóstico</button>
+            </div>
+
+            <p id="diagnostico-status" class="status"></p>
           </section>
         </section>
 

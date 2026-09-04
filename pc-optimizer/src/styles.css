@@ -3371,6 +3371,84 @@ button {
   color: var(--text-muted);
 }
 
+/* A faixa de versão nova.
+
+   Diferente de `.alerta-global`, que é sobre a saúde do PC e nunca fecha,
+   esta é sobre o próprio Otimiza e o cliente decide se quer vê-la de novo —
+   por isso tem botão de fechar e não é vermelha: não é um problema na
+   máquina, é um aviso neutro.
+
+   FORA DO FLUXO DO DOCUMENTO DE PROPÓSITO — `position: fixed`, e não um
+   lugar reservado lá em cima perto do `.alerta-global`.
+
+   `alerta-global` é preenchido por um comando LOCAL, que responde antes de a
+   pessoa conseguir clicar em qualquer coisa. Esta faixa depende de uma
+   consulta ao GitHub que pode levar até dez segundos — o cliente já pode
+   estar com o mouse em cima de um "Aplicar" quando a resposta chega. Se ela
+   ocupasse espaço no fluxo normal (mesmo que reservado desde o início vazio),
+   aparecer empurraria tudo que vem depois, e o clique que estava mirado num
+   botão acertaria outro. Fixa no canto inferior direito, sobreposta e fora do
+   fluxo, ela nunca desloca nada que já esteja na tela — o pior que acontece é
+   cobrir um canto que, nesta tela, não tem nenhum controle. */
+.atualizacao-faixa {
+  position: fixed;
+  right: var(--s5);
+  bottom: var(--s5);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: min(420px, calc(100vw - var(--s5) * 2));
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r2);
+  background-color: var(--panel);
+  color: var(--text);
+  font-size: var(--t-body);
+  box-shadow:
+    inset 0 1px 0 rgba(var(--text-rgb), 0.055),
+    0 1px 2px rgba(var(--bg-rgb), 0.55),
+    0 10px 26px -14px rgba(var(--bg-rgb), 0.85);
+}
+
+.atualizacao-faixa[hidden] {
+  display: none;
+}
+
+.atualizacao-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.atualizacao-acoes {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.atualizacao-fechar {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--r1);
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.atualizacao-fechar:hover {
+  background-color: rgba(var(--text-rgb), 0.08);
+  color: var(--text);
+}
+
 /* Exames que já rodaram sozinhos, recolhidos.
 
    A aba Diagnóstico tinha nove cartões, e quatro deles remediam o que o

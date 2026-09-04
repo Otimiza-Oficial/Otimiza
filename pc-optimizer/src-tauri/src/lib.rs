@@ -62,10 +62,12 @@ pub fn run() {
             commands::analyze_network,
             commands::set_dns,
             commands::flush_dns,
+            commands::medir_perda_de_pacote,
             commands::measure_frames,
             commands::analyze_fivem,
             commands::clean_fivem,
             commands::prioritize_fivem,
+            commands::analyze_citizenfx,
             commands::analyze_browsers,
             commands::clean_browser_cache,
             commands::analyze_boot,
@@ -110,6 +112,8 @@ pub fn run() {
             commands::reparo_cancelar,
             commands::congelados_agora,
             commands::descongelar_agora,
+            commands::relatorio_de_suporte,
+            commands::versao_mais_nova,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

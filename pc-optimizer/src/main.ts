@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Esfera } from "./esfera";
 import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
@@ -55,6 +56,21 @@ interface RestoreStatus {
   available: boolean;
   message: string;
   points: RestorePoint[];
+}
+
+/**
+ * O que a tela decide a partir de — nunca do texto de `versaoPublicada`, que
+ * é só para EXIBIR. Comparar por igualdade uma dessas três palavras é seguro
+ * porque elas são vocabulário do backend (sem espaço, sem ponto final); a
+ * guarda em `commands.rs` reprova o build se este arquivo comparar por
+ * prosa em vez de por essas variantes.
+ */
+type Comparacao = "Igual" | "HaVersaoNova" | "NaoSei";
+
+interface AvisoDeVersao {
+  comparacao: Comparacao;
+  versao_publicada: string | null;
+  pagina: string | null;
 }
 
 interface StartupEntry {
@@ -802,6 +818,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   // preencher enquanto o resto da tela monta.
   void carregarVeredito();
 
+  // Também sem `await`: é uma pergunta ao GitHub que pode levar segundos, e
+  // não interrompe — a faixa aparece quando (e se) a resposta chegar.
+  // O `catch` cobre o que o `NaoSei` do backend não cobre: falha do IPC ou
+  // pânico no comando chegam aqui como rejeição, e sem isto virariam
+  // "unhandled rejection" calado no console. A faixa de atualização
+  // simplesmente não aparece — que é o certo: ela nunca deve derrubar a
+  // abertura do programa.
+  void verificarAtualizacao().catch(() => {});
+
   await ajustarMovimento();
   await listenToBatchProgress();
 
@@ -1125,6 +1150,67 @@ async function checkAccess() {
     badge.dataset.level = "limited";
     badge.querySelector(".access-text")!.textContent = "Acesso desconhecido";
   }
+}
+
+// ------------------------------------------------------------- atualização
+
+/**
+ * Guarda a última versão para a qual esta faixa já foi fechada, para não
+ * reaparecer sozinha depois de o cliente já ter visto e dispensado.
+ *
+ * A CHAVE MUDA JUNTO COM A VERSÃO PUBLICADA, DE PROPÓSITO.
+ *
+ * Se a chave fosse fixa, fechar a faixa uma vez a calaria para sempre — e uma
+ * versão nova publicada meses depois nunca apareceria, porque o "fechei" de
+ * hoje não deveria valer para um lançamento que ainda nem existe.
+ */
+const CHAVE_VERSAO_DISPENSADA = "atualizacao-dispensada";
+
+/**
+ * Pergunta ao backend se existe versão nova, e mostra a faixa quando existir.
+ *
+ * SEM `await` NA CHAMADA — quem chama isto dispara e segue em frente. A
+ * pergunta ao GitHub pode demorar até dez segundos (ver `TIMEOUT_SEGUNDOS`
+ * em `atualizacao.rs`), e nada na tela pode esperar por ela: o programa abriu
+ * para medir o PC do cliente, não para checar se ele mesmo está desatualizado.
+ *
+ * Falha de rede chega aqui como `NaoSei` — nunca como exceção — então não há
+ * `catch`: o backend já decidiu que silêncio é a resposta certa.
+ */
+async function verificarAtualizacao() {
+  const aviso = await invoke<AvisoDeVersao>("versao_mais_nova");
+
+  // A tela decide pela VARIANTE, nunca pelo texto de `versao_publicada` —
+  // esse texto é só para exibir. Comparar por igualdade com `"HaVersaoNova"`
+  // é seguro porque é vocabulário do backend (uma palavra, sem pontuação),
+  // não a prosa que a guarda em `commands.rs` proíbe.
+  if (aviso.comparacao !== "HaVersaoNova" || !aviso.versao_publicada) return;
+
+  if (localStorage.getItem(CHAVE_VERSAO_DISPENSADA) === aviso.versao_publicada) return;
+
+  const faixa = element("atualizacao-faixa");
+  text(
+    "atualizacao-texto",
+    `Uma nova versão do Otimiza está disponível (${aviso.versao_publicada}).`
+  );
+
+  const botaoBaixar = element<HTMLButtonElement>("atualizacao-baixar");
+  botaoBaixar.hidden = !aviso.pagina;
+  if (aviso.pagina) {
+    const pagina = aviso.pagina;
+    // Abre no navegador padrão do cliente, nunca dentro do próprio Otimiza —
+    // o programa não instala nada sozinho, e nem finge que instala.
+    botaoBaixar.onclick = () => {
+      void openUrl(pagina);
+    };
+  }
+
+  element("atualizacao-fechar").onclick = () => {
+    localStorage.setItem(CHAVE_VERSAO_DISPENSADA, aviso.versao_publicada!);
+    faixa.hidden = true;
+  };
+
+  faixa.hidden = false;
 }
 
 // ------------------------------------------------------------ monitoramento
@@ -1644,6 +1730,126 @@ function renderNetwork(report: NetworkReport) {
   setStatus("net-status", report.note, "warn");
 }
 
+// ------------------------------------------- perda de pacote até o servidor
+
+/**
+ * Espelha `Perda` de `rede.rs`. `#[serde(tag = "tipo")]` — internamente
+ * marcada — é o que permite o TypeScript decidir por CAMPO ESTRUTURADO
+ * (`tipo`, `perdidos`, `enviados`) e nunca por comparar a prosa da `nota`. A
+ * guarda `a_tela_nao_decide_cor_comparando_texto_do_backend`, em
+ * `commands.rs`, reprova o build se este arquivo comparar por igualdade ou
+ * substring um texto que parece prosa — por isso o estado da tela abaixo só
+ * olha para `perda.tipo`, `perda.perdidos` e `medida.alvo`.
+ */
+type Perda =
+  | { tipo: "Medida"; enviados: number; perdidos: number }
+  | { tipo: "NaoMedi" }
+  // Nenhum ping voltou, MAS a porta do jogo aceitou conexão. Não é perda:
+  // servidor de jogo bloqueia ping por segurança o tempo todo, e pintar
+  // isso de vermelho diria a um cliente com a rede boa que ela está
+  // destruída.
+  | { tipo: "NaoRespondePing"; enviados: number }
+  | { tipo: "PingLimitado"; enviados: number; perdidos: number };
+
+interface MedidaDeRede {
+  alvo: string | null;
+  perda: Perda;
+  jitter_ms: number | null;
+  tempo_ms: number | null;
+  nota: string;
+}
+
+async function medirPerdaDePacote() {
+  const button = element<HTMLButtonElement>("medir-perda");
+  button.disabled = true;
+  setStatus("perda-status", "Sondando o servidor do jogo…", "progress");
+
+  try {
+    const medida = await invoke<MedidaDeRede>("medir_perda_de_pacote");
+    renderPerdaDePacote(medida);
+  } catch (error) {
+    setStatus("perda-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderPerdaDePacote(medida: MedidaDeRede) {
+  const semAlvo = medida.alvo === null;
+  const perdaTotal = medida.perda.tipo === "Medida" && medida.perda.perdidos === medida.perda.enviados;
+  const comPerda = medida.perda.tipo === "Medida" && medida.perda.perdidos > 0;
+
+  text(
+    "perda-tag",
+    semAlvo
+      ? "servidor não identificado"
+      : medida.perda.tipo === "NaoMedi"
+        ? "medição não rodou"
+        : medida.perda.tipo === "NaoRespondePing"
+          // NÃO diz "perdidos": a porta respondeu, então não se perdeu nada.
+          // A etiqueta antiga dizia "20/20 perdidos" para este caso, e era
+          // ela — não a prosa — que o cliente lia.
+          ? "não responde a ping"
+          : medida.perda.tipo === "PingLimitado"
+            // MESMO MOTIVO: a porta respondeu. "19/20 perdidos" aqui seria
+            // o alarme falso um pacote abaixo do limiar — a etiqueta é o
+            // que o cliente lê, e ela não pode afirmar perda que ninguém
+            // conseguiu medir.
+            ? "ping limitado pelo servidor"
+            : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
+  );
+
+  const linhas: string[] = [];
+
+  if (medida.alvo !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:0">
+        <div class="startup-info">
+          <span class="startup-name">Servidor</span>
+          <span class="startup-exe">${escapeHtml(medida.alvo)}</span>
+        </div>
+      </div>`);
+  }
+
+  if (medida.tempo_ms !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:1">
+        <div class="startup-info">
+          <span class="startup-name">Tempo de resposta</span>
+        </div>
+        <span class="finding-size">${medida.tempo_ms.toFixed(0)} ms</span>
+      </div>`);
+  }
+
+  if (medida.jitter_ms !== null) {
+    linhas.push(`
+      <div class="startup" style="--i:2">
+        <div class="startup-info">
+          <span class="startup-name">Jitter de rede</span>
+        </div>
+        <span class="finding-size">${medida.jitter_ms.toFixed(0)} ms</span>
+      </div>`);
+  }
+
+  element("perda-result").innerHTML = linhas.join("");
+
+  // `NaoRespondePing` entra como aviso, e nunca como erro: a conexão do
+  // cliente está boa, e o que não deu foi medir. Vermelho aqui seria o
+  // alarme falso que esta resposta existe para eliminar.
+  const nivel =
+    semAlvo ||
+    medida.perda.tipo === "NaoMedi" ||
+    medida.perda.tipo === "NaoRespondePing" ||
+    medida.perda.tipo === "PingLimitado"
+      ? "warn"
+      : perdaTotal
+        ? "error"
+        : comPerda
+          ? "warn"
+          : "ok";
+  setStatus("perda-status", medida.nota, nivel);
+}
+
 // --------------------------------------------- cache de shader
 
 interface ShaderCache {
@@ -2114,6 +2320,42 @@ async function descongelarAgora() {
   }
 }
 
+// ---------------------------------------------- diagnóstico de atendimento
+
+/**
+ * Busca o relatório de `relatorio_de_suporte` e põe na área de transferência.
+ *
+ * A história por trás deste botão: um cliente com o Otimiza JÁ INSTALADO
+ * precisou de acesso remoto (AnyDesk) e de um script de PowerShell escrito à
+ * mão só para alguém entender o que estava acontecendo na máquina dele — com
+ * o produto sentado bem ali, sabendo a resposta e sem jeito de contá-la. Este
+ * botão é essa resposta: o cliente cola no Discord ou no WhatsApp em vez de
+ * abrir a máquina para outra pessoa mexer.
+ */
+async function copiarDiagnostico() {
+  const botao = element<HTMLButtonElement>("copiar-diagnostico");
+  botao.disabled = true;
+  // O relatório junta saúde do disco e térmico — os dois mais lentos do
+  // produto, "~5 s" cada na etiqueta. Sem esta linha o cliente clicava e
+  // ficava mais de dez segundos sem NADA na tela, e a conclusão natural é
+  // que o otimizador travou o PC. Todos os outros botões longos deste
+  // arquivo avisam; este era o único que não.
+  setStatus("diagnostico-status", "Montando o relatório — lê disco e térmico, demora um pouco…", "progress");
+
+  try {
+    const texto = await invoke<string>("relatorio_de_suporte");
+    await navigator.clipboard.writeText(texto);
+    setStatus("diagnostico-status", "Copiado. Cole no atendimento.", "ok");
+  } catch (error) {
+    // Cobre tanto a falha do comando (plataforma sem suporte) quanto a
+    // recusa da área de transferência pelo navegador — nos dois casos o
+    // cliente precisa de uma frase, não de um erro técnico calado.
+    setStatus("diagnostico-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 // ------------------------------------------------- quadros por segundo
 
 interface FrameMeasurement {
@@ -2213,6 +2455,10 @@ async function analyzeFiveM() {
   } finally {
     button.disabled = false;
   }
+
+  // Bloco à parte, com o próprio try/catch: uma falha aqui não pode apagar
+  // o levantamento de pastas que acabou de renderizar acima.
+  await analyzeCitizenFx();
 }
 
 function renderFiveM(report: FiveMReport) {
@@ -2299,6 +2545,82 @@ async function prioritizeFiveM() {
   } finally {
     button.disabled = false;
   }
+}
+
+// ---------------------------------------------------- CitizenFX.ini (Pilar 6)
+
+interface PoolAjustado {
+  nome: string;
+  aumento: number;
+  teto_conhecido: number | null;
+}
+
+/**
+ * Espelha `PoolSizesIncrease` de `citizenfx.rs`. `#[serde(tag = "status")]`
+ * é o que permite decidir por CAMPO ESTRUTURADO (`pool_sizes.status`) e
+ * nunca comparando a prosa de `note` — a guarda
+ * `a_tela_nao_decide_cor_comparando_texto_do_backend`, em `commands.rs`,
+ * reprova o build se este arquivo voltar a decidir assim.
+ */
+type PoolSizesIncrease =
+  | { status: "Vazio" }
+  | { status: "Configurado"; pools: PoolAjustado[] }
+  | { status: "Invalido"; bruto: string };
+
+interface CitizenFxReport {
+  existe: boolean;
+  caminho: string | null;
+  /** `null` quando o arquivo não existe ou não pôde ser lido — "não sei". */
+  pool_sizes: PoolSizesIncrease | null;
+  note: string;
+}
+
+/**
+ * Só leitura, e chamada junto de `analyzeFiveM`: o cliente não precisa saber
+ * que são dois comandos diferentes por trás de um clique só em "Analisar".
+ */
+async function analyzeCitizenFx() {
+  try {
+    const report = await invoke<CitizenFxReport>("analyze_citizenfx");
+    renderCitizenFx(report);
+  } catch (error) {
+    text("citizenfx-note", String(error));
+    element("citizenfx-result").innerHTML = "";
+  }
+}
+
+function renderCitizenFx(report: CitizenFxReport) {
+  text("citizenfx-note", report.note);
+
+  const resultado = element("citizenfx-result");
+
+  // Só há lista para desenhar quando há pool configurado. Vazio, ausente,
+  // inválido ou "não sei ler" — todos ficam só com a frase de `note` acima,
+  // que já diz o que precisa.
+  if (!report.pool_sizes || report.pool_sizes.status !== "Configurado") {
+    resultado.innerHTML = "";
+    return;
+  }
+
+  resultado.innerHTML = `
+    <div class="readouts readouts-row">
+      ${report.pool_sizes.pools
+        .map(
+          (p) => `
+            <div class="readout">
+              <span class="readout-label">${escapeHtml(p.nome)}</span>
+              <span class="readout-value">${p.aumento}</span>
+              <span class="readout-note">${
+                p.teto_conhecido !== null
+                  ? `teto conhecido: ${p.teto_conhecido}`
+                  : "teto não conferido"
+              }</span>
+            </div>
+          `
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 // ----------------------------------------------------------- navegador
@@ -5379,6 +5701,7 @@ function wireControls() {
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);
+  element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
@@ -5466,6 +5789,7 @@ function wireControls() {
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
   element("descongelar-agora").addEventListener("click", () => descongelarAgora());
+  element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
   element("flush-dns").addEventListener("click", async () => {

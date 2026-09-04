@@ -215,9 +215,54 @@ O produto já lê o `gta5_settings.xml` — a configuração **gráfica** do jog
 tocou no `CitizenFX.ini`, em `%APPDATA%\CitizenFX\`, que é a configuração do
 **motor do cliente FiveM**. Verificado: nenhuma ocorrência no projeto.
 
+### CORREÇÃO: a pesquisa original estava errada em quase tudo
+
+Verificado na máquina do dono, contra as fontes oficiais. O que eu havia escrito
+veio de blog de hospedagem, e três dos quatro detalhes estavam errados:
+
+| O que a pesquisa dizia | O que é |
+|---|---|
+| `%APPDATA%\CitizenFX\CitizenFX.ini` | `%LOCALAPPDATA%\FiveM\FiveM.app\CitizenFX.ini` |
+| A chave se chama `PoolSize` | Chama-se **`PoolSizesIncrease`** |
+| Valor único (`PoolSize=6000`) | Um **JSON** de pool para acréscimo |
+| É do cliente | Isso estava certo |
+
+O arquivo existe na máquina do dono, na seção `[Game]`, e o campo está **vazio**.
+Ou seja: o pilar é real; o que estava errado eram os detalhes.
+
+A lista autoritativa de pools e de quanto cada um aceita está publicada pela
+Cfx.re e é um mapa simples — `"FragmentStore": 30000`, `"CMoveObject": 600`.
+
+### E a correção que importa mais: NÃO aumentar às cegas
+
+Aumentar pool sem evidência é exatamente o que os blogs mandam fazer, e é o
+"aplique 42 ajustes e torça" que este produto recusa. O sintoma tem nome
+próprio, aparece no registro do FiveM, e **diz qual pool estourou**.
+
+Então o desenho certo é: **ler, procurar evidência, e só oferecer o aumento do
+pool que de fato estourou** — com o teto que a lista oficial permite.
+
+Nos registros da máquina do dono, hoje, **não há nenhum estouro**. O produto vai
+dizer isso: não há o que aumentar. É o resultado mais comum e é um bom
+resultado, igual ao "nenhuma corrupção encontrada" do reparo.
+
+### O que ficou sem poder verificar
+
+Não há estouro nos registros desta máquina, então **não vi o texto real de um
+erro de pool cheio**. Escrever um detector para uma frase que nunca observei é
+adivinhar — e adivinhar aqui significa ou não detectar nunca, ou detectar
+errado e mexer num arquivo do jogo do cliente sem motivo.
+
+**Portanto o pilar entra em duas partes**, e a segunda depende de evidência:
+
+1. **Agora, com certeza:** ler o `CitizenFX.ini`, mostrar o que está configurado
+   e o que a lista oficial permite. Só leitura, risco zero.
+2. **Quando houver um registro real com estouro:** a detecção e a oferta de
+   aumento. Basta um cliente com o problema mandar o registro.
+
 ### O que há lá
 
-`PoolSize` controla o limite interno de veículos que o GTA V mantém. Em servidor
+`PoolSizesIncrease` controla quanto cada pool interno do GTA V pode crescer. Em servidor
 de RP com muito carro personalizado — que é exatamente onde o público deste
 produto joga — estourar esse limite produz **engasgo repentino**: a travada que
 acontece quando muita coisa aparece de uma vez, e que nenhum ajuste gráfico
@@ -263,6 +308,62 @@ tranquilidade quando o quadro é incerto.
 | O texto de pânico do `veredito` usa um prefixo próprio que nenhum outro `Err` do arquivo usa |
 | `congelados()` não tem teste de fiação, ao contrário da convenção do próprio módulo |
 | O teto de 500 linhas da saída do reparo limita número de nós, não volume de caracteres: uma linha gigante não é despejada |
+
+## Vereditos das duas investigações
+
+Feitas contra documentação oficial, não contra memória. As duas deram respostas
+diferentes, e é por isso que valiam ser investigações e não tarefas.
+
+### Driver de vídeo — **VIÁVEL na NVIDIA, indefinido na AMD**
+
+A NVIDIA publica a **NVAPI**, com um subsistema de configuração de driver (DRS)
+que existe exatamente para isto: ler e escrever as opções do painel, inclusive
+por aplicativo. É oficial, documentado, com SDK público.
+
+E — o que decide o pilar para este produto — **tem chamada para restaurar o
+padrão de uma opção**. Ou seja: reversível de verdade, não "reversível se a
+gente anotar direitinho".
+
+Detalhe que tira o obstáculo prático: a `nvapi64.dll` vem junto com o driver.
+Dá para carregá-la em tempo de execução, sem acrescentar dependência ao
+instalador — a mesma escolha que o relatório em PDF já faz ao usar o Edge que
+todo Windows tem.
+
+**A AMD é outra história.** O equivalente é a ADL, e a superfície de
+configuração 3D dela não tem documentação equiparável. Isso precisa de
+investigação própria antes de qualquer promessa.
+
+**Recomendação:** entrar com a NVIDIA e **dizer na tela que a AMD ainda não é
+coberta**, em vez de fazer meia coisa nas duas. Metade dos clientes atendida com
+honestidade vale mais que todos atendidos com um recurso que não funciona
+direito em metade das máquinas.
+
+### Qual driver está travando — **NÃO ENTRA na 1.5**
+
+Medir latência de DPC e **atribuir a um driver** depende do Windows Performance
+Toolkit — `xperf`, `WPR`, `WPA`. Ele **não vem no Windows**: faz parte do ADK,
+que é um pacote de desenvolvedor de perto de um gigabyte.
+
+Isso colide de frente com uma regra que este produto segue desde o começo: não
+depender do que o cliente não tem. É a mesma razão pela qual o relatório usa o
+Edge e as medições usam PowerShell.
+
+Existe o caminho de consumir ETW direto, sem o toolkit. É possível, e é caro:
+exige abrir sessão de rastreamento do núcleo, interpretar os eventos de DPC e
+ISR, e — a parte difícil — resolver o endereço da rotina até o módulo carregado
+para saber de quem é a culpa.
+
+**E é justamente essa última parte que decide.** O risco escrito na
+especificação é real: acusar o driver errado faz o cliente desinstalar algo que
+funcionava. A atribuição depende inteira de acertar esse mapeamento, e errar
+nele é errar com confiança — o pior tipo de erro que este produto pode cometer.
+
+**Veredito: fica para depois.** Não porque é difícil, mas porque a chance de
+acusar errado é alta demais para o que o produto promete. Se voltar, volta como
+"achei latência alta e não consigo atribuir" — que já é mais do que o cliente
+sabia — antes de qualquer tentativa de nomear culpado.
+
+---
 
 ## O que esta versão NÃO promete
 

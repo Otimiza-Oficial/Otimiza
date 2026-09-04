@@ -100,6 +100,42 @@ jobs:
 
           echo "As notas mencionam $versao."
 
+      # ---------------------------------------------------------------------
+      # A tag tem que bater com o que o binario vai carregar.
+      #
+      # A 1.5 chegou pronta para publicar com os quatro arquivos de versao
+      # ainda dizendo 1.3.0. A trava acima nao acusaria: ela so confere que
+      # as NOTAS citam o numero. O estrago aparecia na primeira abertura --
+      # a faixa de atualizacao compara a versao do binario com a ultima
+      # publicada e mandaria o cliente baixar a versao que ele acabou de
+      # instalar.
+      #
+      # `as_quatro_declaracoes_de_versao_concordam`, no cargo test, garante
+      # que os quatro arquivos concordam ENTRE SI. Este passo garante que
+      # eles concordam com a TAG, que e a parte que nenhum teste ve.
+      # ---------------------------------------------------------------------
+      - name: Conferir se a tag bate com a versao do binario
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          versao="${GITHUB_REF_NAME#v}"
+          no_cargo=$(grep -m1 '^version = ' pc-optimizer/src-tauri/Cargo.toml | cut -d'"' -f2)
+
+          if [ "$versao" != "$no_cargo" ]; then
+            echo "::error::A tag diz $versao e o Cargo.toml diz $no_cargo."
+            echo ""
+            echo "  O instalador sairia com um numero e o binario com outro. A"
+            echo "  faixa de atualizacao dentro do programa le o do binario, e"
+            echo "  mandaria o cliente baixar a versao que ele ja tem."
+            echo ""
+            echo "  Atualize os quatro arquivos de versao, faca o commit,"
+            echo "  apague a tag e crie de novo."
+            exit 1
+          fi
+
+          echo "A tag e o binario dizem $versao."
+
       - name: Instalar Node
         uses: actions/setup-node@v4
         with:
@@ -133,7 +169,7 @@ jobs:
       # Parar no primeiro erro mostra menos de uma vez, mas mostra a verdade.
       - name: Testes — núcleo e dados
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- ci_coverage:: core:: modules::changelog:: modules::preferences:: modules::prova:: modules::safety:: modules::windows::cbslog:: modules::windows::reparo::"
+        run: "cargo test --lib -- ci_coverage:: core:: modules::atualizacao:: modules::changelog:: modules::preferences:: modules::prova:: modules::safety:: modules::windows::cbslog:: modules::windows::reparo::"
 
       - name: Testes — licença e comandos
         working-directory: pc-optimizer/src-tauri
@@ -161,7 +197,7 @@ jobs:
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat:: modules::windows::sessao::"
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat:: modules::windows::sessao:: modules::windows::suporte::"
 
       - name: Testes — espaço e memória
         working-directory: pc-optimizer/src-tauri
@@ -180,7 +216,7 @@ jobs:
 
       - name: Testes — inicialização e limitação do processador
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::boot:: modules::windows::thermal:: modules::windows::browsers:: modules::windows::fivem::"
+        run: "cargo test --lib -- modules::windows::boot:: modules::windows::thermal:: modules::windows::browsers:: modules::windows::fivem:: modules::windows::citizenfx::"
 
       - name: Testes — saúde do hardware e relatório
         working-directory: pc-optimizer/src-tauri
@@ -188,7 +224,7 @@ jobs:
 
       - name: Testes — serviços de terceiros, perfis e execução
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::deteccao:: modules::windows::jogos:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
+        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::rede:: modules::windows::frames:: modules::windows::gamemode:: modules::windows::deteccao:: modules::windows::jogos:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
 
       # O mapa de pastas varre o disco de verdade e leva perto de um minuto.
       # Fica num passo próprio para não parecer que outra área travou.

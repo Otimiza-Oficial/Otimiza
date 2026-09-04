@@ -613,7 +613,24 @@ fn congelados_de(registro: &Registro, vivos: &HashSet<(u32, u64)>) -> Vec<Suspen
 /// dele. Esta função é o que faltava: a mesma verdade que `retomar_tudo` usa
 /// para devolver, só que para MOSTRAR antes de qualquer clique.
 pub fn congelados() -> Vec<Suspenso> {
-    let registro = Registro::load();
+    congelados_no_caminho(&Registro::path())
+}
+
+/// O corpo de `congelados()`, com o caminho do registro trocável.
+///
+/// Existe pela mesma razão de `retomar_se_expirado_no_caminho`: em produção
+/// `congelados()` chama isto com `Registro::path()`, e o teste de fiação
+/// abaixo chama a MESMA função com um caminho de teste — assim o teste prova
+/// a fiação real (`Registro::load_de` mais `processes::listar_para_suspensao()`
+/// de verdade, filtrados por `congelados_de`) sem escrever no `suspensos.json`
+/// do PRODUTO. `congelados()` não tinha teste de fiação nenhum até este
+/// módulo ganhar um consumidor de verdade (`suporte.rs`, o relatório de
+/// atendimento): um relatório que mostra "Congelados agora: nenhum" quando na
+/// verdade a fiação está quebrada manda o atendimento na direção errada — o
+/// mesmo tipo de defeito que os outros dois testes de fiação deste módulo já
+/// cobrem.
+fn congelados_no_caminho(caminho: &Path) -> Vec<Suspenso> {
+    let registro = Registro::load_de(caminho);
 
     let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
         .into_iter()
@@ -1243,6 +1260,46 @@ mod tests {
             "o registro vencido continuou no arquivo mesmo sem jogo nenhum rodando — \
              confira se `retomar_se_expirado` ainda passa `jogo_aberto().is_some()`, e não \
              `.is_none()` nem os argumentos fora de ordem"
+        );
+
+        Registro::limpar_em(&caminho).expect("limpar o registro");
+    }
+
+    #[test]
+    fn a_fiacao_de_congelados_usa_o_processo_real() {
+        // Adiado da 1.3: `congelados()` nunca teve teste de fiação, ao
+        // contrário do resto do módulo — e agora ganhou o primeiro consumidor
+        // de verdade, o relatório de atendimento (`suporte.rs`). Um relatório
+        // que mostra "Congelados agora: nenhum" quando na verdade a fiação
+        // está quebrada manda o atendimento procurar no lugar errado, que é
+        // exatamente o defeito que este teste tranca.
+        //
+        // Mesma ideia do teste de prazo acima: o PID gravado é inventado, e a
+        // fiação real (`processes::listar_para_suspensao()`, de verdade,
+        // filtrado por `congelados_de`) nunca bate um PID inventado com um
+        // processo vivo. Se `congelados_no_caminho` regredisse para devolver
+        // `registro.suspensos` direto, sem passar pelo filtro, o PID
+        // inventado apareceria na lista — é essa regressão que este teste
+        // acusa.
+        let caminho = caminho_de_teste("fiacao-congelados");
+
+        let registro = Registro {
+            suspensos: vec![Suspenso {
+                pid: 4242,
+                nome: "discord.exe".to_string(),
+                visivel: "Discord".to_string(),
+                inicio: 133_000_000,
+            }],
+            quando: 0,
+        };
+        registro.save_em(&caminho).expect("gravar o registro");
+
+        let lista = congelados_no_caminho(&caminho);
+
+        assert!(
+            lista.is_empty(),
+            "a fiação real devolveu um processo que não está vivo: {:?}",
+            lista
         );
 
         Registro::limpar_em(&caminho).expect("limpar o registro");

@@ -35,6 +35,8 @@ use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
 #[cfg(target_os = "windows")]
+use crate::modules::windows::citizenfx::CitizenFxReport;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::network::NetworkReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::frames::FrameMeasurement;
@@ -800,6 +802,33 @@ pub async fn flush_dns() -> Result<String, String> {
     }
 }
 
+/// Comando: mede perda de pacote, jitter de rede e tempo de resposta contra o
+/// servidor em que o cliente está jogando agora.
+///
+/// O alvo sai das conexões ativas do processo do jogo — ver
+/// `modules::windows::rede::servidor_do_jogo`. Não descobrir o servidor não é
+/// erro: é o próprio resultado, escrito na nota (regra 1 do módulo).
+///
+/// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que evita o
+/// cliente concluir, errado, que o produto o enganou quando otimiza o PC e a
+/// travada continua — porque a travada era de rede, não de FPS.
+#[tauri::command]
+pub async fn medir_perda_de_pacote() -> Result<crate::modules::windows::rede::MedidaDeRede, String>
+{
+    #[cfg(target_os = "windows")]
+    {
+        // São até vinte pings sequenciais; leva alguns segundos.
+        tokio::task::spawn_blocking(crate::modules::windows::rede::medir_agora)
+            .await
+            .map_err(|e| format!("Falha ao medir a perda de pacote: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: Conta os quadros que um jogo está entregando.
 ///
 /// Mede de fora, escutando o canal de eventos do Windows — nada é injetado no
@@ -830,6 +859,29 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (process, seconds);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: lê o `CitizenFX.ini` e mostra o que está em `PoolSizesIncrease`.
+///
+/// SÓ LEITURA. Não escreve nada, e não sugere aumentar nada — só mostra o que
+/// já está configurado, quando há algo. Ver `modules::windows::citizenfx`
+/// para o porquê: aumentar pool sem evidência de estouro no registro do
+/// FiveM é o "aplique e torça" que o produto recusa, e ninguém viu esse
+/// registro ainda.
+///
+/// Fica em `LIVRES`: é leitura, e nem exige o cliente ter licença para saber
+/// o que já está configurado na máquina dele.
+#[tauri::command]
+pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::citizenfx::analyze())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -2113,6 +2165,22 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
                  O próximo passo é reparar a imagem do Windows.",
                 quantos
             ),
+            // Corrigiu tudo que deu para nomear, mas o registro também
+            // tinha linha de falha sem nome legível — não dá para garantir
+            // que não sobrou corrupção nelas. O tom (`Atencao`, não `Ok`)
+            // já carrega essa ressalva sozinho.
+            ResultadoSfc::CorrigiuComRessalva {
+                quantos,
+                linhas_ilegiveis,
+            } => format!(
+                "Corrigiu {} arquivo(s) corrompido(s), mas o registro do Windows tinha \
+                 {} linha(s) de falha que não deram para identificar — não dá para \
+                 garantir que não sobrou corrupção nelas. O próximo passo é rodar a \
+                 verificação de novo: se a corrupção que sobrou já foi consertada, a \
+                 próxima passagem do `sfc` escreve um registro limpo e legível; se não \
+                 foi, ela aparece de novo, desta vez nomeada.",
+                quantos, linhas_ilegiveis
+            ),
             ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
         };
 
@@ -2340,6 +2408,85 @@ pub fn descongelar_agora() -> Result<usize, String> {
     }
 }
 
+// ========================================================== ATENDIMENTO
+
+/// O relatório que o cliente cola no atendimento — versão, Windows, RAM,
+/// congelados, mudanças aplicadas, disco e térmico, e o que não deu para ler.
+///
+/// Fica em `LIVRES`: é leitura, e é o diagnóstico que o produto já dá de
+/// graça — inclusive porque é justamente esta a informação que faltou
+/// quando um cliente com o produto JÁ INSTALADO precisou de um script de
+/// PowerShell escrito à mão para alguém entender o que estava acontecendo
+/// na máquina dele. Ver `modules::windows::suporte` para o porquê de cada
+/// regra que o texto obedece.
+/// SÍNCRONO NÃO: este comando chama `health::analyze()` e
+/// `thermal::analyze()`, que o resto deste arquivo tira do runtime de
+/// propósito — o primeiro conversa com o disco via WMI e a tela etiqueta os
+/// dois com "~5 s" cada. Somados ao `Get-CimInstance` do sistema e ao resto,
+/// dão 12 a 15 segundos NA THREAD PRINCIPAL: janela sem redesenhar, sem
+/// arrastar, e o "Otimiza não está respondendo" do Windows. É exatamente a
+/// queixa que o relatório de congelados existe para investigar, causada pelo
+/// botão que investiga.
+#[tauri::command(async)]
+pub fn relatorio_de_suporte() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::suporte::montar(
+            &crate::modules::windows::suporte::gerar(),
+        ))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+// ========================================================= ATUALIZAÇÃO
+
+/// O que a tela precisa para decidir se mostra a faixa de versão nova.
+///
+/// `comparacao` é a única coisa que a tela decide a partir de — nunca
+/// `versao_publicada`, que é texto solto para exibir, não para comparar. Ver
+/// a guarda `a_tela_nao_decide_cor_comparando_texto_do_backend`, que reprova
+/// o build se `main.ts` comparar por igualdade ou substring um texto que
+/// parece prosa.
+#[derive(Debug, Clone, Serialize)]
+pub struct AvisoDeVersao {
+    pub comparacao: crate::modules::atualizacao::Comparacao,
+    pub versao_publicada: Option<String>,
+    pub pagina: Option<String>,
+}
+
+/// Pergunta ao GitHub se existe versão publicada mais nova que a instalada.
+///
+/// Fica em `LIVRES`: é leitura — pergunta ao GitHub e não altera nada neste
+/// computador. Não instala nada sozinho: a resposta é só a faixa que o
+/// cliente vê e, se quiser, clica para baixar por conta própria.
+///
+/// A versão instalada vem de `CARGO_PKG_VERSION`, o mesmo número que já
+/// alimenta `relatorio_de_suporte` — não é hardcoded aqui de novo.
+#[tauri::command]
+pub async fn versao_mais_nova() -> AvisoDeVersao {
+    let instalada = env!("CARGO_PKG_VERSION");
+
+    match crate::modules::atualizacao::consultar_ultima().await {
+        Some(ultima) => AvisoDeVersao {
+            comparacao: crate::modules::atualizacao::comparar(instalada, &ultima.versao),
+            versao_publicada: Some(ultima.versao),
+            pagina: ultima.pagina,
+        },
+        // Falha de rede é silêncio, não alarme: `NaoSei` faz a tela não
+        // mostrar nada, em vez de arriscar um "atualize" sem versão nenhuma
+        // por trás.
+        None => AvisoDeVersao {
+            comparacao: crate::modules::atualizacao::Comparacao::NaoSei,
+            versao_publicada: None,
+            pagina: None,
+        },
+    }
+}
+
 // =========================================================== LICENÇA
 
 /// O estado da licença desta máquina.
@@ -2411,8 +2558,10 @@ mod tests {
         "analyze_bottleneck",
         "game_mode_status",
         "analyze_network",
+        "medir_perda_de_pacote",
         "measure_frames",
         "analyze_fivem",
+        "analyze_citizenfx",
         "analyze_browsers",
         "analyze_boot",
         "analyze_thermal",
@@ -2435,6 +2584,8 @@ mod tests {
         "reparo_cancelar",
         "congelados_agora",
         "descongelar_agora",
+        "relatorio_de_suporte",
+        "versao_mais_nova",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
