@@ -179,4 +179,65 @@ mod tests {
         // A raiz da biblioteca não vira caminho de módulo.
         assert_eq!(module_path(src, Path::new("src/lib.rs")), None);
     }
+
+    /// A versão do binário precisa bater com a dos três arquivos que a
+    /// declaram.
+    ///
+    /// Por que isto virou teste: a 1.5 chegou pronta para publicar com os
+    /// quatro arquivos ainda dizendo `1.3.0`. A esteira não teria acusado —
+    /// ela só confere que as notas de versão CITAM o número, não que o
+    /// binário o carrega. O estrago seria visível na primeira abertura: a
+    /// faixa de atualização compara `CARGO_PKG_VERSION` com a última
+    /// publicada e mandaria o cliente baixar a versão que ele acabou de
+    /// instalar, num laço que o "fechei" não interrompe. E o relatório que
+    /// o cliente cola no atendimento anunciaria a versão errada, mandando
+    /// o suporte investigar bug em código que não está rodando.
+    #[test]
+    fn as_quatro_declaracoes_de_versao_concordam() {
+        let esperada = env!("CARGO_PKG_VERSION");
+
+        // `unwrap` de propósito: se um destes arquivos sumiu ou deixou de
+        // ter a chave, isto é uma quebra de estrutura do projeto e precisa
+        // parar a esteira em vez de passar batido.
+        let ler = |caminho: &str, chave_ate: usize| -> String {
+            let bruto = std::fs::read_to_string(caminho)
+                .unwrap_or_else(|e| panic!("não consegui ler {}: {}", caminho, e));
+            let v: serde_json::Value = serde_json::from_str(&bruto)
+                .unwrap_or_else(|e| panic!("{} não é JSON válido: {}", caminho, e));
+
+            // `chave_ate` distingue a versão do pacote raiz do lock (que fica
+            // em `packages[""].version`) da versão do arquivo.
+            let achado = if chave_ate == 1 {
+                v.get("version").cloned()
+            } else {
+                v.pointer("/packages//version").cloned()
+            };
+
+            achado
+                .and_then(|x| x.as_str().map(str::to_string))
+                .unwrap_or_else(|| panic!("{} não declara versão", caminho))
+        };
+
+        let conf = ler("tauri.conf.json", 1);
+        let pkg = ler("../package.json", 1);
+        let lock = ler("../package-lock.json", 1);
+        let lock_raiz = ler("../package-lock.json", 2);
+
+        assert_eq!(
+            conf, esperada,
+            "tauri.conf.json diz {} e o Cargo.toml diz {} — o instalador sairia com um              número e o binário com outro",
+            conf, esperada
+        );
+        assert_eq!(pkg, esperada, "package.json diz {} e o Cargo.toml diz {}", pkg, esperada);
+        assert_eq!(
+            lock, esperada,
+            "package-lock.json diz {} e o Cargo.toml diz {}",
+            lock, esperada
+        );
+        assert_eq!(
+            lock_raiz, esperada,
+            "package-lock.json, em packages[\"\"], diz {} e o Cargo.toml diz {}",
+            lock_raiz, esperada
+        );
+    }
 }

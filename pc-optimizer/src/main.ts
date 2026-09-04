@@ -820,7 +820,12 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Também sem `await`: é uma pergunta ao GitHub que pode levar segundos, e
   // não interrompe — a faixa aparece quando (e se) a resposta chegar.
-  void verificarAtualizacao();
+  // O `catch` cobre o que o `NaoSei` do backend não cobre: falha do IPC ou
+  // pânico no comando chegam aqui como rejeição, e sem isto virariam
+  // "unhandled rejection" calado no console. A faixa de atualização
+  // simplesmente não aparece — que é o certo: ela nunca deve derrubar a
+  // abertura do programa.
+  void verificarAtualizacao().catch(() => {});
 
   await ajustarMovimento();
   await listenToBatchProgress();
@@ -1743,7 +1748,8 @@ type Perda =
   // servidor de jogo bloqueia ping por segurança o tempo todo, e pintar
   // isso de vermelho diria a um cliente com a rede boa que ela está
   // destruída.
-  | { tipo: "NaoRespondePing"; enviados: number };
+  | { tipo: "NaoRespondePing"; enviados: number }
+  | { tipo: "PingLimitado"; enviados: number; perdidos: number };
 
 interface MedidaDeRede {
   alvo: string | null;
@@ -1784,7 +1790,13 @@ function renderPerdaDePacote(medida: MedidaDeRede) {
           // A etiqueta antiga dizia "20/20 perdidos" para este caso, e era
           // ela — não a prosa — que o cliente lia.
           ? "não responde a ping"
-          : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
+          : medida.perda.tipo === "PingLimitado"
+            // MESMO MOTIVO: a porta respondeu. "19/20 perdidos" aqui seria
+            // o alarme falso um pacote abaixo do limiar — a etiqueta é o
+            // que o cliente lê, e ela não pode afirmar perda que ninguém
+            // conseguiu medir.
+            ? "ping limitado pelo servidor"
+            : `${medida.perda.perdidos}/${medida.perda.enviados} perdidos`
   );
 
   const linhas: string[] = [];
@@ -1825,7 +1837,10 @@ function renderPerdaDePacote(medida: MedidaDeRede) {
   // cliente está boa, e o que não deu foi medir. Vermelho aqui seria o
   // alarme falso que esta resposta existe para eliminar.
   const nivel =
-    semAlvo || medida.perda.tipo === "NaoMedi" || medida.perda.tipo === "NaoRespondePing"
+    semAlvo ||
+    medida.perda.tipo === "NaoMedi" ||
+    medida.perda.tipo === "NaoRespondePing" ||
+    medida.perda.tipo === "PingLimitado"
       ? "warn"
       : perdaTotal
         ? "error"
@@ -2320,6 +2335,12 @@ async function descongelarAgora() {
 async function copiarDiagnostico() {
   const botao = element<HTMLButtonElement>("copiar-diagnostico");
   botao.disabled = true;
+  // O relatório junta saúde do disco e térmico — os dois mais lentos do
+  // produto, "~5 s" cada na etiqueta. Sem esta linha o cliente clicava e
+  // ficava mais de dez segundos sem NADA na tela, e a conclusão natural é
+  // que o otimizador travou o PC. Todos os outros botões longos deste
+  // arquivo avisam; este era o único que não.
+  setStatus("diagnostico-status", "Montando o relatório — lê disco e térmico, demora um pouco…", "progress");
 
   try {
     const texto = await invoke<string>("relatorio_de_suporte");

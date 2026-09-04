@@ -2419,7 +2419,15 @@ pub fn descongelar_agora() -> Result<usize, String> {
 /// PowerShell escrito à mão para alguém entender o que estava acontecendo
 /// na máquina dele. Ver `modules::windows::suporte` para o porquê de cada
 /// regra que o texto obedece.
-#[tauri::command]
+/// SÍNCRONO NÃO: este comando chama `health::analyze()` e
+/// `thermal::analyze()`, que o resto deste arquivo tira do runtime de
+/// propósito — o primeiro conversa com o disco via WMI e a tela etiqueta os
+/// dois com "~5 s" cada. Somados ao `Get-CimInstance` do sistema e ao resto,
+/// dão 12 a 15 segundos NA THREAD PRINCIPAL: janela sem redesenhar, sem
+/// arrastar, e o "Otimiza não está respondendo" do Windows. É exatamente a
+/// queixa que o relatório de congelados existe para investigar, causada pelo
+/// botão que investiga.
+#[tauri::command(async)]
 pub fn relatorio_de_suporte() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {

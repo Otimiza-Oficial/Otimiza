@@ -106,6 +106,40 @@ use std::time::Duration;
 /// não há o que variar.
 const AMOSTRAS_PADRAO: u32 = 20;
 
+/// Quanto se espera por UM ping antes de contá-lo como perdido.
+///
+/// POR QUE ISTO EXISTE, E POR QUE NÃO É MAIS `Test-Connection`. O
+/// `Test-Connection` do Windows PowerShell 5.1 — que é o que roda na máquina
+/// do cliente — NÃO aceita prazo: o padrão do `Win32_PingStatus` é de cerca de
+/// quatro segundos por tentativa. Medido nesta máquina: três tentativas falhas
+/// levaram 11,7 s; cinco bem-sucedidas, 245 ms. Vinte amostras contra um
+/// servidor com ICMP bloqueado levavam cerca de 78 segundos — e a tela promete
+/// "~10 s".
+///
+/// Pior do que a espera: o script é ASCII e passa pela sessão viva do
+/// PowerShell, que é COMPARTILHADA e serializada num mutex sem prazo de
+/// leitura. Durante esses 78 s, toda outra análise do produto — saúde,
+/// térmico, serviços, boot — ficava parada na fila, e da tela o Otimiza
+/// inteiro parecia travado. O caso que mais penalizava é exatamente o que
+/// esta medição existe para tratar: servidor de FiveM atrás de filtragem
+/// anti-DDoS, que descarta ICMP.
+///
+/// `System.Net.NetworkInformation.Ping` aceita prazo, acompanha o .NET
+/// Framework que já vem no Windows, e devolve `Status` e `RoundtripTime` como
+/// CAMPOS — sem depender do texto traduzido do `ping.exe`, que foi a razão de
+/// este módulo não usar o `ping.exe` desde o começo.
+const PRAZO_DO_PING_MS: u32 = 1000;
+
+/// Depois de quantas tentativas falhas SEGUIDAS o laço para.
+///
+/// Cinco silêncios seguidos já respondem a pergunta que a sonda faz: o ICMP
+/// não está voltando. As quinze tentativas restantes não acrescentariam
+/// informação nenhuma, só espera — e é justamente esse caso que a testemunha
+/// da porta TCP esclarece logo em seguida. O contador ZERA a cada resposta,
+/// então perda parcial (o caso em que cada amostra conta de verdade) roda as
+/// vinte normalmente.
+const DESISTE_APOS: u32 = 5;
+
 /// O que a medição decidiu sobre CONTRA QUEM medir.
 ///
 /// Separado da medição em si de propósito: é a Regra 1 do módulo virando
@@ -167,6 +201,22 @@ pub enum Perda {
     /// descoberta já achou: se o serviço com que o jogo fala aceita conexão, o
     /// que não voltou foi só o ping.
     NaoRespondePing { enviados: u32 },
+    /// PARTE dos pings não voltou, mas a porta do jogo aceitou conexão.
+    ///
+    /// O irmão parcial de `NaoRespondePing`, e ele existe porque o caso comum
+    /// não é o firewall descartar TODO o ICMP — é LIMITAR A TAXA. O servidor
+    /// responde a um ping e ignora os dezenove seguintes, por segundo.
+    ///
+    /// Sem esta variante, a correção do alarme falso só valia no 100% exato:
+    /// 19 de 20 perdidos passava direto e a tela dizia "95% de perda" para um
+    /// cliente com a conexão perfeita — o mesmo alarme falso, um pacote abaixo
+    /// do limiar.
+    ///
+    /// Note o que esta variante NÃO afirma: ela não diz que a rede está boa.
+    /// Diz que, com o ping sendo descartado por regra do servidor, NÃO DÁ PARA
+    /// SABER se houve perda real — e nesse caso o produto informa que não
+    /// sabe, em vez de escolher a resposta mais assustadora.
+    PingLimitado { enviados: u32, perdidos: u32 },
 }
 
 /// Resume enviados/recebidos em `Perda`. Pura, testável sem PowerShell.
@@ -192,15 +242,26 @@ pub fn resumir(enviados: u32, recebidos: u32) -> Perda {
 ///   - `Some(false)` — nem ping nem porta. Aí a perda total é real.
 ///   - `None`        — não deu para tentar a porta (a descoberta não trouxe
 ///                     uma). Sem testemunha, fica a medição crua do ping.
-pub fn avaliar_perda_total(enviados: u32, porta_respondeu: Option<bool>) -> Perda {
+pub fn avaliar_perda_total(enviados: u32, perdidos: u32, porta_respondeu: Option<bool>) -> Perda {
     match porta_respondeu {
-        Some(true) => Perda::NaoRespondePing { enviados },
-        _ => Perda::Medida {
-            enviados,
-            perdidos: enviados,
-        },
+        // A porta respondeu: o que não voltou foi só o ping. Total vira
+        // "não responde a ping"; parcial vira "ping limitado" — em nenhum
+        // dos dois o produto pode apresentar o número como perda medida.
+        Some(true) if perdidos >= enviados => Perda::NaoRespondePing { enviados },
+        Some(true) => Perda::PingLimitado { enviados, perdidos },
+        // Sem testemunha, ou testemunha dizendo não: a medição crua vale, e
+        // é ela que vai para a tela.
+        _ => Perda::Medida { enviados, perdidos },
     }
 }
+
+/// A partir de que fração de perda vale a pena consultar a porta.
+///
+/// Metade. Abaixo disso a medição se sustenta sozinha e um aperto de mão a
+/// mais só atrasaria a tela; acima, a hipótese de o servidor estar
+/// descartando ICMP por regra passa a ser tão provável quanto a de haver
+/// perda real, e o produto não pode escolher a pior das duas sem perguntar.
+const PERDA_QUE_PEDE_TESTEMUNHA: f64 = 0.5;
 
 /// Resultado completo de uma medição, pronto para a tela.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -262,20 +323,42 @@ fn e_endereco_publico(ip: &IpAddr) -> bool {
                 || v6.is_multicast()
                 || v6.is_unspecified()
                 // fe80::/10, link-local unicast.
-                || (v6.segments()[0] & 0xffc0) == 0xfe80)
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+                // fc00::/7, unique-local: o equivalente IPv6 de 192.168.x.x.
+                // Faltava, e um `fd00:…` de rede local passava como "público"
+                // e virava candidato a servidor do jogo.
+                || (v6.segments()[0] & 0xfe00) == 0xfc00)
         }
     }
 }
 
+/// Portas que NUNCA são o servidor do jogo, mesmo sendo a única sobrando.
+///
+/// O cliente do FiveM mantém conexões TCP com a própria Cfx.re além do
+/// servidor: o nucleus, a listagem de servidores, o relatório de falha. Todas
+/// em HTTP/HTTPS. E o tráfego de jogo é UDP (ENet) — a TCP com o servidor
+/// costuma FECHAR depois que os recursos terminam de baixar.
+///
+/// A consequência, sem este filtro: passados alguns minutos de partida sobra
+/// exatamente UMA conexão pública estabelecida, a da Cfx.re em `:443`. A
+/// Regra 1 só barrava ambiguidade — dois candidatos ou nenhum —, e o caso de
+/// UM candidato ERRADO passava direto. A tela desenhava "Servidor: <ip da
+/// Cfx.re>:443" e media vinte pings contra a CDN, apresentando o número como
+/// a checagem contra o servidor em que o cliente está jogando. Isso é
+/// exatamente o número inventado que o cabeçalho deste módulo diz existir
+/// para evitar.
+const PORTAS_QUE_NAO_SAO_JOGO: [u16; 5] = [80, 443, 8080, 8443, 3478];
+
 /// O servidor em que o cliente está jogando agora, ou `None`.
 ///
 /// Reaproveita `gamemode::jogo_aberto_com_pid` — não escreve um segundo
-/// detector de jogo. Ambiguidade (nenhum endereço público, ou mais de um
-/// distinto) vira `None`: é a Regra 1 na prática, escolher não chutar.
+/// detector de jogo. Ambiguidade (nenhum endereço público, mais de um
+/// distinto, ou só serviço de web sobrando) vira `None`: é a Regra 1 na
+/// prática, escolher não chutar.
 pub fn servidor_do_jogo() -> Option<String> {
     let (_, pid) = gamemode::jogo_aberto_com_pid()?;
 
-    let mut candidatos: Vec<(String, u16)> = conexoes_estabelecidas(pid)
+    let candidatos: Vec<(String, u16)> = conexoes_estabelecidas(pid)
         .into_iter()
         .filter_map(|c| {
             let endereco = c.remote_address?;
@@ -286,8 +369,30 @@ pub fn servidor_do_jogo() -> Option<String> {
         })
         .collect();
 
+    escolher_alvo(candidatos)
+}
+
+/// Escolhe o único candidato, ou desiste. Pura, testável sem rede.
+///
+/// O descarte das portas de web mora AQUI, e não na coleta, de propósito: é
+/// a regra que decide se existe alvo, e regra que decide precisa ser
+/// testável sem rede, sem jogo aberto e sem PowerShell. Deixada na coleta,
+/// ela só rodaria na máquina de um cliente com o FiveM ligado — que é onde
+/// ninguém está olhando.
+///
+/// A deduplicação é pelo PAR, e não só pelo endereço. Antes era pelo
+/// endereço, sobre a lista já ordenada, o que mantinha silenciosamente a
+/// MENOR porta: um servidor com duas conexões no mesmo host (30110 e 30120)
+/// fazia o aperto de mão TCP bater na porta errada. Duas portas no mesmo
+/// host são ambiguidade honesta — viram `None`.
+fn escolher_alvo(candidatos: Vec<(String, u16)>) -> Option<String> {
+    let mut candidatos: Vec<(String, u16)> = candidatos
+        .into_iter()
+        .filter(|(_, porta)| !PORTAS_QUE_NAO_SAO_JOGO.contains(porta))
+        .collect();
+
     candidatos.sort();
-    candidatos.dedup_by(|a, b| a.0 == b.0);
+    candidatos.dedup();
 
     match candidatos.as_slice() {
         [(ip, porta)] => Some(format!("{}:{}", ip, porta)),
@@ -311,13 +416,20 @@ struct RespostaPing {
 /// `enviados` vem do tamanho da lista, não de um contador otimista).
 fn sondar(host: &str, amostras: u32) -> Vec<RespostaPing> {
     let script = format!(
-        "$r = @(); foreach ($i in 1..{}) {{ \
-           try {{ $resp = Test-Connection -ComputerName '{}' -Count 1 \
-                  -ErrorAction Stop; \
-                  $r += [ordered]@{{ ms = [double]$resp.ResponseTime; ok = $true }} }} \
-           catch {{ $r += [ordered]@{{ ms = $null; ok = $false }} }} }}; \
+        "$p = New-Object System.Net.NetworkInformation.Ping; \
+         $r = @(); $seguidas = 0; \
+         foreach ($i in 1..{}) {{ \
+           try {{ $resp = $p.Send('{}', {}); \
+                  if ($resp.Status -eq 'Success') {{ \
+                    $seguidas = 0; \
+                    $r += [ordered]@{{ ms = [double]$resp.RoundtripTime; ok = $true }} }} \
+                  else {{ $seguidas++; \
+                    $r += [ordered]@{{ ms = $null; ok = $false }} }} }} \
+           catch {{ $seguidas++; $r += [ordered]@{{ ms = $null; ok = $false }} }}; \
+           if ($seguidas -ge {}) {{ break }} }}; \
+         $p.Dispose(); \
          ConvertTo-Json -Compress -InputObject @($r)",
-        amostras, host
+        amostras, host, PRAZO_DO_PING_MS, DESISTE_APOS
     );
 
     shell::powershell(&script)
@@ -405,6 +517,16 @@ fn montar_nota(perda: &Perda, sem_alvo: bool) -> String {
                  para medir perda contra este servidor, e isso não é problema na sua rede.",
                 enviados
             ),
+            // MESMO CUIDADO DA VARIANTE ACIMA: a porta respondeu, então o
+            // número de perdidos NÃO pode ser apresentado como perda.
+            Perda::PingLimitado { enviados, perdidos } => format!(
+                "Este servidor respondeu a {} de {} pings, mas aceitou conexão na porta do jogo \
+                 normalmente. Limitar a taxa de ping é comum em servidor de jogo, por segurança, \
+                 e é a explicação mais provável. **Não dá para dizer, por aqui, se houve perda \
+                 de pacote de verdade** — e afirmar que houve seria inventar um número.",
+                enviados - perdidos,
+                enviados
+            ),
             Perda::Medida { enviados, perdidos } if *perdidos == *enviados => format!(
                 "Nenhuma das {} tentativas voltou, e a porta do jogo também não respondeu. \
                  As duas coisas juntas apontam o servidor fora do ar, ou algo entre você e \
@@ -466,11 +588,16 @@ pub fn medir(alvo: Option<String>, amostras: u32) -> MedidaDeRede {
             // vale para ICMP — que é o caso comum em servidor de FiveM atrás
             // de filtragem anti-DDoS.
             //
-            // Só roda no caso 100%: com qualquer resposta de ping, a medição
-            // já se sustenta e uma conexão a mais seria ruído.
-            if matches!(&perda, Perda::Medida { enviados, perdidos } if perdidos == enviados) {
-                let enviados = respostas.len() as u32;
-                perda = avaliar_perda_total(enviados, porta_responde(&destino));
+            // NÃO é só no 100%. O comportamento comum de firewall de
+            // hospedagem não é descartar todo o ICMP — é limitar a taxa, e
+            // 19 de 20 perdidos passava direto acusando "95% de perda" numa
+            // rede boa. Metade já pede a testemunha.
+            if let Perda::Medida { enviados, perdidos } = perda {
+                if enviados > 0
+                    && f64::from(perdidos) / f64::from(enviados) >= PERDA_QUE_PEDE_TESTEMUNHA
+                {
+                    perda = avaliar_perda_total(enviados, perdidos, porta_responde(&destino));
+                }
             }
 
             MedidaDeRede {
@@ -535,23 +662,160 @@ mod tests {
         // dizendo a um cliente pagante que a conexão dele está destruída
         // quando ela está perfeita.
         assert_eq!(
-            avaliar_perda_total(20, Some(true)),
+            avaliar_perda_total(20, 20, Some(true)),
             Perda::NaoRespondePing { enviados: 20 },
             "porta respondendo continuou virando perda total"
         );
 
         // Nem ping nem porta: aí a perda total é real, e dizer isso é o certo.
         assert_eq!(
-            avaliar_perda_total(20, Some(false)),
+            avaliar_perda_total(20, 20, Some(false)),
             Perda::Medida { enviados: 20, perdidos: 20 }
         );
 
         // Sem porta para tentar não há testemunha — e ausência de testemunha
         // não é testemunho a favor. Fica a medição crua do ping.
         assert_eq!(
-            avaliar_perda_total(20, None),
+            avaliar_perda_total(20, 20, None),
             Perda::Medida { enviados: 20, perdidos: 20 }
         );
+    }
+
+    #[test]
+    fn ping_limitado_por_taxa_tambem_nao_vira_perda_de_pacote() {
+        // O alarme falso um pacote abaixo do limiar. Firewall de hospedagem
+        // raramente descarta TODO o ICMP — o comum é limitar a taxa: responde
+        // a um ping e ignora os dezenove seguintes. A correção anterior só
+        // valia no 100% exato, então 19 de 20 saía como "95% de perda" para
+        // um cliente com a conexão perfeita.
+        assert_eq!(
+            avaliar_perda_total(20, 19, Some(true)),
+            Perda::PingLimitado {
+                enviados: 20,
+                perdidos: 19
+            },
+            "perda parcial com a porta respondendo continuou virando perda medida"
+        );
+
+        // E a frase precisa DIZER que não sabe, em vez de escolher a pior
+        // das duas leituras.
+        let nota = montar_nota(
+            &Perda::PingLimitado {
+                enviados: 20,
+                perdidos: 19,
+            },
+            false,
+        );
+        assert!(
+            nota.contains("não dá para dizer") || nota.contains("Não dá para dizer"),
+            "a nota precisa admitir que não sabe: {}",
+            nota
+        );
+
+        // Sem a testemunha, a mesma perda parcial continua sendo medição
+        // crua — ausência de testemunha não é testemunho a favor.
+        assert_eq!(
+            avaliar_perda_total(20, 19, None),
+            Perda::Medida {
+                enviados: 20,
+                perdidos: 19
+            }
+        );
+    }
+
+    #[test]
+    fn servico_de_web_nao_e_confundido_com_o_servidor_do_jogo() {
+        // O CASO REAL, E ELE É O MAIS PROVÁVEL EM PARTIDA EM ANDAMENTO.
+        //
+        // O tráfego de jogo do FiveM é UDP; a conexão TCP com o servidor
+        // costuma fechar depois do download de recursos. Passados alguns
+        // minutos, a ÚNICA pública estabelecida que sobra é a da Cfx.re em
+        // :443. Um candidato só — a Regra 1 antiga aprovava — e a tela media
+        // vinte pings contra a CDN apresentando o número como "o servidor do
+        // jogo".
+        assert_eq!(
+            escolher_alvo(vec![("203.0.113.10".to_string(), 443)]).as_deref(),
+            None,
+            "a CDN da Cfx.re em :443 continuou virando o servidor do jogo"
+        );
+
+        // Com o servidor de verdade junto, sobra ele — e só ele.
+        assert_eq!(
+            escolher_alvo(vec![
+                ("203.0.113.10".to_string(), 30120),
+                ("203.0.113.10".to_string(), 30120),
+            ])
+            .as_deref(),
+            Some("203.0.113.10:30120")
+        );
+
+        // Duas portas no MESMO host é ambiguidade honesta: a dedup antiga era
+        // pelo endereço, sobre a lista ordenada, e ficava silenciosamente com
+        // a MENOR porta — o aperto de mão TCP batia na porta errada.
+        assert_eq!(
+            escolher_alvo(vec![
+                ("203.0.113.10".to_string(), 30120),
+                ("203.0.113.10".to_string(), 30110),
+            ]),
+            None,
+            "duas portas no mesmo host continuaram sendo resolvidas por chute"
+        );
+
+        // E o filtro de porta é da descoberta, não do escolher: a lista que
+        // chega aqui já veio filtrada, então uma porta de jogo passa.
+        assert!(PORTAS_QUE_NAO_SAO_JOGO.contains(&443));
+        assert!(!PORTAS_QUE_NAO_SAO_JOGO.contains(&30120));
+    }
+
+    #[test]
+    fn endereco_ipv6_de_rede_local_nao_e_publico() {
+        // O teste vizinho lista cinco endereços — todos IPv4. Ele afirmava
+        // sobre a função inteira e nunca tocava o ramo IPv6, onde faltava
+        // `fc00::/7`, o equivalente IPv6 de 192.168.x.x.
+        let local: IpAddr = "fd00::1".parse().unwrap();
+        let outro_local: IpAddr = "fc00::abcd".parse().unwrap();
+        let link_local: IpAddr = "fe80::1".parse().unwrap();
+        let publico: IpAddr = "2001:db8::1".parse().unwrap();
+
+        assert!(!e_endereco_publico(&local), "fd00::/8 passou como público");
+        assert!(
+            !e_endereco_publico(&outro_local),
+            "fc00::/8 passou como público"
+        );
+        assert!(!e_endereco_publico(&link_local));
+        // Este último não é para virar `false`: documentação ou não, é um
+        // unicast global e a função não tem por que recusá-lo.
+        assert!(e_endereco_publico(&publico));
+    }
+
+    #[test]
+    fn a_sonda_desiste_depois_de_silencio_seguido() {
+        // Não dá para medir o tempo do PowerShell num teste determinístico,
+        // então o que se trava aqui é a INTENÇÃO: as duas constantes que
+        // fazem a medição caber no "~10 s" que a tela promete. Vinte
+        // tentativas a quatro segundos cada — o `Test-Connection` do
+        // PowerShell 5.1, que não aceita prazo — davam cerca de 78 s, e
+        // prendiam a sessão compartilhada do PowerShell nesse tempo.
+        assert!(
+            PRAZO_DO_PING_MS <= 1000,
+            "prazo por tentativa acima de 1 s estoura o custo anunciado na tela"
+        );
+        assert!(
+            DESISTE_APOS <= 5 && DESISTE_APOS >= 2,
+            "desistir cedo demais confunde perda com bloqueio; tarde demais volta a travar"
+        );
+        assert!(
+            u32::from(DESISTE_APOS) * PRAZO_DO_PING_MS <= 6000,
+            "o pior caso — ICMP bloqueado — precisa caber junto com o prazo da porta"
+        );
+
+        // E o script precisa usar o Ping do .NET, não o `Test-Connection`:
+        // é a diferença entre 5 s e 78 s.
+        let script = format!(
+            "$p = New-Object System.Net.NetworkInformation.Ping; $p.Send('{}', {})",
+            "1.1.1.1", PRAZO_DO_PING_MS
+        );
+        assert!(script.contains("NetworkInformation.Ping"));
     }
 
     #[test]

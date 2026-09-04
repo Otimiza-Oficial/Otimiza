@@ -157,15 +157,35 @@ fn rank(severidade: health::FindingSeverity) -> u8 {
 /// cujo `id` contenha "naosei" por outro motivo (ex.: bateria, memória) não
 /// deve herdar o texto "contador de erros do disco" só por coincidência de
 /// substring.
+///
+/// SÓ ACHADO DE DISCO ENTRA. `health::analyze()` não devolve apenas disco —
+/// devolve também `battery_health` e o `no_data` de quando não houve leitura
+/// nenhuma. Sem o filtro por prefixo `disk_`, um notebook com a bateria a 55%
+/// da capacidade de fábrica e o SSD medido como perfeito saía do relatório
+/// como "Disco: crítico", e o atendimento mandava o cliente comprar um SSD
+/// que estava bom. Era um número medido num componente sendo atribuído a
+/// outro.
+///
+/// E DISCO NENHUM NÃO É DISCO BOM. Se nenhum achado de disco chegou —
+/// máquina virtual, controlador antigo, o `no_data` do `health.rs` — o
+/// resumo é "não consegui ler", nunca "saudável". A Regra 3 do cabeçalho
+/// deste arquivo diz exatamente isso, e o resumo a desfazia na saída.
 fn resumir_disco(relatorio: &health::HealthReport) -> (String, Vec<String>) {
     let mut lacunas = Vec::new();
     let mut pior: Option<health::FindingSeverity> = None;
+    let mut leu_algum_disco = false;
 
     for achado in &relatorio.findings {
+        if !achado.id.starts_with("disk_") {
+            continue;
+        }
+
         if achado.id.starts_with("disk_errors_naosei") {
             lacunas.push("contador de erros do disco".to_string());
             continue;
         }
+
+        leu_algum_disco = true;
 
         if achado.severity != health::FindingSeverity::Ok {
             pior = Some(match pior {
@@ -185,8 +205,13 @@ fn resumir_disco(relatorio: &health::HealthReport) -> (String, Vec<String>) {
     let resumo = match pior {
         Some(health::FindingSeverity::Critical) => "crítico",
         Some(health::FindingSeverity::Important) => "atenção",
-        _ => "saudável",
+        _ if leu_algum_disco => "saudável",
+        _ => "não consegui ler",
     };
+
+    if !leu_algum_disco {
+        lacunas.push("saúde do disco (o Windows não expôs nada nesta máquina)".to_string());
+    }
 
     (resumo.to_string(), lacunas)
 }
@@ -519,6 +544,71 @@ mod tests {
         let (resumo, lacunas) = resumir_disco(&relatorio);
         assert_eq!(resumo, "crítico");
         assert_eq!(lacunas, vec!["contador de erros do disco".to_string()]);
+    }
+
+    #[test]
+    fn bateria_ruim_nao_e_apresentada_como_disco_ruim() {
+        use health::{FindingSeverity, FixLocation, HealthFinding, HealthReport};
+
+        // Notebook: o SSD foi medido e está bom, a BATERIA é que está no fim.
+        // `health::analyze()` devolve os dois no mesmo vetor. Antes deste
+        // filtro o resumo saía "crítico", o cliente colava isso no
+        // atendimento, e o atendimento mandava trocar um disco saudável.
+        let relatorio = HealthReport {
+            needs_admin: false,
+            findings: vec![
+                HealthFinding {
+                    id: "disk_wear_0".to_string(),
+                    title: "Desgaste".to_string(),
+                    measured: "3% de desgaste.".to_string(),
+                    advice: String::new(),
+                    severity: FindingSeverity::Ok,
+                    fix_location: FixLocation::None,
+                },
+                HealthFinding {
+                    id: "battery_health".to_string(),
+                    title: "Saúde da bateria".to_string(),
+                    measured: "55% da capacidade de fábrica.".to_string(),
+                    advice: String::new(),
+                    severity: FindingSeverity::Critical,
+                    fix_location: FixLocation::Hardware,
+                },
+            ],
+        };
+
+        let (resumo, lacunas) = resumir_disco(&relatorio);
+        assert_eq!(resumo, "saudável");
+        assert!(lacunas.is_empty(), "não há lacuna: o disco foi lido");
+    }
+
+    #[test]
+    fn sem_achado_de_disco_o_resumo_nao_diz_saudavel() {
+        use health::{FindingSeverity, FixLocation, HealthFinding, HealthReport};
+
+        // O `no_data` que `health::analyze()` empurra quando não leu NADA:
+        // severidade `Ok`, id que não começa com `disk_`. Sem leitura
+        // nenhuma, "saudável" seria o produto afirmando saúde que ninguém
+        // mediu — o "não consegui verificar" virando "está tudo bem".
+        let relatorio = HealthReport {
+            needs_admin: false,
+            findings: vec![HealthFinding {
+                id: "no_data".to_string(),
+                title: "Sem dados de saúde disponíveis".to_string(),
+                measured: "O Windows não expôs informação de saúde para este hardware."
+                    .to_string(),
+                advice: String::new(),
+                severity: FindingSeverity::Ok,
+                fix_location: FixLocation::None,
+            }],
+        };
+
+        let (resumo, lacunas) = resumir_disco(&relatorio);
+        assert_eq!(resumo, "não consegui ler");
+        assert!(
+            lacunas.iter().any(|l| l.contains("saúde do disco")),
+            "a lacuna precisa aparecer no relatório: {:?}",
+            lacunas
+        );
     }
 
     #[test]

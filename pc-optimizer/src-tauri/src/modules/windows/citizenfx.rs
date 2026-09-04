@@ -198,11 +198,48 @@ fn caminho_do_ini() -> Option<PathBuf> {
     super::fivem::pasta_do_fivem().map(|base| base.join("CitizenFX.ini"))
 }
 
-fn montar_nota(pool_sizes: &Option<PoolSizesIncrease>) -> String {
+/// Por que a leitura falhou, em português, a partir do erro REAL do sistema.
+///
+/// A frase anterior era uma só, para qualquer falha: "pode ser permissão de
+/// arquivo — feche o FiveM e tente de novo". Ela ATRIBUÍA uma causa que nunca
+/// foi verificada, e o conselho que dava não funcionaria nunca no caso mais
+/// provável aqui: o `CitizenFX.ini` é escrito pelo cliente do FiveM, e basta
+/// um `IVPath=C:\Jogos\GTA V — Cópia` gravado em ANSI, ou o arquivo salvo em
+/// UTF-16 com BOM (o que as APIs de INI do Windows produzem), para
+/// `read_to_string` devolver `InvalidData`. Pasta com acento é o caso comum
+/// no Brasil, não o exótico — o cliente fecharia o FiveM, tentaria de novo, e
+/// leria a mesma frase para sempre.
+///
+/// O caminho de CBS deste mesmo lançamento já faz assim. Dois arquivos da
+/// mesma versão não podem ter suposições contraditórias sobre o que significa
+/// "não deu para ler".
+fn explicar_falha(erro: &std::io::ErrorKind) -> &'static str {
+    match erro {
+        std::io::ErrorKind::PermissionDenied => {
+            "O Windows negou acesso ao arquivo — feche o FiveM e tente de novo."
+        }
+        std::io::ErrorKind::NotFound => {
+            "O arquivo sumiu entre a checagem e a leitura, o que costuma ser o FiveM \
+             reescrevendo-o no mesmo instante. Tente de novo."
+        }
+        std::io::ErrorKind::InvalidData => {
+            "O arquivo não está em UTF-8 — costuma ser acento no caminho do jogo gravado na \
+             codificação antiga do Windows. Não é problema no seu PC, e não há o que fazer: \
+             o Otimiza simplesmente não lê este arquivo."
+        }
+        _ => "Não consegui abrir o arquivo.",
+    }
+}
+
+fn montar_nota(pool_sizes: &Option<PoolSizesIncrease>, falha: Option<std::io::ErrorKind>) -> String {
     match pool_sizes {
-        None => "Não consegui ler o CitizenFX.ini. Pode ser permissão de arquivo — feche o \
-                  FiveM e tente de novo."
-            .to_string(),
+        None => format!(
+            "Não consegui ler o CitizenFX.ini. {} O arquivo não foi tocado.",
+            falha
+                .as_ref()
+                .map(explicar_falha)
+                .unwrap_or("Não consegui abrir o arquivo.")
+        ),
 
         // O CASO MAIS COMUM, E É UM BOM RESULTADO — não um problema a
         // resolver, do mesmo jeito que "nenhuma corrupção encontrada" no
@@ -254,8 +291,9 @@ pub fn analyze() -> CitizenFxReport {
     }
 
     let leitura = std::fs::read_to_string(&caminho);
+    let falha = leitura.as_ref().err().map(|e| e.kind());
     let pool_sizes = estado_do_pool(leitura.as_deref().map_err(|_| ()));
-    let note = montar_nota(&pool_sizes);
+    let note = montar_nota(&pool_sizes, falha);
 
     CitizenFxReport {
         existe: true,
@@ -366,7 +404,7 @@ PoolSizesIncrease={"CMoveObject": 600, "FragmentStore": 30000, "PoolQueNaoConhec
     /// pode conter a palavra que convidaria a isso.
     #[test]
     fn nota_do_vazio_nao_sugere_aumentar_nada() {
-        let nota = montar_nota(&Some(PoolSizesIncrease::Vazio));
+        let nota = montar_nota(&Some(PoolSizesIncrease::Vazio), None);
 
         assert!(!nota.to_lowercase().contains("aumente"));
         assert!(!nota.to_lowercase().contains("recomendo"));
@@ -377,9 +415,12 @@ PoolSizesIncrease={"CMoveObject": 600, "FragmentStore": 30000, "PoolQueNaoConhec
 
     #[test]
     fn nota_do_invalido_diz_que_nao_entendeu_em_vez_de_ficar_calada() {
-        let nota = montar_nota(&Some(PoolSizesIncrease::Invalido {
-            bruto: "x".to_string(),
-        }));
+        let nota = montar_nota(
+            &Some(PoolSizesIncrease::Invalido {
+                bruto: "x".to_string(),
+            }),
+            None,
+        );
 
         assert!(nota.contains("não") && (nota.contains("interpretar") || nota.contains("entend")));
     }
