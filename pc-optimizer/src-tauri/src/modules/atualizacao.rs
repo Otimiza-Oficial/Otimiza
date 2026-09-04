@@ -41,13 +41,21 @@ const TIMEOUT_SEGUNDOS: u64 = 10;
 /// TRÊS VARIANTES, E NÃO UM BOOL, PORQUE "NÃO SEI" NÃO É "NÃO HÁ VERSÃO NOVA".
 ///
 /// Uma consulta que falhou, ou que voltou algo ilegível, não pode virar
-/// `Igual` — isso é o produto fingindo que perguntou e recebeu "está tudo em
-/// dia" quando na verdade não perguntou nada de verdade. `NaoSei` é o
+/// `NaoHaNova` — isso é o produto fingindo que perguntou e recebeu "está tudo
+/// em dia" quando na verdade não perguntou nada de verdade. `NaoSei` é o
 /// resultado honesto: a tela não mostra aviso nenhum, mas também não afirma
 /// que está atualizado.
+///
+/// A variante se chamava `Igual`, e o nome mentia sobre um caso real: uma
+/// instalada MAIOR que a publicada — o que acontece toda vez que o dono roda
+/// a versão de desenvolvimento — também cai aqui, e não é igualdade nenhuma.
+/// Nada quebrava por causa disso hoje, porque só `HaVersaoNova` faz a tela
+/// agir; mas um nome que afirma o que a função não verificou é exatamente o
+/// tipo de rótulo que engana quem for reusar a função depois.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Comparacao {
-    Igual,
+    /// Não há versão mais nova para oferecer: a instalada é igual ou maior.
+    NaoHaNova,
     HaVersaoNova,
     NaoSei,
 }
@@ -108,7 +116,7 @@ pub fn comparar(instalada: &str, publicada: &str) -> Comparacao {
     if numeros_publicada > numeros_instalada {
         Comparacao::HaVersaoNova
     } else {
-        Comparacao::Igual
+        Comparacao::NaoHaNova
     }
 }
 
@@ -172,7 +180,7 @@ mod tests {
 
     #[test]
     fn so_avisa_quando_a_publicada_e_maior() {
-        assert_eq!(comparar("1.5.0", "1.5.0"), Comparacao::Igual);
+        assert_eq!(comparar("1.5.0", "1.5.0"), Comparacao::NaoHaNova);
         assert_eq!(comparar("1.5.0", "1.6.0"), Comparacao::HaVersaoNova);
         assert_eq!(comparar("1.5.0", "v1.6.0"), Comparacao::HaVersaoNova);
 
@@ -182,7 +190,7 @@ mod tests {
 
         // Uma versão instalada MAIOR que a publicada acontece em compilação
         // local. Não é aviso, e não é erro.
-        assert_eq!(comparar("1.6.0", "1.5.0"), Comparacao::Igual);
+        assert_eq!(comparar("1.6.0", "1.5.0"), Comparacao::NaoHaNova);
     }
 
     #[test]

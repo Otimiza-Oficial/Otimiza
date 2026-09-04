@@ -65,7 +65,7 @@ interface RestoreStatus {
  * guarda em `commands.rs` reprova o build se este arquivo comparar por
  * prosa em vez de por essas variantes.
  */
-type Comparacao = "Igual" | "HaVersaoNova" | "NaoSei";
+type Comparacao = "NaoHaNova" | "HaVersaoNova" | "NaoSei";
 
 interface AvisoDeVersao {
   comparacao: Comparacao;

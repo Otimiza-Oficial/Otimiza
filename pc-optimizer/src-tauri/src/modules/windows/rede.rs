@@ -490,13 +490,23 @@ fn calcular_jitter(respostas: &[RespostaPing]) -> Option<f64> {
 /// travada de rede sente igual a FPS baixo — porque é isso que impede o
 /// cliente de achar que o produto o enganou quando ele otimiza o PC e a
 /// travada continua.
+/// As Regras 3 e 4 em texto, e o motivo de serem uma CONSTANTE.
+///
+/// Havia uma frase no módulo — a de endereço inválido — escrita direto no
+/// `MedidaDeRede`, sem passar por aqui. Era a única saída que NÃO carregava
+/// estas duas regras, e o teste de canário, que percorre as combinações de
+/// `montar_nota`, não a alcançava. O caminho é inalcançável em produção hoje,
+/// mas um furo na guarda que existe para impedir a próxima frase solta vale
+/// tanto quanto a frase.
+const BASE_DA_NOTA: &str =
+    "Travamento na hora de jogar sente exatamente igual a FPS baixo: o carro que teleporta, o \
+     tiro que não registra, a tela que congela por um instante. Se você otimizou o PC e não \
+     sentiu diferença, pode ser isto aqui — e não o computador. Perda de pacote é quase sempre \
+     do provedor, do cabo, do Wi-Fi ou do servidor do jogo, nunca do PC: o Otimiza mede e \
+     mostra onde está o problema, sem prometer consertar o que não está aqui.";
+
 fn montar_nota(perda: &Perda, sem_alvo: bool) -> String {
-    let base = "Travamento na hora de jogar sente exatamente igual a FPS baixo: o carro que \
-                teleporta, o tiro que não registra, a tela que congela por um instante. Se você \
-                otimizou o PC e não sentiu diferença, pode ser isto aqui — e não o computador. \
-                Perda de pacote é quase sempre do provedor, do cabo, do Wi-Fi ou do servidor do \
-                jogo, nunca do PC: o Otimiza mede e mostra onde está o problema, sem prometer \
-                consertar o que não está aqui.";
+    let base = BASE_DA_NOTA;
 
     let extra = if sem_alvo {
         "Não descobri, com confiança, o servidor em que você está jogando agora. Medir contra \
@@ -572,7 +582,10 @@ pub fn medir(alvo: Option<String>, amostras: u32) -> MedidaDeRede {
                     perda: Perda::NaoMedi,
                     jitter_ms: None,
                     tempo_ms: None,
-                    nota: "O endereço do servidor não é um IP válido — a medição não rodou."
+                    nota: format!(
+                        "{} O endereço do servidor não é um IP válido — a medição não rodou.",
+                        BASE_DA_NOTA
+                    )
                         .to_string(),
                 };
             }
@@ -871,6 +884,14 @@ mod tests {
             (Perda::Medida { enviados: 10, perdidos: 10 }, false),
             (Perda::Medida { enviados: 10, perdidos: 0 }, false),
             (Perda::Medida { enviados: 10, perdidos: 3 }, false),
+            (Perda::NaoRespondePing { enviados: 10 }, false),
+            (
+                Perda::PingLimitado {
+                    enviados: 10,
+                    perdidos: 9,
+                },
+                false,
+            ),
         ] {
             let nota = montar_nota(&perda, sem_alvo);
             assert!(
@@ -880,6 +901,19 @@ mod tests {
                 sem_alvo
             );
         }
+
+        // E O CAMINHO QUE NÃO PASSA POR `montar_nota`. Era o furo da guarda:
+        // a frase de endereço inválido era escrita direto no `MedidaDeRede`, e
+        // este laço nunca a alcançava. Ela é a única saída do módulo que o
+        // canário não cobria.
+        let fora_do_montar = medir(Some("nao-e-um-ip:30120".to_string()), 1);
+        assert!(
+            fora_do_montar
+                .nota
+                .contains("sente exatamente igual a FPS baixo"),
+            "a frase de endereço inválido escapou da regra: {}",
+            fora_do_montar.nota
+        );
     }
 
     #[test]
