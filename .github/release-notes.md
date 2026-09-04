@@ -18,6 +18,81 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.5.0 — o que o produto nao sabe, ele passa a dizer
+
+Versao de conserto e de medida. Tres recursos novos, sete correcoes, e uma
+regra que valeu para todos eles: **quando o Otimiza nao consegue medir uma
+coisa, ele diz que nao consegue** — nunca "esta tudo bem".
+
+## Copiar diagnostico
+
+Um botao na aba Sistema monta um relatorio curto do seu PC e copia. Voce cola
+no atendimento e quem for te ajudar ja sabe o que esta acontecendo.
+
+Ele leva versao do Windows, memoria, monitores, o que esta congelado, o que o
+Otimiza ja mexeu, saude do disco e estado termico. **Nao leva nome, documento,
+contato nem nada que identifique voce** — e uma trava no codigo garante isso.
+
+O que nao deu para ler aparece como *nao consegui verificar*, em vez de
+sumir do texto.
+
+## Aviso de versao nova
+
+Quem comprou fora do Discord nao ficava sabendo quando saia atualizacao. Agora
+o proprio programa avisa, com um botao para baixar.
+
+A faixa aparece so quando ha versao mais nova, some quando voce fecha, e
+**nunca interrompe o que voce esta fazendo**.
+
+## Perda de pacote contra o servidor do jogo
+
+Travamento na hora de jogar sente exatamente igual a FPS baixo: o carro que
+teleporta, o tiro que nao registra. Se voce otimizou o PC e nao sentiu
+diferenca, pode ser a rede — e nao o computador.
+
+O Otimiza mede a perda de pacote **contra o servidor em que voce esta jogando
+agora**, nao contra um endereco qualquer. Se ele nao descobre com confianca
+qual e o servidor, ele nao mede e diz por que.
+
+E aqui esta a parte que mais deu trabalho: **muito servidor de FiveM bloqueia
+ping por seguranca.** Uma medicao ingenua diria "20 de 20 perdidos, sua rede
+esta destruida" para quem esta com a conexao perfeita. O Otimiza confere a
+porta do jogo antes de acusar, e quando o ping esta bloqueado ou limitado ele
+diz isso — que nao e perda.
+
+## CitizenFX.ini
+
+A aba do FiveM passa a mostrar o que ja esta configurado em
+`PoolSizesIncrease`, ao lado dos tetos oficiais da Cfx.re.
+
+**Só leitura.** O Otimiza nao escreve nesse arquivo, e nao sugere que voce
+aumente nada: sem um caso real de pool estourado, sugerir seria adivinhar.
+"Nada configurado" e o normal, e e um bom resultado.
+
+## Correcoes
+
+- **Reparo do Windows com falhas ilegiveis nao le mais como sucesso.** Um
+  reparo que corrigiu parte e nao conseguiu ler o resto dizia "corrigido".
+  Agora diz o que corrigiu, o que nao deu para ler, e qual e o proximo passo.
+- **Relatorio de suporte nao chama mais bateria de disco.** Notebook com a
+  bateria no fim e o SSD perfeito saia como "disco critico".
+- **Disco que nao pode ser lido nao aparece mais como "saudavel".**
+- **A medicao de rede ficou 15x mais rapida no pior caso** — de cerca de 78
+  segundos para menos de 5 — e parou de prender o resto do programa junto.
+- **Copiar diagnostico nao congela mais a janela**, e avisa que vai demorar.
+- **A descoberta do servidor do jogo parou de aceitar qualquer endereco.**
+- **Mensagem de erro do CitizenFX.ini parou de chutar a causa.**
+
+## Por baixo
+
+Duas travas novas: uma reprova o build se os quatro arquivos de versao
+discordarem entre si, outra se a tag nao bater com o que o binario carrega.
+Elas nasceram de um erro real desta propria versao.
+
+543 testes automaticos, todos passando.
+
+---
+
 # 1.3.0 — o congelamento deixa de ser invisivel
 
 Versao de conserto. Nasceu de um caso concreto: um cliente abriu o
