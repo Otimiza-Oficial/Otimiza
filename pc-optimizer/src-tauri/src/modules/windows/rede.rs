@@ -349,6 +349,29 @@ fn e_endereco_publico(ip: &IpAddr) -> bool {
 /// para evitar.
 const PORTAS_QUE_NAO_SAO_JOGO: [u16; 5] = [80, 443, 8080, 8443, 3478];
 
+// A CONEXÃO TCP É A ÚNICA FONTE, E ISSO FOI VERIFICADO — NÃO SUPOSTO.
+//
+// A saída óbvia para o problema acima seria ler o endereço do log do FiveM em
+// vez de olhar as conexões. Procurei, no log de uma sessão real de jogo da
+// máquina do dono (`%LOCALAPPDATA%\FiveM\FiveM.app\logs\`, 2,5 MB, partida
+// inteira), e nas outras fontes que o cliente deixa em disco:
+//
+//   CitizenFX_log_*.log ....... "Connecting to server...", sem endereço
+//                               nenhum. Os únicos números com cara de IP no
+//                               arquivo são versões (2.0.9.0, 1.0.53.576).
+//   cef_console.txt ........... nada
+//   nui-storage/Local Storage . nada
+//
+// Ou seja: NÃO EXISTE fallback de log a construir. O FiveM simplesmente não
+// grava contra quem conectou. Isto está escrito aqui para a próxima pessoa
+// que tiver a mesma ideia não gastar o mesmo tempo — e para ninguém escrever
+// um leitor de log baseado em blog, que já foi o erro de uma pesquisa
+// anterior neste mesmo produto.
+//
+// Consequência aceita: em partida longa, a checagem diz "não identifiquei o
+// servidor" e explica por quê. É menos útil do que medir, e é honesto — o
+// contrário seria medir contra a CDN e chamar de servidor do jogo.
+
 /// O servidor em que o cliente está jogando agora, ou `None`.
 ///
 /// Reaproveita `gamemode::jogo_aberto_com_pid` — não escreve um segundo
@@ -511,7 +534,11 @@ fn montar_nota(perda: &Perda, sem_alvo: bool) -> String {
     let extra = if sem_alvo {
         "Não descobri, com confiança, o servidor em que você está jogando agora. Medir contra \
          um endereço qualquer e apresentar como \"o servidor do jogo\" seria inventar um número \
-         — por isso a medição não rodou. Abra o jogo e tente de novo."
+         — por isso a medição não rodou. Esta checagem funciona melhor logo depois de entrar \
+         no servidor: no FiveM, o jogo em si conversa por um caminho que não dá para identificar \
+         de fora, e depois de um tempo de partida o endereço deixa de ficar visível aqui. Se o \
+         jogo já está aberto há bastante tempo, reconectar ao servidor faz o endereço aparecer \
+         de novo."
             .to_string()
     } else {
         match perda {
