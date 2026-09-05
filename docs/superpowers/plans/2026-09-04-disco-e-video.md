@@ -38,7 +38,7 @@ consulta ao Windows, `nvidia-smi` e `nvapi64.dll` (ambos acompanham o driver).
 - Módulo novo entra em `.github/workflows/release.yml`, senão a guarda
   `ci_coverage::todo_modulo_com_teste_roda_na_esteira` reprova.
 - Rodar `cargo test --lib` em `pc-optimizer/src-tauri` e `npx tsc --noEmit` em
-  `pc-optimizer`. Hoje: **222 testes passando, tsc limpo.**
+  `pc-optimizer`. Hoje: **543 testes passando, tsc limpo.**
 
 ---
 
