@@ -864,6 +864,31 @@ pub fn empty_recycle_bin() -> Result<String, String> {
 mod tests {
     use super::*;
 
+    /// TRAVA SÓ DO LADO DO TESTE — NÃO É PRODUÇÃO.
+    ///
+    /// `ULTIMA_ANALISE` é um `static` de produção, compartilhado por todo
+    /// teste que chama `scan()` (que lê e escreve nele) ou mexe nele direto.
+    /// `cargo test` roda em threads paralelas por padrão, então sem isto há
+    /// uma corrida de verdade: um teste pode ler a memória que outro acabou
+    /// de plantar ou apagar. Um laço de tentativas (como havia aqui antes)
+    /// não elimina essa corrida, só reduz a chance dela aparecer — e um teste
+    /// que falha uma vez a cada tantas é pior que um que nunca passa: todo
+    /// mundo aprende a reexecutar sem investigar. A trava é só `std::sync`,
+    /// sem dependência nova, e não move nada de `ULTIMA_ANALISE` nem de
+    /// `saida_do_dism_analyze_component_store` — a produção continua igual.
+    static TRAVA_ULTIMA_ANALISE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Se um teste entrar em pânico segurando `TRAVA_ULTIMA_ANALISE`, o
+    /// `Mutex` fica envenenado e os testes seguintes falhariam por
+    /// "poisoned" em vez de pelo motivo real deles. Aqui a trava não guarda
+    /// dado nenhum (é um `()`) — só serializa acesso —, então é seguro pegar
+    /// a guarda de dentro do erro e seguir em frente.
+    fn trava_ultima_analise() -> std::sync::MutexGuard<'static, ()> {
+        TRAVA_ULTIMA_ANALISE
+            .lock()
+            .unwrap_or_else(|envenenada| envenenada.into_inner())
+    }
+
     #[test]
     fn toda_categoria_tem_explicacao_em_portugues() {
         for c in CATEGORIES {
@@ -936,6 +961,10 @@ mod tests {
 
     #[test]
     fn nao_promete_espaco_que_nao_vai_entregar() {
+        // Trava porque `scan()` lê/escreve `ULTIMA_ANALISE`, memória
+        // compartilhada com as outras provas que também chamam `scan()`.
+        let _trava = trava_ultima_analise();
+
         // O recuperável não pode incluir o que a gente não limpa.
         let relatorio = scan();
         let soma_limpavel: u64 = relatorio
@@ -1008,6 +1037,10 @@ A operação foi concluída com êxito.";
 
     #[test]
     fn toda_categoria_nova_avisa_o_que_se_perde_quando_ha_o_que_perder() {
+        // Trava porque `scan()` lê/escreve `ULTIMA_ANALISE`, memória
+        // compartilhada com as outras provas que também chamam `scan()`.
+        let _trava = trava_ultima_analise();
+
         // O cache do navegador apagado desloga de nada, mas faz o primeiro
         // carregamento de cada site ficar mais lento uma vez. O cliente precisa
         // saber ANTES de clicar -- e nao descobrir depois achando que quebrou.
@@ -1177,28 +1210,27 @@ A operação foi concluída com êxito.";
     fn a_analise_lembrada_volta_da_memoria_sem_subir_o_dism_de_novo() {
         const SENTINELA: &str = "SENTINELA DA MEMORIA (nao veio de Dism.exe)\nRecuperável : 1.00 GB\n";
 
-        // Até três tentativas porque as provas que chamam `scan()` rodam em
-        // paralelo e escrevem nesta mesma memória: uma delas pode passar entre
-        // a plantada e a chamada. Com o early-return removido, as três falham
-        // igual — a repetição tira a flakiness, não a força do teste.
-        let mut gasto = None;
-        for _ in 0..3 {
-            *ULTIMA_ANALISE
-                .lock()
-                .expect("a memória da análise não está envenenada") =
-                Some((std::time::Instant::now(), Some(SENTINELA.to_string())));
+        // Trava porque este teste planta na `ULTIMA_ANALISE` compartilhada e
+        // depende de ninguém mais mexer nela entre plantar e ler — as provas
+        // que chamam `scan()` fazem exatamente isso. Sem a trava havia uma
+        // corrida de verdade (não só teórica) e um laço de tentativas em cima
+        // dela, que reduzia a chance de pegar a corrida sem eliminá-la: um
+        // teste flaky é o mesmo problema que este projeto já levou a sério
+        // demais para tolerar — a suíte para de ser prova.
+        let _trava = trava_ultima_analise();
 
-            let inicio = std::time::Instant::now();
-            let saida = saida_do_dism_analyze_component_store();
-            let levou = inicio.elapsed();
+        *ULTIMA_ANALISE
+            .lock()
+            .expect("a memória da análise não está envenenada") =
+            Some((std::time::Instant::now(), Some(SENTINELA.to_string())));
 
-            if saida.as_deref() == Some(SENTINELA) {
-                gasto = Some(levou);
-                break;
-            }
-        }
+        let inicio = std::time::Instant::now();
+        let saida = saida_do_dism_analyze_component_store();
+        let gasto = inicio.elapsed();
 
-        let gasto = gasto.expect(
+        assert_eq!(
+            saida.as_deref(),
+            Some(SENTINELA),
             "a análise lembrada foi ignorada: a função subiu o DISM de novo em vez de \
              devolver o que já estava na memória — é um Dism.exe por clique em Limpar",
         );
@@ -1270,7 +1302,7 @@ A operação foi concluída com êxito.";
         assert!(
             typescript.is_dir(),
             "esta prova roda a tela de verdade e precisa do TypeScript do projeto: \
-             rode `npm install` em pc-optimizer ({:?} não existe)",
+             rode `npm ci` em pc-optimizer ({:?} não existe)",
             typescript
         );
 
@@ -1391,6 +1423,10 @@ console.log(
 
     #[test]
     fn varre_esta_maquina() {
+        // Trava porque `scan()` lê/escreve `ULTIMA_ANALISE`, memória
+        // compartilhada com as outras provas que também chamam `scan()`.
+        let _trava = trava_ultima_analise();
+
         let r = scan();
         println!(
             "{} — {} livres de {} ({:.0}%)",
