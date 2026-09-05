@@ -162,6 +162,14 @@ pub fn classificar(caminho: &str, leu: bool) -> Natureza {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderMap {
     pub root: String,
+    /// SOMA DAS RAÍZES VARRIDAS — não o tamanho do disco, nem o espaço usado
+    /// nele. `mapear()` varre uma pasta só, e aqui o total é dela mesma; já
+    /// `mapear_o_disco()` soma só as raízes de `raizes_do_disco()` (perfil do
+    /// usuário, os dois `Program Files`, `ProgramData` e `C:\Windows`) — nem
+    /// `System Volume Information`, nem perfil de outro usuário, nem o disco
+    /// inteiro entram nessa conta. Apresentar isto como "seu disco tem X" na
+    /// tela mentiria por baixo do valor real; a interface precisa dizer o que
+    /// a varredura de fato cobriu.
     pub total_bytes: u64,
     pub total_formatted: String,
     pub folders: Vec<FolderEntry>,
@@ -476,8 +484,6 @@ pub fn perfil_do_usuario() -> PathBuf {
 /// Só entra o que existe: máquina sem `Program Files (x86)` (Windows ARM, por
 /// exemplo) simplesmente não tem essa linha, em vez de mostrar uma pasta vazia.
 pub fn raizes_do_disco() -> Vec<PathBuf> {
-    let mut raizes: Vec<PathBuf> = Vec::new();
-
     let candidatos = [
         std::env::var("ProgramFiles").ok(),
         std::env::var("ProgramFiles(x86)").ok(),
@@ -486,23 +492,40 @@ pub fn raizes_do_disco() -> Vec<PathBuf> {
         Some(perfil_do_usuario().to_string_lossy().to_string()),
     ];
 
-    for candidato in candidatos.into_iter().flatten() {
-        let caminho = PathBuf::from(&candidato);
+    let existentes: Vec<PathBuf> = candidatos
+        .into_iter()
+        .flatten()
+        .map(PathBuf::from)
+        .filter(|caminho| caminho.exists())
+        .collect();
 
-        // DEDUPLICAÇÃO POR TEXTO NORMALIZADO. Em alguns Windows,
-        // `ProgramFiles` e `ProgramFiles(x86)` apontam para o mesmo lugar —
-        // somar as duas passaria o total do tamanho do disco.
+    deduplicar_por_caminho_normalizado(existentes)
+}
+
+/// DEDUPLICAÇÃO POR TEXTO NORMALIZADO, isolada como função pura para dar para
+/// testar o mecanismo em si — e não só o acaso de `raizes_do_disco()` nesta
+/// máquina, onde `ProgramFiles` e `ProgramFiles(x86)` já são strings
+/// diferentes e um teste que chama só `raizes_do_disco()` passaria mesmo com
+/// este bloco inteiro apagado.
+///
+/// Em alguns Windows, `ProgramFiles` e `ProgramFiles(x86)` apontam para o
+/// mesmo lugar — somar as duas passaria o total do tamanho do disco. Mantém
+/// a PRIMEIRA ocorrência de cada caminho, na ordem de entrada, porque a lista
+/// chega em ordem de peso (ver `raizes_do_disco`) e é essa ordem que decide
+/// qual nome sobrevive.
+fn deduplicar_por_caminho_normalizado(caminhos: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut vistos: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut resultado = Vec::new();
+
+    for caminho in caminhos {
         let chave = caminho.to_string_lossy().to_lowercase();
-        let repetida = raizes
-            .iter()
-            .any(|r| r.to_string_lossy().to_lowercase() == chave);
 
-        if caminho.exists() && !repetida {
-            raizes.push(caminho);
+        if vistos.insert(chave) {
+            resultado.push(caminho);
         }
     }
 
-    raizes
+    resultado
 }
 
 /// O mapa do disco: uma linha por raiz, sem descer nelas.
@@ -512,11 +535,25 @@ pub fn raizes_do_disco() -> Vec<PathBuf> {
 /// tela parada. Aqui cada raiz vira uma linha; o detalhe só é varrido quando o
 /// cliente clica numa delas, chamando `mapear` como já se faz hoje.
 pub fn mapear_o_disco(limite: usize) -> Result<FolderMap, String> {
+    mapear_o_disco_com_raizes(raizes_do_disco(), limite)
+}
+
+/// Mesma lógica de `mapear_o_disco`, mas recebendo as raízes de fora.
+///
+/// SEPARADA SÓ PARA DAR PARA TESTAR O RAMO `Err(_)` ABAIXO. Esse ramo é a
+/// regra que motivou a tarefa inteira: raiz ilegível vira `NaoSei` no mapa,
+/// e não desaparece dele. `mapear_o_disco()` sempre chama `raizes_do_disco()`,
+/// que só devolve caminho que `existe()` — ou seja, nunca produz uma raiz que
+/// falhe em `mapear()` por não ser pasta, e o ramo `Err(_)` fica sem nenhum
+/// teste capaz de reprovar se alguém trocar "vira NaoSei" por "pula a raiz".
+/// Passando uma raiz inventada aqui, o teste aciona o `Err` de verdade sem
+/// precisar de ACL nenhuma.
+fn mapear_o_disco_com_raizes(raizes: Vec<PathBuf>, limite: usize) -> Result<FolderMap, String> {
     let mut folders: Vec<FolderEntry> = Vec::new();
     let mut ilegiveis = 0usize;
     let mut estourou = false;
 
-    for raiz in raizes_do_disco() {
+    for raiz in raizes {
         match mapear(&raiz, limite) {
             Ok(parcial) => {
                 ilegiveis += parcial.unreadable;
@@ -529,15 +566,20 @@ pub fn mapear_o_disco(limite: usize) -> Result<FolderMap, String> {
                 let caminho = raiz.to_string_lossy().to_string();
 
                 folders.push(FolderEntry {
-                    name: nome,
                     natureza: classificar(&caminho, true),
                     path: caminho,
                     bytes: parcial.total_bytes,
                     formatted: format_size(parcial.total_bytes),
                     // Preenchido no fim, quando o total de todas for conhecido.
                     percent: 0.0,
-                    explanation: explicar(&raiz.to_string_lossy()).to_string(),
+                    // `nome`, e não o caminho inteiro: `explicar` casa por
+                    // igualdade exata contra chaves curtas como "steam" e
+                    // "appdata". Passar `c:\program files (x86)` nunca bate
+                    // com nada, e a explicação sai sempre vazia em silêncio —
+                    // era esse o bug aqui antes desta correção.
+                    explanation: explicar(&nome).to_string(),
                     partial: parcial.timed_out,
+                    name: nome,
                 });
             }
             Err(_) => {
@@ -1064,6 +1106,83 @@ mod tests {
                 "raiz repetida: {:?}", r
             );
         }
+    }
+
+    #[test]
+    fn deduplicar_por_caminho_normalizado_remove_a_repetida() {
+        // O ACHADO DA RODADA ANTERIOR: `nenhuma_raiz_repetida` passava mesmo
+        // com o bloco de dedup inteiro removido, porque nesta máquina
+        // `ProgramFiles` e `ProgramFiles(x86)` já são strings diferentes --
+        // o teste constatava um acaso do ambiente, não o mecanismo. Chamando
+        // a função pura direto, com dois candidatos que só diferem em
+        // maiúscula/minúscula, o mecanismo fica exposto de verdade: tirar a
+        // deduplicação (por exemplo devolvendo `caminhos` sem passar pelo
+        // `BTreeSet`) faz este teste reprovar, não só o de cima.
+        let candidatos = vec![
+            PathBuf::from(r"C:\Program Files"),
+            PathBuf::from(r"c:\program files"),
+            PathBuf::from(r"C:\Program Files (x86)"),
+        ];
+
+        let resultado = deduplicar_por_caminho_normalizado(candidatos);
+
+        assert_eq!(resultado.len(), 2, "esperava 2 raizes unicas, veio {:?}", resultado);
+        assert_eq!(resultado[0], PathBuf::from(r"C:\Program Files"),
+            "a PRIMEIRA ocorrencia deve sobreviver, e nao a ultima");
+    }
+
+    #[test]
+    fn raiz_ilegivel_aparece_como_naosei_e_nao_e_pulada() {
+        // A REGRA QUE MOTIVOU A TAREFA, agora com guarda de verdade. Raiz
+        // ilegivel pulada em vez de virar `NaoSei` faz o total do disco
+        // mentir por baixo -- exatamente o sintoma que o projeto existe para
+        // resolver, só que ao contrário (some espaço, em vez de aparecer a
+        // mais). Uma raiz que simplesmente não existe já basta para acionar
+        // o `Err(_)` de `mapear()` (falha em `raiz.is_dir()`), sem precisar
+        // de ACL nenhuma -- ACL de verdade se autopula no CI, como a rodada
+        // anterior já mostrou com o teste de `icacls` removido.
+        let raiz_inexistente = std::env::temp_dir().join("otimiza_raiz_que_nao_existe_de_verdade_xyz789");
+        assert!(!raiz_inexistente.exists(), "a raiz de teste precisa MESMO nao existir");
+
+        let mapa = mapear_o_disco_com_raizes(vec![raiz_inexistente.clone()], 12)
+            .expect("raiz ilegivel nao pode derrubar o mapa do disco inteiro");
+
+        // "Pular a raiz" faria isto aqui virar 0 -- é exatamente esse
+        // mutante que este teste tem que pegar.
+        assert_eq!(mapa.folders.len(), 1, "a raiz ilegivel sumiu do mapa em vez de virar NaoSei");
+        assert_eq!(mapa.folders[0].natureza, Natureza::NaoSei);
+        assert_eq!(mapa.folders[0].bytes, 0);
+        assert!(mapa.folders[0].partial);
+        assert_eq!(mapa.unreadable, 1, "raiz ilegivel precisa contar em unreadable");
+    }
+
+    #[test]
+    fn explicar_recebe_o_nome_e_nao_o_caminho_inteiro() {
+        // O BUG: `mapear_o_disco` chamava `explicar(&raiz.to_string_lossy())`
+        // -- caminho inteiro, tipo `c:\program files (x86)` -- contra uma
+        // função que casa por IGUALDADE EXATA com chaves curtas ("steam",
+        // "appdata"). Caminho completo nunca bate com nada, e a explicação
+        // saia sempre vazia em silêncio. `mapear_o_disco_com_raizes` usando
+        // uma raiz cujo nome de arquivo é "steam" precisa devolver a
+        // explicação de verdade -- vazio aqui reprova o mutante que volta a
+        // passar o caminho inteiro.
+        // O NOME DO ARQUIVO precisa ser exatamente "steam" -- é contra isso
+        // que `explicar` casa por igualdade exata. Uma pasta de teste com
+        // outro nome não pegaria o bug: precisa ser o último componente do
+        // caminho, não o caminho todo, a bater com a chave curta.
+        let raiz_steam = std::env::temp_dir().join("otimiza_teste_explicar").join("steam");
+        std::fs::create_dir_all(&raiz_steam).expect("criar pasta de teste");
+
+        let mapa = mapear_o_disco_com_raizes(vec![raiz_steam.clone()], 12)
+            .expect("pasta de teste e legivel");
+
+        assert_eq!(mapa.folders.len(), 1);
+        assert!(
+            !mapa.folders[0].explanation.is_empty(),
+            "explicacao saiu vazia -- explicar() recebeu o caminho inteiro, e nao o nome"
+        );
+
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join("otimiza_teste_explicar"));
     }
 
     #[test]

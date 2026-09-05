@@ -3217,8 +3217,15 @@ async function mapFolders() {
 function renderFolderMap(map: FolderMap) {
   text("map-summary", map.root);
 
+  // "no seu perfil" era verdade quando isto só varria a pasta do usuário.
+  // Hoje `map_folders` chama `mapear_o_disco`, que soma o perfil E MAIS
+  // quatro raízes que não são o perfil (os dois `Program Files`,
+  // `ProgramData` e `C:\Windows`) — na máquina que motivou este projeto, a
+  // maior parte do total é Steam em `Program Files (x86)`, não nada do
+  // perfil. Dizer "no seu perfil" aqui seria mentir para o cliente sobre
+  // onde o espaço está, que é exatamente a pergunta que esta tela responde.
   if (map.folders.length === 0) {
-    setStatus("map-status", "Nenhuma subpasta encontrada no seu perfil.", "ok");
+    setStatus("map-status", "Nenhuma subpasta encontrada nas pastas varridas.", "ok");
     element("map-result").innerHTML = "";
     return;
   }
@@ -3229,15 +3236,17 @@ function renderFolderMap(map: FolderMap) {
   if (map.timed_out) {
     setStatus(
       "map-status",
-      `Pelo menos ${map.total_formatted} no seu perfil. A varredura não terminou ` +
-        `dentro do tempo, então as pastas marcadas como "não terminou" têm mais ` +
-        `do que o mostrado — e são justamente as maiores.`,
+      `Pelo menos ${map.total_formatted} nas pastas varridas (perfil, Program Files ` +
+        `e Windows). A varredura não terminou dentro do tempo, então as pastas ` +
+        `marcadas como "não terminou" têm mais do que o mostrado — e são ` +
+        `justamente as maiores.`,
       "warn"
     );
   } else {
     setStatus(
       "map-status",
-      `${map.total_formatted} no seu perfil.` +
+      `${map.total_formatted} nas pastas varridas (perfil, Program Files e Windows) ` +
+        `— não é o disco inteiro.` +
         (map.unreadable > 0
           ? ` ${map.unreadable} pasta(s) sem permissão de leitura ficaram de fora.`
           : ""),
