@@ -272,6 +272,18 @@ mod tests {
     }
 
     #[test]
+    fn vram_zerada_e_leitura_falha_e_nao_placa_ligada() {
+        // VRAM zero nao existe em placa nenhuma: e o `nvidia-smi` devolvendo
+        // lixo. Sem esta guarda a conta passa (0 >= 0) e o produto anunciaria
+        // "Resizable BAR ligado" para uma leitura que nao aconteceu -- de novo
+        // o "nao sei" virando "esta tudo bem".
+        assert_eq!(
+            avaliar(Some(0), Some(0), "NVIDIA GeForce RTX 3060"),
+            EstadoDoRbar::NaoSei
+        );
+    }
+
+    #[test]
     fn a_familia_da_placa_decide_o_suporte() {
         assert!(suporta_rbar("NVIDIA GeForce RTX 3060"));
         assert!(suporta_rbar("NVIDIA GeForce RTX 4070 Ti"));
@@ -281,6 +293,13 @@ mod tests {
         assert!(!suporta_rbar("NVIDIA GeForce GTX 1080 Ti"));
         // RTX 2000 nao recebeu rBAR.
         assert!(!suporta_rbar("NVIDIA GeForce RTX 2060"));
+
+        // O numero da serie so quer dizer alguma coisa DENTRO da numeracao da
+        // NVIDIA. Sem exigir "RTX" no nome, uma Radeon RX 7900 leria 7 e seria
+        // dada como suportada -- e o cliente receberia conselho de BIOS baseado
+        // numa regra que nao vale para a placa dele.
+        assert!(!suporta_rbar("AMD Radeon RX 7900 XTX"));
+        assert!(!suporta_rbar("Intel Arc A770"));
     }
 
     #[test]
@@ -300,6 +319,31 @@ mod tests {
             com_suporte.to_lowercase().contains("bios"),
             "faltou dizer onde ativar"
         );
+    }
+
+    #[test]
+    fn cada_estado_tem_a_sua_propria_frase() {
+        // Quatro estados, quatro frases. Repetir texto entre estados e o mesmo
+        // erro de sempre com outra roupa: seria "nao sei" saindo com cara de
+        // "esta ligado, nada a fazer", ou o contrario.
+        let frases = [
+            nota_de(EstadoDoRbar::Ligado),
+            nota_de(EstadoDoRbar::DesligadoESuportado),
+            nota_de(EstadoDoRbar::DesligadoSemSuporte),
+            nota_de(EstadoDoRbar::NaoSei),
+        ];
+
+        for (i, uma) in frases.iter().enumerate() {
+            assert!(!uma.trim().is_empty(), "estado {} saiu calado", i);
+            for outra in frases.iter().skip(i + 1) {
+                assert_ne!(uma, outra, "duas frases iguais para estados diferentes");
+            }
+        }
+
+        // A do "ligado" nunca pode confessar ignorancia, nem a do "nao sei"
+        // pode dar a placa por resolvida.
+        assert!(!frases[0].to_lowercase().contains("não consegui"));
+        assert!(frases[3].to_lowercase().contains("não consegui"));
     }
 
     #[test]
@@ -341,5 +385,32 @@ mod tests {
         // estado, e "nao sei" nunca sai calado.
         assert_eq!(relatorio.nota, nota_de(relatorio.estado));
         assert!(!relatorio.nota.trim().is_empty());
+
+        // E o veredito precisa ser sobre A PLACA QUE ESTA AQUI. Sem isto, um
+        // modelo trocado no caminho entre a leitura e a decisao passaria
+        // despercebido -- e o cliente com GTX 1650 receberia o conselho de
+        // BIOS da RTX. Em maquina sem `nvidia-smi` (a esteira, placa AMD) o
+        // modelo vem vazio e o estado ja e `NaoSei`, entao nada a conferir.
+        if !relatorio.modelo.trim().is_empty() {
+            match relatorio.estado {
+                EstadoDoRbar::DesligadoESuportado => {
+                    assert!(suporta_rbar(&relatorio.modelo), "{}", relatorio.modelo)
+                }
+                EstadoDoRbar::DesligadoSemSuporte => {
+                    assert!(!suporta_rbar(&relatorio.modelo), "{}", relatorio.modelo)
+                }
+                // Placa sem rBAR tem BAR1 preso em 256 MiB: nao existe placa
+                // sem suporte com o BAR1 do tamanho da VRAM. Se der "ligado"
+                // numa GTX, o numero lido nao e o BAR1 -- que e exatamente o
+                // engano das varias linhas `Total` do `nvidia-smi`, aqui pego
+                // no fim da linha, com a placa de verdade.
+                EstadoDoRbar::Ligado => {
+                    assert!(suporta_rbar(&relatorio.modelo), "{}", relatorio.modelo)
+                }
+                _ => {}
+            }
+        } else {
+            assert_eq!(relatorio.estado, EstadoDoRbar::NaoSei);
+        }
     }
 }
