@@ -217,6 +217,11 @@ pub fn bar1_da_saida(saida: &str) -> Option<u64> {
 /// até ter cara de resposta, e ignorar o código de saída faria uma leitura que
 /// não aconteceu virar identidade de placa. Testar isso sem esta separação
 /// exigiria injetar o `shell`, que sairia do desenho dos módulos vizinhos.
+///
+/// ATENÇÃO PARA QUEM LÊ ISTO DEPOIS: o teste desta função prova a lógica
+/// SUPONDO que `sucesso` chegou certo. Não prova que `ler_do_nvidia_smi`
+/// realmente passa `saida.success` — esse é outro fio, fechado pelo canário de
+/// texto-fonte no fim do arquivo (`chamada_real_passa_o_sucesso_de_verdade`).
 fn identidade_da_saida(sucesso: bool, stdout: &str) -> (String, Option<u64>) {
     if !sucesso {
         return (String::new(), None);
@@ -618,5 +623,64 @@ mod tests {
         } else {
             assert_eq!(relatorio.estado, EstadoDoRbar::NaoSei);
         }
+    }
+
+    /// Lê o CÓDIGO deste próprio arquivo — só a parte de fora de `mod tests` —
+    /// para o canário de texto-fonte abaixo. Mesmo truque do `foldermap.rs`
+    /// nesta mesma branch: cortar em `#[cfg(test)]` evita que o `.contains`
+    /// se ache a si mesmo (a string procurada aparece, literal, aqui dentro).
+    fn codigo_fonte_deste_arquivo() -> String {
+        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("modules")
+            .join("windows")
+            .join("rbar.rs");
+        let fonte = std::fs::read_to_string(&caminho)
+            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+        fonte
+            .split_once("#[cfg(test)]")
+            .map(|(codigo, _testes)| codigo.to_string())
+            .unwrap_or(fonte)
+    }
+
+    // O ACHADO DA RODADA 2. `identidade_de_comando_que_falhou_nao_vira_placa`
+    // prova a LÓGICA de `identidade_da_saida` — dado `sucesso = false`, o
+    // resultado é vazio. Mas prova isso chamando a função direto, com um
+    // `bool` escrito à mão no teste. Isso mata o mutante DENTRO da função e
+    // não amarra a `sucesso` que chega de verdade em `ler_do_nvidia_smi:253`.
+    // A prova: troque `identidade_da_saida(saida.success, &saida.stdout)` por
+    // `identidade_da_saida(true, &saida.stdout)` ali — a suíte inteira
+    // continuava verde antes deste canário, porque nenhum teste liga as duas
+    // pontas.
+    //
+    // O QUE ESTE CANÁRIO COBRE: que a chamada em `ler_do_nvidia_smi` lê
+    // `saida.success` — e não uma constante, nem uma variável com outro nome
+    // que só por acaso vale `true` sempre. Ele fecha exatamente o fio que
+    // faltava, sem pedir uma costura injetável (parâmetro de função de
+    // execução) num módulo cujo único ponto de entrada real é o
+    // `nvidia-smi` do Windows.
+    //
+    // O QUE ELE NÃO COBRE: um revisor pode escrever
+    // `let sucesso_de_mentira = true; identidade_da_saida(sucesso_de_mentira, ...)`
+    // e a string exigida abaixo (`saida.success`) não aparece mais — o
+    // canário reprovaria por FALTAR o padrão certo, o que já pega esse caso.
+    // Mas ele não prova que `saida` de fato veio do `nvidia-smi` desta
+    // chamada, nem que ninguém reatribuiu `saida.success` antes — texto-fonte
+    // prova FIAÇÃO LITERAL, não SEMÂNTICA. Quem quiser fechar isso de vez
+    // precisa da costura injetável (executor como parâmetro, com um dublê que
+    // devolve `success: false` no teste) — mais robusta, ao custo de um
+    // parâmetro numa função que hoje não tem nenhum.
+    #[test]
+    fn chamada_real_passa_o_sucesso_de_verdade() {
+        let fonte = codigo_fonte_deste_arquivo();
+
+        assert!(
+            fonte.contains("identidade_da_saida(saida.success, &saida.stdout)"),
+            "ler_do_nvidia_smi precisa chamar `identidade_da_saida(saida.success, \
+             &saida.stdout)` -- passar qualquer outra coisa no lugar de \
+             `saida.success` (um `true` fixo, por exemplo) faz um comando que \
+             falhou virar identidade de placa, e nenhum teste de unidade pega isso \
+             porque a lógica interna de `identidade_da_saida` continua certa"
+        );
     }
 }
