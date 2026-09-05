@@ -3180,6 +3180,13 @@ function renderTask(task: ScheduledTask): string {
 
 // --------------------------------------------------- mapa de pastas
 
+/// O que cada linha do mapa É, decidido no backend (`foldermap::Natureza`).
+///
+/// CAMPO TIPADO, E NÃO FRASE. A tela nunca olha a explicação para decidir cor
+/// ou botão — este projeto reprova o build quando ela faz isso, e a guarda
+/// existe porque o mesmo defeito já voltou três vezes.
+type Natureza = { tipo: "PodeLimpar" } | { tipo: "Seu" } | { tipo: "NaoSei" };
+
 interface FolderEntry {
   name: string;
   path: string;
@@ -3188,6 +3195,7 @@ interface FolderEntry {
   percent: number;
   explanation: string;
   partial: boolean;
+  natureza: Natureza;
 }
 
 interface FolderMap {
@@ -3272,17 +3280,128 @@ function renderFolder(folder: FolderEntry, indice = 0): string {
     ? `pelo menos ${folder.formatted}`
     : folder.formatted;
 
+  // A COR, O RÓTULO E O BOTÃO SAEM DO CAMPO TIPADO, e nunca de comparar a
+  // explicação que o backend escreveu. O `Record` fechado é de propósito:
+  // estado novo em `Natureza` reprova o `tsc` aqui em vez de cair num
+  // rótulo genérico na máquina do cliente.
+  const natureza = folder.natureza.tipo;
+  const ROTULO: Record<Natureza["tipo"], string> = {
+    PodeLimpar: "dá para limpar",
+    Seu: "seu arquivo",
+    NaoSei: "não consegui ler",
+  };
+
+  // A LINHA `Seu` NÃO GANHA BOTÃO. Apagar o jogo ou o download de quem pagou
+  // é o único erro deste produto sem desfazer, e é exatamente aqui que o
+  // mapa mostra `Steam — 122 GB`: o produto informa o caminho e o cliente
+  // decide. `NaoSei` também fica sem botão, por motivo ainda mais direto —
+  // oferecer limpeza do que não foi possível nem ler.
+  const acao =
+    natureza === "PodeLimpar"
+      ? `<button class="btn btn-ghost" data-mapa-limpar="1">Limpar no liberador</button>`
+      : `<span class="state-label">${ROTULO[natureza]}</span>`;
+
+  // Pasta ilegível NÃO É PASTA VAZIA, e o número dela não é o total. Sem esta
+  // linha o cliente somaria o mapa e concluiria que o espaço sumiu no nada.
+  const semLeitura =
+    natureza === "NaoSei"
+      ? `<p class="finding-advice">Sem permissão para ler esta pasta: o tamanho acima é um piso, não o total. Não quer dizer que ela esteja vazia.</p>`
+      : "";
+
   return `
-    <article class="folder" data-partial="${folder.partial}" style="--i:${indice}">
+    <article class="folder" data-partial="${folder.partial}" data-natureza="${natureza}" style="--i:${indice}">
       <div class="folder-top">
         <span class="folder-name">${escapeHtml(folder.name)}</span>
         <span class="folder-size">${escapeHtml(tamanho)}</span>
+        ${acao}
       </div>
       <div class="bar"><i style="width:${Math.min(100, folder.percent)}%"></i></div>
       <span class="folder-path">${escapeHtml(folder.path)}${
         folder.partial ? " · não terminou" : ""
       }</span>
       ${explicacao}
+      ${semLeitura}
+    </article>
+  `;
+}
+
+// ------------------------------------------------------- Resizable BAR
+
+type EstadoDoRbar =
+  | "Ligado"
+  | "DesligadoESuportado"
+  | "DesligadoSemSuporte"
+  | "NaoSei";
+
+interface RelatorioDoRbar {
+  estado: EstadoDoRbar;
+  modelo: string;
+  nota: string;
+}
+
+/// O tom da faixa de status. Sai do `estado`, como tudo nesta tela.
+///
+/// `NaoSei` fica em "warn" e não em "ok": não ter conseguido verificar é
+/// assunto pendente, e pintá-lo de verde afirmaria ao cliente que a placa
+/// está em ordem — coisa que ninguém mediu.
+const TOM_DO_RBAR: Record<EstadoDoRbar, "ok" | "warn"> = {
+  Ligado: "ok",
+  DesligadoESuportado: "warn",
+  DesligadoSemSuporte: "ok",
+  NaoSei: "warn",
+};
+
+async function analyzeRbar() {
+  const button = element<HTMLButtonElement>("analyze-rbar");
+  button.disabled = true;
+  setStatus("rbar-status", "Lendo a placa de vídeo…", "progress");
+
+  try {
+    const relatorio = await invoke<RelatorioDoRbar>("analyze_rbar");
+    text("rbar-tag", relatorio.modelo || "placa não identificada");
+    element("rbar-result").innerHTML = renderRbar(relatorio);
+    setStatus("rbar-status", relatorio.nota, TOM_DO_RBAR[relatorio.estado]);
+  } catch (error) {
+    setStatus("rbar-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderRbar(relatorio: RelatorioDoRbar): string {
+  // SÃO DUAS PERGUNTAS — "está ligado?" e "esta placa suporta?" — e por isso
+  // quatro estados, não dois. A tela lê o campo; a `nota` é para o cliente
+  // ler, nunca para esta função comparar.
+  const NA_TELA: Record<EstadoDoRbar, { rotulo: string; severidade: string }> = {
+    Ligado: { rotulo: "ligado", severidade: "Ok" },
+    // O único que pede ação: existe opção na BIOS e ela rende quadros.
+    DesligadoESuportado: {
+      rotulo: "desligado, e a sua placa aceita",
+      severidade: "Important",
+    },
+    // Nada a fazer, e é verdade — mas a frase precisa dizer POR QUE, senão o
+    // cliente vai vasculhar a BIOS atrás de uma opção que não existe para ele.
+    DesligadoSemSuporte: {
+      rotulo: "esta placa não tem",
+      severidade: "Ok",
+    },
+    // NÃO VERIFICADO NÃO É "ESTÁ TUDO BEM": fica fora do verde de propósito.
+    NaoSei: { rotulo: "não consegui verificar", severidade: "Important" },
+  };
+
+  const { rotulo, severidade } = NA_TELA[relatorio.estado];
+  const modelo = relatorio.modelo
+    ? `<span class="finding-size">${escapeHtml(relatorio.modelo)}</span>`
+    : "";
+
+  return `
+    <article class="finding" data-severity="${severidade}" data-estado="${relatorio.estado}">
+      <div class="finding-top">
+        <h3>Resizable BAR</h3>
+        ${modelo}
+        <span class="state-label">${escapeHtml(rotulo)}</span>
+      </div>
+      <p class="finding-advice">${escapeHtml(relatorio.nota)}</p>
     </article>
   `;
 }
@@ -5723,6 +5842,19 @@ function wireControls() {
 
   element("scan-disk").addEventListener("click", scanDiskSpace);
   element("map-folders").addEventListener("click", mapFolders);
+  element("analyze-rbar").addEventListener("click", analyzeRbar);
+
+  // O MAPA NÃO APAGA NADA POR CONTA PRÓPRIA — nem as pastas que ele mesmo
+  // marcou como limpáveis. Quem sabe limpar com segurança, por categoria e
+  // com o cliente confirmando, é o liberador de espaço; o botão daqui leva
+  // até ele em vez de duplicar a exclusão num lugar que não tem desfazer.
+  element("map-result").addEventListener("click", (event) => {
+    const botao = (event.target as HTMLElement).closest("button[data-mapa-limpar]");
+    if (!botao) return;
+
+    element("disk-result").scrollIntoView({ behavior: "smooth", block: "center" });
+    scanDiskSpace();
+  });
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
   element("analyze-network").addEventListener("click", analyzeNetwork);

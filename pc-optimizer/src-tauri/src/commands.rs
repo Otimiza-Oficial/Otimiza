@@ -416,6 +416,28 @@ pub async fn map_folders() -> Result<FolderMap, String> {
     }
 }
 
+/// Comando: o Resizable BAR desta máquina.
+///
+/// Fica em `LIVRES`: é leitura pura — o módulo `rbar` não escreve em lugar
+/// nenhum, e nem teria como: quem liga o Resizable BAR é a BIOS. O que este
+/// comando entrega é a explicação de qual dos quatro estados a máquina está,
+/// para a tela não confundir "desligado" com "esta placa não tem".
+///
+/// `(async)`: chama `nvidia-smi`, que é processo externo e pode demorar — na
+/// thread da interface isso trava a janela inteira.
+#[tauri::command(async)]
+pub fn analyze_rbar() -> Result<crate::modules::windows::rbar::RelatorioDoRbar, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::rbar::analyze())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Relatório de atendimento
 // ---------------------------------------------------------------------------
@@ -2567,6 +2589,7 @@ mod tests {
         "analyze_thermal",
         "export_report",
         "map_folders",
+        "analyze_rbar",
         "list_profiles",
         "list_third_party_services",
         "list_scheduled_tasks",
@@ -3155,5 +3178,264 @@ mod tests {
         let limpo = remover_comentarios(fonte);
 
         assert_eq!(limpo.lines().count(), fonte.lines().count());
+    }
+
+    // ==================================================================
+    // A TELA DO MAPA E A TELA DO RESIZABLE BAR
+    // ==================================================================
+
+    /// Extrai UMA função de tela do `main.ts`, transpila com o TypeScript do
+    /// próprio projeto e RODA no Node.
+    ///
+    /// Guarda que lê o fonte já foi burlada nesta branch: o revisor guardou a
+    /// decisão errada numa variável intermediária, deixou o campo tipado
+    /// aparecendo em algo cosmético, e a leitura de texto passou com o defeito
+    /// inteiro na tela. Executando a função não há texto para enganar — o que
+    /// se olha é o HTML que o cliente veria.
+    ///
+    /// `chamadas` é o pedaço de JS que usa `render` e imprime JSON no stdout.
+    fn roda_a_tela(nome: &str, chamadas: &str) -> serde_json::Value {
+        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let main_ts = raiz.join("src").join("main.ts");
+        let typescript = raiz.join("node_modules").join("typescript");
+        assert!(
+            typescript.is_dir(),
+            "esta prova roda a tela de verdade e precisa do TypeScript do projeto: \
+             rode `npm ci` em pc-optimizer ({:?} não existe)",
+            typescript
+        );
+
+        // O `(` faz parte da marca de propósito: sem ele, procurar
+        // `function renderFolder` acharia antes o `renderFolderMap`, que vem
+        // primeiro no arquivo, e o laboratório rodaria a função errada.
+        let modelo = r#"
+const fs = require("fs");
+const ts = require(process.argv[3]);
+
+const fonte = fs.readFileSync(process.argv[2], "utf8");
+const marca = "function __NOME__(";
+const depois = fonte.split(marca)[1];
+if (depois === undefined) throw new Error("__NOME__ nao existe no main.ts");
+
+const corpo = [];
+for (const linha of depois.split(/\r?\n/)) {
+  if (linha.startsWith("}")) break;
+  corpo.push(linha);
+}
+const trecho = marca + corpo.join("\n") + "\n}\n";
+const js = ts.transpileModule(trecho, { compilerOptions: { target: "ES2020" } }).outputText;
+
+const escapeHtml = (v) =>
+  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const render = new Function("escapeHtml", js + "\nreturn __NOME__;")(escapeHtml);
+
+//__CHAMADAS__
+"#;
+
+        let laboratorio = modelo
+            .replace("__NOME__", nome)
+            .replace("//__CHAMADAS__", chamadas);
+
+        let script = std::env::temp_dir().join(format!("otimiza_tela_{}.cjs", nome));
+        std::fs::write(&script, laboratorio).expect("escreve o laboratório no temporário");
+
+        let saida = std::process::Command::new("node")
+            .arg(&script)
+            .arg(&main_ts)
+            .arg(&typescript)
+            .output()
+            .expect("esta prova roda a tela de verdade e precisa do Node no PATH");
+        let _ = std::fs::remove_file(&script);
+
+        assert!(
+            saida.status.success(),
+            "não deu para rodar `{}`: {}",
+            nome,
+            String::from_utf8_lossy(&saida.stderr)
+        );
+
+        serde_json::from_slice(&saida.stdout).expect("o laboratório imprime JSON")
+    }
+
+    #[test]
+    fn a_tela_do_mapa_decide_por_natureza_e_nao_por_texto() {
+        // A GUARDA QUE JÁ PEGOU O MESMO DEFEITO TRÊS VEZES NESTE PRODUTO.
+        //
+        // `natureza` é campo tipado justamente para a tela não precisar
+        // interpretar frase. Exigir `natureza.tipo`, e não só `natureza`:
+        // aceitar a palavra solta deixaria o teste passar com ela aparecendo
+        // num comentário qualquer, sem uma linha de decisão por trás.
+        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("src")
+            .join("main.ts");
+        let ts = std::fs::read_to_string(&caminho).expect("main.ts");
+
+        assert!(
+            ts.contains("natureza.tipo"),
+            "a tela do mapa precisa decidir pelo campo `natureza.tipo`"
+        );
+    }
+
+    #[test]
+    fn o_comando_do_rbar_esta_registrado() {
+        // Comando que existe e não está no `generate_handler!` falha em tempo
+        // de execução, na máquina do cliente, e nunca no build.
+        let lib = std::fs::read_to_string(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join("lib.rs"),
+        )
+        .expect("lib.rs");
+        assert!(
+            lib.contains("analyze_rbar"),
+            "analyze_rbar fora do generate_handler!"
+        );
+    }
+
+    /// A regra que não tem desfazer: a linha marcada como `Seu` mostra o
+    /// caminho e mais nada.
+    ///
+    /// As três linhas são IGUAIS em tudo — mesmo nome, mesmo caminho, mesmo
+    /// tamanho. A única diferença é a `natureza`, então qualquer diferença no
+    /// HTML só pode ter vindo dela.
+    #[test]
+    fn a_tela_do_mapa_so_oferece_limpar_o_que_e_limpavel() {
+        let telas = roda_a_tela(
+            "renderFolder",
+            r#"
+const base = {
+  name: "Steam",
+  path: "C:\\Program Files (x86)\\Steam",
+  bytes: 131000000000,
+  formatted: "122.0 GB",
+  percent: 40,
+  explanation: "",
+  partial: false,
+};
+
+console.log(
+  JSON.stringify({
+    podeLimpar: render(Object.assign({}, base, { natureza: { tipo: "PodeLimpar" } })),
+    seu: render(Object.assign({}, base, { natureza: { tipo: "Seu" } })),
+    naoSei: render(Object.assign({}, base, { natureza: { tipo: "NaoSei" } })),
+  })
+);
+"#,
+        );
+
+        let pode_limpar = telas["podeLimpar"].as_str().expect("html do limpável");
+        let seu = telas["seu"].as_str().expect("html do arquivo do cliente");
+        let nao_sei = telas["naoSei"].as_str().expect("html do ilegível");
+
+        // APAGAR JOGO OU DOWNLOAD DE QUEM PAGOU É O ÚNICO ERRO DESTE PRODUTO
+        // SEM DESFAZER, e o mapa mostra `Steam — 122 GB` bem ali.
+        assert!(
+            !seu.contains("<button"),
+            "a linha do arquivo do cliente ganhou botão:\n{}",
+            seu
+        );
+        assert!(
+            !nao_sei.contains("<button"),
+            "pasta que não deu para ler ganhou botão — oferecer limpar o que \
+             não foi lido é pior ainda:\n{}",
+            nao_sei
+        );
+        assert!(
+            pode_limpar.contains("<button"),
+            "a pasta limpável perdeu o botão:\n{}",
+            pode_limpar
+        );
+
+        // E `NaoSei` não pode parecer o caso resolvido: pasta ilegível não é
+        // pasta em ordem.
+        assert_ne!(
+            seu, nao_sei,
+            "a tela pinta IGUAL a pasta do cliente e a pasta que não deu para \
+             ler — o cliente não tem como saber a diferença"
+        );
+        assert!(
+            nao_sei.contains("não consegui ler"),
+            "a pasta ilegível não diz que é ilegível:\n{}",
+            nao_sei
+        );
+        assert!(
+            seu.contains("Steam") && seu.contains("Program Files"),
+            "a linha do cliente precisa mostrar o caminho, que é para o que ela \
+             serve:\n{}",
+            seu
+        );
+    }
+
+    /// Os quatro estados do Resizable BAR chegam DIFERENTES na tela.
+    ///
+    /// De novo os relatórios são iguais exceto pelo `estado`. E o que este
+    /// teste protege é a terceira regra: `NaoSei` não pode sair com o selo
+    /// verde de assunto resolvido — placa não verificada não é placa em ordem.
+    #[test]
+    fn a_tela_do_rbar_separa_os_quatro_estados() {
+        let telas = roda_a_tela(
+            "renderRbar",
+            r#"
+const base = { modelo: "NVIDIA GeForce RTX 3060", nota: "nota do backend" };
+
+console.log(
+  JSON.stringify({
+    ligado: render(Object.assign({}, base, { estado: "Ligado" })),
+    desligadoESuportado: render(Object.assign({}, base, { estado: "DesligadoESuportado" })),
+    desligadoSemSuporte: render(Object.assign({}, base, { estado: "DesligadoSemSuporte" })),
+    naoSei: render(Object.assign({}, base, { estado: "NaoSei" })),
+  })
+);
+"#,
+        );
+
+        let ligado = telas["ligado"].as_str().expect("html do ligado");
+        let suportado = telas["desligadoESuportado"]
+            .as_str()
+            .expect("html do suportado");
+        let sem_suporte = telas["desligadoSemSuporte"]
+            .as_str()
+            .expect("html do sem suporte");
+        let nao_sei = telas["naoSei"].as_str().expect("html do não sei");
+
+        let todos = [ligado, suportado, sem_suporte, nao_sei];
+        for (i, a) in todos.iter().enumerate() {
+            for b in todos.iter().skip(i + 1) {
+                assert_ne!(a, b, "dois estados do rBAR saem idênticos na tela");
+            }
+        }
+
+        // "Desligado e dá para ligar" é o único que pede ação do cliente.
+        assert!(
+            ligado.contains(r#"data-severity="Ok""#),
+            "rBAR ligado é assunto resolvido:\n{}",
+            ligado
+        );
+        assert!(
+            !suportado.contains(r#"data-severity="Ok""#),
+            "rBAR desligado numa placa que aceita saiu como assunto resolvido:\n{}",
+            suportado
+        );
+
+        // A TERCEIRA REGRA: não verificado não vira "está tudo bem".
+        assert!(
+            !nao_sei.contains(r#"data-severity="Ok""#),
+            "a placa que não deu para verificar saiu com o selo verde:\n{}",
+            nao_sei
+        );
+        assert!(
+            nao_sei.contains("não consegui verificar"),
+            "a tela não diz que não conseguiu verificar:\n{}",
+            nao_sei
+        );
+
+        // E "esta placa não tem" não pode virar "ligado" nem mandar o cliente
+        // para a BIOS atrás de uma opção que não existe para ele.
+        assert!(
+            sem_suporte.contains("não tem"),
+            "a placa sem o recurso precisa dizer isso:\n{}",
+            sem_suporte
+        );
     }
 }

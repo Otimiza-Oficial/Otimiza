@@ -74,6 +74,7 @@ pub fn run() {
             commands::analyze_thermal,
             commands::export_report,
             commands::map_folders,
+            commands::analyze_rbar,
             commands::list_profiles,
             commands::list_third_party_services,
             commands::set_service_start,
