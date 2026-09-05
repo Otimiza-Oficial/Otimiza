@@ -44,7 +44,33 @@ pub struct RelatorioDoRbar {
 /// Dez por cento. Com rBAR ligado o BAR1 cobre a VRAM inteira, mas o firmware
 /// reserva uma fatia para si e o número não bate na vírgula. Exigir igualdade
 /// exata leria "ligado" como "desligado" em placa perfeitamente configurada.
+///
+/// ESTA FOLGA FOI PENSADA PARA A FATIA DO FIRMWARE, QUE É DE POUCOS MiB — não
+/// para arredondamento de BAR, que é de gigabytes. Ver `piso_potencia_de_dois`.
 const FOLGA: f64 = 0.90;
+
+/// A maior potência de dois que cabe na VRAM.
+///
+/// O BAR do PCIe tem tamanho em potência de dois. Numa placa cuja VRAM NÃO é
+/// potência de dois — e são justamente as do nosso público: RTX 3060 de 12 GiB,
+/// RTX 3080 de 10 GiB, RTX 4070 de 12 GiB — o firmware pode não ter como abrir
+/// uma janela do tamanho exato da memória e parar no degrau de baixo: 8192 MiB
+/// para 12288 de VRAM. Isso dá 0,67, reprova na `FOLGA`, e o cliente QUE JÁ
+/// LIGOU O rBAR leria "está desligado, entre na BIOS".
+///
+/// SE O FIRMWARE ARREDONDA ASSIM É DÚVIDA NOSSA, NÃO FATO MEDIDO: a máquina do
+/// dono é uma GTX 1650, com o BAR1 preso em 256 MiB, e não dá para observar o
+/// caso aqui. O que sustenta a regra é que ela é segura nos dois cenários: se o
+/// firmware NÃO arredondar, o BAR1 vem do tamanho da VRAM e a `FOLGA` já
+/// aprovava sozinha; se arredondar, esta linha aprova. E ela só chega perto de
+/// disparar por engano num número que placa SEM rBAR nunca produz — sem o
+/// recurso o BAR1 fica na janela clássica de 256 MiB, muito abaixo do degrau.
+fn piso_potencia_de_dois(vram_mib: u64) -> u64 {
+    if vram_mib == 0 {
+        return 0;
+    }
+    1u64 << (u64::BITS - 1 - vram_mib.leading_zeros())
+}
 
 /// Se a família da placa tem Resizable BAR.
 ///
@@ -82,7 +108,7 @@ pub fn avaliar(bar1_mib: Option<u64>, vram_mib: Option<u64>, modelo: &str) -> Es
         return EstadoDoRbar::NaoSei;
     }
 
-    if (bar1 as f64) >= (vram as f64) * FOLGA {
+    if (bar1 as f64) >= (vram as f64) * FOLGA || bar1 >= piso_potencia_de_dois(vram) {
         return EstadoDoRbar::Ligado;
     }
 
@@ -97,12 +123,22 @@ pub fn avaliar(bar1_mib: Option<u64>, vram_mib: Option<u64>, modelo: &str) -> Es
 pub fn nota_de(estado: EstadoDoRbar) -> String {
     match estado {
         EstadoDoRbar::Ligado => "O Resizable BAR está ligado. Nada a fazer aqui.".to_string(),
+        // A PLACA DE VÍDEO ACEITAR NÃO BASTA: o Resizable BAR exige a plataforma
+        // inteira — placa-mãe e BIOS também. Só que "Above 4G Decoding" existe em
+        // placa-mãe MUITO ANTERIOR ao rBAR, então o cliente com uma RTX 3060 numa
+        // Z170 ENCONTRA a opção, liga, reinicia, e nada muda. É pior do que o caso
+        // da GTX 1650: lá ele não acha nada e desiste; aqui ele mexe no firmware e
+        // sai com o PC igual e a impressão de que o produto errou.
+        //
+        // Detectar a placa-mãe exigiria ler o firmware. AVISAR NÃO EXIGE NADA —
+        // é uma oração, e a regra do produto é sobre o que o cliente LÊ.
         EstadoDoRbar::DesligadoESuportado => {
-            "O Resizable BAR está desligado, e a sua placa aceita. Ele deixa o \
-             processador enxergar a memória da placa de vídeo inteira de uma vez, \
-             e costuma render alguns quadros. Para ativar, entre na BIOS e procure \
-             por \"Resizable BAR\" ou \"Above 4G Decoding\" — não dá para ligar por \
-             programa nenhum."
+            "O Resizable BAR está desligado, e a sua placa de vídeo aceita. Ele \
+             deixa o processador enxergar a memória da placa de vídeo inteira de \
+             uma vez, e costuma render alguns quadros. Para ativar, entre na BIOS \
+             e procure por \"Resizable BAR\" ou \"Above 4G Decoding\" — não dá para \
+             ligar por programa nenhum. Se você não encontrar essa opção, a sua \
+             placa-mãe é anterior a essa tecnologia e não há o que fazer."
                 .to_string()
         }
         // SEM A PALAVRA "BIOS", DE PROPÓSITO. Mandar procurar uma opção que não
@@ -114,10 +150,14 @@ pub fn nota_de(estado: EstadoDoRbar) -> String {
              não é problema no seu PC."
                 .to_string()
         }
+        // "PLACA AMD" E "DRIVER ANTIGO" SÃO DE NATUREZAS OPOSTAS e não cabem na
+        // mesma frase: a primeira é permanente e conhecida, a segunda é passageira
+        // e tem conserto. Juntas, mandam o dono de Radeon atualizar driver à toa.
+        // O cabeçalho deste módulo promete que a tela diz "ainda não cobrimos sua
+        // placa" — é isso que ela tem de dizer.
         EstadoDoRbar::NaoSei => {
-            "Não consegui verificar o Resizable BAR nesta máquina. Isso acontece \
-             com placa AMD e com driver antigo — e não quer dizer que esteja certo \
-             nem errado."
+            "Não consegui verificar o Resizable BAR nesta máquina: ainda não \
+             cobrimos placas AMD. Isso não quer dizer que esteja certo nem errado."
                 .to_string()
         }
     }
@@ -145,6 +185,16 @@ pub fn bar1_da_saida(saida: &str) -> Option<u64> {
             continue;
         }
 
+        // FIM DA SEÇÃO. No relatório do `nvidia-smi` só cabeçalho vem sem `:`.
+        // Sem fechar aqui, uma saída truncada — seção `BAR1 Memory Usage` sem a
+        // linha `Total` — escorregaria para a seção seguinte e devolveria o
+        // `Total : 0 MiB` do `Conf Compute Protected Memory Usage` como se fosse
+        // o BAR1. É o primo do engano que este módulo existe para evitar: número
+        // de outra seção passando por BAR1. Cai para `None`, que vira `NaoSei`.
+        if !limpa.is_empty() && !limpa.contains(':') {
+            return None;
+        }
+
         if let Some((chave, valor)) = limpa.split_once(':') {
             if chave.trim() == "Total" {
                 return valor
@@ -158,6 +208,25 @@ pub fn bar1_da_saida(saida: &str) -> Option<u64> {
     }
 
     None
+}
+
+/// Tira o modelo e a VRAM do CSV do `nvidia-smi`. PURA, irmã de `bar1_da_saida`.
+///
+/// Recebe o `sucesso` em vez de olhar o `CommandOutput` porque É EXATAMENTE ISSO
+/// QUE PRECISA SER PROVADO: comando que existe mas falha devolve stdout que pode
+/// até ter cara de resposta, e ignorar o código de saída faria uma leitura que
+/// não aconteceu virar identidade de placa. Testar isso sem esta separação
+/// exigiria injetar o `shell`, que sairia do desenho dos módulos vizinhos.
+fn identidade_da_saida(sucesso: bool, stdout: &str) -> (String, Option<u64>) {
+    if !sucesso {
+        return (String::new(), None);
+    }
+
+    let linha = stdout.lines().next().unwrap_or_default();
+    match linha.split_once(',') {
+        Some((nome, mib)) => (nome.trim().to_string(), mib.trim().parse::<u64>().ok()),
+        None => (String::new(), None),
+    }
 }
 
 /// Lê o BAR1 e a VRAM pelo `nvidia-smi`.
@@ -181,18 +250,17 @@ fn ler_do_nvidia_smi() -> (Option<u64>, Option<u64>, String) {
     );
 
     let (modelo, vram) = match identidade {
-        Ok(saida) if saida.success => {
-            let linha = saida.stdout.lines().next().unwrap_or_default().to_string();
-            match linha.split_once(',') {
-                Some((nome, mib)) => (nome.trim().to_string(), mib.trim().parse::<u64>().ok()),
-                None => (String::new(), None),
-            }
-        }
+        Ok(saida) => identidade_da_saida(saida.success, &saida.stdout),
         // SEM `nvidia-smi` NÃO HÁ PLACA NVIDIA VISÍVEL, e isso não é erro: é o
         // caso do cliente com AMD, que a tela trata dizendo que ainda não é
         // coberto.
-        _ => return (None, None, String::new()),
+        Err(_) => return (None, None, String::new()),
     };
+
+    // Sem identidade não vale pagar a segunda chamada: o veredito já é `NaoSei`.
+    if modelo.is_empty() && vram.is_none() {
+        return (None, None, String::new());
+    }
 
     let bar1 = shell::run("nvidia-smi", &["-q"])
         .ok()
@@ -284,6 +352,103 @@ mod tests {
     }
 
     #[test]
+    fn a_fronteira_da_folga_e_presa_dos_dois_lados() {
+        // O MEIO DO CAMINHO NAO PODE VIRAR "ESTA TUDO BEM".
+        //
+        // Os testes de antes prendiam so os extremos: 7800/8192 aprovava e
+        // 4096/8192 reprovava, o que deixa toda a faixa entre ~0,07 e 0,90
+        // solta. Baixar a `FOLGA` para 0,50 numa refatoracao futura faria um
+        // BAR1 de 4096 numa VRAM de 8192 -- metade da janela -- passar a valer
+        // "Ligado. Nada a fazer aqui.", sem nada acusar.
+        //
+        // 8192 * 0,90 = 7372,8. Um MiB de cada lado prende a constante.
+        let placa = "NVIDIA GeForce RTX 3060 Ti";
+        assert_eq!(avaliar(Some(7373), Some(8192), placa), EstadoDoRbar::Ligado);
+        assert_eq!(
+            avaliar(Some(7372), Some(8192), placa),
+            EstadoDoRbar::DesligadoESuportado
+        );
+        assert_eq!(
+            avaliar(Some(4096), Some(8192), placa),
+            EstadoDoRbar::DesligadoESuportado,
+            "meia janela virou rBAR ligado"
+        );
+    }
+
+    #[test]
+    fn vram_que_nao_e_potencia_de_dois_nao_acusa_desligado_a_toa() {
+        // AS PLACAS DO NOSSO PUBLICO: RTX 3060 de 12 GiB, RTX 3080 de 10 GiB,
+        // RTX 4070 de 12 GiB. O BAR do PCIe tem tamanho em potencia de dois, e
+        // 12288 nao e. Se o firmware parar no degrau de baixo, o BAR1 vem 8192 e
+        // a conta da `FOLGA` da 0,67 -- reprova. O cliente QUE JA LIGOU o rBAR
+        // leria "esta desligado, entre na BIOS".
+        //
+        // A `FOLGA` de 10% foi escolhida para a fatia que o firmware reserva,
+        // que e de poucos MiB. Arredondamento de BAR e de gigabytes.
+        assert_eq!(
+            avaliar(Some(8192), Some(12288), "NVIDIA GeForce RTX 3060"),
+            EstadoDoRbar::Ligado
+        );
+        assert_eq!(
+            avaliar(Some(8192), Some(10240), "NVIDIA GeForce RTX 3080"),
+            EstadoDoRbar::Ligado
+        );
+
+        // E o degrau NAO pode afrouxar quem ja estava certo: sem rBAR o BAR1
+        // fica na janela classica de 256 MiB, muito abaixo de qualquer degrau.
+        assert_eq!(
+            avaliar(Some(256), Some(12288), "NVIDIA GeForce RTX 3060"),
+            EstadoDoRbar::DesligadoESuportado
+        );
+        assert_eq!(
+            avaliar(Some(256), Some(4096), "NVIDIA GeForce GTX 1650"),
+            EstadoDoRbar::DesligadoSemSuporte
+        );
+        // Em VRAM que JA e potencia de dois o degrau coincide com a VRAM e nao
+        // afrouxa nada: 4096 de 8192 continua desligado.
+        assert_eq!(piso_potencia_de_dois(8192), 8192);
+        assert_eq!(piso_potencia_de_dois(12288), 8192);
+        assert_eq!(piso_potencia_de_dois(10240), 8192);
+        assert_eq!(piso_potencia_de_dois(0), 0);
+    }
+
+    #[test]
+    fn identidade_de_comando_que_falhou_nao_vira_placa() {
+        // O `nvidia-smi` pode existir e ainda assim falhar -- driver a meio
+        // caminho de uma atualizacao, por exemplo. Ignorar o codigo de saida
+        // faria o stdout de um comando que deu errado virar identidade de placa,
+        // e a regra do produto diz que leitura que nao aconteceu nunca vira
+        // resposta.
+        assert_eq!(
+            identidade_da_saida(false, "NVIDIA GeForce RTX 4090, 24576"),
+            (String::new(), None)
+        );
+        assert_eq!(
+            identidade_da_saida(true, "NVIDIA GeForce RTX 4090, 24576"),
+            ("NVIDIA GeForce RTX 4090".to_string(), Some(24576))
+        );
+        // Saida vazia ou sem virgula nao inventa placa nenhuma.
+        assert_eq!(identidade_da_saida(true, ""), (String::new(), None));
+        assert_eq!(identidade_da_saida(true, "erro"), (String::new(), None));
+    }
+
+    #[test]
+    fn secao_do_bar1_truncada_nao_pega_numero_da_seguinte() {
+        // Saida cortada: a secao `BAR1 Memory Usage` sem a linha `Total`. Sem
+        // fechar a secao no cabecalho seguinte, a varredura escorrega e devolve
+        // o `Total : 0 MiB` da memoria protegida como se fosse o BAR1 -- numero
+        // de outra secao passando por BAR1, que e o engano que este modulo
+        // existe para evitar.
+        let saida = "\
+    BAR1 Memory Usage
+        Used                              : 2 MiB
+    Conf Compute Protected Memory Usage
+        Total                             : 0 MiB";
+
+        assert_eq!(bar1_da_saida(saida), None, "leu o Total da seção seguinte");
+    }
+
+    #[test]
     fn a_familia_da_placa_decide_o_suporte() {
         assert!(suporta_rbar("NVIDIA GeForce RTX 3060"));
         assert!(suporta_rbar("NVIDIA GeForce RTX 4070 Ti"));
@@ -318,6 +483,47 @@ mod tests {
         assert!(
             com_suporte.to_lowercase().contains("bios"),
             "faltou dizer onde ativar"
+        );
+    }
+
+    #[test]
+    fn a_nota_com_suporte_avisa_que_a_placa_mae_tambem_conta() {
+        // A ARMADILHA DA GTX 1650 DE NOVO, AGORA PELA PLACA-MAE.
+        //
+        // Cliente com RTX 3060 numa Z170: a placa de video aceita, o estado e
+        // `DesligadoESuportado`, e a frase manda procurar "Above 4G Decoding".
+        // Essa opcao EXISTE em placa-mae muito anterior ao rBAR -- ele acha,
+        // liga, reinicia, e nada muda, porque o recurso exige a plataforma
+        // inteira. Pior que a GTX 1650: la ele nao acha nada e desiste; aqui ele
+        // mexe no firmware e sai achando que o produto errou.
+        //
+        // Detectar a placa-mae exige ler o firmware. AVISAR nao exige nada.
+        let nota = nota_de(EstadoDoRbar::DesligadoESuportado).to_lowercase();
+        assert!(
+            nota.contains("placa-mãe"),
+            "a frase manda mexer na BIOS sem dizer que a placa-mãe também decide: {}",
+            nota
+        );
+        assert!(
+            nota.contains("não encontrar"),
+            "faltou dizer o que fazer quando a opção não está lá: {}",
+            nota
+        );
+    }
+
+    #[test]
+    fn a_nota_do_nao_sei_nao_manda_atualizar_driver_a_toa() {
+        // "Placa AMD" e "driver antigo" sao de naturezas opostas: uma e
+        // permanente e conhecida, a outra e passageira e tem conserto. Juntas,
+        // o dono de Radeon le "nao consegui verificar" e vai atualizar driver
+        // atras de um resultado que nunca vai aparecer. O cabecalho do modulo
+        // promete "ainda nao cobrimos sua placa" -- e isso que a tela diz.
+        let nota = nota_de(EstadoDoRbar::NaoSei).to_lowercase();
+        assert!(nota.contains("ainda não cobrimos"), "{}", nota);
+        assert!(
+            !nota.contains("driver"),
+            "mandou o dono de Radeon caçar driver: {}",
+            nota
         );
     }
 
