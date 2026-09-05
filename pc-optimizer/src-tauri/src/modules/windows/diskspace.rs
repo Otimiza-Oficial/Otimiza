@@ -473,7 +473,19 @@ fn saida_do_dism_analyze_component_store() -> Option<String> {
 /// o processo terminar; matar o processo fecha o cano, a leitura termina e a
 /// thread morre junto — nada fica pendurado.
 fn saida_com_prazo(filho: &mut std::process::Child, prazo: Duration) -> Option<String> {
-    let cano = filho.stdout.take()?;
+    // Sem cano não há o que esperar — mas o processo está VIVO. Devolver `None`
+    // aqui sem matar seria a única saída da função que não honra o nome dela: o
+    // chamador cai no `filho.wait()` logo depois e trava de 1 a 5 minutos
+    // esperando o DISM inteiro, que é pior que o defeito que este prazo existe
+    // para consertar. Hoje `spawn_capturando` sempre canaliza o stdout, então
+    // este ramo não acontece; o dia em que acontecer, ele mata igual.
+    let cano = match filho.stdout.take() {
+        Some(cano) => cano,
+        None => {
+            let _ = filho.kill();
+            return None;
+        }
+    };
     let (tx, rx) = mpsc::channel();
 
     std::thread::spawn(move || {
@@ -1051,6 +1063,14 @@ A operação foi concluída com êxito.";
     ///
     /// A regra que ela prende: nem o rótulo (`state-label`) nem a severidade
     /// (`data-severity`) saem de `bytes`, e a função consulta `medida`.
+    ///
+    /// MAS ELA SOZINHA NÃO BASTA, e isto não é teoria: dá para passar por ela
+    /// guardando a decisão errada numa variável intermediária (`const vazio =
+    /// semNada;`) e citando `medida` para qualquer coisa cosmética. Quem prende
+    /// o comportamento é
+    /// `a_tela_do_liberador_renderiza_diferente_o_nao_medido_e_o_zero_medido`,
+    /// que RODA a função. Esta continua aqui porque é barata e pega a
+    /// regressão literal antes de subir um Node.
     #[test]
     fn a_tela_do_liberador_nao_chama_de_vazio_o_que_nao_foi_medido() {
         let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1139,6 +1159,217 @@ A operação foi concluída com êxito.";
         assert!(
             !ainda_vale(velha, agora),
             "análise mais velha que a validade precisa ser refeita"
+        );
+    }
+
+    /// O TESTE ACIMA SÓ OLHA O RELÓGIO — ESTE OLHA O CONSERTO.
+    ///
+    /// `ainda_vale` é comparação pura de `Instant`: apagar o early-return de
+    /// `saida_do_dism_analyze_component_store` inteiro deixava a suíte verde,
+    /// com um `warning: function analise_lembrada is never used` como único
+    /// sinal — e warning não reprova build. Ou seja, o conserto que impede um
+    /// `Dism.exe` por clique podia ser removido sem nada notar.
+    ///
+    /// A prova é por SENTINELA: planta na memória uma saída que o DISM de
+    /// verdade nunca produziria e chama a função. Se ela devolver a sentinela,
+    /// consultou a memória; se devolver qualquer outra coisa, subiu o processo.
+    #[test]
+    fn a_analise_lembrada_volta_da_memoria_sem_subir_o_dism_de_novo() {
+        const SENTINELA: &str = "SENTINELA DA MEMORIA (nao veio de Dism.exe)\nRecuperável : 1.00 GB\n";
+
+        // Até três tentativas porque as provas que chamam `scan()` rodam em
+        // paralelo e escrevem nesta mesma memória: uma delas pode passar entre
+        // a plantada e a chamada. Com o early-return removido, as três falham
+        // igual — a repetição tira a flakiness, não a força do teste.
+        let mut gasto = None;
+        for _ in 0..3 {
+            *ULTIMA_ANALISE
+                .lock()
+                .expect("a memória da análise não está envenenada") =
+                Some((std::time::Instant::now(), Some(SENTINELA.to_string())));
+
+            let inicio = std::time::Instant::now();
+            let saida = saida_do_dism_analyze_component_store();
+            let levou = inicio.elapsed();
+
+            if saida.as_deref() == Some(SENTINELA) {
+                gasto = Some(levou);
+                break;
+            }
+        }
+
+        let gasto = gasto.expect(
+            "a análise lembrada foi ignorada: a função subiu o DISM de novo em vez de \
+             devolver o que já estava na memória — é um Dism.exe por clique em Limpar",
+        );
+
+        // E precisa voltar NA HORA: se tivesse esperado o prazo do DISM, teria
+        // rodado o comando e a economia não existiria.
+        assert!(
+            gasto < PRAZO_DO_DISM,
+            "a resposta lembrada levou {:?} — esperou pelo DISM em vez de lembrar",
+            gasto
+        );
+
+        // Não deixa a sentinela para as outras provas: `varre_esta_maquina`
+        // imprime o número do WinSxS, e ele tem de ser o desta máquina.
+        *ULTIMA_ANALISE
+            .lock()
+            .expect("a memória da análise não está envenenada") = None;
+    }
+
+    /// UMA LINHA DE ATRIBUTO É O CONTRATO INTEIRO COM A TELA.
+    ///
+    /// Sem o `#[serde(tag = "tipo")]` do `Medida`, o enum serializa como a
+    /// string `"NaoConsegui"`, `item.medida.tipo` vira `undefined` na tela, o
+    /// `naoMedido` vira `false` — e o achado não medido volta a ser um selo
+    /// verde "vazio". É o Crítico 1 idêntico, ressuscitado por uma linha, com
+    /// `cargo test` e `tsc` limpos. Este teste afirma a FORMA do JSON.
+    #[test]
+    fn a_medida_chega_na_tela_como_objeto_com_campo_tipo() {
+        assert_eq!(
+            serde_json::to_string(&Medida::NaoConsegui).expect("Medida serializa"),
+            r#"{"tipo":"NaoConsegui"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Medida::Medido).expect("Medida serializa"),
+            r#"{"tipo":"Medido"}"#
+        );
+
+        // E dentro do achado, que é o que a tela recebe de verdade.
+        let categoria = CATEGORIES
+            .iter()
+            .find(|c| c.id == "winsxs")
+            .expect("categoria winsxs existe");
+        let json = serde_json::to_string(&finding_do_winsxs_a_partir_da_saida(categoria, None))
+            .expect("o achado serializa");
+        assert!(
+            json.contains(r#""medida":{"tipo":"NaoConsegui"}"#),
+            "o achado não chega com `medida.tipo` na tela: {}",
+            json
+        );
+    }
+
+    /// A GUARDA POR LEITURA DO FONTE FOI BURLADA — ESTA EXECUTA A TELA.
+    ///
+    /// `a_tela_do_liberador_nao_chama_de_vazio_o_que_nao_foi_medido` lê o texto
+    /// do `main.ts`, e o revisor passou por ela em quatro linhas: guardou a
+    /// decisão errada numa variável intermediária (`const vazio = semNada;`),
+    /// usou `medida` para algo cosmético e pronto — guarda verde, `tsc` limpo,
+    /// defeito inteiro de volta na tela.
+    ///
+    /// Aqui não tem texto para enganar: extrai `renderSpaceFinding` do
+    /// `main.ts`, transpila com o próprio TypeScript do projeto, RODA a função
+    /// com dois achados idênticos exceto pela `medida` e olha o HTML que sai.
+    /// Reescrever a decisão de qualquer jeito que produza a tela errada reprova.
+    #[test]
+    fn a_tela_do_liberador_renderiza_diferente_o_nao_medido_e_o_zero_medido() {
+        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let main_ts = raiz.join("src").join("main.ts");
+        let typescript = raiz.join("node_modules").join("typescript");
+        assert!(
+            typescript.is_dir(),
+            "esta prova roda a tela de verdade e precisa do TypeScript do projeto: \
+             rode `npm install` em pc-optimizer ({:?} não existe)",
+            typescript
+        );
+
+        // O laboratório: só o `escapeHtml` é dublê (o de verdade usa `document`,
+        // que não existe no Node). A decisão de rótulo e severidade é a do
+        // `main.ts`, sem uma linha reescrita aqui.
+        let laboratorio = r#"
+const fs = require("fs");
+const ts = require(process.argv[3]);
+
+const fonte = fs.readFileSync(process.argv[2], "utf8");
+const depois = fonte.split("function renderSpaceFinding")[1];
+if (depois === undefined) throw new Error("renderSpaceFinding nao existe no main.ts");
+
+const corpo = [];
+for (const linha of depois.split(/\r?\n/)) {
+  if (linha.startsWith("}")) break;
+  corpo.push(linha);
+}
+const trecho = "function renderSpaceFinding" + corpo.join("\n") + "\n}\n";
+const js = ts.transpileModule(trecho, { compilerOptions: { target: "ES2020" } }).outputText;
+
+const escapeHtml = (v) =>
+  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const render = new Function("escapeHtml", js + "\nreturn renderSpaceFinding;")(escapeHtml);
+
+// Os dois achados são IGUAIS em tudo — inclusive `bytes: 0` e o mesmo texto
+// formatado. A única diferença é a `medida`. Qualquer diferença no HTML só
+// pode ter vindo dela.
+const base = {
+  id: "winsxs",
+  name: "Repositorio de componentes",
+  explanation: "explicacao",
+  bytes: 0,
+  formatted: "--",
+  cleanable: false,
+  requires_admin: true,
+  warning: null,
+};
+
+console.log(
+  JSON.stringify({
+    naoMedido: render(Object.assign({}, base, { medida: { tipo: "NaoConsegui" } })),
+    medido: render(Object.assign({}, base, { medida: { tipo: "Medido" } })),
+  })
+);
+"#;
+
+        let script = std::env::temp_dir().join("otimiza_render_space_finding.cjs");
+        std::fs::write(&script, laboratorio).expect("escreve o laboratório no temporário");
+
+        let saida = std::process::Command::new("node")
+            .arg(&script)
+            .arg(&main_ts)
+            .arg(&typescript)
+            .output()
+            .expect("esta prova roda a tela de verdade e precisa do Node no PATH");
+        let _ = std::fs::remove_file(&script);
+
+        assert!(
+            saida.status.success(),
+            "não deu para rodar `renderSpaceFinding`: {}",
+            String::from_utf8_lossy(&saida.stderr)
+        );
+
+        let telas: serde_json::Value =
+            serde_json::from_slice(&saida.stdout).expect("o laboratório imprime JSON");
+        let nao_medido = telas["naoMedido"].as_str().expect("html do não medido");
+        let medido = telas["medido"].as_str().expect("html do zero medido");
+
+        assert_ne!(
+            nao_medido, medido,
+            "a tela pinta IGUAL o que não foi medido e o zero medido — o cliente \
+             não tem como saber a diferença"
+        );
+
+        // O zero medido é o caso resolvido: verde e "vazio".
+        assert!(
+            medido.contains(r#"data-severity="Ok""#),
+            "zero MEDIDO é assunto resolvido e precisa sair em Ok:\n{}",
+            medido
+        );
+        assert!(
+            medido.contains(">vazio<"),
+            "zero MEDIDO é vazio de verdade e precisa dizer isso:\n{}",
+            medido
+        );
+
+        // E o não medido é assunto pendente: nem verde, nem "vazio".
+        assert!(
+            !nao_medido.contains(r#"data-severity="Ok""#),
+            "o que não foi medido saiu com selo verde de resolvido:\n{}",
+            nao_medido
+        );
+        assert!(
+            !nao_medido.contains("vazio"),
+            "o que não foi medido saiu como \"vazio\" — o produto afirmando o que \
+             não mediu:\n{}",
+            nao_medido
         );
     }
 

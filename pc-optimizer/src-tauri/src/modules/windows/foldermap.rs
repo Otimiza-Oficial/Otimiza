@@ -632,6 +632,32 @@ fn mapear_o_disco_com_raizes(raizes: Vec<PathBuf>, limite: usize) -> Result<Fold
 mod tests {
     use super::*;
 
+    /// UMA LINHA DE ATRIBUTO É O CONTRATO INTEIRO COM A TELA.
+    ///
+    /// Tirar o `#[serde(tag = "tipo")]` do `Natureza` não quebra nada aqui:
+    /// `cargo test` passa, `tsc` passa — e o enum vira a string `"NaoSei"`, com
+    /// `linha.natureza.tipo` virando `undefined` na interface. Aí a pasta que
+    /// não deu para ler passa a ser tratada como qualquer outra, que é
+    /// exatamente o que estes três estados existem para impedir.
+    ///
+    /// O mesmo teste existe para o `Medida` do `diskspace.rs`, pela mesma razão
+    /// e depois do mesmo susto.
+    #[test]
+    fn a_natureza_chega_na_tela_como_objeto_com_campo_tipo() {
+        for (natureza, esperado) in [
+            (Natureza::PodeLimpar, r#"{"tipo":"PodeLimpar"}"#),
+            (Natureza::Seu, r#"{"tipo":"Seu"}"#),
+            (Natureza::NaoSei, r#"{"tipo":"NaoSei"}"#),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&natureza).expect("Natureza serializa"),
+                esperado,
+                "{:?} não chega à tela com `tipo`",
+                natureza
+            );
+        }
+    }
+
     #[test]
     fn tamanho_sai_na_unidade_certa() {
         assert_eq!(format_size(512), "512 B");
