@@ -38,6 +38,7 @@ pub mod power;
 pub mod pressao;
 pub mod processes;
 pub mod profiles;
+pub mod rbar;
 pub mod readiness;
 pub mod rede;
 pub mod registry;
