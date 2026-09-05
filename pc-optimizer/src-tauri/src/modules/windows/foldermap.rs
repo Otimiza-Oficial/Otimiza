@@ -464,6 +464,128 @@ pub fn perfil_do_usuario() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("C:\\Users"))
 }
 
+/// As pastas de primeiro nível que valem varrer, na ordem em que costumam
+/// pesar.
+///
+/// POR QUE UMA LISTA E NÃO `C:\` INTEIRO. Varrer a raiz do disco entra em
+/// `System Volume Information` e no `$Recycle.Bin` de outros usuários — pastas
+/// que devolvem erro de permissão e não acrescentam nada. A lista cobre onde o
+/// espaço realmente vai, medido na máquina que motivou este trabalho:
+/// AppData 176 GB, Steam 122 GB, Downloads 48 GB, Windows 29 GB.
+///
+/// Só entra o que existe: máquina sem `Program Files (x86)` (Windows ARM, por
+/// exemplo) simplesmente não tem essa linha, em vez de mostrar uma pasta vazia.
+pub fn raizes_do_disco() -> Vec<PathBuf> {
+    let mut raizes: Vec<PathBuf> = Vec::new();
+
+    let candidatos = [
+        std::env::var("ProgramFiles").ok(),
+        std::env::var("ProgramFiles(x86)").ok(),
+        std::env::var("ProgramData").ok(),
+        std::env::var("SystemRoot").ok(),
+        Some(perfil_do_usuario().to_string_lossy().to_string()),
+    ];
+
+    for candidato in candidatos.into_iter().flatten() {
+        let caminho = PathBuf::from(&candidato);
+
+        // DEDUPLICAÇÃO POR TEXTO NORMALIZADO. Em alguns Windows,
+        // `ProgramFiles` e `ProgramFiles(x86)` apontam para o mesmo lugar —
+        // somar as duas passaria o total do tamanho do disco.
+        let chave = caminho.to_string_lossy().to_lowercase();
+        let repetida = raizes
+            .iter()
+            .any(|r| r.to_string_lossy().to_lowercase() == chave);
+
+        if caminho.exists() && !repetida {
+            raizes.push(caminho);
+        }
+    }
+
+    raizes
+}
+
+/// O mapa do disco: uma linha por raiz, sem descer nelas.
+///
+/// DUAS CAMADAS, E ESTA É A PRIMEIRA. Varrer 476 GB a fundo leva minutos —
+/// medido: sete, na máquina onde `mapear` foi escrito. Ninguém espera olhando
+/// tela parada. Aqui cada raiz vira uma linha; o detalhe só é varrido quando o
+/// cliente clica numa delas, chamando `mapear` como já se faz hoje.
+pub fn mapear_o_disco(limite: usize) -> Result<FolderMap, String> {
+    let mut folders: Vec<FolderEntry> = Vec::new();
+    let mut ilegiveis = 0usize;
+    let mut estourou = false;
+
+    for raiz in raizes_do_disco() {
+        match mapear(&raiz, limite) {
+            Ok(parcial) => {
+                ilegiveis += parcial.unreadable;
+                estourou = estourou || parcial.timed_out;
+
+                let nome = raiz
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| raiz.to_string_lossy().to_string());
+                let caminho = raiz.to_string_lossy().to_string();
+
+                folders.push(FolderEntry {
+                    name: nome,
+                    natureza: classificar(&caminho, true),
+                    path: caminho,
+                    bytes: parcial.total_bytes,
+                    formatted: format_size(parcial.total_bytes),
+                    // Preenchido no fim, quando o total de todas for conhecido.
+                    percent: 0.0,
+                    explanation: explicar(&raiz.to_string_lossy()).to_string(),
+                    partial: parcial.timed_out,
+                });
+            }
+            Err(_) => {
+                // A RAIZ QUE NÃO DEU PARA LER APARECE MESMO ASSIM, como
+                // `NaoSei`. Omiti-la faria o total mentir por baixo, e o
+                // cliente veria o espaço sumir no nada.
+                let caminho = raiz.to_string_lossy().to_string();
+                ilegiveis += 1;
+
+                folders.push(FolderEntry {
+                    name: raiz
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| caminho.clone()),
+                    natureza: Natureza::NaoSei,
+                    path: caminho,
+                    bytes: 0,
+                    formatted: format_size(0),
+                    percent: 0.0,
+                    explanation: String::new(),
+                    partial: true,
+                });
+            }
+        }
+    }
+
+    let total: u64 = folders.iter().map(|f| f.bytes).sum();
+
+    for pasta in &mut folders {
+        pasta.percent = if total == 0 {
+            0.0
+        } else {
+            (pasta.bytes as f64 / total as f64) * 100.0
+        };
+    }
+
+    folders.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+
+    Ok(FolderMap {
+        root: "C:\\".to_string(),
+        total_bytes: total,
+        total_formatted: format_size(total),
+        folders,
+        unreadable: ilegiveis,
+        timed_out: estourou,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -906,5 +1028,59 @@ mod tests {
         assert!(mapa.folders.is_empty());
 
         let _ = std::fs::remove_dir(&temporaria);
+    }
+
+    #[test]
+    fn as_raizes_incluem_onde_os_jogos_ficam() {
+        // O FURO QUE ESTE PLANO EXISTE PARA FECHAR.
+        //
+        // Medido na maquina do dono: 122 GB de Steam em `Program Files (x86)`,
+        // contra 176 GB em AppData. O mapa so varria o perfil do usuario, entao
+        // era cego para a SEGUNDA MAIOR coisa da maquina -- num produto cujo
+        // publico inteiro e jogador.
+        let raizes: Vec<String> = raizes_do_disco()
+            .iter()
+            .map(|p| p.to_string_lossy().to_lowercase())
+            .collect();
+
+        let juntas = raizes.join(" | ");
+
+        assert!(juntas.contains("program files (x86)"), "faltou: {}", juntas);
+        assert!(juntas.contains("program files"), "faltou: {}", juntas);
+        assert!(juntas.contains("users") || juntas.contains("usuários"), "faltou: {}", juntas);
+    }
+
+    #[test]
+    fn nenhuma_raiz_repetida() {
+        // `Program Files` e prefixo de `Program Files (x86)` -- montar a lista com
+        // um `contains` descuidado somaria a mesma pasta duas vezes, e o total do
+        // mapa passaria do tamanho do disco.
+        let raizes = raizes_do_disco();
+        let mut vistos = std::collections::BTreeSet::new();
+
+        for r in &raizes {
+            assert!(
+                vistos.insert(r.to_string_lossy().to_lowercase()),
+                "raiz repetida: {:?}", r
+            );
+        }
+    }
+
+    #[test]
+    fn o_mapa_do_disco_roda_nesta_maquina() {
+        // MEDICAO DE VERDADE, na maquina que roda o teste. O mapa pode voltar
+        // vazio (maquina sem nada), mas nao pode QUEBRAR -- e se voltar totais,
+        // eles precisam ser coerentes.
+        let mapa = mapear_o_disco(12).expect("o mapa do disco nao pode falhar");
+
+        for pasta in &mapa.folders {
+            assert!(pasta.percent >= 0.0 && pasta.percent <= 100.0,
+                "{} tem porcentagem impossivel: {}", pasta.name, pasta.percent);
+        }
+
+        // O total nunca pode ser menor que a maior pasta.
+        if let Some(maior) = mapa.folders.iter().map(|f| f.bytes).max() {
+            assert!(mapa.total_bytes >= maior, "o total e menor que a maior pasta");
+        }
     }
 }

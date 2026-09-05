@@ -404,7 +404,7 @@ pub async fn map_folders() -> Result<FolderMap, String> {
         // senão trava a interface inteira durante a varredura.
         tokio::task::spawn_blocking(|| {
             use crate::modules::windows::foldermap;
-            foldermap::mapear(&foldermap::perfil_do_usuario(), 12)
+            foldermap::mapear_o_disco(12)
         })
         .await
         .map_err(|e| format!("Falha ao mapear pastas: {}", e))?
