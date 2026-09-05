@@ -95,7 +95,10 @@ pub enum Natureza {
     PodeLimpar,
     /// Arquivo do cliente. O produto MOSTRA o caminho e não faz mais nada.
     Seu,
-    /// Não deu para ler — permissão, ou o prazo da varredura estourou.
+    /// Não deu para ler o próprio nível 1 — falha de permissão nesta pasta
+    /// mesma, e não em algum descendente (ver `nivel1_foi_lido`) nem no
+    /// prazo da varredura (esse é `partial`, campo separado — ver
+    /// `FolderEntry::partial`).
     NaoSei,
 }
 
@@ -164,8 +167,16 @@ pub struct FolderMap {
     pub folders: Vec<FolderEntry>,
     /// Quantas pastas não puderam ser lidas por falta de permissão.
     pub unreadable: usize,
-    /// Verdadeiro quando a varredura parou no prazo. Os totais viram piso, não
-    /// medida final — e a interface precisa dizer isso.
+    /// Verdadeiro quando o RELÓGIO estourou — e só isso. Não é sinônimo de
+    /// "alguma pasta ficou parcial": `partial` também liga por limite de
+    /// profundidade e por descendente sem permissão (ver `somar`), e as duas
+    /// coisas são comuns em pasta grande e legítima. Antes desta correção
+    /// este campo virava verdadeiro sempre que QUALQUER pasta esbarrava em
+    /// permissão negada num canto qualquer — a mesma varredura que terminou
+    /// dentro do prazo alegava para o cliente "a varredura não terminou
+    /// dentro do tempo" (é o texto exato que `main.ts` mostra para este
+    /// campo). Descendente ilegível já tem canal próprio — `unreadable` — e
+    /// não precisa (nem pode) emprestar significado deste aqui.
     pub timed_out: bool,
 }
 
@@ -363,7 +374,16 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
 
     let fim = std::time::Instant::now() + std::time::Duration::from_secs(ORCAMENTO_SEGUNDOS);
     let mut ilegiveis = 0usize;
-    let mut algum_cortado = false;
+    // SÓ o relógio pode ligar isto — não `partial`. `partial` também vira
+    // `true` por limite de profundidade e por descendente sem permissão
+    // (ver `somar`), e as duas coisas acontecem em pasta grande e legítima
+    // sem que a varredura tenha estourado o prazo. `Varredura::estourou` só
+    // liga dentro de `sem_tempo`, quando o relógio de verdade estourou — e
+    // o corte por profundidade e o corte por `read_dir` que falha retornam
+    // ANTES de chamar `sem_tempo` (curto-circuito do `||` em `somar`), então
+    // nenhum dos dois toca `estourou`. É por isso que agregar por aqui, e
+    // não por `partial`, mantém este campo dizendo só o que o nome promete.
+    let mut algum_prazo_estourou = false;
     let mut pastas: Vec<FolderEntry> = Vec::new();
 
     for (indice, caminho) in filhos.iter().enumerate() {
@@ -381,7 +401,7 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
 
         total += bytes;
         ilegiveis += v.ilegiveis;
-        algum_cortado |= partial;
+        algum_prazo_estourou |= v.estourou;
 
         let name = caminho
             .file_name()
@@ -433,7 +453,7 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
         total_formatted: format_size(total),
         folders: pastas,
         unreadable: ilegiveis,
-        timed_out: algum_cortado,
+        timed_out: algum_prazo_estourou,
     })
 }
 
@@ -697,80 +717,181 @@ mod tests {
         assert!(!nivel1_foi_lido(&inexistente));
     }
 
+    // O teste de integração via ACL real (`icacls /deny` + `mapear` de
+    // ponta a ponta) que existia nesta rodada anterior foi REMOVIDO.
+    //
+    // Ele se autopulava neste sandbox de desenvolvimento por causa de
+    // `SeBackupPrivilege` (confirmado com `whoami /priv`), e a rerevisão
+    // confirmou que o mesmo motivo se aplica ao CI real deste repositório:
+    // `.github/workflows/release.yml` roda em `runs-on: windows-latest`, e o
+    // runner do GitHub executa o job com uma conta administrativa — a mesma
+    // classe de ambiente que ignora a checagem de ACL ao abrir diretório com
+    // semântica de backup. Ou seja: o teste não rodaria de verdade nem lá.
+    // Um teste com nome de guarda que nunca reprova em lugar nenhum é pior
+    // que não ter teste — ninguém olha de novo o que já parece coberto.
+    //
+    // A guarda que fica é a de baixo: um canário de texto-fonte, que não
+    // depende de ACL, privilégio de processo, ou sistema operacional. Ela
+    // não prova que o Windows de verdade nega a leitura — isso já está
+    // provado pelos dois testes deterministas acima
+    // (`nivel1_legivel_nao_depende_de_descendente_ilegivel` e
+    // `nivel1_ilegivel_e_reconhecido_como_tal`, que testam cada metade do
+    // mecanismo isoladamente). O que faltava, e é o que este canário fecha,
+    // é a FIAÇÃO: que `mapear` de fato liga as duas metades chamando
+    // `nivel1_foi_lido(caminho)` — e não voltou a usar `v.ilegiveis == 0`,
+    // que é o bug original.
     #[test]
-    fn integracao_descendente_protegido_por_acl_nao_vira_naosei() {
-        // A versão "de verdade" do teste acima, com uma pasta protegida por
-        // ACL de disco de fato, passando pelo `mapear` inteiro.
-        //
-        // ESTE TESTE SE AUTO-PULA quando o processo que roda `cargo test` tem
-        // `SeBackupPrivilege` habilitado — confirmado neste ambiente de
-        // desenvolvimento via `whoami /priv` — porque essa privilégio faz o
-        // Windows ignorar a checagem de ACL para leitura de diretório
-        // (`std::fs::read_dir` abre com semântica de backup), e a pasta
-        // negada continua legível mesmo depois do `icacls /deny`. É uma
-        // particularidade DESTE sandbox, não do produto: numa máquina de
-        // cliente ou num agente de CI comum, sem esse privilégio, o `assert`
-        // abaixo roda de verdade. A garantia real do comportamento vem dos
-        // dois testes determinísticos acima, que não dependem de privilégio
-        // de processo.
-        let raiz = std::env::temp_dir().join("otimiza_teste_raiz_subarvore_acl");
-        let pasta = raiz.join("pasta_grande");
-        let protegida = pasta.join("subpasta_protegida");
+    fn mapear_liga_leu_com_sucesso_a_nivel1_foi_lido_e_nao_a_ilegiveis() {
+        let fonte = codigo_fonte_deste_arquivo();
+
+        // A mutação exata que o bug original era, e que a rerevisão
+        // reintroduziu para provar que o teste de ACL não pegava nada:
+        // `mapear:380` voltando a ler `v.ilegiveis == 0` em vez de chamar
+        // `nivel1_foi_lido`. Se essa string aparecer nesta função, é o bug
+        // de volta, ponto.
+        assert!(
+            !fonte.contains("let leu_com_sucesso = v.ilegiveis"),
+            "mapear voltou a decidir `leu_com_sucesso` por `v.ilegiveis`, que soma \
+             permissão negada em QUALQUER profundidade — exatamente o bug que \
+             `nivel1_foi_lido` existe para evitar"
+        );
+
+        // E a fiação certa precisa estar presente — não basta a errada estar
+        // ausente; alguém poderia trocar por uma terceira coisa igualmente
+        // errada (um `true` incondicional, por exemplo) e as duas guardas
+        // acima não pegariam isso sozinhas.
+        assert!(
+            fonte.contains("let leu_com_sucesso = nivel1_foi_lido(caminho);"),
+            "mapear precisa decidir `leu_com_sucesso` chamando `nivel1_foi_lido(caminho)`"
+        );
+    }
+
+    /// Lê o CÓDIGO deste próprio arquivo — só a parte de fora de `mod tests`
+    /// — para os canários de texto-fonte deste módulo.
+    ///
+    /// Cortar em `#[cfg(test)]` não é cosmético: os próprios canários abaixo
+    /// citam, em string literal, os padrões que reprovam (ex.:
+    /// `"let leu_com_sucesso = v.ilegiveis"`). Sem o corte, um `.contains`
+    /// rodando sobre o arquivo inteiro acharia essa string DENTRO do próprio
+    /// teste que a procura, e a guarda reprovaria sempre — inclusive sem
+    /// nenhuma mutação. `CARGO_MANIFEST_DIR` aponta sempre para `src-tauri`,
+    /// independente de onde `cargo test` é chamado — o mesmo truque que a
+    /// guarda de prosa em `commands.rs` usa para achar `main.ts`.
+    fn codigo_fonte_deste_arquivo() -> String {
+        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("modules")
+            .join("windows")
+            .join("foldermap.rs");
+        let fonte = std::fs::read_to_string(&caminho)
+            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+        fonte
+            .split_once("#[cfg(test)]")
+            .map(|(codigo, _testes)| codigo.to_string())
+            .unwrap_or(fonte)
+    }
+
+    #[test]
+    fn permissao_negada_no_descendente_nao_liga_o_relogio() {
+        // O NÚCLEO DO ACHADO 2. `partial` liga por três motivos (profundidade,
+        // prazo, permissão), mas só um deles é o RELÓGIO de verdade —
+        // `Varredura::estourou`. O ramo de `read_dir` que falha em `somar`
+        // retorna `(0, true)` (marca `partial`) SEM jamais chamar
+        // `sem_tempo`, então `estourou` tem que continuar `false`. Se um dia
+        // alguém "simplificar" e fizer o ramo de permissão também acionar
+        // `sem_tempo`/`estourou`, esta asserção reprova.
+        let mut v = Varredura {
+            ilegiveis: 0,
+            prazo: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            estourou: false,
+        };
+        let caminho_inexistente = std::env::temp_dir()
+            .join("otimiza_teste_permissao_nao_e_relogio_12345");
+        let _ = std::fs::remove_dir_all(&caminho_inexistente);
+
+        let (_, cortado) = somar(&caminho_inexistente, 2, &mut v);
+
+        assert!(cortado, "read_dir que falha precisa marcar partial");
+        assert!(
+            !v.estourou,
+            "descendente sem permissão não pode ligar o relógio — só o prazo de verdade liga isso"
+        );
+    }
+
+    #[test]
+    fn varredura_dentro_do_prazo_com_corte_por_profundidade_nao_e_timed_out() {
+        // PONTA A PONTA, via `mapear`, e determinístico: sem ACL, sem
+        // privilégio de processo, sem depender do relógio de verdade
+        // estourar. Uma árvore mais funda que `PROFUNDIDADE_MAXIMA` corta por
+        // profundidade (`partial = true` na pasta), o mesmo ramo de código
+        // que o corte por permissão em `somar` — os dois retornam `(0/soma,
+        // true)` sem passar por `sem_tempo`. Antes desta correção, `mapear`
+        // fazia `timed_out: algum_cortado` (`algum_cortado |= partial`), e
+        // este cenário — que termina bem dentro do orçamento de
+        // `ORCAMENTO_SEGUNDOS` — teria acusado `timed_out: true` na cara do
+        // cliente por uma varredura que nunca chegou perto do prazo.
+        let raiz = std::env::temp_dir().join("otimiza_teste_timed_out_nao_e_profundidade");
         let _ = std::fs::remove_dir_all(&raiz);
-        std::fs::create_dir_all(&protegida).expect("criar árvore de teste");
-        std::fs::write(pasta.join("arquivo.txt"), b"conteudo legivel")
-            .expect("criar arquivo de teste");
-
-        let usuario = std::env::var("USERNAME").unwrap_or_default();
-        let negou = std::process::Command::new("icacls")
-            .arg(&protegida)
-            .arg("/deny")
-            .arg(format!("{}:(RD)", usuario))
-            .output();
-
-        let deu_para_negar = matches!(&negou, Ok(saida) if saida.status.success())
-            && std::fs::read_dir(&protegida).is_err();
-
-        if !deu_para_negar {
-            eprintln!(
-                "ambiente nao aplica a negacao de ACL a este processo (privilegio de backup?); \
-                 pulando a parte de integracao, a garantia fica com os testes deterministicos"
-            );
-            let _ = std::process::Command::new("icacls")
-                .arg(&protegida)
-                .arg("/remove:d")
-                .arg(&usuario)
-                .output();
-            let _ = std::fs::remove_dir_all(&raiz);
-            return;
+        let mut fundo = raiz.join("pasta_funda");
+        for i in 0..(PROFUNDIDADE_MAXIMA as usize + 10) {
+            fundo = fundo.join(format!("nivel{}", i));
         }
+        std::fs::create_dir_all(&fundo).expect("criar árvore funda de teste");
 
-        let resultado = mapear(&raiz, 5);
+        let inicio = std::time::Instant::now();
+        let mapa = mapear(&raiz, 5).expect("a raiz do teste é legível");
+        let gasto = inicio.elapsed().as_secs();
 
-        // Desfaz a permissão ANTES de qualquer assert poder abortar o teste —
-        // senão a pasta protegida vira lixo que o Windows nem deixa apagar.
-        let _ = std::process::Command::new("icacls")
-            .arg(&protegida)
-            .arg("/remove:d")
-            .arg(&usuario)
-            .output();
         let _ = std::fs::remove_dir_all(&raiz);
 
-        let mapa = resultado.expect("a raiz do teste é legível");
+        // A própria premissa do teste: terminou bem dentro do prazo.
+        assert!(
+            gasto < ORCAMENTO_SEGUNDOS,
+            "o teste levou {} s — não serve para provar 'terminou dentro do prazo'",
+            gasto
+        );
+
         let entrada = mapa
             .folders
             .iter()
-            .find(|f| f.name == "pasta_grande")
-            .expect("pasta_grande precisa aparecer no mapa");
-
-        assert_ne!(
-            entrada.natureza,
-            Natureza::NaoSei,
-            "descendente ilegível não pode reclassificar a pasta inteira como NaoSei"
-        );
+            .find(|f| f.name == "pasta_funda")
+            .expect("pasta_funda precisa aparecer no mapa");
         assert!(
             entrada.partial,
-            "a ilegibilidade do descendente precisa virar `partial`, não desaparecer"
+            "a árvore é mais funda que PROFUNDIDADE_MAXIMA; a pasta tem que ficar parcial"
+        );
+
+        assert!(
+            !mapa.timed_out,
+            "corte por profundidade não é corte por prazo — timed_out mentiu de novo"
+        );
+    }
+
+    #[test]
+    fn mapear_liga_timed_out_a_estourou_e_nao_a_partial() {
+        // Canário de texto-fonte para a mesma fiação, do jeito que o achado 1
+        // já fez para `leu_com_sucesso`: prova que `mapear` monta `timed_out`
+        // a partir do relógio (`v.estourou`), e não do que a rodada anterior
+        // usava (`algum_cortado |= partial` / `timed_out: algum_cortado`).
+        // Sozinho, `varredura_dentro_do_prazo_com_corte_por_profundidade_nao_e_timed_out`
+        // já reprova se a fiação regredir — este teste só torna o motivo
+        // explícito sem precisar montar disco.
+        let fonte = codigo_fonte_deste_arquivo();
+
+        assert!(
+            !fonte.contains("algum_cortado |= partial"),
+            "mapear voltou a agregar `partial` (profundidade + prazo + permissão, os \
+             três misturados) para decidir timed_out — é exatamente a diluição que \
+             este achado corrigiu"
+        );
+        assert!(
+            !fonte.contains("timed_out: algum_cortado"),
+            "timed_out voltou a vir de `algum_cortado`, que inclui corte por permissão"
+        );
+        assert!(
+            fonte.contains("algum_prazo_estourou |= v.estourou"),
+            "timed_out precisa vir só de `Varredura::estourou`, o único sinal que é \
+             de fato o relógio"
         );
     }
 
