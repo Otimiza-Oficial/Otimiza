@@ -14,6 +14,8 @@ use super::shell;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpaceFinding {
@@ -162,11 +164,115 @@ static CATEGORIES: &[Category] = &[
                 .unwrap_or_default()
         },
     },
+    Category {
+        id: "winsxs",
+        name: "Componentes antigos do Windows",
+        explanation: "Cópias antigas de componentes do Windows, guardadas para permitir desinstalar \
+             atualizações já aplicadas. O DISM decide quanto disso já não faz falta.",
+        // Sem aviso porque nada de valor se perde limpando o que o DISM já marcou
+        // como recuperável — ao contrário do Windows.old, aqui não há rollback
+        // para perder.
+        warning: Some(
+            "A limpeza de verdade (`DISM /StartComponentCleanup`) leva de 5 a 25 minutos \
+             e mexe no repositório de componentes do sistema — não cabe num clique rápido \
+             daqui. Use a ferramenta de reparo (Analisar e limpar WinSxS) para fazer isso \
+             com acompanhamento de progresso e sem risco de interrupção pela metade.",
+        ),
+        requires_admin: true,
+        // Deliberadamente NÃO limpamos por aqui: a operação de verdade é longa
+        // (minutos) e mexe em componentes do sistema — igual ao Windows.old, uma
+        // limpeza cortada no meio é pior que apontar a ferramenta certa.
+        cleanable: false,
+        // Sem pasta própria: o tamanho vem do DISM, nunca de `directory_size`.
+        paths: || vec![],
+    },
+    Category {
+        id: "browser_cache",
+        name: "Cache dos navegadores",
+        explanation: "Páginas, imagens e scripts que Chrome, Edge e Firefox guardam no disco para \
+             abrir os mesmos sites mais rápido depois.",
+        warning: Some("Os sites vão carregar uma vez mais devagar."),
+        requires_admin: false,
+        cleanable: true,
+        paths: || {
+            let mut p = Vec::new();
+            if let Some(la) = local_appdata() {
+                // Edge é baseado no Chromium, então herda a mesma estrutura de
+                // pastas do Chrome ("User Data\Default\Cache").
+                p.push(
+                    la.join("Google")
+                        .join("Chrome")
+                        .join("User Data")
+                        .join("Default")
+                        .join("Cache"),
+                );
+                p.push(
+                    la.join("Microsoft")
+                        .join("Edge")
+                        .join("User Data")
+                        .join("Default")
+                        .join("Cache"),
+                );
+
+                // O Firefox guarda o cache dentro de uma pasta de perfil com nome
+                // aleatório ("xxxxxxxx.default-release"), então é preciso varrer
+                // o diretório de perfis em vez de apontar para um caminho fixo.
+                let perfis = la.join("Mozilla").join("Firefox").join("Profiles");
+                if let Ok(entradas) = fs::read_dir(&perfis) {
+                    for entrada in entradas.filter_map(|e| e.ok()) {
+                        p.push(entrada.path().join("cache2"));
+                    }
+                }
+            }
+            p
+        },
+    },
+    Category {
+        id: "crash_dumps",
+        name: "Despejos de memória",
+        explanation: "Arquivos que o Windows grava quando o sistema trava (tela azul), usados só \
+             para diagnóstico técnico. Ninguém abre isso no dia a dia.",
+        warning: None,
+        requires_admin: true,
+        cleanable: true,
+        paths: || {
+            windows_dir()
+                .map(|w| vec![w.join("MEMORY.DMP"), w.join("Minidump")])
+                .unwrap_or_default()
+        },
+    },
+    Category {
+        id: "store_cache",
+        name: "Cache da Microsoft Store",
+        explanation: "Dados temporários que a Microsoft Store guarda para listar e abrir aplicativos \
+             mais rápido.",
+        warning: Some("A Store vai demorar um pouco mais para abrir na primeira vez."),
+        requires_admin: false,
+        cleanable: true,
+        paths: || {
+            local_appdata()
+                .map(|la| {
+                    vec![la
+                        .join("Packages")
+                        .join("Microsoft.WindowsStore_8wekyb3d8bbwe")
+                        .join("LocalCache")]
+                })
+                .unwrap_or_default()
+        },
+    },
 ];
 
-/// Tamanho de uma pasta, somando tudo que houver dentro.
-/// Pasta inacessível conta zero — nunca derruba a varredura.
+/// Tamanho de um caminho: se for arquivo — como o `MEMORY.DMP` da categoria de
+/// despejos de memória —, o tamanho é o do próprio arquivo; se for pasta, soma
+/// tudo que houver dentro. Caminho inacessível conta zero — nunca derruba a
+/// varredura.
 fn directory_size(dir: &std::path::Path) -> u64 {
+    if let Ok(meta) = fs::metadata(dir) {
+        if meta.is_file() {
+            return meta.len();
+        }
+    }
+
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(_) => return 0,
@@ -213,11 +319,142 @@ fn disk_usage() -> (u64, u64) {
     (0, 0)
 }
 
+/// Quanto o DISM diz que dá para recuperar do repositório de componentes.
+///
+/// PURA, PARA SER TESTÁVEL SEM RODAR O DISM. A análise real
+/// (`DISM /Online /Cleanup-Image /AnalyzeComponentStore`) leva minutos e exige
+/// administrador; a leitura da resposta não precisa de nenhum dos dois.
+///
+/// `None` quando a linha não veio — e `None` NÃO é zero. "Não consegui
+/// estimar" e "não há nada para recuperar" são coisas diferentes, e confundir
+/// as duas já foi o defeito deste produto em quatro módulos.
+///
+/// Lê português e inglês porque o DISM responde no idioma do sistema, e um
+/// cliente com Windows em inglês veria a categoria sumir sem explicação.
+pub fn estimativa_do_winsxs(saida_do_dism: &str) -> Option<u64> {
+    for linha in saida_do_dism.lines() {
+        let minuscula = linha.to_lowercase();
+
+        if !(minuscula.contains("recuperável")
+            || minuscula.contains("recuperavel")
+            || minuscula.contains("reclaimable"))
+        {
+            continue;
+        }
+
+        // `continue`, não `?`: uma linha malformada só descarta ELA, não a
+        // busca inteira. Com `?` aqui, "Reclaimable Packages : 12" (sem
+        // unidade) abortava a função antes mesmo de chegar na linha
+        // "Reclaimable : 2.34 GB" logo depois — a saída em inglês do DISM
+        // manda as duas, nessa ordem, e a função nunca lia a segunda.
+        let depois = match linha.split_once(':') {
+            Some((_, depois)) => depois,
+            None => continue,
+        };
+        let bruto = depois.trim();
+
+        // "2.34 GB" — o número e a unidade. Um contador de pacotes
+        // ("Reclaimable Packages : 12") não tem unidade e é descartado aqui.
+        let (numero, unidade) = match bruto.split_once(' ') {
+            Some(par) => par,
+            None => continue,
+        };
+        let valor: f64 = match numero.replace(',', ".").parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let multiplicador: u64 = match unidade.trim().to_uppercase().as_str() {
+            "KB" => 1024,
+            "MB" => 1024 * 1024,
+            "GB" => 1024 * 1024 * 1024,
+            "TB" => 1024u64 * 1024 * 1024 * 1024,
+            _ => continue,
+        };
+
+        return Some((valor * multiplicador as f64) as u64);
+    }
+
+    None
+}
+
+/// Tenta obter a saída do `DISM /AnalyzeComponentStore` sem travar a varredura.
+///
+/// A análise verdadeira pode levar de 1 a 5 minutos (ver `estimativa_do_winsxs`)
+/// — e este `scan()` precisa responder rápido, porque também é chamado pelo
+/// veredito geral da máquina. Por isso a chamada roda numa thread à parte: se o
+/// DISM não respondeu dentro do prazo curto, a categoria diz honestamente que
+/// não deu para estimar agora, em vez de deixar a tela inteira esperando por
+/// uma análise de minutos. Quem quiser o número de qualquer jeito tem a
+/// ferramenta de reparo, que roda a mesma análise como tarefa longa com
+/// progresso.
+fn saida_do_dism_analyze_component_store() -> Option<String> {
+    let (tx, rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        let saida = shell::run("Dism", &["/Online", "/Cleanup-Image", "/AnalyzeComponentStore"]);
+        let _ = tx.send(saida);
+    });
+
+    match rx.recv_timeout(Duration::from_secs(3)) {
+        Ok(Ok(saida)) if saida.success => Some(saida.stdout),
+        _ => None,
+    }
+}
+
+/// Monta o achado do WinSxS a partir da estimativa do DISM — nunca do tamanho
+/// da pasta, que mente por causa dos hard links com `C:\Windows` (ver módulo).
+///
+/// Separada de `finding_do_winsxs` para ser testável sem rodar o DISM de
+/// verdade: o teste passa a saída já pronta e confere que o `bytes` do achado
+/// é exatamente o que `estimativa_do_winsxs` devolveu para aquela saída — nunca
+/// um tamanho lido do disco.
+fn finding_do_winsxs_a_partir_da_saida(c: &Category, saida_do_dism: Option<&str>) -> SpaceFinding {
+    let estimativa = saida_do_dism.and_then(estimativa_do_winsxs);
+
+    let (bytes, explanation, formatted) = match estimativa {
+        Some(bytes) => (bytes, c.explanation.to_string(), format_size(bytes)),
+        None => (
+            0,
+            "Não foi possível estimar quanto dá para recuperar do repositório de \
+             componentes (WinSxS) agora. A pasta aparece grande no Explorer por causa \
+             de hard links com o próprio `C:\\Windows` — o número real só vem da análise \
+             do DISM, que pode ser rodada pela ferramenta de reparo."
+                .to_string(),
+            // NUNCA "vazio": "vazio" diria que não há nada para recuperar, e a
+            // verdade aqui é que não conseguimos medir — são coisas diferentes.
+            "não consegui estimar".to_string(),
+        ),
+    };
+
+    SpaceFinding {
+        id: c.id.to_string(),
+        name: c.name.to_string(),
+        explanation,
+        bytes,
+        formatted,
+        cleanable: false,
+        requires_admin: c.requires_admin,
+        warning: c.warning.map(|w| w.to_string()),
+    }
+}
+
+/// Monta o achado do WinSxS rodando o DISM de verdade. Fininha de propósito:
+/// toda a lógica testável está em `finding_do_winsxs_a_partir_da_saida`.
+fn finding_do_winsxs(c: &Category) -> SpaceFinding {
+    let saida = saida_do_dism_analyze_component_store();
+    finding_do_winsxs_a_partir_da_saida(c, saida.as_deref())
+}
+
 /// Varre todas as categorias. Não apaga nada.
 pub fn scan() -> DiskReport {
     let findings: Vec<SpaceFinding> = CATEGORIES
         .iter()
         .map(|c| {
+            if c.id == "winsxs" {
+                return finding_do_winsxs(c);
+            }
+
             let bytes: u64 = (c.paths)()
                 .iter()
                 .filter(|p| p.exists())
@@ -304,6 +541,27 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
         ));
     }
 
+    // A Store é um caso à parte: o pacote UWP tem permissões diferentes de uma
+    // pasta comum, e apagar `LocalCache` na unha arrisca corromper o registro
+    // do aplicativo. O `wsreset.exe` é a própria ferramenta do Windows para
+    // isto — ele encerra a Store, limpa o cache dela e a reabre.
+    if id == "store_cache" {
+        let liberado: u64 = (categoria.paths)()
+            .iter()
+            .filter(|p| p.exists())
+            .map(|p| directory_size(p))
+            .sum();
+
+        shell::run("wsreset.exe", &[])
+            .map_err(|_| "Não foi possível limpar o cache da Microsoft Store.".to_string())?;
+
+        return Ok(CleanOutcome {
+            id: id.to_string(),
+            freed_bytes: liberado,
+            message: format!("{} liberados de {}.", format_size(liberado), categoria.name),
+        });
+    }
+
     // Parar os serviços de atualização antes de mexer no que é deles evita
     // apagar pela metade e confundir uma atualização em andamento.
     let mexe_com_update = matches!(id, "update_cache" | "delivery_optimization" | "update_logs");
@@ -324,7 +582,7 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
     let mut pulados = 0usize;
 
     for caminho in (categoria.paths)().iter().filter(|p| p.exists()) {
-        let (bytes, ignorados) = limpar_conteudo(caminho);
+        let (bytes, ignorados) = limpar_caminho(caminho);
         liberado += bytes;
         pulados += ignorados;
     }
@@ -347,6 +605,26 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
         freed_bytes: liberado,
         message,
     })
+}
+
+/// Libera um caminho: se for arquivo — como o `MEMORY.DMP` da categoria de
+/// despejos de memória —, apaga o arquivo em si; se for pasta, apaga só o
+/// conteúdo (ver `limpar_conteudo`).
+fn limpar_caminho(caminho: &std::path::Path) -> (u64, usize) {
+    let meta = match fs::metadata(caminho) {
+        Ok(meta) => meta,
+        Err(_) => return (0, 0),
+    };
+
+    if meta.is_file() {
+        let tamanho = meta.len();
+        return match fs::remove_file(caminho) {
+            Ok(()) => (tamanho, 0),
+            Err(_) => (0, 1),
+        };
+    }
+
+    limpar_conteudo(caminho)
 }
 
 /// Apaga o conteúdo de uma pasta, preservando a pasta em si.
@@ -438,7 +716,20 @@ mod tests {
         // Nenhuma categoria pode apontar para pasta de documentos do usuário.
         // Este teste é a barreira contra alguém acrescentar uma categoria que
         // apague algo que importa.
-        let permitidos = ["temp", "softwaredistribution", "wer", "downloader", "logs", "windows.old"];
+        let permitidos = [
+            "temp",
+            "softwaredistribution",
+            "wer",
+            "downloader",
+            "logs",
+            "windows.old",
+            "chrome",
+            "edge",
+            "firefox",
+            "memory.dmp",
+            "minidump",
+            "microsoft.windowsstore",
+        ];
 
         for c in CATEGORIES {
             for caminho in (c.paths)() {
@@ -472,6 +763,78 @@ mod tests {
             .sum();
 
         assert_eq!(relatorio.recoverable_bytes, soma_limpavel);
+    }
+
+    #[test]
+    fn o_winsxs_usa_a_estimativa_do_dism_e_nunca_o_tamanho_da_pasta() {
+        // O WINSXS MENTE SOBRE O TAMANHO, e o produto nao pode repetir a mentira.
+        //
+        // A pasta aparece com 11,5 GB na maquina do dono, mas usa hard links:
+        // boa parte daquilo sao os MESMOS arquivos de `C:\Windows`, contados de
+        // novo. O que o DISM libera de verdade costuma ser 1 a 5 GB. Mostrar
+        // 11,5 GB e prometer o que nao vai acontecer.
+        let saida = "\
+Versão: 10.0.26100.1
+
+Imagem : C:\\
+
+Tamanho do Repositório de Componentes Reportável ao Windows Explorer : 11.49 GB
+Tamanho Real do Repositório de Componentes : 8.21 GB
+Recuperável : 2.34 GB
+Limpeza do Repositório de Componentes Recomendada : Sim
+A operação foi concluída com êxito.";
+
+        let bytes = estimativa_do_winsxs(saida).expect("a linha Recuperavel existe nesta saida");
+        // 2,34 GB, com folga de arredondamento.
+        assert!(bytes > 2_400_000_000 && bytes < 2_600_000_000, "veio {}", bytes);
+    }
+
+    #[test]
+    fn o_achado_do_winsxs_usa_o_numero_do_dism_e_nao_o_tamanho_do_disco() {
+        // Regra do modulo: o achado NUNCA pode vir de `directory_size` da pasta
+        // WinSxS — so da estimativa do DISM. Este teste passa a saida do DISM
+        // ja pronta (sem rodar o comando de verdade) e confere que o `bytes`
+        // do achado bate exatamente com `estimativa_do_winsxs` para essa saida.
+        // Se alguem trocar a fonte por um `directory_size(...)`, o valor nao
+        // vai mais bater e este teste reprova.
+        let categoria = CATEGORIES.iter().find(|c| c.id == "winsxs").expect("categoria winsxs existe");
+        let saida = "Recuperável : 2.34 GB\n";
+
+        let achado = finding_do_winsxs_a_partir_da_saida(categoria, Some(saida));
+        let esperado = estimativa_do_winsxs(saida).expect("saida de teste tem a linha Recuperavel");
+
+        assert_eq!(achado.bytes, esperado);
+    }
+
+    #[test]
+    fn winsxs_sem_a_linha_de_recuperavel_vira_nao_sei_e_nao_zero() {
+        // "NAO CONSEGUI ESTIMAR" e diferente de "nao ha nada para recuperar". A
+        // primeira e honesta; a segunda seria o produto afirmando o que nao mediu.
+        assert_eq!(estimativa_do_winsxs("A operação falhou. Erro: 0x800f0954"), None);
+        assert_eq!(estimativa_do_winsxs(""), None);
+    }
+
+    #[test]
+    fn a_estimativa_entende_o_dism_em_ingles_tambem() {
+        // O Windows do cliente pode estar em ingles, e o DISM responde no idioma
+        // do sistema. Ler so o portugues faria a categoria sumir para esse
+        // cliente, sem explicacao.
+        let saida = "Reclaimable Packages : 12\nReclaimable : 2.34 GB\n";
+        assert!(estimativa_do_winsxs(saida).is_some(), "nao leu a saida em ingles");
+    }
+
+    #[test]
+    fn toda_categoria_nova_avisa_o_que_se_perde_quando_ha_o_que_perder() {
+        // O cache do navegador apagado desloga de nada, mas faz o primeiro
+        // carregamento de cada site ficar mais lento uma vez. O cliente precisa
+        // saber ANTES de clicar -- e nao descobrir depois achando que quebrou.
+        let relatorio = scan();
+
+        for id in ["browser_cache", "store_cache"] {
+            if let Some(f) = relatorio.findings.iter().find(|f| f.id == id) {
+                assert!(f.warning.is_some(), "{} nao diz o que se perde", id);
+            }
+        }
     }
 
     #[test]
