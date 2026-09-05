@@ -94,6 +94,21 @@ struct Category {
     paths: fn() -> Vec<PathBuf>,
 }
 
+/// Os ids das categorias que ESTE produto limpa de verdade.
+///
+/// Existe para o `foldermap.rs` poder conferir, em teste, que cada pasta em
+/// que o mapa oferece o botão "Limpar no liberador" chega aqui e encontra uma
+/// categoria com botão. Sem esta junção as duas telas divergem em silêncio:
+/// marcar uma categoria como `cleanable: false` aqui não reprovava nada lá, e
+/// o mapa seguia prometendo uma limpeza que a segunda tela não entrega.
+pub fn ids_que_o_liberador_limpa() -> Vec<&'static str> {
+    CATEGORIES
+        .iter()
+        .filter(|c| c.cleanable)
+        .map(|c| c.id)
+        .collect()
+}
+
 fn local_appdata() -> Option<PathBuf> {
     std::env::var("LOCALAPPDATA").ok().map(PathBuf::from)
 }

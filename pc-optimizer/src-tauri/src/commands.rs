@@ -3184,8 +3184,8 @@ mod tests {
     // A TELA DO MAPA E A TELA DO RESIZABLE BAR
     // ==================================================================
 
-    /// Extrai UMA função de tela do `main.ts`, transpila com o TypeScript do
-    /// próprio projeto e RODA no Node.
+    /// Extrai PEÇAS de tela do `main.ts`, transpila com o TypeScript do próprio
+    /// projeto e RODA no Node.
     ///
     /// Guarda que lê o fonte já foi burlada nesta branch: o revisor guardou a
     /// decisão errada numa variável intermediária, deixou o campo tipado
@@ -3193,8 +3193,19 @@ mod tests {
     /// inteiro na tela. Executando a função não há texto para enganar — o que
     /// se olha é o HTML que o cliente veria.
     ///
-    /// `chamadas` é o pedaço de JS que usa `render` e imprime JSON no stdout.
-    fn roda_a_tela(nome: &str, chamadas: &str) -> serde_json::Value {
+    /// `pecas` são as marcas de início de cada declaração a extrair, na ordem
+    /// em que devem ser coladas — `"function renderFolder("`, `"const
+    /// NA_TELA_DO_RBAR"`, `"async function analyzeRbar("`. Cada peça vai até a
+    /// primeira linha que começa em coluna 0 com `}` (inclusive), o que serve
+    /// tanto para função quanto para tabela. **A marca precisa incluir o
+    /// `async` quando ele existe**, senão o `await` do corpo fica órfão.
+    ///
+    /// `retorno` é a expressão JS que o laboratório devolve como `render`, e
+    /// `chamadas` é o pedaço de JS que a usa e imprime JSON no stdout. O
+    /// laboratório oferece dublês de `element`, `setStatus`, `text` e `invoke`,
+    /// mais um `registro` com o que cada um recebeu, e as variáveis `resposta`
+    /// e `erro` que dizem o que o `invoke` dublê devolve.
+    fn roda_a_tela(pecas: &[&str], retorno: &str, chamadas: &str) -> serde_json::Value {
         let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
         let main_ts = raiz.join("src").join("main.ts");
         let typescript = raiz.join("node_modules").join("typescript");
@@ -3205,7 +3216,7 @@ mod tests {
             typescript
         );
 
-        // O `(` faz parte da marca de propósito: sem ele, procurar
+        // O `(` faz parte da marca de função de propósito: sem ele, procurar
         // `function renderFolder` acharia antes o `renderFolderMap`, que vem
         // primeiro no arquivo, e o laboratório rodaria a função errada.
         let modelo = r#"
@@ -3213,30 +3224,55 @@ const fs = require("fs");
 const ts = require(process.argv[3]);
 
 const fonte = fs.readFileSync(process.argv[2], "utf8");
-const marca = "function __NOME__(";
-const depois = fonte.split(marca)[1];
-if (depois === undefined) throw new Error("__NOME__ nao existe no main.ts");
 
-const corpo = [];
-for (const linha of depois.split(/\r?\n/)) {
-  if (linha.startsWith("}")) break;
-  corpo.push(linha);
+function extrai(marca) {
+  const depois = fonte.split(marca)[1];
+  if (depois === undefined) throw new Error(marca + " nao existe no main.ts");
+  const corpo = [];
+  for (const linha of depois.split(/\r?\n/)) {
+    corpo.push(linha);
+    if (linha.startsWith("}")) return marca + corpo.join("\n") + "\n";
+  }
+  throw new Error(marca + " nao fecha em coluna 0");
 }
-const trecho = marca + corpo.join("\n") + "\n}\n";
+
+const trecho = __PECAS__.map(extrai).join("\n");
 const js = ts.transpileModule(trecho, { compilerOptions: { target: "ES2020" } }).outputText;
 
 const escapeHtml = (v) =>
   String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const render = new Function("escapeHtml", js + "\nreturn __NOME__;")(escapeHtml);
+
+// Dublês do DOM e do backend. `registro` é tudo que a tela tentou fazer.
+const registro = { status: [], html: null, texto: {}, botao: { disabled: false } };
+let resposta = null;
+let erro = null;
+const element = (id) => {
+  if (id === "analyze-rbar") return registro.botao;
+  return { set innerHTML(v) { registro.html = v; } };
+};
+const setStatus = (id, mensagem, tom) => registro.status.push({ id, mensagem, tom });
+const text = (id, valor) => { registro.texto[id] = valor; };
+const invoke = async () => { if (erro !== null) throw erro; return resposta; };
+
+const render = new Function(
+  "escapeHtml", "element", "setStatus", "text", "invoke",
+  js + "\nreturn (__RETORNO__);"
+)(escapeHtml, element, setStatus, text, invoke);
 
 //__CHAMADAS__
 "#;
 
+        let lista = serde_json::to_string(pecas).expect("as peças viram um array JS");
         let laboratorio = modelo
-            .replace("__NOME__", nome)
+            .replace("__PECAS__", &lista)
+            .replace("__RETORNO__", retorno)
             .replace("//__CHAMADAS__", chamadas);
 
-        let script = std::env::temp_dir().join(format!("otimiza_tela_{}.cjs", nome));
+        let apelido: String = retorno
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .collect();
+        let script = std::env::temp_dir().join(format!("otimiza_tela_{}.cjs", apelido));
         std::fs::write(&script, laboratorio).expect("escreve o laboratório no temporário");
 
         let saida = std::process::Command::new("node")
@@ -3250,7 +3286,7 @@ const render = new Function("escapeHtml", js + "\nreturn __NOME__;")(escapeHtml)
         assert!(
             saida.status.success(),
             "não deu para rodar `{}`: {}",
-            nome,
+            retorno,
             String::from_utf8_lossy(&saida.stderr)
         );
 
@@ -3302,6 +3338,7 @@ const render = new Function("escapeHtml", js + "\nreturn __NOME__;")(escapeHtml)
     #[test]
     fn a_tela_do_mapa_so_oferece_limpar_o_que_e_limpavel() {
         let telas = roda_a_tela(
+            &["function renderFolder("],
             "renderFolder",
             r#"
 const base = {
@@ -3317,6 +3354,7 @@ const base = {
 console.log(
   JSON.stringify({
     podeLimpar: render(Object.assign({}, base, { natureza: { tipo: "PodeLimpar" } })),
+    soOWindowsLimpa: render(Object.assign({}, base, { natureza: { tipo: "SoOWindowsLimpa" } })),
     seu: render(Object.assign({}, base, { natureza: { tipo: "Seu" } })),
     naoSei: render(Object.assign({}, base, { natureza: { tipo: "NaoSei" } })),
   })
@@ -3325,26 +3363,67 @@ console.log(
         );
 
         let pode_limpar = telas["podeLimpar"].as_str().expect("html do limpável");
+        let outro_lugar = telas["soOWindowsLimpa"]
+            .as_str()
+            .expect("html do que só o Windows limpa");
         let seu = telas["seu"].as_str().expect("html do arquivo do cliente");
         let nao_sei = telas["naoSei"].as_str().expect("html do ilegível");
 
-        // APAGAR JOGO OU DOWNLOAD DE QUEM PAGOU É O ÚNICO ERRO DESTE PRODUTO
-        // SEM DESFAZER, e o mapa mostra `Steam — 122 GB` bem ali.
+        // A REGRA É SOBRE A POSSIBILIDADE DE LIMPAR, E NÃO SOBRE A TAG
+        // `<button>`. Só `!contains("<button")` era burlável em uma linha: o
+        // revisor pôs `data-mapa-limpar="1"` no `<article>` inteiro e afrouxou
+        // o seletor do ouvinte para `closest("[data-mapa-limpar]")` — a linha
+        // `Steam — 122 GB` inteira virou clicável para limpeza, e os 598 testes
+        // passaram. A marca é o que o ouvinte procura, então é ela que precisa
+        // estar ausente.
+        for (nome, html) in [
+            ("do arquivo do cliente", seu),
+            ("da pasta que não deu para ler", nao_sei),
+            ("da pasta que só o Windows limpa", outro_lugar),
+        ] {
+            assert!(
+                !html.contains("<button"),
+                "a linha {} ganhou botão:\n{}",
+                nome,
+                html
+            );
+            assert!(
+                !html.contains("data-mapa-limpar"),
+                "a linha {} carrega a marca `data-mapa-limpar`, que é o que o \
+                 ouvinte do mapa procura — com ela no HTML a linha vira \
+                 clicável para limpeza, tenha ou não uma tag `<button>`:\n{}",
+                nome,
+                html
+            );
+        }
         assert!(
-            !seu.contains("<button"),
-            "a linha do arquivo do cliente ganhou botão:\n{}",
-            seu
-        );
-        assert!(
-            !nao_sei.contains("<button"),
-            "pasta que não deu para ler ganhou botão — oferecer limpar o que \
-             não foi lido é pior ainda:\n{}",
-            nao_sei
-        );
-        assert!(
-            pode_limpar.contains("<button"),
+            pode_limpar.contains("<button") && pode_limpar.contains("data-mapa-limpar"),
             "a pasta limpável perdeu o botão:\n{}",
             pode_limpar
+        );
+
+        // O RÓTULO É UMA PROMESSA SOBRE A OUTRA TELA. `Windows.old` e
+        // `Windows\servicing\LogFiles` chegam aqui como `SoOWindowsLimpa`
+        // porque o liberador não limpa nem uma nem outra — a primeira tem
+        // categoria `cleanable: false` de propósito, a segunda não tem
+        // categoria nenhuma. Oferecer "Limpar no liberador" mandava o cliente
+        // esperar uma varredura inteira para encontrar uma categoria sem botão,
+        // ou tela nenhuma sobre a pasta que ele clicou.
+        assert_ne!(
+            outro_lugar, pode_limpar,
+            "a pasta que o liberador não limpa sai igual à que ele limpa"
+        );
+        assert!(
+            outro_lugar.contains("Limpeza de Disco"),
+            "a linha que perdeu o botão precisa dizer ONDE a limpeza acontece, \
+             senão o cliente só vê a recusa:\n{}",
+            outro_lugar
+        );
+        assert!(
+            !outro_lugar.contains("seu arquivo"),
+            "sobra do sistema não é arquivo do cliente — esconderia 24 GB atrás \
+             do rótulo errado:\n{}",
+            outro_lugar
         );
 
         // E `NaoSei` não pode parecer o caso resolvido: pasta ilegível não é
@@ -3375,6 +3454,7 @@ console.log(
     #[test]
     fn a_tela_do_rbar_separa_os_quatro_estados() {
         let telas = roda_a_tela(
+            &["const NA_TELA_DO_RBAR", "function renderRbar("],
             "renderRbar",
             r#"
 const base = { modelo: "NVIDIA GeForce RTX 3060", nota: "nota do backend" };
@@ -3436,6 +3516,124 @@ console.log(
             sem_suporte.contains("não tem"),
             "a placa sem o recurso precisa dizer isso:\n{}",
             sem_suporte
+        );
+    }
+
+    /// A FAIXA DE STATUS É O TEXTO GRANDE, o primeiro que o cliente lê depois
+    /// de clicar Analisar — e ela não estava provada.
+    ///
+    /// `renderRbar` tinha sete mutações mortas. `analyzeRbar` não tinha
+    /// nenhuma: ele decidia o tom da faixa por uma SEGUNDA tabela, separada da
+    /// que o card usa. Trocar `NaoSei` dessa segunda tabela para "ok" passava
+    /// pelos 598 testes e entregava ao cliente de placa AMD a frase "não
+    /// consegui verificar o Resizable BAR nesta máquina: ainda não cobrimos
+    /// placas AMD" pintada de VERDE DE ASSUNTO RESOLVIDO.
+    ///
+    /// Este teste roda o `analyzeRbar` de verdade, com dublês de DOM e de
+    /// backend, e olha o tom que chegou ao `setStatus` — que é exatamente a cor
+    /// que o cliente veria.
+    #[test]
+    fn a_faixa_de_status_do_rbar_nao_pinta_de_verde_o_que_ninguem_mediu() {
+        let faixas = roda_a_tela(
+            &[
+                "const NA_TELA_DO_RBAR",
+                "function tomDoRbar(",
+                "function renderRbar(",
+                "async function analyzeRbar(",
+            ],
+            "analyzeRbar",
+            r#"
+const base = { modelo: "AMD Radeon RX 6600", nota: "nota do backend" };
+
+async function tom(estado) {
+  registro.status.length = 0;
+  resposta = Object.assign({}, base, { estado: estado });
+  await render();
+  // A faixa recebe duas mensagens: "Lendo a placa de vídeo…" no começo e o
+  // veredito no fim. O que o cliente fica olhando é a última.
+  const ultima = registro.status[registro.status.length - 1];
+  return { tom: ultima.tom, mensagem: ultima.mensagem, card: registro.html };
+}
+
+(async () => {
+  console.log(
+    JSON.stringify({
+      ligado: await tom("Ligado"),
+      desligadoESuportado: await tom("DesligadoESuportado"),
+      desligadoSemSuporte: await tom("DesligadoSemSuporte"),
+      naoSei: await tom("NaoSei"),
+    })
+  );
+})();
+"#,
+        );
+
+        let tom_de = |chave: &str| -> String {
+            faixas[chave]["tom"]
+                .as_str()
+                .unwrap_or_else(|| panic!("a faixa de `{}` não recebeu tom", chave))
+                .to_string()
+        };
+
+        // A TERCEIRA REGRA, agora do lado da faixa: não verificado não vira
+        // "está tudo bem". Esta é a linha que o revisor mutou impunemente.
+        assert_ne!(
+            tom_de("naoSei"),
+            "ok",
+            "a faixa de status pintou de verde uma placa que ninguém conseguiu \
+             verificar — o cliente lê \"não consegui verificar\" em cor de \
+             assunto resolvido"
+        );
+
+        // E o que de fato pede ação também não pode sair verde.
+        assert_ne!(
+            tom_de("desligadoESuportado"),
+            "ok",
+            "a faixa deu por resolvido um rBAR desligado numa placa que aceita"
+        );
+
+        // O verde continua existindo para quem merece, senão o teste acima
+        // passaria com a faixa sempre amarela.
+        assert_eq!(
+            tom_de("ligado"),
+            "ok",
+            "rBAR ligado é assunto resolvido e a faixa precisa dizer isso"
+        );
+        assert_eq!(
+            tom_de("desligadoSemSuporte"),
+            "ok",
+            "esta placa não tem o recurso: não há nada pendente para o cliente"
+        );
+
+        // A FAIXA E O CARD SAEM DA MESMA TABELA. Duas tabelas para a mesma
+        // pergunta é uma tabela a mais para divergir em silêncio — foi
+        // exatamente assim que o defeito nasceu. Aqui a coerência é conferida
+        // par a par, e não por leitura de fonte.
+        for chave in [
+            "ligado",
+            "desligadoESuportado",
+            "desligadoSemSuporte",
+            "naoSei",
+        ] {
+            let card_verde = faixas[chave]["card"]
+                .as_str()
+                .unwrap_or_else(|| panic!("`{}` não renderizou card", chave))
+                .contains(r#"data-severity="Ok""#);
+            assert_eq!(
+                card_verde,
+                tom_de(chave) == "ok",
+                "em `{}` o card e a faixa de status discordam de cor — quem olha \
+                 só a cor está olhando a faixa",
+                chave
+            );
+        }
+
+        // E a faixa mostra a `nota` do backend, que é o texto escrito para o
+        // cliente ler — não uma frase inventada aqui.
+        assert_eq!(
+            faixas["naoSei"]["mensagem"].as_str(),
+            Some("nota do backend"),
+            "a faixa parou de mostrar a nota que o backend escreveu"
         );
     }
 }

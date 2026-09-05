@@ -3185,7 +3185,11 @@ function renderTask(task: ScheduledTask): string {
 /// CAMPO TIPADO, E NÃO FRASE. A tela nunca olha a explicação para decidir cor
 /// ou botão — este projeto reprova o build quando ela faz isso, e a guarda
 /// existe porque o mesmo defeito já voltou três vezes.
-type Natureza = { tipo: "PodeLimpar" } | { tipo: "Seu" } | { tipo: "NaoSei" };
+type Natureza =
+  | { tipo: "PodeLimpar" }
+  | { tipo: "SoOWindowsLimpa" }
+  | { tipo: "Seu" }
+  | { tipo: "NaoSei" };
 
 interface FolderEntry {
   name: string;
@@ -3287,19 +3291,39 @@ function renderFolder(folder: FolderEntry, indice = 0): string {
   const natureza = folder.natureza.tipo;
   const ROTULO: Record<Natureza["tipo"], string> = {
     PodeLimpar: "dá para limpar",
+    SoOWindowsLimpa: "só o Windows limpa",
     Seu: "seu arquivo",
     NaoSei: "não consegui ler",
   };
 
-  // A LINHA `Seu` NÃO GANHA BOTÃO. Apagar o jogo ou o download de quem pagou
-  // é o único erro deste produto sem desfazer, e é exatamente aqui que o
-  // mapa mostra `Steam — 122 GB`: o produto informa o caminho e o cliente
-  // decide. `NaoSei` também fica sem botão, por motivo ainda mais direto —
-  // oferecer limpeza do que não foi possível nem ler.
+  // O BOTÃO SÓ APARECE QUANDO ELE LEVA A ALGUM LUGAR QUE AGE.
+  //
+  // `PodeLimpar` é a única natureza cujo caminho casa com uma categoria
+  // `cleanable: true` do liberador — o `foldermap.rs` guarda o destino junto
+  // com o prefixo e o teste
+  // `todo_prefixo_com_botao_tem_categoria_que_limpa_de_verdade` confere a
+  // junção. `SoOWindowsLimpa` perdeu o botão de propósito: o cliente clicava
+  // em `Windows.old — 24 GB`, esperava a varredura inteira e chegava numa
+  // categoria sem botão nenhum; ou, pior, em `Windows\servicing\LogFiles`,
+  // para uma tela onde a pasta clicada não aparecia. Prometer aqui e negar lá
+  // custa mais confiança do que não prometer.
+  //
+  // `Seu` não ganha botão porque apagar o jogo ou o download de quem pagou é o
+  // único erro deste produto sem desfazer, e é exatamente aqui que o mapa
+  // mostra `Steam — 122 GB`: o produto informa o caminho e o cliente decide.
+  // `NaoSei` fica sem botão por motivo ainda mais direto — oferecer limpeza do
+  // que não foi possível nem ler.
   const acao =
     natureza === "PodeLimpar"
       ? `<button class="btn btn-ghost" data-mapa-limpar="1">Limpar no liberador</button>`
       : `<span class="state-label">${ROTULO[natureza]}</span>`;
+
+  // E o rótulo curto não basta: "só o Windows limpa" sem o resto manda o
+  // cliente procurar no lugar errado. A frase diz ONDE, já que aqui não é.
+  const outroLugar =
+    natureza === "SoOWindowsLimpa"
+      ? `<p class="finding-advice">Esta pasta é do sistema e o nosso liberador não mexe nela: a remoção comum falha no meio e deixa lixo pela metade. Quem apaga isto é a Limpeza de Disco do Windows (procure por "Limpeza de Disco" no menu Iniciar).</p>`
+      : "";
 
   // Pasta ilegível NÃO É PASTA VAZIA, e o número dela não é o total. Sem esta
   // linha o cliente somaria o mapa e concluiria que o espaço sumiu no nada.
@@ -3320,6 +3344,7 @@ function renderFolder(folder: FolderEntry, indice = 0): string {
         folder.partial ? " · não terminou" : ""
       }</span>
       ${explicacao}
+      ${outroLugar}
       ${semLeitura}
     </article>
   `;
@@ -3339,17 +3364,47 @@ interface RelatorioDoRbar {
   nota: string;
 }
 
-/// O tom da faixa de status. Sai do `estado`, como tudo nesta tela.
+/// A TABELA DE DECISÃO DO RESIZABLE BAR — uma só, e não duas.
 ///
-/// `NaoSei` fica em "warn" e não em "ok": não ter conseguido verificar é
-/// assunto pendente, e pintá-lo de verde afirmaria ao cliente que a placa
-/// está em ordem — coisa que ninguém mediu.
-const TOM_DO_RBAR: Record<EstadoDoRbar, "ok" | "warn"> = {
-  Ligado: "ok",
-  DesligadoESuportado: "warn",
-  DesligadoSemSuporte: "ok",
-  NaoSei: "warn",
+/// SÃO DUAS PERGUNTAS — "está ligado?" e "esta placa suporta?" — e por isso
+/// quatro estados, não dois. A tela lê o campo; a `nota` é para o cliente ler,
+/// nunca para esta tela comparar.
+///
+/// Ela mora aqui fora, no módulo, porque ANTES ERAM DUAS: esta, dentro do
+/// `renderRbar`, decidia o card; e uma segunda, `TOM_DO_RBAR`, decidia a faixa
+/// de status logo abaixo do botão — o texto grande, o primeiro que o cliente
+/// lê. Só o card estava provado. Trocar o `NaoSei` da segunda tabela para "ok"
+/// passava por 598 testes e entregava ao cliente de placa AMD a frase "não
+/// consegui verificar o Resizable BAR" em VERDE DE ASSUNTO RESOLVIDO. Duas
+/// tabelas para a mesma pergunta é uma tabela a mais para divergir em silêncio.
+const NA_TELA_DO_RBAR: Record<
+  EstadoDoRbar,
+  { rotulo: string; severidade: "Ok" | "Important" }
+> = {
+  Ligado: { rotulo: "ligado", severidade: "Ok" },
+  // O único que pede ação: existe opção na BIOS e ela rende quadros.
+  DesligadoESuportado: {
+    rotulo: "desligado, e a sua placa aceita",
+    severidade: "Important",
+  },
+  // Nada a fazer, e é verdade — mas a frase precisa dizer POR QUE, senão o
+  // cliente vai vasculhar a BIOS atrás de uma opção que não existe para ele.
+  DesligadoSemSuporte: {
+    rotulo: "esta placa não tem",
+    severidade: "Ok",
+  },
+  // NÃO VERIFICADO NÃO É "ESTÁ TUDO BEM": fica fora do verde de propósito.
+  NaoSei: { rotulo: "não consegui verificar", severidade: "Important" },
 };
+
+/// O tom da faixa de status, DERIVADO da mesma tabela do card.
+///
+/// Não é uma segunda decisão: é a primeira, traduzida do vocabulário do card
+/// (`data-severity`) para o da faixa. Card verde e faixa verde não podem se
+/// separar, porque quem olha só a cor está lendo a faixa.
+function tomDoRbar(estado: EstadoDoRbar): "ok" | "warn" {
+  return NA_TELA_DO_RBAR[estado].severidade === "Ok" ? "ok" : "warn";
+}
 
 async function analyzeRbar() {
   const button = element<HTMLButtonElement>("analyze-rbar");
@@ -3360,7 +3415,7 @@ async function analyzeRbar() {
     const relatorio = await invoke<RelatorioDoRbar>("analyze_rbar");
     text("rbar-tag", relatorio.modelo || "placa não identificada");
     element("rbar-result").innerHTML = renderRbar(relatorio);
-    setStatus("rbar-status", relatorio.nota, TOM_DO_RBAR[relatorio.estado]);
+    setStatus("rbar-status", relatorio.nota, tomDoRbar(relatorio.estado));
   } catch (error) {
     setStatus("rbar-status", String(error), "error");
   } finally {
@@ -3369,27 +3424,8 @@ async function analyzeRbar() {
 }
 
 function renderRbar(relatorio: RelatorioDoRbar): string {
-  // SÃO DUAS PERGUNTAS — "está ligado?" e "esta placa suporta?" — e por isso
-  // quatro estados, não dois. A tela lê o campo; a `nota` é para o cliente
-  // ler, nunca para esta função comparar.
-  const NA_TELA: Record<EstadoDoRbar, { rotulo: string; severidade: string }> = {
-    Ligado: { rotulo: "ligado", severidade: "Ok" },
-    // O único que pede ação: existe opção na BIOS e ela rende quadros.
-    DesligadoESuportado: {
-      rotulo: "desligado, e a sua placa aceita",
-      severidade: "Important",
-    },
-    // Nada a fazer, e é verdade — mas a frase precisa dizer POR QUE, senão o
-    // cliente vai vasculhar a BIOS atrás de uma opção que não existe para ele.
-    DesligadoSemSuporte: {
-      rotulo: "esta placa não tem",
-      severidade: "Ok",
-    },
-    // NÃO VERIFICADO NÃO É "ESTÁ TUDO BEM": fica fora do verde de propósito.
-    NaoSei: { rotulo: "não consegui verificar", severidade: "Important" },
-  };
-
-  const { rotulo, severidade } = NA_TELA[relatorio.estado];
+  // A MESMA tabela que decide o tom da faixa de status. Ver `NA_TELA_DO_RBAR`.
+  const { rotulo, severidade } = NA_TELA_DO_RBAR[relatorio.estado];
   const modelo = relatorio.modelo
     ? `<span class="finding-size">${escapeHtml(relatorio.modelo)}</span>`
     : "";

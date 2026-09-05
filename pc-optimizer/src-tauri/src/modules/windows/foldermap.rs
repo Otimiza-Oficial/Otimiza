@@ -85,14 +85,29 @@ pub struct FolderEntry {
 /// decide comparando prosa vinda do backend — já aconteceu três vezes, e a
 /// guarda em `commands.rs` existe por causa disso.
 ///
-/// E são TRÊS estados, não dois. "Não consegui ler" precisa ser distinto de
+/// E são QUATRO estados, não dois. "Não consegui ler" precisa ser distinto de
 /// "não há nada aqui": uma pasta sem permissão contada como zero faria o total
-/// mentir, e o cliente concluiria que o espaço sumiu no nada.
+/// mentir, e o cliente concluiria que o espaço sumiu no nada. E "limpável"
+/// precisa ser distinto de "limpável AQUI" — ver `SoOWindowsLimpa`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "tipo")]
 pub enum Natureza {
-    /// Categoria que o `diskspace.rs` sabe limpar. Ganha botão na tela.
+    /// Categoria que o liberador de espaço deste produto sabe limpar, com
+    /// `cleanable: true` no `diskspace.rs`. É a ÚNICA que ganha botão na tela,
+    /// porque é a única em que o botão leva a algum lugar que age.
     PodeLimpar,
+    /// Sobra do sistema que este produto NÃO limpa: ou a categoria existe no
+    /// liberador com `cleanable: false` de propósito (`Windows.old`, que é do
+    /// TrustedInstaller), ou não existe categoria nenhuma
+    /// (`Windows\servicing\LogFiles`).
+    ///
+    /// Estado separado porque o rótulo da tela promete um destino. Enquanto
+    /// isto era `PodeLimpar`, o mapa oferecia "Limpar no liberador" para
+    /// `Windows.old — 24 GB`; o cliente clicava, esperava a varredura, e
+    /// chegava numa categoria sem botão — ou, no caso do `servicing\LogFiles`,
+    /// numa tela onde a pasta que ele clicou não aparecia de jeito nenhum.
+    /// Prometer na primeira tela e negar na segunda é pior que não prometer.
+    SoOWindowsLimpa,
     /// Arquivo do cliente. O produto MOSTRA o caminho e não faz mais nada.
     Seu,
     /// Não deu para ler o próprio nível 1 — falha de permissão nesta pasta
@@ -102,19 +117,65 @@ pub enum Natureza {
     NaoSei,
 }
 
-/// Prefixos que o `diskspace.rs` já sabe limpar.
+/// Um prefixo limpável E PARA ONDE O BOTÃO DA TELA LEVARIA.
 ///
-/// A lista mora aqui em minúsculas porque caminho no Windows não diferencia
-/// maiúscula de minúscula, e comparar sem normalizar deixaria `C:\WINDOWS\TEMP`
-/// passar como pasta do cliente.
-const LIMPAVEIS: &[&str] = &[
-    r"\windows\temp",
-    r"\appdata\local\temp",
-    r"\windows\softwaredistribution\download",
-    r"\windows.old",
-    r"\programdata\microsoft\windows\wer",
-    r"\windows\servicing\logfiles",
-    r"\windows\logs",
+/// A tabela guarda o destino junto com o prefixo porque o rótulo do mapa é uma
+/// promessa sobre a outra tela. Guardar só o prefixo — como era antes — deixava
+/// as duas listas divergirem em silêncio: bastava alguém marcar uma categoria
+/// como `cleanable: false` no `diskspace.rs` para o mapa continuar oferecendo
+/// limpeza que não acontece, sem nada reprovando.
+struct Destino {
+    /// Em minúsculas porque caminho no Windows não diferencia maiúscula de
+    /// minúscula, e comparar sem normalizar deixaria `C:\WINDOWS\TEMP` passar
+    /// como pasta do cliente.
+    prefixo: &'static str,
+    /// `Some(id)` = categoria do `diskspace.rs` que de fato limpa isto, e o
+    /// teste `todo_prefixo_com_botao_tem_categoria_que_limpa_de_verdade`
+    /// confere que o `id` existe lá e está com `cleanable: true`.
+    ///
+    /// `None` = a pasta é sobra de sistema, mas quem limpa não somos nós.
+    categoria: Option<&'static str>,
+}
+
+const LIMPAVEIS: &[Destino] = &[
+    Destino {
+        prefixo: r"\windows\temp",
+        categoria: Some("temp"),
+    },
+    Destino {
+        prefixo: r"\appdata\local\temp",
+        categoria: Some("temp"),
+    },
+    Destino {
+        prefixo: r"\windows\softwaredistribution\download",
+        categoria: Some("update_cache"),
+    },
+    Destino {
+        prefixo: r"\programdata\microsoft\windows\wer",
+        categoria: Some("error_reports"),
+    },
+    // `update_logs` aponta para `Windows\Logs\CBS`, que fica DENTRO desta
+    // pasta: o botão leva a uma limpeza que de fato libera espaço aqui.
+    Destino {
+        prefixo: r"\windows\logs",
+        categoria: Some("update_logs"),
+    },
+    // A categoria `windows_old` EXISTE no liberador, e é `cleanable: false` de
+    // propósito: a pasta é do TrustedInstaller e a remoção comum falha no meio.
+    // Lá ela aparece com um aviso apontando a Limpeza de Disco do Windows —
+    // que é a informação certa, mas não é o botão que o mapa prometia.
+    Destino {
+        prefixo: r"\windows.old",
+        categoria: None,
+    },
+    // E aqui não há categoria NENHUMA: a única de log é `update_logs`, que
+    // cobre só `Windows\Logs\CBS`. Era o beco sem saída de verdade — o cliente
+    // clicava, esperava o scan, e não havia uma linha sequer sobre a pasta que
+    // ele tinha clicado.
+    Destino {
+        prefixo: r"\windows\servicing\logfiles",
+        categoria: None,
+    },
 ];
 
 /// Compara caminho por COMPONENTE inteiro, e não por substring.
@@ -152,8 +213,17 @@ pub fn classificar(caminho: &str, leu: bool) -> Natureza {
 
     let minusculo = caminho.to_lowercase().replace('/', "\\");
 
-    if LIMPAVEIS.iter().any(|p| contem_como_componente(&minusculo, p)) {
-        return Natureza::PodeLimpar;
+    // O ESTADO SAI DO DESTINO, e não da simples presença na lista. Uma pasta
+    // que este produto não limpa não pode receber o mesmo rótulo de uma que
+    // ele limpa, porque o rótulo vira botão na tela.
+    if let Some(destino) = LIMPAVEIS
+        .iter()
+        .find(|d| contem_como_componente(&minusculo, d.prefixo))
+    {
+        return match destino.categoria {
+            Some(_) => Natureza::PodeLimpar,
+            None => Natureza::SoOWindowsLimpa,
+        };
     }
 
     Natureza::Seu
@@ -646,6 +716,10 @@ mod tests {
     fn a_natureza_chega_na_tela_como_objeto_com_campo_tipo() {
         for (natureza, esperado) in [
             (Natureza::PodeLimpar, r#"{"tipo":"PodeLimpar"}"#),
+            (
+                Natureza::SoOWindowsLimpa,
+                r#"{"tipo":"SoOWindowsLimpa"}"#,
+            ),
             (Natureza::Seu, r#"{"tipo":"Seu"}"#),
             (Natureza::NaoSei, r#"{"tipo":"NaoSei"}"#),
         ] {
@@ -801,6 +875,68 @@ mod tests {
         );
     }
 
+    /// O RÓTULO É UMA PROMESSA SOBRE A OUTRA TELA, e esta é a costura que
+    /// impede as duas de divergirem em silêncio.
+    ///
+    /// Só `PodeLimpar` ganha o botão "Limpar no liberador". Se o `id` que a
+    /// tabela guarda não existir no `diskspace.rs`, ou existir com
+    /// `cleanable: false`, o cliente clica, espera a varredura inteira e chega
+    /// numa categoria sem botão — ou numa tela onde a pasta que ele clicou não
+    /// aparece de jeito nenhum. Prometer na primeira tela e negar na segunda
+    /// era o defeito; este teste é o que faz o defeito voltar como build
+    /// vermelho em vez de como reclamação de cliente.
+    #[test]
+    fn todo_prefixo_com_botao_tem_categoria_que_limpa_de_verdade() {
+        let limpa_de_verdade = super::super::diskspace::ids_que_o_liberador_limpa();
+
+        for destino in LIMPAVEIS {
+            let Some(id) = destino.categoria else {
+                continue;
+            };
+
+            assert!(
+                limpa_de_verdade.contains(&id),
+                "o mapa oferece o botão para `{}` apontando para a categoria `{}`, \
+                 mas o liberador não limpa essa categoria (ela não existe lá, ou está \
+                 com `cleanable: false`). Ou o destino muda, ou o prefixo passa a ser \
+                 `categoria: None` e a linha perde o botão.",
+                destino.prefixo,
+                id
+            );
+        }
+    }
+
+    /// O outro lado da mesma costura: o que o produto NÃO limpa não pode voltar
+    /// a se chamar `PodeLimpar` por descuido.
+    #[test]
+    fn o_que_o_produto_nao_limpa_nao_promete_botao() {
+        // `Windows.old` é do TrustedInstaller e a categoria correspondente é
+        // `cleanable: false` DE PROPÓSITO.
+        assert_eq!(
+            classificar(r"C:\Windows.old", true),
+            Natureza::SoOWindowsLimpa,
+            "Windows.old voltou a prometer o botão que o liberador não tem"
+        );
+
+        // E para esta não existe categoria nenhuma: era o beco sem saída.
+        assert_eq!(
+            classificar(r"C:\Windows\servicing\LogFiles", true),
+            Natureza::SoOWindowsLimpa,
+            "servicing\\LogFiles voltou a prometer um destino que não existe"
+        );
+
+        // Mas continua sendo sobra de sistema, e não pasta do cliente: chamar
+        // isto de `Seu` esconderia 24 GB atrás de "seu arquivo".
+        for caminho in [r"C:\Windows.old", r"C:\Windows\servicing\LogFiles"] {
+            assert_ne!(
+                classificar(caminho, true),
+                Natureza::Seu,
+                "{} não é arquivo do cliente",
+                caminho
+            );
+        }
+    }
+
     #[test]
     fn na_duvida_e_do_cliente_e_nao_limpavel() {
         // CANARIO. Uma pasta que ninguem reconhece nao pode cair em `PodeLimpar`
@@ -815,7 +951,10 @@ mod tests {
         // que o cliente pode ter criado nos proprios Downloads sem nenhuma
         // relacao com o backup de upgrade do Windows. Oferecer apagar isso e
         // o unico erro deste produto sem desfazer.
-        assert_eq!(classificar(r"C:\Windows.old", true), Natureza::PodeLimpar);
+        assert_eq!(
+            classificar(r"C:\Windows.old", true),
+            Natureza::SoOWindowsLimpa
+        );
         assert_eq!(
             classificar(r"C:\Users\Fulano\Downloads\windows.old-backup", true),
             Natureza::Seu,
