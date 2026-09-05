@@ -34,6 +34,7 @@ pub mod jogos;
 pub mod health;
 pub mod memory;
 pub mod network;
+pub mod nvdriver;
 pub mod power;
 pub mod pressao;
 pub mod processes;
@@ -1324,6 +1325,20 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 }
             }
 
+            // O ÚNICO RAMO QUE VOLTA POR UMA CHAMADA DO FABRICANTE.
+            //
+            // Todos os outros aqui reescrevem um valor que o Otimiza anotou.
+            // Este pergunta à própria NVIDIA qual era o padrão de fábrica e
+            // volta para ele — a diferença entre "reversível de verdade" e
+            // "reversível se a gente anotar direitinho", que é o que decidiu
+            // este pilar. O caso em que o cliente já tinha uma escolha própria
+            // no ajuste continua voltando escrito, e quem separa os dois é o
+            // `nvdriver::desfazer`.
+            ChangeRecord::DriverNvidia {
+                opcao,
+                valor_anterior,
+            } => nvdriver::desfazer(opcao, valor_anterior),
+
             // O arquivo do jogo volta INTEIRO ao que era.
             //
             // Sem `anterior`, o arquivo não existia antes de o Otimiza mexer, e
@@ -1360,6 +1375,37 @@ mod tests {
     use crate::modules::changelog::PreviousValue;
 
     const STARTUP_DELAY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
+
+    /// O ramo do driver NVIDIA existe e chama o `nvdriver` DE VERDADE.
+    ///
+    /// NENHUM TESTE DESTA SUÍTE PODE ESCREVER NO DRIVER: a máquina que roda os
+    /// testes é a do dono, e a esteira roda em runner sem placa NVIDIA. Então a
+    /// prova é feita com um ajuste que não existe no catálogo — o `nvdriver`
+    /// recusa pelo nome antes de abrir qualquer sessão da NVAPI, e o erro sobe
+    /// por este ramo.
+    ///
+    /// O QUE ISSO PEGA: um ramo que devolvesse `Ok(())` sem chamar nada — o
+    /// "desfazer" que não desfaz, o pior defeito possível neste produto — e um
+    /// ramo ligado no módulo errado. O que não pega é o desfazer com um ajuste
+    /// de verdade: esse é o Passo 5 do plano, na máquina, com o Painel de
+    /// Controle da NVIDIA aberto.
+    #[test]
+    fn desfazer_um_ajuste_de_driver_inexistente_reclama_em_vez_de_fingir() {
+        let registro = ChangeRecord::DriverNvidia {
+            opcao: "ajuste-que-nao-existe".to_string(),
+            valor_anterior: nvdriver::ANTERIOR_PADRAO.to_string(),
+        };
+
+        let erros = revert_changes(&[registro])
+            .expect_err("um ajuste desconhecido não pode passar por desfeito");
+
+        assert_eq!(erros.len(), 1);
+        assert!(
+            erros[0].contains("ajuste-que-nao-existe"),
+            "o erro precisa dizer QUAL ajuste: {}",
+            erros[0]
+        );
+    }
 
     /// Desfazer a configuração de um jogo tem que devolver o arquivo BYTE A BYTE.
     ///

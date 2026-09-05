@@ -78,6 +78,12 @@ windows-sys = { version = "0.59", features = [
     # duas funções vivem no namespace Shell dos metadados do Win32, apesar
     # de a API em si não ter nada de shell.
     "Win32_UI_Shell",
+    # `LoadLibraryW`/`GetProcAddress`. A `nvapi64.dll`, que é por onde se
+    # ajusta o driver da NVIDIA, só existe em máquina com placa NVIDIA — e
+    # ligar contra ela em tempo de compilação faria o Otimiza se recusar a
+    # abrir em todas as outras. Por isso ela é carregada em tempo de execução,
+    # e o fracasso da carga vira um estado do produto em vez de um erro.
+    "Win32_System_LibraryLoader",
 ] }
 
 

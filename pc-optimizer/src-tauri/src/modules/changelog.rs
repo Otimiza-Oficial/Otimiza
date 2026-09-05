@@ -109,6 +109,26 @@ pub enum ChangeRecord {
         /// Nome do jogo, só para a descrição que o cliente lê.
         jogo: String,
     },
+
+    /// Um ajuste do driver da NVIDIA, aplicado pela NVAPI.
+    ///
+    /// POR QUE ESTA VARIANTE GUARDA TEXTO, E NÃO UM NÚMERO
+    ///
+    /// O valor anterior de um ajuste da NVIDIA tem DOIS estados que precisam
+    /// caber no mesmo campo: um número que o cliente já tinha escolhido, ou "o
+    /// padrão de fábrica do driver". Os dois são reversíveis, mas por caminhos
+    /// diferentes — o número volta escrito, o padrão volta pela chamada de
+    /// restauração da própria NVAPI, que é o que permitiu este pilar existir.
+    ///
+    /// A tradução dos dois sentidos mora no `nvdriver.rs`, junto da chamada que
+    /// os usa; aqui fica só o texto que atravessa o disco.
+    DriverNvidia {
+        /// O identificador do ajuste no catálogo do `nvdriver.rs`.
+        opcao: String,
+        /// O valor que existia antes, ou `nvdriver::ANTERIOR_PADRAO` quando o
+        /// que existia antes era o padrão de fábrica.
+        valor_anterior: String,
+    },
 }
 
 impl ChangeRecord {
@@ -149,6 +169,18 @@ impl ChangeRecord {
                 let keys: Vec<&str> = removed.iter().map(|(key, _)| key.as_str()).collect();
                 format!("boot · limites removidos: {}", keys.join(", "))
             }
+            ChangeRecord::DriverNvidia {
+                opcao,
+                valor_anterior,
+            } => format!(
+                "driver NVIDIA · {} (antes: {})",
+                opcao,
+                if valor_anterior == crate::modules::windows::nvdriver::ANTERIOR_PADRAO {
+                    "o padrão do driver".to_string()
+                } else {
+                    valor_anterior.clone()
+                }
+            ),
             ChangeRecord::GameConfig { jogo, anterior, .. } => format!(
                 "{} · configuração alterada ({})",
                 jogo,
