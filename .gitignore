@@ -36,3 +36,6 @@ npm-debug.log*
 *.pfx
 *.p12
 *.snk
+
+# Rascunho da execucao por subagentes. Nao e codigo do produto.
+.superpowers/
