@@ -179,6 +179,10 @@ interface SpaceFinding {
   cleanable: boolean;
   requires_admin: boolean;
   warning: string | null;
+  // Campo TIPADO, vindo do backend: diz se `bytes` foi medido ou se não deu
+  // para medir. Sem ele, "não consegui estimar" chega aqui como 0 e a tela
+  // pinta um selo verde "vazio" em cima do que ninguém mediu.
+  medida: { tipo: "Medido" } | { tipo: "NaoConsegui" };
 }
 
 interface DiskReport {
@@ -3417,14 +3421,26 @@ function renderSpaceFinding(item: SpaceFinding): string {
     ? `<p class="finding-advice">${escapeHtml(item.warning)}</p>`
     : "";
 
+  // ZERO MEDIDO E ZERO POR FALTA DE MEDIÇÃO SÃO COISAS DIFERENTES, e quem
+  // decide qual é o backend (`Medida`), não esta tela olhando `bytes === 0`.
+  // O caso comum do `NaoConsegui` é o WinSxS sem administrador: dizer "vazio"
+  // ali seria afirmar que não há nada a recuperar, logo abaixo do texto que
+  // explica que não foi possível estimar.
+  const naoMedido = item.medida.tipo === "NaoConsegui";
+  const vazio = !naoMedido && item.bytes === 0;
+
   // Categoria vazia não ganha botão: oferecer limpeza de zero byte é encher a
   // tela de ação inútil.
+  const rotulo = naoMedido ? "não medido" : vazio ? "vazio" : "pela Limpeza de Disco";
   const acao = item.cleanable
     ? `<button class="btn btn-ghost" data-space="${item.id}">Limpar</button>`
-    : `<span class="state-label">${item.bytes === 0 ? "vazio" : "pela Limpeza de Disco"}</span>`;
+    : `<span class="state-label">${rotulo}</span>`;
 
+  // Só o zero medido é "Ok" (verde). O que não foi medido fica em "Important",
+  // como o que tem espaço a recuperar: é assunto pendente, não assunto
+  // resolvido.
   return `
-    <article class="finding" data-severity="${item.bytes === 0 ? "Ok" : "Important"}">
+    <article class="finding" data-severity="${vazio ? "Ok" : "Important"}">
       <div class="finding-top">
         <h3>${escapeHtml(item.name)}</h3>
         <span class="finding-size">${escapeHtml(item.formatted)}</span>

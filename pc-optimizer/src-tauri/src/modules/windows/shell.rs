@@ -29,6 +29,28 @@ pub fn run(program: &str, args: &[&str]) -> Result<CommandOutput, String> {
     })
 }
 
+/// Sobe um programa do sistema e devolve o processo VIVO, com a saída ligada
+/// num cano — sem esperar ele terminar.
+///
+/// `run` só serve para comando que termina rápido: ele bloqueia até o fim e não
+/// deixa ninguém desistir no meio. Quem tem prazo (ver
+/// `diskspace::saida_com_prazo`) precisa do processo na mão para poder matá-lo
+/// quando desistir — senão o comando continua rodando por minutos depois que
+/// ninguém mais quer a resposta.
+///
+/// O `CREATE_NO_WINDOW` mora aqui pelo mesmo motivo de sempre: um console preto
+/// piscando na tela do cliente.
+pub fn spawn_capturando(program: &str, args: &[&str]) -> Result<std::process::Child, String> {
+    Command::new(program)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn `{}`: {}", program, e))
+}
+
 /// Prefixo obrigatório de todo script do PowerShell.
 ///
 /// Sem isto, o PowerShell escreve a saída na página de código do console — CP850

@@ -28,8 +28,46 @@ pub struct SpaceFinding {
     /// Se o Otimiza consegue limpar isto por aqui.
     pub cleanable: bool,
     pub requires_admin: bool,
-    /// O que se perde ao limpar. Vazio quando não se perde nada.
+    /// A ressalva da categoria, em um de dois usos:
+    ///
+    /// 1. **O que se perde ao limpar** — o caso comum (`browser_cache`,
+    ///    `store_cache`): o cliente precisa saber ANTES de clicar.
+    /// 2. **Por que não limpamos por aqui e para onde ir** — quando
+    ///    `cleanable` é `false` (`winsxs`, `windows_old`): não há perda a
+    ///    avisar, e o que falta ao cliente é o caminho da ferramenta certa.
+    ///
+    /// Os dois usos convivem de propósito: a regra que o teste
+    /// `categoria_perigosa_avisa_e_nao_e_limpa_por_aqui` prende é "toda
+    /// categoria não limpável explica o motivo", e ela mora neste campo.
+    /// `None` só quando não há nem perda nem motivo — nada a dizer.
     pub warning: Option<String>,
+    /// O `bytes` acima foi medido, ou não deu para medir? Ver `Medida`.
+    pub medida: Medida,
+}
+
+/// O que o número de `bytes` É — para a tela não precisar adivinhar.
+///
+/// CAMPO TIPADO, E NÃO O PRÓPRIO `bytes`. Sem isto, "não consegui medir" chega
+/// à tela como `bytes: 0`, indistinguível de "medi e deu zero" — e a tela
+/// pintava um selo verde "vazio" bem ao lado do texto que dizia justamente que
+/// não foi possível estimar. É o mesmo defeito que este módulo evita no
+/// backend (`estimativa_do_winsxs` devolve `None`, nunca `Some(0)`) escapando
+/// uma camada acima, porque `u64` não carrega a distinção.
+///
+/// E não é caso raro: o `DISM /AnalyzeComponentStore` exige elevação, então
+/// TODO cliente que não abrir o Otimiza como administrador cai aqui.
+///
+/// Tipado e não frase: este projeto reprova o build quando a interface decide
+/// comparando prosa vinda do backend — ver a guarda em `commands.rs` e a
+/// `Natureza` do `foldermap.rs`, que resolveu o mesmo problema do mesmo jeito.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "tipo")]
+pub enum Medida {
+    /// O número veio de uma medição de verdade. Zero aqui quer dizer zero.
+    Medido,
+    /// Não deu para medir agora. O `bytes` é 0 por falta de opção, e a tela
+    /// NÃO pode tratá-lo como "vazio".
+    NaoConsegui,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,9 +207,13 @@ static CATEGORIES: &[Category] = &[
         name: "Componentes antigos do Windows",
         explanation: "Cópias antigas de componentes do Windows, guardadas para permitir desinstalar \
              atualizações já aplicadas. O DISM decide quanto disso já não faz falta.",
-        // Sem aviso porque nada de valor se perde limpando o que o DISM já marcou
-        // como recuperável — ao contrário do Windows.old, aqui não há rollback
-        // para perder.
+        // O `warning` aqui NÃO é "o que se perde" — não se perde nada limpando
+        // o que o DISM já marcou como recuperável, e ao contrário do
+        // Windows.old não há rollback para perder. É o outro uso do campo (ver
+        // `SpaceFinding::warning`): dizer por que a limpeza não acontece por
+        // aqui e apontar para onde ela acontece. Sem ele, `winsxs` seria uma
+        // categoria não limpável e calada — o que o teste
+        // `categoria_perigosa_avisa_e_nao_e_limpa_por_aqui` proíbe.
         warning: Some(
             "A limpeza de verdade (`DISM /StartComponentCleanup`) leva de 5 a 25 minutos \
              e mexe no repositório de componentes do sistema — não cabe num clique rápido \
@@ -381,24 +423,117 @@ pub fn estimativa_do_winsxs(saida_do_dism: &str) -> Option<u64> {
 /// Tenta obter a saída do `DISM /AnalyzeComponentStore` sem travar a varredura.
 ///
 /// A análise verdadeira pode levar de 1 a 5 minutos (ver `estimativa_do_winsxs`)
-/// — e este `scan()` precisa responder rápido, porque também é chamado pelo
-/// veredito geral da máquina. Por isso a chamada roda numa thread à parte: se o
-/// DISM não respondeu dentro do prazo curto, a categoria diz honestamente que
-/// não deu para estimar agora, em vez de deixar a tela inteira esperando por
-/// uma análise de minutos. Quem quiser o número de qualquer jeito tem a
-/// ferramenta de reparo, que roda a mesma análise como tarefa longa com
-/// progresso.
+/// — e a tela do liberador precisa responder rápido. Por isso a chamada tem
+/// prazo: se o DISM não respondeu a tempo, a categoria diz honestamente que não
+/// deu para estimar agora (`Medida::NaoConsegui`), em vez de deixar a tela
+/// inteira esperando. Quem quiser o número de qualquer jeito tem a ferramenta
+/// de reparo, que roda a mesma análise como tarefa longa com progresso.
+///
+/// DUAS COISAS QUE ESTA FUNÇÃO PRECISA FAZER ALÉM DE ESPERAR:
+///
+/// 1. **Matar o DISM ao desistir.** Desistir de esperar não fazia o comando
+///    parar: ele seguia até o fim, de 1 a 5 minutos, consumindo disco e CPU de
+///    uma máquina que por definição é o "PC fraco" que este produto existe para
+///    ajudar. Quem desiste da resposta desiste do trabalho junto.
+/// 2. **Não repetir a análise a cada varredura.** Cada clique em "Limpar"
+///    refaz o `scan()`, e sem memória disso o cliente acumulava um `Dism.exe`
+///    por clique. A última análise vale por `VALIDADE_DA_ANALISE` — o
+///    repositório de componentes não muda de tamanho em minutos.
 fn saida_do_dism_analyze_component_store() -> Option<String> {
+    if let Some(lembrada) = analise_lembrada() {
+        return lembrada;
+    }
+
+    let saida = match shell::spawn_capturando(
+        "Dism",
+        &["/Online", "/Cleanup-Image", "/AnalyzeComponentStore"],
+    ) {
+        Ok(mut filho) => {
+            let resultado = saida_com_prazo(&mut filho, PRAZO_DO_DISM);
+            // Sem `wait` o processo morto vira zumbi até o Otimiza fechar.
+            let _ = filho.wait();
+            resultado
+        }
+        Err(_) => None,
+    };
+
+    lembrar_analise(saida.clone());
+    saida
+}
+
+/// Espera a saída de um processo por um prazo — e, se o prazo estourar, MATA o
+/// processo em vez de deixá-lo rodando sozinho.
+///
+/// Recebe o `Child` emprestado (e não por valor) de propósito: assim quem
+/// chamou continua dono do processo e pode conferir, no teste, que ele de fato
+/// morreu. É o que prende o conserto — sem o `kill`, o `try_wait` do teste
+/// ainda encontra o processo vivo.
+///
+/// A leitura roda numa thread à parte porque ler o cano até o fim bloqueia até
+/// o processo terminar; matar o processo fecha o cano, a leitura termina e a
+/// thread morre junto — nada fica pendurado.
+fn saida_com_prazo(filho: &mut std::process::Child, prazo: Duration) -> Option<String> {
+    let cano = filho.stdout.take()?;
     let (tx, rx) = mpsc::channel();
 
     std::thread::spawn(move || {
-        let saida = shell::run("Dism", &["/Online", "/Cleanup-Image", "/AnalyzeComponentStore"]);
-        let _ = tx.send(saida);
+        let mut bruto = Vec::new();
+        let lido = std::io::Read::read_to_end(&mut std::io::BufReader::new(cano), &mut bruto);
+        let _ = tx.send(lido.map(|_| String::from_utf8_lossy(&bruto).to_string()));
     });
 
-    match rx.recv_timeout(Duration::from_secs(3)) {
-        Ok(Ok(saida)) if saida.success => Some(saida.stdout),
-        _ => None,
+    match rx.recv_timeout(prazo) {
+        // A leitura só termina quando o processo fecha o cano, então neste
+        // ponto ele já saiu: `wait` responde na hora e diz se deu certo.
+        Ok(Ok(texto)) => match filho.wait() {
+            Ok(status) if status.success() => Some(texto),
+            _ => None,
+        },
+        _ => {
+            let _ = filho.kill();
+            None
+        }
+    }
+}
+
+/// Quanto o liberador espera pelo DISM antes de desistir e matar.
+const PRAZO_DO_DISM: Duration = Duration::from_secs(3);
+
+/// Por quanto tempo a última análise do DISM continua valendo.
+///
+/// O repositório de componentes só muda quando o Windows aplica ou remove
+/// atualização — não em minutos, e não por causa de um clique em "Limpar".
+const VALIDADE_DA_ANALISE: Duration = Duration::from_secs(600);
+
+/// A última análise e quando ela foi feita. `Option<String>` por dentro porque
+/// a FALHA também se lembra: sem admin o DISM falha sempre, e repetir a falha a
+/// cada clique é o mesmo desperdício com outro nome.
+static ULTIMA_ANALISE: std::sync::Mutex<Option<(std::time::Instant, Option<String>)>> =
+    std::sync::Mutex::new(None);
+
+/// `true` enquanto uma análise feita em `quando` ainda vale para `agora`.
+///
+/// Função à parte, e não um `if` solto lá dentro, para o prazo ser testável sem
+/// esperar dez minutos de relógio.
+fn ainda_vale(quando: std::time::Instant, agora: std::time::Instant) -> bool {
+    agora.duration_since(quando) < VALIDADE_DA_ANALISE
+}
+
+/// A análise lembrada, se ainda valer. `None` externo = precisa rodar o DISM.
+fn analise_lembrada() -> Option<Option<String>> {
+    let guarda = ULTIMA_ANALISE.lock().ok()?;
+    let (quando, saida) = guarda.as_ref()?;
+
+    if ainda_vale(*quando, std::time::Instant::now()) {
+        Some(saida.clone())
+    } else {
+        None
+    }
+}
+
+fn lembrar_analise(saida: Option<String>) {
+    if let Ok(mut guarda) = ULTIMA_ANALISE.lock() {
+        *guarda = Some((std::time::Instant::now(), saida));
     }
 }
 
@@ -412,10 +547,18 @@ fn saida_do_dism_analyze_component_store() -> Option<String> {
 fn finding_do_winsxs_a_partir_da_saida(c: &Category, saida_do_dism: Option<&str>) -> SpaceFinding {
     let estimativa = saida_do_dism.and_then(estimativa_do_winsxs);
 
-    let (bytes, explanation, formatted) = match estimativa {
-        Some(bytes) => (bytes, c.explanation.to_string(), format_size(bytes)),
+    let (bytes, medida, explanation, formatted) = match estimativa {
+        Some(bytes) => (
+            bytes,
+            Medida::Medido,
+            c.explanation.to_string(),
+            format_size(bytes),
+        ),
         None => (
             0,
+            // O `bytes: 0` daqui é falta de opção, não medição. Sem este
+            // `NaoConsegui` a tela lê o zero e conclui "vazio" — ver `Medida`.
+            Medida::NaoConsegui,
             "Não foi possível estimar quanto dá para recuperar do repositório de \
              componentes (WinSxS) agora. A pasta aparece grande no Explorer por causa \
              de hard links com o próprio `C:\\Windows` — o número real só vem da análise \
@@ -436,6 +579,7 @@ fn finding_do_winsxs_a_partir_da_saida(c: &Category, saida_do_dism: Option<&str>
         cleanable: false,
         requires_admin: c.requires_admin,
         warning: c.warning.map(|w| w.to_string()),
+        medida,
     }
 }
 
@@ -446,13 +590,37 @@ fn finding_do_winsxs(c: &Category) -> SpaceFinding {
     finding_do_winsxs_a_partir_da_saida(c, saida.as_deref())
 }
 
-/// Varre todas as categorias. Não apaga nada.
+/// Varre todas as categorias, com a análise do DISM. Não apaga nada.
+///
+/// É o que a TELA do liberador chama: quem abriu a aba Espaço quer o número do
+/// WinSxS e aceita esperar por ele.
 pub fn scan() -> DiskReport {
+    varrer(true)
+}
+
+/// A mesma varredura, sem chamar o DISM. É o que o veredito geral usa.
+///
+/// O `diagnostico_rapido()` roda SOZINHO na abertura do app, sem o cliente
+/// pedir nada — e do relatório de disco ele só olha o espaço livre e o que é
+/// LIMPÁVEL (ver `impl EmAchados for DiskReport`). O `winsxs` não é limpável,
+/// então a análise do DISM não muda uma vírgula do veredito: era um comando de
+/// minutos rodando na abertura para alimentar um número que ninguém lia.
+pub fn scan_para_o_veredito() -> DiskReport {
+    varrer(false)
+}
+
+fn varrer(medir_o_winsxs: bool) -> DiskReport {
     let findings: Vec<SpaceFinding> = CATEGORIES
         .iter()
         .map(|c| {
             if c.id == "winsxs" {
-                return finding_do_winsxs(c);
+                return if medir_o_winsxs {
+                    finding_do_winsxs(c)
+                } else {
+                    // Sem DISM não há estimativa — e o achado diz isso, em vez
+                    // de inventar um zero.
+                    finding_do_winsxs_a_partir_da_saida(c, None)
+                };
             }
 
             let bytes: u64 = (c.paths)()
@@ -470,6 +638,9 @@ pub fn scan() -> DiskReport {
                 cleanable: c.cleanable && bytes > 0,
                 requires_admin: c.requires_admin,
                 warning: c.warning.map(|w| w.to_string()),
+                // Somar pastas sempre dá um número: aqui zero é zero de
+                // verdade, e a tela pode dizer "vazio" sem mentir.
+                medida: Medida::Medido,
             }
         })
         .collect();
@@ -835,6 +1006,156 @@ A operação foi concluída com êxito.";
                 assert!(f.warning.is_some(), "{} nao diz o que se perde", id);
             }
         }
+    }
+
+    #[test]
+    fn winsxs_sem_estimativa_chega_na_tela_como_nao_medido_e_nao_como_vazio() {
+        // O ZERO PRECISA CHEGAR ROTULADO NA TELA.
+        //
+        // `estimativa_do_winsxs` já devolve `None` em vez de `Some(0)` — mas
+        // `bytes: u64` não carrega essa distinção até a interface, e a tela
+        // acabava mostrando um selo verde "vazio" ao lado do texto que dizia
+        // "não foi possível estimar". O `Medida` é o que atravessa.
+        let categoria = CATEGORIES
+            .iter()
+            .find(|c| c.id == "winsxs")
+            .expect("categoria winsxs existe");
+
+        let sem_dism = finding_do_winsxs_a_partir_da_saida(categoria, None);
+        assert_eq!(sem_dism.bytes, 0);
+        assert_eq!(
+            sem_dism.medida,
+            Medida::NaoConsegui,
+            "sem a análise do DISM o achado precisa dizer que NÃO MEDIU"
+        );
+
+        let com_dism = finding_do_winsxs_a_partir_da_saida(categoria, Some("Recuperável : 2.34 GB
+"));
+        assert_eq!(com_dism.medida, Medida::Medido);
+    }
+
+    #[test]
+    fn as_outras_categorias_medem_de_verdade() {
+        // Somar pastas sempre dá um número: se alguma categoria comum chegasse
+        // como `NaoConsegui`, a tela esconderia um "vazio" legítimo.
+        for f in scan_para_o_veredito().findings.iter().filter(|f| f.id != "winsxs") {
+            assert_eq!(f.medida, Medida::Medido, "{} não é medição do disco", f.id);
+        }
+    }
+
+    /// A TELA NÃO PODE VOLTAR A DECIDIR "VAZIO" OLHANDO SÓ O `bytes`.
+    ///
+    /// Guarda por leitura do fonte, como a da prosa em `commands.rs`: o defeito
+    /// não estava no Rust, estava em `renderSpaceFinding` — e um teste de Rust
+    /// que só olhasse o `Medida` passaria com a tela quebrada do mesmo jeito.
+    ///
+    /// A regra que ela prende: nem o rótulo (`state-label`) nem a severidade
+    /// (`data-severity`) saem de `bytes`, e a função consulta `medida`.
+    #[test]
+    fn a_tela_do_liberador_nao_chama_de_vazio_o_que_nao_foi_medido() {
+        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("src")
+            .join("main.ts");
+        let fonte = std::fs::read_to_string(&caminho)
+            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
+
+        let corpo: String = fonte
+            .split("function renderSpaceFinding")
+            .nth(1)
+            .expect("renderSpaceFinding precisa existir")
+            .lines()
+            .take_while(|l| !l.starts_with('}'))
+            .collect::<Vec<_>>()
+            .join("
+");
+
+        assert!(
+            corpo.contains("medida"),
+            "renderSpaceFinding não olha `medida`: voltou a tratar todo zero como vazio"
+        );
+
+        for linha in corpo.lines() {
+            let decide = linha.contains("state-label") || linha.contains("data-severity");
+            assert!(
+                !(decide && linha.contains("bytes")),
+                "o rótulo/severidade do liberador voltou a sair de `bytes`:
+  {}",
+                linha.trim()
+            );
+        }
+    }
+
+    #[test]
+    fn desistir_de_esperar_mata_o_processo_em_vez_de_deixar_rodando() {
+        // O DEFEITO: o `recv_timeout` devolvia o controle, mas o `Dism.exe`
+        // seguia até o fim — de 1 a 5 minutos de disco e CPU numa máquina que,
+        // por definição, é o "PC fraco" que este produto existe para ajudar. E
+        // como cada clique em "Limpar" refazia a varredura, eles empilhavam.
+        //
+        // `ping -n 30` no lugar do DISM: um processo que demora muito mais que
+        // o prazo, sem precisar de administrador nem mexer no sistema.
+        let mut filho = shell::spawn_capturando("ping", &["-n", "30", "127.0.0.1"])
+            .expect("o ping do Windows sobe");
+
+        let inicio = std::time::Instant::now();
+        let saida = saida_com_prazo(&mut filho, Duration::from_millis(300));
+
+        assert!(saida.is_none(), "o prazo estourou; não podia vir saída");
+        assert!(
+            inicio.elapsed() < Duration::from_secs(10),
+            "não desistiu no prazo: esperou {:?}",
+            inicio.elapsed()
+        );
+
+        // A prova: o processo precisa estar MORTO agora. Sem o `kill`, ele
+        // continuaria vivo aqui pelos ~30 s do ping.
+        let mut morreu = false;
+        for _ in 0..100 {
+            if matches!(filho.try_wait(), Ok(Some(_))) {
+                morreu = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let _ = filho.kill();
+
+        assert!(
+            morreu,
+            "desistimos de esperar e o processo continuou rodando sozinho"
+        );
+    }
+
+    #[test]
+    fn a_analise_do_dism_e_lembrada_e_nao_refeita_a_cada_clique() {
+        // Cada clique em "Limpar" refaz o `scan()`. Sem memória da última
+        // análise, era um `Dism.exe` por clique.
+        let agora = std::time::Instant::now();
+        assert!(ainda_vale(agora, agora), "a análise recém-feita vale");
+
+        let velha = agora
+            .checked_sub(VALIDADE_DA_ANALISE + Duration::from_secs(1))
+            .expect("o relógio da máquina tem passado suficiente");
+        assert!(
+            !ainda_vale(velha, agora),
+            "análise mais velha que a validade precisa ser refeita"
+        );
+    }
+
+    #[test]
+    fn a_estimativa_entende_virgula_decimal_do_windows_em_portugues() {
+        // O DISM de um Windows em português escreve "2,34 GB", com VÍRGULA.
+        // Todos os outros testes usam ponto — sem este, um refactor que
+        // apagasse o `replace(',', ".")` passaria batido e a categoria sumiria
+        // justamente para o cliente brasileiro, que é o público do produto.
+        let com_virgula = estimativa_do_winsxs("Recuperável : 2,34 GB
+")
+            .expect("a saída em português usa vírgula decimal");
+        let com_ponto = estimativa_do_winsxs("Recuperável : 2.34 GB
+").expect("e a com ponto");
+
+        assert_eq!(com_virgula, com_ponto, "vírgula e ponto medem o mesmo espaço");
+        assert!(com_virgula > 2_400_000_000, "veio {}", com_virgula);
     }
 
     #[test]

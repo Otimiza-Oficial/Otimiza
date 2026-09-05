@@ -778,6 +778,14 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // Todos abaixo do `readiness`, que já custa 4,38 s e domina a fila — o
         // diagnóstico rápido continua limitado por ele, e não por estes.
         //
+        // OS 0,44 s DO DISCO SÓ VALEM SEM O DISM. Quando o liberador ganhou a
+        // categoria do WinSxS, o `scan()` passou a esperar até 3 s por um
+        // `Dism /AnalyzeComponentStore` — e a medida acima virou mentira. Por
+        // isso aqui é `scan_para_o_veredito()`, que pula o DISM: o veredito só
+        // usa espaço livre e o que é limpável, e o WinSxS não é nem um nem
+        // outro. A guarda `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`
+        // impede o `scan()` completo de voltar para esta lista.
+        //
         // BOOT E BLOATWARE FICARAM DE FORA DE PROPÓSITO, e a razão importa: o
         // veredito elege UMA frase. Inicialização lenta e programa de fábrica
         // são higiene, não causa de travamento — e disputando a eleição com a
@@ -788,7 +796,7 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // nenhum ajuste de software resolve, e é a resposta que falta em todo
         // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
-        (Origem::Disco, || Ok(super::diskspace::scan().achados())),
+        (Origem::Disco, || Ok(super::diskspace::scan_para_o_veredito().achados())),
         (Origem::Disco, || Ok(super::shaders::analyze().achados())),
         (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
     ];
@@ -1118,10 +1126,12 @@ mod tests {
     /// útil que por acaso mede durante alguns segundos, e a primeira tela do
     /// produto volta a demorar meio minuto.
     ///
-    /// Os quatro abaixo são úteis e ficam FORA de propósito, cada um por medir
+    /// Os cinco abaixo são úteis e ficam FORA de propósito, cada um por medir
     /// com o relógio: gargalo amostra a máquina por segundos, rede cronometra
-    /// consultas de DNS, e FiveM e navegadores percorrem dezenas de milhares de
-    /// arquivos em disco. Eles rodam quando o cliente aperta o botão deles.
+    /// consultas de DNS, FiveM e navegadores percorrem dezenas de milhares de
+    /// arquivos em disco, e a varredura completa do liberador espera até três
+    /// segundos por um `Dism /AnalyzeComponentStore` que o veredito nem lê.
+    /// Eles rodam quando o cliente aperta o botão deles.
     ///
     /// Guarda por leitura do fonte e não por cronômetro: teste que mede tempo
     /// numa esteira compartilhada falha por vizinho barulhento, e teste que
@@ -1143,7 +1153,17 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        for caro in ["bottleneck::", "network::", "fivem::", "browsers::"] {
+        // `diskspace::scan()` com parênteses, e não o módulo inteiro: o
+        // veredito PRECISA do disco (espaço livre é achado barato e crítico) —
+        // o que não pode voltar é a varredura completa, que espera segundos
+        // pelo DISM do WinSxS. `scan_para_o_veredito()` continua liberada.
+        for caro in [
+            "bottleneck::",
+            "network::",
+            "fivem::",
+            "browsers::",
+            "diskspace::scan()",
+        ] {
             assert!(
                 !corpo.contains(caro),
                 "`{}` entrou no diagnóstico rápido; ele mede por segundos e a \
