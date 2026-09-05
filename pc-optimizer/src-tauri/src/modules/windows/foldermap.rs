@@ -71,8 +71,9 @@ pub struct FolderEntry {
     /// Explicação em português do que costuma morar ali, quando a pasta é
     /// conhecida. Vazio para pasta que o usuário criou.
     pub explanation: String,
-    /// Verdadeiro quando a soma parou no limite de profundidade e o número
-    /// mostrado é um piso, não o total.
+    /// Verdadeiro quando a soma parou no limite de profundidade, no prazo, ou
+    /// esbarrou em permissão negada em algum descendente — em qualquer um
+    /// desses casos o número mostrado é um piso, não o total.
     pub partial: bool,
     /// O que esta linha é: limpável, do cliente, ou ilegível. Ver `Natureza`.
     pub natureza: Natureza,
@@ -113,6 +114,29 @@ const LIMPAVEIS: &[&str] = &[
     r"\windows\logs",
 ];
 
+/// Compara caminho por COMPONENTE inteiro, e não por substring.
+///
+/// `contains` casa `\windows.old` dentro de
+/// `...\downloads\windows.old-backup` — uma pasta que o cliente batizou com
+/// nome parecido e que nada tem a ver com o backup de upgrade do Windows.
+/// Oferecer apagar isso é o único erro deste produto que não tem desfazer, e
+/// probabilidade baixa não compensa consequência irreversível. Comparando
+/// componente inteiro contra componente inteiro, `windows.old-backup` nunca
+/// casa com o padrão `windows.old`, porque são componentes diferentes — não
+/// porque um é prefixo do outro.
+fn contem_como_componente(caminho: &str, padrao: &str) -> bool {
+    let componentes_caminho: Vec<&str> = caminho.split('\\').filter(|c| !c.is_empty()).collect();
+    let componentes_padrao: Vec<&str> = padrao.split('\\').filter(|c| !c.is_empty()).collect();
+
+    if componentes_padrao.is_empty() || componentes_padrao.len() > componentes_caminho.len() {
+        return false;
+    }
+
+    componentes_caminho
+        .windows(componentes_padrao.len())
+        .any(|janela| janela == componentes_padrao.as_slice())
+}
+
 /// Decide o que uma pasta é. Pura, testável sem disco.
 ///
 /// A ORDEM DOS TESTES IMPORTA, e o padrão é o seguro: o que não for
@@ -125,7 +149,7 @@ pub fn classificar(caminho: &str, leu: bool) -> Natureza {
 
     let minusculo = caminho.to_lowercase().replace('/', "\\");
 
-    if LIMPAVEIS.iter().any(|p| minusculo.contains(p)) {
+    if LIMPAVEIS.iter().any(|p| contem_como_componente(&minusculo, p)) {
         return Natureza::PodeLimpar;
     }
 
@@ -208,8 +232,14 @@ fn somar(dir: &Path, profundidade: u32, v: &mut Varredura) -> (u64, bool) {
         // Pasta protegida. Comum e esperado; contamos para poder avisar que a
         // varredura não viu tudo, em vez de apresentar um total incompleto
         // como se fosse completo.
+        //
+        // Devolve `cortado = true` mesmo aqui embaixo na árvore, e não só por
+        // profundidade ou tempo: o total do ancestral também virou piso, e
+        // `partial` é o único canal que avisa isso à interface. Antes desta
+        // correção o retorno era `false`, e um descendente sem permissão
+        // desaparecia sem deixar rastro no `FolderEntry` do pai.
         v.ilegiveis += 1;
-        return (0, false);
+        return (0, true);
     };
 
     let mut total = 0u64;
@@ -239,6 +269,26 @@ fn somar(dir: &Path, profundidade: u32, v: &mut Varredura) -> (u64, bool) {
     }
 
     (total, cortado)
+}
+
+/// Se o NÍVEL 1 desta pasta foi lido com sucesso — e só isso.
+///
+/// DE PROPÓSITO não recebe a `Varredura` da soma recursiva. `v.ilegiveis`
+/// conta permissão negada em QUALQUER profundidade da subárvore, e ligar essa
+/// contagem a esta decisão foi o bug: numa máquina real, quase toda pasta
+/// grande e legítima tem algum descendente inacessível — perfil de outro
+/// usuário, cache de outro programa, uma pasta de sistema no meio. Uma pasta
+/// de 150 GB medida com 99% de exatidão recebia o MESMO rótulo `NaoSei` que
+/// uma pasta com zero bytes lidos.
+///
+/// Ilegibilidade de descendente já tem canal próprio — `partial`, que `somar`
+/// agora devolve `true` para exatamente esse caso — e por isso não precisa
+/// (nem pode) influenciar esta função. Chamar `read_dir` de novo aqui é uma
+/// chamada de sistema a mais por pasta de nível 1 — dezenas por varredura,
+/// não milhões — e é o preço de não confundir "não consegui olhar" com
+/// "olhei quase tudo".
+fn nivel1_foi_lido(caminho: &Path) -> bool {
+    std::fs::read_dir(caminho).is_ok()
 }
 
 /// O que costuma ocupar espaço em cada pasta conhecida.
@@ -327,12 +377,7 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
         };
 
         let (bytes, partial) = somar(caminho, 1, &mut v);
-
-        // Leu de verdade quando nenhum trecho da própria pasta ou de seus
-        // filhos esbarrou em permissão negada. É esse sinal — e não `bytes`,
-        // que uma pasta vazia também zera — que separa "não há nada aqui" de
-        // "não consegui ler", os dois primeiros estados de `Natureza`.
-        let leu_com_sucesso = v.ilegiveis == 0;
+        let leu_com_sucesso = nivel1_foi_lido(caminho);
 
         total += bytes;
         ilegiveis += v.ilegiveis;
@@ -551,6 +596,182 @@ mod tests {
         // CANARIO. Uma pasta que ninguem reconhece nao pode cair em `PodeLimpar`
         // por descuido de ordem dos `if`. O padrao seguro e "e do cliente".
         assert_eq!(classificar(r"C:\MinhaPastaEstranha", true), Natureza::Seu);
+    }
+
+    #[test]
+    fn casamento_e_por_componente_e_nao_por_substring() {
+        // `\windows.old` E UM COMPONENTE INTEIRO DE CAMINHO, nao um prefixo de
+        // texto. `contains` casava dentro de "windows.old-backup", uma pasta
+        // que o cliente pode ter criado nos proprios Downloads sem nenhuma
+        // relacao com o backup de upgrade do Windows. Oferecer apagar isso e
+        // o unico erro deste produto sem desfazer.
+        assert_eq!(classificar(r"C:\Windows.old", true), Natureza::PodeLimpar);
+        assert_eq!(
+            classificar(r"C:\Users\Fulano\Downloads\windows.old-backup", true),
+            Natureza::Seu,
+            "windows.old-backup nao e o mesmo componente que windows.old"
+        );
+        assert_eq!(
+            classificar(r"C:\Users\Fulano\Documents\meus-windows-logs", true),
+            Natureza::Seu,
+            "meus-windows-logs nao pode casar com o padrao \\windows\\logs"
+        );
+    }
+
+    #[test]
+    fn read_dir_que_falha_em_qualquer_profundidade_vira_parcial() {
+        // Antes da correção, `somar` devolvia `(0, false)` quando o próprio
+        // `read_dir` falhava — ou seja, permissão negada num descendente
+        // desaparecia sem deixar rastro em `partial`, o único sinal que a
+        // interface tem de "isto é piso, não total". Um caminho que não
+        // existe entra pelo MESMO ramo de código que uma pasta sem permissão
+        // (`std::fs::read_dir` devolvendo `Err`), de um jeito determinístico
+        // que não depende de ACL de disco — ver o teste seguinte para o
+        // porquê isso importa neste ambiente específico.
+        let mut v = Varredura {
+            ilegiveis: 0,
+            prazo: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            estourou: false,
+        };
+        let caminho_inexistente =
+            std::env::temp_dir().join("otimiza_teste_caminho_que_nao_existe_12345");
+        let _ = std::fs::remove_dir_all(&caminho_inexistente);
+
+        let (bytes, cortado) = somar(&caminho_inexistente, 2, &mut v);
+
+        assert_eq!(bytes, 0);
+        assert!(cortado, "read_dir que falha precisa marcar `partial`, não desaparecer");
+        assert_eq!(v.ilegiveis, 1);
+    }
+
+    #[test]
+    fn nivel1_legivel_nao_depende_de_descendente_ilegivel() {
+        // O NÚCLEO DO BUG. A decisão "consegui ler esta pasta" (usada para
+        // `Natureza`) não pode se basear em `v.ilegiveis`, que soma permissão
+        // negada em QUALQUER profundidade da subárvore. `nivel1_foi_lido` nem
+        // recebe `Varredura` como parâmetro — é estruturalmente impossível
+        // dela reagir a um descendente ilegível. Aqui simulamos exatamente o
+        // cenário do achado: uma pasta cujo próprio `read_dir` funciona, mas
+        // cuja soma recursiva acumulou `ilegiveis > 0` por causa de
+        // descendentes protegidos (perfil de outro usuário, cache de outro
+        // programa — o caso comum numa máquina real).
+        let pasta = std::env::temp_dir().join("otimiza_teste_nivel1_legivel");
+        let _ = std::fs::remove_dir_all(&pasta);
+        std::fs::create_dir_all(&pasta).expect("criar pasta de teste");
+
+        // `v.ilegiveis` alto de propósito — se `nivel1_foi_lido` consultasse
+        // isto, a asserção abaixo reprovaria. Ela não consulta.
+        let v = Varredura {
+            ilegiveis: 3,
+            prazo: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            estourou: false,
+        };
+
+        let leu = nivel1_foi_lido(&pasta);
+        assert!(
+            leu,
+            "read_dir do próprio nível 1 funcionou; a ilegibilidade é só dos descendentes"
+        );
+        assert_ne!(
+            classificar(&pasta.to_string_lossy(), leu),
+            Natureza::NaoSei,
+            "descendente ilegível não pode reclassificar a pasta inteira como NaoSei"
+        );
+
+        drop(v);
+        let _ = std::fs::remove_dir_all(&pasta);
+    }
+
+    #[test]
+    fn nivel1_ilegivel_e_reconhecido_como_tal() {
+        // O OUTRO LADO do teste acima: `nivel1_foi_lido` não pode virar um
+        // `true` incondicional. Se a própria pasta de nível 1 não abre, isto
+        // precisa devolver `false` — é o sinal que vira `NaoSei` em
+        // `classificar`. Sem este teste, uma implementação que sempre
+        // devolve `true` (esvaziando a checagem) passaria despercebida por
+        // todos os outros testes deste arquivo.
+        let inexistente =
+            std::env::temp_dir().join("otimiza_teste_nivel1_que_nao_existe_98765");
+        let _ = std::fs::remove_dir_all(&inexistente);
+
+        assert!(!nivel1_foi_lido(&inexistente));
+    }
+
+    #[test]
+    fn integracao_descendente_protegido_por_acl_nao_vira_naosei() {
+        // A versão "de verdade" do teste acima, com uma pasta protegida por
+        // ACL de disco de fato, passando pelo `mapear` inteiro.
+        //
+        // ESTE TESTE SE AUTO-PULA quando o processo que roda `cargo test` tem
+        // `SeBackupPrivilege` habilitado — confirmado neste ambiente de
+        // desenvolvimento via `whoami /priv` — porque essa privilégio faz o
+        // Windows ignorar a checagem de ACL para leitura de diretório
+        // (`std::fs::read_dir` abre com semântica de backup), e a pasta
+        // negada continua legível mesmo depois do `icacls /deny`. É uma
+        // particularidade DESTE sandbox, não do produto: numa máquina de
+        // cliente ou num agente de CI comum, sem esse privilégio, o `assert`
+        // abaixo roda de verdade. A garantia real do comportamento vem dos
+        // dois testes determinísticos acima, que não dependem de privilégio
+        // de processo.
+        let raiz = std::env::temp_dir().join("otimiza_teste_raiz_subarvore_acl");
+        let pasta = raiz.join("pasta_grande");
+        let protegida = pasta.join("subpasta_protegida");
+        let _ = std::fs::remove_dir_all(&raiz);
+        std::fs::create_dir_all(&protegida).expect("criar árvore de teste");
+        std::fs::write(pasta.join("arquivo.txt"), b"conteudo legivel")
+            .expect("criar arquivo de teste");
+
+        let usuario = std::env::var("USERNAME").unwrap_or_default();
+        let negou = std::process::Command::new("icacls")
+            .arg(&protegida)
+            .arg("/deny")
+            .arg(format!("{}:(RD)", usuario))
+            .output();
+
+        let deu_para_negar = matches!(&negou, Ok(saida) if saida.status.success())
+            && std::fs::read_dir(&protegida).is_err();
+
+        if !deu_para_negar {
+            eprintln!(
+                "ambiente nao aplica a negacao de ACL a este processo (privilegio de backup?); \
+                 pulando a parte de integracao, a garantia fica com os testes deterministicos"
+            );
+            let _ = std::process::Command::new("icacls")
+                .arg(&protegida)
+                .arg("/remove:d")
+                .arg(&usuario)
+                .output();
+            let _ = std::fs::remove_dir_all(&raiz);
+            return;
+        }
+
+        let resultado = mapear(&raiz, 5);
+
+        // Desfaz a permissão ANTES de qualquer assert poder abortar o teste —
+        // senão a pasta protegida vira lixo que o Windows nem deixa apagar.
+        let _ = std::process::Command::new("icacls")
+            .arg(&protegida)
+            .arg("/remove:d")
+            .arg(&usuario)
+            .output();
+        let _ = std::fs::remove_dir_all(&raiz);
+
+        let mapa = resultado.expect("a raiz do teste é legível");
+        let entrada = mapa
+            .folders
+            .iter()
+            .find(|f| f.name == "pasta_grande")
+            .expect("pasta_grande precisa aparecer no mapa");
+
+        assert_ne!(
+            entrada.natureza,
+            Natureza::NaoSei,
+            "descendente ilegível não pode reclassificar a pasta inteira como NaoSei"
+        );
+        assert!(
+            entrada.partial,
+            "a ilegibilidade do descendente precisa virar `partial`, não desaparecer"
+        );
     }
 
     #[test]
