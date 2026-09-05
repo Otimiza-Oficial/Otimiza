@@ -74,6 +74,62 @@ pub struct FolderEntry {
     /// Verdadeiro quando a soma parou no limite de profundidade e o número
     /// mostrado é um piso, não o total.
     pub partial: bool,
+    /// O que esta linha é: limpável, do cliente, ou ilegível. Ver `Natureza`.
+    pub natureza: Natureza,
+}
+
+/// O que cada linha do mapa É, para a tela não precisar adivinhar.
+///
+/// CAMPO TIPADO, E NÃO FRASE. Este projeto reprova o build quando a interface
+/// decide comparando prosa vinda do backend — já aconteceu três vezes, e a
+/// guarda em `commands.rs` existe por causa disso.
+///
+/// E são TRÊS estados, não dois. "Não consegui ler" precisa ser distinto de
+/// "não há nada aqui": uma pasta sem permissão contada como zero faria o total
+/// mentir, e o cliente concluiria que o espaço sumiu no nada.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "tipo")]
+pub enum Natureza {
+    /// Categoria que o `diskspace.rs` sabe limpar. Ganha botão na tela.
+    PodeLimpar,
+    /// Arquivo do cliente. O produto MOSTRA o caminho e não faz mais nada.
+    Seu,
+    /// Não deu para ler — permissão, ou o prazo da varredura estourou.
+    NaoSei,
+}
+
+/// Prefixos que o `diskspace.rs` já sabe limpar.
+///
+/// A lista mora aqui em minúsculas porque caminho no Windows não diferencia
+/// maiúscula de minúscula, e comparar sem normalizar deixaria `C:\WINDOWS\TEMP`
+/// passar como pasta do cliente.
+const LIMPAVEIS: &[&str] = &[
+    r"\windows\temp",
+    r"\appdata\local\temp",
+    r"\windows\softwaredistribution\download",
+    r"\windows.old",
+    r"\programdata\microsoft\windows\wer",
+    r"\windows\servicing\logfiles",
+    r"\windows\logs",
+];
+
+/// Decide o que uma pasta é. Pura, testável sem disco.
+///
+/// A ORDEM DOS TESTES IMPORTA, e o padrão é o seguro: o que não for
+/// reconhecido como limpável é do cliente. Inverter isso ofereceria apagar
+/// pasta desconhecida, e apagar arquivo de quem pagou não tem desfazer.
+pub fn classificar(caminho: &str, leu: bool) -> Natureza {
+    if !leu {
+        return Natureza::NaoSei;
+    }
+
+    let minusculo = caminho.to_lowercase().replace('/', "\\");
+
+    if LIMPAVEIS.iter().any(|p| minusculo.contains(p)) {
+        return Natureza::PodeLimpar;
+    }
+
+    Natureza::Seu
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,6 +328,12 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
 
         let (bytes, partial) = somar(caminho, 1, &mut v);
 
+        // Leu de verdade quando nenhum trecho da própria pasta ou de seus
+        // filhos esbarrou em permissão negada. É esse sinal — e não `bytes`,
+        // que uma pasta vazia também zera — que separa "não há nada aqui" de
+        // "não consegui ler", os dois primeiros estados de `Natureza`.
+        let leu_com_sucesso = v.ilegiveis == 0;
+
         total += bytes;
         ilegiveis += v.ilegiveis;
         algum_cortado |= partial;
@@ -280,11 +342,13 @@ pub fn mapear(raiz: &Path, limite: usize) -> Result<FolderMap, String> {
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
+        let caminho_texto = caminho.to_string_lossy().to_string();
 
         pastas.push(FolderEntry {
             explanation: explicar(&name).to_string(),
             formatted: format_size(bytes),
-            path: caminho.to_string_lossy().to_string(),
+            natureza: classificar(&caminho_texto, leu_com_sucesso),
+            path: caminho_texto,
             percent: 0.0,
             name,
             bytes,
@@ -441,6 +505,52 @@ mod tests {
 
         let inexistente = mapear(Path::new("C:\\pasta que nao existe 12345"), 5);
         assert!(inexistente.is_err());
+    }
+
+    #[test]
+    fn pasta_que_nao_deu_para_ler_nunca_e_zero_nem_limpavel() {
+        // "NAO SEI" E UM TERCEIRO ESTADO, e nao um zero.
+        //
+        // Uma pasta sem permissao aparecendo como 0 GB faria o total mentir, e o
+        // cliente concluiria que o espaco sumiu no nada. E marca-la como
+        // limpavel seria oferecer apagar o que nem foi possivel olhar.
+        assert_eq!(classificar(r"C:\Windows\System32\config", false), Natureza::NaoSei);
+    }
+
+    #[test]
+    fn arquivo_do_cliente_nunca_e_marcado_como_limpavel() {
+        // O PIOR ERRO POSSIVEL DESTE PROGRAMA. Apagar jogo ou download de quem
+        // pagou nao tem desfazer. Steam, Downloads e Documentos sao DELE.
+        for caminho in [
+            r"C:\Program Files (x86)\Steam",
+            r"C:\Users\Fulano\Downloads",
+            r"C:\Users\Fulano\Documents",
+            r"C:\Users\Fulano\Videos",
+        ] {
+            assert_eq!(
+                classificar(caminho, true),
+                Natureza::Seu,
+                "{} foi marcado como limpavel", caminho
+            );
+        }
+    }
+
+    #[test]
+    fn categoria_conhecida_de_limpeza_e_marcada_como_limpavel() {
+        // O que o `diskspace.rs` ja sabe limpar continua limpavel aqui, para as
+        // duas telas nao discordarem uma da outra.
+        assert_eq!(classificar(r"C:\Windows\Temp", true), Natureza::PodeLimpar);
+        assert_eq!(
+            classificar(r"C:\Windows\SoftwareDistribution\Download", true),
+            Natureza::PodeLimpar
+        );
+    }
+
+    #[test]
+    fn na_duvida_e_do_cliente_e_nao_limpavel() {
+        // CANARIO. Uma pasta que ninguem reconhece nao pode cair em `PodeLimpar`
+        // por descuido de ordem dos `if`. O padrao seguro e "e do cliente".
+        assert_eq!(classificar(r"C:\MinhaPastaEstranha", true), Natureza::Seu);
     }
 
     #[test]
