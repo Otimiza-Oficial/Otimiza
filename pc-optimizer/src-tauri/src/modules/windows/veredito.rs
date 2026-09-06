@@ -765,8 +765,13 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
                 None => Ok(relatorio.achados()),
             }
         }),
+        // A versão que devolve `Err` quando a leitura falha, e não lista vazia.
+        // Antes, uma consulta de memória que não respondesse produzia
+        // `Ok(vec![])` — sem achado e sem lacuna —, e a tela ficava calada
+        // sobre memória. Silêncio aqui é indistinguível de "está tudo bem", e
+        // some justamente com o canal único, o achado mais valioso do produto.
         (Origem::Firmware, || {
-            Ok(achados_de_firmware(&super::firmware::analyze_memory_only()))
+            super::firmware::analyze_memory_ou_lacuna().map(|f| achados_de_firmware(&f))
         }),
         // QUATRO MÓDULOS QUE MEDIAM E NÃO CHEGAVAM À FRASE.
         //
@@ -923,6 +928,107 @@ fn nome_da_origem(origem: Origem) -> &'static str {
 pub fn diagnostico_rapido() -> Veredito {
     let (achados, lacunas) = coletar_rapido();
     veredito(&achados, &lacunas)
+}
+
+#[cfg(test)]
+mod medicao_de_tempo {
+    //! Onde o tempo do próprio Otimiza vai, medido nesta máquina.
+    //!
+    //! O comentário de `coletar_rapido` guarda uma medição de 12/08/2026, e é
+    //! ela que justifica a ordem "caros primeiro" e o limite de simultâneos.
+    //! Medição envelhece: o produto ganhou módulos depois daquela data, e a
+    //! ordem só continua certa se os números continuarem valendo.
+    //!
+    //! Este teste existe para a régua que o produto aplica no PC do cliente
+    //! valer também para ele mesmo — otimizar o otimizador sem medir seria o
+    //! chute que o resto do código recusa.
+    //!
+    //! `cargo test --lib -- --ignored --nocapture onde_vai_o_tempo`
+
+    use std::time::Instant;
+
+    fn cronometrar(nome: &str, f: impl FnOnce()) -> (String, u128) {
+        let inicio = Instant::now();
+        f();
+        let ms = inicio.elapsed().as_millis();
+        println!("  {:<28} {:>6} ms", nome, ms);
+        (nome.to_string(), ms)
+    }
+
+    #[test]
+    #[ignore]
+    fn onde_vai_o_tempo() {
+        println!("\nCADA DIAGNÓSTICO, ISOLADO\n");
+
+        let mut tempos = vec![
+            cronometrar("prontidão", || {
+                let _ = super::super::readiness::analyze();
+            }),
+            cronometrar("saúde", || {
+                let _ = super::super::health::analyze();
+            }),
+            cronometrar("memória", || {
+                let _ = super::super::memory::analyze();
+            }),
+            cronometrar("pressão", || {
+                let _ = super::super::pressao::analyze();
+            }),
+            cronometrar("monitor", || {
+                let _ = super::super::display::analyze();
+            }),
+            cronometrar("placa de vídeo", || {
+                let _ = super::super::gpupref::analyze();
+            }),
+            cronometrar("config do jogo", || {
+                let _ = super::super::configjogo::analyze();
+            }),
+            cronometrar("esgotamento", || {
+                let _ = super::super::exhaustion::analyze();
+            }),
+            cronometrar("térmico", || {
+                let _ = super::super::thermal::analyze();
+            }),
+            cronometrar("disco", || {
+                let _ = super::super::diskspace::scan_para_o_veredito();
+            }),
+            cronometrar("shaders", || {
+                let _ = super::super::shaders::analyze();
+            }),
+            cronometrar("resizable bar", || {
+                let _ = super::super::rbar::analyze();
+            }),
+        ];
+
+        let soma: u128 = tempos.iter().map(|(_, ms)| ms).sum();
+
+        tempos.sort_by_key(|(_, ms)| std::cmp::Reverse(*ms));
+
+        println!("\nOS MAIS CAROS\n");
+        for (nome, ms) in tempos.iter().take(4) {
+            let fatia = if soma > 0 { ms * 100 / soma } else { 0 };
+            println!("  {:<28} {:>6} ms   {:>2}% do total", nome, ms, fatia);
+        }
+
+        println!("\n  soma se fosse em série: {} ms", soma);
+
+        // O que o cliente espera de verdade: a tela inicial inteira, já com a
+        // paralelização e o limite de simultâneos.
+        let inicio = Instant::now();
+        let veredito = super::diagnostico_rapido();
+        let real = inicio.elapsed().as_millis();
+
+        println!("  TELA INICIAL DE VERDADE: {} ms", real);
+        println!(
+            "  ganho da paralelização: {} ms ({} tarefas simultâneas)",
+            soma.saturating_sub(real),
+            super::limite_de_simultaneos()
+        );
+        println!(
+            "  achados: {} · lacunas: {}\n",
+            veredito.achados.len(),
+            veredito.lacunas.len()
+        );
+    }
 }
 
 #[cfg(test)]

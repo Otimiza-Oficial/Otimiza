@@ -68,25 +68,70 @@ struct RawReliability {
     power_on_hours: Option<u64>,
 }
 
-fn discos() -> Vec<RawDisk> {
+/// O que sabemos sobre a saúde do disco desta máquina.
+///
+/// Os quatro casos existem porque `unwrap_or_default()` juntava dois deles num
+/// só. "Perguntei e não há disco" e "não consegui perguntar" viravam a mesma
+/// lista vazia — e a tela afirmava, sobre a segunda, a explicação da primeira:
+/// *"acontece em máquinas virtuais e em alguns controladores de disco antigos"*,
+/// marcada como tudo certo. Inventar a causa de uma leitura que nunca aconteceu
+/// é o oposto do que este produto existe para fazer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SituacaoDoDisco {
+    /// Os contadores foram lidos. Segue a análise.
+    Normal,
+    /// Há disco, os contadores exigem elevação e não a temos.
+    PrecisaDeAdministrador,
+    /// Não deu para ler, e não é falta de permissão — já estamos elevados, ou a
+    /// própria enumeração de discos falhou.
+    NaoVerificavel,
+    /// Perguntamos, o Windows respondeu, e não há disco a reportar. Aqui a
+    /// explicação da máquina virtual é legítima.
+    SemDadosDeVerdade,
+}
+
+/// A regra pura, separada da leitura para poder ser testada sem hardware.
+///
+/// `None` significa "não consegui perguntar"; `Some(0)`, "perguntei e não há".
+pub fn situacao_do_disco(
+    discos: Option<usize>,
+    contadores: Option<usize>,
+    elevado: bool,
+) -> SituacaoDoDisco {
+    let Some(discos) = discos else {
+        return SituacaoDoDisco::NaoVerificavel;
+    };
+
+    if discos == 0 {
+        return SituacaoDoDisco::SemDadosDeVerdade;
+    }
+
+    match contadores {
+        Some(n) if n > 0 => SituacaoDoDisco::Normal,
+        // Há disco e o contador não veio. Sem elevação isso se resolve; com
+        // ela, não sabemos por quê — e não saber precisa ser dito.
+        _ if !elevado => SituacaoDoDisco::PrecisaDeAdministrador,
+        _ => SituacaoDoDisco::NaoVerificavel,
+    }
+}
+
+fn discos_lidos() -> Option<Vec<RawDisk>> {
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-PhysicalDisk \
                   -ErrorAction SilentlyContinue | Select-Object FriendlyName,MediaType,HealthStatus,\
                   @{n='SizeGb';e={[math]::Round($_.Size/1GB,0)}})";
 
-    powershell(script)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
+    // `None` aqui é "não consegui perguntar" — e não pode virar lista vazia,
+    // que é a resposta de "perguntei e não há". Ver `situacao_do_disco`.
+    powershell(script).and_then(|json| serde_json::from_str(&json).ok())
 }
 
-fn confiabilidade() -> Vec<RawReliability> {
+fn confiabilidade() -> Option<Vec<RawReliability>> {
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-PhysicalDisk \
                   -ErrorAction SilentlyContinue | Get-StorageReliabilityCounter \
                   -ErrorAction SilentlyContinue | Select-Object DeviceId,Wear,Temperature,\
                   ReadErrorsTotal,WriteErrorsTotal,PowerOnHours)";
 
-    powershell(script)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
+    powershell(script).and_then(|json| serde_json::from_str(&json).ok())
 }
 
 /// Traduz o estado do disco relatado pelo Windows.
@@ -260,8 +305,11 @@ fn achados_de_confiabilidade(contador: &RawReliability) -> Vec<HealthFinding> {
 }
 
 fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
-    let lista = discos();
-    let mut faltou_permissao = false;
+    let lidos = discos_lidos();
+    // `None` continua distinguível de lista vazia pelo `quantos`: a fatia serve
+    // só para percorrer o que veio, e a decisão usa a contagem original.
+    let quantos = lidos.as_ref().map(Vec::len);
+    let lista: &[RawDisk] = lidos.as_deref().unwrap_or(&[]);
 
     for (indice, disco) in lista.iter().enumerate() {
         let nome = disco
@@ -295,16 +343,45 @@ fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
     // elevação. Sem ela, não temos como saber; e não saber precisa ser dito.
     let contadores = confiabilidade();
 
-    if contadores.is_empty() && !lista.is_empty() {
-        faltou_permissao = !super::registry::is_elevated();
-        return faltou_permissao;
-    }
+    match situacao_do_disco(
+        quantos,
+        contadores.as_ref().map(Vec::len),
+        super::registry::is_elevated(),
+    ) {
+        SituacaoDoDisco::Normal => {
+            for contador in contadores.iter().flatten() {
+                findings.extend(achados_de_confiabilidade(contador));
+            }
+            false
+        }
 
-    for contador in &contadores {
-        findings.extend(achados_de_confiabilidade(contador));
-    }
+        // O caminho que já existia: a tela pede administrador.
+        SituacaoDoDisco::PrecisaDeAdministrador => true,
 
-    faltou_permissao
+        // O caminho que faltava. Antes daqui a função voltava calada e a tela
+        // ficava tranquilizadora sobre um disco que ninguém mediu.
+        SituacaoDoDisco::NaoVerificavel => {
+            findings.push(HealthFinding {
+                id: "disk_nao_verificado".to_string(),
+                title: "Saúde do disco não verificada".to_string(),
+                measured: "O Windows não respondeu à consulta de desgaste e erros do disco, \
+                           mesmo com o Otimiza aberto como administrador."
+                    .to_string(),
+                advice: "Não sabemos o estado deste disco — isto não é o mesmo que dizer que \
+                         ele está bem. Costuma acontecer com controladores RAID e com adaptadores \
+                         USB, que escondem os contadores do disco do Windows."
+                    .to_string(),
+                severity: FindingSeverity::Important,
+                fix_location: FixLocation::None,
+            });
+            false
+        }
+
+        // Perguntamos e o Windows disse que não há disco a reportar. O achado
+        // genérico de "sem dados" continua servindo, e é ele que explica o caso
+        // da máquina virtual — agora só onde a explicação é verdadeira.
+        SituacaoDoDisco::SemDadosDeVerdade => false,
+    }
 }
 
 // -------------------------------------------------------------------- bateria
@@ -417,6 +494,66 @@ pub fn analyze() -> HealthReport {
     HealthReport {
         findings,
         needs_admin,
+    }
+}
+
+#[cfg(test)]
+mod tests_1_7 {
+    use super::*;
+
+    #[test]
+    fn contador_ausente_sem_elevacao_pede_administrador() {
+        // Comportamento que já existia e continua valendo.
+        assert_eq!(
+            situacao_do_disco(Some(1), Some(0), false),
+            SituacaoDoDisco::PrecisaDeAdministrador
+        );
+    }
+
+    #[test]
+    fn contador_ausente_mesmo_elevado_nao_pode_virar_silencio() {
+        // O DEFEITO. `faltou_permissao = !is_elevated()` dava `false` quando o
+        // programa ESTAVA elevado, e a função voltava calada: nem achado de
+        // desgaste, nem aviso. A tela ficava tranquilizadora sobre um disco que
+        // ninguém conseguiu medir.
+        assert_eq!(
+            situacao_do_disco(Some(1), Some(0), true),
+            SituacaoDoDisco::NaoVerificavel
+        );
+    }
+
+    #[test]
+    fn consulta_que_falhou_nao_e_maquina_sem_disco() {
+        // A raiz: `unwrap_or_default()` juntava "perguntei e não há disco" com
+        // "não consegui perguntar". Com os dois iguais, a tela afirmava
+        // "acontece em máquinas virtuais e controladores antigos" — inventando
+        // a causa de uma leitura que nunca aconteceu.
+        assert_eq!(
+            situacao_do_disco(None, None, true),
+            SituacaoDoDisco::NaoVerificavel
+        );
+    }
+
+    #[test]
+    fn maquina_que_realmente_nao_reporta_disco_continua_sendo_isso() {
+        // Perguntamos, o Windows respondeu, e não havia disco para reportar.
+        // Aqui a explicação da máquina virtual é legítima.
+        assert_eq!(
+            situacao_do_disco(Some(0), Some(0), true),
+            SituacaoDoDisco::SemDadosDeVerdade
+        );
+    }
+
+    #[test]
+    fn com_contador_lido_a_analise_segue_normal() {
+        assert_eq!(
+            situacao_do_disco(Some(2), Some(2), true),
+            SituacaoDoDisco::Normal
+        );
+        assert_eq!(
+            situacao_do_disco(Some(2), Some(2), false),
+            SituacaoDoDisco::Normal
+        );
     }
 }
 

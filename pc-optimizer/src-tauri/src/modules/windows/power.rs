@@ -344,13 +344,11 @@ pub fn estado_do_armazenamento_reservado() -> EstadoReservado {
     }
 }
 
-pub fn reserved_storage_enabled() -> Option<bool> {
-    match estado_do_armazenamento_reservado() {
-        EstadoReservado::Ligado => Some(true),
-        EstadoReservado::Desligado => Some(false),
-        _ => None,
-    }
-}
+// `reserved_storage_enabled` morava aqui, devolvendo `Option<bool>`. Foi
+// removida porque o `None` dela era a própria conflação que a 1.7 veio
+// desfazer: juntava "o Windows respondeu que não tem o recurso" com "o Windows
+// recusou responder". Os dois lados — inspeção e aplicação — agora usam
+// `estado_do_armazenamento_reservado`, que separa os dois casos.
 
 pub fn set_reserved_storage(enabled: bool) -> Result<(), String> {
     let estado = if enabled { "Enabled" } else { "Disabled" };

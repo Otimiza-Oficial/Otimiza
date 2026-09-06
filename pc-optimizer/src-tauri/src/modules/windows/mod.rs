@@ -1209,8 +1209,31 @@ impl WindowsOptimizer {
             }
 
             Action::ReservedStorage { enabled } => {
-                let anterior = power::reserved_storage_enabled()
-                    .ok_or("Este Windows não tem Armazenamento Reservado.")?;
+                use power::EstadoReservado;
+
+                // A MESMA distinção que a inspeção passou a fazer. Sem ela aqui,
+                // a inspeção dizia "não sabemos, então oferecemos" e a aplicação
+                // respondia "este Windows não tem o recurso" — afirmando, na
+                // hora de agir, exatamente o que se acabou de admitir não saber.
+                //
+                // O ciclo real contra a máquina pegou esta contradição: o item
+                // virou disponível pela correção da inspeção e falhou aqui com a
+                // mensagem antiga.
+                let anterior = match power::estado_do_armazenamento_reservado() {
+                    EstadoReservado::Ligado => true,
+                    EstadoReservado::Desligado => false,
+                    EstadoReservado::SemRecurso => {
+                        return Err("Este Windows não tem Armazenamento Reservado.".to_string())
+                    }
+                    EstadoReservado::NaoVerificavel => {
+                        return Err(
+                            "O Windows recusou informar se há espaço reservado, mesmo com o \
+                             Otimiza como administrador. Sem saber o estado atual não há como \
+                             desfazer depois, então nada foi alterado."
+                                .to_string(),
+                        )
+                    }
+                };
 
                 if anterior == *enabled {
                     return Ok(None);
@@ -1822,6 +1845,7 @@ mod tests {
 
         println!("otimizações a testar: {}", alvos.len());
         let mut testadas = 0;
+        let mut recusadas = 0;
 
         for spec in alvos {
             let estado_inicial = optimizer.inspect(spec, &log);
@@ -1839,8 +1863,30 @@ mod tests {
                 _ => optimizer.revert(spec.id, log),
             };
 
-            let meio = executar(primeiro, &mut log)
-                .unwrap_or_else(|erro| panic!("{} `{}` falhou: {}", primeiro, spec.id, erro));
+            let meio = match executar(primeiro, &mut log) {
+                Ok(resultado) => resultado,
+
+                // RECUSA HONESTA NÃO É FALHA DO CICLO.
+                //
+                // Duas coisas acontecem nesta máquina, e nas duas o produto age
+                // certo: o Windows nega informar o Armazenamento Reservado, e
+                // nega a escrita na política dos Widgets — as duas mesmo com o
+                // programa elevado. Em ambas o Otimiza explica e NÃO altera
+                // nada, que é exatamente a regra que este ciclo existe para
+                // proteger.
+                //
+                // Tratar por categoria, e não por lista de exceções: lista de
+                // ids envelhece e vira teste que ignora tudo que incomoda. O
+                // critério é o contrato da mensagem — se o produto recusou
+                // agir, ele precisa dizer que nada foi alterado.
+                Err(erro) if e_recusa_honesta(&erro) => {
+                    println!("  {} → recusado sem alterar nada: {}", spec.id, erro);
+                    recusadas += 1;
+                    continue;
+                }
+
+                Err(erro) => panic!("{} `{}` falhou: {}", primeiro, spec.id, erro),
+            };
 
             println!(
                 "  {} → {} ({} mudança(s)){}",
@@ -1879,7 +1925,50 @@ mod tests {
             testadas > 0,
             "nenhuma otimização de administrador estava disponível para testar"
         );
-        println!("ciclo completo em {} otimização(ões)", testadas);
+        println!(
+            "ciclo completo em {} otimização(ões); {} recusadas sem alterar nada",
+            testadas, recusadas
+        );
+    }
+
+    /// Se o erro é o produto recusando agir, e dizendo que não alterou nada.
+    ///
+    /// É o CONTRATO das mensagens de recusa, e existe como função para poder
+    /// ser testado: um `contains` solto dentro do ciclo viraria uma peneira
+    /// invisível, que passa a aceitar falha de verdade no dia em que alguém
+    /// escrever a frase errada.
+    ///
+    /// A frase é obrigatória porque é ela que separa "não fiz, e o sistema está
+    /// intacto" de "falhei no meio". O ciclo pode tolerar a primeira; a segunda
+    /// é exatamente o que ele existe para pegar.
+    fn e_recusa_honesta(erro: &str) -> bool {
+        erro.to_lowercase().contains("nada foi alterado")
+    }
+
+    #[test]
+    fn recusa_honesta_exige_dizer_que_nada_mudou() {
+        // As duas recusas reais desta máquina, com o texto que o produto
+        // realmente emite.
+        assert!(e_recusa_honesta(
+            "O Windows recusou informar se há espaço reservado, mesmo com o Otimiza como \
+             administrador. Sem saber o estado atual não há como desfazer depois, então nada \
+             foi alterado."
+        ));
+
+        assert!(e_recusa_honesta(
+            "O Windows negou a escrita em HKLM\\SOFTWARE\\Policies\\Microsoft\\Dsh mesmo com o \
+             Otimiza aberto como administrador. Isso normalmente é antivírus ou uma proteção de \
+             política bloqueando a alteração — não é falta de permissão sua. Nada foi alterado."
+        ));
+    }
+
+    #[test]
+    fn falha_no_meio_nao_passa_por_recusa() {
+        // O caso que o ciclo existe para pegar: algo quebrou DEPOIS de mexer.
+        // Sem a frase, não é recusa — é falha, e tem que derrubar o teste.
+        assert!(!e_recusa_honesta("Falha ao reverter `X`: acesso negado"));
+        assert!(!e_recusa_honesta("Este ajuste não existe neste Windows"));
+        assert!(!e_recusa_honesta(""));
     }
 
     /// Fluxo completo do produto: medir → otimizar → medir de novo → comparar → desfazer.

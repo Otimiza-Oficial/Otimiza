@@ -18,6 +18,77 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.7.0 — abre mais rápido, e para de dizer que está tudo bem quando não olhou
+
+Versão de conserto e de medida. O programa passou a **abrir em cerca de um terço
+do tempo**, e três telas que tranquilizavam sem ter conseguido verificar nada
+passaram a dizer a verdade.
+
+## Abre bem mais rápido
+
+A abertura caiu de **~3,7 s para ~1,2 s** nesta máquina de testes. Dois motivos,
+e os dois eram desperdício puro:
+
+**A leitura do processador.** O Otimiza pedia ao Windows a medição completa de
+uso da CPU — que custa quase um segundo, porque exige duas amostras separadas por
+um intervalo — quando só precisava do **nome** do processador, que vem de graça.
+
+**A detecção do tipo de disco.** A consulta antiga acionava três comandos
+encadeados do módulo de armazenamento do Windows, e só carregar esse módulo
+levava de 1,5 a 3,5 segundos. Agora a mesma informação é lida direto, e o
+caminho antigo continua guardado como reserva para a máquina onde a consulta
+rápida não responder.
+
+Nada foi trocado por atalho: o tipo de disco decide se otimizações como o
+SysMain são oferecidas, e a classificação continua idêntica — SSD, HD ou
+desconhecido, com desconhecido continuando sem virar palpite.
+
+## A saúde do disco parou de tranquilizar sem ter medido
+
+Este é o conserto mais importante da versão, e fica na **primeira tela**.
+
+Quando o Windows não respondia à consulta de desgaste do disco, o Otimiza dizia:
+*"Sem dados de saúde disponíveis — acontece em máquinas virtuais e em alguns
+controladores antigos"*, marcado como se estivesse tudo certo.
+
+Só que essa explicação era um chute. A consulta podia ter simplesmente falhado —
+e a tela afirmava a causa de uma leitura que nunca aconteceu, sobre um disco que
+ninguém mediu.
+
+Agora a tela separa quatro situações, e quando não sabe, diz:
+**"Não sabemos o estado deste disco — isto não é o mesmo que dizer que ele está
+bem."**
+
+## A memória parou de sumir da tela em silêncio
+
+Se a leitura dos pentes de memória falhasse, o diagnóstico não mostrava **nada**
+sobre memória. Sem achado e sem aviso — o que, na prática, é indistinguível de
+dizer que a memória está boa.
+
+E some justamente com o achado mais valioso do produto: a **memória em canal
+único**, que rende mais que todo o catálogo de ajustes somado. Agora, quando a
+leitura falha, a tela diz que não conseguiu verificar.
+
+## Quando o Windows barra o Otimiza, ele explica
+
+Duas operações desta versão podem ser negadas pelo Windows mesmo com o programa
+aberto como administrador — costuma ser antivírus ou proteção de política.
+
+Antes isso aparecia como um código de erro. Agora a mensagem diz que a causa não
+é falta de permissão sua, aponta a origem provável, e afirma que **nada foi
+alterado**. E o Otimiza recusa agir quando não consegue ler o estado anterior:
+sem saber o que havia antes, não há como prometer o desfazer.
+
+## Debaixo do capô
+
+O ciclo que aplica cada otimização, confere contra o sistema e desfaz voltou a
+ser executado nesta máquina, e três tipos de ação que nunca tinham sido provados
+foram fechados: **desativar serviço**, **ajuste fino de energia** e
+**configuração de inicialização**.
+
+São 677 verificações automáticas, e o programa continua compilando sem um único
+aviso.
+
 # 1.6.0 — otimização que estava lá e não fazia efeito
 
 Versão de conserto, e o conserto é incômodo de admitir: **algumas otimizações
