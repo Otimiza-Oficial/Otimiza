@@ -322,19 +322,38 @@ pub fn boot_limits() -> Vec<(String, String)> {
     }
 }
 
-fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
-    let limits = boot_limits();
+/// O achado dos limites de boot, separado da leitura para poder ser testado.
+///
+/// A elevação entra aqui porque sem ela o `bcdedit` não responde e a lista volta
+/// vazia — indistinguível de uma máquina limpa. O lado do catálogo já tratava
+/// esse caso; este painel não tratava, e os dois se contradiziam na mesma tela:
+/// a lista de otimizações dizia "só dá para conferir como administrador"
+/// enquanto o diagnóstico dava a inicialização por limpa.
+fn boot_limits_finding(limits: &[(String, String)], elevated: bool) -> FirmwareFinding {
+    if limits.is_empty() && !elevated {
+        return FirmwareFinding {
+            id: "boot_limits_desconhecido".to_string(),
+            title: "Limites de inicialização não verificados".to_string(),
+            measured: "O Windows só responde a esta consulta para um programa aberto como \
+                       administrador."
+                .to_string(),
+            advice: "Reabra o Otimiza como administrador para conferir se há núcleos ou memória \
+                     limitados na inicialização."
+                .to_string(),
+            severity: FindingSeverity::Important,
+            fix_location: FixLocation::Software,
+        };
+    }
 
     if limits.is_empty() {
-        findings.push(FirmwareFinding {
+        return FirmwareFinding {
             id: "boot_limits_clear".to_string(),
             title: "Inicialização sem limites artificiais".to_string(),
             measured: "Nenhum limite de núcleos ou memória na configuração de boot.".to_string(),
             advice: String::new(),
             severity: FindingSeverity::Ok,
             fix_location: FixLocation::None,
-        });
-        return;
+        };
     }
 
     let described: Vec<String> = limits
@@ -342,17 +361,24 @@ fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
         .map(|(key, value)| format!("{} = {}", key, value))
         .collect();
 
-    findings.push(FirmwareFinding {
+    FirmwareFinding {
         id: "boot_limits_present".to_string(),
         title: "Inicialização limitando o hardware".to_string(),
         measured: described.join(", "),
-        advice: "O Windows está usando de propósito menos processador ou menos memória \
-                 do que você tem. Isso quase sempre é sobra de mexida no msconfig. \
-                 A otimização \"Liberar limites de inicialização\" corrige."
+        advice: "O Windows está usando de propósito menos processador ou menos memória do que \
+                 você tem. Isso quase sempre é sobra de mexida no msconfig. A otimização \
+                 \"Liberar limites de inicialização\" corrige."
             .to_string(),
         severity: FindingSeverity::Critical,
         fix_location: FixLocation::Software,
-    });
+    }
+}
+
+fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
+    findings.push(boot_limits_finding(
+        &boot_limits(),
+        super::registry::is_elevated(),
+    ));
 }
 
 // ------------------------------------------------------------------- VBS
@@ -581,6 +607,38 @@ pub fn analyze() -> FirmwareReport {
         board: board_name(),
         cpu: cpu_name(),
         findings,
+    }
+}
+
+#[cfg(test)]
+mod tests_1_6 {
+    use super::*;
+
+    #[test]
+    fn sem_elevacao_uma_leitura_vazia_nao_e_boot_limpo() {
+        // Sem administrador o `bcdedit` não responde, e a lista volta vazia.
+        // Dizer "inicialização sem limites" a partir daí é afirmar o que não foi
+        // verificado. O lado do catálogo já respeitava isso; o painel de
+        // diagnóstico não — e os dois se contradiziam na mesma tela.
+        let finding = boot_limits_finding(&[], false);
+        assert_ne!(finding.severity, FindingSeverity::Ok);
+        assert!(finding.measured.contains("administrador"));
+    }
+
+    #[test]
+    fn com_elevacao_uma_leitura_vazia_e_boot_limpo_de_verdade() {
+        assert_eq!(boot_limits_finding(&[], true).severity, FindingSeverity::Ok);
+    }
+
+    #[test]
+    fn limite_encontrado_vale_com_ou_sem_elevacao() {
+        // Se conseguimos ler um limite, ele vale — conseguir ler já prova que a
+        // leitura funcionou.
+        let limites = vec![("numproc".to_string(), "4".to_string())];
+        assert_eq!(
+            boot_limits_finding(&limites, false).severity,
+            FindingSeverity::Critical
+        );
     }
 }
 

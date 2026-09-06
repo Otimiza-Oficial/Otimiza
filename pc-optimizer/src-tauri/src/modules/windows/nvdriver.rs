@@ -468,11 +468,15 @@ fn nome_do_ajuste(api: &Api, id: u32) -> Option<String> {
     Some(String::from_utf16_lossy(&destino[..fim]).to_lowercase())
 }
 
-/// Confere o número da tabela contra o nome que o driver reporta.
+/// O veredito sobre o nome, separado da chamada que o obtém. PURA — e é assim
+/// que a trava do cabeçalho fica provável sem placa de vídeo.
 ///
-/// Fecha por padrão: sem conseguir perguntar, a resposta é não.
-fn conferir_o_numero(api: &Api, opcao: &Opcao, id: u32) -> Result<(), String> {
-    match nome_do_ajuste(api, id) {
+/// FECHA POR PADRÃO. Sem conseguir perguntar (`None`), a resposta é NÃO: um
+/// driver que não sabe dizer o nome de um número também não nos dá como saber
+/// se aquele número é o que pensamos, e escrever no escuro é justamente o que
+/// esta função existe para impedir.
+fn veredito_do_nome(nome: Option<&str>, opcao: &Opcao, id: u32) -> Result<(), String> {
+    match nome {
         Some(nome) if nome.contains(opcao.nome_esperado) => Ok(()),
         Some(nome) => Err(format!(
             "recusei mexer em \"{}\": o driver chama o ajuste {:#010X} de \"{}\", e eu esperava \
@@ -485,6 +489,11 @@ fn conferir_o_numero(api: &Api, opcao: &Opcao, id: u32) -> Result<(), String> {
             opcao.titulo, id
         )),
     }
+}
+
+/// Confere o número da tabela contra o nome que o driver reporta.
+fn conferir_o_numero(api: &Api, opcao: &Opcao, id: u32) -> Result<(), String> {
+    veredito_do_nome(nome_do_ajuste(api, id).as_deref(), opcao, id)
 }
 
 /// Abre a sessão da DRS, faz o trabalho no perfil global e salva.
@@ -531,20 +540,36 @@ fn na_sessao<T>(
     resultado
 }
 
-/// Lê o valor de um ajuste no perfil global.
+/// Traduz o que a NVAPI devolveu numa leitura em `(era_o_padrao, valor)`.
+/// PURA — e separada de `ler_valor` justamente para poder ser provada sem
+/// placa de vídeo, que é a única coisa que nenhum teste desta suíte tem.
 ///
-/// Devolve `(era_o_padrao, valor)`. Ajuste que nem aparece no perfil é ajuste
-/// que ninguém tocou: está no padrão de fábrica, e é isso que fica gravado.
-fn ler_valor(api: &Api, sessao: *mut c_void, perfil: *mut c_void, id: u32) -> (bool, u32) {
-    let mut ajuste = NvdrsSetting::zerada();
-
-    if unsafe { (api.ler_ajuste)(sessao, perfil, id, &mut ajuste) } != NVAPI_OK {
+/// AJUSTE QUE NÃO ESTÁ NO PERFIL É AJUSTE QUE NINGUÉM TOCOU. A NVAPI responde
+/// com erro quando o ajuste nunca foi gravado no perfil global, e a leitura
+/// certa disso é "está no padrão de fábrica" — não "não sei". A diferença
+/// aparece no desfazer: no primeiro caso o Otimiza chama a restauração de
+/// padrão; no segundo escreveria um zero que nunca existiu, e o cliente ficaria
+/// com uma configuração que não é nem a dele nem a de fábrica.
+fn interpretar_leitura(leitura_deu_certo: bool, e_predefinido: u32, valor: u32) -> (bool, u32) {
+    if !leitura_deu_certo {
         return (true, 0);
     }
 
-    // `e_predefinido_agora` é o próprio driver dizendo que o valor de agora é o
-    // de fábrica. Confiar nele é melhor do que comparar números na mão.
-    (ajuste.e_predefinido_agora != 0, ajuste.valor_atual.numero)
+    // `e_predefinido` é o próprio driver dizendo que o valor de agora é o de
+    // fábrica. Confiar nele é melhor do que comparar números na mão.
+    (e_predefinido != 0, valor)
+}
+
+/// Lê o valor de um ajuste no perfil global.
+fn ler_valor(api: &Api, sessao: *mut c_void, perfil: *mut c_void, id: u32) -> (bool, u32) {
+    let mut ajuste = NvdrsSetting::zerada();
+    let situacao = unsafe { (api.ler_ajuste)(sessao, perfil, id, &mut ajuste) };
+
+    interpretar_leitura(
+        situacao == NVAPI_OK,
+        ajuste.e_predefinido_agora,
+        ajuste.valor_atual.numero,
+    )
 }
 
 fn escrever_valor_cru(
@@ -937,7 +962,15 @@ mod tests {
                         opcao.nome_esperado
                     );
                 }
-                None => println!("{:#010X}: este driver nao soube dizer o nome", id),
+                // NUMERO QUE O DRIVER NAO CONHECE E NUMERO ERRADO. Sem esta
+                // exigencia, um digito trocado na tabela passaria batido: a
+                // trava do `conferir_o_numero` recusaria a escrita em
+                // silencio e o botao simplesmente nunca funcionaria, sem
+                // ninguem saber por que.
+                None => panic!(
+                    "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela \n                     esta errado, ou nao existe mais nesta versao do driver",
+                    opcao.id, id
+                ),
             }
         }
     }
@@ -978,6 +1011,99 @@ mod tests {
             "`estado()` precisa classificar com o resultado REAL da enumeracao de \
              placas -- qualquer constante no lugar faz o produto oferecer ajustes \
              de NVIDIA em maquina com Radeon"
+        );
+    }
+
+    #[test]
+    fn ajuste_ausente_do_perfil_conta_como_padrao_de_fabrica() {
+        // A NVAPI responde com erro quando o ajuste nunca foi gravado no perfil
+        // global -- e isso quer dizer "esta no padrao", nao "nao sei". Lido como
+        // "nao sei", o desfazer escreveria um zero que nunca existiu, e o
+        // cliente ficaria com uma configuracao que nao e nem a dele nem a de
+        // fabrica. E o caso MAIS COMUM de todos: perfil limpo, cliente que
+        // nunca abriu o Painel de Controle da NVIDIA.
+        assert_eq!(interpretar_leitura(false, 0, 0), (true, 0));
+        assert_eq!(
+            interpretar_leitura(false, 0, 12345),
+            (true, 0),
+            "leitura que falhou nao tem valor para aproveitar"
+        );
+
+        // Leitura boa: quem decide se e o padrao e o driver.
+        assert_eq!(interpretar_leitura(true, 1, 7), (true, 7));
+        assert_eq!(interpretar_leitura(true, 0, 7), (false, 7));
+
+        // E o valor zero de um ajuste que o cliente escolheu NAO pode virar
+        // "padrao": zero e valor legitimo em varios ajustes da NVIDIA.
+        assert_eq!(interpretar_leitura(true, 0, 0), (false, 0));
+
+        // A ida e volta pelo historico precisa preservar os dois casos.
+        let (era_padrao, valor) = interpretar_leitura(true, 0, 0);
+        assert_eq!(
+            plano_de_desfazer(&codificar_anterior(era_padrao, valor)),
+            PlanoDeDesfazer::Escrever(0)
+        );
+        let (era_padrao, valor) = interpretar_leitura(false, 0, 0);
+        assert_eq!(
+            plano_de_desfazer(&codificar_anterior(era_padrao, valor)),
+            PlanoDeDesfazer::RestaurarPadrao
+        );
+    }
+
+    // A leitura de verdade precisa passar o que a NVAPI devolveu, e nao
+    // constantes: `interpretar_leitura(true, 1, 0)` ali dentro faria todo
+    // ajuste parecer estar no padrao, e o desfazer restauraria o padrao por
+    // cima da escolha do cliente. Nenhum teste de logica pega isso -- a suite
+    // nao tem como chamar `ler_valor`, que precisa de uma sessao de verdade.
+    #[test]
+    fn a_leitura_real_interpreta_o_que_a_nvapi_devolveu() {
+        let fonte = codigo_fonte_deste_arquivo();
+
+        assert!(
+            fonte.contains("situacao == NVAPI_OK,")
+                && fonte.contains("ajuste.e_predefinido_agora,")
+                && fonte.contains("ajuste.valor_atual.numero,"),
+            "`ler_valor` precisa interpretar os valores que a NVAPI escreveu na              estrutura, e nao constantes"
+        );
+    }
+
+    #[test]
+    fn o_portao_do_nome_recusa_o_que_nao_bate_e_o_que_nao_da_para_conferir() {
+        // A UNICA COISA entre um numero errado na tabela e uma escrita na opcao
+        // errada do driver. Aqui ela e provada sem placa de video nenhuma.
+        let vsync = opcao_por_id("vsync").expect("o catalogo tem vsync");
+
+        // O caso bom: o nome do driver contem o que a tabela espera.
+        assert!(veredito_do_nome(Some("vertical sync"), vsync, 0x00A8_79CF).is_ok());
+
+        // Numero errado apontando para OUTRA opcao conhecida do driver. E o
+        // caso perigoso: a escrita daria certo, na opcao errada.
+        let erro = veredito_do_nome(Some("shader cache"), vsync, 0x0019_8FFF)
+            .expect_err("nome que nao bate precisa recusar");
+        assert!(erro.contains("shader cache"), "{}", erro);
+        assert!(erro.contains("vertical sync"), "{}", erro);
+
+        // E o caso em que nao da para perguntar: FECHA POR PADRAO.
+        let erro = veredito_do_nome(None, vsync, 0x00A8_79CF)
+            .expect_err("sem saber o nome, a resposta e nao");
+        assert!(!erro.trim().is_empty());
+
+        // A comparacao e por conteudo, e nao por igualdade: o driver acrescenta
+        // sufixos ("texture filtering - quality") e a tabela guarda so o miolo.
+        let textura = opcao_por_id("textura").expect("o catalogo tem textura");
+        assert!(veredito_do_nome(Some("texture filtering - quality"), textura, 0).is_ok());
+    }
+
+    // E o portao precisa perguntar AO DRIVER, e nao a uma constante: um
+    // `veredito_do_nome(Some(opcao.nome_esperado), ...)` ali dentro passaria em
+    // todo teste puro acima e nao conferiria coisa nenhuma.
+    #[test]
+    fn o_portao_pergunta_o_nome_ao_driver() {
+        let fonte = codigo_fonte_deste_arquivo();
+
+        assert!(
+            fonte.contains("veredito_do_nome(nome_do_ajuste(api, id).as_deref(), opcao, id)"),
+            "`conferir_o_numero` precisa julgar o nome que o DRIVER devolveu"
         );
     }
 

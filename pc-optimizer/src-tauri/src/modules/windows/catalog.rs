@@ -14,6 +14,12 @@ use crate::modules::optimizer::{Category, ExpectedGain, OptimizationInfo, Optimi
 pub enum RegValue {
     Dword(u32),
     Text(&'static str),
+    /// Valor binário bruto.
+    ///
+    /// Existe por causa da `UserPreferencesMask`, que é onde o Windows guarda,
+    /// bit a bit, quais efeitos visuais estão ligados. Sem escrever binário só
+    /// dá para mudar o rótulo "melhor desempenho" e deixar os efeitos rodando.
+    Binary(&'static [u8]),
 }
 
 /// Uma ação concreta que a otimização executa no sistema.
@@ -57,6 +63,19 @@ pub enum Action {
     ReservedStorage { enabled: bool },
     /// Remove o relógio de plataforma forçado na configuração de boot.
     RemoveForcedPlatformClock,
+    /// Impede o hipervisor de subir no boot.
+    ///
+    /// Anda junto com o desligamento do VBS, e não por capricho: o VBS roda em
+    /// cima do hipervisor. Zerar só as chaves de registro tira a proteção e
+    /// deixa o hipervisor sendo carregado — o cliente paga o preço em segurança
+    /// e não recebe o desempenho que a otimização prometeu.
+    DisableHypervisor,
+    /// Desliga Filtragem de Teclas, Teclas de Aderência e Teclas Alternadas.
+    ///
+    /// Ação própria, e não três escritas de registro, porque o estado mora num
+    /// campo de bits: só o bit 0 pode mudar, senão as preferências do usuário
+    /// sobre atalho, som e aviso vão junto.
+    AccessibilityKeysOff,
 }
 
 /// Condição de hardware em que uma otimização pesa MUITO mais que a média.
@@ -293,6 +312,29 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 path: r"Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects",
                 name: "VisualFXSetting",
                 value: RegValue::Dword(2),
+            },
+            // Esta é a linha que faz a otimização valer. `VisualFXSetting` é só
+            // o rótulo que a tela de Sistema mostra; os efeitos de verdade
+            // moram nos bits desta máscara, e é ela que o Painel de Controle
+            // grava ao escolher "melhor desempenho". Sem ela, o produto trocava
+            // o rótulo e o Windows seguia animando tudo — medido na máquina do
+            // dono: `VisualFXSetting = 2` com a máscara `9E ...`, ou seja,
+            // rótulo dizendo uma coisa e sistema fazendo outra.
+            //
+            // `90 12 03 80 10 00 00 00` é exatamente o que o Windows escreve
+            // nessa escolha: animação de janela, sombra, deslizar de menu e
+            // arrastar conteúdo desligados; suavização de fonte mantida.
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Control Panel\Desktop",
+                name: "UserPreferencesMask",
+                value: RegValue::Binary(&[0x90, 0x12, 0x03, 0x80, 0x10, 0x00, 0x00, 0x00]),
+            },
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Control Panel\Desktop",
+                name: "DragFullWindows",
+                value: RegValue::Text("0"),
             },
             Action::Registry {
                 hive: "HKCU",
@@ -666,6 +708,9 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 name: "Enabled",
                 value: RegValue::Dword(0),
             },
+            // Sem esta linha o hipervisor continua subindo no boot, e o custo de
+            // desempenho que a otimização promete devolver fica onde estava.
+            Action::DisableHypervisor,
         ],
     },
     OptimizationSpec {
@@ -1096,6 +1141,21 @@ pub static CATALOG: &[OptimizationSpec] = &[
     // ======================================================================
 
     OptimizationSpec {
+        id: "accessibility_keys_off",
+        name: "Desligar teclas de acessibilidade acionadas sem querer",
+        description: "Desliga a Filtragem de Teclas e as Teclas de Aderência, que o Windows liga sozinho por atalho de teclado.",
+        honest_effect: "Só aparece se alguma delas estiver LIGADA na sua máquina — e quando está, o teclado atrasa de verdade: a Filtragem de Teclas chega a ignorar toques por um segundo inteiro. Ela liga sozinha ao segurar o Shift por oito segundos, o que acontece jogando sem ninguém perceber. Não muda FPS: muda o teclado responder na hora. Se você USA esses recursos por necessidade, não aplique — eles existem por um bom motivo.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::AccessibilityKeysOff],
+    },
+    OptimizationSpec {
         id: "clean_temp_files",
         name: "Limpar arquivos temporários",
         description: "Apaga o conteúdo das pastas de temporários do Windows e do seu usuário.",
@@ -1115,6 +1175,63 @@ pub static CATALOG: &[OptimizationSpec] = &[
 /// Busca uma otimização pelo identificador.
 pub fn find(id: &str) -> Option<&'static OptimizationSpec> {
     CATALOG.iter().find(|spec| spec.id == id)
+}
+
+#[cfg(test)]
+mod tests_1_6 {
+    use super::*;
+
+    /// `VisualFXSetting = 2` é só o RÓTULO de "melhor desempenho". Quem governa
+    /// as animações é a `UserPreferencesMask`, e o Painel de Controle escreve as
+    /// duas coisas. Na máquina do dono o resultado era `VisualFXSetting = 2` com
+    /// a máscara `9E ...`: rótulo dizendo uma coisa, sistema fazendo outra.
+    #[test]
+    fn efeitos_visuais_escrevem_a_mascara_que_realmente_governa() {
+        let spec = find("visual_effects_performance").expect("otimização deveria existir");
+
+        assert!(
+            spec.actions.iter().any(|acao| matches!(
+                acao,
+                Action::Registry { name, value: RegValue::Binary(_), .. }
+                    if *name == "UserPreferencesMask"
+            )),
+            "sem UserPreferencesMask a otimização muda o rótulo e não o comportamento"
+        );
+    }
+
+    /// Arrastar janela redesenhando todo o conteúdo é um dos efeitos mais caros
+    /// em PC fraco, e é justamente o que "melhor desempenho" desliga.
+    #[test]
+    fn efeitos_visuais_desligam_o_arrasto_de_janela_cheia() {
+        let spec = find("visual_effects_performance").expect("otimização deveria existir");
+
+        assert!(spec.actions.iter().any(|acao| matches!(
+            acao,
+            Action::Registry { name, value: RegValue::Text("0"), .. }
+                if *name == "DragFullWindows"
+        )));
+    }
+
+    /// O VBS roda EM CIMA do hipervisor. Zerar as duas chaves do DeviceGuard
+    /// desliga a camada de segurança, mas se o hipervisor continuar sendo
+    /// carregado no boot o custo de desempenho continua exatamente onde estava
+    /// — e é justamente esse custo que a otimização promete devolver.
+    ///
+    /// Sem `hypervisorlaunchtype off`, o cliente abre mão da proteção das senhas
+    /// do Windows, que é o que o aviso vermelho desta otimização anuncia, e
+    /// recebe menos do que foi prometido. Aqui a conta é pior que em qualquer
+    /// outro item: esta é a única que cobra em segurança.
+    #[test]
+    fn desligar_vbs_tambem_impede_o_hipervisor_de_subir() {
+        let spec = find("disable_vbs").expect("otimização deveria existir");
+
+        assert!(
+            spec.actions
+                .iter()
+                .any(|acao| matches!(acao, Action::DisableHypervisor)),
+            "sem desligar o hipervisor, o cliente perde a proteção e não ganha o desempenho"
+        );
+    }
 }
 
 #[cfg(test)]

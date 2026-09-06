@@ -6,6 +6,7 @@
 // 2. Se uma ação falhar no meio de uma otimização, as ações já aplicadas são
 //    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
 
+pub mod acessibilidade;
 pub mod achados;
 pub mod anticheat;
 pub mod bloatware;
@@ -53,6 +54,7 @@ pub mod shell;
 pub mod startup;
 pub mod suporte;
 pub mod suspend;
+pub mod sysparams;
 pub mod tarefa_longa;
 pub mod tasks;
 pub mod thermal;
@@ -159,6 +161,22 @@ impl WindowsOptimizer {
                 Some("Só dá para conferir o estado atual como administrador.".to_string())
             }
 
+            // Elevado e ainda assim sem resposta. Medido no Windows 11 Pro da
+            // máquina de desenvolvimento: o comando existe e devolve "acesso
+            // negado". O item aparece como disponível porque não foi possível
+            // conferir — e isso precisa estar escrito, senão vira promessa de
+            // conserto para um problema que talvez nem exista.
+            Action::ReservedStorage { .. }
+                if power::estado_do_armazenamento_reservado()
+                    == power::EstadoReservado::NaoVerificavel =>
+            {
+                Some(
+                    "O Windows recusou informar o estado atual, mesmo como administrador. \
+                     Não sabemos se há espaço reservado nesta máquina."
+                        .to_string(),
+                )
+            }
+
             _ => None,
         }
     }
@@ -175,6 +193,7 @@ impl WindowsOptimizer {
                 let current = registry::read(hive, path, name);
                 let target = match value {
                     RegValue::Dword(v) => PreviousValue::Dword(*v),
+                    RegValue::Binary(v) => PreviousValue::Binary(v.to_vec()),
                     RegValue::Text(v) => PreviousValue::Text(v.to_string()),
                 };
 
@@ -237,11 +256,24 @@ impl WindowsOptimizer {
                 setting,
                 value,
             } => match power::active_scheme() {
-                Ok(scheme) => match power::read_power_setting(&scheme, subgroup, setting) {
-                    Ok(PreviousValue::Dword(current)) if current == *value => ActionState::Satisfied,
-                    Ok(_) => ActionState::Pending,
-                    Err(_) => ActionState::NotApplicable,
-                },
+                Ok(scheme) => {
+                    // O ajuste precisa valer na tomada E na bateria. Conferir só
+                    // a tomada dava por aplicada, num notebook, uma otimização
+                    // que não valia fora dela.
+                    //
+                    // E o valor lido é o EFETIVO: sem valor próprio, o plano
+                    // herda o padrão do Windows, e é o padrão que a máquina usa.
+                    let ac = power::valor_efetivo(&scheme, subgroup, setting, false);
+                    let dc = power::valor_efetivo(&scheme, subgroup, setting, true);
+
+                    if power::power_setting_satisfeito(ac, dc, *value) {
+                        ActionState::Satisfied
+                    } else if power::read_power_setting(&scheme, subgroup, setting).is_err() {
+                        ActionState::NotApplicable
+                    } else {
+                        ActionState::Pending
+                    }
+                }
                 Err(_) => ActionState::NotApplicable,
             },
 
@@ -308,10 +340,43 @@ impl WindowsOptimizer {
                     return ActionState::Pending;
                 }
 
-                match power::reserved_storage_enabled() {
-                    Some(current) if current == *enabled => ActionState::Satisfied,
+                use power::EstadoReservado;
+
+                match power::estado_do_armazenamento_reservado() {
+                    EstadoReservado::Ligado if *enabled => ActionState::Satisfied,
+                    EstadoReservado::Desligado if !*enabled => ActionState::Satisfied,
+                    EstadoReservado::Ligado | EstadoReservado::Desligado => ActionState::Pending,
+                    // O comando respondeu e não trouxe estado: este Windows não
+                    // tem o recurso.
+                    EstadoReservado::SemRecurso => ActionState::NotApplicable,
+                    // O comando não respondeu. Não sabemos — e "não sabemos"
+                    // nunca pode virar "não se aplica a esta máquina".
+                    EstadoReservado::NaoVerificavel => ActionState::Pending,
+                }
+            }
+
+            // Só é oferecida quando alguma das três está de fato ligada. Numa
+            // máquina no padrão do Windows — que é a maioria — esta linha nem
+            // aparece, em vez de virar mais um item para inflar a lista.
+            Action::AccessibilityKeysOff => {
+                if acessibilidade::ligadas().is_empty() {
+                    ActionState::Satisfied
+                } else {
+                    ActionState::Pending
+                }
+            }
+
+            // Mesma regra dos outros itens que dependem do `bcdedit`: sem
+            // elevação a leitura não acontece, e não se afirma o que não foi
+            // verificado.
+            Action::DisableHypervisor => {
+                if !registry::is_elevated() {
+                    return ActionState::Pending;
+                }
+
+                match power::hypervisor_launch_type() {
+                    Some(tipo) if tipo == "off" => ActionState::Satisfied,
                     Some(_) => ActionState::Pending,
-                    // Elevados e ainda sem resposta: este Windows não tem o recurso.
                     None => ActionState::NotApplicable,
                 }
             }
@@ -986,6 +1051,7 @@ impl WindowsOptimizer {
             } => {
                 let previous = match value {
                     RegValue::Dword(v) => registry::set_dword(hive, path, name, *v)?,
+                    RegValue::Binary(v) => registry::set_binary(hive, path, name, v)?,
                     RegValue::Text(v) => registry::set_string(hive, path, name, v)?,
                 };
 
@@ -995,7 +1061,19 @@ impl WindowsOptimizer {
                     name: name.to_string(),
                     previous,
                 });
-                Ok(None)
+
+                // Gravar não basta: as preferências de `HKCU\Control Panel`
+                // ficam em memória desde o logon, e sem avisar o Windows a
+                // otimização valeria só no próximo — numa tela que promete
+                // efeito imediato.
+                if sysparams::precisa_sincronizar_interface(hive, path) {
+                    sysparams::sincronizar_interface();
+                }
+
+                // Quando o shell só relê a chave ao iniciar, o cliente precisa
+                // saber disso — senão aplica, não vê nada mudar na barra de
+                // tarefas e conclui que o produto não funcionou.
+                Ok(sysparams::nota_de_ativacao(hive, path, name).map(|nota| nota.to_string()))
             }
 
             Action::DisableService { name } => {
@@ -1067,8 +1145,16 @@ impl WindowsOptimizer {
             } => {
                 let scheme = power::active_scheme()?;
                 let previous = power::read_power_setting(&scheme, subgroup, setting)?;
+                let previous_dc = power::read_power_setting_dc(&scheme, subgroup, setting).ok();
 
-                if previous == PreviousValue::Dword(*value) {
+                // Os dois modos precisam bater, pelo valor efetivo. Sair aqui
+                // olhando só a tomada deixava a bateria no padrão do Windows e
+                // reportava sucesso.
+                if power::power_setting_satisfeito(
+                    power::valor_efetivo(&scheme, subgroup, setting, false),
+                    power::valor_efetivo(&scheme, subgroup, setting, true),
+                    *value,
+                ) {
                     return Ok(None);
                 }
 
@@ -1078,6 +1164,7 @@ impl WindowsOptimizer {
                     subgroup: subgroup.to_string(),
                     setting: setting.to_string(),
                     previous,
+                    previous_dc,
                 });
                 Ok(None)
             }
@@ -1112,12 +1199,12 @@ impl WindowsOptimizer {
             }
 
             Action::GpuMsiMode => {
-                changes.extend(devices::ativar_msi()?);
+                devices::ativar_msi(changes)?;
                 Ok(None)
             }
 
             Action::NicPowerSaving => {
-                changes.extend(devices::desligar_economia_de_energia_da_rede()?);
+                devices::desligar_economia_de_energia_da_rede(changes)?;
                 Ok(None)
             }
 
@@ -1134,6 +1221,51 @@ impl WindowsOptimizer {
                     previously_enabled: anterior,
                 });
                 Ok(Some("Espaço reservado devolvido ao disco.".to_string()))
+            }
+
+            Action::AccessibilityKeysOff => {
+                let ligadas: Vec<&str> = acessibilidade::ligadas();
+
+                if ligadas.is_empty() {
+                    return Ok(None);
+                }
+
+                // O vetor vai por referência: se a segunda chave falhar, a
+                // primeira — já gravada — continua no histórico e a reversão
+                // automática a desfaz.
+                acessibilidade::desligar(changes)?;
+
+                // O Windows guarda estas preferências em memória desde o logon,
+                // como as do mouse. Sem o aviso, o teclado continuaria atrasando
+                // até o próximo logon — numa otimização que promete efeito
+                // imediato.
+                sysparams::sincronizar_interface();
+
+                Ok(Some(format!("{} desligada(s).", ligadas.join(", "))))
+            }
+
+            Action::DisableHypervisor => {
+                let Some(anterior) = power::hypervisor_launch_type() else {
+                    // Sem conseguir ler o estado atual não há como prometer a
+                    // volta, e mexer sem poder reverter está fora de questão.
+                    return Ok(None);
+                };
+
+                if anterior == "off" {
+                    return Ok(None);
+                }
+
+                shell::run_checked("bcdedit", &["/set", "{current}", "hypervisorlaunchtype", "off"])?;
+
+                // Reaproveita o registro dos limites de boot: ele já sabe
+                // devolver um valor do `bcdedit` ao que estava.
+                changes.push(ChangeRecord::BootLimits {
+                    removed: vec![("hypervisorlaunchtype".to_string(), anterior)],
+                });
+
+                Ok(Some(
+                    "Hipervisor desligado no boot — vale depois de reiniciar.".to_string(),
+                ))
             }
 
             Action::RemoveForcedPlatformClock => {
@@ -1263,6 +1395,10 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
+    // Desfazer também precisa valer na hora. Sem isto, "Desfazer" devolveria o
+    // registro e deixaria a sessão com o comportamento que o cliente pediu para
+    // remover — o mesmo defeito, espelhado.
+    let mut sincronizar_interface = false;
 
     for change in changes.iter().rev() {
         let result = match change {
@@ -1271,7 +1407,13 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 path,
                 name,
                 previous,
-            } => registry::restore(hive, path, name, previous),
+            } => {
+                if sysparams::precisa_sincronizar_interface(hive, path) {
+                    sincronizar_interface = true;
+                }
+
+                registry::restore(hive, path, name, previous)
+            }
 
             ChangeRecord::ServiceStartType { service, previous } => {
                 services::set_start_type(service, previous)
@@ -1288,7 +1430,14 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 subgroup,
                 setting,
                 previous,
-            } => power::restore_power_setting(scheme, subgroup, setting, previous),
+                previous_dc,
+            } => power::restore_power_setting(
+                scheme,
+                subgroup,
+                setting,
+                previous,
+                previous_dc.as_ref(),
+            ),
 
             ChangeRecord::MemoryCompression { previously_enabled } => {
                 power::set_memory_compression(*previously_enabled)
@@ -1360,6 +1509,12 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
         if let Err(error) = result {
             errors.push(error);
         }
+    }
+
+    // Depois de restaurar tudo, e uma vez só: a sincronização lê o registro já
+    // devolvido ao estado original.
+    if sincronizar_interface {
+        sysparams::sincronizar_interface();
     }
 
     if errors.is_empty() {

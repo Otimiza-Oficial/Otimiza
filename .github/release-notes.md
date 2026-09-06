@@ -18,6 +18,108 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.6.0 — otimização que estava lá e não fazia efeito
+
+Versão de conserto, e o conserto é incômodo de admitir: **algumas otimizações
+estavam gravando a configuração certa e não mudando o comportamento da
+máquina**. Apareciam como aplicadas, e não eram.
+
+Onze correções e um recurso novo. Nenhuma otimização foi removida — todas
+continuam no catálogo, agora funcionando.
+
+## Notebook na bateria era o pior caso
+
+Três otimizações de processador — estacionamento de núcleos, estado mínimo e
+limitação de energia — gravavam só o valor de *ligado na tomada*. O valor de
+*na bateria* continuava no padrão do Windows.
+
+Num notebook fora da tomada elas **não faziam absolutamente nada**, e a lista
+dizia que estavam aplicadas.
+
+Medido: com o processador exigido em 100% na tomada, a bateria seguia em 5%.
+Agora os dois modos são gravados, e a tela só diz "aplicada" quando vale nos
+dois.
+
+## Efeitos visuais mudavam o rótulo, não os efeitos
+
+A opção "melhor desempenho" escrevia o rótulo que a tela de Sistema do Windows
+mostra — e deixava as animações ligadas. Faltava a parte que realmente governa
+sombra, animação de janela e deslizar de menu.
+
+Junto veio o arraste de janela cheia, um dos efeitos que mais pesam em PC
+fraco.
+
+## Ajuste que só valia depois de reiniciar agora vale na hora
+
+Desligar a aceleração do mouse e trocar os efeitos visuais gravavam certo e não
+mudavam nada até o próximo logon — em telas que prometem efeito imediato.
+
+O Windows guarda essas preferências em memória desde que você entra na conta, e
+o programa não estava avisando que elas mudaram. Agora avisa. Vale ao aplicar e
+ao desfazer.
+
+## Desligar o VBS tirava a proteção sem entregar o desempenho
+
+Esta é a correção mais séria, porque é a única otimização do produto que cobra
+em segurança.
+
+O VBS roda em cima do hipervisor do Windows. O Otimiza desligava o VBS e deixava
+o hipervisor subindo no boot — ou seja, o cliente abria mão da proteção das
+senhas do Windows e recebia menos desempenho do que foi prometido.
+
+Agora o hipervisor é desligado junto, e continua reversível.
+
+## Teclas de acessibilidade acionadas sem querer
+
+Recurso novo, e só aparece se estiver acontecendo com você.
+
+Segurar o Shift por oito segundos liga a **Filtragem de Teclas** do Windows. Em
+jogo, segurar Shift é agachar, correr, andar devagar — acontece sem ninguém
+perceber, uma caixa aparece, a pessoa fecha no reflexo, e dali em diante o
+teclado passa a ignorar toques. Chega a atrasar um segundo inteiro por tecla.
+
+O Otimiza detecta e desliga, preservando as suas outras preferências de
+teclado. **Se você usa esses recursos por necessidade, não aplique** — eles
+existem por um bom motivo, e o texto na tela diz isso.
+
+## "Não sei" parou de virar "não se aplica"
+
+Duas telas afirmavam coisa que não tinham conseguido verificar:
+
+- O **Armazenamento Reservado** aparecia como *não se aplica a esta máquina*
+  quando, na verdade, o Windows tinha recusado responder
+- Os **limites de inicialização** eram dados por limpos mesmo quando a consulta
+  não foi respondida
+
+As duas agora dizem que não sabem, e por quê.
+
+E quando o Windows nega uma alteração mesmo com o programa aberto como
+administrador, a mensagem parou de ser um código de erro: ela explica que a
+causa costuma ser antivírus ou proteção de política, que não é falta de
+permissão sua, e que nada foi alterado.
+
+## Ajuste do driver NVIDIA fora do padrão parou de ser confundido
+
+Ao ler um ajuste do perfil da NVIDIA, o driver responde com erro quando aquele
+ajuste **nunca foi gravado** — e a leitura certa disso é "está no padrão de
+fábrica", não "não sei".
+
+A diferença aparecia no desfazer: o Otimiza podia escrever um zero que nunca
+existiu, e a placa ficava com uma configuração que não era nem a sua nem a de
+fábrica. Agora a distinção é explícita.
+
+Junto veio a trava que confere o nome do ajuste antes de escrever: se o driver
+chama aquele número de outra coisa, o Otimiza **recusa mexer** em vez de
+escrever no escuro. E as duas regras passaram a ser testadas sem depender de ter
+uma placa NVIDIA na máquina — o que significa que a esteira de publicação também
+as verifica agora.
+
+## Desfazer ficou mais seguro
+
+Numa máquina com várias placas de rede, se a alteração falhasse no meio, as
+placas já alteradas ficavam **fora do histórico** — o "Desfazer" não alcançava
+elas. Corrigido para as placas de rede e para as de vídeo.
+
 # 1.5.0 — o que o produto nao sabe, ele passa a dizer
 
 Versao de conserto e de medida. Tres recursos novos, sete correcoes, e uma

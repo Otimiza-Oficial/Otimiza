@@ -53,6 +53,15 @@ pub enum ChangeRecord {
         subgroup: String,
         setting: String,
         previous: PreviousValue,
+        /// O valor anterior no modo bateria.
+        ///
+        /// `Option` com padrão porque existe `changes.json` em máquina de
+        /// cliente gravado antes de o produto passar a escrever a bateria. Ler
+        /// um desses arquivos precisa continuar funcionando: `None` significa
+        /// "esta mudança é antiga e só mexeu na tomada", e a reversão respeita
+        /// isso em vez de inventar um valor para a bateria.
+        #[serde(default)]
+        previous_dc: Option<PreviousValue>,
     },
     MemoryCompression {
         previously_enabled: bool,
@@ -361,5 +370,43 @@ mod tests {
     fn taking_unknown_optimization_is_not_an_error() {
         let mut log = in_memory();
         assert!(log.take("never_applied").unwrap().is_none());
+    }
+
+    /// A linha que o cliente le sobre um ajuste do driver da NVIDIA precisa
+    /// dizer O QUE ERA ANTES em portugues, e nao cuspir o codigo interno.
+    ///
+    /// Os dois casos sao opostos e nao podem ser trocados: "o padrao do driver"
+    /// e um estado de fabrica; um numero e uma escolha que o cliente ja tinha
+    /// feito. Confundir os dois na tela faria o cliente achar que o Otimiza
+    /// apagou a configuracao dele -- ou o contrario.
+    #[test]
+    fn a_linha_do_driver_nvidia_diz_o_que_existia_antes() {
+        let do_padrao = ChangeRecord::DriverNvidia {
+            opcao: "vsync".to_string(),
+            valor_anterior: crate::modules::windows::nvdriver::ANTERIOR_PADRAO.to_string(),
+        }
+        .describe();
+
+        assert!(do_padrao.contains("vsync"), "{}", do_padrao);
+        assert!(do_padrao.contains("padrão do driver"), "{}", do_padrao);
+        assert!(
+            !do_padrao.contains(crate::modules::windows::nvdriver::ANTERIOR_PADRAO),
+            "o codigo interno vazou para a tela: {}",
+            do_padrao
+        );
+
+        let de_escolha = ChangeRecord::DriverNvidia {
+            opcao: "energia".to_string(),
+            valor_anterior: "3".to_string(),
+        }
+        .describe();
+
+        assert!(de_escolha.contains("energia"), "{}", de_escolha);
+        assert!(de_escolha.contains('3'), "{}", de_escolha);
+        assert!(
+            !de_escolha.contains("padrão do driver"),
+            "o valor que o cliente tinha escolhido virou 'padrao': {}",
+            de_escolha
+        );
     }
 }
