@@ -80,8 +80,8 @@ export const es: Conteudo = {
     linhaMeta:
       "Gratis para descargar · activación R$ 20 BRL, una vez · Windows 10 y 11, 64 bits",
     captura: {
-      titulo: "Diagnóstico",
-      descricao: "la primera pantalla, con salud del disco, memoria y los hallazgos de la máquina",
+      titulo: "Panel",
+      descricao: "la pantalla inicial: qué está frenando esta PC, medido en el momento",
     },
   },
 
@@ -169,8 +169,8 @@ export const es: Conteudo = {
     provaRotulo: "LA PRUEBA",
     provaTitulo: "El antes y el después, lado a lado, con el veredicto de cada métrica.",
     provaCaptura: {
-      titulo: "Prueba",
-      descricao: "la pantalla de antes y después, con el número de cada métrica",
+      titulo: "Optimizaciones",
+      descricao: "medir antes, optimizar, medir de nuevo — y el catálogo diciendo qué ya está optimizado",
     },
   },
 
@@ -179,24 +179,29 @@ export const es: Conteudo = {
     titulo: "El programa entero, sin pantalla escondida.",
     itens: [
       {
-        arquivo: "otimizacoes.png",
-        titulo: "Optimizaciones",
-        descricao: "el catálogo entero, con el estado actual de cada ajuste",
+        arquivo: "diagnostico.png",
+        titulo: "Diagnóstico",
+        descricao: "monitores, memoria instalada y los hallazgos de esta máquina",
       },
       {
-        arquivo: "firmware.png",
-        titulo: "Firmware y hardware",
-        descricao: "memoria en canal único, XMP y rBAR, con dónde se resuelve cada cosa",
+        arquivo: "jogos.png",
+        titulo: "Juegos",
+        descricao: "la placa de video, el driver, y la configuración del juego que más mueve los FPS",
       },
       {
-        arquivo: "limpeza.png",
-        titulo: "Liberador de espacio",
-        descricao: "lo que se puede borrar, separado por categoría",
+        arquivo: "espaco.png",
+        titulo: "Espacio",
+        descricao: "lo que se puede liberar — y, antes de eso, adónde fue a parar el disco",
       },
       {
-        arquivo: "inicializacao.png",
-        titulo: "Inicio",
-        descricao: "lo que arranca junto con Windows, y lo que se puede quitar de ahí",
+        arquivo: "sistema.png",
+        titulo: "Sistema",
+        descricao: "lo que arranca junto con Windows, en los tres lugares donde se esconde",
+      },
+      {
+        arquivo: "reparo.png",
+        titulo: "Reparación",
+        descricao: "las herramientas de Windows que devuelven archivos dañados al original",
       },
     ],
   },

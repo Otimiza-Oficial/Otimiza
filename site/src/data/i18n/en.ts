@@ -75,8 +75,8 @@ export const en: Conteudo = {
     linhaMeta:
       "Free to download · activation R$ 20 BRL, once · Windows 10 and 11, 64-bit",
     captura: {
-      titulo: "Diagnostic",
-      descricao: "the first screen, with disk health, memory and the machine's findings",
+      titulo: "Dashboard",
+      descricao: "the opening screen: what is holding this PC back, measured on the spot",
     },
   },
 
@@ -164,8 +164,8 @@ export const en: Conteudo = {
     provaRotulo: "THE PROOF",
     provaTitulo: "Before and after, side by side, with the verdict for each metric.",
     provaCaptura: {
-      titulo: "Proof",
-      descricao: "the before-and-after screen, with the number for each metric",
+      titulo: "Optimizations",
+      descricao: "measure first, optimize, measure again — and the catalog saying what is already optimized",
     },
   },
 
@@ -174,24 +174,29 @@ export const en: Conteudo = {
     titulo: "The whole program, with no hidden screen.",
     itens: [
       {
-        arquivo: "otimizacoes.png",
-        titulo: "Optimizations",
-        descricao: "the whole catalog, with the current state of each tweak",
+        arquivo: "diagnostico.png",
+        titulo: "Diagnostics",
+        descricao: "monitors, installed memory and the findings on this machine",
       },
       {
-        arquivo: "firmware.png",
-        titulo: "Firmware and hardware",
-        descricao: "single-channel memory, XMP and rBAR, with where each one is fixed",
+        arquivo: "jogos.png",
+        titulo: "Games",
+        descricao: "the graphics card, the driver, and the game setting that moves FPS the most",
       },
       {
-        arquivo: "limpeza.png",
-        titulo: "Free up space",
-        descricao: "what can be deleted, sorted by category",
+        arquivo: "espaco.png",
+        titulo: "Space",
+        descricao: "what can be freed — and, before that, where the disk actually went",
       },
       {
-        arquivo: "inicializacao.png",
-        titulo: "Startup",
-        descricao: "what loads together with Windows, and what can be taken out of there",
+        arquivo: "sistema.png",
+        titulo: "System",
+        descricao: "what starts with Windows, across the three places it hides in",
+      },
+      {
+        arquivo: "reparo.png",
+        titulo: "Repair",
+        descricao: "the Windows tools that return damaged system files to the original",
       },
     ],
   },

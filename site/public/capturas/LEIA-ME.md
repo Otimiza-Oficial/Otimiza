@@ -1,38 +1,40 @@
 # Capturas de tela do Otimiza
 
-Coloque aqui os prints das abas do aplicativo. O site le esta pasta pelos nomes
-abaixo — se o nome nao bater, a imagem nao aparece.
+As sete abas do aplicativo, uma por arquivo. O site le por estes nomes — se o
+nome nao bater, a imagem some da pagina.
 
-## Nomes esperados
+| Arquivo | Aba | Onde aparece no site |
+|---|---|---|
+| `painel.png` | Painel | Hero, logo abaixo dos botoes |
+| `otimizacoes.png` | Otimizacoes | Secao dos pilares, ao lado da PROVA |
+| `diagnostico.png` | Diagnostico | Galeria, em largura inteira |
+| `jogos.png` | Jogos | Galeria |
+| `espaco.png` | Espaco | Galeria |
+| `sistema.png` | Sistema | Galeria |
+| `reparo.png` | Reparo | Galeria |
 
-| Arquivo | Que aba fotografar |
-|---|---|
-| `diagnostico.png` | A primeira tela: saude do disco, memoria, achados |
-| `otimizacoes.png` | O catalogo de otimizacoes, com o estado de cada uma |
-| `prova.png` | A tela de prova — antes/depois com os numeros |
-| `firmware.png` | Firmware e hardware: canal unico, XMP, rBAR |
-| `limpeza.png` | O liberador de espaco, por categoria |
-| `inicializacao.png` | O gerenciador de inicializacao |
+## Ao trocar uma captura
 
-## Como tirar o print
+Basta sobrescrever o arquivo com o mesmo nome. Nao precisa mexer em codigo.
 
-1. Abra o Otimiza **maximizado**, em monitor de 1920x1080 ou maior
-2. `Win + Shift + S` -> retangulo -> pegue **so a janela**, sem a barra de tarefas
-3. Salve em PNG (nao JPG: texto fica borrado em JPG)
+Se a aba mudar de conteudo a ponto da legenda ficar errada, a legenda esta em
+`src/data/i18n/{pt,en,es}.ts` — e precisa mudar nas TRES.
 
-## O que NAO pode aparecer
+## Antes de salvar, apague daqui
 
-Estes prints vao para a internet publica:
+Estes arquivos vao para a internet publica:
 
-- **O codigo da sua maquina** (`OTZ-XXXX-XXXX-XXXX`) — apague ou borre
-- Nome de usuario do Windows em caminhos de pasta
+- **O codigo da maquina** (`OTZ-XXXX-XXXX-XXXX`)
+- Nome de usuario do Windows em caminho de pasta
 - Numero de serie de disco ou placa
-- Nome de arquivo pessoal na tela de limpeza
+- Nome de arquivo pessoal na tela de Espaco
 
-Se aparecer, borre antes de salvar. Uma vez publicado, some do site mas nao some
-do cache de quem ja viu.
+As sete atuais foram conferidas uma a uma e estao limpas.
 
-## Tamanho
+## Como tirar
 
-Largura de 2400px basta. Acima disso so pesa a pagina sem ninguem enxergar
-diferenca.
+1. Otimiza **maximizado**, monitor de 1920x1080 ou maior
+2. `Win + Shift + S`, retangulo, **so a janela** — sem a barra de tarefas
+3. **PNG**, nunca JPG: JPG borra texto pequeno
+
+Largura de 2400px basta; acima disso so pesa a pagina.

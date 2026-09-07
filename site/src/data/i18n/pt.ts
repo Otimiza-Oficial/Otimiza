@@ -64,8 +64,8 @@ export const pt: Conteudo = {
     linhaMeta:
       "Grátis para baixar · ativação R$ 20, uma vez · Windows 10 e 11, 64 bits",
     captura: {
-      titulo: "Diagnóstico",
-      descricao: "a primeira tela, com saúde do disco, memória e os achados da máquina",
+      titulo: "Painel",
+      descricao: "a abertura: o que está travando este PC, medido na hora e dito na cara",
     },
   },
 
@@ -146,8 +146,8 @@ export const pt: Conteudo = {
     provaRotulo: "A PROVA",
     provaTitulo: "O antes e o depois, lado a lado, com o veredito de cada métrica.",
     provaCaptura: {
-      titulo: "Prova",
-      descricao: "a tela de antes e depois, com o número de cada métrica",
+      titulo: "Otimizações",
+      descricao: "medir antes, otimizar, medir de novo — e o catálogo dizendo o que já está otimizado",
     },
   },
 
@@ -156,24 +156,29 @@ export const pt: Conteudo = {
     titulo: "O programa inteiro, sem tela escondida.",
     itens: [
       {
-        arquivo: "otimizacoes.png",
-        titulo: "Otimizações",
-        descricao: "o catálogo inteiro, com o estado atual de cada ajuste",
+        arquivo: "diagnostico.png",
+        titulo: "Diagnóstico",
+        descricao: "monitores, memória instalada e os achados desta máquina",
       },
       {
-        arquivo: "firmware.png",
-        titulo: "Firmware e hardware",
-        descricao: "memória em canal único, XMP e rBAR, com onde cada coisa se resolve",
+        arquivo: "jogos.png",
+        titulo: "Jogos",
+        descricao: "a placa de vídeo, o driver, e a configuração do jogo que mais mexe no FPS",
       },
       {
-        arquivo: "limpeza.png",
-        titulo: "Liberador de espaço",
-        descricao: "o que dá para apagar, separado por categoria",
+        arquivo: "espaco.png",
+        titulo: "Espaço",
+        descricao: "o que dá para liberar — e, antes disso, onde o disco realmente foi parar",
       },
       {
-        arquivo: "inicializacao.png",
-        titulo: "Inicialização",
-        descricao: "o que sobe junto com o Windows, e o que dá para tirar dali",
+        arquivo: "sistema.png",
+        titulo: "Sistema",
+        descricao: "o que sobe junto com o Windows, nos três lugares onde isso se esconde",
+      },
+      {
+        arquivo: "reparo.png",
+        titulo: "Reparo",
+        descricao: "as ferramentas do Windows que devolvem arquivo de sistema danificado ao original",
       },
     ],
   },
