@@ -1,0 +1,33 @@
+---
+/**
+ * Faixa escura com os quatro numeros medidos. A fonte de cada um fica visivel
+ * de proposito: um numero sem procedencia e exatamente o que este produto
+ * acusa o mercado de fazer.
+ *
+ * O VALOR e o mesmo nas tres linguas. Em ingles "1,2 s" vira "1.2 s" porque a
+ * virgula decimal ali seria lida como milhar — a quantidade nao mudou.
+ */
+import type { Conteudo } from "../data/i18n";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section aria-label={t.a11y.numerosMedidos} class="border-b border-linha bg-carvao">
+  <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-16 lg:px-12">
+    <dl class="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+      {
+        t.numeros.map((n) => (
+          <div class="border-t border-carvao-linha pt-5">
+            <dt class="tabular font-mono text-2xl leading-none text-papel sm:text-3xl">{n.valor}</dt>
+            <dd class="mt-3 text-sm leading-relaxed text-linha-forte">{n.legenda}</dd>
+            <dd class="mt-2 font-mono text-[11px] leading-relaxed text-linha-forte/55">{n.fonte}</dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+</section>

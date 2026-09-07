@@ -1,0 +1,69 @@
+---
+/**
+ * O problema, e em seguida as seis respostas a ele — numeradas 01..06 como nos
+ * arquivos de i18n. Cada bloco carrega a fonte de onde a afirmacao saiu.
+ */
+import type { Conteudo } from "../data/i18n";
+import Captura from "./Captura.astro";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section id="pilares" class="scroll-mt-16 border-b border-linha">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+    <div class="max-w-3xl">
+      <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+        {t.pilares.rotulo}
+      </p>
+      <h2 class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl">
+        {t.pilares.titulo}
+      </h2>
+    </div>
+
+    <div class="mt-16 grid grid-cols-1 gap-x-12 gap-y-12 md:grid-cols-2 lg:grid-cols-3 lg:gap-x-14 lg:gap-y-16">
+      {
+        t.pilares.itens.map((p) => (
+          <article class="border-t border-linha pt-6">
+            <div class="flex items-baseline gap-3">
+              <span class="tabular font-mono text-sm text-tinta-3">{p.numero}</span>
+              <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3">{p.rotulo}</span>
+            </div>
+
+            <h3 class="mt-4 text-lg font-semibold leading-snug tracking-tight text-tinta">{p.titulo}</h3>
+
+            <p class="mt-3 text-sm leading-relaxed text-tinta-2">{p.texto}</p>
+
+            {p.detalhe && (
+              <p class="mt-3 border-l border-linha-forte pl-4 text-sm leading-relaxed text-tinta-3">
+                {p.detalhe}
+              </p>
+            )}
+
+            <p class="mt-5 font-mono text-[11px] leading-relaxed text-tinta-3">{p.fonte}</p>
+          </article>
+        ))
+      }
+    </div>
+
+    <div class="mt-20 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.3fr] lg:items-start lg:gap-16">
+      <div class="max-w-md">
+        <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+          {t.pilares.provaRotulo}
+        </p>
+        <h3 class="mt-5 text-xl font-semibold leading-snug tracking-tight text-tinta sm:text-2xl">
+          {t.pilares.provaTitulo}
+        </h3>
+      </div>
+      <Captura
+        arquivo="prova.png"
+        titulo={t.pilares.provaCaptura.titulo}
+        descricao={t.pilares.provaCaptura.descricao}
+        rotuloPendente={t.a11y.capturaPendente}
+      />
+    </div>
+  </div>
+</section>

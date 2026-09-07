@@ -1,0 +1,44 @@
+---
+/**
+ * Privacidade. Texto integral dos arquivos de i18n, sem adjetivo novo: o
+ * argumento aqui e arquitetural, e enfeitar so enfraquece — nas tres linguas.
+ */
+import type { Conteudo } from "../data/i18n";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section id="privacidade" class="scroll-mt-16 border-b border-linha">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+    <div class="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.15fr] lg:gap-20">
+      <div>
+        <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+          {t.privacidade.rotulo}
+        </p>
+        <h2
+          class="mt-6 max-w-[20ch] text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl"
+        >
+          {t.privacidade.titulo}
+        </h2>
+      </div>
+
+      <div>
+        <p class="max-w-2xl text-base leading-relaxed text-tinta-2 sm:text-lg">{t.privacidade.texto}</p>
+
+        <ul class="mt-10 border-t border-linha">
+          {
+            t.privacidade.itens.map((item) => (
+              <li class="border-b border-linha py-4 text-sm leading-relaxed text-tinta-2 md:text-base">
+                {item}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>

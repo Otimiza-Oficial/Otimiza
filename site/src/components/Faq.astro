@@ -1,0 +1,181 @@
+---
+/**
+ * FAQ. <details>/<summary> nativo — zero JavaScript no cliente.
+ *
+ * As perguntas sao as que alguem prestes a pagar realmente faz, e as
+ * respostas saem do README.md, das notas de release e de
+ * pc-optimizer/docs/LICENCA.md. Item com `confirmar: true` imprime um
+ * comentario HTML no markup: e decisao comercial do dono, nao fato do
+ * produto, e o texto que esta la e provisorio — nas tres linguas, porque a
+ * decisao pendente e a mesma.
+ */
+import type { Conteudo } from "../data/i18n";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section id="faq" class="scroll-mt-16 border-b border-linha">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+    <div class="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1.15fr] lg:gap-20">
+      <header>
+        <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+          {t.faq.rotulo}
+        </p>
+        <h2
+          class="mt-6 max-w-[16ch] text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl"
+        >
+          {t.faq.titulo}
+        </h2>
+        <p class="mt-5 max-w-md text-base leading-relaxed text-tinta-2">
+          {t.faq.texto}
+        </p>
+      </header>
+
+      <div class="border-t border-linha">
+        {
+          t.faq.itens.map((item) => (
+            <details class="item border-b border-linha">
+              {item.confirmar && (
+                <Fragment
+                  set:html="<!-- CONFIRMAR COM O DONO: resposta provisoria. Decisao comercial/juridica, nao fato do produto. Ver src/data/i18n/. -->"
+                />
+              )}
+              <summary>
+                <span class="pergunta">{item.pergunta}</span>
+                <span class="marcador" aria-hidden="true" />
+              </summary>
+              <div class="resposta">
+                {item.resposta.map((paragrafo) => (
+                  <p>{paragrafo}</p>
+                ))}
+              </div>
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* --- O cabecalho clicavel ------------------------------------------- */
+
+  summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.125rem 0;
+    cursor: pointer;
+    list-style: none; /* tira o triangulo do Firefox */
+    color: var(--color-tinta);
+  }
+
+  /* tira o triangulo do Safari/Chrome */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary:focus-visible {
+    outline: 2px solid var(--color-tinta);
+    outline-offset: -2px;
+    border-radius: 2px;
+  }
+
+  .pergunta {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: -0.005em;
+    transition: color 160ms ease;
+  }
+
+  @media (min-width: 640px) {
+    .pergunta {
+      font-size: 1rem;
+    }
+  }
+
+  summary:hover .pergunta {
+    color: var(--color-tinta-2);
+  }
+
+  /* --- Marcador proprio: um "+" de 1px que vira "−" -------------------- */
+
+  .marcador {
+    position: relative;
+    flex: none;
+    width: 11px;
+    height: 11px;
+    margin-top: 0.42rem;
+    color: var(--color-tinta-3);
+  }
+
+  .marcador::before,
+  .marcador::after {
+    content: "";
+    position: absolute;
+    background-color: currentColor;
+    transition: transform 180ms ease, opacity 180ms ease;
+  }
+
+  .marcador::before {
+    top: 5px;
+    left: 0;
+    width: 11px;
+    height: 1px;
+  }
+
+  .marcador::after {
+    top: 0;
+    left: 5px;
+    width: 1px;
+    height: 11px;
+  }
+
+  details[open] .marcador {
+    color: var(--color-tinta);
+  }
+
+  details[open] .marcador::after {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+
+  /* --- A resposta ------------------------------------------------------ */
+
+  .resposta {
+    padding-bottom: 1.5rem;
+    padding-right: 2.25rem;
+    max-width: 62ch;
+  }
+
+  details[open] .resposta {
+    animation: revelar 200ms ease-out;
+  }
+
+  .resposta p {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: var(--color-tinta-2);
+  }
+
+  .resposta p + p {
+    margin-top: 0.875rem;
+  }
+
+  @keyframes revelar {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

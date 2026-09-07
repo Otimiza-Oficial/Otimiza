@@ -1,0 +1,170 @@
+---
+/**
+ * Barra fixa. Solida, sem vidro: a regua de 1px embaixo e o unico separador.
+ * O menu de telefone e um <details> — nao carrega JavaScript nenhum.
+ *
+ * O SELETOR DE IDIOMA tambem nao carrega JavaScript: sao tres links comuns
+ * (PT · EN · ES) para a mesma pagina nas outras duas linguas, e o idioma atual
+ * vem marcado com aria-current="page" em vez de virar link para si mesmo.
+ *
+ * Nao ha deteccao automatica por IP nem por navigator.language, e nao deve
+ * haver: redirecionar por conta propria prende quem quer ler noutra lingua e
+ * atrapalha o buscador, que rastreia de varios paises.
+ *
+ * LIMITACAO CONHECIDA, e o preco de nao usar script: o link de idioma leva ao
+ * topo da outra versao, nao a secao que estava sendo lida. Preservar a ancora
+ * exigiria ler location.hash no cliente, e a troca deixaria de funcionar sem
+ * JavaScript. As ancoras (#precos, #faq, #telas, #licenca) sao as mesmas nas
+ * tres linguas, entao quem quiser voltar ao ponto tem o menu logo ali.
+ */
+import { caminho, IDIOMAS, traducoes } from "../data/i18n";
+import type { Conteudo, Idioma } from "../data/i18n";
+import { produto } from "../data/produto";
+
+interface Props {
+  idioma: Idioma;
+  t: Conteudo;
+}
+
+const { idioma, t } = Astro.props;
+---
+
+<header class="sticky top-0 z-40 border-b border-linha bg-papel">
+  <div class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-5 sm:gap-4 sm:px-8 lg:px-12">
+    <a href="#topo" class="flex items-baseline gap-2 rounded-sm">
+      <span class="text-base font-semibold tracking-tight text-tinta">{produto.nome}</span>
+      <span class="tabular font-mono text-[11px] text-tinta-3">v{produto.versao}</span>
+    </a>
+
+    <!-- Telas largas: navegacao inteira visivel -->
+    <nav aria-label={t.a11y.secoes} class="hidden items-center gap-7 md:flex">
+      {
+        t.cabecalho.links.map((l) => (
+          <a href={l.href} class="rounded-sm text-sm text-tinta-2 transition-colors hover:text-tinta">
+            {l.texto}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-2">
+      <!-- Seletor de idioma. Tres links, zero script. -->
+      <nav aria-label={t.a11y.idioma} class="flex items-center">
+        {
+          IDIOMAS.map((codigo, i) => {
+            const atual = codigo === idioma;
+            const meta = traducoes[codigo].meta;
+            return (
+              <>
+                {i > 0 && (
+                  <span aria-hidden="true" class="px-1 font-mono text-[11px] text-linha-forte">
+                    ·
+                  </span>
+                )}
+                <a
+                  href={caminho(codigo)}
+                  hreflang={meta.hreflang}
+                  lang={meta.htmlLang}
+                  title={meta.nome}
+                  aria-current={atual ? "page" : undefined}
+                  class:list={[
+                    "rounded-sm px-0.5 font-mono text-[11px] tracking-[0.08em] transition-colors",
+                    atual ? "text-tinta" : "text-tinta-3 hover:text-tinta",
+                  ]}
+                >
+                  {meta.sigla}
+                </a>
+              </>
+            );
+          })
+        }
+      </nav>
+
+      <button
+        type="button"
+        id="trocar-tema"
+        aria-label={t.a11y.trocarTema}
+        class="rounded-sm border border-linha-forte p-2 text-tinta-2 transition-colors hover:border-tinta hover:text-tinta"
+      >
+        <svg class="icone-escuro" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+          <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+        </svg>
+        <svg class="icone-claro" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+        </svg>
+      </button>
+
+      <a
+        href="#precos"
+        class="hidden rounded-sm bg-tinta px-4 py-2 text-sm font-medium text-papel transition-colors hover:bg-tinta-2 sm:inline-block"
+      >
+        {t.cabecalho.comprar}
+      </a>
+
+      <!-- Telefone: disclosure nativo, zero script -->
+      <details class="relative md:hidden">
+        <summary
+          class="flex cursor-pointer list-none items-center rounded-sm border border-linha-forte px-3 py-2 text-sm text-tinta-2 [&::-webkit-details-marker]:hidden"
+          aria-label={t.a11y.abrirMenu}
+        >
+          {t.cabecalho.menu}
+        </summary>
+        <!-- Fechar ao escolher: uma linha, sem script externo. Sem ela o painel
+             continua aberto por cima do conteudo depois do salto. -->
+        <nav
+          aria-label={t.a11y.secoes}
+          onclick="this.closest('details').open = false"
+          class="absolute right-0 top-[calc(100%+0.5rem)] w-60 rounded-sm border border-linha bg-papel p-2 shadow-sm"
+        >
+          {
+            t.cabecalho.links.map((l) => (
+              <a href={l.href} class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
+                {l.texto}
+              </a>
+            ))
+          }
+          <a href="#precos" class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
+            {t.cabecalho.preco}
+          </a>
+        </nav>
+      </details>
+    </div>
+  </div>
+</header>
+
+<script is:inline>
+  // Trocar o tema. A escolha fica no navegador de quem clicou e nao vai para
+  // lugar nenhum — coerente com uma pagina que promete que nada sai da maquina.
+  //
+  // O estado inicial ja foi aplicado pelo script do <head>, antes do primeiro
+  // quadro. Aqui so trata o clique.
+  (function () {
+    var botao = document.getElementById("trocar-tema");
+    if (!botao) return;
+
+    botao.addEventListener("click", function () {
+      var raiz = document.documentElement;
+      var atual = raiz.dataset.tema;
+
+      // Sem escolha guardada, quem manda e o sistema. Perguntar ao navegador
+      // evita o bug classico: o primeiro clique nao fazer nada visivel porque
+      // o codigo assumiu "claro" numa maquina configurada como escura.
+      if (!atual) {
+        atual = window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "escuro"
+          : "claro";
+      }
+
+      var proximo = atual === "escuro" ? "claro" : "escuro";
+      raiz.dataset.tema = proximo;
+
+      try {
+        localStorage.setItem("otimiza-tema", proximo);
+      } catch (e) {
+        // Janela anonima recusa gravar. O tema vale ate recarregar, e tudo bem:
+        // melhor que quebrar o clique.
+      }
+    });
+  })();
+</script>

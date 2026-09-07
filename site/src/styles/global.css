@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Fichas de design do Otimiza.
+
+   A paleta NAO foi inventada para o site: ela e a mesma do aplicativo
+   (pc-optimizer/src/styles.css). Neutros quentes, preto quase puro e tres
+   cores semanticas. Site e produto precisam parecer a mesma coisa.
+
+   Regra que vale para o site inteiro: nada de gradiente decorativo, nada de
+   sombra colorida, nada de vidro. O argumento do produto e "medimos e
+   admitimos quando nao mudou nada" — enfeite contradiz o texto.
+--------------------------------------------------------------------------- */
+
+@theme {
+  /* Neutros quentes */
+  --color-papel: #f7f5f2;
+  --color-papel-2: #f0ede8;
+  --color-linha: #e2ded7;
+  --color-linha-forte: #cfc9c0;
+  --color-tinta: #14120f;
+  --color-tinta-2: #3a3630;
+  --color-tinta-3: #6f6a63;
+
+  /* Escuro, para as faixas de captura */
+  --color-carvao: #0d0c0b;
+  --color-carvao-2: #191714;
+  --color-carvao-linha: #2a2723;
+
+  /* Semanticas. Escurecidas em relacao as do app para passar contraste
+     AA sobre papel — as do app vivem sobre fundo preto. */
+  --color-verde: #217a51;
+  --color-ambar: #8f701f;
+  --color-vermelho: #b32b41;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    background-color: var(--color-papel);
+    color: var(--color-tinta);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numero e codigo alinham em coluna. Numero de medicao que dansa quando
+     muda de digito faz a tabela parecer estimativa. */
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-tinta);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   MODO ESCURO
+
+   Nenhum componente precisou mudar. Como todos usam so as fichas semanticas
+   (bg-papel, text-tinta, border-linha...), trocar o valor das variaveis vira
+   o site inteiro. Foi por isso que a disciplina de ficha valeu a pena.
+
+   Tres estados, e a ordem importa:
+     1. :root                      -> claro, o padrao
+     2. @media prefers-color-scheme -> escuro, para quem NAO escolheu
+                                       (bloqueado quando a pessoa escolheu claro)
+     3. [data-tema="escuro"]        -> escuro, escolha explicita, vence os dois
+
+   As cores semanticas voltam a ser as do aplicativo aqui. No claro elas foram
+   escurecidas para passar contraste sobre papel; no escuro o app ja tinha
+   resolvido isso, porque a tela dele sempre foi preta.
+--------------------------------------------------------------------------- */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tema="claro"]) {
+      color-scheme: dark;
+
+      --color-papel: #0d0c0b;
+      --color-papel-2: #161412;
+      --color-linha: #262320;
+      --color-linha-forte: #3d3934;
+      --color-tinta: #f2efe9;
+      --color-tinta-2: #c2bdb4;
+      --color-tinta-3: #8a847b;
+
+      --color-carvao: #050403;
+      --color-carvao-2: #100f0d;
+      --color-carvao-linha: #2a2723;
+
+      --color-verde: #5fd39a;
+      --color-ambar: #e8b23a;
+      --color-vermelho: #ff5c73;
+    }
+  }
+
+  :root[data-tema="escuro"] {
+    color-scheme: dark;
+
+    --color-papel: #0d0c0b;
+    --color-papel-2: #161412;
+    --color-linha: #262320;
+    --color-linha-forte: #3d3934;
+    --color-tinta: #f2efe9;
+    --color-tinta-2: #c2bdb4;
+    --color-tinta-3: #8a847b;
+
+    --color-carvao: #050403;
+    --color-carvao-2: #100f0d;
+    --color-carvao-linha: #2a2723;
+
+    --color-verde: #5fd39a;
+    --color-ambar: #e8b23a;
+    --color-vermelho: #ff5c73;
+  }
+
+  /* O foco e preto no claro e claro no escuro; herdar da tinta resolve os dois. */
+  :focus-visible {
+    outline-color: var(--color-tinta);
+  }
+}
+
+/* O botao de trocar tema mostra so o icone do tema para o qual ele leva.
+   Sem JavaScript decidindo qual mostrar: e CSS, e acerta no primeiro quadro. */
+.icone-claro { display: none; }
+:root[data-tema="escuro"] .icone-claro { display: block; }
+:root[data-tema="escuro"] .icone-escuro { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) .icone-claro { display: block; }
+  :root:not([data-tema="claro"]) .icone-escuro { display: none; }
+}

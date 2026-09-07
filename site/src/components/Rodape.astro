@@ -1,0 +1,53 @@
+---
+/**
+ * Rodape. Curto de proposito: nome, versao, os links de secao.
+ *
+ * NAO acrescente aqui link para o GitHub, para o repositorio nem para as
+ * Releases: eles foram removidos a pedido do dono. E a linha de direitos NAO
+ * afirma que o codigo-fonte e publico ou auditavel — essa afirmacao tambem foi
+ * retirada de proposito. Ver `rodape.direitos` em src/data/i18n/.
+ */
+import type { Conteudo } from "../data/i18n";
+import { produto } from "../data/produto";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+
+/* O ano entra por substituicao para nao obrigar cada traducao a repetir a
+   pontuacao do "©" — e para nao ter data escrita na mao em tres arquivos. */
+const direitos = t.rodape.direitos.replace("{ano}", String(new Date().getFullYear()));
+---
+
+<footer class="bg-papel">
+  <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-16 lg:px-12">
+    <div class="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
+      <div class="max-w-sm">
+        <p class="text-base font-semibold tracking-tight text-tinta">{produto.nome}</p>
+        <p class="mt-2 text-sm leading-relaxed text-tinta-3">{t.hero.promessa}</p>
+        <p class="tabular mt-4 font-mono text-[11px] text-tinta-3">
+          {t.hero.versaoPrefixo} {produto.versao}
+        </p>
+      </div>
+
+      <nav
+        aria-label={t.a11y.linksRodape}
+        class="grid grid-cols-2 gap-x-12 gap-y-3 text-sm sm:gap-x-20"
+      >
+        {
+          t.rodape.links.map((l) => (
+            <a href={l.href} class="rounded-sm text-tinta-2 hover:text-tinta">
+              {l.texto}
+            </a>
+          ))
+        }
+      </nav>
+    </div>
+
+    <div class="mt-12 border-t border-linha pt-6">
+      <p class="text-xs leading-relaxed text-tinta-3">{direitos}</p>
+    </div>
+  </div>
+</footer>

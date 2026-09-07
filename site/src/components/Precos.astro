@@ -1,0 +1,187 @@
+---
+/**
+ * Secao de preco. Um produto so: nao ha tres planos para preencher espaco.
+ *
+ * Todo numero desta tela sai de src/data/precos.ts. Se o preco mudar, ele
+ * muda la e so la — nao ha valor escrito neste arquivo, de proposito, e as
+ * tres linguas mostram o MESMO valor.
+ *
+ * MOEDA: a cobranca e em real, pelo Mercado Pago. Nas versoes em ingles e em
+ * espanhol o valor continua em BRL e a tela diz isso ("R$ 20.00 BRL" mais a
+ * nota logo abaixo). Converter para dolar ou peso na tela seria mentir sobre
+ * o que o checkout vai cobrar. Ver o bloco MOEDA em src/data/precos.ts, que
+ * esta marcado como CONFIRMAR COM O DONO.
+ */
+import type { Conteudo, Idioma } from "../data/i18n";
+import { caminho } from "../data/i18n";
+import { precosDe } from "../data/precos";
+
+interface Props {
+  idioma: Idioma;
+  t: Conteudo;
+}
+
+const { idioma, t } = Astro.props;
+const p = precosDe(idioma);
+
+/* O site roda em subpasta (/Otimiza) no GitHub Pages, e cada idioma tem o seu
+   prefixo. `caminho` cuida dos dois. A pagina de checkout ainda nao existe. */
+const hrefComprar = caminho(idioma, t.precos.caminhoCompra);
+
+/** Lido em voz alta no lugar dos tres pedacos tipograficos do preco. */
+const precoFalado = t.precos.sufixoMoeda
+  ? `${p.aVista.completo} ${t.precos.sufixoMoeda}`
+  : p.aVista.completo;
+---
+
+<section id="precos" class="scroll-mt-16 border-b border-linha">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+    <header class="max-w-2xl">
+      <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+        {t.precos.rotulo}
+      </p>
+      <h2
+        class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl"
+      >
+        {t.precos.titulo}
+      </h2>
+      <p class="mt-5 max-w-xl text-base leading-relaxed text-tinta-2">
+        {t.precos.texto}
+      </p>
+    </header>
+
+    <div class="mt-10 border border-linha-forte bg-papel-2 sm:mt-14">
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,20rem)_1fr]">
+        <!-- Coluna do valor -->
+        <div class="flex flex-col p-6 sm:p-8 lg:p-9">
+          <p class="rotulo">{t.precos.planoRotulo}</p>
+          <h3 class="mt-4 text-lg font-semibold leading-snug tracking-[-0.01em] text-tinta">
+            {t.precos.planoTitulo}
+          </h3>
+
+          <p class="mt-6 flex flex-wrap items-baseline gap-x-1.5 text-tinta" aria-label={precoFalado}>
+            <span aria-hidden="true" class="text-base font-medium text-tinta-2">{p.aVista.moeda}</span>
+            <span
+              aria-hidden="true"
+              class="tabular text-[3.25rem] font-semibold leading-none tracking-[-0.035em] sm:text-6xl"
+            >
+              {p.aVista.inteiro}
+            </span>
+            <span aria-hidden="true" class="tabular text-base font-medium text-tinta-2">
+              {p.aVista.separador}{p.aVista.centavos}
+            </span>
+            {
+              t.precos.sufixoMoeda && (
+                <span
+                  aria-hidden="true"
+                  class="font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-tinta-3"
+                >
+                  {t.precos.sufixoMoeda}
+                </span>
+              )
+            }
+          </p>
+
+          <p class="mt-3 text-sm leading-relaxed text-tinta-2">{t.precos.planoResumo}</p>
+          {p.parcelamento && <p class="mt-1 text-sm text-tinta-3">{p.parcelamento}</p>}
+          {
+            t.precos.notaMoeda && (
+              <p class="mt-2 text-sm leading-relaxed text-tinta-3">{t.precos.notaMoeda}</p>
+            )
+          }
+
+          <a
+            href={hrefComprar}
+            class="mt-7 inline-flex w-full items-center justify-center bg-carvao px-6 py-3.5 text-sm font-medium tracking-[0.01em] text-papel transition-colors hover:bg-tinta-2"
+          >
+            {t.precos.ctaTexto}
+          </a>
+
+          <div class="mt-6 border-t border-linha pt-5">
+            <p class="rotulo">{t.precos.formasRotulo}</p>
+            <p class="mt-2.5 text-sm text-tinta-2">
+              {t.precos.formas.join(" · ")}
+            </p>
+            <p class="mt-1 text-sm text-tinta-3">
+              {t.precos.processadoPor}
+            </p>
+            <p class="mt-4 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-tinta-3">
+              {t.precos.requisito}
+            </p>
+          </div>
+        </div>
+
+        <!-- Coluna do que esta incluso -->
+        <div class="border-t border-linha p-6 sm:p-8 lg:border-l lg:border-t-0 lg:p-9">
+          <p class="rotulo">{t.precos.incluiRotulo}</p>
+          <ul class="mt-6 grid grid-cols-1 gap-x-10 gap-y-6 sm:grid-cols-2">
+            {
+              t.precos.inclui.map((item) => (
+                <li class="item">
+                  <p class="text-[0.9375rem] font-semibold leading-snug text-tinta">
+                    {item.titulo}
+                  </p>
+                  <p class="mt-1.5 text-sm leading-relaxed text-tinta-2">{item.texto}</p>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cartao secundario: opcional, e dito com todas as letras -->
+    <div
+      class="mt-4 flex flex-col gap-5 border border-linha p-6 sm:flex-row sm:items-start sm:justify-between sm:gap-10 sm:p-8"
+    >
+      <div class="max-w-xl">
+        <p class="rotulo">{t.precos.adicional.rotulo}</p>
+        <h3 class="mt-4 text-[0.9375rem] font-semibold leading-snug text-tinta sm:text-base">
+          {t.precos.adicional.titulo}
+        </h3>
+        <p class="mt-2 text-sm leading-relaxed text-tinta-2">{t.precos.adicional.texto}</p>
+        <p class="mt-2 text-sm text-tinta-3">{t.precos.adicional.observacao}</p>
+      </div>
+      <div class="shrink-0 sm:text-right">
+        <p class="tabular text-lg font-semibold tracking-[-0.01em] text-tinta">
+          {p.adicional.completo}{t.precos.sufixoMoeda ? ` ${t.precos.sufixoMoeda}` : ""}
+        </p>
+        <p class="mt-0.5 text-sm text-tinta-3">{t.precos.adicional.porComputador}</p>
+        <a
+          href={hrefComprar}
+          class="mt-3 inline-block border-b border-linha-forte pb-0.5 text-sm text-tinta transition-colors hover:border-tinta"
+        >
+          {t.precos.adicional.comprar}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Rotulo miudo em maiuscula — o mesmo tratamento em todas as secoes. */
+  .rotulo {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-tinta-3);
+  }
+
+  /* Marcador de lista tipografico: uma regua de 1px, nao um icone. */
+  .item {
+    position: relative;
+    padding-left: 1.25rem;
+  }
+
+  .item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.6em;
+    width: 0.6rem;
+    height: 1px;
+    background-color: var(--color-linha-forte);
+  }
+</style>
