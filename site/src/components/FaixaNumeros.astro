@@ -16,15 +16,15 @@ interface Props {
 const { t } = Astro.props;
 ---
 
-<section aria-label={t.a11y.numerosMedidos} class="border-b border-linha bg-carvao">
+<section aria-label={t.a11y.numerosMedidos} class="border-b border-linha bg-inverso">
   <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-16 lg:px-12">
     <dl class="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
       {
         t.numeros.map((n) => (
-          <div class="border-t border-carvao-linha pt-5">
-            <dt class="tabular font-mono text-2xl leading-none text-papel sm:text-3xl">{n.valor}</dt>
-            <dd class="mt-3 text-sm leading-relaxed text-linha-forte">{n.legenda}</dd>
-            <dd class="mt-2 font-mono text-[11px] leading-relaxed text-linha-forte/55">{n.fonte}</dd>
+          <div class="border-t border-inverso-linha pt-5">
+            <dt class="tabular font-mono text-2xl leading-none text-inverso-tinta sm:text-3xl">{n.valor}</dt>
+            <dd class="mt-3 text-sm leading-relaxed text-inverso-tinta-2">{n.legenda}</dd>
+            <dd class="mt-2 font-mono text-[11px] leading-relaxed text-inverso-tinta-2/70">{n.fonte}</dd>
           </div>
         ))
       }

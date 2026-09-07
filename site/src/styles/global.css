@@ -22,10 +22,21 @@
   --color-tinta-2: #3a3630;
   --color-tinta-3: #6f6a63;
 
-  /* Escuro, para as faixas de captura */
+  /* Superficie invertida: a faixa dos numeros e o botao principal.
+     Ela existe para CONTRASTAR com a pagina — entao no tema escuro ela
+     inverte junto, virando clara. Foi por nao separar isso de "moldura de
+     captura" que o botao Comprar ficou preto sobre preto. */
+  --color-inverso: #0d0c0b;
+  --color-inverso-tinta: #f7f5f2;
+  --color-inverso-tinta-2: #cfc9c0;
+  --color-inverso-linha: #2e2a26;
+
+  /* Moldura de captura. Escura NOS DOIS temas: ela emoldura print de um
+     aplicativo de tela preta, e inverter isso quebraria a foto. */
   --color-carvao: #0d0c0b;
   --color-carvao-2: #191714;
   --color-carvao-linha: #2a2723;
+  --color-carvao-tinta: #cfc9c0;
 
   /* Semanticas. Escurecidas em relacao as do app para passar contraste
      AA sobre papel — as do app vivem sobre fundo preto. */
@@ -107,9 +118,17 @@
       --color-tinta-2: #c2bdb4;
       --color-tinta-3: #8a847b;
 
-      --color-carvao: #050403;
-      --color-carvao-2: #100f0d;
-      --color-carvao-linha: #2a2723;
+      /* Mesmo motivo do bloco de baixo: a moldura precisa ficar MAIS CLARA
+         que a pagina no tema escuro, senao some. */
+      --color-carvao: #1a1815;
+      --color-carvao-2: #0a0908;
+      --color-carvao-linha: #302c27;
+      --color-carvao-tinta: #cfc9c0;
+
+      --color-inverso: #f2efe9;
+      --color-inverso-tinta: #14120f;
+      --color-inverso-tinta-2: #4a453e;
+      --color-inverso-linha: #d6d0c6;
 
       --color-verde: #5fd39a;
       --color-ambar: #e8b23a;
@@ -128,9 +147,20 @@
     --color-tinta-2: #c2bdb4;
     --color-tinta-3: #8a847b;
 
-    --color-carvao: #050403;
-    --color-carvao-2: #100f0d;
-    --color-carvao-linha: #2a2723;
+    /* A moldura fica MAIS CLARA que a pagina, nao mais escura: no escuro
+       quem se destaca e quem tem mais luz. Com #050403 sobre #0d0c0b a
+       faixa desaparecia — 1,05:1 de contraste, medido. */
+    --color-carvao: #1a1815;
+    --color-carvao-2: #0a0908;
+    --color-carvao-linha: #302c27;
+    --color-carvao-tinta: #cfc9c0;
+
+    /* A superficie invertida vira clara. Assim o botao Comprar continua
+       sendo a coisa de maior contraste da pagina, que e o trabalho dele. */
+    --color-inverso: #f2efe9;
+    --color-inverso-tinta: #14120f;
+    --color-inverso-tinta-2: #4a453e;
+    --color-inverso-linha: #d6d0c6;
 
     --color-verde: #5fd39a;
     --color-ambar: #e8b23a;
