@@ -68,10 +68,12 @@ export const en: Conteudo = {
     texto:
       "A progress bar, a list of tweaks copied off the internet, and a made-up gain at the end. " +
       "Otimiza is built on the refusal to do that.",
-    ctaComprar: "Buy",
+    ctaBaixar: "Download for Windows",
+    ctaComprar: "See the price",
     ctaTelas: "See the screens",
     versaoPrefixo: "Version",
-    linhaMeta: "lifetime license, no monthly fee · Windows 10 and 11, 64-bit",
+    linhaMeta:
+      "Free to download · activation R$ 20 BRL, once · Windows 10 and 11, 64-bit",
     captura: {
       titulo: "Diagnostic",
       descricao: "the first screen, with disk health, memory and the machine's findings",

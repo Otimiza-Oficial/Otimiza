@@ -57,10 +57,12 @@ export const pt: Conteudo = {
     texto:
       "Barra de progresso, lista de ajustes copiada da internet, e um ganho inventado no final. " +
       "O Otimiza é construído em cima da recusa a fazer isso.",
-    ctaComprar: "Comprar",
+    ctaBaixar: "Baixar para Windows",
+    ctaComprar: "Ver preço",
     ctaTelas: "Ver as telas",
     versaoPrefixo: "Versão",
-    linhaMeta: "licença vitalícia, sem mensalidade · Windows 10 e 11, 64 bits",
+    linhaMeta:
+      "Grátis para baixar · ativação R$ 20, uma vez · Windows 10 e 11, 64 bits",
     captura: {
       titulo: "Diagnóstico",
       descricao: "a primeira tela, com saúde do disco, memória e os achados da máquina",

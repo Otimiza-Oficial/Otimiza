@@ -31,17 +31,29 @@ const { t } = Astro.props;
     </p>
 
     <div class="mt-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+      {/*
+        BAIXAR e a acao principal, e nao COMPRAR. Nao e preferencia de
+        marketing: a licenca nasce presa ao codigo OTZ-XXXX-XXXX-XXXX, e esse
+        codigo so aparece DEPOIS de instalar, no portao da primeira abertura.
+        Mandar a pessoa pagar antes de instalar seria pedir que ela colasse um
+        codigo que ela ainda nao tem.
+
+        E o produto se vende melhor assim: no portao ela ve um problema real da
+        maquina dela, medido na hora. Nenhum concorrente imita isso, porque
+        nenhum mede de verdade.
+      */}
       <a
-        href="#precos"
+        href={produto.instalador}
+        rel="noopener"
         class="inline-flex items-center justify-center rounded-sm bg-tinta px-6 py-3 text-sm font-medium text-papel transition-colors hover:bg-tinta-2"
       >
-        {t.hero.ctaComprar}
+        {t.hero.ctaBaixar}
       </a>
       <a
-        href="#telas"
+        href="#precos"
         class="inline-flex items-center justify-center rounded-sm border border-linha-forte px-6 py-3 text-sm font-medium text-tinta transition-colors hover:border-tinta"
       >
-        {t.hero.ctaTelas}
+        {t.hero.ctaComprar}
       </a>
     </div>
 

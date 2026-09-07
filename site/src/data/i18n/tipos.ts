@@ -85,6 +85,8 @@ export type Conteudo = {
     readonly promessa: string;
     readonly chamada: string;
     readonly texto: string;
+    /** Acao principal: baixar. O codigo da maquina so existe apos instalar. */
+    readonly ctaBaixar: string;
     readonly ctaComprar: string;
     readonly ctaTelas: string;
     /** "Versão" / "Version" / "Versión" — o numero vem do produto.ts. */
