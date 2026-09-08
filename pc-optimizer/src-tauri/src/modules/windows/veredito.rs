@@ -750,7 +750,20 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
 
             Ok(relatorio.achados())
         }),
-        (Origem::Memoria, || Ok(super::memory::analyze().achados())),
+        // NAO CONSEGUIR LER A MEMORIA VIRA LACUNA.
+        //
+        // Sem isto, a falha do WMI sumia do diagnostico — e sumia junto com o
+        // achado mais valioso do produto, a memoria em canal unico. Silencio
+        // aqui e indistinguivel de "esta tudo bem".
+        (Origem::Memoria, || {
+            let relatorio = super::memory::analyze();
+
+            if !relatorio.medido {
+                return Err("nao consegui ler a memoria desta maquina".to_string());
+            }
+
+            Ok(relatorio.achados())
+        }),
         // A janela dos últimos dias. Custa uma leitura de arquivo — é o
         // diagnóstico mais barato do produto, e o único que vê o que aconteceu
         // enquanto o cliente jogava, com o Otimiza aberto em segundo plano.
@@ -1058,6 +1071,93 @@ mod medicao_de_tempo {
             veredito.achados.len(),
             veredito.lacunas.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests_1_8_memoria {
+    use super::*;
+    use crate::modules::windows::memory::MemoryReport;
+
+    /// O relatório que uma falha de WMI produz.
+    fn nao_medido() -> MemoryReport {
+        MemoryReport {
+            medido: false,
+            total_ram_gb: 0.0,
+            available_ram_gb: 0.0,
+            committed_gb: 0.0,
+            pagefile_automatic: false,
+            pagefile_size_gb: 0.0,
+            pagefile_peak_gb: 0.0,
+            pagefile_location: "não foi possível ler".to_string(),
+            findings: Vec::new(),
+        }
+    }
+
+    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
+    ///
+    /// Zero de RAM com zero de paginação satisfazia exatamente as condições do
+    /// achado mais grave do módulo: pouca_ram porque 0 <= 8.5, e paginação
+    /// desligada porque 0 <= 0.01. A tela anunciava "Nenhuma paginação
+    /// configurada, com 0.0 GB de RAM" com severidade Critical.
+    #[test]
+    fn memoria_nao_medida_nao_produz_achado() {
+        assert!(
+            nao_medido().achados().is_empty(),
+            "sem ler a memoria, o produto nao pode concluir nada sobre ela"
+        );
+    }
+
+    /// A METADE QUE MAIS DÓI.
+    ///
+    /// O achado de paginação desligada é mapeado para set_automatic_pagefile,
+    /// que ESCREVE no sistema. Sem medição não pode existir achado, e sem
+    /// achado não existe botão — mas isso precisa estar travado, porque o
+    /// caminho entre um e outro passa por dois arquivos, e quem mexer num
+    /// deles amanhã não vai lembrar do outro.
+    #[test]
+    fn memoria_nao_medida_nao_oferece_botao_que_escreve() {
+        let com_acao: Vec<String> = nao_medido()
+            .achados()
+            .iter()
+            .filter(|a| a.acao.is_some())
+            .map(|a| a.id.clone())
+            .collect();
+
+        assert!(
+            com_acao.is_empty(),
+            "o produto ofereceu escrever no sistema a partir de medicao que nao \
+             aconteceu: {:?}",
+            com_acao
+        );
+    }
+
+    /// O CASO OPOSTO, que o conserto não pode ter quebrado: paginação
+    /// realmente desligada com pouca RAM continua sendo crítica, com botão.
+    #[test]
+    fn paginacao_realmente_desligada_continua_com_achado_e_acao() {
+        let relatorio = MemoryReport {
+            medido: true,
+            total_ram_gb: 8.0,
+            available_ram_gb: 2.0,
+            committed_gb: 6.0,
+            pagefile_automatic: false,
+            pagefile_size_gb: 0.0,
+            pagefile_peak_gb: 0.0,
+            pagefile_location: "nenhum".to_string(),
+            findings: crate::modules::windows::memory::diagnosticar(
+                8.0, 0.0, 0.0, false, 6.0, 5.0,
+            ),
+        };
+
+        let achados = relatorio.achados();
+        let off = achados
+            .iter()
+            .find(|a| a.id == "pagefile_off")
+            .expect("paginacao desligada de verdade tem que aparecer");
+
+        assert_eq!(off.severity, FindingSeverity::Critical);
+        assert!(off.acao.is_some(), "e o botao de consertar tem que estar la");
     }
 }
 

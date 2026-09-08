@@ -27,6 +27,14 @@ pub struct MemoryFinding {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryReport {
+    /// A leitura da memória aconteceu?
+    ///
+    /// Sem isto, uma falha do WMI virava zeros — e zero de RAM com zero de
+    /// paginação satisfaz exatamente as condições do achado mais grave deste
+    /// módulo. A tela anunciava "Nenhuma paginação configurada, com 0.0 GB de
+    /// RAM" e oferecia um botão que ESCREVE no sistema, tudo a partir de uma
+    /// medição que não aconteceu.
+    pub medido: bool,
     pub total_ram_gb: f64,
     pub available_ram_gb: f64,
     /// Memória prometida a programas. Passar da RAM física significa que o PC
@@ -69,7 +77,12 @@ struct RawPagefile {
     peak_usage_mb: Option<u64>,
 }
 
-fn ler_memoria() -> RawMemory {
+/// `None` quando o WMI não respondeu.
+///
+/// Antes isto terminava em `unwrap_or_default()`, e todos os campos viravam
+/// `None` — que a análise lia como zero. Falha de consulta e máquina sem
+/// memória são coisas diferentes, e só uma delas existe.
+fn ler_memoria() -> Option<RawMemory> {
     // Um único JSON evita três chamadas de PowerShell, que custam centenas de
     // milissegundos cada. Os nomes das propriedades do WMI são estáveis em
     // qualquer idioma do Windows.
@@ -82,9 +95,7 @@ fn ler_memoria() -> RawMemory {
                     FreeVirtualKb  = $os.FreeVirtualMemory; \
                     Automatic      = $cs.AutomaticManagedPagefile })";
 
-    powershell(script)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
+    powershell(script).and_then(|json| serde_json::from_str(&json).ok())
 }
 
 fn ler_paginacao() -> Option<RawPagefile> {
@@ -102,7 +113,25 @@ const MB_EM_GB: f64 = 1024.0;
 
 /// Analisa memória e paginação, e explica o que estiver errado.
 pub fn analyze() -> MemoryReport {
-    let bruto = ler_memoria();
+    let Some(bruto) = ler_memoria() else {
+        // SEM LEITURA, SEM ACHADO E SEM AÇÃO.
+        //
+        // Os zeros abaixo são falta de opção, e `medido: false` é o que impede
+        // a tela de lê-los como medição. Quem transforma isto em lacuna é a
+        // tarefa do veredito.
+        return MemoryReport {
+            medido: false,
+            total_ram_gb: 0.0,
+            available_ram_gb: 0.0,
+            committed_gb: 0.0,
+            pagefile_automatic: false,
+            pagefile_size_gb: 0.0,
+            pagefile_peak_gb: 0.0,
+            pagefile_location: "não foi possível ler".to_string(),
+            findings: Vec::new(),
+        };
+    };
+
     let paginacao = ler_paginacao();
 
     let total_ram_gb = bruto.total_visible_kb.unwrap_or(0) as f64 / KB_EM_GB;
@@ -142,6 +171,7 @@ pub fn analyze() -> MemoryReport {
     );
 
     MemoryReport {
+        medido: true,
         total_ram_gb,
         available_ram_gb,
         committed_gb,
