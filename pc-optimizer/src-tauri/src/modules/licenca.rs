@@ -37,7 +37,7 @@ use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// A chave pública do Otimiza, em base64.
 ///
@@ -247,26 +247,72 @@ impl Guardada {
         base.join("pc-optimizer").join("licenca.json")
     }
 
-    pub fn load() -> Self {
-        fs::read_to_string(Self::path())
-            .ok()
-            .and_then(|bruto| serde_json::from_str(&bruto).ok())
-            .unwrap_or_default()
+    /// Lê a licença gravada, separando "não existe" de "não consegui ler".
+    ///
+    /// A DIFERENÇA É O CLIENTE QUE PAGOU. Antes, qualquer falha caía em
+    /// `unwrap_or_default()` — chave vazia, `ativa: false`, portão de ativação
+    /// na cara de quem já comprou, sem nenhuma indicação de que existe uma
+    /// licença gravada ali. Ele abriria um chamado dizendo "paguei e o programa
+    /// não abre", e ninguém saberia por quê.
+    pub fn load() -> Leitura {
+        Self::ler(&Self::path())
+    }
+
+    /// Caminho por parâmetro para os testes não mexerem no `%APPDATA%` de quem
+    /// roda a esteira — inclusive no do dono.
+    fn ler(caminho: &Path) -> Leitura {
+        let bruto = match fs::read_to_string(caminho) {
+            Ok(bruto) => bruto,
+            // Não existe arquivo: é o estado de quem ainda não ativou, e é o
+            // caminho normal de toda primeira abertura.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Leitura::Ok(Guardada::default())
+            }
+            Err(e) => return Leitura::Ilegivel(format!("não consegui abrir o arquivo: {}", e)),
+        };
+
+        match serde_json::from_str(&bruto) {
+            Ok(guardada) => Leitura::Ok(guardada),
+            Err(e) => Leitura::Ilegivel(format!("o arquivo está corrompido: {}", e)),
+        }
     }
 
     pub fn save(&self) -> Result<(), String> {
-        let caminho = Self::path();
+        Self::gravar(&Self::path(), self)
+    }
 
+    /// Gravação ATÔMICA: escreve ao lado e renomeia por cima.
+    ///
+    /// Mesmo motivo do histórico de mudanças. A diferença é o preço: um
+    /// `licenca.json` truncado por uma queda de energia tranca o produto para
+    /// quem pagou, e a única saída é o suporte.
+    fn gravar(caminho: &Path, guardada: &Guardada) -> Result<(), String> {
         if let Some(pasta) = caminho.parent() {
             fs::create_dir_all(pasta)
                 .map_err(|e| format!("Não foi possível criar a pasta de dados: {}", e))?;
         }
 
-        let json = serde_json::to_string_pretty(self)
+        let json = serde_json::to_string_pretty(guardada)
             .map_err(|e| format!("Não foi possível gravar a licença: {}", e))?;
 
-        fs::write(&caminho, json).map_err(|e| format!("Não foi possível gravar a licença: {}", e))
+        let temporario = caminho.with_extension("json.novo");
+
+        fs::write(&temporario, json)
+            .map_err(|e| format!("Não foi possível gravar a licença: {}", e))?;
+
+        fs::rename(&temporario, caminho)
+            .map_err(|e| format!("Não foi possível gravar a licença: {}", e))
     }
+}
+
+/// O que saiu da tentativa de ler a licença gravada.
+///
+/// Existe para o portão poder dizer a verdade. `Ok` com chave vazia é "nunca
+/// ativou"; `Ilegivel` é "existe algo aqui e eu não consegui ler" — e tratar os
+/// dois igual é o que punia o cliente pagante por um arquivo truncado.
+pub enum Leitura {
+    Ok(Guardada),
+    Ilegivel(String),
 }
 
 /// O estado da licença desta máquina, para a tela.
@@ -297,7 +343,6 @@ fn hoje() -> String {
 /// continuar liberado depois do vencimento.
 pub fn estado() -> Estado {
     let quem = crate::modules::maquina::identidade();
-    let guardada = Guardada::load();
 
     let base = Estado {
         ativa: false,
@@ -307,6 +352,25 @@ pub fn estado() -> Estado {
         comprador: None,
         expira: None,
         motivo: None,
+    };
+
+    let guardada = match Guardada::load() {
+        Leitura::Ok(guardada) => guardada,
+
+        // O PORTÃO CONTINUA FECHADO — isto não é caminho de contorno. O que
+        // muda é a frase: em vez de tratar quem pagou como se nunca tivesse
+        // comprado, o produto diz o que aconteceu e dá o próximo passo.
+        Leitura::Ilegivel(motivo) => {
+            return Estado {
+                motivo: Some(format!(
+                    "Existe uma licença gravada neste computador, mas não consegui lê-la ({}). \
+                     Cole a sua chave de novo — se você não a tiver mais, fale no suporte com o \
+                     código desta máquina que ela é reemitida sem custo.",
+                    motivo
+                )),
+                ..base
+            }
+        }
     };
 
     if guardada.chave.trim().is_empty() {
@@ -375,6 +439,76 @@ pub fn exigir() -> Result<(), String> {
 }
 
 /// As provas de ponta a ponta da assinatura. Só existe em compilação de teste.
+#[cfg(test)]
+mod tests_1_8 {
+    use super::*;
+
+    fn pasta(nome: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("otimiza-licenca-{}", nome));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("criar pasta de teste");
+        dir
+    }
+
+    /// Arquivo ausente e o estado de quem nunca ativou. Continua sendo Ok, com
+    /// chave vazia — e nao um alarme.
+    #[test]
+    fn licenca_ausente_e_leitura_ok_sem_chave() {
+        let caminho = pasta("ausente").join("licenca.json");
+
+        match Guardada::ler(&caminho) {
+            Leitura::Ok(g) => assert!(g.chave.is_empty()),
+            Leitura::Ilegivel(m) => panic!("arquivo ausente nao pode ser ilegivel: {}", m),
+        }
+    }
+
+    /// O caso que este conserto existe para pegar: um arquivo truncado por
+    /// queda de energia nao pode virar "esse cliente nunca comprou".
+    #[test]
+    fn licenca_truncada_nao_vira_cliente_sem_licenca() {
+        let caminho = pasta("truncada").join("licenca.json");
+        fs::write(&caminho, r#"{"chave":"eyJtYXF1aW5"#).unwrap();
+
+        match Guardada::ler(&caminho) {
+            Leitura::Ilegivel(_) => {}
+            Leitura::Ok(_) => panic!(
+                "arquivo truncado foi lido como licenca valida e vazia: o cliente que                  pagou veria o portao de ativacao"
+            ),
+        }
+    }
+
+    /// Ida e volta pelo caminho atomico.
+    #[test]
+    fn gravar_e_ler_devolve_a_mesma_chave() {
+        let caminho = pasta("ida-e-volta").join("licenca.json");
+        let original = Guardada { chave: "uma-chave-qualquer".to_string() };
+
+        Guardada::gravar(&caminho, &original).unwrap();
+
+        match Guardada::ler(&caminho) {
+            Leitura::Ok(g) => assert_eq!(g.chave, original.chave),
+            Leitura::Ilegivel(m) => panic!("nao consegui reler o que acabei de gravar: {}", m),
+        }
+    }
+
+    /// A gravacao nao pode deixar o temporario para tras na pasta de dados.
+    #[test]
+    fn a_gravacao_da_licenca_nao_deixa_temporario() {
+        let dir = pasta("temporario");
+        let caminho = dir.join("licenca.json");
+
+        Guardada::gravar(&caminho, &Guardada { chave: "x".to_string() }).unwrap();
+
+        let sobraram: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(sobraram, vec!["licenca.json".to_string()]);
+    }
+}
+
 #[cfg(test)]
 #[path = "licenca_prova.rs"]
 mod prova;
@@ -505,8 +639,10 @@ mod tests {
         }
 
         // Sem chave gravada, o produto tem que estar trancado.
-        if Guardada::load().chave.trim().is_empty() {
-            assert!(!e.ativa);
+        if let Leitura::Ok(guardada) = Guardada::load() {
+            if guardada.chave.trim().is_empty() {
+                assert!(!e.ativa);
+            }
         }
     }
 }
