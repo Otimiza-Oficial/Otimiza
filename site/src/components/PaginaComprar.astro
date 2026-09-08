@@ -1,0 +1,262 @@
+---
+/**
+ * /comprar — o caminho da compra, em quatro passos.
+ *
+ * POR QUE ESTA PAGINA EXISTE, E POR QUE ELA COMECA MANDANDO INSTALAR
+ *
+ * A licenca do Otimiza nasce presa ao codigo OTZ-XXXX-XXXX-XXXX, que sai do
+ * numero de serie da placa-mae. Esse codigo so aparece DEPOIS de instalar, no
+ * portao da primeira abertura. Quem chega aqui querendo pagar primeiro precisa
+ * ser avisado, senao paga e fica com uma chave sem ter onde colar.
+ *
+ * Nao e uma limitacao que a pagina esconde: e a primeira coisa que ela diz.
+ *
+ * O QUE ESTA PAGINA AINDA NAO FAZ
+ *
+ * Nao ha checkout aqui. O pagamento acontece no Discord, que e onde ja
+ * funciona hoje — o bot tem Mercado Pago, Pix e o emissor de licenca ligados.
+ * Quando o checkout proprio existir, ele entra NESTA rota, e quem tiver
+ * guardado o link nao perde nada. Ver site/ARQUITETURA.md.
+ */
+import Base from "../layouts/Base.astro";
+import Cabecalho from "./Cabecalho.astro";
+import Rodape from "./Rodape.astro";
+import { traducoes, caminho } from "../data/i18n";
+import type { Idioma } from "../data/i18n";
+import { produto } from "../data/produto";
+import { precosDe } from "../data/precos";
+
+interface Props {
+  idioma: Idioma;
+}
+
+const { idioma } = Astro.props;
+const t = traducoes[idioma];
+const c = t.comprar;
+const precos = precosDe(idioma);
+
+/*
+  CONVITE DO DISCORD — PRECISA SER PERMANENTE.
+
+  O que esta aqui e o mesmo que o produto usa em src/main.ts. Ele foi conferido
+  na API do Discord e VENCE EM 28/09/2026.
+
+  Num site isso tem conserto: republicar. No executavel que o cliente ja
+  instalou, nao tem — nao ha camada de rede para atualizar o endereco. Por isso
+  o convite permanente importa nos dois lugares, e mais no produto do que aqui.
+*/
+const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
+---
+
+<Base idioma={idioma} title={c.tituloPagina} description={c.descricaoPagina} sufixo="/comprar">
+  <Cabecalho idioma={idioma} t={t} sufixo="/comprar" />
+
+  <main id="conteudo">
+    <section id="topo" class="border-b border-linha">
+      <div class="mx-auto w-full max-w-6xl px-5 pb-16 pt-16 sm:px-8 sm:pb-20 sm:pt-24 lg:px-12 lg:pt-28">
+        <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+          {c.rotulo}
+        </p>
+
+        <h1
+          class="mt-6 max-w-[22ch] text-pretty text-[1.75rem] font-semibold leading-[1.12] tracking-tight text-tinta sm:text-4xl md:text-5xl"
+        >
+          {c.titulo}
+        </h1>
+
+        <p class="mt-7 max-w-2xl text-base leading-relaxed text-tinta-2 sm:text-lg">
+          {c.texto}
+        </p>
+
+        <p class="tabular mt-8 font-mono text-xs leading-relaxed text-tinta-3">
+          {precos.aVista.completo}{t.precos.sufixoMoeda ? ` ${t.precos.sufixoMoeda}` : ""}
+          <span aria-hidden="true"> · </span>
+          {t.precos.formas.join(" · ")}
+          <span aria-hidden="true"> · </span>
+          {t.precos.processadoPor}
+        </p>
+      </div>
+    </section>
+
+    {/* Os quatro passos. A numeracao e o assunto: a ordem e o conteudo. */}
+    <section class="border-b border-linha">
+      <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+        <ol class="grid grid-cols-1 gap-x-10 gap-y-12 md:grid-cols-2">
+          {
+            c.passos.map((p) => (
+              <li class="border-t border-linha pt-6">
+                <p class="tabular font-mono text-xs text-tinta-3">{p.numero}</p>
+                <h2 class="mt-4 text-lg font-semibold leading-snug tracking-tight text-tinta sm:text-xl">
+                  {p.titulo}
+                </h2>
+                <p class="mt-3 max-w-prose text-sm leading-relaxed text-tinta-2 sm:text-base">
+                  {p.texto}
+                </p>
+
+                {p.numero === "01" && (
+                  <a
+                    href={produto.instalador}
+                    rel="noopener"
+                    class="mt-6 inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+                  >
+                    {c.acaoBaixar}
+                  </a>
+                )}
+
+                {p.numero === "03" && (
+                  <>
+                    <a
+                      href={CONVITE_DISCORD}
+                      rel="noopener"
+                      class="mt-6 inline-flex items-center justify-center rounded-sm border border-linha-forte px-6 py-3 text-sm font-medium text-tinta transition-colors hover:border-tinta"
+                    >
+                      {c.acaoDiscord}
+                    </a>
+                    <p class="mt-4 max-w-prose text-xs leading-relaxed text-tinta-3">
+                      {c.notaDiscord}
+                    </p>
+                  </>
+                )}
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    {/*
+      O CONFERIDOR DE FORMATO.
+
+      A mesma expressao que o emissor de licenca usa (bot/otimiza-licenca.cjs).
+      Ele existe para pegar o unico erro caro desta compra: pagar com o codigo
+      copiado errado, receber uma chave que nao abre, e descobrir depois.
+
+      Confere so a FORMA — daqui nao ha como saber se o codigo e de uma maquina
+      de verdade —, e o texto diz isso em vez de deixar subentendido.
+
+      Sem JavaScript o campo continua aparecendo e o codigo continua podendo ser
+      copiado; so a conferencia deixa de acontecer. Por isso o resultado nasce
+      escondido e nao ha nada prometendo validacao antes de o script ligar.
+    */}
+    <section class="border-b border-linha bg-papel-2">
+      <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+        <div class="max-w-2xl">
+          <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+            {c.conferidor.rotulo}
+          </p>
+          <h2
+            class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl"
+          >
+            {c.conferidor.titulo}
+          </h2>
+          <p class="mt-5 text-sm leading-relaxed text-tinta-2 sm:text-base">
+            {c.conferidor.texto}
+          </p>
+
+          <form id="forma-codigo" class="mt-8" novalidate>
+            <label
+              for="codigo-maquina"
+              class="block font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3"
+            >
+              {c.conferidor.etiqueta}
+            </label>
+
+            <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+              <input
+                id="codigo-maquina"
+                name="codigo"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="OTZ-XXXX-XXXX-XXXX"
+                aria-describedby="resultado-codigo aviso-codigo"
+                class="tabular w-full rounded-sm border border-linha-forte bg-papel px-4 py-3 font-mono text-sm uppercase tracking-wider text-tinta placeholder:text-tinta-3 placeholder:normal-case sm:max-w-xs"
+              />
+              <button
+                type="submit"
+                class="inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+              >
+                {c.conferidor.botao}
+              </button>
+            </div>
+
+            <p
+              id="resultado-codigo"
+              role="status"
+              aria-live="polite"
+              class="mt-4 max-w-prose text-sm leading-relaxed"
+              hidden
+            >
+            </p>
+
+            <p id="aviso-codigo" class="mt-6 max-w-prose text-xs leading-relaxed text-tinta-3">
+              {c.conferidor.aviso}
+            </p>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-16 lg:px-12">
+        <a
+          href={caminho(idioma)}
+          class="inline-block border-b border-linha-forte pb-0.5 text-sm text-tinta transition-colors hover:border-tinta"
+        >
+          {c.voltar}
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <Rodape t={t} idioma={idioma} sufixo="/comprar" />
+</Base>
+
+<script
+  is:inline
+  define:vars={{
+    certo: t.comprar.conferidor.certo,
+    errado: t.comprar.conferidor.errado,
+    vazio: t.comprar.conferidor.vazio,
+  }}
+>
+  // A MESMA expressao do emissor (bot/otimiza-licenca.cjs). Se uma mudar sem a
+  // outra, o site aprova um codigo que o emissor recusa — e a pessoa descobre
+  // no pior momento possivel, depois de pagar.
+  var FORMA = /^OTZ-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+
+  var forma = document.getElementById("forma-codigo");
+  var campo = document.getElementById("codigo-maquina");
+  var saida = document.getElementById("resultado-codigo");
+
+  if (forma && campo && saida) {
+    forma.addEventListener("submit", function (evento) {
+      evento.preventDefault();
+
+      // Maiuscula e sem espaco nas pontas: e assim que o emissor trata o
+      // codigo antes de conferir. Recusar por causa de um espaco colado junto
+      // seria reprovar quem nao errou nada.
+      var codigo = String(campo.value || "").trim().toUpperCase();
+
+      var mensagem;
+      var cor;
+
+      if (codigo === "") {
+        mensagem = vazio;
+        cor = "text-tinta-3";
+      } else if (FORMA.test(codigo)) {
+        mensagem = certo;
+        cor = "text-verde";
+        campo.value = codigo;
+      } else {
+        mensagem = errado;
+        cor = "text-vermelho";
+      }
+
+      saida.className = "mt-4 max-w-prose text-sm leading-relaxed " + cor;
+      saida.textContent = mensagem;
+      saida.hidden = false;
+    });
+  }
+</script>

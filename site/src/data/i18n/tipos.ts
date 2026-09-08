@@ -181,7 +181,6 @@ export type Conteudo = {
      * existe em nenhuma das tres. Se o destino final for um link unico do
      * Mercado Pago, basta repetir o mesmo valor nos tres arquivos.
      */
-    readonly caminhoCompra: string;
 
     readonly formasRotulo: string;
     readonly formas: readonly string[];
@@ -217,6 +216,49 @@ export type Conteudo = {
     readonly titulo: string;
     readonly texto: string;
     readonly itens: readonly ItemFaq[];
+  };
+
+  /**
+   * A pagina /comprar.
+   *
+   * Ela existe porque a ORDEM importa e nao e obvia: a licenca nasce presa ao
+   * codigo OTZ-XXXX-XXXX-XXXX, e esse codigo so aparece DEPOIS de instalar.
+   * Quem chega querendo pagar primeiro precisa ser avisado, ou paga e nao tem
+   * o que colar.
+   */
+  readonly comprar: {
+    readonly tituloPagina: string;
+    readonly descricaoPagina: string;
+    readonly rotulo: string;
+    readonly titulo: string;
+    readonly texto: string;
+    readonly passos: readonly {
+      readonly numero: string;
+      readonly titulo: string;
+      readonly texto: string;
+    }[];
+    readonly acaoBaixar: string;
+    readonly acaoDiscord: string;
+    readonly notaDiscord: string;
+
+    /**
+     * O conferidor de formato. Confere APENAS a forma do codigo — nao tem como
+     * saber se ele e de uma maquina de verdade, e o texto precisa dizer isso.
+     * Existe para pegar o erro caro: pagar com codigo digitado errado.
+     */
+    readonly conferidor: {
+      readonly rotulo: string;
+      readonly titulo: string;
+      readonly texto: string;
+      readonly etiqueta: string;
+      readonly botao: string;
+      readonly certo: string;
+      readonly errado: string;
+      readonly vazio: string;
+      readonly aviso: string;
+    };
+
+    readonly voltar: string;
   };
 
   readonly rodape: {

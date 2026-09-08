@@ -15,14 +15,23 @@ interface Props {
   idioma: Idioma;
   title?: string;
   description?: string;
+  /**
+   * Sufixo da rota: "" na home, "/comprar" na pagina de compra.
+   *
+   * Sem ele, TODA pagina se declararia canonica da home e os hreflang das tres
+   * linguas apontariam para a home. O buscador leria /comprar como copia da
+   * inicial — e nao ha aviso quando isso acontece: as tags ficam bem formadas,
+   * so mentindo.
+   */
+  sufixo?: string;
 }
 
-const { idioma } = Astro.props;
+const { idioma, sufixo = "" } = Astro.props;
 const t = traducoes[idioma];
 
 const { title = t.meta.titulo, description = t.meta.descricao } = Astro.props;
 
-const canonica = urlAbsoluta(idioma, Astro.site);
+const canonica = urlAbsoluta(idioma, Astro.site, sufixo);
 
 /**
  * hreflang das tres versoes, mais x-default apontando para a raiz.
@@ -33,9 +42,9 @@ const canonica = urlAbsoluta(idioma, Astro.site);
  */
 const alternativas = IDIOMAS.map((codigo) => ({
   hreflang: traducoes[codigo].meta.hreflang,
-  href: urlAbsoluta(codigo, Astro.site),
+  href: urlAbsoluta(codigo, Astro.site, sufixo),
 }));
-const hrefPadrao = urlAbsoluta(IDIOMA_PADRAO, Astro.site);
+const hrefPadrao = urlAbsoluta(IDIOMA_PADRAO, Astro.site, sufixo);
 ---
 
 <!doctype html>

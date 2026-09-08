@@ -13,7 +13,7 @@
  * esta marcado como CONFIRMAR COM O DONO.
  */
 import type { Conteudo, Idioma } from "../data/i18n";
-import { caminho } from "../data/i18n";
+import { caminho, ROTA_COMPRAR } from "../data/i18n";
 import { precosDe } from "../data/precos";
 
 interface Props {
@@ -26,7 +26,7 @@ const p = precosDe(idioma);
 
 /* O site roda em subpasta (/Otimiza) no GitHub Pages, e cada idioma tem o seu
    prefixo. `caminho` cuida dos dois. A pagina de checkout ainda nao existe. */
-const hrefComprar = caminho(idioma, t.precos.caminhoCompra);
+const hrefComprar = caminho(idioma, ROTA_COMPRAR);
 
 /** Lido em voz alta no lugar dos tres pedacos tipograficos do preco. */
 const precoFalado = t.precos.sufixoMoeda

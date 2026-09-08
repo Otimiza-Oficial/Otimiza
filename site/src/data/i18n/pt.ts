@@ -286,7 +286,6 @@ export const pt: Conteudo = {
     planoResumo: "Pagamento único. Sem assinatura, sem renovação, sem cobrança recorrente.",
     ctaTexto: "Comprar",
 
-    caminhoCompra: "/comprar",
 
     formasRotulo: "FORMAS DE PAGAMENTO",
     formas: ["Pix", "Cartão de crédito", "Boleto"],
@@ -443,6 +442,63 @@ export const pt: Conteudo = {
         ],
       },
     ],
+  },
+
+  comprar: {
+    tituloPagina: "Comprar o Otimiza",
+    descricaoPagina:
+      "Quatro passos. Você instala primeiro, porque a chave nasce presa ao computador — e o código dele só aparece depois de instalar.",
+    rotulo: "COMPRAR",
+    titulo: "Instale primeiro. Não é burocracia — é a única ordem que funciona.",
+    texto:
+      "A sua chave nasce presa a este computador, e o código dele só existe depois que o Otimiza roda aqui uma vez. " +
+      "Pagar antes deixaria você com uma chave sem dono e sem nada para colar. O lado bom: ao abrir, antes de pagar, " +
+      "ele já mede a sua máquina e mostra o principal problema que encontrou nela.",
+    passos: [
+      {
+        numero: "01",
+        titulo: "Baixe e instale",
+        texto:
+          "Grátis, sem cadastro. O Windows vai dizer “editor desconhecido” — é esperado, o instalador ainda não tem assinatura digital. Clique em Mais informações e depois em Executar assim mesmo.",
+      },
+      {
+        numero: "02",
+        titulo: "Abra e copie o seu código",
+        texto:
+          "Na primeira abertura aparece o código deste computador, no formato OTZ-XXXX-XXXX-XXXX, junto com o principal problema que ele achou na sua máquina. Copie o código.",
+      },
+      {
+        numero: "03",
+        titulo: "Mande o código e pague",
+        texto:
+          "No Discord, mande o código e escolha como pagar: Pix, cartão de crédito ou boleto, pelo Mercado Pago. A chave é emitida para esse código e para mais nenhum.",
+      },
+      {
+        numero: "04",
+        titulo: "Cole a chave",
+        texto:
+          "De volta no Otimiza, cole no campo “A sua chave” e clique em Ativar. A conferência acontece na sua máquina, sem consultar servidor. Pronto — é para sempre.",
+      },
+    ],
+    acaoBaixar: "Baixar para Windows",
+    acaoDiscord: "Ir para o Discord",
+    notaDiscord:
+      "O atendimento é por lá porque quem emite a chave é uma pessoa, no momento em que você paga. Não há robô decidindo isso.",
+    conferidor: {
+      rotulo: "ANTES DE PAGAR",
+      titulo: "Confira se o código está bem copiado.",
+      texto:
+        "O pior que pode acontecer nesta compra é você pagar e receber uma chave que não abre, porque o código foi copiado errado. Cole aqui que eu confiro a forma dele.",
+      etiqueta: "O código que apareceu no Otimiza",
+      botao: "Conferir",
+      certo: "A forma está certa. Pode mandar este código no Discord.",
+      errado:
+        "Isso não tem a forma de um código do Otimiza. Ele é OTZ- seguido de três blocos de quatro caracteres, assim: OTZ-XXXX-XXXX-XXXX. Copie de novo direto da tela do programa.",
+      vazio: "Cole o código para eu conferir.",
+      aviso:
+        "Isto confere só a FORMA. Não tenho como saber, daqui, se o código é mesmo o do seu computador — essa conferência acontece na hora de emitir a chave.",
+    },
+    voltar: "Voltar para a página inicial",
   },
 
   rodape: {

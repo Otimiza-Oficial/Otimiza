@@ -24,14 +24,33 @@ import { produto } from "../data/produto";
 interface Props {
   idioma: Idioma;
   t: Conteudo;
+  /**
+   * O sufixo da rota que esta sendo servida: "" na home, "/comprar" na pagina
+   * de compra.
+   *
+   * Existe por dois motivos, e os dois quebram em silencio sem ele:
+   *
+   *   1. As ancoras do menu (#precos, #faq...) so existem na home. Fora dela
+   *      elas nao levam a lugar nenhum — o clique simplesmente nao faz nada,
+   *      que e o pior tipo de defeito porque ninguem reporta.
+   *   2. O seletor de idioma precisa levar para a MESMA pagina na outra
+   *      lingua. Sem isto, quem estivesse em /comprar e clicasse em EN caia
+   *      na home em ingles e perdia o passo em que estava.
+   */
+  sufixo?: string;
 }
 
-const { idioma, t } = Astro.props;
+const { idioma, t, sufixo = "" } = Astro.props;
+
+/** Na home a ancora basta; fora dela ela precisa do caminho da home na frente. */
+const naHome = sufixo === "";
+const inicio = caminho(idioma);
+const ancora = (href: string) => (naHome ? href : `${inicio}${href}`);
 ---
 
 <header class="sticky top-0 z-40 border-b border-linha bg-papel">
   <div class="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-5 sm:gap-4 sm:px-8 lg:px-12">
-    <a href="#topo" class="flex items-baseline gap-2 rounded-sm">
+    <a href={ancora("#topo")} class="flex items-baseline gap-2 rounded-sm">
       <span class="text-base font-semibold tracking-tight text-tinta">{produto.nome}</span>
       <span class="tabular font-mono text-[11px] text-tinta-3">v{produto.versao}</span>
     </a>
@@ -40,7 +59,7 @@ const { idioma, t } = Astro.props;
     <nav aria-label={t.a11y.secoes} class="hidden items-center gap-7 md:flex">
       {
         t.cabecalho.links.map((l) => (
-          <a href={l.href} class="rounded-sm text-sm text-tinta-2 transition-colors hover:text-tinta">
+          <a href={ancora(l.href)} class="rounded-sm text-sm text-tinta-2 transition-colors hover:text-tinta">
             {l.texto}
           </a>
         ))
@@ -62,7 +81,7 @@ const { idioma, t } = Astro.props;
                   </span>
                 )}
                 <a
-                  href={caminho(codigo)}
+                  href={caminho(codigo, sufixo === "" ? "/" : sufixo)}
                   hreflang={meta.hreflang}
                   lang={meta.htmlLang}
                   title={meta.nome}
@@ -96,7 +115,7 @@ const { idioma, t } = Astro.props;
       </button>
 
       <a
-        href="#precos"
+        href={ancora("#precos")}
         class="hidden rounded-sm bg-tinta px-4 py-2 text-sm font-medium text-papel transition-colors hover:bg-tinta-2 sm:inline-block"
       >
         {t.cabecalho.comprar}
@@ -119,12 +138,12 @@ const { idioma, t } = Astro.props;
         >
           {
             t.cabecalho.links.map((l) => (
-              <a href={l.href} class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
+              <a href={ancora(l.href)} class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
                 {l.texto}
               </a>
             ))
           }
-          <a href="#precos" class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
+          <a href={ancora("#precos")} class="block rounded-sm px-3 py-2 text-sm text-tinta-2 hover:bg-papel-2">
             {t.cabecalho.preco}
           </a>
         </nav>

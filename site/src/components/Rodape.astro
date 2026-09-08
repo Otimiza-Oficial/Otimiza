@@ -2,19 +2,28 @@
 /**
  * Rodape. Curto de proposito: nome, versao, os links de secao.
  *
- * NAO acrescente aqui link para o GitHub, para o repositorio nem para as
- * Releases: eles foram removidos a pedido do dono. E a linha de direitos NAO
- * afirma que o codigo-fonte e publico ou auditavel — essa afirmacao tambem foi
- * retirada de proposito. Ver `rodape.direitos` em src/data/i18n/.
+ * NAO acrescente aqui link para o REPOSITORIO nem para a pagina de Releases:
+ * foram removidos a pedido do dono. O link do INSTALADOR (produto.instalador)
+ * e a excecao deliberada, e vive no hero e na pagina de compra.
+ *
+ * A linha de direitos PODE afirmar que o codigo e aberto a leitura: o
+ * repositorio segue publico por decisao do dono. Ver `rodape.direitos`.
  */
-import type { Conteudo } from "../data/i18n";
+import { caminho } from "../data/i18n";
+import type { Conteudo, Idioma } from "../data/i18n";
 import { produto } from "../data/produto";
 
 interface Props {
   t: Conteudo;
+  idioma: Idioma;
+  /** Ver a mesma prop no Cabecalho: as ancoras so existem na home. */
+  sufixo?: string;
 }
 
-const { t } = Astro.props;
+const { t, idioma, sufixo = "" } = Astro.props;
+
+const inicio = caminho(idioma);
+const ancora = (href: string) => (sufixo === "" ? href : `${inicio}${href}`);
 
 /* O ano entra por substituicao para nao obrigar cada traducao a repetir a
    pontuacao do "©" — e para nao ter data escrita na mao em tres arquivos. */
@@ -38,7 +47,7 @@ const direitos = t.rodape.direitos.replace("{ano}", String(new Date().getFullYea
       >
         {
           t.rodape.links.map((l) => (
-            <a href={l.href} class="rounded-sm text-tinta-2 hover:text-tinta">
+            <a href={ancora(l.href)} class="rounded-sm text-tinta-2 hover:text-tinta">
               {l.texto}
             </a>
           ))

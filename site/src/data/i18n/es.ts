@@ -311,7 +311,6 @@ export const es: Conteudo = {
     planoResumo: "Pago único. Sin suscripción, sin renovación, sin cobro recurrente.",
     ctaTexto: "Comprar",
 
-    caminhoCompra: "/es/comprar",
 
     formasRotulo: "FORMAS DE PAGO",
     /* Pix y Boleto son medios de pago brasilenos y conservan su nombre: no
@@ -475,6 +474,63 @@ export const es: Conteudo = {
         ],
       },
     ],
+  },
+
+  comprar: {
+    tituloPagina: "Comprar Otimiza",
+    descricaoPagina:
+      "Cuatro pasos. Primero se instala, porque la clave queda atada a la computadora — y su código solo aparece después de instalar.",
+    rotulo: "COMPRAR",
+    titulo: "Instale primero. No es burocracia — es el único orden que funciona.",
+    texto:
+      "Su clave queda atada a esta computadora, y el código de ella solo existe después de que Otimiza corra aquí una vez. " +
+      "Pagar antes lo dejaría con una clave sin dueño y sin nada donde pegarla. Lo bueno: al abrirse, antes de pagar, " +
+      "ya mide su máquina y muestra el principal problema que encontró en ella.",
+    passos: [
+      {
+        numero: "01",
+        titulo: "Descargue e instale",
+        texto:
+          "Gratis, sin registro. Windows va a decir “editor desconocido” — es esperado, el instalador todavía no tiene firma digital. Haga clic en Más información y después en Ejecutar de todas formas.",
+      },
+      {
+        numero: "02",
+        titulo: "Ábralo y copie su código",
+        texto:
+          "En la primera apertura aparece el código de esta computadora, con la forma OTZ-XXXX-XXXX-XXXX, junto con el principal problema que encontró en su máquina. Copie el código.",
+      },
+      {
+        numero: "03",
+        titulo: "Envíe el código y pague",
+        texto:
+          "En Discord, envíe el código y elija cómo pagar: Pix, tarjeta de crédito o boleto, por Mercado Pago. La clave se emite para ese código y para ningún otro.",
+      },
+      {
+        numero: "04",
+        titulo: "Pegue la clave",
+        texto:
+          "De vuelta en Otimiza, péguela en el campo “Su clave” y haga clic en Activar. La verificación ocurre en su máquina, sin consultar ningún servidor. Listo — es para siempre.",
+      },
+    ],
+    acaoBaixar: "Descargar para Windows",
+    acaoDiscord: "Ir a Discord",
+    notaDiscord:
+      "La atención es por ahí porque quien emite la clave es una persona, en el momento en que usted paga. No hay un robot decidiendo eso.",
+    conferidor: {
+      rotulo: "ANTES DE PAGAR",
+      titulo: "Verifique que el código esté bien copiado.",
+      texto:
+        "Lo peor que puede pasar en esta compra es que usted pague y reciba una clave que no abre, porque el código se copió mal. Péguelo aquí y verifico su forma.",
+      etiqueta: "El código que apareció en Otimiza",
+      botao: "Verificar",
+      certo: "La forma está correcta. Puede enviar este código en Discord.",
+      errado:
+        "Eso no tiene la forma de un código de Otimiza. Es OTZ- seguido de tres bloques de cuatro caracteres, así: OTZ-XXXX-XXXX-XXXX. Cópielo de nuevo directo de la pantalla del programa.",
+      vazio: "Pegue el código para que lo verifique.",
+      aviso:
+        "Esto verifica solo la FORMA. Desde aquí no puedo saber si el código es realmente el de su computadora — esa verificación ocurre al emitir la clave.",
+    },
+    voltar: "Volver a la página inicial",
   },
 
   rodape: {

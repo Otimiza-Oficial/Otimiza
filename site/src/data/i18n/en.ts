@@ -308,7 +308,6 @@ export const en: Conteudo = {
     planoResumo: "One-time payment. No subscription, no renewal, no recurring charge.",
     ctaTexto: "Buy",
 
-    caminhoCompra: "/en/comprar",
 
     formasRotulo: "PAYMENT METHODS",
     /* Pix and Boleto are Brazilian payment instruments and keep their names —
@@ -473,6 +472,63 @@ export const en: Conteudo = {
         ],
       },
     ],
+  },
+
+  comprar: {
+    tituloPagina: "Buy Otimiza",
+    descricaoPagina:
+      "Four steps. You install first, because the key is bound to the computer — and its code only appears after installing.",
+    rotulo: "BUY",
+    titulo: "Install first. That is not red tape — it is the only order that works.",
+    texto:
+      "Your key is bound to this computer, and its code only exists after Otimiza has run here once. " +
+      "Paying first would leave you with a key that belongs to nobody and nothing to paste it into. The upside: when it opens, " +
+      "before you pay, it already measures your machine and shows the main problem it found on it.",
+    passos: [
+      {
+        numero: "01",
+        titulo: "Download and install",
+        texto:
+          "Free, no sign-up. Windows will say “unknown publisher” — that is expected, the installer is not code-signed yet. Click More info, then Run anyway.",
+      },
+      {
+        numero: "02",
+        titulo: "Open it and copy your code",
+        texto:
+          "On first launch it shows the code for this computer, shaped OTZ-XXXX-XXXX-XXXX, along with the main problem it found on your machine. Copy the code.",
+      },
+      {
+        numero: "03",
+        titulo: "Send the code and pay",
+        texto:
+          "On Discord, send the code and pick how to pay: Pix, credit card or boleto, through Mercado Pago. The key is issued for that code and no other.",
+      },
+      {
+        numero: "04",
+        titulo: "Paste the key",
+        texto:
+          "Back in Otimiza, paste it into the “Your key” field and click Activate. Verification happens on your machine, with no server involved. Done — it is permanent.",
+      },
+    ],
+    acaoBaixar: "Download for Windows",
+    acaoDiscord: "Go to Discord",
+    notaDiscord:
+      "Support happens there because a person issues the key at the moment you pay. No bot decides it.",
+    conferidor: {
+      rotulo: "BEFORE YOU PAY",
+      titulo: "Check that the code was copied correctly.",
+      texto:
+        "The worst thing that can happen in this purchase is paying and receiving a key that will not open, because the code was mistyped. Paste it here and I will check its shape.",
+      etiqueta: "The code Otimiza showed you",
+      botao: "Check",
+      certo: "The shape is right. You can send this code on Discord.",
+      errado:
+        "That is not shaped like an Otimiza code. It is OTZ- followed by three blocks of four characters, like this: OTZ-XXXX-XXXX-XXXX. Copy it again straight from the program.",
+      vazio: "Paste the code so I can check it.",
+      aviso:
+        "This checks the SHAPE only. From here I cannot know whether the code really belongs to your computer — that check happens when the key is issued.",
+    },
+    voltar: "Back to the home page",
   },
 
   rodape: {

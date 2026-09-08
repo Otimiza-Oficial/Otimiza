@@ -30,6 +30,20 @@ export const IDIOMAS = ["pt", "en", "es"] as const satisfies readonly Idioma[];
 
 export const IDIOMA_PADRAO: Idioma = "pt";
 
+/**
+ * A rota da pagina de compra, SEM prefixo de idioma.
+ *
+ * Ela vivia dentro de cada arquivo de traducao, e isso produziu um defeito
+ * silencioso: en.ts guardava "/en/comprar", es.ts guardava "/es/comprar", e
+ * `caminho()` — que ja adiciona o prefixo — gerava "/Otimiza/en/en/comprar".
+ * O botao Comprar das versoes traduzidas apontava para 404, e o portugues
+ * funcionava, entao nada parecia errado.
+ *
+ * Rota nao e texto traduzivel. Guardada aqui, ela nao tem como divergir entre
+ * idiomas, e `caminho(idioma, ROTA_COMPRAR)` e o unico jeito de montar o link.
+ */
+export const ROTA_COMPRAR = "/comprar";
+
 export const traducoes: Record<Idioma, Conteudo> = { pt, en, es };
 
 /** O prefixo de rota de cada idioma. O padrao nao tem. */
@@ -59,7 +73,11 @@ export function caminho(idioma: Idioma, sufixo = "/"): string {
  * URL absoluta, para canonical e hreflang. Precisa do `site` do
  * astro.config.mjs; sem ele (nao deveria acontecer) cai no caminho relativo.
  */
-export function urlAbsoluta(idioma: Idioma, site: URL | undefined): string {
-  const rel = caminho(idioma);
+export function urlAbsoluta(
+  idioma: Idioma,
+  site: URL | undefined,
+  sufixo = "",
+): string {
+  const rel = caminho(idioma, sufixo === "" ? "/" : sufixo);
   return site ? new URL(rel, site).href : rel;
 }
