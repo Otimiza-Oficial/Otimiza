@@ -18,6 +18,119 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.8.0 — o produto passa no próprio teste
+
+O Otimiza se vende dizendo que só afirma o que mediu, e que admite quando não
+sabe. Esta versão nasceu de uma auditoria que fez essa pergunta ao próprio
+produto — e achou seis lugares onde ele não estava cumprindo isso consigo
+mesmo.
+
+Nenhum recurso novo. É uma versão inteira de tirar afirmação que não se
+sustentava, e de tapar dois buracos por onde a promessa de reversibilidade
+vazava.
+
+## A primeira tela dizia que o seu disco estava cheio sem ter olhado
+
+Quando o Otimiza não conseguia encontrar o volume do Windows — drive de rede
+mapeado, disco sem letra, uma enumeração que falha — ele registrava zero. E
+zero, para a tela inicial, era indistinguível de disco lotado. O diagnóstico
+anunciava:
+
+> **O disco do sistema está quase sem espaço.**
+> Restam 0.0 GB livres no disco do Windows.
+
+Com severidade máxima, no primeiro lugar que você olha, sobre uma máquina que
+podia estar com meio terabyte livre.
+
+Agora, não conseguir medir aparece como **lacuna** — "não consegui olhar isto"
+—, que é uma frase honesta e que já existia no produto para outros casos.
+
+## E oferecia mexer na sua memória sem ter medido nada
+
+Este era pior, porque não parava na frase. Quando a consulta de memória do
+Windows falhava, todos os números viravam zero — e zero de RAM com zero de
+paginação satisfaz exatamente as condições do alerta mais grave do módulo:
+
+> **Arquivo de paginação desativado.**
+> Nenhuma paginação configurada, com 0.0 GB de RAM.
+
+Junto com um botão que **altera a configuração do seu Windows**. A partir de
+uma medição que nunca aconteceu.
+
+Nos dois casos — disco e memória —, a proteção correta já existia a poucas
+linhas de distância, no mesmo arquivo, aplicada a um alerta vizinho.
+
+## O "desfazer" podia apagar algo que já era seu
+
+O Otimiza guarda o valor anterior antes de mudar qualquer coisa. Quando o
+valor anterior não existia, desfazer significa apagar o que ele criou — para
+não deixar sujeira.
+
+O problema: **não conseguir ler** era registrado como **não existia**. Uma
+configuração que já era sua, num lugar onde o Otimiza não teve permissão de
+ler, entrava no histórico como "isto não estava aqui antes" — e o Desfazer a
+removia, achando que estava limpando a própria bagunça.
+
+Agora só "não encontrado" conta como ausência. Qualquer outro motivo para uma
+leitura falhar. Perder o que é seu é pior do que não conseguir mudar nada.
+
+Junto disso: o desfazer também podia **relatar sucesso sem ter desfeito**. Se
+apagar o valor falhasse, a tela dizia que tinha revertido, a anotação de como
+voltar era consumida, e a mudança continuava aplicada — sem chance de tentar
+de novo.
+
+## Uma queda de energia podia apagar o desfazer de tudo
+
+O histórico de mudanças era gravado direto por cima do arquivo antigo. Um
+desligamento no meio dessa escrita deixava o arquivo pela metade — e um arquivo
+pela metade era lido, na abertura seguinte, como **histórico vazio**.
+
+O resultado: todas as otimizações voltavam a aparecer como disponíveis,
+"Desfazer tudo" respondia que não havia nada a fazer, e as mudanças seguiam
+aplicadas na sua máquina. A promessa central do produto morria por causa de
+uma tomada, sem uma palavra na tela.
+
+Agora a gravação é atômica: o arquivo ou é o antigo inteiro, ou o novo inteiro.
+E quando algo assim já tiver acontecido, o Otimiza **avisa na tela** e guarda o
+arquivo ilegível em vez de passar por cima dele.
+
+## E um arquivo corrompido punia justamente quem pagou
+
+O mesmo padrão valia para a licença. Um arquivo de licença danificado virava
+"cliente sem licença", e você via a tela de ativação como se nunca tivesse
+comprado — sem nenhuma indicação de que havia uma licença gravada ali.
+
+Agora o Otimiza diz o que aconteceu e o que fazer. O programa continua
+trancado, porque licença ilegível não é licença válida, mas você deixa de ser
+tratado como quem nunca comprou.
+
+## O caminho até o suporte não sumia mais quando você ativa
+
+Até a 1.7, o endereço do Discord existia num único ponto do programa: dentro da
+tela de ativação. Essa tela some quando a licença é aceita — então **quem
+comprou era exatamente quem ficava sem nenhum caminho até nós**, de dentro do
+produto.
+
+Agora há "Falar com o suporte" no rodapé, ao lado do tutorial, pelo mesmo
+motivo que o tutorial está lá: o rodapé não some.
+
+E o convite deixou de ser um endereço fixo que envelhece dentro do executável.
+O Otimiza agora pergunta qual é o convite atual no momento em que você clica —
+o que conserta o link também para quem instalou versões antigas.
+
+## O que esta versão não promete
+
+**O "editor desconhecido" continua aparecendo.** O instalador ainda não tem
+assinatura digital, e o aviso do Windows está certo em dizer que não sabe quem
+publicou o arquivo. Resolver isso é comprar um certificado, e essa compra ainda
+não foi feita.
+
+Corrigimos, isso sim, o SECURITY.md deste repositório, que afirmava o
+contrário — que o instalador era assinado — e ainda apontava para o documento
+que explica que ele não é.
+
+---
+
 # 1.7.0 — abre mais rápido, e para de dizer que está tudo bem quando não olhou
 
 Versão de conserto e de medida. O programa passou a **abrir em cerca de um terço

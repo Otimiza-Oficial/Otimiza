@@ -8,7 +8,7 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 388 testes unitários passam, zero avisos | `cargo test --lib` |
+| 701 testes unitários passam, zero avisos | `cargo test --lib`, três rodadas seguidas |
 | Instalador gerado | `Otimiza_0.3.0_x64-setup.exe` e `.msi`, compilados pela esteira do GitHub |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
@@ -685,6 +685,128 @@ processo frio. Não é o disco e não é o módulo `Storage`. Sobra a sessão
 persistente de PowerShell (`sessao.rs`) — hipótese ainda **não verificada**, e
 anotada como pendência em vez de conclusão.
 
+## A 1.8, e a pergunta que ela fez ao próprio produto
+
+O Otimiza cobra do mercado que só se afirme o que foi medido. A 1.8 nasceu de
+virar essa régua para dentro — e ela achou seis lugares onde o produto não
+estava cumprindo isso consigo mesmo.
+
+**Nenhum recurso novo.** É uma versão inteira de tirar afirmação que não se
+sustentava.
+
+### O que ele afirmava sem ter medido
+
+| Onde | O que a tela dizia | O que era |
+|---|---|---|
+| `veredito.rs:640` + `diskspace.rs:365` | "Restam 0.0 GB livres no disco do Windows", **Critical** | `disk_usage()` devolvia `(0,0)` quando não achava o volume do sistema |
+| `memory.rs:70` + `veredito.rs:253` | "Nenhuma paginação configurada, com 0.0 GB de RAM", **Critical**, com botão que escreve | `ler_memoria()` terminava em `unwrap_or_default()` |
+
+**Nos dois casos o guard certo já existia no mesmo arquivo**, aplicado a um
+achado vizinho: `diskspace.rs:676` protegia `pressure` com `total_bytes > 0`, e
+`memory.rs:257` protegia outro achado com `total_ram_gb > 0.0`. Não faltou
+conhecimento — faltou aplicar o mesmo cuidado ao número principal.
+
+O da memória era o pior dos dois, e por um motivo específico: ele não parava na
+frase falsa. O achado é mapeado para `set_automatic_pagefile`, então o produto
+**convidava o cliente a escrever no sistema** a partir de uma medição que não
+aconteceu.
+
+Os dois viraram `Lacuna` pelo mecanismo que `Firmware`, `Saude` e
+`Esgotamento` já usavam. Nenhuma estrutura nova foi inventada.
+
+### Onde a reversibilidade não se sustentava
+
+O produto promete que toda mudança volta, byte a byte. Quatro defeitos comiam
+essa promessa por baixo, e nenhum é honestidade — é integridade.
+
+1. **`registry::read` confundia "não existe" com "não consegui abrir"**
+   (`registry.rs:21`). Qualquer erro virava `AbsentKey`, que a reversão trata
+   ao pé da letra: apaga o valor e, se a chave ficar vazia, apaga a chave. Uma
+   chave que **existia** e não pôde ser lida por ACL era gravada como "não
+   existia", e o Desfazer removia do cliente algo que era dele.
+
+2. **`network::set_dns` estava acoplado ao item acima** (`network.rs:302`).
+   Fazia `unwrap_or(Absent)`, inalcançável enquanto o `read` só falhava com
+   hive desconhecida. Consertar o `read` **sem** tocar nesta linha teria criado
+   o mesmo defeito no DNS. Os dois no mesmo commit.
+
+3. **`delete_value` reportava sucesso sem desfazer** (`registry.rs:176`). E o
+   estrago não era só a mensagem: `ChangeLog::take` já consumiu a entrada
+   quando a reversão começa, então o valor continuava aplicado **e** a única
+   anotação de como voltar tinha sido gasta.
+
+4. **`changes.json` sem escrita atômica** (`changelog.rs:265`). Uma queda no
+   meio da gravação deixava JSON truncado, que era lido como histórico vazio:
+   tudo voltava a aparecer como disponível, "Desfazer tudo" dizia que não havia
+   nada a fazer, e as mudanças seguiam no registro do cliente.
+
+O mesmo padrão valia para o `licenca.json`, com preço diferente: arquivo
+truncado punia **quem pagou**, devolvendo o portão de ativação a quem já tinha
+comprado. O portão continua fechado — licença ilegível não é licença válida —,
+mas a frase mudou.
+
+### Uma corrida que a própria correção trouxe
+
+A gravação atômica com nome de temporário fixo criou uma disputa: dois
+caminhos gravando ao mesmo tempo brigam pelo mesmo arquivo, o primeiro a
+renomear leva embora, e o segundo falha com "não encontrado". No produto isso
+aconteceria com duas janelas abertas.
+
+**Foi um teste antigo que pegou** — `take_removes_entry_so_it_can_be_reverted_once`.
+O nome do temporário passou a levar processo e nanossegundos. Vale registrar
+porque é o tipo de coisa que um conserto traz junto sem ninguém procurar.
+
+### O convite do Discord ganhou conserto remoto
+
+Ele vence em 28/09/2026, e o `main.ts` explicava por que isso não tinha
+solução: *"Este produto não tem camada de rede nenhuma — zero dependências
+HTTP, por decisão de projeto"*.
+
+**A premissa estava errada.** O produto tem rede desde antes: `reqwest` é
+dependência e `atualizacao.rs` consulta o GitHub. Era a quarta ocorrência da
+mesma afirmação falsa — as outras três estavam no site e no `SECURITY.md`.
+
+Agora o convite vem de `.github/convite.json`, lido **no clique** e não na
+abertura: quem nunca pede suporte não paga requisição, e a 1.7 gastou uma
+versão inteira derrubando o tempo de abertura. O embutido continua como
+reserva, e o valor vindo da rede só passa se tiver a forma exata
+`https://discord.gg/<código>` — ele abre uma janela no navegador do cliente.
+
+**E o cliente pagante não tinha caminho até o suporte.** `CONVITE_DISCORD` era
+usado num único ponto: dentro do portão, que some quando a licença é aceita. O
+rodapé ganhou "Falar com o suporte", pelo mesmo motivo que o tutorial já estava
+lá.
+
+### Três documentos que afirmavam o que não verificaram
+
+| Arquivo | Afirmava | Realidade |
+|---|---|---|
+| `SECURITY.md:66` e `:108` | "o instalador é assinado digitalmente" | Não é — e o arquivo **linkava para o documento que diz o contrário** |
+| `site/src/data/i18n/*` (12 lugares) | "não tem camada de rede" | Tem |
+| `docs/LICENCA.md:43` | a chave pública é "de teste" | É a de produção desde 29/08/2026 |
+
+O `SECURITY.md` é o que um comprador desconfiado abre primeiro, e duas linhas
+antes da afirmação falsa ele prega: *"Funcionalidade não testada aparece como
+pendente em PROGRESS.md"*.
+
+### O que a 1.8 NÃO fez, e por quê
+
+Cortado de propósito — um plano que faz tudo não é rigor, é papa:
+
+- **Quatro módulos que dizem "nada encontrado" em verde quando a leitura
+  falhou**: conflitos (`conflicts.rs:101`), tarefas (`tasks.rs:50`), serviços
+  (`servicesaudit.rs:164`) e bloatware (`bloatware.rs:159`). O conserto é
+  mecânico e o modelo já existe, mas são quatro módulos e quatro telas.
+- **`analyze_gpu_preference` / `set_gpu_preference`**: registrados, testados,
+  classificados — e **sem botão**. O achado aparece no diagnóstico e o próprio
+  código o chama de *"o maior ganho de FPS que o produto consegue entregar"*.
+  Falta `acao_de` cobrir `Origem::GpuPref`.
+- **`prova_guardada`**: registrado e nunca chamado. A tela diz "Medição
+  guardada", e ao reabrir o painel volta vazio. O padrão certo existe no
+  benchmark, que chama `get_baseline`.
+
+Os três são valor pronto sem porta, não defeito de honestidade.
+
 ## Pendente
 
 ### Cobertura real das otimizações de administrador
@@ -732,10 +854,20 @@ numa máquina.
    ainda não tenha sido otimizada, onde as 14 apareçam como disponíveis
 2. **Instalar o pacote gerado numa máquina limpa** — o instalador compila, mas
    nunca foi instalado e aberto de fato
-3. **Trocar o convite do Discord por um permanente** — o que está no código
-   (`discord.gg/fmeQVJphC`) foi conferido na API e **vence em 28/09/2026**. O
-   produto não tem camada de rede, então convite morto no executável não tem
-   conserto remoto: quem já instalou fica sem caminho até o dono
+3. **Publicar um convite permanente em `.github/convite.json`** — o que está
+   lá hoje (`discord.gg/fmeQVJphC`) foi conferido na API e **vence em
+   28/09/2026**. Precisa ser um com "Expira em: Nunca" e "Usos: Sem limite".
+
+   **O que mudou na 1.8:** este item deixou de ser sem saída. A justificativa
+   antiga — "o produto não tem camada de rede, então convite morto no
+   executável não tem conserto remoto" — estava errada: o produto consulta o
+   GitHub desde antes. Agora ele lê o convite daquele arquivo no momento do
+   clique, então **trocar o valor lá conserta o link inclusive para quem já
+   instalou**, sem publicar versão nova.
+
+   O que continua sendo urgente é publicar o convite permanente. O embutido
+   segue como reserva para quem estiver sem internet, e ele vence na data
+   acima.
 4. Assinatura digital do executável — ver
    [`docs/ASSINATURA.md`](docs/ASSINATURA.md). Depende de compra de certificado e
    verificação de identidade; a configuração de build já está preparada
