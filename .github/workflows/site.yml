@@ -15,12 +15,20 @@
 # Só a `main`. Publicar branch de trabalho colocaria no ar texto de venda ainda
 # em revisão, no mesmo endereço que o cliente acessa.
 #
-# O PAGES SE LIGA SOZINHO
+# UM PASSO MANUAL, E POR QUE ELE NÃO DÁ PARA AUTOMATIZAR
 #
-# O passo "Preparar o Pages" usa `enablement: true` e cria o site pela API na
-# primeira execução, com a origem já em GitHub Actions. Não há passo manual em
-# Settings — se houvesse, seria uma dependência invisível: nada no repositório
-# contaria que ela existe.
+# Em Settings → Pages, a origem precisa ser **GitHub Actions**. É uma vez na
+# vida do repositório.
+#
+# Tentamos evitar isso com `enablement: true`, que manda a ação criar o site
+# pela API. Não funciona: `POST /repos/{owner}/{repo}/pages` exige permissão de
+# ADMINISTRADOR do repositório, e o GITHUB_TOKEN das Actions não pode receber
+# esse nível — o bloco `permissions:` não concede administração. A tentativa
+# morre com "Resource not accessible by integration".
+#
+# O `enablement: true` ficou assim mesmo: quando o Pages já existe, a ação nem
+# chega a chamar a API, e num repositório onde a permissão exista ele evita o
+# clique. Onde não existe, o passo falha dizendo exatamente o que falta.
 
 name: Publicar site
 
@@ -106,16 +114,9 @@ jobs:
           fi
           echo "Link do instalador presente."
 
-      # `enablement: true` faz esta acao LIGAR o Pages pela API se ele ainda
-      # nao estiver ligado, em vez de falhar mandando alguem clicar.
-      #
-      # A primeira execucao falhou exatamente aqui: tudo compilou, as duas
-      # conferencias passaram, e o passo morreu porque nao havia site de Pages
-      # para receber o artefato. Depender de um clique em Settings para a
-      # esteira funcionar e uma dependencia invisivel — nao aparece em lugar
-      # nenhum do repositorio, e quem clonar amanha vai tropecar igual.
-      #
-      # Exige `pages: write`, que este workflow ja declara.
+      # Se o Pages ja existe, esta acao so le a configuracao. Se nao existe,
+      # `enablement: true` tenta cria-lo — e falha onde o token nao tem
+      # administracao do repositorio, que e o caso aqui. Ver o cabecalho.
       - name: Preparar o Pages
         uses: actions/configure-pages@v5
         with:
