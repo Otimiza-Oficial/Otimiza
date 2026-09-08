@@ -512,6 +512,8 @@ export const en: Conteudo = {
     ],
     acaoBaixar: "Download for Windows",
     acaoDiscord: "Go to Discord",
+    passoPagarAqui:
+      "Paste the code below and pay with Pix. The key is issued for that code and appears on this same screen when the payment lands — usually within seconds.",
     notaDiscord:
       "Support happens there because a person issues the key at the moment you pay. No bot decides it.",
     conferidor: {
@@ -529,6 +531,50 @@ export const en: Conteudo = {
         "This checks the SHAPE only. From here I cannot know whether the code really belongs to your computer — that check happens when the key is issued.",
     },
     voltar: "Back to the home page",
+  },
+
+  checkout: {
+    rotulo: "PAY NOW",
+    titulo: "Paste your computer code and pay with Pix.",
+    texto:
+      "The key is issued for that code and arrives right here, on this screen, as soon as the payment lands. " +
+      "It usually takes a few seconds.",
+
+    etiquetaCodigo: "The code Otimiza showed you",
+    gerar: "Generate the Pix",
+    gerando: "Generating…",
+
+    pixTitulo: "Pay this Pix",
+    pixTexto:
+      "Open your bank app, choose Pix, and scan the code or paste the copy-and-paste string. " +
+      "Do not close this page: the key appears here when the payment lands.",
+    copiar: "Copy the Pix code",
+    copiado: "Copied",
+    expiraEm: "This Pix is valid for another",
+    expirou: "This Pix expired. Nothing was charged — generate another whenever you want.",
+    aguardando: "Waiting for the payment…",
+
+    prontoTitulo: "Done. This is your key.",
+    prontoTexto:
+      "It lasts forever, on this computer. Paste it into the “Your key” field in Otimiza and click Activate.",
+    chaveEtiqueta: "Your key",
+    copiarChave: "Copy the key",
+    guardeAChave:
+      "Keep a copy. If you lose it, the key is reissued at no cost — but you will need to contact support.",
+
+    erroGenerico: "Could not finish right now. Nothing was charged.",
+    erroRede: "Could not reach the server. Nothing was charged — check your connection and try again.",
+    erroForaDoAr:
+      "Buying through the site is offline right now. Nothing was charged — the Discord route still works.",
+    erroEstornada: "This payment was refunded. Contact support if that was not you.",
+    recomecar: "Start over",
+
+    ouEntaoTitulo: "Rather talk to a person?",
+    ouEntaoTexto:
+      "Discord is still a complete purchase route, with a human on the other side — and it is the same price.",
+
+    semScript:
+      "Paying on this page needs JavaScript, which is turned off in your browser. You can buy through Discord using the button below — same price, same key.",
   },
 
   rodape: {

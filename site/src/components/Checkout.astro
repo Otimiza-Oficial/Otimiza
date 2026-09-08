@@ -1,0 +1,472 @@
+---
+/**
+ * O checkout Pix do site — o segundo canal de venda.
+ *
+ * COMO ELE SE COMPORTA QUANDO ALGO FALTA
+ *
+ * Esta secao inteira desaparece quando `PUBLIC_OTIMIZA_API` nao esta definida
+ * na compilacao. Nao ha estado "checkout quebrado" na tela: ou ele funciona,
+ * ou a pagina mostra so o caminho do Discord, que funciona sempre.
+ *
+ * Sem JavaScript, o formulario nao aparece e no lugar dele fica um aviso
+ * dizendo isso e apontando o Discord. Um botao de pagar que nao faz nada seria
+ * pior que botao nenhum.
+ *
+ * O QUE FICA GUARDADO NO NAVEGADOR
+ *
+ * Só o token da compra em andamento, em `sessionStorage`, e so ate a chave
+ * sair. Serve para recarregar a pagina sem perder um Pix ja pago — o caso em
+ * que a pessoa mais precisaria do suporte se o dado sumisse.
+ *
+ * `sessionStorage` e nao `localStorage` de proposito: o token da acesso a uma
+ * chave de licenca, e ele nao deve sobreviver ao fechamento da aba num
+ * computador que pode ser compartilhado.
+ */
+import type { Conteudo } from "../data/i18n";
+import { API, INTERVALO_CONSULTA_MS, LIMITE_CONSULTA_MS } from "../data/api";
+
+interface Props {
+  t: Conteudo;
+  conviteDiscord: string;
+}
+
+const { t, conviteDiscord } = Astro.props;
+const c = t.checkout;
+---
+
+<section id="checkout" class="scroll-mt-16 border-b border-linha bg-papel-2">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+    <div class="max-w-2xl">
+      <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+        {c.rotulo}
+      </p>
+      <h2
+        class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl"
+      >
+        {c.titulo}
+      </h2>
+      <p class="mt-5 text-sm leading-relaxed text-tinta-2 sm:text-base">{c.texto}</p>
+
+      {/* Sem script, o formulario nem chega a existir: o <noscript> ocupa o lugar. */}
+      <noscript>
+        <p
+          class="mt-8 border-l-2 border-ambar bg-papel px-4 py-3 text-sm leading-relaxed text-tinta-2"
+        >
+          {c.semScript}
+        </p>
+      </noscript>
+
+      {/* ── 1. o código da máquina ─────────────────────────────────────── */}
+      <form id="ck-forma" class="mt-8" hidden novalidate>
+        <label
+          for="ck-codigo"
+          class="block font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3"
+        >
+          {c.etiquetaCodigo}
+        </label>
+
+        <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+          <input
+            id="ck-codigo"
+            name="maquina"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="OTZ-XXXX-XXXX-XXXX"
+            aria-describedby="ck-erro"
+            class="tabular w-full rounded-sm border border-linha-forte bg-papel px-4 py-3 font-mono text-sm uppercase tracking-wider text-tinta placeholder:text-tinta-3 placeholder:normal-case sm:max-w-xs"
+          />
+          <button
+            id="ck-gerar"
+            type="submit"
+            class="inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85 disabled:opacity-50"
+          >
+            {c.gerar}
+          </button>
+        </div>
+
+        <p id="ck-erro" role="alert" class="mt-4 max-w-prose text-sm leading-relaxed text-vermelho" hidden></p>
+      </form>
+
+      {/* ── 2. o Pix na tela ───────────────────────────────────────────── */}
+      <div id="ck-pix" class="mt-10" hidden>
+        <h3 class="text-lg font-semibold tracking-tight text-tinta">{c.pixTitulo}</h3>
+        <p class="mt-3 max-w-prose text-sm leading-relaxed text-tinta-2">{c.pixTexto}</p>
+
+        <div class="mt-7 flex flex-col gap-7 sm:flex-row sm:items-start">
+          {/* Fundo BRANCO fixo, e não `bg-papel`: um QR Code sobre fundo escuro
+              não é lido por parte dos aplicativos de banco. Aqui a cor não
+              acompanha o tema de propósito. */}
+          <div class="shrink-0 rounded-sm border border-linha-forte bg-white p-3">
+            <img id="ck-qr" alt="" width="180" height="180" class="block h-[180px] w-[180px]" />
+          </div>
+
+          <div class="min-w-0 flex-1">
+            <button
+              id="ck-copiar"
+              type="button"
+              class="inline-flex items-center justify-center rounded-sm border border-linha-forte px-5 py-2.5 text-sm font-medium text-tinta transition-colors hover:border-tinta"
+            >
+              {c.copiar}
+            </button>
+
+            <p
+              id="ck-copia-e-cola"
+              class="mt-4 max-h-24 overflow-y-auto break-all rounded-sm border border-linha bg-papel px-3 py-2 font-mono text-[11px] leading-relaxed text-tinta-3"
+            >
+            </p>
+
+            <p class="tabular mt-5 font-mono text-xs text-tinta-3">
+              <span id="ck-relogio"></span>
+            </p>
+
+            <p class="mt-3 flex items-center gap-2 text-sm text-tinta-2">
+              <span
+                id="ck-pulso"
+                aria-hidden="true"
+                class="inline-block h-1.5 w-1.5 rounded-full bg-verde"
+              ></span>
+              <span id="ck-aguardando">{c.aguardando}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. a chave ─────────────────────────────────────────────────── */}
+      <div id="ck-pronto" class="mt-10" hidden>
+        <h3 class="text-lg font-semibold tracking-tight text-verde">{c.prontoTitulo}</h3>
+        <p class="mt-3 max-w-prose text-sm leading-relaxed text-tinta-2">{c.prontoTexto}</p>
+
+        <p class="mt-7 font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3">
+          {c.chaveEtiqueta}
+        </p>
+        <p
+          id="ck-chave"
+          class="mt-3 max-h-40 overflow-y-auto break-all rounded-sm border border-linha-forte bg-papel px-4 py-3 font-mono text-xs leading-relaxed text-tinta"
+        >
+        </p>
+
+        <button
+          id="ck-copiar-chave"
+          type="button"
+          class="mt-4 inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+        >
+          {c.copiarChave}
+        </button>
+
+        <p class="mt-5 max-w-prose text-xs leading-relaxed text-tinta-3">{c.guardeAChave}</p>
+      </div>
+
+      {/* ── 4. recomeçar ───────────────────────────────────────────────── */}
+      <div id="ck-fim" class="mt-8" hidden>
+        <p id="ck-fim-texto" class="max-w-prose text-sm leading-relaxed text-tinta-2"></p>
+        <button
+          id="ck-recomecar"
+          type="button"
+          class="mt-4 inline-block border-b border-linha-forte pb-0.5 text-sm text-tinta transition-colors hover:border-tinta"
+        >
+          {c.recomecar}
+        </button>
+      </div>
+
+      {/* ── o caminho humano, que não deixa de existir ─────────────────── */}
+      <div class="mt-14 border-t border-linha pt-8">
+        <h3 class="text-base font-semibold tracking-tight text-tinta">{c.ouEntaoTitulo}</h3>
+        <p class="mt-3 max-w-prose text-sm leading-relaxed text-tinta-2">{c.ouEntaoTexto}</p>
+        <a
+          href={conviteDiscord}
+          rel="noopener"
+          class="mt-5 inline-flex items-center justify-center rounded-sm border border-linha-forte px-6 py-3 text-sm font-medium text-tinta transition-colors hover:border-tinta"
+        >
+          {t.comprar.acaoDiscord}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script
+  is:inline
+  define:vars={{
+    API,
+    INTERVALO_CONSULTA_MS,
+    LIMITE_CONSULTA_MS,
+    txt: {
+      gerar: t.checkout.gerar,
+      gerando: t.checkout.gerando,
+      copiar: t.checkout.copiar,
+      copiado: t.checkout.copiado,
+      copiarChave: t.checkout.copiarChave,
+      expiraEm: t.checkout.expiraEm,
+      expirou: t.checkout.expirou,
+      erroGenerico: t.checkout.erroGenerico,
+      erroRede: t.checkout.erroRede,
+      erroForaDoAr: t.checkout.erroForaDoAr,
+      erroEstornada: t.checkout.erroEstornada,
+      codigoInvalido: t.comprar.conferidor.errado,
+      codigoVazio: t.comprar.conferidor.vazio,
+    },
+  }}
+>
+  (function () {
+    // A MESMA expressao do emissor (bot/otimiza-licenca.cjs) e da API. Conferir
+    // aqui poupa uma ida ao servidor para dizer o que da para ver daqui — mas
+    // NAO substitui a conferencia de la: tudo que vem do navegador e palpite.
+    var FORMA = /^OTZ-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
+    var CHAVE_SESSAO = "otimiza-compra";
+
+    var forma = document.getElementById("ck-forma");
+    if (!forma) return;
+
+    var campo = document.getElementById("ck-codigo");
+    var botao = document.getElementById("ck-gerar");
+    var erro = document.getElementById("ck-erro");
+    var painelPix = document.getElementById("ck-pix");
+    var qr = document.getElementById("ck-qr");
+    var copiaECola = document.getElementById("ck-copia-e-cola");
+    var botaoCopiar = document.getElementById("ck-copiar");
+    var relogio = document.getElementById("ck-relogio");
+    var pulso = document.getElementById("ck-pulso");
+    var painelPronto = document.getElementById("ck-pronto");
+    var campoChave = document.getElementById("ck-chave");
+    var botaoCopiarChave = document.getElementById("ck-copiar-chave");
+    var painelFim = document.getElementById("ck-fim");
+    var textoFim = document.getElementById("ck-fim-texto");
+    var botaoRecomecar = document.getElementById("ck-recomecar");
+
+    // O formulario so aparece com script rodando. Ate aqui, quem esta sem
+    // JavaScript ja leu o <noscript> e nao viu botao nenhum prometendo nada.
+    forma.hidden = false;
+
+    var consulta = null;
+    var contador = null;
+
+    function mostrarErro(mensagem) {
+      erro.textContent = mensagem;
+      erro.hidden = false;
+    }
+
+    function limparErro() {
+      erro.hidden = true;
+      erro.textContent = "";
+    }
+
+    function pararTudo() {
+      if (consulta) { clearInterval(consulta); consulta = null; }
+      if (contador) { clearInterval(contador); contador = null; }
+    }
+
+    function encerrar(mensagem) {
+      pararTudo();
+      painelPix.hidden = true;
+      textoFim.textContent = mensagem;
+      painelFim.hidden = false;
+      try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (e) {}
+    }
+
+    function copiarPara(texto, alvo, rotuloAntes, rotuloDepois) {
+      var terminar = function () {
+        alvo.textContent = rotuloDepois;
+        setTimeout(function () { alvo.textContent = rotuloAntes; }, 2000);
+      };
+
+      // `navigator.clipboard` nao existe fora de HTTPS (nem em http://, exceto
+      // localhost). Sem a reserva, copiar simplesmente nao funcionaria em
+      // algumas maquinas e ninguem saberia por que.
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(texto).then(terminar, function () {});
+        return;
+      }
+
+      var area = document.createElement("textarea");
+      area.value = texto;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      try { document.execCommand("copy"); terminar(); } catch (e) {}
+      document.body.removeChild(area);
+    }
+
+    function mostrarChave(chave) {
+      pararTudo();
+      painelPix.hidden = true;
+      campoChave.textContent = chave;
+      painelPronto.hidden = false;
+      try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (e) {}
+
+      botaoCopiarChave.onclick = function () {
+        copiarPara(chave, botaoCopiarChave, txt.copiarChave, txt.copiado);
+      };
+    }
+
+    function ligarRelogio(expiraEm) {
+      var passo = function () {
+        var falta = expiraEm - Date.now();
+
+        if (falta <= 0) { encerrar(txt.expirou); return; }
+
+        var minutos = Math.floor(falta / 60000);
+        var segundos = Math.floor((falta % 60000) / 1000);
+        relogio.textContent =
+          txt.expiraEm + " " + minutos + ":" + (segundos < 10 ? "0" : "") + segundos;
+      };
+
+      passo();
+      contador = setInterval(passo, 1000);
+    }
+
+    function acompanhar(token, expiraEm) {
+      var comecou = Date.now();
+
+      consulta = setInterval(function () {
+        // A aba esquecida aberta para de perguntar sozinha.
+        if (Date.now() - comecou > LIMITE_CONSULTA_MS) { encerrar(txt.expirou); return; }
+
+        fetch(API + "/v1/compras/" + token, { headers: { accept: "application/json" } })
+          .then(function (r) {
+            if (r.status === 404) { encerrar(txt.erroGenerico); return null; }
+            return r.json();
+          })
+          .then(function (corpo) {
+            if (!corpo) return;
+
+            if (corpo.estado === "pago" && corpo.chave) { mostrarChave(corpo.chave); return; }
+            if (corpo.estado === "estornada") { encerrar(txt.erroEstornada); return; }
+            if (corpo.estado === "vencida" || corpo.estado === "cancelada") {
+              encerrar(txt.expirou);
+            }
+          })
+          // Falha de rede numa consulta nao encerra nada: o Pix continua valido
+          // e a proxima tentativa vem em segundos. Encerrar aqui apagaria da
+          // tela um pagamento que talvez ja tenha sido feito.
+          .catch(function () {});
+      }, INTERVALO_CONSULTA_MS);
+
+      if (expiraEm) ligarRelogio(expiraEm);
+    }
+
+    function abrirPix(dados) {
+      if (dados.pix && dados.pix.qrBase64) {
+        qr.src = "data:image/png;base64," + dados.pix.qrBase64;
+        qr.parentElement.hidden = false;
+      } else {
+        // Sem imagem, o copia-e-cola sozinho resolve. Esconder a moldura vazia
+        // e melhor que deixar um quadrado branco sem explicacao.
+        qr.parentElement.hidden = true;
+      }
+
+      copiaECola.textContent = dados.pix ? dados.pix.copiaECola : "";
+
+      botaoCopiar.onclick = function () {
+        copiarPara(dados.pix.copiaECola, botaoCopiar, txt.copiar, txt.copiado);
+      };
+
+      forma.hidden = true;
+      painelFim.hidden = true;
+      painelPix.hidden = false;
+
+      acompanhar(dados.token, dados.expiraEm);
+    }
+
+    forma.addEventListener("submit", function (evento) {
+      evento.preventDefault();
+      limparErro();
+
+      var codigo = String(campo.value || "").trim().toUpperCase();
+
+      if (!codigo) { mostrarErro(txt.codigoVazio); return; }
+      if (!FORMA.test(codigo)) { mostrarErro(txt.codigoInvalido); return; }
+
+      campo.value = codigo;
+      botao.disabled = true;
+      botao.textContent = txt.gerando;
+
+      var destravar = function () {
+        botao.disabled = false;
+        botao.textContent = txt.gerar;
+      };
+
+      fetch(API + "/v1/compras", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ maquina: codigo }),
+      })
+        .then(function (r) {
+          return r.json().then(function (corpo) { return { status: r.status, corpo: corpo }; });
+        })
+        .then(function (resposta) {
+          destravar();
+
+          if (resposta.status === 201) {
+            try {
+              sessionStorage.setItem(
+                CHAVE_SESSAO,
+                JSON.stringify({ token: resposta.corpo.token, expiraEm: resposta.corpo.expiraEm }),
+              );
+            } catch (e) {}
+
+            abrirPix(resposta.corpo);
+            return;
+          }
+
+          if (resposta.status === 400 && resposta.corpo && resposta.corpo.descricao) {
+            mostrarErro(resposta.corpo.descricao);
+            return;
+          }
+
+          if (resposta.status === 502 || resposta.status === 503) {
+            mostrarErro(txt.erroForaDoAr);
+            return;
+          }
+
+          mostrarErro(txt.erroGenerico);
+        })
+        .catch(function () {
+          destravar();
+          mostrarErro(txt.erroRede);
+        });
+    });
+
+    botaoRecomecar.addEventListener("click", function () {
+      painelFim.hidden = true;
+      painelPronto.hidden = true;
+      forma.hidden = false;
+      campo.focus();
+    });
+
+    // ── recarregou a página com um Pix em andamento ────────────────────────
+    //
+    // O caso que mais dói no suporte: pagou, a página recarregou, e a chave
+    // "sumiu". O token guardado devolve a pessoa exatamente para onde ela
+    // estava — inclusive já paga, quando for o caso.
+    try {
+      var guardado = sessionStorage.getItem(CHAVE_SESSAO);
+
+      if (guardado) {
+        var estado = JSON.parse(guardado);
+
+        if (estado && estado.token) {
+          fetch(API + "/v1/compras/" + estado.token)
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (corpo) {
+              if (!corpo) { sessionStorage.removeItem(CHAVE_SESSAO); return; }
+
+              if (corpo.estado === "pago" && corpo.chave) { mostrarChave(corpo.chave); return; }
+
+              if (corpo.estado === "pendente") {
+                forma.hidden = true;
+                painelPix.hidden = false;
+                acompanhar(estado.token, estado.expiraEm || corpo.expiraEm);
+                return;
+              }
+
+              sessionStorage.removeItem(CHAVE_SESSAO);
+            })
+            .catch(function () {});
+        }
+      }
+    } catch (e) {}
+  })();
+</script>

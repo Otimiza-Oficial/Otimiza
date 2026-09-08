@@ -514,6 +514,8 @@ export const es: Conteudo = {
     ],
     acaoBaixar: "Descargar para Windows",
     acaoDiscord: "Ir a Discord",
+    passoPagarAqui:
+      "Pegue el código aquí abajo y pague con Pix. La clave se emite para ese código y aparece en esta misma pantalla cuando el pago entre — normalmente en segundos.",
     notaDiscord:
       "La atención es por ahí porque quien emite la clave es una persona, en el momento en que usted paga. No hay un robot decidiendo eso.",
     conferidor: {
@@ -531,6 +533,50 @@ export const es: Conteudo = {
         "Esto verifica solo la FORMA. Desde aquí no puedo saber si el código es realmente el de su computadora — esa verificación ocurre al emitir la clave.",
     },
     voltar: "Volver a la página inicial",
+  },
+
+  checkout: {
+    rotulo: "PAGAR AHORA",
+    titulo: "Pegue el código de su computadora y pague con Pix.",
+    texto:
+      "La clave se emite para ese código y llega aquí mismo, en esta pantalla, apenas el pago entre. " +
+      "Suele tardar pocos segundos.",
+
+    etiquetaCodigo: "El código que apareció en Otimiza",
+    gerar: "Generar el Pix",
+    gerando: "Generando…",
+
+    pixTitulo: "Pague este Pix",
+    pixTexto:
+      "Abra la aplicación de su banco, elija Pix, y lea el código o pegue el copiar-y-pegar. " +
+      "No cierre esta página: la clave aparece aquí cuando el pago entre.",
+    copiar: "Copiar el código Pix",
+    copiado: "Copiado",
+    expiraEm: "Este Pix vale por",
+    expirou: "Este Pix venció. No se cobró nada — genere otro cuando quiera.",
+    aguardando: "Esperando el pago…",
+
+    prontoTitulo: "Listo. Esta es su clave.",
+    prontoTexto:
+      "Vale para siempre, en esta computadora. Péguela en el campo “Su clave” de Otimiza y haga clic en Activar.",
+    chaveEtiqueta: "Su clave",
+    copiarChave: "Copiar la clave",
+    guardeAChave:
+      "Guarde una copia. Si la pierde, la clave se reemite sin costo — pero va a necesitar hablar con el soporte.",
+
+    erroGenerico: "No se pudo completar ahora. No se cobró nada.",
+    erroRede: "No pude comunicarme con el servidor. No se cobró nada — revise su conexión e intente de nuevo.",
+    erroForaDoAr:
+      "La compra por el sitio está fuera de servicio en este momento. No se cobró nada — el camino por Discord sigue funcionando.",
+    erroEstornada: "Este pago fue reembolsado. Hable con el soporte si no fue usted.",
+    recomecar: "Empezar de nuevo",
+
+    ouEntaoTitulo: "¿Prefiere hablar con una persona?",
+    ouEntaoTexto:
+      "Discord sigue siendo un camino completo de compra, con atención humana — y es el mismo precio.",
+
+    semScript:
+      "El pago en esta página necesita JavaScript, que está desactivado en su navegador. Puede comprar por Discord con el botón de abajo — mismo precio, misma clave.",
   },
 
   rodape: {

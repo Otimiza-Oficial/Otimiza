@@ -11,12 +11,18 @@
  *
  * Nao e uma limitacao que a pagina esconde: e a primeira coisa que ela diz.
  *
- * O QUE ESTA PAGINA AINDA NAO FAZ
+ * DOIS CANAIS, UMA PAGINA
  *
- * Nao ha checkout aqui. O pagamento acontece no Discord, que e onde ja
- * funciona hoje — o bot tem Mercado Pago, Pix e o emissor de licenca ligados.
- * Quando o checkout proprio existir, ele entra NESTA rota, e quem tiver
- * guardado o link nao perde nada. Ver site/ARQUITETURA.md.
+ * Com `PUBLIC_OTIMIZA_API` definida na compilacao, o pagamento acontece aqui
+ * mesmo: Pix gerado na hora e a chave entregue na tela. Sem ela, a pagina cai
+ * no caminho do Discord, que funciona desde sempre.
+ *
+ * A escolha e da COMPILACAO, e nao do navegador. Uma pagina que tenta o
+ * checkout e descobre no clique que a API nao existe deixaria o cliente
+ * esperando por um erro; assim, o que nao funciona nem aparece.
+ *
+ * O checkout nao substitui o Discord — ele fica ao lado. Quem prefere falar
+ * com uma pessoa continua tendo para onde ir, no mesmo preco.
  */
 import Base from "../layouts/Base.astro";
 import Cabecalho from "./Cabecalho.astro";
@@ -25,6 +31,8 @@ import { traducoes, caminho } from "../data/i18n";
 import type { Idioma } from "../data/i18n";
 import { produto } from "../data/produto";
 import { precosDe } from "../data/precos";
+import { TEM_CHECKOUT } from "../data/api";
+import Checkout from "./Checkout.astro";
 
 interface Props {
   idioma: Idioma;
@@ -90,7 +98,7 @@ const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
                   {p.titulo}
                 </h2>
                 <p class="mt-3 max-w-prose text-sm leading-relaxed text-tinta-2 sm:text-base">
-                  {p.texto}
+                  {p.numero === "03" && TEM_CHECKOUT ? c.passoPagarAqui : p.texto}
                 </p>
 
                 {p.numero === "01" && (
@@ -103,7 +111,10 @@ const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
                   </a>
                 )}
 
-                {p.numero === "03" && (
+{/* O botao do Discord so aparece aqui quando NAO ha checkout. Com
+                    checkout, o Discord continua oferecido — mas dentro da
+                    secao de pagamento, como alternativa, e nao como o caminho. */}
+                {p.numero === "03" && !TEM_CHECKOUT && (
                   <>
                     <a
                       href={CONVITE_DISCORD}
@@ -117,6 +128,15 @@ const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
                     </p>
                   </>
                 )}
+
+                {p.numero === "03" && TEM_CHECKOUT && (
+                  <a
+                    href="#checkout"
+                    class="mt-6 inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+                  >
+                    {t.checkout.rotulo}
+                  </a>
+                )}
               </li>
             ))
           }
@@ -125,78 +145,78 @@ const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
     </section>
 
     {/*
-      O CONFERIDOR DE FORMATO.
+      COM CHECKOUT, O CONFERIDOR SOME — e nao por economia de tela.
 
-      A mesma expressao que o emissor de licenca usa (bot/otimiza-licenca.cjs).
-      Ele existe para pegar o unico erro caro desta compra: pagar com o codigo
-      copiado errado, receber uma chave que nao abre, e descobrir depois.
+      Os dois pedem a mesma coisa, um do lado do outro: um so confere a
+      forma do codigo, o outro confere e cobra. Duas caixas iguais fazem a
+      pessoa preencher a errada, e a errada e a que nao vende.
 
-      Confere so a FORMA — daqui nao ha como saber se o codigo e de uma maquina
-      de verdade —, e o texto diz isso em vez de deixar subentendido.
-
-      Sem JavaScript o campo continua aparecendo e o codigo continua podendo ser
-      copiado; so a conferencia deixa de acontecer. Por isso o resultado nasce
-      escondido e nao ha nada prometendo validacao antes de o script ligar.
+      Sem checkout ele continua valendo: e o unico jeito de descobrir que o
+      codigo esta errado ANTES de levar ele para o Discord e pagar.
     */}
-    <section class="border-b border-linha bg-papel-2">
-      <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
-        <div class="max-w-2xl">
-          <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
-            {c.conferidor.rotulo}
-          </p>
-          <h2
-            class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl"
-          >
-            {c.conferidor.titulo}
-          </h2>
-          <p class="mt-5 text-sm leading-relaxed text-tinta-2 sm:text-base">
-            {c.conferidor.texto}
-          </p>
-
-          <form id="forma-codigo" class="mt-8" novalidate>
-            <label
-              for="codigo-maquina"
-              class="block font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3"
+    {!TEM_CHECKOUT && (
+      <section class="border-b border-linha bg-papel-2">
+        <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+          <div class="max-w-2xl">
+            <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+              {c.conferidor.rotulo}
+            </p>
+            <h2
+              class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl"
             >
-              {c.conferidor.etiqueta}
-            </label>
+              {c.conferidor.titulo}
+            </h2>
+            <p class="mt-5 text-sm leading-relaxed text-tinta-2 sm:text-base">
+              {c.conferidor.texto}
+            </p>
 
-            <div class="mt-3 flex flex-col gap-3 sm:flex-row">
-              <input
-                id="codigo-maquina"
-                name="codigo"
-                type="text"
-                inputmode="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="OTZ-XXXX-XXXX-XXXX"
-                aria-describedby="resultado-codigo aviso-codigo"
-                class="tabular w-full rounded-sm border border-linha-forte bg-papel px-4 py-3 font-mono text-sm uppercase tracking-wider text-tinta placeholder:text-tinta-3 placeholder:normal-case sm:max-w-xs"
-              />
-              <button
-                type="submit"
-                class="inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+            <form id="forma-codigo" class="mt-8" novalidate>
+              <label
+                for="codigo-maquina"
+                class="block font-mono text-[11px] uppercase tracking-[0.18em] text-tinta-3"
               >
-                {c.conferidor.botao}
-              </button>
-            </div>
+                {c.conferidor.etiqueta}
+              </label>
 
-            <p
-              id="resultado-codigo"
-              role="status"
-              aria-live="polite"
-              class="mt-4 max-w-prose text-sm leading-relaxed"
-              hidden
-            >
-            </p>
+              <div class="mt-3 flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="codigo-maquina"
+                  name="codigo"
+                  type="text"
+                  inputmode="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="OTZ-XXXX-XXXX-XXXX"
+                  aria-describedby="resultado-codigo aviso-codigo"
+                  class="tabular w-full rounded-sm border border-linha-forte bg-papel px-4 py-3 font-mono text-sm uppercase tracking-wider text-tinta placeholder:text-tinta-3 placeholder:normal-case sm:max-w-xs"
+                />
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center rounded-sm bg-inverso px-6 py-3 text-sm font-medium text-inverso-tinta transition-opacity hover:opacity-85"
+                >
+                  {c.conferidor.botao}
+                </button>
+              </div>
 
-            <p id="aviso-codigo" class="mt-6 max-w-prose text-xs leading-relaxed text-tinta-3">
-              {c.conferidor.aviso}
-            </p>
-          </form>
+              <p
+                id="resultado-codigo"
+                role="status"
+                aria-live="polite"
+                class="mt-4 max-w-prose text-sm leading-relaxed"
+                hidden
+              >
+              </p>
+
+              <p id="aviso-codigo" class="mt-6 max-w-prose text-xs leading-relaxed text-tinta-3">
+                {c.conferidor.aviso}
+              </p>
+            </form>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    )}
+
+    {TEM_CHECKOUT && <Checkout t={t} conviteDiscord={CONVITE_DISCORD} />}
 
     <section>
       <div class="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-16 lg:px-12">

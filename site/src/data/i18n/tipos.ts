@@ -239,6 +239,15 @@ export type Conteudo = {
     }[];
     readonly acaoBaixar: string;
     readonly acaoDiscord: string;
+
+    /**
+     * O passo 03 quando o checkout do site esta ligado nesta compilacao.
+     *
+     * O texto normal manda ir ao Discord, e isso deixa de ser a unica verdade
+     * quando da para pagar na propria pagina. Duas versoes do mesmo passo e
+     * mais honesto que um texto vago que sirva para os dois casos.
+     */
+    readonly passoPagarAqui: string;
     readonly notaDiscord: string;
 
     /**
@@ -259,6 +268,53 @@ export type Conteudo = {
     };
 
     readonly voltar: string;
+  };
+
+  /**
+   * O checkout Pix do site — o segundo canal de venda.
+   *
+   * Nada aqui e enfeite de tela: cada estado abaixo e um momento em que o
+   * cliente esta com dinheiro na mao esperando resposta. Texto vago num
+   * desses vira chamado no suporte.
+   */
+  readonly checkout: {
+    readonly rotulo: string;
+    readonly titulo: string;
+    readonly texto: string;
+
+    readonly etiquetaCodigo: string;
+    readonly gerar: string;
+    readonly gerando: string;
+
+    /** O Pix ja na tela. */
+    readonly pixTitulo: string;
+    readonly pixTexto: string;
+    readonly copiar: string;
+    readonly copiado: string;
+    readonly expiraEm: string;
+    readonly expirou: string;
+    readonly aguardando: string;
+
+    /** Deu certo. */
+    readonly prontoTitulo: string;
+    readonly prontoTexto: string;
+    readonly chaveEtiqueta: string;
+    readonly copiarChave: string;
+    readonly guardeAChave: string;
+
+    /** Deu errado, em cada jeito que da. */
+    readonly erroGenerico: string;
+    readonly erroRede: string;
+    readonly erroForaDoAr: string;
+    readonly erroEstornada: string;
+    readonly recomecar: string;
+
+    /** O caminho humano, que continua existindo. */
+    readonly ouEntaoTitulo: string;
+    readonly ouEntaoTexto: string;
+
+    /** Sem JavaScript o checkout nao roda, e a pagina precisa dizer isso. */
+    readonly semScript: string;
   };
 
   readonly rodape: {
