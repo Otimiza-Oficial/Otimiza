@@ -639,6 +639,21 @@ const GB_LIVRES_QUE_JA_E_PROBLEMA: f64 = 10.0;
 
 impl EmAchados for super::diskspace::DiskReport {
     fn achados(&self) -> Vec<Achado> {
+        // SEM MEDICAO NAO HA ACHADO, E A DIFERENCA E CARA.
+        //
+        // `disk_usage` devolvia (0, 0) quando nao achava o volume do sistema, e
+        // esta funcao lia isso como disco cheio: "Restam 0.0 GB livres no disco
+        // do Windows", severidade Critical, na primeira tela. Numero inventado
+        // no lugar mais visivel do produto.
+        //
+        // Disco genuinamente cheio tem `free_bytes` zero e `total_bytes` maior
+        // que zero, e continua sendo Critical — e o que muda aqui e so o caso
+        // em que ninguem mediu. Quem transforma isso em lacuna e a tarefa que
+        // coleta, logo abaixo.
+        if self.medida_do_espaco != super::diskspace::Medida::Medido {
+            return Vec::new();
+        }
+
         let livres_gb = self.free_bytes as f64 / 1_073_741_824.0;
 
         if livres_gb >= GB_LIVRES_QUE_JA_E_PROBLEMA {
@@ -801,7 +816,22 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // nenhum ajuste de software resolve, e é a resposta que falta em todo
         // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
-        (Origem::Disco, || Ok(super::diskspace::scan_para_o_veredito().achados())),
+        // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
+        //
+        // Enquanto esta tarefa era sempre `Ok`, um disco que nao pode ser lido
+        // sumia do diagnostico sem deixar rastro — o mesmo defeito que o
+        // firmware e a saude ja tiveram e que este mecanismo existe para
+        // resolver. A tela agora diz que nao conseguiu olhar, em vez de nao
+        // dizer nada.
+        (Origem::Disco, || {
+            let relatorio = super::diskspace::scan_para_o_veredito();
+
+            if relatorio.medida_do_espaco != super::diskspace::Medida::Medido {
+                return Err("nao consegui medir o espaco do disco do sistema".to_string());
+            }
+
+            Ok(relatorio.achados())
+        }),
         (Origem::Disco, || Ok(super::shaders::analyze().achados())),
         (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
     ];
@@ -1028,6 +1058,81 @@ mod medicao_de_tempo {
             veredito.achados.len(),
             veredito.lacunas.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests_1_8_disco {
+    use super::*;
+    use crate::modules::windows::diskspace::{DiskReport, Medida};
+
+    /// Monta um relatório de disco sem tocar no disco de verdade.
+    fn relatorio(total_bytes: u64, free_bytes: u64, medida: Medida) -> DiskReport {
+        let free_percent = if total_bytes > 0 {
+            free_bytes as f64 / total_bytes as f64 * 100.0
+        } else {
+            0.0
+        };
+
+        DiskReport {
+            drive: "C:".to_string(),
+            total_bytes,
+            free_bytes,
+            free_percent,
+            medida_do_espaco: medida,
+            pressure: None,
+            recoverable_bytes: 0,
+            findings: Vec::new(),
+        }
+    }
+
+    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
+    ///
+    /// `disk_usage` devolvia (0, 0) quando não achava o volume do sistema —
+    /// drive mapeado, `SystemDrive` divergente, volume sem letra. O veredito
+    /// lia isso como disco cheio e anunciava "Restam 0.0 GB livres", severidade
+    /// Critical, na primeira tela, sobre uma máquina que podia estar com meio
+    /// terabyte livre.
+    #[test]
+    fn disco_nao_medido_nao_produz_achado() {
+        let achados = relatorio(0, 0, Medida::NaoConsegui).achados();
+
+        assert!(
+            achados.is_empty(),
+            "sem medir o disco, o produto nao pode afirmar nada sobre ele — \
+             e muito menos com severidade Critical"
+        );
+    }
+
+    /// O CASO OPOSTO, QUE NÃO PODE SER QUEBRADO PELO CONSERTO.
+    ///
+    /// Disco genuinamente cheio tem zero livre e um total real. Isso continua
+    /// sendo o achado mais importante que o produto sabe dar.
+    #[test]
+    fn disco_realmente_cheio_continua_sendo_achado() {
+        let achados = relatorio(500_000_000_000, 0, Medida::Medido).achados();
+
+        assert_eq!(achados.len(), 1, "disco cheio medido tem que aparecer");
+        assert_eq!(achados[0].id, "disco_quase_cheio");
+        assert_eq!(achados[0].severity, FindingSeverity::Critical);
+    }
+
+    /// Disco com folga não vira achado nenhum, medido ou não.
+    #[test]
+    fn disco_com_folga_nao_produz_achado() {
+        let achados = relatorio(500_000_000_000, 300_000_000_000, Medida::Medido).achados();
+
+        assert!(achados.is_empty());
+    }
+
+    /// A fronteira: abaixo de 10 GB livres o achado aparece.
+    #[test]
+    fn abaixo_de_dez_gb_livres_o_achado_aparece() {
+        let apertado = relatorio(500_000_000_000, 5_000_000_000, Medida::Medido).achados();
+        let folgado = relatorio(500_000_000_000, 11_000_000_000, Medida::Medido).achados();
+
+        assert_eq!(apertado.len(), 1);
+        assert!(folgado.is_empty());
     }
 }
 

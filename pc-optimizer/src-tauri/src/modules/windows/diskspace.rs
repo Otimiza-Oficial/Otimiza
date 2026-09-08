@@ -76,6 +76,13 @@ pub struct DiskReport {
     pub total_bytes: u64,
     pub free_bytes: u64,
     pub free_percent: f64,
+    /// O espaço do disco foi medido, ou os zeros acima são falta de opção?
+    ///
+    /// Sem este campo, quem lê o relatório não tem como saber — e o veredito
+    /// chegou a anunciar disco cheio por causa disso. Mesma `Medida` que as
+    /// categorias já usavam; a honestidade estava aplicada ao tamanho de cada
+    /// pasta e faltava no número principal.
+    pub medida_do_espaco: Medida,
     /// Aviso quando o espaço livre já é baixo o bastante para atrapalhar o Windows.
     pub pressure: Option<String>,
     pub recoverable_bytes: u64,
@@ -362,18 +369,28 @@ pub fn format_size(bytes: u64) -> String {
 }
 
 /// Espaço total e livre do disco do sistema.
-fn disk_usage() -> (u64, u64) {
+///
+/// `None` quando o volume do sistema não aparece na enumeração — drive
+/// mapeado, `SystemDrive` apontando para outro lugar, volume sem letra, ou a
+/// própria enumeração falhando.
+///
+/// ANTES ISSO DEVOLVIA `(0, 0)`, e o custo estava na primeira tela: o veredito
+/// não tinha como distinguir "não achei o disco" de "o disco está cheio", e
+/// anunciava "Restam 0.0 GB livres no disco do Windows" com severidade
+/// Critical. Um número inventado, no lugar mais visível do produto, sobre uma
+/// máquina que podia estar com meio terabyte livre.
+fn disk_usage() -> Option<(u64, u64)> {
     let drive = system_drive();
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
     for disk in &disks {
         let ponto = disk.mount_point().to_string_lossy().to_uppercase();
         if ponto.starts_with(&drive.to_uppercase()) {
-            return (disk.total_space(), disk.available_space());
+            return Some((disk.total_space(), disk.available_space()));
         }
     }
 
-    (0, 0)
+    None
 }
 
 /// Quanto o DISM diz que dá para recuperar do repositório de componentes.
@@ -672,7 +689,13 @@ fn varrer(medir_o_winsxs: bool) -> DiskReport {
         })
         .collect();
 
-    let (total_bytes, free_bytes) = disk_usage();
+    let medido = disk_usage();
+    let (total_bytes, free_bytes) = medido.unwrap_or((0, 0));
+    let medida_do_espaco = if medido.is_some() {
+        Medida::Medido
+    } else {
+        Medida::NaoConsegui
+    };
     let free_percent = if total_bytes > 0 {
         free_bytes as f64 / total_bytes as f64 * 100.0
     } else {
@@ -704,6 +727,7 @@ fn varrer(medir_o_winsxs: bool) -> DiskReport {
         total_bytes,
         free_bytes,
         free_percent,
+        medida_do_espaco,
         pressure,
         recoverable_bytes,
         findings,
