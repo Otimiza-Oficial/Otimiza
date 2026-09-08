@@ -17,13 +17,40 @@ fn root(hive: &str) -> Result<RegKey, String> {
     }
 }
 
+/// A chave não existe, ou eu não consegui abri-la?
+///
+/// A diferença decide se o desfazer APAGA a chave do cliente. `AbsentKey` quer
+/// dizer "não existia antes de eu mexer", e a reversão trata isso ao pé da
+/// letra: apaga o valor e, se a chave ficar vazia, apaga a chave.
+///
+/// Enquanto QUALQUER erro de abertura virava `AbsentKey`, uma chave que EXISTIA
+/// e não pôde ser lida — ACL restritiva, elevação perdida no meio do caminho —
+/// era gravada no histórico como "não existia". O desfazer então apagava uma
+/// chave preexistente, em nome de restaurar o estado anterior. Perder o que o
+/// cliente tinha é pior que não conseguir mudar.
+///
+/// Função pura de propósito: reproduzir o caso real exigiria uma chave com DACL
+/// restritiva, que não se monta numa esteira. Aqui a decisão fica testável
+/// sozinha, e o resto do caminho continua sendo o mesmo.
+pub fn chave_inexistente(erro: std::io::ErrorKind) -> bool {
+    matches!(erro, std::io::ErrorKind::NotFound)
+}
+
 /// Lê o valor atual, seja ele DWORD, texto ou inexistente.
 pub fn read(hive: &str, path: &str, name: &str) -> Result<PreviousValue, String> {
     let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
+        Ok(key) => key,
         // Chave inexistente é um estado válido, e é distinto de "chave existe sem
         // o valor": só no primeiro caso a reversão precisa apagar a chave também.
-        Err(_) => return Ok(PreviousValue::AbsentKey),
-        Ok(key) => key,
+        Err(e) if chave_inexistente(e.kind()) => return Ok(PreviousValue::AbsentKey),
+        // Qualquer outro motivo é desconhecimento, e desconhecimento não pode
+        // virar permissão para apagar.
+        Err(e) => {
+            return Err(format!(
+                "Não consegui ler {}\\{}: {}. Nada foi alterado.",
+                hive, path, e
+            ))
+        }
     };
 
     if let Ok(value) = key.get_value::<u32, _>(name) {
@@ -173,12 +200,45 @@ pub fn restore(hive: &str, path: &str, name: &str, previous: &PreviousValue) -> 
     Ok(())
 }
 
-/// Apaga um valor. Um valor já ausente não é erro — o estado desejado já foi atingido.
+/// Apaga um valor.
+///
+/// ESTADO DESEJADO JÁ ATINGIDO NÃO É ERRO. Chave ausente ou valor ausente
+/// querem dizer que não há o que apagar, e a reversão terminou o trabalho dela.
+///
+/// TUDO O MAIS É ERRO, E PRECISA SUBIR. Antes, esta função engolia duas falhas
+/// diferentes — não conseguir abrir a chave para escrita, e não conseguir
+/// apagar o valor — e devolvia `Ok(())` nos dois casos.
+///
+/// O estrago não era só a mensagem errada na tela. `ChangeLog::take` já tinha
+/// consumido a entrada do histórico quando a reversão começa; então o valor
+/// continuava no registro do cliente, a tela dizia que tinha desfeito, e o
+/// produto perdia a capacidade de desfazer aquilo de novo — a única anotação de
+/// como voltar já tinha sido gasta.
+///
+/// Falhar em voz alta preserva a entrada do histórico, e o cliente pode tentar
+/// outra vez com elevação.
 fn delete_value(hive: &str, path: &str, name: &str) -> Result<(), String> {
-    if let Ok(key) = root(hive)?.open_subkey_with_flags(path, KEY_WRITE) {
-        let _ = key.delete_value(name);
+    let key = match root(hive)?.open_subkey_with_flags(path, KEY_WRITE) {
+        Ok(key) => key,
+        // A chave sumiu: não há valor para apagar, e é isso que se queria.
+        Err(e) if chave_inexistente(e.kind()) => return Ok(()),
+        Err(e) => {
+            return Err(format!(
+                "Não consegui abrir {}\\{} para desfazer: {}. A mudança continua aplicada.",
+                hive, path, e
+            ))
+        }
+    };
+
+    match key.delete_value(name) {
+        Ok(()) => Ok(()),
+        // O valor já não estava lá.
+        Err(e) if chave_inexistente(e.kind()) => Ok(()),
+        Err(e) => Err(format!(
+            "Não consegui apagar {}\\{}\\{} ao desfazer: {}. A mudança continua aplicada.",
+            hive, path, name, e
+        )),
     }
-    Ok(())
 }
 
 /// Uma chave sem valores e sem subchaves pode ser removida com segurança.
@@ -200,6 +260,70 @@ pub fn subkeys(hive: &str, path: &str) -> Result<Vec<String>, String> {
         .map_err(|e| format!("Cannot open {}\\{}: {}", hive, path, e))?;
 
     Ok(key.enum_keys().filter_map(|k| k.ok()).collect())
+}
+
+#[cfg(test)]
+mod tests_1_8 {
+    use super::*;
+    use std::io::ErrorKind;
+
+    /// A classificação que decide se o desfazer APAGA a chave do cliente.
+    ///
+    /// Só "não encontrado" pode virar `AbsentKey`. Qualquer outro motivo é
+    /// desconhecimento, e desconhecimento não autoriza apagar: uma chave que
+    /// existia e não pôde ser lida seria gravada como "não existia", e a
+    /// reversão a removeria em nome de restaurar o estado anterior.
+    #[test]
+    fn so_chave_nao_encontrada_pode_virar_ausente() {
+        assert!(chave_inexistente(ErrorKind::NotFound));
+
+        for negado in [
+            ErrorKind::PermissionDenied,
+            ErrorKind::Other,
+            ErrorKind::InvalidData,
+            ErrorKind::TimedOut,
+        ] {
+            assert!(
+                !chave_inexistente(negado),
+                "{:?} nao pode ser lido como chave inexistente: o desfazer apagaria                  uma chave que o cliente tinha",
+                negado
+            );
+        }
+    }
+
+    /// Ler uma chave que realmente não existe continua sendo `AbsentKey`, e não
+    /// erro. Esse caminho é o normal — a maioria das otimizações escreve em
+    /// chave que o Windows ainda não criou.
+    #[test]
+    fn chave_que_nao_existe_continua_sendo_ausente() {
+        let lido = read(
+            "HKCU",
+            r"Software\Otimiza\NaoExisteEstaChaveDeTeste\NemEsta",
+            "QualquerValor",
+        );
+
+        assert_eq!(lido, Ok(PreviousValue::AbsentKey));
+    }
+
+    /// Hive desconhecida continua sendo erro, e não ausência.
+    #[test]
+    fn hive_desconhecida_e_erro_e_nao_ausencia() {
+        assert!(read("HKXX", r"Software\Otimiza", "X").is_err());
+    }
+
+    /// Apagar um valor que não está lá é sucesso: o estado desejado já foi
+    /// atingido. É o caso que o `delete_value` precisa continuar perdoando
+    /// depois de deixar de perdoar todo o resto.
+    #[test]
+    fn desfazer_valor_ja_ausente_e_sucesso() {
+        let apagado = delete_value(
+            "HKCU",
+            r"Software\Otimiza\NaoExisteEstaChaveDeTeste",
+            "QualquerValor",
+        );
+
+        assert_eq!(apagado, Ok(()));
+    }
 }
 
 #[cfg(test)]

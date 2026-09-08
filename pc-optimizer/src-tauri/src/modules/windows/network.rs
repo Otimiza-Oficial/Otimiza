@@ -26,7 +26,7 @@
 // inclusive quando isso significa não ter nada a vender.
 
 use super::{registry, shell};
-use crate::modules::changelog::{ChangeRecord, PreviousValue};
+use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
 
 const INTERFACES: &str = r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces";
@@ -300,8 +300,16 @@ pub fn definir_dns(guid: &str, servidores: &str) -> Result<ChangeRecord, String>
     }
 
     let caminho = format!("{}\\{}", INTERFACES, guid);
-    let anterior = registry::read("HKLM", &caminho, "NameServer")
-        .unwrap_or(PreviousValue::Absent);
+
+    // SEM `unwrap_or` AQUI, E O MOTIVO É CARO.
+    //
+    // Enquanto `registry::read` só falhava com hive desconhecida, esta linha era
+    // inalcançável. Agora que ela distingue "não existe" de "não consegui ler",
+    // engolir o erro converteria uma leitura falha em "não havia DNS antes" — e
+    // o desfazer APAGARIA o DNS que o cliente tinha, em vez de restaurá-lo.
+    //
+    // Falhar aqui não custa nada ao cliente: ainda não escrevemos.
+    let anterior = registry::read("HKLM", &caminho, "NameServer")?;
 
     registry::set_string("HKLM", &caminho, "NameServer", servidores)?;
 
