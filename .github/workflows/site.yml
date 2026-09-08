@@ -15,11 +15,12 @@
 # Só a `main`. Publicar branch de trabalho colocaria no ar texto de venda ainda
 # em revisão, no mesmo endereço que o cliente acessa.
 #
-# O QUE PRECISA ESTAR LIGADO NO REPOSITÓRIO
+# O PAGES SE LIGA SOZINHO
 #
-# Em Settings → Pages, a origem precisa ser **GitHub Actions** (não "Deploy from
-# a branch"). É um passo manual, feito uma vez; sem ele este workflow compila,
-# gera o artefato e falha na publicação.
+# O passo "Preparar o Pages" usa `enablement: true` e cria o site pela API na
+# primeira execução, com a origem já em GitHub Actions. Não há passo manual em
+# Settings — se houvesse, seria uma dependência invisível: nada no repositório
+# contaria que ela existe.
 
 name: Publicar site
 
@@ -105,8 +106,20 @@ jobs:
           fi
           echo "Link do instalador presente."
 
+      # `enablement: true` faz esta acao LIGAR o Pages pela API se ele ainda
+      # nao estiver ligado, em vez de falhar mandando alguem clicar.
+      #
+      # A primeira execucao falhou exatamente aqui: tudo compilou, as duas
+      # conferencias passaram, e o passo morreu porque nao havia site de Pages
+      # para receber o artefato. Depender de um clique em Settings para a
+      # esteira funcionar e uma dependencia invisivel — nao aparece em lugar
+      # nenhum do repositorio, e quem clonar amanha vai tropecar igual.
+      #
+      # Exige `pages: write`, que este workflow ja declara.
       - name: Preparar o Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Enviar o artefato
         uses: actions/upload-pages-artifact@v3
