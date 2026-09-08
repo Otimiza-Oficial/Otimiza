@@ -1444,6 +1444,24 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
     }
 }
 
+/// Comando: o histórico de mudanças pôde ser lido?
+///
+/// A tela precisa disto para não dizer "nada a desfazer" sobre uma máquina em
+/// que ela apenas não conseguiu ler o que foi aplicado. Vazio por não haver
+/// nada e vazio por não saber são estados diferentes, e só um deles é uma boa
+/// notícia.
+///
+/// Fica em `LIVRES`: é leitura, e é justamente o aviso que impede o produto de
+/// mentir para quem ainda nem ativou.
+#[tauri::command]
+pub async fn estado_do_historico(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::changelog::LeituraDoHistorico, String> {
+    let log = state.changes.lock().await;
+
+    Ok(log.leitura().clone())
+}
+
 /// Comando: Lista o catálogo de otimizações com o estado atual de cada uma
 #[tauri::command]
 pub async fn list_optimizations(
@@ -2598,6 +2616,7 @@ mod tests {
         "restore_status",
         "list_startup",
         "list_optimizations",
+        "estado_do_historico",
         "revert_optimization",
         "revert_all_optimizations",
         "licenca_estado",

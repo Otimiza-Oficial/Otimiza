@@ -3832,11 +3832,66 @@ function mostrarAcaoDoVeredito(acao: Acao | null) {
   };
 }
 
+/**
+ * O histórico de mudanças pôde ser lido?
+ *
+ * `Ok` cobre dois casos honestos: li o arquivo, ou ele não existe porque nada
+ * foi aplicado ainda. `Ilegivel` é o terceiro, e é o perigoso.
+ */
+type LeituraDoHistorico =
+  | { estado: "Ok" }
+  | { estado: "Ilegivel"; motivo: string; guardado_em: string | null };
+
+/**
+ * Avisa quando o histórico não pôde ser lido.
+ *
+ * SEM ISTO A TELA MENTE, e mente para o lado tranquilizador. Com o histórico
+ * ilegível, o backend lista todas as otimizações como disponíveis e o "Desfazer
+ * tudo" não acha nada para desfazer — exatamente o que ele mostraria numa
+ * máquina limpa. Só que as mudanças continuam aplicadas no registro.
+ *
+ * O aviso vai ANTES da lista, e não num rodapé: quem chega aqui está prestes a
+ * decidir o que aplicar, e precisa saber que o programa perdeu a conta do que
+ * já mexeu.
+ */
+async function avisarSeOHistoricoNaoFoiLido() {
+  const caixa = element("optimization-historico-aviso");
+
+  let leitura: LeituraDoHistorico;
+
+  try {
+    leitura = await invoke<LeituraDoHistorico>("estado_do_historico");
+  } catch {
+    // Não conseguir perguntar não é motivo para alarmar: o aviso existe para
+    // um caso específico e conhecido, não para qualquer falha de IPC.
+    caixa.hidden = true;
+    return;
+  }
+
+  if (leitura.estado === "Ok") {
+    caixa.hidden = true;
+    return;
+  }
+
+  const guardado = leitura.guardado_em
+    ? ` O arquivo foi preservado em ${leitura.guardado_em} — ele não foi apagado.`
+    : "";
+
+  caixa.textContent =
+    "Não consegui ler o histórico de mudanças desta máquina, então não sei o que já foi " +
+    "aplicado aqui. A lista abaixo pode mostrar como disponível algo que já está ativo, e o " +
+    "\u201CDesfazer tudo\u201D não vai encontrar o que desfazer." +
+    guardado;
+
+  caixa.hidden = false;
+}
+
 async function loadOptimizations() {
   try {
     optimizations = await invoke<OptimizationInfo[]>("list_optimizations");
     renderFilters();
     renderOptimizations();
+    await avisarSeOHistoricoNaoFoiLido();
   } catch (error) {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;

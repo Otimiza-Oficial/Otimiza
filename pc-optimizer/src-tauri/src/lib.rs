@@ -91,6 +91,7 @@ pub fn run() {
             commands::list_startup,
             commands::set_startup_enabled,
             commands::list_optimizations,
+            commands::estado_do_historico,
             commands::apply_optimization,
             commands::placa_de_video,
             commands::memoria_instalada,

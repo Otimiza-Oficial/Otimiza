@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Valor que existia antes da otimização ser aplicada.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,23 +229,111 @@ pub struct AppliedOptimization {
     pub changes: Vec<ChangeRecord>,
 }
 
+/// Por que o histórico está do jeito que está.
+///
+/// Vazio tem dois significados, e confundi-los é a diferença entre "não há
+/// nada aplicado" e "não sei o que foi aplicado". O segundo caso PRECISA
+/// aparecer na tela: sem ele, o produto diz que não há nada a desfazer sobre
+/// uma máquina que pode estar cheia de mudanças aplicadas.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "estado")]
+pub enum LeituraDoHistorico {
+    /// Li o arquivo, ou ele não existe. Vazio aqui é vazio de verdade.
+    #[default]
+    Ok,
+    /// O arquivo existia e não deu para ler. Vazio aqui é DESCONHECIMENTO.
+    ///
+    /// `guardado_em` é para onde o arquivo ilegível foi movido. Ele não é
+    /// apagado: pode ser a única cópia do que o cliente tem aplicado, e um
+    /// humano ainda consegue ler JSON truncado.
+    Ilegivel {
+        motivo: String,
+        guardado_em: Option<String>,
+    },
+}
+
 /// Histórico persistente de otimizações aplicadas.
 pub struct ChangeLog {
     path: PathBuf,
     entries: Vec<AppliedOptimization>,
+    leitura: LeituraDoHistorico,
 }
 
 impl ChangeLog {
-    /// Carrega o histórico do disco. Um arquivo ausente ou corrompido resulta em
-    /// histórico vazio — nunca em erro, para não travar o app.
+    /// Carrega o histórico do disco.
+    ///
+    /// NÃO devolve erro, para não travar o app — mas também não finge que
+    /// arquivo ilegível é arquivo vazio. Ver `LeituraDoHistorico`.
     pub fn load() -> Self {
         let path = Self::storage_path();
-        let entries = fs::read_to_string(&path)
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or_default();
+        let (entries, leitura) = Self::ler(&path);
 
-        ChangeLog { path, entries }
+        ChangeLog { path, entries, leitura }
+    }
+
+    /// A leitura deu certo, ou o vazio é desconhecimento?
+    pub fn leitura(&self) -> &LeituraDoHistorico {
+        &self.leitura
+    }
+
+    /// Lê o arquivo, separando "não existe" de "não consegui ler".
+    ///
+    /// Função com o caminho por parâmetro de propósito: o caminho de verdade
+    /// sai de `%APPDATA%`, e um teste que dependesse disso escreveria no perfil
+    /// de quem roda a esteira.
+    fn ler(path: &Path) -> (Vec<AppliedOptimization>, LeituraDoHistorico) {
+        let bruto = match fs::read_to_string(path) {
+            Ok(bruto) => bruto,
+            // Arquivo ausente é o estado normal de quem nunca aplicou nada.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return (Vec::new(), LeituraDoHistorico::Ok)
+            }
+            Err(e) => {
+                return (
+                    Vec::new(),
+                    LeituraDoHistorico::Ilegivel {
+                        motivo: format!("não consegui abrir o arquivo: {}", e),
+                        guardado_em: None,
+                    },
+                )
+            }
+        };
+
+        match serde_json::from_str(&bruto) {
+            Ok(entries) => (entries, LeituraDoHistorico::Ok),
+            Err(e) => {
+                // JSON truncado é o resultado esperado de uma queda no meio da
+                // escrita — foi para isso que `persist` virou atômica. Aqui
+                // trata-se do arquivo que JÁ ficou assim.
+                let guardado = Self::guardar_ilegivel(path);
+
+                (
+                    Vec::new(),
+                    LeituraDoHistorico::Ilegivel {
+                        motivo: format!("o arquivo não é um histórico válido: {}", e),
+                        guardado_em: guardado,
+                    },
+                )
+            }
+        }
+    }
+
+    /// Move o arquivo ilegível para o lado, em vez de deixá-lo ser sobrescrito.
+    ///
+    /// Sem isto, a primeira gravação seguinte passa por cima dele e a última
+    /// pista do que estava aplicado na máquina do cliente some para sempre.
+    /// Mover também libera o caminho, para o produto seguir funcionando.
+    fn guardar_ilegivel(path: &Path) -> Option<String> {
+        let carimbo = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let destino = path.with_extension(format!("json.ilegivel-{}", carimbo));
+
+        fs::rename(path, &destino)
+            .ok()
+            .map(|_| destino.to_string_lossy().to_string())
     }
 
     fn storage_path() -> PathBuf {
@@ -258,14 +346,38 @@ impl ChangeLog {
     }
 
     fn persist(&self) -> Result<(), String> {
-        if let Some(dir) = self.path.parent() {
+        Self::gravar(&self.path, &self.entries)
+    }
+
+    /// Grava o histórico de forma ATÔMICA: escreve ao lado e renomeia por cima.
+    ///
+    /// A gravação direta com `fs::write` deixava uma janela real de perda: uma
+    /// queda de energia, ou o processo morto no meio, produzia um JSON truncado
+    /// — e o arquivo truncado era lido depois como histórico vazio. Todas as
+    /// otimizações voltavam a aparecer como disponíveis, "Desfazer tudo"
+    /// respondia que não havia nada a fazer, e as mudanças continuavam
+    /// aplicadas no registro do cliente. A promessa central do produto morria
+    /// em silêncio, por causa de uma tomada.
+    ///
+    /// Com temporário + `rename`, o arquivo de destino ou é o antigo inteiro ou
+    /// é o novo inteiro. No Windows o `rename` do Rust substitui o destino.
+    ///
+    /// Caminho por parâmetro pelo mesmo motivo de `ler`: testabilidade.
+    fn gravar(path: &Path, entries: &[AppliedOptimization]) -> Result<(), String> {
+        if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
         }
 
-        let raw = serde_json::to_string_pretty(&self.entries)
+        let raw = serde_json::to_string_pretty(entries)
             .map_err(|e| format!("Failed to serialize change log: {}", e))?;
 
-        fs::write(&self.path, raw).map_err(|e| format!("Failed to write change log: {}", e))
+        let temporario = path.with_extension("json.novo");
+
+        fs::write(&temporario, raw)
+            .map_err(|e| format!("Failed to write change log: {}", e))?;
+
+        fs::rename(&temporario, path)
+            .map_err(|e| format!("Failed to replace change log: {}", e))
     }
 
     /// Registra uma otimização aplicada. Substitui um registro anterior da mesma
@@ -316,6 +428,131 @@ pub fn now_timestamp() -> u64 {
 }
 
 #[cfg(test)]
+mod tests_1_8 {
+    use super::*;
+
+    /// Uma pasta só deste teste, dentro do temporário do sistema.
+    ///
+    /// O caminho de verdade sai de `%APPDATA%`, e um teste que escrevesse lá
+    /// mexeria no histórico real de quem roda a esteira — inclusive no do dono.
+    fn pasta(nome: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("otimiza-teste-{}", nome));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("criar pasta de teste");
+        dir
+    }
+
+    /// Arquivo que não existe é o estado normal de quem nunca aplicou nada.
+    /// Vazio aqui é vazio de verdade, e não pode virar alarme.
+    #[test]
+    fn arquivo_ausente_e_historico_vazio_de_verdade() {
+        let caminho = pasta("ausente").join("changes.json");
+
+        let (entradas, leitura) = ChangeLog::ler(&caminho);
+
+        assert!(entradas.is_empty());
+        assert_eq!(leitura, LeituraDoHistorico::Ok);
+    }
+
+    /// O caso que este conserto existe para pegar.
+    ///
+    /// Antes, um JSON truncado — o resultado de uma queda no meio da escrita —
+    /// era lido como histórico vazio. Todas as otimizações voltavam a aparecer
+    /// como disponíveis e "Desfazer tudo" dizia que não havia nada a fazer,
+    /// enquanto as mudanças seguiam aplicadas no registro do cliente.
+    #[test]
+    fn arquivo_truncado_nao_vira_historico_vazio_em_silencio() {
+        let dir = pasta("truncado");
+        let caminho = dir.join("changes.json");
+
+        // Exatamente o que sobra de um `fs::write` interrompido.
+        fs::write(&caminho, r#"[{"optimization_id":"algo","name":"Te"#).unwrap();
+
+        let (entradas, leitura) = ChangeLog::ler(&caminho);
+
+        assert!(entradas.is_empty(), "sem conseguir ler, nao ha o que listar");
+
+        match leitura {
+            LeituraDoHistorico::Ilegivel { guardado_em, .. } => {
+                let guardado = guardado_em.expect("o arquivo ilegivel precisa ser guardado");
+
+                assert!(
+                    std::path::Path::new(&guardado).exists(),
+                    "o arquivo ilegivel foi perdido: ele pode ser a unica pista do \
+                     que o cliente tem aplicado"
+                );
+
+                assert!(
+                    !caminho.exists(),
+                    "o caminho precisa ficar livre, senao a proxima gravacao passa \
+                     por cima da unica copia"
+                );
+            }
+            LeituraDoHistorico::Ok => {
+                panic!("arquivo truncado foi lido como historico valido e vazio")
+            }
+        }
+    }
+
+    /// Histórico válido continua sendo lido normalmente.
+    #[test]
+    fn arquivo_valido_e_lido_inteiro() {
+        let caminho = pasta("valido").join("changes.json");
+
+        ChangeLog::gravar(&caminho, &[sample("um"), sample("dois")]).unwrap();
+
+        let (entradas, leitura) = ChangeLog::ler(&caminho);
+
+        assert_eq!(entradas.len(), 2);
+        assert_eq!(leitura, LeituraDoHistorico::Ok);
+    }
+
+    /// A gravação não pode deixar o temporário para trás: ele seria lido como
+    /// lixo por quem abrisse a pasta, e ocuparia espaço para sempre.
+    #[test]
+    fn a_gravacao_nao_deixa_arquivo_temporario_para_tras() {
+        let dir = pasta("temporario");
+        let caminho = dir.join("changes.json");
+
+        ChangeLog::gravar(&caminho, &[sample("um")]).unwrap();
+
+        let sobraram: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+
+        assert_eq!(sobraram, vec!["changes.json".to_string()]);
+    }
+
+    /// Gravar por cima de um histórico que já existe substitui o conteúdo
+    /// inteiro — é o que a troca por `rename` precisa continuar fazendo.
+    #[test]
+    fn gravar_por_cima_substitui_o_conteudo() {
+        let caminho = pasta("substitui").join("changes.json");
+
+        ChangeLog::gravar(&caminho, &[sample("antigo")]).unwrap();
+        ChangeLog::gravar(&caminho, &[sample("novo")]).unwrap();
+
+        let (entradas, _) = ChangeLog::ler(&caminho);
+
+        assert_eq!(entradas.len(), 1);
+        assert_eq!(entradas[0].optimization_id, "novo");
+    }
+
+    fn sample(id: &str) -> AppliedOptimization {
+        AppliedOptimization {
+            optimization_id: id.to_string(),
+            name: "Teste".to_string(),
+            timestamp: 0,
+            changes: vec![ChangeRecord::PowerPlan {
+                previous_guid: "abc".to_string(),
+            }],
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -335,6 +572,8 @@ mod tests {
         ChangeLog {
             path: std::env::temp_dir().join("pc-optimizer-test-changes.json"),
             entries: Vec::new(),
+            // Comeca vazio de verdade, e nao por nao ter conseguido ler.
+            leitura: LeituraDoHistorico::Ok,
         }
     }
 

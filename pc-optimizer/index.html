@@ -722,6 +722,16 @@
               -->
               <p class="expectativa" id="optimization-expectativa"></p>
 
+              <!--
+                AVISO DE HISTORICO ILEGIVEL.
+                Nasce escondido e so aparece quando o backend diz que nao
+                conseguiu ler o changes.json. Sem ele, a tela mostraria a lista
+                inteira como disponivel e o "Desfazer tudo" nao acharia nada -
+                identico a uma maquina limpa, sobre uma maquina que pode estar
+                cheia de mudancas aplicadas.
+              -->
+              <p class="status warn" id="optimization-historico-aviso" hidden></p>
+
               <div class="row-actions">
                 <button id="optimize-now" class="btn btn-primary">Otimizar agora</button>
                 <button id="revert-all" class="btn">Desfazer tudo</button>
