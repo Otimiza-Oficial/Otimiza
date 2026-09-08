@@ -42,13 +42,22 @@ para o público deste produto.
 
 ---
 
-## ANTES DA PRIMEIRA VENDA — faça isto uma vez
+## O PAR DE CHAVES — já está feito
 
-A chave pública que está hoje em `src-tauri/src/modules/licenca.rs` é **de
-teste**: a privada dela foi impressa num terminal durante o desenvolvimento e
-portanto deixou de ser secreta. Vender com ela é vender com a porta destrancada.
+**A chave pública em `src-tauri/src/modules/licenca.rs` é a de produção**,
+instalada em 29/08/2026 e gerada pelo dono. A privada correspondente está com
+ele e no segredo do bot.
 
-**Passo 1 — gerar o seu par**, num terminal que só você está vendo:
+Até a versão anterior esta seção dizia que a chave era "de teste" e que vender
+com ela era "vender com a porta destrancada". Isso deixou de ser verdade em
+29/08/2026, e o documento não foi atualizado junto — num projeto cuja regra é
+só afirmar o que verificou, um aviso que assusta sem motivo é o mesmo defeito
+que um aviso que falta.
+
+O resto desta seção descreve **como trocar o par**, e vale para o único caso em
+que isso deve acontecer: um vazamento da privada. Leia o aviso do fim antes.
+
+**Passo 1 — gerar o par**, num terminal que só você está vendo:
 
 No PowerShell do Windows — que é o terminal padrão — o separador é `;`, e não
 `&&`. O `&&` só existe no PowerShell 7 e no Prompt de Comando; no 5.1, que vem
@@ -77,8 +86,9 @@ e0VViM/y9yT1xuwRPk81x9IrFUWlgBIOIM6YHk6sdCg=
 ```
 
 **Passo 2 — a PÚBLICA vai para o código.** Abra `licenca.rs`, ache
-`const CHAVE_PUBLICA` e troque o valor. Apague o aviso de "chave de teste" que
-está logo acima.
+`const CHAVE_PUBLICA` e troque o valor. Atualize o comentário logo acima com a
+data nova e o motivo da troca — ele é o que conta a história de qual chave está
+valendo desde quando.
 
 **Passo 3 — a PRIVADA você guarda em DOIS lugares.** Um gerenciador de senhas e
 um pendrive, por exemplo. Nunca em pasta do projeto, nunca em mensagem, nunca
@@ -93,8 +103,13 @@ a licença de todos os clientes**. Guarde em dois lugares.
 
 ### Trocar a chave pública invalida tudo
 
-Toda licença já emitida para de valer. Só troque na primeira vez, ou num
-vazamento.
+Toda licença já emitida para de valer — as assinaturas que estão com os
+clientes foram feitas pela privada correspondente à pública atual, e nenhuma
+outra as reconhece.
+
+A primeira instalação já aconteceu (29/08/2026). **Daqui em diante só existe um
+motivo para trocar: um vazamento da privada.** E trocar significa republicar o
+produto e reemitir a licença de cada cliente, um a um.
 
 ---
 

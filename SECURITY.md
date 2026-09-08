@@ -63,21 +63,37 @@ Se você encontrar uma vulnerabilidade de segurança no Otimiza, por favor:
 
 ### Assinatura Digital
 
-O instalador é assinado digitalmente. Veja [`pc-optimizer/docs/ASSINATURA.md`](pc-optimizer/docs/ASSINATURA.md) para detalhes.
+**O instalador ainda não é assinado.** Na primeira execução o Windows mostra
+"O Windows protegeu o seu PC — editor desconhecido", e o aviso está certo: sem
+assinatura, o sistema não tem como saber quem publicou o arquivo.
+
+O motivo não é descuido. Desde 2023 as autoridades certificadoras não emitem
+mais certificado de assinatura de código como arquivo simples — a chave privada
+precisa ficar em hardware certificado —, e essa compra ainda não foi feita. O
+processo, o custo e o que falta estão em
+[`pc-optimizer/docs/ASSINATURA.md`](pc-optimizer/docs/ASSINATURA.md).
+
+Até lá, o que está no seu alcance: baixar apenas da página de versões deste
+repositório, e ler o código, que é público.
 
 ## Dados do Usuário
 
 ### O Que é Coletado
 
-- Nenhum dado é enviado para servidores externos
+- **Nenhum dado da sua máquina é enviado para lugar nenhum**
+- Nenhuma telemetria, nenhum analytics, nenhuma conta
 - Estado das mudanças é salvo localmente em `%APPDATA%\pc-optimizer\changes.json`
-- Nenhuma telemetria ou analytics
+- **A única requisição que o programa faz** é uma pergunta ao GitHub — saiu
+  versão nova? Ela é anônima, manda apenas um User-Agent com o número da versão
+  instalada, e sem resposta o programa apenas não avisa e segue funcionando.
+  O código está em `pc-optimizer/src-tauri/src/modules/atualizacao.rs`
 
 ### O Que é Alterado
 
 - Configurações do Windows (registro, serviços)
 - Configurações de hardware (quando seguro e reversível)
-- Nada é enviado para fora da máquina local
+- Nenhuma dessas informações sai da máquina — a única coisa que sai é a
+  pergunta de versão descrita acima
 
 ## Atualizações de Segurança
 
@@ -105,7 +121,12 @@ Não, porque:
 
 ### Posso confiar no instalador?
 
-Sim, o instalador é assinado digitalmente. Verifique a assinatura antes de instalar.
+Ele **não é assinado**, então o Windows vai avisar que o editor é desconhecido —
+e vai estar certo em avisar. Ver "Assinatura Digital", acima.
+
+O que dá para fazer no lugar disso: baixar só da página de versões deste
+repositório, e ler o código-fonte, que é público inteiro. Um programa que altera
+configurações do seu sistema deveria poder ser auditado por quem instala.
 
 ## Contato de Segurança
 

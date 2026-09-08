@@ -160,14 +160,32 @@ mundo onde a privada existe.
 
 ---
 
-## Antes de programar o checkout, faltam decisões e credenciais
+## O que já foi resolvido desde que este documento foi escrito
 
-1. **O preço.** Ainda não definido
-2. **Onde o bot do Discord roda hoje** — decide onde o checkout mora
-3. **A chave privada Ed25519** — hoje ela está perdida com a formatação, ou
-   guardada em algum lugar que ainda não foi conferido. **Sem ela não existe
-   venda automática**, porque não há como assinar licença
-4. **Conta do Mercado Pago** com credenciais de produção
-5. **Aplicativos OAuth** criados no Discord e no Google Cloud
-6. **Domínio próprio** — dá para viver sem, mas checkout em
+- **A chave privada Ed25519 não estava perdida.** Ela está no `.env` do bot, e
+  foi usada para emitir as duas chaves de dono. Este documento afirmou o
+  contrário por um tempo, escrito antes de ela ser encontrada — e afirmar sem
+  ter conferido é exatamente o defeito que este projeto cobra dos outros.
+- **O preço:** R$ 20, o mesmo que o bot já cobra.
+- **O checkout foi construído** e está desligado até existir onde ligar. Ver o
+  commit `e6059c7`.
+- **Não há OAuth.** O desenho abaixo previa login por Discord ou Google; o que
+  foi construído não tem login nenhum. A credencial é um token aleatório por
+  compra, e o dado pessoal coletado é exatamente nenhum — o que é melhor do que
+  este documento planejava.
+
+## O que ainda falta
+
+1. **Onde o bot roda 24 horas.** Hoje ele roda no PC do dono, e o
+   `docs/DOCKER.md` do próprio bot é franco: *"Docker não é 24 horas"*. Um
+   checkout que só atende com aquele PC ligado é pior que nenhum — no Discord
+   quem chega de madrugada espera o atendimento acordar; no site ele clica,
+   nada acontece, e vai embora
+2. **HTTPS na frente da API.** Sem TLS, o token da compra e a chave de licença
+   viajam em texto puro
+3. **`PUBLIC_OTIMIZA_API` na esteira do site**, para o checkout deixar de ser
+   invisível na compilação de produção
+4. **Domínio próprio** — dá para viver sem, mas checkout em
    `usuario.github.io/Otimiza` derruba a confiança na hora de pagar
+5. **Política de privacidade e termos de uso**, linkados no rodapé antes da
+   primeira venda
