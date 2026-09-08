@@ -88,7 +88,7 @@ export const en: Conteudo = {
       fonte: "1.7.0 release notes",
     },
     { valor: "byte for byte", legenda: "the precision of undo", fonte: "PROGRESS.md" },
-    { valor: "zero", legenda: "of your data leaves your machine", fonte: "there is no network layer" },
+    { valor: "zero", legenda: "of your data leaves your machine", fonte: "only the version question goes out, anonymously" },
   ],
 
   pilares: {
@@ -233,11 +233,12 @@ export const en: Conteudo = {
 
   privacidade: {
     rotulo: "PRIVACY",
-    titulo: "It doesn't send anything of yours anywhere, because it doesn't know how.",
+    titulo: "It doesn't send anything of yours anywhere. One question goes out, and that is all.",
     texto:
-      "Otimiza has no network layer. There is no server to send to, and no telemetry to switch off " +
-      "in the options. This is not a privacy policy you have to believe — it is something the " +
-      "program is unable to do.",
+      "The only thing Otimiza sends out is a question to GitHub: is there a new version? It is " +
+      "anonymous, carries nothing from your machine, and without an answer the program simply " +
+      "doesn't mention it and keeps working. There is no server of ours to send to, and no " +
+      "telemetry to switch off in the options — because there is none.",
     itens: [
       "The source code is public and can be read by anyone who installs it",
       "The license is checked on your machine, without contacting a server",
@@ -342,7 +343,7 @@ export const en: Conteudo = {
       {
         titulo: "Verification done on your machine",
         texto:
-          "The key is checked locally, without contacting a server. Otimiza has no network layer.",
+          "The key is checked locally, without contacting any server — not at activation, and not afterwards.",
       },
       {
         titulo: "Every change is reversible",
@@ -407,7 +408,7 @@ export const en: Conteudo = {
       {
         pergunta: "Do I need internet to use it?",
         resposta: [
-          "No. Otimiza has no network layer: there is no online activation, and no periodic license check. Once installed, it works with the machine disconnected.",
+          "No. There is no online activation and no periodic license check: once installed, it works with the machine disconnected. The only thing it does over the internet is ask GitHub whether a new version is out — and without an answer, it simply doesn't mention it.",
         ],
       },
       {

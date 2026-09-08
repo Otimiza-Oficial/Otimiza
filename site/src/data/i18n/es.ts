@@ -93,7 +93,7 @@ export const es: Conteudo = {
       fonte: "notas de la 1.7.0",
     },
     { valor: "byte a byte", legenda: "la precisión del deshacer", fonte: "PROGRESS.md" },
-    { valor: "cero", legenda: "datos suyos que salen de su máquina", fonte: "no hay capa de red" },
+    { valor: "cero", legenda: "datos suyos que salen de su máquina", fonte: "solo sale la pregunta de versión, anónima" },
   ],
 
   pilares: {
@@ -238,11 +238,12 @@ export const es: Conteudo = {
 
   privacidade: {
     rotulo: "PRIVACIDAD",
-    titulo: "No manda nada suyo a ninguna parte, porque no sabe cómo.",
+    titulo: "No manda nada suyo a ninguna parte. Sale una pregunta, y nada más.",
     texto:
-      "Otimiza no tiene capa de red. No hay servidor adonde mandar, no hay telemetría para apagar en " +
-      "las opciones. Esto no es una política de privacidad que usted tenga que creer — es algo que " +
-      "el programa no puede hacer.",
+      "Lo único que Otimiza envía hacia afuera es una pregunta a GitHub: ¿salió versión nueva? Es " +
+      "anónima, no lleva nada de su máquina, y sin respuesta el programa simplemente no avisa y " +
+      "sigue funcionando. No hay servidor nuestro adonde mandar, y no hay telemetría para apagar " +
+      "en las opciones — porque no existe ninguna.",
     itens: [
       "El código fuente es público y puede ser leído por quien lo instala",
       "La licencia se verifica en su máquina, sin consultar ningún servidor",
@@ -345,7 +346,7 @@ export const es: Conteudo = {
       {
         titulo: "Verificación hecha en su máquina",
         texto:
-          "La clave se verifica localmente, sin consultar ningún servidor. Otimiza no tiene capa de red.",
+          "La clave se verifica localmente, sin consultar ningún servidor — ni al activar, ni después.",
       },
       {
         titulo: "Todos los cambios son reversibles",
@@ -409,7 +410,7 @@ export const es: Conteudo = {
       {
         pergunta: "¿Necesito internet para usarlo?",
         resposta: [
-          "No. Otimiza no tiene capa de red: no hay activación en línea, ni verificación periódica de licencia. Una vez instalado, funciona con la máquina desconectada.",
+          "No. No hay activación en línea ni verificación periódica de licencia: una vez instalado, funciona con la máquina desconectada. Lo único que hace por internet es preguntarle a GitHub si salió versión nueva — y sin respuesta, simplemente no avisa.",
         ],
       },
       {

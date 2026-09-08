@@ -73,7 +73,7 @@ export const pt: Conteudo = {
     { valor: "677", legenda: "testes automatizados, zero avisos", fonte: "commit da 1.7.0" },
     { valor: "1,2 s", legenda: "para abrir, de 3,7 s na versão anterior", fonte: "notas da 1.7.0" },
     { valor: "byte a byte", legenda: "a precisão do desfazer", fonte: "PROGRESS.md" },
-    { valor: "zero", legenda: "dados seus que saem da sua máquina", fonte: "não há camada de rede" },
+    { valor: "zero", legenda: "dados seus que saem da sua máquina", fonte: "só sai a pergunta de versão, anônima" },
   ],
 
   pilares: {
@@ -212,11 +212,12 @@ export const pt: Conteudo = {
 
   privacidade: {
     rotulo: "PRIVACIDADE",
-    titulo: "Ele não manda nada seu para lugar nenhum, porque não sabe como.",
+    titulo: "Ele não manda nada seu para lugar nenhum. Sai uma pergunta, e só.",
     texto:
-      "O Otimiza não tem camada de rede. Não há servidor para onde mandar, não há telemetria para " +
-      "desligar nas opções. Isso não é uma política de privacidade que você precisa acreditar — é " +
-      "uma coisa que o programa não consegue fazer.",
+      "A única coisa que o Otimiza envia para fora é uma pergunta ao GitHub: saiu versão nova? Ela " +
+      "é anônima, não leva nada da sua máquina, e sem resposta o programa apenas não avisa e segue " +
+      "funcionando. Não há servidor nosso para onde mandar, e não há telemetria para desligar nas " +
+      "opções — porque não existe nenhuma.",
     itens: [
       "O código-fonte é público e pode ser lido por quem instala",
       "A licença é conferida na sua máquina, sem consultar servidor",
@@ -316,7 +317,7 @@ export const pt: Conteudo = {
       {
         titulo: "Verificação feita na sua máquina",
         texto:
-          "A chave é conferida localmente, sem consultar servidor. O Otimiza não tem camada de rede.",
+          "A chave é conferida localmente, sem consultar servidor nenhum — nem na ativação, nem depois.",
       },
       {
         titulo: "Todas as alterações são reversíveis",
@@ -375,7 +376,7 @@ export const pt: Conteudo = {
       {
         pergunta: "Preciso de internet para usar?",
         resposta: [
-          "Não. O Otimiza não tem camada de rede: não há ativação online, nem verificação periódica de licença. Depois de instalado, ele funciona com a máquina desconectada.",
+          "Não. Não há ativação online nem verificação periódica de licença: depois de instalado, ele funciona com a máquina desconectada. A única coisa que ele faz pela internet é perguntar ao GitHub se saiu versão nova — e sem resposta, ele apenas não avisa.",
         ],
       },
       {
