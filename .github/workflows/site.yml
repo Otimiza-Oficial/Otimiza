@@ -1,0 +1,128 @@
+# Publicação do site
+#
+# Compila a landing (`site/`) e publica no GitHub Pages, em
+# https://otimiza-oficial.github.io/Otimiza/
+#
+# SÓ RODA QUANDO O SITE MUDA
+#
+# O filtro de caminho existe porque a maior parte dos commits deste repositório
+# é do aplicativo, não do site. Sem ele, cada mudança em Rust gastaria minuto de
+# esteira republicando uma página idêntica — e, pior, encheria o histórico de
+# publicações de ruído, deixando difícil achar quando o site mudou de verdade.
+#
+# POR QUE NÃO PUBLICA A BRANCH
+#
+# Só a `main`. Publicar branch de trabalho colocaria no ar texto de venda ainda
+# em revisão, no mesmo endereço que o cliente acessa.
+#
+# O QUE PRECISA ESTAR LIGADO NO REPOSITÓRIO
+#
+# Em Settings → Pages, a origem precisa ser **GitHub Actions** (não "Deploy from
+# a branch"). É um passo manual, feito uma vez; sem ele este workflow compila,
+# gera o artefato e falha na publicação.
+
+name: Publicar site
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  # Permite republicar sem precisar de commit — útil depois de ligar o Pages
+  # pela primeira vez, ou para reverter uma publicação ruim.
+  workflow_dispatch:
+
+# `pages` e `id-token` são o que o deploy-pages exige; `contents: read` é o
+# mínimo para clonar. Nada aqui escreve no repositório.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Duas publicações ao mesmo tempo se atropelam e a última a terminar vence —
+# que pode ser a mais antiga. Uma de cada vez, e sem cancelar a que já está no
+# ar: `cancel-in-progress: false` evita interromper um deploy pela metade.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  compilar:
+    name: Compilar o site
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: site
+        run: npm ci
+
+      # `npm run build` roda `astro check` antes do `astro build`. É de
+      # propósito: o build sozinho não confere tipo — o esbuild só apaga as
+      # anotações —, e sem o check uma chave de tradução faltando sumiria da
+      # tela em silêncio, numa língua só, sem quebrar nada.
+      - name: Compilar
+        working-directory: site
+        run: npm run build
+
+      # Rede de segurança contra o defeito mais provável desta página: o site é
+      # servido em subpasta (`/Otimiza`), e um caminho escrito na mão sem o
+      # BASE_URL funciona no desenvolvimento e quebra em produção. Aqui isso
+      # falha na esteira, não no navegador do cliente.
+      - name: Conferir que as seis páginas saíram
+        working-directory: site
+        run: |
+          set -euo pipefail
+          for pagina in index comprar en/index en/comprar es/index es/comprar; do
+            arquivo="dist/${pagina}.html"
+            [ -f "$arquivo" ] || arquivo="dist/${pagina%/index}/index.html"
+            if [ ! -f "$arquivo" ]; then
+              echo "Faltou a página: $pagina"
+              exit 1
+            fi
+          done
+          echo "As seis páginas foram geradas."
+
+      - name: Conferir que o instalador continua linkado
+        working-directory: site
+        run: |
+          set -euo pipefail
+          if ! grep -q "releases/latest/download/Otimiza-instalador.exe" dist/index.html; then
+            echo "O link do instalador sumiu da página inicial."
+            echo "Sem ele o funil não existe: o código da máquina só aparece depois de instalar."
+            exit 1
+          fi
+          echo "Link do instalador presente."
+
+      - name: Preparar o Pages
+        uses: actions/configure-pages@v5
+
+      - name: Enviar o artefato
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  publicar:
+    name: Publicar
+    needs: compilar
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+
+    steps:
+      - name: Publicar no GitHub Pages
+        id: publicacao
+        uses: actions/deploy-pages@v4
