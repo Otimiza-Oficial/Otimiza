@@ -1,0 +1,56 @@
+---
+/**
+ * Moldura de screenshot.
+ *
+ * As imagens ainda nao existem (o cliente coloca em public/capturas/). Por isso
+ * a moldura tem proporcao fixa e um marcador sobrio embaixo da imagem: se o
+ * arquivo faltar, a linha `onerror` remove o <img> e o marcador aparece no
+ * lugar. O layout nao mexe nem um pixel nos dois casos, e nunca aparece o
+ * icone de imagem quebrada.
+ *
+ * O nome do arquivo NAO se traduz — ele e um caminho, e o mesmo PNG serve as
+ * tres linguas. So o titulo, a descricao e o rotulo de pendencia mudam.
+ */
+interface Props {
+  arquivo: string;
+  titulo: string;
+  descricao: string;
+  /** "Captura pendente" no idioma da pagina. */
+  rotuloPendente: string;
+  /** Proporcao da moldura. Padrao 16/10, que e onde a janela do app cabe. */
+  proporcao?: string;
+}
+
+const { arquivo, titulo, descricao, rotuloPendente, proporcao = "16 / 10" } = Astro.props;
+
+const base = import.meta.env.BASE_URL.replace(/\/+$/, "");
+const src = `${base}/capturas/${arquivo}`;
+---
+
+<figure class="w-full">
+  <div class="rounded-sm border border-carvao-linha bg-carvao p-2 sm:p-3">
+    <div class="relative w-full overflow-hidden rounded-[2px] bg-carvao-2" style={`aspect-ratio: ${proporcao};`}>
+      <!-- Marcador. Fica atras da imagem; so e visto se ela nao carregar. -->
+      <div class="absolute inset-0 flex flex-col justify-end gap-1.5 p-4 sm:p-6">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-carvao-tinta/45">
+          {rotuloPendente}
+        </span>
+        <span class="font-mono text-xs text-carvao-tinta/85 sm:text-sm">public/capturas/{arquivo}</span>
+      </div>
+
+      <img
+        src={src}
+        alt={`${titulo}: ${descricao}`}
+        loading="lazy"
+        decoding="async"
+        onerror="this.remove()"
+        class="absolute inset-0 h-full w-full object-contain object-top"
+      />
+    </div>
+  </div>
+
+  <figcaption class="mt-3 max-w-2xl text-sm leading-relaxed">
+    <span class="font-medium text-tinta">{titulo}</span>
+    <span class="text-tinta-3"> — {descricao}</span>
+  </figcaption>
+</figure>

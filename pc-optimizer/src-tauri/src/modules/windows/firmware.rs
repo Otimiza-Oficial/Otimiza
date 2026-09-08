@@ -71,15 +71,17 @@ fn query_json(script: &str) -> Option<String> {
     }
 }
 
-fn memory_modules() -> Vec<MemoryModule> {
+/// Os pentes de memória, com `None` para "não consegui perguntar".
+///
+/// A distinção existe porque `unwrap_or_default()` juntava a leitura que falhou
+/// com a máquina que não reporta pente, e as duas viravam silêncio na tela.
+fn memory_modules() -> Option<Vec<MemoryModule>> {
     // O `@()` força array mesmo com um único pente, senão o JSON viria como objeto.
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-CimInstance \
                   Win32_PhysicalMemory | Select-Object DeviceLocator,BankLabel,Speed,\
                   ConfiguredClockSpeed,Capacity,PartNumber)";
 
-    query_json(script)
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
+    query_json(script).and_then(|json| serde_json::from_str(&json).ok())
 }
 
 /// A memória instalada, do jeito que a tela precisa para desenhá-la.
@@ -105,7 +107,10 @@ pub struct MemoriaInstalada {
 
 #[cfg(target_os = "windows")]
 pub fn memoria_instalada() -> MemoriaInstalada {
-    let modules = memory_modules();
+    // Aqui a lista vazia serve: este relatório descreve o que foi encontrado, e
+    // quem precisa distinguir "não consegui ler" de "não há pente" é o
+    // diagnóstico, via `achados_de_memoria`.
+    let modules = memory_modules().unwrap_or_default();
 
     MemoriaInstalada {
         slots: memory_slots(),
@@ -187,19 +192,64 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
 ///
 /// E é justamente aqui que mora o achado de canal único, que precisa aparecer
 /// junto do diagnóstico de memória logo na primeira tela.
-pub fn analyze_memory_only() -> Vec<FirmwareFinding> {
+// `analyze_memory_only` morava aqui. Foi substituída por
+// `analyze_memory_ou_lacuna`, que devolve `Err` quando a leitura falha em vez de
+// uma lista vazia indistinguível de "não há nada a reportar" — e o veredito
+// transforma esse `Err` em lacuna visível na tela.
+
+/// Os achados de memória, com a leitura falha separada da máquina sem pente.
+///
+/// `None` é "não consegui perguntar ao Windows"; `Some(vec![])` é "perguntei e
+/// não há pente a reportar". Antes os dois eram a mesma lista vazia, e o
+/// veredito devolvia `Ok(vec![])` nos dois casos — sem achado e sem lacuna. A
+/// tela ficava calada sobre memória, o que é indistinguível de dizer que ela
+/// está bem.
+///
+/// Custa caro justamente aqui: o canal único é o achado que, segundo este mesmo
+/// documento, rende mais que todo o catálogo de software somado.
+fn achados_de_memoria(
+    modules: Option<Vec<MemoryModule>>,
+) -> Result<Vec<FirmwareFinding>, String> {
+    let Some(modules) = modules else {
+        return Err(
+            "Não foi possível ler os pentes de memória desta máquina, então não sabemos se ela \
+             está em canal único nem se o perfil de velocidade está ativo."
+                .to_string(),
+        );
+    };
+
+    if modules.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut findings = Vec::new();
-    analyze_memory(&mut findings);
-    findings
+    analisar_pentes(&modules, &mut findings);
+    Ok(findings)
+}
+
+/// A mesma análise do `analyze_memory`, já com os pentes em mãos.
+pub fn analyze_memory_ou_lacuna() -> Result<Vec<FirmwareFinding>, String> {
+    achados_de_memoria(memory_modules())
 }
 
 fn analyze_memory(findings: &mut Vec<FirmwareFinding>) {
-    let modules = memory_modules();
+    let Some(modules) = memory_modules() else {
+        return;
+    };
 
     if modules.is_empty() {
         return;
     }
 
+    analisar_pentes(&modules, findings);
+}
+
+/// A análise em si, já com os pentes lidos.
+///
+/// Separada de `analyze_memory` para que `achados_de_memoria` — que distingue
+/// leitura falha de máquina sem pente — possa reaproveitá-la sem duplicar
+/// regra nenhuma.
+fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>) {
     let slots = memory_slots().unwrap_or(0);
     let channels = occupied_channels(&modules);
     let total_gb: f64 = modules
@@ -322,19 +372,38 @@ pub fn boot_limits() -> Vec<(String, String)> {
     }
 }
 
-fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
-    let limits = boot_limits();
+/// O achado dos limites de boot, separado da leitura para poder ser testado.
+///
+/// A elevação entra aqui porque sem ela o `bcdedit` não responde e a lista volta
+/// vazia — indistinguível de uma máquina limpa. O lado do catálogo já tratava
+/// esse caso; este painel não tratava, e os dois se contradiziam na mesma tela:
+/// a lista de otimizações dizia "só dá para conferir como administrador"
+/// enquanto o diagnóstico dava a inicialização por limpa.
+fn boot_limits_finding(limits: &[(String, String)], elevated: bool) -> FirmwareFinding {
+    if limits.is_empty() && !elevated {
+        return FirmwareFinding {
+            id: "boot_limits_desconhecido".to_string(),
+            title: "Limites de inicialização não verificados".to_string(),
+            measured: "O Windows só responde a esta consulta para um programa aberto como \
+                       administrador."
+                .to_string(),
+            advice: "Reabra o Otimiza como administrador para conferir se há núcleos ou memória \
+                     limitados na inicialização."
+                .to_string(),
+            severity: FindingSeverity::Important,
+            fix_location: FixLocation::Software,
+        };
+    }
 
     if limits.is_empty() {
-        findings.push(FirmwareFinding {
+        return FirmwareFinding {
             id: "boot_limits_clear".to_string(),
             title: "Inicialização sem limites artificiais".to_string(),
             measured: "Nenhum limite de núcleos ou memória na configuração de boot.".to_string(),
             advice: String::new(),
             severity: FindingSeverity::Ok,
             fix_location: FixLocation::None,
-        });
-        return;
+        };
     }
 
     let described: Vec<String> = limits
@@ -342,17 +411,24 @@ fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
         .map(|(key, value)| format!("{} = {}", key, value))
         .collect();
 
-    findings.push(FirmwareFinding {
+    FirmwareFinding {
         id: "boot_limits_present".to_string(),
         title: "Inicialização limitando o hardware".to_string(),
         measured: described.join(", "),
-        advice: "O Windows está usando de propósito menos processador ou menos memória \
-                 do que você tem. Isso quase sempre é sobra de mexida no msconfig. \
-                 A otimização \"Liberar limites de inicialização\" corrige."
+        advice: "O Windows está usando de propósito menos processador ou menos memória do que \
+                 você tem. Isso quase sempre é sobra de mexida no msconfig. A otimização \
+                 \"Liberar limites de inicialização\" corrige."
             .to_string(),
         severity: FindingSeverity::Critical,
         fix_location: FixLocation::Software,
-    });
+    }
+}
+
+fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
+    findings.push(boot_limits_finding(
+        &boot_limits(),
+        super::registry::is_elevated(),
+    ));
 }
 
 // ------------------------------------------------------------------- VBS
@@ -552,7 +628,11 @@ fn board_name() -> String {
 
 fn cpu_name() -> String {
     let mut system = sysinfo::System::new();
-    system.refresh_cpu_all();
+
+    // Mesmo motivo do `hardware::profile`: daqui sai só o NOME do processador,
+    // e `refresh_cpu_all()` pagaria o intervalo de amostragem que o percentual
+    // de uso exige — quase um segundo — para um dado que não depende disso.
+    system.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing());
 
     system
         .cpus()
@@ -581,6 +661,75 @@ pub fn analyze() -> FirmwareReport {
         board: board_name(),
         cpu: cpu_name(),
         findings,
+    }
+}
+
+#[cfg(test)]
+mod tests_1_7 {
+    use super::*;
+
+    /// Leitura de memória que falha não pode virar silêncio.
+    ///
+    /// `memory_modules()` caía em `unwrap_or_default()`, e `analyze_memory`
+    /// retornava na hora com a lista vazia. No veredito, a tarefa devolvia
+    /// `Ok(vec![])` — sem achado E sem lacuna. A tela não dizia nada sobre
+    /// memória, o que é indistinguível de "sua memória está bem".
+    ///
+    /// Custa caro justamente aqui: o canal único é, segundo o próprio
+    /// PROGRESS, o achado que "rende mais que todo o catálogo de software
+    /// somado". Sumir com ele em silêncio é perder o mais valioso.
+    #[test]
+    fn leitura_de_memoria_que_falhou_vira_lacuna_e_nao_silencio() {
+        let erro = achados_de_memoria(None)
+            .expect_err("leitura falha precisa virar Err, que o veredito exibe como lacuna");
+
+        assert!(
+            erro.to_lowercase().contains("memória") || erro.to_lowercase().contains("memoria"),
+            "a lacuna precisa dizer o que não foi verificado: {}",
+            erro
+        );
+    }
+
+    #[test]
+    fn maquina_sem_pente_reportado_nao_e_falha_de_leitura() {
+        // Perguntamos e o Windows respondeu que não há pente a reportar.
+        // Acontece em máquina virtual, e ali não há o que dizer.
+        let achados = achados_de_memoria(Some(Vec::new()))
+            .expect("máquina sem pente reportado não é falha de leitura");
+
+        assert!(achados.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests_1_6 {
+    use super::*;
+
+    #[test]
+    fn sem_elevacao_uma_leitura_vazia_nao_e_boot_limpo() {
+        // Sem administrador o `bcdedit` não responde, e a lista volta vazia.
+        // Dizer "inicialização sem limites" a partir daí é afirmar o que não foi
+        // verificado. O lado do catálogo já respeitava isso; o painel de
+        // diagnóstico não — e os dois se contradiziam na mesma tela.
+        let finding = boot_limits_finding(&[], false);
+        assert_ne!(finding.severity, FindingSeverity::Ok);
+        assert!(finding.measured.contains("administrador"));
+    }
+
+    #[test]
+    fn com_elevacao_uma_leitura_vazia_e_boot_limpo_de_verdade() {
+        assert_eq!(boot_limits_finding(&[], true).severity, FindingSeverity::Ok);
+    }
+
+    #[test]
+    fn limite_encontrado_vale_com_ou_sem_elevacao() {
+        // Se conseguimos ler um limite, ele vale — conseguir ler já prova que a
+        // leitura funcionou.
+        let limites = vec![("numproc".to_string(), "4".to_string())];
+        assert_eq!(
+            boot_limits_finding(&limites, false).severity,
+            FindingSeverity::Critical
+        );
     }
 }
 

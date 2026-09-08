@@ -1,0 +1,118 @@
+---
+/**
+ * Casca da pagina: <head>, metadados e o esqueleto semantico.
+ *
+ * Recebe o idioma e monta a partir dele o <html lang>, o title, a description,
+ * o canonical, o og:locale e os hreflang das tres versoes. Nenhuma frase de
+ * venda nova nasce aqui: tudo sai de src/data/i18n/.
+ */
+import "../styles/global.css";
+import { IDIOMA_PADRAO, IDIOMAS, traducoes, urlAbsoluta } from "../data/i18n";
+import type { Idioma } from "../data/i18n";
+import { produto } from "../data/produto";
+
+interface Props {
+  idioma: Idioma;
+  title?: string;
+  description?: string;
+  /**
+   * Sufixo da rota: "" na home, "/comprar" na pagina de compra.
+   *
+   * Sem ele, TODA pagina se declararia canonica da home e os hreflang das tres
+   * linguas apontariam para a home. O buscador leria /comprar como copia da
+   * inicial — e nao ha aviso quando isso acontece: as tags ficam bem formadas,
+   * so mentindo.
+   */
+  sufixo?: string;
+}
+
+const { idioma, sufixo = "" } = Astro.props;
+const t = traducoes[idioma];
+
+const { title = t.meta.titulo, description = t.meta.descricao } = Astro.props;
+
+const canonica = urlAbsoluta(idioma, Astro.site, sufixo);
+
+/**
+ * hreflang das tres versoes, mais x-default apontando para a raiz.
+ *
+ * O x-default e o portugues porque a raiz do site E o portugues — nao ha
+ * pagina de escolha de idioma nem redirecionamento, e nao deve haver: quem
+ * chega sem preferencia declarada cai na versao padrao e troca clicando.
+ */
+const alternativas = IDIOMAS.map((codigo) => ({
+  hreflang: traducoes[codigo].meta.hreflang,
+  href: urlAbsoluta(codigo, Astro.site, sufixo),
+}));
+const hrefPadrao = urlAbsoluta(IDIOMA_PADRAO, Astro.site, sufixo);
+---
+
+<!doctype html>
+<html lang={t.meta.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonica} />
+
+    {alternativas.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+    <link rel="alternate" hreflang="x-default" href={hrefPadrao} />
+
+    <meta name="theme-color" content="#f7f5f2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d0c0b" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Roda ANTES do primeiro quadro, de proposito.
+
+      Se a escolha do tema fosse aplicada depois que a pagina pinta, quem
+      prefere escuro veria um lampejo branco a cada carregamento. E o lampejo
+      nao e so feio: numa pagina que se vende por medir com honestidade,
+      parecer mal-acabada custa confianca.
+
+      O try/catch existe porque localStorage lanca excecao em janela anonima
+      de alguns navegadores. Falhar aqui nao pode derrubar a pagina: sem
+      escolha guardada, o CSS ja resolve pelo prefers-color-scheme.
+
+      A chave e a mesma nas tres linguas: trocar de idioma nao pode fazer o
+      leitor perder o tema que ele escolheu.
+    -->
+    <script is:inline>
+      try {
+        var tema = localStorage.getItem("otimiza-tema");
+        if (tema === "claro" || tema === "escuro") {
+          document.documentElement.dataset.tema = tema;
+        }
+      } catch (e) {}
+    </script>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={produto.nome} />
+    <meta property="og:locale" content={t.meta.ogLocale} />
+    {
+      IDIOMAS.filter((c) => c !== idioma).map((c) => (
+        <meta property="og:locale:alternate" content={traducoes[c].meta.ogLocale} />
+      ))
+    }
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonica} />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+  </head>
+
+  <body class="bg-papel text-tinta antialiased">
+    <a
+      href="#conteudo"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-sm focus:bg-tinta focus:px-4 focus:py-2 focus:text-sm focus:text-papel"
+    >
+      {t.a11y.pularConteudo}
+    </a>
+    <slot />
+  </body>
+</html>

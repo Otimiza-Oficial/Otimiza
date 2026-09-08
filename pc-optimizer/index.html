@@ -1603,6 +1603,33 @@
 
           <section class="panel">
             <div class="panel-head">
+              <h2>Resizable BAR</h2>
+              <span class="panel-tag" id="rbar-tag">—</span>
+            </div>
+
+            <p class="lead">
+              O Resizable BAR deixa o processador enxergar de uma vez a memória
+              inteira da placa de vídeo, em vez de espiá-la por uma janela de
+              256 MB. Rende alguns quadros em jogo — e, como o XMP, é coisa que
+              <strong>só a BIOS liga</strong>: nenhum programa liga por fora, e
+              este painel também não. Ele lê e explica.
+            </p>
+
+            <p class="hint">
+              São <strong>duas perguntas diferentes</strong>, e confundi-las é o
+              erro comum: "está ligado?" e "esta placa suporta?". A NVIDIA só
+              passou a oferecer Resizable BAR a partir da série RTX 3000 — numa
+              GTX não há nada para ligar, e mandar o cliente procurar a opção na
+              BIOS só faria ele perder tempo.
+            </p>
+
+            <button id="analyze-rbar" class="btn" data-custo="~3 s">Analisar</button>
+            <p id="rbar-status" class="status"></p>
+            <div id="rbar-result" class="resultado" data-vazio="Lê o modelo da placa, a memória dela e o tamanho da janela de acesso, e diz em qual dos casos o seu PC está. Não altera nada."></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
               <h2>Modo jogo</h2>
               <span class="panel-tag" id="gamemode-tag">—</span>
             </div>

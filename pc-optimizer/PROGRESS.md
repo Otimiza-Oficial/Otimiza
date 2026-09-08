@@ -573,6 +573,118 @@ aceita. À esquerda a compra, à direita a ativação. O diagnóstico roda por t
 e o achado principal aparece na tela de compra — o problema real daquela
 máquina, medido na hora, em vez de texto de propaganda.
 
+## A varredura do `unwrap_or_default`, e o que ela achou de verdade
+
+O levantamento inicial contou **67 leituras** em `modules/windows/` caindo em
+`unwrap_or_default()` e apontou quatro módulos suspeitos pelo cruzamento "muitos
+achados tranquilizadores + muitas leituras que podem falhar caladas".
+
+Conferidos um a um, o placar foi:
+
+| Módulo | Suspeita | Veredito |
+|---|---|---|
+| `health.rs` | 15 achados Ok · 4 leituras | **Defeito real** — a primeira tela afirmava a causa de uma leitura que nunca aconteceu |
+| `firmware.rs` | 9 achados Ok · 1 leitura | **Defeito real** — memória ilegível virava silêncio, sem achado e sem lacuna |
+| `suporte.rs` | 6 achados Ok · 3 leituras | **Correto.** O `unwrap_or_default` alimenta um `match` que trata o caso vazio explicitamente |
+| `reparo.rs` | 10 achados Ok · 1 leitura | **Falso positivo.** O `unwrap_or_default` está DENTRO de um teste, sobre um campo de texto — não é leitura de sistema |
+
+Dois de quatro. Vale registrar os dois que **não** eram defeito com o mesmo
+destaque dos que eram: a contagem cruzada serve para escolher onde olhar, não
+para concluir. Tratar o número como veredito teria "consertado" código correto.
+
+**A regra que sai da 1.6 e da 1.7, e que vale para o que vier:** leitura de
+sistema devolve `Option`. `Some(vec![])` é "perguntei e não há"; `None` é "não
+consegui perguntar". Juntar os dois num `unwrap_or_default()` é como todos os
+defeitos desta rodada nasceram — e o resultado é sempre o mesmo: o produto
+afirma o que não verificou, às vezes com achado tranquilizador, às vezes com
+silêncio, que é pior porque nem aparece na tela.
+
+## Os 14 testes que não rodam na esteira
+
+Ficavam sem inventário: a esteira roda o que não está marcado como `ignore`, e
+ninguém sabia de cabeça o que os ignorados cobrem nem por quê. Sem essa lista,
+"está ignorado" vira o mesmo silêncio que este documento cobra do produto.
+
+Nenhum deles é candidato a promover, e por razões diferentes:
+
+| Teste | Por que não roda sozinho |
+|---|---|
+| `real_admin_optimizations_apply_and_revert` | **Altera o sistema de verdade.** Serviço, energia, boot |
+| `real_apply_and_revert_cycle_restores_the_system` | Idem, no registro |
+| `real_startup_cycle_restores_exact_bytes` | Idem, na inicialização do cliente |
+| `real_full_cycle_with_measurement` | Idem, e leva ~20 s |
+| `suspende_e_devolve_um_processo_de_verdade` | Suspende processo real da máquina |
+| `mede_quadros_de_verdade` | Exige administrador **e algo desenhando na tela** |
+| `ensaio_de_taxa_nesta_maquina` | Depende do monitor e do driver de vídeo |
+| `noise_calibration` | Mede a mesma máquina várias vezes; é o que DEFINE os limiares |
+| `null_test_never_reports_a_gain` | Duas medições completas em release |
+| `real_benchmark_produces_plausible_numbers` | ~8 s ocupando todos os núcleos |
+| `inspecao::dump` | Escreve arquivo e depende do Edge |
+| `onde_vai_o_tempo` · `onde_vai_o_tempo_da_prontidao` · `onde_vai_o_tempo_do_perfil` | Instrumentos de medição: imprimem, não afirmam |
+
+**O caso que dói é o `null_test_never_reports_a_gain`.** Ele é a garantia central
+de honestidade do produto — mede duas vezes sem mudar nada e falha se qualquer
+indicador acusar melhora. É a diferença entre um medidor honesto e um vendedor de
+ilusão, e a esteira nunca o executa.
+
+Mas ele não pode ser promovido como está: o runner do GitHub é máquina virtual
+compartilhada, com ruído de vizinhança maior que o desta máquina. Um teste que
+compara medições ali falharia por causa do vizinho, e **teste que falha sozinho
+ensina a equipe a ignorar vermelho** — que é justamente o que o comentário do
+`suspend` já alerta.
+
+O caminho, quando for a hora: rodá-lo em máquina conhecida antes de publicar
+versão, como parte do ritual de release, e não dentro da esteira. Fica anotado
+como decisão consciente, não como esquecimento.
+
+### O disco da máquina de desenvolvimento encheu
+
+Durante a 1.7 o `cargo` parou com `os error 112` — **espaço insuficiente**. O
+`C:` estava com **0 GB livres de 464,7 GB**, e 33 deles eram pastas `target/` de
+compilação do próprio Otimiza.
+
+Vale registrar pela ironia e pela lição: a ferramenta que tem liberador de espaço
+encheu o disco da máquina do dono compilando a si mesma. Limpas as duas
+`target/`, o disco voltou a **26,6 GB (5,72%)** — acima do crítico, ainda abaixo
+dos 10% que o próprio produto usa como limiar de folga.
+
+Suspeitei que isso tivesse contaminado a medição — e **remedir com folga derrubou
+a suspeita**: o `detect_system_storage` deu 1440 ms com disco livre contra 957 ms
+com disco cheio. É variação grande, não efeito do disco. A hipótese estava
+errada, e fica registrada como errada.
+
+### Quatro erros de medição numa rodada só
+
+A 1.7 mediu muito, e errou a medição quatro vezes. Todas do mesmo tipo:
+**cronometrar uma coisa e concluir sobre outra.**
+
+1. **O comentário de agosto** dizia "prontidão 4,8 s · saúde 4,5 s". Os dois
+   números eram do `hardware::profile`, pago por quem chamasse primeiro. A ordem
+   "caros primeiro" foi calibrada com custo que muda de dono.
+2. **A primeira medição do veredito** deu "prontidão = 58% do tempo". Mesma
+   causa: a prontidão só era a primeira da fila.
+3. **A verificação do conserto da CPU** mostrou o número parado, e quase virou
+   "o conserto não funcionou" — o medidor continuava cronometrando
+   `refresh_cpu_all()`, o código velho, com a produção já usando o novo.
+4. **Os "79 ms" da consulta de disco.** A consulta rápida foi medida DEPOIS da
+   antiga, que já tinha carregado o módulo `Storage` e aquecido o WMI. Medido em
+   processo frio, na posição certa: **232 ms**.
+
+Nenhum desses foi pego por teste. Todos foram pegos por estranhar um número.
+
+**Os números honestos da detecção de disco:**
+
+| Caminho | Frio |
+|---|---|
+| Antigo — três cmdlets do módulo `Storage` | 1571–3581 ms |
+| Novo — CIM direto, em processo frio | **232 ms** |
+| Novo — dentro do produto | **957–1440 ms** |
+
+O ganho é real, mas o produto ainda paga **4 a 6× mais** que o mesmo comando num
+processo frio. Não é o disco e não é o módulo `Storage`. Sobra a sessão
+persistente de PowerShell (`sessao.rs`) — hipótese ainda **não verificada**, e
+anotada como pendência em vez de conclusão.
+
 ## Pendente
 
 ### Cobertura real das otimizações de administrador
@@ -591,11 +703,25 @@ Tipos de ação já executados contra um sistema real:
 | Enumeração de interfaces de rede (Nagle) | sim, com elevação |
 | Enumeração de classe de dispositivo (placa de rede) | sim, com elevação |
 | Política de máquina em `HKLM\SOFTWARE\Policies` | sim, com elevação |
-| Desativar serviço | **não** |
-| Trocar plano de energia | **não** |
-| Ajuste fino de energia (estacionamento de núcleos) | **não** |
+| **Desativar serviço** | **sim** — `WSearch` foi de Automático a Desativado e voltou |
+| **Ajuste fino de energia** | **sim** — estado mínimo do processador, já gravando tomada E bateria |
+| **Configuração de boot (`bcdedit`)** | **sim** — remoção do HPET forçado, aplicada e revertida |
+| Trocar plano de energia | **não** — já está em Alto Desempenho aqui |
 | MSI da placa de vídeo | **não** — já estava ativo aqui |
 | Hibernação, limites de boot, compressão de memória | **não** — indisponíveis aqui |
+
+As três primeiras linhas em negrito eram "não" até a 1.7. O ciclo real foi
+executado contra esta máquina com o build da 1.7 e fechou as três — **quatro
+otimizações percorreram o ciclo completo**: rede de baixa latência (10 valores de
+registro), estado mínimo do processador, busca do menu Iniciar e indexação de
+busca.
+
+**E ele achou uma contradição que a própria 1.7 tinha criado.** A correção de
+honestidade do Armazenamento Reservado ensinou a INSPEÇÃO a dizer "não sabemos,
+então oferecemos" — mas o caminho da APLICAÇÃO continuava respondendo "este
+Windows não tem o recurso". O item passou a ser oferecido e falhava afirmando,
+na hora de agir, exatamente o que se acabara de admitir não saber. Nenhum teste
+de unidade veria isso: os dois lados estavam certos sozinhos e errados juntos.
 
 As três primeiras lacunas são otimizações de alto impacto. Elas funcionam segundo
 o código e os testes de unidade, mas nunca foram vistas aplicando e revertendo

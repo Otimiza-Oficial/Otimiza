@@ -1,0 +1,101 @@
+---
+/**
+ * A pagina inteira, uma vez so, parametrizada pelo idioma.
+ *
+ * POR QUE ESTE COMPONENTE EXISTE
+ * As tres rotas (/, /en, /es) sao tres arquivos de cinco linhas em src/pages/
+ * que so dizem qual idioma querem. A montagem — quais secoes, em que ordem —
+ * mora aqui. Assim uma secao nova entra em um lugar so e aparece nas tres
+ * linguas; se a ordem morasse em cada pagina, uma das tres ficaria para tras
+ * na primeira mudanca, e ninguem perceberia.
+ *
+ * O idioma desce por prop, explicitamente, ate cada componente. Nao ha estado
+ * global nem leitura de Astro.url: cada componente recebe o texto que vai
+ * imprimir, e o TypeScript confere.
+ */
+import Base from "../layouts/Base.astro";
+import Cabecalho from "./Cabecalho.astro";
+import Hero from "./Hero.astro";
+import FaixaNumeros from "./FaixaNumeros.astro";
+import Pilares from "./Pilares.astro";
+import Captura from "./Captura.astro";
+import Recusas from "./Recusas.astro";
+import Privacidade from "./Privacidade.astro";
+import ComoFuncionaLicenca from "./ComoFuncionaLicenca.astro";
+import Precos from "./Precos.astro";
+import Faq from "./Faq.astro";
+import Rodape from "./Rodape.astro";
+import { traducoes } from "../data/i18n";
+import type { Idioma } from "../data/i18n";
+
+interface Props {
+  idioma: Idioma;
+}
+
+const { idioma } = Astro.props;
+const t = traducoes[idioma];
+---
+
+<Base idioma={idioma}>
+  <Cabecalho idioma={idioma} t={t} />
+
+  <main id="conteudo">
+    <Hero t={t} />
+
+    <FaixaNumeros t={t} />
+
+    <Pilares t={t} />
+
+    <section id="telas" class="scroll-mt-16 border-b border-linha">
+      <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+        <div class="max-w-3xl">
+          <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+            {t.telas.rotulo}
+          </p>
+          <h2
+            class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl"
+          >
+            {t.telas.titulo}
+          </h2>
+        </div>
+
+        {/*
+          O PRIMEIRO ocupa a largura inteira. Sao cinco telas, e cinco numa
+          grade de duas colunas deixa a ultima sozinha na linha, com cara de
+          coisa que faltou. Promovendo a primeira, sobram quatro em 2x2 — e a
+          que ganha tamanho e a que tem o diagrama dos encaixes de memoria,
+          onde o canal unico se ve de olho.
+
+          Se um dia entrar uma sexta tela, este `col-span` precisa sair: com
+          numero par a grade fecha sozinha.
+        */}
+        <div class="mt-14 grid grid-cols-1 gap-10 md:grid-cols-2 md:gap-x-10 md:gap-y-14">
+          {
+            t.telas.itens.map((tela, i) => (
+              <div class={i === 0 ? "md:col-span-2" : undefined}>
+                <Captura
+                  arquivo={tela.arquivo}
+                  titulo={tela.titulo}
+                  descricao={tela.descricao}
+                  rotuloPendente={t.a11y.capturaPendente}
+                />
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <Recusas t={t} />
+
+    <Privacidade t={t} />
+
+    <ComoFuncionaLicenca t={t} />
+
+    <Precos idioma={idioma} t={t} />
+
+    <Faq t={t} />
+  </main>
+
+  <Rodape t={t} idioma={idioma} />
+</Base>

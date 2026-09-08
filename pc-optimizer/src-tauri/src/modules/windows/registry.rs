@@ -58,7 +58,13 @@ pub fn set_binary(hive: &str, path: &str, name: &str, bytes: &[u8]) -> Result<Pr
             vtype: RegType::REG_BINARY,
         },
     )
-    .map_err(|e| format!("Cannot set {}\\{}\\{}: {}", hive, path, name, e))?;
+    .map_err(|e| {
+        explicar_falha_de_escrita(
+            &format!("{}\\{}\\{}", hive, path, name),
+            &e.to_string(),
+            is_elevated(),
+        )
+    })?;
 
     Ok(previous)
 }
@@ -72,9 +78,50 @@ pub fn set_dword(hive: &str, path: &str, name: &str, value: u32) -> Result<Previ
         .map_err(|e| format!("Cannot open {}\\{} for writing: {}", hive, path, e))?;
 
     key.set_value(name, &value)
-        .map_err(|e| format!("Cannot set {}\\{}\\{}: {}", hive, path, name, e))?;
+        .map_err(|e| {
+        explicar_falha_de_escrita(
+            &format!("{}\\{}\\{}", hive, path, name),
+            &e.to_string(),
+            is_elevated(),
+        )
+    })?;
 
     Ok(previous)
+}
+
+/// Traduz a falha de escrita no registro para uma frase que o cliente entende.
+///
+/// "os error 5" não diz nada a ninguém. E o caso que motivou isto é pior que
+/// feio: na máquina de desenvolvimento, com o programa JÁ elevado, a escrita em
+/// `HKLM\SOFTWARE\Policies\Microsoft\Dsh` (a política dos Widgets) volta negada,
+/// enquanto o PowerShell escreve na mesma chave sem reclamar. Quando somos
+/// administrador e ainda assim o Windows nega, a causa não é permissão que o
+/// usuário possa conceder — é alguma coisa na máquina barrando a escrita,
+/// tipicamente antivírus ou proteção de política. Dizer "execute como
+/// administrador" nesse caso manda o cliente fazer o que ele já fez.
+pub fn explicar_falha_de_escrita(caminho: &str, erro: &str, elevado: bool) -> String {
+    let baixo = erro.to_lowercase();
+    let negado = baixo.contains("os error 5")
+        || baixo.contains("acesso negado")
+        || baixo.contains("access is denied");
+
+    if !negado {
+        return format!("Não foi possível escrever em {}: {}", caminho, erro);
+    }
+
+    if !elevado {
+        return format!(
+            "O Windows negou a escrita em {}. Reabra o Otimiza como administrador.",
+            caminho
+        );
+    }
+
+    format!(
+        "O Windows negou a escrita em {} mesmo com o Otimiza aberto como administrador. \
+         Isso normalmente é antivírus ou uma proteção de política bloqueando a alteração — \
+         não é falta de permissão sua. Nada foi alterado.",
+        caminho
+    )
 }
 
 /// Escreve um valor de texto, criando a chave se necessário, e devolve o valor anterior.
@@ -86,7 +133,13 @@ pub fn set_string(hive: &str, path: &str, name: &str, value: &str) -> Result<Pre
         .map_err(|e| format!("Cannot open {}\\{} for writing: {}", hive, path, e))?;
 
     key.set_value(name, &value.to_string())
-        .map_err(|e| format!("Cannot set {}\\{}\\{}: {}", hive, path, name, e))?;
+        .map_err(|e| {
+        explicar_falha_de_escrita(
+            &format!("{}\\{}\\{}", hive, path, name),
+            &e.to_string(),
+            is_elevated(),
+        )
+    })?;
 
     Ok(previous)
 }
@@ -147,6 +200,45 @@ pub fn subkeys(hive: &str, path: &str) -> Result<Vec<String>, String> {
         .map_err(|e| format!("Cannot open {}\\{}: {}", hive, path, e))?;
 
     Ok(key.enum_keys().filter_map(|k| k.ok()).collect())
+}
+
+#[cfg(test)]
+mod tests_1_6 {
+    use super::*;
+
+    #[test]
+    fn negado_sem_elevacao_manda_reabrir_como_administrador() {
+        let msg = explicar_falha_de_escrita("HKLM\\X\\Y", "Acesso negado. (os error 5)", false);
+        assert!(msg.contains("administrador"));
+    }
+
+    #[test]
+    fn negado_ja_elevado_nao_manda_fazer_o_que_ja_foi_feito() {
+        // Medido na máquina do dono: elevado, e o Windows nega a escrita na
+        // política dos Widgets mesmo assim, enquanto o PowerShell elevado grava
+        // na mesma chave. Mandar "execute como administrador" aqui é mandar o
+        // cliente repetir o que ele já fez, e deixá-lo achando que errou.
+        let msg = explicar_falha_de_escrita(
+            "HKLM\\SOFTWARE\\Policies\\Microsoft\\Dsh\\AllowNewsAndInterests",
+            "Acesso negado. (os error 5)",
+            true,
+        );
+
+        assert!(msg.contains("antivírus") || msg.contains("proteção"));
+        assert!(msg.contains("Nada foi alterado"));
+        assert!(
+            !msg.contains("Reabra"),
+            "não pode mandar reabrir como administrador quem já está: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn falha_que_nao_e_permissao_nao_vira_conversa_de_permissao() {
+        let msg = explicar_falha_de_escrita("HKLM\\X\\Y", "The system cannot find the file", true);
+        assert!(!msg.contains("administrador"));
+        assert!(!msg.contains("antivírus"));
+    }
 }
 
 #[cfg(test)]

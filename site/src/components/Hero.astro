@@ -1,0 +1,73 @@
+---
+/**
+ * Abertura. Alinhada a esquerda, uma coluna de texto estreita, muito ar em
+ * volta. Todo o texto sai de src/data/i18n/.
+ */
+import type { Conteudo } from "../data/i18n";
+import { produto } from "../data/produto";
+import Captura from "./Captura.astro";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section id="topo" class="border-b border-linha">
+  <div class="mx-auto w-full max-w-6xl px-5 pb-16 pt-16 sm:px-8 sm:pb-20 sm:pt-24 lg:px-12 lg:pb-24 lg:pt-32">
+    <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+      {t.hero.promessa}
+    </p>
+
+    <h1
+      class="mt-6 max-w-[24ch] text-pretty text-[1.75rem] font-semibold leading-[1.12] tracking-tight text-tinta sm:text-4xl md:text-5xl lg:text-[3.25rem] lg:leading-[1.08]"
+    >
+      {t.hero.chamada}
+    </h1>
+
+    <p class="mt-7 max-w-xl text-base leading-relaxed text-tinta-2 sm:text-lg">
+      {t.hero.texto}
+    </p>
+
+    <div class="mt-10 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+      {/*
+        BAIXAR e a acao principal, e nao COMPRAR. Nao e preferencia de
+        marketing: a licenca nasce presa ao codigo OTZ-XXXX-XXXX-XXXX, e esse
+        codigo so aparece DEPOIS de instalar, no portao da primeira abertura.
+        Mandar a pessoa pagar antes de instalar seria pedir que ela colasse um
+        codigo que ela ainda nao tem.
+
+        E o produto se vende melhor assim: no portao ela ve um problema real da
+        maquina dela, medido na hora. Nenhum concorrente imita isso, porque
+        nenhum mede de verdade.
+      */}
+      <a
+        href={produto.instalador}
+        rel="noopener"
+        class="inline-flex items-center justify-center rounded-sm bg-tinta px-6 py-3 text-sm font-medium text-papel transition-colors hover:bg-tinta-2"
+      >
+        {t.hero.ctaBaixar}
+      </a>
+      <a
+        href="#precos"
+        class="inline-flex items-center justify-center rounded-sm border border-linha-forte px-6 py-3 text-sm font-medium text-tinta transition-colors hover:border-tinta"
+      >
+        {t.hero.ctaComprar}
+      </a>
+    </div>
+
+    <p class="tabular mt-6 font-mono text-xs leading-relaxed text-tinta-3">
+      {t.hero.versaoPrefixo} {produto.versao} · {t.hero.linhaMeta}
+    </p>
+
+    <div class="mt-14 sm:mt-20">
+      <Captura
+        arquivo="painel.png"
+        titulo={t.hero.captura.titulo}
+        descricao={t.hero.captura.descricao}
+        rotuloPendente={t.a11y.capturaPendente}
+      />
+    </div>
+  </div>
+</section>

@@ -475,6 +475,53 @@ mod tests {
     use super::*;
 
     #[test]
+    /// Onde vão os segundos da prontidão.
+    ///
+    /// A medição do veredito apontou este módulo como **58% do tempo da tela
+    /// inicial** — 3,8 s de 6,5 s somados. O número sozinho não diz em qual
+    /// etapa, e consertar sem saber seria o chute que o produto recusa.
+    ///
+    /// `cargo test --lib -- --ignored --nocapture onde_vai_o_tempo_da_prontidao`
+    #[ignore]
+    fn onde_vai_o_tempo_da_prontidao() {
+        use std::time::Instant;
+
+        let cronometrar = |nome: &str, f: &dyn Fn()| {
+            let inicio = Instant::now();
+            f();
+            println!("  {:<32} {:>6} ms", nome, inicio.elapsed().as_millis());
+        };
+
+        println!("\nETAPAS DA PRONTIDÃO\n");
+
+        cronometrar("reinicio_pendente", &|| {
+            let _ = reinicio_pendente();
+        });
+        cronometrar("hardware::profile", &|| {
+            let _ = super::super::hardware::profile();
+        });
+        cronometrar("trim_ligado", &|| {
+            let _ = trim_ligado();
+        });
+        cronometrar("paginacao_em_disco_lento", &|| {
+            let _ = paginacao_em_disco_lento();
+        });
+        cronometrar("plano_ativo_e_de_terceiro", &|| {
+            let _ = plano_ativo_e_de_terceiro();
+        });
+        cronometrar("planos_instalados", &|| {
+            let _ = planos_instalados();
+        });
+        cronometrar("plano_maximo_existe", &|| {
+            let _ = plano_maximo_existe();
+        });
+
+        let inicio = Instant::now();
+        let _ = analyze();
+        println!("\n  analyze() INTEIRO                {:>6} ms\n", inicio.elapsed().as_millis());
+    }
+
+    #[test]
     fn reinicio_pendente_desta_maquina() {
         let motivos = reinicio_pendente();
         println!("motivos de reinício pendente: {:?}", motivos);

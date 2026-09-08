@@ -53,6 +53,15 @@ pub enum ChangeRecord {
         subgroup: String,
         setting: String,
         previous: PreviousValue,
+        /// O valor anterior no modo bateria.
+        ///
+        /// `Option` com padrão porque existe `changes.json` em máquina de
+        /// cliente gravado antes de o produto passar a escrever a bateria. Ler
+        /// um desses arquivos precisa continuar funcionando: `None` significa
+        /// "esta mudança é antiga e só mexeu na tomada", e a reversão respeita
+        /// isso em vez de inventar um valor para a bateria.
+        #[serde(default)]
+        previous_dc: Option<PreviousValue>,
     },
     MemoryCompression {
         previously_enabled: bool,
@@ -109,6 +118,26 @@ pub enum ChangeRecord {
         /// Nome do jogo, só para a descrição que o cliente lê.
         jogo: String,
     },
+
+    /// Um ajuste do driver da NVIDIA, aplicado pela NVAPI.
+    ///
+    /// POR QUE ESTA VARIANTE GUARDA TEXTO, E NÃO UM NÚMERO
+    ///
+    /// O valor anterior de um ajuste da NVIDIA tem DOIS estados que precisam
+    /// caber no mesmo campo: um número que o cliente já tinha escolhido, ou "o
+    /// padrão de fábrica do driver". Os dois são reversíveis, mas por caminhos
+    /// diferentes — o número volta escrito, o padrão volta pela chamada de
+    /// restauração da própria NVAPI, que é o que permitiu este pilar existir.
+    ///
+    /// A tradução dos dois sentidos mora no `nvdriver.rs`, junto da chamada que
+    /// os usa; aqui fica só o texto que atravessa o disco.
+    DriverNvidia {
+        /// O identificador do ajuste no catálogo do `nvdriver.rs`.
+        opcao: String,
+        /// O valor que existia antes, ou `nvdriver::ANTERIOR_PADRAO` quando o
+        /// que existia antes era o padrão de fábrica.
+        valor_anterior: String,
+    },
 }
 
 impl ChangeRecord {
@@ -149,6 +178,18 @@ impl ChangeRecord {
                 let keys: Vec<&str> = removed.iter().map(|(key, _)| key.as_str()).collect();
                 format!("boot · limites removidos: {}", keys.join(", "))
             }
+            ChangeRecord::DriverNvidia {
+                opcao,
+                valor_anterior,
+            } => format!(
+                "driver NVIDIA · {} (antes: {})",
+                opcao,
+                if valor_anterior == crate::modules::windows::nvdriver::ANTERIOR_PADRAO {
+                    "o padrão do driver".to_string()
+                } else {
+                    valor_anterior.clone()
+                }
+            ),
             ChangeRecord::GameConfig { jogo, anterior, .. } => format!(
                 "{} · configuração alterada ({})",
                 jogo,
@@ -329,5 +370,43 @@ mod tests {
     fn taking_unknown_optimization_is_not_an_error() {
         let mut log = in_memory();
         assert!(log.take("never_applied").unwrap().is_none());
+    }
+
+    /// A linha que o cliente le sobre um ajuste do driver da NVIDIA precisa
+    /// dizer O QUE ERA ANTES em portugues, e nao cuspir o codigo interno.
+    ///
+    /// Os dois casos sao opostos e nao podem ser trocados: "o padrao do driver"
+    /// e um estado de fabrica; um numero e uma escolha que o cliente ja tinha
+    /// feito. Confundir os dois na tela faria o cliente achar que o Otimiza
+    /// apagou a configuracao dele -- ou o contrario.
+    #[test]
+    fn a_linha_do_driver_nvidia_diz_o_que_existia_antes() {
+        let do_padrao = ChangeRecord::DriverNvidia {
+            opcao: "vsync".to_string(),
+            valor_anterior: crate::modules::windows::nvdriver::ANTERIOR_PADRAO.to_string(),
+        }
+        .describe();
+
+        assert!(do_padrao.contains("vsync"), "{}", do_padrao);
+        assert!(do_padrao.contains("padrão do driver"), "{}", do_padrao);
+        assert!(
+            !do_padrao.contains(crate::modules::windows::nvdriver::ANTERIOR_PADRAO),
+            "o codigo interno vazou para a tela: {}",
+            do_padrao
+        );
+
+        let de_escolha = ChangeRecord::DriverNvidia {
+            opcao: "energia".to_string(),
+            valor_anterior: "3".to_string(),
+        }
+        .describe();
+
+        assert!(de_escolha.contains("energia"), "{}", de_escolha);
+        assert!(de_escolha.contains('3'), "{}", de_escolha);
+        assert!(
+            !de_escolha.contains("padrão do driver"),
+            "o valor que o cliente tinha escolhido virou 'padrao': {}",
+            de_escolha
+        );
     }
 }

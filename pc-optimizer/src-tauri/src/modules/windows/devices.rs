@@ -93,14 +93,19 @@ pub fn msi_ja_ativo() -> Option<bool> {
 }
 
 /// Liga o modo MSI em cada placa de vídeo encontrada.
-pub fn ativar_msi() -> Result<Vec<ChangeRecord>, String> {
+/// Liga o MSI das placas de vídeo, acumulando no histórico do chamador.
+///
+/// **Recebe o vetor em vez de devolvê-lo.** Devolvendo `Result<Vec<_>>`, uma
+/// falha na segunda placa descartaria o registro da primeira — que JÁ foi
+/// gravada no registro do cliente — e a reversão automática não teria como
+/// desfazê-la. O sistema ficaria pela metade sem rastro, exatamente o que a
+/// regra nº 2 do `mod.rs` proíbe.
+pub fn ativar_msi(mudancas: &mut Vec<ChangeRecord>) -> Result<(), String> {
     let caminhos = caminhos_msi_das_gpus();
 
     if caminhos.is_empty() {
         return Err("Nenhuma placa de vídeo reconhecida para este ajuste.".to_string());
     }
-
-    let mut mudancas = Vec::new();
 
     for caminho in caminhos {
         let anterior = registry::set_dword("HKLM", &caminho, "MSISupported", 1)?;
@@ -112,7 +117,7 @@ pub fn ativar_msi() -> Result<Vec<ChangeRecord>, String> {
         });
     }
 
-    Ok(mudancas)
+    Ok(())
 }
 
 /// Valor de `PnPCapabilities` que desliga o gerenciamento de energia da placa.
@@ -167,14 +172,21 @@ pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
     }))
 }
 
-pub fn desligar_economia_de_energia_da_rede() -> Result<Vec<ChangeRecord>, String> {
+/// Desliga a economia de energia das placas de rede, acumulando no histórico do
+/// chamador.
+///
+/// Mesma razão do `ativar_msi`, e aqui o risco é maior: uma máquina comum tem
+/// vários adaptadores — cinco na máquina de desenvolvimento —, então uma falha
+/// no terceiro deixaria dois já alterados sem registro para desfazer. E é
+/// justamente a otimização que mexe em placa de rede de cliente.
+pub fn desligar_economia_de_energia_da_rede(
+    mudancas: &mut Vec<ChangeRecord>,
+) -> Result<(), String> {
     let caminhos = caminhos_das_placas_de_rede();
 
     if caminhos.is_empty() {
         return Err("Nenhuma placa de rede encontrada.".to_string());
     }
-
-    let mut mudancas = Vec::new();
 
     for caminho in caminhos {
         let anterior = registry::set_dword("HKLM", &caminho, "PnPCapabilities", PNP_SEM_ECONOMIA)?;
@@ -186,7 +198,7 @@ pub fn desligar_economia_de_energia_da_rede() -> Result<Vec<ChangeRecord>, Strin
         });
     }
 
-    Ok(mudancas)
+    Ok(())
 }
 
 #[cfg(test)]

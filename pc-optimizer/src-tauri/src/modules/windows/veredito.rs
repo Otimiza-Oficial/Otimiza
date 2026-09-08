@@ -765,8 +765,13 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
                 None => Ok(relatorio.achados()),
             }
         }),
+        // A versão que devolve `Err` quando a leitura falha, e não lista vazia.
+        // Antes, uma consulta de memória que não respondesse produzia
+        // `Ok(vec![])` — sem achado e sem lacuna —, e a tela ficava calada
+        // sobre memória. Silêncio aqui é indistinguível de "está tudo bem", e
+        // some justamente com o canal único, o achado mais valioso do produto.
         (Origem::Firmware, || {
-            Ok(achados_de_firmware(&super::firmware::analyze_memory_only()))
+            super::firmware::analyze_memory_ou_lacuna().map(|f| achados_de_firmware(&f))
         }),
         // QUATRO MÓDULOS QUE MEDIAM E NÃO CHEGAVAM À FRASE.
         //
@@ -778,6 +783,14 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // Todos abaixo do `readiness`, que já custa 4,38 s e domina a fila — o
         // diagnóstico rápido continua limitado por ele, e não por estes.
         //
+        // OS 0,44 s DO DISCO SÓ VALEM SEM O DISM. Quando o liberador ganhou a
+        // categoria do WinSxS, o `scan()` passou a esperar até 3 s por um
+        // `Dism /AnalyzeComponentStore` — e a medida acima virou mentira. Por
+        // isso aqui é `scan_para_o_veredito()`, que pula o DISM: o veredito só
+        // usa espaço livre e o que é limpável, e o WinSxS não é nem um nem
+        // outro. A guarda `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`
+        // impede o `scan()` completo de voltar para esta lista.
+        //
         // BOOT E BLOATWARE FICARAM DE FORA DE PROPÓSITO, e a razão importa: o
         // veredito elege UMA frase. Inicialização lenta e programa de fábrica
         // são higiene, não causa de travamento — e disputando a eleição com a
@@ -788,7 +801,7 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // nenhum ajuste de software resolve, e é a resposta que falta em todo
         // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
-        (Origem::Disco, || Ok(super::diskspace::scan().achados())),
+        (Origem::Disco, || Ok(super::diskspace::scan_para_o_veredito().achados())),
         (Origem::Disco, || Ok(super::shaders::analyze().achados())),
         (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
     ];
@@ -915,6 +928,107 @@ fn nome_da_origem(origem: Origem) -> &'static str {
 pub fn diagnostico_rapido() -> Veredito {
     let (achados, lacunas) = coletar_rapido();
     veredito(&achados, &lacunas)
+}
+
+#[cfg(test)]
+mod medicao_de_tempo {
+    //! Onde o tempo do próprio Otimiza vai, medido nesta máquina.
+    //!
+    //! O comentário de `coletar_rapido` guarda uma medição de 12/08/2026, e é
+    //! ela que justifica a ordem "caros primeiro" e o limite de simultâneos.
+    //! Medição envelhece: o produto ganhou módulos depois daquela data, e a
+    //! ordem só continua certa se os números continuarem valendo.
+    //!
+    //! Este teste existe para a régua que o produto aplica no PC do cliente
+    //! valer também para ele mesmo — otimizar o otimizador sem medir seria o
+    //! chute que o resto do código recusa.
+    //!
+    //! `cargo test --lib -- --ignored --nocapture onde_vai_o_tempo`
+
+    use std::time::Instant;
+
+    fn cronometrar(nome: &str, f: impl FnOnce()) -> (String, u128) {
+        let inicio = Instant::now();
+        f();
+        let ms = inicio.elapsed().as_millis();
+        println!("  {:<28} {:>6} ms", nome, ms);
+        (nome.to_string(), ms)
+    }
+
+    #[test]
+    #[ignore]
+    fn onde_vai_o_tempo() {
+        println!("\nCADA DIAGNÓSTICO, ISOLADO\n");
+
+        let mut tempos = vec![
+            cronometrar("prontidão", || {
+                let _ = super::super::readiness::analyze();
+            }),
+            cronometrar("saúde", || {
+                let _ = super::super::health::analyze();
+            }),
+            cronometrar("memória", || {
+                let _ = super::super::memory::analyze();
+            }),
+            cronometrar("pressão", || {
+                let _ = super::super::pressao::analyze();
+            }),
+            cronometrar("monitor", || {
+                let _ = super::super::display::analyze();
+            }),
+            cronometrar("placa de vídeo", || {
+                let _ = super::super::gpupref::analyze();
+            }),
+            cronometrar("config do jogo", || {
+                let _ = super::super::configjogo::analyze();
+            }),
+            cronometrar("esgotamento", || {
+                let _ = super::super::exhaustion::analyze();
+            }),
+            cronometrar("térmico", || {
+                let _ = super::super::thermal::analyze();
+            }),
+            cronometrar("disco", || {
+                let _ = super::super::diskspace::scan_para_o_veredito();
+            }),
+            cronometrar("shaders", || {
+                let _ = super::super::shaders::analyze();
+            }),
+            cronometrar("resizable bar", || {
+                let _ = super::super::rbar::analyze();
+            }),
+        ];
+
+        let soma: u128 = tempos.iter().map(|(_, ms)| ms).sum();
+
+        tempos.sort_by_key(|(_, ms)| std::cmp::Reverse(*ms));
+
+        println!("\nOS MAIS CAROS\n");
+        for (nome, ms) in tempos.iter().take(4) {
+            let fatia = if soma > 0 { ms * 100 / soma } else { 0 };
+            println!("  {:<28} {:>6} ms   {:>2}% do total", nome, ms, fatia);
+        }
+
+        println!("\n  soma se fosse em série: {} ms", soma);
+
+        // O que o cliente espera de verdade: a tela inicial inteira, já com a
+        // paralelização e o limite de simultâneos.
+        let inicio = Instant::now();
+        let veredito = super::diagnostico_rapido();
+        let real = inicio.elapsed().as_millis();
+
+        println!("  TELA INICIAL DE VERDADE: {} ms", real);
+        println!(
+            "  ganho da paralelização: {} ms ({} tarefas simultâneas)",
+            soma.saturating_sub(real),
+            super::limite_de_simultaneos()
+        );
+        println!(
+            "  achados: {} · lacunas: {}\n",
+            veredito.achados.len(),
+            veredito.lacunas.len()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1118,10 +1232,12 @@ mod tests {
     /// útil que por acaso mede durante alguns segundos, e a primeira tela do
     /// produto volta a demorar meio minuto.
     ///
-    /// Os quatro abaixo são úteis e ficam FORA de propósito, cada um por medir
+    /// Os cinco abaixo são úteis e ficam FORA de propósito, cada um por medir
     /// com o relógio: gargalo amostra a máquina por segundos, rede cronometra
-    /// consultas de DNS, e FiveM e navegadores percorrem dezenas de milhares de
-    /// arquivos em disco. Eles rodam quando o cliente aperta o botão deles.
+    /// consultas de DNS, FiveM e navegadores percorrem dezenas de milhares de
+    /// arquivos em disco, e a varredura completa do liberador espera até três
+    /// segundos por um `Dism /AnalyzeComponentStore` que o veredito nem lê.
+    /// Eles rodam quando o cliente aperta o botão deles.
     ///
     /// Guarda por leitura do fonte e não por cronômetro: teste que mede tempo
     /// numa esteira compartilhada falha por vizinho barulhento, e teste que
@@ -1143,7 +1259,17 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        for caro in ["bottleneck::", "network::", "fivem::", "browsers::"] {
+        // `diskspace::scan()` com parênteses, e não o módulo inteiro: o
+        // veredito PRECISA do disco (espaço livre é achado barato e crítico) —
+        // o que não pode voltar é a varredura completa, que espera segundos
+        // pelo DISM do WinSxS. `scan_para_o_veredito()` continua liberada.
+        for caro in [
+            "bottleneck::",
+            "network::",
+            "fivem::",
+            "browsers::",
+            "diskspace::scan()",
+        ] {
             assert!(
                 !corpo.contains(caro),
                 "`{}` entrou no diagnóstico rápido; ele mede por segundos e a \

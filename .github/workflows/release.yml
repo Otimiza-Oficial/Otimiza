@@ -197,7 +197,7 @@ jobs:
 
       - name: Testes — sistema e limpeza
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat:: modules::windows::sessao:: modules::windows::suporte::"
+        run: "cargo test --lib -- modules::windows::cleanup:: modules::windows::processes:: modules::windows::restore:: modules::windows::firmware:: modules::windows::suspend:: modules::windows::anticheat:: modules::windows::sessao:: modules::windows::suporte:: modules::windows::sysparams:: modules::windows::acessibilidade::"
 
       - name: Testes — espaço e memória
         working-directory: pc-optimizer/src-tauri
@@ -208,7 +208,7 @@ jobs:
       # quebra aqui é quebra na primeira impressão do produto.
       - name: Testes — veredito da máquina
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::gpupref:: modules::windows::configjogo::"
+        run: "cargo test --lib -- modules::windows::achados:: modules::windows::veredito:: modules::windows::exhaustion:: modules::windows::pressao:: modules::windows::display:: modules::windows::gpupref:: modules::windows::configjogo:: modules::windows::rbar:: modules::windows::nvdriver::"
 
       - name: Testes — conflitos, tarefas e programas de fábrica
         working-directory: pc-optimizer/src-tauri

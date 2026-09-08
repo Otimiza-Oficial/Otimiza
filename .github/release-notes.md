@@ -18,6 +18,179 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.7.0 — abre mais rápido, e para de dizer que está tudo bem quando não olhou
+
+Versão de conserto e de medida. O programa passou a **abrir em cerca de um terço
+do tempo**, e três telas que tranquilizavam sem ter conseguido verificar nada
+passaram a dizer a verdade.
+
+## Abre bem mais rápido
+
+A abertura caiu de **~3,7 s para ~1,2 s** nesta máquina de testes. Dois motivos,
+e os dois eram desperdício puro:
+
+**A leitura do processador.** O Otimiza pedia ao Windows a medição completa de
+uso da CPU — que custa quase um segundo, porque exige duas amostras separadas por
+um intervalo — quando só precisava do **nome** do processador, que vem de graça.
+
+**A detecção do tipo de disco.** A consulta antiga acionava três comandos
+encadeados do módulo de armazenamento do Windows, e só carregar esse módulo
+levava de 1,5 a 3,5 segundos. Agora a mesma informação é lida direto, e o
+caminho antigo continua guardado como reserva para a máquina onde a consulta
+rápida não responder.
+
+Nada foi trocado por atalho: o tipo de disco decide se otimizações como o
+SysMain são oferecidas, e a classificação continua idêntica — SSD, HD ou
+desconhecido, com desconhecido continuando sem virar palpite.
+
+## A saúde do disco parou de tranquilizar sem ter medido
+
+Este é o conserto mais importante da versão, e fica na **primeira tela**.
+
+Quando o Windows não respondia à consulta de desgaste do disco, o Otimiza dizia:
+*"Sem dados de saúde disponíveis — acontece em máquinas virtuais e em alguns
+controladores antigos"*, marcado como se estivesse tudo certo.
+
+Só que essa explicação era um chute. A consulta podia ter simplesmente falhado —
+e a tela afirmava a causa de uma leitura que nunca aconteceu, sobre um disco que
+ninguém mediu.
+
+Agora a tela separa quatro situações, e quando não sabe, diz:
+**"Não sabemos o estado deste disco — isto não é o mesmo que dizer que ele está
+bem."**
+
+## A memória parou de sumir da tela em silêncio
+
+Se a leitura dos pentes de memória falhasse, o diagnóstico não mostrava **nada**
+sobre memória. Sem achado e sem aviso — o que, na prática, é indistinguível de
+dizer que a memória está boa.
+
+E some justamente com o achado mais valioso do produto: a **memória em canal
+único**, que rende mais que todo o catálogo de ajustes somado. Agora, quando a
+leitura falha, a tela diz que não conseguiu verificar.
+
+## Quando o Windows barra o Otimiza, ele explica
+
+Duas operações desta versão podem ser negadas pelo Windows mesmo com o programa
+aberto como administrador — costuma ser antivírus ou proteção de política.
+
+Antes isso aparecia como um código de erro. Agora a mensagem diz que a causa não
+é falta de permissão sua, aponta a origem provável, e afirma que **nada foi
+alterado**. E o Otimiza recusa agir quando não consegue ler o estado anterior:
+sem saber o que havia antes, não há como prometer o desfazer.
+
+## Debaixo do capô
+
+O ciclo que aplica cada otimização, confere contra o sistema e desfaz voltou a
+ser executado nesta máquina, e três tipos de ação que nunca tinham sido provados
+foram fechados: **desativar serviço**, **ajuste fino de energia** e
+**configuração de inicialização**.
+
+São 677 verificações automáticas, e o programa continua compilando sem um único
+aviso.
+
+# 1.6.0 — otimização que estava lá e não fazia efeito
+
+Versão de conserto, e o conserto é incômodo de admitir: **algumas otimizações
+estavam gravando a configuração certa e não mudando o comportamento da
+máquina**. Apareciam como aplicadas, e não eram.
+
+Onze correções e um recurso novo. Nenhuma otimização foi removida — todas
+continuam no catálogo, agora funcionando.
+
+## Notebook na bateria era o pior caso
+
+Três otimizações de processador — estacionamento de núcleos, estado mínimo e
+limitação de energia — gravavam só o valor de *ligado na tomada*. O valor de
+*na bateria* continuava no padrão do Windows.
+
+Num notebook fora da tomada elas **não faziam absolutamente nada**, e a lista
+dizia que estavam aplicadas.
+
+Medido: com o processador exigido em 100% na tomada, a bateria seguia em 5%.
+Agora os dois modos são gravados, e a tela só diz "aplicada" quando vale nos
+dois.
+
+## Efeitos visuais mudavam o rótulo, não os efeitos
+
+A opção "melhor desempenho" escrevia o rótulo que a tela de Sistema do Windows
+mostra — e deixava as animações ligadas. Faltava a parte que realmente governa
+sombra, animação de janela e deslizar de menu.
+
+Junto veio o arraste de janela cheia, um dos efeitos que mais pesam em PC
+fraco.
+
+## Ajuste que só valia depois de reiniciar agora vale na hora
+
+Desligar a aceleração do mouse e trocar os efeitos visuais gravavam certo e não
+mudavam nada até o próximo logon — em telas que prometem efeito imediato.
+
+O Windows guarda essas preferências em memória desde que você entra na conta, e
+o programa não estava avisando que elas mudaram. Agora avisa. Vale ao aplicar e
+ao desfazer.
+
+## Desligar o VBS tirava a proteção sem entregar o desempenho
+
+Esta é a correção mais séria, porque é a única otimização do produto que cobra
+em segurança.
+
+O VBS roda em cima do hipervisor do Windows. O Otimiza desligava o VBS e deixava
+o hipervisor subindo no boot — ou seja, o cliente abria mão da proteção das
+senhas do Windows e recebia menos desempenho do que foi prometido.
+
+Agora o hipervisor é desligado junto, e continua reversível.
+
+## Teclas de acessibilidade acionadas sem querer
+
+Recurso novo, e só aparece se estiver acontecendo com você.
+
+Segurar o Shift por oito segundos liga a **Filtragem de Teclas** do Windows. Em
+jogo, segurar Shift é agachar, correr, andar devagar — acontece sem ninguém
+perceber, uma caixa aparece, a pessoa fecha no reflexo, e dali em diante o
+teclado passa a ignorar toques. Chega a atrasar um segundo inteiro por tecla.
+
+O Otimiza detecta e desliga, preservando as suas outras preferências de
+teclado. **Se você usa esses recursos por necessidade, não aplique** — eles
+existem por um bom motivo, e o texto na tela diz isso.
+
+## "Não sei" parou de virar "não se aplica"
+
+Duas telas afirmavam coisa que não tinham conseguido verificar:
+
+- O **Armazenamento Reservado** aparecia como *não se aplica a esta máquina*
+  quando, na verdade, o Windows tinha recusado responder
+- Os **limites de inicialização** eram dados por limpos mesmo quando a consulta
+  não foi respondida
+
+As duas agora dizem que não sabem, e por quê.
+
+E quando o Windows nega uma alteração mesmo com o programa aberto como
+administrador, a mensagem parou de ser um código de erro: ela explica que a
+causa costuma ser antivírus ou proteção de política, que não é falta de
+permissão sua, e que nada foi alterado.
+
+## Ajuste do driver NVIDIA fora do padrão parou de ser confundido
+
+Ao ler um ajuste do perfil da NVIDIA, o driver responde com erro quando aquele
+ajuste **nunca foi gravado** — e a leitura certa disso é "está no padrão de
+fábrica", não "não sei".
+
+A diferença aparecia no desfazer: o Otimiza podia escrever um zero que nunca
+existiu, e a placa ficava com uma configuração que não era nem a sua nem a de
+fábrica. Agora a distinção é explícita.
+
+Junto veio a trava que confere o nome do ajuste antes de escrever: se o driver
+chama aquele número de outra coisa, o Otimiza **recusa mexer** em vez de
+escrever no escuro. E as duas regras passaram a ser testadas sem depender de ter
+uma placa NVIDIA na máquina — o que significa que a esteira de publicação também
+as verifica agora.
+
+## Desfazer ficou mais seguro
+
+Numa máquina com várias placas de rede, se a alteração falhasse no meio, as
+placas já alteradas ficavam **fora do histórico** — o "Desfazer" não alcançava
+elas. Corrigido para as placas de rede e para as de vídeo.
+
 # 1.5.0 — o que o produto nao sabe, ele passa a dizer
 
 Versao de conserto e de medida. Tres recursos novos, sete correcoes, e uma

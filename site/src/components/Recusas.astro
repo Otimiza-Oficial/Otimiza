@@ -1,0 +1,39 @@
+---
+/**
+ * A lista do que ele nao faz. Duas colunas: a recusa e o motivo dela.
+ * Sem marcador decorativo — a regua de 1px entre as linhas ja separa.
+ */
+import type { Conteudo } from "../data/i18n";
+
+interface Props {
+  t: Conteudo;
+}
+
+const { t } = Astro.props;
+---
+
+<section id="recusas" class="scroll-mt-16 border-b border-linha bg-papel-2">
+  <div class="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-32">
+    <div class="max-w-3xl">
+      <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-tinta-3 sm:text-xs">
+        {t.recusas.rotulo}
+      </p>
+      <h2 class="mt-6 text-pretty text-2xl font-semibold leading-[1.2] tracking-tight text-tinta sm:text-3xl md:text-4xl">
+        {t.recusas.titulo}
+      </h2>
+    </div>
+
+    <ul class="mt-14 border-t border-linha-forte">
+      {
+        t.recusas.itens.map((r) => (
+          <li class="grid grid-cols-1 gap-2 border-b border-linha py-6 md:grid-cols-[1.1fr_1fr] md:gap-12 md:py-7">
+            <h3 class="text-base font-semibold leading-snug tracking-tight text-tinta md:text-lg">
+              {r.titulo}
+            </h3>
+            <p class="text-sm leading-relaxed text-tinta-2 md:text-base">{r.porque}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>

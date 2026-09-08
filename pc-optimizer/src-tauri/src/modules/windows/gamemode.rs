@@ -422,7 +422,21 @@ pub fn executavel_do_jogo() -> Option<String> {
     sistema
         .processes()
         .values()
-        .map(|p| p.name().to_string_lossy().to_string())
+        .filter_map(|p| {
+            // O nome curto do `sysinfo` às vezes vem sem extensão — na máquina
+            // de desenvolvimento, `FiveM_DumpServer`. O nome do arquivo no
+            // caminho real é a fonte confiável, e é ele que a chave do IFEO
+            // precisa: sem `.exe`, a gravação é recusada e o caminho automático
+            // do modo jogo esbarraria num "nome de executável inválido" para um
+            // jogo legítimo. O nome curto fica como reserva para o processo cujo
+            // caminho não podemos ler.
+            let do_caminho = p
+                .exe()
+                .and_then(|caminho| caminho.file_name())
+                .map(|arquivo| arquivo.to_string_lossy().to_string());
+
+            do_caminho.or_else(|| Some(p.name().to_string_lossy().to_string()))
+        })
         .find(|nome| nome_do_jogo(nome).is_some())
 }
 
