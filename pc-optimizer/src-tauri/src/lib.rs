@@ -92,6 +92,7 @@ pub fn run() {
             commands::set_startup_enabled,
             commands::list_optimizations,
             commands::estado_do_historico,
+            commands::convite_do_discord,
             commands::apply_optimization,
             commands::placa_de_video,
             commands::memoria_instalada,

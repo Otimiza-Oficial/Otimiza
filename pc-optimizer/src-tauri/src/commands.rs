@@ -1444,6 +1444,28 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
     }
 }
 
+/// Comando: o endereço do Discord que a tela deve abrir.
+///
+/// Recebe o convite embutido no produto e devolve o que valer mais: o
+/// publicado no repositório, quando ele responde e tem forma de convite, ou o
+/// próprio embutido.
+///
+/// POR QUE A RESERVA VEM DA TELA, E NÃO DAQUI
+///
+/// O embutido já existe em `main.ts`, onde é o único endereço que a tela de
+/// compra oferece. Duplicá-lo aqui criaria dois valores para manter, e um dia
+/// eles discordariam — provavelmente no dia da troca, que é justamente quando
+/// isso não pode acontecer.
+///
+/// Fica em `LIVRES`: quem ainda não ativou é exatamente quem mais precisa
+/// chegar ao suporte.
+#[tauri::command]
+pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
+    Ok(crate::modules::convite::consultar()
+        .await
+        .unwrap_or(embutido))
+}
+
 /// Comando: o histórico de mudanças pôde ser lido?
 ///
 /// A tela precisa disto para não dizer "nada a desfazer" sobre uma máquina em
@@ -2617,6 +2639,7 @@ mod tests {
         "list_startup",
         "list_optimizations",
         "estado_do_historico",
+        "convite_do_discord",
         "revert_optimization",
         "revert_all_optimizations",
         "licenca_estado",

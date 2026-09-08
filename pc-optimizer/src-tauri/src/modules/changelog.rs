@@ -252,6 +252,29 @@ pub enum LeituraDoHistorico {
     },
 }
 
+
+/// Um nome de arquivo temporário que ninguém mais vai usar.
+///
+/// NOME FIXO NÃO SERVE, e o teste provou antes do cliente: dois caminhos
+/// gravando ao mesmo tempo disputam o mesmo temporário, o primeiro a renomear
+/// leva o arquivo embora, e o segundo falha com "não encontrado".
+///
+/// No produto isso aconteceria com duas janelas abertas, ou com um `persist`
+/// disparado enquanto outro ainda não terminou. Identificador do processo mais
+/// o relógio em nanossegundos separa os dois casos sem custo.
+pub(crate) fn caminho_temporario(destino: &Path) -> PathBuf {
+    let marca = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0)
+    );
+
+    destino.with_extension(format!("novo-{}", marca))
+}
+
 /// Histórico persistente de otimizações aplicadas.
 pub struct ChangeLog {
     path: PathBuf,
@@ -371,7 +394,7 @@ impl ChangeLog {
         let raw = serde_json::to_string_pretty(entries)
             .map_err(|e| format!("Failed to serialize change log: {}", e))?;
 
-        let temporario = path.with_extension("json.novo");
+        let temporario = caminho_temporario(path);
 
         fs::write(&temporario, raw)
             .map_err(|e| format!("Failed to write change log: {}", e))?;

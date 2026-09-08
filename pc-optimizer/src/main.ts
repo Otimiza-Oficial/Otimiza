@@ -453,16 +453,41 @@ function conferirInvariantesDaTela() {
  * vencido aqui é uma venda perdida sem que ninguém fique sabendo — e o cliente
  * não tem outro caminho para chegar até o dono.
  *
- * ATENÇÃO — CONFERIDO EM 2026-08-29 E ESTE CONVITE VENCE EM 2026-09-28.
+ * ESTE VALOR É A RESERVA, E NÃO MAIS A ÚNICA VERDADE.
  *
- * Convite do Discord expira por padrão. Este produto não tem camada de rede
- * nenhuma — zero dependências HTTP, por decisão de projeto —, então um convite
- * vencido aqui não tem conserto remoto: quem instalou antes fica com um link
- * morto e sem nenhum caminho até o dono.
+ * Convite do Discord expira por padrão, e o que está aqui foi conferido em
+ * 29/08/2026 e vence em 28/09/2026. Enquanto se acreditou que o produto não
+ * tinha camada de rede, isso era tratado como sem conserto — quem já tinha
+ * instalado ficaria com um link morto.
  *
- * Trocar por um convite com "Expira em: Nunca" e "Usos: Sem limite".
+ * A premissa estava errada: o produto consulta o GitHub desde antes disso, para
+ * saber se saiu versão nova. Então `resolverConvite()` pergunta ao repositório
+ * qual é o convite de hoje, no momento do clique, e só cai aqui quando não
+ * consegue resposta.
+ *
+ * O valor abaixo continua importando: é o que atende quem está sem internet, e
+ * o que aparece se o arquivo publicado sumir. Trocar por um convite com
+ * "Expira em: Nunca" e "Usos: Sem limite" continua valendo.
  */
 const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
+
+/**
+ * O convite que vale agora.
+ *
+ * Pergunta ao backend, que lê o arquivo publicado no repositório e confere se o
+ * que veio tem forma de convite. Qualquer tropeço — sem internet, arquivo fora
+ * do ar, valor estranho — devolve o embutido.
+ *
+ * Nunca lança: um endereço de suporte é a última coisa que pode quebrar por
+ * causa de uma falha de rede.
+ */
+async function resolverConvite(): Promise<string> {
+  try {
+    return await invoke<string>("convite_do_discord", { embutido: CONVITE_DISCORD });
+  } catch {
+    return CONVITE_DISCORD;
+  }
+}
 
 /**
  * O video do dono ensinando a usar o Otimiza.
@@ -533,8 +558,19 @@ function abrirPortao(estado: EstadoLicenca) {
   );
 
   const convite = element("portao-discord") as HTMLAnchorElement;
+
+  // O embutido entra JÁ, e o resolvido substitui quando chegar.
+  //
+  // Pintar primeiro e corrigir depois é de propósito: o cliente que clicar no
+  // instante em que a tela abriu não pode encontrar um link vazio. No pior
+  // caso ele usa o embutido, que é o que existia antes deste conserto.
   convite.href = CONVITE_DISCORD;
   text("portao-discord-endereco", CONVITE_DISCORD.replace(/^https?:\/\//, ""));
+
+  void resolverConvite().then((endereco) => {
+    convite.href = endereco;
+    text("portao-discord-endereco", endereco.replace(/^https?:\/\//, ""));
+  });
 
   // Uma chave gravada que parou de valer — máquina trocada, prazo vencido —
   // precisa dizer o motivo. Sem isso, o cliente que pagou vê a mesma tela de
@@ -5831,6 +5867,15 @@ function wireControls() {
   wireComandos(secoes);
 
   (element("statusbar-tutorial") as HTMLAnchorElement).href = TUTORIAL_URL;
+
+  // O suporte entra com o embutido e é corrigido quando o resolvido chega —
+  // mesma ordem do portão, e pelo mesmo motivo: um link vazio no rodapé seria
+  // pior que um link antigo.
+  const suporte = element("statusbar-suporte") as HTMLAnchorElement;
+  suporte.href = CONVITE_DISCORD;
+  void resolverConvite().then((endereco) => {
+    suporte.href = endereco;
+  });
 
   element("run-diagnostic").addEventListener("click", runDiagnostic);
   element("analyze-firmware").addEventListener("click", analyzeFirmware);

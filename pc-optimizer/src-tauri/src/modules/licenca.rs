@@ -295,7 +295,7 @@ impl Guardada {
         let json = serde_json::to_string_pretty(guardada)
             .map_err(|e| format!("Não foi possível gravar a licença: {}", e))?;
 
-        let temporario = caminho.with_extension("json.novo");
+        let temporario = super::changelog::caminho_temporario(caminho);
 
         fs::write(&temporario, json)
             .map_err(|e| format!("Não foi possível gravar a licença: {}", e))?;
