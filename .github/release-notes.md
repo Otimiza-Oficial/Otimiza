@@ -18,6 +18,153 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 1.9.0 — o que o produto já sabia fazer, e não tinha onde clicar
+
+A 1.8 foi uma versão de tirar afirmação que não se sustentava. Esta é a
+outra metade da mesma auditoria: **coisas que o Otimiza já fazia, testadas
+e reversíveis, que nunca chegaram até você porque faltava um botão**.
+
+Nada aqui foi inventado do zero. Quase tudo já estava no programa, calado.
+
+## Qual placa de vídeo cada jogo está usando
+
+Este é o maior ganho de FPS do catálogo inteiro, e até agora ele só
+aparecia como acusação.
+
+Num PC com duas placas — o caso de praticamente todo notebook gamer —, o
+Windows decide sozinho qual delas cada programa usa. Quando ele fixa um
+jogo na placa de economia, o jogo **abre normalmente e só roda mal**. Não
+há aviso, não há erro, não há nada na tela dizendo que a placa boa está
+parada.
+
+O Otimiza detectava isso e classificava como crítico. E não tinha onde
+clicar: a tela mandava você resolver nas configurações do Windows.
+
+Agora há uma aba que lista os programas com placa fixada, marca os que
+estão presos na fraca, e troca com um clique. Não pede administrador, não
+reinicia o PC, e vale na próxima vez que o jogo abrir.
+
+**O painel nasce escondido e só aparece em máquina com duas placas.** Em PC
+de placa única o ganho é exatamente zero, e mostrar um painel inútil seria
+ocupar tela com nada.
+
+## Os achados do diagnóstico ganharam botão
+
+Até a 1.8, só o achado **eleito** — o mais grave — recebia um botão. Os
+outros vinham com título, medição e um conselho.
+
+O caso que mais doía era a taxa de atualização do monitor, que o próprio
+código chama de *a maior diferença de fluidez que existe num PC*: ela perde
+a eleição para qualquer problema crítico de memória, disco ou temperatura.
+Ou seja, o conserto sumia exatamente nas máquinas com problema.
+
+Pior: quatro achados escreviam para você o **endereço da aba** onde
+resolver — *"aplique o plano de alto desempenho na aba Otimizações"* — sem
+oferecer o clique, mesmo com o produto sabendo qual otimização era.
+
+Agora cada achado que tem conserto tem o botão do lado, com barra de
+progresso e o resultado escrito ali mesmo.
+
+E o contrário também virou regra travada por teste: **memória em canal
+único, RAM insuficiente e desgaste de disco continuam sem botão**. Esses só
+se resolvem comprando peça, e prometer clique para eles seria o mesmo
+defeito, virado do avesso.
+
+## A janela nascia maior que a tela
+
+O tamanho era fixo em 1440×900. Num monitor de 1920×1080 isso ocupa quase
+tudo; num notebook de 1366×768 — resolução comum — **não cabe, nas duas
+dimensões**.
+
+A janela passa a medir a tela e ocupar dois terços da largura por três
+quartos da altura, com um mínimo utilizável e teto na própria tela. Quem
+quiser tela cheia maximiza; quem não quiser, não precisa.
+
+Medido nesta máquina: **1283 × 818** numa tela de 1920×1080.
+
+## Barra de progresso nas ações
+
+Existia um registro ao vivo que escrevia cada passo em texto — e o
+comentário do código dizia que aquilo era *o oposto de uma barra de
+progresso*. Ele estava certo sobre a barra que o mercado usa: a que anda
+sozinha, num ritmo inventado, escondendo o que está sendo feito.
+
+Esta anda por **contagem**. O programa já dizia "3 de 14" em texto; a barra
+recebe exatamente esses dois números. Ela pula de item para item em vez de
+deslizar, porque é assim que o trabalho acontece — e deslizar entre dois
+passos é justamente a aparência de progresso inventado.
+
+## O texto ficou maior — o que se lê, não o que rotula
+
+O corpo do texto estava em 12px. Subiu para 13, e o texto de destaque junto.
+
+As **etiquetas em maiúscula** ficaram onde estavam, de propósito: maiúscula com
+espaçamento entre letras fica *pior* de ler quando cresce — a palavra alarga, a
+linha quebra, e a etiqueta passa a competir com o número que ela nomeia. O que
+se lê cresceu; o que se etiqueta, não.
+
+Junto veio um conserto que só apareceu por causa disso: o nome da otimização no
+catálogo era cortado com reticências, e *"Rede de baixa latência (desativar
+Nagle)"* virava *"…(desativar Nagl…"*. É justamente a lista onde você decide o
+que aplicar. Agora o nome quebra em duas linhas em vez de sumir.
+
+## A tela da prova parou de esquecer o que você mediu
+
+O fluxo da prova é: meça o jogo, feche, aplique as mudanças, abra de novo e
+meça outra vez. Aplicar mudança costuma pedir para reiniciar o PC.
+
+Você voltava, abria o Otimiza — e a tela estava em branco. A medição
+"antes" continuava salva no disco o tempo todo; ninguém perguntava por ela.
+Agora a aba abre mostrando o que estava guardado: o jogo, a data e os três
+números.
+
+O campo do nome do jogo também vinha com `FiveM` escrito de fábrica. Quem
+joga outra coisa tinha que apagar aquilo e digitar o nome de um
+executável — informação que a maioria das pessoas não sabe onde ver. O
+detector de jogo do produto passa a preencher sozinho, e o campo continua
+editável para o caso de ele não achar.
+
+## Média de FPS não é o que faz o jogo travar
+
+O painel de quadros mostrava média, contagem de quadros e o número do
+processo. O módulo que faz a medição é direto sobre por que isso é pouco:
+quando o problema é disputa de memória ou de processador, **a média mal se
+move e o jogo engasga do mesmo jeito** — e engasgo é o que se sente.
+
+O programa já calculava o **1% piores quadros** e os **engasgos por
+minuto**. A interface não os declarava, então eles atravessavam o programa
+e eram jogados fora. Agora aparecem na tela, no lugar da contagem de
+quadros e do número do processo.
+
+## O "jogo aberto agora" apontava para o processo errado
+
+Achado por um teste que reprovou nesta máquina com o FiveM aberto.
+
+A busca varria uma lista de nomes conhecidos e devolvia o primeiro processo
+que casasse — com o FiveM, isso devolvia o **navegador embutido** dele em
+vez do jogo. Os dois casam com a mesma chave, e qual vencia dependia da
+ordem em que o Windows lista os processos: sorteio.
+
+Como a 1.9 preenche o nome do jogo sozinho, o resultado seria medir FPS de
+um subprocesso de navegador — na tela cujo trabalho inteiro é provar
+número. Agora a decisão usa o detector por quatro sinais (janela em
+primeiro plano, uso do motor 3D, tempo aberto e nome conhecido), e a
+varredura por lista fica só como reserva.
+
+## Debaixo do capô
+
+São **707 verificações automáticas**, contra 701 da 1.8. Todas passam, e a
+esteira compila e testa sem um único aviso.
+
+Uma correção de honestidade sobre a frase acima, porque ela vinha redonda
+demais: compilar o **executável final** é um caminho diferente do que a
+esteira percorre, e por ele aparecem 11 avisos de *código sem uso*. Todos do
+mesmo lugar — o módulo do driver NVIDIA, que está pronto no programa e ainda
+não tem tela. O compilador está apenas concordando com o que esta versão
+decidiu deixar para depois.
+
+---
+
 # 1.8.0 — o produto passa no próprio teste
 
 O Otimiza se vende dizendo que só afirma o que mediu, e que admite quando não

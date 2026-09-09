@@ -8,7 +8,10 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 701 testes unitários passam, zero avisos | `cargo test --lib`, três rodadas seguidas |
+| 707 testes unitários passam, zero avisos | `cargo test --lib` nesta máquina: 707 passaram, 0 falharam, 14 ignorados |
+| O executável final compila com 11 avisos | `cargo build --release` — caminho diferente do teste. Os 11 são código sem uso, todos de `nvdriver.rs`, o módulo NVIDIA que ainda não tem tela |
+| Janela nasce cabendo na tela | Programa da 1.9 aberto nesta máquina: **1283 × 818** numa tela de 1920×1080, centralizada. Era 1440×900 fixo |
+| Detector escolhe o processo do jogo, não o subprocesso | Com o FiveM aberto aqui: `FiveM_b3258_GTAProcess.exe`, pelos quatro sinais (janela em primeiro plano, motor 3D a 58%, aberto há 759 s, nome conhecido). A varredura por lista devolvia `FiveM_ChromeBrowser` |
 | Instalador gerado | `Otimiza_0.3.0_x64-setup.exe` e `.msi`, compilados pela esteira do GitHub |
 | Monitor de processos funciona nesta máquina | Discord ×6 · 9,2% da CPU · 1019 MB · marcado como inicialização |
 | Ciclo real de inicialização restaura bytes idênticos | Desligou e religou o Discord; bytes conferidos com PowerShell, fora do nosso código |
@@ -798,16 +801,140 @@ Cortado de propósito — um plano que faz tudo não é rigor, é papa:
   (`servicesaudit.rs:164`) e bloatware (`bloatware.rs:159`). O conserto é
   mecânico e o modelo já existe, mas são quatro módulos e quatro telas.
 - **`analyze_gpu_preference` / `set_gpu_preference`**: registrados, testados,
-  classificados — e **sem botão**. O achado aparece no diagnóstico e o próprio
-  código o chama de *"o maior ganho de FPS que o produto consegue entregar"*.
-  Falta `acao_de` cobrir `Origem::GpuPref`.
-- **`prova_guardada`**: registrado e nunca chamado. A tela diz "Medição
-  guardada", e ao reabrir o painel volta vazio. O padrão certo existe no
-  benchmark, que chama `get_baseline`.
+  classificados — e **sem botão**. *(Fechado na 1.9.)*
+- **`prova_guardada`**: registrado e nunca chamado. *(Fechado na 1.9.)*
 
-Os três são valor pronto sem porta, não defeito de honestidade.
+Os três eram valor pronto sem porta, não defeito de honestidade. Os dois
+últimos foram ligados na 1.9; o primeiro continua de pé.
+
+## A 1.9, e o valor que estava preso do lado de dentro
+
+A 1.8 tirou do produto tudo que ele afirmava sem ter medido. A 1.9 é a outra
+metade da mesma auditoria: **funcionalidade pronta, testada e reversível que
+nunca chegava ao cliente porque faltava um botão.**
+
+Quase nada aqui foi escrito do zero. O trabalho foi ligar o que já existia.
+
+### O que estava calado, e passou a ter tela
+
+| Motor | Desde quando existia | O que faltava |
+|---|---|---|
+| `analyze_gpu_preference` / `set_gpu_preference` | registrado e testado antes da 1.8 | painel; o diagnóstico acusava e não havia onde clicar |
+| `prova_guardada` | registrado e nunca chamado | a aba nunca perguntava por ele |
+| `frametime_mediano_ms`, `low_1pct`, `engasgos_por_minuto` | calculados no backend | a interface não os declarava — atravessavam o IPC e eram descartados |
+| `deteccao::procurar` (4 sinais) | desde a 0.13 | ninguém usava para preencher o campo do jogo |
+| `acao` nos achados não eleitos | o campo existia no dado | `renderDiagnostic` o descartava em silêncio |
+
+### O mapa de botões cobria 4 achados de ~30
+
+`acao_de` foi de 4 para 8 entradas. Os quatro que entraram tinham, no próprio
+texto do achado, o **endereço da aba** onde o cliente deveria resolver:
+
+    thermal.rs:281   "Aplicar o plano de alto desempenho NA ABA OTIMIZAÇÕES"
+    firmware.rs:419  "A otimização 'Liberar limites de inicialização' corrige"
+
+E `renderDiagnostic` passou a desenhar botão em **todo** achado que tem
+conserto, não só no eleito. O caso que mais doía era a taxa do monitor — que o
+próprio código chama de *"a maior diferença de fluidez que existe num PC"* e
+que perde a eleição para qualquer crítico de memória, disco ou térmico. Ou
+seja: sumia justamente nas máquinas com problema.
+
+**O erro simétrico tem teste próprio.** `achado_de_hardware_continua_sem_botao`
+trava memória em canal único, RAM insuficiente, desgaste de disco e pressão
+recorrente **fora** do mapa. Prometer clique para o que só se resolve comprando
+peça seria o mesmo defeito, virado do avesso.
+
+### Os três pedidos do outro dono
+
+| Pedido | O que foi feito |
+|---|---|
+| "barra de carregamento nas ações" | `<progress>` nativo, alimentado pelo `index`/`total` que o backend já emitia. Sem transição de largura: deslizar entre dois passos é a aparência de progresso inventado |
+| "mudar o tamanho quando abre, está quase na tela inteira" | era fixo em 1440×900. Passa a medir a tela: 2/3 da largura × 3/4 da altura, com mínimo utilizável e teto na própria tela |
+| "cor em cada atualização ou uma só" | uma só. Trocar a identidade a cada versão é o que faz produto parecer instável |
+| "deixar as coisas maiores ou deixa assim mesmo talvez" | maiores, e só o que se lê |
+
+### O tamanho dos elementos, respondido com a tela aberta
+
+Ele mesmo ficou em dúvida, então a resposta veio de abrir o programa compilado
+e olhar, e não de opinar no escuro.
+
+O achado: **o texto de leitura estava em 12px e os rótulos em 11px, e a escala
+inteira já era um conjunto de dez variáveis** — ou seja, mexer nisso era trocar
+três linhas, não redesenhar.
+
+- `--t-body` 12 → 13, `--t-lead` 13 → 14, `--t-value` 14 → 15
+- `--t-micro`, `--t-label` e `--t-nota` **ficaram onde estavam**. São rótulos em
+  MAIÚSCULA com espaçamento entre letras, e maiúscula espaçada fica *pior* de
+  ler quando cresce: a palavra alarga, a linha quebra, e o rótulo passa a
+  competir com o dado que ele nomeia
+- `--t-number` e `--t-huge` também ficaram: já dominam a tela
+
+E a olhada achou três coisas que não estavam no pedido:
+
+1. `.nav-atalho` estava em **9px**, abaixo do piso de 10px que o comentário da
+   própria escala declara. Passou a usar `--t-micro`
+2. `.gpupref-nome` e `.gpupref-estado` — escritos nesta mesma versão — tinham
+   pixel na mão em vez de variável. Voltaram para a escala
+3. `.opt-name`, o **nome da otimização no catálogo**, era `nowrap` com
+   reticências. Com o texto maior, "Rede de baixa latência (desativar Nagle)"
+   virava "…(desativar Nagl…". É a lista onde a pessoa DECIDE o que aplicar:
+   passou a quebrar em duas linhas em vez de cortar. As reticências de
+   `.process-name` e `.startup-name` ficaram — são listas ao vivo, e lista que
+   reflui a cada segundo é pior que lista cortada
+
+O tamanho fixo era pior do que ele descreveu: **em notebook de 1366×768 a
+janela não cabia, nas duas dimensões.** Número fixo não resolve, porque não
+existe número que sirva para 1366×768 e para 4K.
+
+A ordem das contas tem teste próprio: numa tela menor que o mínimo, a resposta
+certa é a tela inteira, e não o mínimo — aplicar o mínimo por último recriaria
+o defeito original.
+
+### O defeito que um teste achou sozinho
+
+`executavel_do_jogo` varria a lista de nomes conhecidos e devolvia o **primeiro**
+processo que casasse. Com o FiveM aberto isso devolvia `FiveM_ChromeBrowser` —
+o navegador embutido — em vez de `FiveM_b3258_GTAProcess.exe`. Os dois casam com
+a chave `fivem_`, e qual vencia dependia da ordem de enumeração: sorteio.
+
+Como a 1.9 preenche o nome do jogo sozinho, isso mediria FPS de um subprocesso
+de navegador na tela cujo trabalho inteiro é provar número.
+
+E a afirmação do teste estava errada junto: ele exigia `.exe` no fim de todo
+executável de jogo, e o `FiveM_ChromeBrowser` existe em disco **sem extensão**.
+O teste passava só porque nenhuma máquina de teste tinha o FiveM aberto.
+
+### O que a 1.9 NÃO fez, e por quê
+
+- **Os quatro módulos que dizem "nada encontrado" em verde quando a leitura
+  falhou** — conflitos (`conflicts.rs:101`), tarefas (`tasks.rs:50`), serviços
+  (`servicesaudit.rs:164`) e bloatware (`bloatware.rs:159`). Continuam de pé
+  desde a 1.8. São quatro módulos e quatro telas; é uma versão inteira sozinho.
+- **O painel da NVAPI** — 1.151 linhas de código de driver NVIDIA sem ponto de
+  entrada na interface. Ligar isso exige uma máquina com placa NVIDIA para
+  provar cada ajuste, e este produto não aceita ligar botão que ninguém viu
+  funcionar.
+- **As duas linhas do tempo** — a pressão de 14 dias e o esgotamento de 30 dias
+  são calculados e não têm gráfico. É desenho, não motor: fica para quando
+  houver tela pensada para isso.
+- **`start_monitoring` / `stop_monitoring`** — comandos mortos, ninguém chama.
+  Remover é faxina, e faxina no meio de uma versão de recursos mistura o
+  histórico do que mudou.
 
 ## Pendente
+
+### O que a 1.9 entregou sem ter visto funcionar
+
+Esta lista existe porque o produto cobra isso do mercado, e a régua vale para
+ele mesmo.
+
+| Item | Por que não foi visto |
+|---|---|
+| **Painel da preferência de placa de vídeo** | Metade foi vista: esta máquina tem **uma** placa (GTX 1650, conferido com `Win32_VideoController`) e o painel **ficou escondido**, que é o comportamento certo. A outra metade — a lista, o botão e o que acontece depois do clique — só aparece com **duas** placas, e falta abrir num notebook com placa dupla. O motor por trás tem teste de unidade e é reversível |
+| **Barra de progresso durante uma ação real** | O elemento aparece e é alimentado pelos números que o backend já emitia, mas as ações que a movem exigem administrador e mexem no sistema. Foi conferida pelo caminho do código, não vendo uma otimização correr do começo ao fim |
+| **Restauro da medição guardada** | O código lê `prova_guardada` ao abrir a aba. Aqui não havia medição guardada para restaurar, então o caminho de "existe algo salvo" não foi visto na tela |
+
+Nenhum dos três é chute: os três motores têm teste. O que falta é o olho.
 
 ### Cobertura real das otimizações de administrador
 
