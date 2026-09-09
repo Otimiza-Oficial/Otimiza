@@ -14,8 +14,8 @@
     "windows": [
       {
         "title": "Otimiza — Console de Desempenho",
-        "width": 1440,
-        "height": 900,
+        "width": 1180,
+        "height": 760,
         "minWidth": 900,
         "minHeight": 640,
         "resizable": true,

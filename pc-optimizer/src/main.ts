@@ -1561,6 +1561,7 @@ async function runDiagnostic() {
   try {
     const v = await invoke<Veredito>("diagnostico_rapido");
     renderDiagnostic(v);
+    ligarAcoesDosAchados(v);
     // O cartão do Painel e esta lista saem da mesma coleta, então não podem
     // divergir na tela.
     aplicarVeredito(v);
@@ -1571,19 +1572,90 @@ async function runDiagnostic() {
   }
 }
 
+/**
+ * Executa a ação de um achado e rediagnostica.
+ *
+ * Compartilhada entre o cartão do achado eleito e a lista inteira, porque as
+ * duas fazem exatamente a mesma coisa — e duas cópias divergiriam no dia em
+ * que uma ganhasse tratamento de erro que a outra não tem.
+ */
+async function executarAcaoDoAchado(acao: Acao, botao: HTMLButtonElement, nota: HTMLElement) {
+  botao.disabled = true;
+
+  try {
+    const mensagem = acao.argumento
+      ? await invoke<string>(acao.comando, { id: acao.argumento })
+      : await invoke<string>(acao.comando);
+
+    nota.textContent = mensagem;
+
+    // Rediagnostica: a lista precisa refletir o que acabou de mudar, e não
+    // continuar mostrando um problema que já foi resolvido.
+    await carregarVeredito();
+  } catch (error) {
+    nota.textContent = String(error);
+    botao.disabled = false;
+  }
+}
+
+/** Liga os botões que `renderDiagnostic` desenhou. */
+function ligarAcoesDosAchados(v: Veredito) {
+  const problemas = v.achados.filter((a) => a.severity !== "Ok");
+
+  document
+    .querySelectorAll<HTMLButtonElement>("#diagnostic-result [data-acao-indice]")
+    .forEach((botao) => {
+      const indice = Number(botao.dataset.acaoIndice);
+      const acao = problemas[indice]?.acao;
+      if (!acao) return;
+
+      const nota = botao.parentElement?.querySelector<HTMLElement>(".bottleneck-acao-nota");
+      if (!nota) return;
+
+      botao.onclick = () => void executarAcaoDoAchado(acao, botao, nota);
+    });
+}
+
 function renderDiagnostic(v: Veredito) {
   const problemas = v.achados.filter((a) => a.severity !== "Ok");
   const conferidos = v.achados.filter((a) => a.severity === "Ok");
 
   const linhas = problemas
-    .map(
-      (a) => `
+    .map((a, indice) => {
+      // O BOTÃO DE CADA ACHADO, E POR QUE ELE NÃO EXISTIA.
+      //
+      // Até a 1.8 só o achado ELEITO ganhava botão, no cartão de cima. Os
+      // outros eram desenhados com título, medição e conselho — e o `acao`
+      // era descartado em silêncio, mesmo quando o produto sabia consertar
+      // com um clique.
+      //
+      // O caso que mais doía: o conserto da taxa do monitor, que o próprio
+      // código chama de "a maior diferença de fluidez que existe num PC",
+      // perde a eleição para qualquer achado crítico de memória, disco ou
+      // térmico. Ou seja: sumia justamente nas máquinas com problema, que
+      // são o público do produto.
+      const acao = a.acao
+        ? `
+          <div class="bottleneck-acao">
+            <button class="btn btn-small" data-acao-indice="${indice}">
+              ${escapeHtml(a.acao.rotulo)}
+            </button>
+            <span class="bottleneck-acao-nota">${
+              a.acao.exige_admin && !isElevated
+                ? "Exige abrir o Otimiza como administrador."
+                : ""
+            }</span>
+          </div>`
+        : "";
+
+      return `
         <div class="bottleneck" data-severity="${a.severity}">
           <div class="bottleneck-title">${escapeHtml(a.title)}</div>
           <div class="bottleneck-detail">${escapeHtml(a.measured)}</div>
           ${a.advice ? `<div class="bottleneck-detail">${escapeHtml(a.advice)}</div>` : ""}
-        </div>`
-    )
+          ${acao}
+        </div>`;
+    })
     .join("");
 
   // "Nada encontrado" precisa vir com os números que sustentam a afirmação.
@@ -4235,6 +4307,14 @@ function resetLog(title: string) {
   element("live-log-title").textContent = title;
   element("live-log-count").textContent = "";
   element("live-log-lines").innerHTML = "";
+
+  // Nasce escondida e vazia. Sem isto, o lote seguinte comecaria mostrando a
+  // barra cheia do lote anterior — que e uma mentira pequena, e o tipo de
+  // mentira que este produto nao pode se dar ao luxo de contar.
+  const barra = element<HTMLProgressElement>("live-log-barra");
+  barra.value = 0;
+  barra.max = 1;
+  barra.hidden = true;
 }
 
 function appendLogLine(step: BatchStep) {
@@ -4254,6 +4334,14 @@ function appendLogLine(step: BatchStep) {
   }
 
   element("live-log-count").textContent = `${step.index} de ${step.total}`;
+
+  // A barra recebe os MESMOS numeros do texto ao lado. Nao ha calculo de
+  // ritmo, nao ha estimativa de tempo: se o texto diz "3 de 14", a barra
+  // mostra tres quatorze avos, e ponto.
+  const barra = element<HTMLProgressElement>("live-log-barra");
+  barra.max = step.total;
+  barra.value = step.index;
+  barra.hidden = step.total === 0;
 
   if (step.stage === "started") {
     const entry = document.createElement("li");

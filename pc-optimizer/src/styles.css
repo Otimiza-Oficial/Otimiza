@@ -1689,6 +1689,32 @@ button {
   margin-bottom: var(--s3);
 }
 
+/* A BARRA ANDA POR CONTAGEM, NUNCA POR TEMPO.
+   Sem transição de largura de propósito: uma transição faria o preenchimento
+   deslizar entre dois passos, e deslizar é exatamente a aparência de progresso
+   inventado que este produto recusa. Ela pula de item para item, porque é
+   assim que o trabalho acontece. */
+.live-log-barra {
+  width: 100%;
+  height: 4px;
+  margin: 10px 0 2px;
+  border: none;
+  border-radius: 2px;
+  background: var(--hairline);
+  appearance: none;
+  display: block;
+}
+
+.live-log-barra::-webkit-progress-bar {
+  background: var(--hairline);
+  border-radius: 2px;
+}
+
+.live-log-barra::-webkit-progress-value {
+  background: var(--green);
+  border-radius: 2px;
+}
+
 .live-log-head {
   display: flex;
   justify-content: space-between;

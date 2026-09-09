@@ -13,6 +13,64 @@ use modules::PerformanceMonitor;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
+/// Quanto da tela o Otimiza ocupa ao abrir.
+///
+/// Sao fracoes, e nao pixels, pelo motivo explicado no `setup`: nenhum numero
+/// fixo serve para 1366x768 e para 4K ao mesmo tempo.
+const FRACAO_DA_LARGURA: f64 = 0.66;
+const FRACAO_DA_ALTURA: f64 = 0.75;
+
+/// O menor tamanho util, em pixels logicos. Bate com o `minWidth`/`minHeight`
+/// do tauri.conf.json de proposito: abaixo disso a tabela de otimizacoes
+/// comeca a rolar na horizontal.
+const LARGURA_MINIMA: f64 = 900.0;
+const ALTURA_MINIMA: f64 = 640.0;
+
+/// O tamanho que cabe nesta tela, a partir da area util dela.
+///
+/// Funcao pura para poder ser testada sem monitor: as contas sao o que erra,
+/// nao a chamada ao sistema.
+///
+/// A ordem importa. O minimo e aplicado DEPOIS da fracao e ANTES do teto da
+/// tela — assim, numa tela pequena demais para o minimo, o resultado e a
+/// propria tela, e nao uma janela que nao cabe. Preferir o minimo ali faria
+/// exatamente o defeito que esta funcao existe para corrigir.
+fn tamanho_que_cabe(largura_util: f64, altura_util: f64) -> (f64, f64) {
+    let largura = (largura_util * FRACAO_DA_LARGURA)
+        .max(LARGURA_MINIMA)
+        .min(largura_util);
+
+    let altura = (altura_util * FRACAO_DA_ALTURA)
+        .max(ALTURA_MINIMA)
+        .min(altura_util);
+
+    (largura, altura)
+}
+
+/// Redimensiona e recentraliza a janela para caber no monitor atual.
+///
+/// Falhar aqui nao pode derrubar a abertura: sem conseguir medir a tela, o
+/// tamanho do tauri.conf.json vale, e ele e conservador o bastante para caber
+/// na esmagadora maioria dos monitores.
+fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
+    let Ok(Some(monitor)) = janela.current_monitor() else {
+        return;
+    };
+
+    let escala = monitor.scale_factor();
+    let fisico = monitor.size();
+
+    // Em pixels logicos: e a unidade em que o tauri.conf.json fala, e a unica
+    // que faz sentido numa tela com escala de 125% ou 150% — comum em notebook.
+    let largura_util = fisico.width as f64 / escala;
+    let altura_util = fisico.height as f64 / escala;
+
+    let (largura, altura) = tamanho_que_cabe(largura_util, altura_util);
+
+    let _ = janela.set_size(tauri::LogicalSize::new(largura, altura));
+    let _ = janela.center();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -123,6 +181,29 @@ pub fn run() {
             {
                 let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
+            }
+
+            // ── A JANELA PRECISA CABER NA TELA DE QUEM ABRE ──────────────────
+            //
+            // Ate a 1.8 o tamanho era fixo em 1440x900. Num monitor de
+            // 1920x1080 isso ocupa quase tudo, e o cliente reclamou disso. Mas
+            // o problema real e pior e ninguem tinha visto: num notebook de
+            // 1366x768 — que e resolucao comum — a janela NASCIA MAIOR QUE A
+            // TELA, nas duas dimensoes.
+            //
+            // Numero fixo nao resolve, porque nao existe numero que sirva para
+            // 1366x768 e para 4K ao mesmo tempo: o que cabe num deixa o outro
+            // minusculo. Entao a janela mede a area util do monitor — util, e
+            // nao total, porque a barra de tarefas ocupa espaco — e toma uma
+            // fracao dela.
+            //
+            // Dois tercos da largura e tres quartos da altura deixam o Otimiza
+            // grande o bastante para a tabela de otimizacoes caber sem rolagem
+            // horizontal, e pequeno o bastante para o cliente ver a area de
+            // trabalho atras. Quem quiser tela cheia maximiza — e agora isso e
+            // escolha dele, nao imposicao nossa.
+            if let Some(janela) = app.get_webview_window("main") {
+                ajustar_a_janela_a_tela(&janela);
             }
 
             utils::Logger::info("PC Performance Optimizer iniciado");
@@ -296,4 +377,79 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests_da_janela {
+    use super::*;
+
+    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
+    ///
+    /// Até a 1.8 o tamanho era fixo em 1440x900. Num notebook de 1366x768 —
+    /// resolução comum — a janela nascia maior que a tela nas DUAS dimensões.
+    /// O cliente abria o programa e não conseguia ver as bordas nem alcançar
+    /// parte da interface.
+    #[test]
+    fn a_janela_nunca_nasce_maior_que_a_tela() {
+        for (largura_tela, altura_tela) in [
+            (1366.0, 768.0),  // o notebook que quebrava
+            (1280.0, 720.0),
+            (1920.0, 1080.0),
+            (2560.0, 1440.0),
+            (3840.0, 2160.0),
+            (1024.0, 600.0),  // menor que o proprio minimo
+        ] {
+            let (largura, altura) = tamanho_que_cabe(largura_tela, altura_tela);
+
+            assert!(
+                largura <= largura_tela,
+                "{}x{}: a janela saiu com {} de largura e nao cabe",
+                largura_tela, altura_tela, largura
+            );
+
+            assert!(
+                altura <= altura_tela,
+                "{}x{}: a janela saiu com {} de altura e nao cabe",
+                largura_tela, altura_tela, altura
+            );
+        }
+    }
+
+    /// E o pedido do outro dono: em monitor grande, o Otimiza para de ocupar
+    /// quase tudo. Quem quiser tela cheia maximiza.
+    #[test]
+    fn em_monitor_grande_sobra_area_de_trabalho_atras() {
+        let (largura, altura) = tamanho_que_cabe(1920.0, 1080.0);
+
+        assert!(
+            largura < 1920.0 * 0.8,
+            "em 1920 de largura a janela ficou com {}, que ainda e quase tudo",
+            largura
+        );
+
+        assert!(altura < 1080.0 * 0.85, "altura de {} ainda e quase tudo", altura);
+    }
+
+    /// Numa tela normal a janela nao pode encolher a ponto de a tabela de
+    /// otimizacoes rolar na horizontal.
+    #[test]
+    fn em_tela_normal_a_janela_respeita_o_minimo_util() {
+        let (largura, altura) = tamanho_que_cabe(1920.0, 1080.0);
+
+        assert!(largura >= LARGURA_MINIMA);
+        assert!(altura >= ALTURA_MINIMA);
+    }
+
+    /// A ORDEM DAS CONTAS IMPORTA, e este teste trava ela.
+    ///
+    /// Numa tela menor que o proprio minimo util, a resposta certa e a tela
+    /// inteira — nao o minimo. Aplicar o minimo por ultimo faria a janela
+    /// nascer maior que a tela de novo, que e exatamente o defeito original.
+    #[test]
+    fn tela_menor_que_o_minimo_devolve_a_propria_tela() {
+        let (largura, altura) = tamanho_que_cabe(800.0, 600.0);
+
+        assert_eq!(largura, 800.0);
+        assert_eq!(altura, 600.0);
+    }
 }

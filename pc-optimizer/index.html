@@ -755,12 +755,27 @@
               <p id="optimization-status" class="status"></p>
 
               <!-- Registro ao vivo: o cliente vê cada mudança acontecendo, com o
-                   valor que existia antes. É o oposto de uma barra de progresso. -->
+                   valor que existia antes.
+
+                   E A BARRA ABAIXO NÃO CONTRADIZ ISSO, apesar de este
+                   comentário já ter dito que o registro "é o oposto de uma
+                   barra de progresso".
+
+                   O que o produto recusa é a barra que anda sozinha, num ritmo
+                   inventado, escondendo o que está sendo feito — é a primeira
+                   coisa que o README acusa nos concorrentes. Esta anda por
+                   CONTAGEM: ela só avança quando um item termina de verdade, e
+                   o registro embaixo continua dizendo qual foi.
+
+                   É o elemento <progress> nativo, e isso é de propósito: ele
+                   não tem como ser estilizado para mentir sobre o próprio
+                   valor, e leitor de tela já sabe anunciá-lo. -->
               <div id="live-log" class="live-log" hidden>
                 <div class="live-log-head">
                   <span id="live-log-title">Aplicando</span>
                   <span id="live-log-count"></span>
                 </div>
+                <progress id="live-log-barra" class="live-log-barra" value="0" max="1" hidden></progress>
                 <ol id="live-log-lines"></ol>
               </div>
 

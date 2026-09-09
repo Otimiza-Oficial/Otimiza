@@ -257,6 +257,53 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
+        // ── OS QUATRO QUE FALTAVAM ────────────────────────────────────────
+        //
+        // Todos os quatro ja tinham conserto no backend, e o achado ja dizia
+        // ao cliente para ir aplicar noutra aba. Ler um problema e receber o
+        // endereco de onde resolve-lo e melhor que nada, mas e pior que o
+        // botao — sobretudo porque o produto ja sabia o id da otimizacao.
+        //
+        // `apply_optimization` recebe `id: String`, que casa com o
+        // `{ id: argumento }` que a tela ja manda. Nenhuma assinatura mudou.
+
+        // O caso mais comum de todos, segundo o proprio thermal.rs: o plano de
+        // energia com teto no processador. "O caso mais facil de resolver e o
+        // que mais aparece" — e mandava o cliente para a aba Otimizacoes.
+        (Origem::Termico, "teto_no_plano_de_energia") => (
+            "apply_optimization",
+            Some("power_high_performance"),
+            "Aplicar o plano de alto desempenho",
+            true,
+        ),
+
+        // Mesmo caso: o firmware.rs escrevia "A otimizacao 'Liberar limites de
+        // inicializacao' corrige" e parava ai.
+        (Origem::Firmware, "boot_limits_present") => (
+            "apply_optimization",
+            Some("clear_boot_limits"),
+            "Liberar os limites de inicialização",
+            true,
+        ),
+
+        // Plano de energia de terceiro — mesma cura do teto no plano.
+        (Origem::Prontidao, "plano_de_terceiro") => (
+            "apply_optimization",
+            Some("power_high_performance"),
+            "Voltar para o plano de alto desempenho",
+            true,
+        ),
+
+        // Paginacao pequena demais para o que a maquina ja usou. Devolver a
+        // decisao ao Windows e a mesma cura de `pagefile_off`, e o comando ja
+        // estava mapeado para o irmao dele.
+        (Origem::Memoria, "pagefile_small") => (
+            "set_automatic_pagefile",
+            None,
+            "Deixar o Windows gerenciar a paginação",
+            true,
+        ),
+
         (Origem::Prontidao, "trim") => (
             "fix_readiness",
             Some("trim"),
@@ -1071,6 +1118,61 @@ mod medicao_de_tempo {
             veredito.achados.len(),
             veredito.lacunas.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod tests_1_9_acoes {
+    use super::*;
+
+    /// Os quatro achados que passaram a ter conserto de um clique.
+    ///
+    /// Todos os quatro JÁ tinham comando no backend antes da 1.9. O que
+    /// faltava era o mapa — e sem ele o produto escrevia ao cliente o
+    /// endereço da aba onde resolver, em vez do botão que resolve.
+    #[test]
+    fn os_quatro_consertos_que_faltavam_ganharam_botao() {
+        let esperados = [
+            (Origem::Termico, "teto_no_plano_de_energia", "apply_optimization"),
+            (Origem::Firmware, "boot_limits_present", "apply_optimization"),
+            (Origem::Prontidao, "plano_de_terceiro", "apply_optimization"),
+            (Origem::Memoria, "pagefile_small", "set_automatic_pagefile"),
+        ];
+
+        for (origem, id, comando) in esperados {
+            let acao = acao_de(origem, id)
+                .unwrap_or_else(|| panic!("{:?}/{} ficou sem acao", origem, id));
+
+            assert_eq!(acao.comando, comando, "comando errado para {}", id);
+
+            assert!(
+                !acao.rotulo.trim().is_empty(),
+                "{} tem botao sem rotulo: o cliente veria um botao mudo",
+                id
+            );
+        }
+    }
+
+    /// O que NÃO pode ganhar botão: achado cuja cura é trocar peça.
+    ///
+    /// Oferecer um clique para o que só se resolve comprando memória seria
+    /// prometer o que o produto não faz — e é o erro simétrico do que a 1.9
+    /// veio consertar.
+    #[test]
+    fn achado_de_hardware_continua_sem_botao() {
+        for (origem, id) in [
+            (Origem::Firmware, "memory_single_channel"),
+            (Origem::Memoria, "low_ram"),
+            (Origem::Saude, "disk_wear_alto"),
+            (Origem::Pressao, "pressao_recorrente"),
+        ] {
+            assert!(
+                acao_de(origem, id).is_none(),
+                "{:?}/{} ganhou um botao, e a cura dele nao e software",
+                origem,
+                id
+            );
+        }
     }
 }
 
