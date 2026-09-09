@@ -2499,10 +2499,20 @@ interface FrameMeasurement {
 
 async function measureFrames() {
   const button = element<HTMLButtonElement>("measure-frames");
+
+  // Uma última tentativa antes de reclamar: quem clicou em Analisar com o jogo
+  // aberto já disse tudo o que precisava dizer.
+  await preencherJogoDetectado();
+
   const processo = element<HTMLInputElement>("fps-process").value.trim();
 
   if (!processo) {
-    setStatus("fps-status", "Diga o nome do processo do jogo.", "error");
+    setStatus(
+      "fps-status",
+      "Não achei nenhum jogo aberto. Abra o jogo, entre numa partida, e clique de novo — " +
+        "ou escreva o nome do executável aqui do lado.",
+      "error"
+    );
     return;
   }
 
@@ -5988,13 +5998,22 @@ function segundosDaMedicao(): number {
  * a cada troca de aba seria brigar com o cliente.
  */
 async function preencherJogoDetectado(): Promise<string | null> {
-  const campo = element<HTMLInputElement>("prova-processo");
+  // OS DOIS CAMPOS, NUMA CONSULTA SÓ. A aba Jogos tem duas caixas pedindo o
+  // mesmo nome de executável — a da prova e a da contagem de quadros. Uma ida
+  // ao backend responde às duas; duas idas seriam a mesma resposta, cobrada em
+  // dobro.
+  const campos = [
+    element<HTMLInputElement>("prova-processo"),
+    element<HTMLInputElement>("fps-process"),
+  ];
 
   try {
     const detectado = await invoke<string | null>("running_game_executable");
 
-    if (detectado && !campo.value.trim()) {
-      campo.value = detectado;
+    if (detectado) {
+      for (const campo of campos) {
+        if (!campo.value.trim()) campo.value = detectado;
+      }
     }
 
     return detectado;
