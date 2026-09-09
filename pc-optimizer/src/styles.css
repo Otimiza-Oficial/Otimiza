@@ -101,12 +101,22 @@
     Eram 11 tamanhos entre 8px e 16px. 8px e 9px em fonte monoespaçada, num
     notebook de 1366×768 — que é exatamente o público de "PC fraco" — não são
     legíveis. O piso agora é 10px.
+
+    NA 1.9 O TEXTO DE LEITURA SUBIU UM DEGRAU, E O RÓTULO NÃO.
+    Pedido do outro dono ("deixar as coisas maiores ou deixa assim mesmo").
+    Body, lead e value ganharam 1px cada; micro, label e nota ficaram onde
+    estavam de propósito — são rótulos em MAIÚSCULA com espaçamento entre
+    letras, e maiúscula espaçada fica PIOR de ler quando cresce: a palavra
+    alarga, a linha quebra, e o rótulo passa a competir com o dado que ele
+    nomeia. O que se lê cresceu; o que se etiqueta, não.
+
+    Os números grandes também ficaram: --number e --huge já dominam a tela.
   */
   --t-micro: 10px;
   --t-label: 11px;
-  --t-body: 12px;
-  --t-lead: 13px;
-  --t-value: 14px;
+  --t-body: 13px;
+  --t-lead: 14px;
+  --t-value: 15px;
   --t-big: 20px;
   --t-number: 30px;
   --t-huge: 44px;
@@ -1259,11 +1269,26 @@ button {
   background: var(--amber);
 }
 
+/*
+  O NOME DA OTIMIZAÇÃO NÃO PODE SER CORTADO.
+
+  Ele era `nowrap` com reticências, e o catálogo tem nomes longos de propósito
+  — "Rede de baixa latência (desativar Nagle)" diz o que faz e por quê. Cortado,
+  vira "Rede de baixa latência (desativar Nagl…", que é pior que o nome curto
+  que evitamos escrever.
+
+  E a lista existe para a pessoa DECIDIR. Reticências no título de uma lista de
+  decisão obrigam a clicar item por item só para ler o nome.
+
+  Duas linhas em vez de uma reticência. A lista fica alguns pixels mais alta e
+  passa a caber a frase inteira.
+
+  As outras reticências do produto ficam: `.process-name` e `.startup-name` são
+  listas ao vivo, e lista que reflui a cada segundo é pior que lista cortada.
+*/
 .opt-name {
   font-size: var(--t-body);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .opt-body {
@@ -2574,7 +2599,7 @@ button {
   padding: 2px var(--s2);
   border: 1px solid var(--hairline-strong);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--t-micro);
   color: var(--text-muted);
   letter-spacing: 0.04em;
 }
@@ -4786,13 +4811,13 @@ circle.placa-parafuso {
 
 .gpupref-nome {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--t-lead);
   color: var(--text);
   overflow-wrap: anywhere;
 }
 
 .gpupref-estado {
-  font-size: 12px;
+  font-size: var(--t-body);
   color: var(--text-muted);
 }
 
