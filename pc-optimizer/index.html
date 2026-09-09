@@ -1396,6 +1396,38 @@
           </section>
 
           <!--
+            QUAL PLACA CADA JOGO USA — o maior ganho que este produto tem.
+
+            Notebook de jogo tem duas placas: a integrada, que gasta pouco e
+            desenha pouco, e a dedicada, que é a placa de verdade. O Windows
+            escolhe qual usar por jogo, e às vezes escolhe errado — o jogo abre
+            na integrada e roda a uma fração do que a máquina consegue.
+
+            O cliente não tem como perceber. O jogo abre, roda mal, e ele
+            conclui que o PC é fraco. Muitas vezes não é: é a placa boa parada
+            do lado. Quando o Otimiza acerta esse caso, o ganho é de duas a
+            cinco vezes — mais do que todo o resto do catálogo somado.
+
+            O motor disso existe desde antes da 1.9, testado e reversível, e
+            NÃO TINHA TELA NENHUMA: o diagnóstico acusava o problema como
+            crítico e o cliente não tinha onde clicar.
+
+            NASCE ESCONDIDO. Em máquina de uma placa só o ganho é exatamente
+            zero, e um painel dizendo "nada a fazer aqui" seria ocupar espaço
+            para não oferecer nada.
+          -->
+          <section class="panel" id="gpupref-painel" hidden>
+            <div class="panel-head">
+              <h2>Qual placa cada jogo usa</h2>
+              <span class="panel-tag" id="gpupref-tag">—</span>
+            </div>
+
+            <p class="panel-note" id="gpupref-nota"></p>
+            <div id="gpupref-lista"></div>
+            <p class="hint" id="gpupref-rodape" hidden></p>
+          </section>
+
+          <!--
             O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
 
             A ordem aqui não é estética: é a hierarquia do ganho, medida.

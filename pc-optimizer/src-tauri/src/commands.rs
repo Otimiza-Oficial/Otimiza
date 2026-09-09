@@ -654,7 +654,29 @@ pub async fn fix_readiness(id: String) -> Result<String, String> {
 pub fn running_game_executable() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        crate::modules::windows::gamemode::executavel_do_jogo()
+        // O DETECTOR POR SINAIS VEM PRIMEIRO, E O MOTIVO FOI MEDIDO.
+        //
+        // `executavel_do_jogo` varre a lista de nomes conhecidos e devolve o
+        // PRIMEIRO processo que casa. Com FiveM aberto nesta maquina isso
+        // devolvia `FiveM_ChromeBrowser` — um subprocesso do navegador embutido
+        // — em vez de `FiveM_b3258_GTAProcess.exe`, que e o jogo. Os dois casam
+        // com a chave `fivem_`, e qual vence depende da ordem de enumeracao dos
+        // processos: e sorteio.
+        //
+        // Medir FPS do subprocesso de navegador nao mede nada. E a tela da
+        // prova, que e a que fecha a venda, nasceria comparando o numero errado
+        // com o numero errado.
+        //
+        // `deteccao::procurar` decide por quatro sinais — janela em primeiro
+        // plano, uso do motor 3D, tempo aberto e nome conhecido. Um subprocesso
+        // de navegador nao passa nos dois primeiros.
+        //
+        // A varredura por lista fica como reserva: ela acerta quando o jogo
+        // esta aberto mas nao em primeiro plano, que e o caso de quem alterna
+        // para o Otimiza para medir.
+        crate::modules::windows::deteccao::procurar()
+            .map(|jogo| jogo.executavel)
+            .or_else(crate::modules::windows::gamemode::executavel_do_jogo)
     }
 
     #[cfg(not(target_os = "windows"))]

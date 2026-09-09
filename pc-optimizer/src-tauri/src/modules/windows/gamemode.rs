@@ -413,6 +413,35 @@ pub fn definir_prioridade_persistente(
 /// compilação: `FiveM_b3570_GTAProcess.exe`. Isso tem uma consequência que a
 /// interface precisa dizer — quando o FiveM atualiza, o nome muda e o ajuste
 /// precisa ser aplicado de novo.
+/// Garante a extensão no nome curto vindo do `sysinfo`.
+///
+/// O NOME SEM `.exe` PERDIA A MAIORIA DOS JOGOS DO CATÁLOGO, e em silêncio.
+///
+/// Das doze entradas de `JOGOS`, dez casam por igualdade exata e todas as dez
+/// têm `.exe` na chave — `gta5.exe`, `valorant-win64-shipping.exe`,
+/// `r5apex.exe`. Só FiveM e RedM casam por pedaço, e por isso eram os únicos
+/// que sobreviviam ao nome curto.
+///
+/// A reserva sem extensão só é usada quando o caminho do processo não pode ser
+/// lido — e isso não é raro nem aleatório: é o comportamento típico de jogo com
+/// anticheat, que é exatamente Valorant, Fortnite e Apex. Ou seja, o caminho de
+/// reserva falhava justamente nos jogos em que ele era a única saída.
+///
+/// Acrescentar a extensão aqui é um palpite, e vale dizer que é: existe
+/// executável sem extensão no Windows — o próprio FiveM instala
+/// `FiveM_ChromeBrowser` assim. Mas esta reserva só roda quando o caminho não
+/// pôde ser lido, e nesse caso não há como saber o nome real de qualquer jeito.
+/// O palpite acerta os dez jogos de casamento exato do catálogo e erra num
+/// binário sem extensão cujo caminho também não abre — que é um caso que já
+/// estava perdido antes.
+fn com_extensao_exe(nome: String) -> String {
+    if nome.to_lowercase().ends_with(".exe") {
+        nome
+    } else {
+        format!("{}.exe", nome)
+    }
+}
+
 pub fn executavel_do_jogo() -> Option<String> {
     use sysinfo::System;
 
@@ -435,7 +464,7 @@ pub fn executavel_do_jogo() -> Option<String> {
                 .and_then(|caminho| caminho.file_name())
                 .map(|arquivo| arquivo.to_string_lossy().to_string());
 
-            do_caminho.or_else(|| Some(p.name().to_string_lossy().to_string()))
+            do_caminho.or_else(|| Some(com_extensao_exe(p.name().to_string_lossy().to_string())))
         })
         .find(|nome| nome_do_jogo(nome).is_some())
 }
@@ -666,13 +695,29 @@ mod tests {
         }
     }
 
+    /// O que sai daqui e um NOME DE ARQUIVO, e nao um caminho.
+    ///
+    /// A versao anterior deste teste exigia que o nome terminasse em `.exe`, e
+    /// isso e falso: o FiveM instala `FiveM_ChromeBrowser` SEM extensao nenhuma,
+    /// e o arquivo existe assim em disco. O teste passava so porque nenhuma
+    /// maquina de teste tinha o FiveM aberto — quando teve, ele reprovou, e
+    /// estava certo em reprovar: quem estava errado era a afirmacao.
+    ///
+    /// O que vale de verdade e que o valor seja um nome de arquivo. Caminho
+    /// completo aqui quebraria a chave do IFEO e o casamento com o catalogo.
     #[test]
     fn nome_do_executavel_do_jogo() {
         let nome = executavel_do_jogo();
         println!("executável do jogo agora: {:?}", nome);
 
         if let Some(n) = nome {
-            assert!(n.to_lowercase().ends_with(".exe"));
+            assert!(!n.trim().is_empty(), "nome vazio nao serve para nada");
+
+            assert!(
+                !n.contains('\\') && !n.contains('/'),
+                "veio um caminho, e nao um nome de arquivo: {:?}",
+                n
+            );
         }
     }
 

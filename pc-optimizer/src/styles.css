@@ -4759,3 +4759,50 @@ circle.placa-parafuso {
   color: var(--red);
   background: rgba(var(--red-rgb), 0.12);
 }
+
+/* ── Qual placa cada jogo usa ─────────────────────────────────────────────
+   A linha do jogo preso na placa fraca e a unica que ganha cor. As outras
+   sao informacao, e informacao que grita deixa de informar: se tudo chama
+   atencao, o problema real some no meio. */
+.gpupref-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.gpupref-linha:last-child {
+  border-bottom: none;
+}
+
+.gpupref-jogo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gpupref-nome {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.gpupref-estado {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* O jogo na placa errada: filete a esquerda, do jeito que a lista de
+   otimizacoes ja marca estado. Mesma linguagem visual, sem paleta nova. */
+.gpupref-linha[data-fraca="true"] {
+  border-left: 2px solid var(--accent);
+  padding-left: 12px;
+}
+
+.gpupref-linha[data-fraca="true"] .gpupref-estado {
+  color: var(--accent);
+}

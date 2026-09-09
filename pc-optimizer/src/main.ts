@@ -5554,6 +5554,147 @@ interface PlacaDeVideo {
  * A escolha manual existe, escondida, e só aparece quando a leitura falha. Aí
  * ela deixa de ser trabalho inútil e passa a ser a única saída.
  */
+/** Como o Windows escolhe a placa para um programa. */
+type Preferencia = "Automatica" | "Economia" | "Desempenho";
+
+interface GpuPrefReport {
+  placas: string[];
+  tem_placa_dupla: boolean;
+  /** Jogos com preferência gravada: [caminho, preferência]. */
+  definidos: [string, Preferencia][];
+}
+
+/** O nome do arquivo, que é o que a pessoa reconhece. */
+function nomeDoExecutavel(caminho: string): string {
+  return caminho.split(/[\\/]/).pop() || caminho;
+}
+
+/**
+ * Qual placa cada jogo usa — o maior ganho de FPS do produto.
+ *
+ * O motor existe desde antes da 1.9, testado e reversível, e não tinha tela:
+ * o diagnóstico acusava "jogo na placa errada" como crítico e o cliente não
+ * tinha onde clicar. Isto é a tela.
+ *
+ * NASCE ESCONDIDO e só aparece com duas placas. Em máquina de placa única o
+ * ganho é exatamente zero, e o módulo do backend já garante silêncio nesse
+ * caso — mas quem decide não desenhar é aqui.
+ */
+async function carregarPreferenciaDeGpu() {
+  const painel = element("gpupref-painel");
+
+  let relatorio: GpuPrefReport;
+
+  try {
+    relatorio = await invoke<GpuPrefReport>("analyze_gpu_preference");
+  } catch {
+    // Não conseguir ler não vira painel de erro numa aba que a pessoa nem
+    // pediu. O diagnóstico continua sendo o lugar onde falha vira lacuna.
+    painel.hidden = true;
+    return;
+  }
+
+  if (!relatorio.tem_placa_dupla) {
+    painel.hidden = true;
+    return;
+  }
+
+  painel.hidden = false;
+  text("gpupref-tag", `${relatorio.placas.length} placas`);
+
+  const naEconomia = relatorio.definidos.filter(([, p]) => p === "Economia");
+  const lista = element("gpupref-lista");
+  const rodape = element("gpupref-rodape");
+
+  // ── O CASO QUE VALE DE DUAS A CINCO VEZES ────────────────────────────────
+  if (naEconomia.length > 0) {
+    text(
+      "gpupref-nota",
+      `${naEconomia.length} programa(s) estão fixados na placa que gasta menos. ` +
+        "Num PC com duas placas, jogo rodando na fraca entrega uma fração do que a " +
+        "máquina consegue — e é invisível para quem joga: o jogo abre normalmente e " +
+        "só roda mal."
+    );
+  } else if (relatorio.definidos.length > 0) {
+    text(
+      "gpupref-nota",
+      "Nenhum jogo está preso à placa mais fraca. Os que têm preferência gravada " +
+        "estão abaixo, e dá para mudar qualquer um."
+    );
+  } else {
+    text(
+      "gpupref-nota",
+      "Nenhum programa tem placa fixada neste computador: o Windows está escolhendo " +
+        "sozinho para todos. Não dá para saber daqui se ele está acertando — se um " +
+        "jogo específico estiver rodando mal, fixar a placa de desempenho para ele é " +
+        "o teste mais barato que existe."
+    );
+  }
+
+  lista.innerHTML = relatorio.definidos
+    .map(([caminho, preferencia], indice) => {
+      const fraca = preferencia === "Economia";
+
+      const rotulo =
+        preferencia === "Economia"
+          ? "na placa de economia"
+          : preferencia === "Desempenho"
+            ? "na placa de desempenho"
+            : "o Windows decide";
+
+      // Botão só onde ele muda alguma coisa. Num jogo que já está na placa
+      // boa, um botão "colocar na placa boa" seria teatro.
+      const botao = fraca
+        ? `<button class="btn btn-small" data-gpupref="${indice}">Passar para a placa de desempenho</button>`
+        : "";
+
+      return `
+        <div class="gpupref-linha" data-fraca="${fraca}">
+          <div class="gpupref-jogo">
+            <span class="gpupref-nome">${escapeHtml(nomeDoExecutavel(caminho))}</span>
+            <span class="gpupref-estado">${rotulo}</span>
+          </div>
+          ${botao}
+        </div>`;
+    })
+    .join("");
+
+  rodape.hidden = relatorio.definidos.length === 0;
+  rodape.textContent =
+    "A mudança vale na próxima vez que o jogo abrir, não exige administrador e " +
+    "não reinicia o PC. Como qualquer mudança do Otimiza, ela entra no histórico " +
+    "e o Desfazer devolve o valor exato de antes.";
+
+  lista.querySelectorAll<HTMLButtonElement>("[data-gpupref]").forEach((botao) => {
+    const indice = Number(botao.dataset.gpupref);
+    const entrada = relatorio.definidos[indice];
+    if (!entrada) return;
+
+    botao.onclick = async () => {
+      botao.disabled = true;
+      botao.textContent = "Mudando…";
+
+      try {
+        const resultado = await invoke<{ success: boolean; message: string }>(
+          "set_gpu_preference",
+          { caminho: entrada[0], desempenho: true }
+        );
+
+        text("gpupref-nota", resultado.message);
+
+        // Relê do sistema em vez de assumir. Se a escrita não pegou, a lista
+        // precisa continuar mostrando o estado real — e não o que a gente
+        // esperava que tivesse acontecido.
+        await carregarPreferenciaDeGpu();
+      } catch (error) {
+        text("gpupref-nota", String(error));
+        botao.disabled = false;
+        botao.textContent = "Passar para a placa de desempenho";
+      }
+    };
+  });
+}
+
 async function carregarPlaca() {
   const painel = element("placa-painel");
 
@@ -6096,6 +6237,7 @@ function wireControls() {
   }
 
   void carregarPlaca();
+  void carregarPreferenciaDeGpu();
   void carregarMemoria();
   void carregarMonitores();
   void carregarCongelados();
