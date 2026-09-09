@@ -2476,6 +2476,25 @@ interface FrameMeasurement {
   seconds: number;
   process: string;
   pid: number;
+
+  // ── o que a média esconde ──────────────────────────────────────────────
+  //
+  // O backend calcula estes três desde antes da 1.9, e a interface não os
+  // declarava — então eles atravessavam o IPC e eram jogados fora.
+  //
+  // O comentário do módulo em Rust é direto sobre por que eles importam mais
+  // que a média: "FPS médio é a métrica errada para o que este produto
+  // conserta. Quando o problema é disputa de memória ou de processador, a
+  // média mal se move e o jogo engasga do mesmo jeito — e engasgo é o que o
+  // cliente sente."
+  //
+  // A tela mostrava média, contagem de quadros e o PID. Dos três, só o
+  // primeiro diz alguma coisa ao cliente, e é justamente o que o produto
+  // considera insuficiente.
+  frametime_mediano_ms: number;
+  low_1pct: number;
+  engasgos_por_minuto: number;
+  detalhe_confiavel: boolean;
 }
 
 async function measureFrames() {
@@ -2497,6 +2516,16 @@ async function measureFrames() {
     });
 
     text("fps-tag", `${m.fps.toFixed(0)} FPS`);
+
+    // A ORDEM DIZ O QUE IMPORTA.
+    //
+    // A média vem primeiro porque é o número que a pessoa procura, mas os dois
+    // seguintes são os que respondem "por que engasga". O PID saiu da linha de
+    // cima e virou nota do processo: ele é para suporte, não para o cliente.
+    const detalhe = m.detalhe_confiavel
+      ? `mediana de ${m.frametime_mediano_ms.toFixed(1)} ms entre quadros`
+      : "amostra curta — vale medir de novo em movimento";
+
     element("fps-result").innerHTML = `
       <div class="readouts readouts-row">
         <div class="readout">
@@ -2505,14 +2534,19 @@ async function measureFrames() {
           <span class="readout-note">média da janela medida</span>
         </div>
         <div class="readout">
-          <span class="readout-label">Quadros contados</span>
-          <span class="readout-value">${m.frames}</span>
-          <span class="readout-note">em ${m.seconds.toFixed(1)} s</span>
+          <span class="readout-label">1% piores quadros</span>
+          <span class="readout-value">${m.low_1pct.toFixed(1)}</span>
+          <span class="readout-note">os momentos ruins da partida</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Engasgos por minuto</span>
+          <span class="readout-value">${m.engasgos_por_minuto.toFixed(0)}</span>
+          <span class="readout-note">${detalhe}</span>
         </div>
         <div class="readout">
           <span class="readout-label">Processo</span>
           <span class="readout-value">${escapeHtml(m.process)}</span>
-          <span class="readout-note">pid ${m.pid}</span>
+          <span class="readout-note">${m.frames} quadros · pid ${m.pid}</span>
         </div>
       </div>`;
 
@@ -5946,12 +5980,90 @@ function segundosDaMedicao(): number {
   return 20;
 }
 
+/**
+ * Preenche o campo do jogo com o que estiver aberto agora.
+ *
+ * NÃO SOBRESCREVE O QUE A PESSOA DIGITOU. Quem escreveu um nome à mão tem um
+ * motivo — quase sempre um jogo que o detector não reconhece —, e apagar isso
+ * a cada troca de aba seria brigar com o cliente.
+ */
+async function preencherJogoDetectado(): Promise<string | null> {
+  const campo = element<HTMLInputElement>("prova-processo");
+
+  try {
+    const detectado = await invoke<string | null>("running_game_executable");
+
+    if (detectado && !campo.value.trim()) {
+      campo.value = detectado;
+    }
+
+    return detectado;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Devolve a tela da prova ao estado em que ela parou.
+ *
+ * O FLUXO DA PROVA ATRAVESSA UM REINÍCIO, E ATÉ A 1.8 ELE PERDIA TUDO ALI.
+ *
+ * A própria tela manda: meça, feche o jogo, aplique as mudanças, abra de novo.
+ * Aplicar mudança muitas vezes pede reiniciar o PC. O cliente voltava, abria o
+ * Otimiza — e a tela estava em branco, sem dizer que existia um "antes"
+ * guardado, de qual jogo, nem de quando.
+ *
+ * A medição continuava no disco o tempo todo: o comando que a devolve existe
+ * desde antes, registrado e classificado. Ninguém perguntava.
+ */
+async function restaurarProvaGuardada() {
+  let guardada: Prova | null;
+
+  try {
+    guardada = await invoke<Prova | null>("prova_guardada");
+  } catch {
+    return;
+  }
+
+  if (!guardada) return;
+
+  element<HTMLInputElement>("prova-processo").value = guardada.jogo;
+
+  text("prova-tag", "antes: " + guardada.fps.toFixed(0) + " FPS");
+
+  const quando = new Date(guardada.quando * 1000);
+  const dia = quando.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const hora = quando.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const jogo = escapeHtml(guardada.jogo);
+
+  element("prova-result").innerHTML =
+    "<p><strong>Existe uma medição guardada.</strong> " + jogo +
+    ", em " + dia + " às " + hora + ".</p>" +
+    "<ul class=\"lista\">" +
+    "<li>Média: <strong>" + guardada.fps.toFixed(0) + " FPS</strong></li>" +
+    "<li>1% piores quadros: <strong>" + guardada.low_1pct.toFixed(0) + " FPS</strong></li>" +
+    "<li>Engasgos: <strong>" + guardada.engasgos_por_minuto.toFixed(0) + " por minuto</strong></li>" +
+    "</ul>" +
+    "<p class=\"hint\">Abra <strong>" + jogo + "</strong> no mesmo lugar de antes e clique " +
+    "em \"Medir de novo\" para comparar. Medir o \"antes\" outra vez substitui esta.</p>";
+}
+
 async function medirAntes() {
   const botao = element<HTMLButtonElement>("prova-antes");
+
+  // Uma última tentativa de achar o jogo antes de reclamar com o cliente.
+  // Quem clicou em "Medir" com o jogo aberto já disse tudo o que precisava.
+  await preencherJogoDetectado();
+
   const processo = element<HTMLInputElement>("prova-processo").value.trim();
 
   if (!processo) {
-    setStatus("prova-status", "Diga o nome do jogo antes de medir.", "error");
+    setStatus(
+      "prova-status",
+      "Não achei nenhum jogo aberto. Abra o jogo, entre numa partida, e clique de novo — " +
+        "ou escreva o nome do executável aqui do lado.",
+      "error"
+    );
     return;
   }
 
@@ -6245,6 +6357,7 @@ function wireControls() {
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
   element("cfgjogo-competitivo").addEventListener("click", () => aplicarPerfilDoJogo("competitivo"));
+  void restaurarProvaGuardada().then(() => void preencherJogoDetectado());
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
   element("analyze-readiness").addEventListener("click", analyzeReadiness);

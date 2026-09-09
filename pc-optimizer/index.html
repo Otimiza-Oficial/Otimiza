@@ -1506,8 +1506,19 @@
             </p>
 
             <div class="row-actions">
+              <!--
+                SEM VALOR CHUMBADO. Até a 1.8 este campo nascia com "FiveM"
+                escrito, e o cliente que joga outra coisa precisava apagar e
+                digitar o nome do processo — uma informação que a maioria das
+                pessoas não sabe onde ver.
+
+                O Otimiza tem um detector de jogo por quatro sinais desde a
+                0.13, construído justamente porque lista de nomes não servia.
+                Ele preenche isto sozinho, e o campo continua editável para o
+                caso de o detector não achar.
+              -->
               <input id="prova-processo" class="campo-inline" type="text"
-                     value="FiveM" spellcheck="false"
+                     placeholder="abra o jogo e clique em Medir" spellcheck="false"
                      aria-label="Nome do processo do jogo" />
               <button id="prova-antes" class="btn" data-custo="~20 s">Medir agora (antes)</button>
               <button id="prova-depois" class="btn btn-primary" data-custo="~20 s">Medir de novo (depois)</button>
