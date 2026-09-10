@@ -390,8 +390,21 @@ pub fn definir_prioridade_persistente(
     }
 
     let caminho = format!("{}\\{}\\PerfOptions", IFEO, executavel);
-    let anterior = super::registry::read("HKLM", &caminho, "CpuPriorityClass")
-        .unwrap_or(crate::modules::changelog::PreviousValue::AbsentKey);
+
+    // SEM `unwrap_or` AQUI, E DOI DOS DOIS LADOS.
+    //
+    // Desde a 1.8 o `registry::read` distingue "não existe" de "não consegui
+    // ler". Assumir `AbsentKey` diante de uma leitura falha estraga as duas
+    // pontas desta função:
+    //
+    //   - no `ativar`, o histórico guarda "não existia", e o desfazer APAGA a
+    //     prioridade que o cliente tinha em vez de devolvê-la;
+    //   - no `desativar`, o estrago é IMEDIATO — a linha logo abaixo restaura
+    //     `anterior`, então uma leitura falha vira uma escrita errada agora,
+    //     sem esperar desfazer nenhum.
+    //
+    // Falhar aqui não custa nada ao cliente: ainda não escrevemos.
+    let anterior = super::registry::read("HKLM", &caminho, "CpuPriorityClass")?;
 
     if ativar {
         super::registry::set_dword("HKLM", &caminho, "CpuPriorityClass", PRIORIDADE_ALTA)?;

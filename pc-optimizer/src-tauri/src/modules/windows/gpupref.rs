@@ -28,7 +28,7 @@
 // anterior como qualquer outra mudança do produto. O jogo precisa ser reaberto
 // para valer.
 
-use crate::modules::changelog::{ChangeRecord, PreviousValue};
+use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -249,8 +249,18 @@ pub fn definir(executavel: &Path, preferencia: Preferencia) -> Result<ChangeReco
 
     let chave_do_valor = executavel.to_string_lossy().to_string();
 
-    let anterior = super::registry::read("HKCU", CHAVE, &chave_do_valor)
-        .unwrap_or(PreviousValue::Absent);
+    // SEM `unwrap_or` AQUI, PELO MESMO MOTIVO DO `network.rs`.
+    //
+    // Desde a 1.8 o `registry::read` distingue "não existe" de "não consegui
+    // ler". Engolir o erro converteria uma leitura falha em "não havia
+    // preferência antes" — e o desfazer APAGARIA a escolha de placa que o
+    // cliente já tinha, em vez de devolvê-la.
+    //
+    // Isto pesa mais aqui do que pesava lá: a 1.9 pôs um BOTÃO em cima desta
+    // função. Antes dela, ninguém chegava neste caminho pela tela.
+    //
+    // Falhar aqui não custa nada ao cliente: ainda não escrevemos.
+    let anterior = super::registry::read("HKCU", CHAVE, &chave_do_valor)?;
 
     super::registry::set_string(
         "HKCU",

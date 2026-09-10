@@ -463,3 +463,130 @@ pub fn is_elevated() -> bool {
         ok != 0 && elevation.TokenIsElevated != 0
     }
 }
+
+#[cfg(test)]
+mod tests_2_0 {
+    use std::collections::BTreeSet;
+    use std::path::{Path, PathBuf};
+
+    /// Nenhuma escrita PRESUME o estado anterior.
+    ///
+    /// POR QUE ESTA TRAVA EXISTE
+    ///
+    /// A 1.8 ensinou `registry::read` a distinguir "não existe" de "não
+    /// consegui ler", e consertou o único chamador que na época convertia essa
+    /// falha em ausência (`network.rs`, o DNS). A disciplina parou ali.
+    ///
+    /// Duas outras escritas continuaram presumindo, e as duas doem:
+    ///
+    ///   - `gpupref::definir` gravava `PreviousValue::Absent` diante de uma
+    ///     leitura falha. O desfazer APAGARIA a escolha de placa que o cliente
+    ///     já tinha. A 1.9 pôs um botão em cima dessa função.
+    ///   - `gamemode` gravava `AbsentKey`, e ali o estrago era imediato: o
+    ///     caminho de desativar RESTAURA `anterior` na hora, então a leitura
+    ///     falha virava escrita errada sem esperar desfazer nenhum.
+    ///
+    /// Consertar os dois casos de hoje não impede o terceiro. Esta varredura
+    /// impede — é o mesmo recurso da trava de prosa em `commands.rs`: procurar
+    /// a FORMA do defeito, e não as ocorrências conhecidas.
+    ///
+    /// A regra é estreita de propósito: só reprova `registry::read(...)`
+    /// seguido de `.unwrap_or`. Um `.unwrap_or_default()` sobre `read_text`
+    /// não cai aqui, porque aquilo é leitura para MOSTRAR, não para desfazer —
+    /// é outro problema, com outro conserto.
+    fn arquivos_rust(dir: &Path, achados: &mut Vec<PathBuf>) {
+        let Ok(entradas) = std::fs::read_dir(dir) else {
+            return;
+        };
+
+        for entrada in entradas.flatten() {
+            let caminho = entrada.path();
+
+            if caminho.is_dir() {
+                arquivos_rust(&caminho, achados);
+            } else if caminho.extension().and_then(|e| e.to_str()) == Some("rs") {
+                achados.push(caminho);
+            }
+        }
+    }
+
+    /// O texto entre `registry::read(` e o fim da expressão, sem comentários.
+    ///
+    /// Junta as linhas porque a chamada costuma quebrar em duas — foi assim
+    /// que os dois defeitos se escondiam: o `.unwrap_or` ficava na linha de
+    /// baixo, longe do olho de quem lia a de cima.
+    fn sem_comentarios(conteudo: &str) -> String {
+        conteudo
+            .lines()
+            .map(|l| match l.find("//") {
+                Some(i) => &l[..i],
+                None => l,
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn nenhuma_escrita_presume_o_estado_anterior() {
+        let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+
+        let mut arquivos = Vec::new();
+        arquivos_rust(&raiz, &mut arquivos);
+
+        assert!(
+            arquivos.len() > 40,
+            "a varredura achou só {} arquivos — o caminho provavelmente está errado",
+            arquivos.len()
+        );
+
+        let mut culpados = BTreeSet::new();
+        let mut chamadas = 0usize;
+
+        for arquivo in &arquivos {
+            let Ok(conteudo) = std::fs::read_to_string(arquivo) else {
+                continue;
+            };
+
+            // Este arquivo fala de si mesmo nos comentários acima.
+            if arquivo.file_name().and_then(|n| n.to_str()) == Some("registry.rs") {
+                continue;
+            }
+
+            let plano = sem_comentarios(&conteudo);
+
+            for trecho in plano.split("registry::read(").skip(1) {
+                chamadas += 1;
+
+                // O que vem logo depois do fecha-parênteses da chamada.
+                let Some(fim) = trecho.find(')') else { continue };
+                let depois = trecho[fim..].trim_start_matches(')').trim_start();
+
+                if depois.starts_with(".unwrap_or") {
+                    culpados.insert(
+                        arquivo
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("?")
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        assert!(
+            chamadas > 3,
+            "a varredura achou só {} chamadas de registry::read — a expressão \
+             provavelmente parou de casar",
+            chamadas
+        );
+
+        assert!(
+            culpados.is_empty(),
+            "estes arquivos presumem o estado anterior em vez de ler: {:?}.\n\
+             Uma leitura que falhou não é 'não existia'. Gravar isso no histórico \
+             faz o desfazer APAGAR o que o cliente tinha, em vez de devolver.\n\
+             Use `registry::read(...)?` e deixe a falha subir — nada foi escrito ainda.",
+            culpados
+        );
+    }
+}
