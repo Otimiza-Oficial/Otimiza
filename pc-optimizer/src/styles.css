@@ -3736,6 +3736,19 @@ button {
   color: var(--text-muted);
 }
 
+/* A expectativa vem logo abaixo do achado, no tom de leitura: é informação
+   para decidir, não alarme. */
+.portao-expectativa {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-body);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.portao-expectativa[hidden] {
+  display: none;
+}
+
 .portao-campos {
   margin-top: var(--s5);
 }

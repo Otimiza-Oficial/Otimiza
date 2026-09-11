@@ -1161,6 +1161,21 @@ aberto por três minutos com o Otimiza como administrador. As regras de quando
 medir têm teste puro (`o_acompanhamento_mede_so_o_mesmo_jogo_aberto_sem_parar`,
 `sair_do_jogo_ou_trocar_de_jogo_recomeca_a_contagem`).
 
+### A expectativa honesta, antes de pagar (E.5)
+
+A tela de compra mostrava só o achado principal. Agora ganha uma linha, logo
+abaixo, com o que o Otimiza consegue e o que não consegue **neste** computador:
+
+- quantos dos problemas achados o Otimiza corrige sozinho (achados com `acao`);
+- o que ele não resolve porque é peça (achados com `fix_location` Hardware),
+  pelo nome, no máximo dois, com "isso é peça, e nenhum programa troca peça".
+
+Sai inteiro do diagnóstico que já rodou: nenhum número novo e nenhuma promessa
+de FPS. Nasceu do reembolso — o cliente aplicou tudo, o jogo continuou igual, e
+o teto dele era peça. Dizer antes perde só a venda que não ia dar certo.
+
+**Não visto funcionando:** o portão só aparece sem licença, e esta máquina tem.
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

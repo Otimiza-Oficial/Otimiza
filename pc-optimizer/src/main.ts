@@ -696,6 +696,54 @@ function ligarBotoesDoPortao() {
 }
 
 /**
+ * O que o Otimiza consegue e o que não consegue NESTE computador — antes de a
+ * pessoa pagar.
+ *
+ * Nasceu de um reembolso: o cliente aplicou tudo, o jogo continuou igual, e o
+ * teto dele era peça. Dizer isso depois da compra perde a venda e a confiança;
+ * dizer antes perde só a venda que não ia dar certo.
+ *
+ * Sai dos achados do próprio diagnóstico, pelo que cada um declara: `acao`
+ * quando o Otimiza corrige sozinho, `fix_location` Hardware quando só peça
+ * resolve. Nenhum número inventado e nenhuma promessa de FPS.
+ */
+function mostrarExpectativaNoPortao(v: Veredito) {
+  const caixa = element("portao-expectativa");
+  const corrige = v.achados.filter((achado) => achado.acao !== null).length;
+  const pecas = v.achados.filter((achado) => achado.fix_location === "Hardware");
+
+  if (corrige === 0 && pecas.length === 0) {
+    caixa.hidden = true;
+    return;
+  }
+
+  const partes: string[] = [];
+
+  if (corrige > 0) {
+    partes.push(
+      corrige === 1
+        ? "O Otimiza corrige sozinho 1 dos problemas que o diagnóstico achou."
+        : `O Otimiza corrige sozinho ${corrige} dos problemas que o diagnóstico achou.`
+    );
+  }
+
+  if (pecas.length > 0) {
+    // Dois nomes no máximo: a lista inteira viraria o catálogo de defeitos que
+    // o achado principal já se recusa a ser.
+    const nomes = pecas
+      .slice(0, 2)
+      .map((achado) => `"${achado.title}"`)
+      .join(" e ");
+    const mais = pecas.length > 2 ? ` e mais ${pecas.length - 2}` : "";
+
+    partes.push(`Não resolve ${nomes}${mais}: isso é peça, e nenhum programa troca peça.`);
+  }
+
+  caixa.hidden = false;
+  caixa.textContent = partes.join(" ");
+}
+
+/**
  * Leva o achado do diagnóstico para a tela de compra.
  *
  * Só o principal, e só quando existe. Repetir a lista inteira ali viraria
@@ -704,6 +752,8 @@ function ligarBotoesDoPortao() {
  */
 function mostrarAchadoNoPortao(v: Veredito) {
   if (!portaoAberto) return;
+
+  mostrarExpectativaNoPortao(v);
 
   const caixa = element("portao-achado");
 
