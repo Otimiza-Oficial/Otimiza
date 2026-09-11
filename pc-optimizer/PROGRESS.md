@@ -1064,6 +1064,31 @@ não deu para ler, quando não dá — é o caso das tarefas agendadas aqui. Nã
 o que afirmar sobre uma lista que não chegou; a regra do erro tem teste próprio,
 sem depender de máquina quebrada.
 
+### Os ajustes do driver NVIDIA ganharam tela (E.2)
+
+O `nvdriver.rs` existia desde a 1.9 com o desfazer e sem o fazer. Agora há o
+comando `aplicar_ajuste_nvidia` (exige licença), o painel na aba Jogos, e o
+desfazer é o `revert_optimization` de sempre, com o id que o painel recebe
+pronto do backend.
+
+**Conferido nesta máquina (GTX 1650), sem escrever nada:** o driver devolve,
+para cada número do catálogo, o nome esperado — `power management mode`,
+`maximum pre-rendered frames`, `texture filtering - quality`, `vertical sync`,
+`shader cache`.
+
+**Um erro do catálogo, achado contra o `NvApiDriverSettings.h` oficial:** o
+ajuste de textura se chamava "alto desempenho" e gravava `0x0A`, que é
+`QUALITY_ENHANCEMENTS_PERFORMANCE`; "alto desempenho" é `0x14`. O valor ficou
+(é o que a explicação promete e o que menos piora a imagem); o título passou a
+dizer "desempenho" (`a_textura_grava_o_valor_que_o_titulo_diz`).
+
+Se o histórico não gravar depois da escrita no driver, o ajuste é desfeito na
+hora: mudança no driver sem registro é mudança sem volta pelo Otimiza.
+
+**Não visto funcionando:** aplicar e desfazer de verdade. Os dois escrevem no
+driver e exigem administrador, e nenhum teste desta suíte pode escrever no
+driver. O caminho de escrita é o mesmo que o desfazer já usava desde a 1.9.
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

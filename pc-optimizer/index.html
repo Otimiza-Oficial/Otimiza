@@ -1429,6 +1429,34 @@
           </section>
 
           <!--
+            OS AJUSTES DO DRIVER NVIDIA.
+
+            O motor (`nvdriver.rs`) existia desde a 1.9 com o desfazer e sem o
+            fazer: cinco ajustes documentados pela NVIDIA, cada um conferido
+            pelo nome no próprio driver antes de escrever, e cada um com volta
+            ao padrão de fábrica. Isto é a tela.
+
+            Sem placa NVIDIA o painel aparece do mesmo jeito, com a frase que
+            diz que a placa ainda não é coberta — tela vazia seria lida como
+            programa quebrado.
+          -->
+          <section class="panel" id="nvdriver-painel" hidden>
+            <div class="panel-head">
+              <h2>Ajustes do driver NVIDIA</h2>
+              <span class="panel-tag" id="nvdriver-tag">—</span>
+            </div>
+
+            <p class="panel-note" id="nvdriver-nota"></p>
+            <div id="nvdriver-lista"></div>
+            <p class="hint" id="nvdriver-rodape" hidden>
+              Cada ajuste vale para todos os jogos e passa a valer na próxima vez
+              que o jogo abrir. O driver só salva com permissão de administrador.
+              O Desfazer devolve o valor que existia antes — ou o padrão de
+              fábrica da NVIDIA, quando era ele.
+            </p>
+          </section>
+
+          <!--
             O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
 
             A ordem aqui não é estética: é a hierarquia do ganho, medida.

@@ -166,12 +166,15 @@ pub static OPCOES: &[Opcao] = &[
     },
     Opcao {
         id: "textura",
-        titulo: "Filtragem de textura: alto desempenho",
+        titulo: "Filtragem de textura: desempenho",
         explicacao: "Deixa a placa caprichar menos no filtro das texturas. Rende \
                      quadros e, em movimento, quase não dá para ver a diferença.",
         id_do_padrao: Some(0x00CE_2691),
         nome_esperado: "texture filtering",
-        // QUALITY_ENHANCEMENTS_HIGHPERFORMANCE
+        // QUALITY_ENHANCEMENTS_PERFORMANCE. Até a 2.0 o título dizia "alto
+        // desempenho", que no `NvApiDriverSettings.h` é outro valor (0x14, que
+        // piora mais a imagem). O valor gravado continua o de "desempenho" —
+        // o que a explicação promete —, e o título passou a dizer o mesmo.
         valor_otimizado: 0x0000_000A,
     },
     Opcao {
@@ -201,6 +204,62 @@ pub static OPCOES: &[Opcao] = &[
 /// primeiro portão de toda função que escreve.
 pub fn opcao_por_id(id: &str) -> Option<&'static Opcao> {
     OPCOES.iter().find(|opcao| opcao.id == id)
+}
+
+// ---------------------------------------------------------------- a tela
+
+/// O id com que um ajuste entra no histórico de mudanças.
+///
+/// Mora aqui, e a tela recebe pronto: se o formato mudasse só de um lado, o
+/// botão "Desfazer" procuraria um id que não existe.
+pub fn id_no_historico(opcao: &str) -> String {
+    format!("driver_nvidia:{}", opcao)
+}
+
+/// Um ajuste do catálogo como a tela o vê.
+#[derive(Debug, Clone, Serialize)]
+pub struct AjusteNaTela {
+    pub id: &'static str,
+    pub titulo: &'static str,
+    pub explicacao: &'static str,
+    /// O id no histórico, para o "Desfazer" deste ajuste.
+    pub historico: String,
+    /// Se o OTIMIZA aplicou e ainda não desfez. Não é leitura do driver: um
+    /// ajuste que o cliente pôs à mão no painel da NVIDIA aparece como não
+    /// aplicado, e o "Aplicar" guarda o valor dele para o desfazer devolver.
+    pub aplicado: bool,
+}
+
+/// O painel de ajustes do driver: em que pé está a NVAPI e o que dá para fazer.
+#[derive(Debug, Clone, Serialize)]
+pub struct PainelDoDriver {
+    pub estado: Nvapi,
+    pub nota: String,
+    pub ajustes: Vec<AjusteNaTela>,
+}
+
+/// Monta o painel. Só leitura: carrega a DLL e conta as placas, sem abrir
+/// sessão de configuração do driver.
+pub fn painel(aplicado: impl Fn(&str) -> bool) -> PainelDoDriver {
+    let estado = estado();
+
+    PainelDoDriver {
+        estado,
+        nota: nota_do_estado(estado),
+        ajustes: OPCOES
+            .iter()
+            .map(|opcao| {
+                let historico = id_no_historico(opcao.id);
+                AjusteNaTela {
+                    id: opcao.id,
+                    titulo: opcao.titulo,
+                    explicacao: opcao.explicacao,
+                    aplicado: aplicado(&historico),
+                    historico,
+                }
+            })
+            .collect(),
+    }
 }
 
 // ------------------------------------------------- o valor anterior
@@ -799,6 +858,37 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn o_painel_marca_como_aplicado_so_o_que_esta_no_historico() {
+        // O painel lê a NVAPI desta máquina, mas a marca de "aplicado" vem só
+        // do histórico — é ela que decide se o botão diz "Aplicar" ou
+        // "Desfazer", e um "Desfazer" sem registro não teria o que devolver.
+        let vsync = id_no_historico("vsync");
+        let painel = painel(|id| id == vsync);
+
+        assert_eq!(painel.ajustes.len(), OPCOES.len());
+        for ajuste in &painel.ajustes {
+            assert_eq!(ajuste.historico, id_no_historico(ajuste.id));
+            assert_eq!(ajuste.aplicado, ajuste.id == "vsync", "{}", ajuste.id);
+        }
+        assert!(!painel.nota.trim().is_empty());
+    }
+
+    #[test]
+    fn a_textura_grava_o_valor_que_o_titulo_diz() {
+        // No `NvApiDriverSettings.h`: PERFORMANCE = 0x0A, HIGHPERFORMANCE = 0x14.
+        // O título dizia "alto desempenho" sobre o valor de "desempenho" — o
+        // cliente lia um nível e o driver recebia outro.
+        let textura = opcao_por_id("textura").expect("o ajuste de textura existe");
+
+        assert_eq!(textura.valor_otimizado, 0x0000_000A);
+        assert!(
+            !textura.titulo.to_lowercase().contains("alto"),
+            "o título promete um nível que não é o gravado: {}",
+            textura.titulo
+        );
     }
 
     #[test]

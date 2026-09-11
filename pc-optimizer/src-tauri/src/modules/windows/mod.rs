@@ -747,6 +747,81 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Aplica um ajuste do driver NVIDIA no perfil global e registra o valor que
+    /// existia antes.
+    ///
+    /// Até a 2.0 o `nvdriver.rs` tinha o desfazer e não tinha quem chamasse o
+    /// fazer. Esta é a porta.
+    ///
+    /// O histórico é gravado logo depois da escrita no driver. Se ele não
+    /// gravar, o ajuste é desfeito na hora: mudança no driver sem registro é
+    /// mudança sem caminho de volta pelo Otimiza.
+    pub fn aplicar_ajuste_nvidia(
+        &self,
+        opcao: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let alvo = nvdriver::opcao_por_id(opcao)
+            .ok_or_else(|| format!("não conheço o ajuste de driver \"{}\".", opcao))?;
+        let id = nvdriver::id_no_historico(opcao);
+
+        if log.is_applied(&id) {
+            // Reaplicar por cima gravaria como "anterior" o valor que nós
+            // mesmos escrevemos, e o desfazer devolveria o nosso.
+            return Ok(OptimizationOutcome {
+                id,
+                name: alvo.titulo.to_string(),
+                success: true,
+                applied: true,
+                message: "Este ajuste já está aplicado pelo Otimiza.".to_string(),
+                requires_restart: false,
+                changes_count: 0,
+                changes: Vec::new(),
+            });
+        }
+
+        crate::utils::Logger::info(&format!("driver NVIDIA `{}`: aplicando", opcao));
+        let anterior = nvdriver::aplicar(opcao)?;
+
+        let change = nvdriver::registro(opcao, anterior.clone());
+        let described = change.describe();
+
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} (driver NVIDIA)", alvo.titulo),
+            timestamp: now_timestamp(),
+            changes: vec![change],
+        }) {
+            crate::utils::Logger::warn(&format!(
+                "driver NVIDIA `{}`: histórico não gravou ({}); desfazendo",
+                opcao, erro
+            ));
+            if let Err(falhas) = revert_changes(&[nvdriver::registro(opcao, anterior)]) {
+                return Err(format!(
+                    "{} E não consegui devolver o ajuste ao que era: {}",
+                    erro,
+                    falhas.join("; ")
+                ));
+            }
+            return Err(erro);
+        }
+
+        Ok(OptimizationOutcome {
+            id,
+            name: alvo.titulo.to_string(),
+            success: true,
+            applied: true,
+            message: format!(
+                "\"{}\" aplicado no perfil global do driver. Vale na próxima vez que o jogo \
+                 abrir, e o Desfazer devolve o que existia antes.",
+                alvo.titulo
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
     pub fn set_gpu_preference(
         &self,
         caminho: &str,

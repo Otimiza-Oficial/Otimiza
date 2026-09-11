@@ -21,6 +21,8 @@ use crate::modules::windows::diskspace::{CleanOutcome, DiskReport};
 #[cfg(target_os = "windows")]
 use crate::modules::windows::essenciais::Checagem;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::nvdriver::PainelDoDriver;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::conflicts::ConflictReport;
@@ -607,6 +609,65 @@ pub async fn set_gpu_preference(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (caminho, desempenho, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Os ajustes do driver NVIDIA que o Otimiza sabe aplicar e desfazer, e
+/// em que pé está a NVAPI nesta máquina.
+///
+/// Só leitura. Máquina sem placa NVIDIA recebe a frase que diz isso, não uma
+/// tela vazia.
+#[tauri::command]
+pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<PainelDoDriver, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Os ids aplicados saem antes da chamada ao driver, e a trava do
+        // histórico é solta aqui mesmo: carregar a DLL não pode prender quem
+        // quer aplicar ou desfazer outra coisa.
+        let aplicados: Vec<String> = state
+            .changes
+            .lock()
+            .await
+            .applied()
+            .iter()
+            .map(|entrada| entrada.optimization_id.clone())
+            .collect();
+
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::nvdriver::painel(|id| aplicados.iter().any(|a| a == id))
+        })
+        .await
+        .map_err(|e| format!("Falha ao ler o driver da NVIDIA: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Aplica um ajuste do driver NVIDIA no perfil global.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador. O desfazer é o
+/// `revert_optimization` de sempre, com o id que o painel recebe pronto.
+#[tauri::command]
+pub async fn aplicar_ajuste_nvidia(
+    opcao: String,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().aplicar_ajuste_nvidia(&opcao, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (opcao, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -2706,6 +2767,7 @@ mod tests {
         "relatorio_de_suporte",
         "versao_mais_nova",
         "checar_essenciais",
+        "ajustes_do_driver_nvidia",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
@@ -2735,6 +2797,7 @@ mod tests {
         "set_max_refresh_rate",
         "reparo_executar",
         "religar_essenciais",
+        "aplicar_ajuste_nvidia",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as

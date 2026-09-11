@@ -5819,6 +5819,118 @@ async function carregarPreferenciaDeGpu() {
   });
 }
 
+// ------------------------------------------------- ajustes do driver NVIDIA
+
+type EstadoDaNvapi = "Disponivel" | "SemPlacaNvidia" | "NaoCarregou";
+
+interface AjusteDoDriver {
+  id: string;
+  titulo: string;
+  explicacao: string;
+  /** O id no histórico, pronto: é o que o Desfazer deste ajuste recebe. */
+  historico: string;
+  /** Se o Otimiza aplicou e ainda não desfez. */
+  aplicado: boolean;
+}
+
+interface PainelDoDriver {
+  estado: EstadoDaNvapi;
+  nota: string;
+  ajustes: AjusteDoDriver[];
+}
+
+const NA_TAG_DA_NVAPI: Record<EstadoDaNvapi, string> = {
+  Disponivel: "driver encontrado",
+  SemPlacaNvidia: "sem placa NVIDIA",
+  NaoCarregou: "driver sem resposta",
+};
+
+/**
+ * Os cinco ajustes do driver NVIDIA, com aplicar e desfazer.
+ *
+ * A lista só aparece com o driver respondendo: botão que o driver vai recusar
+ * é teatro. Sem ele, fica a frase do backend dizendo por quê.
+ */
+async function carregarAjustesDoDriver() {
+  const painel = element("nvdriver-painel");
+  const lista = element("nvdriver-lista");
+  const rodape = element("nvdriver-rodape");
+
+  let dados: PainelDoDriver;
+
+  try {
+    dados = await invoke<PainelDoDriver>("ajustes_do_driver_nvidia");
+  } catch (error) {
+    painel.hidden = false;
+    text("nvdriver-tag", "—");
+    text("nvdriver-nota", String(error));
+    lista.innerHTML = "";
+    rodape.hidden = true;
+    return;
+  }
+
+  painel.hidden = false;
+  text("nvdriver-tag", NA_TAG_DA_NVAPI[dados.estado]);
+  text("nvdriver-nota", dados.nota);
+
+  const disponivel = dados.estado === "Disponivel";
+  rodape.hidden = !disponivel;
+
+  if (!disponivel) {
+    lista.innerHTML = "";
+    return;
+  }
+
+  lista.innerHTML = dados.ajustes
+    .map(
+      (ajuste, indice) => `
+        <div class="gpupref-linha" data-fraca="false">
+          <div class="gpupref-jogo">
+            <span class="gpupref-nome">${escapeHtml(ajuste.titulo)}</span>
+            <span class="gpupref-estado">${escapeHtml(ajuste.explicacao)}</span>
+          </div>
+          <button class="btn btn-small" data-nvajuste="${indice}">
+            ${ajuste.aplicado ? "Desfazer" : "Aplicar"}
+          </button>
+        </div>`
+    )
+    .join("");
+
+  lista.querySelectorAll<HTMLButtonElement>("[data-nvajuste]").forEach((botao) => {
+    const ajuste = dados.ajustes[Number(botao.dataset.nvajuste)];
+    if (!ajuste) return;
+
+    botao.onclick = async () => {
+      // Aplicar e desfazer escrevem no driver, e o driver só salva elevado.
+      if (!isElevated) {
+        askForAdmin(
+          "O driver da NVIDIA só salva ajustes com permissão de administrador. " +
+            "Podemos reabrir o Otimiza com essa permissão?"
+        );
+        return;
+      }
+
+      const rotulo = ajuste.aplicado ? "Desfazer" : "Aplicar";
+      botao.disabled = true;
+      botao.textContent = ajuste.aplicado ? "Desfazendo…" : "Aplicando…";
+
+      try {
+        const resultado = ajuste.aplicado
+          ? await invoke<OptimizationOutcome>("revert_optimization", { id: ajuste.historico })
+          : await invoke<OptimizationOutcome>("aplicar_ajuste_nvidia", { opcao: ajuste.id });
+
+        text("nvdriver-nota", resultado.message);
+        // Relê em vez de assumir: o botão precisa dizer o que o histórico diz.
+        await carregarAjustesDoDriver();
+      } catch (error) {
+        text("nvdriver-nota", String(error));
+        botao.disabled = false;
+        botao.textContent = rotulo;
+      }
+    };
+  });
+}
+
 async function carregarPlaca() {
   const painel = element("placa-painel");
 
@@ -6449,6 +6561,7 @@ function wireControls() {
 
   void carregarPlaca();
   void carregarPreferenciaDeGpu();
+  void carregarAjustesDoDriver();
   void carregarMemoria();
   void carregarMonitores();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
