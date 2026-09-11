@@ -7,19 +7,21 @@ import type { Idioma } from "./i18n/tipos";
 import { traducoes } from "./i18n";
 
 /* ==========================================================================
-   O PRECO — R$ 20, o mesmo que o bot do Discord ja cobra.
+   O PRECO — R$ 25, o mesmo que o bot do Discord cobra.
    ==========================================================================
    Vender no site por valor diferente do canal que ja existe cria problema:
    um cliente descobre a diferenca e a conversa vira sobre isso. Todo numero
    da tela sai daqui: trocar este numero troca o site inteiro, nas tres linguas.
+
+   Subiu de R$ 20 para R$ 25 na 2.0, por decisao do dono.
    ========================================================================== */
-export const PRECO_BRL = 20;
+export const PRECO_BRL = 25;
 
 /* ==========================================================================
    MOEDA — CONFIRMAR COM O DONO
    ==========================================================================
    O valor fica em REAL (BRL) nas tres linguas, e as versoes em ingles e em
-   espanhol dizem isso com todas as letras ("R$ 20.00 BRL" + a nota de moeda
+   espanhol dizem isso com todas as letras ("R$ 25.00 BRL" + a nota de moeda
    em i18n/en.ts e i18n/es.ts).
 
    O motivo e simples: o checkout e do Mercado Pago e cobra em real. Mostrar
@@ -59,7 +61,7 @@ export type PartesPreco = {
   readonly centavos: string;
   /** "," em pt e es, "." em en. So a tipografia do numero muda. */
   readonly separador: string;
-  /** "R$ 20,00" / "R$ 20.00" — para atributos e para o cartao secundario. */
+  /** "R$ 25,00" / "R$ 25.00" — para atributos e para o cartao secundario. */
   readonly completo: string;
 };
 
@@ -67,7 +69,7 @@ export type PartesPreco = {
  * Quebra o valor em partes para o componente compor a tipografia do preco.
  *
  * O separador decimal segue a convencao de quem le: virgula em portugues e em
- * espanhol, ponto em ingles. O VALOR e o mesmo nos tres — 20 reais.
+ * espanhol, ponto em ingles. O VALOR e o mesmo nos tres — 25 reais.
  */
 function partes(valor: number, localeNumero: string): PartesPreco {
   const formato = new Intl.NumberFormat(localeNumero, {

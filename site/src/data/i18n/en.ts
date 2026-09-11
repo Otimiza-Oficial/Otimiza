@@ -73,7 +73,7 @@ export const en: Conteudo = {
     ctaTelas: "See the screens",
     versaoPrefixo: "Version",
     linhaMeta:
-      "Free to download · activation R$ 20 BRL, once · Windows 10 and 11, 64-bit",
+      "Free to download · activation R$ 25 BRL, once · Windows 10 and 11, 64-bit",
     captura: {
       titulo: "Dashboard",
       descricao: "the opening screen: what is holding this PC back, measured on the spot",

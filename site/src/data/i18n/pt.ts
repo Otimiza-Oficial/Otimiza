@@ -62,7 +62,7 @@ export const pt: Conteudo = {
     ctaTelas: "Ver as telas",
     versaoPrefixo: "Versão",
     linhaMeta:
-      "Grátis para baixar · ativação R$ 20, uma vez · Windows 10 e 11, 64 bits",
+      "Grátis para baixar · ativação R$ 25, uma vez · Windows 10 e 11, 64 bits",
     captura: {
       titulo: "Painel",
       descricao: "a abertura: o que está travando este PC, medido na hora e dito na cara",

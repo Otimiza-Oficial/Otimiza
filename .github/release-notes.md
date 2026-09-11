@@ -18,6 +18,102 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.0.0 — mais seguro em Windows modificado, e ganho onde o jogo sente
+
+A maior versão do Otimiza até aqui. Ela nasceu de duas coisas que aconteceram de
+verdade: um cliente que aplicou tudo e viu o jogo continuar igual, e um PC com
+Windows modificado em que, depois do "Otimizar agora", os programas pararam de
+abrir — sem nenhum registro do que tinha acontecido.
+
+## O "Otimizar agora" ficou seguro
+
+- **Todo comando tem prazo.** Um comando do Windows que travasse prendia o lote
+  inteiro para sempre. Agora ele é encerrado no prazo, vira falha, e o que o
+  item já tinha feito é desfeito.
+- **O Otimiza passa a guardar registro em arquivo**, em
+  `%APPDATA%\pc-optimizer\otimiza.log`. Cada ação é anotada **antes** de rodar:
+  se algo travar, a última linha diz o que foi. Se acontecer algo estranho,
+  mande esse arquivo no suporte.
+- **Windows com serviços essenciais desligados é avisado antes do lote.**
+  Imagens "lite" do Windows costumam vir sem serviços como Plug and Play e as
+  licenças da Loja. Com eles desligados, programa trava com ou sem otimização.
+  A tela diz quais estão desligados e oferece **Religar os essenciais** (no
+  padrão da Microsoft, com Desfazer), **Otimizar mesmo assim** ou **Agora não**.
+- **O ponto de restauração não prende mais o lote**, e é pulado com o motivo
+  escrito quando a cópia de sombra do Windows está desligada.
+- **"Desligar aplicativos em segundo plano" saiu do "Otimizar agora" e dos
+  perfis.** Ele corta aplicativo da Loja que você usa o dia inteiro. Continua
+  disponível, item a item.
+
+## O modo jogo não congela mais nenhum programa
+
+O modo jogo automático suspendia Discord, navegador e afins durante a partida.
+Foi a opção que mais machucou cliente, e saiu do produto. Ele agora faz só o
+que o nome promete: plano de alto desempenho e prioridade para o jogo.
+
+## Ajustes do driver NVIDIA, com botão
+
+Cinco ajustes do driver — gerenciamento de energia, quadros pré-renderizados,
+filtragem de textura, sincronização vertical e cache de shader — aplicados com
+um clique na aba Jogos. Antes de escrever, o Otimiza **pergunta ao driver o nome
+do ajuste** e recusa se não bater. O Desfazer devolve o valor que existia antes,
+ou o padrão de fábrica da NVIDIA.
+
+## Limite de FPS por jogo
+
+Com o jogo aberto, escolha o limite e clique. O limite vai **só no perfil
+daquele jogo**, nunca no global — um limite global prenderia a área de trabalho
+e todo outro jogo. Se o jogo não tem perfil no driver, o Otimiza cria um com o
+próprio nome, e o Desfazer apaga só ele.
+
+O FiveM troca o nome do executável quando o servidor exige outra versão do jogo;
+nesse caso, limite de novo com o jogo aberto.
+
+## O Otimiza mede o jogo sozinho
+
+Com o jogo aberto há alguns minutos e o Otimiza como administrador, ele mede
+FPS, 1% piores quadros e engasgos por vinte segundos, no máximo a cada vinte
+minutos — sem tocar no jogo. As medições aparecem na aba da prova, lado a lado,
+com quantas mudanças do Otimiza estavam ligadas em cada momento. Dá para
+desligar nas preferências.
+
+## Antes de pagar, o que o Otimiza não resolve no seu PC
+
+A tela de ativação passa a dizer quantos problemas do diagnóstico o Otimiza
+corrige sozinho — e o que ele **não** resolve porque é peça, pelo nome. Dizer
+isso antes da compra é mais honesto do que descobrir depois.
+
+## Telas que diziam "nenhum" sem ter lido
+
+Várias telas transformavam uma leitura que falhou em "está tudo certo":
+programas de inicialização, placa de rede, preferência de placa de vídeo, DNS,
+tarefas agendadas, serviços de terceiros, programas de fábrica e conflitos. O
+"Nenhum conflito entre programas" chegava a contar como verificação aprovada.
+Agora, quando não dá para ler, a tela diz isso.
+
+E duas escritas apagavam uma configuração sua no Desfazer quando não conseguiam
+ler o valor anterior. Corrigido.
+
+## O que esta versão não promete
+
+**Nem tudo foi visto funcionando numa máquina real.** Aplicar e desfazer os
+ajustes do driver, o limite de FPS, religar os serviços essenciais e a medição
+automática têm testes, mas escrevem no sistema, e o primeiro uso de verdade é
+com você. A causa exata dos programas que pararam de abrir ainda não foi
+identificada — o registro em arquivo existe justamente para encontrá-la.
+
+**A linha do tempo do PC e o programa em inglês e espanhol ficam para a 2.1.**
+
+**O "editor desconhecido" continua aparecendo.** O instalador ainda não tem
+assinatura digital.
+
+## Debaixo do capô
+
+São **737 verificações automáticas**, contra 707 da 1.9, todas passando. O
+executável final, na última compilação, saiu com dois avisos de código sem uso.
+
+---
+
 # 1.9.0 — o que o produto já sabia fazer, e não tinha onde clicar
 
 A 1.8 foi uma versão de tirar afirmação que não se sustentava. Esta é a

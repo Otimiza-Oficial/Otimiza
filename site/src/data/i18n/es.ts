@@ -78,7 +78,7 @@ export const es: Conteudo = {
     ctaTelas: "Ver las pantallas",
     versaoPrefixo: "Versión",
     linhaMeta:
-      "Gratis para descargar · activación R$ 20 BRL, una vez · Windows 10 y 11, 64 bits",
+      "Gratis para descargar · activación R$ 25 BRL, una vez · Windows 10 y 11, 64 bits",
     captura: {
       titulo: "Panel",
       descricao: "la pantalla inicial: qué está frenando esta PC, medido en el momento",
