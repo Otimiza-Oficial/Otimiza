@@ -139,8 +139,13 @@ pub fn checar() -> Checagem {
         .filter(|s| s.inicio == Inicio::Desativado)
         .count();
 
+    // Fabricante ilegível fica em branco: é evidência opcional, e nunca decide o
+    // aviso — quem decide é o estado dos serviços.
     let ler_oem = |nome: &str| {
-        registry::read_text("HKLM", OEM_KEY, nome).filter(|texto| !texto.trim().is_empty())
+        registry::read_text("HKLM", OEM_KEY, nome)
+            .ok()
+            .flatten()
+            .filter(|texto| !texto.trim().is_empty())
     };
 
     Checagem {

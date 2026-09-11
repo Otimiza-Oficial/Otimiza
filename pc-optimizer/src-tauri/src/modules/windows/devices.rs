@@ -58,9 +58,15 @@ pub fn caminhos_msi_das_gpus() -> Vec<String> {
         for instancia in instancias {
             let caminho = format!("{}\\{}", caminho_dispositivo, instancia);
 
-            let servico = registry::read_text("HKLM", &caminho, "Service")
-                .unwrap_or_default()
-                .to_lowercase();
+            // Dispositivo cujo `Service` não dá para ler fica de fora, e AQUI esse
+            // é o lado seguro: a lista serve para escrever, e escrever na
+            // interrupção de um dispositivo que não se identificou é o erro que
+            // trava o boot. A enumeração passa por todo dispositivo PCI da
+            // máquina, e uma ponte ilegível não pode derrubar a placa de vídeo.
+            let servico = match registry::read_text("HKLM", &caminho, "Service") {
+                Ok(Some(servico)) => servico.to_lowercase(),
+                Ok(None) | Err(_) => continue,
+            };
 
             if servico.is_empty() || !DRIVERS_DE_VIDEO.iter().any(|d| servico.starts_with(d)) {
                 continue;
@@ -136,29 +142,52 @@ const PNP_SEM_ECONOMIA: u32 = 24;
 /// O `ComponentId` separa os dois mundos: dispositivo físico começa com o
 /// barramento (`pci\`, `usb\`), enquanto os virtuais da Microsoft começam com
 /// `ms_` ou `vms_`.
-pub fn caminhos_das_placas_de_rede() -> Vec<String> {
-    let indices = match registry::subkeys("HKLM", NET_CLASS) {
-        Ok(lista) => lista,
-        Err(_) => return Vec::new(),
-    };
+///
+/// `Err` quando a classe ou o `ComponentId` de um adaptador não dá para ler. Até
+/// a 2.0 isso virava "não é placa física": a placa de verdade do cliente era
+/// descartada como virtual, e a otimização de rede dela sumia sem uma palavra.
+pub fn caminhos_das_placas_de_rede() -> Result<Vec<String>, String> {
+    let mut caminhos = Vec::new();
 
-    indices
+    for indice in registry::subkeys("HKLM", NET_CLASS)?
         .into_iter()
-        .map(|indice| format!("{}\\{}", NET_CLASS, indice))
-        .filter(|caminho| e_placa_fisica(caminho))
-        .collect()
+        .filter(|indice| e_indice_de_adaptador(indice))
+    {
+        let caminho = format!("{}\\{}", NET_CLASS, indice);
+
+        if e_placa_fisica(&caminho)? {
+            caminhos.push(caminho);
+        }
+    }
+
+    Ok(caminhos)
 }
 
-fn e_placa_fisica(caminho: &str) -> bool {
-    let componente = registry::read_text("HKLM", caminho, "ComponentId")
+/// Só as subchaves numeradas (`0000`, `0001`…) são adaptadores.
+///
+/// A classe tem também `Properties`, que o Windows não deixa ler. Enquanto a
+/// leitura ilegível virava "não é placa", ela saía da lista sozinha; com o erro
+/// passando a subir, lê-la como adaptador faria TODA máquina dar erro.
+fn e_indice_de_adaptador(nome: &str) -> bool {
+    !nome.is_empty() && nome.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Se o adaptador está num barramento físico. Sem `ComponentId` nenhum, a
+/// resposta é não: dispositivo que não declara barramento não é placa que se
+/// possa ajustar.
+fn e_placa_fisica(caminho: &str) -> Result<bool, String> {
+    let componente = registry::read_text("HKLM", caminho, "ComponentId")?
         .unwrap_or_default()
         .to_lowercase();
 
-    componente.starts_with("pci\\") || componente.starts_with("usb\\")
+    Ok(componente.starts_with("pci\\") || componente.starts_with("usb\\"))
 }
 
 pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
-    let caminhos = caminhos_das_placas_de_rede();
+    // A lista que não deu para ler vira `None`, como a máquina sem placa: a
+    // leitura que falhou não vira resposta. Quem aplica (`desligar_…`) recebe o
+    // erro de verdade.
+    let caminhos = caminhos_das_placas_de_rede().ok()?;
 
     if caminhos.is_empty() {
         return None;
@@ -182,7 +211,7 @@ pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
 pub fn desligar_economia_de_energia_da_rede(
     mudancas: &mut Vec<ChangeRecord>,
 ) -> Result<(), String> {
-    let caminhos = caminhos_das_placas_de_rede();
+    let caminhos = caminhos_das_placas_de_rede()?;
 
     if caminhos.is_empty() {
         return Err("Nenhuma placa de rede encontrada.".to_string());
@@ -223,10 +252,14 @@ mod tests {
 
     #[test]
     fn encontra_as_placas_de_rede_desta_maquina() {
-        let caminhos = caminhos_das_placas_de_rede();
+        let caminhos = caminhos_das_placas_de_rede()
+            .expect("as placas de rede desta máquina precisam ser legíveis");
 
         for caminho in &caminhos {
-            let nome = registry::read_text("HKLM", caminho, "DriverDesc").unwrap_or_default();
+            let nome = registry::read_text("HKLM", caminho, "DriverDesc")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
             println!("Rede: {} — {}", nome, caminho);
         }
 
@@ -239,6 +272,7 @@ mod tests {
         // o barramento é fato — a mesma lição do `TIPO_DE_INÍCIO`.
         for caminho in &caminhos {
             let componente = registry::read_text("HKLM", caminho, "ComponentId")
+                .expect("o ComponentId de uma placa da lista foi lido para ela entrar")
                 .unwrap_or_default()
                 .to_lowercase();
 
@@ -256,6 +290,17 @@ mod tests {
                 componente
             );
         }
+    }
+
+    #[test]
+    fn so_subchave_numerada_e_adaptador() {
+        assert!(e_indice_de_adaptador("0000"));
+        assert!(e_indice_de_adaptador("0012"));
+        // `Properties` é negada pelo Windows a qualquer um; lida como
+        // adaptador, derrubaria a lista de toda máquina.
+        assert!(!e_indice_de_adaptador("Properties"));
+        assert!(!e_indice_de_adaptador("Configuration"));
+        assert!(!e_indice_de_adaptador(""));
     }
 
     #[test]

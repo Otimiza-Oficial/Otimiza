@@ -1963,6 +1963,7 @@ mod tests {
         // Usa a primeira entrada de HKCU: não exige administrador e vale só para
         // este usuário.
         let entry = startup::entries()
+            .expect("as chaves de inicialização desta máquina precisam ser legíveis")
             .into_iter()
             .find(|entry| entry.hive == "HKCU")
             .expect("nenhuma entrada de inicialização em HKCU");

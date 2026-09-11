@@ -197,7 +197,11 @@ fn guid_do_windows() -> Option<String> {
         "HKLM",
         "SOFTWARE\\Microsoft\\Cryptography",
         "MachineGuid",
-    )?;
+    )
+    // Ilegível ou ausente dá no mesmo aqui: esta é uma das fontes do código da
+    // máquina, e sem ela o código sai das outras.
+    .ok()
+    .flatten()?;
 
     let limpo = bruto.trim().to_string();
     (limpo.len() >= 32).then_some(limpo)

@@ -5644,6 +5644,8 @@ interface GpuPrefReport {
   tem_placa_dupla: boolean;
   /** Jogos com preferência gravada: [caminho, preferência]. */
   definidos: [string, Preferencia][];
+  /** Preenchido quando a chave existe e não deu para ler: aí `definidos` vazio não é "nenhum". */
+  erro_de_leitura: string | null;
 }
 
 /** O nome do arquivo, que é o que a pessoa reconhece. */
@@ -5702,6 +5704,15 @@ async function carregarPreferenciaDeGpu() {
       "gpupref-nota",
       "Nenhum jogo está preso à placa mais fraca. Os que têm preferência gravada " +
         "estão abaixo, e dá para mudar qualquer um."
+    );
+  } else if (relatorio.erro_de_leitura) {
+    // A chave existe e não deu para ler. "Nenhum programa tem placa fixada"
+    // aqui afirmaria o comportamento do Windows sobre uma leitura que não
+    // aconteceu.
+    text(
+      "gpupref-nota",
+      "Não consegui ler as preferências de placa gravadas neste computador, então " +
+        "não dá para dizer se algum jogo está preso à placa mais fraca."
     );
   } else {
     text(

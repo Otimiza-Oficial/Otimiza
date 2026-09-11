@@ -462,7 +462,10 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
         health: Some(windows::health::analyze()),
         memory: Some(windows::memory::analyze()),
         browsers: Some(windows::browsers::analyze()),
-        startup: windows::startup::entries(),
+        // Chave de inicialização ilegível sai do PDF como lista vazia. A tela
+        // mostra o erro; o relatório ainda não tem onde escrever uma lacuna
+        // nesta seção, e isso fica para a passada dos estados vazios (C.4).
+        startup: windows::startup::entries().unwrap_or_default(),
         // O mesmo veredito que a tela mostra, para que o papel e o programa
         // não possam discordar sobre a mesma máquina.
         veredito: Some(windows::veredito::diagnostico_rapido()),
@@ -1337,7 +1340,7 @@ pub async fn enable_system_protection() -> Result<String, String> {
 pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
     #[cfg(target_os = "windows")]
     {
-        Ok(crate::modules::windows::startup::entries())
+        crate::modules::windows::startup::entries()
     }
 
     #[cfg(not(target_os = "windows"))]

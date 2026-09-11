@@ -111,6 +111,9 @@ pub struct GpuPrefReport {
     /// Jogos com preferência gravada, e qual.
     pub definidos: Vec<(String, Preferencia)>,
     pub findings: Vec<GpuPrefFinding>,
+    /// Preenchido quando a chave de preferências existe e não deu para ler. Aí
+    /// `definidos` vazio NÃO quer dizer "nenhum jogo fixado".
+    pub erro_de_leitura: Option<String>,
 }
 
 // ------------------------------------------------------------------- leitura
@@ -142,15 +145,27 @@ pub fn placas() -> Vec<String> {
 }
 
 /// O que já está gravado, jogo por jogo.
-pub fn definidos() -> Vec<(String, Preferencia)> {
-    super::registry::value_names("HKCU", CHAVE)
-        .into_iter()
-        .filter_map(|caminho| {
-            let bruto = super::registry::read_text("HKCU", CHAVE, &caminho)?;
-            let preferencia = preferencia_do_texto(&bruto)?;
-            Some((caminho, preferencia))
-        })
-        .collect()
+///
+/// `Err` quando a chave existe e não dá para ler. Até a 2.0 isso virava lista
+/// vazia, e a tela escrevia "Nenhum programa tem placa fixada neste computador:
+/// o Windows está escolhendo sozinho para todos" — uma afirmação sobre o
+/// comportamento do Windows apoiada numa leitura que não aconteceu.
+pub fn definidos() -> Result<Vec<(String, Preferencia)>, String> {
+    let mut definidos = Vec::new();
+
+    for caminho in super::registry::value_names("HKCU", CHAVE)? {
+        // Valor que não é texto, ou texto sem `GpuPreference`, não é preferência
+        // de placa: não há o que listar.
+        let Some(bruto) = super::registry::read_text("HKCU", CHAVE, &caminho)? else {
+            continue;
+        };
+
+        if let Some(preferencia) = preferencia_do_texto(&bruto) {
+            definidos.push((caminho, preferencia));
+        }
+    }
+
+    Ok(definidos)
 }
 
 // --------------------------------------------------------------- diagnóstico
@@ -215,7 +230,10 @@ pub fn diagnosticar(
 
 pub fn analyze() -> GpuPrefReport {
     let placas = placas();
-    let definidos = definidos();
+    let (definidos, erro_de_leitura) = match definidos() {
+        Ok(lista) => (lista, None),
+        Err(erro) => (Vec::new(), Some(erro)),
+    };
     let findings = diagnosticar(&placas, &definidos);
 
     GpuPrefReport {
@@ -223,6 +241,7 @@ pub fn analyze() -> GpuPrefReport {
         placas,
         definidos,
         findings,
+        erro_de_leitura,
     }
 }
 

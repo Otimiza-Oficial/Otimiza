@@ -55,7 +55,7 @@ pub fn programas_instalados() -> Vec<String> {
         for entrada in registry::subkeys(hive, base).unwrap_or_default() {
             let caminho = format!("{}\\{}", base, entrada);
 
-            if let Some(nome) = registry::read_text(hive, &caminho, "DisplayName") {
+            if let Ok(Some(nome)) = registry::read_text(hive, &caminho, "DisplayName") {
                 let nome = nome.trim().to_string();
                 if !nome.is_empty() && !nomes.contains(&nome) {
                     nomes.push(nome);

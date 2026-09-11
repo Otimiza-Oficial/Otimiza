@@ -57,12 +57,17 @@ pub fn is_entry_enabled(hive: &str, name: &str) -> bool {
 }
 
 /// Todos os programas de inicialização das chaves `Run`.
-pub fn entries() -> Vec<StartupEntry> {
+///
+/// `Err` quando uma das chaves não pôde ser lida. Até a 2.0 a leitura que
+/// falhava virava lista vazia, e a tela escrevia "Nenhum programa nas chaves de
+/// inicialização" sobre uma máquina que podia ter vinte.
+pub fn entries() -> Result<Vec<StartupEntry>, String> {
     let mut entries = Vec::new();
 
     for hive in ["HKCU", "HKLM"] {
-        for name in registry::value_names(hive, RUN_KEY) {
-            let Some(command) = registry::read_text(hive, RUN_KEY, &name) else {
+        for name in registry::value_names(hive, RUN_KEY)? {
+            // Valor que não é texto não é linha de comando: não há o que listar.
+            let Some(command) = registry::read_text(hive, RUN_KEY, &name)? else {
                 continue;
             };
 
@@ -77,7 +82,7 @@ pub fn entries() -> Vec<StartupEntry> {
     }
 
     entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    entries
+    Ok(entries)
 }
 
 /// Liga ou desliga um programa de inicialização.
@@ -99,16 +104,24 @@ pub fn set_enabled(hive: &str, name: &str, enabled: bool) -> Result<ChangeRecord
 ///
 /// Guardamos o nome do arquivo, não a linha de comando inteira: é o nome que dá
 /// para casar com o processo em execução.
+///
+/// Uma chave ou um valor ilegível fica de fora do conjunto. É uma perda que
+/// fica registrada aqui de propósito: o conjunto só marca, na lista de
+/// processos, quem sobe com o Windows, e ali não há onde dizer "não consegui
+/// ler". A lista de inicialização em si (`entries`) devolve o erro.
 pub fn startup_executables() -> HashSet<String> {
     let mut executables = HashSet::new();
 
     for hive in ["HKCU", "HKLM"] {
-        for command in registry::value_names(hive, RUN_KEY)
-            .into_iter()
-            .filter_map(|name| registry::read_text(hive, RUN_KEY, &name))
-        {
-            if let Some(executable) = executable_from_command(&command) {
-                executables.insert(executable);
+        let Ok(nomes) = registry::value_names(hive, RUN_KEY) else {
+            continue;
+        };
+
+        for name in nomes {
+            if let Ok(Some(command)) = registry::read_text(hive, RUN_KEY, &name) {
+                if let Some(executable) = executable_from_command(&command) {
+                    executables.insert(executable);
+                }
             }
         }
     }
@@ -250,7 +263,7 @@ mod tests {
 
     #[test]
     fn lists_real_startup_entries_of_this_machine() {
-        let list = entries();
+        let list = entries().expect("as chaves Run desta máquina precisam ser legíveis");
 
         for entry in &list {
             println!(

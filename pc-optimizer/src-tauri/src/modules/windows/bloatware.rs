@@ -163,7 +163,7 @@ fn ler_programas() -> Vec<ProgramaInstalado> {
         for entrada in registry::subkeys(hive, base).unwrap_or_default() {
             let caminho = format!("{}\\{}", base, entrada);
 
-            let Some(nome) = registry::read_text(hive, &caminho, "DisplayName") else {
+            let Ok(Some(nome)) = registry::read_text(hive, &caminho, "DisplayName") else {
                 continue;
             };
             if nome.trim().is_empty() {
@@ -177,7 +177,10 @@ fn ler_programas() -> Vec<ProgramaInstalado> {
 
             programas.push(ProgramaInstalado {
                 nome: nome.trim().to_string(),
-                editor: registry::read_text(hive, &caminho, "Publisher").unwrap_or_default(),
+                editor: registry::read_text(hive, &caminho, "Publisher")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
                 tamanho_kb,
             });
         }

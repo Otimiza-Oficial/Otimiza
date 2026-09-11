@@ -109,10 +109,12 @@ fn adaptadores() -> Vec<RawAdapter> {
 /// DNS configurado à mão para um adaptador, lido do registro.
 ///
 /// Vazio significa que o endereço vem do roteador por DHCP — que é o padrão e
-/// não é defeito.
-fn dns_do_adaptador(guid: &str) -> String {
-    registry::read_text("HKLM", &format!("{}\\{}", INTERFACES, guid), "NameServer")
-        .unwrap_or_default()
+/// não é defeito. `Err` é não ter conseguido ler — que NÃO é o mesmo que DHCP.
+fn dns_do_adaptador(guid: &str) -> Result<String, String> {
+    Ok(
+        registry::read_text("HKLM", &format!("{}\\{}", INTERFACES, guid), "NameServer")?
+            .unwrap_or_default(),
+    )
 }
 
 // ---------------------------------------------------------------- medição
@@ -207,11 +209,22 @@ pub fn montar_nota(ganho: Option<f64>, melhor: Option<&str>) -> String {
 
 /// Levantamento completo.
 pub fn analyze() -> NetworkReport {
+    // Adaptador cujo DNS não deu para ler sai da lista em vez de entrar como
+    // "automático" — e marca que houve leitura falha, para a comparação abaixo
+    // não afirmar que a máquina usa o DNS do roteador.
+    let mut dns_ilegivel = false;
+
     let adapters: Vec<Adapter> = adaptadores()
         .into_iter()
         .filter_map(|a| {
             let guid = a.interface_guid?;
-            let dns = dns_do_adaptador(&guid);
+            let dns = match dns_do_adaptador(&guid) {
+                Ok(dns) => dns,
+                Err(_) => {
+                    dns_ilegivel = true;
+                    return None;
+                }
+            };
 
             Some(Adapter {
                 automatic: dns.trim().is_empty(),
@@ -233,7 +246,13 @@ pub fn analyze() -> NetworkReport {
             .iter()
             .find(|a| !a.automatic)
             .map(|a| a.dns.clone())
-            .unwrap_or_else(|| "automático, vindo do roteador".to_string()),
+            .unwrap_or_else(|| {
+                if dns_ilegivel {
+                    "não consegui ler o DNS configurado".to_string()
+                } else {
+                    "automático, vindo do roteador".to_string()
+                }
+            }),
         median_ms: atual_ms,
         failures: atual_falhas,
         current: true,

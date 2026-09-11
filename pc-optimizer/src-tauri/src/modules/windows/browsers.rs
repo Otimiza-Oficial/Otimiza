@@ -385,13 +385,19 @@ pub fn navegador_padrao() -> Option<String> {
         "HKCU",
         r"SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice",
         "ProgId",
-    )?;
+    )
+    .ok()
+    .flatten()?;
 
+    // `None` quando não deu para ler também: a função responde "qual é o
+    // navegador padrão", e sem a leitura a resposta honesta é não saber.
     let comando = super::registry::read_text(
         "HKCR",
         &format!(r"{}\shell\open\command", progid),
         "",
-    )?;
+    )
+    .ok()
+    .flatten()?;
 
     let minusculo = comando.to_lowercase();
 

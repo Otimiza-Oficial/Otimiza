@@ -302,7 +302,17 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
 fn ler_windows(biblioteca: &mut Biblioteca) {
     const CHAVE: &str = r"SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
 
-    for caminho_texto in super::registry::value_names("HKCU", CHAVE) {
+    let caminhos = match super::registry::value_names("HKCU", CHAVE) {
+        Ok(caminhos) => caminhos,
+        Err(erro) => {
+            biblioteca
+                .lacunas
+                .push(format!("Preferências de placa de vídeo do Windows: {}", erro));
+            return;
+        }
+    };
+
+    for caminho_texto in caminhos {
         // O nome do valor é o caminho completo do executável. Só entra se o
         // arquivo ainda existir: sem esta conferência o produto afirmaria que
         // o cliente tem um jogo que ele apagou.

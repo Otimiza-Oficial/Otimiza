@@ -391,24 +391,79 @@ mod tests {
             "detecção de elevação discorda do nível de integridade do token"
         );
     }
-}
 
-/// Nomes dos valores de uma chave. Lista vazia quando a chave não existe.
-pub fn value_names(hive: &str, path: &str) -> Vec<String> {
-    match root(hive).and_then(|root| {
-        root.open_subkey_with_flags(path, KEY_READ)
-            .map_err(|e| e.to_string())
-    }) {
-        Ok(key) => key.enum_values().filter_map(|entry| entry.ok().map(|(name, _)| name)).collect(),
-        Err(_) => Vec::new(),
+    #[test]
+    fn chave_que_nao_existe_nao_tem_valores_e_nao_e_falha() {
+        // A distinção que o C.1 trouxe corta nos dois sentidos: não conseguir
+        // ler deixou de virar vazio, e chave inexistente NÃO pode ter virado
+        // erro — senão toda máquina sem preferência de placa gravada, ou sem
+        // programa na chave `Run` do usuário, passaria a mostrar lacuna.
+        const NAO_EXISTE: &str = r"Software\OtimizaChaveQueNaoExiste2026";
+
+        assert_eq!(value_names("HKCU", NAO_EXISTE), Ok(Vec::new()));
+        assert_eq!(read_text("HKCU", NAO_EXISTE, "Qualquer"), Ok(None));
+    }
+
+    #[test]
+    fn le_os_nomes_de_uma_chave_que_existe() {
+        let nomes = value_names("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+            .expect("a chave de versão do Windows é legível por qualquer usuário");
+
+        assert!(nomes.iter().any(|nome| nome == "CurrentBuild"), "veio: {:?}", nomes);
     }
 }
 
-/// Lê um valor de texto, ignorando valores de outro tipo.
-pub fn read_text(hive: &str, path: &str, name: &str) -> Option<String> {
-    match read(hive, path, name) {
-        Ok(PreviousValue::Text(value)) => Some(value),
-        _ => None,
+/// Nomes dos valores de uma chave.
+///
+/// DEVOLVE `Result`, E A DOC ANTIGA EXPLICA POR QUÊ.
+///
+/// Até a 2.0 esta função devolvia `Vec<String>` e a doc dizia "lista vazia
+/// quando a chave não existe". Ela mentia por omissão: o `Err(_) => Vec::new()`
+/// devolvia vazio também para acesso negado, chave corrompida e hive
+/// indisponível — e o chamador não tinha COMO saber a diferença.
+///
+/// O estrago aparecia longe daqui. `startup.rs` enumera as chaves `Run` com
+/// isto; uma leitura que falhasse fazia a tela escrever "Nenhum programa nas
+/// chaves de inicialização" sobre uma máquina que podia ter vinte.
+///
+/// A 1.8 aplicou essa disciplina ao `read` e ao `delete_value`, e parou ali.
+/// Isto é a mesma regra descendo até o alicerce.
+///
+/// Chave que NÃO EXISTE continua sendo lista vazia, e isso não é a mesma
+/// mentira: a chave `Run` de um usuário novo e a de preferência de placa de quem
+/// nunca fixou nenhuma simplesmente não foram criadas. Não ter valores é a
+/// resposta certa ali. O que deixou de virar vazio é não conseguir abrir.
+pub fn value_names(hive: &str, path: &str) -> Result<Vec<String>, String> {
+    let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
+        Ok(key) => key,
+        Err(e) if chave_inexistente(e.kind()) => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Não consegui ler {}\\{}: {}", hive, path, e)),
+    };
+
+    Ok(key
+        .enum_values()
+        .filter_map(|entry| entry.ok().map(|(name, _)| name))
+        .collect())
+}
+
+/// Lê um valor de texto. Três respostas, não duas.
+///
+/// - `Ok(Some(_))` — leu, e é texto.
+/// - `Ok(None)` — a chave ou o valor não existe, ou existe e é de outro tipo.
+///   As duas são "não há texto aqui", que é uma resposta legítima.
+/// - `Err(_)` — NÃO CONSEGUIU LER. Não é o mesmo que ausência.
+///
+/// O `Option` sozinho não dava conta: o `_ => None` jogava fora justamente a
+/// distinção que o `read` de baixo tinha acabado de fazer na 1.8. Em
+/// `devices.rs`, isso decidia se uma placa de rede era FÍSICA — o filtro que o
+/// PROGRESS.md registra como "o que mais deu trabalho acertar", porque separa a
+/// placa real dos WAN Miniports de VPN. Um `ComponentId` ilegível fazia a placa
+/// de verdade do cliente ser descartada como virtual, e as otimizações de rede
+/// dela sumiam da lista sem uma palavra.
+pub fn read_text(hive: &str, path: &str, name: &str) -> Result<Option<String>, String> {
+    match read(hive, path, name)? {
+        PreviousValue::Text(value) => Ok(Some(value)),
+        _ => Ok(None),
     }
 }
 

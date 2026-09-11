@@ -845,7 +845,7 @@ fn desktop_dir() -> PathBuf {
     {
         let shell_folders = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders";
 
-        if let Some(path) =
+        if let Ok(Some(path)) =
             crate::modules::windows::registry::read_text("HKCU", shell_folders, "Desktop")
         {
             let candidate = PathBuf::from(&path);
@@ -1144,7 +1144,7 @@ mod inspecao {
             health: Some(windows::health::analyze()),
             memory: Some(windows::memory::analyze()),
             browsers: Some(windows::browsers::analyze()),
-            startup: windows::startup::entries(),
+            startup: windows::startup::entries().unwrap_or_default(),
             veredito: Some(windows::veredito::diagnostico_rapido()),
         };
 
