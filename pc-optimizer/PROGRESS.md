@@ -965,6 +965,48 @@ Preferências gravadas antes da 2.0 continuam carregando: o arquivo antigo ainda
 tem a chave `game_mode_avisado`, e há teste garantindo que uma chave que sobrou
 não derruba a leitura.
 
+### "Otimizar agora" e o Windows que chegou sem serviços essenciais
+
+Em 10 e 11/09/2026, no PC do dono, o clique em "Otimizar agora" foi seguido de
+"os programas não abriam" — nas duas vezes. O que o levantamento provou, e o que
+não conseguiu provar:
+
+**Provado.** A máquina roda uma imagem modificada ("Team AntiLag · SnyX OS")
+com cerca de 180 serviços desativados, entre eles Plug and Play, Implantação
+AppX, Licenças de Cliente, Isolamento de Chave CNG e Gerente de Contas de
+Segurança. O Otimiza não desativa nenhum deles. O log do Windows mostra o plano
+de energia sendo reaplicado segundos antes de cada reação do dono, e o histórico
+do Otimiza **não registrou nada** nas duas vezes.
+
+**Não provado, e por quê.** O Otimiza não guardava registro em arquivo, e nenhum
+comando do lote tinha prazo. Não dá para dizer qual passo rodou, quanto demorou
+nem onde parou.
+
+**O que mudou:**
+
+| Conserto | Onde | Trava |
+|---|---|---|
+| Todo comando tem prazo: `run` 60 s, PowerShell 120 s; estourou, o processo é encerrado e vira erro com o nome do comando. A sessão viva do PowerShell passou a ler por uma thread com canal | `shell.rs` | `a_sessao_que_trava_e_encerrada_no_prazo`, `run_com_prazo_encerra_o_programa_que_nao_termina`, `desistir_de_esperar_mata_o_processo…` (subiu do `diskspace.rs`) |
+| Prazo longo onde a espera é legítima: aviso de administrador (10 min), `wsreset` (5 min), esvaziar a lixeira (10 min), ponto de restauração (3 min) | `commands.rs`, `diskspace.rs`, `restore.rs` | — |
+| Registro em arquivo: `%APPDATA%\pc-optimizer\otimiza.log`, com milissegundos, girando em 2 MB. Cada aplicação e cada desfazer anotam o começo, **cada ação antes de executá-la**, e o fim com a duração | `utils/logger.rs`, `windows/mod.rs` | `cada_linha_chega_ao_arquivo_na_hora_e_em_ordem`, `o_arquivo_gira…` |
+| Ponto de restauração pulado, com o motivo, quando a Cópia de Sombra de Volume ou o provedor dela estão desativados; um ponto que aparece depois do prazo continua contando como criado | `restore.rs` | `servico_desativado_e_dito_pelo_nome_e_no_plural_certo` |
+| "Desligar aplicativos em segundo plano" saiu de todo lote e dos três perfis que o citavam; continua um a um | `catalog::FORA_DO_LOTE`, `profiles.rs` | `aplicativos_em_segundo_plano_nao_entram_no_lote`, `nenhum_perfil_cita_item_que_fica_fora_do_lote` |
+| Antes de todo lote, a tela confere 11 serviços essenciais. Com algum desativado, avisa quais, o que cada um quebra (pela descrição da Microsoft) e o fabricante registrado, e oferece **Religar os essenciais**, **Otimizar mesmo assim** ou **Agora não** | `essenciais.rs`, `main.ts` | `nao_conseguir_ler_nunca_vira_desativado`, `religar_so_volta_para_um_padrao_do_windows`, `o_catalogo_nunca_desliga_um_essencial` |
+| Religar volta cada serviço ao tipo de início **padrão** do Windows (tabela oficial da Microsoft), entra no histórico com id próprio, e o "Desfazer" os devolve a desligados | `WindowsOptimizer::religar_essenciais` | — |
+
+**Não visto funcionando:**
+
+- **O aviso na tela.** Tem teste de tipo e o motor foi lido nesta máquina (11
+  essenciais, a maioria desativada), mas o modal só abre dentro do programa
+  compilado.
+- **Religar nesta máquina.** Mexer em serviço do Windows é decisão do dono, e o
+  clique é dele. Alguns desses serviços podem recusar o `sc config` mesmo como
+  administrador; a mensagem diz quais.
+- **O gatilho do incidente (U.6).** Com o registro em arquivo pronto, o próximo
+  passo é o dono aplicar os itens do lote um a um e, depois de cada um, conferir
+  se um programa ainda abre. A última linha do `otimiza.log` diz o que rodou por
+  último.
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

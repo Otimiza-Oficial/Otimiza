@@ -23,6 +23,7 @@ pub mod deteccao;
 pub mod devices;
 pub mod diskspace;
 pub mod display;
+pub mod essenciais;
 pub mod exhaustion;
 pub mod firmware;
 pub mod fivem;
@@ -398,7 +399,20 @@ impl WindowsOptimizer {
     }
 
     /// Aplica uma otimização, registrando tudo o que for alterado.
+    ///
+    /// Cada aplicação deixa rastro no registro em arquivo (`utils::logger`):
+    /// quando começou, cada ação antes de executá-la, e como terminou — inclusive
+    /// a falha que se desfez sozinha, que o histórico de desfazer não guarda.
     pub fn apply(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
+        let inicio = std::time::Instant::now();
+        crate::utils::Logger::info(&format!("aplicar `{}`: começou", id));
+
+        let resultado = self.aplicar_sem_registro(id, log);
+        anotar_fim("aplicar", id, inicio, &resultado);
+        resultado
+    }
+
+    fn aplicar_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
 
         if log.is_applied(id) {
@@ -423,12 +437,32 @@ impl WindowsOptimizer {
 
         let mut changes: Vec<ChangeRecord> = Vec::new();
         let mut notes: Vec<String> = Vec::new();
+        let total_de_acoes = spec.actions.len();
 
-        for action in spec.actions {
+        for (numero, action) in spec.actions.iter().enumerate() {
+            // Antes de executar, e não depois: se esta ação travar, a última
+            // linha do registro diz qual foi.
+            crate::utils::Logger::info(&format!(
+                "aplicar `{}`: ação {}/{} — {:?}",
+                spec.id,
+                numero + 1,
+                total_de_acoes,
+                action
+            ));
+
             match self.execute(action, &mut changes) {
                 Ok(Some(note)) => notes.push(note),
                 Ok(None) => {}
                 Err(error) => {
+                    crate::utils::Logger::warn(&format!(
+                        "aplicar `{}`: ação {}/{} falhou ({}); desfazendo {} mudança(s) já feitas",
+                        spec.id,
+                        numero + 1,
+                        total_de_acoes,
+                        error,
+                        changes.len()
+                    ));
+
                     // Desfaz o que já foi aplicado para não deixar o sistema num estado misto.
                     // Se a própria reversão falhar, isso precisa ir para o log: é a
                     // única situação em que o PC pode ficar num estado intermediário.
@@ -472,6 +506,15 @@ impl WindowsOptimizer {
     /// inicialização desligadas pelo usuário. O histórico guarda o suficiente para
     /// reverter qualquer coisa que a gente tenha mexido, e é ele quem manda aqui.
     pub fn revert(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
+        let inicio = std::time::Instant::now();
+        crate::utils::Logger::info(&format!("desfazer `{}`: começou", id));
+
+        let resultado = self.desfazer_sem_registro(id, log);
+        anotar_fim("desfazer", id, inicio, &resultado);
+        resultado
+    }
+
+    fn desfazer_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id);
 
         if let Some(spec) = spec {
@@ -798,6 +841,110 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Volta ao tipo de início padrão do Windows cada serviço essencial que está
+    /// desativado (`essenciais::ESSENCIAIS`).
+    ///
+    /// Cada chamada entra no histórico com um id próprio, marcado com o instante:
+    /// um Windows modificado pode ter os serviços desligados de novo por fora, e
+    /// cada religada precisa poder ser desfeita sozinha, sem apagar a anterior.
+    ///
+    /// Falha num serviço não impede os outros. Cada um é independente, e o que
+    /// foi religado entra no histórico mesmo quando outro falhou — senão ficaria
+    /// mudado sem caminho de volta.
+    pub fn religar_essenciais(&self, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
+        if !registry::is_elevated() {
+            return Err(
+                "Religar serviços do Windows exige executar o Otimiza como administrador."
+                    .to_string(),
+            );
+        }
+
+        let id = format!("religar_essenciais:{}", now_timestamp());
+        let mut changes: Vec<ChangeRecord> = Vec::new();
+        let mut falhas: Vec<String> = Vec::new();
+
+        for essencial in essenciais::ESSENCIAIS {
+            if essenciais::inicio_de(essencial.servico) != essenciais::Inicio::Desativado {
+                continue;
+            }
+
+            crate::utils::Logger::info(&format!(
+                "religar `{}`: de desativado para {}",
+                essencial.servico, essencial.padrao
+            ));
+
+            match services::set_start_type(essencial.servico, essencial.padrao) {
+                Ok(()) => changes.push(ChangeRecord::ServiceStartType {
+                    service: essencial.servico.to_string(),
+                    previous: "disabled".to_string(),
+                }),
+                Err(erro) => {
+                    crate::utils::Logger::warn(&format!(
+                        "religar `{}` falhou: {}",
+                        essencial.servico, erro
+                    ));
+                    falhas.push(format!("{}: {}", essencial.servico, erro));
+                }
+            }
+        }
+
+        let religados = changes.len();
+
+        if religados == 0 {
+            if !falhas.is_empty() {
+                return Err(format!(
+                    "Nenhum serviço essencial foi religado. {}",
+                    falhas.join(" · ")
+                ));
+            }
+
+            return Ok(OptimizationOutcome {
+                id,
+                name: "Serviços essenciais do Windows".to_string(),
+                success: true,
+                applied: false,
+                message: "Nenhum serviço essencial estava desativado.".to_string(),
+                requires_restart: false,
+                changes_count: 0,
+                changes: Vec::new(),
+            });
+        }
+
+        let described: Vec<String> = changes.iter().map(|change| change.describe()).collect();
+
+        log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: "Serviços essenciais do Windows religados".to_string(),
+            timestamp: now_timestamp(),
+            changes,
+        })?;
+
+        let message = if falhas.is_empty() {
+            format!(
+                "{} serviço(s) essencial(is) religado(s). Reinicie o PC para o Windows subir com eles.",
+                religados
+            )
+        } else {
+            format!(
+                "{} religado(s); {} não: {}. Reinicie o PC para os religados valerem.",
+                religados,
+                falhas.len(),
+                falhas.join(" · ")
+            )
+        };
+
+        Ok(OptimizationOutcome {
+            id,
+            name: "Serviços essenciais do Windows".to_string(),
+            success: falhas.is_empty(),
+            applied: true,
+            message,
+            requires_restart: true,
+            changes_count: religados,
+            changes: described,
+        })
+    }
+
     /// Leva um serviço de terceiro para Manual, ou devolve para Automático.
     ///
     /// Segue o mesmo desenho das tarefas agendadas: o id próprio faz a mudança
@@ -924,10 +1071,12 @@ impl WindowsOptimizer {
     /// só o que recomendam, e `None` é o "Otimizar agora", que pega tudo que
     /// está pendente.
     ///
-    /// Duas exclusões deliberadas, e elas vêm DEPOIS do filtro de ids — um
-    /// perfil não pode arrastar nenhuma das duas só porque citou o id:
+    /// Três exclusões deliberadas, em `catalog::entra_no_lote`, e elas vêm
+    /// DEPOIS do filtro de ids — um perfil não pode arrastar nenhuma das três só
+    /// porque citou o id:
     /// - o que não é reversível (apagar arquivo nunca acontece por um clique genérico)
     /// - o que troca segurança por desempenho
+    /// - o que está em `catalog::FORA_DO_LOTE`, cujo efeito o cliente só sente dias depois
     ///
     /// Já aplicado ou já padrão da máquina também fica de fora, pela inspeção.
     ///
@@ -948,12 +1097,18 @@ impl WindowsOptimizer {
                 Some(ids) => ids.iter().any(|id| id == spec.id),
                 None => true,
             })
-            .filter(|spec| spec.reversible)
-            .filter(|spec| !spec.security_tradeoff)
+            .filter(|spec| catalog::entra_no_lote(spec))
             .filter(|spec| self.inspect(spec, log) == OptimizationState::Available)
             .collect();
 
         let total = pending.len();
+
+        crate::utils::Logger::info(&format!(
+            "lote{}: {} item(ns) pendente(s): {}",
+            if only.is_some() { " de perfil" } else { " do Otimizar agora" },
+            total,
+            pending.iter().map(|spec| spec.id).collect::<Vec<_>>().join(", ")
+        ));
 
         pending
             .iter()
@@ -1001,6 +1156,12 @@ impl WindowsOptimizer {
             .collect();
 
         let total = applied.len();
+
+        crate::utils::Logger::info(&format!(
+            "desfazer tudo: {} item(ns): {}",
+            total,
+            applied.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().join(", ")
+        ));
 
         applied
             .iter()
@@ -1414,6 +1575,27 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
+/// A linha de fim de uma aplicação ou de um desfazer, com a duração.
+fn anotar_fim(
+    verbo: &str,
+    id: &str,
+    inicio: std::time::Instant,
+    resultado: &Result<OptimizationOutcome, String>,
+) {
+    let ms = inicio.elapsed().as_millis();
+
+    match resultado {
+        Ok(outcome) => crate::utils::Logger::info(&format!(
+            "{} `{}`: terminou em {} ms ({} mudança(s))",
+            verbo, id, ms, outcome.changes_count
+        )),
+        Err(erro) => crate::utils::Logger::warn(&format!(
+            "{} `{}`: falhou em {} ms — {}",
+            verbo, id, ms, erro
+        )),
+    }
+}
+
 /// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
@@ -1424,6 +1606,9 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut sincronizar_interface = false;
 
     for change in changes.iter().rev() {
+        // Antes, como na aplicação: um desfazer que trava deixa dito qual foi.
+        crate::utils::Logger::info(&format!("desfazendo: {}", change.describe()));
+
         let result = match change {
             ChangeRecord::RegistryValue {
                 hive,
@@ -1530,6 +1715,7 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
         };
 
         if let Err(error) = result {
+            crate::utils::Logger::warn(&format!("não consegui desfazer: {}", error));
             errors.push(error);
         }
     }

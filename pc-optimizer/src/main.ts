@@ -4321,6 +4321,166 @@ async function relaunchAsAdmin() {
   }
 }
 
+// ------------------------------------------------------- serviços essenciais
+
+type InicioDoEssencial = "Desativado" | "Ativo" | "NaoExiste" | "NaoConsegui";
+
+interface ChecagemDosEssenciais {
+  servicos: { servico: string; inicio: InicioDoEssencial }[];
+  desativados: number;
+  fabricante: string | null;
+  modelo: string | null;
+}
+
+/**
+ * O nome e o que quebra, serviço a serviço. O Rust manda só o id e o estado; a
+ * frase mora aqui. Cada consequência segue a descrição que a própria Microsoft
+ * publica do serviço — nada além do que ela diz.
+ */
+const NA_TELA_DOS_ESSENCIAIS: Record<string, { nome: string; quebra: string }> = {
+  PlugPlay: {
+    nome: "Plug and Play",
+    quebra: "a Microsoft avisa que desligá-lo deixa o sistema instável",
+  },
+  AppXSvc: {
+    nome: "Implantação AppX",
+    quebra: "aplicativos da Microsoft Store não instalam e podem não funcionar",
+  },
+  ClipSVC: {
+    nome: "Licenças de Cliente",
+    quebra: "aplicativos da Microsoft Store não funcionam direito",
+  },
+  LicenseManager: {
+    nome: "Gerenciador de Licenças do Windows",
+    quebra: "o que veio da Microsoft Store não funciona direito",
+  },
+  StateRepository: {
+    nome: "Repositório de Estado",
+    quebra: "é a base do modelo de aplicativos do Windows",
+  },
+  AppReadiness: {
+    nome: "Preparação de Aplicativos",
+    quebra: "prepara os aplicativos no primeiro login e ao instalar novos",
+  },
+  KeyIso: {
+    nome: "Isolamento de Chave CNG",
+    quebra: "isola as chaves privadas usadas em criptografia",
+  },
+  CryptSvc: {
+    nome: "Serviços de Criptografia",
+    quebra: "confere a assinatura dos arquivos do Windows e permite instalar programas novos",
+  },
+  SamSs: {
+    nome: "Gerente de Contas de Segurança",
+    quebra: "a Microsoft diz para não desligar: outros serviços podem não iniciar",
+  },
+  TimeBrokerSvc: {
+    nome: "Agente de Tempo",
+    quebra: "o trabalho em segundo plano dos aplicativos pode não acontecer",
+  },
+  TokenBroker: {
+    nome: "Gerenciador de Conta da Web",
+    quebra: "login com conta Microsoft dentro de aplicativos pode falhar",
+  },
+};
+
+/** O lote que ficou esperando a resposta do aviso dos essenciais. */
+let loteAguardando: { progress: string; only?: string[] } | null = null;
+
+/**
+ * Confere os serviços essenciais antes de um lote. `true` quando o lote pode
+ * seguir.
+ *
+ * Falha na conferência não prende o lote: não conseguir conferir não é o mesmo
+ * que achar desligado, e travar o botão por uma leitura que falhou seria o
+ * produto inventando um problema.
+ */
+async function essenciaisLiberamOLote(progress: string, only?: string[]): Promise<boolean> {
+  let checagem: ChecagemDosEssenciais;
+
+  try {
+    checagem = await invoke<ChecagemDosEssenciais>("checar_essenciais");
+  } catch (error) {
+    console.error("Erro ao conferir os serviços essenciais:", error);
+    return true;
+  }
+
+  if (checagem.desativados === 0) return true;
+
+  loteAguardando = { progress, only };
+  mostrarAvisoDosEssenciais(checagem);
+  return false;
+}
+
+function mostrarAvisoDosEssenciais(checagem: ChecagemDosEssenciais) {
+  const origem = [checagem.fabricante, checagem.modelo]
+    .filter((parte): parte is string => Boolean(parte))
+    .join(" · ");
+  const quantos =
+    checagem.desativados === 1
+      ? "1 serviço que o Windows precisa está desativado"
+      : `${checagem.desativados} serviços que o Windows precisa estão desativados`;
+
+  // O fabricante vai como evidência, entre aspas e sem adjetivo: fabricante de
+  // verdade também se registra ali.
+  element("essenciais-origem").textContent = origem
+    ? `O Windows deste PC se identifica como "${origem}", e ${quantos}:`
+    : `Neste Windows, ${quantos}:`;
+
+  element("essenciais-lista").innerHTML = checagem.servicos
+    .filter((s) => s.inicio === "Desativado")
+    .map((s) => {
+      const tela = NA_TELA_DOS_ESSENCIAIS[s.servico];
+      const nome = tela ? tela.nome : s.servico;
+      const quebra = tela ? ` — ${tela.quebra}` : "";
+      return `<li><strong>${escapeHtml(nome)}</strong>${escapeHtml(quebra)}</li>`;
+    })
+    .join("");
+
+  element("essenciais-modal").hidden = false;
+  element<HTMLButtonElement>("essenciais-religar").focus();
+}
+
+function fecharAvisoDosEssenciais() {
+  element("essenciais-modal").hidden = true;
+  loteAguardando = null;
+}
+
+async function otimizarMesmoAssim() {
+  const lote = loteAguardando;
+  fecharAvisoDosEssenciais();
+
+  if (lote) await runBatch("optimize_now", lote.progress, lote.only, true);
+}
+
+async function religarEssenciais() {
+  if (!isElevated) {
+    fecharAvisoDosEssenciais();
+    askForAdmin(
+      "Religar serviços do Windows exige permissão de administrador. Podemos " +
+        "reabrir o Otimiza com essa permissão?"
+    );
+    return;
+  }
+
+  const botao = element<HTMLButtonElement>("essenciais-religar");
+  botao.disabled = true;
+  botao.textContent = "Religando…";
+
+  try {
+    const outcome = await invoke<OptimizationOutcome>("religar_essenciais");
+    fecharAvisoDosEssenciais();
+    setStatus("optimization-status", outcome.message, outcome.success ? "ok" : "error");
+  } catch (error) {
+    fecharAvisoDosEssenciais();
+    setStatus("optimization-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Religar os essenciais";
+    await loadOptimizations();
+  }
+}
+
 /** Otimizações que o lote aplicaria e que dependem de privilégio elevado. */
 function pendingAdminCount(): number {
   return optimizations.filter(
@@ -4328,7 +4488,19 @@ function pendingAdminCount(): number {
   ).length;
 }
 
-async function runBatch(command: string, progress: string, only?: string[]) {
+async function runBatch(
+  command: string,
+  progress: string,
+  only?: string[],
+  essenciaisConferidos = false
+) {
+  // Antes de tudo, inclusive do pedido de administrador: se o Windows veio com
+  // serviços essenciais desligados, o cliente precisa saber antes do clique —
+  // senão o que já estava quebrado passa a parecer efeito da otimização.
+  if (command === "optimize_now" && !essenciaisConferidos) {
+    if (!(await essenciaisLiberamOLote(progress, only))) return;
+  }
+
   if (command === "optimize_now" && !isElevated) {
     const count = pendingAdminCount();
 
@@ -6567,8 +6739,17 @@ function wireControls() {
     if (event.target === element("admin-modal")) closeAdminModal();
   });
 
+  // O aviso dos essenciais não fecha ao clicar fora: é uma decisão, e as três
+  // saídas estão escritas nos botões.
+  element("essenciais-religar").addEventListener("click", religarEssenciais);
+  element("essenciais-mesmo-assim").addEventListener("click", otimizarMesmoAssim);
+  element("essenciais-cancelar").addEventListener("click", fecharAvisoDosEssenciais);
+
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeAdminModal();
+    if (event.key !== "Escape") return;
+
+    closeAdminModal();
+    if (!element("essenciais-modal").hidden) fecharAvisoDosEssenciais();
   });
 
   element("startup-list").addEventListener("click", async (event) => {

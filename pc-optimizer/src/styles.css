@@ -1401,6 +1401,37 @@ button {
   color: var(--text-muted);
 }
 
+/* O aviso dos serviços essenciais carrega uma lista com o que cada serviço
+   desligado quebra; na largura do pedido de administrador, cada linha virava
+   três. */
+.modal-card-largo {
+  max-width: 560px;
+}
+
+.essenciais-lista {
+  list-style: none;
+  margin: var(--s4) 0;
+  padding: 0;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: var(--t-label);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.essenciais-lista li {
+  padding: var(--s2) 0 var(--s2) var(--s3);
+  border-left: 2px solid var(--amber);
+}
+
+.essenciais-lista li + li {
+  margin-top: var(--s2);
+}
+
+.essenciais-lista strong {
+  color: var(--text);
+}
+
 .statusbar-brand {
   display: flex;
   align-items: center;

@@ -153,7 +153,14 @@ impl ChangeRecord {
                 format!("registro · {}\\{} (antes: {})", key, name, previous.describe())
             }
             ChangeRecord::ServiceStartType { service, previous } => {
-                format!("serviço · {} desativado (antes: {})", service, previous)
+                // O mesmo registro serve aos dois sentidos: desligar um serviço
+                // que subia, e religar um essencial que o Windows modificado
+                // trouxe desligado — este, com "antes: disabled".
+                if previous == "disabled" {
+                    format!("serviço · {} religado (antes: desativado)", service)
+                } else {
+                    format!("serviço · {} desativado (antes: {})", service, previous)
+                }
             }
             ChangeRecord::PowerPlan { .. } => "plano de energia trocado".to_string(),
             ChangeRecord::Hibernation { .. } => "hibernação desligada".to_string(),
@@ -598,6 +605,25 @@ mod tests {
             // Comeca vazio de verdade, e nao por nao ter conseguido ler.
             leitura: LeituraDoHistorico::Ok,
         }
+    }
+
+    #[test]
+    fn servico_religado_nao_aparece_como_desativado() {
+        // O mesmo registro serve para desligar um serviço e para religar um
+        // essencial. Religar o Plug and Play e escrever "desativado" no
+        // acompanhamento ao vivo seria dizer ao cliente o contrário do que
+        // aconteceu.
+        let religado = ChangeRecord::ServiceStartType {
+            service: "PlugPlay".to_string(),
+            previous: "disabled".to_string(),
+        };
+        assert_eq!(religado.describe(), "serviço · PlugPlay religado (antes: desativado)");
+
+        let desligado = ChangeRecord::ServiceStartType {
+            service: "SysMain".to_string(),
+            previous: "auto".to_string(),
+        };
+        assert_eq!(desligado.describe(), "serviço · SysMain desativado (antes: auto)");
     }
 
     #[test]

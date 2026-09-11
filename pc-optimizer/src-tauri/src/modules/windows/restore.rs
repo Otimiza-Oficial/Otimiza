@@ -18,6 +18,52 @@
 
 use super::shell;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+
+/// Quanto o Windows tem para terminar o ponto de restauração antes de o Otimiza
+/// seguir sem ele.
+///
+/// Normalmente leva de 15 s a um minuto: é um instantâneo do volume. Três
+/// minutos cobrem disco mecânico ocupado. Passado isso o lote não fica
+/// esperando — o histórico do Otimiza já desfaz item por item sem o ponto.
+const PRAZO_DO_PONTO: Duration = Duration::from_secs(180);
+
+/// Os serviços sem os quais o Windows não cria ponto de restauração.
+///
+/// Imagens "lite" do Windows costumam vir com os dois desativados. Pedir o ponto
+/// assim não cria nada — e ainda deixa o cliente esperando por um serviço que
+/// não vai subir.
+const SERVICOS_DO_PONTO: [(&str, &str); 2] = [
+    ("VSS", "Cópia de Sombra de Volume"),
+    ("swprv", "Provedor de Cópia de Sombra de Software da Microsoft"),
+];
+
+/// A frase de quando algum serviço do ponto está desativado.
+///
+/// Função à parte para o plural ser testável: "o serviço X está" e "os
+/// serviços X e Y estão".
+fn mensagem_de_servicos_desativados(nomes: &[&str]) -> String {
+    let sujeito = match nomes {
+        [um] => format!("o serviço \"{}\" está desativado", um),
+        [inicio @ .., ultimo] => format!(
+            "os serviços {} e \"{}\" estão desativados",
+            inicio
+                .iter()
+                .map(|nome| format!("\"{}\"", nome))
+                .collect::<Vec<_>>()
+                .join(", "),
+            ultimo
+        ),
+        [] => return String::new(),
+    };
+
+    format!(
+        "Ponto de restauração não criado: {} neste Windows, e sem isso o Windows \
+         não cria ponto de restauração. O Otimiza seguiu sem ele; suas otimizações \
+         continuam reversíveis pelo histórico do Otimiza.",
+        sujeito
+    )
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RestorePoint {
@@ -108,23 +154,50 @@ pub fn create(description: &str) -> Result<String, String> {
         return Err("Criar ponto de restauração exige executar como administrador.".to_string());
     }
 
+    // Serviço que não dá para ler NÃO conta como desativado: não sabemos, e aí
+    // o certo é tentar e conferir, como sempre.
+    let desativados: Vec<&str> = SERVICOS_DO_PONTO
+        .iter()
+        .filter(|(servico, _)| {
+            matches!(super::services::query_start_type(servico).as_deref(), Ok("disabled"))
+        })
+        .map(|(_, nome)| *nome)
+        .collect();
+
+    if !desativados.is_empty() {
+        return Err(mensagem_de_servicos_desativados(&desativados));
+    }
+
     let before = list();
     let highest_before = before.first().map(|point| point.sequence).unwrap_or(0);
 
-    // O comando pode demorar; o Windows tira um instantâneo do volume.
+    // O comando pode demorar — o Windows tira um instantâneo do volume —, mas
+    // não para sempre: ver `PRAZO_DO_PONTO`.
     let script = format!(
         "Checkpoint-Computer -Description '{}' -RestorePointType MODIFY_SETTINGS",
         description.replace('\'', "''")
     );
-    let _ = shell::powershell(&script);
+    let pedido = shell::powershell_com_prazo(&script, PRAZO_DO_PONTO);
 
     let after = list();
     let highest_after = after.first().map(|point| point.sequence).unwrap_or(0);
 
+    // Conferido ANTES de olhar se o pedido estourou: o Windows pode ter
+    // terminado o ponto logo depois de o Otimiza desistir de esperar, e um ponto
+    // que existe não vira "não criado".
     if highest_after > highest_before {
         return Ok(format!(
             "Ponto de restauração criado ({} no total).",
             after.len()
+        ));
+    }
+
+    if let Err(erro) = pedido {
+        return Err(format!(
+            "Ponto de restauração não confirmado: o pedido ao Windows não terminou \
+             ({}). O Otimiza seguiu sem ele; suas otimizações continuam reversíveis \
+             pelo histórico do Otimiza.",
+            erro
         ));
     }
 
@@ -205,6 +278,18 @@ mod tests {
     #[test]
     fn formats_wmi_date() {
         assert_eq!(format_wmi_date("20260729143005.000000-180"), "29/07/2026 14:30");
+    }
+
+    #[test]
+    fn servico_desativado_e_dito_pelo_nome_e_no_plural_certo() {
+        let um = mensagem_de_servicos_desativados(&["Cópia de Sombra de Volume"]);
+        assert!(um.contains("o serviço \"Cópia de Sombra de Volume\" está desativado"), "{}", um);
+
+        let dois = mensagem_de_servicos_desativados(&["A", "B"]);
+        assert!(dois.contains("os serviços \"A\" e \"B\" estão desativados"), "{}", dois);
+
+        // A frase nunca pode sugerir que as otimizações ficaram sem volta.
+        assert!(um.contains("continuam reversíveis"));
     }
 
     #[test]

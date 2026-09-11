@@ -47,7 +47,6 @@ pub const PROFILES: &[ProfileInfo] = &[
         optimization_ids: &[
             "visual_effects_performance",
             "disable_transparency",
-            "background_apps_off",
             "disable_widgets",
             "disable_copilot",
             "disable_telemetry",
@@ -106,7 +105,6 @@ pub const PROFILES: &[ProfileInfo] = &[
              ganho.",
         optimization_ids: &[
             "visual_effects_performance",
-            "background_apps_off",
             "disable_widgets",
             "disable_telemetry",
             "telemetry_policy",
@@ -134,7 +132,6 @@ pub const PROFILES: &[ProfileInfo] = &[
             "telemetry_policy",
             "stop_sponsored_apps",
             "start_menu_web_search_off",
-            "background_apps_off",
             "disable_widgets",
             "delivery_optimization_off",
         ],
@@ -212,6 +209,25 @@ mod tests {
     }
 
     #[test]
+    fn nenhum_perfil_cita_item_que_fica_fora_do_lote() {
+        // O perfil aplica pelo mesmo lote do "Otimizar agora", e o lote pula o
+        // que está em `catalog::FORA_DO_LOTE`. Um perfil que citasse um desses
+        // contaria na prévia ("N a aplicar") um item que o clique não aplica.
+        for perfil in PROFILES {
+            for id in perfil.optimization_ids {
+                let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
+
+                assert!(
+                    crate::modules::windows::catalog::entra_no_lote(spec),
+                    "o perfil `{}` cita `{}`, que o lote não aplica",
+                    perfil.id,
+                    id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn perfil_nao_repete_a_mesma_otimizacao() {
         for perfil in PROFILES {
             let unicos: HashSet<&&str> = perfil.optimization_ids.iter().collect();
@@ -245,7 +261,10 @@ mod tests {
 
         // O público que motivou o produto. Se o perfil dele não tiver o que
         // libera memória, ele não serve para nada.
-        for essencial in ["background_apps_off", "visual_effects_performance"] {
+        //
+        // `background_apps_off` era um dos dois essenciais até a 1.9. Saiu de
+        // todo lote na 2.0 (`catalog::FORA_DO_LOTE`) e, com ele, dos perfis.
+        for essencial in ["disable_widgets", "visual_effects_performance"] {
             assert!(fraco.optimization_ids.contains(&essencial));
         }
 

@@ -14,7 +14,6 @@ use super::shell;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -480,64 +479,21 @@ fn saida_do_dism_analyze_component_store() -> Option<String> {
         "Dism",
         &["/Online", "/Cleanup-Image", "/AnalyzeComponentStore"],
     ) {
-        Ok(mut filho) => {
-            let resultado = saida_com_prazo(&mut filho, PRAZO_DO_DISM);
-            // Sem `wait` o processo morto vira zumbi até o Otimiza fechar.
-            let _ = filho.wait();
-            resultado
-        }
+        // `esperar_com_prazo` encerra o DISM ao desistir e sempre espera o
+        // processo — morto ou não —, então não sobra zumbi.
+        Ok(mut filho) => shell::esperar_com_prazo(
+            &mut filho,
+            "Dism /Online /Cleanup-Image /AnalyzeComponentStore",
+            PRAZO_DO_DISM,
+        )
+        .ok()
+        .filter(|saida| saida.success)
+        .map(|saida| saida.stdout),
         Err(_) => None,
     };
 
     lembrar_analise(saida.clone());
     saida
-}
-
-/// Espera a saída de um processo por um prazo — e, se o prazo estourar, MATA o
-/// processo em vez de deixá-lo rodando sozinho.
-///
-/// Recebe o `Child` emprestado (e não por valor) de propósito: assim quem
-/// chamou continua dono do processo e pode conferir, no teste, que ele de fato
-/// morreu. É o que prende o conserto — sem o `kill`, o `try_wait` do teste
-/// ainda encontra o processo vivo.
-///
-/// A leitura roda numa thread à parte porque ler o cano até o fim bloqueia até
-/// o processo terminar; matar o processo fecha o cano, a leitura termina e a
-/// thread morre junto — nada fica pendurado.
-fn saida_com_prazo(filho: &mut std::process::Child, prazo: Duration) -> Option<String> {
-    // Sem cano não há o que esperar — mas o processo está VIVO. Devolver `None`
-    // aqui sem matar seria a única saída da função que não honra o nome dela: o
-    // chamador cai no `filho.wait()` logo depois e trava de 1 a 5 minutos
-    // esperando o DISM inteiro, que é pior que o defeito que este prazo existe
-    // para consertar. Hoje `spawn_capturando` sempre canaliza o stdout, então
-    // este ramo não acontece; o dia em que acontecer, ele mata igual.
-    let cano = match filho.stdout.take() {
-        Some(cano) => cano,
-        None => {
-            let _ = filho.kill();
-            return None;
-        }
-    };
-    let (tx, rx) = mpsc::channel();
-
-    std::thread::spawn(move || {
-        let mut bruto = Vec::new();
-        let lido = std::io::Read::read_to_end(&mut std::io::BufReader::new(cano), &mut bruto);
-        let _ = tx.send(lido.map(|_| String::from_utf8_lossy(&bruto).to_string()));
-    });
-
-    match rx.recv_timeout(prazo) {
-        // A leitura só termina quando o processo fecha o cano, então neste
-        // ponto ele já saiu: `wait` responde na hora e diz se deu certo.
-        Ok(Ok(texto)) => match filho.wait() {
-            Ok(status) if status.success() => Some(texto),
-            _ => None,
-        },
-        _ => {
-            let _ = filho.kill();
-            None
-        }
-    }
 }
 
 /// Quanto o liberador espera pelo DISM antes de desistir e matar.
@@ -774,7 +730,9 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
             .map(|p| directory_size(p))
             .sum();
 
-        shell::run("wsreset.exe", &[])
+        // Prazo próprio: o `wsreset` fecha a Store, limpa e a reabre, e numa
+        // máquina lenta isso passa do minuto padrão.
+        shell::run_com_prazo("wsreset.exe", &[], Duration::from_secs(300))
             .map_err(|_| "Não foi possível limpar o cache da Microsoft Store.".to_string())?;
 
         return Ok(CleanOutcome {
@@ -893,7 +851,12 @@ fn limpar_conteudo(dir: &std::path::Path) -> (u64, usize) {
 /// varre: o Windows tem chamada própria para isso, e usá-la respeita as regras
 /// dele em vez de sair apagando `$Recycle.Bin` na unha.
 pub fn empty_recycle_bin() -> Result<String, String> {
-    shell::powershell_checked("Clear-RecycleBin -Force -ErrorAction Stop")
+    // Prazo próprio: uma lixeira com dezenas de gigabytes em disco mecânico
+    // leva minutos para esvaziar, e o prazo padrão a cortaria no meio.
+    shell::powershell_checked_com_prazo(
+        "Clear-RecycleBin -Force -ErrorAction Stop",
+        Duration::from_secs(600),
+    )
     .map_err(|_| "Não foi possível esvaziar a Lixeira (ela pode já estar vazia).".to_string())?;
 
     Ok("Lixeira esvaziada.".to_string())
@@ -1176,46 +1139,6 @@ A operação foi concluída com êxito.";
                 linha.trim()
             );
         }
-    }
-
-    #[test]
-    fn desistir_de_esperar_mata_o_processo_em_vez_de_deixar_rodando() {
-        // O DEFEITO: o `recv_timeout` devolvia o controle, mas o `Dism.exe`
-        // seguia até o fim — de 1 a 5 minutos de disco e CPU numa máquina que,
-        // por definição, é o "PC fraco" que este produto existe para ajudar. E
-        // como cada clique em "Limpar" refazia a varredura, eles empilhavam.
-        //
-        // `ping -n 30` no lugar do DISM: um processo que demora muito mais que
-        // o prazo, sem precisar de administrador nem mexer no sistema.
-        let mut filho = shell::spawn_capturando("ping", &["-n", "30", "127.0.0.1"])
-            .expect("o ping do Windows sobe");
-
-        let inicio = std::time::Instant::now();
-        let saida = saida_com_prazo(&mut filho, Duration::from_millis(300));
-
-        assert!(saida.is_none(), "o prazo estourou; não podia vir saída");
-        assert!(
-            inicio.elapsed() < Duration::from_secs(10),
-            "não desistiu no prazo: esperou {:?}",
-            inicio.elapsed()
-        );
-
-        // A prova: o processo precisa estar MORTO agora. Sem o `kill`, ele
-        // continuaria vivo aqui pelos ~30 s do ping.
-        let mut morreu = false;
-        for _ in 0..100 {
-            if matches!(filho.try_wait(), Ok(Some(_))) {
-                morreu = true;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        let _ = filho.kill();
-
-        assert!(
-            morreu,
-            "desistimos de esperar e o processo continuou rodando sozinho"
-        );
     }
 
     #[test]

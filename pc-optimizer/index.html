@@ -739,8 +739,9 @@
 
               <p class="hint">
                 "Otimizar agora" aplica só o que é reversível e ainda não está no
-                seu PC. Limpeza de arquivos e o que reduz segurança ficam de fora —
-                essas exigem sua escolha item a item.
+                seu PC. Limpeza de arquivos, o que reduz segurança e desligar os
+                aplicativos em segundo plano ficam de fora — essas exigem sua
+                escolha item a item.
               </p>
 
               <!-- Perfis: a pergunta certa não é "quer otimizar?", é "para que
@@ -2143,6 +2144,38 @@
         <p class="modal-note">
           O Windows vai mostrar o aviso de permissão. Se você recusar, nada é
           alterado no seu PC.
+        </p>
+      </div>
+    </div>
+
+    <!-- Serviços essenciais desligados antes do clique.
+
+         Nasceu do PC do dono, em 10 e 11/09/2026: um Windows "lite" com o Plug
+         and Play, as licenças da Loja e o Gerente de Contas de Segurança
+         desligados, onde clicar em "Otimizar agora" foi seguido de "os
+         programas não abriam". Com esses serviços desligados, programa trava
+         com ou sem otimização, e o cliente precisa saber disso ANTES do
+         clique. Sem fechar ao clicar fora: é uma decisão, não um aviso de
+         passagem. -->
+    <div class="modal" id="essenciais-modal" hidden>
+      <div class="modal-card modal-card-largo" role="dialog" aria-modal="true" aria-labelledby="essenciais-titulo">
+        <h2 id="essenciais-titulo">Serviços essenciais desligados</h2>
+        <p id="essenciais-origem"></p>
+        <ul id="essenciais-lista" class="essenciais-lista"></ul>
+        <p>
+          Com eles desligados, programas podem travar ou não abrir — com ou sem
+          o Otimiza. Otimizar por cima não conserta isso, e o que já estava
+          quebrado passa a parecer efeito da otimização.
+        </p>
+        <div class="modal-actions">
+          <button id="essenciais-religar" class="btn btn-primary">Religar os essenciais</button>
+          <button id="essenciais-mesmo-assim" class="btn">Otimizar mesmo assim</button>
+          <button id="essenciais-cancelar" class="btn">Agora não</button>
+        </div>
+        <p class="modal-note">
+          Religar volta cada um ao tipo de início padrão do Windows e entra no
+          histórico: o "Desfazer" os devolve a desligados. Exige administrador
+          e reiniciar o PC.
         </p>
       </div>
     </div>

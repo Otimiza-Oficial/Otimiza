@@ -145,6 +145,25 @@ pub struct OptimizationSpec {
     pub actions: &'static [Action],
 }
 
+/// Itens que nunca entram num lote — nem no "Otimizar agora", nem num perfil —,
+/// mesmo sendo reversíveis e sem troca de segurança. Continuam disponíveis um a
+/// um, com o aviso na tela.
+///
+/// `background_apps_off` saiu do lote na 2.0. Ele corta a execução em segundo
+/// plano de TODO aplicativo instalado pela Loja, inclusive os que o cliente usa
+/// o dia inteiro. É o tipo de efeito que só aparece dias depois, sem ninguém
+/// ligar ao clique — e decidir isso é do dono do PC, item por item.
+pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
+
+/// Se um item pode ser aplicado por um lote, sem a pessoa escolher item a item.
+///
+/// As três exclusões moram juntas aqui para o motor e os testes lerem a mesma
+/// regra: o que não volta, o que troca segurança por desempenho, e o que está
+/// em `FORA_DO_LOTE`.
+pub fn entra_no_lote(spec: &OptimizationSpec) -> bool {
+    spec.reversible && !spec.security_tradeoff && !FORA_DO_LOTE.contains(&spec.id)
+}
+
 impl OptimizationSpec {
     pub fn to_info(
         &self,
@@ -595,7 +614,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "background_apps_off",
         name: "Desligar aplicativos rodando em segundo plano",
         description: "Impede que aplicativos da Microsoft Store continuem executando quando você não está usando.",
-        honest_effect: "Libera CPU, memória e rede de forma contínua. Em troca, esses aplicativos param de dar notificação e de atualizar sozinhos — Correio, Calendário e Fotos são os mais afetados. Não mexe em programas comuns instalados fora da Store.",
+        honest_effect: "Libera CPU, memória e rede de forma contínua. Em troca, os aplicativos instalados pela Store param de rodar com a janela fechada: deixam de dar notificação e de atualizar sozinhos — Correio, Calendário e Fotos são os mais afetados, e o WhatsApp instalado pela Store pode parar de avisar mensagem nova. Não mexe em programas comuns instalados fora da Store. Por isso não entra no \"Otimizar agora\": só é aplicado escolhendo este item.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
         requires_admin: false,
@@ -1359,6 +1378,38 @@ mod tests {
                 "`{}` promete FPS e está classificado como sem ganho",
                 spec.id
             );
+        }
+    }
+
+    #[test]
+    fn aplicativos_em_segundo_plano_nao_entram_no_lote() {
+        // Na 2.0 este item saiu do "Otimizar agora" e dos perfis: ele corta
+        // aplicativo da Loja que o cliente usa o dia inteiro, e o efeito só
+        // aparece dias depois, sem ligação com o clique.
+        let item = find("background_apps_off").expect("o item continua existindo, um a um");
+
+        assert!(!entra_no_lote(item), "`background_apps_off` voltou a entrar no lote");
+        // Sair do lote não é sair do produto: ele continua reversível e
+        // aplicável sozinho.
+        assert!(item.reversible);
+        assert!(
+            item.honest_effect.contains("não entra no \"Otimizar agora\""),
+            "o texto não diz ao cliente que o item fica fora do lote"
+        );
+    }
+
+    #[test]
+    fn todo_id_fora_do_lote_existe_no_catalogo() {
+        // Um id escrito errado na lista não exclui nada, e em silêncio.
+        for id in FORA_DO_LOTE {
+            assert!(find(id).is_some(), "`{}` está em FORA_DO_LOTE e não existe no catálogo", id);
+        }
+    }
+
+    #[test]
+    fn o_lote_continua_sem_irreversivel_e_sem_troca_de_seguranca() {
+        for spec in CATALOG.iter().filter(|s| !s.reversible || s.security_tradeoff) {
+            assert!(!entra_no_lote(spec), "`{}` entraria no lote", spec.id);
         }
     }
 

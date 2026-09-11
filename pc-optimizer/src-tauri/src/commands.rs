@@ -19,6 +19,8 @@ use crate::modules::windows::restore::RestoreStatus;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::diskspace::{CleanOutcome, DiskReport};
 #[cfg(target_os = "windows")]
+use crate::modules::windows::essenciais::Checagem;
+#[cfg(target_os = "windows")]
 use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::conflicts::ConflictReport;
@@ -1424,9 +1426,14 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
         let path = executable.to_string_lossy().replace('\'', "''");
         let script = format!("Start-Process -FilePath '{}' -Verb RunAs", path);
 
-        crate::modules::windows::shell::run_checked(
+        // Prazo longo de propósito: o `Start-Process -Verb RunAs` só volta
+        // quando a pessoa responde ao aviso do Windows, e encerrar o PowerShell
+        // antes disso deixaria o aviso na tela sem ninguém para abrir o
+        // programa elevado.
+        crate::modules::windows::shell::run_checked_com_prazo(
             "powershell",
             &["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script],
+            std::time::Duration::from_secs(600),
         )
         .map_err(|_| {
             "Você recusou a permissão de administrador. Nada foi alterado.".to_string()
@@ -1874,12 +1881,22 @@ pub async fn optimize_now(
         // falhar — nosso histórico já reverte item por item — mas o cliente é
         // informado do que aconteceu de verdade, inclusive quando não deu.
         if Preferences::load().restore_point_before_batch {
+            let inicio = std::time::Instant::now();
+            crate::utils::Logger::info("ponto de restauração antes do lote: começou");
+
             let (message, success) = match crate::modules::windows::restore::create(
                 "Otimiza - antes de otimizar",
             ) {
                 Ok(message) => (message, true),
                 Err(error) => (error, false),
             };
+
+            crate::utils::Logger::info(&format!(
+                "ponto de restauração antes do lote: {} em {} ms — {}",
+                if success { "criado" } else { "não criado" },
+                inicio.elapsed().as_millis(),
+                message
+            ));
 
             let _ = app.emit(
                 "optimize:step",
@@ -1931,6 +1948,67 @@ pub async fn revert_all_optimizations(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (app, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Confere se o Windows veio com serviços essenciais desativados.
+///
+/// Só leitura. A tela chama antes do "Otimizar agora" e de um perfil: com esses
+/// serviços desligados, programa trava ou não abre com ou sem otimização, e o
+/// cliente precisa saber disso antes do clique. Ver `essenciais.rs`.
+#[tauri::command]
+pub async fn checar_essenciais() -> Result<Checagem, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let checagem = tokio::task::spawn_blocking(crate::modules::windows::essenciais::checar)
+            .await
+            .map_err(|e| format!("Falha ao conferir os serviços essenciais: {}", e))?;
+
+        // No registro também: se o lote que vier depois travar, a checagem que
+        // o precedeu fica escrita logo acima.
+        let desativados: Vec<&str> = checagem
+            .servicos
+            .iter()
+            .filter(|s| s.inicio == crate::modules::windows::essenciais::Inicio::Desativado)
+            .map(|s| s.servico)
+            .collect();
+        crate::utils::Logger::info(&format!(
+            "essenciais: {} desativado(s){}{} — fabricante {:?}, modelo {:?}",
+            desativados.len(),
+            if desativados.is_empty() { "" } else { ": " },
+            desativados.join(", "),
+            checagem.fabricante,
+            checagem.modelo
+        ));
+
+        Ok(checagem)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Religa os serviços essenciais que estão desativados, cada um no tipo
+/// de início padrão do Windows.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador. Entra no histórico, e o
+/// "Desfazer" os devolve a desligados.
+#[tauri::command]
+pub async fn religar_essenciais(state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().religar_essenciais(&mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -2624,6 +2702,7 @@ mod tests {
         "reparo_cancelar",
         "relatorio_de_suporte",
         "versao_mais_nova",
+        "checar_essenciais",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
@@ -2652,6 +2731,7 @@ mod tests {
         "optimize_now",
         "set_max_refresh_rate",
         "reparo_executar",
+        "religar_essenciais",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as
