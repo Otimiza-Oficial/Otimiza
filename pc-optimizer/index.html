@@ -1448,6 +1448,44 @@
 
             <p class="panel-note" id="nvdriver-nota"></p>
             <div id="nvdriver-lista"></div>
+
+            <!--
+              O LIMITE DE FPS FICA NO PERFIL DO JOGO, NUNCA NO GLOBAL.
+
+              Um limite global prenderia a área de trabalho e todo outro jogo no
+              mesmo número. O executável é o do jogo aberto, pelo mesmo detector
+              de quatro sinais da prova de FPS: pedir o nome do arquivo à pessoa
+              seria fazê-la adivinhar "FiveM_b3258_GTAProcess.exe".
+            -->
+            <div class="nvlimite" id="nvlimite" hidden>
+              <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
+              <p class="panel-note" id="nvlimite-nota">
+                Com o jogo aberto, escolha o limite e clique em Limitar. Em RP,
+                quadro estável é sentido como fluidez e a placa trabalha menos;
+                em jogo competitivo, limitar acrescenta atraso.
+              </p>
+              <div id="nvlimite-lista"></div>
+              <div class="row-actions">
+                <div class="pref-choices" id="nvlimite-fps">
+                  <button class="filter" data-fps="30">30</button>
+                  <button class="filter" data-fps="45">45</button>
+                  <button class="filter" data-fps="60">60</button>
+                  <button class="filter" data-fps="75">75</button>
+                  <button class="filter" data-fps="90">90</button>
+                  <button class="filter" data-fps="120">120</button>
+                  <button class="filter" data-fps="144">144</button>
+                  <button class="filter" data-fps="165">165</button>
+                  <button class="filter" data-fps="240">240</button>
+                </div>
+                <button id="nvlimite-aplicar" class="btn btn-small">Limitar o jogo aberto</button>
+              </div>
+              <p class="hint">
+                O limite fica amarrado ao executável do jogo. O FiveM troca o nome
+                do executável quando o servidor exige outra versão do jogo; nesse
+                caso, limite de novo com o jogo aberto.
+              </p>
+            </div>
+
             <p class="hint" id="nvdriver-rodape" hidden>
               Cada ajuste vale para todos os jogos e passa a valer na próxima vez
               que o jogo abrir. O driver só salva com permissão de administrador.

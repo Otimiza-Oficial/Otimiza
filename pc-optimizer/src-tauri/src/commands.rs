@@ -622,20 +622,41 @@ pub async fn set_gpu_preference(
 pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<PainelDoDriver, String> {
     #[cfg(target_os = "windows")]
     {
-        // Os ids aplicados saem antes da chamada ao driver, e a trava do
+        use crate::modules::changelog::ChangeRecord;
+        use crate::modules::windows::nvdriver::LimiteNaTela;
+
+        // O que o histórico sabe sai antes da chamada ao driver, e a trava do
         // histórico é solta aqui mesmo: carregar a DLL não pode prender quem
         // quer aplicar ou desfazer outra coisa.
-        let aplicados: Vec<String> = state
-            .changes
-            .lock()
-            .await
-            .applied()
-            .iter()
-            .map(|entrada| entrada.optimization_id.clone())
-            .collect();
+        let (aplicados, limites) = {
+            let log = state.changes.lock().await;
+
+            let aplicados: Vec<String> = log
+                .applied()
+                .iter()
+                .map(|entrada| entrada.optimization_id.clone())
+                .collect();
+
+            let limites: Vec<LimiteNaTela> = log
+                .applied()
+                .iter()
+                .flat_map(|entrada| {
+                    entrada.changes.iter().filter_map(move |mudanca| match mudanca {
+                        ChangeRecord::LimiteNvidia { executavel, fps, .. } => Some(LimiteNaTela {
+                            executavel: executavel.clone(),
+                            fps: *fps,
+                            historico: entrada.optimization_id.clone(),
+                        }),
+                        _ => None,
+                    })
+                })
+                .collect();
+
+            (aplicados, limites)
+        };
 
         tokio::task::spawn_blocking(move || {
-            crate::modules::windows::nvdriver::painel(|id| aplicados.iter().any(|a| a == id))
+            crate::modules::windows::nvdriver::painel(|id| aplicados.iter().any(|a| a == id), limites)
         })
         .await
         .map_err(|e| format!("Falha ao ler o driver da NVIDIA: {}", e))
@@ -668,6 +689,32 @@ pub async fn aplicar_ajuste_nvidia(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (opcao, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: Limita os quadros por segundo de um jogo, no perfil do executável
+/// dele no driver da NVIDIA.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador. O desfazer é o
+/// `revert_optimization`, com o id que o painel recebe pronto.
+#[tauri::command]
+pub async fn limitar_fps_nvidia(
+    executavel: String,
+    fps: u32,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(&executavel, fps, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (executavel, fps, state);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -2798,6 +2845,7 @@ mod tests {
         "reparo_executar",
         "religar_essenciais",
         "aplicar_ajuste_nvidia",
+        "limitar_fps_nvidia",
     ];
 
     /// Só a parte de produção do arquivo. O código de teste também contém as

@@ -1089,6 +1089,46 @@ hora: mudança no driver sem registro é mudança sem volta pelo Otimiza.
 driver e exigem administrador, e nenhum teste desta suíte pode escrever no
 driver. O caminho de escrita é o mesmo que o desfazer já usava desde a 1.9.
 
+### Limite de FPS por jogo, no perfil do executável (E.3)
+
+`FRL_FPS_ID` (`0x10835002`, de 1 a 1023) é escrito **só no perfil de um jogo,
+nunca no global**: um limite global prenderia a área de trabalho e todo outro
+jogo no mesmo número. O executável é o do jogo aberto, pelo detector de quatro
+sinais da prova de FPS.
+
+- Se o driver já amarra o executável a um perfil (às vezes criado pela NVIDIA),
+  o limite vai nele e o valor anterior é guardado. Se não, o Otimiza cria o
+  perfil "Otimiza - <executável>" e liga o executável a ele.
+- **Nada fica pela metade:** criar perfil, ligar o executável e escrever o
+  limite acontecem numa sessão da DRS que só é salva no fim. Qualquer falha
+  descarta tudo.
+- **Desfazer:** perfil criado pelo Otimiza é achado pelo nome e apagado inteiro
+  — nenhum perfil com outro nome é apagado; perfil que já existia só tem o
+  limite devolvido.
+
+**Os números das cinco funções novas** (achar aplicativo, criar aplicativo,
+criar, achar e apagar perfil) não têm portão de nome como os ajustes: um número
+errado chamaria outra função. Foram conferidos em três tabelas independentes
+(wiki do nvapi.net, lista do jNizM, `FunctionId.cs` do NvAPIWrapper), que também
+batem com os onze números já confirmados pelo driver. As estruturas
+(`NVDRS_APPLICATION_V3`, `NVDRS_PROFILE_V1`) seguem a documentação da NVIDIA, com
+teste de tamanho (`as_estruturas_de_perfil_tem_o_tamanho_que_o_driver_espera`).
+
+**Conferido nesta máquina, sem escrever:** o driver da GTX 1650 chama o
+`0x10835002` de `frame rate limiter`.
+
+**Travas:** executável e faixa validados antes de abrir a sessão, com trava da
+ordem no código (`os_portoes_do_limitador_vem_antes_da_sessao`); os dois caminhos
+conferem o número do limitador (`o_limitador_confere_o_numero_nos_dois_caminhos`).
+
+**Uma limitação, dita na tela:** o FiveM troca o nome do executável quando o
+servidor exige outra versão do jogo (`FiveM_b3258_GTAProcess.exe`), e o limite
+fica no nome antigo — é preciso limitar de novo com o jogo aberto.
+
+**Não visto funcionando:** criar o perfil, aplicar o limite e desfazer. Escrevem
+no driver, e o primeiro teste de verdade é com o dono, o FiveM aberto e o
+Otimiza como administrador.
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

@@ -1432,6 +1432,26 @@ button {
   color: var(--text);
 }
 
+/* O limite de FPS por jogo mora dentro do painel do driver, separado dos
+   ajustes globais por uma linha: são dois alcances diferentes — todos os jogos
+   e um jogo só — e a diferença precisa ser visível. */
+.nvlimite {
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--hairline);
+}
+
+.nvlimite-titulo {
+  font-size: var(--t-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: var(--s2);
+}
+
+.nvlimite .pref-choices {
+  flex-wrap: wrap;
+}
+
 .statusbar-brand {
   display: flex;
   align-items: center;

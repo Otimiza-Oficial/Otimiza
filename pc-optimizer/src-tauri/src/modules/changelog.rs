@@ -138,6 +138,20 @@ pub enum ChangeRecord {
         /// que existia antes era o padrão de fábrica.
         valor_anterior: String,
     },
+
+    /// O limite de quadros de UM jogo, no perfil do executável dele no driver
+    /// da NVIDIA.
+    ///
+    /// `perfil_criado` decide o desfazer: o perfil que o Otimiza criou é
+    /// apagado inteiro, achado pelo nome que só o Otimiza usa; o perfil que já
+    /// existia só tem o limite devolvido ao que era.
+    LimiteNvidia {
+        executavel: String,
+        fps: u32,
+        perfil_criado: bool,
+        /// Como no `DriverNvidia`: um número, ou `nvdriver::ANTERIOR_PADRAO`.
+        valor_anterior: String,
+    },
 }
 
 impl ChangeRecord {
@@ -195,6 +209,26 @@ impl ChangeRecord {
                     "o padrão do driver".to_string()
                 } else {
                     valor_anterior.clone()
+                }
+            ),
+            ChangeRecord::LimiteNvidia {
+                executavel,
+                fps,
+                perfil_criado,
+                valor_anterior,
+            } => format!(
+                "driver NVIDIA · {} limitado a {} FPS ({})",
+                executavel,
+                fps,
+                if *perfil_criado {
+                    "perfil criado pelo Otimiza".to_string()
+                } else if valor_anterior == crate::modules::windows::nvdriver::ANTERIOR_PADRAO
+                    || valor_anterior == "0"
+                {
+                    // 0 é o limitador desligado no driver.
+                    "antes: sem limite".to_string()
+                } else {
+                    format!("antes: {} FPS", valor_anterior)
                 }
             ),
             ChangeRecord::GameConfig { jogo, anterior, .. } => format!(

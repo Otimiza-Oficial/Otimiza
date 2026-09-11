@@ -168,6 +168,7 @@ pub fn run() {
             commands::religar_essenciais,
             commands::ajustes_do_driver_nvidia,
             commands::aplicar_ajuste_nvidia,
+            commands::limitar_fps_nvidia,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,

@@ -822,6 +822,75 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Limita os quadros por segundo de um jogo, no perfil do executável dele no
+    /// driver da NVIDIA.
+    ///
+    /// NUNCA NO PERFIL GLOBAL: um limite global prenderia a área de trabalho e
+    /// todo outro jogo no mesmo número. Trocar o número de um jogo já limitado
+    /// desfaz o limite anterior primeiro — senão o histórico guardaria como
+    /// "anterior" o limite que nós mesmos pusemos.
+    pub fn limitar_fps_nvidia(
+        &self,
+        executavel: &str,
+        fps: u32,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = nvdriver::id_do_limite(executavel);
+
+        if log.is_applied(&id) {
+            self.revert(&id, log)?;
+        }
+
+        crate::utils::Logger::info(&format!(
+            "limite NVIDIA `{}`: {} FPS",
+            executavel, fps
+        ));
+        let feito = nvdriver::aplicar_limite(executavel, fps)?;
+
+        let change = ChangeRecord::LimiteNvidia {
+            executavel: executavel.to_string(),
+            fps,
+            perfil_criado: feito.perfil_criado,
+            valor_anterior: feito.valor_anterior,
+        };
+        let described = change.describe();
+
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} limitado a {} FPS (driver NVIDIA)", executavel, fps),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            crate::utils::Logger::warn(&format!(
+                "limite NVIDIA `{}`: histórico não gravou ({}); desfazendo",
+                executavel, erro
+            ));
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!(
+                    "{} E não consegui tirar o limite que acabei de pôr: {}",
+                    erro,
+                    falhas.join("; ")
+                ));
+            }
+            return Err(erro);
+        }
+
+        Ok(OptimizationOutcome {
+            id,
+            name: executavel.to_string(),
+            success: true,
+            applied: true,
+            message: format!(
+                "`{}` limitado a {} quadros por segundo, no perfil dele no driver. Vale na \
+                 próxima vez que o jogo abrir.",
+                executavel, fps
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+        })
+    }
+
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
@@ -1770,6 +1839,16 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 opcao,
                 valor_anterior,
             } => nvdriver::desfazer(opcao, valor_anterior),
+
+            // O limite de um jogo. Perfil criado pelo Otimiza é apagado
+            // inteiro; perfil que já existia só tem o limite devolvido — quem
+            // separa os dois é o `nvdriver::desfazer_limite`.
+            ChangeRecord::LimiteNvidia {
+                executavel,
+                perfil_criado,
+                valor_anterior,
+                ..
+            } => nvdriver::desfazer_limite(executavel, *perfil_criado, valor_anterior),
 
             // O arquivo do jogo volta INTEIRO ao que era.
             //

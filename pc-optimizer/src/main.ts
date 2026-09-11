@@ -5833,10 +5833,120 @@ interface AjusteDoDriver {
   aplicado: boolean;
 }
 
+interface LimiteDoDriver {
+  executavel: string;
+  fps: number;
+  /** O id no histórico, pronto: é o que o Desfazer deste limite recebe. */
+  historico: string;
+}
+
 interface PainelDoDriver {
   estado: EstadoDaNvapi;
   nota: string;
   ajustes: AjusteDoDriver[];
+  /** Os limites por jogo que o Otimiza aplicou e ainda não desfez. */
+  limites: LimiteDoDriver[];
+}
+
+/** O limite escolhido nos botões. 60 é o ponto de partida: todo monitor mostra 60. */
+let limiteDeFpsEscolhido = 60;
+
+function marcarLimiteEscolhido() {
+  document.querySelectorAll<HTMLButtonElement>("#nvlimite-fps [data-fps]").forEach((botao) => {
+    botao.setAttribute("aria-pressed", String(Number(botao.dataset.fps) === limiteDeFpsEscolhido));
+  });
+}
+
+function desenharLimitesDoDriver(limites: LimiteDoDriver[]) {
+  const lista = element("nvlimite-lista");
+
+  lista.innerHTML = limites
+    .map(
+      (limite, indice) => `
+        <div class="gpupref-linha" data-fraca="false">
+          <div class="gpupref-jogo">
+            <span class="gpupref-nome">${escapeHtml(limite.executavel)}</span>
+            <span class="gpupref-estado">limitado a ${limite.fps} FPS</span>
+          </div>
+          <button class="btn btn-small" data-nvlimite="${indice}">Desfazer</button>
+        </div>`
+    )
+    .join("");
+
+  lista.querySelectorAll<HTMLButtonElement>("[data-nvlimite]").forEach((botao) => {
+    const limite = limites[Number(botao.dataset.nvlimite)];
+    if (!limite) return;
+
+    botao.onclick = async () => {
+      if (!isElevated) {
+        askForAdmin(
+          "O driver da NVIDIA só salva ajustes com permissão de administrador. " +
+            "Podemos reabrir o Otimiza com essa permissão?"
+        );
+        return;
+      }
+
+      botao.disabled = true;
+      botao.textContent = "Desfazendo…";
+
+      try {
+        const resultado = await invoke<OptimizationOutcome>("revert_optimization", {
+          id: limite.historico,
+        });
+        text("nvlimite-nota", resultado.message);
+        await carregarAjustesDoDriver();
+      } catch (error) {
+        text("nvlimite-nota", String(error));
+        botao.disabled = false;
+        botao.textContent = "Desfazer";
+      }
+    };
+  });
+}
+
+async function limitarJogoAberto() {
+  const botao = element<HTMLButtonElement>("nvlimite-aplicar");
+
+  let executavel: string | null = null;
+  try {
+    executavel = await invoke<string | null>("running_game_executable");
+  } catch {
+    executavel = null;
+  }
+
+  if (!executavel) {
+    text(
+      "nvlimite-nota",
+      "Não encontrei jogo aberto. Abra o jogo, volte aqui e clique em Limitar: o limite " +
+        "vai no perfil do executável que estiver rodando."
+    );
+    return;
+  }
+
+  if (!isElevated) {
+    askForAdmin(
+      "O driver da NVIDIA só salva ajustes com permissão de administrador. " +
+        "Podemos reabrir o Otimiza com essa permissão?"
+    );
+    return;
+  }
+
+  botao.disabled = true;
+  botao.textContent = "Limitando…";
+
+  try {
+    const resultado = await invoke<OptimizationOutcome>("limitar_fps_nvidia", {
+      executavel,
+      fps: limiteDeFpsEscolhido,
+    });
+    text("nvlimite-nota", resultado.message);
+    await carregarAjustesDoDriver();
+  } catch (error) {
+    text("nvlimite-nota", String(error));
+  } finally {
+    botao.disabled = false;
+    botao.textContent = "Limitar o jogo aberto";
+  }
 }
 
 const NA_TAG_DA_NVAPI: Record<EstadoDaNvapi, string> = {
@@ -5866,6 +5976,7 @@ async function carregarAjustesDoDriver() {
     text("nvdriver-nota", String(error));
     lista.innerHTML = "";
     rodape.hidden = true;
+    element("nvlimite").hidden = true;
     return;
   }
 
@@ -5875,11 +5986,14 @@ async function carregarAjustesDoDriver() {
 
   const disponivel = dados.estado === "Disponivel";
   rodape.hidden = !disponivel;
+  element("nvlimite").hidden = !disponivel;
 
   if (!disponivel) {
     lista.innerHTML = "";
     return;
   }
+
+  desenharLimitesDoDriver(dados.limites);
 
   lista.innerHTML = dados.ajustes
     .map(
@@ -6562,6 +6676,16 @@ function wireControls() {
   void carregarPlaca();
   void carregarPreferenciaDeGpu();
   void carregarAjustesDoDriver();
+
+  element("nvlimite-fps").addEventListener("click", (event) => {
+    const botao = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-fps]");
+    if (!botao) return;
+
+    limiteDeFpsEscolhido = Number(botao.dataset.fps);
+    marcarLimiteEscolhido();
+  });
+  element("nvlimite-aplicar").addEventListener("click", limitarJogoAberto);
+  marcarLimiteEscolhido();
   void carregarMemoria();
   void carregarMonitores();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
