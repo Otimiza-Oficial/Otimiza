@@ -42,8 +42,6 @@ interface Preferences {
   auto_game_mode: boolean;
   metrics_interval_seconds: number;
   show_unavailable: boolean;
-  /** Se a pessoa já viu a tela que explica que o modo jogo congela programas. */
-  game_mode_avisado: boolean;
 }
 
 interface RestorePoint {
@@ -321,7 +319,6 @@ let preferences: Preferences = {
   auto_game_mode: false,
   metrics_interval_seconds: 2,
   show_unavailable: true,
-  game_mode_avisado: false,
 };
 /** Handle do laço de medição, para poder trocar o intervalo sem recarregar. */
 let metricsTimer: number | null = null;
@@ -877,17 +874,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     setStatus("gamemode-status", evento.payload, "ok");
     void loadGameMode();
     void loadOptimizations();
-    // O vigia é quem suspende e devolve programas em segundo plano; é ele
-    // quem sabe quando o bloco precisa aparecer ou sumir sozinho.
-    void carregarCongelados();
   });
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
 
-  // Depois das preferências carregadas, porque a decisão de mostrar depende
-  // dos dois campos que acabaram de chegar do backend.
-  checarReconsentimentoDoModoJogo();
 
   await Promise.all([
     loadIdentity(),
@@ -2303,132 +2294,6 @@ async function setGameMode(active: boolean) {
   } finally {
     botoes.forEach((b) => (b.disabled = false));
     await loadGameMode();
-    // Ligar ou desligar o modo jogo pode ter devolvido tudo que estava
-    // congelado (desligar sempre devolve), então o bloco precisa acompanhar
-    // sem esperar o próximo evento do vigia.
-    await carregarCongelados();
-  }
-}
-
-// ------------------------------------------- reconsentimento do modo jogo
-
-/**
- * Mostra, uma única vez, o que o modo jogo automático realmente faz —
- * congela programas em segundo plano — para quem ligou a opção antes de o
- * texto explicar isso (o texto mudou na 1.1.2; quem ligou antes nunca leu a
- * versão nova). Sem isso, a primeira notícia que essa pessoa tem é abrir o
- * Gerenciador de Tarefas e ver "Suspenso" ao lado do Discord.
- *
- * As duas condições precisam se encontrar: `auto_game_mode` ligado E
- * `game_mode_avisado` ainda desligado. Instalação nova nunca bate as duas —
- * `auto_game_mode` já nasce desligado — então a tela nunca aparece nela.
- */
-function checarReconsentimentoDoModoJogo() {
-  if (preferences.auto_game_mode && !preferences.game_mode_avisado) {
-    element("gamemode-reconsent-modal").hidden = false;
-    element<HTMLButtonElement>("reconsent-manter").focus();
-  }
-}
-
-function fecharReconsentimentoDoModoJogo() {
-  element("gamemode-reconsent-modal").hidden = true;
-}
-
-/** "Manter": a opção continua ligada, só registra que a pessoa já viu o aviso. */
-async function reconsentirMantendo() {
-  await savePreferences({ game_mode_avisado: true });
-  fecharReconsentimentoDoModoJogo();
-}
-
-/**
- * "Desligar": desliga a opção e devolve, agora, qualquer programa que esteja
- * congelado neste exato momento — sem isso a pessoa desligaria o modo jogo e
- * o Discord continuaria "Suspenso" até o jogo fechar sozinho, o que
- * contradiz o próprio botão que ela acabou de apertar. Reaproveita
- * `descongelar_agora`, o mesmo comando do botão "Descongelar agora" da aba
- * Sistema — é o único caminho do produto que já faz exatamente isso.
- */
-async function reconsentirDesligando() {
-  await savePreferences({ auto_game_mode: false, game_mode_avisado: true });
-
-  try {
-    await invoke<number>("descongelar_agora");
-  } catch {
-    // Sem backend (ou nada congelado) a tela segue utilizável; o painel de
-    // congelados abaixo reflete o estado real de qualquer jeito.
-  }
-
-  await loadGameMode();
-  await carregarCongelados();
-  fecharReconsentimentoDoModoJogo();
-}
-
-// ---------------------------------------------- congelados pelo modo jogo
-
-interface Congelado {
-  pid: number;
-  nome: string;
-  visivel: string;
-  inicio: number;
-}
-
-/**
- * Mostra o que está congelado agora, e some sozinho quando não há nada.
- *
- * Existe porque um cliente abriu o Gerenciador de Tarefas, viu "Steam —
- * Suspenso", depois Discord, depois Chrome — e a tela do Otimiza não
- * mostrava nada disso e não tinha botão nenhum. Ele concluiu que o produto
- * tinha quebrado a máquina dele; não estava errado. Segue o mesmo padrão de
- * `carregarMonitores`: busca, e o próprio resultado decide se o bloco
- * aparece.
- */
-async function carregarCongelados() {
-  const bloco = element("congelados");
-  const lista = element("congelados-lista");
-
-  try {
-    const congelados = await invoke<Congelado[]>("congelados_agora");
-
-    // Nada congelado é o caso comum — o jogo nem sempre está aberto, e
-    // muitos jogos não têm nada para suspender. Um bloco vazio permanente é
-    // ruído, e ruído é o que faz o cliente parar de ler a tela.
-    bloco.hidden = congelados.length === 0;
-
-    if (congelados.length === 0) {
-      return;
-    }
-
-    lista.innerHTML = congelados
-      .map((c) => `<li class="congelados-item">${escapeHtml(c.visivel)}</li>`)
-      .join("");
-  } catch {
-    // Sem backend o painel continua utilizável; o bloco só não aparece.
-    bloco.hidden = true;
-  }
-}
-
-/**
- * Descongela tudo agora, sem esperar o jogo fechar e sem mexer no plano de
- * energia — descongelar não é a mesma coisa que desligar o modo jogo.
- */
-async function descongelarAgora() {
-  const botao = element<HTMLButtonElement>("descongelar-agora");
-  botao.disabled = true;
-
-  try {
-    const quantos = await invoke<number>("descongelar_agora");
-    setStatus(
-      "gamemode-status",
-      quantos > 0
-        ? `Descongelei ${quantos} programa${quantos === 1 ? "" : "s"}.`
-        : "Não havia nada congelado.",
-      "ok"
-    );
-  } catch (error) {
-    setStatus("gamemode-status", String(error), "error");
-  } finally {
-    botao.disabled = false;
-    await carregarCongelados();
   }
 }
 
@@ -4869,10 +4734,11 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
     const rotulo = botao.textContent?.trim();
     const painel = botao.closest<HTMLElement>(".tab-panel");
 
-    // `botao.hidden` sozinho só vê o próprio atributo do botão — o bloco de
-    // congelados esconde por um `hidden` no DIV que envolve o botão
-    // (`#congelados`), não no botão em si, então "Descongelar agora" passava
-    // ileso mesmo sem nada congelado. A correção é subir do botão pelos
+    // `botao.hidden` sozinho só vê o próprio atributo do botão — um bloco que
+    // se esconde por um `hidden` no DIV que envolve o botão, e não no botão em
+    // si, deixava o botão passar ileso para a paleta mesmo invisível. (O caso
+    // que revelou isso foi o bloco de congelados, que saiu na 2.0 junto com o
+    // congelamento.) A correção é subir do botão pelos
     // ancestrais procurando `hidden` — mas PARAR ao chegar no painel: o
     // painel inteiro fica `hidden` sempre que a aba não é a ativa (ver
     // `showTab`), e isso é normal, não um botão escondido dentro de uma aba
@@ -6371,7 +6237,6 @@ function wireControls() {
   void carregarPreferenciaDeGpu();
   void carregarMemoria();
   void carregarMonitores();
-  void carregarCongelados();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
@@ -6443,7 +6308,6 @@ function wireControls() {
   });
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
-  element("descongelar-agora").addEventListener("click", () => descongelarAgora());
   element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
@@ -6706,13 +6570,6 @@ function wireControls() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") closeAdminModal();
   });
-
-  // Reconsentimento do modo jogo. Sem botão "fechar" nem clique fora: as
-  // únicas duas saídas são "Manter" e "Desligar" — ambas gravam que a
-  // pessoa já viu, então não existe um terceiro caminho que deixaria a tela
-  // reaparecendo sem registrar nada.
-  element("reconsent-manter").addEventListener("click", reconsentirMantendo);
-  element("reconsent-desligar").addEventListener("click", reconsentirDesligando);
 
   element("startup-list").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(

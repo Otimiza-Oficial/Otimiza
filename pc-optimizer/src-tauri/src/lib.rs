@@ -171,8 +171,6 @@ pub fn run() {
             commands::reparo_ultimo_resultado,
             commands::reparo_executar,
             commands::reparo_cancelar,
-            commands::congelados_agora,
-            commands::descongelar_agora,
             commands::relatorio_de_suporte,
             commands::versao_mais_nova,
         ])
@@ -241,16 +239,22 @@ pub fn run() {
             // PRIMEIRA REDE DE SEGURANÇA DA SUSPENSÃO — antes de qualquer outra
             // coisa.
             //
-            // O modo jogo suspende Discord, navegador e afins para devolver
-            // memória ao jogo, e os devolve quando o jogo fecha. Se o Otimiza
-            // morrer no meio disso — travamento, fechamento à força, queda de
-            // energia — esses programas ficariam congelados até o cliente
-            // reiniciar o PC, sem qualquer pista do motivo.
+            // A 2.0 TIROU O CONGELAMENTO DO PRODUTO, E ESTA CHAMADA FICA DE
+            // PROPÓSITO.
             //
-            // Os identificadores vão para disco ANTES de a primeira thread ser
-            // suspensa. Esta chamada é o outro lado dessa garantia, e por isso
-            // roda de forma síncrona, na frente de tudo: um Discord congelado
-            // por nossa causa é um defeito pior do que o que viemos resolver.
+            // Até a 1.9, o modo jogo automático suspendia Discord, navegador e
+            // afins durante a partida. Foi a opção que mais machucou cliente: na
+            // 1.1.1 quebrou o Explorador ("clicar na barra de tarefas não abre
+            // nada"), na 1.1.2 congelou a Steam, e o relatório de suporte nasceu
+            // de alguém dizendo que os programas não abriam mais. O ganho de
+            // memória nunca pagou isso, e a opção saiu.
+            //
+            // Mas quem atualiza de uma versão antiga pode chegar com programas
+            // registrados como suspensos no disco — o Otimiza velho morreu no
+            // meio de uma partida, por exemplo. Esta chamada devolve esses
+            // programas na primeira abertura da versão nova, antes de tudo. Com
+            // o registro vazio, que é o caso de todo mundo daqui para frente,
+            // ela não faz nada.
             #[cfg(target_os = "windows")]
             {
                 let devolvidos = modules::windows::suspend::retomar_pendentes();
@@ -318,12 +322,8 @@ pub fn run() {
                             utils::Logger::info(&mensagem);
 
                             // A tela só sabe que algo foi devolvido através deste
-                            // evento — é o mesmo que o vigia normal emite ao
-                            // suspender e ao devolver. Sem ele aqui, o bloco de
-                            // congelados continuaria mostrando um programa que já
-                            // voltou até algum OUTRO evento forçar a atualização:
-                            // a própria tela mentindo sobre o estado que ela existe
-                            // para mostrar direito. Só entra neste `if` — emitir a
+                            // evento — o mesmo que o vigia emite quando o modo
+                            // jogo liga ou desliga. Só entra neste `if`: emitir a
                             // cada seis segundos sem nada ter mudado faria a tela
                             // recarregar à toa o tempo todo.
                             let _ = handle.emit("gamemode:changed", mensagem);

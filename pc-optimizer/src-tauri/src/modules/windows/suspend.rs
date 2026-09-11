@@ -1,32 +1,35 @@
-// Suspender o que está em segundo plano durante o jogo
+// Devolver o que versões antigas deixaram suspenso
 //
-// POR QUE ISTO EXISTE, E POR QUE NÃO É "FECHAR PROGRAMAS"
+// ESTE MÓDULO NÃO CONGELA MAIS NADA, E O MOTIVO FICA ESCRITO AQUI.
 //
-// A queixa que originou este módulo: com o FiveM aberto, o PC inteiro trava —
-// o jogo, o Discord, o navegador, tudo junto. Isso não é FPS baixo; FPS baixo
-// trava o jogo e deixa o resto fluido. Travar tudo junto é memória acabando.
+// Até a 1.9, o modo jogo automático suspendia Discord, navegador e afins
+// durante a partida, para devolver memória ao jogo. A ideia era melhor que a
+// do mercado — suspender em vez de matar, nada se perdia —, e mesmo assim foi
+// a opção que mais machucou cliente:
 //
-// Todo "otimizador" do mercado responde a isso MATANDO processos. O Otimiza
-// não faz isso e não vai fazer: matar o Discord no meio de uma conversa, ou o
-// navegador com quinze abas de trabalho, é a forma mais rápida de o cliente
-// perder coisa que não dá para recuperar. Já recusamos essa ideia quatro vezes
-// neste projeto, e a recusa continua.
+//   - 1.1.1: um programa suspenso não responde ao aviso de desligamento, o
+//     Windows não descarrega o perfil direito, e no login seguinte o
+//     Explorador e a barra de tarefas não abriam nada;
+//   - 1.1.2: a Steam congelada não abria jogo, não baixava, não respondia;
+//   - e o relatório de suporte (`suporte.rs`) nasceu de um cliente pagante
+//     dizendo que os programas não abriam mais.
 //
-// Suspender é diferente. O processo para de consumir CPU e suas páginas viram
-// candidatas preferenciais a sair da memória física para a paginação — que é
-// exatamente o que queremos, porque a RAM liberada vai para o jogo. Quando o
-// jogo fecha, o processo volta do ponto em que estava. Nada se perde.
+// Cada incidente ganhou uma rede de segurança, e as redes funcionavam. Mas um
+// produto que precisa de quatro redes para não quebrar o PC de quem comprou
+// está pagando caro demais por memória que o cliente nem vê. Na 2.0 a opção
+// saiu inteira: não existe mais caminho no produto que suspenda uma thread. A
+// trava `o_produto_nao_congela_mais_nenhum_programa`, nos testes abaixo,
+// reprova o build se esse caminho voltar.
 //
-// O RISCO, E COMO ELE É COBERTO
+// O QUE FICOU, E POR QUÊ
 //
-// Se o Otimiza morrer com processos suspensos, eles ficam suspensos até o
-// cliente reiniciar o PC — e ele não vai saber por quê. Um Discord congelado
-// para sempre é um defeito pior do que o problema que viemos resolver.
-//
-// Por isso os PIDs suspensos vão para disco ANTES de a primeira thread ser
-// suspensa, e `retomar_pendentes()` roda na abertura do programa, antes de
-// qualquer outra coisa. Queda de energia, travamento, fechamento à força: em
-// todos os casos a próxima abertura devolve os processos.
+// Só a metade que DEVOLVE. Quem atualiza de uma versão antiga pode chegar com
+// programas registrados como suspensos em disco — o Otimiza velho morreu no
+// meio de uma partida, faltou energia. `retomar_pendentes()` roda na primeira
+// abertura, antes de tudo, e devolve esses programas. As outras redes (fechar
+// o Otimiza, fim de sessão do Windows, prazo de dez minutos) ficam também:
+// com o registro vazio, que é o caso de todo mundo daqui para frente, nenhuma
+// delas faz nada.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -34,97 +37,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
-
-/// Programas que faz sentido suspender durante o jogo.
-///
-/// A lista é explícita e curta de propósito. Suspender "tudo que não é o jogo"
-/// é como se congela o áudio, o antivírus ou o próprio Windows — e a diferença
-/// entre um otimizador e um problema é justamente esta lista.
-///
-/// Os nomes são comparados em minúsculas, por conter.
-pub const SUSPENSIVEIS: &[(&str, &str)] = &[
-    ("discord.exe", "Discord"),
-    ("chrome.exe", "Google Chrome"),
-    ("msedge.exe", "Microsoft Edge"),
-    ("firefox.exe", "Firefox"),
-    ("opera.exe", "Opera"),
-    ("brave.exe", "Brave"),
-    ("arc.exe", "Arc"),
-    // OS LANÇADORES SAÍRAM DAQUI. Ver `LANCADORES` e `pode_suspender`.
-    ("spotify.exe", "Spotify"),
-    ("slack.exe", "Slack"),
-    ("teams.exe", "Microsoft Teams"),
-    ("whatsapp.exe", "WhatsApp"),
-    ("telegram.exe", "Telegram"),
-];
-
-/// Nunca, em hipótese alguma.
-///
-/// Não é uma lista de "melhor não": é uma lista de coisas que, suspensas,
-/// quebram o PC enquanto o jogo roda. O áudio para. O antivírus deixa de
-/// proteger. O explorador de arquivos congela a barra de tarefas. E suspender
-/// o próprio Otimiza deixaria os processos suspensos para sempre, porque quem
-/// os devolve é ele.
-pub const NUNCA_SUSPENDER: &[&str] = &[
-    // Anticheat. Já não entrariam por inclusão, mas a lista de proibidos é o
-    // que o próximo mantenedor lê — e suspender um anticheat é a forma mais
-    // rápida de fazer um cliente perder a conta.
-    "vgc.exe",
-    "vgtray.exe",
-    "easyanticheat.exe",
-    "easyanticheat_eos.exe",
-    "beservice.exe",
-    "bedaisy.exe",
-    "faceitclient.exe",
-    "faceitservice.exe",
-    // O próprio Otimiza e o motor da interface.
-    "pc-optimizer.exe",
-    "otimiza.exe",
-    // Núcleo do Windows.
-    "explorer.exe",
-    "dwm.exe",
-    "csrss.exe",
-    "winlogon.exe",
-    "services.exe",
-    "lsass.exe",
-    "smss.exe",
-    "wininit.exe",
-    "svchost.exe",
-    "system",
-    "registry",
-    "fontdrvhost.exe",
-    "sihost.exe",
-    "ctfmon.exe",
-    "taskhostw.exe",
-    "shellexperiencehost.exe",
-    "searchhost.exe",
-    "startmenuexperiencehost.exe",
-    // Áudio. Suspender qualquer um destes corta o som do jogo.
-    "audiodg.exe",
-    "rtkngui64.exe",
-    "realtekaudiouniversalservice.exe",
-    // Antivírus e segurança. Suspender é desligar a proteção sem avisar.
-    "msmpeng.exe",
-    "nissrv.exe",
-    "securityhealthservice.exe",
-    "securityhealthsystray.exe",
-    "avp.exe",
-    "avastui.exe",
-    "avgui.exe",
-    "bdagent.exe",
-    "mbamservice.exe",
-    "mbam.exe",
-    "ekrn.exe",
-    "egui.exe",
-    "norton.exe",
-    "ns.exe",
-    // Vídeo. O painel do driver participa da apresentação de quadros.
-    "nvcontainer.exe",
-    "nvdisplay.container.exe",
-    "amddvr.exe",
-    "radeonsoftware.exe",
-    "igfxem.exe",
-];
 
 /// Um processo que o Otimiza suspendeu, e precisa devolver.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -180,16 +92,9 @@ impl Registro {
             .unwrap_or_default()
     }
 
-    /// Grava o registro.
-    ///
-    /// Chamado ANTES de suspender, nunca depois: se o programa morresse entre
-    /// suspender e gravar, o processo ficaria congelado sem ninguém sabendo.
-    /// Gravar antes pode, no pior caso, mandar retomar algo que não chegou a
-    /// ser suspenso — e retomar um processo que já roda não faz nada.
-    pub fn save(&self) -> Result<(), String> {
-        self.save_em(&Self::path())
-    }
-
+    /// Grava o registro. Só os testes gravam: desde a 2.0 o produto não
+    /// suspende nada, então só LÊ o que versões antigas deixaram.
+    #[cfg(test)]
     fn save_em(&self, path: &Path) -> Result<(), String> {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)
@@ -218,73 +123,6 @@ impl Registro {
     }
 }
 
-/// Lançadores de loja.
-///
-/// Separados do resto porque o anticheat conversa com eles durante a partida:
-/// suspender a Steam com Counter-Strike aberto derruba a sessão do VAC, e
-/// suspender o lançador da Epic com Fortnite aberto atrapalha o Easy
-/// Anti-Cheat. Fora de partida, suspendê-los é seguro e devolve memória — que
-/// é por que eles continuam na lista de suspensíveis.
-pub const LANCADORES: &[&str] = &[
-    "steam.exe",
-    "steamwebhelper.exe",
-    "epicgameslauncher.exe",
-    "riotclientservices.exe",
-    "battle.net.exe",
-    "eadesktop.exe",
-    "upc.exe",
-];
-
-pub fn e_lancador(nome: &str) -> bool {
-    let minusculo = nome.trim().to_lowercase();
-    LANCADORES.iter().any(|l| minusculo == *l)
-}
-
-/// Decide se um processo pode ser suspenso.
-///
-/// Função pura, separada da varredura, para poder ser testada sem suspender
-/// nada de verdade. É a peça mais perigosa do módulo: um engano aqui congela
-/// o áudio ou o antivírus da máquina de um cliente.
-pub fn pode_suspender(nome: &str) -> Option<&'static str> {
-    let minusculo = nome.trim().to_lowercase();
-
-    if minusculo.is_empty() {
-        return None;
-    }
-
-    // A proibição vem primeiro e vence sempre, inclusive se alguém acrescentar
-    // o mesmo nome nas duas listas por engano.
-    if NUNCA_SUSPENDER.iter().any(|p| minusculo == *p) {
-        return None;
-    }
-
-    // O jogo em execução nunca é suspenso — seria o oposto do objetivo.
-    if super::gamemode::nome_do_jogo(&minusculo).is_some() {
-        return None;
-    }
-
-    // LANÇADOR DE LOJA NUNCA É SUSPENSO, E ISSO MUDOU DEPOIS DE DOER.
-    //
-    // A regra antiga era mais fina: fora de partida com anticheat, suspender a
-    // Steam era considerado seguro e devolvia memória. Na prática o cliente
-    // abriu o gerenciador de tarefas, viu "Steam — Suspenso", e concluiu que o
-    // programa que ele comprou tinha quebrado a máquina dele. Ele estava certo
-    // em concluir isso: a Steam congelada não abre jogo, não baixa, não
-    // responde. E é o programa que ele usa para começar a jogar — justamente o
-    // que o Otimiza deveria estar ajudando a fazer.
-    //
-    // A memória que se ganha congelando um lançador não paga um cliente
-    // achando que o produto o quebrou.
-    if e_lancador(&minusculo) {
-        return None;
-    }
-
-    SUSPENSIVEIS
-        .iter()
-        .find(|(exe, _)| minusculo == *exe)
-        .map(|(_, visivel)| *visivel)
-}
-
 // --------------------------------------------------------------- Windows API
 
 #[cfg(target_os = "windows")]
@@ -294,19 +132,16 @@ mod api {
         CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
     };
     use windows_sys::Win32::System::Threading::{
-        OpenThread, ResumeThread, SuspendThread, THREAD_SUSPEND_RESUME,
+        OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
     };
 
-    /// Aplica uma operação a todas as threads de um processo.
+    /// Retoma uma vez cada thread de um processo.
     ///
-    /// O Windows não tem `SuspendProcess` público. A forma suportada é
-    /// percorrer as threads e suspender uma a uma — é o que os depuradores
-    /// fazem. `NtSuspendProcess` existe, mas é interna e sem contrato: um
-    /// produto vendido não se apoia em API que a Microsoft pode mudar sem
-    /// aviso numa atualização.
+    /// O Windows não tem uma chamada pública que retome o processo inteiro:
+    /// a forma suportada é percorrer as threads, uma a uma.
     ///
     /// Devolve quantas threads responderam.
-    fn para_cada_thread(pid: u32, suspender: bool) -> u32 {
+    fn retomar_cada_thread(pid: u32) -> u32 {
         let mut atingidas = 0;
 
         unsafe {
@@ -325,11 +160,7 @@ mod api {
                         let handle = OpenThread(THREAD_SUSPEND_RESUME, 0, entrada.th32ThreadID);
 
                         if !handle.is_null() {
-                            let resultado = if suspender {
-                                SuspendThread(handle)
-                            } else {
-                                ResumeThread(handle)
-                            };
+                            let resultado = ResumeThread(handle);
 
                             // -1 (0xFFFFFFFF) sinaliza falha.
                             if resultado != u32::MAX {
@@ -353,10 +184,6 @@ mod api {
         atingidas
     }
 
-    pub fn suspender(pid: u32) -> u32 {
-        para_cada_thread(pid, true)
-    }
-
     pub fn retomar(pid: u32) -> u32 {
         // Retomar é chamado repetidamente até a thread destravar: cada
         // `SuspendThread` incrementa um contador, e a thread só volta a rodar
@@ -366,7 +193,7 @@ mod api {
         let mut atingidas = 0;
 
         for _ in 0..8 {
-            let n = para_cada_thread(pid, false);
+            let n = retomar_cada_thread(pid);
             if n == 0 {
                 break;
             }
@@ -379,9 +206,6 @@ mod api {
 
 #[cfg(not(target_os = "windows"))]
 mod api {
-    pub fn suspender(_pid: u32) -> u32 {
-        0
-    }
     pub fn retomar(_pid: u32) -> u32 {
         0
     }
@@ -389,20 +213,13 @@ mod api {
 
 // ------------------------------------------------------------------- ações
 
-/// Serializa suspender e devolver.
+/// Serializa as devoluções.
 ///
-/// `suspender_fundo` grava o registro em disco ANTES de suspender e só depois
-/// percorre os alvos suspendendo um a um — de propósito, para nunca ter um
-/// processo suspenso sem registro (ver o comentário no topo do arquivo).
-/// Antes deste conserto, quem devolvia (`retomar_tudo`) só corria depois que
-/// o jogo fechava ou na abertura seguinte do Otimiza — nunca no meio desse
-/// laço. Agora que `retomar_tudo` também pode ser disparado pelo gancho de
-/// fim de sessão do Windows e pelo fechamento do Otimiza, as duas coisas
-/// podem correr ao mesmo tempo, em threads diferentes: o laço de devolução lê
-/// o registro, retoma o que já foi suspenso até ali (inofensivo) e APAGA o
-/// arquivo — e o laço de suspensão, ainda no meio, suspende o restante sem
-/// registro nenhum. É o mesmo defeito que este conserto inteiro existe para
-/// fechar, só que numa janela de milissegundos em vez de minutos.
+/// Até a 1.9 esta tranca existia para o congelamento e a devolução nunca
+/// correrem ao mesmo tempo. O congelamento saiu, mas a devolução ainda pode
+/// ser disparada de três lugares — o gancho de fim de sessão do Windows, o
+/// fechamento do Otimiza e o vigia de seis segundos —, e dois deles lendo e
+/// apagando o mesmo arquivo juntos continua sendo uma corrida.
 ///
 /// A tranca não guarda nada além do direito de andar sozinho.
 static TRANCA: Mutex<()> = Mutex::new(());
@@ -444,88 +261,6 @@ fn tentar_travar(prazo: Duration) -> Option<MutexGuard<'static, ()>> {
             }
         }
     }
-}
-
-/// Suspende o que estiver rodando em segundo plano e puder ser suspenso.
-///
-/// Devolve o que foi suspenso, para a interface poder dizer o que fez. Mudança
-/// silenciosa no sistema é exatamente o que este produto critica nos outros.
-pub fn suspender_fundo() -> Result<Vec<Suspenso>, String> {
-    use super::anticheat::{self, Acao};
-
-    let candidatos = super::processes::listar_para_suspensao();
-
-    // ANTICHEAT PRIMEIRO, ANTES DE QUALQUER THREAD PARAR.
-    //
-    // Suspender thread de processo alheio é primitiva clássica de trapaça.
-    // Enquanto a lista de jogos tinha cinco nomes e três eram GTA, isso quase
-    // nunca encostava num anticheat. Com Valorant, Fortnite e PUBG na lista,
-    // encosta — e um cliente banido por causa do Otimiza é pior do que um
-    // cliente com o PC travando: travamento se conserta, conta não volta.
-    let nomes: Vec<String> = candidatos.iter().map(|(_, nome, _)| nome.clone()).collect();
-    let presencas = anticheat::detectar(&nomes);
-
-    let permissao = anticheat::permite(Acao::SuspenderFundo, &presencas);
-    if let Some(motivo) = permissao.motivo() {
-        return Err(motivo.to_string());
-    }
-
-    // O lançador da loja tem regra própria: o anticheat conversa com ele
-    // durante a partida, então suspendê-lo derruba a sessão mesmo quando
-    // suspender o resto é seguro.
-    let pode_lancador = anticheat::permite(Acao::SuspenderLancador, &presencas).pode();
-
-    let alvos: Vec<Suspenso> = candidatos
-        .into_iter()
-        .filter_map(|(pid, nome, inicio)| {
-            if !pode_lancador && e_lancador(&nome) {
-                return None;
-            }
-
-            pode_suspender(&nome).map(|visivel| Suspenso {
-                pid,
-                nome,
-                visivel: visivel.to_string(),
-                inicio,
-            })
-        })
-        .collect();
-
-    if alvos.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Tranca o intervalo inteiro entre gravar e suspender — ver o comentário
-    // de `TRANCA`. Bloqueia sem prazo, e de propósito: quem chama está numa
-    // thread de fundo, não na thread da janela sob orçamento do Windows, e
-    // encurtar essa espera é o que reabriria a corrida que esta tranca
-    // existe para fechar. Uma tranca envenenada (chamador anterior entrou em
-    // pânico no meio) não pode travar a suspensão para sempre — por isso
-    // `unwrap_or_else` recupera a tranca em vez de propagar o pânico alheio.
-    let _guarda = TRANCA.lock().unwrap_or_else(|env| env.into_inner());
-
-    // GRAVA ANTES DE SUSPENDER. Ver a explicação em `Registro::save`.
-    let mut registro = Registro::load();
-    for alvo in &alvos {
-        if !registro.suspensos.iter().any(|s| s.pid == alvo.pid) {
-            registro.suspensos.push(alvo.clone());
-        }
-    }
-    // Marca agora como o instante da suspensão. É o relógio que a rede de
-    // segurança por prazo usa para saber que algo ficou suspenso tempo
-    // demais — ver `retomar_se_expirado`.
-    registro.quando = agora_epoch();
-    registro.save()?;
-
-    let mut feitos = Vec::new();
-
-    for alvo in alvos {
-        if api::suspender(alvo.pid) > 0 {
-            feitos.push(alvo);
-        }
-    }
-
-    Ok(feitos)
 }
 
 /// Segundos desde a época Unix, agora.
@@ -584,60 +319,6 @@ pub fn retomar_tudo() -> Result<Vec<Suspenso>, String> {
 
     Registro::limpar()?;
     Ok(devolvidos)
-}
-
-/// Filtra o registro para o que ainda está vivo, de verdade.
-///
-/// Pura, e recebe `vivos` pronto, pela mesma razão de `retomar_tudo`: é a
-/// peça que a tela usa para desenhar a lista, e um teste que precisasse de
-/// processos reais para provar esta conta não provaria nada de confiável.
-/// Reusa `ainda_e_o_mesmo_processo` — a MESMA conferência de PID que
-/// `retomar_tudo` já faz — porque a lista mostrada na tela e a lista que o
-/// botão "descongelar agora" efetivamente devolve têm que ser a mesma coisa;
-/// duas contas separadas divergiriam cedo ou tarde e voltariam a mostrar
-/// "Discord" numa tela que na verdade não tem mais nada para devolver.
-fn congelados_de(registro: &Registro, vivos: &HashSet<(u32, u64)>) -> Vec<Suspenso> {
-    registro
-        .suspensos
-        .iter()
-        .filter(|s| ainda_e_o_mesmo_processo(s, vivos))
-        .cloned()
-        .collect()
-}
-
-/// O que está congelado agora, para a tela mostrar.
-///
-/// Existe porque um cliente abriu o gerenciador de tarefas, viu "Steam —
-/// Suspenso" sem nenhum aviso na tela do Otimiza e nenhum botão para
-/// desfazer, e concluiu — com razão — que o produto tinha quebrado a máquina
-/// dele. Esta função é o que faltava: a mesma verdade que `retomar_tudo` usa
-/// para devolver, só que para MOSTRAR antes de qualquer clique.
-pub fn congelados() -> Vec<Suspenso> {
-    congelados_no_caminho(&Registro::path())
-}
-
-/// O corpo de `congelados()`, com o caminho do registro trocável.
-///
-/// Existe pela mesma razão de `retomar_se_expirado_no_caminho`: em produção
-/// `congelados()` chama isto com `Registro::path()`, e o teste de fiação
-/// abaixo chama a MESMA função com um caminho de teste — assim o teste prova
-/// a fiação real (`Registro::load_de` mais `processes::listar_para_suspensao()`
-/// de verdade, filtrados por `congelados_de`) sem escrever no `suspensos.json`
-/// do PRODUTO. `congelados()` não tinha teste de fiação nenhum até este
-/// módulo ganhar um consumidor de verdade (`suporte.rs`, o relatório de
-/// atendimento): um relatório que mostra "Congelados agora: nenhum" quando na
-/// verdade a fiação está quebrada manda o atendimento na direção errada — o
-/// mesmo tipo de defeito que os outros dois testes de fiação deste módulo já
-/// cobrem.
-fn congelados_no_caminho(caminho: &Path) -> Vec<Suspenso> {
-    let registro = Registro::load_de(caminho);
-
-    let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
-        .into_iter()
-        .map(|(pid, _, inicio)| (pid, inicio))
-        .collect();
-
-    congelados_de(&registro, &vivos)
 }
 
 /// O registro está parado tempo demais sem nenhum jogo por perto?
@@ -715,10 +396,9 @@ fn retomar_se_expirado_com(
         return Vec::new();
     }
 
-    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Roda no mesmo vigia
-    // de seis segundos que já chama `suspender_fundo`/`retomar_tudo`, então
-    // o bloqueio nunca é o caso comum; é só a rede de segurança para o dia em
-    // que essas chamadas migrarem de thread.
+    // Tranca com prazo — ver `TRANCA` e `PRAZO_TRANCA`. Roda no vigia de seis
+    // segundos, então o bloqueio nunca é o caso comum; é a rede para quando o
+    // fim de sessão do Windows cair no mesmo instante.
     let _guarda = tentar_travar(PRAZO_TRANCA);
 
     let vivos: HashSet<(u32, u64)> = super::processes::listar_para_suspensao()
@@ -800,127 +480,14 @@ mod tests {
     }
 
     #[test]
-    fn o_discord_pode_ser_suspenso_e_o_audio_nunca() {
-        assert_eq!(pode_suspender("Discord.exe"), Some("Discord"));
-        assert_eq!(pode_suspender("chrome.exe"), Some("Google Chrome"));
-
-        // Suspender o áudio corta o som do jogo — o oposto do objetivo.
-        assert_eq!(pode_suspender("audiodg.exe"), None);
-        // Suspender o antivírus é desligar a proteção sem avisar o cliente.
-        assert_eq!(pode_suspender("MsMpEng.exe"), None);
-        // Suspender o explorador congela a barra de tarefas.
-        assert_eq!(pode_suspender("explorer.exe"), None);
-    }
-
-    #[test]
-    fn nenhum_lancador_de_loja_e_suspenso() {
-        // Um cliente abriu o gerenciador de tarefas, viu "Steam — Suspenso", e
-        // concluiu que o produto tinha quebrado a máquina dele. Estava certo:
-        // Steam congelada não abre jogo, não baixa e não responde — e é o
-        // programa que ele usa para COMEÇAR a jogar, que é o que este produto
-        // deveria estar ajudando a fazer.
-        for lancador in LANCADORES {
-            assert_eq!(
-                pode_suspender(lancador),
-                None,
-                "o lançador {} voltou a ser suspensível",
-                lancador
-            );
-        }
-
-        // E em maiúsculas, que é como o Windows costuma devolver.
-        assert_eq!(pode_suspender("Steam.exe"), None);
-        assert_eq!(pode_suspender("EpicGamesLauncher.exe"), None);
-
-        // A lista de suspensíveis não pode voltar a citá-los: a proibição acima
-        // já venceria, mas ter o nome nos dois lugares é um convite a alguém
-        // "consertar" a duplicidade tirando a proibição.
-        for (exe, _) in SUSPENSIVEIS {
-            assert!(
-                !e_lancador(exe),
-                "{} está na lista de suspensíveis E é lançador",
-                exe
-            );
-        }
-    }
-
-    #[test]
-    fn o_otimiza_nunca_suspende_a_si_mesmo() {
-        // Quem devolve os processos é ele. Suspender a si mesmo deixaria tudo
-        // congelado até o cliente reiniciar o PC.
-        assert_eq!(pode_suspender("pc-optimizer.exe"), None);
-        assert_eq!(pode_suspender("Otimiza.exe"), None);
-    }
-
-    #[test]
-    fn o_jogo_em_execucao_nunca_e_suspenso() {
-        for jogo in super::super::gamemode::JOGOS {
-            // As chaves por pedaço não são nome de arquivo — carregam o número
-            // da compilação no meio. Monta-se um nome plausível para elas.
-            let nome = if jogo.por_pedaco {
-                format!("{}b0000_GTAProcess.exe", jogo.chave)
-            } else {
-                jogo.chave.to_string()
-            };
-
-            assert_eq!(
-                pode_suspender(&nome),
-                None,
-                "{} não pode ser suspenso: é o jogo",
-                nome
-            );
-        }
-    }
-
-    #[test]
-    fn programa_desconhecido_nao_e_suspenso() {
-        // A lista é permissiva por inclusão, não por exclusão. Suspender "tudo
-        // que não reconheço" é como se congela o programa de trabalho do
-        // cliente, ou o driver de um periférico que ninguém previu.
-        assert_eq!(pode_suspender("ProgramaDoCliente.exe"), None);
-        assert_eq!(pode_suspender("algum_servico_qualquer.exe"), None);
-        assert_eq!(pode_suspender(""), None);
-    }
-
-    #[test]
-    fn a_proibicao_vence_a_permissao() {
-        // Se alguém acrescentar um nome nas duas listas por engano, o
-        // resultado seguro precisa ser "não suspende".
-        for proibido in NUNCA_SUSPENDER {
-            assert_eq!(
-                pode_suspender(proibido),
-                None,
-                "{} está na lista de proibidos e mesmo assim passou",
-                proibido
-            );
-        }
-    }
-
-    #[test]
-    fn nenhum_suspensivel_esta_na_lista_de_proibidos() {
-        // Guarda contra contradição na própria configuração do módulo.
-        for (exe, visivel) in SUSPENSIVEIS {
-            assert!(
-                !NUNCA_SUSPENDER.contains(exe),
-                "{} ({}) está nas duas listas",
-                exe,
-                visivel
-            );
-        }
-    }
-
-    #[test]
-    fn suspender_nunca_vira_matar() {
-        // A distinção entre este módulo e um "otimizador" qualquer é esta
-        // linha. Suspender devolve o programa como estava; matar faz o cliente
-        // perder o que não salvou. Se alguém trocar uma coisa pela outra numa
-        // pressa futura, o teste quebra antes de virar release.
+    fn devolver_nunca_vira_matar() {
+        // Este módulo só existe para devolver programas do jeito que estavam.
+        // Matar faz o cliente perder o que não salvou. Se alguém trocar uma
+        // coisa pela outra numa pressa futura, o teste quebra antes de virar
+        // release.
         let fonte = include_str!("suspend.rs");
         let producao = fonte.split("#[cfg(test)]").next().unwrap();
 
-        // A lista cobre só o que MATA. `NtSuspendProcess` fica de fora de
-        // propósito: ela suspende, não mata, e o comentário que explica por que
-        // não a usamos é documentação que precisa continuar no arquivo.
         for proibido in [
             "TerminateProcess",
             "Stop-Process",
@@ -930,7 +497,7 @@ mod tests {
         ] {
             assert!(
                 !producao.contains(proibido),
-                "`{}` apareceu na suspensão",
+                "`{}` apareceu no módulo que devolve programas",
                 proibido
             );
         }
@@ -944,78 +511,6 @@ mod tests {
 
         Registro::limpar_em(&caminho).expect("limpar o registro");
         assert!(retomar_pendentes_em(&caminho).is_empty());
-    }
-
-    /// Suspende e devolve um processo de verdade.
-    ///
-    /// Marcado como ignorado porque cria um processo real: numa esteira de
-    /// integração isso é frágil, e um teste que falha por motivo alheio ensina
-    /// a equipe a ignorar teste vermelho. Rodar na mão com:
-    ///
-    /// ```text
-    /// cargo test --lib -- suspende_e_devolve_um_processo_de_verdade --ignored --nocapture
-    /// ```
-    #[test]
-    #[ignore]
-    #[cfg(target_os = "windows")]
-    fn suspende_e_devolve_um_processo_de_verdade() {
-        use std::process::{Command, Stdio};
-
-        // `ping` e não `powershell`: o alvo precisa ficar vivo uns trinta
-        // segundos sem ler a entrada padrão, e existe em qualquer Windows.
-        // (Chamar o PowerShell direto aqui também faria a guarda de UTF-8 do
-        // projeto reprovar este arquivo, e com razão.)
-        let mut filho = Command::new("ping")
-            .args(["-n", "30", "127.0.0.1"])
-            .stdout(Stdio::null())
-            .spawn()
-            .expect("criar o processo de teste");
-
-        let pid = filho.id();
-        std::thread::sleep(std::time::Duration::from_millis(400));
-
-        let estado = |quando: &str| -> String {
-            let saida = super::super::shell::powershell(&format!(
-                "(Get-Process -Id {} -ErrorAction SilentlyContinue).Threads \
-                 | Group-Object WaitReason | ForEach-Object {{ \
-                   \"$($_.Name)=$($_.Count)\" }}",
-                pid
-            ))
-            .expect("consultar as threads");
-
-            let texto = saida.stdout.trim().to_string();
-            println!("  {}: {}", quando, texto.replace('\n', " "));
-            texto
-        };
-
-        estado("antes");
-
-        let threads = api::suspender(pid);
-        assert!(threads > 0, "nenhuma thread foi suspensa");
-        let depois = estado("suspenso");
-
-        // `Suspended` é a razão de espera que o Windows atribui a uma thread
-        // parada por SuspendThread. Se não aparecer, o módulo não está fazendo
-        // o que promete — e o cliente teria um Discord pausado à toa.
-        assert!(
-            depois.contains("Suspended"),
-            "o processo deveria estar suspenso, e está: {}",
-            depois
-        );
-
-        let devolvidas = api::retomar(pid);
-        assert!(devolvidas > 0, "nenhuma thread foi devolvida");
-        let voltou = estado("devolvido");
-
-        assert!(
-            !voltou.contains("Suspended"),
-            "o processo continuou suspenso depois de retomar — este é o pior \
-             defeito possível neste módulo: {}",
-            voltou
-        );
-
-        let _ = filho.kill();
-        let _ = filho.wait();
     }
 
     #[test]
@@ -1173,39 +668,6 @@ mod tests {
     }
 
     #[test]
-    fn so_lista_os_que_ainda_estao_vivos() {
-        // O registro guarda PID e instante de início. O Windows recicla PID:
-        // sem conferir os dois, a tela mostraria congelado um programa que já
-        // fechou, e o botão "descongelar" mexeria num processo que não é
-        // nosso. É o mesmo cliente do incidente descrito no topo do arquivo —
-        // a tela precisa mostrar exatamente o que ainda está congelado, nem
-        // mais nem menos.
-        let registro = Registro {
-            suspensos: vec![
-                Suspenso {
-                    pid: 1,
-                    nome: "chrome.exe".into(),
-                    visivel: "Google Chrome".into(),
-                    inicio: 10,
-                },
-                Suspenso {
-                    pid: 2,
-                    nome: "discord.exe".into(),
-                    visivel: "Discord".into(),
-                    inicio: 20,
-                },
-            ],
-            ..Default::default()
-        };
-
-        let vivos: HashSet<(u32, u64)> = [(1u32, 10u64)].into_iter().collect();
-        let lista = congelados_de(&registro, &vivos);
-
-        assert_eq!(lista.len(), 1);
-        assert_eq!(lista[0].visivel, "Google Chrome", "mostrou o nome do executável");
-    }
-
-    #[test]
     fn a_fiacao_publica_usa_o_jogo_de_verdade() {
         // Todo teste acima passa pelo `_com`, com o booleano do jogo
         // escolhido à mão — nenhum deles pegaria uma inversão na fiação real
@@ -1265,43 +727,75 @@ mod tests {
         Registro::limpar_em(&caminho).expect("limpar o registro");
     }
 
+    /// NENHUM CAMINHO DO PRODUTO SUSPENDE UMA THREAD.
+    ///
+    /// A 2.0 tirou o congelamento porque ele fazia programa do cliente parar de
+    /// abrir. Esta trava garante que ele não volta por um atalho: varre o
+    /// código inteiro — não só este arquivo — atrás das chamadas que suspendem
+    /// processo no Windows, e reprova o build se achar alguma.
+    ///
+    /// Os comentários são descartados antes de procurar, porque a história do
+    /// que foi removido precisa poder continuar escrita.
     #[test]
-    fn a_fiacao_de_congelados_usa_o_processo_real() {
-        // Adiado da 1.3: `congelados()` nunca teve teste de fiação, ao
-        // contrário do resto do módulo — e agora ganhou o primeiro consumidor
-        // de verdade, o relatório de atendimento (`suporte.rs`). Um relatório
-        // que mostra "Congelados agora: nenhum" quando na verdade a fiação
-        // está quebrada manda o atendimento procurar no lugar errado, que é
-        // exatamente o defeito que este teste tranca.
-        //
-        // Mesma ideia do teste de prazo acima: o PID gravado é inventado, e a
-        // fiação real (`processes::listar_para_suspensao()`, de verdade,
-        // filtrado por `congelados_de`) nunca bate um PID inventado com um
-        // processo vivo. Se `congelados_no_caminho` regredisse para devolver
-        // `registro.suspensos` direto, sem passar pelo filtro, o PID
-        // inventado apareceria na lista — é essa regressão que este teste
-        // acusa.
-        let caminho = caminho_de_teste("fiacao-congelados");
+    fn o_produto_nao_congela_mais_nenhum_programa() {
+        fn arquivos(dir: &Path, achados: &mut Vec<PathBuf>) {
+            let Ok(entradas) = std::fs::read_dir(dir) else {
+                return;
+            };
 
-        let registro = Registro {
-            suspensos: vec![Suspenso {
-                pid: 4242,
-                nome: "discord.exe".to_string(),
-                visivel: "Discord".to_string(),
-                inicio: 133_000_000,
-            }],
-            quando: 0,
-        };
-        registro.save_em(&caminho).expect("gravar o registro");
+            for entrada in entradas.flatten() {
+                let caminho = entrada.path();
 
-        let lista = congelados_no_caminho(&caminho);
+                if caminho.is_dir() {
+                    arquivos(&caminho, achados);
+                } else if caminho.extension().and_then(|e| e.to_str()) == Some("rs") {
+                    achados.push(caminho);
+                }
+            }
+        }
+
+        let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut todos = Vec::new();
+        arquivos(&raiz, &mut todos);
 
         assert!(
-            lista.is_empty(),
-            "a fiação real devolveu um processo que não está vivo: {:?}",
-            lista
+            todos.len() > 40,
+            "a varredura achou só {} arquivos — o caminho provavelmente está errado",
+            todos.len()
         );
 
-        Registro::limpar_em(&caminho).expect("limpar o registro");
+        // Montados em pedaços para esta própria lista não casar consigo mesma.
+        let proibidos = [
+            ["Suspend", "Thread"].concat(),
+            ["NtSuspend", "Process"].concat(),
+            ["DebugActive", "Process"].concat(),
+            ["suspender", "_fundo"].concat(),
+        ];
+
+        let mut culpados = Vec::new();
+
+        for arquivo in &todos {
+            let Ok(conteudo) = std::fs::read_to_string(arquivo) else {
+                continue;
+            };
+
+            let sem_comentarios: String = conteudo
+                .lines()
+                .map(|l| l.split("//").next().unwrap_or(""))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            for proibido in &proibidos {
+                if sem_comentarios.contains(proibido.as_str()) {
+                    culpados.push(format!("{} em {}", proibido, arquivo.display()));
+                }
+            }
+        }
+
+        assert!(
+            culpados.is_empty(),
+            "o congelamento de programas voltou ao produto: {:?}. Ele saiu na 2.0 porque fazia programa do cliente parar de abrir. Não é para voltar.",
+            culpados
+        );
     }
 }

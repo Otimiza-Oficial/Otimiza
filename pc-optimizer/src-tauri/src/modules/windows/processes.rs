@@ -97,9 +97,13 @@ impl ProcessMonitor {
 
 /// Processos vivos: identificador, nome do executável e instante de início.
 ///
-/// Existe para a suspensão durante o jogo. Não agrupa por nome, ao contrário do
-/// `top()` acima, porque suspender exige o PID de cada processo — um Chrome com
-/// quinze abas são quinze processos, e todos precisam parar.
+/// Não agrupa por nome, ao contrário do `top()` acima, porque quem usa isto
+/// precisa do PID de cada processo: a detecção de anticheat, e a devolução dos
+/// programas que versões até a 1.9 deixaram suspensos — um Chrome com quinze
+/// abas são quinze processos.
+///
+/// O nome da função ficou de quando o modo jogo ainda congelava programas. A
+/// 2.0 tirou isso; renomear agora só mexeria em chamadores sem mudar nada.
 ///
 /// O instante de início vai junto porque o Windows RECICLA identificadores. Sem
 /// essa assinatura, o Otimiza poderia retomar um processo novo que nunca

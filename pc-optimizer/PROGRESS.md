@@ -602,7 +602,7 @@ defeitos desta rodada nasceram — e o resultado é sempre o mesmo: o produto
 afirma o que não verificou, às vezes com achado tranquilizador, às vezes com
 silêncio, que é pior porque nem aparece na tela.
 
-## Os 14 testes que não rodam na esteira
+## Os 13 testes que não rodam na esteira
 
 Ficavam sem inventário: a esteira roda o que não está marcado como `ignore`, e
 ninguém sabia de cabeça o que os ignorados cobrem nem por quê. Sem essa lista,
@@ -616,7 +616,6 @@ Nenhum deles é candidato a promover, e por razões diferentes:
 | `real_apply_and_revert_cycle_restores_the_system` | Idem, no registro |
 | `real_startup_cycle_restores_exact_bytes` | Idem, na inicialização do cliente |
 | `real_full_cycle_with_measurement` | Idem, e leva ~20 s |
-| `suspende_e_devolve_um_processo_de_verdade` | Suspende processo real da máquina |
 | `mede_quadros_de_verdade` | Exige administrador **e algo desenhando na tela** |
 | `ensaio_de_taxa_nesta_maquina` | Depende do monitor e do driver de vídeo |
 | `noise_calibration` | Mede a mesma máquina várias vezes; é o que DEFINE os limiares |
@@ -633,8 +632,8 @@ ilusão, e a esteira nunca o executa.
 Mas ele não pode ser promovido como está: o runner do GitHub é máquina virtual
 compartilhada, com ruído de vizinhança maior que o desta máquina. Um teste que
 compara medições ali falharia por causa do vizinho, e **teste que falha sozinho
-ensina a equipe a ignorar vermelho** — que é justamente o que o comentário do
-`suspend` já alerta.
+ensina a equipe a ignorar vermelho** — que é justamente o que este documento já
+registra sobre teste que depende da máquina.
 
 O caminho, quando for a hora: rodá-lo em máquina conhecida antes de publicar
 versão, como parte do ritual de release, e não dentro da esteira. Fica anotado
@@ -920,6 +919,51 @@ O teste passava só porque nenhuma máquina de teste tinha o FiveM aberto.
 - **`start_monitoring` / `stop_monitoring`** — comandos mortos, ninguém chama.
   Remover é faxina, e faxina no meio de uma versão de recursos mistura o
   histórico do que mudou.
+
+## A 2.0 — em andamento
+
+### O congelamento de programas saiu do produto
+
+Pedido do dono, e com razão: foi a opção que mais machucou cliente.
+
+Até a 1.9, o modo jogo automático suspendia Discord, navegador, Spotify e afins
+durante a partida, para devolver memória ao jogo. Suspender em vez de matar era
+melhor que o mercado — nada se perdia —, e mesmo assim:
+
+| Versão | O que aconteceu |
+|---|---|
+| 1.1.1 | Programa suspenso não responde ao aviso de desligamento; o Windows não descarrega o perfil, e no login seguinte o Explorador e a barra de tarefas **não abriam nada** |
+| 1.1.2 | A Steam congelada **não abria jogo, não baixava, não respondia** |
+| — | O relatório de suporte (`suporte.rs`) nasceu de um cliente pagante dizendo que **os programas não abriam mais** |
+
+Cada incidente ganhou uma rede de segurança, e as redes funcionavam. Mas quatro
+redes para não quebrar o PC de quem comprou é caro demais por memória que o
+cliente nem vê.
+
+**O que saiu:** a chamada no vigia (`gamemode::passo`), `suspender_fundo` e toda
+a decisão de quem suspender (`SUSPENSIVEIS`, `NUNCA_SUSPENDER`, `LANCADORES`,
+`pode_suspender`), a chamada de suspensão da API do Windows, as duas ações do
+anticheat que só existiam para isso, os comandos `congelados_agora` e
+`descongelar_agora`, o bloco "Congelado agora" da aba Jogos, o modal de
+reconsentimento, o campo `game_mode_avisado` das preferências e a linha
+"Congelados agora" do relatório de suporte.
+
+**O que ficou, de propósito:** as quatro redes que DEVOLVEM — abertura,
+fechamento, fim de sessão do Windows e prazo de dez minutos. Quem atualizar de
+uma versão antiga com algo registrado como suspenso recebe esses programas de
+volta na primeira abertura. Com o registro vazio, que é o caso de todo mundo
+daqui para frente, nenhuma delas faz nada.
+
+**E a trava que impede a volta:** `o_produto_nao_congela_mais_nenhum_programa`
+varre o código inteiro, sem os comentários, atrás das chamadas que suspendem
+processo no Windows e do próprio `suspender_fundo`, e reprova o build se achar.
+
+O modo jogo continua existindo, e agora é só o que o nome promete: plano de alto
+desempenho enquanto o jogo está aberto, e prioridade para ele no processador.
+
+Preferências gravadas antes da 2.0 continuam carregando: o arquivo antigo ainda
+tem a chave `game_mode_avisado`, e há teste garantindo que uma chave que sobrou
+não derruba a leitura.
 
 ## Pendente
 

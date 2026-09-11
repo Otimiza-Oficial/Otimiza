@@ -2445,53 +2445,6 @@ pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
     }
 }
 
-// ============================================================ SUSPENSÃO
-
-/// O que está congelado agora.
-///
-/// Fica em `LIVRES`: é leitura, e é a informação que faltava. Um cliente
-/// abriu o gerenciador de tarefas, viu "Steam — Suspenso" (depois "Discord",
-/// depois "Chrome"), e escreveu para o dono dizendo que o PC dele tinha
-/// ficado "mt bugado" — porque a tela do Otimiza não mostrava nada disso e
-/// não tinha botão nenhum para desfazer. Ele estava certo em concluir que
-/// algo estava errado: o defeito não era ter suspendido, era não ter
-/// avisado. Este comando é o aviso.
-#[tauri::command]
-pub fn congelados_agora() -> Vec<crate::modules::windows::suspend::Suspenso> {
-    #[cfg(target_os = "windows")]
-    {
-        crate::modules::windows::suspend::congelados()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Vec::new()
-    }
-}
-
-/// Devolve todos os congelados, agora — sem esperar o jogo fechar.
-///
-/// Fica em `LIVRES` pelo mesmo motivo que `revert_optimization` e
-/// `reparo_cancelar` ficam: desfazer o que o próprio produto fez nunca pode
-/// depender de licença. Antes deste comando, socorrer o cliente do
-/// incidente acima exigiu um script de PowerShell escrito à mão para
-/// alguém que JÁ TINHA o produto instalado — e que já tinha, portanto,
-/// tudo que precisava para se ajudar sozinho, se a tela tivesse oferecido.
-/// Esta é a função que substitui aquele script.
-#[tauri::command]
-pub fn descongelar_agora() -> Result<usize, String> {
-    #[cfg(target_os = "windows")]
-    {
-        let devolvidos = crate::modules::windows::suspend::retomar_tudo()?;
-        Ok(devolvidos.len())
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(0)
-    }
-}
-
 // ========================================================== ATENDIMENTO
 
 /// O relatório que o cliente cola no atendimento — versão, Windows, RAM,
@@ -2669,8 +2622,6 @@ mod tests {
         "reparo_disponivel",
         "reparo_ultimo_resultado",
         "reparo_cancelar",
-        "congelados_agora",
-        "descongelar_agora",
         "relatorio_de_suporte",
         "versao_mais_nova",
     ];

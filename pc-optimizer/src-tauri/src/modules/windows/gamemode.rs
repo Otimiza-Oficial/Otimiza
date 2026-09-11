@@ -492,28 +492,25 @@ pub fn passo(log: &mut ChangeLog) -> Option<String> {
 
     match (jogo, aplicado) {
         (Some(nome), false) => {
-            let mut feito = ativar(log).ok()?;
-
-            // Suspender o segundo plano é o que devolve memória ao jogo — e é
-            // a razão de este vigia existir numa máquina que trava por falta
-            // de RAM. Falhar aqui não pode impedir o resto do modo jogo.
-            if let Ok(suspensos) = super::suspend::suspender_fundo() {
-                if !suspensos.is_empty() {
-                    let nomes: Vec<&str> =
-                        suspensos.iter().map(|s| s.visivel.as_str()).collect();
-                    feito.push(format!(
-                        "Pausei {} — voltam quando o jogo fechar.",
-                        nomes.join(", ")
-                    ));
-                }
-            }
+            // NADA É CONGELADO AQUI DESDE A 2.0.
+            //
+            // Até a 1.9 este era o ponto em que o vigia suspendia Discord,
+            // navegador e afins. Foi a opção que fez programa do cliente parar
+            // de abrir — o Explorador na 1.1.1, a Steam na 1.1.2 — e saiu do
+            // produto. O modo jogo agora é só o que o nome promete: plano de
+            // energia e prioridade para o jogo.
+            let feito = ativar(log).ok()?;
 
             Some(format!("{} aberto. {}", nome, feito.join(" ")))
         }
         (None, true) => {
             // A ordem importa: devolver os programas ANTES de desfazer o resto.
-            // Se algo falhar no meio, o cliente prefere ter o Discord de volta
-            // com o plano de energia errado do que o contrário.
+            //
+            // Nada é congelado desde a 2.0, então isto só age para quem
+            // atualizou de uma versão antiga no meio de uma partida. Com o
+            // registro vazio não faz nada — e continua aqui porque um Discord
+            // preso pelo Otimiza velho é exatamente o defeito que a remoção
+            // existe para acabar.
             let devolvidos = super::suspend::retomar_tudo().unwrap_or_default();
             let texto = desativar(log).ok()?;
 

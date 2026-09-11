@@ -36,7 +36,7 @@
 //    procurar o problema no lugar errado — o mesmo defeito que motivou aquelas
 //    duas correções, só que agora na porta de saída em vez de na leitura.
 
-use super::{display, health, memory, shell, suspend, thermal};
+use super::{display, health, memory, shell, thermal};
 use serde::Deserialize;
 
 /// Limite de caracteres do relatório.
@@ -59,8 +59,6 @@ pub struct Entrada {
     pub windows: String,
     pub ram_gb: u32,
     pub monitores: usize,
-    /// Nomes apresentáveis do que está congelado agora (`Suspenso::visivel`).
-    pub congelados: Vec<String>,
     pub mudancas_aplicadas: usize,
     /// Resumo curto do disco, já decidido (ex.: "saudável", "crítico").
     pub disco: String,
@@ -89,13 +87,6 @@ pub fn montar(entrada: &Entrada) -> String {
         if entrada.monitores == 1 { "" } else { "es" }
     ));
 
-    let congelados = if entrada.congelados.is_empty() {
-        "nenhum".to_string()
-    } else {
-        entrada.congelados.join(", ")
-    };
-    linhas.push(format!("Congelados agora: {}", congelados));
-
     linhas.push(format!("Mudanças aplicadas: {}", entrada.mudancas_aplicadas));
     linhas.push(format!("Disco: {} · Térmico: {}", entrada.disco, entrada.termico));
 
@@ -113,7 +104,7 @@ pub fn montar(entrada: &Entrada) -> String {
 /// Rede de segurança da Regra 1, não só o teste.
 ///
 /// `cabe_numa_mensagem_e_nao_leva_dado_pessoal` prova que o conteúdo de HOJE
-/// cabe — mas a lista de congelados (`suspend::SUSPENSIVEIS`) pode crescer no
+/// cabe — mas a lista do que não deu para ler pode crescer no
 /// futuro, e nada além deste corte impediria o relatório de um dia estourar o
 /// limite do Discord sem que a mensagem chegasse. Corta em vez de simplesmente
 /// afirmar: preferir um relatório truncado, com `…` avisando o corte, a uma
@@ -287,11 +278,6 @@ pub fn gerar() -> Entrada {
     let ram_gb = memory::analyze().total_ram_gb.round().max(0.0) as u32;
     let monitores = display::monitores().len();
 
-    let congelados = suspend::congelados()
-        .into_iter()
-        .map(|s| s.visivel)
-        .collect();
-
     let mudancas_aplicadas = crate::modules::changelog::ChangeLog::load().applied().len();
 
     let (disco, lacunas_disco) = resumir_disco(&health::analyze());
@@ -305,7 +291,6 @@ pub fn gerar() -> Entrada {
         windows,
         ram_gb,
         monitores,
-        congelados,
         mudancas_aplicadas,
         disco,
         termico,
@@ -330,22 +315,6 @@ mod tests {
                 ram_gb: 128,
                 // Seis monitores é um posto de streaming, o topo do realista.
                 monitores: 6,
-                // Todo `SUSPENSIVEIS` de `suspend.rs`, congelado ao mesmo
-                // tempo — o teto real de quanto essa lista pode crescer.
-                congelados: vec![
-                    "Discord".to_string(),
-                    "Google Chrome".to_string(),
-                    "Microsoft Edge".to_string(),
-                    "Firefox".to_string(),
-                    "Opera".to_string(),
-                    "Brave".to_string(),
-                    "Arc".to_string(),
-                    "Spotify".to_string(),
-                    "Slack".to_string(),
-                    "Microsoft Teams".to_string(),
-                    "WhatsApp".to_string(),
-                    "Telegram".to_string(),
-                ],
                 mudancas_aplicadas: 999,
                 disco: "crítico".to_string(),
                 termico: "limitado (causa não identificada)".to_string(),
@@ -366,7 +335,6 @@ mod tests {
                 windows: "Windows 11 Pro 26200".to_string(),
                 ram_gb: 16,
                 monitores: 1,
-                congelados: Vec::new(),
                 mudancas_aplicadas: 3,
                 disco: "saudável".to_string(),
                 termico: "sem limite ativo".to_string(),
@@ -393,8 +361,7 @@ mod tests {
         // A garantia "nada que identifique a pessoa" hoje é verdadeira POR
         // CONSTRUÇÃO: `resumir_disco` só lê `id`/`severity` do achado, nunca
         // `title` nem `measured` (onde nome comercial e número de série do
-        // disco moram); `congelados` vem da lista fixa `SUSPENSIVEIS`, nunca
-        // de título de janela; monitores entram só como contagem. Mas uma
+        // disco moram); monitores entram só como contagem. Mas uma
         // trava que só confere `%USERNAME%` não pega alguém acrescentando o
         // nome do computador ou um caminho de perfil a `Entrada` amanhã — o
         // teste continuaria verde e a garantia cairia em silêncio. Por isso
@@ -439,7 +406,7 @@ mod tests {
         // real aqui não é um filtro de saída — é que nenhuma função deste
         // módulo lê `SerialNumber`/`ProductId`/campo equivalente em lugar
         // nenhum: `gerar()` só chama `memory::analyze`, `display::monitores`,
-        // `suspend::congelados`, `changelog::ChangeLog::load`,
+        // `changelog::ChangeLog::load`,
         // `health::analyze`, `thermal::analyze` e o CIM de
         // `Win32_OperatingSystem` (Caption/BuildNumber, nunca SerialNumber).
         // Um teste que tentasse simular essa garantia com regex seria mais
@@ -474,28 +441,29 @@ mod tests {
     }
 
     #[test]
-    fn congelados_vazio_diz_nenhum() {
-        let texto = montar(&Entrada::com_leitura_falha());
-        assert!(texto.contains("Congelados agora: nenhum"));
-    }
+    fn o_relatorio_nao_fala_mais_de_congelados() {
+        // Até a 1.9 todo relatório trazia a linha "Congelados agora". O
+        // congelamento saiu do produto na 2.0, e a linha com ele: ela diria
+        // "nenhum" para sempre, e ainda passaria ao atendimento a ideia de que
+        // o Otimiza congela programas.
+        let texto = montar(&Entrada::exemplo_cheia()).to_lowercase();
 
-    #[test]
-    fn congelados_com_gente_lista_os_nomes() {
-        let mut entrada = Entrada::com_leitura_falha();
-        entrada.congelados = vec!["Discord".to_string(), "Google Chrome".to_string()];
-        let texto = montar(&entrada);
-        assert!(texto.contains("Congelados agora: Discord, Google Chrome"));
+        assert!(
+            !texto.contains("congelad"),
+            "o relatório ainda fala de congelados: {}",
+            texto
+        );
     }
 
     #[test]
     fn um_relatorio_hipoteticamente_maior_que_o_limite_ainda_cabe() {
         // `exemplo_cheia` já cabe folgado hoje — este teste é o que garante
-        // que a Regra 1 continua valendo se a lista de congelados crescer no
-        // futuro, sem depender de ninguém lembrar de revisar o teste acima.
-        // Sintetiza um cenário maior que qualquer congelamento real seria
-        // capaz de produzir hoje.
+        // que a Regra 1 continua valendo se a lista do que não deu para ler
+        // crescer no futuro, sem depender de ninguém lembrar de revisar o
+        // teste acima. Sintetiza um cenário maior que qualquer máquina real
+        // produziria hoje.
         let mut entrada = Entrada::exemplo_cheia();
-        entrada.congelados = (0..200).map(|n| format!("Programa Hipotético Número {}", n)).collect();
+        entrada.lacunas = (0..200).map(|n| format!("Leitura Hipotética Número {}", n)).collect();
 
         let texto = montar(&entrada);
 

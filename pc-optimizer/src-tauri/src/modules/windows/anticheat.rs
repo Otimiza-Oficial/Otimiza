@@ -2,9 +2,11 @@
 //
 // POR QUE ESTE MÓDULO EXISTE ANTES DOS OUTROS
 //
-// O produto passou a fazer duas coisas que, vistas de fora, são indistinguíveis
-// de trapaça: SUSPENDE threads de processos de terceiros, e escreve numa chave
-// do registro (IFEO) cujo uso mais conhecido é sequestro de execução.
+// O produto faz coisas que, vistas de fora, se parecem com trapaça: abre handle
+// no processo do jogo para mudar a prioridade, e escreve numa chave do registro
+// (IFEO) cujo uso mais conhecido é sequestro de execução. Até a 1.9 havia uma
+// terceira — suspender threads de programas de terceiros —, que saiu do produto
+// na 2.0 junto com o congelamento.
 //
 // Enquanto a lista de jogos tinha cinco nomes e três eram GTA, isso quase nunca
 // encostava num anticheat. Ao abrir a lista para Valorant, Fortnite, PUBG e
@@ -42,7 +44,7 @@ pub enum AntiCheat {
     /// PUBG, Rainbow Six, Tarkov, DayZ, Arma.
     BattlEye,
     /// Counter-Strike. Modo usuário, mas exige a Steam respondendo durante a
-    /// partida — suspender a Steam derruba a sessão.
+    /// partida.
     Vac,
     FaceIt,
 }
@@ -113,11 +115,6 @@ const SERVICOS: &[(&str, AntiCheat)] = &[
 /// O que o Otimiza quer fazer, para consultar se pode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Acao {
-    /// Suspender threads de programas de segundo plano.
-    SuspenderFundo,
-    /// Suspender o lançador da loja (Steam, Epic). Separado do resto porque o
-    /// anticheat conversa com ele durante a partida.
-    SuspenderLancador,
     /// Abrir handle no processo do jogo para mudar a prioridade.
     PrioridadeNoJogo,
     /// Escrever em Image File Execution Options para o executável do jogo.
@@ -155,10 +152,6 @@ impl Permissao {
 /// matéria de risco ao cliente, e precisa ser testável sem depender de ter um
 /// anticheat instalado na máquina de quem desenvolve.
 pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
-    let ativo_de_kernel = presencas
-        .iter()
-        .find(|p| p.ativo_agora && p.qual.e_de_kernel());
-
     let qualquer_ativo = presencas.iter().find(|p| p.ativo_agora);
     let instalado_de_kernel = presencas.iter().find(|p| p.qual.e_de_kernel());
 
@@ -167,29 +160,6 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
         // Windows lê o que o sistema já publica; o plano de energia é
         // configuração da máquina. Nenhum dos dois é visível como manipulação.
         Acao::PlanoDeEnergia | Acao::MedirQuadros => Permissao::Pode,
-
-        // Suspender thread de processo alheio é primitiva clássica de trapaça.
-        // Com anticheat de kernel rodando, não fazemos, ponto.
-        Acao::SuspenderFundo => match ativo_de_kernel {
-            Some(p) => Permissao::Recusado(format!(
-                "Não pausei nenhum programa: o {} está rodando agora. Pausar programas \
-                 com um anticheat de núcleo ativo é risco de banimento, e nenhum ganho \
-                 de FPS compensa perder a sua conta.",
-                p.qual.nome()
-            )),
-            None => Permissao::Pode,
-        },
-
-        // O lançador conversa com o anticheat durante a partida. Suspender a
-        // Steam com Counter-Strike aberto derruba a sessão do VAC — e aqui nem
-        // precisa ser anticheat de kernel para dar problema.
-        Acao::SuspenderLancador => match qualquer_ativo.or(instalado_de_kernel) {
-            Some(p) => Permissao::Recusado(format!(
-                "Não pausei o lançador da loja: o {} depende dele durante a partida.",
-                p.qual.nome()
-            )),
-            None => Permissao::Pode,
-        },
 
         // Abrir handle no processo do jogo é a coisa mais visível que o produto
         // faz. E o ganho é pequeno: prioridade alta só muda alguma coisa quando
@@ -307,27 +277,10 @@ mod tests {
     }
 
     #[test]
-    fn com_anticheat_de_kernel_ativo_nao_suspende_nada() {
-        // A regra mais importante deste arquivo. Um cliente banido por causa do
-        // Otimiza é pior do que um cliente com o PC travando.
-        for qual in [
-            AntiCheat::Vanguard,
-            AntiCheat::EasyAntiCheat,
-            AntiCheat::BattlEye,
-        ] {
-            let p = permite(Acao::SuspenderFundo, &[rodando(qual)]);
-            assert!(!p.pode(), "{:?} rodando e ainda assim suspendeu", qual);
-            assert!(p.motivo().unwrap().contains("banimento"));
-        }
-    }
-
-    #[test]
     fn maquina_limpa_pode_tudo() {
         // Recusar sem motivo seria o outro extremo do erro: o produto tem que
         // entregar o que o cliente comprou quando não há risco.
         for acao in [
-            Acao::SuspenderFundo,
-            Acao::SuspenderLancador,
             Acao::PrioridadeNoJogo,
             Acao::EscreverIfeo,
             Acao::PlanoDeEnergia,
@@ -357,16 +310,6 @@ mod tests {
     }
 
     #[test]
-    fn o_vac_nao_e_de_kernel_mas_protege_o_lancador() {
-        // Suspender a Steam com Counter-Strike aberto derruba a sessão do VAC,
-        // mesmo o VAC não sendo anticheat de núcleo.
-        let vac = vec![rodando(AntiCheat::Vac)];
-
-        assert!(permite(Acao::SuspenderFundo, &vac).pode());
-        assert!(!permite(Acao::SuspenderLancador, &vac).pode());
-    }
-
-    #[test]
     fn ifeo_e_recusado_mesmo_com_o_jogo_fechado() {
         // A escrita em IFEO deixa marca permanente no registro. Não adianta
         // esperar o jogo fechar: a marca continua lá quando ele abrir.
@@ -374,13 +317,6 @@ mod tests {
 
         assert!(!p.pode());
         assert!(p.motivo().unwrap().contains("sequestram a execução"));
-    }
-
-    #[test]
-    fn anticheat_instalado_mas_parado_nao_impede_suspender() {
-        // Recusar por instalação seria recusar em quase toda máquina de quem
-        // joga — e a suspensão é justamente o que devolve memória ao jogo.
-        assert!(permite(Acao::SuspenderFundo, &[instalado(AntiCheat::EasyAntiCheat)]).pode());
     }
 
     #[test]
