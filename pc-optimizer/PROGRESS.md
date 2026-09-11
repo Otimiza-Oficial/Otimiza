@@ -1007,6 +1007,63 @@ nem onde parou.
   se um programa ainda abre. A última linha do `otimiza.log` diz o que rodou por
   último.
 
+### A leitura de registro que falha deixou de virar lista vazia (C.1)
+
+A 1.8 separou "não existe" de "não consegui ler" no `read` e no `delete_value`,
+e parou ali. `value_names` e `read_text` continuavam achatando as duas, e
+ficam embaixo de dezenas de leituras.
+
+Agora as duas devolvem `Err` quando não conseguem ler. Chave que **não existe**
+continua sendo vazio — a chave `Run` de um usuário novo não foi criada, e isso
+é resposta, não falha (`chave_que_nao_existe_nao_tem_valores_e_nao_e_falha`).
+
+| Onde a falha virava resposta | O que passou a acontecer |
+|---|---|
+| Lista de inicialização: "Nenhum programa nas chaves de inicialização" | A tela recebe o erro |
+| Placa de rede com `ComponentId` ilegível descartada como virtual | O erro sobe; só as subchaves numeradas da classe são lidas como adaptador, porque `Properties` é negada a qualquer um (`so_subchave_numerada_e_adaptador`) |
+| Preferência de placa: "o Windows está escolhendo sozinho para todos" | "Não consegui ler as preferências de placa gravadas" |
+| DNS ilegível entrando como "automático, vindo do roteador" | O adaptador sai da comparação, e a linha atual diz que não leu |
+| Jogos com preferência de placa gravada | Lacuna na biblioteca |
+
+**Ficou achatado, de propósito e com o motivo escrito:** o conjunto de
+executáveis que marca "sobe com o Windows" na lista de processos (ali não há
+onde dizer "não li"), a enumeração de dispositivos PCI para o MSI (a lista
+serve para escrever, e dispositivo que não se identifica não é tocado), o
+fabricante na checagem dos essenciais e o PDF, que ainda não tem onde escrever
+lacuna na seção de inicialização (C.4).
+
+### Os quatro módulos que diziam "nada encontrado" sem ter lido (C.2)
+
+Conflitos, tarefas agendadas, serviços de terceiros e programas de fábrica liam
+pelo PowerShell com `-ErrorAction SilentlyContinue` e terminavam em
+`_ => Vec::new()`. Leitura que falhava virava lista vazia, e lista vazia virava
+verde.
+
+Nesta máquina isso não era hipótese: o Agendador de Tarefas está parado e o
+serviço de aplicativos da Loja desligado. As duas telas diziam "nenhum".
+
+**Uma regra só**, em `shell::json_da_saida`: comando que não rodou, saída com
+erro, saída vazia ou JSON que não casa viram `Err`; `[]` continua sendo lista
+vazia. As quatro consultas passaram a `-ErrorAction Stop`, porque dentro da
+sessão viva um erro que não interrompe o script chega como sucesso — e há trava
+para isso não voltar (`as_quatro_consultas_param_no_erro`).
+
+| Módulo | Antes | Agora |
+|---|---|---|
+| Tarefas agendadas | "Nenhuma tarefa de terceiros neste PC" | A tela mostra o erro do Agendador |
+| Serviços de terceiros | "Nenhum serviço de terceiros neste PC" | A tela mostra o erro do WMI |
+| Programas de fábrica | Lista sem nenhum app da Loja, calada | O que foi lido aparece, e o que faltou vai escrito junto ("Não consegui ler: …") |
+| Conflitos | Fabricava "Nenhum conflito entre programas" em verde, que contava como verificação aprovada; escrevia "0 programas examinados" | O verde só aparece com tudo lido (`nenhum_conflito_so_aparece_quando_tudo_foi_lido`); sem lista, "programas instalados não lidos"; no veredito, leitura falha sem conflito vira lacuna |
+
+E o "Encontrados: ." que o achado de nenhum conflito produzia no veredito — um
+`measured` vazio, contra a regra de `achados.rs` — passou a dizer quantos
+programas foram examinados.
+
+**Os testes que leem a máquina de verdade** param com uma linha dizendo o que
+não deu para ler, quando não dá — é o caso das tarefas agendadas aqui. Não há
+o que afirmar sobre uma lista que não chegou; a regra do erro tem teste próprio,
+sem depender de máquina quebrada.
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

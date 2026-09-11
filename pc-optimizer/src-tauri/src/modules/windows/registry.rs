@@ -254,10 +254,16 @@ fn is_empty_key(hive: &str, path: &str) -> bool {
 
 /// Lista as subchaves de um caminho. Usado para enumerar interfaces de rede,
 /// cujos GUIDs são diferentes em cada máquina.
+///
+/// Mesma regra do `value_names`: chave que não existe não tem subchaves, e isso
+/// é resposta — a chave de programas instalados só para o usuário atual nem
+/// sempre foi criada. Só não conseguir abrir vira `Err`.
 pub fn subkeys(hive: &str, path: &str) -> Result<Vec<String>, String> {
-    let key = root(hive)?
-        .open_subkey_with_flags(path, KEY_READ)
-        .map_err(|e| format!("Cannot open {}\\{}: {}", hive, path, e))?;
+    let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
+        Ok(key) => key,
+        Err(e) if chave_inexistente(e.kind()) => return Ok(Vec::new()),
+        Err(e) => return Err(format!("Não consegui ler {}\\{}: {}", hive, path, e)),
+    };
 
     Ok(key.enum_keys().filter_map(|k| k.ok()).collect())
 }

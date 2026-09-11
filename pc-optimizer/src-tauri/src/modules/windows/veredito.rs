@@ -555,13 +555,28 @@ impl EmAchados for super::conflicts::ConflictReport {
         self.conflicts
             .iter()
             .map(|c| {
+                // O "nenhum conflito" não tem nome para listar, e "Encontrados: ."
+                // violava a regra de que `measured` nunca fica vazio. O número
+                // medido ali é quantos programas foram examinados.
+                let medido = if c.found.is_empty() {
+                    match self.programs_scanned {
+                        Some(n) => format!(
+                            "{} programas instalados examinados, sem dois disputando a mesma função.",
+                            n
+                        ),
+                        None => c.explanation.clone(),
+                    }
+                } else {
+                    format!("Encontrados: {}.", c.found.join(", "))
+                };
+
                 // Conflito não tem `fix_location` próprio: dois antivírus se
                 // resolvem desinstalando um, que é software.
                 montar(
                     Origem::Conflitos,
                     c.id.clone(),
                     c.title.clone(),
-                    format!("Encontrados: {}.", c.found.join(", ")),
+                    medido,
                     c.advice.clone(),
                     c.severity,
                     FixLocation::Software,
@@ -893,7 +908,19 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
             Ok(relatorio.achados())
         }),
         (Origem::Disco, || Ok(super::shaders::analyze().achados())),
-        (Origem::Conflitos, || Ok(super::conflicts::analyze().achados())),
+        (Origem::Conflitos, || {
+            let relatorio = super::conflicts::analyze();
+
+            // Leitura falha e nada encontrado: não há o que afirmar, e vira
+            // lacuna em vez de verificação aprovada. Conflito ENCONTRADO com
+            // leitura parcial continua sendo verdade e fica; o que faltou
+            // aparece no painel de conflitos.
+            if relatorio.conflicts.is_empty() && !relatorio.lacunas.is_empty() {
+                return Err(relatorio.lacunas.join(" · "));
+            }
+
+            Ok(relatorio.achados())
+        }),
     ];
 
     coletar_em_paralelo(tarefas)

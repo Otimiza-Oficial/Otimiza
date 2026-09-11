@@ -509,6 +509,56 @@ mod sessao {
     }
 }
 
+/// Interpreta a resposta JSON de um PowerShell sem achatar falha em vazio.
+///
+/// Os quatro módulos que diziam "nada encontrado" em verde quando a leitura
+/// falhava — conflitos, tarefas agendadas, serviços de terceiros e programas de
+/// fábrica — faziam isto cada um do seu jeito, e todos terminavam em
+/// `_ => Vec::new()`. Aqui fica uma regra só:
+///
+/// - o comando não rodou, ou saiu com erro → `Err`;
+/// - saída vazia → `Err`: todo script do produto embrulha a lista em `@(…)`,
+///   que devolve `[]` quando não há nada — vazio é resposta que não chegou;
+/// - JSON que não casa com o tipo → `Err`.
+///
+/// Lembrete para quem escrever o script: dentro da sessão viva um erro que não
+/// interrompe o script não conta como falha. A consulta precisa de
+/// `-ErrorAction Stop` para chegar aqui como `success: false`.
+pub fn json_da_saida<T: serde::de::DeserializeOwned>(
+    saida: Result<CommandOutput, String>,
+    o_que: &str,
+) -> Result<T, String> {
+    let saida = saida.map_err(|e| format!("Não consegui ler {}: {}", o_que, e))?;
+
+    if !saida.success {
+        let detalhe = if !saida.stderr.trim().is_empty() {
+            saida.stderr.trim()
+        } else if !saida.stdout.trim().is_empty() {
+            saida.stdout.trim()
+        } else {
+            "o Windows recusou a consulta"
+        };
+
+        return Err(format!("Não consegui ler {}: {}", o_que, resumir(detalhe)));
+    }
+
+    let texto = saida.stdout.trim();
+
+    if texto.is_empty() {
+        return Err(format!(
+            "Não consegui ler {}: a consulta não devolveu resposta",
+            o_que
+        ));
+    }
+
+    serde_json::from_str(texto).map_err(|e| {
+        format!(
+            "Não consegui ler {}: a resposta veio num formato inesperado ({})",
+            o_que, e
+        )
+    })
+}
+
 /// Igual a `powershell`, mas devolve `Err` quando o script falha.
 pub fn powershell_checked(script: &str) -> Result<String, String> {
     powershell_checked_com_prazo(script, PRAZO_DO_POWERSHELL)
@@ -757,6 +807,74 @@ mod tests {
         assert_eq!(rotulo.chars().count(), 161);
         assert!(rotulo.ends_with('…'));
         assert_eq!(resumir("  Get-Thing \n  -Flag  "), "Get-Thing -Flag");
+    }
+
+    fn saida(success: bool, stdout: &str, stderr: &str) -> Result<CommandOutput, String> {
+        Ok(CommandOutput {
+            success,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+        })
+    }
+
+    #[test]
+    fn leitura_que_falha_nunca_vira_lista_vazia() {
+        // O defeito dos quatro módulos calados: cada caminho abaixo virava
+        // `Vec::new()`, e a tela pintava "nada encontrado" de verde.
+        let nao_rodou: Result<Vec<u32>, String> =
+            json_da_saida(Err("não subiu".to_string()), "a lista");
+        let saiu_com_erro: Result<Vec<u32>, String> =
+            json_da_saida(saida(false, "", "Acesso negado"), "a lista");
+        let sem_resposta: Result<Vec<u32>, String> = json_da_saida(saida(true, "  \n", ""), "a lista");
+        let formato_errado: Result<Vec<u32>, String> =
+            json_da_saida(saida(true, "isto não é json", ""), "a lista");
+
+        assert!(nao_rodou.is_err());
+        assert!(saiu_com_erro.as_ref().is_err_and(|e| e.contains("Acesso negado")));
+        assert!(sem_resposta.is_err());
+        assert!(formato_errado.is_err());
+    }
+
+    #[test]
+    fn lista_vazia_de_verdade_continua_sendo_vazia() {
+        // O outro lado da regra: `@()` sem nada vira `[]`, e isso é "não há",
+        // que precisa continuar chegando como lista vazia.
+        let vazia: Result<Vec<u32>, String> = json_da_saida(saida(true, "[]\r\n", ""), "a lista");
+        let cheia: Result<Vec<u32>, String> = json_da_saida(saida(true, "[1,2]", ""), "a lista");
+
+        assert_eq!(vazia, Ok(Vec::new()));
+        assert_eq!(cheia, Ok(vec![1, 2]));
+    }
+
+    #[test]
+    fn as_quatro_consultas_param_no_erro() {
+        // `json_da_saida` só enxerga a falha que chega como `success: false`.
+        // Dentro da sessão viva, um erro que não interrompe o script chega como
+        // SUCESSO com `[]` — e a lista vazia voltaria a ser pintada de verde.
+        // Foi assim nos quatro módulos até a 2.0, todos com
+        // `-ErrorAction SilentlyContinue` na consulta principal.
+        let consultas = [
+            ("tasks.rs", "Get-ScheduledTask -ErrorAction Stop"),
+            ("servicesaudit.rs", "Win32_Service -ErrorAction Stop"),
+            ("bloatware.rs", "-ErrorAction Stop | Select-Object Name,PackageFullName"),
+            ("conflicts.rs", "-ErrorAction Stop | Select-Object displayName,productState"),
+        ];
+
+        for (arquivo, consulta) in consultas {
+            let fonte = std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("src/modules/windows")
+                    .join(arquivo),
+            )
+            .expect("o módulo existe");
+
+            assert!(
+                fonte.contains(consulta),
+                "{} voltou a consultar sem parar no erro (esperava `{}`)",
+                arquivo,
+                consulta
+            );
+        }
     }
 
     #[test]

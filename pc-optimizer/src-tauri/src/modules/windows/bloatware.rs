@@ -59,6 +59,10 @@ pub struct BloatReport {
     /// que o total é parcial em vez de deixar parecer completo.
     pub unmeasured: usize,
     pub programs_scanned: usize,
+    /// O que não deu para ler. Até a 2.0, o serviço de aplicativos da Loja
+    /// desligado fazia a lista sair sem nenhum app da Loja e sem uma palavra
+    /// sobre isso — "nenhum programa de fábrica" sobre metade da procura.
+    pub lacunas: Vec<String>,
 }
 
 // ------------------------------------------------------------ nunca marcar
@@ -156,11 +160,16 @@ struct ProgramaInstalado {
     tamanho_kb: u32,
 }
 
-fn ler_programas() -> Vec<ProgramaInstalado> {
+/// Programas instalados, das três chaves de desinstalação.
+///
+/// `Err` quando uma das chaves não abre. Uma ENTRADA cuja `DisplayName` não se
+/// lê fica de fora sozinha — e não entra na contagem de examinados, que continua
+/// dizendo só o que foi examinado de verdade.
+fn ler_programas() -> Result<Vec<ProgramaInstalado>, String> {
     let mut programas = Vec::new();
 
     for (hive, base) in UNINSTALL_KEYS {
-        for entrada in registry::subkeys(hive, base).unwrap_or_default() {
+        for entrada in registry::subkeys(hive, base)? {
             let caminho = format!("{}\\{}", base, entrada);
 
             let Ok(Some(nome)) = registry::read_text(hive, &caminho, "DisplayName") else {
@@ -186,7 +195,7 @@ fn ler_programas() -> Vec<ProgramaInstalado> {
         }
     }
 
-    programas
+    Ok(programas)
 }
 
 #[derive(Debug, Deserialize)]
@@ -196,16 +205,11 @@ struct RawAppx {
     package_full_name: Option<String>,
 }
 
-fn ler_apps_da_loja() -> Vec<RawAppx> {
+fn ler_apps_da_loja() -> Result<Vec<RawAppx>, String> {
     let script = "ConvertTo-Json -Compress -Depth 2 -InputObject @(Get-AppxPackage \
-                  -ErrorAction SilentlyContinue | Select-Object Name,PackageFullName)";
+                  -ErrorAction Stop | Select-Object Name,PackageFullName)";
 
-    match shell::powershell(script) {
-        Ok(o) if o.success && !o.stdout.trim().is_empty() => {
-            serde_json::from_str(&o.stdout).unwrap_or_default()
-        }
-        _ => Vec::new(),
-    }
+    shell::json_da_saida(shell::powershell(script), "os aplicativos da Microsoft Store")
 }
 
 /// Classifica um programa comum. `None` quando não é peso morto conhecido.
@@ -224,10 +228,14 @@ pub fn classificar(nome: &str, editor: &str) -> Option<(BloatKind, String)> {
         .map(|(_, kind, motivo)| (*kind, motivo.to_string()))
 }
 
-pub fn analyze() -> BloatReport {
-    let programas = ler_programas();
+/// `Err` quando os programas instalados não dão para ler — sem eles não há
+/// análise. Os aplicativos da Loja que não dão para ler viram lacuna: a parte
+/// dos programas comuns continua valendo.
+pub fn analyze() -> Result<BloatReport, String> {
+    let programas = ler_programas()?;
     let programs_scanned = programas.len();
     let mut items = Vec::new();
+    let mut lacunas = Vec::new();
 
     for p in &programas {
         if let Some((kind, reason)) = classificar(&p.nome, &p.editor) {
@@ -249,7 +257,15 @@ pub fn analyze() -> BloatReport {
         }
     }
 
-    for app in ler_apps_da_loja() {
+    let apps = match ler_apps_da_loja() {
+        Ok(apps) => apps,
+        Err(erro) => {
+            lacunas.push(erro);
+            Vec::new()
+        }
+    };
+
+    for app in apps {
         let Some(nome) = app.name else { continue };
 
         if let Some((_, motivo)) = APPS_DA_LOJA.iter().find(|(id, _)| *id == nome) {
@@ -277,12 +293,13 @@ pub fn analyze() -> BloatReport {
     let total_mb = items.iter().filter_map(|i| i.size_mb).sum();
     let unmeasured = items.iter().filter(|i| i.size_mb.is_none()).count();
 
-    BloatReport {
+    Ok(BloatReport {
         items,
         total_mb,
         unmeasured,
         programs_scanned,
-    }
+        lacunas,
+    })
 }
 
 /// Remove um aplicativo da Loja.
@@ -394,7 +411,7 @@ mod tests {
     fn nada_de_programa_comum_e_removido_por_aqui() {
         // Programa comum abre o desinstalador do fabricante; imitá-lo é o
         // caminho para deixar instalação pela metade.
-        let r = analyze();
+        let r = analyze().expect("os programas instalados desta máquina precisam ser legíveis");
         for item in r.items.iter().filter(|i| i.kind != BloatKind::StoreApp) {
             assert!(
                 !item.removable_here,
@@ -406,13 +423,16 @@ mod tests {
 
     #[test]
     fn analisa_esta_maquina() {
-        let r = analyze();
+        let r = analyze().expect("os programas instalados desta máquina precisam ser legíveis");
         println!(
             "{} programas examinados, {} marcados, {:.0} MB",
             r.programs_scanned,
             r.items.len(),
             r.total_mb
         );
+        for lacuna in &r.lacunas {
+            println!("  não li: {}", lacuna);
+        }
 
         for i in &r.items {
             let tamanho = match i.size_mb {

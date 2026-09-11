@@ -31,8 +31,12 @@ pub struct Conflict {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictReport {
     pub conflicts: Vec<Conflict>,
-    /// Quantos programas instalados foram examinados.
-    pub programs_scanned: usize,
+    /// Quantos programas instalados foram examinados. `None` quando a lista não
+    /// deu para ler: "0 programas examinados" seria afirmar um número falso.
+    pub programs_scanned: Option<usize>,
+    /// O que não deu para ler. Com qualquer coisa aqui, a ausência de conflito
+    /// não é afirmada.
+    pub lacunas: Vec<String>,
 }
 
 // --------------------------------------------------------- programas instalados
@@ -48,11 +52,13 @@ const UNINSTALL_KEYS: [(&str, &str); 3] = [
 /// As três chaves cobrem programas de 64 bits, de 32 bits e os instalados só
 /// para o usuário atual. Ler só a primeira — erro comum — perde metade da lista
 /// justamente nas máquinas antigas, cheias de programa de 32 bits.
-pub fn programas_instalados() -> Vec<String> {
+///
+/// `Err` quando uma das chaves não abre.
+pub fn programas_instalados() -> Result<Vec<String>, String> {
     let mut nomes = Vec::new();
 
     for (hive, base) in UNINSTALL_KEYS {
-        for entrada in registry::subkeys(hive, base).unwrap_or_default() {
+        for entrada in registry::subkeys(hive, base)? {
             let caminho = format!("{}\\{}", base, entrada);
 
             if let Ok(Some(nome)) = registry::read_text(hive, &caminho, "DisplayName") {
@@ -64,7 +70,7 @@ pub fn programas_instalados() -> Vec<String> {
         }
     }
 
-    nomes
+    Ok(nomes)
 }
 
 /// Encontra programas cujo nome contém algum dos termos.
@@ -98,23 +104,25 @@ struct RawAntivirus {
 /// estado da proteção em tempo real: `0x10` significa ligada. Verificar isso
 /// importa porque quase toda máquina tem o Defender instalado — o que pesa é
 /// ter dois varrendo ao mesmo tempo, não ter dois instalados.
-pub fn antivirus_ativos() -> Vec<String> {
+///
+/// `Err` quando a Central de Segurança do Windows não responde — o que acontece
+/// em imagem "lite" com o serviço dela desligado. Não saber quais antivírus
+/// estão ligados não é o mesmo que ter só um.
+pub fn antivirus_ativos() -> Result<Vec<String>, String> {
     let script = "ConvertTo-Json -Compress -Depth 2 -InputObject @(Get-CimInstance \
                   -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct \
-                  -ErrorAction SilentlyContinue | Select-Object displayName,productState)";
+                  -ErrorAction Stop | Select-Object displayName,productState)";
 
-    let saida = match shell::powershell(script) {
-        Ok(o) if o.success && !o.stdout.trim().is_empty() => o.stdout,
-        _ => return Vec::new(),
-    };
+    let brutos: Vec<RawAntivirus> = shell::json_da_saida(
+        shell::powershell(script),
+        "os antivírus registrados no Windows",
+    )?;
 
-    let brutos: Vec<RawAntivirus> = serde_json::from_str(&saida).unwrap_or_default();
-
-    brutos
+    Ok(brutos
         .into_iter()
         .filter(|a| tempo_real_ligado(a.product_state.unwrap_or(0)))
         .filter_map(|a| a.display_name)
-        .collect()
+        .collect())
 }
 
 /// Exposto para teste: a leitura de bits é onde este tipo de código erra calado.
@@ -195,12 +203,26 @@ const NUVEM: [(&str, &str); 5] = [
 ];
 
 pub fn analyze() -> ConflictReport {
-    let programas = programas_instalados();
+    let mut lacunas = Vec::new();
+
+    let programas = match programas_instalados() {
+        Ok(programas) => Some(programas),
+        Err(erro) => {
+            lacunas.push(format!("Programas instalados: {}", erro));
+            None
+        }
+    };
     let processos = processos_em_execucao();
     let mut conflitos = Vec::new();
 
     // --- dois ou mais antivírus com proteção em tempo real ---
-    let antivirus = antivirus_ativos();
+    let antivirus = match antivirus_ativos() {
+        Ok(antivirus) => antivirus,
+        Err(erro) => {
+            lacunas.push(erro);
+            Vec::new()
+        }
+    };
     if antivirus.len() > 1 {
         conflitos.push(Conflict {
             id: "antivirus".to_string(),
@@ -219,7 +241,10 @@ pub fn analyze() -> ConflictReport {
     }
 
     // --- outros otimizadores instalados ---
-    let otimizadores = casar(&programas, &OTIMIZADORES);
+    let otimizadores = programas
+        .as_deref()
+        .map(|programas| casar(programas, &OTIMIZADORES))
+        .unwrap_or_default();
     if !otimizadores.is_empty() {
         conflitos.push(Conflict {
             id: "optimizers".to_string(),
@@ -273,7 +298,21 @@ pub fn analyze() -> ConflictReport {
         });
     }
 
-    if conflitos.is_empty() {
+    ConflictReport {
+        conflicts: fechar(conflitos, &lacunas),
+        programs_scanned: programas.as_ref().map(|programas| programas.len()),
+        lacunas,
+    }
+}
+
+/// Ordena os conflitos e acrescenta o "nenhum conflito" SÓ quando tudo foi lido.
+///
+/// Até a 2.0 este achado verde era fabricado sempre que a lista saía vazia —
+/// inclusive quando a leitura dos programas ou dos antivírus tinha falhado. E
+/// ele entrava na contagem de "N verificações passaram nesta máquina": uma
+/// leitura que falhou inflava o número de verificações aprovadas.
+pub fn fechar(mut conflitos: Vec<Conflict>, lacunas: &[String]) -> Vec<Conflict> {
+    if conflitos.is_empty() && lacunas.is_empty() {
         conflitos.push(Conflict {
             id: "none".to_string(),
             title: "Nenhum conflito entre programas".to_string(),
@@ -291,15 +330,27 @@ pub fn analyze() -> ConflictReport {
         FindingSeverity::Ok => 2,
     });
 
-    ConflictReport {
-        conflicts: conflitos,
-        programs_scanned: programas.len(),
-    }
+    conflitos
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nenhum_conflito_so_aparece_quando_tudo_foi_lido() {
+        let tudo_lido = fechar(Vec::new(), &[]);
+        assert_eq!(tudo_lido.len(), 1);
+        assert_eq!(tudo_lido[0].id, "none");
+
+        // O defeito: com a leitura falha, o verde era fabricado e contava como
+        // verificação aprovada.
+        let com_lacuna = fechar(
+            Vec::new(),
+            &["Programas instalados: acesso negado".to_string()],
+        );
+        assert!(com_lacuna.is_empty(), "leitura falha virou achado verde");
+    }
 
     #[test]
     fn le_o_bit_de_protecao_em_tempo_real() {
@@ -346,7 +397,8 @@ mod tests {
 
     #[test]
     fn le_os_programas_instalados_desta_maquina() {
-        let programas = programas_instalados();
+        let programas = programas_instalados()
+            .expect("os programas instalados desta máquina precisam ser legíveis");
         println!("{} programas instalados", programas.len());
 
         assert!(
@@ -360,7 +412,7 @@ mod tests {
     #[test]
     fn analisa_conflitos_desta_maquina() {
         let r = analyze();
-        println!("{} programas examinados", r.programs_scanned);
+        println!("{:?} programas examinados", r.programs_scanned);
 
         for c in &r.conflicts {
             println!("  [{:?}] {}", c.severity, c.title);
@@ -368,8 +420,16 @@ mod tests {
                 println!("        - {}", achado);
             }
         }
+        for lacuna in &r.lacunas {
+            println!("  não li: {}", lacuna);
+        }
 
-        assert!(!r.conflicts.is_empty(), "o relatório nunca pode vir vazio");
+        // Nunca mudo: ou há o que dizer sobre conflitos, ou há o que dizer sobre
+        // o que não deu para ler. O verde fabricado deixou de ser a terceira via.
+        assert!(
+            !r.conflicts.is_empty() || !r.lacunas.is_empty(),
+            "o relatório não pode vir sem conflito e sem lacuna"
+        );
         // Problemas antes do que está certo.
         let ordem: Vec<u8> = r
             .conflicts

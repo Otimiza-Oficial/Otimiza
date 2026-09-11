@@ -47,19 +47,17 @@ pub fn e_da_microsoft(caminho: &str) -> bool {
 ///
 /// `Get-ScheduledTask` devolve nomes de propriedade em inglês em qualquer idioma
 /// do Windows, ao contrário do `schtasks`, cujos cabeçalhos são traduzidos.
-pub fn listar() -> Vec<ScheduledTask> {
-    let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-ScheduledTask | \
+///
+/// `Err` quando o Agendador não responde. Até a 2.0 qualquer falha aqui virava
+/// lista vazia, e a tela escrevia "Nenhuma tarefa de terceiros neste PC" —
+/// inclusive com o serviço do Agendador parado, que é como imagens "lite" do
+/// Windows chegam.
+pub fn listar() -> Result<Vec<ScheduledTask>, String> {
+    let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-ScheduledTask -ErrorAction Stop | \
                   Select-Object TaskName,TaskPath,Author,@{n='State';e={$_.State.ToString()}})";
 
-    let saida = match shell::powershell(script) {
-        Ok(o) if o.success && !o.stdout.trim().is_empty() => o.stdout,
-        _ => return Vec::new(),
-    };
-
-    let brutas: Vec<RawTask> = match serde_json::from_str(&saida) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
+    let brutas: Vec<RawTask> =
+        shell::json_da_saida(shell::powershell(script), "as tarefas agendadas")?;
 
     let mut tarefas: Vec<ScheduledTask> = brutas
         .into_iter()
@@ -86,12 +84,12 @@ pub fn listar() -> Vec<ScheduledTask> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 
-    tarefas
+    Ok(tarefas)
 }
 
 /// Só as de terceiros — as que chegaram com programas instalados.
-pub fn listar_de_terceiros() -> Vec<ScheduledTask> {
-    listar().into_iter().filter(|t| !t.microsoft).collect()
+pub fn listar_de_terceiros() -> Result<Vec<ScheduledTask>, String> {
+    Ok(listar()?.into_iter().filter(|t| !t.microsoft).collect())
 }
 
 /// Liga ou desliga uma tarefa, devolvendo o registro para o histórico.
@@ -145,7 +143,19 @@ mod tests {
     fn lista_de_terceiros_nao_traz_tarefa_do_windows() {
         // A barreira principal: tarefa do sistema não pode chegar à tela onde
         // existe um botão de desligar.
-        for tarefa in listar_de_terceiros() {
+        //
+        // Máquina com o Agendador parado — imagem "lite" do Windows, como a de
+        // desenvolvimento — não tem lista para conferir. O que se pode afirmar
+        // ali é o erro, e a regra do erro é travada em `shell::json_da_saida`.
+        let tarefas = match listar_de_terceiros() {
+            Ok(tarefas) => tarefas,
+            Err(erro) => {
+                println!("o Agendador não respondeu nesta máquina: {}", erro);
+                return;
+            }
+        };
+
+        for tarefa in tarefas {
             assert!(
                 !e_da_microsoft(&tarefa.path),
                 "tarefa do Windows entrou na lista de terceiros: {}{}",
@@ -167,8 +177,13 @@ mod tests {
 
     #[test]
     fn lista_esta_maquina() {
-        let todas = listar();
-        let terceiros = listar_de_terceiros();
+        let (todas, terceiros) = match (listar(), listar_de_terceiros()) {
+            (Ok(todas), Ok(terceiros)) => (todas, terceiros),
+            (Err(erro), _) | (_, Err(erro)) => {
+                println!("o Agendador não respondeu nesta máquina: {}", erro);
+                return;
+            }
+        };
 
         println!(
             "{} tarefas no total, {} de terceiros",

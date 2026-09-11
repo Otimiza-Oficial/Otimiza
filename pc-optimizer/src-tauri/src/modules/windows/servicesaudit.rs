@@ -143,12 +143,18 @@ fn system_root() -> String {
     std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string())
 }
 
-fn consultar() -> Vec<RawService> {
+/// `Err` quando o WMI não responde. Até a 2.0 isso virava lista vazia, e a tela
+/// escrevia "Nenhum serviço de terceiros neste PC".
+fn consultar() -> Result<Vec<RawService>, String> {
     // Um único PowerShell resolve serviço, processo e quantos serviços dividem
     // aquele processo. Fazer isso em três chamadas separadas levaria segundos
     // numa máquina fraca, que é justamente a máquina deste produto.
+    //
+    // Só a lista de serviços para no erro: sem ela não há o que mostrar. A de
+    // processos pode falhar à vontade — a memória de cada serviço vira "sem
+    // medida", que a tela já sabe dizer.
     let script = "\
-        $svc = @(Get-CimInstance Win32_Service -ErrorAction SilentlyContinue); \
+        $svc = @(Get-CimInstance Win32_Service -ErrorAction Stop); \
         $porProcesso = @{}; \
         foreach ($s in $svc) { if ($s.ProcessId -gt 0) { \
           $porProcesso[$s.ProcessId] = 1 + [int]$porProcesso[$s.ProcessId] } } \
@@ -161,19 +167,14 @@ fn consultar() -> Vec<RawService> {
             WorkingSetMb = $mem[[int]$_.ProcessId]; \
             SharesProcess = $porProcesso[$_.ProcessId] } })";
 
-    match shell::powershell(script) {
-        Ok(o) if o.success && !o.stdout.trim().is_empty() => {
-            serde_json::from_str(&o.stdout).unwrap_or_default()
-        }
-        _ => Vec::new(),
-    }
+    shell::json_da_saida(shell::powershell(script), "os serviços do Windows")
 }
 
 /// Todos os serviços que não são do Windows.
-pub fn listar_de_terceiros() -> Vec<ServiceEntry> {
+pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
     let raiz = system_root();
 
-    let mut lista: Vec<ServiceEntry> = consultar()
+    let mut lista: Vec<ServiceEntry> = consultar()?
         .into_iter()
         .filter_map(|bruto| {
             let name = bruto.name?;
@@ -232,7 +233,7 @@ pub fn listar_de_terceiros() -> Vec<ServiceEntry> {
             .then_with(|| a.display_name.cmp(&b.display_name))
     });
 
-    lista
+    Ok(lista)
 }
 
 /// Leva um serviço de terceiro para Manual, ou devolve para Automático.
@@ -249,7 +250,7 @@ pub fn definir_inicio(name: &str, automatico: bool) -> Result<ChangeRecord, Stri
     // A checagem é refeita aqui, e não confiada à interface: o comando é
     // exposto por IPC, e uma tela com dado velho não pode virar permissão para
     // mexer num serviço do sistema.
-    let bruto = consultar()
+    let bruto = consultar()?
         .into_iter()
         .find(|s| s.name.as_deref() == Some(name))
         .ok_or_else(|| format!("Serviço `{}` não existe nesta máquina.", name))?;
@@ -343,7 +344,7 @@ mod tests {
     #[test]
     fn lista_desta_maquina_nao_traz_servico_do_windows() {
         let raiz = system_root();
-        let lista = listar_de_terceiros();
+        let lista = listar_de_terceiros().expect("os serviços desta máquina precisam ser legíveis");
 
         println!("{} serviços de terceiros:", lista.len());
         for s in lista.iter().take(12) {
@@ -371,7 +372,7 @@ mod tests {
 
     #[test]
     fn ordem_poe_o_que_custa_no_topo() {
-        let lista = listar_de_terceiros();
+        let lista = listar_de_terceiros().expect("os serviços desta máquina precisam ser legíveis");
 
         // Os protegidos vão para o fim: eles são informação, não ação.
         let primeiro_protegido = lista.iter().position(|s| s.protected.is_some());

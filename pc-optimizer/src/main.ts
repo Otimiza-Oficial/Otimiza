@@ -138,7 +138,10 @@ interface Veredito {
 
 interface ConflictReport {
   conflicts: Conflict[];
-  programs_scanned: number;
+  /** `null` quando a lista de programas não deu para ler. */
+  programs_scanned: number | null;
+  /** O que não deu para ler. Com algo aqui, a ausência de conflito não é afirmada. */
+  lacunas: string[];
 }
 
 interface ScheduledTask {
@@ -166,6 +169,8 @@ interface BloatReport {
   total_mb: number;
   unmeasured: number;
   programs_scanned: number;
+  /** O que não deu para ler — hoje, os aplicativos da Loja com o serviço deles desligado. */
+  lacunas: string[];
 }
 
 interface SpaceFinding {
@@ -3075,8 +3080,20 @@ async function analyzeBloatware() {
 function renderBloatReport(report: BloatReport) {
   text("bloat-summary", `${report.programs_scanned} programas examinados`);
 
+  // O que não deu para ler vai junto com o resultado, nunca some. Até a 2.0, o
+  // serviço de aplicativos da Loja desligado fazia a lista sair sem nenhum app
+  // da Loja e sem uma palavra sobre isso.
+  const leuTudo = report.lacunas.length === 0;
+  const faltou = leuTudo ? "" : ` Não consegui ler: ${report.lacunas.join(" · ")}`;
+
   if (report.items.length === 0) {
-    setStatus("bloat-status", "Nenhum programa de fábrica encontrado.", "ok");
+    setStatus(
+      "bloat-status",
+      leuTudo
+        ? "Nenhum programa de fábrica encontrado."
+        : `Nenhum programa de fábrica entre o que deu para ler.${faltou}`,
+      leuTudo ? "ok" : "warn"
+    );
     element("bloat-result").innerHTML = "";
     return;
   }
@@ -3091,7 +3108,7 @@ function renderBloatReport(report: BloatReport) {
         }.`
       : "";
 
-  setStatus("bloat-status", `${report.items.length} encontrados.${espaco}`, "error");
+  setStatus("bloat-status", `${report.items.length} encontrados.${espaco}${faltou}`, "error");
   element("bloat-result").innerHTML = report.items.map(renderBloatItem).join("");
 }
 
@@ -3127,15 +3144,29 @@ async function analyzeConflicts() {
 
   try {
     const report = await invoke<ConflictReport>("analyze_conflicts");
-    text("conflicts-summary", `${report.programs_scanned} programas examinados`);
+    // "0 programas examinados" sobre uma lista que não deu para ler seria um
+    // número falso — o que a 1.9 escrevia.
+    text(
+      "conflicts-summary",
+      report.programs_scanned === null
+        ? "programas instalados não lidos"
+        : `${report.programs_scanned} programas examinados`
+    );
 
     const problemas = report.conflicts.filter((c) => c.severity !== "Ok").length;
+    const leuTudo = report.lacunas.length === 0;
+    const faltou = leuTudo ? "" : ` Não consegui ler: ${report.lacunas.join(" · ")}`;
+
+    // Sem conflito e com leitura faltando, não dá para afirmar que não há
+    // conflito: fica em aviso, nunca em verde.
     setStatus(
       "conflicts-status",
-      problemas === 0
-        ? "Nenhum programa disputando função com outro."
-        : `${problemas} conflito(s) custando desempenho.`,
-      problemas === 0 ? "ok" : "error"
+      problemas > 0
+        ? `${problemas} conflito(s) custando desempenho.${faltou}`
+        : leuTudo
+          ? "Nenhum programa disputando função com outro."
+          : `Não dá para dizer que não há conflito.${faltou}`,
+      problemas > 0 ? "error" : leuTudo ? "ok" : "warn"
     );
 
     element("conflicts-result").innerHTML = report.conflicts

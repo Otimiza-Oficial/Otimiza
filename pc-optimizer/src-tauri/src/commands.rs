@@ -1137,7 +1137,7 @@ pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
     {
         tokio::task::spawn_blocking(crate::modules::windows::tasks::listar_de_terceiros)
             .await
-            .map_err(|e| format!("Falha ao listar tarefas: {}", e))
+            .map_err(|e| format!("Falha ao listar tarefas: {}", e))?
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1180,7 +1180,7 @@ pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
     {
         tokio::task::spawn_blocking(crate::modules::windows::servicesaudit::listar_de_terceiros)
             .await
-            .map_err(|e| format!("Falha ao listar serviços: {}", e))
+            .map_err(|e| format!("Falha ao listar serviços: {}", e))?
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1224,7 +1224,7 @@ pub async fn analyze_bloatware() -> Result<BloatReport, String> {
     {
         tokio::task::spawn_blocking(crate::modules::windows::bloatware::analyze)
             .await
-            .map_err(|e| format!("Falha ao examinar programas: {}", e))
+            .map_err(|e| format!("Falha ao examinar programas: {}", e))?
     }
 
     #[cfg(not(target_os = "windows"))]
