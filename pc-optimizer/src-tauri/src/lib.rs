@@ -169,6 +169,7 @@ pub fn run() {
             commands::ajustes_do_driver_nvidia,
             commands::aplicar_ajuste_nvidia,
             commands::limitar_fps_nvidia,
+            commands::medicoes_automaticas,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
@@ -348,6 +349,112 @@ pub fn run() {
                         {
                             utils::Logger::info(&format!("Modo jogo: {}", mensagem));
                             let _ = handle.emit("gamemode:changed", mensagem);
+                        }
+                    }
+                });
+            }
+
+            // A PROVA QUE ACONTECE SOZINHA.
+            //
+            // Um vigia à parte do modo jogo, e não um passo a mais dentro dele:
+            // detectar o jogo consulta o motor 3D pelo PowerShell, e medir
+            // escuta o canal de eventos por vinte segundos. Nada disso pode
+            // atrasar a volta de seis segundos, que amostra a pressão de memória
+            // e liga o modo jogo. As duas coisas lentas rodam fora do runtime.
+            //
+            // Ver `modules::medicoes` para quando mede, e para o que ela NÃO faz:
+            // comparar uma medição com outra.
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+
+                tauri::async_runtime::spawn(async move {
+                    use modules::medicoes::{self, Acompanhamento, MedicaoAutomatica};
+                    use tauri::{Emitter, Manager};
+
+                    let mut acompanhamento = Acompanhamento::default();
+
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(
+                            medicoes::SEGUNDOS_ENTRE_OLHADAS,
+                        ))
+                        .await;
+
+                        // Sem a preferência ou sem administrador não há medição
+                        // possível, e procurar o jogo seria PowerShell à toa.
+                        if !modules::preferences::Preferences::load().medir_quadros_sozinho
+                            || !modules::windows::registry::is_elevated()
+                        {
+                            acompanhamento = Acompanhamento::default();
+                            continue;
+                        }
+
+                        let jogo = tokio::task::spawn_blocking(modules::windows::deteccao::procurar)
+                            .await
+                            .ok()
+                            .flatten();
+                        let agora = modules::changelog::now_timestamp();
+
+                        if !acompanhamento.observar(jogo.as_ref().map(|j| j.pid), agora) {
+                            continue;
+                        }
+                        acompanhamento.tentado(agora);
+
+                        let Some(jogo) = jogo else { continue };
+
+                        let mudancas_aplicadas = handle
+                            .state::<commands::AppState>()
+                            .changes
+                            .lock()
+                            .await
+                            .applied()
+                            .len();
+
+                        let executavel = jogo.executavel.clone();
+                        let medido = tokio::task::spawn_blocking(move || {
+                            modules::windows::frames::medir(
+                                jogo.pid,
+                                &jogo.executavel,
+                                medicoes::SEGUNDOS_DE_MEDICAO,
+                            )
+                        })
+                        .await;
+
+                        match medido {
+                            Ok(Ok(m)) => {
+                                let registro = MedicaoAutomatica {
+                                    jogo: m.process,
+                                    quando: agora,
+                                    fps: m.fps,
+                                    low_1pct: m.low_1pct,
+                                    engasgos_por_minuto: m.engasgos_por_minuto,
+                                    segundos: m.seconds,
+                                    confiavel: m.detalhe_confiavel,
+                                    mudancas_aplicadas,
+                                };
+
+                                match medicoes::registrar(registro) {
+                                    Ok(()) => {
+                                        utils::Logger::info(&format!(
+                                            "medição automática de {}: {:.0} FPS, 1% piores {:.0}",
+                                            executavel, m.fps, m.low_1pct
+                                        ));
+                                        let _ = handle.emit("prova:automatica", ());
+                                    }
+                                    Err(erro) => utils::Logger::warn(&format!(
+                                        "medição automática de {} feita, mas não gravada: {}",
+                                        executavel, erro
+                                    )),
+                                }
+                            }
+                            Ok(Err(motivo)) => utils::Logger::info(&format!(
+                                "medição automática de {} não aconteceu: {}",
+                                executavel, motivo
+                            )),
+                            Err(erro) => utils::Logger::warn(&format!(
+                                "medição automática de {} caiu: {}",
+                                executavel, erro
+                            )),
                         }
                     }
                 });

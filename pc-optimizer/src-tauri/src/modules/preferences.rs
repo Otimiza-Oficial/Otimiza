@@ -41,6 +41,15 @@ pub struct Preferences {
     /// Ligado por padrão: saber que o programa se recusou a oferecer algo, e por
     /// quê, é parte do valor. Quem já entendeu pode desligar para reduzir ruído.
     pub show_unavailable: bool,
+
+    /// Medir os quadros do jogo sozinho, de tempos em tempos, durante a partida
+    /// (`medicoes.rs`).
+    ///
+    /// LIGADO por padrão, ao contrário do modo jogo automático — e a diferença é
+    /// o motivo: medir não muda nada no sistema. É escutar o canal de eventos que
+    /// o próprio Windows publica, sem tocar no jogo. Só acontece com o Otimiza
+    /// aberto como administrador.
+    pub medir_quadros_sozinho: bool,
 }
 
 impl Default for Preferences {
@@ -51,6 +60,8 @@ impl Default for Preferences {
             // Desligado: mexer no sistema sem a pessoa pedir precisa ser escolha dela.
             auto_game_mode: false,
             show_unavailable: true,
+            // Ligado: medir só escuta o Windows, e não muda nada na máquina.
+            medir_quadros_sozinho: true,
         }
     }
 }
@@ -165,5 +176,18 @@ mod tests {
                 .expect("preferências antigas precisam continuar legíveis");
 
         assert!(antigo.auto_game_mode);
+    }
+
+    #[test]
+    fn quem_atualiza_da_1_9_passa_a_ter_a_medicao_sozinha_ligada() {
+        // O arquivo de quem já usava não tem a chave nova. Ela precisa nascer
+        // com o padrão — ligada —, e as escolhas antigas continuam valendo.
+        let antigo: Preferences =
+            serde_json::from_str(r#"{"auto_game_mode": true, "show_unavailable": false}"#)
+                .expect("preferências da 1.9 continuam legíveis");
+
+        assert!(antigo.medir_quadros_sozinho);
+        assert!(antigo.auto_game_mode);
+        assert!(!antigo.show_unavailable);
     }
 }

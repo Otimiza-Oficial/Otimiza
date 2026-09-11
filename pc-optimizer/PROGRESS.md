@@ -1129,6 +1129,38 @@ fica no nome antigo — é preciso limitar de novo com o jogo aberto.
 no driver, e o primeiro teste de verdade é com o dono, o FiveM aberto e o
 Otimiza como administrador.
 
+### A prova que acontece sozinha (E.4)
+
+A prova de antes e depois só existia quando o cliente lembrava de medir. O
+cliente do reembolso nunca mediu nada, e ninguém tinha um número das partidas
+dele.
+
+Agora um vigia à parte (`modules::medicoes`) olha a cada 30 s se há jogo em
+primeiro plano. Com o mesmo jogo aberto há **3 minutos** e o Otimiza como
+administrador, ele mede **20 s** pelo canal de eventos do Windows (o mesmo
+`frames.rs`, sem tocar no jogo) e guarda FPS, 1% piores, engasgos e **quantas
+mudanças do Otimiza estavam aplicadas naquele momento**. No máximo uma medição a
+cada **20 minutos**; guarda as últimas 60.
+
+- **Não compara uma medição com outra.** Cada uma foi feita num lugar diferente
+  do jogo. A tela da prova mostra as últimas dez lado a lado, com a frase que
+  diz que elas não são antes e depois.
+- **Não atrasa o vigia do modo jogo:** detecção e medição rodam fora do runtime,
+  num laço próprio.
+- **Tentativa que falha conta como tentativa:** medição recusada (anticheat,
+  outra medição em andamento) não é repetida a cada meio minuto.
+- **Histórico ilegível não é sobrescrito** por uma medição nova
+  (`historico_ilegivel_nao_e_apagado_por_uma_medicao_nova`), e ilegível não vira
+  "nenhuma medição".
+- Preferência nova, `medir_quadros_sozinho`, **ligada por padrão** — ao
+  contrário do modo jogo automático, porque medir não muda nada no sistema. Quem
+  vem da 1.9 recebe ligada (`quem_atualiza_da_1_9_passa_a_ter_a_medicao_sozinha_ligada`).
+
+**Não visto funcionando:** uma medição automática de verdade — pede o FiveM
+aberto por três minutos com o Otimiza como administrador. As regras de quando
+medir têm teste puro (`o_acompanhamento_mede_so_o_mesmo_jogo_aberto_sem_parar`,
+`sair_do_jogo_ou_trocar_de_jogo_recomeca_a_contagem`).
+
 ## Pendente
 
 ### O que a 1.9 entregou sem ter visto funcionar

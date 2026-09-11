@@ -1593,6 +1593,15 @@
 
             <p id="prova-status" class="status"></p>
             <div id="prova-result" class="resultado" data-vazio="Nenhuma medição guardada. Abra o jogo, entre numa partida, e meça."></div>
+
+            <!--
+              O QUE O VIGIA MEDIU SOZINHO, DURANTE AS PARTIDAS.
+
+              Lado a lado e sem conclusão: cada linha foi medida num lugar
+              diferente do jogo, e dizer "subiu" comparando duas delas seria
+              fabricar a prova que este painel se recusa a fabricar.
+            -->
+            <div id="prova-automaticas" class="resultado" hidden></div>
           </section>
 
           <section class="panel">
@@ -2005,6 +2014,19 @@
                   processador; quando ele fecha, o plano volta ao que era antes.
                   <strong>Nenhum programa é fechado nem congelado</strong> — o
                   Discord, o navegador e o resto continuam funcionando normalmente.
+                </span>
+              </label>
+              <label class="pref">
+                <input type="checkbox" id="pref-medir-sozinho" />
+                <span class="pref-text">
+                  <span class="pref-name">Medir os quadros sozinho durante as partidas</span>
+                  <span class="pref-note">
+                    Ligado por padrão. Com o jogo aberto há alguns minutos, o
+                    Otimiza escuta por vinte segundos o canal de eventos do
+                    Windows e guarda FPS, 1% piores quadros e engasgos — no máximo
+                    uma vez a cada vinte minutos, sem tocar no jogo. Só acontece
+                    com o Otimiza aberto como administrador.
+                  </span>
                 </span>
               </label>
               <label class="pref">

@@ -42,6 +42,8 @@ interface Preferences {
   auto_game_mode: boolean;
   metrics_interval_seconds: number;
   show_unavailable: boolean;
+  /** Medir os quadros sozinho durante as partidas. Ligado de fábrica: não muda nada no sistema. */
+  medir_quadros_sozinho: boolean;
 }
 
 interface RestorePoint {
@@ -324,6 +326,7 @@ let preferences: Preferences = {
   auto_game_mode: false,
   metrics_interval_seconds: 2,
   show_unavailable: true,
+  medir_quadros_sozinho: true,
 };
 /** Handle do laço de medição, para poder trocar o intervalo sem recarregar. */
 let metricsTimer: number | null = null;
@@ -880,6 +883,9 @@ window.addEventListener("DOMContentLoaded", async () => {
     void loadGameMode();
     void loadOptimizations();
   });
+  // O vigia mediu o jogo sozinho: a lista da prova precisa aparecer sem a
+  // pessoa trocar de aba.
+  await listen("prova:automatica", () => void carregarMedicoesAutomaticas());
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
@@ -4607,6 +4613,7 @@ function renderPreferences() {
   element<HTMLInputElement>("pref-restore").checked = preferences.restore_point_before_batch;
   element<HTMLInputElement>("pref-unavailable").checked = preferences.show_unavailable;
   element<HTMLInputElement>("pref-gamemode").checked = preferences.auto_game_mode;
+  element<HTMLInputElement>("pref-medir-sozinho").checked = preferences.medir_quadros_sozinho;
 
   document.querySelectorAll<HTMLButtonElement>("#pref-interval button").forEach((button) => {
     const chosen = Number(button.dataset.interval) === preferences.metrics_interval_seconds;
@@ -6373,6 +6380,70 @@ async function restaurarProvaGuardada() {
     "em \"Medir de novo\" para comparar. Medir o \"antes\" outra vez substitui esta.</p>";
 }
 
+interface MedicaoAutomatica {
+  jogo: string;
+  quando: number;
+  fps: number;
+  low_1pct: number;
+  engasgos_por_minuto: number;
+  segundos: number;
+  confiavel: boolean;
+  mudancas_aplicadas: number;
+}
+
+/**
+ * As medições que o vigia fez sozinho durante as partidas.
+ *
+ * LADO A LADO, SEM CONCLUSÃO. Cada uma foi feita num lugar diferente do jogo, e
+ * dizer "subiu" ou "caiu" comparando duas delas seria fabricar a prova que o
+ * painel se recusa a fabricar. O número de mudanças aplicadas está ali para a
+ * pessoa ver o que estava ligado em cada momento — e decidir se vale medir o
+ * antes e depois de verdade.
+ */
+async function carregarMedicoesAutomaticas() {
+  const alvo = element("prova-automaticas");
+
+  let medicoes: MedicaoAutomatica[];
+
+  try {
+    medicoes = await invoke<MedicaoAutomatica[]>("medicoes_automaticas");
+  } catch (error) {
+    alvo.hidden = false;
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(error))}</p>`;
+    return;
+  }
+
+  if (medicoes.length === 0) {
+    alvo.hidden = true;
+    return;
+  }
+
+  const linhas = medicoes
+    .slice(-10)
+    .reverse()
+    .map((m) => {
+      const quando = new Date(m.quando * 1000);
+      const dia = quando.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      const hora = quando.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const curta = m.confiavel ? "" : " · amostra curta";
+
+      return (
+        `<li><strong>${dia} ${hora}</strong> · ${escapeHtml(m.jogo)} · ` +
+        `${m.fps.toFixed(0)} FPS · 1% piores ${m.low_1pct.toFixed(0)} · ` +
+        `${m.engasgos_por_minuto.toFixed(0)} engasgos/min · ` +
+        `${m.mudancas_aplicadas} mudança(s) do Otimiza aplicada(s)${curta}</li>`
+      );
+    })
+    .join("");
+
+  alvo.hidden = false;
+  alvo.innerHTML =
+    `<p><strong>Medido sozinho durante as partidas</strong></p>` +
+    `<ul class="lista">${linhas}</ul>` +
+    `<p class="hint">Cada linha foi medida num momento e num lugar diferentes do jogo, ` +
+    `então elas não se comparam entre si como antes e depois. Para isso, use os botões acima.</p>`;
+}
+
 async function medirAntes() {
   const botao = element<HTMLButtonElement>("prova-antes");
 
@@ -6693,6 +6764,7 @@ function wireControls() {
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
   element("cfgjogo-competitivo").addEventListener("click", () => aplicarPerfilDoJogo("competitivo"));
   void restaurarProvaGuardada().then(() => void preencherJogoDetectado());
+  void carregarMedicoesAutomaticas();
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
   element("analyze-readiness").addEventListener("click", analyzeReadiness);
@@ -6928,6 +7000,10 @@ function wireControls() {
 
   element("pref-gamemode").addEventListener("change", (event) =>
     savePreferences({ auto_game_mode: (event.target as HTMLInputElement).checked })
+  );
+
+  element("pref-medir-sozinho").addEventListener("change", (event) =>
+    savePreferences({ medir_quadros_sozinho: (event.target as HTMLInputElement).checked })
   );
 
   element("pref-unavailable").addEventListener("change", (event) =>

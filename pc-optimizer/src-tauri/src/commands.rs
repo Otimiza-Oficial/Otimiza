@@ -1850,6 +1850,16 @@ pub fn prova_guardada() -> Option<crate::modules::prova::Prova> {
     crate::modules::prova::guardada()
 }
 
+/// Comando: as medições de quadros que o Otimiza fez sozinho durante as
+/// partidas.
+///
+/// Só leitura. `Err` quando o arquivo existe e não dá para ler — "nenhuma
+/// medição" sobre isso seria a lista vazia fingindo ser resposta.
+#[tauri::command]
+pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAutomatica>, String> {
+    crate::modules::medicoes::ler()
+}
+
 /// Comando: mostra o que um perfil MUDARIA na configuração do jogo.
 ///
 /// Não escreve nada. Existe para a tela poder listar chave por chave, com o
@@ -2815,6 +2825,7 @@ mod tests {
         "versao_mais_nova",
         "checar_essenciais",
         "ajustes_do_driver_nvidia",
+        "medicoes_automaticas",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
