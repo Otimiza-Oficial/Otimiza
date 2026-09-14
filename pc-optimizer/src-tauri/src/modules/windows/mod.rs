@@ -65,7 +65,9 @@ pub mod thermal;
 pub mod veredito;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
-use crate::modules::optimizer::{BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState};
+use crate::modules::optimizer::{
+    ActionResult, ActionStatus, BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState,
+};
 use crate::modules::safety::SafetyValidator;
 use catalog::{Action, OptimizationSpec, RegValue};
 
@@ -508,9 +510,7 @@ impl WindowsOptimizer {
                 success: true,
                 applied: true,
                 message: "Otimização já estava aplicada.".to_string(),
-                requires_restart: false,
-                changes_count: 0,
-                changes: Vec::new(),
+                ..Default::default()
             });
         }
 
@@ -521,8 +521,10 @@ impl WindowsOptimizer {
             ));
         }
 
+        let inicio = std::time::Instant::now();
         let mut changes: Vec<ChangeRecord> = Vec::new();
         let mut notes: Vec<String> = Vec::new();
+        let mut acoes: Vec<ActionResult> = Vec::new();
         let total_de_acoes = spec.actions.len();
 
         for (numero, action) in spec.actions.iter().enumerate() {
@@ -536,10 +538,47 @@ impl WindowsOptimizer {
                 action
             ));
 
-            match self.execute(action, &mut changes) {
-                Ok(Some(note)) => notes.push(note),
-                Ok(None) => {}
+            // O DETALHE É CRIADO AQUI E EMPRESTADO AO RAMO, em vez de cada ramo
+            // montar o seu. Nome, relógio e estado padrão saem de um lugar só; o
+            // ramo preenche apenas o que ele é o único a saber — o valor de
+            // antes, o que foi pedido, o que ficou, e a saída do comando.
+            //
+            // O estado nasce `Verified` porque, depois da releitura obrigatória
+            // que todo ramo de escrita agora faz, um `Ok` significa exatamente
+            // isso. Os ramos que sabem mais — já estava bom, não existe aqui —
+            // corrigem antes de sair.
+            let relogio = std::time::Instant::now();
+            let mut detalhe = ActionResult {
+                name: nome_da_acao(action),
+                status: ActionStatus::Verified,
+                ..Default::default()
+            };
+
+            let resultado = self.execute(action, &mut changes, &mut detalhe);
+            detalhe.duration_ms = relogio.elapsed().as_millis() as u64;
+
+            match resultado {
+                Ok(nota) => {
+                    if let Some(note) = nota {
+                        if detalhe.message.is_empty() {
+                            detalhe.message.clone_from(&note);
+                        }
+                        notes.push(note);
+                    }
+
+                    acoes.push(detalhe);
+                }
                 Err(error) => {
+                    // `VerificationFailed` é diferente de `Failed`, e quem sabe
+                    // qual dos dois é o ramo — ele classifica antes de devolver
+                    // o erro. Só quem não disse nada vira `Failed`.
+                    if detalhe.status == ActionStatus::Verified {
+                        detalhe.status = ActionStatus::Failed;
+                    }
+
+                    detalhe.message.clone_from(&error);
+                    acoes.push(detalhe);
+
                     crate::utils::Logger::warn(&format!(
                         "aplicar `{}`: ação {}/{} falhou ({}); desfazendo {} mudança(s) já feitas",
                         spec.id,
@@ -577,12 +616,19 @@ impl WindowsOptimizer {
         Ok(OptimizationOutcome {
             id: spec.id.to_string(),
             name: spec.name.to_string(),
-            success: true,
+            // DERIVADO DAS AÇÕES, e não `true` cravado. Chegar até aqui já
+            // significa que nada devolveu erro — mas o `success` passa a sair
+            // do mesmo lugar que o cliente vê ação por ação, e não de uma
+            // afirmação paralela que pode divergir no próximo conserto.
+            success: acoes.iter().all(|a| a.status.deu_certo()),
             applied: true,
             message: success_message(spec, &notes),
             requires_restart: spec.requires_restart,
+            requires_logoff: exige_logoff(spec),
+            duration_ms: inicio.elapsed().as_millis() as u64,
             changes_count,
             changes: described,
+            actions: acoes,
         })
     }
 
@@ -622,9 +668,7 @@ impl WindowsOptimizer {
                     success: true,
                     applied: false,
                     message: "Não estava aplicada.".to_string(),
-                    requires_restart: false,
-                    changes_count: 0,
-                    changes: Vec::new(),
+                    ..Default::default()
                 });
             }
         };
@@ -653,6 +697,7 @@ impl WindowsOptimizer {
             requires_restart,
             changes_count,
             changes: described,
+            ..Default::default()
         })
     }
 
@@ -685,6 +730,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 1,
                 changes: vec![change.describe()],
+            ..Default::default()
             });
         }
 
@@ -707,6 +753,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -756,6 +803,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -830,6 +878,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -863,6 +912,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 0,
                 changes: Vec::new(),
+            ..Default::default()
             });
         }
 
@@ -905,6 +955,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -974,6 +1025,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -1021,6 +1073,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -1068,6 +1121,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -1137,6 +1191,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 0,
                 changes: Vec::new(),
+            ..Default::default()
             });
         }
 
@@ -1172,6 +1227,7 @@ impl WindowsOptimizer {
             requires_restart: true,
             changes_count: religados,
             changes: described,
+            ..Default::default()
         })
     }
 
@@ -1203,6 +1259,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 1,
                 changes: vec![change.describe()],
+            ..Default::default()
             });
         }
 
@@ -1229,6 +1286,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -1270,6 +1328,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 1,
                 changes: vec![change.describe()],
+                ..Default::default()
             });
         }
 
@@ -1292,6 +1351,7 @@ impl WindowsOptimizer {
             requires_restart: false,
             changes_count: 1,
             changes: vec![described],
+            ..Default::default()
         })
     }
 
@@ -1439,6 +1499,7 @@ impl WindowsOptimizer {
         &self,
         action: &Action,
         changes: &mut Vec<ChangeRecord>,
+        detalhe: &mut ActionResult,
     ) -> Result<Option<String>, String> {
         match action {
             Action::Registry {
@@ -1448,6 +1509,30 @@ impl WindowsOptimizer {
                 value,
             } => {
                 let mut nao_confirmado: Option<String> = None;
+
+                // O QUE HAVIA ANTES, lido antes de escrever. É o campo que
+                // responde "o Otimiza mudou o quê, exatamente?" sem o cliente
+                // ter que confiar na nossa palavra.
+                let antes = registry::read(hive, path, name);
+                detalhe.before_value = antes.as_ref().ok().map(descrever_valor);
+                detalhe.expected_value = Some(descrever_alvo(value));
+
+                // JÁ ESTAVA NO ALVO: não escreve e não registra.
+                //
+                // Todos os outros ramos já faziam isso, e este não — ele
+                // gravava o valor por cima do mesmo valor e devolvia
+                // `Verified`, dizendo ao cliente que mudou o que não mudou. Foi
+                // visto num resultado real: `antes=0 esperado=0 depois=0` com
+                // estado "conferido".
+                //
+                // Também evita uma linha inútil no histórico: um desfazer que
+                // reescreve o mesmo número não desfaz nada, e ocupa espaço na
+                // lista do cliente como se desfizesse.
+                if matches!(conferir_escrita(value, &antes), Confirmacao::Igual) {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.after_value.clone_from(&detalhe.before_value);
+                    return Ok(None);
+                }
 
                 let previous = match value {
                     RegValue::Dword(v) => registry::set_dword(hive, path, name, *v)?,
@@ -1476,9 +1561,17 @@ impl WindowsOptimizer {
                 //
                 // É a mesma regra que o plano de energia já seguia, agora no
                 // caminho por onde passa a maior parte do catálogo.
-                match conferir_escrita(value, &registry::read(hive, path, name)) {
+                let relido = registry::read(hive, path, name);
+                detalhe.after_value = relido.as_ref().ok().map(descrever_valor);
+
+                match conferir_escrita(value, &relido) {
                     Confirmacao::Igual => {}
                     Confirmacao::Diferente(lido) => {
+                        // `VerificationFailed`, e não `Failed`: o comando foi
+                        // aceito. A diferença diz ao atendimento que o problema
+                        // não está no Otimiza.
+                        detalhe.status = ActionStatus::VerificationFailed;
+
                         return Err(format!(
                             "O Windows aceitou a gravação de `{}`, mas ao reler o valor é {}. \
                              Costuma ser política de domínio ou outro programa reescrevendo a \
@@ -1490,6 +1583,7 @@ impl WindowsOptimizer {
                     // seria descartar uma mudança que provavelmente valeu — mas
                     // também não pode passar como confirmado.
                     Confirmacao::NaoDeuParaLer => {
+                        detalhe.status = ActionStatus::NotConfirmed;
                         nao_confirmado = Some(format!(
                             "`{}` foi gravado, mas não foi possível reler para confirmar.",
                             name
@@ -1530,13 +1624,20 @@ impl WindowsOptimizer {
 
                 // Um serviço ausente não é falha: instalações do Windows variam.
                 if !services::exists(name) {
+                    detalhe.status = ActionStatus::Unsupported;
+                    detalhe.unsupported_reason =
+                        Some(format!("O serviço {} não existe neste Windows.", name));
                     return Ok(None);
                 }
 
                 let previous = services::query_start_type(name)?;
+                detalhe.before_value = Some(previous.clone());
+                detalhe.expected_value = Some("disabled".to_string());
 
                 // Já desativado: nada a fazer e nada a registrar.
                 if previous == "disabled" {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.after_value = Some(previous);
                     return Ok(None);
                 }
 
@@ -1550,13 +1651,14 @@ impl WindowsOptimizer {
                 // Gerenciador de Serviços aceitou o pedido; em máquina com
                 // política de domínio, ou com o serviço trancado pelo próprio
                 // Windows, o tipo volta ao que era.
+                let agora = services::query_start_type(name).ok();
+                detalhe.after_value.clone_from(&agora);
+
                 let nota = exigir_confirmacao(
-                    conferir(
-                        &"disabled".to_string(),
-                        services::query_start_type(name).ok(),
-                    ),
+                    conferir(&"disabled".to_string(), agora),
                     &format!("o serviço {}", name),
-                )?;
+                )
+                .inspect_err(|_| detalhe.status = ActionStatus::VerificationFailed)?;
 
                 // Parar o serviço é o que libera recursos agora; a falha em parar
                 // não invalida a otimização, que já vale a partir do próximo boot.
@@ -1606,8 +1708,12 @@ impl WindowsOptimizer {
 
             Action::DisableHibernation => {
                 let previously_enabled = power::hibernation_enabled();
+                detalhe.before_value = Some(previously_enabled.to_string());
+                detalhe.expected_value = Some("false".to_string());
 
                 if !previously_enabled {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.after_value = Some("false".to_string());
                     return Ok(None);
                 }
 
@@ -1633,6 +1739,7 @@ impl WindowsOptimizer {
                     .ok_or("Não foi possível ler o estado da compressão de memória.")?;
 
                 if previously_enabled == *enabled {
+detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1649,6 +1756,7 @@ impl WindowsOptimizer {
                 let removed = firmware::boot_limits();
 
                 if removed.is_empty() {
+detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1711,6 +1819,7 @@ impl WindowsOptimizer {
                 };
 
                 if anterior == *enabled {
+detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1741,6 +1850,7 @@ impl WindowsOptimizer {
                 let ligadas: Vec<&str> = acessibilidade::ligadas();
 
                 if ligadas.is_empty() {
+detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1762,10 +1872,21 @@ impl WindowsOptimizer {
                 let Some(anterior) = power::hypervisor_launch_type() else {
                     // Sem conseguir ler o estado atual não há como prometer a
                     // volta, e mexer sem poder reverter está fora de questão.
+                    //
+                    // NEM "já estava bom" NEM falha: não sabemos. Marcar como
+                    // aplicada diria que o hipervisor está desligado sobre uma
+                    // leitura que não aconteceu.
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message =
+                        "Não foi possível ler como o hipervisor sobe no boot.".to_string();
                     return Ok(None);
                 };
 
+                detalhe.before_value = Some(anterior.clone());
+                detalhe.expected_value = Some("off".to_string());
+
                 if anterior == "off" {
+detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1794,8 +1915,14 @@ impl WindowsOptimizer {
 
             Action::RemoveForcedPlatformClock => {
                 let Some(valor) = firmware::forced_platform_clock() else {
+                    // Nenhum relógio forçado: a máquina já está saudável neste
+                    // ponto, e é isso que o resultado precisa dizer.
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 };
+
+                detalhe.before_value = Some(valor.clone());
+                detalhe.expected_value = Some("ausente".to_string());
 
                 shell::run_checked("bcdedit", &["/deletevalue", "{current}", "useplatformclock"])?;
 
@@ -1957,6 +2084,49 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
+/// O nome de uma ação no resultado padronizado.
+///
+/// É PARA SER LIDO POR UMA PESSOA no atendimento, e por isso não é o `{:?}` do
+/// enum: `Registry { hive: "HKLM", path: "SYSTEM\\…", name: "HwSchMode", … }`
+/// tem a informação toda e é ilegível. O caminho e os valores já viajam nos
+/// campos próprios do `ActionResult`.
+pub fn nome_da_acao(action: &Action) -> String {
+    match action {
+        // Para o registro, o NOME DO VALOR é o que identifica a ação — é ele
+        // que se pesquisa quando se quer saber o que aquela chave faz.
+        Action::Registry { hive, name, .. } => format!("registro {}\\…\\{}", hive, name),
+        Action::DisableService { name } => format!("serviço {}", name),
+        Action::PlanoOtimiza => "plano de energia OTIMIZA".to_string(),
+        Action::DisableNagle => "algoritmo de Nagle nas placas de rede".to_string(),
+        Action::DisableHibernation => "hibernação".to_string(),
+        Action::MemoryCompression { .. } => "compressão de memória".to_string(),
+        Action::GpuMsiMode => "modo MSI da placa de vídeo".to_string(),
+        Action::NicPowerSaving => "economia de energia da placa de rede".to_string(),
+        Action::ClearBootLimits => "limites de inicialização".to_string(),
+        Action::ReservedStorage { .. } => "Armazenamento Reservado".to_string(),
+        Action::CleanTempFiles => "arquivos temporários".to_string(),
+        Action::CleanUpdateCache => "instaladores de atualização".to_string(),
+        Action::AccessibilityKeysOff => "teclas de acessibilidade".to_string(),
+        Action::DisableHypervisor => "hipervisor no boot".to_string(),
+        Action::RemoveForcedPlatformClock => "relógio de plataforma forçado".to_string(),
+    }
+}
+
+/// A otimização só mostra efeito depois de sair e entrar na conta?
+///
+/// DERIVADO, e não um campo novo no catálogo. `sysparams::nota_de_ativacao` já
+/// sabe quais chaves o shell só relê ao iniciar — é a mesma tabela que escreve
+/// a frase mostrada ao cliente. Declarar de novo no catálogo criaria uma
+/// segunda fonte, e duas fontes divergem no primeiro conserto.
+pub fn exige_logoff(spec: &catalog::OptimizationSpec) -> bool {
+    spec.actions.iter().any(|action| match action {
+        Action::Registry {
+            hive, path, name, ..
+        } => sysparams::nota_de_ativacao(hive, path, name).is_some(),
+        _ => false,
+    })
+}
+
 /// O que a releitura de uma escrita de registro diz.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Confirmacao {
@@ -2046,6 +2216,19 @@ pub fn exigir_confirmacao(c: Confirmacao, o_que: &str) -> Result<Option<String>,
             "{} foi alterado, mas não foi possível reler para confirmar.",
             o_que
         ))),
+    }
+}
+
+/// O valor que a otimização vai gravar, na mesma forma do que foi lido.
+///
+/// Mesma função de impressão dos dois lados de propósito: o cliente compara
+/// "antes" com "esperado" olhando, e duas formatações diferentes para o mesmo
+/// número fazem parecer que mudou quando não mudou.
+pub fn descrever_alvo(valor: &RegValue) -> String {
+    match valor {
+        RegValue::Dword(v) => v.to_string(),
+        RegValue::Text(v) => format!("\"{}\"", v),
+        RegValue::Binary(bytes) => format!("{} byte(s)", bytes.len()),
     }
 }
 
@@ -2273,6 +2456,154 @@ mod tests {
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
 
     // ------------------------------------ provar que a escrita ficou de pé
+
+    // ------------------------------------------ o resultado padronizado
+
+    /// Aplica uma otimização de registro REAL e imprime o resultado
+    /// padronizado, depois desfaz.
+    ///
+    /// `disable_startup_delay` é a escolhida por ser em `HKCU`, invisível,
+    /// instantânea e reversível — ela muda um atraso de alguns segundos ao
+    /// entrar na conta, e nada mais.
+    ///
+    /// `#[ignore]`: escreve no registro da máquina que roda o teste.
+    ///
+    ///   cargo test --lib resultado_padronizado -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn resultado_padronizado_de_uma_otimizacao_real() {
+        use crate::modules::changelog::ChangeLog;
+
+        let otimizador = WindowsOptimizer::new();
+        let mut log = ChangeLog::load();
+        let id = "disable_startup_delay";
+
+        let aplicar = otimizador.apply(id, &mut log);
+
+        match &aplicar {
+            Ok(r) => {
+                println!("\n=== {} ===", r.name);
+                println!(
+                    "sucesso={} aplicada={} reinício={} logoff={} {} ms",
+                    r.success, r.applied, r.requires_restart, r.requires_logoff, r.duration_ms
+                );
+
+                for a in &r.actions {
+                    println!(
+                        "  [{:?}] {} | antes={:?} esperado={:?} depois={:?} | saída={:?} | {} ms",
+                        a.status,
+                        a.name,
+                        a.before_value,
+                        a.expected_value,
+                        a.after_value,
+                        a.exit_code,
+                        a.duration_ms
+                    );
+
+                    if let Some(motivo) = &a.unsupported_reason {
+                        println!("      motivo: {}", motivo);
+                    }
+                }
+
+                assert!(!r.actions.is_empty(), "o resultado veio sem ações");
+            }
+            Err(e) => println!("FALHOU: {}", e),
+        }
+
+        // Devolve a máquina ao que estava, tenha a aplicação dado certo ou não.
+        if aplicar.is_ok() {
+            let desfazer = otimizador.revert(id, &mut log);
+            println!("desfazer: {:?}", desfazer.map(|r| r.message));
+        }
+    }
+
+    #[test]
+    fn ajuste_que_este_windows_nao_tem_nao_e_vermelho() {
+        // Não é problema do cliente nem do produto, e pintar de vermelho manda
+        // procurar defeito onde não há. É a mesma regra que o plano de energia
+        // já seguia, agora no vocabulário comum.
+        assert!(ActionStatus::Unsupported.deu_certo());
+        assert!(ActionStatus::AlreadyOptimized.deu_certo());
+        assert!(ActionStatus::Verified.deu_certo());
+        assert!(ActionStatus::NotConfirmed.deu_certo());
+        assert!(ActionStatus::Skipped.deu_certo());
+
+        assert!(!ActionStatus::Failed.deu_certo());
+        assert!(!ActionStatus::VerificationFailed.deu_certo());
+    }
+
+    #[test]
+    fn o_nome_da_acao_e_para_uma_pessoa_ler() {
+        // O `{:?}` do enum tem a informação toda e é ilegível. O caminho e os
+        // valores viajam nos campos próprios do resultado.
+        let nome = nome_da_acao(&Action::Registry {
+            hive: "HKLM",
+            path: r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+            name: "HwSchMode",
+            value: RegValue::Dword(2),
+        });
+
+        assert!(nome.contains("HwSchMode"), "{}", nome);
+        assert!(!nome.contains("RegValue"), "{}", nome);
+        assert!(!nome.contains("CurrentControlSet"), "{}", nome);
+
+        assert_eq!(
+            nome_da_acao(&Action::DisableService { name: "SysMain" }),
+            "serviço SysMain"
+        );
+    }
+
+    #[test]
+    fn todo_item_do_catalogo_tem_nome_legivel_em_cada_acao() {
+        // Trava de forma: uma ação nova sem nome sairia com o nome de outra, ou
+        // vazia, justamente no relatório que o cliente manda quando algo falha.
+        for spec in catalog::CATALOG {
+            for action in spec.actions {
+                let nome = nome_da_acao(action);
+
+                assert!(
+                    nome.len() > 4 && !nome.contains('{'),
+                    "a ação de `{}` não tem nome legível: `{}`",
+                    spec.id,
+                    nome
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn o_logoff_e_derivado_e_nao_declarado() {
+        // A tabela que sabe quais chaves o shell só relê ao iniciar é a do
+        // `sysparams`, e ela já escreve a frase mostrada ao cliente. Se algum
+        // item do catálogo mexe numa dessas chaves, o resultado precisa dizer
+        // que exige logoff — sem ninguém ter declarado isso à mão.
+        let com_logoff: Vec<&str> = catalog::CATALOG
+            .iter()
+            .filter(|spec| exige_logoff(spec))
+            .map(|spec| spec.id)
+            .collect();
+
+        assert!(
+            !com_logoff.is_empty(),
+            "nenhum item do catálogo exige logoff — ou a derivação quebrou, ou \
+             as chaves do `sysparams::nota_de_ativacao` saíram do catálogo"
+        );
+    }
+
+    #[test]
+    fn antes_e_esperado_sao_impressos_do_mesmo_jeito() {
+        // O cliente compara as duas colunas olhando. Duas formatações
+        // diferentes para o mesmo número fazem parecer que mudou quando não
+        // mudou.
+        assert_eq!(
+            descrever_alvo(&RegValue::Dword(2)),
+            descrever_valor(&PreviousValue::Dword(2))
+        );
+        assert_eq!(
+            descrever_alvo(&RegValue::Text("0".into())),
+            descrever_valor(&PreviousValue::Text("0".into()))
+        );
+    }
 
     #[test]
     fn conferir_separa_diferente_de_nao_lido() {

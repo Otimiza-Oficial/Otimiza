@@ -94,8 +94,88 @@ pub struct OptimizationInfo {
     pub detail: Option<String>,
 }
 
+/// O desfecho de UMA AÇÃO, com o que é preciso para reproduzir a falha numa
+/// máquina que não está na sua frente.
+///
+/// Os campos são os que a nota de arquitetura do projeto define, e cada um tem
+/// uma pergunta por trás: o que havia antes, o que pedimos, o que ficou, o que
+/// o comando devolveu, e quanto demorou. Um `message` sozinho responde só a
+/// última pergunta do atendimento, e nunca a primeira.
+///
+/// `Option` em vez de string vazia onde o dado pode não existir: um ajuste que
+/// não roda comando nenhum não tem código de saída, e escrever `0` ali seria
+/// afirmar que um comando deu certo.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ActionResult {
+    pub name: String,
+    pub status: ActionStatus,
+    pub message: String,
+    pub before_value: Option<String>,
+    pub expected_value: Option<String>,
+    pub after_value: Option<String>,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    pub duration_ms: u64,
+    /// POR QUE não se aplica aqui. `Unsupported` sem motivo manda o cliente
+    /// perguntar exatamente o que este campo responderia.
+    pub unsupported_reason: Option<String>,
+}
+
+/// O que aconteceu com uma ação.
+///
+/// O VOCABULÁRIO É O DO PROTOCOLO DE COMPATIBILIDADE do projeto, e não um
+/// inventado aqui — as notas de laboratório classificam com estes mesmos
+/// termos, e duas listas diferentes de palavras para a mesma coisa é como o
+/// relatório do cliente deixa de se agrupar com o do laboratório.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActionStatus {
+    /// Escrito E CONFERIDO relendo do Windows.
+    #[default]
+    Verified,
+    /// A máquina já estava assim. Nada foi escrito.
+    AlreadyOptimized,
+    /// Este Windows ou este hardware não tem isto. NÃO É FALHA.
+    Unsupported,
+    /// O comando foi recusado.
+    Failed,
+    /// O comando foi aceito e o valor relido não é o pedido.
+    ///
+    /// Separado de `Failed` porque é outra conversa: quase sempre é política de
+    /// domínio ou outro programa reescrevendo, e não há nada a consertar no
+    /// produto.
+    VerificationFailed,
+    /// Escrito, e não deu para reler para confirmar.
+    NotConfirmed,
+    /// Não se aplica a esta máquina.
+    Skipped,
+}
+
+impl ActionStatus {
+    /// Esta ação deu certo do ponto de vista de quem clicou?
+    ///
+    /// `Unsupported` conta como certo de propósito: um ajuste que este Windows
+    /// não tem não é um problema do cliente nem do produto, e pintá-lo de
+    /// vermelho manda procurar defeito onde não há.
+    pub fn deu_certo(&self) -> bool {
+        matches!(
+            self,
+            ActionStatus::Verified
+                | ActionStatus::AlreadyOptimized
+                | ActionStatus::Unsupported
+                | ActionStatus::NotConfirmed
+                | ActionStatus::Skipped
+        )
+    }
+}
+
 /// Resultado de aplicar ou desfazer uma otimização.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` existe para que os campos novos do resultado padronizado tenham um
+/// estado neutro em cada ponto de construção, e não para ser usado como
+/// resultado de verdade: um resultado com `success: false` e mensagem vazia não
+/// diz nada a ninguém.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OptimizationOutcome {
     pub id: String,
     pub name: String,
@@ -104,26 +184,57 @@ pub struct OptimizationOutcome {
     pub applied: bool,
     pub message: String,
     pub requires_restart: bool,
+    /// Exige SAIR E ENTRAR na conta, que não é a mesma coisa que reiniciar.
+    ///
+    /// Campo e não status, de propósito: uma otimização pode ter sido aplicada
+    /// E exigir logoff, e as duas informações precisam caber juntas. Como
+    /// status, uma apagaria a outra.
+    #[serde(default)]
+    pub requires_logoff: bool,
+    /// Quanto a otimização inteira levou. É o que separa "falhou" de "ficou
+    /// pendurada" quando o cliente manda o registro.
+    #[serde(default)]
+    pub duration_ms: u64,
     pub changes_count: usize,
     /// O que exatamente foi alterado, em português. Aparece no registro ao vivo:
     /// o cliente vê cada mexida em vez de confiar numa barra de progresso.
     pub changes: Vec<String>,
+    /// Uma linha por ação, com antes, esperado, depois, código de saída e
+    /// saída do comando.
+    ///
+    /// NÃO SUBSTITUI `changes`: aquele é a lista em português que o cliente lê
+    /// no registro ao vivo; esta é a evidência que o atendimento lê. Juntar as
+    /// duas faria uma das leituras piorar.
+    #[serde(default)]
+    pub actions: Vec<ActionResult>,
 }
 
 impl OptimizationOutcome {
-    /// Resultado de uma otimização que falhou, para que um erro isolado não
-    /// interrompa o lote inteiro no modo "Otimizar agora".
-    pub fn failed(id: &str, name: &str, error: String) -> Self {
+    /// O esqueleto de um resultado, com os campos novos no estado neutro.
+    ///
+    /// Existe para que acrescentar um campo ao resultado padronizado não vire
+    /// uma edição em seis lugares — que é exatamente como um deles acaba com o
+    /// valor errado e ninguém percebe.
+    pub fn novo(id: &str, name: &str, message: String) -> Self {
         OptimizationOutcome {
             id: id.to_string(),
             name: name.to_string(),
             success: false,
             applied: false,
-            message: error,
+            message,
             requires_restart: false,
+            requires_logoff: false,
+            duration_ms: 0,
             changes_count: 0,
             changes: Vec::new(),
+            actions: Vec::new(),
         }
+    }
+
+    /// Resultado de uma otimização que falhou, para que um erro isolado não
+    /// interrompa o lote inteiro no modo "Otimizar agora".
+    pub fn failed(id: &str, name: &str, error: String) -> Self {
+        Self::novo(id, name, error)
     }
 }
 

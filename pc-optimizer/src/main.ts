@@ -268,6 +268,38 @@ interface PerformanceMetrics {
   uptime_hours: number;
 }
 
+type ActionStatus =
+  | "Verified"
+  | "AlreadyOptimized"
+  | "Unsupported"
+  | "Failed"
+  | "VerificationFailed"
+  | "NotConfirmed"
+  | "Skipped";
+
+/**
+ * O resultado de UMA ação, com o que é preciso para reproduzir a falha numa
+ * máquina que não está na sua frente.
+ *
+ * A tela mostra pouco disto hoje — o cliente lê o registro ao vivo, não uma
+ * tabela de códigos de saída. Ele existe porque é o que vai no relatório que o
+ * atendimento pede, e porque um campo que não existe no backend não pode ser
+ * mostrado depois.
+ */
+interface ActionResult {
+  name: string;
+  status: ActionStatus;
+  message: string;
+  before_value: string | null;
+  expected_value: string | null;
+  after_value: string | null;
+  exit_code: number | null;
+  stdout: string;
+  stderr: string;
+  duration_ms: number;
+  unsupported_reason: string | null;
+}
+
 interface OptimizationOutcome {
   id: string;
   name: string;
@@ -275,7 +307,10 @@ interface OptimizationOutcome {
   applied: boolean;
   message: string;
   requires_restart: boolean;
+  requires_logoff: boolean;
+  duration_ms: number;
   changes_count: number;
+  actions: ActionResult[];
 }
 
 interface BenchmarkSnapshot {
@@ -5251,6 +5286,11 @@ async function runBatch(
     const failures = outcomes.filter((outcome) => !outcome.success);
     const restart = outcomes.some((outcome) => outcome.success && outcome.requires_restart);
 
+    // SAIR E ENTRAR NA CONTA NÃO É REINICIAR, e as duas frases não podem virar
+    // uma só: o cliente que reinicia por nada perde tempo, e o que só reinicia
+    // quando precisava sair da conta conclui que o produto não funcionou.
+    const logoff = outcomes.some((outcome) => outcome.success && outcome.requires_logoff);
+
     if (failures.length > 0) {
       const detail = failures.map((f) => `${f.name}: ${f.message}`).join(" · ");
       setStatus(
@@ -5261,7 +5301,9 @@ async function runBatch(
     } else {
       setStatus(
         "optimization-status",
-        `${outcomes.length} concluídas.${restart ? " Reinicie o PC para tudo valer." : ""}`,
+        `${outcomes.length} concluídas.${restart ? " Reinicie o PC para tudo valer." : ""}${
+          !restart && logoff ? " Saia e entre de novo na conta para tudo valer." : ""
+        }`,
         "ok"
       );
     }
