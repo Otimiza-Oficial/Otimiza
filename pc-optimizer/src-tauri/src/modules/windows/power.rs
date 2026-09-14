@@ -36,21 +36,71 @@ pub fn set_active_scheme(guid: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Garante que o plano Alto Desempenho exista.
+/// O nome dado à cópia, quando o Alto Desempenho não existe na máquina.
 ///
-/// Em algumas instalações (notebooks com Modern Standby, imagens OEM enxutas) o
-/// plano vem oculto. Nesse caso ele é recriado a partir do modelo do sistema.
-pub fn ensure_high_performance_exists() -> Result<(), String> {
-    let list = shell::run_checked("powercfg", &["/list"])?;
+/// Existe para que a cópia seja REENCONTRADA na próxima execução. Sem nome
+/// nosso, cada tentativa criaria mais um plano chamado "Alto desempenho" e o
+/// cliente acabaria com uma lista deles.
+pub const NOME_DA_COPIA: &str = "OTIMIZA Alto Desempenho";
 
-    if list.to_lowercase().contains(HIGH_PERFORMANCE_GUID) {
-        return Ok(());
+/// O GUID do plano de alto desempenho desta máquina, SEM CRIAR NADA.
+///
+/// `None` quer dizer que ele não existe aqui — não que a leitura falhou; nesse
+/// caso a lista vem vazia e a resposta também é `None`, e quem chama trata as
+/// duas como "não sei se está satisfeito".
+pub fn alto_desempenho_existente() -> Option<String> {
+    use super::planoenergia;
+
+    let lista = shell::run_checked("powercfg", &["/list"]).ok()?;
+    let planos = planoenergia::planos_da_saida(&lista);
+
+    if planos.iter().any(|(g, _)| g == HIGH_PERFORMANCE_GUID) {
+        return Some(HIGH_PERFORMANCE_GUID.to_string());
     }
 
-    shell::run_checked("powercfg", &["-duplicatescheme", HIGH_PERFORMANCE_GUID])
-        .map_err(|e| format!("High performance power plan is unavailable on this system: {}", e))?;
+    planoenergia::achar_na_lista(&planos, NOME_DA_COPIA)
+}
 
-    Ok(())
+/// Garante que exista um plano de alto desempenho E DEVOLVE O GUID DELE.
+///
+/// ESTA FUNÇÃO DEVOLVIA `()`, E ESSE ERA O DEFEITO QUE MAIS DOÍA NO PC DO
+/// CLIENTE. Em notebook com Modern Standby e em imagem OEM enxuta o Alto
+/// Desempenho não existe. O código de antes chamava `-duplicatescheme`, que CRIA
+/// UMA CÓPIA COM GUID NOVO, jogava a resposta fora, e em seguida mandava ativar
+/// o GUID FIXO — que continua não existindo ali. Conferido nesta máquina: a
+/// duplicação respondeu `GUID do Esquema de Energia: 15a86c79-…`, diferente do
+/// pedido.
+///
+/// Resultado no cliente: a otimização falhava, e cada tentativa deixava mais um
+/// plano órfão para trás. Na máquina de desenvolvimento nada disso aparecia,
+/// porque aqui o Alto Desempenho existe.
+pub fn garantir_alto_desempenho() -> Result<String, String> {
+    if let Some(guid) = alto_desempenho_existente() {
+        return Ok(guid);
+    }
+
+    let saida = shell::run_checked("powercfg", &["-duplicatescheme", HIGH_PERFORMANCE_GUID])
+        .map_err(|e| {
+            format!(
+                "Este Windows não tem o plano Alto Desempenho e não deixou copiá-lo: {}",
+                e
+            )
+        })?;
+
+    let novo = parse_active_guid(&saida).ok_or_else(|| {
+        format!(
+            "O Windows copiou o plano mas não disse qual é o GUID dele. Resposta: {}",
+            saida.trim()
+        )
+    })?;
+
+    super::planoenergia::validar_guid_novo(&novo, HIGH_PERFORMANCE_GUID)?;
+
+    // O nome é o que reencontra a cópia na próxima execução.
+    shell::run_checked("powercfg", &["-changename", &novo, NOME_DA_COPIA, ""])
+        .map_err(|e| format!("O plano foi copiado mas não pôde ser nomeado: {}", e))?;
+
+    Ok(novo)
 }
 
 /// Se a hibernação está ligada. Lido do registro, que é a fonte de verdade e não
@@ -122,23 +172,6 @@ pub fn hypervisor_launch_type() -> Option<String> {
     parse_hypervisor_launch_type(&saida.stdout)
 }
 
-/// Valor atual de um ajuste no modo "na bateria".
-///
-/// Ausente significa que o plano herda o padrão do Windows — e o padrão da
-/// bateria é conservador de propósito: 5% de estado mínimo do processador, por
-/// exemplo. Herdar, ali, é o mesmo que não ter aplicado nada.
-pub fn read_power_setting_dc(
-    scheme: &str,
-    subgroup: &str,
-    setting: &str,
-) -> Result<crate::modules::changelog::PreviousValue, String> {
-    super::registry::read(
-        "HKLM",
-        &power_setting_path(scheme, subgroup, setting),
-        "DCSettingIndex",
-    )
-}
-
 /// O valor que o próprio Windows declara como padrão para um ajuste.
 ///
 /// Serve à reversão de um ajuste que não tinha valor antes: o plano herdava o
@@ -146,7 +179,6 @@ pub fn read_power_setting_dc(
 /// única forma de devolver o estado original sem inventar número — e esta
 /// chave, ao contrário das de `PowerSchemes`, é legível.
 fn valor_padrao(scheme: &str, subgroup: &str, setting: &str, indice: &str) -> Option<u32> {
-    use crate::modules::changelog::PreviousValue;
 
     let caminho = format!(
         r"SYSTEM\CurrentControlSet\Control\Power\PowerSettings\{}\{}\DefaultPowerSchemeValues\{}",
@@ -154,7 +186,7 @@ fn valor_padrao(scheme: &str, subgroup: &str, setting: &str, indice: &str) -> Op
     );
 
     match super::registry::read("HKLM", &caminho, indice) {
-        Ok(PreviousValue::Dword(valor)) => Some(valor),
+        Ok(valor) => indice_do_valor(&valor),
         _ => None,
     }
 }
@@ -164,9 +196,39 @@ pub fn resolver_valor(no_plano: Option<u32>, padrao: Option<u32>) -> Option<u32>
     no_plano.or(padrao)
 }
 
+/// O número dentro de um `ACSettingIndex` / `DCSettingIndex`.
+///
+/// NEM TODO ÍNDICE É `REG_DWORD`, e descobrir isso custou um teste contra a
+/// máquina de verdade. Medido aqui: depois de gravar a economia de energia do
+/// adaptador sem fio (`12bbebe6-…`), o `powercfg /query` mostrava o valor certo
+/// e o registro guardava `REG_BINARY {0,0,0,0}` — enquanto todos os outros dez
+/// ajustes do mesmo plano ficaram `REG_DWORD`. O tipo acompanha o que o plano de
+/// origem já tinha, e plano de origem varia de máquina para máquina.
+///
+/// Ler só `Dword` fazia duas coisas erradas, e as duas calado:
+///
+/// 1. O ajuste nunca parecia satisfeito, então era REESCRITO toda vez;
+/// 2. Pior, o valor anterior guardado para desfazer virava `Binary`, e
+///    `restore_power_setting` trata o que não é `Dword` como "não havia valor" —
+///    ou seja, o desfazer GRAVAVA O PADRÃO DO WINDOWS POR CIMA da configuração
+///    que o cliente tinha.
+///
+/// Quatro bytes em little-endian é como o Windows guarda esse índice quando ele
+/// vem binário. Tamanho diferente disso não é um índice, e não vira palpite.
+pub fn indice_do_valor(valor: &crate::modules::changelog::PreviousValue) -> Option<u32> {
+    use crate::modules::changelog::PreviousValue;
+
+    match valor {
+        PreviousValue::Dword(v) => Some(*v),
+        PreviousValue::Binary(bytes) if bytes.len() == 4 => {
+            Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        }
+        _ => None,
+    }
+}
+
 /// O valor que a máquina realmente usa para um ajuste.
 pub fn valor_efetivo(scheme: &str, subgroup: &str, setting: &str, bateria: bool) -> Option<u32> {
-    use crate::modules::changelog::PreviousValue;
 
     let indice = if bateria { "DCSettingIndex" } else { "ACSettingIndex" };
 
@@ -175,50 +237,21 @@ pub fn valor_efetivo(scheme: &str, subgroup: &str, setting: &str, bateria: bool)
         &power_setting_path(scheme, subgroup, setting),
         indice,
     ) {
-        Ok(PreviousValue::Dword(valor)) => Some(valor),
+        Ok(valor) => indice_do_valor(&valor),
         _ => None,
     };
 
     resolver_valor(no_plano, valor_padrao(scheme, subgroup, setting, indice))
 }
 
-/// Se o ajuste vale nos DOIS modos de alimentação.
-///
-/// A regra existe por um defeito medido: o produto gravava só o valor da tomada
-/// e dava a otimização por aplicada. Num notebook fora da tomada — o público
-/// deste produto — ela não mudava nada, e a tela dizia que sim.
-pub fn power_setting_satisfeito(ac: Option<u32>, dc: Option<u32>, alvo: u32) -> bool {
-    ac == Some(alvo) && dc == Some(alvo)
-}
+// `power_setting_satisfeito` MORAVA AQUI.
+//
+// A regra que ela carregava — o ajuste precisa valer na TOMADA E NA BATERIA,
+// senão um notebook fora da tomada não mudava nada e a tela dizia que sim —
+// não foi perdida: ela virou `planoenergia::ja_satisfeito`, que sabe além
+// disso que no notebook a bateria pode NÃO ser alvo de propósito. Os testes
+// foram junto, inclusive o que combina a herança do padrão do Windows.
 
-/// Grava um ajuste nos DOIS modos de alimentação e reativa o plano, para valer
-/// na hora e não só no próximo boot.
-///
-/// Os dois, e não só a tomada: ver `power_setting_satisfeito`.
-pub fn set_power_setting(
-    scheme: &str,
-    subgroup: &str,
-    setting: &str,
-    value: u32,
-) -> Result<(), String> {
-    let valor = value.to_string();
-
-    shell::run_checked(
-        "powercfg",
-        &["-setacvalueindex", scheme, subgroup, setting, &valor],
-    )
-    .map_err(|e| format!("Este ajuste não existe neste Windows: {}", e))?;
-
-    // A falha na bateria não invalida o que já valeu na tomada, mas não pode
-    // passar em silêncio: seria o defeito original de volta, calado.
-    shell::run_checked(
-        "powercfg",
-        &["-setdcvalueindex", scheme, subgroup, setting, &valor],
-    )
-    .map_err(|e| format!("O ajuste valeu na tomada, mas não na bateria: {}", e))?;
-
-    set_active_scheme(scheme)
-}
 
 /// Devolve o ajuste ao estado anterior. Quando não havia valor, a chave é
 /// apagada para o plano voltar a herdar o padrão em vez de ficar com um número
@@ -230,7 +263,6 @@ pub fn restore_power_setting(
     previous: &crate::modules::changelog::PreviousValue,
     previous_dc: Option<&crate::modules::changelog::PreviousValue>,
 ) -> Result<(), String> {
-    use crate::modules::changelog::PreviousValue;
 
     // SÓ pelo `powercfg`. As chaves de `PowerSchemes` pertencem ao SISTEMA e
     // negam escrita direta mesmo a um administrador — conferido contra a
@@ -244,22 +276,26 @@ pub fn restore_power_setting(
         .map(|_| ())
     };
 
-    match previous {
-        PreviousValue::Dword(valor) => escrever("-setacvalueindex", *valor)?,
+    // `indice_do_valor`, e não `PreviousValue::Dword` direto: o índice pode ter
+    // sido lido como `REG_BINARY`, e nesse caso o braço de baixo gravaria o
+    // PADRÃO DO WINDOWS por cima do valor que o cliente tinha. Ver o comentário
+    // de `indice_do_valor`.
+    match indice_do_valor(previous) {
+        Some(valor) => escrever("-setacvalueindex", valor)?,
         // Não havia valor: o plano herdava o padrão. Devolvemos o padrão que o
         // próprio Windows declara — não há como apagar o valor pelo `powercfg`,
         // e o padrão declarado é o estado que o cliente tinha, não um número
         // inventado por nós.
-        _ => {
+        None => {
             if let Some(padrao) = valor_padrao(scheme, subgroup, setting, "ACSettingIndex") {
                 escrever("-setacvalueindex", padrao)?;
             }
         }
     }
 
-    match previous_dc {
-        Some(PreviousValue::Dword(valor)) => escrever("-setdcvalueindex", *valor)?,
-        Some(_) => {
+    match previous_dc.map(|v| (v, indice_do_valor(v))) {
+        Some((_, Some(valor))) => escrever("-setdcvalueindex", valor)?,
+        Some((_, None)) => {
             if let Some(padrao) = valor_padrao(scheme, subgroup, setting, "DCSettingIndex") {
                 escrever("-setdcvalueindex", padrao)?;
             }
@@ -426,25 +462,6 @@ mod tests {
     }
 
     #[test]
-    fn ajuste_so_na_tomada_nao_esta_satisfeito() {
-        // O defeito medido na máquina do dono: gravávamos só `ACSettingIndex`,
-        // e o valor da bateria seguia herdando o padrão do Windows — 5% de
-        // estado mínimo do processador. Num notebook fora da tomada a
-        // otimização não fazia nada, e a lista dizia que estava aplicada.
-        assert!(!power_setting_satisfeito(Some(100), None, 100));
-    }
-
-    #[test]
-    fn ajuste_com_bateria_no_padrao_antigo_nao_esta_satisfeito() {
-        assert!(!power_setting_satisfeito(Some(100), Some(5), 100));
-    }
-
-    #[test]
-    fn ajuste_nos_dois_modos_esta_satisfeito() {
-        assert!(power_setting_satisfeito(Some(100), Some(100), 100));
-    }
-
-    #[test]
     fn valor_do_plano_vence_o_padrao() {
         assert_eq!(resolver_valor(Some(100), Some(5)), Some(100));
     }
@@ -464,15 +481,35 @@ mod tests {
     }
 
     #[test]
-    fn bateria_herdando_padrao_diferente_do_alvo_nao_esta_satisfeita() {
-        // Estado mínimo do processador: padrão da bateria 5%, alvo 100%.
-        assert!(!power_setting_satisfeito(Some(100), resolver_valor(None, Some(5)), 100));
+    fn indice_gravado_como_binario_e_lido_igual_ao_dword() {
+        // MEDIDO NA MÁQUINA, e não deduzido: depois de gravar a economia de
+        // energia do adaptador sem fio, o registro guardou `REG_BINARY
+        // {0,0,0,0}` enquanto os outros dez ajustes do mesmo plano ficaram
+        // `REG_DWORD`. Sem isto, o ajuste era reescrito toda vez e — o que
+        // machuca — o desfazer gravava o padrão do Windows por cima do valor do
+        // cliente, porque o que não era `Dword` contava como "não havia valor".
+        use crate::modules::changelog::PreviousValue;
+
+        assert_eq!(indice_do_valor(&PreviousValue::Dword(100)), Some(100));
+        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![0, 0, 0, 0])), Some(0));
+        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![100, 0, 0, 0])), Some(100));
+        assert_eq!(
+            indice_do_valor(&PreviousValue::Binary(vec![0xff, 0xff, 0xff, 0xff])),
+            Some(u32::MAX)
+        );
     }
 
     #[test]
-    fn bateria_herdando_padrao_igual_ao_alvo_esta_satisfeita() {
-        // Estacionamento de núcleos no plano Alto Desempenho: padrão já é 100.
-        assert!(power_setting_satisfeito(Some(100), resolver_valor(None, Some(100)), 100));
+    fn binario_de_outro_tamanho_nao_vira_palpite() {
+        // Ausência de valor é diferente de um valor que não sabemos ler, e
+        // inventar um número aqui é escrever no PC do cliente por adivinhação.
+        use crate::modules::changelog::PreviousValue;
+
+        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![1, 0])), None);
+        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![1, 0, 0, 0, 0])), None);
+        assert_eq!(indice_do_valor(&PreviousValue::Absent), None);
+        assert_eq!(indice_do_valor(&PreviousValue::AbsentKey), None);
+        assert_eq!(indice_do_valor(&PreviousValue::Text("100".into())), None);
     }
 
     #[test]

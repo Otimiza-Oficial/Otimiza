@@ -715,6 +715,55 @@
             <div id="benchmark-result" class="resultado" data-vazio="Ocupa o processador por alguns segundos para medir o desempenho e guardar como ponto de partida. Não altera configuração nenhuma."></div>
           </section>
 
+          <!--
+            O PLANO DE ENERGIA, NUM PAINEL PRÓPRIO E NÃO NUMA LINHA DA LISTA.
+
+            Ele saiu de três itens de lista ("Alto Desempenho", "estacionamento
+            de núcleos", "estado mínimo do processador") e virou um só, porque
+            os três escreviam DENTRO DO PLANO DO CLIENTE e agora há um plano
+            nosso. Só que um item de lista tem espaço para um rótulo e uma
+            marca de "aplicado", e este resultado tem onze linhas com quatro
+            desfechos possíveis cada uma.
+
+            É justamente aqui que o produto tem o que os outros não têm: ele
+            releu cada valor do Windows depois de gravar, e consegue dizer
+            quais entraram, quais já estavam bons e quais NÃO EXISTEM neste
+            Windows. Esconder isso atrás de um tique verde seria jogar fora a
+            única parte da otimização de energia que dá para conferir.
+
+            O item continua na lista e continua entrando no "Otimizar agora" —
+            este painel é onde se vê o detalhe, não uma segunda porta.
+          -->
+          <section class="panel" id="painel-plano-energia">
+            <div class="panel-head">
+              <h2>Plano de energia OTIMIZA</h2>
+              <span class="panel-tag" id="plano-tag">não verificado</span>
+            </div>
+
+            <p class="lead">
+              Em vez de mexer no plano de energia que você usa, o Otimiza cria um
+              plano próprio, configurado pelo hardware que ele encontrou aqui, e
+              ativa. Desfazer é voltar para o seu — o seu plano nunca é tocado.
+            </p>
+
+            <p class="hint" id="plano-maquina" hidden></p>
+
+            <div class="row-actions">
+              <button id="plano-simular" class="btn">Ver o que mudaria</button>
+              <button id="plano-aplicar" class="btn btn-primary">Criar e ativar o plano OTIMIZA</button>
+              <button id="plano-desfazer" class="btn" hidden>Voltar ao meu plano</button>
+            </div>
+
+            <p class="hint">
+              "Ver o que mudaria" não altera nada: lê a máquina e mostra o antes e
+              o depois de cada ajuste. Ajuste que não existe neste Windows aparece
+              como tal — e não conta como falha.
+            </p>
+
+            <p id="plano-status" class="status"></p>
+            <div id="plano-result" class="resultado" data-vazio="Nenhuma leitura ainda. Comece por 'Ver o que mudaria' — ele não escreve nada no seu computador."></div>
+          </section>
+
           <div class="grid grid-two">
             <section class="panel">
               <div class="panel-head">

@@ -94,6 +94,9 @@ pub fn run() {
             commands::get_baseline,
             commands::measure_and_compare,
             commands::is_elevated,
+            commands::diagnostico_de_energia,
+            commands::simular_plano_otimiza,
+            commands::aplicar_plano_otimiza,
             commands::relaunch_as_admin,
             commands::get_hardware_profile,
             commands::analyze_firmware,
@@ -181,6 +184,16 @@ pub fn run() {
             commands::versao_mais_nova,
         ])
         .setup(|app| {
+            // O REGISTRO COMEÇA DIZENDO EM QUE MÁQUINA ISTO ESTÁ ACONTECENDO.
+            //
+            // Sem esta linha, `otimiza.log` conta o que o produto fez e nada
+            // sobre onde fez — e é o arquivo que o cliente manda quando algo dá
+            // errado. Roda numa thread própria: a coleta chama PowerShell e
+            // `powercfg`, e a abertura tem orçamento de tempo. Ver
+            // `cabecalho::anotar_em_segundo_plano`.
+            #[cfg(target_os = "windows")]
+            modules::windows::cabecalho::anotar_em_segundo_plano();
+
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();

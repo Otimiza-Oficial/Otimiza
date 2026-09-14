@@ -13,6 +13,7 @@ pub mod bloatware;
 pub mod boot;
 pub mod bottleneck;
 pub mod browsers;
+pub mod cabecalho;
 pub mod catalog;
 pub mod cbslog;
 pub mod citizenfx;
@@ -37,6 +38,7 @@ pub mod health;
 pub mod memory;
 pub mod network;
 pub mod nvdriver;
+pub mod planoenergia;
 pub mod power;
 pub mod pressao;
 pub mod processes;
@@ -78,6 +80,22 @@ enum ActionState {
     Pending,
     /// Não faz sentido nesta máquina (serviço inexistente, chave sem suporte).
     NotApplicable,
+    /// NÃO DEU PARA LER o estado atual.
+    ///
+    /// Este estado existe porque as leituras que falhavam caíam em
+    /// `NotApplicable`, e a tela então dizia ao cliente "não se aplica a esta
+    /// máquina" — uma afirmação sobre o computador dele que ninguém verificou.
+    /// O caminho mais provável disso é justamente a máquina do cliente: chave
+    /// de registro com permissão negada, imagem modificada, política de
+    /// domínio. Ou seja, o produto ficava mais calado exatamente onde ele
+    /// precisa falar.
+    ///
+    /// `registry::read` já separa "não existe" (que volta `Ok`) de "não
+    /// consegui ler" (que volta `Err`) desde a 1.8. Quem achatava os dois era
+    /// esta camada.
+    ///
+    /// Não confundir com `NotApplicable`: lá o produto SABE que não se aplica.
+    Desconhecido,
 }
 
 pub struct WindowsOptimizer;
@@ -93,9 +111,58 @@ impl WindowsOptimizer {
             .iter()
             .map(|spec| {
                 let state = self.inspect(spec, log);
-                spec.to_info(state, self.detail(spec), pesa_nesta_maquina(spec))
+
+                // UM RÓTULO SEM MOTIVO NÃO AJUDA NINGUÉM. "Não deu para
+                // verificar" sozinho deixa o cliente sem saber se o problema é
+                // dele, do produto, ou do Windows — e é essa a frase que ele vai
+                // colar no suporte. A causa quase sempre é uma destas três, e
+                // dizer quais são já encurta a conversa pela metade.
+                //
+                // Só quando o `detail` do item não tem nada mais específico a
+                // dizer: medida concreta vence explicação genérica.
+                let detail = self.detail(spec).or_else(|| {
+                    (state == OptimizationState::Unknown).then(|| {
+                        "Não foi possível ler o estado atual desta configuração. \
+                         Costuma ser permissão negada, Windows modificado ou política \
+                         de domínio — o item fica fora do \"Otimizar agora\" por isso."
+                            .to_string()
+                    })
+                });
+
+                spec.to_info(state, detail, pesa_nesta_maquina(spec))
             })
             .collect()
+    }
+
+    /// Junta o estado das ações no estado da otimização.
+    ///
+    /// Função pura, separada do `inspect` de propósito: é aqui que mora a regra
+    /// de o que o cliente vê, e ela precisa de teste sem depender de máquina.
+    ///
+    /// A ORDEM DAS PERGUNTAS É A REGRA. Uma ação pendente vence o
+    /// desconhecimento — se sabemos que há trabalho a fazer, esconder o item
+    /// atrás de "não deu para verificar" tiraria do cliente uma otimização real
+    /// por causa de uma leitura alheia que falhou. Mas quando o que sobra é
+    /// desconhecimento, ele não pode virar nem "já está bom" nem "não se aplica":
+    /// as duas são afirmações sobre o PC do cliente que ninguém verificou.
+    fn compor(states: &[ActionState]) -> OptimizationState {
+        // Sabemos que há o que fazer. Isto vem primeiro.
+        if states.iter().any(|s| *s == ActionState::Pending) {
+            return OptimizationState::Available;
+        }
+
+        // Alguma leitura falhou, e nada acima provou que há trabalho.
+        if states.iter().any(|s| *s == ActionState::Desconhecido) {
+            return OptimizationState::Unknown;
+        }
+
+        // Nenhuma ação pode rodar aqui: a otimização não serve para esta máquina.
+        if states.iter().all(|s| *s == ActionState::NotApplicable) {
+            return OptimizationState::Unavailable;
+        }
+
+        // Satisfeita em todo lugar que se aplica: o PC já estava assim.
+        OptimizationState::AlreadyOptimal
     }
 
     /// Descobre a situação de uma otimização olhando o sistema, não um arquivo.
@@ -115,20 +182,7 @@ impl WindowsOptimizer {
 
         let states: Vec<ActionState> = spec.actions.iter().map(|a| self.inspect_action(a)).collect();
 
-        // Se nenhuma ação pode rodar aqui, a otimização não serve para esta máquina.
-        if states.iter().all(|s| *s == ActionState::NotApplicable) {
-            return OptimizationState::Unavailable;
-        }
-
-        // Já satisfeita em todo lugar que se aplica: o PC já estava assim.
-        if states
-            .iter()
-            .all(|s| matches!(s, ActionState::Satisfied | ActionState::NotApplicable))
-        {
-            return OptimizationState::AlreadyOptimal;
-        }
-
-        OptimizationState::Available
+        Self::compor(&states)
     }
 
     /// Informação medida agora, quando a otimização tem um número ou um motivo
@@ -138,6 +192,36 @@ impl WindowsOptimizer {
             if !meets_requirement(spec) {
                 return Some(requirement.unmet_reason().to_string());
             }
+        }
+
+        // O VBS É O ÚNICO ITEM ONDE A CHAVE DE REGISTRO NÃO É A VERDADE.
+        //
+        // `EnableVirtualizationBasedSecurity = 0` entra sempre, e a releitura
+        // devolve 0 — então a lista marcava a otimização como aplicada. Só que
+        // quem manda é o que está RODANDO, e o VBS pode continuar de pé depois
+        // do reinício: por política de domínio, por bloqueio em UEFI, ou porque
+        // a Integridade de Memória foi religada. O cliente reiniciava o PC,
+        // perdia o Hyper-V e o WSL, não ganhava o FPS, e a tela dizia "feito".
+        //
+        // A resposta verdadeira já existia no produto — `firmware::vbs_running`
+        // lê `Win32_DeviceGuard`, que devolve NÚMERO e não texto traduzido — e
+        // era usada só no diagnóstico. Aqui ela custa uma chamada ao PowerShell
+        // por atualização da lista, e vale: é a diferença entre mostrar o
+        // registro e mostrar a máquina.
+        //
+        // Por id e não por ação porque a primeira ação deste item é uma escrita
+        // de registro comum, indistinguível das outras.
+        if spec.id == "disable_vbs" {
+            return Some(
+                match firmware::vbs_running() {
+                    Some(true) => "Agora: VBS ligado e em execução nesta máquina.",
+                    Some(false) => "Agora: VBS não está em execução nesta máquina.",
+                    // Não saber não pode virar "está desligado": é justamente o
+                    // silêncio que faria o cliente reiniciar por nada.
+                    None => "Não foi possível ler se o VBS está em execução nesta máquina.",
+                }
+                .to_string(),
+            );
         }
 
         match spec.actions.first()? {
@@ -201,7 +285,7 @@ impl WindowsOptimizer {
                 match current {
                     Ok(current) if current == target => ActionState::Satisfied,
                     Ok(_) => ActionState::Pending,
-                    Err(_) => ActionState::NotApplicable,
+                    Err(_) => ActionState::Desconhecido,
                 }
             }
 
@@ -213,14 +297,23 @@ impl WindowsOptimizer {
                 match services::query_start_type(name) {
                     Ok(start_type) if start_type == "disabled" => ActionState::Satisfied,
                     Ok(_) => ActionState::Pending,
-                    Err(_) => ActionState::NotApplicable,
+                    Err(_) => ActionState::Desconhecido,
                 }
             }
 
-            Action::HighPerformancePowerPlan => match power::active_scheme() {
-                Ok(guid) if guid == power::HIGH_PERFORMANCE_GUID => ActionState::Satisfied,
-                Ok(_) => ActionState::Pending,
-                Err(_) => ActionState::NotApplicable,
+            // Comparado com o plano de alto desempenho QUE EXISTE NESTA
+            // MÁQUINA, e não com o GUID fixo: onde o Windows não traz o Alto
+            // Desempenho, o produto usa uma cópia com GUID próprio, e comparar
+            // com o fixo deixaria a otimização eternamente "pendente" mesmo
+            // depois de aplicada.
+            Action::PlanoOtimiza => match planoenergia::onde_esta_o_plano() {
+                planoenergia::EstadoDoPlano::Ativo => ActionState::Satisfied,
+                planoenergia::EstadoDoPlano::ExisteEnaoEstaAtivo
+                | planoenergia::EstadoDoPlano::NaoExiste => ActionState::Pending,
+                // Não conseguir ler NÃO É "não está aplicado": oferecer aplicar
+                // de novo aqui seria pedir ao cliente que refizesse algo que
+                // talvez já esteja feito.
+                planoenergia::EstadoDoPlano::NaoConsegui => ActionState::Desconhecido,
             },
 
             Action::DisableNagle => match registry::subkeys("HKLM", TCPIP_INTERFACES) {
@@ -241,7 +334,13 @@ impl WindowsOptimizer {
                         ActionState::Pending
                     }
                 }
-                _ => ActionState::NotApplicable,
+                // Sem nenhuma interface listada, não há placa de rede em que
+                // mexer — isso o produto SABE.
+                Ok(_) => ActionState::NotApplicable,
+                // A lista não pôde ser lida. Antes caía junto com o caso acima e
+                // virava "não se aplica a esta máquina", sobre um PC que tem
+                // placa de rede como qualquer outro.
+                Err(_) => ActionState::Desconhecido,
             },
 
             Action::DisableHibernation => {
@@ -252,39 +351,16 @@ impl WindowsOptimizer {
                 }
             }
 
-            Action::PowerSetting {
-                subgroup,
-                setting,
-                value,
-            } => match power::active_scheme() {
-                Ok(scheme) => {
-                    // O ajuste precisa valer na tomada E na bateria. Conferir só
-                    // a tomada dava por aplicada, num notebook, uma otimização
-                    // que não valia fora dela.
-                    //
-                    // E o valor lido é o EFETIVO: sem valor próprio, o plano
-                    // herda o padrão do Windows, e é o padrão que a máquina usa.
-                    let ac = power::valor_efetivo(&scheme, subgroup, setting, false);
-                    let dc = power::valor_efetivo(&scheme, subgroup, setting, true);
-
-                    if power::power_setting_satisfeito(ac, dc, *value) {
-                        ActionState::Satisfied
-                    } else if power::read_power_setting(&scheme, subgroup, setting).is_err() {
-                        ActionState::NotApplicable
-                    } else {
-                        ActionState::Pending
-                    }
-                }
-                Err(_) => ActionState::NotApplicable,
-            },
-
             Action::MemoryCompression { enabled } => {
                 // A condição de RAM já foi checada em `meets_requirement`; aqui
                 // só resta comparar o estado atual com o desejado.
                 match power::memory_compression_enabled() {
                     Some(current) if current == *enabled => ActionState::Satisfied,
                     Some(_) => ActionState::Pending,
-                    None => ActionState::NotApplicable,
+                    // O `Get-MMAgent` não respondeu. A compressão de memória
+                    // existe em todo Windows 10 e 11 — dizer "não se aplica a
+                    // esta máquina" era inventar uma limitação que ela não tem.
+                    None => ActionState::Desconhecido,
                 }
             }
 
@@ -352,7 +428,12 @@ impl WindowsOptimizer {
                     EstadoReservado::SemRecurso => ActionState::NotApplicable,
                     // O comando não respondeu. Não sabemos — e "não sabemos"
                     // nunca pode virar "não se aplica a esta máquina".
-                    EstadoReservado::NaoVerificavel => ActionState::Pending,
+                    //
+                    // Era `Pending` porque `Desconhecido` não existia, e
+                    // `Pending` ao menos não escondia o item. Agora há o estado
+                    // certo: `Pending` afirmava que HÁ o que aplicar, o que
+                    // também não tinha sido verificado.
+                    EstadoReservado::NaoVerificavel => ActionState::Desconhecido,
                 }
             }
 
@@ -378,7 +459,11 @@ impl WindowsOptimizer {
                 match power::hypervisor_launch_type() {
                     Some(tipo) if tipo == "off" => ActionState::Satisfied,
                     Some(_) => ActionState::Pending,
-                    None => ActionState::NotApplicable,
+                    // O `bcdedit` não respondeu, ou a linha não estava lá. O
+                    // próprio `hypervisor_launch_type` documenta que `None` é
+                    // "não conseguimos ler" e não "desligado" — esta camada é
+                    // que transformava isso em "não se aplica".
+                    None => ActionState::Desconhecido,
                 }
             }
 
@@ -1242,6 +1327,13 @@ impl WindowsOptimizer {
                 None => true,
             })
             .filter(|spec| catalog::entra_no_lote(spec))
+            // SÓ `Available`, E ISSO AGORA DEIXA `Unknown` DE FORA DE PROPÓSITO.
+            //
+            // O "Otimizar agora" é o botão que o cliente aperta sem ler item a
+            // item, e por isso ele só leva o que o produto CONFERIU que falta.
+            // Item cujo estado não pôde ser lido continua na lista, com a frase
+            // dizendo o porquê, para a pessoa decidir — mas não entra num lote
+            // que ninguém revisou.
             .filter(|spec| self.inspect(spec, log) == OptimizationState::Available)
             .collect();
 
@@ -1415,20 +1507,42 @@ impl WindowsOptimizer {
                 Ok(None)
             }
 
-            Action::HighPerformancePowerPlan => {
-                let previous = power::active_scheme()?;
+            Action::PlanoOtimiza => {
+                let relatorio = planoenergia::montar(false, false)?;
 
-                if previous == power::HIGH_PERFORMANCE_GUID {
-                    return Ok(None);
+                if !relatorio.plano_ativo {
+                    return Err(
+                        "O plano OTIMIZA foi montado mas o Windows não o deixou ativo. \
+                         Nada foi mudado no seu plano de energia."
+                            .to_string(),
+                    );
                 }
 
-                power::ensure_high_performance_exists()?;
-                power::set_active_scheme(power::HIGH_PERFORMANCE_GUID)?;
+                let Some(anterior) = relatorio.guid_anterior.clone() else {
+                    // Sem saber qual era o plano de antes não há caminho de
+                    // volta, e aplicar sem volta é o que este produto não faz.
+                    return Err(
+                        "Não foi possível ler qual plano de energia estava ativo antes. \
+                         O plano OTIMIZA não foi ativado."
+                            .to_string(),
+                    );
+                };
+
+                // O plano OTIMIZA já era o ativo: os ajustes podem ter sido
+                // conferidos ou corrigidos, mas não houve troca de plano para
+                // desfazer. Gravar `previous_guid` igual ao nosso faria o
+                // "Desfazer" reativar o próprio plano que ele deveria remover.
+                if anterior.eq_ignore_ascii_case(
+                    relatorio.guid_do_plano.as_deref().unwrap_or_default(),
+                ) {
+                    return Ok(Some(nota_do_plano(&relatorio)));
+                }
 
                 changes.push(ChangeRecord::PowerPlan {
-                    previous_guid: previous,
+                    previous_guid: anterior,
                 });
-                Ok(None)
+
+                Ok(Some(nota_do_plano(&relatorio)))
             }
 
             Action::DisableHibernation => {
@@ -1443,36 +1557,6 @@ impl WindowsOptimizer {
                 Ok(Some("Arquivo de hibernação removido.".to_string()))
             }
 
-            Action::PowerSetting {
-                subgroup,
-                setting,
-                value,
-            } => {
-                let scheme = power::active_scheme()?;
-                let previous = power::read_power_setting(&scheme, subgroup, setting)?;
-                let previous_dc = power::read_power_setting_dc(&scheme, subgroup, setting).ok();
-
-                // Os dois modos precisam bater, pelo valor efetivo. Sair aqui
-                // olhando só a tomada deixava a bateria no padrão do Windows e
-                // reportava sucesso.
-                if power::power_setting_satisfeito(
-                    power::valor_efetivo(&scheme, subgroup, setting, false),
-                    power::valor_efetivo(&scheme, subgroup, setting, true),
-                    *value,
-                ) {
-                    return Ok(None);
-                }
-
-                power::set_power_setting(&scheme, subgroup, setting, *value)?;
-                changes.push(ChangeRecord::PowerSetting {
-                    scheme,
-                    subgroup: subgroup.to_string(),
-                    setting: setting.to_string(),
-                    previous,
-                    previous_dc,
-                });
-                Ok(None)
-            }
 
             Action::MemoryCompression { enabled } => {
                 let previously_enabled = power::memory_compression_enabled()
@@ -1716,7 +1800,37 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
             hardware::profile().system_storage == StorageKind::Ssd
         }
         Some(Requirement::MinRamGb(minimum)) => hardware::profile().total_ram_gb >= minimum,
+        Some(Requirement::MinWddm(minimo)) => {
+            hardware::alcanca_wddm(hardware::wddm_version(), minimo)
+        }
     }
+}
+
+/// A linha que o registro ao vivo mostra depois de montar o plano.
+///
+/// Ela diz os quatro números porque um "pronto" sozinho seria o que este
+/// produto acusa nos concorrentes. "Já estava bom" não é enfeite: num PC que já
+/// usava um plano de desempenho ele é a resposta inteira, e o cliente merece
+/// saber disso em vez de achar que comprou um ganho que não houve.
+pub fn nota_do_plano(r: &planoenergia::RelatorioDoPlano) -> String {
+    let mut partes = vec![format!("{} ajuste(s) aplicados e conferidos", r.aplicados)];
+
+    if r.ja_estavam_bons > 0 {
+        partes.push(format!("{} já estavam bons", r.ja_estavam_bons));
+    }
+
+    if r.nao_suportados > 0 {
+        partes.push(format!(
+            "{} não existem neste Windows",
+            r.nao_suportados
+        ));
+    }
+
+    if r.falhas > 0 {
+        partes.push(format!("{} não entraram", r.falhas));
+    }
+
+    format!("Plano OTIMIZA ativo: {}.", partes.join(", "))
 }
 
 /// A linha de fim de uma aplicação ou de um desfazer, com a duração.
@@ -1771,7 +1885,12 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 services::set_start_type(service, previous)
             }
 
-            ChangeRecord::PowerPlan { previous_guid } => power::set_active_scheme(previous_guid),
+            // Pelo `planoenergia`, e não pelo `set_active_scheme` cru, por duas
+            // razões: ele CONFERE relendo qual plano ficou ativo — o `powercfg`
+            // devolve zero e não é prova —, e apaga o plano OTIMIZA depois de a
+            // volta estar confirmada, para não deixar plano nosso parado na
+            // máquina de quem desfez.
+            ChangeRecord::PowerPlan { previous_guid } => planoenergia::desfazer(previous_guid),
 
             ChangeRecord::Hibernation { previously_enabled } => {
                 power::set_hibernation(*previously_enabled)
@@ -1893,6 +2012,86 @@ mod tests {
     use crate::modules::changelog::PreviousValue;
 
     const STARTUP_DELAY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
+
+    // ------------------------------------------ o que a leitura falha vira
+
+    use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
+
+    #[test]
+    fn leitura_que_falhou_nao_vira_nao_se_aplica() {
+        // O DEFEITO QUE ESTE ESTADO VEIO CONSERTAR. Antes, `Err` na leitura do
+        // registro caía em `NotApplicable`, e o cliente lia "não se aplica a
+        // esta máquina" — uma afirmação sobre o PC dele que ninguém verificou.
+        assert_eq!(
+            WindowsOptimizer::compor(&[Desconhecido]),
+            OptimizationState::Unknown
+        );
+    }
+
+    #[test]
+    fn leitura_que_falhou_nao_vira_ja_esta_bom() {
+        // A mentira mais cara das duas: dizer "seu PC já está assim" faz o
+        // cliente PARAR DE PROCURAR.
+        assert_eq!(
+            WindowsOptimizer::compor(&[Satisfied, Desconhecido]),
+            OptimizationState::Unknown
+        );
+    }
+
+    #[test]
+    fn saber_que_ha_o_que_fazer_vence_o_desconhecimento() {
+        // O outro lado do erro: esconder atrás de "não deu para verificar" uma
+        // otimização real, por causa de uma leitura alheia que falhou.
+        assert_eq!(
+            WindowsOptimizer::compor(&[Pending, Desconhecido]),
+            OptimizationState::Available
+        );
+        assert_eq!(
+            WindowsOptimizer::compor(&[Desconhecido, Pending, Satisfied]),
+            OptimizationState::Available
+        );
+    }
+
+    #[test]
+    fn os_estados_conhecidos_continuam_como_eram() {
+        // Trava de não-regressão: o quarto estado não pode ter mudado o que o
+        // produto já respondia certo.
+        assert_eq!(
+            WindowsOptimizer::compor(&[NotApplicable, NotApplicable]),
+            OptimizationState::Unavailable
+        );
+        assert_eq!(
+            WindowsOptimizer::compor(&[Satisfied, NotApplicable]),
+            OptimizationState::AlreadyOptimal
+        );
+        assert_eq!(
+            WindowsOptimizer::compor(&[Satisfied]),
+            OptimizationState::AlreadyOptimal
+        );
+        assert_eq!(
+            WindowsOptimizer::compor(&[Pending, Satisfied]),
+            OptimizationState::Available
+        );
+    }
+
+    #[test]
+    fn o_lote_automatico_nunca_leva_o_que_nao_foi_conferido() {
+        // O "Otimizar agora" filtra por `Available`. Este teste existe para que
+        // alguém que um dia afrouxe esse filtro para incluir `Unknown` tenha
+        // que encarar a decisão: seria aplicar, sem revisão, o que o produto
+        // não conseguiu ler.
+        for estados in [
+            vec![Desconhecido],
+            vec![Satisfied, Desconhecido],
+            vec![Desconhecido, NotApplicable],
+        ] {
+            assert_ne!(
+                WindowsOptimizer::compor(&estados),
+                OptimizationState::Available,
+                "estado desconhecido não pode entrar no lote automático"
+            );
+        }
+    }
 
     /// O ramo do driver NVIDIA existe e chama o `nvdriver` DE VERDADE.
     ///

@@ -8,7 +8,7 @@ import { ligarBarraDaJanela } from "./janela";
 // ---------------------------------------------------------------- contratos
 
 type Verdict = "Improved" | "Worsened" | "NoMeasurableChange" | "TooNoisyToJudge";
-type State = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable";
+type State = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable" | "Unknown";
 type Gain = "Measurable" | "Situational" | "Responsiveness" | "NoGain";
 type Category = "System" | "Gaming" | "Network" | "Startup" | "Privacy";
 
@@ -370,6 +370,13 @@ const STATE_LABELS: Record<State, string> = {
   AlreadyOptimal: "já otimizado",
   Available: "disponível",
   Unavailable: "não se aplica",
+  // NÃO É "não se aplica", E A DISTINÇÃO É O MOTIVO DE ESTE ESTADO EXISTIR.
+  //
+  // "Não se aplica" é uma afirmação sobre o computador do cliente. Quando a
+  // leitura falhou — permissão negada, imagem modificada, política de domínio —
+  // o produto não sabe nada sobre aquele item, e dizer que não se aplica é
+  // inventar uma limitação que a máquina talvez não tenha.
+  Unknown: "não deu para verificar",
 };
 
 const VERDICT_LABELS: Record<Verdict, string> = {
@@ -3546,6 +3553,300 @@ function renderRbar(relatorio: RelatorioDoRbar): string {
   `;
 }
 
+// ------------------------------------------------- plano de energia OTIMIZA
+
+type StatusDoAjuste =
+  | "Aplicado"
+  | "JaEstavaBom"
+  | "NaoSuportado"
+  | "FalhouAoAplicar"
+  | "FalhouNaVerificacao"
+  | "Mudaria"
+  | "Pulado";
+
+type ClasseDoAjuste = "Segura" | "Recomendada" | "Avancada";
+type DesfechoDoPlano = "Sucesso" | "EmParte" | "Falhou";
+type FabricanteDaCpu = "Intel" | "Amd" | "Outro";
+
+interface MaquinaDoPlano {
+  notebook: boolean;
+  tem_bateria: boolean;
+  fabricante_da_cpu: FabricanteDaCpu;
+  cpu: string;
+  nucleos_logicos: number;
+  modern_standby: boolean;
+  build_do_windows: number;
+  windows11: boolean;
+}
+
+interface AjusteDoPlano {
+  nome: string;
+  subgrupo: string;
+  ajuste: string;
+  classe: ClasseDoAjuste;
+  porque: string;
+  suportado: boolean;
+  ac_antes: number | null;
+  dc_antes: number | null;
+  ac_alvo: number | null;
+  dc_alvo: number | null;
+  ac_depois: number | null;
+  dc_depois: number | null;
+  status: StatusDoAjuste;
+  mensagem: string;
+}
+
+interface RelatorioDoPlano {
+  maquina: MaquinaDoPlano;
+  simulacao: boolean;
+  plano_existia: boolean;
+  guid_do_plano: string | null;
+  guid_anterior: string | null;
+  plano_ativo: boolean;
+  ajustes: AjusteDoPlano[];
+  aplicados: number;
+  ja_estavam_bons: number;
+  nao_suportados: number;
+  falhas: number;
+  desfecho: DesfechoDoPlano;
+}
+
+/**
+ * O ESTADO VEM DO RUST, A FRASE E A COR SAEM DAQUI.
+ *
+ * Mesma tabela que `NA_TELA_DO_RBAR`, e pelo mesmo motivo: a tela nunca decide
+ * cor comparando texto do backend. O Rust manda `NaoSuportado`; quem escolhe
+ * dizer "este Windows não tem" e pintar de cinza é esta linha.
+ *
+ * E "não suportado" NÃO É VERDE. Não é um problema — o plano segue sem ele —,
+ * mas também não é uma verificação aprovada, e somar os dois numa cor só é
+ * exatamente o que faz um otimizador parecer melhor do que é.
+ */
+const NA_TELA_DO_AJUSTE: Record<
+  StatusDoAjuste,
+  { rotulo: string; severidade: "Ok" | "Important" | "Neutral" }
+> = {
+  Aplicado: { rotulo: "aplicado e conferido", severidade: "Ok" },
+  JaEstavaBom: { rotulo: "já estava bom", severidade: "Ok" },
+  NaoSuportado: { rotulo: "não existe neste Windows", severidade: "Neutral" },
+  FalhouAoAplicar: { rotulo: "o Windows recusou", severidade: "Important" },
+  // O comando foi aceito e o valor não entrou. É o caso que um otimizador que
+  // confia no código de saída reporta como sucesso.
+  FalhouNaVerificacao: { rotulo: "não entrou", severidade: "Important" },
+  // SÓ EM SIMULAÇÃO. Estava junto de `Pulado` e o painel dizia "não se aplica
+  // aqui" sobre ajustes que mudariam — a simulação desencorajando o que ela
+  // existe para mostrar. Ver `StatusDoAjuste::Mudaria`.
+  Mudaria: { rotulo: "vai mudar", severidade: "Neutral" },
+  // "NÃO ENTRA", E NÃO "não se aplica aqui". Visto na tela: `Pulado` cobre dois
+  // casos — o ajuste não vale para esta máquina, E o ajuste é avançado e ficou
+  // fora do conjunto padrão. Com o rótulo antigo, a etiqueta dizia "não se
+  // aplica aqui" enquanto a linha logo abaixo dizia "fora do conjunto padrão",
+  // e as duas se contradiziam na mesma altura da tela. O motivo verdadeiro está
+  // sempre escrito no corpo; a etiqueta só precisa não desmenti-lo.
+  Pulado: { rotulo: "não entra", severidade: "Neutral" },
+};
+
+/**
+ * A linha de números muda com o estado, porque "100 → 100" não é informação.
+ *
+ * Num ajuste que já estava bom, a seta mente sobre haver mudança; num que não
+ * existe nesta máquina, não há número nenhum para mostrar.
+ */
+function numerosDoAjuste(a: AjusteDoPlano): string {
+  if (a.status === "NaoSuportado" || a.status === "Pulado") return "";
+
+  if (a.status === "JaEstavaBom") {
+    return `tomada ${valorDoAjuste(a.ac_antes)} · bateria ${valorDoAjuste(a.dc_antes)}`;
+  }
+
+  const lado = (antes: number | null, alvo: number | null, nome: string) =>
+    alvo === null
+      ? `${nome} ${valorDoAjuste(antes)} (não mexe)`
+      : `${nome} ${valorDoAjuste(antes)} → ${valorDoAjuste(alvo)}`;
+
+  return `${lado(a.ac_antes, a.ac_alvo, "tomada")} · ${lado(a.dc_antes, a.dc_alvo, "bateria")}`;
+}
+
+const NA_TELA_DO_DESFECHO: Record<
+  DesfechoDoPlano,
+  { frase: string; tom: "ok" | "warn" | "error" }
+> = {
+  Sucesso: { frase: "Plano OTIMIZA criado, configurado e ativo.", tom: "ok" },
+  // PARCIAL NÃO É FALHA, e a frase precisa dizer isso: trinta ajustes bons e
+  // dois que não existem naquele Windows é um bom resultado, não um fracasso.
+  EmParte: {
+    frase: "Plano OTIMIZA ativo, com ressalvas — veja a lista abaixo.",
+    tom: "warn",
+  },
+  Falhou: {
+    frase: "O plano não pôde ser criado ou ativado. Nada foi mudado no seu plano de energia.",
+    tom: "error",
+  },
+};
+
+/** `null` é "o Windows não declara valor aqui", e não zero. */
+function valorDoAjuste(v: number | null): string {
+  return v === null ? "—" : String(v);
+}
+
+function linhaDoAjuste(a: AjusteDoPlano): string {
+  const { rotulo, severidade } = NA_TELA_DO_AJUSTE[a.status];
+
+  const numeros = numerosDoAjuste(a);
+  const mudanca = numeros
+    ? `<span class="finding-size">${escapeHtml(numeros)}</span>`
+    : "";
+
+  const mensagem = a.mensagem
+    ? `<p class="finding-advice">${escapeHtml(a.mensagem)}</p>`
+    : "";
+
+  return `
+    <article class="finding" data-severity="${severidade}" data-estado="${a.status}">
+      <div class="finding-top">
+        <h3>${escapeHtml(a.nome)}</h3>
+        ${mudanca}
+        <span class="state-label">${escapeHtml(rotulo)}</span>
+      </div>
+      <p class="finding-advice">${escapeHtml(a.porque)}</p>
+      ${mensagem}
+    </article>
+  `;
+}
+
+function frasesDaMaquina(m: MaquinaDoPlano): string {
+  const partes = [
+    m.cpu,
+    `${m.nucleos_logicos} processadores lógicos`,
+    m.notebook ? "notebook" : "desktop",
+    m.windows11 ? `Windows 11 (build ${m.build_do_windows})` : `Windows 10 (build ${m.build_do_windows})`,
+  ];
+
+  if (m.modern_standby) partes.push("Modern Standby");
+  if (m.tem_bateria) partes.push("com bateria");
+
+  // A frase da bateria é a decisão de produto mais importante deste painel, e
+  // ela precisa aparecer ANTES de a pessoa clicar: num notebook os valores
+  // agressivos valem só na tomada, de propósito.
+  const bateria = m.notebook
+    ? " Na bateria, o plano fica no padrão do Windows — desempenho travado fora da tomada é autonomia queimada e calor por nada."
+    : "";
+
+  return `${partes.join(" · ")}.${bateria}`;
+}
+
+function renderPlano(r: RelatorioDoPlano): string {
+  const contagem = [
+    `${r.aplicados} aplicados`,
+    `${r.ja_estavam_bons} já estavam bons`,
+    `${r.nao_suportados} não existem aqui`,
+    `${r.falhas} não entraram`,
+  ].join(" · ");
+
+  const cabecalho = r.simulacao
+    ? `<p class="hint">Simulação: nada foi escrito no seu computador. Abaixo, o que mudaria.</p>`
+    : `<p class="hint">${escapeHtml(contagem)}.</p>`;
+
+  return cabecalho + r.ajustes.map(linhaDoAjuste).join("");
+}
+
+/** Guarda o plano que estava ativo antes, para o botão de voltar. */
+let planoAnterior: string | null = null;
+
+function mostrarPlano(r: RelatorioDoPlano, tom: "ok" | "warn" | "error", frase: string) {
+  text("plano-tag", r.simulacao ? "simulação" : r.plano_ativo ? "ativo" : "não ativo");
+
+  const maquina = element("plano-maquina");
+  maquina.textContent = frasesDaMaquina(r.maquina);
+  maquina.hidden = false;
+
+  element("plano-result").innerHTML = renderPlano(r);
+  setStatus("plano-status", frase, tom);
+}
+
+async function simularPlano() {
+  const botao = element<HTMLButtonElement>("plano-simular");
+  botao.disabled = true;
+  setStatus("plano-status", "Lendo a máquina e os ajustes de energia…", "progress");
+
+  try {
+    const r = await invoke<RelatorioDoPlano>("simular_plano_otimiza");
+
+    mostrarPlano(
+      r,
+      "ok",
+      r.plano_existia
+        ? "O plano OTIMIZA já existe nesta máquina. Nada foi escrito."
+        : "Nada foi escrito. É isto que mudaria se você aplicar."
+    );
+  } catch (error) {
+    setStatus("plano-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function aplicarPlano() {
+  const botao = element<HTMLButtonElement>("plano-aplicar");
+  botao.disabled = true;
+  setStatus("plano-status", "Criando o plano, configurando e conferindo cada ajuste…", "progress");
+
+  try {
+    const r = await invoke<RelatorioDoPlano>("aplicar_plano_otimiza", {
+      incluirAvancadas: false,
+    });
+
+    const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
+    mostrarPlano(r, tom, frase);
+
+    // O botão de voltar só aparece quando há para onde voltar. Sem o GUID
+    // anterior não há reversão honesta a oferecer.
+    planoAnterior = r.guid_anterior;
+    element("plano-desfazer").hidden = !(r.plano_ativo && planoAnterior !== null);
+
+    // A lista de otimizações tem um item para isto, e ele acabou de mudar de
+    // estado. Sem esta linha ela continuaria oferecendo aplicar o que já está
+    // aplicado até a próxima atualização manual.
+    void loadOptimizations();
+  } catch (error) {
+    setStatus("plano-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function desfazerPlano() {
+  if (planoAnterior === null) return;
+
+  const botao = element<HTMLButtonElement>("plano-desfazer");
+  botao.disabled = true;
+  setStatus("plano-status", "Voltando ao seu plano de energia…", "progress");
+
+  try {
+    // Pelo caminho do histórico, e não por um comando próprio: é o mesmo
+    // "Desfazer" que a lista usa, então o item sai do histórico junto e não
+    // fica marcado como aplicado sobre uma máquina que já voltou.
+    await invoke("revert_optimization", { id: "plano_otimiza" });
+
+    text("plano-tag", "não ativo");
+    element("plano-result").innerHTML = "";
+    element("plano-desfazer").hidden = true;
+    planoAnterior = null;
+
+    setStatus(
+      "plano-status",
+      "Pronto: o seu plano de energia voltou a ser o ativo e o plano OTIMIZA foi apagado.",
+      "ok"
+    );
+
+    void loadOptimizations();
+  } catch (error) {
+    setStatus("plano-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 // ------------------------------------- serviços deixados por programas
 
 type StartMode = "Automatic" | "Manual" | "Disabled" | "Kernel";
@@ -4282,6 +4583,14 @@ function actionControl(item: OptimizationInfo): string {
         : `<span class="state-label" data-state="Applied">${STATE_LABELS.Applied}</span>`;
     case "Available":
       return `<button class="btn btn-ghost" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}">Aplicar</button>`;
+    // NÃO LER O ESTADO NÃO TIRA A ESCOLHA DO DONO DO PC.
+    //
+    // O verbo é outro de propósito: "Tentar aplicar" não promete que falta
+    // aplicar, porque isso é exatamente o que não foi verificado. O item fica
+    // fora do "Otimizar agora" — lote não se aplica no escuro —, mas quem quiser
+    // tentar item a item consegue, e o erro que voltar, se vier, é de verdade.
+    case "Unknown":
+      return `<button class="btn btn-ghost" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}">Tentar aplicar</button>`;
     default:
       return `<span class="state-label" data-state="${item.state}">${STATE_LABELS[item.state]}</span>`;
   }
@@ -7083,6 +7392,10 @@ function wireControls() {
   element("optimize-now").addEventListener("click", () =>
     runBatch("optimize_now", "Aplicando o que falta…")
   );
+
+  element("plano-simular").addEventListener("click", simularPlano);
+  element("plano-aplicar").addEventListener("click", aplicarPlano);
+  element("plano-desfazer").addEventListener("click", desfazerPlano);
 
   element("profile-chips").addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest(

@@ -2741,6 +2741,98 @@ pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, 
     Ok(crate::modules::licenca::estado())
 }
 
+// ==================================================== O PLANO DE ENERGIA OTIMIZA
+
+/// Diz o que o Otimiza consegue fazer nesta máquina, sem mexer em nada.
+///
+/// Fica em `LIVRES`: é leitura pura, e é justamente o diagnóstico que responde
+/// "por que não funcionou no seu PC?" antes de o cliente pagar por alguma coisa.
+#[tauri::command]
+pub async fn diagnostico_de_energia() -> Result<
+    crate::modules::windows::planoenergia::Diagnostico,
+    String,
+> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::planoenergia::diagnosticar())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Mostra o que o plano OTIMIZA mudaria, SEM MUDAR NADA.
+///
+/// Fica em `LIVRES` pelo mesmo motivo do diagnóstico: quem ainda não comprou é
+/// exatamente quem precisa ver o que mudaria na máquina dele.
+#[tauri::command]
+pub async fn simular_plano_otimiza() -> Result<
+    crate::modules::windows::planoenergia::RelatorioDoPlano,
+    String,
+> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::planoenergia::montar(true, false)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Cria (ou reencontra), configura, ativa e CONFERE o plano OTIMIZA.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador.
+///
+/// O QUE ENTRA NO HISTÓRICO É UMA LINHA SÓ, e isso é a arquitetura falando: o
+/// plano do cliente não é tocado, então desfazer é reativar o plano anterior.
+/// Não há trinta valores para escrever de volta, e por isso não há trinta jeitos
+/// de a reversão falhar pela metade.
+#[tauri::command]
+pub async fn aplicar_plano_otimiza(
+    incluir_avancadas: bool,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+
+        let relatorio =
+            crate::modules::windows::planoenergia::montar(false, incluir_avancadas)?;
+
+        // SÓ REGISTRA SE O PLANO REALMENTE FICOU ATIVO. Um registro de desfazer
+        // para uma troca que não aconteceu daria ao cliente um item no histórico
+        // que não desfaz nada.
+        if relatorio.plano_ativo {
+            if let Some(anterior) = relatorio.guid_anterior.clone() {
+                let mut log = state.changes.lock().await;
+
+                log.record(AppliedOptimization {
+                    optimization_id: "plano_otimiza".to_string(),
+                    name: "Plano de energia OTIMIZA".to_string(),
+                    timestamp: now_timestamp(),
+                    changes: vec![ChangeRecord::PowerPlan {
+                        previous_guid: anterior,
+                    }],
+                })?;
+            }
+        }
+
+        Ok(relatorio)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (incluir_avancadas, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // ==================================================== A GUARDA DA GUARDA
 
 /// Confere que todo comando está classificado e que os que alteram o sistema
@@ -2776,6 +2868,8 @@ mod tests {
         "get_baseline",
         "measure_and_compare",
         "is_elevated",
+        "diagnostico_de_energia",
+        "simular_plano_otimiza",
         "relaunch_as_admin",
         "get_hardware_profile",
         "analyze_firmware",
@@ -2831,6 +2925,7 @@ mod tests {
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
         "clean_disk_category",
+        "aplicar_plano_otimiza",
         "empty_recycle_bin",
         "set_automatic_pagefile",
         "clean_shader_cache",

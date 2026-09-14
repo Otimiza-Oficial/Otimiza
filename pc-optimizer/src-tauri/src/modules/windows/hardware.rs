@@ -144,6 +144,65 @@ fn detect_system_storage_rapido() -> Option<StorageKind> {
 }
 
 /// Exposto para teste: o parsing é a parte que pode quebrar em máquinas atípicas.
+/// A versão de WDDM que o driver de vídeo declara, no formato do registro:
+/// `2700` é WDDM 2.7.
+///
+/// `None` é "não deu para ler", e NÃO "é antiga" — quem chama precisa tratar as
+/// duas separado. Lido de `FeatureSetUsage`, que é onde o Windows anota o que os
+/// adaptadores desta máquina suportam, e é número, não texto traduzido.
+///
+/// Conferido nesta máquina (GTX 1650, Windows 10 19045): `WddmVersion_Max` =
+/// 2700.
+pub fn wddm_version() -> Option<u32> {
+    use crate::modules::changelog::PreviousValue;
+
+    match super::registry::read(
+        "HKLM",
+        r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers\FeatureSetUsage",
+        "WddmVersion_Max",
+    ) {
+        Ok(PreviousValue::Dword(v)) => Some(v),
+        _ => None,
+    }
+}
+
+/// Esta máquina alcança a versão de WDDM pedida?
+///
+/// Separada da leitura para poder ser testada. Não conseguir ler responde
+/// `false`: o recurso que depende disto entra no registro sem dar erro e não
+/// vale nada, então oferecer no escuro é prometer um efeito que não se pode
+/// conferir depois.
+pub fn alcanca_wddm(lido: Option<u32>, minimo: u32) -> bool {
+    matches!(lido, Some(v) if v >= minimo)
+}
+
+#[cfg(test)]
+mod testes_do_wddm {
+    use super::alcanca_wddm;
+
+    #[test]
+    fn wddm_igual_ou_mais_novo_passa() {
+        // 2700 é WDDM 2.7, medido nesta máquina.
+        assert!(alcanca_wddm(Some(2700), 2700));
+        assert!(alcanca_wddm(Some(3000), 2700));
+    }
+
+    #[test]
+    fn wddm_mais_antigo_nao_passa() {
+        assert!(!alcanca_wddm(Some(2600), 2700));
+        assert!(!alcanca_wddm(Some(0), 2700));
+    }
+
+    #[test]
+    fn nao_conseguir_ler_nao_libera_o_ajuste() {
+        // NÃO É "deve ser novo o bastante". O agendamento por hardware entra no
+        // registro sem erro mesmo onde o Windows o ignora, e a releitura devolve
+        // o valor gravado — ou seja, nem conferir depois desmente. Oferecer sem
+        // saber é prometer um reinício por nada.
+        assert!(!alcanca_wddm(None, 2700));
+    }
+}
+
 pub fn parse_media_type(output: &str) -> StorageKind {
     let value = output.trim().to_uppercase();
 

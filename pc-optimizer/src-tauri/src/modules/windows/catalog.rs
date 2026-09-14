@@ -33,20 +33,27 @@ pub enum Action {
     },
     /// Desativa um serviço e o para. O tipo de inicialização anterior é preservado.
     DisableService { name: &'static str },
-    /// Ativa o plano de energia Alto Desempenho, guardando o plano anterior.
-    HighPerformancePowerPlan,
+    /// Cria, configura, ativa e CONFERE o plano de energia OTIMIZA.
+    ///
+    /// SUBSTITUIU TRÊS AÇÕES, e a troca não é de arrumação: `HighPerformancePowerPlan`
+    /// ativava um GUID fixo que não existe em toda máquina, e as duas
+    /// `PowerSetting` escreviam DENTRO DO PLANO DO CLIENTE — o que fazia o
+    /// desfazer depender de ter lido e regravado cada valor certo. O plano
+    /// próprio não toca no plano de ninguém, e desfazer é reativar o anterior.
+    /// Ver o cabeçalho de `planoenergia.rs`.
+    PlanoOtimiza,
     /// Desativa o algoritmo de Nagle em cada interface de rede ativa.
     /// Precisa enumerar as interfaces em tempo de execução — os GUIDs mudam de PC para PC.
     DisableNagle,
     /// Desliga a hibernação, liberando do disco um arquivo do tamanho da RAM.
     DisableHibernation,
-    /// Altera um ajuste fino do plano de energia ativo (estacionamento de núcleos,
-    /// estado mínimo do processador). São as opções que o Windows esconde do painel.
-    PowerSetting {
-        subgroup: &'static str,
-        setting: &'static str,
-        value: u32,
-    },
+    // `PowerSetting` MORAVA AQUI, e saiu com a migração para o plano próprio.
+    //
+    // Ela escrevia o ajuste dentro do plano ATIVO do cliente, e por isso o
+    // desfazer precisava ter lido o valor anterior de cada um e conseguir
+    // gravá-lo de volta. `ChangeRecord::PowerSetting` continua existindo de
+    // propósito: há `changes.json` em máquina de cliente gravado por versões
+    // anteriores, e essas mudanças precisam continuar podendo ser desfeitas.
     /// Liga ou desliga a compressão de memória do Windows.
     MemoryCompression { enabled: bool },
     /// Remove limites de núcleos e memória gravados na configuração de boot.
@@ -104,6 +111,20 @@ pub enum Requirement {
     SsdSystemDrive,
     /// Só ajuda a partir desta quantidade de memória.
     MinRamGb(f64),
+    /// Exige que o driver de vídeo declare pelo menos esta versão de WDDM,
+    /// no formato do registro: 2700 é WDDM 2.7.
+    ///
+    /// POR QUE ISTO EXISTE. O agendamento de GPU por hardware era escrito em
+    /// qualquer máquina. A escrita dá certo sempre — é um DWORD num caminho que
+    /// existe em todo Windows —, e a releitura devolve o valor gravado, então o
+    /// produto marcava a otimização como APLICADA. Só que abaixo de WDDM 2.7 o
+    /// Windows simplesmente ignora a chave: o cliente reiniciava o PC por nada e
+    /// a lista dizia que estava tudo certo.
+    ///
+    /// É o defeito da casa — confiar na escrita em vez de conferir o efeito —
+    /// num lugar onde nem reler o valor resolve, porque o valor entra e não vale.
+    /// A única saída honesta é perguntar antes se esta máquina consegue.
+    MinWddm(u32),
 }
 
 impl Requirement {
@@ -115,6 +136,13 @@ impl Requirement {
             }
             Requirement::MinRamGb(_) => {
                 "Não oferecemos: sua memória RAM é pouca para isso, e aplicar pioraria o desempenho."
+            }
+            // A FRASE PRECISA SER VERDADE NOS DOIS CASOS que chegam aqui: o
+            // driver é antigo, ou a versão não pôde ser lida. Dizer "o seu
+            // driver é anterior ao WDDM 2.7" seria afirmar o que não foi
+            // verificado quando a leitura é que falhou.
+            Requirement::MinWddm(_) => {
+                "Não oferecemos: não deu para confirmar que o driver de vídeo desta máquina é WDDM 2.7 ou mais novo. Abaixo disso o Windows ignora este ajuste — aplicar marcaria como feito o que não teria efeito nenhum."
             }
         }
     }
@@ -190,18 +218,12 @@ impl OptimizationSpec {
 }
 
 /// Subgrupo "Gerenciamento de energia do processador" do Windows.
-pub const SUB_PROCESSOR: &str = "54533251-82be-4824-96c1-47b60b740d00";
-/// Mínimo de núcleos que o Windows mantém acordados (estacionamento de núcleos).
-pub const CPMINCORES: &str = "0cc5b647-c1df-4637-891a-dec35c318583";
-/// Estado mínimo do processador, em porcentagem.
-pub const PROCTHROTTLEMIN: &str = "893dee8e-2bef-41e0-89c6-b55d0929964c";
-
 pub static CATALOG: &[OptimizationSpec] = &[
     OptimizationSpec {
-        id: "power_high_performance",
-        name: "Plano de energia Alto Desempenho",
-        description: "Impede que o Windows reduza a frequência da CPU durante jogos e cargas leves.",
-        honest_effect: "Ganho real e consistente em notebooks e em PCs que estão no plano Equilibrado. Se o PC já está em Alto Desempenho, o ganho é zero.",
+        id: "plano_otimiza",
+        name: "Plano de energia OTIMIZA",
+        description: "Cria um plano de energia próprio para este computador, configurado pelo hardware que foi encontrado nele, e o ativa.",
+        honest_effect: "Ganho real e consistente em PCs no plano Equilibrado, e nenhum ganho em PC que já estava num plano de desempenho — o relatório diz qual dos dois é o seu, ajuste por ajuste. Em notebook, os valores agressivos valem só na tomada: na bateria o plano fica no padrão do Windows de propósito. Ajuste que não existe neste Windows é listado como tal, e não conta como falha.",
         category: Category::System,
         expected_gain: ExpectedGain::Measurable,
         requires_admin: true,
@@ -210,7 +232,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         requirement: None,
         security_tradeoff: false,
         highlight_when: &[],
-        actions: &[Action::HighPerformancePowerPlan],
+        actions: &[Action::PlanoOtimiza],
     },
     OptimizationSpec {
         id: "disable_gamedvr",
@@ -250,13 +272,14 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "gpu_hardware_scheduling",
         name: "Agendamento de GPU por hardware",
         description: "Deixa a própria GPU gerenciar sua fila de tarefas, em vez da CPU.",
-        honest_effect: "Reduz latência e ajuda quando a CPU é o gargalo. Exige GPU e driver compatíveis e reinício. Em algumas máquinas o efeito é nulo.",
+        honest_effect: "Reduz latência e ajuda quando a CPU é o gargalo. Exige reinício, e só é oferecido onde o driver de vídeo declara WDDM 2.7 ou mais novo — abaixo disso o Windows ignora a chave e o reinício seria por nada. Mesmo onde é oferecido, há máquinas em que o efeito é nulo.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
-        requirement: None,
+        // WDDM 2.7 é o piso do agendamento por hardware. Ver `Requirement::MinWddm`.
+        requirement: Some(Requirement::MinWddm(2700)),
         security_tradeoff: false,
         highlight_when: &[],
         actions: &[Action::Registry {
@@ -506,44 +529,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         security_tradeoff: false,
         highlight_when: &[],
         actions: &[Action::DisableHibernation],
-    },
-    OptimizationSpec {
-        id: "disable_core_parking",
-        name: "Desligar estacionamento de núcleos",
-        description: "Impede o Windows de colocar núcleos da CPU para dormir e ter que acordá-los quando a carga chega.",
-        honest_effect: "Ataca engasgo, não FPS médio. Acordar um núcleo estacionado custa milissegundos, e é isso que vira travada no meio da partida. Mede-se em 'Travada no pior caso' — se lá não mudar, aqui não teve efeito. Em notebook a bateria dura menos.",
-        category: Category::Gaming,
-        expected_gain: ExpectedGain::Measurable,
-        requires_admin: true,
-        requires_restart: false,
-        reversible: true,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::PowerSetting {
-            subgroup: SUB_PROCESSOR,
-            setting: CPMINCORES,
-            value: 100,
-        }],
-    },
-    OptimizationSpec {
-        id: "processor_min_state",
-        name: "Estado mínimo do processador em 100%",
-        description: "Trava a frequência da CPU no máximo em vez de deixá-la cair e subir conforme a carga.",
-        honest_effect: "Elimina o atraso de a CPU ter que 'acordar' de uma frequência baixa. Aumenta consumo e temperatura. Em notebook na bateria, não recomendamos.",
-        category: Category::Gaming,
-        expected_gain: ExpectedGain::Measurable,
-        requires_admin: true,
-        requires_restart: false,
-        reversible: true,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::PowerSetting {
-            subgroup: SUB_PROCESSOR,
-            setting: PROCTHROTTLEMIN,
-            value: 100,
-        }],
     },
     OptimizationSpec {
         id: "disable_power_throttling",
@@ -1415,7 +1400,7 @@ mod tests {
 
     #[test]
     fn find_returns_known_optimization() {
-        assert!(find("power_high_performance").is_some());
+        assert!(find("plano_otimiza").is_some());
         assert!(find("does_not_exist").is_none());
     }
 }

@@ -186,10 +186,12 @@ pub fn ativar(log: &mut ChangeLog) -> Result<Vec<String>, String> {
     }
 
     let anterior = power::active_scheme()?;
+    // O plano que EXISTE nesta máquina, e não o GUID fixo — ver
+    // `power::garantir_alto_desempenho`.
+    let alvo = power::garantir_alto_desempenho()?;
 
-    if anterior != power::HIGH_PERFORMANCE_GUID {
-        power::ensure_high_performance_exists()?;
-        power::set_active_scheme(power::HIGH_PERFORMANCE_GUID)?;
+    if !anterior.eq_ignore_ascii_case(&alvo) {
+        power::set_active_scheme(&alvo)?;
 
         log.record(AppliedOptimization {
             optimization_id: ID.to_string(),

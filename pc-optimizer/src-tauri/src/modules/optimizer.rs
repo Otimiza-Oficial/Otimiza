@@ -55,6 +55,18 @@ pub enum OptimizationState {
     Available,
     /// Não se aplica a esta máquina (serviço inexistente, hardware sem suporte).
     Unavailable,
+    /// NÃO DEU PARA VERIFICAR o estado nesta máquina.
+    ///
+    /// Separado de `Unavailable` porque os dois diziam a mesma frase ao cliente
+    /// — "não se aplica a esta máquina" — e só um deles era verdade. O outro era
+    /// uma leitura que falhou, o que é comum justamente onde este produto mais
+    /// precisa funcionar: imagem modificada, permissão negada, política de
+    /// domínio.
+    ///
+    /// Também não é `AlreadyOptimal`: dizer "seu PC já está assim" sobre um
+    /// valor que não foi lido é a mentira mais cara que um otimizador pode
+    /// contar, porque o cliente para de procurar.
+    Unknown,
 }
 
 /// Descrição de uma otimização enviada para a interface.

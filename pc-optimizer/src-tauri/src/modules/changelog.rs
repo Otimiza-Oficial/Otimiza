@@ -632,9 +632,25 @@ mod tests {
     }
 
     /// ChangeLog em memória, sem tocar no disco do usuário durante os testes.
+    /// UM ARQUIVO POR CHAMADA, e não um nome fixo compartilhado.
+    ///
+    /// Todos os testes daqui usavam `pc-optimizer-test-changes.json` — o MESMO
+    /// caminho — e o `record` grava em disco. O `cargo test` roda os testes em
+    /// paralelo, então eles disputavam o arquivo entre si: a suíte passava quase
+    /// sempre e reprovava de vez em quando, no teste que perdesse a corrida.
+    /// Visto acontecer com `records_and_reports_applied`, que passa sozinho.
+    ///
+    /// Um contador atômico é suficiente: os testes rodam todos no mesmo
+    /// processo, e o nome único tira a disputa.
     fn in_memory() -> ChangeLog {
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        static PROXIMO: AtomicU32 = AtomicU32::new(0);
+        let numero = PROXIMO.fetch_add(1, Ordering::Relaxed);
+
         ChangeLog {
-            path: std::env::temp_dir().join("pc-optimizer-test-changes.json"),
+            path: std::env::temp_dir()
+                .join(format!("pc-optimizer-test-changes-{}.json", numero)),
             entries: Vec::new(),
             // Comeca vazio de verdade, e nao por nao ter conseguido ler.
             leitura: LeituraDoHistorico::Ok,

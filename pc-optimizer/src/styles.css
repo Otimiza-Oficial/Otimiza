@@ -1254,6 +1254,23 @@ button {
   opacity: 0.45;
 }
 
+/* NÃO APAGADO COMO O "não se aplica", E ÂMBAR EM VEZ DE CINZA.
+
+   "Não se aplica" é uma conclusão, e conclusão pode desbotar. "Não deu para
+   verificar" é uma pergunta em aberto sobre o PC do cliente, e é justamente
+   nas máquinas onde ela aparece — imagem modificada, permissão negada,
+   política de domínio — que o produto precisa ser visto, não escondido.
+
+   Âmbar é o mesmo tom que o resto do programa usa para "olhe para isto", e não
+   o verde de coisa resolvida: ver o comentário de `OptimizationState::Unknown`. */
+.optimization[data-state="Unknown"] .opt-row {
+  border-left-color: var(--amber);
+}
+
+.state-label[data-state="Unknown"] {
+  color: var(--amber);
+}
+
 .gain-dot {
   width: 6px;
   height: 6px;
@@ -1650,6 +1667,17 @@ button {
 
 .finding[data-severity="Ok"] {
   border-left-color: var(--green);
+}
+
+/* NEM VERDE NEM ÂMBAR, DE PROPÓSITO.
+
+   "Este Windows não tem este ajuste" não é um problema — o plano segue sem ele
+   — mas também não é uma verificação aprovada. Pintar de verde inflaria a
+   contagem de coisas que deram certo, que é a conta que este produto se recusa
+   a fabricar. Fica no cinza da borda padrão, e a regra está escrita para não
+   virar verde por descuido de alguém depois. */
+.finding[data-severity="Neutral"] {
+  border-left-color: var(--hairline-strong);
 }
 
 .finding-top {
