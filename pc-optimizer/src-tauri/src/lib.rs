@@ -97,6 +97,8 @@ pub fn run() {
             commands::diagnostico_de_energia,
             commands::simular_plano_otimiza,
             commands::relatorio_de_compatibilidade,
+            commands::vistoriar_plano_otimiza,
+            commands::reparar_plano_otimiza,
             commands::aplicar_plano_otimiza,
             commands::relaunch_as_admin,
             commands::get_hardware_profile,

@@ -1086,11 +1086,27 @@ function ligarSubabas() {
  * novo a cada abertura duplicaria cada linha de andamento na tela.
  */
 let reparoCarregado = false;
+let planoVistoriado = false;
 
 function showTab(name: string) {
   if (name === "reparo" && !reparoCarregado) {
     reparoCarregado = true;
     void carregarReparo();
+  }
+
+  // A VISTORIA DO PLANO RODA AO ABRIR A ABA, E NUNCA NA ABERTURA DO PROGRAMA.
+  //
+  // Ela chama PowerShell e `powercfg`, e a 1.7 gastou uma versão inteira
+  // derrubando o tempo de abertura para 1,2 s. Mas ela precisa ser automática:
+  // um plano que outro programa desfez não vai ser descoberto por um cliente
+  // que não sabe que existe um botão para conferir.
+  //
+  // Uma vez por sessão, como o Reparo: ela é refeita depois de aplicar,
+  // reparar ou desfazer, que são os únicos momentos em que o estado muda por
+  // nossa causa.
+  if (name === "otimizacoes" && !planoVistoriado) {
+    planoVistoriado = true;
+    void vistoriarPlano();
   }
 
   document.querySelectorAll<HTMLElement>(".tab-panel").forEach((panel) => {
@@ -3843,6 +3859,119 @@ function renderDiagnostico(d: DiagnosticoDeEnergia): string {
   return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${avisos}`;
 }
 
+type Vistoria =
+  | { estado: "NaoExiste" }
+  | { estado: "Integro" }
+  | { estado: "DesativadoPorFora" }
+  | { estado: "Desviado"; ativo: boolean; ajustes: string[] }
+  | { estado: "NaoConsegui" };
+
+/**
+ * Alguns nomes, e não todos.
+ *
+ * VISTO NA TELA, e não deduzido: quando o plano inteiro é resetado — o que um
+ * "otimizador" concorrente faz de uma vez —, os dez nomes viram três linhas de
+ * texto corrido que ninguém lê. Um aviso que não é lido não avisa.
+ *
+ * Três é o suficiente para o cliente reconhecer do que se trata e conferir no
+ * painel do Windows; o resto vira contagem. O número total continua na frente
+ * da frase, então nada é escondido.
+ */
+function listarPoucos(nomes: string[], teto = 3): string {
+  if (nomes.length <= teto) return nomes.join(", ");
+
+  return `${nomes.slice(0, teto).join(", ")} e mais ${nomes.length - teto}`;
+}
+
+/**
+ * A frase e o tom de cada resultado da vistoria.
+ *
+ * "DESVIADO" É A ÚNICA QUE PRECISA DE AÇÃO, e é por isso que só ela liga o
+ * botão de reparo. As outras quatro são informação — inclusive `NaoConsegui`,
+ * que não pode virar um "repare" sobre uma leitura que falhou.
+ */
+function naTelaDaVistoria(v: Vistoria): {
+  frase: string;
+  tom: "ok" | "warn" | "error";
+  reparar: boolean;
+} {
+  switch (v.estado) {
+    case "NaoExiste":
+      return {
+        frase: "Não há plano OTIMIZA nesta máquina.",
+        tom: "ok",
+        reparar: false,
+      };
+    case "Integro":
+      return {
+        frase: "O plano OTIMIZA está ativo e como foi deixado.",
+        tom: "ok",
+        reparar: false,
+      };
+    case "DesativadoPorFora":
+      return {
+        frase:
+          "O plano OTIMIZA está intacto, mas o computador voltou a usar outro. " +
+          "Instalador de driver e utilitário de fabricante costumam trocar o plano ativo sem avisar.",
+        tom: "warn",
+        reparar: true,
+      };
+    case "Desviado":
+      return {
+        // O NOME DOS AJUSTES, e não "algo mudou". É o que o cliente consegue
+        // conferir sozinho no painel do Windows — e é o que separa este aviso
+        // do alarme genérico que todo otimizador dá.
+        frase: `Algum programa mudou ${v.ajustes.length} ajuste(s) do plano OTIMIZA: ${listarPoucos(v.ajustes)}.`,
+        tom: "warn",
+        reparar: true,
+      };
+    case "NaoConsegui":
+      return {
+        frase: "Não foi possível ler o plano de energia para conferir.",
+        tom: "error",
+        reparar: false,
+      };
+  }
+}
+
+async function vistoriarPlano() {
+  try {
+    const v = await invoke<Vistoria>("vistoriar_plano_otimiza");
+    const { frase, tom, reparar } = naTelaDaVistoria(v);
+
+    element("plano-reparar").hidden = !reparar;
+    setStatus("plano-status", frase, tom);
+  } catch (error) {
+    // A vistoria roda sozinha ao abrir o painel. Falhar aqui não pode
+    // atrapalhar quem só queria simular ou aplicar.
+    element("plano-reparar").hidden = true;
+    setStatus("plano-status", String(error), "error");
+  }
+}
+
+async function repararPlano() {
+  const botao = element<HTMLButtonElement>("plano-reparar");
+  botao.disabled = true;
+  setStatus("plano-status", "Reaplicando só o que saiu do lugar…", "progress");
+
+  try {
+    const r = await invoke<RelatorioDoPlano>("reparar_plano_otimiza", {
+      incluirAvancadas: false,
+    });
+
+    const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
+    mostrarPlano(r, tom, frase);
+
+    // Confere de novo em vez de assumir que o reparo resolveu: se alguma coisa
+    // continuar mexendo no plano, o botão tem que voltar.
+    await vistoriarPlano();
+  } catch (error) {
+    setStatus("plano-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 async function diagnosticarEnergia() {
   const botao = element<HTMLButtonElement>("plano-diagnostico");
   botao.disabled = true;
@@ -3986,6 +4115,11 @@ async function aplicarPlano() {
     // estado. Sem esta linha ela continuaria oferecendo aplicar o que já está
     // aplicado até a próxima atualização manual.
     void loadOptimizations();
+
+    // E a vistoria precisa refletir o que acabou de acontecer: sem isto, um
+    // aviso de desvio que estava na tela continuaria lá depois de o reparo já
+    // ter sido feito pela aplicação.
+    void vistoriarPlano();
   } catch (error) {
     setStatus("plano-status", String(error), "error");
   } finally {
@@ -4010,6 +4144,10 @@ async function desfazerPlano() {
     element("plano-result").innerHTML = "";
     element("plano-desfazer").hidden = true;
     planoAnterior = null;
+
+    // O plano OTIMIZA foi apagado: não há mais o que reparar, e deixar o botão
+    // na tela ofereceria consertar uma coisa que não existe mais.
+    element("plano-reparar").hidden = true;
 
     setStatus(
       "plano-status",
@@ -7573,6 +7711,7 @@ function wireControls() {
 
   element("plano-diagnostico").addEventListener("click", diagnosticarEnergia);
   element("plano-simular").addEventListener("click", simularPlano);
+  element("plano-reparar").addEventListener("click", repararPlano);
   element("lab-gerar").addEventListener("click", gerarLab);
   element("lab-copiar").addEventListener("click", copiarLab);
   element("plano-aplicar").addEventListener("click", aplicarPlano);

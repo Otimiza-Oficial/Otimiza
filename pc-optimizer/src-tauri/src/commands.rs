@@ -2833,6 +2833,54 @@ pub async fn aplicar_plano_otimiza(
     }
 }
 
+/// O plano OTIMIZA continua de pé como o deixamos?
+///
+/// Fica em `LIVRES`: é leitura pura. E é a pergunta que o cliente faz quando
+/// "aplicou e depois voltou tudo" — a resposta precisa existir antes de
+/// qualquer venda ou renovação.
+#[tauri::command]
+pub async fn vistoriar_plano_otimiza() -> Result<
+    crate::modules::windows::planoenergia::Vistoria,
+    String,
+> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::planoenergia::vistoriar())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Reaplica só o que saiu do alvo no plano OTIMIZA.
+///
+/// Vai para `EXIGEM_LICENCA`: altera o computador.
+///
+/// NÃO MEXE NO HISTÓRICO, e isso é a decisão central deste comando. O registro
+/// de desfazer guarda qual era o plano do cliente ANTES de tudo, e isso não
+/// mudou: o plano dele continua sendo o dele. Gravar uma linha nova aqui daria
+/// ao cliente dois "desfazer" para uma troca só, e o segundo reativaria um
+/// plano que já estava ativo.
+#[tauri::command]
+pub async fn reparar_plano_otimiza(
+    incluir_avancadas: bool,
+) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::planoenergia::reparar(incluir_avancadas)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = incluir_avancadas;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Gera o relatório de compatibilidade desta máquina, no formato do lab.
 ///
 /// Fica em `LIVRES`: é leitura pura, e é justamente de quem AINDA não comprou —
@@ -2890,6 +2938,7 @@ mod tests {
         "diagnostico_de_energia",
         "simular_plano_otimiza",
         "relatorio_de_compatibilidade",
+        "vistoriar_plano_otimiza",
         "relaunch_as_admin",
         "get_hardware_profile",
         "analyze_firmware",
@@ -2946,6 +2995,7 @@ mod tests {
     const EXIGEM_LICENCA: &[&str] = &[
         "clean_disk_category",
         "aplicar_plano_otimiza",
+        "reparar_plano_otimiza",
         "empty_recycle_bin",
         "set_automatic_pagefile",
         "clean_shader_cache",

@@ -674,6 +674,122 @@ pub fn onde_esta_o_plano() -> EstadoDoPlano {
     estado_do_plano(nosso.as_deref(), ativo.as_deref())
 }
 
+// ─── Vistoria: o plano continua de pé como o deixamos? ───────────────────────
+
+/// O que uma vistoria encontrou. É LEITURA PURA: nada é escrito para descobrir.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "estado")]
+pub enum Vistoria {
+    /// Não há plano OTIMIZA nesta máquina.
+    NaoExiste,
+    /// Existe, está ativo, e todo ajuste está onde o deixamos.
+    Integro,
+    /// Existe e está íntegro, mas o computador está usando outro plano.
+    ///
+    /// Acontece sozinho com mais frequência do que se imagina: instalador de
+    /// driver de vídeo, utilitário do fabricante e "otimizadores" concorrentes
+    /// trocam o plano ativo sem avisar.
+    DesativadoPorFora,
+    /// Existe e algum ajuste saiu do alvo.
+    Desviado {
+        ativo: bool,
+        /// Os ajustes que mudaram, pelo nome. É o que transforma "algo mudou"
+        /// em uma frase que o cliente consegue conferir.
+        ajustes: Vec<String>,
+    },
+    NaoConsegui,
+}
+
+/// Regra pura da vistoria, separada da leitura para poder ser testada.
+///
+/// A ORDEM IMPORTA: desvio vence "não está ativo". Um plano alterado E
+/// desativado é, antes de tudo, um plano alterado — reativá-lo sem reparar
+/// devolveria ao cliente os valores errados, com a tela dizendo que está tudo
+/// certo.
+pub fn classificar_vistoria(existe: bool, ativo: bool, desviados: Vec<String>) -> Vistoria {
+    if !existe {
+        return Vistoria::NaoExiste;
+    }
+
+    if !desviados.is_empty() {
+        return Vistoria::Desviado {
+            ativo,
+            ajustes: desviados,
+        };
+    }
+
+    if ativo {
+        Vistoria::Integro
+    } else {
+        Vistoria::DesativadoPorFora
+    }
+}
+
+/// Vistoria o plano. Não escreve nada.
+pub fn vistoriar() -> Vistoria {
+    // Simulação: lê cada ajuste do nosso plano sem tocar em nada. Num plano que
+    // existe, `Mudaria` quer dizer exatamente "este valor não é o que
+    // deixamos" — que é a definição de desvio.
+    let Ok(relatorio) = montar(true, false) else {
+        return Vistoria::NaoConsegui;
+    };
+
+    if !relatorio.plano_existia {
+        return Vistoria::NaoExiste;
+    }
+
+    let desviados = relatorio
+        .ajustes
+        .iter()
+        .filter(|a| a.status == StatusDoAjuste::Mudaria)
+        .map(|a| a.nome.clone())
+        .collect();
+
+    let ativo = matches!(onde_esta_o_plano(), EstadoDoPlano::Ativo);
+
+    classificar_vistoria(true, ativo, desviados)
+}
+
+/// Reaplica só o que saiu do alvo, e reativa o plano se preciso.
+///
+/// POR QUE ISTO É UM CAMINHO PRÓPRIO, E NÃO "aplicar de novo".
+///
+/// O motor recusa reaplicar uma otimização que já está no histórico — e com
+/// razão, senão o "Otimizar agora" refaria tudo a cada clique. Só que o plano de
+/// energia é a única otimização do catálogo que OUTRO PROGRAMA PODE DESFAZER
+/// pelas costas: instalador de driver, utilitário do fabricante, ou um
+/// concorrente trocando o plano ativo. Quando isso acontece, o histórico diz
+/// "aplicada", a máquina discorda, e o cliente não tem botão nenhum — a lista
+/// responde "Otimização já estava aplicada" sobre um PC que não está.
+///
+/// O reparo é a saída: ele não cria plano (se não existe, é criação, e criação
+/// tem o seu próprio caminho com o registro de desfazer) e não mexe no
+/// histórico, porque o estado anterior guardado lá continua sendo o certo — o
+/// plano do cliente nunca deixou de ser o plano do cliente.
+pub fn reparar(incluir_avancadas: bool) -> Result<RelatorioDoPlano, String> {
+    if !registry::is_elevated() {
+        return Err(
+            "Reparar o plano de energia exige executar o Otimiza como administrador.".to_string(),
+        );
+    }
+
+    let planos = listar_planos()?;
+
+    if achar_na_lista(&planos, NOME_DO_PLANO).is_none() {
+        return Err(
+            "Não há plano OTIMIZA nesta máquina para reparar. Use \"Criar e ativar\"."
+                .to_string(),
+        );
+    }
+
+    crate::utils::Logger::info("plano OTIMIZA: reparo pedido");
+
+    // Daqui para frente é o mesmo caminho da aplicação, e é de propósito: ele
+    // já só escreve o que está fora do alvo e já confere cada escrita relendo.
+    // Reparo não é um motor diferente; é o mesmo motor com outra porta.
+    montar(false, incluir_avancadas)
+}
+
 // ─── Aplicar um ajuste, e provar que ele entrou ───────────────────────────────
 
 /// Este Windows tem este ajuste?
@@ -1763,6 +1879,76 @@ mod tests {
     }
 
     #[test]
+    fn desvio_vence_o_plano_estar_desativado() {
+        // Um plano alterado E desativado é, antes de tudo, um plano alterado.
+        // Reativá-lo sem reparar devolveria ao cliente os valores errados, com
+        // a tela dizendo que está tudo certo — que é pior do que deixá-lo
+        // desativado.
+        assert_eq!(
+            classificar_vistoria(true, false, vec!["Estacionamento de núcleos".into()]),
+            Vistoria::Desviado {
+                ativo: false,
+                ajustes: vec!["Estacionamento de núcleos".into()]
+            }
+        );
+    }
+
+    #[test]
+    fn a_vistoria_diz_quais_ajustes_mudaram() {
+        // "Algo mudou" não serve para nada. O nome do ajuste é o que o cliente
+        // consegue conferir sozinho no painel do Windows — e é o que separa
+        // este aviso de um alarme genérico de otimizador.
+        let v = classificar_vistoria(
+            true,
+            true,
+            vec!["Estado mínimo do processador".into(), "ASPM".into()],
+        );
+
+        match v {
+            Vistoria::Desviado { ajustes, ativo } => {
+                assert!(ativo);
+                assert_eq!(ajustes.len(), 2);
+            }
+            outro => panic!("esperava desvio, veio {:?}", outro),
+        }
+    }
+
+    #[test]
+    fn plano_intacto_mas_trocado_por_fora_tem_nome_proprio() {
+        // Instalador de driver de vídeo e utilitário de fabricante trocam o
+        // plano ativo sem avisar. É diferente de alguém ter mexido nos valores,
+        // e o conserto é outro: aqui basta reativar.
+        assert_eq!(
+            classificar_vistoria(true, false, vec![]),
+            Vistoria::DesativadoPorFora
+        );
+        assert_eq!(classificar_vistoria(true, true, vec![]), Vistoria::Integro);
+    }
+
+    #[test]
+    fn sem_plano_nao_ha_o_que_vistoriar() {
+        assert_eq!(classificar_vistoria(false, false, vec![]), Vistoria::NaoExiste);
+        // Nem mesmo com desvio: sem plano nosso, os valores lidos são do plano
+        // do cliente, e chamá-los de "desvio" seria acusar o dono da máquina de
+        // ter mexido no que é dele.
+        assert_eq!(
+            classificar_vistoria(false, false, vec!["qualquer".into()]),
+            Vistoria::NaoExiste
+        );
+    }
+
+    #[test]
+    fn reparar_sem_plano_recusa_em_vez_de_criar() {
+        // Criar tem caminho próprio, com o registro de desfazer. Se o reparo
+        // criasse, o cliente ficaria com um plano ativo e SEM linha no
+        // histórico — ou seja, sem botão de voltar.
+        if registry::is_elevated() && onde_esta_o_plano() == EstadoDoPlano::NaoExiste {
+            let erro = reparar(false).unwrap_err();
+            assert!(erro.contains("Criar e ativar"), "{}", erro);
+        }
+    }
+
+    #[test]
     fn nao_conseguir_ler_nao_e_plano_ausente() {
         // Se isto virasse `NaoExiste`, a lista ofereceria aplicar de novo o que
         // talvez já esteja aplicado — e o cliente criaria um plano em cima do
@@ -1938,6 +2124,79 @@ mod tests {
         );
 
         println!("desfeito: plano ativo voltou a {} e o OTIMIZA foi apagado", antes);
+    }
+
+    /// O CAMINHO DO REPARO, contra o Windows de verdade.
+    ///
+    /// Cria o plano, **estraga um ajuste por fora** — como faria um instalador
+    /// de driver ou um concorrente —, confere que a vistoria acha e nomeia o
+    /// ajuste, repara, confere que ficou íntegro, e desfaz.
+    ///
+    /// `#[ignore]`: escreve na máquina e precisa de administrador.
+    ///
+    ///   cargo test --lib planoenergia -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn vistoria_acha_o_desvio_e_o_reparo_conserta() {
+        if !registry::is_elevated() {
+            println!("PULADO: precisa de administrador.");
+            return;
+        }
+
+        let antes = power::active_scheme().expect("plano ativo");
+        let inicial = montar(false, false).expect("criar o plano");
+
+        assert!(inicial.plano_ativo, "o plano não ficou ativo");
+        assert_eq!(vistoriar(), Vistoria::Integro, "nasceu desviado");
+
+        let guid = inicial.guid_do_plano.clone().unwrap();
+
+        // ── Alguém mexe no plano por fora ────────────────────────────────
+        //
+        // Estacionamento de núcleos de 100 para 50: valor válido, aceito pelo
+        // Windows, e diferente do que deixamos. É exatamente o que um
+        // "otimizador" concorrente faz.
+        shell::run_checked(
+            "powercfg",
+            &["-setacvalueindex", &guid, SUB_PROCESSADOR, CPMINCORES, "50"],
+        )
+        .expect("estragar o ajuste");
+
+        let vistoria = vistoriar();
+        println!("depois de estragar: {:?}", vistoria);
+
+        match &vistoria {
+            Vistoria::Desviado { ajustes, ativo } => {
+                assert!(*ativo, "o plano deveria continuar ativo");
+                assert!(
+                    ajustes.iter().any(|a| a.contains("Estacionamento")),
+                    "a vistoria não nomeou o ajuste que eu estraguei: {:?}",
+                    ajustes
+                );
+            }
+            outro => panic!("a vistoria não viu o desvio: {:?}", outro),
+        }
+
+        // ── O reparo ─────────────────────────────────────────────────────
+        let reparo = reparar(false).expect("reparar");
+
+        println!(
+            "reparo: aplicados={} já bons={} falhas={}",
+            reparo.aplicados, reparo.ja_estavam_bons, reparo.falhas
+        );
+
+        assert_eq!(reparo.falhas, 0, "o reparo falhou");
+        assert!(
+            reparo.aplicados >= 1,
+            "o reparo não reescreveu nada, e havia um ajuste fora do lugar"
+        );
+
+        assert_eq!(vistoriar(), Vistoria::Integro, "continuou desviado");
+
+        desfazer(&antes).expect("desfazer");
+        assert_eq!(power::active_scheme().unwrap(), antes);
+
+        println!("plano ativo voltou a {}", antes);
     }
 
     #[test]
