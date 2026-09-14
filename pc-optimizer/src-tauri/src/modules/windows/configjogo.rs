@@ -355,10 +355,29 @@ const SEM_TETO: &[Mudanca] = &[
     Mudanca { chave: "MaxFPS", valor: "0", custo: "" },
 ];
 
+/// CHAVE QUE NÃO EXISTE NO ARQUIVO É IGNORADA, e isso é o que torna esta tabela
+/// segura de crescer.
+///
+/// `aplicar_no_texto` só mexe no que `valor()` encontrou; uma chave de outra
+/// versão do jogo, ou escrita com outro nome, simplesmente não acontece. O pior
+/// caso de um nome errado aqui é não fazer nada — nunca corromper o arquivo.
 const CAROS_E_POUCO_VISIVEIS: &[Mudanca] = &[
     Mudanca { chave: "MSAA", valor: "0", custo: "serrilhado nas bordas" },
+    // A SUAVIZAÇÃO DOS REFLEXOS É SEPARADA DA DO JOGO, e é das mais caras que
+    // existem: ela roda a cena de novo dentro de cada superfície refletiva.
+    // Quase ninguém percebe a diferença em movimento, e ela estava passando
+    // batido porque o nome parece o mesmo do MSAA.
+    Mudanca { chave: "ReflectionMSAA", valor: "0", custo: "reflexos um pouco mais serrilhados" },
     Mudanca { chave: "Tessellation", valor: "0", custo: "relevo em algumas superfícies" },
     Mudanca { chave: "SSAO", valor: "0", custo: "sombra suave nos cantos" },
+    // Desfoque de movimento e profundidade de campo custam quadro e são as duas
+    // primeiras coisas que jogador de tiro desliga por conta própria.
+    Mudanca { chave: "MotionBlurStrength", valor: "0.000000", custo: "sem desfoque de movimento" },
+    Mudanca { chave: "DoF", valor: "false", custo: "fundo sempre nítido" },
+    // Não é qualidade: é quanta textura o jogo tenta carregar de uma vez.
+    // Ligado numa placa com pouca memória de vídeo, vira engasgo em vez de
+    // detalhe.
+    Mudanca { chave: "HdStreamingInFlight", valor: "false", custo: "" },
 ];
 
 const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
@@ -367,6 +386,18 @@ const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
     Mudanca { chave: "WaterQuality", valor: "0", custo: "água mais simples" },
     Mudanca { chave: "ParticleQuality", valor: "0", custo: "efeitos mais simples" },
     Mudanca { chave: "PostFX", valor: "0", custo: "menos brilho e desfoque" },
+    // A GRAMA É DAS TRÊS MAIS CARAS DO JOGO, e estava fora de todos os perfis.
+    // Ela é visível, por isso fica no perfil que assume o custo visual — mas
+    // deixá-la fora era abrir mão de um dos maiores ganhos disponíveis.
+    Mudanca { chave: "GrassQuality", valor: "0", custo: "grama mais rala e mais curta" },
+    Mudanca { chave: "ShaderQuality", valor: "0", custo: "materiais menos detalhados" },
+    // ESTES TRÊS ALIVIAM O PROCESSADOR, E NÃO A PLACA DE VÍDEO — e é por isso
+    // que importam tanto no FiveM. Num servidor de RP cheio, o gargalo é a CPU
+    // desenhando pessoas e carros, não a GPU. Os ajustes de qualidade gráfica
+    // não encostam nesse gargalo; estes encostam.
+    Mudanca { chave: "LodScale", valor: "0.000000", custo: "detalhe some mais perto" },
+    Mudanca { chave: "PedLodBias", valor: "0.000000", custo: "pessoas distantes mais simples" },
+    Mudanca { chave: "VehicleLodBias", valor: "0.000000", custo: "carros distantes mais simples" },
 ];
 
 /// A taxa de atualização que o jogo vai pedir, lida do monitor de verdade.
@@ -693,6 +724,207 @@ mod tests {
     }
 
     /// Trocar uma chave não pode mexer em mais nada do arquivo.
+    /// Um `settings.xml` no formato completo do jogo, com os valores de quem
+    /// nunca mexeu em nada — que é o PC do cliente típico.
+    const CONFIG_CHEIA: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<Settings>
+  <graphics>
+    <Tessellation value="2" />
+    <LodScale value="1.000000" />
+    <PedLodBias value="1.000000" />
+    <VehicleLodBias value="1.000000" />
+    <ShadowQuality value="2" />
+    <ReflectionQuality value="2" />
+    <ReflectionMSAA value="4" />
+    <SSAO value="2" />
+    <AnisotropicFiltering value="16" />
+    <MSAA value="4" />
+    <MotionBlurStrength value="1.000000" />
+    <DoF value="true" />
+    <HdStreamingInFlight value="true" />
+    <TextureQuality value="2" />
+    <ParticleQuality value="2" />
+    <GrassQuality value="3" />
+    <ShaderQuality value="2" />
+    <WaterQuality value="2" />
+    <PostFX value="3" />
+  </graphics>
+  <video>
+    <VSync value="1" />
+  </video>
+</Settings>"#;
+
+    /// O que cada perfil faria no arquivo de um cliente que nunca mexeu em nada.
+    ///
+    ///   cargo test --lib configjogo -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn o_que_cada_perfil_muda_num_arquivo_cheio() {
+        for (nome, perfil) in [
+            ("SEM TETO", Perfil::SemTeto),
+            ("EQUILIBRADO", Perfil::Equilibrado),
+            ("COMPETITIVO", Perfil::Competitivo),
+        ] {
+            let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, perfil);
+
+            println!("\n=== {} — {} mudança(s) ===", nome, mexidas.len());
+            for m in &mexidas {
+                println!("  {}", m);
+            }
+        }
+    }
+
+    #[test]
+    fn o_competitivo_alcanca_o_que_e_caro_num_arquivo_completo() {
+        // A tabela antiga deixava passar a grama, a suavização dos reflexos e
+        // os três ajustes que aliviam o processador. Num arquivo completo, o
+        // perfil precisa alcançar todos eles.
+        let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, Perfil::Competitivo);
+
+        for esperado in [
+            "MSAA:",
+            "ReflectionMSAA:",
+            "GrassQuality:",
+            "ShaderQuality:",
+            "LodScale:",
+            "PedLodBias:",
+            "VehicleLodBias:",
+            "PostFX:",
+            "DoF:",
+            "MotionBlurStrength:",
+            "HdStreamingInFlight:",
+        ] {
+            assert!(
+                mexidas.iter().any(|m| m.starts_with(esperado)),
+                "o perfil competitivo não alcançou `{}`:\n{:?}",
+                esperado,
+                mexidas
+            );
+        }
+    }
+
+    #[test]
+    fn nenhum_perfil_mexe_no_que_e_barato_e_visivel() {
+        // Textura e filtro anisotrópico praticamente não custam quadro e são
+        // das coisas que mais mudam a aparência. Derrubá-los seria cobrar um
+        // preço visual alto por um ganho que não existe — o oposto do que este
+        // módulo faz.
+        let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, Perfil::Competitivo);
+
+        for proibido in ["TextureQuality:", "AnisotropicFiltering:"] {
+            assert!(
+                !mexidas.iter().any(|m| m.starts_with(proibido)),
+                "`{}` é barato e visível; não deveria ser mexido",
+                proibido
+            );
+        }
+    }
+
+    #[test]
+    fn chave_que_nao_existe_no_arquivo_nao_faz_nada() {
+        // É O QUE TORNA A TABELA SEGURA DE CRESCER. O arquivo do cliente varia
+        // por versão do jogo e por mod; uma chave que não está lá precisa ser
+        // um não-evento, nunca um arquivo corrompido. Sem esta garantia, cada
+        // ajuste novo seria uma aposta no PC de quem pagou.
+        let (saida, mexidas) = aplicar_no_texto(CONFIG_REAL, Perfil::Competitivo);
+
+        for inexistente in ["ReflectionMSAA", "DoF", "LodScale", "PedLodBias"] {
+            assert!(
+                !saida.contains(inexistente),
+                "`{}` não está no arquivo e mesmo assim foi escrito",
+                inexistente
+            );
+            assert!(
+                !mexidas.iter().any(|m| m.starts_with(inexistente)),
+                "`{}` foi relatado como mexido sem existir no arquivo",
+                inexistente
+            );
+        }
+
+        // E o que existe continua sendo mexido.
+        assert!(mexidas.iter().any(|m| m.starts_with("MSAA:")), "{:?}", mexidas);
+    }
+
+    #[test]
+    fn a_grama_entra_no_perfil_competitivo() {
+        // Ela é das três mais caras do jogo e estava fora de TODOS os perfis —
+        // ou seja, o produto deixava na mesa um dos maiores ganhos que tinha
+        // acesso. Fica no competitivo porque o custo visual é real.
+        let competitivo: Vec<&str> = Perfil::Competitivo
+            .mudancas()
+            .iter()
+            .map(|m| m.chave)
+            .collect();
+
+        assert!(competitivo.contains(&"GrassQuality"), "{:?}", competitivo);
+
+        let equilibrado: Vec<&str> = Perfil::Equilibrado
+            .mudancas()
+            .iter()
+            .map(|m| m.chave)
+            .collect();
+
+        assert!(!equilibrado.contains(&"GrassQuality"));
+    }
+
+    #[test]
+    fn o_equilibrado_nao_cobra_custo_visual_grande() {
+        // O perfil do meio é o que a maioria dos clientes vai usar. Ele pode
+        // desligar o que é caro e pouco visível; o que muda a CARA do jogo —
+        // grama, sombras, reflexos, materiais — fica para quem escolheu o
+        // competitivo de propósito.
+        const SO_NO_COMPETITIVO: &[&str] = &[
+            "GrassQuality",
+            "ShadowQuality",
+            "ReflectionQuality",
+            "ShaderQuality",
+            "PostFX",
+        ];
+
+        for chave in Perfil::Equilibrado.mudancas().iter().map(|m| m.chave) {
+            assert!(
+                !SO_NO_COMPETITIVO.contains(&chave),
+                "`{}` muda a cara do jogo e não pode estar no perfil do meio",
+                chave
+            );
+        }
+    }
+
+    #[test]
+    fn os_ajustes_que_aliviam_o_processador_existem() {
+        // No FiveM o gargalo de um servidor de RP cheio é a CPU desenhando
+        // pessoas e carros — nenhum ajuste de qualidade gráfica encosta nisso.
+        // Se estes três sumirem numa refatoração, o produto volta a otimizar só
+        // o lado que não era o problema.
+        let competitivo: Vec<&str> = Perfil::Competitivo
+            .mudancas()
+            .iter()
+            .map(|m| m.chave)
+            .collect();
+
+        for chave in ["LodScale", "PedLodBias", "VehicleLodBias"] {
+            assert!(competitivo.contains(&chave), "faltou `{}`", chave);
+        }
+    }
+
+    #[test]
+    fn todo_ajuste_com_custo_visual_diz_qual_e() {
+        // O cliente aceita perder qualidade quando sabe o que perde. A tabela
+        // não pode crescer com uma linha que tira algo da tela sem dizer o quê.
+        for m in Perfil::Competitivo.mudancas() {
+            let sem_custo_visual = matches!(m.chave, "HdStreamingInFlight")
+                || SEM_TETO.iter().any(|s| s.chave == m.chave);
+
+            if !sem_custo_visual {
+                assert!(
+                    !m.custo.is_empty(),
+                    "`{}` muda a imagem e não diz o que o cliente perde",
+                    m.chave
+                );
+            }
+        }
+    }
+
     #[test]
     fn trocar_mexe_so_na_chave_pedida() {
         let novo = trocar(CONFIG_REAL, "MSAA", "0").expect("MSAA existe no arquivo");
