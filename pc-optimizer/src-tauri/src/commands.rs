@@ -2035,13 +2035,43 @@ pub async fn optimize_now(
 
         // Cada passo é emitido na hora que acontece: a interface mostra o que
         // está sendo mexido, em vez de uma barra de progresso sem informação.
-        Ok(crate::modules::windows::WindowsOptimizer::new().apply_selection(
+        let mut resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(
             only.as_deref(),
             &mut log,
             |step| {
                 let _ = app.emit("optimize:step", step);
             },
-        ))
+        );
+
+        // ─── O TETO DE FPS DO JOGO, NO MESMO CLIQUE ───────────────────────
+        //
+        // O cliente olha o FPS, e os ajustes de Windows quase não mexem nele:
+        // das 41 otimizações do catálogo, 7 são declaradas com ganho
+        // mensurável. Quem move FPS em dezenas é a configuração do jogo — foi
+        // essa a causa do reembolso, com o FiveM preso em MSAA 4x.
+        //
+        // Só que quem aperta "Otimizar agora" não vai explorar o programa até a
+        // aba Jogos. Ele aperta um botão e olha o número. Deixar a maior
+        // alavanca do produto atrás de um segundo clique era garantir que a
+        // maioria nunca a receberia.
+        //
+        // SÓ O `SemTeto`, E ISSO NÃO É TIMIDEZ. Ele tira VSync e limite de
+        // quadros: preço visual EXATAMENTE ZERO, e costuma ser o maior ganho
+        // isolado — um jogo travado em 60 não está travado pela placa, está
+        // travado por um número num arquivo. Os perfis que derrubam grama,
+        // sombra e reflexo mudam a cara do jogo, e isso é escolha do dono,
+        // nunca efeito colateral de um botão genérico.
+        //
+        // `only` sendo `Some` quer dizer que um PERFIL DE USO pediu uma lista
+        // específica; aí o cliente já escolheu o que quer e não se acrescenta
+        // nada por fora.
+        if only.is_none() {
+            if let Some(resultado) = aplicar_teto_do_jogo(&app, &mut log).await {
+                resultados.push(resultado);
+            }
+        }
+
+        Ok(resultados)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2049,6 +2079,105 @@ pub async fn optimize_now(
         let _ = (app, state, only);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
+}
+
+/// Tira o teto de quadros do jogo, como último passo do "Otimizar agora".
+///
+/// Devolve `None` quando não há nada a dizer — sem jogo instalado, ou o arquivo
+/// já sem teto. Nesses casos um passo a mais na tela só confundiria.
+///
+/// O JOGO ABERTO NÃO É FALHA DO LOTE, e por isso não devolve erro: o jogo guarda
+/// a configuração em memória e reescreve o arquivo ao sair, apagando o que for
+/// mudado agora. O cliente precisa saber disso — mas o lote de Windows foi bem,
+/// e reportar "falhou" apagaria esse fato.
+#[cfg(target_os = "windows")]
+async fn aplicar_teto_do_jogo(
+    app: &tauri::AppHandle,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Option<OptimizationOutcome> {
+    use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+    use crate::modules::optimizer::{ActionResult, ActionStatus};
+    use crate::modules::windows::configjogo::{self, Perfil};
+
+    const ID: &str = "config_jogo_sem_teto";
+    const NOME: &str = "Limite de quadros do jogo";
+
+    // Já aplicado antes: o histórico manda, como em toda otimização.
+    if log.is_applied(ID) {
+        return None;
+    }
+
+    let inicio = std::time::Instant::now();
+
+    let (mensagem, sucesso, mudou) = match configjogo::aplicar_perfil(Perfil::SemTeto) {
+        Ok(feito) if feito.mudou.is_empty() => {
+            // Nada a tirar: o jogo já estava sem teto. Não é passo, não é
+            // registro, não é linha na tela.
+            return None;
+        }
+        Ok(feito) => {
+            let resumo = format!("{}: {}", feito.jogo, feito.mudou.join(", "));
+
+            // O ARQUIVO ANTERIOR INTEIRO VAI PARA O HISTÓRICO. É o que faz o
+            // "Desfazer tudo" devolver a configuração do cliente byte a byte,
+            // em vez de tentar reescrever chave por chave.
+            let gravou = log.record(AppliedOptimization {
+                optimization_id: ID.to_string(),
+                name: NOME.to_string(),
+                timestamp: now_timestamp(),
+                changes: vec![ChangeRecord::GameConfig {
+                    caminho: feito.arquivo.to_string_lossy().to_string(),
+                    anterior: Some(feito.anterior),
+                    jogo: feito.jogo.clone(),
+                }],
+            });
+
+            match gravou {
+                Ok(()) => (resumo, true, feito.mudou),
+                // Sem histórico não há desfazer, e isso o cliente precisa ler.
+                Err(erro) => (
+                    format!("{} — mas o histórico não pôde ser gravado: {}", resumo, erro),
+                    false,
+                    feito.mudou,
+                ),
+            }
+        }
+        Err(erro) => (erro, false, Vec::new()),
+    };
+
+    let _ = app.emit(
+        "optimize:step",
+        BatchStep {
+            index: 0,
+            total: 0,
+            name: NOME.to_string(),
+            stage: "finished",
+            message: mensagem.clone(),
+            changes: mudou.clone(),
+            success: sucesso,
+        },
+    );
+
+    Some(OptimizationOutcome {
+        success: sucesso,
+        applied: sucesso,
+        message: mensagem.clone(),
+        duration_ms: inicio.elapsed().as_millis() as u64,
+        changes_count: mudou.len(),
+        changes: mudou.clone(),
+        actions: vec![ActionResult {
+            name: "configuração do jogo".to_string(),
+            status: if sucesso {
+                ActionStatus::Verified
+            } else {
+                ActionStatus::Failed
+            },
+            message: mensagem.clone(),
+            after_value: Some(mudou.join(", ")),
+            ..Default::default()
+        }],
+        ..OptimizationOutcome::novo(ID, NOME, mensagem)
+    })
 }
 
 /// Comando: Desfaz todas as otimizações aplicadas
@@ -2918,6 +3047,50 @@ mod tests {
     /// O desfazer está aqui de propósito. Se a licença vencer, o cliente
     /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
     /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
+    /// O botão genérico NUNCA muda a aparência do jogo do cliente.
+    ///
+    /// O "Otimizar agora" passou a mexer no arquivo do jogo, e essa permissão
+    /// tem um limite estreito: tirar o teto de quadros, que não muda nada na
+    /// tela. Os perfis que derrubam grama, sombra e reflexo mudam a cara do
+    /// jogo — isso é escolha do dono, feita na aba Jogos, e não pode virar
+    /// efeito colateral de um clique genérico.
+    ///
+    /// Trava de FORMA: varre o corpo da função em vez de confiar em revisão.
+    /// Alguém "melhorando" o lote para o perfil competitivo estaria degradando
+    /// a imagem do jogo do cliente sem ele ter pedido.
+    #[test]
+    fn o_lote_automatico_so_tira_o_teto_do_jogo() {
+        let fonte = include_str!("commands.rs");
+
+        let Some(corpo) = fonte.split("async fn aplicar_teto_do_jogo").nth(1) else {
+            panic!("não achei a função que aplica o perfil no lote");
+        };
+
+        // Até o fim da função: a próxima declaração de item no nível do arquivo.
+        let corpo = corpo.split("\n/// ").next().unwrap_or(corpo);
+
+        assert!(
+            corpo.contains("Perfil::SemTeto"),
+            "o lote deixou de usar o perfil sem custo visual"
+        );
+
+        for proibido in ["Perfil::Equilibrado", "Perfil::Competitivo"] {
+            assert!(
+                !corpo.contains(proibido),
+                "o lote automático passou a aplicar `{}`, que muda a aparência do \
+                 jogo sem o cliente ter escolhido",
+                proibido
+            );
+        }
+
+        // E a volta precisa continuar existindo: sem o arquivo anterior no
+        // histórico, o "Desfazer tudo" não devolve a configuração do cliente.
+        assert!(
+            corpo.contains("anterior"),
+            "o lote parou de guardar o arquivo anterior do jogo"
+        );
+    }
+
     const LIVRES: &[&str] = &[
         "placa_de_video",
         "memoria_instalada",

@@ -831,6 +831,26 @@
                 escolha item a item.
               </p>
 
+              <!--
+                ESTA LINHA EXISTE PORQUE O BOTÃO PASSOU A MEXER NO JOGO.
+
+                Mexer no arquivo do jogo do cliente é mais invasivo que mexer no
+                Windows, e ele tem que ler isso ANTES de clicar — não descobrir
+                depois, no registro ao vivo. A frase diz as três coisas que
+                importam: o que muda, que não muda a aparência, e que volta.
+
+                O "sem mudar a aparência" é o que justifica isto estar num botão
+                genérico. Os perfis que derrubam grama, sombra e reflexo mudam a
+                cara do jogo e continuam sendo escolha na aba Jogos.
+              -->
+              <p class="hint">
+                Ele também <strong>tira o limite de quadros do seu jogo</strong> (VSync
+                e teto de FPS), que costuma ser o maior ganho isolado e não muda a
+                aparência de nada. O arquivo do jogo é guardado inteiro antes, e o
+                "Desfazer tudo" devolve exatamente como estava. Com o jogo aberto
+                isso não é feito — ele reescreve o arquivo ao fechar.
+              </p>
+
               <!-- Perfis: a pergunta certa não é "quer otimizar?", é "para que
                    serve este PC?". Desligar a indexação de busca é ótimo num PC
                    de jogos e péssimo num de escritório. -->
