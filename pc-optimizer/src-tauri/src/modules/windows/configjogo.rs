@@ -380,6 +380,40 @@ const CAROS_E_POUCO_VISIVEIS: &[Mudanca] = &[
     Mudanca { chave: "HdStreamingInFlight", valor: "false", custo: "" },
 ];
 
+/// TELA CHEIA EXCLUSIVA. O maior ganho que sobrava sem mexer na imagem.
+///
+/// Em janela sem borda, o compositor do Windows fica no caminho entre o jogo e a
+/// tela: cada quadro passa por ele antes de aparecer. Em tela cheia exclusiva o
+/// jogo fala direto com a placa. A imagem é a MESMA — o que muda é o caminho.
+///
+/// E É POR ISSO QUE ISTO NÃO ENTRA NO BOTÃO AUTOMÁTICO, apesar de não mexer em
+/// nada visual. Eu quase o coloquei lá, e estaria errado: alternar para outra
+/// janela fica mais lento, e quem joga com o Discord ou uma live no segundo
+/// monitor sente isso na hora. Custo visual zero não é o mesmo que custo zero.
+///
+/// `0` é tela cheia; `1` é janela; `2` é janela sem borda.
+const TELA_CHEIA: &[Mudanca] = &[Mudanca {
+    chave: "Windowed",
+    valor: "0",
+    custo: "alternar para outra janela fica mais lento",
+}];
+
+/// A TEXTURA SÓ ENTRA QUANDO A MEMÓRIA DE VÍDEO NÃO CABE.
+///
+/// A regra geral é que textura quase não custa quadro — e ela é verdadeira até a
+/// memória de vídeo transbordar. Numa placa de 4 GB num servidor de RP pesado,
+/// que é o cenário deste produto, a textura no máximo faz a VRAM estourar e o
+/// jogo passa a buscar no sistema: aí não é perda de alguns quadros, é engasgo
+/// severo.
+///
+/// Eu tinha escrito um teste PROIBINDO mexer em textura, e ele estava certo pela
+/// metade. A regra não é "nunca mexer": é "não mexer enquanto couber".
+const TEXTURA_QUANDO_A_VRAM_NAO_CABE: &[Mudanca] = &[Mudanca {
+    chave: "TextureQuality",
+    valor: "0",
+    custo: "texturas menos detalhadas de perto",
+}];
+
 const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
     Mudanca { chave: "ReflectionQuality", valor: "0", custo: "reflexos mais simples" },
     Mudanca { chave: "ShadowQuality", valor: "0", custo: "sombras mais duras" },
@@ -430,19 +464,34 @@ fn hz_do_monitor() -> Option<u32> {
 }
 
 impl Perfil {
-    pub fn mudancas(self) -> Vec<&'static Mudanca> {
+    /// O que o perfil muda NESTA máquina.
+    ///
+    /// `vram_gb` entra porque um ajuste deixou de ser decisão de tabela e passou
+    /// a ser decisão por computador: a textura. Ver
+    /// `TEXTURA_QUANDO_A_VRAM_NAO_CABE`.
+    ///
+    /// `None` é "não deu para ler a memória de vídeo", e nesse caso a textura
+    /// NÃO é mexida — o ajuste tem custo visual, e cobrá-lo sem saber se ele
+    /// rende alguma coisa seria o oposto do que este módulo faz.
+    pub fn mudancas_para(self, vram_gb: Option<f64>) -> Vec<&'static Mudanca> {
         let mut lista: Vec<&Mudanca> = SEM_TETO.iter().collect();
 
         if matches!(self, Perfil::Equilibrado | Perfil::Competitivo) {
             lista.extend(CAROS_E_POUCO_VISIVEIS.iter());
+            lista.extend(TELA_CHEIA.iter());
         }
 
         if matches!(self, Perfil::Competitivo) {
             lista.extend(O_RESTO_QUE_CUSTA.iter());
+
+            if matches!(vram_gb, Some(gb) if gb < VRAM_DE_PLACA_MODESTA_GB) {
+                lista.extend(TEXTURA_QUANDO_A_VRAM_NAO_CABE.iter());
+            }
         }
 
         lista
     }
+
 }
 
 /// A taxa que está no arquivo e a que o monitor aguenta, quando diferem.
@@ -497,7 +546,7 @@ pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'
         ));
     }
 
-    for m in perfil.mudancas() {
+    for m in perfil.mudancas_para(Some(vram_gb())) {
         let Some(atual) = valor(conteudo, m.chave) else {
             continue;
         };
@@ -523,7 +572,20 @@ pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'
 /// conteúdo idêntico e uma lista vazia — e quem chama precisa tratar isso como
 /// "não havia o que fazer", em vez de gravar um arquivo igual e registrar uma
 /// mudança que não houve.
-pub fn aplicar_no_texto(conteudo: &str, perfil: Perfil) -> (String, Vec<String>) {
+///
+/// A MEMÓRIA DE VÍDEO É PARÂMETRO, E NÃO HÁ VERSÃO SEM ELA. Havia um invólucro
+/// que passava `None` por conveniência, e ele foi removido: quem chama precisa
+/// dizer o que sabe da máquina, porque `None` — "não sei" — muda o resultado.
+/// Um atalho que esconde essa escolha é como um dos dois caminhos acaba
+/// aplicando textura onde não devia, ou deixando de aplicar onde devia.
+///
+/// Função pura: o teste passa o número que quer e não depende de haver placa na
+/// máquina que roda a esteira.
+pub fn aplicar_no_texto_com(
+    conteudo: &str,
+    perfil: Perfil,
+    vram_gb: Option<f64>,
+) -> (String, Vec<String>) {
     let mut saida = conteudo.to_string();
     let mut mexidas = Vec::new();
 
@@ -534,7 +596,7 @@ pub fn aplicar_no_texto(conteudo: &str, perfil: Perfil) -> (String, Vec<String>)
         }
     }
 
-    for m in perfil.mudancas() {
+    for m in perfil.mudancas_para(vram_gb) {
         let Some(atual) = valor(&saida, m.chave) else {
             continue;
         };
@@ -633,7 +695,9 @@ pub fn aplicar_perfil(perfil: Perfil) -> Result<AplicacaoNoJogo, String> {
             continue;
         };
 
-        let (novo, mudou) = aplicar_no_texto(&conteudo, perfil);
+        // A MEMÓRIA DE VÍDEO REAL, e não a tabela cega: é ela que decide se a
+        // textura entra. Ver `TEXTURA_QUANDO_A_VRAM_NAO_CABE`.
+        let (novo, mudou) = aplicar_no_texto_com(&conteudo, perfil, Some(vram_gb()));
 
         if mudou.is_empty() {
             return Ok(AplicacaoNoJogo {
@@ -751,6 +815,7 @@ mod tests {
   </graphics>
   <video>
     <VSync value="1" />
+    <Windowed value="2" />
   </video>
 </Settings>"#;
 
@@ -765,7 +830,7 @@ mod tests {
             ("EQUILIBRADO", Perfil::Equilibrado),
             ("COMPETITIVO", Perfil::Competitivo),
         ] {
-            let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, perfil);
+            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, perfil, Some(4.0));
 
             println!("\n=== {} — {} mudança(s) ===", nome, mexidas.len());
             for m in &mexidas {
@@ -779,7 +844,7 @@ mod tests {
         // A tabela antiga deixava passar a grama, a suavização dos reflexos e
         // os três ajustes que aliviam o processador. Num arquivo completo, o
         // perfil precisa alcançar todos eles.
-        let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, Perfil::Competitivo);
+        let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None);
 
         for esperado in [
             "MSAA:",
@@ -804,20 +869,70 @@ mod tests {
     }
 
     #[test]
-    fn nenhum_perfil_mexe_no_que_e_barato_e_visivel() {
-        // Textura e filtro anisotrópico praticamente não custam quadro e são
-        // das coisas que mais mudam a aparência. Derrubá-los seria cobrar um
-        // preço visual alto por um ganho que não existe — o oposto do que este
-        // módulo faz.
-        let (_, mexidas) = aplicar_no_texto(CONFIG_CHEIA, Perfil::Competitivo);
+    fn o_filtro_anisotropico_nunca_e_mexido() {
+        // Ele praticamente não custa quadro em placa nenhuma, e muda bastante a
+        // aparência de perto. Derrubá-lo é cobrar preço visual por um ganho que
+        // não existe.
+        for vram in [None, Some(4.0), Some(12.0)] {
+            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, vram);
 
-        for proibido in ["TextureQuality:", "AnisotropicFiltering:"] {
             assert!(
-                !mexidas.iter().any(|m| m.starts_with(proibido)),
-                "`{}` é barato e visível; não deveria ser mexido",
-                proibido
+                !mexidas.iter().any(|m| m.starts_with("AnisotropicFiltering:")),
+                "filtro anisotrópico mexido com vram {:?}",
+                vram
             );
         }
+    }
+
+    #[test]
+    fn a_textura_so_cai_quando_a_memoria_de_video_nao_cabe() {
+        // EU TINHA ESCRITO ESTE TESTE PROIBINDO TEXTURA EM QUALQUER CASO, e ele
+        // estava certo pela metade. Textura quase não custa quadro — até a VRAM
+        // transbordar. Numa placa de 4 GB num servidor de RP pesado, o jogo
+        // passa a buscar textura na memória do sistema, e aí não são alguns
+        // quadros: é engasgo severo.
+        let (_, com_placa_boa) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(12.0));
+        assert!(
+            !com_placa_boa.iter().any(|m| m.starts_with("TextureQuality:")),
+            "textura derrubada numa placa que tem folga de sobra"
+        );
+
+        let (_, com_placa_apertada) =
+            aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(4.0));
+        assert!(
+            com_placa_apertada.iter().any(|m| m.starts_with("TextureQuality:")),
+            "a textura não caiu numa placa de 4 GB, onde ela vira engasgo"
+        );
+
+        // SEM SABER, NÃO SE COBRA. O ajuste tem custo visual, e aplicá-lo sem
+        // saber se rende alguma coisa é o oposto do que este módulo faz.
+        let (_, sem_saber) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None);
+        assert!(
+            !sem_saber.iter().any(|m| m.starts_with("TextureQuality:")),
+            "a textura caiu sem o produto saber quanta memória de vídeo existe"
+        );
+    }
+
+    #[test]
+    fn a_tela_cheia_nao_entra_no_perfil_sem_custo() {
+        // Custo VISUAL zero não é custo zero. Em tela cheia exclusiva o jogo
+        // fala direto com a placa e ganha quadros, mas alternar para outra
+        // janela fica mais lento — e quem joga com Discord ou live no segundo
+        // monitor sente. Por isso não está no `SemTeto`, que é o perfil que o
+        // botão automático usa.
+        assert!(
+            !Perfil::SemTeto.mudancas_para(None).iter().any(|m| m.chave == "Windowed"),
+            "o perfil sem custo passou a mexer no modo de tela"
+        );
+
+        assert!(
+            Perfil::Equilibrado.mudancas_para(None).iter().any(|m| m.chave == "Windowed"),
+            "o modo de tela sumiu do perfil do meio"
+        );
+
+        // E ele precisa dizer o que o cliente perde.
+        let tela = &TELA_CHEIA[0];
+        assert!(!tela.custo.is_empty());
     }
 
     #[test]
@@ -826,7 +941,7 @@ mod tests {
         // por versão do jogo e por mod; uma chave que não está lá precisa ser
         // um não-evento, nunca um arquivo corrompido. Sem esta garantia, cada
         // ajuste novo seria uma aposta no PC de quem pagou.
-        let (saida, mexidas) = aplicar_no_texto(CONFIG_REAL, Perfil::Competitivo);
+        let (saida, mexidas) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None);
 
         for inexistente in ["ReflectionMSAA", "DoF", "LodScale", "PedLodBias"] {
             assert!(
@@ -851,7 +966,7 @@ mod tests {
         // ou seja, o produto deixava na mesa um dos maiores ganhos que tinha
         // acesso. Fica no competitivo porque o custo visual é real.
         let competitivo: Vec<&str> = Perfil::Competitivo
-            .mudancas()
+            .mudancas_para(None)
             .iter()
             .map(|m| m.chave)
             .collect();
@@ -859,7 +974,7 @@ mod tests {
         assert!(competitivo.contains(&"GrassQuality"), "{:?}", competitivo);
 
         let equilibrado: Vec<&str> = Perfil::Equilibrado
-            .mudancas()
+            .mudancas_para(None)
             .iter()
             .map(|m| m.chave)
             .collect();
@@ -881,7 +996,7 @@ mod tests {
             "PostFX",
         ];
 
-        for chave in Perfil::Equilibrado.mudancas().iter().map(|m| m.chave) {
+        for chave in Perfil::Equilibrado.mudancas_para(None).iter().map(|m| m.chave) {
             assert!(
                 !SO_NO_COMPETITIVO.contains(&chave),
                 "`{}` muda a cara do jogo e não pode estar no perfil do meio",
@@ -897,7 +1012,7 @@ mod tests {
         // Se estes três sumirem numa refatoração, o produto volta a otimizar só
         // o lado que não era o problema.
         let competitivo: Vec<&str> = Perfil::Competitivo
-            .mudancas()
+            .mudancas_para(None)
             .iter()
             .map(|m| m.chave)
             .collect();
@@ -911,7 +1026,7 @@ mod tests {
     fn todo_ajuste_com_custo_visual_diz_qual_e() {
         // O cliente aceita perder qualidade quando sabe o que perde. A tabela
         // não pode crescer com uma linha que tira algo da tela sem dizer o quê.
-        for m in Perfil::Competitivo.mudancas() {
+        for m in Perfil::Competitivo.mudancas_para(None) {
             let sem_custo_visual = matches!(m.chave, "HdStreamingInFlight")
                 || SEM_TETO.iter().any(|s| s.chave == m.chave);
 
@@ -997,7 +1112,7 @@ mod tests {
     /// O perfil que não mexe no visual só tira teto.
     #[test]
     fn sem_teto_nao_toca_em_nada_visual() {
-        for m in Perfil::SemTeto.mudancas() {
+        for m in Perfil::SemTeto.mudancas_para(None) {
             assert!(
                 m.custo.is_empty(),
                 "`{}` está no perfil sem custo visual e cobra `{}`",
@@ -1009,7 +1124,7 @@ mod tests {
         // E o MSAA, que é o mais caro de todos, NÃO entra nele: quem escolhe
         // "não quero mudar como o jogo se parece" não pode perder serrilhado.
         assert!(
-            !Perfil::SemTeto.mudancas().iter().any(|m| m.chave == "MSAA"),
+            !Perfil::SemTeto.mudancas_para(None).iter().any(|m| m.chave == "MSAA"),
             "o MSAA entrou no perfil que promete não mexer no visual"
         );
     }
@@ -1017,7 +1132,7 @@ mod tests {
     /// Aplicar no arquivo real do dono: o MSAA 4x cai, e nada mais se perde.
     #[test]
     fn aplicar_no_arquivo_real_derruba_o_msaa() {
-        let (novo, mudou) = aplicar_no_texto(CONFIG_REAL, Perfil::Equilibrado);
+        let (novo, mudou) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Equilibrado, None);
 
         assert_eq!(valor(&novo, "MSAA").as_deref(), Some("0"));
         assert!(
@@ -1037,8 +1152,8 @@ mod tests {
     /// Aplicar duas vezes seguidas não muda nada na segunda.
     #[test]
     fn aplicar_e_idempotente() {
-        let (uma, _) = aplicar_no_texto(CONFIG_REAL, Perfil::Competitivo);
-        let (duas, mudou) = aplicar_no_texto(&uma, Perfil::Competitivo);
+        let (uma, _) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None);
+        let (duas, mudou) = aplicar_no_texto_com(&uma, Perfil::Competitivo, None);
 
         assert_eq!(uma, duas);
         assert!(
