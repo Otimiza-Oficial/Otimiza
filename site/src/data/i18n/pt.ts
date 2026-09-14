@@ -70,7 +70,7 @@ export const pt: Conteudo = {
   },
 
   numeros: [
-    { valor: "677", legenda: "testes automatizados, zero avisos", fonte: "commit da 1.7.0" },
+    { valor: "842", legenda: "testes automatizados", fonte: "commit da 2.1.0" },
     { valor: "1,2 s", legenda: "para abrir, de 3,7 s na versão anterior", fonte: "notas da 1.7.0" },
     { valor: "byte a byte", legenda: "a precisão do desfazer", fonte: "PROGRESS.md" },
     { valor: "zero", legenda: "dados seus que saem da sua máquina", fonte: "só sai a pergunta de versão, anônima" },

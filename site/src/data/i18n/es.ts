@@ -86,7 +86,7 @@ export const es: Conteudo = {
   },
 
   numeros: [
-    { valor: "677", legenda: "pruebas automatizadas, cero advertencias", fonte: "commit de la 1.7.0" },
+    { valor: "842", legenda: "pruebas automatizadas", fonte: "commit de la 2.1.0" },
     {
       valor: "1,2 s",
       legenda: "para abrir, desde 3,7 s en la versión anterior",

@@ -18,6 +18,76 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.1.0 — FPS onde o cliente olha, e o fim das otimizações que diziam "pronto" sem fazer nada
+
+Esta versão tem duas metades. A primeira dá FPS de verdade. A segunda conserta a
+razão de o produto às vezes não funcionar no computador de quem comprou.
+
+## O botão principal agora mexe no que muda FPS
+
+Dos 41 ajustes do catálogo, 7 têm ganho de quadros declarado. O que move FPS em
+dezenas é a configuração do jogo — e ela estava numa outra aba, atrás de um
+segundo clique que a maioria nunca dava.
+
+- **"Otimizar agora" passou a tirar o limite de quadros do seu jogo** (VSync e
+  teto de FPS). Um jogo travado em 60 muitas vezes não está travado pela placa:
+  está travado por um número num arquivo. Não muda a aparência de nada, o
+  arquivo é guardado inteiro antes, e o "Desfazer tudo" devolve exatamente como
+  estava
+- **Os perfis de jogo alcançam o que realmente custa quadro.** Entraram a grama
+  (das três mais caras do GTA V, e não estava em perfil nenhum), a suavização
+  dos reflexos, o desfoque de movimento, a profundidade de campo e o
+  carregamento antecipado de textura
+- **Três ajustes que aliviam o PROCESSADOR**, e não a placa de vídeo. É o que
+  importa no FiveM: num servidor de RP cheio o gargalo é a CPU desenhando
+  pessoas e carros, e nenhum ajuste gráfico encosta nisso
+- **Tela cheia exclusiva**, que tira o Windows do caminho entre o jogo e o
+  monitor. A imagem é a mesma; o caminho é mais curto
+- **A textura passou a depender da sua placa.** Ela quase não custa quadro — até
+  a memória de vídeo transbordar. Em placa de 4 GB num servidor pesado, ela vira
+  engasgo, e aí o perfil competitivo a derruba. Em placa com folga, não encosta
+
+Num arquivo de quem nunca mexeu em nada, o perfil equilibrado passou de 4 para 9
+mudanças, e o competitivo de 8 para 20.
+
+**O que esta versão NÃO promete:** que 50 FPS virem 100. Se o teto da sua máquina
+é memória insuficiente ou memória em canal único, o Otimiza diz isso na cara e
+não finge resolver — isso é peça, não ajuste.
+
+## E o que fazia o produto não funcionar no PC do cliente
+
+Uma auditoria do código inteiro atrás de uma coisa só: onde o Otimiza dizia
+"pronto" sem ter feito nada.
+
+- **O plano de energia usava um identificador fixo** que não existe em todo
+  Windows. Em notebook e em imagem enxuta, a otimização falhava e cada tentativa
+  deixava um plano órfão para trás. Agora o Otimiza cria um plano PRÓPRIO,
+  chamado OTIMIZA, e nunca mexe no seu
+- **O plano avisa quando outro programa o altera**, e sabe se reparar — dizendo
+  qual ajuste foi mexido
+- **Um ajuste que o seu Windows não tem parou de derrubar a otimização inteira**
+- **Toda alteração é relida antes de contar como feita.** O Windows aceitar um
+  comando não é prova de que o valor ficou — em máquina com política de empresa,
+  ele volta sozinho
+- **"Não consegui ler" parou de virar "não se aplica ao seu PC".** Havia quatro
+  otimizações sumindo da lista com essa frase em máquinas onde elas funcionam
+- **O desfazer parou de gravar o padrão do Windows por cima da sua configuração**
+  quando uma leitura falhava
+- **Relatório de compatibilidade**: um arquivo que você gera e manda no
+  atendimento, com tudo que o Otimiza conseguiu e não conseguiu no seu PC. Nada
+  nele identifica você
+- **Tela de diagnóstico** dizendo, antes de aplicar qualquer coisa, o que este
+  computador permite
+
+## Instalação
+
+O instalador agora **traz o WebView2 dentro dele**. Antes ele baixava esse
+componente da internet na hora de instalar — e em PC sem internet naquele
+momento, ou com o endereço da Microsoft bloqueado, o Otimiza simplesmente não
+abria. O arquivo ficou maior; em troca, ele instala em qualquer PC.
+
+---
+
 # 2.0.0 — mais seguro em Windows modificado, e ganho onde o jogo sente
 
 A maior versão do Otimiza até aqui. Ela nasceu de duas coisas que aconteceram de

@@ -81,7 +81,7 @@ export const en: Conteudo = {
   },
 
   numeros: [
-    { valor: "677", legenda: "automated tests, zero warnings", fonte: "1.7.0 commit" },
+    { valor: "842", legenda: "automated tests", fonte: "2.1.0 commit" },
     {
       valor: "1.2 s",
       legenda: "to launch, down from 3.7 s in the previous version",
