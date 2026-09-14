@@ -103,8 +103,6 @@ pub fn garantir_alto_desempenho() -> Result<String, String> {
     Ok(novo)
 }
 
-/// Se a hibernação está ligada. Lido do registro, que é a fonte de verdade e não
-/// depende do idioma do Windows.
 /// `None` é NÃO CONSEGUI LER, e não "desligada".
 ///
 /// Devolvia `bool`, e a diferença custava caro: erro de leitura, permissão
@@ -170,13 +168,26 @@ pub fn read_power_setting(
 ///
 /// Separado da execução para poder ser testado: é esta linha que decide se o
 /// hipervisor sobe no boot, e é dela que sai o valor guardado para reverter.
-/// Os nomes das opções do `bcdedit` são em inglês em qualquer idioma.
+///
+/// O NOME do elemento é inglês em qualquer idioma — conferido nesta máquina, que
+/// imprime o cabeçalho em português e os nomes em inglês. O VALOR é normalizado
+/// para a palavra-chave que o `bcdedit /set` aceita.
+///
+/// Sem isso, o texto que o `bcdedit` imprime viraria argumento do `bcdedit` no
+/// desfazer, e os dois lados só coincidem enquanto o Windows imprimir em inglês.
+/// Ver `firmware::palavra_chave_do_hipervisor`.
+///
+/// `None` continua sendo "não consegui ler" — agora inclui "li e não reconheço",
+/// que dá no mesmo para quem precisa prometer a volta.
 pub fn parse_hypervisor_launch_type(saida: &str) -> Option<String> {
     saida
         .lines()
         .map(|linha| linha.trim().to_lowercase())
         .find(|linha| linha.starts_with("hypervisorlaunchtype"))
         .and_then(|linha| linha.split_whitespace().nth(1).map(|v| v.to_string()))
+        .and_then(|valor| {
+            super::firmware::palavra_chave_do_hipervisor(&valor).map(str::to_string)
+        })
 }
 
 /// Como o hipervisor está configurado para subir nesta máquina.

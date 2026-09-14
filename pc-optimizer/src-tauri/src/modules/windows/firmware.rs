@@ -350,6 +350,58 @@ pub fn parse_boot_limits(output: &str) -> Vec<(String, String)> {
 /// forçar o HPET obriga o Windows a usar um temporizador mais lento que o
 /// escolhido automaticamente, e o efeito comum é engasgo, não ganho. Quando a
 /// opção está presente, o certo é remover — não é otimizar, é desfazer estrago.
+/// O valor IMPRESSO pelo `bcdedit`, traduzido para a palavra-chave que o
+/// `bcdedit /set` aceita de volta.
+///
+/// POR QUE ISTO PRECISA EXISTIR. O produto lê o valor, guarda no histórico, e no
+/// desfazer manda `bcdedit /set {current} <elemento> <valor guardado>`. Ou seja:
+/// o texto que o `bcdedit` IMPRIME vira ARGUMENTO do `bcdedit`. Os dois lados
+/// só coincidem enquanto o Windows imprimir em inglês.
+///
+/// Conferido nesta máquina, em português: o `bcdedit` traduz o cabeçalho
+/// ("Carregador de Inicialização do Windows") e imprime os valores em INGLÊS —
+/// `recoveryenabled Yes`, `useplatformtick No`. Então aqui o round-trip
+/// funciona por sorte, não por desenho. Não dá para afirmar o mesmo de todos os
+/// idiomas a partir desta máquina, e a reversibilidade é promessa do produto.
+///
+/// `None` é "não reconheço este valor" — e quem chama não deve oferecer a
+/// otimização, porque não há como prometer a volta.
+/// CADA ELEMENTO DO `bcdedit` TEM SEU PRÓPRIO VOCABULÁRIO, e misturá-los
+/// quebraria o desfazer.
+///
+/// Um elemento booleano aceita `yes`/`no`; o `hypervisorlaunchtype` aceita
+/// `off`/`auto`/`on` e RECUSA `no`. Uma função só para os dois traduzia um `Off`
+/// de hipervisor em `no`, e o `bcdedit /set` do desfazer devolveria erro — o
+/// teste que já existia pegou isso na hora.
+pub fn palavra_chave_booleana(valor: &str) -> Option<&'static str> {
+    // À esquerda, a palavra-chave que o `bcdedit /set` aceita; à direita, as
+    // formas que ele pode ter impresso. O inglês é o que esta máquina mostrou;
+    // as traduções entram como rede de segurança, e o que não bater vira `None`
+    // em vez de virar argumento inválido.
+    const SIM: &[&str] = &["yes", "true", "on", "1", "sim", "oui", "ja", "si", "sí", "sì"];
+    const NAO: &[&str] = &["no", "false", "off", "0", "não", "nao", "non", "nein"];
+
+    let v = valor.trim().to_lowercase();
+
+    if SIM.contains(&v.as_str()) {
+        Some("yes")
+    } else if NAO.contains(&v.as_str()) {
+        Some("no")
+    } else {
+        None
+    }
+}
+
+/// O vocabulário do `hypervisorlaunchtype`, que não é booleano.
+pub fn palavra_chave_do_hipervisor(valor: &str) -> Option<&'static str> {
+    match valor.trim().to_lowercase().as_str() {
+        "off" | "desativado" | "désactivé" | "deaktiviert" => Some("off"),
+        "auto" | "automático" | "automatico" | "automatique" | "automatisch" => Some("auto"),
+        "on" | "ativado" | "activé" | "aktiviert" => Some("on"),
+        _ => None,
+    }
+}
+
 pub fn forced_platform_clock() -> Option<String> {
     let output = shell::run("bcdedit", &["/enum", "{current}"]).ok()?;
 
@@ -362,7 +414,12 @@ pub fn forced_platform_clock() -> Option<String> {
         .lines()
         .map(|line| line.trim().to_lowercase())
         .find(|line| line.starts_with("useplatformclock"))
-        .map(|line| line.split_whitespace().nth(1).unwrap_or("sim").to_string())
+        // SEM `unwrap_or`. Havia um `"sim"` cravado aqui como reserva — um
+        // literal em português que ia direto para `bcdedit /set` no desfazer,
+        // onde é recusado. Linha sem valor agora devolve `None`, e o item nem
+        // é oferecido.
+        .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
+        .and_then(|valor| palavra_chave_booleana(&valor).map(str::to_string))
 }
 
 pub fn boot_limits() -> Vec<(String, String)> {
@@ -782,6 +839,40 @@ mod tests {
     fn without_channel_labels_each_stick_counts_as_a_channel() {
         let modules = vec![module("DIMM0"), module("DIMM1")];
         assert_eq!(occupied_channels(&modules), 2);
+    }
+
+    #[test]
+    fn o_valor_lido_do_bcdedit_volta_como_palavra_chave_que_ele_aceita() {
+        // O TEXTO IMPRESSO VIRA ARGUMENTO no desfazer. Medido nesta máquina: o
+        // `bcdedit` traduz o cabeçalho ("Carregador de Inicialização do
+        // Windows") e imprime os valores em INGLÊS (`recoveryenabled Yes`). O
+        // round-trip funciona aqui por sorte; a normalização faz funcionar por
+        // desenho.
+        assert_eq!(palavra_chave_booleana("Yes"), Some("yes"));
+        assert_eq!(palavra_chave_booleana("No"), Some("no"));
+        assert_eq!(palavra_chave_booleana("  TRUE "), Some("yes"));
+        assert_eq!(palavra_chave_booleana("Sim"), Some("yes"));
+        assert_eq!(palavra_chave_booleana("Não"), Some("no"));
+    }
+
+    #[test]
+    fn valor_desconhecido_nao_vira_argumento_invalido() {
+        // O código tinha um `.unwrap_or("sim")` — um literal em PORTUGUÊS que ia
+        // direto para `bcdedit /set`, onde é recusado. Sem reconhecer o valor
+        // não há como prometer a volta, e o item não é oferecido.
+        assert_eq!(palavra_chave_booleana("talvez"), None);
+        assert_eq!(palavra_chave_booleana(""), None);
+    }
+
+    #[test]
+    fn o_hipervisor_tem_vocabulario_proprio() {
+        // `hypervisorlaunchtype` aceita off/auto/on e RECUSA `no`. Uma função só
+        // para os dois traduzia `Off` em `no`, e o desfazer quebrava — o teste
+        // que já existia em `power.rs` pegou isso na hora.
+        assert_eq!(palavra_chave_do_hipervisor("Off"), Some("off"));
+        assert_eq!(palavra_chave_do_hipervisor("Auto"), Some("auto"));
+        assert_eq!(palavra_chave_do_hipervisor("On"), Some("on"));
+        assert_eq!(palavra_chave_do_hipervisor("yes"), None);
     }
 
     #[test]
