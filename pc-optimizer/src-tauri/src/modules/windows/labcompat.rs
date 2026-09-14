@@ -452,10 +452,12 @@ pub fn gerar() -> Result<String, String> {
 
     let sem_suporte = relatorio.nao_suportados > 0;
 
-    // GERENCIADA POR OEM não é "tem fabricante declarado": todo PC de marca
-    // declara um. O sinal é o fabricante declarado JUNTO de serviços essenciais
-    // desligados — que é uma imagem modificada, não um Windows de fábrica.
-    let gerenciada_por_oem = checagem.fabricante.is_some() && checagem.desativados > 0;
+    // A MESMA DEFINIÇÃO QUE O MOTOR USA, e não uma cópia. Ela morava aqui e foi
+    // para `windows::governanca` quando o motor passou a classificar ações com
+    // os mesmos sete termos deste relatório — duas definições da mesma coisa
+    // divergiriam no primeiro conserto, e o relatório passaria a discordar do
+    // produto que ele descreve.
+    let gerenciada_por_oem = super::governanca().imagem_de_terceiros;
 
     let condicao = condicao(dados.elevado, relatorio.plano_existia, fora_do_alvo);
 

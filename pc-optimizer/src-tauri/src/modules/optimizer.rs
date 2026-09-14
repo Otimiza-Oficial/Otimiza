@@ -147,6 +147,20 @@ pub enum ActionStatus {
     VerificationFailed,
     /// Escrito, e não deu para reler para confirmar.
     NotConfirmed,
+    /// O valor não ficou, E esta máquina tem política de grupo aplicada.
+    ///
+    /// É o `VerificationFailed` com a causa provável nomeada. Só é usado quando
+    /// há GPO de verdade na máquina — sem isso continua `VerificationFailed`,
+    /// porque acusar política sem política seria mandar o cliente falar com um
+    /// administrador que não existe.
+    BlockedByPolicy,
+    /// Não existe nesta máquina PORQUE QUEM MONTOU A IMAGEM TIROU.
+    ///
+    /// Diferente de `Unsupported`: ali o Windows não tem o recurso; aqui o
+    /// Windows tem e a imagem instalada não. Pelo cliente, são duas frases
+    /// muito diferentes — a segunda explica por que o mesmo PC, com um Windows
+    /// normal, se comportaria de outro jeito.
+    UserOrOemManaged,
     /// Não se aplica a esta máquina.
     Skipped,
 }
@@ -163,6 +177,10 @@ impl ActionStatus {
             ActionStatus::Verified
                 | ActionStatus::AlreadyOptimized
                 | ActionStatus::Unsupported
+                // Pelo mesmo motivo do `Unsupported`: o recurso não está aqui
+                // porque quem montou a imagem tirou, e não há o que o produto
+                // ou o cliente consertem. Vermelho mandaria procurar defeito.
+                | ActionStatus::UserOrOemManaged
                 | ActionStatus::NotConfirmed
                 | ActionStatus::Skipped
         )

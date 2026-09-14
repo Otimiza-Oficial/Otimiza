@@ -557,6 +557,12 @@ impl WindowsOptimizer {
             let resultado = self.execute(action, &mut changes, &mut detalhe);
             detalhe.duration_ms = relogio.elapsed().as_millis() as u64;
 
+            // DEPOIS DO RAMO, E NÃO DENTRO DELE. O ramo sabe o que aconteceu
+            // com o ajuste; quem manda na máquina é outra pergunta, e a mesma
+            // para todos os ramos. Repeti-la em cada um seria dezessete cópias
+            // da mesma regra.
+            detalhe.status = refinar_status(detalhe.status, governanca());
+
             match resultado {
                 Ok(nota) => {
                     if let Some(note) = nota {
@@ -566,6 +572,7 @@ impl WindowsOptimizer {
                         notes.push(note);
                     }
 
+                    explicar_governanca(&mut detalhe);
                     acoes.push(detalhe);
                 }
                 Err(error) => {
@@ -577,6 +584,7 @@ impl WindowsOptimizer {
                     }
 
                     detalhe.message.clone_from(&error);
+                    explicar_governanca(&mut detalhe);
                     acoes.push(detalhe);
 
                     crate::utils::Logger::warn(&format!(
@@ -2084,6 +2092,117 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
+/// Quem manda nesta máquina além do dono dela.
+///
+/// Existe porque duas causas muito comuns de "não funcionou no PC do cliente"
+/// não são defeito do produto nem do Windows — são de quem administra a máquina
+/// e de quem montou a imagem. Sem separá-las, as duas chegavam ao atendimento
+/// como "falhou", e o atendimento procurava no lugar errado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Governanca {
+    /// Há política de grupo APLICADA — não apenas a chave existindo.
+    pub com_politica_de_grupo: bool,
+    /// A imagem do Windows foi montada por terceiros E tem serviço essencial
+    /// desativado.
+    pub imagem_de_terceiros: bool,
+}
+
+/// Lida uma vez por execução: são leituras de registro baratas, mas o motor
+/// consulta isto uma vez por AÇÃO, e são dezenas por lote.
+static GOVERNANCA: std::sync::OnceLock<Governanca> = std::sync::OnceLock::new();
+
+pub fn governanca() -> Governanca {
+    *GOVERNANCA.get_or_init(|| {
+        let checagem = essenciais::checar();
+
+        Governanca {
+            com_politica_de_grupo: ha_politica_aplicada(),
+            // FABRICANTE DECLARADO NÃO BASTA: todo PC de marca declara um. O
+            // sinal é o fabricante JUNTO de serviço essencial desligado, que é
+            // imagem modificada e não Windows de fábrica. Mesma regra do
+            // relatório de compatibilidade, e de propósito: duas definições da
+            // mesma coisa divergiriam.
+            imagem_de_terceiros: checagem.fabricante.is_some() && checagem.desativados > 0,
+        }
+    })
+}
+
+/// Há GPO aplicada nesta máquina?
+///
+/// A CHAVE EXISTIR NÃO É SINAL, e conferir isso valeu: nesta máquina, sem
+/// domínio e sem política nenhuma, `Group Policy\History` EXISTE e está vazia.
+/// Usar a existência teria acusado política de grupo em todo computador do
+/// mundo. O sinal é ter subchave — cada uma é um objeto de política aplicado.
+fn ha_politica_aplicada() -> bool {
+    registry::subkeys(
+        "HKLM",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\History",
+    )
+    .map(|gpos| !gpos.is_empty())
+    .unwrap_or(false)
+}
+
+/// Dá nome à causa quando ela é de quem administra a máquina, e não do produto.
+///
+/// Função pura, separada da leitura: é uma regra de produto, e regra de produto
+/// precisa de teste que não dependa de uma máquina com domínio.
+///
+/// SÓ REFINA, NUNCA INVENTA. Um estado que já é conclusivo — aplicado, já estava
+/// bom, falhou de vez — não vira outra coisa por causa do ambiente.
+pub fn refinar_status(status: ActionStatus, g: Governanca) -> ActionStatus {
+    match status {
+        // O comando foi aceito e o valor não ficou, numa máquina com GPO. É a
+        // assinatura de política sobrescrevendo, e nomear isso poupa o cliente
+        // de procurar defeito no Otimiza — não há.
+        ActionStatus::VerificationFailed if g.com_politica_de_grupo => {
+            ActionStatus::BlockedByPolicy
+        }
+        // O recurso não está aqui, e a imagem foi montada por terceiros. O
+        // Windows TEM o recurso; esta instalação é que não.
+        ActionStatus::Unsupported if g.imagem_de_terceiros => ActionStatus::UserOrOemManaged,
+        outro => outro,
+    }
+}
+
+/// Escreve, no resultado, a frase que o estado refinado passou a merecer.
+///
+/// Um estado novo sem frase nova não serve para nada: quem lê o relatório vê
+/// `BlockedByPolicy` e continua sem saber o que fazer. A frase diz com quem
+/// falar — e ela nomeia a IMAGEM quando há uma, porque "Team AntiLag / SnyX OS"
+/// é uma informação que o cliente reconhece e que o atendimento pode pesquisar.
+fn explicar_governanca(detalhe: &mut ActionResult) {
+    match detalhe.status {
+        ActionStatus::BlockedByPolicy => {
+            let aviso = "Esta máquina tem política de grupo aplicada, e é ela que costuma \
+                         reescrever este valor. Quem pode mudar isso é quem administra o \
+                         computador.";
+
+            if detalhe.message.is_empty() {
+                detalhe.message = aviso.to_string();
+            } else {
+                detalhe.message.push(' ');
+                detalhe.message.push_str(aviso);
+            }
+        }
+        ActionStatus::UserOrOemManaged => {
+            let checagem = essenciais::checar();
+
+            let quem = match (checagem.fabricante.as_deref(), checagem.modelo.as_deref()) {
+                (Some(f), Some(m)) => format!("{} / {}", f, m),
+                (Some(f), None) => f.to_string(),
+                _ => "outra pessoa".to_string(),
+            };
+
+            detalhe.unsupported_reason = Some(format!(
+                "Este Windows foi montado por {} e vem sem esta parte. Num Windows de fábrica \
+                 ela existe — não é limitação do seu computador.",
+                quem
+            ));
+        }
+        _ => {}
+    }
+}
+
 /// O nome de uma ação no resultado padronizado.
 ///
 /// É PARA SER LIDO POR UMA PESSOA no atendimento, e por isso não é o `{:?}` do
@@ -2515,6 +2634,128 @@ mod tests {
             let desfazer = otimizador.revert(id, &mut log);
             println!("desfazer: {:?}", desfazer.map(|r| r.message));
         }
+    }
+
+    // ----------------------------------- quem manda na máquina além do dono
+
+    const SEM_GOVERNANCA: Governanca = Governanca {
+        com_politica_de_grupo: false,
+        imagem_de_terceiros: false,
+    };
+
+    /// O que o produto conclui sobre QUEM MANDA nesta máquina. Só lê.
+    ///
+    ///   cargo test --lib governanca_desta -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn governanca_desta_maquina() {
+        let g = governanca();
+        let checagem = essenciais::checar();
+
+        println!("\npolítica de grupo aplicada .. {}", g.com_politica_de_grupo);
+        println!("imagem de terceiros ......... {}", g.imagem_de_terceiros);
+        println!("fabricante declarado ........ {:?}", checagem.fabricante);
+        println!("modelo declarado ............ {:?}", checagem.modelo);
+        println!("essenciais desativados ...... {}", checagem.desativados);
+
+        let mut exemplo = ActionResult {
+            name: "serviço de exemplo".to_string(),
+            status: refinar_status(ActionStatus::Unsupported, g),
+            ..Default::default()
+        };
+
+        explicar_governanca(&mut exemplo);
+
+        println!("\num `Unsupported` nesta máquina vira: {:?}", exemplo.status);
+        println!("motivo: {:?}", exemplo.unsupported_reason);
+    }
+
+    #[test]
+    fn sem_politica_na_maquina_nao_se_acusa_politica() {
+        // ACUSAR POLÍTICA SEM POLÍTICA mandaria o cliente falar com um
+        // administrador que não existe — e faria o produto parecer que sabe de
+        // algo que não sabe.
+        assert_eq!(
+            refinar_status(ActionStatus::VerificationFailed, SEM_GOVERNANCA),
+            ActionStatus::VerificationFailed
+        );
+    }
+
+    #[test]
+    fn com_politica_o_valor_que_nao_ficou_ganha_nome() {
+        let com_gpo = Governanca {
+            com_politica_de_grupo: true,
+            ..SEM_GOVERNANCA
+        };
+
+        assert_eq!(
+            refinar_status(ActionStatus::VerificationFailed, com_gpo),
+            ActionStatus::BlockedByPolicy
+        );
+    }
+
+    #[test]
+    fn imagem_de_terceiros_separa_o_windows_da_instalacao() {
+        // "Este Windows não tem" e "quem montou o seu Windows tirou" são duas
+        // frases muito diferentes para o cliente: a segunda explica por que o
+        // mesmo PC, com um Windows normal, se comportaria de outro jeito.
+        let com_imagem = Governanca {
+            imagem_de_terceiros: true,
+            ..SEM_GOVERNANCA
+        };
+
+        assert_eq!(
+            refinar_status(ActionStatus::Unsupported, com_imagem),
+            ActionStatus::UserOrOemManaged
+        );
+    }
+
+    #[test]
+    fn o_refinamento_nunca_mexe_num_estado_conclusivo() {
+        // Só dá nome à causa; não muda o que aconteceu. Um ajuste aplicado numa
+        // máquina com GPO continua aplicado.
+        let tudo = Governanca {
+            com_politica_de_grupo: true,
+            imagem_de_terceiros: true,
+        };
+
+        for estado in [
+            ActionStatus::Verified,
+            ActionStatus::AlreadyOptimized,
+            ActionStatus::Failed,
+            ActionStatus::NotConfirmed,
+            ActionStatus::Skipped,
+        ] {
+            assert_eq!(
+                refinar_status(estado, tudo),
+                estado,
+                "o refinamento mexeu num estado conclusivo: {:?}",
+                estado
+            );
+        }
+    }
+
+    #[test]
+    fn os_sete_termos_do_protocolo_existem_no_motor() {
+        // O motor e o relatório de laboratório classificam com o MESMO
+        // vocabulário. Se um dos dois perder um termo, o relatório do cliente
+        // deixa de se agrupar com o do laboratório — que é a razão de o
+        // relatório existir.
+        //
+        // `partial` e `requires restart/logoff` ficam de fora aqui de propósito:
+        // o primeiro é do conjunto, não da ação, e o segundo é CAMPO no
+        // resultado, porque uma ação pode ter sido aplicada E exigir reinício.
+        let por_acao = [
+            ActionStatus::Verified,
+            ActionStatus::Unsupported,
+            ActionStatus::BlockedByPolicy,
+            ActionStatus::Failed,
+            ActionStatus::UserOrOemManaged,
+        ];
+
+        assert_eq!(por_acao.len(), 5);
+        assert!(ActionStatus::UserOrOemManaged.deu_certo());
+        assert!(!ActionStatus::BlockedByPolicy.deu_certo());
     }
 
     #[test]
