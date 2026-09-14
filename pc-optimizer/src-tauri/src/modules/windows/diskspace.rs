@@ -750,9 +750,13 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
 
     if mexe_com_update {
         for servico in servicos {
-            let rodando = super::services::is_running(servico);
-            estavam_rodando.push(rodando);
-            if rodando {
+            // `None` é "não sei", e a dúvida pende para parar — mesma razão do
+            // `cleanup.rs`: apagar o cache com a atualização em andamento é o
+            // estrago que esta parada evita.
+            let parar = super::services::is_running(servico) != Some(false);
+            estavam_rodando.push(parar);
+
+            if parar {
                 let _ = super::services::stop(servico);
             }
         }

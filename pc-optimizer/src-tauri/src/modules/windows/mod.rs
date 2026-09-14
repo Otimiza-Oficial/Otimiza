@@ -347,10 +347,12 @@ impl WindowsOptimizer {
             },
 
             Action::DisableHibernation => {
-                if power::hibernation_enabled() {
-                    ActionState::Pending
-                } else {
-                    ActionState::Satisfied
+                match power::hibernation_enabled() {
+                    Some(true) => ActionState::Pending,
+                    Some(false) => ActionState::Satisfied,
+                    // Não ler não pode virar "já está desativada": seria dizer
+                    // ao cliente que o espaço já foi liberado sem ter olhado.
+                    None => ActionState::Desconhecido,
                 }
             }
 
@@ -1715,9 +1717,20 @@ impl WindowsOptimizer {
             }
 
             Action::DisableHibernation => {
-                let previously_enabled = power::hibernation_enabled();
-                detalhe.before_value = Some(previously_enabled.to_string());
                 detalhe.expected_value = Some("false".to_string());
+
+                // SEM SABER O ESTADO ANTERIOR NÃO SE MEXE. É a mesma regra do
+                // hipervisor: não há como prometer a volta do que não foi lido,
+                // e o histórico guardaria um "antes" inventado.
+                let Some(previously_enabled) = power::hibernation_enabled() else {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message =
+                        "Não foi possível ler se a hibernação está ligada nesta máquina."
+                            .to_string();
+                    return Ok(None);
+                };
+
+                detalhe.before_value = Some(previously_enabled.to_string());
 
                 if !previously_enabled {
                     detalhe.status = ActionStatus::AlreadyOptimized;
@@ -1732,10 +1745,15 @@ impl WindowsOptimizer {
                 // — e aqui a conferência tem um valor extra: quando a hibernação
                 // não desliga, o `hiberfil.sys` continua ocupando o disco, e o
                 // cliente ia atrás do espaço que a tela prometeu.
-                match exigir_confirmacao(
-                    conferir(&false, Some(power::hibernation_enabled())),
-                    "a hibernação",
-                )? {
+                // `Option` direto, e não embrulhado num `Some`: era esse embrulho
+                // que fazia a conferência validar a si mesma. Com a leitura
+                // quebrada devolvendo `false`, o "depois" batia com o alvo e o
+                // produto dava por conferido o que nunca leu. Agora `None` cai
+                // em `NaoDeuParaLer`, que é a verdade.
+                let depois = power::hibernation_enabled();
+                detalhe.after_value = depois.map(|v| v.to_string());
+
+                match exigir_confirmacao(conferir(&false, depois), "a hibernação")? {
                     Some(ressalva) => Ok(Some(ressalva)),
                     None => Ok(Some("Arquivo de hibernação removido.".to_string())),
                 }
@@ -2988,17 +3006,30 @@ mod tests {
                 continue;
             }
 
-            // Depois de empilhar, procura a primeira saída do ramo.
-            let adiante = linhas[i..]
+            // PARA OS DOIS LADOS, E NÃO SÓ PARA A FRENTE.
+            //
+            // Conferir ANTES de empilhar é um padrão válido — e no ramo do plano
+            // de energia é o único correto: não se grava registro de desfazer
+            // para uma troca que ainda não se provou que aconteceu. Olhando só
+            // adiante, esta trava acusou esse ramo de não conferir, e foi um
+            // edit sem relação que deslocou as linhas e revelou a fragilidade.
+            //
+            // A janela é uma aproximação do ramo do `match`; achar a fronteira
+            // exata por texto seria mais frágil do que o problema que resolve.
+            let inicio = i.saturating_sub(30);
+            let janela = linhas[inicio..]
                 .iter()
-                .take(40)
+                .take(70)
                 .map(|l| l.trim())
                 .collect::<Vec<_>>()
                 .join(" ");
 
-            let confere = adiante.contains("exigir_confirmacao")
-                || adiante.contains("conferir_escrita")
-                || adiante.contains("forced_platform_clock()");
+            let confere = janela.contains("exigir_confirmacao")
+                || janela.contains("conferir_escrita")
+                || janela.contains("forced_platform_clock()")
+                // O plano de energia confere relendo qual plano ficou ativo,
+                // dentro do `montar`. Ver `planoenergia::montar`.
+                || janela.contains("plano_ativo");
 
             if !confere {
                 // O trecho, e não só a contagem: um teste que diz "há 1

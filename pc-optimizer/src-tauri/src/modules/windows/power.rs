@@ -105,11 +105,33 @@ pub fn garantir_alto_desempenho() -> Result<String, String> {
 
 /// Se a hibernação está ligada. Lido do registro, que é a fonte de verdade e não
 /// depende do idioma do Windows.
-pub fn hibernation_enabled() -> bool {
-    matches!(
-        super::registry::read("HKLM", r"SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled"),
-        Ok(crate::modules::changelog::PreviousValue::Dword(1))
-    )
+/// `None` é NÃO CONSEGUI LER, e não "desligada".
+///
+/// Devolvia `bool`, e a diferença custava caro: erro de leitura, permissão
+/// negada e valor ausente caíam todos em `false`. Três consequências, todas
+/// invisíveis:
+///
+/// 1. a lista dizia "hibernação já desativada" num PC onde o `hiberfil.sys`
+///    continua ocupando o tamanho da RAM;
+/// 2. a otimização nunca rodava, e o espaço prometido nunca aparecia;
+/// 3. pior de tudo, esta MESMA função era usada para CONFERIR a escrita — a
+///    verificação validava a si mesma. Leitura quebrada devolvia "antes:
+///    desligada" e "depois: desligada", e o produto dava por conferido o que
+///    nunca leu.
+pub fn hibernation_enabled() -> Option<bool> {
+    use crate::modules::changelog::PreviousValue;
+
+    match super::registry::read(
+        "HKLM",
+        r"SYSTEM\CurrentControlSet\Control\Power",
+        "HibernateEnabled",
+    ) {
+        Ok(PreviousValue::Dword(v)) => Some(v == 1),
+        // Valor ausente: o Windows trata a ausência como desligada, e aqui a
+        // ausência foi LIDA — é resposta, não silêncio.
+        Ok(PreviousValue::Absent) | Ok(PreviousValue::AbsentKey) => Some(false),
+        _ => None,
+    }
 }
 
 /// Liga ou desliga a hibernação. Desligar apaga o `hiberfil.sys`, liberando do

@@ -218,7 +218,10 @@ pub fn analyze() -> ReadinessReport {
         });
     }
 
-    if !plano_maximo_existe() {
+    // `Some(false)` e não `!existe`: sem conseguir ler a lista de planos, o
+    // produto não afirma que o plano falta — seria dizer ao cliente que a
+    // máquina dele não tem uma coisa que ninguém olhou.
+    if plano_maximo_existe() == Some(false) {
         findings.push(ReadinessFinding {
             id: "plano_maximo".to_string(),
             title: "Plano de desempenho máximo não existe nesta máquina".to_string(),
@@ -279,15 +282,16 @@ pub fn analyze() -> ReadinessReport {
 /// desliga o estacionamento de núcleos por padrão — mas ler isso plano a plano
 /// custa caro. Então a checagem passa a ser por CONTAGEM: se existe mais plano
 /// do que os quatro que o Windows traz de fábrica, algum foi acrescentado.
-pub fn plano_maximo_existe() -> bool {
-    planos_instalados().iter().any(|(guid, nome)| {
+/// `None` é NÃO CONSEGUI LER a lista de planos, e não "não existe".
+pub fn plano_maximo_existe() -> Option<bool> {
+    Some(planos_instalados()?.iter().any(|(guid, nome)| {
         guid.eq_ignore_ascii_case(DESEMPENHO_MAXIMO_GUID)
             // O molde tem identificador fixo; a cópia herda o nome que o
             // Windows deu na criação. Comparar os dois cobre a máquina que
             // criou pelo Otimiza e a que já tinha o plano.
             || sem_acento(nome).contains(&sem_acento("desempenho máximo"))
             || sem_acento(nome).contains("ultimate performance")
-    })
+    }))
 }
 
 /// Deixa só o esqueleto ASCII, em minúsculas.
@@ -323,7 +327,7 @@ fn sem_acento(texto: &str) -> String {
 ///
 /// A validade é curta de propósito: plano de energia muda quando o cliente
 /// clica em alguma coisa, e uma lista velha faria a tela mentir.
-pub fn planos_instalados() -> Vec<(String, String)> {
+pub fn planos_instalados() -> Option<Vec<(String, String)>> {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -333,14 +337,25 @@ pub fn planos_instalados() -> Vec<(String, String)> {
     if let Ok(guarda) = CACHE.lock() {
         if let Some((quando, lista)) = guarda.as_ref() {
             if quando.elapsed() < VALIDADE {
-                return lista.clone();
+                return Some(lista.clone());
             }
         }
     }
 
+    // LISTA VAZIA NÃO É "NÃO TEM PLANO NENHUM": todo Windows tem pelo menos um.
+    //
+    // Devolver `Vec::new()` aqui reabria, por outra porta, o defeito dos planos
+    // órfãos que já custou caro: `plano_maximo_existe` virava `false`, a guarda
+    // de `criar_plano_maximo` passava, e cada clique deixava mais uma cópia do
+    // plano no PC do cliente. E o diagnóstico afirmava que o plano não existe
+    // numa máquina que o tem.
     let Ok(saida) = shell::run("powercfg", &["/list"]) else {
-        return Vec::new();
+        return None;
     };
+
+    if !saida.success {
+        return None;
+    }
 
     let lista = analisar_lista_de_planos(&saida.stdout);
 
@@ -348,7 +363,7 @@ pub fn planos_instalados() -> Vec<(String, String)> {
         *guarda = Some((Instant::now(), lista.clone()));
     }
 
-    lista
+    Some(lista)
 }
 
 /// Extrai os planos da saída do `powercfg /list`.
@@ -394,7 +409,7 @@ pub fn analisar_lista_de_planos(saida: &str) -> Vec<(String, String)> {
 pub fn plano_ativo_e_de_terceiro() -> Option<String> {
     let ativo = super::power::active_scheme().ok()?;
 
-    let (_, nome) = planos_instalados()
+    let (_, nome) = planos_instalados()?
         .into_iter()
         .find(|(guid, _)| guid.eq_ignore_ascii_case(&ativo))?;
 
@@ -437,8 +452,23 @@ pub fn criar_plano_maximo() -> Result<String, String> {
         return Err("Criar um plano de energia exige executar como administrador.".to_string());
     }
 
-    if plano_maximo_existe() {
-        return Err("O plano de desempenho máximo já existe nesta máquina.".to_string());
+    // A GUARDA QUE IMPEDE O PLANO DUPLICADO, e ela não pode passar no escuro.
+    //
+    // Sem a lista de planos não dá para saber se ele já existe — e `duplicatescheme`
+    // não checa nada: cada clique deixaria mais uma cópia no PC do cliente. É o
+    // mesmo estrago dos planos órfãos, e recusar é o único lado seguro.
+    match plano_maximo_existe() {
+        Some(true) => {
+            return Err("O plano de desempenho máximo já existe nesta máquina.".to_string())
+        }
+        None => {
+            return Err(
+                "Não foi possível ler a lista de planos de energia desta máquina. Criar o plano \
+                 sem essa leitura poderia deixar uma cópia duplicada, então nada foi feito."
+                    .to_string(),
+            )
+        }
+        Some(false) => {}
     }
 
     shell::run_checked("powercfg", &["-duplicatescheme", DESEMPENHO_MAXIMO_GUID])
@@ -587,18 +617,30 @@ Esquemas de Energia Existentes (* Ativos)
     fn plano_maximo_e_detectado_pelo_identificador() {
         // Pelo identificador, nunca pelo nome — o nome do plano é traduzido.
         let existe = plano_maximo_existe();
-        println!("plano de desempenho máximo existe: {}", existe);
+        println!("plano de desempenho máximo existe: {:?}", existe);
 
         assert_eq!(DESEMPENHO_MAXIMO_GUID.len(), 36);
     }
 
     #[test]
     fn criar_duas_vezes_e_recusado() {
-        if plano_maximo_existe() {
-            let erro = criar_plano_maximo().unwrap_err();
-            assert!(erro.contains("já existe") || erro.contains("administrador"));
-        } else {
-            println!("plano ainda não existe nesta máquina; caso não exercitado");
+        match plano_maximo_existe() {
+            Some(true) => {
+                let erro = criar_plano_maximo().unwrap_err();
+                assert!(erro.contains("já existe") || erro.contains("administrador"));
+            }
+            // SEM A LISTA, CRIAR É PROIBIDO. É a guarda que impede o plano
+            // duplicado: `duplicatescheme` não confere nada, então cada clique
+            // no escuro deixaria mais uma cópia no PC do cliente.
+            None => {
+                let erro = criar_plano_maximo().unwrap_err();
+                assert!(
+                    erro.contains("duplicada") || erro.contains("administrador"),
+                    "{}",
+                    erro
+                );
+            }
+            Some(false) => println!("plano ainda não existe nesta máquina; caso não exercitado"),
         }
     }
 

@@ -153,10 +153,17 @@ pub fn run_update_cache() -> Result<CleanupResult, String> {
     let mut estavam_rodando = Vec::new();
 
     for servico in servicos {
-        let rodando = super::services::is_running(servico);
-        estavam_rodando.push(rodando);
+        // `None` é "NÃO SEI SE ESTÁ RODANDO", e aqui a dúvida pende para parar.
+        //
+        // Apagar `SoftwareDistribution\Download` com a atualização em andamento
+        // é exatamente o estrago que esta parada existe para evitar, e parar um
+        // serviço já parado não é erro. Na volta religamos: deixar o Windows
+        // Update desligado por causa de uma leitura que falhou seria trocar um
+        // problema por outro pior.
+        let parar = super::services::is_running(servico) != Some(false);
+        estavam_rodando.push(parar);
 
-        if rodando {
+        if parar {
             let _ = super::services::stop(servico);
         }
     }
