@@ -35,10 +35,6 @@ fn service_key(service: &str) -> String {
     format!("{}\\{}", SERVICES_KEY, service)
 }
 
-/// Se um serviço está em execução agora.
-///
-/// O `sc query` traduz o rótulo do estado, mas o número ao lado é o mesmo em
-/// qualquer idioma: 4 significa em execução.
 /// O ESTADO NUMÉRICO na saída do `sc query`, sem procurar o rótulo.
 ///
 /// O CÓDIGO ANTIGO PROCURAVA `"STATE"` OU `"ESTADO"`, e isso é o defeito
@@ -125,7 +121,11 @@ pub fn start(service: &str) -> Result<(), String> {
 }
 
 /// Verifica se um serviço existe nesta instalação do Windows.
-pub fn exists(service: &str) -> bool {
+///
+/// `None` é "não deu para ler", e quem chama precisa tratar separado: dizer
+/// "este Windows não tem o serviço" sobre uma chave que a ACL negou faz a
+/// otimização sumir da lista com a frase errada.
+pub fn exists(service: &str) -> Option<bool> {
     registry::key_exists("HKLM", &service_key(service))
 }
 
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn detects_existing_and_missing_services() {
-        assert!(exists("RpcSs"));
-        assert!(!exists("ServicoQueNaoExiste123"));
+        assert_eq!(exists("RpcSs"), Some(true));
+        assert_eq!(exists("ServicoQueNaoExiste123"), Some(false));
     }
 }

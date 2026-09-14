@@ -293,8 +293,15 @@ impl WindowsOptimizer {
             }
 
             Action::DisableService { name } => {
-                if !services::exists(name) {
-                    return ActionState::NotApplicable;
+                match services::exists(name) {
+                    Some(true) => {}
+                    // O Windows realmente não tem este serviço. Instalações
+                    // variam, e isso o produto SABE.
+                    Some(false) => return ActionState::NotApplicable,
+                    // A chave do serviço não pôde ser lida — ACL de domínio,
+                    // endurecimento, antivírus. Dizer "não se aplica" faria a
+                    // otimização sumir da lista com a frase errada.
+                    None => return ActionState::Desconhecido,
                 }
 
                 match services::query_start_type(name) {
@@ -1633,11 +1640,25 @@ impl WindowsOptimizer {
                 }
 
                 // Um serviço ausente não é falha: instalações do Windows variam.
-                if !services::exists(name) {
-                    detalhe.status = ActionStatus::Unsupported;
-                    detalhe.unsupported_reason =
-                        Some(format!("O serviço {} não existe neste Windows.", name));
-                    return Ok(None);
+                match services::exists(name) {
+                    Some(true) => {}
+                    Some(false) => {
+                        detalhe.status = ActionStatus::Unsupported;
+                        detalhe.unsupported_reason =
+                            Some(format!("O serviço {} não existe neste Windows.", name));
+                        return Ok(None);
+                    }
+                    // Sem conseguir ler a chave do serviço não dá para saber o
+                    // tipo de inicialização atual, e sem isso não há caminho de
+                    // volta — a mesma regra do hipervisor e da hibernação.
+                    None => {
+                        detalhe.status = ActionStatus::Skipped;
+                        detalhe.message = format!(
+                            "Não foi possível ler a configuração do serviço {} nesta máquina.",
+                            name
+                        );
+                        return Ok(None);
+                    }
                 }
 
                 let previous = services::query_start_type(name)?;

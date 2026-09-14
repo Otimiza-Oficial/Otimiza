@@ -797,6 +797,12 @@ pub fn reparar(incluir_avancadas: bool) -> Result<RelatorioDoPlano, String> {
 /// Lido da árvore de definições, que é a mesma em qualquer idioma e não depende
 /// de executar nada. Antes isto era descoberto executando e lendo a mensagem de
 /// erro — que é traduzida.
+///
+/// Leitura negada conta como SUPORTADO, e não como ausente — o contrário do
+/// resto do módulo, de propósito. Se a árvore de definições não pôde ser lida, a
+/// alternativa seria marcar os onze ajustes como "este Windows não tem", que é
+/// uma afirmação muito mais forte e muito mais provável de estar errada. Dizendo
+/// que existe, a escrita é tentada e a releitura decide — e ela não mente.
 pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
     registry::key_exists(
         "HKLM",
@@ -805,6 +811,7 @@ pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
             subgrupo, ajuste
         ),
     )
+    .unwrap_or(true)
 }
 
 /// O que o relatório diz de um ajuste, dado o antes, o alvo e o depois.
@@ -1364,10 +1371,12 @@ pub fn diagnosticar() -> Diagnostico {
     let powercfg_responde = lista.is_ok();
     let planos = lista.unwrap_or_default();
 
+    // `None` (leitura negada) conta como ilegível: é exatamente o caso que
+    // este campo do diagnóstico existe para denunciar.
     let registro_de_energia_legivel = registry::key_exists(
         "HKLM",
         r"SYSTEM\CurrentControlSet\Control\Power\PowerSettings",
-    );
+    ) == Some(true);
 
     let ausentes: Vec<String> = AJUSTES
         .iter()

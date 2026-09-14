@@ -474,13 +474,29 @@ pub fn read_text(hive: &str, path: &str, name: &str) -> Result<Option<String>, S
 }
 
 /// Verifica se uma chave existe.
-pub fn key_exists(hive: &str, path: &str) -> bool {
-    root(hive)
-        .and_then(|root| {
-            root.open_subkey_with_flags(path, KEY_READ)
-                .map_err(|e| e.to_string())
-        })
-        .is_ok()
+/// `None` é NÃO DEU PARA SABER, e não "não existe".
+///
+/// Este era o último ponto do módulo que ainda confundia os dois — `read`,
+/// `value_names` e `delete_value` já separavam desde a 1.8. E era o que mais
+/// doía, porque `services::exists` sai daqui: numa máquina onde a leitura de
+/// `HKLM\SYSTEM\CurrentControlSet\Services\<svc>` é negada por ACL (política de
+/// domínio, endurecimento, antivírus), QUATRO otimizações do catálogo sumiam da
+/// lista dizendo "não se aplica a esta máquina" — sobre um Windows que tem os
+/// quatro serviços.
+///
+/// Sumir com a frase errada é a pior forma de falhar num produto que se vende
+/// por honestidade: o cliente não vê erro nenhum, e conclui que comprou um
+/// otimizador que não faz nada no PC dele.
+pub fn key_exists(hive: &str, path: &str) -> Option<bool> {
+    let raiz = root(hive).ok()?;
+
+    match raiz.open_subkey_with_flags(path, KEY_READ) {
+        Ok(_) => Some(true),
+        // Só a ausência de verdade responde "não existe". Qualquer outro
+        // motivo é desconhecimento — a mesma regra que `read` já segue.
+        Err(e) if chave_inexistente(e.kind()) => Some(false),
+        Err(_) => None,
+    }
 }
 
 /// Verifica se o processo tem privilégios de administrador.

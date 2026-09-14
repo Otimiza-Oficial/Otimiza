@@ -53,14 +53,16 @@ pub fn reinicio_pendente() -> Vec<&'static str> {
     if registry::key_exists(
         "HKLM",
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
-    ) {
+    ) == Some(true)
+    {
         motivos.push("instalação de componente do Windows");
     }
 
     if registry::key_exists(
         "HKLM",
         r"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired",
-    ) {
+    ) == Some(true)
+    {
         motivos.push("atualização do Windows");
     }
 
