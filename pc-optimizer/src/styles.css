@@ -1669,6 +1669,27 @@ button {
   border-left-color: var(--green);
 }
 
+/* Bloco de texto pronto para copiar: o relatório de compatibilidade.
+
+   ROLA DENTRO DE SI, e não empurra a página. O relatório passa de cinquenta
+   linhas e tem uma tabela larga; deixá-lo crescer solto faria a aba inteira
+   rolar na horizontal, que é a única coisa que o resto desta folha nunca
+   permite. */
+.bloco-de-texto {
+  margin-top: var(--s3);
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.25));
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+}
+
 /* NEM VERDE NEM ÂMBAR, DE PROPÓSITO.
 
    "Este Windows não tem este ajuste" não é um problema — o plano segue sem ele

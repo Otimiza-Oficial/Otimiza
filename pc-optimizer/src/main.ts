@@ -3750,6 +3750,184 @@ function renderPlano(r: RelatorioDoPlano): string {
   return cabecalho + r.ajustes.map(linhaDoAjuste).join("");
 }
 
+interface DiagnosticoDeEnergia {
+  maquina: MaquinaDoPlano;
+  elevado: boolean;
+  powercfg_responde: boolean;
+  planos_legiveis: boolean;
+  planos: [string, string][];
+  plano_otimiza_existe: boolean;
+  registro_de_energia_legivel: boolean;
+  ajustes_suportados: number;
+  ajustes_totais: number;
+  ajustes_ausentes: string[];
+  processo_64_bits: boolean;
+  avisos: string[];
+}
+
+/**
+ * Uma checagem do diagnóstico vira uma linha. `true` é o estado bom.
+ *
+ * A COR SAI DAQUI E NÃO DO RUST, como em toda tabela deste arquivo. E não há
+ * verde para "não sei": todas as perguntas abaixo têm resposta de sim ou não,
+ * e a que não tivesse precisaria de um terceiro estado em vez de cair no bom.
+ */
+function linhaDaChecagem(rotulo: string, ok: boolean, detalhe: string): string {
+  return `
+    <article class="finding" data-severity="${ok ? "Ok" : "Important"}">
+      <div class="finding-top">
+        <h3>${escapeHtml(rotulo)}</h3>
+        <span class="state-label">${ok ? "sim" : "não"}</span>
+      </div>
+      <p class="finding-advice">${escapeHtml(detalhe)}</p>
+    </article>
+  `;
+}
+
+function renderDiagnostico(d: DiagnosticoDeEnergia): string {
+  const checagens = [
+    linhaDaChecagem(
+      "O Otimiza está como administrador",
+      d.elevado,
+      d.elevado
+        ? "Pode criar e ativar plano de energia."
+        : "Sem isto, nenhum plano de energia pode ser criado. Reabra como administrador.",
+    ),
+    linhaDaChecagem(
+      "O powercfg responde nesta máquina",
+      d.powercfg_responde,
+      d.powercfg_responde
+        ? "É por ele que o plano é criado, configurado e ativado."
+        : "Sem ele não há como mexer em plano de energia neste computador.",
+    ),
+    linhaDaChecagem(
+      "Os planos de energia puderam ser lidos",
+      d.planos_legiveis,
+      d.planos_legiveis
+        ? `${d.planos.length} plano(s) neste computador.`
+        : "A lista de planos voltou vazia ou ilegível.",
+    ),
+    linhaDaChecagem(
+      "A árvore de energia do registro pôde ser lida",
+      d.registro_de_energia_legivel,
+      d.registro_de_energia_legivel
+        ? "É dela que sai quais ajustes existem neste Windows."
+        : "Sem ela, todo ajuste apareceria como inexistente — e seria mentira.",
+    ),
+    linhaDaChecagem(
+      "O Otimiza está rodando em 64 bits",
+      d.processo_64_bits,
+      d.processo_64_bits
+        ? "Lê o registro verdadeiro do Windows."
+        : "Em 32 bits sobre um Windows de 64, as leituras caem num espelho e saem erradas.",
+    ),
+    // ESTA NÃO É UMA FALHA. Ajuste que este Windows não tem é informação sobre
+    // a máquina, e pintar de âmbar faria o cliente procurar defeito onde não há.
+    linhaDaChecagem(
+      "Ajustes de energia disponíveis aqui",
+      d.ajustes_suportados === d.ajustes_totais,
+      d.ajustes_ausentes.length === 0
+        ? `Os ${d.ajustes_totais} ajustes do Otimiza existem neste Windows.`
+        : `${d.ajustes_suportados} de ${d.ajustes_totais}. Este Windows não tem: ${d.ajustes_ausentes.join(", ")}. O plano é montado sem eles, e isso não é falha.`,
+    ),
+  ];
+
+  const avisos = d.avisos.length
+    ? `<p class="hint">${d.avisos.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  const plano = d.plano_otimiza_existe
+    ? `<p class="hint">O plano OTIMIZA já existe nesta máquina.</p>`
+    : "";
+
+  return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${avisos}`;
+}
+
+async function diagnosticarEnergia() {
+  const botao = element<HTMLButtonElement>("plano-diagnostico");
+  botao.disabled = true;
+  setStatus("plano-status", "Lendo o que esta máquina permite…", "progress");
+
+  try {
+    const d = await invoke<DiagnosticoDeEnergia>("diagnostico_de_energia");
+
+    const area = element("plano-diagnostico-result");
+    area.innerHTML = renderDiagnostico(d);
+    area.hidden = false;
+
+    // O TOM SAI DOS AVISOS, e não da contagem de ajustes: um Windows sem dois
+    // ajustes está perfeitamente bem, e um sem administrador não está — mesmo
+    // com os onze ajustes presentes.
+    setStatus(
+      "plano-status",
+      d.avisos.length === 0
+        ? "Esta máquina aceita tudo o que o Otimiza faz no plano de energia."
+        : "Há ressalvas nesta máquina — veja abaixo.",
+      d.avisos.length === 0 ? "ok" : "warn",
+    );
+  } catch (error) {
+    setStatus("plano-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+// ------------------------------------------ relatório de compatibilidade
+
+/**
+ * Gera a nota de laboratório desta máquina e mostra na tela.
+ *
+ * O texto fica VISÍVEL antes de ser copiado, de propósito. O relatório de
+ * atendimento vai direto para a área de transferência porque é curto e o
+ * cliente já sabe o que tem nele; este tem cinquenta linhas e descreve o
+ * computador da pessoa em detalhe. Pedir que ela mande um arquivo que nunca
+ * viu é pedir confiança que o produto não precisa pedir — ele cabe na tela.
+ */
+let labGerado: string | null = null;
+
+async function gerarLab() {
+  const botao = element<HTMLButtonElement>("lab-gerar");
+  botao.disabled = true;
+  setStatus("lab-status", "Lendo a máquina — não altera nada…", "progress");
+
+  try {
+    labGerado = await invoke<string>("relatorio_de_compatibilidade");
+
+    const area = element("lab-texto");
+    area.textContent = labGerado;
+    area.hidden = false;
+
+    element("lab-copiar").hidden = false;
+    text("lab-tag", "pronto");
+    setStatus(
+      "lab-status",
+      "Pronto. Leia se quiser, e mande no atendimento junto da sua dúvida.",
+      "ok",
+    );
+  } catch (error) {
+    setStatus("lab-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function copiarLab() {
+  if (labGerado === null) return;
+
+  try {
+    await navigator.clipboard.writeText(labGerado);
+    setStatus("lab-status", "Copiado. Cole no atendimento.", "ok");
+  } catch (error) {
+    // A recusa da área de transferência não pode apagar o relatório da tela:
+    // ele continua ali para ser selecionado à mão.
+    setStatus(
+      "lab-status",
+      `Não consegui copiar (${String(error)}). O texto está aí em cima e pode ser selecionado.`,
+      "error",
+    );
+  }
+}
+
 /** Guarda o plano que estava ativo antes, para o botão de voltar. */
 let planoAnterior: string | null = null;
 
@@ -7393,7 +7571,10 @@ function wireControls() {
     runBatch("optimize_now", "Aplicando o que falta…")
   );
 
+  element("plano-diagnostico").addEventListener("click", diagnosticarEnergia);
   element("plano-simular").addEventListener("click", simularPlano);
+  element("lab-gerar").addEventListener("click", gerarLab);
+  element("lab-copiar").addEventListener("click", copiarLab);
   element("plano-aplicar").addEventListener("click", aplicarPlano);
   element("plano-desfazer").addEventListener("click", desfazerPlano);
 

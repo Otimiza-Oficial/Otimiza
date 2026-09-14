@@ -749,10 +749,27 @@
             <p class="hint" id="plano-maquina" hidden></p>
 
             <div class="row-actions">
+              <button id="plano-diagnostico" class="btn">O que este PC permite</button>
               <button id="plano-simular" class="btn">Ver o que mudaria</button>
               <button id="plano-aplicar" class="btn btn-primary">Criar e ativar o plano OTIMIZA</button>
               <button id="plano-desfazer" class="btn" hidden>Voltar ao meu plano</button>
             </div>
+
+            <!--
+              O DIAGNÓSTICO VEM ANTES DOS OUTROS DOIS BOTÕES NA ORDEM DE LEITURA,
+              e é de propósito: ele responde "o Otimiza consegue fazer alguma
+              coisa aqui?", que é a pergunta anterior a "o que mudaria?".
+
+              Ele existia como comando e não tinha tela — ou seja, a resposta
+              para "por que não funcionou no seu PC?" estava pronta dentro do
+              produto e ninguém conseguia alcançá-la. É o mesmo defeito que o
+              `suporte.rs` veio consertar, repetido num andar acima.
+
+              Área própria, e não a mesma do relatório do plano: são duas
+              respostas diferentes, e uma sobrescrevendo a outra obrigaria a
+              clicar de novo para comparar.
+            -->
+            <div id="plano-diagnostico-result" class="resultado" hidden></div>
 
             <p class="hint">
               "Ver o que mudaria" não altera nada: lê a máquina e mostra o antes e
@@ -2165,6 +2182,53 @@
             </div>
 
             <p id="diagnostico-status" class="status"></p>
+          </section>
+
+          <!--
+            O RELATÓRIO DE COMPATIBILIDADE, AO LADO DO DE ATENDIMENTO E NÃO
+            DENTRO DELE.
+
+            São artefatos parecidos — os dois o cliente manda — e servem a
+            coisas diferentes. O de cima cabe numa mensagem e responde "o que
+            está acontecendo neste PC agora". Este é longo de propósito e
+            responde "esta MÁQUINA aceitou o que o Otimiza faz?", no formato de
+            laboratório que o projeto usa para registrar classe de hardware.
+
+            POR QUE ELE EXISTE. O produto é desenvolvido num único computador:
+            um desktop Intel com Windows 10 e placa NVIDIA. Notebook, AMD,
+            Windows 11, processador híbrido — nada disso pode ser testado aqui.
+            Quem tem essas máquinas é quem comprou. Cada cliente que manda este
+            relatório fecha um buraco que nenhum commit fecha sozinho.
+
+            Fica junto do atendimento porque é aí que o cliente chega quando
+            algo não funcionou, que é exatamente a hora em que o relatório vale.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Relatório de compatibilidade</h2>
+              <span class="panel-tag" id="lab-tag">não gerado</span>
+            </div>
+
+            <p class="lead">
+              Um relatório completo de como o seu computador respondeu aos ajustes
+              de energia — o que já estava certo, o que mudaria, e o que este
+              Windows simplesmente não tem. Nada é alterado para gerar: ele só lê.
+            </p>
+
+            <p class="hint">
+              O Otimiza é desenvolvido num computador só. Se o seu é um notebook,
+              é AMD, ou é Windows 11, este arquivo mostra coisas que não dá para
+              ver aqui — e é assim que o produto melhora para máquinas como a sua.
+              Como no diagnóstico acima, nada aqui identifica você.
+            </p>
+
+            <div class="row-actions">
+              <button id="lab-gerar" class="btn" data-custo="~5 s">Gerar relatório</button>
+              <button id="lab-copiar" class="btn" hidden>Copiar</button>
+            </div>
+
+            <p id="lab-status" class="status"></p>
+            <pre id="lab-texto" class="bloco-de-texto" hidden></pre>
           </section>
         </section>
 
