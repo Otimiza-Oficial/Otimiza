@@ -1446,18 +1446,55 @@ impl WindowsOptimizer {
                 name,
                 value,
             } => {
+                let mut nao_confirmado: Option<String> = None;
+
                 let previous = match value {
                     RegValue::Dword(v) => registry::set_dword(hive, path, name, *v)?,
                     RegValue::Binary(v) => registry::set_binary(hive, path, name, v)?,
                     RegValue::Text(v) => registry::set_string(hive, path, name, v)?,
                 };
 
+                // ANTES DE CONFERIR, E NÃO DEPOIS. Se a conferência reprovar, o
+                // valor JÁ ESTÁ GRAVADO no PC do cliente — e é este registro que
+                // faz a reversão automática do `apply` conseguir devolvê-lo.
                 changes.push(ChangeRecord::RegistryValue {
                     hive: hive.to_string(),
                     path: path.to_string(),
                     name: name.to_string(),
                     previous,
                 });
+
+                // NÃO CONFIE QUE FUNCIONOU: RELÊ.
+                //
+                // A escrita retornar `Ok` só diz que o Windows aceitou o pedido,
+                // não que o valor ficou. Em máquina gerenciada por política de
+                // domínio, o valor volta sozinho; em processo de 32 bits sobre
+                // Windows de 64, a escrita cai no espelho `WOW6432Node` e o
+                // sistema continua lendo a chave verdadeira. Nos dois casos o
+                // produto dizia "aplicado" sobre um PC que não mudou.
+                //
+                // É a mesma regra que o plano de energia já seguia, agora no
+                // caminho por onde passa a maior parte do catálogo.
+                match conferir_escrita(value, &registry::read(hive, path, name)) {
+                    Confirmacao::Igual => {}
+                    Confirmacao::Diferente(lido) => {
+                        return Err(format!(
+                            "O Windows aceitou a gravação de `{}`, mas ao reler o valor é {}. \
+                             Costuma ser política de domínio ou outro programa reescrevendo a \
+                             chave. Nada ficou aplicado.",
+                            name, lido
+                        ))
+                    }
+                    // Gravou e não deu para reler. Não é falha — desfazer aqui
+                    // seria descartar uma mudança que provavelmente valeu — mas
+                    // também não pode passar como confirmado.
+                    Confirmacao::NaoDeuParaLer => {
+                        nao_confirmado = Some(format!(
+                            "`{}` foi gravado, mas não foi possível reler para confirmar.",
+                            name
+                        ));
+                    }
+                }
 
                 // Gravar não basta: as preferências de `HKCU\Control Panel`
                 // ficam em memória desde o logon, e sem avisar o Windows a
@@ -1470,7 +1507,16 @@ impl WindowsOptimizer {
                 // Quando o shell só relê a chave ao iniciar, o cliente precisa
                 // saber disso — senão aplica, não vê nada mudar na barra de
                 // tarefas e conclui que o produto não funcionou.
-                Ok(sysparams::nota_de_ativacao(hive, path, name).map(|nota| nota.to_string()))
+                // As duas notas podem existir juntas, e nenhuma pode engolir a
+                // outra: uma diz que o efeito só aparece depois de reiniciar o
+                // shell, a outra diz que não deu para confirmar a gravação.
+                let ativacao = sysparams::nota_de_ativacao(hive, path, name).map(|n| n.to_string());
+
+                Ok(match (nao_confirmado, ativacao) {
+                    (Some(a), Some(b)) => Some(format!("{} {}", a, b)),
+                    (Some(unica), None) | (None, Some(unica)) => Some(unica),
+                    (None, None) => None,
+                })
             }
 
             Action::DisableService { name } => {
@@ -1806,6 +1852,65 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
+/// O que a releitura de uma escrita de registro diz.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Confirmacao {
+    /// O valor lido é o que pedimos. Só aqui a otimização está provada.
+    Igual,
+    /// O Windows aceitou a gravação e o valor é OUTRO.
+    Diferente(String),
+    /// Não deu para reler. Não é falha, e não é confirmação.
+    NaoDeuParaLer,
+}
+
+/// Confere uma escrita de registro relendo o valor.
+///
+/// POR QUE ISTO NÃO É PARANOIA. `set_dword` devolver `Ok` diz que o Windows
+/// aceitou o pedido, não que o valor ficou. Dois casos reais, os dois na
+/// máquina do cliente e nenhum na de desenvolvimento:
+///
+/// - política de domínio reescrevendo a chave logo depois;
+/// - processo de 32 bits sobre Windows de 64, onde a escrita cai no espelho
+///   `WOW6432Node` e o sistema continua lendo a chave verdadeira.
+///
+/// Nos dois o produto dizia "aplicado" sobre um PC que não mudou — que é
+/// exatamente a queixa que abriu este trabalho.
+///
+/// Função pura, separada da execução para poder ser testada.
+pub fn conferir_escrita(alvo: &RegValue, lido: &Result<PreviousValue, String>) -> Confirmacao {
+    let Ok(atual) = lido else {
+        return Confirmacao::NaoDeuParaLer;
+    };
+
+    let igual = match (alvo, atual) {
+        (RegValue::Dword(esperado), PreviousValue::Dword(v)) => v == esperado,
+        (RegValue::Text(esperado), PreviousValue::Text(v)) => v == esperado,
+        (RegValue::Binary(esperado), PreviousValue::Binary(v)) => v.as_slice() == *esperado,
+        // TIPO DIFERENTE É VALOR DIFERENTE. Gravamos DWORD e lemos texto quando
+        // a chave é de um tipo que o sistema impõe — o número entrou como outra
+        // coisa, e o Windows não vai lê-lo como nós queríamos.
+        _ => false,
+    };
+
+    if igual {
+        Confirmacao::Igual
+    } else {
+        Confirmacao::Diferente(descrever_valor(atual))
+    }
+}
+
+/// Como o valor lido aparece na mensagem de erro. Curto: ele vai para uma frase
+/// que o cliente lê na tela, não para um despejo de memória.
+fn descrever_valor(valor: &PreviousValue) -> String {
+    match valor {
+        PreviousValue::Dword(v) => v.to_string(),
+        PreviousValue::Text(v) => format!("\"{}\"", v),
+        PreviousValue::Binary(bytes) => format!("{} byte(s)", bytes.len()),
+        PreviousValue::Absent => "inexistente".to_string(),
+        PreviousValue::AbsentKey => "inexistente (a chave sumiu)".to_string(),
+    }
+}
+
 /// A linha que o registro ao vivo mostra depois de montar o plano.
 ///
 /// Ela diz os quatro números porque um "pronto" sozinho seria o que este
@@ -2016,6 +2121,120 @@ mod tests {
     // ------------------------------------------ o que a leitura falha vira
 
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
+
+    // ------------------------------------ provar que a escrita ficou de pé
+
+    #[test]
+    fn escrita_conferida_e_igual_esta_provada() {
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Dword(2))),
+            Confirmacao::Igual
+        );
+        assert_eq!(
+            conferir_escrita(
+                &RegValue::Text("0".into()),
+                &Ok(PreviousValue::Text("0".into()))
+            ),
+            Confirmacao::Igual
+        );
+        assert_eq!(
+            conferir_escrita(
+                &RegValue::Binary(&[3, 0, 0, 0]),
+                &Ok(PreviousValue::Binary(vec![3, 0, 0, 0]))
+            ),
+            Confirmacao::Igual
+        );
+    }
+
+    #[test]
+    fn o_windows_aceitar_nao_e_o_valor_ter_ficado() {
+        // O CASO DA MÁQUINA GERENCIADA: a gravação volta `Ok`, a política de
+        // domínio reescreve a chave, e o produto dizia "aplicado" sobre um PC
+        // que não mudou.
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Dword(1))),
+            Confirmacao::Diferente("1".to_string())
+        );
+    }
+
+    #[test]
+    fn valor_que_sumiu_depois_da_escrita_nao_passa() {
+        // O caso do espelho `WOW6432Node`: escrevemos num lugar e o sistema lê
+        // outro, onde continua não havendo nada.
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Absent)),
+            Confirmacao::Diferente("inexistente".to_string())
+        );
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::AbsentKey)),
+            Confirmacao::Diferente("inexistente (a chave sumiu)".to_string())
+        );
+    }
+
+    #[test]
+    fn tipo_diferente_e_valor_diferente() {
+        // O número entrou como texto: o Windows não vai lê-lo como nós
+        // queríamos, e "2" não é 2.
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Text("2".into()))),
+            Confirmacao::Diferente("\"2\"".to_string())
+        );
+    }
+
+    #[test]
+    fn nao_conseguir_reler_nao_e_falha_nem_confirmacao() {
+        // Desfazer aqui descartaria uma mudança que provavelmente valeu; dar
+        // por confirmado afirmaria o que não foi lido. O terceiro estado existe
+        // para não ter que escolher entre os dois erros.
+        assert_eq!(
+            conferir_escrita(&RegValue::Dword(2), &Err("acesso negado".into())),
+            Confirmacao::NaoDeuParaLer
+        );
+    }
+
+    /// A conferência contra o REGISTRO DE VERDADE, e não contra um valor
+    /// montado à mão.
+    ///
+    /// O que os testes puros acima não cobrem é o encontro das duas pontas: o
+    /// tipo que `set_dword` grava precisa ser o mesmo que `read` devolve, senão
+    /// a conferência reprovaria TODA otimização de registro do catálogo por um
+    /// detalhe de tipo — um estrago bem maior que o defeito que ela conserta.
+    ///
+    /// Escreve numa chave de rascunho nossa, confere, e apaga a chave inteira.
+    /// `#[ignore]`: toca no registro da máquina que roda o teste.
+    ///
+    ///   cargo test --lib conferencia_contra_o_registro -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn conferencia_contra_o_registro_de_verdade() {
+        const CAMINHO: &str = r"Software\Otimiza\rascunho-de-teste";
+
+        for (alvo, rotulo) in [
+            (RegValue::Dword(2), "dword"),
+            (RegValue::Text("0".into()), "texto"),
+            (RegValue::Binary(&[3, 0, 0, 0]), "binário"),
+        ] {
+            let anterior = match &alvo {
+                RegValue::Dword(v) => registry::set_dword("HKCU", CAMINHO, "valor", *v),
+                RegValue::Text(v) => registry::set_string("HKCU", CAMINHO, "valor", v),
+                RegValue::Binary(v) => registry::set_binary("HKCU", CAMINHO, "valor", v),
+            }
+            .expect("gravar no rascunho");
+
+            let conferido = conferir_escrita(&alvo, &registry::read("HKCU", CAMINHO, "valor"));
+
+            println!("{:<8} -> {:?}", rotulo, conferido);
+
+            registry::restore("HKCU", CAMINHO, "valor", &anterior).expect("limpar o rascunho");
+
+            assert_eq!(
+                conferido,
+                Confirmacao::Igual,
+                "o tipo gravado e o tipo lido não batem para {}",
+                rotulo
+            );
+        }
+    }
 
     #[test]
     fn leitura_que_falhou_nao_vira_nao_se_aplica() {
