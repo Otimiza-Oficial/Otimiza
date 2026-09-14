@@ -1545,12 +1545,24 @@ impl WindowsOptimizer {
                     previous,
                 });
 
+                // NÃO CONFIE QUE FUNCIONOU. `sc config` devolver 0 diz que o
+                // Gerenciador de Serviços aceitou o pedido; em máquina com
+                // política de domínio, ou com o serviço trancado pelo próprio
+                // Windows, o tipo volta ao que era.
+                let nota = exigir_confirmacao(
+                    conferir(
+                        &"disabled".to_string(),
+                        services::query_start_type(name).ok(),
+                    ),
+                    &format!("o serviço {}", name),
+                )?;
+
                 // Parar o serviço é o que libera recursos agora; a falha em parar
                 // não invalida a otimização, que já vale a partir do próximo boot.
                 if let Err(error) = services::stop(name) {
                     crate::utils::Logger::warn(&format!("serviço {} não parou agora: {}", name, error));
                 }
-                Ok(None)
+                Ok(nota)
             }
 
             Action::PlanoOtimiza => {
@@ -1600,7 +1612,18 @@ impl WindowsOptimizer {
 
                 power::set_hibernation(false)?;
                 changes.push(ChangeRecord::Hibernation { previously_enabled });
-                Ok(Some("Arquivo de hibernação removido.".to_string()))
+
+                // `HibernateEnabled` muda na hora, então dá para conferir agora
+                // — e aqui a conferência tem um valor extra: quando a hibernação
+                // não desliga, o `hiberfil.sys` continua ocupando o disco, e o
+                // cliente ia atrás do espaço que a tela prometeu.
+                match exigir_confirmacao(
+                    conferir(&false, Some(power::hibernation_enabled())),
+                    "a hibernação",
+                )? {
+                    Some(ressalva) => Ok(Some(ressalva)),
+                    None => Ok(Some("Arquivo de hibernação removido.".to_string())),
+                }
             }
 
 
@@ -1614,7 +1637,11 @@ impl WindowsOptimizer {
 
                 power::set_memory_compression(*enabled)?;
                 changes.push(ChangeRecord::MemoryCompression { previously_enabled });
-                Ok(None)
+
+                exigir_confirmacao(
+                    conferir(enabled, power::memory_compression_enabled()),
+                    "a compressão de memória",
+                )
             }
 
             Action::ClearBootLimits => {
@@ -1635,12 +1662,24 @@ impl WindowsOptimizer {
 
             Action::GpuMsiMode => {
                 devices::ativar_msi(changes)?;
-                Ok(None)
+
+                // O ajuste mais profundo do catálogo escreve numa chave de
+                // dispositivo que o Windows pode reescrever ao reenumerar o
+                // hardware. O efeito só vale depois do reinício, mas o valor é
+                // legível agora — e é o valor que estamos prometendo.
+                exigir_confirmacao(
+                    conferir(&true, devices::msi_ja_ativo()),
+                    "o modo MSI da placa de vídeo",
+                )
             }
 
             Action::NicPowerSaving => {
                 devices::desligar_economia_de_energia_da_rede(changes)?;
-                Ok(None)
+
+                exigir_confirmacao(
+                    conferir(&true, devices::economia_de_energia_da_rede_desligada()),
+                    "a economia de energia da placa de rede",
+                )
             }
 
             Action::ReservedStorage { enabled } => {
@@ -1678,7 +1717,23 @@ impl WindowsOptimizer {
                 changes.push(ChangeRecord::ReservedStorage {
                     previously_enabled: anterior,
                 });
-                Ok(Some("Espaço reservado devolvido ao disco.".to_string()))
+
+                // O Windows recusa mexer no Armazenamento Reservado quando há
+                // atualização em andamento — e nem sempre pela via do erro. Sem
+                // reler, a tela prometia vários GB de volta que não voltaram.
+                let agora = match power::estado_do_armazenamento_reservado() {
+                    EstadoReservado::Ligado => Some(true),
+                    EstadoReservado::Desligado => Some(false),
+                    EstadoReservado::SemRecurso | EstadoReservado::NaoVerificavel => None,
+                };
+
+                match exigir_confirmacao(
+                    conferir(enabled, agora),
+                    "o Armazenamento Reservado",
+                )? {
+                    Some(ressalva) => Ok(Some(ressalva)),
+                    None => Ok(Some("Espaço reservado devolvido ao disco.".to_string())),
+                }
             }
 
             Action::AccessibilityKeysOff => {
@@ -1721,9 +1776,19 @@ impl WindowsOptimizer {
                     removed: vec![("hypervisorlaunchtype".to_string(), anterior)],
                 });
 
-                Ok(Some(
-                    "Hipervisor desligado no boot — vale depois de reiniciar.".to_string(),
-                ))
+                // O VALOR É LEGÍVEL NA HORA, mesmo o efeito só valendo no boot.
+                // Em máquina com VBS imposto por política ou trancado em UEFI, o
+                // `bcdedit` devolve 0 e o valor não fica — e era esse o caso em
+                // que o cliente reiniciava, perdia o Hyper-V e não ganhava nada.
+                match exigir_confirmacao(
+                    conferir(&"off".to_string(), power::hypervisor_launch_type()),
+                    "o hipervisor no boot",
+                )? {
+                    Some(ressalva) => Ok(Some(ressalva)),
+                    None => Ok(Some(
+                        "Hipervisor desligado no boot — vale depois de reiniciar.".to_string(),
+                    )),
+                }
             }
 
             Action::RemoveForcedPlatformClock => {
@@ -1739,10 +1804,19 @@ impl WindowsOptimizer {
                     removed: vec![("useplatformclock".to_string(), valor.clone())],
                 });
 
-                Ok(Some(format!(
-                    "Relógio de plataforma forçado removido (estava em {}).",
-                    valor
-                )))
+                // Apagar tem que ter apagado: `forced_platform_clock` devolve
+                // `None` quando a linha não está mais lá, que é o alvo aqui.
+                match firmware::forced_platform_clock() {
+                    None => Ok(Some(format!(
+                        "Relógio de plataforma forçado removido (estava em {}).",
+                        valor
+                    ))),
+                    Some(ainda) => Err(format!(
+                        "O Windows aceitou o comando, mas o relógio de plataforma continua \
+                         forçado em {}. Nada ficou aplicado.",
+                        ainda
+                    )),
+                }
             }
 
             Action::CleanUpdateCache => {
@@ -1778,6 +1852,8 @@ impl WindowsOptimizer {
             Action::DisableNagle => {
                 let interfaces = registry::subkeys("HKLM", TCPIP_INTERFACES)?;
 
+                let mut sem_confirmar = 0usize;
+
                 for interface in interfaces {
                     let path = format!("{}\\{}", TCPIP_INTERFACES, interface);
 
@@ -1789,10 +1865,38 @@ impl WindowsOptimizer {
                             name: name.to_string(),
                             previous,
                         });
+
+                        // Esta ação escreve direto, sem passar pelo ramo
+                        // `Action::Registry`, então precisa da mesma conferência
+                        // por conta própria.
+                        //
+                        // O ERRO AQUI DERRUBA A OTIMIZAÇÃO INTEIRA, de propósito:
+                        // Nagle meio desligado — numa placa sim e na outra não —
+                        // é pior do que não mexer, porque a latência passa a
+                        // depender de qual placa o Windows escolher.
+                        match conferir_escrita(
+                            &RegValue::Dword(1),
+                            &registry::read("HKLM", &path, name),
+                        ) {
+                            Confirmacao::Igual => {}
+                            Confirmacao::Diferente(lido) => {
+                                return Err(format!(
+                                    "O Windows aceitou gravar `{}` nesta placa de rede, mas ao \
+                                     reler o valor é {}. Nada ficou aplicado.",
+                                    name, lido
+                                ))
+                            }
+                            Confirmacao::NaoDeuParaLer => sem_confirmar += 1,
+                        }
                     }
                 }
 
-                Ok(None)
+                Ok((sem_confirmar > 0).then(|| {
+                    format!(
+                        "{} valor(es) foram gravados, mas não foi possível reler para confirmar.",
+                        sem_confirmar
+                    )
+                }))
             }
         }
     }
@@ -1896,6 +2000,51 @@ pub fn conferir_escrita(alvo: &RegValue, lido: &Result<PreviousValue, String>) -
         Confirmacao::Igual
     } else {
         Confirmacao::Diferente(descrever_valor(atual))
+    }
+}
+
+/// A mesma conferência da escrita de registro, para tudo que NÃO é registro.
+///
+/// Serviços, `bcdedit`, MSI da placa, hibernação e compressão de memória
+/// passavam pelo código de saída do comando e nada mais. `sc config` devolver 0
+/// diz que o Gerenciador de Serviços aceitou o pedido — e numa máquina com
+/// política de domínio, ou com o serviço trancado pelo próprio Windows, o tipo
+/// de inicialização volta ao que era. O produto anotava no histórico uma
+/// mudança que não existia, e o cliente depois mandava desfazer algo que nunca
+/// foi feito.
+///
+/// `None` em `lido` é "não deu para reler", e não "diferente": ver
+/// `exigir_confirmacao`.
+pub fn conferir<T>(esperado: &T, lido: Option<T>) -> Confirmacao
+where
+    T: PartialEq + std::fmt::Debug,
+{
+    match lido {
+        None => Confirmacao::NaoDeuParaLer,
+        Some(atual) if atual == *esperado => Confirmacao::Igual,
+        Some(atual) => Confirmacao::Diferente(format!("{:?}", atual)),
+    }
+}
+
+/// O que fazer com o resultado de `conferir`, em uma regra só.
+///
+/// Existe para que as nove ações não-registro não escrevam nove versões
+/// ligeiramente diferentes da mesma decisão — que é como uma delas acaba
+/// tratando "não consegui ler" como sucesso.
+pub fn exigir_confirmacao(c: Confirmacao, o_que: &str) -> Result<Option<String>, String> {
+    match c {
+        Confirmacao::Igual => Ok(None),
+        Confirmacao::Diferente(atual) => Err(format!(
+            "O Windows aceitou o comando, mas ao reler {} continua {}. Nada ficou aplicado.",
+            o_que, atual
+        )),
+        // Não desfaz: a mudança provavelmente valeu, e descartá-la por causa de
+        // uma leitura que falhou seria trocar um erro por outro. Mas também não
+        // passa calado.
+        Confirmacao::NaoDeuParaLer => Ok(Some(format!(
+            "{} foi alterado, mas não foi possível reler para confirmar.",
+            o_que
+        ))),
     }
 }
 
@@ -2123,6 +2272,86 @@ mod tests {
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
 
     // ------------------------------------ provar que a escrita ficou de pé
+
+    #[test]
+    fn conferir_separa_diferente_de_nao_lido() {
+        assert_eq!(conferir(&true, Some(true)), Confirmacao::Igual);
+        assert_eq!(
+            conferir(&"disabled".to_string(), Some("auto".to_string())),
+            Confirmacao::Diferente("\"auto\"".to_string())
+        );
+        // `None` é "não deu para reler". Se virasse `Diferente`, o produto
+        // desfaria uma mudança que provavelmente valeu, por causa de uma
+        // leitura que falhou.
+        assert_eq!(conferir(&true, None::<bool>), Confirmacao::NaoDeuParaLer);
+    }
+
+    #[test]
+    fn a_regra_da_confirmacao_e_uma_so() {
+        // Nove ações usam esta função. Se cada uma escrevesse a própria versão
+        // da decisão, uma delas acabaria tratando "não consegui ler" como
+        // sucesso — que é exatamente o defeito que o produto passou três
+        // versões consertando em outros lugares.
+        assert_eq!(exigir_confirmacao(Confirmacao::Igual, "o serviço X"), Ok(None));
+
+        let falhou = exigir_confirmacao(Confirmacao::Diferente("\"auto\"".into()), "o serviço X");
+        assert!(falhou.is_err());
+        assert!(falhou.unwrap_err().contains("Nada ficou aplicado"));
+
+        let ressalva = exigir_confirmacao(Confirmacao::NaoDeuParaLer, "o serviço X");
+        assert!(ressalva.clone().is_ok());
+        assert!(ressalva.unwrap().unwrap().contains("não foi possível reler"));
+    }
+
+    #[test]
+    fn nenhuma_acao_que_escreve_devolve_sucesso_sem_conferir() {
+        // TRAVA DE FORMA, e não de ocorrência — o mesmo recurso da guarda de
+        // prosa do `commands.rs`. Ela procura, no corpo do `execute`, ramos que
+        // terminam em `Ok(None)` logo depois de empilhar uma mudança no
+        // histórico: gravar e sair sem reler é exatamente o defeito que este
+        // trabalho fechou, e é o que a ação número dez vai fazer por descuido.
+        let fonte = include_str!("mod.rs");
+
+        let Some(corpo) = fonte.split("fn execute(").nth(1) else {
+            panic!("não achei o `execute` para varrer");
+        };
+
+        let corpo = corpo.split("\n    fn ").next().unwrap_or(corpo);
+
+        let mut suspeitos = Vec::new();
+        let linhas: Vec<&str> = corpo.lines().collect();
+
+        for (i, linha) in linhas.iter().enumerate() {
+            if !linha.trim().starts_with("changes.push(") {
+                continue;
+            }
+
+            // Depois de empilhar, procura a primeira saída do ramo.
+            let adiante = linhas[i..]
+                .iter()
+                .take(40)
+                .map(|l| l.trim())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let confere = adiante.contains("exigir_confirmacao")
+                || adiante.contains("conferir_escrita")
+                || adiante.contains("forced_platform_clock()");
+
+            if !confere {
+                // O trecho, e não só a contagem: um teste que diz "há 1
+                // problema" e não diz onde custa a mesma busca toda vez.
+                suspeitos.push(linha.trim().to_string());
+            }
+        }
+
+        assert!(
+            suspeitos.is_empty(),
+            "há escrita(s) no `execute` que não releem o estado depois de gravar. \
+             Toda mudança precisa ser conferida — ver `exigir_confirmacao`.\n{}",
+            suspeitos.join("\n")
+        );
+    }
 
     #[test]
     fn escrita_conferida_e_igual_esta_provada() {

@@ -259,6 +259,15 @@ pub struct ResultadoDoAjuste {
     pub dc_depois: Option<u32>,
     pub status: StatusDoAjuste,
     pub mensagem: String,
+    /// Os `powercfg` que rodaram por este ajuste, para o registro em arquivo.
+    ///
+    /// FORA DO QUE VAI PARA A TELA, de propósito. Comando cru, código de saída
+    /// e stderr servem a quem está depurando uma máquina pelo log; na tela do
+    /// cliente seriam a poluição que faz um otimizador parecer um terminal. A
+    /// tela já recebe o antes, o alvo, o depois e a frase — que é a mesma
+    /// informação, dita para quem vai ler.
+    #[serde(skip)]
+    pub execucoes: Vec<Execucao>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -673,12 +682,83 @@ pub fn ja_satisfeito(alvo: &Alvo, ac: Option<u32>, dc: Option<u32>) -> bool {
         && alvo.dc.map_or(true, |q| dc == Some(q))
 }
 
-fn escrever(indice: &str, plano: &str, sub: &str, ajuste: &str, valor: u32) -> Result<(), String> {
-    shell::run_checked(
-        "powercfg",
-        &[indice, plano, sub, ajuste, &valor.to_string()],
-    )
-    .map(|_| ())
+/// O que um `powercfg` deixou para trás, para o registro poder contar.
+///
+/// Você pediu comando, código de saída, stdout e stderr no log de cada ajuste,
+/// e a razão é boa: sem o comando exato, quem lê o arquivo não consegue REPETIR
+/// o que o produto fez — e repetir à mão é a primeira coisa que se faz para
+/// entender uma falha numa máquina que não está na sua frente.
+#[derive(Debug, Clone)]
+pub struct Execucao {
+    pub comando: String,
+    pub codigo: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    /// `None` quando o comando deu certo.
+    pub erro: Option<String>,
+}
+
+impl Execucao {
+    /// Uma linha só, para caber no registro ao lado dos outros campos.
+    ///
+    /// Saída vazia não vira `stdout= stderr=`: campo vazio é ruído, e a linha
+    /// já é longa. O `powercfg` que dá certo não escreve nada, que é o caso
+    /// comum.
+    pub fn resumo(&self) -> String {
+        let mut partes = vec![format!("`{}`", self.comando)];
+
+        partes.push(match self.codigo {
+            Some(c) => format!("saiu {}", c),
+            None => "não terminou sozinho".to_string(),
+        });
+
+        for (rotulo, texto) in [("stdout", &self.stdout), ("stderr", &self.stderr)] {
+            let limpo = texto.trim();
+
+            if !limpo.is_empty() {
+                partes.push(format!("{}: {}", rotulo, limpo.replace('\n', " ")));
+            }
+        }
+
+        partes.join(" | ")
+    }
+}
+
+fn escrever(indice: &str, plano: &str, sub: &str, ajuste: &str, valor: u32) -> Execucao {
+    let valor = valor.to_string();
+    let args = [indice, plano, sub, ajuste, &valor];
+
+    // O COMANDO É MONTADO A PARTIR DOS MESMOS ARGUMENTOS QUE RODAM, e não
+    // escrito à mão numa string ao lado. Duas fontes divergem no primeiro
+    // conserto, e um log que mostra um comando diferente do que rodou é pior
+    // que um log sem comando nenhum.
+    let comando = format!("powercfg {}", args.join(" "));
+
+    match shell::run("powercfg", &args) {
+        Ok(saida) => Execucao {
+            comando,
+            codigo: saida.codigo,
+            erro: (!saida.success).then(|| {
+                let detalhe = if saida.stderr.trim().is_empty() {
+                    saida.stdout.trim()
+                } else {
+                    saida.stderr.trim()
+                };
+
+                format!("o Windows recusou o comando: {}", detalhe)
+            }),
+            stdout: saida.stdout,
+            stderr: saida.stderr,
+        },
+        // Nem chegou a rodar, ou estourou o prazo. Não há código nem saída.
+        Err(e) => Execucao {
+            comando,
+            codigo: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            erro: Some(e),
+        },
+    }
 }
 
 /// A linha que cada ajuste deixa em `otimiza.log`.
@@ -726,6 +806,14 @@ pub fn linha_do_log(r: &ResultadoDoAjuste, duracao: std::time::Duration) -> Stri
         linha.push_str(&r.mensagem);
     }
 
+    // O comando exato, o código e a saída, por último: são o que permite
+    // REPETIR à mão o que o produto fez, numa máquina que não está na sua
+    // frente. Ficam no fim porque quem lê procura primeiro o estado.
+    for execucao in &r.execucoes {
+        linha.push_str("\n    ");
+        linha.push_str(&execucao.resumo());
+    }
+
     linha
 }
 
@@ -737,6 +825,7 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
     let dc_antes = power::valor_efetivo(plano, a.subgrupo, a.ajuste, true);
 
     let mut resultado = ResultadoDoAjuste {
+        execucoes: Vec::new(),
         nome: a.nome.to_string(),
         subgrupo: a.subgrupo.to_string(),
         ajuste: a.ajuste.to_string(),
@@ -779,16 +868,18 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
     let mut erro: Option<String> = None;
 
     if let Some(v) = alvo.ac {
-        if let Err(e) = escrever("-setacvalueindex", plano, a.subgrupo, a.ajuste, v) {
-            erro = Some(e);
-        }
+        let execucao = escrever("-setacvalueindex", plano, a.subgrupo, a.ajuste, v);
+        erro = execucao.erro.clone();
+        resultado.execucoes.push(execucao);
     }
 
+    // Só tenta a bateria se a tomada deu certo: num ajuste que o Windows recusa,
+    // repetir o comando do outro lado só enche o registro com a mesma recusa.
     if erro.is_none() {
         if let Some(v) = alvo.dc {
-            if let Err(e) = escrever("-setdcvalueindex", plano, a.subgrupo, a.ajuste, v) {
-                erro = Some(e);
-            }
+            let execucao = escrever("-setdcvalueindex", plano, a.subgrupo, a.ajuste, v);
+            erro = execucao.erro.clone();
+            resultado.execucoes.push(execucao);
         }
     }
 
@@ -903,6 +994,7 @@ pub fn montar(simulacao: bool, incluir_avancadas: bool) -> Result<RelatorioDoPla
     for a in AJUSTES {
         if !incluir_avancadas && !entra_por_padrao(a.classe) {
             ajustes.push(ResultadoDoAjuste {
+                execucoes: Vec::new(),
                 nome: a.nome.to_string(),
                 subgrupo: a.subgrupo.to_string(),
                 ajuste: a.ajuste.to_string(),
@@ -1479,6 +1571,7 @@ mod tests {
 
     fn resultado_de_teste(status: StatusDoAjuste) -> ResultadoDoAjuste {
         ResultadoDoAjuste {
+            execucoes: Vec::new(),
             nome: "Estado mínimo do processador".to_string(),
             subgrupo: SUB_PROCESSADOR.to_string(),
             ajuste: PROCTHROTTLEMIN.to_string(),
@@ -1494,6 +1587,76 @@ mod tests {
             status,
             mensagem: String::new(),
         }
+    }
+
+    #[test]
+    fn o_resumo_da_execucao_traz_o_comando_e_o_codigo() {
+        // O COMANDO EXATO É O PONTO. Sem ele, quem lê o log não consegue
+        // repetir à mão o que o produto fez — e repetir à mão é a primeira
+        // coisa que se faz numa máquina que não está na sua frente.
+        let e = Execucao {
+            comando: "powercfg -setacvalueindex SCHEME_CURRENT SUB AJUSTE 100".to_string(),
+            codigo: Some(0),
+            stdout: String::new(),
+            stderr: String::new(),
+            erro: None,
+        };
+
+        assert_eq!(
+            e.resumo(),
+            "`powercfg -setacvalueindex SCHEME_CURRENT SUB AJUSTE 100` | saiu 0"
+        );
+    }
+
+    #[test]
+    fn saida_vazia_nao_vira_campo_vazio() {
+        // O `powercfg` que dá certo não escreve nada, e esse é o caso comum.
+        // "stdout= stderr=" em toda linha é ruído numa linha que já é longa.
+        let e = Execucao {
+            comando: "powercfg /x".to_string(),
+            codigo: Some(0),
+            stdout: "   \n ".to_string(),
+            stderr: String::new(),
+            erro: None,
+        };
+
+        assert!(!e.resumo().contains("stdout"), "{}", e.resumo());
+        assert!(!e.resumo().contains("stderr"), "{}", e.resumo());
+    }
+
+    #[test]
+    fn a_recusa_do_windows_entra_com_codigo_e_saida() {
+        let e = Execucao {
+            comando: "powercfg -setacvalueindex A B C 1".to_string(),
+            codigo: Some(1),
+            stdout: "Esquema de energia, subgrupo ou configuração\nespecificada não existe."
+                .to_string(),
+            stderr: String::new(),
+            erro: Some("o Windows recusou o comando".to_string()),
+        };
+
+        let r = e.resumo();
+
+        assert!(r.contains("saiu 1"), "{}", r);
+        // Numa linha só: o registro é lido linha a linha, e uma quebra no meio
+        // parte a informação em duas que ninguém junta de volta.
+        assert!(r.contains("especificada não existe."), "{}", r);
+        assert!(!r.contains('\n'), "{}", r);
+    }
+
+    #[test]
+    fn processo_sem_codigo_e_dito_e_nao_virado_zero() {
+        // Prazo estourado: o processo foi encerrado por nós e não terminou
+        // sozinho. Escrever "saiu 0" ali seria afirmar que deu certo.
+        let e = Execucao {
+            comando: "powercfg /x".to_string(),
+            codigo: None,
+            stdout: String::new(),
+            stderr: String::new(),
+            erro: Some("estourou o prazo".to_string()),
+        };
+
+        assert!(e.resumo().contains("não terminou sozinho"), "{}", e.resumo());
     }
 
     #[test]

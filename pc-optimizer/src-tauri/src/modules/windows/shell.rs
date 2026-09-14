@@ -44,6 +44,17 @@ pub struct CommandOutput {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
+    /// O número que o programa devolveu ao terminar.
+    ///
+    /// `success` é ele reduzido a sim ou não, e o número tem informação que o
+    /// booleano joga fora: o `powercfg` devolve 1 tanto para "este ajuste não
+    /// existe" quanto para "acesso negado", mas outros programas do Windows
+    /// separam os casos por código — e é isso que se procura no registro
+    /// quando um cliente manda o log.
+    ///
+    /// `None` quando o processo foi encerrado por um sinal em vez de terminar
+    /// sozinho: aqui, o caminho do prazo estourado.
+    pub codigo: Option<i32>,
 }
 
 /// Executa um programa do sistema e captura a saída, com o `PRAZO_PADRAO`.
@@ -161,6 +172,7 @@ pub fn esperar_com_prazo(
 
     Ok(CommandOutput {
         success: status.success(),
+        codigo: status.code(),
         stdout: String::from_utf8_lossy(&stdout).to_string(),
         stderr: String::from_utf8_lossy(&stderr).to_string(),
     })
@@ -489,6 +501,13 @@ mod sessao {
             if let Some(resto) = linha.trim_end().strip_prefix(marca.as_str()) {
                 return Resposta::Respondeu(CommandOutput {
                     success: !resto.trim().eq_ignore_ascii_case("False"),
+                    // A SESSÃO DO POWERSHELL NÃO TEM CÓDIGO DE SAÍDA.
+                    //
+                    // Aqui o processo continua vivo para o próximo comando: o
+                    // que chega é o `$?` do último, que já é o `success` acima.
+                    // Inventar um número seria pior que não ter: o log passaria
+                    // a afirmar um código que o Windows nunca devolveu.
+                    codigo: None,
                     stdout: coletado,
                     stderr: String::new(),
                 });
@@ -812,6 +831,7 @@ mod tests {
     fn saida(success: bool, stdout: &str, stderr: &str) -> Result<CommandOutput, String> {
         Ok(CommandOutput {
             success,
+            codigo: if success { Some(0) } else { Some(1) },
             stdout: stdout.to_string(),
             stderr: stderr.to_string(),
         })
