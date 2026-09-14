@@ -193,7 +193,7 @@ impl WindowsOptimizer {
     fn detail(&self, spec: &OptimizationSpec) -> Option<String> {
         if let Some(requirement) = spec.requirement {
             if !meets_requirement(spec) {
-                return Some(requirement.unmet_reason().to_string());
+                return Some(motivo_da_recusa(requirement));
             }
         }
 
@@ -2092,6 +2092,48 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
+/// Por que uma otimização não é oferecida nesta máquina.
+///
+/// ENCONTRADO NA MÁQUINA, e não num teste. Este computador roda uma imagem
+/// modificada onde o provedor WMI de armazenamento foi removido: tanto
+/// `Get-PhysicalDisk` quanto `Get-Partition -DriveLetter C` voltam vazios.
+/// `hardware::detect_system_storage` faz a coisa certa e devolve `Unknown` —
+/// mas a frase de recusa dizia, textualmente, **"seu disco de sistema não é
+/// SSD"**. Uma afirmação sobre o computador do cliente tirada de uma leitura
+/// que falhou, na tela, a caminho da decisão de compra dele.
+///
+/// A RECUSA CONTINUA, e é o lado certo: desligar o SysMain num disco mecânico
+/// piora a máquina, e sem saber o tipo do disco não dá para correr esse risco. O
+/// que muda é a frase — ela passa a dizer a verdade sobre o que aconteceu.
+pub fn motivo_da_recusa(requirement: catalog::Requirement) -> String {
+    use catalog::Requirement;
+    use hardware::StorageKind;
+
+    match requirement {
+        Requirement::SsdSystemDrive => match hardware::profile().system_storage {
+            StorageKind::Hdd => "Não oferecemos: seu disco de sistema é mecânico, e aqui isso \
+                                 deixaria o PC mais lento."
+                .to_string(),
+            // O caso desta máquina, e de qualquer Windows "lite" que tenha
+            // tirado o provedor de armazenamento.
+            StorageKind::Unknown => "Não oferecemos: não foi possível ler se o disco de sistema é \
+                                     SSD ou mecânico nesta máquina. Em disco mecânico este ajuste \
+                                     piora o PC, e sem saber o tipo não dá para arriscar."
+                .to_string(),
+            // Chegar aqui significaria que o requisito foi atendido e a
+            // otimização foi recusada mesmo assim.
+            StorageKind::Ssd => "Não oferecemos, e o motivo não pôde ser determinado.".to_string(),
+        },
+        Requirement::MinRamGb(minimo) => format!(
+            "Não oferecemos: esta máquina tem {:.0} GB de memória e este ajuste só ajuda a partir \
+             de {:.0} GB. Abaixo disso, aplicar piora o desempenho.",
+            hardware::profile().total_ram_gb,
+            minimo
+        ),
+        Requirement::MinWddm(_) => requirement.unmet_reason().to_string(),
+    }
+}
+
 /// Quem manda nesta máquina além do dono dela.
 ///
 /// Existe porque duas causas muito comuns de "não funcionou no PC do cliente"
@@ -2642,6 +2684,53 @@ mod tests {
         com_politica_de_grupo: false,
         imagem_de_terceiros: false,
     };
+
+    /// O catálogo INTEIRO visto por esta máquina, item a item. SÓ LÊ.
+    ///
+    /// É o mais perto que dá para chegar da pergunta "o que aconteceria no PC
+    /// do cliente" sem aplicar nada. Cada item aparece com o estado que a lista
+    /// mostraria e com o detalhe medido — e o que interessa não são os
+    /// `Available`, é tudo o que NÃO é: `Unavailable` diz que o produto se
+    /// recusa a oferecer, e `Unknown` diz que ele não conseguiu nem olhar.
+    ///
+    ///   cargo test --lib catalogo_visto_por -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn catalogo_visto_por_esta_maquina() {
+        use crate::modules::changelog::ChangeLog;
+
+        let otimizador = WindowsOptimizer::new();
+        let log = ChangeLog::load();
+        let lista = otimizador.list(&log);
+
+        let mut contagem = std::collections::BTreeMap::new();
+
+        for item in &lista {
+            *contagem.entry(format!("{:?}", item.state)).or_insert(0) += 1;
+        }
+
+        println!("\n=== {} otimizações ===", lista.len());
+        for (estado, quantas) in &contagem {
+            println!("{:<16} {}", estado, quantas);
+        }
+
+        println!("\n--- o que NÃO está disponível aqui ---");
+        for item in &lista {
+            if matches!(
+                item.state,
+                OptimizationState::Available | OptimizationState::Applied
+            ) {
+                continue;
+            }
+
+            println!(
+                "[{:?}] {}\n    {}",
+                item.state,
+                item.name,
+                item.detail.as_deref().unwrap_or("(sem detalhe)")
+            );
+        }
+    }
 
     /// O que o produto conclui sobre QUEM MANDA nesta máquina. Só lê.
     ///
