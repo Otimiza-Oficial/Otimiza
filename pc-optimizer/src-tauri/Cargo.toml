@@ -84,6 +84,11 @@ windows-sys = { version = "0.59", features = [
     # abrir em todas as outras. Por isso ela é carregada em tempo de execução,
     # e o fracasso da carga vira um estado do produto em vez de um erro.
     "Win32_System_LibraryLoader",
+    # `GetSystemPowerStatus`. Saber se a máquina está NA TOMADA AGORA — que é
+    # diferente de ter bateria. O plano de energia trata os dois modos separado
+    # em notebook, então o relatório de compatibilidade precisa dizer em qual
+    # deles a leitura foi feita, senão o número não quer dizer nada.
+    "Win32_System_Power",
 ] }
 
 

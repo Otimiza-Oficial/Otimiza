@@ -176,6 +176,55 @@ pub fn detectar() -> Maquina {
     }
 }
 
+/// Como a máquina está alimentada NESTE MOMENTO.
+///
+/// Diferente de "tem bateria": um notebook na tomada e o mesmo notebook fora
+/// dela usam lados opostos do plano de energia. Sem isto, um relatório que diz
+/// "estado mínimo do processador = 5%" não quer dizer nada — pode ser o valor
+/// certo da bateria ou o valor errado da tomada.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Alimentacao {
+    Tomada,
+    Bateria,
+    /// O Windows respondeu 255, que é o valor documentado para "desconhecido".
+    NaoSei,
+}
+
+/// Regra pura da leitura do `ACLineStatus`, separada para poder ser testada.
+///
+/// Os valores são os documentados em `SYSTEM_POWER_STATUS`: 0 fora da tomada,
+/// 1 na tomada, 255 desconhecido. São NÚMEROS, e portanto iguais em qualquer
+/// idioma do Windows.
+pub fn alimentacao_do_status(ac_line_status: u8) -> Alimentacao {
+    match ac_line_status {
+        0 => Alimentacao::Bateria,
+        1 => Alimentacao::Tomada,
+        _ => Alimentacao::NaoSei,
+    }
+}
+
+pub fn alimentacao() -> Alimentacao {
+    use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+
+    let mut status = SYSTEM_POWER_STATUS {
+        ACLineStatus: 255,
+        BatteryFlag: 255,
+        BatteryLifePercent: 255,
+        SystemStatusFlag: 0,
+        BatteryLifeTime: u32::MAX,
+        BatteryFullLifeTime: u32::MAX,
+    };
+
+    // A chamada falhar é diferente de a máquina não saber, mas o produto trata
+    // os dois igual de propósito: nos dois casos não temos a resposta, e
+    // `NaoSei` já diz exatamente isso.
+    if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
+        return Alimentacao::NaoSei;
+    }
+
+    alimentacao_do_status(status.ACLineStatus)
+}
+
 /// Separada da execução para poder ser testada: é ela que decide desktop ou
 /// notebook, e essa decisão muda todos os valores da bateria.
 pub fn ler_chassi_e_bateria(saida: &str) -> (Option<u32>, bool) {

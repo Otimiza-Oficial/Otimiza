@@ -2833,6 +2833,25 @@ pub async fn aplicar_plano_otimiza(
     }
 }
 
+/// Gera o relatório de compatibilidade desta máquina, no formato do lab.
+///
+/// Fica em `LIVRES`: é leitura pura, e é justamente de quem AINDA não comprou —
+/// ou de quem comprou e reclamou — que vem a evidência que falta. Trancar isso
+/// atrás da licença seria fechar a única porta por onde entra o dado das
+/// máquinas que este projeto não tem.
+#[tauri::command]
+pub async fn relatorio_de_compatibilidade() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::labcompat::gerar()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // ==================================================== A GUARDA DA GUARDA
 
 /// Confere que todo comando está classificado e que os que alteram o sistema
@@ -2870,6 +2889,7 @@ mod tests {
         "is_elevated",
         "diagnostico_de_energia",
         "simular_plano_otimiza",
+        "relatorio_de_compatibilidade",
         "relaunch_as_admin",
         "get_hardware_profile",
         "analyze_firmware",

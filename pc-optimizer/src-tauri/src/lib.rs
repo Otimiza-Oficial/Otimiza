@@ -96,6 +96,7 @@ pub fn run() {
             commands::is_elevated,
             commands::diagnostico_de_energia,
             commands::simular_plano_otimiza,
+            commands::relatorio_de_compatibilidade,
             commands::aplicar_plano_otimiza,
             commands::relaunch_as_admin,
             commands::get_hardware_profile,

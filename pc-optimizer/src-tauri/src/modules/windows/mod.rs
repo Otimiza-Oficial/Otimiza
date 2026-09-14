@@ -34,6 +34,7 @@ pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;
 pub mod jogos;
+pub mod labcompat;
 pub mod health;
 pub mod memory;
 pub mod network;
