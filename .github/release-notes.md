@@ -18,6 +18,122 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.4.0 — O produto passa a investigar em vez de só aplicar
+
+Esta versão junta dez mudanças com um fio só: **parar de aplicar no escuro.**
+
+## Por que o FPS está baixo aqui
+
+Um painel novo, no Painel principal, com **seis causas conhecidas de FPS baixo**
+— cada uma lida desta máquina, cada uma dizendo **como você confere sem
+depender da nossa palavra**:
+
+- memória de vídeo curta para servidor de RP
+- o jogo instalado num disco mecânico
+- faixas de PCI Express estreitas
+- memória em canal único ou abaixo da velocidade do pente
+- limite de temperatura ou de energia ativo
+- **e o próprio Otimiza**, quando a medição aponta para ele
+
+A ordem não é por gravidade: **se o Otimiza pode ter sido a causa, ele é o
+primeiro da lista.** Não o último, e não escondido depois de uma lista de
+defeitos da sua máquina.
+
+Este painel existe porque essa investigação foi feita à mão duas vezes numa
+semana, em dois atendimentos. Enquanto ela não era código, quem fazia era uma
+pessoa — e uma pessoa não atende cem clientes.
+
+## Testar um grupo de cada vez
+
+O catálogo foi dividido em **nove grupos** (A a I), cortados por onde o ajuste
+toca. O painel mostra, grupo por grupo, o que foi medido **antes e depois** e o
+veredito.
+
+A pergunta deixa de ser *"o Otimiza piorou meu PC?"* e vira *"qual destes nove
+grupos piorou meu PC?"* — e a segunda se responde com quatro medições.
+
+Inclusive os grupos que **não mudaram nada** aparecem: saber que um grupo não
+rende nesta máquina é o que permite parar de mexer nele.
+
+**Uma honestidade que a conta obrigou:** só três dos nove grupos dispensam
+reinício, e são os três que menos mexem em FPS. Quando um grupo que exige
+reinício piora, o Otimiza **avisa e oferece o botão** — não desfaz sozinho,
+porque as medições caíram em sessões diferentes e reverter em cima disso é
+reverter em cima de ruído.
+
+## Os três níveis
+
+Os perfis respondem *"para que serve este PC?"*. Os níveis respondem a pergunta
+que faltava: **"o que você aceita trocar?"**
+
+| | Promete | Exige |
+|---|---|---|
+| **Seguro** | Só o que não pode piorar nada | Nada |
+| **Competitivo** | + o que troca comodidade por recurso | Aceitar apps parados em segundo plano |
+| **Experimental** | + o que rende numa máquina e custa em outra | **Medir** |
+
+**Nenhum dos três troca segurança por desempenho** — nem o Experimental. E o
+Experimental **não tem botão de aplicar tudo**: aplicar aqueles ajustes juntos é
+literalmente o que derrubou o FPS de um cliente.
+
+## A conta que está rodando o Otimiza
+
+**Vinte e um dos quarenta e um ajustes são por CONTA, não pela máquina.** Se o
+Otimiza for aberto com a senha de outra conta de administrador — o que acontece
+sempre que a conta de quem usa o PC não é administradora —, esses vinte e um
+vão para um perfil que ninguém usa.
+
+E o produto confere e diz que deu certo, porque ele relê a chave da conta que
+gravou. A verificação está certa e a resposta está errada.
+
+Agora ele compara as duas contas e avisa, dizendo quantos ajustes são afetados,
+o que fazer, e **o que continua valendo do mesmo jeito**.
+
+## O que olhar na BIOS
+
+Cinco fases em ordem de risco. **Quem parar na Fase 1 — perfil de memória,
+Resizable BAR, sair do modo Legacy — pegou a maior parte do ganho disponível.**
+Nada ali é overclock: é usar a peça na velocidade escrita na caixa.
+
+O Otimiza **não altera nada na BIOS e não tem como fazer isso**. O modelo da sua
+placa-mãe aparece junto, porque é ele que faz você achar o manual certo em vez
+de seguir um vídeo de outra placa.
+
+E ele **se recusa a dar número de Curve Optimizer**: não existe valor seguro
+genérico, e um número copiado de vídeo produz uma máquina que passa em teste e
+trava no jogo três semanas depois.
+
+## O que o Otimiza se recusa a fazer
+
+Uma lista nova, com **dez ajustes famosos** que aparecem em toda lista de
+"aumente seu FPS" e que este produto não faz — cada um classificado em *não faz
+nada* / *o Windows já faz* / *piora*, com o motivo **em fato**:
+
+forçar HPET · limpador de memória · prioridade Tempo Real · desligar paginação ·
+listas de 60 serviços · limpeza de registro · desfragmentar SSD · desligar o
+antivírus por FPS · valores "secretos" de driver tirados de fórum.
+
+## Também nesta versão
+
+- **Faixas do PCI Express** — com o cuidado que ninguém tem: a largura é achado
+  a qualquer hora, mas a geração cai sozinha em repouso, e gritar "sua placa
+  está em PCIe 1.0" com a área de trabalho aberta é inventar problema.
+- **Nota de jogo** com 60% de peso no 1% pior. Uma máquina a 120 FPS engasgando
+  a 35 tira **menos** que uma a 90 com o 1% pior em 70 — porque ninguém sente
+  média, a pessoa sente a travada.
+- **Conflitos entre ajustes do próprio Otimiza**, com o mecanismo escrito.
+- **O plano de energia explicado pela geração do processador** — num Intel
+  anterior à 6ª geração, a preferência de energia é gravada, conferida, e
+  ignorada pelo silício. O produto passa a dizer isso.
+- **O plano de fábrica reconhecido em qualquer idioma**, pelo GUID: antes, num
+  Windows em espanhol ou alemão, o produto acusava o Windows do próprio cliente
+  de estar num plano de terceiro.
+
+984 testes automatizados.
+
+---
+
+
 # 2.2.1 — Em que disco o seu jogo está
 
 Um cliente com **SSD de 224 GB e HD mecânico de 466 GB** relatou **15 a 20 FPS
