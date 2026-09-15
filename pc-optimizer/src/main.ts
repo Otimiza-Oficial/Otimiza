@@ -4714,6 +4714,10 @@ async function loadOptimizations() {
     renderFilters();
     renderOptimizations();
     await avisarSeOHistoricoNaoFoiLido();
+    // DEPOIS da lista, e não antes: o aviso de conflito mostra os ajustes pelo
+    // NOME, e o nome vem da lista que acabou de carregar. Antes dela, ele
+    // mostraria identificadores.
+    await carregarConflitosDeAjuste();
   } catch (error) {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
@@ -7413,6 +7417,78 @@ function textoDaDecisao(e: Experimento): string {
       return `<p class="effect">Caiu ${Math.abs(d.queda_pct).toFixed(0)}% depois deste
                 grupo. ${escapeHtml(d.porque)}</p>`;
   }
+}
+
+
+// ------------------------------- ajustes do Otimiza que brigam entre si
+
+interface ConflitoDeAjuste {
+  id: string;
+  um: string;
+  outro: string;
+  tipo: "MesmoLugar" | "SeAnulam" | "DependeDoOutro" | "JuntosCustamCaro";
+  mecanismo: string;
+  conselho: string;
+}
+
+const NA_TELA_DO_CONFLITO: Record<ConflitoDeAjuste["tipo"], string> = {
+  MesmoLugar: "escrevem no mesmo lugar",
+  SeAnulam: "um anula o outro",
+  DependeDoOutro: "um depende do outro",
+  JuntosCustamCaro: "juntos custam caro",
+};
+
+/**
+ * Só aparece quando há conflito de verdade entre o que ESTÁ aplicado.
+ *
+ * Um aviso que aparece sempre é um aviso que ninguém lê — e este precisa ser
+ * lido, porque ele explica por que um teste A/B pode ter dado a resposta errada.
+ */
+async function carregarConflitosDeAjuste() {
+  const painel = element("conflitos-de-ajuste-painel");
+  const alvo = element("conflitos-de-ajuste");
+
+  let conflitos: ConflitoDeAjuste[];
+
+  try {
+    conflitos = await invoke<ConflitoDeAjuste[]>("conflitos_entre_ajustes");
+  } catch {
+    // Não conseguir ler o histórico já é dito em outro lugar da mesma aba.
+    painel.hidden = true;
+    return;
+  }
+
+  if (conflitos.length === 0) {
+    painel.hidden = true;
+    return;
+  }
+
+  painel.hidden = false;
+  alvo.innerHTML = conflitos
+    .map(
+      (c) => `
+      <div class="causa" data-severity="Important">
+        <p class="causa-titulo">
+          <strong>${escapeHtml(nomeDaOtimizacao(c.um))}</strong> e
+          <strong>${escapeHtml(nomeDaOtimizacao(c.outro))}</strong>
+          <span class="chip">${escapeHtml(NA_TELA_DO_CONFLITO[c.tipo])}</span>
+        </p>
+        <p class="effect">${escapeHtml(c.mecanismo)}</p>
+        <p class="causa-confirmar"><strong>O que fazer:</strong> ${escapeHtml(c.conselho)}</p>
+      </div>`
+    )
+    .join("");
+}
+
+/**
+ * O nome de tela de uma otimização, pelo id.
+ *
+ * Usa a lista que a aba já carregou. Sem ela, mostra o id — que é feio e é
+ * honesto; inventar um nome bonito aqui faria a tela e o catálogo poderem
+ * discordar sobre o mesmo ajuste.
+ */
+function nomeDaOtimizacao(id: string): string {
+  return optimizations.find((o) => o.id === id)?.name ?? id;
 }
 
 async function carregarProtocolo() {

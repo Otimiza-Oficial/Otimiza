@@ -1861,6 +1861,34 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: os ajustes do Otimiza que brigam entre si, nesta máquina.
+///
+/// Fica em `LIVRES`: compara a lista de aplicados com a tabela de conflitos
+/// conhecidos e não toca em nada. NÃO impede nada — há casos legítimos de
+/// querer os dois, e bloquear seria o produto decidindo no lugar da pessoa
+/// sobre a máquina dela.
+///
+/// É diferente de `detect_conflicts`, que procura dois PROGRAMAS disputando a
+/// mesma função. Este procura o problema de dentro de casa.
+#[tauri::command]
+pub async fn conflitos_entre_ajustes(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::modules::windows::conflitos::Conflito>, String> {
+    let aplicados: Vec<String> = state
+        .changes
+        .lock()
+        .await
+        .applied()
+        .iter()
+        .map(|a| a.optimization_id.clone())
+        .collect();
+
+    Ok(crate::modules::windows::conflitos::entre(&aplicados)
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
 /// Comando: a nota de jogo da medição mais recente.
 ///
 /// Fica em `LIVRES`: lê o arquivo de medições e calcula. A nota pesa 60% no 1%
@@ -3344,6 +3372,7 @@ mod tests {
         "o_que_nao_fazemos",
         "protocolo_de_grupos",
         "nota_do_jogo",
+        "conflitos_entre_ajustes",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

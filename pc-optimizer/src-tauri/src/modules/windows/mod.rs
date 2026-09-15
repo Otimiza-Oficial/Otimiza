@@ -34,6 +34,7 @@ pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;
 pub mod causas;
+pub mod conflitos;
 pub mod discodojogo;
 pub mod jogos;
 pub mod labcompat;

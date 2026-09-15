@@ -758,6 +758,28 @@
         <!-- ======================================================= OTIMIZAÇÕES -->
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
           <!--
+            AJUSTES DO OTIMIZA QUE BRIGAM ENTRE SI.
+
+            Diferente do detector de conflitos entre PROGRAMAS, que procura dois
+            antivírus varrendo ou dois otimizadores se desfazendo. Este procura
+            o problema de dentro de casa: dois ajustes NOSSOS que se anulam, se
+            somam mal, ou que ficam sem sentido juntos.
+
+            Importa porque o protocolo A/B afirma "este grupo rendeu aqui", e
+            essa afirmação só vale se os grupos forem independentes. Dois ajustes
+            que brigam fazem o teste do segundo medir o efeito do primeiro.
+
+            Só aparece quando há conflito de verdade entre o que ESTÁ aplicado.
+            Aviso que aparece sempre é aviso que ninguém lê.
+          -->
+          <section class="panel" id="conflitos-de-ajuste-painel" hidden>
+            <header class="panel-head">
+              <h2>Ajustes aplicados que brigam entre si</h2>
+            </header>
+            <div id="conflitos-de-ajuste"></div>
+          </section>
+
+          <!--
             A PROVA DE GANHO, NO LUGAR ONDE A OTIMIZAÇÃO ACONTECE
 
             Ela morava numa aba própria chamada "Resultado", e uma aba própria
