@@ -33,6 +33,7 @@ pub mod frames;
 pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;
+pub mod bios;
 pub mod causas;
 pub mod contadousuario;
 pub mod conflitos;

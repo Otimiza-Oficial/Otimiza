@@ -185,6 +185,7 @@ pub fn run() {
             commands::conflitos_entre_ajustes,
             commands::conta_que_esta_rodando,
             commands::niveis_de_otimizacao,
+            commands::passo_a_passo_da_bios,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,

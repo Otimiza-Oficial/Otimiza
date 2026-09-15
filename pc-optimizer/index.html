@@ -2146,6 +2146,27 @@
 
         <!-- ============================================================= SISTEMA -->
         <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
+
+          <!--
+            O PASSO A PASSO DA BIOS.
+
+            Este painel NÃO tem botão, e é a decisão central dele: o Windows não
+            altera firmware de PC de mesa, e uma ferramenta que encontrasse um
+            jeito de fazer isso seria uma ferramenta capaz de deixar a máquina do
+            cliente sem ligar.
+
+            O que ele faz é montar a lista do que vale olhar EM ORDEM DE RISCO,
+            com o modelo da placa-mãe ao lado — porque com esse dado a pessoa
+            acha o manual certo em vez de seguir um vídeo de outra placa.
+
+            Fechado por padrão: quem chegou aqui por FPS resolve o resto antes.
+          -->
+          <details class="panel" id="bios-painel">
+            <summary class="panel-head-resumo">
+              <h2>O que olhar na BIOS desta máquina</h2>
+            </summary>
+            <div id="bios-passos"></div>
+          </details>
           <!--
             TRÊS CARTÕES QUE ERAM A MESMA PERGUNTA
 

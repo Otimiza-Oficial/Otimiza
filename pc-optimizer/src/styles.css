@@ -5020,3 +5020,30 @@ circle.placa-parafuso {
 #conta-aviso {
   padding: 0 var(--s4) var(--s4);
 }
+
+/*
+  A MESMA CAIXA, PARA PROSA.
+
+  `.bloco-de-texto` existe para texto PRÉ-FORMATADO — o relatório de suporte,
+  que o cliente copia e cola no atendimento e cujas quebras de linha fazem
+  parte do conteúdo. Por isso ele tem `white-space: pre`.
+
+  Eu usei essa classe para parágrafos comuns em quatro telas, e o resultado foi
+  uma barra de rolagem horizontal no meio do texto — pego numa captura da tela
+  de BIOS, onde o nome da placa-mãe é longo. Esta variante é a mesma caixa com
+  quebra de linha normal.
+*/
+.bloco-de-prosa {
+  margin-top: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.25));
+  color: var(--text-dim);
+  font-size: var(--t-body);
+  line-height: 1.6;
+}
+
+.bloco-de-prosa strong {
+  color: var(--text);
+}

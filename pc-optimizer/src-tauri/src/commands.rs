@@ -379,6 +379,56 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
     }
 }
 
+/// Comando: o que olhar na BIOS desta máquina, em fases.
+///
+/// Fica em `LIVRES`: **este comando não escreve absolutamente nada.** O Windows
+/// não altera firmware de PC de mesa, e uma ferramenta que encontrasse um jeito
+/// de fazer isso seria uma ferramenta capaz de deixar a máquina do cliente sem
+/// ligar.
+///
+/// Os dois achados que tornam passos relevantes — memória abaixo do nominal e
+/// Resizable BAR desligado — vêm de quem já mede isso. Remedir aqui faria o
+/// produto poder mostrar dois números diferentes para o mesmo fato.
+#[tauri::command]
+pub fn passo_a_passo_da_bios() -> BiosNaTela {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::{bios, firmware, planoenergia, rbar};
+
+        let leitura = bios::ler();
+
+        let memoria_abaixo = firmware::analyze_memory_ou_lacuna()
+            .map(|achados| achados.iter().any(|a| a.id == "memory_xmp_off"))
+            .unwrap_or(false);
+
+        let rebar_desligado = matches!(
+            rbar::analyze().estado,
+            rbar::EstadoDoRbar::DesligadoESuportado
+        );
+
+        let amd = matches!(
+            planoenergia::detectar().fabricante_da_cpu,
+            planoenergia::FabricanteDaCpu::Amd
+        );
+
+        BiosNaTela {
+            passos: bios::montar(&leitura, memoria_abaixo, rebar_desligado, amd),
+            leitura,
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        BiosNaTela::default()
+    }
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct BiosNaTela {
+    pub leitura: crate::modules::windows::bios::Leitura,
+    pub passos: Vec<crate::modules::windows::bios::Passo>,
+}
+
 /// Comando: os três níveis — Seguro, Competitivo, Experimental.
 ///
 /// Fica em `LIVRES`: é a definição dos níveis, montada do catálogo. Não aplica
@@ -3465,6 +3515,7 @@ mod tests {
         "conflitos_entre_ajustes",
         "conta_que_esta_rodando",
         "niveis_de_otimizacao",
+        "passo_a_passo_da_bios",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

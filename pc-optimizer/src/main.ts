@@ -1162,6 +1162,7 @@ function ligarSubabas() {
 let reparoCarregado = false;
 let planoVistoriado = false;
 let discosCarregados = false;
+let biosCarregada = false;
 
 function showTab(name: string) {
   if (name === "reparo" && !reparoCarregado) {
@@ -1172,6 +1173,13 @@ function showTab(name: string) {
   // Carrega ao abrir a aba, e uma vez só. A leitura passa pelo PowerShell e
   // varre as bibliotecas de jogo — é exatamente o tipo de custo que não pode
   // entrar na abertura do programa, pelo mesmo motivo da vistoria do plano.
+  // A BIOS carrega ao abrir a aba Sistema, e uma vez só: a leitura passa pelo
+  // PowerShell e não pode entrar na abertura do programa.
+  if (name === "sistema" && !biosCarregada) {
+    biosCarregada = true;
+    void carregarPassoAPassoDaBios();
+  }
+
   if (name === "jogos" && !discosCarregados) {
     discosCarregados = true;
     void carregarOndeOsJogosMoram();
@@ -3955,7 +3963,7 @@ function renderDiagnostico(d: DiagnosticoDeEnergia): string {
   // ajustes do plano pesa mais NESTE computador. É a parte adaptativa do
   // diagnóstico — a mesma tabela de ajustes rende diferente conforme quem
   // comanda a frequência do processador.
-  const governo = `<p class="bloco-de-texto">${escapeHtml(d.explicacao_do_governo)}</p>`;
+  const governo = `<p class="bloco-de-prosa">${escapeHtml(d.explicacao_do_governo)}</p>`;
 
   return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${governo}${avisos}`;
 }
@@ -4760,6 +4768,106 @@ interface NivelNaTela {
 
 let niveis: NivelNaTela[] = [];
 let nivelEscolhido: string | null = null;
+
+
+// ------------------------------------------- o passo a passo da BIOS
+
+interface PassoDaBios {
+  id: string;
+  fase: string;
+  titulo: string;
+  onde: string;
+  o_que_faz: string;
+  risco_e_volta: string;
+  medido_aqui: boolean;
+}
+
+interface BiosNaTela {
+  leitura: {
+    placa_mae: string | null;
+    versao_da_bios: string | null;
+    data_da_bios: string | null;
+    uefi: boolean | null;
+    secure_boot: boolean | null;
+    lacunas: string[];
+  };
+  passos: PassoDaBios[];
+}
+
+const NA_TELA_DA_FASE: Record<string, string> = {
+  UsarOQueTem: "Fase 1 — ligar o que você já comprou",
+  Documentado: "Fase 2 — o que o fabricante documenta",
+  ExigeTeste: "Fase 3 — exige teste de estabilidade",
+  NaoOrientamos: "Fase 4 — overclock manual",
+  UltimoRecurso: "Fase 5 — atualizar a BIOS",
+};
+
+async function carregarPassoAPassoDaBios() {
+  const alvo = element("bios-passos");
+
+  let b: BiosNaTela;
+
+  try {
+    b = await invoke<BiosNaTela>("passo_a_passo_da_bios");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  const l = b.leitura;
+  const identificacao = l.placa_mae
+    ? `<p class="bloco-de-prosa"><strong>${escapeHtml(l.placa_mae)}</strong>${
+        l.versao_da_bios ? ` · BIOS ${escapeHtml(l.versao_da_bios)}` : ""
+      }${l.uefi === false ? " · iniciando em modo Legacy" : ""}${
+        l.uefi === true ? " · UEFI" : ""
+      }. Use este modelo para achar o manual certo — os nomes das opções mudam de
+      placa para placa, e um vídeo de outra placa manda você procurar um menu que
+      não existe aqui.</p>`
+    : "";
+
+  // Um cabeçalho de fase por vez, e só quando a fase tem passos. Fase vazia na
+  // tela é uma etapa que o cliente procura e não encontra.
+  let faseAtual = "";
+  const corpo = b.passos
+    .map((p) => {
+      const cabecalho =
+        p.fase === faseAtual
+          ? ""
+          : `<p class="profiles-label">${escapeHtml(NA_TELA_DA_FASE[p.fase] ?? p.fase)}</p>`;
+      faseAtual = p.fase;
+
+      // "Medido aqui" separa "isto vale para você" de "isto é boa ideia em
+      // geral". Sem essa marca a lista seria igual em toda máquina — que é
+      // exatamente o que os vídeos de tweak fazem.
+      const marca = p.medido_aqui
+        ? `<span class="chip" data-recommended="true">medido nesta máquina</span>`
+        : "";
+
+      return (
+        cabecalho +
+        `<div class="causa" data-severity="${p.medido_aqui ? "Ok" : "Neutral"}">
+           <p class="causa-titulo"><strong>${escapeHtml(p.titulo)}</strong> ${marca}</p>
+           <p class="effect">${escapeHtml(p.o_que_faz)}</p>
+           <p class="causa-medido"><strong>Onde:</strong> ${escapeHtml(p.onde)}</p>
+           <p class="causa-confirmar"><strong>Risco e como voltar:</strong>
+              ${escapeHtml(p.risco_e_volta)}</p>
+         </div>`
+      );
+    })
+    .join("");
+
+  const lacunas = l.lacunas.length
+    ? `<p class="hint">${l.lacunas.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  alvo.innerHTML =
+    `<p class="hint">O Otimiza não altera nada na BIOS e não tem como fazer isso — esta
+       lista é para você conferir com o manual da sua placa. Ela está em ordem de risco:
+       quem parar na Fase 1 pegou a maior parte do ganho disponível.</p>` +
+    identificacao +
+    corpo +
+    lacunas;
+}
 
 async function carregarNiveis() {
   try {
@@ -7658,7 +7766,7 @@ async function carregarProtocolo() {
   } catch (erro) {
     // Sem medição nenhuma o backend recusa, e a recusa EXPLICA o que fazer —
     // ela não é um erro a esconder, é a primeira instrução do protocolo.
-    alvo.innerHTML = `<p class="bloco-de-texto">${escapeHtml(String(erro))}</p>`;
+    alvo.innerHTML = `<p class="bloco-de-prosa">${escapeHtml(String(erro))}</p>`;
     return;
   }
 
@@ -7752,7 +7860,7 @@ async function carregarPorQueOFpsEstaBaixo() {
   const corpo =
     r.suspeitos.length > 0
       ? cartoes
-      : `<p class="bloco-de-texto">Nenhuma das causas conhecidas de FPS baixo foi
+      : `<p class="bloco-de-prosa">Nenhuma das causas conhecidas de FPS baixo foi
            encontrada aqui: memória de vídeo curta, jogo em disco mecânico, faixas de
            PCI Express estreitas, memória abaixo da velocidade nominal ou em canal
            único, e limite de temperatura ou energia ativo. Isso não quer dizer que o
@@ -7932,7 +8040,7 @@ async function notaDoJogoEmHtml(): Promise<string> {
   if (nota.estado === "SemAmostra") return "";
 
   return `
-    <p class="bloco-de-texto"><strong>Nota ${nota.nota} de 100</strong> —
+    <p class="bloco-de-prosa"><strong>Nota ${nota.nota} de 100</strong> —
       ${nota.fps_medio.toFixed(0)} FPS de média e ${nota.low_1pct.toFixed(0)} no 1% pior.
       O 1% pior pesa mais que a média nesta conta, porque é ele que você sente.
       A nota descreve esta máquina neste jogo e serve para comparar antes e depois,
