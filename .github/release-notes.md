@@ -18,6 +18,73 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.1.3 — O Otimiza passa a conferir o próprio trabalho
+
+As duas versões anteriores consertaram um erro e fecharam a porta por onde ele
+passou. Esta fecha a terceira: **o produto não tinha como perceber que tinha
+piorado a máquina.**
+
+## O que estava acontecendo
+
+O Otimiza já media os quadros sozinho. Enquanto o cliente joga, ele mede a cada
+vinte minutos e guarda o resultado — FPS, 1% piores quadros, engasgos — junto
+com quantas otimizações estavam aplicadas naquele momento.
+
+No incidente da 2.1.0, **as duas medições estavam gravadas no disco daquele
+cliente**: as de antes, com o FPS alto, e as de depois, com ele pela metade. No
+mesmo arquivo, uma embaixo da outra.
+
+Ninguém comparou. Quem percebeu foi o cliente, olhando o contador de quadros, e
+quem contou fomos avisados dias depois, por mensagem.
+
+## O que muda
+
+O Otimiza compara sozinho, jogo por jogo, e **avisa na hora quando piorou**:
+
+> **O FiveM.exe está pior depois que otimizamos.**
+> Antes: 201 FPS · 1% piores 147. Depois: 102 FPS · 1% piores 72.
+> São 49% a menos, medidos nesta máquina.
+
+O aviso interrompe de propósito, com um botão que leva direto para onde se
+desfaz. Um alerta que só aparecesse para quem fosse olhar a aba certa não teria
+evitado nada — no incidente, o cliente não estava procurando defeito no
+Otimiza, estava jogando.
+
+E ele funciona **com o histórico que já existe** na máquina de quem tem a 2.0
+ou mais nova. Não é preciso medir nada de novo.
+
+## As quatro regras da comparação
+
+Acusar o próprio produto exige mais cuidado que elogiá-lo, não menos:
+
+1. **Só compara o mesmo jogo.** Misturar dois jogos produz "queda" onde só
+   houve o cliente trocar de jogo.
+2. **Só compara medição confiável.** Amostra curta não é evidência de nada —
+   nem a favor, nem contra.
+3. **Precisa de amostra dos dois lados.** Uma medição de cada lado é
+   coincidência, não tendência. E a conta é sobre a mediana: uma partida ruim
+   não arrasta a mediana como arrasta a média.
+4. **A margem é larga.** Abaixo de 8% é a variação normal entre duas sessões do
+   mesmo jogo. Gritar "piorou" em cima de ruído gasta a confiança do cliente
+   exatamente como prometer ganho que não existe.
+
+E o **1% pior decide junto com a média**: um ajuste que segura o FPS médio e
+destrói o engasgo deixou o jogo pior de jogar, e chamar isso de "igual" seria
+usar a média para esconder o que o cliente sente.
+
+## O que ele NÃO faz, e por quê
+
+**Não desfaz nada sozinho.** As medições de antes e de depois vêm de sessões
+diferentes, em dias diferentes, em lugares diferentes do mapa. Isso é forte o
+bastante para avisar com os números na mão; não é forte o bastante para o
+produto desfazer, sozinho e sem a pessoa por perto, um trabalho que ela pediu —
+ainda mais quando desfazer exige administrador e às vezes reiniciar.
+
+Os números aparecem, o botão fica ao lado, e quem decide é quem joga.
+
+---
+
+
 # 2.1.2 — O botão grande não pode mais custar FPS
 
 A 2.1.1 consertou o erro de valor que derrubou o FPS de um cliente. Esta versão

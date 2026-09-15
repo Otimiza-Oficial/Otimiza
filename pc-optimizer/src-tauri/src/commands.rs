@@ -1860,6 +1860,26 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: o Otimiza conferindo o próprio trabalho, jogo por jogo.
+///
+/// Compara os quadros medidos ANTES das otimizações com os medidos DEPOIS, com
+/// o histórico que o vigia já vinha gravando na máquina. Existe porque no
+/// incidente da 2.1.0 os dois números estavam no disco do cliente, um embaixo
+/// do outro, e ninguém comparou — quem percebeu a queda foi ele, dias depois.
+///
+/// Só leitura. `Err` quando o arquivo de medições não pôde ser lido: uma lista
+/// vazia ali significaria "nenhum jogo piorou", que é uma afirmação e não uma
+/// falha de leitura.
+#[tauri::command]
+pub async fn conferir_o_proprio_trabalho(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::modules::regressao::Veredito>, String> {
+    let medicoes = crate::modules::medicoes::ler()?;
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    Ok(crate::modules::regressao::todos(&medicoes, aplicadas))
+}
+
 /// Comando: mostra o que um perfil MUDARIA na configuração do jogo.
 ///
 /// Não escreve nada. Existe para a tela poder listar chave por chave, com o
@@ -3162,6 +3182,7 @@ mod tests {
         "checar_essenciais",
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",
+        "conferir_o_proprio_trabalho",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

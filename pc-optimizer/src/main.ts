@@ -985,13 +985,35 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
   // O vigia mediu o jogo sozinho: a lista da prova precisa aparecer sem a
   // pessoa trocar de aba.
-  await listen("prova:automatica", () => void carregarMedicoesAutomaticas());
+  await listen("prova:automatica", () => {
+    void carregarMedicoesAutomaticas();
+    // Cada medição nova pode ser a que fecha a conta. Conferir aqui é o que
+    // faz o aviso aparecer DURANTE a sessão em que o jogo piorou, e não na
+    // próxima vez que a pessoa abrir o programa.
+    void conferirOProprioTrabalho();
+  });
+
+  // O aviso leva para onde se desfaz, e não para uma tela de explicação.
+  element("regressao-ver").addEventListener("click", () => {
+    showTab("otimizacoes");
+    element("regressao-faixa").hidden = true;
+  });
+  // Fechar esconde só até a próxima medição: o problema continua lá, e o
+  // aviso volta quando houver dado novo. Guardar "não mostrar mais" seria o
+  // produto ajudando o cliente a esquecer que perdeu FPS.
+  element("regressao-fechar").addEventListener("click", () => {
+    element("regressao-faixa").hidden = true;
+  });
   // As preferências vêm antes de tudo: elas decidem o intervalo de medição e o
   // que a lista mostra.
   await loadPreferences();
 
 
   await Promise.all([
+    // A conferência do próprio trabalho entra na abertura, junto com o resto.
+    // Ela lê um arquivo pequeno e não chama o Windows, então o orçamento de
+    // abertura que a 1.7 comprou continua de pé.
+    conferirOProprioTrabalho(),
     loadIdentity(),
     checkAccess(),
     loadBaselineState(),
@@ -7139,6 +7161,76 @@ interface MedicaoAutomatica {
  * pessoa ver o que estava ligado em cada momento — e decidir se vale medir o
  * antes e depois de verdade.
  */
+
+// ------------------------------------------------- o Otimiza se conferindo
+
+/**
+ * O veredito do backend sobre o PRÓPRIO trabalho, jogo por jogo.
+ *
+ * O Rust manda o estado e os números; esta tela só escolhe a frase e a cor.
+ * É a regra de `a_tela_nao_decide_cor_comparando_texto_do_backend`, e aqui ela
+ * pesa mais que em qualquer outro lugar: é a tela que acusa o próprio produto.
+ */
+interface LadoDaMedicao {
+  fps: number;
+  low_1pct: number;
+  amostras: number;
+}
+
+interface VereditoDeRegressao {
+  jogo: string;
+  desfecho: { desfecho: "SemAmostra" | "Igual" | "Melhorou" | "Piorou" | "PiorouMuito" };
+  antes: LadoDaMedicao | null;
+  depois: LadoDaMedicao | null;
+  variacao_fps_pct: number | null;
+  variacao_low_pct: number | null;
+}
+
+/**
+ * Confere se o Otimiza piorou algum jogo nesta máquina e, se piorou, avisa
+ * sem esperar a pessoa procurar.
+ *
+ * NÃO desfaz nada sozinho. As medições de antes e de depois vêm de sessões
+ * diferentes, e isso basta para avisar com os números na mão — não basta para
+ * o produto desfazer, sozinho e sem a pessoa por perto, um trabalho que ela
+ * pediu. Ver o cabeçalho de `regressao.rs`.
+ */
+async function conferirOProprioTrabalho() {
+  const faixa = element("regressao-faixa");
+  const texto = element("regressao-texto");
+
+  let vereditos: VereditoDeRegressao[];
+
+  try {
+    vereditos = await invoke<VereditoDeRegressao[]>("conferir_o_proprio_trabalho");
+  } catch {
+    // Não conseguir ler as medições não é notícia para interromper ninguém:
+    // a lista da prova já mostra a falha de leitura na aba dela.
+    faixa.hidden = true;
+    return;
+  }
+
+  const pior = vereditos.find(
+    (v) => v.desfecho.desfecho === "Piorou" || v.desfecho.desfecho === "PiorouMuito"
+  );
+
+  if (!pior || pior.antes === null || pior.depois === null) {
+    faixa.hidden = true;
+    return;
+  }
+
+  const queda = Math.abs(Math.round(pior.variacao_fps_pct ?? 0));
+
+  texto.innerHTML = `
+    <strong>O ${escapeHtml(pior.jogo)} está pior depois que otimizamos.</strong><br>
+    Antes: ${pior.antes.fps.toFixed(0)} FPS · 1% piores ${pior.antes.low_1pct.toFixed(0)}.
+    Depois: ${pior.depois.fps.toFixed(0)} FPS · 1% piores ${pior.depois.low_1pct.toFixed(0)}.
+    São ${queda}% a menos, medidos nesta máquina.
+  `;
+
+  faixa.hidden = false;
+}
+
 async function carregarMedicoesAutomaticas() {
   const alvo = element("prova-automaticas");
 

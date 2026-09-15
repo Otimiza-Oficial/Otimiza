@@ -376,6 +376,34 @@
       </button>
 
       <!--
+        O AVISO DE QUE O OTIMIZA PIOROU A MÁQUINA.
+
+        Existe por causa do incidente da 2.1.0: um cliente aplicou tudo e o FPS
+        dele caiu pela metade. O produto tinha as duas medições gravadas no
+        disco daquela máquina — antes e depois — e nunca as comparou. Quem
+        percebeu foi ele, olhando o contador de quadros, e quem contou foi ele,
+        dias depois, por mensagem.
+
+        Este aviso INTERROMPE de propósito. Um alerta que só aparece para quem
+        foi olhar a aba certa não teria evitado nada: no incidente, o cliente
+        não estava procurando defeito no Otimiza, estava jogando.
+
+        Os números são os medidos nesta máquina. O botão leva para as
+        otimizações, onde dá para desfazer.
+      -->
+      <div class="atualizacao-faixa faixa-regressao" id="regressao-faixa" hidden role="alert">
+        <span class="atualizacao-texto" id="regressao-texto"></span>
+        <div class="atualizacao-acoes">
+          <button class="btn btn-ghost" id="regressao-ver" type="button">
+            Ver o que desfazer
+          </button>
+          <button class="atualizacao-fechar" id="regressao-fechar" type="button" aria-label="Fechar aviso">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      </div>
+
+      <!--
         A FAIXA DE VERSÃO NOVA.
 
         O Otimiza não se atualiza sozinho e não abre porta nenhuma: este texto

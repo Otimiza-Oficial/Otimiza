@@ -4901,3 +4901,37 @@ circle.placa-parafuso {
 .gpupref-linha[data-fraca="true"] .gpupref-estado {
   color: var(--accent);
 }
+
+/*
+  A FAIXA DE REGRESSÃO — o Otimiza avisando que piorou a máquina.
+
+  Mesma forma da faixa de atualização, cor de alerta. A cor sai daqui e não de
+  comparação de texto no TypeScript: é a regra da casa desde
+  `a_tela_nao_decide_cor_comparando_texto_do_backend`.
+
+  `bottom` maior que o da faixa de atualização para as duas não se cobrirem
+  quando aparecem juntas — que é justamente o dia em que a pessoa mais precisa
+  ler as duas.
+*/
+.faixa-regressao {
+  bottom: calc(var(--s5) * 2 + 56px);
+  border-color: var(--amber);
+  /*
+    Empilhado, e a faixa de atualização não é: esta mensagem carrega quatro
+    números medidos, e na coluna estreita que sobra ao lado dos botões ela
+    quebra em sete linhas. Quem está lendo que perdeu FPS não pode ter que
+    decifrar a frase também.
+  */
+  flex-direction: column;
+  align-items: stretch;
+  width: min(520px, calc(100vw - var(--s5) * 2));
+  line-height: 1.5;
+}
+
+.faixa-regressao .atualizacao-acoes {
+  justify-content: flex-end;
+}
+
+.faixa-regressao .atualizacao-texto strong {
+  color: var(--amber);
+}
