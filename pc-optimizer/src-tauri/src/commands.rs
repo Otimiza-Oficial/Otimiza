@@ -1861,6 +1861,51 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: o Otimiza está rodando pela mesma conta que está usando o PC?
+///
+/// Fica em `LIVRES`: só lê. É a verificação que pega a classe mais silenciosa
+/// de "funcionou aqui e não lá" — vinte e um ajustes do catálogo são por CONTA,
+/// e elevados por outra eles vão para um perfil que ninguém usa, com o produto
+/// conferindo e dizendo que deu certo.
+#[tauri::command]
+pub fn conta_que_esta_rodando() -> ContaDoUsuario {
+    #[cfg(target_os = "windows")]
+    {
+        let conta = crate::modules::windows::contadousuario::verificar();
+        let quantos = crate::modules::windows::contadousuario::quantos_sao_por_conta();
+
+        ContaDoUsuario {
+            explicacao: crate::modules::windows::contadousuario::explicar(&conta, quantos),
+            ajustes_por_conta: quantos,
+            conta,
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        ContaDoUsuario::default()
+    }
+}
+
+/// O que a tela recebe: o estado, o número, e a frase já escolhida pelo Rust.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContaDoUsuario {
+    #[cfg(target_os = "windows")]
+    pub conta: crate::modules::windows::contadousuario::Conta,
+    pub ajustes_por_conta: usize,
+    pub explicacao: String,
+}
+
+#[cfg(not(target_os = "windows"))]
+impl Default for ContaDoUsuario {
+    fn default() -> Self {
+        ContaDoUsuario {
+            ajustes_por_conta: 0,
+            explicacao: "Só no Windows.".to_string(),
+        }
+    }
+}
+
 /// Comando: os ajustes do Otimiza que brigam entre si, nesta máquina.
 ///
 /// Fica em `LIVRES`: compara a lista de aplicados com a tabela de conflitos
@@ -3373,6 +3418,7 @@ mod tests {
         "protocolo_de_grupos",
         "nota_do_jogo",
         "conflitos_entre_ajustes",
+        "conta_que_esta_rodando",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

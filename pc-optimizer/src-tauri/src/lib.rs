@@ -183,6 +183,7 @@ pub fn run() {
             commands::protocolo_de_grupos,
             commands::nota_do_jogo,
             commands::conflitos_entre_ajustes,
+            commands::conta_que_esta_rodando,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,

@@ -4718,6 +4718,9 @@ async function loadOptimizations() {
     // NOME, e o nome vem da lista que acabou de carregar. Antes dela, ele
     // mostraria identificadores.
     await carregarConflitosDeAjuste();
+    // O aviso de conta vem junto: ele explica por que 21 desses ajustes podem
+    // ser aplicados, conferidos, e não fazer diferença nenhuma.
+    await carregarContaQueEstaRodando();
   } catch (error) {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
@@ -7444,6 +7447,55 @@ const NA_TELA_DO_CONFLITO: Record<ConflitoDeAjuste["tipo"], string> = {
  * Um aviso que aparece sempre é um aviso que ninguém lê — e este precisa ser
  * lido, porque ele explica por que um teste A/B pode ter dado a resposta errada.
  */
+
+// -------------------------- a conta que está rodando vs a que está jogando
+
+interface ContaDoUsuario {
+  conta:
+    | { estado: "Mesma"; usuario: string }
+    | { estado: "Diferente"; processo: string; shell: string }
+    | { estado: "NaoDeuParaLer"; motivo: string };
+  ajustes_por_conta: number;
+  explicacao: string;
+}
+
+/**
+ * O aviso mais importante da aba de otimizações, e o mais silencioso sem ele.
+ *
+ * Só aparece quando as contas SÃO diferentes ou quando não deu para ler. No
+ * caso normal ele fica escondido: um aviso que aparece sempre é um aviso que
+ * ninguém lê, e este precisa ser lido — ele explica por que vinte e um ajustes
+ * vão ser aplicados, conferidos, e não vão fazer diferença nenhuma.
+ */
+async function carregarContaQueEstaRodando() {
+  const painel = element("conta-painel");
+  const alvo = element("conta-aviso");
+
+  let c: ContaDoUsuario;
+
+  try {
+    c = await invoke<ContaDoUsuario>("conta_que_esta_rodando");
+  } catch {
+    painel.hidden = true;
+    return;
+  }
+
+  if (c.conta.estado === "Mesma") {
+    painel.hidden = true;
+    return;
+  }
+
+  // "Não deu para ler" não é alarme vermelho, mas também não some: é uma
+  // verificação que não aconteceu, e ela fica dita como tal.
+  painel.hidden = false;
+  painel.dataset.severity = c.conta.estado === "Diferente" ? "Important" : "Neutral";
+
+  alvo.innerHTML = c.explicacao
+    .split("\n\n")
+    .map((p) => `<p class="effect">${escapeHtml(p)}</p>`)
+    .join("");
+}
+
 async function carregarConflitosDeAjuste() {
   const painel = element("conflitos-de-ajuste-painel");
   const alvo = element("conflitos-de-ajuste");

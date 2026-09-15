@@ -758,6 +758,29 @@
         <!-- ======================================================= OTIMIZAÇÕES -->
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
           <!--
+            A CONTA QUE ESTÁ RODANDO O OTIMIZA.
+
+            Vinte e um ajustes do catálogo são por CONTA e não pela máquina. Se
+            o cliente elevar o Otimiza digitando a senha de OUTRA conta — o que
+            acontece toda vez que a conta dele não é administradora —, esses
+            ajustes vão para um perfil que ninguém usa.
+
+            E o produto confere e diz que deu certo: ele relê a chave que acabou
+            de escrever, encontra o valor, e reporta sucesso. A verificação está
+            certa e a resposta está errada, porque a pergunta era sobre a conta
+            errada.
+
+            Some da tela quando as contas são a mesma. Aviso que aparece sempre
+            é aviso que ninguém lê.
+          -->
+          <section class="panel" id="conta-painel" hidden data-severity="Important">
+            <header class="panel-head">
+              <h2>A conta que está rodando o Otimiza</h2>
+            </header>
+            <div id="conta-aviso"></div>
+          </section>
+
+          <!--
             AJUSTES DO OTIMIZA QUE BRIGAM ENTRE SI.
 
             Diferente do detector de conflitos entre PROGRAMAS, que procura dois

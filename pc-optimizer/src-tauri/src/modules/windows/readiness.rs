@@ -415,11 +415,43 @@ pub fn plano_ativo_e_de_terceiro() -> Option<String> {
         .into_iter()
         .find(|(guid, _)| guid.eq_ignore_ascii_case(&ativo))?;
 
-    if nome_e_do_windows(&nome) {
+    // PELO GUID PRIMEIRO, e o nome só como reserva.
+    //
+    // A lista de nomes cobria português e inglês, e só. Num Windows em espanhol
+    // o plano de fábrica se chama "Alto rendimiento"; em francês, "Performances
+    // élevées"; em alemão, "Höchstleistung". Nenhum casava, e o produto acusava
+    // o plano DE FÁBRICA de ser plano de terceiro — um alarme falso sobre o
+    // Windows do próprio cliente.
+    //
+    // Os quatro planos internos têm GUID fixo em toda instalação do Windows, em
+    // qualquer idioma. Perguntar pelo GUID elimina a dependência de tradução,
+    // que é a mesma lição do `TIPO_DE_INÍCIO` e do `ESTADO: 1 STOPPED`.
+    if e_guid_de_fabrica(&ativo) || nome_e_do_windows(&nome) {
         None
     } else {
         Some(nome)
     }
+}
+
+/// Os quatro planos que vêm com o Windows, por GUID.
+///
+/// Fixos e iguais em toda instalação — são constantes que a Microsoft publica,
+/// não identificadores de máquina. É o único jeito de reconhecer um plano de
+/// fábrica sem depender do idioma do sistema.
+const GUIDS_DE_FABRICA: [&str; 4] = [
+    // Equilibrado / Balanced / Equilibrado / Ausbalanciert
+    "381b4222-f694-41f0-9685-ff5bb260df2e",
+    // Alto desempenho / High performance / Alto rendimiento / Höchstleistung
+    "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+    // Economia de energia / Power saver / Economizador
+    "a1841308-3541-4fab-bc81-f71556f20b4a",
+    // Desempenho máximo / Ultimate Performance
+    "e9a42b02-d5df-448d-aa00-03f14749eb61",
+];
+
+pub fn e_guid_de_fabrica(guid: &str) -> bool {
+    let limpo = guid.trim().trim_matches(|c| c == '{' || c == '}');
+    GUIDS_DE_FABRICA.iter().any(|g| g.eq_ignore_ascii_case(limpo))
 }
 
 /// Nomes que o Windows dá aos planos de fábrica, nos idiomas que o produto
@@ -505,6 +537,37 @@ pub fn plano_ativo() -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// O DEFEITO QUE ESTE CONSERTO TIRA: num Windows em espanhol, francês ou
+    /// alemão, o plano DE FÁBRICA não casava com nenhum nome da lista, e o
+    /// produto acusava o Windows do próprio cliente de ter plano de terceiro.
+    ///
+    /// Pelo GUID, o idioma deixa de importar.
+    #[test]
+    fn o_plano_de_fabrica_e_reconhecido_em_qualquer_idioma() {
+        // Os quatro, escritos como o `powercfg` os imprime.
+        for guid in [
+            "381b4222-f694-41f0-9685-ff5bb260df2e",
+            "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+            "a1841308-3541-4fab-bc81-f71556f20b4a",
+            "e9a42b02-d5df-448d-aa00-03f14749eb61",
+        ] {
+            assert!(e_guid_de_fabrica(guid), "{guid} é de fábrica");
+            assert!(e_guid_de_fabrica(&guid.to_uppercase()), "a caixa não pode importar");
+            assert!(e_guid_de_fabrica(&format!("{{{guid}}}")), "com chaves também");
+        }
+    }
+
+    /// E um plano criado por terceiro — ou por nós — tem GUID próprio e NÃO
+    /// pode ser confundido com os de fábrica.
+    #[test]
+    fn plano_com_guid_proprio_nao_passa_por_de_fabrica() {
+        // O plano ativo desta máquina, que é um plano próprio.
+        assert!(!e_guid_de_fabrica("fd6bfd99-f5ef-41bb-9663-a1ec92d69712"));
+        assert!(!e_guid_de_fabrica(""));
+        assert!(!e_guid_de_fabrica("não é guid"));
+    }
 
     #[test]
     /// Onde vão os segundos da prontidão.

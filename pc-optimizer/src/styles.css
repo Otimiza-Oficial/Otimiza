@@ -5001,3 +5001,22 @@ circle.placa-parafuso {
   margin-top: var(--s2);
   color: var(--text-dim);
 }
+
+/*
+  O PAINEL DE AVISO DE CONTA.
+
+  A cor sai do `data-severity` que o TypeScript escreve a partir do ESTADO do
+  backend — nunca de comparação de texto. "Não deu para ler" é neutro e não
+  âmbar: é uma verificação que não aconteceu, e não um problema encontrado.
+*/
+#conta-painel[data-severity="Important"] {
+  border-left: 2px solid var(--amber);
+}
+
+#conta-painel[data-severity="Neutral"] {
+  border-left: 2px solid var(--hairline-strong);
+}
+
+#conta-aviso {
+  padding: 0 var(--s4) var(--s4);
+}
