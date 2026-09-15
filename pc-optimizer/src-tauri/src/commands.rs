@@ -1861,6 +1861,42 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: por que o FPS está baixo nesta máquina.
+///
+/// Fica em `LIVRES`: é leitura pura. Junta as seis verificações que eu fiz À MÃO
+/// nos dois atendimentos desta semana, e passa junto a regressão medida — se o
+/// próprio Otimiza pode ter sido a causa, ele aparece como PRIMEIRO suspeito, e
+/// não escondido no fim de uma lista de defeitos da máquina do cliente.
+#[tauri::command]
+pub async fn por_que_o_fps_esta_baixo(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::causas::Investigacao, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // A regressão é lida aqui porque ela depende do histórico de mudanças,
+        // que vive atrás do estado do aplicativo. Falhar em lê-la NÃO impede a
+        // investigação: as outras cinco causas continuam valendo, e uma lista
+        // de cinco é melhor que um erro.
+        let piorou = match crate::modules::medicoes::ler() {
+            Ok(medicoes) => {
+                let aplicadas = state.changes.lock().await.applied().len();
+                let vereditos = crate::modules::regressao::todos(&medicoes, aplicadas);
+
+                crate::modules::regressao::pior_regressao(&vereditos)
+                    .and_then(|v| v.variacao_fps_pct.map(|pct| (v.jogo.clone(), pct)))
+            }
+            Err(_) => None,
+        };
+
+        Ok(crate::modules::windows::causas::investigar(piorou))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Só no Windows.".to_string())
+    }
+}
+
 /// Comando: em que disco cada jogo está instalado.
 ///
 /// Fica em `LIVRES`: é leitura pura, e é justamente o tipo de achado que vale
@@ -3204,6 +3240,7 @@ mod tests {
         "medicoes_automaticas",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
+        "por_que_o_fps_esta_baixo",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

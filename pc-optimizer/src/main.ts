@@ -1014,6 +1014,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Ela lê um arquivo pequeno e não chama o Windows, então o orçamento de
     // abertura que a 1.7 comprou continua de pé.
     conferirOProprioTrabalho(),
+    // Esta CHAMA o Windows — seis leituras, uma delas o `nvidia-smi`. Entra
+    // aqui mesmo assim porque é a pergunta que o cliente de jogo faz primeiro,
+    // e um painel que só aparece depois de trocar de aba não é lido. Ela roda
+    // em paralelo com o resto e não segura a pintura da tela.
+    carregarPorQueOFpsEstaBaixo(),
     loadIdentity(),
     checkAccess(),
     loadBaselineState(),
@@ -7251,6 +7256,83 @@ const NA_TELA_DO_DISCO: Record<
   Mecanico: { rotulo: "em disco mecânico", severidade: "Important" },
   NaoDeuParaLer: { rotulo: "tipo de disco não identificado", severidade: "Neutral" },
 };
+
+
+// ------------------------------------------ por que o FPS está baixo aqui
+
+/**
+ * Um suspeito, já pronto pela regra do Rust.
+ *
+ * A tela não decide nada aqui — nem a ordem, que é decisão de produto e mora em
+ * `causas::ordenar`. Ela só desenha. É a mesma regra de
+ * `a_tela_nao_decide_cor_comparando_texto_do_backend`, e neste painel ela pesa
+ * mais que em qualquer outro: a ordem dos suspeitos é o produto dizendo o que
+ * olhar primeiro, e ela inclui acusar o próprio Otimiza.
+ */
+interface Suspeito {
+  id: string;
+  titulo: string;
+  medido: string;
+  porque: string;
+  como_confirmar: string;
+  confianca: string;
+}
+
+interface Investigacao {
+  suspeitos: Suspeito[];
+  lacunas: string[];
+}
+
+async function carregarPorQueOFpsEstaBaixo() {
+  const painel = element("causas-painel");
+  const alvo = element("causas");
+
+  let r: Investigacao;
+
+  try {
+    r = await invoke<Investigacao>("por_que_o_fps_esta_baixo");
+  } catch (erro) {
+    painel.hidden = false;
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  painel.hidden = false;
+
+  // Quando o suspeito é o próprio Otimiza, ele fica em âmbar. Os outros são
+  // fatos da máquina e não são culpa de ninguém — pintá-los de alerta faria o
+  // cliente achar que o PC dele está quebrado.
+  const cartoes = r.suspeitos
+    .map(
+      (s) => `
+      <div class="causa" data-severity="${s.id === "foi_o_otimiza" ? "Important" : "Neutral"}">
+        <p class="causa-titulo"><strong>${escapeHtml(s.titulo)}</strong></p>
+        <p class="causa-medido">${escapeHtml(s.medido)}</p>
+        <p class="effect">${escapeHtml(s.porque)}</p>
+        <p class="causa-confirmar"><strong>Como confirmar:</strong> ${escapeHtml(s.como_confirmar)}</p>
+      </div>`
+    )
+    .join("");
+
+  // A lista vazia NÃO é uma tela em branco e não é um atestado: é um resultado,
+  // e ela precisa dizer o que foi procurado. A frase vem do Rust para o papel e
+  // a tela não poderem discordar.
+  const corpo =
+    r.suspeitos.length > 0
+      ? cartoes
+      : `<p class="bloco-de-texto">Nenhuma das causas conhecidas de FPS baixo foi
+           encontrada aqui: memória de vídeo curta, jogo em disco mecânico, faixas de
+           PCI Express estreitas, memória abaixo da velocidade nominal ou em canal
+           único, e limite de temperatura ou energia ativo. Isso não quer dizer que o
+           FPS esteja bom — quer dizer que o motivo não é nenhum destes cinco.</p>`;
+
+  const lacunas = r.lacunas.length
+    ? `<p class="hint"><strong>Não deu para verificar:</strong><br>
+         ${r.lacunas.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  alvo.innerHTML = corpo + lacunas;
+}
 
 async function carregarOndeOsJogosMoram() {
   const painel = element("disco-do-jogo-painel");

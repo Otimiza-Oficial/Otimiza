@@ -4966,3 +4966,38 @@ circle.placa-parafuso {
   border-left: 2px solid var(--hairline-strong);
   padding-left: var(--s3);
 }
+
+/*
+  OS SUSPEITOS DE FPS BAIXO.
+
+  Só o "pode ter sido o próprio Otimiza" ganha âmbar. Os outros são fatos da
+  máquina, não defeitos — pintar "sua placa tem 2 GB" de alerta faria o cliente
+  achar que o PC dele está quebrado quando ele só é o que é.
+*/
+.causa {
+  padding: var(--s3) 0 var(--s3) var(--s3);
+  border-left: 2px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.causa:last-child {
+  border-bottom: none;
+}
+
+.causa[data-severity="Important"] {
+  border-left-color: var(--amber);
+}
+
+.causa-titulo {
+  margin-bottom: var(--s1);
+}
+
+.causa-medido {
+  color: var(--text-dim);
+  margin-bottom: var(--s2);
+}
+
+.causa-confirmar {
+  margin-top: var(--s2);
+  color: var(--text-dim);
+}

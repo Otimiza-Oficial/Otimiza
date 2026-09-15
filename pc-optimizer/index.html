@@ -587,6 +587,33 @@
             </div>
           </section>
 
+          <!--
+            POR QUE O FPS ESTÁ BAIXO.
+
+            Este painel existe porque eu fiz esta investigação À MÃO duas vezes
+            numa semana: um cliente que caiu de 200 para 80-120 FPS depois de
+            otimizar, e outro pegando 15 a 20 "dependendo de onde eu fico". As
+            duas foram a mesma investigação — uma lista curta de suspeitos, cada
+            um com um jeito de confirmar.
+
+            Enquanto isso não era código, quem fazia era uma pessoa. E uma
+            pessoa não atende cem clientes.
+
+            Fica DEPOIS do veredito de propósito: o veredito responde "o que há
+            de errado com esta máquina", e este responde a pergunta seguinte,
+            que é a que o cliente de jogo faz primeiro.
+          -->
+          <section class="panel" id="causas-painel" hidden>
+            <header class="panel-head">
+              <h2>Por que o FPS está baixo aqui</h2>
+              <p class="panel-sub">
+                Cada item foi lido desta máquina, e diz como você confere sem
+                depender da nossa palavra.
+              </p>
+            </header>
+            <div id="causas" data-vazio="Procurando…"></div>
+          </section>
+
           <div class="grid grid-hero">
             <section class="panel panel-hero">
               <div class="panel-head">
