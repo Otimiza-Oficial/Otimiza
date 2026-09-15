@@ -33,6 +33,7 @@ pub mod frames;
 pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;
+pub mod discodojogo;
 pub mod jogos;
 pub mod labcompat;
 pub mod health;

@@ -177,6 +177,7 @@ pub fn run() {
             commands::limitar_fps_nvidia,
             commands::medicoes_automaticas,
             commands::conferir_o_proprio_trabalho,
+            commands::onde_os_jogos_moram,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,

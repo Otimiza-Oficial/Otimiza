@@ -4935,3 +4935,34 @@ circle.placa-parafuso {
 .faixa-regressao .atualizacao-texto strong {
   color: var(--amber);
 }
+
+/*
+  A LINHA DE ONDE O JOGO ESTÁ INSTALADO.
+
+  A severidade vem do backend pela tabela `NA_TELA_DO_DISCO`, e a cor sai daqui.
+  "Neutral" existe porque o tipo de disco pode não ter sido lido — e nesse caso
+  a linha não pode ser verde nem âmbar.
+*/
+.linha-do-disco {
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.linha-do-disco:last-child {
+  border-bottom: none;
+}
+
+.linha-do-disco[data-severity="Important"] {
+  border-left: 2px solid var(--amber);
+  padding-left: var(--s3);
+}
+
+.linha-do-disco[data-severity="Ok"] {
+  border-left: 2px solid var(--green);
+  padding-left: var(--s3);
+}
+
+.linha-do-disco[data-severity="Neutral"] {
+  border-left: 2px solid var(--hairline-strong);
+  padding-left: var(--s3);
+}

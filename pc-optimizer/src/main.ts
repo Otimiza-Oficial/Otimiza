@@ -1152,11 +1152,20 @@ function ligarSubabas() {
  */
 let reparoCarregado = false;
 let planoVistoriado = false;
+let discosCarregados = false;
 
 function showTab(name: string) {
   if (name === "reparo" && !reparoCarregado) {
     reparoCarregado = true;
     void carregarReparo();
+  }
+
+  // Carrega ao abrir a aba, e uma vez só. A leitura passa pelo PowerShell e
+  // varre as bibliotecas de jogo — é exatamente o tipo de custo que não pode
+  // entrar na abertura do programa, pelo mesmo motivo da vistoria do plano.
+  if (name === "jogos" && !discosCarregados) {
+    discosCarregados = true;
+    void carregarOndeOsJogosMoram();
   }
 
   // A VISTORIA DO PLANO RODA AO ABRIR A ABA, E NUNCA NA ABERTURA DO PROGRAMA.
@@ -7210,6 +7219,94 @@ interface VereditoDeRegressao {
  * o produto desfazer, sozinho e sem a pessoa por perto, um trabalho que ela
  * pediu. Ver o cabeçalho de `regressao.rs`.
  */
+
+// ------------------------------------------- em que disco o jogo está
+
+/**
+ * O Rust manda o ESTADO da mídia e o modelo; a tela escolhe a frase e a cor.
+ *
+ * `NaoDeuParaLer` NÃO é verde e não é vermelho: é a terceira cor. Numa imagem
+ * de Windows modificado o serviço de armazenamento está desligado e o Windows
+ * não responde o tipo de disco — nessas máquinas o produto mostra o modelo e
+ * diz que não conseguiu classificar, em vez de absolver ou acusar.
+ */
+interface OndeOJogoMora {
+  jogo: string;
+  caminho: string;
+  unidade: string | null;
+  midia: "Ssd" | "Mecanico" | "NaoDeuParaLer";
+  modelo: string | null;
+}
+
+interface RelatorioDeDiscos {
+  jogos: OndeOJogoMora[];
+  lacunas: string[];
+}
+
+const NA_TELA_DO_DISCO: Record<
+  OndeOJogoMora["midia"],
+  { rotulo: string; severidade: string }
+> = {
+  Ssd: { rotulo: "em SSD", severidade: "Ok" },
+  Mecanico: { rotulo: "em disco mecânico", severidade: "Important" },
+  NaoDeuParaLer: { rotulo: "tipo de disco não identificado", severidade: "Neutral" },
+};
+
+async function carregarOndeOsJogosMoram() {
+  const painel = element("disco-do-jogo-painel");
+  const alvo = element("disco-do-jogo");
+
+  let relatorio: RelatorioDeDiscos;
+
+  try {
+    relatorio = await invoke<RelatorioDeDiscos>("onde_os_jogos_moram");
+  } catch (erro) {
+    painel.hidden = false;
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  if (relatorio.jogos.length === 0 && relatorio.lacunas.length === 0) {
+    painel.hidden = true;
+    return;
+  }
+
+  painel.hidden = false;
+
+  const linhas = relatorio.jogos
+    .map((j) => {
+      const naTela = NA_TELA_DO_DISCO[j.midia];
+      const modelo = j.modelo ? ` — ${escapeHtml(j.modelo)}` : "";
+
+      // O aviso só aparece no caso PROVADO. Um disco que não deu para ler não
+      // recebe a frase de "passe para o SSD": seria conselho em cima de uma
+      // leitura que falhou.
+      const conselho =
+        j.midia === "Mecanico"
+          ? `<p class="effect">Num servidor de RP o jogo lê textura e modelo o tempo todo
+               enquanto você anda pelo mapa, e um disco de prato não entrega isso na
+               velocidade que o jogo pede — é o que aparece como travada ao virar a esquina
+               e como FPS que muda conforme o lugar. Passar este jogo para o SSD costuma ser
+               o maior ganho isolado numa máquina com os dois discos.</p>`
+          : "";
+
+      return `
+        <div class="linha-do-disco" data-severity="${naTela.severidade}">
+          <p><strong>${escapeHtml(j.jogo)}</strong> — ${escapeHtml(j.unidade ?? "?")}:
+             ${escapeHtml(naTela.rotulo)}${modelo}</p>
+          <p class="detail">${escapeHtml(j.caminho)}</p>
+          ${conselho}
+        </div>`;
+    })
+    .join("");
+
+  const lacunas = relatorio.lacunas.length
+    ? `<p class="hint">${relatorio.lacunas.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  alvo.innerHTML = linhas + lacunas;
+}
+
 async function conferirOProprioTrabalho() {
   const faixa = element("regressao-faixa");
   const texto = element("regressao-texto");

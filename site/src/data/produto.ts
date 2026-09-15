@@ -14,7 +14,7 @@
  */
 export const produto = {
   nome: "Otimiza",
-  versao: "2.2.0",
+  versao: "2.2.1",
 
   /**
    * Endereco PERMANENTE do instalador da versao mais nova.

@@ -1861,6 +1861,25 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: em que disco cada jogo está instalado.
+///
+/// Fica em `LIVRES`: é leitura pura, e é justamente o tipo de achado que vale
+/// ANTES de a pessoa comprar — num PC com SSD pequeno e HD grande, o jogo quase
+/// sempre foi parar no HD, e nenhum ajuste de registro conserta isso.
+#[tauri::command]
+pub fn onde_os_jogos_moram(
+) -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::modules::windows::discodojogo::analisar())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Só no Windows.".to_string())
+    }
+}
+
 /// Comando: o Otimiza conferindo o próprio trabalho, jogo por jogo.
 ///
 /// Compara os quadros medidos ANTES das otimizações com os medidos DEPOIS, com
@@ -3184,6 +3203,7 @@ mod tests {
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",
         "conferir_o_proprio_trabalho",
+        "onde_os_jogos_moram",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

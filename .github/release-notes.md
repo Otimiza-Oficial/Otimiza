@@ -18,6 +18,57 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.2.1 — Em que disco o seu jogo está
+
+Um cliente com **SSD de 224 GB e HD mecânico de 466 GB** relatou **15 a 20 FPS
+no FiveM, às vezes 30, "dependendo de onde eu fico"**.
+
+Aquele computador é de 2012, mas não é de 15 FPS. E "depende de onde eu fico" é
+a assinatura de duas coisas: a memória de vídeo estourando, e o jogo lendo
+textura de um **disco mecânico** enquanto a pessoa anda pelo mapa.
+
+A segunda o Otimiza não sabia responder.
+
+## A pergunta que o produto fazia era a errada
+
+Ele sabia se o **Windows** está em SSD. Numa máquina com SSD pequeno e HD
+grande, o Windows quase sempre está no SSD — e o jogo quase sempre está no HD,
+porque foi ali que coube. A resposta certa e a pergunta não se encontravam.
+
+Agora a aba **Jogos** mostra, jogo por jogo, a unidade e o tipo de disco. Quando
+é mecânico, aparece o porquê e o que fazer. Nenhum ajuste de registro conserta
+um disco de prato entregando asset no meio da rua.
+
+**O Otimiza só lê.** Mover um jogo são dezenas de gigabytes e um caminho que
+outros programas conhecem: é decisão e trabalho do dono da máquina.
+
+## E um achado que vale para muito mais que este módulo
+
+Escrevendo a leitura, descobri que a classe do Windows que informa o tipo de
+disco — `MSFT_PhysicalDisk` — **devolve uma lista vazia nesta máquina de
+desenvolvimento**, mesmo com o programa elevado. Ela depende do serviço de
+armazenamento, e esta é uma imagem de Windows modificado com cerca de 180
+serviços desligados.
+
+Ou seja: ela falha exatamente no tipo de Windows que este produto mais precisa
+atender — e é dela que o Otimiza dependia, nos **dois** caminhos, para decidir
+se o disco é SSD ou mecânico. Essa decisão é a que liga ou desliga o SysMain.
+
+A leitura nova tem uma reserva pela cadeia antiga do WMI, que responde nessas
+máquinas. Ela não diz se o disco é SSD — o campo dela é o mesmo para os dois —,
+mas entrega o **modelo**, e o modelo aparece do lado do jogo. Quando nem isso dá
+para ler, o produto diz que não conseguiu classificar, com o motivo escrito.
+
+Três estados na tela, e o terceiro não vira nenhum dos outros: **em SSD**
+(verde), **em disco mecânico** (âmbar), **tipo de disco não identificado**
+(cinza). Afirmar "seu jogo está no HD" em cima de uma leitura que falhou é
+exatamente a mentira que este produto existe para não contar.
+
+870 testes passando.
+
+---
+
+
 # 2.2.0 — O ajuste que comanda a frequência, e que nunca foi gravado
 
 Esta versão vem de uma pergunta simples: **o plano de energia do Otimiza está
