@@ -1566,6 +1566,7 @@ pub fn diagnosticar() -> Diagnostico {
         .map(|a| a.nome.to_string())
         .collect();
 
+
     let processo_64_bits = cfg!(target_pointer_width = "64");
 
     // Lido no plano ATIVO, e na tomada: é a combinação em que o cliente joga.
@@ -1574,6 +1575,19 @@ pub fn diagnosticar() -> Diagnostico {
     let governo = power::active_scheme()
         .map(|plano| governa_o_processador(&plano, false))
         .unwrap_or(GovernoDoProcessador::NaoDeuParaLer);
+
+    // A explicação é montada aqui, ANTES de `maquina` ir para a struct: ela
+    // precisa do nome do processador, e mover primeiro deixaria a frase sem
+    // ele. A leitura decide; a geração só explica.
+    let explicacao_do_governo = match super::cpugeracao::o_que_governa(
+        governo,
+        maquina.fabricante_da_cpu,
+        &maquina.cpu,
+    ) {
+        super::cpugeracao::OQueGoverna::OEpp { porque }
+        | super::cpugeracao::OQueGoverna::OEstadoMinimo { porque }
+        | super::cpugeracao::OQueGoverna::NaoDeuParaSaber { porque } => porque,
+    };
 
     let avisos = avisos_do_diagnostico(
         elevado,
@@ -1596,7 +1610,11 @@ pub fn diagnosticar() -> Diagnostico {
         registro_de_energia_legivel,
         processo_64_bits,
         governo_do_processador: governo,
-        explicacao_do_governo: explicar_governo(governo).to_string(),
+        // A EXPLICAÇÃO PASSA PELA GERAÇÃO DO PROCESSADOR: `explicar_governo`
+        // diz o que a LEITURA respondeu, e `cpugeracao` acrescenta o porquê.
+        // A leitura decide; a geração só explica. Montada acima, porque
+        // precisa do nome do processador antes de `maquina` ser movida.
+        explicacao_do_governo,
         avisos,
     }
 }
@@ -1623,6 +1641,25 @@ mod tests {
     /// modificada — nasce com um terço da escala puxado para economia. O
     /// produto nunca escreveu esse número, e ele é o que comanda a frequência
     /// quando o processador está em modo autônomo.
+
+    /// O diagnóstico completo desta máquina, com a explicação já passada pela
+    /// geração do processador. É a conferência de que as duas peças se
+    /// encaixam de verdade, e não só nos testes de função pura.
+    #[test]
+    #[ignore = "toca o Windows desta máquina"]
+    fn a_explicacao_do_governo_desta_maquina() {
+        let d = diagnosticar();
+
+        println!("cpu: {}", d.maquina.cpu);
+        println!("governo: {:?}", d.governo_do_processador);
+        println!("{}", d.explicacao_do_governo);
+
+        assert!(
+            !d.explicacao_do_governo.is_empty(),
+            "o diagnóstico precisa explicar quem governa o processador"
+        );
+    }
+
     #[test]
     #[ignore = "toca o Windows desta máquina"]
     fn o_equilibrado_nasce_puxado_para_economia() {
