@@ -60,6 +60,16 @@ pub struct Entrada {
     pub ram_gb: u32,
     pub monitores: usize,
     pub mudancas_aplicadas: usize,
+    /// O identificador de cada mudança aplicada.
+    ///
+    /// A contagem sozinha não diagnostica nada. Quando um cliente diz
+    /// "apliquei tudo e o FPS caiu", a única pergunta que importa é QUAL
+    /// ajuste ele aplicou — e sem esta lista a resposta exige estar na frente
+    /// do computador dele. Foi exatamente o que faltou no incidente da 2.1.0.
+    ///
+    /// Vai por identificador e não por nome: o identificador é curto, cabe no
+    /// limite do Discord, e não muda quando o texto da tela muda.
+    pub aplicadas: Vec<String>,
     /// Resumo curto do disco, já decidido (ex.: "saudável", "crítico").
     pub disco: String,
     /// Resumo curto do térmico, já decidido (ex.: "sem limite ativo").
@@ -96,6 +106,14 @@ pub fn montar(entrada: &Entrada) -> String {
     // de fato vazia, nunca por engano.
     if !entrada.lacunas.is_empty() {
         linhas.push(format!("Não consegui ler: {}", entrada.lacunas.join(", ")));
+    }
+
+    // A lista vem por último de propósito: se o relatório estourar o limite do
+    // Discord, o corte precisa comer os identificadores e não a linha das
+    // lacunas. O que não deu para ler vale mais que a lista completa do que
+    // foi aplicado — a lista pode ser pedida de novo, a lacuna some calada.
+    if !entrada.aplicadas.is_empty() {
+        linhas.push(format!("Aplicadas: {}", entrada.aplicadas.join(" ")));
     }
 
     cortar_no_limite(linhas.join("\n"))
@@ -278,7 +296,13 @@ pub fn gerar() -> Entrada {
     let ram_gb = memory::analyze().total_ram_gb.round().max(0.0) as u32;
     let monitores = display::monitores().len();
 
-    let mudancas_aplicadas = crate::modules::changelog::ChangeLog::load().applied().len();
+    let historico = crate::modules::changelog::ChangeLog::load();
+    let mudancas_aplicadas = historico.applied().len();
+    let aplicadas: Vec<String> = historico
+        .applied()
+        .iter()
+        .map(|a| a.optimization_id.clone())
+        .collect();
 
     let (disco, lacunas_disco) = resumir_disco(&health::analyze());
     lacunas.extend(lacunas_disco);
@@ -292,6 +316,7 @@ pub fn gerar() -> Entrada {
         ram_gb,
         monitores,
         mudancas_aplicadas,
+        aplicadas,
         disco,
         termico,
         lacunas,
@@ -316,6 +341,12 @@ mod tests {
                 // Seis monitores é um posto de streaming, o topo do realista.
                 monitores: 6,
                 mudancas_aplicadas: 999,
+                // O catálogo inteiro aplicado, com os identificadores mais
+                // longos que existem hoje. É o pior caso real da linha
+                // "Aplicadas:", e o teste de tamanho precisa vê-lo.
+                aplicadas: (0..44)
+                    .map(|i| format!("gpu_hardware_scheduling_{i}"))
+                    .collect(),
                 disco: "crítico".to_string(),
                 termico: "limitado (causa não identificada)".to_string(),
                 lacunas: vec![
@@ -336,6 +367,11 @@ mod tests {
                 ram_gb: 16,
                 monitores: 1,
                 mudancas_aplicadas: 3,
+                aplicadas: vec![
+                    "plano_otimiza".to_string(),
+                    "disable_gamedvr".to_string(),
+                    "mmcss_games".to_string(),
+                ],
                 disco: "saudável".to_string(),
                 termico: "sem limite ativo".to_string(),
                 lacunas: vec!["contador de erros do disco".to_string()],
@@ -343,6 +379,40 @@ mod tests {
         }
     }
 
+
+    /// Nasceu do incidente da 2.1.0: um cliente disse "apliquei tudo e o FPS
+    /// caiu" e o relatório de suporte respondia só "Mudanças aplicadas: 14".
+    /// Catorze quais? Sem isso, diagnosticar exigia estar na frente do PC —
+    /// exatamente o que este módulo existe para evitar.
+    #[test]
+    fn o_relatorio_diz_quais_otimizacoes_foram_aplicadas() {
+        let texto = montar(&Entrada::com_leitura_falha());
+
+        assert!(
+            texto.contains("plano_otimiza"),
+            "a contagem sozinha não diagnostica nada; falta a lista:\n{texto}"
+        );
+        assert!(texto.contains("mmcss_games"), "a lista veio incompleta:\n{texto}");
+    }
+
+    /// A ordem das linhas é uma decisão, não acaso. Com o relatório no limite,
+    /// o corte come o fim — e o fim precisa ser a lista de aplicadas, nunca a
+    /// linha do que não deu para ler (Regra 3).
+    #[test]
+    fn o_corte_come_a_lista_e_nunca_a_lacuna() {
+        let texto = montar(&Entrada::exemplo_cheia());
+
+        assert!(
+            texto.len() <= LIMITE_DE_CARACTERES,
+            "estourou o limite do Discord: {} bytes",
+            texto.len()
+        );
+        assert!(
+            texto.contains("Não consegui ler:"),
+            "a lacuna foi cortada — é ela que manda o atendimento para o lugar \
+             certo, e some calada:\n{texto}"
+        );
+    }
     #[test]
     fn cabe_numa_mensagem_e_nao_leva_dado_pessoal() {
         // CABER É REQUISITO, não estética: um relatório que não cabe numa mensagem
