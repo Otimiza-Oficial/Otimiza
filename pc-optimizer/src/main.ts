@@ -1175,6 +1175,9 @@ function showTab(name: string) {
   if (name === "jogos" && !discosCarregados) {
     discosCarregados = true;
     void carregarOndeOsJogosMoram();
+    // O protocolo mora na mesma aba e lê o mesmo arquivo de medições. Carrega
+    // junto, pelo mesmo motivo: o custo não pode cair na abertura do programa.
+    void carregarProtocolo();
   }
 
   // A VISTORIA DO PLANO RODA AO ABRIR A ABA, E NUNCA NA ABERTURA DO PROGRAMA.
@@ -7317,6 +7320,138 @@ const NA_TELA_DA_NATUREZA: Record<
   Prejudicial: { rotulo: "piora a máquina", severidade: "Important" },
 };
 
+
+// ------------------------------------------ o protocolo A/B, grupo a grupo
+
+type FaseDoGrupo =
+  | { fase: "FaltaOAntes" }
+  | { fase: "ProntoParaAplicar"; amostras_antes: number }
+  | { fase: "EsperandoODepois"; amostras_depois: number; faltam: number }
+  | { fase: "Concluido" };
+
+type DecisaoDoGrupo =
+  | { decisao: "Esperar"; falta: string }
+  | { decisao: "Manter"; ganho_pct: number }
+  | { decisao: "NaoMudouNada" }
+  | { decisao: "ReverterSozinho"; queda_pct: number }
+  | { decisao: "PiorouMasNaoReverto"; queda_pct: number; porque: string };
+
+interface LadoDoVeredito {
+  fps: number;
+  low_1pct: number;
+  amostras: number;
+}
+
+interface Experimento {
+  grupo: string;
+  letra: string;
+  nome: string;
+  descricao: string;
+  itens: string[];
+  exige_reinicio: boolean;
+  fase: FaseDoGrupo;
+  decisao: DecisaoDoGrupo;
+  veredito: {
+    antes: LadoDoVeredito | null;
+    depois: LadoDoVeredito | null;
+    variacao_fps_pct: number | null;
+  } | null;
+}
+
+/**
+ * A cor e o rótulo de cada decisão.
+ *
+ * `NaoMudouNada` é NEUTRO e não cinza-apagado de propósito: "aqui não rende" é
+ * uma resposta de valor — é ela que deixa a pessoa parar de mexer naquilo —, e
+ * apagá-la visualmente faria o cliente refazer o mesmo teste para sempre.
+ */
+const NA_TELA_DA_DECISAO: Record<
+  DecisaoDoGrupo["decisao"],
+  { rotulo: string; severidade: string }
+> = {
+  Esperar: { rotulo: "ainda medindo", severidade: "Neutral" },
+  Manter: { rotulo: "rendeu aqui", severidade: "Ok" },
+  NaoMudouNada: { rotulo: "não mudou nada aqui", severidade: "Neutral" },
+  ReverterSozinho: { rotulo: "piorou — vamos desfazer", severidade: "Important" },
+  PiorouMasNaoReverto: { rotulo: "piorou", severidade: "Important" },
+};
+
+function numerosDoExperimento(e: Experimento): string {
+  const v = e.veredito;
+  if (!v || !v.antes || !v.depois) return "";
+
+  const pct = v.variacao_fps_pct;
+  const sinal = pct !== null && pct > 0 ? "+" : "";
+
+  return `<p class="causa-medido">
+      Antes: ${v.antes.fps.toFixed(0)} FPS · 1% piores ${v.antes.low_1pct.toFixed(0)}
+      (${v.antes.amostras} medições).
+      Depois: ${v.depois.fps.toFixed(0)} FPS · 1% piores ${v.depois.low_1pct.toFixed(0)}
+      (${v.depois.amostras} medições).
+      ${pct !== null ? `Diferença: ${sinal}${pct.toFixed(0)}%.` : ""}
+    </p>`;
+}
+
+function textoDaDecisao(e: Experimento): string {
+  const d = e.decisao;
+
+  switch (d.decisao) {
+    case "Esperar":
+      return `<p class="effect">${escapeHtml(d.falta)}</p>`;
+    case "Manter":
+      return `<p class="effect">Este grupo rendeu ${d.ganho_pct.toFixed(0)}% nesta máquina.
+                Mantenha.</p>`;
+    case "NaoMudouNada":
+      return `<p class="effect">Medido dos dois lados e a diferença ficou dentro da
+                variação normal entre duas partidas. Não rende aqui — e saber disso é o
+                que permite parar de mexer neste grupo.</p>`;
+    case "ReverterSozinho":
+      return `<p class="effect">Caiu ${Math.abs(d.queda_pct).toFixed(0)}% depois deste
+                grupo. Como ele não exige reiniciar, a comparação é limpa e o Otimiza
+                desfaz.</p>`;
+    case "PiorouMasNaoReverto":
+      return `<p class="effect">Caiu ${Math.abs(d.queda_pct).toFixed(0)}% depois deste
+                grupo. ${escapeHtml(d.porque)}</p>`;
+  }
+}
+
+async function carregarProtocolo() {
+  const alvo = element("protocolo");
+
+  let grupos: Experimento[];
+
+  try {
+    grupos = await invoke<Experimento[]>("protocolo_de_grupos", { jogo: null });
+  } catch (erro) {
+    // Sem medição nenhuma o backend recusa, e a recusa EXPLICA o que fazer —
+    // ela não é um erro a esconder, é a primeira instrução do protocolo.
+    alvo.innerHTML = `<p class="bloco-de-texto">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  alvo.innerHTML = grupos
+    .map((e) => {
+      const naTela = NA_TELA_DA_DECISAO[e.decisao.decisao];
+      const reinicio = e.exige_reinicio
+        ? `<span class="chip">exige reiniciar</span>`
+        : `<span class="chip">sem reiniciar</span>`;
+
+      return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo">
+            <strong>${escapeHtml(e.letra)} — ${escapeHtml(e.nome)}</strong>
+            <span class="chip">${escapeHtml(naTela.rotulo)}</span>
+            ${reinicio}
+          </p>
+          <p class="effect">${escapeHtml(e.descricao)}</p>
+          ${numerosDoExperimento(e)}
+          ${textoDaDecisao(e)}
+          <p class="detail">${e.itens.length} ajuste(s) neste grupo.</p>
+        </div>`;
+    })
+    .join("");
+}
+
 async function carregarOQueNaoFazemos() {
   const alvo = element("nao-fazemos");
 
@@ -7528,9 +7663,47 @@ async function carregarMedicoesAutomaticas() {
   alvo.hidden = false;
   alvo.innerHTML =
     `<p><strong>Medido sozinho durante as partidas</strong></p>` +
+    (await notaDoJogoEmHtml()) +
     `<ul class="lista">${linhas}</ul>` +
     `<p class="hint">Cada linha foi medida num momento e num lugar diferentes do jogo, ` +
     `então elas não se comparam entre si como antes e depois. Para isso, use os botões acima.</p>`;
+}
+
+/**
+ * A nota de jogo da última medição confiável.
+ *
+ * A frase inteira vem do Rust — inclusive o diagnóstico de "o que segura esta
+ * nota". É regra de produto: a mesma nota com engasgo e a mesma nota sem
+ * engasgo pedem conselhos diferentes, e quem decide isso não pode ser a tela.
+ */
+async function notaDoJogoEmHtml(): Promise<string> {
+  type Nota =
+    | { estado: "SemAmostra" }
+    | {
+        estado: "Calculada";
+        nota: number;
+        fps_medio: number;
+        low_1pct: number;
+      };
+
+  let nota: Nota;
+
+  try {
+    nota = await invoke<Nota>("nota_do_jogo");
+  } catch {
+    // A nota é um extra da lista de medições. Não conseguir calculá-la não
+    // pode sumir com a lista, que é o dado de verdade.
+    return "";
+  }
+
+  if (nota.estado === "SemAmostra") return "";
+
+  return `
+    <p class="bloco-de-texto"><strong>Nota ${nota.nota} de 100</strong> —
+      ${nota.fps_medio.toFixed(0)} FPS de média e ${nota.low_1pct.toFixed(0)} no 1% pior.
+      O 1% pior pesa mais que a média nesta conta, porque é ele que você sente.
+      A nota descreve esta máquina neste jogo e serve para comparar antes e depois,
+      não para comparar com o PC de outra pessoa.</p>`;
 }
 
 async function medirAntes() {

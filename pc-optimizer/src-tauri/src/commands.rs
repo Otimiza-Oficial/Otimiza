@@ -1861,6 +1861,23 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: a nota de jogo da medição mais recente.
+///
+/// Fica em `LIVRES`: lê o arquivo de medições e calcula. A nota pesa 60% no 1%
+/// pior e 40% na média, porque ninguém sente média — a pessoa sente a travada.
+#[tauri::command]
+pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
+    let medicoes = crate::modules::medicoes::ler()?;
+
+    // A MAIS RECENTE CONFIÁVEL, e não a mais recente: uma amostra curta
+    // sobrepondo uma boa faria a nota piscar sem nada ter mudado na máquina.
+    let Some(m) = medicoes.iter().rev().find(|m| m.confiavel) else {
+        return Ok(crate::modules::pontuacao::Nota::SemAmostra);
+    };
+
+    Ok(crate::modules::pontuacao::calcular(m.fps, m.low_1pct, m.confiavel))
+}
+
 /// Comando: o protocolo A/B, grupo por grupo.
 ///
 /// Fica em `LIVRES`: só lê. Aplicar um grupo continua passando pelo caminho que
@@ -3326,6 +3343,7 @@ mod tests {
         "por_que_o_fps_esta_baixo",
         "o_que_nao_fazemos",
         "protocolo_de_grupos",
+        "nota_do_jogo",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
