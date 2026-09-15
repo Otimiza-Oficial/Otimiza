@@ -41,6 +41,7 @@ pub mod memory;
 pub mod network;
 pub mod nvdriver;
 pub mod planoenergia;
+pub mod pcie;
 pub mod power;
 pub mod pressao;
 pub mod processes;

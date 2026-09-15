@@ -17,6 +17,7 @@ pub mod jitter;
 pub mod licenca;
 pub mod maquina;
 pub mod medicoes;
+pub mod pontuacao;
 pub mod regressao;
 pub mod optimizer;
 pub mod preferences;
