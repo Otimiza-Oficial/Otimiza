@@ -1861,6 +1861,77 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: o protocolo A/B, grupo por grupo.
+///
+/// Fica em `LIVRES`: só lê. Aplicar um grupo continua passando pelo caminho que
+/// já existe — `optimize_now` com a lista de ids —, e desfazer pelo `revert`.
+/// Este comando é o que diz EM QUE PÉ está cada um dos nove testes.
+///
+/// O jogo entra como parâmetro porque a comparação é por jogo: FPS de jogos
+/// diferentes não se compara, e misturar dois produz "queda" onde só houve o
+/// cliente trocar de jogo. Sem jogo informado, usa o mais medido.
+#[tauri::command]
+pub async fn protocolo_de_grupos(
+    state: State<'_, AppState>,
+    jogo: Option<String>,
+) -> Result<Vec<crate::modules::windows::experimento::Experimento>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::{experimento, grupos::Grupo};
+
+        let medicoes = crate::modules::medicoes::ler()?;
+
+        let Some(jogo) = jogo.or_else(|| jogo_mais_medido(&medicoes)) else {
+            return Err(
+                "Ainda não há nenhuma medição de jogo nesta máquina. O Otimiza mede sozinho \
+                 depois de alguns minutos de partida — abra o jogo e jogue um pouco."
+                    .to_string(),
+            );
+        };
+
+        let log = state.changes.lock().await;
+        let aplicadas = log.applied().len();
+
+        Ok(Grupo::TODOS
+            .iter()
+            .map(|grupo| {
+                // "Aplicado" é TODO o grupo estar no histórico, e não algum
+                // item dele: com metade aplicada, a comparação mediria uma
+                // mistura e responderia sobre um grupo que nunca existiu.
+                let itens = crate::modules::windows::grupos::itens_do_grupo(*grupo);
+                let aplicado =
+                    !itens.is_empty() && itens.iter().all(|id| log.is_applied(id));
+
+                experimento::montar(*grupo, &jogo, &medicoes, aplicadas, aplicado)
+            })
+            .collect())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (state, jogo);
+        Err("Só no Windows.".to_string())
+    }
+}
+
+/// O jogo com mais medições guardadas.
+///
+/// Mais medições e não a mais recente: o protocolo precisa de amostra dos dois
+/// lados, e o jogo que a pessoa abriu uma vez ontem nunca vai ter isso.
+#[cfg(target_os = "windows")]
+fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> Option<String> {
+    let mut contagem: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+
+    for m in medicoes {
+        *contagem.entry(m.jogo.as_str()).or_insert(0) += 1;
+    }
+
+    contagem
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(jogo, _)| jogo.to_string())
+}
+
 /// Comando: os ajustes famosos que o Otimiza se recusa a fazer, e por quê.
 ///
 /// Fica em `LIVRES`: é uma lista fixa, não toca a máquina. Existe porque o
@@ -3254,6 +3325,7 @@ mod tests {
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
         "o_que_nao_fazemos",
+        "protocolo_de_grupos",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

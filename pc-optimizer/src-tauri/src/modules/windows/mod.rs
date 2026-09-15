@@ -42,6 +42,8 @@ pub mod memory;
 pub mod network;
 pub mod nvdriver;
 pub mod planoenergia;
+pub mod experimento;
+pub mod grupos;
 pub mod naofazemos;
 pub mod pcie;
 pub mod power;

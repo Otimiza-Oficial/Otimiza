@@ -180,6 +180,7 @@ pub fn run() {
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,
             commands::o_que_nao_fazemos,
+            commands::protocolo_de_grupos,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
