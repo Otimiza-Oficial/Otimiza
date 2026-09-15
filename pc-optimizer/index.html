@@ -979,6 +979,27 @@
                 <p class="hint" id="profile-detail" hidden></p>
               </div>
 
+              <!--
+                OS TRÊS NÍVEIS.
+
+                Os perfis acima respondem "para que serve este PC?". Estes
+                respondem a outra pergunta, e é a que faltava quando um cliente
+                aplicou tudo e o FPS dele caiu pela metade: "o que você aceita
+                trocar?".
+
+                As duas são independentes de propósito. O perfil diz ONDE mexer;
+                o nível diz ATÉ ONDE ir.
+
+                O Experimental não ganha botão de aplicar tudo — o backend manda
+                `aplica_de_uma_vez: false` e a tela obedece. Aplicar aqueles
+                ajustes juntos é exatamente o que causou o incidente.
+              -->
+              <div class="profiles">
+                <p class="profiles-label">O que você aceita trocar?</p>
+                <div class="profile-chips" id="nivel-chips"></div>
+                <div class="hint" id="nivel-detalhe" hidden></div>
+              </div>
+
               <p id="optimization-status" class="status"></p>
 
               <!-- Registro ao vivo: o cliente vê cada mudança acontecendo, com o

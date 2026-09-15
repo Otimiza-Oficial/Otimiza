@@ -4721,6 +4721,9 @@ async function loadOptimizations() {
     // O aviso de conta vem junto: ele explica por que 21 desses ajustes podem
     // ser aplicados, conferidos, e não fazer diferença nenhuma.
     await carregarContaQueEstaRodando();
+    // Os níveis dependem da lista carregada: a contagem "N a aplicar" sai do
+    // estado de cada item nesta máquina, e antes dela seria zero.
+    await carregarNiveis();
   } catch (error) {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
@@ -4741,6 +4744,99 @@ let profiles: ProfileInfo[] = [];
 let activeProfile: string | null = null;
 /** Texto digitado na busca do catálogo. */
 let searchTerm = "";
+
+
+// -------------------------------------------------- os três níveis de risco
+
+interface NivelNaTela {
+  id: string;
+  nome: string;
+  promessa: string;
+  exigencia: string;
+  itens: string[];
+  acrescenta: string[];
+  aplica_de_uma_vez: boolean;
+}
+
+let niveis: NivelNaTela[] = [];
+let nivelEscolhido: string | null = null;
+
+async function carregarNiveis() {
+  try {
+    niveis = await invoke<NivelNaTela[]>("niveis_de_otimizacao");
+    renderNiveis();
+  } catch {
+    // Sem os níveis a lista continua inteira e utilizável: eles são um atalho
+    // para marcar caixas, não um pré-requisito para otimizar.
+    element("nivel-chips").innerHTML = "";
+  }
+}
+
+function renderNiveis() {
+  element("nivel-chips").innerHTML = niveis
+    .map(
+      (n) =>
+        `<button class="profile-chip" data-nivel="${escapeHtml(n.id)}"
+           aria-pressed="${nivelEscolhido === n.id}">${escapeHtml(n.nome)}</button>`
+    )
+    .join("");
+}
+
+/**
+ * Escolher um nível MARCA as caixas dele — não aplica nada.
+ *
+ * É a mesma regra dos perfis: a pessoa continua vendo item a item e podendo
+ * desmarcar. E no Experimental o texto manda para o painel de grupos, porque
+ * aplicar aqueles ajustes de uma vez é o que derrubou o FPS de um cliente.
+ */
+function escolherNivel(id: string) {
+  const nivel = niveis.find((n) => n.id === id);
+  if (!nivel) return;
+
+  // Clicar de novo no mesmo nível desmarca: o atalho tem volta, igual ao perfil.
+  nivelEscolhido = nivelEscolhido === id ? null : id;
+  renderNiveis();
+  renderOptimizations();
+
+  const detalhe = element("nivel-detalhe");
+
+  if (!nivelEscolhido) {
+    detalhe.hidden = true;
+    return;
+  }
+
+  const doNivel = optimizations.filter((o) => nivel.itens.includes(o.id));
+  const aAplicar = doNivel.filter((o) => o.state === "Available");
+  const jaTem = doNivel.filter(
+    (o) => o.state === "Applied" || o.state === "AlreadyOptimal"
+  ).length;
+
+  // O BOTÃO NÃO APARECE NO EXPERIMENTAL, e quem decide isso é o backend.
+  // Aplicar aqueles ajustes de uma vez é literalmente o que derrubou o FPS de
+  // um cliente — oferecer o botão e escrever "não clique" embaixo seria pôr a
+  // armadilha na tela com um aviso ao lado.
+  const acao = !nivel.aplica_de_uma_vez
+    ? `<p class="effect" data-severity="Important">Este nível não tem botão de aplicar
+         tudo, e é de propósito. Os ajustes dele rendem numa máquina e custam quadro em
+         outra — foi aplicar todos juntos que derrubou o FPS de um cliente. Use o painel
+         <strong>“Testar um grupo de cada vez”</strong>, na aba Jogos: ele aplica um grupo
+         por vez e compara a medição dos dois lados.</p>`
+    : aAplicar.length > 0
+      ? `<br /><button id="aplicar-nivel" class="btn btn-primary">Aplicar os ${
+          aAplicar.length
+        } deste nível</button>`
+      : "";
+
+  detalhe.innerHTML =
+    `<p><strong>${escapeHtml(nivel.nome)}.</strong> ${escapeHtml(nivel.promessa)}</p>` +
+    `<p><strong>O que exige:</strong> ${escapeHtml(nivel.exigencia)}</p>` +
+    `<p><strong>${aAplicar.length} a aplicar${
+      jaTem > 0 ? `, ${jaTem} que o seu PC já tem` : ""
+    }.</strong> A lista ao lado está mostrando só os itens deste nível.</p>` +
+    acao;
+
+  detalhe.hidden = false;
+}
 
 async function loadProfiles() {
   try {
@@ -4862,6 +4958,15 @@ function renderOptimizations() {
       if (!activeProfile) return true;
       const perfil = profiles.find((p) => p.id === activeProfile);
       return perfil ? perfil.optimization_ids.includes(item.id) : true;
+    })
+    // O nível corta pelo outro eixo: o perfil diz ONDE mexer, o nível diz ATÉ
+    // ONDE ir. Os dois filtros se somam de propósito — quem escolheu "Jogos" e
+    // "Seguro" quer a interseção, e mostrar a união faria o "Seguro" não
+    // significar nada.
+    .filter((item) => {
+      if (!nivelEscolhido) return true;
+      const nivel = niveis.find((n) => n.id === nivelEscolhido);
+      return nivel ? nivel.itens.includes(item.id) : true;
     });
 
   const available = optimizations.filter((item) => item.state === "Available").length;
@@ -8431,6 +8536,27 @@ function wireControls() {
   element("lab-copiar").addEventListener("click", copiarLab);
   element("plano-aplicar").addEventListener("click", aplicarPlano);
   element("plano-desfazer").addEventListener("click", desfazerPlano);
+
+  element("nivel-chips").addEventListener("click", (event) => {
+    const chip = (event.target as HTMLElement).closest(
+      "button[data-nivel]"
+    ) as HTMLButtonElement | null;
+    if (chip) escolherNivel(chip.dataset.nivel!);
+  });
+
+  // O botão de aplicar o nível é redesenhado a cada escolha, então a escuta
+  // fica no painel que sobrevive, e não no botão.
+  element("nivel-detalhe").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest("#aplicar-nivel");
+    if (!button) return;
+
+    const nivel = niveis.find((n) => n.id === nivelEscolhido);
+    // A trava vale nos DOIS lados: o botão não é desenhado no Experimental, e
+    // se ele aparecer por qualquer outro caminho, esta linha recusa.
+    if (!nivel || !nivel.aplica_de_uma_vez) return;
+
+    runBatch("optimize_now", `Aplicando o nível ${nivel.nome}…`, nivel.itens);
+  });
 
   element("profile-chips").addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest(

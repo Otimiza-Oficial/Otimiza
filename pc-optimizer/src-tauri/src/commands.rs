@@ -379,6 +379,51 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
     }
 }
 
+/// Comando: os três níveis — Seguro, Competitivo, Experimental.
+///
+/// Fica em `LIVRES`: é a definição dos níveis, montada do catálogo. Não aplica
+/// nada; aplicar continua sendo `optimize_now` com a lista de identificadores.
+///
+/// Diferente dos perfis: os perfis respondem "para que você usa a máquina", e
+/// estes respondem "o que você aceita trocar". As duas perguntas são
+/// independentes, e responder as duas com a mesma lista seria fingir que o
+/// cliente que joga e o cliente que aceita risco são a mesma pessoa.
+#[tauri::command]
+pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
+    use crate::modules::windows::niveis::{acrescenta, aplica_de_uma_vez, itens_do_nivel, Nivel};
+
+    Nivel::TODOS
+        .iter()
+        .map(|nivel| NivelNaTela {
+            id: format!("{nivel:?}"),
+            nome: nivel.nome().to_string(),
+            promessa: nivel.promessa().to_string(),
+            exigencia: nivel.exigencia().to_string(),
+            itens: itens_do_nivel(*nivel).iter().map(|s| s.to_string()).collect(),
+            acrescenta: acrescenta(*nivel).iter().map(|s| s.to_string()).collect(),
+            aplica_de_uma_vez: aplica_de_uma_vez(*nivel),
+        })
+        .collect()
+}
+
+/// Um nível, do jeito que a tela precisa dele.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NivelNaTela {
+    pub id: String,
+    pub nome: String,
+    /// O que o nível faz. Sem adjetivo de marketing.
+    pub promessa: String,
+    /// O que ele exige de quem escolhe. Parte do contrato, não nota de rodapé.
+    pub exigencia: String,
+    pub itens: Vec<String>,
+    /// O que ESTE nível acrescenta ao anterior — é a diferença que ajuda a
+    /// decidir, e não a lista inteira.
+    pub acrescenta: Vec<String>,
+    /// Falso no Experimental: aplicar todos de uma vez é o que derrubou o FPS
+    /// de um cliente, e a tela precisa saber disso para não oferecer o botão.
+    pub aplica_de_uma_vez: bool,
+}
+
 /// Comando: Perfis de otimização recomendados por tipo de uso.
 ///
 /// Perfil aqui é sugestão que marca caixas na lista, não pacote fechado: a
@@ -3419,6 +3464,7 @@ mod tests {
         "nota_do_jogo",
         "conflitos_entre_ajustes",
         "conta_que_esta_rodando",
+        "niveis_de_otimizacao",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

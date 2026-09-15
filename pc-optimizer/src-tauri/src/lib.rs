@@ -184,6 +184,7 @@ pub fn run() {
             commands::nota_do_jogo,
             commands::conflitos_entre_ajustes,
             commands::conta_que_esta_rodando,
+            commands::niveis_de_otimizacao,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
