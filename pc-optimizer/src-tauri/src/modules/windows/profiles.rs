@@ -74,7 +74,11 @@ pub const PROFILES: &[ProfileInfo] = &[
              forma bem visível.",
         optimization_ids: &[
             "disable_gamedvr",
-            "gpu_hardware_scheduling",
+            // `gpu_hardware_scheduling` SAIU daqui depois do incidente da
+            // 2.1.0: ele pode custar quadro em parte das máquinas, e um perfil
+            // é um lote — quem escolhe "Jogos" não está escolhendo apostar o
+            // FPS dele. Continua no catálogo, um a um, com o caso escrito.
+            // Ver `RiscoDeFps` e `catalog::entra_no_lote`.
             "system_responsiveness_gaming",
             "mmcss_games",
             "mouse_precision_off",

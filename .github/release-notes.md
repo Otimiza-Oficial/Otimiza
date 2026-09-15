@@ -18,6 +18,61 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.1.2 — O botão grande não pode mais custar FPS
+
+A 2.1.1 consertou o erro de valor que derrubou o FPS de um cliente. Esta versão
+conserta a falha que **permitiu** aquele erro chegar até ele.
+
+## O que estava errado por baixo
+
+O catálogo sabia dizer quanto um ajuste ajuda — "ganho mensurável", "ganho
+situacional", "não muda nada". O que ele **não** sabia dizer era que um ajuste
+pode *piorar*. Não existia degrau abaixo de zero.
+
+Resultado: um ajuste que troca FPS por latência, ou que rende numa máquina e
+atrapalha em outra, entrava no "Otimizar agora" exatamente como um que só tem a
+ganhar. O cliente descobria a diferença olhando o contador de quadros.
+
+## A regra nova
+
+**O botão grande só aplica o que não pode custar quadro.**
+
+Cada ajuste agora declara se pode derrubar FPS e **em que caso** — e quem
+declara isso sai automaticamente do "Otimizar agora" e dos perfis. Não some do
+produto: continua item a item, com o motivo escrito na tela e a etiqueta
+*"pode custar FPS"*.
+
+Dois saíram do lote nesta versão:
+
+| Ajuste | Por quê |
+|---|---|
+| **Agendamento de GPU por hardware (HAGS)** | Depende da combinação de placa e driver. Há máquina em que rende e máquina em que tira quadros, e não dá para saber qual é a sua sem medir |
+| **Desligar compressão de memória** | O piso de 12 GB não bastava. Quem joga com navegador e Discord abertos enche 16 GB, e sem compressão o Windows vai ao disco — que é engasgo, não ganho |
+
+Um terceiro, o **modo MSI da placa de vídeo**, eu cheguei a marcar junto e
+**voltei atrás**: não há evidência de que ele derrube quadro; o que há é relato
+de instabilidade com driver antigo, que é outro problema. Classificar por medo,
+sem evidência, é o mesmo vício que criou o incidente — só que virado do avesso —
+e esvazia o aviso dos ajustes que têm risco de verdade.
+
+## Também nesta versão
+
+O **relatório de suporte** passa a listar *quais* otimizações estão aplicadas,
+não só quantas. No incidente, "Mudanças aplicadas: 14" não permitia diagnosticar
+nada sem estar na frente do computador.
+
+## As travas
+
+Três novas, que reprovam a compilação:
+
+- nenhum item marcado como "pode custar FPS" entra no lote automático;
+- todo risco declarado precisa dizer **em que caso** ele custa — "pode variar"
+  não ajuda ninguém a decidir;
+- os itens que saíram do lote no incidente não voltam por descuido.
+
+---
+
+
 # 2.1.1 — Conserto de um erro meu que derrubou o FPS
 
 **Se você instalou a 2.1.0 e o seu FPS caiu, esta versão é para você, e o erro

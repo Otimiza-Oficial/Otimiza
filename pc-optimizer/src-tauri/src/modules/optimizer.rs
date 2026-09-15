@@ -40,6 +40,49 @@ pub enum ExpectedGain {
     NoGain,
 }
 
+/// Se um ajuste pode DERRUBAR o FPS em alguma máquina.
+///
+/// NASCEU DE UM PREJUÍZO REAL. Na 2.1.0 um cliente aplicou tudo que o produto
+/// oferece e caiu de cerca de 200 para 80-120 FPS no FiveM. Um dos culpados
+/// foi um erro de valor meu, já corrigido — mas a investigação mostrou uma
+/// falha maior e estrutural: **o catálogo não tinha como dizer que um ajuste
+/// pode piorar o FPS.**
+///
+/// `ExpectedGain` responde "quanto isso ajuda" e tem `NoGain` como piso. Não
+/// existe degrau abaixo de zero. Então um ajuste que troca FPS por latência, ou
+/// que ajuda numa máquina e atrapalha em outra, entrava no "Otimizar agora"
+/// exatamente como um que só tem a ganhar — e o cliente descobria a diferença
+/// olhando o contador de quadros.
+///
+/// A regra que este tipo carrega: **o botão grande só aplica o que não pode
+/// custar quadro.** O resto continua no catálogo, item a item, dizendo em voz
+/// alta o que está trocando pelo quê. Ver `catalog::entra_no_lote`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "risco", content = "quando")]
+pub enum RiscoDeFps {
+    /// Não mexe no caminho que desenha o quadro, ou mexe só para o bem.
+    Nenhum,
+    /// Pode custar quadros em parte das máquinas. Fica FORA do lote automático.
+    ///
+    /// O texto diz EM QUE CASO ele custa — não "pode variar", que não ajuda
+    /// ninguém a decidir. Ele vai para a tela do jeito que está escrito.
+    /// `Cow` e não `&'static str` porque `OptimizationInfo` precisa ser
+    /// desserializável: o catálogo constrói `Borrowed` de graça, e o que volta
+    /// do outro lado do IPC vira `Owned`.
+    PodeCustar(std::borrow::Cow<'static, str>),
+}
+
+impl RiscoDeFps {
+    /// O jeito de escrever um risco no catálogo, sem `Cow` em toda linha.
+    pub const fn custa(quando: &'static str) -> Self {
+        RiscoDeFps::PodeCustar(std::borrow::Cow::Borrowed(quando))
+    }
+
+    pub fn pode_custar(&self) -> bool {
+        matches!(self, RiscoDeFps::PodeCustar(_))
+    }
+}
+
 /// Situação de uma otimização nesta máquina.
 ///
 /// `AlreadyOptimal` existe por honestidade comercial: quando o PC do cliente já
@@ -79,6 +122,9 @@ pub struct OptimizationInfo {
     pub honest_effect: String,
     pub category: Category,
     pub expected_gain: ExpectedGain,
+    /// Se este ajuste pode DERRUBAR o FPS em alguma máquina, e em qual caso.
+    /// Quando pode, ele fica fora do "Otimizar agora" e a tela diz por quê.
+    pub risco_de_fps: RiscoDeFps,
     pub requires_admin: bool,
     pub requires_restart: bool,
     pub reversible: bool,

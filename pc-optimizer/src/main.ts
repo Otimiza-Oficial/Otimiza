@@ -23,6 +23,14 @@ interface OptimizationInfo {
   requires_restart: boolean;
   reversible: boolean;
   security_tradeoff: boolean;
+  /**
+   * Se este ajuste pode DERRUBAR o FPS, e em qual caso.
+   *
+   * Veio do incidente da 2.1.0: um cliente aplicou tudo e o FPS caiu pela
+   * metade. O backend manda o ESTADO e o motivo por escrito; a tela só escolhe
+   * como mostrar — a mesma regra de `a_tela_nao_decide_cor_comparando_texto`.
+   */
+  risco_de_fps: { risco: "Nenhum" } | { risco: "PodeCustar"; quando: string };
   recommended: boolean;
   state: State;
   detail: string | null;
@@ -4903,6 +4911,19 @@ function renderOptimization(item: OptimizationInfo): string {
   if (item.security_tradeoff)
     chips.push(`<span class="chip" data-warn="true">reduz segurança</span>`);
 
+  // O aviso que faltava na 2.1.0. Um ajuste que pode custar quadro não pode
+  // parecer igual aos outros numa lista que o cliente percorre para clicar.
+  const podeCustar = item.risco_de_fps.risco === "PodeCustar";
+  if (podeCustar)
+    chips.push(`<span class="chip" data-warn="true">pode custar FPS</span>`);
+
+  const risco = podeCustar
+    ? `<p class="effect" data-severity="Important"><strong>Pode custar FPS.</strong>
+         ${escapeHtml((item.risco_de_fps as { quando: string }).quando)}
+         <br>Por isso ele não entra no “Otimizar agora”: aplique, reinicie se
+         pedir, e meça antes de deixar ligado.</p>`
+    : "";
+
   const detail = item.detail ? `<p class="detail">${escapeHtml(item.detail)}</p>` : "";
 
   return `
@@ -4915,6 +4936,7 @@ function renderOptimization(item: OptimizationInfo): string {
       <div class="opt-body">
         <div class="optimization-meta">${chips.join("")}</div>
         <p class="effect">${escapeHtml(item.honest_effect)}</p>
+        ${risco}
         ${detail}
       </div>
     </details>

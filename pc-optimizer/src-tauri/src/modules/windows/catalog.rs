@@ -7,7 +7,9 @@
 // Nada neste catálogo desativa Windows Update, antivírus, firewall ou serviços de
 // núcleo — as três coisas que "otimizadores" de má qualidade quebram.
 
-use crate::modules::optimizer::{Category, ExpectedGain, OptimizationInfo, OptimizationState};
+use crate::modules::optimizer::{
+    Category, ExpectedGain, OptimizationInfo, OptimizationState, RiscoDeFps,
+};
 
 /// Valor a ser escrito no registro.
 #[derive(Debug, Clone)]
@@ -156,6 +158,9 @@ pub struct OptimizationSpec {
     pub honest_effect: &'static str,
     pub category: Category,
     pub expected_gain: ExpectedGain,
+    /// Se este ajuste pode DERRUBAR o FPS em alguma máquina, e em qual caso.
+    /// Quando pode, `entra_no_lote` o exclui do "Otimizar agora".
+    pub risco_de_fps: RiscoDeFps,
     pub requires_admin: bool,
     pub requires_restart: bool,
     /// Quase todas as otimizações são reversíveis por construção, porque cada ação
@@ -185,11 +190,23 @@ pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 
 /// Se um item pode ser aplicado por um lote, sem a pessoa escolher item a item.
 ///
-/// As três exclusões moram juntas aqui para o motor e os testes lerem a mesma
-/// regra: o que não volta, o que troca segurança por desempenho, e o que está
-/// em `FORA_DO_LOTE`.
+/// As quatro exclusões moram juntas aqui para o motor e os testes lerem a mesma
+/// regra: o que não volta, o que troca segurança por desempenho, o que está em
+/// `FORA_DO_LOTE`, e — desde o incidente da 2.1.0 — **o que pode custar FPS**.
+///
+/// A quarta é a mais importante das quatro, e a mais cara de aprender. Um
+/// cliente aplicou tudo que o produto oferece e o FPS dele caiu pela metade.
+/// O produto é vendido para quem olha o contador de quadros: um lote que pode
+/// derrubar esse número, sem a pessoa ter escolhido a troca, não é otimização
+/// — é uma aposta feita no lugar dela.
+///
+/// O item não some: continua no catálogo, item a item, com o caso escrito em
+/// `RiscoDeFps::PodeCustar` aparecendo na tela. A diferença é quem decide.
 pub fn entra_no_lote(spec: &OptimizationSpec) -> bool {
-    spec.reversible && !spec.security_tradeoff && !FORA_DO_LOTE.contains(&spec.id)
+    spec.reversible
+        && !spec.security_tradeoff
+        && !spec.risco_de_fps.pode_custar()
+        && !FORA_DO_LOTE.contains(&spec.id)
 }
 
 impl OptimizationSpec {
@@ -206,6 +223,7 @@ impl OptimizationSpec {
             honest_effect: self.honest_effect.to_string(),
             category: self.category,
             expected_gain: self.expected_gain,
+            risco_de_fps: self.risco_de_fps.clone(),
             requires_admin: self.requires_admin,
             requires_restart: self.requires_restart,
             reversible: self.reversible,
@@ -226,6 +244,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Ganho real e consistente em PCs no plano Equilibrado, e nenhum ganho em PC que já estava num plano de desempenho — o relatório diz qual dos dois é o seu, ajuste por ajuste. Em notebook, os valores agressivos valem só na tomada: na bateria o plano fica no padrão do Windows de propósito. Ajuste que não existe neste Windows é listado como tal, e não conta como falha.",
         category: Category::System,
         expected_gain: ExpectedGain::Measurable,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -241,6 +260,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Costuma render de 2 a 8 FPS em placas de vídeo mais fracas. Em PCs potentes o ganho é pequeno.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Measurable,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -272,9 +292,14 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "gpu_hardware_scheduling",
         name: "Agendamento de GPU por hardware",
         description: "Deixa a própria GPU gerenciar sua fila de tarefas, em vez da CPU.",
-        honest_effect: "Reduz latência e ajuda quando a CPU é o gargalo. Exige reinício, e só é oferecido onde o driver de vídeo declara WDDM 2.7 ou mais novo — abaixo disso o Windows ignora a chave e o reinício seria por nada. Mesmo onde é oferecido, há máquinas em que o efeito é nulo.",
+        honest_effect: "Reduz latência e ajuda quando a CPU é o gargalo. Exige reinício, e só é oferecido onde o driver de vídeo declara WDDM 2.7 ou mais novo — abaixo disso o Windows ignora a chave e o reinício seria por nada. Em parte das máquinas o efeito é nulo, e em algumas combinações de placa e driver ele CUSTA quadros. Por isso saiu do botão automático: ligue, reinicie e meça.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::custa(
+            "Depende da combinação de placa de vídeo e versão de driver. Há máquinas em \
+             que ele rende e máquinas em que ele tira quadros, e não existe como saber \
+             qual é a sua sem medir antes e depois.",
+        ),
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -296,6 +321,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Ganho pequeno e difícil de medir isoladamente. Ajuda mais em PCs com poucos núcleos.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -324,6 +350,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera CPU, disco e rede em segundo plano. Não aumenta FPS diretamente; reduz engasgos aleatórios. Não afeta o Windows Update.",
         category: Category::Privacy,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -342,6 +369,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda FPS em jogos. Deixa a navegação do Windows visivelmente mais rápida em PCs fracos e com HDD.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -399,6 +427,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O desktop fica utilizável alguns segundos antes. Não reduz o tempo total de boot.",
         category: Category::Startup,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -419,6 +448,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Pode reduzir alguns milissegundos de ping em jogos competitivos. Não aumenta a velocidade da internet nem resolve conexão ruim.",
         category: Category::Network,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -434,6 +464,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda FPS. Deixa a mira consistente: o mesmo movimento de mão passa a percorrer sempre a mesma distância. Quem está acostumado com a aceleração vai estranhar nos primeiros dias.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -468,6 +499,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Ganho pequeno, mais perceptível em PCs de 2 e 4 núcleos. Em processadores modernos com muitos núcleos a diferença é quase nula.",
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -488,6 +520,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera memória e processos de fundo. NÃO faça se você usa Game Pass, jogos da Microsoft Store ou controle de Xbox — eles param de funcionar. É reversível.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -507,6 +540,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Em SSD o ganho de previsão é irrelevante e o serviço só consome disco e CPU. Em HD mecânico ele AJUDA — se seu PC ainda tem HD, não aplique.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -522,6 +556,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera vários GB de disco imediatamente. Em troca, você perde a hibernação e a Inicialização Rápida — o PC vai ligar alguns segundos mais devagar. Reversível.",
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -537,6 +572,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O Windows às vezes classifica errado e limita justamente o que você está usando. Desligar corrige esses casos. Em notebook, gasta mais bateria.",
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -557,6 +593,12 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Só vale com RAM sobrando: troca uso de CPU por uso de memória. Com 16 GB ou mais costuma render; com 8 GB ou menos PIORA, e por isso nem oferecemos nessas máquinas.",
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::custa(
+            "O piso de 12 GB não basta. Quem joga FiveM com navegador e Discord abertos \
+             enche 16 GB, e sem a compressão o Windows passa a ir ao disco — que é \
+             engasgo e queda de quadro, não ganho. Só vale se a memória sobrar DURANTE \
+             o jogo, e isso se vê medindo.",
+        ),
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -572,6 +614,18 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Ataca engasgo e latência, não FPS médio. É o ajuste mais profundo do catálogo e quase nenhum concorrente faz, porque exige achar a placa no registro. Em raríssimos casos de driver antigo pode causar instabilidade — é reversível e exige reiniciar.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
+        // FICA NO LOTE, e isso foi reconsiderado de propósito.
+        //
+        // Na primeira passada depois do incidente eu marquei este ajuste como
+        // "pode custar FPS" junto com os outros dois. Revendo: não existe
+        // evidência de que o modo MSI derrube quadro. O que existe é relato de
+        // instabilidade com driver antigo — outro problema, com outro nome.
+        //
+        // Classificar por medo, sem evidência, é exatamente o erro que criou o
+        // incidente: eu afirmei o significado de um valor sem conferir. Marcar
+        // um ajuste de risco sem prova é o mesmo vício virado do avesso, e
+        // esvazia o aviso dos que têm risco de verdade.
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -587,6 +641,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O Windows desliga a placa quando acha que está ociosa, e o primeiro pacote depois disso atrasa. É uma das causas reais de pico de ping no meio da partida. Em notebook na bateria, gasta um pouco mais.",
         category: Category::Network,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -602,6 +657,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera CPU, memória e rede de forma contínua. Em troca, os aplicativos instalados pela Store param de rodar com a janela fechada: deixam de dar notificação e de atualizar sozinhos — Correio, Calendário e Fotos são os mais afetados, e o WhatsApp instalado pela Store pode parar de avisar mensagem nova. Não mexe em programas comuns instalados fora da Store. Por isso não entra no \"Otimizar agora\": só é aplicado escolhendo este item.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -630,6 +686,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Uma das mudanças mais perceptíveis do dia a dia: o menu Iniciar passa a responder na hora, em vez de esperar resposta da internet para mostrar o programa que já está instalado. Não muda FPS.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -658,6 +715,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O Windows usa a SUA banda de subida para distribuir atualizações a outras máquinas na internet. Desligar libera essa banda — o que aparece como ping mais estável em jogo e upload mais livre em transmissão. Você continua recebendo todas as atualizações normalmente.",
         category: Category::Network,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -678,6 +736,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Se esses limites existem, seu PC está usando de propósito menos processador ou menos memória do que tem — e o ganho ao remover é enorme. Se não existem, esta opção nem aparece como disponível.",
         category: Category::System,
         expected_gain: ExpectedGain::Measurable,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -693,6 +752,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "ATENÇÃO, ISTO REDUZ A SEGURANÇA DO SEU PC. O VBS protege suas senhas do Windows contra roubo por programa malicioso e barra exploração do núcleo do sistema. Desligar rende FPS de verdade, mais em processadores de 8ª a 10ª geração, e é reversível — mas é uma troca de proteção por desempenho, não almoço grátis. Se você usa Hyper-V, WSL ou Sandbox, eles param de funcionar.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Measurable,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -724,6 +784,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Em PC fraco e em disco mecânico é das mudanças que mais aliviam, porque o indexador lê disco e gasta CPU sem hora marcada. Em troca, procurar arquivo pelo Explorador fica lento — ele passa a varrer as pastas na hora. Se você usa muito a busca do Windows, não vale.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -739,6 +800,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O efeito é desenhado pela placa de vídeo a cada quadro. Em vídeo integrado e em PC fraco isso aparece: menus e janelas abrem sem arrastar. Em PC com placa dedicada, o ganho é próximo de zero.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -759,6 +821,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "É a limpeza que mais devolve espaço em disco, e costuma render vários GB. Não aumenta FPS: o ganho é espaço, que num SSD pequeno e cheio faz muita diferença. Os serviços de atualização param durante a limpeza e voltam em seguida. NÃO PODE SER DESFEITA — arquivo apagado não volta.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: false,
@@ -774,6 +837,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Costuma devolver de 7 a 10 GB de disco imediatamente. Não aumenta FPS: o ganho é espaço, e num SSD pequeno e cheio isso muda a vida do PC. As atualizações continuam funcionando — o Windows passa a usar o espaço livre comum em vez de um pedaço separado.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -789,6 +853,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Isto não é um ajuste, é um conserto. Forçar o HPET é uma das dicas de FPS mais repetidas da internet e uma das mais erradas: o Windows já escolhe o melhor temporizador sozinho, e forçar costuma causar engasgo. Se a opção não estiver no seu PC, esta linha nem aparece como disponível. Reversível: guardamos o valor que estava lá.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Measurable,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -804,6 +869,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Complementa a prioridade do sistema para jogos, que sozinha só reserva menos CPU para o fundo. Ganho pequeno e difícil de isolar, mais perceptível em PC com poucos núcleos. Exige reiniciar.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -844,6 +910,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O Windows instala aplicativos patrocinados sem pedir, e eles voltam depois de cada atualização grande. Esta é a única maneira de a limpeza durar: sem ela, o que você desinstalar hoje reaparece. Também tira as sugestões do menu Iniciar.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -884,6 +951,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "O painel mantém um processo próprio carregando conteúdo da internet em segundo plano, e reaparece sozinho ao passar o mouse. Em PC com pouca memória o alívio é perceptível. Em Windows 10 sem o recurso, não muda nada.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -904,6 +972,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera memória e o processo que fica pronto em segundo plano. Se você usa o Copilot, não aplique: o ganho não compensa perder uma ferramenta que você usa de verdade.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -924,6 +993,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Sozinho não muda desempenho. O valor está em fazer a desativação da telemetria DURAR: sem a política, o serviço volta a ser reativado em atualizações grandes do Windows. É o cinto que segura o outro ajuste.",
         category: Category::Privacy,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -956,6 +1026,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda FPS e não libera memória. O que resolve é a notificação que rouba o foco durante um jogo em tela cheia sem bordas — que causa engasgo, mas não é perda de desempenho contínua.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -976,6 +1047,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda FPS. Pesa de verdade em disco mecânico e em internet lenta, onde uma atualização baixando no meio da partida disputa o disco com o jogo. Em SSD com internet boa a diferença é imperceptível.",
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -996,6 +1068,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Praticamente ninguém usa o Mapas do Windows. Se você nunca abriu esse aplicativo, não há mapa nenhum sendo baixado e desligar isto não muda absolutamente nada. Está aqui porque o mercado oferece.",
         category: Category::System,
         expected_gain: ExpectedGain::NoGain,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -1016,6 +1089,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda desempenho. É privacidade: as suas configurações param de subir para a nuvem. Em conta local isto já não fazia nada.",
         category: Category::Privacy,
         expected_gain: ExpectedGain::NoGain,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -1044,6 +1118,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Não muda desempenho. É segurança: fecha um caminho de acesso remoto que quase ninguém usa e que golpista de suporte falso usa. O acesso remoto do TeamViewer, AnyDesk e afins não é afetado.",
         category: Category::Privacy,
         expected_gain: ExpectedGain::NoGain,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -1064,6 +1139,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA. Não ganha um quadro por segundo. Zero. O que ele faz é tirar a última barreira entre um programa qualquer e o seu Windows: com o UAC desligado, qualquer coisa que você abrir por engano ganha poder de administrador sem perguntar nada. É a troca mais cara desta lista e o ganho é nenhum. E tem uma consequência que você vai sentir na hora: com o UAC desligado, aplicativo baixado da Loja da Microsoft se recusa a abrir — no Windows 10 e no Windows 11. Está aqui porque os concorrentes oferecem e você pediu paridade.",
         category: Category::System,
         expected_gain: ExpectedGain::NoGain,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
         reversible: true,
@@ -1085,6 +1161,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA, E A PIOR DA LISTA. Não muda desempenho: nem um quadro por segundo, nem um milissegundo de ping. O filtro roda dentro do núcleo do Windows e custa microssegundos. O que muda é que este PC passa a aceitar conexão de qualquer máquina da rede — e num servidor de jogo você está numa rede com desconhecidos. O ganho é zero e o risco é real.",
         category: Category::Network,
         expected_gain: ExpectedGain::NoGain,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
@@ -1151,6 +1228,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Só aparece se alguma delas estiver LIGADA na sua máquina — e quando está, o teclado atrasa de verdade: a Filtragem de Teclas chega a ignorar toques por um segundo inteiro. Ela liga sozinha ao segurar o Shift por oito segundos, o que acontece jogando sem ninguém perceber. Não muda FPS: muda o teclado responder na hora. Se você USA esses recursos por necessidade, não aplique — eles existem por um bom motivo.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: true,
@@ -1166,6 +1244,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Libera espaço em disco. Não aumenta FPS. É a ÚNICA operação do programa que não pode ser desfeita — arquivo apagado não volta. Arquivos em uso são pulados.",
         category: Category::System,
         expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: false,
         requires_restart: false,
         reversible: false,
@@ -1363,6 +1442,64 @@ mod tests {
                 "`{}` promete FPS e está classificado como sem ganho",
                 spec.id
             );
+        }
+    }
+
+    // ─── O lote automático e o que não pode entrar nele ──────────────────
+
+    /// A trava central do incidente da 2.1.0.
+    ///
+    /// O cliente clicou no botão grande, aplicou tudo, e o FPS caiu pela
+    /// metade. Depois disso a regra virou código: o lote automático só aplica
+    /// o que não pode custar quadro. Se alguém marcar um item como
+    /// `PodeCustar` e ele continuar entrando no lote, a compilação para aqui.
+    #[test]
+    fn nada_que_pode_custar_fps_entra_no_lote_automatico() {
+        for spec in CATALOG {
+            if spec.risco_de_fps.pode_custar() {
+                assert!(
+                    !entra_no_lote(spec),
+                    "`{}` pode custar FPS e ainda assim entra no \"Otimizar agora\". \
+                     Foi exatamente assim que a 2.1.0 derrubou o FPS de um cliente.",
+                    spec.id
+                );
+            }
+        }
+    }
+
+    /// Marcar o risco sem dizer QUANDO ele acontece não serve para nada: o
+    /// cliente fica com um aviso que não o ajuda a decidir, e o suporte fica
+    /// com um "pode variar" para explicar. O texto vai para a tela como está.
+    #[test]
+    fn todo_risco_de_fps_diz_em_que_caso_ele_custa() {
+        for spec in CATALOG {
+            if let RiscoDeFps::PodeCustar(quando) = &spec.risco_de_fps {
+                assert!(
+                    quando.len() >= 80,
+                    "`{}`: o risco precisa dizer em que caso ele custa quadro, \
+                     não só que pode",
+                    spec.id
+                );
+            }
+        }
+    }
+
+    /// Os dois que saíram do lote depois do incidente. O teste existe para que
+    /// tirá-los da lista seja uma decisão consciente, com este nome falhando,
+    /// e não um efeito colateral de mexer noutra coisa.
+    #[test]
+    fn os_ajustes_do_incidente_continuam_fora_do_lote() {
+        for id in ["gpu_hardware_scheduling", "disable_memory_compression"] {
+            let spec = CATALOG
+                .iter()
+                .find(|s| s.id == id)
+                .unwrap_or_else(|| panic!("`{id}` sumiu do catálogo"));
+
+            assert!(
+                spec.risco_de_fps.pode_custar(),
+                "`{id}` voltou a ser tratado como se não pudesse custar FPS"
+            );
+            assert!(!entra_no_lote(spec), "`{id}` voltou para o lote automático");
         }
     }
 
