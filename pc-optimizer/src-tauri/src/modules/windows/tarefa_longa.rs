@@ -458,6 +458,10 @@ mod tests {
     /// só que no duto vizinho. Roda `rodar` numa thread à parte e usa um
     /// prazo: se o `stderr` não for drenado, o `recv_timeout` estoura antes
     /// da tarefa terminar, e o teste falha em vez de travar o CI para sempre.
+    ///
+    /// O prazo é folgado de propósito: sozinho este teste leva uns 15 s, e o
+    /// `cargo test` roda tudo em paralelo. Um prazo justo reprovava o CI por
+    /// disputa de CPU, não por regressão — foi o que aconteceu aqui com 20 s.
     #[test]
     fn stderr_nao_trava_a_tarefa() {
         let tarefa = std::sync::Arc::new(TarefaLonga::nova());
@@ -476,7 +480,7 @@ mod tests {
         });
 
         let resultado = recebe
-            .recv_timeout(std::time::Duration::from_secs(20))
+            .recv_timeout(std::time::Duration::from_secs(90))
             .expect("a tarefa travou — o stderr não está sendo drenado");
 
         assert!(matches!(resultado, Ok(Desfecho::Terminou { codigo: 0 })));

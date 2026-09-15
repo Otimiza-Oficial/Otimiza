@@ -18,6 +18,63 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.1.1 — Conserto de um erro meu que derrubou o FPS
+
+**Se você instalou a 2.1.0 e o seu FPS caiu, esta versão é para você, e o erro
+foi nosso.**
+
+## O que aconteceu
+
+O plano de energia da 2.1.0 gravava uma configuração do Windows chamada
+*"Preferência de placa de vídeo"* com o valor `1`. Nós escrevemos esse valor
+achando que ele significava "preferir desempenho".
+
+Ele significa o contrário. O próprio Windows documenta assim:
+
+```
+0 = None      — nenhuma preferência
+1 = Low Power — preferir a placa de vídeo de baixo consumo
+```
+
+Em qualquer computador com duas placas de vídeo — todo notebook, e os desktops
+com vídeo integrado no processador — isso empurra o jogo para a placa fraca.
+Um cliente relatou cair de cerca de 200 FPS para 80–120 no FiveM. A queda é
+exatamente essa.
+
+## O que mudou
+
+O ajuste passa a gravar `0`, que é o padrão do Windows. Ele **não** foi apenas
+removido: se tivesse sido, quem já aplicou a 2.1.0 ficaria com o `1` gravado
+para sempre, porque o produto só reescreve aquilo que está na sua lista de
+ajustes. Com o alvo em `0`, a próxima aplicação — ou o botão **Reparar** — desfaz
+o estrago sozinha.
+
+## O que fazer se o seu FPS caiu
+
+Qualquer um dos três resolve:
+
+1. Atualize para a 2.1.1 e clique em **Aplicar o plano OTIMIZA** de novo; ou
+2. Atualize e clique em **Reparar o plano**; ou
+3. Em **Otimizações**, clique em **Voltar ao meu plano** e depois em
+   **Desfazer tudo** — isso devolve a máquina ao estado anterior ao Otimiza.
+
+## Para isso não voltar
+
+Entraram três travas no `cargo test`, que reprovam a compilação antes de
+qualquer publicação:
+
+- o ajuste de placa de vídeo nunca mais pode ter `1` como alvo, em notebook ou
+  em desktop, na tomada ou na bateria;
+- ele precisa ter `0` como alvo nos dois modos, para continuar consertando as
+  máquinas já atingidas;
+- todo ajuste de energia precisa registrar por escrito **o que o valor significa
+  para o Windows**, e não só que ele é bom — porque a causa raiz do erro não foi
+  o número, foi deduzir o significado do valor pelo nome da chave em vez de ler
+  a descrição que o Windows publica ao lado dela.
+
+---
+
+
 # 2.1.0 — FPS onde o cliente olha, e o fim das otimizações que diziam "pronto" sem fazer nada
 
 Esta versão tem duas metades. A primeira dá FPS de verdade. A segunda conserta a

@@ -468,14 +468,40 @@ pub static AJUSTES: &[Ajuste] = &[
                  parados. Na bateria continua ligado, porque ali ele economiza de verdade.",
         alvo: |_| Alvo::so_na_tomada(0),
     },
+    // ─────────────────────────────────────────────────────────────────────
+    // INCIDENTE 2.1.0 — ESTE AJUSTE DERRUBOU O FPS DE CLIENTES.
+    //
+    // Ele foi escrito com alvo `1` e o comentário dizia "preferir desempenho".
+    // Isso estava ERRADO. O Windows documenta esta chave assim, lido da árvore
+    // `PowerSettings` numa máquina real:
+    //
+    //     dd848b2a-…  "Policy to determine GPU preference"
+    //        0 => None      — "No preference"
+    //        1 => Low Power — "Prefer low-power GPU"
+    //
+    // Não existe valor "preferir alto desempenho" aqui. O `1` empurra o jogo
+    // para a placa de BAIXO CONSUMO — em notebook e em desktop com vídeo
+    // integrado, isso é o jogo saindo da placa dedicada. Um cliente relatou
+    // cair de 200 para 80-120 FPS.
+    //
+    // POR QUE O ALVO É 0 EM VEZ DE O AJUSTE SER REMOVIDO: remover faria as
+    // máquinas novas escaparem e deixaria as já atingidas com o `1` gravado
+    // para sempre. Com alvo `0` — que é o padrão do Windows — quem já recebeu a
+    // 2.1.0 é corrigido sozinho ao aplicar ou reparar o plano.
+    //
+    // A LIÇÃO, e ela vale mais que o conserto: eu inferi o significado de um
+    // valor a partir do nome da chave em vez de ler a descrição que o próprio
+    // Windows publica ao lado dela. Ver `os_valores_de_cada_ajuste_sao_os_que_o_windows_documenta`.
+    // ─────────────────────────────────────────────────────────────────────
     Ajuste {
-        nome: "Preferência de desempenho da placa de vídeo",
+        nome: "Preferência de placa de vídeo do Windows",
         subgrupo: SUB_GRAFICOS,
         ajuste: GPUPREFERENCEPOLICY,
-        classe: Classe::Recomendada,
-        porque: "Diz ao Windows para preferir desempenho quando ele tiver que escolher a \
-                 placa no lugar do aplicativo.",
-        alvo: |m| tomada_sempre_bateria_se_desktop(m, 1),
+        classe: Classe::Segura,
+        porque: "Garante que o Windows não esteja preferindo a placa de baixo consumo. O \
+                 valor 1 desta chave significa \"preferir a placa mais econômica\" — o \
+                 contrário do que se quer em jogo — e o 0 devolve a escolha ao aplicativo.",
+        alvo: |_| Alvo::nos_dois(0),
     },
     Ajuste {
         nome: "Economia de energia do adaptador sem fio",
@@ -2212,5 +2238,67 @@ mod tests {
     fn processo_de_32_bits_e_avisado() {
         let avisos = avisos_do_diagnostico(true, true, true, 0, false);
         assert!(avisos.iter().any(|a| a.contains("WOW6432Node")));
+    }
+
+    // ── Incidente 2.1.0: a preferência de placa de vídeo ──────────────────
+    //
+    // A 2.1.0 gravou 1 nesta chave achando que era "preferir desempenho". O
+    // Windows documenta 1 como "Prefer low-power GPU". Em máquina com gráficos
+    // híbridos isso tira o jogo da placa dedicada, e um cliente caiu de ~200
+    // para 80-120 FPS. As três travas abaixo existem para que esse valor não
+    // volte por descuido nem sobreviva num PC já atingido.
+
+    #[test]
+    fn a_preferencia_de_placa_de_video_nunca_pede_a_placa_de_baixo_consumo() {
+        let ajuste = AJUSTES
+            .iter()
+            .find(|a| a.ajuste == GPUPREFERENCEPOLICY)
+            .expect("o ajuste precisa continuar na tabela para consertar quem já recebeu a 2.1.0");
+
+        for notebook in [false, true] {
+            let alvo = (ajuste.alvo)(&maquina_de_teste(notebook));
+
+            assert_ne!(
+                alvo.ac,
+                Some(1),
+                "1 é \"preferir a placa de baixo consumo\" — foi isso que derrubou o FPS na 2.1.0"
+            );
+            assert_ne!(alvo.dc, Some(1), "idem na bateria");
+        }
+    }
+
+    #[test]
+    fn a_preferencia_de_placa_de_video_desfaz_o_estrago_da_2_1_0() {
+        // Não basta parar de escrever 1: quem já aplicou a 2.1.0 tem o 1
+        // gravado. `montar` e `reparar` só tocam o que está na tabela, então o
+        // alvo precisa ser 0 nos dois modos, em notebook e em desktop, para que
+        // a próxima aplicação ou reparo devolva a máquina ao padrão do Windows.
+        let ajuste = AJUSTES
+            .iter()
+            .find(|a| a.ajuste == GPUPREFERENCEPOLICY)
+            .expect("ajuste sumiu");
+
+        for notebook in [false, true] {
+            let alvo = (ajuste.alvo)(&maquina_de_teste(notebook));
+            assert_eq!(alvo.ac, Some(0), "na tomada precisa reescrever 0");
+            assert_eq!(alvo.dc, Some(0), "na bateria também, senão o 1 fica lá");
+        }
+    }
+
+    #[test]
+    fn os_valores_de_cada_ajuste_sao_os_que_o_windows_documenta() {
+        // A causa raiz do incidente não foi o número: foi eu ter deduzido o
+        // significado do valor a partir do NOME da chave. O texto de `porque`
+        // é o único lugar onde esse significado fica escrito, então ele não
+        // pode ser vago. Cada ajuste que grava um número precisa explicar o
+        // que o número quer dizer para o Windows.
+        for ajuste in AJUSTES {
+            assert!(
+                ajuste.porque.len() >= 60,
+                "{}: a justificativa precisa dizer o que o valor significa para o Windows, \
+                 não só que ele é bom",
+                ajuste.nome
+            );
+        }
     }
 }
