@@ -8,7 +8,7 @@
 // núcleo — as três coisas que "otimizadores" de má qualidade quebram.
 
 use crate::modules::optimizer::{
-    Category, ExpectedGain, OptimizationInfo, OptimizationState, RiscoDeFps,
+    Category, ExpectedGain, OQuePodeCustar, OptimizationInfo, OptimizationState, RiscoDeFps,
 };
 
 /// Valor a ser escrito no registro.
@@ -223,7 +223,7 @@ impl OptimizationSpec {
             honest_effect: self.honest_effect.to_string(),
             category: self.category,
             expected_gain: self.expected_gain,
-            risco_de_fps: self.risco_de_fps.clone(),
+            risco_de_fps: (&self.risco_de_fps).into(),
             requires_admin: self.requires_admin,
             requires_restart: self.requires_restart,
             reversible: self.reversible,
@@ -296,6 +296,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
         risco_de_fps: RiscoDeFps::custa(
+            OQuePodeCustar::FpsMedio,
             "Depende da combinação de placa de vídeo e versão de driver. Há máquinas em \
              que ele rende e máquinas em que ele tira quadros, e não existe como saber \
              qual é a sua sem medir antes e depois.",
@@ -594,6 +595,9 @@ pub static CATALOG: &[OptimizationSpec] = &[
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
         risco_de_fps: RiscoDeFps::custa(
+            // Engasgo e não FPS médio: sem a compressão o Windows vai ao
+            // disco, e o sintoma disso é travada — a média mal se move.
+            OQuePodeCustar::Engasgo,
             "O piso de 12 GB não basta. Quem joga FiveM com navegador e Discord abertos \
              enche 16 GB, e sem a compressão o Windows passa a ir ao disco — que é \
              engasgo e queda de quadro, não ganho. Só vale se a memória sobrar DURANTE \
@@ -1473,7 +1477,7 @@ mod tests {
     #[test]
     fn todo_risco_de_fps_diz_em_que_caso_ele_custa() {
         for spec in CATALOG {
-            if let RiscoDeFps::PodeCustar(quando) = &spec.risco_de_fps {
+            if let RiscoDeFps::PodeCustar { quando, .. } = &spec.risco_de_fps {
                 assert!(
                     quando.len() >= 80,
                     "`{}`: o risco precisa dizer em que caso ele custa quadro, \

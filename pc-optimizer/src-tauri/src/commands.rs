@@ -1861,6 +1861,18 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: os ajustes famosos que o Otimiza se recusa a fazer, e por quê.
+///
+/// Fica em `LIVRES`: é uma lista fixa, não toca a máquina. Existe porque o
+/// cliente compara lista com lista — ele vê um vídeo de "50 tweaks", conta
+/// trinta que o Otimiza não faz, e conclui que o produto é fraco. A conclusão é
+/// razoável de fora: ninguém tem como saber que metade daquela lista não faz
+/// nada e um quarto dela piora a máquina.
+#[tauri::command]
+pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemos> {
+    crate::modules::windows::naofazemos::LISTA.to_vec()
+}
+
 /// Comando: por que o FPS está baixo nesta máquina.
 ///
 /// Fica em `LIVRES`: é leitura pura. Junta as seis verificações que eu fiz À MÃO
@@ -3241,6 +3253,7 @@ mod tests {
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
+        "o_que_nao_fazemos",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

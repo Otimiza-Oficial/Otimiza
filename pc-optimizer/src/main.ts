@@ -30,7 +30,9 @@ interface OptimizationInfo {
    * metade. O backend manda o ESTADO e o motivo por escrito; a tela só escolhe
    * como mostrar — a mesma regra de `a_tela_nao_decide_cor_comparando_texto`.
    */
-  risco_de_fps: { risco: "Nenhum" } | { risco: "PodeCustar"; quando: string };
+  risco_de_fps:
+    | { risco: "Nenhum" }
+    | { risco: "PodeCustar"; o_que: string; rotulo: string; quando: string };
   recommended: boolean;
   state: State;
   detail: string | null;
@@ -1019,6 +1021,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     // e um painel que só aparece depois de trocar de aba não é lido. Ela roda
     // em paralelo com o resto e não segura a pintura da tela.
     carregarPorQueOFpsEstaBaixo(),
+    // Lista fixa, sem leitura de sistema: custo zero.
+    carregarOQueNaoFazemos(),
     loadIdentity(),
     checkAccess(),
     loadBaselineState(),
@@ -4964,13 +4968,19 @@ function renderOptimization(item: OptimizationInfo): string {
 
   // O aviso que faltava na 2.1.0. Um ajuste que pode custar quadro não pode
   // parecer igual aos outros numa lista que o cliente percorre para clicar.
-  const podeCustar = item.risco_de_fps.risco === "PodeCustar";
+  //
+  // O RÓTULO VEM DO BACKEND, e não de um texto fixo aqui: as quatro coisas que
+  // um ajuste pode piorar não são a mesma, e dizer "pode custar FPS" sobre um
+  // que na verdade ataca o engasgo faz a pessoa recusar a troca certa.
+  const risco_ = item.risco_de_fps;
+  const podeCustar = risco_.risco === "PodeCustar";
+
   if (podeCustar)
-    chips.push(`<span class="chip" data-warn="true">pode custar FPS</span>`);
+    chips.push(`<span class="chip" data-warn="true">${escapeHtml(risco_.rotulo)}</span>`);
 
   const risco = podeCustar
-    ? `<p class="effect" data-severity="Important"><strong>Pode custar FPS.</strong>
-         ${escapeHtml((item.risco_de_fps as { quando: string }).quando)}
+    ? `<p class="effect" data-severity="Important"><strong>${escapeHtml(risco_.rotulo)}.</strong>
+         ${escapeHtml(risco_.quando)}
          <br>Por isso ele não entra no “Otimizar agora”: aplique, reinicie se
          pedir, e meça antes de deixar ligado.</p>`
     : "";
@@ -7281,6 +7291,60 @@ interface Suspeito {
 interface Investigacao {
   suspeitos: Suspeito[];
   lacunas: string[];
+}
+
+
+// ------------------------------ o que o Otimiza se recusa a fazer, e por quê
+
+interface NaoFazemos {
+  id: string;
+  nome: string;
+  natureza: "Placebo" | "Redundante" | "Prejudicial";
+  porque: string;
+}
+
+/**
+ * O rótulo de cada natureza. A tabela mora aqui porque é rótulo de tela; o
+ * VOCABULÁRIO — quais naturezas existem — mora no Rust, e a tela nunca inventa
+ * uma quarta.
+ */
+const NA_TELA_DA_NATUREZA: Record<
+  NaoFazemos["natureza"],
+  { rotulo: string; severidade: string }
+> = {
+  Placebo: { rotulo: "não faz nada", severidade: "Neutral" },
+  Redundante: { rotulo: "o Windows já faz", severidade: "Neutral" },
+  Prejudicial: { rotulo: "piora a máquina", severidade: "Important" },
+};
+
+async function carregarOQueNaoFazemos() {
+  const alvo = element("nao-fazemos");
+
+  let lista: NaoFazemos[];
+
+  try {
+    lista = await invoke<NaoFazemos[]>("o_que_nao_fazemos");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  alvo.innerHTML =
+    `<p class="hint">Estes são ajustes que aparecem em toda lista de “aumente
+       seu FPS”. O Otimiza não faz nenhum deles, e o motivo de cada um está
+       escrito — para você conferir, não para acreditar.</p>` +
+    lista
+      .map((n) => {
+        const naTela = NA_TELA_DA_NATUREZA[n.natureza];
+
+        return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo"><strong>${escapeHtml(n.nome)}</strong>
+             — ${escapeHtml(naTela.rotulo)}</p>
+          <p class="effect">${escapeHtml(n.porque)}</p>
+        </div>`;
+      })
+      .join("");
 }
 
 async function carregarPorQueOFpsEstaBaixo() {

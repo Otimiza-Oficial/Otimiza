@@ -58,28 +58,103 @@ pub enum ExpectedGain {
 /// custar quadro.** O resto continua no catálogo, item a item, dizendo em voz
 /// alta o que está trocando pelo quê. Ver `catalog::entra_no_lote`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "risco", content = "quando")]
+#[serde(tag = "risco")]
 pub enum RiscoDeFps {
     /// Não mexe no caminho que desenha o quadro, ou mexe só para o bem.
     Nenhum,
     /// Pode custar quadros em parte das máquinas. Fica FORA do lote automático.
     ///
-    /// O texto diz EM QUE CASO ele custa — não "pode variar", que não ajuda
-    /// ninguém a decidir. Ele vai para a tela do jeito que está escrito.
+    /// `o_que` diz QUAL das quatro coisas ele pode custar, e `quando` diz em que
+    /// caso. As duas juntas são o que permite decidir: "pode variar" não ajuda
+    /// ninguém, e "pode custar FPS" sobre um ajuste que na verdade ataca o
+    /// engasgo manda a pessoa recusar a troca certa.
+    ///
     /// `Cow` e não `&'static str` porque `OptimizationInfo` precisa ser
     /// desserializável: o catálogo constrói `Borrowed` de graça, e o que volta
     /// do outro lado do IPC vira `Owned`.
-    PodeCustar(std::borrow::Cow<'static, str>),
+    PodeCustar {
+        o_que: OQuePodeCustar,
+        quando: std::borrow::Cow<'static, str>,
+    },
+}
+
+/// O que exatamente um ajuste pode piorar.
+///
+/// Quatro, e eles NÃO são a mesma coisa — foi por tratá-los como uma coisa só
+/// que o produto entregou "otimização" que derrubou FPS:
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OQuePodeCustar {
+    /// O número que o cliente olha no contador.
+    FpsMedio,
+    /// Os piores quadros da partida. Pode cair com a média intacta, e é o que
+    /// a pessoa SENTE.
+    UmPorCentoPior,
+    /// Travadas pontuais. A média e o 1% pior podem nem se mover.
+    Engasgo,
+    /// O turbo do processador. Aparece como FPS menor só em carga longa, o que
+    /// o torna o mais difícil de todos de perceber.
+    Boost,
+}
+
+impl OQuePodeCustar {
+    /// Como isso é dito ao cliente. Mora aqui e não na tela porque é
+    /// vocabulário de produto, e vocabulário de produto tem teste.
+    pub fn rotulo(self) -> &'static str {
+        match self {
+            OQuePodeCustar::FpsMedio => "pode custar FPS",
+            OQuePodeCustar::UmPorCentoPior => "pode piorar os quadros ruins",
+            OQuePodeCustar::Engasgo => "pode causar engasgo",
+            OQuePodeCustar::Boost => "pode segurar o turbo do processador",
+        }
+    }
 }
 
 impl RiscoDeFps {
     /// O jeito de escrever um risco no catálogo, sem `Cow` em toda linha.
-    pub const fn custa(quando: &'static str) -> Self {
-        RiscoDeFps::PodeCustar(std::borrow::Cow::Borrowed(quando))
+    pub const fn custa(o_que: OQuePodeCustar, quando: &'static str) -> Self {
+        RiscoDeFps::PodeCustar {
+            o_que,
+            quando: std::borrow::Cow::Borrowed(quando),
+        }
     }
 
     pub fn pode_custar(&self) -> bool {
-        matches!(self, RiscoDeFps::PodeCustar(_))
+        matches!(self, RiscoDeFps::PodeCustar { .. })
+    }
+}
+
+/// O mesmo risco, do jeito que a TELA precisa dele.
+///
+/// Existe separado porque o rótulo — "pode custar FPS", "pode causar engasgo" —
+/// é vocabulário de produto e tem que sair do Rust JÁ ESCOLHIDO. Se a tela
+/// montasse a frase a partir do nome da variante, ela estaria decidindo texto
+/// de produto por comparação de estado, que é a regra que
+/// `a_tela_nao_decide_cor_comparando_texto_do_backend` existe para impedir.
+///
+/// E há a razão prática: com um texto fixo na tela, um ajuste que ataca o
+/// engasgo apareceria como "pode custar FPS", e o cliente recusaria a troca
+/// certa por causa da etiqueta errada.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "risco")]
+pub enum RiscoNaTela {
+    Nenhum,
+    PodeCustar {
+        o_que: OQuePodeCustar,
+        rotulo: String,
+        quando: String,
+    },
+}
+
+impl From<&RiscoDeFps> for RiscoNaTela {
+    fn from(risco: &RiscoDeFps) -> Self {
+        match risco {
+            RiscoDeFps::Nenhum => RiscoNaTela::Nenhum,
+            RiscoDeFps::PodeCustar { o_que, quando } => RiscoNaTela::PodeCustar {
+                o_que: *o_que,
+                rotulo: o_que.rotulo().to_string(),
+                quando: quando.to_string(),
+            },
+        }
     }
 }
 
@@ -124,7 +199,7 @@ pub struct OptimizationInfo {
     pub expected_gain: ExpectedGain,
     /// Se este ajuste pode DERRUBAR o FPS em alguma máquina, e em qual caso.
     /// Quando pode, ele fica fora do "Otimizar agora" e a tela diz por quê.
-    pub risco_de_fps: RiscoDeFps,
+    pub risco_de_fps: RiscoNaTela,
     pub requires_admin: bool,
     pub requires_restart: bool,
     pub reversible: bool,
@@ -318,4 +393,45 @@ pub struct BatchStep {
     /// O que foi alterado, item por item.
     pub changes: Vec<String>,
     pub success: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// As quatro coisas que um ajuste pode piorar NÃO são a mesma coisa, e foi
+    /// por tratá-las como uma só que o produto entregou "otimização" que
+    /// derrubou FPS. Cada uma precisa de um rótulo próprio, senão o cliente lê
+    /// "pode custar FPS" sobre um ajuste que na verdade ataca o engasgo — e
+    /// recusa a troca certa.
+    #[test]
+    fn cada_coisa_que_pode_ser_custada_tem_rotulo_proprio() {
+        let todos = [
+            OQuePodeCustar::FpsMedio,
+            OQuePodeCustar::UmPorCentoPior,
+            OQuePodeCustar::Engasgo,
+            OQuePodeCustar::Boost,
+        ];
+
+        let mut rotulos: Vec<&str> = todos.iter().map(|o| o.rotulo()).collect();
+        let antes = rotulos.len();
+        rotulos.sort();
+        rotulos.dedup();
+
+        assert_eq!(rotulos.len(), antes, "dois deles dizem a mesma frase ao cliente");
+
+        for o in todos {
+            assert!(!o.rotulo().trim().is_empty(), "{o:?} sem rótulo");
+        }
+    }
+
+    /// `pode_custar` é o que tira o item do lote automático. Se ele deixar de
+    /// reconhecer a variante, o botão grande volta a aplicar o que derrubou o
+    /// FPS de um cliente na 2.1.0.
+    #[test]
+    fn todo_risco_declarado_e_reconhecido_como_risco() {
+        assert!(RiscoDeFps::custa(OQuePodeCustar::Boost, "x").pode_custar());
+        assert!(RiscoDeFps::custa(OQuePodeCustar::Engasgo, "x").pode_custar());
+        assert!(!RiscoDeFps::Nenhum.pode_custar());
+    }
 }
