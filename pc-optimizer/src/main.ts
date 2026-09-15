@@ -30,7 +30,9 @@ interface OptimizationInfo {
    * metade. O backend manda o ESTADO e o motivo por escrito; a tela só escolhe
    * como mostrar — a mesma regra de `a_tela_nao_decide_cor_comparando_texto`.
    */
-  risco_de_fps: { risco: "Nenhum" } | { risco: "PodeCustar"; quando: string };
+  risco_de_fps:
+    | { risco: "Nenhum" }
+    | { risco: "PodeCustar"; o_que: string; rotulo: string; quando: string };
   recommended: boolean;
   state: State;
   detail: string | null;
@@ -1014,6 +1016,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Ela lê um arquivo pequeno e não chama o Windows, então o orçamento de
     // abertura que a 1.7 comprou continua de pé.
     conferirOProprioTrabalho(),
+    // Esta CHAMA o Windows — seis leituras, uma delas o `nvidia-smi`. Entra
+    // aqui mesmo assim porque é a pergunta que o cliente de jogo faz primeiro,
+    // e um painel que só aparece depois de trocar de aba não é lido. Ela roda
+    // em paralelo com o resto e não segura a pintura da tela.
+    carregarPorQueOFpsEstaBaixo(),
+    // Lista fixa, sem leitura de sistema: custo zero.
+    carregarOQueNaoFazemos(),
     loadIdentity(),
     checkAccess(),
     loadBaselineState(),
@@ -1153,6 +1162,7 @@ function ligarSubabas() {
 let reparoCarregado = false;
 let planoVistoriado = false;
 let discosCarregados = false;
+let biosCarregada = false;
 
 function showTab(name: string) {
   if (name === "reparo" && !reparoCarregado) {
@@ -1163,9 +1173,19 @@ function showTab(name: string) {
   // Carrega ao abrir a aba, e uma vez só. A leitura passa pelo PowerShell e
   // varre as bibliotecas de jogo — é exatamente o tipo de custo que não pode
   // entrar na abertura do programa, pelo mesmo motivo da vistoria do plano.
+  // A BIOS carrega ao abrir a aba Sistema, e uma vez só: a leitura passa pelo
+  // PowerShell e não pode entrar na abertura do programa.
+  if (name === "sistema" && !biosCarregada) {
+    biosCarregada = true;
+    void carregarPassoAPassoDaBios();
+  }
+
   if (name === "jogos" && !discosCarregados) {
     discosCarregados = true;
     void carregarOndeOsJogosMoram();
+    // O protocolo mora na mesma aba e lê o mesmo arquivo de medições. Carrega
+    // junto, pelo mesmo motivo: o custo não pode cair na abertura do programa.
+    void carregarProtocolo();
   }
 
   // A VISTORIA DO PLANO RODA AO ABRIR A ABA, E NUNCA NA ABERTURA DO PROGRAMA.
@@ -3943,7 +3963,7 @@ function renderDiagnostico(d: DiagnosticoDeEnergia): string {
   // ajustes do plano pesa mais NESTE computador. É a parte adaptativa do
   // diagnóstico — a mesma tabela de ajustes rende diferente conforme quem
   // comanda a frequência do processador.
-  const governo = `<p class="bloco-de-texto">${escapeHtml(d.explicacao_do_governo)}</p>`;
+  const governo = `<p class="bloco-de-prosa">${escapeHtml(d.explicacao_do_governo)}</p>`;
 
   return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${governo}${avisos}`;
 }
@@ -4702,6 +4722,16 @@ async function loadOptimizations() {
     renderFilters();
     renderOptimizations();
     await avisarSeOHistoricoNaoFoiLido();
+    // DEPOIS da lista, e não antes: o aviso de conflito mostra os ajustes pelo
+    // NOME, e o nome vem da lista que acabou de carregar. Antes dela, ele
+    // mostraria identificadores.
+    await carregarConflitosDeAjuste();
+    // O aviso de conta vem junto: ele explica por que 21 desses ajustes podem
+    // ser aplicados, conferidos, e não fazer diferença nenhuma.
+    await carregarContaQueEstaRodando();
+    // Os níveis dependem da lista carregada: a contagem "N a aplicar" sai do
+    // estado de cada item nesta máquina, e antes dela seria zero.
+    await carregarNiveis();
   } catch (error) {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
@@ -4722,6 +4752,199 @@ let profiles: ProfileInfo[] = [];
 let activeProfile: string | null = null;
 /** Texto digitado na busca do catálogo. */
 let searchTerm = "";
+
+
+// -------------------------------------------------- os três níveis de risco
+
+interface NivelNaTela {
+  id: string;
+  nome: string;
+  promessa: string;
+  exigencia: string;
+  itens: string[];
+  acrescenta: string[];
+  aplica_de_uma_vez: boolean;
+}
+
+let niveis: NivelNaTela[] = [];
+let nivelEscolhido: string | null = null;
+
+
+// ------------------------------------------- o passo a passo da BIOS
+
+interface PassoDaBios {
+  id: string;
+  fase: string;
+  titulo: string;
+  onde: string;
+  o_que_faz: string;
+  risco_e_volta: string;
+  medido_aqui: boolean;
+}
+
+interface BiosNaTela {
+  leitura: {
+    placa_mae: string | null;
+    versao_da_bios: string | null;
+    data_da_bios: string | null;
+    uefi: boolean | null;
+    secure_boot: boolean | null;
+    lacunas: string[];
+  };
+  passos: PassoDaBios[];
+}
+
+const NA_TELA_DA_FASE: Record<string, string> = {
+  UsarOQueTem: "Fase 1 — ligar o que você já comprou",
+  Documentado: "Fase 2 — o que o fabricante documenta",
+  ExigeTeste: "Fase 3 — exige teste de estabilidade",
+  NaoOrientamos: "Fase 4 — overclock manual",
+  UltimoRecurso: "Fase 5 — atualizar a BIOS",
+};
+
+async function carregarPassoAPassoDaBios() {
+  const alvo = element("bios-passos");
+
+  let b: BiosNaTela;
+
+  try {
+    b = await invoke<BiosNaTela>("passo_a_passo_da_bios");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  const l = b.leitura;
+  const identificacao = l.placa_mae
+    ? `<p class="bloco-de-prosa"><strong>${escapeHtml(l.placa_mae)}</strong>${
+        l.versao_da_bios ? ` · BIOS ${escapeHtml(l.versao_da_bios)}` : ""
+      }${l.uefi === false ? " · iniciando em modo Legacy" : ""}${
+        l.uefi === true ? " · UEFI" : ""
+      }. Use este modelo para achar o manual certo — os nomes das opções mudam de
+      placa para placa, e um vídeo de outra placa manda você procurar um menu que
+      não existe aqui.</p>`
+    : "";
+
+  // Um cabeçalho de fase por vez, e só quando a fase tem passos. Fase vazia na
+  // tela é uma etapa que o cliente procura e não encontra.
+  let faseAtual = "";
+  const corpo = b.passos
+    .map((p) => {
+      const cabecalho =
+        p.fase === faseAtual
+          ? ""
+          : `<p class="profiles-label">${escapeHtml(NA_TELA_DA_FASE[p.fase] ?? p.fase)}</p>`;
+      faseAtual = p.fase;
+
+      // "Medido aqui" separa "isto vale para você" de "isto é boa ideia em
+      // geral". Sem essa marca a lista seria igual em toda máquina — que é
+      // exatamente o que os vídeos de tweak fazem.
+      const marca = p.medido_aqui
+        ? `<span class="chip" data-recommended="true">medido nesta máquina</span>`
+        : "";
+
+      return (
+        cabecalho +
+        `<div class="causa" data-severity="${p.medido_aqui ? "Ok" : "Neutral"}">
+           <p class="causa-titulo"><strong>${escapeHtml(p.titulo)}</strong> ${marca}</p>
+           <p class="effect">${escapeHtml(p.o_que_faz)}</p>
+           <p class="causa-medido"><strong>Onde:</strong> ${escapeHtml(p.onde)}</p>
+           <p class="causa-confirmar"><strong>Risco e como voltar:</strong>
+              ${escapeHtml(p.risco_e_volta)}</p>
+         </div>`
+      );
+    })
+    .join("");
+
+  const lacunas = l.lacunas.length
+    ? `<p class="hint">${l.lacunas.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  alvo.innerHTML =
+    `<p class="hint">O Otimiza não altera nada na BIOS e não tem como fazer isso — esta
+       lista é para você conferir com o manual da sua placa. Ela está em ordem de risco:
+       quem parar na Fase 1 pegou a maior parte do ganho disponível.</p>` +
+    identificacao +
+    corpo +
+    lacunas;
+}
+
+async function carregarNiveis() {
+  try {
+    niveis = await invoke<NivelNaTela[]>("niveis_de_otimizacao");
+    renderNiveis();
+  } catch {
+    // Sem os níveis a lista continua inteira e utilizável: eles são um atalho
+    // para marcar caixas, não um pré-requisito para otimizar.
+    element("nivel-chips").innerHTML = "";
+  }
+}
+
+function renderNiveis() {
+  element("nivel-chips").innerHTML = niveis
+    .map(
+      (n) =>
+        `<button class="profile-chip" data-nivel="${escapeHtml(n.id)}"
+           aria-pressed="${nivelEscolhido === n.id}">${escapeHtml(n.nome)}</button>`
+    )
+    .join("");
+}
+
+/**
+ * Escolher um nível MARCA as caixas dele — não aplica nada.
+ *
+ * É a mesma regra dos perfis: a pessoa continua vendo item a item e podendo
+ * desmarcar. E no Experimental o texto manda para o painel de grupos, porque
+ * aplicar aqueles ajustes de uma vez é o que derrubou o FPS de um cliente.
+ */
+function escolherNivel(id: string) {
+  const nivel = niveis.find((n) => n.id === id);
+  if (!nivel) return;
+
+  // Clicar de novo no mesmo nível desmarca: o atalho tem volta, igual ao perfil.
+  nivelEscolhido = nivelEscolhido === id ? null : id;
+  renderNiveis();
+  renderOptimizations();
+
+  const detalhe = element("nivel-detalhe");
+
+  if (!nivelEscolhido) {
+    detalhe.hidden = true;
+    return;
+  }
+
+  const doNivel = optimizations.filter((o) => nivel.itens.includes(o.id));
+  const aAplicar = doNivel.filter((o) => o.state === "Available");
+  const jaTem = doNivel.filter(
+    (o) => o.state === "Applied" || o.state === "AlreadyOptimal"
+  ).length;
+
+  // O BOTÃO NÃO APARECE NO EXPERIMENTAL, e quem decide isso é o backend.
+  // Aplicar aqueles ajustes de uma vez é literalmente o que derrubou o FPS de
+  // um cliente — oferecer o botão e escrever "não clique" embaixo seria pôr a
+  // armadilha na tela com um aviso ao lado.
+  const acao = !nivel.aplica_de_uma_vez
+    ? `<p class="effect" data-severity="Important">Este nível não tem botão de aplicar
+         tudo, e é de propósito. Os ajustes dele rendem numa máquina e custam quadro em
+         outra — foi aplicar todos juntos que derrubou o FPS de um cliente. Use o painel
+         <strong>“Testar um grupo de cada vez”</strong>, na aba Jogos: ele aplica um grupo
+         por vez e compara a medição dos dois lados.</p>`
+    : aAplicar.length > 0
+      ? `<br /><button id="aplicar-nivel" class="btn btn-primary">Aplicar os ${
+          aAplicar.length
+        } deste nível</button>`
+      : "";
+
+  detalhe.innerHTML =
+    `<p><strong>${escapeHtml(nivel.nome)}.</strong> ${escapeHtml(nivel.promessa)}</p>` +
+    `<p><strong>O que exige:</strong> ${escapeHtml(nivel.exigencia)}</p>` +
+    `<p><strong>${aAplicar.length} a aplicar${
+      jaTem > 0 ? `, ${jaTem} que o seu PC já tem` : ""
+    }.</strong> A lista ao lado está mostrando só os itens deste nível.</p>` +
+    acao;
+
+  detalhe.hidden = false;
+}
 
 async function loadProfiles() {
   try {
@@ -4843,6 +5066,15 @@ function renderOptimizations() {
       if (!activeProfile) return true;
       const perfil = profiles.find((p) => p.id === activeProfile);
       return perfil ? perfil.optimization_ids.includes(item.id) : true;
+    })
+    // O nível corta pelo outro eixo: o perfil diz ONDE mexer, o nível diz ATÉ
+    // ONDE ir. Os dois filtros se somam de propósito — quem escolheu "Jogos" e
+    // "Seguro" quer a interseção, e mostrar a união faria o "Seguro" não
+    // significar nada.
+    .filter((item) => {
+      if (!nivelEscolhido) return true;
+      const nivel = niveis.find((n) => n.id === nivelEscolhido);
+      return nivel ? nivel.itens.includes(item.id) : true;
     });
 
   const available = optimizations.filter((item) => item.state === "Available").length;
@@ -4959,13 +5191,19 @@ function renderOptimization(item: OptimizationInfo): string {
 
   // O aviso que faltava na 2.1.0. Um ajuste que pode custar quadro não pode
   // parecer igual aos outros numa lista que o cliente percorre para clicar.
-  const podeCustar = item.risco_de_fps.risco === "PodeCustar";
+  //
+  // O RÓTULO VEM DO BACKEND, e não de um texto fixo aqui: as quatro coisas que
+  // um ajuste pode piorar não são a mesma, e dizer "pode custar FPS" sobre um
+  // que na verdade ataca o engasgo faz a pessoa recusar a troca certa.
+  const risco_ = item.risco_de_fps;
+  const podeCustar = risco_.risco === "PodeCustar";
+
   if (podeCustar)
-    chips.push(`<span class="chip" data-warn="true">pode custar FPS</span>`);
+    chips.push(`<span class="chip" data-warn="true">${escapeHtml(risco_.rotulo)}</span>`);
 
   const risco = podeCustar
-    ? `<p class="effect" data-severity="Important"><strong>Pode custar FPS.</strong>
-         ${escapeHtml((item.risco_de_fps as { quando: string }).quando)}
+    ? `<p class="effect" data-severity="Important"><strong>${escapeHtml(risco_.rotulo)}.</strong>
+         ${escapeHtml(risco_.quando)}
          <br>Por isso ele não entra no “Otimizar agora”: aplique, reinicie se
          pedir, e meça antes de deixar ligado.</p>`
     : "";
@@ -7252,6 +7490,390 @@ const NA_TELA_DO_DISCO: Record<
   NaoDeuParaLer: { rotulo: "tipo de disco não identificado", severidade: "Neutral" },
 };
 
+
+// ------------------------------------------ por que o FPS está baixo aqui
+
+/**
+ * Um suspeito, já pronto pela regra do Rust.
+ *
+ * A tela não decide nada aqui — nem a ordem, que é decisão de produto e mora em
+ * `causas::ordenar`. Ela só desenha. É a mesma regra de
+ * `a_tela_nao_decide_cor_comparando_texto_do_backend`, e neste painel ela pesa
+ * mais que em qualquer outro: a ordem dos suspeitos é o produto dizendo o que
+ * olhar primeiro, e ela inclui acusar o próprio Otimiza.
+ */
+interface Suspeito {
+  id: string;
+  titulo: string;
+  medido: string;
+  porque: string;
+  como_confirmar: string;
+  confianca: string;
+}
+
+interface Investigacao {
+  suspeitos: Suspeito[];
+  lacunas: string[];
+}
+
+
+// ------------------------------ o que o Otimiza se recusa a fazer, e por quê
+
+interface NaoFazemos {
+  id: string;
+  nome: string;
+  natureza: "Placebo" | "Redundante" | "Prejudicial";
+  porque: string;
+}
+
+/**
+ * O rótulo de cada natureza. A tabela mora aqui porque é rótulo de tela; o
+ * VOCABULÁRIO — quais naturezas existem — mora no Rust, e a tela nunca inventa
+ * uma quarta.
+ */
+const NA_TELA_DA_NATUREZA: Record<
+  NaoFazemos["natureza"],
+  { rotulo: string; severidade: string }
+> = {
+  Placebo: { rotulo: "não faz nada", severidade: "Neutral" },
+  Redundante: { rotulo: "o Windows já faz", severidade: "Neutral" },
+  Prejudicial: { rotulo: "piora a máquina", severidade: "Important" },
+};
+
+
+// ------------------------------------------ o protocolo A/B, grupo a grupo
+
+type FaseDoGrupo =
+  | { fase: "FaltaOAntes" }
+  | { fase: "ProntoParaAplicar"; amostras_antes: number }
+  | { fase: "EsperandoODepois"; amostras_depois: number; faltam: number }
+  | { fase: "Concluido" };
+
+type DecisaoDoGrupo =
+  | { decisao: "Esperar"; falta: string }
+  | { decisao: "Manter"; ganho_pct: number }
+  | { decisao: "NaoMudouNada" }
+  | { decisao: "ReverterSozinho"; queda_pct: number }
+  | { decisao: "PiorouMasNaoReverto"; queda_pct: number; porque: string };
+
+interface LadoDoVeredito {
+  fps: number;
+  low_1pct: number;
+  amostras: number;
+}
+
+interface Experimento {
+  grupo: string;
+  letra: string;
+  nome: string;
+  descricao: string;
+  itens: string[];
+  exige_reinicio: boolean;
+  fase: FaseDoGrupo;
+  decisao: DecisaoDoGrupo;
+  veredito: {
+    antes: LadoDoVeredito | null;
+    depois: LadoDoVeredito | null;
+    variacao_fps_pct: number | null;
+  } | null;
+}
+
+/**
+ * A cor e o rótulo de cada decisão.
+ *
+ * `NaoMudouNada` é NEUTRO e não cinza-apagado de propósito: "aqui não rende" é
+ * uma resposta de valor — é ela que deixa a pessoa parar de mexer naquilo —, e
+ * apagá-la visualmente faria o cliente refazer o mesmo teste para sempre.
+ */
+const NA_TELA_DA_DECISAO: Record<
+  DecisaoDoGrupo["decisao"],
+  { rotulo: string; severidade: string }
+> = {
+  Esperar: { rotulo: "ainda medindo", severidade: "Neutral" },
+  Manter: { rotulo: "rendeu aqui", severidade: "Ok" },
+  NaoMudouNada: { rotulo: "não mudou nada aqui", severidade: "Neutral" },
+  ReverterSozinho: { rotulo: "piorou — vamos desfazer", severidade: "Important" },
+  PiorouMasNaoReverto: { rotulo: "piorou", severidade: "Important" },
+};
+
+function numerosDoExperimento(e: Experimento): string {
+  const v = e.veredito;
+  if (!v || !v.antes || !v.depois) return "";
+
+  const pct = v.variacao_fps_pct;
+  const sinal = pct !== null && pct > 0 ? "+" : "";
+
+  return `<p class="causa-medido">
+      Antes: ${v.antes.fps.toFixed(0)} FPS · 1% piores ${v.antes.low_1pct.toFixed(0)}
+      (${v.antes.amostras} medições).
+      Depois: ${v.depois.fps.toFixed(0)} FPS · 1% piores ${v.depois.low_1pct.toFixed(0)}
+      (${v.depois.amostras} medições).
+      ${pct !== null ? `Diferença: ${sinal}${pct.toFixed(0)}%.` : ""}
+    </p>`;
+}
+
+function textoDaDecisao(e: Experimento): string {
+  const d = e.decisao;
+
+  switch (d.decisao) {
+    case "Esperar":
+      return `<p class="effect">${escapeHtml(d.falta)}</p>`;
+    case "Manter":
+      return `<p class="effect">Este grupo rendeu ${d.ganho_pct.toFixed(0)}% nesta máquina.
+                Mantenha.</p>`;
+    case "NaoMudouNada":
+      return `<p class="effect">Medido dos dois lados e a diferença ficou dentro da
+                variação normal entre duas partidas. Não rende aqui — e saber disso é o
+                que permite parar de mexer neste grupo.</p>`;
+    case "ReverterSozinho":
+      return `<p class="effect">Caiu ${Math.abs(d.queda_pct).toFixed(0)}% depois deste
+                grupo. Como ele não exige reiniciar, a comparação é limpa e o Otimiza
+                desfaz.</p>`;
+    case "PiorouMasNaoReverto":
+      return `<p class="effect">Caiu ${Math.abs(d.queda_pct).toFixed(0)}% depois deste
+                grupo. ${escapeHtml(d.porque)}</p>`;
+  }
+}
+
+
+// ------------------------------- ajustes do Otimiza que brigam entre si
+
+interface ConflitoDeAjuste {
+  id: string;
+  um: string;
+  outro: string;
+  tipo: "MesmoLugar" | "SeAnulam" | "DependeDoOutro" | "JuntosCustamCaro";
+  mecanismo: string;
+  conselho: string;
+}
+
+const NA_TELA_DO_CONFLITO: Record<ConflitoDeAjuste["tipo"], string> = {
+  MesmoLugar: "escrevem no mesmo lugar",
+  SeAnulam: "um anula o outro",
+  DependeDoOutro: "um depende do outro",
+  JuntosCustamCaro: "juntos custam caro",
+};
+
+/**
+ * Só aparece quando há conflito de verdade entre o que ESTÁ aplicado.
+ *
+ * Um aviso que aparece sempre é um aviso que ninguém lê — e este precisa ser
+ * lido, porque ele explica por que um teste A/B pode ter dado a resposta errada.
+ */
+
+// -------------------------- a conta que está rodando vs a que está jogando
+
+interface ContaDoUsuario {
+  conta:
+    | { estado: "Mesma"; usuario: string }
+    | { estado: "Diferente"; processo: string; shell: string }
+    | { estado: "NaoDeuParaLer"; motivo: string };
+  ajustes_por_conta: number;
+  explicacao: string;
+}
+
+/**
+ * O aviso mais importante da aba de otimizações, e o mais silencioso sem ele.
+ *
+ * Só aparece quando as contas SÃO diferentes ou quando não deu para ler. No
+ * caso normal ele fica escondido: um aviso que aparece sempre é um aviso que
+ * ninguém lê, e este precisa ser lido — ele explica por que vinte e um ajustes
+ * vão ser aplicados, conferidos, e não vão fazer diferença nenhuma.
+ */
+async function carregarContaQueEstaRodando() {
+  const painel = element("conta-painel");
+  const alvo = element("conta-aviso");
+
+  let c: ContaDoUsuario;
+
+  try {
+    c = await invoke<ContaDoUsuario>("conta_que_esta_rodando");
+  } catch {
+    painel.hidden = true;
+    return;
+  }
+
+  if (c.conta.estado === "Mesma") {
+    painel.hidden = true;
+    return;
+  }
+
+  // "Não deu para ler" não é alarme vermelho, mas também não some: é uma
+  // verificação que não aconteceu, e ela fica dita como tal.
+  painel.hidden = false;
+  painel.dataset.severity = c.conta.estado === "Diferente" ? "Important" : "Neutral";
+
+  alvo.innerHTML = c.explicacao
+    .split("\n\n")
+    .map((p) => `<p class="effect">${escapeHtml(p)}</p>`)
+    .join("");
+}
+
+async function carregarConflitosDeAjuste() {
+  const painel = element("conflitos-de-ajuste-painel");
+  const alvo = element("conflitos-de-ajuste");
+
+  let conflitos: ConflitoDeAjuste[];
+
+  try {
+    conflitos = await invoke<ConflitoDeAjuste[]>("conflitos_entre_ajustes");
+  } catch {
+    // Não conseguir ler o histórico já é dito em outro lugar da mesma aba.
+    painel.hidden = true;
+    return;
+  }
+
+  if (conflitos.length === 0) {
+    painel.hidden = true;
+    return;
+  }
+
+  painel.hidden = false;
+  alvo.innerHTML = conflitos
+    .map(
+      (c) => `
+      <div class="causa" data-severity="Important">
+        <p class="causa-titulo">
+          <strong>${escapeHtml(nomeDaOtimizacao(c.um))}</strong> e
+          <strong>${escapeHtml(nomeDaOtimizacao(c.outro))}</strong>
+          <span class="chip">${escapeHtml(NA_TELA_DO_CONFLITO[c.tipo])}</span>
+        </p>
+        <p class="effect">${escapeHtml(c.mecanismo)}</p>
+        <p class="causa-confirmar"><strong>O que fazer:</strong> ${escapeHtml(c.conselho)}</p>
+      </div>`
+    )
+    .join("");
+}
+
+/**
+ * O nome de tela de uma otimização, pelo id.
+ *
+ * Usa a lista que a aba já carregou. Sem ela, mostra o id — que é feio e é
+ * honesto; inventar um nome bonito aqui faria a tela e o catálogo poderem
+ * discordar sobre o mesmo ajuste.
+ */
+function nomeDaOtimizacao(id: string): string {
+  return optimizations.find((o) => o.id === id)?.name ?? id;
+}
+
+async function carregarProtocolo() {
+  const alvo = element("protocolo");
+
+  let grupos: Experimento[];
+
+  try {
+    grupos = await invoke<Experimento[]>("protocolo_de_grupos", { jogo: null });
+  } catch (erro) {
+    // Sem medição nenhuma o backend recusa, e a recusa EXPLICA o que fazer —
+    // ela não é um erro a esconder, é a primeira instrução do protocolo.
+    alvo.innerHTML = `<p class="bloco-de-prosa">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  alvo.innerHTML = grupos
+    .map((e) => {
+      const naTela = NA_TELA_DA_DECISAO[e.decisao.decisao];
+      const reinicio = e.exige_reinicio
+        ? `<span class="chip">exige reiniciar</span>`
+        : `<span class="chip">sem reiniciar</span>`;
+
+      return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo">
+            <strong>${escapeHtml(e.letra)} — ${escapeHtml(e.nome)}</strong>
+            <span class="chip">${escapeHtml(naTela.rotulo)}</span>
+            ${reinicio}
+          </p>
+          <p class="effect">${escapeHtml(e.descricao)}</p>
+          ${numerosDoExperimento(e)}
+          ${textoDaDecisao(e)}
+          <p class="detail">${e.itens.length} ajuste(s) neste grupo.</p>
+        </div>`;
+    })
+    .join("");
+}
+
+async function carregarOQueNaoFazemos() {
+  const alvo = element("nao-fazemos");
+
+  let lista: NaoFazemos[];
+
+  try {
+    lista = await invoke<NaoFazemos[]>("o_que_nao_fazemos");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  alvo.innerHTML =
+    `<p class="hint">Estes são ajustes que aparecem em toda lista de “aumente
+       seu FPS”. O Otimiza não faz nenhum deles, e o motivo de cada um está
+       escrito — para você conferir, não para acreditar.</p>` +
+    lista
+      .map((n) => {
+        const naTela = NA_TELA_DA_NATUREZA[n.natureza];
+
+        return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo"><strong>${escapeHtml(n.nome)}</strong>
+             — ${escapeHtml(naTela.rotulo)}</p>
+          <p class="effect">${escapeHtml(n.porque)}</p>
+        </div>`;
+      })
+      .join("");
+}
+
+async function carregarPorQueOFpsEstaBaixo() {
+  const painel = element("causas-painel");
+  const alvo = element("causas");
+
+  let r: Investigacao;
+
+  try {
+    r = await invoke<Investigacao>("por_que_o_fps_esta_baixo");
+  } catch (erro) {
+    painel.hidden = false;
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  painel.hidden = false;
+
+  // Quando o suspeito é o próprio Otimiza, ele fica em âmbar. Os outros são
+  // fatos da máquina e não são culpa de ninguém — pintá-los de alerta faria o
+  // cliente achar que o PC dele está quebrado.
+  const cartoes = r.suspeitos
+    .map(
+      (s) => `
+      <div class="causa" data-severity="${s.id === "foi_o_otimiza" ? "Important" : "Neutral"}">
+        <p class="causa-titulo"><strong>${escapeHtml(s.titulo)}</strong></p>
+        <p class="causa-medido">${escapeHtml(s.medido)}</p>
+        <p class="effect">${escapeHtml(s.porque)}</p>
+        <p class="causa-confirmar"><strong>Como confirmar:</strong> ${escapeHtml(s.como_confirmar)}</p>
+      </div>`
+    )
+    .join("");
+
+  // A lista vazia NÃO é uma tela em branco e não é um atestado: é um resultado,
+  // e ela precisa dizer o que foi procurado. A frase vem do Rust para o papel e
+  // a tela não poderem discordar.
+  const corpo =
+    r.suspeitos.length > 0
+      ? cartoes
+      : `<p class="bloco-de-prosa">Nenhuma das causas conhecidas de FPS baixo foi
+           encontrada aqui: memória de vídeo curta, jogo em disco mecânico, faixas de
+           PCI Express estreitas, memória abaixo da velocidade nominal ou em canal
+           único, e limite de temperatura ou energia ativo. Isso não quer dizer que o
+           FPS esteja bom — quer dizer que o motivo não é nenhum destes cinco.</p>`;
+
+  const lacunas = r.lacunas.length
+    ? `<p class="hint"><strong>Não deu para verificar:</strong><br>
+         ${r.lacunas.map(escapeHtml).join("<br>")}</p>`
+    : "";
+
+  alvo.innerHTML = corpo + lacunas;
+}
+
 async function carregarOndeOsJogosMoram() {
   const painel = element("disco-do-jogo-painel");
   const alvo = element("disco-do-jogo");
@@ -7382,9 +8004,47 @@ async function carregarMedicoesAutomaticas() {
   alvo.hidden = false;
   alvo.innerHTML =
     `<p><strong>Medido sozinho durante as partidas</strong></p>` +
+    (await notaDoJogoEmHtml()) +
     `<ul class="lista">${linhas}</ul>` +
     `<p class="hint">Cada linha foi medida num momento e num lugar diferentes do jogo, ` +
     `então elas não se comparam entre si como antes e depois. Para isso, use os botões acima.</p>`;
+}
+
+/**
+ * A nota de jogo da última medição confiável.
+ *
+ * A frase inteira vem do Rust — inclusive o diagnóstico de "o que segura esta
+ * nota". É regra de produto: a mesma nota com engasgo e a mesma nota sem
+ * engasgo pedem conselhos diferentes, e quem decide isso não pode ser a tela.
+ */
+async function notaDoJogoEmHtml(): Promise<string> {
+  type Nota =
+    | { estado: "SemAmostra" }
+    | {
+        estado: "Calculada";
+        nota: number;
+        fps_medio: number;
+        low_1pct: number;
+      };
+
+  let nota: Nota;
+
+  try {
+    nota = await invoke<Nota>("nota_do_jogo");
+  } catch {
+    // A nota é um extra da lista de medições. Não conseguir calculá-la não
+    // pode sumir com a lista, que é o dado de verdade.
+    return "";
+  }
+
+  if (nota.estado === "SemAmostra") return "";
+
+  return `
+    <p class="bloco-de-prosa"><strong>Nota ${nota.nota} de 100</strong> —
+      ${nota.fps_medio.toFixed(0)} FPS de média e ${nota.low_1pct.toFixed(0)} no 1% pior.
+      O 1% pior pesa mais que a média nesta conta, porque é ele que você sente.
+      A nota descreve esta máquina neste jogo e serve para comparar antes e depois,
+      não para comparar com o PC de outra pessoa.</p>`;
 }
 
 async function medirAntes() {
@@ -7984,6 +8644,27 @@ function wireControls() {
   element("lab-copiar").addEventListener("click", copiarLab);
   element("plano-aplicar").addEventListener("click", aplicarPlano);
   element("plano-desfazer").addEventListener("click", desfazerPlano);
+
+  element("nivel-chips").addEventListener("click", (event) => {
+    const chip = (event.target as HTMLElement).closest(
+      "button[data-nivel]"
+    ) as HTMLButtonElement | null;
+    if (chip) escolherNivel(chip.dataset.nivel!);
+  });
+
+  // O botão de aplicar o nível é redesenhado a cada escolha, então a escuta
+  // fica no painel que sobrevive, e não no botão.
+  element("nivel-detalhe").addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest("#aplicar-nivel");
+    if (!button) return;
+
+    const nivel = niveis.find((n) => n.id === nivelEscolhido);
+    // A trava vale nos DOIS lados: o botão não é desenhado no Experimental, e
+    // se ele aparecer por qualquer outro caminho, esta linha recusa.
+    if (!nivel || !nivel.aplica_de_uma_vez) return;
+
+    runBatch("optimize_now", `Aplicando o nível ${nivel.nome}…`, nivel.itens);
+  });
 
   element("profile-chips").addEventListener("click", (event) => {
     const chip = (event.target as HTMLElement).closest(

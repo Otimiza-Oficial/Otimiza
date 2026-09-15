@@ -379,6 +379,101 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
     }
 }
 
+/// Comando: o que olhar na BIOS desta máquina, em fases.
+///
+/// Fica em `LIVRES`: **este comando não escreve absolutamente nada.** O Windows
+/// não altera firmware de PC de mesa, e uma ferramenta que encontrasse um jeito
+/// de fazer isso seria uma ferramenta capaz de deixar a máquina do cliente sem
+/// ligar.
+///
+/// Os dois achados que tornam passos relevantes — memória abaixo do nominal e
+/// Resizable BAR desligado — vêm de quem já mede isso. Remedir aqui faria o
+/// produto poder mostrar dois números diferentes para o mesmo fato.
+#[tauri::command]
+pub fn passo_a_passo_da_bios() -> BiosNaTela {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::{bios, firmware, planoenergia, rbar};
+
+        let leitura = bios::ler();
+
+        let memoria_abaixo = firmware::analyze_memory_ou_lacuna()
+            .map(|achados| achados.iter().any(|a| a.id == "memory_xmp_off"))
+            .unwrap_or(false);
+
+        let rebar_desligado = matches!(
+            rbar::analyze().estado,
+            rbar::EstadoDoRbar::DesligadoESuportado
+        );
+
+        let amd = matches!(
+            planoenergia::detectar().fabricante_da_cpu,
+            planoenergia::FabricanteDaCpu::Amd
+        );
+
+        BiosNaTela {
+            passos: bios::montar(&leitura, memoria_abaixo, rebar_desligado, amd),
+            leitura,
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        BiosNaTela::default()
+    }
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct BiosNaTela {
+    pub leitura: crate::modules::windows::bios::Leitura,
+    pub passos: Vec<crate::modules::windows::bios::Passo>,
+}
+
+/// Comando: os três níveis — Seguro, Competitivo, Experimental.
+///
+/// Fica em `LIVRES`: é a definição dos níveis, montada do catálogo. Não aplica
+/// nada; aplicar continua sendo `optimize_now` com a lista de identificadores.
+///
+/// Diferente dos perfis: os perfis respondem "para que você usa a máquina", e
+/// estes respondem "o que você aceita trocar". As duas perguntas são
+/// independentes, e responder as duas com a mesma lista seria fingir que o
+/// cliente que joga e o cliente que aceita risco são a mesma pessoa.
+#[tauri::command]
+pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
+    use crate::modules::windows::niveis::{acrescenta, aplica_de_uma_vez, itens_do_nivel, Nivel};
+
+    Nivel::TODOS
+        .iter()
+        .map(|nivel| NivelNaTela {
+            id: format!("{nivel:?}"),
+            nome: nivel.nome().to_string(),
+            promessa: nivel.promessa().to_string(),
+            exigencia: nivel.exigencia().to_string(),
+            itens: itens_do_nivel(*nivel).iter().map(|s| s.to_string()).collect(),
+            acrescenta: acrescenta(*nivel).iter().map(|s| s.to_string()).collect(),
+            aplica_de_uma_vez: aplica_de_uma_vez(*nivel),
+        })
+        .collect()
+}
+
+/// Um nível, do jeito que a tela precisa dele.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct NivelNaTela {
+    pub id: String,
+    pub nome: String,
+    /// O que o nível faz. Sem adjetivo de marketing.
+    pub promessa: String,
+    /// O que ele exige de quem escolhe. Parte do contrato, não nota de rodapé.
+    pub exigencia: String,
+    pub itens: Vec<String>,
+    /// O que ESTE nível acrescenta ao anterior — é a diferença que ajuda a
+    /// decidir, e não a lista inteira.
+    pub acrescenta: Vec<String>,
+    /// Falso no Experimental: aplicar todos de uma vez é o que derrubou o FPS
+    /// de um cliente, e a tela precisa saber disso para não oferecer o botão.
+    pub aplica_de_uma_vez: bool,
+}
+
 /// Comando: Perfis de otimização recomendados por tipo de uso.
 ///
 /// Perfil aqui é sugestão que marca caixas na lista, não pacote fechado: a
@@ -1861,6 +1956,215 @@ pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAut
     crate::modules::medicoes::ler()
 }
 
+/// Comando: o Otimiza está rodando pela mesma conta que está usando o PC?
+///
+/// Fica em `LIVRES`: só lê. É a verificação que pega a classe mais silenciosa
+/// de "funcionou aqui e não lá" — vinte e um ajustes do catálogo são por CONTA,
+/// e elevados por outra eles vão para um perfil que ninguém usa, com o produto
+/// conferindo e dizendo que deu certo.
+#[tauri::command]
+pub fn conta_que_esta_rodando() -> ContaDoUsuario {
+    #[cfg(target_os = "windows")]
+    {
+        let conta = crate::modules::windows::contadousuario::verificar();
+        let quantos = crate::modules::windows::contadousuario::quantos_sao_por_conta();
+
+        ContaDoUsuario {
+            explicacao: crate::modules::windows::contadousuario::explicar(&conta, quantos),
+            ajustes_por_conta: quantos,
+            conta,
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        ContaDoUsuario::default()
+    }
+}
+
+/// O que a tela recebe: o estado, o número, e a frase já escolhida pelo Rust.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContaDoUsuario {
+    #[cfg(target_os = "windows")]
+    pub conta: crate::modules::windows::contadousuario::Conta,
+    pub ajustes_por_conta: usize,
+    pub explicacao: String,
+}
+
+#[cfg(not(target_os = "windows"))]
+impl Default for ContaDoUsuario {
+    fn default() -> Self {
+        ContaDoUsuario {
+            ajustes_por_conta: 0,
+            explicacao: "Só no Windows.".to_string(),
+        }
+    }
+}
+
+/// Comando: os ajustes do Otimiza que brigam entre si, nesta máquina.
+///
+/// Fica em `LIVRES`: compara a lista de aplicados com a tabela de conflitos
+/// conhecidos e não toca em nada. NÃO impede nada — há casos legítimos de
+/// querer os dois, e bloquear seria o produto decidindo no lugar da pessoa
+/// sobre a máquina dela.
+///
+/// É diferente de `detect_conflicts`, que procura dois PROGRAMAS disputando a
+/// mesma função. Este procura o problema de dentro de casa.
+#[tauri::command]
+pub async fn conflitos_entre_ajustes(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::modules::windows::conflitos::Conflito>, String> {
+    let aplicados: Vec<String> = state
+        .changes
+        .lock()
+        .await
+        .applied()
+        .iter()
+        .map(|a| a.optimization_id.clone())
+        .collect();
+
+    Ok(crate::modules::windows::conflitos::entre(&aplicados)
+        .into_iter()
+        .cloned()
+        .collect())
+}
+
+/// Comando: a nota de jogo da medição mais recente.
+///
+/// Fica em `LIVRES`: lê o arquivo de medições e calcula. A nota pesa 60% no 1%
+/// pior e 40% na média, porque ninguém sente média — a pessoa sente a travada.
+#[tauri::command]
+pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
+    let medicoes = crate::modules::medicoes::ler()?;
+
+    // A MAIS RECENTE CONFIÁVEL, e não a mais recente: uma amostra curta
+    // sobrepondo uma boa faria a nota piscar sem nada ter mudado na máquina.
+    let Some(m) = medicoes.iter().rev().find(|m| m.confiavel) else {
+        return Ok(crate::modules::pontuacao::Nota::SemAmostra);
+    };
+
+    Ok(crate::modules::pontuacao::calcular(m.fps, m.low_1pct, m.confiavel))
+}
+
+/// Comando: o protocolo A/B, grupo por grupo.
+///
+/// Fica em `LIVRES`: só lê. Aplicar um grupo continua passando pelo caminho que
+/// já existe — `optimize_now` com a lista de ids —, e desfazer pelo `revert`.
+/// Este comando é o que diz EM QUE PÉ está cada um dos nove testes.
+///
+/// O jogo entra como parâmetro porque a comparação é por jogo: FPS de jogos
+/// diferentes não se compara, e misturar dois produz "queda" onde só houve o
+/// cliente trocar de jogo. Sem jogo informado, usa o mais medido.
+#[tauri::command]
+pub async fn protocolo_de_grupos(
+    state: State<'_, AppState>,
+    jogo: Option<String>,
+) -> Result<Vec<crate::modules::windows::experimento::Experimento>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::{experimento, grupos::Grupo};
+
+        let medicoes = crate::modules::medicoes::ler()?;
+
+        let Some(jogo) = jogo.or_else(|| jogo_mais_medido(&medicoes)) else {
+            return Err(
+                "Ainda não há nenhuma medição de jogo nesta máquina. O Otimiza mede sozinho \
+                 depois de alguns minutos de partida — abra o jogo e jogue um pouco."
+                    .to_string(),
+            );
+        };
+
+        let log = state.changes.lock().await;
+        let aplicadas = log.applied().len();
+
+        Ok(Grupo::TODOS
+            .iter()
+            .map(|grupo| {
+                // "Aplicado" é TODO o grupo estar no histórico, e não algum
+                // item dele: com metade aplicada, a comparação mediria uma
+                // mistura e responderia sobre um grupo que nunca existiu.
+                let itens = crate::modules::windows::grupos::itens_do_grupo(*grupo);
+                let aplicado =
+                    !itens.is_empty() && itens.iter().all(|id| log.is_applied(id));
+
+                experimento::montar(*grupo, &jogo, &medicoes, aplicadas, aplicado)
+            })
+            .collect())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (state, jogo);
+        Err("Só no Windows.".to_string())
+    }
+}
+
+/// O jogo com mais medições guardadas.
+///
+/// Mais medições e não a mais recente: o protocolo precisa de amostra dos dois
+/// lados, e o jogo que a pessoa abriu uma vez ontem nunca vai ter isso.
+#[cfg(target_os = "windows")]
+fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> Option<String> {
+    let mut contagem: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+
+    for m in medicoes {
+        *contagem.entry(m.jogo.as_str()).or_insert(0) += 1;
+    }
+
+    contagem
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(jogo, _)| jogo.to_string())
+}
+
+/// Comando: os ajustes famosos que o Otimiza se recusa a fazer, e por quê.
+///
+/// Fica em `LIVRES`: é uma lista fixa, não toca a máquina. Existe porque o
+/// cliente compara lista com lista — ele vê um vídeo de "50 tweaks", conta
+/// trinta que o Otimiza não faz, e conclui que o produto é fraco. A conclusão é
+/// razoável de fora: ninguém tem como saber que metade daquela lista não faz
+/// nada e um quarto dela piora a máquina.
+#[tauri::command]
+pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemos> {
+    crate::modules::windows::naofazemos::LISTA.to_vec()
+}
+
+/// Comando: por que o FPS está baixo nesta máquina.
+///
+/// Fica em `LIVRES`: é leitura pura. Junta as seis verificações que eu fiz À MÃO
+/// nos dois atendimentos desta semana, e passa junto a regressão medida — se o
+/// próprio Otimiza pode ter sido a causa, ele aparece como PRIMEIRO suspeito, e
+/// não escondido no fim de uma lista de defeitos da máquina do cliente.
+#[tauri::command]
+pub async fn por_que_o_fps_esta_baixo(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::causas::Investigacao, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // A regressão é lida aqui porque ela depende do histórico de mudanças,
+        // que vive atrás do estado do aplicativo. Falhar em lê-la NÃO impede a
+        // investigação: as outras cinco causas continuam valendo, e uma lista
+        // de cinco é melhor que um erro.
+        let piorou = match crate::modules::medicoes::ler() {
+            Ok(medicoes) => {
+                let aplicadas = state.changes.lock().await.applied().len();
+                let vereditos = crate::modules::regressao::todos(&medicoes, aplicadas);
+
+                crate::modules::regressao::pior_regressao(&vereditos)
+                    .and_then(|v| v.variacao_fps_pct.map(|pct| (v.jogo.clone(), pct)))
+            }
+            Err(_) => None,
+        };
+
+        Ok(crate::modules::windows::causas::investigar(piorou))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Só no Windows.".to_string())
+    }
+}
+
 /// Comando: em que disco cada jogo está instalado.
 ///
 /// Fica em `LIVRES`: é leitura pura, e é justamente o tipo de achado que vale
@@ -3204,6 +3508,14 @@ mod tests {
         "medicoes_automaticas",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
+        "por_que_o_fps_esta_baixo",
+        "o_que_nao_fazemos",
+        "protocolo_de_grupos",
+        "nota_do_jogo",
+        "conflitos_entre_ajustes",
+        "conta_que_esta_rodando",
+        "niveis_de_otimizacao",
+        "passo_a_passo_da_bios",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

@@ -587,6 +587,52 @@
             </div>
           </section>
 
+          <!--
+            POR QUE O FPS ESTÁ BAIXO.
+
+            Este painel existe porque eu fiz esta investigação À MÃO duas vezes
+            numa semana: um cliente que caiu de 200 para 80-120 FPS depois de
+            otimizar, e outro pegando 15 a 20 "dependendo de onde eu fico". As
+            duas foram a mesma investigação — uma lista curta de suspeitos, cada
+            um com um jeito de confirmar.
+
+            Enquanto isso não era código, quem fazia era uma pessoa. E uma
+            pessoa não atende cem clientes.
+
+            Fica DEPOIS do veredito de propósito: o veredito responde "o que há
+            de errado com esta máquina", e este responde a pergunta seguinte,
+            que é a que o cliente de jogo faz primeiro.
+          -->
+          <section class="panel" id="causas-painel" hidden>
+            <header class="panel-head">
+              <h2>Por que o FPS está baixo aqui</h2>
+              <p class="panel-sub">
+                Cada item foi lido desta máquina, e diz como você confere sem
+                depender da nossa palavra.
+              </p>
+            </header>
+            <div id="causas" data-vazio="Procurando…"></div>
+          </section>
+
+          <!--
+            O QUE O OTIMIZA NÃO FAZ.
+
+            O cliente compara lista com lista. Ele abre um vídeo de "50 tweaks
+            para aumentar FPS", vê trinta coisas que o Otimiza não faz, e conclui
+            que o produto é fraco — o que é razoável de fora, porque ninguém tem
+            como saber que metade daquela lista não faz nada e que um quarto dela
+            piora a máquina.
+
+            Fica DEPOIS das causas e fechado por padrão: quem veio resolver FPS
+            baixo resolve primeiro, e quem veio comparar abre.
+          -->
+          <details class="panel" id="nao-fazemos-painel">
+            <summary class="panel-head-resumo">
+              <h2>O que o Otimiza se recusa a fazer, e por quê</h2>
+            </summary>
+            <div id="nao-fazemos"></div>
+          </details>
+
           <div class="grid grid-hero">
             <section class="panel panel-hero">
               <div class="panel-head">
@@ -711,6 +757,51 @@
 
         <!-- ======================================================= OTIMIZAÇÕES -->
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
+          <!--
+            A CONTA QUE ESTÁ RODANDO O OTIMIZA.
+
+            Vinte e um ajustes do catálogo são por CONTA e não pela máquina. Se
+            o cliente elevar o Otimiza digitando a senha de OUTRA conta — o que
+            acontece toda vez que a conta dele não é administradora —, esses
+            ajustes vão para um perfil que ninguém usa.
+
+            E o produto confere e diz que deu certo: ele relê a chave que acabou
+            de escrever, encontra o valor, e reporta sucesso. A verificação está
+            certa e a resposta está errada, porque a pergunta era sobre a conta
+            errada.
+
+            Some da tela quando as contas são a mesma. Aviso que aparece sempre
+            é aviso que ninguém lê.
+          -->
+          <section class="panel" id="conta-painel" hidden data-severity="Important">
+            <header class="panel-head">
+              <h2>A conta que está rodando o Otimiza</h2>
+            </header>
+            <div id="conta-aviso"></div>
+          </section>
+
+          <!--
+            AJUSTES DO OTIMIZA QUE BRIGAM ENTRE SI.
+
+            Diferente do detector de conflitos entre PROGRAMAS, que procura dois
+            antivírus varrendo ou dois otimizadores se desfazendo. Este procura
+            o problema de dentro de casa: dois ajustes NOSSOS que se anulam, se
+            somam mal, ou que ficam sem sentido juntos.
+
+            Importa porque o protocolo A/B afirma "este grupo rendeu aqui", e
+            essa afirmação só vale se os grupos forem independentes. Dois ajustes
+            que brigam fazem o teste do segundo medir o efeito do primeiro.
+
+            Só aparece quando há conflito de verdade entre o que ESTÁ aplicado.
+            Aviso que aparece sempre é aviso que ninguém lê.
+          -->
+          <section class="panel" id="conflitos-de-ajuste-painel" hidden>
+            <header class="panel-head">
+              <h2>Ajustes aplicados que brigam entre si</h2>
+            </header>
+            <div id="conflitos-de-ajuste"></div>
+          </section>
+
           <!--
             A PROVA DE GANHO, NO LUGAR ONDE A OTIMIZAÇÃO ACONTECE
 
@@ -886,6 +977,27 @@
                 <p class="profiles-label">Para que serve este PC?</p>
                 <div class="profile-chips" id="profile-chips"></div>
                 <p class="hint" id="profile-detail" hidden></p>
+              </div>
+
+              <!--
+                OS TRÊS NÍVEIS.
+
+                Os perfis acima respondem "para que serve este PC?". Estes
+                respondem a outra pergunta, e é a que faltava quando um cliente
+                aplicou tudo e o FPS dele caiu pela metade: "o que você aceita
+                trocar?".
+
+                As duas são independentes de propósito. O perfil diz ONDE mexer;
+                o nível diz ATÉ ONDE ir.
+
+                O Experimental não ganha botão de aplicar tudo — o backend manda
+                `aplica_de_uma_vez: false` e a tela obedece. Aplicar aqueles
+                ajustes juntos é exatamente o que causou o incidente.
+              -->
+              <div class="profiles">
+                <p class="profiles-label">O que você aceita trocar?</p>
+                <div class="profile-chips" id="nivel-chips"></div>
+                <div class="hint" id="nivel-detalhe" hidden></div>
               </div>
 
               <p id="optimization-status" class="status"></p>
@@ -1758,6 +1870,33 @@
             <div id="prova-automaticas" class="resultado" hidden></div>
           </section>
 
+          <!--
+            O PROTOCOLO A/B — UM GRUPO DE CADA VEZ.
+
+            Nasceu do cliente que aplicou tudo e caiu de 200 para 80-120 FPS.
+            Nem ele nem nós tínhamos como saber QUAL dos vinte ajustes fez isso,
+            e a investigação levou dias.
+
+            Com o catálogo em nove grupos, a pergunta deixa de ser "o Otimiza
+            piorou meu PC?" e vira "qual destes nove grupos piorou meu PC?" — e
+            essa segunda se responde com quatro medições.
+
+            Os grupos aparecem TODOS, inclusive os que já foram testados e não
+            mudaram nada: "aqui não rende" é a resposta que deixa a pessoa parar
+            de mexer naquilo, e escondê-la faria o teste ser refeito para sempre.
+          -->
+          <section class="panel" id="protocolo-painel">
+            <header class="panel-head">
+              <h2>Testar um grupo de cada vez</h2>
+              <p class="panel-sub">
+                Aplicar vinte ajustes juntos dá um número e nenhuma informação.
+                Nove grupos testados em sequência dão nove respostas, e cada uma
+                vale para sempre nesta máquina.
+              </p>
+            </header>
+            <div id="protocolo" data-vazio="Carregando…"></div>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>FiveM</h2>
@@ -2007,6 +2146,27 @@
 
         <!-- ============================================================= SISTEMA -->
         <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
+
+          <!--
+            O PASSO A PASSO DA BIOS.
+
+            Este painel NÃO tem botão, e é a decisão central dele: o Windows não
+            altera firmware de PC de mesa, e uma ferramenta que encontrasse um
+            jeito de fazer isso seria uma ferramenta capaz de deixar a máquina do
+            cliente sem ligar.
+
+            O que ele faz é montar a lista do que vale olhar EM ORDEM DE RISCO,
+            com o modelo da placa-mãe ao lado — porque com esse dado a pessoa
+            acha o manual certo em vez de seguir um vídeo de outra placa.
+
+            Fechado por padrão: quem chegou aqui por FPS resolve o resto antes.
+          -->
+          <details class="panel" id="bios-painel">
+            <summary class="panel-head-resumo">
+              <h2>O que olhar na BIOS desta máquina</h2>
+            </summary>
+            <div id="bios-passos"></div>
+          </details>
           <!--
             TRÊS CARTÕES QUE ERAM A MESMA PERGUNTA
 

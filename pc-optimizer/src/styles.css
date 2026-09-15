@@ -4966,3 +4966,84 @@ circle.placa-parafuso {
   border-left: 2px solid var(--hairline-strong);
   padding-left: var(--s3);
 }
+
+/*
+  OS SUSPEITOS DE FPS BAIXO.
+
+  Só o "pode ter sido o próprio Otimiza" ganha âmbar. Os outros são fatos da
+  máquina, não defeitos — pintar "sua placa tem 2 GB" de alerta faria o cliente
+  achar que o PC dele está quebrado quando ele só é o que é.
+*/
+.causa {
+  padding: var(--s3) 0 var(--s3) var(--s3);
+  border-left: 2px solid var(--hairline-strong);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.causa:last-child {
+  border-bottom: none;
+}
+
+.causa[data-severity="Important"] {
+  border-left-color: var(--amber);
+}
+
+.causa-titulo {
+  margin-bottom: var(--s1);
+}
+
+.causa-medido {
+  color: var(--text-dim);
+  margin-bottom: var(--s2);
+}
+
+.causa-confirmar {
+  margin-top: var(--s2);
+  color: var(--text-dim);
+}
+
+/*
+  O PAINEL DE AVISO DE CONTA.
+
+  A cor sai do `data-severity` que o TypeScript escreve a partir do ESTADO do
+  backend — nunca de comparação de texto. "Não deu para ler" é neutro e não
+  âmbar: é uma verificação que não aconteceu, e não um problema encontrado.
+*/
+#conta-painel[data-severity="Important"] {
+  border-left: 2px solid var(--amber);
+}
+
+#conta-painel[data-severity="Neutral"] {
+  border-left: 2px solid var(--hairline-strong);
+}
+
+#conta-aviso {
+  padding: 0 var(--s4) var(--s4);
+}
+
+/*
+  A MESMA CAIXA, PARA PROSA.
+
+  `.bloco-de-texto` existe para texto PRÉ-FORMATADO — o relatório de suporte,
+  que o cliente copia e cola no atendimento e cujas quebras de linha fazem
+  parte do conteúdo. Por isso ele tem `white-space: pre`.
+
+  Eu usei essa classe para parágrafos comuns em quatro telas, e o resultado foi
+  uma barra de rolagem horizontal no meio do texto — pego numa captura da tela
+  de BIOS, onde o nome da placa-mãe é longo. Esta variante é a mesma caixa com
+  quebra de linha normal.
+*/
+.bloco-de-prosa {
+  margin-top: var(--s3);
+  padding: var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--surface-sunken, rgba(0, 0, 0, 0.25));
+  color: var(--text-dim);
+  font-size: var(--t-body);
+  line-height: 1.6;
+}
+
+.bloco-de-prosa strong {
+  color: var(--text);
+}
