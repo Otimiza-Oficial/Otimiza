@@ -153,10 +153,30 @@ pub fn query_start_type(service: &str) -> Result<String, String> {
 
 /// Define o tipo de inicialização de um serviço.
 /// `start_type` deve ser auto, delayed-auto, demand ou disabled.
+/// ESCREVE E RELÊ. O `sc config` já devolveu código zero em máquina onde a
+/// chave do serviço ficou como estava — política de domínio e ACL negada são os
+/// dois casos que aparecem no PC de cliente e nunca no de quem desenvolve. Um
+/// `Ok(())` em cima do código de saída sozinho é o produto dizendo "desativei"
+/// sobre um serviço que continua ligado, e é exatamente a classe de mentira que
+/// fez as otimizações "funcionarem aqui e não lá".
 pub fn set_start_type(service: &str, start_type: &str) -> Result<(), String> {
     // O `sc config` exige o formato `start= valor`, com o espaço depois do sinal.
     super::shell::run_checked("sc", &["config", service, "start=", start_type])?;
-    Ok(())
+
+    match query_start_type(service) {
+        Ok(agora) if agora.eq_ignore_ascii_case(start_type) => Ok(()),
+        Ok(agora) => Err(format!(
+            "O comando não deu erro, mas o serviço `{service}` continua em \
+             \"{agora}\" e não em \"{start_type}\". Costuma ser política do \
+             Windows ou permissão negada na chave do serviço."
+        )),
+        // Não conseguir reler não vira sucesso nem falha de escrita: vira o que
+        // é. Quem chama já sabe transformar isso em "não deu para verificar".
+        Err(erro) => Err(format!(
+            "O serviço `{service}` foi configurado, mas não deu para reler o \
+             estado dele para confirmar: {erro}"
+        )),
+    }
 }
 
 /// Para um serviço em execução. Um serviço já parado não é tratado como erro.
@@ -178,6 +198,25 @@ pub fn stop(service: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A classe de defeito que fez as otimizações "funcionarem aqui e não lá":
+    /// escrever, receber código zero, e dar por feito. `sc config` já devolveu
+    /// zero em máquina com política de domínio e com ACL negada na chave do
+    /// serviço, deixando o serviço exatamente como estava.
+    #[test]
+    fn mudar_um_servico_relê_o_estado_antes_de_dar_por_feito() {
+        let producao = include_str!("services.rs").split("#[cfg(test)]").next().unwrap();
+        let corpo = producao
+            .split("pub fn set_start_type")
+            .nth(1)
+            .expect("a função continua existindo");
+
+        assert!(
+            corpo.contains("query_start_type"),
+            "`set_start_type` voltou a confiar no código de saída do `sc` sem reler"
+        );
+    }
+
 
     /// Saída REAL desta máquina, em português, com os acentos já estragados
     /// pelo código de página do console — que é como ela chega ao produto.

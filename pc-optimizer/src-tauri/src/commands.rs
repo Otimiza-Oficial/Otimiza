@@ -464,10 +464,11 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
         health: Some(windows::health::analyze()),
         memory: Some(windows::memory::analyze()),
         browsers: Some(windows::browsers::analyze()),
-        // Chave de inicialização ilegível sai do PDF como lista vazia. A tela
-        // mostra o erro; o relatório ainda não tem onde escrever uma lacuna
-        // nesta seção, e isso fica para a passada dos estados vazios (C.4).
-        startup: windows::startup::entries().unwrap_or_default(),
+        // Chave de inicialização ilegível chega ao PDF como erro, e vira uma
+        // lacuna escrita na seção. Antes vinha como lista vazia: a seção sumia
+        // do documento inteira, e o laudo afirmava por omissão que a máquina
+        // não tem nada abrindo com o Windows.
+        startup: windows::startup::entries(),
         // O mesmo veredito que a tela mostra, para que o papel e o programa
         // não possam discordar sobre a mesma máquina.
         veredito: Some(windows::veredito::diagnostico_rapido()),

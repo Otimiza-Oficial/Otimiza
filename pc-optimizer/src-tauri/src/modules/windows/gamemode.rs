@@ -265,18 +265,49 @@ fn caminho_do_executavel(nome: &str) -> Option<std::path::PathBuf> {
 pub fn priorizar_pid(pid: u32) -> Result<(), String> {
     // O PID entra formatado como número, nunca como texto vindo de fora — é o
     // que impede alguém de fazer o script executar outra coisa.
+    //
+    // O SCRIPT ANTIGO MENTIA. Ele era:
+    //
+    //     if ($p) { $p.PriorityClass = 'High'; 1 } else { 0 }
+    //
+    // Atribuir `PriorityClass` num processo que não aceita — falta de
+    // privilégio é o caso comum — lança um erro que NÃO interrompe o script. O
+    // `1` era escrito do mesmo jeito, e o produto respondia "prioridade
+    // ajustada" sem ter ajustado nada. É a regra da casa violada no lugar mais
+    // fácil de violar: escrever e confiar, em vez de escrever e RELER.
+    //
+    // Agora ele relê a prioridade do processo e devolve o que o Windows
+    // respondeu. Três desfechos, não dois: ficou alta, não ficou, ou não deu
+    // para reler — e este último não pode virar nenhum dos outros.
     let script = format!(
-        "$p = Get-Process -Id {} -ErrorAction SilentlyContinue; \
-         if ($p) {{ $p.PriorityClass = 'High'; 1 }} else {{ 0 }}",
-        pid
+        "$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; \
+         if (-not $p) {{ 'SEM_PROCESSO' }} else {{ \
+           try {{ $p.PriorityClass = 'High' }} catch {{ }} \
+           $d = Get-Process -Id {pid} -ErrorAction SilentlyContinue; \
+           if ($d) {{ [string]$d.PriorityClass }} else {{ 'SEM_PROCESSO' }} \
+         }}"
     );
 
     let saida = super::shell::powershell(&script)?;
+    let lido = saida.stdout.trim();
 
-    if saida.stdout.trim() == "1" {
-        Ok(())
-    } else {
-        Err("Reabra o Otimiza como administrador para ajustar a prioridade do jogo.".to_string())
+    match lido {
+        "High" => Ok(()),
+        "SEM_PROCESSO" => Err(
+            "O jogo fechou antes de a prioridade ser ajustada.".to_string()
+        ),
+        // Vazio é o caso de não ter conseguido reler, e ele não vira nem
+        // sucesso nem "falta administrador": dizer o motivo errado manda a
+        // pessoa fazer a coisa errada.
+        "" => Err(
+            "A prioridade do jogo foi pedida, mas não deu para conferir se ela \
+             mudou. Nada foi dado como feito."
+                .to_string(),
+        ),
+        outro => Err(format!(
+            "A prioridade do jogo continua em \"{outro}\". Reabra o Otimiza como \
+             administrador para poder alterá-la."
+        )),
     }
 }
 

@@ -118,11 +118,39 @@ pub fn antivirus_ativos() -> Result<Vec<String>, String> {
         "os antivírus registrados no Windows",
     )?;
 
-    Ok(brutos
-        .into_iter()
-        .filter(|a| tempo_real_ligado(a.product_state.unwrap_or(0)))
-        .filter_map(|a| a.display_name)
-        .collect())
+    // `unwrap_or(0)` MORAVA AQUI, e era a mesma família de defeito que o resto
+    // do produto passou versões consertando: um antivírus cujo `productState`
+    // não veio virava `0`, `0` não tem o bit de tempo real, e ele sumia da
+    // lista CALADO.
+    //
+    // O estrago é justamente no caso que este módulo existe para achar: com
+    // dois antivírus varrendo ao mesmo tempo — que é engasgo garantido em jogo
+    // — e o estado de um deles ilegível, a resposta era "só um antivírus", e o
+    // conflito não aparecia para ninguém.
+    //
+    // Agora um estado ilegível propaga o erro. Quem chama já sabe transformar
+    // `Err` em lacuna na tela; ele não sabia adivinhar um nome que nunca
+    // chegou.
+    let mut ativos = Vec::new();
+
+    for a in brutos {
+        let Some(estado) = a.product_state else {
+            return Err(
+                "A Central de Segurança do Windows respondeu sem o estado de um dos \
+                 antivírus, então não dá para dizer quantos estão varrendo ao mesmo \
+                 tempo nesta máquina."
+                    .to_string(),
+            );
+        };
+
+        if tempo_real_ligado(estado) {
+            if let Some(nome) = a.display_name {
+                ativos.push(nome);
+            }
+        }
+    }
+
+    Ok(ativos)
 }
 
 /// Exposto para teste: a leitura de bits é onde este tipo de código erra calado.
@@ -336,6 +364,25 @@ pub fn fechar(mut conflitos: Vec<Conflict>, lacunas: &[String]) -> Vec<Conflict>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `product_state.unwrap_or(0)` MORAVA AQUI. Um antivírus cujo estado não
+    /// veio virava zero, zero não tem o bit de tempo real, e ele sumia calado —
+    /// justamente no caso que este módulo existe para achar: dois antivírus
+    /// varrendo ao mesmo tempo, que é engasgo garantido em jogo.
+    #[test]
+    fn estado_de_antivirus_ilegivel_nao_vira_antivirus_desligado() {
+        let producao = include_str!("conflicts.rs").split("#[cfg(test)]").next().unwrap();
+        let corpo = producao
+            .split("pub fn antivirus_ativos")
+            .nth(1)
+            .expect("a função continua existindo");
+
+        assert!(
+            !corpo.contains("product_state.unwrap_or"),
+            "um `productState` ilegível voltou a ser tratado como antivírus desligado"
+        );
+    }
+
 
     #[test]
     fn nenhum_conflito_so_aparece_quando_tudo_foi_lido() {

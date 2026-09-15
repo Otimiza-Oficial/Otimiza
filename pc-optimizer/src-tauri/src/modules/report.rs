@@ -50,7 +50,6 @@ pub struct ReportSaved {
 /// Coletado pelo comando antes de montar o documento. Cada campo é opcional
 /// porque cada análise pode falhar por conta própria — e uma seção ausente é
 /// dita como ausente, não omitida em silêncio.
-#[derive(Default)]
 pub struct ReportData {
     #[cfg(target_os = "windows")]
     pub boot: Option<crate::modules::windows::boot::BootReport>,
@@ -63,12 +62,41 @@ pub struct ReportData {
     #[cfg(target_os = "windows")]
     pub browsers: Option<crate::modules::windows::browsers::BrowserReport>,
     #[cfg(target_os = "windows")]
-    pub startup: Vec<crate::modules::windows::startup::StartupEntry>,
+    /// `Result` e não `Vec`: a chave `Run` ilegível devolvia lista vazia, a
+    /// seção sumia do PDF inteira, e o relatório ficava dizendo por omissão
+    /// que a máquina não tem nada na inicialização. É a mesma regra que o
+    /// resto do produto já segue: ausente e ilegível não são o mesmo estado.
+    pub startup: Result<Vec<crate::modules::windows::startup::StartupEntry>, String>,
     /// O mesmo veredito que a tela mostra. Vem pronto de fora em vez de ser
     /// coletado aqui: se o relatório recolhesse por conta própria, o papel e o
     /// programa poderiam discordar sobre a mesma máquina.
     #[cfg(target_os = "windows")]
     pub veredito: Option<crate::modules::windows::veredito::Veredito>,
+}
+
+/// `Default` escrito à mão porque `startup` virou `Result`, e `Result` não tem
+/// padrão. O padrão certo aqui é a LISTA VAZIA, e não um erro: `ReportData`
+/// vazio é o que os testes usam para montar um relatório sem máquina nenhuma, e
+/// inventar uma falha de leitura ali seria mentir do outro lado.
+impl Default for ReportData {
+    fn default() -> Self {
+        ReportData {
+            #[cfg(target_os = "windows")]
+            boot: None,
+            #[cfg(target_os = "windows")]
+            thermal: None,
+            #[cfg(target_os = "windows")]
+            health: None,
+            #[cfg(target_os = "windows")]
+            memory: None,
+            #[cfg(target_os = "windows")]
+            browsers: None,
+            #[cfg(target_os = "windows")]
+            startup: Ok(Vec::new()),
+            #[cfg(target_os = "windows")]
+            veredito: None,
+        }
+    }
 }
 
 /// Escapa texto para HTML.
@@ -532,12 +560,31 @@ fn secao_navegador(dados: &ReportData) -> String {
 
 #[cfg(target_os = "windows")]
 fn secao_inicializacao(dados: &ReportData) -> String {
-    if dados.startup.is_empty() {
+    // A LACUNA APARECE. Antes, uma leitura que falhou e uma máquina realmente
+    // sem nada na inicialização produziam a mesma coisa: a seção desaparecia. O
+    // cliente recebia um relatório que afirmava, pelo silêncio, o que o produto
+    // não tinha conseguido conferir.
+    let entradas = match &dados.startup {
+        Ok(entradas) => entradas,
+        Err(erro) => {
+            return secao(
+                7,
+                "Programas que abrem com o Windows",
+                format!(
+                    "<p class=\"lacuna\">Não deu para ler as chaves de inicialização \
+                     desta máquina, então esta seção está vazia por falta de leitura e \
+                     não por falta de programas: {}</p>",
+                    escape(erro)
+                ),
+            );
+        }
+    };
+
+    if entradas.is_empty() {
         return String::new();
     }
 
-    let linhas: String = dados
-        .startup
+    let linhas: String = entradas
         .iter()
         .map(|e| {
             format!(
@@ -1144,7 +1191,7 @@ mod inspecao {
             health: Some(windows::health::analyze()),
             memory: Some(windows::memory::analyze()),
             browsers: Some(windows::browsers::analyze()),
-            startup: windows::startup::entries().unwrap_or_default(),
+            startup: windows::startup::entries(),
             veredito: Some(windows::veredito::diagnostico_rapido()),
         };
 

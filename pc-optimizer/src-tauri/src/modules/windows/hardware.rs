@@ -86,6 +86,27 @@ fn detect_gpu() -> String {
     }
 }
 
+/// A letra onde o Windows está instalado.
+///
+/// `C` ESTAVA CRAVADO nas duas consultas abaixo, e isso é um palpite disfarçado
+/// de constante. Windows instalado em `D:` acontece em máquina com dois
+/// sistemas e em PC de loja com partição de recuperação na frente — e nesses
+/// casos as consultas apontavam para o disco errado, ou para nenhum. O produto
+/// então decidia "SSD ou mecânico" com o dado de outro disco, e é essa decisão
+/// que liga ou desliga o SysMain.
+///
+/// `SystemDrive` é a resposta do próprio Windows para essa pergunta. Só uma
+/// letra de A a Z sai daqui: ela vai para dentro de um script, e o único jeito
+/// de isso ser seguro é nada além de uma letra poder passar.
+fn letra_do_sistema() -> char {
+    std::env::var("SystemDrive")
+        .ok()
+        .and_then(|d| d.chars().next())
+        .map(|c| c.to_ascii_uppercase())
+        .filter(|c| c.is_ascii_alphabetic())
+        .unwrap_or('C')
+}
+
 /// Descobre se o disco do sistema é SSD ou mecânico.
 ///
 /// `MediaType` do PowerShell devolve as constantes "SSD" e "HDD" em qualquer
@@ -98,10 +119,13 @@ fn detect_system_storage() -> StorageKind {
         return conhecido;
     }
 
-    let script = "$n = (Get-Partition -DriveLetter C | Get-Disk).Number; \
-                  (Get-PhysicalDisk | Where-Object DeviceId -eq $n).MediaType";
+    let script = format!(
+        "$n = (Get-Partition -DriveLetter {} | Get-Disk).Number; \
+         (Get-PhysicalDisk | Where-Object DeviceId -eq $n).MediaType",
+        letra_do_sistema()
+    );
 
-    let output = match shell::powershell(script) {
+    let output = match shell::powershell(&script) {
         Ok(output) if output.success => output.stdout,
         _ => return StorageKind::Unknown,
     };
@@ -125,13 +149,16 @@ fn detect_system_storage() -> StorageKind {
 /// máquina onde a consulta direta falhe, a resposta continua sendo a de antes.
 #[cfg(target_os = "windows")]
 fn detect_system_storage_rapido() -> Option<StorageKind> {
-    let script = "$ns = 'root\\Microsoft\\Windows\\Storage'; \
-                  $n = (Get-CimInstance -Namespace $ns -ClassName MSFT_Partition | \
-                        Where-Object DriveLetter -eq 'C').DiskNumber; \
-                  (Get-CimInstance -Namespace $ns -ClassName MSFT_PhysicalDisk | \
-                   Where-Object DeviceId -eq \"$n\").MediaType";
+    let script = format!(
+        "$ns = 'root\\Microsoft\\Windows\\Storage'; \
+         $n = (Get-CimInstance -Namespace $ns -ClassName MSFT_Partition | \
+               Where-Object DriveLetter -eq '{}').DiskNumber; \
+         (Get-CimInstance -Namespace $ns -ClassName MSFT_PhysicalDisk | \
+          Where-Object DeviceId -eq \"$n\").MediaType",
+        letra_do_sistema()
+    );
 
-    let saida = shell::powershell(script).ok()?;
+    let saida = shell::powershell(&script).ok()?;
 
     if !saida.success {
         return None;

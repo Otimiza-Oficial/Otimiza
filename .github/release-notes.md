@@ -18,6 +18,32 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.1.4 — Cinco lugares onde o produto dizia "pronto" sem ter feito
+
+Esta versão não acrescenta recurso nenhum. Ela ataca a pergunta que originou
+todo este trabalho: **por que a otimização funciona no PC de quem desenvolve e
+falha no PC do cliente?**
+
+A resposta, nos cinco casos abaixo, é sempre a mesma: **o produto escrevia e
+confiava, em vez de escrever e conferir** — e a máquina onde a escrita não pega
+é justamente a do cliente, com política de domínio, permissão negada ou imagem
+modificada.
+
+| Onde | O que acontecia |
+|---|---|
+| **Serviços** | `sc config` devolve código zero mesmo quando a chave do serviço não muda — política de domínio e ACL negada fazem isso. O produto dizia "desativado" sobre um serviço que continuava ligado. Agora ele **relê** e, se não mudou, diz que não mudou e por quê |
+| **Prioridade do jogo** | O script atribuía a prioridade e imprimia sucesso na linha seguinte. Atribuir prioridade num processo sem permissão lança um erro que **não interrompe o script** — o sucesso era impresso do mesmo jeito. Agora ele relê a prioridade e responde o que o Windows respondeu |
+| **Antivírus** | Um antivírus cujo estado não viesse na resposta do Windows era tratado como desligado e **sumia da lista calado**. Com dois antivírus varrendo ao mesmo tempo — engasgo garantido em jogo — e o estado de um ilegível, a resposta era "só um antivírus" |
+| **Tipo de disco** | As duas consultas perguntavam pelo disco `C:` cravado. Windows instalado em `D:` acontece em PC com dois sistemas e em máquina de loja — e ali o produto decidia "SSD ou mecânico" com o dado de outro disco. É essa decisão que liga ou desliga o SysMain |
+| **Relatório em PDF** | Chave de inicialização ilegível virava lista vazia, a seção desaparecia do documento inteira, e o laudo afirmava **por omissão** que a máquina não tem nada abrindo com o Windows. Agora a lacuna é escrita no papel |
+
+Duas travas novas impedem os dois primeiros de voltarem.
+
+863 testes passando.
+
+---
+
+
 # 2.1.3 — O Otimiza passa a conferir o próprio trabalho
 
 As duas versões anteriores consertaram um erro e fecharam a porta por onde ele
