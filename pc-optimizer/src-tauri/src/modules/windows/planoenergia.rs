@@ -65,6 +65,57 @@ const PROCTHROTTLEMAX: &str = "bc5038f7-23e0-4960-96da-33abaf5935ec";
 const CPMINCORES: &str = "0cc5b647-c1df-4637-891a-dec35c318583";
 const PERFBOOSTMODE: &str = "be337238-0d82-4146-a960-4f3749d470c7";
 
+/// Preferência entre energia e desempenho, de 0 a 100 POR CENTO.
+///
+/// Lido da árvore `PowerSettings` desta máquina, palavra por palavra:
+///
+/// > "Specify how much processors should favor **energy savings over
+/// > performance** when operating in autonomous mode."
+/// > `ValueMin 0 · ValueMax 100 · unidade: percent`
+///
+/// A escala é de ECONOMIA, não de desempenho: **0 é desempenho total** e 100 é
+/// economia total. Escrever 100 aqui achando que "100 é o máximo" seria repetir
+/// exatamente o erro que derrubou o FPS de um cliente na 2.1.0.
+const PERFEPP: &str = "36687f9e-e3a5-4dbf-b1dc-15eb381c6863";
+
+/// Se o processador escolhe sozinho o estado de desempenho.
+///
+/// Documentado nesta máquina:
+///
+/// > "Specify whether processors should autonomously determine their target
+/// > performance state."
+/// > `0 = Disabled — determine target performance state using operating system
+/// > algorithms` · `1 = Enabled — using autonomous selection`
+///
+/// O produto LÊ e RELATA, e não escreve: é o interruptor que decide QUEM manda
+/// no processador, e trocar isso por cima do que o fabricante entregou é a
+/// definição do tweak de internet que este projeto recusa.
+///
+/// Com ele em `1`, o processador escolhe a própria frequência e quem governa é
+/// o EPP acima; com `0`, quem governa é o estado mínimo/máximo.
+///
+/// UMA CORREÇÃO AO QUE EU MESMO ESCREVI AQUI ANTES: a primeira versão deste
+/// comentário afirmava que `1` é o padrão em "praticamente todo PC recente", e
+/// que por isso o estado mínimo seria quase inerte. Conferindo a árvore de
+/// padrões desta máquina, os TRÊS planos internos do Windows trazem `0`:
+///
+/// ```text
+/// Equilibrado      AC=0  DC=0
+/// Alto desempenho  AC=0  DC=0
+/// Economia         AC=0  DC=0
+/// ```
+///
+/// Eu tinha inferido de novo, em vez de ler. Por isso o produto pergunta à
+/// máquina em vez de afirmar. Ver `governa_o_processador`.
+const PERFAUTONOMOUS: &str = "8baa4a8a-14c6-4451-8e8b-14bdbd197537";
+
+/// O plano Equilibrado do Windows. GUID fixo e igual em toda instalação — é uma
+/// das três constantes que a Microsoft publica, e não um GUID de máquina.
+///
+/// Usado só para LER o padrão de fábrica de um ajuste quando o plano ativo é um
+/// plano próprio, que não aparece em `DefaultPowerSchemeValues`.
+const EQUILIBRADO: &str = "381b4222-f694-41f0-9685-ff5bb260df2e";
+
 const SUB_PCIEXPRESS: &str = "501a4d13-42af-4429-9fd1-a8218c268e20";
 const ASPM: &str = "ee12f906-d277-404b-b6da-e5fa1a576df5";
 
@@ -407,9 +458,23 @@ pub static AJUSTES: &[Ajuste] = &[
         ajuste: PROCTHROTTLEMIN,
         classe: Classe::Recomendada,
         porque: "Com o mínimo baixo, o Windows derruba a frequência entre um quadro e outro \
-                 e a leva de volta tarde demais. É a causa mais comum de engasgo em jogo \
-                 sem que o uso de CPU pareça alto.",
+                 e a leva de volta tarde demais. IMPORTANTE: este ajuste só governa quando \
+                 o processador NÃO está em modo autônomo — em Intel com Speed Shift e AMD \
+                 com CPPC, que é quase todo PC recente, quem manda é a preferência de \
+                 energia (EPP) logo abaixo. O diagnóstico de energia diz qual é o caso aqui.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 100),
+    },
+    Ajuste {
+        nome: "Preferência entre energia e desempenho (EPP)",
+        subgrupo: SUB_PROCESSADOR,
+        ajuste: PERFEPP,
+        classe: Classe::Recomendada,
+        porque: "É este número que comanda a frequência nos processadores modernos, e não o \
+                 estado mínimo acima. O Windows o define como \"o quanto o processador deve \
+                 favorecer ECONOMIA sobre desempenho\", de 0 a 100 por cento — então 0 é \
+                 desempenho total. Na tomada vai a 0; na bateria fica como o fabricante \
+                 deixou, porque ali economia é o que a pessoa quer.",
+        alvo: |_| Alvo::so_na_tomada(0),
     },
     Ajuste {
         nome: "Estado máximo do processador",
@@ -435,9 +500,25 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_PROCESSADOR,
         ajuste: PERFBOOSTMODE,
         classe: Classe::Recomendada,
-        porque: "Modo agressivo deixa o processador subir de frequência sem esperar a média \
-                 de carga confirmar. É o comportamento que a Intel e a AMD documentam para \
-                 carga de resposta rápida.",
+        // A JUSTIFICATIVA ANTERIOR ERA INVENTADA. Ela dizia que o modo agressivo
+        // "deixa o processador subir sem esperar a média de carga confirmar", o
+        // que descreve outro ajuste. O Windows documenta o valor 2 assim, lido
+        // da árvore `PowerSettings` desta máquina:
+        //
+        //     2 = Aggressive — "Always select the highest possible target
+        //         frequency above nominal frequency."
+        //
+        // (Os outros: 0 Disabled, 1 Enabled, 3 Efficient Enabled, 4 Efficient
+        // Aggressive, 5 Aggressive At Guaranteed, 6 Efficient Aggressive At
+        // Guaranteed.)
+        //
+        // NÃO desliga proteção térmica: o limite de temperatura e o de potência
+        // do processador continuam valendo acima disto. O que muda é qual
+        // frequência o Windows PEDE, e não até onde o silício deixa chegar.
+        porque: "O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
+                 maior frequência possível acima da nominal. É o que mantém o turbo ligado no \
+                 jogo em vez de ele subir e descer. Os limites de temperatura e de potência \
+                 do processador continuam valendo por cima disso.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 2),
     },
     Ajuste {
@@ -838,6 +919,76 @@ pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
         ),
     )
     .unwrap_or(true)
+}
+
+/// Quem decide a frequência do processador nesta máquina.
+///
+/// Três estados, e o terceiro não pode virar nenhum dos outros dois. A pergunta
+/// importa porque ela muda qual metade deste plano tem efeito: com o processador
+/// em modo autônomo, o "estado mínimo" é quase decorativo e quem governa é o
+/// EPP; sem ele, é o contrário.
+///
+/// O produto LÊ e CONTA. Não escreve: mudar quem comanda o processador por cima
+/// do que o fabricante entregou é a definição do tweak de internet que este
+/// projeto recusa.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GovernoDoProcessador {
+    /// O próprio processador escolhe (Intel Speed Shift, AMD CPPC).
+    OProcessador,
+    /// O Windows escolhe pelos algoritmos dele.
+    OWindows,
+    NaoDeuParaLer,
+}
+
+/// UM PLANO PRÓPRIO NÃO TEM PADRÃO DECLARADO, e isso quase enterrou esta
+/// leitura. `power::valor_efetivo` procura o valor dentro do plano e, não
+/// achando, o padrão em `DefaultPowerSchemeValues\<guid do plano>` — que só
+/// existe para os TRÊS planos internos do Windows. Num plano duplicado, que é o
+/// caso do OTIMIZA e de todo plano que o cliente criou, os dois caminhos falham
+/// e a resposta vinha `None` para qualquer ajuste sem índice próprio.
+///
+/// Conferido nesta máquina: o plano ativo é próprio, e nem o modo autônomo nem
+/// o EPP têm chave dentro dele.
+///
+/// A saída é ler o padrão do EQUILIBRADO, e dizer que foi isso que se leu. O
+/// Equilibrado é a base de fábrica do Windows para o que nunca foi gravado, e
+/// afirmar "não sei" tendo esse número na mão seria esconder informação boa —
+/// desde que o produto não finja que leu do plano do cliente.
+pub fn governa_o_processador(plano: &str, bateria: bool) -> GovernoDoProcessador {
+    let lido = power::valor_efetivo(plano, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria).or_else(
+        || power::valor_efetivo(EQUILIBRADO, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria),
+    );
+
+    match lido {
+        Some(1) => GovernoDoProcessador::OProcessador,
+        Some(0) => GovernoDoProcessador::OWindows,
+        _ => GovernoDoProcessador::NaoDeuParaLer,
+    }
+}
+
+/// A frase que explica o que muda por causa disso.
+///
+/// Mora aqui e não na tela porque é regra de produto, e regra de produto tem
+/// teste. A tela recebe o ESTADO e escolhe como mostrar.
+pub fn explicar_governo(governo: GovernoDoProcessador) -> &'static str {
+    match governo {
+        GovernoDoProcessador::OProcessador => {
+            "Neste computador é o próprio processador que escolhe a frequência — é assim \
+             que funcionam os Intel com Speed Shift e os AMD com CPPC. Por isso o ajuste \
+             que mais pesa aqui é a preferência entre energia e desempenho (EPP), e não o \
+             estado mínimo do processador, que quase não muda nada nessas máquinas."
+        }
+        GovernoDoProcessador::OWindows => {
+            "Neste computador quem escolhe a frequência é o Windows. Aqui o estado mínimo \
+             do processador governa de verdade, e é ele que evita a frequência cair entre \
+             um quadro e outro."
+        }
+        GovernoDoProcessador::NaoDeuParaLer => {
+            "Não deu para ler se quem escolhe a frequência é o processador ou o Windows. \
+             Os dois ajustes são aplicados mesmo assim: qual dos dois pesa mais depende \
+             dessa resposta, e nenhum dos dois faz mal no outro caso."
+        }
+    }
 }
 
 /// O que o relatório diz de um ajuste, dado o antes, o alvo e o depois.
@@ -1332,6 +1483,11 @@ pub struct Diagnostico {
     /// O processo é de 64 bits. Num processo de 32 bits sobre Windows de 64, as
     /// leituras do registro caem no espelho `WOW6432Node` e saem erradas.
     pub processo_64_bits: bool,
+    /// Quem escolhe a frequência do processador nesta máquina, e o que isso
+    /// muda. Sem essa resposta, metade das explicações deste plano descreve um
+    /// comportamento que a máquina do cliente não tem.
+    pub governo_do_processador: GovernoDoProcessador,
+    pub explicacao_do_governo: String,
     pub avisos: Vec<String>,
 }
 
@@ -1412,6 +1568,13 @@ pub fn diagnosticar() -> Diagnostico {
 
     let processo_64_bits = cfg!(target_pointer_width = "64");
 
+    // Lido no plano ATIVO, e na tomada: é a combinação em que o cliente joga.
+    // Sem plano ativo legível não há o que perguntar, e "não deu para ler" é
+    // uma resposta válida deste campo.
+    let governo = power::active_scheme()
+        .map(|plano| governa_o_processador(&plano, false))
+        .unwrap_or(GovernoDoProcessador::NaoDeuParaLer);
+
     let avisos = avisos_do_diagnostico(
         elevado,
         powercfg_responde,
@@ -1432,6 +1595,8 @@ pub fn diagnosticar() -> Diagnostico {
         planos,
         registro_de_energia_legivel,
         processo_64_bits,
+        governo_do_processador: governo,
+        explicacao_do_governo: explicar_governo(governo).to_string(),
         avisos,
     }
 }
@@ -1439,6 +1604,79 @@ pub fn diagnosticar() -> Diagnostico {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+
+    /// Roda contra o Windows desta máquina. Não é teste de lógica — é a
+    /// conferência de que os dois GUIDs novos existem e respondem aqui, que é
+    /// exatamente o passo que eu pulei ao escrever o ajuste de placa de vídeo
+    /// da 2.1.0.
+
+    /// O ACHADO QUE JUSTIFICA O AJUSTE DE EPP, lido desta máquina:
+    ///
+    /// ```text
+    /// Equilibrado      EPP na tomada = 33
+    /// Alto desempenho  EPP na tomada = 0
+    /// ```
+    ///
+    /// Um plano feito a partir do Equilibrado — o que acontece em toda máquina
+    /// sem "Alto desempenho", que é o caso comum em notebook e em imagem
+    /// modificada — nasce com um terço da escala puxado para economia. O
+    /// produto nunca escreveu esse número, e ele é o que comanda a frequência
+    /// quando o processador está em modo autônomo.
+    #[test]
+    #[ignore = "toca o Windows desta máquina"]
+    fn o_equilibrado_nasce_puxado_para_economia() {
+        let equilibrado = power::valor_efetivo(EQUILIBRADO, SUB_PROCESSADOR, PERFEPP, false);
+        let alto = power::valor_efetivo(
+            "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+            SUB_PROCESSADOR,
+            PERFEPP,
+            false,
+        );
+
+        println!("EPP padrão — Equilibrado: {equilibrado:?} · Alto desempenho: {alto:?}");
+
+        let (Some(equilibrado), Some(alto)) = (equilibrado, alto) else {
+            println!("um dos dois planos não declara padrão de EPP neste Windows");
+            return;
+        };
+
+        assert!(
+            equilibrado > alto,
+            "o Equilibrado deixou de ser mais econômico que o Alto desempenho; \
+             se isso mudou, a justificativa do ajuste de EPP precisa ser reescrita"
+        );
+    }
+
+    #[test]
+    #[ignore = "toca o Windows desta máquina"]
+    fn quem_governa_o_processador_desta_maquina() {
+        let plano = power::active_scheme().expect("plano ativo");
+
+        println!("plano ativo: {plano}");
+        println!(
+            "modo autônomo (tomada): {:?}",
+            power::valor_efetivo(&plano, SUB_PROCESSADOR, PERFAUTONOMOUS, false)
+        );
+        println!(
+            "EPP (tomada): {:?}",
+            power::valor_efetivo(&plano, SUB_PROCESSADOR, PERFEPP, false)
+        );
+        println!(
+            "estado mínimo (tomada): {:?}",
+            power::valor_efetivo(&plano, SUB_PROCESSADOR, PROCTHROTTLEMIN, false)
+        );
+
+        let governo = governa_o_processador(&plano, false);
+        println!("veredito: {governo:?}");
+        println!("{}", explicar_governo(governo));
+
+        assert!(suportado(SUB_PROCESSADOR, PERFEPP), "o EPP não existe neste Windows");
+        assert!(
+            suportado(SUB_PROCESSADOR, PERFAUTONOMOUS),
+            "o modo autônomo não existe neste Windows"
+        );
+    }
 
     #[test]
     fn le_a_lista_de_planos_em_portugues() {

@@ -3843,6 +3843,15 @@ interface DiagnosticoDeEnergia {
   ajustes_totais: number;
   ajustes_ausentes: string[];
   processo_64_bits: boolean;
+  /**
+   * Quem escolhe a frequência do processador nesta máquina.
+   *
+   * O Rust manda o ESTADO e a frase pronta; a tela só escolhe onde pôr. E isto
+   * NÃO é uma checagem de bom/ruim: os dois casos são normais, e pintar um
+   * deles de âmbar faria o cliente procurar defeito onde não há.
+   */
+  governo_do_processador: "OProcessador" | "OWindows" | "NaoDeuParaLer";
+  explicacao_do_governo: string;
   avisos: string[];
 }
 
@@ -3921,7 +3930,13 @@ function renderDiagnostico(d: DiagnosticoDeEnergia): string {
     ? `<p class="hint">O plano OTIMIZA já existe nesta máquina.</p>`
     : "";
 
-  return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${avisos}`;
+  // Fora da lista de checagens de propósito: não é bom nem ruim, é qual dos
+  // ajustes do plano pesa mais NESTE computador. É a parte adaptativa do
+  // diagnóstico — a mesma tabela de ajustes rende diferente conforme quem
+  // comanda a frequência do processador.
+  const governo = `<p class="bloco-de-texto">${escapeHtml(d.explicacao_do_governo)}</p>`;
+
+  return `<p class="hint">${escapeHtml(frasesDaMaquina(d.maquina))}</p>${plano}${checagens.join("")}${governo}${avisos}`;
 }
 
 type Vistoria =

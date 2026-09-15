@@ -18,6 +18,76 @@ depois em *Executar assim mesmo*.
 
 ---
 
+# 2.2.0 — O ajuste que comanda a frequência, e que nunca foi gravado
+
+Esta versão vem de uma pergunta simples: **o plano de energia do Otimiza está
+mexendo no que realmente manda no processador?**
+
+A resposta, lida da árvore de definições do próprio Windows, é que faltava a
+peça principal.
+
+## O que foi encontrado
+
+O Windows tem um ajuste chamado **preferência entre energia e desempenho
+(EPP)**. A definição é dele, palavra por palavra:
+
+> *"Specify how much processors should favor energy savings over performance
+> when operating in autonomous mode."* — 0 a 100 **por cento**
+
+A escala é de **economia**: **0 é desempenho total**, 100 é economia total. E os
+padrões de fábrica deste Windows, lidos do registro:
+
+| Plano do Windows | EPP na tomada |
+|---|---|
+| Equilibrado | **33** |
+| Alto desempenho | **0** |
+| Economia de energia | 60 |
+
+O plano do Otimiza é montado a partir do "Alto desempenho" quando ele existe, e
+a partir do **Equilibrado** quando não existe — o que é comum em notebook e em
+Windows modificado. Nesse caso o plano nascia com **um terço da escala puxado
+para economia**, e o produto nunca escreveu esse número.
+
+A partir desta versão ele escreve: **0 na tomada**. Na bateria fica como o
+fabricante deixou, porque ali economia é o que a pessoa quer.
+
+## E o diagnóstico passa a dizer quem manda na sua máquina
+
+Existe um segundo ajuste, o **modo autônomo**, que decide quem escolhe a
+frequência: o Windows, ou o próprio processador (Intel Speed Shift, AMD CPPC).
+Isso muda qual metade do plano tem efeito — com o processador no comando, quem
+governa é o EPP; com o Windows no comando, é o estado mínimo.
+
+O Otimiza **lê e conta**, e não escreve. Trocar quem comanda o processador por
+cima do que o fabricante entregou é a definição do tweak de internet que este
+projeto recusa.
+
+## Duas correções a textos que eu tinha escrito de cabeça
+
+Ambas encontradas conferindo o registro em vez de confiar na memória:
+
+- A justificativa do **modo de boost** dizia que o valor 2 "deixa o processador
+  subir sem esperar a média de carga confirmar". O Windows define o valor 2 como
+  *"sempre escolher a maior frequência possível acima da nominal"*. Outro
+  comportamento. O texto foi trocado pelo que o Windows diz.
+- Eu havia escrito que o modo autônomo vem ligado em "praticamente todo PC
+  recente" e que por isso o estado mínimo seria quase inerte. Os três planos
+  internos deste Windows trazem o modo autônomo **desligado**. Era inferência,
+  de novo — e virou uma leitura, com a correção registrada no código.
+
+## Um defeito de leitura que apareceu no caminho
+
+Um plano **próprio** — o do Otimiza, e qualquer um que o cliente tenha criado —
+não aparece na tabela de padrões do Windows. Qualquer ajuste sem valor gravado
+dentro dele era lido como "não deu para ler". Agora a leitura recorre ao padrão
+do Equilibrado e **diz que foi isso que leu**, em vez de calar.
+
+863 testes passando, mais dois que rodam contra o Windows desta máquina e
+registram os números acima.
+
+---
+
+
 # 2.1.4 — Cinco lugares onde o produto dizia "pronto" sem ter feito
 
 Esta versão não acrescenta recurso nenhum. Ela ataca a pergunta que originou
