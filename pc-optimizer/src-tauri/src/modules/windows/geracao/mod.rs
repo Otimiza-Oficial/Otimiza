@@ -511,11 +511,11 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut contadores = Contadores::default();
     let mut janela_de_contagem = (segundos(inicio), 0u64, 0u64);
     let mut ultima_checagem = Instant::now();
+    let mut cabe_atual = multiplicador;
+    let mut pedidos_de_troca = 0u32;
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
-    let mut cabe_atual = multiplicador;
-    let mut pedidos_de_troca = 0u32;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(());
@@ -545,11 +545,29 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             let dt = agora - janela_de_contagem.0;
             if dt > 0.0 {
                 let reais = contadores.reais - janela_de_contagem.1;
+                // TETO PELA TAXA DO MONITOR, decidido pelo FPS de meio segundo e
+                // não pelo intervalo entre dois quadros: a captura chega
+                // irregular (5 ms, 14 ms, 5 ms…) e decidir quadro a quadro nunca
+                // estabiliza. Troca só depois de duas janelas pedindo a mesma coisa.
+                let fps_janela = reais as f64 / dt;
+                if fps_janela > 1.0 {
+                    let quer = ritmo::multiplicador_que_cabe(multiplicador, 1.0 / fps_janela, hz);
+                    if quer == cabe_atual {
+                        pedidos_de_troca = 0;
+                    } else {
+                        pedidos_de_troca += 1;
+                        if pedidos_de_troca >= 2 {
+                            cabe_atual = quer;
+                            pedidos_de_troca = 0;
+                        }
+                    }
+                }
                 let apresentados = (contadores.reais + contadores.gerados) - janela_de_contagem.2;
                 publicar(|e| {
                     e.fps_reais = (reais as f64 / dt * 10.0).round() / 10.0;
                     e.fps_apresentados = (apresentados as f64 / dt * 10.0).round() / 10.0;
                     e.contadores = contadores;
+                    e.multiplicador = cabe_atual;
                     e.situacao = if ultimo_real.elapsed() > Duration::from_secs(2) { Situacao::SemQuadros } else { Situacao::Gerando };
                 });
             }
@@ -587,20 +605,6 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                             // tempo que sobra até o próximo quadro real.
                             let pronto = segundos(inicio);
                             let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
-                            let quer = ritmo::multiplicador_que_cabe(multiplicador, intervalo.estimado.unwrap_or(0.0), hz);
-                            // Histerese: o jogo oscilando perto do limite (87–92 FPS num
-                            // monitor de 180 Hz) não pode ficar ligando e desligando a
-                            // geração a cada quadro — isso é engasgo. Troca só depois de
-                            // meio segundo pedindo a mesma coisa.
-                            if quer == cabe_atual {
-                                pedidos_de_troca = 0;
-                            } else {
-                                pedidos_de_troca += 1;
-                                if pedidos_de_troca as f64 * intervalo.estimado.unwrap_or(0.016) > 0.5 {
-                                    cabe_atual = quer;
-                                    pedidos_de_troca = 0;
-                                }
-                            }
                             let cabe = cabe_atual;
                             agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
                         } else {
@@ -664,5 +668,38 @@ mod tests {
             println!("{:?} reais={} apresentados={} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.contadores, e.erro);
         }
         desligar();
+    }
+}
+
+#[cfg(test)]
+mod teste_do_limite {
+    /// Aplica (ou desfaz) o limite de FPS no driver NVIDIA pelo MESMO caminho
+    /// do app, gravando no histórico real — para aparecer em "Desfazer".
+    /// `OTIMIZA_FG_EXE=... OTIMIZA_FG_LIMITE=90` aplica; `OTIMIZA_FG_LIMITE=0` desfaz.
+    #[test]
+    #[ignore]
+    fn limite_no_driver() {
+        use crate::modules::changelog::ChangeLog;
+        let exe = std::env::var("OTIMIZA_FG_EXE").expect("OTIMIZA_FG_EXE");
+        let fps: u32 = std::env::var("OTIMIZA_FG_LIMITE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let mut log = ChangeLog::load();
+        let otimizador = crate::modules::windows::WindowsOptimizer::new();
+        if fps == 0 {
+            let id = crate::modules::windows::nvdriver::id_do_limite(&exe);
+            println!("desfazer: {:?}", otimizador.revert(&id, &mut log));
+        } else {
+            println!("aplicar: {:?}", otimizador.limitar_fps_nvidia(&exe, fps, &mut log));
+        }
+    }
+}
+
+#[cfg(test)]
+mod teste_do_monitor {
+    #[test]
+    #[ignore]
+    fn monitor_principal() {
+        for m in super::super::display::monitores() {
+            println!("{} principal={} {}x{} {}Hz", m.dispositivo, m.principal, m.largura, m.altura, m.hz_atual);
+        }
     }
 }
