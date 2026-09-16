@@ -261,7 +261,15 @@ float4 Escolha(Saida e) : SV_Target
     // Canal a: 1 onde a discordância é grande. A média disso na tela inteira
     // é a nota do quadro — e decide se ele pode ser mostrado.
     melhorErro = max(melhorErro, 0.0);
-    return float4(melhorVetor, melhorErro, melhorErro > 0.06 ? 1.0 : 0.0);
+    // Segundo sinal: quanto este ponto MUDOU de verdade entre os dois reais.
+    // Câmera atravessando o interior de um carro muda a tela inteira, e em
+    // superfícies lisas a cor ainda "bate" com vetor errado. Mudança grande
+    // com concordância só razoável também conta como ruim.
+    float3 antes = T0.SampleLevel(Linear, uv, 0).rgb;
+    float3 depois = T1.SampleLevel(Linear, uv, 0).rgb;
+    float mudou = dot(abs(antes - depois), float3(0.299, 0.587, 0.114));
+    bool ruim = melhorErro > 0.05 || (mudou > 0.18 && melhorErro > 0.02);
+    return float4(melhorVetor, melhorErro, ruim ? 1.0 : 0.0);
 }
 
 // Composição em resolução cheia. T0 = anterior, T1 = atual, T2 = escolha (1/2).
@@ -273,11 +281,39 @@ float4 Escolha(Saida e) : SV_Target
 float4 Final(Saida e) : SV_Target
 {
     float2 uv = e.pos.xy * texelDestino;
-    float4 escolha = T2.Load(int3(int2(e.pos.xy) / 2, 0));
-    float2 vuv = escolha.xy * texelDestino;
+    float3 anteriorNoLugar = T0.SampleLevel(Linear, uv, 0).rgb;
+    float3 atualNoLugar = T1.SampleLevel(Linear, uv, 0).rgb;
 
-    float3 a = T0.SampleLevel(Linear, uv - vuv * t, 0).rgb;
-    float3 b = T1.SampleLevel(Linear, uv + vuv * (1.0 - t), 0).rgb;
+    // PIXEL PARADO SAI DO REAL. Se o pixel não mudou entre os dois quadros
+    // reais — HUD, minimapa, velocímetro, texto — ele não é deslocado por
+    // vetor nenhum. É o que mantém a interface nítida com a câmera girando.
+    if (dot(abs(anteriorNoLugar - atualNoLugar), float3(0.3333, 0.3333, 0.3333)) < 0.004)
+        return float4(atualNoLugar, 1);
+
+    // BORDA SEM DEGRAU. A escolha vem em meia resolução; perto da borda de um
+    // objeto, o pixel testa a escolha do seu ponto e das quatro vizinhas e fica
+    // com a que faz os dois quadros concordarem NELE.
+    int2 m = int2(e.pos.xy) / 2;
+    int2 tamanhoEscolha = int2(ceil(1.0 / texelDestino * 0.5));
+    static const int2 VIZ[5] = { int2(0, 0), int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
+    float4 escolha = T2.Load(int3(m, 0));
+    float3 a = T0.SampleLevel(Linear, uv - escolha.xy * texelDestino * t, 0).rgb;
+    float3 b = T1.SampleLevel(Linear, uv + escolha.xy * texelDestino * (1.0 - t), 0).rgb;
+    float melhor = dot(abs(a - b), float3(0.299, 0.587, 0.114)) - 0.01;
+    [loop] for (int k = 1; k < 5; k++)
+    {
+        float4 outra = T2.Load(int3(clamp(m + VIZ[k], int2(0, 0), tamanhoEscolha - 1), 0));
+        float3 ao = T0.SampleLevel(Linear, uv - outra.xy * texelDestino * t, 0).rgb;
+        float3 bo = T1.SampleLevel(Linear, uv + outra.xy * texelDestino * (1.0 - t), 0).rgb;
+        float erro = dot(abs(ao - bo), float3(0.299, 0.587, 0.114));
+        if (erro < melhor)
+        {
+            melhor = erro;
+            escolha = outra;
+            a = ao;
+            b = bo;
+        }
+    }
     float recuo = saturate((escolha.z - limiarErro) / faixaErro);
     float3 umLado = t < 0.5 ? a : b;
     float3 cor = lerp(lerp(a, b, t), umLado, recuo);
@@ -286,7 +322,7 @@ float4 Final(Saida e) : SV_Target
     // achado (giro rapidíssimo, troca de cena, explosão). Aí o pixel mostra o
     // quadro real mais próximo NO LUGAR — no pior caso, um quadro repetido.
     // Nunca uma imagem derretida.
-    float3 real = t < 0.5 ? T0.SampleLevel(Linear, uv, 0).rgb : T1.SampleLevel(Linear, uv, 0).rgb;
+    float3 real = t < 0.5 ? anteriorNoLugar : atualNoLugar;
     float perdido = saturate((escolha.z - (limiarErro + faixaErro)) / faixaErro);
     return float4(lerp(cor, real, perdido), 1);
 }

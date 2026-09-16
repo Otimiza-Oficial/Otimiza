@@ -68,6 +68,10 @@ pub struct Estado {
     pub erro: Option<String>,
     /// FPS real com geração ÷ sem geração, medido pela guarda. 1,0 = sem perda.
     pub razao_fps: Option<f64>,
+    /// ATRASO MEDIDO, em ms: do instante em que o Windows compôs o quadro do
+    /// jogo até o gerador mostrar esse mesmo quadro real. É o atraso que o
+    /// gerador acrescenta (captura + espera da interpolação). Média móvel.
+    pub atraso_ms: Option<f64>,
     /// PID deste processo: é por ele que o medidor de quadros conta o que o
     /// gerador apresenta.
     pub pid_do_gerador: u32,
@@ -85,6 +89,7 @@ impl Default for Estado {
             contadores: Contadores::default(),
             erro: None,
             razao_fps: None,
+            atraso_ms: None,
             pid_do_gerador: std::process::id(),
         }
     }
@@ -477,7 +482,7 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
 fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     let multiplicador = config.multiplicador.clamp(2, 4);
     // Taxa do monitor principal: o teto de quadros que vale a pena gerar.
-    let hz = super::display::monitores().into_iter().find(|m| m.principal).map(|m| m.hz_atual).unwrap_or(0);
+    let hz = if std::env::var_os("OTIMIZA_FG_SEM_TETO").is_some() { 0 } else { super::display::monitores().into_iter().find(|m| m.principal).map(|m| m.hz_atual).unwrap_or(0) };
 
     // Procura o jogo por até 30 segundos.
     let limite = Instant::now() + Duration::from_secs(30);
@@ -526,6 +531,18 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
+    // Relógio do Windows (QPC) no mesmo instante do `inicio`: é nele que vem o
+    // carimbo de quando o quadro do jogo foi composto.
+    let (qpc_inicio, qpc_frequencia) = unsafe {
+        use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+        let mut f = 0i64;
+        let mut c = 0i64;
+        let _ = QueryPerformanceFrequency(&mut f);
+        let _ = QueryPerformanceCounter(&mut c);
+        (c as f64 / f.max(1) as f64 - segundos(inicio), f.max(1) as f64)
+    };
+    let mut composto_do_real: Option<f64> = None;
+    let mut atraso_medio: Option<f64> = None;
     let mut guarda = guarda::Guarda::nova(0.0);
     let mut nota_media = 0.0f64;
     while !parar.load(Ordering::Relaxed) {
@@ -581,6 +598,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                     e.contadores = contadores;
                     e.multiplicador = cabe_atual;
                     e.razao_fps = guarda.razao_media();
+                    e.atraso_ms = atraso_medio.map(|a| (a * 10.0).round() / 10.0);
                     e.situacao = if ultimo_real.elapsed() > Duration::from_secs(2) { Situacao::SemQuadros } else { Situacao::Gerando };
                 });
             }
@@ -621,6 +639,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                     if let Some(tex) = recurso.as_ref().and_then(|r| r.cast::<ID3D11Texture2D>().ok()) {
                         let chegada = segundos(inicio);
                         let medido = Instant::now();
+                        composto_do_real = Some(info.LastPresentTime as f64 / qpc_frequencia - qpc_inicio);
                         gpu.receber(&tex, recorte);
                         intervalo.registrar(chegada);
                         contadores.reais += 1;
@@ -681,7 +700,15 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                     sobreposicao.apresentar(&gpu, Some(t));
                     contadores.gerados += 1;
                 }
-                Fase::Real => sobreposicao.apresentar(&gpu, None),
+                Fase::Real => {
+                    sobreposicao.apresentar(&gpu, None);
+                    if let Some(composto) = composto_do_real.take() {
+                        let atraso = (segundos(inicio) - composto) * 1000.0;
+                        if (0.0..200.0).contains(&atraso) {
+                            atraso_medio = Some(atraso_medio.map_or(atraso, |m| m * 0.9 + atraso * 0.1));
+                        }
+                    }
+                }
             }
         }
     }
@@ -715,7 +742,7 @@ mod tests {
         for _ in 0..extra {
             std::thread::sleep(Duration::from_secs(1));
             let e = estado();
-            println!("{:?} reais={} apresentados={} razao={:?} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.razao_fps, e.contadores, e.erro);
+            println!("{:?} reais={} apresentados={} razao={:?} atraso_ms={:?} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.razao_fps, e.atraso_ms, e.contadores, e.erro);
         }
         desligar();
     }

@@ -64,7 +64,7 @@ pub fn multiplicador_que_cabe(pedido: u8, intervalo: f64, hz: u32) -> u8 {
 }
 
 /// Acima desta fração de imagem ruim, o quadro gerado não sai.
-pub const FRACAO_RUIM_MAXIMA: f32 = 0.10;
+pub const FRACAO_RUIM_MAXIMA: f32 = 0.06;
 
 /// O quadro gerado pode ir à tela?
 pub fn quadro_aprovado(fracao_ruim: Option<f32>) -> bool {
@@ -244,7 +244,8 @@ mod tests {
     #[test]
     fn quadro_com_muita_imagem_ruim_nao_sai() {
         assert!(quadro_aprovado(Some(0.02)));
-        assert!(quadro_aprovado(Some(0.10)));
+        assert!(quadro_aprovado(Some(0.06)));
+        assert!(!quadro_aprovado(Some(0.08)));
         assert!(!quadro_aprovado(Some(0.25)));
         assert!(!quadro_aprovado(None));
         assert!(!quadro_aprovado(Some(f32::NAN)));
