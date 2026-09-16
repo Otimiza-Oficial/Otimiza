@@ -516,6 +516,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
+    let mut nota_media = 0.0f64;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(());
@@ -598,7 +599,9 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                         agenda.clear();
                         if gpu.tem_par() && intervalo.pode_gerar() {
                             gpu.estimar();
+                            let nota = gpu.fracao_ruim();
                             gpu.esperar();
+                            nota_media = nota.map(|n| nota_media * 0.9 + n as f64 * 0.1).unwrap_or(nota_media);
                             let custo = medido.elapsed().as_secs_f64() * 1000.0;
                             contadores.custo_ms = if contadores.custo_ms == 0.0 { custo } else { contadores.custo_ms * 0.9 + custo * 0.1 };
                             // A agenda começa quando a GPU terminou, e reparte só o
@@ -606,7 +609,14 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                             let pronto = segundos(inicio);
                             let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
                             let cabe = cabe_atual;
-                            agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
+                            if ritmo::quadro_aprovado(nota) {
+                                agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
+                            } else {
+                                // Movimento que não dá para interpolar: só o real.
+                                // Fica igual a jogar sem gerador, nunca pior.
+                                contadores.recusados += 1;
+                                agenda.push_back(Apresentacao { instante: pronto, fase: Fase::Real });
+                            }
                         } else {
                             agenda.push_back(Apresentacao { instante: chegada, fase: Fase::Real });
                         }
@@ -660,9 +670,15 @@ mod tests {
         let mult: u8 = std::env::var("OTIMIZA_FG_MULT").ok().and_then(|v| v.parse().ok()).unwrap_or(2);
         let e = ligar(Configuracao { processo: std::env::var("OTIMIZA_FG_PROCESSO").unwrap_or_else(|_| "jogo_de_teste".into()), multiplicador: mult, visivel_em_captura: std::env::var_os("OTIMIZA_FG_VISIVEL").is_some() }).unwrap();
         println!("inicio: {:?}", e);
-        std::thread::sleep(Duration::from_secs(3));
-        gravar_proximos_quadros(pasta, 6);
-        for _ in 0..5 {
+        std::thread::sleep(Duration::from_secs(2));
+        // Capturas espalhadas: 2 quadros a cada 0,4 s, em pastas numeradas.
+        for n in 0..12 {
+            let sub = pasta.join(format!("{:02}", n));
+            let _ = std::fs::create_dir_all(&sub);
+            gravar_proximos_quadros(sub, 2);
+            std::thread::sleep(Duration::from_millis(400));
+        }
+        for _ in 0..2 {
             std::thread::sleep(Duration::from_secs(1));
             let e = estado();
             println!("{:?} reais={} apresentados={} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.contadores, e.erro);

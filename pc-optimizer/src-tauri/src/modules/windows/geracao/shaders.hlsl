@@ -4,7 +4,8 @@
 // Tudo roda na placa de vídeo, em passes de tela cheia:
 //
 //   1. Luma      — imagem → luminância em 1/4 e depois 1/16 da resolução
-//   2. Grossa    — busca de movimento em 1/16, raio ±6 (±96 px na imagem)
+//   2. Global    — busca em 1/64, raio ±6 (alcança giro rápido de câmera)
+//      Grossa    — em 1/16, ao redor do parado e do vetor global
 //   3. Fina      — refina em 1/4, com os vetores grossos da vizinhança como
 //                  candidatos, na grade de 1/8
 //   4. Suave     — mediana vetorial 3×3: tira vetor isolado errado
@@ -67,15 +68,16 @@ float4 Luma(Saida e) : SV_Target
 float Ler0(int2 p) { return T0.Load(int3(clamp(p, int2(0, 0), tamanhoOrigem - 1), 0)).r; }
 float Ler1(int2 p) { return T1.Load(int3(clamp(p, int2(0, 0), tamanhoOrigem - 1), 0)).r; }
 
-// Busca grossa em 1/16. T0/T1 = luma 1/16 anterior/atual.
-float4 Grossa(Saida e) : SV_Target
+// Busca global em 1/64. T0/T1 = luma 1/64. Alcança ±384 px de movimento
+// simétrico (768 px entre os dois reais): o giro rápido de câmera, que a busca
+// em 1/16 sozinha não alcançava — e o quadro gerado saía derretido.
+float4 Global(Saida e) : SV_Target
 {
     int2 p = int2(e.pos.xy);
     const int R = 6;
     float melhor = 1e9;
     float parado = 1e9;
     int2 escolhido = int2(0, 0);
-
     [loop] for (int uy = -R; uy <= R; uy++)
     {
         [loop] for (int ux = -R; ux <= R; ux++)
@@ -88,16 +90,53 @@ float4 Grossa(Saida e) : SV_Target
                     int2 d = int2(dx, dy);
                     sad += abs(Ler0(p + d - u) - Ler1(p + d + u));
                 }
-            sad += lambda * (abs(ux) + abs(uy));
+            sad += lambda * 0.5 * (abs(ux) + abs(uy));
             if (sad < melhor) { melhor = sad; escolhido = u; }
             if (ux == 0 && uy == 0) parado = sad;
         }
     }
-    // PARADO VENCE EMPATE. Textura repetida (grade, cerca, piso) casa a um
-    // período de distância quase tão bem quanto no lugar certo; sem esta
-    // preferência, a imagem rasga em faixas.
     if (parado <= melhor * 1.15 + 0.02) escolhido = int2(0, 0);
-    // Vetor total entre os dois reais: 2u em pixels de 1/16 → ×16 na imagem.
+    // 2u em pixels de 1/64 → ×64 na imagem.
+    return float4(float2(escolhido) * 128.0, melhor, 1);
+}
+
+// Busca grossa em 1/16. T0/T1 = luma 1/16; T2 = vetores globais (1/64).
+// Procura ao redor de dois pontos de partida: parado e o vetor global.
+float4 Grossa(Saida e) : SV_Target
+{
+    int2 p = int2(e.pos.xy);
+    const int R = 4;
+    int2 pg = clamp(p / 4, int2(0, 0), tamanhoAux - 1);
+    int2 partida[2];
+    partida[0] = int2(0, 0);
+    partida[1] = int2(round(T2.Load(int3(pg, 0)).xy / 32.0));
+
+    float melhor = 1e9;
+    float parado = 1e9;
+    int2 escolhido = int2(0, 0);
+    [loop] for (int k = 0; k < 2; k++)
+    {
+        [loop] for (int uy = -R; uy <= R; uy++)
+        {
+            [loop] for (int ux = -R; ux <= R; ux++)
+            {
+                int2 u = partida[k] + int2(ux, uy);
+                float sad = 0;
+                [loop] for (int dy = -1; dy <= 1; dy++)
+                    [loop] for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int2 d = int2(dx, dy);
+                        sad += abs(Ler0(p + d - u) - Ler1(p + d + u));
+                    }
+                sad += lambda * 0.5 * (abs(u.x - partida[k].x) + abs(u.y - partida[k].y));
+                if (sad < melhor) { melhor = sad; escolhido = u; }
+                if (u.x == 0 && u.y == 0) parado = min(parado, sad);
+            }
+        }
+    }
+    // PARADO VENCE EMPATE: textura repetida casa a um período de distância
+    // quase tão bem quanto no lugar certo.
+    if (parado <= melhor * 1.15 + 0.02) escolhido = int2(0, 0);
     return float4(float2(escolhido) * 32.0, melhor, 1);
 }
 
@@ -219,7 +258,10 @@ float4 Escolha(Saida e) : SV_Target
         if (k == 0) erro -= 0.004;
         if (erro < melhorErro) { melhorErro = erro; melhorVetor = v; }
     }
-    return float4(melhorVetor, max(melhorErro, 0.0), 1);
+    // Canal a: 1 onde a discordância é grande. A média disso na tela inteira
+    // é a nota do quadro — e decide se ele pode ser mostrado.
+    melhorErro = max(melhorErro, 0.0);
+    return float4(melhorVetor, melhorErro, melhorErro > 0.06 ? 1.0 : 0.0);
 }
 
 // Composição em resolução cheia. T0 = anterior, T1 = atual, T2 = escolha (1/2).
@@ -238,7 +280,15 @@ float4 Final(Saida e) : SV_Target
     float3 b = T1.SampleLevel(Linear, uv + vuv * (1.0 - t), 0).rgb;
     float recuo = saturate((escolha.z - limiarErro) / faixaErro);
     float3 umLado = t < 0.5 ? a : b;
-    return float4(lerp(lerp(a, b, t), umLado, recuo), 1);
+    float3 cor = lerp(lerp(a, b, t), umLado, recuo);
+
+    // TRAVA: discordância grande demais quer dizer que o movimento não foi
+    // achado (giro rapidíssimo, troca de cena, explosão). Aí o pixel mostra o
+    // quadro real mais próximo NO LUGAR — no pior caso, um quadro repetido.
+    // Nunca uma imagem derretida.
+    float3 real = t < 0.5 ? T0.SampleLevel(Linear, uv, 0).rgb : T1.SampleLevel(Linear, uv, 0).rgb;
+    float perdido = saturate((escolha.z - (limiarErro + faixaErro)) / faixaErro);
+    return float4(lerp(cor, real, perdido), 1);
 }
 
 // O quadro real, sem mexer.

@@ -47,6 +47,7 @@ pub struct Alvo {
 struct Passes {
     vs: ID3D11VertexShader,
     luma: ID3D11PixelShader,
+    global: ID3D11PixelShader,
     grossa: ID3D11PixelShader,
     fina: ID3D11PixelShader,
     suave: ID3D11PixelShader,
@@ -61,12 +62,17 @@ struct Trabalho {
     imagem: [Alvo; 2],
     luma_q: [Alvo; 2],
     luma_s: [Alvo; 2],
+    luma_g: [Alvo; 2],
+    vet_global: Alvo,
     vet_grosso: Alvo,
     vet_fino: Alvo,
     vet_suave: Alvo,
     /// Vetor escolhido e discordância, em meia resolução. Refeito a cada
     /// quadro gerado, porque depende de `t`.
     escolhido: Alvo,
+    /// 1×1 lido pela CPU: a média do canal "ruim" do quadro.
+    nota_leitura: ID3D11Texture2D,
+    niveis_escolhido: u32,
 }
 
 pub struct Gpu {
@@ -117,6 +123,19 @@ fn compilar(entrada: &str, alvo: &str) -> Result<ID3DBlob, String> {
     codigo.ok_or_else(|| format!("shader {} sem código", entrada))
 }
 
+/// Meio-float (16 bits) para f32.
+fn meio_float(h: u16) -> f32 {
+    let sinal = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
+    let expoente = ((h >> 10) & 0x1f) as i32;
+    let fracao = (h & 0x3ff) as f32;
+    sinal
+        * match expoente {
+            0 => fracao / 1024.0 * 2f32.powi(-14),
+            31 => f32::INFINITY,
+            e => (1.0 + fracao / 1024.0) * 2f32.powi(e - 15),
+        }
+}
+
 fn bytes(b: &ID3DBlob) -> &[u8] {
     unsafe { std::slice::from_raw_parts(b.GetBufferPointer() as *const u8, b.GetBufferSize()) }
 }
@@ -155,6 +174,7 @@ impl Gpu {
         let passes = Passes {
             vs: vs.ok_or("VS")?,
             luma: ps("Luma")?,
+            global: ps("Global")?,
             grossa: ps("Grossa")?,
             fina: ps("Fina")?,
             suave: ps("Suave")?,
@@ -240,12 +260,88 @@ impl Gpu {
         Ok(Alvo { textura, rtv, srv: srv.ok_or("srv")?, largura, altura })
     }
 
+    fn alvo_com_mips(&self, largura: u32, altura: u32, formato: DXGI_FORMAT) -> Result<Alvo, String> {
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: largura,
+            Height: altura,
+            MipLevels: 0,
+            ArraySize: 1,
+            Format: formato,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: (D3D11_BIND_SHADER_RESOURCE.0 | D3D11_BIND_RENDER_TARGET.0) as u32,
+            MiscFlags: D3D11_RESOURCE_MISC_GENERATE_MIPS.0 as u32,
+            ..Default::default()
+        };
+        let mut textura = None;
+        unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut textura)) }.map_err(|e| erro("textura com mips", e))?;
+        let textura: ID3D11Texture2D = textura.ok_or("textura")?;
+        let mut srv = None;
+        unsafe { self.device.CreateShaderResourceView(&textura, None, Some(&mut srv)) }.map_err(|e| erro("srv", e))?;
+        let mut rtv = None;
+        unsafe { self.device.CreateRenderTargetView(&textura, None, Some(&mut rtv)) }.map_err(|e| erro("rtv", e))?;
+        Ok(Alvo { textura, rtv, srv: srv.ok_or("srv")?, largura, altura })
+    }
+
+    fn leitura_1x1(&self, formato: DXGI_FORMAT) -> Result<ID3D11Texture2D, String> {
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: 1,
+            Height: 1,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: formato,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_STAGING,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            ..Default::default()
+        };
+        let mut textura = None;
+        unsafe { self.device.CreateTexture2D(&desc, None, Some(&mut textura)) }.map_err(|e| erro("leitura", e))?;
+        textura.ok_or_else(|| "leitura".to_string())
+    }
+
+    /// NOTA DO QUADRO: fração da imagem em que os dois quadros reais discordam
+    /// muito, medida no ponto do meio (t = 0,5). Giro rapidíssimo de câmera,
+    /// troca de cena e explosão dão nota alta — e aí o quadro gerado não sai.
+    pub fn fracao_ruim(&self) -> Option<f32> {
+        let tr = self.trabalho.as_ref()?;
+        if !self.tem_par() {
+            return None;
+        }
+        let (a, b) = (1 - self.atual, self.atual);
+        self.passe(
+            &self.passes.escolha,
+            tr.escolhido.rtv.as_ref().unwrap(),
+            tr.escolhido.largura,
+            tr.escolhido.altura,
+            &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.vet_suave.srv.clone())],
+            Parametros {
+                texel_destino: [1.0 / tr.largura as f32, 1.0 / tr.altura as f32],
+                tamanho_aux: [tr.vet_suave.largura as i32, tr.vet_suave.altura as i32],
+                t: 0.5,
+                ..Default::default()
+            },
+        );
+        unsafe {
+            self.ctx.GenerateMips(&tr.escolhido.srv);
+            let ultimo = tr.niveis_escolhido.saturating_sub(1);
+            self.ctx.CopySubresourceRegion(&tr.nota_leitura, 0, 0, 0, 0, &tr.escolhido.textura, ultimo, None);
+            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
+            self.ctx.Map(&tr.nota_leitura, 0, D3D11_MAP_READ, 0, Some(&mut m)).ok()?;
+            let bytes = std::slice::from_raw_parts(m.pData as *const u8, 8);
+            let ruim = meio_float(u16::from_le_bytes([bytes[6], bytes[7]]));
+            self.ctx.Unmap(&tr.nota_leitura, 0);
+            Some(ruim)
+        }
+    }
+
     /// Cria (ou recria) as texturas para uma área de jogo deste tamanho.
     pub fn preparar(&mut self, largura: u32, altura: u32) -> Result<(), String> {
         if self.trabalho.as_ref().is_some_and(|t| t.largura == largura && t.altura == altura) {
             return Ok(());
         }
         let ((ql, qa), (fl, fa), (sl, sa)) = niveis(largura as i32, altura as i32);
+        let (gl, ga) = (sl.div_ceil(4).max(1), sa.div_ceil(4).max(1));
         let luma = DXGI_FORMAT_R16_FLOAT;
         let vet = DXGI_FORMAT_R16G16B16A16_FLOAT;
         self.trabalho = Some(Trabalho {
@@ -257,10 +353,14 @@ impl Gpu {
             ],
             luma_q: [self.alvo(ql, qa, luma, true)?, self.alvo(ql, qa, luma, true)?],
             luma_s: [self.alvo(sl, sa, luma, true)?, self.alvo(sl, sa, luma, true)?],
+            luma_g: [self.alvo(gl, ga, luma, true)?, self.alvo(gl, ga, luma, true)?],
+            vet_global: self.alvo(gl, ga, vet, true)?,
             vet_grosso: self.alvo(sl, sa, vet, true)?,
             vet_fino: self.alvo(fl, fa, vet, true)?,
             vet_suave: self.alvo(fl, fa, vet, true)?,
-            escolhido: self.alvo((largura + 1) / 2, (altura + 1) / 2, vet, true)?,
+            escolhido: self.alvo_com_mips((largura + 1) / 2, (altura + 1) / 2, vet)?,
+            nota_leitura: self.leitura_1x1(vet)?,
+            niveis_escolhido: 32 - ((largura + 1) / 2).max((altura + 1) / 2).leading_zeros(),
         });
         self.reais = 0;
         Ok(())
@@ -360,6 +460,19 @@ impl Gpu {
                 ..Default::default()
             },
         );
+        let g = &t.luma_g[novo];
+        self.passe(
+            &self.passes.luma,
+            g.rtv.as_ref().unwrap(),
+            g.largura,
+            g.altura,
+            &[Some(s.srv.clone()), None, None],
+            Parametros {
+                texel_origem: [1.0 / s.largura as f32, 1.0 / s.altura as f32],
+                tamanho_aux: [1, 1],
+                ..Default::default()
+            },
+        );
         self.atual = novo;
         self.reais += 1;
     }
@@ -399,14 +512,29 @@ impl Gpu {
         let (a, b) = (1 - self.atual, self.atual);
         let lambda = 0.02;
 
+        let g = &t.luma_g[a];
+        self.passe(
+            &self.passes.global,
+            t.vet_global.rtv.as_ref().unwrap(),
+            t.vet_global.largura,
+            t.vet_global.altura,
+            &[Some(t.luma_g[a].srv.clone()), Some(t.luma_g[b].srv.clone()), None],
+            Parametros { tamanho_origem: [g.largura as i32, g.altura as i32], lambda, ..Default::default() },
+        );
+
         let s = &t.luma_s[a];
         self.passe(
             &self.passes.grossa,
             t.vet_grosso.rtv.as_ref().unwrap(),
             t.vet_grosso.largura,
             t.vet_grosso.altura,
-            &[Some(t.luma_s[a].srv.clone()), Some(t.luma_s[b].srv.clone()), None],
-            Parametros { tamanho_origem: [s.largura as i32, s.altura as i32], lambda, ..Default::default() },
+            &[Some(t.luma_s[a].srv.clone()), Some(t.luma_s[b].srv.clone()), Some(t.vet_global.srv.clone())],
+            Parametros {
+                tamanho_origem: [s.largura as i32, s.altura as i32],
+                tamanho_aux: [t.vet_global.largura as i32, t.vet_global.altura as i32],
+                lambda,
+                ..Default::default()
+            },
         );
 
         let q = &t.luma_q[a];
@@ -460,7 +588,7 @@ impl Gpu {
                     largura,
                     altura,
                     &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.escolhido.srv.clone())],
-                    Parametros { texel_destino: texel, t, limiar_erro: 0.05, faixa_erro: 0.12, ..Default::default() },
+                    Parametros { texel_destino: texel, t, limiar_erro: 0.04, faixa_erro: 0.06, ..Default::default() },
                 );
             }
             _ => self.passe(

@@ -63,6 +63,14 @@ pub fn multiplicador_que_cabe(pedido: u8, intervalo: f64, hz: u32) -> u8 {
     pedido.min(cabe).max(1)
 }
 
+/// Acima desta fração de imagem ruim, o quadro gerado não sai.
+pub const FRACAO_RUIM_MAXIMA: f32 = 0.10;
+
+/// O quadro gerado pode ir à tela?
+pub fn quadro_aprovado(fracao_ruim: Option<f32>) -> bool {
+    fracao_ruim.is_some_and(|f| f.is_finite() && f <= FRACAO_RUIM_MAXIMA)
+}
+
 /// Estimativa do intervalo entre quadros reais.
 ///
 /// Média exponencial com rejeição de extremos: uma tela de carregamento de
@@ -152,6 +160,10 @@ pub struct Contadores {
     pub reais: u64,
     pub gerados: u64,
     pub descartados: u64,
+    /// Quadros reais em que a geração foi recusada pela nota (movimento que
+    /// não dá para interpolar sem inventar).
+    #[serde(default)]
+    pub recusados: u64,
     /// Tempo médio de GPU por quadro gerado, em ms (do envio ao fim da cópia).
     pub custo_ms: f64,
 }
@@ -227,6 +239,15 @@ mod tests {
         assert_eq!(multiplicador_que_cabe(3, 1.0 / 30.0, 144), 3);
         assert_eq!(multiplicador_que_cabe(2, 1.0 / 90.0, 180), 2);
         assert_eq!(multiplicador_que_cabe(2, 1.0 / 60.0, 0), 2);
+    }
+
+    #[test]
+    fn quadro_com_muita_imagem_ruim_nao_sai() {
+        assert!(quadro_aprovado(Some(0.02)));
+        assert!(quadro_aprovado(Some(0.10)));
+        assert!(!quadro_aprovado(Some(0.25)));
+        assert!(!quadro_aprovado(None));
+        assert!(!quadro_aprovado(Some(f32::NAN)));
     }
 
     #[test]
