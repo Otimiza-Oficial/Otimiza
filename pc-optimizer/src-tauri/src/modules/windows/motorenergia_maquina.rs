@@ -616,6 +616,62 @@ pub fn teste_de_rajada() -> (Option<motor::RespostaMedida>, Vec<Vec<f64>>) {
     (motor::analisar_rajadas(&rajadas, FATIA.as_millis() as f64), rajadas)
 }
 
+// ======================================================= teste de quadros
+
+/// Quantos blocos de trabalho cabem em ~4 ms nesta CPU. Medido uma vez por
+/// sessão e usado igual em todos os candidatos — senão os números não se
+/// comparam.
+fn blocos_por_quadro() -> u64 {
+    static BLOCOS: OnceLock<u64> = OnceLock::new();
+    *BLOCOS.get_or_init(|| {
+        let mut estado: u64 = 0x9E37_79B9_7F4A_7C15;
+        // Aquece: a CPU sobe o desempenho antes de medir.
+        let aquecer = Instant::now();
+        while aquecer.elapsed() < Duration::from_millis(300) {
+            bloco_de_trabalho(&mut estado);
+        }
+        let inicio = Instant::now();
+        let mut blocos = 0u64;
+        while inicio.elapsed() < Duration::from_millis(400) {
+            bloco_de_trabalho(&mut estado);
+            blocos += 1;
+        }
+        ((blocos as f64 / 400.0) * 4.0).max(1.0) as u64
+    })
+}
+
+/// TESTE DE QUADROS: um laço parecido com a thread principal de um jogo.
+///
+/// Cada "quadro" faz uma quantidade FIXA de trabalho de processador e depois
+/// espera ~3 ms, como o jogo esperando a placa de vídeo. É nessas esperas
+/// curtas que o plano de energia deixa o processador baixar o desempenho — e
+/// o próximo quadro paga. Serve para autoajustar sem precisar do jogo aberto.
+pub fn teste_de_quadros(segundos: u64) -> (f64, Vec<f64>) {
+    use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
+    let blocos = blocos_por_quadro();
+    std::thread::spawn(move || {
+        unsafe { timeBeginPeriod(1) };
+        let mut estado: u64 = 0x2545_F491_4F6C_DD1D;
+        let inicio = Instant::now();
+        let mut intervalos = Vec::with_capacity(segundos as usize * 200);
+        let mut anterior = Instant::now();
+        while inicio.elapsed() < Duration::from_secs(segundos) {
+            for _ in 0..blocos {
+                bloco_de_trabalho(&mut estado);
+            }
+            std::thread::sleep(Duration::from_millis(3));
+            let agora = Instant::now();
+            intervalos.push((agora - anterior).as_secs_f64() * 1000.0);
+            anterior = agora;
+        }
+        unsafe { timeEndPeriod(1) };
+        let fps = intervalos.len() as f64 / inicio.elapsed().as_secs_f64();
+        (fps, intervalos)
+    })
+    .join()
+    .unwrap_or((0.0, Vec::new()))
+}
+
 // ================================================================ medição
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -661,6 +717,7 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
     let mut fps_repeticoes = Vec::new();
     let mut gpu = None;
     let mut uso = None;
+    let mut quadros_sinteticos = false;
 
     if let Some(nome) = processo.filter(|p| !p.trim().is_empty()) {
         let (pid, executavel) = super::frames::encontrar_processo(nome)
@@ -687,6 +744,24 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
             intervalos_todos.extend(m.intervalos_ms);
         }
         quadros = motor::resumir_quadros(fps_soma / fps_repeticoes.len() as f64, &intervalos_todos);
+    } else {
+        // Sem jogo: o teste de quadros do Otimiza, com os contadores rodando.
+        amostras.clear();
+        let mut intervalos_todos = Vec::new();
+        let mut fps_soma = 0.0;
+        for _ in 0..repeticoes.clamp(1, 5) {
+            let parar = Arc::new(AtomicBool::new(false));
+            let p2 = parar.clone();
+            let amostrador = std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
+            let (fps, intervalos) = teste_de_quadros(segundos.min(15));
+            parar.store(true, Ordering::Relaxed);
+            amostras.extend(amostrador.join().unwrap_or_default());
+            fps_repeticoes.push((fps * 10.0).round() / 10.0);
+            fps_soma += fps;
+            intervalos_todos.extend(intervalos);
+        }
+        quadros = motor::resumir_quadros(fps_soma / fps_repeticoes.len().max(1) as f64, &intervalos_todos);
+        quadros_sinteticos = quadros.is_some();
     }
 
     Ok(MedicaoDoCandidato {
@@ -698,6 +773,7 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
             fps_repeticoes,
             gpu_pct: gpu,
             uso_cpu_pct: uso,
+            quadros_sinteticos,
         },
         curva_pct: curva_media(&rajadas),
         aplicacao: None,
@@ -828,6 +904,13 @@ mod tests {
 
     /// Leitura real desta máquina, sem escrever nada. Roda com
     /// `cargo test --lib -- --ignored motorenergia_maquina`.
+    #[test]
+    #[ignore]
+    fn teste_de_quadros_real() {
+        let (fps, intervalos) = teste_de_quadros(3);
+        println!("blocos={} fps={:.1} quadros={:?}", blocos_por_quadro(), fps, motor::resumir_quadros(fps, &intervalos));
+    }
+
     #[test]
     #[ignore]
     fn leitura_real_sem_escrever() {

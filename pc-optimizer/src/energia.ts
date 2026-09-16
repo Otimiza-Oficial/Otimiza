@@ -24,7 +24,7 @@ type Boost = "Windows" | "Agressivo";
 type Autonomia = "Windows" | "Hardware";
 type RespostaPol = "Windows" | "Rapida";
 type Dispositivo = "Windows" | "Desligada";
-type Papel = "PadraoWindows" | "A" | "B" | "C" | "Epp" | "Dispositivo";
+type Papel = "PadraoWindows" | "A" | "B" | "C" | "D" | "Epp" | "Dispositivo";
 type Motivo =
   | "EppDoCandidato" | "EppNucleosDeEficienciaPreservado" | "AutonomiaPeloHardware" | "BoostAgressivoEmTeste"
   | "SobeMaisCedo" | "SobeSemEsperarJanela" | "SobeDireto" | "DesceEmDegraus" | "DesceSemPressa"
@@ -34,7 +34,8 @@ type Motivo =
 type MotivoIgnorado = "NaoExiste" | "ForaDaFaixa" | "CpuNaoSuporta";
 type Achado =
   | "FirmwareLimitaPorTemperatura" | "FirmwareLimitaPorEnergia" | "ClockReportadoSubiuEfetivoCaiu" | "SemJogoMedido"
-  | "TemperaturaIndisponivel" | "NenhumGanhouComMargem" | "EmpateDesfeitoPelaTemperatura" | "PoucasRepeticoes" | "MedicaoInstavel";
+  | "TemperaturaIndisponivel" | "NenhumGanhouComMargem" | "EmpateDesfeitoPelaTemperatura" | "PoucasRepeticoes" | "MedicaoInstavel"
+  | "PlanoAtualJaEOMelhor" | "CandidatoTirariaFps" | "QuadrosSinteticos";
 
 type Parametros = {
   epp_bruto: number | null;
@@ -118,6 +119,7 @@ type Resultado = {
   fps_repeticoes: number[];
   gpu_pct: number | null;
   uso_cpu_pct: number | null;
+  quadros_sinteticos: boolean;
 };
 type Aplicacao = { plano: string; candidato: string; escritos: number; divergentes: string[]; recusados: string[]; ativo: boolean };
 type Medicao = { resultado: Resultado; curva_pct: number[]; aplicacao: Aplicacao | null };
@@ -223,6 +225,18 @@ const ACHADO: Record<Achado, { texto: string; tom: Tom }> = {
   EmpateDesfeitoPelaTemperatura: { texto: "Houve empate de desempenho; ganhou o que esquenta menos.", tom: "ok" },
   PoucasRepeticoes: { texto: "Só uma medição por candidato. Com duas ou mais, a confiança sobe.", tom: "aviso" },
   MedicaoInstavel: { texto: "O FPS variou muito entre repetições. Repita numa cena mais estável.", tom: "aviso" },
+  PlanoAtualJaEOMelhor: {
+    texto: "O plano que você já usa não perdeu para nenhum candidato em FPS nem em 1% low. Ele fica — trocar seria tirar FPS.",
+    tom: "ok",
+  },
+  CandidatoTirariaFps: {
+    texto: "Pelo menos um candidato foi descartado por dar menos FPS ou pior 1% low. Nenhum plano que tire FPS é recomendado.",
+    tom: "neutro",
+  },
+  QuadrosSinteticos: {
+    texto: "Sem jogo aberto, o FPS veio do teste de quadros do Otimiza (trabalho de processador com esperas curtas, como a thread principal de um jogo). Para a palavra final, meça com o jogo.",
+    tom: "neutro",
+  },
 };
 
 const ROTULO_DO_PAPEL = (p: Papel, notebook: boolean): string =>
@@ -231,6 +245,7 @@ const ROTULO_DO_PAPEL = (p: Papel, notebook: boolean): string =>
     A: notebook ? "A · Tomada competitivo" : "A · Resposta máxima",
     B: notebook ? "B · Tomada equilibrado" : "B · Adaptativo",
     C: "C · Autonomia do hardware",
+    D: "D · Resposta máxima (tudo no máximo)",
     Epp: "Laboratório de EPP",
     Dispositivo: "Política de dispositivo",
   })[p];
@@ -608,7 +623,7 @@ function desenharAutoajuste() {
       ? "Mesma resposta e mesmo estacionamento; só o EPP varia (0, 16, 32, 64, 128 na escala da CPU). Mede FPS, 1% low, tempo de quadro, clock efetivo, resposta e temperatura quando exposta."
       : estado.bateriaTestada === "dispositivos"
         ? "ASPM (PCI Express) e suspensão seletiva do USB, cada um desligado sozinho sobre o candidato B. Nunca entram por padrão: só ficam se a medição mostrar ganho. A política de USB por dispositivo, ligada ao AimTracking, ainda não existe — aqui é o controlador inteiro."
-        : "Padrão do Windows contra três candidatos feitos para esta arquitetura. Cada um é aplicado, medido com rajadas de carga e — com jogo aberto — com o jogo.";
+        : "Seu plano atual, o padrão do Windows e candidatos feitos para esta arquitetura. Cada um é aplicado e medido com rajadas de carga e com quadros — do jogo, se ele estiver aberto, ou do teste de quadros do Otimiza. Nenhum plano que dê menos FPS ou pior 1% low que o seu plano atual é recomendado.";
 
   return painel(
     "Autoajuste",
@@ -642,7 +657,7 @@ function desenharResultados() {
       return `<tr ${estado.escolha?.vencedor === c.id ? 'data-selecionada="true"' : ""}>
         <td>${c.id === "atual" ? `Plano atual<small>${esc(estado.painel?.impressao.plano_ativo_nome ?? "")} · sem mudança nenhuma</small>` : `${ROTULO_DO_PAPEL(c.papel, notebook())}<small>${esc(descreverParametros(c.parametros))}</small>`}</td>
         <td class="fg-mono">${n ? num(n.total, 1) : "—"}</td>
-        <td class="fg-mono">${q ? num(q.fps, 1) : "—"}</td>
+        <td class="fg-mono">${q ? num(q.fps, 1) : "—"}${q && r.quadros_sinteticos ? "<small>teste de quadros</small>" : ""}</td>
         <td class="fg-mono">${q ? num(q.low_1, 1) : "—"}</td>
         <td class="fg-mono">${q ? num(q.low_01, 1) : "—"}</td>
         <td class="fg-mono">${q ? `${num(q.p99_ms, 1)} ms` : "—"}</td>

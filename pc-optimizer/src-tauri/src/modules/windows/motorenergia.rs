@@ -549,6 +549,10 @@ pub enum Papel {
     /// No notebook: "PLUGGED BALANCED".
     B,
     C,
+    /// "Resposta máxima": o estilo dos planos de concorrente — tudo no máximo.
+    /// Só em desktop, e só como candidato MEDIDO: se ganhar nesta máquina, é
+    /// escolhido; se não, não.
+    D,
     Epp,
     Dispositivo,
 }
@@ -724,12 +728,24 @@ pub fn candidatos_de_autoajuste(impressao: &Impressao, base: &Enumeracao) -> Vec
         )
     };
 
-    vec![
+    let mut v = vec![
         gerar(impressao, base, "windows", Papel::PadraoWindows, Parametros::WINDOWS),
         gerar(impressao, base, "a", Papel::A, a),
         gerar(impressao, base, "b", Papel::B, b),
         gerar(impressao, base, "c", Papel::C, c),
-    ]
+    ];
+    if !notebook {
+        let d = Parametros {
+            epp_bruto: hw.then_some(0),
+            estacionamento: Estacionamento::TodosAcordados,
+            boost: Boost::Agressivo,
+            resposta: Resposta::Rapida,
+            minimo: (!hw).then_some(100),
+            ..Parametros::WINDOWS
+        };
+        v.push(gerar(impressao, base, "d", Papel::D, d));
+    }
+    v
 }
 
 /// O laboratório de EPP: mesma resposta e estacionamento, só o EPP varia.
@@ -1025,6 +1041,9 @@ pub struct ResultadoDoCandidato {
     pub fps_repeticoes: Vec<f64>,
     pub gpu_pct: Option<f64>,
     pub uso_cpu_pct: Option<f64>,
+    /// Os quadros vieram do teste de quadros do Otimiza, e não de um jogo.
+    #[serde(default)]
+    pub quadros_sinteticos: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1103,6 +1122,12 @@ pub enum Achado {
     TemperaturaIndisponivel,
     /// Os candidatos ficaram dentro da margem: fica o padrão do Windows.
     NenhumGanhouComMargem,
+    /// O plano que a pessoa já usa não perdeu para nenhum candidato: fica ele.
+    PlanoAtualJaEOMelhor,
+    /// Um candidato foi descartado por ter MENOS FPS ou pior 1% low.
+    CandidatoTirariaFps,
+    /// Sem jogo aberto, os quadros vieram do teste de quadros do Otimiza.
+    QuadrosSinteticos,
     /// Empate de desempenho; ganhou o que esquenta menos.
     EmpateDesfeitoPelaTemperatura,
     PoucasRepeticoes,
@@ -1152,8 +1177,10 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     let notas: Vec<(String, Nota)> = resultados.iter().map(|r| (r.candidato.clone(), pontuar(r, b))).collect();
 
     let sem_regressao = |r: &ResultadoDoCandidato| {
+        // NUNCA MENOS FPS. Um plano que tira FPS médio ou 1% low não entra,
+        // não importa o que mais ele melhore.
         let quadros_ok = match (r.quadros, b.quadros) {
-            (Some(a), Some(q)) => a.low_1 >= q.low_1 * 0.98 && a.p99_ms <= q.p99_ms * 1.03,
+            (Some(a), Some(q)) => a.fps >= q.fps * 0.99 && a.low_1 >= q.low_1 * 0.99 && a.p99_ms <= q.p99_ms * 1.03,
             _ => true,
         };
         let termica_ok = match (r.cpu.temperatura_max_c, b.cpu.temperatura_max_c, r.quadros, b.quadros) {
@@ -1205,6 +1232,40 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
                 _ => Some(*lider),
             }
         }
+    };
+
+    if resultados.iter().any(|r| {
+        r.candidato != base
+            && matches!((r.quadros, b.quadros), (Some(a), Some(q)) if a.fps < q.fps * 0.99 || a.low_1 < q.low_1 * 0.99)
+    }) {
+        achados.push(Achado::CandidatoTirariaFps);
+    }
+    if b.quadros_sinteticos {
+        achados.push(Achado::QuadrosSinteticos);
+    }
+
+    // O PLANO ATUAL É O PISO. Trocar o plano que a pessoa já usa por um que dá
+    // menos FPS — mesmo que ganhe do padrão do Windows — é tirar FPS dela.
+    let atual = resultados.iter().find(|r| r.candidato == "atual");
+    let vencedor = match (vencedor, atual) {
+        (Some(v), Some(_)) if v.candidato == "atual" => {
+            achados.push(Achado::PlanoAtualJaEOMelhor);
+            Some(v)
+        }
+        (Some(v), Some(a)) if v.candidato != "atual" => {
+            let perde_para_o_atual = matches!((v.quadros, a.quadros), (Some(q), Some(qa)) if q.fps < qa.fps * 0.99 || q.low_1 < qa.low_1 * 0.99);
+            if perde_para_o_atual {
+                achados.push(Achado::PlanoAtualJaEOMelhor);
+                Some(a)
+            } else {
+                Some(v)
+            }
+        }
+        (None, Some(a)) if matches!((a.quadros, b.quadros), (Some(qa), Some(q)) if qa.fps >= q.fps * 0.99 && qa.low_1 >= q.low_1 * 0.99) => {
+            achados.push(Achado::PlanoAtualJaEOMelhor);
+            Some(a)
+        }
+        (v, _) => v,
     };
 
     if vencedor.is_none() {
@@ -1659,7 +1720,39 @@ mod tests {
             fps_repeticoes: vec![fps, fps],
             gpu_pct: None,
             uso_cpu_pct: None,
+            quadros_sinteticos: false,
         }
+    }
+
+    #[test]
+    fn candidato_que_tira_fps_nunca_ganha() {
+        let base = resultado("windows", 100.0, 60.0, 20.0, 40.0, 70.0, (3600.0, 1800.0));
+        // Resposta e 1% low melhores, mas 3% menos FPS médio: fora.
+        let a = resultado("a", 97.0, 66.0, 17.0, 15.0, 70.0, (3700.0, 1900.0));
+        let e = escolher(&[base, a], "windows").unwrap();
+        assert_eq!(e.vencedor, None);
+        assert!(e.achados.contains(&Achado::CandidatoTirariaFps));
+    }
+
+    #[test]
+    fn plano_atual_e_o_piso() {
+        let base = resultado("windows", 90.0, 50.0, 22.0, 40.0, 70.0, (3600.0, 1800.0));
+        let atual = resultado("atual", 110.0, 70.0, 16.0, 8.0, 72.0, (4000.0, 2000.0));
+        // B ganha do Windows com folga, mas perde do plano que a pessoa já usa.
+        let b = resultado("b", 104.0, 64.0, 17.0, 10.0, 71.0, (3900.0, 1950.0));
+        let e = escolher(&[base, atual, b], "windows").unwrap();
+        assert_eq!(e.vencedor.as_deref(), Some("atual"));
+        assert!(e.achados.contains(&Achado::PlanoAtualJaEOMelhor));
+    }
+
+    #[test]
+    fn candidato_d_so_em_desktop() {
+        let base = enumerar(QH);
+        assert!(candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base).iter().any(|c| c.papel == Papel::D));
+        assert!(!candidatos_de_autoajuste(&intel_moderna(Formato::Notebook), &base).iter().any(|c| c.papel == Papel::D));
+        let d = candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base).into_iter().find(|c| c.papel == Papel::D).unwrap();
+        assert!(d.mudancas.iter().any(|m| m.alias == "PERFBOOSTMODE" && m.ac == Some(2)));
+        assert!(d.mudancas.iter().any(|m| m.alias == "PERFEPP" && m.ac == Some(0)));
     }
 
     #[test]
