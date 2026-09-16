@@ -1338,6 +1338,25 @@ pub async fn energia_medir_atual(
     .map_err(|e| format!("Falha ao medir: {}", e))?
 }
 
+/// Comando: os vizinhos do vencedor, já como candidatos desta máquina. `LIVRES`.
+#[tauri::command]
+pub async fn energia_vizinhos(
+    parametros: crate::modules::windows::motorenergia::Parametros,
+) -> Result<Vec<crate::modules::windows::motorenergia::Candidato>, String> {
+    tokio::task::spawn_blocking(move || {
+        use crate::modules::windows::{motorenergia as motor, motorenergia_maquina as maquina};
+        let impressao = maquina::impressao();
+        let base = maquina::enumerar_base()?;
+        Ok(motor::vizinhos_do_vencedor(parametros, &impressao)
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| motor::gerar(&impressao, &base, &format!("refino-{}", i + 1), motor::Papel::Refino, p))
+            .collect())
+    })
+    .await
+    .map_err(|e| format!("Falha ao gerar o refino: {}", e))?
+}
+
 /// Comando: escolhe entre resultados já medidos. Conta pura, `LIVRES`.
 #[tauri::command]
 pub fn energia_escolher(
@@ -3778,6 +3797,7 @@ mod tests {
         "gerador_desligar",
         "gerador_estado",
         "energia_painel",
+        "energia_vizinhos",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",

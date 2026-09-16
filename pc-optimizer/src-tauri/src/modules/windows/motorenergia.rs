@@ -553,6 +553,8 @@ pub enum Papel {
     /// Só em desktop, e só como candidato MEDIDO: se ganhar nesta máquina, é
     /// escolhido; se não, não.
     D,
+    /// Vizinho do vencedor, testado na segunda etapa do autoajuste.
+    Refino,
     Epp,
     Dispositivo,
 }
@@ -745,6 +747,35 @@ pub fn candidatos_de_autoajuste(impressao: &Impressao, base: &Enumeracao) -> Vec
         };
         v.push(gerar(impressao, base, "d", Papel::D, d));
     }
+    v
+}
+
+/// O REFINO: vizinhos do vencedor da primeira etapa, para achar o ponto
+/// ótimo em volta dele em vez de ficar com o melhor de quatro palpites.
+///
+/// EPP 16 acima e 16 abaixo (quando o processador usa EPP) e o estacionamento
+/// trocado entre adaptativo e todos acordados. Nada que o vencedor já tinha.
+pub fn vizinhos_do_vencedor(p: Parametros, impressao: &Impressao) -> Vec<Parametros> {
+    let mut v = Vec::new();
+    if let Some(epp) = p.epp_bruto {
+        if controle_por_hardware(impressao) {
+            for novo in [epp.saturating_sub(16), (epp + 16).min(255)] {
+                if novo != epp {
+                    v.push(Parametros { epp_bruto: Some(novo), ..p });
+                }
+            }
+        }
+    }
+    let outro = match p.estacionamento {
+        Estacionamento::TodosAcordados => Some(Estacionamento::Adaptativo),
+        Estacionamento::Adaptativo if impressao.formato == Formato::Desktop => Some(Estacionamento::TodosAcordados),
+        Estacionamento::Adaptativo => None,
+        Estacionamento::Windows => Some(Estacionamento::Adaptativo),
+    };
+    if let Some(e) = outro {
+        v.push(Parametros { estacionamento: e, ..p });
+    }
+    v.dedup();
     v
 }
 
@@ -1743,6 +1774,22 @@ mod tests {
         let e = escolher(&[base, atual, b], "windows").unwrap();
         assert_eq!(e.vencedor.as_deref(), Some("atual"));
         assert!(e.achados.contains(&Achado::PlanoAtualJaEOMelhor));
+    }
+
+    #[test]
+    fn vizinhos_exploram_em_volta_do_vencedor() {
+        let p = Parametros { epp_bruto: Some(32), estacionamento: Estacionamento::Adaptativo, resposta: Resposta::Rapida, ..Parametros::WINDOWS };
+        let v = vizinhos_do_vencedor(p, &intel_moderna(Formato::Desktop));
+        assert!(v.iter().any(|x| x.epp_bruto == Some(16)));
+        assert!(v.iter().any(|x| x.epp_bruto == Some(48)));
+        assert!(v.iter().any(|x| x.estacionamento == Estacionamento::TodosAcordados && x.epp_bruto == Some(32)));
+        assert!(!v.contains(&p));
+        // EPP 0 não desce abaixo de zero, e notebook não ganha "todos acordados".
+        let zero = Parametros { epp_bruto: Some(0), ..p };
+        let note = vizinhos_do_vencedor(zero, &intel_moderna(Formato::Notebook));
+        assert_eq!(note, vec![Parametros { epp_bruto: Some(16), ..zero }]);
+        // CPU sem EPP: só o estacionamento varia.
+        assert!(vizinhos_do_vencedor(p, &legada()).iter().all(|x| x.epp_bruto == Some(32)));
     }
 
     #[test]

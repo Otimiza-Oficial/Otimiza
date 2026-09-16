@@ -24,7 +24,7 @@ type Boost = "Windows" | "Agressivo";
 type Autonomia = "Windows" | "Hardware";
 type RespostaPol = "Windows" | "Rapida";
 type Dispositivo = "Windows" | "Desligada";
-type Papel = "PadraoWindows" | "A" | "B" | "C" | "D" | "Epp" | "Dispositivo";
+type Papel = "PadraoWindows" | "A" | "B" | "C" | "D" | "Refino" | "Epp" | "Dispositivo";
 type Motivo =
   | "EppDoCandidato" | "EppNucleosDeEficienciaPreservado" | "AutonomiaPeloHardware" | "BoostAgressivoEmTeste"
   | "SobeMaisCedo" | "SobeSemEsperarJanela" | "SobeDireto" | "DesceEmDegraus" | "DesceSemPressa"
@@ -246,6 +246,7 @@ const ROTULO_DO_PAPEL = (p: Papel, notebook: boolean): string =>
     B: notebook ? "B · Tomada equilibrado" : "B · Adaptativo",
     C: "C · Autonomia do hardware",
     D: "D · Resposta máxima (tudo no máximo)",
+    Refino: "Refino do vencedor",
     Epp: "Laboratório de EPP",
     Dispositivo: "Política de dispositivo",
   })[p];
@@ -298,6 +299,8 @@ const estado = {
   escolha: null as Escolha | null,
   ultimaMedicao: null as Medicao | null,
   bateriaTestada: "autoajuste" as "autoajuste" | "epp" | "dispositivos",
+  /** Candidatos do refino (segunda etapa), gerados a partir do vencedor. */
+  refino: [] as Candidato[],
 };
 
 let raiz: HTMLElement;
@@ -315,7 +318,7 @@ function candidatosDaBateria(): Candidato[] {
 
 function todosOsCandidatos(): Candidato[] {
   const b = estado.painel?.bateria;
-  return b ? [...b.autoajuste, ...b.escada_de_epp, ...b.dispositivos] : [];
+  return b ? [...b.autoajuste, ...b.escada_de_epp, ...b.dispositivos, ...estado.refino] : [];
 }
 
 // ------------------------------------------------------------------ ações
@@ -353,6 +356,7 @@ async function testarBateria() {
   if (!base) return;
   estado.resultados = {};
   estado.escolha = null;
+  estado.refino = [];
   estado.erro = "";
   estado.rodando = "bateria";
 
@@ -398,6 +402,36 @@ async function testarBateria() {
   const resultados = Object.values(estado.resultados).map((m) => m.resultado);
   if (resultados.length) {
     estado.escolha = await invoke<Escolha | null>("energia_escolher", { resultados, base: base.id });
+  }
+
+  // ETAPA 2 — REFINO: os vizinhos do vencedor, medidos na mesma cena.
+  estado.refino = [];
+  const primeiro = vencedor();
+  if (!estado.erro && primeiro && estado.bateriaTestada === "autoajuste") {
+    try {
+      estado.refino = await invoke<Candidato[]>("energia_vizinhos", { parametros: primeiro.parametros });
+    } catch {
+      estado.refino = [];
+    }
+    for (const [i, c] of estado.refino.entries()) {
+      estado.progresso = `Refino ${i + 1} de ${estado.refino.length} em volta do vencedor: ${esc(descreverParametros(c.parametros))}. ${estado.processo ? "Continue na mesma cena." : "Deixe o PC parado."}`;
+      desenhar();
+      try {
+        const m = await invoke<Medicao>("energia_testar_candidato", {
+          candidato: c,
+          processo: estado.processo || null,
+          segundos: estado.segundos,
+          repeticoes: estado.repeticoes,
+        });
+        estado.resultados[c.id] = m;
+        estado.ultimaMedicao = m;
+      } catch (e) {
+        estado.erro = `Parou no refino ${c.id}: ${e}`;
+        break;
+      }
+    }
+    const todos = Object.values(estado.resultados).map((m) => m.resultado);
+    estado.escolha = await invoke<Escolha | null>("energia_escolher", { resultados: todos, base: base.id });
   }
 
   // A bateria não deixa a máquina no último candidato testado: volta ao plano
@@ -616,7 +650,8 @@ function desenharAutoajuste() {
 
   const duracoes = [10, 20, 30, 60].map((s) => `<option value="${s}" ${estado.segundos === s ? "selected" : ""}>${s} s</option>`).join("");
   const reps = [1, 2, 3].map((n) => `<option value="${n}" ${estado.repeticoes === n ? "selected" : ""}>${n}×</option>`).join("");
-  const minutos = Math.ceil((lista.length * (15 + (estado.processo ? estado.segundos * estado.repeticoes : 0))) / 60);
+  // + 1 do plano atual, + até 3 do refino.
+  const minutos = Math.ceil(((lista.length + 4) * (15 + estado.segundos * estado.repeticoes)) / 60);
 
   const explicacao =
     estado.bateriaTestada === "epp"
@@ -643,7 +678,7 @@ function desenharAutoajuste() {
 }
 
 function desenharResultados() {
-  const lista = candidatosDaBateria().filter((c) => estado.resultados[c.id]);
+  const lista = [...candidatosDaBateria(), ...estado.refino].filter((c) => estado.resultados[c.id]);
   if (!lista.length) return "";
   const notas = new Map(estado.escolha?.notas ?? []);
   const atual: Candidato | null = estado.resultados.atual

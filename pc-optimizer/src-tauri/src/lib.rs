@@ -136,6 +136,7 @@ pub fn run() {
             commands::gerador_desligar,
             commands::gerador_estado,
             commands::energia_painel,
+            commands::energia_vizinhos,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,
