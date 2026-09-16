@@ -7,70 +7,85 @@ resultado é que não mudou nada.
 | Arquivo | Quando usar |
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_2.5.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_2.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_2.6.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_2.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
 
 ---
 
-# A 2.5 é a versão em que o programa mudou de cara
+# A 2.6 mede antes de escolher: energia e geração de quadros
 
-Nada do que o Otimiza mede, aplica ou desfaz mudou aqui. O que mudou foi a
-tela — e ela mudou inteira.
+## O plano de energia deixou de ser uma lista fixa
 
-## De preto para papel
+Até a 2.5, o plano OTIMIZA escrevia os mesmos números em todo PC: preferência
+de energia (EPP) em 0, estado mínimo do processador em 100%, núcleos todos
+acordados e boost agressivo. Num desktop isso é quase inofensivo; num notebook
+é calor a mais pelo mesmo FPS, e numa Intel híbrida é tirar do Windows a escolha
+entre núcleo de desempenho e de eficiência.
 
-O console era escuro, com tipografia monoespaçada em tudo e um verde de acento.
-Agora é claro: fundo de papel, tinta preta, e mono só onde ela serve — número,
-código de registro e rótulo. É a mesma linguagem do site, porque o programa e a
-página são o mesmo produto, e quem instala depois de visitar a página não
-deveria sentir que trocou de empresa.
+A nova aba **Energia** troca isso por um motor que:
 
-A cor que sobrou carrega significado, como sempre carregou: âmbar para o que
-pede atenção, vermelho para o que está errado. "Está tudo bem" não precisa de
-cor — precisa de um certo.
+- **identifica o processador** pela própria CPU — família, modelo, se é
+  híbrido, se tem Speed Shift, EPP ou CPPC — e se a máquina é desktop ou
+  notebook;
+- **lê o que este Windows expõe** (`powercfg /qh`), sem lista fixa: ajuste
+  que não existe aqui, ou valor fora da faixa que o Windows publica, não é
+  escrito;
+- **testa candidatos feitos para a arquitetura**, medindo a resposta da CPU
+  com rajadas de carga, o clock efetivo, os limites de firmware e — com o
+  jogo aberto — FPS, 1% low, 0,1% low e P99;
+- **escolhe pelo resultado.** 1% low, P99 e tempo de resposta pesam mais que
+  FPS médio, e esquentar conta contra. Se nenhum candidato ganha do padrão do
+  Windows com margem, a recomendação é o padrão do Windows.
 
-## A barra do topo agora é a barra do produto
+O seu plano de energia nunca é escrito: o motor trabalha no plano OTIMIZA e
+guarda um backup de todos os valores do plano anterior. **Restaurar plano
+anterior** e **Restaurar padrão do Windows** estão na aba.
 
-Ela era só a moldura da janela, com o nome no meio. Agora tem a marca à
-esquerda, a busca no centro — a mesma do `Ctrl K` — e, à direita, o uso de CPU,
-memória e disco, o nível de acesso e os controles da janela. Os botões de
-minimizar, maximizar e fechar foram para a direita, que é onde quem usa Windows
-procura o X.
+No notebook, o lado da bateria nunca é mexido.
 
-## A lateral encostou na borda
+Também na aba: laboratório de EPP, teste de economia do PCI Express e do USB,
+perfis por jogo e o **modo dinâmico** — o perfil entra quando o jogo abre e sai
+quando ele fecha.
 
-Sem canto, sem sombra, e a seção aberta deixou de ser uma pílula preta: virou um
-retângulo cinza claro. Os itens ficaram mais baixos e o texto menor. Um console
-com sete seções é uma ferramenta de trabalho, e ferramenta de trabalho usa a
-tela que tem.
+**O plano OTIMIZA antigo mudou junto.** Ele não aplica mais sozinho EPP 0,
+mínimo 100%, núcleos acordados, boost agressivo, ASPM desligado nem suspensão do
+USB desligada. Esses valores só entram se o motor medir que eles ganham nesta
+máquina.
 
-## As telas de licença
+## Laboratório de geração de quadros
 
-A ativação e a tela de boas-vindas foram redesenhadas no mesmo par: o formulário
-no papel, à esquerda, e a arte em tinta na coluna ao lado.
+A nova aba **Geração de quadros** não liga nada: você liga DLSS, FSR, Smooth
+Motion, AFMF ou Lossless Scaling onde eles moram, e o Otimiza mede antes e
+depois, sem encostar no processo do jogo.
 
-## Detalhes que só se notam depois
-
-- As fontes vêm dentro do programa (79 KB). Ele abre igual sem internet: nada é
-  baixado enquanto a primeira tela aparece.
-- Saíram dois efeitos que só existiam por causa do fundo escuro — o desfoque
-  atrás da tela de ativação e o vidro da busca. Os dois obrigavam o computador a
-  redesenhar o que estava atrás a cada quadro, e num otimizador isso é o produto
-  se desmentindo.
-- As ilustrações da placa de vídeo e do pente de memória viraram desenho de
-  traço, para existirem sobre papel sem virar mancha.
+- Separa sempre **quadros renderizados** (o que o jogo desenhou) de **quadros
+  exibidos** (o que chegou à tela), e marca cada número como MEDIDO, ESTIMADO
+  ou DESCONHECIDO.
+- Diz se a máquina está pronta (EXCELENTE, BOA, MARGINAL, NÃO RECOMENDADA) a
+  partir dos quadros reais, e avisa quando o processador é o limite.
+- Compara 2×, 3× e 4× com pontuação por perfil — competitivo, equilibrado ou
+  máxima fluidez — e uma decisão com o grau de confiança.
+- Confere se o multiplicador do Lossless Scaling é o que chegou à tela, e se a
+  cena medida se repetiu.
+- Teste visual guiado de artefatos, e limite de FPS pela taxa do monitor (no
+  driver NVIDIA, desfeito sozinho se a medição seguinte sair pior).
 
 ---
 
 ## O que esta versão não promete
 
-**Nenhum ganho novo de desempenho.** A 2.5 não acrescenta otimização nenhuma: o
-que ela muda é a tela. Se você já está na 2.4, o que o programa faz pelo seu PC
-continua exatamente o mesmo.
+**Nenhum ganho fixo.** O motor de energia pode concluir que o padrão do Windows
+é o melhor para o seu PC — e aí é isso que ele diz.
+
+**Geração de quadros não diminui atraso.** O laboratório estima o atraso que ela
+acrescenta e nunca mostra o contrário.
+
+**Temperatura e consumo do processador** só aparecem quando o Windows os expõe.
+Na maioria dos PCs ele não expõe sem driver de terceiros, e o Otimiza não
+instala um: nesses casos a tela diz "desconhecido".
 
 **O "editor desconhecido" continua aparecendo.** O aviso do SmartScreen é o
-Windows dizendo, com razão, que não sabe quem publicou este instalador. Resolver
-isso é comprar um certificado de assinatura, e essa compra ainda não foi feita.
+Windows dizendo, com razão, que não sabe quem publicou este instalador.
