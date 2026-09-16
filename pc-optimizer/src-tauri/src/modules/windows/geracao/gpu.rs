@@ -49,7 +49,6 @@ struct Passes {
     luma: ID3D11PixelShader,
     grossa: ID3D11PixelShader,
     fina: ID3D11PixelShader,
-    refino: ID3D11PixelShader,
     suave: ID3D11PixelShader,
     final_: ID3D11PixelShader,
     copia: ID3D11PixelShader,
@@ -63,7 +62,6 @@ struct Trabalho {
     luma_s: [Alvo; 2],
     vet_grosso: Alvo,
     vet_fino: Alvo,
-    vet_refinado: Alvo,
     vet_suave: Alvo,
 }
 
@@ -155,7 +153,6 @@ impl Gpu {
             luma: ps("Luma")?,
             grossa: ps("Grossa")?,
             fina: ps("Fina")?,
-            refino: ps("Refino")?,
             suave: ps("Suave")?,
             final_: ps("Final")?,
             copia: ps("Copia")?,
@@ -257,7 +254,6 @@ impl Gpu {
             luma_s: [self.alvo(sl, sa, luma, true)?, self.alvo(sl, sa, luma, true)?],
             vet_grosso: self.alvo(sl, sa, vet, true)?,
             vet_fino: self.alvo(fl, fa, vet, true)?,
-            vet_refinado: self.alvo(fl, fa, vet, true)?,
             vet_suave: self.alvo(fl, fa, vet, true)?,
         });
         self.reais = 0;
@@ -423,20 +419,11 @@ impl Gpu {
         );
 
         self.passe(
-            &self.passes.refino,
-            t.vet_refinado.rtv.as_ref().unwrap(),
-            t.vet_refinado.largura,
-            t.vet_refinado.altura,
-            &[Some(t.imagem[a].srv.clone()), Some(t.imagem[b].srv.clone()), Some(t.vet_fino.srv.clone())],
-            Parametros { tamanho_origem: [t.largura as i32, t.altura as i32], lambda, ..Default::default() },
-        );
-
-        self.passe(
             &self.passes.suave,
             t.vet_suave.rtv.as_ref().unwrap(),
             t.vet_suave.largura,
             t.vet_suave.altura,
-            &[Some(t.vet_refinado.srv.clone()), None, None],
+            &[Some(t.vet_fino.srv.clone()), None, None],
             Parametros { tamanho_origem: [t.vet_fino.largura as i32, t.vet_fino.altura as i32], ..Default::default() },
         );
     }

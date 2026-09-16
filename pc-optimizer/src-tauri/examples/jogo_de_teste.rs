@@ -6,7 +6,7 @@
 //! movimento: fundo em movimento uniforme, objeto com movimento próprio e
 //! elemento fixo que não pode tremer.
 //!
-//!     cargo run --example jogo_de_teste -- [fps]
+//!     cargo run --example jogo_de_teste -- [fps] [largura] [altura]
 
 #[cfg(windows)]
 fn main() {
@@ -29,20 +29,22 @@ fn main() {
     }
 
     let fps: f64 = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(60.0);
+    let largura: i32 = std::env::args().nth(2).and_then(|a| a.parse().ok()).unwrap_or(1280);
+    let altura: i32 = std::env::args().nth(3).and_then(|a| a.parse().ok()).unwrap_or(720);
 
     unsafe {
         let _ = windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let inst = GetModuleHandleW(None).unwrap();
         RegisterClassW(&WNDCLASSW { lpfnWndProc: Some(proc_), hInstance: inst.into(), lpszClassName: w!("JogoDeTeste"), ..Default::default() });
-        let mut r = RECT { left: 0, top: 0, right: 1280, bottom: 720 };
-        let _ = AdjustWindowRect(&mut r, WS_OVERLAPPEDWINDOW, false);
+        let mut r = RECT { left: 0, top: 0, right: largura, bottom: altura };
+        let _ = AdjustWindowRect(&mut r, WS_POPUP, false);
         let hwnd = CreateWindowExW(
             WINDOW_EX_STYLE(0),
             w!("JogoDeTeste"),
             w!("Jogo de teste do Otimiza"),
-            WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-            100,
-            100,
+            WS_POPUP | WS_VISIBLE,
+            0,
+            0,
             r.right - r.left,
             r.bottom - r.top,
             None,
@@ -53,7 +55,7 @@ fn main() {
         .unwrap();
 
         let desc = DXGI_SWAP_CHAIN_DESC {
-            BufferDesc: DXGI_MODE_DESC { Width: 1280, Height: 720, Format: DXGI_FORMAT_B8G8R8A8_UNORM, ..Default::default() },
+            BufferDesc: DXGI_MODE_DESC { Width: largura as u32, Height: altura as u32, Format: DXGI_FORMAT_B8G8R8A8_UNORM, ..Default::default() },
             SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
             BufferCount: 2,

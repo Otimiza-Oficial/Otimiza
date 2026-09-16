@@ -50,6 +50,19 @@ pub fn agenda(chegada: f64, intervalo: f64, multiplicador: u8) -> Vec<Apresentac
     v
 }
 
+/// O multiplicador que cabe na tela.
+///
+/// Quadro gerado além da taxa do monitor não aparece: vira descarte ou rasgo e
+/// custa placa de vídeo à toa. Com o jogo a 96 FPS num monitor de 180 Hz, 2×
+/// daria 192 — então fica 1× (só o real) até o jogo cair abaixo de 90.
+pub fn multiplicador_que_cabe(pedido: u8, intervalo: f64, hz: u32) -> u8 {
+    if hz == 0 || intervalo <= 0.0 {
+        return pedido.max(1);
+    }
+    let cabe = (hz as f64 * intervalo * 1.03).floor() as u8;
+    pedido.min(cabe).max(1)
+}
+
 /// Estimativa do intervalo entre quadros reais.
 ///
 /// Média exponencial com rejeição de extremos: uma tela de carregamento de
@@ -204,6 +217,16 @@ mod tests {
         let jogo = Retangulo { x: 1900, y: -10, largura: 1300, altura: 800 };
         assert_eq!(recorte(jogo, monitor), Some(Retangulo { x: 0, y: 0, largura: 1280, altura: 790 }));
         assert_eq!(recorte(Retangulo { x: 0, y: 0, largura: 800, altura: 600 }, monitor), None);
+    }
+
+    #[test]
+    fn multiplicador_nunca_passa_do_monitor() {
+        assert_eq!(multiplicador_que_cabe(2, 1.0 / 60.0, 180), 2);
+        assert_eq!(multiplicador_que_cabe(4, 1.0 / 60.0, 180), 3);
+        assert_eq!(multiplicador_que_cabe(2, 1.0 / 96.0, 180), 1);
+        assert_eq!(multiplicador_que_cabe(3, 1.0 / 30.0, 144), 3);
+        assert_eq!(multiplicador_que_cabe(2, 1.0 / 90.0, 180), 2);
+        assert_eq!(multiplicador_que_cabe(2, 1.0 / 60.0, 0), 2);
     }
 
     #[test]

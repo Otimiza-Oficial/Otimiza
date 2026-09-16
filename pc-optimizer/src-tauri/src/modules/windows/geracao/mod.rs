@@ -466,6 +466,8 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
 
 fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     let multiplicador = config.multiplicador.clamp(2, 4);
+    // Taxa do monitor principal: o teto de quadros que vale a pena gerar.
+    let hz = super::display::monitores().into_iter().find(|m| m.principal).map(|m| m.hz_atual).unwrap_or(0);
 
     // Procura o jogo por até 30 segundos.
     let limite = Instant::now() + Duration::from_secs(30);
@@ -512,6 +514,8 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
+    let mut cabe_atual = multiplicador;
+    let mut pedidos_de_troca = 0u32;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(());
@@ -583,7 +587,22 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                             // tempo que sobra até o próximo quadro real.
                             let pronto = segundos(inicio);
                             let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
-                            agenda.extend(ritmo::agenda(pronto, janela.max(0.0), multiplicador));
+                            let quer = ritmo::multiplicador_que_cabe(multiplicador, intervalo.estimado.unwrap_or(0.0), hz);
+                            // Histerese: o jogo oscilando perto do limite (87–92 FPS num
+                            // monitor de 180 Hz) não pode ficar ligando e desligando a
+                            // geração a cada quadro — isso é engasgo. Troca só depois de
+                            // meio segundo pedindo a mesma coisa.
+                            if quer == cabe_atual {
+                                pedidos_de_troca = 0;
+                            } else {
+                                pedidos_de_troca += 1;
+                                if pedidos_de_troca as f64 * intervalo.estimado.unwrap_or(0.016) > 0.5 {
+                                    cabe_atual = quer;
+                                    pedidos_de_troca = 0;
+                                }
+                            }
+                            let cabe = cabe_atual;
+                            agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
                         } else {
                             agenda.push_back(Apresentacao { instante: chegada, fase: Fase::Real });
                         }
@@ -635,7 +654,7 @@ mod tests {
     fn sobre_o_jogo_de_teste() {
         let pasta = std::path::PathBuf::from(std::env::var("OTIMIZA_FG_PASTA").unwrap_or_else(|_| ".".into()));
         let mult: u8 = std::env::var("OTIMIZA_FG_MULT").ok().and_then(|v| v.parse().ok()).unwrap_or(2);
-        let e = ligar(Configuracao { processo: "jogo_de_teste".into(), multiplicador: mult, visivel_em_captura: std::env::var_os("OTIMIZA_FG_VISIVEL").is_some() }).unwrap();
+        let e = ligar(Configuracao { processo: std::env::var("OTIMIZA_FG_PROCESSO").unwrap_or_else(|_| "jogo_de_teste".into()), multiplicador: mult, visivel_em_captura: std::env::var_os("OTIMIZA_FG_VISIVEL").is_some() }).unwrap();
         println!("inicio: {:?}", e);
         std::thread::sleep(Duration::from_secs(3));
         gravar_proximos_quadros(pasta, 6);

@@ -7,10 +7,8 @@
 //   2. Grossa    — busca de movimento em 1/16, raio ±6 (±96 px na imagem)
 //   3. Fina      — refina em 1/4, com os vetores grossos da vizinhança como
 //                  candidatos, na grade de 1/8
-//   4. Refino    — em resolução cheia, ±2 px ao redor do vetor fino: tira o
-//                  degrau de 8 px da busca em 1/4
-//   5. Suave     — mediana vetorial 3×3: tira vetor isolado errado
-//   6. Final     — cada pixel do quadro gerado busca a cor seguindo o vetor
+//   4. Suave     — mediana vetorial 3×3: tira vetor isolado errado
+//   5. Final     — cada pixel do quadro gerado busca a cor seguindo o vetor
 //                  nos dois quadros reais; onde os dois discordam (oclusão,
 //                  interface, erro de busca) recua para o quadro real mais
 //                  próximo em vez de inventar
@@ -103,81 +101,65 @@ float4 Grossa(Saida e) : SV_Target
 
 // Busca fina em 1/4, saída na grade de 1/8. T0/T1 = luma 1/4; T2 = vetores
 // grossos (1/16), em pixels da imagem.
+//
+// ORÇAMENTO. Numa GTX 1650 dividida com o jogo, o passe custava 23 ms em 1080p
+// e o gerador perdia metade dos quadros reais. Agora: 4 candidatos (parado,
+// grosso do bloco e dois vizinhos) × vizinhança 3×3 × patch 4×4 — e a fração
+// de pixel sai de uma parábola sobre as diferenças ao redor do vencedor, em vez
+// de um passe inteiro em resolução cheia.
+float Sad4(int2 c, int2 u)
+{
+    float sad = 0;
+    [loop] for (int dy = -2; dy <= 1; dy++)
+        [loop] for (int dx = -2; dx <= 1; dx++)
+        {
+            int2 d = int2(dx, dy);
+            sad += abs(Ler0(c + d - u) - Ler1(c + d + u));
+        }
+    return sad;
+}
+
 float4 Fina(Saida e) : SV_Target
 {
     int2 q = int2(e.pos.xy);
     int2 c = q * 2 + 1;
-    int2 qg = q / 2;
+    int2 qg = clamp(q / 2, int2(0, 0), tamanhoAux - 1);
 
-    int2 predicao[6];
+    int2 predicao[4];
     predicao[0] = int2(0, 0);
-    int2 viz[5] = { int2(0, 0), int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
-    for (int i = 0; i < 5; i++)
-    {
-        int2 pg = clamp(qg + viz[i], int2(0, 0), tamanhoAux - 1);
-        float2 v = T2.Load(int3(pg, 0)).xy;       // pixels da imagem
-        predicao[i + 1] = int2(round(v / 8.0));    // u em pixels de 1/4
-    }
+    predicao[1] = int2(round(T2.Load(int3(qg, 0)).xy / 8.0));
+    predicao[2] = int2(round(T2.Load(int3(clamp(qg + int2((q.x & 1) * 2 - 1, 0), int2(0, 0), tamanhoAux - 1), 0)).xy / 8.0));
+    predicao[3] = int2(round(T2.Load(int3(clamp(qg + int2(0, (q.y & 1) * 2 - 1), int2(0, 0), tamanhoAux - 1), 0)).xy / 8.0));
 
     float melhor = 1e9;
     int2 escolhido = int2(0, 0);
-    [loop] for (int k = 0; k < 6; k++)
+    [loop] for (int k = 0; k < 4; k++)
     {
-        [loop] for (int uy = -2; uy <= 2; uy++)
+        [loop] for (int uy = -1; uy <= 1; uy++)
         {
-            [loop] for (int ux = -2; ux <= 2; ux++)
+            [loop] for (int ux = -1; ux <= 1; ux++)
             {
                 int2 u = predicao[k] + int2(ux, uy);
-                float sad = 0;
-                [loop] for (int dy = -2; dy <= 1; dy++)
-                    [loop] for (int dx = -2; dx <= 1; dx++)
-                    {
-                        int2 d = int2(dx, dy);
-                        sad += abs(Ler0(c + d - u) - Ler1(c + d + u));
-                    }
-                // Continuidade: longe da previsão grossa custa mais.
-                sad += lambda * 0.5 * (abs(u.x) + abs(u.y)) + lambda * 0.5 * (abs(u.x - predicao[1].x) + abs(u.y - predicao[1].y));
+                float sad = Sad4(c, u) + lambda * 0.5 * (abs(u.x) + abs(u.y));
                 if (sad < melhor) { melhor = sad; escolhido = u; }
             }
         }
     }
-    return float4(float2(escolhido) * 8.0, melhor, 1);
+
+    // Fração de pixel: parábola pelas três diferenças em cada eixo.
+    float s0 = Sad4(c, escolhido);
+    float sxm = Sad4(c, escolhido - int2(1, 0)), sxp = Sad4(c, escolhido + int2(1, 0));
+    float sym = Sad4(c, escolhido - int2(0, 1)), syp = Sad4(c, escolhido + int2(0, 1));
+    float dx = sxm + sxp - 2.0 * s0;
+    float dy = sym + syp - 2.0 * s0;
+    float fx = dx > 1e-4 ? clamp(0.5 * (sxm - sxp) / dx, -0.5, 0.5) : 0.0;
+    float fy = dy > 1e-4 ? clamp(0.5 * (sym - syp) / dy, -0.5, 0.5) : 0.0;
+
+    // u em pixels de 1/4; vetor total = 2u; na imagem, ×4.
+    return float4((float2(escolhido) + float2(fx, fy)) * 8.0, melhor, 1);
 }
 
-float LumaCheia0(int2 p) { return dot(T0.Load(int3(clamp(p, int2(0, 0), tamanhoOrigem - 1), 0)).rgb, PESOS_LUMA); }
-float LumaCheia1(int2 p) { return dot(T1.Load(int3(clamp(p, int2(0, 0), tamanhoOrigem - 1), 0)).rgb, PESOS_LUMA); }
-
-// Refino em resolução cheia, grade de 1/8. T0/T1 = imagens; T2 = vetores
-// finos (pixels da imagem, múltiplos de 8).
-float4 Refino(Saida e) : SV_Target
-{
-    int2 q = int2(e.pos.xy);
-    int2 c = q * 8 + 4;
-    float2 v = T2.Load(int3(q, 0)).xy;
-    int2 base = int2(round(v * 0.5));
-
-    float melhor = 1e9;
-    int2 escolhido = base;
-    [loop] for (int uy = -3; uy <= 3; uy++)
-    {
-        [loop] for (int ux = -3; ux <= 3; ux++)
-        {
-            int2 u = base + int2(ux, uy);
-            float sad = 0;
-            [loop] for (int dy = -4; dy < 4; dy += 2)
-                [loop] for (int dx = -4; dx < 4; dx += 2)
-                {
-                    int2 d = int2(dx, dy);
-                    sad += abs(LumaCheia0(c + d - u) - LumaCheia1(c + d + u));
-                }
-            sad += lambda * 0.25 * (abs(ux) + abs(uy));
-            if (sad < melhor) { melhor = sad; escolhido = u; }
-        }
-    }
-    return float4(float2(escolhido) * 2.0, melhor, 1);
-}
-
-// Mediana vetorial 3×3. T0 = vetores refinados.
+// Mediana vetorial 3×3. T0 = vetores finos.
 float4 Suave(Saida e) : SV_Target
 {
     int2 p = int2(e.pos.xy);
@@ -203,7 +185,7 @@ float4 Suave(Saida e) : SV_Target
 // CADA PIXEL ESCOLHE O PRÓPRIO VETOR. Um vetor por bloco de 8×8 erra na borda
 // entre dois movimentos (objeto sobre fundo, personagem sobre cenário): metade
 // do bloco anda de um jeito, metade de outro. Aqui o pixel testa os vetores dos
-// 9 blocos vizinhos e o vetor parado, e fica com aquele em que os dois quadros
+// blocos vizinhos em cruz e o vetor parado, e fica com aquele em que os dois quadros
 // reais concordam NAQUELE pixel. Onde nenhum concorda, mistura os dois reais
 // no lugar — um leve fantasma em vez de uma mancha inventada.
 float4 Final(Saida e) : SV_Target
@@ -213,20 +195,18 @@ float4 Final(Saida e) : SV_Target
 
     float melhorErro = 1e9;
     float3 melhorCor = float3(0, 0, 0);
-    [loop] for (int k = 0; k < 10; k++)
+    static const int2 CRUZ[5] = { int2(0, 0), int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
+    [loop] for (int k = 0; k < 6; k++)
     {
         float2 v = float2(0, 0);
-        if (k < 9)
-        {
-            int2 d = int2(k % 3 - 1, k / 3 - 1);
-            v = T2.Load(int3(clamp(bloco + d, int2(0, 0), tamanhoAux - 1), 0)).xy;
-        }
+        if (k < 5)
+            v = T2.Load(int3(clamp(bloco + CRUZ[k], int2(0, 0), tamanhoAux - 1), 0)).xy;
         float2 vuv = v * texelDestino;
         float4 a = T0.SampleLevel(Linear, uv - vuv * t, 0);
         float4 b = T1.SampleLevel(Linear, uv + vuv * (1.0 - t), 0);
         float erro = dot(abs(a.rgb - b.rgb), float3(0.3333, 0.3333, 0.3333));
         // O vetor do próprio bloco ganha empate: estabilidade entre quadros.
-        if (k == 4) erro -= 0.004;
+        if (k == 0) erro -= 0.004;
         if (erro < melhorErro)
         {
             melhorErro = erro;
