@@ -94,6 +94,7 @@ type Painel = {
   perfis_de_jogo: PerfilDeJogo[];
   dinamico: boolean;
   elevado: boolean;
+  teste_interrompido: boolean;
 };
 
 type RespostaMedida = { ate_90_ms: number; primeira_fatia_pct: number; sustentado: number; dispersao_pct: number; rajadas: number };
@@ -836,6 +837,9 @@ function desenhar() {
   raiz.innerHTML = [
     estado.erro ? `<div class="fg-erro" role="alert">${esc(estado.erro)}</div>` : "",
     estado.aviso ? `<div class="fg-aviso" role="status">${esc(estado.aviso)}</div>` : "",
+    estado.painel?.teste_interrompido && !estado.rodando
+      ? `<div class="fg-erro" role="alert">Um autoajuste foi interrompido no meio e o computador pode ter ficado num plano de teste. Abra o Otimiza como administrador ou clique em "Restaurar plano anterior" lá embaixo.</div>`
+      : "",
     desenharPrincipio(),
     desenharImpressao(),
     desenharMapaDeResposta(),

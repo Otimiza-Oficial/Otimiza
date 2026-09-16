@@ -1251,6 +1251,9 @@ pub struct PainelDeEnergia {
     pub perfis_de_jogo: Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>,
     pub dinamico: bool,
     pub elevado: bool,
+    /// Um autoajuste ficou pela metade (app fechado no meio) e o plano não
+    /// pôde voltar sozinho — normalmente por falta de administrador.
+    pub teste_interrompido: bool,
 }
 
 /// Comando: HARDWARE FINGERPRINT, enumeração e candidatos. Só leitura, `LIVRES`.
@@ -1285,6 +1288,7 @@ pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
             perfis_de_jogo: maquina::perfis_de_jogo(),
             dinamico: maquina::dinamico().ligado,
             elevado: crate::modules::windows::registry::is_elevated(),
+            teste_interrompido: maquina::teste_foi_interrompido(),
         })
     })
     .await
@@ -1315,6 +1319,7 @@ pub async fn energia_testar_candidato(
                 controlados.push(m.alias.clone());
             }
         }
+        maquina::marcar_teste_em_andamento(true);
         let aplicacao = maquina::aplicar(&candidato, &controlados)?;
         let mut medicao = maquina::medir_atual(&candidato.id, processo.as_deref(), segundos.clamp(10, 60), repeticoes)?;
         medicao.aplicacao = Some(aplicacao);
@@ -1373,7 +1378,14 @@ pub async fn energia_aplicar(
 ) -> Result<crate::modules::windows::motorenergia_maquina::Aplicacao, String> {
     crate::modules::licenca::exigir()?;
 
-    tokio::task::spawn_blocking(move || crate::modules::windows::motorenergia_maquina::aplicar_parametros("escolhido", parametros))
+    tokio::task::spawn_blocking(move || {
+        let r = crate::modules::windows::motorenergia_maquina::aplicar_parametros("escolhido", parametros);
+        if r.is_ok() {
+            // O plano escolhido de propósito não é mais "teste em andamento".
+            crate::modules::windows::motorenergia_maquina::marcar_teste_em_andamento(false);
+        }
+        r
+    })
         .await
         .map_err(|e| format!("Falha ao aplicar: {}", e))?
 }

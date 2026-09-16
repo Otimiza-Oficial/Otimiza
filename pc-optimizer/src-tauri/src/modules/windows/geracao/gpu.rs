@@ -52,6 +52,7 @@ struct Passes {
     fina: ID3D11PixelShader,
     suave: ID3D11PixelShader,
     escolha: ID3D11PixelShader,
+    mascara: ID3D11PixelShader,
     final_: ID3D11PixelShader,
     copia: ID3D11PixelShader,
 }
@@ -70,6 +71,9 @@ struct Trabalho {
     /// Vetor escolhido e discordância, em meia resolução. Refeito a cada
     /// quadro gerado, porque depende de `t`.
     escolhido: Alvo,
+    /// Máscara de interface (ping-pong): índice `mascara_atual` é a mais nova.
+    mascara: [Alvo; 2],
+    mascara_atual: usize,
     /// 1×1 lido pela CPU: a média do canal "ruim" do quadro.
     nota_leitura: ID3D11Texture2D,
     niveis_escolhido: u32,
@@ -179,6 +183,7 @@ impl Gpu {
             fina: ps("Fina")?,
             suave: ps("Suave")?,
             escolha: ps("Escolha")?,
+            mascara: ps("Mascara")?,
             final_: ps("Final")?,
             copia: ps("Copia")?,
         };
@@ -360,6 +365,11 @@ impl Gpu {
             vet_suave: self.alvo(fl, fa, vet, true)?,
             escolhido: self.alvo_com_mips((largura + 1) / 2, (altura + 1) / 2, vet)?,
             nota_leitura: self.leitura_1x1(vet)?,
+            mascara: [
+                self.alvo((largura + 1) / 2, (altura + 1) / 2, luma, true)?,
+                self.alvo((largura + 1) / 2, (altura + 1) / 2, luma, true)?,
+            ],
+            mascara_atual: 0,
             niveis_escolhido: 32 - ((largura + 1) / 2).max((altura + 1) / 2).leading_zeros(),
         });
         self.reais = 0;
@@ -382,7 +392,7 @@ impl Gpu {
         rtv: &ID3D11RenderTargetView,
         largura: u32,
         altura: u32,
-        entradas: &[Option<ID3D11ShaderResourceView>; 3],
+        entradas: &[Option<ID3D11ShaderResourceView>],
         p: Parametros,
     ) {
         self.parametros(p);
@@ -405,7 +415,7 @@ impl Gpu {
             self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.buffer.clone())]));
             self.ctx.Draw(3, 0);
             // Desliga as entradas: a mesma textura vira alvo no passe seguinte.
-            self.ctx.PSSetShaderResources(0, Some(&[None, None, None]));
+            self.ctx.PSSetShaderResources(0, Some(&[None, None, None, None]));
             self.ctx.OMSetRenderTargets(None, None);
         }
     }
@@ -473,6 +483,23 @@ impl Gpu {
                 ..Default::default()
             },
         );
+        // Máscara de interface: entre o real anterior e este.
+        if self.reais >= 1 {
+            let anterior = 1 - novo;
+            let (de, para) = (t.mascara_atual, 1 - t.mascara_atual);
+            let alvo = &t.mascara[para];
+            self.passe(
+                &self.passes.mascara,
+                alvo.rtv.as_ref().unwrap(),
+                alvo.largura,
+                alvo.altura,
+                &[Some(t.imagem[anterior].srv.clone()), Some(t.imagem[novo].srv.clone()), Some(t.mascara[de].srv.clone())],
+                Parametros { texel_destino: [1.0 / t.largura as f32, 1.0 / t.altura as f32], ..Default::default() },
+            );
+            if let Some(tr) = self.trabalho.as_mut() {
+                tr.mascara_atual = para;
+            }
+        }
         self.atual = novo;
         self.reais += 1;
     }
@@ -587,7 +614,12 @@ impl Gpu {
                     destino,
                     largura,
                     altura,
-                    &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.escolhido.srv.clone())],
+                    &[
+                        Some(tr.imagem[a].srv.clone()),
+                        Some(tr.imagem[b].srv.clone()),
+                        Some(tr.escolhido.srv.clone()),
+                        Some(tr.mascara[tr.mascara_atual].srv.clone()),
+                    ],
                     Parametros { texel_destino: texel, t, limiar_erro: 0.04, faixa_erro: 0.06, ..Default::default() },
                 );
             }

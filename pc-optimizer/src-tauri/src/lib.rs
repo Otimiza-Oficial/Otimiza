@@ -398,6 +398,14 @@ pub fn run() {
                 });
             }
 
+            // TESTE DE ENERGIA INTERROMPIDO: volta ao plano de antes.
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::windows::motorenergia_maquina::recuperar_teste_interrompido).await {
+                    utils::Logger::info(&format!("motor de energia: teste interrompido desfeito na abertura: {:?}", r.map(|x| x.plano_ativo)));
+                }
+            });
+
             // O MODO DINÂMICO DO MOTOR DE ENERGIA.
             //
             // NORMAL → JOGO ABRIU → PERFIL DE BAIXA LATÊNCIA → JOGO FECHOU →

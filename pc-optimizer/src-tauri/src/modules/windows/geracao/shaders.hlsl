@@ -36,6 +36,7 @@ cbuffer Parametros : register(b0)
 Texture2D<float4> T0 : register(t0);
 Texture2D<float4> T1 : register(t1);
 Texture2D<float4> T2 : register(t2);
+Texture2D<float4> T3 : register(t3);
 SamplerState Linear : register(s0);
 
 struct Saida { float4 pos : SV_Position; };
@@ -221,6 +222,25 @@ float4 Suave(Saida e) : SV_Target
     return float4(escolhido, 0, 1);
 }
 
+// MÁSCARA DE INTERFACE, em meia resolução. T0 = anterior, T1 = atual,
+// T2 = máscara do quadro real anterior. Saída r = fração recente do tempo em
+// que este ponto ficou PARADO na tela.
+//
+// A moldura do velocímetro, as barras de vida, as caixas de notificação e o
+// fundo dos textos ficam parados quase sempre — mesmo quando o número dentro
+// deles muda. Um ponto parado na maior parte do tempo é tratado como
+// interface: sai do quadro real, nunca deslocado nem misturado. É o que acaba
+// com os números quebrados do velocímetro.
+float4 Mascara(Saida e) : SV_Target
+{
+    float2 uv = (floor(e.pos.xy) + 0.5) * 2.0 * texelDestino;
+    float3 antes = T0.SampleLevel(Linear, uv, 0).rgb;
+    float3 depois = T1.SampleLevel(Linear, uv, 0).rgb;
+    float parado = dot(abs(antes - depois), float3(0.299, 0.587, 0.114)) < 0.008 ? 1.0 : 0.0;
+    float anterior = T2.Load(int3(int2(e.pos.xy), 0)).r;
+    return float4(lerp(anterior, parado, 0.08), 0, 0, 1);
+}
+
 // Escolha do vetor, em meia resolução. T0 = anterior, T1 = atual (imagem
 // inteira), T2 = vetores (1/8). Saída: xy = vetor escolhido, z = discordância.
 //
@@ -283,6 +303,10 @@ float4 Final(Saida e) : SV_Target
     float2 uv = e.pos.xy * texelDestino;
     float3 anteriorNoLugar = T0.SampleLevel(Linear, uv, 0).rgb;
     float3 atualNoLugar = T1.SampleLevel(Linear, uv, 0).rgb;
+
+    // Interface (ver Mascara): sai do real mais próximo, no lugar.
+    if (T3.Load(int3(int2(e.pos.xy) / 2, 0)).r > 0.5)
+        return float4(t < 0.5 ? anteriorNoLugar : atualNoLugar, 1);
 
     // PIXEL PARADO SAI DO REAL. Se o pixel não mudou entre os dois quadros
     // reais — HUD, minimapa, velocímetro, texto — ele não é deslocado por

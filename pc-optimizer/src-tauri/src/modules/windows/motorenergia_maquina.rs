@@ -276,6 +276,42 @@ fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
     Ok(backup)
 }
 
+// ============================================= teste interrompido
+
+/// Marca "há um teste de candidatos em andamento". Se o Otimiza fechar ou
+/// travar no meio do autoajuste, a máquina ficaria presa no último candidato
+/// testado — que não é o plano da pessoa. Na abertura seguinte, a marca
+/// existindo, o plano anterior volta sozinho.
+pub fn marcar_teste_em_andamento(em_andamento: bool) {
+    let arquivo = pasta().join("teste_em_andamento");
+    if em_andamento {
+        let _ = std::fs::create_dir_all(pasta());
+        let _ = std::fs::write(arquivo, b"1");
+    } else {
+        let _ = std::fs::remove_file(arquivo);
+    }
+}
+
+pub fn teste_foi_interrompido() -> bool {
+    pasta().join("teste_em_andamento").exists()
+}
+
+/// Chamado na abertura do app: desfaz um teste interrompido.
+pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
+    if !teste_foi_interrompido() {
+        return None;
+    }
+    if !registry::is_elevated() {
+        // Sem administrador não dá para trocar o plano; a tela avisa.
+        return None;
+    }
+    let r = restaurar_anterior();
+    if r.is_ok() {
+        marcar_teste_em_andamento(false);
+    }
+    Some(r)
+}
+
 // ============================================================ escrita
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -404,6 +440,7 @@ pub fn restaurar_anterior() -> Result<Restauracao, String> {
 
     let apagado = apagar_plano_otimiza();
     let _ = std::fs::remove_file(pasta().join("backup.json"));
+    marcar_teste_em_andamento(false);
     Ok(Restauracao { plano_ativo: ativo, divergentes, plano_otimiza_apagado: apagado })
 }
 
@@ -416,6 +453,7 @@ pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
         return Err(format!("O Windows aceitou, mas o plano ativo continua {}.", ativo));
     }
     let apagado = apagar_plano_otimiza();
+    marcar_teste_em_andamento(false);
     Ok(Restauracao { plano_ativo: ativo, divergentes: Vec::new(), plano_otimiza_apagado: apagado })
 }
 
