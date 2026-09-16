@@ -198,3 +198,28 @@
 .pulse-dot {
   animation: pulse-dot 2.4s var(--ease-out-soft) infinite;
 }
+
+/* Duas entradas curtas, usadas pelo painel: menus e a paleta de busca surgem
+   com 140ms de opacidade e 3px de deslocamento; a gaveta do celular desliza.
+   Movimento a mais numa ferramenta de trabalho vira atraso. */
+@keyframes surgir {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes deslizar {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

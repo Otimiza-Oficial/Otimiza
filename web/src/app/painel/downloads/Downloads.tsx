@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, FileDown, ShieldAlert } from "lucide-react";
-import { Bloco, PainelTitulo } from "@/components/painel/PainelShell";
+import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
 import { ButtonLink } from "@/components/ui/Button";
 import { formatarDataHora, formatarTamanho, useUltimaRelease } from "@/lib/release";
 import { links, site } from "@/lib/site";
@@ -18,12 +18,12 @@ export function Downloads() {
 
   return (
     <>
-      <PainelTitulo
+      <CabecalhoPagina
         titulo="Downloads"
         texto="Sempre a versão mais nova. A sua chave continua valendo quando você atualiza — ela é presa ao computador, não à versão."
       />
 
-      <Bloco className="mt-8 overflow-hidden">
+      <Cartao className="overflow-hidden">
         <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="flex items-center gap-4">
             <span className="grid size-12 shrink-0 place-items-center rounded-[12px] bg-ink text-white">
@@ -47,21 +47,21 @@ export function Downloads() {
           Windows 10 ou 11, 64 bits. Não há versão para macOS ou Linux: o que o Otimiza faz depende do registro e dos
           serviços do Windows.
         </div>
-      </Bloco>
+      </Cartao>
 
       {r?.resumo && (
-        <Bloco className="mt-5 p-5 sm:p-6">
+        <Cartao className="mt-2 p-3.5 sm:p-4">
           <p className="eyebrow">O que é esta versão</p>
           <p className="mt-3 max-w-[760px] text-[14px] leading-[1.65] text-[#2b2b2b]">{r.resumo}</p>
-        </Bloco>
+        </Cartao>
       )}
 
-      <Bloco className="mt-5 p-5 sm:p-6">
+      <Cartao className="mt-2 p-3.5 sm:p-4">
         <p className="flex items-center gap-2 font-display text-[18px] font-semibold tracking-[-0.03em]">
           <ShieldAlert size={18} strokeWidth={2} aria-hidden="true" />
           O aviso de “editor desconhecido”
         </p>
-        <ol className="mt-5 grid gap-3 md:grid-cols-3">
+        <ol className="mt-2 grid gap-3 md:grid-cols-3">
           {SMARTSCREEN.map((p, i) => (
             <li key={p.titulo} className="card p-4">
               <span className="font-mono text-[11.5px] text-subtle">0{i + 1}</span>
@@ -70,7 +70,7 @@ export function Downloads() {
             </li>
           ))}
         </ol>
-      </Bloco>
+      </Cartao>
     </>
   );
 }

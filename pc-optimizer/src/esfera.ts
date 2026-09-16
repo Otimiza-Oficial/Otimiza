@@ -53,9 +53,9 @@ interface Ponto {
 }
 
 const COR = {
-  ok: "233, 231, 227",
-  importante: "232, 178, 58",
-  critico: "255, 92, 115",
+  ok: "10, 10, 10",
+  importante: "138, 97, 0",
+  critico: "180, 35, 24",
 } as const;
 
 /**

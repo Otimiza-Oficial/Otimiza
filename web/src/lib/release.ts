@@ -94,3 +94,60 @@ export const formatarTamanho = (bytes: number) =>
 
 export const formatarDataHora = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+
+/* ------------------------------------------------------------ o histórico */
+
+export type ItemDeVersao = { versao: string; publicadaEm: string };
+
+export type EstadoHistorico =
+  | { estado: "carregando" }
+  | { estado: "ok"; versoes: ItemDeVersao[] }
+  | { estado: "falhou" };
+
+const CACHE_HISTORICO = "otimiza.painel.versoes";
+
+/**
+ * Todas as versões publicadas, da API pública do GitHub.
+ *
+ * É o único dado com linha do tempo que a área do cliente tem de verdade — o
+ * programa não manda nada para lugar nenhum, então não existe "receita por
+ * mês" para desenhar aqui. O que existe é o ritmo com que o produto sai.
+ */
+export function useHistoricoDeVersoes(): EstadoHistorico {
+  const [estado, setEstado] = useState<EstadoHistorico>({ estado: "carregando" });
+
+  useEffect(() => {
+    let vivo = true;
+
+    try {
+      const guardado = JSON.parse(sessionStorage.getItem(CACHE_HISTORICO) ?? "null");
+      if (guardado && Date.now() - guardado.em < VALIDADE_MS) {
+        queueMicrotask(() => vivo && setEstado({ estado: "ok", versoes: guardado.versoes }));
+        return () => {
+          vivo = false;
+        };
+      }
+    } catch {}
+
+    fetch("https://api.github.com/repos/Otimiza-Oficial/Otimiza/releases?per_page=100", {
+      headers: { Accept: "application/vnd.github+json" },
+    })
+      .then((r) => (r.ok ? (r.json() as Promise<Bruta[]>) : Promise.reject(r.status)))
+      .then((brutas) => {
+        const versoes = brutas
+          .map((b) => ({ versao: b.tag_name.replace(/^v/, ""), publicadaEm: b.published_at }))
+          .sort((a, b) => a.publicadaEm.localeCompare(b.publicadaEm));
+        try {
+          sessionStorage.setItem(CACHE_HISTORICO, JSON.stringify({ em: Date.now(), versoes }));
+        } catch {}
+        if (vivo) setEstado({ estado: "ok", versoes });
+      })
+      .catch(() => vivo && setEstado({ estado: "falhou" }));
+
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  return estado;
+}

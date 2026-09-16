@@ -99,14 +99,14 @@ jobs:
         working-directory: web
         run: |
           set -euo pipefail
-          for pagina in "" entrar painel painel/licencas painel/downloads painel/suporte; do
+          for pagina in "" entrar boas-vindas comecar painel painel/licencas painel/downloads painel/suporte painel/conta; do
             arquivo="out/${pagina:+$pagina/}index.html"
             if [ ! -f "$arquivo" ]; then
               echo "Faltou a página: /${pagina}"
               exit 1
             fi
           done
-          echo "As seis páginas foram geradas."
+          echo "As nove páginas foram geradas."
 
       - name: Conferir que o instalador continua linkado
         working-directory: web

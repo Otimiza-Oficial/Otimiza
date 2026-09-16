@@ -3,7 +3,7 @@
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 import { useId, useState } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
-import { Bloco, PainelTitulo } from "@/components/painel/PainelShell";
+import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { useCodigoDaMaquina } from "@/lib/armazem";
 import { codigoValido } from "@/lib/licenca";
@@ -61,10 +61,10 @@ export function Suporte() {
 
   return (
     <>
-      <PainelTitulo
+      <CabecalhoPagina
         titulo="Suporte"
         texto="O atendimento é no Discord, por uma pessoa. Escolha a situação, copie a mensagem pronta e cole no canal."
-        acao={
+        acoes={
           <ButtonLink href={links.discord} size="md">
             <BrandLogo brand="discord" size={16} decorative />
             Abrir o Discord
@@ -73,7 +73,7 @@ export function Suporte() {
         }
       />
 
-      <Bloco className="mt-8 p-5 sm:p-6">
+      <Cartao className="p-3.5 sm:p-4">
         <label htmlFor={idCodigo} className="text-[12.5px] font-semibold">
           Código deste computador
         </label>
@@ -92,13 +92,13 @@ export function Suporte() {
             ? "Isso não tem a forma de um código do Otimiza. Copie de novo direto da tela do programa."
             : "Entra sozinho nas mensagens abaixo. Fica guardado só neste navegador."}
         </p>
-      </Bloco>
+      </Cartao>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="mt-2 grid gap-4 md:grid-cols-2">
         {SITUACOES.map((s) => {
           const mensagem = s.mensagem?.(codigoParaMensagem);
           return (
-            <Bloco key={s.id} className="flex flex-col p-5 sm:p-6">
+            <Cartao key={s.id} className="flex flex-col p-3.5 sm:p-4">
               <h2 className="font-display text-[17px] font-semibold tracking-[-0.03em]">{s.titulo}</h2>
               <p className="mt-2 text-[13.5px] leading-[1.6] text-muted">{s.texto}</p>
               {mensagem && (
@@ -121,7 +121,7 @@ export function Suporte() {
                   </div>
                 </>
               )}
-            </Bloco>
+            </Cartao>
           );
         })}
       </div>

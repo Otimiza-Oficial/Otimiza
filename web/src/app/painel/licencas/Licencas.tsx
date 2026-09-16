@@ -2,7 +2,7 @@
 
 import { Check, KeyRound } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
-import { Bloco, PainelTitulo } from "@/components/painel/PainelShell";
+import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
 import { CartaoLicenca } from "@/components/painel/Licenca";
 import { Button } from "@/components/ui/Button";
 import { useCodigoDaMaquina, useLicencas } from "@/lib/armazem";
@@ -40,15 +40,15 @@ export function Licencas() {
 
   return (
     <>
-      <PainelTitulo
+      <CabecalhoPagina
         titulo="Licenças"
         texto="Cole a sua chave para conferir para qual computador ela foi emitida e se continua valendo. A conferência usa a mesma chave pública do programa, aqui no seu navegador."
       />
 
-      <div className="mt-8 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-        <Bloco className="p-5 sm:p-6">
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        <Cartao className="p-3.5 sm:p-4">
           <h2 className="font-display text-[18px] font-semibold tracking-[-0.03em]">Conferir uma chave</h2>
-          <form onSubmit={aoEnviar} className="mt-5 space-y-4" noValidate>
+          <form onSubmit={aoEnviar} className="mt-2 space-y-4" noValidate>
             <div>
               <label htmlFor={idCodigo} className="text-[12.5px] font-semibold">
                 Código deste computador <span className="font-normal text-subtle">(opcional)</span>
@@ -107,7 +107,7 @@ export function Licencas() {
               </p>
             )}
           </form>
-        </Bloco>
+        </Cartao>
 
         <div className="space-y-4">
           <div className="flex items-baseline justify-between">
@@ -118,7 +118,7 @@ export function Licencas() {
           </div>
 
           {licencas.length === 0 ? (
-            <Bloco className="grid place-items-center px-6 py-14 text-center">
+            <Cartao className="grid place-items-center px-6 py-14 text-center">
               <span className="grid size-12 place-items-center rounded-[12px] bg-[#f1f1f0]">
                 <KeyRound size={20} strokeWidth={2} aria-hidden="true" />
               </span>
@@ -127,7 +127,7 @@ export function Licencas() {
                 Confira a sua chave ao lado. Ela fica guardada só aqui, para você ter à mão quando formatar ou trocar
                 de computador.
               </p>
-            </Bloco>
+            </Cartao>
           ) : (
             licencas.map((l) => (
               <CartaoLicenca

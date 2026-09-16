@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PainelShell } from "@/components/painel/PainelShell";
+import { AppShell } from "@/components/painel/AppShell";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -11,5 +11,5 @@ export const metadata: Metadata = {
 };
 
 export default function PainelLayout({ children }: LayoutProps<"/painel">) {
-  return <PainelShell>{children}</PainelShell>;
+  return <AppShell>{children}</AppShell>;
 }

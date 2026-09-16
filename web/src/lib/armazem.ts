@@ -14,7 +14,7 @@ const CHAVE_LICENCAS = "otimiza.painel.licencas";
 const CHAVE_CODIGO = "otimiza.painel.codigo";
 const EVENTO = "otimiza:armazem";
 
-function ler(chave: string): string | null {
+export function ler(chave: string): string | null {
   try {
     return window.localStorage.getItem(chave);
   } catch {
@@ -22,7 +22,7 @@ function ler(chave: string): string | null {
   }
 }
 
-function gravar(chave: string, valor: string | null) {
+export function gravar(chave: string, valor: string | null) {
   try {
     if (valor === null) window.localStorage.removeItem(chave);
     else window.localStorage.setItem(chave, valor);
@@ -32,7 +32,8 @@ function gravar(chave: string, valor: string | null) {
   window.dispatchEvent(new Event(EVENTO));
 }
 
-function assinar(avisar: () => void) {
+/** Avisa quem estiver na tela quando qualquer coisa guardada aqui mudar. */
+export function assinarArmazem(avisar: () => void) {
   window.addEventListener(EVENTO, avisar);
   window.addEventListener("storage", avisar);
   return () => {
@@ -45,20 +46,41 @@ function assinar(avisar: () => void) {
    e o parse acontece fora do useSyncExternalStore. */
 const semNada = () => null;
 
+/*
+ * O RESULTADO É MEMORIZADO, E ISSO NÃO É MICRO-OTIMIZAÇÃO.
+ *
+ * Sem isto, cada renderização devolvia um ARRAY NOVO para o mesmo texto
+ * guardado. Todo efeito que depende da lista — conferir a chave, montar a busca,
+ * listar as máquinas — via a dependência mudar, rodava de novo, gravava estado,
+ * e disparava a renderização seguinte: um laço infinito de efeito.
+ *
+ * A tela continuava respondendo a clique, então o defeito não aparecia. O que
+ * ele quebrava era a NAVEGAÇÃO: o React troca de rota dentro de uma transição,
+ * e uma transição não termina enquanto a árvore não para de se atualizar.
+ * Clicar em "Downloads" não levava a lugar nenhum, sem nenhum erro no console.
+ */
+let ultimoBruto: string | null | undefined;
+let ultimaLista: LicencaGuardada[] = [];
+
 function parseLicencas(bruto: string | null): LicencaGuardada[] {
-  if (!bruto) return [];
-  try {
-    const lista = JSON.parse(bruto);
-    return Array.isArray(lista)
-      ? lista.filter((l): l is LicencaGuardada => typeof l?.chave === "string" && typeof l?.adicionadaEm === "string")
-      : [];
-  } catch {
-    return [];
-  }
+  if (bruto === ultimoBruto) return ultimaLista;
+  ultimoBruto = bruto;
+  ultimaLista = (() => {
+    if (!bruto) return [];
+    try {
+      const lista = JSON.parse(bruto);
+      return Array.isArray(lista)
+        ? lista.filter((l): l is LicencaGuardada => typeof l?.chave === "string" && typeof l?.adicionadaEm === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  })();
+  return ultimaLista;
 }
 
 export function useLicencas() {
-  const bruto = useSyncExternalStore(assinar, () => ler(CHAVE_LICENCAS), semNada);
+  const bruto = useSyncExternalStore(assinarArmazem, () => ler(CHAVE_LICENCAS), semNada);
   const licencas = parseLicencas(bruto);
 
   const adicionar = (chave: string) => {
@@ -78,7 +100,16 @@ export function useLicencas() {
 }
 
 export function useCodigoDaMaquina() {
-  const codigo = useSyncExternalStore(assinar, () => ler(CHAVE_CODIGO), semNada) ?? "";
+  const codigo = useSyncExternalStore(assinarArmazem, () => ler(CHAVE_CODIGO), semNada) ?? "";
   const definir = (valor: string) => gravar(CHAVE_CODIGO, valor.trim() ? valor.trim().toUpperCase() : null);
   return [codigo, definir] as const;
+}
+
+/**
+ * Apaga tudo o que o painel guardou neste navegador: chaves, código da máquina
+ * e o andamento do primeiro acesso. É o que "Sair" faz — não há sessão em
+ * servidor nenhum para encerrar.
+ */
+export function limparTudo() {
+  for (const chave of [CHAVE_LICENCAS, CHAVE_CODIGO, "otimiza.painel.onboarding"]) gravar(chave, null);
 }
