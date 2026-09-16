@@ -132,6 +132,16 @@ pub fn run() {
             commands::framegen_medir,
             commands::framegen_comparar,
             commands::framegen_melhor,
+            commands::energia_painel,
+            commands::energia_medir_atual,
+            commands::energia_escolher,
+            commands::energia_restaurar_anterior,
+            commands::energia_restaurar_windows,
+            commands::energia_salvar_perfil_de_jogo,
+            commands::energia_remover_perfil_de_jogo,
+            commands::energia_testar_candidato,
+            commands::energia_aplicar,
+            commands::energia_modo_dinamico,
             commands::analyze_fivem,
             commands::clean_fivem,
             commands::prioritize_fivem,
@@ -379,6 +389,37 @@ pub fn run() {
                         {
                             utils::Logger::info(&format!("Modo jogo: {}", mensagem));
                             let _ = handle.emit("gamemode:changed", mensagem);
+                        }
+                    }
+                });
+            }
+
+            // O MODO DINÂMICO DO MOTOR DE ENERGIA.
+            //
+            // NORMAL → JOGO ABRIU → PERFIL DE BAIXA LATÊNCIA → JOGO FECHOU →
+            // NORMAL. Olha a cada três segundos só os executáveis que têm
+            // perfil salvo, e só age com o modo ligado e o Otimiza elevado.
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+                    let mut vigia = modules::windows::motorenergia_maquina::Vigia::default();
+
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                        let (volta, evento) = tokio::task::spawn_blocking(move || {
+                            let evento = modules::windows::motorenergia_maquina::olhar(&mut vigia);
+                            (vigia, evento)
+                        })
+                        .await
+                        .unwrap_or_default();
+                        vigia = volta;
+
+                        if let Some(evento) = evento {
+                            utils::Logger::info(&format!("motor de energia, modo dinâmico: {:?}", evento));
+                            let _ = handle.emit("energia:dinamico", evento);
                         }
                     }
                 });

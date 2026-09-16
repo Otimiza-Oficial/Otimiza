@@ -1180,12 +1180,13 @@ pub fn framegen_comparar(
     perfil: Perfil,
     hz: u32,
     artefatos: Vec<(Artefato, Intensidade)>,
+    deriva_pct: Option<f64>,
 ) -> FramegenComparacao {
     use crate::modules::windows::framegen;
 
     let nota = (!artefatos.is_empty()).then(|| framegen::avaliar_artefatos(&artefatos));
     FramegenComparacao {
-        comparacao: framegen::comparar(&desligado, &ligado, perfil, hz, nota.map(|n| n.nivel)),
+        comparacao: framegen::comparar(&desligado, &ligado, perfil, hz, nota.map(|n| n.nivel), deriva_pct),
         artefatos: nota,
     }
 }
@@ -1200,6 +1201,179 @@ pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil,
 pub struct FramegenComparacao {
     pub comparacao: crate::modules::windows::framegen::Comparacao,
     pub artefatos: Option<crate::modules::windows::framegen::NotaDeArtefatos>,
+}
+
+// ─── Motor de energia adaptativo ──────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct PainelDeEnergia {
+    pub impressao: crate::modules::windows::motorenergia::Impressao,
+    pub bateria: crate::modules::windows::motorenergia_maquina::Bateria,
+    /// Os ajustes do plano ATIVO que o motor sabe interpretar.
+    pub ppm_atual: Vec<crate::modules::windows::motorenergia::Configuracao>,
+    pub plano_otimiza_ativo: bool,
+    pub backup: Option<crate::modules::windows::motorenergia_maquina::Backup>,
+    pub perfis_de_jogo: Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>,
+    pub dinamico: bool,
+    pub elevado: bool,
+}
+
+/// Comando: HARDWARE FINGERPRINT, enumeração e candidatos. Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
+    tokio::task::spawn_blocking(|| {
+        use crate::modules::windows::{motorenergia as motor, motorenergia_maquina as maquina, planoenergia};
+
+        let impressao = maquina::impressao();
+        let base = maquina::enumerar_base()?;
+        let bateria = maquina::bateria_de_candidatos(&impressao, &base);
+        let ativo = impressao.plano_ativo.clone().unwrap_or_default();
+        let ppm_atual = maquina::enumerar_plano(&ativo)
+            .map(|e| {
+                e.configuracoes
+                    .into_iter()
+                    .filter(|c| c.alias.as_deref().is_some_and(|a| {
+                        let sem_classe = a.trim_end_matches('1');
+                        motor::apelidos::DA_TELA.iter().any(|t| t.eq_ignore_ascii_case(a) || t.eq_ignore_ascii_case(sem_classe))
+                    }))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let plano_otimiza_ativo = impressao.plano_ativo_nome.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(planoenergia::NOME_DO_PLANO));
+
+        Ok(PainelDeEnergia {
+            impressao,
+            bateria,
+            ppm_atual,
+            plano_otimiza_ativo,
+            backup: maquina::ler_backup(),
+            perfis_de_jogo: maquina::perfis_de_jogo(),
+            dinamico: maquina::dinamico().ligado,
+            elevado: crate::modules::windows::registry::is_elevated(),
+        })
+    })
+    .await
+    .map_err(|e| format!("Falha ao ler a máquina: {}", e))?
+}
+
+/// Comando: aplica um candidato no plano OTIMIZA e mede.
+///
+/// `EXIGEM_LICENCA`: escreve no plano de energia. O plano do cliente não é
+/// tocado; o backup é feito antes da primeira escrita.
+#[tauri::command]
+pub async fn energia_testar_candidato(
+    candidato: crate::modules::windows::motorenergia::Candidato,
+    processo: Option<String>,
+    segundos: u64,
+    repeticoes: u32,
+) -> Result<crate::modules::windows::motorenergia_maquina::MedicaoDoCandidato, String> {
+    crate::modules::licenca::exigir()?;
+
+    tokio::task::spawn_blocking(move || {
+        use crate::modules::windows::motorenergia_maquina as maquina;
+
+        let impressao = maquina::impressao();
+        let base = maquina::enumerar_base()?;
+        let mut controlados = maquina::bateria_de_candidatos(&impressao, &base).controlados;
+        for m in &candidato.mudancas {
+            if !controlados.contains(&m.alias) {
+                controlados.push(m.alias.clone());
+            }
+        }
+        let aplicacao = maquina::aplicar(&candidato, &controlados)?;
+        let mut medicao = maquina::medir_atual(&candidato.id, processo.as_deref(), segundos.clamp(10, 60), repeticoes)?;
+        medicao.aplicacao = Some(aplicacao);
+        Ok(medicao)
+    })
+    .await
+    .map_err(|e| format!("Falha ao testar o candidato: {}", e))?
+}
+
+/// Comando: só mede o que está ativo (rajada + contadores + jogo). `LIVRES`.
+#[tauri::command]
+pub async fn energia_medir_atual(
+    processo: Option<String>,
+    segundos: u64,
+    repeticoes: u32,
+) -> Result<crate::modules::windows::motorenergia_maquina::MedicaoDoCandidato, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::modules::windows::motorenergia_maquina::medir_atual("atual", processo.as_deref(), segundos.clamp(10, 60), repeticoes)
+    })
+    .await
+    .map_err(|e| format!("Falha ao medir: {}", e))?
+}
+
+/// Comando: escolhe entre resultados já medidos. Conta pura, `LIVRES`.
+#[tauri::command]
+pub fn energia_escolher(
+    resultados: Vec<crate::modules::windows::motorenergia::ResultadoDoCandidato>,
+    base: String,
+) -> Option<crate::modules::windows::motorenergia::Escolha> {
+    crate::modules::windows::motorenergia::escolher(&resultados, &base)
+}
+
+/// Comando: aplica os parâmetros escolhidos e deixa ativo. `EXIGEM_LICENCA`.
+#[tauri::command]
+pub async fn energia_aplicar(
+    parametros: crate::modules::windows::motorenergia::Parametros,
+) -> Result<crate::modules::windows::motorenergia_maquina::Aplicacao, String> {
+    crate::modules::licenca::exigir()?;
+
+    tokio::task::spawn_blocking(move || crate::modules::windows::motorenergia_maquina::aplicar_parametros("escolhido", parametros))
+        .await
+        .map_err(|e| format!("Falha ao aplicar: {}", e))?
+}
+
+/// Comando: RESTORE PREVIOUS PLAN. `LIVRES`: desfazer nunca pode depender de
+/// licença válida.
+#[tauri::command]
+pub async fn energia_restaurar_anterior() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_anterior)
+        .await
+        .map_err(|e| format!("Falha ao restaurar: {}", e))?
+}
+
+/// Comando: RESTORE WINDOWS DEFAULT. `LIVRES`, pelo mesmo motivo.
+#[tauri::command]
+pub async fn energia_restaurar_windows() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows)
+        .await
+        .map_err(|e| format!("Falha ao restaurar: {}", e))?
+}
+
+/// Comando: guarda o perfil de um jogo. Só grava a preferência, `LIVRES`.
+#[tauri::command]
+pub fn energia_salvar_perfil_de_jogo(
+    executavel: String,
+    parametros: crate::modules::windows::motorenergia::Parametros,
+    escolha: Option<crate::modules::windows::motorenergia::Escolha>,
+) -> Result<Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>, String> {
+    crate::modules::windows::motorenergia_maquina::salvar_perfil_de_jogo(
+        crate::modules::windows::motorenergia_maquina::PerfilDeJogo {
+            executavel,
+            parametros,
+            escolha,
+            quando: crate::modules::changelog::now_timestamp(),
+        },
+    )
+}
+
+/// Comando: apaga o perfil de um jogo. `LIVRES`.
+#[tauri::command]
+pub fn energia_remover_perfil_de_jogo(
+    executavel: String,
+) -> Result<Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>, String> {
+    crate::modules::windows::motorenergia_maquina::remover_perfil_de_jogo(&executavel)
+}
+
+/// Comando: liga ou desliga o modo dinâmico de jogo.
+///
+/// `EXIGEM_LICENCA`: ligado, o Otimiza passa a trocar o plano sozinho quando
+/// um jogo com perfil abre e fecha.
+#[tauri::command]
+pub fn energia_modo_dinamico(ligado: bool) -> Result<bool, String> {
+    crate::modules::licenca::exigir()?;
+    crate::modules::windows::motorenergia_maquina::definir_dinamico(ligado).map(|d| d.ligado)
 }
 
 /// Comando: lê o `CitizenFX.ini` e mostra o que está em `PoolSizesIncrease`.
@@ -3566,6 +3740,13 @@ mod tests {
         "framegen_medir",
         "framegen_comparar",
         "framegen_melhor",
+        "energia_painel",
+        "energia_medir_atual",
+        "energia_escolher",
+        "energia_restaurar_anterior",
+        "energia_restaurar_windows",
+        "energia_salvar_perfil_de_jogo",
+        "energia_remover_perfil_de_jogo",
         "analyze_fivem",
         "analyze_citizenfx",
         "analyze_browsers",
@@ -3610,6 +3791,9 @@ mod tests {
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
+        "energia_testar_candidato",
+        "energia_aplicar",
+        "energia_modo_dinamico",
         "clean_disk_category",
         "aplicar_plano_otimiza",
         "reparar_plano_otimiza",

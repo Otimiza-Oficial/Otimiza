@@ -89,6 +89,10 @@ windows-sys = { version = "0.59", features = [
     # em notebook, então o relatório de compatibilidade precisa dizer em qual
     # deles a leitura foi feita, senão o número não quer dizer nada.
     "Win32_System_Power",
+    # `GetLogicalProcessorInformationEx`. É a resposta do próprio Windows para
+    # "quantos núcleos, de qual classe de eficiência": em Intel híbrida, é o
+    # que separa núcleo P de núcleo E sem lista de modelos.
+    "Win32_System_SystemInformation",
 ] }
 
 

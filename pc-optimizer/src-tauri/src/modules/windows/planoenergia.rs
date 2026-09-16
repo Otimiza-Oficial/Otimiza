@@ -456,8 +456,8 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Estado mínimo do processador",
         subgrupo: SUB_PROCESSADOR,
         ajuste: PROCTHROTTLEMIN,
-        classe: Classe::Recomendada,
-        porque: "Com o mínimo baixo, o Windows derruba a frequência entre um quadro e outro \
+        classe: Classe::Avancada,
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. Com o mínimo baixo, o Windows derruba a frequência entre um quadro e outro \
                  e a leva de volta tarde demais. IMPORTANTE: este ajuste só governa quando \
                  o processador NÃO está em modo autônomo — em Intel com Speed Shift e AMD \
                  com CPPC, que é quase todo PC recente, quem manda é a preferência de \
@@ -468,8 +468,8 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Preferência entre energia e desempenho (EPP)",
         subgrupo: SUB_PROCESSADOR,
         ajuste: PERFEPP,
-        classe: Classe::Recomendada,
-        porque: "É este número que comanda a frequência nos processadores modernos, e não o \
+        classe: Classe::Avancada,
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. É este número que comanda a frequência nos processadores modernos, e não o \
                  estado mínimo acima. O Windows o define como \"o quanto o processador deve \
                  favorecer ECONOMIA sobre desempenho\", de 0 a 100 por cento — então 0 é \
                  desempenho total. Na tomada vai a 0; na bateria fica como o fabricante \
@@ -489,8 +489,8 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Estacionamento de núcleos",
         subgrupo: SUB_PROCESSADOR,
         ajuste: CPMINCORES,
-        classe: Classe::Recomendada,
-        porque: "Manter 100% dos núcleos acordados evita o atraso de desestacionar um núcleo \
+        classe: Classe::Avancada,
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. Manter 100% dos núcleos acordados evita o atraso de desestacionar um núcleo \
                  quando a carga chega de repente. Não desativa proteção nenhuma: o núcleo \
                  continua com todos os estados de economia dentro dele.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 100),
@@ -499,7 +499,7 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Modo de aumento de desempenho (boost)",
         subgrupo: SUB_PROCESSADOR,
         ajuste: PERFBOOSTMODE,
-        classe: Classe::Recomendada,
+        classe: Classe::Avancada,
         // A JUSTIFICATIVA ANTERIOR ERA INVENTADA. Ela dizia que o modo agressivo
         // "deixa o processador subir sem esperar a média de carga confirmar", o
         // que descreve outro ajuste. O Windows documenta o valor 2 assim, lido
@@ -515,7 +515,7 @@ pub static AJUSTES: &[Ajuste] = &[
         // NÃO desliga proteção térmica: o limite de temperatura e o de potência
         // do processador continuam valendo acima disto. O que muda é qual
         // frequência o Windows PEDE, e não até onde o silício deixa chegar.
-        porque: "O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
                  maior frequência possível acima da nominal. É o que mantém o turbo ligado no \
                  jogo em vez de ele subir e descer. Os limites de temperatura e de potência \
                  do processador continuam valendo por cima disso.",
@@ -525,8 +525,8 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Economia de energia do PCI Express (ASPM)",
         subgrupo: SUB_PCIEXPRESS,
         ajuste: ASPM,
-        classe: Classe::Recomendada,
-        porque: "O ASPM adormece a via até a placa de vídeo, e acordá-la custa em cada \
+        classe: Classe::Avancada,
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. O ASPM adormece a via até a placa de vídeo, e acordá-la custa em cada \
                  transferência. Desligado na tomada, o caminho até a GPU fica acordado.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 0),
     },
@@ -544,8 +544,8 @@ pub static AJUSTES: &[Ajuste] = &[
         nome: "Suspensão seletiva do USB",
         subgrupo: SUB_USB,
         ajuste: USBSELECTIVESUSPEND,
-        classe: Classe::Recomendada,
-        porque: "É o que faz mouse e teclado perderem o primeiro movimento depois de um tempo \
+        classe: Classe::Avancada,
+        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. É o que faz mouse e teclado perderem o primeiro movimento depois de um tempo \
                  parados. Na bateria continua ligado, porque ali ele economiza de verdade.",
         alvo: |_| Alvo::so_na_tomada(0),
     },
@@ -670,7 +670,7 @@ pub fn achar_na_lista(planos: &[(String, String)], nome: &str) -> Option<String>
         .map(|(guid, _)| guid.clone())
 }
 
-fn listar_planos() -> Result<Vec<(String, String)>, String> {
+pub(crate) fn listar_planos() -> Result<Vec<(String, String)>, String> {
     let saida = shell::run_checked("powercfg", &["/list"])?;
     Ok(planos_da_saida(&saida))
 }
@@ -681,21 +681,18 @@ fn listar_planos() -> Result<Vec<(String, String)>, String> {
 /// desligado e o mínimo do processador alto. Mas ELE PODE NÃO EXISTIR: em
 /// notebook com Modern Standby o Windows não o oferece. O Equilibrado existe
 /// sempre, e é a rede de segurança que faltava.
-pub fn escolher_molde(planos: &[(String, String)]) -> &'static str {
-    if planos
-        .iter()
-        .any(|(guid, _)| guid == power::HIGH_PERFORMANCE_GUID)
-    {
-        power::HIGH_PERFORMANCE_GUID
-    } else {
-        EQUILIBRADO_GUID
-    }
+pub fn escolher_molde(_planos: &[(String, String)]) -> &'static str {
+    // O MOLDE É SEMPRE O EQUILIBRADO desde o motor de energia adaptativo. O
+    // Alto Desempenho traz embutidos exatamente os números universais que o
+    // motor recusa — núcleos todos acordados e estado mínimo alto — e copiar
+    // dele seria aplicá-los em todo PC antes de medir qualquer coisa.
+    EQUILIBRADO_GUID
 }
 
 /// Cria o plano e devolve O GUID QUE O WINDOWS GEROU — nunca o do molde.
 ///
 /// Esta função é o conserto do defeito principal.
-fn criar_plano(molde: &str) -> Result<String, String> {
+pub(crate) fn criar_plano(molde: &str) -> Result<String, String> {
     let saida = shell::run_checked("powercfg", &["-duplicatescheme", molde])?;
 
     let novo = power::parse_active_guid(&saida).ok_or_else(|| {
@@ -1784,13 +1781,13 @@ mod tests {
     }
 
     #[test]
-    fn com_alto_desempenho_ele_e_o_molde() {
+    fn nem_com_alto_desempenho_ele_vira_molde() {
         let planos = vec![(
             power::HIGH_PERFORMANCE_GUID.to_string(),
             "Alto desempenho".to_string(),
         )];
 
-        assert_eq!(escolher_molde(&planos), power::HIGH_PERFORMANCE_GUID);
+        assert_eq!(escolher_molde(&planos), EQUILIBRADO_GUID);
     }
 
     #[test]

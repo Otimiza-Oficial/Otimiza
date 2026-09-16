@@ -43,7 +43,8 @@ type Perfil = "Competitivo" | "Equilibrado" | "MaximaFluidez";
 type Decisao = "Manter" | "Desligar" | "Inconclusivo";
 type MotivoDecisao =
   | "AmostraCurta" | "RenderizadoCaiu" | "RitmoPiorou" | "AtrasoAcrescentadoAlto" | "ArtefatosIncomodos"
-  | "PontuacaoSubiu" | "PontuacaoCaiu" | "DiferencaPequena" | "ExibidoDesconhecido" | "PassouDoMonitor";
+  | "PontuacaoSubiu" | "PontuacaoCaiu" | "DiferencaPequena" | "ExibidoDesconhecido" | "PassouDoMonitor"
+  | "CenaNaoRepetivel" | "MultiplicadorNaoConfere";
 type Casamento = "AcimaDoMonitor" | "NoLimite" | "AbaixoDoMonitor" | "MonitorDesconhecido";
 type Artefato = "Fantasmas" | "InterfaceTremida" | "BordasQuebradas" | "RespostaPesada" | "Borrado";
 type Intensidade = "Nenhuma" | "Leve" | "Forte";
@@ -72,6 +73,7 @@ type Ritmo = {
   p95_ms: number;
   p99_ms: number;
   low_1pct_fps: number;
+  low_01pct_fps: number;
   oscilacao_ms: number;
   picos_por_minuto: number;
   consistencia: number;
@@ -86,6 +88,7 @@ type Rodada = {
   ritmo_renderizado: Ritmo;
   ritmo_exibido: Ritmo | null;
   latencia: { renderizacao_ms: Valor; acrescimo_da_geracao_ms: Valor; jogo_ms: Valor; tela_ms: Valor };
+  multiplicador_medido: number | null;
   amostra_ms: number[];
   segundos: number;
 };
@@ -117,6 +120,7 @@ type ComparacaoDaTela = {
     atraso_acrescentado_ms: number | null;
     decisao: Decisao;
     motivos: MotivoDecisao[];
+    confianca_pct: number;
   };
   artefatos: { nota: number; nivel: NivelDeArtefato } | null;
 };
@@ -265,6 +269,10 @@ const MOTIVO_DECISAO: Record<MotivoDecisao, string> = {
   DiferencaPequena: "A diferença ficou dentro da margem de 3 pontos: não dá para afirmar melhora nem piora.",
   ExibidoDesconhecido: "Os quadros exibidos não puderam ser medidos nesta rodada.",
   PassouDoMonitor: "A tela recebeu mais quadros do que o monitor mostra. Limite o FPS em vez de desligar.",
+  CenaNaoRepetivel:
+    "A base desligada, medida de novo, mudou mais de 5%. A cena não se repetiu, então parte da diferença pode ser o jogo e não a geração.",
+  MultiplicadorNaoConfere:
+    "O multiplicador que chegou à tela não é o escolhido. No Lossless Scaling, confira o limite de quadros e o vsync da janela dele.",
 };
 
 const CASAMENTO: Record<Casamento, { texto: string; tom: Tom }> = {
@@ -348,7 +356,49 @@ const estado = {
   comparacao: null as ComparacaoDaTela | null,
   limite: null as { id: string; fps: number; antes: Rodada } | null,
   aviso_limite: "",
+  /** Segunda medição da base desligada, para conferir se a cena se repete. */
+  conferencia: null as Rodada | null,
 };
+
+type Sessao = { quando: number; tecnologia: Tecnologia; multiplicador: number; perfil: Perfil; decisao: Decisao; pontos: number; confianca: number };
+const CHAVE_HISTORICO = "otimiza.framegen.historico";
+
+function lerHistorico(): Record<string, Sessao[]> {
+  try {
+    return JSON.parse(localStorage.getItem(CHAVE_HISTORICO) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function guardarNoHistorico(c: ComparacaoDaTela, r: Rodada) {
+  if (!r.tecnologia) return;
+  try {
+    const todos = lerHistorico();
+    const chave = estado.processo.toLowerCase();
+    const lista = (todos[chave] ?? []).slice(-9);
+    lista.push({
+      quando: Date.now(),
+      tecnologia: r.tecnologia,
+      multiplicador: r.multiplicador,
+      perfil: c.comparacao.perfil,
+      decisao: c.comparacao.decisao,
+      pontos: c.comparacao.pontos_ligado.total,
+      confianca: c.comparacao.confianca_pct,
+    });
+    todos[chave] = lista;
+    localStorage.setItem(CHAVE_HISTORICO, JSON.stringify(todos));
+  } catch {
+    /* histórico é conveniência: sem armazenamento, a tela funciona igual */
+  }
+}
+
+function derivaDaCena(): number | null {
+  const a = estado.desligado?.rodada.fps_renderizado;
+  const b = estado.conferencia?.fps_renderizado;
+  if (!a || !b || a.origem === "Desconhecido" || b.origem === "Desconhecido" || a.valor <= 0) return null;
+  return Math.round(((b.valor - a.valor) / a.valor) * 1000) / 10;
+}
 
 let raiz: HTMLElement;
 let pedirAdmin: (motivo: string) => void = () => {};
@@ -402,8 +452,18 @@ async function medirDesligado() {
   const r = await medir(null, 1);
   if (r) {
     estado.desligado = r;
+    estado.conferencia = null;
     estado.comparacao = null;
     estado.melhor = null;
+  }
+  desenhar();
+}
+
+async function conferirCena() {
+  const r = await medir(null, 1);
+  if (r) {
+    estado.conferencia = r.rodada;
+    await recalcular();
   }
   desenhar();
 }
@@ -433,7 +493,9 @@ async function recalcular() {
     perfil: estado.perfil,
     hz: hz(),
     artefatos,
+    derivaPct: derivaDaCena(),
   });
+  guardarNoHistorico(estado.comparacao, ligada.resultado.rodada);
   estado.melhor = await invoke<number | null>("framegen_melhor", {
     desligado: estado.desligado.rodada,
     testadas: estado.ligadas.map((l) => l.resultado.rodada),
@@ -488,6 +550,7 @@ async function conferirLimite() {
     perfil: estado.perfil,
     hz: hz(),
     artefatos: [],
+    derivaPct: null,
   });
   if (c.comparacao.decisao === "Desligar") {
     await desfazerLimite(
@@ -651,6 +714,7 @@ function blocoRitmo(r: Ritmo, titulo: string) {
     ["P95", `${num(r.p95_ms, 1)} ms`],
     ["P99", `${num(r.p99_ms, 1)} ms`],
     ["1% piores", `${num(r.low_1pct_fps, 0)} FPS`],
+    ["0,1% piores", `${num(r.low_01pct_fps, 0)} FPS`],
     ["Oscilação", `${num(r.oscilacao_ms, 2)} ms`],
     ["Picos", `${num(r.picos_por_minuto, 1)}/min`],
     ["Consistência", `${num(r.consistencia)}/100`],
@@ -680,6 +744,7 @@ function blocoGargalo(g: ResultadoDaRodada["gargalo"]) {
     <span class="fg-mono">CPU ${num(g.cpu_total)}% · núcleo mais carregado ${num(g.cpu_max_core)}% · GPU ${num(g.gpu_percent)}%${
       g.vram_total_mb ? ` · VRAM ${num(g.vram_used_mb / 1024, 1)}/${num(g.vram_total_mb / 1024, 1)} GB` : ""
     }</span>
+    ${cpu ? `<button class="btn btn-ghost" data-acao="ir-energia">Ver a resposta da CPU na aba Energia</button>` : ""}
     ${cpu ? `<small>Com o processador no teto, a placa espera por ele. A geração de quadros é um dos poucos recursos que sobem a fluidez nesse caso — sem mudar a resposta, que continua presa ao processador.</small>` : ""}
   </div>`;
 }
@@ -777,7 +842,11 @@ function desenharMultiplicadores() {
       <td>${rotulo}${melhor ? ` ${chip("SMART: melhor para este perfil", "ok")}` : ""}</td>
       <td>${valor(r.fps_renderizado, "")}</td>
       <td>${valor(r.fps_exibido, "")}</td>
+      <td class="fg-mono">${r.multiplicador_medido === null ? "—" : `${num(r.multiplicador_medido, 2)}×`}${
+        r.multiplicador_medido !== null && Math.abs(r.multiplicador_medido - r.multiplicador) > 0.25 ? " " + chip("não confere", "aviso") : ""
+      }</td>
       <td class="fg-mono">${num((r.ritmo_exibido ?? r.ritmo_renderizado).p99_ms, 1)} ms</td>
+      <td class="fg-mono">${num((r.ritmo_exibido ?? r.ritmo_renderizado).low_01pct_fps, 0)}</td>
       <td>${valor(r.latencia.acrescimo_da_geracao_ms, " ms", 1)}</td>
       <td>${i === null ? "" : `<button class="btn btn-ghost" data-selecionar="${i}">${selecionada ? "em análise" : "analisar"}</button>`}</td>
     </tr>`;
@@ -789,10 +858,44 @@ function desenharMultiplicadores() {
   return painel(
     "Comparação de rodadas",
     "OFF · 2× · 3× · 4×",
-    `<table class="fg-tabela"><thead><tr><th>Rodada</th><th>Renderizados</th><th>Exibidos</th><th>P99</th><th>Atraso a mais</th><th></th></tr></thead>
+    `<table class="fg-tabela"><thead><tr><th>Rodada</th><th>Renderizados</th><th>Exibidos</th><th>Multiplicador real</th><th>P99</th><th>0,1% piores</th><th>Atraso a mais</th><th></th></tr></thead>
     <tbody>${linha("Desligado", base.rodada, null)}${estado.ligadas
       .map((l, i) => linha(`${CURTO[l.resultado.rodada.tecnologia!]} ${l.resultado.rodada.multiplicador}×`, l.resultado.rodada, i))
-      .join("")}</tbody></table>${smart}`,
+      .join("")}</tbody></table>${smart}
+    ${desenharConferencia()}`,
+  );
+}
+
+function desenharConferencia() {
+  const d = derivaDaCena();
+  const botao = `<button class="btn" data-acao="conferir-cena" ${estado.medindo ? "disabled" : ""}>${
+    estado.conferencia ? "Conferir a cena de novo" : "Medir desligado de novo para conferir a cena"
+  }</button>`;
+  if (d === null) {
+    return `<div class="fg-aviso"><b>Conferência da cena.</b> Desligue a geração e meça a base mais uma vez no mesmo lugar. Se ela mudar mais de 5%, a cena não se repetiu e a confiança da decisão cai.<div class="fg-linha" style="margin-top:8px">${botao}</div></div>`;
+  }
+  const estavel = Math.abs(d) <= 5;
+  return `<div class="fg-aviso"><b>Conferência da cena:</b> a base desligada variou ${d > 0 ? "+" : ""}${num(d, 1)}% entre as duas medições ${chip(estavel ? "cena repetível" : "cena não repetível", estavel ? "ok" : "aviso")}<div class="fg-linha" style="margin-top:8px">${botao}</div></div>`;
+}
+
+function desenharHistorico() {
+  const lista = lerHistorico()[estado.processo.toLowerCase()] ?? [];
+  if (!lista.length) return "";
+  const linhas = lista
+    .slice()
+    .reverse()
+    .map(
+      (s) => `<tr><td class="fg-mono">${new Date(s.quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
+      <td>${CURTO[s.tecnologia]} ${s.multiplicador}×</td><td>${PERFIL[s.perfil].rotulo}</td>
+      <td>${chip(DECISAO[s.decisao].rotulo, DECISAO[s.decisao].tom)}</td>
+      <td class="fg-mono">${num(s.pontos)}</td><td class="fg-mono">${num(s.confianca)}%</td></tr>`,
+    )
+    .join("");
+  return painel(
+    "Sessões anteriores neste jogo",
+    esc(estado.processo),
+    `<table class="fg-tabela"><thead><tr><th>Quando</th><th>Rodada</th><th>Perfil</th><th>Decisão</th><th>Pontos</th><th>Confiança</th></tr></thead><tbody>${linhas}</tbody></table>
+    <p class="fg-nota">Guardado só neste computador. Sessões de dias diferentes não são comparadas entre si: driver, jogo e cena mudam.</p>`,
   );
 }
 
@@ -833,6 +936,7 @@ function desenharResultado() {
     `${CURTO[r.tecnologia!]} ${r.multiplicador}× · ${PERFIL[c.perfil].rotulo}`,
     `<div class="fg-decisao" data-tom="${dec.tom}">
       <div><span>FRAME GEN SCORE</span><b>${num(c.pontos_desligado.total)} → ${num(c.pontos_ligado.total)}</b></div>
+      <div><span>CONFIANÇA</span><b>${num(c.confianca_pct)}%</b></div>
       <strong>${dec.rotulo}</strong>
     </div>
     <ul class="fg-motivos">${c.motivos.map((m) => `<li>${MOTIVO_DECISAO[m]}</li>`).join("")}</ul>
@@ -907,6 +1011,7 @@ function desenhar() {
     desenharResultado(),
     desenharArtefatos(),
     desenharTela(),
+    desenharHistorico(),
   ].join("");
 }
 
@@ -932,6 +1037,10 @@ function ligarEventos() {
       await desfazerLimite("Limite desfeito. O driver voltou ao valor que tinha antes.");
     } else if (acao === "conferir-limite") {
       await conferirLimite();
+    } else if (acao === "conferir-cena") {
+      await conferirCena();
+    } else if (acao === "ir-energia") {
+      document.getElementById("tabbtn-energia")?.click();
     } else if (alvo.dataset.perfil) {
       estado.perfil = alvo.dataset.perfil as Perfil;
       await recalcular();

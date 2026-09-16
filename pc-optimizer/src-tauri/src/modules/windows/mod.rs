@@ -30,6 +30,8 @@ pub mod firmware;
 pub mod fivem;
 pub mod foldermap;
 pub mod frames;
+pub mod motorenergia;
+pub mod motorenergia_maquina;
 pub mod framegen;
 pub mod gamemode;
 pub mod gpupref;

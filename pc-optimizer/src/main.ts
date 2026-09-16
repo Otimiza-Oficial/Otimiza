@@ -5,6 +5,7 @@ import { Esfera } from "./esfera";
 import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
+import { carregarMotorDeEnergia } from "./energia";
 
 // ---------------------------------------------------------------- contratos
 
@@ -1166,6 +1167,10 @@ let discosCarregados = false;
 let biosCarregada = false;
 
 function showTab(name: string) {
+  if (name === "energia") {
+    void carregarMotorDeEnergia({ pedirAdmin: askForAdmin });
+  }
+
   if (name === "framegen") {
     void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
   }

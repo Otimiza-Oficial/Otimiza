@@ -5234,3 +5234,48 @@ circle.placa-parafuso {
   .fg-pipeline { grid-template-columns: 1fr; }
   .fg-pipeline div + div { border-left: 0; border-top: 1px solid var(--hairline); }
 }
+
+/* ================================================== MOTOR DE ENERGIA ADAPTATIVO
+   A aba Energia (src/energia.ts). Reusa as peças do laboratório de geração de
+   quadros (.fg-*) e acrescenta só o mapa de resposta e os cartões de candidato. */
+
+.en-mapa { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
+.en-mapa > i { align-self: center; font-style: normal; color: var(--text-muted); }
+.en-etapa { flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; }
+.en-etapa b { font-size: 10px; letter-spacing: .07em; }
+.en-etapa span { font-size: 12px; color: var(--text-dim); }
+.en-etapa[data-i="2"], .en-etapa[data-i="3"] { background: #0a0a0a; color: #fff; }
+.en-etapa[data-i="2"] span, .en-etapa[data-i="3"] span { color: rgba(255,255,255,.75); }
+
+.en-metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s3); }
+.en-metrica { display: flex; flex-direction: column; gap: 3px; padding: var(--s3); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); }
+.en-metrica span { font-size: 9.5px; font-weight: 700; letter-spacing: .07em; color: var(--text-muted); }
+.en-metrica b { font-family: var(--font-mono); font-size: 18px; letter-spacing: -.01em; }
+.en-metrica small { font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+
+.en-candidatos { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--s3); }
+.en-candidato { display: flex; flex-direction: column; gap: 6px; padding: var(--s3); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; }
+.en-candidato[data-vencedor="true"] { box-shadow: inset 0 0 0 1.5px var(--text); }
+.en-candidato-topo { display: flex; justify-content: space-between; align-items: center; gap: var(--s2); }
+.en-candidato p { margin: 0; color: var(--text-dim); line-height: 1.45; }
+.en-candidato summary { cursor: pointer; font-size: 11.5px; color: var(--text-muted); }
+.en-candidato ul { margin: 6px 0 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+.en-candidato li small { display: block; color: var(--text-muted); font-size: 10.5px; }
+.en-candidato code, .en-avancado code { font-family: var(--font-mono); font-size: 11px; }
+.en-ignorado { color: var(--text-muted); }
+
+.en-rolagem { overflow-x: auto; }
+.en-rolagem .fg-tabela td small { display: block; }
+.en-delta { font-family: var(--font-mono); font-size: 18px; }
+.en-delta[data-bom="false"] { color: var(--red); }
+
+.en-fluxo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.en-fluxo span { padding: 4px 8px; border-radius: 5px; background: #f1f1f0; color: var(--text-dim); font-weight: 600; letter-spacing: .03em; }
+.en-fluxo span[data-forte="true"] { background: #0a0a0a; color: #fff; }
+
+.en-avancado summary { cursor: pointer; display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
+.en-avancado[open] summary { margin-bottom: var(--s3); }
+
+.en-indeterminada { width: 35% !important; animation: en-vai 1.4s ease-in-out infinite; }
+@keyframes en-vai { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.sem-animacao .en-indeterminada { animation: none; width: 100% !important; opacity: .4; }

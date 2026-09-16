@@ -62,6 +62,11 @@
           <rect x="15.5" y="6" width="6" height="12" rx="1" />
         </symbol>
 
+        <!-- Energia: o raio dentro da onda de resposta -->
+        <symbol id="i-energia" viewBox="0 0 24 24">
+          <path d="M3 17h3l2.5-7 3 10 3-14 2.5 11H21" />
+        </symbol>
+
         <!-- Espaço: o disco, com a fatia que indica ocupação -->
         <symbol id="i-espaco" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
@@ -490,6 +495,12 @@
                   aria-controls="tab-framegen" id="tabbtn-framegen">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-framegen" /></svg>
             <span class="nav-rotulo">Geração de quadros</span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="energia" aria-selected="false"
+                  aria-controls="tab-energia" id="tabbtn-energia">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-energia" /></svg>
+            <span class="nav-rotulo">Energia</span>
           </button>
 
           <button class="nav" role="tab" data-tab="espaco" aria-selected="false"
@@ -2483,6 +2494,15 @@
             <p id="lab-status" class="status"></p>
             <pre id="lab-texto" class="bloco-de-texto" hidden></pre>
           </section>
+        </section>
+
+        <!-- ================================================= MOTOR DE ENERGIA -->
+        <section class="tab-panel" id="tab-energia" role="tabpanel" aria-labelledby="tabbtn-energia" hidden>
+          <!--
+            Montado por `src/energia.ts` ao abrir a aba: a leitura passa pelo
+            PowerShell e pelo `powercfg`, e não pode entrar na abertura.
+          -->
+          <div id="energia-motor" class="fg"></div>
         </section>
 
         <!-- ================================================ GERAÇÃO DE QUADROS -->

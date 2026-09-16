@@ -402,6 +402,8 @@ pub struct Ritmo {
     pub p95_ms: f64,
     pub p99_ms: f64,
     pub low_1pct_fps: f64,
+    /// Média do 0,1% pior, em FPS. É o engasgo raro que o 1% ainda dilui.
+    pub low_01pct_fps: f64,
     /// Diferença média entre um intervalo e o seguinte. É o "tremido" que
     /// o olho sente mesmo com a média alta.
     pub oscilacao_ms: f64,
@@ -434,6 +436,7 @@ pub fn ritmo(intervalos_ms: &[f64]) -> Ritmo {
             p95_ms: 0.0,
             p99_ms: 0.0,
             low_1pct_fps: 0.0,
+            low_01pct_fps: 0.0,
             oscilacao_ms: 0.0,
             picos_por_minuto: 0.0,
             consistencia: 0.0,
@@ -452,6 +455,8 @@ pub fn ritmo(intervalos_ms: &[f64]) -> Ritmo {
     // Mesma definição de `frames::estatistica`: média do 1% pior, não P99.
     let quantos = (n / 100).max(1);
     let media_piores = ordenados[n - quantos..].iter().sum::<f64>() / quantos as f64;
+    let quantos_01 = (n / 1000).max(1);
+    let media_piores_01 = ordenados[n - quantos_01..].iter().sum::<f64>() / quantos_01 as f64;
 
     let oscilacao = if n > 1 {
         validos.windows(2).map(|p| (p[1] - p[0]).abs()).sum::<f64>() / (n - 1) as f64
@@ -477,6 +482,7 @@ pub fn ritmo(intervalos_ms: &[f64]) -> Ritmo {
         p95_ms: arredondar(percentil(&ordenados, 95.0), 2),
         p99_ms: arredondar(percentil(&ordenados, 99.0), 2),
         low_1pct_fps: arredondar(if media_piores > 0.0 { 1000.0 / media_piores } else { 0.0 }, 1),
+        low_01pct_fps: arredondar(if media_piores_01 > 0.0 { 1000.0 / media_piores_01 } else { 0.0 }, 1),
         oscilacao_ms: arredondar(oscilacao, 2),
         picos_por_minuto: arredondar(if minutos > 0.0 { picos as f64 / minutos } else { 0.0 }, 1),
         consistencia: arredondar(consistencia, 0),
@@ -641,6 +647,10 @@ pub struct Rodada {
     /// Ritmo do que foi para a tela, quando dá para medir separado.
     pub ritmo_exibido: Option<Ritmo>,
     pub latencia: Latencia,
+    /// Exibidos ÷ renderizados, quando os DOIS foram medidos (geração
+    /// externa). Confere se o multiplicador escolhido é o que chegou à tela:
+    /// com limite de quadros ou vsync no gerador, chega menos.
+    pub multiplicador_medido: Option<f64>,
     /// Os primeiros intervalos medidos, para o gráfico de tempo de quadro.
     pub amostra_ms: Vec<f64>,
     pub segundos: f64,
@@ -696,6 +706,12 @@ pub fn montar_rodada(
     };
 
     let latencia = latencia(fps_renderizado.numero(), tecnologia.is_some());
+    let multiplicador_medido = match (&fps_renderizado, &fps_exibido) {
+        (Valor::Medido { valor: r }, Valor::Medido { valor: e }) if tecnologia.is_some() && *r > 0.0 => {
+            Some(arredondar(e / r, 2))
+        }
+        _ => None,
+    };
 
     Rodada {
         tecnologia,
@@ -705,6 +721,7 @@ pub fn montar_rodada(
         ritmo_renderizado,
         ritmo_exibido,
         latencia,
+        multiplicador_medido,
         amostra_ms: jogo.intervalos_ms.iter().take(PONTOS_DO_GRAFICO).map(|ms| arredondar(*ms, 2)).collect(),
         segundos: arredondar(segundos, 1),
     }
@@ -864,6 +881,10 @@ pub enum MotivoDaDecisao {
     ExibidoDesconhecido,
     /// A tela recebeu mais quadros do que consegue mostrar.
     PassouDoMonitor,
+    /// A base desligada, medida de novo, mudou demais: a cena não se repetiu.
+    CenaNaoRepetivel,
+    /// O multiplicador que chegou à tela não é o escolhido.
+    MultiplicadorNaoConfere,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -878,6 +899,40 @@ pub struct Comparacao {
     pub atraso_acrescentado_ms: Option<f64>,
     pub decisao: Decisao,
     pub motivos: Vec<MotivoDaDecisao>,
+    /// 0–100. Cai com amostra curta, cena que não se repete e diferença
+    /// pequena. Uma decisão com 40% de confiança é dita como tal.
+    pub confianca_pct: f64,
+}
+
+/// Quanto a base desligada mudou entre a primeira medição e a conferência.
+pub fn deriva_da_cena(primeira: &Rodada, conferencia: &Rodada) -> Option<f64> {
+    variacao(primeira.fps_renderizado.numero(), conferencia.fps_renderizado.numero())
+}
+
+/// O multiplicador medido bate com o escolhido (tolerância de 0,25)?
+pub fn multiplicador_confere(r: &Rodada) -> Option<bool> {
+    r.multiplicador_medido.map(|m| (m - r.multiplicador as f64).abs() <= 0.25)
+}
+
+pub const DERIVA_MAXIMA_PCT: f64 = 5.0;
+
+fn confianca(motivos: &[MotivoDaDecisao], deriva_pct: Option<f64>) -> f64 {
+    let mut c: f64 = 90.0;
+    if motivos.contains(&MotivoDaDecisao::AmostraCurta) {
+        c -= 45.0;
+    }
+    if motivos.contains(&MotivoDaDecisao::DiferencaPequena) {
+        c -= 15.0;
+    }
+    if motivos.contains(&MotivoDaDecisao::MultiplicadorNaoConfere) {
+        c -= 10.0;
+    }
+    match deriva_pct.map(f64::abs) {
+        Some(d) if d > DERIVA_MAXIMA_PCT => c -= (15.0 + (d - DERIVA_MAXIMA_PCT) * 5.0).min(50.0),
+        Some(_) => c += 5.0,
+        None => c -= 10.0,
+    }
+    arredondar(c.clamp(5.0, 98.0), 0)
 }
 
 fn variacao(antes: Option<f64>, depois: Option<f64>) -> Option<f64> {
@@ -896,6 +951,7 @@ pub fn comparar(
     perfil: Perfil,
     hz: u32,
     artefatos: Option<NivelDeArtefato>,
+    deriva_pct: Option<f64>,
 ) -> Comparacao {
     let pontos_desligado = pontuar(desligado, perfil, hz);
     let pontos_ligado = pontuar(ligado, perfil, hz);
@@ -920,12 +976,21 @@ pub fn comparar(
             renderizado_pct,
             atraso_acrescentado_ms,
             decisao: Decisao::Inconclusivo,
+            confianca_pct: confianca(&motivos, deriva_pct),
             motivos,
         };
     }
 
     if ligado.fps_exibido.numero().is_none() {
         motivos.push(MotivoDaDecisao::ExibidoDesconhecido);
+    }
+
+    if deriva_pct.is_some_and(|d| d.abs() > DERIVA_MAXIMA_PCT) {
+        motivos.push(MotivoDaDecisao::CenaNaoRepetivel);
+    }
+
+    if multiplicador_confere(ligado) == Some(false) {
+        motivos.push(MotivoDaDecisao::MultiplicadorNaoConfere);
     }
 
     let queda_maxima = if perfil == Perfil::Competitivo {
@@ -983,6 +1048,7 @@ pub fn comparar(
         renderizado_pct,
         atraso_acrescentado_ms,
         decisao,
+        confianca_pct: confianca(&motivos, deriva_pct),
         motivos,
     }
 }
@@ -999,7 +1065,7 @@ pub fn melhor_rodada(
     testadas
         .iter()
         .enumerate()
-        .map(|(i, r)| (i, comparar(desligado, r, perfil, hz, None)))
+        .map(|(i, r)| (i, comparar(desligado, r, perfil, hz, None, None)))
         .filter(|(_, c)| c.decisao == Decisao::Manter)
         .max_by(|(_, a), (_, b)| {
             a.pontos_ligado
@@ -1504,7 +1570,7 @@ mod tests {
     fn competitivo_desliga_quando_o_atraso_sobe() {
         let off = rodada_off(60.0);
         let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
-        let c = comparar(&off, &ligado, Perfil::Competitivo, 144, None);
+        let c = comparar(&off, &ligado, Perfil::Competitivo, 144, None, None);
         assert_eq!(c.decisao, Decisao::Desligar);
         assert!(c.motivos.contains(&MotivoDaDecisao::AtrasoAcrescentadoAlto));
     }
@@ -1513,7 +1579,7 @@ mod tests {
     fn maxima_fluidez_mantem_quando_dobra_sem_perder_quadro_real() {
         let off = rodada_off(60.0);
         let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(59.0, 1000), None, 20.0);
-        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None);
+        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, None);
         assert_eq!(c.decisao, Decisao::Manter);
         assert!(c.exibido_pct.unwrap() > 90.0);
     }
@@ -1523,7 +1589,7 @@ mod tests {
         let off = rodada_off(60.0);
         let ligado = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(40.0, 1000), Some(&contagem(80.0, 2000)), 20.0);
         for perfil in [Perfil::Competitivo, Perfil::Equilibrado, Perfil::MaximaFluidez] {
-            let c = comparar(&off, &ligado, perfil, 144, None);
+            let c = comparar(&off, &ligado, perfil, 144, None, None);
             assert_eq!(c.decisao, Decisao::Desligar, "{:?}", perfil);
             assert!(c.motivos.contains(&MotivoDaDecisao::RenderizadoCaiu));
         }
@@ -1533,7 +1599,7 @@ mod tests {
     fn artefato_incomodo_desliga() {
         let off = rodada_off(60.0);
         let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
-        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, Some(NivelDeArtefato::Incomodo));
+        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, Some(NivelDeArtefato::Incomodo), None);
         assert_eq!(c.decisao, Decisao::Desligar);
     }
 
@@ -1541,7 +1607,7 @@ mod tests {
     fn amostra_curta_e_inconclusiva() {
         let off = montar_rodada(None, 1, &contagem(60.0, 50), None, 1.0);
         let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 50), None, 1.0);
-        let c = comparar(&off, &ligado, Perfil::Equilibrado, 144, None);
+        let c = comparar(&off, &ligado, Perfil::Equilibrado, 144, None, None);
         assert_eq!(c.decisao, Decisao::Inconclusivo);
         assert_eq!(c.motivos, vec![MotivoDaDecisao::AmostraCurta]);
     }
@@ -1550,8 +1616,41 @@ mod tests {
     fn exibido_acima_do_monitor_e_avisado() {
         let off = rodada_off(100.0);
         let ligado = montar_rodada(Some(Tecnologia::DlssFg), 2, &contagem(200.0, 2000), None, 20.0);
-        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None);
+        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, None);
         assert!(c.motivos.contains(&MotivoDaDecisao::PassouDoMonitor));
+    }
+
+    #[test]
+    fn cena_que_nao_se_repete_derruba_a_confianca() {
+        let off = rodada_off(60.0);
+        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(59.0, 1000), None, 20.0);
+        let estavel = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, Some(1.0));
+        let instavel = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, Some(-18.0));
+        assert!(instavel.motivos.contains(&MotivoDaDecisao::CenaNaoRepetivel));
+        assert!(instavel.confianca_pct + 30.0 <= estavel.confianca_pct);
+        assert_eq!(deriva_da_cena(&rodada_off(60.0), &rodada_off(51.0)), Some(-15.0));
+    }
+
+    #[test]
+    fn multiplicador_real_do_gerador_externo_e_conferido() {
+        let certo = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(60.0, 1000), Some(&contagem(119.0, 2000)), 20.0);
+        let errado = montar_rodada(Some(Tecnologia::LosslessScaling), 3, &contagem(60.0, 1000), Some(&contagem(120.0, 2000)), 20.0);
+        assert_eq!(multiplicador_confere(&certo), Some(true));
+        assert_eq!(multiplicador_confere(&errado), Some(false));
+        let driver = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
+        assert_eq!(multiplicador_confere(&driver), None);
+        let off = rodada_off(60.0);
+        assert!(comparar(&off, &errado, Perfil::MaximaFluidez, 144, None, None).motivos.contains(&MotivoDaDecisao::MultiplicadorNaoConfere));
+    }
+
+    #[test]
+    fn low_01_pega_o_engasgo_raro() {
+        let mut v = estavel(10.0, 2000);
+        v[500] = 200.0;
+        v[1500] = 200.0;
+        let r = ritmo(&v);
+        assert_eq!(r.low_01pct_fps, 5.0);
+        assert!(r.low_1pct_fps > r.low_01pct_fps);
     }
 
     #[test]
