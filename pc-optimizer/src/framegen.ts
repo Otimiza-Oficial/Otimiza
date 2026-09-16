@@ -125,7 +125,7 @@ type ComparacaoDaTela = {
   artefatos: { nota: number; nivel: NivelDeArtefato } | null;
 };
 
-type SituacaoDoGerador = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" | "Erro";
+type SituacaoDoGerador = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" | "Erro" | "DesligadoPorPerdaDeFps";
 type EstadoDoGerador = {
   situacao: SituacaoDoGerador;
   processo: string;
@@ -135,6 +135,7 @@ type EstadoDoGerador = {
   fps_apresentados: number;
   contadores: { reais: number; gerados: number; descartados: number; custo_ms: number };
   erro: string | null;
+  razao_fps: number | null;
 };
 
 const SITUACAO_DO_GERADOR: Record<SituacaoDoGerador, { rotulo: string; tom: Tom }> = {
@@ -143,6 +144,7 @@ const SITUACAO_DO_GERADOR: Record<SituacaoDoGerador, { rotulo: string; tom: Tom 
   Gerando: { rotulo: "gerando", tom: "ok" },
   SemQuadros: { rotulo: "sem quadros do jogo", tom: "aviso" },
   Erro: { rotulo: "parou", tom: "erro" },
+  DesligadoPorPerdaDeFps: { rotulo: "desligado para proteger o FPS", tom: "aviso" },
 };
 
 type OptimizationOutcome = { id: string; success: boolean; applied: boolean; message: string };
@@ -437,6 +439,7 @@ function desenharGerador(): string {
     ? `<div class="fg-numeros">
         <div><span>Quadros do jogo</span><span class="fg-par"><span class="fg-valor">${num(g.fps_reais)}<small> FPS</small></span></span></div>
         <div><span>Quadros na tela</span><span class="fg-par"><span class="fg-valor">${num(g.fps_apresentados)}<small> FPS</small></span></span></div>
+        <div><span>FPS do jogo com ÷ sem gerador</span><span class="fg-par"><span class="fg-valor">${g.razao_fps === null ? "medindo…" : `${num(g.razao_fps * 100)}<small>%</small>`}</span></span></div>
         <div><span>Custo na placa</span><span class="fg-par"><span class="fg-valor">${num(g.contadores.custo_ms, 1)}<small> ms</small></span></span></div>
       </div>
       <p class="fg-nota">Contagem do próprio gerador. Para medir com o canal de eventos do Windows e comparar com a geração desligada, use "Medir ligado" com Otimiza FG no passo 2.${
@@ -451,6 +454,7 @@ function desenharGerador(): string {
       <li>O jogo precisa estar em <strong>janela sem bordas</strong> (tela cheia exclusiva não pode ser capturada).</li>
       <li>Aumenta os quadros <strong>na tela</strong>. O jogo continua desenhando os mesmos; o controle fica um pouco mais atrasado.</li>
       <li><strong>Ctrl+Alt+G</strong> desliga de qualquer lugar, inclusive de dentro do jogo.</li>
+      <li><strong>Nunca tira FPS do jogo:</strong> de tempos em tempos o gerador pausa por um instante e compara o FPS real com e sem ele. Se o jogo perder mais de 4%, ele se desliga sozinho.</li>
     </ul>
     <div class="fg-linha">
       <div class="fg-campo">Multiplicador <div class="fg-segmentos">${mults}</div></div>
@@ -460,6 +464,7 @@ function desenharGerador(): string {
     </div>
     ${numeros}
     ${g?.situacao === "SemQuadros" ? `<p class="fg-nota" data-tom="aviso">O jogo está aberto, mas nenhum quadro novo chega à captura. Ele está em tela cheia exclusiva, minimizado ou numa tela parada.</p>` : ""}
+    ${g?.situacao === "DesligadoPorPerdaDeFps" ? `<p class="fg-nota" data-tom="aviso">O gerador foi desligado sozinho: com ele ligado, o jogo desenhava ${num(100 - (g.razao_fps ?? 1) * 100)}% menos quadros reais. Nesta máquina e nesta cena ele não compensa, e a regra do Otimiza é nunca tirar FPS do jogo.</p>` : ""}
     ${g?.situacao === "Erro" && g.erro ? `<p class="fg-nota" data-tom="erro">${esc(g.erro)}</p>` : ""}
   </section>`;
 }

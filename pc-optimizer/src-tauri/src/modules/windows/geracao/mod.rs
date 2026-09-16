@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 pub mod gpu;
+pub mod guarda;
 pub mod ritmo;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,6 +52,8 @@ pub enum Situacao {
     /// exclusiva, minimizado ou parado.
     SemQuadros,
     Erro,
+    /// A guarda mediu que o gerador tirava FPS real do jogo e o desligou.
+    DesligadoPorPerdaDeFps,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +66,8 @@ pub struct Estado {
     pub fps_apresentados: f64,
     pub contadores: Contadores,
     pub erro: Option<String>,
+    /// FPS real com geração ÷ sem geração, medido pela guarda. 1,0 = sem perda.
+    pub razao_fps: Option<f64>,
     /// PID deste processo: é por ele que o medidor de quadros conta o que o
     /// gerador apresenta.
     pub pid_do_gerador: u32,
@@ -79,6 +84,7 @@ impl Default for Estado {
             fps_apresentados: 0.0,
             contadores: Contadores::default(),
             erro: None,
+            razao_fps: None,
             pid_do_gerador: std::process::id(),
         }
     }
@@ -177,7 +183,11 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
                     s.erro = Some(e);
                 });
             } else {
-                publicar(|s| s.situacao = Situacao::Parado);
+                publicar(|s| {
+                    if s.situacao != Situacao::DesligadoPorPerdaDeFps {
+                        s.situacao = Situacao::Parado;
+                    }
+                });
             }
         })
         .map_err(|e| e.to_string())?;
@@ -516,6 +526,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
+    let mut guarda = guarda::Guarda::nova(0.0);
     let mut nota_media = 0.0f64;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
@@ -569,6 +580,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                     e.fps_apresentados = (apresentados as f64 / dt * 10.0).round() / 10.0;
                     e.contadores = contadores;
                     e.multiplicador = cabe_atual;
+                    e.razao_fps = guarda.razao_media();
                     e.situacao = if ultimo_real.elapsed() > Duration::from_secs(2) { Situacao::SemQuadros } else { Situacao::Gerando };
                 });
             }
@@ -581,6 +593,25 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             .map(|a| ((a.instante - segundos(inicio)) * 1000.0).floor().max(0.0) as u32)
             .unwrap_or(8)
             .min(8);
+
+        // GUARDA DE FPS: pausa a geração por instantes e compara o FPS real.
+        match guarda.passo(segundos(inicio), contadores.reais) {
+            guarda::Acao::Desligar => {
+                let razao = guarda.razao_media();
+                crate::utils::Logger::warn(&format!("gerador desligado pela guarda: razão de FPS {:?}", razao));
+                publicar(|e| {
+                    e.situacao = Situacao::DesligadoPorPerdaDeFps;
+                    e.razao_fps = razao;
+                    e.fps_apresentados = 0.0;
+                });
+                return Ok(());
+            }
+            guarda::Acao::Pausar => {
+                contadores.descartados += agenda.len() as u64;
+                agenda.clear();
+            }
+            _ => {}
+        }
 
         let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
         let mut recurso: Option<IDXGIResource> = None;
@@ -597,7 +628,9 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
 
                         contadores.descartados += agenda.len() as u64;
                         agenda.clear();
-                        if gpu.tem_par() && intervalo.pode_gerar() {
+                        // cabe_atual == 1: a tela já recebe o que o monitor mostra. Não gasta
+                        // placa estimando movimento que não vai ser usado.
+                        if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() && cabe_atual > 1 {
                             gpu.estimar();
                             let nota = gpu.fracao_ruim();
                             gpu.esperar();
@@ -678,10 +711,11 @@ mod tests {
             gravar_proximos_quadros(sub, 2);
             std::thread::sleep(Duration::from_millis(400));
         }
-        for _ in 0..2 {
+        let extra: u64 = std::env::var("OTIMIZA_FG_SEGUNDOS").ok().and_then(|v| v.parse().ok()).unwrap_or(2);
+        for _ in 0..extra {
             std::thread::sleep(Duration::from_secs(1));
             let e = estado();
-            println!("{:?} reais={} apresentados={} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.contadores, e.erro);
+            println!("{:?} reais={} apresentados={} razao={:?} contadores={:?} erro={:?}", e.situacao, e.fps_reais, e.fps_apresentados, e.razao_fps, e.contadores, e.erro);
         }
         desligar();
     }
