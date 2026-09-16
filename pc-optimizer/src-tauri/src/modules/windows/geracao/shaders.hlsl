@@ -8,7 +8,9 @@
 //   3. Fina      — refina em 1/4, com os vetores grossos da vizinhança como
 //                  candidatos, na grade de 1/8
 //   4. Suave     — mediana vetorial 3×3: tira vetor isolado errado
-//   5. Final     — cada pixel do quadro gerado busca a cor seguindo o vetor
+//   5. Escolha   — em meia resolução, o vetor em que os dois reais concordam
+//                  numa vizinhança de 5 pontos
+//   6. Final     — cada pixel do quadro gerado busca a cor seguindo o vetor
 //                  nos dois quadros reais; onde os dois discordam (oclusão,
 //                  interface, erro de busca) recua para o quadro real mais
 //                  próximo em vez de inventar
@@ -180,43 +182,63 @@ float4 Suave(Saida e) : SV_Target
     return float4(escolhido, 0, 1);
 }
 
-// Composição. T0 = anterior, T1 = atual (imagem inteira), T2 = vetores (1/8).
+// Escolha do vetor, em meia resolução. T0 = anterior, T1 = atual (imagem
+// inteira), T2 = vetores (1/8). Saída: xy = vetor escolhido, z = discordância.
 //
-// CADA PIXEL ESCOLHE O PRÓPRIO VETOR. Um vetor por bloco de 8×8 erra na borda
-// entre dois movimentos (objeto sobre fundo, personagem sobre cenário): metade
-// do bloco anda de um jeito, metade de outro. Aqui o pixel testa os vetores dos
-// blocos vizinhos em cruz e o vetor parado, e fica com aquele em que os dois quadros
-// reais concordam NAQUELE pixel. Onde nenhum concorda, mistura os dois reais
-// no lugar — um leve fantasma em vez de uma mancha inventada.
-float4 Final(Saida e) : SV_Target
+// POR QUE NÃO PIXEL A PIXEL. Decidindo com um pixel só, dois vizinhos
+// escolhiam vetores diferentes na borda de quem se move, e cada um trazia uma
+// cor de um lugar — os pontinhos soltos na perna e na mão do personagem. Aqui a
+// decisão compara cinco pontos em cruz (±2 px), e vizinhos passam a concordar.
+static const int2 CRUZ[5] = { int2(0, 0), int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
+static const float2 TAPS[5] = { float2(0, 0), float2(2, 0), float2(-2, 0), float2(0, 2), float2(0, -2) };
+
+float4 Escolha(Saida e) : SV_Target
 {
-    float2 uv = e.pos.xy * texelDestino;
-    int2 bloco = int2(e.pos.xy) / 8;
+    float2 pixel = (floor(e.pos.xy) + 0.5) * 2.0;
+    float2 uv = pixel * texelDestino;
+    int2 bloco = int2(pixel) / 8;
 
     float melhorErro = 1e9;
-    float3 melhorCor = float3(0, 0, 0);
-    static const int2 CRUZ[5] = { int2(0, 0), int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1) };
+    float2 melhorVetor = float2(0, 0);
     [loop] for (int k = 0; k < 6; k++)
     {
         float2 v = float2(0, 0);
         if (k < 5)
             v = T2.Load(int3(clamp(bloco + CRUZ[k], int2(0, 0), tamanhoAux - 1), 0)).xy;
         float2 vuv = v * texelDestino;
-        float4 a = T0.SampleLevel(Linear, uv - vuv * t, 0);
-        float4 b = T1.SampleLevel(Linear, uv + vuv * (1.0 - t), 0);
-        float erro = dot(abs(a.rgb - b.rgb), float3(0.3333, 0.3333, 0.3333));
+        float erro = 0;
+        [loop] for (int n = 0; n < 5; n++)
+        {
+            float2 o = TAPS[n] * texelDestino;
+            float3 a = T0.SampleLevel(Linear, uv + o - vuv * t, 0).rgb;
+            float3 b = T1.SampleLevel(Linear, uv + o + vuv * (1.0 - t), 0).rgb;
+            erro += dot(abs(a - b), float3(0.299, 0.587, 0.114));
+        }
+        erro *= 0.2;
         // O vetor do próprio bloco ganha empate: estabilidade entre quadros.
         if (k == 0) erro -= 0.004;
-        if (erro < melhorErro)
-        {
-            melhorErro = erro;
-            melhorCor = lerp(a.rgb, b.rgb, t);
-        }
+        if (erro < melhorErro) { melhorErro = erro; melhorVetor = v; }
     }
+    return float4(melhorVetor, max(melhorErro, 0.0), 1);
+}
 
-    float recuo = saturate((melhorErro - limiarErro) / faixaErro);
-    float3 noLugar = lerp(T0.SampleLevel(Linear, uv, 0).rgb, T1.SampleLevel(Linear, uv, 0).rgb, t);
-    return float4(lerp(melhorCor, noLugar, recuo), 1);
+// Composição em resolução cheia. T0 = anterior, T1 = atual, T2 = escolha (1/2).
+//
+// Onde os dois quadros concordam: mistura os dois deslocados. Onde não
+// concordam — quase sempre fundo que acabou de aparecer atrás de quem se
+// move —, a cor vem de UM lado só, deslocado pelo mesmo vetor: o quadro mais
+// próximo no tempo. Misturar os dois no lugar, como antes, deixava fantasma.
+float4 Final(Saida e) : SV_Target
+{
+    float2 uv = e.pos.xy * texelDestino;
+    float4 escolha = T2.Load(int3(int2(e.pos.xy) / 2, 0));
+    float2 vuv = escolha.xy * texelDestino;
+
+    float3 a = T0.SampleLevel(Linear, uv - vuv * t, 0).rgb;
+    float3 b = T1.SampleLevel(Linear, uv + vuv * (1.0 - t), 0).rgb;
+    float recuo = saturate((escolha.z - limiarErro) / faixaErro);
+    float3 umLado = t < 0.5 ? a : b;
+    return float4(lerp(lerp(a, b, t), umLado, recuo), 1);
 }
 
 // O quadro real, sem mexer.

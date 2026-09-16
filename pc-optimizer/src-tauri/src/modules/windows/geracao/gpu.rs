@@ -50,6 +50,7 @@ struct Passes {
     grossa: ID3D11PixelShader,
     fina: ID3D11PixelShader,
     suave: ID3D11PixelShader,
+    escolha: ID3D11PixelShader,
     final_: ID3D11PixelShader,
     copia: ID3D11PixelShader,
 }
@@ -63,6 +64,9 @@ struct Trabalho {
     vet_grosso: Alvo,
     vet_fino: Alvo,
     vet_suave: Alvo,
+    /// Vetor escolhido e discordância, em meia resolução. Refeito a cada
+    /// quadro gerado, porque depende de `t`.
+    escolhido: Alvo,
 }
 
 pub struct Gpu {
@@ -154,6 +158,7 @@ impl Gpu {
             grossa: ps("Grossa")?,
             fina: ps("Fina")?,
             suave: ps("Suave")?,
+            escolha: ps("Escolha")?,
             final_: ps("Final")?,
             copia: ps("Copia")?,
         };
@@ -255,6 +260,7 @@ impl Gpu {
             vet_grosso: self.alvo(sl, sa, vet, true)?,
             vet_fino: self.alvo(fl, fa, vet, true)?,
             vet_suave: self.alvo(fl, fa, vet, true)?,
+            escolhido: self.alvo((largura + 1) / 2, (altura + 1) / 2, vet, true)?,
         });
         self.reais = 0;
         Ok(())
@@ -434,21 +440,29 @@ impl Gpu {
         let (a, b) = (1 - self.atual, self.atual);
         let texel = [1.0 / largura as f32, 1.0 / altura as f32];
         match t_gerado {
-            Some(t) if self.tem_par() => self.passe(
-                &self.passes.final_,
-                destino,
-                largura,
-                altura,
-                &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.vet_suave.srv.clone())],
-                Parametros {
-                    texel_destino: texel,
-                    tamanho_aux: [tr.vet_suave.largura as i32, tr.vet_suave.altura as i32],
-                    t,
-                    limiar_erro: 0.08,
-                    faixa_erro: 0.2,
-                    ..Default::default()
-                },
-            ),
+            Some(t) if self.tem_par() => {
+                self.passe(
+                    &self.passes.escolha,
+                    tr.escolhido.rtv.as_ref().unwrap(),
+                    tr.escolhido.largura,
+                    tr.escolhido.altura,
+                    &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.vet_suave.srv.clone())],
+                    Parametros {
+                        texel_destino: texel,
+                        tamanho_aux: [tr.vet_suave.largura as i32, tr.vet_suave.altura as i32],
+                        t,
+                        ..Default::default()
+                    },
+                );
+                self.passe(
+                    &self.passes.final_,
+                    destino,
+                    largura,
+                    altura,
+                    &[Some(tr.imagem[a].srv.clone()), Some(tr.imagem[b].srv.clone()), Some(tr.escolhido.srv.clone())],
+                    Parametros { texel_destino: texel, t, limiar_erro: 0.05, faixa_erro: 0.12, ..Default::default() },
+                );
+            }
             _ => self.passe(
                 &self.passes.copia,
                 destino,
