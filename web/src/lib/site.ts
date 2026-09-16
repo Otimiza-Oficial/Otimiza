@@ -18,7 +18,7 @@ export const site = {
   titulo: "Otimiza — Console de desempenho para Windows",
   description:
     "Mede o que o seu PC faz, otimiza o que dá, e prova com número — inclusive quando o número diz que não mudou nada.",
-  versao: "2.6.0",
+  versao: "2.7.0",
 } as const;
 
 export const links = {

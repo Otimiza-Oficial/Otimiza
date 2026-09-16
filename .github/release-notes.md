@@ -7,85 +7,78 @@ resultado é que não mudou nada.
 | Arquivo | Quando usar |
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_2.6.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_2.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_2.7.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_2.7.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
 
 ---
 
-# A 2.6 mede antes de escolher: energia e geração de quadros
+# A 2.7 traz a geração de quadros do próprio Otimiza
 
-## O plano de energia deixou de ser uma lista fixa
+## Otimiza Frame Gen (experimental)
 
-Até a 2.5, o plano OTIMIZA escrevia os mesmos números em todo PC: preferência
-de energia (EPP) em 0, estado mínimo do processador em 100%, núcleos todos
-acordados e boost agressivo. Num desktop isso é quase inofensivo; num notebook
-é calor a mais pelo mesmo FPS, e numa Intel híbrida é tirar do Windows a escolha
-entre núcleo de desempenho e de eficiência.
+Na aba **Geração de quadros**, o painel **Gerador do Otimiza** liga uma geração
+de quadros feita pelo próprio Otimiza — sem instalar nenhum outro programa.
 
-A nova aba **Energia** troca isso por um motor que:
+Ela funciona por fora do jogo, como o Lossless Scaling: captura a janela,
+estima o movimento na placa de vídeo e mostra os quadros intermediários numa
+camada por cima. **Nada é injetado no processo do jogo.**
 
-- **identifica o processador** pela própria CPU — família, modelo, se é
-  híbrido, se tem Speed Shift, EPP ou CPPC — e se a máquina é desktop ou
-  notebook;
-- **lê o que este Windows expõe** (`powercfg /qh`), sem lista fixa: ajuste
-  que não existe aqui, ou valor fora da faixa que o Windows publica, não é
-  escrito;
-- **testa candidatos feitos para a arquitetura**, medindo a resposta da CPU
-  com rajadas de carga, o clock efetivo, os limites de firmware e — com o
-  jogo aberto — FPS, 1% low, 0,1% low e P99;
-- **escolhe pelo resultado.** 1% low, P99 e tempo de resposta pesam mais que
-  FPS médio, e esquentar conta contra. Se nenhum candidato ganha do padrão do
-  Windows com margem, a recomendação é o padrão do Windows.
+O que ela faz, dito com clareza: **aumenta os quadros que chegam à tela** (2×,
+3× ou 4×). O jogo continua desenhando os mesmos quadros — o contador de FPS do
+próprio jogo não muda — e o controle fica um pouco mais atrasado.
 
-O seu plano de energia nunca é escrito: o motor trabalha no plano OTIMIZA e
-guarda um backup de todos os valores do plano anterior. **Restaurar plano
-anterior** e **Restaurar padrão do Windows** estão na aba.
+Medido no FiveM, em 1080p, numa GeForce GTX 1650 dividida com o jogo:
 
-No notebook, o lado da bateria nunca é mexido.
+- a tela recebeu cerca do dobro de quadros com 2× (por exemplo, 48 → 96);
+- custo de cerca de 2 ms por quadro na placa de vídeo;
+- **atraso acrescentado medido: 7 a 14 ms**.
 
-Também na aba: laboratório de EPP, teste de economia do PCI Express e do USB,
-perfis por jogo e o **modo dinâmico** — o perfil entra quando o jogo abre e sai
-quando ele fecha.
+Proteções que vêm ligadas:
 
-**O plano OTIMIZA antigo mudou junto.** Ele não aplica mais sozinho EPP 0,
-mínimo 100%, núcleos acordados, boost agressivo, ASPM desligado nem suspensão do
-USB desligada. Esses valores só entram se o motor medir que eles ganham nesta
-máquina.
+- **Nunca tira FPS do jogo.** De tempos em tempos a geração pausa por um
+  instante e o FPS real é comparado com e sem ela. Se o jogo perder mais de
+  4%, o gerador se desliga sozinho e diz por quê.
+- **Não inventa imagem quando não dá.** Em giro de câmera muito rápido, troca
+  de cena ou câmera atravessando um carro, o quadro gerado é recusado e a tela
+  mostra só o real — fica igual a jogar sem gerador, nunca pior.
+- **Nunca passa da taxa do monitor.** Se o jogo já entrega o que o monitor
+  mostra, não há geração.
+- **Interface parada sai do quadro real**, sem ser deslocada.
+- **Ctrl+Alt+G** desliga de qualquer lugar, inclusive de dentro do jogo.
 
-## Laboratório de geração de quadros
+Exige o jogo em **janela sem bordas** — tela cheia exclusiva não pode ser
+capturada.
 
-A nova aba **Geração de quadros** não liga nada: você liga DLSS, FSR, Smooth
-Motion, AFMF ou Lossless Scaling onde eles moram, e o Otimiza mede antes e
-depois, sem encostar no processo do jogo.
+## Plano de energia: nunca menos FPS
 
-- Separa sempre **quadros renderizados** (o que o jogo desenhou) de **quadros
-  exibidos** (o que chegou à tela), e marca cada número como MEDIDO, ESTIMADO
-  ou DESCONHECIDO.
-- Diz se a máquina está pronta (EXCELENTE, BOA, MARGINAL, NÃO RECOMENDADA) a
-  partir dos quadros reais, e avisa quando o processador é o limite.
-- Compara 2×, 3× e 4× com pontuação por perfil — competitivo, equilibrado ou
-  máxima fluidez — e uma decisão com o grau de confiança.
-- Confere se o multiplicador do Lossless Scaling é o que chegou à tela, e se a
-  cena medida se repetiu.
-- Teste visual guiado de artefatos, e limite de FPS pela taxa do monitor (no
-  driver NVIDIA, desfeito sozinho se a medição seguinte sair pior).
+- **O plano que você já usa é o piso.** Um candidato com menos FPS ou pior 1%
+  low que o seu plano atual nunca é recomendado; se nenhum ganha dele, ele fica.
+- **Autoajuste em duas etapas.** Depois da primeira bateria, o vencedor ganha
+  vizinhos (preferência de energia um pouco acima e abaixo, estacionamento de
+  núcleos trocado), medidos na mesma cena.
+- **Candidato "resposta máxima"** — tudo no máximo, o estilo de planos de
+  concorrentes — medido lado a lado em desktop. Se ele for o melhor no seu PC,
+  é o escolhido.
+- **Teste de quadros sem abrir o jogo**, para autoajustar mesmo com ele fechado.
+- **Teste interrompido não deixa a máquina presa.** Se o Otimiza fechar no meio
+  do autoajuste, a abertura seguinte volta ao plano anterior.
 
 ---
 
 ## O que esta versão não promete
 
-**Nenhum ganho fixo.** O motor de energia pode concluir que o padrão do Windows
-é o melhor para o seu PC — e aí é isso que ele diz.
+**Geração de quadros não é FPS a mais.** Ela deixa a imagem mais lisa. Para o
+jogo desenhar mais quadros, o caminho continua sendo a configuração do jogo, o
+driver e o gargalo do processador — as abas Jogos e Energia.
 
-**Geração de quadros não diminui atraso.** O laboratório estima o atraso que ela
-acrescenta e nunca mostra o contrário.
-
-**Temperatura e consumo do processador** só aparecem quando o Windows os expõe.
-Na maioria dos PCs ele não expõe sem driver de terceiros, e o Otimiza não
-instala um: nesses casos a tela diz "desconhecido".
+**O gerador é experimental.** Ainda aparecem defeitos em interface
+semitransparente sobre fundo em movimento, em minimapa girando e em carro
+passando muito rápido perto da câmera. E os números acima foram medidos numa
+máquina só: em outra placa, jogo e resolução, eles mudam — o laboratório da aba
+mede antes e depois na sua.
 
 **O "editor desconhecido" continua aparecendo.** O aviso do SmartScreen é o
 Windows dizendo, com razão, que não sabe quem publicou este instalador.
