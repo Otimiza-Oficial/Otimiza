@@ -703,3 +703,38 @@ mod teste_do_monitor {
         }
     }
 }
+
+#[cfg(test)]
+mod teste_sem_gerador {
+    use super::*;
+
+    /// Conta os quadros do jogo pela mesma captura, SEM gerar nada nem abrir
+    /// janela. É a base "desligado" para comparar com o gerador ligado.
+    #[test]
+    #[ignore]
+    fn quadros_do_jogo_sem_gerador() {
+        let processo = std::env::var("OTIMIZA_FG_PROCESSO").unwrap_or_else(|_| "jogo_de_teste".into());
+        let (pid, _) = super::super::frames::encontrar_processo(&processo).expect("jogo aberto");
+        let hwnd = janela_do_processo(pid).expect("janela");
+        let saida = saida_do_monitor(hwnd).unwrap();
+        let gpu = Gpu::novo(&saida.adaptador).unwrap();
+        let dup = unsafe { saida.saida.DuplicateOutput(&gpu.device) }.unwrap();
+        for segundo in 0..6 {
+            let inicio = Instant::now();
+            let mut quadros = 0;
+            while inicio.elapsed() < Duration::from_secs(1) {
+                let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
+                let mut r: Option<IDXGIResource> = None;
+                if unsafe { dup.AcquireNextFrame(50, &mut info, &mut r) }.is_ok() {
+                    if info.LastPresentTime != 0 {
+                        quadros += 1;
+                    }
+                    unsafe {
+                        let _ = dup.ReleaseFrame();
+                    }
+                }
+            }
+            println!("sem gerador, segundo {}: {} quadros", segundo + 1, quadros);
+        }
+    }
+}
