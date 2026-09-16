@@ -103,6 +103,19 @@ static MEDINDO: AtomicBool = AtomicBool::new(false);
 static CONTADOR: AtomicU64 = AtomicU64::new(0);
 static PID_ALVO: AtomicU32 = AtomicU32::new(0);
 
+/// O SEGUNDO PROCESSO, PARA A GERAÇÃO DE QUADROS EXTERNA.
+///
+/// Um gerador externo — o Lossless Scaling é o caso real — lê a janela do jogo
+/// e desenha os quadros gerados na DELE. O jogo continua entregando o que
+/// renderiza, e o gerador entrega o que a pessoa vê.
+///
+/// Medir um e depois o outro compararia duas janelas de tempo diferentes, e a
+/// variação do jogo entre elas viraria "efeito da geração". Os dois são
+/// contados na MESMA sessão. Zero quer dizer "sem segundo processo".
+static PID_SECUNDARIO: AtomicU32 = AtomicU32::new(0);
+static CONTADOR_SECUNDARIO: AtomicU64 = AtomicU64::new(0);
+static INSTANTES_SECUNDARIOS: Mutex<Vec<i64>> = Mutex::new(Vec::new());
+
 /// Instante de cada quadro, em unidades do relógio de alta resolução.
 ///
 /// O dado já passava pela função de retorno e era jogado fora: o cabeçalho do
@@ -127,22 +140,29 @@ unsafe extern "system" fn ao_receber_evento(registro: *mut EVENT_RECORD) {
 
     let cabecalho = &(*registro).EventHeader;
 
-    // Só o processo pedido, e só o evento de início de quadro. Sem os dois
+    // Só o evento de início de quadro, e só dos processos pedidos. Sem os dois
     // filtros a conta viraria a soma de tudo que desenha na máquina.
-    if cabecalho.ProcessId != PID_ALVO.load(Ordering::Relaxed) {
-        return;
-    }
-
     if cabecalho.EventDescriptor.Id != EVENTO_PRESENT_START {
         return;
     }
 
-    CONTADOR.fetch_add(1, Ordering::Relaxed);
+    let pid = cabecalho.ProcessId;
+    let (contador, lista) = if pid == PID_ALVO.load(Ordering::Relaxed) {
+        (&CONTADOR, &INSTANTES)
+    } else {
+        let segundo = PID_SECUNDARIO.load(Ordering::Relaxed);
+        if segundo == 0 || pid != segundo {
+            return;
+        }
+        (&CONTADOR_SECUNDARIO, &INSTANTES_SECUNDARIOS)
+    };
+
+    contador.fetch_add(1, Ordering::Relaxed);
 
     // `try_lock` e não `lock`: se por qualquer motivo o cadeado estiver
     // ocupado, perder uma amostra é muito melhor do que segurar a função de
     // retorno do rastreamento do Windows.
-    if let Ok(mut instantes) = INSTANTES.try_lock() {
+    if let Ok(mut instantes) = lista.try_lock() {
         if instantes.len() < MAXIMO_DE_AMOSTRAS {
             instantes.push(cabecalho.TimeStamp);
         }
@@ -284,6 +304,30 @@ pub fn encontrar_processo(prefixo: &str) -> Option<(u32, String)> {
 ///
 /// Bloqueia pelo tempo pedido. Deve ser chamada fora do runtime assíncrono.
 pub fn medir(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, String> {
+    medir_par(pid, nome, None, segundos).map(|(principal, _)| principal.resumo)
+}
+
+/// Uma medição com os intervalos crus, para quem precisa de mais que a média.
+///
+/// O laboratório de geração de quadros calcula P95, P99 e oscilação daqui;
+/// `FrameMeasurement` continua sendo o resumo que o resto do produto usa.
+#[derive(Debug, Clone)]
+pub struct MedicaoCrua {
+    pub resumo: FrameMeasurement,
+    pub intervalos_ms: Vec<f64>,
+}
+
+/// Mede um processo e, opcionalmente, um segundo AO MESMO TEMPO.
+///
+/// O segundo existe para a geração de quadros externa (`PID_SECUNDARIO`). Ele
+/// volta `None` quando não foi pedido ou não entregou quadro nenhum: um gerador
+/// parado não pode virar "zero quadros exibidos".
+pub fn medir_par(
+    pid: u32,
+    nome: &str,
+    segundo: Option<(u32, String)>,
+    segundos: u64,
+) -> Result<(MedicaoCrua, Option<MedicaoCrua>), String> {
     if !super::registry::is_elevated() {
         return Err(
             "Medir quadros exige executar como administrador: o canal de eventos do Windows \
@@ -314,12 +358,18 @@ pub fn medir(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, St
     }
 
     // A partir daqui todo caminho de saída precisa liberar a trava.
-    let resultado = medir_interno(pid, nome, segundos);
+    let resultado = medir_interno(pid, nome, segundo, segundos);
+    PID_SECUNDARIO.store(0, Ordering::SeqCst);
     MEDINDO.store(false, Ordering::SeqCst);
     resultado
 }
 
-fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, String> {
+fn medir_interno(
+    pid: u32,
+    nome: &str,
+    segundo: Option<(u32, String)>,
+    segundos: u64,
+) -> Result<(MedicaoCrua, Option<MedicaoCrua>), String> {
     derrubar_sessao_antiga();
 
     let nome_sessao = para_utf16(NOME_SESSAO);
@@ -365,7 +415,9 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
     }
 
     CONTADOR.store(0, Ordering::SeqCst);
+    CONTADOR_SECUNDARIO.store(0, Ordering::SeqCst);
     PID_ALVO.store(pid, Ordering::SeqCst);
+    PID_SECUNDARIO.store(segundo.as_ref().map_or(0, |(p, _)| *p), Ordering::SeqCst);
 
     // `ProcessTrace` só devolve quando a sessão para, então ela roda numa
     // linha de execução própria enquanto esta aqui cronometra.
@@ -394,12 +446,14 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
         Ok(())
     });
 
-    if let Ok(mut instantes) = INSTANTES.lock() {
-        instantes.clear();
-        // Pré-alocação generosa: alocar durante a medição faria o coletor
-        // parar para crescer o vetor, e esse custo apareceria como engasgo na
-        // própria conta de engasgos.
-        instantes.reserve(segundos as usize * 600);
+    // Pré-alocação generosa: alocar durante a medição faria o coletor parar
+    // para crescer o vetor, e esse custo apareceria como engasgo na própria
+    // conta de engasgos.
+    for lista in [&INSTANTES, &INSTANTES_SECUNDARIOS] {
+        if let Ok(mut instantes) = lista.lock() {
+            instantes.clear();
+            instantes.reserve(segundos as usize * 600);
+        }
     }
 
     let cronometro = std::time::Instant::now();
@@ -427,19 +481,35 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
         ));
     }
 
-    let (mediana, low_1pct, engasgos, confiavel) = estatistica(intervalos_em_ms());
+    let principal = montar(nome, pid, frames, decorrido, intervalos_em_ms(&INSTANTES));
 
-    Ok(FrameMeasurement {
-        fps: frames as f64 / decorrido,
-        frames,
-        seconds: decorrido,
-        process: nome.to_string(),
-        pid,
-        frametime_mediano_ms: mediana,
-        low_1pct,
-        engasgos_por_minuto: engasgos,
-        detalhe_confiavel: confiavel,
-    })
+    let secundaria = segundo.and_then(|(pid2, nome2)| {
+        let quadros = CONTADOR_SECUNDARIO.load(Ordering::SeqCst);
+        (quadros > 0).then(|| {
+            montar(&nome2, pid2, quadros, decorrido, intervalos_em_ms(&INSTANTES_SECUNDARIOS))
+        })
+    });
+
+    Ok((principal, secundaria))
+}
+
+fn montar(nome: &str, pid: u32, frames: u64, decorrido: f64, intervalos_ms: Vec<f64>) -> MedicaoCrua {
+    let (mediana, low_1pct, engasgos, confiavel) = estatistica(intervalos_ms.clone());
+
+    MedicaoCrua {
+        resumo: FrameMeasurement {
+            fps: frames as f64 / decorrido,
+            frames,
+            seconds: decorrido,
+            process: nome.to_string(),
+            pid,
+            frametime_mediano_ms: mediana,
+            low_1pct,
+            engasgos_por_minuto: engasgos,
+            detalhe_confiavel: confiavel,
+        },
+        intervalos_ms,
+    }
 }
 
 /// Converte os instantes coletados em intervalos, em milissegundos.
@@ -447,7 +517,7 @@ fn medir_interno(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement
 /// O carimbo de tempo do evento vem em unidades do contador de alta resolução,
 /// cuja frequência varia de máquina para máquina — tratá-lo como se fosse
 /// microssegundo daria números plausíveis e errados.
-fn intervalos_em_ms() -> Vec<f64> {
+fn intervalos_em_ms(lista: &Mutex<Vec<i64>>) -> Vec<f64> {
     use windows_sys::Win32::System::Performance::QueryPerformanceFrequency;
 
     let mut frequencia: i64 = 0;
@@ -457,7 +527,7 @@ fn intervalos_em_ms() -> Vec<f64> {
         }
     }
 
-    let Ok(instantes) = INSTANTES.lock() else {
+    let Ok(instantes) = lista.lock() else {
         return Vec::new();
     };
 

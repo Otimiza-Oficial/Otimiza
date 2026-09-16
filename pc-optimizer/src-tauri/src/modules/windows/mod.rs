@@ -30,6 +30,7 @@ pub mod firmware;
 pub mod fivem;
 pub mod foldermap;
 pub mod frames;
+pub mod framegen;
 pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;

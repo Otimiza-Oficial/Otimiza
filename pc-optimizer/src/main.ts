@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Esfera } from "./esfera";
 import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
+import { carregarLaboratorioDeGeracao } from "./framegen";
 
 // ---------------------------------------------------------------- contratos
 
@@ -1165,6 +1166,10 @@ let discosCarregados = false;
 let biosCarregada = false;
 
 function showTab(name: string) {
+  if (name === "framegen") {
+    void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
+  }
+
   if (name === "reparo" && !reparoCarregado) {
     reparoCarregado = true;
     void carregarReparo();

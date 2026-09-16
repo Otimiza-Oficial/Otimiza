@@ -45,6 +45,8 @@ use crate::modules::windows::network::NetworkReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::frames::FrameMeasurement;
 #[cfg(target_os = "windows")]
+use crate::modules::windows::framegen::{Artefato, Deteccao, Intensidade, Perfil, ResultadoDaRodada, Rodada, Tecnologia};
+#[cfg(target_os = "windows")]
 use crate::modules::windows::gamemode::GameModeStatus;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::bottleneck::BottleneckReport;
@@ -1114,6 +1116,90 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
         let _ = (process, seconds);
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
+}
+
+/// Comando: o que existe de geração de quadros nesta placa, neste monitor e
+/// neste jogo.
+///
+/// Só leitura. Fica em `LIVRES`: saber o que a máquina suporta não altera nada.
+#[tauri::command]
+pub async fn framegen_detectar(processo: Option<String>) -> Result<Deteccao, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || crate::modules::windows::framegen::detectar(processo.as_deref()))
+            .await
+            .map_err(|e| format!("Falha ao detectar a geração de quadros: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = processo;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: mede uma rodada do laboratório de geração de quadros.
+///
+/// Mede de fora, como `measure_frames`: nada é injetado no jogo, e nada é
+/// ligado — quem liga a geração é a pessoa. Fica em `LIVRES`.
+#[tauri::command]
+pub async fn framegen_medir(
+    processo: String,
+    segundos: u64,
+    tecnologia: Option<Tecnologia>,
+    multiplicador: u8,
+    hz: u32,
+) -> Result<ResultadoDaRodada, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::framegen::medir_rodada(
+                &processo,
+                segundos.clamp(5, 60),
+                tecnologia,
+                multiplicador,
+                hz,
+            )
+        })
+        .await
+        .map_err(|e| format!("Falha ao medir a rodada: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (processo, segundos, tecnologia, multiplicador, hz);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Comando: compara a rodada desligada com uma ligada. Conta pura, em `LIVRES`.
+#[tauri::command]
+pub fn framegen_comparar(
+    desligado: Rodada,
+    ligado: Rodada,
+    perfil: Perfil,
+    hz: u32,
+    artefatos: Vec<(Artefato, Intensidade)>,
+) -> FramegenComparacao {
+    use crate::modules::windows::framegen;
+
+    let nota = (!artefatos.is_empty()).then(|| framegen::avaliar_artefatos(&artefatos));
+    FramegenComparacao {
+        comparacao: framegen::comparar(&desligado, &ligado, perfil, hz, nota.map(|n| n.nivel)),
+        artefatos: nota,
+    }
+}
+
+/// Comando: o modo inteligente. Entre as rodadas ligadas, qual ganhou.
+#[tauri::command]
+pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil, hz: u32) -> Option<usize> {
+    crate::modules::windows::framegen::melhor_rodada(&desligado, &testadas, perfil, hz)
+}
+
+#[derive(serde::Serialize)]
+pub struct FramegenComparacao {
+    pub comparacao: crate::modules::windows::framegen::Comparacao,
+    pub artefatos: Option<crate::modules::windows::framegen::NotaDeArtefatos>,
 }
 
 /// Comando: lê o `CitizenFX.ini` e mostra o que está em `PoolSizesIncrease`.
@@ -3476,6 +3562,10 @@ mod tests {
         "analyze_network",
         "medir_perda_de_pacote",
         "measure_frames",
+        "framegen_detectar",
+        "framegen_medir",
+        "framegen_comparar",
+        "framegen_melhor",
         "analyze_fivem",
         "analyze_citizenfx",
         "analyze_browsers",

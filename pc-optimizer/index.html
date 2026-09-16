@@ -55,6 +55,13 @@
           <circle cx="18.5" cy="14" r="1" />
         </symbol>
 
+        <!-- Geração de quadros: dois quadros reais e o gerado entre eles -->
+        <symbol id="i-framegen" viewBox="0 0 24 24">
+          <rect x="2.5" y="6" width="6" height="12" rx="1" />
+          <rect x="9" y="6" width="6" height="12" rx="1" stroke-dasharray="2 2" />
+          <rect x="15.5" y="6" width="6" height="12" rx="1" />
+        </symbol>
+
         <!-- Espaço: o disco, com a fatia que indica ocupação -->
         <symbol id="i-espaco" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="9" />
@@ -477,6 +484,12 @@
             <svg class="nav-icone" aria-hidden="true"><use href="#i-jogos" /></svg>
             <span class="nav-rotulo">Jogos</span>
             <span class="tab-badge" id="badge-jogos" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="framegen" aria-selected="false"
+                  aria-controls="tab-framegen" id="tabbtn-framegen">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-framegen" /></svg>
+            <span class="nav-rotulo">Geração de quadros</span>
           </button>
 
           <button class="nav" role="tab" data-tab="espaco" aria-selected="false"
@@ -2470,6 +2483,15 @@
             <p id="lab-status" class="status"></p>
             <pre id="lab-texto" class="bloco-de-texto" hidden></pre>
           </section>
+        </section>
+
+        <!-- ================================================ GERAÇÃO DE QUADROS -->
+        <section class="tab-panel" id="tab-framegen" role="tabpanel" aria-labelledby="tabbtn-framegen" hidden>
+          <!--
+            O laboratório é montado por `src/framegen.ts` ao abrir a aba. Ele
+            mede e compara; quem liga a geração é a pessoa, no jogo ou no driver.
+          -->
+          <div id="framegen-lab" class="fg"></div>
         </section>
 
         <!-- ============================================================ REPARO -->
