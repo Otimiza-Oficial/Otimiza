@@ -6,6 +6,39 @@
   A cor só aparece onde carrega significado — carga, veredito, aviso.
 */
 
+/*
+  AS FONTES, EMBUTIDAS NO PROGRAMA.
+
+  Os três arquivos são variáveis (um arquivo cobre todos os pesos) e vêm
+  empacotados: o Otimiza precisa abrir igual sem internet, e uma fonte baixada
+  em tempo de execução deixaria a primeira tela trocando de letra na frente do
+  cliente. Somam 79 KB.
+
+  São as MESMAS do site — Plus Jakarta Sans nos títulos, Geist no texto e Geist
+  Mono nos números —, porque o programa e a página são o mesmo produto.
+  Ambas têm licença SIL Open Font License 1.1; ver src/assets/fontes/LEIA-ME.md.
+*/
+@font-face {
+  font-family: "Jakarta";
+  src: url("./assets/fontes/jakarta-variavel.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("./assets/fontes/geist-variavel.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "GeistMono";
+  src: url("./assets/fontes/geist-mono-variavel.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   /* PRETO DE VERDADE, E NÃO QUASE-PRETO.
 
@@ -21,39 +54,39 @@
 
      Nos monitores OLED, que é o que boa parte do público de jogo usa, preto
      puro é pixel desligado: a moldura some de verdade. */
-  --bg: #000000;
-  --panel: #000000;
-  --panel-raised: #000000;
+  --bg: #f4f4f3;
+  --panel: #ffffff;
+  --panel-raised: #ffffff;
 
   /* O fundo dos campos onde se digita ou se copia.
      Existe como token porque ele NÃO deve seguir o painel: um campo tem que
      ser encontrável, e num fundo todo preto quem o desenha é a borda. */
-  --campo: #000000;
+  --campo: #ffffff;
 
   /* A estética de fio de cabelo estava tão fraca que a moldura não se lia:
      #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
      que a norma pede para elemento de interface. Subir para #2e2e2e devolve a
      estrutura sem perder a discrição. */
-  --hairline: #2e2e2e;
-  --hairline-strong: #3f3f3f;
+  --hairline: rgba(10, 10, 10, 0.09);
+  --hairline-strong: rgba(10, 10, 10, 0.16);
 
-  --text: #e9e7e3;
-  --text-dim: #a6a29c;
+  --text: #0a0a0a;
+  --text-dim: #3f3f3f;
   /* Era #726e69: 3,70:1 sobre o painel, reprovado no AA da WCAG — e ele
      carrega 43 regras, ou seja, praticamente todo o texto explicativo do
      produto. O argumento de honestidade do Otimiza mora nesses parágrafos, e
      eles estavam apagados demais para serem lidos. #8a8681 dá 5,18:1 e ainda
      fica claramente abaixo de --text-dim (7,38:1), preservando a hierarquia. */
-  --text-muted: #8a8681;
+  --text-muted: #6b6b6b;
 
-  --accent: #f5f3f0;
-  --green: #5fd39a;
-  --amber: #e8b23a;
-  --red: #ff5c73;
-  --ok: #5fd39a;
-  --aviso: #e8b23a;
-  --erro: #ff5c73;
-  --borda-forte: #3f3f3f;
+  --accent: #0a0a0a;
+  --green: #0a0a0a;
+  --amber: #8a6100;
+  --red: #b42318;
+  --ok: #0a0a0a;
+  --aviso: #8a6100;
+  --erro: #b42318;
+  --borda-forte: rgba(10, 10, 10, 0.16);
   --anim-rapida: 0.18s;
 
   /*
@@ -65,21 +98,24 @@
     recriando cores que já existiam logo acima. Trocar o vermelho da marca
     exigia caçar todas.
   */
-  --accent-rgb: 245, 243, 240;
-  --green-rgb: 95, 211, 154;
-  --amber-rgb: 232, 178, 58;
-  --red-rgb: 255, 92, 115;
-  --bg-rgb: 0, 0, 0;
-  --text-rgb: 233, 231, 227;
-  --panel-rgb: 0, 0, 0;
+  --accent-rgb: 10, 10, 10;
+  --green-rgb: 10, 10, 10;
+  --amber-rgb: 138, 97, 0;
+  --red-rgb: 180, 35, 24;
+  --bg-rgb: 244, 244, 243;
+  --text-rgb: 10, 10, 10;
+  --panel-rgb: 255, 255, 255;
 
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
      e a matriz de núcleos usava um branco diferente — dois cinzas para a
      mesma ideia, lado a lado no mesmo painel. */
-  --track: rgba(var(--text-rgb), 0.09);
+  --track: rgba(10, 10, 10, 0.08);
 
-  --font-mono: ui-monospace, "Cascadia Mono", "Consolas", "DejaVu Sans Mono", monospace;
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "GeistMono", ui-monospace, "Cascadia Mono", "Consolas", monospace;
+  --font-sans: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  /* Só título usa a de exibição: ela é mais estreita e aguenta o tracking
+     negativo que dá o ar de produto acabado. */
+  --font-display: "Jakarta", "Geist", "Segoe UI", system-ui, sans-serif;
 
   /*
     ESCALA DE ESPAÇAMENTO
@@ -135,9 +171,9 @@
     de canto reto parece um formulário, não um produto. Três degraus, do
     controle pequeno ao painel.
   */
-  --r1: 6px;
-  --r2: 9px;
-  --r3: 14px;
+  --r1: 8px;
+  --r2: 12px;
+  --r3: 16px;
 
   --dur: 0.18s;
   --dur-slow: 0.45s;
@@ -193,7 +229,7 @@
    azul do Windows no meio de uma interface monocromática. */
 ::selection {
   background: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 /*
@@ -250,9 +286,10 @@ body {
      enquanto o resto carrega. */
   background-color: var(--bg);
   color: var(--text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-lead);
-  line-height: 1.5;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -472,7 +509,7 @@ button {
   justify-content: center;
   border-radius: 9px;
   background: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
   font-size: var(--t-micro);
   font-weight: 700;
   letter-spacing: 0;
@@ -484,7 +521,7 @@ button {
 
 .tab-badge[data-tone="bad"] {
   background: var(--red);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 /* ------------------------------------------------------------------ painéis */
@@ -526,48 +563,25 @@ button {
 .panel {
   position: relative;
   isolation: isolate;
-  border: 1px solid transparent;
+  border: 1px solid var(--hairline);
   border-radius: var(--r3);
   padding: var(--s5);
   min-width: 0;
+  background: var(--panel);
 
-  background-image:
-    linear-gradient(
-      180deg,
-      rgba(var(--text-rgb), 0.032) 0%,
-      rgba(var(--text-rgb), 0.008) 88px,
-      rgba(var(--text-rgb), 0) 100%
-    ),
-    linear-gradient(var(--panel), var(--panel)),
-    /* A moldura escurece de cima para baixo, na mesma direção de luz do fio
-       interno. Moldura uniforme lê como contorno; com queda, lê como volume. */
-      linear-gradient(
-        165deg,
-        rgba(var(--text-rgb), 0.13) 0%,
-        rgba(var(--text-rgb), 0.05) 34%,
-        rgba(var(--text-rgb), 0.02) 62%,
-        rgba(var(--bg-rgb), 0.6) 100%
-      );
-  background-origin: padding-box, padding-box, border-box;
-  background-clip: padding-box, padding-box, border-box;
-
-  box-shadow:
-    /* fio de luz na aresta de cima */
-    inset 0 1px 0 rgba(var(--text-rgb), 0.055),
-    /* contato curto: é o que assenta o cartão na superfície */
-    0 1px 2px rgba(var(--bg-rgb), 0.55),
-    /* difusa, com espalhamento NEGATIVO — sem isso a sombra invade o cartão
-       vizinho no `gap` e o conjunto vira sujeira */
-    0 10px 26px -14px rgba(var(--bg-rgb), 0.85);
+  /* Uma sombra curta, de contato, e nada mais. No escuro o cartão precisava de
+     três camadas de gradiente para existir; no papel ele existe sozinho — o
+     que o assenta é o fio de 1px e um contato de 2px. */
+  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
 }
 
-/* Um único degrau de ênfase, e ele só vale enquanto for raro: no momento em
+/* Um único degrau de ênfase de ênfase, e ele só vale enquanto for raro: no momento em
    que o terceiro cartão receber destaque, nenhum tem destaque. */
 .panel[data-realce] {
+  border-color: rgba(10, 10, 10, 0.16);
   box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.085),
-    0 1px 2px rgba(var(--bg-rgb), 0.6),
-    0 16px 40px -18px rgba(var(--bg-rgb), 0.95);
+    0 1px 2px rgba(10, 10, 10, 0.05),
+    0 18px 40px -24px rgba(10, 10, 10, 0.28);
 }
 
 /* O cabeçalho sangra até a borda do cartão e carrega o degrau de luz, para o
@@ -580,12 +594,7 @@ button {
   gap: var(--s3);
   margin: calc(var(--s5) * -1) calc(var(--s5) * -1) var(--s5);
   padding: var(--s4) var(--s5);
-  border-bottom: 1px solid rgba(var(--text-rgb), 0.055);
-  background: linear-gradient(
-    180deg,
-    rgba(var(--text-rgb), 0.022),
-    rgba(var(--text-rgb), 0)
-  );
+  border-bottom: 1px solid var(--hairline);
   border-radius: var(--r3) var(--r3) 0 0;
 }
 
@@ -595,10 +604,10 @@ button {
    bonito" era essa planicie, nao a falta de enfeite. Agora ha um degrau claro:
    titulo 13px cheio, aba 11px medio, botao 10px discreto. */
 .panel-head h2 {
-  font-size: var(--t-lead);
+  font-family: var(--font-display);
+  font-size: var(--t-value);
   font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
@@ -625,28 +634,10 @@ button {
   align-items: center;
   gap: var(--s6);
   padding: var(--s4) var(--s5);
-  border: 1px solid transparent;
-  border-radius: var(--r2);
-  background-image:
-    linear-gradient(
-      180deg,
-      rgba(var(--text-rgb), 0.045) 0%,
-      rgba(var(--text-rgb), 0.015) 100%
-    ),
-    linear-gradient(var(--panel), var(--panel)),
-    linear-gradient(
-      165deg,
-      rgba(var(--text-rgb), 0.16) 0%,
-      rgba(var(--text-rgb), 0.08) 34%,
-      rgba(var(--text-rgb), 0.04) 62%,
-      rgba(var(--bg-rgb), 0.6) 100%
-    );
-  background-origin: padding-box, padding-box, border-box;
-  background-clip: padding-box, padding-box, border-box;
-  box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.08),
-    0 2px 4px rgba(var(--bg-rgb), 0.6),
-    0 12px 32px -16px rgba(var(--bg-rgb), 0.9);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3);
+  background: var(--panel);
+  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
 }
 
 .brand {
@@ -959,20 +950,34 @@ button {
 
 /* ------------------------------------------------------------------ botões */
 
+/* O BOTÃO DEIXOU DE GRITAR.
+
+   Eram todos em MAIÚSCULA espaçada de 10px — a letra de etiqueta de máquina,
+   e com ela qualquer tela parece um painel de controle industrial. Agora é
+   frase normal, no peso do texto, e a hierarquia vem do preenchimento: o
+   primário é tinta cheia, o secundário é papel com fio. */
 .btn {
-  padding: var(--s2) var(--s4);
-  background: transparent;
-  border: 1px solid var(--hairline-strong);
-  color: var(--text-dim);
-  font-size: var(--t-micro);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  padding: 9px var(--s4);
+  background: var(--panel);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--t-body);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
   cursor: pointer;
-  transition: border-color 0.18s, color 0.18s, background 0.18s;
+  transition: background 0.18s, box-shadow 0.18s, color 0.18s;
 }
 
 .btn:hover:not(:disabled) {
-  border-color: var(--accent);
+  background: #f6f6f5;
   color: var(--accent);
 }
 
@@ -987,13 +992,16 @@ button {
 }
 
 .btn-primary {
-  border-color: rgba(var(--accent-rgb), 0.55);
-  color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.06);
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(10, 10, 10, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: rgba(var(--accent-rgb), 0.14);
+  background: #262626;
+  color: #ffffff;
 }
 
 .btn-ghost {
@@ -1682,7 +1690,7 @@ button {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(0, 0, 0, 0.25));
+  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -2265,7 +2273,7 @@ button {
 .profile-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 .profile-chip:focus-visible {
@@ -2571,16 +2579,17 @@ button {
 }
 
 .lateral {
-  position: relative;
+  position: sticky;
+  top: var(--gap);
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: var(--s3) var(--s2);
   background: var(--panel);
   border: 1px solid var(--hairline);
+  border-radius: var(--r3);
+  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
   align-self: start;
-  position: sticky;
-  top: var(--gap);
 }
 
 .lateral-grupo {
@@ -2604,27 +2613,29 @@ button {
   padding: var(--s2) var(--s3);
   background: transparent;
   border: none;
-  border-left: 2px solid transparent;
+  border-radius: var(--r1);
   color: var(--text-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-body);
+  font-weight: 500;
+  letter-spacing: -0.01em;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
-  transition: color var(--dur), background-color var(--dur), border-color var(--dur);
+  transition: color var(--dur), background-color var(--dur);
 }
 
 .nav:hover {
   color: var(--text);
-  background: var(--panel-raised);
+  background: rgba(10, 10, 10, 0.045);
 }
 
 /* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
    saber onde está sem ler. */
 .nav[aria-selected="true"] {
-  color: var(--bg);
+  color: #ffffff;
   background: var(--accent);
-  border-left-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 /* ==========================================================================
@@ -2680,7 +2691,7 @@ button {
 }
 
 .nav[aria-selected="true"] .tab-badge {
-  background: var(--bg);
+  background: #ffffff;
   color: var(--accent);
 }
 
@@ -2925,7 +2936,7 @@ button {
 .comando:hover,
 .comando[aria-selected="true"] {
   background: var(--accent);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 .comando-secao {
@@ -3026,9 +3037,10 @@ button {
 
 .lateral-marca-nome {
   flex: 1;
+  font-family: var(--font-display);
   font-size: var(--t-value);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -3057,44 +3069,21 @@ button {
   gap: var(--s3);
   min-width: 280px;
   padding: var(--s3) var(--s4);
-  background: rgba(var(--bg-rgb), 0.4);
-  border: 1px solid transparent;
-  border-radius: var(--r2);
+  background: var(--bg);
+  border: none;
+  border-radius: var(--r1);
+  box-shadow: inset 0 0 0 1px rgba(10, 10, 10, 0.09);
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-body);
   cursor: pointer;
-  background-image:
-    linear-gradient(rgba(var(--bg-rgb), 0.4), rgba(var(--bg-rgb), 0.4)),
-    linear-gradient(
-      135deg,
-      rgba(var(--text-rgb), 0.12) 0%,
-      rgba(var(--text-rgb), 0.06) 50%,
-      rgba(var(--text-rgb), 0.03) 100%
-    );
-  background-origin: padding-box, border-box;
-  background-clip: padding-box, border-box;
-  backdrop-filter: blur(8px);
-  transition: all var(--dur) var(--ease);
-  box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.05),
-    0 2px 6px rgba(var(--bg-rgb), 0.4);
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 
 .busca-topo:hover {
-  background-image:
-    linear-gradient(rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.5)),
-    linear-gradient(
-      135deg,
-      rgba(var(--accent-rgb), 0.2) 0%,
-      rgba(var(--text-rgb), 0.1) 50%,
-      rgba(var(--text-rgb), 0.05) 100%
-    );
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(10, 10, 10, 0.16);
   color: var(--text-dim);
-  box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.08),
-    0 4px 12px rgba(var(--bg-rgb), 0.6);
-  transform: translateY(-1px);
 }
 
 .busca-topo-texto {
@@ -3190,6 +3179,17 @@ button {
   align-items: center;
   gap: var(--s3);
   margin-top: var(--s2);
+}
+
+/* O nome da seção é o maior texto da tela e o único em fonte de exibição:
+   é por ele que o olho entra. */
+.secao-titulo h2 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  color: var(--text);
 }
 
 /* O ícone da seção reaproveita as mesmas silhuetas da navegação, num quadrado
@@ -3514,9 +3514,8 @@ button {
   color: var(--text);
   font-size: var(--t-body);
   box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.055),
-    0 1px 2px rgba(var(--bg-rgb), 0.55),
-    0 10px 26px -14px rgba(var(--bg-rgb), 0.85);
+    0 1px 2px rgba(10, 10, 10, 0.05),
+    0 12px 28px -16px rgba(10, 10, 10, 0.3);
 }
 
 .atualizacao-faixa[hidden] {
@@ -3636,11 +3635,12 @@ button {
   padding: var(--s5);
   overflow: auto;
 
-  background: 
-    radial-gradient(ellipse at 30% 40%, rgba(var(--accent-rgb), 0.08), transparent 50%),
-    radial-gradient(ellipse at 70% 60%, rgba(var(--green-rgb), 0.06), transparent 50%),
-    rgba(var(--bg-rgb), 0.92);
-  backdrop-filter: blur(24px) saturate(130%);
+  /* Papel liso. Os dois halos de cor que existiam aqui vinham da paleta
+     antiga; no claro eles viravam duas manchas sujas atrás de uma caixa
+     branca. E o desfoque do fundo saiu junto: ele custava uma releitura da
+     tela inteira a cada quadro para produzir um efeito que ninguém vê, porque
+     a caixa cobre quase tudo. */
+  background: var(--bg);
 }
 
 .portao[hidden] {
@@ -3650,37 +3650,20 @@ button {
 .portao-caixa {
   width: min(1180px, 100%);
 
-  /* Alta o bastante para a esfera ser cortada em cima e embaixo. É o corte que
-     transforma um ícone redondo em um lugar. */
+  /* Alta o bastante para a arte ser cortada em cima e embaixo. É o corte que
+     transforma um desenho redondo em um lugar. */
   height: min(780px, calc(100vh - var(--s5) * 2));
 
-  border: 1px solid transparent;
+  border: 1px solid var(--hairline);
   border-radius: var(--r3);
   overflow: hidden;
-  
-  background-image:
-    linear-gradient(
-      180deg,
-      rgba(var(--text-rgb), 0.035) 0%,
-      rgba(var(--text-rgb), 0.012) 100%
-    ),
-    linear-gradient(var(--panel), var(--panel)),
-    linear-gradient(
-      165deg,
-      rgba(var(--text-rgb), 0.14) 0%,
-      rgba(var(--text-rgb), 0.07) 34%,
-      rgba(var(--text-rgb), 0.03) 62%,
-      rgba(var(--bg-rgb), 0.7) 100%
-    );
-  background-origin: padding-box, padding-box, border-box;
-  background-clip: padding-box, padding-box, border-box;
+  background: var(--panel);
 
   /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
      aquele halo escuro que denuncia caixa flutuante mal feita. */
-  box-shadow: 
-    inset 0 1px 0 rgba(var(--text-rgb), 0.06),
-    0 4px 12px rgba(var(--bg-rgb), 0.5),
-    0 32px 80px rgba(0, 0, 0, 0.65);
+  box-shadow:
+    0 1px 2px rgba(10, 10, 10, 0.05),
+    0 32px 64px -32px rgba(10, 10, 10, 0.3);
 }
 
 /* A PROPORÇÃO É O DESENHO INTEIRO.
@@ -3718,19 +3701,37 @@ button {
   margin: 0 auto;
 }
 
+/* A marca de verdade, e não a palavra sozinha: o símbolo entra como máscara
+   sobre a cor do texto, exatamente como no site. */
 .portao-marca {
-  font-family: var(--font-mono);
-  font-size: var(--t-label);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-family: var(--font-display);
+  font-size: var(--t-value);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.portao-marca::before,
+.chegada-marca::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: url("./assets/otimiza-marca.svg") center / contain no-repeat;
+  mask: url("./assets/otimiza-marca.svg") center / contain no-repeat;
 }
 
 .portao-titulo {
-  margin: var(--s4) 0 0;
-  font-size: var(--t-h2);
-  line-height: 1.2;
-  letter-spacing: -0.01em;
+  margin: var(--s5) 0 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
   color: var(--text);
 }
 
@@ -3827,8 +3828,9 @@ button {
   color: var(--text);
 
   background: var(--campo);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r2);
+  border: none;
+  border-radius: var(--r1);
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
 
   /* O código é para copiar, não para digitar: selecionável, mas sem quebrar
      no meio de um bloco. */
@@ -3839,18 +3841,20 @@ button {
 .portao-copiar {
   flex: none;
   padding: 0 var(--s4);
+  font-family: var(--font-sans);
   font-size: var(--t-body);
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r2);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--panel);
+  border: none;
+  border-radius: var(--r1);
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
   cursor: pointer;
-  transition: color var(--anim-rapida), border-color var(--anim-rapida);
+  transition: background var(--anim-rapida);
 }
 
 .portao-copiar:hover {
-  color: var(--text);
-  border-color: var(--borda-forte);
+  background: #f6f6f5;
 }
 
 .portao-nota {
@@ -3870,14 +3874,15 @@ button {
   resize: vertical;
 
   background: var(--campo);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r2);
-  transition: border-color var(--anim-rapida);
+  border: none;
+  border-radius: var(--r1);
+  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
+  transition: box-shadow var(--anim-rapida);
 }
 
 .portao-campo:focus {
   outline: none;
-  border-color: var(--borda-forte);
+  box-shadow: 0 0 0 1px #0a0a0a, 0 0 0 4px rgba(10, 10, 10, 0.08);
 }
 
 /* A AÇÃO PRINCIPAL É A ÚNICA COISA BRANCA DA TELA.
@@ -3987,18 +3992,9 @@ button {
 .portao-arte {
   position: relative;
   overflow: hidden;
-  background: 
-    linear-gradient(
-      90deg,
-      rgba(var(--bg-rgb), 0.3) 0%,
-      transparent 25%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(var(--text-rgb), 0.02) 0%,
-      rgba(var(--bg-rgb), 0.5) 100%
-    ),
-    var(--panel-raised);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 70%),
+    #0b0b0b;
 }
 
 .portao-pilares {
@@ -4124,7 +4120,7 @@ button {
   padding: 0 var(--s4);
   flex: none;
 
-  background: var(--bg);
+  background: var(--panel);
   border-bottom: 1px solid var(--hairline);
 
   /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
@@ -4166,11 +4162,17 @@ button {
   background: var(--cor-botao);
 }
 
-.janela-fechar { --cor-botao: #ff5f57; }
-.janela-minimizar { --cor-botao: #febc2e; }
-.janela-maximizar { --cor-botao: #28c840; }
+/* MONOCROMÁTICOS, E O MOTIVO É A PALETA.
 
-.janela-botao:hover { filter: brightness(1.25); }
+   Eles eram as três bolinhas coloridas do sistema em que foram inspirados. No
+   escuro elas passavam despercebidas; sobre papel branco viram as três manchas
+   de cor mais fortes da tela inteira, logo no canto — e o produto acabou de
+   trocar toda a sua cor por tinta preta. Continuam três, no mesmo lugar e com
+   a mesma área de clique: só perderam o croma. Quem está por baixo do ponteiro
+   escurece, e é assim que se sabe qual é qual. */
+.janela-botao { --cor-botao: rgba(10, 10, 10, 0.22); }
+
+.janela-botao:hover { --cor-botao: var(--accent); }
 
 /* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
 
@@ -4207,10 +4209,10 @@ button {
 .janela-titulo {
   flex: 1;
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: var(--t-label);
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted);
   pointer-events: none;
 }
@@ -4256,10 +4258,7 @@ body.janela-cheia {
   display: grid;
   grid-template-columns: 1fr minmax(340px, 0.85fr);
   align-items: center;
-  background: 
-    radial-gradient(ellipse at 20% 50%, rgba(var(--green-rgb), 0.08), transparent 45%),
-    radial-gradient(ellipse at 80% 50%, rgba(var(--accent-rgb), 0.06), transparent 45%),
-    var(--bg);
+  background: var(--panel);
   overflow: hidden;
 }
 
@@ -4272,12 +4271,8 @@ body.janela-cheia {
   height: 100%;
   overflow: hidden;
   background:
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(var(--bg-rgb), 0.4) 85%,
-      rgba(var(--bg-rgb), 0.9) 100%
-    );
+    radial-gradient(ellipse 80% 60% at 40% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
+    #0b0b0b;
 }
 
 .chegada-pilares {
@@ -4307,34 +4302,17 @@ body.janela-cheia {
 }
 
 /* Cartão com profundidade por trás do texto */
-.chegada-texto::before {
-  content: "";
-  position: absolute;
-  inset: calc(var(--s5) * -1);
-  background:
-    linear-gradient(
-      135deg,
-      rgba(0, 0, 0, 0.6) 0%,
-      rgba(0, 0, 0, 0.4) 100%
-    );
-  backdrop-filter: blur(12px);
-  border-radius: var(--r3);
-  border: 1px solid rgba(var(--text-rgb), 0.08);
-  z-index: -1;
-  box-shadow:
-    inset 0 1px 0 rgba(var(--text-rgb), 0.04),
-    0 8px 24px rgba(var(--bg-rgb), 0.5);
-}
 
 .chegada-titulo {
   margin: 0;
 
   /* O maior tamanho do produto inteiro, usado uma vez só. Guardar o extremo
      da escala para um momento único é o que faz ele significar alguma coisa. */
+  font-family: var(--font-display);
   font-size: var(--t-huge);
-  font-weight: 300;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: -0.05em;
   color: var(--text);
 }
 
@@ -4420,12 +4398,12 @@ body.janela-cheia {
 .placa[data-marca="intel"]  { --marca: #0071c5; }
 .placa[data-marca="desconhecida"] { --marca: var(--hairline-strong); }
 
-.placa-tras     { fill: #000; opacity: 0.55; }
-.placa-pcb      { fill: #0d0d0d; stroke: var(--hairline); stroke-width: 1; }
-.placa-carenagem{ fill: #151515; stroke: var(--hairline); stroke-width: 1; }
-.placa-chapa    { fill: #1c1c1c; stroke: var(--hairline); stroke-width: 1; }
-.placa-saidas rect { fill: #000; stroke: var(--hairline-strong); stroke-width: 1; }
-.placa-pinos rect  { fill: #b8952f; }
+.placa-tras     { fill: #0a0a0a; opacity: 0.06; }
+.placa-pcb      { fill: #f3f3f1; stroke: var(--hairline); stroke-width: 1; }
+.placa-carenagem{ fill: #f0f0ee; stroke: var(--hairline); stroke-width: 1; }
+.placa-chapa    { fill: #e5e5e3; stroke: var(--hairline); stroke-width: 1; }
+.placa-saidas rect { fill: #e9e9e7; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-pinos rect  { fill: #cfcbc0; }
 
 .placa-aletas path {
   stroke: var(--hairline-strong);
@@ -4437,7 +4415,7 @@ body.janela-cheia {
    viva" sem custar quase nada: uma transformação por elemento, sem repintura de
    layout. */
 .placa-ventilador {
-  fill: #1f1f1f;
+  fill: #e3e3e1;
   stroke: var(--hairline);
   stroke-width: 1;
   transform-origin: center;
@@ -4447,20 +4425,20 @@ body.janela-cheia {
    ventilador. É esse par que dá a impressão de profundidade — sem ele, o
    ventilador fica colado na superfície como um adesivo. */
 .placa-aro {
-  fill: #090909;
+  fill: #eeeeec;
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .placa-aro-interno {
-  fill: #050505;
+  fill: #ebebe9;
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .placa-pas path {
   fill: none;
-  stroke: #303030;
+  stroke: #c4c4c1;
   stroke-width: 6;
   stroke-linecap: round;
 }
@@ -4473,13 +4451,13 @@ body.janela-cheia {
 
 .placa-parafuso circle,
 circle.placa-parafuso {
-  fill: #050505;
+  fill: #ebebe9;
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
 
 .placa-furos circle {
-  fill: #000;
+  fill: #e9e9e7;
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
@@ -4506,7 +4484,7 @@ circle.placa-parafuso {
   opacity: 0.85;
 }
 
-.placa-energia rect { fill: #101010; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-energia rect { fill: #efefed; stroke: var(--hairline-strong); stroke-width: 1; }
 .placa-energia path { stroke: var(--hairline-strong); stroke-width: 1; }
 
 .placa-marca {
@@ -4581,7 +4559,7 @@ circle.placa-parafuso {
 }
 
 .memoria-placa {
-  fill: #070707;
+  fill: #f1f1ef;
   stroke: var(--hairline);
   stroke-width: 1;
 }
@@ -4595,32 +4573,32 @@ circle.placa-parafuso {
 
 /* O encaixe vazio: só o contorno e as travas das pontas. */
 .memoria-slot-vazio {
-  fill: #0b0b0b;
+  fill: #f0f0ee;
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-trava {
-  fill: #1a1a1a;
+  fill: #e8e8e6;
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 /* O pente encaixado. */
 .memoria-pente {
-  fill: #161616;
+  fill: #ededeb;
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-chip {
-  fill: #060606;
+  fill: #ececea;
   stroke: var(--hairline);
   stroke-width: 0.8;
 }
 
 .memoria-contato {
-  fill: #b8952f;
+  fill: #cfcbc0;
 }
 
 /* A etiqueta de capacidade em cima do pente. */
@@ -4677,20 +4655,20 @@ circle.placa-parafuso {
 }
 
 .monitor-moldura {
-  fill: #0a0a0a;
+  fill: #efefed;
   stroke: var(--hairline-strong);
   stroke-width: 1.5;
 }
 
 .monitor-tela {
-  fill: #000;
+  fill: #e9e9e7;
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .monitor-pe,
 .monitor-base {
-  fill: #141414;
+  fill: #ebebe9;
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
@@ -5038,7 +5016,7 @@ circle.placa-parafuso {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(0, 0, 0, 0.25));
+  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
   color: var(--text-dim);
   font-size: var(--t-body);
   line-height: 1.6;
