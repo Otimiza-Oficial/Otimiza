@@ -260,19 +260,61 @@
       `capabilities/default.json`. Sem ela o duplo-clique falha calado.
     -->
     <header class="janela" data-tauri-drag-region="deep">
-      <div class="janela-botoes">
-        <button class="janela-botao janela-fechar" id="janela-fechar"
-                type="button" title="Fechar" aria-label="Fechar"></button>
-        <button class="janela-botao janela-minimizar" id="janela-minimizar"
-                type="button" title="Minimizar" aria-label="Minimizar"></button>
-        <button class="janela-botao janela-maximizar" id="janela-maximizar"
-                type="button" title="Maximizar" aria-label="Maximizar"></button>
+      <span class="janela-marca" aria-hidden="true"></span>
+
+      <!--
+        A busca mora no meio da faixa preta. É a mesma paleta do Ctrl K: clicar
+        aqui abre a mesma coisa, então existe um só caminho para achar qualquer
+        ação do programa.
+      -->
+      <button class="busca-topo" id="abrir-comandos-topo">
+        <svg class="busca-topo-icone" aria-hidden="true"><use href="#i-busca" /></svg>
+        <span class="busca-topo-texto">Pesquisar no Otimiza</span>
+        <kbd class="nav-atalho">Ctrl K</kbd>
+      </button>
+
+      <!-- O lado direito da faixa: o que a máquina está fazendo agora, o nível
+           de acesso e os controles da janela. -->
+      <div class="janela-direita">
+        <!--
+          Sinais vitais fixos: seguem visíveis em qualquer aba. Trocar de aba não
+          pode significar perder de vista o que a máquina está fazendo agora.
+        -->
+        <div class="vitals" id="vitals">
+          <div class="vital">
+            <span class="vital-label">CPU</span>
+            <span class="vital-value" id="vital-cpu">—</span>
+            <div class="vital-bar"><i id="vital-cpu-bar"></i></div>
+          </div>
+          <div class="vital">
+            <span class="vital-label">Memória</span>
+            <span class="vital-value" id="vital-ram">—</span>
+            <div class="vital-bar"><i id="vital-ram-bar"></i></div>
+          </div>
+          <div class="vital">
+            <span class="vital-label">Disco</span>
+            <span class="vital-value" id="vital-disk">—</span>
+            <div class="vital-bar"><i id="vital-disk-bar"></i></div>
+          </div>
+        </div>
+
+        <div class="access" id="access-badge" data-level="checking">
+          <span class="access-dot"></span>
+          <span class="access-text">Verificando acesso</span>
+        </div>
+
+        <!-- Os controles ficam à DIREITA: é onde quem usa Windows procura o X.
+             Sem eles não há como fechar o programa: a decoração do Windows está
+             desligada e esta faixa é a única moldura que existe. -->
+        <div class="janela-botoes">
+          <button class="janela-botao janela-minimizar" id="janela-minimizar"
+                  type="button" title="Minimizar" aria-label="Minimizar"></button>
+          <button class="janela-botao janela-maximizar" id="janela-maximizar"
+                  type="button" title="Maximizar" aria-label="Maximizar"></button>
+          <button class="janela-botao janela-fechar" id="janela-fechar"
+                  type="button" title="Fechar" aria-label="Fechar"></button>
+        </div>
       </div>
-
-      <span class="janela-titulo">Otimiza</span>
-
-      <!-- Espelha a largura dos botões, para o título ficar no meio de verdade. -->
-      <div class="janela-espaco" aria-hidden="true"></div>
     </header>
 
     <!--
@@ -319,45 +361,6 @@
     </section>
 
     <div class="console">
-      <header class="topbar">
-        <!--
-          Busca no topo, do jeito que a pessoa espera encontrar. É a mesma
-          paleta do Ctrl K: clicar aqui abre a mesma coisa, então existe um só
-          caminho para achar qualquer ação do programa.
-        -->
-        <button class="busca-topo" id="abrir-comandos-topo">
-          <svg class="busca-topo-icone" aria-hidden="true"><use href="#i-busca" /></svg>
-          <span class="busca-topo-texto">Buscar ação…</span>
-          <kbd class="nav-atalho">Ctrl K</kbd>
-        </button>
-
-        <!--
-          Sinais vitais fixos: seguem visíveis em qualquer aba. Trocar de aba não
-          pode significar perder de vista o que a máquina está fazendo agora.
-        -->
-        <div class="vitals" id="vitals">
-          <div class="vital">
-            <span class="vital-label">CPU</span>
-            <span class="vital-value" id="vital-cpu">—</span>
-            <div class="vital-bar"><i id="vital-cpu-bar"></i></div>
-          </div>
-          <div class="vital">
-            <span class="vital-label">Memória</span>
-            <span class="vital-value" id="vital-ram">—</span>
-            <div class="vital-bar"><i id="vital-ram-bar"></i></div>
-          </div>
-          <div class="vital">
-            <span class="vital-label">Disco</span>
-            <span class="vital-value" id="vital-disk">—</span>
-            <div class="vital-bar"><i id="vital-disk-bar"></i></div>
-          </div>
-        </div>
-
-        <div class="access" id="access-badge" data-level="checking">
-          <span class="access-dot"></span>
-          <span class="access-text">Verificando acesso</span>
-        </div>
-      </header>
 
       <!--
         O AVISO QUE NÃO SAI DA TELA

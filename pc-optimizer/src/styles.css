@@ -171,9 +171,9 @@
     de canto reto parece um formulário, não um produto. Três degraus, do
     controle pequeno ao painel.
   */
-  --r1: 8px;
-  --r2: 12px;
-  --r3: 16px;
+  --r1: 6px;
+  --r2: 8px;
+  --r3: 10px;
 
   --dur: 0.18s;
   --dur-slow: 0.45s;
@@ -406,8 +406,8 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding: var(--gap);
-  gap: var(--gap);
+  padding: 0;
+  gap: 0;
   /* Sem isto, em 1920 o console ocupava a tela inteira e os textos do produto
      chegavam a 319 caracteres por linha. A faixa legivel e 45 a 75: o olho
      perde a linha no retorno, e sao justamente esses paragrafos que carregam
@@ -565,7 +565,7 @@ button {
   isolation: isolate;
   border: 1px solid var(--hairline);
   border-radius: var(--r3);
-  padding: var(--s5);
+  padding: var(--s4);
   min-width: 0;
   background: var(--panel);
 
@@ -592,8 +592,8 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: var(--s3);
-  margin: calc(var(--s5) * -1) calc(var(--s5) * -1) var(--s5);
-  padding: var(--s4) var(--s5);
+  margin: calc(var(--s4) * -1) calc(var(--s4) * -1) var(--s4);
+  padding: 10px var(--s4);
   border-bottom: 1px solid var(--hairline);
   border-radius: var(--r3) var(--r3) 0 0;
 }
@@ -604,8 +604,8 @@ button {
    bonito" era essa planicie, nao a falta de enfeite. Agora ha um degrau claro:
    titulo 13px cheio, aba 11px medio, botao 10px discreto. */
 .panel-head h2 {
-  font-family: var(--font-display);
-  font-size: var(--t-value);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -628,17 +628,6 @@ button {
 }
 
 /* ---------------------------------------------------------------------- topo */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  gap: var(--s6);
-  padding: var(--s4) var(--s5);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r3);
-  background: var(--panel);
-  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
-}
 
 .brand {
   display: flex;
@@ -687,12 +676,17 @@ button {
 .access {
   display: flex;
   align-items: center;
-  gap: var(--s2);
-  padding: var(--s2) var(--s3);
-  border: 1px solid var(--hairline-strong);
-  font-size: var(--t-micro);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--r1);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -1238,12 +1232,13 @@ button {
   grid-template-columns: 8px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s3);
+  min-height: 38px;
   padding: var(--s2) var(--s3);
-  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .opt-row:hover {
-  background: var(--panel-raised);
+  background: #f9f9f8;
 }
 
 .optimization[data-state="Applied"] .opt-row {
@@ -1329,12 +1324,19 @@ button {
 }
 
 .chip {
-  font-size: var(--t-micro);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 2px var(--s2);
-  border: 1px solid var(--hairline-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: none;
+  border-radius: 5px;
+  background: #f1f1f0;
   color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .chip[data-warn="true"] {
@@ -1583,16 +1585,6 @@ button {
 }
 
 @media (max-width: 900px) {
-  .topbar {
-    flex-wrap: wrap;
-    gap: var(--s4);
-  }
-
-  .vitals {
-    order: 3;
-    width: 100%;
-  }
-
   .hero {
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
@@ -1603,7 +1595,7 @@ button {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
   }
@@ -2005,10 +1997,50 @@ button {
   2. Ficavam centralizados, flutuando num vão entre a busca e o selo de acesso.
      Instrumento se lê na borda, ancorado, não no meio do nada.
 */
+/* DENTRO DA FAIXA, CADA SINAL É UMA LINHA SÓ.
+
+   Fora dela o vital é um bloco de três andares — rótulo, número e barra —, e
+   três andares não cabem numa barra de 34px: eles transbordavam por baixo e o
+   selo de acesso ficava cortado. Aqui o rótulo e o número andam lado a lado, e
+   a barrinha sai: quem quer a leitura contínua tem o medidor do Painel. */
 .vitals {
   display: flex;
-  gap: var(--s5);
-  margin-left: auto;
+  align-items: center;
+  gap: var(--s4);
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.janela .vital {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+}
+
+.janela .vital-bar {
+  display: none;
+}
+
+.vitals .vital-label {
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.vitals .vital-value {
+  font-size: var(--t-label);
+  color: #ffffff;
+}
+
+.vitals .vital-bar {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.vitals .vital-bar i {
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .vital {
@@ -2568,10 +2600,25 @@ button {
 
 .corpo {
   display: grid;
-  grid-template-columns: 208px minmax(0, 1fr);
-  gap: var(--gap);
+  grid-template-columns: 212px minmax(0, 1fr);
+  gap: 0;
   flex: 1;
   min-height: 0;
+  background: var(--bg);
+}
+
+/* O conteúdo respira por dentro, e não por uma margem em volta da janela. */
+.stage,
+.secao-cabecalho {
+  padding-inline: var(--s4);
+}
+
+.secao-cabecalho {
+  padding-top: var(--s4);
+}
+
+.stage {
+  padding-bottom: var(--s5);
 }
 
 .corpo[data-recolhida="true"] {
@@ -2580,16 +2627,17 @@ button {
 
 .lateral {
   position: sticky;
-  top: var(--gap);
+  top: 0;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   padding: var(--s3) var(--s2);
   background: var(--panel);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r3);
-  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
-  align-self: start;
+  border: none;
+  border-right: 1px solid var(--hairline);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .lateral-grupo {
@@ -2610,13 +2658,14 @@ button {
   align-items: center;
   gap: var(--s3);
   width: 100%;
-  padding: var(--s2) var(--s3);
+  height: 31px;
+  padding: 0 var(--s2);
   background: transparent;
   border: none;
   border-radius: var(--r1);
-  color: var(--text-dim);
+  color: #4a4a4a;
   font-family: var(--font-sans);
-  font-size: var(--t-body);
+  font-size: 12.5px;
   font-weight: 500;
   letter-spacing: -0.01em;
   text-align: left;
@@ -2633,9 +2682,9 @@ button {
 /* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
    saber onde está sem ler. */
 .nav[aria-selected="true"] {
-  color: #ffffff;
-  background: var(--accent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  color: var(--text);
+  font-weight: 600;
+  background: #f1f1f0;
 }
 
 /* ==========================================================================
@@ -2691,8 +2740,8 @@ button {
 }
 
 .nav[aria-selected="true"] .tab-badge {
-  background: #ffffff;
-  color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .lateral-rodape {
@@ -2962,7 +3011,6 @@ button {
    legível de uma vez, em vez de ficar espalhada por trinta regras antigas.
    ===================================================================== */
 
-.topbar,
 .lateral,
 .comandos-caixa,
 .statusbar,
@@ -3064,26 +3112,41 @@ button {
 /* ------------------------------------------------------- busca no topo */
 
 .busca-topo {
+  /* CENTRADA NA FAIXA, E NÃO NO QUE SOBRA DELA.
+
+     Com `margin: auto` ela ficava no meio do espaço livre entre a marca e os
+     sinais vitais — ou seja, à esquerda. Posicionada, ela fica no meio da
+     janela mesmo quando o lado direito cresce. */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: var(--s3);
-  min-width: 280px;
-  padding: var(--s3) var(--s4);
-  background: var(--bg);
+  gap: var(--s2);
+  width: min(340px, 34vw);
+  height: 24px;
+  padding: 0 var(--s3);
+  background: rgba(255, 255, 255, 0.07);
   border: none;
   border-radius: var(--r1);
-  box-shadow: inset 0 0 0 1px rgba(10, 10, 10, 0.09);
-  color: var(--text-muted);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.45);
   font-family: var(--font-sans);
-  font-size: var(--t-body);
+  font-size: var(--t-label);
   cursor: pointer;
-  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 
 .busca-topo:hover {
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(10, 10, 10, 0.16);
-  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.busca-topo .nav-atalho {
+  margin-left: auto;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .busca-topo-texto {
@@ -3125,11 +3188,6 @@ button {
   Densidade alta serve para tabela de números; para texto explicativo — que é
   onde vive o argumento deste produto — ela cansa.
 */
-.topbar {
-  padding: var(--s3) var(--s5);
-  gap: var(--s5);
-}
-
 .panel-head {
   padding-bottom: var(--s3);
   margin-bottom: var(--s4);
@@ -3185,10 +3243,10 @@ button {
    é por ele que o olho entra. */
 .secao-titulo h2 {
   font-family: var(--font-display);
-  font-size: 26px;
+  font-size: 17px;
   font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
   color: var(--text);
 }
 
@@ -4114,17 +4172,37 @@ button {
 .janela {
   position: relative;
   z-index: 70;
+  /* TRÊS COLUNAS, E A DO MEIO É A BUSCA.
+
+     Centrar por `margin: auto` põe a busca no meio do espaço que sobra, e não
+     no meio da janela — foi assim que ela passou por cima dos sinais vitais.
+     Com a grade, o meio é o meio, e os dois lados crescem sem empurrá-la. */
   display: flex;
   align-items: center;
+  gap: var(--s3);
   height: 34px;
-  padding: 0 var(--s4);
+  padding: 0 var(--s2) 0 var(--s3);
   flex: none;
 
-  background: var(--panel);
-  border-bottom: 1px solid var(--hairline);
+  /* A FAIXA É PRETA, E ELA É A MOLDURA DO PRODUTO INTEIRO.
+
+     Antes era branca e carregava só o nome. Agora carrega a marca, a busca e
+     os controles — a mesma barra do painel do site, e uma linha a menos entre
+     o alto da tela e o trabalho. */
+  background: #050505;
+  color: #ffffff;
 
   /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
   user-select: none;
+}
+
+.janela-marca {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  background: #ffffff;
+  -webkit-mask: url(/logo.svg) center / contain no-repeat;
+  mask: url(/logo.svg) center / contain no-repeat;
 }
 
 .janela-botoes {
@@ -4170,9 +4248,9 @@ button {
    trocar toda a sua cor por tinta preta. Continuam três, no mesmo lugar e com
    a mesma área de clique: só perderam o croma. Quem está por baixo do ponteiro
    escurece, e é assim que se sabe qual é qual. */
-.janela-botao { --cor-botao: rgba(10, 10, 10, 0.22); }
+.janela-botao { --cor-botao: rgba(255, 255, 255, 0.3); }
 
-.janela-botao:hover { --cor-botao: var(--accent); }
+.janela-botao:hover { --cor-botao: #ffffff; }
 
 /* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
 
@@ -4206,23 +4284,8 @@ button {
   outline-offset: 2px;
 }
 
-.janela-titulo {
-  flex: 1;
-  text-align: center;
-  font-family: var(--font-sans);
-  font-size: var(--t-label);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
 /* Espelha a largura dos botões, para o título ficar centrado de verdade e não
    deslocado pela fileira da esquerda. */
-.janela-espaco {
-  width: 84px;
-}
-
 /*
   O CANTO ARREDONDADO, E POR QUE ELE SOME MAXIMIZADO.
 
@@ -5024,4 +5087,22 @@ circle.placa-parafuso {
 
 .bloco-de-prosa strong {
   color: var(--text);
+}
+
+/* O lado direito da faixa. Os sinais vitais são companhia, não assunto: em
+   janela estreita eles somem antes do selo de acesso e dos controles, que são
+   o que a pessoa precisa alcançar. */
+.janela-direita {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1180px) {
+  .janela-direita .vitals {
+    display: none;
+  }
 }
