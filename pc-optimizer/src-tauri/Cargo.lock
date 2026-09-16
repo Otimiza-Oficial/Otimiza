@@ -2625,6 +2625,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tokio",
+ "windows 0.61.3",
  "windows-sys 0.59.0",
  "winreg 0.52.0",
 ]

@@ -33,6 +33,7 @@ pub mod frames;
 pub mod motorenergia;
 pub mod motorenergia_maquina;
 pub mod framegen;
+pub mod geracao;
 pub mod gamemode;
 pub mod gpupref;
 pub mod hardware;

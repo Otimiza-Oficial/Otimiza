@@ -174,6 +174,9 @@ pub enum Tecnologia {
     Afmf,
     /// Lossless Scaling. Programa à parte, pago, vendido na Steam.
     LosslessScaling,
+    /// O gerador do próprio Otimiza (`geracao/`). Por fora do jogo, como o
+    /// Lossless Scaling: captura, estima movimento na GPU e apresenta por cima.
+    Otimiza,
 }
 
 /// Onde a geração acontece. Muda o que dá para medir.
@@ -191,7 +194,7 @@ pub fn tipo_de(tecnologia: Tecnologia) -> Tipo {
     match tecnologia {
         Tecnologia::DlssFg | Tecnologia::FsrFg => Tipo::Nativa,
         Tecnologia::SmoothMotion | Tecnologia::Afmf => Tipo::Driver,
-        Tecnologia::LosslessScaling => Tipo::Externa,
+        Tecnologia::LosslessScaling | Tecnologia::Otimiza => Tipo::Externa,
     }
 }
 
@@ -203,6 +206,8 @@ pub enum Disponibilidade {
     DependeDoDriver,
     /// Instalado nesta máquina.
     Instalado,
+    /// Vem dentro do Otimiza.
+    Integrado,
     /// Não foi encontrado na pasta padrão. Pode estar em outra biblioteca.
     NaoEncontrado,
     /// A placa não tem suporte oficial.
@@ -329,6 +334,13 @@ pub fn catalogo(
             tipo: Tipo::Driver,
             disponibilidade: afmf.0,
             multiplicadores: afmf.1,
+            o_jogo_oferece: None,
+        },
+        OpcaoDeGeracao {
+            tecnologia: Tecnologia::Otimiza,
+            tipo: Tipo::Externa,
+            disponibilidade: Disponibilidade::Integrado,
+            multiplicadores: vec![2, 3, 4],
             o_jogo_oferece: None,
         },
         OpcaoDeGeracao {
@@ -1264,14 +1276,20 @@ pub fn medir_rodada(
         format!("Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de medir.", processo)
     })?;
 
-    let externa = tecnologia.map(tipo_de) == Some(Tipo::Externa);
-    let gerador = if externa {
-        Some(frames::encontrar_processo(PROCESSO_LOSSLESS).ok_or_else(|| {
+    let gerador = match tecnologia {
+        Some(Tecnologia::LosslessScaling) => Some(frames::encontrar_processo(PROCESSO_LOSSLESS).ok_or_else(|| {
             "O Lossless Scaling não está aberto. Abra, ligue a geração na janela do jogo e meça de novo."
                 .to_string()
-        })?)
-    } else {
-        None
+        })?),
+        // O gerador do Otimiza apresenta pelo próprio processo do Otimiza.
+        Some(Tecnologia::Otimiza) => {
+            let estado = super::geracao::estado();
+            if estado.situacao != super::geracao::Situacao::Gerando {
+                return Err("O gerador do Otimiza não está ligado. Ligue no painel acima e meça de novo.".to_string());
+            }
+            Some((estado.pid_do_gerador, "otimiza".to_string()))
+        }
+        _ => None,
     };
 
     let amostrador = std::thread::spawn(move || super::bottleneck::analisar(segundos));
@@ -1392,6 +1410,17 @@ mod tests {
         assert_eq!(tipo_de(Tecnologia::SmoothMotion), Tipo::Driver);
         assert_eq!(tipo_de(Tecnologia::Afmf), Tipo::Driver);
         assert_eq!(tipo_de(Tecnologia::LosslessScaling), Tipo::Externa);
+        assert_eq!(tipo_de(Tecnologia::Otimiza), Tipo::Externa);
+    }
+
+    #[test]
+    fn o_gerador_do_otimiza_existe_em_qualquer_placa() {
+        for nome in ["NVIDIA GeForce GTX 1650", "AMD Radeon RX 580", "Intel(R) UHD Graphics 630", ""] {
+            let lista = catalogo(&classificar_placa(nome, None), Some(JogoConhecido::FiveM), None);
+            let o = opcao(&lista, Tecnologia::Otimiza);
+            assert_eq!(o.disponibilidade, Disponibilidade::Integrado);
+            assert_eq!(o.multiplicadores, vec![2, 3, 4]);
+        }
     }
 
     #[test]
@@ -1536,7 +1565,7 @@ mod tests {
 
     #[test]
     fn geracao_nunca_reduz_o_atraso() {
-        for tecnologia in [Tecnologia::DlssFg, Tecnologia::FsrFg, Tecnologia::SmoothMotion, Tecnologia::Afmf, Tecnologia::LosslessScaling] {
+        for tecnologia in [Tecnologia::DlssFg, Tecnologia::FsrFg, Tecnologia::SmoothMotion, Tecnologia::Afmf, Tecnologia::LosslessScaling, Tecnologia::Otimiza] {
             for mult in 2..=4 {
                 let r = montar_rodada(Some(tecnologia), mult, &contagem(60.0, 1000), Some(&contagem(180.0, 3000)), 20.0);
                 let acrescimo = r.latencia.acrescimo_da_geracao_ms.numero().unwrap_or(0.0);

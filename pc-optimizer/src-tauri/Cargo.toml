@@ -95,6 +95,25 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_SystemInformation",
 ] }
 
+# O gerador de quadros do Otimiza fala COM Direct3D 11, DXGI e DirectComposition.
+# Esses são objetos COM, e o `windows` (irmão do `windows-sys`) é quem os
+# embrulha com segurança. Mesma versão que o Tauri já traz: não compila outra.
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D_Fxc",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
+    "Win32_Media",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+
 
 # A ferramenta que EMITE licença vive em `examples/gerar_chave.rs`.
 #

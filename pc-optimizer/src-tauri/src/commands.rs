@@ -1191,6 +1191,41 @@ pub fn framegen_comparar(
     }
 }
 
+/// Comando: liga o gerador de quadros do Otimiza sobre a janela do jogo.
+///
+/// `EXIGEM_LICENCA`: é recurso do produto. Não altera o computador — nada é
+/// gravado, e desligar (ou fechar o Otimiza) some com a sobreposição.
+#[tauri::command]
+pub async fn gerador_ligar(
+    processo: String,
+    multiplicador: u8,
+) -> Result<crate::modules::windows::geracao::Estado, String> {
+    crate::modules::licenca::exigir()?;
+
+    tokio::task::spawn_blocking(move || {
+        crate::modules::windows::geracao::ligar(crate::modules::windows::geracao::Configuracao {
+            processo,
+            multiplicador,
+            visivel_em_captura: false,
+        })
+    })
+    .await
+    .map_err(|e| format!("Falha ao ligar o gerador: {}", e))?
+}
+
+/// Comando: desliga o gerador. `LIVRES`.
+#[tauri::command]
+pub async fn gerador_desligar() -> crate::modules::windows::geracao::Estado {
+    let _ = tokio::task::spawn_blocking(crate::modules::windows::geracao::desligar).await;
+    crate::modules::windows::geracao::estado()
+}
+
+/// Comando: como o gerador está agora. `LIVRES`.
+#[tauri::command]
+pub fn gerador_estado() -> crate::modules::windows::geracao::Estado {
+    crate::modules::windows::geracao::estado()
+}
+
 /// Comando: o modo inteligente. Entre as rodadas ligadas, qual ganhou.
 #[tauri::command]
 pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil, hz: u32) -> Option<usize> {
@@ -3740,6 +3775,8 @@ mod tests {
         "framegen_medir",
         "framegen_comparar",
         "framegen_melhor",
+        "gerador_desligar",
+        "gerador_estado",
         "energia_painel",
         "energia_medir_atual",
         "energia_escolher",
@@ -3791,6 +3828,7 @@ mod tests {
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
+        "gerador_ligar",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",

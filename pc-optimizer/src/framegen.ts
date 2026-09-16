@@ -21,10 +21,10 @@ type Arquitetura =
   | "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior"
   | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior"
   | "IntelArc" | "IntelIntegrada" | "Desconhecida";
-type Tecnologia = "DlssFg" | "FsrFg" | "SmoothMotion" | "Afmf" | "LosslessScaling";
+type Tecnologia = "DlssFg" | "FsrFg" | "SmoothMotion" | "Afmf" | "LosslessScaling" | "Otimiza";
 type Tipo = "Nativa" | "Driver" | "Externa";
 type Disponibilidade =
-  | "DependeDoJogo" | "DependeDoDriver" | "Instalado" | "NaoEncontrado" | "NaoSuportada" | "SemConfirmacao";
+  | "DependeDoJogo" | "DependeDoDriver" | "Instalado" | "Integrado" | "NaoEncontrado" | "NaoSuportada" | "SemConfirmacao";
 type JogoConhecido = "FiveM" | "GtaVEnhanced" | "GtaVLegacy";
 type Base =
   | "MedidoVezesMultiplicador" | "MedidoDivididoPeloMultiplicador" | "IntervaloDoQuadro" | "UmQuadroRetido" | "SemGeracao";
@@ -125,6 +125,26 @@ type ComparacaoDaTela = {
   artefatos: { nota: number; nivel: NivelDeArtefato } | null;
 };
 
+type SituacaoDoGerador = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" | "Erro";
+type EstadoDoGerador = {
+  situacao: SituacaoDoGerador;
+  processo: string;
+  multiplicador: number;
+  area: { x: number; y: number; largura: number; altura: number } | null;
+  fps_reais: number;
+  fps_apresentados: number;
+  contadores: { reais: number; gerados: number; descartados: number; custo_ms: number };
+  erro: string | null;
+};
+
+const SITUACAO_DO_GERADOR: Record<SituacaoDoGerador, { rotulo: string; tom: Tom }> = {
+  Parado: { rotulo: "desligado", tom: "neutro" },
+  ProcurandoJanela: { rotulo: "procurando o jogo…", tom: "aviso" },
+  Gerando: { rotulo: "gerando", tom: "ok" },
+  SemQuadros: { rotulo: "sem quadros do jogo", tom: "aviso" },
+  Erro: { rotulo: "parou", tom: "erro" },
+};
+
 type OptimizationOutcome = { id: string; success: boolean; applied: boolean; message: string };
 
 type Tom = "ok" | "aviso" | "erro" | "neutro";
@@ -137,6 +157,7 @@ const NOME: Record<Tecnologia, string> = {
   SmoothMotion: "NVIDIA Smooth Motion",
   Afmf: "AMD Fluid Motion Frames",
   LosslessScaling: "Lossless Scaling",
+  Otimiza: "Otimiza Frame Gen",
 };
 
 const CURTO: Record<Tecnologia, string> = {
@@ -145,6 +166,7 @@ const CURTO: Record<Tecnologia, string> = {
   SmoothMotion: "Smooth Motion",
   Afmf: "AFMF",
   LosslessScaling: "Lossless Scaling",
+  Otimiza: "Otimiza FG",
 };
 
 const TIPO: Record<Tipo, { rotulo: string; explica: string }> = {
@@ -161,12 +183,14 @@ const ONDE_LIGAR: Record<Tecnologia, string> = {
   Afmf: "No AMD Software: Adrenalin Edition → Jogos → Gráficos → AMD Fluid Motion Frames.",
   LosslessScaling:
     "Abra o Lossless Scaling, escolha LSFG e o multiplicador, deixe o jogo em janela sem bordas e clique em Scale.",
+  Otimiza: "Aqui mesmo, no painel \"Gerador do Otimiza\" logo abaixo. Deixe o jogo em janela sem bordas.",
 };
 
 const DISPONIBILIDADE: Record<Disponibilidade, { texto: string; tom: Tom }> = {
   DependeDoJogo: { texto: "a placa suporta — depende do jogo trazer", tom: "ok" },
   DependeDoDriver: { texto: "a placa suporta — depende da versão do driver", tom: "ok" },
   Instalado: { texto: "instalado nesta máquina", tom: "ok" },
+  Integrado: { texto: "vem no Otimiza — sem instalar nada", tom: "ok" },
   NaoEncontrado: { texto: "não achei na pasta padrão da Steam", tom: "neutro" },
   NaoSuportada: { texto: "sem suporte nesta placa", tom: "erro" },
   SemConfirmacao: { texto: "pode funcionar — o fabricante não garante nesta placa", tom: "aviso" },
@@ -358,7 +382,87 @@ const estado = {
   aviso_limite: "",
   /** Segunda medição da base desligada, para conferir se a cena se repete. */
   conferencia: null as Rodada | null,
+  gerador: null as EstadoDoGerador | null,
+  geradorMultiplicador: 2,
 };
+
+let vigiaDoGerador: number | undefined;
+
+async function atualizarGerador() {
+  try {
+    estado.gerador = await invoke<EstadoDoGerador>("gerador_estado");
+  } catch {
+    return;
+  }
+  const painelDoGerador = document.getElementById("fg-gerador");
+  if (painelDoGerador) painelDoGerador.outerHTML = desenharGerador();
+  const ativo = estado.gerador.situacao === "Gerando" || estado.gerador.situacao === "ProcurandoJanela" || estado.gerador.situacao === "SemQuadros";
+  if (ativo && vigiaDoGerador === undefined) {
+    vigiaDoGerador = window.setInterval(() => void atualizarGerador(), 1000);
+  } else if (!ativo && vigiaDoGerador !== undefined) {
+    window.clearInterval(vigiaDoGerador);
+    vigiaDoGerador = undefined;
+  }
+}
+
+async function ligarGerador() {
+  try {
+    estado.gerador = await invoke<EstadoDoGerador>("gerador_ligar", {
+      processo: estado.processo,
+      multiplicador: estado.geradorMultiplicador,
+    });
+    estado.escolha = { tecnologia: "Otimiza", multiplicador: estado.geradorMultiplicador };
+  } catch (e) {
+    estado.erro = String(e);
+  }
+  desenhar();
+  await atualizarGerador();
+}
+
+async function desligarGerador() {
+  estado.gerador = await invoke<EstadoDoGerador>("gerador_desligar").catch(() => estado.gerador);
+  desenhar();
+  await atualizarGerador();
+}
+
+function desenharGerador(): string {
+  const g = estado.gerador;
+  const ligado = !!g && (g.situacao === "Gerando" || g.situacao === "ProcurandoJanela" || g.situacao === "SemQuadros");
+  const sit = SITUACAO_DO_GERADOR[g?.situacao ?? "Parado"];
+  const mults = [2, 3, 4]
+    .map((m) => `<button class="fg-segmento" data-gmult="${m}" aria-pressed="${estado.geradorMultiplicador === m}" ${ligado ? "disabled" : ""}>${m}×</button>`)
+    .join("");
+  const hz = estado.deteccao?.tela?.hz_atual ?? 0;
+  const numeros = ligado && g
+    ? `<div class="fg-numeros">
+        <div><span>Quadros do jogo</span><span class="fg-par"><span class="fg-valor">${num(g.fps_reais)}<small> FPS</small></span></span></div>
+        <div><span>Quadros na tela</span><span class="fg-par"><span class="fg-valor">${num(g.fps_apresentados)}<small> FPS</small></span></span></div>
+        <div><span>Custo na placa</span><span class="fg-par"><span class="fg-valor">${num(g.contadores.custo_ms, 1)}<small> ms</small></span></span></div>
+      </div>
+      <p class="fg-nota">Contagem do próprio gerador. Para medir com o canal de eventos do Windows e comparar com a geração desligada, use "Medir ligado" com Otimiza FG no passo 2.${
+        hz && g.fps_apresentados > hz * 1.02 ? ` A tela recebe mais que ${hz} Hz: use um multiplicador menor ou limite o FPS do jogo.` : ""
+      }</p>`
+    : "";
+
+  return `<section class="panel fg-painel" id="fg-gerador">
+    <div class="panel-head"><h2>Gerador do Otimiza</h2><span class="panel-tag">${chip(sit.rotulo, sit.tom)}</span></div>
+    <p class="fg-lead">A geração de quadros do próprio Otimiza, sem instalar nada. Ela captura a janela do jogo, estima o movimento na placa de vídeo e mostra os quadros intermediários por cima — <strong>sem encostar no processo do jogo</strong>, do mesmo jeito que o Lossless Scaling.</p>
+    <ul class="fg-passos">
+      <li>O jogo precisa estar em <strong>janela sem bordas</strong> (tela cheia exclusiva não pode ser capturada).</li>
+      <li>Aumenta os quadros <strong>na tela</strong>. O jogo continua desenhando os mesmos; o controle fica um pouco mais atrasado.</li>
+      <li><strong>Ctrl+Alt+G</strong> desliga de qualquer lugar, inclusive de dentro do jogo.</li>
+    </ul>
+    <div class="fg-linha">
+      <div class="fg-campo">Multiplicador <div class="fg-segmentos">${mults}</div></div>
+      ${ligado
+        ? `<button class="btn" data-acao="gerador-desligar">Desligar o gerador</button>`
+        : `<button class="btn btn-primary" data-acao="gerador-ligar" ${estado.processo ? "" : "disabled"}>Ligar em ${esc(estado.processo || "…")}</button>`}
+    </div>
+    ${numeros}
+    ${g?.situacao === "SemQuadros" ? `<p class="fg-nota" data-tom="aviso">O jogo está aberto, mas nenhum quadro novo chega à captura. Ele está em tela cheia exclusiva, minimizado ou numa tela parada.</p>` : ""}
+    ${g?.situacao === "Erro" && g.erro ? `<p class="fg-nota" data-tom="erro">${esc(g.erro)}</p>` : ""}
+  </section>`;
+}
 
 type Sessao = { quando: number; tecnologia: Tecnologia; multiplicador: number; perfil: Perfil; decisao: Decisao; pontos: number; confianca: number };
 const CHAVE_HISTORICO = "otimiza.framegen.historico";
@@ -1004,6 +1108,7 @@ function desenhar() {
     estado.erro ? `<div class="fg-erro" role="alert">${esc(estado.erro)}</div>` : "",
     desenharPrincipio(),
     desenharDeteccao(),
+    desenharGerador(),
     desenharPerfil(),
     desenharPassoDesligado(),
     desenharPassoLigado(),
@@ -1037,6 +1142,14 @@ function ligarEventos() {
       await desfazerLimite("Limite desfeito. O driver voltou ao valor que tinha antes.");
     } else if (acao === "conferir-limite") {
       await conferirLimite();
+    } else if (acao === "gerador-ligar") {
+      alvo.disabled = true;
+      await ligarGerador();
+    } else if (acao === "gerador-desligar") {
+      await desligarGerador();
+    } else if (alvo.dataset.gmult) {
+      estado.geradorMultiplicador = Number(alvo.dataset.gmult);
+      desenhar();
     } else if (acao === "conferir-cena") {
       await conferirCena();
     } else if (acao === "ir-energia") {
@@ -1093,4 +1206,5 @@ export async function carregarLaboratorioDeGeracao(opcoes: { pedirAdmin: (motivo
   }
   desenhar();
   await detectar();
+  await atualizarGerador();
 }
