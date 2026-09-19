@@ -23,6 +23,7 @@ pub mod regressao;
 pub mod optimizer;
 pub mod preferences;
 pub mod prova;
+pub mod repeticoes;
 pub mod report;
 pub mod safety;
 pub mod transacao;

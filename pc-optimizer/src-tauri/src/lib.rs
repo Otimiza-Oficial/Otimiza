@@ -91,6 +91,9 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::capturar_baseline,
             #[cfg(target_os = "windows")]
+            commands::capturar_baseline_repetido,
+            commands::protocolo_do_perfil,
+            #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
             #[cfg(target_os = "windows")]

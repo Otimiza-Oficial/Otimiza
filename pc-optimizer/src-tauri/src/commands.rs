@@ -163,6 +163,109 @@ pub async fn capturar_baseline(
     Ok(retrato)
 }
 
+/// Comando: como este perfil vai ser medido, e quanto tempo vai levar.
+///
+/// A tela chama isto ANTES de `capturar_baseline_repetido`. Um benchmark que
+/// prende a máquina por mais de um minuto sem avisar é um benchmark que o
+/// cliente cancela no meio — e um que descarta a primeira repetição sem dizer
+/// está a um passo de descartar a que não convém.
+#[tauri::command]
+pub fn protocolo_do_perfil(perfil: crate::modules::baseline::Perfil) -> ProtocoloNaTela {
+    let p = crate::modules::repeticoes::protocolo(perfil);
+
+    ProtocoloNaTela {
+        // Contas feitas AQUI e não na tela: `execucoes` inclui a repetição
+        // descartada e `duracao` depende dela. Duas versões da mesma conta
+        // acabam discordando, e a que o cliente lê seria a errada.
+        execucoes: p.execucoes(),
+        duracao_estimada_s: p.duracao_estimada_s(),
+        protocolo: p,
+    }
+}
+
+/// O protocolo com as contas prontas.
+#[derive(Debug, Serialize)]
+pub struct ProtocoloNaTela {
+    pub protocolo: crate::modules::repeticoes::Protocolo,
+    /// Quantas repetições serão EXECUTADAS, incluindo a descartada.
+    pub execucoes: usize,
+    pub duracao_estimada_s: u64,
+}
+
+/// Comando: guardar o retrato de ANTES medindo várias vezes.
+///
+/// A diferença para `capturar_baseline` é a incerteza. Uma coleta só entrega
+/// um número; várias entregam o número E o quanto ele balança nesta máquina.
+/// Com isso, "esta diferença é ganho ou é ruído?" deixa de ser respondida por
+/// um limiar de 3% que vale para toda máquina e passa a ser respondida pelas
+/// medições — ver `repeticoes.rs`.
+///
+/// O protocolo (quantas repetições, quanto tempo, se descarta a primeira) sai
+/// do perfil de carga, e a duração estimada volta no relatório para a tela
+/// poder avisar antes de começar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capturar_baseline_repetido(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Baseline, String> {
+    use crate::modules::{baseline, repeticoes};
+    use std::collections::BTreeMap;
+
+    let protocolo = repeticoes::protocolo(perfil);
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let mut series: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut ultima = None;
+
+    for volta in 0..protocolo.execucoes() {
+        let metricas = {
+            let mut monitor = state.monitor.lock().await;
+            monitor.collect_metrics().await?
+        };
+
+        // A primeira roda com cache frio e o Windows ainda se acomodando. Ela
+        // é sistematicamente pior que as outras, e entra no relatório como
+        // descartada em vez de sumir em silêncio.
+        let aquecimento = protocolo.descarta_primeira && volta == 0;
+
+        if !aquecimento {
+            for (id, m) in &metricas.telemetry.metrics {
+                if let Some(v) = m.value {
+                    series.entry(id.clone()).or_default().push(v);
+                }
+            }
+        }
+
+        ultima = Some(metricas);
+
+        if volta + 1 < protocolo.execucoes() {
+            tokio::time::sleep(std::time::Duration::from_secs(
+                protocolo.segundos_por_repeticao,
+            ))
+            .await;
+        }
+    }
+
+    let metricas = ultima.ok_or("nenhuma repetição foi executada")?;
+
+    let incerteza: Vec<repeticoes::Resumo> = series
+        .iter()
+        .filter_map(|(id, amostras)| repeticoes::resumir(id, amostras))
+        .collect();
+
+    let retrato = baseline::Baseline::novo(
+        crate::modules::changelog::now_timestamp(),
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    )
+    .com_incerteza(incerteza);
+
+    baseline::guardar(retrato.clone())?;
+    Ok(retrato)
+}
+
 /// Comando: comparar o retrato guardado com a máquina de agora.
 ///
 /// Devolve `Err` com a explicação quando a comparação não pode ser feita —
@@ -3902,6 +4005,8 @@ mod tests {
         "get_platform_info",
         "get_performance_metrics",
         "capturar_baseline",
+        "capturar_baseline_repetido",
+        "protocolo_do_perfil",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

@@ -171,6 +171,13 @@ pub struct Baseline {
     /// A telemetria inteira, com qualidade e idade por métrica. É daqui que
     /// sai a decisão sobre o que pode ou não ser comparado.
     pub telemetria: Telemetry,
+    /// A incerteza de cada métrica, quando o retrato veio de repetições.
+    ///
+    /// Vazio num retrato de uma coleta só — que continua valendo, só não
+    /// permite dizer se uma diferença é maior que o ruído DESTA máquina. Ver
+    /// `repeticoes.rs`.
+    #[serde(default)]
+    pub incerteza: Vec<super::repeticoes::Resumo>,
 }
 
 impl Baseline {
@@ -186,7 +193,18 @@ impl Baseline {
             perfil,
             identidade,
             telemetria,
+            incerteza: Vec::new(),
         }
+    }
+
+    /// O mesmo retrato, com a incerteza medida por repetições.
+    pub fn com_incerteza(mut self, incerteza: Vec<super::repeticoes::Resumo>) -> Self {
+        self.incerteza = incerteza;
+        self
+    }
+
+    fn incerteza_de(&self, id: &str) -> Option<&super::repeticoes::Resumo> {
+        self.incerteza.iter().find(|r| r.id == id)
     }
 }
 
@@ -244,6 +262,26 @@ pub struct Delta {
     pub ressalva: Option<String>,
     /// A variação passou do ruído de medição.
     pub acima_do_ruido: bool,
+    /// De onde saiu o julgamento do ruído.
+    ///
+    /// Existe porque as duas respostas têm peso diferente e a tela precisa
+    /// poder dizer qual é qual: um ganho aprovado pelo limiar fixo é um
+    /// palpite calibrado, e um aprovado pelos intervalos é uma medição.
+    pub criterio: Criterio,
+}
+
+/// Como o "isto é ganho ou é ruído?" foi decidido.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Criterio {
+    /// Os dois retratos vieram de repetições e os intervalos foram comparados.
+    ///
+    /// É a resposta forte: o ruído é o DESTA máquina, nesta métrica, hoje.
+    Intervalos { folga: Option<f64> },
+    /// Um dos lados não tem repetições que bastem. Vale o limiar de 3%.
+    ///
+    /// É um palpite bem calibrado sobre toda máquina e toda métrica — melhor
+    /// que nada, e pior que medir.
+    LimiarFixo,
 }
 
 /// Uma métrica que existia em um dos lados e não no outro.
@@ -325,6 +363,32 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
         let ressalva = ressalva_da_comparacao(a, d);
         let variacao_pct = (va != 0.0).then(|| (vd - va) / va.abs() * 100.0);
 
+        // O RUÍDO MEDIDO GANHA DO RUÍDO SUPOSTO.
+        //
+        // Com repetições dos dois lados, a pergunta deixa de ser "a diferença
+        // é maior que 3%?" e passa a ser "estas medições conseguem distinguir
+        // os dois?" — que é a pergunta certa. O limiar fixo continua como
+        // resposta para quem mediu uma vez só.
+        let (acima_do_ruido, criterio) = match (antes.incerteza_de(id), depois.incerteza_de(id)) {
+            (Some(ia), Some(id_)) => match super::repeticoes::comparar(ia, id_) {
+                super::repeticoes::Diferenca::Real { folga, .. } => {
+                    (true, Criterio::Intervalos { folga: Some(folga) })
+                }
+                super::repeticoes::Diferenca::Indistinguivel { .. } => {
+                    (false, Criterio::Intervalos { folga: None })
+                }
+                // Resumo sem repetições que bastem: cai no limiar.
+                super::repeticoes::Diferenca::SemRepeticoes { .. } => (
+                    variacao_pct.is_some_and(|p| p.abs() >= RUIDO_PCT),
+                    Criterio::LimiarFixo,
+                ),
+            },
+            _ => (
+                variacao_pct.is_some_and(|p| p.abs() >= RUIDO_PCT),
+                Criterio::LimiarFixo,
+            ),
+        };
+
         deltas.push(Delta {
             id: id.clone(),
             antes: va,
@@ -332,7 +396,8 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
             variacao_pct,
             firme: ressalva.is_none(),
             ressalva,
-            acima_do_ruido: variacao_pct.is_some_and(|p| p.abs() >= RUIDO_PCT),
+            acima_do_ruido,
+            criterio,
         });
     }
 
@@ -541,14 +606,26 @@ mod tests {
         }
     }
 
+    /// A unidade tem de bater com a do catálogo: o contrato recusa gravação
+    /// com unidade divergente, e um teste que ignorasse isso mediria outra
+    /// coisa — foi assim que dois testes deste módulo falharam ao nascer.
+    fn unidade(id: &str) -> Unit {
+        if id.starts_with("fps.") {
+            Unit::Fps
+        } else {
+            Unit::Percent
+        }
+    }
+
     fn retrato(perfil: Perfil, pares: &[(&str, f64, Quality)]) -> Baseline {
         let mut t = Telemetry::new(0, None);
 
         for (id, valor, qualidade) in pares {
+            let u = unidade(id);
             let m = match qualidade {
-                Quality::Measured => Metric::measured(*valor, Unit::Percent, "teste"),
-                Quality::Estimated => Metric::estimated(*valor, Unit::Percent, "teste", "derivado"),
-                Quality::Unknown => Metric::unknown(Unit::Percent, "sem provedor"),
+                Quality::Measured => Metric::measured(*valor, u, "teste"),
+                Quality::Estimated => Metric::estimated(*valor, u, "teste", "derivado"),
+                Quality::Unknown => Metric::unknown(u, "sem provedor"),
             };
             t.set(id, m);
         }
@@ -691,6 +768,79 @@ mod tests {
         // `com_idade` já rebaixa para estimativa, então a ressalva cita as duas
         // coisas. O que importa é que a comparação não passa por firme.
         assert!(delta.ressalva.is_some());
+    }
+
+    #[test]
+    fn com_repeticoes_o_ruido_medido_ganha_do_suposto() {
+        use crate::modules::repeticoes::resumir;
+
+        // 84 → 87 é 3,57%: o limiar fixo de 3% aprovaria. Mas as repetições
+        // desta máquina mostram dispersão larga, e os intervalos se tocam.
+        let antes = retrato(
+            Perfil::Jogo,
+            &[("cpu.usage.overall", 84.0, Quality::Measured)],
+        )
+        .com_incerteza(vec![
+            resumir("cpu.usage.overall", &[78.0, 84.0, 90.0]).expect("três")
+        ]);
+        let depois = retrato(
+            Perfil::Jogo,
+            &[("cpu.usage.overall", 87.0, Quality::Measured)],
+        )
+        .com_incerteza(vec![
+            resumir("cpu.usage.overall", &[81.0, 87.0, 93.0]).expect("três")
+        ]);
+
+        let c = comparar(&antes, &depois).expect("comparável");
+        let d = &c.deltas[0];
+
+        assert!(
+            (d.variacao_pct.unwrap() - 3.57).abs() < 0.01,
+            "a variação continua sendo 3,57%"
+        );
+        assert!(!d.acima_do_ruido, "mas as medições não distinguem os dois");
+        assert!(matches!(d.criterio, Criterio::Intervalos { folga: None }));
+    }
+
+    #[test]
+    fn com_repeticoes_apertadas_um_ganho_pequeno_e_real() {
+        use crate::modules::repeticoes::resumir;
+
+        // 2% — abaixo do limiar fixo, que o descartaria. Com a máquina
+        // medindo apertado, ele é real.
+        let antes = retrato(Perfil::Jogo, &[("fps.average", 100.0, Quality::Measured)])
+            .com_incerteza(vec![
+                resumir("fps.average", &[100.0, 100.1, 99.9, 100.0]).expect("quatro")
+            ]);
+        let depois = retrato(Perfil::Jogo, &[("fps.average", 102.0, Quality::Measured)])
+            .com_incerteza(vec![
+                resumir("fps.average", &[102.0, 102.1, 101.9, 102.0]).expect("quatro")
+            ]);
+
+        let c = comparar(&antes, &depois).expect("comparável");
+        let d = &c.deltas[0];
+
+        assert_eq!(d.variacao_pct, Some(2.0));
+        assert!(
+            d.acima_do_ruido,
+            "o limiar fixo teria descartado este ganho"
+        );
+        assert!(matches!(
+            d.criterio,
+            Criterio::Intervalos { folga: Some(_) }
+        ));
+    }
+
+    #[test]
+    fn sem_repeticoes_o_criterio_diz_que_e_limiar_fixo() {
+        // A tela precisa poder separar um ganho medido de um ganho aprovado
+        // por palpite calibrado.
+        let antes = retrato(Perfil::Jogo, &[("fps.average", 100.0, Quality::Measured)]);
+        let depois = retrato(Perfil::Jogo, &[("fps.average", 110.0, Quality::Measured)]);
+
+        let c = comparar(&antes, &depois).expect("comparável");
+        assert!(c.deltas[0].acima_do_ruido);
+        assert_eq!(c.deltas[0].criterio, Criterio::LimiarFixo);
     }
 
     #[test]
