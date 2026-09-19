@@ -92,6 +92,8 @@ pub fn run() {
             commands::capturar_baseline,
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
+            commands::recuperacao_pendente,
+            commands::descartar_pendencia,
             commands::start_monitoring,
             commands::stop_monitoring,
             commands::measure_baseline,

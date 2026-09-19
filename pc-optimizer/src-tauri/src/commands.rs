@@ -204,6 +204,43 @@ pub async fn comparar_com_baseline(
     baseline::comparar(&antes, &agora).map_err(|recusa| recusa.explicacao())
 }
 
+/// Comando: há uma operação que ficou pela metade?
+///
+/// A tela chama isto na abertura. `None` é o caso normal. Um `Some` significa
+/// que o Otimiza foi interrompido no meio de aplicar ou desfazer algo — e o
+/// que vem junto são os valores anteriores, que é o que permite terminar o
+/// serviço.
+///
+/// O produto NÃO conserta sozinho. Completar uma reversão sem perguntar é
+/// decidir pelo cliente sobre a máquina dele, com base num arquivo que já
+/// provou que algo deu errado.
+#[tauri::command]
+pub fn recuperacao_pendente() -> Result<Option<PendenciaNaTela>, String> {
+    Ok(crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
+        // A frase é montada AQUI e não na tela: quem sabe o que "aplicar" e
+        // "desfazer" significam neste produto é este lado, e duas versões da
+        // mesma explicação acabam discordando.
+        explicacao: p.explicacao(),
+        pendencia: p,
+    }))
+}
+
+/// A pendência com a frase pronta.
+#[derive(Debug, Serialize)]
+pub struct PendenciaNaTela {
+    pub pendencia: crate::modules::transacao::Pendencia,
+    pub explicacao: String,
+}
+
+/// Comando: descartar a pendência sem completar nada.
+///
+/// O cliente olhou o que ficou pela metade e decidiu deixar como está. O nome
+/// não disfarça o que a função faz: não "resolver", DESCARTAR.
+#[tauri::command]
+pub fn descartar_pendencia() -> Result<(), String> {
+    crate::modules::transacao::descartar()
+}
+
 /// Comando: Iniciar monitoramento contínuo
 #[tauri::command]
 pub async fn start_monitoring(state: State<'_, AppState>) -> Result<String, String> {
@@ -3847,6 +3884,8 @@ mod tests {
         "get_platform_info",
         "get_performance_metrics",
         "capturar_baseline",
+        "recuperacao_pendente",
+        "descartar_pendencia",
         "comparar_com_baseline",
         "start_monitoring",
         "stop_monitoring",

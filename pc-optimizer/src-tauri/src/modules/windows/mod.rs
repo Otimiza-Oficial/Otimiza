@@ -714,12 +714,35 @@ impl WindowsOptimizer {
         let changes_count = entry.changes.len();
         let described: Vec<String> = entry.changes.iter().map(|change| change.describe()).collect();
 
+        // O DIÁRIO, ABERTO ANTES DE TOCAR NO SISTEMA.
+        //
+        // `log.take` acima já removeu o registro do histórico E GRAVOU EM
+        // DISCO. Daqui até o fim desta função, o valor anterior de cada
+        // mudança só existe na memória deste processo: morrer agora deixa a
+        // mudança aplicada e o número original perdido para sempre.
+        //
+        // O `if let Err` abaixo cobre a reversão FALHAR. Ele não cobre o
+        // processo ser morto, e não há `catch` para a tomada sendo puxada.
+        // O diário cobre.
+        let diario = crate::modules::transacao::abrir(&crate::modules::transacao::Pendencia::nova(
+            id,
+            &name,
+            crate::modules::transacao::Intencao::Reverter,
+            crate::modules::changelog::now_timestamp(),
+            entry.changes.clone(),
+        ))?;
+
         if let Err(errors) = revert_changes(&entry.changes) {
             // A reversão falhou: o registro volta ao histórico para que o usuário
             // possa tentar de novo em vez de perder o estado original.
             log.record(entry)?;
+            // Falha TRATADA fecha o diário: o estado original está de volta no
+            // histórico, que é onde ele deve estar.
+            diario.concluir()?;
             return Err(format!("Falha ao reverter `{}`: {}", name, errors.join("; ")));
         }
+
+        diario.concluir()?;
 
         Ok(OptimizationOutcome {
             id: id.to_string(),

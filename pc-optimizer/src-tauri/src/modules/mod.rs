@@ -25,6 +25,7 @@ pub mod preferences;
 pub mod prova;
 pub mod report;
 pub mod safety;
+pub mod transacao;
 pub mod monitor;
 pub mod gargalo;
 pub mod telemetry;
