@@ -74,6 +74,26 @@ pub struct MedicaoAutomatica {
     /// Nenhum dos dois números sozinho sustenta essa frase.
     #[serde(default)]
     pub gpu_uso_pct: Option<f64>,
+
+    // --- O INSTANTE DE CADA TRANCO, CRUZADO COM O DISCO ---
+    //
+    // Shader compilando e asset chegando do disco produzem o mesmo buraco no
+    // frametime. A distribuição não os separa — ela diz que houve buraco e
+    // quanto doeu, não o que a máquina estava fazendo naquele instante.
+    //
+    // Estes dois campos guardam o resultado do cruzamento, e não a série: a
+    // série são milhares de carimbos que não cabem num histórico de sessenta
+    // medições, e o que a decisão precisa é da proporção.
+    //
+    /// Proporção dos trancos que aconteceram com o disco ocupado, em %.
+    #[serde(default)]
+    pub trancos_com_disco_pct: Option<f64>,
+    /// Quantos trancos entraram nessa conta.
+    ///
+    /// Sem isto, "100% dos trancos com o disco ocupado" esconde que o total
+    /// era dois. Proporção sem denominador é meia informação.
+    #[serde(default)]
+    pub trancos_medidos: Option<usize>,
 }
 
 /// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
@@ -233,6 +253,8 @@ mod tests {
             frametime_p99_ms: Some(31.0),
             cpu_uso_pct: Some(48.0),
             gpu_uso_pct: Some(72.0),
+            trancos_com_disco_pct: Some(20.0),
+            trancos_medidos: Some(15),
         }
     }
 

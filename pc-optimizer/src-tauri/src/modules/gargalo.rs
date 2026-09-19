@@ -72,6 +72,13 @@ pub const MEMORIA_APERTADA: f64 = 90.0;
 /// mandaria o cliente caçar um problema que ele não sente.
 pub const ENGASGOS_POR_MINUTO: f64 = 6.0;
 
+/// A partir de que proporção o disco deixa de ser coincidência.
+///
+/// Sessenta por cento: a maioria clara dos trancos caindo junto com atividade
+/// de disco. Abaixo disso é ruído — numa partida qualquer o disco trabalha de
+/// vez em quando, e algum tranco vai cair por cima sem ter relação nenhuma.
+pub const TRANCOS_COM_DISCO_PCT: f64 = 60.0;
+
 /// Acima desta idade a leitura vira hipótese, nunca causa.
 ///
 /// Cinco segundos é mais que o intervalo do painel: o que passa disso não
@@ -105,6 +112,12 @@ pub enum Classe {
     /// quadros, ou uma espera que nenhum dos dois contadores mostra — e é por
     /// isso que a classe diz onde o limite NÃO está, em vez de nomear a causa.
     ForaDoHardware,
+    /// Os trancos caem quando o disco está ocupado.
+    ///
+    /// O jogo esperando o disco entregar conteúdo. Separado do engasgo genérico
+    /// porque aqui há uma evidência a mais: o INSTANTE de cada tranco bateu com
+    /// atividade de disco, e não com o disco quieto.
+    StreamingDeAssets,
 }
 
 impl Classe {
@@ -363,6 +376,39 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         }),
     }
 
+    // ---- streaming de assets
+    //
+    // A proporção já vem do cruzamento entre o instante de cada tranco e a
+    // atividade de disco na mesma janela (`frames::trancos_com_disco`). Aqui
+    // só se lê o resultado e se aplica o corte.
+    //
+    // O CORTE PARA CIMA APONTA; O CORTE PARA BAIXO NÃO APONTA O CONTRÁRIO.
+    // Trancos em sua maioria com o disco ocupado é indício de o jogo estar
+    // esperando o disco. Trancos com o disco quieto descartam o disco — e só
+    // isso: shader compilando, disputa de memória e simulação pesada continuam
+    // todos possíveis, e escolher um deles seria escolher o mais vendável.
+    match leitura(t, "frametime.stutters_with_disk") {
+        Some(l) => {
+            avaliadas += 1;
+            if l.valor >= TRANCOS_COM_DISCO_PCT {
+                achados.push(Achado {
+                    classe: Classe::StreamingDeAssets,
+                    forca: Forca::Hipotese,
+                    evidencia: format!(
+                        "frametime.stutters_with_disk: {:.0}% dos trancos caíram com o \
+                         disco ocupado",
+                        l.valor
+                    ),
+                    idade_ms: l.idade_ms,
+                });
+            }
+        }
+        None => nao_verificado.push(NaoVerificado {
+            classe: "Streaming de assets".to_string(),
+            falta: "exige o instante de cada tranco cruzado com a atividade de disco".to_string(),
+        }),
+    }
+
     // ---- limite fora do hardware
     //
     // Os dois usos são da MESMA janela em que os quadros foram contados, e é
@@ -407,11 +453,7 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         // instante. Sem isso os dois continuam sendo o mesmo sintoma.
         (
             "Engasgo de shader",
-            "exige o instante de cada tranco, não só a distribuição",
-        ),
-        (
-            "Streaming de assets",
-            "exige o instante de cada tranco junto da atividade de disco",
+            "descartar o disco não prova shader: memória e simulação dão o mesmo buraco",
         ),
         (
             "Problema de driver",
@@ -545,7 +587,7 @@ mod tests {
         match id {
             "cpu.throttling.thermal" | "cpu.throttling.power" => Unit::Boolean,
             "frametime.stutters_per_minute" => Unit::Count,
-            "match.cpu_usage" | "match.gpu_usage" => Unit::Percent,
+            "match.cpu_usage" | "match.gpu_usage" | "frametime.stutters_with_disk" => Unit::Percent,
             "display.refresh" => Unit::Hertz,
             "fps.average" | "fps.low_1pct" => Unit::Fps,
             _ => Unit::Percent,
@@ -872,6 +914,57 @@ mod tests {
 
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(faltando.contains(&"Limite fora do hardware"));
+    }
+
+    #[test]
+    fn trancos_colados_no_disco_apontam_streaming() {
+        let mut t = vazia();
+        t.set(
+            "frametime.stutters_with_disk",
+            Metric::estimated(84.0, Unit::Percent, "etw+pdh", "42 trancos").com_idade(240_000),
+        );
+
+        let d = classificar(&t.finish(0));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::StreamingDeAssets)
+            .expect("streaming de assets");
+
+        assert_eq!(achado.forca, Forca::Hipotese, "coincidência não é causa");
+        assert!(achado.evidencia.contains("84"));
+    }
+
+    #[test]
+    fn disco_quieto_descarta_o_disco_e_nao_prova_shader() {
+        // 10% dos trancos com o disco ocupado: o disco está fora. Mas isso NÃO
+        // aponta shader — memória e simulação pesada dão o mesmo buraco, e
+        // escolher uma delas seria escolher a mais vendável.
+        let mut t = vazia();
+        t.set(
+            "frametime.stutters_with_disk",
+            Metric::estimated(10.0, Unit::Percent, "etw+pdh", "30 trancos"),
+        );
+
+        let d = classificar(&t.finish(0));
+        assert!(!d
+            .achados
+            .iter()
+            .any(|a| a.classe == Classe::StreamingDeAssets));
+
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(faltando.contains(&"Engasgo de shader"));
+
+        // E "Streaming de assets" NÃO volta para a lista do não verificado: a
+        // pergunta foi feita e respondida com não.
+        assert!(!faltando.contains(&"Streaming de assets"));
+    }
+
+    #[test]
+    fn sem_o_cruzamento_a_classe_volta_para_o_nao_verificado() {
+        let d = classificar(&vazia().finish(0));
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(faltando.contains(&"Streaming de assets"));
     }
 
     #[test]

@@ -809,6 +809,41 @@ impl PerformanceMonitor {
             .com_idade(idade_ms),
         );
 
+        // A correlação entre os trancos e o disco.
+        //
+        // Poucos trancos não sustentam proporção: com três buracos, "67% com
+        // disco" são dois deles, e dois não descrevem uma partida. O número de
+        // trancos vem junto do resultado para que esse corte possa existir.
+        const TRANCOS_MINIMOS: usize = 8;
+
+        match (medicao.trancos_com_disco_pct, medicao.trancos_medidos) {
+            (Some(pct), Some(total)) if total >= TRANCOS_MINIMOS => t.set(
+                "frametime.stutters_with_disk",
+                Metric::estimated(
+                    pct,
+                    Unit::Percent,
+                    "etw+pdh",
+                    format!("{total} trancos cruzados com o disco em {jogo}"),
+                )
+                .com_idade(idade_ms)
+                .require_range(0.0, 100.0),
+            ),
+            (_, Some(total)) => t.set(
+                "frametime.stutters_with_disk",
+                Metric::unknown(
+                    Unit::Percent,
+                    format!("só {total} trancos na partida: poucos para uma proporção"),
+                ),
+            ),
+            _ => t.set(
+                "frametime.stutters_with_disk",
+                Metric::unknown(
+                    Unit::Percent,
+                    "esta medição é de uma versão anterior, que não cruzava trancos com o disco",
+                ),
+            ),
+        }
+
         // O contexto da partida: como a máquina estava ENQUANTO o jogo rodava.
         for (id, valor) in [
             ("match.cpu_usage", medicao.cpu_uso_pct),

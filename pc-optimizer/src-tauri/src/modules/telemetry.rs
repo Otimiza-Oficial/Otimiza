@@ -384,6 +384,10 @@ pub const CATALOG: &[(&str, Unit)] = &[
     // dois é comparar momentos diferentes e chamar o resultado de diagnóstico.
     ("match.cpu_usage", Unit::Percent),
     ("match.gpu_usage", Unit::Percent),
+    // Proporção dos trancos que caíram com o disco ocupado. É o que separa
+    // asset chegando do disco de shader compilando: os dois fazem o mesmo
+    // buraco no frametime, e só o instante diz qual foi.
+    ("frametime.stutters_with_disk", Unit::Percent),
     // CPU.
     ("cpu.usage.overall", Unit::Percent),
     ("cpu.cores.logical", Unit::Count),

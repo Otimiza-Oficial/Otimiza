@@ -521,20 +521,39 @@ pub fn run() {
                         let placa = std::thread::spawn(move || {
                             use std::sync::atomic::Ordering;
                             let contadores = modules::windows::placa::Contadores::novo()?;
-                            let mut vistos: Vec<f64> = Vec::new();
+                            let mut gpu: Vec<f64> = Vec::new();
+                            // Cada leitura de disco vai CARIMBADA no contador
+                            // de alta resolução — o mesmo relógio dos quadros.
+                            // É o que permite perguntar depois o que o disco
+                            // estava fazendo no instante de cada tranco.
+                            let mut disco: Vec<(i64, f64)> = Vec::new();
 
+                            // 200 ms, e não 500: a janela de correlação é de
+                            // 300 ms para cada lado do tranco, e amostrar mais
+                            // espaçado que isso deixaria trancos sem nenhuma
+                            // leitura perto o bastante para valer.
                             while !parar_placa.load(Ordering::Relaxed) {
-                                std::thread::sleep(std::time::Duration::from_millis(500));
-                                if let Some(pct) = contadores.coletar().gpu_pct {
-                                    vistos.push(pct);
+                                std::thread::sleep(std::time::Duration::from_millis(200));
+                                let a = contadores.coletar();
+
+                                if let Some(pct) = a.gpu_pct {
+                                    gpu.push(pct);
+                                }
+                                if let (Some(quando), Some(pct)) = (
+                                    modules::windows::frames::agora_qpc(),
+                                    a.disco_ocupado_pct,
+                                ) {
+                                    disco.push((quando, pct));
                                 }
                             }
 
                             // Sem leitura nenhuma não há média: lista vazia
                             // viraria zero, e "placa parada" é a conclusão
                             // oposta à que se quer tirar daqui.
-                            (!vistos.is_empty())
-                                .then(|| vistos.iter().sum::<f64>() / vistos.len() as f64)
+                            let media = (!gpu.is_empty())
+                                .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
+
+                            Some((media, disco))
                         });
 
                         let medido = tokio::task::spawn_blocking(move || {
@@ -555,7 +574,10 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
-                        let gpu_uso_pct = placa.join().ok().flatten();
+                        let (gpu_uso_pct, disco_da_janela) = match placa.join().ok().flatten() {
+                            Some((media, disco)) => (media, disco),
+                            None => (None, Vec::new()),
+                        };
 
                         match medido.map(|r| r.map(|(principal, _)| principal)) {
                             Ok(Ok(crua)) => {
@@ -565,6 +587,27 @@ pub fn run() {
                                         Some((a, b, c)) => (Some(a), Some(b), Some(c)),
                                         None => (None, None, None),
                                     };
+
+                                // A correlação entre cada tranco e o disco.
+                                //
+                                // 300 ms para cada lado: um asset que o jogo
+                                // esperou aparece como disco ocupado colado ao
+                                // buraco, não meio segundo depois. 40% é o
+                                // ponto em que o disco deixa de estar de
+                                // passagem e passa a estar trabalhando.
+                                let correlacao = modules::windows::frames::frequencia_qpc()
+                                    .and_then(|hz| {
+                                        modules::windows::frames::trancos_com_disco(
+                                            &crua.trancos_qpc,
+                                            &disco_da_janela,
+                                            hz,
+                                            300.0,
+                                            40.0,
+                                        )
+                                    });
+
+                                let trancos_com_disco_pct = correlacao
+                                    .map(|(com, total)| com as f64 / total as f64 * 100.0);
 
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
@@ -580,6 +623,8 @@ pub fn run() {
                                     frametime_p99_ms: p99,
                                     cpu_uso_pct,
                                     gpu_uso_pct,
+                                    trancos_com_disco_pct,
+                                    trancos_medidos: correlacao.map(|(_, total)| total),
                                 };
 
                                 match medicoes::registrar(registro) {

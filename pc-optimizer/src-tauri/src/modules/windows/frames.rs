@@ -360,6 +360,20 @@ pub fn medir(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, St
 pub struct MedicaoCrua {
     pub resumo: FrameMeasurement,
     pub intervalos_ms: Vec<f64>,
+    /// O INSTANTE de cada tranco, no contador de alta resolução.
+    ///
+    /// A distribuição diz que houve tranco e quanto ele doeu. Ela não diz
+    /// QUANDO — e sem o quando não dá para perguntar o que a máquina estava
+    /// fazendo naquele momento. Shader compilando e asset chegando do disco
+    /// produzem o mesmo buraco no frametime; o que os separa é o disco estar
+    /// ou não ocupado no instante exato do buraco.
+    ///
+    /// Em unidades do contador, e não em milissegundos desde o início: é
+    /// assim que o carimbo chega do Windows, e é o mesmo relógio que qualquer
+    /// outro amostrador desta máquina lê. Converter para um zero próprio
+    /// criaria uma origem que só existe aqui, e alinhar duas séries com
+    /// origens diferentes é como se erram correlações.
+    pub trancos_qpc: Vec<i64>,
 }
 
 /// Mede um processo e, opcionalmente, um segundo AO MESMO TEMPO.
@@ -526,7 +540,14 @@ fn medir_interno(
         ));
     }
 
-    let principal = montar(nome, pid, frames, decorrido, intervalos_em_ms(&INSTANTES));
+    let principal = montar(
+        nome,
+        pid,
+        frames,
+        decorrido,
+        intervalos_em_ms(&INSTANTES),
+        trancos_qpc(&INSTANTES),
+    );
 
     let secundaria = segundo.and_then(|(pid2, nome2)| {
         let quadros = CONTADOR_SECUNDARIO.load(Ordering::SeqCst);
@@ -537,6 +558,7 @@ fn medir_interno(
                 quadros,
                 decorrido,
                 intervalos_em_ms(&INSTANTES_SECUNDARIOS),
+                trancos_qpc(&INSTANTES_SECUNDARIOS),
             )
         })
     });
@@ -550,6 +572,7 @@ fn montar(
     frames: u64,
     decorrido: f64,
     intervalos_ms: Vec<f64>,
+    trancos_qpc: Vec<i64>,
 ) -> MedicaoCrua {
     let (mediana, low_1pct, engasgos, confiavel) = estatistica(intervalos_ms.clone());
 
@@ -566,7 +589,134 @@ fn montar(
             detalhe_confiavel: confiavel,
         },
         intervalos_ms,
+        trancos_qpc,
     }
+}
+
+/// Em que instante cada tranco aconteceu.
+///
+/// Percorre os carimbos guardados e devolve o de cada quadro que demorou mais
+/// que o limiar — o MESMO limiar de `estatistica`, pela mesma razão: um valor
+/// fixo trataria um jogo a 30 quadros como engasgo permanente e nunca acusaria
+/// nada num jogo a 240.
+///
+/// O carimbo devolvido é o do FIM do quadro demorado, que é o instante em que
+/// a pessoa sentiu o tranco.
+fn trancos_qpc(lista: &Mutex<Vec<i64>>) -> Vec<i64> {
+    let Some(frequencia) = frequencia_qpc() else {
+        return Vec::new();
+    };
+    let Ok(instantes) = lista.lock() else {
+        return Vec::new();
+    };
+
+    let para_ms = |ticks: i64| ticks as f64 * 1000.0 / frequencia as f64;
+
+    let intervalos: Vec<f64> = instantes
+        .windows(2)
+        .map(|par| para_ms(par[1] - par[0]))
+        .collect();
+
+    let limiar = limiar_de_engasgo(&intervalos);
+
+    instantes
+        .windows(2)
+        .filter(|par| {
+            let ms = para_ms(par[1] - par[0]);
+            ms > limiar && ms < 10_000.0
+        })
+        .map(|par| par[1])
+        .collect()
+}
+
+/// A partir de quanto um quadro conta como tranco, em milissegundos.
+///
+/// Relativo à partida: o dobro da mediana, com um piso de 50 ms para que um
+/// jogo muito rápido não passe a acusar oscilação normal como engasgo.
+fn limiar_de_engasgo(intervalos_ms: &[f64]) -> f64 {
+    if intervalos_ms.is_empty() {
+        return f64::INFINITY;
+    }
+
+    let mut ordenados: Vec<f64> = intervalos_ms.to_vec();
+    ordenados.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    (ordenados[ordenados.len() / 2] * 2.0).max(50.0)
+}
+
+/// Frequência do contador de alta resolução desta máquina.
+pub fn frequencia_qpc() -> Option<i64> {
+    use windows_sys::Win32::System::Performance::QueryPerformanceFrequency;
+
+    let mut frequencia: i64 = 0;
+    let ok = unsafe { QueryPerformanceFrequency(&mut frequencia) != 0 };
+
+    (ok && frequencia > 0).then_some(frequencia)
+}
+
+/// O contador de alta resolução agora.
+///
+/// Público para que outro amostrador possa carimbar as leituras DELE no mesmo
+/// relógio em que os quadros são carimbados. Duas séries só se cruzam quando
+/// compartilham o relógio.
+pub fn agora_qpc() -> Option<i64> {
+    use windows_sys::Win32::System::Performance::QueryPerformanceCounter;
+
+    let mut agora: i64 = 0;
+    let ok = unsafe { QueryPerformanceCounter(&mut agora) != 0 };
+
+    ok.then_some(agora)
+}
+
+/// Quantos trancos aconteceram com o disco ocupado.
+///
+/// **Função pura.** Recebe as duas séries já carimbadas no mesmo relógio e
+/// devolve `(com o disco ocupado, total de trancos)`.
+///
+/// POR QUE ISTO SEPARA DUAS COISAS QUE PARECEM IGUAIS
+///
+/// Shader compilando e asset chegando do disco produzem o mesmo buraco no
+/// frametime. A diferença está no que a máquina estava fazendo NAQUELE
+/// instante: streaming de asset é o jogo esperando o disco, e aparece como
+/// disco ocupado colado ao tranco; compilação de shader é o processador
+/// trabalhando, com o disco quieto.
+///
+/// O QUE ELA NÃO FAZ
+///
+/// Não conclui. Coincidência não é causa, e uma partida onde o disco vive
+/// ocupado faria qualquer tranco parecer de streaming. Quem lê isto decide o
+/// peso — aqui só se conta.
+///
+/// `None` quando não há tranco nenhum, ou quando a amostragem do disco não
+/// cobriu a janela: proporção sobre zero seria um número inventado.
+pub fn trancos_com_disco(
+    trancos_qpc: &[i64],
+    disco: &[(i64, f64)],
+    frequencia: i64,
+    janela_ms: f64,
+    ocupado_pct: f64,
+) -> Option<(usize, usize)> {
+    if trancos_qpc.is_empty() || disco.is_empty() || frequencia <= 0 {
+        return None;
+    }
+
+    let janela_ticks = (janela_ms / 1000.0 * frequencia as f64) as i64;
+
+    let com_disco = trancos_qpc
+        .iter()
+        .filter(|tranco| {
+            // A amostra mais próxima no tempo, e só se ela estiver DENTRO da
+            // janela: uma leitura de dois segundos depois não descreve o que o
+            // disco fazia no instante do tranco.
+            disco
+                .iter()
+                .filter(|(quando, _)| (*quando - **tranco).abs() <= janela_ticks)
+                .min_by_key(|(quando, _)| (*quando - **tranco).abs())
+                .is_some_and(|(_, pct)| *pct >= ocupado_pct)
+        })
+        .count();
+
+    Some((com_disco, trancos_qpc.len()))
 }
 
 /// Converte os instantes coletados em intervalos, em milissegundos.
@@ -666,6 +816,79 @@ mod tests {
         let (_, p95, p99) = percentis(&com_cauda).expect("amostra suficiente");
         assert_eq!(p95, 100.0);
         assert_eq!(p99, 100.0);
+    }
+
+    /// Um relógio de teste: mil tiques por milissegundo, para as contas
+    /// ficarem legíveis.
+    const HZ: i64 = 1_000_000;
+
+    fn em_ms(ms: f64) -> i64 {
+        (ms / 1000.0 * HZ as f64) as i64
+    }
+
+    #[test]
+    fn tranco_colado_no_disco_ocupado_conta() {
+        // Três trancos, e o disco trabalhando em todos os três momentos.
+        let trancos = vec![em_ms(1000.0), em_ms(2000.0), em_ms(3000.0)];
+        let disco = vec![
+            (em_ms(950.0), 90.0),
+            (em_ms(1950.0), 85.0),
+            (em_ms(2980.0), 95.0),
+        ];
+
+        let (com, total) =
+            trancos_com_disco(&trancos, &disco, HZ, 300.0, 40.0).expect("há trancos");
+        assert_eq!((com, total), (3, 3));
+    }
+
+    #[test]
+    fn disco_quieto_no_instante_do_tranco_nao_conta() {
+        // O disco trabalhou na partida, só que NÃO quando os trancos caíram.
+        // É a diferença entre asset chegando do disco e shader compilando.
+        let trancos = vec![em_ms(1000.0), em_ms(2000.0)];
+        let disco = vec![
+            (em_ms(980.0), 2.0),
+            (em_ms(1990.0), 1.0),
+            // Muito trabalho de disco, mas longe dos trancos.
+            (em_ms(5000.0), 99.0),
+        ];
+
+        let (com, total) =
+            trancos_com_disco(&trancos, &disco, HZ, 300.0, 40.0).expect("há trancos");
+        assert_eq!((com, total), (0, 2));
+    }
+
+    #[test]
+    fn amostra_fora_da_janela_nao_descreve_o_tranco() {
+        // A única leitura de disco é de um segundo depois do tranco. Ela não
+        // diz o que o disco fazia no instante dele, então não conta — e o
+        // "mais próximo" sem limite de distância contaria.
+        let trancos = vec![em_ms(1000.0)];
+        let disco = vec![(em_ms(2000.0), 99.0)];
+
+        let (com, _) = trancos_com_disco(&trancos, &disco, HZ, 300.0, 40.0).expect("há trancos");
+        assert_eq!(com, 0);
+    }
+
+    #[test]
+    fn sem_tranco_ou_sem_disco_nao_ha_proporcao() {
+        // Proporção sobre zero seria número inventado.
+        assert_eq!(trancos_com_disco(&[], &[(0, 90.0)], HZ, 300.0, 40.0), None);
+        assert_eq!(trancos_com_disco(&[em_ms(1.0)], &[], HZ, 300.0, 40.0), None);
+        assert_eq!(
+            trancos_com_disco(&[em_ms(1.0)], &[(0, 90.0)], 0, 300.0, 40.0),
+            None
+        );
+    }
+
+    #[test]
+    fn limiar_de_engasgo_acompanha_a_partida() {
+        // Jogo a 60 FPS: o dobro da mediana são 33 ms, mas o piso de 50 vale.
+        assert_eq!(limiar_de_engasgo(&[16.6; 100]), 50.0);
+        // Jogo a 30 FPS: o dobro da mediana passa do piso e manda.
+        assert!((limiar_de_engasgo(&[33.0; 100]) - 66.0).abs() < 0.01);
+        // Sem amostra, nada é tranco.
+        assert_eq!(limiar_de_engasgo(&[]), f64::INFINITY);
     }
 
     #[test]
