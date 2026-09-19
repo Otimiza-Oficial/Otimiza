@@ -130,6 +130,80 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: guardar o retrato de ANTES sob um perfil de carga.
+///
+/// O perfil vem de fora porque ele não é detectável: a carga diz o que a
+/// máquina está fazendo, não o que quem mediu quis medir. Rotular sozinho um
+/// retrato de "ocioso" com um jogo abrindo no fundo autorizaria depois uma
+/// comparação que não devia existir — ver o cabeçalho de `baseline.rs`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capturar_baseline(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Baseline, String> {
+    use crate::modules::baseline;
+
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    let quando = crate::modules::changelog::now_timestamp();
+    let retrato = baseline::Baseline::novo(
+        quando,
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    );
+
+    baseline::guardar(retrato.clone())?;
+    Ok(retrato)
+}
+
+/// Comando: comparar o retrato guardado com a máquina de agora.
+///
+/// Devolve `Err` com a explicação quando a comparação não pode ser feita —
+/// máquina diferente, carga diferente, ou nada medido dos dois lados. Uma
+/// recusa explicada vale mais que uma tabela de diferenças que não significa
+/// nada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn comparar_com_baseline(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Comparacao, String> {
+    use crate::modules::baseline;
+
+    let antes = baseline::ler()?
+        .into_iter()
+        .find(|b| b.perfil == perfil)
+        .ok_or_else(|| {
+            format!(
+                "Não há retrato guardado com {}. Guarde o antes primeiro.",
+                perfil.nome()
+            )
+        })?;
+
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    let agora = baseline::Baseline::novo(
+        crate::modules::changelog::now_timestamp(),
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    );
+
+    baseline::comparar(&antes, &agora).map_err(|recusa| recusa.explicacao())
+}
+
 /// Comando: Iniciar monitoramento contínuo
 #[tauri::command]
 pub async fn start_monitoring(state: State<'_, AppState>) -> Result<String, String> {
@@ -3772,6 +3846,8 @@ mod tests {
         "prova_guardada",
         "get_platform_info",
         "get_performance_metrics",
+        "capturar_baseline",
+        "comparar_com_baseline",
         "start_monitoring",
         "stop_monitoring",
         "measure_baseline",

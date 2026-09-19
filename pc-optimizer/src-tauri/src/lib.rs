@@ -88,6 +88,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
             commands::get_performance_metrics,
+            #[cfg(target_os = "windows")]
+            commands::capturar_baseline,
+            #[cfg(target_os = "windows")]
+            commands::comparar_com_baseline,
             commands::start_monitoring,
             commands::stop_monitoring,
             commands::measure_baseline,

@@ -2060,6 +2060,53 @@ mod tests {
         }
     }
 
+    /// Dois retratos reais desta máquina, comparados.
+    ///
+    /// É o caminho inteiro: coleta → contrato → baseline → comparação. Sem
+    /// mexer em nada entre os dois, o esperado é que a maior parte das
+    /// diferenças fique dentro do ruído — e, principalmente, que NENHUMA
+    /// métrica desconhecida vire delta.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn dois_retratos_seguidos_comparam_sem_inventar() {
+        use crate::modules::baseline::{comparar, Baseline, Identidade, Perfil};
+
+        let mut monitor = PerformanceMonitor::new();
+
+        let identidade = Identidade {
+            cpu: "teste".into(),
+            ..Default::default()
+        };
+
+        let primeira = monitor.collect_metrics().await.expect("coleta");
+        let antes = Baseline::novo(0, Perfil::Ocioso, identidade.clone(), primeira.telemetry);
+
+        let segunda = monitor.collect_metrics().await.expect("coleta");
+        let depois = Baseline::novo(1, Perfil::Ocioso, identidade, segunda.telemetry);
+
+        let c = comparar(&antes, &depois).expect("mesma máquina, mesmo perfil");
+
+        assert!(!c.deltas.is_empty(), "alguma coisa foi medida nos dois");
+
+        // A invariante que este trabalho inteiro persegue: o que não foi
+        // medido não vira número. Todo delta tem os dois lados de verdade.
+        for d in &c.deltas {
+            assert!(d.antes.is_finite() && d.depois.is_finite(), "{}", d.id);
+            assert!(d.firme || d.ressalva.is_some(), "{} sem ressalva", d.id);
+        }
+
+        // E o que ficou de fora diz por quê.
+        for n in &c.nao_comparaveis {
+            assert!(!n.motivo.is_empty(), "{} sem motivo", n.id);
+        }
+
+        // Uma métrica que ninguém mede nunca aparece como delta.
+        assert!(
+            !c.deltas.iter().any(|d| d.id == "gpu.temperature"),
+            "sensor sem provedor não pode virar diferença"
+        );
+    }
+
     #[test]
     fn uptime_e_positivo() {
         assert!(uptime_hours() >= 0.0);

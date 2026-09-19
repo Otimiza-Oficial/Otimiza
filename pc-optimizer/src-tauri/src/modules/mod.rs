@@ -10,6 +10,7 @@
 // `windows::veredito`, que elege uma frase a partir dos módulos que medem.
 
 pub mod atualizacao;
+pub mod baseline;
 pub mod benchmark;
 pub mod changelog;
 pub mod convite;
