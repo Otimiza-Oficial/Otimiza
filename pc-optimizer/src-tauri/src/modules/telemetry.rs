@@ -371,6 +371,10 @@ pub const CATALOG: &[(&str, Unit)] = &[
     ("frametime.mean", Unit::Milliseconds),
     ("frametime.p95", Unit::Milliseconds),
     ("frametime.p99", Unit::Milliseconds),
+    // Quadros que demoraram mais que o dobro da mediana DAQUELA partida, por
+    // minuto. O limiar é relativo porque um fixo trataria um jogo a 30 quadros
+    // como engasgo permanente e nunca acusaria nada num jogo a 240.
+    ("frametime.stutters_per_minute", Unit::Count),
     // CPU.
     ("cpu.usage.overall", Unit::Percent),
     ("cpu.cores.logical", Unit::Count),

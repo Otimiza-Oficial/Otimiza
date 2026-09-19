@@ -342,7 +342,9 @@ type Classe =
   | "MemoriaVideo"
   | "Disco"
   | "LimiteTermico"
-  | "LimiteEletrico";
+  | "LimiteEletrico"
+  | "TetoDeQuadros"
+  | "Engasgo";
 
 /** `Causa` = o sistema afirmou o fato agora. `Hipotese` = indireto ou velho. */
 type Forca = "Causa" | "Hipotese";
@@ -2003,6 +2005,8 @@ const NOME_DA_CLASSE: Record<Classe, string> = {
   Disco: "Disco no limite",
   LimiteTermico: "Firmware segurando por temperatura",
   LimiteEletrico: "Firmware segurando por energia",
+  TetoDeQuadros: "Quadros presos na taxa do monitor",
+  Engasgo: "Engasgo durante a partida",
 };
 
 /** Classes em que nenhum ajuste de software resolve. */

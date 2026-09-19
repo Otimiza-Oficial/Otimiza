@@ -65,6 +65,13 @@ pub const CARGA_MINIMA: f64 = 15.0;
 /// daí o problema aparece como engasgo, não como número alto.
 pub const MEMORIA_APERTADA: f64 = 90.0;
 
+/// A partir de quantos engasgos por minuto vale falar no assunto.
+///
+/// Seis é um a cada dez segundos — o ponto em que deixa de ser um tranco
+/// isolado e vira a experiência da partida. Abaixo disso, apontar engasgo
+/// mandaria o cliente caçar um problema que ele não sente.
+pub const ENGASGOS_POR_MINUTO: f64 = 6.0;
+
 /// Acima desta idade a leitura vira hipótese, nunca causa.
 ///
 /// Cinco segundos é mais que o intervalo do painel: o que passa disso não
@@ -85,6 +92,13 @@ pub enum Classe {
     LimiteTermico,
     /// O firmware está segurando o processador por energia.
     LimiteEletrico,
+    /// O jogo está entregando exatamente a taxa do monitor.
+    TetoDeQuadros,
+    /// Quadros muito acima do normal daquela partida, com frequência.
+    ///
+    /// A contagem é medida; a causa NÃO está nesta classe. Shader compilando,
+    /// asset chegando do disco e disputa de memória dão o mesmo sintoma.
+    Engasgo,
 }
 
 impl Classe {
@@ -284,28 +298,83 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         }
     }
 
+    // ---- teto de quadros
+    //
+    // O jogo entregando exatamente a taxa do monitor é o sinal de V-Sync, de
+    // limite dentro do próprio jogo ou de limitador do driver. Vale como
+    // hipótese e nunca como causa, por uma razão que precisa ficar DITA na
+    // evidência: os dois números são de momentos diferentes — o FPS é da
+    // partida, a taxa do monitor é de agora. Eles só podem ser comparados
+    // porque a taxa do monitor não muda sozinha.
+    match (t.value("fps.average"), t.value("display.refresh")) {
+        (Some(fps), Some(hz)) if hz > 0.0 => {
+            avaliadas += 1;
+
+            if (fps - hz).abs() / hz <= 0.02 {
+                achados.push(Achado {
+                    classe: Classe::TetoDeQuadros,
+                    forca: Forca::Hipotese,
+                    evidencia: format!(
+                        "fps.average: {fps:.0} contra display.refresh: {hz:.0} Hz, \
+                         medidos em momentos diferentes"
+                    ),
+                    idade_ms: t.get("fps.average").and_then(|m| m.age_ms),
+                });
+            }
+        }
+        _ => nao_verificado.push(NaoVerificado {
+            classe: "Teto de quadros".to_string(),
+            falta: "exige fps.average e display.refresh".to_string(),
+        }),
+    }
+
+    // ---- engasgo
+    //
+    // A CONTAGEM é medida. A CAUSA não: shader compilando, asset chegando do
+    // disco e disputa de memória produzem o mesmo sintoma, e separá-los exige
+    // a série de frametime junto da atividade de disco na MESMA janela. O
+    // achado diz o que foi visto e para aí — apontar "shader" sem essa
+    // correlação seria escolher a causa mais vendável.
+    match leitura(t, "frametime.stutters_per_minute") {
+        Some(l) => {
+            avaliadas += 1;
+            if l.valor >= ENGASGOS_POR_MINUTO {
+                achados.push(Achado {
+                    classe: Classe::Engasgo,
+                    forca: Forca::Hipotese,
+                    evidencia: format!(
+                        "frametime.stutters_per_minute: {:.0} por minuto; a causa não é \
+                         separável sem a série de frametime",
+                        l.valor
+                    ),
+                    idade_ms: l.idade_ms,
+                });
+            }
+        }
+        None => nao_verificado.push(NaoVerificado {
+            classe: "Engasgo".to_string(),
+            falta: "exige uma medição de quadros durante a partida".to_string(),
+        }),
+    }
+
     // ---- o que este classificador ainda não alcança
     //
-    // Sete classes do produto dependem de medição de quadros, de latência ou
-    // de caminho de apresentação. Elas não somem da resposta: aparecem aqui
-    // dizendo o que falta, para que ninguém leia "não achei gargalo" como
+    // Cinco classes dependem de correlação temporal, de histórico de driver ou
+    // de sondagem que o painel não faz. Elas não somem da resposta: aparecem
+    // aqui dizendo o que falta, para que ninguém leia "não achei gargalo" como
     // "olhei tudo".
     for (nome, falta) in [
         (
-            "Teto de quadros",
-            "exige fps.rendered e display.refresh na mesma medição",
-        ),
-        (
-            "Problema de driver",
-            "exige comparar quadros com a versão anterior do driver",
-        ),
-        (
             "Engasgo de shader",
-            "exige a série de frametime durante a partida",
+            "exige a série de frametime durante a partida, não só a contagem",
         ),
         (
             "Streaming de assets",
             "exige frametime e atividade de disco na mesma janela",
+        ),
+        (
+            "Problema de driver",
+            "exige comparar quadros com a versão anterior do driver",
         ),
         (
             "Limite do motor do jogo",
@@ -434,6 +503,9 @@ mod tests {
     fn unidade(id: &str) -> Unit {
         match id {
             "cpu.throttling.thermal" | "cpu.throttling.power" => Unit::Boolean,
+            "frametime.stutters_per_minute" => Unit::Count,
+            "display.refresh" => Unit::Hertz,
+            "fps.average" | "fps.low_1pct" => Unit::Fps,
             _ => Unit::Percent,
         }
     }
@@ -621,6 +693,81 @@ mod tests {
 
         let d = classificar(&com(&[("gpu.usage", 91.0)]).finish(0));
         assert!(d.achados.is_empty(), "91% de placa ainda tem folga");
+    }
+
+    #[test]
+    fn fps_colado_na_taxa_do_monitor_e_teto_de_quadros() {
+        let mut t = vazia();
+        t.set(
+            "display.refresh",
+            Metric::measured(60.0, Unit::Hertz, "win32"),
+        );
+        t.set(
+            "fps.average",
+            Metric::estimated(59.8, Unit::Fps, "etw", "partida").com_idade(300_000),
+        );
+
+        let d = classificar(&t.finish(0));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::TetoDeQuadros)
+            .expect("teto de quadros");
+
+        // Nunca causa: os dois números são de momentos diferentes, e a
+        // evidência precisa dizer isso na cara.
+        assert_eq!(achado.forca, Forca::Hipotese);
+        assert!(achado.evidencia.contains("momentos diferentes"));
+
+        // 42 quadros num monitor de 60 Hz não é teto nenhum.
+        let mut longe = vazia();
+        longe.set(
+            "display.refresh",
+            Metric::measured(60.0, Unit::Hertz, "win32"),
+        );
+        longe.set(
+            "fps.average",
+            Metric::estimated(42.0, Unit::Fps, "etw", "partida"),
+        );
+        let d = classificar(&longe.finish(0));
+        assert!(!d.achados.iter().any(|a| a.classe == Classe::TetoDeQuadros));
+    }
+
+    #[test]
+    fn engasgo_e_contado_mas_a_causa_nao_e_escolhida() {
+        let mut t = vazia();
+        t.set(
+            "frametime.stutters_per_minute",
+            Metric::estimated(14.0, Unit::Count, "etw", "partida").com_idade(120_000),
+        );
+
+        let d = classificar(&t.finish(0));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::Engasgo)
+            .expect("engasgo");
+
+        assert_eq!(achado.forca, Forca::Hipotese);
+        assert!(achado.evidencia.contains("não é separável"));
+
+        // E as duas causas possíveis continuam declaradas como não olhadas.
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(faltando.contains(&"Engasgo de shader"));
+        assert!(faltando.contains(&"Streaming de assets"));
+    }
+
+    #[test]
+    fn tranco_isolado_nao_vira_diagnostico() {
+        let d = classificar(&com(&[("frametime.stutters_per_minute", 2.0)]).finish(0));
+
+        assert!(
+            d.achados.is_empty(),
+            "dois por minuto não é o que o cliente sente"
+        );
+        // Mas a classe FOI avaliada: a contagem existe e estava baixa.
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(!faltando.contains(&"Engasgo"));
     }
 
     #[test]

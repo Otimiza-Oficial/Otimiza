@@ -29,10 +29,17 @@
 // IDADE escrita no contrato. Passados trinta segundos ela é descartada: um uso
 // de GPU de meio minuto atrás não descreve mais esta máquina.
 //
+// QUADROS não são medidos aqui e também não são inventados: o coletor LÊ a
+// última medição que o vigia de `medicoes.rs` guardou — feita por rastreamento
+// de eventos do Windows, durante a partida — e publica com a idade real, até
+// meia hora. Só existe uma sessão de rastreamento no sistema, e disputá-la a
+// partir do painel derrubaria justamente a medição que vira prova para o
+// cliente. `fps.rendered`, `fps.generated` e `fps.displayed` continuam
+// desconhecidos: separar os três exige a medição em par, e preencher um com o
+// outro esconderia o FPS nativo atrás do exibido.
+//
 // Sensor da placa (clock, temperatura, potência), potência de pacote da CPU,
-// latência, entrada e quadros saem como UNKNOWN, cada um dizendo o que
-// exigiria. Quadros não são "sem provedor": o Otimiza os mede por ETW em
-// `windows::frames`, durante a partida — só não neste laço.
+// latência e entrada saem como UNKNOWN, cada um dizendo o que exigiria.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -196,12 +203,20 @@ const JANELA_TERMICA: usize = 12;
 /// que custa MAIS DE UM SEGUNDO — o comentário em `bottleneck.rs` já dizia
 /// isso. A frequência do monitor vem junto por ser barata e igualmente estável.
 #[cfg(target_os = "windows")]
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct LeituraLenta {
     gpu_pct: Option<f64>,
     vram_usada_gb: Option<f64>,
     disco_pct: Option<f64>,
     hz: Option<u32>,
+    /// A medição de quadros mais recente do histórico automático.
+    ///
+    /// NÃO é medida aqui. Quem mede é o vigia de `medicoes.rs`, que abre uma
+    /// sessão de rastreamento do Windows durante a partida. Abrir uma segunda
+    /// sessão a partir do painel disputaria a mesma sessão com ele — só existe
+    /// uma — e o perdedor seria justamente a medição que vira prova para o
+    /// cliente. Aqui só se LÊ o que ele já guardou, com a idade real.
+    quadros: Option<crate::modules::medicoes::MedicaoAutomatica>,
 }
 
 /// De quanto em quanto tempo a leitura cara é refeita.
@@ -292,6 +307,11 @@ impl PerformanceMonitor {
         );
 
         declarar_o_que_este_laco_nao_mede(&mut telemetry);
+
+        // Depois da declaração geral, de propósito: onde há medição de quadros
+        // guardada, ela entra por cima do motivo genérico.
+        #[cfg(target_os = "windows")]
+        self.telemetria_dos_quadros(&mut telemetry);
 
         let telemetry = telemetry.finish(comeco.elapsed().as_millis() as u64);
         let gargalo = super::gargalo::classificar(&telemetry);
@@ -678,6 +698,106 @@ impl PerformanceMonitor {
         None
     }
 
+    /// Publica a última medição de quadros que o vigia guardou.
+    ///
+    /// O QUE ESTE MÉTODO NÃO FAZ: medir. Quem mede é `medicoes.rs`, que escuta
+    /// o canal de eventos do Windows por vinte segundos durante a partida. Só
+    /// existe UMA sessão de rastreamento, então abrir outra a partir do painel
+    /// faria as duas disputarem — e quem perderia seria a medição que vira
+    /// prova para o cliente.
+    ///
+    /// O QUE ELE NÃO PREENCHE: `fps.rendered`, `fps.generated` e
+    /// `fps.displayed`. O vigia mede UM processo, então o número dele é a taxa
+    /// daquele processo — não dá para saber se é o renderizado ou o exibido sem
+    /// a medição em par que `frames::medir_par` faz. Preencher os três com o
+    /// mesmo valor seria esconder o FPS nativo atrás do exibido, que é
+    /// exatamente o placebo que este produto existe para não fazer.
+    #[cfg(target_os = "windows")]
+    fn telemetria_dos_quadros(&mut self, t: &mut Telemetry) {
+        let Some((quando, leitura)) = self.placa.lock().ok().and_then(|g| g.clone()) else {
+            return;
+        };
+        let Some(medicao) = leitura.quadros else {
+            t.set(
+                "fps.average",
+                Metric::unknown(
+                    Unit::Fps,
+                    "ainda não há medição de quadros guardada nesta máquina",
+                ),
+            );
+            return;
+        };
+
+        // A medição tem carimbo em tempo de relógio; a leitura do arquivo tem
+        // carimbo em tempo de processo. A idade real é a soma das duas.
+        let agora = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let desde_a_medicao = std::time::Duration::from_secs(agora.saturating_sub(medicao.quando));
+        let idade = desde_a_medicao + std::time::Instant::now().duration_since(quando);
+
+        if idade > VALIDADE_DOS_QUADROS {
+            let velha = format!(
+                "a última medição de quadros é de {} min atrás, em {}",
+                idade.as_secs() / 60,
+                medicao.jogo
+            );
+            t.set("fps.average", Metric::unknown(Unit::Fps, velha.clone()));
+            t.set("fps.low_1pct", Metric::unknown(Unit::Fps, velha));
+            return;
+        }
+
+        let idade_ms = idade.as_millis() as u64;
+        let jogo = medicao.jogo.clone();
+
+        t.set(
+            "fps.average",
+            Metric::estimated(
+                medicao.fps,
+                Unit::Fps,
+                "etw",
+                format!("medido em {jogo} durante a partida"),
+            )
+            .com_idade(idade_ms),
+        );
+
+        // Amostra curta demais não sustenta 1% low nem contagem de engasgo: os
+        // dois dependem da cauda da distribuição, e cauda de amostra curta é
+        // ruído. O próprio vigia já marca isso.
+        if !medicao.confiavel {
+            const CURTA: &str =
+                "a amostra foi curta demais para a cauda da distribuição significar algo";
+            t.set("fps.low_1pct", Metric::unknown(Unit::Fps, CURTA));
+            t.set(
+                "frametime.stutters_per_minute",
+                Metric::unknown(Unit::Count, CURTA),
+            );
+            return;
+        }
+
+        t.set(
+            "fps.low_1pct",
+            Metric::estimated(
+                medicao.low_1pct,
+                Unit::Fps,
+                "etw",
+                format!("medido em {jogo} durante a partida"),
+            )
+            .com_idade(idade_ms),
+        );
+        t.set(
+            "frametime.stutters_per_minute",
+            Metric::estimated(
+                medicao.engasgos_por_minuto,
+                Unit::Count,
+                "etw",
+                format!("quadros acima do dobro da mediana em {jogo}"),
+            )
+            .com_idade(idade_ms),
+        );
+    }
+
     /// Dispara a leitura cara quando é hora, e publica a última que existe.
     ///
     /// A coleta NUNCA espera pela consulta ao WMI. Ela olha o que a tarefa de
@@ -689,7 +809,7 @@ impl PerformanceMonitor {
         use std::sync::atomic::Ordering;
 
         let agora = std::time::Instant::now();
-        let guardada = self.placa.lock().ok().and_then(|g| *g);
+        let guardada = self.placa.lock().ok().and_then(|g| g.clone());
 
         let precisa = match guardada {
             None => true,
@@ -1164,13 +1284,30 @@ fn ler_placa_devagar() -> LeituraLenta {
         .find(|m| m.principal)
         .map(|m| m.hz_atual);
 
+    // A mais recente pelo CARIMBO, e não pela posição: o arquivo é acrescido
+    // no fim hoje, mas uma ordem no disco não é uma garantia sobre o tempo.
+    let quadros = crate::modules::medicoes::ler()
+        .unwrap_or_default()
+        .into_iter()
+        .max_by_key(|m| m.quando);
+
     LeituraLenta {
         gpu_pct: bruto.gpu,
         vram_usada_gb: bruto.vram_mb.map(|mb| mb / 1024.0),
         disco_pct: bruto.disco,
         hz,
+        quadros,
     }
 }
+
+/// Até quando uma medição de quadros ainda diz algo sobre a máquina de agora.
+///
+/// Trinta minutos. O vigia mede no máximo uma vez a cada vinte, então durante
+/// uma partida há quase sempre uma dentro da janela. Passado isso a partida
+/// acabou, e o número descreve outra sessão — sai do contrato em vez de
+/// envelhecer na tela.
+#[cfg(target_os = "windows")]
+const VALIDADE_DOS_QUADROS: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 fn bytes_to_mb(bytes: u64) -> f64 {
     bytes as f64 / 1_048_576.0
