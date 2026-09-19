@@ -99,6 +99,12 @@ pub enum Classe {
     /// A contagem é medida; a causa NÃO está nesta classe. Shader compilando,
     /// asset chegando do disco e disputa de memória dão o mesmo sintoma.
     Engasgo,
+    /// Processador e placa SOBRANDO os dois, durante a partida.
+    ///
+    /// O limite não está no hardware. Pode ser o motor do jogo, um teto de
+    /// quadros, ou uma espera que nenhum dos dois contadores mostra — e é por
+    /// isso que a classe diz onde o limite NÃO está, em vez de nomear a causa.
+    ForaDoHardware,
 }
 
 impl Classe {
@@ -357,6 +363,37 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         }),
     }
 
+    // ---- limite fora do hardware
+    //
+    // Os dois usos são da MESMA janela em que os quadros foram contados, e é
+    // só por isso que a conclusão se sustenta: processador e placa sobrando
+    // AGORA não diriam nada sobre uma partida que já acabou.
+    //
+    // A classe diz onde o limite NÃO está. Nomear a causa — motor do jogo,
+    // teto de quadros, espera de memória — exigiria evidência que estes dois
+    // números não trazem, e escolher uma delas seria escolher a mais vendável.
+    match (t.value("match.cpu_usage"), t.value("match.gpu_usage")) {
+        (Some(cpu), Some(gpu)) => {
+            avaliadas += 1;
+
+            if cpu <= FOLGADO && gpu <= FOLGADO {
+                achados.push(Achado {
+                    classe: Classe::ForaDoHardware,
+                    forca: Forca::Hipotese,
+                    evidencia: format!(
+                        "match.cpu_usage: {cpu:.0}% e match.gpu_usage: {gpu:.0}% na mesma \
+                         janela dos quadros"
+                    ),
+                    idade_ms: t.get("match.cpu_usage").and_then(|m| m.age_ms),
+                });
+            }
+        }
+        _ => nao_verificado.push(NaoVerificado {
+            classe: "Limite fora do hardware".to_string(),
+            falta: "exige o uso de processador e placa na janela da partida".to_string(),
+        }),
+    }
+
     // ---- o que este classificador ainda não alcança
     //
     // Cinco classes dependem de correlação temporal, de histórico de driver ou
@@ -382,7 +419,7 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         ),
         (
             "Limite do motor do jogo",
-            "falta o uso da placa na janela da partida; o do processador já é medido",
+            "exige distinguir motor, teto e espera: os contadores de uso não separam os três",
         ),
         (
             "Placa híbrida em notebook",
@@ -508,6 +545,7 @@ mod tests {
         match id {
             "cpu.throttling.thermal" | "cpu.throttling.power" => Unit::Boolean,
             "frametime.stutters_per_minute" => Unit::Count,
+            "match.cpu_usage" | "match.gpu_usage" => Unit::Percent,
             "display.refresh" => Unit::Hertz,
             "fps.average" | "fps.low_1pct" => Unit::Fps,
             _ => Unit::Percent,
@@ -772,6 +810,68 @@ mod tests {
         // Mas a classe FOI avaliada: a contagem existe e estava baixa.
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(!faltando.contains(&"Engasgo"));
+    }
+
+    #[test]
+    fn hardware_sobrando_na_partida_aponta_para_fora_dele() {
+        let mut t = vazia();
+        t.set(
+            "match.cpu_usage",
+            Metric::estimated(31.0, Unit::Percent, "pdh", "partida").com_idade(180_000),
+        );
+        t.set(
+            "match.gpu_usage",
+            Metric::estimated(44.0, Unit::Percent, "pdh", "partida").com_idade(180_000),
+        );
+
+        let d = classificar(&t.finish(0));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::ForaDoHardware)
+            .expect("limite fora do hardware");
+
+        assert_eq!(achado.forca, Forca::Hipotese);
+        assert!(
+            achado.evidencia.contains("mesma janela"),
+            "{}",
+            achado.evidencia
+        );
+    }
+
+    #[test]
+    fn um_dos_dois_no_limite_nao_e_limite_fora_do_hardware() {
+        // Placa a 95% durante a partida é gargalo DE hardware. A classe só
+        // existe quando os DOIS sobram.
+        let mut t = vazia();
+        t.set(
+            "match.cpu_usage",
+            Metric::estimated(30.0, Unit::Percent, "pdh", "partida"),
+        );
+        t.set(
+            "match.gpu_usage",
+            Metric::estimated(95.0, Unit::Percent, "pdh", "partida"),
+        );
+
+        let d = classificar(&t.finish(0));
+        assert!(!d.achados.iter().any(|a| a.classe == Classe::ForaDoHardware));
+    }
+
+    #[test]
+    fn um_lado_so_nao_autoriza_a_conclusao() {
+        // Só o processador medido na janela. Não dá para dizer nada sobre o
+        // par, e a classe volta para a lista do que não foi verificado.
+        let mut t = vazia();
+        t.set(
+            "match.cpu_usage",
+            Metric::estimated(20.0, Unit::Percent, "pdh", "partida"),
+        );
+
+        let d = classificar(&t.finish(0));
+        assert!(!d.achados.iter().any(|a| a.classe == Classe::ForaDoHardware));
+
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(faltando.contains(&"Limite fora do hardware"));
     }
 
     #[test]

@@ -66,6 +66,14 @@ pub struct MedicaoAutomatica {
     /// diz nada sobre a partida.
     #[serde(default)]
     pub cpu_uso_pct: Option<f64>,
+    /// Uso da placa de vídeo DURANTE a mesma janela.
+    ///
+    /// Vale pelo par: quadros baixos com processador e placa os DOIS sobrando
+    /// é o desenho de um limite que não está no hardware — é o motor do jogo,
+    /// um teto de quadros, ou uma espera que nenhum dos dois contadores mostra.
+    /// Nenhum dos dois números sozinho sustenta essa frase.
+    #[serde(default)]
+    pub gpu_uso_pct: Option<f64>,
 }
 
 /// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
@@ -224,6 +232,7 @@ mod tests {
             frametime_p95_ms: Some(22.0),
             frametime_p99_ms: Some(31.0),
             cpu_uso_pct: Some(48.0),
+            gpu_uso_pct: Some(72.0),
         }
     }
 

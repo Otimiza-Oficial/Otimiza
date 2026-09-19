@@ -23,11 +23,15 @@
 // leituras aqui aplica a mesma regra do motor de energia e DESCARTA a zona que
 // não se move sob carga.
 //
-// Uso da placa, VRAM em uso, ocupação do disco e frequência do monitor saem de
-// uma leitura CARA — a consulta ao WMI custa mais de um segundo. Ela roda fora
-// do laço, a cada dez segundos, e o que a tela recebe é a última leitura com a
-// IDADE escrita no contrato. Passados trinta segundos ela é descartada: um uso
-// de GPU de meio minuto atrás não descreve mais esta máquina.
+// Uso da placa, memória de vídeo, ocupação e LATÊNCIA do disco vêm dos mesmos
+// contadores de desempenho, em `windows::placa`. Eram lidos por WMI através do
+// PowerShell, a mais de um segundo por consulta, o que obrigava o painel a
+// guardar o número por dez segundos e mostrá-lo com a idade escrita. Pelo
+// contador custam microssegundos e são lidos a cada coleta — medição de agora,
+// sem idade e sem rebaixamento para estimativa.
+//
+// Sobraram na tarefa de fundo só o modo de vídeo e o histórico de quadros em
+// disco, que são as duas leituras que ainda custam.
 //
 // QUADROS não são medidos aqui e também não são inventados: o coletor LÊ a
 // última medição que o vigia de `medicoes.rs` guardou — feita por rastreamento
@@ -188,6 +192,13 @@ pub struct PerformanceMonitor {
     /// reler a cada coleta seria oito consultas ao registro por nada.
     #[cfg(target_os = "windows")]
     vram_total_gb: Option<Option<f64>>,
+    /// Contadores de placa de vídeo e disco, vivos entre as coletas.
+    ///
+    /// Mesma razão do amostrador da CPU: o PDH entrega a diferença entre duas
+    /// consultas, então a consulta precisa sobreviver de uma coleta para a
+    /// outra. Recriada a cada leitura, ela mediria uma janela de zero segundo.
+    #[cfg(target_os = "windows")]
+    contadores_placa: Option<crate::modules::windows::placa::Contadores>,
 }
 
 /// Quantas leituras a janela térmica guarda.
@@ -205,9 +216,6 @@ const JANELA_TERMICA: usize = 12;
 #[cfg(target_os = "windows")]
 #[derive(Debug, Clone, Default)]
 struct LeituraLenta {
-    gpu_pct: Option<f64>,
-    vram_usada_gb: Option<f64>,
-    disco_pct: Option<f64>,
     hz: Option<u32>,
     /// A medição de quadros mais recente do histórico automático.
     ///
@@ -221,18 +229,12 @@ struct LeituraLenta {
 
 /// De quanto em quanto tempo a leitura cara é refeita.
 ///
-/// Dez segundos. A consulta custa mais de um segundo e roda fora do laço; a
-/// cada dois segundos, o monitor passaria boa parte do tempo sendo a carga que
-/// veio medir.
+/// Dez segundos. Sobraram aqui duas leituras: o modo de vídeo, que só muda
+/// quando alguém o troca, e o histórico de quadros, que é um arquivo em disco
+/// reescrito no máximo a cada vinte minutos. Nenhuma das duas justifica ser
+/// refeita a cada dois segundos.
 #[cfg(target_os = "windows")]
 const INTERVALO_DA_PLACA: std::time::Duration = std::time::Duration::from_secs(10);
-
-/// Depois disto a leitura para de valer.
-///
-/// Trinta segundos é tempo de um jogo abrir, fechar, ou a cena mudar por
-/// inteiro. Passado isso o número não descreve mais esta máquina, e some.
-#[cfg(target_os = "windows")]
-const VALIDADE_DA_PLACA: std::time::Duration = std::time::Duration::from_secs(30);
 
 impl PerformanceMonitor {
     pub fn new() -> Self {
@@ -259,6 +261,8 @@ impl PerformanceMonitor {
             placa_em_curso: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(target_os = "windows")]
             vram_total_gb: None,
+            #[cfg(target_os = "windows")]
+            contadores_placa: None,
         }
     }
 
@@ -342,6 +346,14 @@ impl PerformanceMonitor {
         #[cfg(target_os = "windows")]
         if self.contadores.is_none() {
             self.contadores = crate::modules::windows::motorenergia_maquina::Amostrador::novo();
+        }
+
+        // Pela mesma razão, e no mesmo lugar: os contadores da placa também
+        // medem a diferença entre duas consultas, e a leitura deles acontece
+        // depois da espera de amostragem lá embaixo.
+        #[cfg(target_os = "windows")]
+        if self.contadores_placa.is_none() {
+            self.contadores_placa = crate::modules::windows::placa::Contadores::novo();
         }
 
         self.system.refresh_cpu_all();
@@ -797,6 +809,33 @@ impl PerformanceMonitor {
             .com_idade(idade_ms),
         );
 
+        // O contexto da partida: como a máquina estava ENQUANTO o jogo rodava.
+        for (id, valor) in [
+            ("match.cpu_usage", medicao.cpu_uso_pct),
+            ("match.gpu_usage", medicao.gpu_uso_pct),
+        ] {
+            match valor {
+                Some(pct) => t.set(
+                    id,
+                    Metric::estimated(
+                        pct,
+                        Unit::Percent,
+                        "pdh",
+                        format!("medido durante a partida em {jogo}"),
+                    )
+                    .com_idade(idade_ms)
+                    .require_range(0.0, 100.0),
+                ),
+                None => t.set(
+                    id,
+                    Metric::unknown(
+                        Unit::Percent,
+                        "esta medição é de uma versão anterior, que não guardava o contexto",
+                    ),
+                ),
+            }
+        }
+
         // O RITMO, e não só o resultado.
         //
         // Uma configuração com FPS maior e ritmo pior não é uma melhora, e é
@@ -880,51 +919,52 @@ impl PerformanceMonitor {
             ),
         }
 
-        let Some((quando, leitura)) = guardada else {
-            const PRIMEIRA: &str = "a primeira consulta aos contadores da placa ainda não voltou";
-            t.set("gpu.usage", Metric::unknown(Unit::Percent, PRIMEIRA));
-            t.set("vram.used", Metric::unknown(Unit::Gigabytes, PRIMEIRA));
-            t.set("vram.usage", Metric::unknown(Unit::Percent, PRIMEIRA));
-            t.set("storage.busy", Metric::unknown(Unit::Percent, PRIMEIRA));
-            t.set("display.refresh", Metric::unknown(Unit::Hertz, PRIMEIRA));
+        // A frequência do monitor continua vindo da tarefa de fundo, porque
+        // ler o modo de vídeo é a única parte dela que ainda custa. Ela não
+        // envelhece como o resto: muda quando alguém troca o modo, não sozinha.
+        match guardada {
+            Some((quando, leitura)) => marcar_hz(t, leitura.hz, agora.duration_since(quando)),
+            None => t.set(
+                "display.refresh",
+                Metric::unknown(
+                    Unit::Hertz,
+                    "a primeira leitura do modo de vídeo ainda não voltou",
+                ),
+            ),
+        }
+
+        // O resto é lido AGORA, dos contadores de desempenho. Sem idade, sem
+        // rebaixamento para estimativa: é medição desta coleta.
+        let Some(contadores) = self.contadores_placa.as_ref() else {
+            const SEM: &str = "os contadores de placa e disco não abriram nesta máquina";
+            t.set("gpu.usage", Metric::unknown(Unit::Percent, SEM));
+            t.set("vram.used", Metric::unknown(Unit::Gigabytes, SEM));
+            t.set("vram.usage", Metric::unknown(Unit::Percent, SEM));
+            t.set("storage.busy", Metric::unknown(Unit::Percent, SEM));
+            t.set("storage.latency", Metric::unknown(Unit::Milliseconds, SEM));
             return;
         };
 
-        let idade = agora.duration_since(quando);
+        let a = contadores.coletar();
 
-        if idade > VALIDADE_DA_PLACA {
-            let velha = format!(
-                "a última leitura da placa tem {} s e não descreve mais esta máquina",
-                idade.as_secs()
-            );
-            t.set("gpu.usage", Metric::unknown(Unit::Percent, velha.clone()));
-            t.set("vram.used", Metric::unknown(Unit::Gigabytes, velha.clone()));
-            t.set("vram.usage", Metric::unknown(Unit::Percent, velha.clone()));
-            t.set("storage.busy", Metric::unknown(Unit::Percent, velha));
-            // A frequência do monitor não estraga com o tempo do mesmo jeito:
-            // ela muda quando alguém troca o modo de vídeo, não sozinha.
-            marcar_hz(t, leitura.hz, idade);
-            return;
-        }
-
-        let idade_ms = idade.as_millis() as u64;
-        let com_idade = |m: Metric| m.com_idade(idade_ms);
-
-        match leitura.gpu_pct {
+        match a.gpu_pct {
             Some(pct) => t.set(
                 "gpu.usage",
-                com_idade(Metric::measured(pct, Unit::Percent, "wmi").require_range(0.0, 100.0)),
+                Metric::measured(pct, Unit::Percent, "pdh").require_range(0.0, 100.0),
             ),
             None => t.set(
                 "gpu.usage",
-                Metric::unknown(Unit::Percent, "o contador de motores 3D não respondeu"),
+                Metric::unknown(
+                    Unit::Percent,
+                    "esta máquina não publica o contador de motores 3D",
+                ),
             ),
         }
 
-        match leitura.disco_pct {
+        match a.disco_ocupado_pct {
             Some(pct) => t.set(
                 "storage.busy",
-                com_idade(Metric::measured(pct, Unit::Percent, "wmi").require_range(0.0, 100.0)),
+                Metric::measured(pct, Unit::Percent, "pdh").require_range(0.0, 100.0),
             ),
             None => t.set(
                 "storage.busy",
@@ -932,20 +972,33 @@ impl PerformanceMonitor {
             ),
         }
 
-        match leitura.vram_usada_gb {
-            Some(gb) => {
-                t.set(
-                    "vram.used",
-                    com_idade(Metric::measured(gb, Unit::Gigabytes, "wmi")),
-                );
+        // Latência é outra pergunta que ocupação, e agora as duas têm resposta
+        // separada: um disco 100% ocupado com 0,2 ms está dando conta, e um a
+        // 40% com 30 ms é o que trava o jogo.
+        match a.disco_latencia_ms {
+            Some(ms) => t.set(
+                "storage.latency",
+                Metric::measured(ms, Unit::Milliseconds, "pdh"),
+            ),
+            None => t.set(
+                "storage.latency",
+                Metric::unknown(
+                    Unit::Milliseconds,
+                    "o contador de tempo por transferência não respondeu",
+                ),
+            ),
+        }
+
+        match a.vram_mb {
+            Some(mb) => {
+                let gb = mb / 1024.0;
+                t.set("vram.used", Metric::measured(gb, Unit::Gigabytes, "pdh"));
 
                 match total {
                     Some(tot) if tot > 0.0 => t.set(
                         "vram.usage",
-                        com_idade(
-                            Metric::measured(gb / tot * 100.0, Unit::Percent, "wmi")
-                                .require_range(0.0, 100.0),
-                        ),
+                        Metric::measured(gb / tot * 100.0, Unit::Percent, "pdh")
+                            .require_range(0.0, 100.0),
                     ),
                     _ => t.set(
                         "vram.usage",
@@ -962,8 +1015,6 @@ impl PerformanceMonitor {
                 t.set("vram.usage", Metric::unknown(Unit::Percent, MUDO));
             }
         }
-
-        marcar_hz(t, leitura.hz, idade);
     }
 
     /// Segundos desde a leitura anterior, ou `None` na primeira.
@@ -1074,14 +1125,6 @@ impl PerformanceMonitor {
                     (None, None)
                 }
             };
-
-        t.set(
-            "storage.latency",
-            Metric::unknown(
-                Unit::Milliseconds,
-                "exige contador de desempenho por disco; sem provedor nesta versão",
-            ),
-        );
 
         DiskMetrics {
             read_speed_mbps: read,
@@ -1307,10 +1350,15 @@ fn marcar_hz(t: &mut Telemetry, hz: Option<u32>, idade: std::time::Duration) {
 /// leva mais de um segundo.
 #[cfg(target_os = "windows")]
 fn ler_placa_devagar() -> LeituraLenta {
-    use crate::modules::windows::{bottleneck, display};
+    use crate::modules::windows::display;
 
-    let bruto = bottleneck::amostrar_wmi();
-
+    // A consulta ao WMI saiu daqui.
+    //
+    // Uso da placa, memória de vídeo e ocupação do disco agora vêm dos
+    // contadores de desempenho, em `windows::placa`: microssegundos em vez de
+    // mais de um segundo, e por isso lidos a cada coleta em vez de guardados
+    // e envelhecidos. Ficaram nesta tarefa de fundo só as duas leituras que
+    // realmente custam — o modo de vídeo e o histórico de quadros em disco.
     let hz = display::monitores()
         .into_iter()
         .find(|m| m.principal)
@@ -1323,13 +1371,7 @@ fn ler_placa_devagar() -> LeituraLenta {
         .into_iter()
         .max_by_key(|m| m.quando);
 
-    LeituraLenta {
-        gpu_pct: bruto.gpu,
-        vram_usada_gb: bruto.vram_mb.map(|mb| mb / 1024.0),
-        disco_pct: bruto.disco,
-        hz,
-        quadros,
-    }
+    LeituraLenta { hz, quadros }
 }
 
 /// Até quando uma medição de quadros ainda diz algo sobre a máquina de agora.
@@ -1414,18 +1456,21 @@ mod tests {
 
         assert_eq!(m.ram.cached_gb, None);
 
+        // O que continua sem quem leia, cada um por um motivo diferente:
+        // sensor da placa exige biblioteca do fabricante, potência de pacote
+        // exige driver assinado, quadros exigem partida em andamento, latência
+        // de rede e polling do mouse não têm provedor nenhum.
         for id in [
             "cpu.package_power",
-            "gpu.usage",
-            "vram.used",
+            "gpu.clock",
+            "gpu.temperature",
+            "gpu.power",
             "fps.rendered",
             "fps.generated",
             "fps.displayed",
-            "frametime.p99",
-            "storage.latency",
             "network.latency",
+            "network.jitter",
             "input.mouse_polling",
-            "display.refresh",
         ] {
             let metric = m.telemetry.get(id).unwrap_or_else(|| panic!("{id} sumiu"));
             assert_eq!(metric.quality, Quality::Unknown, "{id}");
@@ -1587,8 +1632,10 @@ mod tests {
         // aberto, com a janela térmica fechada e a leitura cara já de volta.
         // Uma coleta só mostraria o pior caso e não o estado normal.
         let mut m = monitor.collect_metrics().await.expect("coleta");
+        // Espera pelo modo de vídeo, que é a última leitura a chegar: o resto
+        // já vem pronto na primeira coleta.
         let limite = std::time::Instant::now() + std::time::Duration::from_secs(25);
-        while std::time::Instant::now() < limite && m.telemetry.value("gpu.usage").is_none() {
+        while std::time::Instant::now() < limite && m.telemetry.value("display.refresh").is_none() {
             m = monitor.collect_metrics().await.expect("coleta");
         }
         let s = m.telemetry.summary;
@@ -1629,51 +1676,62 @@ mod tests {
     /// um instante que já passou, e `age_ms` diz quanto.
     #[cfg(target_os = "windows")]
     #[tokio::test]
-    async fn a_leitura_cara_chega_com_idade() {
+    async fn a_placa_e_lida_agora_e_nao_envelhecida() {
+        let mut monitor = PerformanceMonitor::new();
+
+        // Logo na PRIMEIRA coleta. A consulta ao WMI levava segundos e obrigava
+        // a tela a esperar, mostrando "ainda não voltou"; o contador de
+        // desempenho responde dentro da própria coleta.
+        let m = monitor.collect_metrics().await.expect("coleta");
+
+        for id in [
+            "gpu.usage",
+            "vram.used",
+            "vram.usage",
+            "storage.busy",
+            "storage.latency",
+        ] {
+            let metric = m.telemetry.get(id).unwrap_or_else(|| panic!("{id} sumiu"));
+
+            // Numa máquina sem o contador, a resposta continua sendo "não sei"
+            // — nunca um zero. O teste aceita os dois desfechos e exige que o
+            // contrato seja coerente em cada um.
+            match metric.quality {
+                Quality::Unknown => assert!(metric.value.is_none() && metric.reason.is_some()),
+                _ => {
+                    assert_eq!(metric.quality, Quality::Measured, "{id} não é estimativa");
+                    assert_eq!(metric.source, "pdh", "{id}");
+                    assert_eq!(metric.age_ms, None, "{id} é desta coleta, não tem idade");
+                }
+            }
+        }
+    }
+
+    /// A frequência do monitor continua vindo da tarefa de fundo.
+    ///
+    /// É a única leitura que sobrou lá, e a que justifica o campo de idade
+    /// continuar existindo no caminho da placa.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn o_modo_de_video_chega_pela_tarefa_de_fundo() {
         let mut monitor = PerformanceMonitor::new();
 
         let primeira = monitor.collect_metrics().await.expect("coleta");
-        let gpu = primeira.telemetry.get("gpu.usage").expect("catálogo");
-        assert_eq!(gpu.quality, Quality::Unknown, "a consulta ainda não voltou");
-        assert_eq!(gpu.value, None, "e não vira zero enquanto isso");
-        assert_eq!(gpu.age_ms, None, "não há leitura para envelhecer");
+        let hz = primeira.telemetry.get("display.refresh").expect("catálogo");
+        assert_eq!(
+            hz.quality,
+            Quality::Unknown,
+            "a primeira leitura não voltou ainda"
+        );
 
-        // A tarefa de fundo abre um PowerShell; a primeira volta leva alguns
-        // segundos. O limite é de tempo e não de tentativas, porque o número
-        // de coletas que cabem nesse tempo muda com a carga da máquina.
         let limite = std::time::Instant::now() + std::time::Duration::from_secs(25);
-        let mut chegou = None;
         while std::time::Instant::now() < limite {
             let m = monitor.collect_metrics().await.expect("coleta");
-            if m.telemetry.value("gpu.usage").is_some() {
-                chegou = Some(m);
-                break;
+            if let Some(v) = m.telemetry.value("display.refresh") {
+                assert!((20.0..=1000.0).contains(&v), "{v} Hz não é taxa de monitor");
+                return;
             }
         }
-
-        let Some(m) = chegou else {
-            // Máquina sem os contadores de GPU do Windows. O contrato tem de
-            // continuar dizendo isso, e não inventando um número.
-            let m = monitor.collect_metrics().await.expect("coleta");
-            let gpu = m.telemetry.get("gpu.usage").expect("catálogo");
-            assert_eq!(gpu.quality, Quality::Unknown);
-            assert!(gpu.reason.is_some());
-            return;
-        };
-
-        let gpu = m.telemetry.get("gpu.usage").expect("catálogo");
-        assert_eq!(gpu.source, "wmi");
-        assert_eq!(
-            gpu.quality,
-            Quality::Estimated,
-            "leitura de segundos atrás não é MEASURED"
-        );
-        assert!(gpu.age_ms.is_some(), "a idade precisa estar escrita");
-        assert!(
-            gpu.age_ms.unwrap() <= VALIDADE_DA_PLACA.as_millis() as u64,
-            "leitura vencida não deveria ter sido publicada"
-        );
-        assert!((0.0..=100.0).contains(&gpu.value.unwrap()));
     }
 
     #[test]

@@ -55,6 +55,7 @@ pub mod grupos;
 pub mod naofazemos;
 pub mod niveis;
 pub mod pcie;
+pub mod placa;
 pub mod power;
 pub mod pressao;
 pub mod processes;

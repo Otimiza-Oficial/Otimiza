@@ -512,6 +512,31 @@ pub fn run() {
                             )
                         });
 
+                        // A placa também, na mesma janela, e por contador de
+                        // desempenho. Pela consulta ao WMI isto era impossível:
+                        // mais de um segundo por leitura, abrindo PowerShell
+                        // dentro de uma medição de desempenho — virar a carga
+                        // que se está medindo.
+                        let parar_placa = parar.clone();
+                        let placa = std::thread::spawn(move || {
+                            use std::sync::atomic::Ordering;
+                            let contadores = modules::windows::placa::Contadores::novo()?;
+                            let mut vistos: Vec<f64> = Vec::new();
+
+                            while !parar_placa.load(Ordering::Relaxed) {
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                if let Some(pct) = contadores.coletar().gpu_pct {
+                                    vistos.push(pct);
+                                }
+                            }
+
+                            // Sem leitura nenhuma não há média: lista vazia
+                            // viraria zero, e "placa parada" é a conclusão
+                            // oposta à que se quer tirar daqui.
+                            (!vistos.is_empty())
+                                .then(|| vistos.iter().sum::<f64>() / vistos.len() as f64)
+                        });
+
                         let medido = tokio::task::spawn_blocking(move || {
                             modules::windows::frames::medir_par(
                                 jogo.pid,
@@ -530,6 +555,7 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
+                        let gpu_uso_pct = placa.join().ok().flatten();
 
                         match medido.map(|r| r.map(|(principal, _)| principal)) {
                             Ok(Ok(crua)) => {
@@ -553,6 +579,7 @@ pub fn run() {
                                     frametime_p95_ms: p95,
                                     frametime_p99_ms: p99,
                                     cpu_uso_pct,
+                                    gpu_uso_pct,
                                 };
 
                                 match medicoes::registrar(registro) {

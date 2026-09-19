@@ -344,7 +344,8 @@ type Classe =
   | "LimiteTermico"
   | "LimiteEletrico"
   | "TetoDeQuadros"
-  | "Engasgo";
+  | "Engasgo"
+  | "ForaDoHardware";
 
 /** `Causa` = o sistema afirmou o fato agora. `Hipotese` = indireto ou velho. */
 type Forca = "Causa" | "Hipotese";
@@ -2007,6 +2008,7 @@ const NOME_DA_CLASSE: Record<Classe, string> = {
   LimiteEletrico: "Firmware segurando por energia",
   TetoDeQuadros: "Quadros presos na taxa do monitor",
   Engasgo: "Engasgo durante a partida",
+  ForaDoHardware: "Limite fora do hardware",
 };
 
 /** Classes em que nenhum ajuste de software resolve. */

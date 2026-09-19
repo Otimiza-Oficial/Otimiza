@@ -375,6 +375,15 @@ pub const CATALOG: &[(&str, Unit)] = &[
     // minuto. O limiar é relativo porque um fixo trataria um jogo a 30 quadros
     // como engasgo permanente e nunca acusaria nada num jogo a 240.
     ("frametime.stutters_per_minute", Unit::Count),
+    // O CONTEXTO DA PARTIDA, e não o de agora.
+    //
+    // Uso de processador e de placa medidos DENTRO da janela em que os quadros
+    // foram contados. Existem separados de `cpu.usage.overall` e `gpu.usage`
+    // porque respondem outra pergunta: aqueles dizem como a máquina está neste
+    // instante, estes dizem como ela estava enquanto o jogo rodava. Misturar os
+    // dois é comparar momentos diferentes e chamar o resultado de diagnóstico.
+    ("match.cpu_usage", Unit::Percent),
+    ("match.gpu_usage", Unit::Percent),
     // CPU.
     ("cpu.usage.overall", Unit::Percent),
     ("cpu.cores.logical", Unit::Count),

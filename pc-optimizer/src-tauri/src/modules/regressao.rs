@@ -289,6 +289,7 @@ mod tests {
             frametime_p95_ms: None,
             frametime_p99_ms: None,
             cpu_uso_pct: None,
+            gpu_uso_pct: None,
         }
     }
 
