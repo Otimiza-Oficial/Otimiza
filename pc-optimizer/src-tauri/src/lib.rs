@@ -93,6 +93,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
+            #[cfg(target_os = "windows")]
+            commands::concluir_recuperacao,
             commands::descartar_pendencia,
             commands::start_monitoring,
             commands::stop_monitoring,

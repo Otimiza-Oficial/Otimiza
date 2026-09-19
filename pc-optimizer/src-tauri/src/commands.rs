@@ -232,6 +232,24 @@ pub struct PendenciaNaTela {
     pub explicacao: String,
 }
 
+/// Comando: terminar o serviço que ficou pela metade.
+///
+/// Devolve os valores anteriores guardados no diário, limpa o histórico do id
+/// envolvido e apaga a pendência. Devolve quantas mudanças foram desfeitas.
+///
+/// Só roda quando o cliente pede. O produto não conserta sozinho na abertura —
+/// ver `recuperacao_pendente`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn concluir_recuperacao(state: State<'_, AppState>) -> Result<usize, String> {
+    let Some(pendencia) = crate::modules::transacao::pendente()? else {
+        return Err("Não há operação pela metade para terminar.".to_string());
+    };
+
+    let mut log = state.changes.lock().await;
+    crate::modules::windows::concluir_recuperacao(&pendencia, &mut log)
+}
+
 /// Comando: descartar a pendência sem completar nada.
 ///
 /// O cliente olhou o que ficou pela metade e decidiu deixar como está. O nome
@@ -3886,6 +3904,7 @@ mod tests {
         "capturar_baseline",
         "recuperacao_pendente",
         "descartar_pendencia",
+        "concluir_recuperacao",
         "comparar_com_baseline",
         "start_monitoring",
         "stop_monitoring",

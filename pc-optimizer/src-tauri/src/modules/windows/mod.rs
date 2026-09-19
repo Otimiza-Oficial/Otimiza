@@ -552,6 +552,11 @@ impl WindowsOptimizer {
         let mut acoes: Vec<ActionResult> = Vec::new();
         let total_de_acoes = spec.actions.len();
 
+        // O diário desta aplicação, aberto assim que existir a primeira
+        // mudança a proteger. `None` enquanto nada foi mexido: não há o que
+        // recuperar de uma operação que ainda não tocou em nada.
+        let mut diario: Option<crate::modules::transacao::Diario> = None;
+
         for (numero, action) in spec.actions.iter().enumerate() {
             // Antes de executar, e não depois: se esta ação travar, a última
             // linha do registro diz qual foi.
@@ -581,6 +586,29 @@ impl WindowsOptimizer {
 
             let resultado = self.execute(action, &mut changes, &mut detalhe);
             detalhe.duration_ms = relogio.elapsed().as_millis() as u64;
+
+            // O DIÁRIO É REESCRITO A CADA AÇÃO, e não uma vez antes do laço.
+            //
+            // Uma otimização é uma sequência de mudanças, e `changes` cresce
+            // conforme elas acontecem. Um diário gravado antes do laço estaria
+            // vazio — saberia que algo começou e não saberia desfazer nada. O
+            // que precisa sobreviver a uma queda de energia é a lista de
+            // valores anteriores COMO ELA ESTÁ AGORA.
+            //
+            // Custa um `sync_all` por ação. Uma otimização tem um punhado de
+            // ações, e cada uma já escreveu no registro — o custo do diário
+            // desaparece ao lado disso.
+            if !changes.is_empty() {
+                diario = Some(crate::modules::transacao::abrir(
+                    &crate::modules::transacao::Pendencia::nova(
+                        spec.id,
+                        spec.name,
+                        crate::modules::transacao::Intencao::Aplicar,
+                        now_timestamp(),
+                        changes.clone(),
+                    ),
+                )?);
+            }
 
             // DEPOIS DO RAMO, E NÃO DENTRO DELE. O ramo sabe o que aconteceu
             // com o ajuste; quem manda na máquina é outra pergunta, e a mesma
@@ -631,6 +659,20 @@ impl WindowsOptimizer {
                             failures.join("; ")
                         ));
                     }
+
+                    // Falha TRATADA fecha o diário: a reversão parcial acima
+                    // já pôs a máquina de volta, e deixar a pendência no disco
+                    // faria a próxima abertura oferecer desfazer o que já foi
+                    // desfeito.
+                    if let Some(d) = diario.take() {
+                        if let Err(erro) = d.concluir() {
+                            crate::utils::Logger::warn(&format!(
+                                "não consegui fechar o diário de `{}`: {}",
+                                spec.id, erro
+                            ));
+                        }
+                    }
+
                     return Err(format!("{}: {}", spec.name, error));
                 }
             }
@@ -645,6 +687,14 @@ impl WindowsOptimizer {
             timestamp: now_timestamp(),
             changes,
         })?;
+
+        // DEPOIS do `record`, e não antes. O diário existe para cobrir
+        // exatamente a janela entre mexer no sistema e o histórico saber
+        // disso; fechá-lo antes de o histórico estar gravado deixaria essa
+        // janela descoberta, que é o defeito que ele veio corrigir.
+        if let Some(d) = diario.take() {
+            d.concluir()?;
+        }
 
         Ok(OptimizationOutcome {
             id: spec.id.to_string(),
@@ -2533,6 +2583,41 @@ fn anotar_fim(
 
 /// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
+/// Termina uma operação que ficou pela metade, devolvendo os valores
+/// anteriores guardados no diário.
+///
+/// AS DUAS INTENÇÕES TERMINAM NO MESMO LUGAR, e isso não é preguiça.
+///
+/// Se o Otimiza morreu DESFAZENDO, o que falta é justamente desfazer — os
+/// valores anteriores são o destino.
+///
+/// Se ele morreu APLICANDO, parte das mudanças foi feita e o histórico não
+/// soube. A resposta conservadora é a mesma: pôr a máquina de volta onde ela
+/// estava antes da operação interrompida. Completar uma aplicação pela metade
+/// exigiria saber quais ações faltavam e em que ordem, e o diário não guarda
+/// isso — ele guarda o caminho de volta, que é o que sempre se pode garantir.
+///
+/// Escrever um valor de registro que já está lá não faz nada, então repetir a
+/// reversão de uma mudança já revertida é inofensivo. É o que permite este
+/// conserto rodar sem saber até onde a operação anterior chegou.
+///
+/// O histórico é limpo no fim: se a aplicação chegou a ser registrada antes de
+/// o diário fechar, deixar o registro lá faria o produto afirmar que uma
+/// otimização está aplicada logo depois de desfazê-la.
+#[cfg(target_os = "windows")]
+pub fn concluir_recuperacao(
+    pendencia: &crate::modules::transacao::Pendencia,
+    log: &mut ChangeLog,
+) -> Result<usize, String> {
+    revert_changes(&pendencia.mudancas)
+        .map_err(|erros| format!("não consegui terminar o serviço: {}", erros.join("; ")))?;
+
+    log.take(&pendencia.id)?;
+    crate::modules::transacao::descartar()?;
+
+    Ok(pendencia.mudancas.len())
+}
+
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     // Desfazer também precisa valer na hora. Sem isto, "Desfazer" devolveria o
