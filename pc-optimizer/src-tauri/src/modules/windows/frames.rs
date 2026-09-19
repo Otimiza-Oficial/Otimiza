@@ -37,10 +37,10 @@ use std::sync::Mutex;
 use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS, ERROR_SUCCESS};
 use windows_sys::Win32::System::Diagnostics::Etw::{
     CloseTrace, ControlTraceW, EnableTraceEx2, OpenTraceW, ProcessTrace, StartTraceW,
-    CONTROLTRACE_HANDLE, EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_RECORD, EVENT_TRACE_CONTROL_STOP,
-    EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE,
-    PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME, TRACE_LEVEL_INFORMATION,
-    WNODE_FLAG_TRACED_GUID,
+    CONTROLTRACE_HANDLE, EVENT_CONTROL_CODE_ENABLE_PROVIDER, EVENT_RECORD,
+    EVENT_TRACE_CONTROL_STOP, EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES,
+    EVENT_TRACE_REAL_TIME_MODE, PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME,
+    TRACE_LEVEL_INFORMATION, WNODE_FLAG_TRACED_GUID,
 };
 
 /// Provedor de eventos do DXGI, a camada por onde todo jogo moderno entrega
@@ -221,6 +221,51 @@ pub fn estatistica(mut intervalos_ms: Vec<f64>) -> (f64, f64, f64, bool) {
         (por_minuto * 10.0).round() / 10.0,
         intervalos_ms.len() >= AMOSTRAS_PARA_DETALHE,
     )
+}
+
+/// Média e percentis do tempo entre quadros, em milissegundos.
+///
+/// **Função pura**, pelo mesmo motivo de `estatistica`: dá para conferir sem
+/// abrir jogo nenhum.
+///
+/// POR QUE A MÉDIA E A MEDIANA SÃO NÚMEROS DIFERENTES, E OS DOIS FICAM
+///
+/// A mediana é o quadro do meio: ela ignora os engasgos por construção, e é a
+/// que descreve como o jogo se comporta na maior parte do tempo. A média é
+/// puxada por cada tranco. Quando as duas se afastam, o afastamento É o
+/// sintoma — e é por isso que o produto não escolhe uma das duas para chamar
+/// de "frametime".
+///
+/// P95 E P99 SÃO PERCENTIS, NÃO MÉDIAS DE CAUDA
+///
+/// `low_1pct` em `estatistica` é a MÉDIA do 1% pior, que é a convenção de quem
+/// publica análise de jogo. P99 é outra coisa: é o valor abaixo do qual estão
+/// 99% dos quadros. Trocar um pelo outro dá números parecidos e conclusões
+/// diferentes, então eles vivem em campos separados.
+///
+/// `None` com amostra curta demais: percentil de cauda tirado de poucas
+/// dezenas de quadros é ruído com cara de medição.
+pub fn percentis(intervalos_ms: &[f64]) -> Option<(f64, f64, f64)> {
+    if intervalos_ms.len() < AMOSTRAS_PARA_DETALHE {
+        return None;
+    }
+
+    let mut ordenados: Vec<f64> = intervalos_ms.to_vec();
+    ordenados.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let media = ordenados.iter().sum::<f64>() / ordenados.len() as f64;
+
+    // Índice do percentil pelo método do mais próximo, que é o que as
+    // ferramentas de análise de quadros usam. `min` com o último índice porque
+    // o arredondamento pode cair fora do vetor em amostra pequena.
+    let em = |p: f64| {
+        let indice = ((p / 100.0) * ordenados.len() as f64).ceil() as usize;
+        ordenados[indice.saturating_sub(1).min(ordenados.len() - 1)]
+    };
+
+    let arred = |v: f64| (v * 100.0).round() / 100.0;
+
+    Some((arred(media), arred(em(95.0)), arred(em(99.0))))
 }
 
 // --------------------------------------------------------------- utilitários
@@ -486,14 +531,26 @@ fn medir_interno(
     let secundaria = segundo.and_then(|(pid2, nome2)| {
         let quadros = CONTADOR_SECUNDARIO.load(Ordering::SeqCst);
         (quadros > 0).then(|| {
-            montar(&nome2, pid2, quadros, decorrido, intervalos_em_ms(&INSTANTES_SECUNDARIOS))
+            montar(
+                &nome2,
+                pid2,
+                quadros,
+                decorrido,
+                intervalos_em_ms(&INSTANTES_SECUNDARIOS),
+            )
         })
     });
 
     Ok((principal, secundaria))
 }
 
-fn montar(nome: &str, pid: u32, frames: u64, decorrido: f64, intervalos_ms: Vec<f64>) -> MedicaoCrua {
+fn montar(
+    nome: &str,
+    pid: u32,
+    frames: u64,
+    decorrido: f64,
+    intervalos_ms: Vec<f64>,
+) -> MedicaoCrua {
     let (mediana, low_1pct, engasgos, confiavel) = estatistica(intervalos_ms.clone());
 
     MedicaoCrua {
@@ -574,6 +631,70 @@ mod tests {
     }
 
     #[test]
+    fn percentil_nao_e_media_de_cauda() {
+        // Os mesmos 1000 quadros do teste acima: 990 a 10 ms e 10 a 100 ms.
+        //
+        // A média do 1% pior são os dez de 100 ms. O P99 é o valor abaixo do
+        // qual estão 99% dos quadros, que ainda é 10 ms. Números diferentes,
+        // respondendo perguntas diferentes — e é por isso que moram em campos
+        // separados no contrato.
+        let mut intervalos = vec![10.0; 990];
+        intervalos.extend(vec![100.0; 10]);
+
+        // Repete até passar do mínimo de amostra para o detalhe.
+        let longo: Vec<f64> = intervalos.iter().cycle().take(3000).copied().collect();
+        let (media, p95, p99) = percentis(&longo).expect("amostra suficiente");
+
+        assert_eq!(p95, 10.0, "95% dos quadros estão em 10 ms");
+        assert_eq!(p99, 10.0, "e o P99 também — a cauda é 1% exato");
+        assert!(
+            media > 10.0 && media < 12.0,
+            "a média é puxada pelos trancos: {media}"
+        );
+
+        // Cauda de EXATAMENTE 5%: o P95 ainda é 10 ms, porque 95% dos quadros
+        // continuam em 10 ms. O percentil marca a fronteira, não a entrada
+        // dela — é a diferença que faz P95 e "os 5% piores" serem outra conta.
+        let mut na_fronteira = vec![10.0; 2850];
+        na_fronteira.extend(vec![100.0; 150]);
+        let (_, p95, _) = percentis(&na_fronteira).expect("amostra suficiente");
+        assert_eq!(p95, 10.0);
+
+        // Passando de 5%, o P95 enxerga a cauda.
+        let mut com_cauda = vec![10.0; 2820];
+        com_cauda.extend(vec![100.0; 180]);
+        let (_, p95, p99) = percentis(&com_cauda).expect("amostra suficiente");
+        assert_eq!(p95, 100.0);
+        assert_eq!(p99, 100.0);
+    }
+
+    #[test]
+    fn percentil_de_amostra_curta_nao_existe() {
+        // Percentil de cauda tirado de poucas dezenas de quadros é ruído com
+        // cara de medição. Melhor não responder.
+        assert_eq!(percentis(&[16.0; 300]), None);
+        assert_eq!(percentis(&[]), None);
+    }
+
+    #[test]
+    fn media_e_mediana_se_afastam_quando_o_jogo_engasga() {
+        // O afastamento É o sintoma: jogo liso tem as duas coladas.
+        let liso = vec![16.0; 3000];
+        let (media, _, _) = percentis(&liso).expect("amostra");
+        let (mediana, _, _, _) = estatistica(liso);
+        assert_eq!(media, mediana, "jogo liso: média e mediana iguais");
+
+        let mut engasgado = vec![16.0; 2700];
+        engasgado.extend(vec![300.0; 300]);
+        let (media, _, _) = percentis(&engasgado).expect("amostra");
+        let (mediana, _, _, _) = estatistica(engasgado);
+        assert!(
+            media > mediana * 2.0,
+            "média {media} contra mediana {mediana}"
+        );
+    }
+
+    #[test]
     fn engasgo_e_relativo_a_partida_e_nao_a_um_numero_fixo() {
         // Limiar fixo trataria um jogo a 30 quadros como engasgo permanente e
         // nunca acusaria nada num jogo a 240.
@@ -586,7 +707,10 @@ mod tests {
         let mut com_travada = vec![33.0; 2900];
         com_travada.extend(vec![200.0; 100]);
         let (_, _, engasgos, _) = estatistica(com_travada);
-        assert!(engasgos > 0.0, "travada de 200 ms tem que contar como engasgo");
+        assert!(
+            engasgos > 0.0,
+            "travada de 200 ms tem que contar como engasgo"
+        );
     }
 
     #[test]

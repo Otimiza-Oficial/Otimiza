@@ -494,17 +494,52 @@ pub fn run() {
                             .len();
 
                         let executavel = jogo.executavel.clone();
+
+                        // Os contadores do processador rodam EM PARALELO com a
+                        // contagem de quadros, na mesma janela. Medir um depois
+                        // do outro compararia dois momentos da partida, e a
+                        // variação entre eles viraria conclusão — é a mesma
+                        // razão pela qual o medidor de quadros conta os dois
+                        // processos na mesma sessão.
+                        let parar = std::sync::Arc::new(
+                            std::sync::atomic::AtomicBool::new(false),
+                        );
+                        let parar_amostrador = parar.clone();
+                        let amostrador = std::thread::spawn(move || {
+                            modules::windows::motorenergia_maquina::amostrar_enquanto(
+                                parar_amostrador,
+                                std::time::Duration::from_millis(500),
+                            )
+                        });
+
                         let medido = tokio::task::spawn_blocking(move || {
-                            modules::windows::frames::medir(
+                            modules::windows::frames::medir_par(
                                 jogo.pid,
                                 &jogo.executavel,
+                                None,
                                 medicoes::SEGUNDOS_DE_MEDICAO,
                             )
                         })
                         .await;
 
-                        match medido {
-                            Ok(Ok(m)) => {
+                        parar.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let cpu_uso_pct = amostrador
+                            .join()
+                            .ok()
+                            .and_then(|amostras| {
+                                modules::windows::motorenergia::resumir_cpu(&amostras)
+                            })
+                            .and_then(|resumo| resumo.uso_medio_pct);
+
+                        match medido.map(|r| r.map(|(principal, _)| principal)) {
+                            Ok(Ok(crua)) => {
+                                let m = crua.resumo;
+                                let (medio, p95, p99) =
+                                    match modules::windows::frames::percentis(&crua.intervalos_ms) {
+                                        Some((a, b, c)) => (Some(a), Some(b), Some(c)),
+                                        None => (None, None, None),
+                                    };
+
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,
@@ -514,6 +549,10 @@ pub fn run() {
                                     segundos: m.seconds,
                                     confiavel: m.detalhe_confiavel,
                                     mudancas_aplicadas,
+                                    frametime_medio_ms: medio,
+                                    frametime_p95_ms: p95,
+                                    frametime_p99_ms: p99,
+                                    cpu_uso_pct,
                                 };
 
                                 match medicoes::registrar(registro) {

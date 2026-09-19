@@ -285,6 +285,10 @@ mod tests {
             segundos: 20.0,
             confiavel: true,
             mudancas_aplicadas: aplicadas,
+            frametime_medio_ms: None,
+            frametime_p95_ms: None,
+            frametime_p99_ms: None,
+            cpu_uso_pct: None,
         }
     }
 

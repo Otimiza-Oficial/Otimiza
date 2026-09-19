@@ -796,6 +796,38 @@ impl PerformanceMonitor {
             )
             .com_idade(idade_ms),
         );
+
+        // O RITMO, e não só o resultado.
+        //
+        // Uma configuração com FPS maior e ritmo pior não é uma melhora, e é
+        // o P99 que denuncia isso. Medição gravada antes desta versão não tem
+        // os campos — chega como `None`, e aí o contrato diz que não sabe em
+        // vez de inventar.
+        for (id, valor) in [
+            ("frametime.mean", medicao.frametime_medio_ms),
+            ("frametime.p95", medicao.frametime_p95_ms),
+            ("frametime.p99", medicao.frametime_p99_ms),
+        ] {
+            match valor {
+                Some(ms) => t.set(
+                    id,
+                    Metric::estimated(
+                        ms,
+                        Unit::Milliseconds,
+                        "etw",
+                        format!("medido em {jogo} durante a partida"),
+                    )
+                    .com_idade(idade_ms),
+                ),
+                None => t.set(
+                    id,
+                    Metric::unknown(
+                        Unit::Milliseconds,
+                        "esta medição é de uma versão anterior, que não guardava a distribuição",
+                    ),
+                ),
+            }
+        }
     }
 
     /// Dispara a leitura cara quando é hora, e publica a última que existe.

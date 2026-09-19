@@ -1003,6 +1003,13 @@ pub struct ResumoCpu {
     /// Reportado × uso: trabalho realmente entregue, que cai quando a CPU
     /// "sobe o clock" mas passa o tempo em espera ou limitada.
     pub clock_efetivo_mhz: f64,
+    /// Uso médio do processador na janela, em %.
+    ///
+    /// É o `% Processor Time` das amostras que serviram. Sai separado do clock
+    /// efetivo porque quem quer saber "o quanto a CPU trabalhou" não deve ter
+    /// de desfazer a multiplicação por frequência para chegar lá.
+    #[serde(default)]
+    pub uso_medio_pct: Option<f64>,
     /// `None` quando o contador de limite não respondeu em nenhuma amostra.
     pub limite_medio_pct: Option<f64>,
     /// Fração das amostras com o firmware limitando. `None` quando não houve
@@ -1060,6 +1067,7 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
         amostras_descartadas: amostras.len() - n,
         clock_reportado_mhz: arred(media(&|a| a.clock_reportado_mhz().unwrap_or_default()), 0),
         clock_efetivo_mhz: arred(media(&|a| a.clock_efetivo_mhz().unwrap_or_default()), 0),
+        uso_medio_pct: Some(arred(media(&|a| a.uso_pct.unwrap_or_default()), 1)),
         limite_medio_pct: (!limites_pct.is_empty()).then(|| arred(limites_pct.iter().sum::<f64>() / limites_pct.len() as f64, 1)),
         tempo_limitado_pct: (com_limite > 0).then(|| arred(limitadas as f64 / com_limite as f64 * 100.0, 0)),
         limite_termico: (com_flags > 0).then(|| uteis.iter().filter(|a| a.flags.is_some_and(|f| f & 1 != 0)).count() * 5 >= com_flags),

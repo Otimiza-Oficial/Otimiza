@@ -364,13 +364,17 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
     // aqui dizendo o que falta, para que ninguém leia "não achei gargalo" como
     // "olhei tudo".
     for (nome, falta) in [
+        // A distribuição já é guardada — média, P95 e P99. O que ainda falta
+        // para separar shader de streaming é o EIXO DO TEMPO: saber em que
+        // instante cada tranco caiu, e o que o disco estava fazendo naquele
+        // instante. Sem isso os dois continuam sendo o mesmo sintoma.
         (
             "Engasgo de shader",
-            "exige a série de frametime durante a partida, não só a contagem",
+            "exige o instante de cada tranco, não só a distribuição",
         ),
         (
             "Streaming de assets",
-            "exige frametime e atividade de disco na mesma janela",
+            "exige o instante de cada tranco junto da atividade de disco",
         ),
         (
             "Problema de driver",
@@ -378,7 +382,7 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         ),
         (
             "Limite do motor do jogo",
-            "exige quadros com CPU e placa sobrando",
+            "falta o uso da placa na janela da partida; o do processador já é medido",
         ),
         (
             "Placa híbrida em notebook",
