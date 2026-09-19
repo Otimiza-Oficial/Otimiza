@@ -5279,3 +5279,155 @@ circle.placa-parafuso {
 .en-indeterminada { width: 35% !important; animation: en-vai 1.4s ease-in-out infinite; }
 @keyframes en-vai { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .sem-animacao .en-indeterminada { animation: none; width: 100% !important; opacity: .4; }
+
+/* ===================================================== PAINEL DE EVIDÊNCIA
+
+   De onde veio cada número. O painel existe para mostrar o que o produto NÃO
+   mediu com o mesmo destaque do que ele mediu — ver o comentário no index.html.
+
+   A cor aqui segue a mesma disciplina do resto do arquivo: só o que carrega
+   aviso ganha tom. "Medido" é preto normal, porque é o esperado; estimado é
+   âmbar, porque pede cautela; não medido fica apagado, porque é ausência e não
+   erro. */
+
+.evidencia-detalhe {
+  margin-top: var(--s4);
+  border-top: 1px solid var(--track);
+  padding-top: var(--s3);
+}
+
+.evidencia-detalhe summary {
+  cursor: pointer;
+  font-size: var(--t-label);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.evidencia-detalhe summary:hover {
+  color: var(--text);
+}
+
+.evidencia-tabela {
+  margin-top: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.evidencia-linha {
+  display: grid;
+  /* O id em largura fixa mantém a coluna do meio alinhada mesmo com nomes de
+     tamanhos muito diferentes — `fps.rendered` e `storage.capacity_used` na
+     mesma lista. */
+  grid-template-columns: minmax(0, 15rem) minmax(0, 7rem) minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s2) var(--s3);
+  background: var(--panel, #ffffff);
+  font-size: var(--t-label);
+}
+
+.evidencia-id {
+  font-family: var(--font-mono);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.evidencia-valor {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--text);
+}
+
+.evidencia-origem {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.evidencia-linha[data-qualidade="ESTIMATED"] .evidencia-valor {
+  color: var(--amber);
+}
+
+/* Não medido: o id continua legível — é ele que nomeia o que falta — e o
+   travessão no lugar do valor apaga junto com o motivo. */
+.evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-id,
+.evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-valor {
+  color: var(--text-muted);
+}
+
+#evidencia-tag[data-estado="falha"] {
+  color: var(--red);
+}
+
+/* Barra de medidor sem leitura. Vazia e vazia-marcada não podem parecer a
+   mesma coisa: uma diz "0%", a outra diz "não sei". */
+.vital[data-estado="desconhecido"] .vital-bar,
+.vital[data-estado="desconhecido"] .bar {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--track) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+/* ======================================================= PAINEL DE GARGALO
+
+   Duas colunas: o que foi encontrado e o que não foi verificado. A segunda
+   não é rodapé nem nota de rodapé — ela tem o mesmo peso visual da primeira,
+   porque é ela que impede "não encontramos gargalo" de soar como "está tudo
+   bem". */
+
+.gargalo-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
+@media (max-width: 720px) {
+  .gargalo-colunas { grid-template-columns: 1fr; }
+}
+
+.gargalo-achado,
+.gargalo-falta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--track);
+}
+
+.gargalo-classe {
+  font-size: var(--t-label);
+  color: var(--text);
+}
+
+.gargalo-forca {
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Causa em âmbar, hipótese apagada. O cliente precisa ver a diferença sem ler:
+   uma é o sistema afirmando o fato, a outra é uma leitura que sugere. */
+.gargalo-achado[data-forca="Causa"] .gargalo-forca {
+  color: var(--amber);
+}
+
+.gargalo-evidencia {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.gargalo-aviso {
+  margin: var(--s1) 0 0;
+  font-size: var(--t-label);
+  color: var(--red);
+  max-width: 48ch;
+}

@@ -250,34 +250,122 @@ interface FirmwareReport {
   findings: FirmwareFinding[];
 }
 
+/**
+ * Qualidade de uma medição. Ver o cabeçalho de `modules/telemetry.rs`.
+ *
+ * A tela trata MEASURED e ESTIMATED como número para mostrar, e UNKNOWN como
+ * texto — nunca como zero.
+ */
+type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
+
+interface Metric {
+  /** `null` sempre que a qualidade é UNKNOWN. */
+  value: number | null;
+  unit: string;
+  source: string;
+  quality: Quality;
+  /** Por que não foi medido, ou por que é apenas estimado. */
+  reason: string | null;
+  /**
+   * Há quanto tempo a leitura foi feita. `null` quando é desta coleta.
+   *
+   * Sensor caro — o uso da placa de vídeo, por exemplo — é lido de dez em dez
+   * segundos fora do laço, porque a consulta custa mais de um segundo. A tela
+   * mostra a idade em vez de fingir que o número é de agora.
+   */
+  age_ms: number | null;
+}
+
+interface TelemetrySummary {
+  measured: number;
+  estimated: number;
+  unknown: number;
+  total: number;
+}
+
+interface Telemetry {
+  schema_version: number;
+  collected_at: number;
+  since_previous_ms: number | null;
+  /** Inclui a espera de amostragem da CPU. Não é percentual de overhead. */
+  collection_duration_ms: number;
+  summary: TelemetrySummary;
+  metrics: Record<string, Metric>;
+}
+
+/**
+ * A versão de contrato que esta tela sabe desenhar.
+ *
+ * Número diferente é motivo para avisar, não para adivinhar: um campo que mudou
+ * de significado entre versões continuaria desenhando bonito e dizendo outra
+ * coisa.
+ */
+const TELEMETRIA_SUPORTADA = 1;
+
 interface PerformanceMetrics {
   timestamp: number;
   cpu: {
-    overall: number;
+    overall: number | null;
     per_core: number[];
-    temperature: number;
-    frequency: number;
+    temperature: number | null;
+    frequency: number | null;
   };
   ram: {
     total_gb: number;
     used_gb: number;
     available_gb: number;
-    cached_gb: number;
-    usage_percent: number;
+    cached_gb: number | null;
+    usage_percent: number | null;
   };
   disk: {
-    read_speed_mbps: number;
-    write_speed_mbps: number;
+    read_speed_mbps: number | null;
+    write_speed_mbps: number | null;
     /** Espaço ocupado, não atividade. */
-    usage_percent: number;
+    usage_percent: number | null;
   };
   network: {
-    download_speed_mbps: number;
-    upload_speed_mbps: number;
+    download_speed_mbps: number | null;
+    upload_speed_mbps: number | null;
     total_received_gb: number;
     total_transmitted_gb: number;
   };
   uptime_hours: number;
+  telemetry: Telemetry;
+  gargalo: Diagnostico;
+}
+
+type Classe =
+  | "CpuTodosNucleos"
+  | "CpuUmNucleo"
+  | "Gpu"
+  | "MemoriaRam"
+  | "MemoriaVideo"
+  | "Disco"
+  | "LimiteTermico"
+  | "LimiteEletrico";
+
+/** `Causa` = o sistema afirmou o fato agora. `Hipotese` = indireto ou velho. */
+type Forca = "Causa" | "Hipotese";
+
+interface Achado {
+  classe: Classe;
+  forca: Forca;
+  /** O número que sustenta o achado, com o id da métrica. */
+  evidencia: string;
+  idade_ms: number | null;
+}
+
+interface NaoVerificado {
+  classe: string;
+  falta: string;
+}
+
+interface Diagnostico {
+  conclusao: "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
+  achados: Achado[];
+  nao_verificado: NaoVerificado[];
+  classes_avaliadas: number;
+  classes_totais: number;
 }
 
 type ActionStatus =
@@ -1457,20 +1545,93 @@ function restartMetricsLoop() {
   metricsTimer = window.setInterval(tick, preferences.metrics_interval_seconds * 1000);
 }
 
+/**
+ * Uma coleta já está em curso.
+ *
+ * A coleta espera 200 ms amostrando a CPU, e a leitura de processos vem logo
+ * atrás. Num intervalo curto — ou numa máquina ocupada, que é justamente
+ * quando o cliente está olhando — o relógio dispara de novo antes de a volta
+ * anterior terminar, e as chamadas passam a se empilhar. O monitor vira parte
+ * do problema que ele foi medir.
+ */
+let tickEmAndamento = false;
+
 async function tick() {
-  try {
-    const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
-    renderMetrics(metrics);
-  } catch (error) {
-    console.error("Erro ao coletar métricas:", error);
-  }
+  if (tickEmAndamento) return;
+  tickEmAndamento = true;
 
   try {
-    const processes = await invoke<ProcessImpact[]>("top_processes");
-    renderProcesses(processes);
-  } catch (error) {
-    console.error("Erro ao ler processos:", error);
+    try {
+      const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
+      renderMetrics(metrics);
+    } catch (error) {
+      console.error("Erro ao coletar métricas:", error);
+      // Os números da tela são de uma leitura que não aconteceu. Deixá-los no
+      // lugar faria o painel continuar afirmando algo sobre a máquina agora.
+      limparMetricas(String(error));
+    }
+
+    try {
+      const processes = await invoke<ProcessImpact[]>("top_processes");
+      renderProcesses(processes);
+    } catch (error) {
+      console.error("Erro ao ler processos:", error);
+    }
+  } finally {
+    tickEmAndamento = false;
   }
+}
+
+/**
+ * Apaga os números vivos e diz que a leitura falhou.
+ *
+ * Não zera nada: travessão, não zero. Um painel de CPU marcando 0% porque a
+ * coleta caiu é a mesma mentira que este trabalho inteiro veio tirar do
+ * produto, só que vinda da tela em vez do coletor.
+ */
+function limparMetricas(motivo: string) {
+  for (const id of [
+    "vital-cpu",
+    "vital-ram",
+    "vital-disk",
+    "cpu-value",
+    "ram-value",
+    "disk-value",
+    "flow-read",
+    "flow-write",
+    "flow-net",
+    "clock-efetivo",
+    "gpu-value",
+    "vram-value",
+  ]) {
+    text(id, "—");
+  }
+
+  for (const id of ["vital-cpu-bar", "vital-ram-bar", "vital-disk-bar", "ram-bar", "disk-bar", "clock-bar", "gpu-bar", "vram-bar"]) {
+    setBar(id, null);
+  }
+
+  for (const id of ["clock-note", "gpu-note", "vram-note"]) {
+    const nota = element(id);
+    nota.textContent = "sem leitura";
+    nota.className = "readout-note";
+  }
+
+  // O diagnóstico sai junto dos números. Sem coleta não há o que classificar,
+  // e deixar o veredito anterior na tela seria afirmar sobre a máquina de agora
+  // com a evidência de antes.
+  element("gargalo-cobertura").textContent = "—";
+  element("gargalo-conclusao").textContent =
+    "A leitura falhou, então não há evidência para classificar nada.";
+  element("gargalo-achados").innerHTML = "";
+  element("gargalo-faltas").innerHTML = "";
+
+  const tag = element("evidencia-tag");
+  tag.textContent = "leitura indisponível";
+  tag.dataset.estado = "falha";
+  element("evidencia-tabela").innerHTML = `<p class="empty">${escapeHtml(motivo)}</p>`;
+
+  text("status-right", `leitura falhou às ${new Date().toLocaleTimeString("pt-BR")}`);
 }
 
 /**
@@ -1511,8 +1672,29 @@ function renderProcesses(processes: ProcessImpact[]) {
     .join("");
 }
 
+/**
+ * Formata um número que pode não existir.
+ *
+ * Ausência vira travessão. É a regra que atravessa a tela inteira desde que o
+ * backend passou a distinguir "medi zero" de "não medi": onde o produto não
+ * tem número, ele não escreve número nenhum.
+ */
+function medida(valor: number | null, formatar: (n: number) => string): string {
+  return valor === null ? "—" : formatar(valor);
+}
+
 function renderMetrics(metrics: PerformanceMetrics) {
-  const cpu = Math.min(100, Math.max(0, metrics.cpu.overall));
+  if (metrics.telemetry.schema_version !== TELEMETRIA_SUPORTADA) {
+    limparMetricas(
+      `esta tela lê a telemetria versão ${TELEMETRIA_SUPORTADA} e recebeu a versão ${metrics.telemetry.schema_version}`
+    );
+    return;
+  }
+
+  renderEvidencia(metrics.telemetry);
+  renderGargalo(metrics.gargalo);
+
+  const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
   const gauge = element<SVGCircleElement & HTMLElement>("gauge-cpu");
@@ -1527,15 +1709,20 @@ function renderMetrics(metrics: PerformanceMetrics) {
     aro.dataset.entrada = "true";
     window.setTimeout(() => delete aro.dataset.entrada, 1000);
   }
-  gauge.style.strokeDashoffset = String(540 - (540 * cpu) / 100);
-  gauge.style.stroke = loadColor(cpu);
+  // Sem leitura de CPU o anel esvazia e fica cinza. Ele não pode descansar no
+  // valor anterior: um instrumento parado exibindo o número de trinta segundos
+  // atrás é pior do que um instrumento vazio, porque parece vivo.
+  gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
+  gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
 
   // Faixa fixa do topo, viva em qualquer aba.
-  text("vital-cpu", `${cpu.toFixed(0)}%`);
+  const porcento = (n: number) => `${n.toFixed(0)}%`;
+
+  text("vital-cpu", medida(cpu, porcento));
   setBar("vital-cpu-bar", cpu);
-  text("vital-ram", `${metrics.ram.usage_percent.toFixed(0)}%`);
+  text("vital-ram", medida(metrics.ram.usage_percent, porcento));
   setBar("vital-ram-bar", metrics.ram.usage_percent);
-  text("vital-disk", `${metrics.disk.usage_percent.toFixed(0)}%`);
+  text("vital-disk", medida(metrics.disk.usage_percent, porcento));
   setBar("vital-disk-bar", metrics.disk.usage_percent);
 
   // A ESFERA RECEBE A MEDIÇÃO.
@@ -1546,38 +1733,57 @@ function renderMetrics(metrics: PerformanceMetrics) {
   const nivelAgora =
     (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok";
 
-  alimentarEsferas({
-    nucleos: metrics.cpu.per_core.length,
-    cpu,
-    memoria: metrics.ram.usage_percent,
-    nivel: nivelAgora,
-  });
+  // Só desenha com medição na mão. O parágrafo acima é a promessa de que cada
+  // propriedade do desenho sai de um número lido desta máquina — alimentar a
+  // esfera com zero quando a leitura falhou transformaria a promessa em enfeite.
+  if (cpu !== null && metrics.ram.usage_percent !== null) {
+    alimentarEsferas({
+      nucleos: metrics.cpu.per_core.length,
+      cpu,
+      memoria: metrics.ram.usage_percent,
+      nivel: nivelAgora,
+    });
+  }
 
   // OS TRÊS PILARES RECEBEM AS TRÊS MEDIÇÕES.
   //
   // É o que separa a imagem de um enfeite: a altura de cada ruína sai de um
   // número que acabou de ser lido desta máquina, e não de um gosto nosso.
-  alimentarPilares({
-    cpu,
-    memoria: metrics.ram.usage_percent,
-    disco: metrics.disk.usage_percent,
-    nivel: nivelAgora,
-  });
+  if (cpu !== null && metrics.ram.usage_percent !== null && metrics.disk.usage_percent !== null) {
+    alimentarPilares({
+      cpu,
+      memoria: metrics.ram.usage_percent,
+      disco: metrics.disk.usage_percent,
+      nivel: nivelAgora,
+    });
+  }
 
-  text("cpu-value", cpu.toFixed(0));
-  text("cpu-freq", `${metrics.cpu.frequency.toFixed(0)} MHz · ${metrics.cpu.per_core.length} núcleos`);
+  text("cpu-value", medida(cpu, (n) => n.toFixed(0)));
+
+  // O clock sai do backend como ESTIMATED: é o que o sistema informa para o
+  // primeiro núcleo, não o clock efetivo. Quando ele não vem, a linha mostra só
+  // a contagem de núcleos em vez de "0 MHz".
+  const nucleos = `${metrics.cpu.per_core.length} núcleos`;
+  const nominal = valorDe(metrics.telemetry, "cpu.clock.reported") ?? metrics.cpu.frequency;
+  text(
+    "cpu-freq",
+    nominal === null ? `clock não informado · ${nucleos}` : `${nominal.toFixed(0)} MHz · ${nucleos}`
+  );
+
+  renderClock(metrics.telemetry);
+  renderPlaca(metrics.telemetry);
   text("core-count", `${metrics.cpu.per_core.length} lógicos`);
   text("tick-clock", new Date().toLocaleTimeString("pt-BR"));
 
   renderCores(metrics.cpu.per_core);
-  pushHistory(cpu);
+  if (cpu !== null) pushHistory(cpu);
 
   const ram = metrics.ram;
-  text("ram-value", `${ram.usage_percent.toFixed(0)}%`);
+  text("ram-value", medida(ram.usage_percent, porcento));
   text("ram-note", `${ram.used_gb.toFixed(1)} de ${ram.total_gb.toFixed(1)} GB em uso`);
   setBar("ram-bar", ram.usage_percent);
 
-  text("disk-value", `${metrics.disk.usage_percent.toFixed(0)}%`);
+  text("disk-value", medida(metrics.disk.usage_percent, porcento));
   setBar("disk-bar", metrics.disk.usage_percent);
 
   text("net-value", `${metrics.network.total_received_gb.toFixed(1)} GB`);
@@ -1590,8 +1796,14 @@ function renderMetrics(metrics: PerformanceMetrics) {
 /**
  * Taxa em unidade legível. Abaixo de 1 MB/s a leitura em MB vira "0,0" e some;
  * em KB/s o mesmo valor aparece como 340 e se enxerga.
+ *
+ * "parado" só aparece para taxa MEDIDA e perto de zero — hoje isso é a rede,
+ * onde uma interface que falha some da lista em vez de reportar zero. O disco,
+ * que não distingue parado de falha, chega aqui como `null` e vira travessão.
+ * As duas palavras dizem coisas diferentes e não podem trocar de lugar.
  */
-function formatRate(mbPerSecond: number): string {
+function formatRate(mbPerSecond: number | null): string {
+  if (mbPerSecond === null) return "—";
   if (mbPerSecond >= 1) return `${mbPerSecond.toFixed(1)} MB/s`;
   if (mbPerSecond >= 0.01) return `${(mbPerSecond * 1024).toFixed(0)} KB/s`;
   return "parado";
@@ -1629,6 +1841,307 @@ function renderFlow(metrics: PerformanceMetrics) {
   }
 }
 
+// ------------------------------------------------------------- evidência
+//
+// O painel que responde "de onde veio este número".
+//
+// Ele existe porque a resposta honesta do produto hoje é que a maior parte das
+// métricas centrais não tem sensor nesta versão. Esconder isso deixaria a tela
+// mais bonita e o cliente sem saber o que está sendo olhado de verdade — e é
+// exatamente o tipo de silêncio que faz um otimizador parecer placebo. O que
+// não foi medido aparece pelo nome, com o motivo escrito.
+
+const ROTULO_QUALIDADE: Record<Quality, string> = {
+  MEASURED: "medido",
+  ESTIMATED: "estimado",
+  UNKNOWN: "não medido",
+};
+
+const ORDEM_QUALIDADE: Record<Quality, number> = {
+  MEASURED: 0,
+  ESTIMATED: 1,
+  UNKNOWN: 2,
+};
+
+const UNIDADE: Record<string, string> = {
+  percent: "%",
+  megahertz: "MHz",
+  hertz: "Hz",
+  celsius: "°C",
+  gigabytes: "GB",
+  megabytes_per_second: "MB/s",
+  milliseconds: "ms",
+  fps: "FPS",
+  watts: "W",
+  hours: "h",
+  count: "",
+  boolean: "",
+};
+
+/** O uso de cada núcleo, que na lista viraria dezenas de linhas iguais. */
+const ID_DE_NUCLEO = /^cpu\.core\.\d+\.usage$/;
+
+function valorLegivel(metric: Metric): string {
+  if (metric.value === null) return "—";
+  if (metric.unit === "boolean") return metric.value >= 0.5 ? "sim" : "não";
+
+  const casas = metric.unit === "count" ? 0 : 1;
+  const unidade = UNIDADE[metric.unit] ?? metric.unit;
+
+  return `${metric.value.toFixed(casas)}${unidade ? ` ${unidade}` : ""}`;
+}
+
+/** O valor de uma métrica, ou `null` quando ela não foi medida. */
+function valorDe(telemetry: Telemetry, id: string): number | null {
+  return telemetry.metrics[id]?.value ?? null;
+}
+
+/**
+ * Clock efetivo ao lado do nominal, e o que o firmware está segurando.
+ *
+ * É a leitura que separa "a CPU está a 4 GHz" de "a CPU entrega 4 GHz". Os
+ * contadores do Windows medem os dois, e o segundo é o que cai quando a
+ * máquina passa o tempo esperando disco, memória ou o próprio limite térmico.
+ *
+ * Quando o firmware está limitando, isso aparece aqui e não em lugar nenhum
+ * mais: nenhum plano de energia resolve limite de firmware, e o cliente
+ * precisa saber disso ANTES de pagar por um ajuste que não vai mudar nada.
+ */
+function renderClock(telemetry: Telemetry) {
+  const efetivo = valorDe(telemetry, "cpu.clock.effective");
+  const nominal = valorDe(telemetry, "cpu.clock.reported");
+
+  text("clock-efetivo", medida(efetivo, (n) => `${n.toFixed(0)} MHz`));
+
+  // A barra é a fração do nominal que virou trabalho. Sem um dos dois lados
+  // ela fica marcada como desconhecida, e não em zero.
+  setBar(
+    "clock-bar",
+    efetivo !== null && nominal !== null && nominal > 0 ? (efetivo / nominal) * 100 : null
+  );
+
+  const termico = valorDe(telemetry, "cpu.throttling.thermal");
+  const eletrico = valorDe(telemetry, "cpu.throttling.power");
+  const limite = valorDe(telemetry, "cpu.performance_limit");
+
+  const nota = element("clock-note");
+
+  if (termico === 1 || eletrico === 1) {
+    const causa = termico === 1 ? "temperatura" : "energia";
+    nota.textContent = `firmware limitando por ${causa} — nenhum plano resolve isso`;
+    nota.className = "readout-note warn";
+    return;
+  }
+
+  nota.className = "readout-note";
+
+  if (efetivo === null || nominal === null) {
+    nota.textContent = "contadores do Windows não responderam";
+    return;
+  }
+
+  const aproveitamento = nominal > 0 ? (efetivo / nominal) * 100 : 0;
+  const folga = limite === null ? "" : limite >= 99.5 ? " · sem limite de firmware" : ` · firmware em ${limite.toFixed(0)}%`;
+
+  nota.textContent = `${aproveitamento.toFixed(0)}% do nominal de ${nominal.toFixed(0)} MHz${folga}`;
+}
+
+/**
+ * Quando a leitura foi feita, em texto curto.
+ *
+ * "agora" só para o que foi lido nesta coleta. Um sensor caro é lido de dez em
+ * dez segundos, e essa diferença importa: 95% de uso de GPU agora e 95% antes
+ * de o jogo fechar levam a vereditos opostos.
+ */
+function quandoFoiLido(metric: Metric | undefined): string {
+  if (!metric || metric.age_ms === null) return "agora";
+  if (metric.age_ms < 1000) return "agora";
+  return `há ${(metric.age_ms / 1000).toFixed(0)} s`;
+}
+
+/**
+ * Placa de vídeo e memória de vídeo.
+ *
+ * Os dois vêm da leitura cara, então os dois mostram a idade. Sem leitura, o
+ * motivo do contrato vai para a nota — "a primeira consulta ainda não voltou"
+ * é uma resposta; uma barra em zero não é.
+ */
+function renderPlaca(telemetry: Telemetry) {
+  const gpu = telemetry.metrics["gpu.usage"];
+  const uso = gpu?.value ?? null;
+
+  text("gpu-value", medida(uso, (n) => `${n.toFixed(0)}%`));
+  setBar("gpu-bar", uso);
+  element("gpu-note").textContent =
+    uso === null ? (gpu?.reason ?? "não medido") : `motores 3D · ${quandoFoiLido(gpu)}`;
+
+  const usada = telemetry.metrics["vram.used"];
+  const pct = telemetry.metrics["vram.usage"]?.value ?? null;
+  const total = valorDe(telemetry, "vram.total");
+
+  text("vram-value", medida(pct, (n) => `${n.toFixed(0)}%`));
+  setBar("vram-bar", pct);
+
+  const nota = element("vram-note");
+  if (usada?.value != null && total !== null) {
+    nota.textContent = `${usada.value.toFixed(1)} de ${total.toFixed(1)} GB · ${quandoFoiLido(usada)}`;
+  } else if (total !== null) {
+    nota.textContent = `${total.toFixed(1)} GB na placa · uso não medido`;
+  } else {
+    nota.textContent = usada?.reason ?? "não medido";
+  }
+}
+
+// --------------------------------------------------------------- gargalo
+
+const NOME_DA_CLASSE: Record<Classe, string> = {
+  CpuTodosNucleos: "Processador no limite",
+  CpuUmNucleo: "Um núcleo no limite",
+  Gpu: "Placa de vídeo no limite",
+  MemoriaRam: "Memória do sistema apertada",
+  MemoriaVideo: "Memória de vídeo apertada",
+  Disco: "Disco no limite",
+  LimiteTermico: "Firmware segurando por temperatura",
+  LimiteEletrico: "Firmware segurando por energia",
+};
+
+/** Classes em que nenhum ajuste de software resolve. */
+const SOFTWARE_NAO_RESOLVE: Classe[] = ["LimiteTermico", "LimiteEletrico"];
+
+const CONCLUSAO: Record<Diagnostico["conclusao"], string> = {
+  SemEvidencia:
+    "Não há medição suficiente para classificar nada. O que falta está listado ao lado.",
+  SemCarga:
+    "A máquina está parada. Sem carga não existe gargalo para encontrar — medir agora não diria nada sobre um jogo.",
+  NadaNoLimite:
+    "Há carga e nenhum recurso medido encostou no limite. Isso não é o mesmo que estar tudo bem: veja o que não foi verificado.",
+  Encontrado: "",
+};
+
+function renderGargalo(d: Diagnostico) {
+  const tag = element("gargalo-cobertura");
+  tag.textContent = `${d.classes_avaliadas} de ${d.classes_totais} classes avaliadas`;
+
+  const causas = d.achados.filter((a) => a.forca === "Causa").length;
+
+  element("gargalo-conclusao").textContent =
+    d.conclusao === "Encontrado"
+      ? causas > 0
+        ? "O sistema está afirmando o limite abaixo, agora."
+        : "Os indícios abaixo são hipóteses: números reais, mas indiretos ou de alguns segundos atrás."
+      : CONCLUSAO[d.conclusao];
+
+  const achados = element("gargalo-achados");
+
+  achados.innerHTML =
+    d.achados.length === 0
+      ? `<p class="empty">Nenhum recurso medido no limite.</p>`
+      : d.achados
+          .map((a) => {
+            const idade =
+              a.idade_ms === null || a.idade_ms < 1000
+                ? ""
+                : ` · leitura de ${(a.idade_ms / 1000).toFixed(0)} s atrás`;
+
+            const aviso = SOFTWARE_NAO_RESOLVE.includes(a.classe)
+              ? `<p class="gargalo-aviso">Nenhum plano de energia ou ajuste resolve isto — é refrigeração ou alimentação.</p>`
+              : "";
+
+            return `
+              <div class="gargalo-achado" data-forca="${a.forca}">
+                <span class="gargalo-classe">${escapeHtml(NOME_DA_CLASSE[a.classe])}</span>
+                <span class="gargalo-forca">${a.forca === "Causa" ? "causa" : "hipótese"}${idade}</span>
+                <span class="gargalo-evidencia">${escapeHtml(a.evidencia)}</span>
+                ${aviso}
+              </div>
+            `;
+          })
+          .join("");
+
+  element("gargalo-faltas").innerHTML =
+    d.nao_verificado.length === 0
+      ? `<p class="empty">Todas as classes puderam ser avaliadas.</p>`
+      : d.nao_verificado
+          .map(
+            (n) => `
+              <div class="gargalo-falta">
+                <span class="gargalo-classe">${escapeHtml(n.classe)}</span>
+                <span class="gargalo-evidencia">${escapeHtml(n.falta)}</span>
+              </div>
+            `
+          )
+          .join("");
+}
+
+function renderEvidencia(telemetry: Telemetry) {
+  const { measured, estimated, unknown, total } = telemetry.summary;
+
+  text("evidencia-medido", String(measured));
+  text("evidencia-estimado", String(estimated));
+  text("evidencia-desconhecido", String(unknown));
+
+  const tag = element("evidencia-tag");
+  tag.textContent = `${measured} de ${total} medidos`;
+  delete tag.dataset.estado;
+
+  // A duração da coleta INCLUI a espera de amostragem da CPU, que é a maior
+  // parte dela. Dizer isso na tela evita que o número seja lido como o peso que
+  // o Otimiza impõe à máquina, que é outra coisa e não está medida aqui.
+  text(
+    "evidencia-custo",
+    `esta coleta levou ${telemetry.collection_duration_ms} ms, dos quais 200 ms são a espera necessária para amostrar a CPU`
+  );
+
+  const nucleos = Object.entries(telemetry.metrics).filter(([id]) => ID_DE_NUCLEO.test(id));
+
+  const linhas = Object.entries(telemetry.metrics)
+    .filter(([id]) => !ID_DE_NUCLEO.test(id))
+    .sort(([idA, a], [idB, b]) => {
+      const porQualidade = ORDEM_QUALIDADE[a.quality] - ORDEM_QUALIDADE[b.quality];
+      return porQualidade !== 0 ? porQualidade : idA.localeCompare(idB);
+    })
+    .map(([id, metric]) => linhaDeEvidencia(id, metric));
+
+  if (nucleos.length > 0) {
+    const medidos = nucleos.filter(([, m]) => m.quality === "MEASURED").length;
+    linhas.unshift(`
+      <div class="evidencia-linha" data-qualidade="${medidos === nucleos.length ? "MEASURED" : "UNKNOWN"}">
+        <span class="evidencia-id">cpu.core.*.usage</span>
+        <span class="evidencia-valor">${medidos} de ${nucleos.length} núcleos</span>
+        <span class="evidencia-origem">sysinfo · ${
+          medidos === nucleos.length ? "medido" : "parcial"
+        }</span>
+      </div>
+    `);
+  }
+
+  element("evidencia-tabela").innerHTML = linhas.join("");
+}
+
+function linhaDeEvidencia(id: string, metric: Metric): string {
+  // A idade fica ao lado da origem, e não escondida no motivo: é ela que diz
+  // se o número descreve a máquina agora ou dez segundos atrás.
+  const idade =
+    metric.age_ms === null || metric.age_ms < 1000
+      ? ""
+      : ` · ${(metric.age_ms / 1000).toFixed(0)} s atrás`;
+
+  const origem =
+    metric.quality === "UNKNOWN"
+      ? escapeHtml(metric.reason ?? "sem motivo declarado")
+      : `${escapeHtml(metric.source)} · ${ROTULO_QUALIDADE[metric.quality]}${idade}${
+          metric.reason ? ` — ${escapeHtml(metric.reason)}` : ""
+        }`;
+
+  return `
+    <div class="evidencia-linha" data-qualidade="${metric.quality}">
+      <span class="evidencia-id">${escapeHtml(id)}</span>
+      <span class="evidencia-valor">${escapeHtml(valorLegivel(metric))}</span>
+      <span class="evidencia-origem">${origem}</span>
+    </div>
+  `;
+}
+
 function loadColor(percent: number): string {
   if (percent >= 85) return "var(--red)";
   if (percent >= 60) return "var(--amber)";
@@ -1644,14 +2157,28 @@ function loadColor(percent: number): string {
  * carregam informacao, e quem decide isso e uma regra de folha de estilo que
  * da para ler num lugar so.
  */
-function setBar(id: string, percent: number) {
+function setBar(id: string, percent: number | null) {
   const bar = element(id);
+  const medidorOuNada = bar.closest(".vital") as HTMLElement | null;
+
+  // Barra sem medição fica vazia E marcada. Só esvaziar a deixaria idêntica a
+  // uma barra medida em 0%, que é uma afirmação sobre a máquina.
+  if (percent === null) {
+    bar.style.width = "0%";
+    if (medidorOuNada) {
+      delete medidorOuNada.dataset.nivel;
+      medidorOuNada.dataset.estado = "desconhecido";
+    }
+    return;
+  }
+
   const valor = Math.min(100, Math.max(0, percent));
 
   bar.style.width = `${valor}%`;
 
-  const medidor = bar.closest(".vital") as HTMLElement | null;
+  const medidor = medidorOuNada;
   if (!medidor) return;
+  delete medidor.dataset.estado;
 
   // Os mesmos degraus do resto do produto: 75 e 90.
   if (valor >= 90) medidor.dataset.nivel = "critico";

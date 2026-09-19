@@ -25,6 +25,8 @@ pub mod prova;
 pub mod report;
 pub mod safety;
 pub mod monitor;
+pub mod gargalo;
+pub mod telemetry;
 
 #[cfg(target_os = "windows")]
 pub mod windows;

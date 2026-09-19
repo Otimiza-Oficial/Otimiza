@@ -681,6 +681,43 @@
                 </div>
 
                 <div class="readouts">
+                  <!--
+                    CLOCK EFETIVO, e não só o nominal.
+
+                    O nominal é o que o firmware anuncia. O efetivo é o que os
+                    núcleos entregaram no intervalo — e é a diferença entre os
+                    dois que mostra a CPU "a 4 GHz" passando o tempo esperando.
+                    Os dois números vêm dos contadores do Windows, os mesmos
+                    que o motor de energia usa para decidir se um plano fica.
+                  -->
+                  <div class="readout">
+                    <span class="readout-label">Clock efetivo</span>
+                    <span class="readout-value" id="clock-efetivo">—</span>
+                    <div class="bar"><i id="clock-bar"></i></div>
+                    <span class="readout-note" id="clock-note">—</span>
+                  </div>
+                  <!--
+                    PLACA DE VÍDEO.
+
+                    Lida de dez em dez segundos, e não a cada coleta: a
+                    consulta ao Windows custa mais de um segundo, e um monitor
+                    que pesa é um monitor que atrapalha o jogo que ele mede. A
+                    nota diz de quando é a leitura — número de dez segundos
+                    atrás apresentado como se fosse agora é a mesma mentira que
+                    um zero inventado.
+                  -->
+                  <div class="readout">
+                    <span class="readout-label">Placa de vídeo</span>
+                    <span class="readout-value" id="gpu-value">—</span>
+                    <div class="bar"><i id="gpu-bar"></i></div>
+                    <span class="readout-note" id="gpu-note">—</span>
+                  </div>
+                  <div class="readout">
+                    <span class="readout-label">Memória de vídeo</span>
+                    <span class="readout-value" id="vram-value">—</span>
+                    <div class="bar"><i id="vram-bar"></i></div>
+                    <span class="readout-note" id="vram-note">—</span>
+                  </div>
                   <div class="readout">
                     <span class="readout-label">Memória</span>
                     <span class="readout-value" id="ram-value">—</span>
@@ -779,6 +816,91 @@
                 <span class="readout-note" id="flow-uptime-note">desde o último boot</span>
               </div>
             </div>
+          </section>
+
+          <!--
+            O QUE ESTÁ SEGURANDO A MÁQUINA AGORA.
+
+            Duas listas, e as duas importam. À esquerda o que foi encontrado,
+            separado entre CAUSA — o Windows afirmando o fato, agora — e
+            HIPÓTESE — número real, mas indireto ou de alguns segundos atrás.
+            À direita o que NÃO foi verificado, com o que faltou para olhar.
+
+            A segunda lista é a que impede a primeira de mentir. "Não
+            encontramos gargalo" sem dizer que sete das catorze classes não
+            puderam ser avaliadas é a frase de um otimizador que finge ter
+            olhado tudo.
+          -->
+          <section class="panel" id="gargalo">
+            <div class="panel-head">
+              <h2>O que está segurando a máquina</h2>
+              <span class="panel-tag" id="gargalo-cobertura">—</span>
+            </div>
+
+            <p class="lead" id="gargalo-conclusao">—</p>
+
+            <div class="gargalo-colunas">
+              <div>
+                <span class="readout-label">Encontrado</span>
+                <div id="gargalo-achados"></div>
+              </div>
+              <div>
+                <span class="readout-label">Não verificado</span>
+                <div id="gargalo-faltas"></div>
+              </div>
+            </div>
+          </section>
+
+          <!--
+            DE ONDE VÊM ESTES NÚMEROS.
+
+            Nenhum outro painel do produto admite o que ele NÃO sabe. Este
+            admite, e por isso ele é o que torna os outros confiáveis: quando a
+            tela diz 43%, dá para vir aqui e ver quem leu esse 43, quando, e com
+            que qualidade — e ver, na mesma lista, que temperatura e GPU ainda
+            não têm quem leia nesta versão.
+
+            Um otimizador que só mostra o que conseguiu medir é indistinguível
+            de um que inventa.
+          -->
+          <section class="panel" id="evidencia">
+            <div class="panel-head">
+              <h2>De onde vêm estes números</h2>
+              <span class="panel-tag" id="evidencia-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Toda métrica desta tela carrega a origem e a qualidade da leitura.
+              O que foi lido desta máquina agora aparece como medido; o que foi
+              derivado ou informado pelo Windows aparece como estimado; e o que
+              ainda não tem sensor aparece pelo nome, dizendo o que falta. O
+              Otimiza não preenche o que não mediu.
+            </p>
+
+            <div class="readouts readouts-row">
+              <div class="readout">
+                <span class="readout-label">Medido</span>
+                <span class="readout-value" id="evidencia-medido">—</span>
+                <span class="readout-note">lido desta máquina agora</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Estimado</span>
+                <span class="readout-value" id="evidencia-estimado">—</span>
+                <span class="readout-note">derivado ou informado pelo sistema</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Não medido</span>
+                <span class="readout-value" id="evidencia-desconhecido">—</span>
+                <span class="readout-note">sem sensor nesta versão</span>
+              </div>
+            </div>
+
+            <p class="readout-note" id="evidencia-custo">—</p>
+
+            <details class="evidencia-detalhe">
+              <summary>Ver métrica por métrica</summary>
+              <div class="evidencia-tabela" id="evidencia-tabela"></div>
+            </details>
           </section>
         </section>
 

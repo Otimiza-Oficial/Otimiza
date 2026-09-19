@@ -946,87 +946,145 @@ pub fn analisar_rajadas(rajadas: &[Vec<f64>], fatia_ms: f64) -> Option<RespostaM
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct AmostraCpu {
     /// `% Processor Performance`: desempenho em relação à frequência nominal.
-    pub desempenho_pct: f64,
+    pub desempenho_pct: Option<f64>,
     /// `Processor Frequency`: frequência nominal, em MHz.
-    pub frequencia_mhz: f64,
+    pub frequencia_mhz: Option<f64>,
     /// `% Processor Time`: fração do tempo em que a CPU trabalhou.
-    pub uso_pct: f64,
+    pub uso_pct: Option<f64>,
     /// `% Performance Limit`: 100 = sem limite.
-    pub limite_pct: f64,
-    /// `Performance Limit Flags`: bit 0 térmico, bit 1 elétrico.
-    pub flags: u64,
+    ///
+    /// `None` quando o contador não respondeu. Isso NÃO é 100: um contador que
+    /// falhou e um firmware que não limita davam a mesma resposta antes desta
+    /// mudança, e o motor concluía "não há limite" a partir de uma leitura que
+    /// nunca aconteceu.
+    pub limite_pct: Option<f64>,
+    /// `Performance Limit Flags`: bit 0 térmico, bit 1 elétrico. `None` quando
+    /// o contador não respondeu — pela mesma razão de `limite_pct`.
+    pub flags: Option<u64>,
     pub nucleos_acordados: Option<u32>,
     pub nucleos_total: Option<u32>,
     /// Zona térmica ACPI. Pode não ser o sensor do processador.
     pub temperatura_c: Option<f64>,
 }
 
+impl AmostraCpu {
+    /// Clock reportado desta amostra: nominal × desempenho.
+    ///
+    /// `None` quando falta qualquer uma das duas metades — meia conta não é
+    /// meia resposta, é nenhuma.
+    pub fn clock_reportado_mhz(&self) -> Option<f64> {
+        Some(self.frequencia_mhz? * self.desempenho_pct? / 100.0)
+    }
+
+    /// Clock efetivo: o reportado descontado o tempo em que a CPU não estava
+    /// trabalhando. É o número que cai quando o firmware "sobe o clock" e a
+    /// máquina não entrega nada com isso.
+    pub fn clock_efetivo_mhz(&self) -> Option<f64> {
+        Some(self.clock_reportado_mhz()? * self.uso_pct? / 100.0)
+    }
+
+    /// Esta amostra serve para a conta de clock.
+    fn tem_clock(&self) -> bool {
+        self.clock_efetivo_mhz().is_some()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct ResumoCpu {
+    /// Quantas amostras entraram na conta de clock.
     pub amostras: usize,
+    /// Quantas foram DESCARTADAS por terem vindo incompletas do PDH. Existe
+    /// para aparecer no relatório: um resumo tirado de três amostras boas e
+    /// trinta perdidas não vale o mesmo que um tirado de trinta e três.
+    #[serde(default)]
+    pub amostras_descartadas: usize,
     /// Frequência nominal × desempenho: o que o Windows REPORTA.
     pub clock_reportado_mhz: f64,
     /// Reportado × uso: trabalho realmente entregue, que cai quando a CPU
     /// "sobe o clock" mas passa o tempo em espera ou limitada.
     pub clock_efetivo_mhz: f64,
-    pub limite_medio_pct: f64,
-    /// Fração das amostras com o firmware limitando.
-    pub tempo_limitado_pct: f64,
-    pub limite_termico: bool,
-    pub limite_eletrico: bool,
+    /// `None` quando o contador de limite não respondeu em nenhuma amostra.
+    pub limite_medio_pct: Option<f64>,
+    /// Fração das amostras com o firmware limitando. `None` quando não houve
+    /// amostra com os contadores de limite.
+    pub tempo_limitado_pct: Option<f64>,
+    /// `None` quando o contador de flags não respondeu: não observar a flag é
+    /// diferente de observar que ela está baixa.
+    pub limite_termico: Option<bool>,
+    pub limite_eletrico: Option<bool>,
     pub temperatura_max_c: Option<f64>,
     pub temperatura_media_c: Option<f64>,
     pub nucleos_acordados_medio: Option<f64>,
     pub nucleos_total: Option<u32>,
 }
 
-pub fn resumir_cpu(amostras: &[AmostraCpu]) -> ResumoCpu {
-    let n = amostras.len();
+/// Resume uma série de amostras do PDH.
+///
+/// `None` quando nenhuma amostra trouxe as três leituras de que a conta de
+/// clock precisa. Antes isto devolvia um `ResumoCpu` ZERADO, e um resumo com
+/// clock efetivo de 0 MHz e "o firmware não limita" seguia para a pontuação
+/// como se fosse medição.
+pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
+    let uteis: Vec<&AmostraCpu> = amostras.iter().filter(|a| a.tem_clock()).collect();
+    let n = uteis.len();
     if n == 0 {
-        return ResumoCpu::default();
+        return None;
     }
-    let media = |f: &dyn Fn(&AmostraCpu) -> f64| amostras.iter().map(f).sum::<f64>() / n as f64;
-    let limitadas = amostras.iter().filter(|a| a.flags != 0 || a.limite_pct < 95.0).count();
-    let mut temps: Vec<f64> = amostras.iter().filter_map(|a| a.temperatura_c).collect();
+    let media = |f: &dyn Fn(&AmostraCpu) -> f64| uteis.iter().map(|a| f(a)).sum::<f64>() / n as f64;
+    // Limite e flags são contadores SEPARADOS dos de clock: podem faltar numa
+    // amostra que serve para o resto. Só entram na conta as amostras em que
+    // eles vieram, e se não vier nenhuma o campo fica desconhecido.
+    let com_limite = uteis.iter().filter(|a| a.limite_pct.is_some() || a.flags.is_some()).count();
+    let limitadas = uteis
+        .iter()
+        .filter(|a| a.flags.is_some_and(|f| f != 0) || a.limite_pct.is_some_and(|l| l < 95.0))
+        .count();
+    let limites_pct: Vec<f64> = uteis.iter().filter_map(|a| a.limite_pct).collect();
+    let com_flags = uteis.iter().filter(|a| a.flags.is_some()).count();
+    let mut temps: Vec<f64> = uteis.iter().filter_map(|a| a.temperatura_c).collect();
     // SENSOR PARADO NÃO É SENSOR. Muitas placas publicam uma zona térmica ACPI
     // fixa (28 °C o dia inteiro, com a CPU a 100%). Com carga e sem variação
     // nenhuma, a leitura é descartada: folga térmica inventada é pior que
     // "não sei".
     if temps.len() >= 8 {
         let (min, max) = temps.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(*t), b.max(*t)));
-        let com_carga = amostras.iter().any(|a| a.uso_pct >= 10.0);
+        let com_carga = uteis.iter().any(|a| a.uso_pct.is_some_and(|u| u >= 10.0));
         if com_carga && max - min < 0.5 {
             temps.clear();
         }
     }
-    let acordados: Vec<f64> = amostras.iter().filter_map(|a| a.nucleos_acordados.map(|v| v as f64)).collect();
+    let acordados: Vec<f64> = uteis.iter().filter_map(|a| a.nucleos_acordados.map(|v| v as f64)).collect();
 
-    ResumoCpu {
+    Some(ResumoCpu {
         amostras: n,
-        clock_reportado_mhz: arred(media(&|a| a.frequencia_mhz * a.desempenho_pct / 100.0), 0),
-        clock_efetivo_mhz: arred(media(&|a| a.frequencia_mhz * a.desempenho_pct / 100.0 * a.uso_pct / 100.0), 0),
-        limite_medio_pct: arred(media(&|a| a.limite_pct), 1),
-        tempo_limitado_pct: arred(limitadas as f64 / n as f64 * 100.0, 0),
-        limite_termico: amostras.iter().filter(|a| a.flags & 1 != 0).count() * 5 >= n,
-        limite_eletrico: amostras.iter().filter(|a| a.flags & 2 != 0).count() * 5 >= n,
+        amostras_descartadas: amostras.len() - n,
+        clock_reportado_mhz: arred(media(&|a| a.clock_reportado_mhz().unwrap_or_default()), 0),
+        clock_efetivo_mhz: arred(media(&|a| a.clock_efetivo_mhz().unwrap_or_default()), 0),
+        limite_medio_pct: (!limites_pct.is_empty()).then(|| arred(limites_pct.iter().sum::<f64>() / limites_pct.len() as f64, 1)),
+        tempo_limitado_pct: (com_limite > 0).then(|| arred(limitadas as f64 / com_limite as f64 * 100.0, 0)),
+        limite_termico: (com_flags > 0).then(|| uteis.iter().filter(|a| a.flags.is_some_and(|f| f & 1 != 0)).count() * 5 >= com_flags),
+        limite_eletrico: (com_flags > 0).then(|| uteis.iter().filter(|a| a.flags.is_some_and(|f| f & 2 != 0)).count() * 5 >= com_flags),
         temperatura_max_c: temps.iter().copied().reduce(f64::max).map(|t| arred(t, 0)),
         temperatura_media_c: (!temps.is_empty()).then(|| arred(temps.iter().sum::<f64>() / temps.len() as f64, 0)),
         nucleos_acordados_medio: (!acordados.is_empty()).then(|| arred(acordados.iter().sum::<f64>() / acordados.len() as f64, 1)),
-        nucleos_total: amostras.iter().find_map(|a| a.nucleos_total),
-    }
+        nucleos_total: uteis.iter().find_map(|a| a.nucleos_total),
+    })
 }
 
 /// THERMAL HEADROOM SCORE, 0–100. `None` quando não há leitura de temperatura
 /// e nenhum limite térmico foi visto — não se inventa folga.
+///
+/// Note o `Some(true)`: flag não observada não conta como "sem limite". Com o
+/// contador mudo e sem temperatura, a resposta continua sendo "não sei".
 pub fn folga_termica(r: &ResumoCpu) -> Option<f64> {
     const TETO: f64 = 95.0;
     const CONFORTO: f64 = 45.0;
     let por_temperatura = r.temperatura_max_c.map(|t| ((TETO - t) / (TETO - CONFORTO) * 100.0).clamp(0.0, 100.0));
     match (por_temperatura, r.limite_termico) {
-        (Some(v), true) => Some(v.min(20.0)),
-        (Some(v), false) => Some(arred(v, 0)),
-        (None, true) => Some(10.0),
-        (None, false) => None,
+        (Some(v), Some(true)) => Some(v.min(20.0)),
+        (Some(v), _) => Some(arred(v, 0)),
+        (None, Some(true)) => Some(10.0),
+        (None, _) => None,
     }
 }
 
@@ -1066,7 +1124,11 @@ pub fn resumir_quadros(fps: f64, intervalos_ms: &[f64]) -> Option<Quadros> {
 pub struct ResultadoDoCandidato {
     pub candidato: String,
     pub resposta: Option<RespostaMedida>,
-    pub cpu: ResumoCpu,
+    /// `None` quando o PDH não entregou nenhuma amostra utilizável. Resultado
+    /// antigo gravado em disco tem um objeto aqui e continua desserializando
+    /// como `Some` — o campo só passou a admitir ausência.
+    #[serde(default)]
+    pub cpu: Option<ResumoCpu>,
     pub quadros: Option<Quadros>,
     /// FPS de cada repetição, para a confiança.
     pub fps_repeticoes: Vec<f64>,
@@ -1075,6 +1137,30 @@ pub struct ResultadoDoCandidato {
     /// Os quadros vieram do teste de quadros do Otimiza, e não de um jogo.
     #[serde(default)]
     pub quadros_sinteticos: bool,
+}
+
+impl ResultadoDoCandidato {
+    /// Temperatura máxima medida, se houve resumo e se houve sensor.
+    fn temp_max(&self) -> Option<f64> {
+        self.cpu.as_ref()?.temperatura_max_c
+    }
+
+    fn clock_efetivo(&self) -> Option<f64> {
+        self.cpu.as_ref().map(|c| c.clock_efetivo_mhz)
+    }
+
+    fn clock_reportado(&self) -> Option<f64> {
+        self.cpu.as_ref().map(|c| c.clock_reportado_mhz)
+    }
+
+    /// O clock reportado subiu e o efetivo caiu: o firmware anuncia mais
+    /// frequência e a máquina entrega menos trabalho. `None` quando falta
+    /// medição dos dois lados — e aí não se acusa nada.
+    fn clock_piorou_contra(&self, base: &Self) -> Option<bool> {
+        let (r_rep, b_rep) = (self.clock_reportado()?, base.clock_reportado()?);
+        let (r_ef, b_ef) = (self.clock_efetivo()?, base.clock_efetivo()?);
+        Some(r_rep > b_rep * 1.02 && r_ef < b_ef * 0.98)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1108,12 +1194,17 @@ pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
     let p99 = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(false, a.p99_ms, b.p99_ms));
     let fps = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(true, a.fps, b.fps));
     let resposta = r.resposta.zip(base.resposta).and_then(|(a, b)| razao(false, a.ate_90_ms, b.ate_90_ms));
-    let clock = razao(true, r.cpu.clock_efetivo_mhz, base.cpu.clock_efetivo_mhz);
-    let termica = match (folga_termica(&r.cpu), folga_termica(&base.cpu)) {
+    let clock = r.clock_efetivo().zip(base.clock_efetivo()).and_then(|(a, b)| razao(true, a, b));
+    let folga = |x: &ResultadoDoCandidato| x.cpu.as_ref().and_then(folga_termica);
+    let termica = match (folga(r), folga(base)) {
         (Some(a), Some(b)) => Some((100.0 + (a - b)).clamp(50.0, 150.0)),
         _ => None,
     };
-    let estabilidade = Some((100.0 - (r.cpu.tempo_limitado_pct - base.cpu.tempo_limitado_pct)).clamp(50.0, 150.0));
+    // Sem contador de limite dos dois lados não há estabilidade a comparar.
+    // Antes o campo era sempre preenchido, e um par de leituras que não
+    // aconteceu virava nota 100 — um décimo do peso saindo do nada.
+    let limitado = |x: &ResultadoDoCandidato| x.cpu.as_ref().and_then(|c| c.tempo_limitado_pct);
+    let estabilidade = limitado(r).zip(limitado(base)).map(|(a, b)| (100.0 - (a - b)).clamp(50.0, 150.0));
 
     let partes = [
         (low_1, 0.25),
@@ -1151,6 +1242,12 @@ pub enum Achado {
     SemJogoMedido,
     /// Temperatura não exposta pelo Windows nesta máquina.
     TemperaturaIndisponivel,
+    /// Os contadores de limite de firmware não responderam. Não dá para dizer
+    /// que a CPU está livre nem que está limitada.
+    LimitesDeFirmwareIndisponiveis,
+    /// A amostragem do PDH falhou em mais da metade das leituras. O resumo
+    /// vale menos do que o número de amostras sugere.
+    AmostragemFalha,
     /// Os candidatos ficaram dentro da margem: fica o padrão do Windows.
     NenhumGanhouComMargem,
     /// O plano que a pessoa já usa não perdeu para nenhum candidato: fica ele.
@@ -1192,17 +1289,30 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     let b = resultados.iter().find(|r| r.candidato == base)?;
     let mut achados = Vec::new();
 
-    if b.cpu.limite_termico {
+    // `== Some(true)`: o achado só é anunciado quando a flag foi LIDA e estava
+    // alta. Contador mudo não vira "o firmware limita" nem o seu contrário.
+    let termico = b.cpu.as_ref().and_then(|c| c.limite_termico);
+    let eletrico = b.cpu.as_ref().and_then(|c| c.limite_eletrico);
+
+    if termico == Some(true) {
         achados.push(Achado::FirmwareLimitaPorTemperatura);
     }
-    if b.cpu.limite_eletrico {
+    if eletrico == Some(true) {
         achados.push(Achado::FirmwareLimitaPorEnergia);
+    }
+    if termico.is_none() && eletrico.is_none() {
+        achados.push(Achado::LimitesDeFirmwareIndisponiveis);
     }
     if b.quadros.is_none() {
         achados.push(Achado::SemJogoMedido);
     }
-    if b.cpu.temperatura_max_c.is_none() {
+    if b.temp_max().is_none() {
         achados.push(Achado::TemperaturaIndisponivel);
+    }
+    // Sem resumo nenhum a amostragem falhou inteira, que é o caso mais grave e
+    // não pode ser o mais silencioso.
+    if b.cpu.as_ref().is_none_or(|c| c.amostras_descartadas > c.amostras) {
+        achados.push(Achado::AmostragemFalha);
     }
 
     let notas: Vec<(String, Nota)> = resultados.iter().map(|r| (r.candidato.clone(), pontuar(r, b))).collect();
@@ -1214,21 +1324,18 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
             (Some(a), Some(q)) => a.fps >= q.fps * 0.99 && a.low_1 >= q.low_1 * 0.99 && a.p99_ms <= q.p99_ms * 1.03,
             _ => true,
         };
-        let termica_ok = match (r.cpu.temperatura_max_c, b.cpu.temperatura_max_c, r.quadros, b.quadros) {
+        let termica_ok = match (r.temp_max(), b.temp_max(), r.quadros, b.quadros) {
             (Some(t), Some(tb), Some(a), Some(q)) => t <= tb + 5.0 || a.low_1 >= q.low_1 * 1.05,
             (Some(t), Some(tb), _, _) => t <= tb + 5.0,
             _ => true,
         };
-        let clock_ok = !(r.cpu.clock_reportado_mhz > b.cpu.clock_reportado_mhz * 1.02
-            && r.cpu.clock_efetivo_mhz < b.cpu.clock_efetivo_mhz * 0.98);
+        // Sem medição dos dois lados o veto não se aplica: não há do que
+        // acusar o candidato.
+        let clock_ok = r.clock_piorou_contra(b) != Some(true);
         quadros_ok && termica_ok && clock_ok
     };
 
-    if resultados.iter().any(|r| {
-        r.candidato != base
-            && r.cpu.clock_reportado_mhz > b.cpu.clock_reportado_mhz * 1.02
-            && r.cpu.clock_efetivo_mhz < b.cpu.clock_efetivo_mhz * 0.98
-    }) {
+    if resultados.iter().any(|r| r.candidato != base && r.clock_piorou_contra(b) == Some(true)) {
         achados.push(Achado::ClockReportadoSubiuEfetivoCaiu);
     }
 
@@ -1253,8 +1360,8 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
             let mais_fresco = empatados
                 .iter()
                 .copied()
-                .filter(|r| r.cpu.temperatura_max_c.is_some())
-                .min_by(|a, b| a.cpu.temperatura_max_c.partial_cmp(&b.cpu.temperatura_max_c).unwrap_or(std::cmp::Ordering::Equal));
+                .filter(|r| r.temp_max().is_some())
+                .min_by(|a, b| a.temp_max().partial_cmp(&b.temp_max()).unwrap_or(std::cmp::Ordering::Equal));
             match mais_fresco {
                 Some(f) if empatados.len() > 1 && f.candidato != lider.candidato => {
                     achados.push(Achado::EmpateDesfeitoPelaTemperatura);
@@ -1344,7 +1451,7 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
             v.quadros.zip(b.quadros).and_then(|(a, q)| variacao(a.low_1, q.low_1)),
             v.quadros.zip(b.quadros).and_then(|(a, q)| variacao(a.p99_ms, q.p99_ms)),
             v.resposta.zip(b.resposta).and_then(|(a, q)| variacao(a.ate_90_ms, q.ate_90_ms)),
-            v.cpu.temperatura_max_c.zip(b.cpu.temperatura_max_c).map(|(a, q)| arred(a - q, 0)),
+            v.temp_max().zip(b.temp_max()).map(|(a, q)| arred(a - q, 0)),
         ),
         None => (None, None, None, None, None),
     };
@@ -1707,26 +1814,86 @@ mod tests {
 
     // ---- cpu
 
+    /// Uma amostra completa, como o PDH entrega quando tudo responde.
+    fn amostra_cheia() -> AmostraCpu {
+        AmostraCpu {
+            desempenho_pct: Some(120.0),
+            frequencia_mhz: Some(3600.0),
+            uso_pct: Some(50.0),
+            limite_pct: Some(100.0),
+            flags: Some(0),
+            temperatura_c: Some(70.0),
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn clock_efetivo_e_limites() {
-        let a = AmostraCpu { desempenho_pct: 120.0, frequencia_mhz: 3600.0, uso_pct: 50.0, limite_pct: 100.0, flags: 0, temperatura_c: Some(70.0), ..Default::default() };
-        let b = AmostraCpu { flags: 1, limite_pct: 80.0, temperatura_c: Some(96.0), ..a };
-        let r = resumir_cpu(&[a, a, b]);
+        let a = amostra_cheia();
+        let b = AmostraCpu { flags: Some(1), limite_pct: Some(80.0), temperatura_c: Some(96.0), ..a };
+        let r = resumir_cpu(&[a, a, b]).expect("três amostras completas");
         assert_eq!(r.clock_reportado_mhz, 4320.0);
         assert_eq!(r.clock_efetivo_mhz, 2160.0);
-        assert!(r.limite_termico);
-        assert!(!r.limite_eletrico);
+        assert_eq!(r.limite_termico, Some(true));
+        assert_eq!(r.limite_eletrico, Some(false));
         assert_eq!(r.temperatura_max_c, Some(96.0));
+        assert_eq!(r.amostras_descartadas, 0);
         assert_eq!(folga_termica(&r), Some(0.0));
-        assert_eq!(folga_termica(&resumir_cpu(&[AmostraCpu { temperatura_c: None, ..a }])), None);
+
+        let sem_sensor = resumir_cpu(&[AmostraCpu { temperatura_c: None, ..a }]).expect("completa");
+        assert_eq!(folga_termica(&sem_sensor), None);
+    }
+
+    #[test]
+    fn contador_mudo_nao_vira_leitura() {
+        // O defeito: `unwrap_or(0.0)` e `unwrap_or(100.0)` no amostrador
+        // transformavam PDH calado em "CPU a 0%" e "firmware sem limite".
+        let a = amostra_cheia();
+
+        // Sem os contadores de clock a amostra não serve e é descartada — não
+        // vira média puxada para baixo.
+        let cega = AmostraCpu { desempenho_pct: None, ..a };
+        let r = resumir_cpu(&[a, cega, a]).expect("duas amostras boas");
+        assert_eq!(r.amostras, 2);
+        assert_eq!(r.amostras_descartadas, 1);
+        assert_eq!(r.clock_efetivo_mhz, 2160.0, "a amostra cega não entrou na média");
+
+        // Sem flags nem limite, o motor não afirma que a CPU está livre.
+        let sem_limite = AmostraCpu { flags: None, limite_pct: None, ..a };
+        let r = resumir_cpu(&[sem_limite; 4]).expect("clock presente");
+        assert_eq!(r.limite_termico, None);
+        assert_eq!(r.limite_eletrico, None);
+        assert_eq!(r.tempo_limitado_pct, None);
+        assert_eq!(r.limite_medio_pct, None);
+
+        // Nenhuma amostra utilizável: resumo nenhum, e não um resumo zerado.
+        assert_eq!(resumir_cpu(&[]), None);
+        assert_eq!(resumir_cpu(&[AmostraCpu::default(); 5]), None);
+    }
+
+    #[test]
+    fn flag_nao_lida_nao_vira_folga_termica() {
+        let muda = AmostraCpu { flags: None, temperatura_c: None, ..amostra_cheia() };
+        let r = resumir_cpu(&[muda; 3]).expect("clock presente");
+        assert_eq!(folga_termica(&r), None, "sem sensor e sem flag, a resposta é não sei");
+
+        let com_temp = resumir_cpu(&[AmostraCpu { temperatura_c: Some(90.0), ..muda }; 3]).expect("clock");
+        assert_eq!(folga_termica(&com_temp), Some(10.0), "90 °C dá folga baixa, não folga inventada");
     }
 
     #[test]
     fn zona_termica_parada_sob_carga_e_descartada() {
-        let a = AmostraCpu { desempenho_pct: 100.0, frequencia_mhz: 3600.0, uso_pct: 90.0, limite_pct: 100.0, temperatura_c: Some(27.85), ..Default::default() };
-        assert_eq!(resumir_cpu(&[a; 10]).temperatura_max_c, None);
-        let ociosa = AmostraCpu { uso_pct: 3.0, ..a };
-        assert_eq!(resumir_cpu(&[ociosa; 10]).temperatura_max_c, Some(28.0));
+        let a = AmostraCpu {
+            desempenho_pct: Some(100.0),
+            frequencia_mhz: Some(3600.0),
+            uso_pct: Some(90.0),
+            limite_pct: Some(100.0),
+            temperatura_c: Some(27.85),
+            ..Default::default()
+        };
+        assert_eq!(resumir_cpu(&[a; 10]).unwrap().temperatura_max_c, None);
+        let ociosa = AmostraCpu { uso_pct: Some(3.0), ..a };
+        assert_eq!(resumir_cpu(&[ociosa; 10]).unwrap().temperatura_max_c, Some(28.0));
     }
 
     #[test]
@@ -1746,7 +1913,7 @@ mod tests {
         ResultadoDoCandidato {
             candidato: id.into(),
             resposta: Some(RespostaMedida { ate_90_ms: ate90, primeira_fatia_pct: 80.0, sustentado: 100.0, dispersao_pct: 1.0, rajadas: 5 }),
-            cpu: ResumoCpu { amostras: 20, clock_reportado_mhz: clock.0, clock_efetivo_mhz: clock.1, limite_medio_pct: 100.0, temperatura_max_c: Some(temp), ..Default::default() },
+            cpu: Some(ResumoCpu { amostras: 20, clock_reportado_mhz: clock.0, clock_efetivo_mhz: clock.1, limite_medio_pct: Some(100.0), tempo_limitado_pct: Some(0.0), limite_termico: Some(false), limite_eletrico: Some(false), temperatura_max_c: Some(temp), ..Default::default() }),
             quadros: Some(Quadros { fps, low_1: low, low_01: low * 0.8, p99_ms: p99 }),
             fps_repeticoes: vec![fps, fps],
             gpu_pct: None,
@@ -1852,7 +2019,7 @@ mod tests {
     #[test]
     fn firmware_limitado_e_dito() {
         let mut base = resultado("windows", 100.0, 60.0, 20.0, 40.0, 70.0, (3600.0, 1800.0));
-        base.cpu.limite_eletrico = true;
+        base.cpu.as_mut().expect("resultado de teste tem resumo").limite_eletrico = Some(true);
         let e = escolher(&[base], "windows").unwrap();
         assert!(e.achados.contains(&Achado::FirmwareLimitaPorEnergia));
     }
