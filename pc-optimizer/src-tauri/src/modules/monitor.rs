@@ -199,7 +199,39 @@ pub struct PerformanceMonitor {
     /// outra. Recriada a cada leitura, ela mediria uma janela de zero segundo.
     #[cfg(target_os = "windows")]
     contadores_placa: Option<crate::modules::windows::placa::Contadores>,
+    /// A última medição de rede, com a hora em que foi feita.
+    ///
+    /// Vive separada da outra leitura de fundo porque tem OUTRO ritmo: são
+    /// vinte pings contra o servidor do jogo, e repetir isso a cada dez
+    /// segundos seria o Otimiza martelando a hospedagem do cliente.
+    #[cfg(target_os = "windows")]
+    rede: std::sync::Arc<
+        std::sync::Mutex<
+            Option<(
+                std::time::Instant,
+                crate::modules::windows::rede::MedidaDeRede,
+            )>,
+        >,
+    >,
+    #[cfg(target_os = "windows")]
+    rede_em_curso: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
+
+/// De quanto em quanto tempo a rede é medida de novo.
+///
+/// Um minuto. Cada medição são vinte pings contra o servidor do jogo, e o
+/// produto não vai martelar a hospedagem de ninguém para manter um número
+/// fresco na tela.
+#[cfg(target_os = "windows")]
+const INTERVALO_DA_REDE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Até quando a medição de rede ainda descreve a partida.
+///
+/// Cinco minutos. Passado isso o cliente pode ter trocado de servidor, saído
+/// do jogo, ou a rota pode ter mudado — e o número deixa de ser sobre o que
+/// está acontecendo agora.
+#[cfg(target_os = "windows")]
+const VALIDADE_DA_REDE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 /// Quantas leituras a janela térmica guarda.
 ///
@@ -263,6 +295,10 @@ impl PerformanceMonitor {
             vram_total_gb: None,
             #[cfg(target_os = "windows")]
             contadores_placa: None,
+            #[cfg(target_os = "windows")]
+            rede: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(target_os = "windows")]
+            rede_em_curso: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -316,6 +352,9 @@ impl PerformanceMonitor {
         // guardada, ela entra por cima do motivo genérico.
         #[cfg(target_os = "windows")]
         self.telemetria_dos_quadros(&mut telemetry);
+
+        #[cfg(target_os = "windows")]
+        self.telemetria_da_rede(&mut telemetry);
 
         let telemetry = telemetry.finish(comeco.elapsed().as_millis() as u64);
         let gargalo = super::gargalo::classificar(&telemetry);
@@ -904,6 +943,153 @@ impl PerformanceMonitor {
         }
     }
 
+    /// Mede a rede de tempos em tempos, e publica a última medição.
+    ///
+    /// Quem mede é `windows::rede`, que já existia e já carrega as decisões
+    /// difíceis: ela só mede contra o SERVIDOR DO JOGO, descoberto pelas
+    /// conexões do processo, e se recusa a medir contra um alvo qualquer —
+    /// vinte pings contra a CDN apresentados como "o servidor do jogo" seriam
+    /// um número fabricado.
+    ///
+    /// E ela distingue perda REAL de ping descartado por regra do servidor.
+    /// Hospedagem de jogo costuma filtrar ICMP; sem essa distinção, um servidor
+    /// saudável apareceria na tela como "100% de perda, rede fora do ar". Este
+    /// método não recria nada disso: só traduz o resultado para o contrato, e
+    /// o que ela diz que não sabe chega como UNKNOWN.
+    #[cfg(target_os = "windows")]
+    fn telemetria_da_rede(&mut self, t: &mut Telemetry) {
+        use crate::modules::windows::rede::Perda;
+        use std::sync::atomic::Ordering;
+
+        let agora = std::time::Instant::now();
+        let guardada = self.rede.lock().ok().and_then(|g| g.clone());
+
+        let precisa = match &guardada {
+            None => true,
+            Some((quando, _)) => agora.duration_since(*quando) >= INTERVALO_DA_REDE,
+        };
+
+        if precisa && !self.rede_em_curso.swap(true, Ordering::AcqRel) {
+            let destino = self.rede.clone();
+            let bandeira = self.rede_em_curso.clone();
+
+            tokio::task::spawn_blocking(move || {
+                let medida = crate::modules::windows::rede::medir_agora();
+                if let Ok(mut g) = destino.lock() {
+                    *g = Some((std::time::Instant::now(), medida));
+                }
+                bandeira.store(false, Ordering::Release);
+            });
+        }
+
+        const IDS: [&str; 3] = ["network.latency", "network.jitter", "network.packet_loss"];
+
+        let Some((quando, medida)) = guardada else {
+            const PRIMEIRA: &str = "a primeira medição de rede ainda não voltou";
+            t.set(
+                "network.latency",
+                Metric::unknown(Unit::Milliseconds, PRIMEIRA),
+            );
+            t.set(
+                "network.jitter",
+                Metric::unknown(Unit::Milliseconds, PRIMEIRA),
+            );
+            t.set(
+                "network.packet_loss",
+                Metric::unknown(Unit::Percent, PRIMEIRA),
+            );
+            return;
+        };
+
+        let idade = agora.duration_since(quando);
+
+        if idade > VALIDADE_DA_REDE {
+            let velha = format!(
+                "a última medição de rede tem {} min: o servidor ou a rota podem ter mudado",
+                idade.as_secs() / 60
+            );
+            for id in IDS {
+                let unidade = if id.ends_with("loss") {
+                    Unit::Percent
+                } else {
+                    Unit::Milliseconds
+                };
+                t.set(id, Metric::unknown(unidade, velha.clone()));
+            }
+            return;
+        }
+
+        let idade_ms = idade.as_millis() as u64;
+        let alvo = medida
+            .alvo
+            .clone()
+            .unwrap_or_else(|| "sem alvo".to_string());
+
+        for (id, valor) in [
+            ("network.latency", medida.tempo_ms),
+            ("network.jitter", medida.jitter_ms),
+        ] {
+            match valor {
+                Some(ms) => t.set(
+                    id,
+                    Metric::estimated(
+                        ms,
+                        Unit::Milliseconds,
+                        "icmp",
+                        format!("medido contra {alvo}"),
+                    )
+                    .com_idade(idade_ms),
+                ),
+                None => t.set(
+                    id,
+                    Metric::unknown(
+                        Unit::Milliseconds,
+                        "não houve resposta suficiente para este número",
+                    ),
+                ),
+            }
+        }
+
+        // Só `Medida` é uma medição. As outras três variantes são a sonda
+        // dizendo que NÃO SABE, cada uma por um motivo, e nenhuma delas pode
+        // virar "0% de perda" nem "100%".
+        match medida.perda {
+            Perda::Medida { enviados, perdidos } if enviados > 0 => t.set(
+                "network.packet_loss",
+                Metric::estimated(
+                    perdidos as f64 / enviados as f64 * 100.0,
+                    Unit::Percent,
+                    "icmp",
+                    format!("{perdidos} de {enviados} pacotes contra {alvo}"),
+                )
+                .com_idade(idade_ms)
+                .require_range(0.0, 100.0),
+            ),
+            Perda::Medida { .. } | Perda::NaoMedi => t.set(
+                "network.packet_loss",
+                Metric::unknown(
+                    Unit::Percent,
+                    "nenhum pacote saiu: não é 0% de perda nem 100%, é ausência de dado",
+                ),
+            ),
+            Perda::NaoRespondePing { .. } => t.set(
+                "network.packet_loss",
+                Metric::unknown(
+                    Unit::Percent,
+                    "o servidor descarta ping mas aceita conexão na porta do jogo: \
+                     não dá para saber se houve perda real",
+                ),
+            ),
+            Perda::PingLimitado { .. } => t.set(
+                "network.packet_loss",
+                Metric::unknown(
+                    Unit::Percent,
+                    "o servidor limita a taxa de ping: não dá para saber se houve perda real",
+                ),
+            ),
+        }
+    }
+
     /// Dispara a leitura cara quando é hora, e publica a última que existe.
     ///
     /// A coleta NUNCA espera pela consulta ao WMI. Ela olha o que a tarefa de
@@ -1276,9 +1462,10 @@ impl PerformanceMonitor {
         };
 
         // Latência, jitter e perda de pacote são três perguntas distintas, e
-        // nenhuma delas se responde contando bytes. Ficam declaradas como não
+        // nenhuma delas se responde contando bytes. Quem responde é a sonda de
+        // `windows::rede`, mais abaixo; aqui elas ficam declaradas como não
         // medidas para que ninguém as confunda com a taxa acima.
-        const SEM_SONDA: &str = "exige sonda de rede; sem provedor nesta versão";
+        const SEM_SONDA: &str = "a taxa de rede não responde latência; ver a sonda";
         t.set(
             "network.latency",
             Metric::unknown(Unit::Milliseconds, SEM_SONDA),
@@ -1737,6 +1924,56 @@ mod tests {
                     assert_eq!(metric.quality, Quality::Measured, "{id} não é estimativa");
                     assert_eq!(metric.source, "pdh", "{id}");
                     assert_eq!(metric.age_ms, None, "{id} é desta coleta, não tem idade");
+                }
+            }
+        }
+    }
+
+    /// Sem jogo aberto, a sonda de rede não mede contra ninguém.
+    ///
+    /// É a regra de `windows::rede`: medir contra um alvo qualquer e
+    /// apresentar o número como "o servidor do jogo" é fabricar prova. Este
+    /// teste roda numa máquina sem jogo, então o desfecho esperado é que as
+    /// três métricas fiquem desconhecidas COM motivo — e nunca com zero.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn sem_jogo_a_rede_nao_inventa_numero() {
+        let mut monitor = PerformanceMonitor::new();
+
+        // A medição roda fora do laço; vinte pings com timeout levam tempo
+        // mesmo quando não há alvo.
+        let limite = std::time::Instant::now() + std::time::Duration::from_secs(40);
+        let mut ultima = monitor.collect_metrics().await.expect("coleta");
+
+        while std::time::Instant::now() < limite {
+            let m = monitor.collect_metrics().await.expect("coleta");
+            let motivo = m
+                .telemetry
+                .get("network.packet_loss")
+                .and_then(|x| x.reason.clone())
+                .unwrap_or_default();
+
+            ultima = m;
+            if !motivo.contains("ainda não voltou") {
+                break;
+            }
+        }
+
+        for id in ["network.latency", "network.jitter", "network.packet_loss"] {
+            let metric = ultima.telemetry.get(id).expect("catálogo");
+
+            // Num ambiente de teste não há jogo, então o esperado é UNKNOWN.
+            // Se alguém rodar isto com jogo aberto, o valor é legítimo — o que
+            // NÃO pode acontecer, em nenhum dos dois casos, é valor sem
+            // qualidade ou qualidade sem motivo.
+            match metric.quality {
+                Quality::Unknown => {
+                    assert!(metric.value.is_none(), "{id} é UNKNOWN e tem valor");
+                    assert!(metric.reason.is_some(), "{id} não diz por quê");
+                }
+                _ => {
+                    assert!(metric.value.is_some(), "{id} tem qualidade sem valor");
+                    assert_eq!(metric.source, "icmp", "{id}");
                 }
             }
         }

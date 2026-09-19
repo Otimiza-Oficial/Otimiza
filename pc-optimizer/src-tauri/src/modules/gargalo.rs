@@ -79,6 +79,19 @@ pub const ENGASGOS_POR_MINUTO: f64 = 6.0;
 /// vez em quando, e algum tranco vai cair por cima sem ter relação nenhuma.
 pub const TRANCOS_COM_DISCO_PCT: f64 = 60.0;
 
+/// A partir de quanta variação a rede atrapalha a partida.
+///
+/// Trinta milissegundos. Não é o ping: é o quanto ele PULA de uma resposta
+/// para a outra. Um ping de 120 ms estável dá uma partida jogável; um de 40 ms
+/// que vira 90 e volta é o que produz o teletransporte que o cliente reclama.
+pub const JITTER_QUE_ATRAPALHA: f64 = 30.0;
+
+/// A partir de quanta perda de pacote a partida sente.
+///
+/// Dois por cento. Abaixo disso o jogo reconstrói o que faltou sem que ninguém
+/// perceba; acima, começa a aparecer como engasgo de movimento.
+pub const PERDA_QUE_ATRAPALHA: f64 = 2.0;
+
 /// Acima desta idade a leitura vira hipótese, nunca causa.
 ///
 /// Cinco segundos é mais que o intervalo do painel: o que passa disso não
@@ -118,6 +131,14 @@ pub enum Classe {
     /// porque aqui há uma evidência a mais: o INSTANTE de cada tranco bateu com
     /// atividade de disco, e não com o disco quieto.
     StreamingDeAssets,
+    /// A conexão está instável ou perdendo pacote.
+    ///
+    /// LATÊNCIA ALTA NÃO ENTRA AQUI. Ping é distância: um servidor do outro
+    /// lado do mundo responde em 200 ms porque a luz leva esse tempo, e
+    /// nenhum ajuste no PC muda isso — `windows::network` abre dizendo
+    /// exatamente isso. O que estraga a partida e TEM conserto é a variação e
+    /// a perda.
+    Rede,
 }
 
 impl Classe {
@@ -440,6 +461,50 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         }),
     }
 
+    // ---- rede
+    //
+    // Jitter e perda, e NÃO latência. A latência é medida e publicada, mas não
+    // vira achado: ping é distância, e apontá-lo como gargalo mandaria o
+    // cliente procurar conserto para a velocidade da luz.
+    //
+    // A classe é avaliada quando QUALQUER um dos dois existe. Perda que a
+    // sonda não conseguiu determinar — servidor que filtra ICMP — chega como
+    // ausente, e aí só o jitter responde.
+    let jitter = leitura(t, "network.jitter");
+    let perda = leitura(t, "network.packet_loss");
+
+    match (jitter, perda) {
+        (None, None) => nao_verificado.push(NaoVerificado {
+            classe: "Limitado pela rede".to_string(),
+            falta: "exige jitter ou perda medidos contra o servidor do jogo".to_string(),
+        }),
+        _ => {
+            avaliadas += 1;
+
+            let ruim = jitter.filter(|l| l.valor >= JITTER_QUE_ATRAPALHA);
+            let com_perda = perda.filter(|l| l.valor >= PERDA_QUE_ATRAPALHA);
+
+            if let Some(l) = com_perda.or(ruim) {
+                let texto = match (com_perda, ruim) {
+                    (Some(p), Some(j)) => format!(
+                        "network.packet_loss: {:.1}% com network.jitter: {:.0} ms",
+                        p.valor, j.valor
+                    ),
+                    (Some(p), None) => format!("network.packet_loss: {:.1}%", p.valor),
+                    (None, Some(j)) => format!("network.jitter: {:.0} ms", j.valor),
+                    (None, None) => unreachable!("um dos dois existe"),
+                };
+
+                achados.push(Achado {
+                    classe: Classe::Rede,
+                    forca: Forca::Hipotese,
+                    evidencia: texto,
+                    idade_ms: l.idade_ms,
+                });
+            }
+        }
+    }
+
     // ---- o que este classificador ainda não alcança
     //
     // Cinco classes dependem de correlação temporal, de histórico de driver ou
@@ -466,10 +531,6 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         (
             "Placa híbrida em notebook",
             "exige o caminho de apresentação do jogo",
-        ),
-        (
-            "Limitado pela rede",
-            "exige sonda de latência, jitter e perda",
         ),
     ] {
         nao_verificado.push(NaoVerificado {
@@ -587,6 +648,7 @@ mod tests {
         match id {
             "cpu.throttling.thermal" | "cpu.throttling.power" => Unit::Boolean,
             "frametime.stutters_per_minute" => Unit::Count,
+            "network.jitter" | "network.latency" => Unit::Milliseconds,
             "match.cpu_usage" | "match.gpu_usage" | "frametime.stutters_with_disk" => Unit::Percent,
             "display.refresh" => Unit::Hertz,
             "fps.average" | "fps.low_1pct" => Unit::Fps,
@@ -965,6 +1027,72 @@ mod tests {
         let d = classificar(&vazia().finish(0));
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(faltando.contains(&"Streaming de assets"));
+    }
+
+    #[test]
+    fn jitter_e_perda_apontam_a_rede_mas_ping_alto_nao() {
+        // Ping alto e ESTÁVEL: é distância, não é gargalo. Apontar isso
+        // mandaria o cliente procurar conserto para a velocidade da luz.
+        let mut estavel = vazia();
+        estavel.set(
+            "network.latency",
+            Metric::estimated(190.0, Unit::Milliseconds, "icmp", "servidor").com_idade(30_000),
+        );
+        estavel.set(
+            "network.jitter",
+            Metric::estimated(3.0, Unit::Milliseconds, "icmp", "servidor").com_idade(30_000),
+        );
+
+        let d = classificar(&estavel.finish(0));
+        assert!(
+            !d.achados.iter().any(|a| a.classe == Classe::Rede),
+            "190 ms estáveis não são gargalo de rede"
+        );
+
+        // O mesmo ping, agora pulando: é isso que produz teletransporte.
+        let mut instavel = vazia();
+        instavel.set(
+            "network.jitter",
+            Metric::estimated(55.0, Unit::Milliseconds, "icmp", "servidor").com_idade(30_000),
+        );
+
+        let d = classificar(&instavel.finish(0));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::Rede)
+            .expect("rede");
+        assert_eq!(achado.forca, Forca::Hipotese);
+        assert!(achado.evidencia.contains("jitter"));
+    }
+
+    #[test]
+    fn perda_que_a_sonda_nao_determinou_nao_vira_zero() {
+        // Servidor que filtra ICMP: a sonda diz que não sabe, e o contrato
+        // entrega a perda ausente. Só o jitter responde, e ele está bom.
+        let mut t = vazia();
+        t.set(
+            "network.jitter",
+            Metric::estimated(4.0, Unit::Milliseconds, "icmp", "servidor"),
+        );
+        t.set(
+            "network.packet_loss",
+            Metric::unknown(Unit::Percent, "o servidor descarta ping"),
+        );
+
+        let d = classificar(&t.finish(0));
+        assert!(!d.achados.iter().any(|a| a.classe == Classe::Rede));
+
+        // A classe FOI avaliada — havia jitter. Não volta para o não verificado.
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(!faltando.contains(&"Limitado pela rede"));
+    }
+
+    #[test]
+    fn sem_sonda_a_rede_fica_por_verificar() {
+        let d = classificar(&vazia().finish(0));
+        let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
+        assert!(faltando.contains(&"Limitado pela rede"));
     }
 
     #[test]
