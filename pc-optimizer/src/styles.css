@@ -4311,11 +4311,19 @@ button {
   user-select: none;
 }
 
+/* A MARCA DA BARRA DE TÍTULO ESTAVA DESENHADA NA COR ERRADA.
+
+   Ela usava `--panel`, que sobrou de quando a barra tinha fundo próprio e a
+   marca era vazada nele. Com os dois temas, `--panel` é branco no claro e
+   quase-preto no escuro — ou seja, a marca ficava da mesma cor do fundo da
+   barra nos DOIS, e sumia nos dois.
+
+   `--text` é a cor de quem desenha em cima do fundo, que é o que ela é. */
 .janela-marca {
   width: 18px;
   height: 18px;
   flex: none;
-  background: var(--panel);
+  background: var(--text);
   -webkit-mask: url(/logo.svg) center / contain no-repeat;
   mask: url(/logo.svg) center / contain no-repeat;
 }
@@ -6113,4 +6121,32 @@ circle.placa-parafuso {
   font-size: var(--t-nota);
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* A capa de verdade, quando ela existe nesta máquina.
+
+   Ela entra como FUNDO do mesmo bloco que desenha as iniciais, e não como um
+   elemento novo: assim o bloco com capa e o bloco sem capa têm exatamente a
+   mesma caixa, e a fileira não muda de altura conforme a Steam já tenha ou não
+   baixado a arte. */
+.jogo-tile-arte[data-com-capa="sim"] {
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  /* O degradê de cor some: ele existia para dar o que olhar no lugar da arte. */
+  background-color: var(--sup-afundada);
+}
+
+/* A arte do jogo não obedece ao nosso tema, e não deve mesmo. O que ela não
+   pode é encostar na borda do bloco com uma linha clara sobre o fundo escuro —
+   a sombra interna fecha esse contorno sem escurecer a imagem. */
+.jogo-tile-arte[data-com-capa="sim"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.jogo-tile-arte {
+  position: relative;
 }

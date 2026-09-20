@@ -161,6 +161,7 @@ pub async fn biblioteca_de_jogos() -> Result<BibliotecaNaTela, String> {
             nome: j.nome.clone(),
             pasta: j.pasta.to_string_lossy().to_string(),
             executavel: j.executavel.as_ref().map(|e| e.to_string_lossy().to_string()),
+            appid: j.appid,
         })
         .collect();
 
@@ -182,6 +183,36 @@ pub struct BibliotecaNaTela {
     /// Quantos foram encontrados no disco.
     pub instalados: usize,
     pub lacunas: Vec<String>,
+}
+
+/// Comando: a capa de um jogo, tirada do cache da Steam desta máquina.
+///
+/// O PEDIDO FOI "a foto de verdade, não as letras". A resposta não é embutir
+/// as capas no instalador — a arte é de quem fez o jogo, e empacotá-la num
+/// produto que se vende é distribuir material de terceiro. A resposta é que a
+/// capa JÁ ESTÁ NO COMPUTADOR: a Steam baixa a arte de cada jogo da biblioteca
+/// para desenhar a própria grade, e ler dali mostra ao cliente uma imagem que
+/// já é dele.
+///
+/// UM JOGO POR CHAMADA, de propósito. Mandar vinte capas dentro da resposta da
+/// grade atrasaria a primeira pintura em alguns megabytes de base64 — e a
+/// maior parte das capas nem estaria na tela ainda.
+///
+/// `None` quando não há capa: jogo fora da Steam, jogo não instalado, ou cache
+/// que a Steam ainda não preencheu. Nenhum desses é erro — é o bloco de cor.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capa_do_jogo(appid: u32) -> Option<String> {
+    use crate::modules::{capas, windows::jogos};
+
+    tokio::task::spawn_blocking(move || {
+        let raiz = jogos::varrer().raiz_steam?;
+        let arquivo = capas::procurar_steam(&raiz, appid)?;
+        capas::ler_como_url(&arquivo)
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
@@ -4333,6 +4364,7 @@ mod tests {
         "historico_de_desempenho",
         "caminho_do_mouse",
         "biblioteca_de_jogos",
+        "capa_do_jogo",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

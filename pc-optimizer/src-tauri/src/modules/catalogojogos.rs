@@ -234,6 +234,8 @@ pub struct NaGrade {
     pub matiz: u16,
     /// As duas letras do bloco quando não há capa.
     pub iniciais: String,
+    /// Por onde pedir a capa de verdade. Ausente em jogo que não é da Steam.
+    pub appid: Option<u32>,
 }
 
 /// Uma cor estável a partir do identificador.
@@ -307,6 +309,8 @@ pub struct Detectado {
     pub nome: String,
     pub pasta: String,
     pub executavel: Option<String>,
+    /// O número do jogo na Steam, quando vem da Steam.
+    pub appid: Option<u32>,
 }
 
 /// Monta a grade: o que está instalado, mais o que o produto conhece.
@@ -348,6 +352,7 @@ pub fn montar(detectados: &[Detectado]) -> Vec<NaGrade> {
             pasta: Some(d.pasta.clone()),
             executavel: d.executavel.clone(),
             conhecido: conhecido.is_some(),
+            appid: d.appid,
         });
     }
 
@@ -365,6 +370,8 @@ pub fn montar(detectados: &[Detectado]) -> Vec<NaGrade> {
             conhecido: true,
             matiz: matiz_de(j.id),
             iniciais: iniciais_de(j.nome),
+            // Jogo não instalado não tem capa nesta máquina.
+            appid: None,
         });
     }
 
@@ -380,6 +387,7 @@ mod tests {
             nome: nome.to_string(),
             pasta: pasta.to_string(),
             executavel: exe.map(|e| e.to_string()),
+            appid: None,
         }
     }
 

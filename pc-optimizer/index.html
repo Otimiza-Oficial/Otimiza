@@ -590,6 +590,12 @@
             <span class="tab-badge" id="badge-otimizacoes" hidden></span>
           </button>
 
+          <button class="nav" role="tab" data-tab="biblioteca" aria-selected="false"
+                  aria-controls="tab-biblioteca" id="tabbtn-biblioteca">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-biblioteca" /></svg>
+            <span class="nav-rotulo">Biblioteca</span>
+          </button>
+
           <button class="nav" role="tab" data-tab="jogos" aria-selected="false"
                   aria-controls="tab-jogos" id="tabbtn-jogos">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-jogos" /></svg>
@@ -2014,7 +2020,16 @@
 
         <!-- =========================================================== RESULTADO -->
         <!-- ============================================================== JOGOS -->
-        <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
+        <!--
+          A BIBLIOTECA TEM ABA PRÓPRIA.
+
+          Ela estava no topo da aba Jogos, e ali competia com quatro painéis
+          de ajuste logo abaixo. Quem abre a biblioteca não veio ajustar nada:
+          veio achar um jogo. Aba própria é o que deixa a grade ocupar a tela
+          inteira e é onde a pessoa espera encontrá-la.
+        -->
+        <section class="tab-panel" id="tab-biblioteca" role="tabpanel"
+                 aria-labelledby="tabbtn-biblioteca" hidden>
           <!--
             A BIBLIOTECA.
 
@@ -2059,6 +2074,9 @@
             <p class="hint" id="biblioteca-lacunas" hidden></p>
           </section>
 
+        </section>
+
+        <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <!--
             EM QUE DISCO O JOGO ESTÁ.
 

@@ -2294,6 +2294,8 @@ interface JogoNaGrade {
   /** Matiz de 0 a 359, derivada do id. Ver `catalogojogos.rs`. */
   matiz: number;
   iniciais: string;
+  /// Por onde pedir a capa de verdade. Ausente em jogo fora da Steam.
+  appid: number | null;
 }
 
 interface BibliotecaNaTela {
@@ -2330,6 +2332,54 @@ async function carregarBiblioteca() {
   }
 }
 
+
+/**
+ * As capas já pedidas, para não pedir duas vezes.
+ *
+ * A grade é redesenhada a cada tecla digitada na busca. Sem esta memória, cada
+ * letra dispararia uma leitura de disco por jogo visível — e a busca, que
+ * precisa ser instantânea, viraria a parte mais lenta da tela.
+ *
+ * `null` guardado significa "já perguntei e não há capa". Guardar a ausência é
+ * o que impede o produto de perguntar de novo a cada desenho sobre um jogo que
+ * nunca vai ter capa.
+ */
+const capasDosJogos = new Map<number, string | null>();
+
+/**
+ * Busca as capas dos blocos que estão na tela.
+ *
+ * SÓ OS QUE ESTÃO NA TELA, e uma de cada vez. Vinte capas dentro da resposta da
+ * grade seriam alguns megabytes de base64 antes da primeira pintura, e a maior
+ * parte delas nem estaria visível ainda.
+ */
+async function carregarCapasVisiveis() {
+  const blocos = document.querySelectorAll<HTMLElement>(".jogo-tile-arte[data-appid]");
+
+  for (const bloco of blocos) {
+    const appid = Number(bloco.dataset.appid);
+    if (!Number.isFinite(appid) || appid <= 0) continue;
+
+    if (!capasDosJogos.has(appid)) {
+      try {
+        capasDosJogos.set(appid, await invoke<string | null>("capa_do_jogo", { appid }));
+      } catch {
+        // Uma capa a menos não é erro de tela: o bloco de cor cobre.
+        capasDosJogos.set(appid, null);
+      }
+    }
+
+    const url = capasDosJogos.get(appid);
+    if (!url) continue;
+
+    // A capa entra como fundo e as iniciais somem. Deixá-las por cima da arte
+    // seria pior que as duas coisas separadas.
+    bloco.style.backgroundImage = `url("${url}")`;
+    bloco.dataset.comCapa = "sim";
+    bloco.textContent = "";
+  }
+}
+
 function desenharBiblioteca() {
   const busca = element<HTMLInputElement>("biblioteca-busca").value.trim().toLowerCase();
 
@@ -2352,12 +2402,14 @@ function desenharBiblioteca() {
       (j) => `
       <button class="jogo-tile" type="button" data-jogo="${escapeHtml(j.id)}"
               data-instalado="${j.instalado}" style="--matiz:${j.matiz}">
-        <span class="jogo-tile-arte" aria-hidden="true">${escapeHtml(j.iniciais)}</span>
+        <span class="jogo-tile-arte" aria-hidden="true" data-appid="${j.appid ?? ''}">${escapeHtml(j.iniciais)}</span>
         <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
         <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
       </button>`
     )
     .join("");
+
+  void carregarCapasVisiveis();
 }
 
 /**
