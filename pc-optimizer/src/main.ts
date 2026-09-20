@@ -2946,8 +2946,10 @@ function desenharBiblioteca() {
       <button class="jogo-tile" type="button" data-jogo="${escapeHtml(j.id)}"
               data-instalado="${j.instalado}" style="--matiz:${j.matiz}">
         <span class="jogo-tile-arte" aria-hidden="true" data-appid="${j.appid ?? ''}">${escapeHtml(j.iniciais)}</span>
-        <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
-        <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
+        <span class="jogo-tile-rodape">
+          <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
+          <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
+        </span>
       </button>`
     )
     .join("");
@@ -7274,16 +7276,29 @@ function renderOptimization(item: OptimizationInfo): string {
 
   const detail = item.detail ? `<p class="detail">${escapeHtml(item.detail)}</p>` : "";
 
+  // A LINHA DE AJUSTE, E NÃO UM CARTÃO.
+  //
+  // Dezessete cartões empilhados fazem uma página de ajustes parecer um
+  // catálogo; dezessete linhas fazem ela parecer o painel de configurações
+  // de um sistema operacional — que é o que ela é.
+  //
+  // E O EFEITO HONESTO SUBIU PARA A LINHA. Ele estava dentro do bloco que só
+  // abre no clique, ao lado do risco e das etiquetas. Aquilo é o argumento
+  // inteiro deste produto — “o que isto faz de verdade” — escondido atrás de
+  // um clique que a maior parte das pessoas não dá. Agora é a descrição da
+  // linha, visível sem pedir; o que continua dobrado é o detalhe técnico.
   return `
     <details class="optimization" data-state="${item.state}">
-      <summary class="opt-row">
+      <summary class="opt-row linha-ajuste">
         <span class="gain-dot" data-gain="${item.expected_gain}" ${item.recommended ? 'data-recommended="true"' : ""}></span>
-        <span class="opt-name">${escapeHtml(item.name)}</span>
+        <span class="linha-ajuste-corpo">
+          <span class="linha-ajuste-nome opt-name">${escapeHtml(item.name)}</span>
+          <span class="linha-ajuste-descricao">${escapeHtml(item.honest_effect)}</span>
+        </span>
         ${actionControl(item)}
       </summary>
       <div class="opt-body">
         <div class="optimization-meta">${chips.join("")}</div>
-        <p class="effect">${escapeHtml(item.honest_effect)}</p>
         ${risco}
         ${detail}
       </div>
@@ -7298,12 +7313,16 @@ function renderOptimization(item: OptimizationInfo): string {
  */
 function actionControl(item: OptimizationInfo): string {
   switch (item.state) {
+    // APLICADO E REVERSÍVEL é o único par que um interruptor sabe dizer:
+    // ligado ou desligado, e o clique volta. Onde o estado não é binário —
+    // aplicado e SEM volta, ou não lido — o interruptor mentiria, porque
+    // ele promete com a própria forma que dá para desligar.
     case "Applied":
       return item.reversible
-        ? `<button class="btn btn-ghost" data-id="${item.id}" data-action="revert" data-admin="${item.requires_admin}">Desfazer</button>`
+        ? `<button class="switch" role="switch" aria-checked="true" aria-label="Desfazer ${escapeHtml(item.name)}" data-id="${item.id}" data-action="revert" data-admin="${item.requires_admin}"></button>`
         : `<span class="state-label" data-state="Applied">${STATE_LABELS.Applied}</span>`;
     case "Available":
-      return `<button class="btn btn-ghost" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}">Aplicar</button>`;
+      return `<button class="switch" role="switch" aria-checked="false" aria-label="Aplicar ${escapeHtml(item.name)}" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}"></button>`;
     // NÃO LER O ESTADO NÃO TIRA A ESCOLHA DO DONO DO PC.
     //
     // O verbo é outro de propósito: "Tentar aplicar" não promete que falta

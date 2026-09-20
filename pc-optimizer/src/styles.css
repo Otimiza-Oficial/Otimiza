@@ -86,6 +86,34 @@
   --borda-forte: rgba(var(--text-rgb), 0.16);
   --anim-rapida: 0.18s;
 
+  /* ================================================================
+     A CAMADA NOVA DE NOMES, no claro.
+
+     Os mesmos papéis do tema escuro, com os valores do claro. Componente
+     novo escreve `--surface` e `--text-secondary` e funciona nos dois; se
+     um deles só existisse no escuro, todo componente novo precisaria de uma
+     regra extra para o claro — que é exatamente o que o bloco de tema
+     existe para não ter.
+     ================================================================ */
+  --sidebar: #efefee;
+  --surface: #ffffff;
+  --surface-2: #fafaf9;
+  --surface-3: #f1f1f0;
+  --surface-hover: rgba(10, 10, 10, 0.04);
+
+  --border: rgba(10, 10, 10, 0.09);
+  --border-strong: rgba(10, 10, 10, 0.16);
+
+  --text-primary: #0a0a0a;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #8a8a8a;
+  --text-disabled: #b4b4b4;
+
+  --accent-base: #0a0a0a;
+  --success: #1a7f4b;
+  --warning: #8a6100;
+  --danger: #b42318;
+
   /*
     AS SUPERFÍCIES POR PAPEL, e não por tom.
 
@@ -159,6 +187,13 @@
   --s4: 16px;
   --s5: 24px;
   --s6: 32px;
+  /* Os três degraus grandes entraram com o redesenho: a especificação do
+     dono pede 40, 48 e 64 para o respiro das páginas, e sem eles cada
+     página inventaria o próprio número — que é como os 21 valores soltos
+     de antes nasceram. */
+  --s7: 40px;
+  --s8: 48px;
+  --s9: 64px;
 
   /*
     ESCALA TIPOGRÁFICA
@@ -217,87 +252,126 @@
 }
 
 /*
-  O TEMA ESCURO.
+  O TEMA ESCURO — e, a partir da 2.8, o desenho principal do produto.
 
-  UMA CÓPIA SÓ, e é por isso que ele mora atrás de um atributo em vez de uma
-  consulta de mídia. O caminho comum — `@media (prefers-color-scheme: dark)`
-  mais um seletor de override — obriga a escrever a lista de cores DUAS vezes,
-  e duas listas de cor discordam assim que alguém corrigir uma. Aqui quem
-  resolve a preferência do sistema é o script de abertura, que escreve
-  `data-tema` no `<html>` antes do primeiro desenho; o CSS só conhece o
-  atributo.
+  UMA CÓPIA SÓ DA LISTA DE CORES, e é por isso que ele mora atrás de um
+  atributo em vez de uma consulta de mídia. O caminho comum obriga a escrever a
+  lista duas vezes, e duas listas de cor discordam assim que alguém corrigir
+  uma. Quem resolve a preferência do sistema é o script síncrono do `<head>`,
+  antes do primeiro desenho; o CSS conhece só o atributo.
 
-  NENHUMA REGRA DE LAYOUT É DUPLICADA. Este bloco redefine nomes, e nada mais.
-  Se um componente novo precisar de uma regra própria para o escuro, é sinal de
-  que ele escreveu uma cor à mão em vez de usar um token — e o conserto é lá,
-  não aqui.
+  OS NOMES NOVOS SÃO A FONTE, OS ANTIGOS VIRARAM APELIDO.
 
-  SOBRE O PRETO: #0b0b0c e não #000. Preto puro é pixel desligado em OLED, o
-  que é bonito, mas encosta o contraste do texto no máximo e cansa numa tela
-  que o cliente deixa aberta durante a partida. O quase-preto mantém a moldura
-  discreta e a leitura confortável.
+  O produto tinha vinte e poucos nomes de cor herdados (`--panel`, `--hairline`,
+  `--text-dim`) espalhados por quase seis mil linhas de CSS. Renomear tudo de
+  uma vez seria um diff que ninguém revisa e uma noite inteira caçando o que
+  quebrou.
+
+  Então a camada nova — `--surface`, `--border`, `--text-primary` — é quem
+  carrega o VALOR, e os nomes antigos passam a apontar para ela. Trocar uma cor
+  acontece num lugar só, componente novo usa o nome novo, e as seis mil linhas
+  continuam de pé. Quem for migrar um bloco antigo: troque o nome, não o valor.
+
+  SOBRE O QUASE-PRETO: #090a0a e não #000. Preto puro é pixel desligado em
+  OLED, o que é bonito, mas encosta o contraste do texto no máximo e cansa numa
+  tela que o cliente deixa aberta durante a partida.
 */
 :root[data-tema="escuro"] {
-  --bg: #0b0b0c;
-  --panel: #121214;
-  --panel-raised: #17171a;
-  --campo: #0f0f11;
+  /* ---------------------------------------------------- superfícies */
+  --bg: #090a0a;
+  /* A lateral é UM DEGRAU mais escura que o conteúdo, e não mais clara. É o
+     que a faz recuar: a barra é moldura, não é o assunto. */
+  --sidebar: #0b0c0c;
+  --surface: #101111;
+  --surface-2: #121313;
+  --surface-3: #151616;
+  --surface-hover: #181919;
 
-  --hairline: rgba(255, 255, 255, 0.09);
-  --hairline-strong: rgba(255, 255, 255, 0.18);
-  --borda-forte: rgba(255, 255, 255, 0.18);
-  --track: rgba(255, 255, 255, 0.1);
+  /* Duas bordas, e a diferença entre elas é o que separa "há algo aqui" de
+     "isto está selecionado". Mais de duas viram ruído. */
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.1);
 
-  --text: #f1f1f2;
-  --text-dim: #c0c0c5;
-  /* Mesmo critério do claro: este tom carrega quase todo o texto explicativo
-     do produto, que é onde mora o argumento de honestidade. Apagado demais,
-     ninguém lê — e o produto vira mais um otimizador de botão. */
-  --text-muted: #8b8b92;
+  /* ---------------------------------------------------- texto
+     QUATRO DEGRAUS, e cada um tem um trabalho:
 
-  /* Neutros de propósito, como no claro: cor só onde carrega significado.
-     Verde de "está tudo bem" espalhado pela tela ensina o olho a ignorá-lo
-     justamente onde ele precisaria ser notado. */
-  --accent: #f1f1f2;
-  --green: #f1f1f2;
-  --ok: #f1f1f2;
+     primary    o número, o título, o que decide
+     secondary  a descrição embaixo do título
+     muted      o rótulo de seção em maiúscula
+     disabled   o que não dá para clicar
 
-  /* Âmbar e vermelho SOBEM no escuro. Os tons do claro foram calibrados para
-     ter contraste sobre branco; sobre quase-preto eles somem, e um alerta que
-     some é um alerta que não existe. */
-  --amber: #e9a23b;
-  --red: #f97066;
-  --aviso: #e9a23b;
-  --erro: #f97066;
+     O degrau `--text-dim` fica entre o primeiro e o segundo. Ele não está na
+     especificação e existe porque o produto o usa em parágrafo longo de
+     explicação — e é justamente nesses parágrafos que mora o argumento de
+     honestidade do Otimiza. Apagá-los para o cinza de rótulo deixaria
+     ilegível o que mais precisa ser lido. */
+  --text-primary: #f2f2f2;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #656565;
+  --text-disabled: #444444;
 
-  --accent-rgb: 241, 241, 242;
-  --green-rgb: 241, 241, 242;
-  --amber-rgb: 233, 162, 59;
-  --red-rgb: 249, 112, 102;
-  --bg-rgb: 11, 11, 12;
-  --text-rgb: 241, 241, 242;
-  --panel-rgb: 18, 18, 20;
+  /* ---------------------------------------------------- estados
+     Cor SÓ onde ela carrega significado. O destaque do produto é branco, e
+     não azul: num painel que passa a vida mostrando número, uma cor de marca
+     competindo com o número é uma cor a menos disponível para dizer
+     "isto aqui é um problema". */
+  --accent-base: #f1f1f1;
+  --success: #57d68d;
+  --warning: #e0a458;
+  --danger: #d97070;
 
-  /* Diz ao navegador para desenhar barra de rolagem e campos nativos no
-     escuro. Sem isto, uma barra de rolagem branca corta a tela ao meio. */
---sup-selecionada: rgba(255, 255, 255, 0.08);
-  --sup-afundada: rgba(255, 255, 255, 0.05);
-  --sup-sutil: rgba(255, 255, 255, 0.03);
-  --sobre-accent: #0b0b0c;
-  --accent-hover: #d6d6da;
+  color-scheme: dark;
+
+  /* ================================================================
+     OS NOMES ANTIGOS, APONTANDO PARA OS NOVOS.
+     Nada abaixo desta linha tem valor próprio.
+     ================================================================ */
+  --panel: var(--surface);
+  --panel-raised: var(--surface-3);
+  --campo: #0d0e0e;
+
+  --hairline: var(--border);
+  --hairline-strong: var(--border-strong);
+  --borda-forte: var(--border-strong);
+  --track: rgba(255, 255, 255, 0.08);
+
+  --text: var(--text-primary);
+  --text-dim: #c9c9c9;
+  --text-muted: var(--text-secondary);
+
+  --accent: var(--accent-base);
+  --green: var(--success);
+  --ok: var(--success);
+  --amber: var(--warning);
+  --red: var(--danger);
+  --aviso: var(--warning);
+  --erro: var(--danger);
+
+  --accent-rgb: 241, 241, 241;
+  --green-rgb: 87, 214, 141;
+  --amber-rgb: 224, 164, 88;
+  --red-rgb: 217, 112, 112;
+  --bg-rgb: 9, 10, 10;
+  --text-rgb: 242, 242, 242;
+  --panel-rgb: 16, 17, 17;
+
+  --sup-selecionada: var(--surface-3);
+  --sup-afundada: var(--surface-2);
+  --sup-sutil: rgba(255, 255, 255, 0.02);
+  --sobre-accent: #111111;
+  --accent-hover: #ffffff;
 
   --peca-1: #26262b;
   --peca-2: #2d2d33;
   --peca-3: #1e1e22;
   --peca-4: #43434c;
   --peca-5: #55555f;
-
-  color-scheme: dark;
 }
 
 :root[data-tema="claro"] {
   color-scheme: light;
 }
+
 
 
 /*
@@ -6600,4 +6674,498 @@ circle.placa-parafuso {
 
 .vivo {
   gap: var(--s3);
+}
+
+/* =====================================================================
+   A CAMADA DE COMPONENTES — redesenho 2.8
+
+   O que vem abaixo é o desenho que o dono especificou: escuro, quase
+   monocromático, silencioso. Ele vale para a tela inteira, e por isso
+   mora num lugar só.
+
+   A REGRA PARA QUEM MEXER AQUI: nenhum valor de cor escrito à mão.
+   Tudo sai dos tokens. Uma cor escrita direto numa regra é uma cor que
+   não tem como virar clara — foi assim que o tema escuro acendeu 88
+   delas quando foi ligado pela primeira vez.
+   ===================================================================== */
+
+/* ------------------------------------------------------------ o casco */
+
+.lateral {
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+}
+
+/* A barra de título recua: ela é moldura, não conteudo. Sem fundo
+   proprio, sem sombra, so o fio embaixo separando do palco. */
+.janela {
+  height: 52px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ------------------------------------------------- itens da lateral
+
+   Tres estados e so. O item parado fica a 55% — visivel o bastante para
+   ser reconhecido, apagado o bastante para nao competir com o conteudo.
+   O ativo nao ganha fundo colorido: ganha opacidade cheia e um risco. */
+.corpo[data-recolhida="true"] .nav {
+  opacity: 0.55;
+  background: transparent;
+  transition:
+    opacity 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.corpo[data-recolhida="true"] .nav:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+.corpo[data-recolhida="true"] .nav[aria-selected="true"] {
+  opacity: 1;
+  background: transparent;
+}
+
+/* --------------------------------------------------------- tipografia
+
+   A escala da especificacao. Ela e mais leve que a anterior de proposito:
+   negrito em tudo e o que faz uma tela tecnica parecer um site de venda. */
+
+.abertura-sobrenome,
+.secao-rotulo,
+.panel-tag,
+.readout-label,
+.vivo-nome,
+.ficha-rotulo,
+.jogo-sobrenome {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.abertura-titulo {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.panel h2,
+.secao-cabecalho .abertura-titulo {
+  font-weight: 600;
+}
+
+.panel h2 {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+/* ----------------------------------------------------------- switch
+
+   OFF: trilho escuro, botao cinza. ON: trilho branco, botao escuro.
+   Sem brilho, sem cor de marca — o estado ligado e a propria inversao,
+   que e o sinal mais forte que existe e nao gasta cor nenhuma. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--track);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition:
+    transform 160ms ease-out,
+    background-color 160ms ease-out;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent-base);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(16px);
+  background: var(--sobre-accent);
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ------------------------------------------------------------ botoes */
+
+.btn {
+  height: 36px;
+  padding: 0 var(--s4);
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: var(--t-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.btn-primary {
+  background: var(--accent-base);
+  border-color: var(--accent-base);
+  color: var(--sobre-accent);
+  height: 40px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--sobre-accent);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-disabled);
+  border-color: var(--border);
+  background: transparent;
+}
+
+.btn-small {
+  height: 30px;
+  padding: 0 var(--s3);
+  font-size: var(--t-nota);
+}
+
+/* ------------------------------------------------------------ campos */
+
+input[type="search"],
+input[type="text"],
+.biblioteca-busca input,
+.programas-busca input {
+  height: 40px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--campo);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--t-body);
+  transition: border-color 150ms ease-out;
+}
+
+input::placeholder {
+  color: var(--text-tertiary);
+}
+
+input:focus-visible {
+  outline: none;
+  border-color: rgba(var(--text-rgb), 0.22);
+}
+
+/* -------------------------------------------------- linha de ajuste
+
+   A FORMA CANONICA de toda configuracao do produto: titulo e descricao
+   a esquerda, controle a direita, um fio embaixo.
+
+   NAO E CARTAO, e essa e a decisao. Dezessete cartoes empilhados fazem
+   uma pagina de ajustes parecer um catalogo; dezessete linhas fazem ela
+   parecer o painel de configuracoes de um sistema operacional — que e o
+   que ela e. */
+.linha-ajuste {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  min-height: 76px;
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 150ms ease-out;
+}
+
+.linha-ajuste:last-child {
+  border-bottom: 0;
+}
+
+.linha-ajuste-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.linha-ajuste-nome {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.linha-ajuste-descricao {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------- separador */
+
+.divisor {
+  height: 1px;
+  margin: var(--s5) 0;
+  border: 0;
+  background: var(--border);
+}
+
+/* ------------------------------------------------------------ modais
+
+   Sem sombra gigante e sem cartao flutuando no meio do nada: o modal e
+   uma superficie do proprio aplicativo, com a mesma borda de tudo. */
+.modal {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  max-width: 600px;
+  padding: var(--s6);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------ estados */
+
+*:focus-visible {
+  outline: 2px solid rgba(var(--text-rgb), 0.35);
+  outline-offset: 2px;
+}
+
+.status[data-tom="ok"] {
+  color: var(--success);
+}
+
+.status[data-tom="error"] {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------ cartão de jogo
+
+   A CAPA OCUPA O CARTÃO INTEIRO, e o nome fica por cima dela, sobre um
+   degradê que só existe no rodapé. O desenho anterior tinha a arte em
+   cima e uma faixa de texto embaixo — duas caixas empilhadas, que é o
+   que faz uma biblioteca parecer uma tabela com foto.
+
+   O degradê é a ÚNICA exceção à regra de não usar gradiente neste
+   produto, e ele não é enfeite: sem escurecer o pé da imagem, metade das
+   capas deixa o nome ilegível. Ele é ferramenta de contraste. */
+.jogo-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+  transition:
+    border-color 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.jogo-tile:hover {
+  border-color: var(--border-strong);
+  transform: none;
+}
+
+.jogo-tile-arte {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  transition: transform 180ms ease-out;
+}
+
+/* A IMAGEM cresce, e não o cartão. Crescer o cartão empurraria os
+   vizinhos e faria a grade inteira tremer a cada passada do mouse. */
+.jogo-tile:hover .jogo-tile-arte {
+  transform: scale(1.02);
+}
+
+.jogo-tile-arte[data-com-capa="sim"]::after {
+  box-shadow: none;
+}
+
+/* O pé do cartão: degradê, nome e estado, por cima da arte. */
+.jogo-tile-rodape {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s5) var(--s3) var(--s3);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88), rgba(0, 0, 0, 0));
+  text-align: left;
+  pointer-events: none;
+}
+
+.jogo-tile-nome {
+  padding: 0;
+  min-height: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #f2f2f2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.jogo-tile-estado {
+  padding: 0;
+  font-size: 11px;
+  color: rgba(242, 242, 242, 0.62);
+}
+
+/* Não instalado continua na grade e continua clicável — é assim que a
+   pessoa acha o jogo dela. O que muda é só a saturação da arte. */
+.jogo-tile[data-instalado="false"] .jogo-tile-arte {
+  filter: saturate(0.45);
+  opacity: 0.75;
+}
+
+.biblioteca-grade {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s4);
+}
+
+/* -------------------------------------------------- linha de software
+
+   Linha, e não cartão: uma lista de vinte programas em cartões vira um
+   catálogo de loja. A altura é a da especificação, e o hover é quase
+   imperceptível de propósito — ele serve para dizer "esta é a linha sob
+   o cursor", e não para chamar atenção. */
+.programa-linha {
+  min-height: 74px;
+  padding: var(--s3) var(--s3);
+  margin: 0 calc(var(--s3) * -1);
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  transition: background-color 150ms ease-out;
+}
+
+.programa-linha:hover {
+  background: rgba(var(--text-rgb), 0.02);
+}
+
+.programa-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.programa-descricao {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------- cartão de métrica
+
+   O NÚMERO É O ELEMENTO DOMINANTE. Tudo o mais no cartão — o rótulo em
+   cima, a linha do tempo, a nota embaixo — existe para dar contexto a
+   ele, e nenhum deles pode competir em peso. */
+.vivo {
+  background: var(--surface);
+  border-radius: 7px;
+}
+
+.vivo-valor {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.vivo-unidade {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.vivo-nota {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.vivo-traco {
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.ficha {
+  background: var(--surface);
+  border-radius: 7px;
+}
+
+/* ------------------------------------------------------ vazio e carga
+
+   Dois estados que o produto precisava ter e não tinha nome para. */
+.vazio {
+  padding: var(--s8) var(--s5);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.esqueleto {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2),
+    var(--surface-3),
+    var(--surface-2)
+  );
+  background-size: 200% 100%;
+  animation: esqueleto 1.4s ease-in-out infinite;
+}
+
+@keyframes esqueleto {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Quem pediu menos animação não recebe nenhuma. */
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto {
+    animation: none;
+  }
 }
