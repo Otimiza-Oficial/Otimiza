@@ -79,6 +79,7 @@ pub mod tarefa_longa;
 pub mod tasks;
 pub mod thermal;
 pub mod veredito;
+pub mod winget;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{

@@ -240,6 +240,71 @@ pub async fn capa_do_jogo(appid: u32, state: State<'_, AppState>) -> Result<Opti
     Ok(capas::obter(appid, raiz.as_deref()).await)
 }
 
+/// Comando: a lista de programas, com o que já está instalado.
+///
+/// SÓ LÊ. Abrir a aba não instala nada.
+///
+/// Quem responde "o que já está instalado" é o REGISTRO, e não o winget:
+/// as três chaves de desinstalação respondem na hora e existem em toda
+/// máquina — inclusive nas que não têm winget, que são justamente as que mais
+/// precisam desta lista.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
+    use crate::modules::programas;
+    use crate::modules::windows::{conflicts, winget};
+
+    let (instalados, winget) = tokio::task::spawn_blocking(|| {
+        (conflicts::programas_instalados(), winget::disponibilidade())
+    })
+    .await
+    .map_err(|e| format!("a leitura de programas não terminou: {e}"))?;
+
+    // Falha na leitura do registro NÃO vira lista vazia nem lista de "não
+    // instalados": vira estado desconhecido em todos, e a tela diz isso. O
+    // contrário faria o técnico instalar por cima do que já estava lá.
+    let lidos = instalados.as_deref().ok();
+
+    Ok(ProgramasNaTela {
+        programas: programas::montar(lidos),
+        winget,
+        lacuna: instalados.err(),
+    })
+}
+
+/// A lista com o estado do instalador.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct ProgramasNaTela {
+    pub programas: Vec<crate::modules::programas::NaLista>,
+    pub winget: crate::modules::windows::winget::Disponibilidade,
+    /// Por que o estado de instalação não pôde ser lido, quando não pôde.
+    pub lacuna: Option<String>,
+}
+
+/// Comando: instala um programa do catálogo pelo winget.
+///
+/// O IDENTIFICADOR VEM DO CATÁLOGO, e nunca da tela. A tela manda o id curto
+/// ("7zip"), e é aqui que ele vira o pacote do winget. Aceitar o nome do
+/// pacote direto da tela seria deixar a escolha de O QUE INSTALAR na máquina
+/// do cliente fora do nosso controle — a mesma razão pela qual o catálogo de
+/// jogos não desserializa.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn instalar_programa(id: String) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::programas;
+    use crate::modules::windows::winget;
+
+    let programa = programas::por_id(&id).ok_or("programa fora do catálogo")?;
+    let pacote = programa.winget;
+
+    tokio::task::spawn_blocking(move || winget::instalar(pacote))
+        .await
+        .map_err(|e| format!("a instalação não terminou: {e}"))?
+}
+
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
 ///
 /// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
@@ -4390,6 +4455,7 @@ mod tests {
         "caminho_do_mouse",
         "biblioteca_de_jogos",
         "capa_do_jogo",
+        "catalogo_de_programas",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",
@@ -4482,6 +4548,7 @@ mod tests {
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
+        "instalar_programa",
         "gerador_ligar",
         "energia_testar_candidato",
         "energia_aplicar",

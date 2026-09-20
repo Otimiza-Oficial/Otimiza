@@ -6297,3 +6297,61 @@ circle.placa-parafuso {
   color: var(--text-dim);
   line-height: 1.7;
 }
+
+/* A lista de programas. Uma linha por programa: nome, para que serve, botão.
+
+   O "para que serve" não é opcional. Uma lista de nomes obriga quem lê a já
+   saber o que cada um faz — e quem precisa desta aba é exatamente quem não
+   sabe. */
+.programa-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.programa-linha:last-child {
+  border-bottom: 0;
+}
+
+.programa-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.programa-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 600;
+}
+
+.programa-descricao {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.programa-estado {
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  padding: 1px var(--s2);
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+
+/* "Não deu para conferir" fica em itálico e não ganha cor de estado: ele não
+   é uma resposta sobre a máquina, é a ausência de uma. */
+.programa-estado[data-tom="desconhecido"] {
+  font-style: italic;
+}
+
+.panel-note[data-tom="aviso"] {
+  color: var(--amber);
+}

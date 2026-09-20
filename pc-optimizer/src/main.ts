@@ -2281,6 +2281,174 @@ function blocoDeFaltas(itens: string[], rotulo: string): string {
 }
 
 
+
+// ------------------------------------------------------------ programas
+
+interface ProgramaNaLista {
+  id: string;
+  nome: string;
+  descricao: string;
+  categoria: string;
+  /** `null` quando não deu para ler o que está instalado. Não é "não instalado". */
+  instalado: boolean | null;
+}
+
+type WingetNaTela =
+  | { estado: "Pronto"; versao: string }
+  | { estado: "Ausente"; como_resolver: string };
+
+interface ProgramasNaTela {
+  programas: ProgramaNaLista[];
+  winget: WingetNaTela;
+  lacuna: string | null;
+}
+
+let programasCarregados: ProgramaNaLista[] = [];
+let wingetPronto = false;
+let categoriaEscolhida = "Todos";
+
+async function carregarProgramas() {
+  try {
+    const r = await invoke<ProgramasNaTela>("catalogo_de_programas");
+    programasCarregados = r.programas;
+    wingetPronto = r.winget.estado === "Pronto";
+
+    const aviso = element("programas-winget");
+    if (r.winget.estado === "Pronto") {
+      aviso.textContent = `Instalador do Windows pronto (winget ${r.winget.versao}).`;
+      aviso.dataset.tom = "ok";
+    } else {
+      aviso.textContent = r.winget.como_resolver;
+      aviso.dataset.tom = "aviso";
+    }
+
+    // A lacuna da leitura do registro vai para a tela. Sem ela, "nenhum
+    // instalado" seria indistinguível de "não consegui olhar".
+    const lacuna = element("programas-lacuna");
+    lacuna.hidden = !r.lacuna;
+    lacuna.textContent = r.lacuna
+      ? `O estado de instalação não pôde ser lido: ${r.lacuna}`
+      : "";
+
+    const instalados = r.programas.filter((p) => p.instalado === true).length;
+    text(
+      "programas-tag",
+      r.lacuna
+        ? `${r.programas.length} programas`
+        : `${instalados} de ${r.programas.length} instalados`
+    );
+
+    desenharFiltrosDeCategoria();
+    desenharProgramas();
+  } catch (error) {
+    element("programas-lista").innerHTML = `<p class="hint">${escapeHtml(String(error))}</p>`;
+  }
+}
+
+function desenharFiltrosDeCategoria() {
+  const categorias = ["Todos", ...new Set(programasCarregados.map((p) => p.categoria))];
+
+  element("programas-filtros").innerHTML = categorias
+    .map(
+      (c) => `
+      <button class="biblioteca-filtro" role="tab" data-categoria="${escapeHtml(c)}"
+              aria-selected="${c === categoriaEscolhida}">${escapeHtml(c)}</button>`
+    )
+    .join("");
+
+  for (const botao of element("programas-filtros").querySelectorAll<HTMLButtonElement>(
+    "[data-categoria]"
+  )) {
+    botao.onclick = () => {
+      categoriaEscolhida = botao.dataset.categoria ?? "Todos";
+      desenharFiltrosDeCategoria();
+      desenharProgramas();
+    };
+  }
+}
+
+function desenharProgramas() {
+  const busca = element<HTMLInputElement>("programas-busca").value.trim().toLowerCase();
+
+  const visiveis = programasCarregados.filter((p) => {
+    if (categoriaEscolhida !== "Todos" && p.categoria !== categoriaEscolhida) return false;
+    return busca === "" || p.nome.toLowerCase().includes(busca);
+  });
+
+  if (visiveis.length === 0) {
+    element("programas-lista").innerHTML =
+      `<p class="hint">Nenhum programa com esse nome no catálogo.</p>`;
+    return;
+  }
+
+  element("programas-lista").innerHTML = visiveis
+    .map((p) => {
+      // Três estados, e o terceiro importa: desconhecido NÃO vira "Instalar".
+      // Oferecer instalação sobre o que pode já estar lá faz o técnico
+      // instalar por cima — e alguns instaladores tratam isso como reparo,
+      // outros como primeira instalação.
+      const estado =
+        p.instalado === null
+          ? `<span class="programa-estado" data-tom="desconhecido">não deu para conferir</span>`
+          : p.instalado
+            ? `<span class="programa-estado" data-tom="ok">instalado</span>`
+            : "";
+
+      const botao =
+        p.instalado === true
+          ? `<button class="btn btn-small" disabled>Já instalado</button>`
+          : `<button class="btn btn-small" data-instalar="${escapeHtml(p.id)}" ${
+              wingetPronto ? "" : "disabled"
+            }>Instalar</button>`;
+
+      return `
+        <div class="programa-linha">
+          <div class="programa-corpo">
+            <span class="programa-nome">${escapeHtml(p.nome)}${estado}</span>
+            <span class="programa-descricao">${escapeHtml(p.descricao)}</span>
+          </div>
+          ${botao}
+        </div>`;
+    })
+    .join("");
+
+  for (const botao of element("programas-lista").querySelectorAll<HTMLButtonElement>(
+    "[data-instalar]"
+  )) {
+    botao.onclick = () => void instalarPrograma(botao);
+  }
+}
+
+async function instalarPrograma(botao: HTMLButtonElement) {
+  const id = botao.dataset.instalar;
+  const programa = programasCarregados.find((p) => p.id === id);
+  if (!id || !programa) return;
+
+  botao.disabled = true;
+  botao.textContent = "Instalando…";
+  setStatus(
+    "programas-status",
+    `Baixando e instalando ${programa.nome} pela fonte oficial. Pode levar alguns minutos.`,
+    "progress"
+  );
+
+  try {
+    await invoke<string>("instalar_programa", { id });
+    setStatus("programas-status", `${programa.nome} instalado.`, "ok");
+
+    // Relê em vez de assumir: o botão precisa dizer o que o registro diz.
+    await carregarProgramas();
+  } catch (error) {
+    setStatus("programas-status", String(error), "error");
+    botao.disabled = false;
+    botao.textContent = "Instalar";
+  }
+}
+
+function ligarProgramas() {
+  element<HTMLInputElement>("programas-busca").addEventListener("input", desenharProgramas);
+}
+
 // ------------------------------------------------ biblioteca de jogos
 
 interface JogoNaGrade {
@@ -10098,6 +10266,8 @@ function wireControls() {
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
   ligarTema();
   ligarBiblioteca();
+  ligarProgramas();
+  void carregarProgramas();
   void carregarCartaoDaPlaca();
   void carregarBiblioteca();
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);

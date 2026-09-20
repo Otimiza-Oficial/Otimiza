@@ -596,6 +596,12 @@
             <span class="nav-rotulo">Biblioteca</span>
           </button>
 
+          <button class="nav" role="tab" data-tab="programas" aria-selected="false"
+                  aria-controls="tab-programas" id="tabbtn-programas">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-instaladores" /></svg>
+            <span class="nav-rotulo">Programas</span>
+          </button>
+
           <button class="nav" role="tab" data-tab="gpu" aria-selected="false"
                   aria-controls="tab-gpu" id="tabbtn-gpu">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-gpu" /></svg>
@@ -2080,6 +2086,63 @@
             <p class="hint" id="biblioteca-lacunas" hidden></p>
           </section>
 
+        </section>
+
+        <!--
+          OS PROGRAMAS.
+
+          O Otimiza NÃO hospeda instalador nenhum, não baixa binário de
+          endereço escolhido por nós, e não tem cópia de programa de terceiro
+          dentro do instalador. Quem instala é o winget, o gerenciador de
+          pacotes do próprio Windows: o pacote vem da fonte oficial do
+          fabricante, e a conta de "de onde veio este .exe" é da Microsoft.
+
+          Um otimizador que baixa executável de um servidor próprio é
+          indistinguível de um que entrega vírus, e o cliente não tem como
+          saber a diferença antes de rodar.
+        -->
+        <section class="tab-panel" id="tab-programas" role="tabpanel"
+                 aria-labelledby="tabbtn-programas" hidden>
+          <header class="abertura">
+            <p class="abertura-sobrenome">Software</p>
+            <h1 class="abertura-titulo">Programas</h1>
+            <p class="abertura-sub">
+              Instalados pelo gerenciador de pacotes do Windows, direto da fonte
+              oficial de cada fabricante.
+            </p>
+          </header>
+
+          <!--
+            O ESTADO DO INSTALADOR FICA NO ALTO, E NÃO ESCONDIDO.
+
+            O winget pode não existir — Windows "lite", debloat agressivo e
+            Loja removida deixam esse estado, e é o perfil do cliente que mais
+            precisa desta lista. Sem ele a aba não some nem quebra: ela lista,
+            diz o que já está instalado, e diz o que falta para instalar daqui.
+          -->
+          <p class="panel-note" id="programas-winget"></p>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Catálogo</h2>
+              <span class="panel-tag" id="programas-tag">—</span>
+            </div>
+
+            <div class="biblioteca-topo">
+              <div class="biblioteca-filtros" id="programas-filtros" role="tablist"
+                   aria-label="Filtrar por categoria"></div>
+
+              <label class="biblioteca-busca">
+                <span class="sr-only">Buscar programa</span>
+                <input type="search" id="programas-busca" placeholder="Buscar programa"
+                       autocomplete="off" spellcheck="false" />
+              </label>
+            </div>
+
+            <div id="programas-lista"></div>
+            <p id="programas-status" class="status"></p>
+            <p class="hint" id="programas-lacuna" hidden></p>
+          </section>
         </section>
 
         <!--

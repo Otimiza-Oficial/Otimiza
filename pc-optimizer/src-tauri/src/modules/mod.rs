@@ -29,6 +29,7 @@ pub mod mouse;
 pub mod optimizer;
 pub mod orquestrador;
 pub mod preferences;
+pub mod programas;
 pub mod prova;
 pub mod repeticoes;
 pub mod report;
