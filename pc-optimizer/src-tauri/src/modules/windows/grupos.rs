@@ -196,6 +196,8 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "maps_auto_update_off" => Grupo::Fundo,
         "remote_assistance_off" => Grupo::Fundo,
         "accessibility_keys_off" => Grupo::Fundo,
+        "edge_background_off" => Grupo::Fundo,
+        "error_reporting_off" => Grupo::Fundo,
 
         "visual_effects_performance" => Grupo::Visual,
         "disable_transparency" => Grupo::Visual,
@@ -203,8 +205,11 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "clear_boot_limits" => Grupo::Boot,
         "remove_forced_hpet" => Grupo::Boot,
         // `disable_vbs` mora no Boot por natureza e NÃO está aqui: ele troca
-        // segurança por desempenho, e a regra abaixo vale para os três que
-        // fazem isso. O protocolo aplica grupos INTEIROS — um grupo com
+        // segurança por desempenho, e é o ÚNICO ajuste do catálogo que faz
+        // isso — os outros dois que faziam (desligar o UAC e desligar o
+        // firewall) saíram do produto, porque o que eles cobravam em segurança
+        // não era pago em quadro nenhum; o motivo de cada um está em
+        // `naofazemos.rs`. O protocolo aplica grupos INTEIROS — um grupo com
         // "desligar a virtualização de segurança" dentro desligaria isso na
         // máquina de quem pediu só um teste de FPS.
 
@@ -218,7 +223,7 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "clean_update_cache" => Grupo::Higiene,
         "disable_reserved_storage" => Grupo::Higiene,
 
-        "uac_off" | "firewall_off" | "disable_vbs" => return None,
+        "disable_vbs" => return None,
 
         _ => return None,
     })

@@ -1136,68 +1136,67 @@ pub static CATALOG: &[OptimizationSpec] = &[
             value: RegValue::Dword(0),
         }],
     },
-    OptimizationSpec {
-        id: "uac_off",
-        name: "Desligar o Controle de Conta de Usuário (UAC)",
-        description: "Remove a janela que pergunta \"deseja permitir que este aplicativo faça alterações\".",
-        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA. Não ganha um quadro por segundo. Zero. O que ele faz é tirar a última barreira entre um programa qualquer e o seu Windows: com o UAC desligado, qualquer coisa que você abrir por engano ganha poder de administrador sem perguntar nada. É a troca mais cara desta lista e o ganho é nenhum. E tem uma consequência que você vai sentir na hora: com o UAC desligado, aplicativo baixado da Loja da Microsoft se recusa a abrir — no Windows 10 e no Windows 11. Está aqui porque os concorrentes oferecem e você pediu paridade.",
-        category: Category::System,
-        expected_gain: ExpectedGain::NoGain,
-        risco_de_fps: RiscoDeFps::Nenhum,
-        requires_admin: true,
-        requires_restart: true,
-        reversible: true,
-        requirement: None,
-        security_tradeoff: true,
-        highlight_when: &[],
-        actions: &[Action::Registry {
-            hive: "HKLM",
-            path: r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System",
-            name: "EnableLUA",
-            value: RegValue::Dword(0),
-        }],
-    },
+
+    // ======================================================================
+    // OS DOIS QUE ENTRARAM NO LUGAR DOS QUE SAÍRAM
+    //
+    // Saíram daqui "desligar o UAC" e "desligar o firewall": ganho declarado
+    // nulo, custo real em segurança. Estes dois entraram sob a régua contrária
+    // — cada um mexe numa chave documentada pelo dono dela, faz uma coisa que
+    // dá para perceber, volta atrás, e traz o preço escrito.
+    //
+    // Nenhum dos dois promete quadro por segundo, e os textos dizem isso na
+    // primeira linha. Trocar dois itens que mentiam alto por dois que dizem
+    // "isto não é FPS" é a troca que este produto precisa fazer.
+    // ======================================================================
 
     OptimizationSpec {
-        id: "firewall_off",
-        name: "Desligar o Firewall do Windows",
-        description: "Desliga o filtro de rede do Windows nos três perfis: domínio, particular e público.",
-        honest_effect: "ATENÇÃO — TROCA DE SEGURANÇA, E A PIOR DA LISTA. Não muda desempenho: nem um quadro por segundo, nem um milissegundo de ping. O filtro roda dentro do núcleo do Windows e custa microssegundos. O que muda é que este PC passa a aceitar conexão de qualquer máquina da rede — e num servidor de jogo você está numa rede com desconhecidos. O ganho é zero e o risco é real.",
-        category: Category::Network,
-        expected_gain: ExpectedGain::NoGain,
+        id: "error_reporting_off",
+        name: "Desligar o Relatório de Erros do Windows",
+        description: "Impede o Windows de abrir o coletor de falhas (WerFault) quando um programa fecha sozinho.",
+        honest_effect: "Não dá FPS — o coletor só existe depois que alguma coisa já quebrou. O que ele muda é o que acontece NA HORA em que o jogo fecha sozinho: hoje o Windows sobe o WerFault, que segura a janela travada enquanto copia a memória do processo para o disco e tenta enviar o relatório. Com jogo grande isso é gigabyte de escrita e dezenas de segundos de PC parado, e é por isso que a queda parece muito pior do que foi. Desligado, o jogo simplesmente fecha e você volta para a área de trabalho. O PREÇO: você perde o registro daquela falha. O Histórico de Confiabilidade do Windows para de anotar, e se um dia precisar descobrir POR QUE aquele jogo cai, a informação não vai estar lá — e aí o caminho é ligar de volta e reproduzir a queda.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
         risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: false,
         reversible: true,
         requirement: None,
-        security_tradeoff: true,
+        security_tradeoff: false,
         highlight_when: &[],
-        // Três perfis, três chaves. O estado do firewall mora aqui de verdade:
-        // conferido nesta máquina contra `netsh advfirewall show allprofiles
-        // state`, e os dois concordam.
-        //
-        // Fazer pelo registro em vez de chamar o `netsh` não é preguiça: o
-        // sistema de reversão do produto já sabe desfazer alteração de
-        // registro, guardando o valor anterior. Uma ação nova de linha de
-        // comando precisaria de um caminho de volta escrito à mão, e caminho de
-        // volta escrito à mão é o que costuma nunca ser testado.
+        actions: &[Action::Registry {
+            hive: "HKLM",
+            path: r"SOFTWARE\Microsoft\Windows\Windows Error Reporting",
+            name: "Disabled",
+            value: RegValue::Dword(1),
+        }],
+    },
+
+    OptimizationSpec {
+        id: "edge_background_off",
+        name: "Impedir o Edge de ficar aberto por trás e de carregar no boot",
+        description: "Desliga as duas configurações que mantêm o Microsoft Edge em execução com a janela fechada e o carregam junto com o Windows.",
+        honest_effect: "O Edge tem dois comportamentos ligados de fábrica que quase ninguém sabe que existem: ele se carrega sozinho durante o boot para abrir mais rápido depois, e continua com processos vivos depois que você fecha a última janela. Juntos costumam segurar algumas centenas de megabytes e um punhado de processos que você não pediu. Desligando os dois, esses processos somem quando você fecha o navegador. NÃO ESPERE FPS: memória liberada só vira quadro em máquina que estava realmente sem memória, e em PC com folga a diferença no jogo é nenhuma. O que muda de verdade é o boot e o que fica rodando enquanto você joga. O PREÇO, e ele aparece na cara: isto é escrito como política de máquina, que é a única forma que o Edge lê do registro — então o navegador vai passar a mostrar \"gerenciado pela sua organização\" nas configurações dele. Não é vírus e não é bloqueio; é o Edge dizendo que a configuração veio de fora. Desfazendo aqui, o aviso some.",
+        category: Category::Startup,
+        expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
+        requires_admin: true,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        highlight_when: &[Boost::LowRam],
+        security_tradeoff: false,
         actions: &[
             Action::Registry {
                 hive: "HKLM",
-                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\DomainProfile",
-                name: "EnableFirewall",
+                path: r"SOFTWARE\Policies\Microsoft\Edge",
+                name: "StartupBoost",
                 value: RegValue::Dword(0),
             },
             Action::Registry {
                 hive: "HKLM",
-                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\StandardProfile",
-                name: "EnableFirewall",
-                value: RegValue::Dword(0),
-            },
-            Action::Registry {
-                hive: "HKLM",
-                path: r"SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\PublicProfile",
-                name: "EnableFirewall",
+                path: r"SOFTWARE\Policies\Microsoft\Edge",
+                name: "BackgroundModeEnabled",
                 value: RegValue::Dword(0),
             },
         ],
@@ -1343,24 +1342,44 @@ mod tests {
         }
     }
 
+    /// A TRAVA QUE SUBSTITUIU O TESTE DO UAC.
+    ///
+    /// Havia aqui um teste conferindo que o aviso de "desligar o UAC" dizia
+    /// que aquilo quebra aplicativo da Loja da Microsoft. O ajuste saiu do
+    /// catálogo — ele não rendia quadro nenhum e cobrava segurança —, e junto
+    /// com ele saiu "desligar o firewall", pelo mesmo motivo.
+    ///
+    /// Apagar o teste e não pôr nada no lugar deixaria a porta aberta para os
+    /// dois voltarem por descuido, numa revisão futura em que alguém repita a
+    /// lista de um concorrente. Então a regra virou geral: ajuste que troca
+    /// segurança PRECISA entregar alguma coisa. `NoGain` com `security_tradeoff`
+    /// é, por definição, custo sem contrapartida.
     #[test]
-    fn o_aviso_do_uac_diz_que_quebra_aplicativo_da_loja() {
-        // O texto já dizia que o ganho é zero e que é troca de segurança —
-        // isso fica. O que faltava era a consequência que o cliente SENTE:
-        // com o UAC desligado, aplicativo da Loja da Microsoft se recusa a
-        // abrir, no Windows 10 e no Windows 11. "aplicativo" sozinho não
-        // basta como prova — a descrição já usa essa palavra para outra
-        // coisa ("...que este aplicativo faça alterações"), então esse teste
-        // passaria mesmo sem o aviso novo. "loja" é a palavra que só existe
-        // depois da correção.
-        let item = CATALOG.iter().find(|o| o.id == "uac_off").expect("achei o uac_off");
-        let texto = format!("{} {}", item.description, item.honest_effect).to_lowercase();
+    fn nenhum_ajuste_cobra_seguranca_sem_entregar_nada() {
+        for spec in CATALOG {
+            assert!(
+                !(spec.security_tradeoff && spec.expected_gain == ExpectedGain::NoGain),
+                "`{}` pede segurança em troca de ganho declarado nulo — isso é recusa, \
+                 e o lugar dela é `naofazemos.rs`",
+                spec.id
+            );
+        }
+    }
 
-        assert!(
-            texto.contains("loja"),
-            "o aviso não diz que quebra aplicativo da Loja: {}",
-            item.honest_effect
-        );
+    #[test]
+    fn o_que_saiu_do_catalogo_esta_explicado_na_lista_de_recusas() {
+        // Tirar do catálogo sem explicar troca um botão ruim por um buraco: o
+        // cliente que vem de outro programa procura, não acha, e conclui que
+        // falta função. Estes dois ids são o contrato de que a explicação
+        // continua existindo.
+        use super::super::naofazemos::LISTA;
+
+        for id in ["uac_desligado", "firewall_desligado"] {
+            assert!(
+                LISTA.iter().any(|n| n.id == id),
+                "`{id}` saiu do catálogo e ninguém explica por quê"
+            );
+        }
     }
 
     #[test]

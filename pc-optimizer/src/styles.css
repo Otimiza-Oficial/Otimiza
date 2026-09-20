@@ -7431,3 +7431,83 @@ input:focus-visible {
   font-size: 14px;
   overflow-wrap: normal;
 }
+
+/* ----------------------------------------------------- aviso de "em breve"
+
+   Uma faixa, e não um cartão de erro: a aba FUNCIONA, só não inteira. Cor de
+   alerta aqui diria "algo quebrou", que é diferente de "isto ainda não
+   chegou" — e a diferença importa para quem está decidindo se confia no
+   programa. Então a faixa usa a mesma superfície do resto da tela, e quem
+   carrega o recado é o selo. */
+.aviso-breve {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  max-width: 1000px;
+  padding: var(--s4) var(--s5);
+  margin: 0 0 var(--s5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.aviso-breve-selo {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.aviso-breve-texto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.aviso-breve-texto strong {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Em tela estreita o selo sobe para a própria linha: espremido ao lado de um
+   parágrafo de seis linhas ele vira uma coluna de uma letra. */
+@media (max-width: 720px) {
+  .aviso-breve {
+    flex-direction: column;
+    gap: var(--s3);
+  }
+}
+
+/* ------------------------------------------------------- só para o leitor
+
+   A classe era USADA em dois lugares do HTML e não existia em lugar nenhum
+   do CSS — então os dois rótulos, que só deviam existir para quem navega por
+   leitor de tela, apareciam desenhados ao lado do próprio campo que
+   descrevem. "Buscar jogo" impresso à esquerda de uma caixa cujo texto de
+   apoio já diz "Buscar jogo".
+
+   Apagar os `<span>` seria o conserto errado: o campo ficaria sem nome para
+   quem não enxerga o desenho. O conserto é a regra que faltava.
+
+   E ela não usa `display: none` nem `visibility: hidden` — os dois tiram o
+   elemento da árvore de acessibilidade, que é exatamente a árvore para a
+   qual ele existe. O recorte de um pixel some da tela e continua sendo
+   lido. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
