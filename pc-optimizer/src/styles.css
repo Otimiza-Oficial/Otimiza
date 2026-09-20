@@ -5362,6 +5362,29 @@ circle.placa-parafuso {
   color: var(--red);
 }
 
+/* Memória de vídeo.
+
+   "Cheia" e "transbordando" precisam de cores DIFERENTES, e é esse o ponto do
+   painel inteiro: placa cheia é o estado normal de uma placa, e pintá-la de
+   âmbar junto com o transbordo devolveria o alarme falso que a etapa veio
+   desfazer. Só o derramamento medido acende. */
+#vram-estado[data-estado="ok"] {
+  color: var(--text-muted);
+}
+
+#vram-estado[data-estado="neutro"] {
+  color: var(--text-muted);
+}
+
+#vram-estado[data-estado="desconhecido"] {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+#vram-estado[data-estado="alerta"] {
+  color: var(--amber);
+}
+
 /* Barra de medidor sem leitura. Vazia e vazia-marcada não podem parecer a
    mesma coisa: uma diz "0%", a outra diz "não sei". */
 .vital[data-estado="desconhecido"] .vital-bar,

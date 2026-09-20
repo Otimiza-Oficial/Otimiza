@@ -27,6 +27,7 @@ pub mod repeticoes;
 pub mod report;
 pub mod safety;
 pub mod transacao;
+pub mod vram;
 pub mod monitor;
 pub mod gargalo;
 pub mod telemetry;

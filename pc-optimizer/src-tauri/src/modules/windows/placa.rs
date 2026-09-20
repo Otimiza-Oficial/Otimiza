@@ -57,6 +57,14 @@ pub struct Amostra {
     /// Máximo e não soma: numa máquina com placa integrada e dedicada, somar
     /// as duas produziria um total que nenhuma das duas tem.
     pub vram_mb: Option<f64>,
+    /// Memória do SISTEMA que a placa está usando, em MB.
+    ///
+    /// Do MESMO adaptador de `vram_mb`, e não o maior de todos: as duas
+    /// leituras só respondem juntas a pergunta que interessa — "a dedicada
+    /// acabou e o driver começou a derramar para a RAM?". Cruzar o
+    /// derramamento de um adaptador com a dedicada de outro responderia essa
+    /// pergunta sobre uma placa que não existe.
+    pub vram_compartilhada_mb: Option<f64>,
     /// `% Disk Time` do total dos discos físicos.
     pub disco_ocupado_pct: Option<f64>,
     /// `Avg. Disk sec/Transfer`, convertido para milissegundos.
@@ -71,6 +79,7 @@ pub struct Contadores {
     consulta: isize,
     gpu: isize,
     vram: isize,
+    vram_compartilhada: isize,
     disco_tempo: isize,
     disco_latencia: isize,
 }
@@ -109,6 +118,7 @@ impl Contadores {
             consulta,
             gpu: adicionar(r"\GPU Engine(*)\Utilization Percentage"),
             vram: adicionar(r"\GPU Adapter Memory(*)\Dedicated Usage"),
+            vram_compartilhada: adicionar(r"\GPU Adapter Memory(*)\Shared Usage"),
             disco_tempo: adicionar(r"\PhysicalDisk(_Total)\% Disk Time"),
             disco_latencia: adicionar(r"\PhysicalDisk(_Total)\Avg. Disk sec/Transfer"),
         };
@@ -227,15 +237,29 @@ impl Contadores {
         // existe nesta máquina, a resposta é que não se sabe.
         let gpu_pct = (!motores.is_empty()).then(|| motores.iter().sum::<f64>().min(100.0));
 
-        let vram_mb = self
+        // O adaptador que mais usa memória dedicada é o que está rodando o
+        // jogo. Máximo e não soma: numa máquina com integrada e dedicada,
+        // somar as duas produziria um total que nenhuma das duas tem.
+        let dedicada = self
             .lista(self.vram)
             .into_iter()
-            .map(|(_, bytes)| bytes / 1_048_576.0)
-            .reduce(f64::max);
+            .map(|(nome, bytes)| (nome, bytes / 1_048_576.0))
+            .reduce(|a, b| if b.1 > a.1 { b } else { a });
+
+        // A compartilhada é lida pelo NOME da instância escolhida acima. Se o
+        // contador existir mas não trouxer aquela instância, a resposta é
+        // ausente — e não zero, que significaria "não está derramando nada".
+        let vram_compartilhada_mb = dedicada.as_ref().and_then(|(nome, _)| {
+            self.lista(self.vram_compartilhada)
+                .into_iter()
+                .find(|(n, _)| n == nome)
+                .map(|(_, bytes)| bytes / 1_048_576.0)
+        });
 
         Amostra {
             gpu_pct,
-            vram_mb,
+            vram_mb: dedicada.map(|(_, mb)| mb),
+            vram_compartilhada_mb,
             disco_ocupado_pct: self.valor(self.disco_tempo).map(|v| v.min(100.0)),
             // O contador vem em SEGUNDOS por transferência. Publicar isso como
             // milissegundo sem converter erraria por mil, que é exatamente o
@@ -288,6 +312,16 @@ mod tests {
                 "1 TB de VRAM é leitura errada, não placa boa"
             );
         }
+        if let Some(mb) = a.vram_compartilhada_mb {
+            assert!(mb >= 0.0, "memória compartilhada em {mb} MB");
+            assert!(mb < 1_048_576.0, "1 TB compartilhado é leitura errada");
+            // As duas saem da MESMA instância de adaptador: ou as duas
+            // respondem, ou a escolha da instância está errada.
+            assert!(
+                a.vram_mb.is_some(),
+                "compartilhada sem dedicada é instância de adaptador trocada"
+            );
+        }
         if let Some(disco) = a.disco_ocupado_pct {
             assert!((0.0..=100.0).contains(&disco));
         }
@@ -315,5 +349,9 @@ mod tests {
         // Exige-se que as duas tenham respondido às mesmas perguntas.
         assert_eq!(x.gpu_pct.is_some(), y.gpu_pct.is_some());
         assert_eq!(x.vram_mb.is_some(), y.vram_mb.is_some());
+        assert_eq!(
+            x.vram_compartilhada_mb.is_some(),
+            y.vram_compartilhada_mb.is_some()
+        );
     }
 }

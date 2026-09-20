@@ -119,6 +119,12 @@ pub struct PerformanceMetrics {
     /// função pura da telemetria que acabou de ser lida. Num segundo comando,
     /// a tela mostraria um diagnóstico de uma coleta e números de outra.
     pub gargalo: super::gargalo::Diagnostico,
+    /// Pressão de memória de vídeo, medida pelo derramamento. Ver `vram.rs`.
+    ///
+    /// Vem junto pela mesma razão do gargalo: é função pura desta telemetria,
+    /// e num comando separado a tela mostraria a análise de uma coleta ao lado
+    /// dos números de outra.
+    pub vram: super::vram::Analise,
 }
 
 /// Quanto a amostragem de CPU espera entre as duas leituras.
@@ -150,6 +156,13 @@ pub struct PerformanceMonitor {
     /// e a taxa calculada em cima dela não quer dizer nada.
     discos_vistos: Option<BTreeSet<String>>,
     interfaces_vistas: Option<BTreeSet<String>>,
+    /// O menor derramamento para memória do sistema já visto nesta máquina
+    /// com a placa em repouso. Ver `vram::Piso`.
+    ///
+    /// Vive no monitor porque é uma medida acumulada: uma coleta sozinha não
+    /// sabe quanto esta máquina já derramava parada, e sem essa referência
+    /// toda máquina ligada seria acusada de transbordo.
+    piso_compartilhada: super::vram::Piso,
     /// Contadores de desempenho do Windows, vivos entre as coletas.
     ///
     /// É o mesmo amostrador que o motor de energia usa para decidir se um
@@ -280,6 +293,7 @@ impl PerformanceMonitor {
             last_sample: None,
             discos_vistos: None,
             interfaces_vistas: None,
+            piso_compartilhada: super::vram::Piso::default(),
             // Aberto na primeira coleta, não aqui: abrir a consulta do PDH
             // custa, e o monitor é construído mesmo em sessão que nunca vai
             // olhar o painel.
@@ -357,7 +371,17 @@ impl PerformanceMonitor {
         self.telemetria_da_rede(&mut telemetry);
 
         let telemetry = telemetry.finish(comeco.elapsed().as_millis() as u64);
-        let gargalo = super::gargalo::classificar(&telemetry);
+
+        // O piso aprende ANTES de a análise usá-lo: uma coleta com a placa em
+        // repouso já vale como referência para ela mesma, e esperar a próxima
+        // atrasaria em um tique o momento em que o transbordo passa a ser
+        // detectável.
+        self.piso_compartilhada.observar(
+            telemetry.value("vram.shared_used"),
+            telemetry.value("gpu.usage"),
+        );
+        let vram = super::vram::avaliar(&telemetry, &self.piso_compartilhada);
+        let gargalo = super::gargalo::classificar_com(&telemetry, &vram);
 
         Ok(PerformanceMetrics {
             timestamp,
@@ -369,6 +393,7 @@ impl PerformanceMonitor {
             uptime_hours: uptime,
             telemetry,
             gargalo,
+            vram,
         })
     }
 
@@ -737,6 +762,7 @@ impl PerformanceMonitor {
             t.set("vram.used", Metric::unknown(Unit::Gigabytes, FORA));
             t.set("vram.total", Metric::unknown(Unit::Gigabytes, FORA));
             t.set("vram.usage", Metric::unknown(Unit::Percent, FORA));
+            t.set("vram.shared_used", Metric::unknown(Unit::Gigabytes, FORA));
             t.set("storage.busy", Metric::unknown(Unit::Percent, FORA));
             t.set("display.refresh", Metric::unknown(Unit::Hertz, FORA));
         }
@@ -1161,6 +1187,7 @@ impl PerformanceMonitor {
             t.set("gpu.usage", Metric::unknown(Unit::Percent, SEM));
             t.set("vram.used", Metric::unknown(Unit::Gigabytes, SEM));
             t.set("vram.usage", Metric::unknown(Unit::Percent, SEM));
+            t.set("vram.shared_used", Metric::unknown(Unit::Gigabytes, SEM));
             t.set("storage.busy", Metric::unknown(Unit::Percent, SEM));
             t.set("storage.latency", Metric::unknown(Unit::Milliseconds, SEM));
             return;
@@ -1235,6 +1262,24 @@ impl PerformanceMonitor {
                 t.set("vram.used", Metric::unknown(Unit::Gigabytes, MUDO));
                 t.set("vram.usage", Metric::unknown(Unit::Percent, MUDO));
             }
+        }
+
+        // A memória do sistema em uso pela placa. É esta leitura que separa
+        // "cache cheio", que é normal, de "não coube e está indo pelo PCIe",
+        // que é o que o cliente sente como engasgo. Quem interpreta é
+        // `modules::vram`; aqui ela só entra no contrato.
+        match a.vram_compartilhada_mb {
+            Some(mb) => t.set(
+                "vram.shared_used",
+                Metric::measured(mb / 1024.0, Unit::Gigabytes, "pdh"),
+            ),
+            None => t.set(
+                "vram.shared_used",
+                Metric::unknown(
+                    Unit::Gigabytes,
+                    "esta máquina não publica o contador de memória compartilhada da placa",
+                ),
+            ),
         }
     }
 

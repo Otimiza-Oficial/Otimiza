@@ -212,8 +212,12 @@ pub struct Diagnostico {
 /// classes que ninguém implementou.
 const CLASSES_PROMETIDAS: usize = 14;
 
-/// Classifica o que houver na telemetria.
-pub fn classificar(t: &Telemetry) -> Diagnostico {
+/// Classifica com a análise de memória de vídeo já feita.
+///
+/// A separação existe porque a pressão de memória de vídeo depende de uma
+/// medida que a telemetria de uma coleta não carrega: o piso de derramamento
+/// DESTA máquina, que só se conhece observando várias leituras em repouso.
+pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostico {
     let mut achados = Vec::new();
     let mut nao_verificado = Vec::new();
     let mut avaliadas = 0usize;
@@ -302,19 +306,48 @@ pub fn classificar(t: &Telemetry) -> Diagnostico {
         }),
     }
 
-    // ---- os quatro recursos com um número só
+    // ---- memória de vídeo
+    //
+    // NÃO entra no laço abaixo, e a razão é o erro que este bloco corrige.
+    // `vram.usage` alto não é pressão de memória: o driver é um cache e não
+    // devolve textura que já carregou. Uma placa a 95% depois de meia hora de
+    // jogo é o estado NORMAL, e apontá-la como gargalo mandava o cliente
+    // baixar a qualidade das texturas à toa. O que mede pressão é o
+    // derramamento para a memória do sistema, e quem faz essa conta — com o
+    // piso desta máquina — é `modules::vram`.
+    match vram.estado {
+        super::vram::Estado::NaoAvaliado => nao_verificado.push(NaoVerificado {
+            classe: "Memória de vídeo".to_string(),
+            falta: if vram.falta.is_empty() {
+                "a memória de vídeo não foi avaliada".to_string()
+            } else {
+                vram.falta.join(", ")
+            },
+        }),
+        super::vram::Estado::Transbordando => {
+            avaliadas += 1;
+            achados.push(Achado {
+                classe: Classe::MemoriaVideo,
+                // Causa, e não hipótese: as duas pontas são leitura direta do
+                // contador desta coleta, e o piso é medida desta máquina.
+                forca: Forca::Causa,
+                evidencia: match vram.derramado_gb {
+                    Some(gb) => format!("vram.shared_used: {gb:.1} GB acima do piso da máquina"),
+                    None => "a placa está derramando para a memória do sistema".to_string(),
+                },
+                idade_ms: None,
+            });
+        }
+        _ => avaliadas += 1,
+    }
+
+    // ---- os três recursos com um número só
     for (id, classe, nome, teto) in [
         ("gpu.usage", Classe::Gpu, "Placa de vídeo", SATURADO),
         (
             "ram.usage",
             Classe::MemoriaRam,
             "Memória do sistema",
-            MEMORIA_APERTADA,
-        ),
-        (
-            "vram.usage",
-            Classe::MemoriaVideo,
-            "Memória de vídeo",
             MEMORIA_APERTADA,
         ),
         ("storage.busy", Classe::Disco, "Disco", SATURADO),
@@ -636,6 +669,19 @@ mod tests {
         Telemetry::new(0, None)
     }
 
+    /// Classifica sem piso de derramamento conhecido.
+    ///
+    /// É o pior caso de propósito: a maioria dos testes aqui não fala de
+    /// memória de vídeo, e sem o piso essa classe cai em "não verificada" em
+    /// vez de sair como folgada. Um atalho que a desse por folgada esconderia,
+    /// em todo teste do arquivo, exatamente o engano que o módulo combate.
+    fn classificar(t: &Telemetry) -> Diagnostico {
+        classificar_com(
+            t,
+            &crate::modules::vram::avaliar(t, &crate::modules::vram::Piso::default()),
+        )
+    }
+
     fn com(pares: &[(&str, f64)]) -> Telemetry {
         let mut t = vazia();
         for (id, valor) in pares {
@@ -651,6 +697,7 @@ mod tests {
             "network.jitter" | "network.latency" => Unit::Milliseconds,
             "match.cpu_usage" | "match.gpu_usage" | "frametime.stutters_with_disk" => Unit::Percent,
             "display.refresh" => Unit::Hertz,
+            "vram.used" | "vram.total" | "vram.shared_used" => Unit::Gigabytes,
             "fps.average" | "fps.low_1pct" => Unit::Fps,
             _ => Unit::Percent,
         }
@@ -831,14 +878,74 @@ mod tests {
     }
 
     #[test]
-    fn memoria_aperta_antes_dos_noventa_e_dois() {
-        // 91% de VRAM não passa do teto do processador, mas já é despejo de
-        // textura. Os dois recursos não têm o mesmo limiar.
-        let d = classificar(&com(&[("vram.usage", 91.0)]).finish(0));
-        assert!(d.achados.iter().any(|a| a.classe == Classe::MemoriaVideo));
+    fn memoria_do_sistema_aperta_antes_dos_noventa_e_dois() {
+        // 91% de RAM não passa do teto do processador, mas o sistema já está
+        // paginando. Os dois recursos não têm o mesmo limiar.
+        let d = classificar(&com(&[("ram.usage", 91.0)]).finish(0));
+        assert!(d.achados.iter().any(|a| a.classe == Classe::MemoriaRam));
 
         let d = classificar(&com(&[("gpu.usage", 91.0)]).finish(0));
         assert!(d.achados.is_empty(), "91% de placa ainda tem folga");
+    }
+
+    /// A crença que esta etapa desfez.
+    ///
+    /// Até aqui, `vram.usage` alto sozinho virava achado de memória de vídeo —
+    /// e mandava o cliente baixar textura numa placa que estava apenas com o
+    /// cache cheio, que é o estado normal dela. Agora a porcentagem sozinha
+    /// não conclui nada: ela é o número que HABILITA a pergunta do
+    /// derramamento, feita em `modules::vram`.
+    #[test]
+    fn dedicada_cheia_sozinha_nao_acusa_memoria_de_video() {
+        let d = classificar(&com(&[("vram.used", 7.8), ("vram.total", 8.0)]).finish(0));
+
+        assert!(
+            !d.achados.iter().any(|a| a.classe == Classe::MemoriaVideo),
+            "cache cheio não é gargalo: {:?}",
+            d.achados
+        );
+    }
+
+    /// Derramamento medido acima do piso da máquina: aí sim é causa.
+    #[test]
+    fn transbordo_medido_vira_causa_de_memoria_de_video() {
+        use crate::modules::vram;
+
+        let t = com(&[
+            ("vram.used", 7.8),
+            ("vram.total", 8.0),
+            ("vram.shared_used", 2.0),
+        ])
+        .finish(0);
+
+        let mut piso = vram::Piso::default();
+        for _ in 0..vram::AMOSTRAS_PARA_PISO {
+            piso.observar(Some(0.3), Some(4.0));
+        }
+
+        let d = classificar_com(&t, &vram::avaliar(&t, &piso));
+        let achado = d
+            .achados
+            .iter()
+            .find(|a| a.classe == Classe::MemoriaVideo)
+            .expect("transbordo medido tem de virar achado");
+
+        assert_eq!(achado.forca, Forca::Causa);
+        assert!(achado.evidencia.contains("vram.shared_used"));
+    }
+
+    /// Sem o piso, a classe fica em "não verificado" — e não em "está bem".
+    #[test]
+    fn memoria_de_video_sem_medida_fica_declarada_como_nao_verificada() {
+        let d = classificar(&vazia().finish(0));
+
+        assert!(
+            d.nao_verificado
+                .iter()
+                .any(|n| n.classe == "Memória de vídeo"),
+            "{:?}",
+            d.nao_verificado
+        );
     }
 
     #[test]

@@ -852,6 +852,46 @@
           </section>
 
           <!--
+            MEMÓRIA DE VÍDEO: O PAINEL QUE EXISTE PARA NÃO VENDER UM AJUSTE.
+
+            Placa de vídeo cheia é o estado NORMAL de uma placa de vídeo. O
+            driver é um cache: carrega textura e não devolve enquanto ninguém
+            precisar do espaço. Todo painel de otimizador que mostra "VRAM 95%"
+            em vermelho está cobrando por um problema que não existe.
+
+            O que existe é a placa DERRAMANDO para a memória do sistema quando
+            não coube — e isso tem preço medido, porque o que está do outro lado
+            do PCIe é lido muito mais devagar. Este painel mostra os dois
+            estados com nomes diferentes, e diz quanto liberar só quando há
+            derramamento medido acima do piso desta máquina.
+          -->
+          <section class="panel" id="vram">
+            <div class="panel-head">
+              <h2>Memória de vídeo</h2>
+              <span class="panel-tag" id="vram-estado">—</span>
+            </div>
+
+            <p class="lead" id="vram-explicacao">—</p>
+
+            <div class="readouts readouts-row">
+              <div class="readout">
+                <span class="readout-label">Dedicada em uso</span>
+                <span class="readout-value" id="vram-dedicada">—</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Livre na placa</span>
+                <span class="readout-value" id="vram-folga">—</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Derramado para a RAM</span>
+                <span class="readout-value" id="vram-derramado">—</span>
+              </div>
+            </div>
+
+            <p class="readout-note" id="vram-conselho">—</p>
+          </section>
+
+          <!--
             DE ONDE VÊM ESTES NÚMEROS.
 
             Nenhum outro painel do produto admite o que ele NÃO sabe. Este

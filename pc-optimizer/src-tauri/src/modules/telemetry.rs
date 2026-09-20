@@ -418,6 +418,11 @@ pub const CATALOG: &[(&str, Unit)] = &[
     ("vram.used", Unit::Gigabytes),
     ("vram.total", Unit::Gigabytes),
     ("vram.usage", Unit::Percent),
+    // Memória do SISTEMA em uso pela placa. É esta, e não a porcentagem acima,
+    // que mede pressão de memória de vídeo: placa cheia é cache cheio, mas
+    // placa DERRAMANDO para a RAM é textura sendo lida pelo PCIe. Quem lê e
+    // interpreta é `modules::vram`.
+    ("vram.shared_used", Unit::Gigabytes),
     // Armazenamento.
     ("storage.read_rate", Unit::MegabytesPerSecond),
     ("storage.write_rate", Unit::MegabytesPerSecond),

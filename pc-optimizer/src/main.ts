@@ -332,6 +332,27 @@ interface PerformanceMetrics {
   uptime_hours: number;
   telemetry: Telemetry;
   gargalo: Diagnostico;
+  vram: AnaliseVram;
+}
+
+type EstadoVram =
+  | "NaoAvaliado"
+  | "PlacaIntegrada"
+  | "Folgada"
+  | "CacheCheio"
+  | "Transbordando"
+  | "DerramaSemPressao";
+
+interface AnaliseVram {
+  estado: EstadoVram;
+  dedicada_pct: number | null;
+  folga_gb: number | null;
+  /** Quanto foi para a memória do sistema ACIMA do piso desta máquina. */
+  derramado_gb: number | null;
+  piso_gb: number | null;
+  falta: string[];
+  explicacao: string;
+  conselho: { liberar_gb: number; texto: string } | null;
 }
 
 type Classe =
@@ -1631,6 +1652,17 @@ function limparMetricas(motivo: string) {
   element("gargalo-achados").innerHTML = "";
   element("gargalo-faltas").innerHTML = "";
 
+  renderVram({
+    estado: "NaoAvaliado",
+    dedicada_pct: null,
+    folga_gb: null,
+    derramado_gb: null,
+    piso_gb: null,
+    falta: [],
+    explicacao: "A leitura falhou, então não há memória de vídeo a avaliar.",
+    conselho: null,
+  });
+
   const tag = element("evidencia-tag");
   tag.textContent = "leitura indisponível";
   tag.dataset.estado = "falha";
@@ -1697,6 +1729,7 @@ function renderMetrics(metrics: PerformanceMetrics) {
   }
 
   renderEvidencia(metrics.telemetry);
+  renderVram(metrics.vram);
   renderGargalo(metrics.gargalo);
 
   const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
@@ -1994,6 +2027,61 @@ function renderPlaca(telemetry: Telemetry) {
     nota.textContent = `${total.toFixed(1)} GB na placa · uso não medido`;
   } else {
     nota.textContent = usada?.reason ?? "não medido";
+  }
+}
+
+// --------------------------------------------------- memória de vídeo
+
+/**
+ * O rótulo curto de cada estado, e o dado que decide a cor do painel.
+ *
+ * "Cheia, e tudo bem" é o rótulo que este painel existe para poder mostrar:
+ * placa cheia é o estado normal de uma placa, e pintá-la de vermelho é o que
+ * faz o cliente baixar textura à toa.
+ */
+const ESTADO_VRAM: Record<EstadoVram, { rotulo: string; tom: string }> = {
+  NaoAvaliado: { rotulo: "não avaliada", tom: "desconhecido" },
+  PlacaIntegrada: { rotulo: "vídeo integrado", tom: "neutro" },
+  Folgada: { rotulo: "com folga", tom: "ok" },
+  CacheCheio: { rotulo: "cheia, e tudo bem", tom: "ok" },
+  Transbordando: { rotulo: "transbordando", tom: "alerta" },
+  DerramaSemPressao: { rotulo: "outro programa usando", tom: "neutro" },
+};
+
+function renderVram(a: AnaliseVram) {
+  const { rotulo, tom } = ESTADO_VRAM[a.estado];
+  const tag = element("vram-estado");
+  tag.textContent = rotulo;
+  tag.dataset.estado = tom;
+
+  text("vram-explicacao", a.explicacao);
+  text(
+    "vram-dedicada",
+    medida(a.dedicada_pct, (n) => `${n.toFixed(0)}%`)
+  );
+  text(
+    "vram-folga",
+    medida(a.folga_gb, (n) => `${n.toFixed(1)} GB`)
+  );
+
+  // Derramamento ausente não vira "0 GB". Zero afirmaria que nada foi para a
+  // RAM, e o que se sabe é que a conta não pôde ser feita — normalmente
+  // porque o piso desta máquina ainda não foi observado.
+  text(
+    "vram-derramado",
+    medida(a.derramado_gb, (n) => `${n.toFixed(1)} GB`)
+  );
+
+  const nota = element("vram-conselho");
+  if (a.conselho) {
+    nota.textContent = a.conselho.texto;
+    nota.className = "readout-note warn";
+  } else if (a.falta.length > 0) {
+    nota.textContent = `Ainda não foi possível avaliar por completo: ${a.falta.join(", ")}.`;
+    nota.className = "readout-note";
+  } else {
+    nota.textContent = "Nada a ajustar na memória de vídeo.";
+    nota.className = "readout-note";
   }
 }
 
