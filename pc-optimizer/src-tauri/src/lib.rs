@@ -94,6 +94,8 @@ pub fn run() {
             commands::capturar_baseline_repetido,
             commands::protocolo_do_perfil,
             #[cfg(target_os = "windows")]
+            commands::laboratorio_de_streaming,
+            #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
             #[cfg(target_os = "windows")]

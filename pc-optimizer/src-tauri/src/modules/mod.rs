@@ -27,6 +27,7 @@ pub mod prova;
 pub mod repeticoes;
 pub mod report;
 pub mod safety;
+pub mod streaming;
 pub mod transacao;
 pub mod vram;
 pub mod monitor;

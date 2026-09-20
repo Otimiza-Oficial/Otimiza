@@ -2220,6 +2220,45 @@
             <p id="prio-status" class="status"></p>
           </section>
 
+          <!--
+            LABORATÓRIO DE STREAMING DE ASSETS.
+
+            "O jogo trava quando eu ando pelo mapa" é a reclamação mais comum
+            que existe, e a resposta padrão da internet é "instala no SSD". Às
+            vezes é isso. Muitas vezes não é, e a pessoa passa uma tarde movendo
+            oitenta gigabytes para continuar travando igual.
+
+            Este laboratório não conclui pela configuração. Saber que o jogo
+            está num HD é um fato, não um diagnóstico: o que prova é o INSTANTE
+            dos trancos batendo com atividade de disco. E, quando bate, ainda há
+            três causas diferentes por trás do mesmo gráfico — memória trocando
+            página, asset vindo de mídia lenta, e outra coisa mexendo no disco.
+            Só uma delas se resolve movendo o jogo.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O jogo está esperando o disco?</h2>
+              <span class="panel-tag" id="streaming-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Usa a medição de quadros da partida para ver se os trancos caem no
+              instante em que o disco está ocupado — e, quando caem, separa as
+              três causas que produzem o mesmo sintoma.
+            </p>
+
+            <p class="hint">
+              Precisa de uma medição de quadros feita <strong>andando pelo
+              mapa</strong>: é andando que o jogo pede conteúdo que ainda não
+              está na memória. Sem essa medição o laboratório diz o que falta,
+              em vez de responder pelo tipo de disco.
+            </p>
+
+            <button id="analyze-streaming" class="btn" data-custo="~3 s">Analisar</button>
+            <p id="streaming-status" class="status"></p>
+            <div id="streaming-result" class="resultado" data-vazio="Cruza os trancos medidos na partida com a atividade de disco e diz se mover o jogo resolveria — ou se o disco não tem nada com isso. Não move nem apaga nada."></div>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>Por que o FPS está baixo</h2>

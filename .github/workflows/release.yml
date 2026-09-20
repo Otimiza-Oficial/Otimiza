@@ -220,7 +220,7 @@ jobs:
 
       - name: Testes — saúde do hardware e relatório
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::health:: modules::report:: modules::monitor:: modules::telemetry:: modules::gargalo:: modules::baseline:: modules::transacao:: modules::repeticoes:: modules::vram:: modules::latencia::"
+        run: "cargo test --lib -- modules::windows::health:: modules::report:: modules::monitor:: modules::telemetry:: modules::gargalo:: modules::baseline:: modules::transacao:: modules::repeticoes:: modules::vram:: modules::latencia:: modules::streaming::"
 
       - name: Testes — serviços de terceiros, perfis e execução
         working-directory: pc-optimizer/src-tauri

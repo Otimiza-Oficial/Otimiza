@@ -2861,6 +2861,131 @@ interface ShaderReport {
   note: string;
 }
 
+// ------------------------------------- laboratório de streaming de assets
+
+type VereditoStreaming =
+  | "SemMedicao"
+  | "SemEngasgos"
+  | "NaoEODisco"
+  | "TrocaDeMemoria"
+  | "AssetsDeMidiaLenta"
+  | "OutraCoisaNoDisco";
+
+interface AnaliseStreaming {
+  veredito: VereditoStreaming;
+  engasgos_por_minuto: number | null;
+  coincidencia_pct: number | null;
+  latencia_ms: number | null;
+  memoria_pct: number | null;
+  midia: "Ssd" | "Mecanico" | "NaoDeuParaLer" | null;
+  falta: string[];
+  explicacao: string;
+  proximo_passo: string | null;
+}
+
+interface LaboratorioStreaming {
+  analise: AnaliseStreaming;
+  jogo: { jogo: string; caminho: string; unidade: string | null } | null;
+  lacunas: string[];
+}
+
+/**
+ * O rótulo e a gravidade de cada veredito.
+ *
+ * Só o caso em que mover o jogo resolve acende. "Não é o disco" e "outra coisa
+ * no disco" são respostas boas — pintá-las de alerta empurraria a pessoa para
+ * uma mudança que a própria medição já descartou.
+ */
+const VEREDITO_STREAMING: Record<
+  VereditoStreaming,
+  { rotulo: string; severidade: string }
+> = {
+  SemMedicao: { rotulo: "falta medir", severidade: "Info" },
+  SemEngasgos: { rotulo: "partida lisa", severidade: "Ok" },
+  NaoEODisco: { rotulo: "não é o disco", severidade: "Ok" },
+  TrocaDeMemoria: { rotulo: "é a memória", severidade: "Important" },
+  AssetsDeMidiaLenta: { rotulo: "é o disco", severidade: "Important" },
+  OutraCoisaNoDisco: { rotulo: "outra coisa no disco", severidade: "Info" },
+};
+
+async function analyzeStreaming() {
+  const button = element<HTMLButtonElement>("analyze-streaming");
+  button.disabled = true;
+  setStatus("streaming-status", "Lendo os discos e cruzando com a partida…", "progress");
+
+  try {
+    const r = await invoke<LaboratorioStreaming>("laboratorio_de_streaming");
+    renderStreaming(r);
+    setStatus("streaming-status", "", "ok");
+  } catch (error) {
+    setStatus("streaming-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderStreaming(r: LaboratorioStreaming) {
+  const { rotulo, severidade } = VEREDITO_STREAMING[r.analise.veredito];
+  text("streaming-tag", rotulo);
+
+  // Os números que sustentaram a conclusão vão para a tela junto dela. Um
+  // veredito sem os números que o produziram é indistinguível de um palpite,
+  // e é por isso que a linha aparece mesmo quando algum deles falta.
+  const numero = (valor: number | null, sufixo: string) =>
+    valor === null ? "—" : `${valor.toFixed(1)}${sufixo}`;
+
+  const jogo = r.jogo
+    ? `<p class="hint">O jogo que entrou na conta: ${escapeHtml(r.jogo.jogo)}, em ${escapeHtml(
+        r.jogo.caminho
+      )}.</p>`
+    : "";
+
+  const passo = r.analise.proximo_passo
+    ? `<p class="finding-advice">${escapeHtml(r.analise.proximo_passo)}</p>`
+    : "";
+
+  const falta =
+    r.analise.falta.length > 0
+      ? `<p class="hint">Não entrou na conta, por falta de medida: ${escapeHtml(
+          r.analise.falta.join(", ")
+        )}.</p>`
+      : "";
+
+  const lacunas =
+    r.lacunas.length > 0
+      ? `<p class="hint">A leitura dos discos não conseguiu: ${escapeHtml(
+          r.lacunas.join(", ")
+        )}.</p>`
+      : "";
+
+  element("streaming-result").innerHTML = `
+    <article class="finding" data-severity="${severidade}" style="--i:0">
+      <div class="finding-top">
+        <h3>${escapeHtml(rotulo)}</h3>
+      </div>
+      <p>${escapeHtml(r.analise.explicacao)}</p>
+      <div class="readouts readouts-row">
+        <div class="readout">
+          <span class="readout-label">Trancos por minuto</span>
+          <span class="readout-value">${numero(r.analise.engasgos_por_minuto, "")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Deles, com o disco ocupado</span>
+          <span class="readout-value">${numero(r.analise.coincidencia_pct, "%")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Latência do disco</span>
+          <span class="readout-value">${numero(r.analise.latencia_ms, " ms")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Memória do sistema</span>
+          <span class="readout-value">${numero(r.analise.memoria_pct, "%")}</span>
+        </div>
+      </div>
+      ${jogo}${passo}${falta}${lacunas}
+    </article>`;
+}
+
 async function analyzeShaders() {
   const button = element<HTMLButtonElement>("analyze-shaders");
   button.disabled = true;
@@ -9043,6 +9168,7 @@ function wireControls() {
   element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
+  element("analyze-streaming").addEventListener("click", analyzeStreaming);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {
       // A escolha manual pinta o desenho e mais nada. O produto não muda

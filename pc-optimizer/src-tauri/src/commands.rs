@@ -130,6 +130,62 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: o laboratório de streaming de assets.
+///
+/// COMANDO, e não um campo da coleta a cada dois segundos. Descobrir em que
+/// disco cada jogo mora custa uma consulta ao sistema de arquivos e ao WMI —
+/// o mesmo custo que tirou a leitura da placa de vídeo do caminho do painel.
+/// E, ao contrário do uso de CPU, a resposta não muda de segundo em segundo:
+/// ninguém reinstala um jogo enquanto olha a tela.
+///
+/// O jogo cujo disco entra na análise é o PRIMEIRO em disco mecânico, quando
+/// há algum. É o único que muda a conclusão: se nenhum jogo está em mídia
+/// lenta, a mídia não explica o tranco, e a análise segue sem ela em vez de
+/// sortear um jogo para representar os outros.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn laboratorio_de_streaming(
+    state: State<'_, AppState>,
+) -> Result<LaboratorioNaTela, String> {
+    use crate::modules::streaming;
+    use crate::modules::windows::discodojogo;
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    // A leitura de disco é bloqueante e mexe com WMI: fora da thread do
+    // executor, como todo o resto que custa neste produto.
+    let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
+        .await
+        .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
+
+    let em_mecanico = discodojogo::em_disco_mecanico(&relatorio.jogos);
+    let jogo = em_mecanico.first().map(|o| (*o).clone());
+    let midia = jogo.as_ref().map(|o| streaming::Midia::from(o.midia));
+
+    Ok(LaboratorioNaTela {
+        analise: streaming::analisar(&metricas.telemetry, midia),
+        jogo,
+        lacunas: relatorio.lacunas,
+    })
+}
+
+/// O laboratório com o jogo que sustentou a conclusão.
+///
+/// O jogo vai junto porque "o disco está lento" sem dizer QUAL jogo está nele
+/// é uma frase que o cliente não consegue conferir nem agir sobre.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct LaboratorioNaTela {
+    pub analise: crate::modules::streaming::Analise,
+    /// O jogo em mídia lenta que entrou na conta, quando há um.
+    pub jogo: Option<crate::modules::windows::discodojogo::OndeMora>,
+    /// O que a leitura de discos não conseguiu descobrir.
+    pub lacunas: Vec<String>,
+}
+
 /// Comando: guardar o retrato de ANTES sob um perfil de carga.
 ///
 /// O perfil vem de fora porque ele não é detectável: a carga diz o que a
@@ -4007,6 +4063,7 @@ mod tests {
         "capturar_baseline",
         "capturar_baseline_repetido",
         "protocolo_do_perfil",
+        "laboratorio_de_streaming",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",
