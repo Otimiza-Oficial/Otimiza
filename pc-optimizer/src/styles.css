@@ -7169,3 +7169,265 @@ input:focus-visible {
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------- atalhos
+
+   Os tres cartoes do fim do Inicio. Eles sao NAVEGACAO, entao pesam
+   menos que os monitores acima: mesma borda, mesmo fundo, e o unico
+   destaque e o hover. */
+.atalhos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--s4);
+}
+
+.atalho {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.atalho:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.atalho-icone {
+  width: 20px;
+  height: 20px;
+  margin-bottom: var(--s3);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--text-secondary);
+}
+
+.atalho-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.atalho-nota {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* =====================================================================
+   AS PAGINAS TECNICAS — GPU e Nucleos
+
+   A especificacao pede que elas deixem de ser uma pilha de paineis e
+   passem a ser SECOES separadas por espaco. A diferenca nao e estetica:
+   um painel com borda diz "isto e uma caixa"; uma secao com titulo diz
+   "isto e um assunto". Numa pagina que tem tres assuntos — o hardware, os
+   ajustes, os perfis — sao tres secoes, e nao tres caixas.
+   ===================================================================== */
+
+/* O painel perde a borda e o fundo nestas paginas: o que separa uma
+   secao da outra passa a ser o espaco, e o titulo. */
+#tab-gpu .panel,
+#tab-nucleos .panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+#tab-gpu .panel-head,
+#tab-nucleos .panel-head {
+  padding: 0;
+  margin-bottom: var(--s4);
+  border-bottom: 0;
+}
+
+#tab-gpu .panel h2,
+#tab-nucleos .panel h2 {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+#tab-gpu .gpu-colunas {
+  gap: var(--s9);
+}
+
+/* A largura das paginas de ajuste. Uma lista de configuracoes com 1600px
+   de largura obriga o olho a atravessar a tela inteira entre o nome e o
+   interruptor — e ai ninguem sabe mais qual interruptor e de qual nome. */
+#tab-gpu .gpu-coluna,
+#tab-nucleos .panel {
+  max-width: 1000px;
+}
+
+/* ------------------------------------------------------ cartao de perfil
+
+   Escolha unica, entao o cartao inteiro e a area de clique. Um quadrado
+   de 14px como unico alvo e o tipo de coisa que faz a pessoa clicar tres
+   vezes achando que o programa travou. */
+.gpu-perfil {
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.gpu-perfil:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.gpu-perfil[data-inteiro="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.gpu-perfil-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.gpu-perfil-resumo {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.gpu-perfil-conta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* --------------------------------------------------- abas de fabricante */
+
+.gpu-marcas {
+  border-bottom: 1px solid var(--border);
+}
+
+.gpu-marca {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  transition: color 150ms ease-out;
+}
+
+.gpu-marca:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+.gpu-marca[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent-base);
+}
+
+/* ---------------------------------------------------- cartao da placa */
+
+.gpu-cartao {
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.gpu-cartao-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.gpu-cartao-nota {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------------------------------ matriz de nucleos
+
+   Quadrado menor e mais folga: a matriz de 32 nucleos de um processador
+   moderno precisa caber numa fileira ou duas sem virar um tabuleiro. */
+.nucleos-matriz {
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: var(--s2);
+  margin: 0 0 var(--s4);
+}
+
+.nucleo {
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.nucleo[data-classe="Desempenho"] {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.nucleo[data-no-jogo="true"] {
+  border-color: var(--accent-base);
+  box-shadow: inset 0 0 0 1px var(--accent-base);
+  color: var(--text);
+}
+
+.nucleos-legenda {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------------------- o painel de alavancas
+
+   Os ajustes do driver viram linhas de configuracao, como os do Windows:
+   e a mesma coisa — um nome, o que ele faz, e um controle. Duas formas
+   diferentes para a mesma ideia sao duas coisas para o cliente aprender. */
+#nvdriver-lista .gpupref-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  min-height: 76px;
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#nvdriver-lista .gpupref-linha:last-child {
+  border-bottom: 0;
+}
+
+#nvdriver-lista .gpupref-nome {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+#nvdriver-lista .gpupref-estado {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* A MONOESPACADA SAI DOS NOMES DE AJUSTE.
+
+   Ela veio de quando esta lista mostrava caminho de executavel, onde
+   monoespacada e a escolha certa — caminho tem barra, ponto e underline, e
+   a largura fixa e o que deixa os dois lados alinhados. Mas o que esta ali
+   agora e uma FRASE em portugues, e frase em monoespacada le pior e ainda
+   parece saida de terminal no meio de uma tela de produto. */
+#nvdriver-lista .gpupref-nome {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  overflow-wrap: normal;
+}

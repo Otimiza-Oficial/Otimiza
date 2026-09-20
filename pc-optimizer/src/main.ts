@@ -1523,6 +1523,7 @@ async function loadIdentity() {
     );
     text("ident-os", `${platform.version} · ${platform.arch}`);
     text("ficha-so", `${platform.version} · ${platform.arch}`);
+    fichaDaMaquina.so = platform.version;
   } catch (error) {
     text("ident-os", "indisponível");
     text("ficha-so", "indisponível");
@@ -1552,6 +1553,10 @@ async function loadIdentity() {
     // as duas discordarem.
     text("ficha-cpu", hardware.cpu_name);
     text("ficha-gpu", hardware.gpu_name);
+
+    fichaDaMaquina.cpu = hardware.cpu_name;
+    fichaDaMaquina.gpu = hardware.gpu_name;
+    fichaDaMaquina.ram = `${hardware.total_ram_gb.toFixed(0)} GB`;
     text("ficha-ram", `${hardware.total_ram_gb.toFixed(0)} GB · ${hardware.logical_cores} núcleos lógicos`);
   } catch (error) {
     text("ident-storage", "indisponível");
@@ -2040,6 +2045,16 @@ function valorDe(telemetry: Telemetry, id: string): number | null {
 
 // ------------------------------------------------ a abertura do painel
 
+/**
+ * O que esta máquina é, lido uma vez na abertura.
+ *
+ * Guardado porque as LEGENDAS dos cartões de leitura usam isto: a
+ * referência do dono põe "i9-14900HX · 24 núcleos" embaixo do número de
+ * CPU, e sem o nome do processador a legenda vira uma contagem solta que
+ * não diz de que máquina se está falando.
+ */
+const fichaDaMaquina: { cpu?: string; gpu?: string; ram?: string; so?: string } = {};
+
 /** Quantas leituras cada linha guarda. */
 const PONTOS_DA_LINHA = 40;
 
@@ -2128,19 +2143,30 @@ function pintarVivo(
 function renderAbertura(m: PerformanceMetrics) {
   const t = m.telemetry;
 
+  // A LEGENDA DIZ DE QUE PEÇA É O NÚMERO. Sem o nome do processador ela é
+  // uma contagem solta, e o cartão passa a servir para qualquer máquina —
+  // que é o contrário do que um painel de diagnóstico precisa fazer.
   pintarVivo(
     "cpu",
     valorDe(t, "cpu.usage.overall"),
-    medida(valorDe(t, "cpu.cores.logical"), (n) => `${n.toFixed(0)} núcleos lógicos`),
+    [
+      fichaDaMaquina.cpu,
+      medida(valorDe(t, "cpu.cores.logical"), (n) => `${n.toFixed(0)} núcleos`),
+    ]
+      .filter((parte) => parte && parte !== "—")
+      .join(" · "),
     100
   );
 
   pintarVivo(
     "gpu",
     valorDe(t, "gpu.usage"),
-    quandoFoiLido(t.metrics["gpu.usage"]) === "agora"
-      ? "motores 3D, agora"
-      : `motores 3D, ${quandoFoiLido(t.metrics["gpu.usage"])}`,
+    [
+      fichaDaMaquina.gpu,
+      medida(valorDe(t, "vram.total"), (n) => `${n.toFixed(0)} GB`),
+    ]
+      .filter((parte) => parte && parte !== "—")
+      .join(" · "),
     100
   );
 
@@ -2172,9 +2198,15 @@ function renderAbertura(m: PerformanceMetrics) {
         : { texto: "Instável", tom: "alerta" }
   );
 
+  // O SUBTÍTULO PAROU DE REPETIR AS CLASSES AVALIADAS. Aquele número já é o
+  // selo do painel de gargalo, quatro dedos abaixo — dizer a mesma coisa
+  // duas vezes na mesma tela não acrescenta e ainda tira peso do lugar onde
+  // ela decide alguma coisa.
   text(
     "abertura-sub",
-    `${m.gargalo.classes_avaliadas} de ${m.gargalo.classes_totais} classes avaliadas · leitura de ${new Date().toLocaleTimeString("pt-BR")}`
+    [fichaDaMaquina.so, "monitorando em tempo real"]
+      .filter(Boolean)
+      .join(" · ")
   );
 }
 
@@ -10669,6 +10701,13 @@ function wireControls() {
   void carregarProgramas();
   void carregarCartaoDaPlaca();
   void carregarBiblioteca();
+  // Os atalhos do Início levam para a aba, pela MESMA função que a lateral
+  // usa. Um atalho que trocasse a aba por conta própria deixaria a lateral
+  // marcando a seção errada.
+  for (const atalho of document.querySelectorAll<HTMLElement>("[data-vai]")) {
+    atalho.addEventListener("click", () => showTab(atalho.dataset.vai!));
+  }
+
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
