@@ -15,6 +15,7 @@ pub mod baseline;
 pub mod benchmark;
 pub mod changelog;
 pub mod convite;
+pub mod historico;
 pub mod jitter;
 pub mod latencia;
 pub mod licenca;

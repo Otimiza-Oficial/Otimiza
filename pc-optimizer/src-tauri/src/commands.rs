@@ -298,7 +298,81 @@ pub async fn capturar_baseline(
     );
 
     baseline::guardar(retrato.clone())?;
+
+    // O histórico entra DEPOIS do baseline e não no lugar dele: são perguntas
+    // diferentes. O baseline responde "como estava antes desta mexida"; o
+    // histórico responde "quando foi que isto piorou". Falhar aqui não pode
+    // derrubar a captura — o retrato já está guardado, e perder a linha do
+    // tempo é menos grave que perder a medição que o cliente acabou de esperar.
+    if let Err(erro) = anotar_no_historico(&retrato) {
+        eprintln!("histórico de desempenho não foi atualizado: {erro}");
+    }
+
     Ok(retrato)
+}
+
+/// Grava no histórico as métricas que respondem "piorou?".
+///
+/// Só as de `METRICAS_GUARDADAS`: o contrato tem mais de cinquenta, e gravar
+/// todas a cada captura encheria o teto do arquivo em nove capturas.
+#[cfg(target_os = "windows")]
+fn anotar_no_historico(retrato: &crate::modules::baseline::Baseline) -> Result<(), String> {
+    use crate::modules::historico;
+
+    let mut h = historico::ler()?;
+
+    for resumo in &retrato.incerteza {
+        if historico::METRICAS_GUARDADAS.contains(&resumo.id.as_str()) {
+            h.anotar(
+                retrato.quando,
+                retrato.identidade.clone(),
+                historico::Evento::Medicao(resumo.clone()),
+            );
+        }
+    }
+
+    historico::guardar(&h)
+}
+
+/// Comando: a linha do tempo de desempenho desta máquina.
+///
+/// As mudanças vêm do `changelog` na hora de responder, e não de uma segunda
+/// lista gravada em paralelo: duas listas do mesmo fato acabam discordando, e
+/// a que o cliente lê seria a errada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn historico_de_desempenho(
+    state: State<'_, AppState>,
+) -> Result<HistoricoNaTela, String> {
+    use crate::modules::historico;
+
+    let aplicadas = state.changes.lock().await.applied().to_vec();
+    let h = historico::ler()?.com_mudancas(&aplicadas);
+
+    // Uma regressão por métrica guardada, com o sentido vindo da tabela — e
+    // não de um palpite de quem chama. Métrica com menos de duas medições não
+    // entra: não há o que comparar.
+    let regressoes = historico::METRICAS_GUARDADAS
+        .iter()
+        .filter_map(|id| {
+            let sentido = historico::maior_e_melhor(id)?;
+            h.regressao(id, sentido)
+        })
+        .collect();
+
+    Ok(HistoricoNaTela {
+        historico: h,
+        regressoes,
+    })
+}
+
+/// A linha do tempo com as regressões já calculadas.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct HistoricoNaTela {
+    pub historico: crate::modules::historico::Historico,
+    /// Uma por métrica com pelo menos duas medições.
+    pub regressoes: Vec<crate::modules::historico::Regressao>,
 }
 
 /// Comando: como este perfil vai ser medido, e quanto tempo vai levar.
@@ -4165,6 +4239,7 @@ mod tests {
         "laboratorio_de_streaming",
         "plano_de_renderizacao",
         "passo_do_autoajuste",
+        "historico_de_desempenho",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",
