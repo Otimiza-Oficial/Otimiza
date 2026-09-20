@@ -5512,3 +5512,13 @@ circle.placa-parafuso {
   color: var(--amber);
   font-size: 0.85em;
 }
+
+/* O bloco de lacunas, igual em todo painel.
+
+   A borda à esquerda existe para ele ser reconhecível de relance: o cliente
+   aprende que aquela marca é sempre "isto aqui ninguém mediu", e passa a
+   procurar por ela em vez de acreditar que o painel está completo. */
+.faltas {
+  border-left: 2px solid var(--hairline);
+  padding-left: var(--s3);
+}

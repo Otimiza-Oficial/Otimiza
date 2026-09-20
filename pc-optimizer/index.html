@@ -969,6 +969,45 @@
               <div class="evidencia-tabela" id="evidencia-tabela"></div>
             </details>
           </section>
+
+          <!--
+            QUANDO FOI QUE PIOROU.
+
+            A ordem desta aba não é decorativa, e é esta: o que está segurando a
+            máquina (gargalo) → a memória de vídeo → do clique ao pixel → de
+            onde vêm estes números → e, por último, o tempo. Cada painel
+            responde uma pergunta diferente, e o tempo vem no fim porque é o
+            único que precisa de mais de uma visita ao produto para ter o que
+            dizer.
+
+            "Estava bom semana passada e agora está ruim" é a queixa mais
+            difícil do suporte. Este painel é a única coisa no produto que
+            consegue respondê-la — e a resposta vem com o aviso de que as
+            mudanças listadas apenas COINCIDEM no tempo com a queda. Provar
+            exige desfazer uma de cada vez e medir de novo.
+          -->
+          <section class="panel" id="historico">
+            <div class="panel-head">
+              <h2>Quando foi que piorou</h2>
+              <span class="panel-tag" id="historico-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Compara as duas últimas medições repetidas de cada métrica e lista
+              o que aconteceu entre elas.
+            </p>
+
+            <p class="hint">
+              A comparação é entre as <strong>duas últimas</strong>, e não
+              contra o melhor já medido. O melhor de sempre é a medição que mais
+              teve sorte — comparar contra ela acusaria queda em toda máquina,
+              inclusive nas que não mudaram nada.
+            </p>
+
+            <button id="historico-ler" class="btn" data-custo="instantâneo">Ver o histórico</button>
+            <p id="historico-status" class="status"></p>
+            <div id="historico-result" class="resultado" data-vazio="Precisa de pelo menos duas capturas de linha de base com repetição, em visitas diferentes. Com uma só não há o que comparar."></div>
+          </section>
         </section>
 
         <!-- ======================================================= OTIMIZAÇÕES -->

@@ -2059,6 +2059,126 @@ function renderPlaca(telemetry: Telemetry) {
   }
 }
 
+// ------------------------------------------------ o que não foi medido
+
+/**
+ * O bloco de "isto não entrou na conta", igual em todo painel.
+ *
+ * Um produto que admite lacunas com uma cara diferente em cada tela ensina o
+ * cliente a não procurar por elas. Aqui é sempre o mesmo bloco, e ele SOME
+ * quando não há lacuna — um "nada faltou" repetido em quatro painéis viraria
+ * ruído e faria a lista de verdade passar despercebida.
+ */
+function blocoDeFaltas(itens: string[], rotulo: string): string {
+  if (itens.length === 0) return "";
+
+  return `<p class="hint faltas"><strong>${escapeHtml(rotulo)}</strong> ${escapeHtml(
+    itens.join(", ")
+  )}.</p>`;
+}
+
+// ------------------------------------------------ quando foi que piorou
+
+interface RegressaoNaTela {
+  id: string;
+  anterior: { media: number; n: number; margem: number | null };
+  atual: { media: number; n: number; margem: number | null };
+  piorou: boolean;
+  suspeitos: {
+    mudancas: string[];
+    maquina_mudou: string[];
+    descartados: number;
+    aviso: string;
+    como_provar: string;
+  };
+}
+
+interface HistoricoNaTela {
+  historico: { registros: unknown[]; descartados: number };
+  regressoes: RegressaoNaTela[];
+}
+
+async function lerHistorico() {
+  const botao = element<HTMLButtonElement>("historico-ler");
+  botao.disabled = true;
+  setStatus("historico-status", "Lendo a linha do tempo…", "progress");
+
+  try {
+    renderHistorico(await invoke<HistoricoNaTela>("historico_de_desempenho"));
+    setStatus("historico-status", "", "ok");
+  } catch (error) {
+    setStatus("historico-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderHistorico(h: HistoricoNaTela) {
+  const pioraram = h.regressoes.filter((r) => r.piorou);
+
+  text(
+    "historico-tag",
+    h.regressoes.length === 0
+      ? "sem comparação ainda"
+      : pioraram.length === 0
+        ? "nada piorou"
+        : `${pioraram.length} de ${h.regressoes.length} pioraram`
+  );
+
+  if (h.regressoes.length === 0) {
+    element("historico-result").innerHTML = `
+      <p class="hint">Ainda não há duas medições da mesma métrica para comparar. Capture a linha de base com repetição hoje e de novo depois de mexer em alguma coisa — a comparação aparece aqui sozinha.</p>`;
+    return;
+  }
+
+  // As que pioraram primeiro. Uma lista em ordem alfabética faria o cliente
+  // caçar a linha que importa no meio das que estão bem.
+  const ordenadas = [...h.regressoes].sort(
+    (a, b) => Number(b.piorou) - Number(a.piorou)
+  );
+
+  element("historico-result").innerHTML = ordenadas
+    .map((r, i) => {
+      // A margem sai junto do número SEMPRE. Uma média sem a margem esconde se
+      // ela veio de três medições ou de trinta — e é a margem que decide se a
+      // diferença é real.
+      const lado = (l: RegressaoNaTela["anterior"]) =>
+        `${l.media.toFixed(1)}${l.margem === null ? "" : ` ± ${l.margem.toFixed(1)}`} (${l.n}×)`;
+
+      const suspeitos =
+        r.suspeitos.mudancas.length > 0
+          ? `<p class="finding-measured"><strong>Entre as duas:</strong> ${escapeHtml(
+              r.suspeitos.mudancas.join(", ")
+            )}</p>
+             <p class="hint">${escapeHtml(r.suspeitos.aviso)}</p>
+             <p class="finding-advice">${escapeHtml(r.suspeitos.como_provar)}</p>`
+          : "";
+
+      const maquina = blocoDeFaltas(
+        r.suspeitos.maquina_mudou,
+        "A própria máquina mudou no intervalo:"
+      );
+
+      // O descarte precisa aparecer: sem ele, "nada entre as duas medições"
+      // seria indistinguível de "o arquivo encheu e o que havia saiu".
+      const descarte =
+        r.suspeitos.descartados > 0
+          ? `<p class="hint">${r.suspeitos.descartados} registro(s) antigo(s) já saíram do histórico por limite de tamanho.</p>`
+          : "";
+
+      return `
+        <article class="finding" data-severity="${r.piorou ? "Important" : "Ok"}" style="--i:${i}">
+          <div class="finding-top">
+            <h3>${escapeHtml(r.id)}</h3>
+            <span class="finding-size">${r.piorou ? "piorou" : "sem queda provada"}</span>
+          </div>
+          <p class="finding-measured">Antes: ${lado(r.anterior)} · Agora: ${lado(r.atual)}</p>
+          ${suspeitos}${maquina}${descarte}
+        </article>`;
+    })
+    .join("");
+}
+
 // ------------------------------------------------ do clique ao pixel
 
 const NOME_DA_ETAPA: Record<Etapa, string> = {
@@ -2944,19 +3064,9 @@ function renderStreaming(r: LaboratorioStreaming) {
     ? `<p class="finding-advice">${escapeHtml(r.analise.proximo_passo)}</p>`
     : "";
 
-  const falta =
-    r.analise.falta.length > 0
-      ? `<p class="hint">Não entrou na conta, por falta de medida: ${escapeHtml(
-          r.analise.falta.join(", ")
-        )}.</p>`
-      : "";
+  const falta = blocoDeFaltas(r.analise.falta, "Não entrou na conta, por falta de medida:");
 
-  const lacunas =
-    r.lacunas.length > 0
-      ? `<p class="hint">A leitura dos discos não conseguiu: ${escapeHtml(
-          r.lacunas.join(", ")
-        )}.</p>`
-      : "";
+  const lacunas = blocoDeFaltas(r.lacunas, "A leitura dos discos não conseguiu:");
 
   element("streaming-result").innerHTML = `
     <article class="finding" data-severity="${severidade}" style="--i:0">
@@ -9242,6 +9352,7 @@ function wireControls() {
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
+  element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {
       // A escolha manual pinta o desenho e mais nada. O produto não muda
