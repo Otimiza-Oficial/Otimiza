@@ -46,6 +46,7 @@ pub mod discodojogo;
 pub mod jogos;
 pub mod labcompat;
 pub mod health;
+pub mod limpar;
 pub mod memory;
 pub mod network;
 pub mod nvdriver;

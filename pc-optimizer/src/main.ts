@@ -2282,6 +2282,187 @@ function blocoDeFaltas(itens: string[], rotulo: string): string {
 
 
 
+
+// ----------------------------------------------------- limpeza do sistema
+
+interface AlvoDeLimpeza {
+  id: string;
+  nome: string;
+  o_que_e: string;
+  custo: string;
+  padrao: boolean;
+  /** `null` quando a pasta não pôde ser lida. Não é zero. */
+  bytes: number | null;
+}
+
+interface LimpezaNaTela {
+  alvos: AlvoDeLimpeza[];
+  marcados: string[];
+}
+
+interface ResultadoDaLimpeza {
+  id: string;
+  bytes_liberados: number;
+  arquivos_apagados: number;
+  arquivos_pulados: number;
+  erro: string | null;
+}
+
+let alvosDeLimpeza: AlvoDeLimpeza[] = [];
+
+function emTexto(bytes: number): string {
+  const KB = 1024;
+  const MB = KB * 1024;
+  const GB = MB * 1024;
+
+  if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
+  if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+  if (bytes >= KB) return `${Math.round(bytes / KB)} KB`;
+  return `${bytes} B`;
+}
+
+async function medirLimpeza() {
+  const botao = element<HTMLButtonElement>("limpeza-medir");
+  botao.disabled = true;
+  setStatus("limpeza-status", "Somando o que dá para liberar…", "progress");
+
+  try {
+    const r = await invoke<LimpezaNaTela>("medir_limpeza");
+    alvosDeLimpeza = r.alvos;
+    desenharLimpeza(r.marcados);
+    setStatus("limpeza-status", "", "ok");
+  } catch (error) {
+    setStatus("limpeza-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function desenharLimpeza(marcados: string[]) {
+  element("limpeza-lista").innerHTML = alvosDeLimpeza
+    .map((a) => {
+      // Três estados de tamanho, e o terceiro importa: "não deu para ler" não
+      // é "0 B". Zero afirmaria que a pasta está vazia; a ausência diz que
+      // ninguém conseguiu abri-la, e é o que faz o técnico tentar como
+      // administrador.
+      const tamanho =
+        a.bytes === null
+          ? `<span class="limpeza-tamanho" data-tom="desconhecido">não deu para ler</span>`
+          : `<span class="limpeza-tamanho">${emTexto(a.bytes)}</span>`;
+
+      // Nada para apagar não ganha caixa: marcar uma pasta vazia é um clique
+      // que não faz nada, e um clique que não faz nada ensina que os outros
+      // também não fazem.
+      const vazio = a.bytes === 0;
+      const marcado = marcados.includes(a.id) && !vazio;
+
+      return `
+        <label class="limpeza-item" data-custa="${a.id === "lixeira"}">
+          <input type="checkbox" data-limpar="${escapeHtml(a.id)}"
+                 ${marcado ? "checked" : ""} ${vazio ? "disabled" : ""} />
+          <span class="limpeza-corpo">
+            <span class="limpeza-nome">${escapeHtml(a.nome)}${tamanho}</span>
+            <span class="limpeza-oque">${escapeHtml(a.o_que_e)}</span>
+            <span class="limpeza-custo">${escapeHtml(a.custo)}</span>
+          </span>
+        </label>`;
+    })
+    .join("");
+
+  for (const caixa of element("limpeza-lista").querySelectorAll<HTMLInputElement>(
+    "[data-limpar]"
+  )) {
+    caixa.addEventListener("change", atualizarTotalDaLimpeza);
+  }
+
+  atualizarTotalDaLimpeza();
+}
+
+function marcadosNaLimpeza(): string[] {
+  return [
+    ...element("limpeza-lista").querySelectorAll<HTMLInputElement>("[data-limpar]:checked"),
+  ].map((c) => c.dataset.limpar!);
+}
+
+function atualizarTotalDaLimpeza() {
+  const marcados = marcadosNaLimpeza();
+  const escolhidos = alvosDeLimpeza.filter((a) => marcados.includes(a.id));
+
+  // O que não pôde ser medido NÃO entra na soma como zero: ele é contado à
+  // parte e dito na tela. Um total que finge cobrir tudo é pior que um total
+  // declaradamente parcial.
+  const soma = escolhidos.reduce((t, a) => t + (a.bytes ?? 0), 0);
+  const semMedida = escolhidos.filter((a) => a.bytes === null).length;
+
+  text(
+    "limpeza-total",
+    escolhidos.length === 0 ? "nada marcado" : `${emTexto(soma)} selecionados`
+  );
+
+  const aviso = element("limpeza-aviso");
+  aviso.hidden = semMedida === 0;
+  aviso.textContent =
+    semMedida === 0
+      ? ""
+      : `${semMedida} item(ns) marcado(s) não puderam ser medidos, então não estão no total — o que for liberado será mais que o número acima.`;
+
+  element<HTMLButtonElement>("limpeza-limpar").disabled = escolhidos.length === 0;
+}
+
+async function limparMarcados() {
+  const marcados = marcadosNaLimpeza();
+  if (marcados.length === 0) return;
+
+  // A única operação do produto sem Desfazer. A confirmação lista o que vai
+  // embora pelo NOME — e não "os itens selecionados", que não é uma frase que
+  // alguém consiga conferir.
+  const nomes = alvosDeLimpeza
+    .filter((a) => marcados.includes(a.id))
+    .map((a) => a.nome)
+    .join(", ");
+
+  const temLixeira = marcados.includes("lixeira");
+  const aviso = temLixeira
+    ? "\n\nA LIXEIRA ESTÁ MARCADA: os arquivos que você mandou para ela vão ser apagados de vez."
+    : "";
+
+  if (!window.confirm(`Apagar: ${nomes}.\n\nIsto não tem desfazer.${aviso}`)) return;
+
+  const botao = element<HTMLButtonElement>("limpeza-limpar");
+  botao.disabled = true;
+  setStatus("limpeza-status", "Limpando…", "progress");
+
+  try {
+    const r = await invoke<ResultadoDaLimpeza[]>("limpar_alvos", { ids: marcados });
+
+    const total = r.reduce((t, x) => t + x.bytes_liberados, 0);
+    const pulados = r.reduce((t, x) => t + x.arquivos_pulados, 0);
+    const falhas = r.filter((x) => x.erro);
+
+    // Arquivo pulado é o caso comum — em uso por programa aberto —, e por isso
+    // ele é CONTADO e não escondido: o cliente que esperava liberar 2 GB e
+    // liberou 1,4 precisa saber por quê.
+    setStatus(
+      "limpeza-status",
+      `Liberados ${emTexto(total)}.` +
+        (pulados > 0 ? ` ${pulados} arquivo(s) em uso foram pulados.` : "") +
+        (falhas.length > 0 ? ` ${falhas.map((f) => f.erro).join(" ")}` : ""),
+      falhas.length > 0 ? "error" : "ok"
+    );
+
+    // Mede de novo: os números da tela precisam dizer o que o disco diz.
+    await medirLimpeza();
+  } catch (error) {
+    setStatus("limpeza-status", String(error), "error");
+    botao.disabled = false;
+  }
+}
+
+function ligarLimpeza() {
+  element("limpeza-medir").addEventListener("click", () => void medirLimpeza());
+  element("limpeza-limpar").addEventListener("click", () => void limparMarcados());
+}
+
 // ------------------------------------------------------------ programas
 
 interface ProgramaNaLista {
@@ -10267,6 +10448,7 @@ function wireControls() {
   ligarTema();
   ligarBiblioteca();
   ligarProgramas();
+  ligarLimpeza();
   void carregarProgramas();
   void carregarCartaoDaPlaca();
   void carregarBiblioteca();

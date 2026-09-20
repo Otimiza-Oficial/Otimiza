@@ -6355,3 +6355,76 @@ circle.placa-parafuso {
 .panel-note[data-tom="aviso"] {
   color: var(--amber);
 }
+
+/* A limpeza, item a item.
+
+   Cada item tem DUAS linhas de texto abaixo do nome: o que aquilo e, e o que
+   se perde ao apagar. Parece muito texto para uma lista, e e justamente o que
+   separa isto de um limpador que pede uma decisao sobre algo que nao
+   explicou. */
+.limpeza-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.limpeza-item:last-of-type {
+  border-bottom: 0;
+}
+
+.limpeza-item input {
+  margin-top: 3px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.limpeza-item input:disabled {
+  opacity: 0.4;
+}
+
+.limpeza-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.limpeza-nome {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  font-weight: 600;
+}
+
+.limpeza-tamanho {
+  font-family: var(--font-mono);
+  font-size: var(--t-nota);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* Em italico e sem numero: nao e uma medida pequena, e a ausencia de medida. */
+.limpeza-tamanho[data-tom="desconhecido"] {
+  font-style: italic;
+}
+
+.limpeza-oque {
+  font-size: var(--t-nota);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.limpeza-custo {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* O custo em ambar quando o item apaga arquivo do cliente. E o unico da lista
+   sem volta, e ele nao pode parecer com os outros. */
+.limpeza-item[data-custa="true"] .limpeza-custo {
+  color: var(--amber);
+}

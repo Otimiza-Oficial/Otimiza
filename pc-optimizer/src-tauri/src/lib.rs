@@ -111,6 +111,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::catalogo_de_programas,
             #[cfg(target_os = "windows")]
+            commands::medir_limpeza,
+            #[cfg(target_os = "windows")]
+            commands::limpar_alvos,
+            #[cfg(target_os = "windows")]
             commands::instalar_programa,
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,

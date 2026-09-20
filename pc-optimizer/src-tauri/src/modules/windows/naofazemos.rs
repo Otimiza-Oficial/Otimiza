@@ -70,6 +70,18 @@ pub struct NaoFazemos {
 
 pub static LISTA: &[NaoFazemos] = &[
     NaoFazemos {
+        id: "limpar_prefetch",
+        nome: "Apagar a pasta Prefetch para liberar espaço e acelerar o PC",
+        natureza: Natureza::Prejudicial,
+        porque: "O Prefetch é o contrário de lixo: é a anotação que o Windows faz de QUE \
+                 ARQUIVOS cada programa lê ao abrir, para ler tudo de uma vez na próxima \
+                 abertura em vez de ir buscando aos poucos. Apagar aquilo deixa as próximas \
+                 aberturas MAIS LENTAS até o Windows refazer a anotação — e ele refaz \
+                 sozinho, então o espaço volta a ser ocupado em poucos dias. A pasta \
+                 inteira costuma ter alguns megabytes, o que não resolve espaço nenhum. \
+                 Aparece em toda lista de limpeza porque tem nome de cache, e não é.",
+    },
+    NaoFazemos {
         id: "hpet_forcado",
         nome: "Forçar o relógio de alta precisão (HPET) pela linha de comando",
         natureza: Natureza::Prejudicial,

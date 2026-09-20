@@ -305,6 +305,66 @@ pub async fn instalar_programa(id: String) -> Result<String, String> {
         .map_err(|e| format!("a instalação não terminou: {e}"))?
 }
 
+/// Comando: mede o que a limpeza pode liberar, sem apagar nada.
+///
+/// SEPARADO DE APAGAR de propósito. É a medição que o cliente vê antes de
+/// decidir, e ela precisa poder ser feita quantas vezes ele quiser sem
+/// consequência nenhuma.
+///
+/// Alvo que não pôde ser medido sai com tamanho AUSENTE, e não com zero.
+/// Zero afirmaria que a pasta está vazia; ausente diz que ninguém conseguiu
+/// abri-la — e é a diferença que decide se vale tentar como administrador.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn medir_limpeza() -> Result<LimpezaNaTela, String> {
+    use crate::modules::limpeza;
+    use crate::modules::windows::limpar;
+
+    // Andar em pastas grandes é leitura de disco: fora da thread do executor.
+    let alvos = tokio::task::spawn_blocking(limpar::medir)
+        .await
+        .map_err(|e| format!("a medição não terminou: {e}"))?;
+
+    Ok(LimpezaNaTela {
+        marcados: limpeza::marcados_por_padrao(),
+        alvos,
+    })
+}
+
+/// A medição, com o que vem marcado de fábrica.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct LimpezaNaTela {
+    pub alvos: Vec<crate::modules::limpeza::AlvoMedido>,
+    /// Os ids que vêm marcados. Nada que contenha arquivo do cliente entra.
+    pub marcados: Vec<String>,
+}
+
+/// Comando: apaga os alvos escolhidos.
+///
+/// É A ÚNICA OPERAÇÃO DO PRODUTO QUE NÃO TEM DESFAZER — arquivo apagado não
+/// volta. Por isso ela recebe a lista EXPLÍCITA do que apagar, em vez de um
+/// "limpar tudo": o que vai embora é o que o cliente marcou, item a item.
+///
+/// Id fora do catálogo é recusado. Aceitar caminho vindo da tela seria deixar
+/// a escolha do que apagar na máquina do cliente fora do nosso controle.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::windows::limpar;
+
+    tokio::task::spawn_blocking(move || {
+        ids.iter().map(|id| limpar::apagar(id)).collect()
+    })
+    .await
+    .map_err(|e| format!("a limpeza não terminou: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+pub type LimparResultado = crate::modules::windows::limpar::Resultado;
+
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
 ///
 /// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
@@ -4456,6 +4516,7 @@ mod tests {
         "biblioteca_de_jogos",
         "capa_do_jogo",
         "catalogo_de_programas",
+        "medir_limpeza",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",
@@ -4549,6 +4610,7 @@ mod tests {
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
         "instalar_programa",
+        "limpar_alvos",
         "gerador_ligar",
         "energia_testar_candidato",
         "energia_aplicar",

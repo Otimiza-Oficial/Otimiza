@@ -1956,6 +1956,47 @@
 
         <!-- ============================================================== ESPAÇO -->
         <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
+          <!--
+            A LIMPEZA, ITEM A ITEM.
+
+            Três coisas separam isto de um "limpador de PC":
+
+            1. CADA ITEM DIZ O QUE SE PERDE. "Cache de miniaturas · 29 MB" não
+               é informação suficiente para decidir; "as miniaturas são
+               redesenhadas na primeira vez que você abrir cada pasta" é.
+
+            2. TAMANHO AUSENTE NÃO É ZERO. Pasta que não abriu aparece como
+               "não deu para ler", e não como 0 B — que afirmaria que não há
+               nada ali e faria o técnico não tentar como administrador.
+
+            3. O QUE É DO CLIENTE NÃO VEM MARCADO. A lixeira é a única coisa
+               da lista com arquivo que ele criou, e apagá-la não tem volta.
+
+            É a única operação do produto sem Desfazer. Por isso ela mostra o
+            total antes, e apaga só o que estiver marcado.
+          -->
+          <section class="panel" id="limpeza-painel">
+            <div class="panel-head">
+              <h2>Limpeza do sistema</h2>
+              <span class="panel-tag" id="limpeza-total">—</span>
+            </div>
+
+            <p class="lead">
+              Remove temporários e caches. Nenhum arquivo pessoal — e o que
+              contém arquivo seu vem desmarcado.
+            </p>
+
+            <div id="limpeza-lista"></div>
+
+            <div class="row-actions">
+              <button id="limpeza-medir" class="btn" data-custo="~5 s">Analisar</button>
+              <button id="limpeza-limpar" class="btn btn-primary" disabled>Limpar</button>
+            </div>
+
+            <p id="limpeza-status" class="status"></p>
+            <p class="hint" id="limpeza-aviso" hidden></p>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>Liberador de espaço</h2>
