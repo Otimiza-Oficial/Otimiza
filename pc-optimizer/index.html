@@ -2016,6 +2016,50 @@
         <!-- ============================================================== JOGOS -->
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <!--
+            A BIBLIOTECA.
+
+            Abre a aba porque é onde a pessoa procura o jogo dela — e porque
+            tudo o que vem abaixo (disco, placa, prioridade) faz mais sentido
+            depois de escolher sobre QUAL jogo se está falando.
+
+            DUAS LISTAS, UMA GRADE. O que está instalado sai da varredura de
+            Steam, Epic e da lista do Windows; o que não está sai do catálogo de
+            títulos que o produto conhece de nome. Jogo instalado que o catálogo
+            não conhece entra do mesmo jeito — prioridade e preferência de placa
+            não dependem de a gente ter ouvido falar dele.
+
+            SEM CAPA DE JOGO. A arte de cada título é de quem fez o título, e
+            embutir aquilo no instalador é distribuir material de terceiro. Cada
+            bloco ganha uma cor derivada do próprio nome — estável, a mesma em
+            toda abertura — e quem quiser a capa de verdade aponta um arquivo da
+            própria máquina.
+          -->
+          <section class="panel" id="biblioteca-painel">
+            <div class="panel-head">
+              <h2>Biblioteca</h2>
+              <span class="panel-tag" id="biblioteca-tag">—</span>
+            </div>
+
+            <div class="biblioteca-topo">
+              <div class="biblioteca-filtros" role="tablist" aria-label="Filtrar a biblioteca">
+                <button class="biblioteca-filtro" role="tab" data-filtro="todos"
+                        aria-selected="true">Todos</button>
+                <button class="biblioteca-filtro" role="tab" data-filtro="instalados"
+                        aria-selected="false">Instalados</button>
+              </div>
+
+              <label class="biblioteca-busca">
+                <span class="sr-only">Buscar jogo</span>
+                <input type="search" id="biblioteca-busca" placeholder="Buscar jogo"
+                       autocomplete="off" spellcheck="false" />
+              </label>
+            </div>
+
+            <div class="biblioteca-grade" id="biblioteca-grade"></div>
+            <p class="hint" id="biblioteca-lacunas" hidden></p>
+          </section>
+
+          <!--
             EM QUE DISCO O JOGO ESTÁ.
 
             Veio de um cliente com SSD de 224 GB e HD de 466 GB pegando 15 a 20
@@ -3165,6 +3209,40 @@
 
     <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
          então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
+    <!--
+      A FICHA DE UM JOGO.
+
+      DUAS ALAVANCAS, e não cinco. Preferência de placa de vídeo e prioridade
+      fixa são as que o produto sabe aplicar E DESFAZER — as duas passam pelo
+      histórico de mudanças como qualquer outra otimização.
+
+      A tentação aqui é encher a ficha de interruptores: "compatibilidade",
+      "otimização de núcleos", "modo desempenho". Um interruptor que não escreve
+      nada verificável é um interruptor que o cliente liga, sente melhora, e
+      paga por nada — e é o que este produto inteiro foi escrito para não
+      fazer. Quando houver uma terceira alavanca com medição e desfazer, ela
+      entra aqui.
+    -->
+    <div class="modal" id="jogo-modal" hidden>
+      <div class="modal-card jogo-card" role="dialog" aria-modal="true"
+           aria-labelledby="jogo-modal-nome">
+        <header class="jogo-cabeca">
+          <span class="jogo-bloco" id="jogo-modal-bloco" aria-hidden="true"></span>
+          <div>
+            <p class="jogo-sobrenome">Otimizações do jogo</p>
+            <h2 id="jogo-modal-nome">—</h2>
+            <p class="jogo-caminho" id="jogo-modal-caminho">—</p>
+          </div>
+          <button class="jogo-fechar" id="jogo-modal-fechar" type="button"
+                  aria-label="Fechar">×</button>
+        </header>
+
+        <div class="jogo-alavancas" id="jogo-alavancas"></div>
+
+        <p class="modal-note" id="jogo-modal-nota"></p>
+      </div>
+    </div>
+
     <div class="modal" id="admin-modal" hidden>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="brand-logo modal-logo" aria-hidden="true"></div>

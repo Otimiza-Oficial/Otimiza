@@ -103,6 +103,8 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::caminho_do_mouse,
             #[cfg(target_os = "windows")]
+            commands::biblioteca_de_jogos,
+            #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
             #[cfg(target_os = "windows")]

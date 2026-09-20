@@ -130,6 +130,60 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: a grade da biblioteca de jogos.
+///
+/// Junta duas listas que respondem perguntas diferentes: o que ESTÁ INSTALADO
+/// nesta máquina (`windows::jogos::varrer`, que lê Steam, Epic e a lista do
+/// Windows) e o que o produto CONHECE de nome (`modules::catalogojogos`).
+///
+/// Jogo instalado que o catálogo não conhece entra do mesmo jeito: prioridade,
+/// afinidade e preferência de placa não dependem de o Otimiza ter ouvido falar
+/// do título. E jogo conhecido que não está instalado aparece marcado como tal,
+/// para a pessoa achar o dela na grade em vez de concluir que não há suporte.
+///
+/// SÓ LÊ. Nenhuma otimização é aplicada por abrir a biblioteca.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn biblioteca_de_jogos() -> Result<BibliotecaNaTela, String> {
+    use crate::modules::catalogojogos::{montar, Detectado};
+    use crate::modules::windows::jogos;
+
+    // Varrer bibliotecas de loja é leitura de disco: fora da thread do
+    // executor, como todo o resto que custa neste produto.
+    let biblioteca = tokio::task::spawn_blocking(jogos::varrer)
+        .await
+        .map_err(|e| format!("a varredura de jogos não terminou: {e}"))?;
+
+    let detectados: Vec<Detectado> = biblioteca
+        .jogos
+        .iter()
+        .map(|j| Detectado {
+            nome: j.nome.clone(),
+            pasta: j.pasta.to_string_lossy().to_string(),
+            executavel: j.executavel.as_ref().map(|e| e.to_string_lossy().to_string()),
+        })
+        .collect();
+
+    Ok(BibliotecaNaTela {
+        jogos: montar(&detectados),
+        instalados: detectados.len(),
+        // O que a varredura não conseguiu ler vai junto. Uma biblioteca curta
+        // porque a Steam não abriu é indistinguível de uma biblioteca curta
+        // de verdade — e a primeira tem conserto.
+        lacunas: biblioteca.lacunas,
+    })
+}
+
+/// A grade, com o que a varredura não conseguiu ler.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct BibliotecaNaTela {
+    pub jogos: Vec<crate::modules::catalogojogos::NaGrade>,
+    /// Quantos foram encontrados no disco.
+    pub instalados: usize,
+    pub lacunas: Vec<String>,
+}
+
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
 ///
 /// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
@@ -4278,6 +4332,7 @@ mod tests {
         "passo_do_autoajuste",
         "historico_de_desempenho",
         "caminho_do_mouse",
+        "biblioteca_de_jogos",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

@@ -2280,6 +2280,195 @@ function blocoDeFaltas(itens: string[], rotulo: string): string {
   )}.</p>`;
 }
 
+
+// ------------------------------------------------ biblioteca de jogos
+
+interface JogoNaGrade {
+  id: string;
+  nome: string;
+  instalado: boolean;
+  pasta: string | null;
+  executavel: string | null;
+  /** O produto conhece este título de nome. */
+  conhecido: boolean;
+  /** Matiz de 0 a 359, derivada do id. Ver `catalogojogos.rs`. */
+  matiz: number;
+  iniciais: string;
+}
+
+interface BibliotecaNaTela {
+  jogos: JogoNaGrade[];
+  instalados: number;
+  lacunas: string[];
+}
+
+let bibliotecaCarregada: JogoNaGrade[] = [];
+let filtroDaBiblioteca: "todos" | "instalados" = "todos";
+
+async function carregarBiblioteca() {
+  try {
+    const r = await invoke<BibliotecaNaTela>("biblioteca_de_jogos");
+    bibliotecaCarregada = r.jogos;
+
+    text(
+      "biblioteca-tag",
+      `${r.instalados} instalado${r.instalados === 1 ? "" : "s"} · ${r.jogos.length} na grade`
+    );
+
+    // O que a varredura não conseguiu ler vai para a tela. Uma biblioteca
+    // curta porque a Steam não abriu é indistinguível de uma curta de verdade,
+    // e só a primeira tem conserto.
+    const lacunas = element("biblioteca-lacunas");
+    lacunas.hidden = r.lacunas.length === 0;
+    lacunas.textContent =
+      r.lacunas.length === 0 ? "" : `Não deu para ler: ${r.lacunas.join(", ")}.`;
+
+    desenharBiblioteca();
+  } catch (error) {
+    element("biblioteca-grade").innerHTML =
+      `<p class="hint">${escapeHtml(String(error))}</p>`;
+  }
+}
+
+function desenharBiblioteca() {
+  const busca = element<HTMLInputElement>("biblioteca-busca").value.trim().toLowerCase();
+
+  const visiveis = bibliotecaCarregada.filter((j) => {
+    if (filtroDaBiblioteca === "instalados" && !j.instalado) return false;
+    return busca === "" || j.nome.toLowerCase().includes(busca);
+  });
+
+  if (visiveis.length === 0) {
+    element("biblioteca-grade").innerHTML = `<p class="hint">${
+      busca
+        ? "Nenhum jogo com esse nome na grade. Jogos fora do catálogo aparecem aqui assim que forem encontrados no disco."
+        : "Nenhum jogo instalado foi encontrado nas bibliotecas desta máquina."
+    }</p>`;
+    return;
+  }
+
+  element("biblioteca-grade").innerHTML = visiveis
+    .map(
+      (j) => `
+      <button class="jogo-tile" type="button" data-jogo="${escapeHtml(j.id)}"
+              data-instalado="${j.instalado}" style="--matiz:${j.matiz}">
+        <span class="jogo-tile-arte" aria-hidden="true">${escapeHtml(j.iniciais)}</span>
+        <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
+        <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
+      </button>`
+    )
+    .join("");
+}
+
+/**
+ * Abre a ficha de um jogo.
+ *
+ * AS DUAS ALAVANCAS SÓ APARECEM COM CAMINHO. Preferência de placa e prioridade
+ * fixa são escritas por caminho de executável; sem ele não há o que escrever, e
+ * mostrar o interruptor desligado sugeriria que basta clicar.
+ */
+function abrirFichaDoJogo(id: string) {
+  const jogo = bibliotecaCarregada.find((j) => j.id === id);
+  if (!jogo) return;
+
+  const bloco = element("jogo-modal-bloco");
+  bloco.textContent = jogo.iniciais;
+  bloco.style.setProperty("--matiz", String(jogo.matiz));
+
+  text("jogo-modal-nome", jogo.nome);
+  text(
+    "jogo-modal-caminho",
+    jogo.executavel ?? jogo.pasta ?? "não instalado nesta máquina"
+  );
+
+  const alvo = jogo.executavel ?? null;
+
+  element("jogo-alavancas").innerHTML = alvo
+    ? `
+      <div class="jogo-alavanca">
+        <div>
+          <span class="jogo-alavanca-nome">Placa de vídeo de alto desempenho</span>
+          <span class="jogo-alavanca-nota">Diz ao Windows para rodar este jogo na placa dedicada, e não na integrada. Em desktop com uma placa só não muda nada.</span>
+        </div>
+        <button class="btn" type="button" data-acao="gpu">Aplicar</button>
+      </div>
+      <div class="jogo-alavanca">
+        <div>
+          <span class="jogo-alavanca-nome">Prioridade alta fixa</span>
+          <span class="jogo-alavanca-nota">O Windows passa a criar o processo já em prioridade alta, em toda abertura. Ganho pequeno, maior em processador de poucos núcleos.</span>
+        </div>
+        <button class="btn" type="button" data-acao="prioridade">Aplicar</button>
+      </div>`
+    : `<p class="hint">Este jogo não foi encontrado no disco, então não há executável para ajustar. Instale-o, ou use "Selecionar" na ficha de configuração do jogo para apontar o arquivo.</p>`;
+
+  text(
+    "jogo-modal-nota",
+    alvo
+      ? "As duas entram no histórico de mudanças e o desfazer devolve como estava."
+      : ""
+  );
+
+  for (const botao of element("jogo-alavancas").querySelectorAll<HTMLButtonElement>(
+    "button[data-acao]"
+  )) {
+    botao.addEventListener("click", () => void aplicarNoJogo(botao, jogo, botao.dataset.acao!));
+  }
+
+  element("jogo-modal").hidden = false;
+}
+
+async function aplicarNoJogo(botao: HTMLButtonElement, jogo: JogoNaGrade, acao: string) {
+  const caminho = jogo.executavel;
+  if (!caminho) return;
+
+  botao.disabled = true;
+  const antes = botao.textContent;
+  botao.textContent = "Aplicando…";
+
+  try {
+    if (acao === "gpu") {
+      await invoke("set_gpu_preference", { caminho, desempenho: true });
+    } else {
+      await invoke("set_persistent_priority", { executable: caminho, enable: true });
+    }
+
+    botao.textContent = "Aplicado";
+    text("jogo-modal-nota", "Feito. Está no histórico de mudanças, e o desfazer devolve como estava.");
+    void loadOptimizations?.();
+  } catch (error) {
+    botao.textContent = antes ?? "Aplicar";
+    botao.disabled = false;
+    text("jogo-modal-nota", String(error));
+  }
+}
+
+function ligarBiblioteca() {
+  element("biblioteca-grade").addEventListener("click", (e) => {
+    const tile = (e.target as HTMLElement).closest<HTMLElement>(".jogo-tile");
+    if (tile?.dataset.jogo) abrirFichaDoJogo(tile.dataset.jogo);
+  });
+
+  element<HTMLInputElement>("biblioteca-busca").addEventListener("input", desenharBiblioteca);
+
+  for (const botao of document.querySelectorAll<HTMLButtonElement>(".biblioteca-filtro")) {
+    botao.addEventListener("click", () => {
+      for (const outro of document.querySelectorAll(".biblioteca-filtro")) {
+        outro.setAttribute("aria-selected", String(outro === botao));
+      }
+      filtroDaBiblioteca = botao.dataset.filtro === "instalados" ? "instalados" : "todos";
+      desenharBiblioteca();
+    });
+  }
+
+  const fechar = () => {
+    element("jogo-modal").hidden = true;
+  };
+  element("jogo-modal-fechar").addEventListener("click", fechar);
+  element("jogo-modal").addEventListener("click", (e) => {
+    if (e.target === element("jogo-modal")) fechar();
+  });
+}
+
 // ------------------------------------------------ o caminho do mouse
 
 type AchadoMouse = "AceleracaoLigada" | "BarraAbaixoDoMeio" | "BarraAcimaDoMeio";
@@ -9692,6 +9881,8 @@ function wireControls() {
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
   ligarTema();
+  ligarBiblioteca();
+  void carregarBiblioteca();
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
