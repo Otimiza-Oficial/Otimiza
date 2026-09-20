@@ -1238,6 +1238,56 @@ function element<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
+
+// ------------------------------------------------------------- tema
+
+/** Onde a escolha do cliente fica. O mesmo nome lido pelo script de abertura. */
+const CHAVE_DO_TEMA = "otimiza-tema";
+
+/**
+ * Liga o botão do tema e passa a seguir o Windows enquanto ninguém escolher.
+ *
+ * QUEM APLICA O TEMA NA ABERTURA NÃO É ESTA FUNÇÃO — é o script síncrono do
+ * `<head>`, que roda antes da primeira pintura. Aqui só ficam as duas coisas
+ * que dependem de o app estar vivo: o clique e o acompanhamento da preferência
+ * do sistema.
+ */
+function ligarTema() {
+  const botao = element<HTMLButtonElement>("tema-botao");
+  const midia = window.matchMedia?.("(prefers-color-scheme: dark)");
+
+  const aplicar = (tema: "claro" | "escuro") => {
+    document.documentElement.dataset.tema = tema;
+  };
+
+  botao.addEventListener("click", () => {
+    const novo = document.documentElement.dataset.tema === "escuro" ? "claro" : "escuro";
+    aplicar(novo);
+
+    // Guardar a escolha é o que faz o app PARAR de seguir o Windows. Quem
+    // mexeu no interruptor não quer que o sistema desfaça a escolha à noite.
+    try {
+      localStorage.setItem(CHAVE_DO_TEMA, novo);
+    } catch {
+      // Sem armazenamento a escolha vale só para esta sessão. É uma perda
+      // pequena, e é melhor que o botão não funcionar.
+    }
+  });
+
+  // Enquanto o cliente não escolher, o app acompanha o Windows ao vivo — sem
+  // precisar reabrir. Depois da escolha, para de acompanhar.
+  midia?.addEventListener("change", (e) => {
+    let escolhido: string | null = null;
+    try {
+      escolhido = localStorage.getItem(CHAVE_DO_TEMA);
+    } catch {
+      escolhido = null;
+    }
+
+    if (escolhido === null) aplicar(e.matches ? "escuro" : "claro");
+  });
+}
+
 // ---------------------------------------------------------------------- abas
 
 /**
@@ -9641,6 +9691,7 @@ function wireControls() {
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
+  ligarTema();
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {

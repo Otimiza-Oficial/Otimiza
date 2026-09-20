@@ -40,20 +40,17 @@
 }
 
 :root {
-  /* PRETO DE VERDADE, E NÃO QUASE-PRETO.
+  /* AS TRÊS SUPERFÍCIES, E O FIO QUE AS SEPARA.
 
-     As três superfícies eram tons diferentes de cinza muito escuro, e o degrau
-     entre elas era o que separava fundo, cartão e cartão em relevo. Agora as
-     três são a mesma: #000. Quem separa passa a ser só o fio de cabelo.
+     Fundo, painel e painel em relevo são a MESMA cor de propósito, e quem
+     separa um do outro é só o fio de cabelo. A regra do produto sempre foi que
+     cor só aparece onde carrega significado, e um cinza a mais ou a menos no
+     fundo não carregava nenhum.
 
-     É mais limpo e é mais honesto com a escala de cor do produto — a regra
-     sempre foi que cor só aparece onde carrega significado, e um cinza a mais
-     ou a menos no fundo não carregava nenhum. De quebra, todo texto de apoio
-     ganha contraste: os tons foram calibrados contra #121212, e contra preto
-     eles só melhoram.
-
-     Nos monitores OLED, que é o que boa parte do público de jogo usa, preto
-     puro é pixel desligado: a moldura some de verdade. */
+     ESTE BLOCO É O TEMA CLARO. O escuro está logo abaixo, em
+     `:root[data-tema="escuro"]`, e redefine estes mesmos nomes — nenhum
+     componente do produto sabe qual dos dois está valendo, e é isso que
+     permite os dois existirem sem duplicar uma única regra de layout. */
   --bg: #f4f4f3;
   --panel: #ffffff;
   --panel-raised: #ffffff;
@@ -67,8 +64,8 @@
      #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
      que a norma pede para elemento de interface. Subir para #2e2e2e devolve a
      estrutura sem perder a discrição. */
-  --hairline: rgba(10, 10, 10, 0.09);
-  --hairline-strong: rgba(10, 10, 10, 0.16);
+  --hairline: rgba(var(--text-rgb), 0.09);
+  --hairline-strong: rgba(var(--text-rgb), 0.16);
 
   --text: #0a0a0a;
   --text-dim: #3f3f3f;
@@ -86,8 +83,39 @@
   --ok: #0a0a0a;
   --aviso: #8a6100;
   --erro: #b42318;
-  --borda-forte: rgba(10, 10, 10, 0.16);
+  --borda-forte: rgba(var(--text-rgb), 0.16);
   --anim-rapida: 0.18s;
+
+  /*
+    AS SUPERFÍCIES POR PAPEL, e não por tom.
+
+    Estes cinco nasceram de uma varredura: o tema escuro acendeu 88 cores
+    escritas direto na regra, e a maior parte delas era a mesma ideia repetida
+    — "fundo de chip", "fundo afundado", "texto sobre botão preenchido".
+    Escritas como tom, elas não têm como virar escuro; escritas como papel,
+    viram sozinhas.
+  */
+  --sup-selecionada: var(--sup-selecionada);
+  --sup-afundada: var(--sup-afundada);
+  --sup-sutil: var(--sup-sutil);
+  /* O texto de cima de um elemento PREENCHIDO com a cor de destaque. No claro
+     o destaque é quase-preto e o texto é branco; no escuro inverte. */
+  --sobre-accent: #ffffff;
+  --accent-hover: #262626;
+
+  /*
+    A ESCALA DAS PEÇAS DESENHADAS.
+
+    A placa de vídeo, os pentes de memória e os monitores da tela são
+    desenhos vetoriais com uma escala de cinzas própria — eram catorze tons
+    escritos à mão, e no tema escuro todos eles viravam um borrão branco no
+    meio da tela. Cinco degraus, do corpo da peça ao traço.
+  */
+  --peca-1: #f1f1ef;
+  --peca-2: #ececea;
+  --peca-3: #e5e5e3;
+  --peca-4: #cfcbc0;
+  --peca-5: #c4c4c1;
 
   /*
     AS MESMAS CORES, EM COMPONENTES — para quando é preciso transparência.
@@ -109,7 +137,7 @@
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
      e a matriz de núcleos usava um branco diferente — dois cinzas para a
      mesma ideia, lado a lado no mesmo painel. */
-  --track: rgba(10, 10, 10, 0.08);
+  --track: rgba(var(--text-rgb), 0.08);
 
   --font-mono: "GeistMono", ui-monospace, "Cascadia Mono", "Consolas", monospace;
   --font-sans: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -189,6 +217,90 @@
 }
 
 /*
+  O TEMA ESCURO.
+
+  UMA CÓPIA SÓ, e é por isso que ele mora atrás de um atributo em vez de uma
+  consulta de mídia. O caminho comum — `@media (prefers-color-scheme: dark)`
+  mais um seletor de override — obriga a escrever a lista de cores DUAS vezes,
+  e duas listas de cor discordam assim que alguém corrigir uma. Aqui quem
+  resolve a preferência do sistema é o script de abertura, que escreve
+  `data-tema` no `<html>` antes do primeiro desenho; o CSS só conhece o
+  atributo.
+
+  NENHUMA REGRA DE LAYOUT É DUPLICADA. Este bloco redefine nomes, e nada mais.
+  Se um componente novo precisar de uma regra própria para o escuro, é sinal de
+  que ele escreveu uma cor à mão em vez de usar um token — e o conserto é lá,
+  não aqui.
+
+  SOBRE O PRETO: #0b0b0c e não #000. Preto puro é pixel desligado em OLED, o
+  que é bonito, mas encosta o contraste do texto no máximo e cansa numa tela
+  que o cliente deixa aberta durante a partida. O quase-preto mantém a moldura
+  discreta e a leitura confortável.
+*/
+:root[data-tema="escuro"] {
+  --bg: #0b0b0c;
+  --panel: #121214;
+  --panel-raised: #17171a;
+  --campo: #0f0f11;
+
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.18);
+  --borda-forte: rgba(255, 255, 255, 0.18);
+  --track: rgba(255, 255, 255, 0.1);
+
+  --text: #f1f1f2;
+  --text-dim: #c0c0c5;
+  /* Mesmo critério do claro: este tom carrega quase todo o texto explicativo
+     do produto, que é onde mora o argumento de honestidade. Apagado demais,
+     ninguém lê — e o produto vira mais um otimizador de botão. */
+  --text-muted: #8b8b92;
+
+  /* Neutros de propósito, como no claro: cor só onde carrega significado.
+     Verde de "está tudo bem" espalhado pela tela ensina o olho a ignorá-lo
+     justamente onde ele precisaria ser notado. */
+  --accent: #f1f1f2;
+  --green: #f1f1f2;
+  --ok: #f1f1f2;
+
+  /* Âmbar e vermelho SOBEM no escuro. Os tons do claro foram calibrados para
+     ter contraste sobre branco; sobre quase-preto eles somem, e um alerta que
+     some é um alerta que não existe. */
+  --amber: #e9a23b;
+  --red: #f97066;
+  --aviso: #e9a23b;
+  --erro: #f97066;
+
+  --accent-rgb: 241, 241, 242;
+  --green-rgb: 241, 241, 242;
+  --amber-rgb: 233, 162, 59;
+  --red-rgb: 249, 112, 102;
+  --bg-rgb: 11, 11, 12;
+  --text-rgb: 241, 241, 242;
+  --panel-rgb: 18, 18, 20;
+
+  /* Diz ao navegador para desenhar barra de rolagem e campos nativos no
+     escuro. Sem isto, uma barra de rolagem branca corta a tela ao meio. */
+--sup-selecionada: rgba(255, 255, 255, 0.08);
+  --sup-afundada: rgba(255, 255, 255, 0.05);
+  --sup-sutil: rgba(255, 255, 255, 0.03);
+  --sobre-accent: #0b0b0c;
+  --accent-hover: #d6d6da;
+
+  --peca-1: #26262b;
+  --peca-2: #2d2d33;
+  --peca-3: #1e1e22;
+  --peca-4: #43434c;
+  --peca-5: #55555f;
+
+  color-scheme: dark;
+}
+
+:root[data-tema="claro"] {
+  color-scheme: light;
+}
+
+
+/*
   Desligamento global do movimento.
   Duas fontes: a preferência do sistema operacional e o perfil de hardware que
   o próprio Otimiza já mede. Nos dois casos a interface continua inteira — só
@@ -229,7 +341,7 @@
    azul do Windows no meio de uma interface monocromática. */
 ::selection {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 /*
@@ -509,7 +621,7 @@ button {
   justify-content: center;
   border-radius: 9px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
   font-size: var(--t-micro);
   font-weight: 700;
   letter-spacing: 0;
@@ -521,7 +633,7 @@ button {
 
 .tab-badge[data-tone="bad"] {
   background: var(--red);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 /* ------------------------------------------------------------------ painéis */
@@ -572,16 +684,16 @@ button {
   /* Uma sombra curta, de contato, e nada mais. No escuro o cartão precisava de
      três camadas de gradiente para existir; no papel ele existe sozinho — o
      que o assenta é o fio de 1px e um contato de 2px. */
-  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
+  box-shadow: 0 1px 2px rgba(var(--text-rgb), 0.04);
 }
 
 /* Um único degrau de ênfase de ênfase, e ele só vale enquanto for raro: no momento em
    que o terceiro cartão receber destaque, nenhum tem destaque. */
 .panel[data-realce] {
-  border-color: rgba(10, 10, 10, 0.16);
+  border-color: rgba(var(--text-rgb), 0.16);
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 18px 40px -24px rgba(10, 10, 10, 0.28);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 18px 40px -24px rgba(var(--text-rgb), 0.28);
 }
 
 /* O cabeçalho sangra até a borda do cartão e carrega o degrau de luz, para o
@@ -959,7 +1071,7 @@ button {
   background: var(--panel);
   border: 1px solid transparent;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.1), 0 1px 2px rgba(var(--text-rgb), 0.05);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--t-body);
@@ -971,7 +1083,7 @@ button {
 }
 
 .btn:hover:not(:disabled) {
-  background: #f6f6f5;
+  background: var(--sup-afundada);
   color: var(--accent);
 }
 
@@ -987,15 +1099,15 @@ button {
 
 .btn-primary {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #262626;
-  color: #ffffff;
+  background: var(--accent-hover);
+  color: var(--sobre-accent);
 }
 
 .btn-ghost {
@@ -1238,7 +1350,7 @@ button {
 }
 
 .opt-row:hover {
-  background: #f9f9f8;
+  background: var(--sup-sutil);
 }
 
 .optimization[data-state="Applied"] .opt-row {
@@ -1330,7 +1442,7 @@ button {
   padding: 2px 7px;
   border: none;
   border-radius: 5px;
-  background: #f1f1f0;
+  background: var(--sup-selecionada);
   color: var(--text-muted);
   font-size: 10.5px;
   font-weight: 600;
@@ -1682,7 +1794,7 @@ button {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
+  background: var(--surface-sunken, rgba(var(--text-rgb), 0.05));
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -2031,7 +2143,7 @@ button {
 
 .vitals .vital-value {
   font-size: var(--t-label);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .vitals .vital-bar {
@@ -2305,7 +2417,7 @@ button {
 .profile-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .profile-chip:focus-visible {
@@ -2663,7 +2775,7 @@ button {
   background: transparent;
   border: none;
   border-radius: var(--r1);
-  color: #4a4a4a;
+  color: var(--text-dim);
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
@@ -2676,7 +2788,7 @@ button {
 
 .nav:hover {
   color: var(--text);
-  background: rgba(10, 10, 10, 0.045);
+  background: rgba(var(--text-rgb), 0.045);
 }
 
 /* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
@@ -2684,7 +2796,7 @@ button {
 .nav[aria-selected="true"] {
   color: var(--text);
   font-weight: 600;
-  background: #f1f1f0;
+  background: var(--sup-selecionada);
 }
 
 /* ==========================================================================
@@ -2744,7 +2856,7 @@ button {
 
 .nav[aria-selected="true"] .tab-badge {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .lateral-rodape {
@@ -2988,7 +3100,7 @@ button {
 .comando:hover,
 .comando[aria-selected="true"] {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .comando-secao {
@@ -3575,8 +3687,8 @@ button {
   color: var(--text);
   font-size: var(--t-body);
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 12px 28px -16px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 12px 28px -16px rgba(var(--text-rgb), 0.3);
 }
 
 .atualizacao-faixa[hidden] {
@@ -3723,8 +3835,8 @@ button {
   /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
      aquele halo escuro que denuncia caixa flutuante mal feita. */
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 32px 64px -32px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 32px 64px -32px rgba(var(--text-rgb), 0.3);
 }
 
 /* A PROPORÇÃO É O DESENHO INTEIRO.
@@ -3891,7 +4003,7 @@ button {
   background: var(--campo);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.14);
 
   /* O código é para copiar, não para digitar: selecionável, mas sem quebrar
      no meio de um bloco. */
@@ -3909,13 +4021,13 @@ button {
   background: var(--panel);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.1), 0 1px 2px rgba(var(--text-rgb), 0.05);
   cursor: pointer;
   transition: background var(--anim-rapida);
 }
 
 .portao-copiar:hover {
-  background: #f6f6f5;
+  background: var(--sup-afundada);
 }
 
 .portao-nota {
@@ -3937,13 +4049,13 @@ button {
   background: var(--campo);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.14);
   transition: box-shadow var(--anim-rapida);
 }
 
 .portao-campo:focus {
   outline: none;
-  box-shadow: 0 0 0 1px #0a0a0a, 0 0 0 4px rgba(10, 10, 10, 0.08);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px rgba(var(--text-rgb), 0.08);
 }
 
 /* A AÇÃO PRINCIPAL É A ÚNICA COISA BRANCA DA TELA.
@@ -4055,7 +4167,7 @@ button {
   overflow: hidden;
   background:
     radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 70%),
-    #0b0b0b;
+    var(--bg);
 }
 
 .portao-pilares {
@@ -4192,8 +4304,8 @@ button {
      Antes era branca e carregava só o nome. Agora carrega a marca, a busca e
      os controles — a mesma barra do painel do site, e uma linha a menos entre
      o alto da tela e o trabalho. */
-  background: #050505;
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--sobre-accent);
 
   /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
   user-select: none;
@@ -4203,7 +4315,7 @@ button {
   width: 18px;
   height: 18px;
   flex: none;
-  background: #ffffff;
+  background: var(--panel);
   -webkit-mask: url(/logo.svg) center / contain no-repeat;
   mask: url(/logo.svg) center / contain no-repeat;
 }
@@ -4253,7 +4365,7 @@ button {
    escurece, e é assim que se sabe qual é qual. */
 .janela-botao { --cor-botao: rgba(255, 255, 255, 0.3); }
 
-.janela-botao:hover { --cor-botao: #ffffff; }
+.janela-botao:hover { --cor-botao: var(--text); }
 
 /* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
 
@@ -4338,7 +4450,7 @@ body.janela-cheia {
   overflow: hidden;
   background:
     radial-gradient(ellipse 80% 60% at 40% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
-    #0b0b0b;
+    var(--bg);
 }
 
 .chegada-pilares {
@@ -4464,12 +4576,12 @@ body.janela-cheia {
 .placa[data-marca="intel"]  { --marca: #0071c5; }
 .placa[data-marca="desconhecida"] { --marca: var(--hairline-strong); }
 
-.placa-tras     { fill: #0a0a0a; opacity: 0.06; }
-.placa-pcb      { fill: #f3f3f1; stroke: var(--hairline); stroke-width: 1; }
-.placa-carenagem{ fill: #f0f0ee; stroke: var(--hairline); stroke-width: 1; }
-.placa-chapa    { fill: #e5e5e3; stroke: var(--hairline); stroke-width: 1; }
-.placa-saidas rect { fill: #e9e9e7; stroke: var(--hairline-strong); stroke-width: 1; }
-.placa-pinos rect  { fill: #cfcbc0; }
+.placa-tras     { fill: var(--text); opacity: 0.06; }
+.placa-pcb      { fill: var(--peca-1); stroke: var(--hairline); stroke-width: 1; }
+.placa-carenagem{ fill: var(--peca-1); stroke: var(--hairline); stroke-width: 1; }
+.placa-chapa    { fill: var(--peca-3); stroke: var(--hairline); stroke-width: 1; }
+.placa-saidas rect { fill: var(--peca-3); stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-pinos rect  { fill: var(--peca-4); }
 
 .placa-aletas path {
   stroke: var(--hairline-strong);
@@ -4481,7 +4593,7 @@ body.janela-cheia {
    viva" sem custar quase nada: uma transformação por elemento, sem repintura de
    layout. */
 .placa-ventilador {
-  fill: #e3e3e1;
+  fill: var(--peca-3);
   stroke: var(--hairline);
   stroke-width: 1;
   transform-origin: center;
@@ -4491,20 +4603,20 @@ body.janela-cheia {
    ventilador. É esse par que dá a impressão de profundidade — sem ele, o
    ventilador fica colado na superfície como um adesivo. */
 .placa-aro {
-  fill: #eeeeec;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .placa-aro-interno {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .placa-pas path {
   fill: none;
-  stroke: #c4c4c1;
+  stroke: var(--peca-5);
   stroke-width: 6;
   stroke-linecap: round;
 }
@@ -4517,13 +4629,13 @@ body.janela-cheia {
 
 .placa-parafuso circle,
 circle.placa-parafuso {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
 
 .placa-furos circle {
-  fill: #e9e9e7;
+  fill: var(--peca-3);
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
@@ -4550,7 +4662,7 @@ circle.placa-parafuso {
   opacity: 0.85;
 }
 
-.placa-energia rect { fill: #efefed; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-energia rect { fill: var(--peca-2); stroke: var(--hairline-strong); stroke-width: 1; }
 .placa-energia path { stroke: var(--hairline-strong); stroke-width: 1; }
 
 .placa-marca {
@@ -4625,7 +4737,7 @@ circle.placa-parafuso {
 }
 
 .memoria-placa {
-  fill: #f1f1ef;
+  fill: var(--peca-1);
   stroke: var(--hairline);
   stroke-width: 1;
 }
@@ -4639,32 +4751,32 @@ circle.placa-parafuso {
 
 /* O encaixe vazio: só o contorno e as travas das pontas. */
 .memoria-slot-vazio {
-  fill: #f0f0ee;
+  fill: var(--peca-1);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-trava {
-  fill: #e8e8e6;
+  fill: var(--peca-3);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 /* O pente encaixado. */
 .memoria-pente {
-  fill: #ededeb;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-chip {
-  fill: #ececea;
+  fill: var(--peca-2);
   stroke: var(--hairline);
   stroke-width: 0.8;
 }
 
 .memoria-contato {
-  fill: #cfcbc0;
+  fill: var(--peca-4);
 }
 
 /* A etiqueta de capacidade em cima do pente. */
@@ -4721,20 +4833,20 @@ circle.placa-parafuso {
 }
 
 .monitor-moldura {
-  fill: #efefed;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1.5;
 }
 
 .monitor-tela {
-  fill: #e9e9e7;
+  fill: var(--peca-3);
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .monitor-pe,
 .monitor-base {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
@@ -5082,7 +5194,7 @@ circle.placa-parafuso {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
+  background: var(--surface-sunken, rgba(var(--text-rgb), 0.05));
   color: var(--text-dim);
   font-size: var(--t-body);
   line-height: 1.6;
@@ -5123,13 +5235,13 @@ circle.placa-parafuso {
 .fg-sub, .fg-ritmo h3, .fg-latencia h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: var(--s2) 0; }
 .fg-mono { font-family: var(--font-mono); font-size: 11.5px; }
 .fg-erro { padding: var(--s3) var(--s4); border-radius: var(--r2); background: rgba(var(--red-rgb), .07); color: var(--red); font-size: 12.5px; }
-.fg-aviso { padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+.fg-aviso { padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
 
 .fg-linha { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); }
 .fg-campo { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); font-weight: 600; }
 .fg-campo input, .fg-campo select { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--campo); border: 1px solid var(--hairline-strong); border-radius: var(--r1); padding: 7px 10px; min-width: 180px; }
 
-.fg-selo { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .05em; vertical-align: middle; cursor: help; background: #f1f1f0; color: var(--text); }
+.fg-selo { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .05em; vertical-align: middle; cursor: help; background: var(--sup-selecionada); color: var(--text); }
 .fg-selo[data-origem="Estimado"] { background: rgba(var(--amber-rgb), .1); color: var(--amber); }
 .fg-selo[data-origem="Desconhecido"] { background: transparent; color: var(--text-muted); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 .fg-desconhecido { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; color: var(--text-muted); }
@@ -5138,19 +5250,19 @@ circle.placa-parafuso {
 .fg-valor { font-family: var(--font-mono); font-weight: 600; }
 .fg-valor small { font-weight: 400; color: var(--text-muted); }
 
-.fg-chip { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: #f1f1f0; color: var(--text-dim); white-space: nowrap; }
+.fg-chip { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: var(--sup-selecionada); color: var(--text-dim); white-space: nowrap; }
 .fg-chip[data-tom="aviso"] { background: rgba(var(--amber-rgb), .1); color: var(--amber); }
 .fg-chip[data-tom="erro"] { background: rgba(var(--red-rgb), .08); color: var(--red); }
-.fg-chip[data-tom="ok"] { background: #0a0a0a; color: #fff; }
+.fg-chip[data-tom="ok"] { background: var(--accent); color: var(--sobre-accent); }
 .fg-tipo { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 
 .fg-fluxo { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
 .fg-fluxo i { align-self: center; font-style: normal; color: var(--text-muted); }
-.fg-quadro { flex: 1 1 120px; display: flex; flex-direction: column; justify-content: space-between; gap: var(--s3); min-height: 78px; padding: var(--s3); border-radius: var(--r2); background: #0a0a0a; color: #fff; }
+.fg-quadro { flex: 1 1 120px; display: flex; flex-direction: column; justify-content: space-between; gap: var(--s3); min-height: 78px; padding: var(--s3); border-radius: var(--r2); background: var(--accent); color: var(--sobre-accent); }
 .fg-quadro span { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; opacity: .7; }
 .fg-quadro b { font-family: var(--font-mono); font-size: 15px; }
-.fg-quadro[data-real="false"] { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(10,10,10,.05) 6px 7px); }
-.fg-quadro.fg-analise { background: #f1f1f0; color: var(--text); }
+.fg-quadro[data-real="false"] { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(var(--text-rgb), .05) 6px 7px); }
+.fg-quadro.fg-analise { background: var(--sup-selecionada); color: var(--text); }
 .fg-pipeline { display: grid; grid-template-columns: repeat(3, 1fr); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); overflow: hidden; }
 .fg-pipeline div { display: flex; flex-direction: column; gap: 3px; padding: var(--s3); }
 .fg-pipeline div + div { border-left: 1px solid var(--hairline); }
@@ -5167,17 +5279,17 @@ circle.placa-parafuso {
 .fg-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .fg-tabela th { text-align: left; font-size: 10.5px; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
 .fg-tabela td { padding: 9px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
-.fg-tabela tr[data-selecionada="true"] td { background: #f6f6f5; }
+.fg-tabela tr[data-selecionada="true"] td { background: var(--sup-afundada); }
 
-.fg-segmentos { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--r1); background: #f1f1f0; }
+.fg-segmentos { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--r1); background: var(--sup-selecionada); }
 .fg-segmento { font: inherit; font-size: 12px; font-weight: 600; border: 0; background: transparent; color: var(--text-dim); padding: 5px 11px; border-radius: 5px; cursor: pointer; }
-.fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(10,10,10,.12); }
+.fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(var(--text-rgb), .12); }
 
 .fg-passos { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
-.fg-onde { margin: 0; font-size: 12.5px; padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; }
+.fg-onde { margin: 0; font-size: 12.5px; padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); }
 
 .fg-progresso { display: flex; flex-direction: column; gap: 6px; }
-.fg-progresso-trilho { height: 4px; border-radius: 2px; background: #ececeb; overflow: hidden; }
+.fg-progresso-trilho { height: 4px; border-radius: 2px; background: var(--peca-2); overflow: hidden; }
 .fg-progresso-barra { height: 100%; width: 0; background: var(--text); transition: width .25s linear; }
 .fg-progresso-texto { font-size: 12px; color: var(--text-dim); }
 
@@ -5186,13 +5298,13 @@ circle.placa-parafuso {
 .fg-numeros > div > span:first-child { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
 .fg-numeros .fg-valor { font-size: 26px; letter-spacing: -.02em; }
 
-.fg-prontidao, .fg-decisao { padding: var(--s4); border-radius: var(--r3); background: #0a0a0a; color: #fff; }
+.fg-prontidao, .fg-decisao { padding: var(--s4); border-radius: var(--r3); background: var(--accent); color: var(--sobre-accent); }
 .fg-prontidao span, .fg-decisao span { font-size: 10px; letter-spacing: .08em; font-weight: 700; opacity: .65; }
 .fg-prontidao b { display: block; font-size: 22px; letter-spacing: -.01em; margin: 4px 0 var(--s2); }
 .fg-prontidao ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.55; opacity: .85; }
 .fg-prontidao[data-tom="aviso"], .fg-decisao[data-tom="aviso"] { background: #fbf6ea; color: var(--amber); }
 .fg-prontidao[data-tom="erro"], .fg-decisao[data-tom="erro"] { background: #fcf0ee; color: var(--red); }
-.fg-prontidao[data-tom="neutro"] { background: #f1f1f0; color: var(--text); }
+.fg-prontidao[data-tom="neutro"] { background: var(--sup-selecionada); color: var(--text); }
 .fg-decisao { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
 .fg-decisao b { display: block; font-family: var(--font-mono); font-size: 24px; margin-top: 4px; }
 .fg-decisao strong { font-size: 13px; letter-spacing: .06em; }
@@ -5210,13 +5322,13 @@ circle.placa-parafuso {
 .fg-latencia .fg-nota { margin-top: var(--s2); }
 
 .fg-grafico { margin: 0; }
-.fg-grafico svg { width: 100%; height: 90px; display: block; background: #fafaf9; border-radius: var(--r1); }
+.fg-grafico svg { width: 100%; height: 90px; display: block; background: var(--sup-sutil); border-radius: var(--r1); }
 .fg-grafico-linha { fill: none; stroke: var(--text); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 .fg-grafico-media { stroke: var(--text-muted); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .fg-grafico figcaption { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; }
 
 .fg-timeline { display: flex; flex-wrap: wrap; gap: 3px; }
-.fg-timeline span { flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 6px 7px; border-radius: 4px; background: #0a0a0a; color: #fff; }
+.fg-timeline span { flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 6px 7px; border-radius: 4px; background: var(--accent); color: var(--sobre-accent); }
 .fg-timeline span[data-real="false"] { background: transparent; color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 
 .fg-antes-depois { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s3); }
@@ -5244,10 +5356,10 @@ circle.placa-parafuso {
 
 .en-mapa { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
 .en-mapa > i { align-self: center; font-style: normal; color: var(--text-muted); }
-.en-etapa { flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; }
+.en-etapa { flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); }
 .en-etapa b { font-size: 10px; letter-spacing: .07em; }
 .en-etapa span { font-size: 12px; color: var(--text-dim); }
-.en-etapa[data-i="2"], .en-etapa[data-i="3"] { background: #0a0a0a; color: #fff; }
+.en-etapa[data-i="2"], .en-etapa[data-i="3"] { background: var(--accent); color: var(--sobre-accent); }
 .en-etapa[data-i="2"] span, .en-etapa[data-i="3"] span { color: rgba(255,255,255,.75); }
 
 .en-metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s3); }
@@ -5273,8 +5385,8 @@ circle.placa-parafuso {
 .en-delta[data-bom="false"] { color: var(--red); }
 
 .en-fluxo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
-.en-fluxo span { padding: 4px 8px; border-radius: 5px; background: #f1f1f0; color: var(--text-dim); font-weight: 600; letter-spacing: .03em; }
-.en-fluxo span[data-forte="true"] { background: #0a0a0a; color: #fff; }
+.en-fluxo span { padding: 4px 8px; border-radius: 5px; background: var(--sup-selecionada); color: var(--text-dim); font-weight: 600; letter-spacing: .03em; }
+.en-fluxo span[data-forte="true"] { background: var(--accent); color: var(--sobre-accent); }
 
 .en-avancado summary { cursor: pointer; display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
 .en-avancado[open] summary { margin-bottom: var(--s3); }
@@ -5717,4 +5829,53 @@ circle.placa-parafuso {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* O botão do tema.
+
+   Um desenho só, com as duas metades no mesmo SVG: o sol aparece no escuro
+   (é o que o clique vai trazer) e a lua no claro. Dois ícones trocados por
+   JavaScript exigiriam o estado do tema em dois lugares. */
+.tema-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--dur),
+    border-color var(--dur);
+}
+
+.tema-botao:hover {
+  color: var(--text);
+  border-color: var(--hairline);
+}
+
+.tema-icone {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* No claro mostra a lua; no escuro, o sol. O ícone anuncia PARA ONDE o clique
+   leva, que é como todo interruptor de tema que não confunde funciona. */
+:root[data-tema="claro"] .tema-sol,
+:root[data-tema="claro"] .tema-raios {
+  display: none;
+}
+
+:root[data-tema="escuro"] .tema-lua {
+  display: none;
 }
