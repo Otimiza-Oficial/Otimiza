@@ -1460,8 +1460,10 @@ async function loadIdentity() {
       "get_platform_info"
     );
     text("ident-os", `${platform.version} · ${platform.arch}`);
+    text("ficha-so", `${platform.version} · ${platform.arch}`);
   } catch (error) {
     text("ident-os", "indisponível");
+    text("ficha-so", "indisponível");
     console.error(error);
   }
 
@@ -1482,10 +1484,20 @@ async function loadIdentity() {
     text("ident-ram", `${hardware.total_ram_gb.toFixed(1)} GB`);
     text("ident-cpu", hardware.cpu_name);
     text("ident-gpu", hardware.gpu_name);
+
+    // A mesma leitura alimenta a ficha da abertura. Uma segunda consulta
+    // para os mesmos quatro campos custaria o dobro e abriria a porta para
+    // as duas discordarem.
+    text("ficha-cpu", hardware.cpu_name);
+    text("ficha-gpu", hardware.gpu_name);
+    text("ficha-ram", `${hardware.total_ram_gb.toFixed(0)} GB · ${hardware.logical_cores} núcleos lógicos`);
   } catch (error) {
     text("ident-storage", "indisponível");
     text("ident-cpu", "indisponível");
     text("ident-gpu", "indisponível");
+    text("ficha-cpu", "indisponível");
+    text("ficha-gpu", "indisponível");
+    text("ficha-ram", "indisponível");
     console.error(error);
   }
 }
@@ -1756,6 +1768,7 @@ function renderMetrics(metrics: PerformanceMetrics) {
     return;
   }
 
+  renderAbertura(metrics);
   renderEvidencia(metrics.telemetry);
   renderVram(metrics.vram);
   renderLatencia(metrics.latencia);
@@ -1961,6 +1974,146 @@ function valorLegivel(metric: Metric): string {
 /** O valor de uma métrica, ou `null` quando ela não foi medida. */
 function valorDe(telemetry: Telemetry, id: string): number | null {
   return telemetry.metrics[id]?.value ?? null;
+}
+
+// ------------------------------------------------ a abertura do painel
+
+/** Quantas leituras cada linha guarda. */
+const PONTOS_DA_LINHA = 40;
+
+/**
+ * O histórico de cada cartão, só na tela.
+ *
+ * Não vai para disco de propósito: isto é o desenho dos últimos minutos, e o
+ * histórico que o produto guarda para responder "quando piorou?" é outro, é
+ * medido com repetição e tem margem — ver `historico.rs`. Duas memórias de
+ * desempenho com regras diferentes é como um produto passa a mostrar duas
+ * respostas para a mesma pergunta.
+ */
+const linhasDoVivo: Record<string, number[]> = {};
+
+/**
+ * Desenha a linha de um cartão.
+ *
+ * LEITURA AUSENTE NÃO VIRA PONTO. Ela interrompe a série: um `null` empurrado
+ * como zero desenharia uma queda a pique que a máquina nunca teve, e é
+ * exatamente o tipo de gráfico bonito e mentiroso que este produto não faz.
+ * A linha simplesmente não cresce naquele tique, e o cartão inteiro ganha a
+ * marca de sem leitura.
+ */
+function desenharLinha(chave: string, valor: number | null, teto: number) {
+  const serie = (linhasDoVivo[chave] ??= []);
+
+  if (valor !== null && Number.isFinite(valor)) {
+    serie.push(valor);
+    if (serie.length > PONTOS_DA_LINHA) serie.shift();
+  }
+
+  const traco = element<SVGPathElement & HTMLElement>(`monitor-${chave}-linha`).querySelector(
+    ".vivo-traco"
+  ) as SVGPathElement | null;
+  if (!traco) return;
+
+  if (serie.length < 2) {
+    traco.setAttribute("d", "");
+    return;
+  }
+
+  // A escala acompanha o maior valor já visto na janela, com um piso: uma
+  // série inteira entre 2% e 4% desenhada contra 100 vira uma linha reta que
+  // não mostra nada, e desenhada contra o próprio máximo vira uma montanha
+  // que sugere uma carga que não existe. O piso é o meio-termo honesto.
+  const maior = Math.max(teto * 0.25, ...serie);
+  const passo = 100 / (serie.length - 1);
+
+  const d = serie
+    .map((v, i) => {
+      const x = (i * passo).toFixed(2);
+      const y = (28 - Math.min(1, v / maior) * 26).toFixed(2);
+      return `${i === 0 ? "M" : "L"}${x} ${y}`;
+    })
+    .join(" ");
+
+  traco.setAttribute("d", d);
+}
+
+/** Um cartão inteiro: valor, linha, nota e selo. */
+function pintarVivo(
+  chave: string,
+  valor: number | null,
+  nota: string,
+  teto: number,
+  casas = 0,
+  selo?: { texto: string; tom: string }
+) {
+  const cartao = document.querySelector<HTMLElement>(`.vivo[data-metrica="${chave}"]`);
+  if (cartao) cartao.dataset.semLeitura = valor === null ? "sim" : "nao";
+
+  text(`monitor-${chave}-valor`, valor === null ? "—" : valor.toFixed(casas));
+  text(`monitor-${chave}-nota`, nota);
+  desenharLinha(chave, valor, teto);
+
+  const marca = element(`monitor-${chave}-marca`);
+  if (selo) {
+    marca.textContent = selo.texto;
+    marca.dataset.tom = selo.tom;
+    marca.hidden = false;
+  } else {
+    marca.hidden = true;
+  }
+}
+
+function renderAbertura(m: PerformanceMetrics) {
+  const t = m.telemetry;
+
+  pintarVivo(
+    "cpu",
+    valorDe(t, "cpu.usage.overall"),
+    medida(valorDe(t, "cpu.cores.logical"), (n) => `${n.toFixed(0)} núcleos lógicos`),
+    100
+  );
+
+  pintarVivo(
+    "gpu",
+    valorDe(t, "gpu.usage"),
+    quandoFoiLido(t.metrics["gpu.usage"]) === "agora"
+      ? "motores 3D, agora"
+      : `motores 3D, ${quandoFoiLido(t.metrics["gpu.usage"])}`,
+    100
+  );
+
+  const usada = valorDe(t, "ram.used");
+  const total = valorDe(t, "ram.total");
+  pintarVivo(
+    "ram",
+    usada,
+    total === null ? "total não lido" : `de ${total.toFixed(0)} GB`,
+    total ?? 32,
+    1
+  );
+
+  // O selo olha o JITTER, e não a latência. Ping alto e estável dá partida
+  // jogável; ping baixo que pula é o que produz o teletransporte — marcar
+  // aquele de verde seria elogiar o que estraga a partida.
+  const latencia = valorDe(t, "network.latency");
+  const jitter = valorDe(t, "network.jitter");
+  pintarVivo(
+    "rede",
+    latencia,
+    medida(jitter, (n) => `variação de ${n.toFixed(0)} ms`),
+    100,
+    0,
+    jitter === null
+      ? undefined
+      : jitter <= 30
+        ? { texto: "Estável", tom: "bom" }
+        : { texto: "Instável", tom: "alerta" }
+  );
+
+  text(
+    "abertura-sub",
+    `${m.gargalo.classes_avaliadas} de ${m.gargalo.classes_totais} classes avaliadas · leitura de ${new Date().toLocaleTimeString("pt-BR")}`
+  );
 }
 
 /**
@@ -7626,12 +7779,12 @@ async function carregarMonitores() {
               <rect class="monitor-moldura" x="6" y="6" width="188" height="112" rx="7" />
               <rect class="monitor-tela" x="14" y="14" width="172" height="96" rx="3" />
               <text class="monitor-hz" x="100" y="66">${m.hz_atual}</text>
-              <text class="monitor-unidade" x="100" y="82">HZ</text>
+              <text class="vivo-unidade" x="100" y="82">HZ</text>
               <rect class="monitor-pe" x="88" y="118" width="24" height="16" rx="2" />
               <rect class="monitor-base" x="62" y="134" width="76" height="8" rx="4" />
             </svg>
             <div>
-              <p class="monitor-nome">${escapeHtml(m.descricao)}${m.principal ? " · principal" : ""}</p>
+              <p class="vivo-nome">${escapeHtml(m.descricao)}${m.principal ? " · principal" : ""}</p>
               <p class="monitor-detalhe">${m.largura}×${m.altura}${
                 estaAbaixo ? ` · aceita ${maximo} Hz` : " · no máximo"
               }</p>

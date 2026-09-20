@@ -2708,7 +2708,10 @@ button {
 .secao-icone svg {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  /* 1,5 e não 1,8: o traço mais fino é o que separa um ícone de
+     aplicativo de um ícone de barra de ferramentas antiga. A 18 pixels
+     ele ainda lê, e a 1,8 a lateral inteira pesava. */
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -2723,8 +2726,8 @@ button {
 }
 
 .nav-icone {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   flex: none;
   opacity: 0.85;
   transition: opacity var(--dur);
@@ -4743,7 +4746,7 @@ circle.placa-parafuso {
   fill: var(--text);
 }
 
-.monitor-unidade {
+.vivo-unidade {
   font-family: var(--font-mono);
   font-size: 10px;
   text-anchor: middle;
@@ -4756,7 +4759,7 @@ circle.placa-parafuso {
 .monitor[data-abaixo="true"] .monitor-hz { fill: var(--amber); }
 .monitor[data-abaixo="true"] .monitor-moldura { stroke: var(--amber); }
 
-.monitor-nome {
+.vivo-nome {
   font-size: var(--t-body);
   color: var(--text);
 }
@@ -5521,4 +5524,197 @@ circle.placa-parafuso {
 .faltas {
   border-left: 2px solid var(--hairline);
   padding-left: var(--s3);
+}
+
+/* =====================================================================
+   A ABERTURA DO PAINEL
+
+   Cabeçalho, monitores ao vivo e ficha da máquina. O conjunto existe para
+   responder em meio segundo "esta máquina está viva e está sendo lida
+   agora", antes de a tela entregar o veredito.
+
+   Tudo aqui herda os tokens: nenhuma cor, espaçamento ou fonte escrita à
+   mão. Um bloco novo que traga os próprios valores é como a tela volta a
+   parecer montada por acréscimo.
+   ===================================================================== */
+
+.abertura {
+  margin-bottom: var(--s5);
+}
+
+/* O sobrenome pequeno acima do título. Dá hierarquia sem precisar de mais
+   uma linha de texto explicando onde a pessoa está. */
+.abertura-sobrenome {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 var(--s2);
+}
+
+.abertura-titulo {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.abertura-sub {
+  color: var(--text-muted);
+  margin: var(--s2) 0 0;
+}
+
+/* O rótulo que separa as faixas. Mesmo tamanho do sobrenome de propósito:
+   são a mesma voz, e dois tamanhos parecidos lado a lado é o que faz uma
+   tela parecer desalinhada sem ninguém saber dizer por quê. */
+.secao-rotulo {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: var(--s6) 0 var(--s3);
+}
+
+.vivos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s3);
+}
+
+.vivo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3, 10px);
+  background: var(--panel);
+  min-width: 0;
+}
+
+.vivo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.vivo-nome {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* O selo do canto. Só aparece quando há o que dizer — um selo permanente
+   vira decoração e deixa de ser lido. */
+.vivo-marca {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  padding: 2px var(--s2);
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.vivo-marca[data-tom="bom"] {
+  color: var(--ok);
+  border-color: var(--borda-forte);
+}
+
+.vivo-marca[data-tom="alerta"] {
+  color: var(--amber);
+  border-color: rgba(var(--amber-rgb), 0.35);
+}
+
+.vivo-valor {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.vivo-unidade {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 3px;
+  letter-spacing: 0;
+}
+
+/* A linha do tempo do cartão. Altura fixa e pequena: ela é contexto, não
+   gráfico — quem quer o gráfico tem o painel de histórico logo abaixo. */
+.vivo-linha {
+  width: 100%;
+  height: 28px;
+  display: block;
+  overflow: visible;
+}
+
+.vivo-traco {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Sem leitura, sem linha inventada: o cartão fica com o traço tracejado e
+   apagado, que é diferente de uma linha reta no zero. */
+.vivo[data-sem-leitura="sim"] .vivo-traco {
+  opacity: 0.25;
+  stroke-dasharray: 2 3;
+}
+
+.vivo[data-sem-leitura="sim"] .vivo-valor {
+  color: var(--text-muted);
+}
+
+.vivo-nota {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A ficha da máquina: uma faixa só, dividida. Quatro cartões separados
+   davam a mesma informação com quatro bordas a mais — e isto aqui é o que
+   menos muda na tela inteira. */
+.ficha {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--s4);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3, 10px);
+  background: var(--panel);
+}
+
+.ficha-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.ficha-rotulo {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ficha-valor {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

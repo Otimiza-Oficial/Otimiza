@@ -30,29 +30,83 @@
     -->
     <svg class="sprite-icones" aria-hidden="true">
       <defs>
-        <!-- Painel: uma coluna alta e dois blocos, que é a forma da própria tela -->
+        <!--
+          O TRAÇO É O MESMO EM TODOS.
+
+          Todo desenho daqui cabe numa grade de 24, encosta nas margens de 3 e
+          21, e usa só linha — nenhum preenchido. Não é preciosismo: ícone de
+          espessura diferente na mesma coluna faz a lateral parecer montada de
+          pedaços, e é o tipo de coisa que o olho percebe sem saber nomear.
+
+          Quem for acrescentar um: linha de 1,5, cantos arredondados, e a forma
+          mais simples que ainda diz o que é. Na dúvida entre bonito e legível
+          a 18 pixels, legível ganha.
+        -->
+
+        <!-- Início: a casa, e não um painel de blocos. É a primeira parada. -->
         <symbol id="i-painel" viewBox="0 0 24 24">
-          <rect x="3" y="3" width="7.5" height="18" rx="1.5" />
-          <rect x="14.5" y="3" width="6.5" height="7" rx="1.5" />
-          <rect x="14.5" y="14" width="6.5" height="7" rx="1.5" />
+          <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19Z" />
+          <path d="M9.5 20.5v-6h5v6" />
         </symbol>
 
         <!-- Diagnóstico: o traçado de um monitor cardíaco -->
         <symbol id="i-diagnostico" viewBox="0 0 24 24">
-          <path d="M2 12h4l2.5-7 4 14 3-9 2 2h4.5" />
+          <path d="M3 12h3.5l2-5.5 3.5 11 2.5-7 1.5 1.5H21" />
         </symbol>
 
-        <!-- Otimizações: o raio -->
+        <!-- Ajustes: os controles deslizantes, em pé -->
         <symbol id="i-otimizacoes" viewBox="0 0 24 24">
-          <path d="M13.5 2 4 13.5h6.5L10 22l9.5-11.5H13z" />
+          <path d="M6 20V14M6 10V4M12 20v-9M12 7V4M18 20v-4M18 12V4" />
+          <path d="M3.5 12h5M9.5 8.5h5M15.5 15h5" />
         </symbol>
 
-        <!-- Jogos: o controle -->
+        <!-- Jogos: o controle, mais largo e mais leve -->
         <symbol id="i-jogos" viewBox="0 0 24 24">
-          <path d="M7.5 7h9a5.5 5.5 0 0 1 5.4 4.4l.8 4.2A3 3 0 0 1 19 19a3 3 0 0 1-2.3-1.1L15.4 16H8.6l-1.3 1.9A3 3 0 0 1 5 19a3 3 0 0 1-3.7-3.4l.8-4.2A5.5 5.5 0 0 1 7.5 7Z" />
-          <path d="M7 11v3M5.5 12.5h3" />
-          <circle cx="16" cy="11.5" r="1" />
-          <circle cx="18.5" cy="14" r="1" />
+          <path d="M8 8h8a5 5 0 0 1 4.9 4l.7 3.6A2.8 2.8 0 0 1 18.8 19a2.8 2.8 0 0 1-2.2-1.1L15.6 16.5H8.4l-1 1.4A2.8 2.8 0 0 1 5.2 19a2.8 2.8 0 0 1-2.8-3.4L3.1 12A5 5 0 0 1 8 8Z" />
+          <path d="M7.5 11.5v3M6 13h3" />
+          <path d="M16 12h.01M18 14.5h.01" />
+        </symbol>
+
+        <!-- Biblioteca: as capas lado a lado -->
+        <symbol id="i-biblioteca" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="6" height="16" rx="1.5" />
+          <rect x="11" y="4" width="4.5" height="16" rx="1.5" />
+          <path d="M17.6 5.2 21 6.1l-3.1 13-2.2-.6" />
+        </symbol>
+
+        <!-- Instaladores: a seta que desce para a bandeja -->
+        <symbol id="i-instaladores" viewBox="0 0 24 24">
+          <path d="M12 3.5v11" />
+          <path d="M7.5 10.5 12 15l4.5-4.5" />
+          <path d="M4 16.5v2A2 2 0 0 0 6 20.5h12a2 2 0 0 0 2-2v-2" />
+        </symbol>
+
+        <!-- Placa de vídeo: a placa com os dois ventiladores -->
+        <symbol id="i-gpu" viewBox="0 0 24 24">
+          <rect x="2.5" y="6" width="19" height="11" rx="2" />
+          <circle cx="8" cy="11.5" r="2.4" />
+          <circle cx="15.5" cy="11.5" r="2.4" />
+          <path d="M6 17v3.5M18 17v3.5" />
+        </symbol>
+
+        <!-- BIOS: o chip com as pernas -->
+        <symbol id="i-bios" viewBox="0 0 24 24">
+          <rect x="7" y="7" width="10" height="10" rx="1.5" />
+          <path d="M10 3.5V7M14 3.5V7M10 17v3.5M14 17v3.5M3.5 10H7M3.5 14H7M17 10h3.5M17 14h3.5" />
+        </symbol>
+
+        <!-- Núcleos: a grade de núcleos com um aceso -->
+        <symbol id="i-affinity" viewBox="0 0 24 24">
+          <rect x="4" y="4" width="6.5" height="6.5" rx="1.2" />
+          <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" />
+          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" />
+          <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" />
+        </symbol>
+
+        <!-- Assistente: o balão com a faísca -->
+        <symbol id="i-assistente" viewBox="0 0 24 24">
+          <path d="M20.5 12.5a7.5 7.5 0 0 1-10.9 6.7L4 20.5l1.4-5.2A7.5 7.5 0 1 1 20.5 12.5Z" />
+          <path d="M12 8.5 12.9 11l2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9Z" />
         </symbol>
 
         <!-- Geração de quadros: dois quadros reais e o gerado entre eles -->
@@ -67,19 +121,18 @@
           <path d="M3 17h3l2.5-7 3 10 3-14 2.5 11H21" />
         </symbol>
 
-        <!-- Espaço: o disco, com a fatia que indica ocupação -->
+        <!-- Espaço: o disco visto de lado, com os pratos empilhados -->
         <symbol id="i-espaco" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 12V3a9 9 0 0 1 7.8 4.5Z" />
-          <circle cx="12" cy="12" r="2.5" />
+          <path d="M20 6.5c0 1.4-3.6 2.5-8 2.5S4 7.9 4 6.5 7.6 4 12 4s8 1.1 8 2.5Z" />
+          <path d="M4 6.5v11C4 18.9 7.6 20 12 20s8-1.1 8-2.5v-11" />
+          <path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" />
         </symbol>
 
-        <!-- Sistema: os controles deslizantes -->
+        <!-- Sistema: a janela com a lista do que roda atrás -->
         <symbol id="i-sistema" viewBox="0 0 24 24">
-          <path d="M3 7h6M15 7h6M3 12h12M20 12h1M3 17h3M12 17h9" />
-          <circle cx="12" cy="7" r="2.2" />
-          <circle cx="17.5" cy="12" r="2.2" />
-          <circle cx="9" cy="17" r="2.2" />
+          <rect x="3" y="4" width="18" height="16" rx="2.5" />
+          <path d="M3 8.5h18" />
+          <path d="M7 12.5h10M7 16h6" />
         </symbol>
 
         <!-- Reparo: a chave de fenda consertando o que quebrou -->
@@ -465,7 +518,7 @@
           <button class="nav" role="tab" data-tab="painel" aria-selected="true"
                   aria-controls="tab-painel" id="tabbtn-painel">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-painel" /></svg>
-            <span class="nav-rotulo">Painel</span>
+            <span class="nav-rotulo">Início</span>
           </button>
 
           <button class="nav" role="tab" data-tab="diagnostico" aria-selected="false"
@@ -546,17 +599,131 @@
             <nav class="trilha" aria-label="Trilha">
               <span>Otimiza</span>
               <span class="trilha-sep" aria-hidden="true">/</span>
-              <span id="trilha-atual">Painel</span>
+              <span id="trilha-atual">Início</span>
             </nav>
             <div class="secao-titulo">
               <span class="secao-icone" aria-hidden="true"><svg><use id="secao-icone-uso" href="#i-painel" /></svg></span>
-              <h2 id="secao-nome">Painel</h2>
+              <h2 id="secao-nome">Início</h2>
             </div>
           </header>
 
         <main class="stage">
         <!-- ============================================================ PAINEL -->
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
+          <!--
+            A ABERTURA.
+
+            O que vem antes do veredito é de propósito UMA LINHA DE SINAIS
+            VITAIS, e não um segundo diagnóstico. Serve para a tela responder
+            em meio segundo "esta máquina está viva e está sendo lida agora" —
+            que é o que o olho procura ao abrir qualquer monitor — e só então
+            entregar a frase que interessa.
+
+            A REGRA DO PRODUTO VALE AQUI TAMBÉM. Cada cartão mostra "—" quando
+            a leitura não veio, e a linha de baixo diz de onde o número saiu.
+            Um cartão grande e bonito com um zero inventado seria pior que a
+            tela feia que ele substituiu.
+          -->
+          <header class="abertura">
+            <p class="abertura-sobrenome">Otimização</p>
+            <h1 class="abertura-titulo">Início</h1>
+            <p class="abertura-sub" id="abertura-sub">Lendo esta máquina…</p>
+          </header>
+
+          <p class="secao-rotulo">Monitores ao vivo</p>
+
+          <div class="vivos" id="vivos">
+            <article class="vivo" data-metrica="cpu">
+              <header class="vivo-topo">
+                <span class="vivo-nome">CPU</span>
+                <span class="vivo-marca" id="monitor-cpu-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-cpu-valor">—</span><span class="vivo-unidade">%</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-cpu-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-cpu-nota">—</p>
+            </article>
+
+            <article class="vivo" data-metrica="gpu">
+              <header class="vivo-topo">
+                <span class="vivo-nome">GPU</span>
+                <span class="vivo-marca" id="monitor-gpu-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-gpu-valor">—</span><span class="vivo-unidade">%</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-gpu-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-gpu-nota">—</p>
+            </article>
+
+            <article class="vivo" data-metrica="ram">
+              <header class="vivo-topo">
+                <span class="vivo-nome">Memória</span>
+                <span class="vivo-marca" id="monitor-ram-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-ram-valor">—</span><span class="vivo-unidade">GB</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-ram-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-ram-nota">—</p>
+            </article>
+
+            <!--
+              LATÊNCIA, e não "ping".
+
+              O selo ao lado diz ESTÁVEL ou INSTÁVEL, e ele olha o jitter — não
+              o número grande. Um ping de 120 ms estável dá partida jogável; um
+              de 40 que vira 90 e volta é o que produz o teletransporte. Marcar
+              de verde um ping baixo e instável seria elogiar exatamente o que
+              estraga a partida.
+            -->
+            <article class="vivo" data-metrica="rede">
+              <header class="vivo-topo">
+                <span class="vivo-nome">Latência</span>
+                <span class="vivo-marca" id="monitor-rede-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-rede-valor">—</span><span class="vivo-unidade">ms</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-rede-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-rede-nota">—</p>
+            </article>
+          </div>
+
+          <p class="secao-rotulo">Sistema</p>
+
+          <div class="ficha" id="ficha">
+            <div class="ficha-item">
+              <span class="ficha-rotulo">CPU</span>
+              <span class="ficha-valor" id="ficha-cpu">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">GPU</span>
+              <span class="ficha-valor" id="ficha-gpu">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">RAM</span>
+              <span class="ficha-valor" id="ficha-ram">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">Sistema</span>
+              <span class="ficha-valor" id="ficha-so">—</span>
+            </div>
+          </div>
+
           <!--
             O VEREDITO
 
