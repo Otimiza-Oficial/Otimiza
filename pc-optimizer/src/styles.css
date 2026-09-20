@@ -5496,3 +5496,19 @@ circle.placa-parafuso {
   color: var(--red);
   max-width: 48ch;
 }
+
+/* O perfil que a medição escolheu.
+
+   A marca fica no BOTÃO, e não numa lista à parte: o cliente lê o plano e o
+   dedo já está sobre o botão certo. Os outros dois continuam clicáveis — a
+   escolha é dele, e o produto recomenda em vez de decidir por ele. */
+.btn[data-recomendado="sim"] {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.btn[data-recomendado="sim"]::after {
+  content: " · recomendado";
+  color: var(--amber);
+  font-size: 0.85em;
+}

@@ -2015,12 +2015,28 @@
               arquivo ao sair, apagando o que fizermos agora.
             </p>
 
+            <!--
+              OS TRÊS BOTÕES ABAIXO SÃO A PERGUNTA ERRADA FEITA AO CLIENTE.
+
+              Ele não tem como saber qual dos três o problema DELE pede — e em
+              boa parte dos casos a resposta certa é nenhum: num jogo preso no
+              processador, baixar configuração gráfica tira trabalho da placa,
+              que já estava sobrando. O jogo fica feio e o número não sai do
+              lugar.
+
+              "Qual o meu caso pede" responde a partir do que foi medido, e
+              responde "nenhum" quando é o caso. É a regra do produto — nenhum
+              ajuste genérico antes de classificar o gargalo — virando botão.
+            -->
             <div class="row-actions">
               <button id="cfgjogo-analisar" class="btn" data-custo="~1 s">Analisar</button>
+              <button id="cfgjogo-plano" class="btn" data-custo="~3 s">Qual o meu caso pede?</button>
               <button id="cfgjogo-sem-teto" class="btn btn-primary">Tirar o limite de FPS</button>
               <button id="cfgjogo-equilibrado" class="btn">Equilibrado</button>
               <button id="cfgjogo-competitivo" class="btn">Competitivo</button>
             </div>
+
+            <div id="cfgjogo-plano-result"></div>
 
             <p id="cfgjogo-status" class="status"></p>
             <div id="cfgjogo-result" class="resultado" data-vazio="Lê a configuração do jogo instalado e mostra o que está pesando. Nada é alterado sem você confirmar o que vai mudar."></div>

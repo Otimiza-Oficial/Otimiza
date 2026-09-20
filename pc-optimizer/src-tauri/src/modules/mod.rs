@@ -22,6 +22,7 @@ pub mod medicoes;
 pub mod pontuacao;
 pub mod regressao;
 pub mod optimizer;
+pub mod orquestrador;
 pub mod preferences;
 pub mod prova;
 pub mod repeticoes;

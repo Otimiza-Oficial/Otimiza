@@ -130,6 +130,69 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: o que fazer com a configuração do jogo, segundo o que foi medido.
+///
+/// NÃO APLICA NADA. Devolve um plano, e o plano sai com o nome do perfil que
+/// `apply_game_profile` aceita — junto com as razões medidas, o que o ajuste
+/// não resolve, e o que ninguém pôde verificar.
+///
+/// Junta as três leituras que decidem: a classificação de gargalo e a pressão
+/// de memória de vídeo, que vêm da coleta, e o laboratório de streaming, que
+/// precisa saber em que disco o jogo mora.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNaTela, String> {
+    use crate::modules::windows::{configjogo, discodojogo};
+    use crate::modules::{orquestrador, streaming};
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    // As duas leituras caras saem da thread do executor, como todo o resto que
+    // custa neste produto.
+    let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
+        .await
+        .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
+    let config = tokio::task::spawn_blocking(configjogo::analyze)
+        .await
+        .map_err(|e| format!("a leitura da configuração do jogo não terminou: {e}"))?;
+
+    let midia = discodojogo::em_disco_mecanico(&relatorio.jogos)
+        .first()
+        .map(|o| streaming::Midia::from(o.midia));
+
+    let analise = streaming::analisar(&metricas.telemetry, midia);
+    let plano = orquestrador::planejar(
+        &metricas.gargalo,
+        &metricas.vram,
+        &analise,
+        config.arquivo.is_some(),
+    );
+
+    Ok(PlanoNaTela {
+        // O nome sai daqui e não da tela: uma segunda tabela de nomes na tela
+        // sairia do lugar sem ninguém perceber.
+        perfil_para_aplicar: match plano.decisao {
+            orquestrador::Decisao::Aplicar(p) => Some(p.nome().to_string()),
+            _ => None,
+        },
+        plano,
+        jogo: config.jogo,
+    })
+}
+
+/// O plano com o nome que o comando de aplicar aceita.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct PlanoNaTela {
+    pub plano: crate::modules::orquestrador::Plano,
+    /// Ausente quando o plano não manda aplicar nada.
+    pub perfil_para_aplicar: Option<String>,
+    pub jogo: String,
+}
+
 /// Comando: o laboratório de streaming de assets.
 ///
 /// COMANDO, e não um campo da coleta a cada dois segundos. Descobrir em que
@@ -4049,6 +4112,23 @@ mod tests {
         );
     }
 
+    /// O plano fala a língua de quem aplica.
+    ///
+    /// O orquestrador devolve o nome do perfil em texto, e é esse texto que a
+    /// tela manda para `apply_game_profile`. Se as duas tabelas saírem do
+    /// lugar, o cliente recebe "perfil desconhecido" depois de o produto ter
+    /// recomendado aquele perfil — e ninguém descobre até acontecer.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn o_plano_fala_a_lingua_de_quem_aplica() {
+        use crate::modules::orquestrador::Perfil;
+
+        for p in Perfil::TODOS {
+            super::perfil_por_nome(p.nome())
+                .unwrap_or_else(|e| panic!("o perfil {:?} saiu do lugar: {e}", p));
+        }
+    }
+
     const LIVRES: &[&str] = &[
         "placa_de_video",
         "memoria_instalada",
@@ -4064,6 +4144,7 @@ mod tests {
         "capturar_baseline_repetido",
         "protocolo_do_perfil",
         "laboratorio_de_streaming",
+        "plano_de_renderizacao",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

@@ -8063,6 +8063,79 @@ function renderConfigJogo(r: ConfigJogoReport) {
     `<p class="hint">Arquivo: <code>${escapeHtml(r.arquivo)}</code></p>${caros}`;
 }
 
+// ------------------------------- qual perfil o caso medido pede
+
+interface PlanoRenderizacao {
+  plano: {
+    decisao: "SemEvidencia" | "NaoResolveAqui" | { Aplicar: string };
+    porque: string[];
+    contra: string[];
+    nao_verificado: string[];
+    exige_baseline: boolean;
+  };
+  /** Ausente quando o plano não manda aplicar nada. */
+  perfil_para_aplicar: string | null;
+  jogo: string;
+}
+
+async function planoDeRenderizacao() {
+  const botao = element<HTMLButtonElement>("cfgjogo-plano");
+  botao.disabled = true;
+  setStatus("cfgjogo-status", "Medindo e cruzando com a configuração do jogo…", "progress");
+
+  try {
+    const r = await invoke<PlanoRenderizacao>("plano_de_renderizacao");
+    renderPlanoDeRenderizacao(r);
+    setStatus("cfgjogo-status", "", "ok");
+  } catch (error) {
+    setStatus("cfgjogo-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderPlanoDeRenderizacao(r: PlanoRenderizacao) {
+  // A marca de recomendado sai de TODOS os botões antes de entrar em um. Sem
+  // isto, um plano anterior deixaria dois perfis marcados ao mesmo tempo.
+  for (const meta of Object.values(PERFIS)) {
+    delete element(meta.botao).dataset.recomendado;
+  }
+
+  const escolhido = r.perfil_para_aplicar;
+  if (escolhido && PERFIS[escolhido]) {
+    element(PERFIS[escolhido].botao).dataset.recomendado = "sim";
+  }
+
+  const titulo = escolhido
+    ? `O seu caso pede: ${PERFIS[escolhido].nome}`
+    : r.plano.decisao === "SemEvidencia"
+      ? "Ainda não dá para dizer"
+      : "Nenhum destes resolve o seu caso";
+
+  const lista = (itens: string[], rotulo: string, classe: string) =>
+    itens.length === 0
+      ? ""
+      : `<p class="${classe}"><strong>${rotulo}</strong> ${escapeHtml(itens.join(" "))}</p>`;
+
+  // A linha da linha de base não é conselho solto: ela só aparece quando há o
+  // que aplicar, porque é exatamente aí que deixar de medir antes custa a
+  // resposta para "melhorou?".
+  const base = r.plano.exige_baseline
+    ? `<p class="finding-advice">Guarde a linha de base desta máquina ANTES de aplicar. Sem o retrato de antes, não há como responder depois se melhorou — e quanto.</p>`
+    : "";
+
+  element("cfgjogo-plano-result").innerHTML = `
+    <article class="finding" data-severity="${escolhido ? "Important" : "Ok"}" style="--i:0">
+      <div class="finding-top">
+        <h3>${escapeHtml(titulo)}</h3>
+      </div>
+      ${lista(r.plano.porque, "Porque", "finding-measured")}
+      ${lista(r.plano.contra, "O que isto não resolve:", "hint")}
+      ${base}
+      ${lista(r.plano.nao_verificado, "Não foi possível verificar:", "hint")}
+    </article>`;
+}
+
 /**
  * Mostra o que o perfil MUDARIA, e só aplica depois do "sim".
  *
@@ -9195,6 +9268,7 @@ function wireControls() {
   void carregarMemoria();
   void carregarMonitores();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
+  element("cfgjogo-plano").addEventListener("click", planoDeRenderizacao);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
   element("cfgjogo-competitivo").addEventListener("click", () => aplicarPerfilDoJogo("competitivo"));
