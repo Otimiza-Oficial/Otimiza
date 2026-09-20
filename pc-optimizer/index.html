@@ -672,16 +672,26 @@
             duplicar isso em sete blocos de HTML seria pedir para eles saírem de
             sincronia na primeira renomeação.
           -->
-          <header class="secao-cabecalho">
-            <nav class="trilha" aria-label="Trilha">
-              <span>Otimiza</span>
-              <span class="trilha-sep" aria-hidden="true">/</span>
-              <span id="trilha-atual">Início</span>
-            </nav>
-            <div class="secao-titulo">
-              <span class="secao-icone" aria-hidden="true"><svg><use id="secao-icone-uso" href="#i-painel" /></svg></span>
-              <h2 id="secao-nome">Início</h2>
-            </div>
+          <!--
+            O CABEÇALHO DA SEÇÃO, NO MESMO DESENHO DE TODAS AS ABERTURAS.
+
+            Era uma trilha ("Otimiza / Início") mais um ícone mais o nome —
+            três elementos para dizer uma coisa. A trilha não levava a lugar
+            nenhum: não há nível acima de uma aba, então ela era enfeite com
+            cara de navegação. O ícone repetia o da lateral, a dois
+            centímetros de distância.
+
+            Ficou o par que as abas novas já usavam: um rótulo pequeno em
+            maiúscula dizendo o GRUPO, e o nome grande embaixo. Um desenho só
+            para a tela inteira.
+
+            E ele SOME nas abas que já trazem a própria abertura — duas vezes
+            o mesmo título, um grande e um maior, é o tipo de coisa que faz a
+            tela parecer montada por acréscimo.
+          -->
+          <header class="secao-cabecalho" id="secao-cabecalho">
+            <p class="abertura-sobrenome" id="secao-grupo">Monitorar</p>
+            <h2 class="abertura-titulo" id="secao-nome">Início</h2>
           </header>
 
         <main class="stage">

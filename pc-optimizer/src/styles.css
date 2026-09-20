@@ -6509,3 +6509,95 @@ circle.placa-parafuso {
   border-color: var(--amber);
   box-shadow: inset 0 0 0 1px var(--amber);
 }
+
+/* =====================================================================
+   A LATERAL RECOLHIDA
+
+   Ela passou a ser o padrao, entao ela precisa funcionar sozinha: o icone
+   e a unica coisa que identifica a secao, e o item ativo precisa ser
+   obvio sem o rotulo ao lado.
+   ===================================================================== */
+
+.corpo[data-recolhida="true"] .nav {
+  position: relative;
+  height: 38px;
+  border-radius: var(--r2);
+}
+
+/* A BARRA NA BORDA, e nao so o fundo.
+
+   Com rotulo, o fundo mais claro basta para dizer qual item esta aberto.
+   Sem rotulo, os itens viram uma coluna de quadrados iguais e o fundo
+   sozinho fica fraco demais para achar de relance. A barra resolve, e e o
+   mesmo desenho que todo aplicativo de lateral estreita usa. */
+.corpo[data-recolhida="true"] .nav[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.corpo[data-recolhida="true"] .nav-icone {
+  width: 19px;
+  height: 19px;
+}
+
+/* Os grupos viram um fio. Sem rotulo eles nao podem sumir de vez: e o fio
+   que separa "monitorar" de "agir", e sem ele a coluna fica um bloco unico
+   de onze icones sem hierarquia nenhuma. */
+.corpo[data-recolhida="true"] .lateral-grupo {
+  height: 1px;
+  margin: var(--s2) auto;
+  width: 18px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+/* O cabecalho da secao, no mesmo desenho das aberturas das abas novas. */
+.secao-cabecalho {
+  margin-bottom: var(--s5);
+}
+
+.secao-cabecalho .abertura-titulo {
+  font-size: 1.75rem;
+}
+
+/* =====================================================================
+   O RESPIRO DO PALCO
+
+   As referencias do dono sao notavelmente mais folgadas que esta tela
+   estava: mais margem do lado da lateral, mais ar entre as faixas, e
+   cartoes com mais folga por dentro.
+
+   Nao e gosto: numa tela cheia de numero e paragrafo curto, o que separa
+   um painel de controle de uma planilha e o espaco. O conteudo e o mesmo.
+   ===================================================================== */
+
+.palco {
+  padding: var(--s5) var(--s6) var(--s6) var(--s5);
+  gap: var(--s5);
+}
+
+/* O cabecalho da secao ja tem a propria margem embaixo; o padding de cima
+   era para compensar uma trilha que nao existe mais. */
+.secao-cabecalho {
+  padding: 0;
+}
+
+.tab-panel {
+  gap: var(--s5);
+}
+
+/* Os cartoes de leitura ao vivo e a ficha, com a folga das referencias. */
+.vivo,
+.ficha {
+  padding: var(--s5);
+}
+
+.vivo {
+  gap: var(--s3);
+}

@@ -1350,6 +1350,36 @@ let planoVistoriado = false;
 let discosCarregados = false;
 let biosCarregada = false;
 
+/**
+ * Põe o cabeçalho da seção de acordo com o item da lateral.
+ *
+ * SEPARADA DE `showTab` porque ela precisa rodar TAMBÉM NA ABERTURA, e
+ * `showTab` não roda: o estado inicial vem do HTML. O defeito que isso
+ * causou foi visível — o programa abria com o cabeçalho da seção e a
+ * abertura da aba, os dois dizendo "Início", um embaixo do outro.
+ *
+ * Chamá-la é barato e não tem efeito colateral; chamar `showTab` na
+ * abertura teria, porque ele dispara as leituras caras de cada aba.
+ */
+function sincronizarCabecalho(item: HTMLElement, name: string) {
+  const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
+  text("secao-nome", rotulo);
+
+  // O GRUPO da lateral vira o rótulo pequeno do cabeçalho. Ele já existe
+  // como separador da navegação ("Monitorar", "Agir"), e reaproveitá-lo é o
+  // que impede a tela de ter uma segunda tabela de nomes para manter.
+  let grupo = item.previousElementSibling;
+  while (grupo && !grupo.classList.contains("lateral-grupo")) {
+    grupo = grupo.previousElementSibling;
+  }
+  text("secao-grupo", grupo?.textContent?.trim() ?? "");
+
+  // O cabeçalho some quando a aba já traz a própria abertura. Dois títulos,
+  // um grande e um maior, é o que faz a tela parecer montada por acréscimo.
+  const painel = document.getElementById(`tab-${name}`);
+  element("secao-cabecalho").hidden = !!painel?.querySelector(".abertura");
+}
+
 function showTab(name: string) {
   if (name === "energia") {
     void carregarMotorDeEnergia({ pedirAdmin: askForAdmin });
@@ -1410,25 +1440,7 @@ function showTab(name: string) {
     // alguém renomeasse uma seção.
     if (!escolhida) return;
 
-    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
-
-    // O TÍTULO COPIA O DESENHO DA LATERAL, e não um nome que os dois teriam de
-    // combinar. Antes cada lado tinha a sua cópia da forma em CSS: renomear ou
-    // redesenhar um ícone exigia lembrar do outro, e esquecer não quebrava
-    // nada — só deixava a tela mostrando dois desenhos diferentes para a mesma
-    // seção. Copiando a referência, é impossível saírem de sincronia.
-    const referencia = item
-      .querySelector(".nav-icone use")
-      ?.getAttribute("href");
-
-    text("secao-nome", rotulo);
-    text("trilha-atual", rotulo);
-
-    if (referencia) {
-      document
-        .getElementById("secao-icone-uso")
-        ?.setAttribute("href", referencia);
-    }
+    sincronizarCabecalho(item, name);
   });
 }
 
@@ -10440,7 +10452,19 @@ function wireControls() {
 
   secoes.forEach((item) => {
     item.addEventListener("click", () => showTab(item.dataset.tab!));
+
+    // A DICA SAI DO PRÓPRIO RÓTULO. Com a lateral recolhida — que agora é o
+    // padrão — o ícone é a única coisa na tela, e treze quadrados sem nome
+    // viram adivinhação. Copiar o rótulo em vez de escrever o nome de novo é
+    // o que impede os dois de saírem de sincronia numa renomeação.
+    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim();
+    if (rotulo) item.title = rotulo;
   });
+
+  // O cabeçalho da aba que já vem aberta. Sem isto o programa abre com o
+  // título duplicado até a primeira troca de aba.
+  const inicial = secoes.find((s) => s.getAttribute("aria-selected") === "true");
+  if (inicial) sincronizarCabecalho(inicial, inicial.dataset.tab!);
 
   // Setas percorrem as seções, como manda o padrão de acessibilidade para
   // navegação em abas — e é como quem usa teclado espera que funcione. Agora
@@ -10464,7 +10488,13 @@ function wireControls() {
   const corpo = document.querySelector<HTMLElement>(".corpo")!;
   const alternar = element<HTMLButtonElement>("toggle-lateral");
 
-  if (localStorage.getItem("lateral-recolhida") === "sim") {
+  // RECOLHIDA POR PADRÃO. A lateral com rótulo ocupa um quinto da largura
+  // para repetir sete palavras que o ícone já diz, e numa tela de notebook —
+  // que é o público deste produto — isso é o espaço de um painel inteiro.
+  //
+  // Quem preferir o rótulo abre, e a escolha fica guardada; o que muda é só
+  // o lado para o qual o padrão pende.
+  if (localStorage.getItem("lateral-recolhida") !== "nao") {
     corpo.dataset.recolhida = "true";
     alternar.setAttribute("aria-expanded", "false");
   }
