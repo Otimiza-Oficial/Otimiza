@@ -8557,10 +8557,12 @@ async function carregarAjustesDoDriver() {
 
   if (!disponivel) {
     lista.innerHTML = "";
+    desenharPerfisDaPlaca(dados);
     return;
   }
 
   desenharLimitesDoDriver(dados.limites);
+  desenharPerfisDaPlaca(dados);
 
   lista.innerHTML = dados.ajustes
     .map(
@@ -8610,6 +8612,152 @@ async function carregarAjustesDoDriver() {
       }
     };
   });
+}
+
+
+// ------------------------------------------------------- perfis da placa
+
+/**
+ * Os perfis, que são COMBINAÇÕES dos cinco ajustes do driver.
+ *
+ * TRÊS, e não sete. A referência que inspirou esta tela tem sete perfis sobre
+ * um punhado de opções de liga-desliga — "Básico", "Casual", "FPS", "FPS 2.0",
+ * "Avançado". Sete nomes para três respostas não é mais escolha: é mais
+ * promessa, e o cliente que liga o "FPS 2.0" acreditando que ele faz algo além
+ * do "FPS" está pagando por um nome.
+ *
+ * Cada perfil declara os ids que liga, e a tela MOSTRA essa lista. É o que
+ * permite conferir que o botão grande não faz nada além do que os
+ * interruptores do lado fazem — e desfazer um a um depois.
+ */
+const PERFIS_DA_PLACA: {
+  id: string;
+  nome: string;
+  resumo: string;
+  ajustes: string[];
+}[] = [
+  {
+    id: "equilibrado",
+    nome: "Equilibrado",
+    resumo:
+      "O que quase toda máquina ganha sem trocar nada de lugar: a placa para de baixar o clock entre quadros e o cache de shader fica ligado.",
+    ajustes: ["energia", "cache_shader"],
+  },
+  {
+    id: "competitivo",
+    nome: "Competitivo",
+    resumo:
+      "O de cima, mais a fila de quadros curta e a sincronia vertical desligada. Troca suavidade por resposta — e pode aparecer rasgo na imagem.",
+    ajustes: ["energia", "cache_shader", "latencia", "vsync"],
+  },
+  {
+    id: "maximo",
+    nome: "Tudo que há",
+    resumo:
+      "Os cinco ajustes. Inclui a filtragem de textura em desempenho, que é o único deles que muda como o jogo se parece.",
+    ajustes: ["energia", "cache_shader", "latencia", "vsync", "textura"],
+  },
+];
+
+/**
+ * Desenha os perfis, dizendo quais deles já estão inteiros.
+ *
+ * "Aplicado" aqui significa que TODOS os ajustes do perfil estão ligados — e
+ * não que alguém clicou neste botão. Guardar "o cliente escolheu o perfil X"
+ * seria uma segunda verdade ao lado do histórico de mudanças, e as duas
+ * discordariam assim que ele desfizesse um ajuste sozinho.
+ */
+function desenharPerfisDaPlaca(dados: PainelDoDriver) {
+  const disponivel = dados.estado === "Disponivel";
+  const ligados = new Set(dados.ajustes.filter((a) => a.aplicado).map((a) => a.id));
+
+  element("gpu-perfis").innerHTML = PERFIS_DA_PLACA.map((perfil) => {
+    const inteiro = perfil.ajustes.every((id) => ligados.has(id));
+    const quantos = perfil.ajustes.filter((id) => ligados.has(id)).length;
+
+    const nomes = perfil.ajustes
+      .map((id) => dados.ajustes.find((a) => a.id === id)?.titulo ?? id)
+      .map((t) => `<li>${escapeHtml(t)}</li>`)
+      .join("");
+
+    return `
+      <article class="gpu-perfil" data-inteiro="${inteiro}">
+        <div class="gpu-perfil-topo">
+          <span class="gpu-perfil-nome">${escapeHtml(perfil.nome)}</span>
+          <span class="gpu-perfil-conta">${quantos} de ${perfil.ajustes.length} ligados</span>
+        </div>
+        <p class="gpu-perfil-resumo">${escapeHtml(perfil.resumo)}</p>
+        <details class="gpu-perfil-detalhe">
+          <summary>O que ele liga</summary>
+          <ul>${nomes}</ul>
+        </details>
+        <button class="btn" data-perfil="${perfil.id}" ${
+          disponivel && !inteiro ? "" : "disabled"
+        }>${inteiro ? "Já está aplicado" : "Aplicar os que faltam"}</button>
+      </article>`;
+  }).join("");
+
+  for (const botao of element("gpu-perfis").querySelectorAll<HTMLButtonElement>("[data-perfil]")) {
+    botao.onclick = () => void aplicarPerfilDaPlaca(botao, dados);
+  }
+}
+
+async function aplicarPerfilDaPlaca(botao: HTMLButtonElement, dados: PainelDoDriver) {
+  const perfil = PERFIS_DA_PLACA.find((p) => p.id === botao.dataset.perfil);
+  if (!perfil) return;
+
+  // O driver só salva elevado, e isso vale para o perfil como vale para o
+  // ajuste solto.
+  if (!isElevated) {
+    askForAdmin(
+      "O driver da NVIDIA só salva ajustes com permissão de administrador. " +
+        "Podemos reabrir o Otimiza com essa permissão?"
+    );
+    return;
+  }
+
+  const ligados = new Set(dados.ajustes.filter((a) => a.aplicado).map((a) => a.id));
+  const faltam = perfil.ajustes.filter((id) => !ligados.has(id));
+
+  botao.disabled = true;
+  setStatus("gpu-perfis-status", `Aplicando ${faltam.length} ajuste(s)…`, "progress");
+
+  // UM DE CADA VEZ, e parando no primeiro que falhar. Seguir depois de uma
+  // recusa deixaria a máquina num estado que nem o perfil nem o cliente
+  // descrevem — metade de um perfil não é nada.
+  for (const id of faltam) {
+    try {
+      await invoke<OptimizationOutcome>("aplicar_ajuste_nvidia", { opcao: id });
+    } catch (error) {
+      setStatus("gpu-perfis-status", String(error), "error");
+      await carregarAjustesDoDriver();
+      return;
+    }
+  }
+
+  setStatus(
+    "gpu-perfis-status",
+    `Pronto. Cada um entrou no histórico e pode ser desfeito sozinho.`,
+    "ok"
+  );
+  await carregarAjustesDoDriver();
+}
+
+/** O cartão da placa detectada, no alto da aba. */
+async function carregarCartaoDaPlaca() {
+  try {
+    const p = await invoke<PlacaDeVideo>("placa_de_video");
+
+    text("gpu-cartao-nome", p.nome ?? "Placa não identificada");
+    text(
+      "gpu-cartao-nota",
+      p.driver ? `driver ${p.driver}` : "versão do driver não lida"
+    );
+    element("gpu-cartao").dataset.marca = p.marca;
+  } catch {
+    text("gpu-cartao-nome", "Placa não identificada");
+    text("gpu-cartao-nota", "a leitura da placa falhou");
+  }
 }
 
 async function carregarPlaca() {
@@ -9950,6 +10098,7 @@ function wireControls() {
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
   ligarTema();
   ligarBiblioteca();
+  void carregarCartaoDaPlaca();
   void carregarBiblioteca();
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);

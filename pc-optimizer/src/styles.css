@@ -6150,3 +6150,150 @@ circle.placa-parafuso {
 .jogo-tile-arte {
   position: relative;
 }
+
+/* =====================================================================
+   A ABA DA PLACA DE VÍDEO
+   ===================================================================== */
+
+.abertura-gpu {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s4);
+}
+
+.gpu-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--panel);
+  min-width: 220px;
+}
+
+.gpu-cartao-nome {
+  font-weight: 600;
+}
+
+.gpu-cartao-nota {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.gpu-marcas {
+  display: flex;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.gpu-marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--t-lead);
+  cursor: pointer;
+}
+
+.gpu-marca[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* A aba da AMD fica visível e desligada, dizendo por quê. Escondê-la faria o
+   cliente com Radeon concluir que o produto não sabe que a placa dele existe;
+   ligá-la sem ter o que fazer seria pior ainda. */
+.gpu-marca:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gpu-marca-nota {
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gpu-colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--s4);
+  align-items: start;
+}
+
+.gpu-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.gpu-perfil {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--sup-afundada);
+}
+
+.gpu-perfil + .gpu-perfil {
+  margin-top: var(--s3);
+}
+
+/* Perfil já inteiro fica marcado, e o botão dele desligado. O cliente precisa
+   ver que não há o que fazer ali — um botão vivo que não muda nada é o tipo de
+   clique que faz o produto parecer que agiu. */
+.gpu-perfil[data-inteiro="true"] {
+  border-color: var(--borda-forte);
+}
+
+.gpu-perfil-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.gpu-perfil-nome {
+  font-weight: 600;
+}
+
+.gpu-perfil-conta {
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.gpu-perfil-resumo {
+  margin: 0;
+  font-size: var(--t-body);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.gpu-perfil-detalhe summary {
+  cursor: pointer;
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.gpu-perfil-detalhe ul {
+  margin: var(--s2) 0 0;
+  padding-left: var(--s5);
+  font-size: var(--t-nota);
+  color: var(--text-dim);
+  line-height: 1.7;
+}
