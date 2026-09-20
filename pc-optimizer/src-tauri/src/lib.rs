@@ -113,6 +113,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::medir_limpeza,
             #[cfg(target_os = "windows")]
+            commands::nucleos_da_maquina,
+            #[cfg(target_os = "windows")]
+            commands::prender_jogo_nos_nucleos,
+            #[cfg(target_os = "windows")]
             commands::limpar_alvos,
             #[cfg(target_os = "windows")]
             commands::instalar_programa,

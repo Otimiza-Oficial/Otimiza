@@ -6428,3 +6428,84 @@ circle.placa-parafuso {
 .limpeza-item[data-custa="true"] .limpeza-custo {
   color: var(--amber);
 }
+
+/* A matriz de nucleos.
+
+   Um quadrado por nucleo logico, na ordem do indice. A cor diz a classe; a
+   borda diz se o jogo pode rodar ali. Sao duas informacoes diferentes e elas
+   precisam de dois canais: um jogo preso nos nucleos de eficiencia e
+   exatamente o caso que esta tela existe para tornar visivel de relance. */
+.nucleos-matriz {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: var(--s2);
+  margin: var(--s4) 0;
+}
+
+.nucleo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r1);
+  background: var(--sup-afundada);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+}
+
+.nucleo[data-classe="Desempenho"] {
+  background: var(--sup-selecionada);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Os de eficiencia ficam apagados de proposito: eles nao sao piores, sao
+   OUTRA coisa, e o jogo nao deveria estar neles. */
+.nucleo[data-classe="Eficiencia"] {
+  opacity: 0.6;
+}
+
+/* Onde o jogo pode rodar agora. Borda e nao cor de fundo: a cor ja esta
+   dizendo a classe, e duas informacoes no mesmo canal se anulam. */
+.nucleo[data-no-jogo="true"] {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.nucleos-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.nucleo-chave {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.nucleo-chave::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  background: var(--sup-afundada);
+}
+
+.nucleo-chave[data-classe="Desempenho"]::before {
+  background: var(--sup-selecionada);
+}
+
+.nucleo-chave[data-classe="Eficiencia"]::before {
+  opacity: 0.6;
+}
+
+.nucleo-chave[data-no-jogo="true"]::before {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}

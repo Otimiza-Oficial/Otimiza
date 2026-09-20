@@ -2283,6 +2283,172 @@ function blocoDeFaltas(itens: string[], rotulo: string): string {
 
 
 
+
+// -------------------------------------------------------------- núcleos
+
+type ClasseDeNucleo = "Desempenho" | "Eficiencia" | "Uniforme";
+
+interface NucleoLogico {
+  indice: number;
+  fisico: number;
+  classe: ClasseDeNucleo;
+}
+
+interface NucleosNaTela {
+  topologia: { nucleos: NucleoLogico[]; hibrido: boolean };
+  conselho: { cabe: boolean; explicacao: string };
+  fisicos: number;
+  /** Máscara em TEXTO: 64 bits não cabem no número do JavaScript. */
+  mascara_de_desempenho: string | null;
+  jogo_nome: string | null;
+  jogo_pid: number | null;
+  jogo_mascara: string | null;
+}
+
+const NOME_DA_CLASSE_DE_NUCLEO: Record<ClasseDeNucleo, string> = {
+  Desempenho: "desempenho",
+  Eficiencia: "eficiência",
+  Uniforme: "iguais",
+};
+
+let nucleosCarregados: NucleosNaTela | null = null;
+
+async function carregarNucleos() {
+  try {
+    const r = await invoke<NucleosNaTela>("nucleos_da_maquina");
+    nucleosCarregados = r;
+    desenharNucleos(r);
+  } catch (error) {
+    text("nucleos-resumo", String(error));
+    element("nucleos-matriz").innerHTML = "";
+  }
+}
+
+function desenharNucleos(r: NucleosNaTela) {
+  const logicos = r.topologia.nucleos;
+  text(
+    "nucleos-resumo",
+    `${logicos.length} núcleos lógicos em ${r.fisicos} físicos · ${
+      r.topologia.hibrido ? "processador híbrido" : "todos iguais"
+    }`
+  );
+
+  text("nucleos-tag", r.conselho.cabe ? "há o que fazer" : "nada a fazer aqui");
+  text("nucleos-conselho", r.conselho.explicacao);
+
+  // Em que núcleos o jogo está. A máscara vem em texto e vira BigInt: um
+  // número comum perderia os bits acima de 53, e o bit perdido é um núcleo que
+  // some da conta sem ninguém notar.
+  const doJogo = r.jogo_mascara === null ? null : BigInt(r.jogo_mascara);
+
+  element("nucleos-matriz").innerHTML = logicos
+    .map((n) => {
+      const noJogo = doJogo === null ? false : (doJogo >> BigInt(n.indice)) & 1n ? true : false;
+
+      return `
+        <span class="nucleo" data-classe="${n.classe}" data-no-jogo="${noJogo}"
+              title="Núcleo lógico ${n.indice}, físico ${n.fisico}, ${
+                NOME_DA_CLASSE_DE_NUCLEO[n.classe]
+              }">
+          <span class="nucleo-indice">${String(n.indice).padStart(2, "0")}</span>
+        </span>`;
+    })
+    .join("");
+
+  // A legenda só lista as classes que EXISTEM nesta máquina. Uma legenda com
+  // "eficiência" num processador que não tem núcleo de eficiência ensina o
+  // cliente a procurar uma coisa que não está lá.
+  const classes = [...new Set(logicos.map((n) => n.classe))];
+  element("nucleos-legenda").innerHTML =
+    classes
+      .map(
+        (c) =>
+          `<span class="nucleo-chave" data-classe="${c}">${escapeHtml(
+            NOME_DA_CLASSE_DE_NUCLEO[c]
+          )}</span>`
+      )
+      .join("") +
+    (doJogo === null
+      ? ""
+      : `<span class="nucleo-chave" data-no-jogo="true">onde o jogo pode rodar</span>`);
+
+  desenharJogoNosNucleos(r);
+}
+
+function desenharJogoNosNucleos(r: NucleosNaTela) {
+  const prender = element<HTMLButtonElement>("nucleos-prender");
+  const soltar = element<HTMLButtonElement>("nucleos-soltar");
+
+  if (r.jogo_pid === null) {
+    text("nucleos-jogo-tag", "nenhum jogo aberto");
+    text(
+      "nucleos-jogo-estado",
+      "Abra o jogo e clique em Reler. A afinidade vale para o processo aberto, então não há o que ajustar com o jogo fechado."
+    );
+    prender.disabled = true;
+    soltar.disabled = true;
+    return;
+  }
+
+  text("nucleos-jogo-tag", r.jogo_nome ?? "jogo detectado");
+
+  const doJogo = r.jogo_mascara === null ? null : BigInt(r.jogo_mascara);
+  const rapidos = r.mascara_de_desempenho === null ? null : BigInt(r.mascara_de_desempenho);
+  const todos = BigInt(r.topologia.nucleos.length) === 64n
+    ? null
+    : (1n << BigInt(r.topologia.nucleos.length)) - 1n;
+
+  const presoNosRapidos = doJogo !== null && rapidos !== null && doJogo === rapidos;
+  const solto = doJogo !== null && todos !== null && doJogo === todos;
+
+  text(
+    "nucleos-jogo-estado",
+    doJogo === null
+      ? "Não consegui ler em que núcleos este jogo está. Jogos com anticheat costumam bloquear essa leitura."
+      : presoNosRapidos
+        ? "Este jogo já está preso nos núcleos de desempenho."
+        : solto
+          ? "Este jogo pode usar todos os núcleos — que é o estado normal."
+          : `Este jogo está limitado a ${
+              [...Array(r.topologia.nucleos.length).keys()].filter(
+                (i) => (doJogo >> BigInt(i)) & 1n
+              ).length
+            } núcleos. Alguém ou algum programa mexeu nisso.`
+  );
+
+  // Prender só fica ativo onde ele resolve alguma coisa: com processador
+  // híbrido e o jogo ainda não preso. Num processador de núcleos iguais o
+  // botão fica desligado — oferecê-lo ali seria oferecer um jeito de piorar.
+  prender.disabled = !r.conselho.cabe || presoNosRapidos || doJogo === null;
+  soltar.disabled = doJogo === null || solto;
+}
+
+async function mexerNosNucleos(prender: boolean) {
+  const pid = nucleosCarregados?.jogo_pid;
+  if (pid === null || pid === undefined) return;
+
+  const botao = element<HTMLButtonElement>(prender ? "nucleos-prender" : "nucleos-soltar");
+  botao.disabled = true;
+  setStatus("nucleos-status", prender ? "Prendendo…" : "Soltando…", "progress");
+
+  try {
+    const mensagem = await invoke<string>("prender_jogo_nos_nucleos", { pid, prender });
+    setStatus("nucleos-status", mensagem, "ok");
+
+    // Relê em vez de assumir: a tela precisa dizer o que o Windows diz.
+    await carregarNucleos();
+  } catch (error) {
+    setStatus("nucleos-status", String(error), "error");
+    botao.disabled = false;
+  }
+}
+
+function ligarNucleos() {
+  element("nucleos-prender").addEventListener("click", () => void mexerNosNucleos(true));
+  element("nucleos-soltar").addEventListener("click", () => void mexerNosNucleos(false));
+  element("nucleos-reler").addEventListener("click", () => void carregarNucleos());
+}
+
 // ----------------------------------------------------- limpeza do sistema
 
 interface AlvoDeLimpeza {
@@ -10449,6 +10615,8 @@ function wireControls() {
   ligarBiblioteca();
   ligarProgramas();
   ligarLimpeza();
+  ligarNucleos();
+  void carregarNucleos();
   void carregarProgramas();
   void carregarCartaoDaPlaca();
   void carregarBiblioteca();

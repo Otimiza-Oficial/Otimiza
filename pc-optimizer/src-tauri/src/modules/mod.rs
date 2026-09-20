@@ -38,6 +38,7 @@ pub mod safety;
 pub mod streaming;
 pub mod transacao;
 pub mod vram;
+pub mod nucleos;
 pub mod monitor;
 pub mod gargalo;
 pub mod telemetry;

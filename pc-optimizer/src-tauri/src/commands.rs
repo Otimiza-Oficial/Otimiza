@@ -365,6 +365,123 @@ pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, Stri
 #[cfg(target_os = "windows")]
 pub type LimparResultado = crate::modules::windows::limpar::Resultado;
 
+/// Comando: os núcleos desta máquina, e se vale mexer na afinidade.
+///
+/// SÓ LÊ. A classe de cada núcleo vem do Windows, e não de uma tabela de
+/// modelos escrita à mão — uma tabela fica errada no lançamento seguinte e
+/// erra em todo processador que não estiver nela.
+///
+/// Num processador uniforme a resposta é que NÃO HÁ O QUE FAZER, e ela vem
+/// escrita. É a maioria das máquinas, e oferecer um botão de afinidade ali
+/// seria oferecer um jeito de piorar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
+    use crate::modules::nucleos;
+    use crate::modules::windows::{afinidade, deteccao, topologia};
+
+    let (topologia, jogo) =
+        tokio::task::spawn_blocking(|| (topologia::ler(), deteccao::procurar()))
+            .await
+            .map_err(|e| format!("a leitura dos núcleos não terminou: {e}"))?;
+
+    let topologia = topologia.ok_or(
+        "o Windows não informou a lista de núcleos desta máquina. Sem ela o produto não oferece \
+         prender o jogo em núcleo nenhum — prender no núcleo errado é pior que não prender.",
+    )?;
+
+    // O jogo aberto, quando há um. A afinidade dele é lida junto: é ela que
+    // diz se ele JÁ está preso em algum lugar, e um jogo preso nos núcleos de
+    // eficiência por outro programa é exatamente o caso que esta tela existe
+    // para achar.
+    let (jogo_nome, jogo_pid, jogo_mascara) = match &jogo {
+        Some(j) => {
+            let mascara = afinidade::ler(j.pid).ok().map(|(processo, _)| processo);
+            (Some(j.nome.clone()), Some(j.pid), mascara)
+        }
+        None => (None, None, None),
+    };
+
+    Ok(NucleosNaTela {
+        conselho: nucleos::conselho(&topologia),
+        // A contagem de físicos vem DAQUI, e não da tela. Ela é uma conta
+        // sobre a topologia — dois lógicos no mesmo físico são irmãos de
+        // SMT —, e duas versões dela acabam discordando.
+        fisicos: topologia.fisicos(),
+        mascara_de_desempenho: nucleos::mascara_de_desempenho(&topologia).map(|m| m.to_string()),
+        topologia,
+        jogo_nome,
+        jogo_pid,
+        jogo_mascara: jogo_mascara.map(|m| m.to_string()),
+    })
+}
+
+/// Os núcleos, com o jogo aberto quando há um.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct NucleosNaTela {
+    pub topologia: crate::modules::nucleos::Topologia,
+    pub conselho: crate::modules::nucleos::Conselho,
+    /// Quantos núcleos FÍSICOS há. Dois lógicos no mesmo físico são
+    /// irmãos de SMT.
+    pub fisicos: usize,
+    /// A máscara dos núcleos rápidos, em texto.
+    ///
+    /// TEXTO e não número: uma máscara de 64 bits não cabe no número do
+    /// JavaScript sem perder os bits altos, e o bit perdido é um núcleo que
+    /// some da conta sem ninguém notar.
+    pub mascara_de_desempenho: Option<String>,
+    pub jogo_nome: Option<String>,
+    pub jogo_pid: Option<u32>,
+    /// Em que núcleos o jogo está agora.
+    pub jogo_mascara: Option<String>,
+}
+
+/// Comando: prende o jogo aberto nos núcleos de desempenho, ou o solta.
+///
+/// NÃO ENTRA NO HISTÓRICO DE MUDANÇAS, e é de propósito. O histórico existe
+/// para o Desfazer achar o valor anterior de coisas que PERSISTEM; afinidade
+/// é propriedade do processo aberto e some quando o jogo fecha. Uma linha lá
+/// ficaria para sempre oferecendo desfazer um processo que já não existe.
+///
+/// O desfazer dela é o botão ao lado, enquanto o jogo está aberto — e fechar
+/// o jogo também desfaz.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::nucleos;
+    use crate::modules::windows::{afinidade, topologia};
+
+    tokio::task::spawn_blocking(move || {
+        if !prender {
+            afinidade::soltar(pid)?;
+            return Ok("O jogo voltou a poder usar todos os núcleos.".to_string());
+        }
+
+        let t = topologia::ler().ok_or("o Windows não informou a lista de núcleos.")?;
+
+        // A recusa que impede o botão que piora: num processador uniforme não
+        // existe núcleo melhor, e prender em parte deles só tira máquina.
+        let mascara = nucleos::mascara_de_desempenho(&t).ok_or(
+            "este processador tem todos os núcleos iguais: prender o jogo em parte deles só \
+             reduziria o que a máquina entrega.",
+        )?;
+
+        afinidade::escrever(pid, mascara)?;
+
+        Ok(format!(
+            "O jogo está preso nos {} núcleos de desempenho. Isso vale para o processo aberto e \
+             some quando o jogo fechar.",
+            nucleos::indices_de(mascara).len()
+        ))
+    })
+    .await
+    .map_err(|e| format!("a mudança não terminou: {e}"))?
+}
+
+
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
 ///
 /// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
@@ -4517,6 +4634,7 @@ mod tests {
         "capa_do_jogo",
         "catalogo_de_programas",
         "medir_limpeza",
+        "nucleos_da_maquina",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",
@@ -4611,6 +4729,7 @@ mod tests {
     const EXIGEM_LICENCA: &[&str] = &[
         "instalar_programa",
         "limpar_alvos",
+        "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "energia_testar_candidato",
         "energia_aplicar",

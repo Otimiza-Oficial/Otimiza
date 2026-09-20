@@ -596,6 +596,12 @@
             <span class="nav-rotulo">Biblioteca</span>
           </button>
 
+          <button class="nav" role="tab" data-tab="nucleos" aria-selected="false"
+                  aria-controls="tab-nucleos" id="tabbtn-nucleos">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-affinity" /></svg>
+            <span class="nav-rotulo">Núcleos</span>
+          </button>
+
           <button class="nav" role="tab" data-tab="programas" aria-selected="false"
                   aria-controls="tab-programas" id="tabbtn-programas">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-instaladores" /></svg>
@@ -2127,6 +2133,73 @@
             <p class="hint" id="biblioteca-lacunas" hidden></p>
           </section>
 
+        </section>
+
+        <!--
+          OS NÚCLEOS.
+
+          A área mais cheia de promessa vazia que existe, e por isso a tela
+          abre dizendo o que a afinidade NÃO faz:
+
+          - Não é ganho grátis. Tirar núcleos de um jogo que usa todos eles
+            REDUZ o que a máquina entrega. Prender só ajuda quando o jogo
+            estava nos núcleos errados.
+          - Não dura. Afinidade é propriedade do processo aberto: fechou o
+            jogo, acabou. Vender isso como ajuste permanente é vender uma
+            coisa que some sozinha.
+          - Empurrar programa de fundo para outro núcleo quase não faz nada no
+            Windows moderno. O escalonador já evita o núcleo ocupado.
+
+          O que SOBRA é real e é medível: em processador híbrido, um jogo que
+          cai nos núcleos de eficiência entrega muito menos quadro, e nada na
+          tela do Windows diz que foi isso. Num processador de núcleos iguais
+          — que é a maioria — esta tela diz que não há o que fazer.
+        -->
+        <section class="tab-panel" id="tab-nucleos" role="tabpanel"
+                 aria-labelledby="tabbtn-nucleos" hidden>
+          <header class="abertura">
+            <p class="abertura-sobrenome">Processador</p>
+            <h1 class="abertura-titulo">Núcleos</h1>
+            <p class="abertura-sub" id="nucleos-resumo">Lendo os núcleos…</p>
+          </header>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O que a afinidade resolve aqui</h2>
+              <span class="panel-tag" id="nucleos-tag">—</span>
+            </div>
+
+            <p class="lead" id="nucleos-conselho">—</p>
+
+            <!--
+              A MATRIZ. Um quadrado por núcleo lógico, com a classe na cor.
+              Os irmãos de SMT — dois lógicos no mesmo núcleo físico —
+              aparecem colados, porque prender o jogo em um e não no irmão é
+              um erro que a matriz precisa deixar visível.
+            -->
+            <div class="nucleos-matriz" id="nucleos-matriz"></div>
+
+            <div class="nucleos-legenda" id="nucleos-legenda"></div>
+          </section>
+
+          <section class="panel" id="nucleos-jogo-painel">
+            <div class="panel-head">
+              <h2>O jogo aberto</h2>
+              <span class="panel-tag" id="nucleos-jogo-tag">—</span>
+            </div>
+
+            <p class="lead" id="nucleos-jogo-estado">—</p>
+
+            <div class="row-actions">
+              <button id="nucleos-prender" class="btn btn-primary" disabled>
+                Prender nos núcleos de desempenho
+              </button>
+              <button id="nucleos-soltar" class="btn" disabled>Soltar</button>
+              <button id="nucleos-reler" class="btn">Reler</button>
+            </div>
+
+            <p id="nucleos-status" class="status"></p>
+          </section>
         </section>
 
         <!--

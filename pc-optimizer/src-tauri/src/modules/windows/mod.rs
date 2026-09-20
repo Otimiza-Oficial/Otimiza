@@ -8,6 +8,7 @@
 
 pub mod acessibilidade;
 pub mod achados;
+pub mod afinidade;
 pub mod anticheat;
 pub mod bloatware;
 pub mod boot;
@@ -79,6 +80,7 @@ pub mod sysparams;
 pub mod tarefa_longa;
 pub mod tasks;
 pub mod thermal;
+pub mod topologia;
 pub mod veredito;
 pub mod winget;
 
