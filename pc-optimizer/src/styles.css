@@ -5385,6 +5385,48 @@ circle.placa-parafuso {
   color: var(--amber);
 }
 
+/* Do clique ao pixel.
+
+   A etapa sem medida ocupa a MESMA linha e o mesmo espaço da etapa medida, de
+   propósito: encolher ou esconder o que não foi medido devolveria a lista
+   curta e bonita que faz o piso parecer o total. O que muda é a cor, e o
+   "não medida" no lugar do número. */
+.latencia-etapa {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.latencia-etapa:last-child {
+  border-bottom: 0;
+}
+
+.latencia-nome {
+  font-weight: 500;
+}
+
+.latencia-valor {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.latencia-origem {
+  grid-column: 1 / -1;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.latencia-etapa[data-qualidade="ESTIMATED"] .latencia-valor {
+  color: var(--amber);
+}
+
+.latencia-etapa[data-qualidade="UNKNOWN"] .latencia-nome,
+.latencia-etapa[data-qualidade="UNKNOWN"] .latencia-valor {
+  color: var(--text-muted);
+}
+
 /* Barra de medidor sem leitura. Vazia e vazia-marcada não podem parecer a
    mesma coisa: uma diz "0%", a outra diz "não sei". */
 .vital[data-estado="desconhecido"] .vital-bar,

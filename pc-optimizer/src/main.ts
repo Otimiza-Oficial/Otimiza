@@ -333,6 +333,26 @@ interface PerformanceMetrics {
   telemetry: Telemetry;
   gargalo: Diagnostico;
   vram: AnaliseVram;
+  latencia: Orcamento;
+}
+
+type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
+
+interface Parcela {
+  etapa: Etapa;
+  /** Ausente quando não foi medida. Nunca zero. */
+  ms: number | null;
+  qualidade: Quality;
+  origem: string;
+}
+
+interface Orcamento {
+  parcelas: Parcela[];
+  /** Limite inferior: a soma só do que foi medido. */
+  piso_ms: number | null;
+  etapas_com_valor: number;
+  etapas_totais: number;
+  observacoes: string[];
 }
 
 type EstadoVram =
@@ -1663,6 +1683,14 @@ function limparMetricas(motivo: string) {
     conselho: null,
   });
 
+  renderLatencia({
+    parcelas: [],
+    piso_ms: null,
+    etapas_com_valor: 0,
+    etapas_totais: 5,
+    observacoes: [],
+  });
+
   const tag = element("evidencia-tag");
   tag.textContent = "leitura indisponível";
   tag.dataset.estado = "falha";
@@ -1730,6 +1758,7 @@ function renderMetrics(metrics: PerformanceMetrics) {
 
   renderEvidencia(metrics.telemetry);
   renderVram(metrics.vram);
+  renderLatencia(metrics.latencia);
   renderGargalo(metrics.gargalo);
 
   const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
@@ -2028,6 +2057,48 @@ function renderPlaca(telemetry: Telemetry) {
   } else {
     nota.textContent = usada?.reason ?? "não medido";
   }
+}
+
+// ------------------------------------------------ do clique ao pixel
+
+const NOME_DA_ETAPA: Record<Etapa, string> = {
+  Entrada: "Entrada do mouse e do teclado",
+  JogoEPlaca: "Jogo e placa desenhando o quadro",
+  Fila: "Fila do driver",
+  Apresentacao: "Espera pela tela",
+  Tela: "Resposta do painel",
+};
+
+function renderLatencia(o: Orcamento) {
+  text(
+    "latencia-cobertura",
+    `${o.etapas_com_valor} de ${o.etapas_totais} etapas medidas`
+  );
+
+  // "Pelo menos" não é figura de linguagem: três etapas continuam sem medida,
+  // e o número real é maior. Sem medida nenhuma, a frase não vira "0 ms" — ela
+  // diz que não há o que somar.
+  element("latencia-piso").textContent =
+    o.piso_ms === null
+      ? "Nenhuma etapa do caminho foi medida ainda. Uma medição de quadros durante a partida preenche a maior delas."
+      : `Pelo menos ${o.piso_ms.toFixed(1)} ms, somando só o que foi medido. As ${
+          o.etapas_totais - o.etapas_com_valor
+        } etapas restantes custam mais do que isso — quanto, ninguém daqui sabe.`;
+
+  element("latencia-etapas").innerHTML = o.parcelas
+    .map(
+      (p) => `
+        <div class="latencia-etapa" data-qualidade="${p.qualidade}">
+          <span class="latencia-nome">${escapeHtml(NOME_DA_ETAPA[p.etapa])}</span>
+          <span class="latencia-valor">${
+            p.ms === null ? "não medida" : `${p.ms.toFixed(1)} ms`
+          }</span>
+          <span class="latencia-origem">${escapeHtml(p.origem)}</span>
+        </div>`
+    )
+    .join("");
+
+  element("latencia-observacoes").textContent = o.observacoes.join(" ");
 }
 
 // --------------------------------------------------- memória de vídeo

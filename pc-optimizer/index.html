@@ -892,6 +892,33 @@
           </section>
 
           <!--
+            DO CLIQUE AO PIXEL.
+
+            Este painel mostra um PISO, não uma latência. Medir latência de
+            verdade exige instrumentar o jogo ou apontar um aparelho para o
+            monitor; nenhuma das duas coisas está ao alcance de um programa
+            rodando ao lado. O que dá para fazer é medir alguns pedaços da
+            corrente e dizer quais são os outros.
+
+            Por isso a lista tem as cinco etapas SEMPRE, e as que ninguém mediu
+            aparecem com o motivo no lugar do número. Uma etapa sem medição não
+            vira zero: zero somaria como se aquele pedaço não custasse nada, e é
+            assim que se fabrica o "1 ms de latência" que se vê por aí.
+          -->
+          <section class="panel" id="latencia">
+            <div class="panel-head">
+              <h2>Do clique ao pixel</h2>
+              <span class="panel-tag" id="latencia-cobertura">—</span>
+            </div>
+
+            <p class="lead" id="latencia-piso">—</p>
+
+            <div id="latencia-etapas"></div>
+
+            <p class="readout-note" id="latencia-observacoes"></p>
+          </section>
+
+          <!--
             DE ONDE VÊM ESTES NÚMEROS.
 
             Nenhum outro painel do produto admite o que ele NÃO sabe. Este

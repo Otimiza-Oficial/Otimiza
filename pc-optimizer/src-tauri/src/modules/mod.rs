@@ -15,6 +15,7 @@ pub mod benchmark;
 pub mod changelog;
 pub mod convite;
 pub mod jitter;
+pub mod latencia;
 pub mod licenca;
 pub mod maquina;
 pub mod medicoes;

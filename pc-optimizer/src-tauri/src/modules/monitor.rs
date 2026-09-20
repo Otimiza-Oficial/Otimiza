@@ -125,6 +125,12 @@ pub struct PerformanceMetrics {
     /// e num comando separado a tela mostraria a análise de uma coleta ao lado
     /// dos números de outra.
     pub vram: super::vram::Analise,
+    /// Do clique ao pixel, com o que falta declarado. Ver `latencia.rs`.
+    ///
+    /// É um PISO, não um total: três das cinco etapas do caminho não têm como
+    /// ser medidas por um programa rodando ao lado do jogo, e o orçamento diz
+    /// quais são em vez de somar zeros no lugar delas.
+    pub latencia: super::latencia::Orcamento,
 }
 
 /// Quanto a amostragem de CPU espera entre as duas leituras.
@@ -391,6 +397,7 @@ impl PerformanceMonitor {
             disk,
             network,
             uptime_hours: uptime,
+            latencia: super::latencia::orcar(&telemetry),
             telemetry,
             gargalo,
             vram,
