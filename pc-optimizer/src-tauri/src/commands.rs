@@ -130,6 +130,25 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: o próximo passo de uma sessão de autoajuste.
+///
+/// SEM ESTADO NO BACKEND, de propósito. A sessão vem da tela e volta para a
+/// tela; aqui só se calcula o passo. Um laço guardado do lado de cá teria de
+/// sobreviver a fechar o programa no meio, e uma sessão interrompida com a
+/// mudança aplicada e não medida é o pior estado em que a máquina do cliente
+/// pode ficar. Com o estado na tela, fechar o programa encerra a sessão — e o
+/// que estiver aplicado continua no histórico de desfazer como qualquer outra
+/// mudança.
+///
+/// NÃO APLICA E NÃO DESFAZ. Devolve o passo; quem executa é o caminho que já
+/// tem diário de intenção e desfazer.
+#[tauri::command]
+pub fn passo_do_autoajuste(
+    sessao: crate::modules::autoajuste::Sessao,
+) -> crate::modules::autoajuste::Passo {
+    crate::modules::autoajuste::proximo_passo(&sessao)
+}
+
 /// Comando: o que fazer com a configuração do jogo, segundo o que foi medido.
 ///
 /// NÃO APLICA NADA. Devolve um plano, e o plano sai com o nome do perfil que
@@ -4145,6 +4164,7 @@ mod tests {
         "protocolo_do_perfil",
         "laboratorio_de_streaming",
         "plano_de_renderizacao",
+        "passo_do_autoajuste",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

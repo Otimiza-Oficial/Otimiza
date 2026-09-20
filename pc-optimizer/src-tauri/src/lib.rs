@@ -97,6 +97,7 @@ pub fn run() {
             commands::laboratorio_de_streaming,
             #[cfg(target_os = "windows")]
             commands::plano_de_renderizacao,
+            commands::passo_do_autoajuste,
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
