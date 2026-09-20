@@ -32,12 +32,30 @@
 // por último. Um `header.jpg` esticado num bloco 3:4 fica feio — mas feio com a
 // arte certa ainda diz mais que "CS" escrito num quadrado.
 //
-// E QUANDO NÃO HÁ
+// E QUANDO O JOGO NÃO ESTÁ INSTALADO
 //
-// Jogo que não está instalado não tem capa em lugar nenhum desta máquina, e
-// inventar uma seria voltar ao problema. Esses continuam com o bloco de cor —
-// que passa a ser o que sempre devia ter sido: o caso de EXCEÇÃO, e não a
-// regra.
+// Aí não há capa em lugar nenhum desta máquina — e a grade fica quase toda de
+// letras, porque a maior parte dos títulos conhecidos não está instalada.
+//
+// Para esses, a capa é buscada UMA VEZ na CDN pública da Steam, pelo número do
+// jogo, e guardada aqui do lado. É a mesma imagem que a Steam serve para
+// qualquer página de loja; a diferença para o caso acima é que ela chega pela
+// rede em vez de já estar no disco.
+//
+// ISSO TEM DUAS CONSEQUÊNCIAS QUE PRECISAM ESTAR DITAS:
+//
+//   1. O programa faz uma requisição de rede para desenhar a biblioteca. Uma
+//      por jogo, uma única vez na vida da instalação.
+//   2. A imagem é da Steam. Ela é exibida como capa do jogo que ela representa
+//      — que é para o que ela existe —, e não é redistribuída: fica no cache
+//      desta máquina como qualquer imagem que um navegador guarda.
+//
+// O NÚMERO DO JOGO É O PONTO FRÁGIL. Um número errado não dá erro: dá a capa
+// de OUTRO jogo no bloco, com toda a confiança. Por isso cada um deles foi
+// conferido contra a API pública da Steam antes de entrar no catálogo.
+//
+// Jogo sem número — Valorant, Fortnite, League, Minecraft, Roblox, Tarkov,
+// FiveM, que não estão na Steam — continua com o bloco de cor.
 
 use std::path::{Path, PathBuf};
 
@@ -152,9 +170,155 @@ fn base64(bytes: &[u8]) -> String {
     saida
 }
 
+// ------------------------------------------------- a capa que vem da rede
+
+/// De onde a Steam serve a arte pública de cada jogo.
+///
+/// O mesmo endereço que a página de loja usa. Retrato primeiro, cabeçalho
+/// depois — a mesma ordem da busca em disco, e pela mesma razão.
+pub fn enderecos_da_steam(appid: u32) -> Vec<String> {
+    let base = "https://cdn.cloudflare.steamstatic.com/steam/apps";
+
+    vec![
+        format!("{base}/{appid}/library_600x900_2x.jpg"),
+        format!("{base}/{appid}/library_600x900.jpg"),
+        format!("{base}/{appid}/header.jpg"),
+    ]
+}
+
+/// Onde a capa baixada fica guardada nesta máquina.
+///
+/// Ao lado dos outros dados do produto. Uma pasta por conta própria porque ela
+/// pode crescer alguns megabytes, e quem for limpar precisa saber o que está
+/// apagando.
+pub fn pasta_do_cache() -> std::path::PathBuf {
+    let base = std::env::var("APPDATA")
+        .or_else(|_| std::env::var("HOME"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    base.join("pc-optimizer").join("capas")
+}
+
+/// A capa deste jogo, de onde quer que ela venha.
+///
+/// A ordem é a do custo: o cache da Steam é leitura de disco; o cache do
+/// produto também; a rede é a última. Uma vez baixada, a capa nunca é baixada
+/// de novo.
+///
+/// `raiz_steam` é onde a Steam está instalada, quando está.
+pub async fn obter(appid: u32, raiz_steam: Option<&Path>) -> Option<String> {
+    // 1. O cache da própria Steam. Melhor fonte: já é do cliente e não custa
+    //    rede nenhuma.
+    if let Some(raiz) = raiz_steam {
+        if let Some(arquivo) = procurar_steam(raiz, appid) {
+            return ler_como_url(&arquivo);
+        }
+    }
+
+    // 2. O que já foi baixado antes.
+    let guardada = pasta_do_cache().join(format!("{appid}.jpg"));
+    if guardada.is_file() {
+        return ler_como_url(&guardada);
+    }
+
+    // 3. A rede, uma vez só.
+    let bytes = baixar(appid).await?;
+
+    // Gravar é o que impede a próxima abertura de baixar de novo. Falhar aqui
+    // não perde a capa desta vez — só faz a próxima abrir buscando de novo.
+    if let Some(pasta) = guardada.parent() {
+        let _ = std::fs::create_dir_all(pasta);
+    }
+    let _ = std::fs::write(&guardada, &bytes);
+
+    Some(format!("data:image/jpeg;base64,{}", base64(&bytes)))
+}
+
+/// Baixa a primeira capa que responder.
+async fn baixar(appid: u32) -> Option<Vec<u8>> {
+    let cliente = reqwest::Client::builder()
+        // Tempo curto: isto é enfeite de tela. Uma biblioteca que demora dez
+        // segundos para desenhar porque a rede caiu é pior que uma biblioteca
+        // de letras.
+        .timeout(std::time::Duration::from_secs(6))
+        .build()
+        .ok()?;
+
+    for endereco in enderecos_da_steam(appid) {
+        let Ok(resposta) = cliente.get(&endereco).send().await else {
+            continue;
+        };
+
+        if !resposta.status().is_success() {
+            continue;
+        }
+
+        let Ok(bytes) = resposta.bytes().await else {
+            continue;
+        };
+
+        // Resposta vazia ou gigante não é capa. O mesmo teto da leitura em
+        // disco, pela mesma razão.
+        if bytes.is_empty() || bytes.len() as u64 > TETO_DA_CAPA_BYTES {
+            continue;
+        }
+
+        return Some(bytes.to_vec());
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_endereco_publico_pede_o_retrato_primeiro() {
+        let lista = enderecos_da_steam(730);
+
+        assert!(lista[0].contains("library_600x900"), "{lista:?}");
+        assert!(lista.iter().all(|u| u.starts_with("https://")), "só https");
+        assert!(
+            lista.iter().all(|u| u.contains("/730/")),
+            "o número tem de entrar"
+        );
+    }
+
+    /// A capa que vem da rede, de verdade.
+    ///
+    /// Pega um jogo que NÃO está instalado nesta máquina — que é o caso da
+    /// maior parte da grade, e o que sobrou de letras depois da primeira
+    /// versão. Rede fora não reprova: o teste diz e sai.
+    #[tokio::test]
+    async fn a_capa_de_jogo_nao_instalado_vem_da_rede_e_fica_guardada() {
+        // Marvel Rivals. Número conferido contra a API pública da Steam.
+        const APPID: u32 = 2767030;
+
+        let guardada = pasta_do_cache().join(format!("{APPID}.jpg"));
+        let _ = std::fs::remove_file(&guardada);
+
+        // Sem raiz de Steam: obriga o caminho da rede, que é o que se testa.
+        let Some(url) = obter(APPID, None).await else {
+            println!("sem rede, ou a CDN não respondeu");
+            return;
+        };
+
+        assert!(url.starts_with("data:image/jpeg;base64,"), "{}", &url[..40]);
+        assert!(url.len() > 10_000, "capa curta demais para ser imagem");
+
+        // E ficou guardada: a próxima abertura não baixa de novo.
+        assert!(guardada.is_file(), "a capa baixada tem de ficar em disco");
+
+        // A segunda chamada tem de vir do disco, e não da rede. Não dá para
+        // medir isso daqui sem cronômetro frágil — o que dá para afirmar é que
+        // ela devolve a MESMA imagem.
+        let de_novo = obter(APPID, None).await.expect("segunda leitura");
+        assert_eq!(url, de_novo);
+
+        let _ = std::fs::remove_file(&guardada);
+    }
 
     #[test]
     fn o_retrato_vem_antes_do_cabecalho() {

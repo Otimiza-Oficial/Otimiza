@@ -101,6 +101,17 @@ pub struct AppState {
     /// tokio chamado de dentro do runtime entraria em pânico.
     #[cfg(target_os = "windows")]
     pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
+    /// Onde a Steam está instalada, lembrado depois da primeira leitura.
+    ///
+    /// A biblioteca pede uma capa por bloco, e a primeira versão varria Steam,
+    /// Epic e registro inteiros A CADA UMA para descobrir o mesmo caminho.
+    /// A resposta não muda enquanto o programa está aberto.
+    ///
+    /// Dois níveis de propósito: o de fora é "já perguntei", o de
+    /// dentro é "e a resposta foi que não tem Steam". Sem os dois, uma máquina
+    /// sem Steam refaria a varredura em toda capa.
+    #[cfg(target_os = "windows")]
+    pub raiz_steam: Mutex<Option<Option<std::path::PathBuf>>>,
 }
 
 #[derive(Serialize)]
@@ -202,17 +213,31 @@ pub struct BibliotecaNaTela {
 /// que a Steam ainda não preencheu. Nenhum desses é erro — é o bloco de cor.
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn capa_do_jogo(appid: u32) -> Option<String> {
-    use crate::modules::{capas, windows::jogos};
+pub async fn capa_do_jogo(appid: u32, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    use crate::modules::capas;
 
-    tokio::task::spawn_blocking(move || {
-        let raiz = jogos::varrer().raiz_steam?;
-        let arquivo = capas::procurar_steam(&raiz, appid)?;
-        capas::ler_como_url(&arquivo)
-    })
-    .await
-    .ok()
-    .flatten()
+    // A raiz da Steam é lembrada entre chamadas. A primeira versão disto
+    // chamava `jogos::varrer()` uma vez POR CAPA — uma varredura completa de
+    // Steam, Epic e registro para cada bloco da grade. Funcionava e era um
+    // desperdício de vinte varreduras para responder vinte vezes a mesma
+    // coisa, que é onde a biblioteca mora.
+    let raiz = {
+        let mut guardada = state.raiz_steam.lock().await;
+
+        if guardada.is_none() {
+            *guardada = Some(
+                tokio::task::spawn_blocking(|| {
+                    crate::modules::windows::jogos::varrer().raiz_steam
+                })
+                .await
+                .map_err(|e| format!("a leitura da Steam não terminou: {e}"))?,
+            );
+        }
+
+        guardada.clone().flatten()
+    };
+
+    Ok(capas::obter(appid, raiz.as_deref()).await)
 }
 
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.

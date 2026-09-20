@@ -2354,30 +2354,46 @@ const capasDosJogos = new Map<number, string | null>();
  * parte delas nem estaria visível ainda.
  */
 async function carregarCapasVisiveis() {
-  const blocos = document.querySelectorAll<HTMLElement>(".jogo-tile-arte[data-appid]");
+  const blocos = [...document.querySelectorAll<HTMLElement>('.jogo-tile-arte[data-appid]')];
 
-  for (const bloco of blocos) {
-    const appid = Number(bloco.dataset.appid);
-    if (!Number.isFinite(appid) || appid <= 0) continue;
+  // EM PARALELO, e com um limite. A primeira versão pedia uma capa por vez, e
+  // na primeira abertura — quando nenhuma foi baixada ainda — isso enfileirava
+  // dezessete idas à rede em série: a última capa apareceria mais de um minuto
+  // depois da primeira. Em paralelo sem limite seria o oposto: dezessete
+  // conexões de uma vez, que algumas redes domésticas tratam como abuso.
+  const DE_CADA_VEZ = 4;
 
-    if (!capasDosJogos.has(appid)) {
-      try {
-        capasDosJogos.set(appid, await invoke<string | null>("capa_do_jogo", { appid }));
-      } catch {
-        // Uma capa a menos não é erro de tela: o bloco de cor cobre.
-        capasDosJogos.set(appid, null);
-      }
-    }
+  const pendentes = blocos.filter((b) => {
+    const appid = Number(b.dataset.appid);
+    return Number.isFinite(appid) && appid > 0;
+  });
 
-    const url = capasDosJogos.get(appid);
-    if (!url) continue;
-
-    // A capa entra como fundo e as iniciais somem. Deixá-las por cima da arte
-    // seria pior que as duas coisas separadas.
-    bloco.style.backgroundImage = `url("${url}")`;
-    bloco.dataset.comCapa = "sim";
-    bloco.textContent = "";
+  for (let i = 0; i < pendentes.length; i += DE_CADA_VEZ) {
+    await Promise.all(pendentes.slice(i, i + DE_CADA_VEZ).map(vestirBloco));
   }
+}
+
+/** Põe a capa num bloco, buscando-a se ainda não foi buscada. */
+async function vestirBloco(bloco: HTMLElement) {
+  const appid = Number(bloco.dataset.appid);
+
+  if (!capasDosJogos.has(appid)) {
+    try {
+      capasDosJogos.set(appid, await invoke<string | null>('capa_do_jogo', { appid }));
+    } catch {
+      // Uma capa a menos não é erro de tela: o bloco de cor cobre.
+      capasDosJogos.set(appid, null);
+    }
+  }
+
+  const url = capasDosJogos.get(appid);
+  if (!url) return;
+
+  // A capa entra como fundo e as iniciais somem. Deixá-las por cima da arte
+  // seria pior que as duas coisas separadas.
+  bloco.style.backgroundImage = `url("${url}")`;
+  bloco.dataset.comCapa = 'sim';
+  bloco.textContent = '';
 }
 
 function desenharBiblioteca() {

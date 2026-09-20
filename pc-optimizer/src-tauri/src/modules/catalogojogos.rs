@@ -58,6 +58,18 @@ pub struct JogoConhecido {
     ///
     /// Servem para a Steam, que não informa o executável no manifesto.
     pub pastas: &'static [&'static str],
+    /// O número do jogo na Steam, para buscar a capa.
+    ///
+    /// TODOS OS QUE ESTÃO AQUI FORAM CONFERIDOS contra a API pública da
+    /// Steam, um por um. Número errado não dá erro: dá a capa de OUTRO jogo
+    /// no bloco, que é pior que letra nenhuma — é o produto afirmando com
+    /// confiança uma coisa errada, que é o defeito que ele existe para não
+    /// ter. Quem for acrescentar um: confira antes.
+    ///
+    /// `None` para jogo que não está na Steam. Valorant, Fortnite, League,
+    /// Minecraft, Roblox, Tarkov e FiveM não estão, e inventar um número
+    /// para eles cairia justamente no caso acima.
+    pub appid: Option<u32>,
 }
 
 /// Os jogos que o produto reconhece de nome.
@@ -74,144 +86,175 @@ pub const CATALOGO: &[JogoConhecido] = &[
         nome: "Counter-Strike 2",
         executaveis: &["cs2.exe"],
         pastas: &["counter-strike global offensive", "counter-strike 2"],
+        appid: Some(730),
     },
     JogoConhecido {
         id: "valorant",
         nome: "Valorant",
         executaveis: &["valorant.exe", "valorant-win64-shipping.exe"],
         pastas: &["riot games/valorant", "valorant"],
+        appid: None,
     },
     JogoConhecido {
         id: "fortnite",
         nome: "Fortnite",
         executaveis: &["fortniteclient-win64-shipping.exe", "fortnitelauncher.exe"],
         pastas: &["fortnite"],
+        appid: None,
     },
     JogoConhecido {
         id: "warzone",
         nome: "Call of Duty: Warzone",
         executaveis: &["cod.exe", "modernwarfare.exe"],
         pastas: &["call of duty"],
+        appid: Some(1962663),
     },
     JogoConhecido {
         id: "apex",
         nome: "Apex Legends",
         executaveis: &["r5apex.exe", "r5apex_dx12.exe"],
         pastas: &["apex legends"],
+        appid: Some(1172470),
     },
     JogoConhecido {
         id: "rust",
         nome: "Rust",
         executaveis: &["rustclient.exe"],
         pastas: &["rust"],
+        appid: Some(252490),
     },
     JogoConhecido {
         id: "pubg",
         nome: "PUBG: Battlegrounds",
         executaveis: &["tslgame.exe"],
         pastas: &["pubg"],
+        appid: Some(578080),
     },
     JogoConhecido {
         id: "gtav",
         nome: "Grand Theft Auto V",
         executaveis: &["gta5.exe", "gtav.exe", "playgtav.exe"],
         pastas: &["grand theft auto v"],
+        appid: Some(271590),
     },
     JogoConhecido {
         id: "fivem",
         nome: "FiveM",
         executaveis: &["fivem.exe", "fivem_b2699_gtaprocess.exe"],
         pastas: &["fivem"],
+        appid: None,
     },
     JogoConhecido {
         id: "eafc",
         nome: "EA SPORTS FC",
         executaveis: &["fc25.exe", "fc26.exe", "fc24.exe"],
         pastas: &["ea sports fc"],
+        appid: Some(2669320),
     },
     JogoConhecido {
         id: "lol",
         nome: "League of Legends",
         executaveis: &["league of legends.exe", "leagueclient.exe"],
         pastas: &["league of legends"],
+        appid: None,
     },
     JogoConhecido {
         id: "dota2",
         nome: "Dota 2",
         executaveis: &["dota2.exe"],
         pastas: &["dota 2"],
+        appid: Some(570),
     },
     JogoConhecido {
         id: "r6",
         nome: "Rainbow Six Siege",
         executaveis: &["rainbowsix.exe", "rainbowsix_vulkan.exe"],
         pastas: &["tom clancy's rainbow six siege"],
+        appid: Some(359550),
     },
     JogoConhecido {
         id: "overwatch2",
         nome: "Overwatch 2",
         executaveis: &["overwatch.exe"],
         pastas: &["overwatch"],
+        appid: Some(2357570),
     },
     JogoConhecido {
         id: "minecraft",
         nome: "Minecraft",
         executaveis: &["minecraft.windows.exe", "javaw.exe"],
         pastas: &["minecraft"],
+        appid: None,
     },
     JogoConhecido {
         id: "roblox",
         nome: "Roblox",
         executaveis: &["robloxplayerbeta.exe"],
         pastas: &["roblox"],
+        appid: None,
     },
     JogoConhecido {
         id: "tarkov",
         nome: "Escape from Tarkov",
         executaveis: &["escapefromtarkov.exe"],
         pastas: &["escape from tarkov"],
+        appid: None,
     },
     JogoConhecido {
         id: "thefinals",
         nome: "The Finals",
         executaveis: &["discovery.exe"],
         pastas: &["the finals"],
+        appid: Some(2073850),
     },
     JogoConhecido {
         id: "marvelrivals",
         nome: "Marvel Rivals",
         executaveis: &["marvel-win64-shipping.exe"],
         pastas: &["marvelrivals", "marvel rivals"],
+        appid: Some(2767030),
     },
     JogoConhecido {
         id: "deltaforce",
         nome: "Delta Force",
         executaveis: &["deltaforceclient-win64-shipping.exe"],
         pastas: &["delta force"],
+        appid: Some(2507950),
     },
     JogoConhecido {
         id: "valheim",
         nome: "Valheim",
         executaveis: &["valheim.exe"],
         pastas: &["valheim"],
+        appid: Some(892970),
     },
     JogoConhecido {
         id: "elden-ring",
         nome: "Elden Ring",
         executaveis: &["eldenring.exe"],
         pastas: &["elden ring"],
+        appid: Some(1245620),
     },
     JogoConhecido {
         id: "cyberpunk",
         nome: "Cyberpunk 2077",
         executaveis: &["cyberpunk2077.exe"],
         pastas: &["cyberpunk 2077"],
+        appid: Some(1091500),
+    },
+    JogoConhecido {
+        id: "helldivers2",
+        nome: "Helldivers 2",
+        executaveis: &["helldivers2.exe"],
+        pastas: &["helldivers 2"],
+        appid: Some(553850),
     },
     JogoConhecido {
         id: "rocketleague",
         nome: "Rocket League",
         executaveis: &["rocketleague.exe"],
         pastas: &["rocketleague", "rocket league"],
+        appid: Some(252950),
     },
 ];
 
@@ -370,8 +413,9 @@ pub fn montar(detectados: &[Detectado]) -> Vec<NaGrade> {
             conhecido: true,
             matiz: matiz_de(j.id),
             iniciais: iniciais_de(j.nome),
-            // Jogo não instalado não tem capa nesta máquina.
-            appid: None,
+            // O número do catálogo: é por ele que a capa é procurada, mesmo
+            // sem o jogo instalado.
+            appid: j.appid,
         });
     }
 
@@ -388,6 +432,76 @@ mod tests {
             pasta: pasta.to_string(),
             executavel: exe.map(|e| e.to_string()),
             appid: None,
+        }
+    }
+
+    /// O CAMINHO INTEIRO, nesta máquina: varrer → casar → achar a capa.
+    ///
+    /// Os outros testes provam pedaços. Este prova a junta, que é onde o
+    /// defeito mora: um `appid` que se perde entre o manifesto da Steam e a
+    /// grade não quebra teste nenhum — só devolve uma tela de letras.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn a_grade_desta_maquina_chega_com_capa() {
+        use crate::modules::capas;
+        use crate::modules::windows::jogos;
+
+        let biblioteca = jogos::varrer();
+        let Some(raiz) = biblioteca.raiz_steam.clone() else {
+            println!("sem Steam nesta máquina");
+            return;
+        };
+
+        let detectados: Vec<Detectado> = biblioteca
+            .jogos
+            .iter()
+            .map(|j| Detectado {
+                nome: j.nome.clone(),
+                pasta: j.pasta.to_string_lossy().to_string(),
+                executavel: j
+                    .executavel
+                    .as_ref()
+                    .map(|e| e.to_string_lossy().to_string()),
+                appid: j.appid,
+            })
+            .collect();
+
+        let grade = montar(&detectados);
+        let instalados: Vec<&NaGrade> = grade.iter().filter(|g| g.instalado).collect();
+
+        println!("instalados: {}", instalados.len());
+
+        let mut com_capa = 0;
+        for g in &instalados {
+            let capa = g.appid.and_then(|id| capas::procurar_steam(&raiz, id));
+            println!(
+                "  {} · appid {:?} · capa {}",
+                g.nome,
+                g.appid,
+                capa.as_ref()
+                    .map(|c| c
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string())
+                    .unwrap_or_else(|| "NENHUMA".to_string())
+            );
+            if capa.is_some() {
+                com_capa += 1;
+            }
+        }
+
+        println!("com capa: {com_capa} de {}", instalados.len());
+
+        // Sem jogo instalado não há o que afirmar. COM jogo da Steam
+        // instalado, o appid TEM de chegar até aqui — se ele se perder no
+        // caminho, a grade vira um campo de letras e nenhum outro teste nota.
+        let da_steam = instalados.iter().filter(|g| g.appid.is_some()).count();
+        if !instalados.is_empty() {
+            assert!(
+                da_steam > 0 || biblioteca.jogos.iter().all(|j| j.appid.is_none()),
+                "há jogo instalado e nenhum appid chegou na grade"
+            );
         }
     }
 

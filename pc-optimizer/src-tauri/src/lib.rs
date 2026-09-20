@@ -84,6 +84,8 @@ pub fn run() {
             reparo: modules::windows::tarefa_longa::TarefaLonga::nova(),
             #[cfg(target_os = "windows")]
             disco: std::sync::Mutex::new(Default::default()),
+            #[cfg(target_os = "windows")]
+            raiz_steam: Default::default(),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
