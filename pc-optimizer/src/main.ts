@@ -2077,6 +2077,142 @@ function blocoDeFaltas(itens: string[], rotulo: string): string {
   )}.</p>`;
 }
 
+// ------------------------------------------------ o caminho do mouse
+
+type AchadoMouse = "AceleracaoLigada" | "BarraAbaixoDoMeio" | "BarraAcimaDoMeio";
+
+interface CaminhoDoMouse {
+  /** Ausente quando a chave não pôde ser lida. Ausente não é "desligada". */
+  aceleracao: boolean | null;
+  barra: number | null;
+  taxa_hz: number | null;
+  achados: AchadoMouse[];
+  falta: string[];
+}
+
+interface AchadoNaTela {
+  achado: AchadoMouse;
+  titulo: string;
+  explicacao: string;
+  onde_mexer: string;
+}
+
+interface CaminhoNaTela {
+  caminho: CaminhoDoMouse;
+  achados: AchadoNaTela[];
+}
+
+/** Quanto tempo a janela fica contando os relatos de movimento. */
+const SEGUNDOS_CONTANDO = 3;
+
+/**
+ * Conta os intervalos entre relatos de movimento DENTRO DESTA JANELA.
+ *
+ * `getCoalescedEvents` é o que torna a conta possível: o navegador junta os
+ * movimentos e entrega um por quadro desenhado, e contar os juntados devolveria
+ * a taxa da TELA, não a do mouse. Os coalescidos são os relatos como chegaram.
+ *
+ * Nada disto sai da janela do aplicativo: não há gancho global, não há outro
+ * processo, e nenhum anticheat tem o que vigiar aqui.
+ */
+function contarRelatos(segundos: number): Promise<number[]> {
+  return new Promise((resolve) => {
+    const instantes: number[] = [];
+
+    const ouvir = (e: PointerEvent) => {
+      const juntados = e.getCoalescedEvents?.() ?? [e];
+      for (const p of juntados) instantes.push(p.timeStamp);
+    };
+
+    window.addEventListener("pointermove", ouvir, { passive: true });
+
+    window.setTimeout(() => {
+      window.removeEventListener("pointermove", ouvir);
+
+      // Em microssegundos, que é o que o comando espera. Intervalo não
+      // positivo sai daqui — dois relatos com o mesmo carimbo de tempo não
+      // descrevem uma taxa, e o Rust também os descarta.
+      const intervalos: number[] = [];
+      for (let i = 1; i < instantes.length; i += 1) {
+        const dt = Math.round((instantes[i] - instantes[i - 1]) * 1000);
+        if (dt > 0) intervalos.push(dt);
+      }
+
+      resolve(intervalos);
+    }, segundos * 1000);
+  });
+}
+
+async function lerCaminhoDoMouse() {
+  const botao = element<HTMLButtonElement>("mouse-ler");
+  botao.disabled = true;
+  setStatus(
+    "mouse-status",
+    `Mexa o mouse em círculos sobre esta janela por ${SEGUNDOS_CONTANDO} segundos…`,
+    "progress"
+  );
+
+  try {
+    // A contagem vem primeiro: as chaves do registro são instantâneas, e ler
+    // antes só faria a pessoa esperar sem saber o que fazer.
+    const intervalos_us = await contarRelatos(SEGUNDOS_CONTANDO);
+
+    setStatus("mouse-status", "Lendo as opções do ponteiro…", "progress");
+    renderCaminhoDoMouse(await invoke<CaminhoNaTela>("caminho_do_mouse", { intervalosUs: intervalos_us }));
+    setStatus("mouse-status", "", "ok");
+  } catch (error) {
+    setStatus("mouse-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderCaminhoDoMouse(r: CaminhoNaTela) {
+  const c = r.caminho;
+  // "Nada a corrigir" só pode ser dito quando as DUAS chaves foram lidas. Com
+  // uma ilegível, o que se sabe é que não se sabe — e dizer "tudo certo" ali
+  // seria absolver o que ninguém olhou.
+  const leuTudo = c.aceleracao !== null && c.barra !== null;
+
+  text(
+    "mouse-tag",
+    c.achados.length > 0
+      ? `${c.achados.length} coisa(s) no caminho`
+      : leuTudo
+        ? "movimento 1:1"
+        : "não deu para ler"
+  );
+
+  // O texto de cada achado vem do Rust, e não de uma tabela aqui. Duas cópias
+  // de uma frase que o cliente lê acabam discordando assim que uma das duas
+  // for corrigida.
+  const achados = r.achados
+    .map(
+      (a, i) => `
+        <article class="finding" data-severity="Important" style="--i:${i}">
+          <div class="finding-top">
+            <h3>${escapeHtml(a.titulo)}</h3>
+          </div>
+          <p>${escapeHtml(a.explicacao)}</p>
+          <p class="finding-advice">${escapeHtml(a.onde_mexer)}</p>
+        </article>`
+    )
+    .join("");
+
+  const limpo =
+    c.achados.length === 0 && leuTudo
+      ? `<p class="hint">O Windows não está mexendo no movimento: a aceleração está desligada e a barra de velocidade está no meio. O que chega ao jogo é o que o sensor do mouse mandou.</p>`
+      : "";
+
+  const taxa =
+    c.taxa_hz === null
+      ? ""
+      : `<p class="finding-measured">Taxa de varredura medida: ${c.taxa_hz.toFixed(0)} Hz.</p>`;
+
+  element("mouse-result").innerHTML =
+    achados + limpo + taxa + blocoDeFaltas(c.falta, "Não entrou na conta:");
+}
+
 // ------------------------------------------------ quando foi que piorou
 
 interface RegressaoNaTela {
@@ -9352,6 +9488,7 @@ function wireControls() {
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
+  element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {

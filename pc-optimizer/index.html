@@ -971,6 +971,45 @@
           </section>
 
           <!--
+            O CAMINHO DO MOUSE.
+
+            Este painel NÃO mede mira. Mira é habilidade de pessoa, e um
+            programa que a mede sem estar dentro do jogo está inventando um
+            número — enquanto um que se mete dentro do jogo para medir está do
+            lado errado de qualquer anticheat, arriscando a conta do cliente
+            para entregar um gráfico.
+
+            O que ele olha é o caminho, que é do sistema: o que o Windows faz
+            com o movimento antes de ele chegar ao jogo. Duas coisas quebram a
+            relação 1:1, e as duas são do Windows, não do jogo — a aceleração,
+            que o produto já sabia desligar, e a barra de velocidade do
+            ponteiro, que quase ninguém olha e que faz o sistema DESCARTAR
+            contagem abaixo do meio e PULAR pixel acima dele.
+          -->
+          <section class="panel" id="mouse">
+            <div class="panel-head">
+              <h2>O caminho do mouse</h2>
+              <span class="panel-tag" id="mouse-tag">—</span>
+            </div>
+
+            <p class="lead">
+              O que o Windows faz com o movimento da mão antes de ele virar
+              pixel dentro do jogo.
+            </p>
+
+            <p class="hint">
+              Não medimos mira, não olhamos dentro do jogo e não instalamos
+              gancho de entrada — nada aqui chega perto do que um anticheat
+              precisa vigiar. São duas chaves do seu próprio usuário no
+              Windows.
+            </p>
+
+            <button id="mouse-ler" class="btn" data-custo="~3 s">Conferir o caminho</button>
+            <p id="mouse-status" class="status"></p>
+            <div id="mouse-result" class="resultado" data-vazio="Lê a aceleração do ponteiro e a barra de velocidade, e diz se o Windows está mexendo no movimento antes de o jogo recebê-lo. Não altera nada."></div>
+          </section>
+
+          <!--
             QUANDO FOI QUE PIOROU.
 
             A ordem desta aba não é decorativa, e é esta: o que está segurando a

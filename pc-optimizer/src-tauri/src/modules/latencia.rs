@@ -101,16 +101,38 @@ pub fn orcar(t: &Telemetry) -> Orcamento {
     // ---- entrada
     //
     // O Windows entrega o evento do mouse, não o instante em que o sensor o
-    // produziu. A diferença entre os dois é a taxa de varredura do aparelho, e
-    // ela não é publicada por nenhuma interface que um programa comum alcance.
-    parcelas.push(Parcela {
-        etapa: Etapa::Entrada,
-        ms: None,
-        qualidade: Quality::Unknown,
-        origem: "o Windows não publica o instante em que o mouse produziu o evento, só o instante \
-                 em que o entregou"
-            .to_string(),
-    });
+    // produziu. A diferença entre os dois é, no pior caso, um ciclo inteiro de
+    // varredura do aparelho: o movimento que acontece logo depois de um relato
+    // espera o próximo.
+    //
+    // A taxa NÃO é publicada por interface nenhuma — ela é medida contando os
+    // relatos que chegam à janela deste aplicativo (`modules::mouse`). Por isso
+    // a etapa só tem número quando essa medição existir; até lá, a ausência
+    // fica declarada em vez de virar zero.
+    let entrada = t
+        .get("input.polling_rate")
+        .and_then(|m| m.value)
+        .filter(|hz| *hz > 0.0)
+        .map(|hz| 1000.0 / hz);
+
+    match entrada {
+        Some(ms) => parcelas.push(Parcela {
+            etapa: Etapa::Entrada,
+            ms: Some(ms),
+            // Estimativa: é o pior caso de um ciclo, e a contagem mede a
+            // chegada ao nosso processo — não o instante do sensor.
+            qualidade: Quality::Estimated,
+            origem: "pior caso de um ciclo de varredura do mouse, de input.polling_rate".to_string(),
+        }),
+        None => parcelas.push(Parcela {
+            etapa: Etapa::Entrada,
+            ms: None,
+            qualidade: Quality::Unknown,
+            origem: "o Windows não publica a taxa de varredura do mouse; medi-la exige contar os \
+                     relatos que chegam à janela deste aplicativo"
+                .to_string(),
+        }),
+    }
 
     // ---- jogo e placa
     //
@@ -263,6 +285,50 @@ mod tests {
         assert_eq!(o.parcelas.len(), ETAPAS);
         assert!(o.parcelas.iter().all(|p| p.ms.is_none()));
         assert!(o.parcelas.iter().all(|p| !p.origem.is_empty()));
+    }
+
+    /// Com a taxa do mouse medida, a primeira etapa deixa de ser desconhecida.
+    ///
+    /// É o fechamento de uma lacuna que este orçamento declarou desde o começo:
+    /// a etapa da entrada tinha motivo escrito e nenhum número. Agora ela tem
+    /// número quando alguém mediu, e continua sem número quando ninguém mediu.
+    #[test]
+    fn a_taxa_do_mouse_preenche_a_etapa_da_entrada() {
+        let mut t = vazia();
+        t.set(
+            "input.polling_rate",
+            Metric::measured(1000.0, Unit::Hertz, "janela do aplicativo"),
+        );
+
+        let o = orcar(&t.finish(0));
+        let entrada = o
+            .parcelas
+            .iter()
+            .find(|p| p.etapa == Etapa::Entrada)
+            .expect("etapa");
+
+        assert_eq!(entrada.ms, Some(1.0));
+        assert_eq!(entrada.qualidade, Quality::Estimated);
+        assert_eq!(o.etapas_com_valor, 1);
+    }
+
+    #[test]
+    fn taxa_de_mouse_invalida_nao_vira_divisao_por_zero() {
+        let mut t = vazia();
+        t.set(
+            "input.polling_rate",
+            Metric::measured(0.0, Unit::Hertz, "janela do aplicativo"),
+        );
+
+        let o = orcar(&t.finish(0));
+        let entrada = o
+            .parcelas
+            .iter()
+            .find(|p| p.etapa == Etapa::Entrada)
+            .expect("etapa");
+
+        assert_eq!(entrada.ms, None);
+        assert_eq!(entrada.qualidade, Quality::Unknown);
     }
 
     #[test]

@@ -130,6 +130,43 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     monitor.collect_metrics().await
 }
 
+/// Comando: o caminho do mouse, do movimento da mão ao pixel.
+///
+/// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
+/// registro do próprio usuário e responde o que o Windows está fazendo com o
+/// movimento antes de ele chegar ao jogo. Ver o cabeçalho de `modules::mouse`
+/// para o que ficou de fora e por quê.
+///
+/// `intervalos_us` são os intervalos entre relatos de movimento que a TELA
+/// contou na janela deste aplicativo. Lista vazia ou curta demais devolve taxa
+/// ausente — declarada como ausente, e nunca como zero.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
+    use crate::modules::mouse;
+
+    // Os intervalos vêm da JANELA DESTE aplicativo, contados pela tela
+    // enquanto o cliente mexe o mouse por cima dela. É a nossa própria
+    // janela: nenhum gancho global, nenhum outro processo, nada que um
+    // anticheat precise vigiar. Lista vazia é taxa ausente, e não zero.
+    let taxa = mouse::taxa_de_varredura(&intervalos_us);
+    let caminho = mouse::desta_maquina(taxa);
+
+    CaminhoNaTela {
+        achados: caminho.achados_na_tela(),
+        caminho,
+    }
+}
+
+/// O caminho do mouse com o texto de cada achado pronto.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct CaminhoNaTela {
+    pub caminho: crate::modules::mouse::Caminho,
+    /// Os mesmos achados de `caminho`, com o texto que a tela mostra.
+    pub achados: Vec<crate::modules::mouse::AchadoNaTela>,
+}
+
 /// Comando: o próximo passo de uma sessão de autoajuste.
 ///
 /// SEM ESTADO NO BACKEND, de propósito. A sessão vem da tela e volta para a
@@ -4240,6 +4277,7 @@ mod tests {
         "plano_de_renderizacao",
         "passo_do_autoajuste",
         "historico_de_desempenho",
+        "caminho_do_mouse",
         "recuperacao_pendente",
         "descartar_pendencia",
         "concluir_recuperacao",

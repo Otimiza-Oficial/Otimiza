@@ -23,6 +23,7 @@ pub mod maquina;
 pub mod medicoes;
 pub mod pontuacao;
 pub mod regressao;
+pub mod mouse;
 pub mod optimizer;
 pub mod orquestrador;
 pub mod preferences;

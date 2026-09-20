@@ -759,6 +759,21 @@ impl PerformanceMonitor {
         );
         t.set("gpu.power", Metric::unknown(Unit::Watts, SEM_SENSOR));
 
+        // A taxa de varredura do mouse. O motivo é escrito aqui e não deixado
+        // no padrão do catálogo porque este não é um sensor que falta: é uma
+        // medição que o produto SABE fazer (`modules::mouse::taxa_de_varredura`)
+        // e que depende de contar os relatos que chegam à janela do aplicativo.
+        // A diferença entre "ninguém escreveu isto" e "falta ligar a captura"
+        // é a diferença entre uma lacuna e uma tarefa.
+        t.set(
+            "input.polling_rate",
+            Metric::unknown(
+                Unit::Hertz,
+                "exige contar os relatos de entrada que chegam à janela do aplicativo; a captura \
+                 ainda não está ligada",
+            ),
+        );
+
         #[cfg(target_os = "windows")]
         self.telemetria_da_placa(t);
 

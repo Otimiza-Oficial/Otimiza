@@ -442,6 +442,12 @@ pub const CATALOG: &[(&str, Unit)] = &[
     ("input.mouse_polling", Unit::Hertz),
     ("input.consistency", Unit::Percent),
     ("display.refresh", Unit::Hertz),
+    // Quantas vezes por segundo o mouse relata posição. É a outra ponta da
+    // corrente que `display.refresh` fecha: uma diz de quanto em quanto tempo a
+    // tela mostra, a outra de quanto em quanto tempo a mão é ouvida. Quem
+    // interpreta é `modules::mouse`; quem a transforma em milissegundos do
+    // orçamento é `modules::latencia`.
+    ("input.polling_rate", Unit::Hertz),
     // Sistema.
     ("system.uptime", Unit::Hours),
 ];
