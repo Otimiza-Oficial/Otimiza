@@ -698,6 +698,27 @@ O mesmo vale depois para os formatos da Valve (CS2, Dota 2).
 | Limites de FPS escondidos (NVIDIA global, RTSS, Unreal) | `tetos.rs` | leitura real: 180 Hz, nenhum teto |
 | Portão "nunca menos FPS" para ajuste de jogo | `portao.rs` | testes |
 
+**Segunda rodada:**
+
+| Item | Onde | Conferido nesta máquina |
+|---|---|---|
+| Desempenho perdido (P0–P3) no veredito | `veredito.rs` | real: "sim" — canal único, RAM curta, esgotamento |
+| Botões de conserto que chamavam otimização inexistente | `veredito.rs` | trava em teste |
+| Registro de eventos sem eventos deixa de virar "não consegui ler" | `exhaustion.rs` | real: lacuna falsa sumiu |
+| Boot e térmico: leitura que falha não vira verde | `boot.rs`, `thermal.rs` | testes |
+| Detetive de travadas (travada × disco, paginação, VRAM, núcleo, programa) | `core/travadas.rs` | testes; sem jogo aberto |
+| Deriva por jogo (driver / Windows / sem culpado) | `deriva.rs` | versão real lida: driver 32.0.16.1692, build 19045.4170 |
+| Verificar antes de jogar | `prontojogo.rs` | real: pronto, recomenda modo jogo |
+| Inicialização classificada | `startup.rs` | real: Discord/Spotify/Steam opcionais, LG Hub útil |
+
+Já existiam antes da 2.9 e não foram duplicados: teste de resposta de boost e
+clock efetivo no motor de energia; prontidão, multiplicador pelo Hz e guarda
+de atraso no gerador de quadros.
+
+Decidido não fazer: ajustador do Roblox — o jogo já vem no gráfico
+automático, que baixa a qualidade para segurar o FPS; não há como provar que
+um ajuste nosso renderia mais.
+
 **Não visto ainda (precisa de jogo aberto / outra máquina):**
 
 - `diagnostico_ao_vivo` com jogo aberto (quadros por ETW exigem administrador).
