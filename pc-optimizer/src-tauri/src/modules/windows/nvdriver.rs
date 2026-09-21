@@ -219,9 +219,9 @@ pub fn opcao_por_id(id: &str) -> Option<&'static Opcao> {
 pub static LIMITADOR: Opcao = Opcao {
     id: "limitador",
     titulo: "Limite de quadros por segundo",
-    explicacao: "Segura o jogo num número fixo de quadros por segundo. Em RP, quadro \
-                 estável é sentido como fluidez e a placa trabalha menos; em jogo \
-                 competitivo, limitar acrescenta atraso.",
+    explicacao: "Segura o jogo num número fixo de quadros por segundo. Baixa o FPS \
+                 médio por definição — o Otimiza nunca aplica sozinho; serve para quem \
+                 quer a placa mais fria ou um número estável.",
     id_do_padrao: Some(0x1083_5002),
     nome_esperado: "frame rate limiter",
     // Não é usado: o valor escrito é o limite que a pessoa escolhe.
@@ -781,6 +781,65 @@ fn na_sessao_da_drs<T>(
 
     unsafe { (api.destruir_sessao)(sessao) };
     resultado
+}
+
+/// Abre a sessão no perfil global SÓ PARA LER. Nada é salvo.
+fn na_sessao_de_leitura<T>(
+    trabalho: impl FnOnce(&Api, *mut c_void, *mut c_void) -> Result<T, String>,
+) -> Result<T, String> {
+    let api = api().map_err(nota_do_estado)?;
+    let mut sessao: *mut c_void = std::ptr::null_mut();
+    if unsafe { (api.criar_sessao)(&mut sessao) } != NVAPI_OK {
+        return Err("não consegui abrir a configuração do driver da NVIDIA.".to_string());
+    }
+    let resultado = (|| {
+        if unsafe { (api.carregar_ajustes)(sessao) } != NVAPI_OK {
+            return Err("não consegui ler a configuração atual do driver da NVIDIA.".to_string());
+        }
+        let mut perfil: *mut c_void = std::ptr::null_mut();
+        if unsafe { (api.perfil_base)(sessao, &mut perfil) } != NVAPI_OK {
+            return Err("não consegui abrir o perfil global do driver da NVIDIA.".to_string());
+        }
+        trabalho(api, sessao, perfil)
+    })();
+    unsafe { (api.destruir_sessao)(sessao) };
+    resultado
+}
+
+// ------------------------------------------------ tetos escondidos (2.9)
+
+/// `VSYNCMODE_*` do `NvApiDriverSettings.h` que PRENDEM o FPS: ligado à
+/// força e os intervalos de 2, 3 e 4 atualizações por quadro. "Controlado pelo
+/// aplicativo" (0x60925292), "desligado" e "rápido" (virtual) não prendem.
+pub fn vsync_prende(valor: u32) -> bool {
+    const FORCEON: u32 = 0x4781_4940;
+    const FLIPINTERVAL2: u32 = 0x3261_0244;
+    const FLIPINTERVAL3: u32 = 0x7127_1021;
+    const FLIPINTERVAL4: u32 = 0x1324_5256;
+    matches!(valor, FORCEON | FLIPINTERVAL2 | FLIPINTERVAL3 | FLIPINTERVAL4)
+}
+
+/// O que o perfil GLOBAL do driver está impondo a todo jogo.
+#[derive(Debug, Clone, Serialize)]
+pub struct TetosDoDriver {
+    /// Limitador de FPS no perfil global (0 = desligado).
+    pub limite_global_fps: u32,
+    /// V-Sync forçado (ou intervalo) no perfil global.
+    pub vsync_forcado: bool,
+}
+
+/// Lê, sem escrever nada, os dois tetos que o perfil global pode impor.
+pub fn tetos_no_perfil_global() -> Result<TetosDoDriver, String> {
+    na_sessao_de_leitura(|api, sessao, perfil| {
+        let limite_id = LIMITADOR.id_do_padrao.expect("o limitador tem número");
+        let vsync_id = opcao_por_id("vsync").and_then(|o| o.id_do_padrao).expect("vsync tem número");
+        let (_, limite) = ler_valor(api, sessao, perfil, limite_id);
+        let (padrao_vsync, vsync) = ler_valor(api, sessao, perfil, vsync_id);
+        Ok(TetosDoDriver {
+            limite_global_fps: limite,
+            vsync_forcado: !padrao_vsync && vsync_prende(vsync),
+        })
+    })
 }
 
 /// Traduz o que a NVAPI devolveu numa leitura em `(era_o_padrao, valor)`.

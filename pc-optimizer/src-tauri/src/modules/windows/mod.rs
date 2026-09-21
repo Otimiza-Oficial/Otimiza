@@ -77,6 +77,7 @@ pub mod suspend;
 pub mod sysparams;
 pub mod tarefa_longa;
 pub mod tasks;
+pub mod tetos;
 pub mod thermal;
 pub mod unreal;
 pub mod veredito;

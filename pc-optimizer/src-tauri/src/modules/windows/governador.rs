@@ -340,8 +340,8 @@ mod testes {
             windows_sys::Win32::Foundation::CloseHandle(h);
             p
         };
-        let mut filho = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", "while ($true) { $x = 1 }"])
+        let mut filho = std::process::Command::new("cmd")
+            .args(["/C", "for /L %i in () do @rem"])
             .spawn()
             .unwrap();
         std::thread::sleep(std::time::Duration::from_secs(2));

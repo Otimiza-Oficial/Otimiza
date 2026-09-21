@@ -141,6 +141,7 @@ pub fn run() {
             commands::biblioteca_de_jogos,
             commands::unreal_prever,
             commands::unreal_aplicar,
+            commands::tetos_escondidos,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,

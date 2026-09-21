@@ -1452,6 +1452,14 @@ pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<Bibliotec
     .map_err(|e| format!("Falha ao ler a biblioteca: {}", e))?
 }
 
+
+/// Comando: limites de FPS escondidos (driver, RTSS, arquivo do jogo). `LIVRES`.
+#[tauri::command]
+pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relatorio, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::tetos::procurar)
+        .await
+        .map_err(|e| format!("Falha ao procurar limites: {}", e))
+}
 fn vram_gb() -> Option<f64> {
     crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
 }
@@ -4056,6 +4064,7 @@ mod tests {
         "diagnostico_ao_vivo",
         "biblioteca_de_jogos",
         "unreal_prever",
+        "tetos_escondidos",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",

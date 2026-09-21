@@ -134,6 +134,72 @@ const ROTULO_EVIDENCIA: Record<string, [string, string]> = {
   fps_medio: ["FPS médio", ""],
 };
 
+type Teto =
+  | { tipo: "LimiteGlobalNvidia"; fps: number }
+  | { tipo: "VsyncForcadoNvidia" }
+  | { tipo: "Rtss" }
+  | { tipo: "LimiteNoJogo"; jogo: string; fps: number; arquivo: string }
+  | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string };
+
+type RelatorioDeTetos = { monitor_hz: number | null; tetos: Teto[]; lacunas: string[] };
+
+function frasesDoTeto(t: Teto, hz: number | null): { titulo: string; onde: string } {
+  const monitor = hz ? `o monitor mostra ${hz}` : "o monitor mostra mais";
+  switch (t.tipo) {
+    case "LimiteGlobalNvidia":
+      return {
+        titulo: `O driver da NVIDIA segura TODO jogo em ${t.fps} FPS, e ${monitor}.`,
+        onde: "Painel de Controle da NVIDIA → Gerenciar configurações 3D → aba Configurações globais → Taxa de quadros máxima → Desligada.",
+      };
+    case "VsyncForcadoNvidia":
+      return {
+        titulo: "O driver da NVIDIA está forçando V-Sync em todo jogo.",
+        onde: "Painel de Controle da NVIDIA → Gerenciar configurações 3D → Configurações globais → Sincronização vertical → Usar configuração do aplicativo 3D.",
+      };
+    case "Rtss":
+      return {
+        titulo: "O RivaTuner (RTSS) está aberto — ele costuma ter um limite de FPS ligado.",
+        onde: "Abra o RTSS e confira \"Framerate limit\" do perfil Global e do jogo. 0 é sem limite.",
+      };
+    case "LimiteNoJogo":
+      return {
+        titulo: `${t.jogo} está com limite de ${t.fps} FPS no arquivo de configuração, e ${monitor}.`,
+        onde: `No menu do jogo, opção de limite de FPS. Arquivo: ${t.arquivo}`,
+      };
+    case "VsyncNoJogo":
+      return {
+        titulo: `${t.jogo} está com V-Sync ligado.`,
+        onde: `No menu de vídeo do jogo. Arquivo: ${t.arquivo}`,
+      };
+  }
+}
+
+async function desenharTetos() {
+  const alvo = raiz?.querySelector<HTMLElement>("#mapa-tetos");
+  if (!alvo) return;
+  alvo.innerHTML = `<p class="fg-nota">Procurando limites de FPS escondidos…</p>`;
+  try {
+    const r = await invoke<RelatorioDeTetos>("tetos_escondidos");
+    const lacunas = r.lacunas.length ? `<p class="fg-nota">Não deu para ler: ${r.lacunas.map(esc).join("; ")}</p>` : "";
+    if (!r.tetos.length) {
+      alvo.innerHTML = `<p class="fg-nota">Nenhum limite de FPS escondido encontrado no driver, no RTSS ou nos arquivos dos jogos que o Otimiza sabe ler.</p>${lacunas}`;
+      return;
+    }
+    alvo.innerHTML = `
+      <h3 class="fg-sub">Limites de FPS escondidos</h3>
+      ${r.tetos
+        .map((t) => {
+          const f = frasesDoTeto(t, r.monitor_hz);
+          return `<article class="mapa-gargalo"><b>${esc(f.titulo)}</b><p class="fg-nota"><strong>Onde tirar:</strong> ${esc(f.onde)}</p></article>`;
+        })
+        .join("")}
+      <p class="fg-nota">O Otimiza nunca põe limite de FPS, e não tira sozinho: às vezes o limite foi escolhido de propósito (menos calor, menos ruído).</p>
+      ${lacunas}`;
+  } catch (e) {
+    alvo.innerHTML = `<p class="fg-nota">Não deu para procurar limites: ${esc(String(e))}</p>`;
+  }
+}
+
 const SEGUNDOS = 20;
 const ESPERA_PARA_VOLTAR_AO_JOGO = 8;
 
@@ -308,6 +374,7 @@ function desenhar(d: Diagnostico) {
       ${mapa}
       ${gargalos}
       ${quadros}
+      <div id="mapa-tetos"></div>
       <div class="fg-linha">
         <button class="btn" id="mapa-de-novo-jogo">Medir de novo no jogo</button>
         <button class="btn btn-ghost" id="mapa-de-novo">Medir agora</button>
@@ -315,6 +382,7 @@ function desenhar(d: Diagnostico) {
     </div>`;
   raiz.querySelector("#mapa-de-novo-jogo")?.addEventListener("click", () => void medir(ESPERA_PARA_VOLTAR_AO_JOGO));
   raiz.querySelector("#mapa-de-novo")?.addEventListener("click", () => void medir(0));
+  void desenharTetos();
 }
 
 export function carregarMapaDeDesempenho() {
