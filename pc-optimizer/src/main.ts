@@ -2698,7 +2698,45 @@ let programasCarregados: ProgramaNaLista[] = [];
 let wingetPronto = false;
 let categoriaEscolhida = "Todos";
 
+/**
+ * O ESQUELETO DE CARGA.
+ *
+ * As duas listas mais lentas do produto — a varredura de jogos e a leitura do
+ * estado de instalação de vinte e dois programas — são varreduras de disco e
+ * de registro, e levam segundos. Até aqui elas desenhavam uma caixa vazia
+ * enquanto isso: a mesma caixa vazia que aparece quando não há NADA para
+ * mostrar. Quem abria a aba e via o vazio não tinha como saber se devia
+ * esperar ou se já era a resposta.
+ *
+ * O esqueleto responde isso sem prometer número nenhum: ele diz "está vindo",
+ * com a forma do que vem, e some quando o conteúdo real chega.
+ *
+ * `aria-hidden` porque para quem usa leitor de tela isto não é informação — o
+ * recado certo é o `aria-busy` no container, que o leitor anuncia como
+ * ocupado.
+ */
+function esqueletos(quantos: number, forma: "linha" | "bloco"): string {
+  return Array.from(
+    { length: quantos },
+    () => `<div class="esqueleto esqueleto-${forma}" aria-hidden="true"></div>`
+  ).join("");
+}
+
+/** Liga ou desliga o estado de ocupado do container, para o leitor de tela. */
+function ocupado(id: string, sim: boolean) {
+  if (sim) {
+    element(id).setAttribute("aria-busy", "true");
+  } else {
+    element(id).removeAttribute("aria-busy");
+  }
+}
+
 async function carregarProgramas() {
+  // A contagem é o tamanho do catálogo, que é conhecido antes da varredura —
+  // o que demora é descobrir o ESTADO de cada um, não quantos são.
+  element("programas-lista").innerHTML = esqueletos(8, "linha");
+  ocupado("programas-lista", true);
+
   try {
     const r = await invoke<ProgramasNaTela>("catalogo_de_programas");
     programasCarregados = r.programas;
@@ -2733,6 +2771,11 @@ async function carregarProgramas() {
     desenharProgramas();
   } catch (error) {
     element("programas-lista").innerHTML = `<p class="hint">${escapeHtml(String(error))}</p>`;
+  } finally {
+    // `finally` e não o fim do `try`: o caminho do erro também precisa parar
+    // de se anunciar como ocupado, senão o leitor de tela fica dizendo que a
+    // lista está carregando para sempre.
+    ocupado("programas-lista", false);
   }
 }
 
@@ -2867,6 +2910,9 @@ let bibliotecaCarregada: JogoNaGrade[] = [];
 let filtroDaBiblioteca: "todos" | "instalados" = "todos";
 
 async function carregarBiblioteca() {
+  element("biblioteca-grade").innerHTML = esqueletos(12, "bloco");
+  ocupado("biblioteca-grade", true);
+
   try {
     const r = await invoke<BibliotecaNaTela>("biblioteca_de_jogos");
     bibliotecaCarregada = r.jogos;
@@ -2888,6 +2934,8 @@ async function carregarBiblioteca() {
   } catch (error) {
     element("biblioteca-grade").innerHTML =
       `<p class="hint">${escapeHtml(String(error))}</p>`;
+  } finally {
+    ocupado("biblioteca-grade", false);
   }
 }
 

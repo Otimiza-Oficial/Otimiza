@@ -6936,12 +6936,13 @@ input:focus-visible {
 
 /* --------------------------------------------------------- separador */
 
-.divisor {
-  height: 1px;
-  margin: var(--s5) 0;
-  border: 0;
-  background: var(--border);
-}
+/* `.divisor` MORAVA AQUI e saiu. Eu a escrevi junto com o resto da camada de
+   componentes e nunca a usei em lugar nenhum do HTML: as separações desta
+   interface acabaram todas saindo de `border-bottom` nas próprias linhas, que
+   é o certo — um traço que pertence à linha some junto com ela, e um traço
+   solto no meio da página não sabe quando sair. Regra de CSS que ninguém usa
+   é a mesma dívida que função morta em Rust: alguém vai achar que existe uma
+   convenção aqui, e não existe. */
 
 /* ------------------------------------------------------------ modais
 
@@ -7145,7 +7146,6 @@ input:focus-visible {
 }
 
 .esqueleto {
-  height: 14px;
   border-radius: 4px;
   background: linear-gradient(
     90deg,
@@ -7155,6 +7155,31 @@ input:focus-visible {
   );
   background-size: 200% 100%;
   animation: esqueleto 1.4s ease-in-out infinite;
+}
+
+/* DUAS FORMAS, porque o esqueleto só cumpre o papel dele se tiver a forma do
+   que está vindo. Uma fileira de barrinhas no lugar de uma grade de capas
+   anuncia a coisa errada, e a tela "pula" quando o conteúdo real entra. */
+.esqueleto-linha {
+  height: 74px;
+  margin-bottom: 1px;
+  border-radius: 6px;
+}
+
+.esqueleto-bloco {
+  aspect-ratio: 3 / 4;
+  border-radius: 9px;
+}
+
+/* Cada bloco começa a animação um pouco depois do anterior: doze retângulos
+   pulsando no mesmo compasso viram um piscar de tela inteira, que incomoda
+   mais do que informa. */
+.esqueleto:nth-child(3n + 2) {
+  animation-delay: 160ms;
+}
+
+.esqueleto:nth-child(3n + 3) {
+  animation-delay: 320ms;
 }
 
 @keyframes esqueleto {
