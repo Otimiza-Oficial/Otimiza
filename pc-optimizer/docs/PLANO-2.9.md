@@ -674,3 +674,37 @@ O mesmo vale depois para os formatos da Valve (CS2, Dota 2).
 - **Ficha sem assinatura válida:** é recusada.
 - **Trava contra lista fixa:** reprova se a detecção passar a depender de
   lista de nomes. Um jogo sem ficha tem que continuar sendo detectado.
+
+---
+
+## 18. Andamento (branch `versao-2.9`)
+
+**Feito, testado e commitado:**
+
+| Item | Onde | Conferido nesta máquina |
+|---|---|---|
+| 11 ajustes retirados (só o desfazer continua) + `naofazemos.rs` | `catalog.rs`, `profiles.rs` | testes |
+| Núcleo de estatística (Welch 95%, A B B A, validade) | `core/estatistica.rs` | testes |
+| Saúde dos quadros: P95, P99, 1% e 0,1% low, engasgos por gravidade, índice de fluidez | `core/fluidez.rs`, `frames.rs` | testes + equivalência com o 1% antigo |
+| Telemetria por PDH/DXGI (CPU, núcleo mais ocupado, clock efetivo, GPU, VRAM, RAM, disco) | `core/telemetria.rs`, `core/pdh.rs` | leitura real: GTX 1650, 4.066 MHz efetivos |
+| Classificador de gargalo múltiplo | `core/gargalo.rs` | testes |
+| Mapa de desempenho (mede qualquer jogo aberto) | `mapa.ts`, `diagnostico_ao_vivo` | comando real sem jogo; tela conferida |
+| Biblioteca: programas instalados + todo jogo visto rodando | `jogos.rs`, `deteccao.rs` | achou GTA V (Steam), FiveM e Roblox |
+| Ajustador genérico de Unreal (orçamento de imagem) | `unreal.rs` | teste de ponta a ponta com desfazer byte a byte |
+| Tela Seus jogos | `biblioteca.ts` | tela conferida |
+| Fora: painel DNS, prioridade fixa; "Competitivo" vira "Máximo de FPS" | vários | testes |
+| Guarda de atraso do gerador vale para todo perfil | `framegen.rs` | testes |
+| Modo jogo → governador de segundo plano (prioridade baixa + EcoQoS) | `governador.rs`, `gamemode.rs` | ao vivo: acalmou e devolveu um processo real |
+| Limites de FPS escondidos (NVIDIA global, RTSS, Unreal) | `tetos.rs` | leitura real: 180 Hz, nenhum teto |
+| Portão "nunca menos FPS" para ajuste de jogo | `portao.rs` | testes |
+
+**Não visto ainda (precisa de jogo aberto / outra máquina):**
+
+- `diagnostico_ao_vivo` com jogo aberto (quadros por ETW exigem administrador).
+- Ajustador Unreal num jogo Unreal real — esta máquina não tem nenhum.
+- Portão decidindo com partidas reais (precisa de 3 partidas medidas antes e 3 depois).
+- Governador numa partida de verdade.
+
+**Próximas fases:** Recuperação P0–P3 no veredito, energia (teste de resposta
+de boost, escrita como admin), Stutter Detective com janela de contexto,
+fichas de jogo nível B, AimTracking, UI final e fechamento da versão.
