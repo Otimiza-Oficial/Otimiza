@@ -255,22 +255,17 @@ pub fn percentis(intervalos_ms: &[f64]) -> Option<(f64, f64, f64)> {
         return None;
     }
 
-    let mut ordenados: Vec<f64> = intervalos_ms.to_vec();
-    ordenados.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let media = ordenados.iter().sum::<f64>() / ordenados.len() as f64;
-
-    // Índice do percentil pelo método do mais próximo, que é o que as
-    // ferramentas de análise de quadros usam. `min` com o último índice porque
-    // o arredondamento pode cair fora do vetor em amostra pequena.
-    let em = |p: f64| {
-        let indice = ((p / 100.0) * ordenados.len() as f64).ceil() as usize;
-        ordenados[indice.saturating_sub(1).min(ordenados.len() - 1)]
-    };
-
+    // Percentil pelo método do posto mais próximo — a MESMA conta da saúde
+    // dos quadros (`core::estatistica::percentil`), para a medição automática
+    // e o Mapa de desempenho nunca darem P99 diferentes para a mesma partida.
+    use crate::core::estatistica::{media, percentil};
     let arred = |v: f64| (v * 100.0).round() / 100.0;
 
-    Some((arred(media), arred(em(95.0)), arred(em(99.0))))
+    Some((
+        arred(media(intervalos_ms)?),
+        arred(percentil(intervalos_ms, 95.0)?),
+        arred(percentil(intervalos_ms, 99.0)?),
+    ))
 }
 
 // --------------------------------------------------------------- utilitários
