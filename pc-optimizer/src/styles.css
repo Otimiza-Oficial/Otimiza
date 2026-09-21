@@ -5483,8 +5483,8 @@ circle.placa-parafuso {
 .mapa-no span { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--text-muted); }
 .mapa-no b { font-family: var(--font-mono); font-size: 18px; }
 .mapa-no em { font-style: normal; font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
-.mapa-no[data-preso="true"] { background: #0a0a0a; color: #fff; box-shadow: none; }
-.mapa-no[data-preso="true"] span, .mapa-no[data-preso="true"] em { color: rgba(255, 255, 255, .72); }
+.mapa-no[data-preso="true"] { background: var(--text); color: var(--panel); box-shadow: none; }
+.mapa-no[data-preso="true"] span, .mapa-no[data-preso="true"] em { color: var(--panel); opacity: .75; }
 .mapa-gargalo { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r2); box-shadow: inset 3px 0 0 var(--text), inset 0 0 0 1px var(--hairline); }
 .mapa-gargalo header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .mapa-gargalo p { margin: 0; line-height: 1.5; color: var(--text-dim); font-size: 13px; }

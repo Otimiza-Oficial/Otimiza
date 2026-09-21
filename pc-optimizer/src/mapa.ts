@@ -254,7 +254,9 @@ async function desenharTetos() {
   }
 }
 
-const SEGUNDOS = 20;
+// 40 s: num jogo preso a 60 FPS, 20 s dão ~1.200 quadros, abaixo dos 2.000 que
+// o 1% pior e o P99 exigem para significar alguma coisa.
+const SEGUNDOS = 40;
 const ESPERA_PARA_VOLTAR_AO_JOGO = 8;
 
 let raiz: HTMLElement | null = null;
