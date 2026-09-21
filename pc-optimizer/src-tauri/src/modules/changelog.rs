@@ -26,7 +26,7 @@ pub enum PreviousValue {
 }
 
 /// Uma mudança atômica no sistema, com informação suficiente para desfazê-la.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ChangeRecord {
     RegistryValue {
@@ -162,9 +162,19 @@ impl ChangeRecord {
     /// confiança de uma caixa preta que diz "otimizado!".
     pub fn describe(&self) -> String {
         match self {
-            ChangeRecord::RegistryValue { path, name, previous, .. } => {
+            ChangeRecord::RegistryValue {
+                path,
+                name,
+                previous,
+                ..
+            } => {
                 let key = path.rsplit('\\').next().unwrap_or(path);
-                format!("registro · {}\\{} (antes: {})", key, name, previous.describe())
+                format!(
+                    "registro · {}\\{} (antes: {})",
+                    key,
+                    name,
+                    previous.describe()
+                )
             }
             ChangeRecord::ServiceStartType { service, previous } => {
                 // O mesmo registro serve aos dois sentidos: desligar um serviço
@@ -178,20 +188,35 @@ impl ChangeRecord {
             }
             ChangeRecord::PowerPlan { .. } => "plano de energia trocado".to_string(),
             ChangeRecord::Hibernation { .. } => "hibernação desligada".to_string(),
-            ChangeRecord::PowerSetting { setting, previous, .. } => {
+            ChangeRecord::PowerSetting {
+                setting, previous, ..
+            } => {
                 let short: String = setting.chars().take(8).collect();
-                format!("energia · ajuste {} (antes: {})", short, previous.describe())
+                format!(
+                    "energia · ajuste {} (antes: {})",
+                    short,
+                    previous.describe()
+                )
             }
             ChangeRecord::MemoryCompression { .. } => "compressão de memória desligada".to_string(),
-            ChangeRecord::ReservedStorage { .. } => {
-                "armazenamento reservado liberado".to_string()
-            }
-            ChangeRecord::ScheduledTask { name, previously_enabled, .. } => format!(
+            ChangeRecord::ReservedStorage { .. } => "armazenamento reservado liberado".to_string(),
+            ChangeRecord::ScheduledTask {
+                name,
+                previously_enabled,
+                ..
+            } => format!(
                 "tarefa agendada · {} (antes: {})",
                 name,
-                if *previously_enabled { "ligada" } else { "desligada" }
+                if *previously_enabled {
+                    "ligada"
+                } else {
+                    "desligada"
+                }
             ),
-            ChangeRecord::RefreshRate { device, previous_hz } => {
+            ChangeRecord::RefreshRate {
+                device,
+                previous_hz,
+            } => {
                 let curto = device.rsplit('\\').next().unwrap_or(device);
                 format!("monitor · {} (antes: {} Hz)", curto, previous_hz)
             }
@@ -293,7 +318,6 @@ pub enum LeituraDoHistorico {
     },
 }
 
-
 /// Um nome de arquivo temporário que ninguém mais vai usar.
 ///
 /// NOME FIXO NÃO SERVE, e o teste provou antes do cliente: dois caminhos
@@ -332,7 +356,11 @@ impl ChangeLog {
         let path = Self::storage_path();
         let (entries, leitura) = Self::ler(&path);
 
-        ChangeLog { path, entries, leitura }
+        ChangeLog {
+            path,
+            entries,
+            leitura,
+        }
     }
 
     /// A leitura deu certo, ou o vazio é desconhecimento?
@@ -437,18 +465,45 @@ impl ChangeLog {
 
         let temporario = caminho_temporario(path);
 
-        fs::write(&temporario, raw)
-            .map_err(|e| format!("Failed to write change log: {}", e))?;
+        // `write` + `rename` NÃO bastava, e a falta estava justamente no caso
+        // que esta função existe para cobrir.
+        //
+        // `fs::write` devolve sucesso quando o conteúdo chegou ao cache do
+        // sistema, não ao disco. Renomeando em seguida, uma queda de energia
+        // podia deixar o rename gravado e o conteúdo não — e o destino virava
+        // um arquivo truncado ou vazio. O arquivo antigo, que estava íntegro,
+        // já tinha sido substituído. Era o mesmo desfecho que o comentário
+        // acima descreve como inaceitável, por um caminho diferente.
+        //
+        // `sync_all` antes do rename fecha isso: o conteúdo está em disco
+        // antes de o nome apontar para ele.
+        {
+            use std::io::Write;
 
-        fs::rename(&temporario, path)
-            .map_err(|e| format!("Failed to replace change log: {}", e))
+            let mut arquivo = fs::File::create(&temporario)
+                .map_err(|e| format!("Failed to write change log: {}", e))?;
+
+            arquivo
+                .write_all(raw.as_bytes())
+                .map_err(|e| format!("Failed to write change log: {}", e))?;
+
+            arquivo
+                .sync_all()
+                .map_err(|e| format!("Failed to flush change log: {}", e))?;
+        }
+
+        fs::rename(&temporario, path).map_err(|e| format!("Failed to replace change log: {}", e))
     }
 
     /// Registra uma otimização aplicada. Substitui um registro anterior da mesma
     /// otimização para que o histórico guarde sempre o estado original mais antigo
     /// que ainda não foi revertido.
     pub fn record(&mut self, entry: AppliedOptimization) -> Result<(), String> {
-        if !self.entries.iter().any(|e| e.optimization_id == entry.optimization_id) {
+        if !self
+            .entries
+            .iter()
+            .any(|e| e.optimization_id == entry.optimization_id)
+        {
             self.entries.push(entry);
             self.persist()?;
         }
@@ -534,7 +589,10 @@ mod tests_1_8 {
 
         let (entradas, leitura) = ChangeLog::ler(&caminho);
 
-        assert!(entradas.is_empty(), "sem conseguir ler, nao ha o que listar");
+        assert!(
+            entradas.is_empty(),
+            "sem conseguir ler, nao ha o que listar"
+        );
 
         match leitura {
             LeituraDoHistorico::Ilegivel { guardado_em, .. } => {
@@ -649,8 +707,7 @@ mod tests {
         let numero = PROXIMO.fetch_add(1, Ordering::Relaxed);
 
         ChangeLog {
-            path: std::env::temp_dir()
-                .join(format!("pc-optimizer-test-changes-{}.json", numero)),
+            path: std::env::temp_dir().join(format!("pc-optimizer-test-changes-{}.json", numero)),
             entries: Vec::new(),
             // Comeca vazio de verdade, e nao por nao ter conseguido ler.
             leitura: LeituraDoHistorico::Ok,
@@ -667,13 +724,19 @@ mod tests {
             service: "PlugPlay".to_string(),
             previous: "disabled".to_string(),
         };
-        assert_eq!(religado.describe(), "serviço · PlugPlay religado (antes: desativado)");
+        assert_eq!(
+            religado.describe(),
+            "serviço · PlugPlay religado (antes: desativado)"
+        );
 
         let desligado = ChangeRecord::ServiceStartType {
             service: "SysMain".to_string(),
             previous: "auto".to_string(),
         };
-        assert_eq!(desligado.describe(), "serviço · SysMain desativado (antes: auto)");
+        assert_eq!(
+            desligado.describe(),
+            "serviço · SysMain desativado (antes: auto)"
+        );
     }
 
     #[test]

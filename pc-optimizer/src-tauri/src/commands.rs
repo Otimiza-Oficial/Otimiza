@@ -101,6 +101,17 @@ pub struct AppState {
     /// tokio chamado de dentro do runtime entraria em pânico.
     #[cfg(target_os = "windows")]
     pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
+    /// Onde a Steam está instalada, lembrado depois da primeira leitura.
+    ///
+    /// A biblioteca pede uma capa por bloco, e a primeira versão varria Steam,
+    /// Epic e registro inteiros A CADA UMA para descobrir o mesmo caminho.
+    /// A resposta não muda enquanto o programa está aberto.
+    ///
+    /// Dois níveis de propósito: o de fora é "já perguntei", o de
+    /// dentro é "e a resposta foi que não tem Steam". Sem os dois, uma máquina
+    /// sem Steam refaria a varredura em toda capa.
+    #[cfg(target_os = "windows")]
+    pub raiz_steam: Mutex<Option<Option<std::path::PathBuf>>>,
 }
 
 #[derive(Serialize)]
@@ -128,6 +139,828 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
 pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<PerformanceMetrics, String> {
     let mut monitor = state.monitor.lock().await;
     monitor.collect_metrics().await
+}
+
+/// Comando: a grade da biblioteca de jogos.
+///
+/// Junta duas listas que respondem perguntas diferentes: o que ESTÁ INSTALADO
+/// nesta máquina (`windows::jogos::varrer`, que lê Steam, Epic e a lista do
+/// Windows) e o que o produto CONHECE de nome (`modules::catalogojogos`).
+///
+/// Jogo instalado que o catálogo não conhece entra do mesmo jeito: prioridade,
+/// afinidade e preferência de placa não dependem de o Otimiza ter ouvido falar
+/// do título. E jogo conhecido que não está instalado aparece marcado como tal,
+/// para a pessoa achar o dela na grade em vez de concluir que não há suporte.
+///
+/// SÓ LÊ. Nenhuma otimização é aplicada por abrir a biblioteca.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn biblioteca_de_jogos() -> Result<BibliotecaNaTela, String> {
+    use crate::modules::catalogojogos::{montar, Detectado};
+    use crate::modules::windows::jogos;
+
+    // Varrer bibliotecas de loja é leitura de disco: fora da thread do
+    // executor, como todo o resto que custa neste produto.
+    let biblioteca = tokio::task::spawn_blocking(jogos::varrer)
+        .await
+        .map_err(|e| format!("a varredura de jogos não terminou: {e}"))?;
+
+    let detectados: Vec<Detectado> = biblioteca
+        .jogos
+        .iter()
+        .map(|j| Detectado {
+            nome: j.nome.clone(),
+            pasta: j.pasta.to_string_lossy().to_string(),
+            executavel: j.executavel.as_ref().map(|e| e.to_string_lossy().to_string()),
+            appid: j.appid,
+        })
+        .collect();
+
+    Ok(BibliotecaNaTela {
+        jogos: montar(&detectados),
+        instalados: detectados.len(),
+        // O que a varredura não conseguiu ler vai junto. Uma biblioteca curta
+        // porque a Steam não abriu é indistinguível de uma biblioteca curta
+        // de verdade — e a primeira tem conserto.
+        lacunas: biblioteca.lacunas,
+    })
+}
+
+/// A grade, com o que a varredura não conseguiu ler.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct BibliotecaNaTela {
+    pub jogos: Vec<crate::modules::catalogojogos::NaGrade>,
+    /// Quantos foram encontrados no disco.
+    pub instalados: usize,
+    pub lacunas: Vec<String>,
+}
+
+/// Comando: a capa de um jogo, tirada do cache da Steam desta máquina.
+///
+/// O PEDIDO FOI "a foto de verdade, não as letras". A resposta não é embutir
+/// as capas no instalador — a arte é de quem fez o jogo, e empacotá-la num
+/// produto que se vende é distribuir material de terceiro. A resposta é que a
+/// capa JÁ ESTÁ NO COMPUTADOR: a Steam baixa a arte de cada jogo da biblioteca
+/// para desenhar a própria grade, e ler dali mostra ao cliente uma imagem que
+/// já é dele.
+///
+/// UM JOGO POR CHAMADA, de propósito. Mandar vinte capas dentro da resposta da
+/// grade atrasaria a primeira pintura em alguns megabytes de base64 — e a
+/// maior parte das capas nem estaria na tela ainda.
+///
+/// `None` quando não há capa: jogo fora da Steam, jogo não instalado, ou cache
+/// que a Steam ainda não preencheu. Nenhum desses é erro — é o bloco de cor.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capa_do_jogo(appid: u32, state: State<'_, AppState>) -> Result<Option<String>, String> {
+    use crate::modules::capas;
+
+    // A raiz da Steam é lembrada entre chamadas. A primeira versão disto
+    // chamava `jogos::varrer()` uma vez POR CAPA — uma varredura completa de
+    // Steam, Epic e registro para cada bloco da grade. Funcionava e era um
+    // desperdício de vinte varreduras para responder vinte vezes a mesma
+    // coisa, que é onde a biblioteca mora.
+    let raiz = {
+        let mut guardada = state.raiz_steam.lock().await;
+
+        if guardada.is_none() {
+            *guardada = Some(
+                tokio::task::spawn_blocking(|| {
+                    crate::modules::windows::jogos::varrer().raiz_steam
+                })
+                .await
+                .map_err(|e| format!("a leitura da Steam não terminou: {e}"))?,
+            );
+        }
+
+        guardada.clone().flatten()
+    };
+
+    Ok(capas::obter(appid, raiz.as_deref()).await)
+}
+
+/// Comando: a lista de programas, com o que já está instalado.
+///
+/// SÓ LÊ. Abrir a aba não instala nada.
+///
+/// Quem responde "o que já está instalado" é o REGISTRO, e não o winget:
+/// as três chaves de desinstalação respondem na hora e existem em toda
+/// máquina — inclusive nas que não têm winget, que são justamente as que mais
+/// precisam desta lista.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
+    use crate::modules::programas;
+    use crate::modules::windows::{conflicts, winget};
+
+    let (instalados, winget) = tokio::task::spawn_blocking(|| {
+        (conflicts::programas_instalados(), winget::disponibilidade())
+    })
+    .await
+    .map_err(|e| format!("a leitura de programas não terminou: {e}"))?;
+
+    // Falha na leitura do registro NÃO vira lista vazia nem lista de "não
+    // instalados": vira estado desconhecido em todos, e a tela diz isso. O
+    // contrário faria o técnico instalar por cima do que já estava lá.
+    let lidos = instalados.as_deref().ok();
+
+    Ok(ProgramasNaTela {
+        programas: programas::montar(lidos),
+        winget,
+        lacuna: instalados.err(),
+    })
+}
+
+/// A lista com o estado do instalador.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct ProgramasNaTela {
+    pub programas: Vec<crate::modules::programas::NaLista>,
+    pub winget: crate::modules::windows::winget::Disponibilidade,
+    /// Por que o estado de instalação não pôde ser lido, quando não pôde.
+    pub lacuna: Option<String>,
+}
+
+/// Comando: instala um programa do catálogo pelo winget.
+///
+/// O IDENTIFICADOR VEM DO CATÁLOGO, e nunca da tela. A tela manda o id curto
+/// ("7zip"), e é aqui que ele vira o pacote do winget. Aceitar o nome do
+/// pacote direto da tela seria deixar a escolha de O QUE INSTALAR na máquina
+/// do cliente fora do nosso controle — a mesma razão pela qual o catálogo de
+/// jogos não desserializa.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn instalar_programa(id: String) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::programas;
+    use crate::modules::windows::winget;
+
+    let programa = programas::por_id(&id).ok_or("programa fora do catálogo")?;
+    let pacote = programa.winget;
+
+    tokio::task::spawn_blocking(move || winget::instalar(pacote))
+        .await
+        .map_err(|e| format!("a instalação não terminou: {e}"))?
+}
+
+/// Comando: mede o que a limpeza pode liberar, sem apagar nada.
+///
+/// SEPARADO DE APAGAR de propósito. É a medição que o cliente vê antes de
+/// decidir, e ela precisa poder ser feita quantas vezes ele quiser sem
+/// consequência nenhuma.
+///
+/// Alvo que não pôde ser medido sai com tamanho AUSENTE, e não com zero.
+/// Zero afirmaria que a pasta está vazia; ausente diz que ninguém conseguiu
+/// abri-la — e é a diferença que decide se vale tentar como administrador.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn medir_limpeza() -> Result<LimpezaNaTela, String> {
+    use crate::modules::limpeza;
+    use crate::modules::windows::limpar;
+
+    // Andar em pastas grandes é leitura de disco: fora da thread do executor.
+    let alvos = tokio::task::spawn_blocking(limpar::medir)
+        .await
+        .map_err(|e| format!("a medição não terminou: {e}"))?;
+
+    Ok(LimpezaNaTela {
+        marcados: limpeza::marcados_por_padrao(),
+        alvos,
+    })
+}
+
+/// A medição, com o que vem marcado de fábrica.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct LimpezaNaTela {
+    pub alvos: Vec<crate::modules::limpeza::AlvoMedido>,
+    /// Os ids que vêm marcados. Nada que contenha arquivo do cliente entra.
+    pub marcados: Vec<String>,
+}
+
+/// Comando: apaga os alvos escolhidos.
+///
+/// É A ÚNICA OPERAÇÃO DO PRODUTO QUE NÃO TEM DESFAZER — arquivo apagado não
+/// volta. Por isso ela recebe a lista EXPLÍCITA do que apagar, em vez de um
+/// "limpar tudo": o que vai embora é o que o cliente marcou, item a item.
+///
+/// Id fora do catálogo é recusado. Aceitar caminho vindo da tela seria deixar
+/// a escolha do que apagar na máquina do cliente fora do nosso controle.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::windows::limpar;
+
+    tokio::task::spawn_blocking(move || {
+        ids.iter().map(|id| limpar::apagar(id)).collect()
+    })
+    .await
+    .map_err(|e| format!("a limpeza não terminou: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+pub type LimparResultado = crate::modules::windows::limpar::Resultado;
+
+/// Comando: os núcleos desta máquina, e se vale mexer na afinidade.
+///
+/// SÓ LÊ. A classe de cada núcleo vem do Windows, e não de uma tabela de
+/// modelos escrita à mão — uma tabela fica errada no lançamento seguinte e
+/// erra em todo processador que não estiver nela.
+///
+/// Num processador uniforme a resposta é que NÃO HÁ O QUE FAZER, e ela vem
+/// escrita. É a maioria das máquinas, e oferecer um botão de afinidade ali
+/// seria oferecer um jeito de piorar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
+    use crate::modules::nucleos;
+    use crate::modules::windows::{afinidade, deteccao, topologia};
+
+    let (topologia, jogo) =
+        tokio::task::spawn_blocking(|| (topologia::ler(), deteccao::procurar()))
+            .await
+            .map_err(|e| format!("a leitura dos núcleos não terminou: {e}"))?;
+
+    let topologia = topologia.ok_or(
+        "o Windows não informou a lista de núcleos desta máquina. Sem ela o produto não oferece \
+         prender o jogo em núcleo nenhum — prender no núcleo errado é pior que não prender.",
+    )?;
+
+    // O jogo aberto, quando há um. A afinidade dele é lida junto: é ela que
+    // diz se ele JÁ está preso em algum lugar, e um jogo preso nos núcleos de
+    // eficiência por outro programa é exatamente o caso que esta tela existe
+    // para achar.
+    let (jogo_nome, jogo_pid, jogo_mascara) = match &jogo {
+        Some(j) => {
+            let mascara = afinidade::ler(j.pid).ok().map(|(processo, _)| processo);
+            (Some(j.nome.clone()), Some(j.pid), mascara)
+        }
+        None => (None, None, None),
+    };
+
+    Ok(NucleosNaTela {
+        conselho: nucleos::conselho(&topologia),
+        // A contagem de físicos vem DAQUI, e não da tela. Ela é uma conta
+        // sobre a topologia — dois lógicos no mesmo físico são irmãos de
+        // SMT —, e duas versões dela acabam discordando.
+        fisicos: topologia.fisicos(),
+        mascara_de_desempenho: nucleos::mascara_de_desempenho(&topologia).map(|m| m.to_string()),
+        topologia,
+        jogo_nome,
+        jogo_pid,
+        jogo_mascara: jogo_mascara.map(|m| m.to_string()),
+    })
+}
+
+/// Os núcleos, com o jogo aberto quando há um.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct NucleosNaTela {
+    pub topologia: crate::modules::nucleos::Topologia,
+    pub conselho: crate::modules::nucleos::Conselho,
+    /// Quantos núcleos FÍSICOS há. Dois lógicos no mesmo físico são
+    /// irmãos de SMT.
+    pub fisicos: usize,
+    /// A máscara dos núcleos rápidos, em texto.
+    ///
+    /// TEXTO e não número: uma máscara de 64 bits não cabe no número do
+    /// JavaScript sem perder os bits altos, e o bit perdido é um núcleo que
+    /// some da conta sem ninguém notar.
+    pub mascara_de_desempenho: Option<String>,
+    pub jogo_nome: Option<String>,
+    pub jogo_pid: Option<u32>,
+    /// Em que núcleos o jogo está agora.
+    pub jogo_mascara: Option<String>,
+}
+
+/// Comando: prende o jogo aberto nos núcleos de desempenho, ou o solta.
+///
+/// NÃO ENTRA NO HISTÓRICO DE MUDANÇAS, e é de propósito. O histórico existe
+/// para o Desfazer achar o valor anterior de coisas que PERSISTEM; afinidade
+/// é propriedade do processo aberto e some quando o jogo fecha. Uma linha lá
+/// ficaria para sempre oferecendo desfazer um processo que já não existe.
+///
+/// O desfazer dela é o botão ao lado, enquanto o jogo está aberto — e fechar
+/// o jogo também desfaz.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String, String> {
+    crate::modules::licenca::exigir()?;
+
+    use crate::modules::nucleos;
+    use crate::modules::windows::{afinidade, topologia};
+
+    tokio::task::spawn_blocking(move || {
+        if !prender {
+            afinidade::soltar(pid)?;
+            return Ok("O jogo voltou a poder usar todos os núcleos.".to_string());
+        }
+
+        let t = topologia::ler().ok_or("o Windows não informou a lista de núcleos.")?;
+
+        // A recusa que impede o botão que piora: num processador uniforme não
+        // existe núcleo melhor, e prender em parte deles só tira máquina.
+        let mascara = nucleos::mascara_de_desempenho(&t).ok_or(
+            "este processador tem todos os núcleos iguais: prender o jogo em parte deles só \
+             reduziria o que a máquina entrega.",
+        )?;
+
+        afinidade::escrever(pid, mascara)?;
+
+        Ok(format!(
+            "O jogo está preso nos {} núcleos de desempenho. Isso vale para o processo aberto e \
+             some quando o jogo fechar.",
+            nucleos::indices_de(mascara).len()
+        ))
+    })
+    .await
+    .map_err(|e| format!("a mudança não terminou: {e}"))?
+}
+
+
+/// Comando: o caminho do mouse, do movimento da mão ao pixel.
+///
+/// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
+/// registro do próprio usuário e responde o que o Windows está fazendo com o
+/// movimento antes de ele chegar ao jogo. Ver o cabeçalho de `modules::mouse`
+/// para o que ficou de fora e por quê.
+///
+/// `intervalos_us` são os intervalos entre relatos de movimento que a TELA
+/// contou na janela deste aplicativo. Lista vazia ou curta demais devolve taxa
+/// ausente — declarada como ausente, e nunca como zero.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
+    use crate::modules::mouse;
+
+    // Os intervalos vêm da JANELA DESTE aplicativo, contados pela tela
+    // enquanto o cliente mexe o mouse por cima dela. É a nossa própria
+    // janela: nenhum gancho global, nenhum outro processo, nada que um
+    // anticheat precise vigiar. Lista vazia é taxa ausente, e não zero.
+    let taxa = mouse::taxa_de_varredura(&intervalos_us);
+    let caminho = mouse::desta_maquina(taxa);
+
+    CaminhoNaTela {
+        achados: caminho.achados_na_tela(),
+        caminho,
+    }
+}
+
+/// O caminho do mouse com o texto de cada achado pronto.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct CaminhoNaTela {
+    pub caminho: crate::modules::mouse::Caminho,
+    /// Os mesmos achados de `caminho`, com o texto que a tela mostra.
+    pub achados: Vec<crate::modules::mouse::AchadoNaTela>,
+}
+
+/// Comando: o próximo passo de uma sessão de autoajuste.
+///
+/// SEM ESTADO NO BACKEND, de propósito. A sessão vem da tela e volta para a
+/// tela; aqui só se calcula o passo. Um laço guardado do lado de cá teria de
+/// sobreviver a fechar o programa no meio, e uma sessão interrompida com a
+/// mudança aplicada e não medida é o pior estado em que a máquina do cliente
+/// pode ficar. Com o estado na tela, fechar o programa encerra a sessão — e o
+/// que estiver aplicado continua no histórico de desfazer como qualquer outra
+/// mudança.
+///
+/// NÃO APLICA E NÃO DESFAZ. Devolve o passo; quem executa é o caminho que já
+/// tem diário de intenção e desfazer.
+#[tauri::command]
+pub fn passo_do_autoajuste(
+    sessao: crate::modules::autoajuste::Sessao,
+) -> crate::modules::autoajuste::Passo {
+    crate::modules::autoajuste::proximo_passo(&sessao)
+}
+
+/// Comando: o que fazer com a configuração do jogo, segundo o que foi medido.
+///
+/// NÃO APLICA NADA. Devolve um plano, e o plano sai com o nome do perfil que
+/// `apply_game_profile` aceita — junto com as razões medidas, o que o ajuste
+/// não resolve, e o que ninguém pôde verificar.
+///
+/// Junta as três leituras que decidem: a classificação de gargalo e a pressão
+/// de memória de vídeo, que vêm da coleta, e o laboratório de streaming, que
+/// precisa saber em que disco o jogo mora.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNaTela, String> {
+    use crate::modules::windows::{configjogo, discodojogo};
+    use crate::modules::{orquestrador, streaming};
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    // As duas leituras caras saem da thread do executor, como todo o resto que
+    // custa neste produto.
+    let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
+        .await
+        .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
+    let config = tokio::task::spawn_blocking(configjogo::analyze)
+        .await
+        .map_err(|e| format!("a leitura da configuração do jogo não terminou: {e}"))?;
+
+    let midia = discodojogo::em_disco_mecanico(&relatorio.jogos)
+        .first()
+        .map(|o| streaming::Midia::from(o.midia));
+
+    let analise = streaming::analisar(&metricas.telemetry, midia);
+    let plano = orquestrador::planejar(
+        &metricas.gargalo,
+        &metricas.vram,
+        &analise,
+        config.arquivo.is_some(),
+    );
+
+    Ok(PlanoNaTela {
+        // O nome sai daqui e não da tela: uma segunda tabela de nomes na tela
+        // sairia do lugar sem ninguém perceber.
+        perfil_para_aplicar: match plano.decisao {
+            orquestrador::Decisao::Aplicar(p) => Some(p.nome().to_string()),
+            _ => None,
+        },
+        plano,
+        jogo: config.jogo,
+    })
+}
+
+/// O plano com o nome que o comando de aplicar aceita.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct PlanoNaTela {
+    pub plano: crate::modules::orquestrador::Plano,
+    /// Ausente quando o plano não manda aplicar nada.
+    pub perfil_para_aplicar: Option<String>,
+    pub jogo: String,
+}
+
+/// Comando: o laboratório de streaming de assets.
+///
+/// COMANDO, e não um campo da coleta a cada dois segundos. Descobrir em que
+/// disco cada jogo mora custa uma consulta ao sistema de arquivos e ao WMI —
+/// o mesmo custo que tirou a leitura da placa de vídeo do caminho do painel.
+/// E, ao contrário do uso de CPU, a resposta não muda de segundo em segundo:
+/// ninguém reinstala um jogo enquanto olha a tela.
+///
+/// O jogo cujo disco entra na análise é o PRIMEIRO em disco mecânico, quando
+/// há algum. É o único que muda a conclusão: se nenhum jogo está em mídia
+/// lenta, a mídia não explica o tranco, e a análise segue sem ela em vez de
+/// sortear um jogo para representar os outros.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn laboratorio_de_streaming(
+    state: State<'_, AppState>,
+) -> Result<LaboratorioNaTela, String> {
+    use crate::modules::streaming;
+    use crate::modules::windows::discodojogo;
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    // A leitura de disco é bloqueante e mexe com WMI: fora da thread do
+    // executor, como todo o resto que custa neste produto.
+    let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
+        .await
+        .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
+
+    let em_mecanico = discodojogo::em_disco_mecanico(&relatorio.jogos);
+    let jogo = em_mecanico.first().map(|o| (*o).clone());
+    let midia = jogo.as_ref().map(|o| streaming::Midia::from(o.midia));
+
+    Ok(LaboratorioNaTela {
+        analise: streaming::analisar(&metricas.telemetry, midia),
+        jogo,
+        lacunas: relatorio.lacunas,
+    })
+}
+
+/// O laboratório com o jogo que sustentou a conclusão.
+///
+/// O jogo vai junto porque "o disco está lento" sem dizer QUAL jogo está nele
+/// é uma frase que o cliente não consegue conferir nem agir sobre.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct LaboratorioNaTela {
+    pub analise: crate::modules::streaming::Analise,
+    /// O jogo em mídia lenta que entrou na conta, quando há um.
+    pub jogo: Option<crate::modules::windows::discodojogo::OndeMora>,
+    /// O que a leitura de discos não conseguiu descobrir.
+    pub lacunas: Vec<String>,
+}
+
+/// Comando: guardar o retrato de ANTES sob um perfil de carga.
+///
+/// O perfil vem de fora porque ele não é detectável: a carga diz o que a
+/// máquina está fazendo, não o que quem mediu quis medir. Rotular sozinho um
+/// retrato de "ocioso" com um jogo abrindo no fundo autorizaria depois uma
+/// comparação que não devia existir — ver o cabeçalho de `baseline.rs`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capturar_baseline(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Baseline, String> {
+    use crate::modules::baseline;
+
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    let quando = crate::modules::changelog::now_timestamp();
+    let retrato = baseline::Baseline::novo(
+        quando,
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    );
+
+    baseline::guardar(retrato.clone())?;
+
+    // O histórico entra DEPOIS do baseline e não no lugar dele: são perguntas
+    // diferentes. O baseline responde "como estava antes desta mexida"; o
+    // histórico responde "quando foi que isto piorou". Falhar aqui não pode
+    // derrubar a captura — o retrato já está guardado, e perder a linha do
+    // tempo é menos grave que perder a medição que o cliente acabou de esperar.
+    if let Err(erro) = anotar_no_historico(&retrato) {
+        eprintln!("histórico de desempenho não foi atualizado: {erro}");
+    }
+
+    Ok(retrato)
+}
+
+/// Grava no histórico as métricas que respondem "piorou?".
+///
+/// Só as de `METRICAS_GUARDADAS`: o contrato tem mais de cinquenta, e gravar
+/// todas a cada captura encheria o teto do arquivo em nove capturas.
+#[cfg(target_os = "windows")]
+fn anotar_no_historico(retrato: &crate::modules::baseline::Baseline) -> Result<(), String> {
+    use crate::modules::historico;
+
+    let mut h = historico::ler()?;
+
+    for resumo in &retrato.incerteza {
+        if historico::METRICAS_GUARDADAS.contains(&resumo.id.as_str()) {
+            h.anotar(
+                retrato.quando,
+                retrato.identidade.clone(),
+                historico::Evento::Medicao(resumo.clone()),
+            );
+        }
+    }
+
+    historico::guardar(&h)
+}
+
+/// Comando: a linha do tempo de desempenho desta máquina.
+///
+/// As mudanças vêm do `changelog` na hora de responder, e não de uma segunda
+/// lista gravada em paralelo: duas listas do mesmo fato acabam discordando, e
+/// a que o cliente lê seria a errada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn historico_de_desempenho(
+    state: State<'_, AppState>,
+) -> Result<HistoricoNaTela, String> {
+    use crate::modules::historico;
+
+    let aplicadas = state.changes.lock().await.applied().to_vec();
+    let h = historico::ler()?.com_mudancas(&aplicadas);
+
+    // Uma regressão por métrica guardada, com o sentido vindo da tabela — e
+    // não de um palpite de quem chama. Métrica com menos de duas medições não
+    // entra: não há o que comparar.
+    let regressoes = historico::METRICAS_GUARDADAS
+        .iter()
+        .filter_map(|id| {
+            let sentido = historico::maior_e_melhor(id)?;
+            h.regressao(id, sentido)
+        })
+        .collect();
+
+    Ok(HistoricoNaTela {
+        historico: h,
+        regressoes,
+    })
+}
+
+/// A linha do tempo com as regressões já calculadas.
+#[cfg(target_os = "windows")]
+#[derive(Debug, Serialize)]
+pub struct HistoricoNaTela {
+    pub historico: crate::modules::historico::Historico,
+    /// Uma por métrica com pelo menos duas medições.
+    pub regressoes: Vec<crate::modules::historico::Regressao>,
+}
+
+/// Comando: como este perfil vai ser medido, e quanto tempo vai levar.
+///
+/// A tela chama isto ANTES de `capturar_baseline_repetido`. Um benchmark que
+/// prende a máquina por mais de um minuto sem avisar é um benchmark que o
+/// cliente cancela no meio — e um que descarta a primeira repetição sem dizer
+/// está a um passo de descartar a que não convém.
+#[tauri::command]
+pub fn protocolo_do_perfil(perfil: crate::modules::baseline::Perfil) -> ProtocoloNaTela {
+    let p = crate::modules::repeticoes::protocolo(perfil);
+
+    ProtocoloNaTela {
+        // Contas feitas AQUI e não na tela: `execucoes` inclui a repetição
+        // descartada e `duracao` depende dela. Duas versões da mesma conta
+        // acabam discordando, e a que o cliente lê seria a errada.
+        execucoes: p.execucoes(),
+        duracao_estimada_s: p.duracao_estimada_s(),
+        protocolo: p,
+    }
+}
+
+/// O protocolo com as contas prontas.
+#[derive(Debug, Serialize)]
+pub struct ProtocoloNaTela {
+    pub protocolo: crate::modules::repeticoes::Protocolo,
+    /// Quantas repetições serão EXECUTADAS, incluindo a descartada.
+    pub execucoes: usize,
+    pub duracao_estimada_s: u64,
+}
+
+/// Comando: guardar o retrato de ANTES medindo várias vezes.
+///
+/// A diferença para `capturar_baseline` é a incerteza. Uma coleta só entrega
+/// um número; várias entregam o número E o quanto ele balança nesta máquina.
+/// Com isso, "esta diferença é ganho ou é ruído?" deixa de ser respondida por
+/// um limiar de 3% que vale para toda máquina e passa a ser respondida pelas
+/// medições — ver `repeticoes.rs`.
+///
+/// O protocolo (quantas repetições, quanto tempo, se descarta a primeira) sai
+/// do perfil de carga, e a duração estimada volta no relatório para a tela
+/// poder avisar antes de começar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn capturar_baseline_repetido(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Baseline, String> {
+    use crate::modules::{baseline, repeticoes};
+    use std::collections::BTreeMap;
+
+    let protocolo = repeticoes::protocolo(perfil);
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let mut series: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    let mut ultima = None;
+
+    for volta in 0..protocolo.execucoes() {
+        let metricas = {
+            let mut monitor = state.monitor.lock().await;
+            monitor.collect_metrics().await?
+        };
+
+        // A primeira roda com cache frio e o Windows ainda se acomodando. Ela
+        // é sistematicamente pior que as outras, e entra no relatório como
+        // descartada em vez de sumir em silêncio.
+        let aquecimento = protocolo.descarta_primeira && volta == 0;
+
+        if !aquecimento {
+            for (id, m) in &metricas.telemetry.metrics {
+                if let Some(v) = m.value {
+                    series.entry(id.clone()).or_default().push(v);
+                }
+            }
+        }
+
+        ultima = Some(metricas);
+
+        if volta + 1 < protocolo.execucoes() {
+            tokio::time::sleep(std::time::Duration::from_secs(
+                protocolo.segundos_por_repeticao,
+            ))
+            .await;
+        }
+    }
+
+    let metricas = ultima.ok_or("nenhuma repetição foi executada")?;
+
+    let incerteza: Vec<repeticoes::Resumo> = series
+        .iter()
+        .filter_map(|(id, amostras)| repeticoes::resumir(id, amostras))
+        .collect();
+
+    let retrato = baseline::Baseline::novo(
+        crate::modules::changelog::now_timestamp(),
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    )
+    .com_incerteza(incerteza);
+
+    baseline::guardar(retrato.clone())?;
+    Ok(retrato)
+}
+
+/// Comando: comparar o retrato guardado com a máquina de agora.
+///
+/// Devolve `Err` com a explicação quando a comparação não pode ser feita —
+/// máquina diferente, carga diferente, ou nada medido dos dois lados. Uma
+/// recusa explicada vale mais que uma tabela de diferenças que não significa
+/// nada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn comparar_com_baseline(
+    perfil: crate::modules::baseline::Perfil,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::baseline::Comparacao, String> {
+    use crate::modules::baseline;
+
+    let antes = baseline::ler()?
+        .into_iter()
+        .find(|b| b.perfil == perfil)
+        .ok_or_else(|| {
+            format!(
+                "Não há retrato guardado com {}. Guarde o antes primeiro.",
+                perfil.nome()
+            )
+        })?;
+
+    let aplicadas = state.changes.lock().await.applied().len();
+
+    let metricas = {
+        let mut monitor = state.monitor.lock().await;
+        monitor.collect_metrics().await?
+    };
+
+    let agora = baseline::Baseline::novo(
+        crate::modules::changelog::now_timestamp(),
+        perfil,
+        baseline::identidade_desta_maquina(aplicadas),
+        metricas.telemetry,
+    );
+
+    baseline::comparar(&antes, &agora).map_err(|recusa| recusa.explicacao())
+}
+
+/// Comando: há uma operação que ficou pela metade?
+///
+/// A tela chama isto na abertura. `None` é o caso normal. Um `Some` significa
+/// que o Otimiza foi interrompido no meio de aplicar ou desfazer algo — e o
+/// que vem junto são os valores anteriores, que é o que permite terminar o
+/// serviço.
+///
+/// O produto NÃO conserta sozinho. Completar uma reversão sem perguntar é
+/// decidir pelo cliente sobre a máquina dele, com base num arquivo que já
+/// provou que algo deu errado.
+#[tauri::command]
+pub fn recuperacao_pendente() -> Result<Option<PendenciaNaTela>, String> {
+    Ok(crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
+        // A frase é montada AQUI e não na tela: quem sabe o que "aplicar" e
+        // "desfazer" significam neste produto é este lado, e duas versões da
+        // mesma explicação acabam discordando.
+        explicacao: p.explicacao(),
+        pendencia: p,
+    }))
+}
+
+/// A pendência com a frase pronta.
+#[derive(Debug, Serialize)]
+pub struct PendenciaNaTela {
+    pub pendencia: crate::modules::transacao::Pendencia,
+    pub explicacao: String,
+}
+
+/// Comando: terminar o serviço que ficou pela metade.
+///
+/// Devolve os valores anteriores guardados no diário, limpa o histórico do id
+/// envolvido e apaga a pendência. Devolve quantas mudanças foram desfeitas.
+///
+/// Só roda quando o cliente pede. O produto não conserta sozinho na abertura —
+/// ver `recuperacao_pendente`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn concluir_recuperacao(state: State<'_, AppState>) -> Result<usize, String> {
+    let Some(pendencia) = crate::modules::transacao::pendente()? else {
+        return Err("Não há operação pela metade para terminar.".to_string());
+    };
+
+    let mut log = state.changes.lock().await;
+    crate::modules::windows::concluir_recuperacao(&pendencia, &mut log)
+}
+
+/// Comando: descartar a pendência sem completar nada.
+///
+/// O cliente olhou o que ficou pela metade e decidiu deixar como está. O nome
+/// não disfarça o que a função faz: não "resolver", DESCARTAR.
+#[tauri::command]
+pub fn descartar_pendencia() -> Result<(), String> {
+    crate::modules::transacao::descartar()
 }
 
 /// Comando: Iniciar monitoramento contínuo
@@ -3761,6 +4594,23 @@ mod tests {
         );
     }
 
+    /// O plano fala a língua de quem aplica.
+    ///
+    /// O orquestrador devolve o nome do perfil em texto, e é esse texto que a
+    /// tela manda para `apply_game_profile`. Se as duas tabelas saírem do
+    /// lugar, o cliente recebe "perfil desconhecido" depois de o produto ter
+    /// recomendado aquele perfil — e ninguém descobre até acontecer.
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn o_plano_fala_a_lingua_de_quem_aplica() {
+        use crate::modules::orquestrador::Perfil;
+
+        for p in Perfil::TODOS {
+            super::perfil_por_nome(p.nome())
+                .unwrap_or_else(|e| panic!("o perfil {:?} saiu do lugar: {e}", p));
+        }
+    }
+
     const LIVRES: &[&str] = &[
         "placa_de_video",
         "memoria_instalada",
@@ -3772,6 +4622,23 @@ mod tests {
         "prova_guardada",
         "get_platform_info",
         "get_performance_metrics",
+        "capturar_baseline",
+        "capturar_baseline_repetido",
+        "protocolo_do_perfil",
+        "laboratorio_de_streaming",
+        "plano_de_renderizacao",
+        "passo_do_autoajuste",
+        "historico_de_desempenho",
+        "caminho_do_mouse",
+        "biblioteca_de_jogos",
+        "capa_do_jogo",
+        "catalogo_de_programas",
+        "medir_limpeza",
+        "nucleos_da_maquina",
+        "recuperacao_pendente",
+        "descartar_pendencia",
+        "concluir_recuperacao",
+        "comparar_com_baseline",
         "start_monitoring",
         "stop_monitoring",
         "measure_baseline",
@@ -3860,6 +4727,9 @@ mod tests {
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
+        "instalar_programa",
+        "limpar_alvos",
+        "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "energia_testar_candidato",
         "energia_aplicar",

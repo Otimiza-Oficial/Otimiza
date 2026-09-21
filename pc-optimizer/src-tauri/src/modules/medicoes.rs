@@ -40,6 +40,60 @@ pub struct MedicaoAutomatica {
     pub confiavel: bool,
     /// Quantas mudanças do Otimiza estavam aplicadas quando a medição foi feita.
     pub mudancas_aplicadas: usize,
+
+    // --- A DISTRIBUIÇÃO, E NÃO SÓ O RESUMO ---
+    //
+    // FPS e 1% pior descrevem o resultado. Estes descrevem o RITMO: uma
+    // configuração com FPS maior e ritmo pior não é uma melhora, e sem estes
+    // campos não havia como saber qual das duas estava na frente.
+    //
+    // Todos opcionais com `serde(default)`: medição gravada antes desta versão
+    // continua sendo lida, com os campos novos ausentes em vez de zerados.
+    //
+    /// Média do tempo entre quadros. Diferente da mediana de propósito: a
+    /// média é puxada por cada tranco, e o afastamento entre as duas é o
+    /// sintoma.
+    #[serde(default)]
+    pub frametime_medio_ms: Option<f64>,
+    #[serde(default)]
+    pub frametime_p95_ms: Option<f64>,
+    #[serde(default)]
+    pub frametime_p99_ms: Option<f64>,
+    /// Uso do processador DURANTE a mesma janela de medição.
+    ///
+    /// Medido em paralelo, pelos contadores do Windows. Vale porque só serve
+    /// comparado na mesma janela: uso de CPU lido depois que o jogo fechou não
+    /// diz nada sobre a partida.
+    #[serde(default)]
+    pub cpu_uso_pct: Option<f64>,
+    /// Uso da placa de vídeo DURANTE a mesma janela.
+    ///
+    /// Vale pelo par: quadros baixos com processador e placa os DOIS sobrando
+    /// é o desenho de um limite que não está no hardware — é o motor do jogo,
+    /// um teto de quadros, ou uma espera que nenhum dos dois contadores mostra.
+    /// Nenhum dos dois números sozinho sustenta essa frase.
+    #[serde(default)]
+    pub gpu_uso_pct: Option<f64>,
+
+    // --- O INSTANTE DE CADA TRANCO, CRUZADO COM O DISCO ---
+    //
+    // Shader compilando e asset chegando do disco produzem o mesmo buraco no
+    // frametime. A distribuição não os separa — ela diz que houve buraco e
+    // quanto doeu, não o que a máquina estava fazendo naquele instante.
+    //
+    // Estes dois campos guardam o resultado do cruzamento, e não a série: a
+    // série são milhares de carimbos que não cabem num histórico de sessenta
+    // medições, e o que a decisão precisa é da proporção.
+    //
+    /// Proporção dos trancos que aconteceram com o disco ocupado, em %.
+    #[serde(default)]
+    pub trancos_com_disco_pct: Option<f64>,
+    /// Quantos trancos entraram nessa conta.
+    ///
+    /// Sem isto, "100% dos trancos com o disco ocupado" esconde que o total
+    /// era dois. Proporção sem denominador é meia informação.
+    #[serde(default)]
+    pub trancos_medidos: Option<usize>,
 }
 
 /// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
@@ -194,6 +248,13 @@ mod tests {
             segundos: 20.0,
             confiavel: true,
             mudancas_aplicadas: 4,
+            frametime_medio_ms: Some(16.7),
+            frametime_p95_ms: Some(22.0),
+            frametime_p99_ms: Some(31.0),
+            cpu_uso_pct: Some(48.0),
+            gpu_uso_pct: Some(72.0),
+            trancos_com_disco_pct: Some(20.0),
+            trancos_medidos: Some(15),
         }
     }
 
@@ -203,7 +264,12 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
 
-        std::env::temp_dir().join(format!("otimiza-medicoes-{}-{}-{}", nome, std::process::id(), unico))
+        std::env::temp_dir().join(format!(
+            "otimiza-medicoes-{}-{}-{}",
+            nome,
+            std::process::id(),
+            unico
+        ))
     }
 
     #[test]
@@ -299,6 +365,9 @@ mod tests {
         let _ = fs::remove_dir_all(&pasta);
 
         assert!(resultado.is_err());
-        assert_eq!(conteudo, "corrompido", "a medição nova apagou o que estava lá");
+        assert_eq!(
+            conteudo, "corrompido",
+            "a medição nova apagou o que estava lá"
+        );
     }
 }
