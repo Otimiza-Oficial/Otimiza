@@ -90,6 +90,7 @@ interface AvisoDeVersao {
 }
 
 interface StartupEntry {
+  classe?: "Essencial" | "Util" | "Opcional" | "Desconhecido";
   name: string;
   command: string;
   executable: string;
@@ -5715,10 +5716,18 @@ async function loadStartup() {
 }
 
 function renderStartupEntry(entry: StartupEntry): string {
+  const CLASSE: Record<string, [string, string]> = {
+    Essencial: ["essencial", "Segurança, áudio, vídeo ou touchpad. Desligar tira algo do sistema."],
+    Util: ["útil", "Sincronização de nuvem ou software de periférico. Dá para abrir na mão quando precisar."],
+    Opcional: ["opcional", "Loja de jogo, mensageiro, música ou navegador pré-aberto: ocupa memória desde o boot até alguém usar."],
+  };
+  const classe = entry.classe && CLASSE[entry.classe]
+    ? `<span class="chip" title="${CLASSE[entry.classe][1]}"${entry.classe === "Essencial" ? "" : entry.classe === "Opcional" ? ' data-recommended="true"' : ""}>${CLASSE[entry.classe][0]}</span>`
+    : "";
   const scope =
-    entry.hive === "HKLM"
+    (entry.hive === "HKLM"
       ? `<span class="chip" title="Vale para todos os usuários">todos</span>`
-      : "";
+      : "") + classe;
 
   return `
     <div class="startup" data-enabled="${entry.enabled}">
