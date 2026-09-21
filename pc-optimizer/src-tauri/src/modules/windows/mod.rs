@@ -60,6 +60,7 @@ pub mod power;
 pub mod pressao;
 pub mod processes;
 pub mod profiles;
+pub mod prontojogo;
 pub mod rbar;
 pub mod readiness;
 pub mod rede;

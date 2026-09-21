@@ -116,6 +116,43 @@ const GRUPO: Record<string, string> = {
 };
 const NIVEL = ["Baixo", "Médio", "Alto", "Épico", "Cinematográfico"];
 
+type ItemDeProntidao =
+  | { tipo: "MonitorAbaixo"; hz_atual: number; hz_maximo: number; monitor: string }
+  | { tipo: "LimitesEscondidos"; quantos: number }
+  | { tipo: "SegundoPlanoPesado"; programas: [string, number][] }
+  | { tipo: "MemoriaApertada"; livre_mb: number; commit_pct: number | null; maiores: [string, number][] }
+  | { tipo: "ModoJogoDesligado" };
+
+type Prontidao = { pronto: boolean; itens: ItemDeProntidao[]; conferido: string[] };
+
+function fraseDaProntidao(i: ItemDeProntidao): string {
+  switch (i.tipo) {
+    case "MonitorAbaixo":
+      return `<strong>${esc(i.monitor)} está a ${i.hz_atual} Hz e aguenta ${i.hz_maximo} Hz.</strong> É a maior diferença de fluidez que existe — corrija na aba Diagnóstico, em Monitores.`;
+    case "LimitesEscondidos":
+      return `<strong>${i.quantos} limite(s) de FPS escondido(s).</strong> Veja quais e onde tirar no Mapa de desempenho (Painel).`;
+    case "SegundoPlanoPesado":
+      return `<strong>Programas usando processador agora:</strong> ${i.programas.map(([n, c]) => `${esc(n)} (${Math.round(c * 100)}% da máquina)`).join(", ")}. Feche antes de jogar, ou ligue o modo jogo.`;
+    case "MemoriaApertada":
+      return `<strong>Memória já apertada antes do jogo:</strong> ${(i.livre_mb / 1024).toFixed(1)} GB livres${i.commit_pct !== null ? `, ${Math.round(i.commit_pct)}% comprometida` : ""}.${i.maiores.length ? ` Quem mais usa: ${i.maiores.map(([n, mb]) => `${esc(n)} (${(mb / 1024).toFixed(1)} GB)`).join(", ")}.` : ""} Fechar isso antes de abrir o jogo evita travada de paginação.`;
+    case "ModoJogoDesligado":
+      return `<strong>Modo jogo desligado.</strong> Ligado (aba Sistema, Preferências), ele passa programas que disputam processador para o modo econômico durante a partida.`;
+  }
+}
+
+async function verificarProntidao(alvo: HTMLElement) {
+  alvo.innerHTML = `<p class="fg-nota">Verificando…</p>`;
+  try {
+    const p = await invoke<Prontidao>("pronto_para_jogar");
+    alvo.innerHTML = `
+      <p class="fg-aviso"><strong>${p.pronto ? "Pronto para jogar." : "Resolva isto antes de jogar:"}</strong></p>
+      ${p.itens.map((i) => `<p class="fg-nota">${fraseDaProntidao(i)}</p>`).join("")}
+      ${p.conferido.length ? `<p class="fg-nota">Conferido: ${p.conferido.map(esc).join(" · ")}.</p>` : ""}`;
+  } catch (e) {
+    alvo.innerHTML = `<p class="fg-erro">${esc(String(e))}</p>`;
+  }
+}
+
 let raiz: HTMLElement | null = null;
 let pedirAdmin: (motivo: string) => void = () => {};
 
@@ -225,12 +262,16 @@ async function carregar() {
     const lacunas = [...b.lacunas, ...(b.medicoes_erro ? [b.medicoes_erro] : [])];
     raiz.innerHTML = `
       <div class="fg-painel">
+        <div class="fg-linha"><button class="btn btn-primary" id="bib-pronto">Verificar antes de jogar</button></div>
+        <div id="bib-pronto-resultado"></div>
         ${b.jogos.length ? b.jogos.map(linhaDoJogo).join("") : `<p class="fg-aviso">Nenhum jogo encontrado ainda. Abra qualquer jogo por alguns minutos: o Otimiza reconhece pelo que ele faz na tela e na placa de vídeo, e ele passa a aparecer aqui.</p>`}
         ${lacunas.length ? `<p class="fg-nota">Não deu para ler: ${lacunas.map(esc).join("; ")}</p>` : ""}
         <p class="fg-nota">
           Qualquer jogo que você abrir entra nesta lista sozinho, mesmo fora das lojas conhecidas.
         </p>
       </div>`;
+    const pronto = raiz.querySelector<HTMLElement>("#bib-pronto-resultado");
+    raiz.querySelector("#bib-pronto")?.addEventListener("click", () => pronto && void verificarProntidao(pronto));
     raiz.querySelectorAll<HTMLButtonElement>("[data-desfazer]").forEach((btn) =>
       btn.addEventListener("click", async () => {
         const j = b.jogos[Number(btn.dataset.desfazer)];

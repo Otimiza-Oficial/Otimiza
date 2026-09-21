@@ -1480,6 +1480,14 @@ fn medicoes_para_deriva() -> Vec<crate::modules::deriva::Deriva> {
         .unwrap_or_default()
 }
 
+
+/// Comando: pronto para jogar? Scan de ~2 s antes de abrir o jogo. `LIVRES`.
+#[tauri::command]
+pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::Prontidao, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::prontojogo::verificar)
+        .await
+        .map_err(|e| format!("Falha na verificação: {}", e))
+}
 fn vram_gb() -> Option<f64> {
     crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
 }
@@ -4109,6 +4117,7 @@ mod tests {
         "biblioteca_de_jogos",
         "unreal_prever",
         "tetos_escondidos",
+        "pronto_para_jogar",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",

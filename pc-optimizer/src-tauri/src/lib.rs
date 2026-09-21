@@ -142,6 +142,7 @@ pub fn run() {
             commands::unreal_prever,
             commands::unreal_aplicar,
             commands::tetos_escondidos,
+            commands::pronto_para_jogar,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,
