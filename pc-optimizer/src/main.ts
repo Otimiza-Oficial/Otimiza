@@ -25,6 +25,8 @@ interface OptimizationInfo {
   requires_restart: boolean;
   reversible: boolean;
   security_tradeoff: boolean;
+  /** Retirado na 2.9: só aparece enquanto aplicado, para poder ser desfeito. */
+  retirado?: boolean;
   /**
    * Se este ajuste pode DERRUBAR o FPS, e em qual caso.
    *
@@ -5198,6 +5200,8 @@ function renderOptimization(item: OptimizationInfo): string {
   if (!item.reversible) chips.push(`<span class="chip" data-warn="true">sem volta</span>`);
   if (item.security_tradeoff)
     chips.push(`<span class="chip" data-warn="true">reduz segurança</span>`);
+  if (item.retirado)
+    chips.push(`<span class="chip" data-warn="true">retirado na 2.9 — só desfazer</span>`);
 
   // O aviso que faltava na 2.1.0. Um ajuste que pode custar quadro não pode
   // parecer igual aos outros numa lista que o cliente percorre para clicar.

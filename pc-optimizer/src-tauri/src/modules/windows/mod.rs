@@ -127,6 +127,9 @@ impl WindowsOptimizer {
     pub fn list(&self, log: &ChangeLog) -> Vec<OptimizationInfo> {
         catalog::CATALOG
             .iter()
+            // Retirado só aparece enquanto está aplicado, para poder ser
+            // desfeito. Ver `catalog::RETIRADOS`.
+            .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
             .map(|spec| {
                 let state = self.inspect(spec, log);
 
@@ -526,6 +529,14 @@ impl WindowsOptimizer {
 
     fn aplicar_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
+
+        if catalog::retirado(id) && !log.is_applied(id) {
+            return Err(format!(
+                "`{}` foi retirado do Otimiza na 2.9: não muda FPS nem fluidez. \
+                 Se estiver aplicado, ainda dá para desfazer.",
+                spec.name
+            ));
+        }
 
         if log.is_applied(id) {
             return Ok(OptimizationOutcome {
@@ -3380,7 +3391,23 @@ mod tests {
             println!("{:<45} {:?} {:?}", info.name, info.state, info.detail);
         }
 
-        assert_eq!(optimizer.list(&log).len(), catalog::CATALOG.len());
+        // Retirado só aparece enquanto aplicado (ver `catalog::RETIRADOS`).
+        let esperado = catalog::CATALOG
+            .iter()
+            .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
+            .count();
+        assert_eq!(optimizer.list(&log).len(), esperado);
+    }
+
+    #[test]
+    fn item_retirado_nao_pode_ser_aplicado_nem_entrar_em_lote() {
+        let optimizer = WindowsOptimizer::new();
+        let mut log = ChangeLog::em_memoria();
+        for id in catalog::RETIRADOS {
+            let spec = catalog::find(id).expect("retirado continua no catálogo para o desfazer");
+            assert!(!catalog::entra_no_lote(spec), "`{}` entrou no lote", id);
+            assert!(optimizer.apply(id, &mut log).is_err(), "`{}` foi aplicado", id);
+        }
     }
 
     /// "Otimizar Agora" nunca pode apagar arquivos do cliente sem ele escolher isso.

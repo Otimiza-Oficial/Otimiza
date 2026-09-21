@@ -209,6 +209,10 @@ pub struct OptimizationInfo {
     /// Pesa muito mais nesta máquina do que na média, segundo o hardware detectado.
     /// Não é promessa de milagre — é dizer o que vale a pena AQUI.
     pub recommended: bool,
+    /// Retirado na 2.9: só aparece enquanto estiver aplicado, e só pode ser
+    /// desfeito. Ver `catalog::RETIRADOS`.
+    #[serde(default)]
+    pub retirado: bool,
     pub state: OptimizationState,
     /// Informação medida agora nesta máquina, quando existir.
     /// Ex.: "1,4 GB de temporários para limpar".

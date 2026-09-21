@@ -188,6 +188,37 @@ pub struct OptimizationSpec {
 /// ligar ao clique — e decidir isso é do dono do PC, item por item.
 pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 
+/// Itens RETIRADOS na 2.9: não mudam FPS, 1% low, engasgo, atraso,
+/// carregamento nem responsividade, e não protegem a máquina.
+///
+/// A regra da 2.9 é "as mudanças certas para aquele computador, não a lista
+/// mais longa". Um item que não muda nada que o cliente sinta só ocupa lugar
+/// na tela e dá a impressão de que o produto "fez 40 coisas". Dois deles (UAC
+/// e Firewall) ainda tiravam proteção em troca de nada.
+///
+/// Eles ficam no catálogo SÓ para o desfazer: quem aplicou numa versão antiga
+/// continua vendo o item na lista, com o botão de desfazer, até desfazer. Nada
+/// aqui pode ser aplicado de novo — nem um a um, nem em lote, nem por perfil.
+/// O motivo de cada um mora em `naofazemos.rs`.
+pub const RETIRADOS: &[&str] = &[
+    "network_low_latency",
+    "disable_xbox_services",
+    "maps_auto_update_off",
+    "settings_sync_off",
+    "remote_assistance_off",
+    "uac_off",
+    "firewall_off",
+    "disable_telemetry",
+    "telemetry_policy",
+    "start_menu_web_search_off",
+    "disable_copilot",
+];
+
+/// Se o item foi retirado do produto (ver `RETIRADOS`).
+pub fn retirado(id: &str) -> bool {
+    RETIRADOS.contains(&id)
+}
+
 /// Se um item pode ser aplicado por um lote, sem a pessoa escolher item a item.
 ///
 /// As quatro exclusões moram juntas aqui para o motor e os testes lerem a mesma
@@ -207,6 +238,7 @@ pub fn entra_no_lote(spec: &OptimizationSpec) -> bool {
         && !spec.security_tradeoff
         && !spec.risco_de_fps.pode_custar()
         && !FORA_DO_LOTE.contains(&spec.id)
+        && !retirado(spec.id)
 }
 
 impl OptimizationSpec {
@@ -228,6 +260,7 @@ impl OptimizationSpec {
             requires_restart: self.requires_restart,
             reversible: self.reversible,
             security_tradeoff: self.security_tradeoff,
+            retirado: retirado(self.id),
             recommended,
             state,
             detail,

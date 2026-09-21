@@ -335,6 +335,24 @@ impl ChangeLog {
         ChangeLog { path, entries, leitura }
     }
 
+    /// Histórico vazio num arquivo temporário próprio, para testes de outros
+    /// módulos. Nome único pelo mesmo motivo do `in_memory` dos testes daqui.
+    #[cfg(test)]
+    pub(crate) fn em_memoria() -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static PROXIMO: AtomicU32 = AtomicU32::new(0);
+        let numero = PROXIMO.fetch_add(1, Ordering::Relaxed);
+        ChangeLog {
+            path: std::env::temp_dir().join(format!(
+                "pc-optimizer-teste-externo-{}-{}.json",
+                std::process::id(),
+                numero
+            )),
+            entries: Vec::new(),
+            leitura: LeituraDoHistorico::Ok,
+        }
+    }
+
     /// A leitura deu certo, ou o vazio é desconhecimento?
     pub fn leitura(&self) -> &LeituraDoHistorico {
         &self.leitura

@@ -48,13 +48,8 @@ pub const PROFILES: &[ProfileInfo] = &[
             "visual_effects_performance",
             "disable_transparency",
             "disable_widgets",
-            "disable_copilot",
-            "disable_telemetry",
-            "telemetry_policy",
             "stop_sponsored_apps",
-            "start_menu_web_search_off",
             "disable_startup_delay",
-            "disable_xbox_services",
             "disable_gamedvr",
             "delivery_optimization_off",
             "disable_reserved_storage",
@@ -86,11 +81,9 @@ pub const PROFILES: &[ProfileInfo] = &[
             "disable_power_throttling",
             "plano_otimiza",
             "gpu_msi_mode",
-            "network_low_latency",
             "nic_power_saving_off",
             "remove_forced_hpet",
             "clear_boot_limits",
-            "disable_xbox_services",
         ],
     },
     ProfileInfo {
@@ -108,34 +101,11 @@ pub const PROFILES: &[ProfileInfo] = &[
         optimization_ids: &[
             "visual_effects_performance",
             "disable_widgets",
-            "disable_telemetry",
-            "telemetry_policy",
             "stop_sponsored_apps",
-            "start_menu_web_search_off",
             "disable_startup_delay",
             "disable_gamedvr",
-            "disable_xbox_services",
             "delivery_optimization_off",
             "plano_otimiza",
-        ],
-    },
-    ProfileInfo {
-        id: "privacidade",
-        name: "Privacidade",
-        description:
-            "Corta a coleta de dados e a propaganda embutida no sistema. O ganho \
-             de desempenho é pequeno e honestamente secundário — o motivo aqui é \
-             outro.",
-        tradeoff:
-            "Ganho de velocidade quase nulo. Se o seu problema é PC lento, este \
-             não é o perfil que resolve.",
-        optimization_ids: &[
-            "disable_telemetry",
-            "telemetry_policy",
-            "stop_sponsored_apps",
-            "start_menu_web_search_off",
-            "disable_widgets",
-            "delivery_optimization_off",
         ],
     },
 ];
