@@ -120,10 +120,10 @@ fn gb(bytes: Option<f64>) -> f64 {
 /// aconteceu" numa máquina que esgotou memória três vezes na mesma noite.
 pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
     let script = format!(
-        "$e = Get-WinEvent -LogName System -FilterXPath \
+        "try {{ $e = Get-WinEvent -LogName System -FilterXPath \
            \"*[System[Provider[@Name='Microsoft-Windows-Resource-Exhaustion-Detector'] \
              and EventID=2004 and TimeCreated[timediff(@SystemTime) <= {}]]]\" \
-           -MaxEvents 30 -ErrorAction Stop; \
+           -MaxEvents 30 -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
          ConvertTo-Json -Compress -Depth 5 -InputObject @($e | ForEach-Object {{ \
            $x = [xml]$_.ToXml(); \
            $texto = {{ param($no, $nome) \
@@ -150,8 +150,11 @@ pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
         );
     }
 
-    // Sem nenhum evento, o PowerShell devolve vazio. Isso é boa notícia, e não
-    // erro: significa que a memória não acabou no período.
+    // Sem nenhum evento, o Get-WinEvent LANÇA "NoMatchingEventsFound" — e até a
+    // 2.7 isso virava "não consegui ler o registro" numa máquina sadia. O
+    // script agora pega essa exceção PELO NOME e devolve lista vazia; qualquer
+    // outro erro continua sendo erro. Vazio aqui é boa notícia: a memória não
+    // acabou no período.
     if saida.stdout.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -200,10 +203,10 @@ pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
 /// lista viria com eventos que não têm nada a ver com programa travado.
 pub fn travamentos(dias: u32) -> Result<Vec<Travamento>, String> {
     let script = format!(
-        "$e = Get-WinEvent -LogName Application -FilterXPath \
+        "try {{ $e = Get-WinEvent -LogName Application -FilterXPath \
            \"*[System[Provider[@Name='Application Hang'] and EventID=1002 \
              and TimeCreated[timediff(@SystemTime) <= {}]]]\" \
-           -MaxEvents 40 -ErrorAction Stop; \
+           -MaxEvents 40 -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
          ConvertTo-Json -Compress -Depth 3 -InputObject @($e | ForEach-Object {{ \
            $d = ([xml]$_.ToXml()).Event.EventData.Data; \
            [ordered]@{{ \

@@ -152,6 +152,39 @@ interface Veredito {
   corroboracoes: Achado[];
   achados: Achado[];
   lacunas: Lacuna[];
+  recuperacao: { perdido: "Sim" | "Nao" | "Incerto"; itens: [string, "P0" | "P1" | "P2" | "P3"][] };
+}
+
+const PRIORIDADE: Record<"P0" | "P1" | "P2" | "P3", string> = {
+  P0: "P0 · erro crítico de configuração",
+  P1: "P1 · oportunidade grande",
+  P2: "P2 · oportunidade moderada",
+  P3: "P3 · pequena",
+};
+
+const PERDIDO: Record<"Sim" | "Nao" | "Incerto", string> = {
+  Sim: "Há desempenho perdido nesta máquina — o hardware pode entregar mais do que está entregando.",
+  Nao: "Nenhum desempenho perdido encontrado: a configuração desta máquina está certa. Ganho daqui para frente depende do jogo e das peças.",
+  Incerto: "Talvez haja desempenho perdido: os indícios vêm de configuração lida, sem medir o efeito, ou algo não pôde ser verificado.",
+};
+
+function mostrarRecuperacao(v: Veredito) {
+  const bloco = element("veredito-recuperacao");
+  const r = v.recuperacao;
+  if (!r) {
+    bloco.hidden = true;
+    return;
+  }
+  const porId = new Map(v.achados.map((a) => [a.id, a]));
+  const itens = r.itens
+    .map(([id, p]) => {
+      const a = porId.get(id);
+      if (!a) return "";
+      return `<li><span class="chip" data-warn="${p === "P0" || p === "P1"}">${PRIORIDADE[p]}</span> <strong>${escapeHtml(a.title)}</strong> — ${escapeHtml(a.measured)}</li>`;
+    })
+    .join("");
+  bloco.hidden = false;
+  bloco.innerHTML = `<p class="veredito-detalhe"><strong>Desempenho perdido:</strong> ${PERDIDO[r.perdido]}</p>${itens ? `<ul class="veredito-junto">${itens}</ul>` : ""}`;
 }
 
 interface ConflictReport {
@@ -4505,6 +4538,7 @@ function aplicarVeredito(v: Veredito) {
     .join("");
 
   mostrarAcaoDoVeredito(v.principal?.acao ?? null);
+  mostrarRecuperacao(v);
 
   // E, quando o portão está de pé, o mesmo achado aparece na tela de compra.
   mostrarAchadoNoPortao(v);
