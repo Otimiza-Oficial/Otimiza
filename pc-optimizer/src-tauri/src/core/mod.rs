@@ -1,7 +1,13 @@
 // Núcleo
 //
-// Detecção da plataforma. O trabalho de otimização vive em `modules::windows`.
+// Detecção da plataforma, e — desde a 2.9 — as regras de medição que todos os
+// módulos compartilham: estatística (comparar rodadas sem confundir ruído com
+// ganho), saúde dos quadros (a cauda que a média esconde) e a origem de cada
+// número (medido, derivado, estimado ou desconhecido).
 
+pub mod confiabilidade;
+pub mod estatistica;
+pub mod fluidez;
 pub mod platform;
 
 pub use platform::PlatformDetector;
