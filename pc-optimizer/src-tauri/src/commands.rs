@@ -1543,6 +1543,8 @@ pub struct DiagnosticoAoVivo {
     /// Por que não há `saude`, quando havia jogo e a medição falhou.
     pub quadros_erro: Option<String>,
     pub gargalos: Vec<crate::core::gargalo::Achado>,
+    /// Cada travada da partida com o que coincidiu com ela (detetive).
+    pub travadas: Option<crate::core::travadas::Investigacao>,
 }
 
 #[tauri::command]
@@ -1551,13 +1553,16 @@ pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, Str
     tokio::task::spawn_blocking(move || {
         use crate::core::{gargalo, telemetria};
 
-        let coletor = telemetria::Coletor::novo()
+        let mut coletor = telemetria::Coletor::novo()
             .ok_or("Os contadores de desempenho do Windows não abriram nesta máquina.")?;
         let jogo = crate::modules::windows::gamemode::jogo_aberto_com_pid();
+        coletor.acompanhar_processos(jogo.as_ref().map(|(_, pid)| *pid));
 
-        // Os quadros são medidos numa thread ao lado, pelo mesmo tempo.
+        // Os quadros são medidos numa thread ao lado, pelo mesmo tempo. O
+        // instante de início amarra o relógio dos quadros ao das amostras.
+        let inicio_dos_quadros = coletor.decorrido_ms();
         let medicao = jogo.clone().map(|(nome, pid)| {
-            std::thread::spawn(move || crate::modules::windows::frames::medir(pid, &nome, segundos))
+            std::thread::spawn(move || crate::modules::windows::frames::medir_par(pid, &nome, None, segundos))
         });
 
         let mut amostras = Vec::new();
@@ -1567,12 +1572,15 @@ pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, Str
             amostras.push(coletor.amostra());
         }
 
-        let (saude, quadros_erro) = match medicao.map(|h| h.join()) {
-            None => (None, None),
-            Some(Ok(Ok(m))) => (m.saude, None),
-            Some(Ok(Err(e))) => (None, Some(e)),
-            Some(Err(_)) => (None, Some("A medição de quadros parou no meio.".to_string())),
+        let (saude, intervalos, quadros_erro) = match medicao.map(|h| h.join()) {
+            None => (None, Vec::new(), None),
+            Some(Ok(Ok((m, _)))) => (m.resumo.saude, m.intervalos_ms, None),
+            Some(Ok(Err(e))) => (None, Vec::new(), Some(e)),
+            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string())),
         };
+        let vram_total = coletor.placa().map(|p| p.vram_total_mb);
+        let travadas = (!intervalos.is_empty())
+            .then(|| crate::core::travadas::investigar(&intervalos, &amostras, inicio_dos_quadros, vram_total));
 
         let ctx = gargalo::Contexto {
             vram_total_mb: coletor.placa().map(|p| p.vram_total_mb),
@@ -1590,6 +1598,7 @@ pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, Str
             saude,
             quadros_erro,
             gargalos,
+            travadas,
         })
     })
     .await

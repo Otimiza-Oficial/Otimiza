@@ -51,6 +51,34 @@ type Saude = {
   indice_de_fluidez: number | null;
 };
 
+type Suspeito =
+  | { tipo: "Disco" }
+  | { tipo: "Paginacao" }
+  | { tipo: "Vram" }
+  | { tipo: "ThreadPrincipal" }
+  | { tipo: "SegundoPlano"; processo: string };
+
+type Investigacao = {
+  travadas: { instante_ms: number; duracao_ms: number; gravidade: string }[];
+  pistas: { suspeito: Suspeito; forca: "Media" | "Alta"; travadas: number }[];
+  sem_causa_visivel: number;
+};
+
+function fraseDoSuspeito(s: Suspeito): { titulo: string; faz: string } {
+  switch (s.tipo) {
+    case "Disco":
+      return { titulo: "o disco demorou para responder", faz: "Veja se o jogo está num HD mecânico (aba Jogos) e se algo está baixando ou atualizando." };
+    case "Paginacao":
+      return { titulo: "o Windows foi buscar memória no disco (faltou RAM)", faz: "Feche o navegador e programas pesados antes de jogar. Se acontece sempre, o limite é a quantidade de RAM." };
+    case "Vram":
+      return { titulo: "a memória da placa de vídeo encheu", faz: "Baixe a qualidade de textura um degrau." };
+    case "ThreadPrincipal":
+      return { titulo: "o núcleo principal do processador bateu no teto", faz: "Baixe distância de visão e densidade de população/objetos no jogo." };
+    case "SegundoPlano":
+      return { titulo: `o programa ${s.processo} disparou o uso de processador`, faz: "Feche esse programa antes de jogar, ou ligue o Modo jogo (aba Jogos): ele passa programas assim para o modo econômico durante a partida." };
+  }
+}
+
 type Diagnostico = {
   placa: { nome: string; vram_total_mb: number } | null;
   jogo: string | null;
@@ -58,6 +86,7 @@ type Diagnostico = {
   saude: Saude | null;
   quadros_erro: string | null;
   gargalos: Achado[];
+  travadas: Investigacao | null;
 };
 
 /** O que cada gargalo quer dizer, e o que fazer — escrito para quem joga. */
@@ -369,11 +398,32 @@ function desenhar(d: Diagnostico) {
     quadros = `<p class="fg-aviso">O jogo ${esc(d.jogo)} estava aberto, mas os quadros não puderam ser medidos: ${esc(d.quadros_erro)}</p>`;
   }
 
+  let detetive = "";
+  if (d.travadas) {
+    const t = d.travadas;
+    if (!t.travadas.length) {
+      detetive = `<p class="fg-nota">Nenhuma travada perceptível nesta medição.</p>`;
+    } else {
+      const pistas = t.pistas
+        .map((p) => {
+          const f = fraseDoSuspeito(p.suspeito);
+          return `<article class="mapa-gargalo"><header><b>Em ${p.travadas} de ${t.travadas.length} travada(s), ${esc(f.titulo)}</b><span class="fg-chip">coincidência ${p.forca === "Alta" ? "forte" : "média"}</span></header><p class="fg-nota"><strong>O que fazer:</strong> ${esc(f.faz)}</p></article>`;
+        })
+        .join("");
+      detetive = `
+        <h3 class="fg-sub">Detetive de travadas: o que o PC fazia na hora de cada uma</h3>
+        ${pistas}
+        ${t.sem_causa_visivel ? `<p class="fg-nota">${t.sem_causa_visivel} travada(s) sem nenhum salto de disco, memória, placa ou programa na mesma hora. Isso costuma ser compilação de shader ou o próprio jogo — e nenhum ajuste de Windows resolve.</p>` : ""}
+        <p class="fg-nota">A telemetria é lida a cada meio segundo, então isto é coincidência no tempo, não causa provada. Coincidência forte = aconteceu em pelo menos metade das travadas.</p>`;
+    }
+  }
+
   raiz.innerHTML = `
     <div class="fg-painel">
       ${mapa}
       ${gargalos}
       ${quadros}
+      ${detetive}
       <div id="mapa-tetos"></div>
       <div class="fg-linha">
         <button class="btn" id="mapa-de-novo-jogo">Medir de novo no jogo</button>

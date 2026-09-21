@@ -55,6 +55,18 @@ pub struct Amostra {
     pub disco_latencia_ms: Option<f64>,
     pub disco_fila: Option<f64>,
     pub disco_ocupado_pct: Option<f64>,
+    /// Os programas que mais usavam processador nesta amostra (fora o jogo e
+    /// o Otimiza). Só preenchido quando o coletor acompanha processos — é o
+    /// que o detetive de travadas usa para apontar quem disparou.
+    #[serde(default)]
+    pub processos: Vec<ProcessoNaAmostra>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProcessoNaAmostra {
+    pub nome: String,
+    /// Fração da máquina inteira (0–1).
+    pub cpu: f64,
 }
 
 // ------------------------------------------------------------ contas puras
@@ -194,6 +206,8 @@ pub struct Coletor {
     disco_latencia: super::pdh::Contador,
     disco_fila: super::pdh::Contador,
     disco_ocioso: super::pdh::Contador,
+    /// Acompanhamento de processos (sysinfo) e o PID que fica de fora (o jogo).
+    processos: Option<(sysinfo::System, Option<u32>)>,
 }
 
 #[cfg(windows)]
@@ -218,6 +232,7 @@ impl Coletor {
             disco_fila: c(r"\PhysicalDisk(_Total)\Current Disk Queue Length"),
             disco_ocioso: c(r"\PhysicalDisk(_Total)\% Idle Time"),
             placa: placas().into_iter().next(),
+            processos: None,
             inicio: std::time::Instant::now(),
             q,
         };
@@ -225,12 +240,43 @@ impl Coletor {
         Some(coletor)
     }
 
+    /// Milissegundos desde a abertura do coletor (o relógio de `instante_ms`).
+    pub fn decorrido_ms(&self) -> u64 {
+        self.inicio.elapsed().as_millis() as u64
+    }
+
     pub fn placa(&self) -> Option<&Placa> {
         self.placa.as_ref()
     }
 
+    /// Passa a registrar os 3 programas que mais usam processador em cada
+    /// amostra, deixando `fora` (o jogo) de lado.
+    pub fn acompanhar_processos(&mut self, fora: Option<u32>) {
+        let mut s = sysinfo::System::new();
+        s.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_cpu());
+        self.processos = Some((s, fora));
+    }
+
+    fn top_processos(&mut self) -> Vec<ProcessoNaAmostra> {
+        let Some((s, fora)) = self.processos.as_mut() else { return Vec::new() };
+        s.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_cpu());
+        let nucleos = num_cpus::get().max(1) as f64;
+        let eu = std::process::id();
+        let mut v: Vec<ProcessoNaAmostra> = s
+            .processes()
+            .iter()
+            .filter(|(pid, _)| Some(pid.as_u32()) != *fora && pid.as_u32() != eu && pid.as_u32() > 4)
+            .map(|(_, p)| ProcessoNaAmostra { nome: p.name().to_string_lossy().to_string(), cpu: p.cpu_usage() as f64 / 100.0 / nucleos })
+            .filter(|p| p.cpu > 0.0)
+            .collect();
+        v.sort_by(|a, b| b.cpu.total_cmp(&a.cpu));
+        v.truncate(3);
+        v
+    }
+
     /// Uma leitura. Chame com intervalo de pelo menos ~250 ms entre elas.
-    pub fn amostra(&self) -> Amostra {
+    pub fn amostra(&mut self) -> Amostra {
+        let processos = self.top_processos();
         let q = &self.q;
         q.coletar();
 
@@ -270,6 +316,7 @@ impl Coletor {
             disco_latencia_ms: q.valor(self.disco_latencia).map(|s| s * 1000.0),
             disco_fila: q.valor(self.disco_fila),
             disco_ocupado_pct: q.valor(self.disco_ocioso).map(|o| (100.0 - o).clamp(0.0, 100.0)),
+            processos,
         }
     }
 }
@@ -337,7 +384,7 @@ mod testes {
     #[test]
     #[ignore = "lê os contadores desta máquina"]
     fn amostra_desta_maquina() {
-        let c = Coletor::novo().expect("PDH");
+        let mut c = Coletor::novo().expect("PDH");
         std::thread::sleep(std::time::Duration::from_millis(600));
         let a = c.amostra();
         println!("{:?}\n{:#?}", c.placa(), a);

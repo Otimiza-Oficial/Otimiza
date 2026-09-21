@@ -13,5 +13,6 @@ pub mod gargalo;
 pub mod pdh;
 pub mod platform;
 pub mod telemetria;
+pub mod travadas;
 
 pub use platform::PlatformDetector;
