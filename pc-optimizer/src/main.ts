@@ -7,6 +7,7 @@ import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
 import { carregarMapaDeDesempenho } from "./mapa";
+import { carregarBiblioteca } from "./biblioteca";
 
 // ---------------------------------------------------------------- contratos
 
@@ -1177,6 +1178,10 @@ function showTab(name: string) {
 
   if (name === "framegen") {
     void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
+  }
+
+  if (name === "jogos") {
+    carregarBiblioteca({ pedirAdmin: askForAdmin });
   }
 
   if (name === "reparo" && !reparoCarregado) {

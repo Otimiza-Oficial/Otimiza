@@ -77,6 +77,7 @@ pub mod sysparams;
 pub mod tarefa_longa;
 pub mod tasks;
 pub mod thermal;
+pub mod unreal;
 pub mod veredito;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
@@ -2520,6 +2521,12 @@ fn anotar_fim(
 
 /// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
+/// Para os testes de outros módulos que gravam `ChangeRecord`.
+#[cfg(test)]
+pub(crate) fn revert_changes_para_teste(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
+    revert_changes(changes)
+}
+
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
     // Desfazer também precisa valer na hora. Sem isto, "Desfazer" devolveria o

@@ -1344,6 +1344,163 @@ pub async fn energia_medir_atual(
 }
 
 
+
+// ============================================================ biblioteca de jogos (2.9)
+
+/// Um jogo da biblioteca, com o que o Otimiza consegue fazer por ele.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct JogoNaBiblioteca {
+    pub nome: String,
+    pub origem: crate::modules::windows::jogos::Origem,
+    pub pasta: String,
+    pub executavel: Option<String>,
+    /// A: o Otimiza ajusta a configuração gráfica. C: mede e ajusta o sistema.
+    pub nivel: char,
+    /// Qual ajustador de configuração serve: "fivem" ou "unreal".
+    pub ajustador: Option<&'static str>,
+    pub ultima_medicao: Option<crate::modules::medicoes::MedicaoAutomatica>,
+    /// Id no histórico quando o Otimiza já ajustou a configuração deste jogo
+    /// (para o botão Desfazer).
+    pub ajuste_aplicado: Option<String>,
+}
+
+/// Id do ajuste Unreal de um jogo no histórico.
+pub fn id_do_ajuste_unreal(nome: &str) -> String {
+    let limpo: String = nome
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect();
+    format!("config_unreal_{}", limpo)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BibliotecaNaTela {
+    pub jogos: Vec<JogoNaBiblioteca>,
+    pub lacunas: Vec<String>,
+    pub medicoes_erro: Option<String>,
+}
+
+/// Comando: a biblioteca de jogos desta máquina. `LIVRES`.
+#[tauri::command]
+pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<BibliotecaNaTela, String> {
+    let aplicados: Vec<String> = state
+        .changes
+        .lock()
+        .await
+        .applied()
+        .iter()
+        .map(|a| a.optimization_id.clone())
+        .collect();
+    tokio::task::spawn_blocking(move || {
+        use crate::modules::windows::{jogos, unreal};
+        let b = jogos::varrer();
+        let (medicoes, medicoes_erro) = match crate::modules::medicoes::ler() {
+            Ok(m) => (m, None),
+            Err(e) => (Vec::new(), Some(e)),
+        };
+        let jogos = b
+            .jogos
+            .into_iter()
+            .map(|j| {
+                let exe = j.executavel.clone();
+                let nome_exe = exe
+                    .as_ref()
+                    .and_then(|e| e.file_stem())
+                    .map(|s| s.to_string_lossy().to_lowercase());
+                let e_fivem_ou_gta = j.nome.to_lowercase().contains("fivem")
+                    || j.nome.to_lowercase().contains("grand theft auto v")
+                    || nome_exe.as_deref() == Some("gta5");
+                let ajustador = if e_fivem_ou_gta {
+                    Some("fivem")
+                } else if exe.as_ref().is_some_and(|e| unreal::config_do_jogo(e).is_some()) {
+                    Some("unreal")
+                } else {
+                    None
+                };
+                // A medição automática grava o nome do PROCESSO; o do FiveM
+                // (FiveM_b3258_GTAProcess.exe) começa pelo nome do lançador.
+                let id_ajuste = id_do_ajuste_unreal(&j.nome);
+                let ultima_medicao = nome_exe.as_ref().and_then(|n| {
+                    medicoes
+                        .iter()
+                        .filter(|m| m.jogo.to_lowercase().starts_with(n.as_str()))
+                        .max_by_key(|m| m.quando)
+                        .cloned()
+                });
+                JogoNaBiblioteca {
+                    nome: j.nome,
+                    origem: j.origem,
+                    pasta: j.pasta.to_string_lossy().to_string(),
+                    executavel: exe.map(|e| e.to_string_lossy().to_string()),
+                    nivel: if ajustador.is_some() { 'A' } else { 'C' },
+                    ajustador,
+                    ultima_medicao,
+                    ajuste_aplicado: aplicados.contains(&id_ajuste).then_some(id_ajuste),
+                }
+            })
+            .collect();
+        Ok(BibliotecaNaTela { jogos, lacunas: b.lacunas, medicoes_erro })
+    })
+    .await
+    .map_err(|e| format!("Falha ao ler a biblioteca: {}", e))?
+}
+
+fn vram_gb() -> Option<f64> {
+    crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
+}
+
+/// Comando: o que o ajustador Unreal mudaria, sem gravar. `LIVRES`.
+#[tauri::command]
+pub async fn unreal_prever(
+    executavel: String,
+    orcamento: crate::modules::windows::unreal::Orcamento,
+) -> Result<crate::modules::windows::unreal::Previa, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::modules::windows::unreal::prever(std::path::Path::new(&executavel), orcamento, vram_gb())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Comando: aplica o orçamento na configuração Unreal do jogo, guardando o
+/// arquivo inteiro no histórico. `EXIGEM_LICENCA`.
+#[tauri::command]
+pub async fn unreal_aplicar(
+    executavel: String,
+    nome: String,
+    orcamento: crate::modules::windows::unreal::Orcamento,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::modules::windows::unreal::Mudanca>, String> {
+    crate::modules::licenca::exigir()?;
+    use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
+    let caminho = executavel.clone();
+    let feito = tokio::task::spawn_blocking(move || {
+        crate::modules::windows::unreal::aplicar(std::path::Path::new(&caminho), orcamento, vram_gb())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if feito.mudancas.is_empty() {
+        return Ok(feito.mudancas);
+    }
+    let mut log = state.changes.lock().await;
+    let id = id_do_ajuste_unreal(&nome);
+    // Aplicar de novo por cima: o desfazer precisa voltar ao ORIGINAL, então
+    // o registro antigo fica e o novo não é gravado por cima dele.
+    if !log.is_applied(&id) {
+        log.record(AppliedOptimization {
+            optimization_id: id,
+            name: format!("Configuração do {}", nome),
+            timestamp: now_timestamp(),
+            changes: vec![ChangeRecord::GameConfig {
+                caminho: feito.arquivo.to_string_lossy().to_string(),
+                anterior: Some(feito.anterior),
+                jogo: nome,
+            }],
+        })?;
+    }
+    Ok(feito.mudancas)
+}
 // ============================================================ diagnóstico ao vivo (2.9)
 
 /// O que está limitando o PC AGORA: telemetria do Windows amostrada a cada
@@ -3891,6 +4048,8 @@ mod tests {
         "energia_painel",
         "energia_vizinhos",
         "diagnostico_ao_vivo",
+        "biblioteca_de_jogos",
+        "unreal_prever",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",
@@ -3942,6 +4101,7 @@ mod tests {
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
         "gerador_ligar",
+        "unreal_aplicar",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",
