@@ -6,6 +6,41 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Otimiza — Console de Desempenho</title>
     <script type="module" src="/src/main.ts" defer></script>
+
+    <!--
+      O TEMA, RESOLVIDO ANTES DO PRIMEIRO DESENHO.
+
+      Este script é síncrono e mora no `<head>` de propósito. O resto do
+      programa carrega com `defer`, ou seja, depois da primeira pintura — e um
+      app que abre branco e vira preto meio segundo depois pisca na cara de
+      quem usa toda vez que abre.
+
+      Ele faz UMA coisa: escreve em `<html>` se o tema é claro ou escuro. Quem
+      decide é a escolha guardada do cliente; sem escolha, a preferência do
+      Windows. O CSS não conhece consulta de mídia nenhuma — assim a lista de
+      cores do escuro existe uma vez só, em vez de uma cópia para o sistema e
+      outra para o botão.
+
+      Falhar aqui não pode derrubar a tela: `localStorage` lança em algumas
+      situações, e um app que não abre por causa da cor do fundo é pior que um
+      app da cor errada.
+    -->
+    <script>
+      (function () {
+        var escolhido = null;
+        try {
+          escolhido = localStorage.getItem("otimiza-tema");
+        } catch (e) {}
+
+        var escuro =
+          escolhido === "escuro" ||
+          (escolhido === null &&
+            window.matchMedia &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+        document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
+      })();
+    </script>
   </head>
   <body>
     <!--
@@ -30,29 +65,83 @@
     -->
     <svg class="sprite-icones" aria-hidden="true">
       <defs>
-        <!-- Painel: uma coluna alta e dois blocos, que é a forma da própria tela -->
+        <!--
+          O TRAÇO É O MESMO EM TODOS.
+
+          Todo desenho daqui cabe numa grade de 24, encosta nas margens de 3 e
+          21, e usa só linha — nenhum preenchido. Não é preciosismo: ícone de
+          espessura diferente na mesma coluna faz a lateral parecer montada de
+          pedaços, e é o tipo de coisa que o olho percebe sem saber nomear.
+
+          Quem for acrescentar um: linha de 1,5, cantos arredondados, e a forma
+          mais simples que ainda diz o que é. Na dúvida entre bonito e legível
+          a 18 pixels, legível ganha.
+        -->
+
+        <!-- Início: a casa, e não um painel de blocos. É a primeira parada. -->
         <symbol id="i-painel" viewBox="0 0 24 24">
-          <rect x="3" y="3" width="7.5" height="18" rx="1.5" />
-          <rect x="14.5" y="3" width="6.5" height="7" rx="1.5" />
-          <rect x="14.5" y="14" width="6.5" height="7" rx="1.5" />
+          <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19Z" />
+          <path d="M9.5 20.5v-6h5v6" />
         </symbol>
 
         <!-- Diagnóstico: o traçado de um monitor cardíaco -->
         <symbol id="i-diagnostico" viewBox="0 0 24 24">
-          <path d="M2 12h4l2.5-7 4 14 3-9 2 2h4.5" />
+          <path d="M3 12h3.5l2-5.5 3.5 11 2.5-7 1.5 1.5H21" />
         </symbol>
 
-        <!-- Otimizações: o raio -->
+        <!-- Ajustes: os controles deslizantes, em pé -->
         <symbol id="i-otimizacoes" viewBox="0 0 24 24">
-          <path d="M13.5 2 4 13.5h6.5L10 22l9.5-11.5H13z" />
+          <path d="M6 20V14M6 10V4M12 20v-9M12 7V4M18 20v-4M18 12V4" />
+          <path d="M3.5 12h5M9.5 8.5h5M15.5 15h5" />
         </symbol>
 
-        <!-- Jogos: o controle -->
+        <!-- Jogos: o controle, mais largo e mais leve -->
         <symbol id="i-jogos" viewBox="0 0 24 24">
-          <path d="M7.5 7h9a5.5 5.5 0 0 1 5.4 4.4l.8 4.2A3 3 0 0 1 19 19a3 3 0 0 1-2.3-1.1L15.4 16H8.6l-1.3 1.9A3 3 0 0 1 5 19a3 3 0 0 1-3.7-3.4l.8-4.2A5.5 5.5 0 0 1 7.5 7Z" />
-          <path d="M7 11v3M5.5 12.5h3" />
-          <circle cx="16" cy="11.5" r="1" />
-          <circle cx="18.5" cy="14" r="1" />
+          <path d="M8 8h8a5 5 0 0 1 4.9 4l.7 3.6A2.8 2.8 0 0 1 18.8 19a2.8 2.8 0 0 1-2.2-1.1L15.6 16.5H8.4l-1 1.4A2.8 2.8 0 0 1 5.2 19a2.8 2.8 0 0 1-2.8-3.4L3.1 12A5 5 0 0 1 8 8Z" />
+          <path d="M7.5 11.5v3M6 13h3" />
+          <path d="M16 12h.01M18 14.5h.01" />
+        </symbol>
+
+        <!-- Biblioteca: as capas lado a lado -->
+        <symbol id="i-biblioteca" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="6" height="16" rx="1.5" />
+          <rect x="11" y="4" width="4.5" height="16" rx="1.5" />
+          <path d="M17.6 5.2 21 6.1l-3.1 13-2.2-.6" />
+        </symbol>
+
+        <!-- Instaladores: a seta que desce para a bandeja -->
+        <symbol id="i-instaladores" viewBox="0 0 24 24">
+          <path d="M12 3.5v11" />
+          <path d="M7.5 10.5 12 15l4.5-4.5" />
+          <path d="M4 16.5v2A2 2 0 0 0 6 20.5h12a2 2 0 0 0 2-2v-2" />
+        </symbol>
+
+        <!-- Placa de vídeo: a placa com os dois ventiladores -->
+        <symbol id="i-gpu" viewBox="0 0 24 24">
+          <rect x="2.5" y="6" width="19" height="11" rx="2" />
+          <circle cx="8" cy="11.5" r="2.4" />
+          <circle cx="15.5" cy="11.5" r="2.4" />
+          <path d="M6 17v3.5M18 17v3.5" />
+        </symbol>
+
+        <!-- BIOS: o chip com as pernas -->
+        <symbol id="i-bios" viewBox="0 0 24 24">
+          <rect x="7" y="7" width="10" height="10" rx="1.5" />
+          <path d="M10 3.5V7M14 3.5V7M10 17v3.5M14 17v3.5M3.5 10H7M3.5 14H7M17 10h3.5M17 14h3.5" />
+        </symbol>
+
+        <!-- Núcleos: a grade de núcleos com um aceso -->
+        <symbol id="i-affinity" viewBox="0 0 24 24">
+          <rect x="4" y="4" width="6.5" height="6.5" rx="1.2" />
+          <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" />
+          <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" />
+          <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" />
+        </symbol>
+
+        <!-- Assistente: o balão com a faísca -->
+        <symbol id="i-assistente" viewBox="0 0 24 24">
+          <path d="M20.5 12.5a7.5 7.5 0 0 1-10.9 6.7L4 20.5l1.4-5.2A7.5 7.5 0 1 1 20.5 12.5Z" />
+          <path d="M12 8.5 12.9 11l2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9Z" />
         </symbol>
 
         <!-- Geração de quadros: dois quadros reais e o gerado entre eles -->
@@ -67,19 +156,18 @@
           <path d="M3 17h3l2.5-7 3 10 3-14 2.5 11H21" />
         </symbol>
 
-        <!-- Espaço: o disco, com a fatia que indica ocupação -->
+        <!-- Espaço: o disco visto de lado, com os pratos empilhados -->
         <symbol id="i-espaco" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 12V3a9 9 0 0 1 7.8 4.5Z" />
-          <circle cx="12" cy="12" r="2.5" />
+          <path d="M20 6.5c0 1.4-3.6 2.5-8 2.5S4 7.9 4 6.5 7.6 4 12 4s8 1.1 8 2.5Z" />
+          <path d="M4 6.5v11C4 18.9 7.6 20 12 20s8-1.1 8-2.5v-11" />
+          <path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" />
         </symbol>
 
-        <!-- Sistema: os controles deslizantes -->
+        <!-- Sistema: a janela com a lista do que roda atrás -->
         <symbol id="i-sistema" viewBox="0 0 24 24">
-          <path d="M3 7h6M15 7h6M3 12h12M20 12h1M3 17h3M12 17h9" />
-          <circle cx="12" cy="7" r="2.2" />
-          <circle cx="17.5" cy="12" r="2.2" />
-          <circle cx="9" cy="17" r="2.2" />
+          <rect x="3" y="4" width="18" height="16" rx="2.5" />
+          <path d="M3 8.5h18" />
+          <path d="M7 12.5h10M7 16h6" />
         </symbol>
 
         <!-- Reparo: a chave de fenda consertando o que quebrou -->
@@ -315,6 +403,24 @@
           <span class="access-text">Verificando acesso</span>
         </div>
 
+        <!--
+          O BOTÃO DO TEMA.
+
+          Ele alterna, e ao alternar GUARDA a escolha: a partir daí o app para
+          de seguir o Windows. É o que se espera — quem mexeu no interruptor
+          não quer que o sistema desfaça a escolha dele à noite.
+        -->
+        <button class="tema-botao" id="tema-botao" type="button"
+                title="Alternar entre tema claro e escuro"
+                aria-label="Alternar entre tema claro e escuro">
+          <svg class="tema-icone" aria-hidden="true" viewBox="0 0 24 24">
+            <circle class="tema-sol" cx="12" cy="12" r="4.2" />
+            <path class="tema-raios"
+                  d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6" />
+            <path class="tema-lua" d="M20 13.2A8 8 0 0 1 10.8 4a7 7 0 1 0 9.2 9.2Z" />
+          </svg>
+        </button>
+
         <!-- Os controles ficam à DIREITA: é onde quem usa Windows procura o X.
              Sem eles não há como fechar o programa: a decoração do Windows está
              desligada e esta faixa é a única moldura que existe. -->
@@ -465,7 +571,7 @@
           <button class="nav" role="tab" data-tab="painel" aria-selected="true"
                   aria-controls="tab-painel" id="tabbtn-painel">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-painel" /></svg>
-            <span class="nav-rotulo">Painel</span>
+            <span class="nav-rotulo">Início</span>
           </button>
 
           <button class="nav" role="tab" data-tab="diagnostico" aria-selected="false"
@@ -482,6 +588,30 @@
             <svg class="nav-icone" aria-hidden="true"><use href="#i-otimizacoes" /></svg>
             <span class="nav-rotulo">Otimizações</span>
             <span class="tab-badge" id="badge-otimizacoes" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="biblioteca" aria-selected="false"
+                  aria-controls="tab-biblioteca" id="tabbtn-biblioteca">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-biblioteca" /></svg>
+            <span class="nav-rotulo">Biblioteca</span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="nucleos" aria-selected="false"
+                  aria-controls="tab-nucleos" id="tabbtn-nucleos">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-affinity" /></svg>
+            <span class="nav-rotulo">Núcleos</span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="programas" aria-selected="false"
+                  aria-controls="tab-programas" id="tabbtn-programas">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-instaladores" /></svg>
+            <span class="nav-rotulo">Programas</span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="gpu" aria-selected="false"
+                  aria-controls="tab-gpu" id="tabbtn-gpu">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-gpu" /></svg>
+            <span class="nav-rotulo">Placa de vídeo</span>
           </button>
 
           <button class="nav" role="tab" data-tab="jogos" aria-selected="false"
@@ -542,21 +672,181 @@
             duplicar isso em sete blocos de HTML seria pedir para eles saírem de
             sincronia na primeira renomeação.
           -->
-          <header class="secao-cabecalho">
-            <nav class="trilha" aria-label="Trilha">
-              <span>Otimiza</span>
-              <span class="trilha-sep" aria-hidden="true">/</span>
-              <span id="trilha-atual">Painel</span>
-            </nav>
-            <div class="secao-titulo">
-              <span class="secao-icone" aria-hidden="true"><svg><use id="secao-icone-uso" href="#i-painel" /></svg></span>
-              <h2 id="secao-nome">Painel</h2>
-            </div>
+          <!--
+            O CABEÇALHO DA SEÇÃO, NO MESMO DESENHO DE TODAS AS ABERTURAS.
+
+            Era uma trilha ("Otimiza / Início") mais um ícone mais o nome —
+            três elementos para dizer uma coisa. A trilha não levava a lugar
+            nenhum: não há nível acima de uma aba, então ela era enfeite com
+            cara de navegação. O ícone repetia o da lateral, a dois
+            centímetros de distância.
+
+            Ficou o par que as abas novas já usavam: um rótulo pequeno em
+            maiúscula dizendo o GRUPO, e o nome grande embaixo. Um desenho só
+            para a tela inteira.
+
+            E ele SOME nas abas que já trazem a própria abertura — duas vezes
+            o mesmo título, um grande e um maior, é o tipo de coisa que faz a
+            tela parecer montada por acréscimo.
+          -->
+          <header class="secao-cabecalho" id="secao-cabecalho">
+            <p class="abertura-sobrenome" id="secao-grupo">Monitorar</p>
+            <h2 class="abertura-titulo" id="secao-nome">Início</h2>
           </header>
 
         <main class="stage">
         <!-- ============================================================ PAINEL -->
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
+          <!--
+            A ABERTURA.
+
+            O que vem antes do veredito é de propósito UMA LINHA DE SINAIS
+            VITAIS, e não um segundo diagnóstico. Serve para a tela responder
+            em meio segundo "esta máquina está viva e está sendo lida agora" —
+            que é o que o olho procura ao abrir qualquer monitor — e só então
+            entregar a frase que interessa.
+
+            A REGRA DO PRODUTO VALE AQUI TAMBÉM. Cada cartão mostra "—" quando
+            a leitura não veio, e a linha de baixo diz de onde o número saiu.
+            Um cartão grande e bonito com um zero inventado seria pior que a
+            tela feia que ele substituiu.
+          -->
+          <header class="abertura">
+            <p class="abertura-sobrenome">Otimização</p>
+            <h1 class="abertura-titulo">Início</h1>
+            <p class="abertura-sub" id="abertura-sub">Lendo esta máquina…</p>
+          </header>
+
+          <p class="secao-rotulo">Monitores ao vivo</p>
+
+          <div class="vivos" id="vivos">
+            <article class="vivo" data-metrica="cpu">
+              <header class="vivo-topo">
+                <span class="vivo-nome">CPU</span>
+                <span class="vivo-marca" id="monitor-cpu-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-cpu-valor">—</span><span class="vivo-unidade">%</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-cpu-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-cpu-nota">—</p>
+            </article>
+
+            <article class="vivo" data-metrica="gpu">
+              <header class="vivo-topo">
+                <span class="vivo-nome">GPU</span>
+                <span class="vivo-marca" id="monitor-gpu-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-gpu-valor">—</span><span class="vivo-unidade">%</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-gpu-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-gpu-nota">—</p>
+            </article>
+
+            <article class="vivo" data-metrica="ram">
+              <header class="vivo-topo">
+                <span class="vivo-nome">Memória</span>
+                <span class="vivo-marca" id="monitor-ram-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-ram-valor">—</span><span class="vivo-unidade">GB</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-ram-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-ram-nota">—</p>
+            </article>
+
+            <!--
+              LATÊNCIA, e não "ping".
+
+              O selo ao lado diz ESTÁVEL ou INSTÁVEL, e ele olha o jitter — não
+              o número grande. Um ping de 120 ms estável dá partida jogável; um
+              de 40 que vira 90 e volta é o que produz o teletransporte. Marcar
+              de verde um ping baixo e instável seria elogiar exatamente o que
+              estraga a partida.
+            -->
+            <article class="vivo" data-metrica="rede">
+              <header class="vivo-topo">
+                <span class="vivo-nome">Latência</span>
+                <span class="vivo-marca" id="monitor-rede-marca" hidden></span>
+              </header>
+              <p class="vivo-valor">
+                <span id="monitor-rede-valor">—</span><span class="vivo-unidade">ms</span>
+              </p>
+              <svg class="vivo-linha" id="monitor-rede-linha" viewBox="0 0 100 28"
+                   preserveAspectRatio="none" aria-hidden="true">
+                <path class="vivo-traco" d="" />
+              </svg>
+              <p class="vivo-nota" id="monitor-rede-nota">—</p>
+            </article>
+          </div>
+
+          <p class="secao-rotulo">Sistema</p>
+
+          <div class="ficha" id="ficha">
+            <div class="ficha-item">
+              <span class="ficha-rotulo">CPU</span>
+              <span class="ficha-valor" id="ficha-cpu">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">GPU</span>
+              <span class="ficha-valor" id="ficha-gpu">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">RAM</span>
+              <span class="ficha-valor" id="ficha-ram">—</span>
+            </div>
+            <div class="ficha-item">
+              <span class="ficha-rotulo">Sistema</span>
+              <span class="ficha-valor" id="ficha-so">—</span>
+            </div>
+          </div>
+
+          <!--
+            OS ATALHOS DO INÍCIO.
+
+            Três, e não nove. O Início existe para responder "como está esta
+            máquina agora" — os atalhos são a saída dali, e uma parede de
+            atalhos transforma a página de abertura num menu, que é
+            exatamente o que a lateral já é.
+
+            SEM FOTO. As referências usam fotografia de teclado e controle
+            para encher esses cartões. Não tenho essas fotos, e pôr imagem de
+            banco de imagens num produto que se vende é a mesma conversa das
+            capas de jogo. O ícone de linha faz o trabalho: ele diz para onde
+            o cartão leva, que é tudo o que se pede dele.
+          -->
+          <p class="secao-rotulo">Atalhos</p>
+
+          <div class="atalhos">
+            <button class="atalho" type="button" data-vai="gpu">
+              <svg class="atalho-icone" aria-hidden="true"><use href="#i-gpu" /></svg>
+              <span class="atalho-nome">Ajustes de driver</span>
+              <span class="atalho-nota">Os cinco ajustes de placa que o produto sabe aplicar e desfazer.</span>
+            </button>
+
+            <button class="atalho" type="button" data-vai="biblioteca">
+              <svg class="atalho-icone" aria-hidden="true"><use href="#i-biblioteca" /></svg>
+              <span class="atalho-nome">Biblioteca de jogos</span>
+              <span class="atalho-nota">O que está instalado, e a ficha de otimização de cada título.</span>
+            </button>
+
+            <button class="atalho" type="button" data-vai="otimizacoes">
+              <svg class="atalho-icone" aria-hidden="true"><use href="#i-otimizacoes" /></svg>
+              <span class="atalho-nome">Ajustes do Windows</span>
+              <span class="atalho-nota">Cada um com o que ele faz de verdade escrito ao lado.</span>
+            </button>
+          </div>
+
           <!--
             O VEREDITO
 
@@ -704,6 +994,43 @@
                 </div>
 
                 <div class="readouts">
+                  <!--
+                    CLOCK EFETIVO, e não só o nominal.
+
+                    O nominal é o que o firmware anuncia. O efetivo é o que os
+                    núcleos entregaram no intervalo — e é a diferença entre os
+                    dois que mostra a CPU "a 4 GHz" passando o tempo esperando.
+                    Os dois números vêm dos contadores do Windows, os mesmos
+                    que o motor de energia usa para decidir se um plano fica.
+                  -->
+                  <div class="readout">
+                    <span class="readout-label">Clock efetivo</span>
+                    <span class="readout-value" id="clock-efetivo">—</span>
+                    <div class="bar"><i id="clock-bar"></i></div>
+                    <span class="readout-note" id="clock-note">—</span>
+                  </div>
+                  <!--
+                    PLACA DE VÍDEO.
+
+                    Lida de dez em dez segundos, e não a cada coleta: a
+                    consulta ao Windows custa mais de um segundo, e um monitor
+                    que pesa é um monitor que atrapalha o jogo que ele mede. A
+                    nota diz de quando é a leitura — número de dez segundos
+                    atrás apresentado como se fosse agora é a mesma mentira que
+                    um zero inventado.
+                  -->
+                  <div class="readout">
+                    <span class="readout-label">Placa de vídeo</span>
+                    <span class="readout-value" id="gpu-value">—</span>
+                    <div class="bar"><i id="gpu-bar"></i></div>
+                    <span class="readout-note" id="gpu-note">—</span>
+                  </div>
+                  <div class="readout">
+                    <span class="readout-label">Memória de vídeo</span>
+                    <span class="readout-value" id="vram-value">—</span>
+                    <div class="bar"><i id="vram-bar"></i></div>
+                    <span class="readout-note" id="vram-note">—</span>
+                  </div>
                   <div class="readout">
                     <span class="readout-label">Memória</span>
                     <span class="readout-value" id="ram-value">—</span>
@@ -802,6 +1129,236 @@
                 <span class="readout-note" id="flow-uptime-note">desde o último boot</span>
               </div>
             </div>
+          </section>
+
+          <!--
+            O QUE ESTÁ SEGURANDO A MÁQUINA AGORA.
+
+            Duas listas, e as duas importam. À esquerda o que foi encontrado,
+            separado entre CAUSA — o Windows afirmando o fato, agora — e
+            HIPÓTESE — número real, mas indireto ou de alguns segundos atrás.
+            À direita o que NÃO foi verificado, com o que faltou para olhar.
+
+            A segunda lista é a que impede a primeira de mentir. "Não
+            encontramos gargalo" sem dizer que sete das catorze classes não
+            puderam ser avaliadas é a frase de um otimizador que finge ter
+            olhado tudo.
+          -->
+          <section class="panel" id="gargalo">
+            <div class="panel-head">
+              <h2>O que está segurando a máquina</h2>
+              <span class="panel-tag" id="gargalo-cobertura">—</span>
+            </div>
+
+            <p class="lead" id="gargalo-conclusao">—</p>
+
+            <div class="gargalo-colunas">
+              <div>
+                <span class="readout-label">Encontrado</span>
+                <div id="gargalo-achados"></div>
+              </div>
+              <div>
+                <span class="readout-label">Não verificado</span>
+                <div id="gargalo-faltas"></div>
+              </div>
+            </div>
+          </section>
+
+          <!--
+            MEMÓRIA DE VÍDEO: O PAINEL QUE EXISTE PARA NÃO VENDER UM AJUSTE.
+
+            Placa de vídeo cheia é o estado NORMAL de uma placa de vídeo. O
+            driver é um cache: carrega textura e não devolve enquanto ninguém
+            precisar do espaço. Todo painel de otimizador que mostra "VRAM 95%"
+            em vermelho está cobrando por um problema que não existe.
+
+            O que existe é a placa DERRAMANDO para a memória do sistema quando
+            não coube — e isso tem preço medido, porque o que está do outro lado
+            do PCIe é lido muito mais devagar. Este painel mostra os dois
+            estados com nomes diferentes, e diz quanto liberar só quando há
+            derramamento medido acima do piso desta máquina.
+          -->
+          <section class="panel" id="vram">
+            <div class="panel-head">
+              <h2>Memória de vídeo</h2>
+              <span class="panel-tag" id="vram-estado">—</span>
+            </div>
+
+            <p class="lead" id="vram-explicacao">—</p>
+
+            <div class="readouts readouts-row">
+              <div class="readout">
+                <span class="readout-label">Dedicada em uso</span>
+                <span class="readout-value" id="vram-dedicada">—</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Livre na placa</span>
+                <span class="readout-value" id="vram-folga">—</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Derramado para a RAM</span>
+                <span class="readout-value" id="vram-derramado">—</span>
+              </div>
+            </div>
+
+            <p class="readout-note" id="vram-conselho">—</p>
+          </section>
+
+          <!--
+            DO CLIQUE AO PIXEL.
+
+            Este painel mostra um PISO, não uma latência. Medir latência de
+            verdade exige instrumentar o jogo ou apontar um aparelho para o
+            monitor; nenhuma das duas coisas está ao alcance de um programa
+            rodando ao lado. O que dá para fazer é medir alguns pedaços da
+            corrente e dizer quais são os outros.
+
+            Por isso a lista tem as cinco etapas SEMPRE, e as que ninguém mediu
+            aparecem com o motivo no lugar do número. Uma etapa sem medição não
+            vira zero: zero somaria como se aquele pedaço não custasse nada, e é
+            assim que se fabrica o "1 ms de latência" que se vê por aí.
+          -->
+          <section class="panel" id="latencia">
+            <div class="panel-head">
+              <h2>Do clique ao pixel</h2>
+              <span class="panel-tag" id="latencia-cobertura">—</span>
+            </div>
+
+            <p class="lead" id="latencia-piso">—</p>
+
+            <div id="latencia-etapas"></div>
+
+            <p class="readout-note" id="latencia-observacoes"></p>
+          </section>
+
+          <!--
+            DE ONDE VÊM ESTES NÚMEROS.
+
+            Nenhum outro painel do produto admite o que ele NÃO sabe. Este
+            admite, e por isso ele é o que torna os outros confiáveis: quando a
+            tela diz 43%, dá para vir aqui e ver quem leu esse 43, quando, e com
+            que qualidade — e ver, na mesma lista, que temperatura e GPU ainda
+            não têm quem leia nesta versão.
+
+            Um otimizador que só mostra o que conseguiu medir é indistinguível
+            de um que inventa.
+          -->
+          <section class="panel" id="evidencia">
+            <div class="panel-head">
+              <h2>De onde vêm estes números</h2>
+              <span class="panel-tag" id="evidencia-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Toda métrica desta tela carrega a origem e a qualidade da leitura.
+              O que foi lido desta máquina agora aparece como medido; o que foi
+              derivado ou informado pelo Windows aparece como estimado; e o que
+              ainda não tem sensor aparece pelo nome, dizendo o que falta. O
+              Otimiza não preenche o que não mediu.
+            </p>
+
+            <div class="readouts readouts-row">
+              <div class="readout">
+                <span class="readout-label">Medido</span>
+                <span class="readout-value" id="evidencia-medido">—</span>
+                <span class="readout-note">lido desta máquina agora</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Estimado</span>
+                <span class="readout-value" id="evidencia-estimado">—</span>
+                <span class="readout-note">derivado ou informado pelo sistema</span>
+              </div>
+              <div class="readout">
+                <span class="readout-label">Não medido</span>
+                <span class="readout-value" id="evidencia-desconhecido">—</span>
+                <span class="readout-note">sem sensor nesta versão</span>
+              </div>
+            </div>
+
+            <p class="readout-note" id="evidencia-custo">—</p>
+
+            <details class="evidencia-detalhe">
+              <summary>Ver métrica por métrica</summary>
+              <div class="evidencia-tabela" id="evidencia-tabela"></div>
+            </details>
+          </section>
+
+          <!--
+            O CAMINHO DO MOUSE.
+
+            Este painel NÃO mede mira. Mira é habilidade de pessoa, e um
+            programa que a mede sem estar dentro do jogo está inventando um
+            número — enquanto um que se mete dentro do jogo para medir está do
+            lado errado de qualquer anticheat, arriscando a conta do cliente
+            para entregar um gráfico.
+
+            O que ele olha é o caminho, que é do sistema: o que o Windows faz
+            com o movimento antes de ele chegar ao jogo. Duas coisas quebram a
+            relação 1:1, e as duas são do Windows, não do jogo — a aceleração,
+            que o produto já sabia desligar, e a barra de velocidade do
+            ponteiro, que quase ninguém olha e que faz o sistema DESCARTAR
+            contagem abaixo do meio e PULAR pixel acima dele.
+          -->
+          <section class="panel" id="mouse">
+            <div class="panel-head">
+              <h2>O caminho do mouse</h2>
+              <span class="panel-tag" id="mouse-tag">—</span>
+            </div>
+
+            <p class="lead">
+              O que o Windows faz com o movimento da mão antes de ele virar
+              pixel dentro do jogo.
+            </p>
+
+            <p class="hint">
+              Não medimos mira, não olhamos dentro do jogo e não instalamos
+              gancho de entrada — nada aqui chega perto do que um anticheat
+              precisa vigiar. São duas chaves do seu próprio usuário no
+              Windows.
+            </p>
+
+            <button id="mouse-ler" class="btn" data-custo="~3 s">Conferir o caminho</button>
+            <p id="mouse-status" class="status"></p>
+            <div id="mouse-result" class="resultado" data-vazio="Lê a aceleração do ponteiro e a barra de velocidade, e diz se o Windows está mexendo no movimento antes de o jogo recebê-lo. Não altera nada."></div>
+          </section>
+
+          <!--
+            QUANDO FOI QUE PIOROU.
+
+            A ordem desta aba não é decorativa, e é esta: o que está segurando a
+            máquina (gargalo) → a memória de vídeo → do clique ao pixel → de
+            onde vêm estes números → e, por último, o tempo. Cada painel
+            responde uma pergunta diferente, e o tempo vem no fim porque é o
+            único que precisa de mais de uma visita ao produto para ter o que
+            dizer.
+
+            "Estava bom semana passada e agora está ruim" é a queixa mais
+            difícil do suporte. Este painel é a única coisa no produto que
+            consegue respondê-la — e a resposta vem com o aviso de que as
+            mudanças listadas apenas COINCIDEM no tempo com a queda. Provar
+            exige desfazer uma de cada vez e medir de novo.
+          -->
+          <section class="panel" id="historico">
+            <div class="panel-head">
+              <h2>Quando foi que piorou</h2>
+              <span class="panel-tag" id="historico-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Compara as duas últimas medições repetidas de cada métrica e lista
+              o que aconteceu entre elas.
+            </p>
+
+            <p class="hint">
+              A comparação é entre as <strong>duas últimas</strong>, e não
+              contra o melhor já medido. O melhor de sempre é a medição que mais
+              teve sorte — comparar contra ela acusaria queda em toda máquina,
+              inclusive nas que não mudaram nada.
+            </p>
+
+            <button id="historico-ler" class="btn" data-custo="instantâneo">Ver o histórico</button>
+            <p id="historico-status" class="status"></p>
+            <div id="historico-result" class="resultado" data-vazio="Precisa de pelo menos duas capturas de linha de base com repetição, em visitas diferentes. Com uma só não há o que comparar."></div>
           </section>
         </section>
 
@@ -1444,6 +2001,47 @@
 
         <!-- ============================================================== ESPAÇO -->
         <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
+          <!--
+            A LIMPEZA, ITEM A ITEM.
+
+            Três coisas separam isto de um "limpador de PC":
+
+            1. CADA ITEM DIZ O QUE SE PERDE. "Cache de miniaturas · 29 MB" não
+               é informação suficiente para decidir; "as miniaturas são
+               redesenhadas na primeira vez que você abrir cada pasta" é.
+
+            2. TAMANHO AUSENTE NÃO É ZERO. Pasta que não abriu aparece como
+               "não deu para ler", e não como 0 B — que afirmaria que não há
+               nada ali e faria o técnico não tentar como administrador.
+
+            3. O QUE É DO CLIENTE NÃO VEM MARCADO. A lixeira é a única coisa
+               da lista com arquivo que ele criou, e apagá-la não tem volta.
+
+            É a única operação do produto sem Desfazer. Por isso ela mostra o
+            total antes, e apaga só o que estiver marcado.
+          -->
+          <section class="panel" id="limpeza-painel">
+            <div class="panel-head">
+              <h2>Limpeza do sistema</h2>
+              <span class="panel-tag" id="limpeza-total">—</span>
+            </div>
+
+            <p class="lead">
+              Remove temporários e caches. Nenhum arquivo pessoal — e o que
+              contém arquivo seu vem desmarcado.
+            </p>
+
+            <div id="limpeza-lista"></div>
+
+            <div class="row-actions">
+              <button id="limpeza-medir" class="btn" data-custo="~5 s">Analisar</button>
+              <button id="limpeza-limpar" class="btn btn-primary" disabled>Limpar</button>
+            </div>
+
+            <p id="limpeza-status" class="status"></p>
+            <p class="hint" id="limpeza-aviso" hidden></p>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>Liberador de espaço</h2>
@@ -1520,23 +2118,368 @@
 
         <!-- =========================================================== RESULTADO -->
         <!-- ============================================================== JOGOS -->
-        <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
+        <!--
+          A BIBLIOTECA TEM ABA PRÓPRIA.
+
+          Ela estava no topo da aba Jogos, e ali competia com quatro painéis
+          de ajuste logo abaixo. Quem abre a biblioteca não veio ajustar nada:
+          veio achar um jogo. Aba própria é o que deixa a grade ocupar a tela
+          inteira e é onde a pessoa espera encontrá-la.
+        -->
+        <section class="tab-panel" id="tab-biblioteca" role="tabpanel"
+                 aria-labelledby="tabbtn-biblioteca" hidden>
           <!--
-            SEUS JOGOS (2.9). Todos os jogos desta máquina — lojas, programas
-            instalados e tudo que o Otimiza já viu rodando — com o que o produto
-            consegue fazer por cada um. Montado por `src/biblioteca.ts`.
+            A BIBLIOTECA.
+
+            Abre a aba porque é onde a pessoa procura o jogo dela — e porque
+            tudo o que vem abaixo (disco, placa, prioridade) faz mais sentido
+            depois de escolher sobre QUAL jogo se está falando.
+
+            DUAS LISTAS, UMA GRADE. O que está instalado sai da varredura de
+            Steam, Epic e da lista do Windows; o que não está sai do catálogo de
+            títulos que o produto conhece de nome. Jogo instalado que o catálogo
+            não conhece entra do mesmo jeito — prioridade e preferência de placa
+            não dependem de a gente ter ouvido falar dele.
+
+            SEM CAPA DE JOGO. A arte de cada título é de quem fez o título, e
+            embutir aquilo no instalador é distribuir material de terceiro. Cada
+            bloco ganha uma cor derivada do próprio nome — estável, a mesma em
+            toda abertura — e quem quiser a capa de verdade aponta um arquivo da
+            própria máquina.
           -->
-          <section class="panel" id="biblioteca-painel">
+          <!--
+            EM BREVE, E POR QUÊ ISSO FICA ESCRITO.
+
+            A grade abaixo funciona: ela lista o que está instalado, reconhece
+            os títulos do catálogo e abre a ficha de cada um. O que NÃO está
+            pronto é a parte que dá sentido a ela — a ficha de otimização por
+            jogo, que hoje só sabe mexer de verdade em GTA V e FiveM.
+
+            Uma tela que faz metade do que aparenta, sem dizer isso, é
+            exatamente o que este produto existe para não fazer. Então o aviso
+            fica em cima, antes de qualquer coisa, e diz qual metade é qual.
+          -->
+          <div class="aviso-breve" role="note">
+            <span class="aviso-breve-selo">Como funciona</span>
+            <p class="aviso-breve-texto">
+              O ajuste <strong>dentro</strong> do jogo já funciona em GTA V,
+              FiveM e nos jogos em Unreal Engine (Fortnite, Valorant, PUBG e
+              outros) — abra a ficha do jogo. Nos outros títulos a ficha
+              oferece a placa de vídeo certa, e o resto do Otimiza (energia,
+              modo jogo, Mapa de desempenho) vale para qualquer jogo. Todo
+              ajuste de jogo fica em observação: se as partidas depois dele
+              ficarem piores, ele é desfeito sozinho.
+            </p>
+          </div>
+
+          <section class="panel" id="pronto-jogar-painel">
             <header class="panel-head">
-              <h2>Seus jogos</h2>
-              <p class="panel-sub">
-                Todo jogo ganha: o Otimiza mede as partidas e ajusta o sistema. Nos marcados
-                "ajusta o jogo", ele também baixa as opções gráficas que mais custam FPS.
-              </p>
+              <h2>Pronto para jogar?</h2>
+              <p class="panel-sub">Monitor, limites de FPS escondidos, programas pesando e memória — medidos em 2 segundos.</p>
             </header>
-            <div id="biblioteca-jogos"></div>
+            <div class="fg-linha"><button class="btn btn-primary" id="pronto-jogar" type="button">Verificar antes de jogar</button></div>
+            <div id="pronto-jogar-resultado"></div>
           </section>
 
+          <section class="panel" id="biblioteca-painel">
+            <div class="panel-head">
+              <h2>Biblioteca</h2>
+              <span class="panel-tag" id="biblioteca-tag">—</span>
+            </div>
+
+            <div class="biblioteca-topo">
+              <div class="biblioteca-filtros" role="tablist" aria-label="Filtrar a biblioteca">
+                <button class="biblioteca-filtro" role="tab" data-filtro="todos"
+                        aria-selected="true">Todos</button>
+                <button class="biblioteca-filtro" role="tab" data-filtro="instalados"
+                        aria-selected="false">Instalados</button>
+              </div>
+
+              <label class="biblioteca-busca">
+                <span class="sr-only">Buscar jogo</span>
+                <input type="search" id="biblioteca-busca" placeholder="Buscar jogo"
+                       autocomplete="off" spellcheck="false" />
+              </label>
+            </div>
+
+            <div class="biblioteca-grade" id="biblioteca-grade"></div>
+            <p class="hint" id="biblioteca-lacunas" hidden></p>
+          </section>
+
+        </section>
+
+        <!--
+          OS NÚCLEOS.
+
+          A área mais cheia de promessa vazia que existe, e por isso a tela
+          abre dizendo o que a afinidade NÃO faz:
+
+          - Não é ganho grátis. Tirar núcleos de um jogo que usa todos eles
+            REDUZ o que a máquina entrega. Prender só ajuda quando o jogo
+            estava nos núcleos errados.
+          - Não dura. Afinidade é propriedade do processo aberto: fechou o
+            jogo, acabou. Vender isso como ajuste permanente é vender uma
+            coisa que some sozinha.
+          - Empurrar programa de fundo para outro núcleo quase não faz nada no
+            Windows moderno. O escalonador já evita o núcleo ocupado.
+
+          O que SOBRA é real e é medível: em processador híbrido, um jogo que
+          cai nos núcleos de eficiência entrega muito menos quadro, e nada na
+          tela do Windows diz que foi isso. Num processador de núcleos iguais
+          — que é a maioria — esta tela diz que não há o que fazer.
+        -->
+        <section class="tab-panel" id="tab-nucleos" role="tabpanel"
+                 aria-labelledby="tabbtn-nucleos" hidden>
+          <header class="abertura">
+            <p class="abertura-sobrenome">Processador</p>
+            <h1 class="abertura-titulo">Núcleos</h1>
+            <p class="abertura-sub" id="nucleos-resumo">Lendo os núcleos…</p>
+          </header>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O que a afinidade resolve aqui</h2>
+              <span class="panel-tag" id="nucleos-tag">—</span>
+            </div>
+
+            <p class="lead" id="nucleos-conselho">—</p>
+
+            <!--
+              A MATRIZ. Um quadrado por núcleo lógico, com a classe na cor.
+              Os irmãos de SMT — dois lógicos no mesmo núcleo físico —
+              aparecem colados, porque prender o jogo em um e não no irmão é
+              um erro que a matriz precisa deixar visível.
+            -->
+            <div class="nucleos-matriz" id="nucleos-matriz"></div>
+
+            <div class="nucleos-legenda" id="nucleos-legenda"></div>
+          </section>
+
+          <section class="panel" id="nucleos-jogo-painel">
+            <div class="panel-head">
+              <h2>O jogo aberto</h2>
+              <span class="panel-tag" id="nucleos-jogo-tag">—</span>
+            </div>
+
+            <p class="lead" id="nucleos-jogo-estado">—</p>
+
+            <div class="row-actions">
+              <button id="nucleos-prender" class="btn btn-primary" disabled>
+                Prender nos núcleos de desempenho
+              </button>
+              <button id="nucleos-soltar" class="btn" disabled>Soltar</button>
+              <button id="nucleos-reler" class="btn">Reler</button>
+            </div>
+
+            <p id="nucleos-status" class="status"></p>
+          </section>
+        </section>
+
+        <!--
+          OS PROGRAMAS.
+
+          O Otimiza NÃO hospeda instalador nenhum, não baixa binário de
+          endereço escolhido por nós, e não tem cópia de programa de terceiro
+          dentro do instalador. Quem instala é o winget, o gerenciador de
+          pacotes do próprio Windows: o pacote vem da fonte oficial do
+          fabricante, e a conta de "de onde veio este .exe" é da Microsoft.
+
+          Um otimizador que baixa executável de um servidor próprio é
+          indistinguível de um que entrega vírus, e o cliente não tem como
+          saber a diferença antes de rodar.
+        -->
+        <section class="tab-panel" id="tab-programas" role="tabpanel"
+                 aria-labelledby="tabbtn-programas" hidden>
+          <header class="abertura">
+            <p class="abertura-sobrenome">Software</p>
+            <h1 class="abertura-titulo">Programas</h1>
+            <p class="abertura-sub">
+              Instalados pelo gerenciador de pacotes do Windows, direto da fonte
+              oficial de cada fabricante.
+            </p>
+          </header>
+
+          <!--
+            O ESTADO DO INSTALADOR FICA NO ALTO, E NÃO ESCONDIDO.
+
+            O winget pode não existir — Windows "lite", debloat agressivo e
+            Loja removida deixam esse estado, e é o perfil do cliente que mais
+            precisa desta lista. Sem ele a aba não some nem quebra: ela lista,
+            diz o que já está instalado, e diz o que falta para instalar daqui.
+          -->
+          <p class="panel-note" id="programas-winget"></p>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Catálogo</h2>
+              <span class="panel-tag" id="programas-tag">—</span>
+            </div>
+
+            <div class="biblioteca-topo">
+              <div class="biblioteca-filtros" id="programas-filtros" role="tablist"
+                   aria-label="Filtrar por categoria"></div>
+
+              <label class="biblioteca-busca">
+                <span class="sr-only">Buscar programa</span>
+                <input type="search" id="programas-busca" placeholder="Buscar programa"
+                       autocomplete="off" spellcheck="false" />
+              </label>
+            </div>
+
+            <div id="programas-lista"></div>
+            <p id="programas-status" class="status"></p>
+            <p class="hint" id="programas-lacuna" hidden></p>
+          </section>
+        </section>
+
+        <!--
+          A PLACA DE VÍDEO TEM ABA PRÓPRIA.
+
+          Os ajustes de driver estavam no meio da aba Jogos, entre a
+          configuração do jogo e o cache de shader. São coisas diferentes: um
+          é o que o JOGO pede, o outro é o que o DRIVER faz com todos os jogos.
+
+          A DIVISÃO DA TELA É A DIVISÃO DA RESPONSABILIDADE. À esquerda, os
+          ajustes um a um, cada um com o que ele faz escrito. À direita, os
+          perfis, que são combinações desses MESMOS ajustes — e não outra
+          coisa. Um perfil que ligasse algo que não está na lista da esquerda
+          seria um botão que o cliente não tem como conferir.
+        -->
+        <section class="tab-panel" id="tab-gpu" role="tabpanel"
+                 aria-labelledby="tabbtn-gpu" hidden>
+          <header class="abertura abertura-gpu">
+            <div>
+              <p class="abertura-sobrenome">Hardware</p>
+              <h1 class="abertura-titulo">Placa de vídeo</h1>
+              <p class="abertura-sub">Ajustes de driver, e o que eles fazem com todos os jogos.</p>
+            </div>
+            <div class="gpu-cartao" id="gpu-cartao">
+              <span class="gpu-cartao-nome" id="gpu-cartao-nome">—</span>
+              <span class="gpu-cartao-nota" id="gpu-cartao-nota">procurando a placa…</span>
+            </div>
+          </header>
+
+          <!--
+            AS DUAS ABAS DE FABRICANTE, E A HONESTIDADE DE UMA DELAS.
+
+            A AMD aparece DESLIGADA e dizendo por quê. É recomendação literal
+            do estudo que decidiu este pilar: "entrar com a NVIDIA e dizer na
+            tela que a AMD ainda não é coberta, em vez de fazer meia coisa nas
+            duas". Cliente com Radeon lê "ainda não cobrimos sua placa" — e
+            não uma tela vazia, que ele leria como programa quebrado.
+          -->
+          <div class="gpu-marcas" role="tablist" aria-label="Fabricante da placa">
+            <button class="gpu-marca" role="tab" data-marca="nvidia" aria-selected="true">
+              NVIDIA
+            </button>
+            <button class="gpu-marca" role="tab" data-marca="amd" aria-selected="false"
+                    disabled title="O Otimiza ainda não mexe no driver da AMD.">
+              AMD <span class="gpu-marca-nota">ainda não coberta</span>
+            </button>
+          </div>
+
+          <div class="gpu-colunas">
+            <div class="gpu-coluna">
+          <!--
+            OS AJUSTES DO DRIVER NVIDIA.
+
+            O motor (`nvdriver.rs`) existia desde a 1.9 com o desfazer e sem o
+            fazer: cinco ajustes documentados pela NVIDIA, cada um conferido
+            pelo nome no próprio driver antes de escrever, e cada um com volta
+            ao padrão de fábrica. Isto é a tela.
+
+            Sem placa NVIDIA o painel aparece do mesmo jeito, com a frase que
+            diz que a placa ainda não é coberta — tela vazia seria lida como
+            programa quebrado.
+          -->
+          <section class="panel" id="nvdriver-painel">
+            <div class="panel-head">
+              <h2>Ajustes do driver NVIDIA</h2>
+              <span class="panel-tag" id="nvdriver-tag">—</span>
+            </div>
+
+            <p class="panel-note" id="nvdriver-nota"></p>
+            <div id="nvdriver-lista"></div>
+
+            <!--
+              O LIMITE DE FPS FICA NO PERFIL DO JOGO, NUNCA NO GLOBAL.
+
+              Um limite global prenderia a área de trabalho e todo outro jogo no
+              mesmo número. O executável é o do jogo aberto, pelo mesmo detector
+              de quatro sinais da prova de FPS: pedir o nome do arquivo à pessoa
+              seria fazê-la adivinhar "FiveM_b3258_GTAProcess.exe".
+            -->
+            <div class="nvlimite" id="nvlimite" hidden>
+              <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
+              <p class="panel-note" id="nvlimite-nota">
+                O Otimiza nunca limita o FPS sozinho: todo limite baixa o FPS
+                médio. Use só se você quer a placa mais fria e silenciosa, ou um
+                número estável num jogo que oscila muito — com o jogo aberto,
+                escolha o limite e clique em Limitar.
+              </p>
+              <div id="nvlimite-lista"></div>
+              <div class="row-actions">
+                <div class="pref-choices" id="nvlimite-fps">
+                  <button class="filter" data-fps="30">30</button>
+                  <button class="filter" data-fps="45">45</button>
+                  <button class="filter" data-fps="60">60</button>
+                  <button class="filter" data-fps="75">75</button>
+                  <button class="filter" data-fps="90">90</button>
+                  <button class="filter" data-fps="120">120</button>
+                  <button class="filter" data-fps="144">144</button>
+                  <button class="filter" data-fps="165">165</button>
+                  <button class="filter" data-fps="240">240</button>
+                </div>
+                <button id="nvlimite-aplicar" class="btn btn-small">Limitar o jogo aberto</button>
+              </div>
+              <p class="hint">
+                O limite fica amarrado ao executável do jogo. O FiveM troca o nome
+                do executável quando o servidor exige outra versão do jogo; nesse
+                caso, limite de novo com o jogo aberto.
+              </p>
+            </div>
+
+            <p class="hint" id="nvdriver-rodape" hidden>
+              Cada ajuste vale para todos os jogos e passa a valer na próxima vez
+              que o jogo abrir. O driver só salva com permissão de administrador.
+              O Desfazer devolve o valor que existia antes — ou o padrão de
+              fábrica da NVIDIA, quando era ele.
+            </p>
+          </section>
+            </div>
+
+            <!--
+              OS PERFIS SÃO COMBINAÇÕES DOS AJUSTES DA ESQUERDA.
+
+              Três, e não sete. A referência que inspirou esta tela tem sete —
+              "Básico", "Casual", "FPS", "FPS 2.0", "Avançado" —, e sobre cinco
+              opções de liga-desliga sete perfis não são sete respostas: são
+              sete nomes para três. Nome a mais é promessa a mais.
+
+              Cada perfil LISTA o que liga. É o que permite o cliente conferir
+              que o botão grande não faz nada além do que os interruptores do
+              lado fazem — e desfazer um a um se quiser.
+            -->
+            <div class="gpu-coluna">
+              <section class="panel" id="gpu-perfis-painel">
+                <div class="panel-head">
+                  <h2>Perfis</h2>
+                  <span class="panel-tag">combinações dos ajustes ao lado</span>
+                </div>
+
+                <p class="hint">
+                  Cada perfil liga um conjunto dos mesmos ajustes da esquerda.
+                  Nada além deles — e o Desfazer continua valendo um a um.
+                </p>
+
+                <div id="gpu-perfis"></div>
+                <p id="gpu-perfis-status" class="status"></p>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <!--
             EM QUE DISCO O JOGO ESTÁ.
 
@@ -1730,72 +2673,6 @@
             <p class="hint" id="gpupref-rodape" hidden></p>
           </section>
 
-          <!--
-            OS AJUSTES DO DRIVER NVIDIA.
-
-            O motor (`nvdriver.rs`) existia desde a 1.9 com o desfazer e sem o
-            fazer: cinco ajustes documentados pela NVIDIA, cada um conferido
-            pelo nome no próprio driver antes de escrever, e cada um com volta
-            ao padrão de fábrica. Isto é a tela.
-
-            Sem placa NVIDIA o painel aparece do mesmo jeito, com a frase que
-            diz que a placa ainda não é coberta — tela vazia seria lida como
-            programa quebrado.
-          -->
-          <section class="panel" id="nvdriver-painel" hidden>
-            <div class="panel-head">
-              <h2>Ajustes do driver NVIDIA</h2>
-              <span class="panel-tag" id="nvdriver-tag">—</span>
-            </div>
-
-            <p class="panel-note" id="nvdriver-nota"></p>
-            <div id="nvdriver-lista"></div>
-
-            <!--
-              O LIMITE DE FPS FICA NO PERFIL DO JOGO, NUNCA NO GLOBAL.
-
-              Um limite global prenderia a área de trabalho e todo outro jogo no
-              mesmo número. O executável é o do jogo aberto, pelo mesmo detector
-              de quatro sinais da prova de FPS: pedir o nome do arquivo à pessoa
-              seria fazê-la adivinhar "FiveM_b3258_GTAProcess.exe".
-            -->
-            <div class="nvlimite" id="nvlimite" hidden>
-              <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
-              <p class="panel-note" id="nvlimite-nota">
-                O Otimiza nunca limita o FPS sozinho: todo limite baixa o FPS
-                médio. Use só se você quer a placa mais fria e silenciosa, ou um
-                número estável num jogo que oscila muito — com o jogo aberto,
-                escolha o limite e clique em Limitar.
-              </p>
-              <div id="nvlimite-lista"></div>
-              <div class="row-actions">
-                <div class="pref-choices" id="nvlimite-fps">
-                  <button class="filter" data-fps="30">30</button>
-                  <button class="filter" data-fps="45">45</button>
-                  <button class="filter" data-fps="60">60</button>
-                  <button class="filter" data-fps="75">75</button>
-                  <button class="filter" data-fps="90">90</button>
-                  <button class="filter" data-fps="120">120</button>
-                  <button class="filter" data-fps="144">144</button>
-                  <button class="filter" data-fps="165">165</button>
-                  <button class="filter" data-fps="240">240</button>
-                </div>
-                <button id="nvlimite-aplicar" class="btn btn-small">Limitar o jogo aberto</button>
-              </div>
-              <p class="hint">
-                O limite fica amarrado ao executável do jogo. O FiveM troca o nome
-                do executável quando o servidor exige outra versão do jogo; nesse
-                caso, limite de novo com o jogo aberto.
-              </p>
-            </div>
-
-            <p class="hint" id="nvdriver-rodape" hidden>
-              Cada ajuste vale para todos os jogos e passa a valer na próxima vez
-              que o jogo abrir. O driver só salva com permissão de administrador.
-              O Desfazer devolve o valor que existia antes — ou o padrão de
-              fábrica da NVIDIA, quando era ele.
-            </p>
-          </section>
 
           <!--
             O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
@@ -1836,12 +2713,28 @@
               arquivo ao sair, apagando o que fizermos agora.
             </p>
 
+            <!--
+              OS TRÊS BOTÕES ABAIXO SÃO A PERGUNTA ERRADA FEITA AO CLIENTE.
+
+              Ele não tem como saber qual dos três o problema DELE pede — e em
+              boa parte dos casos a resposta certa é nenhum: num jogo preso no
+              processador, baixar configuração gráfica tira trabalho da placa,
+              que já estava sobrando. O jogo fica feio e o número não sai do
+              lugar.
+
+              "Qual o meu caso pede" responde a partir do que foi medido, e
+              responde "nenhum" quando é o caso. É a regra do produto — nenhum
+              ajuste genérico antes de classificar o gargalo — virando botão.
+            -->
             <div class="row-actions">
               <button id="cfgjogo-analisar" class="btn" data-custo="~1 s">Analisar</button>
+              <button id="cfgjogo-plano" class="btn" data-custo="~3 s">Qual o meu caso pede?</button>
               <button id="cfgjogo-sem-teto" class="btn btn-primary">Tirar o limite de FPS</button>
               <button id="cfgjogo-equilibrado" class="btn">Equilibrado</button>
               <button id="cfgjogo-competitivo" class="btn">Máximo de FPS</button>
             </div>
+
+            <div id="cfgjogo-plano-result"></div>
 
             <p id="cfgjogo-status" class="status"></p>
             <div id="cfgjogo-result" class="resultado" data-vazio="Lê a configuração do jogo instalado e mostra o que está pesando. Nada é alterado sem você confirmar o que vai mudar."></div>
@@ -2032,6 +2925,45 @@
             </div>
 
             <p id="prio-status" class="status"></p>
+          </section>
+
+          <!--
+            LABORATÓRIO DE STREAMING DE ASSETS.
+
+            "O jogo trava quando eu ando pelo mapa" é a reclamação mais comum
+            que existe, e a resposta padrão da internet é "instala no SSD". Às
+            vezes é isso. Muitas vezes não é, e a pessoa passa uma tarde movendo
+            oitenta gigabytes para continuar travando igual.
+
+            Este laboratório não conclui pela configuração. Saber que o jogo
+            está num HD é um fato, não um diagnóstico: o que prova é o INSTANTE
+            dos trancos batendo com atividade de disco. E, quando bate, ainda há
+            três causas diferentes por trás do mesmo gráfico — memória trocando
+            página, asset vindo de mídia lenta, e outra coisa mexendo no disco.
+            Só uma delas se resolve movendo o jogo.
+          -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O jogo está esperando o disco?</h2>
+              <span class="panel-tag" id="streaming-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Usa a medição de quadros da partida para ver se os trancos caem no
+              instante em que o disco está ocupado — e, quando caem, separa as
+              três causas que produzem o mesmo sintoma.
+            </p>
+
+            <p class="hint">
+              Precisa de uma medição de quadros feita <strong>andando pelo
+              mapa</strong>: é andando que o jogo pede conteúdo que ainda não
+              está na memória. Sem essa medição o laboratório diz o que falta,
+              em vez de responder pelo tipo de disco.
+            </p>
+
+            <button id="analyze-streaming" class="btn" data-custo="~3 s">Analisar</button>
+            <p id="streaming-status" class="status"></p>
+            <div id="streaming-result" class="resultado" data-vazio="Cruza os trancos medidos na partida com a atividade de disco e diz se mover o jogo resolveria — ou se o disco não tem nada com isso. Não move nem apaga nada."></div>
           </section>
 
           <section class="panel">
@@ -2629,6 +3561,40 @@
 
     <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
          então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
+    <!--
+      A FICHA DE UM JOGO.
+
+      DUAS ALAVANCAS, e não cinco. Preferência de placa de vídeo e prioridade
+      fixa são as que o produto sabe aplicar E DESFAZER — as duas passam pelo
+      histórico de mudanças como qualquer outra otimização.
+
+      A tentação aqui é encher a ficha de interruptores: "compatibilidade",
+      "otimização de núcleos", "modo desempenho". Um interruptor que não escreve
+      nada verificável é um interruptor que o cliente liga, sente melhora, e
+      paga por nada — e é o que este produto inteiro foi escrito para não
+      fazer. Quando houver uma terceira alavanca com medição e desfazer, ela
+      entra aqui.
+    -->
+    <div class="modal" id="jogo-modal" hidden>
+      <div class="modal-card jogo-card" role="dialog" aria-modal="true"
+           aria-labelledby="jogo-modal-nome">
+        <header class="jogo-cabeca">
+          <span class="jogo-bloco" id="jogo-modal-bloco" aria-hidden="true"></span>
+          <div>
+            <p class="jogo-sobrenome">Otimizações do jogo</p>
+            <h2 id="jogo-modal-nome">—</h2>
+            <p class="jogo-caminho" id="jogo-modal-caminho">—</p>
+          </div>
+          <button class="jogo-fechar" id="jogo-modal-fechar" type="button"
+                  aria-label="Fechar">×</button>
+        </header>
+
+        <div class="jogo-alavancas" id="jogo-alavancas"></div>
+
+        <p class="modal-note" id="jogo-modal-nota"></p>
+      </div>
+    </div>
+
     <div class="modal" id="admin-modal" hidden>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="brand-logo modal-logo" aria-hidden="true"></div>

@@ -62,6 +62,13 @@ pub struct JogoInstalado {
     /// a loja não guarda essa informação.
     pub ultima_vez: u64,
     pub bytes: u64,
+    /// O número do jogo na Steam, quando a origem é a Steam.
+    ///
+    /// Guardado por causa da CAPA: é por este número que a Steam nomeia a
+    /// imagem que ela mesma baixou para desenhar a própria biblioteca. Ver
+    /// `modules::capas`.
+    #[serde(default)]
+    pub appid: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -72,6 +79,12 @@ pub struct Biblioteca {
     pub raizes: Vec<PathBuf>,
     /// O que não deu para ler, dito em voz alta.
     pub lacunas: Vec<String>,
+    /// Onde a Steam está instalada, quando está.
+    ///
+    /// Não é a mesma coisa que uma raiz de biblioteca: os jogos podem estar em
+    /// outro disco, mas o cache de capas fica sempre junto do programa.
+    #[serde(default)]
+    pub raiz_steam: Option<PathBuf>,
 }
 
 // ------------------------------------------------------------------ leitura
@@ -150,6 +163,7 @@ pub fn jogo_do_manifest(conteudo: &str, raiz: &Path) -> Option<JogoInstalado> {
         executavel: None,
         ultima_vez: numero("LastPlayed"),
         bytes: numero("SizeOnDisk"),
+        appid: valor_vdf(conteudo, "appid").and_then(|v| v.trim().parse().ok()),
     })
 }
 
@@ -177,6 +191,10 @@ fn ler_steam(biblioteca: &mut Biblioteca) {
     let Some(steam) = pasta_da_steam() else {
         return;
     };
+
+    // Guardada ANTES de qualquer leitura poder falhar: o cache de capas fica
+    // aqui, e ele continua servindo mesmo que a lista de bibliotecas não abra.
+    biblioteca.raiz_steam = Some(steam.clone());
 
     let arquivo = steam.join("steamapps").join("libraryfolders.vdf");
 
@@ -299,6 +317,8 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
             executavel,
             ultima_vez: 0,
             bytes: 0,
+            // Fora da Steam não existe número de Steam.
+            appid: None,
         });
     }
 }
@@ -357,6 +377,7 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
             executavel: Some(executavel),
             ultima_vez: 0,
             bytes: 0,
+            appid: None,
         });
     }
 }
@@ -469,6 +490,7 @@ fn ler_instalados(biblioteca: &mut Biblioteca) {
                 executavel,
                 ultima_vez: 0,
                 bytes: 0,
+                appid: None,
             });
         }
     }
@@ -596,6 +618,7 @@ fn ler_detectados(biblioteca: &mut Biblioteca) {
             executavel: Some(v.executavel),
             ultima_vez: v.ultima_vez,
             bytes: 0,
+            appid: None,
         });
     }
 }

@@ -86,19 +86,19 @@ pub struct BottleneckReport {
 
 // ------------------------------------------------------------ leituras
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
-struct RawContadores {
-    gpu: Option<f64>,
-    vram_mb: Option<f64>,
-    disco: Option<f64>,
+pub struct RawContadores {
+    pub gpu: Option<f64>,
+    pub vram_mb: Option<f64>,
+    pub disco: Option<f64>,
 }
 
 /// Uma amostra dos contadores que não vêm do sysinfo.
 ///
 /// Placa de vídeo e disco em uma só consulta: cada chamada ao WMI custa mais de
 /// um segundo, e duas por amostra dobrariam o tempo da análise.
-fn amostrar_wmi() -> RawContadores {
+pub fn amostrar_wmi() -> RawContadores {
     // O uso da placa é somado sobre os motores 3D. Uma placa expõe vários
     // motores — 3D, cópia, vídeo — e só o 3D representa o que um jogo pede.
     let script = "\
@@ -129,6 +129,16 @@ fn amostrar_wmi() -> RawContadores {
 /// aqui significa "não sabemos", nunca "placa fraca".
 pub fn vram_total_gb() -> f64 {
     vram_total_mb().map(|mb| mb / 1024.0).unwrap_or(0.0)
+}
+
+/// A mesma leitura, sem o zero no lugar da ausência.
+///
+/// `vram_total_gb` devolve `0.0` quando não consegue ler, e os dois chamadores
+/// dele conferem `<= 0.0` antes de usar. Quem precisa da resposta honesta —
+/// a telemetria central, onde zero e "não sei" são coisas diferentes — usa
+/// esta.
+pub fn vram_total_gb_opt() -> Option<f64> {
+    vram_total_mb().map(|mb| mb / 1024.0)
 }
 
 fn vram_total_mb() -> Option<f64> {
@@ -328,10 +338,19 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
 
         ram_livre_min = ram_livre_min.min(sistema.available_memory() as f64 / 1_073_741_824.0);
 
+        // Consulta que não respondeu não entra na média. Antes ela entrava
+        // como zero, e uma placa a 95% com uma leitura perdida no meio saía
+        // como 63% — o suficiente para o veredito deixar de dizer GPU.
         let bruto = amostrar_wmi();
-        gpus.push(bruto.gpu.unwrap_or(0.0));
-        discos.push(bruto.disco.unwrap_or(0.0));
-        vram_max = vram_max.max(bruto.vram_mb.unwrap_or(0.0));
+        if let Some(g) = bruto.gpu {
+            gpus.push(g);
+        }
+        if let Some(d) = bruto.disco {
+            discos.push(d);
+        }
+        if let Some(v) = bruto.vram_mb {
+            vram_max = vram_max.max(v);
+        }
     }
 
     let media = |v: &[f64]| {

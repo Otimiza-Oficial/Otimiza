@@ -566,12 +566,18 @@ impl Amostrador {
             .filter(|c| (5.0..=120.0).contains(c))
             .collect();
 
+        // Contador que não responde chega como `None`, e não como número. O
+        // `unwrap_or(0.0)` que estava aqui transformava falha de PDH em "CPU a
+        // 0% de desempenho", e o `unwrap_or(100.0)` do limite transformava
+        // falha em "o firmware não está limitando nada" — os dois viravam
+        // evidência dentro da pontuação que decide se um plano fica na máquina
+        // do cliente ou é revertido.
         AmostraCpu {
-            desempenho_pct: self.valor(self.desempenho).unwrap_or(0.0),
-            frequencia_mhz: self.valor(self.frequencia).unwrap_or(0.0),
-            uso_pct: self.valor(self.uso).unwrap_or(0.0),
-            limite_pct: self.valor(self.limite).unwrap_or(100.0),
-            flags: self.valor(self.flags).map(|f| f as u64).unwrap_or(0),
+            desempenho_pct: self.valor(self.desempenho),
+            frequencia_mhz: self.valor(self.frequencia),
+            uso_pct: self.valor(self.uso),
+            limite_pct: self.valor(self.limite),
+            flags: self.valor(self.flags).map(|f| f as u64),
             nucleos_acordados: (!nucleos.is_empty()).then(|| nucleos.iter().filter(|(_, v)| *v == 0.0).count() as u32),
             nucleos_total: (!nucleos.is_empty()).then_some(nucleos.len() as u32),
             temperatura_c: temperaturas.into_iter().reduce(f64::max),

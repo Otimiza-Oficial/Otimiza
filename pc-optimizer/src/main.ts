@@ -7,7 +7,7 @@ import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
 import { carregarMapaDeDesempenho } from "./mapa";
-import { carregarBiblioteca } from "./biblioteca";
+import { preencherFichaDoJogo, ligarProntidao } from "./biblioteca";
 
 // ---------------------------------------------------------------- contratos
 
@@ -288,34 +288,168 @@ interface FirmwareReport {
   findings: FirmwareFinding[];
 }
 
+/**
+ * Qualidade de uma medição. Ver o cabeçalho de `modules/telemetry.rs`.
+ *
+ * A tela trata MEASURED e ESTIMATED como número para mostrar, e UNKNOWN como
+ * texto — nunca como zero.
+ */
+type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
+
+interface Metric {
+  /** `null` sempre que a qualidade é UNKNOWN. */
+  value: number | null;
+  unit: string;
+  source: string;
+  quality: Quality;
+  /** Por que não foi medido, ou por que é apenas estimado. */
+  reason: string | null;
+  /**
+   * Há quanto tempo a leitura foi feita. `null` quando é desta coleta.
+   *
+   * Sensor caro — o uso da placa de vídeo, por exemplo — é lido de dez em dez
+   * segundos fora do laço, porque a consulta custa mais de um segundo. A tela
+   * mostra a idade em vez de fingir que o número é de agora.
+   */
+  age_ms: number | null;
+}
+
+interface TelemetrySummary {
+  measured: number;
+  estimated: number;
+  unknown: number;
+  total: number;
+}
+
+interface Telemetry {
+  schema_version: number;
+  collected_at: number;
+  since_previous_ms: number | null;
+  /** Inclui a espera de amostragem da CPU. Não é percentual de overhead. */
+  collection_duration_ms: number;
+  summary: TelemetrySummary;
+  metrics: Record<string, Metric>;
+}
+
+/**
+ * A versão de contrato que esta tela sabe desenhar.
+ *
+ * Número diferente é motivo para avisar, não para adivinhar: um campo que mudou
+ * de significado entre versões continuaria desenhando bonito e dizendo outra
+ * coisa.
+ */
+const TELEMETRIA_SUPORTADA = 1;
+
 interface PerformanceMetrics {
   timestamp: number;
   cpu: {
-    overall: number;
+    overall: number | null;
     per_core: number[];
-    temperature: number;
-    frequency: number;
+    temperature: number | null;
+    frequency: number | null;
   };
   ram: {
     total_gb: number;
     used_gb: number;
     available_gb: number;
-    cached_gb: number;
-    usage_percent: number;
+    cached_gb: number | null;
+    usage_percent: number | null;
   };
   disk: {
-    read_speed_mbps: number;
-    write_speed_mbps: number;
+    read_speed_mbps: number | null;
+    write_speed_mbps: number | null;
     /** Espaço ocupado, não atividade. */
-    usage_percent: number;
+    usage_percent: number | null;
   };
   network: {
-    download_speed_mbps: number;
-    upload_speed_mbps: number;
+    download_speed_mbps: number | null;
+    upload_speed_mbps: number | null;
     total_received_gb: number;
     total_transmitted_gb: number;
   };
   uptime_hours: number;
+  telemetry: Telemetry;
+  gargalo: Diagnostico;
+  vram: AnaliseVram;
+  latencia: Orcamento;
+}
+
+type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
+
+interface Parcela {
+  etapa: Etapa;
+  /** Ausente quando não foi medida. Nunca zero. */
+  ms: number | null;
+  qualidade: Quality;
+  origem: string;
+}
+
+interface Orcamento {
+  parcelas: Parcela[];
+  /** Limite inferior: a soma só do que foi medido. */
+  piso_ms: number | null;
+  etapas_com_valor: number;
+  etapas_totais: number;
+  observacoes: string[];
+}
+
+type EstadoVram =
+  | "NaoAvaliado"
+  | "PlacaIntegrada"
+  | "Folgada"
+  | "CacheCheio"
+  | "Transbordando"
+  | "DerramaSemPressao";
+
+interface AnaliseVram {
+  estado: EstadoVram;
+  dedicada_pct: number | null;
+  folga_gb: number | null;
+  /** Quanto foi para a memória do sistema ACIMA do piso desta máquina. */
+  derramado_gb: number | null;
+  piso_gb: number | null;
+  falta: string[];
+  explicacao: string;
+  conselho: { liberar_gb: number; texto: string } | null;
+}
+
+type Classe =
+  | "CpuTodosNucleos"
+  | "CpuUmNucleo"
+  | "Gpu"
+  | "MemoriaRam"
+  | "MemoriaVideo"
+  | "Disco"
+  | "LimiteTermico"
+  | "LimiteEletrico"
+  | "TetoDeQuadros"
+  | "Engasgo"
+  | "ForaDoHardware"
+  | "StreamingDeAssets"
+  | "Rede";
+
+/** `Causa` = o sistema afirmou o fato agora. `Hipotese` = indireto ou velho. */
+type Forca = "Causa" | "Hipotese";
+
+interface Achado {
+  classe: Classe;
+  forca: Forca;
+  /** O número que sustenta o achado, com o id da métrica. */
+  evidencia: string;
+  idade_ms: number | null;
+}
+
+interface NaoVerificado {
+  classe: string;
+  falta: string;
+}
+
+interface Diagnostico {
+  conclusao: "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
+  achados: Achado[];
+  nao_verificado: NaoVerificado[];
+  classes_avaliadas: number;
+  classes_totais: number;
 }
 
 type ActionStatus =
@@ -1143,6 +1277,56 @@ function element<T extends HTMLElement>(id: string): T {
   return document.getElementById(id) as T;
 }
 
+
+// ------------------------------------------------------------- tema
+
+/** Onde a escolha do cliente fica. O mesmo nome lido pelo script de abertura. */
+const CHAVE_DO_TEMA = "otimiza-tema";
+
+/**
+ * Liga o botão do tema e passa a seguir o Windows enquanto ninguém escolher.
+ *
+ * QUEM APLICA O TEMA NA ABERTURA NÃO É ESTA FUNÇÃO — é o script síncrono do
+ * `<head>`, que roda antes da primeira pintura. Aqui só ficam as duas coisas
+ * que dependem de o app estar vivo: o clique e o acompanhamento da preferência
+ * do sistema.
+ */
+function ligarTema() {
+  const botao = element<HTMLButtonElement>("tema-botao");
+  const midia = window.matchMedia?.("(prefers-color-scheme: dark)");
+
+  const aplicar = (tema: "claro" | "escuro") => {
+    document.documentElement.dataset.tema = tema;
+  };
+
+  botao.addEventListener("click", () => {
+    const novo = document.documentElement.dataset.tema === "escuro" ? "claro" : "escuro";
+    aplicar(novo);
+
+    // Guardar a escolha é o que faz o app PARAR de seguir o Windows. Quem
+    // mexeu no interruptor não quer que o sistema desfaça a escolha à noite.
+    try {
+      localStorage.setItem(CHAVE_DO_TEMA, novo);
+    } catch {
+      // Sem armazenamento a escolha vale só para esta sessão. É uma perda
+      // pequena, e é melhor que o botão não funcionar.
+    }
+  });
+
+  // Enquanto o cliente não escolher, o app acompanha o Windows ao vivo — sem
+  // precisar reabrir. Depois da escolha, para de acompanhar.
+  midia?.addEventListener("change", (e) => {
+    let escolhido: string | null = null;
+    try {
+      escolhido = localStorage.getItem(CHAVE_DO_TEMA);
+    } catch {
+      escolhido = null;
+    }
+
+    if (escolhido === null) aplicar(e.matches ? "escuro" : "claro");
+  });
+}
+
 // ---------------------------------------------------------------------- abas
 
 /**
@@ -1205,6 +1389,36 @@ let planoVistoriado = false;
 let discosCarregados = false;
 let biosCarregada = false;
 
+/**
+ * Põe o cabeçalho da seção de acordo com o item da lateral.
+ *
+ * SEPARADA DE `showTab` porque ela precisa rodar TAMBÉM NA ABERTURA, e
+ * `showTab` não roda: o estado inicial vem do HTML. O defeito que isso
+ * causou foi visível — o programa abria com o cabeçalho da seção e a
+ * abertura da aba, os dois dizendo "Início", um embaixo do outro.
+ *
+ * Chamá-la é barato e não tem efeito colateral; chamar `showTab` na
+ * abertura teria, porque ele dispara as leituras caras de cada aba.
+ */
+function sincronizarCabecalho(item: HTMLElement, name: string) {
+  const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
+  text("secao-nome", rotulo);
+
+  // O GRUPO da lateral vira o rótulo pequeno do cabeçalho. Ele já existe
+  // como separador da navegação ("Monitorar", "Agir"), e reaproveitá-lo é o
+  // que impede a tela de ter uma segunda tabela de nomes para manter.
+  let grupo = item.previousElementSibling;
+  while (grupo && !grupo.classList.contains("lateral-grupo")) {
+    grupo = grupo.previousElementSibling;
+  }
+  text("secao-grupo", grupo?.textContent?.trim() ?? "");
+
+  // O cabeçalho some quando a aba já traz a própria abertura. Dois títulos,
+  // um grande e um maior, é o que faz a tela parecer montada por acréscimo.
+  const painel = document.getElementById(`tab-${name}`);
+  element("secao-cabecalho").hidden = !!painel?.querySelector(".abertura");
+}
+
 function showTab(name: string) {
   if (name === "energia") {
     void carregarMotorDeEnergia({ pedirAdmin: askForAdmin });
@@ -1214,8 +1428,8 @@ function showTab(name: string) {
     void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
   }
 
-  if (name === "jogos") {
-    carregarBiblioteca({ pedirAdmin: askForAdmin });
+  if (name === "biblioteca") {
+    ligarProntidao();
   }
 
   if (name === "reparo" && !reparoCarregado) {
@@ -1269,25 +1483,7 @@ function showTab(name: string) {
     // alguém renomeasse uma seção.
     if (!escolhida) return;
 
-    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
-
-    // O TÍTULO COPIA O DESENHO DA LATERAL, e não um nome que os dois teriam de
-    // combinar. Antes cada lado tinha a sua cópia da forma em CSS: renomear ou
-    // redesenhar um ícone exigia lembrar do outro, e esquecer não quebrava
-    // nada — só deixava a tela mostrando dois desenhos diferentes para a mesma
-    // seção. Copiando a referência, é impossível saírem de sincronia.
-    const referencia = item
-      .querySelector(".nav-icone use")
-      ?.getAttribute("href");
-
-    text("secao-nome", rotulo);
-    text("trilha-atual", rotulo);
-
-    if (referencia) {
-      document
-        .getElementById("secao-icone-uso")
-        ?.setAttribute("href", referencia);
-    }
+    sincronizarCabecalho(item, name);
   });
 }
 
@@ -1369,8 +1565,11 @@ async function loadIdentity() {
       "get_platform_info"
     );
     text("ident-os", `${platform.version} · ${platform.arch}`);
+    text("ficha-so", `${platform.version} · ${platform.arch}`);
+    fichaDaMaquina.so = platform.version;
   } catch (error) {
     text("ident-os", "indisponível");
+    text("ficha-so", "indisponível");
     console.error(error);
   }
 
@@ -1391,10 +1590,24 @@ async function loadIdentity() {
     text("ident-ram", `${hardware.total_ram_gb.toFixed(1)} GB`);
     text("ident-cpu", hardware.cpu_name);
     text("ident-gpu", hardware.gpu_name);
+
+    // A mesma leitura alimenta a ficha da abertura. Uma segunda consulta
+    // para os mesmos quatro campos custaria o dobro e abriria a porta para
+    // as duas discordarem.
+    text("ficha-cpu", hardware.cpu_name);
+    text("ficha-gpu", hardware.gpu_name);
+
+    fichaDaMaquina.cpu = hardware.cpu_name;
+    fichaDaMaquina.gpu = hardware.gpu_name;
+    fichaDaMaquina.ram = `${hardware.total_ram_gb.toFixed(0)} GB`;
+    text("ficha-ram", `${hardware.total_ram_gb.toFixed(0)} GB · ${hardware.logical_cores} núcleos lógicos`);
   } catch (error) {
     text("ident-storage", "indisponível");
     text("ident-cpu", "indisponível");
     text("ident-gpu", "indisponível");
+    text("ficha-cpu", "indisponível");
+    text("ficha-gpu", "indisponível");
+    text("ficha-ram", "indisponível");
     console.error(error);
   }
 }
@@ -1500,20 +1713,112 @@ function restartMetricsLoop() {
   metricsTimer = window.setInterval(tick, preferences.metrics_interval_seconds * 1000);
 }
 
+/**
+ * Uma coleta já está em curso.
+ *
+ * A coleta espera 200 ms amostrando a CPU, e a leitura de processos vem logo
+ * atrás. Num intervalo curto — ou numa máquina ocupada, que é justamente
+ * quando o cliente está olhando — o relógio dispara de novo antes de a volta
+ * anterior terminar, e as chamadas passam a se empilhar. O monitor vira parte
+ * do problema que ele foi medir.
+ */
+let tickEmAndamento = false;
+
 async function tick() {
-  try {
-    const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
-    renderMetrics(metrics);
-  } catch (error) {
-    console.error("Erro ao coletar métricas:", error);
-  }
+  if (tickEmAndamento) return;
+  tickEmAndamento = true;
 
   try {
-    const processes = await invoke<ProcessImpact[]>("top_processes");
-    renderProcesses(processes);
-  } catch (error) {
-    console.error("Erro ao ler processos:", error);
+    try {
+      const metrics = await invoke<PerformanceMetrics>("get_performance_metrics");
+      renderMetrics(metrics);
+    } catch (error) {
+      console.error("Erro ao coletar métricas:", error);
+      // Os números da tela são de uma leitura que não aconteceu. Deixá-los no
+      // lugar faria o painel continuar afirmando algo sobre a máquina agora.
+      limparMetricas(String(error));
+    }
+
+    try {
+      const processes = await invoke<ProcessImpact[]>("top_processes");
+      renderProcesses(processes);
+    } catch (error) {
+      console.error("Erro ao ler processos:", error);
+    }
+  } finally {
+    tickEmAndamento = false;
   }
+}
+
+/**
+ * Apaga os números vivos e diz que a leitura falhou.
+ *
+ * Não zera nada: travessão, não zero. Um painel de CPU marcando 0% porque a
+ * coleta caiu é a mesma mentira que este trabalho inteiro veio tirar do
+ * produto, só que vinda da tela em vez do coletor.
+ */
+function limparMetricas(motivo: string) {
+  for (const id of [
+    "vital-cpu",
+    "vital-ram",
+    "vital-disk",
+    "cpu-value",
+    "ram-value",
+    "disk-value",
+    "flow-read",
+    "flow-write",
+    "flow-net",
+    "clock-efetivo",
+    "gpu-value",
+    "vram-value",
+  ]) {
+    text(id, "—");
+  }
+
+  for (const id of ["vital-cpu-bar", "vital-ram-bar", "vital-disk-bar", "ram-bar", "disk-bar", "clock-bar", "gpu-bar", "vram-bar"]) {
+    setBar(id, null);
+  }
+
+  for (const id of ["clock-note", "gpu-note", "vram-note"]) {
+    const nota = element(id);
+    nota.textContent = "sem leitura";
+    nota.className = "readout-note";
+  }
+
+  // O diagnóstico sai junto dos números. Sem coleta não há o que classificar,
+  // e deixar o veredito anterior na tela seria afirmar sobre a máquina de agora
+  // com a evidência de antes.
+  element("gargalo-cobertura").textContent = "—";
+  element("gargalo-conclusao").textContent =
+    "A leitura falhou, então não há evidência para classificar nada.";
+  element("gargalo-achados").innerHTML = "";
+  element("gargalo-faltas").innerHTML = "";
+
+  renderVram({
+    estado: "NaoAvaliado",
+    dedicada_pct: null,
+    folga_gb: null,
+    derramado_gb: null,
+    piso_gb: null,
+    falta: [],
+    explicacao: "A leitura falhou, então não há memória de vídeo a avaliar.",
+    conselho: null,
+  });
+
+  renderLatencia({
+    parcelas: [],
+    piso_ms: null,
+    etapas_com_valor: 0,
+    etapas_totais: 5,
+    observacoes: [],
+  });
+
+  const tag = element("evidencia-tag");
+  tag.textContent = "leitura indisponível";
+  tag.dataset.estado = "falha";
+  element("evidencia-tabela").innerHTML = `<p class="empty">${escapeHtml(motivo)}</p>`;
+
+  text("status-right", `leitura falhou às ${new Date().toLocaleTimeString("pt-BR")}`);
 }
 
 /**
@@ -1554,8 +1859,32 @@ function renderProcesses(processes: ProcessImpact[]) {
     .join("");
 }
 
+/**
+ * Formata um número que pode não existir.
+ *
+ * Ausência vira travessão. É a regra que atravessa a tela inteira desde que o
+ * backend passou a distinguir "medi zero" de "não medi": onde o produto não
+ * tem número, ele não escreve número nenhum.
+ */
+function medida(valor: number | null, formatar: (n: number) => string): string {
+  return valor === null ? "—" : formatar(valor);
+}
+
 function renderMetrics(metrics: PerformanceMetrics) {
-  const cpu = Math.min(100, Math.max(0, metrics.cpu.overall));
+  if (metrics.telemetry.schema_version !== TELEMETRIA_SUPORTADA) {
+    limparMetricas(
+      `esta tela lê a telemetria versão ${TELEMETRIA_SUPORTADA} e recebeu a versão ${metrics.telemetry.schema_version}`
+    );
+    return;
+  }
+
+  renderAbertura(metrics);
+  renderEvidencia(metrics.telemetry);
+  renderVram(metrics.vram);
+  renderLatencia(metrics.latencia);
+  renderGargalo(metrics.gargalo);
+
+  const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
   const gauge = element<SVGCircleElement & HTMLElement>("gauge-cpu");
@@ -1570,15 +1899,20 @@ function renderMetrics(metrics: PerformanceMetrics) {
     aro.dataset.entrada = "true";
     window.setTimeout(() => delete aro.dataset.entrada, 1000);
   }
-  gauge.style.strokeDashoffset = String(540 - (540 * cpu) / 100);
-  gauge.style.stroke = loadColor(cpu);
+  // Sem leitura de CPU o anel esvazia e fica cinza. Ele não pode descansar no
+  // valor anterior: um instrumento parado exibindo o número de trinta segundos
+  // atrás é pior do que um instrumento vazio, porque parece vivo.
+  gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
+  gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
 
   // Faixa fixa do topo, viva em qualquer aba.
-  text("vital-cpu", `${cpu.toFixed(0)}%`);
+  const porcento = (n: number) => `${n.toFixed(0)}%`;
+
+  text("vital-cpu", medida(cpu, porcento));
   setBar("vital-cpu-bar", cpu);
-  text("vital-ram", `${metrics.ram.usage_percent.toFixed(0)}%`);
+  text("vital-ram", medida(metrics.ram.usage_percent, porcento));
   setBar("vital-ram-bar", metrics.ram.usage_percent);
-  text("vital-disk", `${metrics.disk.usage_percent.toFixed(0)}%`);
+  text("vital-disk", medida(metrics.disk.usage_percent, porcento));
   setBar("vital-disk-bar", metrics.disk.usage_percent);
 
   // A ESFERA RECEBE A MEDIÇÃO.
@@ -1589,38 +1923,57 @@ function renderMetrics(metrics: PerformanceMetrics) {
   const nivelAgora =
     (element("veredito").dataset.nivel as "ok" | "importante" | "critico") ?? "ok";
 
-  alimentarEsferas({
-    nucleos: metrics.cpu.per_core.length,
-    cpu,
-    memoria: metrics.ram.usage_percent,
-    nivel: nivelAgora,
-  });
+  // Só desenha com medição na mão. O parágrafo acima é a promessa de que cada
+  // propriedade do desenho sai de um número lido desta máquina — alimentar a
+  // esfera com zero quando a leitura falhou transformaria a promessa em enfeite.
+  if (cpu !== null && metrics.ram.usage_percent !== null) {
+    alimentarEsferas({
+      nucleos: metrics.cpu.per_core.length,
+      cpu,
+      memoria: metrics.ram.usage_percent,
+      nivel: nivelAgora,
+    });
+  }
 
   // OS TRÊS PILARES RECEBEM AS TRÊS MEDIÇÕES.
   //
   // É o que separa a imagem de um enfeite: a altura de cada ruína sai de um
   // número que acabou de ser lido desta máquina, e não de um gosto nosso.
-  alimentarPilares({
-    cpu,
-    memoria: metrics.ram.usage_percent,
-    disco: metrics.disk.usage_percent,
-    nivel: nivelAgora,
-  });
+  if (cpu !== null && metrics.ram.usage_percent !== null && metrics.disk.usage_percent !== null) {
+    alimentarPilares({
+      cpu,
+      memoria: metrics.ram.usage_percent,
+      disco: metrics.disk.usage_percent,
+      nivel: nivelAgora,
+    });
+  }
 
-  text("cpu-value", cpu.toFixed(0));
-  text("cpu-freq", `${metrics.cpu.frequency.toFixed(0)} MHz · ${metrics.cpu.per_core.length} núcleos`);
+  text("cpu-value", medida(cpu, (n) => n.toFixed(0)));
+
+  // O clock sai do backend como ESTIMATED: é o que o sistema informa para o
+  // primeiro núcleo, não o clock efetivo. Quando ele não vem, a linha mostra só
+  // a contagem de núcleos em vez de "0 MHz".
+  const nucleos = `${metrics.cpu.per_core.length} núcleos`;
+  const nominal = valorDe(metrics.telemetry, "cpu.clock.reported") ?? metrics.cpu.frequency;
+  text(
+    "cpu-freq",
+    nominal === null ? `clock não informado · ${nucleos}` : `${nominal.toFixed(0)} MHz · ${nucleos}`
+  );
+
+  renderClock(metrics.telemetry);
+  renderPlaca(metrics.telemetry);
   text("core-count", `${metrics.cpu.per_core.length} lógicos`);
   text("tick-clock", new Date().toLocaleTimeString("pt-BR"));
 
   renderCores(metrics.cpu.per_core);
-  pushHistory(cpu);
+  if (cpu !== null) pushHistory(cpu);
 
   const ram = metrics.ram;
-  text("ram-value", `${ram.usage_percent.toFixed(0)}%`);
+  text("ram-value", medida(ram.usage_percent, porcento));
   text("ram-note", `${ram.used_gb.toFixed(1)} de ${ram.total_gb.toFixed(1)} GB em uso`);
   setBar("ram-bar", ram.usage_percent);
 
-  text("disk-value", `${metrics.disk.usage_percent.toFixed(0)}%`);
+  text("disk-value", medida(metrics.disk.usage_percent, porcento));
   setBar("disk-bar", metrics.disk.usage_percent);
 
   text("net-value", `${metrics.network.total_received_gb.toFixed(1)} GB`);
@@ -1633,8 +1986,14 @@ function renderMetrics(metrics: PerformanceMetrics) {
 /**
  * Taxa em unidade legível. Abaixo de 1 MB/s a leitura em MB vira "0,0" e some;
  * em KB/s o mesmo valor aparece como 340 e se enxerga.
+ *
+ * "parado" só aparece para taxa MEDIDA e perto de zero — hoje isso é a rede,
+ * onde uma interface que falha some da lista em vez de reportar zero. O disco,
+ * que não distingue parado de falha, chega aqui como `null` e vira travessão.
+ * As duas palavras dizem coisas diferentes e não podem trocar de lugar.
  */
-function formatRate(mbPerSecond: number): string {
+function formatRate(mbPerSecond: number | null): string {
+  if (mbPerSecond === null) return "—";
   if (mbPerSecond >= 1) return `${mbPerSecond.toFixed(1)} MB/s`;
   if (mbPerSecond >= 0.01) return `${(mbPerSecond * 1024).toFixed(0)} KB/s`;
   return "parado";
@@ -1672,6 +2031,1653 @@ function renderFlow(metrics: PerformanceMetrics) {
   }
 }
 
+// ------------------------------------------------------------- evidência
+//
+// O painel que responde "de onde veio este número".
+//
+// Ele existe porque a resposta honesta do produto hoje é que a maior parte das
+// métricas centrais não tem sensor nesta versão. Esconder isso deixaria a tela
+// mais bonita e o cliente sem saber o que está sendo olhado de verdade — e é
+// exatamente o tipo de silêncio que faz um otimizador parecer placebo. O que
+// não foi medido aparece pelo nome, com o motivo escrito.
+
+const ROTULO_QUALIDADE: Record<Quality, string> = {
+  MEASURED: "medido",
+  ESTIMATED: "estimado",
+  UNKNOWN: "não medido",
+};
+
+const ORDEM_QUALIDADE: Record<Quality, number> = {
+  MEASURED: 0,
+  ESTIMATED: 1,
+  UNKNOWN: 2,
+};
+
+const UNIDADE: Record<string, string> = {
+  percent: "%",
+  megahertz: "MHz",
+  hertz: "Hz",
+  celsius: "°C",
+  gigabytes: "GB",
+  megabytes_per_second: "MB/s",
+  milliseconds: "ms",
+  fps: "FPS",
+  watts: "W",
+  hours: "h",
+  count: "",
+  boolean: "",
+};
+
+/** O uso de cada núcleo, que na lista viraria dezenas de linhas iguais. */
+const ID_DE_NUCLEO = /^cpu\.core\.\d+\.usage$/;
+
+function valorLegivel(metric: Metric): string {
+  if (metric.value === null) return "—";
+  if (metric.unit === "boolean") return metric.value >= 0.5 ? "sim" : "não";
+
+  const casas = metric.unit === "count" ? 0 : 1;
+  const unidade = UNIDADE[metric.unit] ?? metric.unit;
+
+  return `${metric.value.toFixed(casas)}${unidade ? ` ${unidade}` : ""}`;
+}
+
+/** O valor de uma métrica, ou `null` quando ela não foi medida. */
+function valorDe(telemetry: Telemetry, id: string): number | null {
+  return telemetry.metrics[id]?.value ?? null;
+}
+
+// ------------------------------------------------ a abertura do painel
+
+/**
+ * O que esta máquina é, lido uma vez na abertura.
+ *
+ * Guardado porque as LEGENDAS dos cartões de leitura usam isto: a
+ * referência do dono põe "i9-14900HX · 24 núcleos" embaixo do número de
+ * CPU, e sem o nome do processador a legenda vira uma contagem solta que
+ * não diz de que máquina se está falando.
+ */
+const fichaDaMaquina: { cpu?: string; gpu?: string; ram?: string; so?: string } = {};
+
+/** Quantas leituras cada linha guarda. */
+const PONTOS_DA_LINHA = 40;
+
+/**
+ * O histórico de cada cartão, só na tela.
+ *
+ * Não vai para disco de propósito: isto é o desenho dos últimos minutos, e o
+ * histórico que o produto guarda para responder "quando piorou?" é outro, é
+ * medido com repetição e tem margem — ver `historico.rs`. Duas memórias de
+ * desempenho com regras diferentes é como um produto passa a mostrar duas
+ * respostas para a mesma pergunta.
+ */
+const linhasDoVivo: Record<string, number[]> = {};
+
+/**
+ * Desenha a linha de um cartão.
+ *
+ * LEITURA AUSENTE NÃO VIRA PONTO. Ela interrompe a série: um `null` empurrado
+ * como zero desenharia uma queda a pique que a máquina nunca teve, e é
+ * exatamente o tipo de gráfico bonito e mentiroso que este produto não faz.
+ * A linha simplesmente não cresce naquele tique, e o cartão inteiro ganha a
+ * marca de sem leitura.
+ */
+function desenharLinha(chave: string, valor: number | null, teto: number) {
+  const serie = (linhasDoVivo[chave] ??= []);
+
+  if (valor !== null && Number.isFinite(valor)) {
+    serie.push(valor);
+    if (serie.length > PONTOS_DA_LINHA) serie.shift();
+  }
+
+  const traco = element<SVGPathElement & HTMLElement>(`monitor-${chave}-linha`).querySelector(
+    ".vivo-traco"
+  ) as SVGPathElement | null;
+  if (!traco) return;
+
+  if (serie.length < 2) {
+    traco.setAttribute("d", "");
+    return;
+  }
+
+  // A escala acompanha o maior valor já visto na janela, com um piso: uma
+  // série inteira entre 2% e 4% desenhada contra 100 vira uma linha reta que
+  // não mostra nada, e desenhada contra o próprio máximo vira uma montanha
+  // que sugere uma carga que não existe. O piso é o meio-termo honesto.
+  const maior = Math.max(teto * 0.25, ...serie);
+  const passo = 100 / (serie.length - 1);
+
+  const d = serie
+    .map((v, i) => {
+      const x = (i * passo).toFixed(2);
+      const y = (28 - Math.min(1, v / maior) * 26).toFixed(2);
+      return `${i === 0 ? "M" : "L"}${x} ${y}`;
+    })
+    .join(" ");
+
+  traco.setAttribute("d", d);
+}
+
+/** Um cartão inteiro: valor, linha, nota e selo. */
+function pintarVivo(
+  chave: string,
+  valor: number | null,
+  nota: string,
+  teto: number,
+  casas = 0,
+  selo?: { texto: string; tom: string }
+) {
+  const cartao = document.querySelector<HTMLElement>(`.vivo[data-metrica="${chave}"]`);
+  if (cartao) cartao.dataset.semLeitura = valor === null ? "sim" : "nao";
+
+  text(`monitor-${chave}-valor`, valor === null ? "—" : valor.toFixed(casas));
+  text(`monitor-${chave}-nota`, nota);
+  desenharLinha(chave, valor, teto);
+
+  const marca = element(`monitor-${chave}-marca`);
+  if (selo) {
+    marca.textContent = selo.texto;
+    marca.dataset.tom = selo.tom;
+    marca.hidden = false;
+  } else {
+    marca.hidden = true;
+  }
+}
+
+function renderAbertura(m: PerformanceMetrics) {
+  const t = m.telemetry;
+
+  // A LEGENDA DIZ DE QUE PEÇA É O NÚMERO. Sem o nome do processador ela é
+  // uma contagem solta, e o cartão passa a servir para qualquer máquina —
+  // que é o contrário do que um painel de diagnóstico precisa fazer.
+  pintarVivo(
+    "cpu",
+    valorDe(t, "cpu.usage.overall"),
+    [
+      fichaDaMaquina.cpu,
+      medida(valorDe(t, "cpu.cores.logical"), (n) => `${n.toFixed(0)} núcleos`),
+    ]
+      .filter((parte) => parte && parte !== "—")
+      .join(" · "),
+    100
+  );
+
+  pintarVivo(
+    "gpu",
+    valorDe(t, "gpu.usage"),
+    [
+      fichaDaMaquina.gpu,
+      medida(valorDe(t, "vram.total"), (n) => `${n.toFixed(0)} GB`),
+    ]
+      .filter((parte) => parte && parte !== "—")
+      .join(" · "),
+    100
+  );
+
+  const usada = valorDe(t, "ram.used");
+  const total = valorDe(t, "ram.total");
+  pintarVivo(
+    "ram",
+    usada,
+    total === null ? "total não lido" : `de ${total.toFixed(0)} GB`,
+    total ?? 32,
+    1
+  );
+
+  // O selo olha o JITTER, e não a latência. Ping alto e estável dá partida
+  // jogável; ping baixo que pula é o que produz o teletransporte — marcar
+  // aquele de verde seria elogiar o que estraga a partida.
+  const latencia = valorDe(t, "network.latency");
+  const jitter = valorDe(t, "network.jitter");
+  pintarVivo(
+    "rede",
+    latencia,
+    medida(jitter, (n) => `variação de ${n.toFixed(0)} ms`),
+    100,
+    0,
+    jitter === null
+      ? undefined
+      : jitter <= 30
+        ? { texto: "Estável", tom: "bom" }
+        : { texto: "Instável", tom: "alerta" }
+  );
+
+  // O SUBTÍTULO PAROU DE REPETIR AS CLASSES AVALIADAS. Aquele número já é o
+  // selo do painel de gargalo, quatro dedos abaixo — dizer a mesma coisa
+  // duas vezes na mesma tela não acrescenta e ainda tira peso do lugar onde
+  // ela decide alguma coisa.
+  text(
+    "abertura-sub",
+    [fichaDaMaquina.so, "monitorando em tempo real"]
+      .filter(Boolean)
+      .join(" · ")
+  );
+}
+
+/**
+ * Clock efetivo ao lado do nominal, e o que o firmware está segurando.
+ *
+ * É a leitura que separa "a CPU está a 4 GHz" de "a CPU entrega 4 GHz". Os
+ * contadores do Windows medem os dois, e o segundo é o que cai quando a
+ * máquina passa o tempo esperando disco, memória ou o próprio limite térmico.
+ *
+ * Quando o firmware está limitando, isso aparece aqui e não em lugar nenhum
+ * mais: nenhum plano de energia resolve limite de firmware, e o cliente
+ * precisa saber disso ANTES de pagar por um ajuste que não vai mudar nada.
+ */
+function renderClock(telemetry: Telemetry) {
+  const efetivo = valorDe(telemetry, "cpu.clock.effective");
+  const nominal = valorDe(telemetry, "cpu.clock.reported");
+
+  text("clock-efetivo", medida(efetivo, (n) => `${n.toFixed(0)} MHz`));
+
+  // A barra é a fração do nominal que virou trabalho. Sem um dos dois lados
+  // ela fica marcada como desconhecida, e não em zero.
+  setBar(
+    "clock-bar",
+    efetivo !== null && nominal !== null && nominal > 0 ? (efetivo / nominal) * 100 : null
+  );
+
+  const termico = valorDe(telemetry, "cpu.throttling.thermal");
+  const eletrico = valorDe(telemetry, "cpu.throttling.power");
+  const limite = valorDe(telemetry, "cpu.performance_limit");
+
+  const nota = element("clock-note");
+
+  if (termico === 1 || eletrico === 1) {
+    const causa = termico === 1 ? "temperatura" : "energia";
+    nota.textContent = `firmware limitando por ${causa} — nenhum plano resolve isso`;
+    nota.className = "readout-note warn";
+    return;
+  }
+
+  nota.className = "readout-note";
+
+  if (efetivo === null || nominal === null) {
+    nota.textContent = "contadores do Windows não responderam";
+    return;
+  }
+
+  const aproveitamento = nominal > 0 ? (efetivo / nominal) * 100 : 0;
+  const folga = limite === null ? "" : limite >= 99.5 ? " · sem limite de firmware" : ` · firmware em ${limite.toFixed(0)}%`;
+
+  nota.textContent = `${aproveitamento.toFixed(0)}% do nominal de ${nominal.toFixed(0)} MHz${folga}`;
+}
+
+/**
+ * Quando a leitura foi feita, em texto curto.
+ *
+ * "agora" só para o que foi lido nesta coleta. Um sensor caro é lido de dez em
+ * dez segundos, e essa diferença importa: 95% de uso de GPU agora e 95% antes
+ * de o jogo fechar levam a vereditos opostos.
+ */
+function quandoFoiLido(metric: Metric | undefined): string {
+  if (!metric || metric.age_ms === null) return "agora";
+  if (metric.age_ms < 1000) return "agora";
+  return `há ${(metric.age_ms / 1000).toFixed(0)} s`;
+}
+
+/**
+ * Placa de vídeo e memória de vídeo.
+ *
+ * Os dois vêm da leitura cara, então os dois mostram a idade. Sem leitura, o
+ * motivo do contrato vai para a nota — "a primeira consulta ainda não voltou"
+ * é uma resposta; uma barra em zero não é.
+ */
+function renderPlaca(telemetry: Telemetry) {
+  const gpu = telemetry.metrics["gpu.usage"];
+  const uso = gpu?.value ?? null;
+
+  text("gpu-value", medida(uso, (n) => `${n.toFixed(0)}%`));
+  setBar("gpu-bar", uso);
+  element("gpu-note").textContent =
+    uso === null ? (gpu?.reason ?? "não medido") : `motores 3D · ${quandoFoiLido(gpu)}`;
+
+  const usada = telemetry.metrics["vram.used"];
+  const pct = telemetry.metrics["vram.usage"]?.value ?? null;
+  const total = valorDe(telemetry, "vram.total");
+
+  text("vram-value", medida(pct, (n) => `${n.toFixed(0)}%`));
+  setBar("vram-bar", pct);
+
+  const nota = element("vram-note");
+  if (usada?.value != null && total !== null) {
+    nota.textContent = `${usada.value.toFixed(1)} de ${total.toFixed(1)} GB · ${quandoFoiLido(usada)}`;
+  } else if (total !== null) {
+    nota.textContent = `${total.toFixed(1)} GB na placa · uso não medido`;
+  } else {
+    nota.textContent = usada?.reason ?? "não medido";
+  }
+}
+
+// ------------------------------------------------ o que não foi medido
+
+/**
+ * O bloco de "isto não entrou na conta", igual em todo painel.
+ *
+ * Um produto que admite lacunas com uma cara diferente em cada tela ensina o
+ * cliente a não procurar por elas. Aqui é sempre o mesmo bloco, e ele SOME
+ * quando não há lacuna — um "nada faltou" repetido em quatro painéis viraria
+ * ruído e faria a lista de verdade passar despercebida.
+ */
+function blocoDeFaltas(itens: string[], rotulo: string): string {
+  if (itens.length === 0) return "";
+
+  return `<p class="hint faltas"><strong>${escapeHtml(rotulo)}</strong> ${escapeHtml(
+    itens.join(", ")
+  )}.</p>`;
+}
+
+
+
+
+
+// -------------------------------------------------------------- núcleos
+
+type ClasseDeNucleo = "Desempenho" | "Eficiencia" | "Uniforme";
+
+interface NucleoLogico {
+  indice: number;
+  fisico: number;
+  classe: ClasseDeNucleo;
+}
+
+interface NucleosNaTela {
+  topologia: { nucleos: NucleoLogico[]; hibrido: boolean };
+  conselho: { cabe: boolean; explicacao: string };
+  fisicos: number;
+  /** Máscara em TEXTO: 64 bits não cabem no número do JavaScript. */
+  mascara_de_desempenho: string | null;
+  jogo_nome: string | null;
+  jogo_pid: number | null;
+  jogo_mascara: string | null;
+}
+
+const NOME_DA_CLASSE_DE_NUCLEO: Record<ClasseDeNucleo, string> = {
+  Desempenho: "desempenho",
+  Eficiencia: "eficiência",
+  Uniforme: "iguais",
+};
+
+let nucleosCarregados: NucleosNaTela | null = null;
+
+async function carregarNucleos() {
+  try {
+    const r = await invoke<NucleosNaTela>("nucleos_da_maquina");
+    nucleosCarregados = r;
+    desenharNucleos(r);
+  } catch (error) {
+    text("nucleos-resumo", String(error));
+    element("nucleos-matriz").innerHTML = "";
+  }
+}
+
+function desenharNucleos(r: NucleosNaTela) {
+  const logicos = r.topologia.nucleos;
+  text(
+    "nucleos-resumo",
+    `${logicos.length} núcleos lógicos em ${r.fisicos} físicos · ${
+      r.topologia.hibrido ? "processador híbrido" : "todos iguais"
+    }`
+  );
+
+  text("nucleos-tag", r.conselho.cabe ? "há o que fazer" : "nada a fazer aqui");
+  text("nucleos-conselho", r.conselho.explicacao);
+
+  // Em que núcleos o jogo está. A máscara vem em texto e vira BigInt: um
+  // número comum perderia os bits acima de 53, e o bit perdido é um núcleo que
+  // some da conta sem ninguém notar.
+  const doJogo = r.jogo_mascara === null ? null : BigInt(r.jogo_mascara);
+
+  element("nucleos-matriz").innerHTML = logicos
+    .map((n) => {
+      const noJogo = doJogo === null ? false : (doJogo >> BigInt(n.indice)) & 1n ? true : false;
+
+      return `
+        <span class="nucleo" data-classe="${n.classe}" data-no-jogo="${noJogo}"
+              title="Núcleo lógico ${n.indice}, físico ${n.fisico}, ${
+                NOME_DA_CLASSE_DE_NUCLEO[n.classe]
+              }">
+          <span class="nucleo-indice">${String(n.indice).padStart(2, "0")}</span>
+        </span>`;
+    })
+    .join("");
+
+  // A legenda só lista as classes que EXISTEM nesta máquina. Uma legenda com
+  // "eficiência" num processador que não tem núcleo de eficiência ensina o
+  // cliente a procurar uma coisa que não está lá.
+  const classes = [...new Set(logicos.map((n) => n.classe))];
+  element("nucleos-legenda").innerHTML =
+    classes
+      .map(
+        (c) =>
+          `<span class="nucleo-chave" data-classe="${c}">${escapeHtml(
+            NOME_DA_CLASSE_DE_NUCLEO[c]
+          )}</span>`
+      )
+      .join("") +
+    (doJogo === null
+      ? ""
+      : `<span class="nucleo-chave" data-no-jogo="true">onde o jogo pode rodar</span>`);
+
+  desenharJogoNosNucleos(r);
+}
+
+function desenharJogoNosNucleos(r: NucleosNaTela) {
+  const prender = element<HTMLButtonElement>("nucleos-prender");
+  const soltar = element<HTMLButtonElement>("nucleos-soltar");
+
+  if (r.jogo_pid === null) {
+    text("nucleos-jogo-tag", "nenhum jogo aberto");
+    text(
+      "nucleos-jogo-estado",
+      "Abra o jogo e clique em Reler. A afinidade vale para o processo aberto, então não há o que ajustar com o jogo fechado."
+    );
+    prender.disabled = true;
+    soltar.disabled = true;
+    return;
+  }
+
+  text("nucleos-jogo-tag", r.jogo_nome ?? "jogo detectado");
+
+  const doJogo = r.jogo_mascara === null ? null : BigInt(r.jogo_mascara);
+  const rapidos = r.mascara_de_desempenho === null ? null : BigInt(r.mascara_de_desempenho);
+  const todos = BigInt(r.topologia.nucleos.length) === 64n
+    ? null
+    : (1n << BigInt(r.topologia.nucleos.length)) - 1n;
+
+  const presoNosRapidos = doJogo !== null && rapidos !== null && doJogo === rapidos;
+  const solto = doJogo !== null && todos !== null && doJogo === todos;
+
+  text(
+    "nucleos-jogo-estado",
+    doJogo === null
+      ? "Não consegui ler em que núcleos este jogo está. Jogos com anticheat costumam bloquear essa leitura."
+      : presoNosRapidos
+        ? "Este jogo já está preso nos núcleos de desempenho."
+        : solto
+          ? "Este jogo pode usar todos os núcleos — que é o estado normal."
+          : `Este jogo está limitado a ${
+              [...Array(r.topologia.nucleos.length).keys()].filter(
+                (i) => (doJogo >> BigInt(i)) & 1n
+              ).length
+            } núcleos. Alguém ou algum programa mexeu nisso.`
+  );
+
+  // Prender só fica ativo onde ele resolve alguma coisa: com processador
+  // híbrido e o jogo ainda não preso. Num processador de núcleos iguais o
+  // botão fica desligado — oferecê-lo ali seria oferecer um jeito de piorar.
+  prender.disabled = !r.conselho.cabe || presoNosRapidos || doJogo === null;
+  soltar.disabled = doJogo === null || solto;
+}
+
+async function mexerNosNucleos(prender: boolean) {
+  const pid = nucleosCarregados?.jogo_pid;
+  if (pid === null || pid === undefined) return;
+
+  const botao = element<HTMLButtonElement>(prender ? "nucleos-prender" : "nucleos-soltar");
+  botao.disabled = true;
+  setStatus("nucleos-status", prender ? "Prendendo…" : "Soltando…", "progress");
+
+  try {
+    const mensagem = await invoke<string>("prender_jogo_nos_nucleos", { pid, prender });
+    setStatus("nucleos-status", mensagem, "ok");
+
+    // Relê em vez de assumir: a tela precisa dizer o que o Windows diz.
+    await carregarNucleos();
+  } catch (error) {
+    setStatus("nucleos-status", String(error), "error");
+    botao.disabled = false;
+  }
+}
+
+function ligarNucleos() {
+  element("nucleos-prender").addEventListener("click", () => void mexerNosNucleos(true));
+  element("nucleos-soltar").addEventListener("click", () => void mexerNosNucleos(false));
+  element("nucleos-reler").addEventListener("click", () => void carregarNucleos());
+}
+
+// ----------------------------------------------------- limpeza do sistema
+
+interface AlvoDeLimpeza {
+  id: string;
+  nome: string;
+  o_que_e: string;
+  custo: string;
+  padrao: boolean;
+  /** `null` quando a pasta não pôde ser lida. Não é zero. */
+  bytes: number | null;
+}
+
+interface LimpezaNaTela {
+  alvos: AlvoDeLimpeza[];
+  marcados: string[];
+}
+
+interface ResultadoDaLimpeza {
+  id: string;
+  bytes_liberados: number;
+  arquivos_apagados: number;
+  arquivos_pulados: number;
+  erro: string | null;
+}
+
+let alvosDeLimpeza: AlvoDeLimpeza[] = [];
+
+function emTexto(bytes: number): string {
+  const KB = 1024;
+  const MB = KB * 1024;
+  const GB = MB * 1024;
+
+  if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
+  if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+  if (bytes >= KB) return `${Math.round(bytes / KB)} KB`;
+  return `${bytes} B`;
+}
+
+async function medirLimpeza() {
+  const botao = element<HTMLButtonElement>("limpeza-medir");
+  botao.disabled = true;
+  setStatus("limpeza-status", "Somando o que dá para liberar…", "progress");
+
+  try {
+    const r = await invoke<LimpezaNaTela>("medir_limpeza");
+    alvosDeLimpeza = r.alvos;
+    desenharLimpeza(r.marcados);
+    setStatus("limpeza-status", "", "ok");
+  } catch (error) {
+    setStatus("limpeza-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function desenharLimpeza(marcados: string[]) {
+  element("limpeza-lista").innerHTML = alvosDeLimpeza
+    .map((a) => {
+      // Três estados de tamanho, e o terceiro importa: "não deu para ler" não
+      // é "0 B". Zero afirmaria que a pasta está vazia; a ausência diz que
+      // ninguém conseguiu abri-la, e é o que faz o técnico tentar como
+      // administrador.
+      const tamanho =
+        a.bytes === null
+          ? `<span class="limpeza-tamanho" data-tom="desconhecido">não deu para ler</span>`
+          : `<span class="limpeza-tamanho">${emTexto(a.bytes)}</span>`;
+
+      // Nada para apagar não ganha caixa: marcar uma pasta vazia é um clique
+      // que não faz nada, e um clique que não faz nada ensina que os outros
+      // também não fazem.
+      const vazio = a.bytes === 0;
+      const marcado = marcados.includes(a.id) && !vazio;
+
+      return `
+        <label class="limpeza-item" data-custa="${a.id === "lixeira"}">
+          <input type="checkbox" data-limpar="${escapeHtml(a.id)}"
+                 ${marcado ? "checked" : ""} ${vazio ? "disabled" : ""} />
+          <span class="limpeza-corpo">
+            <span class="limpeza-nome">${escapeHtml(a.nome)}${tamanho}</span>
+            <span class="limpeza-oque">${escapeHtml(a.o_que_e)}</span>
+            <span class="limpeza-custo">${escapeHtml(a.custo)}</span>
+          </span>
+        </label>`;
+    })
+    .join("");
+
+  for (const caixa of element("limpeza-lista").querySelectorAll<HTMLInputElement>(
+    "[data-limpar]"
+  )) {
+    caixa.addEventListener("change", atualizarTotalDaLimpeza);
+  }
+
+  atualizarTotalDaLimpeza();
+}
+
+function marcadosNaLimpeza(): string[] {
+  return [
+    ...element("limpeza-lista").querySelectorAll<HTMLInputElement>("[data-limpar]:checked"),
+  ].map((c) => c.dataset.limpar!);
+}
+
+function atualizarTotalDaLimpeza() {
+  const marcados = marcadosNaLimpeza();
+  const escolhidos = alvosDeLimpeza.filter((a) => marcados.includes(a.id));
+
+  // O que não pôde ser medido NÃO entra na soma como zero: ele é contado à
+  // parte e dito na tela. Um total que finge cobrir tudo é pior que um total
+  // declaradamente parcial.
+  const soma = escolhidos.reduce((t, a) => t + (a.bytes ?? 0), 0);
+  const semMedida = escolhidos.filter((a) => a.bytes === null).length;
+
+  text(
+    "limpeza-total",
+    escolhidos.length === 0 ? "nada marcado" : `${emTexto(soma)} selecionados`
+  );
+
+  const aviso = element("limpeza-aviso");
+  aviso.hidden = semMedida === 0;
+  aviso.textContent =
+    semMedida === 0
+      ? ""
+      : `${semMedida} item(ns) marcado(s) não puderam ser medidos, então não estão no total — o que for liberado será mais que o número acima.`;
+
+  element<HTMLButtonElement>("limpeza-limpar").disabled = escolhidos.length === 0;
+}
+
+async function limparMarcados() {
+  const marcados = marcadosNaLimpeza();
+  if (marcados.length === 0) return;
+
+  // A única operação do produto sem Desfazer. A confirmação lista o que vai
+  // embora pelo NOME — e não "os itens selecionados", que não é uma frase que
+  // alguém consiga conferir.
+  const nomes = alvosDeLimpeza
+    .filter((a) => marcados.includes(a.id))
+    .map((a) => a.nome)
+    .join(", ");
+
+  const temLixeira = marcados.includes("lixeira");
+  const aviso = temLixeira
+    ? "\n\nA LIXEIRA ESTÁ MARCADA: os arquivos que você mandou para ela vão ser apagados de vez."
+    : "";
+
+  if (!window.confirm(`Apagar: ${nomes}.\n\nIsto não tem desfazer.${aviso}`)) return;
+
+  const botao = element<HTMLButtonElement>("limpeza-limpar");
+  botao.disabled = true;
+  setStatus("limpeza-status", "Limpando…", "progress");
+
+  try {
+    const r = await invoke<ResultadoDaLimpeza[]>("limpar_alvos", { ids: marcados });
+
+    const total = r.reduce((t, x) => t + x.bytes_liberados, 0);
+    const pulados = r.reduce((t, x) => t + x.arquivos_pulados, 0);
+    const falhas = r.filter((x) => x.erro);
+
+    // Arquivo pulado é o caso comum — em uso por programa aberto —, e por isso
+    // ele é CONTADO e não escondido: o cliente que esperava liberar 2 GB e
+    // liberou 1,4 precisa saber por quê.
+    setStatus(
+      "limpeza-status",
+      `Liberados ${emTexto(total)}.` +
+        (pulados > 0 ? ` ${pulados} arquivo(s) em uso foram pulados.` : "") +
+        (falhas.length > 0 ? ` ${falhas.map((f) => f.erro).join(" ")}` : ""),
+      falhas.length > 0 ? "error" : "ok"
+    );
+
+    // Mede de novo: os números da tela precisam dizer o que o disco diz.
+    await medirLimpeza();
+  } catch (error) {
+    setStatus("limpeza-status", String(error), "error");
+    botao.disabled = false;
+  }
+}
+
+function ligarLimpeza() {
+  element("limpeza-medir").addEventListener("click", () => void medirLimpeza());
+  element("limpeza-limpar").addEventListener("click", () => void limparMarcados());
+}
+
+// ------------------------------------------------------------ programas
+
+interface ProgramaNaLista {
+  id: string;
+  nome: string;
+  descricao: string;
+  categoria: string;
+  /** `null` quando não deu para ler o que está instalado. Não é "não instalado". */
+  instalado: boolean | null;
+}
+
+type WingetNaTela =
+  | { estado: "Pronto"; versao: string }
+  | { estado: "Ausente"; como_resolver: string };
+
+interface ProgramasNaTela {
+  programas: ProgramaNaLista[];
+  winget: WingetNaTela;
+  lacuna: string | null;
+}
+
+let programasCarregados: ProgramaNaLista[] = [];
+let wingetPronto = false;
+let categoriaEscolhida = "Todos";
+
+/**
+ * O ESQUELETO DE CARGA.
+ *
+ * As duas listas mais lentas do produto — a varredura de jogos e a leitura do
+ * estado de instalação de vinte e dois programas — são varreduras de disco e
+ * de registro, e levam segundos. Até aqui elas desenhavam uma caixa vazia
+ * enquanto isso: a mesma caixa vazia que aparece quando não há NADA para
+ * mostrar. Quem abria a aba e via o vazio não tinha como saber se devia
+ * esperar ou se já era a resposta.
+ *
+ * O esqueleto responde isso sem prometer número nenhum: ele diz "está vindo",
+ * com a forma do que vem, e some quando o conteúdo real chega.
+ *
+ * `aria-hidden` porque para quem usa leitor de tela isto não é informação — o
+ * recado certo é o `aria-busy` no container, que o leitor anuncia como
+ * ocupado.
+ */
+function esqueletos(quantos: number, forma: "linha" | "bloco"): string {
+  return Array.from(
+    { length: quantos },
+    () => `<div class="esqueleto esqueleto-${forma}" aria-hidden="true"></div>`
+  ).join("");
+}
+
+/** Liga ou desliga o estado de ocupado do container, para o leitor de tela. */
+function ocupado(id: string, sim: boolean) {
+  if (sim) {
+    element(id).setAttribute("aria-busy", "true");
+  } else {
+    element(id).removeAttribute("aria-busy");
+  }
+}
+
+async function carregarProgramas() {
+  // A contagem é o tamanho do catálogo, que é conhecido antes da varredura —
+  // o que demora é descobrir o ESTADO de cada um, não quantos são.
+  element("programas-lista").innerHTML = esqueletos(8, "linha");
+  ocupado("programas-lista", true);
+
+  try {
+    const r = await invoke<ProgramasNaTela>("catalogo_de_programas");
+    programasCarregados = r.programas;
+    wingetPronto = r.winget.estado === "Pronto";
+
+    const aviso = element("programas-winget");
+    if (r.winget.estado === "Pronto") {
+      aviso.textContent = `Instalador do Windows pronto (winget ${r.winget.versao}).`;
+      aviso.dataset.tom = "ok";
+    } else {
+      aviso.textContent = r.winget.como_resolver;
+      aviso.dataset.tom = "aviso";
+    }
+
+    // A lacuna da leitura do registro vai para a tela. Sem ela, "nenhum
+    // instalado" seria indistinguível de "não consegui olhar".
+    const lacuna = element("programas-lacuna");
+    lacuna.hidden = !r.lacuna;
+    lacuna.textContent = r.lacuna
+      ? `O estado de instalação não pôde ser lido: ${r.lacuna}`
+      : "";
+
+    const instalados = r.programas.filter((p) => p.instalado === true).length;
+    text(
+      "programas-tag",
+      r.lacuna
+        ? `${r.programas.length} programas`
+        : `${instalados} de ${r.programas.length} instalados`
+    );
+
+    desenharFiltrosDeCategoria();
+    desenharProgramas();
+  } catch (error) {
+    element("programas-lista").innerHTML = `<p class="hint">${escapeHtml(String(error))}</p>`;
+  } finally {
+    // `finally` e não o fim do `try`: o caminho do erro também precisa parar
+    // de se anunciar como ocupado, senão o leitor de tela fica dizendo que a
+    // lista está carregando para sempre.
+    ocupado("programas-lista", false);
+  }
+}
+
+function desenharFiltrosDeCategoria() {
+  const categorias = ["Todos", ...new Set(programasCarregados.map((p) => p.categoria))];
+
+  element("programas-filtros").innerHTML = categorias
+    .map(
+      (c) => `
+      <button class="biblioteca-filtro" role="tab" data-categoria="${escapeHtml(c)}"
+              aria-selected="${c === categoriaEscolhida}">${escapeHtml(c)}</button>`
+    )
+    .join("");
+
+  for (const botao of element("programas-filtros").querySelectorAll<HTMLButtonElement>(
+    "[data-categoria]"
+  )) {
+    botao.onclick = () => {
+      categoriaEscolhida = botao.dataset.categoria ?? "Todos";
+      desenharFiltrosDeCategoria();
+      desenharProgramas();
+    };
+  }
+}
+
+function desenharProgramas() {
+  const busca = element<HTMLInputElement>("programas-busca").value.trim().toLowerCase();
+
+  const visiveis = programasCarregados.filter((p) => {
+    if (categoriaEscolhida !== "Todos" && p.categoria !== categoriaEscolhida) return false;
+    return busca === "" || p.nome.toLowerCase().includes(busca);
+  });
+
+  if (visiveis.length === 0) {
+    element("programas-lista").innerHTML =
+      `<p class="hint">Nenhum programa com esse nome no catálogo.</p>`;
+    return;
+  }
+
+  element("programas-lista").innerHTML = visiveis
+    .map((p) => {
+      // Três estados, e o terceiro importa: desconhecido NÃO vira "Instalar".
+      // Oferecer instalação sobre o que pode já estar lá faz o técnico
+      // instalar por cima — e alguns instaladores tratam isso como reparo,
+      // outros como primeira instalação.
+      const estado =
+        p.instalado === null
+          ? `<span class="programa-estado" data-tom="desconhecido">não deu para conferir</span>`
+          : p.instalado
+            ? `<span class="programa-estado" data-tom="ok">instalado</span>`
+            : "";
+
+      const botao =
+        p.instalado === true
+          ? `<button class="btn btn-small" disabled>Já instalado</button>`
+          : `<button class="btn btn-small" data-instalar="${escapeHtml(p.id)}" ${
+              wingetPronto ? "" : "disabled"
+            }>Instalar</button>`;
+
+      return `
+        <div class="programa-linha">
+          <div class="programa-corpo">
+            <span class="programa-nome">${escapeHtml(p.nome)}${estado}</span>
+            <span class="programa-descricao">${escapeHtml(p.descricao)}</span>
+          </div>
+          ${botao}
+        </div>`;
+    })
+    .join("");
+
+  for (const botao of element("programas-lista").querySelectorAll<HTMLButtonElement>(
+    "[data-instalar]"
+  )) {
+    botao.onclick = () => void instalarPrograma(botao);
+  }
+}
+
+async function instalarPrograma(botao: HTMLButtonElement) {
+  const id = botao.dataset.instalar;
+  const programa = programasCarregados.find((p) => p.id === id);
+  if (!id || !programa) return;
+
+  botao.disabled = true;
+  botao.textContent = "Instalando…";
+  setStatus(
+    "programas-status",
+    `Baixando e instalando ${programa.nome} pela fonte oficial. Pode levar alguns minutos.`,
+    "progress"
+  );
+
+  try {
+    await invoke<string>("instalar_programa", { id });
+    setStatus("programas-status", `${programa.nome} instalado.`, "ok");
+
+    // Relê em vez de assumir: o botão precisa dizer o que o registro diz.
+    await carregarProgramas();
+  } catch (error) {
+    setStatus("programas-status", String(error), "error");
+    botao.disabled = false;
+    botao.textContent = "Instalar";
+  }
+}
+
+function ligarProgramas() {
+  element<HTMLInputElement>("programas-busca").addEventListener("input", desenharProgramas);
+}
+
+// ------------------------------------------------ biblioteca de jogos
+
+interface JogoNaGrade {
+  id: string;
+  nome: string;
+  instalado: boolean;
+  pasta: string | null;
+  executavel: string | null;
+  /** O produto conhece este título de nome. */
+  conhecido: boolean;
+  /** Matiz de 0 a 359, derivada do id. Ver `catalogojogos.rs`. */
+  matiz: number;
+  iniciais: string;
+  /// Por onde pedir a capa de verdade. Ausente em jogo fora da Steam.
+  appid: number | null;
+}
+
+interface BibliotecaNaTela {
+  jogos: JogoNaGrade[];
+  instalados: number;
+  lacunas: string[];
+}
+
+let bibliotecaCarregada: JogoNaGrade[] = [];
+let filtroDaBiblioteca: "todos" | "instalados" = "todos";
+
+async function carregarBiblioteca() {
+  element("biblioteca-grade").innerHTML = esqueletos(12, "bloco");
+  ocupado("biblioteca-grade", true);
+
+  try {
+    const r = await invoke<BibliotecaNaTela>("biblioteca_de_jogos");
+    bibliotecaCarregada = r.jogos;
+
+    text(
+      "biblioteca-tag",
+      `${r.instalados} instalado${r.instalados === 1 ? "" : "s"} · ${r.jogos.length} na grade`
+    );
+
+    // O que a varredura não conseguiu ler vai para a tela. Uma biblioteca
+    // curta porque a Steam não abriu é indistinguível de uma curta de verdade,
+    // e só a primeira tem conserto.
+    const lacunas = element("biblioteca-lacunas");
+    lacunas.hidden = r.lacunas.length === 0;
+    lacunas.textContent =
+      r.lacunas.length === 0 ? "" : `Não deu para ler: ${r.lacunas.join(", ")}.`;
+
+    desenharBiblioteca();
+  } catch (error) {
+    element("biblioteca-grade").innerHTML =
+      `<p class="hint">${escapeHtml(String(error))}</p>`;
+  } finally {
+    ocupado("biblioteca-grade", false);
+  }
+}
+
+
+/**
+ * As capas já pedidas, para não pedir duas vezes.
+ *
+ * A grade é redesenhada a cada tecla digitada na busca. Sem esta memória, cada
+ * letra dispararia uma leitura de disco por jogo visível — e a busca, que
+ * precisa ser instantânea, viraria a parte mais lenta da tela.
+ *
+ * `null` guardado significa "já perguntei e não há capa". Guardar a ausência é
+ * o que impede o produto de perguntar de novo a cada desenho sobre um jogo que
+ * nunca vai ter capa.
+ */
+const capasDosJogos = new Map<number, string | null>();
+
+/**
+ * Busca as capas dos blocos que estão na tela.
+ *
+ * SÓ OS QUE ESTÃO NA TELA, e uma de cada vez. Vinte capas dentro da resposta da
+ * grade seriam alguns megabytes de base64 antes da primeira pintura, e a maior
+ * parte delas nem estaria visível ainda.
+ */
+async function carregarCapasVisiveis() {
+  const blocos = [...document.querySelectorAll<HTMLElement>('.jogo-tile-arte[data-appid]')];
+
+  // EM PARALELO, e com um limite. A primeira versão pedia uma capa por vez, e
+  // na primeira abertura — quando nenhuma foi baixada ainda — isso enfileirava
+  // dezessete idas à rede em série: a última capa apareceria mais de um minuto
+  // depois da primeira. Em paralelo sem limite seria o oposto: dezessete
+  // conexões de uma vez, que algumas redes domésticas tratam como abuso.
+  const DE_CADA_VEZ = 4;
+
+  const pendentes = blocos.filter((b) => {
+    const appid = Number(b.dataset.appid);
+    return Number.isFinite(appid) && appid > 0;
+  });
+
+  for (let i = 0; i < pendentes.length; i += DE_CADA_VEZ) {
+    await Promise.all(pendentes.slice(i, i + DE_CADA_VEZ).map(vestirBloco));
+  }
+}
+
+/** Põe a capa num bloco, buscando-a se ainda não foi buscada. */
+async function vestirBloco(bloco: HTMLElement) {
+  const appid = Number(bloco.dataset.appid);
+
+  if (!capasDosJogos.has(appid)) {
+    try {
+      capasDosJogos.set(appid, await invoke<string | null>('capa_do_jogo', { appid }));
+    } catch {
+      // Uma capa a menos não é erro de tela: o bloco de cor cobre.
+      capasDosJogos.set(appid, null);
+    }
+  }
+
+  const url = capasDosJogos.get(appid);
+  if (!url) return;
+
+  // A capa entra como fundo e as iniciais somem. Deixá-las por cima da arte
+  // seria pior que as duas coisas separadas.
+  bloco.style.backgroundImage = `url("${url}")`;
+  bloco.dataset.comCapa = 'sim';
+  bloco.textContent = '';
+}
+
+function desenharBiblioteca() {
+  const busca = element<HTMLInputElement>("biblioteca-busca").value.trim().toLowerCase();
+
+  const visiveis = bibliotecaCarregada.filter((j) => {
+    if (filtroDaBiblioteca === "instalados" && !j.instalado) return false;
+    return busca === "" || j.nome.toLowerCase().includes(busca);
+  });
+
+  if (visiveis.length === 0) {
+    element("biblioteca-grade").innerHTML = `<p class="hint">${
+      busca
+        ? "Nenhum jogo com esse nome na grade. Jogos fora do catálogo aparecem aqui assim que forem encontrados no disco."
+        : "Nenhum jogo instalado foi encontrado nas bibliotecas desta máquina."
+    }</p>`;
+    return;
+  }
+
+  element("biblioteca-grade").innerHTML = visiveis
+    .map(
+      (j) => `
+      <button class="jogo-tile" type="button" data-jogo="${escapeHtml(j.id)}"
+              data-instalado="${j.instalado}" style="--matiz:${j.matiz}">
+        <span class="jogo-tile-arte" aria-hidden="true" data-appid="${j.appid ?? ''}">${escapeHtml(j.iniciais)}</span>
+        <span class="jogo-tile-rodape">
+          <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
+          <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
+        </span>
+      </button>`
+    )
+    .join("");
+
+  void carregarCapasVisiveis();
+}
+
+/**
+ * Abre a ficha de um jogo.
+ *
+ * A ALAVANCA SÓ APARECE COM CAMINHO. Preferência de placa é escrita por caminho
+ * de executável; sem ele não há o que escrever. A "prioridade alta fixa" saiu
+ * na 2.9 (prioridade cega, sem ganho medido).
+ */
+function abrirFichaDoJogo(id: string) {
+  const jogo = bibliotecaCarregada.find((j) => j.id === id);
+  if (!jogo) return;
+
+  const bloco = element("jogo-modal-bloco");
+  bloco.textContent = jogo.iniciais;
+  bloco.style.setProperty("--matiz", String(jogo.matiz));
+
+  text("jogo-modal-nome", jogo.nome);
+  text(
+    "jogo-modal-caminho",
+    jogo.executavel ?? jogo.pasta ?? "não instalado nesta máquina"
+  );
+
+  const alvo = jogo.executavel ?? null;
+
+  element("jogo-alavancas").innerHTML = alvo
+    ? `
+      <div class="jogo-alavanca">
+        <div>
+          <span class="jogo-alavanca-nome">Placa de vídeo de alto desempenho</span>
+          <span class="jogo-alavanca-nota">Diz ao Windows para rodar este jogo na placa dedicada, e não na integrada. Em desktop com uma placa só não muda nada.</span>
+        </div>
+        <button class="btn" type="button" data-acao="gpu">Aplicar</button>
+      </div>
+`
+    : `<p class="hint">Este jogo não foi encontrado no disco, então não há executável para ajustar. Instale-o, ou use "Selecionar" na ficha de configuração do jogo para apontar o arquivo.</p>`;
+
+  text(
+    "jogo-modal-nota",
+    alvo
+      ? "Entra no histórico de mudanças e o desfazer devolve como estava."
+      : ""
+  );
+
+  // A parte da 2.9: ajuste gráfico por orçamento de imagem, vigília "nunca
+  // menos FPS", deriva e última partida medida (`biblioteca.ts`).
+  const extra = document.createElement("div");
+  extra.className = "jogo-ajustes-29";
+  element("jogo-alavancas").appendChild(extra);
+  void preencherFichaDoJogo(extra, { executavel: jogo.executavel ?? null, pasta: jogo.pasta ?? null }, { pedirAdmin: askForAdmin });
+
+  for (const botao of element("jogo-alavancas").querySelectorAll<HTMLButtonElement>(
+    "button[data-acao]"
+  )) {
+    botao.addEventListener("click", () => void aplicarNoJogo(botao, jogo, botao.dataset.acao!));
+  }
+
+  element("jogo-modal").hidden = false;
+}
+
+async function aplicarNoJogo(botao: HTMLButtonElement, jogo: JogoNaGrade, acao: string) {
+  const caminho = jogo.executavel;
+  if (!caminho) return;
+
+  botao.disabled = true;
+  const antes = botao.textContent;
+  botao.textContent = "Aplicando…";
+
+  try {
+    if (acao === "gpu") {
+      await invoke("set_gpu_preference", { caminho, desempenho: true });
+    }
+
+    botao.textContent = "Aplicado";
+    text("jogo-modal-nota", "Feito. Está no histórico de mudanças, e o desfazer devolve como estava.");
+    void loadOptimizations?.();
+  } catch (error) {
+    botao.textContent = antes ?? "Aplicar";
+    botao.disabled = false;
+    text("jogo-modal-nota", String(error));
+  }
+}
+
+function ligarBiblioteca() {
+  element("biblioteca-grade").addEventListener("click", (e) => {
+    const tile = (e.target as HTMLElement).closest<HTMLElement>(".jogo-tile");
+    if (tile?.dataset.jogo) abrirFichaDoJogo(tile.dataset.jogo);
+  });
+
+  element<HTMLInputElement>("biblioteca-busca").addEventListener("input", desenharBiblioteca);
+
+  for (const botao of document.querySelectorAll<HTMLButtonElement>(".biblioteca-filtro")) {
+    botao.addEventListener("click", () => {
+      for (const outro of document.querySelectorAll(".biblioteca-filtro")) {
+        outro.setAttribute("aria-selected", String(outro === botao));
+      }
+      filtroDaBiblioteca = botao.dataset.filtro === "instalados" ? "instalados" : "todos";
+      desenharBiblioteca();
+    });
+  }
+
+  const fechar = () => {
+    element("jogo-modal").hidden = true;
+  };
+  element("jogo-modal-fechar").addEventListener("click", fechar);
+  element("jogo-modal").addEventListener("click", (e) => {
+    if (e.target === element("jogo-modal")) fechar();
+  });
+}
+
+// ------------------------------------------------ o caminho do mouse
+
+type AchadoMouse = "AceleracaoLigada" | "BarraAbaixoDoMeio" | "BarraAcimaDoMeio";
+
+interface CaminhoDoMouse {
+  /** Ausente quando a chave não pôde ser lida. Ausente não é "desligada". */
+  aceleracao: boolean | null;
+  barra: number | null;
+  taxa_hz: number | null;
+  achados: AchadoMouse[];
+  falta: string[];
+}
+
+interface AchadoNaTela {
+  achado: AchadoMouse;
+  titulo: string;
+  explicacao: string;
+  onde_mexer: string;
+}
+
+interface CaminhoNaTela {
+  caminho: CaminhoDoMouse;
+  achados: AchadoNaTela[];
+}
+
+/** Quanto tempo a janela fica contando os relatos de movimento. */
+const SEGUNDOS_CONTANDO = 3;
+
+/**
+ * Conta os intervalos entre relatos de movimento DENTRO DESTA JANELA.
+ *
+ * `getCoalescedEvents` é o que torna a conta possível: o navegador junta os
+ * movimentos e entrega um por quadro desenhado, e contar os juntados devolveria
+ * a taxa da TELA, não a do mouse. Os coalescidos são os relatos como chegaram.
+ *
+ * Nada disto sai da janela do aplicativo: não há gancho global, não há outro
+ * processo, e nenhum anticheat tem o que vigiar aqui.
+ */
+function contarRelatos(segundos: number): Promise<number[]> {
+  return new Promise((resolve) => {
+    const instantes: number[] = [];
+
+    const ouvir = (e: PointerEvent) => {
+      const juntados = e.getCoalescedEvents?.() ?? [e];
+      for (const p of juntados) instantes.push(p.timeStamp);
+    };
+
+    window.addEventListener("pointermove", ouvir, { passive: true });
+
+    window.setTimeout(() => {
+      window.removeEventListener("pointermove", ouvir);
+
+      // Em microssegundos, que é o que o comando espera. Intervalo não
+      // positivo sai daqui — dois relatos com o mesmo carimbo de tempo não
+      // descrevem uma taxa, e o Rust também os descarta.
+      const intervalos: number[] = [];
+      for (let i = 1; i < instantes.length; i += 1) {
+        const dt = Math.round((instantes[i] - instantes[i - 1]) * 1000);
+        if (dt > 0) intervalos.push(dt);
+      }
+
+      resolve(intervalos);
+    }, segundos * 1000);
+  });
+}
+
+async function lerCaminhoDoMouse() {
+  const botao = element<HTMLButtonElement>("mouse-ler");
+  botao.disabled = true;
+  setStatus(
+    "mouse-status",
+    `Mexa o mouse em círculos sobre esta janela por ${SEGUNDOS_CONTANDO} segundos…`,
+    "progress"
+  );
+
+  try {
+    // A contagem vem primeiro: as chaves do registro são instantâneas, e ler
+    // antes só faria a pessoa esperar sem saber o que fazer.
+    const intervalos_us = await contarRelatos(SEGUNDOS_CONTANDO);
+
+    setStatus("mouse-status", "Lendo as opções do ponteiro…", "progress");
+    renderCaminhoDoMouse(await invoke<CaminhoNaTela>("caminho_do_mouse", { intervalosUs: intervalos_us }));
+    setStatus("mouse-status", "", "ok");
+  } catch (error) {
+    setStatus("mouse-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderCaminhoDoMouse(r: CaminhoNaTela) {
+  const c = r.caminho;
+  // "Nada a corrigir" só pode ser dito quando as DUAS chaves foram lidas. Com
+  // uma ilegível, o que se sabe é que não se sabe — e dizer "tudo certo" ali
+  // seria absolver o que ninguém olhou.
+  const leuTudo = c.aceleracao !== null && c.barra !== null;
+
+  text(
+    "mouse-tag",
+    c.achados.length > 0
+      ? `${c.achados.length} coisa(s) no caminho`
+      : leuTudo
+        ? "movimento 1:1"
+        : "não deu para ler"
+  );
+
+  // O texto de cada achado vem do Rust, e não de uma tabela aqui. Duas cópias
+  // de uma frase que o cliente lê acabam discordando assim que uma das duas
+  // for corrigida.
+  const achados = r.achados
+    .map(
+      (a, i) => `
+        <article class="finding" data-severity="Important" style="--i:${i}">
+          <div class="finding-top">
+            <h3>${escapeHtml(a.titulo)}</h3>
+          </div>
+          <p>${escapeHtml(a.explicacao)}</p>
+          <p class="finding-advice">${escapeHtml(a.onde_mexer)}</p>
+        </article>`
+    )
+    .join("");
+
+  const limpo =
+    c.achados.length === 0 && leuTudo
+      ? `<p class="hint">O Windows não está mexendo no movimento: a aceleração está desligada e a barra de velocidade está no meio. O que chega ao jogo é o que o sensor do mouse mandou.</p>`
+      : "";
+
+  const taxa =
+    c.taxa_hz === null
+      ? ""
+      : `<p class="finding-measured">Taxa de varredura medida: ${c.taxa_hz.toFixed(0)} Hz.</p>`;
+
+  element("mouse-result").innerHTML =
+    achados + limpo + taxa + blocoDeFaltas(c.falta, "Não entrou na conta:");
+}
+
+// ------------------------------------------------ quando foi que piorou
+
+interface RegressaoNaTela {
+  id: string;
+  anterior: { media: number; n: number; margem: number | null };
+  atual: { media: number; n: number; margem: number | null };
+  piorou: boolean;
+  suspeitos: {
+    mudancas: string[];
+    maquina_mudou: string[];
+    descartados: number;
+    aviso: string;
+    como_provar: string;
+  };
+}
+
+interface HistoricoNaTela {
+  historico: { registros: unknown[]; descartados: number };
+  regressoes: RegressaoNaTela[];
+}
+
+async function lerHistorico() {
+  const botao = element<HTMLButtonElement>("historico-ler");
+  botao.disabled = true;
+  setStatus("historico-status", "Lendo a linha do tempo…", "progress");
+
+  try {
+    renderHistorico(await invoke<HistoricoNaTela>("historico_de_desempenho"));
+    setStatus("historico-status", "", "ok");
+  } catch (error) {
+    setStatus("historico-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderHistorico(h: HistoricoNaTela) {
+  const pioraram = h.regressoes.filter((r) => r.piorou);
+
+  text(
+    "historico-tag",
+    h.regressoes.length === 0
+      ? "sem comparação ainda"
+      : pioraram.length === 0
+        ? "nada piorou"
+        : `${pioraram.length} de ${h.regressoes.length} pioraram`
+  );
+
+  if (h.regressoes.length === 0) {
+    element("historico-result").innerHTML = `
+      <p class="hint">Ainda não há duas medições da mesma métrica para comparar. Capture a linha de base com repetição hoje e de novo depois de mexer em alguma coisa — a comparação aparece aqui sozinha.</p>`;
+    return;
+  }
+
+  // As que pioraram primeiro. Uma lista em ordem alfabética faria o cliente
+  // caçar a linha que importa no meio das que estão bem.
+  const ordenadas = [...h.regressoes].sort(
+    (a, b) => Number(b.piorou) - Number(a.piorou)
+  );
+
+  element("historico-result").innerHTML = ordenadas
+    .map((r, i) => {
+      // A margem sai junto do número SEMPRE. Uma média sem a margem esconde se
+      // ela veio de três medições ou de trinta — e é a margem que decide se a
+      // diferença é real.
+      const lado = (l: RegressaoNaTela["anterior"]) =>
+        `${l.media.toFixed(1)}${l.margem === null ? "" : ` ± ${l.margem.toFixed(1)}`} (${l.n}×)`;
+
+      const suspeitos =
+        r.suspeitos.mudancas.length > 0
+          ? `<p class="finding-measured"><strong>Entre as duas:</strong> ${escapeHtml(
+              r.suspeitos.mudancas.join(", ")
+            )}</p>
+             <p class="hint">${escapeHtml(r.suspeitos.aviso)}</p>
+             <p class="finding-advice">${escapeHtml(r.suspeitos.como_provar)}</p>`
+          : "";
+
+      const maquina = blocoDeFaltas(
+        r.suspeitos.maquina_mudou,
+        "A própria máquina mudou no intervalo:"
+      );
+
+      // O descarte precisa aparecer: sem ele, "nada entre as duas medições"
+      // seria indistinguível de "o arquivo encheu e o que havia saiu".
+      const descarte =
+        r.suspeitos.descartados > 0
+          ? `<p class="hint">${r.suspeitos.descartados} registro(s) antigo(s) já saíram do histórico por limite de tamanho.</p>`
+          : "";
+
+      return `
+        <article class="finding" data-severity="${r.piorou ? "Important" : "Ok"}" style="--i:${i}">
+          <div class="finding-top">
+            <h3>${escapeHtml(r.id)}</h3>
+            <span class="finding-size">${r.piorou ? "piorou" : "sem queda provada"}</span>
+          </div>
+          <p class="finding-measured">Antes: ${lado(r.anterior)} · Agora: ${lado(r.atual)}</p>
+          ${suspeitos}${maquina}${descarte}
+        </article>`;
+    })
+    .join("");
+}
+
+// ------------------------------------------------ do clique ao pixel
+
+const NOME_DA_ETAPA: Record<Etapa, string> = {
+  Entrada: "Entrada do mouse e do teclado",
+  JogoEPlaca: "Jogo e placa desenhando o quadro",
+  Fila: "Fila do driver",
+  Apresentacao: "Espera pela tela",
+  Tela: "Resposta do painel",
+};
+
+function renderLatencia(o: Orcamento) {
+  text(
+    "latencia-cobertura",
+    `${o.etapas_com_valor} de ${o.etapas_totais} etapas medidas`
+  );
+
+  // "Pelo menos" não é figura de linguagem: três etapas continuam sem medida,
+  // e o número real é maior. Sem medida nenhuma, a frase não vira "0 ms" — ela
+  // diz que não há o que somar.
+  element("latencia-piso").textContent =
+    o.piso_ms === null
+      ? "Nenhuma etapa do caminho foi medida ainda. Uma medição de quadros durante a partida preenche a maior delas."
+      : `Pelo menos ${o.piso_ms.toFixed(1)} ms, somando só o que foi medido. As ${
+          o.etapas_totais - o.etapas_com_valor
+        } etapas restantes custam mais do que isso — quanto, ninguém daqui sabe.`;
+
+  element("latencia-etapas").innerHTML = o.parcelas
+    .map(
+      (p) => `
+        <div class="latencia-etapa" data-qualidade="${p.qualidade}">
+          <span class="latencia-nome">${escapeHtml(NOME_DA_ETAPA[p.etapa])}</span>
+          <span class="latencia-valor">${
+            p.ms === null ? "não medida" : `${p.ms.toFixed(1)} ms`
+          }</span>
+          <span class="latencia-origem">${escapeHtml(p.origem)}</span>
+        </div>`
+    )
+    .join("");
+
+  element("latencia-observacoes").textContent = o.observacoes.join(" ");
+}
+
+// --------------------------------------------------- memória de vídeo
+
+/**
+ * O rótulo curto de cada estado, e o dado que decide a cor do painel.
+ *
+ * "Cheia, e tudo bem" é o rótulo que este painel existe para poder mostrar:
+ * placa cheia é o estado normal de uma placa, e pintá-la de vermelho é o que
+ * faz o cliente baixar textura à toa.
+ */
+const ESTADO_VRAM: Record<EstadoVram, { rotulo: string; tom: string }> = {
+  NaoAvaliado: { rotulo: "não avaliada", tom: "desconhecido" },
+  PlacaIntegrada: { rotulo: "vídeo integrado", tom: "neutro" },
+  Folgada: { rotulo: "com folga", tom: "ok" },
+  CacheCheio: { rotulo: "cheia, e tudo bem", tom: "ok" },
+  Transbordando: { rotulo: "transbordando", tom: "alerta" },
+  DerramaSemPressao: { rotulo: "outro programa usando", tom: "neutro" },
+};
+
+function renderVram(a: AnaliseVram) {
+  const { rotulo, tom } = ESTADO_VRAM[a.estado];
+  const tag = element("vram-estado");
+  tag.textContent = rotulo;
+  tag.dataset.estado = tom;
+
+  text("vram-explicacao", a.explicacao);
+  text(
+    "vram-dedicada",
+    medida(a.dedicada_pct, (n) => `${n.toFixed(0)}%`)
+  );
+  text(
+    "vram-folga",
+    medida(a.folga_gb, (n) => `${n.toFixed(1)} GB`)
+  );
+
+  // Derramamento ausente não vira "0 GB". Zero afirmaria que nada foi para a
+  // RAM, e o que se sabe é que a conta não pôde ser feita — normalmente
+  // porque o piso desta máquina ainda não foi observado.
+  text(
+    "vram-derramado",
+    medida(a.derramado_gb, (n) => `${n.toFixed(1)} GB`)
+  );
+
+  const nota = element("vram-conselho");
+  if (a.conselho) {
+    nota.textContent = a.conselho.texto;
+    nota.className = "readout-note warn";
+  } else if (a.falta.length > 0) {
+    nota.textContent = `Ainda não foi possível avaliar por completo: ${a.falta.join(", ")}.`;
+    nota.className = "readout-note";
+  } else {
+    nota.textContent = "Nada a ajustar na memória de vídeo.";
+    nota.className = "readout-note";
+  }
+}
+
+// --------------------------------------------------------------- gargalo
+
+const NOME_DA_CLASSE: Record<Classe, string> = {
+  CpuTodosNucleos: "Processador no limite",
+  CpuUmNucleo: "Um núcleo no limite",
+  Gpu: "Placa de vídeo no limite",
+  MemoriaRam: "Memória do sistema apertada",
+  MemoriaVideo: "Memória de vídeo apertada",
+  Disco: "Disco no limite",
+  LimiteTermico: "Firmware segurando por temperatura",
+  LimiteEletrico: "Firmware segurando por energia",
+  TetoDeQuadros: "Quadros presos na taxa do monitor",
+  Engasgo: "Engasgo durante a partida",
+  ForaDoHardware: "Limite fora do hardware",
+  StreamingDeAssets: "Jogo esperando o disco",
+  Rede: "Conexão instável ou perdendo pacote",
+};
+
+/** Classes em que nenhum ajuste de software resolve. */
+const SOFTWARE_NAO_RESOLVE: Classe[] = ["LimiteTermico", "LimiteEletrico"];
+
+const CONCLUSAO: Record<Diagnostico["conclusao"], string> = {
+  SemEvidencia:
+    "Não há medição suficiente para classificar nada. O que falta está listado ao lado.",
+  SemCarga:
+    "A máquina está parada. Sem carga não existe gargalo para encontrar — medir agora não diria nada sobre um jogo.",
+  NadaNoLimite:
+    "Há carga e nenhum recurso medido encostou no limite. Isso não é o mesmo que estar tudo bem: veja o que não foi verificado.",
+  Encontrado: "",
+};
+
+function renderGargalo(d: Diagnostico) {
+  const tag = element("gargalo-cobertura");
+  tag.textContent = `${d.classes_avaliadas} de ${d.classes_totais} classes avaliadas`;
+
+  const causas = d.achados.filter((a) => a.forca === "Causa").length;
+
+  element("gargalo-conclusao").textContent =
+    d.conclusao === "Encontrado"
+      ? causas > 0
+        ? "O sistema está afirmando o limite abaixo, agora."
+        : "Os indícios abaixo são hipóteses: números reais, mas indiretos ou de alguns segundos atrás."
+      : CONCLUSAO[d.conclusao];
+
+  const achados = element("gargalo-achados");
+
+  achados.innerHTML =
+    d.achados.length === 0
+      ? `<p class="empty">Nenhum recurso medido no limite.</p>`
+      : d.achados
+          .map((a) => {
+            const idade =
+              a.idade_ms === null || a.idade_ms < 1000
+                ? ""
+                : ` · leitura de ${(a.idade_ms / 1000).toFixed(0)} s atrás`;
+
+            const aviso = SOFTWARE_NAO_RESOLVE.includes(a.classe)
+              ? `<p class="gargalo-aviso">Nenhum plano de energia ou ajuste resolve isto — é refrigeração ou alimentação.</p>`
+              : "";
+
+            return `
+              <div class="gargalo-achado" data-forca="${a.forca}">
+                <span class="gargalo-classe">${escapeHtml(NOME_DA_CLASSE[a.classe])}</span>
+                <span class="gargalo-forca">${a.forca === "Causa" ? "causa" : "hipótese"}${idade}</span>
+                <span class="gargalo-evidencia">${escapeHtml(a.evidencia)}</span>
+                ${aviso}
+              </div>
+            `;
+          })
+          .join("");
+
+  element("gargalo-faltas").innerHTML =
+    d.nao_verificado.length === 0
+      ? `<p class="empty">Todas as classes puderam ser avaliadas.</p>`
+      : d.nao_verificado
+          .map(
+            (n) => `
+              <div class="gargalo-falta">
+                <span class="gargalo-classe">${escapeHtml(n.classe)}</span>
+                <span class="gargalo-evidencia">${escapeHtml(n.falta)}</span>
+              </div>
+            `
+          )
+          .join("");
+}
+
+function renderEvidencia(telemetry: Telemetry) {
+  const { measured, estimated, unknown, total } = telemetry.summary;
+
+  text("evidencia-medido", String(measured));
+  text("evidencia-estimado", String(estimated));
+  text("evidencia-desconhecido", String(unknown));
+
+  const tag = element("evidencia-tag");
+  tag.textContent = `${measured} de ${total} medidos`;
+  delete tag.dataset.estado;
+
+  // A duração da coleta INCLUI a espera de amostragem da CPU, que é a maior
+  // parte dela. Dizer isso na tela evita que o número seja lido como o peso que
+  // o Otimiza impõe à máquina, que é outra coisa e não está medida aqui.
+  text(
+    "evidencia-custo",
+    `esta coleta levou ${telemetry.collection_duration_ms} ms, dos quais 200 ms são a espera necessária para amostrar a CPU`
+  );
+
+  const nucleos = Object.entries(telemetry.metrics).filter(([id]) => ID_DE_NUCLEO.test(id));
+
+  const linhas = Object.entries(telemetry.metrics)
+    .filter(([id]) => !ID_DE_NUCLEO.test(id))
+    .sort(([idA, a], [idB, b]) => {
+      const porQualidade = ORDEM_QUALIDADE[a.quality] - ORDEM_QUALIDADE[b.quality];
+      return porQualidade !== 0 ? porQualidade : idA.localeCompare(idB);
+    })
+    .map(([id, metric]) => linhaDeEvidencia(id, metric));
+
+  if (nucleos.length > 0) {
+    const medidos = nucleos.filter(([, m]) => m.quality === "MEASURED").length;
+    linhas.unshift(`
+      <div class="evidencia-linha" data-qualidade="${medidos === nucleos.length ? "MEASURED" : "UNKNOWN"}">
+        <span class="evidencia-id">cpu.core.*.usage</span>
+        <span class="evidencia-valor">${medidos} de ${nucleos.length} núcleos</span>
+        <span class="evidencia-origem">sysinfo · ${
+          medidos === nucleos.length ? "medido" : "parcial"
+        }</span>
+      </div>
+    `);
+  }
+
+  element("evidencia-tabela").innerHTML = linhas.join("");
+}
+
+function linhaDeEvidencia(id: string, metric: Metric): string {
+  // A idade fica ao lado da origem, e não escondida no motivo: é ela que diz
+  // se o número descreve a máquina agora ou dez segundos atrás.
+  const idade =
+    metric.age_ms === null || metric.age_ms < 1000
+      ? ""
+      : ` · ${(metric.age_ms / 1000).toFixed(0)} s atrás`;
+
+  const origem =
+    metric.quality === "UNKNOWN"
+      ? escapeHtml(metric.reason ?? "sem motivo declarado")
+      : `${escapeHtml(metric.source)} · ${ROTULO_QUALIDADE[metric.quality]}${idade}${
+          metric.reason ? ` — ${escapeHtml(metric.reason)}` : ""
+        }`;
+
+  return `
+    <div class="evidencia-linha" data-qualidade="${metric.quality}">
+      <span class="evidencia-id">${escapeHtml(id)}</span>
+      <span class="evidencia-valor">${escapeHtml(valorLegivel(metric))}</span>
+      <span class="evidencia-origem">${origem}</span>
+    </div>
+  `;
+}
+
 function loadColor(percent: number): string {
   if (percent >= 85) return "var(--red)";
   if (percent >= 60) return "var(--amber)";
@@ -1687,14 +3693,28 @@ function loadColor(percent: number): string {
  * carregam informacao, e quem decide isso e uma regra de folha de estilo que
  * da para ler num lugar so.
  */
-function setBar(id: string, percent: number) {
+function setBar(id: string, percent: number | null) {
   const bar = element(id);
+  const medidorOuNada = bar.closest(".vital") as HTMLElement | null;
+
+  // Barra sem medição fica vazia E marcada. Só esvaziar a deixaria idêntica a
+  // uma barra medida em 0%, que é uma afirmação sobre a máquina.
+  if (percent === null) {
+    bar.style.width = "0%";
+    if (medidorOuNada) {
+      delete medidorOuNada.dataset.nivel;
+      medidorOuNada.dataset.estado = "desconhecido";
+    }
+    return;
+  }
+
   const valor = Math.min(100, Math.max(0, percent));
 
   bar.style.width = `${valor}%`;
 
-  const medidor = bar.closest(".vital") as HTMLElement | null;
+  const medidor = medidorOuNada;
   if (!medidor) return;
+  delete medidor.dataset.estado;
 
   // Os mesmos degraus do resto do produto: 75 e 90.
   if (valor >= 90) medidor.dataset.nivel = "critico";
@@ -2112,6 +4132,121 @@ interface ShaderReport {
   driver_date: string | null;
   driver_age_days: number | null;
   note: string;
+}
+
+// ------------------------------------- laboratório de streaming de assets
+
+type VereditoStreaming =
+  | "SemMedicao"
+  | "SemEngasgos"
+  | "NaoEODisco"
+  | "TrocaDeMemoria"
+  | "AssetsDeMidiaLenta"
+  | "OutraCoisaNoDisco";
+
+interface AnaliseStreaming {
+  veredito: VereditoStreaming;
+  engasgos_por_minuto: number | null;
+  coincidencia_pct: number | null;
+  latencia_ms: number | null;
+  memoria_pct: number | null;
+  midia: "Ssd" | "Mecanico" | "NaoDeuParaLer" | null;
+  falta: string[];
+  explicacao: string;
+  proximo_passo: string | null;
+}
+
+interface LaboratorioStreaming {
+  analise: AnaliseStreaming;
+  jogo: { jogo: string; caminho: string; unidade: string | null } | null;
+  lacunas: string[];
+}
+
+/**
+ * O rótulo e a gravidade de cada veredito.
+ *
+ * Só o caso em que mover o jogo resolve acende. "Não é o disco" e "outra coisa
+ * no disco" são respostas boas — pintá-las de alerta empurraria a pessoa para
+ * uma mudança que a própria medição já descartou.
+ */
+const VEREDITO_STREAMING: Record<
+  VereditoStreaming,
+  { rotulo: string; severidade: string }
+> = {
+  SemMedicao: { rotulo: "falta medir", severidade: "Info" },
+  SemEngasgos: { rotulo: "partida lisa", severidade: "Ok" },
+  NaoEODisco: { rotulo: "não é o disco", severidade: "Ok" },
+  TrocaDeMemoria: { rotulo: "é a memória", severidade: "Important" },
+  AssetsDeMidiaLenta: { rotulo: "é o disco", severidade: "Important" },
+  OutraCoisaNoDisco: { rotulo: "outra coisa no disco", severidade: "Info" },
+};
+
+async function analyzeStreaming() {
+  const button = element<HTMLButtonElement>("analyze-streaming");
+  button.disabled = true;
+  setStatus("streaming-status", "Lendo os discos e cruzando com a partida…", "progress");
+
+  try {
+    const r = await invoke<LaboratorioStreaming>("laboratorio_de_streaming");
+    renderStreaming(r);
+    setStatus("streaming-status", "", "ok");
+  } catch (error) {
+    setStatus("streaming-status", String(error), "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderStreaming(r: LaboratorioStreaming) {
+  const { rotulo, severidade } = VEREDITO_STREAMING[r.analise.veredito];
+  text("streaming-tag", rotulo);
+
+  // Os números que sustentaram a conclusão vão para a tela junto dela. Um
+  // veredito sem os números que o produziram é indistinguível de um palpite,
+  // e é por isso que a linha aparece mesmo quando algum deles falta.
+  const numero = (valor: number | null, sufixo: string) =>
+    valor === null ? "—" : `${valor.toFixed(1)}${sufixo}`;
+
+  const jogo = r.jogo
+    ? `<p class="hint">O jogo que entrou na conta: ${escapeHtml(r.jogo.jogo)}, em ${escapeHtml(
+        r.jogo.caminho
+      )}.</p>`
+    : "";
+
+  const passo = r.analise.proximo_passo
+    ? `<p class="finding-advice">${escapeHtml(r.analise.proximo_passo)}</p>`
+    : "";
+
+  const falta = blocoDeFaltas(r.analise.falta, "Não entrou na conta, por falta de medida:");
+
+  const lacunas = blocoDeFaltas(r.lacunas, "A leitura dos discos não conseguiu:");
+
+  element("streaming-result").innerHTML = `
+    <article class="finding" data-severity="${severidade}" style="--i:0">
+      <div class="finding-top">
+        <h3>${escapeHtml(rotulo)}</h3>
+      </div>
+      <p>${escapeHtml(r.analise.explicacao)}</p>
+      <div class="readouts readouts-row">
+        <div class="readout">
+          <span class="readout-label">Trancos por minuto</span>
+          <span class="readout-value">${numero(r.analise.engasgos_por_minuto, "")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Deles, com o disco ocupado</span>
+          <span class="readout-value">${numero(r.analise.coincidencia_pct, "%")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Latência do disco</span>
+          <span class="readout-value">${numero(r.analise.latencia_ms, " ms")}</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">Memória do sistema</span>
+          <span class="readout-value">${numero(r.analise.memoria_pct, "%")}</span>
+        </div>
+      </div>
+      ${jogo}${passo}${falta}${lacunas}
+    </article>`;
 }
 
 async function analyzeShaders() {
@@ -5192,16 +7327,29 @@ function renderOptimization(item: OptimizationInfo): string {
 
   const detail = item.detail ? `<p class="detail">${escapeHtml(item.detail)}</p>` : "";
 
+  // A LINHA DE AJUSTE, E NÃO UM CARTÃO.
+  //
+  // Dezessete cartões empilhados fazem uma página de ajustes parecer um
+  // catálogo; dezessete linhas fazem ela parecer o painel de configurações
+  // de um sistema operacional — que é o que ela é.
+  //
+  // E O EFEITO HONESTO SUBIU PARA A LINHA. Ele estava dentro do bloco que só
+  // abre no clique, ao lado do risco e das etiquetas. Aquilo é o argumento
+  // inteiro deste produto — “o que isto faz de verdade” — escondido atrás de
+  // um clique que a maior parte das pessoas não dá. Agora é a descrição da
+  // linha, visível sem pedir; o que continua dobrado é o detalhe técnico.
   return `
     <details class="optimization" data-state="${item.state}">
-      <summary class="opt-row">
+      <summary class="opt-row linha-ajuste">
         <span class="gain-dot" data-gain="${item.expected_gain}" ${item.recommended ? 'data-recommended="true"' : ""}></span>
-        <span class="opt-name">${escapeHtml(item.name)}</span>
+        <span class="linha-ajuste-corpo">
+          <span class="linha-ajuste-nome opt-name">${escapeHtml(item.name)}</span>
+          <span class="linha-ajuste-descricao">${escapeHtml(item.honest_effect)}</span>
+        </span>
         ${actionControl(item)}
       </summary>
       <div class="opt-body">
         <div class="optimization-meta">${chips.join("")}</div>
-        <p class="effect">${escapeHtml(item.honest_effect)}</p>
         ${risco}
         ${detail}
       </div>
@@ -5216,12 +7364,16 @@ function renderOptimization(item: OptimizationInfo): string {
  */
 function actionControl(item: OptimizationInfo): string {
   switch (item.state) {
+    // APLICADO E REVERSÍVEL é o único par que um interruptor sabe dizer:
+    // ligado ou desligado, e o clique volta. Onde o estado não é binário —
+    // aplicado e SEM volta, ou não lido — o interruptor mentiria, porque
+    // ele promete com a própria forma que dá para desligar.
     case "Applied":
       return item.reversible
-        ? `<button class="btn btn-ghost" data-id="${item.id}" data-action="revert" data-admin="${item.requires_admin}">Desfazer</button>`
+        ? `<button class="switch" role="switch" aria-checked="true" aria-label="Desfazer ${escapeHtml(item.name)}" data-id="${item.id}" data-action="revert" data-admin="${item.requires_admin}"></button>`
         : `<span class="state-label" data-state="Applied">${STATE_LABELS.Applied}</span>`;
     case "Available":
-      return `<button class="btn btn-ghost" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}">Aplicar</button>`;
+      return `<button class="switch" role="switch" aria-checked="false" aria-label="Aplicar ${escapeHtml(item.name)}" data-id="${item.id}" data-action="apply" data-admin="${item.requires_admin}"></button>`;
     // NÃO LER O ESTADO NÃO TIRA A ESCOLHA DO DONO DO PC.
     //
     // O verbo é outro de propósito: "Tentar aplicar" não promete que falta
@@ -6539,12 +8691,12 @@ async function carregarMonitores() {
               <rect class="monitor-moldura" x="6" y="6" width="188" height="112" rx="7" />
               <rect class="monitor-tela" x="14" y="14" width="172" height="96" rx="3" />
               <text class="monitor-hz" x="100" y="66">${m.hz_atual}</text>
-              <text class="monitor-unidade" x="100" y="82">HZ</text>
+              <text class="vivo-unidade" x="100" y="82">HZ</text>
               <rect class="monitor-pe" x="88" y="118" width="24" height="16" rx="2" />
               <rect class="monitor-base" x="62" y="134" width="76" height="8" rx="4" />
             </svg>
             <div>
-              <p class="monitor-nome">${escapeHtml(m.descricao)}${m.principal ? " · principal" : ""}</p>
+              <p class="vivo-nome">${escapeHtml(m.descricao)}${m.principal ? " · principal" : ""}</p>
               <p class="monitor-detalhe">${m.largura}×${m.altura}${
                 estaAbaixo ? ` · aceita ${maximo} Hz` : " · no máximo"
               }</p>
@@ -7010,10 +9162,12 @@ async function carregarAjustesDoDriver() {
 
   if (!disponivel) {
     lista.innerHTML = "";
+    desenharPerfisDaPlaca(dados);
     return;
   }
 
   desenharLimitesDoDriver(dados.limites);
+  desenharPerfisDaPlaca(dados);
 
   lista.innerHTML = dados.ajustes
     .map(
@@ -7063,6 +9217,152 @@ async function carregarAjustesDoDriver() {
       }
     };
   });
+}
+
+
+// ------------------------------------------------------- perfis da placa
+
+/**
+ * Os perfis, que são COMBINAÇÕES dos cinco ajustes do driver.
+ *
+ * TRÊS, e não sete. A referência que inspirou esta tela tem sete perfis sobre
+ * um punhado de opções de liga-desliga — "Básico", "Casual", "FPS", "FPS 2.0",
+ * "Avançado". Sete nomes para três respostas não é mais escolha: é mais
+ * promessa, e o cliente que liga o "FPS 2.0" acreditando que ele faz algo além
+ * do "FPS" está pagando por um nome.
+ *
+ * Cada perfil declara os ids que liga, e a tela MOSTRA essa lista. É o que
+ * permite conferir que o botão grande não faz nada além do que os
+ * interruptores do lado fazem — e desfazer um a um depois.
+ */
+const PERFIS_DA_PLACA: {
+  id: string;
+  nome: string;
+  resumo: string;
+  ajustes: string[];
+}[] = [
+  {
+    id: "equilibrado",
+    nome: "Equilibrado",
+    resumo:
+      "O que quase toda máquina ganha sem trocar nada de lugar: a placa para de baixar o clock entre quadros e o cache de shader fica ligado.",
+    ajustes: ["energia", "cache_shader"],
+  },
+  {
+    id: "competitivo",
+    nome: "Competitivo",
+    resumo:
+      "O de cima, mais a fila de quadros curta e a sincronia vertical desligada. Troca suavidade por resposta — e pode aparecer rasgo na imagem.",
+    ajustes: ["energia", "cache_shader", "latencia", "vsync"],
+  },
+  {
+    id: "maximo",
+    nome: "Tudo que há",
+    resumo:
+      "Os cinco ajustes. Inclui a filtragem de textura em desempenho, que é o único deles que muda como o jogo se parece.",
+    ajustes: ["energia", "cache_shader", "latencia", "vsync", "textura"],
+  },
+];
+
+/**
+ * Desenha os perfis, dizendo quais deles já estão inteiros.
+ *
+ * "Aplicado" aqui significa que TODOS os ajustes do perfil estão ligados — e
+ * não que alguém clicou neste botão. Guardar "o cliente escolheu o perfil X"
+ * seria uma segunda verdade ao lado do histórico de mudanças, e as duas
+ * discordariam assim que ele desfizesse um ajuste sozinho.
+ */
+function desenharPerfisDaPlaca(dados: PainelDoDriver) {
+  const disponivel = dados.estado === "Disponivel";
+  const ligados = new Set(dados.ajustes.filter((a) => a.aplicado).map((a) => a.id));
+
+  element("gpu-perfis").innerHTML = PERFIS_DA_PLACA.map((perfil) => {
+    const inteiro = perfil.ajustes.every((id) => ligados.has(id));
+    const quantos = perfil.ajustes.filter((id) => ligados.has(id)).length;
+
+    const nomes = perfil.ajustes
+      .map((id) => dados.ajustes.find((a) => a.id === id)?.titulo ?? id)
+      .map((t) => `<li>${escapeHtml(t)}</li>`)
+      .join("");
+
+    return `
+      <article class="gpu-perfil" data-inteiro="${inteiro}">
+        <div class="gpu-perfil-topo">
+          <span class="gpu-perfil-nome">${escapeHtml(perfil.nome)}</span>
+          <span class="gpu-perfil-conta">${quantos} de ${perfil.ajustes.length} ligados</span>
+        </div>
+        <p class="gpu-perfil-resumo">${escapeHtml(perfil.resumo)}</p>
+        <details class="gpu-perfil-detalhe">
+          <summary>O que ele liga</summary>
+          <ul>${nomes}</ul>
+        </details>
+        <button class="btn" data-perfil="${perfil.id}" ${
+          disponivel && !inteiro ? "" : "disabled"
+        }>${inteiro ? "Já está aplicado" : "Aplicar os que faltam"}</button>
+      </article>`;
+  }).join("");
+
+  for (const botao of element("gpu-perfis").querySelectorAll<HTMLButtonElement>("[data-perfil]")) {
+    botao.onclick = () => void aplicarPerfilDaPlaca(botao, dados);
+  }
+}
+
+async function aplicarPerfilDaPlaca(botao: HTMLButtonElement, dados: PainelDoDriver) {
+  const perfil = PERFIS_DA_PLACA.find((p) => p.id === botao.dataset.perfil);
+  if (!perfil) return;
+
+  // O driver só salva elevado, e isso vale para o perfil como vale para o
+  // ajuste solto.
+  if (!isElevated) {
+    askForAdmin(
+      "O driver da NVIDIA só salva ajustes com permissão de administrador. " +
+        "Podemos reabrir o Otimiza com essa permissão?"
+    );
+    return;
+  }
+
+  const ligados = new Set(dados.ajustes.filter((a) => a.aplicado).map((a) => a.id));
+  const faltam = perfil.ajustes.filter((id) => !ligados.has(id));
+
+  botao.disabled = true;
+  setStatus("gpu-perfis-status", `Aplicando ${faltam.length} ajuste(s)…`, "progress");
+
+  // UM DE CADA VEZ, e parando no primeiro que falhar. Seguir depois de uma
+  // recusa deixaria a máquina num estado que nem o perfil nem o cliente
+  // descrevem — metade de um perfil não é nada.
+  for (const id of faltam) {
+    try {
+      await invoke<OptimizationOutcome>("aplicar_ajuste_nvidia", { opcao: id });
+    } catch (error) {
+      setStatus("gpu-perfis-status", String(error), "error");
+      await carregarAjustesDoDriver();
+      return;
+    }
+  }
+
+  setStatus(
+    "gpu-perfis-status",
+    `Pronto. Cada um entrou no histórico e pode ser desfeito sozinho.`,
+    "ok"
+  );
+  await carregarAjustesDoDriver();
+}
+
+/** O cartão da placa detectada, no alto da aba. */
+async function carregarCartaoDaPlaca() {
+  try {
+    const p = await invoke<PlacaDeVideo>("placa_de_video");
+
+    text("gpu-cartao-nome", p.nome ?? "Placa não identificada");
+    text(
+      "gpu-cartao-nota",
+      p.driver ? `driver ${p.driver}` : "versão do driver não lida"
+    );
+    element("gpu-cartao").dataset.marca = p.marca;
+  } catch {
+    text("gpu-cartao-nome", "Placa não identificada");
+    text("gpu-cartao-nota", "a leitura da placa falhou");
+  }
 }
 
 async function carregarPlaca() {
@@ -7220,6 +9520,79 @@ function renderConfigJogo(r: ConfigJogoReport) {
 
   element("cfgjogo-result").innerHTML =
     `<p class="hint">Arquivo: <code>${escapeHtml(r.arquivo)}</code></p>${caros}`;
+}
+
+// ------------------------------- qual perfil o caso medido pede
+
+interface PlanoRenderizacao {
+  plano: {
+    decisao: "SemEvidencia" | "NaoResolveAqui" | { Aplicar: string };
+    porque: string[];
+    contra: string[];
+    nao_verificado: string[];
+    exige_baseline: boolean;
+  };
+  /** Ausente quando o plano não manda aplicar nada. */
+  perfil_para_aplicar: string | null;
+  jogo: string;
+}
+
+async function planoDeRenderizacao() {
+  const botao = element<HTMLButtonElement>("cfgjogo-plano");
+  botao.disabled = true;
+  setStatus("cfgjogo-status", "Medindo e cruzando com a configuração do jogo…", "progress");
+
+  try {
+    const r = await invoke<PlanoRenderizacao>("plano_de_renderizacao");
+    renderPlanoDeRenderizacao(r);
+    setStatus("cfgjogo-status", "", "ok");
+  } catch (error) {
+    setStatus("cfgjogo-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function renderPlanoDeRenderizacao(r: PlanoRenderizacao) {
+  // A marca de recomendado sai de TODOS os botões antes de entrar em um. Sem
+  // isto, um plano anterior deixaria dois perfis marcados ao mesmo tempo.
+  for (const meta of Object.values(PERFIS)) {
+    delete element(meta.botao).dataset.recomendado;
+  }
+
+  const escolhido = r.perfil_para_aplicar;
+  if (escolhido && PERFIS[escolhido]) {
+    element(PERFIS[escolhido].botao).dataset.recomendado = "sim";
+  }
+
+  const titulo = escolhido
+    ? `O seu caso pede: ${PERFIS[escolhido].nome}`
+    : r.plano.decisao === "SemEvidencia"
+      ? "Ainda não dá para dizer"
+      : "Nenhum destes resolve o seu caso";
+
+  const lista = (itens: string[], rotulo: string, classe: string) =>
+    itens.length === 0
+      ? ""
+      : `<p class="${classe}"><strong>${rotulo}</strong> ${escapeHtml(itens.join(" "))}</p>`;
+
+  // A linha da linha de base não é conselho solto: ela só aparece quando há o
+  // que aplicar, porque é exatamente aí que deixar de medir antes custa a
+  // resposta para "melhorou?".
+  const base = r.plano.exige_baseline
+    ? `<p class="finding-advice">Guarde a linha de base desta máquina ANTES de aplicar. Sem o retrato de antes, não há como responder depois se melhorou — e quanto.</p>`
+    : "";
+
+  element("cfgjogo-plano-result").innerHTML = `
+    <article class="finding" data-severity="${escolhido ? "Important" : "Ok"}" style="--i:0">
+      <div class="finding-top">
+        <h3>${escapeHtml(titulo)}</h3>
+      </div>
+      ${lista(r.plano.porque, "Porque", "finding-measured")}
+      ${lista(r.plano.contra, "O que isto não resolve:", "hint")}
+      ${base}
+      ${lista(r.plano.nao_verificado, "Não foi possível verificar:", "hint")}
+    </article>`;
 }
 
 /**
@@ -8157,7 +10530,19 @@ function wireControls() {
 
   secoes.forEach((item) => {
     item.addEventListener("click", () => showTab(item.dataset.tab!));
+
+    // A DICA SAI DO PRÓPRIO RÓTULO. Com a lateral recolhida — que agora é o
+    // padrão — o ícone é a única coisa na tela, e treze quadrados sem nome
+    // viram adivinhação. Copiar o rótulo em vez de escrever o nome de novo é
+    // o que impede os dois de saírem de sincronia numa renomeação.
+    const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim();
+    if (rotulo) item.title = rotulo;
   });
+
+  // O cabeçalho da aba que já vem aberta. Sem isto o programa abre com o
+  // título duplicado até a primeira troca de aba.
+  const inicial = secoes.find((s) => s.getAttribute("aria-selected") === "true");
+  if (inicial) sincronizarCabecalho(inicial, inicial.dataset.tab!);
 
   // Setas percorrem as seções, como manda o padrão de acessibilidade para
   // navegação em abas — e é como quem usa teclado espera que funcione. Agora
@@ -8181,7 +10566,13 @@ function wireControls() {
   const corpo = document.querySelector<HTMLElement>(".corpo")!;
   const alternar = element<HTMLButtonElement>("toggle-lateral");
 
-  if (localStorage.getItem("lateral-recolhida") === "sim") {
+  // RECOLHIDA POR PADRÃO. A lateral com rótulo ocupa um quinto da largura
+  // para repetir sete palavras que o ícone já diz, e numa tela de notebook —
+  // que é o público deste produto — isso é o espaço de um painel inteiro.
+  //
+  // Quem preferir o rótulo abre, e a escolha fica guardada; o que muda é só
+  // o lado para o qual o padrão pende.
+  if (localStorage.getItem("lateral-recolhida") !== "nao") {
     corpo.dataset.recolhida = "true";
     alternar.setAttribute("aria-expanded", "false");
   }
@@ -8326,6 +10717,25 @@ function wireControls() {
   element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
+  element("analyze-streaming").addEventListener("click", analyzeStreaming);
+  ligarTema();
+  ligarBiblioteca();
+  ligarProgramas();
+  ligarLimpeza();
+  ligarNucleos();
+  void carregarNucleos();
+  void carregarProgramas();
+  void carregarCartaoDaPlaca();
+  void carregarBiblioteca();
+  // Os atalhos do Início levam para a aba, pela MESMA função que a lateral
+  // usa. Um atalho que trocasse a aba por conta própria deixaria a lateral
+  // marcando a seção errada.
+  for (const atalho of document.querySelectorAll<HTMLElement>("[data-vai]")) {
+    atalho.addEventListener("click", () => showTab(atalho.dataset.vai!));
+  }
+
+  element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
+  element("historico-ler").addEventListener("click", lerHistorico);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {
       // A escolha manual pinta o desenho e mais nada. O produto não muda
@@ -8352,6 +10762,7 @@ function wireControls() {
   void carregarMemoria();
   void carregarMonitores();
   element("cfgjogo-analisar").addEventListener("click", analisarConfigJogo);
+  element("cfgjogo-plano").addEventListener("click", planoDeRenderizacao);
   element("cfgjogo-sem-teto").addEventListener("click", () => aplicarPerfilDoJogo("sem_teto"));
   element("cfgjogo-equilibrado").addEventListener("click", () => aplicarPerfilDoJogo("equilibrado"));
   element("cfgjogo-competitivo").addEventListener("click", () => aplicarPerfilDoJogo("competitivo"));

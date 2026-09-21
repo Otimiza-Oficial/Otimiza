@@ -7,78 +7,119 @@ resultado é que não mudou nada.
 | Arquivo | Quando usar |
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
-| `Otimiza_2.7.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_2.7.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_2.8.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_2.8.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
 
 ---
 
-# A 2.7 traz a geração de quadros do próprio Otimiza
+# A 2.8 mede de onde vem cada número, e mostra isso na tela
 
-## Otimiza Frame Gen (experimental)
+Esta versão mexeu em duas coisas ao mesmo tempo: **o que o Otimiza sabe sobre
+a sua máquina**, e **como ele conta isso para você**.
 
-Na aba **Geração de quadros**, o painel **Gerador do Otimiza** liga uma geração
-de quadros feita pelo próprio Otimiza — sem instalar nenhum outro programa.
+## Toda medida diz de onde veio
 
-Ela funciona por fora do jogo, como o Lossless Scaling: captura a janela,
-estima o movimento na placa de vídeo e mostra os quadros intermediários numa
-camada por cima. **Nada é injetado no processo do jogo.**
+Cada número na tela passou a carregar a própria procedência: **medido**,
+**estimado** ou **não foi possível ler**. Não é detalhe de engenharia — é a
+diferença entre um painel que informa e um que enfeita.
 
-O que ela faz, dito com clareza: **aumenta os quadros que chegam à tela** (2×,
-3× ou 4×). O jogo continua desenhando os mesmos quadros — o contador de FPS do
-próprio jogo não muda — e o controle fica um pouco mais atrasado.
+A regra que sustenta o resto: **"0 ms" nunca aparece sem medição real.** Onde
+não deu para medir, a tela diz que não deu para medir, e diz o motivo. Um
+número que você não pode conferir vale menos que um espaço em branco honesto.
 
-Medido no FiveM, em 1080p, numa GeForce GTX 1650 dividida com o jogo:
+## Sete leituras novas, cada uma com uma recusa
 
-- a tela recebeu cerca do dobro de quadros com 2× (por exemplo, 48 → 96);
-- custo de cerca de 2 ms por quadro na placa de vídeo;
-- **atraso acrescentado medido: 7 a 14 ms**.
+- **Memória de vídeo.** O que aperta o jogo não é a VRAM dedicada estar cheia —
+  o driver usa aquilo como cache de propósito. O sinal de verdade é o derrame
+  para a memória compartilhada, e é isso que o painel passou a mostrar.
+- **Orçamento de latência**, em cinco etapas do caminho até a tela. O que ele
+  entrega é um **piso**, e está escrito que é um piso: o Otimiza não chama
+  aquilo de "a sua latência".
+- **Laboratório de carregamento.** Engasgo ao carregar cenário não é concluído
+  da configuração ("seu jogo está num HD"), e sim de coincidência medida entre
+  a travada e o que o disco estava fazendo naquele instante.
+- **Orquestrador de renderização**, que **se recusa** a sugerir ajuste de placa
+  quando o gargalo medido é o processador, o firmware ou o disco.
+- **Autoajuste**, cujo desfecho padrão é **voltar atrás**: provou que melhorou,
+  fica; provou que piorou, volta; **não provou nada, também volta.**
+- **Histórico de desempenho**, comparando as duas medições mais recentes — e
+  não contra o seu melhor resultado de sempre, que é um extremo escolhido a
+  dedo e faz qualquer dia normal parecer uma piora.
+- **Caminho do mouse**, que aponta aceleração ligada e barra fora do meio — e
+  **não mede a sua mira** nem instala gancho de teclado ou mouse.
 
-Proteções que vêm ligadas:
+As comparações antes/depois passaram a usar intervalo de confiança. A conclusão
+deixou de ser "a diferença passou de 3%" e virou "os intervalos se sobrepõem,
+então não dá para afirmar que mudou".
 
-- **Nunca tira FPS do jogo.** De tempos em tempos a geração pausa por um
-  instante e o FPS real é comparado com e sem ela. Se o jogo perder mais de
-  4%, o gerador se desliga sozinho e diz por quê.
-- **Não inventa imagem quando não dá.** Em giro de câmera muito rápido, troca
-  de cena ou câmera atravessando um carro, o quadro gerado é recusado e a tela
-  mostra só o real — fica igual a jogar sem gerador, nunca pior.
-- **Nunca passa da taxa do monitor.** Se o jogo já entrega o que o monitor
-  mostra, não há geração.
-- **Interface parada sai do quadro real**, sem ser deslocada.
-- **Ctrl+Alt+G** desliga de qualquer lugar, inclusive de dentro do jogo.
+## A interface inteira foi refeita
 
-Exige o jogo em **janela sem bordas** — tela cheia exclusiva não pode ser
-capturada.
+Lateral só de ícones, cabeçalho sem repetir o que a lateral já diz, e os
+ajustes como **lista**, no formato das configurações do Windows, em vez de uma
+parede de cartões.
 
-## Plano de energia: nunca menos FPS
+A mudança que mais importa é pequena de ver e grande de usar: **o que cada
+ajuste faz de verdade saiu do bloco que só abria no clique e virou a descrição
+da linha.** Aquele texto é o argumento inteiro deste produto, e estava
+escondido atrás de um clique que quase ninguém dá.
 
-- **O plano que você já usa é o piso.** Um candidato com menos FPS ou pior 1%
-  low que o seu plano atual nunca é recomendado; se nenhum ganha dele, ele fica.
-- **Autoajuste em duas etapas.** Depois da primeira bateria, o vencedor ganha
-  vizinhos (preferência de energia um pouco acima e abaixo, estacionamento de
-  núcleos trocado), medidos na mesma cena.
-- **Candidato "resposta máxima"** — tudo no máximo, o estilo de planos de
-  concorrentes — medido lado a lado em desktop. Se ele for o melhor no seu PC,
-  é o escolhido.
-- **Teste de quadros sem abrir o jogo**, para autoajustar mesmo com ele fechado.
-- **Teste interrompido não deixa a máquina presa.** Se o Otimiza fechar no meio
-  do autoajuste, a abertura seguinte volta ao plano anterior.
+Junto vieram as capas de verdade dos jogos na biblioteca, lidas do cache da
+própria Steam, e a logo acompanhando o tema claro e escuro.
+
+## Ajustes: dois saíram, dois entraram
+
+**Saíram "desligar o UAC" e "desligar o firewall".**
+
+Os dois cobravam segurança de verdade e devolviam **zero** — zero quadro por
+segundo, zero milissegundo de ping. O UAC não roda durante o jogo, e o filtro
+de rede do Windows decide sobre cada pacote em microssegundos, contra dezenas
+de milissegundos de caminho até o servidor. Trocar segurança por desempenho já
+é uma decisão pesada; trocar segurança por nada não é decisão.
+
+Eles não sumiram: viraram item da lista **"o que o Otimiza não faz, e por
+quê"**, com o fato escrito. Quem vier de outro programa vai achar a explicação
+no lugar onde procuraria o botão. Na mesma lista entraram as duas promessas de
+afinidade que rendem vídeo e não rendem quadro: o serviço que fixa núcleo
+sozinho, e empurrar programa de fundo para os núcleos que o jogo não usa.
+
+**Entraram dois que não prometem FPS — e dizem isso na primeira linha.**
+
+- **Relatório de erros do Windows.** Quando um jogo fecha sozinho, o Windows
+  sobe o coletor de falhas, que segura a janela travada copiando gigabytes de
+  memória para o disco. É por isso que a queda parece muito pior do que foi.
+  O preço de desligar está escrito: você perde o registro daquela falha.
+- **Edge carregando no boot e vivo de janela fechada.** São dois
+  comportamentos ligados de fábrica que quase ninguém sabe que existem. O
+  preço também está escrito, e ele aparece na cara: o Edge passa a mostrar
+  "gerenciado pela sua organização" nas configurações dele.
+
+**Se você já aplicou o UAC ou o firewall numa versão anterior, o desfazer
+continua funcionando.** O histórico de alterações guarda o valor anterior de
+cada mudança e não depende de o ajuste continuar na lista.
+
+## Uma trava nova no código
+
+Ajuste que troca segurança e declara ganho nulo agora **derruba o teste**. Não
+é promessa de que não vai acontecer de novo: é o repositório se recusando a
+compilar um botão que cobra e não paga.
 
 ---
 
 ## O que esta versão não promete
 
-**Geração de quadros não é FPS a mais.** Ela deixa a imagem mais lisa. Para o
-jogo desenhar mais quadros, o caminho continua sendo a configuração do jogo, o
-driver e o gargalo do processador — as abas Jogos e Energia.
+**A aba Biblioteca não está pronta, e avisa isso no topo.** Achar e reconhecer
+os seus jogos funciona. O ajuste *dentro* de cada jogo, por enquanto, só existe
+de verdade para GTA V e FiveM — nos outros títulos a ficha é informação, não
+botão. Fica assim de propósito, em vez de mostrar controle que não faz o que
+promete.
 
-**O gerador é experimental.** Ainda aparecem defeitos em interface
-semitransparente sobre fundo em movimento, em minimapa girando e em carro
-passando muito rápido perto da câmera. E os números acima foram medidos numa
-máquina só: em outra placa, jogo e resolução, eles mudam — o laboratório da aba
-mede antes e depois na sua.
+**Os ajustes de Windows, somados, valem alguns por cento.** Eles não são o
+caminho para dobrar o seu FPS, e nunca foram. O que move o número de verdade é
+a configuração do jogo, o driver e o gargalo da sua máquina — as abas Jogos,
+Placa de vídeo e Energia.
 
 **O "editor desconhecido" continua aparecendo.** O aviso do SmartScreen é o
 Windows dizendo, com razão, que não sabe quem publicou este instalador.

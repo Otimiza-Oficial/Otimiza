@@ -40,20 +40,17 @@
 }
 
 :root {
-  /* PRETO DE VERDADE, E NÃO QUASE-PRETO.
+  /* AS TRÊS SUPERFÍCIES, E O FIO QUE AS SEPARA.
 
-     As três superfícies eram tons diferentes de cinza muito escuro, e o degrau
-     entre elas era o que separava fundo, cartão e cartão em relevo. Agora as
-     três são a mesma: #000. Quem separa passa a ser só o fio de cabelo.
+     Fundo, painel e painel em relevo são a MESMA cor de propósito, e quem
+     separa um do outro é só o fio de cabelo. A regra do produto sempre foi que
+     cor só aparece onde carrega significado, e um cinza a mais ou a menos no
+     fundo não carregava nenhum.
 
-     É mais limpo e é mais honesto com a escala de cor do produto — a regra
-     sempre foi que cor só aparece onde carrega significado, e um cinza a mais
-     ou a menos no fundo não carregava nenhum. De quebra, todo texto de apoio
-     ganha contraste: os tons foram calibrados contra #121212, e contra preto
-     eles só melhoram.
-
-     Nos monitores OLED, que é o que boa parte do público de jogo usa, preto
-     puro é pixel desligado: a moldura some de verdade. */
+     ESTE BLOCO É O TEMA CLARO. O escuro está logo abaixo, em
+     `:root[data-tema="escuro"]`, e redefine estes mesmos nomes — nenhum
+     componente do produto sabe qual dos dois está valendo, e é isso que
+     permite os dois existirem sem duplicar uma única regra de layout. */
   --bg: #f4f4f3;
   --panel: #ffffff;
   --panel-raised: #ffffff;
@@ -67,8 +64,8 @@
      #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
      que a norma pede para elemento de interface. Subir para #2e2e2e devolve a
      estrutura sem perder a discrição. */
-  --hairline: rgba(10, 10, 10, 0.09);
-  --hairline-strong: rgba(10, 10, 10, 0.16);
+  --hairline: rgba(var(--text-rgb), 0.09);
+  --hairline-strong: rgba(var(--text-rgb), 0.16);
 
   --text: #0a0a0a;
   --text-dim: #3f3f3f;
@@ -86,8 +83,67 @@
   --ok: #0a0a0a;
   --aviso: #8a6100;
   --erro: #b42318;
-  --borda-forte: rgba(10, 10, 10, 0.16);
+  --borda-forte: rgba(var(--text-rgb), 0.16);
   --anim-rapida: 0.18s;
+
+  /* ================================================================
+     A CAMADA NOVA DE NOMES, no claro.
+
+     Os mesmos papéis do tema escuro, com os valores do claro. Componente
+     novo escreve `--surface` e `--text-secondary` e funciona nos dois; se
+     um deles só existisse no escuro, todo componente novo precisaria de uma
+     regra extra para o claro — que é exatamente o que o bloco de tema
+     existe para não ter.
+     ================================================================ */
+  --sidebar: #efefee;
+  --surface: #ffffff;
+  --surface-2: #fafaf9;
+  --surface-3: #f1f1f0;
+  --surface-hover: rgba(10, 10, 10, 0.04);
+
+  --border: rgba(10, 10, 10, 0.09);
+  --border-strong: rgba(10, 10, 10, 0.16);
+
+  --text-primary: #0a0a0a;
+  --text-secondary: #6b6b6b;
+  --text-tertiary: #8a8a8a;
+  --text-disabled: #b4b4b4;
+
+  --accent-base: #0a0a0a;
+  --success: #1a7f4b;
+  --warning: #8a6100;
+  --danger: #b42318;
+
+  /*
+    AS SUPERFÍCIES POR PAPEL, e não por tom.
+
+    Estes cinco nasceram de uma varredura: o tema escuro acendeu 88 cores
+    escritas direto na regra, e a maior parte delas era a mesma ideia repetida
+    — "fundo de chip", "fundo afundado", "texto sobre botão preenchido".
+    Escritas como tom, elas não têm como virar escuro; escritas como papel,
+    viram sozinhas.
+  */
+  --sup-selecionada: var(--sup-selecionada);
+  --sup-afundada: var(--sup-afundada);
+  --sup-sutil: var(--sup-sutil);
+  /* O texto de cima de um elemento PREENCHIDO com a cor de destaque. No claro
+     o destaque é quase-preto e o texto é branco; no escuro inverte. */
+  --sobre-accent: #ffffff;
+  --accent-hover: #262626;
+
+  /*
+    A ESCALA DAS PEÇAS DESENHADAS.
+
+    A placa de vídeo, os pentes de memória e os monitores da tela são
+    desenhos vetoriais com uma escala de cinzas própria — eram catorze tons
+    escritos à mão, e no tema escuro todos eles viravam um borrão branco no
+    meio da tela. Cinco degraus, do corpo da peça ao traço.
+  */
+  --peca-1: #f1f1ef;
+  --peca-2: #ececea;
+  --peca-3: #e5e5e3;
+  --peca-4: #cfcbc0;
+  --peca-5: #c4c4c1;
 
   /*
     AS MESMAS CORES, EM COMPONENTES — para quando é preciso transparência.
@@ -109,7 +165,7 @@
   /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
      e a matriz de núcleos usava um branco diferente — dois cinzas para a
      mesma ideia, lado a lado no mesmo painel. */
-  --track: rgba(10, 10, 10, 0.08);
+  --track: rgba(var(--text-rgb), 0.08);
 
   --font-mono: "GeistMono", ui-monospace, "Cascadia Mono", "Consolas", monospace;
   --font-sans: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -131,6 +187,13 @@
   --s4: 16px;
   --s5: 24px;
   --s6: 32px;
+  /* Os três degraus grandes entraram com o redesenho: a especificação do
+     dono pede 40, 48 e 64 para o respiro das páginas, e sem eles cada
+     página inventaria o próprio número — que é como os 21 valores soltos
+     de antes nasceram. */
+  --s7: 40px;
+  --s8: 48px;
+  --s9: 64px;
 
   /*
     ESCALA TIPOGRÁFICA
@@ -189,6 +252,129 @@
 }
 
 /*
+  O TEMA ESCURO — e, a partir da 2.8, o desenho principal do produto.
+
+  UMA CÓPIA SÓ DA LISTA DE CORES, e é por isso que ele mora atrás de um
+  atributo em vez de uma consulta de mídia. O caminho comum obriga a escrever a
+  lista duas vezes, e duas listas de cor discordam assim que alguém corrigir
+  uma. Quem resolve a preferência do sistema é o script síncrono do `<head>`,
+  antes do primeiro desenho; o CSS conhece só o atributo.
+
+  OS NOMES NOVOS SÃO A FONTE, OS ANTIGOS VIRARAM APELIDO.
+
+  O produto tinha vinte e poucos nomes de cor herdados (`--panel`, `--hairline`,
+  `--text-dim`) espalhados por quase seis mil linhas de CSS. Renomear tudo de
+  uma vez seria um diff que ninguém revisa e uma noite inteira caçando o que
+  quebrou.
+
+  Então a camada nova — `--surface`, `--border`, `--text-primary` — é quem
+  carrega o VALOR, e os nomes antigos passam a apontar para ela. Trocar uma cor
+  acontece num lugar só, componente novo usa o nome novo, e as seis mil linhas
+  continuam de pé. Quem for migrar um bloco antigo: troque o nome, não o valor.
+
+  SOBRE O QUASE-PRETO: #090a0a e não #000. Preto puro é pixel desligado em
+  OLED, o que é bonito, mas encosta o contraste do texto no máximo e cansa numa
+  tela que o cliente deixa aberta durante a partida.
+*/
+:root[data-tema="escuro"] {
+  /* ---------------------------------------------------- superfícies */
+  --bg: #090a0a;
+  /* A lateral é UM DEGRAU mais escura que o conteúdo, e não mais clara. É o
+     que a faz recuar: a barra é moldura, não é o assunto. */
+  --sidebar: #0b0c0c;
+  --surface: #101111;
+  --surface-2: #121313;
+  --surface-3: #151616;
+  --surface-hover: #181919;
+
+  /* Duas bordas, e a diferença entre elas é o que separa "há algo aqui" de
+     "isto está selecionado". Mais de duas viram ruído. */
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.1);
+
+  /* ---------------------------------------------------- texto
+     QUATRO DEGRAUS, e cada um tem um trabalho:
+
+     primary    o número, o título, o que decide
+     secondary  a descrição embaixo do título
+     muted      o rótulo de seção em maiúscula
+     disabled   o que não dá para clicar
+
+     O degrau `--text-dim` fica entre o primeiro e o segundo. Ele não está na
+     especificação e existe porque o produto o usa em parágrafo longo de
+     explicação — e é justamente nesses parágrafos que mora o argumento de
+     honestidade do Otimiza. Apagá-los para o cinza de rótulo deixaria
+     ilegível o que mais precisa ser lido. */
+  --text-primary: #f2f2f2;
+  --text-secondary: #a0a0a0;
+  --text-tertiary: #656565;
+  --text-disabled: #444444;
+
+  /* ---------------------------------------------------- estados
+     Cor SÓ onde ela carrega significado. O destaque do produto é branco, e
+     não azul: num painel que passa a vida mostrando número, uma cor de marca
+     competindo com o número é uma cor a menos disponível para dizer
+     "isto aqui é um problema". */
+  --accent-base: #f1f1f1;
+  --success: #57d68d;
+  --warning: #e0a458;
+  --danger: #d97070;
+
+  color-scheme: dark;
+
+  /* ================================================================
+     OS NOMES ANTIGOS, APONTANDO PARA OS NOVOS.
+     Nada abaixo desta linha tem valor próprio.
+     ================================================================ */
+  --panel: var(--surface);
+  --panel-raised: var(--surface-3);
+  --campo: #0d0e0e;
+
+  --hairline: var(--border);
+  --hairline-strong: var(--border-strong);
+  --borda-forte: var(--border-strong);
+  --track: rgba(255, 255, 255, 0.08);
+
+  --text: var(--text-primary);
+  --text-dim: #c9c9c9;
+  --text-muted: var(--text-secondary);
+
+  --accent: var(--accent-base);
+  --green: var(--success);
+  --ok: var(--success);
+  --amber: var(--warning);
+  --red: var(--danger);
+  --aviso: var(--warning);
+  --erro: var(--danger);
+
+  --accent-rgb: 241, 241, 241;
+  --green-rgb: 87, 214, 141;
+  --amber-rgb: 224, 164, 88;
+  --red-rgb: 217, 112, 112;
+  --bg-rgb: 9, 10, 10;
+  --text-rgb: 242, 242, 242;
+  --panel-rgb: 16, 17, 17;
+
+  --sup-selecionada: var(--surface-3);
+  --sup-afundada: var(--surface-2);
+  --sup-sutil: rgba(255, 255, 255, 0.02);
+  --sobre-accent: #111111;
+  --accent-hover: #ffffff;
+
+  --peca-1: #26262b;
+  --peca-2: #2d2d33;
+  --peca-3: #1e1e22;
+  --peca-4: #43434c;
+  --peca-5: #55555f;
+}
+
+:root[data-tema="claro"] {
+  color-scheme: light;
+}
+
+
+
+/*
   Desligamento global do movimento.
   Duas fontes: a preferência do sistema operacional e o perfil de hardware que
   o próprio Otimiza já mede. Nos dois casos a interface continua inteira — só
@@ -229,7 +415,7 @@
    azul do Windows no meio de uma interface monocromática. */
 ::selection {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 /*
@@ -509,7 +695,7 @@ button {
   justify-content: center;
   border-radius: 9px;
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
   font-size: var(--t-micro);
   font-weight: 700;
   letter-spacing: 0;
@@ -521,7 +707,7 @@ button {
 
 .tab-badge[data-tone="bad"] {
   background: var(--red);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 /* ------------------------------------------------------------------ painéis */
@@ -572,16 +758,16 @@ button {
   /* Uma sombra curta, de contato, e nada mais. No escuro o cartão precisava de
      três camadas de gradiente para existir; no papel ele existe sozinho — o
      que o assenta é o fio de 1px e um contato de 2px. */
-  box-shadow: 0 1px 2px rgba(10, 10, 10, 0.04);
+  box-shadow: 0 1px 2px rgba(var(--text-rgb), 0.04);
 }
 
 /* Um único degrau de ênfase de ênfase, e ele só vale enquanto for raro: no momento em
    que o terceiro cartão receber destaque, nenhum tem destaque. */
 .panel[data-realce] {
-  border-color: rgba(10, 10, 10, 0.16);
+  border-color: rgba(var(--text-rgb), 0.16);
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 18px 40px -24px rgba(10, 10, 10, 0.28);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 18px 40px -24px rgba(var(--text-rgb), 0.28);
 }
 
 /* O cabeçalho sangra até a borda do cartão e carrega o degrau de luz, para o
@@ -959,7 +1145,7 @@ button {
   background: var(--panel);
   border: 1px solid transparent;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.1), 0 1px 2px rgba(var(--text-rgb), 0.05);
   color: var(--text);
   font-family: var(--font-sans);
   font-size: var(--t-body);
@@ -971,7 +1157,7 @@ button {
 }
 
 .btn:hover:not(:disabled) {
-  background: #f6f6f5;
+  background: var(--sup-afundada);
   color: var(--accent);
 }
 
@@ -987,15 +1173,15 @@ button {
 
 .btn-primary {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 1px 2px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #262626;
-  color: #ffffff;
+  background: var(--accent-hover);
+  color: var(--sobre-accent);
 }
 
 .btn-ghost {
@@ -1238,7 +1424,7 @@ button {
 }
 
 .opt-row:hover {
-  background: #f9f9f8;
+  background: var(--sup-sutil);
 }
 
 .optimization[data-state="Applied"] .opt-row {
@@ -1330,7 +1516,7 @@ button {
   padding: 2px 7px;
   border: none;
   border-radius: 5px;
-  background: #f1f1f0;
+  background: var(--sup-selecionada);
   color: var(--text-muted);
   font-size: 10.5px;
   font-weight: 600;
@@ -1682,7 +1868,7 @@ button {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
+  background: var(--surface-sunken, rgba(var(--text-rgb), 0.05));
   color: var(--text-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -2031,7 +2217,7 @@ button {
 
 .vitals .vital-value {
   font-size: var(--t-label);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .vitals .vital-bar {
@@ -2305,7 +2491,7 @@ button {
 .profile-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .profile-chip:focus-visible {
@@ -2663,7 +2849,7 @@ button {
   background: transparent;
   border: none;
   border-radius: var(--r1);
-  color: #4a4a4a;
+  color: var(--text-dim);
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 500;
@@ -2676,7 +2862,7 @@ button {
 
 .nav:hover {
   color: var(--text);
-  background: rgba(10, 10, 10, 0.045);
+  background: rgba(var(--text-rgb), 0.045);
 }
 
 /* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
@@ -2684,7 +2870,7 @@ button {
 .nav[aria-selected="true"] {
   color: var(--text);
   font-weight: 600;
-  background: #f1f1f0;
+  background: var(--sup-selecionada);
 }
 
 /* ==========================================================================
@@ -2708,7 +2894,10 @@ button {
 .secao-icone svg {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  /* 1,5 e não 1,8: o traço mais fino é o que separa um ícone de
+     aplicativo de um ícone de barra de ferramentas antiga. A 18 pixels
+     ele ainda lê, e a 1,8 a lateral inteira pesava. */
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -2723,8 +2912,8 @@ button {
 }
 
 .nav-icone {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   flex: none;
   opacity: 0.85;
   transition: opacity var(--dur);
@@ -2741,7 +2930,7 @@ button {
 
 .nav[aria-selected="true"] .tab-badge {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .lateral-rodape {
@@ -2985,7 +3174,7 @@ button {
 .comando:hover,
 .comando[aria-selected="true"] {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--sobre-accent);
 }
 
 .comando-secao {
@@ -3572,8 +3761,8 @@ button {
   color: var(--text);
   font-size: var(--t-body);
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 12px 28px -16px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 12px 28px -16px rgba(var(--text-rgb), 0.3);
 }
 
 .atualizacao-faixa[hidden] {
@@ -3720,8 +3909,8 @@ button {
   /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
      aquele halo escuro que denuncia caixa flutuante mal feita. */
   box-shadow:
-    0 1px 2px rgba(10, 10, 10, 0.05),
-    0 32px 64px -32px rgba(10, 10, 10, 0.3);
+    0 1px 2px rgba(var(--text-rgb), 0.05),
+    0 32px 64px -32px rgba(var(--text-rgb), 0.3);
 }
 
 /* A PROPORÇÃO É O DESENHO INTEIRO.
@@ -3888,7 +4077,7 @@ button {
   background: var(--campo);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.14);
 
   /* O código é para copiar, não para digitar: selecionável, mas sem quebrar
      no meio de um bloco. */
@@ -3906,13 +4095,13 @@ button {
   background: var(--panel);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.1), 0 1px 2px rgba(10, 10, 10, 0.05);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.1), 0 1px 2px rgba(var(--text-rgb), 0.05);
   cursor: pointer;
   transition: background var(--anim-rapida);
 }
 
 .portao-copiar:hover {
-  background: #f6f6f5;
+  background: var(--sup-afundada);
 }
 
 .portao-nota {
@@ -3934,13 +4123,13 @@ button {
   background: var(--campo);
   border: none;
   border-radius: var(--r1);
-  box-shadow: 0 0 0 1px rgba(10, 10, 10, 0.14);
+  box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.14);
   transition: box-shadow var(--anim-rapida);
 }
 
 .portao-campo:focus {
   outline: none;
-  box-shadow: 0 0 0 1px #0a0a0a, 0 0 0 4px rgba(10, 10, 10, 0.08);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px rgba(var(--text-rgb), 0.08);
 }
 
 /* A AÇÃO PRINCIPAL É A ÚNICA COISA BRANCA DA TELA.
@@ -4052,7 +4241,7 @@ button {
   overflow: hidden;
   background:
     radial-gradient(ellipse 70% 60% at 50% 0%, rgba(255, 255, 255, 0.1), transparent 70%),
-    #0b0b0b;
+    var(--bg);
 }
 
 .portao-pilares {
@@ -4189,18 +4378,26 @@ button {
      Antes era branca e carregava só o nome. Agora carrega a marca, a busca e
      os controles — a mesma barra do painel do site, e uma linha a menos entre
      o alto da tela e o trabalho. */
-  background: #050505;
-  color: #ffffff;
+  background: var(--bg);
+  color: var(--sobre-accent);
 
   /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
   user-select: none;
 }
 
+/* A MARCA DA BARRA DE TÍTULO ESTAVA DESENHADA NA COR ERRADA.
+
+   Ela usava `--panel`, que sobrou de quando a barra tinha fundo próprio e a
+   marca era vazada nele. Com os dois temas, `--panel` é branco no claro e
+   quase-preto no escuro — ou seja, a marca ficava da mesma cor do fundo da
+   barra nos DOIS, e sumia nos dois.
+
+   `--text` é a cor de quem desenha em cima do fundo, que é o que ela é. */
 .janela-marca {
   width: 18px;
   height: 18px;
   flex: none;
-  background: #ffffff;
+  background: var(--text);
   -webkit-mask: url(/logo.svg) center / contain no-repeat;
   mask: url(/logo.svg) center / contain no-repeat;
 }
@@ -4250,7 +4447,7 @@ button {
    escurece, e é assim que se sabe qual é qual. */
 .janela-botao { --cor-botao: rgba(255, 255, 255, 0.3); }
 
-.janela-botao:hover { --cor-botao: #ffffff; }
+.janela-botao:hover { --cor-botao: var(--text); }
 
 /* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
 
@@ -4335,7 +4532,7 @@ body.janela-cheia {
   overflow: hidden;
   background:
     radial-gradient(ellipse 80% 60% at 40% 10%, rgba(255, 255, 255, 0.1), transparent 70%),
-    #0b0b0b;
+    var(--bg);
 }
 
 .chegada-pilares {
@@ -4461,12 +4658,12 @@ body.janela-cheia {
 .placa[data-marca="intel"]  { --marca: #0071c5; }
 .placa[data-marca="desconhecida"] { --marca: var(--hairline-strong); }
 
-.placa-tras     { fill: #0a0a0a; opacity: 0.06; }
-.placa-pcb      { fill: #f3f3f1; stroke: var(--hairline); stroke-width: 1; }
-.placa-carenagem{ fill: #f0f0ee; stroke: var(--hairline); stroke-width: 1; }
-.placa-chapa    { fill: #e5e5e3; stroke: var(--hairline); stroke-width: 1; }
-.placa-saidas rect { fill: #e9e9e7; stroke: var(--hairline-strong); stroke-width: 1; }
-.placa-pinos rect  { fill: #cfcbc0; }
+.placa-tras     { fill: var(--text); opacity: 0.06; }
+.placa-pcb      { fill: var(--peca-1); stroke: var(--hairline); stroke-width: 1; }
+.placa-carenagem{ fill: var(--peca-1); stroke: var(--hairline); stroke-width: 1; }
+.placa-chapa    { fill: var(--peca-3); stroke: var(--hairline); stroke-width: 1; }
+.placa-saidas rect { fill: var(--peca-3); stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-pinos rect  { fill: var(--peca-4); }
 
 .placa-aletas path {
   stroke: var(--hairline-strong);
@@ -4478,7 +4675,7 @@ body.janela-cheia {
    viva" sem custar quase nada: uma transformação por elemento, sem repintura de
    layout. */
 .placa-ventilador {
-  fill: #e3e3e1;
+  fill: var(--peca-3);
   stroke: var(--hairline);
   stroke-width: 1;
   transform-origin: center;
@@ -4488,20 +4685,20 @@ body.janela-cheia {
    ventilador. É esse par que dá a impressão de profundidade — sem ele, o
    ventilador fica colado na superfície como um adesivo. */
 .placa-aro {
-  fill: #eeeeec;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .placa-aro-interno {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .placa-pas path {
   fill: none;
-  stroke: #c4c4c1;
+  stroke: var(--peca-5);
   stroke-width: 6;
   stroke-linecap: round;
 }
@@ -4514,13 +4711,13 @@ body.janela-cheia {
 
 .placa-parafuso circle,
 circle.placa-parafuso {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
 
 .placa-furos circle {
-  fill: #e9e9e7;
+  fill: var(--peca-3);
   stroke: var(--hairline-strong);
   stroke-width: 0.8;
 }
@@ -4547,7 +4744,7 @@ circle.placa-parafuso {
   opacity: 0.85;
 }
 
-.placa-energia rect { fill: #efefed; stroke: var(--hairline-strong); stroke-width: 1; }
+.placa-energia rect { fill: var(--peca-2); stroke: var(--hairline-strong); stroke-width: 1; }
 .placa-energia path { stroke: var(--hairline-strong); stroke-width: 1; }
 
 .placa-marca {
@@ -4622,7 +4819,7 @@ circle.placa-parafuso {
 }
 
 .memoria-placa {
-  fill: #f1f1ef;
+  fill: var(--peca-1);
   stroke: var(--hairline);
   stroke-width: 1;
 }
@@ -4636,32 +4833,32 @@ circle.placa-parafuso {
 
 /* O encaixe vazio: só o contorno e as travas das pontas. */
 .memoria-slot-vazio {
-  fill: #f0f0ee;
+  fill: var(--peca-1);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-trava {
-  fill: #e8e8e6;
+  fill: var(--peca-3);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 /* O pente encaixado. */
 .memoria-pente {
-  fill: #ededeb;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
 
 .memoria-chip {
-  fill: #ececea;
+  fill: var(--peca-2);
   stroke: var(--hairline);
   stroke-width: 0.8;
 }
 
 .memoria-contato {
-  fill: #cfcbc0;
+  fill: var(--peca-4);
 }
 
 /* A etiqueta de capacidade em cima do pente. */
@@ -4718,20 +4915,20 @@ circle.placa-parafuso {
 }
 
 .monitor-moldura {
-  fill: #efefed;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1.5;
 }
 
 .monitor-tela {
-  fill: #e9e9e7;
+  fill: var(--peca-3);
   stroke: var(--hairline);
   stroke-width: 1;
 }
 
 .monitor-pe,
 .monitor-base {
-  fill: #ebebe9;
+  fill: var(--peca-2);
   stroke: var(--hairline-strong);
   stroke-width: 1;
 }
@@ -4743,7 +4940,7 @@ circle.placa-parafuso {
   fill: var(--text);
 }
 
-.monitor-unidade {
+.vivo-unidade {
   font-family: var(--font-mono);
   font-size: 10px;
   text-anchor: middle;
@@ -4756,7 +4953,7 @@ circle.placa-parafuso {
 .monitor[data-abaixo="true"] .monitor-hz { fill: var(--amber); }
 .monitor[data-abaixo="true"] .monitor-moldura { stroke: var(--amber); }
 
-.monitor-nome {
+.vivo-nome {
   font-size: var(--t-body);
   color: var(--text);
 }
@@ -5079,7 +5276,7 @@ circle.placa-parafuso {
   padding: var(--s3);
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: var(--surface-sunken, rgba(10, 10, 10, 0.05));
+  background: var(--surface-sunken, rgba(var(--text-rgb), 0.05));
   color: var(--text-dim);
   font-size: var(--t-body);
   line-height: 1.6;
@@ -5120,13 +5317,13 @@ circle.placa-parafuso {
 .fg-sub, .fg-ritmo h3, .fg-latencia h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin: var(--s2) 0; }
 .fg-mono { font-family: var(--font-mono); font-size: 11.5px; }
 .fg-erro { padding: var(--s3) var(--s4); border-radius: var(--r2); background: rgba(var(--red-rgb), .07); color: var(--red); font-size: 12.5px; }
-.fg-aviso { padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
+.fg-aviso { padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
 
 .fg-linha { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); }
 .fg-campo { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-muted); font-weight: 600; }
 .fg-campo input, .fg-campo select { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--campo); border: 1px solid var(--hairline-strong); border-radius: var(--r1); padding: 7px 10px; min-width: 180px; }
 
-.fg-selo { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .05em; vertical-align: middle; cursor: help; background: #f1f1f0; color: var(--text); }
+.fg-selo { display: inline-block; margin-left: 6px; padding: 1px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; letter-spacing: .05em; vertical-align: middle; cursor: help; background: var(--sup-selecionada); color: var(--text); }
 .fg-selo[data-origem="Estimado"] { background: rgba(var(--amber-rgb), .1); color: var(--amber); }
 .fg-selo[data-origem="Desconhecido"] { background: transparent; color: var(--text-muted); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 .fg-desconhecido { font-size: 9.5px; font-weight: 700; letter-spacing: .05em; color: var(--text-muted); }
@@ -5135,19 +5332,19 @@ circle.placa-parafuso {
 .fg-valor { font-family: var(--font-mono); font-weight: 600; }
 .fg-valor small { font-weight: 400; color: var(--text-muted); }
 
-.fg-chip { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: #f1f1f0; color: var(--text-dim); white-space: nowrap; }
+.fg-chip { display: inline-flex; padding: 2px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: var(--sup-selecionada); color: var(--text-dim); white-space: nowrap; }
 .fg-chip[data-tom="aviso"] { background: rgba(var(--amber-rgb), .1); color: var(--amber); }
 .fg-chip[data-tom="erro"] { background: rgba(var(--red-rgb), .08); color: var(--red); }
-.fg-chip[data-tom="ok"] { background: #0a0a0a; color: #fff; }
+.fg-chip[data-tom="ok"] { background: var(--accent); color: var(--sobre-accent); }
 .fg-tipo { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 
 .fg-fluxo { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
 .fg-fluxo i { align-self: center; font-style: normal; color: var(--text-muted); }
-.fg-quadro { flex: 1 1 120px; display: flex; flex-direction: column; justify-content: space-between; gap: var(--s3); min-height: 78px; padding: var(--s3); border-radius: var(--r2); background: #0a0a0a; color: #fff; }
+.fg-quadro { flex: 1 1 120px; display: flex; flex-direction: column; justify-content: space-between; gap: var(--s3); min-height: 78px; padding: var(--s3); border-radius: var(--r2); background: var(--accent); color: var(--sobre-accent); }
 .fg-quadro span { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; opacity: .7; }
 .fg-quadro b { font-family: var(--font-mono); font-size: 15px; }
-.fg-quadro[data-real="false"] { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(10,10,10,.05) 6px 7px); }
-.fg-quadro.fg-analise { background: #f1f1f0; color: var(--text); }
+.fg-quadro[data-real="false"] { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--text); background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(var(--text-rgb), .05) 6px 7px); }
+.fg-quadro.fg-analise { background: var(--sup-selecionada); color: var(--text); }
 .fg-pipeline { display: grid; grid-template-columns: repeat(3, 1fr); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); overflow: hidden; }
 .fg-pipeline div { display: flex; flex-direction: column; gap: 3px; padding: var(--s3); }
 .fg-pipeline div + div { border-left: 1px solid var(--hairline); }
@@ -5164,17 +5361,17 @@ circle.placa-parafuso {
 .fg-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .fg-tabela th { text-align: left; font-size: 10.5px; color: var(--text-muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
 .fg-tabela td { padding: 9px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
-.fg-tabela tr[data-selecionada="true"] td { background: #f6f6f5; }
+.fg-tabela tr[data-selecionada="true"] td { background: var(--sup-afundada); }
 
-.fg-segmentos { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--r1); background: #f1f1f0; }
+.fg-segmentos { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: var(--r1); background: var(--sup-selecionada); }
 .fg-segmento { font: inherit; font-size: 12px; font-weight: 600; border: 0; background: transparent; color: var(--text-dim); padding: 5px 11px; border-radius: 5px; cursor: pointer; }
-.fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(10,10,10,.12); }
+.fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(var(--text-rgb), .12); }
 
 .fg-passos { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
-.fg-onde { margin: 0; font-size: 12.5px; padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; }
+.fg-onde { margin: 0; font-size: 12.5px; padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); }
 
 .fg-progresso { display: flex; flex-direction: column; gap: 6px; }
-.fg-progresso-trilho { height: 4px; border-radius: 2px; background: #ececeb; overflow: hidden; }
+.fg-progresso-trilho { height: 4px; border-radius: 2px; background: var(--peca-2); overflow: hidden; }
 .fg-progresso-barra { height: 100%; width: 0; background: var(--text); transition: width .25s linear; }
 .fg-progresso-texto { font-size: 12px; color: var(--text-dim); }
 
@@ -5183,13 +5380,13 @@ circle.placa-parafuso {
 .fg-numeros > div > span:first-child { font-size: 10.5px; color: var(--text-muted); font-weight: 600; }
 .fg-numeros .fg-valor { font-size: 26px; letter-spacing: -.02em; }
 
-.fg-prontidao, .fg-decisao { padding: var(--s4); border-radius: var(--r3); background: #0a0a0a; color: #fff; }
+.fg-prontidao, .fg-decisao { padding: var(--s4); border-radius: var(--r3); background: var(--accent); color: var(--sobre-accent); }
 .fg-prontidao span, .fg-decisao span { font-size: 10px; letter-spacing: .08em; font-weight: 700; opacity: .65; }
 .fg-prontidao b { display: block; font-size: 22px; letter-spacing: -.01em; margin: 4px 0 var(--s2); }
 .fg-prontidao ul { margin: 0; padding-left: 16px; font-size: 12.5px; line-height: 1.55; opacity: .85; }
 .fg-prontidao[data-tom="aviso"], .fg-decisao[data-tom="aviso"] { background: #fbf6ea; color: var(--amber); }
 .fg-prontidao[data-tom="erro"], .fg-decisao[data-tom="erro"] { background: #fcf0ee; color: var(--red); }
-.fg-prontidao[data-tom="neutro"] { background: #f1f1f0; color: var(--text); }
+.fg-prontidao[data-tom="neutro"] { background: var(--sup-selecionada); color: var(--text); }
 .fg-decisao { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
 .fg-decisao b { display: block; font-family: var(--font-mono); font-size: 24px; margin-top: 4px; }
 .fg-decisao strong { font-size: 13px; letter-spacing: .06em; }
@@ -5207,13 +5404,13 @@ circle.placa-parafuso {
 .fg-latencia .fg-nota { margin-top: var(--s2); }
 
 .fg-grafico { margin: 0; }
-.fg-grafico svg { width: 100%; height: 90px; display: block; background: #fafaf9; border-radius: var(--r1); }
+.fg-grafico svg { width: 100%; height: 90px; display: block; background: var(--sup-sutil); border-radius: var(--r1); }
 .fg-grafico-linha { fill: none; stroke: var(--text); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 .fg-grafico-media { stroke: var(--text-muted); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .fg-grafico figcaption { font-size: 10.5px; color: var(--text-muted); margin-top: 4px; }
 
 .fg-timeline { display: flex; flex-wrap: wrap; gap: 3px; }
-.fg-timeline span { flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 6px 7px; border-radius: 4px; background: #0a0a0a; color: #fff; }
+.fg-timeline span { flex: 0 0 auto; font-size: 9px; font-weight: 700; letter-spacing: .05em; padding: 6px 7px; border-radius: 4px; background: var(--accent); color: var(--sobre-accent); }
 .fg-timeline span[data-real="false"] { background: transparent; color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
 
 .fg-antes-depois { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s3); }
@@ -5241,10 +5438,10 @@ circle.placa-parafuso {
 
 .en-mapa { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
 .en-mapa > i { align-self: center; font-style: normal; color: var(--text-muted); }
-.en-etapa { flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); background: #f6f6f5; }
+.en-etapa { flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); background: var(--sup-afundada); }
 .en-etapa b { font-size: 10px; letter-spacing: .07em; }
 .en-etapa span { font-size: 12px; color: var(--text-dim); }
-.en-etapa[data-i="2"], .en-etapa[data-i="3"] { background: #0a0a0a; color: #fff; }
+.en-etapa[data-i="2"], .en-etapa[data-i="3"] { background: var(--accent); color: var(--sobre-accent); }
 .en-etapa[data-i="2"] span, .en-etapa[data-i="3"] span { color: rgba(255,255,255,.75); }
 
 .en-metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s3); }
@@ -5270,8 +5467,8 @@ circle.placa-parafuso {
 .en-delta[data-bom="false"] { color: var(--red); }
 
 .en-fluxo { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
-.en-fluxo span { padding: 4px 8px; border-radius: 5px; background: #f1f1f0; color: var(--text-dim); font-weight: 600; letter-spacing: .03em; }
-.en-fluxo span[data-forte="true"] { background: #0a0a0a; color: #fff; }
+.en-fluxo span { padding: 4px 8px; border-radius: 5px; background: var(--sup-selecionada); color: var(--text-dim); font-weight: 600; letter-spacing: .03em; }
+.en-fluxo span[data-forte="true"] { background: var(--accent); color: var(--sobre-accent); }
 
 .en-avancado summary { cursor: pointer; display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
 .en-avancado[open] summary { margin-bottom: var(--s3); }
@@ -5300,3 +5497,2062 @@ circle.placa-parafuso {
 .bib-previa:empty { display: none; }
 .bib-previa { display: flex; flex-direction: column; gap: var(--s2); }
 .fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+/* ===================================================== PAINEL DE EVIDÊNCIA
+
+   De onde veio cada número. O painel existe para mostrar o que o produto NÃO
+   mediu com o mesmo destaque do que ele mediu — ver o comentário no index.html.
+
+   A cor aqui segue a mesma disciplina do resto do arquivo: só o que carrega
+   aviso ganha tom. "Medido" é preto normal, porque é o esperado; estimado é
+   âmbar, porque pede cautela; não medido fica apagado, porque é ausência e não
+   erro. */
+
+.evidencia-detalhe {
+  margin-top: var(--s4);
+  border-top: 1px solid var(--track);
+  padding-top: var(--s3);
+}
+
+.evidencia-detalhe summary {
+  cursor: pointer;
+  font-size: var(--t-label);
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.evidencia-detalhe summary:hover {
+  color: var(--text);
+}
+
+.evidencia-tabela {
+  margin-top: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--track);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.evidencia-linha {
+  display: grid;
+  /* O id em largura fixa mantém a coluna do meio alinhada mesmo com nomes de
+     tamanhos muito diferentes — `fps.rendered` e `storage.capacity_used` na
+     mesma lista. */
+  grid-template-columns: minmax(0, 15rem) minmax(0, 7rem) minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s2) var(--s3);
+  background: var(--panel, #ffffff);
+  font-size: var(--t-label);
+}
+
+.evidencia-id {
+  font-family: var(--font-mono);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.evidencia-valor {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--text);
+}
+
+.evidencia-origem {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.evidencia-linha[data-qualidade="ESTIMATED"] .evidencia-valor {
+  color: var(--amber);
+}
+
+/* Não medido: o id continua legível — é ele que nomeia o que falta — e o
+   travessão no lugar do valor apaga junto com o motivo. */
+.evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-id,
+.evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-valor {
+  color: var(--text-muted);
+}
+
+#evidencia-tag[data-estado="falha"] {
+  color: var(--red);
+}
+
+/* Memória de vídeo.
+
+   "Cheia" e "transbordando" precisam de cores DIFERENTES, e é esse o ponto do
+   painel inteiro: placa cheia é o estado normal de uma placa, e pintá-la de
+   âmbar junto com o transbordo devolveria o alarme falso que a etapa veio
+   desfazer. Só o derramamento medido acende. */
+#vram-estado[data-estado="ok"] {
+  color: var(--text-muted);
+}
+
+#vram-estado[data-estado="neutro"] {
+  color: var(--text-muted);
+}
+
+#vram-estado[data-estado="desconhecido"] {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+#vram-estado[data-estado="alerta"] {
+  color: var(--amber);
+}
+
+/* Do clique ao pixel.
+
+   A etapa sem medida ocupa a MESMA linha e o mesmo espaço da etapa medida, de
+   propósito: encolher ou esconder o que não foi medido devolveria a lista
+   curta e bonita que faz o piso parecer o total. O que muda é a cor, e o
+   "não medida" no lugar do número. */
+.latencia-etapa {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.latencia-etapa:last-child {
+  border-bottom: 0;
+}
+
+.latencia-nome {
+  font-weight: 500;
+}
+
+.latencia-valor {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.latencia-origem {
+  grid-column: 1 / -1;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.latencia-etapa[data-qualidade="ESTIMATED"] .latencia-valor {
+  color: var(--amber);
+}
+
+.latencia-etapa[data-qualidade="UNKNOWN"] .latencia-nome,
+.latencia-etapa[data-qualidade="UNKNOWN"] .latencia-valor {
+  color: var(--text-muted);
+}
+
+/* Barra de medidor sem leitura. Vazia e vazia-marcada não podem parecer a
+   mesma coisa: uma diz "0%", a outra diz "não sei". */
+.vital[data-estado="desconhecido"] .vital-bar,
+.vital[data-estado="desconhecido"] .bar {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--track) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+/* ======================================================= PAINEL DE GARGALO
+
+   Duas colunas: o que foi encontrado e o que não foi verificado. A segunda
+   não é rodapé nem nota de rodapé — ela tem o mesmo peso visual da primeira,
+   porque é ela que impede "não encontramos gargalo" de soar como "está tudo
+   bem". */
+
+.gargalo-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s4);
+  margin-top: var(--s4);
+}
+
+@media (max-width: 720px) {
+  .gargalo-colunas { grid-template-columns: 1fr; }
+}
+
+.gargalo-achado,
+.gargalo-falta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--track);
+}
+
+.gargalo-classe {
+  font-size: var(--t-label);
+  color: var(--text);
+}
+
+.gargalo-forca {
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Causa em âmbar, hipótese apagada. O cliente precisa ver a diferença sem ler:
+   uma é o sistema afirmando o fato, a outra é uma leitura que sugere. */
+.gargalo-achado[data-forca="Causa"] .gargalo-forca {
+  color: var(--amber);
+}
+
+.gargalo-evidencia {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.gargalo-aviso {
+  margin: var(--s1) 0 0;
+  font-size: var(--t-label);
+  color: var(--red);
+  max-width: 48ch;
+}
+
+/* O perfil que a medição escolheu.
+
+   A marca fica no BOTÃO, e não numa lista à parte: o cliente lê o plano e o
+   dedo já está sobre o botão certo. Os outros dois continuam clicáveis — a
+   escolha é dele, e o produto recomenda em vez de decidir por ele. */
+.btn[data-recomendado="sim"] {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.btn[data-recomendado="sim"]::after {
+  content: " · recomendado";
+  color: var(--amber);
+  font-size: 0.85em;
+}
+
+/* O bloco de lacunas, igual em todo painel.
+
+   A borda à esquerda existe para ele ser reconhecível de relance: o cliente
+   aprende que aquela marca é sempre "isto aqui ninguém mediu", e passa a
+   procurar por ela em vez de acreditar que o painel está completo. */
+.faltas {
+  border-left: 2px solid var(--hairline);
+  padding-left: var(--s3);
+}
+
+/* =====================================================================
+   A ABERTURA DO PAINEL
+
+   Cabeçalho, monitores ao vivo e ficha da máquina. O conjunto existe para
+   responder em meio segundo "esta máquina está viva e está sendo lida
+   agora", antes de a tela entregar o veredito.
+
+   Tudo aqui herda os tokens: nenhuma cor, espaçamento ou fonte escrita à
+   mão. Um bloco novo que traga os próprios valores é como a tela volta a
+   parecer montada por acréscimo.
+   ===================================================================== */
+
+.abertura {
+  margin-bottom: var(--s5);
+}
+
+/* O sobrenome pequeno acima do título. Dá hierarquia sem precisar de mais
+   uma linha de texto explicando onde a pessoa está. */
+.abertura-sobrenome {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 var(--s2);
+}
+
+.abertura-titulo {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.abertura-sub {
+  color: var(--text-muted);
+  margin: var(--s2) 0 0;
+}
+
+/* O rótulo que separa as faixas. Mesmo tamanho do sobrenome de propósito:
+   são a mesma voz, e dois tamanhos parecidos lado a lado é o que faz uma
+   tela parecer desalinhada sem ninguém saber dizer por quê. */
+.secao-rotulo {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: var(--s6) 0 var(--s3);
+}
+
+.vivos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s3);
+}
+
+.vivo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3, 10px);
+  background: var(--panel);
+  min-width: 0;
+}
+
+.vivo-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.vivo-nome {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* O selo do canto. Só aparece quando há o que dizer — um selo permanente
+   vira decoração e deixa de ser lido. */
+.vivo-marca {
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  padding: 2px var(--s2);
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.vivo-marca[data-tom="bom"] {
+  color: var(--ok);
+  border-color: var(--borda-forte);
+}
+
+.vivo-marca[data-tom="alerta"] {
+  color: var(--amber);
+  border-color: rgba(var(--amber-rgb), 0.35);
+}
+
+.vivo-valor {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.vivo-unidade {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: 3px;
+  letter-spacing: 0;
+}
+
+/* A linha do tempo do cartão. Altura fixa e pequena: ela é contexto, não
+   gráfico — quem quer o gráfico tem o painel de histórico logo abaixo. */
+.vivo-linha {
+  width: 100%;
+  height: 28px;
+  display: block;
+  overflow: visible;
+}
+
+.vivo-traco {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Sem leitura, sem linha inventada: o cartão fica com o traço tracejado e
+   apagado, que é diferente de uma linha reta no zero. */
+.vivo[data-sem-leitura="sim"] .vivo-traco {
+  opacity: 0.25;
+  stroke-dasharray: 2 3;
+}
+
+.vivo[data-sem-leitura="sim"] .vivo-valor {
+  color: var(--text-muted);
+}
+
+.vivo-nota {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A ficha da máquina: uma faixa só, dividida. Quatro cartões separados
+   davam a mesma informação com quatro bordas a mais — e isto aqui é o que
+   menos muda na tela inteira. */
+.ficha {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--s4);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r3, 10px);
+  background: var(--panel);
+}
+
+.ficha-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.ficha-rotulo {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ficha-valor {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* O botão do tema.
+
+   Um desenho só, com as duas metades no mesmo SVG: o sol aparece no escuro
+   (é o que o clique vai trazer) e a lua no claro. Dois ícones trocados por
+   JavaScript exigiriam o estado do tema em dois lugares. */
+.tema-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color var(--dur),
+    border-color var(--dur);
+}
+
+.tema-botao:hover {
+  color: var(--text);
+  border-color: var(--hairline);
+}
+
+.tema-icone {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* No claro mostra a lua; no escuro, o sol. O ícone anuncia PARA ONDE o clique
+   leva, que é como todo interruptor de tema que não confunde funciona. */
+:root[data-tema="claro"] .tema-sol,
+:root[data-tema="claro"] .tema-raios {
+  display: none;
+}
+
+:root[data-tema="escuro"] .tema-lua {
+  display: none;
+}
+
+/* =====================================================================
+   A BIBLIOTECA DE JOGOS
+
+   A COR DE CADA BLOCO vem do próprio nome do jogo, em `catalogojogos.rs`,
+   e chega aqui como um número de matiz. O produto não distribui capa de
+   jogo — a arte é de quem fez o jogo — então o bloco é uma cor estável
+   mais as iniciais. Estável importa: um jogo que troca de cor a cada
+   abertura faz a grade parecer quebrada mesmo estando certa.
+   ===================================================================== */
+
+.biblioteca-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+
+.biblioteca-filtros {
+  display: inline-flex;
+  gap: var(--s1);
+  padding: 3px;
+  border-radius: var(--r1);
+  background: var(--sup-selecionada);
+}
+
+.biblioteca-filtro {
+  padding: 5px var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--t-body);
+  cursor: pointer;
+}
+
+.biblioteca-filtro[aria-selected="true"] {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.biblioteca-busca input {
+  width: 200px;
+  padding: 6px var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r1);
+  background: var(--campo);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--t-body);
+}
+
+.biblioteca-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  gap: var(--s3);
+}
+
+.jogo-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: 0 0 var(--s3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--panel);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    border-color var(--dur),
+    transform var(--dur);
+}
+
+.jogo-tile:hover {
+  border-color: var(--borda-forte);
+  transform: translateY(-2px);
+}
+
+/* O bloco de cor no lugar da capa. A saturação e a luminosidade são fixas
+   e só a matiz muda: assim dois jogos quaisquer ficam distinguíveis sem
+   que nenhum grite mais alto que o outro. */
+.jogo-tile-arte {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(
+    160deg,
+    hsl(var(--matiz) 42% 42%),
+    hsl(calc(var(--matiz) + 24) 38% 26%)
+  );
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* Duas linhas SEMPRE, com ou sem nome comprido. Sem a altura fixa, um
+   "PUBG: Battlegrounds" ao lado de um "Rust" desalinha a fileira inteira —
+   e a grade passa a impressão de ter sido montada às pressas, que é
+   exatamente o contrário do que ela precisa passar. */
+.jogo-tile-nome {
+  padding: 0 var(--s3);
+  font-size: var(--t-body);
+  font-weight: 600;
+  line-height: 1.25;
+  min-height: 2.5em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.jogo-tile-estado {
+  padding: 0 var(--s3);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+}
+
+/* Não instalado fica mais apagado — mas continua clicável e legível. Some
+   da grade seria pior: é assim que a pessoa acha o jogo dela e descobre
+   que o produto o conhece. */
+.jogo-tile[data-instalado="false"] .jogo-tile-arte {
+  filter: saturate(0.35);
+  opacity: 0.7;
+}
+
+/* ---- a ficha de um jogo */
+
+.jogo-card {
+  max-width: 560px;
+  text-align: left;
+}
+
+.jogo-cabeca {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  margin-bottom: var(--s5);
+}
+
+.jogo-bloco {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 74px;
+  flex: none;
+  border-radius: var(--r2);
+  background: linear-gradient(
+    160deg,
+    hsl(var(--matiz) 42% 42%),
+    hsl(calc(var(--matiz) + 24) 38% 26%)
+  );
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.jogo-sobrenome {
+  margin: 0 0 2px;
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.jogo-cabeca h2 {
+  margin: 0;
+}
+
+.jogo-caminho {
+  margin: var(--s1) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.jogo-fechar {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.jogo-fechar:hover {
+  color: var(--text);
+}
+
+.jogo-alavancas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+
+.jogo-alavanca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--sup-afundada);
+}
+
+.jogo-alavanca-nome {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.jogo-alavanca-nota {
+  display: block;
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* A capa de verdade, quando ela existe nesta máquina.
+
+   Ela entra como FUNDO do mesmo bloco que desenha as iniciais, e não como um
+   elemento novo: assim o bloco com capa e o bloco sem capa têm exatamente a
+   mesma caixa, e a fileira não muda de altura conforme a Steam já tenha ou não
+   baixado a arte. */
+.jogo-tile-arte[data-com-capa="sim"] {
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  /* O degradê de cor some: ele existia para dar o que olhar no lugar da arte. */
+  background-color: var(--sup-afundada);
+}
+
+/* A arte do jogo não obedece ao nosso tema, e não deve mesmo. O que ela não
+   pode é encostar na borda do bloco com uma linha clara sobre o fundo escuro —
+   a sombra interna fecha esse contorno sem escurecer a imagem. */
+.jogo-tile-arte[data-com-capa="sim"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.jogo-tile-arte {
+  position: relative;
+}
+
+/* =====================================================================
+   A ABA DA PLACA DE VÍDEO
+   ===================================================================== */
+
+.abertura-gpu {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s4);
+}
+
+.gpu-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--panel);
+  min-width: 220px;
+}
+
+.gpu-cartao-nome {
+  font-weight: 600;
+}
+
+.gpu-cartao-nota {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.gpu-marcas {
+  display: flex;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.gpu-marca {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--t-lead);
+  cursor: pointer;
+}
+
+.gpu-marca[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* A aba da AMD fica visível e desligada, dizendo por quê. Escondê-la faria o
+   cliente com Radeon concluir que o produto não sabe que a placa dele existe;
+   ligá-la sem ter o que fazer seria pior ainda. */
+.gpu-marca:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.gpu-marca-nota {
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gpu-colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--s4);
+  align-items: start;
+}
+
+.gpu-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.gpu-perfil {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r2);
+  background: var(--sup-afundada);
+}
+
+.gpu-perfil + .gpu-perfil {
+  margin-top: var(--s3);
+}
+
+/* Perfil já inteiro fica marcado, e o botão dele desligado. O cliente precisa
+   ver que não há o que fazer ali — um botão vivo que não muda nada é o tipo de
+   clique que faz o produto parecer que agiu. */
+.gpu-perfil[data-inteiro="true"] {
+  border-color: var(--borda-forte);
+}
+
+.gpu-perfil-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.gpu-perfil-nome {
+  font-weight: 600;
+}
+
+.gpu-perfil-conta {
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.gpu-perfil-resumo {
+  margin: 0;
+  font-size: var(--t-body);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.gpu-perfil-detalhe summary {
+  cursor: pointer;
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.gpu-perfil-detalhe ul {
+  margin: var(--s2) 0 0;
+  padding-left: var(--s5);
+  font-size: var(--t-nota);
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+
+/* A lista de programas. Uma linha por programa: nome, para que serve, botão.
+
+   O "para que serve" não é opcional. Uma lista de nomes obriga quem lê a já
+   saber o que cada um faz — e quem precisa desta aba é exatamente quem não
+   sabe. */
+.programa-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.programa-linha:last-child {
+  border-bottom: 0;
+}
+
+.programa-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.programa-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 600;
+}
+
+.programa-descricao {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.programa-estado {
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  padding: 1px var(--s2);
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+
+/* "Não deu para conferir" fica em itálico e não ganha cor de estado: ele não
+   é uma resposta sobre a máquina, é a ausência de uma. */
+.programa-estado[data-tom="desconhecido"] {
+  font-style: italic;
+}
+
+.panel-note[data-tom="aviso"] {
+  color: var(--amber);
+}
+
+/* A limpeza, item a item.
+
+   Cada item tem DUAS linhas de texto abaixo do nome: o que aquilo e, e o que
+   se perde ao apagar. Parece muito texto para uma lista, e e justamente o que
+   separa isto de um limpador que pede uma decisao sobre algo que nao
+   explicou. */
+.limpeza-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--hairline);
+  cursor: pointer;
+}
+
+.limpeza-item:last-of-type {
+  border-bottom: 0;
+}
+
+.limpeza-item input {
+  margin-top: 3px;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.limpeza-item input:disabled {
+  opacity: 0.4;
+}
+
+.limpeza-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.limpeza-nome {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  font-weight: 600;
+}
+
+.limpeza-tamanho {
+  font-family: var(--font-mono);
+  font-size: var(--t-nota);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* Em italico e sem numero: nao e uma medida pequena, e a ausencia de medida. */
+.limpeza-tamanho[data-tom="desconhecido"] {
+  font-style: italic;
+}
+
+.limpeza-oque {
+  font-size: var(--t-nota);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.limpeza-custo {
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* O custo em ambar quando o item apaga arquivo do cliente. E o unico da lista
+   sem volta, e ele nao pode parecer com os outros. */
+.limpeza-item[data-custa="true"] .limpeza-custo {
+  color: var(--amber);
+}
+
+/* A matriz de nucleos.
+
+   Um quadrado por nucleo logico, na ordem do indice. A cor diz a classe; a
+   borda diz se o jogo pode rodar ali. Sao duas informacoes diferentes e elas
+   precisam de dois canais: um jogo preso nos nucleos de eficiencia e
+   exatamente o caso que esta tela existe para tornar visivel de relance. */
+.nucleos-matriz {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: var(--s2);
+  margin: var(--s4) 0;
+}
+
+.nucleo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r1);
+  background: var(--sup-afundada);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-muted);
+}
+
+.nucleo[data-classe="Desempenho"] {
+  background: var(--sup-selecionada);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Os de eficiencia ficam apagados de proposito: eles nao sao piores, sao
+   OUTRA coisa, e o jogo nao deveria estar neles. */
+.nucleo[data-classe="Eficiencia"] {
+  opacity: 0.6;
+}
+
+/* Onde o jogo pode rodar agora. Borda e nao cor de fundo: a cor ja esta
+   dizendo a classe, e duas informacoes no mesmo canal se anulam. */
+.nucleo[data-no-jogo="true"] {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+.nucleos-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  font-size: var(--t-nota);
+  color: var(--text-muted);
+}
+
+.nucleo-chave {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.nucleo-chave::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  background: var(--sup-afundada);
+}
+
+.nucleo-chave[data-classe="Desempenho"]::before {
+  background: var(--sup-selecionada);
+}
+
+.nucleo-chave[data-classe="Eficiencia"]::before {
+  opacity: 0.6;
+}
+
+.nucleo-chave[data-no-jogo="true"]::before {
+  border-color: var(--amber);
+  box-shadow: inset 0 0 0 1px var(--amber);
+}
+
+/* =====================================================================
+   A LATERAL RECOLHIDA
+
+   Ela passou a ser o padrao, entao ela precisa funcionar sozinha: o icone
+   e a unica coisa que identifica a secao, e o item ativo precisa ser
+   obvio sem o rotulo ao lado.
+   ===================================================================== */
+
+.corpo[data-recolhida="true"] .nav {
+  position: relative;
+  height: 38px;
+  border-radius: var(--r2);
+}
+
+/* A BARRA NA BORDA, e nao so o fundo.
+
+   Com rotulo, o fundo mais claro basta para dizer qual item esta aberto.
+   Sem rotulo, os itens viram uma coluna de quadrados iguais e o fundo
+   sozinho fica fraco demais para achar de relance. A barra resolve, e e o
+   mesmo desenho que todo aplicativo de lateral estreita usa. */
+.corpo[data-recolhida="true"] .nav[aria-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.corpo[data-recolhida="true"] .nav-icone {
+  width: 19px;
+  height: 19px;
+}
+
+/* Os grupos viram um fio. Sem rotulo eles nao podem sumir de vez: e o fio
+   que separa "monitorar" de "agir", e sem ele a coluna fica um bloco unico
+   de onze icones sem hierarquia nenhuma. */
+.corpo[data-recolhida="true"] .lateral-grupo {
+  height: 1px;
+  margin: var(--s2) auto;
+  width: 18px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+
+/* O cabecalho da secao, no mesmo desenho das aberturas das abas novas. */
+.secao-cabecalho {
+  margin-bottom: var(--s5);
+}
+
+.secao-cabecalho .abertura-titulo {
+  font-size: 1.75rem;
+}
+
+/* =====================================================================
+   O RESPIRO DO PALCO
+
+   As referencias do dono sao notavelmente mais folgadas que esta tela
+   estava: mais margem do lado da lateral, mais ar entre as faixas, e
+   cartoes com mais folga por dentro.
+
+   Nao e gosto: numa tela cheia de numero e paragrafo curto, o que separa
+   um painel de controle de uma planilha e o espaco. O conteudo e o mesmo.
+   ===================================================================== */
+
+.palco {
+  padding: var(--s5) var(--s6) var(--s6) var(--s5);
+  gap: var(--s5);
+}
+
+/* O cabecalho da secao ja tem a propria margem embaixo; o padding de cima
+   era para compensar uma trilha que nao existe mais. */
+.secao-cabecalho {
+  padding: 0;
+}
+
+.tab-panel {
+  gap: var(--s5);
+}
+
+/* Os cartoes de leitura ao vivo e a ficha, com a folga das referencias. */
+.vivo,
+.ficha {
+  padding: var(--s5);
+}
+
+.vivo {
+  gap: var(--s3);
+}
+
+/* =====================================================================
+   A CAMADA DE COMPONENTES — redesenho 2.8
+
+   O que vem abaixo é o desenho que o dono especificou: escuro, quase
+   monocromático, silencioso. Ele vale para a tela inteira, e por isso
+   mora num lugar só.
+
+   A REGRA PARA QUEM MEXER AQUI: nenhum valor de cor escrito à mão.
+   Tudo sai dos tokens. Uma cor escrita direto numa regra é uma cor que
+   não tem como virar clara — foi assim que o tema escuro acendeu 88
+   delas quando foi ligado pela primeira vez.
+   ===================================================================== */
+
+/* ------------------------------------------------------------ o casco */
+
+.lateral {
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+}
+
+/* A barra de título recua: ela é moldura, não conteudo. Sem fundo
+   proprio, sem sombra, so o fio embaixo separando do palco. */
+.janela {
+  height: 52px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ------------------------------------------------- itens da lateral
+
+   Tres estados e so. O item parado fica a 55% — visivel o bastante para
+   ser reconhecido, apagado o bastante para nao competir com o conteudo.
+   O ativo nao ganha fundo colorido: ganha opacidade cheia e um risco. */
+.corpo[data-recolhida="true"] .nav {
+  opacity: 0.55;
+  background: transparent;
+  transition:
+    opacity 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.corpo[data-recolhida="true"] .nav:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+.corpo[data-recolhida="true"] .nav[aria-selected="true"] {
+  opacity: 1;
+  background: transparent;
+}
+
+/* --------------------------------------------------------- tipografia
+
+   A escala da especificacao. Ela e mais leve que a anterior de proposito:
+   negrito em tudo e o que faz uma tela tecnica parecer um site de venda. */
+
+.abertura-sobrenome,
+.secao-rotulo,
+.panel-tag,
+.readout-label,
+.vivo-nome,
+.ficha-rotulo,
+.jogo-sobrenome {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.abertura-titulo {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.panel h2,
+.secao-cabecalho .abertura-titulo {
+  font-weight: 600;
+}
+
+.panel h2 {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+/* ----------------------------------------------------------- switch
+
+   OFF: trilho escuro, botao cinza. ON: trilho branco, botao escuro.
+   Sem brilho, sem cor de marca — o estado ligado e a propria inversao,
+   que e o sinal mais forte que existe e nao gasta cor nenhuma. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--track);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition:
+    transform 160ms ease-out,
+    background-color 160ms ease-out;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent-base);
+}
+
+.switch[aria-checked="true"]::after {
+  transform: translateX(16px);
+  background: var(--sobre-accent);
+}
+
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* ------------------------------------------------------------ botoes */
+
+.btn {
+  height: 36px;
+  padding: 0 var(--s4);
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: var(--t-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.btn-primary {
+  background: var(--accent-base);
+  border-color: var(--accent-base);
+  color: var(--sobre-accent);
+  height: 40px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--sobre-accent);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  color: var(--text-disabled);
+  border-color: var(--border);
+  background: transparent;
+}
+
+.btn-small {
+  height: 30px;
+  padding: 0 var(--s3);
+  font-size: var(--t-nota);
+}
+
+/* ------------------------------------------------------------ campos */
+
+input[type="search"],
+input[type="text"],
+.biblioteca-busca input,
+.programas-busca input {
+  height: 40px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--campo);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--t-body);
+  transition: border-color 150ms ease-out;
+}
+
+input::placeholder {
+  color: var(--text-tertiary);
+}
+
+input:focus-visible {
+  outline: none;
+  border-color: rgba(var(--text-rgb), 0.22);
+}
+
+/* -------------------------------------------------- linha de ajuste
+
+   A FORMA CANONICA de toda configuracao do produto: titulo e descricao
+   a esquerda, controle a direita, um fio embaixo.
+
+   NAO E CARTAO, e essa e a decisao. Dezessete cartoes empilhados fazem
+   uma pagina de ajustes parecer um catalogo; dezessete linhas fazem ela
+   parecer o painel de configuracoes de um sistema operacional — que e o
+   que ela e. */
+.linha-ajuste {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  min-height: 76px;
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--border);
+  transition: background-color 150ms ease-out;
+}
+
+.linha-ajuste:last-child {
+  border-bottom: 0;
+}
+
+.linha-ajuste-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.linha-ajuste-nome {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.linha-ajuste-descricao {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* --------------------------------------------------------- separador */
+
+/* `.divisor` MORAVA AQUI e saiu. Eu a escrevi junto com o resto da camada de
+   componentes e nunca a usei em lugar nenhum do HTML: as separações desta
+   interface acabaram todas saindo de `border-bottom` nas próprias linhas, que
+   é o certo — um traço que pertence à linha some junto com ela, e um traço
+   solto no meio da página não sabe quando sair. Regra de CSS que ninguém usa
+   é a mesma dívida que função morta em Rust: alguém vai achar que existe uma
+   convenção aqui, e não existe. */
+
+/* ------------------------------------------------------------ modais
+
+   Sem sombra gigante e sem cartao flutuando no meio do nada: o modal e
+   uma superficie do proprio aplicativo, com a mesma borda de tudo. */
+.modal {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  max-width: 600px;
+  padding: var(--s6);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+/* ------------------------------------------------------ estados */
+
+*:focus-visible {
+  outline: 2px solid rgba(var(--text-rgb), 0.35);
+  outline-offset: 2px;
+}
+
+.status[data-tom="ok"] {
+  color: var(--success);
+}
+
+.status[data-tom="error"] {
+  color: var(--danger);
+}
+
+/* ------------------------------------------------------ cartão de jogo
+
+   A CAPA OCUPA O CARTÃO INTEIRO, e o nome fica por cima dela, sobre um
+   degradê que só existe no rodapé. O desenho anterior tinha a arte em
+   cima e uma faixa de texto embaixo — duas caixas empilhadas, que é o
+   que faz uma biblioteca parecer uma tabela com foto.
+
+   O degradê é a ÚNICA exceção à regra de não usar gradiente neste
+   produto, e ele não é enfeite: sem escurecer o pé da imagem, metade das
+   capas deixa o nome ilegível. Ele é ferramenta de contraste. */
+.jogo-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  overflow: hidden;
+  transition:
+    border-color 180ms ease-out,
+    transform 180ms ease-out;
+}
+
+.jogo-tile:hover {
+  border-color: var(--border-strong);
+  transform: none;
+}
+
+.jogo-tile-arte {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+  transition: transform 180ms ease-out;
+}
+
+/* A IMAGEM cresce, e não o cartão. Crescer o cartão empurraria os
+   vizinhos e faria a grade inteira tremer a cada passada do mouse. */
+.jogo-tile:hover .jogo-tile-arte {
+  transform: scale(1.02);
+}
+
+.jogo-tile-arte[data-com-capa="sim"]::after {
+  box-shadow: none;
+}
+
+/* O pé do cartão: degradê, nome e estado, por cima da arte. */
+.jogo-tile-rodape {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--s5) var(--s3) var(--s3);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88), rgba(0, 0, 0, 0));
+  text-align: left;
+  pointer-events: none;
+}
+
+.jogo-tile-nome {
+  padding: 0;
+  min-height: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #f2f2f2;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.jogo-tile-estado {
+  padding: 0;
+  font-size: 11px;
+  color: rgba(242, 242, 242, 0.62);
+}
+
+/* Não instalado continua na grade e continua clicável — é assim que a
+   pessoa acha o jogo dela. O que muda é só a saturação da arte. */
+.jogo-tile[data-instalado="false"] .jogo-tile-arte {
+  filter: saturate(0.45);
+  opacity: 0.75;
+}
+
+.biblioteca-grade {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s4);
+}
+
+/* -------------------------------------------------- linha de software
+
+   Linha, e não cartão: uma lista de vinte programas em cartões vira um
+   catálogo de loja. A altura é a da especificação, e o hover é quase
+   imperceptível de propósito — ele serve para dizer "esta é a linha sob
+   o cursor", e não para chamar atenção. */
+.programa-linha {
+  min-height: 74px;
+  padding: var(--s3) var(--s3);
+  margin: 0 calc(var(--s3) * -1);
+  border-bottom: 1px solid var(--border);
+  border-radius: 6px;
+  transition: background-color 150ms ease-out;
+}
+
+.programa-linha:hover {
+  background: rgba(var(--text-rgb), 0.02);
+}
+
+.programa-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.programa-descricao {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ------------------------------------------------- cartão de métrica
+
+   O NÚMERO É O ELEMENTO DOMINANTE. Tudo o mais no cartão — o rótulo em
+   cima, a linha do tempo, a nota embaixo — existe para dar contexto a
+   ele, e nenhum deles pode competir em peso. */
+.vivo {
+  background: var(--surface);
+  border-radius: 7px;
+}
+
+.vivo-valor {
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.vivo-unidade {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.vivo-nota {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.vivo-traco {
+  stroke-width: 1;
+  opacity: 0.45;
+}
+
+.ficha {
+  background: var(--surface);
+  border-radius: 7px;
+}
+
+/* ------------------------------------------------------ vazio e carga
+
+   Dois estados que o produto precisava ter e não tinha nome para. */
+.vazio {
+  padding: var(--s8) var(--s5);
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.esqueleto {
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2),
+    var(--surface-3),
+    var(--surface-2)
+  );
+  background-size: 200% 100%;
+  animation: esqueleto 1.4s ease-in-out infinite;
+}
+
+/* DUAS FORMAS, porque o esqueleto só cumpre o papel dele se tiver a forma do
+   que está vindo. Uma fileira de barrinhas no lugar de uma grade de capas
+   anuncia a coisa errada, e a tela "pula" quando o conteúdo real entra. */
+.esqueleto-linha {
+  height: 74px;
+  margin-bottom: 1px;
+  border-radius: 6px;
+}
+
+.esqueleto-bloco {
+  aspect-ratio: 3 / 4;
+  border-radius: 9px;
+}
+
+/* Cada bloco começa a animação um pouco depois do anterior: doze retângulos
+   pulsando no mesmo compasso viram um piscar de tela inteira, que incomoda
+   mais do que informa. */
+.esqueleto:nth-child(3n + 2) {
+  animation-delay: 160ms;
+}
+
+.esqueleto:nth-child(3n + 3) {
+  animation-delay: 320ms;
+}
+
+@keyframes esqueleto {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Quem pediu menos animação não recebe nenhuma. */
+@media (prefers-reduced-motion: reduce) {
+  .esqueleto {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------- atalhos
+
+   Os tres cartoes do fim do Inicio. Eles sao NAVEGACAO, entao pesam
+   menos que os monitores acima: mesma borda, mesmo fundo, e o unico
+   destaque e o hover. */
+.atalhos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--s4);
+}
+
+.atalho {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.atalho:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.atalho-icone {
+  width: 20px;
+  height: 20px;
+  margin-bottom: var(--s3);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--text-secondary);
+}
+
+.atalho-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.atalho-nota {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* =====================================================================
+   AS PAGINAS TECNICAS — GPU e Nucleos
+
+   A especificacao pede que elas deixem de ser uma pilha de paineis e
+   passem a ser SECOES separadas por espaco. A diferenca nao e estetica:
+   um painel com borda diz "isto e uma caixa"; uma secao com titulo diz
+   "isto e um assunto". Numa pagina que tem tres assuntos — o hardware, os
+   ajustes, os perfis — sao tres secoes, e nao tres caixas.
+   ===================================================================== */
+
+/* O painel perde a borda e o fundo nestas paginas: o que separa uma
+   secao da outra passa a ser o espaco, e o titulo. */
+#tab-gpu .panel,
+#tab-nucleos .panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+#tab-gpu .panel-head,
+#tab-nucleos .panel-head {
+  padding: 0;
+  margin-bottom: var(--s4);
+  border-bottom: 0;
+}
+
+#tab-gpu .panel h2,
+#tab-nucleos .panel h2 {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+#tab-gpu .gpu-colunas {
+  gap: var(--s9);
+}
+
+/* A largura das paginas de ajuste. Uma lista de configuracoes com 1600px
+   de largura obriga o olho a atravessar a tela inteira entre o nome e o
+   interruptor — e ai ninguem sabe mais qual interruptor e de qual nome. */
+#tab-gpu .gpu-coluna,
+#tab-nucleos .panel {
+  max-width: 1000px;
+}
+
+/* ------------------------------------------------------ cartao de perfil
+
+   Escolha unica, entao o cartao inteiro e a area de clique. Um quadrado
+   de 14px como unico alvo e o tipo de coisa que faz a pessoa clicar tres
+   vezes achando que o programa travou. */
+.gpu-perfil {
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-out,
+    background-color 150ms ease-out;
+}
+
+.gpu-perfil:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.gpu-perfil[data-inteiro="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+
+.gpu-perfil-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.gpu-perfil-resumo {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.gpu-perfil-conta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* --------------------------------------------------- abas de fabricante */
+
+.gpu-marcas {
+  border-bottom: 1px solid var(--border);
+}
+
+.gpu-marca {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  transition: color 150ms ease-out;
+}
+
+.gpu-marca:hover:not(:disabled) {
+  color: var(--text-secondary);
+}
+
+.gpu-marca[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent-base);
+}
+
+/* ---------------------------------------------------- cartao da placa */
+
+.gpu-cartao {
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.gpu-cartao-nome {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.gpu-cartao-nota {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------------------------------ matriz de nucleos
+
+   Quadrado menor e mais folga: a matriz de 32 nucleos de um processador
+   moderno precisa caber numa fileira ou duas sem virar um tabuleiro. */
+.nucleos-matriz {
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: var(--s2);
+  margin: 0 0 var(--s4);
+}
+
+.nucleo {
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.nucleo[data-classe="Desempenho"] {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.nucleo[data-no-jogo="true"] {
+  border-color: var(--accent-base);
+  box-shadow: inset 0 0 0 1px var(--accent-base);
+  color: var(--text);
+}
+
+.nucleos-legenda {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------------------- o painel de alavancas
+
+   Os ajustes do driver viram linhas de configuracao, como os do Windows:
+   e a mesma coisa — um nome, o que ele faz, e um controle. Duas formas
+   diferentes para a mesma ideia sao duas coisas para o cliente aprender. */
+#nvdriver-lista .gpupref-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s5);
+  min-height: 76px;
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#nvdriver-lista .gpupref-linha:last-child {
+  border-bottom: 0;
+}
+
+#nvdriver-lista .gpupref-nome {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+#nvdriver-lista .gpupref-estado {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* A MONOESPACADA SAI DOS NOMES DE AJUSTE.
+
+   Ela veio de quando esta lista mostrava caminho de executavel, onde
+   monoespacada e a escolha certa — caminho tem barra, ponto e underline, e
+   a largura fixa e o que deixa os dois lados alinhados. Mas o que esta ali
+   agora e uma FRASE em portugues, e frase em monoespacada le pior e ainda
+   parece saida de terminal no meio de uma tela de produto. */
+#nvdriver-lista .gpupref-nome {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  overflow-wrap: normal;
+}
+
+/* ----------------------------------------------------- aviso de "em breve"
+
+   Uma faixa, e não um cartão de erro: a aba FUNCIONA, só não inteira. Cor de
+   alerta aqui diria "algo quebrou", que é diferente de "isto ainda não
+   chegou" — e a diferença importa para quem está decidindo se confia no
+   programa. Então a faixa usa a mesma superfície do resto da tela, e quem
+   carrega o recado é o selo. */
+.aviso-breve {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  max-width: 1000px;
+  padding: var(--s4) var(--s5);
+  margin: 0 0 var(--s5);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.aviso-breve-selo {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.aviso-breve-texto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.aviso-breve-texto strong {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Em tela estreita o selo sobe para a própria linha: espremido ao lado de um
+   parágrafo de seis linhas ele vira uma coluna de uma letra. */
+@media (max-width: 720px) {
+  .aviso-breve {
+    flex-direction: column;
+    gap: var(--s3);
+  }
+}
+
+/* ------------------------------------------------------- só para o leitor
+
+   A classe era USADA em dois lugares do HTML e não existia em lugar nenhum
+   do CSS — então os dois rótulos, que só deviam existir para quem navega por
+   leitor de tela, apareciam desenhados ao lado do próprio campo que
+   descrevem. "Buscar jogo" impresso à esquerda de uma caixa cujo texto de
+   apoio já diz "Buscar jogo".
+
+   Apagar os `<span>` seria o conserto errado: o campo ficaria sem nome para
+   quem não enxerga o desenho. O conserto é a regra que faltava.
+
+   E ela não usa `display: none` nem `visibility: hidden` — os dois tiram o
+   elemento da árvore de acessibilidade, que é exatamente a árvore para a
+   qual ele existe. O recorte de um pixel some da tela e continua sendo
+   lido. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

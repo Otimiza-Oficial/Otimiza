@@ -243,9 +243,9 @@ async function aplicar(j: Jogo, i: number, orc: Orcamento) {
   saida.textContent = "Aplicando…";
   try {
     const m = await invoke<Mudanca[]>("unreal_aplicar", { executavel: j.executavel, nome: j.nome, orcamento: orc });
-    if (m.length) setTimeout(() => void carregar(), 2500);
+    if (m.length) void seusJogos(true);
     saida.textContent = m.length
-      ? `Pronto: ${m.length} opção(ões) ajustada(s). Jogue uma partida e meça no Mapa de desempenho (Painel) para ver a diferença. Para voltar como era, use Desfazer neste cartão.`
+      ? `Pronto: ${m.length} opção(ões) ajustada(s). Jogue algumas partidas: o Otimiza compara antes e depois e desfaz sozinho se o jogo piorar. Para voltar agora, use Desfazer nesta ficha.`
       : "Nada precisou mudar.";
   } catch (e) {
     const msg = String(e);
@@ -254,53 +254,78 @@ async function aplicar(j: Jogo, i: number, orc: Orcamento) {
   }
 }
 
-async function carregar() {
-  if (!raiz) return;
-  raiz.innerHTML = `<p class="fg-nota">Procurando os jogos desta máquina…</p>`;
+/*
+ * INTEGRAÇÃO COM A GRADE DA 2.8
+ *
+ * A aba Biblioteca (grade com capas, `main.ts`) é a tela dos jogos. Este
+ * arquivo alimenta a FICHA de cada jogo com o que a 2.9 acrescentou: o ajuste
+ * gráfico por orçamento de imagem (Unreal), a vigília "nunca menos FPS", a
+ * deriva e a última partida medida — e o "Verificar antes de jogar", no topo
+ * da aba.
+ */
+
+let cache: Promise<Biblioteca> | null = null;
+
+function seusJogos(recarregar = false): Promise<Biblioteca> {
+  if (!cache || recarregar) cache = invoke<Biblioteca>("seus_jogos");
+  return cache;
+}
+
+function mesmoCaminho(a: string | null | undefined, b: string | null | undefined): boolean {
+  return !!a && !!b && a.replace(/\//g, "\\").toLowerCase() === b.replace(/\//g, "\\").toLowerCase();
+}
+
+/** O jogo da ficha, na lista da 2.9 (pelo executável; senão pela pasta). */
+function acharNaLista(lista: Jogo[], executavel: string | null, pasta: string | null): number {
+  let i = lista.findIndex((j) => mesmoCaminho(j.executavel, executavel));
+  if (i < 0) i = lista.findIndex((j) => mesmoCaminho(j.pasta, pasta));
+  return i;
+}
+
+/** Preenche a parte 2.9 da ficha de um jogo. */
+export async function preencherFichaDoJogo(
+  alvo: HTMLElement,
+  jogo: { executavel: string | null; pasta: string | null },
+  opcoes: { pedirAdmin: (motivo: string) => void },
+) {
+  pedirAdmin = opcoes.pedirAdmin;
+  raiz = alvo;
+  alvo.innerHTML = `<p class="fg-nota">Lendo o que o Otimiza sabe deste jogo…</p>`;
   try {
-    const b = await invoke<Biblioteca>("biblioteca_de_jogos");
-    const lacunas = [...b.lacunas, ...(b.medicoes_erro ? [b.medicoes_erro] : [])];
-    raiz.innerHTML = `
-      <div class="fg-painel">
-        <div class="fg-linha"><button class="btn btn-primary" id="bib-pronto">Verificar antes de jogar</button></div>
-        <div id="bib-pronto-resultado"></div>
-        ${b.jogos.length ? b.jogos.map(linhaDoJogo).join("") : `<p class="fg-aviso">Nenhum jogo encontrado ainda. Abra qualquer jogo por alguns minutos: o Otimiza reconhece pelo que ele faz na tela e na placa de vídeo, e ele passa a aparecer aqui.</p>`}
-        ${lacunas.length ? `<p class="fg-nota">Não deu para ler: ${lacunas.map(esc).join("; ")}</p>` : ""}
-        <p class="fg-nota">
-          Qualquer jogo que você abrir entra nesta lista sozinho, mesmo fora das lojas conhecidas.
-        </p>
-      </div>`;
-    const pronto = raiz.querySelector<HTMLElement>("#bib-pronto-resultado");
-    raiz.querySelector("#bib-pronto")?.addEventListener("click", () => pronto && void verificarProntidao(pronto));
-    raiz.querySelectorAll<HTMLButtonElement>("[data-desfazer]").forEach((btn) =>
-      btn.addEventListener("click", async () => {
-        const j = b.jogos[Number(btn.dataset.desfazer)];
-        if (!j.ajuste_aplicado) return;
-        btn.disabled = true;
-        try {
-          await invoke("revert_optimization", { id: j.ajuste_aplicado });
-          await carregar();
-        } catch (e) {
-          btn.disabled = false;
-          btn.textContent = String(e);
-        }
-      }),
-    );
-    raiz.querySelectorAll<HTMLButtonElement>("[data-orcamento][data-jogo]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const i = Number(btn.dataset.jogo);
-        void prever(b.jogos[i], i, btn.dataset.orcamento as Orcamento);
-      }),
+    const lista = await seusJogos();
+    const i = acharNaLista(lista.jogos, jogo.executavel, jogo.pasta);
+    if (i < 0) {
+      alvo.innerHTML = "";
+      return;
+    }
+    alvo.innerHTML = linhaDoJogo(lista.jogos[i], i);
+    alvo.querySelector<HTMLButtonElement>("[data-desfazer]")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const id = lista.jogos[i].ajuste_aplicado;
+      if (!id) return;
+      btn.disabled = true;
+      try {
+        await invoke("revert_optimization", { id });
+        await seusJogos(true);
+        void preencherFichaDoJogo(alvo, jogo, opcoes);
+      } catch (erro) {
+        btn.disabled = false;
+        btn.textContent = String(erro);
+      }
+    });
+    alvo.querySelectorAll<HTMLButtonElement>("[data-orcamento][data-jogo]").forEach((btn) =>
+      btn.addEventListener("click", () => void prever(lista.jogos[i], i, btn.dataset.orcamento as Orcamento)),
     );
   } catch (e) {
-    raiz.innerHTML = `<p class="fg-erro">${esc(String(e))}</p>`;
+    alvo.innerHTML = `<p class="fg-erro">${esc(String(e))}</p>`;
   }
 }
 
-export function carregarBiblioteca(opcoes: { pedirAdmin: (motivo: string) => void }) {
-  if (raiz) return;
-  raiz = document.getElementById("biblioteca-jogos");
-  if (!raiz) return;
-  pedirAdmin = opcoes.pedirAdmin;
-  void carregar();
+/** O "Verificar antes de jogar", no topo da aba Biblioteca. */
+export function ligarProntidao() {
+  const botao = document.getElementById("pronto-jogar");
+  const saida = document.getElementById("pronto-jogar-resultado");
+  if (!botao || !saida || botao.dataset.ligado) return;
+  botao.dataset.ligado = "1";
+  botao.addEventListener("click", () => void verificarProntidao(saida));
 }
