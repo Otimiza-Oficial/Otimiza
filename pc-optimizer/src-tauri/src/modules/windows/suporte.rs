@@ -249,7 +249,10 @@ fn resumir_termico(relatorio: &thermal::ThermalReport) -> (String, Vec<String>) 
         thermal::Culprit::NaoIdentificado => "limitado (causa não identificada)",
     };
 
-    (resumo.to_string(), Vec::new())
+    // O limite foi medido, mas o registro térmico do Windows não: o "sem
+    // limite" continua valendo para agora, e o histórico vira lacuna.
+    let lacunas = if relatorio.eventos_lidos { Vec::new() } else { vec!["eventos térmicos do Windows".to_string()] };
+    (resumo.to_string(), lacunas)
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -666,6 +669,7 @@ mod tests {
             thermal_events: 0,
             last_thermal_event: None,
             medido: false,
+            eventos_lidos: true,
         };
 
         let (resumo, lacunas) = resumir_termico(&relatorio);

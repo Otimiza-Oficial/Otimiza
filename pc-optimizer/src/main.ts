@@ -2953,6 +2953,8 @@ interface BootReport {
   culprits: BootCulprit[];
   recent_types: [string, BootType][];
   note: string;
+  /** `false` = a lista dos que atrasam não pôde ser lida (não é "nenhum"). */
+  culpados_lidos?: boolean;
 }
 
 const BOOT_TYPE_LABELS: Record<BootType, string> = {
@@ -3016,6 +3018,12 @@ function renderBootReport(report: BootReport) {
     text("boot-tag", report.needs_admin ? "precisa de administrador" : "sem medição");
   }
 
+  if (!report.needs_admin && report.culpados_lidos === false) {
+    partes.push(
+      `<p class="hint">Não deu para ler quais programas atrasam a inicialização — o registro de desempenho do Windows não respondeu. Isso não quer dizer que nenhum atrasa.</p>`
+    );
+  }
+
   if (report.culprits.length > 0) {
     partes.push(`<h3 class="sub">O que mais atrasou</h3>`);
     partes.push(
@@ -3076,6 +3084,10 @@ interface ThermalReport {
   on_battery: boolean;
   thermal_events: number;
   last_thermal_event: string | null;
+  /** O contador de limite do processador foi lido de verdade. */
+  medido?: boolean;
+  /** O registro térmico do Windows foi lido (com ou sem eventos). */
+  eventos_lidos?: boolean;
 }
 
 async function analyzeThermal() {
@@ -3126,12 +3138,20 @@ function renderThermalReport(report: ThermalReport) {
     </article>
   `;
 
+  // "Nada está segurando" só com as duas leituras feitas. Leitura que falhou
+  // não vira verde (até a 2.7 virava).
+  const naoLido = report.medido === false || report.eventos_lidos === false;
+  const livre = report.culprit === "Nenhum";
   setStatus(
     "thermal-status",
-    report.culprit === "Nenhum"
-      ? "Nada está segurando o processador."
-      : report.summary,
-    report.culprit === "Nenhum" || report.culprit === "Bateria" ? "ok" : "error"
+    livre && report.medido === false
+      ? "Não deu para medir se o processador está sendo limitado agora."
+      : livre
+        ? report.eventos_lidos === false
+          ? "Nenhum limite ativo agora — mas o registro térmico do Windows não pôde ser lido, então o histórico de calor ficou sem conferir."
+          : "Nada está segurando o processador."
+        : report.summary,
+    livre && naoLido ? "warn" : livre || report.culprit === "Bateria" ? "ok" : "error"
   );
 }
 
