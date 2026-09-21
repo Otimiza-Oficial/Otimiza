@@ -187,6 +187,7 @@ mod testes {
             segundos: 30.0,
             confiavel: true,
             mudancas_aplicadas: 0,
+            ambiente: None,
         }
     }
 

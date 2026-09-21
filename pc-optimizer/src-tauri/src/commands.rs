@@ -1372,6 +1372,9 @@ pub struct JogoNaBiblioteca {
     pub em_observacao: bool,
     /// O último veredito do portão para o ajuste deste jogo.
     pub decidido: Option<crate::modules::portao::Decidido>,
+    /// O desempenho deste jogo caiu com o tempo (driver, Windows, ou sem
+    /// culpado aparente).
+    pub deriva: Option<crate::modules::deriva::Deriva>,
 }
 
 /// Id do ajuste Unreal de um jogo no histórico.
@@ -1406,6 +1409,7 @@ pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<Bibliotec
         use crate::modules::windows::{jogos, unreal};
         let b = jogos::varrer();
         let portao = crate::modules::portao::ler();
+        let derivas = medicoes_para_deriva();
         let (medicoes, medicoes_erro) = match crate::modules::medicoes::ler() {
             Ok(m) => (m, None),
             Err(e) => (Vec::new(), Some(e)),
@@ -1447,6 +1451,9 @@ pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<Bibliotec
                     nivel: if ajustador.is_some() { 'A' } else { 'C' },
                     ajustador,
                     ultima_medicao,
+                    deriva: nome_exe.as_ref().and_then(|n| {
+                        derivas.iter().find(|d| d.jogo.to_lowercase().starts_with(n.as_str())).cloned()
+                    }),
                     em_observacao: portao.vigiados.iter().any(|v| v.id == id_ajuste),
                     decidido: portao.decididos.iter().rev().find(|d| d.vigiado.id == id_ajuste).cloned(),
                     ajuste_aplicado: aplicados.contains(&id_ajuste).then_some(id_ajuste),
@@ -1467,6 +1474,12 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
+fn medicoes_para_deriva() -> Vec<crate::modules::deriva::Deriva> {
+    crate::modules::medicoes::ler()
+        .map(|m| crate::modules::deriva::procurar(&m))
+        .unwrap_or_default()
+}
+
 fn vram_gb() -> Option<f64> {
     crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
 }

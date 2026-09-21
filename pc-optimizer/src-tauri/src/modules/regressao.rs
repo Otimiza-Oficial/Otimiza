@@ -285,6 +285,7 @@ mod tests {
             segundos: 20.0,
             confiavel: true,
             mudancas_aplicadas: aplicadas,
+            ambiente: None,
         }
     }
 

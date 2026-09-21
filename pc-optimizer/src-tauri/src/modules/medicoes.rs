@@ -40,6 +40,10 @@ pub struct MedicaoAutomatica {
     pub confiavel: bool,
     /// Quantas mudanças do Otimiza estavam aplicadas quando a medição foi feita.
     pub mudancas_aplicadas: usize,
+    /// Driver de vídeo e Windows daquele momento (2.9), para a deriva saber
+    /// o que mudou entre uma partida e outra. `None` em medição antiga.
+    #[serde(default)]
+    pub ambiente: Option<crate::modules::deriva::Ambiente>,
 }
 
 /// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
@@ -194,6 +198,7 @@ mod tests {
             segundos: 20.0,
             confiavel: true,
             mudancas_aplicadas: 4,
+            ambiente: None,
         }
     }
 

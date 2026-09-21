@@ -186,6 +186,45 @@ pub fn placas() -> Vec<Placa> {
     v
 }
 
+/// Versão do driver de vídeo da placa principal, pelo DXGI
+/// (`IDXGIAdapter::CheckInterfaceSupport` devolve a versão do driver de modo
+/// usuário em quatro partes de 16 bits). Sem PowerShell.
+#[cfg(windows)]
+pub fn versao_do_driver() -> Option<String> {
+    use windows::core::Interface;
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
+    let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
+    let mut melhor: Option<(u64, String)> = None;
+    let mut i = 0;
+    while let Ok(a) = unsafe { fabrica.EnumAdapters1(i) } {
+        i += 1;
+        let Ok(d) = (unsafe { a.GetDesc1() }) else { continue };
+        if d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+            continue;
+        }
+        let Ok(v) = (unsafe { a.CheckInterfaceSupport(&IDXGIDevice::IID) }) else { continue };
+        let v = v as u64;
+        let texto = format!("{}.{}.{}.{}", v >> 48, (v >> 32) & 0xFFFF, (v >> 16) & 0xFFFF, v & 0xFFFF);
+        if melhor.as_ref().is_none_or(|(mem, _)| d.DedicatedVideoMemory as u64 > *mem) {
+            melhor = Some((d.DedicatedVideoMemory as u64, texto));
+        }
+    }
+    melhor.map(|(_, t)| t)
+}
+
+/// Build do Windows com a revisão ("19045.4046"), do registro.
+#[cfg(windows)]
+pub fn build_do_windows() -> Option<String> {
+    use crate::modules::changelog::PreviousValue;
+    use crate::modules::windows::registry;
+    const CHAVE: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+    let build = registry::read_text("HKLM", CHAVE, "CurrentBuildNumber").ok().flatten()?;
+    Some(match registry::read("HKLM", CHAVE, "UBR") {
+        Ok(PreviousValue::Dword(ubr)) => format!("{}.{}", build, ubr),
+        _ => build,
+    })
+}
+
 // ------------------------------------------------------------ o coletor
 
 #[cfg(windows)]
@@ -388,6 +427,7 @@ mod testes {
         std::thread::sleep(std::time::Duration::from_millis(600));
         let a = c.amostra();
         println!("{:?}\n{:#?}", c.placa(), a);
+        println!("driver {:?} · windows {:?}", versao_do_driver(), build_do_windows());
         assert!(a.cpu_total_pct.is_some());
     }
 }

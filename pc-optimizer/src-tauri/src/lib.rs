@@ -530,6 +530,10 @@ pub fn run() {
                                     segundos: m.seconds,
                                     confiavel: m.detalhe_confiavel,
                                     mudancas_aplicadas,
+                                    ambiente: Some(modules::deriva::Ambiente {
+                                        driver: core::telemetria::versao_do_driver(),
+                                        windows: core::telemetria::build_do_windows(),
+                                    }),
                                 };
 
                                 match medicoes::registrar(registro) {

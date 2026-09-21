@@ -33,7 +33,30 @@ type Jogo = {
   ajuste_aplicado: string | null;
   em_observacao: boolean;
   decidido: Decidido | null;
+  deriva: Deriva | null;
 };
+
+type Deriva = {
+  mudou: { tipo: "Driver"; de: string; para: string } | { tipo: "Windows"; de: string; para: string } | { tipo: "Nada" };
+  fps_antes: number;
+  fps_depois: number;
+  queda_pct: number;
+  partidas_antes: number;
+  partidas_depois: number;
+};
+
+function linhaDaDeriva(j: Jogo): string {
+  const d = j.deriva;
+  if (!d) return "";
+  const numeros = `${Math.round(d.fps_antes)} → ${Math.round(d.fps_depois)} FPS (−${Math.round(d.queda_pct)}%, ${d.partidas_antes} partidas antes e ${d.partidas_depois} depois)`;
+  const causa =
+    d.mudou.tipo === "Driver"
+      ? `depois que o driver de vídeo mudou de ${esc(d.mudou.de)} para ${esc(d.mudou.para)}. Vale testar o driver anterior ou esperar a próxima versão.`
+      : d.mudou.tipo === "Windows"
+        ? `depois que o Windows atualizou (${esc(d.mudou.de)} → ${esc(d.mudou.para)}). Confira no Mapa de desempenho o que está limitando agora.`
+        : "sem mudança de driver nem de Windows. Poeira e temperatura, um programa novo rodando junto ou uma atualização do jogo são os suspeitos — meça no Mapa de desempenho.";
+  return `<p class="fg-aviso"><strong>O desempenho caiu:</strong> ${numeros}, ${causa}</p>`;
+}
 
 type Decidido = {
   veredito: "Desfazer" | "Melhorou" | "SemMudanca" | { Aguardando: { antes: number; depois: number } };
@@ -146,6 +169,7 @@ function linhaDoJogo(j: Jogo, i: number): string {
       <div class="fg-linha">${med}</div>
       ${acao}
       ${linhaDoPortao(j)}
+      ${linhaDaDeriva(j)}
     </article>`;
 }
 

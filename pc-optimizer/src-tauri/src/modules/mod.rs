@@ -13,6 +13,7 @@ pub mod atualizacao;
 pub mod benchmark;
 pub mod changelog;
 pub mod convite;
+pub mod deriva;
 pub mod jitter;
 pub mod licenca;
 pub mod maquina;
