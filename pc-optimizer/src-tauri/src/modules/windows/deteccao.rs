@@ -322,7 +322,14 @@ pub fn procurar() -> Option<JogoDetectado> {
         segundos_aberto: segundos,
     };
 
-    decidir(&observacao)
+    let detectado = decidir(&observacao)?;
+
+    // Todo jogo visto rodando entra na biblioteca (2.9). Nenhum jogo fica de
+    // fora por não estar numa loja que o produto sabe ler.
+    if let Some(caminho) = &detectado.caminho {
+        super::jogos::registrar_visto(&detectado.nome, caminho);
+    }
+    Some(detectado)
 }
 
 /// Quanto tempo um "não é jogo" continua valendo para o mesmo processo.
