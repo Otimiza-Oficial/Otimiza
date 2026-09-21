@@ -331,6 +331,34 @@ mod testes {
     }
 
     #[test]
+    #[ignore = "mexe na prioridade de processos reais desta máquina e devolve"]
+    fn acalma_e_devolve_um_processo_real() {
+        use windows_sys::Win32::System::Threading::{GetPriorityClass, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+        let prioridade = |pid: u32| unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            let p = GetPriorityClass(h);
+            windows_sys::Win32::Foundation::CloseHandle(h);
+            p
+        };
+        let mut filho = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", "while ($true) { $x = 1 }"])
+            .spawn()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let pid = filho.id();
+        assert_eq!(prioridade(pid), 0x20, "começa em normal");
+        let mut g = Governador::default();
+        let novos = g.passada(0);
+        println!("acalmados: {:?}", novos);
+        assert!(g.acalmados().iter().any(|a| a.pid == pid), "o processo que queima CPU tinha que ser acalmado");
+        assert_eq!(prioridade(pid), 0x4000, "abaixo do normal");
+        let devolvidos = g.devolver_tudo();
+        assert!(devolvidos >= 1);
+        assert_eq!(prioridade(pid), 0x20, "voltou ao normal");
+        let _ = filho.kill();
+    }
+
+    #[test]
     fn protegidos_por_nome() {
         for n in ["Discord.exe", "obs64.exe", "audiodg.exe", "EasyAntiCheat.exe", "BEService.exe", "explorer.exe", "svchost.exe"] {
             assert!(protegido(n), "{}", n);
