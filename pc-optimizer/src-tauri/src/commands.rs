@@ -1343,6 +1343,74 @@ pub async fn energia_medir_atual(
     .map_err(|e| format!("Falha ao medir: {}", e))?
 }
 
+
+// ============================================================ diagnóstico ao vivo (2.9)
+
+/// O que está limitando o PC AGORA: telemetria do Windows amostrada a cada
+/// meio segundo e, se houver jogo aberto, os quadros dele medidos no mesmo
+/// intervalo. O classificador (`core::gargalo`) aponta todos os gargalos que
+/// se sustentaram na janela, cada um com a evidência numérica.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiagnosticoAoVivo {
+    pub placa: Option<crate::core::telemetria::Placa>,
+    pub jogo: Option<String>,
+    pub amostras: Vec<crate::core::telemetria::Amostra>,
+    pub saude: Option<crate::core::fluidez::SaudeDosQuadros>,
+    /// Por que não há `saude`, quando havia jogo e a medição falhou.
+    pub quadros_erro: Option<String>,
+    pub gargalos: Vec<crate::core::gargalo::Achado>,
+}
+
+#[tauri::command]
+pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, String> {
+    let segundos = segundos.clamp(5, 60);
+    tokio::task::spawn_blocking(move || {
+        use crate::core::{gargalo, telemetria};
+
+        let coletor = telemetria::Coletor::novo()
+            .ok_or("Os contadores de desempenho do Windows não abriram nesta máquina.")?;
+        let jogo = crate::modules::windows::gamemode::jogo_aberto_com_pid();
+
+        // Os quadros são medidos numa thread ao lado, pelo mesmo tempo.
+        let medicao = jogo.clone().map(|(nome, pid)| {
+            std::thread::spawn(move || crate::modules::windows::frames::medir(pid, &nome, segundos))
+        });
+
+        let mut amostras = Vec::new();
+        let fim = std::time::Instant::now() + std::time::Duration::from_secs(segundos);
+        while std::time::Instant::now() < fim {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            amostras.push(coletor.amostra());
+        }
+
+        let (saude, quadros_erro) = match medicao.map(|h| h.join()) {
+            None => (None, None),
+            Some(Ok(Ok(m))) => (m.saude, None),
+            Some(Ok(Err(e))) => (None, Some(e)),
+            Some(Err(_)) => (None, Some("A medição de quadros parou no meio.".to_string())),
+        };
+
+        let ctx = gargalo::Contexto {
+            vram_total_mb: coletor.placa().map(|p| p.vram_total_mb),
+            quadros: saude.as_ref().map(|s| gargalo::QuadrosDaJanela {
+                fps_medio: s.fps_medio,
+                frametime_cv: s.frametime_cv.unwrap_or(1.0),
+            }),
+        };
+        let gargalos = gargalo::classificar(&amostras, &ctx);
+
+        Ok(DiagnosticoAoVivo {
+            placa: coletor.placa().cloned(),
+            jogo: jogo.map(|(n, _)| n),
+            amostras,
+            saude,
+            quadros_erro,
+            gargalos,
+        })
+    })
+    .await
+    .map_err(|e| format!("Falha no diagnóstico: {}", e))?
+}
 /// Comando: os vizinhos do vencedor, já como candidatos desta máquina. `LIVRES`.
 #[tauri::command]
 pub async fn energia_vizinhos(
@@ -3712,6 +3780,18 @@ pub async fn relatorio_de_compatibilidade() -> Result<String, String> {
 /// Com este teste, comando novo sem classificação REPROVA O BUILD.
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[ignore = "mede esta máquina por 6 s"]
+    fn diagnostico_ao_vivo_nesta_maquina() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let d = rt.block_on(super::diagnostico_ao_vivo(6)).expect("diagnóstico");
+        println!("placa {:?} jogo {:?} erro {:?}", d.placa, d.jogo, d.quadros_erro);
+        println!("saude {:#?}", d.saude);
+        println!("gargalos {:#?}", d.gargalos);
+        println!("{}", serde_json::to_string(&d).unwrap().len());
+        assert!(d.amostras.len() >= 10);
+    }
+
     /// Rodam sem licença: leitura, medição, e o desfazer.
     ///
     /// O desfazer está aqui de propósito. Se a licença vencer, o cliente
@@ -3810,6 +3890,7 @@ mod tests {
         "gerador_estado",
         "energia_painel",
         "energia_vizinhos",
+        "diagnostico_ao_vivo",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",

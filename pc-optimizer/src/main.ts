@@ -6,6 +6,7 @@ import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
+import { carregarMapaDeDesempenho } from "./mapa";
 
 // ---------------------------------------------------------------- contratos
 
@@ -926,6 +927,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await montarPortao();
 
   ligarBarraDaJanela();
+  carregarMapaDeDesempenho();
 
   // A DO PAINEL GIRA; AS DUAS GRANDES NÃO.
   //

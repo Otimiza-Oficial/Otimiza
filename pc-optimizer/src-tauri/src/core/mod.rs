@@ -8,6 +8,10 @@
 pub mod confiabilidade;
 pub mod estatistica;
 pub mod fluidez;
+pub mod gargalo;
+#[cfg(windows)]
+pub mod pdh;
 pub mod platform;
+pub mod telemetria;
 
 pub use platform::PlatformDetector;
