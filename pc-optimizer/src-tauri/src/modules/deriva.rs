@@ -6,8 +6,9 @@
 //
 // Cada medição automática passa a carregar a versão do driver de vídeo e do
 // Windows daquele momento. Este módulo procura, por jogo, a última vez em que
-// um dos dois mudou, e compara as partidas de antes e de depois com o motor
-// comum (`core::estatistica`): piora além do ruído e de pelo menos 5% vira
+// um dos dois mudou, e compara as partidas de antes e de depois com a regra
+// comum do produto (`modules::repeticoes`: intervalos de 95% que não se
+// tocam): piora com os intervalos separados e de pelo menos 5% vira
 // "desempenho caiu depois de X", com os números dos dois lados.
 //
 // Sem mudança de driver ou de Windows, compara as 3 partidas mais recentes
@@ -19,7 +20,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::core::estatistica::{comparar, Conclusao};
+use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
 
 /// O ambiente em que uma medição foi feita.
@@ -54,11 +55,12 @@ const MAXIMO: usize = 8;
 const QUEDA_MINIMA_PCT: f64 = 5.0;
 
 fn queda(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Option<(f64, f64, f64)> {
-    let a: Vec<f64> = antes.iter().map(|m| m.fps).collect();
-    let d: Vec<f64> = depois.iter().map(|m| m.fps).collect();
-    let c = comparar(&a, &d, true)?;
-    (c.conclusao == Conclusao::PioraMedida && -c.diferenca_pct >= QUEDA_MINIMA_PCT)
-        .then_some((c.media_base, c.media_candidato, -c.diferenca_pct))
+    let a = resumir("fps.average", &antes.iter().map(|m| m.fps).collect::<Vec<_>>())?;
+    let d = resumir("fps.average", &depois.iter().map(|m| m.fps).collect::<Vec<_>>())?;
+    match comparar(&a, &d) {
+        Diferenca::Real { delta, pct: Some(p), .. } if delta < 0.0 && -p >= QUEDA_MINIMA_PCT => Some((a.media, d.media, -p)),
+        _ => None,
+    }
 }
 
 /// Procura deriva num jogo (medições já filtradas para ele, qualquer ordem).

@@ -8,9 +8,10 @@
 //   1. no momento em que é aplicado, o jogo entra na vigília;
 //   2. as medições automáticas das partidas (`medicoes.rs`) se acumulam de
 //      um lado (antes) e do outro (depois);
-//   3. com pelo menos 3 de cada lado, o motor comum (`core::estatistica`)
-//      compara FPS médio e 1% low;
-//   4. se algum PIOROU além do ruído E em pelo menos 5%, o ajuste é desfeito
+//   3. com pelo menos 3 de cada lado, a regra comum do produto
+//      (`modules::repeticoes`: intervalos de 95% que não se tocam) compara
+//      FPS médio e 1% low;
+//   4. se algum PIOROU com os intervalos separados E em pelo menos 5%, o ajuste é desfeito
 //      sozinho, e a pessoa é avisada com os números;
 //   5. se melhorou, ou ficou igual, a vigília termina e o resultado fica
 //      guardado para a tela.
@@ -23,7 +24,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::core::estatistica::{comparar, Comparacao, Conclusao};
+use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
 
 /// Medições de cada lado para decidir.
@@ -56,11 +57,24 @@ pub enum Veredito {
     SemMudanca,
 }
 
+/// As médias dos dois lados de uma métrica, e o que a regra concluiu.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Lados {
+    pub media_base: f64,
+    pub media_candidato: f64,
+    pub diferenca: Diferenca,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Avaliacao {
     pub veredito: Veredito,
-    pub fps: Option<Comparacao>,
-    pub low_1pct: Option<Comparacao>,
+    pub fps: Option<Lados>,
+    pub low_1pct: Option<Lados>,
+}
+
+fn lados(id: &str, antes: &[f64], depois: &[f64]) -> Option<Lados> {
+    let (a, d) = (resumir(id, antes)?, resumir(id, depois)?);
+    Some(Lados { media_base: a.media, media_candidato: d.media, diferenca: comparar(&a, &d) })
 }
 
 fn e_do_jogo(m: &MedicaoAutomatica, processo: &str) -> bool {
@@ -82,20 +96,21 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
         return Avaliacao { veredito: Veredito::Aguardando { antes: antes.len(), depois: depois.len() }, fps: None, low_1pct: None };
     }
 
-    let fps = comparar(
+    let fps = lados(
+        "fps.average",
         &antes.iter().map(|m| m.fps).collect::<Vec<_>>(),
         &depois.iter().map(|m| m.fps).collect::<Vec<_>>(),
-        true,
     );
     // 1% low só das medições com amostra suficiente para ele valer.
     let a1: Vec<f64> = antes.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).collect();
     let d1: Vec<f64> = depois.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).collect();
-    let low = comparar(&a1, &d1, true);
+    let low = lados("fps.low_1pct", &a1, &d1);
 
-    let piorou = |c: &Option<Comparacao>| {
-        c.as_ref().is_some_and(|c| c.conclusao == Conclusao::PioraMedida && -c.diferenca_pct >= PIORA_MINIMA_PCT)
+    // FPS e 1% low: maior é melhor nos dois.
+    let piorou = |c: &Option<Lados>| {
+        c.as_ref().is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, pct: Some(p), .. } if delta < 0.0 && -p >= PIORA_MINIMA_PCT))
     };
-    let melhorou = |c: &Option<Comparacao>| c.as_ref().is_some_and(|c| c.conclusao == Conclusao::MelhoraMedida);
+    let melhorou = |c: &Option<Lados>| c.as_ref().is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, .. } if delta > 0.0));
 
     let veredito = if piorou(&fps) || piorou(&low) {
         Veredito::Desfazer
