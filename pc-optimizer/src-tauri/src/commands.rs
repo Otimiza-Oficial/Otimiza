@@ -2396,16 +2396,28 @@ pub struct DiagnosticoAoVivo {
     pub saude: Option<crate::core::fluidez::SaudeDosQuadros>,
     /// Por que não há `saude`, quando havia jogo e a medição falhou.
     pub quadros_erro: Option<String>,
-    pub gargalos: Vec<crate::core::gargalo::Achado>,
+    /// O veredito do MESMO classificador do painel ao vivo
+    /// (`modules::gargalo`), sobre a janela inteira.
+    pub gargalo: crate::modules::gargalo::Diagnostico,
     /// Cada travada da partida com o que coincidiu com ela (detetive).
     pub travadas: Option<crate::core::travadas::Investigacao>,
 }
 
 #[tauri::command]
-pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, String> {
+pub async fn diagnostico_ao_vivo(segundos: u64, state: State<'_, AppState>) -> Result<DiagnosticoAoVivo, String> {
     let segundos = segundos.clamp(5, 60);
-    tokio::task::spawn_blocking(move || {
-        use crate::core::{gargalo, telemetria};
+    // O piso de memória compartilhada que o monitor aprendeu em repouso: sem
+    // ele o transbordo de VRAM não é distinguível do normal da placa.
+    let piso = state.monitor.lock().await.piso_de_vram();
+    tokio::task::spawn_blocking(move || diagnostico_na_janela(segundos, piso))
+        .await
+        .map_err(|e| format!("Falha no diagnóstico: {}", e))?
+}
+
+/// A medição do Mapa, fora do comando (para o teste ao vivo chamar direto).
+pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) -> Result<DiagnosticoAoVivo, String> {
+    {
+        use crate::core::telemetria;
 
         let mut coletor = telemetria::Coletor::novo()
             .ok_or("Os contadores de desempenho do Windows não abriram nesta máquina.")?;
@@ -2436,14 +2448,16 @@ pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, Str
         let travadas = (!intervalos.is_empty())
             .then(|| crate::core::travadas::investigar(&intervalos, &amostras, inicio_dos_quadros, vram_total));
 
-        let ctx = gargalo::Contexto {
-            vram_total_mb: coletor.placa().map(|p| p.vram_total_mb),
-            quadros: saude.as_ref().map(|s| gargalo::QuadrosDaJanela {
-                fps_medio: s.fps_medio,
-                frametime_cv: s.frametime_cv.unwrap_or(1.0),
-            }),
+        let ram_total_mb = {
+            let mut s = sysinfo::System::new();
+            s.refresh_memory();
+            Some(s.total_memory() as f64 / 1_048_576.0)
         };
-        let gargalos = gargalo::classificar(&amostras, &ctx);
+        let hz = crate::modules::windows::display::monitores().iter().find(|m| m.principal).map(|m| m.hz_atual);
+        let agora = crate::modules::changelog::now_timestamp();
+        let t = crate::core::janela::para_telemetria(&amostras, ram_total_mb, vram_total, saude.as_ref(), travadas.as_ref(), hz, agora);
+        let gargalo = crate::modules::gargalo::classificar_com(&t, &crate::modules::vram::avaliar(&t, &piso));
+
 
         Ok(DiagnosticoAoVivo {
             placa: coletor.placa().cloned(),
@@ -2451,12 +2465,10 @@ pub async fn diagnostico_ao_vivo(segundos: u64) -> Result<DiagnosticoAoVivo, Str
             amostras,
             saude,
             quadros_erro,
-            gargalos,
+            gargalo,
             travadas,
         })
-    })
-    .await
-    .map_err(|e| format!("Falha no diagnóstico: {}", e))?
+    }
 }
 /// Comando: os vizinhos do vencedor, já como candidatos desta máquina. `LIVRES`.
 #[tauri::command]
@@ -4839,11 +4851,10 @@ mod tests {
     #[test]
     #[ignore = "mede esta máquina por 6 s"]
     fn diagnostico_ao_vivo_nesta_maquina() {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        let d = rt.block_on(super::diagnostico_ao_vivo(6)).expect("diagnóstico");
+        let d = super::diagnostico_na_janela(6, Default::default()).expect("diagnóstico");
         println!("placa {:?} jogo {:?} erro {:?}", d.placa, d.jogo, d.quadros_erro);
         println!("saude {:#?}", d.saude);
-        println!("gargalos {:#?}", d.gargalos);
+        println!("gargalo {:#?}", d.gargalo);
         println!("{}", serde_json::to_string(&d).unwrap().len());
         assert!(d.amostras.len() >= 10);
     }

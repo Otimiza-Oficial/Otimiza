@@ -332,6 +332,12 @@ impl PerformanceMonitor {
         self.monitoring_active = false;
     }
 
+    /// O piso de memória compartilhada aprendido em repouso (ver `vram.rs`),
+    /// para quem classifica fora deste laço — o Mapa de desempenho.
+    pub fn piso_de_vram(&self) -> super::vram::Piso {
+        self.piso_compartilhada
+    }
+
     /// Coleta snapshot das métricas atuais.
     ///
     /// Não há `refresh_all` aqui. Ele varria a tabela de processos a cada

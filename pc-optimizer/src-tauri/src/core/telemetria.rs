@@ -29,7 +29,7 @@
 //
 // O QUE NÃO É MEDIDO: temperatura e potência do processador. Exigem ler
 // registradores da CPU por driver de kernel, e o Otimiza não instala driver.
-// Ficam `Desconhecido` (ver `core::confiabilidade`), nunca zero.
+// Ficam UNKNOWN no contrato da 2.8 (`modules::telemetry::Quality`), nunca zero.
 
 use serde::{Deserialize, Serialize};
 
@@ -60,6 +60,12 @@ pub struct Amostra {
     /// que o detetive de travadas usa para apontar quem disparou.
     #[serde(default)]
     pub processos: Vec<ProcessoNaAmostra>,
+    /// Uso de cada núcleo lógico, na ordem do Windows.
+    #[serde(default, skip_serializing)]
+    pub nucleos_pct: Vec<f64>,
+    /// `Performance Limit Flags` do processador: bit 0 térmico, bit 1 energia.
+    #[serde(default)]
+    pub limite_flags: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -245,6 +251,7 @@ pub struct Coletor {
     disco_latencia: super::pdh::Contador,
     disco_fila: super::pdh::Contador,
     disco_ocioso: super::pdh::Contador,
+    limite_flags: super::pdh::Contador,
     /// Acompanhamento de processos (sysinfo) e o PID que fica de fora (o jogo).
     processos: Option<(sysinfo::System, Option<u32>)>,
 }
@@ -270,6 +277,7 @@ impl Coletor {
             disco_latencia: c(r"\PhysicalDisk(_Total)\Avg. Disk sec/Transfer"),
             disco_fila: c(r"\PhysicalDisk(_Total)\Current Disk Queue Length"),
             disco_ocioso: c(r"\PhysicalDisk(_Total)\% Idle Time"),
+            limite_flags: c(r"\Processor Information(_Total)\Performance Limit Flags"),
             placa: placas().into_iter().next(),
             processos: None,
             inicio: std::time::Instant::now(),
@@ -356,6 +364,8 @@ impl Coletor {
             disco_fila: q.valor(self.disco_fila),
             disco_ocupado_pct: q.valor(self.disco_ocioso).map(|o| (100.0 - o).clamp(0.0, 100.0)),
             processos,
+            limite_flags: q.valor(self.limite_flags).map(|f| f as u64),
+            nucleos_pct: nucleos,
         }
     }
 }

@@ -27,6 +27,11 @@ pub enum Teto {
     Rtss,
     LimiteNoJogo { jogo: String, fps: u32, arquivo: String },
     VsyncNoJogo { jogo: String, arquivo: String },
+    /// O Roblox com o limite de quadros no padrão de fábrica (60 FPS), ou num
+    /// valor abaixo do monitor. Visto nesta máquina: Roblox a 59,5 FPS com
+    /// processador e placa a ~35% num monitor de 180 Hz. O próprio jogo tem a
+    /// opção "Taxa de quadros máxima" para subir.
+    RobloxLimitado { fps: Option<u32>, arquivo: String },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,6 +60,25 @@ pub fn ler_unreal(texto: &str) -> (Option<u32>, bool) {
         }
     }
     (limite, vsync)
+}
+
+/// `FramerateCap` das configurações do Roblox. **Pura.** `Some(-1)` = padrão.
+pub fn ler_roblox(xml: &str) -> Option<i64> {
+    let i = xml.find("name=\"FramerateCap\"")?;
+    let resto = &xml[i..];
+    let ini = resto.find('>')? + 1;
+    let fim = resto.find('<')?;
+    resto.get(ini..fim)?.trim().parse().ok()
+}
+
+/// O limite do Roblox prende o jogo? -1 é o padrão de fábrica (60 FPS).
+pub fn roblox_prende(cap: i64, monitor_hz: Option<u32>) -> Option<Option<u32>> {
+    const PADRAO_DO_ROBLOX: u32 = 60;
+    match cap {
+        -1 => prende(PADRAO_DO_ROBLOX, monitor_hz).then_some(None),
+        c if c > 0 => prende(c as u32, monitor_hz).then_some(Some(c as u32)),
+        _ => None,
+    }
 }
 
 /// Um limite é teto quando fica abaixo da taxa do monitor. Sem saber o
@@ -100,6 +124,23 @@ pub fn procurar() -> Relatorio {
         }
     }
 
+    // Roblox: configurações do jogador em %LOCALAPPDATA%\Roblox (a do
+    // Studio fica de fora — não é o jogo).
+    if let Ok(pasta) = std::env::var("LOCALAPPDATA").map(|l| std::path::PathBuf::from(l).join("Roblox")) {
+        if let Ok(entradas) = std::fs::read_dir(&pasta) {
+            for e in entradas.flatten() {
+                let nome = e.file_name().to_string_lossy().to_lowercase();
+                if !nome.starts_with("globalbasicsettings_") || nome.contains("studio") || !nome.ends_with(".xml") {
+                    continue;
+                }
+                let Ok(xml) = std::fs::read_to_string(e.path()) else { continue };
+                if let Some(fps) = ler_roblox(&xml).and_then(|c| roblox_prende(c, monitor_hz)) {
+                    tetos.push(Teto::RobloxLimitado { fps, arquivo: e.path().to_string_lossy().to_string() });
+                }
+            }
+        }
+    }
+
     Relatorio { monitor_hz, tetos, lacunas }
 }
 
@@ -112,6 +153,17 @@ mod testes {
         assert_eq!(ler_unreal("[x]\nFrameRateLimit=60.000000\nbUseVSync=False\n"), (Some(60), false));
         assert_eq!(ler_unreal("FrameRateLimit=0.000000\r\nbUseVSync=True\r\n"), (Some(0), true));
         assert_eq!(ler_unreal("nada aqui"), (None, false));
+    }
+
+    #[test]
+    fn roblox_no_padrao_prende_em_monitor_rapido() {
+        let xml = r#"<Item><int name="FramerateCap">-1</int><token name="SavedQualityLevel">0</token></Item>"#;
+        assert_eq!(ler_roblox(xml), Some(-1));
+        assert_eq!(roblox_prende(-1, Some(180)), Some(None));
+        assert_eq!(roblox_prende(-1, Some(60)), None, "monitor de 60 Hz: o padrão não prende");
+        assert_eq!(roblox_prende(144, Some(144)), None);
+        assert_eq!(roblox_prende(120, Some(165)), Some(Some(120)));
+        assert_eq!(ler_roblox("<nada/>"), None);
     }
 
     #[test]

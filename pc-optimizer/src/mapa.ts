@@ -13,14 +13,20 @@ import { invoke } from "@tauri-apps/api/core";
  * medido".
  */
 
-type Gargalo =
-  | "ThreadPrincipal" | "CpuInteira" | "Gpu" | "Vram" | "Memoria" | "Disco" | "ClockSegurado" | "LimiteDeFps";
+/** As classes do classificador ÚNICO do produto (`modules/gargalo.rs`, 2.8). */
+type Classe =
+  | "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | "MemoriaVideo" | "Disco"
+  | "LimiteTermico" | "LimiteEletrico" | "TetoDeQuadros" | "Engasgo" | "ForaDoHardware"
+  | "StreamingDeAssets" | "Rede";
 
-type Achado = {
-  gargalo: Gargalo;
-  confianca: "Media" | "Alta";
-  fracao: number;
-  evidencia: [string, number][];
+type AchadoDeGargalo = { classe: Classe; forca: "Causa" | "Hipotese"; evidencia: string; idade_ms: number | null };
+
+type DiagnosticoDeGargalo = {
+  conclusao: "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
+  achados: AchadoDeGargalo[];
+  nao_verificado: { classe: string; falta: string }[];
+  classes_avaliadas: number;
+  classes_totais: number;
 };
 
 type Amostra = {
@@ -85,90 +91,102 @@ type Diagnostico = {
   amostras: Amostra[];
   saude: Saude | null;
   quadros_erro: string | null;
-  gargalos: Achado[];
+  gargalo: DiagnosticoDeGargalo;
   travadas: Investigacao | null;
 };
 
 /** O que cada gargalo quer dizer, e o que fazer — escrito para quem joga. */
-const NA_TELA: Record<Gargalo, { titulo: string; explica: string; faz: string; no: No }> = {
-  ThreadPrincipal: {
+/** O que cada classe quer dizer, e o que fazer — escrito para quem joga. */
+const NA_TELA: Record<Classe, { titulo: string; explica: string; faz: string; no: No }> = {
+  CpuUmNucleo: {
     titulo: "O jogo está preso em um núcleo do processador",
-    explica:
-      "Um núcleo está no limite enquanto a placa de vídeo espera. O uso total da CPU parece baixo, mas o jogo não consegue dividir esse trabalho entre os outros núcleos.",
-    faz:
-      "Placa de vídeo nova NÃO resolve isto. O que ajuda: baixar distância de visão e densidade de população/objetos no jogo, fechar programas pesados em segundo plano, RAM com XMP ligado, e um plano de energia que sobe o clock rápido (aba Energia).",
+    explica: "Um núcleo está no limite enquanto os outros sobram. O uso total da CPU parece baixo, mas o jogo não consegue dividir esse trabalho.",
+    faz: "Placa de vídeo nova NÃO resolve isto. Ajuda: baixar distância de visão e densidade de população/objetos no jogo, fechar programas pesados, RAM com XMP ligado e o plano de energia medido para a máquina (aba Energia).",
     no: "cpu",
   },
-  CpuInteira: {
+  CpuTodosNucleos: {
     titulo: "O processador inteiro está no limite",
-    explica: "Todos os núcleos estão ocupados. A placa de vídeo recebe quadros mais devagar do que consegue desenhar.",
-    faz: "Feche o que roda em segundo plano, reduza opções que pesam na CPU (população, física, distância) e confira se não há processo pesando na lista de processos.",
+    explica: "Todos os núcleos ocupados: a placa de vídeo recebe quadros mais devagar do que consegue desenhar.",
+    faz: "Feche o que roda em segundo plano (ou ligue o modo jogo) e reduza o que pesa na CPU: população, física, distância.",
     no: "cpu",
   },
   Gpu: {
     titulo: "A placa de vídeo é o limite",
-    explica: "A placa está trabalhando no máximo. É o caso em que ajuste gráfico rende mais FPS.",
-    faz: "Baixe primeiro o que mais custa: sombras, pós-processamento, anti-serrilhado pesado (MSAA) e resolução de renderização. Upscaling (DLSS/FSR) e o gerador de quadros também entram aqui.",
+    explica: "A placa está no máximo. É o caso em que ajuste gráfico rende mais FPS.",
+    faz: "Baixe primeiro sombras, pós-processamento, anti-serrilhado pesado e resolução de renderização (ficha do jogo, na Biblioteca). Upscaling e o gerador de quadros também entram aqui.",
     no: "gpu",
   },
-  Vram: {
-    titulo: "A memória da placa de vídeo está acabando",
-    explica:
-      "Quando a VRAM enche, o driver passa textura para a memória comum, que é muito mais lenta — e isso aparece como travada, não como FPS menor.",
-    faz: "Baixe qualidade de textura um degrau e feche navegador e outros programas que usam a placa. Isto reduz travadas mesmo quando o FPS médio parece igual.",
-    no: "vram",
-  },
-  Memoria: {
-    titulo: "A memória RAM está no limite",
-    explica: "O Windows está lendo do disco o que deveria estar na memória. Cada leitura dessas é uma travada em potencial.",
-    faz: "Feche navegador e programas pesados antes de jogar. Confira o arquivo de paginação (aba Diagnóstico). Se acontece sempre, o limite é a quantidade de RAM.",
+  MemoriaRam: {
+    titulo: "A memória RAM está apertada",
+    explica: "Com a RAM no limite o Windows passa a buscar no disco — e cada busca é uma travada em potencial.",
+    faz: "Feche navegador e programas pesados antes de jogar. Se acontece sempre, o limite é a quantidade de RAM.",
     no: "ram",
   },
+  MemoriaVideo: {
+    titulo: "A memória da placa de vídeo está apertada",
+    explica: "Quando a VRAM enche, textura vai para a memória comum, muito mais lenta — aparece como travada, não como FPS menor.",
+    faz: "Baixe a qualidade de textura um degrau e feche navegador e outros programas que usam a placa.",
+    no: "vram",
+  },
   Disco: {
-    titulo: "O disco está demorando para responder",
-    explica: "O jogo pede dados e o disco demora. Aparece como travada ao entrar em área nova ou ao virar a câmera.",
-    faz: "Confira se o jogo está num HD mecânico (aba Jogos) e se algo está baixando ou atualizando em segundo plano.",
+    titulo: "O disco está no limite",
+    explica: "O disco está ocupado a maior parte do tempo; o jogo espera quando precisa ler algo.",
+    faz: "Veja se o jogo está num HD mecânico (aba Jogos) e se algo está baixando ou atualizando.",
     no: "disco",
   },
-  ClockSegurado: {
-    titulo: "O processador está abaixo do clock com carga",
-    explica: "Com o jogo exigindo, o processador entregou menos que a frequência base. Costuma ser temperatura alta ou limite de energia.",
-    faz: "Confira a limpeza e a pasta térmica do cooler, se o notebook está na tomada, e o plano de energia (aba Energia).",
+  LimiteTermico: {
+    titulo: "O processador está sendo segurado por temperatura",
+    explica: "O próprio Windows reporta que o firmware reduziu a velocidade por calor.",
+    faz: "Nenhum ajuste de software resolve: limpeza, pasta térmica e circulação de ar.",
     no: "cpu",
   },
-  LimiteDeFps: {
-    titulo: "O FPS está preso num teto",
-    explica: "O FPS fica colado num valor redondo enquanto processador e placa sobram. Algo está limitando: V-Sync, limitador do jogo, do driver ou de um programa como o RTSS.",
-    faz: "Se o teto é a taxa do monitor, é o comportamento esperado. Se é abaixo dela, procure o limitador nas configurações do jogo e do driver.",
+  LimiteEletrico: {
+    titulo: "O processador está sendo segurado por energia",
+    explica: "O firmware limitou a potência (notebook na bateria, fonte ou limite da placa-mãe).",
+    faz: "No notebook, jogue na tomada. Em desktop, confira os limites de potência na BIOS (aba Diagnóstico).",
+    no: "cpu",
+  },
+  TetoDeQuadros: {
+    titulo: "O FPS está preso na taxa do monitor",
+    explica: "O jogo entrega exatamente o que o monitor mostra — V-Sync ou limitador.",
+    faz: "Se é a taxa do monitor, é o esperado. Os limites escondidos abaixo dela aparecem logo abaixo.",
+    no: "tela",
+  },
+  Engasgo: {
+    titulo: "Travadas frequentes durante a partida",
+    explica: "Muitos quadros bem acima do normal. A causa não está nesta linha — o detetive de travadas, logo abaixo, mostra o que coincidiu com elas.",
+    faz: "Veja as pistas do detetive de travadas.",
+    no: "tela",
+  },
+  ForaDoHardware: {
+    titulo: "O limite não está no hardware",
+    explica: "Processador e placa sobrando ao mesmo tempo, durante a partida. O limite é o motor do jogo, o servidor, um teto de quadros ou uma espera que os contadores não mostram.",
+    faz: "Ajuste de Windows não muda isto. Confira os limites de FPS escondidos e, no FiveM, o servidor.",
+    no: "tela",
+  },
+  StreamingDeAssets: {
+    titulo: "O jogo está esperando o disco",
+    explica: "As travadas caem justamente quando o disco está ocupado: o jogo carregando conteúdo.",
+    faz: "Instale o jogo num SSD (aba Jogos mostra em qual disco ele está) e evite downloads durante a partida.",
+    no: "disco",
+  },
+  Rede: {
+    titulo: "A conexão está instável ou perdendo pacote",
+    explica: "Rede que engasga parece FPS baixo: teleporte, tiro que não registra.",
+    faz: "Meça a perda de pacote até o servidor (aba Diagnóstico). Cabo em vez de Wi-Fi resolve a maioria.",
     no: "tela",
   },
 };
 
 type No = "cpu" | "ram" | "disco" | "gpu" | "vram" | "tela";
 
-const ROTULO_EVIDENCIA: Record<string, [string, string]> = {
-  cpu_total_pct: ["CPU total", "%"],
-  nucleo_max_pct: ["núcleo mais ocupado", "%"],
-  gpu_pct: ["placa de vídeo", "%"],
-  vram_usada_mb: ["VRAM usada", " MB"],
-  vram_total_mb: ["VRAM total", " MB"],
-  vram_compartilhada_mb: ["transbordando para a RAM", " MB"],
-  ram_disponivel_mb: ["RAM livre", " MB"],
-  commit_pct: ["memória comprometida", "%"],
-  paginas_lidas_s: ["páginas lidas do disco", "/s"],
-  disco_latencia_ms: ["latência do disco", " ms"],
-  disco_ocupado_pct: ["disco ocupado", "%"],
-  clock_efetivo_mhz: ["clock efetivo", " MHz"],
-  clock_nominal_mhz: ["clock base", " MHz"],
-  fps_medio: ["FPS médio", ""],
-};
-
 type Teto =
   | { tipo: "LimiteGlobalNvidia"; fps: number }
   | { tipo: "VsyncForcadoNvidia" }
   | { tipo: "Rtss" }
   | { tipo: "LimiteNoJogo"; jogo: string; fps: number; arquivo: string }
-  | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string };
+  | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string }
+  | { tipo: "RobloxLimitado"; fps: number | null; arquivo: string };
 
 type RelatorioDeTetos = { monitor_hz: number | null; tetos: Teto[]; lacunas: string[] };
 
@@ -194,6 +212,13 @@ function frasesDoTeto(t: Teto, hz: number | null): { titulo: string; onde: strin
       return {
         titulo: `${t.jogo} está com limite de ${t.fps} FPS no arquivo de configuração, e ${monitor}.`,
         onde: `No menu do jogo, opção de limite de FPS. Arquivo: ${t.arquivo}`,
+      };
+    case "RobloxLimitado":
+      return {
+        titulo: t.fps
+          ? `O Roblox está limitado a ${t.fps} FPS, e ${monitor}.`
+          : `O Roblox está com o limite de quadros no padrão de fábrica (60 FPS), e ${monitor}.`,
+        onde: "Dentro do Roblox: Configurações → Taxa de quadros máxima → escolha a do seu monitor.",
       };
     case "VsyncNoJogo":
       return {
@@ -326,7 +351,7 @@ function desenhar(d: Diagnostico) {
   const disco = mediana(a.map((x) => x.disco_latencia_ms));
   const clock = mediana(a.map((x) => x.clock_efetivo_mhz));
 
-  const presos = new Set<No>(d.gargalos.map((g) => NA_TELA[g.gargalo].no));
+  const presos = new Set<No>(d.gargalo.achados.map((g) => NA_TELA[g.classe].no));
   const no = (id: No, titulo: string, valor: string, sub: string) =>
     `<div class="mapa-no" data-preso="${presos.has(id)}">
        <span>${titulo}</span><b>${valor}</b><em>${sub}</em>
@@ -343,33 +368,35 @@ function desenhar(d: Diagnostico) {
       ${no("tela", "JOGO", d.saude ? num(d.saude.fps_medio, 0, " FPS") : "—", esc(d.jogo ?? "nenhum jogo aberto"))}
     </div>`;
 
-  const gargalos = d.gargalos.length
-    ? d.gargalos
-        .map((g) => {
-          const t = NA_TELA[g.gargalo];
-          const ev = g.evidencia
-            .map(([k, v]) => {
-              const [rot, suf] = ROTULO_EVIDENCIA[k] ?? [k, ""];
-              return `<span class="fg-chip">${esc(rot)}: ${num(v, suf === " ms" ? 1 : 0, suf)}</span>`;
-            })
-            .join(" ");
+  const g = d.gargalo;
+  const gargalos = g.achados.length
+    ? g.achados
+        .map((a) => {
+          const t = NA_TELA[a.classe];
           return `
           <article class="mapa-gargalo">
             <header>
               <b>${esc(t.titulo)}</b>
-              <span class="fg-chip">${g.confianca === "Alta" ? "confiança alta" : "confiança média"} · ${Math.round(g.fracao * 100)}% do tempo</span>
+              <span class="fg-chip">${a.forca === "Causa" ? "medido agora" : "hipótese"}</span>
             </header>
             <p>${esc(t.explica)}</p>
             <p class="fg-nota"><strong>O que fazer:</strong> ${esc(t.faz)}</p>
-            <div class="fg-linha">${ev}</div>
+            <div class="fg-linha"><span class="fg-chip">${esc(a.evidencia)}</span></div>
           </article>`;
         })
         .join("")
-    : `<p class="fg-aviso">Nenhum gargalo se sustentou nesta medição. ${
-        d.jogo
-          ? "Com o jogo aberto, isso costuma querer dizer que o limite é o próprio jogo (o motor dele, o servidor) — ou que a máquina está folgada para essa cena."
-          : "Sem jogo aberto, é o esperado: meça com o jogo rodando para ver o que limita a partida."
+    : `<p class="fg-aviso">${
+        g.conclusao === "SemCarga"
+          ? "A máquina estava parada durante a medição — sem carga não existe gargalo para encontrar. Meça com o jogo rodando."
+          : g.conclusao === "SemEvidencia"
+            ? "Não houve medição suficiente para classificar."
+            : d.jogo
+              ? "Nada encostou no limite nesta medição. Com o jogo aberto, isso costuma querer dizer que o limite é o próprio jogo (o motor, o servidor) — ou que a máquina está folgada para essa cena."
+              : "Nada encostou no limite. Sem jogo aberto é o esperado: meça com o jogo rodando."
       }</p>`;
+  const cobertura = `<p class="fg-nota">${g.classes_avaliadas} de ${g.classes_totais} tipos de gargalo puderam ser avaliados nesta medição${
+    g.nao_verificado.length ? ` — sem dado para: ${g.nao_verificado.map((n) => esc(n.classe)).join(", ")}` : ""
+  }. Mesmo classificador do painel ao vivo.</p>`;
 
   let quadros = "";
   if (d.saude) {
@@ -422,6 +449,7 @@ function desenhar(d: Diagnostico) {
     <div class="fg-painel">
       ${mapa}
       ${gargalos}
+      ${cobertura}
       ${quadros}
       ${detetive}
       <div id="mapa-tetos"></div>
