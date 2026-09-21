@@ -18,7 +18,22 @@ export const site = {
   titulo: "Otimiza — Console de desempenho para Windows",
   description:
     "Mede o que o seu PC faz, otimiza o que dá, e prova com número — inclusive quando o número diz que não mudou nada.",
-  versao: "2.7.0",
+  /*
+   * O NÚMERO QUE O BOTÃO DE BAIXAR MOSTRA — e que precisa andar junto com a
+   * tag, nesta ordem: primeiro a tag `v<versao>`, depois este arquivo em
+   * `main`.
+   *
+   * O motivo é que `links.baixar` aponta para `releases/latest`, e não para
+   * uma versão fixa. Se este número subir antes de a versão existir, o botão
+   * passa a dizer "Baixar o Otimiza 2.8.0" e entregar o instalador da 2.7.0 —
+   * o site prometendo o que ainda não dá para baixar, que é exatamente o tipo
+   * de coisa que o produto inteiro existe para não fazer.
+   *
+   * Na direção contrária o erro é pequeno e se conserta sozinho: o painel
+   * prefere a versão que vem da API de releases e só cai neste valor quando a
+   * leitura falha.
+   */
+  versao: "2.8.0",
 } as const;
 
 export const links = {
