@@ -1368,6 +1368,10 @@ pub struct JogoNaBiblioteca {
     /// Id no histórico quando o Otimiza já ajustou a configuração deste jogo
     /// (para o botão Desfazer).
     pub ajuste_aplicado: Option<String>,
+    /// O ajuste está em observação pelo portão "nunca menos FPS".
+    pub em_observacao: bool,
+    /// O último veredito do portão para o ajuste deste jogo.
+    pub decidido: Option<crate::modules::portao::Decidido>,
 }
 
 /// Id do ajuste Unreal de um jogo no histórico.
@@ -1401,6 +1405,7 @@ pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<Bibliotec
     tokio::task::spawn_blocking(move || {
         use crate::modules::windows::{jogos, unreal};
         let b = jogos::varrer();
+        let portao = crate::modules::portao::ler();
         let (medicoes, medicoes_erro) = match crate::modules::medicoes::ler() {
             Ok(m) => (m, None),
             Err(e) => (Vec::new(), Some(e)),
@@ -1442,6 +1447,8 @@ pub async fn biblioteca_de_jogos(state: State<'_, AppState>) -> Result<Bibliotec
                     nivel: if ajustador.is_some() { 'A' } else { 'C' },
                     ajustador,
                     ultima_medicao,
+                    em_observacao: portao.vigiados.iter().any(|v| v.id == id_ajuste),
+                    decidido: portao.decididos.iter().rev().find(|d| d.vigiado.id == id_ajuste).cloned(),
                     ajuste_aplicado: aplicados.contains(&id_ajuste).then_some(id_ajuste),
                 }
             })
@@ -1497,8 +1504,14 @@ pub async fn unreal_aplicar(
     if feito.mudancas.is_empty() {
         return Ok(feito.mudancas);
     }
+    let processo = std::path::Path::new(&executavel)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
     let mut log = state.changes.lock().await;
     let id = id_do_ajuste_unreal(&nome);
+    // Nunca menos FPS: o ajuste entra em observação (`modules::portao`).
+    crate::modules::portao::vigiar(&id, &nome, &processo, now_timestamp());
     // Aplicar de novo por cima: o desfazer precisa voltar ao ORIGINAL, então
     // o registro antigo fica e o novo não é gravado por cima dele.
     if !log.is_applied(&id) {
@@ -2851,6 +2864,11 @@ pub async fn apply_game_profile(
 
         let mut log = state.changes.lock().await;
 
+        // Nunca menos FPS: o ajuste entra em observação (`modules::portao`).
+        // O processo do FiveM é "FiveM_b3258_GTAProcess.exe"; o do GTA, "GTA5.exe".
+        let processo = if feito.jogo.to_lowercase().contains("fivem") { "fivem_" } else { "gta5" };
+        crate::modules::portao::vigiar(&format!("config_jogo_{}", perfil), &feito.jogo, processo, now_timestamp());
+
         log.record(AppliedOptimization {
             optimization_id: format!("config_jogo_{}", perfil),
             name: format!("Configuração do {} · perfil {}", feito.jogo, perfil),
@@ -2881,7 +2899,11 @@ pub async fn revert_optimization(
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
-        crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log)
+        let resultado = crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log);
+        if resultado.as_ref().is_ok_and(|r| r.success) {
+            crate::modules::portao::esquecer(&id);
+        }
+        resultado
     }
 
     #[cfg(not(target_os = "windows"))]

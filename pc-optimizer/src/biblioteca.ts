@@ -31,7 +31,37 @@ type Jogo = {
   ajustador: "fivem" | "unreal" | null;
   ultima_medicao: Medicao | null;
   ajuste_aplicado: string | null;
+  em_observacao: boolean;
+  decidido: Decidido | null;
 };
+
+type Decidido = {
+  veredito: "Desfazer" | "Melhorou" | "SemMudanca" | { Aguardando: { antes: number; depois: number } };
+  quando: number;
+  fps_antes: number | null;
+  fps_depois: number | null;
+  low_antes: number | null;
+  low_depois: number | null;
+  erro: string | null;
+};
+
+function linhaDoPortao(j: Jogo): string {
+  if (j.em_observacao) {
+    return `<p class="fg-nota"><strong>Em observação:</strong> o Otimiza está medindo as próximas partidas deste jogo. Se o FPS ou o 1% piores caírem de verdade (além da variação normal e em pelo menos 5%), o ajuste é desfeito sozinho. Precisa da medição automática ligada (aba Sistema, Preferências) e do Otimiza aberto como administrador.</p>`;
+  }
+  const d = j.decidido;
+  if (!d) return "";
+  const n = (v: number | null) => (v === null ? "—" : Math.round(v).toString());
+  const numeros = `FPS ${n(d.fps_antes)} → ${n(d.fps_depois)}${d.low_antes !== null ? ` · 1% piores ${n(d.low_antes)} → ${n(d.low_depois)}` : ""}`;
+  if (d.veredito === "Desfazer") {
+    return d.erro
+      ? `<p class="fg-erro">O ajuste piorou este jogo (${numeros}) e o Otimiza tentou desfazer, mas falhou: ${esc(d.erro)}. Use o botão Desfazer.</p>`
+      : `<p class="fg-aviso"><strong>Desfeito sozinho:</strong> o ajuste piorou este jogo nesta máquina (${numeros}). A configuração voltou ao que era.</p>`;
+  }
+  if (d.veredito === "Melhorou") return `<p class="fg-nota"><strong>Medido:</strong> melhorou (${numeros}).</p>`;
+  if (d.veredito === "SemMudanca") return `<p class="fg-nota"><strong>Medido:</strong> sem diferença além da variação normal entre partidas (${numeros}).</p>`;
+  return "";
+}
 
 type Biblioteca = { jogos: Jogo[]; lacunas: string[]; medicoes_erro: string | null };
 type Mudanca = { chave: string; antes: number; depois: number };
@@ -115,6 +145,7 @@ function linhaDoJogo(j: Jogo, i: number): string {
       </header>
       <div class="fg-linha">${med}</div>
       ${acao}
+      ${linhaDoPortao(j)}
     </article>`;
 }
 

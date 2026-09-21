@@ -2523,6 +2523,60 @@ fn anotar_fim(
 
 /// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
+/// O portão "nunca menos FPS": avalia cada ajuste em observação contra as
+/// medições automáticas e DESFAZ o que piorou. Devolve o que foi decidido
+/// agora (para avisar a tela).
+pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidido> {
+    use crate::modules::portao::{self, Decidido, Veredito};
+    let mut estado = portao::ler();
+    if estado.vigiados.is_empty() {
+        return Vec::new();
+    }
+    let Ok(medicoes) = crate::modules::medicoes::ler() else { return Vec::new() };
+    let agora = crate::modules::changelog::now_timestamp();
+    let mut decididos = Vec::new();
+    let mut ficam = Vec::new();
+    for v in std::mem::take(&mut estado.vigiados) {
+        // Desfeito por outro caminho (Desfazer tudo): não há o que vigiar.
+        if !log.is_applied(&v.id) {
+            continue;
+        }
+        let a = portao::avaliar(&v, &medicoes);
+        if matches!(a.veredito, Veredito::Aguardando { .. }) {
+            ficam.push(v);
+            continue;
+        }
+        let erro = if a.veredito == Veredito::Desfazer {
+            match WindowsOptimizer::new().revert(&v.id, log) {
+                Ok(r) if r.success => None,
+                Ok(r) => Some(r.message),
+                Err(e) => Some(e),
+            }
+        } else {
+            None
+        };
+        decididos.push(Decidido {
+            fps_antes: a.fps.as_ref().map(|c| c.media_base),
+            fps_depois: a.fps.as_ref().map(|c| c.media_candidato),
+            low_antes: a.low_1pct.as_ref().map(|c| c.media_base),
+            low_depois: a.low_1pct.as_ref().map(|c| c.media_candidato),
+            vigiado: v,
+            veredito: a.veredito,
+            quando: agora,
+            erro,
+        });
+    }
+    estado.vigiados = ficam;
+    estado.decididos.extend(decididos.iter().cloned());
+    // Guarda só os últimos 50 vereditos.
+    let excesso = estado.decididos.len().saturating_sub(50);
+    estado.decididos.drain(..excesso);
+    if let Err(e) = portao::gravar(&estado) {
+        crate::utils::Logger::warn(&format!("portão: não gravei: {}", e));
+    }
+    decididos
+}
+
 /// Para os testes de outros módulos que gravam `ChangeRecord`.
 #[cfg(test)]
 pub(crate) fn revert_changes_para_teste(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {

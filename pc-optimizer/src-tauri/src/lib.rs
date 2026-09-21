@@ -539,6 +539,18 @@ pub fn run() {
                                             executavel, m.fps, m.low_1pct
                                         ));
                                         let _ = handle.emit("prova:automatica", ());
+
+                                        // NUNCA MENOS FPS: cada partida medida pode
+                                        // decidir um ajuste em observação.
+                                        let decididos = {
+                                            let estado = handle.state::<commands::AppState>();
+                                            let mut log = estado.changes.lock().await;
+                                            modules::windows::decidir_portao(&mut log)
+                                        };
+                                        for d in decididos {
+                                            utils::Logger::info(&format!("portão: {} → {:?}", d.vigiado.nome, d.veredito));
+                                            let _ = handle.emit("portao:decidido", d);
+                                        }
                                     }
                                     Err(erro) => utils::Logger::warn(&format!(
                                         "medição automática de {} feita, mas não gravada: {}",
