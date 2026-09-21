@@ -1259,37 +1259,7 @@
             <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador está sendo limitado, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Cerca de 5 segundos, e não altera nada."></div>
           </section>
 
-<section class="panel">
-            <div class="panel-head">
-              <h2>Rede e DNS</h2>
-              <span class="panel-tag" id="net-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Esta é a área com mais promessa falsa do mercado, então vamos
-              começar pelo que <strong>não</strong> é possível: nenhum ajuste no
-              seu PC reduz o ping. Ping é distância física mais roteamento —
-              quem promete encurtar isso com um botão está vendendo o que não
-              existe.
-            </p>
-
-            <p class="hint">
-              O que existe de verdade: trocar o servidor de DNS acelera achar o
-              endereço de um site, o que aparece em carregar página, abrir lista
-              de servidores e começar um download. Em vez de afirmar que um DNS
-              é mais rápido, aqui a gente <strong>mede</strong> — faz consultas
-              reais a cada um e mostra os tempos lado a lado. Se o que você já
-              usa for o melhor, é isso que vai aparecer.
-            </p>
-
-            <div class="row-actions">
-              <button id="analyze-network" class="btn" data-custo="~8 s">Analisar</button>
-              <button id="flush-dns" class="btn">Limpar cache de nomes</button>
-            </div>
-
-            <p id="net-status" class="status"></p>
-            <div id="net-result" class="resultado" data-vazio="Mede o tempo de resposta dos servidores de nome, resolvendo domínios reais três vezes cada. Cerca de 8 segundos, usa a rede, e não altera nada."></div>
-          </section>
+<!-- Rede e DNS: retirado na 2.9. DNS não participa dos pacotes da partida — não muda ping nem FPS. Ver naofazemos.rs (dns_para_ping). -->
 
 <section class="panel">
             <div class="panel-head">
@@ -1788,9 +1758,10 @@
             <div class="nvlimite" id="nvlimite" hidden>
               <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
               <p class="panel-note" id="nvlimite-nota">
-                Com o jogo aberto, escolha o limite e clique em Limitar. Em RP,
-                quadro estável é sentido como fluidez e a placa trabalha menos;
-                em jogo competitivo, limitar acrescenta atraso.
+                O Otimiza nunca limita o FPS sozinho: todo limite baixa o FPS
+                médio. Use só se você quer a placa mais fria e silenciosa, ou um
+                número estável num jogo que oscila muito — com o jogo aberto,
+                escolha o limite e clique em Limitar.
               </p>
               <div id="nvlimite-lista"></div>
               <div class="row-actions">
@@ -1865,7 +1836,7 @@
               <button id="cfgjogo-analisar" class="btn" data-custo="~1 s">Analisar</button>
               <button id="cfgjogo-sem-teto" class="btn btn-primary">Tirar o limite de FPS</button>
               <button id="cfgjogo-equilibrado" class="btn">Equilibrado</button>
-              <button id="cfgjogo-competitivo" class="btn">Competitivo</button>
+              <button id="cfgjogo-competitivo" class="btn">Máximo de FPS</button>
             </div>
 
             <p id="cfgjogo-status" class="status"></p>
@@ -2041,26 +2012,19 @@
 
           <section class="panel">
             <div class="panel-head">
-              <h2>Prioridade fixa do jogo</h2>
+              <h2>Prioridade fixa do jogo — retirada</h2>
               <span class="panel-tag" id="prio-tag">—</span>
             </div>
 
             <p class="lead">
-              O botão "Priorizar o jogo" acima vale só para a sessão: quando o
-              jogo fecha, a prioridade some. Aqui ela é fixada de vez — o Windows
-              passa a criar o processo já em prioridade alta, em toda abertura.
-            </p>
-
-            <p class="hint">
-              <strong>Uma ressalva importante:</strong> o ajuste é por nome de
-              arquivo, e o processo do FiveM carrega o número da compilação. Ao
-              atualizar o FiveM o nome muda, e isto precisa ser aplicado de novo.
-              É reversível e entra no histórico como qualquer outra mudança.
+              Fixar o jogo em prioridade alta foi retirado na 2.9: prioridade só
+              muda alguma coisa quando há disputa real de processador, e nas
+              medições não mostrou ganho. Se você fixou numa versão anterior,
+              remova aqui com o jogo aberto.
             </p>
 
             <div class="row-actions">
-              <button id="fix-priority" class="btn btn-primary">Fixar prioridade do jogo aberto</button>
-              <button id="unfix-priority" class="btn">Remover</button>
+              <button id="unfix-priority" class="btn">Remover a prioridade fixada</button>
             </div>
 
             <p id="prio-status" class="status"></p>

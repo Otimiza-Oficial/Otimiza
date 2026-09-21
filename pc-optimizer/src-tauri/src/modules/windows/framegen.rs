@@ -884,7 +884,8 @@ pub enum MotivoDaDecisao {
     /// O custo de gerar tirou quadros reais demais.
     RenderizadoCaiu,
     RitmoPiorou,
-    /// No perfil competitivo, o atraso acrescentado passou do aceitável.
+    /// O atraso acrescentado passou do aceitável (10 ms no perfil de resposta,
+    /// 20 ms nos outros).
     AtrasoAcrescentadoAlto,
     ArtefatosIncomodos,
     PontuacaoSubiu,
@@ -955,6 +956,11 @@ fn variacao(antes: Option<f64>, depois: Option<f64>) -> Option<f64> {
 pub const QUEDA_MAXIMA_COMPETITIVO_PCT: f64 = 5.0;
 pub const QUEDA_MAXIMA_PCT: f64 = 20.0;
 pub const ATRASO_MAXIMO_COMPETITIVO_MS: f64 = 10.0;
+/// A guarda de atraso vale para TODO perfil desde a 2.9, não só para quem
+/// escolheu "resposta acima de tudo": acima disto (mais de um quadro de 60 Hz
+/// e um pouco), o controle fica pesado o bastante para ser sentido por
+/// qualquer jogador, e a imagem mais lisa não compensa.
+pub const ATRASO_MAXIMO_MS: f64 = 20.0;
 
 /// Liga contra desliga, com a mesma régua para os dois lados.
 pub fn comparar(
@@ -1021,9 +1027,8 @@ pub fn comparar(
         contra = true;
     }
 
-    if perfil == Perfil::Competitivo
-        && atraso_acrescentado_ms.is_some_and(|ms| ms > ATRASO_MAXIMO_COMPETITIVO_MS)
-    {
+    let limite_de_atraso = if perfil == Perfil::Competitivo { ATRASO_MAXIMO_COMPETITIVO_MS } else { ATRASO_MAXIMO_MS };
+    if atraso_acrescentado_ms.is_some_and(|ms| ms > limite_de_atraso) {
         motivos.push(MotivoDaDecisao::AtrasoAcrescentadoAlto);
         contra = true;
     }

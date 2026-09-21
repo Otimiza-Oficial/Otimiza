@@ -1934,101 +1934,7 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
 
 // ------------------------------------------------------- rede e DNS
 
-interface DnsMeasurement {
-  id: string;
-  name: string;
-  servers: string;
-  median_ms: number | null;
-  failures: number;
-  current: boolean;
-}
-
-interface NetAdapter {
-  guid: string;
-  name: string;
-  dns: string;
-  automatic: boolean;
-}
-
-interface NetworkReport {
-  adapters: NetAdapter[];
-  measurements: DnsMeasurement[];
-  gain_ms: number | null;
-  note: string;
-}
-
-let lastNetwork: NetworkReport | null = null;
-
-async function analyzeNetwork() {
-  const button = element<HTMLButtonElement>("analyze-network");
-  button.disabled = true;
-  setStatus("net-status", "Consultando cada servidor de DNS e cronometrando…", "progress");
-
-  try {
-    const report = await invoke<NetworkReport>("analyze_network");
-    lastNetwork = report;
-    renderNetwork(report);
-  } catch (error) {
-    setStatus("net-status", String(error), "error");
-  } finally {
-    button.disabled = false;
-  }
-}
-
-function renderNetwork(report: NetworkReport) {
-  const medidos = report.measurements.filter((m) => m.median_ms !== null);
-  const maisRapido = medidos.reduce<DnsMeasurement | null>(
-    (melhor, m) => (!melhor || m.median_ms! < melhor.median_ms! ? m : melhor),
-    null
-  );
-
-  text(
-    "net-tag",
-    report.gain_ms !== null && report.gain_ms >= 5
-      ? `${report.gain_ms.toFixed(0)} ms a ganhar`
-      : "sem ganho relevante"
-  );
-
-  const linhas = report.measurements
-    .map((m, i) => {
-      const tempo =
-        m.median_ms === null
-          ? `<span class="state-label">sem resposta</span>`
-          : `<span class="finding-size">${m.median_ms.toFixed(0)} ms</span>`;
-
-      // Só oferece trocar quando há ganho que valha, e nunca para o que já
-      // está em uso. Botão para ganhar 2 ms seria venda, não conserto.
-      const vale =
-        !m.current &&
-        m.failures === 0 &&
-        m.median_ms !== null &&
-        report.gain_ms !== null &&
-        report.gain_ms >= 5 &&
-        m === maisRapido;
-
-      const acao = vale
-        ? `<button class="btn btn-ghost" data-dns="${escapeHtml(m.servers)}">Usar este</button>`
-        : m.current
-          ? `<span class="state-label">em uso</span>`
-          : "";
-
-      return `
-        <div class="startup" data-enabled="${m.current}" style="--i:${i}">
-          <div class="startup-info">
-            <span class="startup-name">${escapeHtml(m.name)}</span>
-            <span class="startup-exe">${escapeHtml(m.servers)}${
-              m.failures > 0 ? ` · ${m.failures} consulta(s) sem resposta` : ""
-            }</span>
-          </div>
-          ${tempo}
-          ${acao}
-        </div>`;
-    })
-    .join("");
-
-  element("net-result").innerHTML = linhas;
-  setStatus("net-status", report.note, "warn");
-}
+// Rede e DNS: retirado na 2.9 (DNS não muda ping nem FPS da partida).
 
 // ------------------------------------------- perda de pacote até o servidor
 
@@ -2229,7 +2135,7 @@ function renderShaders(r: ShaderReport) {
 
 async function fixPriority(enable: boolean) {
   const botoes = document.querySelectorAll<HTMLButtonElement>(
-    "#fix-priority, #unfix-priority"
+    "#unfix-priority"
   );
   botoes.forEach((b) => (b.disabled = true));
 
@@ -7198,7 +7104,7 @@ const PERFIS: Record<string, { botao: string; nome: string; aviso: string }> = {
   },
   competitivo: {
     botao: "cfgjogo-competitivo",
-    nome: "Competitivo",
+    nome: "Máximo de FPS",
     aviso: "Isto muda bastante como o jogo se parece.",
   },
 };
@@ -8354,7 +8260,6 @@ function wireControls() {
   });
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
-  element("analyze-network").addEventListener("click", analyzeNetwork);
   element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
@@ -8392,7 +8297,6 @@ function wireControls() {
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
   element("analyze-readiness").addEventListener("click", analyzeReadiness);
-  element("fix-priority").addEventListener("click", () => fixPriority(true));
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
 
   element("shader-result").addEventListener("click", async (event) => {
@@ -8458,62 +8362,6 @@ function wireControls() {
   element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
-  element("flush-dns").addEventListener("click", async () => {
-    const button = element<HTMLButtonElement>("flush-dns");
-    button.disabled = true;
-
-    try {
-      setStatus("net-status", await invoke<string>("flush_dns"), "ok");
-    } catch (error) {
-      setStatus("net-status", String(error), "error");
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  element("net-result").addEventListener("click", async (event) => {
-    const button = (event.target as HTMLElement).closest(
-      "button[data-dns]"
-    ) as HTMLButtonElement | null;
-    if (!button) return;
-
-    if (!isElevated) {
-      askForAdmin(
-        "Trocar o servidor de DNS exige permissao de administrador. " +
-          "Podemos reabrir o Otimiza com essa permissao?"
-      );
-      return;
-    }
-
-    // Um adaptador de cada vez seria pior: a maquina usa o DNS do adaptador
-    // ativo, e trocar so um deixaria o resultado dependendo de qual conexao
-    // esta em uso na hora.
-    const adaptadores = lastNetwork?.adapters ?? [];
-    if (adaptadores.length === 0) {
-      setStatus("net-status", "Nenhum adaptador ativo para configurar.", "error");
-      return;
-    }
-
-    button.disabled = true;
-
-    try {
-      for (const adaptador of adaptadores) {
-        await invoke<unknown>("set_dns", {
-          guid: adaptador.guid,
-          servers: button.dataset.dns,
-        });
-      }
-      setStatus(
-        "net-status",
-        "DNS trocado. A troca fica no historico e o botao Desfazer tudo devolve o anterior.",
-        "ok"
-      );
-    } catch (error) {
-      setStatus("net-status", String(error), "error");
-    } finally {
-      await analyzeNetwork();
-    }
-  });
   element("prioritize-fivem").addEventListener("click", prioritizeFiveM);
 
   element("fivem-result").addEventListener("click", async (event) => {

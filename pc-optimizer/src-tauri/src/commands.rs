@@ -905,6 +905,12 @@ pub async fn set_persistent_priority(
 ) -> Result<OptimizationOutcome, String> {
     crate::modules::licenca::exigir()?;
 
+    // RETIRADO NA 2.9: prioridade alta fixa é "prioridade cega" — só rende
+    // com disputa real de processador, e é a escrita mais visível para um
+    // anticheat. Quem fixou numa versão anterior continua podendo remover.
+    if enable {
+        return Err("Fixar prioridade foi retirado na 2.9: não mostrava ganho medido. Ainda dá para remover o que foi fixado antes.".to_string());
+    }
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;

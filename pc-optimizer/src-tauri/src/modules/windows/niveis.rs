@@ -54,7 +54,7 @@ impl Nivel {
     pub fn nome(self) -> &'static str {
         match self {
             Nivel::Seguro => "Seguro",
-            Nivel::Competitivo => "Competitivo",
+            Nivel::Competitivo => "Avançado",
             Nivel::Experimental => "Experimental",
         }
     }
@@ -74,7 +74,7 @@ impl Nivel {
                  jogo. Continua sem nada que possa custar quadro."
             }
             Nivel::Experimental => {
-                "Tudo do Competitivo, mais os ajustes que rendem numa máquina e custam \
+                "Tudo do Avançado, mais os ajustes que rendem numa máquina e custam \
                  quadro em outra. Eles não vêm com promessa: vêm com um teste. O jeito de \
                  usar este nível é um grupo de cada vez, medindo antes e depois — e foi \
                  aplicar tudo isso de uma vez que derrubou o FPS de um cliente na 2.1.0."
