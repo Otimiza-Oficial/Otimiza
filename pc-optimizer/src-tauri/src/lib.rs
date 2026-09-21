@@ -402,6 +402,17 @@ pub fn run() {
                 });
             }
 
+            // GOVERNADOR INTERROMPIDO: o Otimiza fechou com um jogo aberto e
+            // programas em modo econômico. Devolve antes de qualquer outra coisa.
+            #[cfg(windows)]
+            tauri::async_runtime::spawn(async {
+                if let Ok(n) = tokio::task::spawn_blocking(modules::windows::governador::recuperar_na_abertura).await {
+                    if n > 0 {
+                        utils::Logger::info(&format!("governador: {} programa(s) devolvidos ao normal na abertura", n));
+                    }
+                }
+            });
+
             // TESTE DE ENERGIA INTERROMPIDO: volta ao plano de antes.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {

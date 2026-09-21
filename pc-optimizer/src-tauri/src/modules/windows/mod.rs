@@ -36,6 +36,7 @@ pub mod framegen;
 pub mod geracao;
 pub mod gamemode;
 pub mod gpupref;
+pub mod governador;
 pub mod hardware;
 pub mod bios;
 pub mod causas;
