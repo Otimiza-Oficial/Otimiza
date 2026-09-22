@@ -243,6 +243,70 @@ function quando(ts: number): string {
   return new Date(ts * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
+/*
+ * OTIMIZAR E TESTAR (2.9)
+ *
+ * Um clique no lugar de "escolha o orçamento, depois escolha o perfil": aplica
+ * o ajuste gráfico Equilibrado e o perfil NVIDIA Competitivo — os dois com o
+ * estado anterior guardado e desfazer.
+ *
+ * E não promete nada depois disso. Os dois entram na vigília "nunca menos
+ * FPS": quem decide são as próximas partidas medidas, e o que piorar é
+ * desfeito sozinho.
+ *
+ * Não inventa etapa nova: chama os mesmos comandos dos botões ao lado.
+ */
+async function otimizarETestar(j: Jogo, i: number, nvidia: boolean) {
+  const saida = raiz?.querySelector<HTMLElement>(`#bib-otimizar-${i}`);
+  if (!saida || !j.executavel) return;
+  const feitos: string[] = [];
+  const falhas: string[] = [];
+
+  saida.innerHTML = `<p class="fg-nota">Aplicando o ajuste gráfico…</p>`;
+  try {
+    const m = await invoke<Mudanca[]>("unreal_aplicar", {
+      executavel: j.executavel,
+      nome: j.nome,
+      orcamento: "Equilibrado" as Orcamento,
+    });
+    feitos.push(
+      m.length
+        ? `Configuração do jogo: ${m.length} opção(ões) baixada(s).`
+        : "Configuração do jogo: já estava nesse nível ou abaixo — nada mudou.",
+    );
+  } catch (e) {
+    const msg = String(e);
+    if (msg.toLowerCase().includes("administrador")) pedirAdmin(msg);
+    falhas.push(`Configuração do jogo: ${msg}`);
+  }
+
+  if (nvidia) {
+    saida.innerHTML = `<p class="fg-nota">Aplicando o perfil NVIDIA…</p>`;
+    try {
+      const r = await invoke<{ message: string }>("nvidia_perfil_aplicar", {
+        executavel: j.executavel,
+        perfil: "Competitivo" as PerfilDoJogo,
+      });
+      feitos.push(r.message);
+    } catch (e) {
+      falhas.push(`Perfil NVIDIA: ${String(e)}`);
+    }
+  }
+
+  void seusJogos(true);
+  saida.innerHTML = `
+    ${feitos.map((t) => `<p class="fg-nota">${esc(t)}</p>`).join("")}
+    ${falhas.map((t) => `<p class="fg-erro">${esc(t)}</p>`).join("")}
+    ${
+      feitos.length
+        ? `<p class="fg-aviso"><strong>Agora jogue.</strong> O Otimiza mede as próximas
+             partidas sozinho e compara com as de antes. Se o FPS ou o 1% piores caírem de
+             verdade, ele desfaz o que aplicou e mostra os números. Precisa da medição
+             automática ligada (aba Sistema, Preferências) e do Otimiza como administrador.</p>`
+        : ""
+    }`;
+}
+
 function linhaDoJogo(j: Jogo, i: number, nvidia: boolean): string {
   const med = j.ultima_medicao
     ? `<span class="fg-chip">última partida medida ${quando(j.ultima_medicao.quando)}: ${Math.round(j.ultima_medicao.fps)} FPS${
@@ -253,6 +317,12 @@ function linhaDoJogo(j: Jogo, i: number, nvidia: boolean): string {
   let acao = "";
   if (j.ajustador === "unreal" && j.executavel) {
     acao = `
+      <div class="fg-linha">
+        <button class="btn btn-primary" data-otimizar="${i}">Otimizar e testar</button>
+        <span class="fg-nota">Aplica o Equilibrado${nvidia ? " e o perfil NVIDIA Competitivo" : ""}, e deixa as próximas partidas decidirem.</span>
+      </div>
+      <div class="bib-previa" id="bib-otimizar-${i}"></div>
+      <p class="fg-nota">Ou escolha o orçamento de imagem você mesmo:</p>
       <div class="fg-linha">
         <div class="fg-segmentos" role="group" aria-label="Orçamento de imagem">
           ${(Object.keys(ORCAMENTO) as Orcamento[])
@@ -409,6 +479,10 @@ export async function preencherFichaDoJogo(
         btn.disabled = false;
         btn.textContent = String(erro);
       }
+    });
+    alvo.querySelector<HTMLButtonElement>("[data-otimizar]")?.addEventListener("click", (e) => {
+      (e.currentTarget as HTMLButtonElement).disabled = true;
+      void otimizarETestar(lista.jogos[i], i, lista.nvidia);
     });
     alvo.querySelectorAll<HTMLButtonElement>("[data-orcamento][data-jogo]").forEach((btn) =>
       btn.addEventListener("click", () => void prever(lista.jogos[i], i, btn.dataset.orcamento as Orcamento)),
