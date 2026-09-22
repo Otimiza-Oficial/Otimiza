@@ -1158,23 +1158,8 @@ pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
     }
 }
 
-/// Comando: Esvazia a Lixeira.
-#[tauri::command]
-pub async fn empty_recycle_bin() -> Result<String, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::diskspace::empty_recycle_bin)
-            .await
-            .map_err(|e| format!("Falha ao esvaziar a Lixeira: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
+// O "Esvaziar Lixeira" do liberador saiu na 2.9: a Lixeira é um item da
+// Limpeza do sistema, que diz o que se perde e vem desmarcada.
 
 // ---------------------------------------------------------------------------
 // Memória e paginação
@@ -5172,7 +5157,6 @@ mod tests {
         "clean_disk_category",
         "aplicar_plano_otimiza",
         "reparar_plano_otimiza",
-        "empty_recycle_bin",
         "set_automatic_pagefile",
         "clean_shader_cache",
         "set_gpu_preference",

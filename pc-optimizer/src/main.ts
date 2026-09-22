@@ -11092,20 +11092,6 @@ function wireControls() {
     if (button) cleanDiskCategory(button.dataset.space!, button);
   });
 
-  element("empty-recycle").addEventListener("click", async () => {
-    const button = element<HTMLButtonElement>("empty-recycle");
-    button.disabled = true;
-
-    try {
-      const message = await invoke<string>("empty_recycle_bin");
-      setStatus("disk-status", message, "ok");
-    } catch (error) {
-      setStatus("disk-status", String(error), "error");
-    } finally {
-      button.disabled = false;
-    }
-  });
-
   element("analyze-memory").addEventListener("click", analyzeMemory);
 
   element("fix-pagefile").addEventListener("click", async () => {

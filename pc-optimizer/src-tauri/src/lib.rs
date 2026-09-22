@@ -212,7 +212,6 @@ pub fn run() {
             commands::set_scheduled_task,
             commands::scan_disk_space,
             commands::clean_disk_category,
-            commands::empty_recycle_bin,
             commands::analyze_memory,
             commands::set_automatic_pagefile,
             commands::restore_status,

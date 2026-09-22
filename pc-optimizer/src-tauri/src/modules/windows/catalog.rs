@@ -65,10 +65,6 @@ pub enum Action {
     GpuMsiMode,
     /// Impede o Windows de desligar a placa de rede para economizar energia.
     NicPowerSaving,
-    /// Apaga arquivos temporários. A única ação irreversível do catálogo.
-    CleanTempFiles,
-    /// Apaga instaladores de atualizações já aplicadas. Também irreversível.
-    CleanUpdateCache,
     /// Liga ou desliga o Armazenamento Reservado do Windows.
     ReservedStorage { enabled: bool },
     /// Remove o relógio de plataforma forçado na configuração de boot.
@@ -316,8 +312,6 @@ pub const RETIRADOS: &[&str] = &[
     "disable_memory_compression",
     "mmcss_games",
     "notifications_off",
-    "clean_temp_files",
-    "clean_update_cache",
     "network_low_latency",
     "disable_xbox_services",
     "maps_auto_update_off",
@@ -985,22 +979,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         }],
     },
     OptimizationSpec {
-        id: "clean_update_cache",
-        name: "Limpar instaladores de atualizações já aplicadas",
-        description: "Apaga os instaladores que o Windows guarda depois de instalar cada atualização.",
-        honest_effect: "É a limpeza que mais devolve espaço em disco, e costuma render vários GB. Não aumenta FPS: o ganho é espaço, que num SSD pequeno e cheio faz muita diferença. Os serviços de atualização param durante a limpeza e voltam em seguida. NÃO PODE SER DESFEITA — arquivo apagado não volta.",
-        category: Category::System,
-        expected_gain: ExpectedGain::Responsiveness,
-        risco_de_fps: RiscoDeFps::Nenhum,
-        requires_admin: true,
-        requires_restart: false,
-        reversible: false,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::CleanUpdateCache],
-    },
-    OptimizationSpec {
         id: "disable_reserved_storage",
         name: "Liberar o Armazenamento Reservado",
         description: "Devolve os gigabytes que o Windows reserva no disco só para instalar atualizações futuras.",
@@ -1406,22 +1384,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         highlight_when: &[],
         actions: &[Action::AccessibilityKeysOff],
     },
-    OptimizationSpec {
-        id: "clean_temp_files",
-        name: "Limpar arquivos temporários",
-        description: "Apaga o conteúdo das pastas de temporários do Windows e do seu usuário.",
-        honest_effect: "Libera espaço em disco. Não aumenta FPS. É a ÚNICA operação do programa que não pode ser desfeita — arquivo apagado não volta. Arquivos em uso são pulados.",
-        category: Category::System,
-        expected_gain: ExpectedGain::Responsiveness,
-        risco_de_fps: RiscoDeFps::Nenhum,
-        requires_admin: false,
-        requires_restart: false,
-        reversible: false,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::CleanTempFiles],
-    },
 ];
 
 /// Busca uma otimização pelo identificador.
@@ -1580,7 +1542,9 @@ mod tests {
             .collect();
         irreversible.sort();
 
-        assert_eq!(irreversible, vec!["clean_temp_files", "clean_update_cache"]);
+        // 2.9: as duas limpezas saíram do catálogo (moram na Limpeza do sistema,
+        // que mostra o que se perde antes). O catálogo inteiro tem desfazer.
+        assert!(irreversible.is_empty(), "{:?}", irreversible);
     }
 
     #[test]

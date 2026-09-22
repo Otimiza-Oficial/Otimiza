@@ -18,7 +18,6 @@ pub mod cabecalho;
 pub mod catalog;
 pub mod cbslog;
 pub mod citizenfx;
-pub mod cleanup;
 pub mod configjogo;
 pub mod conflicts;
 pub mod deteccao;
@@ -265,15 +264,6 @@ impl WindowsOptimizer {
         }
 
         match spec.actions.first()? {
-            Action::CleanTempFiles => {
-                let bytes = cleanup::estimate();
-                Some(format!("{} para liberar", cleanup::format_size(bytes)))
-            }
-            Action::CleanUpdateCache => {
-                let bytes = cleanup::estimate_update_cache();
-                Some(format!("{} para liberar", cleanup::format_size(bytes)))
-            }
-
             // Sem elevação não conseguimos sequer LER estas configurações. Dizer
             // isso é obrigatório: o usuário precisa saber que o item aparece
             // como disponível porque não foi possível conferir, não porque
@@ -445,22 +435,6 @@ impl WindowsOptimizer {
             },
 
             // Só faz sentido oferecer a limpeza se houver algo a limpar.
-            Action::CleanTempFiles => {
-                if cleanup::estimate() > 0 {
-                    ActionState::Pending
-                } else {
-                    ActionState::Satisfied
-                }
-            }
-
-            Action::CleanUpdateCache => {
-                if cleanup::estimate_update_cache() > 0 {
-                    ActionState::Pending
-                } else {
-                    ActionState::Satisfied
-                }
-            }
-
             Action::ReservedStorage { enabled } => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -2157,36 +2131,6 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 }
             }
 
-            Action::CleanUpdateCache => {
-                let result = cleanup::run_update_cache()?;
-
-                Ok(Some(format!(
-                    "{} liberados dos instaladores de atualização.",
-                    cleanup::format_size(result.bytes_freed)
-                )))
-            }
-
-            Action::CleanTempFiles => {
-                let result = cleanup::run();
-
-                // Nada é registrado no ChangeLog: arquivo apagado não volta, e
-                // fingir que volta seria pior que admitir que não.
-                let mut note = format!(
-                    "{} liberados em {} itens.",
-                    cleanup::format_size(result.bytes_freed),
-                    result.files_removed
-                );
-
-                if result.files_skipped > 0 {
-                    note.push_str(&format!(
-                        " {} itens em uso foram pulados.",
-                        result.files_skipped
-                    ));
-                }
-
-                Ok(Some(note))
-            }
-
             Action::DisableNagle => {
                 let interfaces = registry::subkeys("HKLM", TCPIP_INTERFACES)?;
 
@@ -2500,8 +2444,6 @@ pub fn nome_da_acao(action: &Action) -> String {
         Action::NicPowerSaving => "economia de energia da placa de rede".to_string(),
         Action::ClearBootLimits => "limites de inicialização".to_string(),
         Action::ReservedStorage { .. } => "Armazenamento Reservado".to_string(),
-        Action::CleanTempFiles => "arquivos temporários".to_string(),
-        Action::CleanUpdateCache => "instaladores de atualização".to_string(),
         Action::AccessibilityKeysOff => "teclas de acessibilidade".to_string(),
         Action::DisableHypervisor => "hipervisor no boot".to_string(),
         Action::RemoveForcedPlatformClock => "relógio de plataforma forçado".to_string(),
@@ -3708,7 +3650,7 @@ mod tests {
             .map(|spec| spec.id)
             .collect();
 
-        assert!(!batch.contains(&"clean_temp_files"));
+        assert!(batch.iter().all(|id| catalog::find(id).is_some_and(|s| s.reversible)));
     }
 
     /// Sem elevação, o Windows nega a leitura de algumas configurações. Nesses
