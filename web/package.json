@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/csp.mjs out",
     "start": "next start",
     "lint": "eslint"
   },
