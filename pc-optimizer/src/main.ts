@@ -8905,6 +8905,8 @@ interface PlacaDeVideo {
   nome: string | null;
   driver: string | null;
   driver_data: string | null;
+  driver_origem?: string | null;
+  driver_generico?: boolean;
   driver_dias: number | null;
   vram_gb: number;
 }
@@ -9469,6 +9471,25 @@ async function carregarPlaca() {
     );
 
     text("placa-vram", p.vram_gb > 0 ? `${p.vram_gb.toFixed(0)} GB` : "não sei dizer");
+
+    text("placa-driver-origem", p.driver_origem ?? "não deu para ler");
+    text(
+      "placa-driver-nota",
+      p.driver_generico
+        ? "Este é o driver genérico do Windows: a placa roda sem a aceleração completa. Instalar o driver do fabricante muda o FPS de verdade."
+        : "Driver mais novo não é automaticamente mais rápido: às vezes melhora um jogo e piora outro. Se um jogo caiu depois de atualizar, a ficha dele na Biblioteca mostra a queda e a versão que mudou.",
+    );
+    const sites: Record<string, string> = {
+      nvidia: "https://www.nvidia.com/pt-br/drivers/",
+      amd: "https://www.amd.com/pt/support/download/drivers.html",
+      intel: "https://www.intel.com.br/content/www/br/pt/download-center/home.html",
+    };
+    const site = sites[p.marca];
+    const botaoSite = document.getElementById("placa-driver-site") as HTMLButtonElement | null;
+    if (botaoSite) {
+      botaoSite.hidden = !site;
+      botaoSite.onclick = site ? () => void openUrl(site) : null;
+    }
 
     // Só pergunta quando não sabe.
     element("placa-escolha").hidden = p.marca !== "desconhecida";

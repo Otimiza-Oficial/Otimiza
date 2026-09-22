@@ -2498,6 +2498,7 @@
               <dl class="placa-dados">
                 <div><dt>Driver</dt><dd id="placa-driver">—</dd></div>
                 <div><dt>Publicado</dt><dd id="placa-driver-idade">—</dd></div>
+                <div><dt>Origem</dt><dd id="placa-driver-origem">—</dd></div>
                 <div><dt>Memória de vídeo</dt><dd id="placa-vram">—</dd></div>
               </dl>
 
@@ -2506,6 +2507,16 @@
                 escolha manual deixa de ser trabalho inútil e passa a ser a
                 única saída.
               -->
+              <!--
+                DRIVER (2.9). Sem "mais novo é mais rápido": driver novo às
+                vezes melhora um jogo e piora outro. O Otimiza mostra o que
+                está instalado, avisa quando é o genérico do Windows (aí muda
+                FPS de verdade) e aponta a página do fabricante. Não instala
+                nada: instalador de terceiros não tem desfazer confiável.
+              -->
+              <p class="hint" id="placa-driver-nota"></p>
+              <div class="row-actions"><button class="btn btn-ghost" id="placa-driver-site" hidden>Página de drivers do fabricante</button></div>
+
               <div class="placa-escolha" id="placa-escolha" hidden>
                 <p class="hint">Não consegui ler a sua placa. Qual delas é?</p>
                 <div class="row-actions">

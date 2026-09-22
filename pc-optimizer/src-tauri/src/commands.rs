@@ -3330,6 +3330,10 @@ pub struct PlacaDeVideo {
     pub driver: Option<String>,
     pub driver_data: Option<String>,
     pub driver_dias: Option<i64>,
+    /// Quem publicou o driver (2.9): o fabricante, ou a Microsoft.
+    pub driver_origem: Option<String>,
+    /// É o driver genérico do Windows. Aí sim atualizar muda FPS.
+    pub driver_generico: bool,
     pub vram_gb: f64,
 }
 
@@ -3370,6 +3374,7 @@ pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
     {
         let s = crate::modules::windows::shaders::analyze();
         let nome = s.gpu.clone();
+        let origem = crate::modules::windows::shaders::provedor_do_driver();
 
         Ok(PlacaDeVideo {
             marca: nome
@@ -3381,6 +3386,10 @@ pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
             driver: s.driver_version.clone(),
             driver_data: s.driver_date.clone(),
             driver_dias: s.driver_age_days,
+            driver_generico: origem
+                .as_deref()
+                .is_some_and(|p| crate::modules::windows::shaders::driver_generico(p, s.gpu.as_deref())),
+            driver_origem: origem,
             vram_gb: crate::modules::windows::bottleneck::vram_total_gb(),
         })
     }
