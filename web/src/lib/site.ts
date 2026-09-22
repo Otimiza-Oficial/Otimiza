@@ -41,8 +41,9 @@ export const links = {
   baixar: "https://github.com/Otimiza-Oficial/Otimiza/releases/latest/download/Otimiza-instalador.exe",
   /** O mesmo convite que o app abre (`.github/convite.json`). */
   discord: "https://discord.gg/fmeQVJphC",
-  /** A compra acontece no Discord: quem emite a chave é uma pessoa. */
-  comprar: "https://discord.gg/fmeQVJphC",
+  /** A página que explica o preço. Com o checkout ligado, ela também cobra;
+      sem ele, ela leva ao Discord, onde a compra já funciona. */
+  comprar: "/comprar/",
   entrar: "/entrar/",
   painel: "/painel/",
 } as const;
