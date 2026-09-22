@@ -1431,6 +1431,47 @@ pub async fn export_report(
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
 }
 
+/// Comando: as alterações aplicadas, em planilha (CSV) na Área de Trabalho. `LIVRES`.
+///
+/// Só lê o histórico; é o que a pessoa leva para conferir o que o Otimiza fez.
+#[tauri::command]
+pub async fn exportar_alteracoes(state: State<'_, AppState>) -> Result<String, String> {
+    let log = state.changes.lock().await;
+    let csv = crate::modules::report::csv_das_alteracoes(&log, valor_novo_da_alteracao);
+    crate::modules::report::salvar_csv(&csv)
+}
+
+/// O valor que o Otimiza escreveu, quando o catálogo o conhece.
+#[cfg(target_os = "windows")]
+fn valor_novo_da_alteracao(id: &str, c: &crate::modules::changelog::ChangeRecord) -> Option<String> {
+    use crate::modules::changelog::ChangeRecord;
+    use crate::modules::windows::catalog::{self, Action, RegValue};
+    match c {
+        ChangeRecord::RegistryValue { path, name, .. } => catalog::find(id)?.actions.iter().find_map(|a| match a {
+            Action::Registry { path: p, name: n, value, .. } if p.eq_ignore_ascii_case(path) && n.eq_ignore_ascii_case(name) => Some(match value {
+                RegValue::Dword(v) => v.to_string(),
+                RegValue::Text(t) => t.to_string(),
+                RegValue::Binary(b) => b.iter().map(|x| format!("{:02X}", x)).collect::<Vec<_>>().join(" "),
+            }),
+            _ => None,
+        }),
+        ChangeRecord::LimiteNvidia { fps, .. } => Some(format!("{} FPS", fps)),
+        ChangeRecord::PerfilNvidia { perfil, .. } => Some(format!("perfil {}", perfil)),
+        ChangeRecord::Hibernation { .. } => Some("desligada".into()),
+        ChangeRecord::MemoryCompression { .. } => Some("desligada".into()),
+        ChangeRecord::ReservedStorage { .. } => Some("desligado".into()),
+        ChangeRecord::ScheduledTask { previously_enabled, .. } => {
+            Some(if *previously_enabled { "desligada" } else { "ligada" }.into())
+        }
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn valor_novo_da_alteracao(_: &str, _: &crate::modules::changelog::ChangeRecord) -> Option<String> {
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Cache de shader, prontidão e prioridade permanente
 // ---------------------------------------------------------------------------
@@ -5034,6 +5075,7 @@ mod tests {
         "analyze_boot",
         "analyze_thermal",
         "export_report",
+        "exportar_alteracoes",
         "map_folders",
         "analyze_rbar",
         "list_profiles",

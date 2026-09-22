@@ -687,8 +687,9 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
             .collect();
 
         blocos.push_str(&format!(
-            "<article class=\"mud\"><h4>{}</h4><ul>{}</ul></article>",
+            "<article class=\"mud\"><h4>{} <small>({})</small></h4><ul>{}</ul></article>",
             escape(&otimizacao.name),
+            escape(&data_de(otimizacao.timestamp)),
             itens
         ));
     }
@@ -707,6 +708,62 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
     );
 
     (html, aplicadas.len(), total_mudancas)
+}
+
+/// Data local legível de um instante do histórico. `0` é histórico antigo sem
+/// hora gravada, e aparece como tal em vez de 01/01/1970.
+fn data_de(ts: u64) -> String {
+    use chrono::TimeZone;
+    if ts == 0 {
+        return "sem data".to_string();
+    }
+    match chrono::Local.timestamp_opt(ts as i64, 0).single() {
+        Some(d) => d.format("%d/%m/%Y %H:%M").to_string(),
+        None => "sem data".to_string(),
+    }
+}
+
+// ─── Relatório de alterações em planilha (2.9) ──────────────────────────
+//
+// Uma linha por alteração: quando, qual ajuste, o que mudou e o valor de antes
+// (que é o que volta no desfazer), e o valor novo quando o catálogo o conhece.
+// Separador ";" e BOM UTF-8 porque é assim que o Excel em português abre um
+// CSV sem embaralhar acento nem coluna.
+
+fn campo_csv(s: &str) -> String {
+    format!("\"{}\"", s.replace('"', "\"\"").replace(['\n', '\r'], " "))
+}
+
+/// **Pura**, a menos do fuso da data. `valor_novo` responde o valor escrito
+/// para um id e uma alteração, quando se sabe.
+pub fn csv_das_alteracoes(
+    log: &ChangeLog,
+    valor_novo: impl Fn(&str, &crate::modules::changelog::ChangeRecord) -> Option<String>,
+) -> String {
+    let mut s = String::from("\u{FEFF}data;id;ajuste;alteracao_e_valor_anterior;valor_novo;desfazer\r\n");
+    for o in log.applied() {
+        for c in &o.changes {
+            let linha = [
+                data_de(o.timestamp),
+                o.optimization_id.clone(),
+                o.name.clone(),
+                c.describe(),
+                valor_novo(&o.optimization_id, c).unwrap_or_default(),
+                "pelo Otimiza, item a item ou Desfazer tudo".to_string(),
+            ];
+            s.push_str(&linha.iter().map(|x| campo_csv(x)).collect::<Vec<_>>().join(";"));
+            s.push_str("\r\n");
+        }
+    }
+    s
+}
+
+/// Grava o CSV na Área de Trabalho e devolve o caminho.
+pub fn salvar_csv(conteudo: &str) -> Result<String, String> {
+    let nome = format!("Otimiza - alteracoes - {}.csv", chrono::Local::now().format("%Y-%m-%d %Hh%M"));
+    let caminho = desktop_dir().join(nome);
+    std::fs::write(&caminho, conteudo).map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
+    Ok(caminho.to_string_lossy().to_string())
 }
 
 fn secao_recusas() -> String {
@@ -1026,6 +1083,33 @@ pub fn save(
 }
 
 #[cfg(test)]
+mod testes_csv {
+    use super::*;
+    use crate::modules::changelog::{AppliedOptimization, ChangeRecord};
+
+    #[test]
+    fn o_csv_tem_uma_linha_por_alteracao_e_escapa_aspas() {
+        let mut log = ChangeLog::em_memoria();
+        log.record(AppliedOptimization {
+            optimization_id: "x".into(),
+            name: "Ajuste \"com aspas\"".into(),
+            timestamp: 0,
+            changes: vec![
+                ChangeRecord::PowerPlan { previous_guid: "a".into() },
+                ChangeRecord::Hibernation { previously_enabled: true },
+            ],
+        })
+        .unwrap();
+        let csv = csv_das_alteracoes(&log, |_, _| Some("1".into()));
+        let linhas: Vec<&str> = csv.trim_end().split("\r\n").collect();
+        assert_eq!(linhas.len(), 3, "{csv}");
+        assert!(linhas[0].starts_with('\u{FEFF}'));
+        assert!(linhas[1].contains("\"Ajuste \"\"com aspas\"\"\""));
+        assert!(linhas[1].contains("\"sem data\""));
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1213,5 +1297,17 @@ mod inspecao {
             Err(e) => println!("sem PDF: {}", e),
         }
         println!("HTML: {:?}", html);
+    }
+}
+
+#[cfg(test)]
+mod csv_desta_maquina {
+    /// Só leitura do histórico real; imprime o CSV sem gravar.
+    #[test]
+    #[ignore]
+    fn csv_desta_maquina() {
+        let log = crate::modules::changelog::ChangeLog::load();
+        let csv = super::csv_das_alteracoes(&log, |_, _| None);
+        println!("{}", csv.lines().take(8).collect::<Vec<_>>().join("\n"));
     }
 }

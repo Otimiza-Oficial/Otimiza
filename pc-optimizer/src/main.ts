@@ -10998,6 +10998,18 @@ function wireControls() {
   element("measure-baseline").addEventListener("click", () => runBenchmark("measure_baseline"));
   element("measure-compare").addEventListener("click", () => runBenchmark("measure_and_compare"));
   element("export-report").addEventListener("click", exportReport);
+  document.getElementById("exportar-alteracoes")?.addEventListener("click", async (e) => {
+    const botao = e.currentTarget as HTMLButtonElement;
+    botao.disabled = true;
+    try {
+      const caminho = await invoke<string>("exportar_alteracoes");
+      text("report-status", `Planilha gravada: ${caminho}`);
+    } catch (erro) {
+      text("report-status", String(erro));
+    } finally {
+      botao.disabled = false;
+    }
+  });
 
   element("optimize-now").addEventListener("click", () =>
     runBatch("optimize_now", "Aplicando o que falta…")

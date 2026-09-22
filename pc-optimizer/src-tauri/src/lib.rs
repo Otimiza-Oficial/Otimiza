@@ -200,6 +200,7 @@ pub fn run() {
             commands::analyze_boot,
             commands::analyze_thermal,
             commands::export_report,
+            commands::exportar_alteracoes,
             commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,
