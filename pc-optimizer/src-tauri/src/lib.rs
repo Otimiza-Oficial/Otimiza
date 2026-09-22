@@ -499,6 +499,17 @@ pub fn run() {
                 });
             }
 
+            // AQUECE AS CONDIÇÕES DOS AJUSTES CONDICIONAIS (2.9).
+            //
+            // Ler o espaço livre do disco custa segundos na primeira vez, e a
+            // lista de ajustes pergunta isso. Medido aqui, fora do caminho da
+            // tela, a primeira listagem já encontra a resposta pronta — e se
+            // não encontrar, ela não espera (ver `condicao_atendida_sem_esperar`).
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                let _ = tokio::task::spawn_blocking(modules::windows::aquecer_condicoes).await;
+            });
+
             // AUTO CPU SET (2.9): reaplica "só núcleos de desempenho" nos jogos
             // em que isso foi MEDIDO e rendeu. Afinidade morre com o processo,
             // então cada abertura do jogo precisa dela de novo. Sem nenhum

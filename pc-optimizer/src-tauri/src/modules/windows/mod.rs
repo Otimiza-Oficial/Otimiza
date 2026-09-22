@@ -147,7 +147,7 @@ impl WindowsOptimizer {
             // se já estiver aplicado (para poder desfazer) ou se a condição
             // não pôde ser medida (esconder seria afirmar o que ninguém viu).
             .filter(|spec| match catalog::classe(spec.id) {
-                catalog::Classe::Condicional(c) => condicao_atendida(c) != Some(false) || log.is_applied(spec.id),
+                catalog::Classe::Condicional(c) => condicao_atendida_sem_esperar(c) != Some(false) || log.is_applied(spec.id),
                 _ => true,
             })
             .map(|spec| {
@@ -2209,7 +2209,88 @@ fn startup_change_id(hive: &str, name: &str) -> String {
 ///
 /// `None` quando não deu para medir: nem aparece como "não se aplica" nem
 /// entra num lote.
+type CacheDasCondicoes = std::sync::Mutex<Vec<(catalog::Condicao, std::time::Instant, Option<bool>)>>;
+
+fn cache_das_condicoes() -> &'static CacheDasCondicoes {
+    static LEMBRADO: std::sync::OnceLock<CacheDasCondicoes> = std::sync::OnceLock::new();
+    LEMBRADO.get_or_init(Default::default)
+}
+
+/// Quanto tempo a resposta continua valendo. Curto o bastante para a pessoa
+/// liberar espaço, desligar a gravação do Game Bar e ver a lista mudar sem
+/// reabrir o programa.
+const VALIDADE_DA_CONDICAO: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A resposta guardada, quando ainda vale. `None` externo = ninguém mediu.
+fn condicao_lembrada(c: catalog::Condicao) -> Option<Option<bool>> {
+    let cache = cache_das_condicoes().lock().ok()?;
+    cache
+        .iter()
+        .find(|(qual, _, _)| *qual == c)
+        .filter(|(_, quando, _)| quando.elapsed() < VALIDADE_DA_CONDICAO)
+        .map(|(_, _, valor)| *valor)
+}
+
 pub fn condicao_atendida(c: catalog::Condicao) -> Option<bool> {
+    // LEMBRA POR MEIO MINUTO, E A RAZÃO É TEMPO DE TELA.
+    //
+    // A condição de espaço em disco enumera os volumes, e isso custou 850 ms
+    // por chamada nesta máquina. A listagem do catálogo pergunta uma vez por
+    // item condicional, então sem lembrança a lista inteira ficava segundos
+    // mais lenta — desfazendo o trabalho de abertura que a 1.7 comprou.
+    //
+    // Meio minuto é curto o bastante para a pessoa liberar espaço, desligar a
+    // gravação do Game Bar e ver a lista mudar sem reabrir o programa.
+    if let Some(valor) = condicao_lembrada(c) {
+        return valor;
+    }
+    let valor = medir_condicao(c);
+    guardar_condicao(c, valor);
+    valor
+}
+
+fn guardar_condicao(c: catalog::Condicao, valor: Option<bool>) {
+    if let Some(cache) = cache_das_condicoes().lock().ok().as_mut() {
+        cache.retain(|(qual, _, _)| *qual != c);
+        cache.push((c, std::time::Instant::now(), valor));
+    }
+}
+
+/// A condição, SEM ESPERAR por leitura lenta.
+///
+/// A listagem do catálogo passa por aqui. Ler o espaço livre do disco custou
+/// 3,4 s na primeira vez nesta máquina (é o Windows enumerando volumes), e a
+/// lista de ajustes não pode parar por isso — a abertura rápida foi comprada a
+/// peso de versão na 1.7.
+///
+/// Sem resposta guardada ainda: devolve `None` — que é "não deu para medir",
+/// e faz o item CONTINUAR aparecendo — e manda medir numa thread à parte, para
+/// a próxima listagem já saber. Nunca esconde por pressa.
+pub fn condicao_atendida_sem_esperar(c: catalog::Condicao) -> Option<bool> {
+    if let Some(valor) = condicao_lembrada(c) {
+        return valor;
+    }
+    std::thread::spawn(move || {
+        let valor = medir_condicao(c);
+        guardar_condicao(c, valor);
+    });
+    None
+}
+
+/// Mede todas as condições fora do caminho da tela. Chamada na abertura.
+pub fn aquecer_condicoes() {
+    for c in [
+        catalog::Condicao::GameDvrLigado,
+        catalog::Condicao::PcFraco,
+        catalog::Condicao::MemoriaApertada,
+        catalog::Condicao::PoucoEspaco,
+    ] {
+        let valor = medir_condicao(c);
+        guardar_condicao(c, valor);
+    }
+}
+
+fn medir_condicao(c: catalog::Condicao) -> Option<bool> {
     use catalog::Condicao;
     let perfil = hardware::profile();
     match c {
@@ -4040,4 +4121,24 @@ fn success_message(spec: &OptimizationSpec, notes: &[String]) -> String {
     }
 
     message
+}
+
+#[cfg(test)]
+mod custo_das_condicoes {
+    /// Quanto custa perguntar a condição, e quanto a lembrança economiza.
+    /// `cargo test --lib -- --ignored quanto_custa_listar --nocapture`.
+    #[test]
+    #[ignore]
+    fn quanto_custa_listar() {
+        use std::time::Instant;
+        for k in 0..4 {
+            let u = Instant::now();
+            let v = super::condicao_atendida(super::catalog::Condicao::PoucoEspaco);
+            println!("  chamada {k}: {:?} = {v:?}", u.elapsed());
+        }
+        let t = Instant::now();
+        let log = super::ChangeLog::load();
+        let n = super::WindowsOptimizer::new().list(&log).len();
+        println!("list() com {n} itens: {:?}", t.elapsed());
+    }
 }
