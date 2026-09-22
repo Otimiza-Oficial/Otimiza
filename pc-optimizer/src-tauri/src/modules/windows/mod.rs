@@ -1177,7 +1177,7 @@ impl WindowsOptimizer {
             name: executavel.to_string(),
             success: true,
             applied: true,
-            message: format!("Perfil NVIDIA aplicado em {}. Vale na próxima vez que o jogo abrir.", executavel),
+            message: format!("Perfil NVIDIA aplicado em {}. Vale na próxima vez que o jogo abrir. As próximas partidas medidas ficam em observação: se o FPS ou o 1% piores caírem de verdade, o perfil é desfeito sozinho.", executavel),
             changes_count: 1,
             changes: vec![described],
             ..Default::default()

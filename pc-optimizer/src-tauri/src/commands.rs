@@ -2438,7 +2438,21 @@ pub async fn nvidia_perfil_aplicar(
     crate::modules::licenca::exigir()?;
     let exe = nome_do_executavel(&executavel)?;
     let mut log = state.changes.lock().await;
-    crate::modules::windows::WindowsOptimizer::new().aplicar_perfil_nvidia(&exe, perfil, &mut log)
+    let feito = crate::modules::windows::WindowsOptimizer::new().aplicar_perfil_nvidia(&exe, perfil, &mut log)?;
+    // Nunca menos FPS: o perfil entra na mesma vigília dos ajustes de jogo
+    // (`modules::portao`). Se as próximas partidas medidas caírem de verdade,
+    // ele é desfeito sozinho.
+    let processo = std::path::Path::new(&exe)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    crate::modules::portao::vigiar(
+        &crate::modules::windows::nvdriver::id_do_perfil(&exe),
+        &format!("perfil NVIDIA de {exe}"),
+        &processo,
+        crate::modules::changelog::now_timestamp(),
+    );
+    Ok(feito)
 }
 
 /// O driver amarra perfil ao NOME DO ARQUIVO; a tela manda o caminho inteiro.
