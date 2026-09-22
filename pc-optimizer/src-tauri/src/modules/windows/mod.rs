@@ -139,6 +139,14 @@ impl WindowsOptimizer {
             // Retirado só aparece enquanto está aplicado, para poder ser
             // desfeito. Ver `catalog::RETIRADOS`.
             .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
+            // Condicional cuja condição foi medida e NÃO vale aqui some — o
+            // ajuste certo para este computador, não a lista mais longa. Fica
+            // se já estiver aplicado (para poder desfazer) ou se a condição
+            // não pôde ser medida (esconder seria afirmar o que ninguém viu).
+            .filter(|spec| match catalog::classe(spec.id) {
+                catalog::Classe::Condicional(c) => condicao_atendida(c) != Some(false) || log.is_applied(spec.id),
+                _ => true,
+            })
             .map(|spec| {
                 let state = self.inspect(spec, log);
 
@@ -1557,7 +1565,7 @@ impl WindowsOptimizer {
                 Some(ids) => ids.iter().any(|id| id == spec.id),
                 None => true,
             })
-            .filter(|spec| catalog::entra_no_lote(spec))
+            .filter(|spec| catalog::entra_no_lote_se(spec, |c| condicao_atendida(c) == Some(true)))
             // SÓ `Available`, E ISSO AGORA DEIXA `Unknown` DE FORA DE PROPÓSITO.
             //
             // O "Otimizar agora" é o botão que o cliente aperta sem ler item a
@@ -2249,6 +2257,39 @@ fn startup_change_id(hive: &str, name: &str) -> String {
 /// É o que permite dizer ao dono de um PC de 4 GB quais ajustes valem a pena
 /// para ELE, em vez de entregar a mesma lista de vinte itens para todo mundo e
 /// deixar a pessoa adivinhar.
+/// A condição de um item condicional, MEDIDA nesta máquina.
+///
+/// `None` quando não deu para medir: nem aparece como "não se aplica" nem
+/// entra num lote.
+pub fn condicao_atendida(c: catalog::Condicao) -> Option<bool> {
+    use catalog::Condicao;
+    let perfil = hardware::profile();
+    match c {
+        Condicao::GameDvrLigado => gamedvr_ligado(
+            registry::read("HKCU", r"System\GameConfigStore", "GameDVR_Enabled").ok(),
+            registry::read("HKCU", r"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled").ok(),
+        ),
+        Condicao::PcFraco => Some(perfil.total_ram_gb <= 8.5 || perfil.logical_cores <= 4),
+        Condicao::MemoriaApertada => Some(perfil.total_ram_gb > 0.0 && perfil.total_ram_gb <= 16.5),
+        Condicao::PoucoEspaco => diskspace::disk_usage().map(|(_, livre)| livre < 20 * 1024 * 1024 * 1024),
+        Condicao::SoSePedir => Some(false),
+    }
+}
+
+/// **Pura.** O Game DVR está ligado? `GameDVR_Enabled` ausente é o padrão do
+/// Windows, que é ligado; `AppCaptureEnabled = 1` também liga. Qualquer
+/// leitura que falhou vira `None`.
+fn gamedvr_ligado(dvr: Option<PreviousValue>, captura: Option<PreviousValue>) -> Option<bool> {
+    let ligado = |v: &PreviousValue| match v {
+        PreviousValue::Dword(n) => Some(*n != 0),
+        PreviousValue::Absent | PreviousValue::AbsentKey => None,
+        _ => Some(true),
+    };
+    let dvr = dvr?;
+    let captura = captura?;
+    Some(ligado(&dvr).unwrap_or(true) || ligado(&captura).unwrap_or(false))
+}
+
 fn pesa_nesta_maquina(spec: &OptimizationSpec) -> bool {
     use catalog::Boost;
     use hardware::StorageKind;
@@ -3621,8 +3662,24 @@ mod tests {
         let esperado = catalog::CATALOG
             .iter()
             .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
+            .filter(|spec| match catalog::classe(spec.id) {
+                catalog::Classe::Condicional(c) => condicao_atendida(c) != Some(false) || log.is_applied(spec.id),
+                _ => true,
+            })
             .count();
         assert_eq!(optimizer.list(&log).len(), esperado);
+    }
+
+    #[test]
+    fn o_game_dvr_ligado_e_lido_como_o_windows_decide() {
+        use PreviousValue::*;
+        // Ausente é o padrão do Windows: ligado.
+        assert_eq!(gamedvr_ligado(Some(Absent), Some(Absent)), Some(true));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(0))), Some(false));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Absent)), Some(false));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(1))), Some(true));
+        // Leitura que falhou não vira resposta.
+        assert_eq!(gamedvr_ligado(None, Some(Dword(0))), None);
     }
 
     #[test]

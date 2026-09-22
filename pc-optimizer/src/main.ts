@@ -29,6 +29,10 @@ interface OptimizationInfo {
   security_tradeoff: boolean;
   /** Retirado na 2.9: só aparece enquanto aplicado, para poder ser desfeito. */
   retirado?: boolean;
+  /** Só no modo Expert (2.9). */
+  expert?: boolean;
+  /** Item condicional: por que ele aparece nesta máquina. */
+  condicao?: string | null;
   /**
    * Se este ajuste pode DERRUBAR o FPS, e em qual caso.
    *
@@ -6865,6 +6869,24 @@ let activeProfile: string | null = null;
 /** Texto digitado na busca do catálogo. */
 let searchTerm = "";
 
+/**
+ * Modo Expert (2.9): preferência DESTA tela, guardada no navegador do app.
+ * Leitura que falha vira modo Simples — o seguro.
+ */
+function lerModoExpert(): boolean {
+  try {
+    return localStorage.getItem("otimiza.modo") === "expert";
+  } catch {
+    return false;
+  }
+}
+let modoExpert = lerModoExpert();
+
+function aplicarModoExpert() {
+  document.body.dataset.modo = modoExpert ? "expert" : "simples";
+  document.querySelectorAll<HTMLElement>("[data-so-expert]").forEach((el) => (el.hidden = !modoExpert));
+}
+
 
 // -------------------------------------------------- os três níveis de risco
 
@@ -7169,6 +7191,8 @@ function renderOptimizations() {
 
   const visible = optimizations
     .filter((item) => preferences.show_unavailable || item.state !== "Unavailable")
+    // Expert só no modo Expert — menos quando já aplicado, para poder desfazer.
+    .filter((item) => modoExpert || !item.expert || item.state === "Applied")
     .filter((item) => activeCategory === "Todas" || item.category === activeCategory)
     .filter((item) => matchesSearch(item, termo))
     // Perfil escolhido reduz a lista ao que ele recomenda. É o que transforma
@@ -7300,6 +7324,7 @@ function renderOptimization(item: OptimizationInfo): string {
   if (!item.reversible) chips.push(`<span class="chip" data-warn="true">sem volta</span>`);
   if (item.security_tradeoff)
     chips.push(`<span class="chip" data-warn="true">reduz segurança</span>`);
+  if (item.expert) chips.push(`<span class="chip" data-warn="true">Expert — meça antes e depois</span>`);
   if (item.retirado)
     chips.push(`<span class="chip" data-warn="true">retirado na 2.9 — só desfazer</span>`);
 
@@ -7323,6 +7348,7 @@ function renderOptimization(item: OptimizationInfo): string {
     : "";
 
   const detail = item.detail ? `<p class="detail">${escapeHtml(item.detail)}</p>` : "";
+  const condicao = item.condicao ? `<p class="detail">${escapeHtml(item.condicao)}</p>` : "";
 
   // A LINHA DE AJUSTE, E NÃO UM CARTÃO.
   //
@@ -7348,6 +7374,7 @@ function renderOptimization(item: OptimizationInfo): string {
       <div class="opt-body">
         <div class="optimization-meta">${chips.join("")}</div>
         ${risco}
+        ${condicao}
         ${detail}
       </div>
     </details>
@@ -11027,6 +11054,22 @@ function wireControls() {
       perfil.optimization_ids
     );
   });
+
+  const caixaExpert = document.getElementById("modo-expert") as HTMLInputElement | null;
+  if (caixaExpert) {
+    caixaExpert.checked = modoExpert;
+    caixaExpert.addEventListener("change", () => {
+      modoExpert = caixaExpert.checked;
+      try {
+        localStorage.setItem("otimiza.modo", modoExpert ? "expert" : "simples");
+      } catch {
+        /* sem armazenamento: vale só nesta sessão */
+      }
+      aplicarModoExpert();
+      renderOptimizations();
+    });
+  }
+  aplicarModoExpert();
 
   const busca = element<HTMLInputElement>("optimization-search");
   busca.addEventListener("input", () => {

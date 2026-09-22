@@ -1529,6 +1529,17 @@
                 <h2>Catálogo</h2>
                 <span class="panel-tag">por categoria</span>
               </div>
+              <!--
+                MODO EXPERT (2.9). O Simples mostra o que vale para esta máquina.
+                O Expert acrescenta o que pode render numa máquina e custar em
+                outra (agendamento de GPU, MSI, VBS, indexação) — sempre um a
+                um, nunca em lote. Qualquer elemento com data-so-expert segue
+                a mesma chave.
+              -->
+              <label class="modo-expert">
+                <input type="checkbox" id="modo-expert" />
+                <span><strong>Modo Expert</strong> — mostra os ajustes que dependem da máquina e pedem teste antes e depois.</span>
+              </label>
               <div class="filters" id="filters"></div>
 
               <!-- Busca: com 35 itens, rolar a lista atrás de um nome específico

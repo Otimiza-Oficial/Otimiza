@@ -49,9 +49,10 @@ pub const PROFILES: &[ProfileInfo] = &[
             "disable_transparency",
             "disable_widgets",
             "stop_sponsored_apps",
-            "disable_startup_delay",
+            // 2.9: atraso de inicialização e entrega de atualizações P2P são
+            // "só se pedir" — nada medido decide por você. Ver
+            // `catalog::CONDICIONAIS`.
             "disable_gamedvr",
-            "delivery_optimization_off",
             "disable_reserved_storage",
             "plano_otimiza",
         ],
@@ -76,8 +77,8 @@ pub const PROFILES: &[ProfileInfo] = &[
             // Ver `RiscoDeFps` e `catalog::entra_no_lote`.
             "mouse_precision_off",
             "plano_otimiza",
-            "gpu_msi_mode",
-            "nic_power_saving_off",
+            // 2.9: MSI é Expert (a maioria dos drivers já usa) e a economia da
+            // placa de rede só vale com perda de pacote medida.
             "remove_forced_hpet",
             "clear_boot_limits",
         ],
@@ -98,9 +99,7 @@ pub const PROFILES: &[ProfileInfo] = &[
             "visual_effects_performance",
             "disable_widgets",
             "stop_sponsored_apps",
-            "disable_startup_delay",
             "disable_gamedvr",
-            "delivery_optimization_off",
             "plano_otimiza",
         ],
     },
@@ -185,8 +184,10 @@ mod tests {
             for id in perfil.optimization_ids {
                 let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
 
+                // Condicional pode estar no perfil: entra quando a condição
+                // for medida nesta máquina. Expert e "só se pedir", nunca.
                 assert!(
-                    crate::modules::windows::catalog::entra_no_lote(spec),
+                    crate::modules::windows::catalog::entra_no_lote_se(spec, |_| true),
                     "o perfil `{}` cita `{}`, que o lote não aplica",
                     perfil.id,
                     id

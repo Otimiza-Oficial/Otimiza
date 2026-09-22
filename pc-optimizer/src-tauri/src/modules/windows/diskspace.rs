@@ -378,7 +378,7 @@ pub fn format_size(bytes: u64) -> String {
 /// anunciava "Restam 0.0 GB livres no disco do Windows" com severidade
 /// Critical. Um número inventado, no lugar mais visível do produto, sobre uma
 /// máquina que podia estar com meio terabyte livre.
-fn disk_usage() -> Option<(u64, u64)> {
+pub(crate) fn disk_usage() -> Option<(u64, u64)> {
     let drive = system_drive();
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
