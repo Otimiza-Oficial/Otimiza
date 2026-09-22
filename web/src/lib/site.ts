@@ -40,7 +40,7 @@ export const links = {
   /** Endereço permanente do instalador mais novo, publicado pela esteira. */
   baixar: "https://github.com/Otimiza-Oficial/Otimiza/releases/latest/download/Otimiza-instalador.exe",
   /** O mesmo convite que o app abre (`.github/convite.json`). */
-  discord: "https://discord.gg/fmeQVJphC",
+  discord: "https://discord.gg/ultimus",
   /** A página que explica o preço. Com o checkout ligado, ela também cobra;
       sem ele, ela leva ao Discord, onde a compra já funciona. */
   comprar: "/comprar/",

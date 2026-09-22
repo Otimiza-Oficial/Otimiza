@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn aceita_um_convite_de_verdade() {
-        assert!(parece_convite("https://discord.gg/fmeQVJphC"));
+        assert!(parece_convite("https://discord.gg/ultimus"));
         assert!(parece_convite("https://discord.gg/otimiza-oficial"));
         assert!(parece_convite("https://discord.gg/a_b-C9"));
     }

@@ -704,7 +704,7 @@ function conferirInvariantesDaTela() {
  * o que aparece se o arquivo publicado sumir. Trocar por um convite com
  * "Expira em: Nunca" e "Usos: Sem limite" continua valendo.
  */
-const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
+const CONVITE_DISCORD = "https://discord.gg/ultimus";
 
 /**
  * O convite que vale agora.
