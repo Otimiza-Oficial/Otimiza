@@ -89,7 +89,9 @@ jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
   o valor que fica, lidos do driver. Vale só para aquele executável; nenhum
   perfil mexe em V-Sync nem põe limite de FPS, e ajuste que já está mais rápido
   fica como está. Desfazer apaga o perfil que o Otimiza criou, ou devolve cada
-  ajuste ao que era. Ganho **não validado**: meça antes e depois no Mapa.
+  ajuste ao que era. O perfil entra na mesma vigília "nunca menos FPS" dos
+  ajustes de jogo: se as próximas partidas medidas caírem de verdade, ele é
+  desfeito sozinho. Ganho **não validado** nesta versão.
 
 ## O ajuste certo para este computador
 
@@ -109,6 +111,16 @@ jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
   - **Drivers prendendo o processador (DPC):** quanto de cada núcleo foi para
     interrupção durante 10 segundos. Diz qual núcleo, não qual driver.
 
+## Auto CPU Set (processador híbrido)
+
+Em processador com núcleos de desempenho e de eficiência, **"Testar e
+decidir"** (aba Núcleos, com o jogo em partida) mede o jogo em todos os
+núcleos e só nos de desempenho, alternando, por cerca de um minuto. O jogo
+fica nos de desempenho só se o FPS ou o 1% piores melhorarem de verdade sem
+nenhum dos dois piorar; empate volta para todos. A escolha é reaplicada
+quando o jogo abre de novo, e "Esquecer" desfaz. Com anticheat rodando, o
+Otimiza não mexe nos núcleos do jogo. **Não validado em máquina híbrida.**
+
 ## Placa de vídeo e temperatura
 
 - **Temperatura e limites, num lugar só:** o diagnóstico do processador
@@ -126,12 +138,27 @@ jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
 Além do PDF, **uma planilha** com cada alteração: data, ajuste, o que mudou,
 o valor de antes (o que volta no desfazer) e o valor novo.
 
+## Uma limpeza só, e energia com um dono por ajuste
+
+- O liberador de espaço e a Limpeza do sistema passam a medir e apagar as
+  mesmas pastas pelo mesmo código. **Conserto:** a categoria de entrega
+  otimizada do liberador apontava para a fila de downloads do BITS, e apagar
+  ali descartava downloads pendentes do Windows. O "Esvaziar Lixeira" do
+  liberador saiu — a Lixeira é item da Limpeza, desmarcada.
+- O plano de energia OTIMIZA cuida do que vale igual em qualquer máquina
+  (disco, Wi-Fi, multimídia, preferência de placa). O que é processador é do
+  motor de energia, que mede antes de escolher — o plano não escreve mais a
+  receita fixa por cima dele.
+
 ## O que saiu, porque não mudava nada ou atrapalhava
 
 A 2.9 começou por uma auditoria de tudo o que o Otimiza altera no Windows
 (`docs/AUDITORIA-2.9.md`). Menos ajustes, e melhores.
 
-- **Dezoito ajustes.** Nove sem efeito em jogo: Nagle, serviços do Xbox, as
+- **Vinte ajustes** — os dezoito abaixo e as duas limpezas do catálogo
+  (temporários e cache do Windows Update), que moram na Limpeza do sistema.
+  O catálogo inteiro agora tem desfazer.
+- **Dezoito deles:** Nove sem efeito em jogo: Nagle, serviços do Xbox, as
   duas de telemetria, Mapas, Sincronização, Assistência Remota, busca na
   internet do menu Iniciar e Copilot. E nove que ou não mudam nada no Windows
   10/11 atual ou pioram: SystemResponsiveness, prioridade de primeiro plano,

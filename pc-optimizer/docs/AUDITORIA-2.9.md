@@ -221,7 +221,11 @@ Todo item retirado mantém o desfazer para quem já aplicou, como os 9 da primei
 | ADD 5 — driver | feito (`decc1d2`) |
 | ADD 6 — MSI por dispositivo | **só leitura** (`b3cd3d3`). Escrever fora da placa de vídeo não passa no "como desfazer?": driver que não aguenta impede o boot |
 | ADD 7 — relatório exportável | feito, planilha + data no PDF (`1ba72b7`) |
-| REWORK 1, 2, 4, 5, 6, 7, 8 — motor único, "Otimizar e testar", Auto CPU Set, energia única, limpeza única, Home, página do jogo | pendente |
+| REWORK 6 — limpeza única | feito (`d97ca8b`): um código de apagar para as pastas repetidas; conserto da fila do BITS; as duas limpezas irreversíveis saem do catálogo |
+| REWORK 5 — energia | feito (`1c639fc`): um dono por ajuste. `power.rs` ficou só como biblioteca do `powercfg` |
+| REWORK 4 — Auto CPU Set | feito (`3c8d01a`): A/B alternado, regra "nunca menos FPS", reaplicado ao abrir. **Não validado em híbrido.** Consulta de anticheat que faltava na afinidade entrou |
+| REWORK 2 — antes e depois | parcial (`1d5a211`): o perfil NVIDIA entra no portão. O lote do Windows não é por jogo e fica fora do portão |
+| REWORK 1, 7, 8 — interface única de alteração, Home, página do jogo | pendente |
 
 ## 8. Matriz de testes — o que dá e o que não dá para validar
 
