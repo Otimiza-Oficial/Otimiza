@@ -10419,12 +10419,74 @@ async function carregarProtocolo() {
     .join("");
 }
 
+interface AlteracaoRegistrada {
+  id: string;
+  titulo: string;
+  modulo: string;
+  o_que_muda: string;
+  risco: "Baixo" | "Medio" | "Alto";
+  escopo: "Windows" | "Jogo" | "Driver" | "Arquivo";
+  precisa_reiniciar: boolean;
+  refaz_sozinho: boolean;
+  desfazer: string;
+}
+
+const NA_TELA_DO_RISCO: Record<AlteracaoRegistrada["risco"], { rotulo: string; severidade: Severity }> = {
+  Baixo: { rotulo: "risco baixo", severidade: "Ok" },
+  Medio: { rotulo: "risco médio", severidade: "Important" },
+  Alto: { rotulo: "risco alto", severidade: "Critical" },
+};
+
+const NA_TELA_DO_ESCOPO: Record<AlteracaoRegistrada["escopo"], string> = {
+  Windows: "Windows",
+  Jogo: "um jogo",
+  Driver: "driver de vídeo",
+  Arquivo: "apaga arquivo",
+};
+
+/** O registro central: tudo o que o produto altera, com o desfazer de cada um. */
+async function carregarOQueAltera() {
+  const alvo = document.getElementById("o-que-altera");
+  if (!alvo) return;
+  let lista: AlteracaoRegistrada[];
+  try {
+    lista = await invoke<AlteracaoRegistrada[]>("o_que_o_otimiza_altera");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+  const ordem = { Alto: 0, Medio: 1, Baixo: 2 } as const;
+  lista.sort((a, b) => ordem[a.risco] - ordem[b.risco] || a.titulo.localeCompare(b.titulo, "pt-BR"));
+  alvo.innerHTML =
+    `<p class="hint">${lista.length} alterações. Nada muda no seu computador sem estar
+       nesta lista: um teste da esteira reprova a versão se um pedaço do produto passar
+       a escrever sem aparecer aqui. Cada uma diz como se desfaz.</p>` +
+    lista
+      .map((a) => {
+        const naTela = NA_TELA_DO_RISCO[a.risco];
+        const marcas = [
+          `<span class="chip">${escapeHtml(NA_TELA_DO_ESCOPO[a.escopo])}</span>`,
+          `<span class="chip">${escapeHtml(naTela.rotulo)}</span>`,
+          a.precisa_reiniciar ? `<span class="chip">exige reiniciar</span>` : "",
+          a.refaz_sozinho ? `<span class="chip">o sistema refaz</span>` : "",
+        ].join("");
+        return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo"><strong>${escapeHtml(a.titulo)}</strong> ${marcas}</p>
+          <p class="effect">${escapeHtml(a.o_que_muda)}</p>
+          <p class="detail"><strong>Desfazer:</strong> ${escapeHtml(a.desfazer)}</p>
+        </div>`;
+      })
+      .join("");
+}
+
 async function carregarOQueNaoFazemos() {
   const alvo = element("nao-fazemos");
 
   let lista: NaoFazemos[];
 
   try {
+    void carregarOQueAltera();
     lista = await invoke<NaoFazemos[]>("o_que_nao_fazemos");
   } catch (erro) {
     alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;

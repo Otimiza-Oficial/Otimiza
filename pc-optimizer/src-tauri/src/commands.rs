@@ -3720,6 +3720,14 @@ pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemo
     crate::modules::windows::naofazemos::LISTA.to_vec()
 }
 
+/// Comando: TUDO o que o Otimiza altera nesta máquina, com risco, reinício e
+/// como se desfaz (2.9). O outro lado do "o que não fazemos". `LIVRES`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn o_que_o_otimiza_altera() -> Vec<crate::modules::windows::registro::Alteracao> {
+    crate::modules::windows::registro::todas()
+}
+
 /// Comando: por que o FPS está baixo nesta máquina.
 ///
 /// Fica em `LIVRES`: é leitura pura. Junta as seis verificações que eu fiz À MÃO
@@ -5176,6 +5184,7 @@ mod tests {
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
         "o_que_nao_fazemos",
+        "o_que_o_otimiza_altera",
         "protocolo_de_grupos",
         "nota_do_jogo",
         "conflitos_entre_ajustes",

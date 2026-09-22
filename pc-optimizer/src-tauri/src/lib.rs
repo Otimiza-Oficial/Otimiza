@@ -248,6 +248,7 @@ pub fn run() {
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,
             commands::o_que_nao_fazemos,
+            commands::o_que_o_otimiza_altera,
             commands::protocolo_de_grupos,
             commands::nota_do_jogo,
             commands::conflitos_entre_ajustes,
