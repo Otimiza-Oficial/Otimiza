@@ -1,8 +1,8 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useMotionValueEvent, useScroll, useSpring } from "framer-motion";
 import { Download, Menu, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OtimizaLogo } from "@/components/brand/OtimizaLogo";
 import { useReducedMotionSafe } from "@/components/motion/useReducedMotionSafe";
 import { ButtonLink } from "@/components/ui/Button";
@@ -11,20 +11,75 @@ import { cn } from "@/lib/cn";
 import { links, nav } from "@/lib/site";
 
 /**
- * No topo, a navbar é só uma linha dentro da moldura. Ao rolar, ela vira uma
- * cápsula branca flutuante, com sombra longa e borda de 1px — sai do fluxo
- * visual da página sem virar uma barra pesada de ponta a ponta.
+ * A NAVBAR, E O QUE A ANIMAÇÃO DELA PRECISA FAZER
+ *
+ * No topo ela é uma linha dentro da moldura. Ao rolar, vira uma cápsula branca
+ * flutuante — e a transição acontece por MOLA, não por `transition` de CSS em
+ * `padding` e `border-radius`, que era o que havia antes: animar propriedade
+ * que muda layout obriga o navegador a refazer a conta a cada quadro, e o
+ * salto aparecia no meio da rolagem.
+ *
+ * Três coisas foram acrescentadas, e cada uma responde a uma pergunta de quem
+ * está lendo a página:
+ *
+ * 1. ONDE EU ESTOU? Uma pastilha desliza por baixo do item da seção que está
+ *    na tela. É o mesmo elemento mudando de lugar (`layoutId`), então ela
+ *    escorrega de um item para o outro em vez de piscar.
+ * 2. QUANTO FALTA? Uma linha fina de progresso no pé da cápsula, presa à
+ *    rolagem da página.
+ * 3. DEIXA EU LER. Rolando para baixo a barra sai do caminho; ao subir um
+ *    pouco, ela volta. Só por transformação — nada de layout.
+ *
+ * QUEM PEDIU MENOS MOVIMENTO recebe menos movimento: sem mola, sem pastilha
+ * deslizante, sem esconder ao rolar. O estado continua legível, porque a
+ * pastilha vira uma borda embaixo do item ativo.
  */
+
+/** Rolagem acumulada, em pixels, para a barra sair do caminho. */
+const ESCONDE_DEPOIS_DE = 90;
+
 export function Navbar() {
   const [rolou, setRolou] = useState(false);
   const [aberto, setAberto] = useState(false);
+  const [escondida, setEscondida] = useState(false);
+  const [ativo, setAtivo] = useState<string | null>(null);
   const reduce = useReducedMotionSafe();
 
+  const { scrollY, scrollYProgress } = useScroll();
+  const progresso = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
+  const ultimoY = useRef(0);
+
+  useMotionValueEvent(scrollY, "change", (y) => {
+    setRolou(y > 12);
+    const descendo = y > ultimoY.current;
+    // O menu aberto nunca some debaixo da pessoa.
+    if (!aberto) setEscondida(descendo && y > ESCONDE_DEPOIS_DE);
+    ultimoY.current = y;
+  });
+
+  /*
+   * QUAL SEÇÃO ESTÁ NA TELA.
+   *
+   * `IntersectionObserver` com a janela encolhida no topo e no pé: a seção só
+   * conta como "a que estou lendo" quando ocupa a faixa do meio da tela. Sem
+   * isso, duas seções vizinhas disputam a pastilha durante a rolagem inteira.
+   */
   useEffect(() => {
-    const aoRolar = () => setRolou(window.scrollY > 12);
-    aoRolar();
-    window.addEventListener("scroll", aoRolar, { passive: true });
-    return () => window.removeEventListener("scroll", aoRolar);
+    const ids = nav.map((i) => i.href.replace("#", ""));
+    const secoes = ids.map((id) => document.getElementById(id)).filter((s): s is HTMLElement => Boolean(s));
+    if (!secoes.length) return;
+
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        const visivel = entradas.filter((e) => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visivel) setAtivo(`#${visivel.target.id}`);
+        else if (window.scrollY < 80) setAtivo(null);
+      },
+      { rootMargin: "-45% 0px -45% 0px", threshold: 0 },
+    );
+
+    secoes.forEach((s) => observador.observe(s));
+    return () => observador.disconnect();
   }, []);
 
   useEffect(() => {
@@ -39,40 +94,68 @@ export function Navbar() {
   }, [aberto]);
 
   const flutuando = rolou || aberto;
+  const mola = reduce ? { duration: 0 } : { type: "spring" as const, stiffness: 420, damping: 38, mass: 0.9 };
 
   return (
-    <header className="sticky top-0 z-50">
+    <motion.header
+      className="sticky top-0 z-50"
+      animate={{ y: escondida && !reduce ? "-100%" : "0%" }}
+      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 34 }}
+    >
       <div className="frame border-transparent">
-        <div
-          className={cn(
-            "transition-[padding] duration-300 ease-[var(--ease-out-soft)]",
-            flutuando ? "px-3 pt-3 md:px-6" : "px-0 pt-0",
-          )}
+        <motion.div
+          animate={{ paddingTop: flutuando ? 12 : 0, paddingLeft: flutuando ? 12 : 0, paddingRight: flutuando ? 12 : 0 }}
+          transition={mola}
+          className="md:[--lado:24px]"
         >
-          <nav
+          <motion.nav
             aria-label="Principal"
+            animate={{
+              borderRadius: flutuando ? 14 : 0,
+              backgroundColor: flutuando ? "rgb(255 255 255 / 0.85)" : "rgb(250 250 250 / 1)",
+              boxShadow: flutuando
+                ? "0 0 0 1px rgb(10 10 10 / 0.07), 0 10px 30px -12px rgb(0 0 0 / 0.18)"
+                : "0 1px 0 0 rgb(10 10 10 / 0.08)",
+            }}
+            transition={mola}
             className={cn(
-              "relative flex h-16 items-center justify-between transition-[background-color,box-shadow,border-radius,padding] duration-300 ease-[var(--ease-out-soft)]",
-              flutuando
-                ? "rounded-[14px] bg-white/85 px-4 shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_10px_30px_-12px_rgb(0_0_0/0.18)] backdrop-blur-md md:px-6"
-                : "frame-inner border-b border-line bg-bg",
+              "relative flex h-16 items-center justify-between backdrop-blur-md",
+              flutuando ? "px-4 md:px-6" : "frame-inner",
             )}
           >
             <SmartLink href="/" aria-label="Otimiza — página inicial" className="-my-2 rounded-md py-2">
               <OtimizaLogo mark={26} wordmark />
             </SmartLink>
 
-            <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-8 lg:flex">
-              {nav.map((item) => (
-                <li key={item.href}>
-                  <SmartLink
-                    href={item.href}
-                    className="rounded-sm text-[13.5px] text-[#3a3a3a] transition-colors hover:text-fg"
-                  >
-                    {item.label}
-                  </SmartLink>
-                </li>
-              ))}
+            <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 lg:flex">
+              {nav.map((item) => {
+                const estaAtivo = ativo === item.href;
+                return (
+                  <li key={item.href} className="relative">
+                    <SmartLink
+                      href={item.href}
+                      aria-current={estaAtivo ? "true" : undefined}
+                      className={cn(
+                        "relative z-10 block rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors",
+                        estaAtivo ? "text-fg" : "text-[#3a3a3a] hover:text-fg",
+                      )}
+                    >
+                      {item.label}
+                    </SmartLink>
+                    {estaAtivo &&
+                      (reduce ? (
+                        <span className="absolute inset-x-3 -bottom-0.5 h-px bg-fg" aria-hidden="true" />
+                      ) : (
+                        <motion.span
+                          layoutId="navbar-ativo"
+                          className="absolute inset-0 rounded-full bg-[rgb(10_10_10/0.06)]"
+                          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                          aria-hidden="true"
+                        />
+                      ))}
+                  </li>
+                );
+              })}
             </ul>
 
             <div className="flex items-center gap-2">
@@ -98,8 +181,18 @@ export function Navbar() {
                 {aberto ? <X size={20} strokeWidth={1.75} /> : <Menu size={20} strokeWidth={1.75} />}
               </button>
             </div>
-          </nav>
-        </div>
+
+            {/* Quanto da página já passou. Só aparece depois que a cápsula
+                aparece, para não riscar o topo da página inteira. */}
+            <motion.div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-3 bottom-0 h-px origin-left bg-fg/25"
+              style={{ scaleX: progresso }}
+              animate={{ opacity: flutuando ? 1 : 0 }}
+              transition={{ duration: reduce ? 0 : 0.2 }}
+            />
+          </motion.nav>
+        </motion.div>
       </div>
 
       <AnimatePresence>
@@ -113,8 +206,14 @@ export function Navbar() {
             className="fixed inset-x-0 top-[76px] bottom-0 bg-bg lg:hidden"
           >
             <ul className="frame-inner flex flex-col pt-4">
-              {[...nav, { label: "Entrar", href: links.entrar }].map((item) => (
-                <li key={item.href} className="border-b border-line">
+              {[...nav, { label: "Entrar", href: links.entrar }].map((item, i) => (
+                <motion.li
+                  key={item.href}
+                  className="border-b border-line"
+                  initial={reduce ? false : { opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: reduce ? 0 : 0.04 + i * 0.035, duration: reduce ? 0 : 0.22, ease: [0.22, 1, 0.36, 1] }}
+                >
                   <SmartLink
                     href={item.href}
                     onClick={() => setAberto(false)}
@@ -122,7 +221,7 @@ export function Navbar() {
                   >
                     {item.label}
                   </SmartLink>
-                </li>
+                </motion.li>
               ))}
             </ul>
             <div className="frame-inner pt-6">
@@ -134,6 +233,6 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
-    </header>
+    </motion.header>
   );
 }

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Banner } from "@/components/painel/Banner";
 import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
-import { CartaoMetrica, Selo } from "@/components/painel/CartaoMetrica";
+import { CartaoMetrica } from "@/components/painel/CartaoMetrica";
 import { Checklist } from "@/components/painel/Estados";
 import { FiltroPeriodo } from "@/components/painel/FiltroPeriodo";
 import { GraficoVersoes } from "@/components/painel/GraficoVersoes";
@@ -53,7 +53,11 @@ export function VisaoGeral() {
 
   return (
     <div className="space-y-3">
-      <Banner />
+      {/* A FAIXA PRETA É DE QUEM AINDA NÃO COMEÇOU.
+          Ela diz "instale e meça o seu PC". Para quem já instalou e já tem a
+          chave conferida, isso é a maior peça da tela repetindo uma tarefa
+          concluída — e empurrando para baixo o que a pessoa veio ver. */}
+      {!configurado && <Banner />}
 
       <CabecalhoPagina
         icone={<House size={14} strokeWidth={2} aria-hidden="true" />}
@@ -73,19 +77,17 @@ export function VisaoGeral() {
               <RefreshCw size={12} strokeWidth={2} aria-hidden="true" className={cn(atualizando && "animate-spin")} />
               Atualizar
             </button>
-            <FiltroPeriodo valor={meses} aoEscolher={setMeses} />
           </>
         }
       />
 
-      {/* quatro números, e todos vêm de algum lugar conferível */}
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <CartaoMetrica
-          rotulo="Licença"
-          valor={conferindo ? "…" : licenca ? (licenca.dados.expira ? "Válida" : "Vitalícia") : total ? "Não confere" : "Nenhuma"}
-          nota={licenca ? `Emitida em ${formatarData(licenca.dados.emitida)}` : "Confira a sua chave em Licenças"}
-          etiqueta={licenca && <Selo tom="escuro">Ativa</Selo>}
-        />
+      {/* O ESTADO DA LICENÇA NÃO É UM CARTÃO COMO OS OUTROS.
+          Ele é a única coisa desta tela que pode estar ERRADA — e um estado
+          ruim no meio de quatro cartões iguais lê como número de enfeite.
+          Quando a chave não confere, o cartão diz o que fazer, com o botão. */}
+      <EstadoDaLicenca conferindo={conferindo} licenca={licenca} total={total} temMaquina={temMaquina} />
+
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
         <CartaoMetrica
           rotulo="Computador"
           valor={temMaquina ? codigo : "—"}
@@ -106,9 +108,9 @@ export function VisaoGeral() {
           etiqueta={<Sparkles size={13} strokeWidth={2} className="text-subtle" aria-hidden="true" />}
         />
         <CartaoMetrica
-          rotulo="Chaves aqui"
+          rotulo="Chaves guardadas"
           valor={String(licencas.length)}
-          nota={licencas.length ? "Guardadas só neste navegador" : "Nenhuma guardada ainda"}
+          nota={licencas.length ? "Só neste navegador" : "Nenhuma guardada ainda"}
           etiqueta={<KeyRound size={13} strokeWidth={2} className="text-subtle" aria-hidden="true" />}
         />
       </div>
@@ -144,32 +146,18 @@ export function VisaoGeral() {
       )}
 
       {/* a área analítica: ritmo das versões + as máquinas desta conta */}
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
-        <Cartao>
-          <div className="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
-            <div>
-              <h2 className="text-[12.5px] font-semibold">Ritmo das versões</h2>
-              <p className="text-[11px] text-subtle">Quando cada versão do Otimiza saiu</p>
-            </div>
-            <Link
-              href="/painel/downloads/"
-              className="flex items-center gap-1 text-[11.5px] font-medium text-muted transition-colors hover:text-fg"
-            >
-              Ver downloads
-              <ArrowRight size={12} strokeWidth={2} aria-hidden="true" />
-            </Link>
-          </div>
-          <div className="px-2 pt-2 pb-1">
-            <GraficoVersoes periodoEmMeses={meses} />
-          </div>
-          <p className="border-t border-line px-3.5 py-2 text-[11px] text-subtle">
-            Dados públicos das versões do Otimiza. O programa não envia nada da sua máquina.
-          </p>
-        </Cartao>
-
+      {/* A COLUNA LARGA É A DOS DADOS DA PESSOA.
+          Era o contrário: o gráfico de quando cada versão saiu ocupava dois
+          terços da largura, e a lista das chaves dela ficava espremida — a
+          ponto de a coluna de validade não caber no cartão. O gráfico é
+          contexto do produto; a lista é o que ela veio ver. */}
+      <div className="grid gap-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Cartao className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
-            <h2 className="text-[12.5px] font-semibold">Seus computadores</h2>
+            <div>
+              <h2 className="text-[12.5px] font-semibold">Seus computadores</h2>
+              <p className="text-[11px] text-subtle">As chaves guardadas neste navegador</p>
+            </div>
             <Link
               href="/painel/licencas/"
               className="flex items-center gap-1 text-[11.5px] font-medium text-muted transition-colors hover:text-fg"
@@ -179,6 +167,22 @@ export function VisaoGeral() {
             </Link>
           </div>
           <ListaMaquinas />
+        </Cartao>
+
+        <Cartao>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-3.5 py-2.5">
+            <div className="min-w-0">
+              <h2 className="text-[12.5px] font-semibold">Ritmo das versões</h2>
+              <p className="truncate text-[11px] text-subtle">Quando cada versão saiu</p>
+            </div>
+            <FiltroPeriodo valor={meses} aoEscolher={setMeses} />
+          </div>
+          <div className="px-2 pt-2 pb-1">
+            <GraficoVersoes periodoEmMeses={meses} />
+          </div>
+          <p className="border-t border-line px-3.5 py-2 text-[11px] text-subtle">
+            Dados públicos das versões. O programa não envia nada da sua máquina.
+          </p>
         </Cartao>
       </div>
 
@@ -206,6 +210,99 @@ export function VisaoGeral() {
         />
       </div>
     </div>
+  );
+}
+
+/**
+ * O ESTADO DA LICENÇA, EM UMA FRASE E UMA AÇÃO.
+ *
+ * Quatro estados, e cada um responde a pergunta seguinte da pessoa:
+ *
+ * - válida: nada a fazer, e a data de emissão fica à mão para o suporte;
+ * - não confere: a chave é de outro computador, ou foi copiada pela metade —
+ *   os dois casos se resolvem na mesma tela, e o botão leva até ela;
+ * - sem código de máquina: a chave até pode estar certa, mas não há contra o
+ *   que conferir;
+ * - nenhuma chave: quem chegou agora.
+ *
+ * A cor não decide nada sozinha: o texto diz o estado. É a mesma regra do
+ * programa — quem lê precisa entender sem depender de enxergar cor.
+ */
+function EstadoDaLicenca({
+  conferindo,
+  licenca,
+  total,
+  temMaquina,
+}: {
+  conferindo: boolean;
+  licenca: { dados: { emitida: string; expira?: string | null; maquina: string } } | null;
+  total: number;
+  temMaquina: boolean;
+}) {
+  const estado = conferindo
+    ? ({ tom: "neutro", titulo: "Conferindo a sua chave…", texto: "A assinatura é conferida aqui no navegador." } as const)
+    : licenca
+      ? ({
+          tom: "ok",
+          titulo: licenca.dados.expira ? "Licença válida" : "Licença vitalícia",
+          texto: `Emitida em ${formatarData(licenca.dados.emitida)} para o computador ${licenca.dados.maquina}.`,
+        } as const)
+      : total > 0 && !temMaquina
+        ? ({
+            tom: "atencao",
+            titulo: "Falta o código deste computador",
+            texto: "A chave é emitida para um computador. Informe o código que aparece na tela de ativação do Otimiza para conferir.",
+            acao: { texto: "Informar o código", href: "/painel/licencas/" },
+          } as const)
+        : total > 0
+          ? ({
+              tom: "atencao",
+              titulo: "A chave guardada não confere",
+              texto: "Ou ela é de outro computador, ou veio copiada pela metade. As duas coisas se resolvem em Licenças — e a reemissão no Discord não custa nada.",
+              acao: { texto: "Conferir a chave", href: "/painel/licencas/" },
+            } as const)
+          : ({
+              tom: "neutro",
+              titulo: "Nenhuma chave guardada",
+              texto: "Cole a chave que você recebeu para ela ficar à mão quando formatar ou trocar de computador.",
+              acao: { texto: "Colar a minha chave", href: "/painel/licencas/" },
+            } as const);
+
+  return (
+    <section
+      className={cn(
+        "flex flex-wrap items-center justify-between gap-3 rounded-[8px] px-4 py-3.5",
+        estado.tom === "ok"
+          ? "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]"
+          : estado.tom === "atencao"
+            ? "bg-[#fffaf2] shadow-[0_0_0_1px_rgb(180_120_20/0.22)]"
+            : "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07)]",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <span
+          className={cn(
+            "mt-0.5 grid size-8 shrink-0 place-items-center rounded-[7px]",
+            estado.tom === "atencao" ? "bg-[#f6e6c9] text-[#6b4a00]" : "bg-[#f4f4f3] text-fg",
+          )}
+        >
+          <KeyRound size={15} strokeWidth={2} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-display text-[15px] font-semibold tracking-[-0.02em]">{estado.titulo}</p>
+          <p className="mt-0.5 text-[12.5px] leading-[1.45] text-muted">{estado.texto}</p>
+        </div>
+      </div>
+      {"acao" in estado && estado.acao && (
+        <Link
+          href={estado.acao.href}
+          className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] bg-ink px-3 text-[12px] font-semibold text-white transition-colors hover:bg-[#262626]"
+        >
+          {estado.acao.texto}
+          <ArrowRight size={13} strokeWidth={2} aria-hidden="true" />
+        </Link>
+      )}
+    </section>
   );
 }
 
