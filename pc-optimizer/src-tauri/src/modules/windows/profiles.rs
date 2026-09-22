@@ -74,11 +74,7 @@ pub const PROFILES: &[ProfileInfo] = &[
             // é um lote — quem escolhe "Jogos" não está escolhendo apostar o
             // FPS dele. Continua no catálogo, um a um, com o caso escrito.
             // Ver `RiscoDeFps` e `catalog::entra_no_lote`.
-            "system_responsiveness_gaming",
-            "mmcss_games",
             "mouse_precision_off",
-            "foreground_priority",
-            "disable_power_throttling",
             "plano_otimiza",
             "gpu_msi_mode",
             "nic_power_saving_off",

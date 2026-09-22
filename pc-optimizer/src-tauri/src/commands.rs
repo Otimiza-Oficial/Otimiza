@@ -1678,7 +1678,6 @@ pub async fn fix_readiness(id: String) -> Result<String, String> {
 
             match id.as_str() {
                 "trim" => readiness::ligar_trim(),
-                "plano_maximo" => readiness::criar_plano_maximo(),
                 outro => Err(format!("`{}` não é corrigível pelo Otimiza.", outro)),
             }
         })
@@ -2631,24 +2630,6 @@ pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = id;
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// Comando: Prioridade alta no processador para o jogo.
-#[tauri::command]
-pub async fn prioritize_fivem() -> Result<String, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::fivem::priorizar_jogo)
-            .await
-            .map_err(|e| format!("Falha ao ajustar a prioridade: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -5067,7 +5048,6 @@ mod tests {
         "set_dns",
         "flush_dns",
         "clean_fivem",
-        "prioritize_fivem",
         "clean_browser_cache",
         "set_scheduled_task",
         "set_service_start",

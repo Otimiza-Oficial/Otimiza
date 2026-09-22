@@ -201,6 +201,25 @@ pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 /// aqui pode ser aplicado de novo — nem um a um, nem em lote, nem por perfil.
 /// O motivo de cada um mora em `naofazemos.rs`.
 pub const RETIRADOS: &[&str] = &[
+    // Segunda rodada (auditoria da 2.9, docs/AUDITORIA-2.9.md):
+    // - SystemResponsiveness/NetworkThrottlingIndex, Win32PrioritySeparation e
+    //   as prioridades MMCSS de "Games": sem ganho reproduzível em jogo;
+    // - SysMain e compressão de memória: o Windows gerencia; com pouca RAM,
+    //   desligar a compressão piora;
+    // - PowerThrottlingOff: desliga o EcoQoS no sistema inteiro, que é
+    //   justamente o que o modo jogo (governador) usa nos programas de fundo;
+    // - notificações: o Windows 11 já silencia durante o jogo;
+    // - limpezas de temporários e do cache do Windows Update: duplicadas da
+    //   tela Limpeza do sistema.
+    "system_responsiveness_gaming",
+    "foreground_priority",
+    "disable_sysmain",
+    "disable_power_throttling",
+    "disable_memory_compression",
+    "mmcss_games",
+    "notifications_off",
+    "clean_temp_files",
+    "clean_update_cache",
     "network_low_latency",
     "disable_xbox_services",
     "maps_auto_update_off",

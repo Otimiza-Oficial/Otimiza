@@ -973,162 +973,24 @@
             <div id="nao-fazemos"></div>
           </details>
 
-          <div class="grid grid-hero">
-            <section class="panel panel-hero">
-              <div class="panel-head">
-                <h2>Uso agora</h2>
-                <span class="panel-tag" id="tick-clock">—</span>
-              </div>
-
-              <div class="hero">
-                <div class="gauge">
-                  <svg viewBox="0 0 200 200" aria-hidden="true">
-                    <circle class="gauge-track" cx="100" cy="100" r="86" />
-                    <circle class="gauge-fill" id="gauge-cpu" cx="100" cy="100" r="86" />
-                  </svg>
-                  <div class="gauge-center">
-                    <span class="gauge-value" id="cpu-value">—</span>
-                    <span class="gauge-unit">% CPU</span>
-                    <span class="gauge-note" id="cpu-freq">—</span>
-                  </div>
-                </div>
-
-                <div class="readouts">
-                  <!--
-                    CLOCK EFETIVO, e não só o nominal.
-
-                    O nominal é o que o firmware anuncia. O efetivo é o que os
-                    núcleos entregaram no intervalo — e é a diferença entre os
-                    dois que mostra a CPU "a 4 GHz" passando o tempo esperando.
-                    Os dois números vêm dos contadores do Windows, os mesmos
-                    que o motor de energia usa para decidir se um plano fica.
-                  -->
-                  <div class="readout">
-                    <span class="readout-label">Clock efetivo</span>
-                    <span class="readout-value" id="clock-efetivo">—</span>
-                    <div class="bar"><i id="clock-bar"></i></div>
-                    <span class="readout-note" id="clock-note">—</span>
-                  </div>
-                  <!--
-                    PLACA DE VÍDEO.
-
-                    Lida de dez em dez segundos, e não a cada coleta: a
-                    consulta ao Windows custa mais de um segundo, e um monitor
-                    que pesa é um monitor que atrapalha o jogo que ele mede. A
-                    nota diz de quando é a leitura — número de dez segundos
-                    atrás apresentado como se fosse agora é a mesma mentira que
-                    um zero inventado.
-                  -->
-                  <div class="readout">
-                    <span class="readout-label">Placa de vídeo</span>
-                    <span class="readout-value" id="gpu-value">—</span>
-                    <div class="bar"><i id="gpu-bar"></i></div>
-                    <span class="readout-note" id="gpu-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Memória de vídeo</span>
-                    <span class="readout-value" id="vram-value">—</span>
-                    <div class="bar"><i id="vram-bar"></i></div>
-                    <span class="readout-note" id="vram-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Memória</span>
-                    <span class="readout-value" id="ram-value">—</span>
-                    <div class="bar"><i id="ram-bar"></i></div>
-                    <span class="readout-note" id="ram-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Disco</span>
-                    <span class="readout-value" id="disk-value">—</span>
-                    <div class="bar"><i id="disk-bar"></i></div>
-                    <span class="readout-note">espaço ocupado</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Rede recebida</span>
-                    <span class="readout-value" id="net-value">—</span>
-                    <div class="bar"><i id="net-bar" style="width: 0%"></i></div>
-                    <span class="readout-note">desde que o PC ligou</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Quem está pesando agora</h2>
-                <span class="panel-tag">ao vivo</span>
-              </div>
-              <div id="process-list" class="process-list">
-                <p class="empty carregando">Medindo…</p>
-              </div>
-              <p class="core-legend">
-                Porcentagem da CPU total da máquina. O selo indica que o programa
-                volta sozinho no próximo boot.
-              </p>
-            </section>
-          </div>
-
-          <div class="grid grid-two">
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Carga por núcleo</h2>
-                <span class="panel-tag" id="core-count">—</span>
-              </div>
-              <div class="core-matrix" id="core-matrix"></div>
-              <p class="core-legend">
-                Cada barra é um núcleo lógico. Um núcleo saturado enquanto os
-                outros dormem é o que trava um jogo — e a média esconde isso.
-              </p>
-            </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Histórico de CPU</h2>
-                <span class="panel-tag">últimos 2 min</span>
-              </div>
-              <svg class="sparkline" id="cpu-history" viewBox="0 0 300 70" preserveAspectRatio="none">
-                <polyline id="cpu-history-line" fill="none" />
-                <polygon id="cpu-history-area" />
-              </svg>
-            </section>
-          </div>
-
+          <!--
+            Os painéis "Uso agora", "Carga por núcleo", "Histórico de CPU" e
+            "Movimento agora" saíram na 2.9: repetiam os vivos do topo e a matriz
+            da aba Núcleos. Fica a lista de quem está pesando — é o que diz O QUE
+            tirar do caminho do jogo.
+          -->
           <section class="panel">
             <div class="panel-head">
-              <h2>Movimento agora</h2>
-              <span class="panel-tag" id="flow-tag">ao vivo</span>
+              <h2>Quem está pesando agora</h2>
+              <span class="panel-tag">ao vivo</span>
             </div>
-
-            <p class="lead">
-              Em PC fraco, a maioria das travadas não é a CPU: é o disco ocupado
-              enquanto tudo espera. Aqui você vê o quanto está sendo lido e
-              gravado neste instante — se esse número fica alto com a máquina
-              parada, há algo trabalhando em segundo plano, e é isso que precisa
-              ser resolvido antes de qualquer ajuste.
+            <div id="process-list" class="process-list">
+              <p class="empty carregando">Medindo…</p>
+            </div>
+            <p class="core-legend">
+              Porcentagem da CPU total da máquina. O selo indica que o programa
+              volta sozinho no próximo boot.
             </p>
-
-            <div class="readouts readouts-row">
-              <div class="readout">
-                <span class="readout-label">Disco lendo</span>
-                <span class="readout-value" id="flow-read">—</span>
-                <span class="readout-note">agora</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Disco gravando</span>
-                <span class="readout-value" id="flow-write">—</span>
-                <span class="readout-note">agora</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Rede</span>
-                <span class="readout-value" id="flow-net">—</span>
-                <span class="readout-note">baixando · enviando</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Ligado há</span>
-                <span class="readout-value" id="flow-uptime">—</span>
-                <span class="readout-note" id="flow-uptime-note">desde o último boot</span>
-              </div>
-            </div>
           </section>
 
           <!--
@@ -2860,7 +2722,6 @@
 
             <div class="row-actions">
               <button id="analyze-fivem" class="btn" data-custo="~15 s">Analisar</button>
-              <button id="prioritize-fivem" class="btn">Priorizar o jogo</button>
             </div>
 
             <p id="fivem-status" class="status"></p>

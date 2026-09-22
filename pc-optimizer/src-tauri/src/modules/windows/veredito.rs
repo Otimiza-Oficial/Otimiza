@@ -402,13 +402,6 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
-        (Origem::Prontidao, "plano_maximo") => (
-            "fix_readiness",
-            Some("plano_maximo"),
-            "Criar o plano de desempenho máximo",
-            true,
-        ),
-
         _ => return None,
     };
 

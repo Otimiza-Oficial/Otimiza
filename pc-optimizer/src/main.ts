@@ -1547,8 +1547,14 @@ function setBadge(id: string, count: number, tone?: "warn" | "bad") {
   }
 }
 
+/**
+ * Escreve o texto de um elemento. Elemento ausente é ignorado: painéis que
+ * saíram da tela (2.9) não podem derrubar o laço do monitor que ainda os
+ * alimentava.
+ */
 function text(id: string, value: string) {
-  element(id).textContent = value;
+  const alvo = document.getElementById(id);
+  if (alvo) alvo.textContent = value;
 }
 
 function escapeHtml(value: string): string {
@@ -1887,13 +1893,13 @@ function renderMetrics(metrics: PerformanceMetrics) {
   const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
-  const gauge = element<SVGCircleElement & HTMLElement>("gauge-cpu");
+  const gauge = document.getElementById("gauge-cpu") as (SVGCircleElement & HTMLElement) | null;
 
   // Na primeira leitura o anel subia de 540 direto para o valor, sem gesto
   // nenhum. Agora ele sobe devagar uma unica vez, como instrumento ligando —
   // e volta a velocidade normal em seguida, porque um medidor que reinicia a
   // cada 2 segundos pareceria quebrado, nao caro.
-  const aro = gauge.closest(".gauge") as HTMLElement | null;
+  const aro = gauge?.closest(".gauge") as HTMLElement | null;
   if (aro && !aro.dataset.iniciado) {
     aro.dataset.iniciado = "sim";
     aro.dataset.entrada = "true";
@@ -1902,8 +1908,8 @@ function renderMetrics(metrics: PerformanceMetrics) {
   // Sem leitura de CPU o anel esvazia e fica cinza. Ele não pode descansar no
   // valor anterior: um instrumento parado exibindo o número de trinta segundos
   // atrás é pior do que um instrumento vazio, porque parece vivo.
-  gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
-  gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
+  if (gauge) gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
+  if (gauge) gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
 
   // Faixa fixa do topo, viva em qualquer aba.
   const porcento = (n: number) => `${n.toFixed(0)}%`;
@@ -3694,7 +3700,8 @@ function loadColor(percent: number): string {
  * da para ler num lugar so.
  */
 function setBar(id: string, percent: number | null) {
-  const bar = element(id);
+  const bar = document.getElementById(id);
+  if (!bar) return;
   const medidorOuNada = bar.closest(".vital") as HTMLElement | null;
 
   // Barra sem medição fica vazia E marcada. Só esvaziar a deixaria idêntica a
@@ -3728,7 +3735,8 @@ function setBar(id: string, percent: number | null) {
  * enquanto os outros dormem é exatamente o que trava um jogo.
  */
 function renderCores(perCore: number[]) {
-  const matrix = element("core-matrix");
+  const matrix = document.getElementById("core-matrix");
+  if (!matrix) return;
 
   const primeiraVez = matrix.children.length !== perCore.length;
 
@@ -3771,7 +3779,9 @@ function pushHistory(cpu: number) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
 
-  element("cpu-history-line").setAttribute("points", points.join(" "));
+  const linha = document.getElementById("cpu-history-line");
+  if (!linha) return;
+  linha.setAttribute("points", points.join(" "));
 
   const lastX = ((cpuHistory.length - 1) / (HISTORY_SAMPLES - 1)) * 300;
   element("cpu-history-area").setAttribute(
@@ -4826,19 +4836,6 @@ function renderFiveMFolder(folder: FiveMFolder, indice: number): string {
   `;
 }
 
-async function prioritizeFiveM() {
-  const button = element<HTMLButtonElement>("prioritize-fivem");
-  button.disabled = true;
-
-  try {
-    const mensagem = await invoke<string>("prioritize_fivem");
-    setStatus("fivem-status", mensagem, "ok");
-  } catch (error) {
-    setStatus("fivem-status", String(error), "error");
-  } finally {
-    button.disabled = false;
-  }
-}
 
 // ---------------------------------------------------- CitizenFX.ini (Pilar 6)
 
@@ -10836,7 +10833,6 @@ function wireControls() {
   element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
-  element("prioritize-fivem").addEventListener("click", prioritizeFiveM);
 
   element("fivem-result").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(

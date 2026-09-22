@@ -192,7 +192,6 @@ pub fn run() {
             commands::energia_modo_dinamico,
             commands::analyze_fivem,
             commands::clean_fivem,
-            commands::prioritize_fivem,
             commands::analyze_citizenfx,
             commands::analyze_browsers,
             commands::clean_browser_cache,

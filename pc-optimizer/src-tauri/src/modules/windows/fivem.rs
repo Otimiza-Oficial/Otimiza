@@ -32,7 +32,6 @@
 // tudo precisa ser relido do disco. Já está na lista de recusas do produto, e
 // não passa a valer só porque o assunto agora é jogo.
 
-use super::shell;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -405,50 +404,9 @@ fn esvaziar(dir: &Path) {
     }
 }
 
-/// Coloca o processo do jogo em prioridade alta no processador.
-///
-/// DUAS COISAS QUE PRECISAM ESTAR DITAS
-///
-/// A prioridade é do processo, e some quando ele fecha. Não é ajuste
-/// permanente, e prometer o contrário seria mentira: tem que ser aplicado a
-/// cada sessão.
-///
-/// E é "alta", nunca "tempo real". Tempo real coloca o jogo acima do próprio
-/// sistema operacional, incluindo as tarefas que cuidam de som, mouse e teclado
-/// — o resultado prático costuma ser travar a máquina inteira. É uma das
-/// "dicas de FPS" mais repetidas e mais perigosas da internet.
-pub fn priorizar_jogo() -> Result<String, String> {
-    let (_, jogo_aberto) = processos_abertos();
-
-    if !jogo_aberto {
-        return Err(
-            "O jogo não está aberto. Entre no FiveM primeiro — a prioridade é dada ao \
-             processo do jogo, e ele só existe com o jogo rodando."
-                .to_string(),
-        );
-    }
-
-    let script = "$n = 0; \
-                  foreach ($p in @(Get-Process -ErrorAction SilentlyContinue | \
-                    Where-Object { $_.Name -like 'FiveM*GTAProcess*' })) { \
-                    try { $p.PriorityClass = 'High'; $n++ } catch {} }; \
-                  $n";
-
-    let saida = shell::powershell(script)?;
-    let quantos: u32 = saida.stdout.trim().parse().unwrap_or(0);
-
-    if quantos == 0 {
-        return Err(
-            "Não foi possível alterar a prioridade do jogo. Reabra o Otimiza como \
-             administrador e tente de novo."
-                .to_string(),
-        );
-    }
-
-    Ok("Jogo em prioridade alta no processador. Vale para esta sessão: ao fechar o FiveM a \
-        prioridade volta ao normal, e isto precisa ser aplicado de novo na próxima vez."
-        .to_string())
-}
+// `priorizar_jogo` (prioridade Alta no processo do FiveM) saiu na 2.9:
+// prioridade cega, sem ganho medido, e a ação mais visível para um anticheat.
+// Quem tira os programas de fundo do caminho do jogo agora é o governador.
 
 #[cfg(test)]
 mod tests {
@@ -544,17 +502,16 @@ mod tests {
     }
 
     #[test]
-    fn prioridade_e_alta_e_nunca_tempo_real() {
+    fn o_fivem_nao_mexe_mais_na_prioridade_do_jogo() {
         // "Tempo real" coloca o jogo acima do sistema operacional, incluindo o
         // que cuida de som, mouse e teclado. É uma das dicas de FPS mais
         // repetidas da internet e trava a máquina inteira.
         let fonte = codigo_de_producao();
 
-        assert!(fonte.contains("PriorityClass = 'High'"));
-        assert!(
-            !fonte.contains("PriorityClass = 'RealTime'"),
-            "prioridade de tempo real nunca pode entrar aqui"
-        );
+        // Desde a 2.9 nem Alta: prioridade cega saiu do produto.
+        for proibido in ["PriorityClass = 'High'", "PriorityClass = 'RealTime'"] {
+            assert!(!fonte.contains(proibido), "`{}` voltou ao módulo do FiveM", proibido);
+        }
     }
 
     #[test]

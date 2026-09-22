@@ -71,6 +71,42 @@ pub struct NaoFazemos {
 pub static LISTA: &[NaoFazemos] = &[
     // --- retirados do próprio catálogo na 2.9 (`catalog::RETIRADOS`) ---
     NaoFazemos {
+        id: "network_throttling_index",
+        nome: "NetworkThrottlingIndex, SystemResponsiveness e prioridades MMCSS de \"Games\"",
+        natureza: Natureza::Placebo,
+        porque: "O NetworkThrottlingIndex só limita tráfego de rede ENQUANTO um programa \
+                 multimídia registrado toca áudio ou vídeo; não muda ping nem FPS de jogo. O \
+                 SystemResponsiveness e as prioridades da tarefa \"Games\" só valem para \
+                 programa que se registra no agendador multimídia, o que quase nenhum jogo \
+                 faz. O Otimiza tinha os três e tirou na 2.9: não havia ganho medido.",
+    },
+    NaoFazemos {
+        id: "win32_priority_separation",
+        nome: "Valor \"mágico\" de Win32PrioritySeparation",
+        natureza: Natureza::Placebo,
+        porque: "Os valores que circulam (0x26, 0x28, 0x2A) mudam o tamanho da fatia de tempo e \
+                 o reforço da janela em primeiro plano — e o padrão do Windows para desktop já é \
+                 quase o mesmo 0x26. Nenhuma medição reproduzível mostrou ganho de FPS ou 1% low.",
+    },
+    NaoFazemos {
+        id: "power_throttling_off",
+        nome: "Desligar a limitação de energia (PowerThrottlingOff)",
+        natureza: Natureza::Prejudicial,
+        porque: "Desliga o modo econômico por processo (EcoQoS) no Windows inteiro. É o recurso \
+                 que tira programas de fundo do caminho do jogo — em processador híbrido, é o que \
+                 manda esse trabalho para os núcleos de eficiência. O modo jogo do Otimiza usa \
+                 exatamente isso nos programas que disputam processador durante a partida.",
+    },
+    NaoFazemos {
+        id: "sysmain_compressao",
+        nome: "Desligar SysMain e a compressão de memória",
+        natureza: Natureza::Prejudicial,
+        porque: "Com pouca RAM, a compressão é o que evita ir ao disco: desligar troca memória \
+                 comprimida por paginação, que é travada. Com muita RAM, nenhum dos dois pesa. \
+                 O SysMain pré-carrega o que você usa; desligar deixa programas abrirem mais \
+                 devagar em HD e não dá quadro em lugar nenhum.",
+    },
+    NaoFazemos {
         id: "nagle",
         nome: "Desligar o algoritmo de Nagle para \"baixar o ping\"",
         natureza: Natureza::Placebo,
