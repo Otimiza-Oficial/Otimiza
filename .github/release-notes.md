@@ -78,14 +78,40 @@ econômico do Windows. Nada é fechado nem congelado; Discord, OBS, áudio e
 anticheats nunca são tocados; tudo volta quando o jogo fecha. A energia do
 jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
 
-## O que saiu, porque não mudava nada
+## Driver NVIDIA: por jogo, não no PC inteiro
 
-- **Nove ajustes:** Nagle, serviços do Xbox, as duas de telemetria, Mapas,
-  Sincronização, Assistência Remota, busca na internet do menu Iniciar e
-  Copilot. Nenhum muda FPS nem fluidez. Quem já aplicou continua podendo
-  desfazer; o motivo de cada um está em "o que o Otimiza não faz".
+- **"Desempenho máximo" e V-Sync forçado desligado não são mais aplicados no
+  perfil global.** O primeiro deixa a placa acordada até na área de trabalho;
+  o segundo quebra o G-SYNC/FreeSync de todo jogo. Quem já tinha aplicado
+  continua vendo o botão de desfazer.
+- **Perfil NVIDIA na ficha do jogo** (Biblioteca): Competitivo ou Baixa
+  latência. Antes de aplicar, a ficha mostra cada ajuste com o valor de hoje e
+  o valor que fica, lidos do driver. Vale só para aquele executável; nenhum
+  perfil mexe em V-Sync nem põe limite de FPS, e ajuste que já está mais rápido
+  fica como está. Desfazer apaga o perfil que o Otimiza criou, ou devolve cada
+  ajuste ao que era. Ganho **não validado**: meça antes e depois no Mapa.
+
+## O que saiu, porque não mudava nada ou atrapalhava
+
+A 2.9 começou por uma auditoria de tudo o que o Otimiza altera no Windows
+(`docs/AUDITORIA-2.9.md`). Menos ajustes, e melhores.
+
+- **Dezoito ajustes.** Nove sem efeito em jogo: Nagle, serviços do Xbox, as
+  duas de telemetria, Mapas, Sincronização, Assistência Remota, busca na
+  internet do menu Iniciar e Copilot. E nove que ou não mudam nada no Windows
+  10/11 atual ou pioram: SystemResponsiveness, prioridade de primeiro plano,
+  MMCSS de jogos, desligar o SysMain, desligar a compressão de memória,
+  desligar o controle de energia por processo (desligava o modo econômico que
+  o novo modo jogo usa), notificações, e as duas limpezas de temporários e de
+  cache do Windows Update. Quem já aplicou continua podendo desfazer; o motivo
+  de cada um está em "o que o Otimiza não faz".
+- **O botão "Priorizar" do FiveM e a prioridade alta fixa do jogo** — subir a
+  prioridade às cegas faz o jogo disputar com o áudio e a entrada do mouse.
+- **O plano de energia "máximo" sugerido pelo diagnóstico** — a energia é do
+  motor de energia, que mede por jogo.
 - **O painel de DNS** — o DNS não participa dos pacotes da partida.
-- **Prioridade alta fixa do jogo** — só dá para remover o que já foi fixado.
+- **Painéis repetidos** na aba de processos: uso, carga por núcleo, histórico
+  e movimento já aparecem no topo e na aba Núcleos.
 
 ## Consertos
 
