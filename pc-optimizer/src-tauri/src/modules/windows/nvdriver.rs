@@ -2090,3 +2090,97 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod prova_no_driver {
+    use super::*;
+
+    /// ESCREVE NO DRIVER DESTA MÁQUINA e desfaz. Só com autorização:
+    /// `cargo test --lib -- --ignored aplicar_e_desfazer_perfil_de_verdade --nocapture`.
+    ///
+    /// Usa um executável que não existe (`otimiza-prova.exe`), então o perfil
+    /// criado é do Otimiza e de mais ninguém — nenhum jogo é tocado. No fim,
+    /// confere que o perfil sumiu.
+    #[test]
+    #[ignore]
+    fn aplicar_e_desfazer_perfil_de_verdade() {
+        const EXE: &str = "otimiza-prova.exe";
+
+        let antes = prever_perfil_do_jogo(EXE, PerfilDoJogo::Competitivo).expect("prévia");
+        println!("ANTES: {:#?}", antes);
+
+        // Nesta máquina o global já está nos valores do perfil, e aí o Otimiza
+        // não escreve nada (é a trava "nunca menos FPS"). Para provar a
+        // ESCRITA, o teste primeiro põe um valor diferente no perfil de teste:
+        // energia em "adaptável" (0), que é o padrão de fábrica da NVIDIA.
+        na_sessao_da_drs(|api, sessao| {
+            let perfis = api.perfis.as_ref().expect("perfis");
+            let nome_do_app = utf16_fixo(EXE).expect("exe");
+            let nome = utf16_fixo(&nome_do_perfil_do_otimiza(EXE)).expect("nome");
+            let perfil = match perfil_do_executavel(perfis, sessao, &nome_do_app) {
+                Some(p) => p,
+                None => {
+                    let mut dados = NvdrsProfileV1::zerado();
+                    dados.nome = nome;
+                    let mut p: *mut c_void = std::ptr::null_mut();
+                    assert_eq!(unsafe { (perfis.criar_perfil)(sessao, &mut dados, &mut p) }, NVAPI_OK);
+                    let mut app = NvdrsApplicationV3::zerada();
+                    app.nome_do_app = nome_do_app;
+                    assert_eq!(unsafe { (perfis.criar_app)(sessao, p, &mut app) }, NVAPI_OK);
+                    p
+                }
+            };
+            let o = numero_de("energia").expect("energia");
+            escrever_valor_cru(api, sessao, perfil, o.id_do_padrao.unwrap(), 0)
+        })
+        .expect("plantar o valor diferente");
+
+        let plantado = prever_perfil_do_jogo(EXE, PerfilDoJogo::Competitivo).expect("prévia plantada");
+        println!("PLANTADO: energia = {:?}", plantado.iter().find(|a| a.opcao == "energia").map(|a| &a.atual));
+        assert!(plantado.iter().any(|a| a.opcao == "energia" && !a.igual), "o valor plantado não apareceu");
+
+        let feito = aplicar_perfil_do_jogo(EXE, PerfilDoJogo::Competitivo).expect("aplicar");
+        println!("perfil criado pelo Otimiza: {} | anteriores: {:?}", feito.perfil_criado, feito.anteriores);
+
+        let depois = prever_perfil_do_jogo(EXE, PerfilDoJogo::Competitivo).expect("prévia depois");
+        println!("DEPOIS: {:#?}", depois);
+        assert!(depois.iter().all(|a| a.igual), "o driver não ficou com os valores do perfil");
+
+        desfazer_perfil_do_jogo(EXE, feito.perfil_criado, &feito.anteriores).expect("desfazer");
+
+        // O DESFAZER TEM DOIS CAMINHOS, e este teste passa pelos dois:
+        //
+        // - perfil que o Otimiza criou: some inteiro;
+        // - perfil que já existia (o caso aqui, porque o teste plantou um
+        //   valor antes): cada ajuste volta ao que era, e o perfil FICA.
+        assert!(!feito.perfil_criado, "o teste plantou o perfil antes; ele não podia ter sido criado agora");
+        let voltou = prever_perfil_do_jogo(EXE, PerfilDoJogo::Competitivo).expect("prévia do desfazer");
+        let energia = voltou.iter().find(|a| a.opcao == "energia").expect("energia");
+        println!("DEPOIS DO DESFAZER: energia = {:?}", energia.atual);
+        assert_eq!(energia.atual, "adaptável", "o desfazer não devolveu o valor que existia antes");
+
+        // Faxina: o perfil de teste sai do driver desta máquina.
+        apagar_perfil_de_teste(EXE);
+        let sumiu = na_sessao_so_de_leitura(|api, sessao| {
+            let perfis = api.perfis.as_ref().expect("perfis");
+            let nome = utf16_fixo(&nome_do_perfil_do_otimiza(EXE)).expect("nome");
+            let mut perfil: *mut c_void = std::ptr::null_mut();
+            Ok(unsafe { (perfis.achar_perfil)(sessao, nome.as_ptr(), &mut perfil) } != NVAPI_OK)
+        })
+        .expect("conferir");
+        println!("perfil de teste apagado: {sumiu}");
+        assert!(sumiu, "o perfil de teste continuou no driver");
+    }
+
+    fn apagar_perfil_de_teste(exe: &str) {
+        let _ = na_sessao_da_drs(|api, sessao| {
+            let perfis = api.perfis.as_ref().expect("perfis");
+            let nome = utf16_fixo(&nome_do_perfil_do_otimiza(exe)).expect("nome");
+            let mut perfil: *mut c_void = std::ptr::null_mut();
+            if unsafe { (perfis.achar_perfil)(sessao, nome.as_ptr(), &mut perfil) } == NVAPI_OK && !perfil.is_null() {
+                unsafe { (perfis.apagar_perfil)(sessao, perfil) };
+            }
+            Ok(())
+        });
+    }
+}
