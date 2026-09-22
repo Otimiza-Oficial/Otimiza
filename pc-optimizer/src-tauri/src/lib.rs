@@ -201,6 +201,7 @@ pub fn run() {
             commands::analyze_thermal,
             commands::export_report,
             commands::exportar_alteracoes,
+            commands::msi_dispositivos,
             commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,

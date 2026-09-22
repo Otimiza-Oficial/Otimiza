@@ -5283,6 +5283,38 @@ function blocoDaPlaca(p: SensoresGpu | null | undefined): string {
     </article>`;
 }
 
+interface DispositivoMsi {
+  nome: string;
+  servico: string;
+  msi: boolean | null;
+  placa_de_video: boolean;
+}
+
+/** MSI por dispositivo (2.9, Expert): só leitura. */
+async function lerMsi() {
+  const saida = document.getElementById("msi-resultado");
+  if (!saida) return;
+  saida.innerHTML = `<p class="hint">Lendo…</p>`;
+  try {
+    const lista = await invoke<DispositivoMsi[]>("msi_dispositivos");
+    const estado = (d: DispositivoMsi) =>
+      d.msi === true ? "MSI ligado" : d.msi === false ? "MSI desligado (o driver declara suporte)" : "o driver não declara MSI";
+    saida.innerHTML = `
+      <table class="fg-tabela">
+        <thead><tr><th>Dispositivo</th><th>Driver</th><th>Interrupção</th></tr></thead>
+        <tbody>${lista
+          .map(
+            (d) =>
+              `<tr><td>${escapeHtml(d.nome)}${d.placa_de_video ? " <span class=\"chip\">placa de vídeo</span>" : ""}</td><td class="fg-mono">${escapeHtml(d.servico)}</td><td>${estado(d)}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+      <p class="hint">${lista.length} dispositivo(s). Para a placa de vídeo, o ajuste fica no catálogo (modo Expert), com desfazer.</p>`;
+  } catch (erro) {
+    saida.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+  }
+}
+
 async function analyzeThermal() {
   const button = element<HTMLButtonElement>("analyze-thermal");
   button.disabled = true;
@@ -10705,6 +10737,7 @@ function wireControls() {
 
   element("analyze-boot").addEventListener("click", analyzeBoot);
   element("analyze-thermal").addEventListener("click", analyzeThermal);
+  document.getElementById("msi-ler")?.addEventListener("click", () => void lerMsi());
   element("analyze-health").addEventListener("click", analyzeHealth);
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
 

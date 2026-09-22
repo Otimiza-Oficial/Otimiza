@@ -1431,6 +1431,21 @@ pub async fn export_report(
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
 }
 
+/// Comando: o MSI de cada dispositivo PCI, só leitura (2.9, modo Expert). `LIVRES`.
+#[tauri::command]
+pub async fn msi_dispositivos() -> Result<Vec<crate::modules::windows::devices::DispositivoMsi>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::devices::msi_por_dispositivo)
+            .await
+            .map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: as alterações aplicadas, em planilha (CSV) na Área de Trabalho. `LIVRES`.
 ///
 /// Só lê o histórico; é o que a pessoa leva para conferir o que o Otimiza fez.
@@ -5090,6 +5105,7 @@ mod tests {
         "analyze_thermal",
         "export_report",
         "exportar_alteracoes",
+        "msi_dispositivos",
         "map_folders",
         "analyze_rbar",
         "list_profiles",

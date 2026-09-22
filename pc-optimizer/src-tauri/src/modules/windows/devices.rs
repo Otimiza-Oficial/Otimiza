@@ -126,6 +126,87 @@ pub fn ativar_msi(mudancas: &mut Vec<ChangeRecord>) -> Result<(), String> {
     Ok(())
 }
 
+// ─── MSI por dispositivo: SÓ LEITURA (2.9) ───────────────────────────────
+//
+// A auditoria pediu MSI por dispositivo. A leitura entra; a escrita, fora da
+// placa de vídeo, NÃO. Ligar MSI num dispositivo cujo driver não aguenta é o
+// erro que trava o boot — e aí o Otimiza nem abre para desfazer. Passa no
+// critério "como desfazer?" só a placa de vídeo, que já tem o item próprio no
+// catálogo. Para o resto, a tela mostra o estado de cada dispositivo e quem
+// quiser mexer sabe onde, por conta própria.
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct DispositivoMsi {
+    pub nome: String,
+    pub servico: String,
+    /// `Some(true)` ligado, `Some(false)` declarado e desligado, `None` o
+    /// driver não declara MSI (a chave não existe).
+    pub msi: Option<bool>,
+    /// É placa de vídeo — a única em que o Otimiza escreve.
+    pub placa_de_video: bool,
+}
+
+/// **Pura.** O nome que o Gerenciador de Dispositivos mostra: `FriendlyName`,
+/// senão o que vem depois do último `;` do `DeviceDesc`
+/// (`@oem11.inf,%rtl8168.devicedesc%;Realtek PCIe GbE`).
+pub fn nome_legivel(amigavel: Option<&str>, descricao: Option<&str>) -> Option<String> {
+    let bruto = amigavel.map(str::trim).filter(|a| !a.is_empty()).or(descricao.map(str::trim))?;
+    let nome = resolver_nome(bruto);
+    (!nome.is_empty()).then_some(nome)
+}
+
+/// Resolve os dois formatos do registro: `@recurso;Nome` e o molde com
+/// argumentos, `@recurso;%1 USB %2 Controller;(Intel(R),3.20)`.
+fn resolver_nome(bruto: &str) -> String {
+    let partes: Vec<&str> = bruto.split(';').collect();
+    let ultima = partes.last().copied().unwrap_or(bruto).trim();
+    if partes.len() >= 3 && ultima.starts_with('(') && ultima.ends_with(')') {
+        let mut molde = partes[partes.len() - 2].trim().to_string();
+        let argumentos = &ultima[1..ultima.len() - 1];
+        // "Intel(R)" tem parêntese dentro: separa só nas vírgulas.
+        for (i, arg) in argumentos.split(',').collect::<Vec<_>>().iter().enumerate().rev() {
+            molde = molde.replace(&format!("%{}", i + 1), arg.trim());
+        }
+        return molde;
+    }
+    ultima.to_string()
+}
+
+/// Todos os dispositivos PCI com driver, e o estado do MSI de cada um.
+pub fn msi_por_dispositivo() -> Result<Vec<DispositivoMsi>, String> {
+    let dispositivos = registry::subkeys("HKLM", PCI_ENUM)?;
+    let mut lista = Vec::new();
+    for dispositivo in dispositivos {
+        let caminho_dispositivo = format!("{}\\{}", PCI_ENUM, dispositivo);
+        let Ok(instancias) = registry::subkeys("HKLM", &caminho_dispositivo) else { continue };
+        for instancia in instancias {
+            let caminho = format!("{}\\{}", caminho_dispositivo, instancia);
+            let Ok(Some(servico)) = registry::read_text("HKLM", &caminho, "Service") else { continue };
+            if servico.trim().is_empty() {
+                continue;
+            }
+            let amigavel = registry::read_text("HKLM", &caminho, "FriendlyName").ok().flatten();
+            let descricao = registry::read_text("HKLM", &caminho, "DeviceDesc").ok().flatten();
+            let Some(nome) = nome_legivel(amigavel.as_deref(), descricao.as_deref()) else { continue };
+            let chave = format!("{}\\Device Parameters\\Interrupt Management\\MessageSignaledInterruptProperties", caminho);
+            let msi = match registry::read("HKLM", &chave, "MSISupported") {
+                Ok(PreviousValue::Dword(v)) => Some(v != 0),
+                _ => None,
+            };
+            let s = servico.to_lowercase();
+            lista.push(DispositivoMsi {
+                placa_de_video: DRIVERS_DE_VIDEO.iter().any(|d| s.starts_with(d)),
+                nome,
+                servico,
+                msi,
+            });
+        }
+    }
+    lista.sort_by(|a, b| a.nome.cmp(&b.nome));
+    lista.dedup_by(|a, b| a.nome == b.nome && a.servico == b.servico && a.msi == b.msi);
+    Ok(lista)
+}
+
 /// Valor de `PnPCapabilities` que desliga o gerenciamento de energia da placa.
 ///
 /// 24 = 0x18: soma de "não desligar o dispositivo para economizar energia" (8) e
@@ -235,6 +316,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn o_nome_vem_do_amigavel_ou_do_fim_da_descricao() {
+        assert_eq!(
+            nome_legivel(None, Some("@oem11.inf,%rtl8168.devicedesc%;Realtek PCIe GbE Family Controller")).as_deref(),
+            Some("Realtek PCIe GbE Family Controller")
+        );
+        assert_eq!(nome_legivel(Some(" Placa X "), Some("@a;Y")).as_deref(), Some("Placa X"));
+        assert_eq!(nome_legivel(Some(""), Some("Controlador")).as_deref(), Some("Controlador"));
+        assert_eq!(nome_legivel(None, None), None);
+        // Visto nesta máquina: o controlador USB guarda o nome como molde.
+        assert_eq!(
+            nome_legivel(
+                Some(r"@System32\drivers\usbxhci.sys,#1073807361;%1 USB %2 eXtensible Host Controller - %3 (Microsoft);(Intel(R),3.20,1.20)"),
+                None
+            )
+            .as_deref(),
+            Some("Intel(R) USB 3.20 eXtensible Host Controller - 1.20 (Microsoft)")
+        );
+    }
+
+    #[test]
     fn encontra_as_placas_de_video_desta_maquina() {
         let caminhos = caminhos_msi_das_gpus();
 
@@ -307,5 +408,16 @@ mod tests {
     fn valor_de_pnp_desliga_economia_e_despertar() {
         // 8 = não desligar para economizar energia; 16 = não deixar acordar o PC.
         assert_eq!(PNP_SEM_ECONOMIA, 8 | 16);
+    }
+}
+
+#[cfg(test)]
+mod nesta_maquina {
+    #[test]
+    #[ignore]
+    fn msi_desta_maquina() {
+        for d in super::msi_por_dispositivo().expect("leu") {
+            println!("{:<55} {:<12} {:?}", d.nome, d.servico, d.msi);
+        }
     }
 }

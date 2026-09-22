@@ -1692,6 +1692,26 @@
             <p id="thermal-status" class="status"></p>
             <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador ou a placa de vídeo estão sendo limitados, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Com o jogo aberto a leitura da placa diz mais. Cerca de 5 segundos, e não altera nada."></div>
           </section>
+          <!--
+            MSI POR DISPOSITIVO (2.9, modo Expert). Só leitura: ligar MSI num
+            dispositivo cujo driver não aguenta trava o boot, e aí não há como
+            desfazer pelo Otimiza. A escrita continua só na placa de vídeo, no
+            item próprio do catálogo.
+          -->
+          <section class="panel" data-so-expert hidden>
+            <div class="panel-head">
+              <h2>Interrupções por dispositivo (MSI)</h2>
+              <span class="panel-tag">Expert · só leitura</span>
+            </div>
+            <p class="lead">
+              Como cada dispositivo avisa o processador: por mensagem (MSI) ou
+              pela linha compartilhada antiga. O Otimiza só muda isto na placa
+              de vídeo — em outro dispositivo, um driver que não aguenta MSI
+              impede o Windows de ligar, e aí não há desfazer.
+            </p>
+            <button id="msi-ler" class="btn" data-custo="~1 s">Ler dispositivos</button>
+            <div id="msi-resultado" class="resultado"></div>
+          </section>
 
 <!-- Rede e DNS: retirado na 2.9. DNS não participa dos pacotes da partida — não muda ping nem FPS. Ver naofazemos.rs (dns_para_ping). -->
 
