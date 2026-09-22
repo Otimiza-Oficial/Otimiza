@@ -202,6 +202,7 @@ pub fn run() {
             commands::export_report,
             commands::exportar_alteracoes,
             commands::msi_dispositivos,
+            commands::diagnostico_dpc,
             commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,

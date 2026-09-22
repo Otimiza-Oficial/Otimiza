@@ -1713,6 +1713,23 @@
             <div id="msi-resultado" class="resultado"></div>
           </section>
 
+          <!-- DPC E INTERRUPÇÕES (2.9, modo Expert). Só leitura. -->
+          <section class="panel" data-so-expert hidden>
+            <div class="panel-head">
+              <h2>Drivers prendendo o processador (DPC)</h2>
+              <span class="panel-tag">Expert · só leitura</span>
+            </div>
+            <p class="lead">
+              Driver mal escrito prende um núcleo atendendo interrupção, e o que se
+              sente é engasgo e som estalando com FPS médio normal. Isto mede, por 10
+              segundos, quanto de cada núcleo foi para DPC e interrupção. Diz qual
+              núcleo e quanto — não diz qual driver: isso exige rastreamento do kernel,
+              que o Otimiza ainda não faz. Meça com o jogo aberto para valer.
+            </p>
+            <button id="dpc-medir" class="btn" data-custo="~10 s">Medir 10 s</button>
+            <div id="dpc-resultado" class="resultado"></div>
+          </section>
+
 <!-- Rede e DNS: retirado na 2.9. DNS não participa dos pacotes da partida — não muda ping nem FPS. Ver naofazemos.rs (dns_para_ping). -->
 
 <section class="panel">

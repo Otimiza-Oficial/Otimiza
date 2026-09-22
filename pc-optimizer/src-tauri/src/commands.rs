@@ -1431,6 +1431,21 @@ pub async fn export_report(
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
 }
 
+/// Comando: DPC e interrupções por núcleo, por 10 s (2.9, modo Expert). `LIVRES`.
+#[tauri::command]
+pub async fn diagnostico_dpc() -> Result<crate::modules::windows::dpc::DiagnosticoDpc, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(|| crate::modules::windows::dpc::medir(10))
+            .await
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Comando: o MSI de cada dispositivo PCI, só leitura (2.9, modo Expert). `LIVRES`.
 #[tauri::command]
 pub async fn msi_dispositivos() -> Result<Vec<crate::modules::windows::devices::DispositivoMsi>, String> {
@@ -5106,6 +5121,7 @@ mod tests {
         "export_report",
         "exportar_alteracoes",
         "msi_dispositivos",
+        "diagnostico_dpc",
         "map_folders",
         "analyze_rbar",
         "list_profiles",

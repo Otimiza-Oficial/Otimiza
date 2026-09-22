@@ -5290,6 +5290,56 @@ interface DispositivoMsi {
   placa_de_video: boolean;
 }
 
+interface NucleoDpc {
+  nucleo: string;
+  dpc_medio: number;
+  dpc_pico: number;
+  interrupcao_media: number;
+  interrupcao_pico: number;
+}
+type DiagnosticoDpc = {
+  segundos: number;
+  nucleos: NucleoDpc[];
+  estado: { estado: "Normal" } | { estado: "Alto"; nucleo: string } | { estado: "NaoDeuParaLer"; motivo: string };
+};
+
+/** DPC e interrupções por núcleo (2.9, Expert): só leitura. */
+async function medirDpc() {
+  const saida = document.getElementById("dpc-resultado");
+  const botao = document.getElementById("dpc-medir") as HTMLButtonElement | null;
+  if (!saida) return;
+  if (botao) botao.disabled = true;
+  saida.innerHTML = `<p class="hint">Medindo por 10 segundos…</p>`;
+  try {
+    const d = await invoke<DiagnosticoDpc>("diagnostico_dpc");
+    if (d.estado.estado === "NaoDeuParaLer") {
+      saida.innerHTML = `<p class="hint">Não deu para medir: ${escapeHtml(d.estado.motivo)}</p>`;
+      return;
+    }
+    const pct = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
+    const pior = d.estado.estado === "Alto" ? d.estado.nucleo : null;
+    const frase =
+      pior === null
+        ? "Nenhum núcleo passou da referência (3% em média ou 15% num instante). Se o engasgo continua, meça de novo com o jogo aberto."
+        : `O núcleo ${escapeHtml(pior)} passou da referência. Drivers de rede, áudio, USB e placa de vídeo são os suspeitos comuns: atualize-os pelo fabricante e desconecte periféricos um a um, medindo de novo.`;
+    saida.innerHTML = `
+      <p class="hint">${frase} As referências não foram validadas em muitas máquinas.</p>
+      <table class="fg-tabela">
+        <thead><tr><th>Núcleo</th><th>DPC médio</th><th>DPC pico</th><th>Interrupção média</th><th>Interrupção pico</th></tr></thead>
+        <tbody>${d.nucleos
+          .map(
+            (n) =>
+              `<tr${n.nucleo === pior ? ' data-preso="true"' : ""}><td>${escapeHtml(n.nucleo)}</td><td>${pct(n.dpc_medio)}</td><td>${pct(n.dpc_pico)}</td><td>${pct(n.interrupcao_media)}</td><td>${pct(n.interrupcao_pico)}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>`;
+  } catch (erro) {
+    saida.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+  } finally {
+    if (botao) botao.disabled = false;
+  }
+}
+
 /** MSI por dispositivo (2.9, Expert): só leitura. */
 async function lerMsi() {
   const saida = document.getElementById("msi-resultado");
@@ -10738,6 +10788,7 @@ function wireControls() {
   element("analyze-boot").addEventListener("click", analyzeBoot);
   element("analyze-thermal").addEventListener("click", analyzeThermal);
   document.getElementById("msi-ler")?.addEventListener("click", () => void lerMsi());
+  document.getElementById("dpc-medir")?.addEventListener("click", () => void medirDpc());
   element("analyze-health").addEventListener("click", analyzeHealth);
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
 

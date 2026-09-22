@@ -25,6 +25,7 @@ pub mod deteccao;
 pub mod devices;
 pub mod diskspace;
 pub mod sensoresgpu;
+pub mod dpc;
 pub mod display;
 pub mod essenciais;
 pub mod exhaustion;
