@@ -225,7 +225,9 @@ Todo item retirado mantém o desfazer para quem já aplicou, como os 9 da primei
 | REWORK 5 — energia | feito (`1c639fc`): um dono por ajuste. `power.rs` ficou só como biblioteca do `powercfg` |
 | REWORK 4 — Auto CPU Set | feito (`3c8d01a`): A/B alternado, regra "nunca menos FPS", reaplicado ao abrir. **Não validado em híbrido.** Consulta de anticheat que faltava na afinidade entrou |
 | REWORK 2 — antes e depois | parcial (`1d5a211`): o perfil NVIDIA entra no portão. O lote do Windows não é por jogo e fica fora do portão |
-| REWORK 1, 7, 8 — interface única de alteração, Home, página do jogo | pendente |
+| REWORK 1 — motor único | parcial (`c13f857`): entra o REGISTRO central (`registro.rs`) com risco, reinício e desfazer de cada alteração, e a trava que reprova quem escreve sem estar nele. O executor continua em cada módulo: trocar isso agora seria reescrever vinte módulos numa versão que já mexeu em muitos |
+| REWORK 7 — Painel | feito (`3f6939d`): "Pronto para jogar?" mudou da Biblioteca para o Painel (uma cópia só) e entrou "Suas últimas partidas" |
+| REWORK 8 — página do jogo | feito (`1e29365`): "Otimizar e testar" aplica ajuste gráfico + perfil NVIDIA e deixa as próximas partidas decidirem |
 
 ## 8. Matriz de testes — o que dá e o que não dá para validar
 

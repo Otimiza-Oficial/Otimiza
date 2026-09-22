@@ -111,6 +111,26 @@ jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
   - **Drivers prendendo o processador (DPC):** quanto de cada núcleo foi para
     interrupção durante 10 segundos. Diz qual núcleo, não qual driver.
 
+## Otimizar e testar, num clique
+
+Na ficha do jogo (Biblioteca), **"Otimizar e testar"** aplica o ajuste gráfico
+Equilibrado e o perfil NVIDIA Competitivo de uma vez, cada um com o estado
+anterior guardado — e depois não promete nada: os dois ficam em observação, e o
+que piorar nas próximas partidas medidas é desfeito sozinho. Quem quiser
+escolher o orçamento de imagem continua escolhendo, logo abaixo.
+
+## Tudo o que o Otimiza altera, num lugar só
+
+No Painel, ao lado de "o que o Otimiza se recusa a fazer", entra a outra
+metade: **as 44 alterações que o produto pode fazer neste computador**, cada
+uma com o que muda, o risco, se pede reiniciar e **como se desfaz**. A lista
+sai do próprio código, e um teste da esteira reprova a versão se algum pedaço
+do produto passar a escrever sem aparecer nela.
+
+O Painel também ganhou **"Pronto para jogar?"** (que saiu da Biblioteca, porque
+olha a máquina e não um jogo) e **"Suas últimas partidas"**, com o que a
+medição automática registrou por jogo.
+
 ## Auto CPU Set (processador híbrido)
 
 Em processador com núcleos de desempenho e de eficiência, **"Testar e
