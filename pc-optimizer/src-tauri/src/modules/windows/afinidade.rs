@@ -95,6 +95,18 @@ pub fn ler(pid: u32) -> Result<(u64, u64), String> {
 /// o Windows devolve um erro que não explica nada, e o cliente leria isso como
 /// defeito do Otimiza.
 pub fn escrever(pid: u32, mascara: u64) -> Result<(), String> {
+    // 2.9: abrir o processo do jogo com anticheat rodando é o risco que não
+    // vale ganho nenhum. Mora AQUI para valer em todo caminho — botão, teste
+    // do Auto CPU Set e vigia.
+    if let Some(recusa) = super::anticheat::permite(
+        super::anticheat::Acao::AfinidadeNoJogo,
+        &super::anticheat::detectar_agora(),
+    )
+    .motivo()
+    {
+        return Err(recusa.to_string());
+    }
+
     if mascara == 0 {
         return Err("uma máscara sem nenhum núcleo pararia o processo.".to_string());
     }

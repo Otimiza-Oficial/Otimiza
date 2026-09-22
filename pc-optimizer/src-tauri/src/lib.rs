@@ -203,6 +203,9 @@ pub fn run() {
             commands::exportar_alteracoes,
             commands::msi_dispositivos,
             commands::diagnostico_dpc,
+            commands::cpuset_testar,
+            commands::cpuset_resultados,
+            commands::cpuset_esquecer,
             commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,
@@ -494,6 +497,28 @@ pub fn run() {
                     }
                 });
             }
+
+            // AUTO CPU SET (2.9): reaplica "só núcleos de desempenho" nos jogos
+            // em que isso foi MEDIDO e rendeu. Afinidade morre com o processo,
+            // então cada abertura do jogo precisa dela de novo. Sem nenhum
+            // resultado guardado, a volta não varre processo nenhum.
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                let mut ja = std::collections::HashSet::new();
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    let (volta, aplicados) = tokio::task::spawn_blocking(move || {
+                        let a = modules::windows::cpuset::reaplicar(&mut ja);
+                        (ja, a)
+                    })
+                    .await
+                    .unwrap_or_default();
+                    ja = volta;
+                    for jogo in aplicados {
+                        utils::Logger::info(&format!("auto cpu set: {jogo} nos núcleos de desempenho"));
+                    }
+                }
+            });
 
             // A PROVA QUE ACONTECE SOZINHA.
             //

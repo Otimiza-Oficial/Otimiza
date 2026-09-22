@@ -2184,6 +2184,18 @@
             </div>
 
             <p id="nucleos-status" class="status"></p>
+
+            <!--
+              AUTO CPU SET (2.9). Não se sabe de antemão se o jogo rende mais
+              só nos núcleos de desempenho ou em todos: o teste mede os dois,
+              alternando, e fica com o que rendeu. Empate volta para todos.
+              A escolha fica guardada e é reaplicada quando o jogo abrir.
+            -->
+            <div class="row-actions">
+              <button id="cpuset-testar" class="btn" data-custo="~1 min" disabled>Testar e decidir (1 minuto)</button>
+            </div>
+            <p class="hint">Com o jogo aberto e em partida: mede 10 segundos em todos os núcleos e 10 só nos de desempenho, três vezes cada. Fica nos de desempenho só se o FPS ou o 1% piores melhorarem de verdade sem nenhum dos dois piorar. Precisa do Otimiza como administrador.</p>
+            <div id="cpuset-resultados"></div>
           </section>
         </section>
 

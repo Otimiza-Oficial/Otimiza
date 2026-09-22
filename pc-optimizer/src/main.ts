@@ -2400,6 +2400,8 @@ interface NucleosNaTela {
   jogo_nome: string | null;
   jogo_pid: number | null;
   jogo_mascara: string | null;
+  /** Executável do jogo (Auto CPU Set). */
+  jogo_exe?: string | null;
 }
 
 const NOME_DA_CLASSE_DE_NUCLEO: Record<ClasseDeNucleo, string> = {
@@ -2472,8 +2474,88 @@ function desenharNucleos(r: NucleosNaTela) {
   desenharJogoNosNucleos(r);
 }
 
+interface ResultadoCpuSet {
+  executavel: string;
+  quando: number;
+  escolha: "SoDesempenho" | "TodosOsNucleos";
+  fps_todos: number;
+  fps_desempenho: number;
+  low_todos: number;
+  low_desempenho: number;
+}
+
+/** Os resultados guardados do Auto CPU Set, com "Esquecer" em cada um. */
+async function desenharCpuSet() {
+  const alvo = document.getElementById("cpuset-resultados");
+  if (!alvo) return;
+  try {
+    const lista = await invoke<ResultadoCpuSet[]>("cpuset_resultados");
+    if (!lista.length) {
+      alvo.innerHTML = "";
+      return;
+    }
+    const n = (v: number) => Math.round(v).toString();
+    alvo.innerHTML = `
+      <table class="fg-tabela">
+        <thead><tr><th>Jogo</th><th>Todos os núcleos</th><th>Só desempenho</th><th>Ficou</th><th></th></tr></thead>
+        <tbody>${lista
+          .map(
+            (r) => `<tr>
+              <td class="fg-mono">${escapeHtml(r.executavel)}</td>
+              <td>${n(r.fps_todos)} FPS · 1% ${n(r.low_todos)}</td>
+              <td>${n(r.fps_desempenho)} FPS · 1% ${n(r.low_desempenho)}</td>
+              <td>${r.escolha === "SoDesempenho" ? "só desempenho (reaplicado ao abrir)" : "todos os núcleos"}</td>
+              <td><button class="btn btn-ghost" data-cpuset-esquecer="${escapeHtml(r.executavel)}">Esquecer</button></td>
+            </tr>`,
+          )
+          .join("")}</tbody>
+      </table>`;
+    alvo.querySelectorAll<HTMLButtonElement>("[data-cpuset-esquecer]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await invoke("cpuset_esquecer", { executavel: b.dataset.cpusetEsquecer });
+          setStatus("nucleos-status", "Esquecido: o jogo volta a abrir em todos os núcleos.", "ok");
+        } catch (e) {
+          setStatus("nucleos-status", String(e), "error");
+        }
+        void desenharCpuSet();
+      }),
+    );
+  } catch {
+    alvo.innerHTML = "";
+  }
+}
+
+async function testarCpuSet() {
+  const pid = nucleosCarregados?.jogo_pid;
+  const exe = nucleosCarregados?.jogo_exe;
+  if (pid === null || pid === undefined || !exe) return;
+  const botao = element<HTMLButtonElement>("cpuset-testar");
+  botao.disabled = true;
+  setStatus("nucleos-status", "Medindo… mantenha o jogo em partida por cerca de 1 minuto.", "progress");
+  try {
+    const r = await invoke<ResultadoCpuSet>("cpuset_testar", { pid, executavel: exe });
+    setStatus(
+      "nucleos-status",
+      r.escolha === "SoDesempenho"
+        ? "Rendeu nos núcleos de desempenho: o jogo fica neles, e isso é reaplicado quando ele abrir."
+        : "Não rendeu de verdade só nos núcleos de desempenho: o jogo voltou a usar todos.",
+      "ok",
+    );
+    await carregarNucleos();
+  } catch (e) {
+    setStatus("nucleos-status", String(e), "error");
+    botao.disabled = false;
+  }
+  void desenharCpuSet();
+}
+
 function desenharJogoNosNucleos(r: NucleosNaTela) {
   const prender = element<HTMLButtonElement>("nucleos-prender");
+  const testar = document.getElementById("cpuset-testar") as HTMLButtonElement | null;
+  if (testar) testar.disabled = r.jogo_pid === null || !r.conselho.cabe || !r.jogo_exe;
+  void desenharCpuSet();
   const soltar = element<HTMLButtonElement>("nucleos-soltar");
 
   if (r.jogo_pid === null) {
@@ -2544,6 +2626,7 @@ function ligarNucleos() {
   element("nucleos-prender").addEventListener("click", () => void mexerNosNucleos(true));
   element("nucleos-soltar").addEventListener("click", () => void mexerNosNucleos(false));
   element("nucleos-reler").addEventListener("click", () => void carregarNucleos());
+  document.getElementById("cpuset-testar")?.addEventListener("click", () => void testarCpuSet());
 }
 
 // ----------------------------------------------------- limpeza do sistema

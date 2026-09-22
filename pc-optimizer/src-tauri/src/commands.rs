@@ -394,12 +394,12 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
     // diz se ele JÁ está preso em algum lugar, e um jogo preso nos núcleos de
     // eficiência por outro programa é exatamente o caso que esta tela existe
     // para achar.
-    let (jogo_nome, jogo_pid, jogo_mascara) = match &jogo {
+    let (jogo_nome, jogo_pid, jogo_mascara, jogo_exe) = match &jogo {
         Some(j) => {
             let mascara = afinidade::ler(j.pid).ok().map(|(processo, _)| processo);
-            (Some(j.nome.clone()), Some(j.pid), mascara)
+            (Some(j.nome.clone()), Some(j.pid), mascara, Some(j.executavel.clone()))
         }
-        None => (None, None, None),
+        None => (None, None, None, None),
     };
 
     Ok(NucleosNaTela {
@@ -413,6 +413,7 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
         jogo_nome,
         jogo_pid,
         jogo_mascara: jogo_mascara.map(|m| m.to_string()),
+        jogo_exe,
     })
 }
 
@@ -435,6 +436,8 @@ pub struct NucleosNaTela {
     pub jogo_pid: Option<u32>,
     /// Em que núcleos o jogo está agora.
     pub jogo_mascara: Option<String>,
+    /// O executável do jogo, para o Auto CPU Set guardar o resultado.
+    pub jogo_exe: Option<String>,
 }
 
 /// Comando: prende o jogo aberto nos núcleos de desempenho, ou o solta.
@@ -481,6 +484,32 @@ pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String,
     .map_err(|e| format!("a mudança não terminou: {e}"))?
 }
 
+
+/// Comando: Auto CPU Set — mede o jogo aberto em todos os núcleos e só nos de
+/// desempenho, alternando, e fica com o que rendeu (2.9). `EXIGEM_LICENCA`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::modules::windows::cpuset::ResultadoCpuSet, String> {
+    crate::modules::licenca::exigir()?;
+    tokio::task::spawn_blocking(move || crate::modules::windows::cpuset::testar(pid, &executavel))
+        .await
+        .map_err(|e| format!("o teste não terminou: {e}"))?
+}
+
+/// Comando: os resultados guardados do Auto CPU Set. `LIVRES`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn cpuset_resultados() -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
+    Ok(crate::modules::windows::cpuset::ler().into_values().collect())
+}
+
+/// Comando: esquece o resultado de um jogo (ele volta a abrir em todos os
+/// núcleos). `LIVRES`: só tira.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn cpuset_esquecer(executavel: String) -> Result<(), String> {
+    crate::modules::windows::cpuset::esquecer(&executavel)
+}
 
 /// Comando: o caminho do mouse, do movimento da mão ao pixel.
 ///
@@ -5103,6 +5132,8 @@ mod tests {
         "exportar_alteracoes",
         "msi_dispositivos",
         "diagnostico_dpc",
+        "cpuset_resultados",
+        "cpuset_esquecer",
         "map_folders",
         "analyze_rbar",
         "list_profiles",
@@ -5147,6 +5178,7 @@ mod tests {
         "gerador_ligar",
         "unreal_aplicar",
         "nvidia_perfil_aplicar",
+        "cpuset_testar",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",
