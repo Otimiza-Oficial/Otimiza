@@ -1,6 +1,6 @@
 // A janela do Mapa de desempenho, no contrato de telemetria da 2.8
 //
-// O Mapa mede 20 segundos com o jogo aberto: uma amostra de contadores a cada
+// O Mapa mede 40 segundos com o jogo aberto: uma amostra de contadores a cada
 // meio segundo (`core::telemetria`) e os quadros do jogo no mesmo intervalo.
 // Para o veredito de gargalo existe UM classificador no produto —
 // `modules::gargalo`, que a 2.8 publicou e que o painel ao vivo usa. Este

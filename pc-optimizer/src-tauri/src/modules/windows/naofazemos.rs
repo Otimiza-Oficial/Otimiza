@@ -71,16 +71,6 @@ pub struct NaoFazemos {
 pub static LISTA: &[NaoFazemos] = &[
     // --- retirados do próprio catálogo na 2.9 (`catalog::RETIRADOS`) ---
     NaoFazemos {
-        id: "desligar_uac_firewall",
-        nome: "Desligar o Controle de Conta de Usuário (UAC) e o Firewall \"para ganhar FPS\"",
-        natureza: Natureza::Prejudicial,
-        porque: "Nenhum dos dois trabalha durante o jogo: o UAC só aparece quando um \
-                 programa pede para ser administrador, e o Firewall filtra conexões novas \
-                 sem custo que o contador de quadros consiga ver. Desligar não devolve um \
-                 quadro e deixa qualquer programa mudar o sistema sem perguntar. O Otimiza \
-                 tinha os dois no catálogo, marcados como \"sem ganho\", e tirou na 2.9.",
-    },
-    NaoFazemos {
         id: "nagle",
         nome: "Desligar o algoritmo de Nagle para \"baixar o ping\"",
         natureza: Natureza::Placebo,
@@ -157,9 +147,10 @@ pub static LISTA: &[NaoFazemos] = &[
         natureza: Natureza::Prejudicial,
         porque: "Tempo real põe o jogo ACIMA de partes do próprio Windows, incluindo o que \
                  atende teclado, mouse e rede. Quando o jogo satura o processador — que é \
-                 quando isso supostamente ajudaria — a máquina para de responder. O Otimiza \
-                 usa prioridade Alta, que é o degrau abaixo, e tem uma trava no código \
-                 impedindo o valor de tempo real de voltar.",
+                 quando isso supostamente ajudaria — a máquina para de responder. Desde a \
+                 2.9 o Otimiza não mexe na prioridade do jogo: o que ele faz é o contrário, \
+                 baixar a prioridade dos programas em segundo plano que disputam processador \
+                 durante a partida.",
     },
     NaoFazemos {
         id: "desligar_paginacao",
