@@ -171,14 +171,23 @@ fn placa_de_video() -> Option<RawGpu> {
 /// Quem publicou o driver de vídeo instalado (`DriverProviderName`), da
 /// placa principal. `None` quando não deu para ler.
 pub fn provedor_do_driver() -> Option<String> {
-    let script = "(Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='DISPLAY'\" \
-                  -ErrorAction Stop | Where-Object { $_.DriverProviderName } | \
-                  Select-Object -First 1).DriverProviderName";
-    shell::powershell(script)
-        .ok()
-        .filter(|s| s.success)
-        .map(|s| s.stdout.trim().to_string())
-        .filter(|s| !s.is_empty())
+    // Lido UMA VEZ por execução: é uma consulta ao WMI pelo PowerShell, e quem
+    // trocar o driver de vídeo com o Otimiza aberto vai reiniciar o PC de
+    // qualquer jeito. Sem isto, o painel da placa pagava a consulta a cada
+    // abertura — o mesmo defeito que a leitura de disco tinha na listagem.
+    static LEMBRADO: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    LEMBRADO
+        .get_or_init(|| {
+            let script = "(Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='DISPLAY'\" \
+                          -ErrorAction Stop | Where-Object { $_.DriverProviderName } | \
+                          Select-Object -First 1).DriverProviderName";
+            shell::powershell(script)
+                .ok()
+                .filter(|s| s.success)
+                .map(|s| s.stdout.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .clone()
 }
 
 /// **Pura.** O driver instalado é o genérico que o Windows põe quando não há o
