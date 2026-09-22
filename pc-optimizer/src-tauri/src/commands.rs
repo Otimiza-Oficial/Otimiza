@@ -2795,9 +2795,14 @@ pub async fn analyze_thermal() -> Result<ThermalReport, String> {
     {
         // Amostra contadores e varre o log térmico; fora do runtime porque a
         // consulta WMI custa mais de um segundo.
-        tokio::task::spawn_blocking(crate::modules::windows::thermal::analyze)
-            .await
-            .map_err(|e| format!("Falha ao medir o processador: {}", e))
+        // 2.9: o processador e a placa de vídeo no mesmo diagnóstico.
+        tokio::task::spawn_blocking(|| {
+            let mut r = crate::modules::windows::thermal::analyze();
+            r.placa = Some(crate::modules::windows::sensoresgpu::ler());
+            r
+        })
+        .await
+        .map_err(|e| format!("Falha ao medir o processador: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]

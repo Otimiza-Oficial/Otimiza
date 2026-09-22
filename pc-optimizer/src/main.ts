@@ -5225,6 +5225,62 @@ interface ThermalReport {
   medido?: boolean;
   /** O registro térmico do Windows foi lido (com ou sem eventos). */
   eventos_lidos?: boolean;
+  /** Sensores da placa de vídeo (2.9). */
+  placa?: SensoresGpu | null;
+}
+
+type EstadoGpu = "Temperatura" | "FreioDeHardware" | "TetoDeEnergiaNormal" | "Livre" | "SemCarga";
+type SensoresGpu =
+  | {
+      tipo: "Lido";
+      leitura: {
+        nome: string;
+        temperatura_c: number | null;
+        clock_mhz: number | null;
+        clock_max_mhz: number | null;
+        potencia_w: number | null;
+        limite_potencia_w: number | null;
+        uso_pct: number | null;
+      };
+      estado: { estado: EstadoGpu };
+    }
+  | { tipo: "NaoDeuParaLer"; motivo: string };
+
+/** Estado da placa: o backend decide, a tela só escolhe a frase e a cor. */
+const NA_TELA_DA_PLACA: Record<EstadoGpu, { frase: string; severidade: Severity }> = {
+  Temperatura: {
+    frase: "O driver está segurando o clock da placa por temperatura. Limpe a poeira, confira as ventoinhas e o fluxo de ar do gabinete.",
+    severidade: "Critical",
+  },
+  FreioDeHardware: {
+    frase: "A placa acionou o freio de hardware — costuma ser a fonte, o conector de energia da placa ou a proteção térmica dela.",
+    severidade: "Critical",
+  },
+  TetoDeEnergiaNormal: {
+    frase: "Em carga, a placa está no teto de energia. Isso é o funcionamento normal de uma placa em uso máximo, não defeito.",
+    severidade: "Ok",
+  },
+  Livre: { frase: "Em carga, nada está segurando a placa.", severidade: "Ok" },
+  SemCarga: {
+    frase: "A placa não está em carga agora. Temperatura e freio apareceriam mesmo assim; o resto só se vê com o jogo aberto — analise de novo durante uma partida.",
+    severidade: "Ok",
+  },
+};
+
+function blocoDaPlaca(p: SensoresGpu | null | undefined): string {
+  if (!p) return "";
+  if (p.tipo === "NaoDeuParaLer") {
+    return `<article class="finding" data-severity="Important" style="--i:1"><div class="finding-top"><h3>Placa de vídeo: não deu para ler</h3></div><p class="finding-advice">${escapeHtml(p.motivo)}</p></article>`;
+  }
+  const l = p.leitura;
+  const n = (v: number | null, u: string) => (v === null ? "—" : `${Math.round(v)} ${u}`);
+  const tela = NA_TELA_DA_PLACA[p.estado.estado];
+  return `
+    <article class="finding" data-severity="${tela.severidade}" style="--i:1">
+      <div class="finding-top"><h3>${escapeHtml(l.nome)}</h3></div>
+      <p class="finding-measured">${n(l.temperatura_c, "°C")} · clock ${n(l.clock_mhz, "MHz")} de ${n(l.clock_max_mhz, "MHz")} · ${n(l.potencia_w, "W")} de ${n(l.limite_potencia_w, "W")} · uso ${n(l.uso_pct, "%")}</p>
+      <p class="finding-advice">${escapeHtml(tela.frase)}</p>
+    </article>`;
 }
 
 async function analyzeThermal() {
@@ -5273,6 +5329,7 @@ function renderThermalReport(report: ThermalReport) {
       </div>
       ${conselho}
     </article>
+    ${blocoDaPlaca(report.placa)}
   `;
 
   // "Nada está segurando" só com as duas leituras feitas. Leitura que falhou
