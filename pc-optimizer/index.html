@@ -908,6 +908,29 @@
             </div>
           </section>
 
+          <section class="panel" id="pronto-jogar-painel">
+            <header class="panel-head">
+              <h2>Pronto para jogar?</h2>
+              <p class="panel-sub">Monitor, limites de FPS escondidos, programas pesando e memória — medidos em 2 segundos.</p>
+            </header>
+            <div class="fg-linha"><button class="btn btn-primary" id="pronto-jogar" type="button">Verificar antes de jogar</button></div>
+            <div id="pronto-jogar-resultado"></div>
+          </section>
+
+          <!--
+            ÚLTIMAS PARTIDAS MEDIDAS (2.9). O Painel responde "como está a
+            máquina"; isto responde "e nos meus jogos?", com o que foi medido
+            sozinho durante as partidas. Sem partida medida, diz isso — e diz o
+            que falta ligar.
+          -->
+          <section class="panel" id="ultimas-partidas-painel">
+            <header class="panel-head">
+              <h2>Suas últimas partidas</h2>
+              <p class="panel-sub">O que o Otimiza mediu sozinho, por jogo.</p>
+            </header>
+            <div id="ultimas-partidas"></div>
+          </section>
+
           <!--
             O MAPA DE DESEMPENHO (2.9).
 
@@ -2097,14 +2120,12 @@
             </p>
           </div>
 
-          <section class="panel" id="pronto-jogar-painel">
-            <header class="panel-head">
-              <h2>Pronto para jogar?</h2>
-              <p class="panel-sub">Monitor, limites de FPS escondidos, programas pesando e memória — medidos em 2 segundos.</p>
-            </header>
-            <div class="fg-linha"><button class="btn btn-primary" id="pronto-jogar" type="button">Verificar antes de jogar</button></div>
-            <div id="pronto-jogar-resultado"></div>
-          </section>
+          <!--
+            "Pronto para jogar?" mudou para o Painel na 2.9: ele olha a MÁQUINA
+            (monitor, limites escondidos, memória, programas pesando), não um
+            jogo. Duas cópias da mesma verificação era o que a auditoria achou
+            em outros quatro lugares.
+          -->
 
           <section class="panel" id="biblioteca-painel">
             <div class="panel-head">

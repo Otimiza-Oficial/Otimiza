@@ -1432,8 +1432,9 @@ function showTab(name: string) {
     void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
   }
 
-  if (name === "biblioteca") {
+  if (name === "painel") {
     ligarProntidao();
+    void carregarUltimasPartidas();
   }
 
   if (name === "reparo" && !reparoCarregado) {
@@ -10478,6 +10479,52 @@ async function carregarOQueAltera() {
         </div>`;
       })
       .join("");
+}
+
+/** As últimas partidas medidas, uma linha por jogo (o mais recente de cada). */
+async function carregarUltimasPartidas() {
+  const alvo = document.getElementById("ultimas-partidas");
+  if (!alvo) return;
+  let medicoes: MedicaoAutomatica[];
+  try {
+    medicoes = await invoke<MedicaoAutomatica[]>("medicoes_automaticas");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+  if (!medicoes.length) {
+    alvo.innerHTML = `<p class="hint">Nenhuma partida medida ainda. A medição automática precisa da opção ligada em Sistema → Preferências e do Otimiza aberto como administrador; a partir daí ela mede sozinha enquanto você joga.</p>`;
+    return;
+  }
+  const porJogo = new Map<string, MedicaoAutomatica[]>();
+  for (const m of medicoes) {
+    const lista = porJogo.get(m.jogo) ?? [];
+    lista.push(m);
+    porJogo.set(m.jogo, lista);
+  }
+  const linhas = [...porJogo.entries()]
+    .map(([jogo, lista]) => {
+      const ordenadas = [...lista].sort((a, b) => b.quando - a.quando);
+      return { jogo, ultima: ordenadas[0], quantas: lista.length };
+    })
+    .sort((a, b) => b.ultima.quando - a.ultima.quando);
+
+  alvo.innerHTML = `
+    <table class="fg-tabela">
+      <thead><tr><th>Jogo</th><th>Quando</th><th>FPS</th><th>1% piores</th><th>Partidas medidas</th></tr></thead>
+      <tbody>${linhas
+        .map(
+          (l) => `<tr>
+            <td class="fg-mono">${escapeHtml(l.jogo)}</td>
+            <td>${new Date(l.ultima.quando * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
+            <td>${Math.round(l.ultima.fps)}</td>
+            <td>${l.ultima.confiavel ? Math.round(l.ultima.low_1pct).toString() : "amostra curta"}</td>
+            <td>${l.quantas}</td>
+          </tr>`,
+        )
+        .join("")}</tbody>
+    </table>
+    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou. A ficha de cada jogo, na Biblioteca, mostra a comparação.</p>`;
 }
 
 async function carregarOQueNaoFazemos() {
