@@ -1837,7 +1837,7 @@ impl WindowsOptimizer {
             }
 
             Action::PlanoOtimiza => {
-                let relatorio = planoenergia::montar(false, false)?;
+                let relatorio = planoenergia::montar(false)?;
 
                 if !relatorio.plano_ativo {
                     return Err(

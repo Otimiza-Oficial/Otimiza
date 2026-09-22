@@ -4804,7 +4804,7 @@ pub async fn simular_plano_otimiza() -> Result<
 > {
     #[cfg(target_os = "windows")]
     {
-        crate::modules::windows::planoenergia::montar(true, false)
+        crate::modules::windows::planoenergia::montar(true)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -4823,7 +4823,6 @@ pub async fn simular_plano_otimiza() -> Result<
 /// de a reversão falhar pela metade.
 #[tauri::command]
 pub async fn aplicar_plano_otimiza(
-    incluir_avancadas: bool,
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     crate::modules::licenca::exigir()?;
@@ -4833,7 +4832,7 @@ pub async fn aplicar_plano_otimiza(
         use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
 
         let relatorio =
-            crate::modules::windows::planoenergia::montar(false, incluir_avancadas)?;
+            crate::modules::windows::planoenergia::montar(false)?;
 
         // SÓ REGISTRA SE O PLANO REALMENTE FICOU ATIVO. Um registro de desfazer
         // para uma troca que não aconteceu daria ao cliente um item no histórico
@@ -4858,7 +4857,7 @@ pub async fn aplicar_plano_otimiza(
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (incluir_avancadas, state);
+        let _ = state;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -4894,19 +4893,16 @@ pub async fn vistoriar_plano_otimiza() -> Result<
 /// ao cliente dois "desfazer" para uma troca só, e o segundo reativaria um
 /// plano que já estava ativo.
 #[tauri::command]
-pub async fn reparar_plano_otimiza(
-    incluir_avancadas: bool,
-) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
+pub async fn reparar_plano_otimiza() -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
     {
-        crate::modules::windows::planoenergia::reparar(incluir_avancadas)
+        crate::modules::windows::planoenergia::reparar()
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = incluir_avancadas;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

@@ -6318,9 +6318,7 @@ async function repararPlano() {
   setStatus("plano-status", "Reaplicando só o que saiu do lugar…", "progress");
 
   try {
-    const r = await invoke<RelatorioDoPlano>("reparar_plano_otimiza", {
-      incluirAvancadas: false,
-    });
+    const r = await invoke<RelatorioDoPlano>("reparar_plano_otimiza");
 
     const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
     mostrarPlano(r, tom, frase);
@@ -6462,9 +6460,7 @@ async function aplicarPlano() {
   setStatus("plano-status", "Criando o plano, configurando e conferindo cada ajuste…", "progress");
 
   try {
-    const r = await invoke<RelatorioDoPlano>("aplicar_plano_otimiza", {
-      incluirAvancadas: false,
-    });
+    const r = await invoke<RelatorioDoPlano>("aplicar_plano_otimiza");
 
     const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
     mostrarPlano(r, tom, frase);

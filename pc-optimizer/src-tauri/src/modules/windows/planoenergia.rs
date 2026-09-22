@@ -834,7 +834,7 @@ pub fn vistoriar() -> Vistoria {
     // Simulação: lê cada ajuste do nosso plano sem tocar em nada. Num plano que
     // existe, `Mudaria` quer dizer exatamente "este valor não é o que
     // deixamos" — que é a definição de desvio.
-    let Ok(relatorio) = montar(true, false) else {
+    let Ok(relatorio) = montar(true) else {
         return Vistoria::NaoConsegui;
     };
 
@@ -870,7 +870,7 @@ pub fn vistoriar() -> Vistoria {
 /// tem o seu próprio caminho com o registro de desfazer) e não mexe no
 /// histórico, porque o estado anterior guardado lá continua sendo o certo — o
 /// plano do cliente nunca deixou de ser o plano do cliente.
-pub fn reparar(incluir_avancadas: bool) -> Result<RelatorioDoPlano, String> {
+pub fn reparar() -> Result<RelatorioDoPlano, String> {
     if !registry::is_elevated() {
         return Err(
             "Reparar o plano de energia exige executar o Otimiza como administrador.".to_string(),
@@ -891,7 +891,7 @@ pub fn reparar(incluir_avancadas: bool) -> Result<RelatorioDoPlano, String> {
     // Daqui para frente é o mesmo caminho da aplicação, e é de propósito: ele
     // já só escreve o que está fora do alvo e já confere cada escrita relendo.
     // Reparo não é um motor diferente; é o mesmo motor com outra porta.
-    montar(false, incluir_avancadas)
+    montar(false)
 }
 
 // ─── Aplicar um ajuste, e provar que ele entrou ───────────────────────────────
@@ -1301,7 +1301,13 @@ pub fn desfecho(
 ///
 /// Em `simulacao`, nada é escrito: o relatório diz o que mudaria. É o modo para
 /// olhar a máquina de um cliente antes de mexer nela.
-pub fn montar(simulacao: bool, incluir_avancadas: bool) -> Result<RelatorioDoPlano, String> {
+/// UM DONO POR AJUSTE (2.9). O plano OTIMIZA aplica só o que vale igual em
+/// qualquer máquina (disco, Wi-Fi, multimídia, preferência de placa, teto do
+/// processador). O que é processador — mínimo, EPP, estacionamento, boost — e
+/// ASPM/USB é do motor de energia, que mede nesta máquina antes de escolher.
+/// Os `Avancada` continuam no relatório, dizendo que ficaram com o motor, e
+/// não há mais caminho para o plano escrevê-los.
+pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
     let maquina = detectar();
 
     crate::utils::Logger::info(&format!(
@@ -1338,7 +1344,7 @@ pub fn montar(simulacao: bool, incluir_avancadas: bool) -> Result<RelatorioDoPla
     let mut ajustes = Vec::new();
 
     for a in AJUSTES {
-        if !incluir_avancadas && !entra_por_padrao(a.classe) {
+        if !entra_por_padrao(a.classe) {
             ajustes.push(ResultadoDoAjuste {
                 execucoes: Vec::new(),
                 nome: a.nome.to_string(),
@@ -2250,7 +2256,7 @@ mod tests {
         // criasse, o cliente ficaria com um plano ativo e SEM linha no
         // histórico — ou seja, sem botão de voltar.
         if registry::is_elevated() && onde_esta_o_plano() == EstadoDoPlano::NaoExiste {
-            let erro = reparar(false).unwrap_err();
+            let erro = reparar().unwrap_err();
             assert!(erro.contains("Criar e ativar"), "{}", erro);
         }
     }
@@ -2340,7 +2346,7 @@ mod tests {
 
         println!("\n=== SIMULAÇÃO (nada é escrito) ===");
 
-        match montar(true, false) {
+        match montar(true) {
             Ok(r) => {
                 for a in &r.ajustes {
                     println!(
@@ -2378,7 +2384,7 @@ mod tests {
         let antes = power::active_scheme().expect("plano ativo");
         println!("\nplano ativo antes: {}", antes);
 
-        let primeira = montar(false, false).expect("primeira passada");
+        let primeira = montar(false).expect("primeira passada");
 
         println!(
             "1ª passada: existia={} guid={:?} ativo={} aplicados={} já bons={} sem suporte={} falhas={} desfecho={:?}",
@@ -2406,7 +2412,7 @@ mod tests {
 
         // IDEMPOTÊNCIA: a segunda passada não cria plano nenhum e não escreve
         // nada — tudo que ela toca já está no alvo.
-        let segunda = montar(false, false).expect("segunda passada");
+        let segunda = montar(false).expect("segunda passada");
 
         println!(
             "2ª passada: existia={} guid={:?} aplicados={} já bons={}",
@@ -2451,7 +2457,7 @@ mod tests {
         }
 
         let antes = power::active_scheme().expect("plano ativo");
-        let inicial = montar(false, false).expect("criar o plano");
+        let inicial = montar(false).expect("criar o plano");
 
         assert!(inicial.plano_ativo, "o plano não ficou ativo");
         assert_eq!(vistoriar(), Vistoria::Integro, "nasceu desviado");
@@ -2485,7 +2491,7 @@ mod tests {
         }
 
         // ── O reparo ─────────────────────────────────────────────────────
-        let reparo = reparar(false).expect("reparar");
+        let reparo = reparar().expect("reparar");
 
         println!(
             "reparo: aplicados={} já bons={} falhas={}",
