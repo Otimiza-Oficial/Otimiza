@@ -91,6 +91,41 @@ jogo fica com o motor de energia, que usa o perfil medido para cada jogo.
   fica como está. Desfazer apaga o perfil que o Otimiza criou, ou devolve cada
   ajuste ao que era. Ganho **não validado**: meça antes e depois no Mapa.
 
+## O ajuste certo para este computador
+
+- **Ajustes que dependem da máquina só aparecem quando valem.** O Game DVR só
+  aparece com a gravação em segundo plano ligada; efeitos visuais e
+  transparência, em PC com até 8 GB ou até 4 núcleos; hibernação e
+  Armazenamento Reservado, com menos de 20 GB livres; Widgets e Edge em
+  segundo plano, com até 16 GB. Cada um diz por que apareceu. Leitura que
+  falha não esconde nem aplica.
+- **Modo Expert** (aba de ajustes): agendamento de GPU, MSI da placa, VBS e
+  indexação de busca só aparecem nele, nunca entram no "Otimizar agora", e
+  pedem medição antes e depois. Nele também ficam dois diagnósticos, só de
+  leitura:
+  - **Interrupções por dispositivo (MSI):** como cada dispositivo avisa o
+    processador. O Otimiza só muda isso na placa de vídeo — em outro
+    dispositivo, um driver que não aguenta impede o Windows de ligar.
+  - **Drivers prendendo o processador (DPC):** quanto de cada núcleo foi para
+    interrupção durante 10 segundos. Diz qual núcleo, não qual driver.
+
+## Placa de vídeo e temperatura
+
+- **Temperatura e limites, num lugar só:** o diagnóstico do processador
+  agora mostra também a placa de vídeo NVIDIA — temperatura, clock, potência
+  e o motivo de ela estar segurando o clock. Só temperatura e freio de
+  hardware viram alerta; teto de energia em carga é o normal de qualquer
+  placa, e a tela diz isso.
+- **Driver de vídeo:** quem publicou o driver instalado. Se for o genérico do
+  Windows, o aviso diz que instalar o do fabricante muda FPS de verdade; nos
+  outros casos, que mais novo não é automaticamente mais rápido. Botão para a
+  página do fabricante. O Otimiza não instala driver.
+
+## Relatório de alterações
+
+Além do PDF, **uma planilha** com cada alteração: data, ajuste, o que mudou,
+o valor de antes (o que volta no desfazer) e o valor novo.
+
 ## O que saiu, porque não mudava nada ou atrapalhava
 
 A 2.9 começou por uma auditoria de tudo o que o Otimiza altera no Windows

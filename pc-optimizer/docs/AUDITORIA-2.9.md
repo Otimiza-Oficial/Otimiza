@@ -208,6 +208,21 @@ Todo item retirado mantém o desfazer para quem já aplicou, como os 9 da primei
 
 ---
 
+### Andamento (22/09/2026)
+
+| Item | Estado |
+|---|---|
+| REMOVE — 9 itens do catálogo, "Priorizar" do FiveM, plano máximo, painéis repetidos | feito (`eb55b03`) |
+| REWORK 3 — NVIDIA por jogo (Competitivo, Baixa latência), valor atual → novo, nada volta a um valor mais lento | feito (`3cdac45`). Padrão = desfazer. Qualidade e Custom **não** entraram: não há valor documentado que só melhore imagem sem custo. V-Sync fica fora (VRR não é legível pelo driver) |
+| REWORK 9 — itens condicionais, medidos nesta máquina | feito (`cac4be6`) |
+| ADD 1 — modo Expert | feito como chave na aba de ajustes (`cac4be6`). O modo Simples é o padrão |
+| ADD 2 e 3 — sensores da placa e térmico num lugar só | feito por `nvidia-smi` (`fd3dcad`) |
+| ADD 4 — DPC/ISR | feito por núcleo, pelos contadores do Windows (`3be8ca4`). **Por driver, não**: exige ETW do kernel |
+| ADD 5 — driver | feito (`decc1d2`) |
+| ADD 6 — MSI por dispositivo | **só leitura** (`b3cd3d3`). Escrever fora da placa de vídeo não passa no "como desfazer?": driver que não aguenta impede o boot |
+| ADD 7 — relatório exportável | feito, planilha + data no PDF (`1ba72b7`) |
+| REWORK 1, 2, 4, 5, 6, 7, 8 — motor único, "Otimizar e testar", Auto CPU Set, energia única, limpeza única, Home, página do jogo | pendente |
+
 ## 8. Matriz de testes — o que dá e o que não dá para validar
 
 | Configuração | Disponível | Como |
