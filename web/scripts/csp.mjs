@@ -33,6 +33,23 @@ import path from "node:path";
 
 const RAIZ = process.argv[2] ?? "out";
 
+/*
+ * A ORIGEM DO SERVIÇO QUE COBRA, quando o checkout está ligado na compilação.
+ * Sem ela no `connect-src`, a política bloquearia o próprio pagamento — e o
+ * erro apareceria só no navegador do cliente, na hora de pagar.
+ */
+const API_DA_COMPRA = (() => {
+  const bruto = process.env.NEXT_PUBLIC_OTIMIZA_API ?? "";
+  if (!bruto) return "";
+  try {
+    return new URL(bruto).origin;
+  } catch {
+    console.error(`csp: NEXT_PUBLIC_OTIMIZA_API não é um endereço válido: ${bruto}`);
+    process.exitCode = 1;
+    return "";
+  }
+})();
+
 /** De onde a página pode buscar cada coisa. */
 function politica(hashes) {
   const script = ["'self'", ...hashes.map((h) => `'sha256-${h}'`)].join(" ");
@@ -46,9 +63,10 @@ function politica(hashes) {
     "img-src 'self' data: https://images.unsplash.com",
     // O `next/font` baixa a fonte na compilação e a serve daqui.
     "font-src 'self'",
-    // A única chamada que o site faz: a versão mais nova, na API pública do
-    // GitHub. Nada da máquina do cliente sai daqui.
-    "connect-src 'self' https://api.github.com",
+    // As chamadas que o site faz: a versão mais nova, na API pública do
+    // GitHub, e — quando o checkout está ligado — o serviço que cobra e emite
+    // a chave. Nada da máquina do cliente sai daqui.
+    `connect-src 'self' https://api.github.com${API_DA_COMPRA ? " " + API_DA_COMPRA : ""}`,
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
