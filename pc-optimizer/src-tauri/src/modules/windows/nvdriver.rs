@@ -137,6 +137,13 @@ pub struct Opcao {
     pub nome_esperado: &'static str,
     /// O valor que o Otimiza escreve.
     pub valor_otimizado: u32,
+    /// Só vale no perfil de UM jogo, nunca no global (2.9).
+    ///
+    /// "Desempenho máximo" no global mantém a placa acordada até na área de
+    /// trabalho; V-Sync forçado desligado no global quebra o G-SYNC/VRR de todo
+    /// jogo. Os dois ficam para o perfil do jogo — e o V-Sync, nem lá entra
+    /// sozinho: nenhum perfil automático o usa.
+    pub so_por_jogo: bool,
 }
 
 /// Os cinco ajustes. Números e valores vêm do `NvApiDriverSettings.h` público
@@ -153,6 +160,7 @@ pub static OPCOES: &[Opcao] = &[
         nome_esperado: "power management",
         // PREFERRED_PSTATE_PREFER_MAX
         valor_otimizado: 0x0000_0001,
+        so_por_jogo: true,
     },
     Opcao {
         id: "latencia",
@@ -163,6 +171,7 @@ pub static OPCOES: &[Opcao] = &[
         id_do_padrao: Some(0x007B_A09E),
         nome_esperado: "pre-rendered",
         valor_otimizado: 0x0000_0001,
+        so_por_jogo: false,
     },
     Opcao {
         id: "textura",
@@ -176,6 +185,7 @@ pub static OPCOES: &[Opcao] = &[
         // piora mais a imagem). O valor gravado continua o de "desempenho" —
         // o que a explicação promete —, e o título passou a dizer o mesmo.
         valor_otimizado: 0x0000_000A,
+        so_por_jogo: false,
     },
     Opcao {
         id: "vsync",
@@ -187,6 +197,7 @@ pub static OPCOES: &[Opcao] = &[
         nome_esperado: "vertical sync",
         // VSYNCMODE_FORCEOFF
         valor_otimizado: 0x0841_6747,
+        so_por_jogo: true,
     },
     Opcao {
         id: "cache_shader",
@@ -197,6 +208,7 @@ pub static OPCOES: &[Opcao] = &[
         nome_esperado: "shader cache",
         // PS_SHADERDISKCACHE_ON
         valor_otimizado: 0x0000_0001,
+        so_por_jogo: false,
     },
 ];
 
@@ -226,6 +238,7 @@ pub static LIMITADOR: Opcao = Opcao {
     nome_esperado: "frame rate limiter",
     // Não é usado: o valor escrito é o limite que a pessoa escolhe.
     valor_otimizado: 0,
+    so_por_jogo: true,
 };
 
 /// `FRL_FPS_MAX` no `NvApiDriverSettings.h`.
@@ -285,6 +298,7 @@ pub fn painel(aplicado: impl Fn(&str) -> bool, limites: Vec<LimiteNaTela>) -> Pa
         limites,
         ajustes: OPCOES
             .iter()
+            .filter(|opcao| !opcao.so_por_jogo || aplicado(&id_no_historico(opcao.id)))
             .map(|opcao| {
                 let historico = id_no_historico(opcao.id);
                 AjusteNaTela {
@@ -919,6 +933,12 @@ fn numero_de(opcao: &str) -> Result<&'static Opcao, String> {
 /// promessa dele.
 pub fn aplicar(opcao: &str) -> Result<String, String> {
     let alvo = numero_de(opcao)?;
+    if alvo.so_por_jogo {
+        return Err(format!(
+            "\"{}\" não é mais aplicado para todos os jogos: use o perfil NVIDIA do jogo, na ficha dele na Biblioteca.",
+            alvo.titulo
+        ));
+    }
     let id = alvo.id_do_padrao.expect("numero_de já garantiu");
 
     na_sessao(move |api, sessao, perfil| {
@@ -1106,6 +1126,224 @@ pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, Stri
             valor_anterior: codificar_anterior(era_o_padrao, anterior),
         })
     })
+}
+
+// ------------------------------------------ perfil NVIDIA por jogo (2.9)
+
+/// O perfil que a pessoa escolhe para UM jogo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PerfilDoJogo {
+    /// A placa não baixa o clock no meio da partida, e a fila de quadros que o
+    /// processador prepara adiantado cai para um.
+    Competitivo,
+    /// Tudo do Competitivo, mais o filtro de textura em "desempenho".
+    BaixaLatencia,
+}
+
+/// O que cada perfil escreve: (ajuste de `OPCOES`, valor do `NvApiDriverSettings.h`).
+///
+/// V-SYNC NÃO ENTRA EM NENHUM. Forçar desligado rasga a imagem fora da faixa
+/// VRR, e com G-SYNC a recomendação da NVIDIA é o contrário. O Otimiza não sabe
+/// ler, pelo driver, se o monitor da pessoa tem VRR ligado — então não decide.
+pub fn ajustes_do_perfil(p: PerfilDoJogo) -> &'static [(&'static str, u32)] {
+    match p {
+        PerfilDoJogo::Competitivo => &[("energia", 0x0000_0001), ("latencia", 0x0000_0001)],
+        PerfilDoJogo::BaixaLatencia => &[("energia", 0x0000_0001), ("latencia", 0x0000_0001), ("textura", 0x0000_000A)],
+    }
+}
+
+/// O valor atual já entrega o que o perfil quer? **Pura.**
+///
+/// No filtro de textura a escala é ordenada (alta qualidade −10, qualidade 0,
+/// desempenho 10, alto desempenho 20, como inteiro com sinal): quem já está
+/// em "alto desempenho" não pode ser devolvido a "desempenho" — seria o
+/// Otimiza tirando FPS. Nos outros, só o valor exato atende.
+pub fn ja_atende(opcao: &str, padrao: bool, atual: u32, alvo: u32) -> bool {
+    if padrao {
+        return false;
+    }
+    match opcao {
+        "textura" => (atual as i32) >= (alvo as i32),
+        _ => atual == alvo,
+    }
+}
+
+/// O valor de um ajuste em palavras. **Pura.** Só nomeia o que o cabeçalho da
+/// NVIDIA documenta; o resto aparece como número.
+pub fn rotulo_do_valor(opcao: &str, padrao: bool, valor: u32) -> String {
+    if padrao {
+        return "padrão do driver".to_string();
+    }
+    match (opcao, valor) {
+        ("energia", 0) => "adaptável".into(),
+        ("energia", 1) => "preferir desempenho máximo".into(),
+        ("energia", 5) => "energia ideal".into(),
+        ("latencia", n) => format!("{} quadro(s) pré-renderizado(s)", n),
+        ("textura", 0x0000_0000) => "qualidade".into(),
+        ("textura", 0x0000_000A) => "desempenho".into(),
+        ("textura", 0x0000_0014) => "alto desempenho".into(),
+        ("textura", 0xFFFF_FFF6) => "alta qualidade".into(),
+        (_, v) => format!("valor 0x{:08X}", v),
+    }
+}
+
+/// Um ajuste do perfil do jogo: como está e como fica.
+#[derive(Debug, Clone, Serialize)]
+pub struct AjusteDoJogo {
+    pub opcao: &'static str,
+    pub titulo: &'static str,
+    pub explicacao: &'static str,
+    pub atual: String,
+    pub novo: String,
+    /// Já está no valor novo: nada a mudar.
+    pub igual: bool,
+}
+
+fn na_sessao_so_de_leitura<T>(trabalho: impl FnOnce(&Api, *mut c_void) -> Result<T, String>) -> Result<T, String> {
+    let api = api().map_err(nota_do_estado)?;
+    let mut sessao: *mut c_void = std::ptr::null_mut();
+    if unsafe { (api.criar_sessao)(&mut sessao) } != NVAPI_OK {
+        return Err("não consegui abrir a configuração do driver da NVIDIA.".to_string());
+    }
+    let r = (|| {
+        if unsafe { (api.carregar_ajustes)(sessao) } != NVAPI_OK {
+            return Err("não consegui ler a configuração atual do driver da NVIDIA.".to_string());
+        }
+        trabalho(api, sessao)
+    })();
+    unsafe { (api.destruir_sessao)(sessao) };
+    r
+}
+
+/// Prévia do perfil: o valor que VALE para este jogo hoje (o do perfil dele,
+/// ou o global quando ele não tem perfil) e o que o perfil escreveria.
+pub fn prever_perfil_do_jogo(executavel: &str, p: PerfilDoJogo) -> Result<Vec<AjusteDoJogo>, String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel).ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    na_sessao_so_de_leitura(move |api, sessao| {
+        let perfil = match api.perfis.as_ref().and_then(|perfis| perfil_do_executavel(perfis, sessao, &nome_do_app)) {
+            Some(p) => p,
+            None => {
+                let mut global: *mut c_void = std::ptr::null_mut();
+                if unsafe { (api.perfil_base)(sessao, &mut global) } != NVAPI_OK {
+                    return Err("não consegui abrir o perfil global do driver da NVIDIA.".to_string());
+                }
+                global
+            }
+        };
+        ajustes_do_perfil(p)
+            .iter()
+            .map(|(opcao, valor)| {
+                let o = numero_de(opcao)?;
+                let id = o.id_do_padrao.expect("numero_de já garantiu");
+                conferir_o_numero(api, o, id)?;
+                let (padrao, atual) = ler_valor(api, sessao, perfil, id);
+                Ok(AjusteDoJogo {
+                    opcao: o.id,
+                    titulo: o.titulo,
+                    explicacao: o.explicacao,
+                    atual: rotulo_do_valor(o.id, padrao, atual),
+                    novo: rotulo_do_valor(o.id, false, *valor),
+                    igual: ja_atende(o.id, padrao, atual, *valor),
+                })
+            })
+            .collect()
+    })
+}
+
+/// O que ficou gravado para desfazer o perfil de um jogo.
+pub struct PerfilAplicado {
+    pub perfil_criado: bool,
+    /// (ajuste, valor anterior codificado como no `codificar_anterior`).
+    pub anteriores: Vec<(String, String)>,
+}
+
+/// Escreve o perfil no perfil do EXECUTÁVEL (cria um "Otimiza - jogo.exe"
+/// quando o jogo não tem). Nunca no global.
+pub fn aplicar_perfil_do_jogo(executavel: &str, p: PerfilDoJogo) -> Result<PerfilAplicado, String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel).ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+
+    na_sessao_da_drs(move |api, sessao| {
+        let perfis = api.perfis.as_ref().ok_or_else(|| {
+            "este driver não oferece perfil por jogo, então nada foi aplicado.".to_string()
+        })?;
+        let (perfil, perfil_criado) = match perfil_do_executavel(perfis, sessao, &nome_do_app) {
+            Some(perfil) => (perfil, false),
+            None => {
+                let mut dados = NvdrsProfileV1::zerado();
+                dados.nome = nome_do_perfil;
+                let mut perfil: *mut c_void = std::ptr::null_mut();
+                if unsafe { (perfis.criar_perfil)(sessao, &mut dados, &mut perfil) } != NVAPI_OK {
+                    return Err("o driver da NVIDIA não deixou criar o perfil deste jogo. Nada foi alterado.".to_string());
+                }
+                let mut aplicativo = NvdrsApplicationV3::zerada();
+                aplicativo.nome_do_app = nome_do_app;
+                if unsafe { (perfis.criar_app)(sessao, perfil, &mut aplicativo) } != NVAPI_OK {
+                    return Err("o driver da NVIDIA não deixou ligar o jogo ao perfil. Nada foi alterado.".to_string());
+                }
+                (perfil, true)
+            }
+        };
+        let mut anteriores = Vec::new();
+        for (opcao, valor) in ajustes_do_perfil(p) {
+            let o = numero_de(opcao)?;
+            let id = o.id_do_padrao.expect("numero_de já garantiu");
+            conferir_o_numero(api, o, id)?;
+            let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, id);
+            if ja_atende(o.id, era_o_padrao, anterior, *valor) {
+                continue;
+            }
+            escrever_valor_cru(api, sessao, perfil, id, *valor)?;
+            anteriores.push((o.id.to_string(), codificar_anterior(era_o_padrao, anterior)));
+        }
+        // Se qualquer escrita falhou acima, o `?` sai sem salvar: nada fica
+        // pela metade no driver (ver `na_sessao_da_drs`).
+        Ok(PerfilAplicado { perfil_criado, anteriores })
+    })
+}
+
+/// Desfaz o perfil de um jogo: perfil criado pelo Otimiza é apagado inteiro
+/// (achado pelo nome que só o Otimiza usa); perfil que já existia tem cada
+/// ajuste devolvido — ao padrão pela NVIDIA, ou ao número de antes.
+pub fn desfazer_perfil_do_jogo(executavel: &str, perfil_criado: bool, anteriores: &[(String, String)]) -> Result<(), String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel).ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let anteriores = anteriores.to_vec();
+    na_sessao_da_drs(move |api, sessao| {
+        let perfis = api.perfis.as_ref().ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
+        if perfil_criado {
+            let mut perfil: *mut c_void = std::ptr::null_mut();
+            let achou = unsafe { (perfis.achar_perfil)(sessao, nome_do_perfil.as_ptr(), &mut perfil) } == NVAPI_OK;
+            if achou && !perfil.is_null() && unsafe { (perfis.apagar_perfil)(sessao, perfil) } != NVAPI_OK {
+                return Err(format!("não consegui apagar o perfil \"{}\" do driver da NVIDIA.", nome_do_perfil_do_otimiza(executavel)));
+            }
+            return Ok(());
+        }
+        let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) else { return Ok(()) };
+        for (opcao, anterior) in &anteriores {
+            let o = numero_de(opcao)?;
+            let id = o.id_do_padrao.expect("numero_de já garantiu");
+            match plano_de_desfazer(anterior) {
+                PlanoDeDesfazer::RestaurarPadrao => {
+                    if unsafe { (api.restaurar_ajuste)(sessao, perfil, id) } != NVAPI_OK {
+                        return Err(format!("não consegui devolver \"{}\" ao padrão neste jogo.", o.titulo));
+                    }
+                }
+                PlanoDeDesfazer::Escrever(valor) => escrever_valor_cru(api, sessao, perfil, id, valor)?,
+            }
+        }
+        Ok(())
+    })
+}
+
+/// O id do perfil de um jogo no histórico.
+pub fn id_do_perfil(executavel: &str) -> String {
+    format!("nvidia_perfil:{}", executavel.to_lowercase())
 }
 
 /// Desfaz o limite de um jogo, a partir do que ficou no histórico.
@@ -1314,12 +1552,80 @@ mod tests {
         let vsync = id_no_historico("vsync");
         let painel = painel(|id| id == vsync, Vec::new());
 
-        assert_eq!(painel.ajustes.len(), OPCOES.len());
+        // O que só vale por jogo some do painel global — menos o que já foi
+        // aplicado por uma versão antiga, que precisa continuar desfazível.
+        let esperados = OPCOES.iter().filter(|o| !o.so_por_jogo || o.id == "vsync").count();
+        assert_eq!(painel.ajustes.len(), esperados);
+        assert!(painel.ajustes.iter().all(|a| a.id != "energia"));
         for ajuste in &painel.ajustes {
             assert_eq!(ajuste.historico, id_no_historico(ajuste.id));
             assert_eq!(ajuste.aplicado, ajuste.id == "vsync", "{}", ajuste.id);
         }
         assert!(!painel.nota.trim().is_empty());
+    }
+
+    #[test]
+    fn energia_e_vsync_nao_se_aplicam_mais_no_global() {
+        for id in ["energia", "vsync"] {
+            let erro = aplicar(id).expect_err(id);
+            assert!(erro.contains("perfil NVIDIA do jogo"), "{}: {}", id, erro);
+        }
+    }
+
+    #[test]
+    fn nenhum_perfil_de_jogo_mexe_no_vsync_nem_no_limitador() {
+        // V-Sync forçado quebra G-SYNC/VRR; o limitador é escolha da pessoa,
+        // nunca parte de um perfil. O Otimiza não põe teto sozinho.
+        for p in [PerfilDoJogo::Competitivo, PerfilDoJogo::BaixaLatencia] {
+            for (opcao, _) in ajustes_do_perfil(p) {
+                assert!(*opcao != "vsync" && *opcao != LIMITADOR.id, "{:?} mexe em {}", p, opcao);
+                assert!(numero_de(opcao).is_ok(), "{:?}: {} fora do catálogo", p, opcao);
+            }
+        }
+    }
+
+    #[test]
+    fn baixa_latencia_contem_o_competitivo() {
+        let comp = ajustes_do_perfil(PerfilDoJogo::Competitivo);
+        let baixa = ajustes_do_perfil(PerfilDoJogo::BaixaLatencia);
+        assert!(comp.iter().all(|a| baixa.contains(a)));
+    }
+
+    #[test]
+    fn o_rotulo_do_valor_diz_o_padrao_e_os_valores_documentados() {
+        assert_eq!(rotulo_do_valor("energia", true, 7), "padrão do driver");
+        assert_eq!(rotulo_do_valor("energia", false, 1), "preferir desempenho máximo");
+        assert_eq!(rotulo_do_valor("textura", false, 0x0A), "desempenho");
+        assert_eq!(rotulo_do_valor("textura", false, 0x14), "alto desempenho");
+        assert_eq!(rotulo_do_valor("textura", false, 0x33), "valor 0x00000033");
+    }
+
+    /// Só leitura, na placa desta máquina: `cargo test -- --ignored previa_na_placa`.
+    #[test]
+    #[ignore]
+    fn previa_na_placa_desta_maquina() {
+        for p in [PerfilDoJogo::Competitivo, PerfilDoJogo::BaixaLatencia] {
+            let r = prever_perfil_do_jogo("RobloxPlayerBeta.exe", p);
+            println!("{:?}: {:#?}", p, r);
+            assert!(r.is_ok());
+        }
+    }
+
+    #[test]
+    fn o_perfil_nunca_devolve_textura_para_menos_desempenho() {
+        // Visto na GTX 1650 do dono: textura já em "alto desempenho" (0x14).
+        assert!(ja_atende("textura", false, 0x14, 0x0A));
+        assert!(ja_atende("textura", false, 0x0A, 0x0A));
+        assert!(!ja_atende("textura", false, 0x00, 0x0A));
+        assert!(!ja_atende("textura", false, 0xFFFF_FFF6, 0x0A));
+        assert!(!ja_atende("textura", true, 0x14, 0x0A));
+        assert!(ja_atende("energia", false, 1, 1));
+        assert!(!ja_atende("energia", false, 5, 1));
+    }
+
+    #[test]
+    fn o_id_do_perfil_nao_depende_de_maiusculas() {
+        assert_eq!(id_do_perfil("FiveM.exe"), id_do_perfil("fivem.exe"));
     }
 
     #[test]

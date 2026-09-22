@@ -181,6 +181,8 @@ pub fn run() {
             commands::unreal_aplicar,
             commands::tetos_escondidos,
             commands::pronto_para_jogar,
+            commands::nvidia_perfil_prever,
+            commands::nvidia_perfil_aplicar,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,

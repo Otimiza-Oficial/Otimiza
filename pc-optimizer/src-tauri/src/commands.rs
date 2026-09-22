@@ -2207,6 +2207,8 @@ pub struct JogoNaBiblioteca {
     /// O desempenho deste jogo caiu com o tempo (driver, Windows, ou sem
     /// culpado aparente).
     pub deriva: Option<crate::modules::deriva::Deriva>,
+    /// Id no histórico do perfil NVIDIA deste jogo, quando aplicado.
+    pub perfil_nvidia: Option<String>,
 }
 
 /// Id do ajuste Unreal de um jogo no histórico.
@@ -2221,6 +2223,8 @@ pub fn id_do_ajuste_unreal(nome: &str) -> String {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SeusJogos {
+    /// Há placa NVIDIA com a NVAPI respondendo (para a ficha mostrar o perfil).
+    pub nvidia: bool,
     pub jogos: Vec<JogoNaBiblioteca>,
     pub lacunas: Vec<String>,
     pub medicoes_erro: Option<String>,
@@ -2275,24 +2279,31 @@ pub async fn seus_jogos(state: State<'_, AppState>) -> Result<SeusJogos, String>
                         .max_by_key(|m| m.quando)
                         .cloned()
                 });
+                let perfil_nvidia = exe
+                    .as_ref()
+                    .and_then(|e| e.file_name())
+                    .map(|n| crate::modules::windows::nvdriver::id_do_perfil(&n.to_string_lossy()))
+                    .filter(|id| aplicados.contains(id));
                 JogoNaBiblioteca {
                     nome: j.nome,
                     origem: j.origem,
                     pasta: j.pasta.to_string_lossy().to_string(),
-                    executavel: exe.map(|e| e.to_string_lossy().to_string()),
+                    executavel: exe.as_ref().map(|e| e.to_string_lossy().to_string()),
                     nivel: if ajustador.is_some() { 'A' } else { 'C' },
                     ajustador,
                     ultima_medicao,
                     deriva: nome_exe.as_ref().and_then(|n| {
                         derivas.iter().find(|d| d.jogo.to_lowercase().starts_with(n.as_str())).cloned()
                     }),
+                    perfil_nvidia,
                     em_observacao: portao.vigiados.iter().any(|v| v.id == id_ajuste),
                     decidido: portao.decididos.iter().rev().find(|d| d.vigiado.id == id_ajuste).cloned(),
                     ajuste_aplicado: aplicados.contains(&id_ajuste).then_some(id_ajuste),
                 }
             })
             .collect();
-        Ok(SeusJogos { jogos, lacunas: b.lacunas, medicoes_erro })
+        let nvidia = matches!(crate::modules::windows::nvdriver::estado(), crate::modules::windows::nvdriver::Nvapi::Disponivel);
+        Ok(SeusJogos { nvidia, jogos, lacunas: b.lacunas, medicoes_erro })
     })
     .await
     .map_err(|e| format!("Falha ao ler a biblioteca: {}", e))?
@@ -2320,6 +2331,39 @@ pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::
         .await
         .map_err(|e| format!("Falha na verificação: {}", e))
 }
+/// Comando: prévia do perfil NVIDIA de um jogo (valor atual → novo). `LIVRES`.
+#[tauri::command]
+pub async fn nvidia_perfil_prever(
+    executavel: String,
+    perfil: crate::modules::windows::nvdriver::PerfilDoJogo,
+) -> Result<Vec<crate::modules::windows::nvdriver::AjusteDoJogo>, String> {
+    let exe = nome_do_executavel(&executavel)?;
+    tokio::task::spawn_blocking(move || crate::modules::windows::nvdriver::prever_perfil_do_jogo(&exe, perfil))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Comando: aplica o perfil NVIDIA no perfil do executável do jogo. `EXIGEM_LICENCA`.
+#[tauri::command]
+pub async fn nvidia_perfil_aplicar(
+    executavel: String,
+    perfil: crate::modules::windows::nvdriver::PerfilDoJogo,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+    let exe = nome_do_executavel(&executavel)?;
+    let mut log = state.changes.lock().await;
+    crate::modules::windows::WindowsOptimizer::new().aplicar_perfil_nvidia(&exe, perfil, &mut log)
+}
+
+/// O driver amarra perfil ao NOME DO ARQUIVO; a tela manda o caminho inteiro.
+fn nome_do_executavel(caminho: &str) -> Result<String, String> {
+    std::path::Path::new(caminho)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .ok_or_else(|| "caminho de executável inválido.".to_string())
+}
+
 fn vram_gb() -> Option<f64> {
     crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
 }
@@ -4977,6 +5021,7 @@ mod tests {
         "unreal_prever",
         "tetos_escondidos",
         "pronto_para_jogar",
+        "nvidia_perfil_prever",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",
@@ -5032,6 +5077,7 @@ mod tests {
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "unreal_aplicar",
+        "nvidia_perfil_aplicar",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",

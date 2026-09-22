@@ -1154,6 +1154,51 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Aplica um perfil NVIDIA no perfil do executável de UM jogo (2.9).
+    /// Trocar de perfil desfaz o anterior primeiro, para o "antes" guardado ser
+    /// o do cliente e não o nosso.
+    pub fn aplicar_perfil_nvidia(
+        &self,
+        executavel: &str,
+        perfil: nvdriver::PerfilDoJogo,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = nvdriver::id_do_perfil(executavel);
+        if log.is_applied(&id) {
+            self.revert(&id, log)?;
+        }
+        let feito = nvdriver::aplicar_perfil_do_jogo(executavel, perfil)?;
+        let change = ChangeRecord::PerfilNvidia {
+            executavel: executavel.to_string(),
+            perfil: format!("{:?}", perfil),
+            perfil_criado: feito.perfil_criado,
+            anteriores: feito.anteriores,
+        };
+        let described = change.describe();
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} · perfil NVIDIA {:?}", executavel, perfil),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            // Sem histórico não há desfazer: tira o que acabou de pôr.
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!("{} E não consegui tirar o perfil: {}", erro, falhas.join("; ")));
+            }
+            return Err(erro);
+        }
+        Ok(OptimizationOutcome {
+            id,
+            name: executavel.to_string(),
+            success: true,
+            applied: true,
+            message: format!("Perfil NVIDIA aplicado em {}. Vale na próxima vez que o jogo abrir.", executavel),
+            changes_count: 1,
+            changes: vec![described],
+            ..Default::default()
+        })
+    }
+
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
@@ -2809,6 +2854,10 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 valor_anterior,
                 ..
             } => nvdriver::desfazer_limite(executavel, *perfil_criado, valor_anterior),
+
+            ChangeRecord::PerfilNvidia { executavel, perfil_criado, anteriores, .. } => {
+                nvdriver::desfazer_perfil_do_jogo(executavel, *perfil_criado, anteriores)
+            }
 
             // O arquivo do jogo volta INTEIRO ao que era.
             //

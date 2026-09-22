@@ -34,6 +34,7 @@ type Jogo = {
   em_observacao: boolean;
   decidido: Decidido | null;
   deriva: Deriva | null;
+  perfil_nvidia: string | null;
 };
 
 type Deriva = {
@@ -86,7 +87,7 @@ function linhaDoPortao(j: Jogo): string {
   return "";
 }
 
-type Biblioteca = { jogos: Jogo[]; lacunas: string[]; medicoes_erro: string | null };
+type Biblioteca = { nvidia: boolean; jogos: Jogo[]; lacunas: string[]; medicoes_erro: string | null };
 type Mudanca = { chave: string; antes: number; depois: number };
 type Previa = { arquivo: string; mudancas: Mudanca[] };
 
@@ -153,6 +154,84 @@ async function verificarProntidao(alvo: HTMLElement) {
   }
 }
 
+/*
+ * PERFIL NVIDIA DO JOGO (2.9)
+ *
+ * Vai no perfil do executável, nunca no global: "desempenho máximo" no global
+ * deixa a placa acordada até na área de trabalho. V-Sync não entra em nenhum
+ * perfil (G-SYNC/VRR), e nenhum perfil põe limite de FPS.
+ */
+type PerfilDoJogo = "Competitivo" | "BaixaLatencia";
+type AjusteDoJogo = { opcao: string; titulo: string; explicacao: string; atual: string; novo: string; igual: boolean };
+
+const PERFIL_NVIDIA: Record<PerfilDoJogo, { nome: string; resumo: string }> = {
+  Competitivo: {
+    nome: "Competitivo",
+    resumo: "A placa não baixa o clock no meio da partida e o processador prepara só um quadro adiantado. A imagem não muda.",
+  },
+  BaixaLatencia: {
+    nome: "Baixa latência",
+    resumo: "Tudo do Competitivo, mais o filtro de textura em \"desempenho\" — pode deixar texturas distantes um pouco menos nítidas.",
+  },
+};
+
+function blocoNvidia(j: Jogo, i: number): string {
+  if (!j.executavel) return "";
+  if (j.perfil_nvidia) {
+    return `<div class="fg-linha"><span class="fg-chip">perfil NVIDIA do Otimiza aplicado neste jogo</span><button class="btn btn-ghost" data-nv-desfazer="${i}">Voltar ao padrão (desfaz o perfil)</button></div>`;
+  }
+  return `
+    <div class="fg-linha">
+      <span class="fg-nota"><strong>Perfil NVIDIA deste jogo:</strong></span>
+      <div class="fg-segmentos" role="group" aria-label="Perfil NVIDIA">
+        ${(Object.keys(PERFIL_NVIDIA) as PerfilDoJogo[])
+          .map((p) => `<button class="fg-segmento" data-nv-jogo="${i}" data-nv-perfil="${p}">${PERFIL_NVIDIA[p].nome}</button>`)
+          .join("")}
+      </div>
+    </div>
+    <div class="bib-previa" id="bib-nv-${i}"></div>`;
+}
+
+async function preverNvidia(j: Jogo, i: number, p: PerfilDoJogo) {
+  const alvo = raiz?.querySelector<HTMLElement>(`#bib-nv-${i}`);
+  if (!alvo || !j.executavel) return;
+  raiz?.querySelectorAll<HTMLElement>(`[data-nv-jogo="${i}"]`).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.nvPerfil === p)));
+  alvo.innerHTML = `<p class="fg-nota">Lendo o driver da NVIDIA…</p>`;
+  try {
+    const ajustes = await invoke<AjusteDoJogo[]>("nvidia_perfil_prever", { executavel: j.executavel, perfil: p });
+    const nada = ajustes.every((a) => a.igual);
+    alvo.innerHTML = `
+      <p class="fg-nota">${esc(PERFIL_NVIDIA[p].resumo)}</p>
+      <table class="fg-tabela">
+        <thead><tr><th>Ajuste</th><th>Hoje</th><th>Fica</th></tr></thead>
+        <tbody>${ajustes
+          .map((a) => `<tr title="${esc(a.explicacao)}"><td>${esc(a.titulo)}</td><td>${esc(a.atual)}</td><td>${a.igual ? "fica como está" : esc(a.novo)}</td></tr>`)
+          .join("")}</tbody>
+      </table>
+      <p class="fg-nota">Só este jogo muda. V-Sync e limite de FPS não são tocados. Ganho não validado nesta máquina: meça antes e depois no Mapa de desempenho.</p>
+      ${nada ? `<p class="fg-aviso">Nada a mudar: este jogo já está assim.</p>` : `<div class="fg-linha"><button class="btn btn-primary" data-nv-aplicar="${i}">Aplicar neste jogo</button></div>`}
+      <p class="fg-nota" id="bib-nv-resultado-${i}"></p>`;
+    alvo.querySelector<HTMLButtonElement>(`[data-nv-aplicar="${i}"]`)?.addEventListener("click", () => void aplicarNvidia(j, i, p));
+  } catch (e) {
+    alvo.innerHTML = `<p class="fg-erro">${esc(String(e))}</p>`;
+  }
+}
+
+async function aplicarNvidia(j: Jogo, i: number, p: PerfilDoJogo) {
+  const saida = raiz?.querySelector<HTMLElement>(`#bib-nv-resultado-${i}`);
+  if (!saida || !j.executavel) return;
+  saida.textContent = "Aplicando…";
+  try {
+    const r = await invoke<{ message: string }>("nvidia_perfil_aplicar", { executavel: j.executavel, perfil: p });
+    void seusJogos(true);
+    saida.textContent = r.message;
+  } catch (e) {
+    const msg = String(e);
+    if (msg.toLowerCase().includes("administrador")) pedirAdmin(msg);
+    saida.textContent = msg;
+  }
+}
+
 let raiz: HTMLElement | null = null;
 let pedirAdmin: (motivo: string) => void = () => {};
 
@@ -164,7 +243,7 @@ function quando(ts: number): string {
   return new Date(ts * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-function linhaDoJogo(j: Jogo, i: number): string {
+function linhaDoJogo(j: Jogo, i: number, nvidia: boolean): string {
   const med = j.ultima_medicao
     ? `<span class="fg-chip">última partida medida ${quando(j.ultima_medicao.quando)}: ${Math.round(j.ultima_medicao.fps)} FPS${
         j.ultima_medicao.confiavel ? ` · 1% piores ${Math.round(j.ultima_medicao.low_1pct)}` : ""
@@ -207,6 +286,7 @@ function linhaDoJogo(j: Jogo, i: number): string {
       ${acao}
       ${linhaDoPortao(j)}
       ${linhaDaDeriva(j)}
+      ${nvidia ? blocoNvidia(j, i) : ""}
     </article>`;
 }
 
@@ -298,7 +378,24 @@ export async function preencherFichaDoJogo(
       alvo.innerHTML = "";
       return;
     }
-    alvo.innerHTML = linhaDoJogo(lista.jogos[i], i);
+    alvo.innerHTML = linhaDoJogo(lista.jogos[i], i, lista.nvidia);
+    alvo.querySelectorAll<HTMLButtonElement>("[data-nv-perfil]").forEach((btn) =>
+      btn.addEventListener("click", () => void preverNvidia(lista.jogos[i], i, btn.dataset.nvPerfil as PerfilDoJogo)),
+    );
+    alvo.querySelector<HTMLButtonElement>("[data-nv-desfazer]")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget as HTMLButtonElement;
+      const id = lista.jogos[i].perfil_nvidia;
+      if (!id) return;
+      btn.disabled = true;
+      try {
+        await invoke("revert_optimization", { id });
+        await seusJogos(true);
+        void preencherFichaDoJogo(alvo, jogo, opcoes);
+      } catch (erro) {
+        btn.disabled = false;
+        btn.textContent = String(erro);
+      }
+    });
     alvo.querySelector<HTMLButtonElement>("[data-desfazer]")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget as HTMLButtonElement;
       const id = lista.jogos[i].ajuste_aplicado;
