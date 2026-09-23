@@ -168,6 +168,36 @@ fn placa_de_video() -> Option<RawGpu> {
         .and_then(|s| serde_json::from_str(&s.stdout).ok())
 }
 
+/// Quem publicou o driver de vídeo instalado (`DriverProviderName`), da
+/// placa principal. `None` quando não deu para ler.
+pub fn provedor_do_driver() -> Option<String> {
+    // Lido UMA VEZ por execução: é uma consulta ao WMI pelo PowerShell, e quem
+    // trocar o driver de vídeo com o Otimiza aberto vai reiniciar o PC de
+    // qualquer jeito. Sem isto, o painel da placa pagava a consulta a cada
+    // abertura — o mesmo defeito que a leitura de disco tinha na listagem.
+    static LEMBRADO: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    LEMBRADO
+        .get_or_init(|| {
+            let script = "(Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='DISPLAY'\" \
+                          -ErrorAction Stop | Where-Object { $_.DriverProviderName } | \
+                          Select-Object -First 1).DriverProviderName";
+            shell::powershell(script)
+                .ok()
+                .filter(|s| s.success)
+                .map(|s| s.stdout.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .clone()
+}
+
+/// **Pura.** O driver instalado é o genérico que o Windows põe quando não há o
+/// do fabricante? Com ele a placa roda sem aceleração completa — é o caso em
+/// que atualizar driver muda FPS de verdade.
+pub fn driver_generico(provedor: &str, nome_da_placa: Option<&str>) -> bool {
+    provedor.trim().eq_ignore_ascii_case("microsoft")
+        || nome_da_placa.is_some_and(|n| n.to_lowercase().contains("basic display"))
+}
+
 fn para_texto(momento: std::time::SystemTime) -> String {
     let data: chrono::DateTime<chrono::Local> = momento.into();
     data.format("%d/%m/%Y").to_string()
@@ -361,6 +391,14 @@ mod tests {
     }
 
     #[test]
+    fn driver_da_microsoft_e_generico_e_o_do_fabricante_nao() {
+        assert!(driver_generico("Microsoft", Some("Microsoft Basic Display Adapter")));
+        assert!(driver_generico("  microsoft ", None));
+        assert!(!driver_generico("NVIDIA", Some("NVIDIA GeForce GTX 1650")));
+        assert!(driver_generico("NVIDIA", Some("Microsoft Basic Display Adapter")));
+    }
+
+    #[test]
     fn cache_anterior_ao_driver_e_obsoleto() {
         // A comparação que dá sentido ao módulo: entrada de fevereiro sobre um
         // driver de julho foi compilada por um driver que não existe mais.
@@ -451,5 +489,14 @@ mod tests {
         // A soma bate com as partes.
         let soma: u64 = r.caches.iter().map(|c| c.bytes).sum();
         assert_eq!(soma, r.total_bytes);
+    }
+}
+
+#[cfg(test)]
+mod nesta_maquina {
+    #[test]
+    #[ignore]
+    fn provedor_desta_placa() {
+        println!("provedor: {:?}", super::provedor_do_driver());
     }
 }

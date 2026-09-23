@@ -431,7 +431,7 @@ pub fn gerar() -> Result<String, String> {
     // Simulação: lê o estado de cada ajuste sem tocar em nada. Numa máquina onde
     // o cliente JÁ aplicou, ela lê os valores reais de depois — que é o que
     // torna a coluna "AC after" verdadeira sem precisar reaplicar.
-    let relatorio = planoenergia::montar(true, false)?;
+    let relatorio = planoenergia::montar(true)?;
 
     let checagem = essenciais::checar();
 

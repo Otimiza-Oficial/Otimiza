@@ -91,6 +91,11 @@ pub struct FrameMeasurement {
     /// Verdadeiro quando houve amostra suficiente para os números acima
     /// significarem alguma coisa.
     pub detalhe_confiavel: bool,
+    /// A cauda inteira (P95, P99, 0,1% low, engasgos por gravidade, índice de
+    /// fluidez), calculada por `core::fluidez`. `None` em medição antiga, ou
+    /// sem nenhum quadro.
+    #[serde(default)]
+    pub saude: Option<crate::core::fluidez::SaudeDosQuadros>,
 }
 
 // ------------------------------------------------------- estado do callback
@@ -250,22 +255,17 @@ pub fn percentis(intervalos_ms: &[f64]) -> Option<(f64, f64, f64)> {
         return None;
     }
 
-    let mut ordenados: Vec<f64> = intervalos_ms.to_vec();
-    ordenados.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-    let media = ordenados.iter().sum::<f64>() / ordenados.len() as f64;
-
-    // Índice do percentil pelo método do mais próximo, que é o que as
-    // ferramentas de análise de quadros usam. `min` com o último índice porque
-    // o arredondamento pode cair fora do vetor em amostra pequena.
-    let em = |p: f64| {
-        let indice = ((p / 100.0) * ordenados.len() as f64).ceil() as usize;
-        ordenados[indice.saturating_sub(1).min(ordenados.len() - 1)]
-    };
-
+    // Percentil pelo método do posto mais próximo — a MESMA conta da saúde
+    // dos quadros (`core::estatistica::percentil`), para a medição automática
+    // e o Mapa de desempenho nunca darem P99 diferentes para a mesma partida.
+    use crate::core::estatistica::{media, percentil};
     let arred = |v: f64| (v * 100.0).round() / 100.0;
 
-    Some((arred(media), arred(em(95.0)), arred(em(99.0))))
+    Some((
+        arred(media(intervalos_ms)?),
+        arred(percentil(intervalos_ms, 95.0)?),
+        arred(percentil(intervalos_ms, 99.0)?),
+    ))
 }
 
 // --------------------------------------------------------------- utilitários
@@ -587,6 +587,7 @@ fn montar(
             low_1pct,
             engasgos_por_minuto: engasgos,
             detalhe_confiavel: confiavel,
+            saude: crate::core::fluidez::analisar(&intervalos_ms),
         },
         intervalos_ms,
         trancos_qpc,
@@ -763,6 +764,21 @@ fn parar_sessao() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_1pct_do_nucleo_e_o_mesmo_daqui() {
+        // A 2.9 passa a mostrar a saúde dos quadros calculada em
+        // `core::fluidez`. Se as duas contas divergirem, a mesma partida teria
+        // dois "1% low" na tela.
+        let mut intervalos: Vec<f64> = (0..5_000).map(|i| 8.0 + (i % 7) as f64 * 0.9).collect();
+        for i in (0..5_000).step_by(97) {
+            intervalos[i] = 31.0;
+        }
+        let (_, low_aqui, _, _) = estatistica(intervalos.clone());
+        let saude = crate::core::fluidez::analisar(&intervalos).unwrap();
+        let low_nucleo = (saude.low_1pct_fps.unwrap() * 10.0).round() / 10.0;
+        assert_eq!(low_aqui, low_nucleo);
+    }
 
     #[test]
     fn o_um_por_cento_pior_e_media_e_nao_percentil() {

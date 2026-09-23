@@ -26,7 +26,9 @@ export function CartaoMetrica({
   mono?: boolean;
 }) {
   return (
-    <article className="relative flex h-[86px] flex-col justify-between overflow-hidden rounded-[8px] bg-white px-3.5 py-3 shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]">
+    // Altura MÍNIMA, e não fixa: num telefone estreito o rótulo quebra em
+    // duas linhas, e com altura fixa a nota saía cortada para fora do cartão.
+    <article className="relative flex min-h-[86px] flex-col justify-between gap-2 overflow-hidden rounded-[8px] bg-white px-3.5 py-3 shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11.5px] font-medium text-muted">{rotulo}</p>
         {etiqueta}

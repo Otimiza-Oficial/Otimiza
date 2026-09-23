@@ -138,7 +138,7 @@ export function LoginForm() {
 
       <ButtonLink href={links.comprar} variant="secondary" size="md" className="w-full">
         <BrandLogo brand="discord" size={16} decorative />
-        Comprar no Discord — R$ 25, uma vez
+        Comprar no Discord — R$ 30, uma vez
       </ButtonLink>
 
       <p className="mt-6 text-[11.5px] leading-[1.55] text-subtle">

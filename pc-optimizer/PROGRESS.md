@@ -8,7 +8,7 @@
 | Item | Como foi verificado |
 |---|---|
 | Backend Rust compila | `cargo check` e `cargo build` sem erros |
-| 707 testes unitários passam, zero avisos | `cargo test --lib` nesta máquina: 707 passaram, 0 falharam, 14 ignorados |
+| 1395 testes unitários passam | `cargo test --lib` nesta máquina na 2.9: 1395 passaram, 0 falharam, 50 ignorados (os ignorados são os que exigem hardware ou jogo aberto) |
 | O executável final compila com 11 avisos | `cargo build --release` — caminho diferente do teste. Os 11 são código sem uso, todos de `nvdriver.rs`, o módulo NVIDIA que ainda não tem tela |
 | Janela nasce cabendo na tela | Programa da 1.9 aberto nesta máquina: **1283 × 818** numa tela de 1920×1080, centralizada. Era 1440×900 fixo |
 | Detector escolhe o processo do jogo, não o subprocesso | Com o FiveM aberto aqui: `FiveM_b3258_GTAProcess.exe`, pelos quatro sinais (janela em primeiro plano, motor 3D a 58%, aberto há 759 s, nome conhecido). A varredura por lista devolvia `FiveM_ChromeBrowser` |
@@ -1175,6 +1175,57 @@ de FPS. Nasceu do reembolso — o cliente aplicou tudo, o jogo continuou igual, 
 o teto dele era peça. Dizer antes perde só a venda que não ia dar certo.
 
 **Não visto funcionando:** o portão só aparece sem licença, e esta máquina tem.
+
+## A 2.9 — a auditoria, e o que ela mudou
+
+A versão começou por uma auditoria de **tudo** o que o produto escreve no
+Windows (`docs/AUDITORIA-2.9.md`), com a régua do dono: nunca menos FPS, sem
+divisão entre tipo de jogador, e fora o que não muda nada.
+
+### O que saiu
+
+Vinte ajustes. Dezoito por não mudarem FPS, fluidez, atraso, carregamento nem
+proteção — entre eles `SystemResponsiveness`, `Win32PrioritySeparation`,
+`NetworkThrottlingIndex`, MMCSS de jogos, desligar SysMain e desligar a
+compressão de memória. Mais as duas limpezas irreversíveis, que foram para a
+tela de Limpeza, onde o cliente vê o que se perde antes de apagar: **o catálogo
+inteiro passou a ter desfazer**. Saíram também o botão "Priorizar" do FiveM, o
+plano de energia máximo sugerido pelo diagnóstico e quatro painéis repetidos.
+
+Um caso merece nome próprio: `PowerThrottlingOff=1` desligava o EcoQoS — o
+mesmo mecanismo que o modo jogo novo usa para tirar programa de fundo da
+frente do jogo. O produto brigava consigo mesmo.
+
+### O que foi consertado
+
+| Defeito | Onde |
+|---|---|
+| A categoria "entrega otimizada" do liberador apagava `ProgramData\Microsoft\Network\Downloader`, que é a **fila de downloads do BITS** | `diskspace.rs` |
+| "Desempenho máximo" e V-Sync forçado eram escritos no perfil **global** da NVIDIA — o primeiro mantém a placa acordada na área de trabalho, o segundo quebra G-SYNC | `nvdriver.rs` |
+| Mexer nos núcleos do jogo **não consultava o anticheat** | `afinidade.rs` |
+| O plano de energia podia escrever a receita fixa de processador por cima do motor que mede | `planoenergia.rs` |
+
+### O que foi visto funcionando nesta máquina
+
+| Item | O que foi medido |
+|---|---|
+| Sensores da placa (`nvidia-smi`) | GTX 1650: 35 °C, 15 W de 75 W, clock 1485 de 2175 MHz, sem carga |
+| Prévia do perfil NVIDIA por jogo | Lido do driver, sem escrever: energia e fila de quadros já no valor do perfil, textura em "alto desempenho" |
+| Regra "nunca menos FPS" no perfil | A prévia mostrava textura indo de "alto desempenho" para "desempenho" — mais lento. Virou trava: ajuste já igual ou mais rápido fica como está |
+| DPC por núcleo | 10 s medidos: núcleo 0 com ~0,9% de DPC e ~1,6% de interrupção, resto em zero. Veredito: normal |
+| MSI por dispositivo | 11 dispositivos PCI lidos: NVMe, SATA, rede, USB e a GTX 1650 com MSI ligado; áudio HD declarado e desligado |
+| Origem do driver de vídeo | `DriverProviderName` = NVIDIA (não é o genérico do Windows) |
+| Planilha de alterações | Gerada do histórico real desta máquina, com data, id, alteração e valor anterior |
+| Registro central | 44 alterações listadas, e a trava achou um módulo que escrevia sem estar nela (a afinidade) |
+
+### O que a 2.9 NÃO viu funcionar
+
+| Item | Por quê |
+|---|---|
+| **Auto CPU Set** | Esta máquina tem 8 núcleos lógicos iguais. Em processador uniforme o botão fica desligado de propósito — prender o jogo em parte dos núcleos só tiraria máquina. Falta um híbrido (Intel 12ª geração ou mais novo) |
+| **Escrever e desfazer um perfil NVIDIA no driver** | A leitura foi feita; a escrita no driver e o desfazer dela não foram executados |
+| **As telas novas abertas no programa** | Modo Expert, MSI, DPC, registro central, "Suas últimas partidas" e "Otimizar e testar" compilam e passam no `tsc`, mas não foram vistas na janela |
+| **O portão desfazendo um perfil NVIDIA sozinho** | Exige três partidas medidas antes e três depois, com a medição automática ligada |
 
 ## Pendente
 

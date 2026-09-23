@@ -169,7 +169,7 @@ jobs:
       # Parar no primeiro erro mostra menos de uma vez, mas mostra a verdade.
       - name: Testes — núcleo e dados
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- ci_coverage:: core:: modules::atualizacao:: modules::changelog:: modules::convite:: modules::preferences:: modules::prova:: modules::safety:: modules::windows::cbslog:: modules::windows::reparo:: utils::logger:: modules::medicoes:: modules::regressao:: modules::windows::discodojogo:: modules::windows::pcie:: modules::pontuacao:: modules::windows::causas:: modules::optimizer:: modules::windows::naofazemos:: modules::windows::grupos:: modules::windows::experimento:: modules::windows::conflitos:: modules::windows::contadousuario:: modules::windows::niveis:: modules::windows::cpugeracao:: modules::windows::bios::"
+        run: "cargo test --lib -- ci_coverage:: core:: modules::atualizacao:: modules::changelog:: modules::convite:: modules::preferences:: modules::prova:: modules::safety:: modules::windows::cbslog:: modules::windows::reparo:: utils::logger:: modules::medicoes:: modules::regressao:: modules::portao:: modules::deriva:: modules::windows::discodojogo:: modules::windows::pcie:: modules::pontuacao:: modules::windows::causas:: modules::optimizer:: modules::windows::naofazemos:: modules::windows::grupos:: modules::windows::experimento:: modules::windows::conflitos:: modules::windows::contadousuario:: modules::windows::niveis:: modules::windows::cpugeracao:: modules::windows::bios::"
 
       - name: Testes — licença e comandos
         working-directory: pc-optimizer/src-tauri
@@ -224,7 +224,7 @@ jobs:
 
       - name: Testes — serviços de terceiros, perfis e execução
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::rede:: modules::windows::frames:: modules::windows::framegen:: modules::windows::geracao:: modules::windows::motorenergia:: modules::windows::motorenergia_maquina:: modules::windows::gamemode:: modules::windows::deteccao:: modules::windows::jogos:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness::"
+        run: "cargo test --lib -- modules::windows::servicesaudit:: modules::windows::profiles:: modules::windows::shell:: modules::windows::network:: modules::windows::rede:: modules::windows::frames:: modules::windows::framegen:: modules::windows::geracao:: modules::windows::motorenergia:: modules::windows::motorenergia_maquina:: modules::windows::gamemode:: modules::windows::deteccao:: modules::windows::jogos:: modules::windows::bottleneck:: modules::windows::shaders:: modules::windows::readiness:: modules::windows::unreal:: modules::windows::governador:: modules::windows::tetos:: modules::windows::prontojogo:: modules::windows::sensoresgpu:: modules::windows::dpc:: modules::windows::cpuset:: modules::windows::registro:: modules::windows::nvml::"
 
       # O mapa de pastas varre o disco de verdade e leva perto de um minuto.
       # Fica num passo próprio para não parecer que outra área travou.

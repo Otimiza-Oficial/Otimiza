@@ -69,6 +69,81 @@ pub struct NaoFazemos {
 }
 
 pub static LISTA: &[NaoFazemos] = &[
+    // --- retirados do próprio catálogo na 2.9 (`catalog::RETIRADOS`) ---
+    NaoFazemos {
+        id: "network_throttling_index",
+        nome: "NetworkThrottlingIndex, SystemResponsiveness e prioridades MMCSS de \"Games\"",
+        natureza: Natureza::Placebo,
+        porque: "O NetworkThrottlingIndex só limita tráfego de rede ENQUANTO um programa \
+                 multimídia registrado toca áudio ou vídeo; não muda ping nem FPS de jogo. O \
+                 SystemResponsiveness e as prioridades da tarefa \"Games\" só valem para \
+                 programa que se registra no agendador multimídia, o que quase nenhum jogo \
+                 faz. O Otimiza tinha os três e tirou na 2.9: não havia ganho medido.",
+    },
+    NaoFazemos {
+        id: "win32_priority_separation",
+        nome: "Valor \"mágico\" de Win32PrioritySeparation",
+        natureza: Natureza::Placebo,
+        porque: "Os valores que circulam (0x26, 0x28, 0x2A) mudam o tamanho da fatia de tempo e \
+                 o reforço da janela em primeiro plano — e o padrão do Windows para desktop já é \
+                 quase o mesmo 0x26. Nenhuma medição reproduzível mostrou ganho de FPS ou 1% low.",
+    },
+    NaoFazemos {
+        id: "power_throttling_off",
+        nome: "Desligar a limitação de energia (PowerThrottlingOff)",
+        natureza: Natureza::Prejudicial,
+        porque: "Desliga o modo econômico por processo (EcoQoS) no Windows inteiro. É o recurso \
+                 que tira programas de fundo do caminho do jogo — em processador híbrido, é o que \
+                 manda esse trabalho para os núcleos de eficiência. O modo jogo do Otimiza usa \
+                 exatamente isso nos programas que disputam processador durante a partida.",
+    },
+    NaoFazemos {
+        id: "sysmain_compressao",
+        nome: "Desligar SysMain e a compressão de memória",
+        natureza: Natureza::Prejudicial,
+        porque: "Com pouca RAM, a compressão é o que evita ir ao disco: desligar troca memória \
+                 comprimida por paginação, que é travada. Com muita RAM, nenhum dos dois pesa. \
+                 O SysMain pré-carrega o que você usa; desligar deixa programas abrirem mais \
+                 devagar em HD e não dá quadro em lugar nenhum.",
+    },
+    NaoFazemos {
+        id: "nagle",
+        nome: "Desligar o algoritmo de Nagle para \"baixar o ping\"",
+        natureza: Natureza::Placebo,
+        porque: "Nagle junta pedaços pequenos de dados em conexões TCP. A maioria dos jogos \
+                 de ação manda a partida por UDP, onde ele não existe, e o ping é distância \
+                 até o servidor mais o caminho da internet — nada disso muda no seu PC. O \
+                 que o Otimiza faz no lugar é medir a perda de pacote até o servidor do jogo, \
+                 que é o que o jogador sente como travada de rede.",
+    },
+    NaoFazemos {
+        id: "servicos_xbox",
+        nome: "Desativar os serviços do Xbox",
+        natureza: Natureza::Prejudicial,
+        porque: "Esses serviços são sob demanda: ficam parados até um jogo da Microsoft \
+                 pedir. Parados, não gastam processador nem memória, então desativar não \
+                 muda FPS. O que muda é que o Game Pass, as conquistas e o salvamento na \
+                 nuvem de vários jogos param de funcionar.",
+    },
+    NaoFazemos {
+        id: "telemetria_por_fps",
+        nome: "Desligar a telemetria do Windows para ganhar desempenho",
+        natureza: Natureza::Placebo,
+        porque: "O serviço de telemetria usa uma fração de processador que nenhum contador \
+                 de quadros consegue separar do ruído, e quase sempre fora da partida. É uma \
+                 escolha de privacidade, legítima, mas não de desempenho — e o Otimiza é uma \
+                 ferramenta de desempenho. Os ajustes de telemetria, Copilot, busca web do \
+                 Iniciar, mapas, sincronização e assistência remota saíram na 2.9 por isso.",
+    },
+    NaoFazemos {
+        id: "dns_para_ping",
+        nome: "Trocar o DNS para \"diminuir o ping\" no jogo",
+        natureza: Natureza::Placebo,
+        porque: "O DNS só é consultado para descobrir o endereço do servidor, uma vez, antes \
+                 de conectar. Durante a partida o jogo fala direto com o endereço, e o DNS \
+                 não participa de nenhum pacote. Um DNS mais rápido encurta o carregamento \
+                 de uma página de internet; o ping do jogo continua o mesmo.",
+    },
     NaoFazemos {
         id: "limpar_prefetch",
         nome: "Apagar a pasta Prefetch para liberar espaço e acelerar o PC",
@@ -108,9 +183,10 @@ pub static LISTA: &[NaoFazemos] = &[
         natureza: Natureza::Prejudicial,
         porque: "Tempo real põe o jogo ACIMA de partes do próprio Windows, incluindo o que \
                  atende teclado, mouse e rede. Quando o jogo satura o processador — que é \
-                 quando isso supostamente ajudaria — a máquina para de responder. O Otimiza \
-                 usa prioridade Alta, que é o degrau abaixo, e tem uma trava no código \
-                 impedindo o valor de tempo real de voltar.",
+                 quando isso supostamente ajudaria — a máquina para de responder. Desde a \
+                 2.9 o Otimiza não mexe na prioridade do jogo: o que ele faz é o contrário, \
+                 baixar a prioridade dos programas em segundo plano que disputam processador \
+                 durante a partida.",
     },
     NaoFazemos {
         id: "desligar_paginacao",
@@ -128,8 +204,8 @@ pub static LISTA: &[NaoFazemos] = &[
         porque: "Essas listas circulam há dez anos e não distinguem uma máquina da outra. \
                  Entre os nomes que aparecem nelas estão o Plug and Play, o Agendador de \
                  Tarefas e os serviços de criptografia — sem eles, programa não abre, \
-                 impressora some e o Windows para de atualizar. O Otimiza mexe em sete \
-                 serviços, todos nomeados na tela, e se recusa a tocar no Windows Update e \
+                 impressora some e o Windows para de atualizar. O Otimiza mexe em dois \
+                 serviços (SysMain e a indexação de busca), nomeados na tela, e se recusa a tocar no Windows Update e \
                  no BITS por teste do próprio produto.",
     },
     NaoFazemos {

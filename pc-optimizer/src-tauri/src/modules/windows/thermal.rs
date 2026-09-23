@@ -87,6 +87,18 @@ pub struct ThermalReport {
     /// `LimitesDoProcessador::NaoSei` acabou virando `Culprit::Nenhum` por
     /// falta de leitura, e não porque o processador está de fato livre.
     pub medido: bool,
+    /// O registro térmico do Windows foi lido (com ou sem eventos). `false`
+    /// = não deu para ler, e "nenhum evento" NÃO pode ser afirmado.
+    #[serde(default = "sim")]
+    pub eventos_lidos: bool,
+    /// Os sensores da placa de vídeo, no mesmo diagnóstico (2.9). `None`
+    /// quando o chamador não leu.
+    #[serde(default)]
+    pub placa: Option<super::sensoresgpu::SensoresGpu>,
+}
+
+fn sim() -> bool {
+    true
 }
 
 // -------------------------------------------------------------- leituras
@@ -157,20 +169,23 @@ struct RawTermico {
 /// Este é o único sinal em que o módulo confia para dizer "calor". Resfriamento
 /// passivo ACPI é, por definição, resposta a temperatura — não há como
 /// confundir com plano de energia.
-fn eventos_termicos() -> Vec<RawTermico> {
+/// `None` = NÃO consegui ler (até a 2.7 isso virava lista vazia, e a tela
+/// dizia "nada está segurando o processador" em verde sobre uma leitura que
+/// falhou). Lista vazia = lido, e não houve evento.
+fn eventos_termicos() -> Option<Vec<RawTermico>> {
     let script = format!(
-        "$e = Get-WinEvent -FilterHashtable @{{ LogName='{}'; \
-         StartTime=(Get-Date).AddDays(-30) }} -MaxEvents 40 -ErrorAction SilentlyContinue; \
+        "try {{ $e = Get-WinEvent -FilterHashtable @{{ LogName='{}'; \
+         StartTime=(Get-Date).AddDays(-30) }} -MaxEvents 40 -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
          ConvertTo-Json -Compress -Depth 3 -InputObject @($e | ForEach-Object {{ \
            [ordered]@{{ when = $_.TimeCreated.ToString('s') }} }})",
         LOG_TERMICO
     );
 
-    shell::powershell(&script)
-        .ok()
-        .filter(|s| s.success && !s.stdout.trim().is_empty())
-        .and_then(|s| serde_json::from_str(&s.stdout).ok())
-        .unwrap_or_default()
+    let s = shell::powershell(&script).ok().filter(|s| s.success)?;
+    if s.stdout.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    serde_json::from_str(&s.stdout).ok()
 }
 
 // ------------------------------------------------------------- veredito
@@ -374,6 +389,8 @@ fn montar_relatorio(
         thermal_events: eventos_termicos,
         last_thermal_event: ultimo_evento,
         medido: !nao_medido,
+        eventos_lidos: true,
+        placa: None,
     }
 }
 
@@ -382,17 +399,21 @@ pub fn analyze() -> ThermalReport {
     let bateria = na_bateria();
     let teto = teto_do_plano();
     let contadores = amostrar_contadores().unwrap_or_default();
-    let termicos = eventos_termicos();
+    let lidos = eventos_termicos();
+    let eventos_lidos = lidos.is_some();
+    let termicos = lidos.unwrap_or_default();
     let ultimo = termicos.first().and_then(|t| t.when.clone());
 
-    montar_relatorio(
+    let mut r = montar_relatorio(
         bateria,
         teto,
         contadores.percentof_maximum_frequency,
         contadores.performance_limit_flags,
         termicos.len(),
         ultimo,
-    )
+    );
+    r.eventos_lidos = eventos_lidos;
+    r
 }
 
 #[cfg(test)]

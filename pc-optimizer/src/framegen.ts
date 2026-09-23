@@ -268,7 +268,7 @@ const DESCONHECIDO: Record<MotivoDesconhecido, string> = {
 
 const PERFIL: Record<Perfil, { rotulo: string; explica: string }> = {
   Competitivo: {
-    rotulo: "Competitivo",
+    rotulo: "Resposta primeiro",
     explica: "Resposta acima de tudo. Quadro gerado não vale ponto; qualquer atraso a mais pesa contra.",
   },
   Equilibrado: { rotulo: "Equilibrado", explica: "Fluidez e resposta com o mesmo peso." },
@@ -288,7 +288,7 @@ const MOTIVO_DECISAO: Record<MotivoDecisao, string> = {
   AmostraCurta: "Pelo menos uma das medições teve poucos quadros. Meça de novo por mais tempo.",
   RenderizadoCaiu: "O custo de gerar tirou quadros reais demais — o jogo passou a desenhar menos.",
   RitmoPiorou: "O ritmo dos quadros ficou mais irregular com a geração ligada.",
-  AtrasoAcrescentadoAlto: "No perfil competitivo, o atraso estimado acrescentado passou de 10 ms.",
+  AtrasoAcrescentadoAlto: "O atraso acrescentado passou do limite (10 ms com prioridade em resposta, 20 ms nos outros perfis).",
   ArtefatosIncomodos: "No teste visual você marcou artefato forte.",
   PontuacaoSubiu: "A pontuação subiu com a geração ligada, sem nenhuma regra contra.",
   PontuacaoCaiu: "A pontuação caiu com a geração ligada.",

@@ -32,6 +32,56 @@ pub struct StartupEntry {
     /// "HKCU" (só este usuário) ou "HKLM" (todos os usuários, exige administrador).
     pub hive: String,
     pub enabled: bool,
+    /// O que este programa é (2.9). Quem decide desligar é a pessoa; a classe
+    /// só diz o que costuma acontecer se ele não abrir com o Windows.
+    pub classe: Classe,
+}
+
+/// Classe de um programa de inicialização.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Classe {
+    /// Segurança, áudio, vídeo, touchpad: desligar tira algo do sistema.
+    Essencial,
+    /// Sincronização de nuvem e software de periférico (mouse, teclado,
+    /// fone): útil, mas dá para abrir na mão.
+    Util,
+    /// Lojas de jogo, mensageiros, música, navegador pré-aberto: só ocupam
+    /// memória e processador desde o boot até alguém abrir.
+    Opcional,
+    /// Não reconhecido pelo nome. Sem palpite.
+    Desconhecido,
+}
+
+const ESSENCIAIS: &[&str] = &[
+    "securityhealthsystray", "msmpeng", "rtkaud", "rtkngui", "ravcpl", "realtek", "waves", "nahimic",
+    "igfx", "nvcplui", "nvidia", "radeonsoftware", "amdrsserv", "synaptics", "syntp", "etdctrl", "elan",
+    "bthudtask", "bluetooth", "sgrmbroker",
+];
+const UTEIS: &[&str] = &[
+    "onedrive", "googledrivefs", "dropbox", "megasync", "icloud", "lghub", "logioptions", "razer",
+    "icue", "steelseries", "hyperx", "corsair", "armoury", "msi center", "dragon center",
+];
+const OPCIONAIS: &[&str] = &[
+    "steam", "epicgameslauncher", "riotclient", "battle.net", "eadesktop", "origin", "ubisoftconnect",
+    "upc", "galaxyclient", "rockstar", "spotify", "discord", "teams", "skype", "zoom", "whatsapp",
+    "telegram", "msedge", "chrome", "opera", "brave", "firefox", "utorrent", "qbittorrent", "adobe",
+    "ccleaner", "cortana", "yourphone", "phonelink", "roblox",
+];
+
+/// Classifica pelo executável (e pelo comando, quando o executável é
+/// genérico, como `rundll32`). **Pura.**
+pub fn classificar(executavel: &str, comando: &str) -> Classe {
+    let alvo = format!("{} {}", executavel, comando).to_lowercase();
+    let tem = |lista: &[&str]| lista.iter().any(|n| alvo.contains(n));
+    if tem(ESSENCIAIS) {
+        Classe::Essencial
+    } else if tem(UTEIS) {
+        Classe::Util
+    } else if tem(OPCIONAIS) {
+        Classe::Opcional
+    } else {
+        Classe::Desconhecido
+    }
 }
 
 /// Monta o valor de 12 bytes que o Windows espera em `StartupApproved`.
@@ -71,8 +121,10 @@ pub fn entries() -> Result<Vec<StartupEntry>, String> {
                 continue;
             };
 
+            let executable = executable_from_command(&command).unwrap_or_default();
             entries.push(StartupEntry {
-                executable: executable_from_command(&command).unwrap_or_default(),
+                classe: classificar(&executable, &command),
+                executable,
                 enabled: is_entry_enabled(hive, &name),
                 name,
                 command,
@@ -191,6 +243,23 @@ fn process_start_target(command: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classe_pelo_nome() {
+        assert_eq!(classificar("securityhealthsystray.exe", ""), Classe::Essencial);
+        assert_eq!(classificar("onedrive.exe", ""), Classe::Util);
+        assert_eq!(classificar("steam.exe", r#""C:\Steam\steam.exe" -silent"#), Classe::Opcional);
+        assert_eq!(classificar("discord.exe", ""), Classe::Opcional);
+        assert_eq!(classificar("rundll32.exe", "rundll32 algo.dll"), Classe::Desconhecido);
+    }
+
+    #[test]
+    #[ignore = "lê a inicialização desta máquina"]
+    fn classes_desta_maquina() {
+        for e in entries().unwrap() {
+            println!("{:?} {} ({})", e.classe, e.name, e.executable);
+        }
+    }
 
     #[test]
     fn resolves_squirrel_launcher_to_its_target() {

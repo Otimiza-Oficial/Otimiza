@@ -48,15 +48,11 @@ pub const PROFILES: &[ProfileInfo] = &[
             "visual_effects_performance",
             "disable_transparency",
             "disable_widgets",
-            "disable_copilot",
-            "disable_telemetry",
-            "telemetry_policy",
             "stop_sponsored_apps",
-            "start_menu_web_search_off",
-            "disable_startup_delay",
-            "disable_xbox_services",
+            // 2.9: atraso de inicialização e entrega de atualizações P2P são
+            // "só se pedir" — nada medido decide por você. Ver
+            // `catalog::CONDICIONAIS`.
             "disable_gamedvr",
-            "delivery_optimization_off",
             "disable_reserved_storage",
             "plano_otimiza",
         ],
@@ -79,18 +75,12 @@ pub const PROFILES: &[ProfileInfo] = &[
             // é um lote — quem escolhe "Jogos" não está escolhendo apostar o
             // FPS dele. Continua no catálogo, um a um, com o caso escrito.
             // Ver `RiscoDeFps` e `catalog::entra_no_lote`.
-            "system_responsiveness_gaming",
-            "mmcss_games",
             "mouse_precision_off",
-            "foreground_priority",
-            "disable_power_throttling",
             "plano_otimiza",
-            "gpu_msi_mode",
-            "network_low_latency",
-            "nic_power_saving_off",
+            // 2.9: MSI é Expert (a maioria dos drivers já usa) e a economia da
+            // placa de rede só vale com perda de pacote medida.
             "remove_forced_hpet",
             "clear_boot_limits",
-            "disable_xbox_services",
         ],
     },
     ProfileInfo {
@@ -108,34 +98,9 @@ pub const PROFILES: &[ProfileInfo] = &[
         optimization_ids: &[
             "visual_effects_performance",
             "disable_widgets",
-            "disable_telemetry",
-            "telemetry_policy",
             "stop_sponsored_apps",
-            "start_menu_web_search_off",
-            "disable_startup_delay",
             "disable_gamedvr",
-            "disable_xbox_services",
-            "delivery_optimization_off",
             "plano_otimiza",
-        ],
-    },
-    ProfileInfo {
-        id: "privacidade",
-        name: "Privacidade",
-        description:
-            "Corta a coleta de dados e a propaganda embutida no sistema. O ganho \
-             de desempenho é pequeno e honestamente secundário — o motivo aqui é \
-             outro.",
-        tradeoff:
-            "Ganho de velocidade quase nulo. Se o seu problema é PC lento, este \
-             não é o perfil que resolve.",
-        optimization_ids: &[
-            "disable_telemetry",
-            "telemetry_policy",
-            "stop_sponsored_apps",
-            "start_menu_web_search_off",
-            "disable_widgets",
-            "delivery_optimization_off",
         ],
     },
 ];
@@ -219,8 +184,10 @@ mod tests {
             for id in perfil.optimization_ids {
                 let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
 
+                // Condicional pode estar no perfil: entra quando a condição
+                // for medida nesta máquina. Expert e "só se pedir", nunca.
                 assert!(
-                    crate::modules::windows::catalog::entra_no_lote(spec),
+                    crate::modules::windows::catalog::entra_no_lote_se(spec, |_| true),
                     "o perfil `{}` cita `{}`, que o lote não aplica",
                     perfil.id,
                     id

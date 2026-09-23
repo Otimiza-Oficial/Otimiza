@@ -323,7 +323,10 @@ pub enum Perfil {
     SemTeto,
     /// Tira os tetos e desliga o que é caro e pouco visível.
     Equilibrado,
-    /// Tira os tetos e derruba tudo que custa quadro.
+    /// Tira os tetos e derruba tudo que custa quadro. Na tela chama "Máximo
+    /// de FPS" desde a 2.9: é um orçamento de imagem, não um estilo de jogo —
+    /// quem joga RP ou PvP escolhe o mesmo botão se quer o mesmo ganho. O nome
+    /// interno fica para o histórico de quem aplicou antes continuar desfazendo.
     Competitivo,
 }
 

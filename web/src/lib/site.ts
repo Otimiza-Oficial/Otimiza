@@ -40,9 +40,10 @@ export const links = {
   /** Endereço permanente do instalador mais novo, publicado pela esteira. */
   baixar: "https://github.com/Otimiza-Oficial/Otimiza/releases/latest/download/Otimiza-instalador.exe",
   /** O mesmo convite que o app abre (`.github/convite.json`). */
-  discord: "https://discord.gg/fmeQVJphC",
-  /** A compra acontece no Discord: quem emite a chave é uma pessoa. */
-  comprar: "https://discord.gg/fmeQVJphC",
+  discord: "https://discord.gg/ultimus",
+  /** A página que explica o preço. Com o checkout ligado, ela também cobra;
+      sem ele, ela leva ao Discord, onde a compra já funciona. */
+  comprar: "/comprar/",
   entrar: "/entrar/",
   painel: "/painel/",
 } as const;
@@ -82,9 +83,13 @@ export const pessoas = {
 export const texturaCetim =
   "https://images.unsplash.com/photo-1705674337411-3b89e5afcc11?w=2000&q=75";
 
-/* O preço é o mesmo que o bot do Discord cobra (`site/src/data/precos.ts`). */
-export const PRECO_BRL = 25;
-export const PRECO_ADICIONAL_BRL = 25;
+/* O PREÇO É O MESMO QUE O BOT COBRA, e o bot é quem manda.
+   Fonte da verdade: `src/config/catalogo.js` no bot, item `otimiza` —
+   hoje `centavos: 3000`. Subiu de R$ 25 para R$ 30 em 23/09/2026, por decisão
+   do dono. Site e bot desalinhados aqui significam anunciar um preço e cobrar
+   outro na tela seguinte. */
+export const PRECO_BRL = 30;
+export const PRECO_ADICIONAL_BRL = 30;
 
 export const formatarReais = (valor: number) =>
   valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

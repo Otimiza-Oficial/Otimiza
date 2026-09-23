@@ -18,12 +18,16 @@ pub mod cabecalho;
 pub mod catalog;
 pub mod cbslog;
 pub mod citizenfx;
-pub mod cleanup;
 pub mod configjogo;
 pub mod conflicts;
 pub mod deteccao;
 pub mod devices;
 pub mod diskspace;
+pub mod sensoresgpu;
+pub mod cpuset;
+pub mod registro;
+pub mod nvml;
+pub mod dpc;
 pub mod display;
 pub mod essenciais;
 pub mod exhaustion;
@@ -37,6 +41,7 @@ pub mod framegen;
 pub mod geracao;
 pub mod gamemode;
 pub mod gpupref;
+pub mod governador;
 pub mod hardware;
 pub mod bios;
 pub mod causas;
@@ -62,6 +67,7 @@ pub mod power;
 pub mod pressao;
 pub mod processes;
 pub mod profiles;
+pub mod prontojogo;
 pub mod rbar;
 pub mod readiness;
 pub mod rede;
@@ -79,7 +85,9 @@ pub mod suspend;
 pub mod sysparams;
 pub mod tarefa_longa;
 pub mod tasks;
+pub mod tetos;
 pub mod thermal;
+pub mod unreal;
 pub mod topologia;
 pub mod veredito;
 pub mod winget;
@@ -132,6 +140,17 @@ impl WindowsOptimizer {
     pub fn list(&self, log: &ChangeLog) -> Vec<OptimizationInfo> {
         catalog::CATALOG
             .iter()
+            // Retirado só aparece enquanto está aplicado, para poder ser
+            // desfeito. Ver `catalog::RETIRADOS`.
+            .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
+            // Condicional cuja condição foi medida e NÃO vale aqui some — o
+            // ajuste certo para este computador, não a lista mais longa. Fica
+            // se já estiver aplicado (para poder desfazer) ou se a condição
+            // não pôde ser medida (esconder seria afirmar o que ninguém viu).
+            .filter(|spec| match catalog::classe(spec.id) {
+                catalog::Classe::Condicional(c) => condicao_atendida_sem_esperar(c) != Some(false) || log.is_applied(spec.id),
+                _ => true,
+            })
             .map(|spec| {
                 let state = self.inspect(spec, log);
 
@@ -248,15 +267,6 @@ impl WindowsOptimizer {
         }
 
         match spec.actions.first()? {
-            Action::CleanTempFiles => {
-                let bytes = cleanup::estimate();
-                Some(format!("{} para liberar", cleanup::format_size(bytes)))
-            }
-            Action::CleanUpdateCache => {
-                let bytes = cleanup::estimate_update_cache();
-                Some(format!("{} para liberar", cleanup::format_size(bytes)))
-            }
-
             // Sem elevação não conseguimos sequer LER estas configurações. Dizer
             // isso é obrigatório: o usuário precisa saber que o item aparece
             // como disponível porque não foi possível conferir, não porque
@@ -428,22 +438,6 @@ impl WindowsOptimizer {
             },
 
             // Só faz sentido oferecer a limpeza se houver algo a limpar.
-            Action::CleanTempFiles => {
-                if cleanup::estimate() > 0 {
-                    ActionState::Pending
-                } else {
-                    ActionState::Satisfied
-                }
-            }
-
-            Action::CleanUpdateCache => {
-                if cleanup::estimate_update_cache() > 0 {
-                    ActionState::Pending
-                } else {
-                    ActionState::Satisfied
-                }
-            }
-
             Action::ReservedStorage { enabled } => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -531,6 +525,14 @@ impl WindowsOptimizer {
 
     fn aplicar_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
+
+        if catalog::retirado(id) && !log.is_applied(id) {
+            return Err(format!(
+                "`{}` foi retirado do Otimiza na 2.9: não muda FPS nem fluidez. \
+                 Se estiver aplicado, ainda dá para desfazer.",
+                spec.name
+            ));
+        }
 
         if log.is_applied(id) {
             return Ok(OptimizationOutcome {
@@ -1139,6 +1141,51 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Aplica um perfil NVIDIA no perfil do executável de UM jogo (2.9).
+    /// Trocar de perfil desfaz o anterior primeiro, para o "antes" guardado ser
+    /// o do cliente e não o nosso.
+    pub fn aplicar_perfil_nvidia(
+        &self,
+        executavel: &str,
+        perfil: nvdriver::PerfilDoJogo,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = nvdriver::id_do_perfil(executavel);
+        if log.is_applied(&id) {
+            self.revert(&id, log)?;
+        }
+        let feito = nvdriver::aplicar_perfil_do_jogo(executavel, perfil)?;
+        let change = ChangeRecord::PerfilNvidia {
+            executavel: executavel.to_string(),
+            perfil: format!("{:?}", perfil),
+            perfil_criado: feito.perfil_criado,
+            anteriores: feito.anteriores,
+        };
+        let described = change.describe();
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} · perfil NVIDIA {:?}", executavel, perfil),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            // Sem histórico não há desfazer: tira o que acabou de pôr.
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!("{} E não consegui tirar o perfil: {}", erro, falhas.join("; ")));
+            }
+            return Err(erro);
+        }
+        Ok(OptimizationOutcome {
+            id,
+            name: executavel.to_string(),
+            success: true,
+            applied: true,
+            message: format!("Perfil NVIDIA aplicado em {}. Vale na próxima vez que o jogo abrir. As próximas partidas medidas ficam em observação: se o FPS ou o 1% piores caírem de verdade, o perfil é desfeito sozinho.", executavel),
+            changes_count: 1,
+            changes: vec![described],
+            ..Default::default()
+        })
+    }
+
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
@@ -1497,7 +1544,7 @@ impl WindowsOptimizer {
                 Some(ids) => ids.iter().any(|id| id == spec.id),
                 None => true,
             })
-            .filter(|spec| catalog::entra_no_lote(spec))
+            .filter(|spec| catalog::entra_no_lote_se(spec, |c| condicao_atendida(c) == Some(true)))
             // SÓ `Available`, E ISSO AGORA DEIXA `Unknown` DE FORA DE PROPÓSITO.
             //
             // O "Otimizar agora" é o botão que o cliente aperta sem ler item a
@@ -1793,7 +1840,7 @@ impl WindowsOptimizer {
             }
 
             Action::PlanoOtimiza => {
-                let relatorio = planoenergia::montar(false, false)?;
+                let relatorio = planoenergia::montar(false)?;
 
                 if !relatorio.plano_ativo {
                     return Err(
@@ -2087,36 +2134,6 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 }
             }
 
-            Action::CleanUpdateCache => {
-                let result = cleanup::run_update_cache()?;
-
-                Ok(Some(format!(
-                    "{} liberados dos instaladores de atualização.",
-                    cleanup::format_size(result.bytes_freed)
-                )))
-            }
-
-            Action::CleanTempFiles => {
-                let result = cleanup::run();
-
-                // Nada é registrado no ChangeLog: arquivo apagado não volta, e
-                // fingir que volta seria pior que admitir que não.
-                let mut note = format!(
-                    "{} liberados em {} itens.",
-                    cleanup::format_size(result.bytes_freed),
-                    result.files_removed
-                );
-
-                if result.files_skipped > 0 {
-                    note.push_str(&format!(
-                        " {} itens em uso foram pulados.",
-                        result.files_skipped
-                    ));
-                }
-
-                Ok(Some(note))
-            }
-
             Action::DisableNagle => {
                 let interfaces = registry::subkeys("HKLM", TCPIP_INTERFACES)?;
 
@@ -2189,6 +2206,120 @@ fn startup_change_id(hive: &str, name: &str) -> String {
 /// É o que permite dizer ao dono de um PC de 4 GB quais ajustes valem a pena
 /// para ELE, em vez de entregar a mesma lista de vinte itens para todo mundo e
 /// deixar a pessoa adivinhar.
+/// A condição de um item condicional, MEDIDA nesta máquina.
+///
+/// `None` quando não deu para medir: nem aparece como "não se aplica" nem
+/// entra num lote.
+type CacheDasCondicoes = std::sync::Mutex<Vec<(catalog::Condicao, std::time::Instant, Option<bool>)>>;
+
+fn cache_das_condicoes() -> &'static CacheDasCondicoes {
+    static LEMBRADO: std::sync::OnceLock<CacheDasCondicoes> = std::sync::OnceLock::new();
+    LEMBRADO.get_or_init(Default::default)
+}
+
+/// Quanto tempo a resposta continua valendo. Curto o bastante para a pessoa
+/// liberar espaço, desligar a gravação do Game Bar e ver a lista mudar sem
+/// reabrir o programa.
+const VALIDADE_DA_CONDICAO: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A resposta guardada, quando ainda vale. `None` externo = ninguém mediu.
+fn condicao_lembrada(c: catalog::Condicao) -> Option<Option<bool>> {
+    let cache = cache_das_condicoes().lock().ok()?;
+    cache
+        .iter()
+        .find(|(qual, _, _)| *qual == c)
+        .filter(|(_, quando, _)| quando.elapsed() < VALIDADE_DA_CONDICAO)
+        .map(|(_, _, valor)| *valor)
+}
+
+pub fn condicao_atendida(c: catalog::Condicao) -> Option<bool> {
+    // LEMBRA POR MEIO MINUTO, E A RAZÃO É TEMPO DE TELA.
+    //
+    // A condição de espaço em disco enumera os volumes, e isso custou 850 ms
+    // por chamada nesta máquina. A listagem do catálogo pergunta uma vez por
+    // item condicional, então sem lembrança a lista inteira ficava segundos
+    // mais lenta — desfazendo o trabalho de abertura que a 1.7 comprou.
+    //
+    // Meio minuto é curto o bastante para a pessoa liberar espaço, desligar a
+    // gravação do Game Bar e ver a lista mudar sem reabrir o programa.
+    if let Some(valor) = condicao_lembrada(c) {
+        return valor;
+    }
+    let valor = medir_condicao(c);
+    guardar_condicao(c, valor);
+    valor
+}
+
+fn guardar_condicao(c: catalog::Condicao, valor: Option<bool>) {
+    if let Some(cache) = cache_das_condicoes().lock().ok().as_mut() {
+        cache.retain(|(qual, _, _)| *qual != c);
+        cache.push((c, std::time::Instant::now(), valor));
+    }
+}
+
+/// A condição, SEM ESPERAR por leitura lenta.
+///
+/// A listagem do catálogo passa por aqui. Ler o espaço livre do disco custou
+/// 3,4 s na primeira vez nesta máquina (é o Windows enumerando volumes), e a
+/// lista de ajustes não pode parar por isso — a abertura rápida foi comprada a
+/// peso de versão na 1.7.
+///
+/// Sem resposta guardada ainda: devolve `None` — que é "não deu para medir",
+/// e faz o item CONTINUAR aparecendo — e manda medir numa thread à parte, para
+/// a próxima listagem já saber. Nunca esconde por pressa.
+pub fn condicao_atendida_sem_esperar(c: catalog::Condicao) -> Option<bool> {
+    if let Some(valor) = condicao_lembrada(c) {
+        return valor;
+    }
+    std::thread::spawn(move || {
+        let valor = medir_condicao(c);
+        guardar_condicao(c, valor);
+    });
+    None
+}
+
+/// Mede todas as condições fora do caminho da tela. Chamada na abertura.
+pub fn aquecer_condicoes() {
+    for c in [
+        catalog::Condicao::GameDvrLigado,
+        catalog::Condicao::PcFraco,
+        catalog::Condicao::MemoriaApertada,
+        catalog::Condicao::PoucoEspaco,
+    ] {
+        let valor = medir_condicao(c);
+        guardar_condicao(c, valor);
+    }
+}
+
+fn medir_condicao(c: catalog::Condicao) -> Option<bool> {
+    use catalog::Condicao;
+    let perfil = hardware::profile();
+    match c {
+        Condicao::GameDvrLigado => gamedvr_ligado(
+            registry::read("HKCU", r"System\GameConfigStore", "GameDVR_Enabled").ok(),
+            registry::read("HKCU", r"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled").ok(),
+        ),
+        Condicao::PcFraco => Some(perfil.total_ram_gb <= 8.5 || perfil.logical_cores <= 4),
+        Condicao::MemoriaApertada => Some(perfil.total_ram_gb > 0.0 && perfil.total_ram_gb <= 16.5),
+        Condicao::PoucoEspaco => diskspace::disk_usage().map(|(_, livre)| livre < 20 * 1024 * 1024 * 1024),
+        Condicao::SoSePedir => Some(false),
+    }
+}
+
+/// **Pura.** O Game DVR está ligado? `GameDVR_Enabled` ausente é o padrão do
+/// Windows, que é ligado; `AppCaptureEnabled = 1` também liga. Qualquer
+/// leitura que falhou vira `None`.
+fn gamedvr_ligado(dvr: Option<PreviousValue>, captura: Option<PreviousValue>) -> Option<bool> {
+    let ligado = |v: &PreviousValue| match v {
+        PreviousValue::Dword(n) => Some(*n != 0),
+        PreviousValue::Absent | PreviousValue::AbsentKey => None,
+        _ => Some(true),
+    };
+    let dvr = dvr?;
+    let captura = captura?;
+    Some(ligado(&dvr).unwrap_or(true) || ligado(&captura).unwrap_or(false))
+}
+
 fn pesa_nesta_maquina(spec: &OptimizationSpec) -> bool {
     use catalog::Boost;
     use hardware::StorageKind;
@@ -2397,8 +2528,6 @@ pub fn nome_da_acao(action: &Action) -> String {
         Action::NicPowerSaving => "economia de energia da placa de rede".to_string(),
         Action::ClearBootLimits => "limites de inicialização".to_string(),
         Action::ReservedStorage { .. } => "Armazenamento Reservado".to_string(),
-        Action::CleanTempFiles => "arquivos temporários".to_string(),
-        Action::CleanUpdateCache => "instaladores de atualização".to_string(),
         Action::AccessibilityKeysOff => "teclas de acessibilidade".to_string(),
         Action::DisableHypervisor => "hipervisor no boot".to_string(),
         Action::RemoveForcedPlatformClock => "relógio de plataforma forçado".to_string(),
@@ -2587,6 +2716,66 @@ fn anotar_fim(
 
 /// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
 /// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
+/// O portão "nunca menos FPS": avalia cada ajuste em observação contra as
+/// medições automáticas e DESFAZ o que piorou. Devolve o que foi decidido
+/// agora (para avisar a tela).
+pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidido> {
+    use crate::modules::portao::{self, Decidido, Veredito};
+    let mut estado = portao::ler();
+    if estado.vigiados.is_empty() {
+        return Vec::new();
+    }
+    let Ok(medicoes) = crate::modules::medicoes::ler() else { return Vec::new() };
+    let agora = crate::modules::changelog::now_timestamp();
+    let mut decididos = Vec::new();
+    let mut ficam = Vec::new();
+    for v in std::mem::take(&mut estado.vigiados) {
+        // Desfeito por outro caminho (Desfazer tudo): não há o que vigiar.
+        if !log.is_applied(&v.id) {
+            continue;
+        }
+        let a = portao::avaliar(&v, &medicoes);
+        if matches!(a.veredito, Veredito::Aguardando { .. }) {
+            ficam.push(v);
+            continue;
+        }
+        let erro = if a.veredito == Veredito::Desfazer {
+            match WindowsOptimizer::new().revert(&v.id, log) {
+                Ok(r) if r.success => None,
+                Ok(r) => Some(r.message),
+                Err(e) => Some(e),
+            }
+        } else {
+            None
+        };
+        decididos.push(Decidido {
+            fps_antes: a.fps.as_ref().map(|c| c.media_base),
+            fps_depois: a.fps.as_ref().map(|c| c.media_candidato),
+            low_antes: a.low_1pct.as_ref().map(|c| c.media_base),
+            low_depois: a.low_1pct.as_ref().map(|c| c.media_candidato),
+            vigiado: v,
+            veredito: a.veredito,
+            quando: agora,
+            erro,
+        });
+    }
+    estado.vigiados = ficam;
+    estado.decididos.extend(decididos.iter().cloned());
+    // Guarda só os últimos 50 vereditos.
+    let excesso = estado.decididos.len().saturating_sub(50);
+    estado.decididos.drain(..excesso);
+    if let Err(e) = portao::gravar(&estado) {
+        crate::utils::Logger::warn(&format!("portão: não gravei: {}", e));
+    }
+    decididos
+}
+
+/// Para os testes de outros módulos que gravam `ChangeRecord`.
+#[cfg(test)]
+pub(crate) fn revert_changes_para_teste(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
+    revert_changes(changes)
+}
+
 /// Termina uma operação que ficou pela metade, devolvendo os valores
 /// anteriores guardados no diário.
 ///
@@ -2734,6 +2923,10 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 valor_anterior,
                 ..
             } => nvdriver::desfazer_limite(executavel, *perfil_criado, valor_anterior),
+
+            ChangeRecord::PerfilNvidia { executavel, perfil_criado, anteriores, .. } => {
+                nvdriver::desfazer_perfil_do_jogo(executavel, *perfil_criado, anteriores)
+            }
 
             // O arquivo do jogo volta INTEIRO ao que era.
             //
@@ -3493,7 +3686,39 @@ mod tests {
             println!("{:<45} {:?} {:?}", info.name, info.state, info.detail);
         }
 
-        assert_eq!(optimizer.list(&log).len(), catalog::CATALOG.len());
+        // Retirado só aparece enquanto aplicado (ver `catalog::RETIRADOS`).
+        let esperado = catalog::CATALOG
+            .iter()
+            .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
+            .filter(|spec| match catalog::classe(spec.id) {
+                catalog::Classe::Condicional(c) => condicao_atendida(c) != Some(false) || log.is_applied(spec.id),
+                _ => true,
+            })
+            .count();
+        assert_eq!(optimizer.list(&log).len(), esperado);
+    }
+
+    #[test]
+    fn o_game_dvr_ligado_e_lido_como_o_windows_decide() {
+        use PreviousValue::*;
+        // Ausente é o padrão do Windows: ligado.
+        assert_eq!(gamedvr_ligado(Some(Absent), Some(Absent)), Some(true));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(0))), Some(false));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Absent)), Some(false));
+        assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(1))), Some(true));
+        // Leitura que falhou não vira resposta.
+        assert_eq!(gamedvr_ligado(None, Some(Dword(0))), None);
+    }
+
+    #[test]
+    fn item_retirado_nao_pode_ser_aplicado_nem_entrar_em_lote() {
+        let optimizer = WindowsOptimizer::new();
+        let mut log = ChangeLog::em_memoria();
+        for id in catalog::RETIRADOS {
+            let spec = catalog::find(id).expect("retirado continua no catálogo para o desfazer");
+            assert!(!catalog::entra_no_lote(spec), "`{}` entrou no lote", id);
+            assert!(optimizer.apply(id, &mut log).is_err(), "`{}` foi aplicado", id);
+        }
     }
 
     /// "Otimizar Agora" nunca pode apagar arquivos do cliente sem ele escolher isso.
@@ -3509,7 +3734,7 @@ mod tests {
             .map(|spec| spec.id)
             .collect();
 
-        assert!(!batch.contains(&"clean_temp_files"));
+        assert!(batch.iter().all(|id| catalog::find(id).is_some_and(|s| s.reversible)));
     }
 
     /// Sem elevação, o Windows nega a leitura de algumas configurações. Nesses
@@ -3897,4 +4122,24 @@ fn success_message(spec: &OptimizationSpec, notes: &[String]) -> String {
     }
 
     message
+}
+
+#[cfg(test)]
+mod custo_das_condicoes {
+    /// Quanto custa perguntar a condição, e quanto a lembrança economiza.
+    /// `cargo test --lib -- --ignored quanto_custa_listar --nocapture`.
+    #[test]
+    #[ignore]
+    fn quanto_custa_listar() {
+        use std::time::Instant;
+        for k in 0..4 {
+            let u = Instant::now();
+            let v = super::condicao_atendida(super::catalog::Condicao::PoucoEspaco);
+            println!("  chamada {k}: {:?} = {v:?}", u.elapsed());
+        }
+        let t = Instant::now();
+        let log = super::ChangeLog::load();
+        let n = super::WindowsOptimizer::new().list(&log).len();
+        println!("list() com {n} itens: {:?}", t.elapsed());
+    }
 }

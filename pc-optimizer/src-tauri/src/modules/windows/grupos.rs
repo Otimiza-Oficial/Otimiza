@@ -219,8 +219,6 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "settings_sync_off" => Grupo::Higiene,
         "start_menu_web_search_off" => Grupo::Higiene,
         "mouse_precision_off" => Grupo::Higiene,
-        "clean_temp_files" => Grupo::Higiene,
-        "clean_update_cache" => Grupo::Higiene,
         "disable_reserved_storage" => Grupo::Higiene,
 
         "disable_vbs" => return None,

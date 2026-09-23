@@ -175,6 +175,14 @@ pub fn run() {
             commands::gerador_estado,
             commands::energia_painel,
             commands::energia_vizinhos,
+            commands::diagnostico_ao_vivo,
+            commands::seus_jogos,
+            commands::unreal_prever,
+            commands::unreal_aplicar,
+            commands::tetos_escondidos,
+            commands::pronto_para_jogar,
+            commands::nvidia_perfil_prever,
+            commands::nvidia_perfil_aplicar,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,
@@ -186,13 +194,18 @@ pub fn run() {
             commands::energia_modo_dinamico,
             commands::analyze_fivem,
             commands::clean_fivem,
-            commands::prioritize_fivem,
             commands::analyze_citizenfx,
             commands::analyze_browsers,
             commands::clean_browser_cache,
             commands::analyze_boot,
             commands::analyze_thermal,
             commands::export_report,
+            commands::exportar_alteracoes,
+            commands::msi_dispositivos,
+            commands::diagnostico_dpc,
+            commands::cpuset_testar,
+            commands::cpuset_resultados,
+            commands::cpuset_esquecer,
             commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,
@@ -202,7 +215,6 @@ pub fn run() {
             commands::set_scheduled_task,
             commands::scan_disk_space,
             commands::clean_disk_category,
-            commands::empty_recycle_bin,
             commands::analyze_memory,
             commands::set_automatic_pagefile,
             commands::restore_status,
@@ -236,6 +248,7 @@ pub fn run() {
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,
             commands::o_que_nao_fazemos,
+            commands::o_que_o_otimiza_altera,
             commands::protocolo_de_grupos,
             commands::nota_do_jogo,
             commands::conflitos_entre_ajustes,
@@ -436,6 +449,17 @@ pub fn run() {
                 });
             }
 
+            // GOVERNADOR INTERROMPIDO: o Otimiza fechou com um jogo aberto e
+            // programas em modo econômico. Devolve antes de qualquer outra coisa.
+            #[cfg(windows)]
+            tauri::async_runtime::spawn(async {
+                if let Ok(n) = tokio::task::spawn_blocking(modules::windows::governador::recuperar_na_abertura).await {
+                    if n > 0 {
+                        utils::Logger::info(&format!("governador: {} programa(s) devolvidos ao normal na abertura", n));
+                    }
+                }
+            });
+
             // TESTE DE ENERGIA INTERROMPIDO: volta ao plano de antes.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
@@ -474,6 +498,39 @@ pub fn run() {
                     }
                 });
             }
+
+            // AQUECE AS CONDIÇÕES DOS AJUSTES CONDICIONAIS (2.9).
+            //
+            // Ler o espaço livre do disco custa segundos na primeira vez, e a
+            // lista de ajustes pergunta isso. Medido aqui, fora do caminho da
+            // tela, a primeira listagem já encontra a resposta pronta — e se
+            // não encontrar, ela não espera (ver `condicao_atendida_sem_esperar`).
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                let _ = tokio::task::spawn_blocking(modules::windows::aquecer_condicoes).await;
+            });
+
+            // AUTO CPU SET (2.9): reaplica "só núcleos de desempenho" nos jogos
+            // em que isso foi MEDIDO e rendeu. Afinidade morre com o processo,
+            // então cada abertura do jogo precisa dela de novo. Sem nenhum
+            // resultado guardado, a volta não varre processo nenhum.
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                let mut ja = std::collections::HashSet::new();
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    let (volta, aplicados) = tokio::task::spawn_blocking(move || {
+                        let a = modules::windows::cpuset::reaplicar(&mut ja);
+                        (ja, a)
+                    })
+                    .await
+                    .unwrap_or_default();
+                    ja = volta;
+                    for jogo in aplicados {
+                        utils::Logger::info(&format!("auto cpu set: {jogo} nos núcleos de desempenho"));
+                    }
+                }
+            });
 
             // A PROVA QUE ACONTECE SOZINHA.
             //
@@ -560,6 +617,22 @@ pub fn run() {
                             use std::sync::atomic::Ordering;
                             let contadores = modules::windows::placa::Contadores::novo()?;
                             let mut gpu: Vec<f64> = Vec::new();
+                            // OS SENSORES DA PLACA, NA MESMA JANELA (2.9).
+                            //
+                            // Temperatura, clock, potência e o motivo de o
+                            // driver estar segurando o clock. Pela NVML em
+                            // processo: abrir o nvidia-smi a cada 200 ms
+                            // dentro de uma medição de desempenho seria virar
+                            // a carga que se está medindo.
+                            let limite_w = modules::windows::nvml::limite_de_potencia_w();
+                            let mut sensores: Vec<crate::core::sensores::AmostraGpu> = Vec::new();
+                            // A pergunta do MOTIVO custa 11 ms nesta máquina
+                            // (medido), e este laço carimba o disco para
+                            // correlacionar travadas: pedir o motivo a cada
+                            // volta empurraria esse carimbo. A cada cinco
+                            // voltas — um segundo — não empurra, e um
+                            // engasgo térmico dura muito mais que isso.
+                            let mut volta: u32 = 0;
                             // Cada leitura de disco vai CARIMBADA no contador
                             // de alta resolução — o mesmo relógio dos quadros.
                             // É o que permite perguntar depois o que o disco
@@ -577,6 +650,12 @@ pub fn run() {
                                 if let Some(pct) = a.gpu_pct {
                                     gpu.push(pct);
                                 }
+                                volta += 1;
+                                if let Some(amostra) =
+                                    modules::windows::nvml::amostrar_com_motivos(volta % 5 == 1)
+                                {
+                                    sensores.push(amostra);
+                                }
                                 if let (Some(quando), Some(pct)) = (
                                     modules::windows::frames::agora_qpc(),
                                     a.disco_ocupado_pct,
@@ -591,7 +670,7 @@ pub fn run() {
                             let media = (!gpu.is_empty())
                                 .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
 
-                            Some((media, disco))
+                            Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
                         let medido = tokio::task::spawn_blocking(move || {
@@ -612,9 +691,9 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
-                        let (gpu_uso_pct, disco_da_janela) = match placa.join().ok().flatten() {
-                            Some((media, disco)) => (media, disco),
-                            None => (None, Vec::new()),
+                        let (gpu_uso_pct, disco_da_janela, sensores_da_placa) = match placa.join().ok().flatten() {
+                            Some((media, disco, sensores)) => (media, disco, sensores),
+                            None => (None, Vec::new(), None),
                         };
 
                         match medido.map(|r| r.map(|(principal, _)| principal)) {
@@ -654,8 +733,13 @@ pub fn run() {
                                     low_1pct: m.low_1pct,
                                     engasgos_por_minuto: m.engasgos_por_minuto,
                                     segundos: m.seconds,
+                                    placa: sensores_da_placa,
                                     confiavel: m.detalhe_confiavel,
                                     mudancas_aplicadas,
+                                    ambiente: Some(modules::deriva::Ambiente {
+                                        driver: core::telemetria::versao_do_driver(),
+                                        windows: core::telemetria::build_do_windows(),
+                                    }),
                                     frametime_medio_ms: medio,
                                     frametime_p95_ms: p95,
                                     frametime_p99_ms: p99,
@@ -672,6 +756,18 @@ pub fn run() {
                                             executavel, m.fps, m.low_1pct
                                         ));
                                         let _ = handle.emit("prova:automatica", ());
+
+                                        // NUNCA MENOS FPS: cada partida medida pode
+                                        // decidir um ajuste em observação.
+                                        let decididos = {
+                                            let estado = handle.state::<commands::AppState>();
+                                            let mut log = estado.changes.lock().await;
+                                            modules::windows::decidir_portao(&mut log)
+                                        };
+                                        for d in decididos {
+                                            utils::Logger::info(&format!("portão: {} → {:?}", d.vigiado.nome, d.veredito));
+                                            let _ = handle.emit("portao:decidido", d);
+                                        }
                                     }
                                     Err(erro) => utils::Logger::warn(&format!(
                                         "medição automática de {} feita, mas não gravada: {}",

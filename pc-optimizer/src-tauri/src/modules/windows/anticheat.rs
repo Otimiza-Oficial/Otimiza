@@ -115,8 +115,9 @@ const SERVICOS: &[(&str, AntiCheat)] = &[
 /// O que o Otimiza quer fazer, para consultar se pode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Acao {
-    /// Abrir handle no processo do jogo para mudar a prioridade.
-    PrioridadeNoJogo,
+    /// Abrir handle no processo do jogo para mudar a afinidade (núcleos).
+    /// Até a 2.8 servia à prioridade, que saiu.
+    AfinidadeNoJogo,
     /// Escrever em Image File Execution Options para o executável do jogo.
     EscreverIfeo,
     /// Trocar o plano de energia do Windows.
@@ -164,11 +165,11 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
         // Abrir handle no processo do jogo é a coisa mais visível que o produto
         // faz. E o ganho é pequeno: prioridade alta só muda alguma coisa quando
         // há disputa real de processador.
-        Acao::PrioridadeNoJogo => match qualquer_ativo {
+        Acao::AfinidadeNoJogo => match qualquer_ativo {
             Some(p) => Permissao::Recusado(format!(
-                "Não mexi na prioridade do jogo: o {} está ativo, e alterar o processo \
-                 do jogo com ele rodando é risco desnecessário. O ganho de prioridade \
-                 só aparece quando falta processador — e nunca vale uma conta banida.",
+                "Não mexi nos núcleos do jogo: o {} está ativo, e alterar o processo \
+                 do jogo com ele rodando é risco desnecessário. Nenhum ganho de núcleo \
+                 vale uma conta banida.",
                 p.qual.nome()
             )),
             None => Permissao::Pode,
@@ -281,7 +282,7 @@ mod tests {
         // Recusar sem motivo seria o outro extremo do erro: o produto tem que
         // entregar o que o cliente comprou quando não há risco.
         for acao in [
-            Acao::PrioridadeNoJogo,
+            Acao::AfinidadeNoJogo,
             Acao::EscreverIfeo,
             Acao::PlanoDeEnergia,
             Acao::MedirQuadros,

@@ -123,10 +123,6 @@ fn windows_dir() -> Option<PathBuf> {
     std::env::var("SystemRoot").ok().map(PathBuf::from)
 }
 
-fn program_data() -> Option<PathBuf> {
-    std::env::var("ProgramData").ok().map(PathBuf::from)
-}
-
 fn system_drive() -> String {
     std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string())
 }
@@ -139,16 +135,9 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: false,
         cleanable: true,
-        paths: || {
-            let mut p = Vec::new();
-            if let Ok(temp) = std::env::var("TEMP") {
-                p.push(PathBuf::from(temp));
-            }
-            if let Some(win) = windows_dir() {
-                p.push(win.join("Temp"));
-            }
-            p
-        },
+        // 2.9: as pastas e o apagar vêm da Limpeza do sistema (`limpar.rs`),
+        // para as duas telas medirem e apagarem a mesma coisa.
+        paths: || super::limpar::pastas_de("temporarios"),
     },
     Category {
         id: "update_cache",
@@ -157,11 +146,7 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: true,
         cleanable: true,
-        paths: || {
-            windows_dir()
-                .map(|w| vec![w.join("SoftwareDistribution").join("Download")])
-                .unwrap_or_default()
-        },
+        paths: || super::limpar::pastas_de("windows_update"),
     },
     Category {
         id: "windows_old",
@@ -186,16 +171,7 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: true,
         cleanable: true,
-        paths: || {
-            let mut p = Vec::new();
-            if let Some(pd) = program_data() {
-                p.push(pd.join("Microsoft").join("Windows").join("WER"));
-            }
-            if let Some(la) = local_appdata() {
-                p.push(la.join("Microsoft").join("Windows").join("WER"));
-            }
-            p
-        },
+        paths: || super::limpar::pastas_de("relatorios_de_erro"),
     },
     Category {
         id: "delivery_optimization",
@@ -204,11 +180,10 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: true,
         cleanable: true,
-        paths: || {
-            program_data()
-                .map(|pd| vec![pd.join("Microsoft").join("Network").join("Downloader")])
-                .unwrap_or_default()
-        },
+        // Até a 2.8 isto apontava para `ProgramData\Microsoft\Network\Downloader`
+        // — que é a fila de downloads do BITS, não o cache de entrega. Apagar
+        // ali descartava downloads pendentes do Windows.
+        paths: || super::limpar::pastas_de("entregas_otimizadas"),
     },
     Category {
         id: "update_logs",
@@ -378,7 +353,7 @@ pub fn format_size(bytes: u64) -> String {
 /// anunciava "Restam 0.0 GB livres no disco do Windows" com severidade
 /// Critical. Um número inventado, no lugar mais visível do produto, sobre uma
 /// máquina que podia estar com meio terabyte livre.
-fn disk_usage() -> Option<(u64, u64)> {
+pub(crate) fn disk_usage() -> Option<(u64, u64)> {
     let drive = system_drive();
     let disks = sysinfo::Disks::new_with_refreshed_list();
 
@@ -742,6 +717,20 @@ pub fn clean(id: &str) -> Result<CleanOutcome, String> {
         });
     }
 
+    // As categorias que a Limpeza do sistema também tem apagam pelo MESMO
+    // código dela (2.9): um jeito só de apagar cada pasta.
+    if let Some(alvo) = alvo_da_limpeza(id) {
+        let r = super::limpar::apagar(alvo);
+        if let Some(erro) = r.erro {
+            return Err(erro);
+        }
+        let mut message = format!("{} liberados de {}.", format_size(r.bytes_liberados), categoria.name);
+        if r.arquivos_pulados > 0 {
+            message.push_str(&format!(" {} itens em uso foram pulados.", r.arquivos_pulados));
+        }
+        return Ok(CleanOutcome { id: id.to_string(), freed_bytes: r.bytes_liberados, message });
+    }
+
     // Parar os serviços de atualização antes de mexer no que é deles evita
     // apagar pela metade e confundir uma atualização em andamento.
     let mexe_com_update = matches!(id, "update_cache" | "delivery_optimization" | "update_logs");
@@ -854,21 +843,38 @@ fn limpar_conteudo(dir: &std::path::Path) -> (u64, usize) {
 /// Esvazia a Lixeira. Fica fora das categorias porque não é uma pasta que se
 /// varre: o Windows tem chamada própria para isso, e usá-la respeita as regras
 /// dele em vez de sair apagando `$Recycle.Bin` na unha.
-pub fn empty_recycle_bin() -> Result<String, String> {
-    // Prazo próprio: uma lixeira com dezenas de gigabytes em disco mecânico
-    // leva minutos para esvaziar, e o prazo padrão a cortaria no meio.
-    shell::powershell_checked_com_prazo(
-        "Clear-RecycleBin -Force -ErrorAction Stop",
-        Duration::from_secs(600),
-    )
-    .map_err(|_| "Não foi possível esvaziar a Lixeira (ela pode já estar vazia).".to_string())?;
-
-    Ok("Lixeira esvaziada.".to_string())
+/// **Pura.** A categoria do liberador que é a mesma pasta de um alvo da
+/// Limpeza do sistema.
+pub fn alvo_da_limpeza(id: &str) -> Option<&'static str> {
+    match id {
+        "temp" => Some("temporarios"),
+        "update_cache" => Some("windows_update"),
+        "error_reports" => Some("relatorios_de_erro"),
+        "delivery_optimization" => Some("entregas_otimizadas"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn as_categorias_repetidas_medem_as_mesmas_pastas_da_limpeza() {
+        for c in CATEGORIES {
+            if let Some(alvo) = alvo_da_limpeza(c.id) {
+                assert!(super::super::limpar::pastas_de(alvo).len() > 0 || alvo == "entregas_otimizadas");
+                assert_eq!((c.paths)(), super::super::limpar::pastas_de(alvo), "{}", c.id);
+                assert!(crate::modules::limpeza::alvo_por_id(alvo).is_some(), "{alvo} fora da limpeza");
+            }
+        }
+    }
+
+    #[test]
+    fn a_entrega_otimizada_nao_aponta_mais_para_a_fila_do_bits() {
+        let c = CATEGORIES.iter().find(|c| c.id == "delivery_optimization").unwrap();
+        assert!((c.paths)().iter().all(|p| !p.to_string_lossy().contains("Downloader")));
+    }
 
     /// TRAVA SÓ DO LADO DO TESTE — NÃO É PRODUÇÃO.
     ///

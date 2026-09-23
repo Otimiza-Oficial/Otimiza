@@ -7,6 +7,7 @@
 // Nada neste catálogo desativa Windows Update, antivírus, firewall ou serviços de
 // núcleo — as três coisas que "otimizadores" de má qualidade quebram.
 
+use serde::{Deserialize, Serialize};
 use crate::modules::optimizer::{
     Category, ExpectedGain, OQuePodeCustar, OptimizationInfo, OptimizationState, RiscoDeFps,
 };
@@ -64,10 +65,6 @@ pub enum Action {
     GpuMsiMode,
     /// Impede o Windows de desligar a placa de rede para economizar energia.
     NicPowerSaving,
-    /// Apaga arquivos temporários. A única ação irreversível do catálogo.
-    CleanTempFiles,
-    /// Apaga instaladores de atualizações já aplicadas. Também irreversível.
-    CleanUpdateCache,
     /// Liga ou desliga o Armazenamento Reservado do Windows.
     ReservedStorage { enabled: bool },
     /// Remove o relógio de plataforma forçado na configuração de boot.
@@ -188,6 +185,149 @@ pub struct OptimizationSpec {
 /// ligar ao clique — e decidir isso é do dono do PC, item por item.
 pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 
+// ─── Classes da auditoria 2.9 ────────────────────────────────────────────
+//
+// "Menos ajustes, e melhores": o ajuste certo PARA ESTE COMPUTADOR, não a
+// lista mais longa. Cada item do catálogo é de uma de três classes
+// (`docs/AUDITORIA-2.9.md`, seção 2):
+//
+// - **Essencial**: vale em qualquer máquina, entra no "Otimizar agora".
+// - **Condicional**: só faz diferença quando a máquina tem um problema que dá
+//   para MEDIR (gravação do Game Bar ligada, pouco espaço, pouca memória, PC
+//   fraco). Só aparece — e só entra no lote — quando a condição foi medida
+//   aqui. Os de "só se pedir" aparecem sempre, mas nunca entram em lote.
+// - **Expert**: pode render numa máquina e custar em outra, ou troca algo que
+//   a pessoa precisa entender. Só aparece no modo Expert, e nunca em lote.
+//
+// As listas são curtas e têm trava: id errado aqui não classifica nada, em
+// silêncio, e o teste `toda_classe_aponta_para_um_item_do_catalogo` pega.
+
+/// O que precisa ser verdade nesta máquina para um item condicional valer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Condicao {
+    /// A gravação em segundo plano do Game Bar está ligada.
+    GameDvrLigado,
+    /// PC fraco: até 8 GB de RAM ou até 4 núcleos lógicos. Os ajustes de área
+    /// de trabalho só são sentidos aqui.
+    PcFraco,
+    /// Menos de 20 GB livres no disco do Windows.
+    PoucoEspaco,
+    /// Até 16 GB de RAM: processo de fundo disputa memória com o jogo.
+    MemoriaApertada,
+    /// Nada que dê para medir decide por você. Aparece, mas só entra se a
+    /// pessoa escolher o item — nunca num lote.
+    SoSePedir,
+}
+
+impl Condicao {
+    /// Por que o item aparece, na tela.
+    pub fn quando(self) -> &'static str {
+        match self {
+            Condicao::GameDvrLigado => "Aparece porque a gravação em segundo plano do Game Bar está ligada nesta máquina.",
+            Condicao::PcFraco => "Aparece porque esta máquina tem até 8 GB de memória ou até 4 núcleos — é onde a área de trabalho mais pesa.",
+            Condicao::PoucoEspaco => "Aparece porque o disco do Windows tem menos de 20 GB livres.",
+            Condicao::MemoriaApertada => "Aparece porque esta máquina tem até 16 GB de memória, e processo de fundo disputa memória com o jogo.",
+            Condicao::SoSePedir => "Só se você quiser: nada medido nesta máquina decide isto por você, então nunca entra no \"Otimizar agora\".",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Classe {
+    Essencial,
+    Condicional(Condicao),
+    Expert,
+}
+
+/// Só no modo Expert, nunca em lote, sempre com antes e depois.
+pub const EXPERT: &[&str] = &[
+    // Depende de placa e driver; já causou engasgo em driver antigo.
+    "gpu_hardware_scheduling",
+    // A maioria dos drivers atuais já usa MSI; só age se estiver desligado.
+    "gpu_msi_mode",
+    // Ganho real em parte dos jogos presos na CPU, com custo de segurança real.
+    "disable_vbs",
+    // A busca do Windows fica lenta; ganho só em disco mecânico.
+    "disable_search_indexing",
+];
+
+/// Itens que só valem quando a máquina tem o problema que eles resolvem.
+pub const CONDICIONAIS: &[(&str, Condicao)] = &[
+    ("disable_gamedvr", Condicao::GameDvrLigado),
+    ("visual_effects_performance", Condicao::PcFraco),
+    ("disable_transparency", Condicao::PcFraco),
+    ("disable_hibernation", Condicao::PoucoEspaco),
+    ("disable_reserved_storage", Condicao::PoucoEspaco),
+    ("disable_widgets", Condicao::MemoriaApertada),
+    ("edge_background_off", Condicao::MemoriaApertada),
+    // Boot, não jogo.
+    ("disable_startup_delay", Condicao::SoSePedir),
+    // Real quando a placa dorme e perde pacote — o Otimiza ainda não mede
+    // perda de pacote, então não decide sozinho.
+    ("nic_power_saving_off", Condicao::SoSePedir),
+    ("delivery_optimization_off", Condicao::SoSePedir),
+    // Os apps da Loja ficam desatualizados.
+    ("store_auto_download_off", Condicao::SoSePedir),
+    // Perde o registro da falha quando um jogo cai.
+    ("error_reporting_off", Condicao::SoSePedir),
+];
+
+pub fn classe(id: &str) -> Classe {
+    if EXPERT.contains(&id) {
+        return Classe::Expert;
+    }
+    match CONDICIONAIS.iter().find(|(i, _)| *i == id) {
+        Some((_, c)) => Classe::Condicional(*c),
+        None => Classe::Essencial,
+    }
+}
+
+/// Itens RETIRADOS na 2.9: não mudam FPS, 1% low, engasgo, atraso,
+/// carregamento nem responsividade, e não protegem a máquina.
+///
+/// A regra da 2.9 é "as mudanças certas para aquele computador, não a lista
+/// mais longa". Um item que não muda nada que o cliente sinta só ocupa lugar
+/// na tela e dá a impressão de que o produto "fez 40 coisas". Dois deles (UAC
+/// e Firewall) ainda tiravam proteção em troca de nada.
+///
+/// Eles ficam no catálogo SÓ para o desfazer: quem aplicou numa versão antiga
+/// continua vendo o item na lista, com o botão de desfazer, até desfazer. Nada
+/// aqui pode ser aplicado de novo — nem um a um, nem em lote, nem por perfil.
+/// O motivo de cada um mora em `naofazemos.rs`.
+pub const RETIRADOS: &[&str] = &[
+    // Segunda rodada (auditoria da 2.9, docs/AUDITORIA-2.9.md):
+    // - SystemResponsiveness/NetworkThrottlingIndex, Win32PrioritySeparation e
+    //   as prioridades MMCSS de "Games": sem ganho reproduzível em jogo;
+    // - SysMain e compressão de memória: o Windows gerencia; com pouca RAM,
+    //   desligar a compressão piora;
+    // - PowerThrottlingOff: desliga o EcoQoS no sistema inteiro, que é
+    //   justamente o que o modo jogo (governador) usa nos programas de fundo;
+    // - notificações: o Windows 11 já silencia durante o jogo;
+    // - limpezas de temporários e do cache do Windows Update: duplicadas da
+    //   tela Limpeza do sistema.
+    "system_responsiveness_gaming",
+    "foreground_priority",
+    "disable_sysmain",
+    "disable_power_throttling",
+    "disable_memory_compression",
+    "mmcss_games",
+    "notifications_off",
+    "network_low_latency",
+    "disable_xbox_services",
+    "maps_auto_update_off",
+    "settings_sync_off",
+    "remote_assistance_off",
+    "disable_telemetry",
+    "telemetry_policy",
+    "start_menu_web_search_off",
+    "disable_copilot",
+];
+
+/// Se o item foi retirado do produto (ver `RETIRADOS`).
+pub fn retirado(id: &str) -> bool {
+    RETIRADOS.contains(&id)
+}
+
 /// Se um item pode ser aplicado por um lote, sem a pessoa escolher item a item.
 ///
 /// As quatro exclusões moram juntas aqui para o motor e os testes lerem a mesma
@@ -203,10 +343,24 @@ pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 /// O item não some: continua no catálogo, item a item, com o caso escrito em
 /// `RiscoDeFps::PodeCustar` aparecendo na tela. A diferença é quem decide.
 pub fn entra_no_lote(spec: &OptimizationSpec) -> bool {
-    spec.reversible
+    entra_no_lote_se(spec, |_| false)
+}
+
+/// `entra_no_lote`, mas com a resposta de cada condição medida nesta
+/// máquina. Condicional só entra com a condição atendida; Expert e "só se
+/// pedir" nunca entram. **Pura**: quem mede é o chamador.
+pub fn entra_no_lote_se(spec: &OptimizationSpec, atendida: impl Fn(Condicao) -> bool) -> bool {
+    let pela_classe = match classe(spec.id) {
+        Classe::Essencial => true,
+        Classe::Expert | Classe::Condicional(Condicao::SoSePedir) => false,
+        Classe::Condicional(c) => atendida(c),
+    };
+    pela_classe
+        && spec.reversible
         && !spec.security_tradeoff
         && !spec.risco_de_fps.pode_custar()
         && !FORA_DO_LOTE.contains(&spec.id)
+        && !retirado(spec.id)
 }
 
 impl OptimizationSpec {
@@ -228,6 +382,12 @@ impl OptimizationSpec {
             requires_restart: self.requires_restart,
             reversible: self.reversible,
             security_tradeoff: self.security_tradeoff,
+            retirado: retirado(self.id),
+            expert: classe(self.id) == Classe::Expert,
+            condicao: match classe(self.id) {
+                Classe::Condicional(c) => Some(c.quando().to_string()),
+                _ => None,
+            },
             recommended,
             state,
             detail,
@@ -819,22 +979,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         }],
     },
     OptimizationSpec {
-        id: "clean_update_cache",
-        name: "Limpar instaladores de atualizações já aplicadas",
-        description: "Apaga os instaladores que o Windows guarda depois de instalar cada atualização.",
-        honest_effect: "É a limpeza que mais devolve espaço em disco, e costuma render vários GB. Não aumenta FPS: o ganho é espaço, que num SSD pequeno e cheio faz muita diferença. Os serviços de atualização param durante a limpeza e voltam em seguida. NÃO PODE SER DESFEITA — arquivo apagado não volta.",
-        category: Category::System,
-        expected_gain: ExpectedGain::Responsiveness,
-        risco_de_fps: RiscoDeFps::Nenhum,
-        requires_admin: true,
-        requires_restart: false,
-        reversible: false,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::CleanUpdateCache],
-    },
-    OptimizationSpec {
         id: "disable_reserved_storage",
         name: "Liberar o Armazenamento Reservado",
         description: "Devolve os gigabytes que o Windows reserva no disco só para instalar atualizações futuras.",
@@ -1240,22 +1384,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         highlight_when: &[],
         actions: &[Action::AccessibilityKeysOff],
     },
-    OptimizationSpec {
-        id: "clean_temp_files",
-        name: "Limpar arquivos temporários",
-        description: "Apaga o conteúdo das pastas de temporários do Windows e do seu usuário.",
-        honest_effect: "Libera espaço em disco. Não aumenta FPS. É a ÚNICA operação do programa que não pode ser desfeita — arquivo apagado não volta. Arquivos em uso são pulados.",
-        category: Category::System,
-        expected_gain: ExpectedGain::Responsiveness,
-        risco_de_fps: RiscoDeFps::Nenhum,
-        requires_admin: false,
-        requires_restart: false,
-        reversible: false,
-        requirement: None,
-        security_tradeoff: false,
-        highlight_when: &[],
-        actions: &[Action::CleanTempFiles],
-    },
 ];
 
 /// Busca uma otimização pelo identificador.
@@ -1414,7 +1542,9 @@ mod tests {
             .collect();
         irreversible.sort();
 
-        assert_eq!(irreversible, vec!["clean_temp_files", "clean_update_cache"]);
+        // 2.9: as duas limpezas saíram do catálogo (moram na Limpeza do sistema,
+        // que mostra o que se perde antes). O catálogo inteiro tem desfazer.
+        assert!(irreversible.is_empty(), "{:?}", irreversible);
     }
 
     #[test]
@@ -1555,6 +1685,43 @@ mod tests {
     fn o_lote_continua_sem_irreversivel_e_sem_troca_de_seguranca() {
         for spec in CATALOG.iter().filter(|s| !s.reversible || s.security_tradeoff) {
             assert!(!entra_no_lote(spec), "`{}` entraria no lote", spec.id);
+        }
+    }
+
+    #[test]
+    fn toda_classe_aponta_para_um_item_do_catalogo() {
+        for id in EXPERT.iter().chain(CONDICIONAIS.iter().map(|(i, _)| i)) {
+            let spec = find(id).unwrap_or_else(|| panic!("`{id}` classificado e fora do catálogo"));
+            assert!(!retirado(id), "`{id}` foi retirado e ainda está classificado");
+            let _ = spec;
+        }
+        for id in EXPERT {
+            assert!(!CONDICIONAIS.iter().any(|(i, _)| i == id), "`{id}` em duas classes");
+        }
+    }
+
+    #[test]
+    fn expert_e_so_se_pedir_nunca_entram_em_lote_nem_com_tudo_atendido() {
+        for spec in CATALOG {
+            let nunca = matches!(classe(spec.id), Classe::Expert | Classe::Condicional(Condicao::SoSePedir));
+            if nunca {
+                assert!(!entra_no_lote_se(spec, |_| true), "`{}` entraria num lote", spec.id);
+            }
+        }
+    }
+
+    #[test]
+    fn condicional_so_entra_no_lote_com_a_condicao_medida() {
+        let dvr = find("disable_gamedvr").unwrap();
+        assert!(!entra_no_lote(dvr), "sem medir, o Game DVR não pode entrar");
+        assert!(entra_no_lote_se(dvr, |c| c == Condicao::GameDvrLigado));
+        assert!(!entra_no_lote_se(dvr, |c| c != Condicao::GameDvrLigado));
+    }
+
+    #[test]
+    fn toda_condicao_explica_por_que_o_item_aparece() {
+        for (_, c) in CONDICIONAIS {
+            assert!(c.quando().len() >= 40, "{:?} sem explicação", c);
         }
     }
 

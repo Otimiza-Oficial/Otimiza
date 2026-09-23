@@ -84,16 +84,53 @@ jobs:
       # O site mora na subpasta /Otimiza. Sem PAGES_BASE_PATH, os links e os
       # arquivos apontariam para a raiz do domínio e a página abriria sem
       # estilo, sem logo e sem imagens.
+      # O CHECKOUT DO SITE É UMA VARIÁVEL, NÃO UMA MUDANÇA DE CÓDIGO.
+      #
+      # Vazia (o padrão), a página de compra mostra o caminho do Discord e não
+      # promete pagamento nenhum. Com o endereço do serviço que cobra em
+      # `vars.OTIMIZA_API` (Settings → Secrets and variables → Actions →
+      # Variables), a mesma página passa a cobrar por Pix — e a política de
+      # conteúdo já libera aquela origem, porque o passo do CSP lê a mesma
+      # variável.
+      #
+      # Antes de ligar: o serviço precisa estar no ar 24 h, com HTTPS, com este
+      # site na lista de origens do CORS dele, e os termos e a política de
+      # privacidade publicados.
       - name: Compilar
         working-directory: web
         env:
           PAGES_BASE_PATH: /Otimiza
+          NEXT_PUBLIC_OTIMIZA_API: ${{ vars.OTIMIZA_API }}
         run: npm run build
 
       # O Pages procura `404.html` na raiz; o Next exporta em `404/index.html`.
+      # A cópia acontece DEPOIS do carimbo da política (que roda no postbuild),
+      # então o 404 sai com a mesma política das outras páginas.
       - name: Página de não encontrado
         working-directory: web
         run: cp out/404/index.html out/404.html
+
+      # A política de conteúdo é a única defesa contra script injetado num site
+      # estático — e ela é escrita por um passo que alguém pode remover sem
+      # perceber. Aqui a falta dela reprova a publicação.
+      - name: Conferir a política de conteúdo em toda página
+        working-directory: web
+        run: |
+          set -euo pipefail
+          sem=$(grep -rLE 'http-equiv="Content-Security-Policy"' out --include=*.html || true)
+          if [ -n "$sem" ]; then
+            echo "Páginas sem política de conteúdo:"
+            echo "$sem"
+            exit 1
+          fi
+          # Só o trecho do script-src: o style-src TEM unsafe-inline de propósito
+          # (animação escreve style no elemento), e um padrão que atravessa o
+          # ponto e vírgula acusaria isso como defeito.
+          if grep -rhoE "script-src[^;\"]*" out --include=*.html | grep -q "unsafe-inline"; then
+            echo "A política liberou script em linha — isso anula a proteção."
+            exit 1
+          fi
+          echo "Política presente em todas as páginas, sem 'unsafe-inline' em script."
 
       - name: Conferir que as páginas saíram
         working-directory: web

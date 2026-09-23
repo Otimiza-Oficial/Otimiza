@@ -28,7 +28,7 @@
 //    a pessoa decidir.
 
 use super::power;
-use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord};
+use crate::modules::changelog::{ChangeLog, ChangeRecord};
 use serde::{Deserialize, Serialize};
 
 /// Identificador do registro no histórico.
@@ -157,79 +157,44 @@ pub fn jogo_aberto_com_pid() -> Option<(String, u32)> {
     None
 }
 
-/// Liga o modo: plano de alto desempenho e prioridade para o jogo.
+/// O governador da sessão de jogo aberta. `Some` enquanto o modo está ligado.
+static GOVERNADOR: std::sync::Mutex<Option<super::governador::Governador>> = std::sync::Mutex::new(None);
+
+/// Liga o modo (2.9): o governador de segundo plano.
 ///
-/// O plano de energia entra no histórico; a prioridade não, porque ela some
-/// sozinha quando o processo do jogo fecha e não há o que reverter.
-pub fn ativar(log: &mut ChangeLog) -> Result<Vec<String>, String> {
-    if log.is_applied(ID) {
-        return Err("O modo jogo já está aplicado.".to_string());
+/// O QUE SAIU, E POR QUÊ. Até a 2.7 o modo jogo ligava o plano "Alto
+/// Desempenho" e punha o jogo em prioridade alta. As duas coisas são receita
+/// universal — o mesmo número em toda máquina, sem medir — e a 2.9 tirou
+/// ambas: a energia do jogo agora é do motor adaptativo (perfil MEDIDO por
+/// jogo, aba Energia), e prioridade alta cega não mostrou ganho. O que fica é
+/// o que ataca uma causa real de engasgo: programa em segundo plano
+/// disputando processador com o jogo. Ver `governador.rs`.
+///
+/// `log` continua na assinatura: quem atualizou de uma versão antiga pode
+/// ter o plano de energia do modo antigo no histórico, e `desativar` devolve.
+pub fn ativar(_log: &mut ChangeLog) -> Result<Vec<String>, String> {
+    let (nome, pid) = jogo_aberto_com_pid()
+        .ok_or("Nenhum jogo aberto agora. O modo age enquanto um jogo está rodando.")?;
+    let mut guarda = GOVERNADOR.lock().map_err(|_| "estado do modo jogo indisponível".to_string())?;
+    let governador = guarda.get_or_insert_with(Default::default);
+    #[cfg(windows)]
+    let novos = governador.passada(pid);
+    #[cfg(not(windows))]
+    let novos: Vec<String> = { let _ = pid; Vec::new() };
+    Ok(vec![mensagem_de_acalmados(&nome, &novos)])
+}
+
+fn mensagem_de_acalmados(jogo: &str, novos: &[String]) -> String {
+    if novos.is_empty() {
+        format!("Nada em segundo plano está disputando processador com {} agora.", jogo)
+    } else {
+        format!(
+            "{} programa(s) em segundo plano passaram a rodar em modo econômico enquanto {} está aberto: {}.",
+            novos.len(),
+            jogo,
+            novos.join(", ")
+        )
     }
-
-    let mut feito = Vec::new();
-
-    // Plano de energia: o único ajuste do modo que muda o sistema e precisa
-    // voltar depois.
-    //
-    // A consulta ao anticheat aqui sempre autoriza, e a chamada existe de
-    // propósito: plano de energia é configuração da máquina e não encosta em
-    // processo nenhum. Deixar a decisão escrita no mesmo lugar das outras
-    // impede que alguém, no futuro, endureça a política sem perceber que este
-    // caminho existe — ou afrouxe achando que ele nunca foi avaliado.
-    if let Some(recusa) = super::anticheat::permite(
-        super::anticheat::Acao::PlanoDeEnergia,
-        &super::anticheat::detectar_agora(),
-    )
-    .motivo()
-    {
-        return Err(recusa.to_string());
-    }
-
-    let anterior = power::active_scheme()?;
-    // O plano que EXISTE nesta máquina, e não o GUID fixo — ver
-    // `power::garantir_alto_desempenho`.
-    let alvo = power::garantir_alto_desempenho()?;
-
-    if !anterior.eq_ignore_ascii_case(&alvo) {
-        power::set_active_scheme(&alvo)?;
-
-        log.record(AppliedOptimization {
-            optimization_id: ID.to_string(),
-            name: "Modo jogo: plano de energia".to_string(),
-            timestamp: now_timestamp(),
-            changes: vec![ChangeRecord::PowerPlan { previous_guid: anterior }],
-        })?;
-
-        feito.push("Plano de alto desempenho ligado.".to_string());
-    }
-
-    // Prioridade é por sessão e some com o processo. Falhar aqui não derruba o
-    // modo: o plano de energia já vale por si.
-    match jogo_aberto_com_pid() {
-        Some((nome, pid)) => {
-            // Mudar a prioridade abre um handle NO PROCESSO DO JOGO — é a coisa
-            // mais visível que o Otimiza faz para um anticheat. E o ganho é
-            // pequeno: prioridade alta só muda alguma coisa quando há disputa
-            // real de processador. Trocar risco de banimento por isso seria um
-            // mau negócio para o cliente.
-            let presencas = super::anticheat::detectar_agora();
-            let permissao =
-                super::anticheat::permite(super::anticheat::Acao::PrioridadeNoJogo, &presencas);
-
-            match permissao.motivo() {
-                Some(recusa) => feito.push(recusa.to_string()),
-                None => match priorizar_pid(pid) {
-                    Ok(_) => feito.push(format!("{} em prioridade alta no processador.", nome)),
-                    Err(motivo) => feito.push(format!("Prioridade não aplicada: {}", motivo)),
-                },
-            }
-        }
-        None => feito.push(
-            "Prioridade não aplicada: o jogo fechou entre a detecção e o ajuste.".to_string(),
-        ),
-    }
-
-    Ok(feito)
 }
 
 /// Onde está, no disco, o executável com este nome — se ele estiver rodando.
@@ -254,76 +219,34 @@ fn caminho_do_executavel(nome: &str) -> Option<std::path::PathBuf> {
         .and_then(|p| p.exe().map(std::path::PathBuf::from))
 }
 
-/// Põe um processo em prioridade alta, pelo identificador.
-///
-/// Alta, e nunca tempo real: prioridade de tempo real põe o processo acima do
-/// próprio Windows, e um jogo travado nessa faixa deixa a máquina sem teclado e
-/// sem mouse. É a mesma recusa que `definir_prioridade_persistente` já faz.
-///
-/// Vale só para a sessão: some quando o processo fecha, então não há o que
-/// registrar no histórico de mudanças.
-pub fn priorizar_pid(pid: u32) -> Result<(), String> {
-    // O PID entra formatado como número, nunca como texto vindo de fora — é o
-    // que impede alguém de fazer o script executar outra coisa.
-    //
-    // O SCRIPT ANTIGO MENTIA. Ele era:
-    //
-    //     if ($p) { $p.PriorityClass = 'High'; 1 } else { 0 }
-    //
-    // Atribuir `PriorityClass` num processo que não aceita — falta de
-    // privilégio é o caso comum — lança um erro que NÃO interrompe o script. O
-    // `1` era escrito do mesmo jeito, e o produto respondia "prioridade
-    // ajustada" sem ter ajustado nada. É a regra da casa violada no lugar mais
-    // fácil de violar: escrever e confiar, em vez de escrever e RELER.
-    //
-    // Agora ele relê a prioridade do processo e devolve o que o Windows
-    // respondeu. Três desfechos, não dois: ficou alta, não ficou, ou não deu
-    // para reler — e este último não pode virar nenhum dos outros.
-    let script = format!(
-        "$p = Get-Process -Id {pid} -ErrorAction SilentlyContinue; \
-         if (-not $p) {{ 'SEM_PROCESSO' }} else {{ \
-           try {{ $p.PriorityClass = 'High' }} catch {{ }} \
-           $d = Get-Process -Id {pid} -ErrorAction SilentlyContinue; \
-           if ($d) {{ [string]$d.PriorityClass }} else {{ 'SEM_PROCESSO' }} \
-         }}"
-    );
-
-    let saida = super::shell::powershell(&script)?;
-    let lido = saida.stdout.trim();
-
-    match lido {
-        "High" => Ok(()),
-        "SEM_PROCESSO" => Err(
-            "O jogo fechou antes de a prioridade ser ajustada.".to_string()
-        ),
-        // Vazio é o caso de não ter conseguido reler, e ele não vira nem
-        // sucesso nem "falta administrador": dizer o motivo errado manda a
-        // pessoa fazer a coisa errada.
-        "" => Err(
-            "A prioridade do jogo foi pedida, mas não deu para conferir se ela \
-             mudou. Nada foi dado como feito."
-                .to_string(),
-        ),
-        outro => Err(format!(
-            "A prioridade do jogo continua em \"{outro}\". Reabra o Otimiza como \
-             administrador para poder alterá-la."
-        )),
-    }
-}
-
-/// Desliga o modo, devolvendo o plano de energia que existia antes.
+/// Desliga o modo: devolve prioridade e EcoQoS de todo programa acalmado, e
+/// — para quem veio de versão antiga — o plano de energia do modo antigo.
 pub fn desativar(log: &mut ChangeLog) -> Result<String, String> {
-    let Some(registro) = log.take(ID)? else {
-        return Err("O modo jogo não está aplicado.".to_string());
-    };
+    let governador = GOVERNADOR.lock().ok().and_then(|mut g| g.take());
+    #[cfg(windows)]
+    let devolvidos = governador.map(|mut g| g.devolver_tudo()).unwrap_or(0);
+    #[cfg(not(windows))]
+    let devolvidos = { let _ = governador; 0 };
 
-    for mudanca in &registro.changes {
-        if let ChangeRecord::PowerPlan { previous_guid } = mudanca {
-            power::set_active_scheme(previous_guid)?;
+    let mut plano = false;
+    if let Some(registro) = log.take(ID)? {
+        for mudanca in &registro.changes {
+            if let ChangeRecord::PowerPlan { previous_guid } = mudanca {
+                power::set_active_scheme(previous_guid)?;
+                plano = true;
+            }
         }
     }
 
-    Ok("Modo jogo desligado. O plano de energia voltou ao que era antes.".to_string())
+    Ok(match (devolvidos, plano) {
+        (0, false) => "Modo jogo desligado.".to_string(),
+        (n, false) => format!("Modo jogo desligado. {} programa(s) voltaram ao normal.", n),
+        (n, true) => format!("Modo jogo desligado. {} programa(s) voltaram ao normal e o plano de energia voltou ao de antes.", n),
+    })
+}
+
+fn modo_ligado(log: &ChangeLog) -> bool {
+    GOVERNADOR.lock().map(|g| g.is_some()).unwrap_or(false) || log.is_applied(ID)
 }
 
 /// Situação atual, para a interface.
@@ -333,8 +256,12 @@ pub fn status(log: &ChangeLog) -> GameModeStatus {
     GameModeStatus {
         game_running: jogo.is_some(),
         game: jogo.map(|g| g.to_string()),
-        active: log.is_applied(ID),
-        applied: Vec::new(),
+        active: modo_ligado(log),
+        applied: GOVERNADOR
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|g| g.acalmados().iter().map(|a| a.nome.clone()).collect()))
+            .unwrap_or_default(),
     }
 }
 
@@ -520,10 +447,22 @@ pub fn executavel_do_jogo() -> Option<String> {
 /// Devolve a mensagem quando alguma coisa mudou, e `None` quando não havia o
 /// que fazer — assim a interface só é avisada quando há novidade.
 pub fn passo(log: &mut ChangeLog) -> Option<String> {
-    let jogo = jogo_aberto();
-    let aplicado = log.is_applied(ID);
+    let aberto = jogo_aberto_com_pid();
+    let aplicado = modo_ligado(log);
 
-    match (jogo, aplicado) {
+    // Jogo aberto com o modo já ligado: nova passada do governador, porque
+    // um atualizador pode começar a baixar no meio da partida.
+    if let (Some((nome, pid)), true) = (&aberto, aplicado) {
+        let mut guarda = GOVERNADOR.lock().ok()?;
+        let governador = guarda.get_or_insert_with(Default::default);
+        #[cfg(windows)]
+        let novos = governador.passada(*pid);
+        #[cfg(not(windows))]
+        let novos: Vec<String> = { let _ = (pid, governador); Vec::new() };
+        return (!novos.is_empty()).then(|| mensagem_de_acalmados(nome, &novos));
+    }
+
+    match (aberto.map(|(n, _)| n), aplicado) {
         (Some(nome), false) => {
             // NADA É CONGELADO AQUI DESDE A 2.0.
             //
@@ -669,10 +608,17 @@ mod tests {
             !producao.contains("use super::{fivem"),
             "o modo jogo voltou a importar o módulo do FiveM"
         );
-        assert!(
-            producao.contains("fn priorizar_pid"),
-            "a prioridade precisa ser dada pelo identificador do processo detectado"
-        );
+    }
+
+    #[test]
+    fn o_modo_jogo_nao_usa_mais_receita_universal() {
+        // 2.9: nem plano "Alto Desempenho" fixo, nem prioridade alta cega no
+        // jogo. A energia é do motor adaptativo; o modo jogo é o governador.
+        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+        for proibido in ["garantir_alto_desempenho", "fn priorizar_pid", "PriorityClass = 'High'"] {
+            assert!(!producao.contains(proibido), "`{}` voltou ao modo jogo", proibido);
+        }
+        assert!(producao.contains("governador"), "o modo jogo precisa usar o governador");
     }
 
     #[test]

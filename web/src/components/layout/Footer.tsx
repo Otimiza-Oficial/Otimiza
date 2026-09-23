@@ -26,6 +26,15 @@ const COLUNAS = [
       { label: "Discord", href: links.discord },
     ],
   },
+  // Termos e privacidade no rodapé, e não escondidos numa página que ninguém
+  // acha: quem vende pela internet precisa dizer em que condições vende.
+  {
+    titulo: "Legal",
+    itens: [
+      { label: "Termos de uso", href: "/termos/" },
+      { label: "Privacidade", href: "/privacidade/" },
+    ],
+  },
 ];
 
 export function Footer() {

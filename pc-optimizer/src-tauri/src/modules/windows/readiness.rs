@@ -220,25 +220,9 @@ pub fn analyze() -> ReadinessReport {
         });
     }
 
-    // `Some(false)` e não `!existe`: sem conseguir ler a lista de planos, o
-    // produto não afirma que o plano falta — seria dizer ao cliente que a
-    // máquina dele não tem uma coisa que ninguém olhou.
-    if plano_maximo_existe() == Some(false) {
-        findings.push(ReadinessFinding {
-            id: "plano_maximo".to_string(),
-            title: "Plano de desempenho máximo não existe nesta máquina".to_string(),
-            measured: "O Windows tem um plano de energia mais agressivo que o de alto \
-                       desempenho, e ele não aparece na lista até ser criado."
-                .to_string(),
-            advice: "Ele reduz a latência de mudança de estado do processador, o que aparece \
-                     em resposta e não em número de quadros. O ganho é pequeno e real; em \
-                     notebook na bateria, custa autonomia."
-                .to_string(),
-            severity: FindingSeverity::Ok,
-            fix_location: FixLocation::Software,
-            actionable: true,
-        });
-    }
+    // O achado "plano de desempenho máximo não existe" saiu na 2.9: criar o
+    // Ultimate Performance é receita universal, e a energia é do motor
+    // adaptativo (aba Energia), que mede o plano certo para cada máquina.
 
     findings.sort_by_key(|f| match f.severity {
         FindingSeverity::Critical => 0,

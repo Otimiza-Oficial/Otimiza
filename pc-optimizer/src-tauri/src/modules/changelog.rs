@@ -139,6 +139,16 @@ pub enum ChangeRecord {
         valor_anterior: String,
     },
 
+    /// O perfil NVIDIA de UM jogo (2.9): vários ajustes no perfil do
+    /// executável. Perfil criado pelo Otimiza é apagado inteiro no desfazer;
+    /// perfil que já existia tem cada ajuste devolvido.
+    PerfilNvidia {
+        executavel: String,
+        perfil: String,
+        perfil_criado: bool,
+        anteriores: Vec<(String, String)>,
+    },
+
     /// O limite de quadros de UM jogo, no perfil do executável dele no driver
     /// da NVIDIA.
     ///
@@ -235,6 +245,13 @@ impl ChangeRecord {
                 } else {
                     valor_anterior.clone()
                 }
+            ),
+            ChangeRecord::PerfilNvidia { executavel, perfil, perfil_criado, anteriores } => format!(
+                "driver NVIDIA · {} no perfil {} ({} ajuste(s){})",
+                executavel,
+                perfil,
+                anteriores.len(),
+                if *perfil_criado { ", perfil criado pelo Otimiza" } else { "" }
             ),
             ChangeRecord::LimiteNvidia {
                 executavel,
@@ -360,6 +377,24 @@ impl ChangeLog {
             path,
             entries,
             leitura,
+        }
+    }
+
+    /// Histórico vazio num arquivo temporário próprio, para testes de outros
+    /// módulos. Nome único pelo mesmo motivo do `in_memory` dos testes daqui.
+    #[cfg(test)]
+    pub(crate) fn em_memoria() -> Self {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static PROXIMO: AtomicU32 = AtomicU32::new(0);
+        let numero = PROXIMO.fetch_add(1, Ordering::Relaxed);
+        ChangeLog {
+            path: std::env::temp_dir().join(format!(
+                "pc-optimizer-teste-externo-{}-{}.json",
+                std::process::id(),
+                numero
+            )),
+            entries: Vec::new(),
+            leitura: LeituraDoHistorico::Ok,
         }
     }
 

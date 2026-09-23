@@ -86,6 +86,10 @@ pub struct BootReport {
     pub culprits: Vec<BootCulprit>,
     /// Tipo das últimas inicializações. Lido sem administrador.
     pub recent_types: Vec<(String, BootType)>,
+    /// Os programas que atrasam a inicialização foram lidos. `false` quando
+    /// a leitura falhou — aí "nenhum programa atrasando" não pode ser dito.
+    #[serde(default)]
+    pub culpados_lidos: bool,
     /// Explicação em português do que foi possível medir e do que não foi.
     pub note: String,
 }
@@ -196,19 +200,20 @@ fn ler_boots() -> Option<Vec<RawBoot>> {
     serde_json::from_str(&saida.stdout).ok()
 }
 
-fn ler_culpados() -> Vec<RawCulprit> {
+/// `None` = não consegui ler; vazio = lido, sem nenhum evento.
+fn ler_culpados() -> Option<Vec<RawCulprit>> {
     let script = format!(
-        "{} $e = Get-WinEvent -LogName '{}' -FilterXPath '*[System[EventID=101]]' \
-         -MaxEvents 40 -ErrorAction SilentlyContinue; \
+        "{} try {{ $e = Get-WinEvent -LogName '{}' -FilterXPath '*[System[EventID=101]]' \
+         -MaxEvents 40 -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
          ConvertTo-Json -Compress -Depth 4 -InputObject @($e | ForEach-Object {{ Campos $_ }})",
         EXTRAIR_CAMPOS, LOG_DESEMPENHO
     );
 
-    shell::powershell(&script)
-        .ok()
-        .filter(|s| s.success && !s.stdout.trim().is_empty())
-        .and_then(|s| serde_json::from_str(&s.stdout).ok())
-        .unwrap_or_default()
+    let s = shell::powershell(&script).ok().filter(|s| s.success)?;
+    if s.stdout.trim().is_empty() {
+        return Some(Vec::new());
+    }
+    serde_json::from_str(&s.stdout).ok()
 }
 
 /// Tipo das últimas inicializações, do log System.
@@ -338,8 +343,11 @@ pub fn analyze() -> BootReport {
         })
         .collect();
 
+    let lidos = if elevado { ler_culpados() } else { None };
+    let culpados_lidos = lidos.is_some();
     let mut culprits: Vec<BootCulprit> = if elevado {
-        ler_culpados()
+        lidos
+            .unwrap_or_default()
             .into_iter()
             .filter_map(|c| {
                 let total_ms = numero(&c.total);
@@ -378,6 +386,7 @@ pub fn analyze() -> BootReport {
         history,
         culprits,
         recent_types,
+        culpados_lidos,
         note,
     }
 }

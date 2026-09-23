@@ -74,12 +74,16 @@ pub fn pastas_de(id: &str) -> Vec<PathBuf> {
             .map(|l| vec![l.join("Microsoft").join("Windows").join("Explorer")])
             .unwrap_or_default(),
 
-        "relatorios_de_erro" => local
-            .map(|l| {
-                let wer = l.join("Microsoft").join("Windows").join("WER");
-                vec![wer.join("ReportQueue"), wer.join("ReportArchive")]
+        // Os da sua conta e os do sistema (`ProgramData`, exige
+        // administrador — sem ele os arquivos são contados como pulados).
+        "relatorios_de_erro" => [local, variavel("ProgramData")]
+            .into_iter()
+            .flatten()
+            .flat_map(|raiz| {
+                let wer = raiz.join("Microsoft").join("Windows").join("WER");
+                [wer.join("ReportQueue"), wer.join("ReportArchive")]
             })
-            .unwrap_or_default(),
+            .collect(),
 
         // A lixeira fica na raiz de CADA disco, com uma subpasta por usuário.
         // Varrer para medir é seguro; apagar é feito pelo Windows, que sabe
@@ -301,6 +305,16 @@ pub fn apagar(id: &str) -> Resultado {
         return resultado;
     }
 
+    // Apagar o cache com uma atualização em andamento deixa a atualização pela
+    // metade: os serviços que são donos dele param antes e voltam depois (só
+    // os que estavam rodando). Veio do liberador de espaço, que já fazia isso
+    // antes da unificação da 2.9.
+    let servicos: &[&str] = match id {
+        "windows_update" | "entregas_otimizadas" => &["wuauserv", "bits", "dosvc"],
+        _ => &[],
+    };
+    let parados = parar_servicos(servicos);
+
     for pasta in pastas_de(id) {
         let (bytes, apagados, pulados) = if id == "miniaturas" {
             apagar_miniaturas(&pasta)
@@ -313,7 +327,27 @@ pub fn apagar(id: &str) -> Resultado {
         resultado.arquivos_pulados += pulados;
     }
 
+    religar_servicos(&parados);
     resultado
+}
+
+/// Para os serviços que estão rodando e devolve quais parou. `None` na
+/// leitura é "não sei", e a dúvida pende para parar.
+pub fn parar_servicos(servicos: &[&str]) -> Vec<String> {
+    let mut parados = Vec::new();
+    for s in servicos {
+        if super::services::is_running(s) != Some(false) {
+            let _ = super::services::stop(s);
+            parados.push(s.to_string());
+        }
+    }
+    parados
+}
+
+pub fn religar_servicos(parados: &[String]) {
+    for s in parados {
+        let _ = super::services::start(s);
+    }
 }
 
 #[cfg(test)]

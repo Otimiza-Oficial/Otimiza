@@ -6,6 +6,8 @@ import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
+import { carregarMapaDeDesempenho } from "./mapa";
+import { preencherFichaDoJogo, ligarProntidao } from "./biblioteca";
 
 // ---------------------------------------------------------------- contratos
 
@@ -25,6 +27,12 @@ interface OptimizationInfo {
   requires_restart: boolean;
   reversible: boolean;
   security_tradeoff: boolean;
+  /** Retirado na 2.9: só aparece enquanto aplicado, para poder ser desfeito. */
+  retirado?: boolean;
+  /** Só no modo Expert (2.9). */
+  expert?: boolean;
+  /** Item condicional: por que ele aparece nesta máquina. */
+  condicao?: string | null;
   /**
    * Se este ajuste pode DERRUBAR o FPS, e em qual caso.
    *
@@ -86,6 +94,7 @@ interface AvisoDeVersao {
 }
 
 interface StartupEntry {
+  classe?: "Essencial" | "Util" | "Opcional" | "Desconhecido";
   name: string;
   command: string;
   executable: string;
@@ -148,6 +157,39 @@ interface Veredito {
   corroboracoes: Achado[];
   achados: Achado[];
   lacunas: Lacuna[];
+  recuperacao: { perdido: "Sim" | "Nao" | "Incerto"; itens: [string, "P0" | "P1" | "P2" | "P3"][] };
+}
+
+const PRIORIDADE: Record<"P0" | "P1" | "P2" | "P3", string> = {
+  P0: "P0 · erro crítico de configuração",
+  P1: "P1 · oportunidade grande",
+  P2: "P2 · oportunidade moderada",
+  P3: "P3 · pequena",
+};
+
+const PERDIDO: Record<"Sim" | "Nao" | "Incerto", string> = {
+  Sim: "Há desempenho perdido nesta máquina — o hardware pode entregar mais do que está entregando.",
+  Nao: "Nenhum desempenho perdido encontrado: a configuração desta máquina está certa. Ganho daqui para frente depende do jogo e das peças.",
+  Incerto: "Talvez haja desempenho perdido: os indícios vêm de configuração lida, sem medir o efeito, ou algo não pôde ser verificado.",
+};
+
+function mostrarRecuperacao(v: Veredito) {
+  const bloco = element("veredito-recuperacao");
+  const r = v.recuperacao;
+  if (!r) {
+    bloco.hidden = true;
+    return;
+  }
+  const porId = new Map(v.achados.map((a) => [a.id, a]));
+  const itens = r.itens
+    .map(([id, p]) => {
+      const a = porId.get(id);
+      if (!a) return "";
+      return `<li><span class="chip" data-warn="${p === "P0" || p === "P1"}">${PRIORIDADE[p]}</span> <strong>${escapeHtml(a.title)}</strong> — ${escapeHtml(a.measured)}</li>`;
+    })
+    .join("");
+  bloco.hidden = false;
+  bloco.innerHTML = `<p class="veredito-detalhe"><strong>Desempenho perdido:</strong> ${PERDIDO[r.perdido]}</p>${itens ? `<ul class="veredito-junto">${itens}</ul>` : ""}`;
 }
 
 interface ConflictReport {
@@ -589,8 +631,11 @@ function conferirInvariantesDaTela() {
 
   const paineis = document.querySelectorAll(".panel").length;
   const enfase = document.querySelectorAll(".palco .btn-primary").length;
+  // Caixa que nasce escondida nunca é vista vazia: ela só aparece com
+  // conteúdo. Cobrar dela um texto de estado vazio é cobrar uma frase que
+  // ninguém lê — e era o que fazia esta trava apontar dois falsos positivos.
   const caixasMudas = [...document.querySelectorAll(".resultado")].filter(
-    (caixa) => !(caixa as HTMLElement).dataset.vazio
+    (caixa) => !(caixa as HTMLElement).hidden && !(caixa as HTMLElement).dataset.vazio
   );
 
   console.assert(paineis <= 35, `painéis demais na tela: ${paineis}`);
@@ -662,7 +707,7 @@ function conferirInvariantesDaTela() {
  * o que aparece se o arquivo publicado sumir. Trocar por um convite com
  * "Expira em: Nunca" e "Usos: Sem limite" continua valendo.
  */
-const CONVITE_DISCORD = "https://discord.gg/fmeQVJphC";
+const CONVITE_DISCORD = "https://discord.gg/ultimus";
 
 /**
  * O convite que vale agora.
@@ -1058,6 +1103,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await montarPortao();
 
   ligarBarraDaJanela();
+  carregarMapaDeDesempenho();
 
   // A DO PAINEL GIRA; AS DUAS GRANDES NÃO.
   //
@@ -1389,6 +1435,11 @@ function showTab(name: string) {
     void carregarLaboratorioDeGeracao({ pedirAdmin: askForAdmin });
   }
 
+  if (name === "painel") {
+    ligarProntidao();
+    void carregarUltimasPartidas();
+  }
+
   if (name === "reparo" && !reparoCarregado) {
     reparoCarregado = true;
     void carregarReparo();
@@ -1504,8 +1555,14 @@ function setBadge(id: string, count: number, tone?: "warn" | "bad") {
   }
 }
 
+/**
+ * Escreve o texto de um elemento. Elemento ausente é ignorado: painéis que
+ * saíram da tela (2.9) não podem derrubar o laço do monitor que ainda os
+ * alimentava.
+ */
 function text(id: string, value: string) {
-  element(id).textContent = value;
+  const alvo = document.getElementById(id);
+  if (alvo) alvo.textContent = value;
 }
 
 function escapeHtml(value: string): string {
@@ -1844,13 +1901,13 @@ function renderMetrics(metrics: PerformanceMetrics) {
   const cpu = metrics.cpu.overall === null ? null : Math.min(100, Math.max(0, metrics.cpu.overall));
 
   // Anel principal. O perímetro (2πr, r=86) é 540, igual ao dasharray do CSS.
-  const gauge = element<SVGCircleElement & HTMLElement>("gauge-cpu");
+  const gauge = document.getElementById("gauge-cpu") as (SVGCircleElement & HTMLElement) | null;
 
   // Na primeira leitura o anel subia de 540 direto para o valor, sem gesto
   // nenhum. Agora ele sobe devagar uma unica vez, como instrumento ligando —
   // e volta a velocidade normal em seguida, porque um medidor que reinicia a
   // cada 2 segundos pareceria quebrado, nao caro.
-  const aro = gauge.closest(".gauge") as HTMLElement | null;
+  const aro = gauge?.closest(".gauge") as HTMLElement | null;
   if (aro && !aro.dataset.iniciado) {
     aro.dataset.iniciado = "sim";
     aro.dataset.entrada = "true";
@@ -1859,8 +1916,8 @@ function renderMetrics(metrics: PerformanceMetrics) {
   // Sem leitura de CPU o anel esvazia e fica cinza. Ele não pode descansar no
   // valor anterior: um instrumento parado exibindo o número de trinta segundos
   // atrás é pior do que um instrumento vazio, porque parece vivo.
-  gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
-  gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
+  if (gauge) gauge.style.strokeDashoffset = String(cpu === null ? 540 : 540 - (540 * cpu) / 100);
+  if (gauge) gauge.style.stroke = cpu === null ? "var(--text-muted)" : loadColor(cpu);
 
   // Faixa fixa do topo, viva em qualquer aba.
   const porcento = (n: number) => `${n.toFixed(0)}%`;
@@ -2347,6 +2404,8 @@ interface NucleosNaTela {
   jogo_nome: string | null;
   jogo_pid: number | null;
   jogo_mascara: string | null;
+  /** Executável do jogo (Auto CPU Set). */
+  jogo_exe?: string | null;
 }
 
 const NOME_DA_CLASSE_DE_NUCLEO: Record<ClasseDeNucleo, string> = {
@@ -2419,8 +2478,88 @@ function desenharNucleos(r: NucleosNaTela) {
   desenharJogoNosNucleos(r);
 }
 
+interface ResultadoCpuSet {
+  executavel: string;
+  quando: number;
+  escolha: "SoDesempenho" | "TodosOsNucleos";
+  fps_todos: number;
+  fps_desempenho: number;
+  low_todos: number;
+  low_desempenho: number;
+}
+
+/** Os resultados guardados do Auto CPU Set, com "Esquecer" em cada um. */
+async function desenharCpuSet() {
+  const alvo = document.getElementById("cpuset-resultados");
+  if (!alvo) return;
+  try {
+    const lista = await invoke<ResultadoCpuSet[]>("cpuset_resultados");
+    if (!lista.length) {
+      alvo.innerHTML = "";
+      return;
+    }
+    const n = (v: number) => Math.round(v).toString();
+    alvo.innerHTML = `
+      <table class="fg-tabela">
+        <thead><tr><th>Jogo</th><th>Todos os núcleos</th><th>Só desempenho</th><th>Ficou</th><th></th></tr></thead>
+        <tbody>${lista
+          .map(
+            (r) => `<tr>
+              <td class="fg-mono">${escapeHtml(r.executavel)}</td>
+              <td>${n(r.fps_todos)} FPS · 1% ${n(r.low_todos)}</td>
+              <td>${n(r.fps_desempenho)} FPS · 1% ${n(r.low_desempenho)}</td>
+              <td>${r.escolha === "SoDesempenho" ? "só desempenho (reaplicado ao abrir)" : "todos os núcleos"}</td>
+              <td><button class="btn btn-ghost" data-cpuset-esquecer="${escapeHtml(r.executavel)}">Esquecer</button></td>
+            </tr>`,
+          )
+          .join("")}</tbody>
+      </table>`;
+    alvo.querySelectorAll<HTMLButtonElement>("[data-cpuset-esquecer]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try {
+          await invoke("cpuset_esquecer", { executavel: b.dataset.cpusetEsquecer });
+          setStatus("nucleos-status", "Esquecido: o jogo volta a abrir em todos os núcleos.", "ok");
+        } catch (e) {
+          setStatus("nucleos-status", String(e), "error");
+        }
+        void desenharCpuSet();
+      }),
+    );
+  } catch {
+    alvo.innerHTML = "";
+  }
+}
+
+async function testarCpuSet() {
+  const pid = nucleosCarregados?.jogo_pid;
+  const exe = nucleosCarregados?.jogo_exe;
+  if (pid === null || pid === undefined || !exe) return;
+  const botao = element<HTMLButtonElement>("cpuset-testar");
+  botao.disabled = true;
+  setStatus("nucleos-status", "Medindo… mantenha o jogo em partida por cerca de 1 minuto.", "progress");
+  try {
+    const r = await invoke<ResultadoCpuSet>("cpuset_testar", { pid, executavel: exe });
+    setStatus(
+      "nucleos-status",
+      r.escolha === "SoDesempenho"
+        ? "Rendeu nos núcleos de desempenho: o jogo fica neles, e isso é reaplicado quando ele abrir."
+        : "Não rendeu de verdade só nos núcleos de desempenho: o jogo voltou a usar todos.",
+      "ok",
+    );
+    await carregarNucleos();
+  } catch (e) {
+    setStatus("nucleos-status", String(e), "error");
+    botao.disabled = false;
+  }
+  void desenharCpuSet();
+}
+
 function desenharJogoNosNucleos(r: NucleosNaTela) {
   const prender = element<HTMLButtonElement>("nucleos-prender");
+  const testar = document.getElementById("cpuset-testar") as HTMLButtonElement | null;
+  if (testar) testar.disabled = r.jogo_pid === null || !r.conselho.cabe || !r.jogo_exe;
+  void desenharCpuSet();
   const soltar = element<HTMLButtonElement>("nucleos-soltar");
 
   if (r.jogo_pid === null) {
@@ -2491,6 +2630,7 @@ function ligarNucleos() {
   element("nucleos-prender").addEventListener("click", () => void mexerNosNucleos(true));
   element("nucleos-soltar").addEventListener("click", () => void mexerNosNucleos(false));
   element("nucleos-reler").addEventListener("click", () => void carregarNucleos());
+  document.getElementById("cpuset-testar")?.addEventListener("click", () => void testarCpuSet());
 }
 
 // ----------------------------------------------------- limpeza do sistema
@@ -3040,9 +3180,9 @@ function desenharBiblioteca() {
 /**
  * Abre a ficha de um jogo.
  *
- * AS DUAS ALAVANCAS SÓ APARECEM COM CAMINHO. Preferência de placa e prioridade
- * fixa são escritas por caminho de executável; sem ele não há o que escrever, e
- * mostrar o interruptor desligado sugeriria que basta clicar.
+ * A ALAVANCA SÓ APARECE COM CAMINHO. Preferência de placa é escrita por caminho
+ * de executável; sem ele não há o que escrever. A "prioridade alta fixa" saiu
+ * na 2.9 (prioridade cega, sem ganho medido).
  */
 function abrirFichaDoJogo(id: string) {
   const jogo = bibliotecaCarregada.find((j) => j.id === id);
@@ -3069,21 +3209,22 @@ function abrirFichaDoJogo(id: string) {
         </div>
         <button class="btn" type="button" data-acao="gpu">Aplicar</button>
       </div>
-      <div class="jogo-alavanca">
-        <div>
-          <span class="jogo-alavanca-nome">Prioridade alta fixa</span>
-          <span class="jogo-alavanca-nota">O Windows passa a criar o processo já em prioridade alta, em toda abertura. Ganho pequeno, maior em processador de poucos núcleos.</span>
-        </div>
-        <button class="btn" type="button" data-acao="prioridade">Aplicar</button>
-      </div>`
+`
     : `<p class="hint">Este jogo não foi encontrado no disco, então não há executável para ajustar. Instale-o, ou use "Selecionar" na ficha de configuração do jogo para apontar o arquivo.</p>`;
 
   text(
     "jogo-modal-nota",
     alvo
-      ? "As duas entram no histórico de mudanças e o desfazer devolve como estava."
+      ? "Entra no histórico de mudanças e o desfazer devolve como estava."
       : ""
   );
+
+  // A parte da 2.9: ajuste gráfico por orçamento de imagem, vigília "nunca
+  // menos FPS", deriva e última partida medida (`biblioteca.ts`).
+  const extra = document.createElement("div");
+  extra.className = "jogo-ajustes-29";
+  element("jogo-alavancas").appendChild(extra);
+  void preencherFichaDoJogo(extra, { executavel: jogo.executavel ?? null, pasta: jogo.pasta ?? null }, { pedirAdmin: askForAdmin });
 
   for (const botao of element("jogo-alavancas").querySelectorAll<HTMLButtonElement>(
     "button[data-acao]"
@@ -3105,8 +3246,6 @@ async function aplicarNoJogo(botao: HTMLButtonElement, jogo: JogoNaGrade, acao: 
   try {
     if (acao === "gpu") {
       await invoke("set_gpu_preference", { caminho, desempenho: true });
-    } else {
-      await invoke("set_persistent_priority", { executable: caminho, enable: true });
     }
 
     botao.textContent = "Aplicado";
@@ -3652,7 +3791,8 @@ function loadColor(percent: number): string {
  * da para ler num lugar so.
  */
 function setBar(id: string, percent: number | null) {
-  const bar = element(id);
+  const bar = document.getElementById(id);
+  if (!bar) return;
   const medidorOuNada = bar.closest(".vital") as HTMLElement | null;
 
   // Barra sem medição fica vazia E marcada. Só esvaziar a deixaria idêntica a
@@ -3686,7 +3826,8 @@ function setBar(id: string, percent: number | null) {
  * enquanto os outros dormem é exatamente o que trava um jogo.
  */
 function renderCores(perCore: number[]) {
-  const matrix = element("core-matrix");
+  const matrix = document.getElementById("core-matrix");
+  if (!matrix) return;
 
   const primeiraVez = matrix.children.length !== perCore.length;
 
@@ -3729,7 +3870,9 @@ function pushHistory(cpu: number) {
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
 
-  element("cpu-history-line").setAttribute("points", points.join(" "));
+  const linha = document.getElementById("cpu-history-line");
+  if (!linha) return;
+  linha.setAttribute("points", points.join(" "));
 
   const lastX = ((cpuHistory.length - 1) / (HISTORY_SAMPLES - 1)) * 300;
   element("cpu-history-area").setAttribute(
@@ -3946,101 +4089,7 @@ function renderFinding(finding: FirmwareFinding, indice = 0): string {
 
 // ------------------------------------------------------- rede e DNS
 
-interface DnsMeasurement {
-  id: string;
-  name: string;
-  servers: string;
-  median_ms: number | null;
-  failures: number;
-  current: boolean;
-}
-
-interface NetAdapter {
-  guid: string;
-  name: string;
-  dns: string;
-  automatic: boolean;
-}
-
-interface NetworkReport {
-  adapters: NetAdapter[];
-  measurements: DnsMeasurement[];
-  gain_ms: number | null;
-  note: string;
-}
-
-let lastNetwork: NetworkReport | null = null;
-
-async function analyzeNetwork() {
-  const button = element<HTMLButtonElement>("analyze-network");
-  button.disabled = true;
-  setStatus("net-status", "Consultando cada servidor de DNS e cronometrando…", "progress");
-
-  try {
-    const report = await invoke<NetworkReport>("analyze_network");
-    lastNetwork = report;
-    renderNetwork(report);
-  } catch (error) {
-    setStatus("net-status", String(error), "error");
-  } finally {
-    button.disabled = false;
-  }
-}
-
-function renderNetwork(report: NetworkReport) {
-  const medidos = report.measurements.filter((m) => m.median_ms !== null);
-  const maisRapido = medidos.reduce<DnsMeasurement | null>(
-    (melhor, m) => (!melhor || m.median_ms! < melhor.median_ms! ? m : melhor),
-    null
-  );
-
-  text(
-    "net-tag",
-    report.gain_ms !== null && report.gain_ms >= 5
-      ? `${report.gain_ms.toFixed(0)} ms a ganhar`
-      : "sem ganho relevante"
-  );
-
-  const linhas = report.measurements
-    .map((m, i) => {
-      const tempo =
-        m.median_ms === null
-          ? `<span class="state-label">sem resposta</span>`
-          : `<span class="finding-size">${m.median_ms.toFixed(0)} ms</span>`;
-
-      // Só oferece trocar quando há ganho que valha, e nunca para o que já
-      // está em uso. Botão para ganhar 2 ms seria venda, não conserto.
-      const vale =
-        !m.current &&
-        m.failures === 0 &&
-        m.median_ms !== null &&
-        report.gain_ms !== null &&
-        report.gain_ms >= 5 &&
-        m === maisRapido;
-
-      const acao = vale
-        ? `<button class="btn btn-ghost" data-dns="${escapeHtml(m.servers)}">Usar este</button>`
-        : m.current
-          ? `<span class="state-label">em uso</span>`
-          : "";
-
-      return `
-        <div class="startup" data-enabled="${m.current}" style="--i:${i}">
-          <div class="startup-info">
-            <span class="startup-name">${escapeHtml(m.name)}</span>
-            <span class="startup-exe">${escapeHtml(m.servers)}${
-              m.failures > 0 ? ` · ${m.failures} consulta(s) sem resposta` : ""
-            }</span>
-          </div>
-          ${tempo}
-          ${acao}
-        </div>`;
-    })
-    .join("");
-
-  element("net-result").innerHTML = linhas;
-  setStatus("net-status", report.note, "warn");
-}
+// Rede e DNS: retirado na 2.9 (DNS não muda ping nem FPS da partida).
 
 // ------------------------------------------- perda de pacote até o servidor
 
@@ -4356,7 +4405,7 @@ function renderShaders(r: ShaderReport) {
 
 async function fixPriority(enable: boolean) {
   const botoes = document.querySelectorAll<HTMLButtonElement>(
-    "#fix-priority, #unfix-priority"
+    "#unfix-priority"
   );
   botoes.forEach((b) => (b.disabled = true));
 
@@ -4878,19 +4927,6 @@ function renderFiveMFolder(folder: FiveMFolder, indice: number): string {
   `;
 }
 
-async function prioritizeFiveM() {
-  const button = element<HTMLButtonElement>("prioritize-fivem");
-  button.disabled = true;
-
-  try {
-    const mensagem = await invoke<string>("prioritize_fivem");
-    setStatus("fivem-status", mensagem, "ok");
-  } catch (error) {
-    setStatus("fivem-status", String(error), "error");
-  } finally {
-    button.disabled = false;
-  }
-}
 
 // ---------------------------------------------------- CitizenFX.ini (Pilar 6)
 
@@ -5141,6 +5177,8 @@ interface BootReport {
   culprits: BootCulprit[];
   recent_types: [string, BootType][];
   note: string;
+  /** `false` = a lista dos que atrasam não pôde ser lida (não é "nenhum"). */
+  culpados_lidos?: boolean;
 }
 
 const BOOT_TYPE_LABELS: Record<BootType, string> = {
@@ -5204,6 +5242,12 @@ function renderBootReport(report: BootReport) {
     text("boot-tag", report.needs_admin ? "precisa de administrador" : "sem medição");
   }
 
+  if (!report.needs_admin && report.culpados_lidos === false) {
+    partes.push(
+      `<p class="hint">Não deu para ler quais programas atrasam a inicialização — o registro de desempenho do Windows não respondeu. Isso não quer dizer que nenhum atrasa.</p>`
+    );
+  }
+
   if (report.culprits.length > 0) {
     partes.push(`<h3 class="sub">O que mais atrasou</h3>`);
     partes.push(
@@ -5264,6 +5308,148 @@ interface ThermalReport {
   on_battery: boolean;
   thermal_events: number;
   last_thermal_event: string | null;
+  /** O contador de limite do processador foi lido de verdade. */
+  medido?: boolean;
+  /** O registro térmico do Windows foi lido (com ou sem eventos). */
+  eventos_lidos?: boolean;
+  /** Sensores da placa de vídeo (2.9). */
+  placa?: SensoresGpu | null;
+}
+
+type EstadoGpu = "Temperatura" | "FreioDeHardware" | "TetoDeEnergiaNormal" | "Livre" | "SemCarga";
+type SensoresGpu =
+  | {
+      tipo: "Lido";
+      leitura: {
+        nome: string;
+        temperatura_c: number | null;
+        clock_mhz: number | null;
+        clock_max_mhz: number | null;
+        potencia_w: number | null;
+        limite_potencia_w: number | null;
+        uso_pct: number | null;
+      };
+      estado: { estado: EstadoGpu };
+    }
+  | { tipo: "NaoDeuParaLer"; motivo: string };
+
+/** Estado da placa: o backend decide, a tela só escolhe a frase e a cor. */
+const NA_TELA_DA_PLACA: Record<EstadoGpu, { frase: string; severidade: Severity }> = {
+  Temperatura: {
+    frase: "O driver está segurando o clock da placa por temperatura. Limpe a poeira, confira as ventoinhas e o fluxo de ar do gabinete.",
+    severidade: "Critical",
+  },
+  FreioDeHardware: {
+    frase: "A placa acionou o freio de hardware — costuma ser a fonte, o conector de energia da placa ou a proteção térmica dela.",
+    severidade: "Critical",
+  },
+  TetoDeEnergiaNormal: {
+    frase: "Em carga, a placa está no teto de energia. Isso é o funcionamento normal de uma placa em uso máximo, não defeito.",
+    severidade: "Ok",
+  },
+  Livre: { frase: "Em carga, nada está segurando a placa.", severidade: "Ok" },
+  SemCarga: {
+    frase: "A placa não está em carga agora. Temperatura e freio apareceriam mesmo assim; o resto só se vê com o jogo aberto — analise de novo durante uma partida.",
+    severidade: "Ok",
+  },
+};
+
+function blocoDaPlaca(p: SensoresGpu | null | undefined): string {
+  if (!p) return "";
+  if (p.tipo === "NaoDeuParaLer") {
+    return `<article class="finding" data-severity="Important" style="--i:1"><div class="finding-top"><h3>Placa de vídeo: não deu para ler</h3></div><p class="finding-advice">${escapeHtml(p.motivo)}</p></article>`;
+  }
+  const l = p.leitura;
+  const n = (v: number | null, u: string) => (v === null ? "—" : `${Math.round(v)} ${u}`);
+  const tela = NA_TELA_DA_PLACA[p.estado.estado];
+  return `
+    <article class="finding" data-severity="${tela.severidade}" style="--i:1">
+      <div class="finding-top"><h3>${escapeHtml(l.nome)}</h3></div>
+      <p class="finding-measured">${n(l.temperatura_c, "°C")} · clock ${n(l.clock_mhz, "MHz")} de ${n(l.clock_max_mhz, "MHz")} · ${n(l.potencia_w, "W")} de ${n(l.limite_potencia_w, "W")} · uso ${n(l.uso_pct, "%")}</p>
+      <p class="finding-advice">${escapeHtml(tela.frase)}</p>
+    </article>`;
+}
+
+interface DispositivoMsi {
+  nome: string;
+  servico: string;
+  msi: boolean | null;
+  placa_de_video: boolean;
+}
+
+interface NucleoDpc {
+  nucleo: string;
+  dpc_medio: number;
+  dpc_pico: number;
+  interrupcao_media: number;
+  interrupcao_pico: number;
+}
+type DiagnosticoDpc = {
+  segundos: number;
+  nucleos: NucleoDpc[];
+  estado: { estado: "Normal" } | { estado: "Alto"; nucleo: string } | { estado: "NaoDeuParaLer"; motivo: string };
+};
+
+/** DPC e interrupções por núcleo (2.9, Expert): só leitura. */
+async function medirDpc() {
+  const saida = document.getElementById("dpc-resultado");
+  const botao = document.getElementById("dpc-medir") as HTMLButtonElement | null;
+  if (!saida) return;
+  if (botao) botao.disabled = true;
+  saida.innerHTML = `<p class="hint">Medindo por 10 segundos…</p>`;
+  try {
+    const d = await invoke<DiagnosticoDpc>("diagnostico_dpc");
+    if (d.estado.estado === "NaoDeuParaLer") {
+      saida.innerHTML = `<p class="hint">Não deu para medir: ${escapeHtml(d.estado.motivo)}</p>`;
+      return;
+    }
+    const pct = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
+    const pior = d.estado.estado === "Alto" ? d.estado.nucleo : null;
+    const frase =
+      pior === null
+        ? "Nenhum núcleo passou da referência (3% em média ou 15% num instante). Se o engasgo continua, meça de novo com o jogo aberto."
+        : `O núcleo ${escapeHtml(pior)} passou da referência. Drivers de rede, áudio, USB e placa de vídeo são os suspeitos comuns: atualize-os pelo fabricante e desconecte periféricos um a um, medindo de novo.`;
+    saida.innerHTML = `
+      <p class="hint">${frase} As referências não foram validadas em muitas máquinas.</p>
+      <table class="fg-tabela">
+        <thead><tr><th>Núcleo</th><th>DPC médio</th><th>DPC pico</th><th>Interrupção média</th><th>Interrupção pico</th></tr></thead>
+        <tbody>${d.nucleos
+          .map(
+            (n) =>
+              `<tr${n.nucleo === pior ? ' data-preso="true"' : ""}><td>${escapeHtml(n.nucleo)}</td><td>${pct(n.dpc_medio)}</td><td>${pct(n.dpc_pico)}</td><td>${pct(n.interrupcao_media)}</td><td>${pct(n.interrupcao_pico)}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>`;
+  } catch (erro) {
+    saida.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+  } finally {
+    if (botao) botao.disabled = false;
+  }
+}
+
+/** MSI por dispositivo (2.9, Expert): só leitura. */
+async function lerMsi() {
+  const saida = document.getElementById("msi-resultado");
+  if (!saida) return;
+  saida.innerHTML = `<p class="hint">Lendo…</p>`;
+  try {
+    const lista = await invoke<DispositivoMsi[]>("msi_dispositivos");
+    const estado = (d: DispositivoMsi) =>
+      d.msi === true ? "MSI ligado" : d.msi === false ? "MSI desligado (o driver declara suporte)" : "o driver não declara MSI";
+    saida.innerHTML = `
+      <table class="fg-tabela">
+        <thead><tr><th>Dispositivo</th><th>Driver</th><th>Interrupção</th></tr></thead>
+        <tbody>${lista
+          .map(
+            (d) =>
+              `<tr><td>${escapeHtml(d.nome)}${d.placa_de_video ? " <span class=\"chip\">placa de vídeo</span>" : ""}</td><td class="fg-mono">${escapeHtml(d.servico)}</td><td>${estado(d)}</td></tr>`,
+          )
+          .join("")}</tbody>
+      </table>
+      <p class="hint">${lista.length} dispositivo(s). Para a placa de vídeo, o ajuste fica no catálogo (modo Expert), com desfazer.</p>`;
+  } catch (erro) {
+    saida.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+  }
 }
 
 async function analyzeThermal() {
@@ -5312,14 +5498,23 @@ function renderThermalReport(report: ThermalReport) {
       </div>
       ${conselho}
     </article>
+    ${blocoDaPlaca(report.placa)}
   `;
 
+  // "Nada está segurando" só com as duas leituras feitas. Leitura que falhou
+  // não vira verde (até a 2.7 virava).
+  const naoLido = report.medido === false || report.eventos_lidos === false;
+  const livre = report.culprit === "Nenhum";
   setStatus(
     "thermal-status",
-    report.culprit === "Nenhum"
-      ? "Nada está segurando o processador."
-      : report.summary,
-    report.culprit === "Nenhum" || report.culprit === "Bateria" ? "ok" : "error"
+    livre && report.medido === false
+      ? "Não deu para medir se o processador está sendo limitado agora."
+      : livre
+        ? report.eventos_lidos === false
+          ? "Nenhum limite ativo agora — mas o registro térmico do Windows não pôde ser lido, então o histórico de calor ficou sem conferir."
+          : "Nada está segurando o processador."
+        : report.summary,
+    livre && naoLido ? "warn" : livre || report.culprit === "Bateria" ? "ok" : "error"
   );
 }
 
@@ -6210,9 +6405,7 @@ async function repararPlano() {
   setStatus("plano-status", "Reaplicando só o que saiu do lugar…", "progress");
 
   try {
-    const r = await invoke<RelatorioDoPlano>("reparar_plano_otimiza", {
-      incluirAvancadas: false,
-    });
+    const r = await invoke<RelatorioDoPlano>("reparar_plano_otimiza");
 
     const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
     mostrarPlano(r, tom, frase);
@@ -6354,9 +6547,7 @@ async function aplicarPlano() {
   setStatus("plano-status", "Criando o plano, configurando e conferindo cada ajuste…", "progress");
 
   try {
-    const r = await invoke<RelatorioDoPlano>("aplicar_plano_otimiza", {
-      incluirAvancadas: false,
-    });
+    const r = await invoke<RelatorioDoPlano>("aplicar_plano_otimiza");
 
     const { frase, tom } = NA_TELA_DO_DESFECHO[r.desfecho];
     mostrarPlano(r, tom, frase);
@@ -6726,6 +6917,7 @@ function aplicarVeredito(v: Veredito) {
     .join("");
 
   mostrarAcaoDoVeredito(v.principal?.acao ?? null);
+  mostrarRecuperacao(v);
 
   // E, quando o portão está de pé, o mesmo achado aparece na tela de compra.
   mostrarAchadoNoPortao(v);
@@ -6898,6 +7090,24 @@ let profiles: ProfileInfo[] = [];
 let activeProfile: string | null = null;
 /** Texto digitado na busca do catálogo. */
 let searchTerm = "";
+
+/**
+ * Modo Expert (2.9): preferência DESTA tela, guardada no navegador do app.
+ * Leitura que falha vira modo Simples — o seguro.
+ */
+function lerModoExpert(): boolean {
+  try {
+    return localStorage.getItem("otimiza.modo") === "expert";
+  } catch {
+    return false;
+  }
+}
+let modoExpert = lerModoExpert();
+
+function aplicarModoExpert() {
+  document.body.dataset.modo = modoExpert ? "expert" : "simples";
+  document.querySelectorAll<HTMLElement>("[data-so-expert]").forEach((el) => (el.hidden = !modoExpert));
+}
 
 
 // -------------------------------------------------- os três níveis de risco
@@ -7203,6 +7413,8 @@ function renderOptimizations() {
 
   const visible = optimizations
     .filter((item) => preferences.show_unavailable || item.state !== "Unavailable")
+    // Expert só no modo Expert — menos quando já aplicado, para poder desfazer.
+    .filter((item) => modoExpert || !item.expert || item.state === "Applied")
     .filter((item) => activeCategory === "Todas" || item.category === activeCategory)
     .filter((item) => matchesSearch(item, termo))
     // Perfil escolhido reduz a lista ao que ele recomenda. É o que transforma
@@ -7334,6 +7546,9 @@ function renderOptimization(item: OptimizationInfo): string {
   if (!item.reversible) chips.push(`<span class="chip" data-warn="true">sem volta</span>`);
   if (item.security_tradeoff)
     chips.push(`<span class="chip" data-warn="true">reduz segurança</span>`);
+  if (item.expert) chips.push(`<span class="chip" data-warn="true">Expert — meça antes e depois</span>`);
+  if (item.retirado)
+    chips.push(`<span class="chip" data-warn="true">retirado na 2.9 — só desfazer</span>`);
 
   // O aviso que faltava na 2.1.0. Um ajuste que pode custar quadro não pode
   // parecer igual aos outros numa lista que o cliente percorre para clicar.
@@ -7355,6 +7570,7 @@ function renderOptimization(item: OptimizationInfo): string {
     : "";
 
   const detail = item.detail ? `<p class="detail">${escapeHtml(item.detail)}</p>` : "";
+  const condicao = item.condicao ? `<p class="detail">${escapeHtml(item.condicao)}</p>` : "";
 
   // A LINHA DE AJUSTE, E NÃO UM CARTÃO.
   //
@@ -7380,6 +7596,7 @@ function renderOptimization(item: OptimizationInfo): string {
       <div class="opt-body">
         <div class="optimization-meta">${chips.join("")}</div>
         ${risco}
+        ${condicao}
         ${detail}
       </div>
     </details>
@@ -7897,10 +8114,18 @@ async function loadStartup() {
 }
 
 function renderStartupEntry(entry: StartupEntry): string {
+  const CLASSE: Record<string, [string, string]> = {
+    Essencial: ["essencial", "Segurança, áudio, vídeo ou touchpad. Desligar tira algo do sistema."],
+    Util: ["útil", "Sincronização de nuvem ou software de periférico. Dá para abrir na mão quando precisar."],
+    Opcional: ["opcional", "Loja de jogo, mensageiro, música ou navegador pré-aberto: ocupa memória desde o boot até alguém usar."],
+  };
+  const classe = entry.classe && CLASSE[entry.classe]
+    ? `<span class="chip" title="${CLASSE[entry.classe][1]}"${entry.classe === "Essencial" ? "" : entry.classe === "Opcional" ? ' data-recommended="true"' : ""}>${CLASSE[entry.classe][0]}</span>`
+    : "";
   const scope =
-    entry.hive === "HKLM"
+    (entry.hive === "HKLM"
       ? `<span class="chip" title="Vale para todos os usuários">todos</span>`
-      : "";
+      : "") + classe;
 
   return `
     <div class="startup" data-enabled="${entry.enabled}">
@@ -8845,6 +9070,8 @@ interface PlacaDeVideo {
   nome: string | null;
   driver: string | null;
   driver_data: string | null;
+  driver_origem?: string | null;
+  driver_generico?: boolean;
   driver_dias: number | null;
   vram_gb: number;
 }
@@ -9410,6 +9637,25 @@ async function carregarPlaca() {
 
     text("placa-vram", p.vram_gb > 0 ? `${p.vram_gb.toFixed(0)} GB` : "não sei dizer");
 
+    text("placa-driver-origem", p.driver_origem ?? "não deu para ler");
+    text(
+      "placa-driver-nota",
+      p.driver_generico
+        ? "Este é o driver genérico do Windows: a placa roda sem a aceleração completa. Instalar o driver do fabricante muda o FPS de verdade."
+        : "Driver mais novo não é automaticamente mais rápido: às vezes melhora um jogo e piora outro. Se um jogo caiu depois de atualizar, a ficha dele na Biblioteca mostra a queda e a versão que mudou.",
+    );
+    const sites: Record<string, string> = {
+      nvidia: "https://www.nvidia.com/pt-br/drivers/",
+      amd: "https://www.amd.com/pt/support/download/drivers.html",
+      intel: "https://www.intel.com.br/content/www/br/pt/download-center/home.html",
+    };
+    const site = sites[p.marca];
+    const botaoSite = document.getElementById("placa-driver-site") as HTMLButtonElement | null;
+    if (botaoSite) {
+      botaoSite.hidden = !site;
+      botaoSite.onclick = site ? () => void openUrl(site) : null;
+    }
+
     // Só pergunta quando não sabe.
     element("placa-escolha").hidden = p.marca !== "desconhecida";
   } catch {
@@ -9488,7 +9734,7 @@ const PERFIS: Record<string, { botao: string; nome: string; aviso: string }> = {
   },
   competitivo: {
     botao: "cfgjogo-competitivo",
-    nome: "Competitivo",
+    nome: "Máximo de FPS",
     aviso: "Isto muda bastante como o jogo se parece.",
   },
 };
@@ -10177,12 +10423,120 @@ async function carregarProtocolo() {
     .join("");
 }
 
+interface AlteracaoRegistrada {
+  id: string;
+  titulo: string;
+  modulo: string;
+  o_que_muda: string;
+  risco: "Baixo" | "Medio" | "Alto";
+  escopo: "Windows" | "Jogo" | "Driver" | "Arquivo";
+  precisa_reiniciar: boolean;
+  refaz_sozinho: boolean;
+  desfazer: string;
+}
+
+const NA_TELA_DO_RISCO: Record<AlteracaoRegistrada["risco"], { rotulo: string; severidade: Severity }> = {
+  Baixo: { rotulo: "risco baixo", severidade: "Ok" },
+  Medio: { rotulo: "risco médio", severidade: "Important" },
+  Alto: { rotulo: "risco alto", severidade: "Critical" },
+};
+
+const NA_TELA_DO_ESCOPO: Record<AlteracaoRegistrada["escopo"], string> = {
+  Windows: "Windows",
+  Jogo: "um jogo",
+  Driver: "driver de vídeo",
+  Arquivo: "apaga arquivo",
+};
+
+/** O registro central: tudo o que o produto altera, com o desfazer de cada um. */
+async function carregarOQueAltera() {
+  const alvo = document.getElementById("o-que-altera");
+  if (!alvo) return;
+  let lista: AlteracaoRegistrada[];
+  try {
+    lista = await invoke<AlteracaoRegistrada[]>("o_que_o_otimiza_altera");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+  const ordem = { Alto: 0, Medio: 1, Baixo: 2 } as const;
+  lista.sort((a, b) => ordem[a.risco] - ordem[b.risco] || a.titulo.localeCompare(b.titulo, "pt-BR"));
+  alvo.innerHTML =
+    `<p class="hint">${lista.length} alterações. Nada muda no seu computador sem estar
+       nesta lista: um teste da esteira reprova a versão se um pedaço do produto passar
+       a escrever sem aparecer aqui. Cada uma diz como se desfaz.</p>` +
+    lista
+      .map((a) => {
+        const naTela = NA_TELA_DO_RISCO[a.risco];
+        const marcas = [
+          `<span class="chip">${escapeHtml(NA_TELA_DO_ESCOPO[a.escopo])}</span>`,
+          `<span class="chip">${escapeHtml(naTela.rotulo)}</span>`,
+          a.precisa_reiniciar ? `<span class="chip">exige reiniciar</span>` : "",
+          a.refaz_sozinho ? `<span class="chip">o sistema refaz</span>` : "",
+        ].join("");
+        return `
+        <div class="causa" data-severity="${naTela.severidade}">
+          <p class="causa-titulo"><strong>${escapeHtml(a.titulo)}</strong> ${marcas}</p>
+          <p class="effect">${escapeHtml(a.o_que_muda)}</p>
+          <p class="detail"><strong>Desfazer:</strong> ${escapeHtml(a.desfazer)}</p>
+        </div>`;
+      })
+      .join("");
+}
+
+/** As últimas partidas medidas, uma linha por jogo (o mais recente de cada). */
+async function carregarUltimasPartidas() {
+  const alvo = document.getElementById("ultimas-partidas");
+  if (!alvo) return;
+  let medicoes: MedicaoAutomatica[];
+  try {
+    medicoes = await invoke<MedicaoAutomatica[]>("medicoes_automaticas");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="hint">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+  if (!medicoes.length) {
+    alvo.innerHTML = `<p class="hint">Nenhuma partida medida ainda. A medição automática precisa da opção ligada em Sistema → Preferências e do Otimiza aberto como administrador; a partir daí ela mede sozinha enquanto você joga.</p>`;
+    return;
+  }
+  const porJogo = new Map<string, MedicaoAutomatica[]>();
+  for (const m of medicoes) {
+    const lista = porJogo.get(m.jogo) ?? [];
+    lista.push(m);
+    porJogo.set(m.jogo, lista);
+  }
+  const linhas = [...porJogo.entries()]
+    .map(([jogo, lista]) => {
+      const ordenadas = [...lista].sort((a, b) => b.quando - a.quando);
+      return { jogo, ultima: ordenadas[0], quantas: lista.length };
+    })
+    .sort((a, b) => b.ultima.quando - a.ultima.quando);
+
+  alvo.innerHTML = `
+    <table class="fg-tabela">
+      <thead><tr><th>Jogo</th><th>Quando</th><th>FPS</th><th>1% piores</th><th>Partidas medidas</th></tr></thead>
+      <tbody>${linhas
+        .map(
+          (l) => `<tr>
+            <td class="fg-mono">${escapeHtml(l.jogo)}</td>
+            <td>${new Date(l.ultima.quando * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
+            <td>${Math.round(l.ultima.fps)}</td>
+            <td>${l.ultima.confiavel ? Math.round(l.ultima.low_1pct).toString() : "amostra curta"}</td>
+            <td>${l.quantas}</td>
+          </tr>`,
+        )
+        .join("")}</tbody>
+    </table>
+    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou. A ficha de cada jogo, na Biblioteca, mostra a comparação.</p>`;
+}
+
 async function carregarOQueNaoFazemos() {
   const alvo = element("nao-fazemos");
 
   let lista: NaoFazemos[];
 
   try {
+    void carregarOQueAltera();
     lista = await invoke<NaoFazemos[]>("o_que_nao_fazemos");
   } catch (erro) {
     alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
@@ -10624,6 +10978,8 @@ function wireControls() {
 
   element("analyze-boot").addEventListener("click", analyzeBoot);
   element("analyze-thermal").addEventListener("click", analyzeThermal);
+  document.getElementById("msi-ler")?.addEventListener("click", () => void lerMsi());
+  document.getElementById("dpc-medir")?.addEventListener("click", () => void medirDpc());
   element("analyze-health").addEventListener("click", analyzeHealth);
   element("analyze-conflicts").addEventListener("click", analyzeConflicts);
 
@@ -10735,7 +11091,6 @@ function wireControls() {
   });
   element("analyze-browsers").addEventListener("click", analyzeBrowsers);
   element("analyze-fivem").addEventListener("click", analyzeFiveM);
-  element("analyze-network").addEventListener("click", analyzeNetwork);
   element("medir-perda").addEventListener("click", medirPerdaDePacote);
   element("analyze-bottleneck").addEventListener("click", analyzeBottleneck);
   element("analyze-shaders").addEventListener("click", analyzeShaders);
@@ -10793,7 +11148,6 @@ function wireControls() {
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
   element("analyze-readiness").addEventListener("click", analyzeReadiness);
-  element("fix-priority").addEventListener("click", () => fixPriority(true));
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
 
   element("shader-result").addEventListener("click", async (event) => {
@@ -10859,63 +11213,6 @@ function wireControls() {
   element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 
-  element("flush-dns").addEventListener("click", async () => {
-    const button = element<HTMLButtonElement>("flush-dns");
-    button.disabled = true;
-
-    try {
-      setStatus("net-status", await invoke<string>("flush_dns"), "ok");
-    } catch (error) {
-      setStatus("net-status", String(error), "error");
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  element("net-result").addEventListener("click", async (event) => {
-    const button = (event.target as HTMLElement).closest(
-      "button[data-dns]"
-    ) as HTMLButtonElement | null;
-    if (!button) return;
-
-    if (!isElevated) {
-      askForAdmin(
-        "Trocar o servidor de DNS exige permissao de administrador. " +
-          "Podemos reabrir o Otimiza com essa permissao?"
-      );
-      return;
-    }
-
-    // Um adaptador de cada vez seria pior: a maquina usa o DNS do adaptador
-    // ativo, e trocar so um deixaria o resultado dependendo de qual conexao
-    // esta em uso na hora.
-    const adaptadores = lastNetwork?.adapters ?? [];
-    if (adaptadores.length === 0) {
-      setStatus("net-status", "Nenhum adaptador ativo para configurar.", "error");
-      return;
-    }
-
-    button.disabled = true;
-
-    try {
-      for (const adaptador of adaptadores) {
-        await invoke<unknown>("set_dns", {
-          guid: adaptador.guid,
-          servers: button.dataset.dns,
-        });
-      }
-      setStatus(
-        "net-status",
-        "DNS trocado. A troca fica no historico e o botao Desfazer tudo devolve o anterior.",
-        "ok"
-      );
-    } catch (error) {
-      setStatus("net-status", String(error), "error");
-    } finally {
-      await analyzeNetwork();
-    }
-  });
-  element("prioritize-fivem").addEventListener("click", prioritizeFiveM);
 
   element("fivem-result").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest(
@@ -10986,20 +11283,6 @@ function wireControls() {
     if (button) cleanDiskCategory(button.dataset.space!, button);
   });
 
-  element("empty-recycle").addEventListener("click", async () => {
-    const button = element<HTMLButtonElement>("empty-recycle");
-    button.disabled = true;
-
-    try {
-      const message = await invoke<string>("empty_recycle_bin");
-      setStatus("disk-status", message, "ok");
-    } catch (error) {
-      setStatus("disk-status", String(error), "error");
-    } finally {
-      button.disabled = false;
-    }
-  });
-
   element("analyze-memory").addEventListener("click", analyzeMemory);
 
   element("fix-pagefile").addEventListener("click", async () => {
@@ -11054,6 +11337,18 @@ function wireControls() {
   element("measure-baseline").addEventListener("click", () => runBenchmark("measure_baseline"));
   element("measure-compare").addEventListener("click", () => runBenchmark("measure_and_compare"));
   element("export-report").addEventListener("click", exportReport);
+  document.getElementById("exportar-alteracoes")?.addEventListener("click", async (e) => {
+    const botao = e.currentTarget as HTMLButtonElement;
+    botao.disabled = true;
+    try {
+      const caminho = await invoke<string>("exportar_alteracoes");
+      text("report-status", `Planilha gravada: ${caminho}`);
+    } catch (erro) {
+      text("report-status", String(erro));
+    } finally {
+      botao.disabled = false;
+    }
+  });
 
   element("optimize-now").addEventListener("click", () =>
     runBatch("optimize_now", "Aplicando o que falta…")
@@ -11110,6 +11405,22 @@ function wireControls() {
       perfil.optimization_ids
     );
   });
+
+  const caixaExpert = document.getElementById("modo-expert") as HTMLInputElement | null;
+  if (caixaExpert) {
+    caixaExpert.checked = modoExpert;
+    caixaExpert.addEventListener("change", () => {
+      modoExpert = caixaExpert.checked;
+      try {
+        localStorage.setItem("otimiza.modo", modoExpert ? "expert" : "simples");
+      } catch {
+        /* sem armazenamento: vale só nesta sessão */
+      }
+      aplicarModoExpert();
+      renderOptimizations();
+    });
+  }
+  aplicarModoExpert();
 
   const busca = element<HTMLInputElement>("optimization-search");
   busca.addEventListener("input", () => {

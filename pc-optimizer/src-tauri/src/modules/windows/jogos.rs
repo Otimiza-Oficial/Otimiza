@@ -39,6 +39,15 @@ pub enum Origem {
     /// A lista de preferência de GPU do próprio Windows, com o arquivo
     /// confirmado no disco.
     Windows,
+    /// "Programas instalados" do Windows, com editora de jogo. É onde Riot,
+    /// Blizzard, EA, Ubisoft, GOG, Rockstar, Roblox e o FiveM registram o
+    /// que instalam — um leitor só para todas, pelo mecanismo do próprio
+    /// Windows, em vez de um leitor por formato interno de cada loja.
+    Instalado,
+    /// O Otimiza viu este jogo RODANDO (`deteccao.rs`: janela cobrindo o
+    /// monitor, motor 3D em uso). É o que garante que nenhum jogo fica de
+    /// fora da biblioteca por não estar numa loja conhecida.
+    Detectado,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -382,6 +391,8 @@ pub fn varrer() -> Biblioteca {
 
     ler_steam(&mut biblioteca);
     ler_epic(&mut biblioteca);
+    ler_instalados(&mut biblioteca);
+    ler_detectados(&mut biblioteca);
     ler_windows(&mut biblioteca);
 
     // O mais jogado primeiro; o que a loja não datou vai para o fim.
@@ -390,6 +401,226 @@ pub fn varrer() -> Biblioteca {
     biblioteca.raizes.dedup();
 
     biblioteca
+}
+
+// ------------------------------------------------------ programas instalados
+
+/// Editoras de jogo, como aparecem no campo "Editor" dos programas
+/// instalados. Comparação por pedaço, sem diferenciar maiúsculas.
+const EDITORAS_DE_JOGO: &[&str] = &[
+    "riot games", "blizzard", "activision", "electronic arts", "ubisoft", "gog.com", "rockstar",
+    "roblox", "mojang", "cfx.re", "bethesda", "hoyoverse", "mihoyo", "garena", "krafton",
+    "bandai namco", "square enix", "capcom", "warner bros", "2k", "cd projekt", "nexon", "wargaming",
+    "embark studios", "respawn", "bungie", "epic games", "valve",
+];
+
+/// O que também usa essas editoras e não é jogo: lojas, SDKs, editores.
+const NAO_E_JOGO: &[&str] = &[
+    "launcher", "sdk", "studio", "redistributable", "riot client", "battle.net", "ea app",
+    "ubisoft connect", "gog galaxy", "social club", "epic online services", "steam", "anti-cheat",
+    "anticheat", "vanguard", "easyanticheat", "battleye", "uninstall", "setup",
+];
+
+/// Um programa instalado é jogo? **Função pura.**
+pub fn instalado_e_jogo(nome: &str, editora: &str) -> bool {
+    let editora = editora.to_lowercase();
+    let nome = nome.to_lowercase();
+    EDITORAS_DE_JOGO.iter().any(|e| editora.contains(e)) && !NAO_E_JOGO.iter().any(|n| nome.contains(n))
+}
+
+/// O executável que o Windows usa de ícone, quando é o jogo e não um
+/// instalador. `"C:\x\GTA5.exe",0` → `C:\x\GTA5.exe`. **Função pura.**
+pub fn executavel_do_icone(icone: &str) -> Option<PathBuf> {
+    let limpo = icone.trim();
+    let sem_indice = match limpo.rfind(',') {
+        Some(i) if limpo[i + 1..].trim().parse::<i32>().is_ok() => &limpo[..i],
+        _ => limpo,
+    };
+    let caminho = sem_indice.trim().trim_matches('"');
+    let minusculo = caminho.to_lowercase();
+    (minusculo.ends_with(".exe") && !minusculo.contains("install") && !minusculo.contains("setup"))
+        .then(|| PathBuf::from(caminho))
+}
+
+#[cfg(target_os = "windows")]
+fn ler_instalados(biblioteca: &mut Biblioteca) {
+    use super::registry::{read_text, subkeys};
+    const RAIZES: &[(&str, &str)] = &[
+        ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    ];
+    for (hive, raiz) in RAIZES {
+        let chaves = match subkeys(hive, raiz) {
+            Ok(c) => c,
+            Err(erro) => {
+                biblioteca.lacunas.push(format!("Programas instalados: {}", erro));
+                continue;
+            }
+        };
+        for chave in chaves {
+            let caminho = format!("{}\\{}", raiz, chave);
+            let ler = |valor: &str| read_text(hive, &caminho, valor).ok().flatten().unwrap_or_default();
+            let (nome, editora) = (ler("DisplayName"), ler("Publisher"));
+            if nome.is_empty() || !instalado_e_jogo(&nome, &editora) {
+                continue;
+            }
+            let executavel = executavel_do_icone(&ler("DisplayIcon")).filter(|e| e.exists());
+            let local = ler("InstallLocation");
+            let pasta = if !local.trim().is_empty() {
+                PathBuf::from(local.trim().trim_matches('"'))
+            } else if let Some(pai) = executavel.as_ref().and_then(|e| e.parent()) {
+                pai.to_path_buf()
+            } else {
+                continue;
+            };
+            if !pasta.exists() {
+                continue;
+            }
+            // Steam e Epic têm informação melhor (tamanho, última vez jogado).
+            if biblioteca.jogos.iter().any(|j| j.pasta == pasta || pasta.starts_with(&j.pasta)) {
+                continue;
+            }
+            // NÃO entra em `raizes`: raiz autoriza escrita em IFEO, e isso só
+            // vale para biblioteca de loja lida do arquivo da própria loja.
+            biblioteca.jogos.push(JogoInstalado {
+                nome,
+                origem: Origem::Instalado,
+                pasta,
+                executavel,
+                ultima_vez: 0,
+                bytes: 0,
+                appid: None,
+            });
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn ler_instalados(_biblioteca: &mut Biblioteca) {}
+
+// ------------------------------------------------------ jogos vistos rodando
+
+/// Um jogo que o Otimiza viu rodando nesta máquina.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JogoVisto {
+    pub nome: String,
+    pub executavel: PathBuf,
+    pub primeira_vez: u64,
+    pub ultima_vez: u64,
+    pub vezes: u32,
+}
+
+fn arquivo_de_vistos() -> Option<PathBuf> {
+    std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("jogos_vistos.json"))
+}
+
+/// Lê a lista. Arquivo ausente = lista vazia; ilegível = erro (nunca vira
+/// "nenhum jogo" em silêncio).
+pub fn ler_vistos_de(caminho: &Path) -> Result<Vec<JogoVisto>, String> {
+    match std::fs::read_to_string(caminho) {
+        Ok(texto) => serde_json::from_str(&texto).map_err(|e| format!("jogos_vistos.json ilegível: {}", e)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("jogos_vistos.json: {}", e)),
+    }
+}
+
+/// Junta uma observação à lista. **Função pura.** Devolve se mudou algo que
+/// valha gravar (jogo novo, ou a última vez avançou mais de uma hora).
+pub fn anotar_visto(lista: &mut Vec<JogoVisto>, nome: &str, executavel: &Path, agora: u64) -> bool {
+    const UMA_HORA: u64 = 3600;
+    if let Some(v) = lista.iter_mut().find(|v| v.executavel.as_os_str().eq_ignore_ascii_case(executavel.as_os_str())) {
+        if agora.saturating_sub(v.ultima_vez) < UMA_HORA {
+            return false;
+        }
+        v.ultima_vez = agora;
+        v.vezes = v.vezes.saturating_add(1);
+        v.nome = nome.to_string();
+        return true;
+    }
+    lista.push(JogoVisto {
+        nome: nome.to_string(),
+        executavel: executavel.to_path_buf(),
+        primeira_vez: agora,
+        ultima_vez: agora,
+        vezes: 1,
+    });
+    true
+}
+
+/// Anota um jogo detectado rodando. Barato: só grava quando muda algo, e a
+/// lembrança da última gravação fica em memória.
+pub fn registrar_visto(nome: &str, executavel: &Path) {
+    use std::sync::Mutex;
+    static RECENTES: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
+    let agora = crate::modules::changelog::now_timestamp();
+    if let Ok(recentes) = RECENTES.lock() {
+        if recentes.iter().any(|(e, t)| e == executavel && agora.saturating_sub(*t) < 3600) {
+            return;
+        }
+    }
+    let Some(arquivo) = arquivo_de_vistos() else { return };
+    // Ilegível: não sobrescreve (apagaria o histórico); só registra no log.
+    let mut lista = match ler_vistos_de(&arquivo) {
+        Ok(l) => l,
+        Err(e) => {
+            crate::utils::Logger::info(&format!("biblioteca: {}", e));
+            return;
+        }
+    };
+    if anotar_visto(&mut lista, nome, executavel, agora) {
+        if let Some(pasta) = arquivo.parent() {
+            let _ = std::fs::create_dir_all(pasta);
+        }
+        match serde_json::to_string_pretty(&lista) {
+            Ok(json) => {
+                let temporario = arquivo.with_extension("json.tmp");
+                if std::fs::write(&temporario, json).is_ok() {
+                    let _ = std::fs::rename(&temporario, &arquivo);
+                }
+            }
+            Err(e) => crate::utils::Logger::info(&format!("biblioteca: {}", e)),
+        }
+    }
+    if let Ok(mut recentes) = RECENTES.lock() {
+        recentes.retain(|(e, _)| e != executavel);
+        recentes.push((executavel.to_path_buf(), agora));
+    }
+}
+
+fn ler_detectados(biblioteca: &mut Biblioteca) {
+    let Some(arquivo) = arquivo_de_vistos() else { return };
+    let vistos = match ler_vistos_de(&arquivo) {
+        Ok(v) => v,
+        Err(e) => {
+            biblioteca.lacunas.push(format!("Jogos vistos rodando: {}", e));
+            return;
+        }
+    };
+    for v in vistos {
+        if !v.executavel.exists() {
+            continue;
+        }
+        // Já contado por uma loja: a loja manda no nome, mas a data de
+        // quando jogou é a nossa, que é real.
+        if let Some(j) = biblioteca.jogos.iter_mut().find(|j| v.executavel.starts_with(&j.pasta)) {
+            if j.executavel.is_none() {
+                j.executavel = Some(v.executavel.clone());
+            }
+            j.ultima_vez = j.ultima_vez.max(v.ultima_vez);
+            continue;
+        }
+        let Some(pasta) = v.executavel.parent().map(PathBuf::from) else { continue };
+        biblioteca.jogos.push(JogoInstalado {
+            nome: v.nome,
+            origem: Origem::Detectado,
+            pasta,
+            executavel: Some(v.executavel),
+            ultima_vez: v.ultima_vez,
+            bytes: 0,
+            appid: None,
+        });
+    }
 }
 
 /// Este executável está dentro de uma biblioteca de jogo?
@@ -417,6 +648,55 @@ pub fn dentro_de_biblioteca(executavel: &Path, raizes: &[PathBuf]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn programa_instalado_de_editora_de_jogo() {
+        assert!(instalado_e_jogo("Grand Theft Auto V", "Rockstar Games"));
+        assert!(instalado_e_jogo("FiveM", "Cfx.re"));
+        assert!(instalado_e_jogo("Roblox Player", "Roblox Corporation"));
+        assert!(instalado_e_jogo("VALORANT", "Riot Games, Inc"));
+        assert!(!instalado_e_jogo("Rockstar Games Launcher", "Rockstar Games"));
+        assert!(!instalado_e_jogo("Roblox Studio", "Roblox Corporation"));
+        assert!(!instalado_e_jogo("Riot Vanguard", "Riot Games, Inc"));
+        assert!(!instalado_e_jogo("Google Chrome", "Google LLC"));
+    }
+
+    #[test]
+    fn executavel_vem_do_icone_quando_nao_e_instalador() {
+        assert_eq!(
+            executavel_do_icone(r#""C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe""#),
+            Some(PathBuf::from(r"C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe"))
+        );
+        assert_eq!(
+            executavel_do_icone(r"C:\Users\U\AppData\Local\FiveM\FiveM.exe,0"),
+            Some(PathBuf::from(r"C:\Users\U\AppData\Local\FiveM\FiveM.exe"))
+        );
+        assert_eq!(executavel_do_icone(r"C:\R\RobloxPlayerInstaller.exe,0"), None);
+        assert_eq!(executavel_do_icone(r"C:\x\jogo.ico"), None);
+    }
+
+    #[test]
+    fn jogo_visto_so_regrava_quando_muda() {
+        let mut l = Vec::new();
+        let exe = Path::new(r"C:\Jogos\X\x.exe");
+        assert!(anotar_visto(&mut l, "X", exe, 1_000));
+        assert!(!anotar_visto(&mut l, "X", exe, 1_500), "menos de uma hora: não regrava");
+        assert!(anotar_visto(&mut l, "X", exe, 1_000 + 3_600));
+        assert_eq!(l.len(), 1);
+        assert_eq!(l[0].vezes, 2);
+        assert!(anotar_visto(&mut l, "Y", Path::new(r"C:\Jogos\Y\y.exe"), 5_000));
+        assert_eq!(l.len(), 2);
+    }
+
+    #[test]
+    fn arquivo_de_vistos_ilegivel_e_erro_e_ausente_e_vazio() {
+        let dir = std::env::temp_dir().join(format!("otimiza-vistos-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        assert_eq!(ler_vistos_de(&dir.join("nao-existe.json")), Ok(Vec::new()));
+        let ruim = dir.join("ruim.json");
+        std::fs::write(&ruim, "{ quebrado").unwrap();
+        assert!(ler_vistos_de(&ruim).is_err());
+    }
 
     const LIBRARYFOLDERS: &str = r#"
 "libraryfolders"

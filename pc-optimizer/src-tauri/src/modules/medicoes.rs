@@ -40,6 +40,10 @@ pub struct MedicaoAutomatica {
     pub confiavel: bool,
     /// Quantas mudanças do Otimiza estavam aplicadas quando a medição foi feita.
     pub mudancas_aplicadas: usize,
+    /// Driver de vídeo e Windows daquele momento (2.9), para a deriva saber
+    /// o que mudou entre uma partida e outra. `None` em medição antiga.
+    #[serde(default)]
+    pub ambiente: Option<crate::modules::deriva::Ambiente>,
 
     // --- A DISTRIBUIÇÃO, E NÃO SÓ O RESUMO ---
     //
@@ -59,6 +63,18 @@ pub struct MedicaoAutomatica {
     pub frametime_p95_ms: Option<f64>,
     #[serde(default)]
     pub frametime_p99_ms: Option<f64>,
+    /// O QUE A PLACA FEZ NA MESMA JANELA (2.9).
+    ///
+    /// Temperatura, clock, potência e — o que importa — o percentual do tempo
+    /// em que o próprio driver disse estar segurando o clock, e por quê. Lido
+    /// pela NVML em processo, junto com os quadros.
+    ///
+    /// Antes disso a temperatura só era lida sob demanda, com o jogo fechado e
+    /// a placa já fria: o momento em que ela não diz nada. `None` em medição
+    /// antiga, e em máquina sem placa NVIDIA.
+    #[serde(default)]
+    pub placa: Option<crate::core::sensores::ResumoGpu>,
+
     /// Uso do processador DURANTE a mesma janela de medição.
     ///
     /// Medido em paralelo, pelos contadores do Windows. Vale porque só serve
@@ -246,8 +262,10 @@ mod tests {
             low_1pct: fps / 2.0,
             engasgos_por_minuto: 3.0,
             segundos: 20.0,
+            placa: None,
             confiavel: true,
             mudancas_aplicadas: 4,
+            ambiente: None,
             frametime_medio_ms: Some(16.7),
             frametime_p95_ms: Some(22.0),
             frametime_p99_ms: Some(31.0),

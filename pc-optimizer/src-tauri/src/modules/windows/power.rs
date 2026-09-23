@@ -36,72 +36,8 @@ pub fn set_active_scheme(guid: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// O nome dado à cópia, quando o Alto Desempenho não existe na máquina.
-///
-/// Existe para que a cópia seja REENCONTRADA na próxima execução. Sem nome
-/// nosso, cada tentativa criaria mais um plano chamado "Alto desempenho" e o
-/// cliente acabaria com uma lista deles.
-pub const NOME_DA_COPIA: &str = "OTIMIZA Alto Desempenho";
-
-/// O GUID do plano de alto desempenho desta máquina, SEM CRIAR NADA.
-///
-/// `None` quer dizer que ele não existe aqui — não que a leitura falhou; nesse
-/// caso a lista vem vazia e a resposta também é `None`, e quem chama trata as
-/// duas como "não sei se está satisfeito".
-pub fn alto_desempenho_existente() -> Option<String> {
-    use super::planoenergia;
-
-    let lista = shell::run_checked("powercfg", &["/list"]).ok()?;
-    let planos = planoenergia::planos_da_saida(&lista);
-
-    if planos.iter().any(|(g, _)| g == HIGH_PERFORMANCE_GUID) {
-        return Some(HIGH_PERFORMANCE_GUID.to_string());
-    }
-
-    planoenergia::achar_na_lista(&planos, NOME_DA_COPIA)
-}
-
-/// Garante que exista um plano de alto desempenho E DEVOLVE O GUID DELE.
-///
-/// ESTA FUNÇÃO DEVOLVIA `()`, E ESSE ERA O DEFEITO QUE MAIS DOÍA NO PC DO
-/// CLIENTE. Em notebook com Modern Standby e em imagem OEM enxuta o Alto
-/// Desempenho não existe. O código de antes chamava `-duplicatescheme`, que CRIA
-/// UMA CÓPIA COM GUID NOVO, jogava a resposta fora, e em seguida mandava ativar
-/// o GUID FIXO — que continua não existindo ali. Conferido nesta máquina: a
-/// duplicação respondeu `GUID do Esquema de Energia: 15a86c79-…`, diferente do
-/// pedido.
-///
-/// Resultado no cliente: a otimização falhava, e cada tentativa deixava mais um
-/// plano órfão para trás. Na máquina de desenvolvimento nada disso aparecia,
-/// porque aqui o Alto Desempenho existe.
-pub fn garantir_alto_desempenho() -> Result<String, String> {
-    if let Some(guid) = alto_desempenho_existente() {
-        return Ok(guid);
-    }
-
-    let saida = shell::run_checked("powercfg", &["-duplicatescheme", HIGH_PERFORMANCE_GUID])
-        .map_err(|e| {
-            format!(
-                "Este Windows não tem o plano Alto Desempenho e não deixou copiá-lo: {}",
-                e
-            )
-        })?;
-
-    let novo = parse_active_guid(&saida).ok_or_else(|| {
-        format!(
-            "O Windows copiou o plano mas não disse qual é o GUID dele. Resposta: {}",
-            saida.trim()
-        )
-    })?;
-
-    super::planoenergia::validar_guid_novo(&novo, HIGH_PERFORMANCE_GUID)?;
-
-    // O nome é o que reencontra a cópia na próxima execução.
-    shell::run_checked("powercfg", &["-changename", &novo, NOME_DA_COPIA, ""])
-        .map_err(|e| format!("O plano foi copiado mas não pôde ser nomeado: {}", e))?;
-
-    Ok(novo)
-}
+// `garantir_alto_desempenho` e a cópia "OTIMIZA Alto Desempenho" saíram na
+// 2.9: o modo jogo não liga mais plano fixo nenhum (ver `gamemode::ativar`).
 
 /// `None` é NÃO CONSEGUI LER, e não "desligada".
 ///

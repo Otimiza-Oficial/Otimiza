@@ -898,10 +898,56 @@
               <!-- Achados da mesma causa, que antes moravam em abas diferentes. -->
               <ul class="veredito-junto" id="veredito-junto" hidden></ul>
 
+              <!-- Desempenho perdido (2.9): há desempenho que o hardware deveria
+                   entregar e não entrega? P0 e P1 primeiro. -->
+              <div class="veredito-recuperacao" id="veredito-recuperacao" hidden></div>
+
               <!-- O que não deu para verificar. Nunca fica escondido: silêncio
                    aqui seria indistinguível de aprovação. -->
               <ul class="veredito-lacunas" id="veredito-lacunas" hidden></ul>
             </div>
+          </section>
+
+          <section class="panel" id="pronto-jogar-painel">
+            <header class="panel-head">
+              <h2>Pronto para jogar?</h2>
+              <p class="panel-sub">Monitor, limites de FPS escondidos, programas pesando e memória — medidos em 2 segundos.</p>
+            </header>
+            <div class="fg-linha"><button class="btn btn-primary" id="pronto-jogar" type="button">Verificar antes de jogar</button></div>
+            <div id="pronto-jogar-resultado"></div>
+          </section>
+
+          <!--
+            ÚLTIMAS PARTIDAS MEDIDAS (2.9). O Painel responde "como está a
+            máquina"; isto responde "e nos meus jogos?", com o que foi medido
+            sozinho durante as partidas. Sem partida medida, diz isso — e diz o
+            que falta ligar.
+          -->
+          <section class="panel" id="ultimas-partidas-painel">
+            <header class="panel-head">
+              <h2>Suas últimas partidas</h2>
+              <p class="panel-sub">O que o Otimiza mediu sozinho, por jogo.</p>
+            </header>
+            <div id="ultimas-partidas"></div>
+          </section>
+
+          <!--
+            O MAPA DE DESEMPENHO (2.9).
+
+            Mede o que limita o PC agora — processador, núcleo mais ocupado,
+            memória, disco, placa de vídeo e memória de vídeo — e, com um jogo
+            aberto, os quadros dele no mesmo intervalo. Aponta todos os
+            gargalos que se sustentaram, cada um com a evidência numérica.
+            Montado por `src/mapa.ts`.
+          -->
+          <section class="panel" id="mapa-desempenho-painel">
+            <header class="panel-head">
+              <h2>Mapa de desempenho</h2>
+              <p class="panel-sub">
+                O que está limitando este PC, medido — em qualquer jogo.
+              </p>
+            </header>
+            <div id="mapa-desempenho"></div>
           </section>
 
           <!--
@@ -943,6 +989,19 @@
             Fica DEPOIS das causas e fechado por padrão: quem veio resolver FPS
             baixo resolve primeiro, e quem veio comparar abre.
           -->
+<!--
+            O REGISTRO CENTRAL (2.9). O outro lado da recusa: tudo o que o
+            produto ALTERA, num lugar só, com risco, reinício e como se desfaz.
+            A lista sai do código (`registro.rs`), e um teste reprova a versão
+            se um módulo passar a escrever sem estar nela.
+          -->
+          <details class="panel" id="o-que-altera-painel">
+            <summary class="panel-head-resumo">
+              <h2>Tudo o que o Otimiza altera neste computador</h2>
+            </summary>
+            <div id="o-que-altera"></div>
+          </details>
+
           <details class="panel" id="nao-fazemos-painel">
             <summary class="panel-head-resumo">
               <h2>O que o Otimiza se recusa a fazer, e por quê</h2>
@@ -950,162 +1009,24 @@
             <div id="nao-fazemos"></div>
           </details>
 
-          <div class="grid grid-hero">
-            <section class="panel panel-hero">
-              <div class="panel-head">
-                <h2>Uso agora</h2>
-                <span class="panel-tag" id="tick-clock">—</span>
-              </div>
-
-              <div class="hero">
-                <div class="gauge">
-                  <svg viewBox="0 0 200 200" aria-hidden="true">
-                    <circle class="gauge-track" cx="100" cy="100" r="86" />
-                    <circle class="gauge-fill" id="gauge-cpu" cx="100" cy="100" r="86" />
-                  </svg>
-                  <div class="gauge-center">
-                    <span class="gauge-value" id="cpu-value">—</span>
-                    <span class="gauge-unit">% CPU</span>
-                    <span class="gauge-note" id="cpu-freq">—</span>
-                  </div>
-                </div>
-
-                <div class="readouts">
-                  <!--
-                    CLOCK EFETIVO, e não só o nominal.
-
-                    O nominal é o que o firmware anuncia. O efetivo é o que os
-                    núcleos entregaram no intervalo — e é a diferença entre os
-                    dois que mostra a CPU "a 4 GHz" passando o tempo esperando.
-                    Os dois números vêm dos contadores do Windows, os mesmos
-                    que o motor de energia usa para decidir se um plano fica.
-                  -->
-                  <div class="readout">
-                    <span class="readout-label">Clock efetivo</span>
-                    <span class="readout-value" id="clock-efetivo">—</span>
-                    <div class="bar"><i id="clock-bar"></i></div>
-                    <span class="readout-note" id="clock-note">—</span>
-                  </div>
-                  <!--
-                    PLACA DE VÍDEO.
-
-                    Lida de dez em dez segundos, e não a cada coleta: a
-                    consulta ao Windows custa mais de um segundo, e um monitor
-                    que pesa é um monitor que atrapalha o jogo que ele mede. A
-                    nota diz de quando é a leitura — número de dez segundos
-                    atrás apresentado como se fosse agora é a mesma mentira que
-                    um zero inventado.
-                  -->
-                  <div class="readout">
-                    <span class="readout-label">Placa de vídeo</span>
-                    <span class="readout-value" id="gpu-value">—</span>
-                    <div class="bar"><i id="gpu-bar"></i></div>
-                    <span class="readout-note" id="gpu-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Memória de vídeo</span>
-                    <span class="readout-value" id="vram-value">—</span>
-                    <div class="bar"><i id="vram-bar"></i></div>
-                    <span class="readout-note" id="vram-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Memória</span>
-                    <span class="readout-value" id="ram-value">—</span>
-                    <div class="bar"><i id="ram-bar"></i></div>
-                    <span class="readout-note" id="ram-note">—</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Disco</span>
-                    <span class="readout-value" id="disk-value">—</span>
-                    <div class="bar"><i id="disk-bar"></i></div>
-                    <span class="readout-note">espaço ocupado</span>
-                  </div>
-                  <div class="readout">
-                    <span class="readout-label">Rede recebida</span>
-                    <span class="readout-value" id="net-value">—</span>
-                    <div class="bar"><i id="net-bar" style="width: 0%"></i></div>
-                    <span class="readout-note">desde que o PC ligou</span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Quem está pesando agora</h2>
-                <span class="panel-tag">ao vivo</span>
-              </div>
-              <div id="process-list" class="process-list">
-                <p class="empty carregando">Medindo…</p>
-              </div>
-              <p class="core-legend">
-                Porcentagem da CPU total da máquina. O selo indica que o programa
-                volta sozinho no próximo boot.
-              </p>
-            </section>
-          </div>
-
-          <div class="grid grid-two">
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Carga por núcleo</h2>
-                <span class="panel-tag" id="core-count">—</span>
-              </div>
-              <div class="core-matrix" id="core-matrix"></div>
-              <p class="core-legend">
-                Cada barra é um núcleo lógico. Um núcleo saturado enquanto os
-                outros dormem é o que trava um jogo — e a média esconde isso.
-              </p>
-            </section>
-
-            <section class="panel">
-              <div class="panel-head">
-                <h2>Histórico de CPU</h2>
-                <span class="panel-tag">últimos 2 min</span>
-              </div>
-              <svg class="sparkline" id="cpu-history" viewBox="0 0 300 70" preserveAspectRatio="none">
-                <polyline id="cpu-history-line" fill="none" />
-                <polygon id="cpu-history-area" />
-              </svg>
-            </section>
-          </div>
-
+          <!--
+            Os painéis "Uso agora", "Carga por núcleo", "Histórico de CPU" e
+            "Movimento agora" saíram na 2.9: repetiam os vivos do topo e a matriz
+            da aba Núcleos. Fica a lista de quem está pesando — é o que diz O QUE
+            tirar do caminho do jogo.
+          -->
           <section class="panel">
             <div class="panel-head">
-              <h2>Movimento agora</h2>
-              <span class="panel-tag" id="flow-tag">ao vivo</span>
+              <h2>Quem está pesando agora</h2>
+              <span class="panel-tag">ao vivo</span>
             </div>
-
-            <p class="lead">
-              Em PC fraco, a maioria das travadas não é a CPU: é o disco ocupado
-              enquanto tudo espera. Aqui você vê o quanto está sendo lido e
-              gravado neste instante — se esse número fica alto com a máquina
-              parada, há algo trabalhando em segundo plano, e é isso que precisa
-              ser resolvido antes de qualquer ajuste.
+            <div id="process-list" class="process-list">
+              <p class="empty carregando">Medindo…</p>
+            </div>
+            <p class="core-legend">
+              Porcentagem da CPU total da máquina. O selo indica que o programa
+              volta sozinho no próximo boot.
             </p>
-
-            <div class="readouts readouts-row">
-              <div class="readout">
-                <span class="readout-label">Disco lendo</span>
-                <span class="readout-value" id="flow-read">—</span>
-                <span class="readout-note">agora</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Disco gravando</span>
-                <span class="readout-value" id="flow-write">—</span>
-                <span class="readout-note">agora</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Rede</span>
-                <span class="readout-value" id="flow-net">—</span>
-                <span class="readout-note">baixando · enviando</span>
-              </div>
-              <div class="readout">
-                <span class="readout-label">Ligado há</span>
-                <span class="readout-value" id="flow-uptime">—</span>
-                <span class="readout-note" id="flow-uptime-note">desde o último boot</span>
-              </div>
-            </div>
           </section>
 
           <!--
@@ -1644,6 +1565,17 @@
                 <h2>Catálogo</h2>
                 <span class="panel-tag">por categoria</span>
               </div>
+              <!--
+                MODO EXPERT (2.9). O Simples mostra o que vale para esta máquina.
+                O Expert acrescenta o que pode render numa máquina e custar em
+                outra (agendamento de GPU, MSI, VBS, indexação) — sempre um a
+                um, nunca em lote. Qualquer elemento com data-so-expert segue
+                a mesma chave.
+              -->
+              <label class="modo-expert">
+                <input type="checkbox" id="modo-expert" />
+                <span><strong>Modo Expert</strong> — mostra os ajustes que dependem da máquina e pedem teste antes e depois.</span>
+              </label>
               <div class="filters" id="filters"></div>
 
               <!-- Busca: com 35 itens, rolar a lista atrás de um nome específico
@@ -1777,7 +1709,7 @@
 
 <section class="panel">
             <div class="panel-head">
-              <h2>Por que o processador não entrega tudo</h2>
+              <h2>Temperatura e limites: processador e placa de vídeo</h2>
               <span class="panel-tag" id="thermal-tag">—</span>
             </div>
 
@@ -1794,40 +1726,47 @@
 
             <button id="analyze-thermal" class="btn" data-custo="~5 s">Analisar</button>
             <p id="thermal-status" class="status"></p>
-            <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador está sendo limitado, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Cerca de 5 segundos, e não altera nada."></div>
+            <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador ou a placa de vídeo estão sendo limitados, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Com o jogo aberto a leitura da placa diz mais. Cerca de 5 segundos, e não altera nada."></div>
           </section>
-
-<section class="panel">
+          <!--
+            MSI POR DISPOSITIVO (2.9, modo Expert). Só leitura: ligar MSI num
+            dispositivo cujo driver não aguenta trava o boot, e aí não há como
+            desfazer pelo Otimiza. A escrita continua só na placa de vídeo, no
+            item próprio do catálogo.
+          -->
+          <section class="panel" data-so-expert hidden>
             <div class="panel-head">
-              <h2>Rede e DNS</h2>
-              <span class="panel-tag" id="net-tag">—</span>
+              <h2>Interrupções por dispositivo (MSI)</h2>
+              <span class="panel-tag">Expert · só leitura</span>
             </div>
-
             <p class="lead">
-              Esta é a área com mais promessa falsa do mercado, então vamos
-              começar pelo que <strong>não</strong> é possível: nenhum ajuste no
-              seu PC reduz o ping. Ping é distância física mais roteamento —
-              quem promete encurtar isso com um botão está vendendo o que não
-              existe.
+              Como cada dispositivo avisa o processador: por mensagem (MSI) ou
+              pela linha compartilhada antiga. O Otimiza só muda isto na placa
+              de vídeo — em outro dispositivo, um driver que não aguenta MSI
+              impede o Windows de ligar, e aí não há desfazer.
             </p>
-
-            <p class="hint">
-              O que existe de verdade: trocar o servidor de DNS acelera achar o
-              endereço de um site, o que aparece em carregar página, abrir lista
-              de servidores e começar um download. Em vez de afirmar que um DNS
-              é mais rápido, aqui a gente <strong>mede</strong> — faz consultas
-              reais a cada um e mostra os tempos lado a lado. Se o que você já
-              usa for o melhor, é isso que vai aparecer.
-            </p>
-
-            <div class="row-actions">
-              <button id="analyze-network" class="btn" data-custo="~8 s">Analisar</button>
-              <button id="flush-dns" class="btn">Limpar cache de nomes</button>
-            </div>
-
-            <p id="net-status" class="status"></p>
-            <div id="net-result" class="resultado" data-vazio="Mede o tempo de resposta dos servidores de nome, resolvendo domínios reais três vezes cada. Cerca de 8 segundos, usa a rede, e não altera nada."></div>
+            <button id="msi-ler" class="btn" data-custo="~1 s">Ler dispositivos</button>
+            <div id="msi-resultado" class="resultado" data-vazio="Lista cada dispositivo PCI com driver e como ele avisa o processador: por mensagem (MSI) ou pela linha compartilhada. Só leitura."></div>
           </section>
+
+          <!-- DPC E INTERRUPÇÕES (2.9, modo Expert). Só leitura. -->
+          <section class="panel" data-so-expert hidden>
+            <div class="panel-head">
+              <h2>Drivers prendendo o processador (DPC)</h2>
+              <span class="panel-tag">Expert · só leitura</span>
+            </div>
+            <p class="lead">
+              Driver mal escrito prende um núcleo atendendo interrupção, e o que se
+              sente é engasgo e som estalando com FPS médio normal. Isto mede, por 10
+              segundos, quanto de cada núcleo foi para DPC e interrupção. Diz qual
+              núcleo e quanto — não diz qual driver: isso exige rastreamento do kernel,
+              que o Otimiza ainda não faz. Meça com o jogo aberto para valer.
+            </p>
+            <button id="dpc-medir" class="btn" data-custo="~10 s">Medir 10 s</button>
+            <div id="dpc-resultado" class="resultado" data-vazio="Mostra, núcleo por núcleo, quanto do tempo foi para DPC e interrupção durante a medição. Diz qual núcleo, não qual driver. Só leitura."></div>
+          </section>
+
+<!-- Rede e DNS: retirado na 2.9. DNS não participa dos pacotes da partida — não muda ping nem FPS. Ver naofazemos.rs (dns_para_ping). -->
 
 <section class="panel">
             <div class="panel-head">
@@ -1997,7 +1936,10 @@
               símbolo decorativo, e sem número que não tenha sido medido.
             </p>
 
-            <button id="export-report" class="btn btn-primary">Gerar relatório em PDF</button>
+            <div class="actions">
+              <button id="export-report" class="btn btn-primary">Gerar relatório em PDF</button>
+              <button id="exportar-alteracoes" class="btn btn-ghost" title="Uma linha por alteração: data, ajuste, valor de antes e valor novo">Exportar alterações (planilha)</button>
+            </div>
             <p id="report-status" class="status"></p>
           </section>
 
@@ -2063,7 +2005,6 @@
 
             <div class="row-actions">
               <button id="scan-disk" class="btn" data-custo="~10 s">Analisar</button>
-              <button id="empty-recycle" class="btn">Esvaziar Lixeira</button>
             </div>
 
             <p id="disk-status" class="status"></p>
@@ -2167,18 +2108,24 @@
             fica em cima, antes de qualquer coisa, e diz qual metade é qual.
           -->
           <div class="aviso-breve" role="note">
-            <span class="aviso-breve-selo">Em breve</span>
+            <span class="aviso-breve-selo">Como funciona</span>
             <p class="aviso-breve-texto">
-              Esta aba ainda não está pronta. O que já funciona aqui é
-              <strong>encontrar e reconhecer os seus jogos</strong> — o que
-              está instalado, onde está e em qual disco. O que ainda não
-              funciona é o ajuste <strong>dentro</strong> de cada jogo: por
-              enquanto o produto só sabe mexer na configuração de GTA V e
-              FiveM, e para os outros títulos a ficha é só informação. Nesta
-              versão fica assim, de propósito, em vez de mostrar botão que não
-              faz o que promete.
+              O ajuste <strong>dentro</strong> do jogo já funciona em GTA V,
+              FiveM e nos jogos em Unreal Engine (Fortnite, Valorant, PUBG e
+              outros) — abra a ficha do jogo. Nos outros títulos a ficha
+              oferece a placa de vídeo certa, e o resto do Otimiza (energia,
+              modo jogo, Mapa de desempenho) vale para qualquer jogo. Todo
+              ajuste de jogo fica em observação: se as partidas depois dele
+              ficarem piores, ele é desfeito sozinho.
             </p>
           </div>
+
+          <!--
+            "Pronto para jogar?" mudou para o Painel na 2.9: ele olha a MÁQUINA
+            (monitor, limites escondidos, memória, programas pesando), não um
+            jogo. Duas cópias da mesma verificação era o que a auditoria achou
+            em outros quatro lugares.
+          -->
 
           <section class="panel" id="biblioteca-painel">
             <div class="panel-head">
@@ -2271,6 +2218,18 @@
             </div>
 
             <p id="nucleos-status" class="status"></p>
+
+            <!--
+              AUTO CPU SET (2.9). Não se sabe de antemão se o jogo rende mais
+              só nos núcleos de desempenho ou em todos: o teste mede os dois,
+              alternando, e fica com o que rendeu. Empate volta para todos.
+              A escolha fica guardada e é reaplicada quando o jogo abrir.
+            -->
+            <div class="row-actions">
+              <button id="cpuset-testar" class="btn" data-custo="~1 min" disabled>Testar e decidir (1 minuto)</button>
+            </div>
+            <p class="hint">Com o jogo aberto e em partida: mede 10 segundos em todos os núcleos e 10 só nos de desempenho, três vezes cada. Fica nos de desempenho só se o FPS ou o 1% piores melhorarem de verdade sem nenhum dos dois piorar. Precisa do Otimiza como administrador.</p>
+            <div id="cpuset-resultados"></div>
           </section>
         </section>
 
@@ -2411,9 +2370,10 @@
             <div class="nvlimite" id="nvlimite" hidden>
               <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
               <p class="panel-note" id="nvlimite-nota">
-                Com o jogo aberto, escolha o limite e clique em Limitar. Em RP,
-                quadro estável é sentido como fluidez e a placa trabalha menos;
-                em jogo competitivo, limitar acrescenta atraso.
+                O Otimiza nunca limita o FPS sozinho: todo limite baixa o FPS
+                médio. Use só se você quer a placa mais fria e silenciosa, ou um
+                número estável num jogo que oscila muito — com o jogo aberto,
+                escolha o limite e clique em Limitar.
               </p>
               <div id="nvlimite-lista"></div>
               <div class="row-actions">
@@ -2620,6 +2580,7 @@
               <dl class="placa-dados">
                 <div><dt>Driver</dt><dd id="placa-driver">—</dd></div>
                 <div><dt>Publicado</dt><dd id="placa-driver-idade">—</dd></div>
+                <div><dt>Origem</dt><dd id="placa-driver-origem">—</dd></div>
                 <div><dt>Memória de vídeo</dt><dd id="placa-vram">—</dd></div>
               </dl>
 
@@ -2628,6 +2589,16 @@
                 escolha manual deixa de ser trabalho inútil e passa a ser a
                 única saída.
               -->
+              <!--
+                DRIVER (2.9). Sem "mais novo é mais rápido": driver novo às
+                vezes melhora um jogo e piora outro. O Otimiza mostra o que
+                está instalado, avisa quando é o genérico do Windows (aí muda
+                FPS de verdade) e aponta a página do fabricante. Não instala
+                nada: instalador de terceiros não tem desfazer confiável.
+              -->
+              <p class="hint" id="placa-driver-nota"></p>
+              <div class="row-actions"><button class="btn btn-ghost" id="placa-driver-site" hidden>Página de drivers do fabricante</button></div>
+
               <div class="placa-escolha" id="placa-escolha" hidden>
                 <p class="hint">Não consegui ler a sua placa. Qual delas é?</p>
                 <div class="row-actions">
@@ -2729,7 +2700,7 @@
               <button id="cfgjogo-plano" class="btn" data-custo="~3 s">Qual o meu caso pede?</button>
               <button id="cfgjogo-sem-teto" class="btn btn-primary">Tirar o limite de FPS</button>
               <button id="cfgjogo-equilibrado" class="btn">Equilibrado</button>
-              <button id="cfgjogo-competitivo" class="btn">Competitivo</button>
+              <button id="cfgjogo-competitivo" class="btn">Máximo de FPS</button>
             </div>
 
             <div id="cfgjogo-plano-result"></div>
@@ -2858,7 +2829,6 @@
 
             <div class="row-actions">
               <button id="analyze-fivem" class="btn" data-custo="~15 s">Analisar</button>
-              <button id="prioritize-fivem" class="btn">Priorizar o jogo</button>
             </div>
 
             <p id="fivem-status" class="status"></p>
@@ -2907,26 +2877,19 @@
 
           <section class="panel">
             <div class="panel-head">
-              <h2>Prioridade fixa do jogo</h2>
+              <h2>Prioridade fixa do jogo — retirada</h2>
               <span class="panel-tag" id="prio-tag">—</span>
             </div>
 
             <p class="lead">
-              O botão "Priorizar o jogo" acima vale só para a sessão: quando o
-              jogo fecha, a prioridade some. Aqui ela é fixada de vez — o Windows
-              passa a criar o processo já em prioridade alta, em toda abertura.
-            </p>
-
-            <p class="hint">
-              <strong>Uma ressalva importante:</strong> o ajuste é por nome de
-              arquivo, e o processo do FiveM carrega o número da compilação. Ao
-              atualizar o FiveM o nome muda, e isto precisa ser aplicado de novo.
-              É reversível e entra no histórico como qualquer outra mudança.
+              Fixar o jogo em prioridade alta foi retirado na 2.9: prioridade só
+              muda alguma coisa quando há disputa real de processador, e nas
+              medições não mostrou ganho. Se você fixou numa versão anterior,
+              remova aqui com o jogo aberto.
             </p>
 
             <div class="row-actions">
-              <button id="fix-priority" class="btn btn-primary">Fixar prioridade do jogo aberto</button>
-              <button id="unfix-priority" class="btn">Remover</button>
+              <button id="unfix-priority" class="btn">Remover a prioridade fixada</button>
             </div>
 
             <p id="prio-status" class="status"></p>
@@ -3039,16 +3002,19 @@
             </div>
 
             <p class="lead">
-              Liga o plano de alto desempenho quando um jogo abre e
-              <strong>desliga quando ele fecha</strong>. Essa segunda metade é o
-              ponto: deixar a máquina em desempenho máximo o dia inteiro por
-              causa de duas horas de jogo à noite gasta bateria e esquenta o
-              notebook à toa. Aplicar só na hora que importa entrega o mesmo
-              ganho sem cobrar o resto do dia.
+              Enquanto um jogo está aberto, todo programa em segundo plano que
+              está <strong>usando processador de verdade</strong> — atualizador,
+              sincronização de nuvem, navegador, launcher baixando — passa a rodar
+              em prioridade baixa e no modo econômico do Windows. Ele continua
+              funcionando, só para de disputar com o jogo; isso ataca travada e
+              1% low ruim. Quando o jogo fecha, <strong>tudo volta ao que era</strong>.
+              Voz (Discord), transmissão (OBS), áudio, anticheats e o próprio jogo
+              nunca são tocados. A energia do jogo fica com o motor de energia
+              (aba Energia), que usa o perfil medido para cada jogo.
             </p>
 
             <p class="hint">
-              <strong>Não fechamos nenhum programa.</strong> "Encerrar processos
+              <strong>Não fechamos nem congelamos nenhum programa.</strong> "Encerrar processos
               desnecessários" é a forma mais rápida de alguém perder trabalho não
               salvo. O que pesa em segundo plano já está listado nas abas Painel
               e Sistema, com nome, para você decidir.
@@ -3058,8 +3024,8 @@
               O modo automático vem <strong>desligado</strong> e fica na aba
               Sistema, em Preferências. Um programa que muda a configuração do
               seu PC sozinho, sem você pedir, é justamente o que criticamos nos
-              outros — mesmo quando a mudança é boa. Tudo o que ele faz entra no
-              histórico e volta com "Desfazer tudo".
+              outros — mesmo quando a mudança é boa. Se o Otimiza fechar no meio
+              da partida, a próxima abertura devolve os programas ao normal.
             </p>
 
             <div class="row-actions">

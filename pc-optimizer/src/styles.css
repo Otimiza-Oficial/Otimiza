@@ -2506,6 +2506,22 @@ button {
   background: var(--panel-raised);
 }
 
+.modo-expert {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.modo-expert input {
+  margin-top: 3px;
+}
+.modo-expert strong {
+  color: var(--text);
+}
+
 .search {
   position: relative;
   margin-bottom: var(--s3);
@@ -5477,6 +5493,26 @@ circle.placa-parafuso {
 @keyframes en-vai { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .sem-animacao .en-indeterminada { animation: none; width: 100% !important; opacity: .4; }
 
+/* ============================================================ Mapa de desempenho (2.9) */
+.mapa-fluxo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s2); }
+.mapa-no { display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline-strong); min-width: 0; }
+.mapa-no span { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--text-muted); }
+.mapa-no b { font-family: var(--font-mono); font-size: 18px; }
+.mapa-no em { font-style: normal; font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
+.mapa-no[data-preso="true"] { background: var(--text); color: var(--panel); box-shadow: none; }
+.mapa-no[data-preso="true"] span, .mapa-no[data-preso="true"] em { color: var(--panel); opacity: .75; }
+.mapa-gargalo { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r2); box-shadow: inset 3px 0 0 var(--text), inset 0 0 0 1px var(--hairline); }
+.mapa-gargalo header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.mapa-gargalo p { margin: 0; line-height: 1.5; color: var(--text-dim); font-size: 13px; }
+
+/* ============================================================ Seus jogos (2.9) */
+.bib-jogo { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); }
+.bib-jogo > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
+.bib-jogo > header > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bib-jogo > header b { font-size: 14px; overflow-wrap: anywhere; }
+.bib-previa:empty { display: none; }
+.bib-previa { display: flex; flex-direction: column; gap: var(--s2); }
+.fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 /* ===================================================== PAINEL DE EVIDÊNCIA
 
    De onde veio cada número. O painel existe para mostrar o que o produto NÃO

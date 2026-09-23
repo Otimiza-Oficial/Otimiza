@@ -42,6 +42,95 @@ pub struct Veredito {
     pub achados: Vec<Achado>,
     /// O que não deu para verificar. Nunca fica escondido.
     pub lacunas: Vec<Lacuna>,
+    /// O relatório de desempenho perdido (2.9): há desempenho que o hardware
+    /// deveria entregar e não entrega? Com prioridade por achado.
+    pub recuperacao: Recuperacao,
+}
+
+// ------------------------------------------------- desempenho perdido (2.9)
+
+/// Prioridade de um problema. Sempre resolver P0 e P1 primeiro.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Prioridade {
+    /// Erro de configuração crítico: a máquina está entregando muito menos do
+    /// que deveria por um motivo que se corrige (boot limitado, paginação
+    /// desligada, disco morrendo).
+    P0,
+    /// Oportunidade grande: memória sem XMP ou em canal único, configuração
+    /// de jogo pesada, falta de memória registrada.
+    P1,
+    /// Oportunidade moderada.
+    P2,
+    /// Pequena ou deduzida só de configuração.
+    P3,
+}
+
+/// Ids que são erro crítico de configuração, independente do resto.
+const P0: &[&str] = &["boot_limits_present", "pagefile_off", "windows_registrou_esgotamento"];
+/// Ids que são oportunidade grande quando aparecem.
+const P1: &[&str] = &[
+    "memory_xmp_off",
+    "memory_single_channel",
+    "config_do_jogo_pesada",
+    "low_ram",
+    "memoria_esgotada_historico",
+    "pressao_recorrente",
+    "sustained_decay",
+    "teto_no_plano_de_energia",
+];
+
+/// A prioridade de um achado. `None` para o que está certo. **Pura.**
+pub fn prioridade(a: &Achado) -> Option<Prioridade> {
+    if a.severity == FindingSeverity::Ok {
+        return None;
+    }
+    // Disco com falha é P0 pelo risco de perder arquivo, antes de desempenho.
+    if P0.contains(&a.id.as_str()) || (a.causa == Causa::Armazenamento && a.severity == FindingSeverity::Critical && a.id.starts_with("disk_")) {
+        return Some(Prioridade::P0);
+    }
+    if P1.contains(&a.id.as_str()) || a.severity == FindingSeverity::Critical {
+        return Some(Prioridade::P1);
+    }
+    Some(if a.confianca == Confianca::Inferido { Prioridade::P3 } else { Prioridade::P2 })
+}
+
+/// Há desempenho perdido nesta máquina?
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Perdido {
+    /// Pelo menos um P0/P1 sustentado por medição, histórico ou declaração.
+    Sim,
+    /// Nada de P0/P1, e nada que deixou de ser verificado.
+    Nao,
+    /// Só há suspeita deduzida de configuração, ou faltou verificar coisas.
+    Incerto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recuperacao {
+    pub perdido: Perdido,
+    /// (id do achado, prioridade), na ordem em que resolver.
+    pub itens: Vec<(String, Prioridade)>,
+}
+
+/// Monta o relatório. **Pura.**
+pub fn recuperacao(achados: &[Achado], lacunas: &[Lacuna]) -> Recuperacao {
+    let mut itens: Vec<(String, Prioridade, u8)> = achados
+        .iter()
+        .filter_map(|a| prioridade(a).map(|p| (a.id.clone(), p, peso_confianca(a.confianca))))
+        .collect();
+    itens.sort_by_key(|(_, p, c)| (*p, *c));
+    let forte = achados.iter().any(|a| {
+        matches!(prioridade(a), Some(Prioridade::P0 | Prioridade::P1)) && a.confianca != Confianca::Inferido
+    });
+    let fraco = itens.iter().any(|(_, p, _)| *p <= Prioridade::P1);
+    let perdido = if forte {
+        Perdido::Sim
+    } else if fraco || !lacunas.is_empty() {
+        Perdido::Incerto
+    } else {
+        Perdido::Nao
+    };
+    Recuperacao { perdido, itens: itens.into_iter().map(|(id, p, _)| (id, p)).collect() }
 }
 
 // ------------------------------------------------------------------ eleição
@@ -102,6 +191,7 @@ pub fn veredito(achados: &[Achado], lacunas: &[Lacuna]) -> Veredito {
         ),
     };
 
+    let recuperacao = recuperacao(&ordenados, lacunas);
     Veredito {
         frase,
         detalhe,
@@ -109,6 +199,7 @@ pub fn veredito(achados: &[Achado], lacunas: &[Lacuna]) -> Veredito {
         corroboracoes,
         achados: ordenados,
         lacunas: lacunas.to_vec(),
+        recuperacao,
     }
 }
 
@@ -272,8 +363,8 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
         // que mais aparece" — e mandava o cliente para a aba Otimizacoes.
         (Origem::Termico, "teto_no_plano_de_energia") => (
             "apply_optimization",
-            Some("power_high_performance"),
-            "Aplicar o plano de alto desempenho",
+            Some("plano_otimiza"),
+            "Aplicar o plano de energia do Otimiza",
             true,
         ),
 
@@ -289,8 +380,8 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
         // Plano de energia de terceiro — mesma cura do teto no plano.
         (Origem::Prontidao, "plano_de_terceiro") => (
             "apply_optimization",
-            Some("power_high_performance"),
-            "Voltar para o plano de alto desempenho",
+            Some("plano_otimiza"),
+            "Aplicar o plano de energia do Otimiza",
             true,
         ),
 
@@ -308,13 +399,6 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             "fix_readiness",
             Some("trim"),
             "Ligar o TRIM do SSD",
-            true,
-        ),
-
-        (Origem::Prontidao, "plano_maximo") => (
-            "fix_readiness",
-            Some("plano_maximo"),
-            "Criar o plano de desempenho máximo",
             true,
         ),
 
@@ -1386,6 +1470,47 @@ mod tests {
         )
     }
 
+    #[test]
+    fn todo_botao_de_conserto_aponta_para_otimizacao_que_existe() {
+        // A 2.7 tinha dois botões chamando "power_high_performance", id que
+        // não existia no catálogo: o clique dava erro. Esta trava varre todas
+        // as origens com os ids que têm botão.
+        let casos = [
+            (Origem::Termico, "teto_no_plano_de_energia"),
+            (Origem::Firmware, "boot_limits_present"),
+            (Origem::Prontidao, "plano_de_terceiro"),
+        ];
+        for (origem, id) in casos {
+            let acao = acao_de(origem, id).expect("tem botão");
+            if acao.comando == "apply_optimization" {
+                let alvo = acao.argumento.as_deref().unwrap();
+                let spec = crate::modules::windows::catalog::find(alvo)
+                    .unwrap_or_else(|| panic!("`{}` aponta para `{}`, que não existe no catálogo", id, alvo));
+                assert!(!crate::modules::windows::catalog::retirado(spec.id), "`{}` aponta para item retirado", id);
+            }
+        }
+    }
+
+    #[test]
+    fn prioridade_e_desempenho_perdido() {
+        let boot = achado("boot_limits_present", Origem::Firmware, FindingSeverity::Critical, FixLocation::Software);
+        let xmp = achado("memory_xmp_off", Origem::Firmware, FindingSeverity::Important, FixLocation::Bios);
+        let ok = achado("memory_dual_channel", Origem::Firmware, FindingSeverity::Ok, FixLocation::None);
+        assert_eq!(prioridade(&boot), Some(Prioridade::P0));
+        assert_eq!(prioridade(&xmp), Some(Prioridade::P1));
+        assert_eq!(prioridade(&ok), None);
+
+        // Boot limitado é medido: desempenho perdido = sim, e ele vem primeiro.
+        let r = recuperacao(&[xmp.clone(), boot.clone(), ok.clone()], &[]);
+        assert_eq!(r.perdido, Perdido::Sim);
+        assert_eq!(r.itens[0], ("boot_limits_present".to_string(), Prioridade::P0));
+
+        // Só o XMP (deduzido de configuração, sem medir efeito): incerto.
+        assert_eq!(recuperacao(&[xmp, ok.clone()], &[]).perdido, Perdido::Incerto);
+        // Tudo certo e nada deixou de ser verificado: não.
+        assert_eq!(recuperacao(&[ok], &[]).perdido, Perdido::Nao);
+    }
+
     /// O caso que motivou este arquivo inteiro.
     ///
     /// Máquina do dono, 12/08/2026: 7,9 GB num único pente, 9,5 GB prometidos,
@@ -1621,6 +1746,7 @@ mod tests {
 
         println!("\n  VEREDITO: {}", v.frase);
         println!("  {}", v.detalhe);
+        println!("  DESEMPENHO PERDIDO: {:?} {:?}", v.recuperacao.perdido, v.recuperacao.itens);
         for c in &v.corroboracoes {
             println!("    junto: {} — {}", c.title, c.measured);
         }
