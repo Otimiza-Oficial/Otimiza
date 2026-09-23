@@ -105,6 +105,18 @@ export default function ComprarPage() {
           </div>
 
           <p className="mt-8 text-[12.5px] text-subtle">
+            Ao comprar você concorda com os{" "}
+            <SmartLink href="/termos/" className="font-medium text-fg underline underline-offset-2">
+              termos de uso
+            </SmartLink>{" "}
+            e com a{" "}
+            <SmartLink href="/privacidade/" className="font-medium text-fg underline underline-offset-2">
+              política de privacidade
+            </SmartLink>
+            . Sete dias para desistir, contados do pagamento.
+          </p>
+
+          <p className="mt-3 text-[12.5px] text-subtle">
             Antes de comprar, instale e meça: o download é grátis e mostra o que a sua máquina tem.{" "}
             <SmartLink href={links.baixar} className="font-medium text-fg underline underline-offset-2">
               Baixar o Otimiza
