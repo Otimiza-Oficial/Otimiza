@@ -711,13 +711,26 @@ mod tests {
     }
 
     #[test]
-    fn desligar_sem_ter_ligado_e_recusado() {
-        let mut log = ChangeLog::load();
+    fn desligar_sem_ter_ligado_nao_falha_e_nao_mexe_em_nada() {
+        // ATÉ A 2.8 ISTO ERA UMA RECUSA, e a 2.9 mudou de propósito: o modo
+        // jogo agora é o governador, que pode estar ligado sem entrada nenhuma
+        // no histórico. Desligar precisa funcionar nesse caso — recusar
+        // deixaria programas acalmados sem caminho de volta.
+        //
+        // O teste antigo lia o histórico DESTA máquina e só conferia quando o
+        // modo não estava aplicado. No PC de quem desenvolve estava, a
+        // conferência nunca rodava, e o teste ficou verde por acaso enquanto
+        // afirmava o comportamento velho. Na esteira, com histórico vazio,
+        // ele rodou — e derrubou a publicação da 2.9.0.
+        //
+        // Histórico em memória: o resultado não depende de máquina nenhuma.
+        let mut log = ChangeLog::em_memoria();
 
-        if !log.is_applied(ID) {
-            let erro = desativar(&mut log).unwrap_err();
-            assert!(erro.contains("não está aplicado"));
-        }
+        let resposta = desativar(&mut log).expect("desligar sem ter ligado não pode falhar");
+
+        assert!(resposta.starts_with("Modo jogo desligado"), "{resposta}");
+        assert!(!resposta.contains("plano de energia"), "não havia plano para devolver: {resposta}");
+        assert!(!log.is_applied(ID));
     }
 
     #[test]
