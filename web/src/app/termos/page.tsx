@@ -18,7 +18,7 @@ export default function TermosPage() {
     >
       <Secao titulo="Quem vende">
         <p>
-          O Otimiza é vendido por {REVISAR} (nome empresarial), inscrito sob {REVISAR} (CNPJ ou CPF), com contato em{" "}
+          O Otimiza é vendido por {REVISAR} (nome completo do vendedor), CPF 100.492.689-88, com contato em{" "}
           {REVISAR} (e-mail) e atendimento no{" "}
           <SmartLink href={links.discord} className="font-medium text-fg underline underline-offset-2">
             Discord

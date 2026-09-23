@@ -18,7 +18,7 @@ export default function PrivacidadePage() {
     >
       <Secao titulo="Quem responde pelos dados">
         <p>
-          O controlador é {REVISAR} (nome empresarial), {REVISAR} (CNPJ ou CPF). Para exercer qualquer direito desta
+          O controlador é {REVISAR} (nome completo do vendedor), CPF 100.492.689-88. Para exercer qualquer direito desta
           página, escreva para {REVISAR} (e-mail) ou fale no{" "}
           <SmartLink href={links.discord} className="font-medium text-fg underline underline-offset-2">
             Discord
