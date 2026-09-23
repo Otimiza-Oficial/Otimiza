@@ -33,7 +33,7 @@ export const site = {
    * prefere a versão que vem da API de releases e só cai neste valor quando a
    * leitura falha.
    */
-  versao: "2.8.0",
+  versao: "2.9.0",
 } as const;
 
 export const links = {
