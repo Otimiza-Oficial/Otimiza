@@ -20,7 +20,73 @@ import { invoke } from "@tauri-apps/api/core";
 type Origem = "Steam" | "Epic" | "Windows" | "Instalado" | "Detectado";
 type Orcamento = "MaxFps" | "Equilibrado" | "Qualidade";
 
-type Medicao = { jogo: string; quando: number; fps: number; low_1pct: number; engasgos_por_minuto: number; confiavel: boolean };
+type Medicao = {
+  jogo: string;
+  quando: number;
+  fps: number;
+  low_1pct: number;
+  engasgos_por_minuto: number;
+  confiavel: boolean;
+  /** O que a placa fez NA MESMA janela medida (2.9). */
+  placa?: ResumoGpu | null;
+};
+
+type ResumoGpu = {
+  amostras: number;
+  temperatura_max_c: number | null;
+  temperatura_media_c: number | null;
+  clock_medio_mhz: number | null;
+  potencia_media_w: number | null;
+  limite_w: number | null;
+  uso_medio_pct: number | null;
+  pct_termico: number;
+  pct_teto_de_energia: number;
+  pct_freio_de_hardware: number;
+  motivos_lidos: boolean;
+};
+
+/*
+ * A PLACA DURANTE A PARTIDA.
+ *
+ * O número que interessa não é a temperatura: é quanto do tempo o DRIVER disse
+ * que estava segurando o clock, e por quê. Temperatura alta com o clock cheio
+ * é uma placa trabalhando; 70 °C segurando o clock metade da partida é um
+ * problema que nenhum ajuste de Windows resolve.
+ *
+ * Os limiares moram no Rust (`core::sensores`), e são os mesmos do veredito —
+ * a tela não inventa piso próprio.
+ */
+function linhaDaPlaca(m: Medicao | null): string {
+  const p = m?.placa;
+  if (!p || !p.amostras) return "";
+
+  const numeros = [
+    p.temperatura_max_c !== null ? `máx. ${Math.round(p.temperatura_max_c)} °C` : null,
+    p.clock_medio_mhz !== null ? `${Math.round(p.clock_medio_mhz)} MHz` : null,
+    p.potencia_media_w !== null
+      ? `${Math.round(p.potencia_media_w)} W${p.limite_w !== null ? ` de ${Math.round(p.limite_w)} W` : ""}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  if (!p.motivos_lidos) {
+    return `<p class="fg-nota"><strong>Placa na partida:</strong> ${esc(numeros)}. O driver não informou se estava segurando o clock nesta máquina.</p>`;
+  }
+
+  const pct = (v: number) => `${v.toFixed(0)}%`;
+
+  if (p.pct_termico >= 5) {
+    return `<p class="fg-aviso"><strong>A placa foi limitada por temperatura em ${pct(p.pct_termico)} desta partida</strong> (${esc(numeros)}). Isso é físico: limpe a poeira, confira as ventoinhas e o fluxo de ar do gabinete. Nenhum ajuste de Windows resolve isso.</p>`;
+  }
+  if (p.pct_freio_de_hardware >= 5) {
+    return `<p class="fg-aviso"><strong>A placa acionou o freio de hardware em ${pct(p.pct_freio_de_hardware)} desta partida</strong> (${esc(numeros)}). Costuma ser a fonte, o conector de energia da placa ou a proteção térmica dela.</p>`;
+  }
+  if (p.pct_teto_de_energia >= 60) {
+    return `<p class="fg-nota"><strong>Placa na partida:</strong> ${esc(numeros)}. Ela passou ${pct(p.pct_teto_de_energia)} do tempo no teto de energia — é o funcionamento normal de uma placa em carga máxima, não defeito.</p>`;
+  }
+  return `<p class="fg-nota"><strong>Placa na partida:</strong> ${esc(numeros)}. Nada segurou o clock além do normal.</p>`;
+}
 
 type Jogo = {
   nome: string;
@@ -354,6 +420,7 @@ function linhaDoJogo(j: Jogo, i: number, nvidia: boolean): string {
       </header>
       <div class="fg-linha">${med}</div>
       ${acao}
+      ${linhaDaPlaca(j.ultima_medicao)}
       ${linhaDoPortao(j)}
       ${linhaDaDeriva(j)}
       ${nvidia ? blocoNvidia(j, i) : ""}

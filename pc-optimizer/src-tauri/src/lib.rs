@@ -617,6 +617,22 @@ pub fn run() {
                             use std::sync::atomic::Ordering;
                             let contadores = modules::windows::placa::Contadores::novo()?;
                             let mut gpu: Vec<f64> = Vec::new();
+                            // OS SENSORES DA PLACA, NA MESMA JANELA (2.9).
+                            //
+                            // Temperatura, clock, potência e o motivo de o
+                            // driver estar segurando o clock. Pela NVML em
+                            // processo: abrir o nvidia-smi a cada 200 ms
+                            // dentro de uma medição de desempenho seria virar
+                            // a carga que se está medindo.
+                            let limite_w = modules::windows::nvml::limite_de_potencia_w();
+                            let mut sensores: Vec<crate::core::sensores::AmostraGpu> = Vec::new();
+                            // A pergunta do MOTIVO custa 11 ms nesta máquina
+                            // (medido), e este laço carimba o disco para
+                            // correlacionar travadas: pedir o motivo a cada
+                            // volta empurraria esse carimbo. A cada cinco
+                            // voltas — um segundo — não empurra, e um
+                            // engasgo térmico dura muito mais que isso.
+                            let mut volta: u32 = 0;
                             // Cada leitura de disco vai CARIMBADA no contador
                             // de alta resolução — o mesmo relógio dos quadros.
                             // É o que permite perguntar depois o que o disco
@@ -634,6 +650,12 @@ pub fn run() {
                                 if let Some(pct) = a.gpu_pct {
                                     gpu.push(pct);
                                 }
+                                volta += 1;
+                                if let Some(amostra) =
+                                    modules::windows::nvml::amostrar_com_motivos(volta % 5 == 1)
+                                {
+                                    sensores.push(amostra);
+                                }
                                 if let (Some(quando), Some(pct)) = (
                                     modules::windows::frames::agora_qpc(),
                                     a.disco_ocupado_pct,
@@ -648,7 +670,7 @@ pub fn run() {
                             let media = (!gpu.is_empty())
                                 .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
 
-                            Some((media, disco))
+                            Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
                         let medido = tokio::task::spawn_blocking(move || {
@@ -669,9 +691,9 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
-                        let (gpu_uso_pct, disco_da_janela) = match placa.join().ok().flatten() {
-                            Some((media, disco)) => (media, disco),
-                            None => (None, Vec::new()),
+                        let (gpu_uso_pct, disco_da_janela, sensores_da_placa) = match placa.join().ok().flatten() {
+                            Some((media, disco, sensores)) => (media, disco, sensores),
+                            None => (None, Vec::new(), None),
                         };
 
                         match medido.map(|r| r.map(|(principal, _)| principal)) {
@@ -711,6 +733,7 @@ pub fn run() {
                                     low_1pct: m.low_1pct,
                                     engasgos_por_minuto: m.engasgos_por_minuto,
                                     segundos: m.seconds,
+                                    placa: sensores_da_placa,
                                     confiavel: m.detalhe_confiavel,
                                     mudancas_aplicadas,
                                     ambiente: Some(modules::deriva::Ambiente {

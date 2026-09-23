@@ -26,6 +26,7 @@ pub mod diskspace;
 pub mod sensoresgpu;
 pub mod cpuset;
 pub mod registro;
+pub mod nvml;
 pub mod dpc;
 pub mod display;
 pub mod essenciais;

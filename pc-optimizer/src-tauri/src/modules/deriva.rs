@@ -143,6 +143,7 @@ mod testes {
             low_1pct: fps * 0.6,
             engasgos_por_minuto: 0.0,
             segundos: 30.0,
+            placa: None,
             confiavel: true,
             mudancas_aplicadas: 0,
             frametime_medio_ms: None,

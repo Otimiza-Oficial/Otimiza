@@ -283,6 +283,7 @@ mod tests {
             low_1pct: low,
             engasgos_por_minuto: 0.0,
             segundos: 20.0,
+            placa: None,
             confiavel: true,
             mudancas_aplicadas: aplicadas,
             ambiente: None,
