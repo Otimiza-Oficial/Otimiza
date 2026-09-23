@@ -141,6 +141,34 @@ nenhum dos dois piorar; empate volta para todos. A escolha é reaplicada
 quando o jogo abre de novo, e "Esquecer" desfaz. Com anticheat rodando, o
 Otimiza não mexe nos núcleos do jogo. **Não validado em máquina híbrida.**
 
+## A placa durante a partida
+
+Esta é a pergunta que o Otimiza não conseguia responder: **"a minha placa
+estava sendo limitada por temperatura enquanto eu jogava?"**. A temperatura só
+era lida quando você clicava — com o jogo fechado e a placa já fria, que é
+justamente quando ela não diz nada.
+
+Agora o Otimiza amostra a placa **na mesma janela** em que mede os quadros, e
+mostra o resultado em dois lugares: no **Mapa de desempenho**, logo abaixo do
+mapa, e na **ficha do jogo**, junto da última partida medida. Uma frase por
+caso:
+
+- *"A placa foi limitada por temperatura em 23% desta partida (máx. 84 °C,
+  1650 MHz, 120 W de 125 W)."* — isso é físico, e nenhum ajuste de Windows
+  resolve: poeira, ventoinha, fluxo de ar.
+- *"A placa acionou o freio de hardware em 8% desta partida."* — fonte,
+  conector de energia ou proteção da placa.
+- *"Ela passou 92% do tempo no teto de energia."* — o funcionamento **normal**
+  de uma placa em carga máxima, e a tela diz isso em vez de vender como
+  defeito.
+- Driver que não informa o motivo vira "não deu para ler", nunca "placa livre".
+
+O dado vem da biblioteca oficial do driver (NVML), lida dentro do próprio
+programa: nada de abrir processo a cada amostra. A pergunta cara — o motivo de
+o clock estar segurado — custa 11 ms nesta máquina e por isso é feita uma vez
+por segundo, enquanto o resto é lido a cada 200 ms. O painel de temperatura
+também passou a usar esse caminho: 73 ms contra 135 ms de antes.
+
 ## Placa de vídeo e temperatura
 
 - **Temperatura e limites, num lugar só:** o diagnóstico do processador

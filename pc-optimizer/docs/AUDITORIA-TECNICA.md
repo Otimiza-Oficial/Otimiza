@@ -69,7 +69,7 @@ uma assinatura Ed25519 conferida no navegador.
 
 | Lacuna | Por que importa | Dificuldade |
 |---|---|---|
-| **Sensores da GPU durante a partida** | Temperatura, clock e power limit só são lidos sob demanda, por `nvidia-smi` (processo externo, ~100 ms). Durante o jogo o produto não sabe se a placa está limitada por temperatura — que é a causa que ele mais deveria pegar | Média (NVML em processo) |
+| ~~**Sensores da GPU durante a partida**~~ | **FEITO em 23/09** (`4ad98bb`, `a9a6ad3`, `377acd4`): NVML em processo, amostrada na mesma janela dos quadros, com o motivo do clock segurado; aparece no Mapa e na ficha do jogo. O painel térmico também passou a usar a NVML | — |
 | **DPC por driver** | Hoje diz qual núcleo, não qual driver. Sem isso o cliente sabe que há um problema e não sabe o que fazer | Alta (ETW de kernel) |
 | **Eventos do Windows: WHEA e reset de driver de vídeo** | "Sua placa resetou o driver 3 vezes ontem" explica travamento que nenhum tweak resolve. O Windows já registra; ninguém lê | Baixa |
 | **VRR/G-SYNC ligado** | O produto evita mexer em V-Sync porque não sabe se há VRR. Saber destrava um ajuste real | Média |
@@ -182,7 +182,7 @@ O que foi feito e conferido nesta rodada:
 2. **Publicar a 2.9** (merge, tag, notas, site) — a versão está pronta e parada.
 
 ### P1 — próxima rodada
-3. Sensores da GPU durante a partida (NVML), com temperatura no relatório de prova.
+3. ~~Sensores da GPU durante a partida (NVML)~~ — **feito em 23/09**. Falta ver acontecer com um jogo aberto: nesta máquina a placa nunca esteve sob carga durante uma medição.
 4. Leitor de eventos WHEA e reset de driver de vídeo, na aba Diagnóstico.
 5. Checksum SHA-256 publicado no release e mostrado na página de download.
 6. Medir o custo de abertura do app depois da 2.9 (o orçamento de 1,2 s da 1.7).
