@@ -2543,6 +2543,10 @@ pub struct DiagnosticoAoVivo {
     pub gargalo: crate::modules::gargalo::Diagnostico,
     /// Cada travada da partida com o que coincidiu com ela (detetive).
     pub travadas: Option<crate::core::travadas::Investigacao>,
+    /// O que a placa fez NESTA janela: temperatura, clock, potência e quanto
+    /// do tempo o driver segurou o clock, e por quê (2.9). `None` sem placa
+    /// NVIDIA.
+    pub sensores_da_placa: Option<crate::core::sensores::ResumoGpu>,
 }
 
 #[tauri::command]
@@ -2574,10 +2578,22 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         });
 
         let mut amostras = Vec::new();
+        // Os sensores da placa entram na MESMA janela: temperatura lida depois
+        // é temperatura de placa fria, e não diz nada sobre o teste.
+        //
+        // O motivo do clock estar segurado custa 11 ms (medido), então ele é
+        // perguntado a cada duas voltas — um segundo — e o resto a cada volta.
+        let limite_w = crate::modules::windows::nvml::limite_de_potencia_w();
+        let mut sensores: Vec<crate::core::sensores::AmostraGpu> = Vec::new();
+        let mut volta: u32 = 0;
         let fim = std::time::Instant::now() + std::time::Duration::from_secs(segundos);
         while std::time::Instant::now() < fim {
             std::thread::sleep(std::time::Duration::from_millis(500));
             amostras.push(coletor.amostra());
+            volta += 1;
+            if let Some(a) = crate::modules::windows::nvml::amostrar_com_motivos(volta % 2 == 1) {
+                sensores.push(a);
+            }
         }
 
         let (saude, intervalos, quadros_erro) = match medicao.map(|h| h.join()) {
@@ -2609,6 +2625,7 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
             quadros_erro,
             gargalo,
             travadas,
+            sensores_da_placa: crate::core::sensores::resumir(&sensores, limite_w),
         })
     }
 }

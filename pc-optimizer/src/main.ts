@@ -631,8 +631,11 @@ function conferirInvariantesDaTela() {
 
   const paineis = document.querySelectorAll(".panel").length;
   const enfase = document.querySelectorAll(".palco .btn-primary").length;
+  // Caixa que nasce escondida nunca é vista vazia: ela só aparece com
+  // conteúdo. Cobrar dela um texto de estado vazio é cobrar uma frase que
+  // ninguém lê — e era o que fazia esta trava apontar dois falsos positivos.
   const caixasMudas = [...document.querySelectorAll(".resultado")].filter(
-    (caixa) => !(caixa as HTMLElement).dataset.vazio
+    (caixa) => !(caixa as HTMLElement).hidden && !(caixa as HTMLElement).dataset.vazio
   );
 
   console.assert(paineis <= 35, `painéis demais na tela: ${paineis}`);

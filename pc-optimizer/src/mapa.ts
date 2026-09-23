@@ -1,3 +1,4 @@
+import { fraseDaPlaca, type ResumoGpu } from "./placa";
 import { invoke } from "@tauri-apps/api/core";
 
 /*
@@ -93,6 +94,8 @@ type Diagnostico = {
   quadros_erro: string | null;
   gargalo: DiagnosticoDeGargalo;
   travadas: Investigacao | null;
+  /** O que a placa fez nesta janela (2.9): temperatura, clock e o que segurou o clock. */
+  sensores_da_placa: ResumoGpu | null;
 };
 
 /** O que cada gargalo quer dizer, e o que fazer — escrito para quem joga. */
@@ -342,6 +345,20 @@ async function medir(espera: number) {
   }
 }
 
+/*
+ * A placa NESTA janela.
+ *
+ * Fica logo abaixo do mapa e acima dos gargalos, de propósito: "a placa foi
+ * limitada por temperatura em 23% do teste" é a resposta que muda o que a
+ * pessoa vai fazer — e nenhum ajuste de Windows resolve isso.
+ *
+ * A frase mora em `placa.ts`, a mesma que a ficha do jogo usa.
+ */
+function linhaDaPlacaNoMapa(d: Diagnostico): string {
+  const f = fraseDaPlaca(d.sensores_da_placa, "deste teste");
+  return f ? `<p class="fg-${f.tom}">${f.texto}</p>` : "";
+}
+
 function desenhar(d: Diagnostico) {
   if (!raiz) return;
   const a = d.amostras;
@@ -450,6 +467,7 @@ function desenhar(d: Diagnostico) {
   raiz.innerHTML = `
     <div class="fg-painel">
       ${mapa}
+      ${linhaDaPlacaNoMapa(d)}
       ${gargalos}
       ${cobertura}
       ${quadros}
