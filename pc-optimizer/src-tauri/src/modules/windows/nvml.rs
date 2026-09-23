@@ -50,6 +50,8 @@ struct Nvml {
     potencia: unsafe extern "C" fn(*mut c_void, *mut u32) -> u32,
     limite_de_potencia: unsafe extern "C" fn(*mut c_void, *mut u32) -> u32,
     utilizacao: unsafe extern "C" fn(*mut c_void, *mut Utilizacao) -> u32,
+    nome: unsafe extern "C" fn(*mut c_void, *mut u8, u32) -> u32,
+    clock_maximo: unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> u32,
     motivos: Option<unsafe extern "C" fn(*mut c_void, *mut u64) -> u32>,
 }
 
@@ -103,6 +105,8 @@ fn carregar() -> Option<Nvml> {
         potencia: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetPowerUsage")?) },
         limite_de_potencia: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetEnforcedPowerLimit")?) },
         utilizacao: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetUtilizationRates")?) },
+        nome: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetName")?) },
+        clock_maximo: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetMaxClockInfo")?) },
         // O nome mudou de "ThrottleReasons" para "EventReasons" em drivers
         // novos, e o antigo continua exportado por compatibilidade. Tenta os
         // dois: sem nenhum, o resto das leituras continua valendo.
@@ -151,6 +155,25 @@ pub fn amostrar_com_motivos(incluir_motivos: bool) -> Option<AmostraGpu> {
         uso_pct,
         motivos,
     })
+}
+
+/// O nome da placa, como o driver a chama.
+pub fn nome_da_placa() -> Option<String> {
+    let n = nvml()?;
+    // 96 bytes é o tamanho que a própria NVML documenta para o nome.
+    let mut buffer = [0u8; 96];
+    if unsafe { (n.nome)(n.dispositivo, buffer.as_mut_ptr(), buffer.len() as u32) } != OK {
+        return None;
+    }
+    let fim = buffer.iter().position(|b| *b == 0).unwrap_or(buffer.len());
+    String::from_utf8(buffer[..fim].to_vec()).ok().filter(|s| !s.is_empty())
+}
+
+/// O clock gráfico máximo da placa, em MHz.
+pub fn clock_maximo_mhz() -> Option<u32> {
+    let n = nvml()?;
+    let mut v = 0u32;
+    (unsafe { (n.clock_maximo)(n.dispositivo, CLOCK_GRAFICO, &mut v) } == OK).then_some(v)
 }
 
 /// O limite de potência que o driver está impondo, em watts. Lido uma vez: ele

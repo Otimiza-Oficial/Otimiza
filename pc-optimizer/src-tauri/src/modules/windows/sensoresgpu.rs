@@ -113,8 +113,38 @@ pub fn julgar(l: &LeituraGpu) -> EstadoGpu {
     }
 }
 
+/// A MESMA LEITURA, PELA NVML — sem abrir processo (2.9).
+///
+/// O `nvidia-smi` continua como reserva logo abaixo: driver antigo pode não
+/// exportar tudo que este caminho usa, e aí é melhor pagar os 100 ms do
+/// processo do que não mostrar nada.
+#[cfg(target_os = "windows")]
+fn ler_pela_nvml() -> Option<LeituraGpu> {
+    use super::nvml;
+    let a = nvml::amostrar()?;
+    let motivos = a.motivos?;
+    use crate::core::sensores as s;
+    Some(LeituraGpu {
+        nome: nvml::nome_da_placa()?,
+        temperatura_c: a.temperatura_c.map(f64::from),
+        clock_mhz: a.clock_mhz.map(f64::from),
+        clock_max_mhz: nvml::clock_maximo_mhz().map(f64::from),
+        potencia_w: a.potencia_w,
+        limite_potencia_w: nvml::limite_de_potencia_w(),
+        uso_pct: a.uso_pct.map(f64::from),
+        termico: motivos & (s::MOTIVO_TERMICO_SW | s::MOTIVO_TERMICO_HW) != 0,
+        teto_de_energia: motivos & s::MOTIVO_TETO_DE_ENERGIA != 0,
+        freio_de_hardware: motivos & (s::MOTIVO_FREIO_DE_HARDWARE | s::MOTIVO_FREIO_DE_ENERGIA_HW) != 0,
+    })
+}
+
 #[cfg(target_os = "windows")]
 pub fn ler() -> SensoresGpu {
+    if let Some(leitura) = ler_pela_nvml() {
+        let estado = julgar(&leitura);
+        return SensoresGpu::Lido { leitura, estado };
+    }
+
     let saida = super::shell::run("nvidia-smi", &[&format!("--query-gpu={CAMPOS}"), "--format=csv,noheader,nounits"]);
     match saida {
         Ok(s) if s.success => match ler_linha(&s.stdout) {
@@ -183,5 +213,25 @@ mod nesta_maquina {
     #[ignore]
     fn sensores_desta_placa() {
         println!("{:#?}", super::ler());
+    }
+}
+
+#[cfg(test)]
+mod custo_da_leitura {
+    /// Quanto o painel térmico economiza lendo pela NVML em vez de abrir o
+    /// `nvidia-smi`: `cargo test --lib -- --ignored quanto_custa_ler --nocapture`.
+    #[test]
+    #[ignore]
+    fn quanto_custa_ler() {
+        let t = std::time::Instant::now();
+        let _ = super::ler_pela_nvml();
+        println!("NVML: {:?}", t.elapsed());
+
+        let t = std::time::Instant::now();
+        let _ = super::super::shell::run(
+            "nvidia-smi",
+            &[&format!("--query-gpu={}", super::CAMPOS), "--format=csv,noheader,nounits"],
+        );
+        println!("nvidia-smi: {:?}", t.elapsed());
     }
 }
