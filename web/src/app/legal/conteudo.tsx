@@ -14,12 +14,10 @@ import { Navbar } from "@/components/layout/Navbar";
  * (`sessao.ts`), o programa só faz uma pergunta para fora — a de versão
  * (`atualizacao.rs`) —, e a chave fica guardada no navegador de quem a colou.
  *
- * ONDE ESTÁ `[...]`, FALTA UM DADO QUE SÓ O DONO TEM. Nome empresarial, CNPJ
- * ou CPF e e-mail de contato não podem ser inventados por quem escreve a
- * página: eles identificam quem responde legalmente pela venda.
+ * QUEM VENDE ESTÁ IDENTIFICADO NAS DUAS PÁGINAS, com nome, CPF e e-mail: é
+ * exigência do Decreto 7.962 para venda pela internet, e é o que dá a quem
+ * compra a quem reclamar.
  */
-
-export const REVISAR = "[...]";
 
 export function PaginaLegal({
   titulo,

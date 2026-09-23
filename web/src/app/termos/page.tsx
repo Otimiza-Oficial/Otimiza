@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PaginaLegal, REVISAR, Secao } from "@/app/legal/conteudo";
+import { PaginaLegal, Secao } from "@/app/legal/conteudo";
 import { SmartLink } from "@/components/ui/SmartLink";
 import { formatarReais, links, PRECO_BRL, site } from "@/lib/site";
 
@@ -18,8 +18,11 @@ export default function TermosPage() {
     >
       <Secao titulo="Quem vende">
         <p>
-          O Otimiza é vendido por {REVISAR} (nome completo do vendedor), CPF 100.492.689-88, com contato em{" "}
-          {REVISAR} (e-mail) e atendimento no{" "}
+          O Otimiza é vendido por <strong>Eduardo Maciel Wanka</strong>, CPF 100.492.689-88, com contato em{" "}
+          <a href="mailto:otimizasupport@gmail.com" className="font-medium text-fg underline underline-offset-2">
+            otimizasupport@gmail.com
+          </a>{" "}
+          e atendimento no{" "}
           <SmartLink href={links.discord} className="font-medium text-fg underline underline-offset-2">
             Discord
           </SmartLink>

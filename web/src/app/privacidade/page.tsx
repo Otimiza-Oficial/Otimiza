@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PaginaLegal, REVISAR, Secao } from "@/app/legal/conteudo";
+import { PaginaLegal, Secao } from "@/app/legal/conteudo";
 import { SmartLink } from "@/components/ui/SmartLink";
 import { links, site } from "@/lib/site";
 
@@ -18,8 +18,12 @@ export default function PrivacidadePage() {
     >
       <Secao titulo="Quem responde pelos dados">
         <p>
-          O controlador é {REVISAR} (nome completo do vendedor), CPF 100.492.689-88. Para exercer qualquer direito desta
-          página, escreva para {REVISAR} (e-mail) ou fale no{" "}
+          O controlador é <strong>Eduardo Maciel Wanka</strong>, CPF 100.492.689-88. Para exercer qualquer direito desta
+          página, escreva para{" "}
+          <a href="mailto:otimizasupport@gmail.com" className="font-medium text-fg underline underline-offset-2">
+            otimizasupport@gmail.com
+          </a>{" "}
+          ou fale no{" "}
           <SmartLink href={links.discord} className="font-medium text-fg underline underline-offset-2">
             Discord
           </SmartLink>
