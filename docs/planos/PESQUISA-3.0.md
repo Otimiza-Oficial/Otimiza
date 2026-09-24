@@ -88,6 +88,34 @@ Entra, nesta ordem de valor:
 
 Cada um passa pela regra de sempre: medido antes e depois, e **nunca menos FPS**.
 
+## 5. A aba BIOS (pedido do dono, 24/09)
+
+Referência: um concorrente com Exportar, Ver config., Abrir pasta, Auto config,
+Importar e Entrar na BIOS. Exportar/Importar/Auto config desse tipo gravam a
+NVRAM pelo SCEWIN (AMISCE), ferramenta da AMI: só placas AMI, a mesma versão
+de BIOS nos dois lados, e uma gravação errada deixa a placa sem ligar. O
+Otimiza continua **sem gravar na BIOS** (`bios.rs`, `firmware.rs`).
+
+A aba do Otimiza, melhor naquilo que o cliente sente:
+1. **Ficha do firmware**: placa, versão e data da BIOS, UEFI/CSM, Secure Boot,
+   TPM, virtualização, VBS, Resizable BAR, memória (velocidade do pente ×
+   velocidade real, canais), microcódigo.
+2. **Entrar na BIOS** com um clique (`shutdown /r /fw`), com aviso antes.
+3. **O que mudar, nesta placa**: as fases de `bios.rs`, com o nome da opção
+   no menu de cada fabricante (ASUS, MSI, Gigabyte, ASRock e notebooks).
+4. **Conferir depois**: ao voltar ao Windows, o app mede se cada mudança pegou
+   (memória, Resizable BAR, VBS) e mostra antes × depois. Nenhum concorrente faz.
+5. **BIOS com defeito conhecido**: Intel 13ª/14ª de mesa sem microcódigo 0x12F
+   (instabilidade Vmin; notebooks não são afetados, diz a Intel); BIOS muito
+   antiga. Só aponta a página oficial do fabricante — nunca atualiza sozinho.
+6. **Exportar**: a ficha e a lista num arquivo, para guardar ou mandar ao suporte.
+7. **Tempo de BIOS no boot** (“Last BIOS time”) com o achado do AM5/MCR.
+8. Notebook: diz o que o fabricante trava, para ninguém procurar opção que não existe.
+
+Fontes: https://www.intel.com/content/www/us/en/support/articles/000102331/processors.html ,
+https://community.intel.com/t5/Mobile-and-Desktop-Processors/Intel-Core-13th-and-14th-Gen-Vmin-Shift-Instabilty-Update-New/m-p/1686948 ,
+https://developer.seco.com/how-to/bios-update-settings-amisce/
+
 ## Fontes
 
 - Tom's Hardware, VBS/HVCI em jogos: https://www.tomshardware.com/news/windows-11-gaming-benchmarks-performance-vbs-hvci-security
