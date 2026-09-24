@@ -177,6 +177,7 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "gpu_hardware_scheduling" => Grupo::Video,
         "gpu_msi_mode" => Grupo::Video,
         "disable_gamedvr" => Grupo::Video,
+        "windowed_game_optimizations" => Grupo::Video,
 
         "disable_memory_compression" => Grupo::Memoria,
 

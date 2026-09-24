@@ -323,6 +323,7 @@ pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("gpupref", "item do catálogo (preferência de placa por programa)"),
     ("network", "item do catálogo (rede)"),
     ("acessibilidade", "item do catálogo (teclas de aderência)"),
+    ("janelas", "item do catálogo (otimizações para jogos em janela)"),
 ];
 
 /// Tudo, com o catálogo junto.

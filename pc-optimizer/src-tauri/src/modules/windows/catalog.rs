@@ -82,6 +82,11 @@ pub enum Action {
     /// campo de bits: só o bit 0 pode mudar, senão as preferências do usuário
     /// sobre atalho, som e aviso vão junto.
     AccessibilityKeysOff,
+    /// Liga as Otimizações para jogos em janela do Windows 11.
+    ///
+    /// Ação própria porque o valor é um texto com várias escolhas gráficas:
+    /// só o pedaço desta muda (`janelas.rs`).
+    JanelasOtimizadas,
 }
 
 /// Condição de hardware em que uma otimização pesa MUITO mais que a média.
@@ -1383,6 +1388,22 @@ pub static CATALOG: &[OptimizationSpec] = &[
         security_tradeoff: false,
         highlight_when: &[],
         actions: &[Action::AccessibilityKeysOff],
+    },
+    OptimizationSpec {
+        id: "windowed_game_optimizations",
+        name: "Otimizações para jogos em janela",
+        description: "Liga a opção do Windows 11 que tira o atraso dos jogos em tela cheia sem borda.",
+        honest_effect: "Vale para jogos DirectX 10 e 11 em janela ou em tela cheia sem borda, o modo em que o FiveM costuma rodar. O ganho é menos atraso entre o comando e a imagem, e o VRR (G-Sync, FreeSync) passa a funcionar nesse modo; o FPS médio não muda. Jogo em tela cheia exclusiva e em DirectX 12 já usa esse caminho. Só existe no Windows 11. Se algum jogo passar a piscar, desfaça.",
+        category: Category::Gaming,
+        expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::JanelasOtimizadas],
     },
 ];
 

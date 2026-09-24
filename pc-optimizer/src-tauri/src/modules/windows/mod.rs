@@ -45,6 +45,7 @@ pub mod governador;
 pub mod hardware;
 pub mod bios;
 pub mod fichabios;
+pub mod janelas;
 pub mod causas;
 pub mod contadousuario;
 pub mod conflitos;
@@ -474,6 +475,13 @@ impl WindowsOptimizer {
                     ActionState::Pending
                 }
             }
+
+            Action::JanelasOtimizadas => match janelas::ligada() {
+                Ok(None) => ActionState::NotApplicable,
+                Ok(Some(true)) => ActionState::Satisfied,
+                Ok(Some(false)) => ActionState::Pending,
+                Err(_) => ActionState::Desconhecido,
+            },
 
             // Mesma regra dos outros itens que dependem do `bcdedit`: sem
             // elevação a leitura não acontece, e não se afirma o que não foi
@@ -2011,6 +2019,23 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 Ok(Some(format!("{} desligada(s).", ligadas.join(", "))))
             }
 
+            Action::JanelasOtimizadas => {
+                match janelas::ligada()? {
+                    None => {
+                        detalhe.status = ActionStatus::Skipped;
+                        detalhe.message = "Esta opção só existe no Windows 11.".to_string();
+                        return Ok(None);
+                    }
+                    Some(true) => {
+                        detalhe.status = ActionStatus::AlreadyOptimized;
+                        return Ok(None);
+                    }
+                    Some(false) => {}
+                }
+                changes.push(janelas::ligar()?);
+                Ok(Some("Ligada. Vale a partir da próxima vez que o jogo abrir.".to_string()))
+            }
+
             Action::DisableHypervisor => {
                 let Some(anterior) = power::hypervisor_launch_type() else {
                     // Sem conseguir ler o estado atual não há como prometer a
@@ -2485,6 +2510,7 @@ pub fn nome_da_acao(action: &Action) -> String {
         Action::ClearBootLimits => "limites de inicialização".to_string(),
         Action::ReservedStorage { .. } => "Armazenamento Reservado".to_string(),
         Action::AccessibilityKeysOff => "teclas de acessibilidade".to_string(),
+        Action::JanelasOtimizadas => "otimizações para jogos em janela".to_string(),
         Action::DisableHypervisor => "hipervisor no boot".to_string(),
         Action::RemoveForcedPlatformClock => "relógio de plataforma forçado".to_string(),
     }
