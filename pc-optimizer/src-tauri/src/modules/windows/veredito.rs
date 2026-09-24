@@ -402,6 +402,13 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
+        (Origem::Prontidao, "janelas_otimizadas_desligada") => (
+            "apply_optimization",
+            Some("windowed_game_optimizations"),
+            "Ligar as otimizações para jogos em janela",
+            false,
+        ),
+
         _ => return None,
     };
 
@@ -456,6 +463,38 @@ impl EmAchados for super::memory::MemoryReport {
                 )
             })
             .collect()
+    }
+}
+
+/// Otimizações para jogos em janela desligada (Windows 11). Leitura de registro.
+fn achados_da_janela() -> Result<Vec<Achado>, String> {
+    Ok(match super::janelas::ligada()? {
+        Some(false) => vec![montar(
+            Origem::Prontidao,
+            "janelas_otimizadas_desligada".to_string(),
+            "Otimizações para jogos em janela desligada".to_string(),
+            "A opção do Windows 11 está desligada nesta máquina.".to_string(),
+            "Ligada, ela tira o atraso dos jogos em tela cheia sem borda e deixa o VRR funcionar nesse modo. O FPS médio não muda.".to_string(),
+            FindingSeverity::Important,
+            FixLocation::Software,
+        )],
+        _ => Vec::new(),
+    })
+}
+
+/// Intel de mesa da 13ª ou 14ª geração sem o microcódigo 0x12F.
+fn achados_do_microcodigo() -> Vec<Achado> {
+    match super::fichabios::defeito_de_microcodigo() {
+        Some(super::fichabios::Defeito::MicrocodigoIntelAntigo { atual }) => vec![montar(
+            Origem::Firmware,
+            "microcodigo_intel_antigo".to_string(),
+            "BIOS sem a correção de instabilidade da Intel".to_string(),
+            format!("O microcódigo carregado é o 0x{:X}; a correção da Intel é o 0x12F.", atual),
+            "Processadores de mesa da 13ª e 14ª geração degradam com o tempo sem essa correção. Ela chega por atualização de BIOS, na página oficial da sua placa-mãe. A aba BIOS mostra o modelo da placa.".to_string(),
+            FindingSeverity::Critical,
+            FixLocation::Bios,
+        )],
+        _ => Vec::new(),
     }
 }
 
@@ -975,6 +1014,9 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // nenhum ajuste de software resolve, e é a resposta que falta em todo
         // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
+        // 3.0: dois achados de leitura de registro, sem PowerShell.
+        (Origem::Prontidao, achados_da_janela),
+        (Origem::Firmware, || Ok(achados_do_microcodigo())),
         // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
         //
         // Enquanto esta tarefa era sempre `Ok`, um disco que nao pode ser lido

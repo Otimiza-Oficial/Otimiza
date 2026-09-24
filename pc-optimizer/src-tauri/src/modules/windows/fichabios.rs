@@ -152,6 +152,21 @@ pub fn ler() -> Ficha {
     Ficha::default()
 }
 
+/// Só o defeito de microcódigo, lido direto do registro: barato o bastante
+/// para o diagnóstico da abertura (sem PowerShell).
+#[cfg(windows)]
+pub fn defeito_de_microcodigo() -> Option<Defeito> {
+    use crate::modules::changelog::PreviousValue;
+    const CPU: &str = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0";
+    let cpu = super::registry::read_text("HKLM", CPU, "ProcessorNameString").ok().flatten()?;
+    let microcodigo = match super::registry::read("HKLM", CPU, "Update Revision") {
+        Ok(PreviousValue::Binary(b)) => microcodigo_intel(&b),
+        _ => None,
+    };
+    let l = Leitura { cpu: Some(cpu.trim().to_string()), microcodigo, ..Default::default() };
+    defeitos(&l).into_iter().find(|d| matches!(d, Defeito::MicrocodigoIntelAntigo { .. }))
+}
+
 /// Reinicia direto na tela de configuração da BIOS (UEFI).
 #[cfg(windows)]
 pub fn reiniciar_na_bios() -> Result<(), String> {
