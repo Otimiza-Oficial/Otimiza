@@ -627,6 +627,12 @@
             <span class="tab-badge" id="badge-espaco" hidden></span>
           </button>
 
+          <button class="nav" role="tab" data-tab="bios" aria-selected="false"
+                  aria-controls="tab-bios" id="tabbtn-bios">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-bios" /></svg>
+            <span class="nav-rotulo">BIOS</span>
+          </button>
+
           <button class="nav" role="tab" data-tab="sistema" aria-selected="false"
                   aria-controls="tab-sistema" id="tabbtn-sistema">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-sistema" /></svg>
@@ -2978,26 +2984,6 @@
         <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
 
           <!--
-            O PASSO A PASSO DA BIOS.
-
-            Este painel NÃO tem botão, e é a decisão central dele: o Windows não
-            altera firmware de PC de mesa, e uma ferramenta que encontrasse um
-            jeito de fazer isso seria uma ferramenta capaz de deixar a máquina do
-            cliente sem ligar.
-
-            O que ele faz é montar a lista do que vale olhar EM ORDEM DE RISCO,
-            com o modelo da placa-mãe ao lado — porque com esse dado a pessoa
-            acha o manual certo em vez de seguir um vídeo de outra placa.
-
-            Fechado por padrão: quem chegou aqui por FPS resolve o resto antes.
-          -->
-          <details class="panel" id="bios-painel">
-            <summary class="panel-head-resumo">
-              <h2>O que olhar na BIOS desta máquina</h2>
-            </summary>
-            <div id="bios-passos"></div>
-          </details>
-          <!--
             TRÊS CARTÕES QUE ERAM A MESMA PERGUNTA
 
             Inicialização, Tarefas agendadas e Serviços viviam como três painéis
@@ -3297,6 +3283,30 @@
             <p id="lab-status" class="status"></p>
             <pre id="lab-texto" class="bloco-de-texto" hidden></pre>
           </section>
+        </section>
+
+        <!-- ============================================================== BIOS -->
+        <section class="tab-panel" id="tab-bios" role="tabpanel" aria-labelledby="tabbtn-bios" hidden>
+          <!-- Montada por `src/bios.ts` ao abrir a aba: a leitura passa pelo PowerShell. -->
+          <div id="bios-aba" class="fg"></div>
+          <!--
+            O PASSO A PASSO DA BIOS.
+
+            Este painel NÃO tem botão, e é a decisão central dele: o Windows não
+            altera firmware de PC de mesa, e uma ferramenta que encontrasse um
+            jeito de fazer isso seria uma ferramenta capaz de deixar a máquina do
+            cliente sem ligar.
+
+            O que ele faz é montar a lista do que vale olhar EM ORDEM DE RISCO,
+            com o modelo da placa-mãe ao lado — porque com esse dado a pessoa
+            acha o manual certo em vez de seguir um vídeo de outra placa.
+          -->
+          <details class="panel" id="bios-painel" open>
+            <summary class="panel-head-resumo">
+              <h2>O que olhar na BIOS desta máquina</h2>
+            </summary>
+            <div id="bios-passos"></div>
+          </details>
         </section>
 
         <!-- ================================================= MOTOR DE ENERGIA -->

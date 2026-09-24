@@ -44,6 +44,7 @@ pub mod gpupref;
 pub mod governador;
 pub mod hardware;
 pub mod bios;
+pub mod fichabios;
 pub mod causas;
 pub mod contadousuario;
 pub mod conflitos;

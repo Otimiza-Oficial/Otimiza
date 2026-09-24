@@ -1162,6 +1162,28 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
     }
 }
 
+/// Comando: a ficha do firmware da aba BIOS. `LIVRES`: só lê.
+#[tauri::command]
+pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::fichabios::ler)
+        .await
+        .map_err(|e| format!("Falha ao ler o firmware: {}", e))
+}
+
+/// Comando: reinicia o PC direto na tela da BIOS (UEFI). `LIVRES`: não
+/// altera configuração nenhuma; a tela pede confirmação antes.
+#[tauri::command]
+pub fn reiniciar_na_bios() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::modules::windows::fichabios::reiniciar_na_bios()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct BiosNaTela {
     pub leitura: crate::modules::windows::bios::Leitura,
@@ -4870,6 +4892,8 @@ mod tests {
         "conta_que_esta_rodando",
         "niveis_de_otimizacao",
         "passo_a_passo_da_bios",
+        "ficha_da_bios",
+        "reiniciar_na_bios",
     ];
 
     /// Alteram o computador. Sem licença, recusam.

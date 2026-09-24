@@ -6,6 +6,7 @@ import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
+import { carregarAbaBios } from "./bios";
 import { carregarMapaDeDesempenho } from "./mapa";
 import { ligarProntidao } from "./prontidao";
 
@@ -1445,9 +1446,13 @@ function showTab(name: string) {
     void carregarReparo();
   }
 
-  // A BIOS carrega ao abrir a aba Sistema, e uma vez só: a leitura passa pelo
+  // A BIOS carrega ao abrir a aba dela, e uma vez só: a leitura passa pelo
   // PowerShell e não pode entrar na abertura do programa.
-  if (name === "sistema" && !biosCarregada) {
+  if (name === "bios") {
+    void carregarAbaBios();
+  }
+
+  if (name === "bios" && !biosCarregada) {
     biosCarregada = true;
     void carregarPassoAPassoDaBios();
   }
