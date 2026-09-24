@@ -251,8 +251,12 @@ fn modo_ligado(log: &ChangeLog) -> bool {
 
 /// Situação atual, para a interface.
 pub fn status(log: &ChangeLog) -> GameModeStatus {
-    let jogo = jogo_aberto();
+    status_com(log, jogo_aberto())
+}
 
+/// O status com o jogo já lido: uma leitura só dos processos, e o teste
+/// passa o jogo que quiser sem depender do que está aberto na máquina.
+fn status_com(log: &ChangeLog, jogo: Option<String>) -> GameModeStatus {
     GameModeStatus {
         game_running: jogo.is_some(),
         game: jogo.map(|g| g.to_string()),
@@ -421,10 +425,23 @@ pub fn executavel_do_jogo() -> Option<String> {
     let mut sistema = System::new();
     sistema.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
-    sistema
-        .processes()
-        .values()
-        .filter_map(|p| {
+    escolher_executavel(sistema.processes().values().map(|p| {
+        (
+            p.exe().map(std::path::PathBuf::from),
+            p.name().to_string_lossy().to_string(),
+        )
+    }))
+}
+
+/// Entre (caminho, nome curto) de cada processo, o nome de arquivo do
+/// primeiro que é jogo conhecido. Separada da varredura para ser testada sem
+/// depender do que está aberto na máquina.
+fn escolher_executavel(
+    processos: impl IntoIterator<Item = (Option<std::path::PathBuf>, String)>,
+) -> Option<String> {
+    processos
+        .into_iter()
+        .filter_map(|(exe, nome_curto)| {
             // O nome curto do `sysinfo` às vezes vem sem extensão — na máquina
             // de desenvolvimento, `FiveM_DumpServer`. O nome do arquivo no
             // caminho real é a fonte confiável, e é ele que a chave do IFEO
@@ -432,12 +449,12 @@ pub fn executavel_do_jogo() -> Option<String> {
             // do modo jogo esbarraria num "nome de executável inválido" para um
             // jogo legítimo. O nome curto fica como reserva para o processo cujo
             // caminho não podemos ler.
-            let do_caminho = p
-                .exe()
+            let do_caminho = exe
+                .as_deref()
                 .and_then(|caminho| caminho.file_name())
                 .map(|arquivo| arquivo.to_string_lossy().to_string());
 
-            do_caminho.or_else(|| Some(com_extensao_exe(p.name().to_string_lossy().to_string())))
+            do_caminho.or_else(|| Some(com_extensao_exe(nome_curto)))
         })
         .find(|nome| nome_do_jogo(nome).is_some())
 }
@@ -447,23 +464,46 @@ pub fn executavel_do_jogo() -> Option<String> {
 /// Devolve a mensagem quando alguma coisa mudou, e `None` quando não havia o
 /// que fazer — assim a interface só é avisada quando há novidade.
 pub fn passo(log: &mut ChangeLog) -> Option<String> {
-    let aberto = jogo_aberto_com_pid();
-    let aplicado = modo_ligado(log);
+    passo_com(log, jogo_aberto_com_pid())
+}
 
-    // Jogo aberto com o modo já ligado: nova passada do governador, porque
-    // um atualizador pode começar a baixar no meio da partida.
-    if let (Some((nome, pid)), true) = (&aberto, aplicado) {
-        let mut guarda = GOVERNADOR.lock().ok()?;
-        let governador = guarda.get_or_insert_with(Default::default);
-        #[cfg(windows)]
-        let novos = governador.passada(*pid);
-        #[cfg(not(windows))]
-        let novos: Vec<String> = { let _ = (pid, governador); Vec::new() };
-        return (!novos.is_empty()).then(|| mensagem_de_acalmados(nome, &novos));
+/// O que um passo do vigia faz, decidido só por jogo aberto e modo ligado.
+/// Pura, para a regra ser testada sem processo nem histórico reais.
+#[derive(Debug, PartialEq, Eq)]
+enum Vigia {
+    /// Nada mudou: o vigia roda a cada poucos segundos e não pode agir à toa.
+    Nada,
+    /// O jogo abriu com o modo desligado.
+    Ligar,
+    /// O jogo segue aberto com o modo ligado: nova passada do governador.
+    NovaPassada,
+    /// O jogo fechou com o modo ligado.
+    Desligar,
+}
+
+fn o_que_o_vigia_faz(jogo_aberto: bool, ligado: bool) -> Vigia {
+    match (jogo_aberto, ligado) {
+        (false, false) => Vigia::Nada,
+        (true, false) => Vigia::Ligar,
+        (true, true) => Vigia::NovaPassada,
+        (false, true) => Vigia::Desligar,
     }
+}
 
-    match (aberto.map(|(n, _)| n), aplicado) {
-        (Some(nome), false) => {
+/// O passo com o jogo já detectado, para o teste injetar o jogo.
+fn passo_com(log: &mut ChangeLog, aberto: Option<(String, u32)>) -> Option<String> {
+    match (o_que_o_vigia_faz(aberto.is_some(), modo_ligado(log)), aberto) {
+        (Vigia::NovaPassada, Some((nome, pid))) => {
+            // Um atualizador pode começar a baixar no meio da partida.
+            let mut guarda = GOVERNADOR.lock().ok()?;
+            let governador = guarda.get_or_insert_with(Default::default);
+            #[cfg(windows)]
+            let novos = governador.passada(pid);
+            #[cfg(not(windows))]
+            let novos: Vec<String> = { let _ = (pid, governador); Vec::new() };
+            (!novos.is_empty()).then(|| mensagem_de_acalmados(&nome, &novos))
+        }
+        (Vigia::Ligar, Some((nome, _))) => {
             // NADA É CONGELADO AQUI DESDE A 2.0.
             //
             // Até a 1.9 este era o ponto em que o vigia suspendia Discord,
@@ -475,7 +515,7 @@ pub fn passo(log: &mut ChangeLog) -> Option<String> {
 
             Some(format!("{} aberto. {}", nome, feito.join(" ")))
         }
-        (None, true) => {
+        (Vigia::Desligar, _) => {
             // A ordem importa: devolver os programas ANTES de desfazer o resto.
             //
             // Nada é congelado desde a 2.0, então isto só age para quem
@@ -692,21 +732,45 @@ mod tests {
     /// maquina de teste tinha o FiveM aberto — quando teve, ele reprovou, e
     /// estava certo em reprovar: quem estava errado era a afirmacao.
     ///
+    /// Depois disso ele ainda lia os processos desta maquina e so conferia com
+    /// jogo aberto: sem jogo, nao afirmava nada. Agora os processos sao
+    /// simulados, e a varredura real fica no teste ignorado abaixo.
+    ///
     /// O que vale de verdade e que o valor seja um nome de arquivo. Caminho
     /// completo aqui quebraria a chave do IFEO e o casamento com o catalogo.
     #[test]
     fn nome_do_executavel_do_jogo() {
+        use std::path::PathBuf;
+
+        // Caminho legivel: o nome vem do arquivo, nunca o caminho inteiro, e
+        // o nome curto sem extensao do `sysinfo` nao e o que sai.
+        let nome = escolher_executavel([
+            (Some(PathBuf::from(r"C:\Windows\notepad.exe")), "notepad.exe".to_string()),
+            (Some(PathBuf::from(r"C:\Steam\steamapps\common\cs2\cs2.exe")), "cs2".to_string()),
+        ]);
+        assert_eq!(nome.as_deref(), Some("cs2.exe"));
+
+        // Caminho ilegivel: o nome curto, com `.exe` quando faltar.
+        assert_eq!(escolher_executavel([(None, "cs2".to_string())]).as_deref(), Some("cs2.exe"));
+        assert_eq!(
+            escolher_executavel([(None, "RobloxPlayerBeta.exe".to_string())]).as_deref(),
+            Some("RobloxPlayerBeta.exe")
+        );
+
+        // Sem jogo, nada.
+        assert_eq!(escolher_executavel([(None, "notepad.exe".to_string())]), None);
+        assert_eq!(escolher_executavel(Vec::new()), None);
+    }
+
+    #[test]
+    #[ignore = "lê esta máquina"]
+    fn nome_do_executavel_do_jogo_nesta_maquina() {
         let nome = executavel_do_jogo();
         println!("executável do jogo agora: {:?}", nome);
 
         if let Some(n) = nome {
             assert!(!n.trim().is_empty(), "nome vazio nao serve para nada");
-
-            assert!(
-                !n.contains('\\') && !n.contains('/'),
-                "veio um caminho, e nao um nome de arquivo: {:?}",
-                n
-            );
+            assert!(!n.contains('\\') && !n.contains('/'), "veio um caminho: {:?}", n);
         }
     }
 
@@ -734,27 +798,57 @@ mod tests {
     }
 
     #[test]
-    fn o_vigia_nao_faz_nada_quando_nao_ha_mudanca() {
-        let mut log = ChangeLog::load();
-
-        let jogo = jogo_aberto();
-        let aplicado = log.is_applied(ID);
-
-        // Sem jogo aberto e sem modo aplicado, um passo do vigia não pode
-        // mexer em nada: ele rodaria a cada poucos segundos, e um passo que
-        // age à toa mexeria na energia da máquina o tempo todo.
-        if jogo.is_none() && !aplicado {
-            assert!(passo(&mut log).is_none());
-            assert!(!log.is_applied(ID));
-        }
+    fn o_vigia_so_age_quando_algo_muda() {
+        // Sem jogo aberto e com o modo desligado, um passo do vigia não pode
+        // mexer em nada: ele roda a cada poucos segundos, e um passo que age à
+        // toa mexeria na máquina o tempo todo.
+        //
+        // Desde a 2.9 "ligado" é o governador OU o histórico (`modo_ligado`).
+        // A regra recebe o ligado já resolvido e as quatro combinações são
+        // conferidas, sem depender do que está aberto nesta máquina.
+        assert_eq!(o_que_o_vigia_faz(false, false), Vigia::Nada);
+        assert_eq!(o_que_o_vigia_faz(true, false), Vigia::Ligar);
+        assert_eq!(o_que_o_vigia_faz(true, true), Vigia::NovaPassada);
+        assert_eq!(o_que_o_vigia_faz(false, true), Vigia::Desligar);
     }
 
     #[test]
-    fn detecta_jogo_nesta_maquina() {
-        let jogo = jogo_aberto();
-        println!("jogo aberto agora: {:?}", jogo);
+    fn o_vigia_nao_faz_nada_quando_nao_ha_mudanca() {
+        // O teste antigo lia o histórico e os processos DESTA máquina e só
+        // conferia sem jogo aberto e sem modo aplicado — com um jogo aberto,
+        // não afirmava nada. É o padrão do teste que derrubou a 2.9.0.
+        //
+        // Histórico em memória e jogo injetado como ausente. Nenhum teste
+        // deste binário liga o governador (só `ativar` e o passo COM jogo o
+        // fazem), então o modo está desligado e o passo tem de ser nada.
+        let mut log = ChangeLog::em_memoria();
 
-        let s = status(&ChangeLog::load());
-        assert_eq!(s.game_running, jogo.is_some());
+        assert!(passo_com(&mut log, None).is_none());
+        assert!(!log.is_applied(ID));
+    }
+
+    #[test]
+    fn o_status_mostra_o_jogo_que_recebeu() {
+        // Uma leitura só do jogo, passada adiante: o antigo
+        // `detecta_jogo_nesta_maquina` chamava `jogo_aberto()` duas vezes e
+        // falhava se um jogo abrisse ou fechasse entre as leituras.
+        let log = ChangeLog::em_memoria();
+
+        let s = status_com(&log, Some("Counter-Strike 2".to_string()));
+        assert!(s.game_running);
+        assert_eq!(s.game.as_deref(), Some("Counter-Strike 2"));
+
+        let s = status_com(&log, None);
+        assert!(!s.game_running);
+        assert_eq!(s.game, None);
+        assert!(!s.active);
+    }
+
+    #[test]
+    #[ignore = "lê esta máquina"]
+    fn detecta_jogo_nesta_maquina() {
+        let s = status(&ChangeLog::em_memoria());
+        println!("jogo aberto agora: {:?}", s.game);
+        assert_eq!(s.game_running, s.game.is_some());
     }
 }
