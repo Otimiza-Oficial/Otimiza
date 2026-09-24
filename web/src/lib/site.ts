@@ -1,48 +1,24 @@
-/**
- * Tudo o que o site afirma sobre o Otimiza mora aqui.
- *
- * Os números e as frases saíram do próprio produto: `site/src/data/i18n/pt.ts`,
- * `site/src/data/precos.ts`, `site/src/data/produto.ts` e o catálogo do app.
- * Nenhum foi arredondado para soar melhor, e nenhum foi inventado — o Otimiza
- * se vende dizendo que o mercado anuncia número que ninguém confere.
- */
+/** Tudo o que o site afirma sobre o Otimiza. Nenhum número foi arredondado para soar melhor, nem inventado. */
 
 export const site = {
   name: "Otimiza",
   /*
-   * Endereço público, SEM barra no fim. É a base das URLs canônicas e do Open
-   * Graph. Se um dia houver domínio próprio, troque aqui e o PAGES_BASE_PATH
-   * da esteira (`.github/workflows/site.yml`).
+   * Sem barra no fim. Com domínio próprio, troque aqui e o PAGES_BASE_PATH da esteira.
    */
   url: "https://otimiza-oficial.github.io/Otimiza",
   titulo: "Otimiza — Console de desempenho para Windows",
   description:
     "Mede o que o seu PC faz, otimiza o que dá, e prova com número — inclusive quando o número diz que não mudou nada.",
   /*
-   * O NÚMERO QUE O BOTÃO DE BAIXAR MOSTRA — e que precisa andar junto com a
-   * tag, nesta ordem: primeiro a tag `v<versao>`, depois este arquivo em
-   * `main`.
-   *
-   * O motivo é que `links.baixar` aponta para `releases/latest`, e não para
-   * uma versão fixa. Se este número subir antes de a versão existir, o botão
-   * passa a dizer "Baixar o Otimiza 2.8.0" e entregar o instalador da 2.7.0 —
-   * o site prometendo o que ainda não dá para baixar, que é exatamente o tipo
-   * de coisa que o produto inteiro existe para não fazer.
-   *
-   * Na direção contrária o erro é pequeno e se conserta sozinho: o painel
-   * prefere a versão que vem da API de releases e só cai neste valor quando a
-   * leitura falha.
+   * O número do botão de baixar: primeiro a tag v<versao>, depois este arquivo.
+   * links.baixar aponta para releases/latest; subir antes faria o botão prometer uma versão e entregar a anterior.
    */
   versao: "2.9.0",
 } as const;
 
 export const links = {
-  /** Endereço permanente do instalador mais novo, publicado pela esteira. */
   baixar: "https://github.com/Otimiza-Oficial/Otimiza/releases/latest/download/Otimiza-instalador.exe",
-  /** O mesmo convite que o app abre (`.github/convite.json`). */
   discord: "https://discord.gg/ultimus",
-  /** A página que explica o preço. Com o checkout ligado, ela também cobra;
-      sem ele, ela leva ao Discord, onde a compra já funciona. */
   comprar: "/comprar/",
   entrar: "/entrar/",
   painel: "/painel/",
@@ -55,7 +31,6 @@ export const nav = [
   { label: "Perguntas", href: "#perguntas" },
 ] as const;
 
-/** As sete abas do app, na ordem da lateral, com a captura real de cada uma. */
 export const telas = [
   { id: "painel", nome: "Painel", legenda: "O que está travando este PC, medido na hora e dito na cara." },
   { id: "diagnostico", nome: "Diagnóstico", legenda: "Monitores, memória instalada e os achados desta máquina." },
@@ -67,8 +42,7 @@ export const telas = [
 ] as const;
 
 /*
- * Fotos (licença Unsplash). Aparecem SÓ dentro de telas ilustrativas, cada uma
- * de uma pessoa diferente, e nunca como depoimento ou cliente real.
+ * Fotos da Unsplash, só dentro de telas ilustrativas; nunca como depoimento ou cliente real.
  */
 const foto = (id: string) => `https://images.unsplash.com/${id}?w=160&h=160&fit=crop&crop=faces&q=80`;
 export const pessoas = {
@@ -83,11 +57,9 @@ export const pessoas = {
 export const texturaCetim =
   "https://images.unsplash.com/photo-1705674337411-3b89e5afcc11?w=2000&q=75";
 
-/* O PREÇO É O MESMO QUE O BOT COBRA, e o bot é quem manda.
-   Fonte da verdade: `src/config/catalogo.js` no bot, item `otimiza` —
-   hoje `centavos: 3000`. Subiu de R$ 25 para R$ 30 em 23/09/2026, por decisão
-   do dono. Site e bot desalinhados aqui significam anunciar um preço e cobrar
-   outro na tela seguinte. */
+/*
+ * O mesmo preço que o bot cobra (catalogo.js, item otimiza, centavos 3000). Desalinhado, o site anunciaria um preço e cobraria outro.
+ */
 export const PRECO_BRL = 30;
 export const PRECO_ADICIONAL_BRL = 30;
 

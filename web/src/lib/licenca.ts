@@ -1,20 +1,9 @@
 /**
- * A conferência da licença, feita no navegador.
- *
- * É a MESMA regra de `pc-optimizer/src-tauri/src/modules/licenca.rs`:
- *
- *     <dados em base64url>.<assinatura em base64url>
- *
- * A assinatura Ed25519 é conferida com a chave PÚBLICA do Otimiza — a mesma que
- * viaja no instalador. Ela confere e não cria: estar neste arquivo não permite
- * gerar chave nenhuma. E a ordem também é a mesma do app: a assinatura é
- * conferida ANTES de qualquer campo ser lido como verdade.
- *
- * Se a chave pública do app mudar, esta aqui precisa mudar junto.
+ * A conferência da licença no navegador, com a mesma regra de licenca.rs: <dados>.<assinatura> em base64url, Ed25519.
+ * A chave pública confere e não cria. A assinatura é conferida antes de qualquer campo ser lido. Mudou no app, muda aqui.
  */
 export const CHAVE_PUBLICA = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
-/** O que a licença afirma (espelho de `Dados` no Rust). */
 export type Dados = {
   maquina: string;
   comprador: string;
@@ -31,7 +20,6 @@ export type Recusa =
 
 export type Resultado = { ok: true; dados: Dados } | { ok: false; recusa: Recusa };
 
-/** Os textos são os do app, para o cliente ler a mesma coisa nos dois lugares. */
 export function explicar(recusa: Recusa): string {
   switch (recusa.tipo) {
     case "malformada":
@@ -48,8 +36,7 @@ export function explicar(recusa: Recusa): string {
 }
 
 /*
- * O código da máquina: OTZ- e três blocos de quatro caracteres, num alfabeto
- * sem I, O, S e Z — as letras que se confundem com número (`maquina.rs`).
+ * OTZ- e três blocos de quatro caracteres, sem I, O, S e Z (maquina.rs).
  */
 const CODIGO = /^OTZ-[A-HJ-NP-RT-Y0-9]{4}-[A-HJ-NP-RT-Y0-9]{4}-[A-HJ-NP-RT-Y0-9]{4}$/;
 
@@ -68,7 +55,6 @@ function base64urlParaBytes(texto: string): Uint8Array | null {
   }
 }
 
-/** Separa a chave nas duas partes. Espaço e quebra de linha são perdoados. */
 export function desmontar(chave: string): { dados: Uint8Array; assinatura: Uint8Array } | null {
   const limpa = chave.replace(/\s+/g, "");
   const ponto = limpa.indexOf(".");
@@ -79,13 +65,7 @@ export function desmontar(chave: string): { dados: Uint8Array; assinatura: Uint8
   return { dados, assinatura };
 }
 
-/**
- * Confere a chave com uma chave pública dada. Existe separada pelo mesmo motivo
- * do `conferir_com` do Rust: o teste gera o próprio par e assina.
- *
- * `maquina` é opcional aqui, ao contrário do app: no navegador a pessoa pode
- * querer só ver para quem a chave foi emitida.
- */
+/** Separada, como conferir_com no Rust: o teste gera o próprio par. maquina é opcional no navegador. */
 export async function conferirCom(
   publica: Uint8Array,
   chave: string,
@@ -110,7 +90,6 @@ export async function conferirCom(
   }
   if (!valida) return { ok: false, recusa: { tipo: "assinatura-invalida" } };
 
-  // Só agora, com a assinatura conferida, os dados são lidos.
   let dados: Dados;
   try {
     const bruto = JSON.parse(new TextDecoder().decode(partes.dados));
@@ -128,7 +107,6 @@ export async function conferirCom(
   if (maquina && dados.maquina !== normalizarCodigo(maquina)) {
     return { ok: false, recusa: { tipo: "outra-maquina", emitidaPara: dados.maquina } };
   }
-  // "AAAA-MM-DD" compara certo como texto, como no app.
   if (dados.expira && hoje > dados.expira) {
     return { ok: false, recusa: { tipo: "expirada", em: dados.expira } };
   }

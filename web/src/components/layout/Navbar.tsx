@@ -11,31 +11,11 @@ import { cn } from "@/lib/cn";
 import { links, nav } from "@/lib/site";
 
 /**
- * A NAVBAR, E O QUE A ANIMAÇÃO DELA PRECISA FAZER
- *
- * No topo ela é uma linha dentro da moldura. Ao rolar, vira uma cápsula branca
- * flutuante — e a transição acontece por MOLA, não por `transition` de CSS em
- * `padding` e `border-radius`, que era o que havia antes: animar propriedade
- * que muda layout obriga o navegador a refazer a conta a cada quadro, e o
- * salto aparecia no meio da rolagem.
- *
- * Três coisas foram acrescentadas, e cada uma responde a uma pergunta de quem
- * está lendo a página:
- *
- * 1. ONDE EU ESTOU? Uma pastilha desliza por baixo do item da seção que está
- *    na tela. É o mesmo elemento mudando de lugar (`layoutId`), então ela
- *    escorrega de um item para o outro em vez de piscar.
- * 2. QUANTO FALTA? Uma linha fina de progresso no pé da cápsula, presa à
- *    rolagem da página.
- * 3. DEIXA EU LER. Rolando para baixo a barra sai do caminho; ao subir um
- *    pouco, ela volta. Só por transformação — nada de layout.
- *
- * QUEM PEDIU MENOS MOVIMENTO recebe menos movimento: sem mola, sem pastilha
- * deslizante, sem esconder ao rolar. O estado continua legível, porque a
- * pastilha vira uma borda embaixo do item ativo.
+ * A navbar: no topo é uma linha; ao rolar vira uma cápsula, por mola (animar padding e raio refaria o layout a cada quadro).
+ * A pastilha desliza até a seção na tela (layoutId), uma linha mostra o progresso, e ela sai do caminho ao descer.
+ * Com menos movimento pedido: sem mola, sem deslize, sem esconder; o item ativo ganha uma borda.
  */
 
-/** Rolagem acumulada, em pixels, para a barra sair do caminho. */
 const ESCONDE_DEPOIS_DE = 90;
 
 export function Navbar() {
@@ -52,17 +32,12 @@ export function Navbar() {
   useMotionValueEvent(scrollY, "change", (y) => {
     setRolou(y > 12);
     const descendo = y > ultimoY.current;
-    // O menu aberto nunca some debaixo da pessoa.
     if (!aberto) setEscondida(descendo && y > ESCONDE_DEPOIS_DE);
     ultimoY.current = y;
   });
 
   /*
-   * QUAL SEÇÃO ESTÁ NA TELA.
-   *
-   * `IntersectionObserver` com a janela encolhida no topo e no pé: a seção só
-   * conta como "a que estou lendo" quando ocupa a faixa do meio da tela. Sem
-   * isso, duas seções vizinhas disputam a pastilha durante a rolagem inteira.
+   * A seção conta como "a que estou lendo" só na faixa do meio da tela, senão duas vizinhas disputam a pastilha.
    */
   useEffect(() => {
     const ids = nav.map((i) => i.href.replace("#", ""));

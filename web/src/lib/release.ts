@@ -4,12 +4,8 @@ import { useEffect, useState } from "react";
 import { site } from "./site";
 
 /*
- * A versão mais nova, lida da API pública do GitHub no navegador de quem abre o
- * painel. O site é estático: não há servidor para perguntar por ele.
- *
- * Só o instalador de nome fixo aparece. O produto decidiu não mostrar a página
- * de releases nem os outros arquivos (.msi, setup com versão): cada escolha que
- * a pessoa não sabe fazer é uma desistência possível (`site/src/data/produto.ts`).
+ * A versão mais nova, lida da API pública do GitHub no navegador. Só o instalador de nome fixo aparece:
+ * cada escolha que a pessoa não sabe fazer é uma desistência possível.
  */
 
 export type Release = {
@@ -35,7 +31,6 @@ type Bruta = {
   assets: { name: string; size: number; browser_download_url: string }[];
 };
 
-/** O primeiro trecho das notas, antes do primeiro título — sem tabela nem markdown. */
 function resumir(corpo: string | null): string {
   if (!corpo) return "";
   const antesDoTitulo = corpo.split(/\n#{1,6}\s/)[0] ?? "";
@@ -58,8 +53,7 @@ export function useUltimaRelease(): EstadoRelease {
   useEffect(() => {
     let vivo = true;
 
-    // A API sem autenticação aceita 60 pedidos por hora por endereço. O cache
-    // de meia hora na sessão evita gastar isso trocando de página no painel.
+    // 60 pedidos por hora por endereço sem autenticação: o cache de meia hora na sessão poupa isso.
     try {
       const guardado = JSON.parse(sessionStorage.getItem(CACHE) ?? "null");
       if (guardado && Date.now() - guardado.em < VALIDADE_MS) {
@@ -95,8 +89,6 @@ export const formatarTamanho = (bytes: number) =>
 export const formatarDataHora = (iso: string) =>
   new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 
-/* ------------------------------------------------------------ o histórico */
-
 export type ItemDeVersao = { versao: string; publicadaEm: string };
 
 export type EstadoHistorico =
@@ -106,13 +98,7 @@ export type EstadoHistorico =
 
 const CACHE_HISTORICO = "otimiza.painel.versoes";
 
-/**
- * Todas as versões publicadas, da API pública do GitHub.
- *
- * É o único dado com linha do tempo que a área do cliente tem de verdade — o
- * programa não manda nada para lugar nenhum, então não existe "receita por
- * mês" para desenhar aqui. O que existe é o ritmo com que o produto sai.
- */
+/** Todas as versões publicadas: o único dado com linha do tempo que a área do cliente tem, já que o programa não manda nada. */
 export function useHistoricoDeVersoes(): EstadoHistorico {
   const [estado, setEstado] = useState<EstadoHistorico>({ estado: "carregando" });
 

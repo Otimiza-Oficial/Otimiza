@@ -19,15 +19,8 @@ import { useLicencaAtiva, useOnboarding } from "@/lib/sessao";
 import { links, site } from "@/lib/site";
 
 /*
- * O PAINEL TEM DOIS ESTADOS, E ELES NÃO SE MISTURAM.
- *
- * Quem acabou de entrar não instalou nada: mostrar curva, histórico e lista
- * cheia para essa pessoa seria simular uma operação que não existe. Ela vê a
- * lista do que falta e os estados vazios.
- *
- * Quem já informou a máquina e tem a chave conferida vê o painel completo.
- * Nenhum número aqui é inventado: os que existem vêm da chave (assinada) e da
- * API pública do GitHub.
+ * Dois estados que não se misturam: quem acabou de entrar vê o que falta; quem tem máquina e chave conferida vê o painel.
+ * Nenhum número é inventado: vêm da chave assinada e da API pública do GitHub.
  */
 export function VisaoGeral() {
   const { licenca, conferindo, total } = useLicencaAtiva();
@@ -214,19 +207,8 @@ export function VisaoGeral() {
 }
 
 /**
- * O ESTADO DA LICENÇA, EM UMA FRASE E UMA AÇÃO.
- *
- * Quatro estados, e cada um responde a pergunta seguinte da pessoa:
- *
- * - válida: nada a fazer, e a data de emissão fica à mão para o suporte;
- * - não confere: a chave é de outro computador, ou foi copiada pela metade —
- *   os dois casos se resolvem na mesma tela, e o botão leva até ela;
- * - sem código de máquina: a chave até pode estar certa, mas não há contra o
- *   que conferir;
- * - nenhuma chave: quem chegou agora.
- *
- * A cor não decide nada sozinha: o texto diz o estado. É a mesma regra do
- * programa — quem lê precisa entender sem depender de enxergar cor.
+ * O estado da licença em uma frase e uma ação: válida, não confere, sem código de máquina, nenhuma chave.
+ * O texto diz o estado; a cor não decide sozinha.
  */
 function EstadoDaLicenca({
   conferindo,
