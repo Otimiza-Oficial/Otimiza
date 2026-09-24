@@ -453,10 +453,21 @@ pub fn run() {
             // programas em modo econômico. Devolve antes de qualquer outra coisa.
             #[cfg(windows)]
             tauri::async_runtime::spawn(async {
-                if let Ok(n) = tokio::task::spawn_blocking(modules::windows::governador::recuperar_na_abertura).await {
-                    if n > 0 {
-                        utils::Logger::info(&format!("governador: {} programa(s) devolvidos ao normal na abertura", n));
+                match tokio::task::spawn_blocking(modules::windows::gamemode::recuperar_na_abertura).await {
+                    Ok(Ok(d)) => {
+                        if d.devolvidos > 0 {
+                            utils::Logger::info(&format!("governador: {} programa(s) devolvidos ao normal na abertura", d.devolvidos));
+                        }
+                        if !d.falharam.is_empty() {
+                            let nomes: Vec<&str> = d.falharam.iter().map(|a| a.nome.as_str()).collect();
+                            utils::Logger::warn(&format!(
+                                "governador: na abertura o Windows não deixou devolver {}; seguem anotados",
+                                nomes.join(", ")
+                            ));
+                        }
                     }
+                    Ok(Err(e)) => utils::Logger::warn(&format!("governador: não consegui ler o que ficou acalmado: {}", e)),
+                    Err(e) => utils::Logger::warn(&format!("governador: a devolução na abertura caiu: {}", e)),
                 }
             });
 
@@ -673,6 +684,13 @@ pub fn run() {
                             Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
+                        // De que lado da vigília do governador esta medição
+                        // fica (`modules::portao`): o estado no começo e no
+                        // fim precisa ser o mesmo, senão não fica em lado
+                        // nenhum.
+                        let governador_no_inicio =
+                            modules::windows::gamemode::governador_na_partida(&executavel);
+
                         let medido = tokio::task::spawn_blocking(move || {
                             modules::windows::frames::medir_par(
                                 jogo.pid,
@@ -684,6 +702,10 @@ pub fn run() {
                         .await;
 
                         parar.store(true, std::sync::atomic::Ordering::Relaxed);
+                        let governador_na_medicao = modules::portao::marcar(
+                            governador_no_inicio,
+                            modules::windows::gamemode::governador_na_partida(&executavel),
+                        );
                         let cpu_uso_pct = amostrador
                             .join()
                             .ok()
@@ -747,6 +769,7 @@ pub fn run() {
                                     gpu_uso_pct,
                                     trancos_com_disco_pct,
                                     trancos_medidos: correlacao.map(|(_, total)| total),
+                                    governador: governador_na_medicao,
                                 };
 
                                 match medicoes::registrar(registro) {
@@ -766,6 +789,9 @@ pub fn run() {
                                         };
                                         for d in decididos {
                                             utils::Logger::info(&format!("portão: {} → {:?}", d.vigiado.nome, d.veredito));
+                                            if d.vigiado.id.starts_with("governador:") {
+                                                let _ = handle.emit("gamemode:changed", modules::portao::frase_do_governador(&d));
+                                            }
                                             let _ = handle.emit("portao:decidido", d);
                                         }
                                     }

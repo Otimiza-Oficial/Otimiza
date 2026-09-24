@@ -27,6 +27,7 @@
 //    em segundo plano já está listado nas abas Sistema e Painel, com nome, para
 //    a pessoa decidir.
 
+use super::governador::{Devolucao, Governador, Modo, Passada};
 use super::power;
 use crate::modules::changelog::{ChangeLog, ChangeRecord};
 use serde::{Deserialize, Serialize};
@@ -158,7 +159,191 @@ pub fn jogo_aberto_com_pid() -> Option<(String, u32)> {
 }
 
 /// O governador da sessão de jogo aberta. `Some` enquanto o modo está ligado.
-static GOVERNADOR: std::sync::Mutex<Option<super::governador::Governador>> = std::sync::Mutex::new(None);
+static GOVERNADOR: std::sync::Mutex<Option<Governador>> = std::sync::Mutex::new(None);
+
+/// O governador, mesmo com o mutex envenenado.
+///
+/// Envenenar é um pânico no meio de uma passada. A lista do que foi acalmado
+/// continua lá dentro e continua valendo — e é justamente ela que o desligar
+/// precisa para devolver. Tratar o veneno como "não há governador" fazia a
+/// tela dizer "Modo jogo desligado." com programas ainda em prioridade baixa.
+fn trava() -> std::sync::MutexGuard<'static, Option<Governador>> {
+    GOVERNADOR.lock().unwrap_or_else(|envenenado| envenenado.into_inner())
+}
+
+/// A chave de um jogo no formato do portão e das medições: o começo do nome
+/// do processo, em minúsculas. **Função pura.**
+///
+/// FiveM e RedM trocam de nome a cada compilação (`FiveM_b3258_GTAProcess`),
+/// então a chave deles é o pedaço fixo do catálogo; os outros, o nome sem
+/// `.exe`.
+pub fn chave_do_processo(executavel: &str) -> String {
+    let nome = executavel.trim().to_lowercase();
+    if let Some(jogo) = JOGOS.iter().find(|j| j.por_pedaco && nome.contains(j.chave)) {
+        return jogo.chave.to_string();
+    }
+    nome.strip_suffix(".exe").unwrap_or(&nome).to_string()
+}
+
+fn executavel_do_pid(pid: u32) -> Option<String> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut sistema = System::new();
+    let alvo = [Pid::from_u32(pid)];
+    sistema.refresh_processes_specifics(ProcessesToUpdate::Some(&alvo), true, ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet));
+    let p = sistema.process(alvo[0])?;
+    let do_caminho = p.exe().and_then(|c| c.file_name()).map(|a| a.to_string_lossy().to_string());
+    do_caminho.or_else(|| Some(p.name().to_string_lossy().to_string()))
+}
+
+/// Pergunta ao portão como o governador age na partida que começa. Devolve o
+/// governador da sessão e, quando há, o aviso para a tela.
+fn governador_para(jogo: &str, pid: u32) -> (Governador, Option<String>) {
+    use crate::modules::portao::{self, Rodada};
+
+    let Some(processo) = executavel_do_pid(pid).map(|e| chave_do_processo(&e)).filter(|p| !p.is_empty()) else {
+        return (
+            Governador::novo(Modo::Parado, None, pid),
+            Some(format!(
+                "O governador fica parado: não consegui identificar o executável de {} para medir o efeito dele.",
+                jogo
+            )),
+        );
+    };
+    // Antes de qualquer outra coisa: sem ler o que uma sessão anterior deixou
+    // acalmado, ele não mexe em nada — nem anota a partida como "agindo".
+    let sondagem = Governador::novo(Modo::Parado, Some(processo.clone()), pid);
+    if let Some(e) = sondagem.anotacao_ilegivel() {
+        let aviso = format!("O governador fica parado: {}. Sem conseguir ler o que uma sessão anterior acalmou, ele não mexe em nada.", e);
+        return (sondagem, Some(aviso));
+    }
+    let medindo = crate::modules::preferences::Preferences::load().medir_quadros_sozinho && super::registry::is_elevated();
+    let medicoes = crate::modules::medicoes::ler().ok();
+    let estado = portao::ler_estrito();
+    let rodada = portao::rodada_do_governador(estado.as_ref().ok(), &processo, medicoes.as_deref(), medindo);
+    let agora = crate::modules::changelog::now_timestamp();
+
+    // Sem a vigília gravada não há comparação nem veredito: não age.
+    let vigiar = |agindo: bool| {
+        portao::observar_governador(&processo, jogo, agora, agindo)
+            .map_err(|e| (Modo::Parado, Some(format!("O governador fica parado: {}.", e))))
+    };
+    let (modo, aviso) = match rodada {
+        Rodada::Agir => match vigiar(true) {
+            Ok(()) => (Modo::Agir, None),
+            Err(parado) => parado,
+        },
+        Rodada::Comparar => match vigiar(false) {
+            Err(parado) => parado,
+            Ok(()) => (
+                Modo::Comparar,
+                Some(format!(
+                    "Partida de comparação: nesta partida o governador não mexe em nada, para o Otimiza medir {} sem ele e conferir que ele não tira FPS.",
+                    jogo
+                )),
+            ),
+        },
+        Rodada::Reprovado(d) => (Modo::Parado, Some(format!("Governador parado. {}", portao::frase_do_governador(&d)))),
+        Rodada::SemMedicao(motivo) => (Modo::Parado, Some(format!("O governador fica parado: {}.", motivo))),
+    };
+    (Governador::novo(modo, Some(processo), pid), aviso)
+}
+
+/// Uma passada do governador para o jogo aberto, criando o da sessão quando
+/// ela começa. Devolve as frases para a tela (vazia quando nada mudou).
+fn passar(guarda: &mut Option<Governador>, jogo: &str, pid: u32) -> Vec<String> {
+    let mut frases = Vec::new();
+
+    // Outro jogo no lugar do anterior sem o vigia ter visto o fechamento:
+    // devolve o que era da sessão velha antes de começar a nova.
+    if guarda.as_ref().is_some_and(|g| g.jogo_pid() != pid) {
+        if let Some(mut velho) = guarda.take() {
+            let d = velho.devolver_tudo();
+            if !d.falharam.is_empty() {
+                frases.push(frase_de_falha(&d));
+            }
+        }
+    }
+    let sessao_nova = guarda.is_none();
+    if sessao_nova {
+        let (novo, aviso) = governador_para(jogo, pid);
+        frases.extend(aviso);
+        *guarda = Some(novo);
+    }
+    let Some(g) = guarda.as_mut() else { return frases };
+    let feito = g.passada(pid);
+    // "Nada disputando" só na primeira passada da sessão: nas seguintes,
+    // silêncio é o normal e não precisa de aviso.
+    if let Some(frase) = mensagem_da_passada(jogo, g.modo(), &feito, sessao_nova) {
+        frases.push(frase);
+    }
+    frases
+}
+
+/// A frase de uma passada. **Função pura.**
+///
+/// "Nada disputando" e "o Windows não deixou" são coisas diferentes, e a tela
+/// precisa saber qual das duas aconteceu: a segunda é um programa que continua
+/// brigando com o jogo, e quase sempre tem solução (abrir o Otimiza como
+/// administrador).
+pub fn mensagem_da_passada(jogo: &str, modo: Modo, p: &Passada, dizer_nada: bool) -> Option<String> {
+    let mut partes = Vec::new();
+    if !p.acalmados.is_empty() {
+        partes.push(format!(
+            "{} programa(s) em segundo plano passaram a rodar em modo econômico enquanto {} está aberto: {}.",
+            p.acalmados.len(),
+            jogo,
+            p.acalmados.join(", ")
+        ));
+    }
+    if !p.em_espera.is_empty() {
+        partes.push(format!(
+            "Disputando processador com {}, deixados como estão nesta partida de comparação: {}.",
+            jogo,
+            p.em_espera.join(", ")
+        ));
+    }
+    if !p.recusados.is_empty() {
+        let nomes: Vec<&str> = p.recusados.iter().map(|r| r.nome.as_str()).collect();
+        let causa = if p.recusados.iter().all(|r| r.codigo == 5) {
+            "acesso negado — costuma ser programa rodando como administrador com o Otimiza sem administrador".to_string()
+        } else {
+            let mut codigos: Vec<String> = p.recusados.iter().map(|r| r.codigo.to_string()).collect();
+            codigos.dedup();
+            format!("erro do Windows {}", codigos.join(", "))
+        };
+        partes.push(format!(
+            "{} programa(s) disputam processador com {}, mas o Windows não deixou o Otimiza acalmá-los ({}): {}.",
+            nomes.len(),
+            jogo,
+            causa,
+            nomes.join(", ")
+        ));
+    }
+    if partes.is_empty() && dizer_nada && modo != Modo::Parado {
+        partes.push(format!("Nada em segundo plano está disputando processador com {} agora.", jogo));
+    }
+    (!partes.is_empty()).then(|| partes.join(" "))
+}
+
+/// **Função pura.**
+fn frase_de_falha(d: &Devolucao) -> String {
+    let mut partes = Vec::new();
+    if !d.falharam.is_empty() {
+        let nomes: Vec<&str> = d.falharam.iter().map(|a| a.nome.as_str()).collect();
+        partes.push(format!("O Windows não deixou devolver ao normal: {}. Continuam em prioridade baixa.", nomes.join(", ")));
+    }
+    match (&d.nao_anotado, d.falharam.is_empty()) {
+        (None, false) => partes.push(
+            "Estão anotados, e o Otimiza tenta de novo quando o próximo jogo fechar e na próxima abertura.".to_string(),
+        ),
+        (Some(e), _) => partes.push(format!(
+            "E não consegui ler ou gravar a lista do que foi acalmado ({}): o que estiver nela pode não voltar sozinho — reiniciar o PC devolve tudo.",
+            e
+        )),
+        (None, true) => {}
+    }
+    partes.join(" ")
+}
 
 /// Liga o modo (2.9): o governador de segundo plano.
 ///
@@ -168,32 +353,60 @@ static GOVERNADOR: std::sync::Mutex<Option<super::governador::Governador>> = std
 /// ambas: a energia do jogo agora é do motor adaptativo (perfil MEDIDO por
 /// jogo, aba Energia), e prioridade alta cega não mostrou ganho. O que fica é
 /// o que ataca uma causa real de engasgo: programa em segundo plano
-/// disputando processador com o jogo. Ver `governador.rs`.
+/// disputando processador com o jogo. Ver `governador.rs` — e ele mesmo só
+/// age com o aval do portão "nunca menos FPS".
 ///
 /// `log` continua na assinatura: quem atualizou de uma versão antiga pode
 /// ter o plano de energia do modo antigo no histórico, e `desativar` devolve.
 pub fn ativar(_log: &mut ChangeLog) -> Result<Vec<String>, String> {
     let (nome, pid) = jogo_aberto_com_pid()
         .ok_or("Nenhum jogo aberto agora. O modo age enquanto um jogo está rodando.")?;
-    let mut guarda = GOVERNADOR.lock().map_err(|_| "estado do modo jogo indisponível".to_string())?;
-    let governador = guarda.get_or_insert_with(Default::default);
-    #[cfg(windows)]
-    let novos = governador.passada(pid);
-    #[cfg(not(windows))]
-    let novos: Vec<String> = { let _ = pid; Vec::new() };
-    Ok(vec![mensagem_de_acalmados(&nome, &novos)])
+    let mut guarda = trava();
+    let mut frases = passar(&mut guarda, &nome, pid);
+    if frases.is_empty() {
+        frases.push(format!("Modo jogo ligado para {}.", nome));
+    }
+    Ok(frases)
 }
 
-fn mensagem_de_acalmados(jogo: &str, novos: &[String]) -> String {
-    if novos.is_empty() {
-        format!("Nada em segundo plano está disputando processador com {} agora.", jogo)
+/// Na abertura do Otimiza: devolve o que uma sessão anterior deixou acalmado.
+///
+/// Pela trava do governador, para não correr com uma sessão de jogo que
+/// começa ao mesmo tempo: as duas leem e gravam o mesmo governador.json.
+/// Se a sessão já começou, ela carregou as sobras e devolve quando terminar.
+pub fn recuperar_na_abertura() -> Result<Devolucao, String> {
+    let guarda = trava();
+    if guarda.is_some() {
+        return Ok(Devolucao::default());
+    }
+    super::governador::recuperar_na_abertura()
+}
+
+/// O que o governador está fazendo agora no jogo `executavel`, para marcar a
+/// medição automática. `None` quando ele não está nesse jogo.
+pub fn governador_na_partida(executavel: &str) -> Option<crate::modules::portao::GovernadorNaPartida> {
+    let guarda = trava();
+    let g = guarda.as_ref()?;
+    let processo = g.processo()?;
+    if !executavel.to_lowercase().starts_with(processo) {
+        return None;
+    }
+    g.participacao()
+}
+
+/// O portão reprovou o governador em `processo`: se ele está agindo nesse
+/// jogo agora, devolve tudo e para. As próximas partidas já nascem paradas
+/// (`portao::rodada_do_governador`).
+pub fn reprovar_governador(processo: &str) -> Result<(), String> {
+    let mut guarda = trava();
+    let Some(g) = guarda.as_mut().filter(|g| g.processo() == Some(processo)) else {
+        return Ok(());
+    };
+    let d = g.parar();
+    if d.falharam.is_empty() {
+        Ok(())
     } else {
-        format!(
-            "{} programa(s) em segundo plano passaram a rodar em modo econômico enquanto {} está aberto: {}.",
-            novos.len(),
-            jogo,
-            novos.join(", ")
-        )
+        Err(frase_de_falha(&d))
     }
 }
 
@@ -221,12 +434,20 @@ fn caminho_do_executavel(nome: &str) -> Option<std::path::PathBuf> {
 
 /// Desliga o modo: devolve prioridade e EcoQoS de todo programa acalmado, e
 /// — para quem veio de versão antiga — o plano de energia do modo antigo.
+///
+/// Programa que o Windows não deixou devolver NÃO vira sucesso: a resposta é
+/// erro, com o nome dele, e ele segue anotado em disco para a próxima
+/// tentativa.
 pub fn desativar(log: &mut ChangeLog) -> Result<String, String> {
-    let governador = GOVERNADOR.lock().ok().and_then(|mut g| g.take());
-    #[cfg(windows)]
-    let devolvidos = governador.map(|mut g| g.devolver_tudo()).unwrap_or(0);
-    #[cfg(not(windows))]
-    let devolvidos = { let _ = governador; 0 };
+    // Sem governador na memória ainda pode haver sobra anotada em disco de
+    // uma devolução que falhou antes: `novo` a carrega, e ela é tentada aqui.
+    // A trava fica segura até o fim da devolução: a devolução da abertura
+    // (ecuperar_na_abertura) mexe no mesmo arquivo.
+    let devolucao = {
+        let mut guarda = trava();
+        let mut governador = guarda.take().unwrap_or_else(|| Governador::novo(Modo::Parado, None, 0));
+        governador.devolver_tudo()
+    };
 
     let mut plano = false;
     if let Some(registro) = log.take(ID)? {
@@ -238,15 +459,27 @@ pub fn desativar(log: &mut ChangeLog) -> Result<String, String> {
         }
     }
 
-    Ok(match (devolvidos, plano) {
-        (0, false) => "Modo jogo desligado.".to_string(),
-        (n, false) => format!("Modo jogo desligado. {} programa(s) voltaram ao normal.", n),
-        (n, true) => format!("Modo jogo desligado. {} programa(s) voltaram ao normal e o plano de energia voltou ao de antes.", n),
-    })
+    frase_do_desligar(&devolucao, plano)
+}
+
+/// **Função pura.**
+fn frase_do_desligar(d: &Devolucao, plano: bool) -> Result<String, String> {
+    let mut partes = Vec::new();
+    if d.devolvidos > 0 {
+        partes.push(format!("{} programa(s) voltaram ao normal.", d.devolvidos));
+    }
+    if plano {
+        partes.push("O plano de energia voltou ao de antes.".to_string());
+    }
+    if !d.falharam.is_empty() || d.nao_anotado.is_some() {
+        partes.push(frase_de_falha(d));
+        return Err(format!("Modo jogo desligado só em parte. {}", partes.join(" ")));
+    }
+    Ok(if partes.is_empty() { "Modo jogo desligado.".to_string() } else { format!("Modo jogo desligado. {}", partes.join(" ")) })
 }
 
 fn modo_ligado(log: &ChangeLog) -> bool {
-    GOVERNADOR.lock().map(|g| g.is_some()).unwrap_or(false) || log.is_applied(ID)
+    trava().is_some() || log.is_applied(ID)
 }
 
 /// Situação atual, para a interface.
@@ -257,10 +490,9 @@ pub fn status(log: &ChangeLog) -> GameModeStatus {
         game_running: jogo.is_some(),
         game: jogo.map(|g| g.to_string()),
         active: modo_ligado(log),
-        applied: GOVERNADOR
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|g| g.acalmados().iter().map(|a| a.nome.clone()).collect()))
+        applied: trava()
+            .as_ref()
+            .map(|g| g.acalmados().iter().map(|a| a.nome.clone()).collect())
             .unwrap_or_default(),
     }
 }
@@ -453,13 +685,8 @@ pub fn passo(log: &mut ChangeLog) -> Option<String> {
     // Jogo aberto com o modo já ligado: nova passada do governador, porque
     // um atualizador pode começar a baixar no meio da partida.
     if let (Some((nome, pid)), true) = (&aberto, aplicado) {
-        let mut guarda = GOVERNADOR.lock().ok()?;
-        let governador = guarda.get_or_insert_with(Default::default);
-        #[cfg(windows)]
-        let novos = governador.passada(*pid);
-        #[cfg(not(windows))]
-        let novos: Vec<String> = { let _ = (pid, governador); Vec::new() };
-        return (!novos.is_empty()).then(|| mensagem_de_acalmados(nome, &novos));
+        let frases = passar(&mut trava(), nome, *pid);
+        return (!frases.is_empty()).then(|| frases.join(" "));
     }
 
     match (aberto.map(|(n, _)| n), aplicado) {
@@ -484,7 +711,8 @@ pub fn passo(log: &mut ChangeLog) -> Option<String> {
             // preso pelo Otimiza velho é exatamente o defeito que a remoção
             // existe para acabar.
             let devolvidos = super::suspend::retomar_tudo().unwrap_or_default();
-            let texto = desativar(log).ok()?;
+            // Falha ao devolver vai para a tela como está: nunca some.
+            let texto = desativar(log).unwrap_or_else(|erro| erro);
 
             if devolvidos.is_empty() {
                 Some(texto)
@@ -756,5 +984,76 @@ mod tests {
 
         let s = status(&ChangeLog::load());
         assert_eq!(s.game_running, jogo.is_some());
+    }
+
+    #[test]
+    fn chave_casa_com_o_nome_que_a_medicao_grava() {
+        assert_eq!(chave_do_processo("FiveM_b3258_GTAProcess.exe"), "fivem_");
+        assert_eq!(chave_do_processo("cs2.exe"), "cs2");
+        assert_eq!(chave_do_processo("Palworld-Win64-Shipping.exe"), "palworld-win64-shipping");
+    }
+
+    fn recusa(nome: &str, codigo: u32) -> super::super::governador::Recusa {
+        super::super::governador::Recusa { nome: nome.into(), codigo }
+    }
+
+    #[test]
+    fn nao_havia_e_nao_consegui_sao_frases_diferentes() {
+        let nada = mensagem_da_passada("FiveM", Modo::Agir, &Passada::default(), true).unwrap();
+        assert!(nada.contains("Nada em segundo plano"));
+
+        let recusado = Passada { recusados: vec![recusa("OneDrive.exe", 5)], ..Default::default() };
+        let frase = mensagem_da_passada("FiveM", Modo::Agir, &recusado, true).unwrap();
+        assert!(!frase.contains("Nada"), "recusa não pode virar \"nada disputando\": {}", frase);
+        assert!(frase.contains("OneDrive.exe") && frase.contains("administrador"), "{}", frase);
+
+        let outro = Passada { recusados: vec![recusa("x.exe", 87)], ..Default::default() };
+        assert!(mensagem_da_passada("FiveM", Modo::Agir, &outro, false).unwrap().contains("erro do Windows 87"));
+    }
+
+    #[test]
+    fn silencio_depois_da_primeira_passada_e_parado_sem_frase() {
+        assert_eq!(mensagem_da_passada("FiveM", Modo::Agir, &Passada::default(), false), None);
+        assert_eq!(mensagem_da_passada("FiveM", Modo::Parado, &Passada::default(), true), None);
+    }
+
+    #[test]
+    fn desligar_com_devolucao_falha_nao_e_sucesso() {
+        use super::super::governador::{Acalmado, Eco};
+        let falhou = Devolucao {
+            devolvidos: 2,
+            sumidos: 0,
+            falharam: vec![Acalmado { pid: 7, nome: "chrome.exe".into(), inicio: 1, prioridade_anterior: 32, ecoqos: Eco::NaoMexido }],
+            nao_anotado: None,
+        };
+        let erro = frase_do_desligar(&falhou, false).unwrap_err();
+        assert!(erro.contains("só em parte") && erro.contains("chrome.exe"), "{}", erro);
+
+        assert_eq!(frase_do_desligar(&Devolucao::default(), false).unwrap(), "Modo jogo desligado.");
+        let ok = Devolucao { devolvidos: 3, ..Default::default() };
+        assert!(frase_do_desligar(&ok, true).unwrap().contains("3 programa(s) voltaram ao normal. O plano de energia"));
+    }
+
+    #[test]
+    fn mutex_envenenado_nao_esconde_o_governador() {
+        // Um pânico no meio de uma passada envenena o mutex. Antes, o desligar
+        // lia isso como "não há governador" e dizia "Modo jogo desligado." com
+        // programas ainda acalmados.
+        let _ = std::thread::spawn(|| {
+            let mut g = GOVERNADOR.lock().unwrap_or_else(|e| e.into_inner());
+            *g = Some(Governador::default());
+            panic!("envenena de propósito");
+        })
+        .join();
+        assert!(GOVERNADOR.is_poisoned());
+        assert!(trava().take().is_some(), "o governador continua lá dentro para ser devolvido");
+        GOVERNADOR.clear_poison();
+    }
+
+    #[test]
+    fn lista_que_nao_se_le_nem_grava_nao_vira_desligado() {
+        let d = Devolucao { nao_anotado: Some("governador.json ilegível".into()), ..Default::default() };
+        let erro = frase_do_desligar(&d, false).unwrap_err();
+        assert!(erro.contains("governador.json ilegível") && !erro.contains("Estão anotados"), "{}", erro);
     }
 }

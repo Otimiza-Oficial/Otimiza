@@ -294,6 +294,7 @@ mod tests {
             gpu_uso_pct: None,
             trancos_com_disco_pct: None,
             trancos_medidos: None,
+            governador: None,
         }
     }
 
