@@ -30,6 +30,14 @@
 // Se o Otimiza morrer no meio, a lista do que foi mexido fica em disco e a
 // próxima abertura devolve (conferindo que é o mesmo processo pelo horário
 // em que ele começou, para não mexer em outro que herdou o mesmo número).
+//
+// E ELE NÃO AGE SEM PROVA. Acalmar algo de que o jogo depende fora da pasta
+// dele (overlay do launcher, `steamwebhelper`) pode custar FPS. Por isso cada
+// jogo passa pelo portão "nunca menos FPS" (`modules::portao`): partidas de
+// comparação, em que ele só anota quem acalmaria, se alternam com partidas em
+// que ele age, até haver medições dos dois lados. Se o FPS médio ou o 1% pior
+// caírem (intervalos separados e pelo menos 5%), ele devolve tudo e fica
+// parado naquele jogo. Sem medição automática, ele não age.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -100,6 +108,28 @@ pub fn escolher(candidatos: &[Candidato], jogo_pid: u32, jogo_caminho: Option<&P
         .collect()
 }
 
+/// O que estava no EcoQoS do processo antes de o governador mexer.
+///
+/// Chrome, Edge e o próprio Windows ligam o EcoQoS em processos por conta
+/// própria. Devolver "sem controle" (ControlMask 0) para todo mundo apagaria
+/// essa escolha: por isso o estado é LIDO antes, e devolvido como estava.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Eco {
+    /// O governador não mexeu no EcoQoS: o Windows não deixou ler o estado
+    /// anterior (no Windows 10 a leitura não existe) ou recusou a mudança.
+    /// Sem saber o que havia, não se escreve.
+    NaoMexido,
+    /// O estado lido antes, para devolver exatamente.
+    Anterior { control: u32, state: u32 },
+    /// Registro gravado por uma versão que não lia o estado anterior. Devolve
+    /// como ela devolvia (sem controle), que é o melhor que se sabe.
+    Legado,
+}
+
+fn eco_legado() -> Eco {
+    Eco::Legado
+}
+
 /// O que foi mexido num processo, para devolver.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Acalmado {
@@ -108,41 +138,99 @@ pub struct Acalmado {
     /// Segundos desde 1970 em que o processo começou: confirma que é o mesmo.
     pub inicio: u64,
     pub prioridade_anterior: u32,
+    #[serde(default = "eco_legado")]
+    pub ecoqos: Eco,
+}
+
+/// Um processo que o governador quis acalmar e o Windows não deixou.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recusa {
+    pub nome: String,
+    /// Código do Windows (`GetLastError`). 5 é acesso negado: quase sempre um
+    /// programa rodando como administrador com o Otimiza sem administrador.
+    pub codigo: u32,
+}
+
+/// O que uma passada fez de novo, para a tela.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Passada {
+    /// Passaram a rodar em modo econômico agora.
+    pub acalmados: Vec<String>,
+    /// Estavam disputando e o Windows recusou.
+    pub recusados: Vec<Recusa>,
+    /// Partida de comparação: estavam disputando e ficaram como estavam.
+    pub em_espera: Vec<String>,
+}
+
+/// Como o governador age nesta sessão de jogo (decidido pelo portão).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Modo {
+    /// Acalma quem disputa.
+    Agir,
+    /// Partida de comparação: vê quem acalmaria e não mexe.
+    Comparar,
+    /// Não faz nada: reprovado neste jogo, ou sem medição para conferir. É o
+    /// padrão: um governador criado sem passar pelo portão não mexe em nada.
+    #[default]
+    Parado,
+}
+
+/// O resultado de devolver uma lista.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Devolucao {
+    pub devolvidos: usize,
+    /// Fecharam (ou o número passou a outro processo): não há o que devolver.
+    pub sumidos: usize,
+    /// O Windows recusou devolver. Ficam anotados em disco para nova tentativa.
+    pub falharam: Vec<Acalmado>,
+    /// A anotação em disco falhou (ou o arquivo anterior não se lê): quem
+    /// falhou pode não ser tentado de novo, e a frase não pode dizer que é.
+    pub nao_anotado: Option<String>,
 }
 
 fn arquivo() -> Option<PathBuf> {
     std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("governador.json"))
 }
 
-fn gravar(lista: &[Acalmado]) {
-    let Some(a) = arquivo() else { return };
-    if lista.is_empty() {
-        let _ = std::fs::remove_file(&a);
-        return;
+fn gravar(lista: &[Acalmado]) -> Result<(), String> {
+    let a = arquivo().ok_or("APPDATA ausente")?;
+    let resultado = if lista.is_empty() {
+        match std::fs::remove_file(&a) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        }
+    } else {
+        if let Some(p) = a.parent() {
+            let _ = std::fs::create_dir_all(p);
+        }
+        serde_json::to_string(lista).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&a, json).map_err(|e| e.to_string()))
+    };
+    if let Err(e) = &resultado {
+        crate::utils::Logger::warn(&format!("governador: não gravei a lista do que está acalmado: {}", e));
     }
-    if let Some(p) = a.parent() {
-        let _ = std::fs::create_dir_all(p);
-    }
-    if let Ok(json) = serde_json::to_string(lista) {
-        let _ = std::fs::write(&a, json);
-    }
+    resultado
 }
 
-fn ler() -> Vec<Acalmado> {
-    arquivo()
-        .and_then(|a| std::fs::read_to_string(a).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+/// O que ficou anotado em disco. Arquivo ausente é lista vazia; arquivo que
+/// existe e não se lê é ERRO — não "nada acalmado".
+fn ler() -> Result<Vec<Acalmado>, String> {
+    let Some(a) = arquivo() else { return Ok(Vec::new()) };
+    match std::fs::read_to_string(&a) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("governador.json ilegível: {}", e)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(e) => Err(format!("governador.json: {}", e)),
+    }
 }
 
 // ------------------------------------------------------------------ Windows
 
 #[cfg(windows)]
 mod sys {
-    use windows_sys::Win32::Foundation::CloseHandle;
+    use super::Eco;
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
     use windows_sys::Win32::System::Threading::{
-        GetPriorityClass, OpenProcess, ProcessPowerThrottling, SetPriorityClass, SetProcessInformation,
-        BELOW_NORMAL_PRIORITY_CLASS, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        GetPriorityClass, GetProcessInformation, OpenProcess, ProcessPowerThrottling, SetPriorityClass,
+        SetProcessInformation, BELOW_NORMAL_PRIORITY_CLASS, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
         PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_STATE, PROCESS_QUERY_LIMITED_INFORMATION,
         PROCESS_SET_INFORMATION,
     };
@@ -154,18 +242,43 @@ mod sys {
         }
     }
 
-    fn abrir(pid: u32) -> Option<Alca> {
-        let h = unsafe { OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-        (!h.is_null()).then_some(Alca(h))
+    fn erro() -> u32 {
+        unsafe { GetLastError() }
     }
 
-    fn ecoqos(h: &Alca, ligar: bool) -> bool {
-        // Ligar: controla a velocidade e pede eficiência. Devolver: tira o
-        // controle (ControlMask 0), e o Windows volta a decidir sozinho.
+    fn abrir(pid: u32) -> Result<Alca, u32> {
+        let h = unsafe { OpenProcess(PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if h.is_null() {
+            Err(erro())
+        } else {
+            Ok(Alca(h))
+        }
+    }
+
+    /// O EcoQoS como está agora. `None` quando o Windows não responde — no
+    /// Windows 10 esta leitura não existe.
+    fn ler_ecoqos(h: &Alca) -> Option<(u32, u32)> {
+        let mut estado = PROCESS_POWER_THROTTLING_STATE {
+            Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: 0,
+            StateMask: 0,
+        };
+        let ok = unsafe {
+            GetProcessInformation(
+                h.0,
+                ProcessPowerThrottling,
+                &mut estado as *mut _ as *mut core::ffi::c_void,
+                std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+            ) != 0
+        };
+        ok.then_some((estado.ControlMask, estado.StateMask))
+    }
+
+    fn escrever_ecoqos(h: &Alca, control: u32, state: u32) -> bool {
         let estado = PROCESS_POWER_THROTTLING_STATE {
             Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
-            ControlMask: if ligar { PROCESS_POWER_THROTTLING_EXECUTION_SPEED } else { 0 },
-            StateMask: if ligar { PROCESS_POWER_THROTTLING_EXECUTION_SPEED } else { 0 },
+            ControlMask: control,
+            StateMask: state,
         };
         unsafe {
             SetProcessInformation(
@@ -177,30 +290,49 @@ mod sys {
         }
     }
 
-    /// Acalma. Devolve a prioridade anterior, ou `None` se o Windows negou.
-    pub fn acalmar(pid: u32) -> Option<u32> {
+    /// Acalma. Devolve a prioridade anterior e o que havia no EcoQoS, ou o
+    /// código do Windows quando ele negou.
+    pub fn acalmar(pid: u32) -> Result<(u32, Eco), u32> {
         let h = abrir(pid)?;
         let anterior = unsafe { GetPriorityClass(h.0) };
         if anterior == 0 {
-            return None;
+            return Err(erro());
         }
         // Quem já está abaixo do normal (ou ocioso) continua como está.
-        if anterior == BELOW_NORMAL_PRIORITY_CLASS || anterior == 0x40 {
-            ecoqos(&h, true);
-            return Some(anterior);
+        let ja_baixo = anterior == BELOW_NORMAL_PRIORITY_CLASS || anterior == 0x40;
+        if !ja_baixo && unsafe { SetPriorityClass(h.0, BELOW_NORMAL_PRIORITY_CLASS) } == 0 {
+            return Err(erro());
         }
-        if unsafe { SetPriorityClass(h.0, BELOW_NORMAL_PRIORITY_CLASS) } == 0 {
-            return None;
-        }
-        ecoqos(&h, true);
-        Some(anterior)
+        let eco = match ler_ecoqos(&h) {
+            Some((control, state))
+                if escrever_ecoqos(&h, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_EXECUTION_SPEED) =>
+            {
+                Eco::Anterior { control, state }
+            }
+            _ => Eco::NaoMexido,
+        };
+        Ok((anterior, eco))
     }
 
-    pub fn devolver(pid: u32, prioridade: u32) -> bool {
-        let Some(h) = abrir(pid) else { return false };
+    pub fn devolver(pid: u32, prioridade: u32, eco: Eco) -> bool {
+        let Ok(h) = abrir(pid) else { return false };
         let a = unsafe { SetPriorityClass(h.0, prioridade) } != 0;
-        let b = ecoqos(&h, false);
+        let b = match eco {
+            Eco::NaoMexido => true,
+            Eco::Anterior { control, state } => escrever_ecoqos(&h, control, state),
+            Eco::Legado => escrever_ecoqos(&h, 0, 0),
+        };
         a && b
+    }
+
+    #[cfg(test)]
+    pub fn ecoqos_de(pid: u32) -> Option<(u32, u32)> {
+        ler_ecoqos(&abrir(pid).ok()?)
+    }
+
+    #[cfg(test)]
+    pub fn ligar_ecoqos_por_conta_propria(pid: u32) -> bool {
+        abrir(pid).is_ok_and(|h| escrever_ecoqos(&h, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, PROCESS_POWER_THROTTLING_EXECUTION_SPEED))
     }
 }
 
@@ -208,19 +340,89 @@ mod sys {
 #[derive(Debug, Default)]
 pub struct Governador {
     acalmados: Vec<Acalmado>,
+    /// Sobras de uma devolução que o Windows recusou: continuam anotadas em
+    /// disco e são tentadas de novo ao devolver.
+    pendentes: Vec<Acalmado>,
     sistema: Option<sysinfo::System>,
+    modo: Modo,
+    /// Chave do jogo desta sessão (formato de `portao::Vigiado::processo`).
+    processo: Option<String>,
+    jogo_pid: u32,
+    /// Na partida de comparação: houve quem acalmar em algum momento.
+    viu_candidatos: bool,
+    /// Já avisados nesta sessão (recusa ou espera), para não repetir.
+    avisados: Vec<u32>,
+    /// O governador.json existe e não se lê. Enquanto for assim ele não
+    /// acalma nada e não grava por cima: a lista de uma sessão anterior pode
+    /// estar lá dentro, com programas ainda em prioridade baixa.
+    anotacao_ilegivel: Option<String>,
 }
 
 impl Governador {
+    /// Um governador para a sessão que começa, com as sobras de devoluções
+    /// anteriores que falharam.
+    ///
+    /// Com o governador.json ilegível ele nasce parado (ver
+    /// notacao_ilegivel).
+    pub fn novo(modo: Modo, processo: Option<String>, jogo_pid: u32) -> Self {
+        match ler() {
+            Ok(pendentes) => Governador { modo, processo, jogo_pid, pendentes, ..Default::default() },
+            Err(e) => {
+                crate::utils::Logger::warn(&format!("governador: {}", e));
+                Governador { modo: Modo::Parado, processo, jogo_pid, anotacao_ilegivel: Some(e), ..Default::default() }
+            }
+        }
+    }
+
+    /// Por que ele não consegue anotar, quando não consegue.
+    pub fn anotacao_ilegivel(&self) -> Option<&str> {
+        self.anotacao_ilegivel.as_deref()
+    }
+
     pub fn acalmados(&self) -> &[Acalmado] {
         &self.acalmados
     }
 
+    pub fn modo(&self) -> Modo {
+        self.modo
+    }
+
+    pub fn jogo_pid(&self) -> u32 {
+        self.jogo_pid
+    }
+
+    pub fn processo(&self) -> Option<&str> {
+        self.processo.as_deref()
+    }
+
+    /// O que ele está fazendo AGORA, para marcar a medição.
+    pub fn participacao(&self) -> Option<crate::modules::portao::GovernadorNaPartida> {
+        use crate::modules::portao::GovernadorNaPartida;
+        match self.modo {
+            Modo::Agir if !self.acalmados.is_empty() => Some(GovernadorNaPartida::Acalmou),
+            Modo::Comparar if self.viu_candidatos => Some(GovernadorNaPartida::Absteve),
+            _ => None,
+        }
+    }
+
+    fn anotar(&self) -> Result<(), String> {
+        if let Some(e) = &self.anotacao_ilegivel {
+            return Err(e.clone());
+        }
+        let mut tudo = self.pendentes.clone();
+        tudo.extend(self.acalmados.iter().cloned());
+        gravar(&tudo)
+    }
+
     /// Uma passada com o jogo aberto: mede quem está usando processador e
-    /// acalma os que disputam. Chamado a cada olhada do vigia (~6 s).
+    /// acalma os que disputam (ou, na partida de comparação, só anota).
+    /// Chamado a cada olhada do vigia (~6 s).
     #[cfg(windows)]
-    pub fn passada(&mut self, jogo_pid: u32) -> Vec<String> {
+    pub fn passada(&mut self, jogo_pid: u32) -> Passada {
         use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+        if self.modo == Modo::Parado {
+            return Passada::default();
+        }
         let primeira = self.sistema.is_none();
         let s = self.sistema.get_or_insert_with(System::new);
         let atualizar = |s: &mut System| {
@@ -245,62 +447,108 @@ impl Governador {
             .collect();
         let jogo_caminho = s.process(sysinfo::Pid::from_u32(jogo_pid)).and_then(|p| p.exe()).map(PathBuf::from);
         let escolhidos = escolher(&candidatos, jogo_pid, jogo_caminho.as_deref(), std::process::id());
-        let mut novos = Vec::new();
+        let mut feito = Passada::default();
         for pid in escolhidos {
             if self.acalmados.iter().any(|a| a.pid == pid) {
                 continue;
             }
             let Some(p) = s.process(sysinfo::Pid::from_u32(pid)) else { continue };
-            if let Some(anterior) = sys::acalmar(pid) {
-                let nome = p.name().to_string_lossy().to_string();
-                novos.push(nome.clone());
-                self.acalmados.push(Acalmado { pid, nome, inicio: p.start_time(), prioridade_anterior: anterior });
+            let nome = p.name().to_string_lossy().to_string();
+            let novo_aviso = !self.avisados.contains(&pid);
+            if self.modo == Modo::Comparar {
+                self.viu_candidatos = true;
+                if novo_aviso {
+                    self.avisados.push(pid);
+                    feito.em_espera.push(nome);
+                }
+                continue;
+            }
+            match sys::acalmar(pid) {
+                Ok((anterior, ecoqos)) => {
+                    feito.acalmados.push(nome.clone());
+                    self.acalmados.push(Acalmado { pid, nome, inicio: p.start_time(), prioridade_anterior: anterior, ecoqos });
+                }
+                Err(codigo) => {
+                    if novo_aviso {
+                        self.avisados.push(pid);
+                        feito.recusados.push(Recusa { nome, codigo });
+                    }
+                }
             }
         }
-        if !novos.is_empty() {
-            gravar(&self.acalmados);
-            crate::utils::Logger::info(&format!("governador: acalmados {}", novos.join(", ")));
+        if !feito.acalmados.is_empty() {
+            // Falha aqui fica no log: o que foi acalmado continua na memória e
+            // é devolvido quando o jogo fechar; só a volta depois de o Otimiza
+            // morrer no meio fica sem a lista.
+            let _ = self.anotar();
+            crate::utils::Logger::info(&format!("governador: acalmados {}", feito.acalmados.join(", ")));
         }
-        novos
+        if !feito.recusados.is_empty() {
+            let nomes: Vec<String> = feito.recusados.iter().map(|r| format!("{} (erro {})", r.nome, r.codigo)).collect();
+            crate::utils::Logger::warn(&format!("governador: o Windows recusou acalmar {}", nomes.join(", ")));
+        }
+        feito
     }
 
-    /// O jogo fechou: devolve tudo.
+    /// O jogo fechou, o modo desligou ou o portão reprovou: devolve tudo. O
+    /// que o Windows recusar devolver fica anotado em disco para a próxima
+    /// tentativa — "não consegui" nunca vira "devolvido".
     #[cfg(windows)]
-    pub fn devolver_tudo(&mut self) -> usize {
-        let n = devolver_lista(&self.acalmados);
-        self.acalmados.clear();
+    pub fn devolver_tudo(&mut self) -> Devolucao {
+        let mut lista = std::mem::take(&mut self.pendentes);
+        lista.append(&mut self.acalmados);
+        let mut d = devolver_lista(&lista);
+        self.pendentes = d.falharam.clone();
         self.sistema = None;
-        gravar(&[]);
-        n
+        self.viu_candidatos = false;
+        d.nao_anotado = self.anotar().err();
+        d
+    }
+
+    /// O portão reprovou o governador neste jogo: devolve e para.
+    #[cfg(windows)]
+    pub fn parar(&mut self) -> Devolucao {
+        self.modo = Modo::Parado;
+        self.devolver_tudo()
     }
 }
 
 /// Devolve uma lista, conferindo que cada processo ainda é o mesmo.
 #[cfg(windows)]
-fn devolver_lista(lista: &[Acalmado]) -> usize {
+fn devolver_lista(lista: &[Acalmado]) -> Devolucao {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
     let mut s = System::new();
     s.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
-    lista
-        .iter()
-        .filter(|a| {
-            s.process(sysinfo::Pid::from_u32(a.pid)).is_some_and(|p| p.start_time() == a.inicio)
-                && sys::devolver(a.pid, a.prioridade_anterior)
-        })
-        .count()
+    let mut d = Devolucao::default();
+    for a in lista {
+        let mesmo = s.process(sysinfo::Pid::from_u32(a.pid)).is_some_and(|p| p.start_time() == a.inicio);
+        if !mesmo {
+            d.sumidos += 1;
+        } else if sys::devolver(a.pid, a.prioridade_anterior, a.ecoqos) {
+            d.devolvidos += 1;
+        } else {
+            d.falharam.push(a.clone());
+        }
+    }
+    if !d.falharam.is_empty() {
+        let nomes: Vec<&str> = d.falharam.iter().map(|a| a.nome.as_str()).collect();
+        crate::utils::Logger::warn(&format!("governador: não consegui devolver {}", nomes.join(", ")));
+    }
+    d
 }
 
 /// Na abertura: devolve o que uma sessão anterior deixou acalmado (o Otimiza
-/// morreu com o jogo aberto).
+/// morreu com o jogo aberto, ou o Windows recusou devolver). O que falhar de
+/// novo continua anotado.
 #[cfg(windows)]
-pub fn recuperar_na_abertura() -> usize {
-    let lista = ler();
+pub fn recuperar_na_abertura() -> Result<Devolucao, String> {
+    let lista = ler()?;
     if lista.is_empty() {
-        return 0;
+        return Ok(Devolucao::default());
     }
-    let n = devolver_lista(&lista);
-    gravar(&[]);
-    n
+    let mut d = devolver_lista(&lista);
+    d.nao_anotado = gravar(&d.falharam).err();
+    Ok(d)
 }
 
 #[cfg(test)]
@@ -347,15 +595,64 @@ mod testes {
         std::thread::sleep(std::time::Duration::from_secs(2));
         let pid = filho.id();
         assert_eq!(prioridade(pid), 0x20, "começa em normal");
-        let mut g = Governador::default();
+        let mut g = Governador::novo(Modo::Agir, None, 0);
         let novos = g.passada(0);
         println!("acalmados: {:?}", novos);
         assert!(g.acalmados().iter().any(|a| a.pid == pid), "o processo que queima CPU tinha que ser acalmado");
         assert_eq!(prioridade(pid), 0x4000, "abaixo do normal");
-        let devolvidos = g.devolver_tudo();
-        assert!(devolvidos >= 1);
+        let devolucao = g.devolver_tudo();
+        assert!(devolucao.devolvidos >= 1 && devolucao.falharam.is_empty(), "{:?}", devolucao);
         assert_eq!(prioridade(pid), 0x20, "voltou ao normal");
         let _ = filho.kill();
+    }
+
+    /// Só mexe num processo filho criado pelo próprio teste.
+    #[test]
+    #[ignore = "abre um processo filho e mexe na prioridade e no EcoQoS dele"]
+    fn ecoqos_volta_ao_que_o_processo_tinha() {
+        let mut filho = std::process::Command::new("cmd").args(["/C", "for /L %i in () do @rem"]).spawn().unwrap();
+        let pid = filho.id();
+        // O processo liga o EcoQoS por conta própria, como o Chrome faz.
+        let ligou = sys::ligar_ecoqos_por_conta_propria(pid);
+        let antes = sys::ecoqos_de(pid);
+        println!("ligou sozinho: {}, estado antes: {:?}", ligou, antes);
+        let (prioridade, eco) = sys::acalmar(pid).expect("acalmar o próprio filho");
+        match antes {
+            Some((control, state)) => assert_eq!(eco, Eco::Anterior { control, state }),
+            // Windows sem a leitura (Windows 10): não se escreve o que não se leu.
+            None => assert_eq!(eco, Eco::NaoMexido),
+        }
+        assert!(sys::devolver(pid, prioridade, eco));
+        assert_eq!(sys::ecoqos_de(pid), antes, "o EcoQoS tem que voltar ao que o processo tinha, não a zero");
+        let _ = filho.kill();
+    }
+
+    #[test]
+    fn registro_antigo_sem_ecoqos_devolve_como_antes() {
+        // governador.json gravado antes de o estado anterior ser lido.
+        let antigo = r#"[{"pid":10,"nome":"a.exe","inicio":5,"prioridade_anterior":32}]"#;
+        let lista: Vec<Acalmado> = serde_json::from_str(antigo).unwrap();
+        assert_eq!(lista[0].ecoqos, Eco::Legado);
+    }
+
+    #[test]
+    fn sem_passar_pelo_portao_nao_mexe() {
+        let g = Governador::default();
+        assert_eq!(g.modo(), Modo::Parado);
+        assert_eq!(g.participacao(), None);
+    }
+
+    #[test]
+    fn participacao_marca_os_dois_lados() {
+        use crate::modules::portao::GovernadorNaPartida;
+        let mut g = Governador { modo: Modo::Agir, ..Default::default() };
+        assert_eq!(g.participacao(), None, "agindo sem nada acalmado não é lado nenhum");
+        g.acalmados.push(Acalmado { pid: 9, nome: "x".into(), inicio: 1, prioridade_anterior: 32, ecoqos: Eco::NaoMexido });
+        assert_eq!(g.participacao(), Some(GovernadorNaPartida::Acalmou));
+        let mut c = Governador { modo: Modo::Comparar, ..Default::default() };
+        assert_eq!(c.participacao(), None, "comparação sem ninguém disputando não é lado nenhum");
+        c.viu_candidatos = true;
+        assert_eq!(c.participacao(), Some(GovernadorNaPartida::Absteve));
     }
 
     #[test]

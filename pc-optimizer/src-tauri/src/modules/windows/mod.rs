@@ -2722,7 +2722,8 @@ fn anotar_fim(
 pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidido> {
     use crate::modules::portao::{self, Decidido, Veredito};
     let mut estado = portao::ler();
-    if estado.vigiados.is_empty() {
+    let governador_em_aberto = estado.governador.iter().any(|g| g.decidido.is_none());
+    if estado.vigiados.is_empty() && !governador_em_aberto {
         return Vec::new();
     }
     let Ok(medicoes) = crate::modules::medicoes::ler() else { return Vec::new() };
@@ -2758,6 +2759,31 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             quando: agora,
             erro,
         });
+    }
+    // O governador do modo jogo: partidas sem ele contra partidas com ele.
+    // Piorou: ele devolve o que acalmou e fica parado naquele jogo.
+    for g in estado.governador.iter_mut().filter(|g| g.decidido.is_none()) {
+        let a = portao::avaliar_governador(&g.processo, &medicoes);
+        if matches!(a.veredito, Veredito::Aguardando { .. }) {
+            continue;
+        }
+        let erro = if a.veredito == Veredito::Desfazer {
+            gamemode::reprovar_governador(&g.processo).err()
+        } else {
+            None
+        };
+        let d = Decidido {
+            fps_antes: a.fps.as_ref().map(|c| c.media_base),
+            fps_depois: a.fps.as_ref().map(|c| c.media_candidato),
+            low_antes: a.low_1pct.as_ref().map(|c| c.media_base),
+            low_depois: a.low_1pct.as_ref().map(|c| c.media_candidato),
+            vigiado: g.como_vigiado(),
+            veredito: a.veredito,
+            quando: agora,
+            erro,
+        };
+        g.decidido = Some(d.clone());
+        decididos.push(d);
     }
     estado.vigiados = ficam;
     estado.decididos.extend(decididos.iter().cloned());

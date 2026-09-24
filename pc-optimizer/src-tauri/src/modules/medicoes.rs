@@ -110,6 +110,13 @@ pub struct MedicaoAutomatica {
     /// era dois. Proporção sem denominador é meia informação.
     #[serde(default)]
     pub trancos_medidos: Option<usize>,
+
+    /// O governador do modo jogo nesta medição (2.9): agindo, parado de
+    /// propósito numa partida de comparação, ou `None` (não se aplica, mudou
+    /// no meio da medição, ou medição antiga). É o que separa os dois lados da
+    /// vigília dele em `modules::portao`.
+    #[serde(default)]
+    pub governador: Option<crate::modules::portao::GovernadorNaPartida>,
 }
 
 /// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
@@ -273,6 +280,7 @@ mod tests {
             gpu_uso_pct: Some(72.0),
             trancos_com_disco_pct: Some(20.0),
             trancos_medidos: Some(15),
+            governador: None,
         }
     }
 

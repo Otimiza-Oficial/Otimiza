@@ -91,7 +91,12 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
     depois.sort_by_key(|m| m.quando);
     antes.truncate(MAXIMO_POR_LADO);
     depois.truncate(MAXIMO_POR_LADO);
+    decidir(&antes, &depois)
+}
 
+/// A regra, dados os dois lados já escolhidos. Serve ao ajuste de jogo
+/// (antes/depois de uma data) e ao governador (partidas sem/com ele).
+fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avaliacao {
     if antes.len() < MINIMO_POR_LADO || depois.len() < MINIMO_POR_LADO {
         return Avaliacao { veredito: Veredito::Aguardando { antes: antes.len(), depois: depois.len() }, fps: None, low_1pct: None };
     }
@@ -122,6 +127,222 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
     Avaliacao { veredito, fps, low_1pct: low }
 }
 
+// ------------------------------------------------ o governador do modo jogo
+//
+// O modo jogo acalma programas de fundo (`windows/governador.rs`) sozinho, a
+// cada partida. Acalmar algo de que o jogo depende fora da pasta dele —
+// overlay do launcher, `steamwebhelper`, o launcher da Rockstar — pode
+// derrubar FPS, e até a 2.9 nada perceberia. Agora ele passa pela mesma regra
+// dos ajustes de jogo, com uma diferença de desenho:
+//
+// o ajuste de jogo tem uma data (antes/depois); o governador liga e desliga a
+// cada partida, então "antes" não existe. Os dois lados são PARTIDAS: cada
+// medição automática diz se o governador estava agindo nela
+// (`GovernadorNaPartida::Acalmou`) ou se ficou parado de propósito, numa
+// partida de comparação em que havia programa para acalmar
+// (`GovernadorNaPartida::Absteve`). Enquanto o veredito não sai, as partidas
+// se alternam para encher o lado que tem menos.
+//
+// "Absteve" exige que houvesse candidato: comparar partidas com programa
+// disputando contra partidas sem nada rodando mediria o programa, não o
+// governador.
+//
+// Piorou (intervalos separados E pelo menos 5%, no FPS médio ou no 1% pior):
+// o governador devolve o que acalmou e fica parado naquele jogo, com os
+// números guardados. Melhorou ou igual: ele segue agindo naquele jogo.
+
+/// O que o governador fez durante uma medição. Vai gravado na medição.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GovernadorNaPartida {
+    /// Havia programa acalmado do começo ao fim da medição.
+    Acalmou,
+    /// Partida de comparação: havia o que acalmar e ele ficou parado.
+    Absteve,
+}
+
+/// Juntar o estado do começo e do fim da medição: se mudou no meio, a medição
+/// não serve a nenhum dos dois lados. **Função pura.**
+pub fn marcar(inicio: Option<GovernadorNaPartida>, fim: Option<GovernadorNaPartida>) -> Option<GovernadorNaPartida> {
+    if inicio == fim {
+        inicio
+    } else {
+        None
+    }
+}
+
+/// A vigília do governador num jogo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernadorNoJogo {
+    /// Mesmo formato de `Vigiado::processo`.
+    pub processo: String,
+    pub nome: String,
+    pub desde: u64,
+    /// `None` enquanto a comparação não fechou.
+    #[serde(default)]
+    pub decidido: Option<Decidido>,
+    /// Quando começou cada partida em que ele agiu (as últimas), para saber
+    /// quantas passaram sem nenhuma medição que conte.
+    #[serde(default)]
+    pub sessoes_agindo: Vec<u64>,
+}
+
+/// Partidas seguidas agindo sem nenhuma medição marcada deste jogo, antes de
+/// ele voltar a só comparar. Partida curta demais para medir, ou medição que
+/// falha, não pode virar governador agindo sem prova indefinidamente.
+pub const SESSOES_AGINDO_SEM_MEDICAO: usize = 3;
+const SESSOES_GUARDADAS: usize = 10;
+
+impl GovernadorNoJogo {
+    pub fn como_vigiado(&self) -> Vigiado {
+        Vigiado {
+            id: format!("governador:{}", self.processo),
+            nome: format!("governador do modo jogo em {}", self.nome),
+            processo: self.processo.clone(),
+            aplicado_em: self.desde,
+        }
+    }
+}
+
+/// O que o governador faz na partida que está começando.
+#[derive(Debug, Clone)]
+pub enum Rodada {
+    /// Acalma.
+    Agir,
+    /// Partida de comparação: olha quem acalmaria e não mexe.
+    Comparar,
+    /// A comparação mostrou queda: fica parado neste jogo.
+    Reprovado(Decidido),
+    /// Sem medição não há como provar que ele não tira FPS: fica parado.
+    SemMedicao(String),
+}
+
+/// As partidas sem e com o governador, mais recentes primeiro.
+pub fn lados_do_governador<'a>(
+    processo: &str,
+    medicoes: &'a [MedicaoAutomatica],
+) -> (Vec<&'a MedicaoAutomatica>, Vec<&'a MedicaoAutomatica>) {
+    let lado = |qual: GovernadorNaPartida| {
+        let mut v: Vec<&MedicaoAutomatica> =
+            medicoes.iter().filter(|m| e_do_jogo(m, processo) && m.governador == Some(qual)).collect();
+        v.sort_by_key(|m| std::cmp::Reverse(m.quando));
+        v.truncate(MAXIMO_POR_LADO);
+        v
+    };
+    (lado(GovernadorNaPartida::Absteve), lado(GovernadorNaPartida::Acalmou))
+}
+
+/// A regra comum aplicada ao governador: base = partidas sem, candidato =
+/// partidas com. **Função pura.**
+pub fn avaliar_governador(processo: &str, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
+    let (sem, com) = lados_do_governador(processo, medicoes);
+    decidir(&sem, &com)
+}
+
+/// Qual rodada o governador faz neste jogo. **Função pura.**
+///
+/// `medicoes` é `None` quando o arquivo não pôde ser lido — e aí não há como
+/// equilibrar os lados nem conferir nada, então ele não age. `medindo` é a
+/// medição automática estar ligada e possível (preferência e administrador).
+///
+/// estado é None quando o portao.json existe e não pôde ser lido: o
+/// veredito pode estar lá dentro, então ele não age.
+pub fn rodada_do_governador(
+    estado: Option<&Estado>,
+    processo: &str,
+    medicoes: Option<&[MedicaoAutomatica]>,
+    medindo: bool,
+) -> Rodada {
+    let Some(estado) = estado else {
+        return Rodada::SemMedicao("não consegui ler o registro do portão, onde fica o veredito dele".into());
+    };
+    let vigilia = estado.governador.iter().find(|g| g.processo == processo);
+    if let Some(d) = vigilia.and_then(|g| g.decidido.as_ref()) {
+        return if d.veredito == Veredito::Desfazer { Rodada::Reprovado(d.clone()) } else { Rodada::Agir };
+    }
+    if !medindo {
+        return Rodada::SemMedicao(
+            "a medição automática de quadros está desligada ou sem administrador, e sem medir não dá para provar que ele não tira FPS".into(),
+        );
+    }
+    let Some(medicoes) = medicoes else {
+        return Rodada::SemMedicao("não consegui ler as medições das partidas anteriores para conferir o efeito dele".into());
+    };
+    let (sem, com) = lados_do_governador(processo, medicoes);
+    // Partidas em que ele agiu depois da última medição marcada deste jogo.
+    // Uma partida de comparação medida zera a conta: prova que a medição
+    // voltou a funcionar neste jogo.
+    let ultima_marca = medicoes
+        .iter()
+        .filter(|m| e_do_jogo(m, processo) && m.governador.is_some())
+        .map(|m| m.quando)
+        .max()
+        .unwrap_or(0);
+    let agindo_sem_medicao = vigilia.map(|g| g.sessoes_agindo.iter().filter(|&&t| t > ultima_marca).count()).unwrap_or(0);
+    // Empate vai para a comparação: o lado sem governador é a referência, e é
+    // por ela que se começa.
+    if sem.len() <= com.len() || agindo_sem_medicao >= SESSOES_AGINDO_SEM_MEDICAO {
+        Rodada::Comparar
+    } else {
+        Rodada::Agir
+    }
+}
+
+/// A frase para a tela quando a vigília do governador fecha.
+pub fn frase_do_governador(d: &Decidido) -> String {
+    let numeros = match (d.fps_antes, d.fps_depois) {
+        (Some(a), Some(b)) => format!(" (FPS médio {:.0} sem ele, {:.0} com ele", a, b),
+        _ => String::from(" ("),
+    };
+    let low = match (d.low_antes, d.low_depois) {
+        (Some(a), Some(b)) => format!("; 1% pior {:.0} sem, {:.0} com)", a, b),
+        _ => String::from(")"),
+    };
+    let numeros = if numeros == " (" && low == ")" { String::new() } else { format!("{}{}", numeros, low) };
+    match d.veredito {
+        Veredito::Desfazer => match &d.erro {
+            None => format!(
+                "O {} foi desligado sozinho: nas partidas medidas o jogo rodou pior com ele{}. Os programas voltaram ao normal.",
+                d.vigiado.nome, numeros
+            ),
+            Some(e) => format!(
+                "O {} derrubou o FPS{} e foi desligado, mas não consegui devolver tudo: {}",
+                d.vigiado.nome, numeros, e
+            ),
+        },
+        Veredito::Melhorou => format!("O {} passou na comparação: o jogo rodou melhor com ele{}.", d.vigiado.nome, numeros),
+        _ => format!("O {} passou na comparação: sem diferença além do ruído{}.", d.vigiado.nome, numeros),
+    }
+}
+
+/// Põe o governador de um jogo em vigília, se ainda não estiver, e anota a
+/// partida quando ele vai agir nela.
+///
+/// Devolve erro sem gravar nada quando o arquivo existe e não se lê: gravar
+/// por cima apagaria as vigílias dos ajustes de jogo e os vereditos.
+pub fn observar_governador(processo: &str, nome: &str, agora: u64, agindo: bool) -> Result<(), String> {
+    let mut e = ler_estrito()?;
+    let i = match e.governador.iter().position(|g| g.processo == processo) {
+        Some(i) => i,
+        None => {
+            e.governador.push(GovernadorNoJogo {
+                processo: processo.into(),
+                nome: nome.into(),
+                desde: agora,
+                decidido: None,
+                sessoes_agindo: Vec::new(),
+            });
+            e.governador.len() - 1
+        }
+    };
+    if agindo {
+        let s = &mut e.governador[i].sessoes_agindo;
+        s.push(agora);
+        let excesso = s.len().saturating_sub(SESSOES_GUARDADAS);
+        s.drain(..excesso);
+    }
+    gravar(&e).map_err(|erro| format!("não gravei a vigília do governador em {}: {}", nome, erro))
+}
+
 // ------------------------------------------------------------ o arquivo
 
 /// Vigiados em aberto e os resultados já decididos.
@@ -129,6 +350,9 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
 pub struct Estado {
     pub vigiados: Vec<Vigiado>,
     pub decididos: Vec<Decidido>,
+    /// O governador do modo jogo, por jogo (ver acima).
+    #[serde(default)]
+    pub governador: Vec<GovernadorNoJogo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +370,17 @@ pub struct Decidido {
 
 fn arquivo() -> Option<PathBuf> {
     std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("portao.json"))
+}
+
+/// Como ler, mas distingue "não existe" (estado vazio) de "existe e não se
+/// lê" (erro). Quem vai GRAVAR depois de ler usa esta.
+pub fn ler_estrito() -> Result<Estado, String> {
+    let a = arquivo().ok_or("APPDATA ausente")?;
+    match std::fs::read_to_string(&a) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("portao.json ilegível: {}", e)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Estado::default()),
+        Err(e) => Err(format!("portao.json: {}", e)),
+    }
 }
 
 pub fn ler() -> Estado {
@@ -211,6 +446,7 @@ mod testes {
             trancos_com_disco_pct: None,
             trancos_medidos: None,
             ambiente: None,
+            governador: None,
         }
     }
 
@@ -270,5 +506,136 @@ mod testes {
             ms.push(m("Outro.exe", 2000 + i, 50.0, 20.0));
         }
         assert!(matches!(avaliar(&vig(), &ms).veredito, Veredito::Aguardando { .. }));
+    }
+
+    // ------------------------------------------------ o governador
+
+    fn g(quando: u64, fps: f64, lado: GovernadorNaPartida) -> MedicaoAutomatica {
+        MedicaoAutomatica { governador: Some(lado), ..m("FiveM_b3258_GTAProcess.exe", quando, fps, fps * 0.6) }
+    }
+
+    fn estado_com(decidido: Option<Decidido>) -> Estado {
+        Estado {
+            governador: vec![GovernadorNoJogo { processo: "fivem_".into(), nome: "FiveM".into(), desde: 1, decidido, sessoes_agindo: Vec::new() }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn governador_que_derruba_fps_e_reprovado() {
+        use GovernadorNaPartida::*;
+        let mut ms = Vec::new();
+        for (i, f) in [140.0, 142.0, 139.0].iter().enumerate() {
+            ms.push(g(10 + i as u64, *f, Absteve));
+        }
+        for (i, f) in [120.0, 121.0, 119.0].iter().enumerate() {
+            ms.push(g(20 + i as u64, *f, Acalmou));
+        }
+        let a = avaliar_governador("fivem_", &ms);
+        assert_eq!(a.veredito, Veredito::Desfazer);
+        assert_eq!(a.fps.as_ref().map(|l| l.media_base.round()), Some(140.0), "a base é a partida SEM ele");
+    }
+
+    #[test]
+    fn governador_sem_efeito_segue() {
+        use GovernadorNaPartida::*;
+        let mut ms = Vec::new();
+        for (i, f) in [140.0, 142.0, 139.0, 141.0].iter().enumerate() {
+            ms.push(g(10 + i as u64, *f, Absteve));
+            ms.push(g(50 + i as u64, *f + 0.5, Acalmou));
+        }
+        assert_ne!(avaliar_governador("fivem_", &ms).veredito, Veredito::Desfazer);
+    }
+
+    #[test]
+    fn medicao_sem_marca_nao_entra_em_lado_nenhum() {
+        // Medição antiga, governador parado, ou estado que mudou no meio.
+        let ms: Vec<MedicaoAutomatica> = (0..8).map(|i| m("FiveM_b3258_GTAProcess.exe", i, 100.0, 60.0)).collect();
+        assert_eq!(avaliar_governador("fivem_", &ms).veredito, Veredito::Aguardando { antes: 0, depois: 0 });
+    }
+
+    #[test]
+    fn marca_que_muda_no_meio_nao_vale() {
+        use GovernadorNaPartida::*;
+        assert_eq!(marcar(Some(Acalmou), Some(Acalmou)), Some(Acalmou));
+        assert_eq!(marcar(None, Some(Acalmou)), None);
+        assert_eq!(marcar(Some(Absteve), Some(Acalmou)), None);
+    }
+
+    #[test]
+    fn rodadas_alternam_para_encher_o_lado_menor() {
+        use GovernadorNaPartida::*;
+        let vazio = Estado::default();
+        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), true), Rodada::Comparar), "começa pela referência");
+        let ms = vec![g(1, 100.0, Absteve)];
+        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true), Rodada::Agir));
+        let ms = vec![g(1, 100.0, Absteve), g(2, 100.0, Acalmou)];
+        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true), Rodada::Comparar));
+    }
+
+    #[test]
+    fn sem_medicao_o_governador_nao_age() {
+        let vazio = Estado::default();
+        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), false), Rodada::SemMedicao(_)));
+        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", None, true), Rodada::SemMedicao(_)));
+    }
+
+    #[test]
+    fn reprovado_fica_parado_e_aprovado_age() {
+        let d = |veredito| Decidido {
+            vigiado: estado_com(None).governador[0].como_vigiado(),
+            veredito,
+            quando: 9,
+            fps_antes: Some(140.0),
+            fps_depois: Some(120.0),
+            low_antes: None,
+            low_depois: None,
+            erro: None,
+        };
+        let reprovado = estado_com(Some(d(Veredito::Desfazer)));
+        // Nem a medição desligada tira ele do estado parado.
+        assert!(matches!(rodada_do_governador(Some(&reprovado), "fivem_", Some(&[]), true), Rodada::Reprovado(_)));
+        assert!(frase_do_governador(&d(Veredito::Desfazer)).contains("140 sem ele, 120 com ele"));
+        let aprovado = estado_com(Some(d(Veredito::SemMudanca)));
+        assert!(matches!(rodada_do_governador(Some(&aprovado), "fivem_", Some(&[]), true), Rodada::Agir));
+    }
+
+    #[test]
+    fn estado_antigo_sem_governador_continua_legivel() {
+        let e: Estado = serde_json::from_str(r#"{"vigiados":[],"decididos":[]}"#).unwrap();
+        assert!(e.governador.is_empty());
+    }
+
+    #[test]
+    fn portao_ilegivel_nao_solta_o_governador() {
+        // O veredito pode estar dentro do arquivo que não se leu.
+        assert!(matches!(rodada_do_governador(None, "fivem_", Some(&[]), true), Rodada::SemMedicao(_)));
+    }
+
+    #[test]
+    fn agir_sem_medicao_que_conte_tem_limite() {
+        use GovernadorNaPartida::*;
+        // Uma partida de comparação medida: o lado "sem" está na frente.
+        let ms = vec![g(100, 140.0, Absteve)];
+        let com_sessoes = |sessoes: Vec<u64>| Estado {
+            governador: vec![GovernadorNoJogo {
+                processo: "fivem_".into(),
+                nome: "FiveM".into(),
+                desde: 1,
+                decidido: None,
+                sessoes_agindo: sessoes,
+            }],
+            ..Default::default()
+        };
+        // Duas partidas agindo depois da última medição: ainda age.
+        assert!(matches!(rodada_do_governador(Some(&com_sessoes(vec![200, 300])), "fivem_", Some(&ms), true), Rodada::Agir));
+        // Três sem nenhuma medição marcada: volta a só comparar.
+        let travado = com_sessoes(vec![200, 300, 400]);
+        assert!(matches!(rodada_do_governador(Some(&travado), "fivem_", Some(&ms), true), Rodada::Comparar));
+        // Uma partida de comparação medida depois delas libera de novo.
+        let ms2 = vec![g(100, 140.0, Absteve), g(500, 139.0, Absteve)];
+        assert!(matches!(rodada_do_governador(Some(&travado), "fivem_", Some(&ms2), true), Rodada::Agir));
+        // Sessões anteriores à última medição não contam.
+        assert!(matches!(rodada_do_governador(Some(&com_sessoes(vec![10, 20, 30])), "fivem_", Some(&ms), true), Rodada::Agir));
     }
 }
