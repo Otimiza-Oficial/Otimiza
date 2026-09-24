@@ -58,10 +58,10 @@ export const texturaCetim =
   "https://images.unsplash.com/photo-1705674337411-3b89e5afcc11?w=2000&q=75";
 
 /*
- * O mesmo preço que o bot cobra (catalogo.js, item otimiza, centavos 3000). Desalinhado, o site anunciaria um preço e cobraria outro.
+ * O mesmo preço que o bot cobra (catalogo.js, item otimiza, centavos 4000). Desalinhado, o site anunciaria um preço e cobraria outro.
  */
-export const PRECO_BRL = 30;
-export const PRECO_ADICIONAL_BRL = 30;
+export const PRECO_BRL = 40;
+export const PRECO_ADICIONAL_BRL = 40;
 
 export const formatarReais = (valor: number) =>
   valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

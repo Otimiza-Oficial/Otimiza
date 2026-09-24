@@ -3,13 +3,12 @@
 import { ArrowRight, Eye, EyeOff, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { SmartLink } from "@/components/ui/SmartLink";
 import { useLicencas } from "@/lib/armazem";
 import { conferir, explicar } from "@/lib/licenca";
 import { useSessao } from "@/lib/sessao";
-import { links } from "@/lib/site";
+import { formatarReais, links, PRECO_BRL } from "@/lib/site";
 
 /*
  * A CHAVE É A SENHA, E ESSA É A DIFERENÇA DESTE LOGIN.
@@ -137,8 +136,7 @@ export function LoginForm() {
       </div>
 
       <ButtonLink href={links.comprar} variant="secondary" size="md" className="w-full">
-        <BrandLogo brand="discord" size={16} decorative />
-        Comprar no Discord — R$ 30, uma vez
+        Comprar a chave — {formatarReais(PRECO_BRL)}, uma vez
       </ButtonLink>
 
       <p className="mt-6 text-[11.5px] leading-[1.55] text-subtle">

@@ -13,7 +13,7 @@ export default function TermosPage() {
   return (
     <PaginaLegal
       titulo="Termos de uso"
-      atualizada="23 de setembro de 2026"
+      atualizada="24 de setembro de 2026"
       resumo="O que você compra, o que o programa faz na sua máquina e o que acontece quando algo dá errado. Escrito para ser lido, não para ser aceito sem ler."
     >
       <Secao titulo="Quem vende">
