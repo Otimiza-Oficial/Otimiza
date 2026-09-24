@@ -4405,6 +4405,19 @@ async function setGameMode(active: boolean) {
   }
 }
 
+async function zerarModoJogo() {
+  const botao = element<HTMLButtonElement>("gamemode-zerar");
+  botao.disabled = true;
+  try {
+    setStatus("gamemode-status", await invoke<string>("zerar_modo_jogo"), "ok");
+  } catch (error) {
+    setStatus("gamemode-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+    await loadGameMode();
+  }
+}
+
 // ---------------------------------------------- diagnóstico de atendimento
 
 /**
@@ -10943,6 +10956,7 @@ function wireControls() {
   });
   element("gamemode-on").addEventListener("click", () => setGameMode(true));
   element("gamemode-off").addEventListener("click", () => setGameMode(false));
+  element("gamemode-zerar").addEventListener("click", zerarModoJogo);
   element("copiar-diagnostico").addEventListener("click", () => copiarDiagnostico());
   element("measure-frames").addEventListener("click", measureFrames);
 

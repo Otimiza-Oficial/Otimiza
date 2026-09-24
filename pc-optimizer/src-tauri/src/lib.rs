@@ -155,6 +155,7 @@ pub fn run() {
             commands::analyze_bottleneck,
             commands::game_mode_status,
             commands::set_game_mode,
+            commands::zerar_modo_jogo,
             commands::analyze_network,
             commands::set_dns,
             commands::flush_dns,

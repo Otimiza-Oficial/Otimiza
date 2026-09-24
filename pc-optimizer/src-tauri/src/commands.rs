@@ -1809,6 +1809,23 @@ pub async fn set_game_mode(
     }
 }
 
+/// Comando: zera a anotação do governador quando ela estragou. `LIVRES`: só
+/// devolve e esquece, não otimiza nada.
+#[tauri::command]
+pub async fn zerar_modo_jogo(state: State<'_, AppState>) -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let log = state.changes.lock().await;
+        crate::modules::windows::gamemode::zerar(&log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Rede e quadros
 // ---------------------------------------------------------------------------
@@ -4734,6 +4751,7 @@ mod tests {
     }
 
     const LIVRES: &[&str] = &[
+        "zerar_modo_jogo",
         "placa_de_video",
         "memoria_instalada",
         "monitores",

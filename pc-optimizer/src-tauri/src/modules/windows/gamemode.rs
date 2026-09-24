@@ -478,6 +478,19 @@ fn frase_do_desligar(d: &Devolucao, plano: bool) -> Result<String, String> {
     Ok(if partes.is_empty() { "Modo jogo desligado.".to_string() } else { format!("Modo jogo desligado. {}", partes.join(" ")) })
 }
 
+/// O botão "Zerar o modo jogo": para quando a anotação do governador estragou
+/// e ele ficou parado de vez. Com o modo ligado, a lista em uso é a da
+/// partida aberta, e zerar perderia o caminho de volta.
+#[cfg(windows)]
+pub fn zerar(log: &ChangeLog) -> Result<String, String> {
+    if modo_ligado(log) {
+        return Err("Desligue o modo jogo antes de zerar.".to_string());
+    }
+    let mut guarda = trava();
+    *guarda = None;
+    super::governador::zerar_anotacao().map(|z| super::governador::frase_do_zerar(&z))
+}
+
 fn modo_ligado(log: &ChangeLog) -> bool {
     trava().is_some() || log.is_applied(ID)
 }

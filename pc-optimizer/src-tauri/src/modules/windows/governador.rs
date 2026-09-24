@@ -551,9 +551,119 @@ pub fn recuperar_na_abertura() -> Result<Devolucao, String> {
     Ok(d)
 }
 
+/// O que o botão "Zerar o modo jogo" fez.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Zerado {
+    NadaAnotado,
+    /// A lista se lia: cada processo foi devolvido, e a lista apagada.
+    Devolvidos { devolvidos: usize, falharam: Vec<String> },
+    /// A lista não se lia. Ela fica guardada com outro nome, para o suporte.
+    Ilegivel { guardado_em: Option<PathBuf> },
+}
+
+/// Zera o que o governador anotou em disco, para ele voltar a agir.
+#[cfg(windows)]
+pub fn zerar_anotacao() -> Result<Zerado, String> {
+    let a = arquivo().ok_or("APPDATA ausente")?;
+    zerar_em(&a, devolver_lista, crate::modules::changelog::now_timestamp())
+}
+
+/// Quem falha ao devolver não fica anotado de novo: zerar é esquecer a lista.
+/// O processo volta ao normal quando for reaberto.
+fn zerar_em(a: &Path, devolver: impl Fn(&[Acalmado]) -> Devolucao, agora: u64) -> Result<Zerado, String> {
+    let texto = match std::fs::read_to_string(a) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Zerado::NadaAnotado),
+        Err(e) => return Err(format!("governador.json: {}", e)),
+    };
+    match serde_json::from_str::<Vec<Acalmado>>(&texto) {
+        Ok(lista) => {
+            let d = devolver(&lista);
+            std::fs::remove_file(a).map_err(|e| format!("não consegui apagar governador.json: {}", e))?;
+            if lista.is_empty() {
+                return Ok(Zerado::NadaAnotado);
+            }
+            Ok(Zerado::Devolvidos { devolvidos: d.devolvidos, falharam: d.falharam.into_iter().map(|x| x.nome).collect() })
+        }
+        Err(_) => {
+            let guardado = a.with_file_name(format!("governador.ilegivel-{}.json", agora));
+            if std::fs::rename(a, &guardado).is_ok() {
+                return Ok(Zerado::Ilegivel { guardado_em: Some(guardado) });
+            }
+            std::fs::remove_file(a).map_err(|e| format!("não consegui tirar governador.json do caminho: {}", e))?;
+            Ok(Zerado::Ilegivel { guardado_em: None })
+        }
+    }
+}
+
+/// **Função pura.**
+pub fn frase_do_zerar(z: &Zerado) -> String {
+    match z {
+        Zerado::NadaAnotado => "Não havia nada anotado: o modo jogo já estava livre.".to_string(),
+        Zerado::Devolvidos { devolvidos, falharam } if falharam.is_empty() => {
+            format!("Modo jogo zerado. {} programa(s) voltaram ao normal.", devolvidos)
+        }
+        Zerado::Devolvidos { devolvidos, falharam } => format!(
+            "Modo jogo zerado. {} programa(s) voltaram ao normal; {} o Windows não deixou devolver agora e volta(m) ao normal quando for(em) reaberto(s).",
+            devolvidos,
+            falharam.join(", ")
+        ),
+        Zerado::Ilegivel { .. } => "Modo jogo zerado. A anotação estava estragada e foi guardada à parte. Algum programa que tenha ficado em modo econômico volta ao normal quando for reaberto, ou quando o PC reiniciar.".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    fn pasta_de_teste(nome: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("otimiza_zerar_{}_{}", nome, std::process::id()));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    fn acalmado(nome: &str) -> Acalmado {
+        Acalmado { pid: 1, nome: nome.into(), inicio: 0, prioridade_anterior: 32, ecoqos: Eco::NaoMexido }
+    }
+
+    #[test]
+    fn zerar_sem_arquivo_nao_faz_nada() {
+        let p = pasta_de_teste("vazio");
+        let z = zerar_em(&p.join("governador.json"), |_| panic!("não devolve nada"), 1).unwrap();
+        assert_eq!(z, Zerado::NadaAnotado);
+        let _ = std::fs::remove_dir_all(&p);
+    }
+
+    #[test]
+    fn zerar_arquivo_estragado_guarda_a_parte_e_libera() {
+        let p = pasta_de_teste("estragado");
+        let a = p.join("governador.json");
+        std::fs::write(&a, "{isto não é json").unwrap();
+        let z = zerar_em(&a, |_| panic!("não devolve nada"), 42).unwrap();
+        let guardado = p.join("governador.ilegivel-42.json");
+        assert_eq!(z, Zerado::Ilegivel { guardado_em: Some(guardado.clone()) });
+        assert!(!a.exists(), "o caminho precisa ficar livre, senão o governador segue parado");
+        assert_eq!(std::fs::read_to_string(&guardado).unwrap(), "{isto não é json");
+        let _ = std::fs::remove_dir_all(&p);
+    }
+
+    #[test]
+    fn zerar_lista_legivel_devolve_e_apaga_mesmo_com_falha() {
+        let p = pasta_de_teste("legivel");
+        let a = p.join("governador.json");
+        std::fs::write(&a, serde_json::to_string(&vec![acalmado("chrome.exe"), acalmado("OneDrive.exe")]).unwrap()).unwrap();
+        let z = zerar_em(
+            &a,
+            |lista| Devolucao { devolvidos: 1, falharam: vec![lista[1].clone()], ..Default::default() },
+            1,
+        )
+        .unwrap();
+        assert_eq!(z, Zerado::Devolvidos { devolvidos: 1, falharam: vec!["OneDrive.exe".into()] });
+        assert!(!a.exists());
+        assert!(frase_do_zerar(&z).contains("OneDrive.exe"));
+        let _ = std::fs::remove_dir_all(&p);
+    }
 
     fn c(pid: u32, nome: &str, caminho: &str, uso: f64) -> Candidato {
         Candidato { pid, nome: nome.into(), caminho: Some(PathBuf::from(caminho)), uso }
