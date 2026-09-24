@@ -72,6 +72,7 @@ export function PassoCartao({
           customization={{
             paymentMethods: { maxInstallments: 1, types: { included: ["credit_card"] } },
             visual: {
+              hideFormTitle: true,
               style: {
                 theme: "default",
                 customVariables: { baseColor: "#111111", borderRadiusMedium: "8px", borderRadiusLarge: "12px" },
