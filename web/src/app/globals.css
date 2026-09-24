@@ -27,6 +27,10 @@
   /* 4.6:1 sobre #ffffff — o menor contraste permitido para texto de apoio. */
   --color-subtle: #737373;
 
+  --color-aviso: #fffaf2;
+  --color-aviso-fg: #5b4300;
+  --color-aviso-line: rgb(180 120 20 / 0.22);
+
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-jakarta), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;

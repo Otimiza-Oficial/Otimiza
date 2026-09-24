@@ -4,14 +4,27 @@
     {
       "name": "otimiza-ui",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "pc-optimizer"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "pc-optimizer"
+      ],
       "port": 1420
     },
     {
-      "name": "site",
+      "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "site"],
-      "port": 4321
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "web",
+        "--",
+        "--port",
+        "3100"
+      ],
+      "port": 3100
     }
   ]
 }

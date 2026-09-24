@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { asset } from "@/lib/asset";
 import { site } from "@/lib/site";
 import "./globals.css";
 
@@ -58,6 +59,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} ${jakarta.variable} antialiased`}
     >
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts -- precisa rodar antes da pintura */}
+        <script src={asset("/moldura.js")} />
+      </head>
       <body>
         <a
           href="#conteudo"

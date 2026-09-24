@@ -2,14 +2,13 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 
 /**
- * Link que só usa o roteador do Next para o que é DESTE site.
- *
- * Âncoras (`#preco`) e rotas internas (`/entrar`) vão pelo `Link`. Endereços de
- * fora — o instalador no GitHub, o convite do Discord — são um `<a>` comum: o
- * Next não tenta pré-carregá-los, e o Discord abre em outra aba.
+ * Rotas deste site vão pelo `Link`; endereços de fora viram `<a>` em outra aba.
+ * `//host` é externo, e o `rel` vem por último para nenhuma prop o desligar.
  */
 export function SmartLink({ href, ...props }: Omit<ComponentProps<"a">, "href"> & { href: string }) {
-  if (href.startsWith("/") || href.startsWith("#")) {
+  const interno = (href.startsWith("/") && !href.startsWith("//")) || href.startsWith("#");
+
+  if (interno) {
     return <Link href={href} {...props} />;
   }
 
@@ -17,8 +16,8 @@ export function SmartLink({ href, ...props }: Omit<ComponentProps<"a">, "href"> 
   return (
     <a
       href={href}
-      {...(baixa ? {} : { target: "_blank", rel: "noopener noreferrer" })}
       {...props}
+      {...(baixa ? {} : { target: "_blank", rel: "noopener noreferrer" })}
     />
   );
 }

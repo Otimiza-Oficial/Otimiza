@@ -13,7 +13,7 @@ export default function PrivacidadePage() {
   return (
     <PaginaLegal
       titulo="Privacidade"
-      atualizada="23 de setembro de 2026"
+      atualizada="24 de setembro de 2026"
       resumo="A resposta curta: o programa não manda nada seu para lugar nenhum. Sai uma pergunta de versão, anônima. O resto desta página é o detalhe disso, e o que muda quando você compra."
     >
       <Secao titulo="Quem responde pelos dados">
@@ -59,8 +59,14 @@ export default function PrivacidadePage() {
           <li>o seu usuário do Discord, quando a compra ou o suporte acontece por lá.</li>
         </ul>
         <p>
-          <strong>Nós não vemos dado de pagamento.</strong> A cobrança por Pix é processada pelo provedor de pagamento;
-          o site e o programa nunca recebem número de cartão, chave Pix sua ou dado bancário.
+          <strong>Nós não vemos dado de pagamento.</strong> O Pix e o cartão são processados pelo Mercado Pago. No
+          cartão, o número, a validade e o código de segurança são digitados em campos do próprio Mercado Pago, dentro
+          desta página, e nunca chegam ao site, ao programa ou aos nossos servidores.
+        </p>
+        <p>
+          <strong>No cartão, o Mercado Pago exige o seu e-mail e o seu CPF.</strong> Eles passam pelo nosso serviço só
+          para serem entregues a ele, no momento do pagamento: não são gravados no nosso banco de dados nem escritos
+          em registro.
         </p>
         <p>
           Esses registros são guardados enquanto a licença existir — ela é vitalícia, e é o que permite reemitir a sua
@@ -91,7 +97,8 @@ export default function PrivacidadePage() {
             política do Discord.
           </li>
           <li>
-            <strong>Provedor de pagamento</strong> — processa o Pix e trata os dados da transação sob a política dele.
+            <strong>Mercado Pago</strong> — processa o Pix e o cartão e trata os dados da transação sob a política
+            dele, inclusive a prevenção a fraude.
           </li>
         </ul>
       </Secao>

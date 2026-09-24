@@ -71,6 +71,12 @@ jobs:
         working-directory: web
         run: npm ci
 
+      # Só o que vai para o navegador, e só o que é grave: o site com checkout
+      # não sai com dependência de falha alta conhecida.
+      - name: Conferir falhas conhecidas nas dependências
+        working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+
       # O lint roda antes do build porque o `next build` não roda mais o ESLint
       # sozinho nesta versão do Next.
       - name: Conferir o código
@@ -97,6 +103,7 @@ jobs:
         env:
           PAGES_BASE_PATH: /Otimiza
           NEXT_PUBLIC_OTIMIZA_API: ${{ vars.OTIMIZA_API }}
+          NEXT_PUBLIC_MP_PUBLIC_KEY: ${{ vars.MP_PUBLIC_KEY }}
         run: npm run build
 
       # O Pages procura `404.html` na raiz; o Next exporta em `404/index.html`.
@@ -126,7 +133,19 @@ jobs:
             echo "A política liberou script em linha — isso anula a proteção."
             exit 1
           fi
-          echo "Política presente em todas as páginas, sem 'unsafe-inline' em script."
+          # Script e janela de fora só dos donos conhecidos: o GitHub e o grupo
+          # Mercado Pago/Mercado Livre (o formulário do cartão). Qualquer outro
+          # domínio que entrar na política reprova a publicação.
+          fora=$(grep -rhoE "(script|frame)-src[^;\"]*" out --include=*.html \
+            | tr ' ' '\n' | grep -E '^https?://' \
+            | grep -vE '^https://(sdk\.mercadopago\.com|http2\.mlstatic\.com|\*\.mercadopago\.com|\*\.mercadolibre\.com|\*\.mercadolivre\.com)$' \
+            | sort -u || true)
+          if [ -n "$fora" ]; then
+            echo "Domínio fora da lista aprovada em script-src/frame-src:"
+            echo "$fora"
+            exit 1
+          fi
+          echo "Política presente em todas as páginas, sem 'unsafe-inline' em script e sem domínio estranho."
 
       - name: Conferir que as páginas saíram
         working-directory: web

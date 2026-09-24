@@ -50,27 +50,39 @@ const API_DA_COMPRA = (() => {
   }
 })();
 
+/**
+ * O formulário do cartão é do Mercado Pago: o SDK, os campos seguros em janela
+ * própria e o antifraude falam com domínios do grupo Mercado Livre. Eles só
+ * entram na política quando o cartão está ligado nesta compilação.
+ */
+export const COM_CARTAO = Boolean((process.env.NEXT_PUBLIC_MP_PUBLIC_KEY ?? "").trim()) && Boolean(API_DA_COMPRA);
+
+export const DOMINIOS_DO_CARTAO = {
+  script: ["https://sdk.mercadopago.com", "https://http2.mlstatic.com"],
+  estilo: ["https://http2.mlstatic.com"],
+  fonte: ["https://http2.mlstatic.com"],
+  imagem: ["https://*.mlstatic.com", "https://*.mercadopago.com"],
+  conexao: ["https://*.mercadopago.com", "https://*.mercadolibre.com", "https://*.mercadolivre.com", "https://*.mlstatic.com"],
+  janela: ["https://*.mercadopago.com", "https://*.mercadolibre.com", "https://*.mercadolivre.com"],
+};
+
+const cartao = (tipo) => (COM_CARTAO ? DOMINIOS_DO_CARTAO[tipo] : []);
+const junto = (...partes) => partes.flat().filter(Boolean).join(" ");
+
 /** De onde a página pode buscar cada coisa. */
 function politica(hashes) {
-  const script = ["'self'", ...hashes.map((h) => `'sha256-${h}'`)].join(" ");
   return [
     "default-src 'self'",
-    `script-src ${script}`,
-    // Ver o cabeçalho: estilo em linha é o preço da animação sem servidor.
-    "style-src 'self' 'unsafe-inline'",
-    // As fotos das telas ilustrativas vêm recortadas do Unsplash; `data:` é o
-    // que o Next usa para imagem embutida pequena.
-    "img-src 'self' data: https://images.unsplash.com",
-    // O `next/font` baixa a fonte na compilação e a serve daqui.
-    "font-src 'self'",
-    // As chamadas que o site faz: a versão mais nova, na API pública do
-    // GitHub, e — quando o checkout está ligado — o serviço que cobra e emite
-    // a chave. Nada da máquina do cliente sai daqui.
-    `connect-src 'self' https://api.github.com${API_DA_COMPRA ? " " + API_DA_COMPRA : ""}`,
+    `script-src ${junto("'self'", hashes.map((h) => `'sha256-${h}'`), cartao("script"))}`,
+    // Estilo em linha é o preço da animação sem servidor.
+    `style-src ${junto("'self'", "'unsafe-inline'", cartao("estilo"))}`,
+    `img-src ${junto("'self'", "data:", "https://images.unsplash.com", cartao("imagem"))}`,
+    `font-src ${junto("'self'", cartao("fonte"))}`,
+    `connect-src ${junto("'self'", "https://api.github.com", API_DA_COMPRA, cartao("conexao"))}`,
     "form-action 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-src 'none'",
+    `frame-src ${COM_CARTAO ? junto(cartao("janela")) : "'none'"}`,
     "worker-src 'self'",
     "manifest-src 'self'",
     "upgrade-insecure-requests",
