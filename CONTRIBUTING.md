@@ -83,13 +83,13 @@ Antes de propor uma otimização nova:
 1. Meça a mesma máquina três vezes sem alterar nada
 2. Identifique o ruído natural
 3. Só reporte ganho acima desse ruído
-4. Documente em `pc-optimizer/PROGRESS.md` o que foi verificado
+4. Documente em `docs/app/PROGRESS.md` o que foi verificado
 
 Funcionalidade que existe no código mas nunca foi executada aparece como pendente no `PROGRESS.md`.
 
 ### Documentação
 
-- Atualize `pc-optimizer/PROGRESS.md` com o que foi verificado
+- Atualize `docs/app/PROGRESS.md` com o que foi verificado
 - Documente novas otimizações com:
   - O que faz
   - Quando ajuda (hardware específico)

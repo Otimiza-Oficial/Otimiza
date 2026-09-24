@@ -71,7 +71,7 @@ O motivo não é descuido. Desde 2023 as autoridades certificadoras não emitem
 mais certificado de assinatura de código como arquivo simples — a chave privada
 precisa ficar em hardware certificado —, e essa compra ainda não foi feita. O
 processo, o custo e o que falta estão em
-[`pc-optimizer/docs/ASSINATURA.md`](pc-optimizer/docs/ASSINATURA.md).
+[`docs/app/ASSINATURA.md`](docs/app/ASSINATURA.md).
 
 Até lá, o que está no seu alcance: baixar apenas da página de versões deste
 repositório, e ler o código, que é público.

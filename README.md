@@ -90,12 +90,12 @@ público-alvo.
 
 ## Documentação
 
-- [`pc-optimizer/PROGRESS.md`](pc-optimizer/PROGRESS.md) — o que está pronto, o
+- [`docs/app/PROGRESS.md`](docs/app/PROGRESS.md) — o que está pronto, o
   que foi verificado e como, e o que falta
-- [`pc-optimizer/docs/LICENCA.md`](pc-optimizer/docs/LICENCA.md) — como o
+- [`docs/app/LICENCA.md`](docs/app/LICENCA.md) — como o
   sistema de chave funciona, o que fazer antes da primeira venda, e o que
   responder em cada caso que aparece no suporte
-- [`pc-optimizer/docs/ASSINATURA.md`](pc-optimizer/docs/ASSINATURA.md) —
+- [`docs/app/ASSINATURA.md`](docs/app/ASSINATURA.md) —
   assinatura digital do instalador
 
 O `PROGRESS.md` registra apenas o que foi **verificado**. Funcionalidade que

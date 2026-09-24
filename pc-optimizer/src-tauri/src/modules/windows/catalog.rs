@@ -189,7 +189,7 @@ pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
 //
 // "Menos ajustes, e melhores": o ajuste certo PARA ESTE COMPUTADOR, não a
 // lista mais longa. Cada item do catálogo é de uma de três classes
-// (`docs/AUDITORIA-2.9.md`, seção 2):
+// (`docs/auditorias/AUDITORIA-2.9.md`, seção 2):
 //
 // - **Essencial**: vale em qualquer máquina, entra no "Otimizar agora".
 // - **Condicional**: só faz diferença quando a máquina tem um problema que dá
@@ -295,7 +295,7 @@ pub fn classe(id: &str) -> Classe {
 /// aqui pode ser aplicado de novo — nem um a um, nem em lote, nem por perfil.
 /// O motivo de cada um mora em `naofazemos.rs`.
 pub const RETIRADOS: &[&str] = &[
-    // Segunda rodada (auditoria da 2.9, docs/AUDITORIA-2.9.md):
+    // Segunda rodada (auditoria da 2.9, docs/auditorias/AUDITORIA-2.9.md):
     // - SystemResponsiveness/NetworkThrottlingIndex, Win32PrioritySeparation e
     //   as prioridades MMCSS de "Games": sem ganho reproduzível em jogo;
     // - SysMain e compressão de memória: o Windows gerencia; com pouca RAM,

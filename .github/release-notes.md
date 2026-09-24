@@ -201,7 +201,7 @@ o valor de antes (o que volta no desfazer) e o valor novo.
 ## O que saiu, porque não mudava nada ou atrapalhava
 
 A 2.9 começou por uma auditoria de tudo o que o Otimiza altera no Windows
-(`docs/AUDITORIA-2.9.md`). Menos ajustes, e melhores.
+(`docs/auditorias/AUDITORIA-2.9.md`). Menos ajustes, e melhores.
 
 - **Vinte ajustes** — os dezoito abaixo e as duas limpezas do catálogo
   (temporários e cache do Windows Update), que moram na Limpeza do sistema.

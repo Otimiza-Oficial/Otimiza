@@ -3,10 +3,6 @@
 # Compila o site (`web/`, Next.js exportado como arquivos estáticos) e publica
 # no GitHub Pages, em https://otimiza-oficial.github.io/Otimiza/
 #
-# O site anterior (`site/`, Astro) saiu do ar nesta troca. O código dele segue
-# no repositório; para voltar a publicá-lo, é só apontar este arquivo de novo
-# para `site/`.
-#
 # SÓ RODA QUANDO O SITE MUDA
 #
 # O filtro de caminho existe porque a maior parte dos commits deste repositório
