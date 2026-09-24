@@ -308,7 +308,6 @@ pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("suspend", "só RETOMA programa que versão antiga suspendeu; o produto não congela mais nada"),
     ("governador", "muda prioridade em memória e volta quando o jogo fecha (registrado como modo jogo)"),
     ("jogos", "cache da biblioteca de jogos, em dados do Otimiza"),
-    ("capas", "capas dos jogos, em dados do Otimiza"),
     ("pressao", "janela de pressão de memória, em dados do Otimiza"),
     ("tarefa_longa", "marca de tarefa longa em andamento, em dados do Otimiza"),
     ("citizenfx", "escreve só em arquivo temporário do próprio Otimiza (tem trava própria)"),

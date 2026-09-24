@@ -84,8 +84,6 @@ pub fn run() {
             reparo: modules::windows::tarefa_longa::TarefaLonga::nova(),
             #[cfg(target_os = "windows")]
             disco: std::sync::Mutex::new(Default::default()),
-            #[cfg(target_os = "windows")]
-            raiz_steam: Default::default(),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
@@ -104,10 +102,6 @@ pub fn run() {
             commands::historico_de_desempenho,
             #[cfg(target_os = "windows")]
             commands::caminho_do_mouse,
-            #[cfg(target_os = "windows")]
-            commands::biblioteca_de_jogos,
-            #[cfg(target_os = "windows")]
-            commands::capa_do_jogo,
             #[cfg(target_os = "windows")]
             commands::catalogo_de_programas,
             #[cfg(target_os = "windows")]
@@ -176,13 +170,8 @@ pub fn run() {
             commands::energia_painel,
             commands::energia_vizinhos,
             commands::diagnostico_ao_vivo,
-            commands::seus_jogos,
-            commands::unreal_prever,
-            commands::unreal_aplicar,
             commands::tetos_escondidos,
             commands::pronto_para_jogar,
-            commands::nvidia_perfil_prever,
-            commands::nvidia_perfil_aplicar,
             commands::energia_medir_atual,
             commands::energia_escolher,
             commands::energia_restaurar_anterior,

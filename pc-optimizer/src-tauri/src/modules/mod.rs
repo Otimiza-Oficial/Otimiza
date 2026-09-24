@@ -13,8 +13,6 @@ pub mod atualizacao;
 pub mod autoajuste;
 pub mod baseline;
 pub mod benchmark;
-pub mod capas;
-pub mod catalogojogos;
 pub mod changelog;
 pub mod convite;
 pub mod deriva;

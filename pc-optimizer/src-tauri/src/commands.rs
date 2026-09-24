@@ -101,17 +101,6 @@ pub struct AppState {
     /// tokio chamado de dentro do runtime entraria em pânico.
     #[cfg(target_os = "windows")]
     pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
-    /// Onde a Steam está instalada, lembrado depois da primeira leitura.
-    ///
-    /// A biblioteca pede uma capa por bloco, e a primeira versão varria Steam,
-    /// Epic e registro inteiros A CADA UMA para descobrir o mesmo caminho.
-    /// A resposta não muda enquanto o programa está aberto.
-    ///
-    /// Dois níveis de propósito: o de fora é "já perguntei", o de
-    /// dentro é "e a resposta foi que não tem Steam". Sem os dois, uma máquina
-    /// sem Steam refaria a varredura em toda capa.
-    #[cfg(target_os = "windows")]
-    pub raiz_steam: Mutex<Option<Option<std::path::PathBuf>>>,
 }
 
 #[derive(Serialize)]
@@ -139,105 +128,6 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
 pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<PerformanceMetrics, String> {
     let mut monitor = state.monitor.lock().await;
     monitor.collect_metrics().await
-}
-
-/// Comando: a grade da biblioteca de jogos.
-///
-/// Junta duas listas que respondem perguntas diferentes: o que ESTÁ INSTALADO
-/// nesta máquina (`windows::jogos::varrer`, que lê Steam, Epic e a lista do
-/// Windows) e o que o produto CONHECE de nome (`modules::catalogojogos`).
-///
-/// Jogo instalado que o catálogo não conhece entra do mesmo jeito: prioridade,
-/// afinidade e preferência de placa não dependem de o Otimiza ter ouvido falar
-/// do título. E jogo conhecido que não está instalado aparece marcado como tal,
-/// para a pessoa achar o dela na grade em vez de concluir que não há suporte.
-///
-/// SÓ LÊ. Nenhuma otimização é aplicada por abrir a biblioteca.
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn biblioteca_de_jogos() -> Result<BibliotecaNaTela, String> {
-    use crate::modules::catalogojogos::{montar, Detectado};
-    use crate::modules::windows::jogos;
-
-    // Varrer bibliotecas de loja é leitura de disco: fora da thread do
-    // executor, como todo o resto que custa neste produto.
-    let biblioteca = tokio::task::spawn_blocking(jogos::varrer)
-        .await
-        .map_err(|e| format!("a varredura de jogos não terminou: {e}"))?;
-
-    let detectados: Vec<Detectado> = biblioteca
-        .jogos
-        .iter()
-        .map(|j| Detectado {
-            nome: j.nome.clone(),
-            pasta: j.pasta.to_string_lossy().to_string(),
-            executavel: j.executavel.as_ref().map(|e| e.to_string_lossy().to_string()),
-            appid: j.appid,
-        })
-        .collect();
-
-    Ok(BibliotecaNaTela {
-        jogos: montar(&detectados),
-        instalados: detectados.len(),
-        // O que a varredura não conseguiu ler vai junto. Uma biblioteca curta
-        // porque a Steam não abriu é indistinguível de uma biblioteca curta
-        // de verdade — e a primeira tem conserto.
-        lacunas: biblioteca.lacunas,
-    })
-}
-
-/// A grade, com o que a varredura não conseguiu ler.
-#[cfg(target_os = "windows")]
-#[derive(Debug, Serialize)]
-pub struct BibliotecaNaTela {
-    pub jogos: Vec<crate::modules::catalogojogos::NaGrade>,
-    /// Quantos foram encontrados no disco.
-    pub instalados: usize,
-    pub lacunas: Vec<String>,
-}
-
-/// Comando: a capa de um jogo, tirada do cache da Steam desta máquina.
-///
-/// O PEDIDO FOI "a foto de verdade, não as letras". A resposta não é embutir
-/// as capas no instalador — a arte é de quem fez o jogo, e empacotá-la num
-/// produto que se vende é distribuir material de terceiro. A resposta é que a
-/// capa JÁ ESTÁ NO COMPUTADOR: a Steam baixa a arte de cada jogo da biblioteca
-/// para desenhar a própria grade, e ler dali mostra ao cliente uma imagem que
-/// já é dele.
-///
-/// UM JOGO POR CHAMADA, de propósito. Mandar vinte capas dentro da resposta da
-/// grade atrasaria a primeira pintura em alguns megabytes de base64 — e a
-/// maior parte das capas nem estaria na tela ainda.
-///
-/// `None` quando não há capa: jogo fora da Steam, jogo não instalado, ou cache
-/// que a Steam ainda não preencheu. Nenhum desses é erro — é o bloco de cor.
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn capa_do_jogo(appid: u32, state: State<'_, AppState>) -> Result<Option<String>, String> {
-    use crate::modules::capas;
-
-    // A raiz da Steam é lembrada entre chamadas. A primeira versão disto
-    // chamava `jogos::varrer()` uma vez POR CAPA — uma varredura completa de
-    // Steam, Epic e registro para cada bloco da grade. Funcionava e era um
-    // desperdício de vinte varreduras para responder vinte vezes a mesma
-    // coisa, que é onde a biblioteca mora.
-    let raiz = {
-        let mut guardada = state.raiz_steam.lock().await;
-
-        if guardada.is_none() {
-            *guardada = Some(
-                tokio::task::spawn_blocking(|| {
-                    crate::modules::windows::jogos::varrer().raiz_steam
-                })
-                .await
-                .map_err(|e| format!("a leitura da Steam não terminou: {e}"))?,
-            );
-        }
-
-        guardada.clone().flatten()
-    };
-
-    Ok(capas::obter(appid, raiz.as_deref()).await)
 }
 
 /// Comando: a lista de programas, com o que já está instalado.
@@ -2268,133 +2158,6 @@ pub async fn energia_medir_atual(
 
 
 
-// ============================================================ biblioteca de jogos (2.9)
-
-/// Um jogo da biblioteca, com o que o Otimiza consegue fazer por ele.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct JogoNaBiblioteca {
-    pub nome: String,
-    pub origem: crate::modules::windows::jogos::Origem,
-    pub pasta: String,
-    pub executavel: Option<String>,
-    /// A: o Otimiza ajusta a configuração gráfica. C: mede e ajusta o sistema.
-    pub nivel: char,
-    /// Qual ajustador de configuração serve: "fivem" ou "unreal".
-    pub ajustador: Option<&'static str>,
-    pub ultima_medicao: Option<crate::modules::medicoes::MedicaoAutomatica>,
-    /// Id no histórico quando o Otimiza já ajustou a configuração deste jogo
-    /// (para o botão Desfazer).
-    pub ajuste_aplicado: Option<String>,
-    /// O ajuste está em observação pelo portão "nunca menos FPS".
-    pub em_observacao: bool,
-    /// O último veredito do portão para o ajuste deste jogo.
-    pub decidido: Option<crate::modules::portao::Decidido>,
-    /// O desempenho deste jogo caiu com o tempo (driver, Windows, ou sem
-    /// culpado aparente).
-    pub deriva: Option<crate::modules::deriva::Deriva>,
-    /// Id no histórico do perfil NVIDIA deste jogo, quando aplicado.
-    pub perfil_nvidia: Option<String>,
-}
-
-/// Id do ajuste Unreal de um jogo no histórico.
-pub fn id_do_ajuste_unreal(nome: &str) -> String {
-    let limpo: String = nome
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '_' })
-        .collect();
-    format!("config_unreal_{}", limpo)
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct SeusJogos {
-    /// Há placa NVIDIA com a NVAPI respondendo (para a ficha mostrar o perfil).
-    pub nvidia: bool,
-    pub jogos: Vec<JogoNaBiblioteca>,
-    pub lacunas: Vec<String>,
-    pub medicoes_erro: Option<String>,
-}
-
-/// Comando: a biblioteca de jogos desta máquina. `LIVRES`.
-#[tauri::command]
-pub async fn seus_jogos(state: State<'_, AppState>) -> Result<SeusJogos, String> {
-    let aplicados: Vec<String> = state
-        .changes
-        .lock()
-        .await
-        .applied()
-        .iter()
-        .map(|a| a.optimization_id.clone())
-        .collect();
-    tokio::task::spawn_blocking(move || {
-        use crate::modules::windows::{jogos, unreal};
-        let b = jogos::varrer();
-        let portao = crate::modules::portao::ler();
-        let derivas = medicoes_para_deriva();
-        let (medicoes, medicoes_erro) = match crate::modules::medicoes::ler() {
-            Ok(m) => (m, None),
-            Err(e) => (Vec::new(), Some(e)),
-        };
-        let jogos = b
-            .jogos
-            .into_iter()
-            .map(|j| {
-                let exe = j.executavel.clone();
-                let nome_exe = exe
-                    .as_ref()
-                    .and_then(|e| e.file_stem())
-                    .map(|s| s.to_string_lossy().to_lowercase());
-                let e_fivem_ou_gta = j.nome.to_lowercase().contains("fivem")
-                    || j.nome.to_lowercase().contains("grand theft auto v")
-                    || nome_exe.as_deref() == Some("gta5");
-                let ajustador = if e_fivem_ou_gta {
-                    Some("fivem")
-                } else if exe.as_ref().is_some_and(|e| unreal::config_do_jogo(e).is_some()) {
-                    Some("unreal")
-                } else {
-                    None
-                };
-                // A medição automática grava o nome do PROCESSO; o do FiveM
-                // (FiveM_b3258_GTAProcess.exe) começa pelo nome do lançador.
-                let id_ajuste = id_do_ajuste_unreal(&j.nome);
-                let ultima_medicao = nome_exe.as_ref().and_then(|n| {
-                    medicoes
-                        .iter()
-                        .filter(|m| m.jogo.to_lowercase().starts_with(n.as_str()))
-                        .max_by_key(|m| m.quando)
-                        .cloned()
-                });
-                let perfil_nvidia = exe
-                    .as_ref()
-                    .and_then(|e| e.file_name())
-                    .map(|n| crate::modules::windows::nvdriver::id_do_perfil(&n.to_string_lossy()))
-                    .filter(|id| aplicados.contains(id));
-                JogoNaBiblioteca {
-                    nome: j.nome,
-                    origem: j.origem,
-                    pasta: j.pasta.to_string_lossy().to_string(),
-                    executavel: exe.as_ref().map(|e| e.to_string_lossy().to_string()),
-                    nivel: if ajustador.is_some() { 'A' } else { 'C' },
-                    ajustador,
-                    ultima_medicao,
-                    deriva: nome_exe.as_ref().and_then(|n| {
-                        derivas.iter().find(|d| d.jogo.to_lowercase().starts_with(n.as_str())).cloned()
-                    }),
-                    perfil_nvidia,
-                    em_observacao: portao.vigiados.iter().any(|v| v.id == id_ajuste),
-                    decidido: portao.decididos.iter().rev().find(|d| d.vigiado.id == id_ajuste).cloned(),
-                    ajuste_aplicado: aplicados.contains(&id_ajuste).then_some(id_ajuste),
-                }
-            })
-            .collect();
-        let nvidia = matches!(crate::modules::windows::nvdriver::estado(), crate::modules::windows::nvdriver::Nvapi::Disponivel);
-        Ok(SeusJogos { nvidia, jogos, lacunas: b.lacunas, medicoes_erro })
-    })
-    .await
-    .map_err(|e| format!("Falha ao ler a biblioteca: {}", e))?
-}
-
-
 /// Comando: limites de FPS escondidos (driver, RTSS, arquivo do jogo). `LIVRES`.
 #[tauri::command]
 pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relatorio, String> {
@@ -2402,13 +2165,6 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
-fn medicoes_para_deriva() -> Vec<crate::modules::deriva::Deriva> {
-    crate::modules::medicoes::ler()
-        .map(|m| crate::modules::deriva::procurar(&m))
-        .unwrap_or_default()
-}
-
-
 /// Comando: pronto para jogar? Scan de ~2 s antes de abrir o jogo. `LIVRES`.
 #[tauri::command]
 pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::Prontidao, String> {
@@ -2416,114 +2172,7 @@ pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::
         .await
         .map_err(|e| format!("Falha na verificação: {}", e))
 }
-/// Comando: prévia do perfil NVIDIA de um jogo (valor atual → novo). `LIVRES`.
-#[tauri::command]
-pub async fn nvidia_perfil_prever(
-    executavel: String,
-    perfil: crate::modules::windows::nvdriver::PerfilDoJogo,
-) -> Result<Vec<crate::modules::windows::nvdriver::AjusteDoJogo>, String> {
-    let exe = nome_do_executavel(&executavel)?;
-    tokio::task::spawn_blocking(move || crate::modules::windows::nvdriver::prever_perfil_do_jogo(&exe, perfil))
-        .await
-        .map_err(|e| e.to_string())?
-}
 
-/// Comando: aplica o perfil NVIDIA no perfil do executável do jogo. `EXIGEM_LICENCA`.
-#[tauri::command]
-pub async fn nvidia_perfil_aplicar(
-    executavel: String,
-    perfil: crate::modules::windows::nvdriver::PerfilDoJogo,
-    state: State<'_, AppState>,
-) -> Result<OptimizationOutcome, String> {
-    crate::modules::licenca::exigir()?;
-    let exe = nome_do_executavel(&executavel)?;
-    let mut log = state.changes.lock().await;
-    let feito = crate::modules::windows::WindowsOptimizer::new().aplicar_perfil_nvidia(&exe, perfil, &mut log)?;
-    // Nunca menos FPS: o perfil entra na mesma vigília dos ajustes de jogo
-    // (`modules::portao`). Se as próximas partidas medidas caírem de verdade,
-    // ele é desfeito sozinho.
-    let processo = std::path::Path::new(&exe)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    crate::modules::portao::vigiar(
-        &crate::modules::windows::nvdriver::id_do_perfil(&exe),
-        &format!("perfil NVIDIA de {exe}"),
-        &processo,
-        crate::modules::changelog::now_timestamp(),
-    );
-    Ok(feito)
-}
-
-/// O driver amarra perfil ao NOME DO ARQUIVO; a tela manda o caminho inteiro.
-fn nome_do_executavel(caminho: &str) -> Result<String, String> {
-    std::path::Path::new(caminho)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .ok_or_else(|| "caminho de executável inválido.".to_string())
-}
-
-fn vram_gb() -> Option<f64> {
-    crate::core::telemetria::placas().first().map(|p| p.vram_total_mb / 1024.0)
-}
-
-/// Comando: o que o ajustador Unreal mudaria, sem gravar. `LIVRES`.
-#[tauri::command]
-pub async fn unreal_prever(
-    executavel: String,
-    orcamento: crate::modules::windows::unreal::Orcamento,
-) -> Result<crate::modules::windows::unreal::Previa, String> {
-    tokio::task::spawn_blocking(move || {
-        crate::modules::windows::unreal::prever(std::path::Path::new(&executavel), orcamento, vram_gb())
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-/// Comando: aplica o orçamento na configuração Unreal do jogo, guardando o
-/// arquivo inteiro no histórico. `EXIGEM_LICENCA`.
-#[tauri::command]
-pub async fn unreal_aplicar(
-    executavel: String,
-    nome: String,
-    orcamento: crate::modules::windows::unreal::Orcamento,
-    state: State<'_, AppState>,
-) -> Result<Vec<crate::modules::windows::unreal::Mudanca>, String> {
-    crate::modules::licenca::exigir()?;
-    use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
-    let caminho = executavel.clone();
-    let feito = tokio::task::spawn_blocking(move || {
-        crate::modules::windows::unreal::aplicar(std::path::Path::new(&caminho), orcamento, vram_gb())
-    })
-    .await
-    .map_err(|e| e.to_string())??;
-    if feito.mudancas.is_empty() {
-        return Ok(feito.mudancas);
-    }
-    let processo = std::path::Path::new(&executavel)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let mut log = state.changes.lock().await;
-    let id = id_do_ajuste_unreal(&nome);
-    // Nunca menos FPS: o ajuste entra em observação (`modules::portao`).
-    crate::modules::portao::vigiar(&id, &nome, &processo, now_timestamp());
-    // Aplicar de novo por cima: o desfazer precisa voltar ao ORIGINAL, então
-    // o registro antigo fica e o novo não é gravado por cima dele.
-    if !log.is_applied(&id) {
-        log.record(AppliedOptimization {
-            optimization_id: id,
-            name: format!("Configuração do {}", nome),
-            timestamp: now_timestamp(),
-            changes: vec![ChangeRecord::GameConfig {
-                caminho: feito.arquivo.to_string_lossy().to_string(),
-                anterior: Some(feito.anterior),
-                jogo: nome,
-            }],
-        })?;
-    }
-    Ok(feito.mudancas)
-}
 // ============================================================ diagnóstico ao vivo (2.9)
 
 /// O que está limitando o PC AGORA: telemetria do Windows amostrada a cada
@@ -5103,8 +4752,6 @@ mod tests {
         "passo_do_autoajuste",
         "historico_de_desempenho",
         "caminho_do_mouse",
-        "biblioteca_de_jogos",
-        "capa_do_jogo",
         "catalogo_de_programas",
         "medir_limpeza",
         "nucleos_da_maquina",
@@ -5151,11 +4798,8 @@ mod tests {
         "energia_painel",
         "energia_vizinhos",
         "diagnostico_ao_vivo",
-        "seus_jogos",
-        "unreal_prever",
         "tetos_escondidos",
         "pronto_para_jogar",
-        "nvidia_perfil_prever",
         "energia_medir_atual",
         "energia_escolher",
         "energia_restaurar_anterior",
@@ -5216,8 +4860,6 @@ mod tests {
         "limpar_alvos",
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
-        "unreal_aplicar",
-        "nvidia_perfil_aplicar",
         "cpuset_testar",
         "energia_testar_candidato",
         "energia_aplicar",

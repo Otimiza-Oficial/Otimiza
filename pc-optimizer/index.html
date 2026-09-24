@@ -102,13 +102,6 @@
           <path d="M16 12h.01M18 14.5h.01" />
         </symbol>
 
-        <!-- Biblioteca: as capas lado a lado -->
-        <symbol id="i-biblioteca" viewBox="0 0 24 24">
-          <rect x="3" y="4" width="6" height="16" rx="1.5" />
-          <rect x="11" y="4" width="4.5" height="16" rx="1.5" />
-          <path d="M17.6 5.2 21 6.1l-3.1 13-2.2-.6" />
-        </symbol>
-
         <!-- Instaladores: a seta que desce para a bandeja -->
         <symbol id="i-instaladores" viewBox="0 0 24 24">
           <path d="M12 3.5v11" />
@@ -590,12 +583,6 @@
             <span class="tab-badge" id="badge-otimizacoes" hidden></span>
           </button>
 
-          <button class="nav" role="tab" data-tab="biblioteca" aria-selected="false"
-                  aria-controls="tab-biblioteca" id="tabbtn-biblioteca">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-biblioteca" /></svg>
-            <span class="nav-rotulo">Biblioteca</span>
-          </button>
-
           <button class="nav" role="tab" data-tab="nucleos" aria-selected="false"
                   aria-controls="tab-nucleos" id="tabbtn-nucleos">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-affinity" /></svg>
@@ -832,12 +819,6 @@
               <svg class="atalho-icone" aria-hidden="true"><use href="#i-gpu" /></svg>
               <span class="atalho-nome">Ajustes de driver</span>
               <span class="atalho-nota">Os cinco ajustes de placa que o produto sabe aplicar e desfazer.</span>
-            </button>
-
-            <button class="atalho" type="button" data-vai="biblioteca">
-              <svg class="atalho-icone" aria-hidden="true"><use href="#i-biblioteca" /></svg>
-              <span class="atalho-nome">Biblioteca de jogos</span>
-              <span class="atalho-nota">O que está instalado, e a ficha de otimização de cada título.</span>
             </button>
 
             <button class="atalho" type="button" data-vai="otimizacoes">
@@ -2062,96 +2043,6 @@
             <p id="browser-status" class="status"></p>
             <div id="browser-result" class="resultado" data-vazio="Lista as extensões instaladas e separa cache descartável de dado de aplicativo — que parece cache e não é. Cerca de 6 segundos, e não apaga nada sem você confirmar."></div>
           </section>
-        </section>
-
-        <!-- =========================================================== RESULTADO -->
-        <!-- ============================================================== JOGOS -->
-        <!--
-          A BIBLIOTECA TEM ABA PRÓPRIA.
-
-          Ela estava no topo da aba Jogos, e ali competia com quatro painéis
-          de ajuste logo abaixo. Quem abre a biblioteca não veio ajustar nada:
-          veio achar um jogo. Aba própria é o que deixa a grade ocupar a tela
-          inteira e é onde a pessoa espera encontrá-la.
-        -->
-        <section class="tab-panel" id="tab-biblioteca" role="tabpanel"
-                 aria-labelledby="tabbtn-biblioteca" hidden>
-          <!--
-            A BIBLIOTECA.
-
-            Abre a aba porque é onde a pessoa procura o jogo dela — e porque
-            tudo o que vem abaixo (disco, placa, prioridade) faz mais sentido
-            depois de escolher sobre QUAL jogo se está falando.
-
-            DUAS LISTAS, UMA GRADE. O que está instalado sai da varredura de
-            Steam, Epic e da lista do Windows; o que não está sai do catálogo de
-            títulos que o produto conhece de nome. Jogo instalado que o catálogo
-            não conhece entra do mesmo jeito — prioridade e preferência de placa
-            não dependem de a gente ter ouvido falar dele.
-
-            SEM CAPA DE JOGO. A arte de cada título é de quem fez o título, e
-            embutir aquilo no instalador é distribuir material de terceiro. Cada
-            bloco ganha uma cor derivada do próprio nome — estável, a mesma em
-            toda abertura — e quem quiser a capa de verdade aponta um arquivo da
-            própria máquina.
-          -->
-          <!--
-            EM BREVE, E POR QUÊ ISSO FICA ESCRITO.
-
-            A grade abaixo funciona: ela lista o que está instalado, reconhece
-            os títulos do catálogo e abre a ficha de cada um. O que NÃO está
-            pronto é a parte que dá sentido a ela — a ficha de otimização por
-            jogo, que hoje só sabe mexer de verdade em GTA V e FiveM.
-
-            Uma tela que faz metade do que aparenta, sem dizer isso, é
-            exatamente o que este produto existe para não fazer. Então o aviso
-            fica em cima, antes de qualquer coisa, e diz qual metade é qual.
-          -->
-          <div class="aviso-breve" role="note">
-            <span class="aviso-breve-selo">Como funciona</span>
-            <p class="aviso-breve-texto">
-              O ajuste <strong>dentro</strong> do jogo já funciona em GTA V,
-              FiveM e nos jogos em Unreal Engine (Fortnite, Valorant, PUBG e
-              outros) — abra a ficha do jogo. Nos outros títulos a ficha
-              oferece a placa de vídeo certa, e o resto do Otimiza (energia,
-              modo jogo, Mapa de desempenho) vale para qualquer jogo. Todo
-              ajuste de jogo fica em observação: se as partidas depois dele
-              ficarem piores, ele é desfeito sozinho.
-            </p>
-          </div>
-
-          <!--
-            "Pronto para jogar?" mudou para o Painel na 2.9: ele olha a MÁQUINA
-            (monitor, limites escondidos, memória, programas pesando), não um
-            jogo. Duas cópias da mesma verificação era o que a auditoria achou
-            em outros quatro lugares.
-          -->
-
-          <section class="panel" id="biblioteca-painel">
-            <div class="panel-head">
-              <h2>Biblioteca</h2>
-              <span class="panel-tag" id="biblioteca-tag">—</span>
-            </div>
-
-            <div class="biblioteca-topo">
-              <div class="biblioteca-filtros" role="tablist" aria-label="Filtrar a biblioteca">
-                <button class="biblioteca-filtro" role="tab" data-filtro="todos"
-                        aria-selected="true">Todos</button>
-                <button class="biblioteca-filtro" role="tab" data-filtro="instalados"
-                        aria-selected="false">Instalados</button>
-              </div>
-
-              <label class="biblioteca-busca">
-                <span class="sr-only">Buscar jogo</span>
-                <input type="search" id="biblioteca-busca" placeholder="Buscar jogo"
-                       autocomplete="off" spellcheck="false" />
-              </label>
-            </div>
-
-            <div class="biblioteca-grade" id="biblioteca-grade"></div>
-            <p class="hint" id="biblioteca-lacunas" hidden></p>
-          </section>
-
         </section>
 
         <!--
@@ -3529,40 +3420,6 @@
 
     <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
          então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
-    <!--
-      A FICHA DE UM JOGO.
-
-      DUAS ALAVANCAS, e não cinco. Preferência de placa de vídeo e prioridade
-      fixa são as que o produto sabe aplicar E DESFAZER — as duas passam pelo
-      histórico de mudanças como qualquer outra otimização.
-
-      A tentação aqui é encher a ficha de interruptores: "compatibilidade",
-      "otimização de núcleos", "modo desempenho". Um interruptor que não escreve
-      nada verificável é um interruptor que o cliente liga, sente melhora, e
-      paga por nada — e é o que este produto inteiro foi escrito para não
-      fazer. Quando houver uma terceira alavanca com medição e desfazer, ela
-      entra aqui.
-    -->
-    <div class="modal" id="jogo-modal" hidden>
-      <div class="modal-card jogo-card" role="dialog" aria-modal="true"
-           aria-labelledby="jogo-modal-nome">
-        <header class="jogo-cabeca">
-          <span class="jogo-bloco" id="jogo-modal-bloco" aria-hidden="true"></span>
-          <div>
-            <p class="jogo-sobrenome">Otimizações do jogo</p>
-            <h2 id="jogo-modal-nome">—</h2>
-            <p class="jogo-caminho" id="jogo-modal-caminho">—</p>
-          </div>
-          <button class="jogo-fechar" id="jogo-modal-fechar" type="button"
-                  aria-label="Fechar">×</button>
-        </header>
-
-        <div class="jogo-alavancas" id="jogo-alavancas"></div>
-
-        <p class="modal-note" id="jogo-modal-nota"></p>
-      </div>
-    </div>
-
     <div class="modal" id="admin-modal" hidden>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="brand-logo modal-logo" aria-hidden="true"></div>

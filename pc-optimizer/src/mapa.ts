@@ -116,7 +116,7 @@ const NA_TELA: Record<Classe, { titulo: string; explica: string; faz: string; no
   Gpu: {
     titulo: "A placa de vídeo é o limite",
     explica: "A placa está no máximo. É o caso em que ajuste gráfico rende mais FPS.",
-    faz: "Baixe primeiro sombras, pós-processamento, anti-serrilhado pesado e resolução de renderização (ficha do jogo, na Biblioteca). Upscaling e o gerador de quadros também entram aqui.",
+    faz: "Baixe primeiro sombras, pós-processamento, anti-serrilhado pesado e resolução de renderização (configuração do jogo, na aba Jogos). Upscaling e o gerador de quadros também entram aqui.",
     no: "gpu",
   },
   MemoriaRam: {

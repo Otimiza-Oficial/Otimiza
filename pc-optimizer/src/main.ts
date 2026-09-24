@@ -7,7 +7,7 @@ import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
 import { carregarMapaDeDesempenho } from "./mapa";
-import { preencherFichaDoJogo, ligarProntidao } from "./biblioteca";
+import { ligarProntidao } from "./prontidao";
 
 // ---------------------------------------------------------------- contratos
 
@@ -1445,9 +1445,6 @@ function showTab(name: string) {
     void carregarReparo();
   }
 
-  // Carrega ao abrir a aba, e uma vez só. A leitura passa pelo PowerShell e
-  // varre as bibliotecas de jogo — é exatamente o tipo de custo que não pode
-  // entrar na abertura do programa, pelo mesmo motivo da vistoria do plano.
   // A BIOS carrega ao abrir a aba Sistema, e uma vez só: a leitura passa pelo
   // PowerShell e não pode entrar na abertura do programa.
   if (name === "sistema" && !biosCarregada) {
@@ -3021,268 +3018,6 @@ async function instalarPrograma(botao: HTMLButtonElement) {
 
 function ligarProgramas() {
   element<HTMLInputElement>("programas-busca").addEventListener("input", desenharProgramas);
-}
-
-// ------------------------------------------------ biblioteca de jogos
-
-interface JogoNaGrade {
-  id: string;
-  nome: string;
-  instalado: boolean;
-  pasta: string | null;
-  executavel: string | null;
-  /** O produto conhece este título de nome. */
-  conhecido: boolean;
-  /** Matiz de 0 a 359, derivada do id. Ver `catalogojogos.rs`. */
-  matiz: number;
-  iniciais: string;
-  /// Por onde pedir a capa de verdade. Ausente em jogo fora da Steam.
-  appid: number | null;
-}
-
-interface BibliotecaNaTela {
-  jogos: JogoNaGrade[];
-  instalados: number;
-  lacunas: string[];
-}
-
-let bibliotecaCarregada: JogoNaGrade[] = [];
-let filtroDaBiblioteca: "todos" | "instalados" = "todos";
-
-async function carregarBiblioteca() {
-  element("biblioteca-grade").innerHTML = esqueletos(12, "bloco");
-  ocupado("biblioteca-grade", true);
-
-  try {
-    const r = await invoke<BibliotecaNaTela>("biblioteca_de_jogos");
-    bibliotecaCarregada = r.jogos;
-
-    text(
-      "biblioteca-tag",
-      `${r.instalados} instalado${r.instalados === 1 ? "" : "s"} · ${r.jogos.length} na grade`
-    );
-
-    // O que a varredura não conseguiu ler vai para a tela. Uma biblioteca
-    // curta porque a Steam não abriu é indistinguível de uma curta de verdade,
-    // e só a primeira tem conserto.
-    const lacunas = element("biblioteca-lacunas");
-    lacunas.hidden = r.lacunas.length === 0;
-    lacunas.textContent =
-      r.lacunas.length === 0 ? "" : `Não deu para ler: ${r.lacunas.join(", ")}.`;
-
-    desenharBiblioteca();
-  } catch (error) {
-    element("biblioteca-grade").innerHTML =
-      `<p class="hint">${escapeHtml(String(error))}</p>`;
-  } finally {
-    ocupado("biblioteca-grade", false);
-  }
-}
-
-
-/**
- * As capas já pedidas, para não pedir duas vezes.
- *
- * A grade é redesenhada a cada tecla digitada na busca. Sem esta memória, cada
- * letra dispararia uma leitura de disco por jogo visível — e a busca, que
- * precisa ser instantânea, viraria a parte mais lenta da tela.
- *
- * `null` guardado significa "já perguntei e não há capa". Guardar a ausência é
- * o que impede o produto de perguntar de novo a cada desenho sobre um jogo que
- * nunca vai ter capa.
- */
-const capasDosJogos = new Map<number, string | null>();
-
-/**
- * Busca as capas dos blocos que estão na tela.
- *
- * SÓ OS QUE ESTÃO NA TELA, e uma de cada vez. Vinte capas dentro da resposta da
- * grade seriam alguns megabytes de base64 antes da primeira pintura, e a maior
- * parte delas nem estaria visível ainda.
- */
-async function carregarCapasVisiveis() {
-  const blocos = [...document.querySelectorAll<HTMLElement>('.jogo-tile-arte[data-appid]')];
-
-  // EM PARALELO, e com um limite. A primeira versão pedia uma capa por vez, e
-  // na primeira abertura — quando nenhuma foi baixada ainda — isso enfileirava
-  // dezessete idas à rede em série: a última capa apareceria mais de um minuto
-  // depois da primeira. Em paralelo sem limite seria o oposto: dezessete
-  // conexões de uma vez, que algumas redes domésticas tratam como abuso.
-  const DE_CADA_VEZ = 4;
-
-  const pendentes = blocos.filter((b) => {
-    const appid = Number(b.dataset.appid);
-    return Number.isFinite(appid) && appid > 0;
-  });
-
-  for (let i = 0; i < pendentes.length; i += DE_CADA_VEZ) {
-    await Promise.all(pendentes.slice(i, i + DE_CADA_VEZ).map(vestirBloco));
-  }
-}
-
-/** Põe a capa num bloco, buscando-a se ainda não foi buscada. */
-async function vestirBloco(bloco: HTMLElement) {
-  const appid = Number(bloco.dataset.appid);
-
-  if (!capasDosJogos.has(appid)) {
-    try {
-      capasDosJogos.set(appid, await invoke<string | null>('capa_do_jogo', { appid }));
-    } catch {
-      // Uma capa a menos não é erro de tela: o bloco de cor cobre.
-      capasDosJogos.set(appid, null);
-    }
-  }
-
-  const url = capasDosJogos.get(appid);
-  if (!url) return;
-
-  // A capa entra como fundo e as iniciais somem. Deixá-las por cima da arte
-  // seria pior que as duas coisas separadas.
-  bloco.style.backgroundImage = `url("${url}")`;
-  bloco.dataset.comCapa = 'sim';
-  bloco.textContent = '';
-}
-
-function desenharBiblioteca() {
-  const busca = element<HTMLInputElement>("biblioteca-busca").value.trim().toLowerCase();
-
-  const visiveis = bibliotecaCarregada.filter((j) => {
-    if (filtroDaBiblioteca === "instalados" && !j.instalado) return false;
-    return busca === "" || j.nome.toLowerCase().includes(busca);
-  });
-
-  if (visiveis.length === 0) {
-    element("biblioteca-grade").innerHTML = `<p class="hint">${
-      busca
-        ? "Nenhum jogo com esse nome na grade. Jogos fora do catálogo aparecem aqui assim que forem encontrados no disco."
-        : "Nenhum jogo instalado foi encontrado nas bibliotecas desta máquina."
-    }</p>`;
-    return;
-  }
-
-  element("biblioteca-grade").innerHTML = visiveis
-    .map(
-      (j) => `
-      <button class="jogo-tile" type="button" data-jogo="${escapeHtml(j.id)}"
-              data-instalado="${j.instalado}" style="--matiz:${j.matiz}">
-        <span class="jogo-tile-arte" aria-hidden="true" data-appid="${j.appid ?? ''}">${escapeHtml(j.iniciais)}</span>
-        <span class="jogo-tile-rodape">
-          <span class="jogo-tile-nome">${escapeHtml(j.nome)}</span>
-          <span class="jogo-tile-estado">${j.instalado ? "Instalado" : "Não instalado"}</span>
-        </span>
-      </button>`
-    )
-    .join("");
-
-  void carregarCapasVisiveis();
-}
-
-/**
- * Abre a ficha de um jogo.
- *
- * A ALAVANCA SÓ APARECE COM CAMINHO. Preferência de placa é escrita por caminho
- * de executável; sem ele não há o que escrever. A "prioridade alta fixa" saiu
- * na 2.9 (prioridade cega, sem ganho medido).
- */
-function abrirFichaDoJogo(id: string) {
-  const jogo = bibliotecaCarregada.find((j) => j.id === id);
-  if (!jogo) return;
-
-  const bloco = element("jogo-modal-bloco");
-  bloco.textContent = jogo.iniciais;
-  bloco.style.setProperty("--matiz", String(jogo.matiz));
-
-  text("jogo-modal-nome", jogo.nome);
-  text(
-    "jogo-modal-caminho",
-    jogo.executavel ?? jogo.pasta ?? "não instalado nesta máquina"
-  );
-
-  const alvo = jogo.executavel ?? null;
-
-  element("jogo-alavancas").innerHTML = alvo
-    ? `
-      <div class="jogo-alavanca">
-        <div>
-          <span class="jogo-alavanca-nome">Placa de vídeo de alto desempenho</span>
-          <span class="jogo-alavanca-nota">Diz ao Windows para rodar este jogo na placa dedicada, e não na integrada. Em desktop com uma placa só não muda nada.</span>
-        </div>
-        <button class="btn" type="button" data-acao="gpu">Aplicar</button>
-      </div>
-`
-    : `<p class="hint">Este jogo não foi encontrado no disco, então não há executável para ajustar. Instale-o, ou use "Selecionar" na ficha de configuração do jogo para apontar o arquivo.</p>`;
-
-  text(
-    "jogo-modal-nota",
-    alvo
-      ? "Entra no histórico de mudanças e o desfazer devolve como estava."
-      : ""
-  );
-
-  // A parte da 2.9: ajuste gráfico por orçamento de imagem, vigília "nunca
-  // menos FPS", deriva e última partida medida (`biblioteca.ts`).
-  const extra = document.createElement("div");
-  extra.className = "jogo-ajustes-29";
-  element("jogo-alavancas").appendChild(extra);
-  void preencherFichaDoJogo(extra, { executavel: jogo.executavel ?? null, pasta: jogo.pasta ?? null }, { pedirAdmin: askForAdmin });
-
-  for (const botao of element("jogo-alavancas").querySelectorAll<HTMLButtonElement>(
-    "button[data-acao]"
-  )) {
-    botao.addEventListener("click", () => void aplicarNoJogo(botao, jogo, botao.dataset.acao!));
-  }
-
-  element("jogo-modal").hidden = false;
-}
-
-async function aplicarNoJogo(botao: HTMLButtonElement, jogo: JogoNaGrade, acao: string) {
-  const caminho = jogo.executavel;
-  if (!caminho) return;
-
-  botao.disabled = true;
-  const antes = botao.textContent;
-  botao.textContent = "Aplicando…";
-
-  try {
-    if (acao === "gpu") {
-      await invoke("set_gpu_preference", { caminho, desempenho: true });
-    }
-
-    botao.textContent = "Aplicado";
-    text("jogo-modal-nota", "Feito. Está no histórico de mudanças, e o desfazer devolve como estava.");
-    void loadOptimizations?.();
-  } catch (error) {
-    botao.textContent = antes ?? "Aplicar";
-    botao.disabled = false;
-    text("jogo-modal-nota", String(error));
-  }
-}
-
-function ligarBiblioteca() {
-  element("biblioteca-grade").addEventListener("click", (e) => {
-    const tile = (e.target as HTMLElement).closest<HTMLElement>(".jogo-tile");
-    if (tile?.dataset.jogo) abrirFichaDoJogo(tile.dataset.jogo);
-  });
-
-  element<HTMLInputElement>("biblioteca-busca").addEventListener("input", desenharBiblioteca);
-
-  for (const botao of document.querySelectorAll<HTMLButtonElement>(".biblioteca-filtro")) {
-    botao.addEventListener("click", () => {
-      for (const outro of document.querySelectorAll(".biblioteca-filtro")) {
-        outro.setAttribute("aria-selected", String(outro === botao));
-      }
-      filtroDaBiblioteca = botao.dataset.filtro === "instalados" ? "instalados" : "todos";
-      desenharBiblioteca();
-    });
-  }
-
-  const fechar = () => {
-    element("jogo-modal").hidden = true;
-  };
-  element("jogo-modal-fechar").addEventListener("click", fechar);
-  element("jogo-modal").addEventListener("click", (e) => {
-    if (e.target === element("jogo-modal")) fechar();
-  });
 }
 
 // ------------------------------------------------ o caminho do mouse
@@ -9642,7 +9377,7 @@ async function carregarPlaca() {
       "placa-driver-nota",
       p.driver_generico
         ? "Este é o driver genérico do Windows: a placa roda sem a aceleração completa. Instalar o driver do fabricante muda o FPS de verdade."
-        : "Driver mais novo não é automaticamente mais rápido: às vezes melhora um jogo e piora outro. Se um jogo caiu depois de atualizar, a ficha dele na Biblioteca mostra a queda e a versão que mudou.",
+        : "Driver mais novo não é automaticamente mais rápido: às vezes melhora um jogo e piora outro. Se um jogo caiu depois de atualizar, volte ao driver anterior e compare as partidas medidas.",
     );
     const sites: Record<string, string> = {
       nvidia: "https://www.nvidia.com/pt-br/drivers/",
@@ -10527,7 +10262,7 @@ async function carregarUltimasPartidas() {
         )
         .join("")}</tbody>
     </table>
-    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou. A ficha de cada jogo, na Biblioteca, mostra a comparação.</p>`;
+    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou.</p>`;
 }
 
 async function carregarOQueNaoFazemos() {
@@ -11096,14 +10831,12 @@ function wireControls() {
   element("analyze-shaders").addEventListener("click", analyzeShaders);
   element("analyze-streaming").addEventListener("click", analyzeStreaming);
   ligarTema();
-  ligarBiblioteca();
   ligarProgramas();
   ligarLimpeza();
   ligarNucleos();
   void carregarNucleos();
   void carregarProgramas();
   void carregarCartaoDaPlaca();
-  void carregarBiblioteca();
   // Os atalhos do Início levam para a aba, pela MESMA função que a lateral
   // usa. Um atalho que trocasse a aba por conta própria deixaria a lateral
   // marcando a seção errada.
