@@ -8703,9 +8703,46 @@ async function carregarMonitores() {
           </div>`;
       })
       .join("");
+
+    const principal = monitores.find((m) => m.principal) ?? monitores[0];
+    sugerirLimiteParaVrr(principal.hz_atual);
   } catch {
     lista.innerHTML = '<p class="hint">Não consegui ler os monitores.</p>';
   }
+}
+
+/**
+ * O limite que mantém G-Sync e FreeSync dentro da faixa: um pouco abaixo da
+ * taxa do monitor (hz − hz²/3600: 144 → 138, 165 → 157, 240 → 224). Acima da
+ * taxa o VRR vira V-Sync comum, com atraso.
+ */
+function limiteParaVrr(hz: number): number {
+  return Math.round(hz - (hz * hz) / 3600);
+}
+
+/**
+ * Oferece o limite do monitor no limitador. SÓ OFERECE: o Otimiza nunca põe
+ * limite sozinho, e sem G-Sync ou FreeSync este limite só tira FPS.
+ */
+function sugerirLimiteParaVrr(hz: number) {
+  if (!Number.isFinite(hz) || hz < 100) return;
+  const alvo = limiteParaVrr(hz);
+  const grupo = element("nvlimite-fps");
+  grupo.querySelector("[data-vrr]")?.remove();
+
+  const botao = document.createElement("button");
+  botao.className = "filter";
+  botao.dataset.fps = String(alvo);
+  botao.dataset.vrr = "sim";
+  botao.textContent = `${alvo} · G-Sync`;
+  grupo.prepend(botao);
+
+  text(
+    "nvlimite-vrr",
+    `Com G-Sync ou FreeSync ligado, o limite certo neste monitor de ${hz} Hz é ${alvo}: acima da taxa do monitor o G-Sync vira V-Sync comum, com atraso. Sem G-Sync ou FreeSync, não use.`,
+  );
+  element("nvlimite-vrr").hidden = false;
+  marcarLimiteEscolhido();
 }
 
 /* --------------------------------------------------- a memória, desenhada */
