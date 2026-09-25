@@ -1,16 +1,6 @@
-// Detector de conflitos
-//
-// Este é o sistema que nenhum concorrente tem, e por um motivo simples: metade
-// do que ele denuncia são os próprios concorrentes.
-//
-// Programa lento raramente é culpa de um programa só. É de dois fazendo a mesma
-// coisa ao mesmo tempo: dois antivírus varrendo um ao outro, três sobreposições
-// injetando código no mesmo jogo, dois "otimizadores" desfazendo a configuração
-// um do outro. Cada um sozinho funcionaria; juntos, brigam.
-//
-// Aqui não se desinstala nada. Desinstalar é decisão do dono da máquina, e
-// desinstalador de terceiro é interativo. O que se faz é mostrar o conflito com
-// nome e sobrenome, para a pessoa poder escolher.
+// Dois programas fazendo a mesma coisa: antivírus varrendo um ao outro, sobreposições no mesmo jogo,
+// otimizadores desfazendo um ao outro. Aqui não se desinstala nada: mostra o conflito pelo nome, e a pessoa
+// escolhe.
 
 use super::{registry, shell};
 use serde::{Deserialize, Serialize};
@@ -21,7 +11,6 @@ pub use super::firmware::FindingSeverity;
 pub struct Conflict {
     pub id: String,
     pub title: String,
-    /// Os programas concretos encontrados, pelo nome.
     pub found: Vec<String>,
     pub explanation: String,
     pub advice: String,
@@ -31,15 +20,11 @@ pub struct Conflict {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConflictReport {
     pub conflicts: Vec<Conflict>,
-    /// Quantos programas instalados foram examinados. `None` quando a lista não
-    /// deu para ler: "0 programas examinados" seria afirmar um número falso.
+    /// `None` quando a lista não se leu: "0 examinados" seria um número falso.
     pub programs_scanned: Option<usize>,
-    /// O que não deu para ler. Com qualquer coisa aqui, a ausência de conflito
-    /// não é afirmada.
+    /// Com qualquer coisa aqui, a ausência de conflito não é afirmada.
     pub lacunas: Vec<String>,
 }
-
-// --------------------------------------------------------- programas instalados
 
 const UNINSTALL_KEYS: [(&str, &str); 3] = [
     ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
@@ -47,13 +32,8 @@ const UNINSTALL_KEYS: [(&str, &str); 3] = [
     ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
 ];
 
-/// Nomes dos programas instalados, lidos do registro.
-///
-/// As três chaves cobrem programas de 64 bits, de 32 bits e os instalados só
-/// para o usuário atual. Ler só a primeira — erro comum — perde metade da lista
-/// justamente nas máquinas antigas, cheias de programa de 32 bits.
-///
-/// `Err` quando uma das chaves não abre.
+/// As três chaves (64 bits, 32 bits e só deste usuário): ler só a primeira perde metade da lista nas máquinas
+/// antigas. `Err` quando uma não abre.
 pub fn programas_instalados() -> Result<Vec<String>, String> {
     let mut nomes = Vec::new();
 
@@ -73,7 +53,6 @@ pub fn programas_instalados() -> Result<Vec<String>, String> {
     Ok(nomes)
 }
 
-/// Encontra programas cujo nome contém algum dos termos.
 fn casar(programas: &[String], termos: &[&str]) -> Vec<String> {
     let mut achados: Vec<String> = programas
         .iter()
@@ -89,8 +68,6 @@ fn casar(programas: &[String], termos: &[&str]) -> Vec<String> {
     achados
 }
 
-// ------------------------------------------------------------------ antivírus
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct RawAntivirus {
@@ -98,16 +75,8 @@ struct RawAntivirus {
     product_state: Option<u32>,
 }
 
-/// Antivírus com proteção em tempo real LIGADA.
-///
-/// O `productState` do Windows é um campo de bits. O byte do meio indica o
-/// estado da proteção em tempo real: `0x10` significa ligada. Verificar isso
-/// importa porque quase toda máquina tem o Defender instalado — o que pesa é
-/// ter dois varrendo ao mesmo tempo, não ter dois instalados.
-///
-/// `Err` quando a Central de Segurança do Windows não responde — o que acontece
-/// em imagem "lite" com o serviço dela desligado. Não saber quais antivírus
-/// estão ligados não é o mesmo que ter só um.
+/// Tempo real LIGADO é o que pesa: quase toda máquina tem o Defender instalado. `Err` quando a Central de
+/// Segurança não responde (imagem "lite"): não saber não é ter só um.
 pub fn antivirus_ativos() -> Result<Vec<String>, String> {
     let script = "ConvertTo-Json -Compress -Depth 2 -InputObject @(Get-CimInstance \
                   -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct \
@@ -118,19 +87,7 @@ pub fn antivirus_ativos() -> Result<Vec<String>, String> {
         "os antivírus registrados no Windows",
     )?;
 
-    // `unwrap_or(0)` MORAVA AQUI, e era a mesma família de defeito que o resto
-    // do produto passou versões consertando: um antivírus cujo `productState`
-    // não veio virava `0`, `0` não tem o bit de tempo real, e ele sumia da
-    // lista CALADO.
-    //
-    // O estrago é justamente no caso que este módulo existe para achar: com
-    // dois antivírus varrendo ao mesmo tempo — que é engasgo garantido em jogo
-    // — e o estado de um deles ilegível, a resposta era "só um antivírus", e o
-    // conflito não aparecia para ninguém.
-    //
-    // Agora um estado ilegível propaga o erro. Quem chama já sabe transformar
-    // `Err` em lacuna na tela; ele não sabia adivinhar um nome que nunca
-    // chegou.
+    // Estado ilegível propaga erro: virar 0 fazia o antivírus sumir calado, justamente com dois varrendo juntos.
     let mut ativos = Vec::new();
 
     for a in brutos {
@@ -153,21 +110,12 @@ pub fn antivirus_ativos() -> Result<Vec<String>, String> {
     Ok(ativos)
 }
 
-/// Exposto para teste: a leitura de bits é onde este tipo de código erra calado.
-///
-/// É preciso TESTAR O BIT, não comparar igualdade. A primeira versão exigia que
-/// o byte do meio fosse exatamente `0x10`, e falhava com `0x061100` — que é o
-/// valor do próprio Defender ativo, onde o byte é `0x11`. O resultado seria o
-/// pior possível para este módulo: concluir que um antivírus ligado está
-/// desligado, e nunca apontar o conflito de dois rodando juntos.
+/// TESTA O BIT, não igualdade: o Defender ativo é 0x061100, byte do meio 0x11.
 pub fn tempo_real_ligado(product_state: u32) -> bool {
     const BIT_TEMPO_REAL: u32 = 0x1000;
     product_state & BIT_TEMPO_REAL != 0
 }
 
-// ------------------------------------------------------------------- processos
-
-/// Nomes dos processos em execução, em minúsculas.
 fn processos_em_execucao() -> Vec<String> {
     let mut sistema = sysinfo::System::new();
     sistema.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -195,9 +143,6 @@ fn casar_processos(processos: &[String], alvos: &[(&str, &str)]) -> Vec<String> 
     achados
 }
 
-// -------------------------------------------------------------------- análise
-
-/// Ferramentas que mexem nas mesmas configurações que o Otimiza.
 const OTIMIZADORES: [&str; 10] = [
     "driver booster",
     "iobit",
@@ -211,7 +156,6 @@ const OTIMIZADORES: [&str; 10] = [
     "itop",
 ];
 
-/// Programas que injetam sobreposição em jogos.
 const SOBREPOSICOES: [(&str, &str); 6] = [
     ("discord.exe", "Discord"),
     ("nvcontainer.exe", "NVIDIA App / GeForce Experience"),
@@ -221,7 +165,6 @@ const SOBREPOSICOES: [(&str, &str); 6] = [
     ("gamebar.exe", "Xbox Game Bar"),
 ];
 
-/// Clientes de nuvem que varrem disco em segundo plano.
 const NUVEM: [(&str, &str); 5] = [
     ("onedrive.exe", "OneDrive"),
     ("googledrivefs.exe", "Google Drive"),
@@ -243,7 +186,6 @@ pub fn analyze() -> ConflictReport {
     let processos = processos_em_execucao();
     let mut conflitos = Vec::new();
 
-    // --- dois ou mais antivírus com proteção em tempo real ---
     let antivirus = match antivirus_ativos() {
         Ok(antivirus) => antivirus,
         Err(erro) => {
@@ -268,7 +210,6 @@ pub fn analyze() -> ConflictReport {
         });
     }
 
-    // --- outros otimizadores instalados ---
     let otimizadores = programas
         .as_deref()
         .map(|programas| casar(programas, &OTIMIZADORES))
@@ -291,7 +232,6 @@ pub fn analyze() -> ConflictReport {
         });
     }
 
-    // --- várias sobreposições de jogo ---
     let sobreposicoes = casar_processos(&processos, &SOBREPOSICOES);
     if sobreposicoes.len() > 2 {
         conflitos.push(Conflict {
@@ -309,7 +249,6 @@ pub fn analyze() -> ConflictReport {
         });
     }
 
-    // --- vários clientes de nuvem ---
     let nuvem = casar_processos(&processos, &NUVEM);
     if nuvem.len() > 1 {
         conflitos.push(Conflict {
@@ -333,12 +272,8 @@ pub fn analyze() -> ConflictReport {
     }
 }
 
-/// Ordena os conflitos e acrescenta o "nenhum conflito" SÓ quando tudo foi lido.
-///
-/// Até a 2.0 este achado verde era fabricado sempre que a lista saía vazia —
-/// inclusive quando a leitura dos programas ou dos antivírus tinha falhado. E
-/// ele entrava na contagem de "N verificações passaram nesta máquina": uma
-/// leitura que falhou inflava o número de verificações aprovadas.
+/// O "nenhum conflito" só entra quando tudo foi lido: fabricado com a leitura falha, ele inflava a contagem de
+/// verificações aprovadas.
 pub fn fechar(mut conflitos: Vec<Conflict>, lacunas: &[String]) -> Vec<Conflict> {
     if conflitos.is_empty() && lacunas.is_empty() {
         conflitos.push(Conflict {
@@ -365,10 +300,6 @@ pub fn fechar(mut conflitos: Vec<Conflict>, lacunas: &[String]) -> Vec<Conflict>
 mod tests {
     use super::*;
 
-    /// `product_state.unwrap_or(0)` MORAVA AQUI. Um antivírus cujo estado não
-    /// veio virava zero, zero não tem o bit de tempo real, e ele sumia calado —
-    /// justamente no caso que este módulo existe para achar: dois antivírus
-    /// varrendo ao mesmo tempo, que é engasgo garantido em jogo.
     #[test]
     fn estado_de_antivirus_ilegivel_nao_vira_antivirus_desligado() {
         let producao = include_str!("conflicts.rs").split("#[cfg(test)]").next().unwrap();
@@ -383,15 +314,12 @@ mod tests {
         );
     }
 
-
     #[test]
     fn nenhum_conflito_so_aparece_quando_tudo_foi_lido() {
         let tudo_lido = fechar(Vec::new(), &[]);
         assert_eq!(tudo_lido.len(), 1);
         assert_eq!(tudo_lido[0].id, "none");
 
-        // O defeito: com a leitura falha, o verde era fabricado e contava como
-        // verificação aprovada.
         let com_lacuna = fechar(
             Vec::new(),
             &["Programas instalados: acesso negado".to_string()],
@@ -401,9 +329,6 @@ mod tests {
 
     #[test]
     fn le_o_bit_de_protecao_em_tempo_real() {
-        // Valores reais do Windows. 0x061100 é o Defender ativo — o byte do meio
-        // é 0x11, não 0x10, e foi exatamente isso que derrubou a primeira versão
-        // deste código, que comparava igualdade em vez de testar o bit.
         assert!(tempo_real_ligado(0x061100), "Defender ativo");
         assert!(tempo_real_ligado(0x041000), "antivírus de terceiro ativo");
 
@@ -428,16 +353,13 @@ mod tests {
 
     #[test]
     fn casar_nao_repete_o_mesmo_programa() {
-        // "iobit" e "driver booster" casam com a mesma entrada; ela não pode
-        // aparecer duas vezes na tela do cliente.
+        // "iobit" e "driver booster" casam com a mesma entrada; ela não pode aparecer duas vezes.
         let programas = vec!["IObit Driver Booster".to_string()];
         assert_eq!(casar(&programas, &OTIMIZADORES).len(), 1);
     }
 
     #[test]
     fn sem_conflito_o_relatorio_ainda_diz_algo() {
-        // Relatório vazio deixaria o cliente sem saber se rodou. Um achado
-        // "está tudo certo" é informação, e das boas.
         let vazio: Vec<String> = Vec::new();
         assert!(casar(&vazio, &OTIMIZADORES).is_empty());
     }
@@ -452,7 +374,6 @@ mod tests {
             programas.len() > 3,
             "toda máquina com Windows tem mais que três programas registrados"
         );
-        // Nome vazio na lista viraria linha em branco na tela.
         assert!(programas.iter().all(|p| !p.trim().is_empty()));
     }
 
@@ -471,13 +392,10 @@ mod tests {
             println!("  não li: {}", lacuna);
         }
 
-        // Nunca mudo: ou há o que dizer sobre conflitos, ou há o que dizer sobre
-        // o que não deu para ler. O verde fabricado deixou de ser a terceira via.
         assert!(
             !r.conflicts.is_empty() || !r.lacunas.is_empty(),
             "o relatório não pode vir sem conflito e sem lacuna"
         );
-        // Problemas antes do que está certo.
         let ordem: Vec<u8> = r
             .conflicts
             .iter()

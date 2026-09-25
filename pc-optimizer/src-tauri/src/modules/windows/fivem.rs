@@ -1,41 +1,10 @@
-// FiveM
-//
-// O público que motivou este módulo joga FiveM, e o problema dele não é o
-// mesmo do PC de escritório lento: é travada no meio da partida, crash ao
-// entrar num servidor, e disco cheio sem explicação.
-//
-// A causa mais comum das três é a mesma, e é medível: o FiveM guarda em disco
-// tudo que baixa de cada servidor em que você entra. Numa instalação real
-// medida durante o desenvolvimento, essa pasta tinha 10 GB divididos em 21.584
-// arquivos. Nada disso é necessário — o servidor manda de novo na próxima
-// conexão.
-//
-// A ARMADILHA, QUE É A MESMA DO NAVEGADOR
-//
-// A segunda maior pasta da instalação NÃO pode ser apagada, e é justamente o
-// alvo óbvio de quem varre por tamanho. `game-storage` tinha 3,2 GB e guarda o
-// perfil do jogo e os dados de sessão da Rockstar. Apagar desloga a pessoa da
-// Social Club e joga fora a configuração do jogo dela.
-//
-// Por isso aqui, como no resto do produto, cada pasta é classificada uma a uma,
-// com o motivo escrito. Tamanho não decide nada.
-//
-// O QUE ESTE MÓDULO NÃO FAZ
-//
-// Não injeta nada no jogo, e isso não é limitação técnica — é decisão. Overlay
-// de FPS dentro do FiveM exige injetar código no processo, e o anticheat trata
-// injeção como ameaça. O ganho seria um número bonito na tela; o risco é o
-// cliente tomar ban na conta dele.
-//
-// Também não "libera memória" antes de abrir o jogo. Esvaziar o conjunto de
-// trabalho dos processos melhora o gráfico e piora o desempenho real, porque
-// tudo precisa ser relido do disco. Já está na lista de recusas do produto, e
-// não passa a valer só porque o assunto agora é jogo.
+// FiveM: o cache de servidores chega a 10 GB e é descartável (o servidor reenvia). A armadilha é `game-storage`
+// (perfil e sessão da Rockstar): apagar desloga da Social Club. Cada pasta é classificada uma a uma; tamanho não
+// decide nada. Não injeta nada no jogo (risco de ban) nem "libera memória" antes de abrir.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Uma pasta da instalação, classificada.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FiveMFolder {
     pub id: String,
@@ -43,19 +12,16 @@ pub struct FiveMFolder {
     pub path: String,
     pub bytes: u64,
     pub formatted: String,
-    /// Se pode ser apagada com segurança.
     pub cleanable: bool,
     pub explanation: String,
-    /// O preço de apagar, quando existe. Nunca é omitido.
+    /// Nunca é omitido.
     pub tradeoff: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FiveMReport {
     pub installed: bool,
-    /// O FiveM está aberto agora. Com ele aberto não dá para apagar nada.
     pub running: bool,
-    /// O jogo em si, e não só o lançador.
     pub game_running: bool,
     pub folders: Vec<FiveMFolder>,
     pub cleanable_bytes: u64,
@@ -81,7 +47,6 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-/// Onde o FiveM instala.
 pub fn pasta_do_fivem() -> Option<PathBuf> {
     let local = std::env::var("LOCALAPPDATA").ok()?;
     let caminho = PathBuf::from(local).join("FiveM").join("FiveM.app");
@@ -89,13 +54,7 @@ pub fn pasta_do_fivem() -> Option<PathBuf> {
     caminho.is_dir().then_some(caminho)
 }
 
-/// Classificação de cada pasta conhecida da instalação.
-///
-/// A ordem dos campos é: caminho relativo, nome visível, se pode apagar,
-/// explicação, e o preço de apagar.
-///
-/// Nada aqui foi deduzido pelo nome da pasta. Cada uma foi aberta e olhada numa
-/// instalação real antes de ser classificada.
+/// Caminho, nome, se pode apagar, explicação e preço. Cada pasta foi aberta e olhada numa instalação real.
 fn catalogo() -> Vec<(&'static str, &'static str, bool, &'static str, Option<&'static str>)> {
     vec![
         (
@@ -183,7 +142,6 @@ fn catalogo() -> Vec<(&'static str, &'static str, bool, &'static str, Option<&'s
     ]
 }
 
-/// Soma recursiva de uma pasta, sem seguir link.
 fn somar(dir: &Path) -> u64 {
     let Ok(entradas) = std::fs::read_dir(dir) else {
         return 0;
@@ -203,11 +161,7 @@ fn somar(dir: &Path) -> u64 {
         .sum()
 }
 
-/// Processos do FiveM em execução.
-///
-/// Devolve (lançador aberto, jogo aberto). O jogo roda num processo próprio,
-/// cujo nome carrega o número da compilação — por isso a comparação é por
-/// prefixo e não por nome exato.
+/// O jogo tem processo próprio com o número da compilação no nome: comparação por prefixo.
 pub fn processos_abertos() -> (bool, bool) {
     use sysinfo::System;
 
@@ -226,7 +180,6 @@ pub fn processos_abertos() -> (bool, bool) {
 
         lancador = true;
 
-        // `FiveM_b3570_GTAProcess.exe` é o jogo; `FiveM.exe` é só o lançador.
         if nome.contains("gtaprocess") {
             jogo = true;
         }
@@ -235,7 +188,6 @@ pub fn processos_abertos() -> (bool, bool) {
     (lancador, jogo)
 }
 
-/// Monta a frase de resumo.
 pub fn montar_nota(limpavel: u64, protegido: u64, aberto: bool, instalado: bool) -> String {
     if !instalado {
         return "O FiveM não está instalado nesta máquina.".to_string();
@@ -271,7 +223,6 @@ pub fn montar_nota(limpavel: u64, protegido: u64, aberto: bool, instalado: bool)
     nota
 }
 
-/// Levantamento completo da instalação.
 pub fn analyze() -> FiveMReport {
     let Some(base) = pasta_do_fivem() else {
         return FiveMReport {
@@ -300,7 +251,6 @@ pub fn analyze() -> FiveMReport {
 
         let bytes = somar(&caminho);
 
-        // Pasta vazia não vira linha: encheria a tela sem dizer nada.
         if bytes == 0 && cleanable {
             continue;
         }
@@ -323,7 +273,6 @@ pub fn analyze() -> FiveMReport {
         });
     }
 
-    // O que dá para recuperar primeiro; dentro de cada grupo, do maior.
     folders.sort_by(|a, b| b.cleanable.cmp(&a.cleanable).then(b.bytes.cmp(&a.bytes)));
 
     FiveMReport {
@@ -343,16 +292,11 @@ pub struct CleanOutcome {
     pub message: String,
 }
 
-/// Apaga uma pasta descartável da instalação.
-///
-/// Três travas: a pasta precisa estar no catálogo e marcada como descartável,
-/// o FiveM precisa estar fechado, e o conteúdo é apagado sem remover a pasta.
+/// Três travas: no catálogo e descartável, FiveM fechado, e só o conteúdo é apagado.
 pub fn limpar(id: &str) -> Result<CleanOutcome, String> {
     let base = pasta_do_fivem().ok_or("O FiveM não está instalado nesta máquina.")?;
 
-    // A checagem é refeita aqui e não confiada à interface: o comando é exposto
-    // por IPC, e uma tela com dado velho não pode virar permissão para apagar o
-    // perfil do jogo de alguém.
+    // Refeita aqui: o comando vem por IPC, e tela com dado velho não pode apagar o perfil de alguém.
     let (relativo, nome, cleanable, _, _) = catalogo()
         .into_iter()
         .find(|(r, _, _, _, _)| *r == id)
@@ -379,7 +323,7 @@ pub fn limpar(id: &str) -> Result<CleanOutcome, String> {
 
     esvaziar(&caminho);
 
-    // O que se relata é o que sumiu de verdade, e não o que se esperava apagar.
+    // O que se relata é o que sumiu de verdade.
     let liberado = antes.saturating_sub(somar(&caminho));
 
     Ok(CleanOutcome {
@@ -404,9 +348,7 @@ fn esvaziar(dir: &Path) {
     }
 }
 
-// `priorizar_jogo` (prioridade Alta no processo do FiveM) saiu na 2.9:
-// prioridade cega, sem ganho medido, e a ação mais visível para um anticheat.
-// Quem tira os programas de fundo do caminho do jogo agora é o governador.
+// `priorizar_jogo` saiu na 2.9: prioridade cega, sem ganho medido, e a ação mais visível para um anticheat.
 
 #[cfg(test)]
 mod tests {
@@ -414,10 +356,6 @@ mod tests {
 
     #[test]
     fn perfil_do_jogo_nunca_e_apagavel() {
-        // A confusão mais cara possível deste módulo, e a mesma que o navegador
-        // já ensinou: a segunda maior pasta é a que não se pode tocar.
-        // `game-storage` tinha 3,2 GB numa instalação real e guarda a sessão da
-        // Rockstar. Apagar desloga a pessoa da conta dela.
         let protegidas = ["data/game-storage", "data/nui-storage", "citizen", "plugins", "mods"];
 
         for id in protegidas {
@@ -439,16 +377,12 @@ mod tests {
             .unwrap();
 
         assert!(cleanable);
-        // Limpar não é ganho puro: o servidor reenvia tudo na próxima conexão,
-        // e em servidor de RP isso demora. O usuário precisa saber antes.
         let preco = tradeoff.expect("a maior limpeza do módulo precisa declarar o preço");
         assert!(preco.contains("baixar tudo de novo"));
     }
 
     #[test]
     fn limpar_recusa_pasta_protegida() {
-        // O comando é exposto por IPC. Uma tela com dado velho, ou qualquer
-        // chamada direta, não pode virar permissão para apagar o perfil.
         let erro = limpar("data/game-storage").unwrap_err();
         assert!(
             erro.contains("guarda dados seus") || erro.contains("não está instalado"),
@@ -472,7 +406,6 @@ mod tests {
         let nota = montar_nota(10_737_418_240, 3_407_872_000, true, true);
 
         assert!(nota.contains("10.0 GB"));
-        // A parte que impede o cliente de achar que estamos escondendo espaço.
         assert!(nota.contains("protegidos"));
         assert!(nota.contains("desloga você da conta"));
         assert!(nota.contains("Feche o FiveM"));
@@ -491,11 +424,7 @@ mod tests {
         assert_eq!(format_size(3 * 1024 * 1024 * 1024), "3.0 GB");
     }
 
-    /// Só o código de produção, sem os testes.
-    ///
-    /// Os guards abaixo procuram nomes de API proibidos no módulo. Sem este
-    /// corte eles se acusariam sozinhos, porque os nomes aparecem dentro das
-    /// próprias asserções.
+    /// Sem este corte os guards se acusariam: os nomes proibidos aparecem nas próprias asserções.
     fn codigo_de_producao() -> &'static str {
         let fonte = include_str!("fivem.rs");
         fonte.split("#[cfg(test)]").next().unwrap()
@@ -503,12 +432,8 @@ mod tests {
 
     #[test]
     fn o_fivem_nao_mexe_mais_na_prioridade_do_jogo() {
-        // "Tempo real" coloca o jogo acima do sistema operacional, incluindo o
-        // que cuida de som, mouse e teclado. É uma das dicas de FPS mais
-        // repetidas da internet e trava a máquina inteira.
         let fonte = codigo_de_producao();
 
-        // Desde a 2.9 nem Alta: prioridade cega saiu do produto.
         for proibido in ["PriorityClass = 'High'", "PriorityClass = 'RealTime'"] {
             assert!(!fonte.contains(proibido), "`{}` voltou ao módulo do FiveM", proibido);
         }
@@ -516,9 +441,6 @@ mod tests {
 
     #[test]
     fn nao_ha_injecao_nem_liberacao_de_memoria() {
-        // As duas recusas do cabeçalho, travadas em teste: injetar overlay é
-        // risco de ban para o cliente, e esvaziar memória piora o desempenho
-        // real enquanto melhora o gráfico.
         let fonte = codigo_de_producao();
 
         for proibido in ["EmptyWorkingSet", "SetWindowsHookEx", "CreateRemoteThread"] {
@@ -549,13 +471,10 @@ mod tests {
         assert!(!r.note.is_empty());
 
         if r.installed {
-            // Toda pasta listada tem explicação, e toda pasta apagável com
-            // preço declara qual é.
             for f in &r.folders {
                 assert!(!f.explanation.is_empty(), "{} sem explicação", f.name);
             }
 
-            // As protegidas vêm depois das apagáveis.
             let primeira_protegida = r.folders.iter().position(|f| !f.cleanable);
             let ultima_limpavel = r.folders.iter().rposition(|f| f.cleanable);
 
