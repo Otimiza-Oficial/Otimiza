@@ -1,19 +1,6 @@
-// Benchmark — medição real antes e depois
-//
-// Este é o módulo que separa o produto dos "otimizadores" de mentira. Eles
-// mostram uma barra de progresso e afirmam "PC 200% mais rápido". Aqui, o número
-// vem de uma medição repetível, e o veredito pode perfeitamente ser
-// "nenhuma melhora mensurável" — inclusive depois de otimizar.
-//
-// Três decisões sustentam a honestidade da medição:
-//
-// 1. Cada carga de trabalho roda várias vezes e usa o MELHOR resultado. O melhor
-//    é o que menos sofreu interferência de outros processos; a média seria
-//    puxada para baixo por ruído aleatório.
-// 2. Cada métrica tem um limiar de ruído. Variação abaixo dele é reportada como
-//    "dentro da margem de erro", nunca como ganho.
-// 3. O baseline é gravado em disco, então otimizações que exigem reiniciar o PC
-//    podem ser medidas corretamente depois do boot.
+// Benchmark antes e depois, com veredito que pode ser "nenhuma melhora mensurável". Cada carga roda várias vezes e
+// usa o MELHOR (o que menos sofreu interferência); cada métrica tem limiar de ruído; o baseline fica em disco para
+// medir o que exige reiniciar.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -22,43 +9,27 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use sysinfo::System;
 
-/// Duração de cada repetição da carga de CPU.
 const WORKLOAD_DURATION: Duration = Duration::from_millis(500);
-/// Repetições por carga. Mais repetições aumentam a chance de pegar uma rodada
-/// limpa, sem interferência de outros programas.
 const WORKLOAD_ROUNDS: u32 = 5;
-/// Tempo de acomodação antes de medir o consumo ocioso. Sem essa pausa, a medição
-/// pega a máquina ainda ocupada com o que veio antes e reporta um valor inflado.
+/// Sem a pausa, pega a máquina ocupada com o que veio antes.
 const IDLE_SETTLE: Duration = Duration::from_secs(2);
-/// Amostras de uso ocioso de CPU, espaçadas por `IDLE_SAMPLE_INTERVAL`.
 const IDLE_SAMPLES: u32 = 10;
 const IDLE_SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
-/// Acima deste consumo ocioso, o PC está ocupado com outra coisa e a medição não
-/// vale. Comparar um PC ocupado com um PC descansado produz um ganho fantasma de
-/// dezenas por cento — o erro mais fácil de cometer e o mais fácil de vender.
+/// Comparar PC ocupado com PC descansado produz ganho fantasma de dezenas por cento.
 const BUSY_CPU_PERCENT: f64 = 25.0;
 
-/// Uma fotografia mensurável do desempenho da máquina.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkSnapshot {
     pub timestamp: u64,
-    /// Uso de CPU com o PC parado. Cai quando serviços de fundo são desativados.
     pub idle_cpu_percent: f64,
-    /// RAM em uso com o PC parado, em GB.
     pub idle_ram_gb: f64,
-    /// Processos em execução.
     pub process_count: f64,
-    /// Operações por segundo em um único núcleo (em milhões).
     pub cpu_single_thread_mops: f64,
-    /// Operações por segundo usando todos os núcleos (em milhões).
     pub cpu_multi_thread_mops: f64,
-    /// Frequência da CPU sob carga, em MHz. É aqui que o plano de energia aparece.
     pub cpu_frequency_under_load_mhz: f64,
-    /// Atraso do agendador no pior 1% dos casos, em ms. É a travada que se sente.
-    /// `default` mantém compatível o baseline gravado antes desta métrica existir.
+    /// `default` mantém legível o baseline gravado antes desta métrica.
     #[serde(default)]
     pub scheduler_p99_delay_ms: f64,
-    /// Engasgos por minuto: pausas maiores que a duração de um quadro.
     #[serde(default)]
     pub hitches_per_minute: f64,
 }
@@ -67,11 +38,8 @@ pub struct BenchmarkSnapshot {
 pub enum Verdict {
     Improved,
     Worsened,
-    /// A diferença ficou dentro do ruído de medição — não é ganho nem perda.
     NoMeasurableChange,
-    /// A métrica é útil de mostrar, mas oscila demais sozinha para que qualquer
-    /// variação possa ser atribuída à otimização. Medida na máquina de teste, a
-    /// CPU ociosa variou 244% sem nada ter mudado no sistema.
+    /// Oscila demais para atribuir variação à otimização: a CPU ociosa variou 244% sem nada mudar.
     TooNoisyToJudge,
 }
 
@@ -92,42 +60,24 @@ pub struct BenchmarkComparison {
     pub before: BenchmarkSnapshot,
     pub after: BenchmarkSnapshot,
     pub metrics: Vec<MetricDelta>,
-    /// Frase única e honesta sobre o resultado geral, para mostrar ao cliente.
     pub summary: String,
 }
 
-/// Descrição de uma métrica: como lê-la, como interpretá-la e quanto de variação
-/// é apenas ruído.
 struct MetricSpec {
     key: &'static str,
     label: &'static str,
     unit: &'static str,
     higher_is_better: bool,
-    /// Variação percentual abaixo da qual o resultado é considerado empate.
     noise_percent: f64,
-    /// Diferença absoluta mínima para o resultado contar.
-    ///
-    /// Percentual sozinho engana quando o número é pequeno: sair de 1,0 ms para
-    /// 1,4 ms de travada é 40% de variação e não significa nada. Aqui as duas
-    /// condições precisam ser atendidas — percentual E diferença absoluta.
+    /// Percentual sozinho engana com número pequeno (1,0 → 1,4 ms é 40%): precisa percentual E diferença absoluta.
     min_absolute_delta: f64,
-    /// Se `false`, a métrica é exibida mas nunca gera veredito de melhora ou piora.
     judgeable: bool,
     read: fn(&BenchmarkSnapshot) -> f64,
     explanation: &'static str,
 }
 
-/// Os limiares NÃO foram escolhidos no chute: vieram do teste `noise_calibration`,
-/// que mede a mesma máquina três vezes sem mudar nada. O que variou ali é ruído.
-/// Cada limiar é a variação observada com margem de segurança de ~50%.
-///
-/// Medido na máquina de calibração: 1 núcleo 3,8% · todos os núcleos 10,5% (com
-/// picos de 19% no teste nulo) · frequência 0% · RAM 1,0% · processos 0,9% ·
-/// CPU ociosa 244%.
-///
-/// Só quatro das seis métricas sustentam um veredito. As outras duas continuam
-/// visíveis para o cliente, marcadas como referência — mostrar o número e admitir
-/// que ele não prova nada é melhor que esconder ou que fingir que prova.
+/// Limiares do teste `noise_calibration` (mesma máquina três vezes, sem mudar nada) com ~50% de margem. Só
+/// quatro das seis métricas sustentam veredito; as outras aparecem como referência.
 static METRICS: &[MetricSpec] = &[
     MetricSpec {
         key: "cpu_single_thread_mops",
@@ -147,10 +97,7 @@ static METRICS: &[MetricSpec] = &[
         higher_is_better: true,
         noise_percent: 0.0,
         min_absolute_delta: 0.0,
-        // Carga em todos os núcleos aquece a CPU, e CPU quente reduz a própria
-        // frequência. A segunda medição começa mais quente que a primeira, o que
-        // cria um viés SISTEMÁTICO contra ela — não é ruído que mais repetições
-        // resolvam. No teste nulo esta métrica marcou -19% sem nada ter mudado.
+        // Viés SISTEMÁTICO: a segunda medição começa mais quente e a CPU reduz a frequência. No teste nulo marcou -19%.
         judgeable: false,
         read: |s| s.cpu_multi_thread_mops,
         explanation: "Mostrado apenas como referência: depende da temperatura da CPU no momento da medição, então não serve para provar ganho.",
@@ -171,9 +118,7 @@ static METRICS: &[MetricSpec] = &[
         label: "Travada no pior caso",
         unit: "ms",
         higher_is_better: false,
-        // Calibração: o valor oscilou entre 1,0 e 1,4 ms sem nada mudar — 49%.
-        // Daí o percentual alto e, principalmente, o piso de 3 ms: abaixo de um
-        // quinto de quadro, nenhum jogador percebe diferença.
+        // Oscilou 49% sem nada mudar; o piso de 3 ms é um quinto de quadro, abaixo do perceptível.
         noise_percent: 60.0,
         min_absolute_delta: 3.0,
         judgeable: true,
@@ -186,10 +131,7 @@ static METRICS: &[MetricSpec] = &[
         unit: "",
         higher_is_better: false,
         noise_percent: 50.0,
-        // O teste nulo pegou saltos de 0 para 2 e 5 engasgos por minuto sem nada
-        // ter mudado no sistema — qualquer programa de fundo que acorde produz
-        // isso. Só a partir de 6 por minuto, um engasgo a cada dez segundos, a
-        // diferença é grande demais para ser acaso e perceptível para o jogador.
+        // O teste nulo pegou 0 → 5 por minuto sem mudança; a partir de 6 (um a cada dez segundos) não é acaso.
         min_absolute_delta: 6.0,
         judgeable: true,
         read: |s| s.hitches_per_minute,
@@ -202,8 +144,6 @@ static METRICS: &[MetricSpec] = &[
         higher_is_better: false,
         noise_percent: 0.0,
         min_absolute_delta: 0.0,
-        // Na calibração esta métrica variou 244% sem nada ter mudado. Qualquer
-        // veredito aqui seria adivinhação vendida como resultado.
         judgeable: false,
         read: |s| s.idle_cpu_percent,
         explanation: "Mostrado apenas como referência: oscila demais sozinho para provar qualquer coisa.",
@@ -233,15 +173,12 @@ static METRICS: &[MetricSpec] = &[
 ];
 
 impl BenchmarkSnapshot {
-    /// Uma medição só é confiável se o PC estava razoavelmente parado.
     pub fn is_reliable(&self) -> bool {
         self.idle_cpu_percent <= BUSY_CPU_PERCENT
     }
 }
 
-/// Resultado da medição inicial, já avisando se ela vale.
-/// O aviso vem aqui, e não só na comparação, para o usuário refazer a medição
-/// agora — e não descobrir 20 minutos depois que perdeu o baseline.
+/// Avisa já na medição inicial, para refazer agora e não descobrir 20 minutos depois.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BaselineResult {
     pub snapshot: BenchmarkSnapshot,
@@ -278,17 +215,13 @@ impl Benchmark {
         Benchmark
     }
 
-    /// Executa a medição completa. Leva cerca de 8 segundos.
-    ///
-    /// A ordem importa: o uso ocioso é medido ANTES das cargas de trabalho, senão
-    /// o próprio benchmark apareceria como consumo de segundo plano.
+    /// O ocioso é medido ANTES das cargas, senão o próprio benchmark apareceria como consumo de fundo.
     pub fn run(&self) -> BenchmarkSnapshot {
         let mut system = System::new_all();
 
         let (idle_cpu_percent, idle_ram_gb, process_count) = measure_idle(&mut system);
 
-        // A medição de engasgos vem antes das cargas pesadas: ela mede o atraso
-        // do agendador com o PC como está, não com o PC ocupado por nós mesmos.
+        // Antes das cargas pesadas: mede o agendador com o PC como está, não ocupado por nós.
         let jitter = crate::modules::jitter::measure();
 
         let cpu_single_thread_mops = measure_single_thread();
@@ -314,8 +247,7 @@ impl Default for Benchmark {
     }
 }
 
-/// Mede o consumo do sistema parado: CPU, RAM e número de processos.
-/// Usa a mediana das amostras para descartar picos isolados de outros programas.
+/// Mediana, para descartar picos isolados.
 fn measure_idle(system: &mut System) -> (f64, f64, f64) {
     std::thread::sleep(IDLE_SETTLE);
 
@@ -341,14 +273,12 @@ fn measure_idle(system: &mut System) -> (f64, f64, f64) {
     (median(&mut cpu_samples), idle_ram_gb, process_count)
 }
 
-/// Carga determinística de inteiros. O `black_box` impede o compilador de
-/// descartar o laço — sem ele, a versão otimizada mediria o nada.
+/// Sem o `black_box`, o compilador descarta o laço e mede o nada.
 fn integer_workload(deadline: Instant) -> u64 {
     let mut operations: u64 = 0;
     let mut accumulator: u64 = 1;
 
-    // O tempo é checado a cada bloco de 4096 operações: consultar o relógio a
-    // cada iteração mediria o relógio, não a CPU.
+    // Consultar o relógio a cada iteração mediria o relógio.
     while Instant::now() < deadline {
         for _ in 0..4096 {
             accumulator = accumulator
@@ -363,7 +293,6 @@ fn integer_workload(deadline: Instant) -> u64 {
     operations
 }
 
-/// Milhões de operações por segundo em um núcleo, melhor de N rodadas.
 fn measure_single_thread() -> f64 {
     (0..WORKLOAD_ROUNDS)
         .map(|_| {
@@ -374,8 +303,6 @@ fn measure_single_thread() -> f64 {
         .fold(0.0, f64::max)
 }
 
-/// Milhões de operações por segundo somando todos os núcleos, mais a frequência
-/// atingida sob carga.
 fn measure_multi_thread(system: &mut System) -> (f64, f64) {
     let threads = num_cpus::get().max(1);
     let mut best_throughput = 0.0f64;
@@ -389,8 +316,7 @@ fn measure_multi_thread(system: &mut System) -> (f64, f64) {
             .map(|_| std::thread::spawn(move || integer_workload(deadline)))
             .collect();
 
-        // A frequência é lida com as threads ainda rodando: é sob carga que o
-        // plano de energia mostra se está ou não segurando a CPU.
+        // Lida com as threads rodando: é sob carga que o plano de energia se mostra.
         std::thread::sleep(WORKLOAD_DURATION / 2);
         system.refresh_cpu_all();
         let frequency = system
@@ -434,11 +360,8 @@ fn median(values: &mut [f64]) -> f64 {
     }
 }
 
-/// Compara duas medições e emite um veredito por métrica.
 pub fn compare(before: &BenchmarkSnapshot, after: &BenchmarkSnapshot) -> BenchmarkComparison {
-    // Se qualquer uma das duas medições pegou o PC ocupado, nenhum número aqui
-    // sustenta conclusão. Emitir veredito nesse caso seria vender o descanso do
-    // PC como se fosse resultado da otimização.
+    // Medição com o PC ocupado: veredito aqui venderia o descanso do PC como otimização.
     let trustworthy = before.is_reliable() && after.is_reliable();
 
     let metrics: Vec<MetricDelta> = METRICS
@@ -452,12 +375,9 @@ pub fn compare(before: &BenchmarkSnapshot, after: &BenchmarkSnapshot) -> Benchma
             let verdict = if !spec.judgeable || !trustworthy {
                 Verdict::TooNoisyToJudge
             } else if absolute_delta < spec.min_absolute_delta {
-                // Grande em porcentagem, irrelevante na prática.
                 Verdict::NoMeasurableChange
             } else if before_value == 0.0 {
-                // Sair de zero não tem porcentagem — a divisão seria por zero.
-                // Ignorar isso esconderia a pior regressão possível: um PC que
-                // não engasgava e passou a engasgar.
+                // Sair de zero não tem porcentagem, e ignorar isso esconderia um PC que passou a engasgar.
                 judge_by_direction(after_value - before_value, spec.higher_is_better)
             } else {
                 judge(change_percent, spec.higher_is_better, spec.noise_percent)
@@ -498,14 +418,11 @@ pub fn compare(before: &BenchmarkSnapshot, after: &BenchmarkSnapshot) -> Benchma
 
 fn percent_change(before: f64, after: f64) -> f64 {
     if before == 0.0 {
-        // Sem base de comparação, qualquer variação é indefinida — reportar 0
-        // evita inventar um ganho infinito.
         return 0.0;
     }
     (after - before) / before.abs() * 100.0
 }
 
-/// Decide o veredito de uma métrica considerando o ruído de medição.
 fn judge(change_percent: f64, higher_is_better: bool, noise_percent: f64) -> Verdict {
     if change_percent.abs() < noise_percent {
         return Verdict::NoMeasurableChange;
@@ -524,8 +441,7 @@ fn judge(change_percent: f64, higher_is_better: bool, noise_percent: f64) -> Ver
     }
 }
 
-/// Veredito quando não há base para porcentagem: só o sentido da diferença.
-/// Só é chamado depois de a diferença absoluta já ter passado do piso da métrica.
+/// Só chamado depois de a diferença absoluta passar do piso da métrica.
 fn judge_by_direction(delta: f64, higher_is_better: bool) -> Verdict {
     let improved = if higher_is_better { delta > 0.0 } else { delta < 0.0 };
 
@@ -536,7 +452,6 @@ fn judge_by_direction(delta: f64, higher_is_better: bool) -> Verdict {
     }
 }
 
-/// Frase de resumo. Nunca afirma melhora quando nenhuma métrica melhorou.
 fn summarize(metrics: &[MetricDelta]) -> String {
     let improved = metrics.iter().filter(|m| m.verdict == Verdict::Improved).count();
     let worsened = metrics.iter().filter(|m| m.verdict == Verdict::Worsened).count();
@@ -555,8 +470,6 @@ fn summarize(metrics: &[MetricDelta]) -> String {
     }
 }
 
-/// Guarda o baseline em disco para sobreviver a um reinício do PC —
-/// otimizações que só valem após reiniciar não poderiam ser medidas sem isso.
 pub struct BaselineStore;
 
 impl BaselineStore {
@@ -609,8 +522,6 @@ mod tests {
 
     #[test]
     fn small_variation_is_reported_as_noise_not_gain() {
-        // 2% de ganho em CPU está dentro do ruído: prometer melhora aqui seria
-        // exatamente o que os concorrentes fazem.
         assert_eq!(judge(2.0, true, 4.0), Verdict::NoMeasurableChange);
         assert_eq!(judge(-2.0, true, 4.0), Verdict::NoMeasurableChange);
     }
@@ -627,7 +538,6 @@ mod tests {
 
     #[test]
     fn lower_is_better_metrics_invert_the_verdict() {
-        // Uso ocioso de CPU caindo 40% é melhora, não piora.
         assert_eq!(judge(-40.0, false, 25.0), Verdict::Improved);
         assert_eq!(judge(40.0, false, 25.0), Verdict::Worsened);
     }
@@ -645,9 +555,7 @@ mod tests {
 
     #[test]
     fn busy_machine_invalidates_the_whole_comparison() {
-        // Cenário real observado: baseline medido com o PC a 92% de CPU, medição
-        // seguinte com o PC parado. A diferença de 29% veio do descanso, não da
-        // otimização.
+        // Caso real: baseline com o PC a 92% de CPU, a seguinte parado; os 29% vieram do descanso.
         let mut before = snapshot(500.0, 92.0);
         before.idle_cpu_percent = 92.0;
         let after = snapshot(645.0, 5.0);
@@ -676,8 +584,6 @@ mod tests {
 
     #[test]
     fn large_percentage_over_a_tiny_number_is_not_a_result() {
-        // Travada saindo de 1,0 ms para 1,6 ms é 60% de variação e nenhum
-        // jogador percebe. O piso absoluto impede vender isso como piora.
         let mut before = snapshot(100.0, 5.0);
         before.scheduler_p99_delay_ms = 1.0;
         let mut after = snapshot(100.0, 5.0);
@@ -694,7 +600,6 @@ mod tests {
 
     #[test]
     fn a_real_stutter_reduction_is_reported() {
-        // 40 ms de travada caindo para 4 ms é a diferença entre engasgar e não.
         let mut before = snapshot(100.0, 5.0);
         before.scheduler_p99_delay_ms = 40.0;
         let mut after = snapshot(100.0, 5.0);
@@ -711,8 +616,6 @@ mod tests {
 
     #[test]
     fn a_pc_that_started_stuttering_is_not_hidden_by_division_by_zero() {
-        // Zero engasgos por minuto virando dez é a pior regressão possível, e
-        // não tem porcentagem que a descreva. Precisa aparecer mesmo assim.
         let mut before = snapshot(100.0, 5.0);
         before.hitches_per_minute = 0.0;
         let mut after = snapshot(100.0, 5.0);
@@ -731,9 +634,6 @@ mod tests {
 
     #[test]
     fn noisy_metrics_never_claim_a_gain() {
-        // A CPU ociosa caiu 75% (dentro da faixa confiável, então a comparação
-        // vale), mas essa métrica é instável demais para sustentar qualquer
-        // afirmação. Reportar melhora aqui seria vender ruído.
         let before = snapshot(100.0, 20.0);
         let after = snapshot(100.0, 5.0);
 
@@ -767,14 +667,11 @@ mod tests {
 
     #[test]
     fn median_ignores_isolated_spikes() {
-        // O pico de 90% de um processo aleatório não deve virar o resultado.
         let mut values = vec![4.0, 5.0, 90.0, 5.0, 6.0];
         assert_eq!(median(&mut values), 5.0);
     }
 
-    /// Teste nulo: mede duas vezes sem mudar NADA no sistema. Qualquer veredito de
-    /// melhora ou piora aqui é um falso positivo — a falha exata que transforma um
-    /// medidor honesto num vendedor de ilusão.
+    /// Teste nulo: duas medições sem mudar nada; qualquer veredito é falso positivo.
     /// `cargo test --release --lib -- --ignored --nocapture null_test`
     #[test]
     #[ignore]
@@ -804,8 +701,7 @@ mod tests {
         );
     }
 
-    /// Calibração: mede a mesma máquina várias vezes SEM mudar nada.
-    /// Toda variação que aparecer aqui é ruído, e define o limiar de cada métrica.
+    /// Calibração que define o limiar de cada métrica.
     /// `cargo test --release --lib -- --ignored --nocapture noise_calibration`
     #[test]
     #[ignore]
@@ -828,9 +724,7 @@ mod tests {
         }
     }
 
-    /// Executa a medição real. Marcado como `ignore` porque leva ~8 segundos e
-    /// ocupa todos os núcleos; rode sob demanda com:
-    /// `cargo test --lib -- --ignored --nocapture benchmark`
+    /// ~8 segundos com todos os núcleos: `cargo test --lib -- --ignored --nocapture benchmark`
     #[test]
     #[ignore]
     fn real_benchmark_produces_plausible_numbers() {

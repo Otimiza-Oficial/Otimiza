@@ -1,145 +1,71 @@
-// Medições de quadros feitas sozinhas, durante as partidas
-//
-// POR QUE ISTO EXISTE
-//
-// A prova de antes e depois (`prova.rs`) só existe quando o cliente lembra de
-// medir — e quase ninguém lembra. O cliente que pediu reembolso porque "o FiveM
-// continuou igual" nunca mediu nada: nem ele nem o Otimiza tinham um número
-// para mostrar sobre as partidas dele.
-//
-// Aqui o vigia mede sozinho. Com o jogo em primeiro plano há alguns minutos e o
-// Otimiza aberto como administrador, ele escuta por vinte segundos o mesmo canal
-// de eventos do Windows que a medição manual usa — sem tocar no jogo, ver
-// `frames.rs` — e guarda FPS, 1% piores quadros e engasgos. No máximo uma vez a
-// cada vinte minutos de partida.
-//
-// O QUE ELE NÃO FAZ
-//
-// Não compara uma medição com outra e não diz que houve ganho. Duas medições
-// automáticas foram feitas em lugares diferentes do jogo, e comparar menu com rua
-// movimentada é fabricar prova — o cabeçalho de `prova.rs` conta por quê. Ele
-// guarda o número, a hora e quantas mudanças do Otimiza estavam aplicadas
-// naquele momento, e a tela mostra lado a lado, sem conclusão.
+// Medições de quadros automáticas durante as partidas (quase ninguém lembra de medir). Com o jogo em primeiro
+// plano há alguns minutos e o app como administrador, escuta vinte segundos pelo canal de `frames.rs`, no máximo
+// uma vez a cada vinte minutos. NÃO compara medições entre si: foram feitas em lugares diferentes do jogo, e
+// comparar menu com rua movimentada é fabricar prova.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Uma medição feita pelo vigia, sem ninguém pedir.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MedicaoAutomatica {
-    /// Processo medido.
     pub jogo: String,
     pub quando: u64,
     pub fps: f64,
     pub low_1pct: f64,
     pub engasgos_por_minuto: f64,
     pub segundos: f64,
-    /// Falso quando a amostra foi curta demais para os detalhes significarem
-    /// alguma coisa.
     pub confiavel: bool,
-    /// Quantas mudanças do Otimiza estavam aplicadas quando a medição foi feita.
     pub mudancas_aplicadas: usize,
-    /// Driver de vídeo e Windows daquele momento (2.9), para a deriva saber
-    /// o que mudou entre uma partida e outra. `None` em medição antiga.
+    /// `None` em medição antiga.
     #[serde(default)]
     pub ambiente: Option<crate::modules::deriva::Ambiente>,
 
-    // --- A DISTRIBUIÇÃO, E NÃO SÓ O RESUMO ---
-    //
-    // FPS e 1% pior descrevem o resultado. Estes descrevem o RITMO: uma
-    // configuração com FPS maior e ritmo pior não é uma melhora, e sem estes
-    // campos não havia como saber qual das duas estava na frente.
-    //
-    // Todos opcionais com `serde(default)`: medição gravada antes desta versão
-    // continua sendo lida, com os campos novos ausentes em vez de zerados.
-    //
-    /// Média do tempo entre quadros. Diferente da mediana de propósito: a
-    /// média é puxada por cada tranco, e o afastamento entre as duas é o
-    /// sintoma.
+    // O RITMO, além do resumo: FPS maior com ritmo pior não é melhora. Todos com `serde(default)`: medição antiga
+    // continua lendo, com os campos ausentes em vez de zerados.
+    /// Diferente da mediana de propósito: o afastamento entre as duas é o sintoma.
     #[serde(default)]
     pub frametime_medio_ms: Option<f64>,
     #[serde(default)]
     pub frametime_p95_ms: Option<f64>,
     #[serde(default)]
     pub frametime_p99_ms: Option<f64>,
-    /// O QUE A PLACA FEZ NA MESMA JANELA (2.9).
-    ///
-    /// Temperatura, clock, potência e — o que importa — o percentual do tempo
-    /// em que o próprio driver disse estar segurando o clock, e por quê. Lido
-    /// pela NVML em processo, junto com os quadros.
-    ///
-    /// Antes disso a temperatura só era lida sob demanda, com o jogo fechado e
-    /// a placa já fria: o momento em que ela não diz nada. `None` em medição
-    /// antiga, e em máquina sem placa NVIDIA.
+    /// Lido pela NVML na mesma janela: com o jogo fechado a placa já esfriou e não diz nada. `None` em medição antiga
+    /// e sem placa NVIDIA.
     #[serde(default)]
     pub placa: Option<crate::core::sensores::ResumoGpu>,
 
-    /// Uso do processador DURANTE a mesma janela de medição.
-    ///
-    /// Medido em paralelo, pelos contadores do Windows. Vale porque só serve
-    /// comparado na mesma janela: uso de CPU lido depois que o jogo fechou não
-    /// diz nada sobre a partida.
+    /// Só vale na mesma janela: uso de CPU depois do jogo fechar não diz nada da partida.
     #[serde(default)]
     pub cpu_uso_pct: Option<f64>,
-    /// Uso da placa de vídeo DURANTE a mesma janela.
-    ///
-    /// Vale pelo par: quadros baixos com processador e placa os DOIS sobrando
-    /// é o desenho de um limite que não está no hardware — é o motor do jogo,
-    /// um teto de quadros, ou uma espera que nenhum dos dois contadores mostra.
-    /// Nenhum dos dois números sozinho sustenta essa frase.
+    /// Vale pelo par: quadros baixos com os DOIS sobrando aponta para motor do jogo, teto ou espera.
     #[serde(default)]
     pub gpu_uso_pct: Option<f64>,
 
-    // --- O INSTANTE DE CADA TRANCO, CRUZADO COM O DISCO ---
-    //
-    // Shader compilando e asset chegando do disco produzem o mesmo buraco no
-    // frametime. A distribuição não os separa — ela diz que houve buraco e
-    // quanto doeu, não o que a máquina estava fazendo naquele instante.
-    //
-    // Estes dois campos guardam o resultado do cruzamento, e não a série: a
-    // série são milhares de carimbos que não cabem num histórico de sessenta
-    // medições, e o que a decisão precisa é da proporção.
-    //
-    /// Proporção dos trancos que aconteceram com o disco ocupado, em %.
+    // Shader e asset do disco dão o mesmo buraco no frametime. Guarda a proporção do cruzamento, não a série
+    // (milhares de carimbos não cabem em sessenta medições).
     #[serde(default)]
     pub trancos_com_disco_pct: Option<f64>,
-    /// Quantos trancos entraram nessa conta.
-    ///
-    /// Sem isto, "100% dos trancos com o disco ocupado" esconde que o total
-    /// era dois. Proporção sem denominador é meia informação.
+    /// Proporção sem denominador esconde que o total era dois.
     #[serde(default)]
     pub trancos_medidos: Option<usize>,
 
-    /// O governador do modo jogo nesta medição (2.9): agindo, parado de
-    /// propósito numa partida de comparação, ou `None` (não se aplica, mudou
-    /// no meio da medição, ou medição antiga). É o que separa os dois lados da
-    /// vigília dele em `modules::portao`.
+    /// Separa os dois lados da vigília do governador em `modules::portao`. `None`: não se aplica, mudou no meio ou antiga.
     #[serde(default)]
     pub governador: Option<crate::modules::portao::GovernadorNaPartida>,
 }
 
-/// Quantas medições ficam guardadas. Sessenta são semanas de partidas a uma
-/// medição a cada vinte minutos, e o arquivo continua pequeno.
 pub const GUARDADAS: usize = 60;
 
-/// Quanto tempo cada medição escuta o canal de eventos. Vinte segundos é o
-/// mesmo da prova manual: menos que isso o 1% pior não significa nada.
+/// Menos de vinte segundos e o 1% pior não significa nada.
 pub const SEGUNDOS_DE_MEDICAO: u64 = 20;
 
-/// Quanto tempo o jogo precisa estar em primeiro plano antes da primeira medição.
-///
-/// Os primeiros minutos são carregamento, menu e tela de conexão — que rodam a
-/// centenas de quadros e não dizem nada sobre a partida.
+/// Os primeiros minutos são carregamento e menu, a centenas de quadros.
 pub const SEGUNDOS_ANTES_DA_PRIMEIRA: u64 = 180;
 
-/// Intervalo mínimo entre duas medições do mesmo jogo aberto.
 pub const SEGUNDOS_ENTRE_MEDICOES: u64 = 20 * 60;
 
-/// De quantos em quantos segundos o vigia olha se há jogo em primeiro plano.
-///
-/// Mais espaçado que o vigia do modo jogo, de propósito: a detecção consulta o
-/// uso do motor 3D pelo PowerShell, e medir o jogo não pode virar peso no jogo.
+/// Mais espaçado que o vigia do modo jogo: a detecção passa pelo PowerShell, e medir não pode pesar no jogo.
 pub const SEGUNDOS_ENTRE_OLHADAS: u64 = 30;
 
 fn caminho() -> PathBuf {
@@ -151,11 +77,7 @@ fn caminho() -> PathBuf {
     base.join("pc-optimizer").join("medicoes.json")
 }
 
-/// Lê o histórico.
-///
-/// Arquivo que não existe é histórico vazio. Arquivo que existe e não dá para
-/// ler é `Err`: "nenhuma medição" sobre um arquivo ilegível seria a lista vazia
-/// fingindo ser resposta.
+/// Arquivo inexistente é vazio; existente e ilegível é `Err`, nunca a lista vazia fingindo resposta.
 pub fn ler_de(caminho: &Path) -> Result<Vec<MedicaoAutomatica>, String> {
     match fs::read_to_string(caminho) {
         Ok(bruto) => serde_json::from_str(&bruto)
@@ -169,11 +91,7 @@ pub fn ler() -> Result<Vec<MedicaoAutomatica>, String> {
     ler_de(&caminho())
 }
 
-/// Acrescenta uma medição e guarda só as últimas `GUARDADAS`.
-///
-/// Histórico ilegível NÃO é sobrescrito: a medição nova é descartada e o arquivo
-/// fica como está. Gravar por cima apagaria, sem aviso, tudo o que já tinha sido
-/// medido.
+/// Histórico ilegível NÃO é sobrescrito: gravar por cima apagaria tudo o que já foi medido.
 pub fn registrar_em(caminho: &Path, medicao: MedicaoAutomatica) -> Result<(), String> {
     let mut todas = ler_de(caminho)?;
     todas.push(medicao);
@@ -197,11 +115,6 @@ pub fn registrar(medicao: MedicaoAutomatica) -> Result<(), String> {
     registrar_em(&caminho(), medicao)
 }
 
-/// Se é hora de medir. PURA.
-///
-/// `aberto_ha`: segundos com o mesmo jogo em primeiro plano, sem interrupção.
-/// `desde_a_ultima`: segundos desde a última tentativa neste jogo aberto, ou
-/// `None` quando ainda não houve nenhuma.
 pub fn hora_de_medir(aberto_ha: u64, desde_a_ultima: Option<u64>) -> bool {
     match desde_a_ultima {
         None => aberto_ha >= SEGUNDOS_ANTES_DA_PRIMEIRA,
@@ -209,10 +122,7 @@ pub fn hora_de_medir(aberto_ha: u64, desde_a_ultima: Option<u64>) -> bool {
     }
 }
 
-/// O que o vigia lembra de uma olhada para a outra.
-///
-/// Recebe o relógio de fora, e não lê `Instant` por dentro, para cada transição
-/// ser provada em teste sem esperar três minutos.
+/// Relógio de fora, para cada transição ser provada em teste sem esperar.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Acompanhamento {
     pid: Option<u32>,
@@ -221,11 +131,7 @@ pub struct Acompanhamento {
 }
 
 impl Acompanhamento {
-    /// Uma olhada: o PID do jogo em primeiro plano agora (ou nenhum) e o relógio.
-    /// Devolve se é hora de medir.
-    ///
-    /// Sem jogo, ou com OUTRO jogo, a contagem recomeça: tempo de menu de outro
-    /// jogo, ou de área de trabalho, não conta como partida deste.
+    /// Sem jogo, ou com OUTRO jogo, a contagem recomeça.
     pub fn observar(&mut self, pid: Option<u32>, agora: u64) -> bool {
         match pid {
             None => {
@@ -247,11 +153,7 @@ impl Acompanhamento {
         }
     }
 
-    /// Marca a tentativa, deu certo ou não.
-    ///
-    /// Marcar também a que falhou é de propósito: uma medição recusada — pelo
-    /// anticheat, por outra medição em andamento — tentada de novo a cada meio
-    /// minuto viraria ruído no registro e trabalho à toa durante a partida.
+    /// Marca também a que falhou: recusa do anticheat tentada a cada meio minuto seria trabalho à toa na partida.
     pub fn tentado(&mut self, agora: u64) {
         self.ultima = Some(agora);
     }
@@ -315,18 +217,14 @@ mod tests {
     fn o_acompanhamento_mede_so_o_mesmo_jogo_aberto_sem_parar() {
         let mut vigia = Acompanhamento::default();
 
-        // O jogo aparece: começa a contar, não mede ainda.
         assert!(!vigia.observar(Some(42), 1000));
         assert!(!vigia.observar(Some(42), 1000 + SEGUNDOS_ANTES_DA_PRIMEIRA - 30));
 
-        // Passou o carregamento.
         assert!(vigia.observar(Some(42), 1000 + SEGUNDOS_ANTES_DA_PRIMEIRA));
         vigia.tentado(1000 + SEGUNDOS_ANTES_DA_PRIMEIRA);
 
-        // Logo depois, não mede de novo.
         assert!(!vigia.observar(Some(42), 1000 + SEGUNDOS_ANTES_DA_PRIMEIRA + 60));
 
-        // Vinte minutos depois, mede.
         let depois = 1000 + SEGUNDOS_ANTES_DA_PRIMEIRA + SEGUNDOS_ENTRE_MEDICOES;
         assert!(vigia.observar(Some(42), depois));
     }
@@ -337,11 +235,9 @@ mod tests {
         assert!(!vigia.observar(Some(42), 0));
         assert!(vigia.observar(Some(42), SEGUNDOS_ANTES_DA_PRIMEIRA));
 
-        // Outro processo em primeiro plano: tempo do anterior não conta.
         assert!(!vigia.observar(Some(7), SEGUNDOS_ANTES_DA_PRIMEIRA + 30));
         assert!(!vigia.observar(Some(7), SEGUNDOS_ANTES_DA_PRIMEIRA + 60));
 
-        // Nenhum jogo: tudo zera.
         assert!(!vigia.observar(None, 10_000));
         assert_eq!(vigia, Acompanhamento::default());
     }
@@ -374,7 +270,6 @@ mod tests {
         let _ = fs::remove_dir_all(&pasta);
 
         assert_eq!(todas.len(), GUARDADAS);
-        // As mais antigas saem, a mais recente fica por último.
         assert_eq!(todas.first().unwrap().fps, 5.0);
         assert_eq!(todas.last().unwrap().fps, (GUARDADAS + 4) as f64);
     }

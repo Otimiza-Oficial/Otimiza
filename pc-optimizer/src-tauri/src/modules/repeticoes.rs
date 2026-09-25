@@ -1,73 +1,33 @@
-// Repetições e incerteza: quanto vale um número medido uma vez
-//
-// POR QUE ISTO EXISTE
-//
-// `prova.rs` e `baseline.rs` decidem se uma diferença é ganho comparando-a com
-// 3%. O número é bem escolhido e está documentado nos dois: duas medições
-// seguidas, sem mexer em nada, variam nessa ordem de grandeza.
-//
-// Mas 3% é um palpite sobre TODA máquina e TODA métrica. Numa máquina estável
-// o ruído real é menor, e o produto está descartando ganhos verdadeiros. Numa
-// máquina instável ele é muito maior, e o produto está vendendo ruído como
-// ganho — exatamente o que ele existe para não fazer.
-//
-// Medindo VÁRIAS vezes, o ruído deixa de ser palpite: ele é a dispersão das
-// próprias amostras, nesta máquina, nesta métrica, hoje.
-//
-// A REGRA QUE SUBSTITUI O LIMIAR FIXO
-//
-// Duas médias com margem de erro só são diferentes quando os intervalos NÃO SE
-// TOCAM. Dizer que 87 ± 6 é maior que 84 ± 5 é afirmar uma diferença que as
-// próprias medições não sustentam — os dois valores cabem no mesmo lugar.
-//
-// UMA REPETIÇÃO NÃO TEM INCERTEZA
-//
-// Com uma amostra não há dispersão a calcular, e com duas a estimativa é fraca
-// demais para valer. Abaixo de três repetições a resposta é "não sei" — nunca
-// "não houve diferença". São coisas diferentes, e confundi-las é como se
-// aprova uma mudança que não fez nada.
+// Repetições e incerteza. O limiar fixo de 3% de `prova.rs` e `baseline.rs` descarta ganho real em máquina
+// estável e vende ruído em máquina instável. Com várias medições o ruído é a dispersão medida. Regra: duas médias
+// só são diferentes quando os intervalos de 95% NÃO SE TOCAM. Abaixo de três repetições a resposta é "não sei",
+// nunca "não houve diferença".
 
 use serde::{Deserialize, Serialize};
 
-/// Mínimo de repetições para haver incerteza calculável.
-///
-/// Três. Com duas amostras o desvio existe matematicamente e não significa
-/// nada: qualquer par de números tem um desvio, inclusive dois números
-/// sorteados.
+/// Com duas amostras o desvio existe e não significa nada: qualquer par sorteado tem um.
 pub const REPETICOES_MINIMAS: usize = 3;
 
-/// Uma métrica medida várias vezes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Resumo {
     pub id: String,
-    /// Quantas amostras entraram. Vai junto SEMPRE: uma margem de erro sem o
-    /// número de repetições esconde se ela veio de três medições ou de trinta.
+    /// Vai junto SEMPRE: margem sem o número de repetições esconde se veio de três ou de trinta.
     pub n: usize,
     pub media: f64,
-    /// O do meio. Diferente da média quando há uma repetição fora da curva, e
-    /// o afastamento entre as duas é sinal de que algo aconteceu numa delas.
+    /// O afastamento da média é sinal de que algo aconteceu numa repetição.
     pub mediana: f64,
-    /// Desvio padrão amostral. `None` com menos de duas amostras.
     pub desvio: Option<f64>,
-    /// Metade da largura do intervalo de confiança de 95%.
-    ///
-    /// `None` abaixo de `REPETICOES_MINIMAS`: sem repetições que bastem, o
-    /// produto não sabe a incerteza, e fingir uma margem estreita seria pior
-    /// que não ter margem nenhuma.
+    /// `None` abaixo de `REPETICOES_MINIMAS`: fingir margem estreita é pior que não ter margem.
     pub margem: Option<f64>,
 }
 
 impl Resumo {
-    /// O intervalo, quando há margem.
     pub fn intervalo(&self) -> Option<(f64, f64)> {
         let m = self.margem?;
         Some((self.media - m, self.media + m))
     }
 }
 
-/// Resume uma série de amostras da MESMA métrica.
-///
-/// **Função pura.** Lista vazia devolve `None`: não existe resumo de nada.
 pub fn resumir(id: &str, amostras: &[f64]) -> Option<Resumo> {
     let uteis: Vec<f64> = amostras.iter().copied().filter(|v| v.is_finite()).collect();
 
@@ -86,10 +46,7 @@ pub fn resumir(id: &str, amostras: &[f64]) -> Option<Resumo> {
         ordenadas[n / 2]
     };
 
-    // Desvio AMOSTRAL, com `n - 1` no denominador. Estas repetições são uma
-    // amostra do que a máquina faz, não a população inteira dela; dividir por
-    // `n` subestimaria a dispersão justamente no caso de poucas repetições,
-    // que é o caso comum aqui.
+    // `n - 1`: dividir por `n` subestima a dispersão justamente com poucas repetições, o caso comum aqui.
     let desvio = (n >= 2).then(|| {
         let soma = uteis.iter().map(|v| (v - media).powi(2)).sum::<f64>();
         (soma / (n - 1) as f64).sqrt()
@@ -110,13 +67,8 @@ pub fn resumir(id: &str, amostras: &[f64]) -> Option<Resumo> {
     })
 }
 
-/// Valor crítico de Student a 95%, bicaudal, por graus de liberdade.
-///
-/// Tabela e não fórmula: a fórmula exigiria a função beta incompleta, e o
-/// produto precisa de nove valores. Com poucas repetições este número é MUITO
-/// maior que os 1,96 da distribuição normal — com três amostras ele é 4,3 — e
-/// usar 1,96 aí produziria uma margem estreita demais, que é o erro que faz
-/// ruído virar ganho.
+/// Student a 95%, bicaudal. Tabela, não fórmula (seria a beta incompleta). Com três amostras é 4,3; usar o 1,96
+/// da normal daria margem estreita demais, e ruído viraria ganho.
 fn t_95(graus: usize) -> f64 {
     match graus {
         0 | 1 => 12.706,
@@ -131,40 +83,25 @@ fn t_95(graus: usize) -> f64 {
         10..=14 => 2.145,
         15..=19 => 2.093,
         20..=29 => 2.045,
-        // Daqui para cima a diferença para a normal é menor que 2%, e o
-        // produto nunca vai rodar trinta repetições de um benchmark de jogo.
+        // Daqui para cima a diferença para a normal é menor que 2%.
         _ => 1.96,
     }
 }
 
-/// O que a comparação de duas séries permite afirmar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Diferenca {
-    /// Não há repetições que bastem de pelo menos um dos lados.
-    ///
-    /// NÃO é "não houve diferença". É o produto dizendo que não mediu o
-    /// suficiente para responder.
+    /// NÃO é "não houve diferença": é não ter medido o suficiente.
     SemRepeticoes { falta: String },
-    /// Os intervalos se tocam: as medições não sustentam uma diferença.
     Indistinguivel { delta: f64, sobreposicao: f64 },
-    /// Os intervalos não se tocam.
     Real {
         delta: f64,
-        /// Variação em %. `None` quando o "antes" era zero.
         pct: Option<f64>,
-        /// A menor diferença que estas medições ainda distinguiriam.
-        ///
-        /// É a honestidade do número: um ganho de 4% com folga mínima de 3,8%
-        /// é real e apertado, e quem lê precisa saber disso.
+        /// Um ganho de 4% com folga de 3,8% é real e apertado, e quem lê precisa saber.
         folga: f64,
     },
 }
 
-/// Compara duas séries resumidas.
-///
-/// A regra é a sobreposição dos intervalos, e não um limiar em porcentagem.
-/// Um limiar fixo pergunta "a diferença é grande?"; a sobreposição pergunta
-/// "estas medições conseguem distinguir os dois?", que é a pergunta certa.
+/// Sobreposição, não limiar: a pergunta certa é se estas medições conseguem distinguir os dois.
 pub fn comparar(antes: &Resumo, depois: &Resumo) -> Diferenca {
     let (Some((a_min, a_max)), Some((d_min, d_max))) = (antes.intervalo(), depois.intervalo())
     else {
@@ -182,8 +119,6 @@ pub fn comparar(antes: &Resumo, depois: &Resumo) -> Diferenca {
 
     let delta = depois.media - antes.media;
 
-    // Sobreposição: o quanto os dois intervalos dividem. Zero ou menos
-    // significa que eles não se tocam.
     let sobreposicao = a_max.min(d_max) - a_min.max(d_min);
 
     if sobreposicao >= 0.0 {
@@ -196,59 +131,32 @@ pub fn comparar(antes: &Resumo, depois: &Resumo) -> Diferenca {
     Diferenca::Real {
         delta,
         pct: (antes.media != 0.0).then(|| delta / antes.media.abs() * 100.0),
-        // A folga é o tamanho do vão entre os intervalos: `-sobreposicao`.
         folga: -sobreposicao,
     }
 }
 
-/// Como medir, por tipo de carga.
-///
-/// O prompt do produto pede protocolo por carga, e a razão é concreta: medir
-/// uma máquina ociosa e medir uma partida não pedem o mesmo cuidado nem o
-/// mesmo tempo.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Protocolo {
     pub repeticoes: usize,
     pub segundos_por_repeticao: u64,
-    /// Descartar a primeira repetição.
-    ///
-    /// A primeira roda com cache frio, shader compilando e o Windows ainda
-    /// acomodando o que acabou de abrir. Ela é sistematicamente pior que as
-    /// outras, e mantê-la não acrescenta informação — acrescenta um viés.
-    ///
-    /// DESCARTAR PRECISA SER DITO. Um produto que joga fora a pior amostra em
-    /// silêncio está a um passo de jogar fora a que não convém.
+    /// A primeira roda com cache frio e shader compilando. Descartar precisa ser DITO: quem joga fora a pior amostra
+    /// em silêncio está a um passo de jogar fora a que não convém.
     pub descarta_primeira: bool,
 }
 
 impl Protocolo {
-    /// Quantas repetições precisam ser EXECUTADAS para sobrarem as pedidas.
     pub fn execucoes(&self) -> usize {
         self.repeticoes + usize::from(self.descarta_primeira)
     }
 
-    /// Quanto tempo o cliente vai esperar, em segundos.
-    ///
-    /// Existe para a tela poder dizer isso ANTES de começar. Um benchmark que
-    /// prende a máquina por três minutos sem avisar é um benchmark que o
-    /// cliente cancela no meio.
+    /// Para a tela avisar ANTES: benchmark que prende a máquina sem avisar é cancelado no meio.
     pub fn duracao_estimada_s(&self) -> u64 {
         self.execucoes() as u64 * self.segundos_por_repeticao
     }
 }
 
-/// O protocolo de cada carga.
-///
-/// Os números saem do que cada medida precisa, e não de um padrão redondo:
-///
-/// - OCIOSO e ÁREA DE TRABALHO: cinco repetições curtas. A máquina está
-///   estável, então a dispersão é pequena e mais amostras baratas apertam a
-///   margem de graça.
-/// - CPU, PLACA e DISCO: quatro repetições um pouco mais longas. A carga
-///   precisa de tempo para estabilizar antes de a leitura valer.
-/// - JOGO: três repetições de vinte segundos, que é o mesmo da medição
-///   automática de quadros. Mais que isso vira tempo demais com o cliente
-///   parado esperando, e a partida muda debaixo da medição.
+/// Ocioso: cinco curtas (estável, amostra barata). CPU, placa e disco: quatro mais longas (a carga precisa
+/// estabilizar). Jogo: três de vinte segundos (mais que isso, a partida muda debaixo da medição).
 pub fn protocolo(perfil: super::baseline::Perfil) -> Protocolo {
     use super::baseline::Perfil;
 
@@ -289,8 +197,6 @@ mod tests {
 
     #[test]
     fn duas_amostras_tem_desvio_mas_nao_margem() {
-        // O desvio de dois números existe e não significa nada: qualquer par
-        // sorteado tem um.
         let r = resumir("fps", &[80.0, 90.0]).expect("duas amostras");
 
         assert_eq!(r.n, 2);
@@ -300,8 +206,6 @@ mod tests {
 
     #[test]
     fn a_margem_aperta_com_mais_repeticoes() {
-        // A MESMA dispersão, medida mais vezes, dá uma margem menor. É o que
-        // torna repetir útil em vez de só demorado.
         let poucas = resumir("fps", &[80.0, 85.0, 90.0]).expect("três");
         let muitas = resumir(
             "fps",
@@ -319,8 +223,6 @@ mod tests {
 
     #[test]
     fn media_e_mediana_se_afastam_com_uma_repeticao_fora_da_curva() {
-        // O afastamento é sinal de que algo aconteceu numa das repetições —
-        // uma atualização subindo no fundo, por exemplo.
         let r = resumir("fps", &[86.0, 87.0, 88.0, 20.0]).expect("quatro");
 
         assert_eq!(r.mediana, 86.5);
@@ -329,8 +231,6 @@ mod tests {
 
     #[test]
     fn intervalos_que_se_tocam_nao_sustentam_diferenca() {
-        // 84 e 87, com dispersão larga. A diferença existe nos números e as
-        // medições não conseguem distinguir os dois.
         let antes = resumir("fps", &[80.0, 84.0, 88.0]).expect("três");
         let depois = resumir("fps", &[83.0, 87.0, 91.0]).expect("três");
 
@@ -348,9 +248,7 @@ mod tests {
 
     #[test]
     fn intervalos_separados_sustentam_diferenca() {
-        // O mesmo ganho de 3 quadros, agora com medições apertadas. Aqui ele
-        // é real — e é o caso que o limiar fixo de 3% descartaria, porque
-        // 3/84 é 3,6% mas a máquina mostrou que sabe medir melhor que isso.
+        // O caso que o limiar fixo de 3% descartaria.
         let antes = resumir("fps", &[84.0, 84.1, 83.9, 84.0]).expect("quatro");
         let depois = resumir("fps", &[87.0, 87.1, 86.9, 87.0]).expect("quatro");
 
@@ -366,8 +264,7 @@ mod tests {
 
     #[test]
     fn maquina_instavel_nao_vende_ruido_como_ganho() {
-        // O caso que o limiar fixo erra do outro lado: 10% de ganho aparente
-        // numa máquina que varia 30% entre repetições. Os 3% aprovariam.
+        // O caso que o limiar fixo aprovaria.
         let antes = resumir("fps", &[60.0, 90.0, 75.0, 50.0]).expect("quatro");
         let depois = resumir("fps", &[70.0, 95.0, 80.0, 60.0]).expect("quatro");
 
@@ -389,7 +286,6 @@ mod tests {
             outro => panic!("esperava sem repetições, veio {outro:?}"),
         }
 
-        // E o espelho: falta do outro lado.
         match comparar(&varias, &uma) {
             Diferenca::SemRepeticoes { falta } => assert!(falta.contains("depois"), "{falta}"),
             outro => panic!("esperava sem repetições, veio {outro:?}"),
@@ -412,7 +308,7 @@ mod tests {
 
     #[test]
     fn amostra_invalida_nao_entra_na_conta() {
-        // NaN de uma leitura que falhou não pode contaminar a média inteira.
+        // NaN de uma leitura que falhou não pode contaminar a média.
         let r = resumir("fps", &[86.0, f64::NAN, 88.0, f64::INFINITY]).expect("duas boas");
 
         assert_eq!(r.n, 2);
@@ -446,8 +342,6 @@ mod tests {
 
     #[test]
     fn todo_protocolo_alcanca_o_minimo_de_repeticoes() {
-        // Um protocolo que pedisse menos que o mínimo produziria medições sem
-        // margem de erro — e todo o módulo existe para que isso não aconteça.
         for perfil in [
             Perfil::Ocioso,
             Perfil::AreaDeTrabalho,

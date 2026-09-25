@@ -1,51 +1,7 @@
-// Histórico de desempenho: o que mudou entre a vez que estava bom e agora
-//
-// A PERGUNTA QUE NENHUM OTIMIZADOR RESPONDE
-//
-// "Estava bom semana passada e agora está ruim." É a queixa mais difícil do
-// suporte, porque a máquina de hoje não tem nada que conte o que ela era. O
-// produto já media — `repeticoes` entrega média e margem, `baseline` guarda um
-// retrato, `changelog` guarda o que foi aplicado — mas cada um guardava a SUA
-// coisa, e ninguém guardava a LINHA DO TEMPO das duas juntas.
-//
-// Este módulo é essa linha do tempo: medições e mudanças, na ordem em que
-// aconteceram, com a identidade da máquina em cada registro.
-//
-// COINCIDÊNCIA NO TEMPO NÃO É CAUSA
-//
-// É a regra inteira deste módulo. Ele consegue dizer "entre a medição boa e a
-// ruim, estas três coisas foram aplicadas". Não consegue dizer que alguma delas
-// causou a queda: no mesmo intervalo o Windows atualizou, o driver mudou, o
-// jogo recebeu patch e a temperatura ambiente subiu dez graus. Por isso o que
-// sai chama-se SUSPEITOS, carrega o aviso junto e aponta o caminho de provar —
-// que é desfazer uma, medir com repetição, e ver.
-//
-// POR QUE A COMPARAÇÃO NÃO É CONTRA O MELHOR DE SEMPRE
-//
-// Seria a escolha óbvia e está errada. "O melhor já medido" é um EXTREMO por
-// construção: de vinte medições, a maior é a que mais teve sorte — menos coisa
-// aberta, cache quente, nenhuma varredura no meio. Comparar o de agora contra
-// ela encontra regressão em máquina nenhuma mudou, sempre, porque a régua foi
-// escolhida justamente por ser a mais alta.
-//
-// A comparação aqui é entre as DUAS ÚLTIMAS medições da mesma métrica. Nenhuma
-// das duas foi escolhida por ser extrema, e a diferença entre elas é a que
-// `repeticoes` sabe julgar com intervalo de confiança.
-//
-// O ARQUIVO GUARDA MEDIÇÕES, E NÃO MUDANÇAS
-//
-// As mudanças já têm dono: `changelog` é quem sabe o que foi aplicado e
-// quando, e é ele que o botão de desfazer consulta. Gravá-las também aqui
-// criaria duas listas do mesmo fato, que é como um produto passa a mostrar dois
-// históricos diferentes para o mesmo cliente. Então elas entram na linha do
-// tempo por `com_mudancas`, na hora de responder, vindas da fonte.
-//
-// O DESCARTE É DECLARADO
-//
-// O arquivo tem teto. Ao estourar, os registros mais antigos saem — e a
-// contagem do que saiu fica gravada. Um histórico que apaga em silêncio produz
-// a frase "não há nenhuma mudança entre as duas medições" quando o que houve
-// foi o arquivo encher.
+// Linha do tempo de medições ("estava bom semana passada"), com a identidade da máquina em cada registro.
+// Coincidência no tempo NÃO é causa: sai como SUSPEITOS, com o aviso e o caminho de provar. Compara as DUAS
+// ÚLTIMAS medições, nunca o melhor de sempre (um extremo escolhido acha regressão em toda máquina). As mudanças
+// vêm do `changelog` na hora de responder, não são gravadas aqui. O descarte pelo teto é contado.
 
 use std::path::Path;
 
@@ -57,11 +13,7 @@ use super::repeticoes::{comparar, Diferenca, Resumo};
 
 pub const VERSAO: u32 = 1;
 
-/// As métricas que entram no histórico.
-///
-/// UMA LISTA, e não todas. O contrato tem mais de cinquenta métricas, e gravar
-/// todas a cada captura encheria o teto em nove capturas — o histórico de um
-/// ano viraria o histórico de uma semana. Estas são as que respondem "piorou?".
+/// Uma lista, não as cinquenta do contrato: todas encheriam o teto em nove capturas.
 pub const METRICAS_GUARDADAS: &[&str] = &[
     "fps.average",
     "fps.low_1pct",
@@ -75,14 +27,8 @@ pub const METRICAS_GUARDADAS: &[&str] = &[
     "storage.latency",
 ];
 
-/// Para esta métrica, maior é melhor?
-///
-/// Tabela e não palpite de quem chama. `autoajuste` já mostrou o estrago de
-/// deixar esse sentido por conta de cada chamador: quadros melhoram subindo,
-/// tempo de quadro e temperatura melhoram descendo, e errar o sinal faz o
-/// produto chamar de regressão exatamente a melhora que ele produziu.
-///
-/// `None` para métrica que não está na lista — e aí não há regressão a julgar.
+/// Tabela, e não palpite de quem chama: errar o sinal chama de regressão a melhora que o produto produziu.
+/// `None` fora da lista: não há regressão a julgar.
 pub fn maior_e_melhor(id: &str) -> Option<bool> {
     match id {
         "fps.average" | "fps.low_1pct" => Some(true),
@@ -98,38 +44,23 @@ pub fn maior_e_melhor(id: &str) -> Option<bool> {
     }
 }
 
-/// Quantos registros o arquivo guarda.
-///
-/// Quinhentos. Com uma medição e uma mudança por dia, dá mais de um ano — e o
-/// arquivo fica em alguns poucos megabytes, que é o que se pode pedir do disco
-/// de alguém sem avisar.
+/// Mais de um ano a uma medição e uma mudança por dia, em poucos megabytes.
 pub const LIMITE_DE_REGISTROS: usize = 500;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Evento {
-    /// Uma medição repetida, resumida.
-    ///
-    /// Guarda o RESUMO e não as amostras: a margem é o que permite julgar a
-    /// diferença depois, e as amostras cruas encheriam o arquivo sem
-    /// acrescentar resposta nenhuma.
+    /// O resumo, não as amostras: a margem basta para julgar depois.
     Medicao(Resumo),
-    /// Uma mudança do produto foi aplicada ou desfeita.
     Mudanca {
         nome: String,
-        /// Verdadeiro para aplicada, falso para desfeita.
         aplicada: bool,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Registro {
-    /// Segundos desde 1970, como o resto do produto.
     pub quando: u64,
-    /// A máquina no momento do registro.
-    ///
-    /// Vai em CADA registro, e não uma vez no arquivo: trocar de placa ou de
-    /// plano de energia no meio do histórico é exatamente o tipo de coisa que
-    /// explica uma queda, e um cabeçalho único apagaria isso.
+    /// Em CADA registro: trocar placa ou plano no meio do histórico é o que explica uma queda.
     pub identidade: Identidade,
     pub evento: Evento,
 }
@@ -140,11 +71,7 @@ pub struct Historico {
     pub schema_version: u32,
     #[serde(default)]
     pub registros: Vec<Registro>,
-    /// Quantos registros antigos já saíram por causa do teto.
-    ///
-    /// Gravado junto de propósito. Sem ele, "não há nenhuma mudança entre as
-    /// duas medições" seria indistinguível de "o arquivo encheu e as mudanças
-    /// que havia foram embora".
+    /// Sem isto, "nenhuma mudança entre as medições" seria indistinguível de "o arquivo encheu".
     #[serde(default)]
     pub descartados: usize,
 }
@@ -163,31 +90,22 @@ impl Default for Historico {
     }
 }
 
-/// O que estava aplicado entre duas medições, e o aviso que vai junto.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Suspeitos {
-    /// As mudanças do produto no intervalo, na ordem.
     pub mudancas: Vec<String>,
-    /// O que mudou na própria máquina entre as duas medições.
-    ///
-    /// Placa trocada, plano de energia mudado por fora, Windows atualizado. Na
-    /// prática, quando esta lista não está vazia ela costuma pesar mais que
-    /// tudo que o produto fez.
+    /// Quando não está vazia, costuma pesar mais que tudo o que o produto fez.
     pub maquina_mudou: Vec<String>,
-    /// Quantos registros o teto já engoliu. Ver `Historico::descartados`.
     pub descartados: usize,
     pub aviso: String,
     pub como_provar: String,
 }
 
-/// A queda medida entre as duas últimas medições de uma métrica.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Regressao {
     pub id: String,
     pub anterior: Resumo,
     pub atual: Resumo,
     pub diferenca: Diferenca,
-    /// Verdadeiro quando a diferença é real E na direção ruim.
     pub piorou: bool,
     pub suspeitos: Suspeitos,
 }
@@ -200,7 +118,6 @@ const COMO_PROVAR: &str = "Para provar, desfaça uma de cada vez e meça de novo
                            única forma de separar a mudança do resto — e é o que o autoajuste faz.";
 
 impl Historico {
-    /// Acrescenta um registro, respeitando o teto.
     pub fn anotar(&mut self, quando: u64, identidade: Identidade, evento: Evento) {
         self.schema_version = VERSAO;
         self.registros.push(Registro {
@@ -209,8 +126,6 @@ impl Historico {
             evento,
         });
 
-        // Sai pela frente: o mais antigo é o que menos descreve a máquina de
-        // hoje.
         let sobra = self.registros.len().saturating_sub(LIMITE_DE_REGISTROS);
         if sobra > 0 {
             self.registros.drain(0..sobra);
@@ -218,16 +133,7 @@ impl Historico {
         }
     }
 
-    /// Uma cópia com as mudanças do `changelog` na linha do tempo.
-    ///
-    /// As mudanças NÃO são gravadas no arquivo: quem sabe o que está aplicado
-    /// é o `changelog`, e duas listas do mesmo fato acabam discordando. Elas
-    /// entram aqui, na hora de responder, vindas da fonte.
-    ///
-    /// A identidade de cada mudança é a do registro de medição mais próximo
-    /// ANTES dela — é o que se sabia da máquina naquele momento. Sem nenhuma
-    /// medição anterior, a mudança fica de fora: ela é anterior a tudo que o
-    /// histórico conhece, e não cai em intervalo nenhum.
+    /// A identidade de cada mudança é a da medição mais próxima ANTES dela; sem medição anterior, fica de fora.
     pub fn com_mudancas(&self, aplicadas: &[AppliedOptimization]) -> Historico {
         let mut copia = self.clone();
 
@@ -250,12 +156,6 @@ impl Historico {
         copia
     }
 
-    /// As duas últimas medições de uma métrica, da mais antiga para a mais
-    /// recente.
-    ///
-    /// As DUAS ÚLTIMAS, e não a melhor contra a de agora. Ver o cabeçalho: a
-    /// melhor de sempre é um extremo escolhido, e comparar contra ela acha
-    /// regressão em toda máquina.
     pub fn duas_ultimas(&self, id: &str) -> Option<(&Resumo, &Resumo)> {
         let mut encontradas = self.registros.iter().rev().filter_map(|r| match &r.evento {
             Evento::Medicao(resumo) if resumo.id == id => Some(resumo),
@@ -268,11 +168,7 @@ impl Historico {
         Some((anterior, atual))
     }
 
-    /// O que aconteceu entre dois instantes.
-    ///
-    /// O intervalo é aberto nas pontas: a mudança feita no mesmo segundo da
-    /// medição anterior aconteceu ANTES dela, e incluí-la culparia algo que já
-    /// estava valendo quando o "antes" foi medido.
+    /// Aberto nas pontas: mudança no mesmo segundo da medição anterior já valia no "antes".
     pub fn suspeitos_entre(&self, inicio: u64, fim: u64) -> Suspeitos {
         let no_intervalo = || {
             self.registros
@@ -290,9 +186,7 @@ impl Historico {
             })
             .collect();
 
-        // A identidade é comparada entre as pontas do intervalo, e não registro
-        // a registro: o que interessa é se a máquina de hoje é a mesma de
-        // quando o "antes" foi medido.
+        // Compara as pontas, não registro a registro: importa se a máquina de hoje é a do "antes".
         let maquina_mudou = match (
             self.identidade_em_ou_antes(inicio),
             self.identidade_em_ou_antes(fim),
@@ -318,12 +212,7 @@ impl Historico {
             .map(|r| &r.identidade)
     }
 
-    /// A métrica piorou entre as duas últimas medições?
-    ///
-    /// `maior_e_melhor` sem valor padrão, pela mesma razão de `autoajuste`:
-    /// quadros por segundo melhoram subindo e tempo de quadro melhora
-    /// descendo, e um padrão aqui faria o histórico chamar de regressão toda
-    /// melhora de latência.
+    /// `maior_e_melhor` sem padrão: um padrão chamaria de regressão toda melhora de latência.
     pub fn regressao(&self, id: &str, maior_e_melhor: bool) -> Option<Regressao> {
         let (anterior, atual) = self.duas_ultimas(id)?;
         let diferenca = comparar(anterior, atual);
@@ -336,9 +225,7 @@ impl Historico {
                     *delta > 0.0
                 }
             }
-            // Sem diferença que as medições distingam, não há regressão a
-            // declarar. Não provar uma queda é diferente de provar que não
-            // houve — e aqui a resposta honesta é não acusar.
+            // Não provar uma queda é diferente de provar que não houve: aqui não se acusa.
             _ => false,
         };
 
@@ -367,10 +254,7 @@ impl Historico {
     }
 }
 
-/// Lê o histórico. Arquivo ausente é histórico vazio; ilegível é ERRO.
-///
-/// A distinção é a mesma de `baseline`: tratar arquivo corrompido como vazio
-/// faria o produto apagar por cima do histórico do cliente no próximo registro.
+/// Ilegível é ERRO: tratar como vazio faria o próximo registro apagar o histórico do cliente.
 pub fn ler_de(caminho: &Path) -> Result<Historico, String> {
     match std::fs::read_to_string(caminho) {
         Ok(bruto) => serde_json::from_str(&bruto)
@@ -380,11 +264,7 @@ pub fn ler_de(caminho: &Path) -> Result<Historico, String> {
     }
 }
 
-/// Grava o histórico inteiro, de forma atômica.
-///
-/// Temporário com `create_new`, `sync_all` antes do rename: o mesmo cuidado de
-/// `baseline` e `changelog`, e pela mesma razão — renomear um arquivo cujo
-/// conteúdo ainda está no cache troca o histórico do cliente por um vazio.
+/// `create_new` e `sync_all` antes do rename: renomear com o conteúdo ainda em cache troca o histórico por um vazio.
 pub fn guardar_em(caminho: &Path, historico: &Historico) -> Result<(), String> {
     use std::io::Write;
 
@@ -418,7 +298,6 @@ pub fn guardar_em(caminho: &Path, historico: &Historico) -> Result<(), String> {
         .map_err(|e| format!("não consegui substituir o histórico: {e}"))
 }
 
-/// Onde o histórico mora: ao lado dos baselines, pela mesma conta de caminho.
 fn caminho_padrao() -> std::path::PathBuf {
     let base = std::env::var("APPDATA")
         .or_else(|_| std::env::var("HOME"))
@@ -472,11 +351,6 @@ mod tests {
         }
     }
 
-    /// Duas medições com uma mudança do produto no meio.
-    ///
-    /// A mudança entra por `com_mudancas`, que é o caminho de verdade: o
-    /// arquivo guarda medições, e quem sabe o que foi aplicado é o
-    /// `changelog`.
     fn com_queda() -> Historico {
         let mut h = Historico::default();
         h.anotar(100, identidade("GTX 770"), medicao(60.0));
@@ -493,7 +367,6 @@ mod tests {
         assert!(r.suspeitos.mudancas[0].contains("aplicada"));
     }
 
-    /// A regra inteira do módulo, escrita como teste.
     #[test]
     fn suspeito_nao_e_culpado() {
         let r = com_queda().regressao("fps.average", true).expect("regressão");
@@ -502,23 +375,18 @@ mod tests {
         assert!(r.suspeitos.como_provar.contains("uma de cada vez"));
     }
 
-    /// Mudança feita ANTES da medição de referência não entra na lista.
     #[test]
     fn mudanca_anterior_ao_antes_nao_e_suspeita() {
         let mut h = Historico::default();
-        // Uma medição bem antiga, só para a mudança ter identidade conhecida.
         h.anotar(10, identidade("GTX 770"), medicao(59.0));
         h.anotar(100, identidade("GTX 770"), medicao(60.0));
         h.anotar(200, identidade("GTX 770"), medicao(48.0));
 
-        // Aplicada ANTES da medição de referência: já estava valendo quando o
-        // "antes" foi medido, então não explica a diferença.
         let h = h.com_mudancas(&[mudanca("já estava valendo", 50)]);
         let r = h.regressao("fps.average", true).expect("regressão");
         assert!(r.suspeitos.mudancas.is_empty(), "{:?}", r.suspeitos.mudancas);
     }
 
-    /// Trocar a placa no meio pesa mais que tudo que o produto fez.
     #[test]
     fn a_maquina_mudando_entra_na_resposta() {
         let mut h = Historico::default();
@@ -533,7 +401,6 @@ mod tests {
         );
     }
 
-    /// Diferença que as medições não distinguem NÃO vira regressão.
     #[test]
     fn diferenca_dentro_do_ruido_nao_acusa_queda() {
         let mut h = Historico::default();
@@ -544,7 +411,6 @@ mod tests {
         assert!(!r.piorou, "{:?}", r.diferenca);
     }
 
-    /// O sentido da métrica decide o que é piora.
     #[test]
     fn tempo_de_quadro_subindo_e_que_e_piora() {
         let mut h = Historico::default();
@@ -554,9 +420,7 @@ mod tests {
         h.anotar(100, identidade("GTX 770"), subiu(14.0));
         h.anotar(200, identidade("GTX 770"), subiu(22.0));
 
-        // Menor é melhor: subir é piorar.
         assert!(h.regressao("frametime.mean", false).expect("r").piorou);
-        // Lido ao contrário, o mesmo dado vira melhora.
         assert!(!h.regressao("frametime.mean", true).expect("r").piorou);
     }
 
@@ -568,7 +432,6 @@ mod tests {
         assert!(h.regressao("fps.average", true).is_none());
     }
 
-    /// O teto corta os antigos, e a contagem do que saiu fica.
     #[test]
     fn o_descarte_e_contado_e_nao_silencioso() {
         let mut h = Historico::default();
@@ -578,8 +441,6 @@ mod tests {
 
         assert_eq!(h.registros.len(), LIMITE_DE_REGISTROS);
         assert_eq!(h.descartados, 7);
-        // E a contagem acompanha a resposta, para não parecer que não houve
-        // mudança nenhuma no intervalo.
         assert_eq!(h.suspeitos_entre(0, u64::MAX).descartados, 7);
     }
 
@@ -588,8 +449,6 @@ mod tests {
         let caminho = std::env::temp_dir().join("otimiza-historico-ida-e-volta.json");
         let _ = std::fs::remove_file(&caminho);
 
-        // Só medições: é o que o arquivo guarda. As mudanças entram na hora de
-        // responder, vindas do `changelog`.
         let mut h = Historico::default();
         h.anotar(100, identidade("GTX 770"), medicao(60.0));
         h.anotar(200, identidade("GTX 770"), medicao(48.0));
@@ -609,13 +468,11 @@ mod tests {
         let quebrado = std::env::temp_dir().join("otimiza-historico-quebrado.json");
         std::fs::write(&quebrado, "{ isto nao e json").expect("escrever");
 
-        // Tratar corrompido como vazio faria o próximo registro apagar por cima
-        // do histórico do cliente.
         assert!(ler_de(&quebrado).is_err());
         let _ = std::fs::remove_file(&quebrado);
     }
 
-    /// Arquivo de uma versão anterior, sem os campos novos, continua legível.
+    /// Arquivo de versão anterior, sem os campos novos, continua legível.
     #[test]
     fn arquivo_antigo_nao_quebra() {
         let caminho = std::env::temp_dir().join("otimiza-historico-antigo.json");
