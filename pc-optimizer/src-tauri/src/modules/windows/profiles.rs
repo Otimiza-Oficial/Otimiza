@@ -1,22 +1,5 @@
-// Perfis de otimização
-//
-// O catálogo tem 35 otimizações. Para quem entende, é poder de escolha; para o
-// cliente que abriu o programa pela primeira vez, é uma lista intimidante em que
-// ele vai marcar tudo — inclusive o que não serve para o uso dele, e inclusive o
-// que troca segurança por FPS.
-//
-// A resposta óbvia seria um botão "otimizar tudo", que é o que o mercado faz. A
-// resposta honesta é perguntar PARA QUE serve este PC, porque a resposta muda o
-// que vale a pena. Desligar a indexação de busca é excelente num PC de jogos e
-// péssimo num PC de escritório, onde a pessoa procura arquivo o dia inteiro.
-//
-// Um perfil aqui é uma recomendação, não um pacote fechado: ele marca os itens
-// na lista e a pessoa continua vendo, e podendo desmarcar, cada um deles.
-//
-// REGRA QUE NÃO SE QUEBRA: nenhum perfil inclui otimização que troca segurança
-// por desempenho. Desligar as proteções da CPU rende FPS de verdade, e por isso
-// mesmo não pode entrar num botão que a pessoa aperta sem ler. Quem quiser essa
-// troca marca na mão, lendo o aviso. Existe um teste garantindo isto.
+// Perfis: PARA QUE serve este PC muda o que vale a pena. Um perfil marca itens na lista, que a pessoa continua
+// vendo e podendo desmarcar. Nenhum perfil inclui otimização que troca segurança por desempenho (há teste).
 
 use serde::Serialize;
 
@@ -25,9 +8,7 @@ pub struct ProfileInfo {
     pub id: &'static str,
     pub name: &'static str,
     pub description: &'static str,
-    /// O que este perfil deliberadamente NÃO faz, e por quê. Todo perfil tem
-    /// uma renúncia; esconder isso seria vender pacote fechado como se fosse
-    /// escolha informada.
+    /// O que o perfil NÃO faz, e por quê: esconder a renúncia seria vender pacote fechado.
     pub tradeoff: &'static str,
     pub optimization_ids: &'static [&'static str],
 }
@@ -49,9 +30,6 @@ pub const PROFILES: &[ProfileInfo] = &[
             "disable_transparency",
             "disable_widgets",
             "stop_sponsored_apps",
-            // 2.9: atraso de inicialização e entrega de atualizações P2P são
-            // "só se pedir" — nada medido decide por você. Ver
-            // `catalog::CONDICIONAIS`.
             "disable_gamedvr",
             "disable_reserved_storage",
             "plano_otimiza",
@@ -70,15 +48,9 @@ pub const PROFILES: &[ProfileInfo] = &[
              forma bem visível.",
         optimization_ids: &[
             "disable_gamedvr",
-            // `gpu_hardware_scheduling` SAIU daqui depois do incidente da
-            // 2.1.0: ele pode custar quadro em parte das máquinas, e um perfil
-            // é um lote — quem escolhe "Jogos" não está escolhendo apostar o
-            // FPS dele. Continua no catálogo, um a um, com o caso escrito.
-            // Ver `RiscoDeFps` e `catalog::entra_no_lote`.
+            // `gpu_hardware_scheduling` saiu daqui depois da 2.1.0: pode custar quadro, e perfil é lote. Ver `RiscoDeFps`.
             "mouse_precision_off",
             "plano_otimiza",
-            // 2.9: MSI é Expert (a maioria dos drivers já usa) e a economia da
-            // placa de rede só vale com perda de pacote medida.
             "remove_forced_hpet",
             "clear_boot_limits",
         ],
@@ -105,8 +77,6 @@ pub const PROFILES: &[ProfileInfo] = &[
     },
 ];
 
-/// Perfil pelo id. A interface trabalha com a lista inteira, mas a busca por id
-/// existe para quando o motor precisar validar um perfil vindo de fora.
 #[allow(dead_code)]
 pub fn find(id: &str) -> Option<&'static ProfileInfo> {
     PROFILES.iter().find(|p| p.id == id)
@@ -121,9 +91,7 @@ mod tests {
 
     #[test]
     fn todo_id_de_perfil_existe_no_catalogo() {
-        // Um id com erro de digitação some em silêncio: o perfil marca uma
-        // otimização a menos e ninguém percebe até o cliente reclamar que não
-        // melhorou. Este teste é o que impede isso.
+        // Um id com erro de digitação some em silêncio: o perfil marca uma otimização a menos.
         let conhecidos: HashSet<&str> = CATALOG.iter().map(|o| o.id).collect();
 
         for perfil in PROFILES {
@@ -140,9 +108,6 @@ mod tests {
 
     #[test]
     fn nenhum_perfil_troca_seguranca_por_desempenho() {
-        // A regra que dá nome ao produto. Desligar as proteções da CPU rende
-        // FPS de verdade — e por isso mesmo não pode entrar num botão que a
-        // pessoa aperta sem ler o aviso.
         for perfil in PROFILES {
             for id in perfil.optimization_ids {
                 let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
@@ -159,8 +124,6 @@ mod tests {
 
     #[test]
     fn nenhum_perfil_apaga_arquivo() {
-        // Perfil marca caixas numa lista; apagar não tem volta e não pode
-        // acontecer por causa de um clique em "PC fraco".
         for perfil in PROFILES {
             for id in perfil.optimization_ids {
                 let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
@@ -177,15 +140,13 @@ mod tests {
 
     #[test]
     fn nenhum_perfil_cita_item_que_fica_fora_do_lote() {
-        // O perfil aplica pelo mesmo lote do "Otimizar agora", e o lote pula o
-        // que está em `catalog::FORA_DO_LOTE`. Um perfil que citasse um desses
-        // contaria na prévia ("N a aplicar") um item que o clique não aplica.
+        // O perfil aplica pelo mesmo lote, que pula `catalog::FORA_DO_LOTE`: a prévia contaria um item que o clique
+        // não aplica.
         for perfil in PROFILES {
             for id in perfil.optimization_ids {
                 let spec = CATALOG.iter().find(|o| o.id == *id).unwrap();
 
-                // Condicional pode estar no perfil: entra quando a condição
-                // for medida nesta máquina. Expert e "só se pedir", nunca.
+                // Condicional entra quando a condição for medida; Expert e "só se pedir", nunca.
                 assert!(
                     crate::modules::windows::catalog::entra_no_lote_se(spec, |_| true),
                     "o perfil `{}` cita `{}`, que o lote não aplica",
@@ -213,8 +174,6 @@ mod tests {
     fn perfil_de_trabalho_nao_atrapalha_quem_trabalha() {
         let trabalho = find("trabalho").unwrap();
 
-        // A promessa está escrita na renúncia do perfil; o teste garante que a
-        // promessa e a lista não se separem com o tempo.
         for proibida in ["disable_search_indexing", "disable_hibernation"] {
             assert!(
                 !trabalho.optimization_ids.contains(&proibida),
@@ -228,16 +187,10 @@ mod tests {
     fn perfil_de_pc_fraco_ataca_memoria_e_segundo_plano() {
         let fraco = find("pc_fraco").unwrap();
 
-        // O público que motivou o produto. Se o perfil dele não tiver o que
-        // libera memória, ele não serve para nada.
-        //
-        // `background_apps_off` era um dos dois essenciais até a 1.9. Saiu de
-        // todo lote na 2.0 (`catalog::FORA_DO_LOTE`) e, com ele, dos perfis.
         for essencial in ["disable_widgets", "visual_effects_performance"] {
             assert!(fraco.optimization_ids.contains(&essencial));
         }
 
-        // E não deve carregar ajuste que só faz sentido em jogo.
         assert!(!fraco.optimization_ids.contains(&"mouse_precision_off"));
     }
 

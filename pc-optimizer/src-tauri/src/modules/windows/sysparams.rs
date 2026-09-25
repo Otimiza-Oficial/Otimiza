@@ -1,33 +1,8 @@
-// Fazer o ajuste valer AGORA
-//
-// O defeito que este módulo existe para consertar: gravar no registro não muda
-// o comportamento do Windows na sessão aberta. As preferências de `HKCU\Control
-// Panel` são lidas no logon e mantidas em memória; escrever a chave e parar por
-// aí deixa o valor certo no registro e o comportamento errado na tela.
-//
-// Duas otimizações prometiam efeito imediato e não entregavam:
-//
-//   Desativar aceleração do mouse  — a aceleração continuava até o próximo logon
-//   Efeitos visuais para desempenho — as animações continuavam rodando
-//
-// As duas declaram `requires_restart: false`, então a promessa era explícita.
-//
-// A forma suportada de avisar o Windows é `SystemParametersInfoW`, que atualiza
-// a cópia em memória e, com `SPIF_SENDCHANGE`, avisa os programas abertos. É o
-// que o Painel de Controle faz ao clicar em Aplicar.
-//
-// A função é de SINCRONIZAÇÃO, não de aplicação: ela lê o que está no registro
-// e empurra para a sessão. Assim serve tanto ao aplicar quanto ao desfazer —
-// nos dois casos o que se quer é a sessão refletindo o registro, e não há como
-// os dois caminhos divergirem.
+// Fazer o ajuste valer AGORA: as preferências de `HKCU\Control Panel` são lidas no logon, e gravar o registro
+// não muda a sessão aberta. `SystemParametersInfoW` com `SPIF_SENDCHANGE` avisa o Windows, como o Painel de
+// Controle. É sincronização: lê o registro e empurra, e serve igual ao aplicar e ao desfazer.
 
-/// Se uma escrita no registro mexeu numa preferência que o Windows mantém em
-/// memória, e portanto exige aviso para valer na sessão aberta.
-///
-/// Só `HKCU\Control Panel`: é ali que moram as preferências do usuário lidas no
-/// logon. Chave de máquina e política não passam por aqui — são lidas na hora
-/// pelo componente que as usa, ou dependem de reinício, e nesses casos o
-/// catálogo já declara `requires_restart`.
+/// Só `HKCU\Control Panel`: é ali que moram as preferências lidas no logon.
 pub fn precisa_sincronizar_interface(hive: &str, path: &str) -> bool {
     hive.eq_ignore_ascii_case("HKCU")
         && path
@@ -36,30 +11,14 @@ pub fn precisa_sincronizar_interface(hive: &str, path: &str) -> bool {
             .starts_with("control panel")
 }
 
-/// O valor lido, ou o padrão do Windows quando não havia valor.
-///
-/// A distinção é onde estava um defeito: ausência não é zero. Para
-/// `DragFullWindows` o padrão é 1 e para `MenuShowDelay` é 400 — assumir zero
-/// desligaria o arraste de janela e zeraria o atraso do menu sem ninguém pedir.
-/// Pior ao DESFAZER: a reversão devolve o valor a ausente, e a sincronização
-/// seguinte empurraria zero para a sessão. Zero escolhido pelo usuário é escolha
-/// legítima e vence o padrão; ausência não.
+/// Ausência não é zero: o padrão de `DragFullWindows` é 1 e o de `MenuShowDelay` é 400. Ao desfazer, a
+/// reversão devolve o valor a ausente, e empurrar zero desligaria o que ninguém pediu.
 pub fn valor_ou_padrao(lido: Option<i32>, padrao: i32) -> i32 {
     lido.unwrap_or(padrao)
 }
 
-/// O que dizer ao cliente quando o ajuste está gravado mas o shell ainda não o
-/// leu.
-///
-/// Algumas políticas — Widgets, Copilot, sugestões da busca — são lidas pelo
-/// Explorer ao iniciar. A chave fica certa na hora e a barra de tarefas continua
-/// igual, e essas otimizações declaram `requires_restart: false`. O cliente
-/// aplicava, não via nada mudar e concluía que o produto não funcionou.
-///
-/// Aqui a resposta é dizer a verdade, não reiniciar o Explorer por conta
-/// própria: derrubar o Explorador fecha as pastas que a pessoa deixou abertas, e
-/// fazer isso sem avisar, no meio de um lote, é pior que esperar. Reiniciar o PC
-/// inteiro por causa de um botão da barra também seria cobrar caro demais.
+/// Widgets, Copilot e sugestões da busca são lidos pelo Explorer ao iniciar. Diz-se a verdade em vez de
+/// reiniciar o Explorer por conta própria, o que fecharia as pastas abertas no meio de um lote.
 pub fn nota_de_ativacao(hive: &str, path: &str, name: &str) -> Option<&'static str> {
     const PELO_EXPLORADOR: &str =
         "O ajuste já está gravado; a barra de tarefas mostra a mudança depois de reiniciar o \
@@ -90,12 +49,7 @@ pub fn nota_de_ativacao(hive: &str, path: &str, name: &str) -> Option<&'static s
     None
 }
 
-/// Empurra para a sessão aberta as preferências que estão no registro.
-///
-/// Idempotente de propósito: chamar duas vezes não faz mal, e chamar sem que
-/// nada tenha mudado também não. Falha aqui não invalida a otimização — o valor
-/// já está gravado e vale no próximo logon —, então o erro é engolido e a vida
-/// segue, em vez de derrubar uma otimização que funcionou.
+/// Idempotente. Falha aqui não invalida a otimização: o valor já está gravado e vale no próximo logon.
 #[cfg(target_os = "windows")]
 pub fn sincronizar_interface() {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -103,8 +57,7 @@ pub fn sincronizar_interface() {
         SPI_SETMOUSE, SPI_SETUIEFFECTS,
     };
 
-    // Os padrões são os do Windows, e estão aqui escritos porque ausência de
-    // valor significa "o Windows usa o dele" — não zero.
+    // Os padrões do Windows: ausência significa "o Windows usa o dele", não zero.
     let mouse: [i32; 3] = [
         ler_numero(r"Control Panel\Mouse", "MouseSpeed", 1),
         ler_numero(r"Control Panel\Mouse", "MouseThreshold1", 6),
@@ -136,8 +89,6 @@ pub fn sincronizar_interface() {
             SPIF_SENDCHANGE,
         );
 
-        // Relê a `UserPreferencesMask` inteira, que é onde moram animação de
-        // janela, sombra e deslizar de menu.
         SystemParametersInfoW(SPI_SETUIEFFECTS, 0, core::ptr::null_mut(), SPIF_SENDCHANGE);
     }
 }
@@ -164,8 +115,6 @@ mod tests {
 
     #[test]
     fn preferencia_do_mouse_precisa_de_aviso() {
-        // Sem o aviso, a aceleração do mouse continuava ligada até o próximo
-        // logon — numa otimização que promete efeito imediato.
         assert!(precisa_sincronizar_interface("HKCU", r"Control Panel\Mouse"));
     }
 
@@ -229,8 +178,7 @@ mod tests {
 
     #[test]
     fn chave_sem_cache_do_shell_nao_ganha_nota() {
-        // Nota que aparece onde não precisa vira ruído, e ruído numa ferramenta
-        // de sistema ensina o cliente a ignorar aviso.
+        // Nota onde não precisa ensina o cliente a ignorar aviso.
         assert!(nota_de_ativacao(
             "HKCU",
             r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize",

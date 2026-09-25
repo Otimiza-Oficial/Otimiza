@@ -1,26 +1,5 @@
-// Os sensores da placa NVIDIA, EM PROCESSO, para amostrar durante a partida
-//
-// POR QUE NÃO O `nvidia-smi`
-//
-// O `sensoresgpu.rs` lê pelo `nvidia-smi`, e para uma leitura sob demanda isso
-// está certo: é o cliente oficial, vem com o driver, e custar 100 ms uma vez
-// não atrapalha ninguém. Mas amostrar DURANTE o jogo é outra coisa — abrir um
-// processo a cada 200 ms enquanto se mede quadros seria virar a carga que se
-// está medindo.
-//
-// A `nvml.dll` é a mesma biblioteca que o `nvidia-smi` usa por dentro, e ela
-// acompanha o driver (`System32\nvml.dll`). Carregada uma vez, cada leitura é
-// uma chamada de função.
-//
-// O QUE ISTO FECHA
-//
-// A pergunta que o produto não conseguia responder: "a placa estava limitada
-// por temperatura DURANTE a partida?". Antes, a temperatura era lida depois,
-// com o jogo fechado e a placa já fria — que é justamente quando ela não diz
-// nada. Agora a resposta vem do intervalo medido, com o percentual do tempo em
-// que o próprio driver disse que estava segurando o clock.
-//
-// NADA AQUI ESCREVE. São leituras.
+// Sensores da placa NVIDIA EM PROCESSO (`nvml.dll`), para amostrar durante a partida: abrir o `nvidia-smi` a
+// cada 200 ms viraria a carga que se está medindo. Só leituras.
 
 #![cfg(target_os = "windows")]
 
@@ -29,11 +8,8 @@ use std::sync::OnceLock;
 
 use crate::core::sensores::AmostraGpu;
 
-/// `NVML_SUCCESS`.
 const OK: u32 = 0;
-/// `NVML_TEMPERATURE_GPU`.
 const SENSOR_GPU: u32 = 0;
-/// `NVML_CLOCK_GRAPHICS`.
 const CLOCK_GRAFICO: u32 = 0;
 
 #[repr(C)]
@@ -55,8 +31,7 @@ struct Nvml {
     motivos: Option<unsafe extern "C" fn(*mut c_void, *mut u64) -> u32>,
 }
 
-// A NVML é usada de uma thread por vez (a que amostra), e o ponteiro do
-// dispositivo é estável enquanto a biblioteca está carregada.
+// Uma thread por vez; o ponteiro do dispositivo é estável enquanto a biblioteca está carregada.
 unsafe impl Send for Nvml {}
 unsafe impl Sync for Nvml {}
 
@@ -65,18 +40,13 @@ fn nvml() -> Option<&'static Nvml> {
     NVML.get_or_init(carregar).as_ref()
 }
 
-/// Carrega a `nvml.dll` e resolve o que este módulo usa.
-///
-/// Como a NVAPI, a biblioteca não é descarregada: o `nvmlInit` cria estado no
-/// driver, e devolver a DLL com esse estado de pé é mais arriscado do que
-/// segurar o identificador até o Otimiza fechar.
+/// Não é descarregada: o `nvmlInit` cria estado no driver, e soltar a DLL com ele de pé é mais arriscado.
 fn carregar() -> Option<Nvml> {
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
     let nome: Vec<u16> = "nvml.dll\0".encode_utf16().collect();
     let modulo = unsafe { LoadLibraryW(nome.as_ptr()) };
-    // Sem o arquivo não há driver NVIDIA: é o cliente com AMD ou Intel, e não
-    // um erro.
+    // Sem o arquivo não há driver NVIDIA: é AMD ou Intel, e não um erro.
     if modulo.is_null() {
         return None;
     }
@@ -91,8 +61,6 @@ fn carregar() -> Option<Nvml> {
     let por_indice: unsafe extern "C" fn(u32, *mut *mut c_void) -> u32 =
         unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetHandleByIndex_v2")?) };
 
-    // A primeira placa. Máquina com duas NVIDIA é rara o bastante para não
-    // valer um seletor que ninguém usaria; o nome aparece no painel da placa.
     let mut dispositivo: *mut c_void = std::ptr::null_mut();
     if unsafe { por_indice(0, &mut dispositivo) } != OK || dispositivo.is_null() {
         return None;
@@ -107,32 +75,19 @@ fn carregar() -> Option<Nvml> {
         utilizacao: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetUtilizationRates")?) },
         nome: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetName")?) },
         clock_maximo: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetMaxClockInfo")?) },
-        // O nome mudou de "ThrottleReasons" para "EventReasons" em drivers
-        // novos, e o antigo continua exportado por compatibilidade. Tenta os
-        // dois: sem nenhum, o resto das leituras continua valendo.
+        // "ThrottleReasons" virou "EventReasons" em drivers novos; tenta os dois.
         motivos: buscar(c"nvmlDeviceGetCurrentClocksThrottleReasons")
             .or_else(|| buscar(c"nvmlDeviceGetCurrentClocksEventReasons"))
             .map(|p| unsafe { std::mem::transmute(p) }),
     })
 }
 
-/// Lê os sensores agora. `None` quando não há placa NVIDIA aqui.
 pub fn amostrar() -> Option<AmostraGpu> {
     amostrar_com_motivos(true)
 }
 
-/// A MESMA LEITURA, COM A PERGUNTA CARA OPCIONAL.
-///
-/// Medido nesta máquina, 100 chamadas de cada: temperatura 0,5 µs, clock
-/// 0,9 ms, potência 0,5 ms, utilização 0,5 ms — e o motivo do clock estar
-/// segurado, **11 ms**. Ele é o dado mais importante e o mais caro.
-///
-/// Dentro da janela de medição isso não pode acontecer a cada 200 ms: o mesmo
-/// laço carimba o disco para correlacionar travadas, e 11 ms de atraso por
-/// volta empurrariam esse carimbo. Então o motivo é perguntado a cada um
-/// segundo, e o resto continua a cada volta. O resumo já conta a porcentagem
-/// sobre as amostras que TÊM motivo, então misturar as duas cadências não
-/// distorce a conta.
+/// Medido aqui: o motivo do clock segurado custa ~11 ms, o resto menos de 1 ms. Dentro da janela ele é
+/// perguntado a cada segundo, para não empurrar o carimbo do disco que correlaciona travadas.
 pub fn amostrar_com_motivos(incluir_motivos: bool) -> Option<AmostraGpu> {
     let n = nvml()?;
     let ler = |f: unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> u32, arg: u32| {
@@ -157,10 +112,9 @@ pub fn amostrar_com_motivos(incluir_motivos: bool) -> Option<AmostraGpu> {
     })
 }
 
-/// O nome da placa, como o driver a chama.
 pub fn nome_da_placa() -> Option<String> {
     let n = nvml()?;
-    // 96 bytes é o tamanho que a própria NVML documenta para o nome.
+    // 96 bytes é o tamanho que a NVML documenta para o nome.
     let mut buffer = [0u8; 96];
     if unsafe { (n.nome)(n.dispositivo, buffer.as_mut_ptr(), buffer.len() as u32) } != OK {
         return None;
@@ -169,15 +123,13 @@ pub fn nome_da_placa() -> Option<String> {
     String::from_utf8(buffer[..fim].to_vec()).ok().filter(|s| !s.is_empty())
 }
 
-/// O clock gráfico máximo da placa, em MHz.
 pub fn clock_maximo_mhz() -> Option<u32> {
     let n = nvml()?;
     let mut v = 0u32;
     (unsafe { (n.clock_maximo)(n.dispositivo, CLOCK_GRAFICO, &mut v) } == OK).then_some(v)
 }
 
-/// O limite de potência que o driver está impondo, em watts. Lido uma vez: ele
-/// não muda no meio da partida.
+/// Lido uma vez: não muda no meio da partida.
 pub fn limite_de_potencia_w() -> Option<f64> {
     let n = nvml()?;
     let mut miliwatts = 0u32;
@@ -186,7 +138,6 @@ pub fn limite_de_potencia_w() -> Option<f64> {
 
 #[cfg(test)]
 mod nesta_maquina {
-    /// Lê os sensores desta placa por 2 segundos:
     /// `cargo test --lib -- --ignored sensores_ao_vivo --nocapture`.
     #[test]
     #[ignore]
@@ -209,14 +160,12 @@ mod nesta_maquina {
 
 #[cfg(test)]
 mod custo {
-    /// Quanto custa uma amostra. Ela roda dentro da janela de medição de
-    /// quadros: se custasse muito, viraria a carga que se está medindo.
+    /// Roda dentro da janela de medição de quadros: se custasse muito, viraria a carga medida.
     #[test]
     #[ignore]
     fn quanto_custa_uma_amostra() {
         let _ = super::amostrar();
 
-        // A cadência que o vigia usa: motivo a cada 5 voltas.
         let t = std::time::Instant::now();
         for volta in 1..=100u32 {
             let _ = super::amostrar_com_motivos(volta % 5 == 1);
@@ -235,7 +184,6 @@ mod custo {
         }
         println!("100 amostras: {:?} ({:?} cada)", inicio.elapsed(), inicio.elapsed() / 100);
 
-        // Qual das chamadas custa? Sem isto, "otimizar" seria chute.
         let n = super::nvml().expect("nvml");
         let medir = |nome: &str, f: &dyn Fn()| {
             let t = std::time::Instant::now();

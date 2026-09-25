@@ -1,27 +1,6 @@
-// Detetive de travadas (2.9)
-//
-// "O jogo trava de vez em quando" é a queixa mais comum e a mais difícil de
-// atacar, porque na hora que a pessoa abre um otimizador a travada já passou.
-// Este módulo junta, NA MESMA JANELA DE TEMPO, cada quadro que demorou demais
-// e o que a máquina estava fazendo naquele meio segundo: disco, paginação,
-// memória de vídeo, o núcleo mais ocupado, a placa, e os programas em segundo
-// plano que mais usavam processador.
-//
-// O QUE ELE AFIRMA, E O QUE NÃO AFIRMA
-//
-// A telemetria é amostrada a cada meio segundo; uma travada dura dezenas de
-// milissegundos. Então o que se tem é COINCIDÊNCIA NO TEMPO, não causa
-// provada. A tela diz "provável" e mostra a força da coincidência:
-//
-//   - Alta: o recurso saltou muito acima do normal daquela partida na mesma
-//     amostra da travada, e isso se repete em pelo menos metade das travadas.
-//   - Média: o salto aconteceu, mas em menos da metade.
-//
-// Travada sem nenhum salto fica "sem causa visível" — que também é
-// informação: costuma ser compilação de shader ou o próprio jogo, e nenhum
-// ajuste de Windows resolve.
-//
-// Função pura: recebe intervalos e amostras, devolve a explicação.
+// Detetive de travadas: junta, na mesma janela, cada quadro que demorou demais e o que a máquina fazia naquele
+// meio segundo. É COINCIDÊNCIA NO TEMPO, não causa provada: a tela diz "provável" e a força (alta: salto em pelo
+// menos metade das travadas). Travada sem salto nenhum costuma ser shader ou o próprio jogo.
 
 use serde::Serialize;
 
@@ -29,17 +8,14 @@ use super::estatistica::mediana;
 use super::fluidez::{gravidade, Gravidade};
 use super::telemetria::Amostra;
 
-/// Uma travada, no tempo da medição.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Travada {
-    /// Milissegundos desde o primeiro quadro medido.
     pub instante_ms: f64,
     pub duracao_ms: f64,
     pub gravidade: Gravidade,
 }
 
-/// Acha as travadas perceptíveis ou piores. O instante é a soma dos
-/// intervalos até ali (o relógio dos próprios quadros).
+/// O instante é a soma dos intervalos até ali (o relógio dos próprios quadros).
 pub fn localizar(intervalos_ms: &[f64]) -> Vec<Travada> {
     let validos: Vec<f64> = intervalos_ms.iter().copied().filter(|x| x.is_finite() && *x > 0.0).collect();
     let Some(med) = mediana(&validos) else { return Vec::new() };
@@ -59,15 +35,10 @@ pub fn localizar(intervalos_ms: &[f64]) -> Vec<Travada> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(tag = "tipo")]
 pub enum Suspeito {
-    /// O disco demorou para responder.
     Disco,
-    /// O Windows leu memória do disco (falta de RAM).
     Paginacao,
-    /// A memória de vídeo encheu ou transbordou para a RAM.
     Vram,
-    /// Um núcleo do processador bateu no teto.
     ThreadPrincipal,
-    /// Um programa em segundo plano disparou o uso de processador.
     SegundoPlano { processo: String },
 }
 
@@ -81,7 +52,6 @@ pub enum Forca {
 pub struct Pista {
     pub suspeito: Suspeito,
     pub forca: Forca,
-    /// Em quantas das travadas este suspeito estava presente.
     pub travadas: usize,
 }
 
@@ -89,13 +59,11 @@ pub struct Pista {
 pub struct Investigacao {
     pub travadas: Vec<Travada>,
     pub pistas: Vec<Pista>,
-    /// Travadas sem nenhum suspeito na mesma amostra.
     pub sem_causa_visivel: usize,
 }
 
-/// Quanto acima do normal (mediana da janela) um valor precisa estar para
-/// contar como salto, e o mínimo absoluto — sem o mínimo, um disco a 1 ms
-/// que foi para 3 ms seria "triplicou".
+/// Salto é relativo à mediana da janela E acima de um mínimo absoluto: sem o mínimo, um disco de 1 ms que foi
+/// para 3 ms seria "triplicou".
 const SALTO: f64 = 3.0;
 const DISCO_MIN_MS: f64 = 20.0;
 const PAGINAS_MIN: f64 = 200.0;
@@ -112,8 +80,6 @@ fn salto(valor: Option<f64>, normal: Option<f64>, minimo: f64) -> bool {
     }
 }
 
-/// A amostra que cobre o instante (a primeira com `instante_ms` >= t, e a
-/// anterior a ela — meio segundo para cada lado).
 fn vizinhas(amostras: &[Amostra], inicio_ms: u64, t: f64) -> Vec<&Amostra> {
     let alvo = inicio_ms as f64 + t;
     let i = amostras.iter().position(|a| a.instante_ms as f64 >= alvo).unwrap_or(amostras.len());
@@ -127,8 +93,6 @@ fn vizinhas(amostras: &[Amostra], inicio_ms: u64, t: f64) -> Vec<&Amostra> {
     v
 }
 
-/// Investiga. `inicio_ms` é o instante (no relógio das amostras) em que a
-/// medição de quadros começou; `vram_total_mb` quando conhecido.
 pub fn investigar(intervalos_ms: &[f64], amostras: &[Amostra], inicio_ms: u64, vram_total_mb: Option<f64>) -> Investigacao {
     let travadas = localizar(intervalos_ms);
     let med = |f: &dyn Fn(&Amostra) -> Option<f64>| mediana(&amostras.iter().filter_map(f).collect::<Vec<_>>());
@@ -137,7 +101,6 @@ pub fn investigar(intervalos_ms: &[f64], amostras: &[Amostra], inicio_ms: u64, v
     let comp_n = med(&|a| a.vram_compartilhada_mb);
     let nucleo_n = med(&|a| a.cpu_nucleo_max_pct);
 
-    // Uso normal de cada processo na janela, para saber quem disparou.
     let mut normal_proc: std::collections::HashMap<&str, Vec<f64>> = Default::default();
     for a in amostras {
         for p in &a.processos {
@@ -218,7 +181,6 @@ mod testes {
         }
     }
 
-    /// 20 s a 10 ms por quadro, com travadas de 60 ms nos instantes pedidos.
     fn quadros_com_travadas(em_ms: &[f64]) -> Vec<f64> {
         let mut v = Vec::new();
         let mut t = 0.0;

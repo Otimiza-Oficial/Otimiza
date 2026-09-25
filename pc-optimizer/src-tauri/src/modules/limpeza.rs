@@ -1,57 +1,17 @@
-// A limpeza do sistema, item a item, com o preço de cada um escrito
-//
-// O QUE SEPARA ISTO DE UM "LIMPADOR DE PC"
-//
-// Três coisas, e nenhuma é opcional:
-//
-// 1. CADA ITEM DIZ O QUE SE PERDE. "Cache de miniaturas · 16 MB" não é
-//    informação suficiente para alguém decidir. "As miniaturas são redesenhadas
-//    na primeira vez que você abrir cada pasta" é. Um limpador que só mostra
-//    tamanho está pedindo uma decisão sobre uma coisa que ele não explicou.
-//
-// 2. TAMANHO É MEDIDO, E AUSENTE NÃO É ZERO. Pasta que não abriu sai com
-//    tamanho desconhecido, e não com "0 B" — que seria o produto afirmando que
-//    não há nada ali. É a mesma regra da telemetria, e vale aqui porque o
-//    número vira uma decisão de apagar.
-//
-// 3. O QUE É DO CLIENTE NÃO VEM MARCADO. A lixeira é a única coisa desta lista
-//    que contém arquivo que o cliente criou, e apagá-la não tem volta. Ela
-//    aparece, com o tamanho, e desmarcada — quem quiser marca.
-//
-// O QUE NÃO ESTÁ AQUI, E POR QUÊ
-//
-// PREFETCH. Ele aparece em toda lista de limpeza que existe, e é o contrário de
-// lixo: é a anotação de que arquivos cada programa lê ao abrir, que o Windows
-// usa para abrir mais rápido na próxima vez. Apagar deixa as próximas aberturas
-// mais lentas, e o Windows refaz sozinho em poucos dias. Está em
-// `windows::naofazemos`, com o motivo, para quem vier perguntar por que não
-// está aqui.
-//
-// CACHE DE SHADER. Não está nesta lista porque JÁ TEM TELA PRÓPRIA — limpar o
-// cache de shader depois de trocar o driver é uma das coisas mais úteis que o
-// produto faz, e ela tem contexto (qual placa, qual driver, quando) que uma
-// caixinha numa lista de limpeza jogaria fora.
-//
-// CACHE DE NAVEGADOR. Não está porque não é "lixo": é o que faz os sites que a
-// pessoa usa abrirem rápido. Apagar troca alguns megabytes por navegação lenta
-// pelos próximos dias, e o navegador tem a própria tela para isso.
+// A limpeza, item a item: cada item diz o que se perde; tamanho que não se leu é desconhecido, e não 0 B; o que
+// é do cliente (a lixeira) não vem marcado. Prefetch não está aqui (`naofazemos`); cache de shader e de navegador
+// têm tela própria.
 
 use serde::{Deserialize, Serialize};
 
-/// Um alvo da limpeza.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Alvo {
     pub id: &'static str,
     pub nome: &'static str,
-    /// O que aquilo é, em uma frase.
     pub o_que_e: &'static str,
-    /// O QUE SE PERDE ao apagar. Nunca vazio, nem para os inofensivos: "nada"
-    /// é uma resposta, e o cliente precisa lê-la para saber que perguntamos.
+    /// Nunca vazio, nem para os inofensivos: "nada" é uma resposta.
     pub custo: &'static str,
-    /// Vem marcado.
-    ///
-    /// Só o que não tem volta fica desmarcado. A regra é uma só: nada que
-    /// contenha arquivo do cliente vem marcado por padrão.
+    /// Nada que contenha arquivo do cliente vem marcado por padrão.
     pub padrao: bool,
 }
 
@@ -111,7 +71,6 @@ pub fn alvo_por_id(id: &str) -> Option<&'static Alvo> {
     ALVOS.iter().find(|a| a.id == id)
 }
 
-/// Um alvo com o tamanho que ele tem agora.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AlvoMedido {
     pub id: String,
@@ -119,15 +78,10 @@ pub struct AlvoMedido {
     pub o_que_e: String,
     pub custo: String,
     pub padrao: bool,
-    /// Bytes. `None` quando a pasta não pôde ser lida.
-    ///
-    /// AUSENTE NÃO É ZERO. "0 B" afirma que não há nada ali; ausente diz que
-    /// ninguém conseguiu olhar. A diferença decide se vale a pena rodar como
-    /// administrador e tentar de novo.
+    /// `None` quando não se leu: "0 B" afirmaria que não há nada ali.
     pub bytes: Option<u64>,
 }
 
-/// Os que vêm marcados de fábrica.
 pub fn marcados_por_padrao() -> Vec<String> {
     ALVOS
         .iter()
@@ -150,8 +104,6 @@ mod tests {
         assert_eq!(ids.len(), antes);
     }
 
-    /// A regra que separa isto de um limpador de PC: todo item diz o que se
-    /// perde, inclusive os que não perdem nada.
     #[test]
     fn todo_alvo_diz_o_que_se_perde() {
         for a in ALVOS {
@@ -161,9 +113,8 @@ mod tests {
         }
     }
 
-    /// A lixeira é a única coisa da lista com arquivo do cliente, e ela NÃO
-    /// pode vir marcada. Um limpador que esvazia a lixeira por padrão apaga
-    /// arquivo de gente que só queria liberar espaço de temporários.
+    /// A lixeira é a única com arquivo do cliente: marcada por padrão, apagaria arquivo de quem só queria liberar
+    /// temporários.
     #[test]
     fn a_lixeira_nunca_vem_marcada() {
         let lixeira = alvo_por_id("lixeira").expect("lixeira");
@@ -173,14 +124,12 @@ mod tests {
         assert!(!marcados_por_padrao().contains(&"lixeira".to_string()));
     }
 
-    /// Os relatórios de erro são o que um técnico usa para achar a causa de um
-    /// travamento. Apagá-los por padrão apagaria a prova junto com o lixo.
+    /// Os relatórios de erro são o que um técnico usa para achar a causa de um travamento.
     #[test]
     fn os_relatorios_de_erro_nao_vem_marcados() {
         assert!(!alvo_por_id("relatorios_de_erro").expect("alvo").padrao);
     }
 
-    /// O prefetch não pode voltar para esta lista por descuido.
     #[test]
     fn o_prefetch_nao_esta_na_limpeza() {
         assert!(

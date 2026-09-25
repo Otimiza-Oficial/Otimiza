@@ -1,45 +1,22 @@
-// Saúde dos quadros — o que a média de FPS esconde
-//
-// O jogador não reclama de "média baixa". Reclama de travada. Dois jogos a
-// 144 FPS de média podem ser um liso e outro engasgando a cada segundo: a
-// diferença está na CAUDA da distribuição dos tempos de quadro — nos
-// percentis altos, no 1% e no 0,1% piores, e em quantos quadros saíram muito
-// acima do normal.
-//
-// Este módulo recebe os intervalos entre quadros (em ms) e devolve tudo isso,
-// com uma regra fixa de quando cada número tem amostra para ser mostrado.
-// Número sem amostra não sai: vira `None`, e a tela diz "amostra curta".
-//
-// O cálculo do 1% low é o mesmo de `frames::estatistica` (média do 1% pior,
-// convertida em FPS) — existe um teste de equivalência lá garantindo isso.
+// A saúde dos quadros: a cauda que a média de FPS esconde (percentis, 1% e 0,1% piores, quadros muito acima do
+// normal). Número sem amostra não sai: vira `None`, e a tela diz "amostra curta". O 1% low é o mesmo de
+// `frames::estatistica`, com teste de equivalência lá.
 
 use serde::{Deserialize, Serialize};
 
 use super::estatistica::{coeficiente_de_variacao, desvio, mediana, percentil};
 
-/// Mínimo de quadros para 1% low, P95 e P99: 20 quadros no 1% pior.
 pub const AMOSTRA_PARA_1PCT: usize = 2_000;
-/// Mínimo para o 0,1% low: com 10.000 quadros, o 0,1% pior são 10 quadros.
-/// Abaixo disso o "0,1%" seria um ou dois quadros — sorte, não medida.
+/// Com menos que isso o "0,1% pior" seria um ou dois quadros: sorte, não medida.
 pub const AMOSTRA_PARA_01PCT: usize = 10_000;
 
-/// Gravidade de um quadro que demorou mais que o normal.
-///
-/// Os limites combinam RAZÃO (quanto acima da mediana daquela partida) e
-/// ATRASO ABSOLUTO (quantos ms a mais). Só a razão acusaria engasgo em todo
-/// quadro de um jogo a 400 FPS; só o absoluto nunca acusaria nada num jogo a
-/// 30 FPS. Os valores em ms seguem o tempo de um quadro a 60 Hz (16,7 ms),
-/// que é a unidade que o olho percebe como "pulou um quadro".
+/// RAZÃO sobre a mediana E ATRASO ABSOLUTO: só a razão acusaria todo quadro a 400 FPS; só o absoluto nunca
+/// acusaria nada a 30 FPS. Os ms seguem o quadro de 60 Hz (16,7 ms).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Gravidade {
-    /// ≥ 1,5× a mediana e ≥ 4 ms a mais. Quase sempre invisível sozinho;
-    /// em rajada, vira sensação de "jogo pesado".
     Micro,
-    /// ≥ 2× e ≥ 8 ms a mais: meio quadro de 60 Hz. Percebido em câmera girando.
     Perceptivel,
-    /// ≥ 3× e ≥ 16,7 ms a mais: um quadro inteiro de 60 Hz perdido.
     Severo,
-    /// ≥ 100 ms: a tela congela visivelmente.
     Extremo,
 }
 
@@ -72,14 +49,12 @@ pub struct ContagemDeEngasgos {
     pub extremo: u32,
 }
 
-/// A saúde dos quadros de uma medição.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SaudeDosQuadros {
     pub quadros: usize,
     pub duracao_s: f64,
     pub fps_medio: f64,
     pub frametime_mediano_ms: f64,
-    /// Desvio padrão do tempo de quadro. Quanto menor, mais regular.
     pub frametime_desvio_ms: Option<f64>,
     pub frametime_cv: Option<f64>,
     pub p95_ms: Option<f64>,
@@ -87,10 +62,8 @@ pub struct SaudeDosQuadros {
     pub low_1pct_fps: Option<f64>,
     pub low_01pct_fps: Option<f64>,
     pub engasgos: ContagemDeEngasgos,
-    /// Severos + extremos por minuto: o número que resume a travada sentida.
     pub engasgos_graves_por_minuto: f64,
-    /// Índice de fluidez, 0 a 100. É DERIVADO dos números acima (ver
-    /// `indice_de_fluidez`) e nunca aparece sem eles do lado.
+    /// DERIVADO dos números acima (`indice_de_fluidez`), e nunca aparece sem eles do lado.
     pub indice_de_fluidez: Option<f64>,
 }
 
@@ -101,7 +74,6 @@ fn low(ordenados_desc: &[f64], fracao: f64) -> Option<f64> {
     (media > 0.0).then(|| 1000.0 / media)
 }
 
-/// Calcula a saúde dos quadros a partir dos intervalos em ms.
 pub fn analisar(intervalos_ms: &[f64]) -> Option<SaudeDosQuadros> {
     let validos: Vec<f64> = intervalos_ms.iter().copied().filter(|x| x.is_finite() && *x > 0.0).collect();
     if validos.is_empty() {
@@ -157,16 +129,8 @@ pub fn analisar(intervalos_ms: &[f64]) -> Option<SaudeDosQuadros> {
     Some(saude)
 }
 
-/// Índice de fluidez, 0 a 100 — DERIVADO, e a fórmula fica à vista:
-///
-/// - 40% **consistência**: 1% low ÷ FPS médio. 1,0 quando o pior 1% é tão
-///   rápido quanto a média.
-/// - 40% **cauda**: mediana ÷ P99. 1,0 quando o quadro lento é igual ao
-///   típico.
-/// - 20% **travadas**: cai pela metade a cada ~2,8 engasgos graves por
-///   minuto (exp(-g/4)).
-///
-/// Não existe sem 1% low e P99: sem amostra, sem índice.
+/// 40% consistência (1% low ÷ média), 40% cauda (mediana ÷ P99), 20% travadas (exp(-g/4)). Sem 1% low e P99,
+/// sem índice.
 pub fn indice_de_fluidez(s: &SaudeDosQuadros) -> Option<f64> {
     let low1 = s.low_1pct_fps?;
     let p99 = s.p99_ms?;
@@ -196,7 +160,6 @@ mod testes {
         assert_eq!(s.p99_ms, Some(10.0));
         assert_eq!(s.engasgos, ContagemDeEngasgos::default());
         assert_eq!(s.indice_de_fluidez, Some(100.0));
-        // 3.000 quadros não bastam para o 0,1%.
         assert_eq!(s.low_01pct_fps, None);
     }
 
@@ -211,11 +174,10 @@ mod testes {
 
     #[test]
     fn mesma_media_fluidez_diferente() {
-        // Dois jogos com a MESMA média (~100 FPS): um regular, um com travadas.
         let liso = constante(10.0, 12_000);
         let mut travando = constante(9.8, 12_000);
         for i in (0..12_000).step_by(200) {
-            travando[i] = 40.0; // 60 travadas de 40 ms
+            travando[i] = 40.0;
         }
         let a = analisar(&liso).unwrap();
         let b = analisar(&travando).unwrap();
@@ -227,9 +189,7 @@ mod testes {
 
     #[test]
     fn gravidade_combina_razao_e_atraso() {
-        // 400 FPS (2,5 ms): um quadro de 5 ms é o dobro, mas só 2,5 ms a mais.
         assert_eq!(gravidade(5.0, 2.5), None);
-        // 60 FPS: 26 ms é ~1,56x e 9,3 ms a mais.
         assert_eq!(gravidade(26.0, 16.7), Some(Gravidade::Micro));
         assert_eq!(gravidade(34.0, 16.7), Some(Gravidade::Perceptivel));
         assert_eq!(gravidade(51.0, 16.7), Some(Gravidade::Severo));

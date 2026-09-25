@@ -1,42 +1,22 @@
-// ---------------------------------------------------------------------------
-// O RITMO DO GERADOR DE QUADROS — a parte que decide QUANDO mostrar cada quadro
-//
-// Um quadro gerado mostrado na hora errada é pior que quadro nenhum: a imagem
-// anda, para, anda — o "judder" que faz a geração parecer engasgo. Por isso a
-// agenda é função pura e testada, separada da GPU.
-//
-// Como funciona, para multiplicador M e intervalo real estimado d:
-//
-//   chega o quadro real N (instante a)
-//     a + 0·d/M   → gerado t = 1/M   (entre N-1 e N)
-//     a + 1·d/M   → gerado t = 2/M
-//     ...
-//     a + (M-1)·d/M → o próprio quadro real N
-//
-// O quadro real sai atrasado (M-1)/M de um intervalo. É o preço da
-// interpolação, e é exatamente o atraso que o laboratório declara como
-// ESTIMADO. Se o próximo quadro real chega antes de a agenda terminar, o que
-// sobrou é descartado: atraso acumulado nunca vira fila.
-// ---------------------------------------------------------------------------
+// O RITMO do gerador: QUANDO mostrar cada quadro. Na hora errada, o gerado vira "judder". Para multiplicador M
+// e intervalo d, os gerados saem em a + k·d/M e o real por último: o real atrasa (M-1)/M de um intervalo, o
+// atraso que o laboratório declara como ESTIMADO. Real que chega antes do fim descarta o resto: atraso nunca
+// vira fila.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Fase {
-    /// Quadro interpolado na posição `t` entre o real anterior (0) e o atual (1).
     Gerado(f32),
-    /// O quadro real atual, sem interpolação.
     Real,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Apresentacao {
-    /// Segundos no relógio de alta resolução.
     pub instante: f64,
     pub fase: Fase,
 }
 
-/// A agenda de apresentações para um quadro real que acabou de chegar.
 pub fn agenda(chegada: f64, intervalo: f64, multiplicador: u8) -> Vec<Apresentacao> {
     let m = multiplicador.clamp(1, 8) as usize;
     if m == 1 || intervalo <= 0.0 {
@@ -50,11 +30,7 @@ pub fn agenda(chegada: f64, intervalo: f64, multiplicador: u8) -> Vec<Apresentac
     v
 }
 
-/// O multiplicador que cabe na tela.
-///
-/// Quadro gerado além da taxa do monitor não aparece: vira descarte ou rasgo e
-/// custa placa de vídeo à toa. Com o jogo a 96 FPS num monitor de 180 Hz, 2×
-/// daria 192 — então fica 1× (só o real) até o jogo cair abaixo de 90.
+/// Gerado além da taxa do monitor não aparece: vira descarte ou rasgo e custa placa à toa.
 pub fn multiplicador_que_cabe(pedido: u8, intervalo: f64, hz: u32) -> u8 {
     if hz == 0 || intervalo <= 0.0 {
         return pedido.max(1);
@@ -63,19 +39,13 @@ pub fn multiplicador_que_cabe(pedido: u8, intervalo: f64, hz: u32) -> u8 {
     pedido.min(cabe).max(1)
 }
 
-/// Acima desta fração de imagem ruim, o quadro gerado não sai.
 pub const FRACAO_RUIM_MAXIMA: f32 = 0.06;
 
-/// O quadro gerado pode ir à tela?
 pub fn quadro_aprovado(fracao_ruim: Option<f32>) -> bool {
     fracao_ruim.is_some_and(|f| f.is_finite() && f <= FRACAO_RUIM_MAXIMA)
 }
 
-/// Estimativa do intervalo entre quadros reais.
-///
-/// Média exponencial com rejeição de extremos: uma tela de carregamento de
-/// dois segundos não pode virar "o jogo roda a 0,5 FPS" e espalhar quadros
-/// gerados por dois segundos.
+/// Média exponencial com rejeição de extremos: uma tela de carregamento de 2 s não pode virar "0,5 FPS".
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Intervalo {
     pub estimado: Option<f64>,
@@ -88,20 +58,16 @@ impl Default for Intervalo {
     }
 }
 
-/// Acima disto (menos de 20 FPS reais) não se gera nada: a interpolação entre
-/// quadros tão distantes vira borrão, e o atraso dobra.
+/// Abaixo de 20 FPS reais não se gera: a interpolação vira borrão e o atraso dobra.
 pub const INTERVALO_MAXIMO: f64 = 1.0 / 20.0;
-/// Abaixo disto (mais de 500 FPS) é duplicata ou ruído de captura.
 pub const INTERVALO_MINIMO: f64 = 1.0 / 500.0;
 
 impl Intervalo {
-    /// Registra a chegada de um quadro real. Devolve o intervalo medido.
     pub fn registrar(&mut self, chegada: f64) -> Option<f64> {
         let medido = self.ultimo_real.map(|u| chegada - u);
         self.ultimo_real = Some(chegada);
         let d = medido?;
         if !(INTERVALO_MINIMO..=INTERVALO_MAXIMO).contains(&d) {
-            // Pausa longa zera a estimativa: ao voltar, recomeça do zero.
             if d > INTERVALO_MAXIMO {
                 self.estimado = None;
             }
@@ -109,8 +75,7 @@ impl Intervalo {
         }
         self.estimado = Some(match self.estimado {
             None => d,
-            // Mudança grande de ritmo (entrou numa área pesada) segue rápido;
-            // oscilação pequena é suavizada.
+            // Mudança grande de ritmo segue rápido; oscilação pequena é suavizada.
             Some(e) if (d - e).abs() > e * 0.5 => d,
             Some(e) => e * 0.8 + d * 0.2,
         });
@@ -122,7 +87,6 @@ impl Intervalo {
     }
 }
 
-/// Retângulo em pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Retangulo {
     pub x: i32,
@@ -131,11 +95,7 @@ pub struct Retangulo {
     pub altura: i32,
 }
 
-/// O pedaço da imagem do monitor que é a área do jogo.
-///
-/// `cliente` e `monitor` em coordenadas da área de trabalho. Devolve o recorte
-/// em coordenadas do monitor, já limitado a ele. `None` quando o jogo está
-/// fora do monitor ou pequeno demais para valer a pena.
+/// Coordenadas da área de trabalho; devolve o recorte no monitor. `None` fora dele ou pequeno demais.
 pub fn recorte(cliente: Retangulo, monitor: Retangulo) -> Option<Retangulo> {
     let x0 = cliente.x.max(monitor.x);
     let y0 = cliente.y.max(monitor.y);
@@ -148,23 +108,18 @@ pub fn recorte(cliente: Retangulo, monitor: Retangulo) -> Option<Retangulo> {
     Some(Retangulo { x: x0 - monitor.x, y: y0 - monitor.y, largura, altura })
 }
 
-/// Tamanhos das texturas de trabalho: 1/4 e 1/16 da imagem (mínimo 1 pixel).
 pub fn niveis(largura: i32, altura: i32) -> ((u32, u32), (u32, u32), (u32, u32)) {
     let d = |v: i32, f: i32| ((v + f - 1) / f).max(1) as u32;
     ((d(largura, 4), d(altura, 4)), (d(largura, 8), d(altura, 8)), (d(largura, 16), d(altura, 16)))
 }
 
-/// Contadores do gerador, para a tela e para o laboratório.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct Contadores {
     pub reais: u64,
     pub gerados: u64,
     pub descartados: u64,
-    /// Quadros reais em que a geração foi recusada pela nota (movimento que
-    /// não dá para interpolar sem inventar).
     #[serde(default)]
     pub recusados: u64,
-    /// Tempo médio de GPU por quadro gerado, em ms (do envio ao fim da cópia).
     pub custo_ms: f64,
 }
 
@@ -203,11 +158,9 @@ mod tests {
         assert_eq!(i.registrar(0.0), None);
         i.registrar(1.0 / 60.0);
         assert!((i.estimado.unwrap() - 1.0 / 60.0).abs() < 1e-9);
-        // Oscilação pequena: suavizada.
         i.registrar(1.0 / 60.0 + 0.018);
         let e = i.estimado.unwrap();
         assert!(e > 1.0 / 60.0 && e < 0.018);
-        // Queda para 30 FPS: segue na hora.
         let agora = i.ultimo_real.unwrap();
         i.registrar(agora + 1.0 / 30.0);
         assert!((i.estimado.unwrap() - 1.0 / 30.0).abs() < 1e-9);
