@@ -7444,7 +7444,7 @@ function sugerirLimiteParaVrr(hz: number) {
 
   text(
     "nvlimite-vrr",
-    `Com G-Sync ou FreeSync ligado, o limite certo neste monitor de ${hz} Hz é ${alvo}: acima da taxa do monitor o G-Sync vira V-Sync comum, com atraso. Sem G-Sync ou FreeSync, não use.`,
+    `Com G-Sync ou FreeSync ligado, o limite certo neste monitor de ${hz} Hz é ${alvo}: acima da taxa do monitor o G-Sync vira V-Sync comum, com atraso. Sem G-Sync ou FreeSync, não use. E dentro do jogo, se o menu tiver NVIDIA Reflex, deixe ligado: com a placa no limite ele esvazia a fila de quadros e o controle responde mais rápido. Use "Ligado", não "Ligado + Boost", que só esquenta a placa.`,
   );
   element("nvlimite-vrr").hidden = false;
   marcarLimiteEscolhido();
