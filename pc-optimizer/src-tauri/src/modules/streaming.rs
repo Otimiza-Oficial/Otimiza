@@ -1,62 +1,14 @@
-// Laboratório de streaming de assets
-//
-// A PERGUNTA
-//
-// "O jogo trava quando eu ando pelo mapa" é a reclamação mais comum que existe,
-// e a resposta padrão da internet é "instala no SSD". Às vezes é isso. Muitas
-// vezes não é, e a pessoa passa uma tarde movendo oitenta gigabytes para
-// continuar travando igual.
-//
-// O QUE ESTE MÓDULO RECUSA A FAZER
-//
-// Recusa concluir pela configuração. O produto JÁ sabe em que disco cada jogo
-// mora (`windows::discodojogo`), e essa informação sozinha não prova nada: um
-// jogo num disco mecânico que carrega o mapa inteiro na abertura roda liso a
-// tarde toda. "Está num HD" é um fato, não um diagnóstico — do mesmo jeito que
-// "a memória de vídeo está em 95%" não era.
-//
-// O que prova é a COINCIDÊNCIA: os trancos caindo no instante em que o disco
-// está ocupado, e não com o disco quieto. Isso é medido durante a partida
-// (`frametime.stutters_with_disk`), e é o único sinal aqui que autoriza
-// apontar o disco.
-//
-// AS TRÊS RESPOSTAS QUE O MESMO SINTOMA ESCONDE
-//
-// Trancos coincidindo com disco NÃO querem dizer "asset chegando devagar". Há
-// três causas diferentes atrás do mesmo gráfico, e elas pedem coisas opostas:
-//
-//   1. A MEMÓRIA ACABOU e o Windows está trocando página com o disco. Mover o
-//      jogo para um disco mais rápido ameniza o sintoma e não toca na causa.
-//      Esta é verificada PRIMEIRO, justamente porque é a que mais se disfarça
-//      das outras duas.
-//   2. O JOGO está lendo asset de uma mídia lenta. Aqui mover resolve, e é a
-//      única das três em que mover resolve.
-//   3. O DISCO É RÁPIDO e mesmo assim está ocupado na hora do tranco. Então
-//      não é a mídia: é outra coisa mexendo no disco durante a partida —
-//      antivírus varrendo, gravação de vídeo, shader sendo compilado para o
-//      cache. Mover o jogo de disco não muda nada disto.
-//
-// Um laboratório que devolvesse "instale no SSD" nos três casos estaria certo
-// em um e cobrando à toa nos outros dois.
-//
-// E DEPOIS DE MOVER?
-//
-// O módulo não promete quantos quadros a mudança traz. Ninguém sabe isso antes
-// de medir, e um número chutado aqui viraria promessa. O que ele faz é apontar
-// o caminho que o próprio produto já tem: guardar a linha de base antes
-// (`baseline`), repetir a medição depois e comparar com a incerteza medida
-// (`repeticoes`). A resposta honesta para "quanto melhora?" é "vamos medir".
+// Laboratório de streaming de assets: "trava quando ando pelo mapa". Não conclui pela configuração (jogo no HD
+// é fato, não diagnóstico): o que prova é a COINCIDÊNCIA dos trancos com disco ocupado. Aí separa três causas
+// com respostas opostas: memória acabando (checada PRIMEIRO; mover não resolve), mídia lenta (só aqui mover
+// resolve), disco rápido e ocupado por outra coisa. Não promete quadros: aponta como medir depois.
 
 use serde::{Deserialize, Serialize};
 
 use super::gargalo::{ENGASGOS_POR_MINUTO, TRANCOS_COM_DISCO_PCT};
 use super::telemetry::Telemetry;
 
-/// O tipo de mídia onde o jogo mora.
-///
-/// Espelha `windows::discodojogo::Midia` de propósito, em vez de importá-lo: o
-/// laboratório é uma função pura sobre números e precisa rodar e ser testado em
-/// qualquer sistema, inclusive no que não tem o leitor de unidades.
+/// Espelha `windows::discodojogo::Midia` em vez de importar: o laboratório é puro e roda em qualquer sistema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Midia {
     Ssd,
@@ -76,37 +28,20 @@ impl From<super::windows::discodojogo::Midia> for Midia {
     }
 }
 
-/// Acima desta latência por transferência o disco está entregando devagar.
-///
-/// Dez milissegundos. Um NVMe responde em frações de milissegundo e um SSD
-/// comum em menos de um; um prato girando com a cabeça procurando trilha passa
-/// tranquilamente de quinze. Dez fica entre os dois mundos sem encostar em
-/// nenhum, de modo que um SSD saudável nunca cai aqui por oscilação.
+/// SSD responde em menos de 1 ms, HD passa de 15: dez fica entre os dois sem encostar em nenhum.
 pub const LATENCIA_DE_DISCO_LENTO_MS: f64 = 10.0;
 
-/// A partir de quanto a memória do sistema está apertada o bastante para
-/// explicar a atividade de disco.
-///
-/// Os mesmos 90% que `gargalo` usa para memória, e pela mesma razão: o sistema
-/// começa a trocar página bem antes de o contador encostar no topo.
+/// Os mesmos 90% do `gargalo`: o sistema troca página antes de encostar no topo.
 pub const MEMORIA_QUE_TROCA_PAGINA: f64 = 90.0;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Veredito {
-    /// Faltou medida. O que faltou está em `falta`.
     SemMedicao,
-    /// A partida medida não teve trancos que valessem investigar.
     SemEngasgos,
-    /// Há trancos, e eles NÃO caem junto com atividade de disco.
-    ///
-    /// Resposta valiosa por si: fecha a porta do disco e devolve a pergunta ao
-    /// classificador de gargalo, em vez de mandar mover oitenta gigabytes.
+    /// Fecha a porta do disco e devolve a pergunta ao gargalo.
     NaoEODisco,
-    /// A memória acabou e o sistema está trocando página com o disco.
     TrocaDeMemoria,
-    /// O jogo está lendo asset de uma mídia lenta.
     AssetsDeMidiaLenta,
-    /// O disco dá conta, e mesmo assim está ocupado na hora do tranco.
     OutraCoisaNoDisco,
 }
 
@@ -114,32 +49,22 @@ pub enum Veredito {
 pub struct Analise {
     pub veredito: Veredito,
     pub engasgos_por_minuto: Option<f64>,
-    /// Proporção dos trancos que caíram com o disco ocupado.
     pub coincidencia_pct: Option<f64>,
     pub latencia_ms: Option<f64>,
     pub memoria_pct: Option<f64>,
     pub midia: Option<Midia>,
-    /// O que faltou para concluir. Vazio quando nada faltou.
     pub falta: Vec<String>,
     pub explicacao: String,
-    /// O que fazer em seguida, quando há o que fazer.
     pub proximo_passo: Option<String>,
 }
 
-/// Como medir de novo depois de mexer.
-///
-/// Sai junto do passo que muda alguma coisa, e não como conselho solto: a
-/// diferença entre um produto que sugere e um que comprova é esta frase estar
-/// grudada na sugestão.
+/// Grudado na sugestão: é a diferença entre sugerir e comprovar.
 const COMO_COMPROVAR: &str = "Antes de mover, guarde a linha de base desta máquina; depois de \
                               mover, repita a medição de quadros e compare. Só a comparação com \
                               repetição diz se a mudança valeu — uma partida antes e uma depois \
                               não distinguem melhora de variação normal.";
 
-/// Analisa o streaming de assets com o que houver medido.
-///
-/// `midia` é onde o jogo mora, quando se sabe. Ela NUNCA conclui sozinha: só
-/// entra depois de a coincidência com o disco ter sido medida.
+/// `midia` NUNCA conclui sozinha: só entra depois da coincidência medida.
 pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
     let engasgos = t.value("frametime.stutters_per_minute");
     let coincidencia = t.value("frametime.stutters_with_disk");
@@ -160,7 +85,6 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         proximo_passo,
     };
 
-    // ---- há medição de partida?
     let Some(engasgos_medidos) = engasgos else {
         falta.push("frametime.stutters_per_minute".to_string());
         return base(
@@ -177,7 +101,6 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         );
     };
 
-    // ---- os trancos chegam a incomodar?
     if engasgos_medidos < ENGASGOS_POR_MINUTO {
         return base(
             Veredito::SemEngasgos,
@@ -190,7 +113,6 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         );
     }
 
-    // ---- eles caem junto com o disco?
     let Some(coincidencia) = coincidencia else {
         falta.push("frametime.stutters_with_disk".to_string());
         return base(
@@ -218,15 +140,7 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         );
     }
 
-    // Daqui para baixo: os trancos coincidem com o disco. Falta separar as três
-    // causas que produzem exatamente esse gráfico.
-
-    // ---- 1. a memória acabou?
-    //
-    // PRIMEIRO, e não por último. Com a memória no fim, o disco está ocupado
-    // porque o Windows está trocando página — a atividade de disco é
-    // consequência, não causa. Concluir "asset lento" aqui mandaria mover
-    // oitenta gigabytes para amenizar um sintoma cuja causa é RAM.
+    // PRIMEIRO: com a memória no fim, o disco ocupado é consequência, não causa.
     if memoria.is_some_and(|m| m >= MEMORIA_QUE_TROCA_PAGINA) {
         let m = memoria.unwrap_or_default();
         return base(
@@ -250,13 +164,7 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         falta.push("ram.usage".to_string());
     }
 
-    // ---- 2. a mídia é lenta?
-    //
-    // Duas evidências independentes dizem a mesma coisa e são aceitas as duas:
-    // a latência medida AGORA, e o tipo de mídia lido do sistema. A latência é
-    // a melhor das duas porque mede o disco trabalhando; o tipo de mídia vale
-    // quando a latência não foi lida ou quando o disco está quieto neste
-    // instante.
+    // Latência medida agora (melhor) ou tipo de mídia lido do sistema: as duas valem.
     let latencia_ruim = latencia.is_some_and(|ms| ms >= LATENCIA_DE_DISCO_LENTO_MS);
     let midia_lenta = midia == Some(Midia::Mecanico);
 
@@ -291,7 +199,6 @@ pub fn analisar(t: &Telemetry, midia: Option<Midia>) -> Analise {
         falta.push("o disco onde o jogo está instalado".to_string());
     }
 
-    // ---- 3. disco rápido e ocupado mesmo assim
     base(
         Veredito::OutraCoisaNoDisco,
         format!(
@@ -332,7 +239,6 @@ mod tests {
         t.finish(0)
     }
 
-    /// Uma partida medida com muitos trancos que coincidem com disco.
     fn partida_ruim() -> Vec<(&'static str, f64)> {
         vec![
             ("frametime.stutters_per_minute", 14.0),
@@ -340,7 +246,6 @@ mod tests {
         ]
     }
 
-    /// A regra que o módulo existe para sustentar: configuração não conclui.
     #[test]
     fn jogo_em_disco_mecanico_sem_medicao_nao_vira_diagnostico() {
         let a = analisar(&com(&[]), Some(Midia::Mecanico));
@@ -349,7 +254,6 @@ mod tests {
         assert!(a
             .falta
             .contains(&"frametime.stutters_per_minute".to_string()));
-        // E não sugere mover nada.
         assert!(
             !a.proximo_passo
                 .as_deref()
@@ -371,7 +275,6 @@ mod tests {
         assert!(a.proximo_passo.is_none());
     }
 
-    /// Trancos sem coincidência fecham a porta do disco.
     #[test]
     fn trancos_que_nao_coincidem_com_disco_devolvem_a_pergunta() {
         let a = analisar(
@@ -386,7 +289,6 @@ mod tests {
         assert!(a.proximo_passo.is_none(), "não há o que mover");
     }
 
-    /// Sem o instante dos trancos, o disco não é apontado nem absolvido.
     #[test]
     fn sem_a_coincidencia_nao_conclui() {
         let a = analisar(
@@ -400,12 +302,6 @@ mod tests {
             .contains(&"frametime.stutters_with_disk".to_string()));
     }
 
-    /// A memória é checada ANTES da mídia.
-    ///
-    /// Este é o teste que impede o erro caro: um jogo num disco mecânico, com
-    /// os trancos coincidindo com disco, numa máquina sem memória. Concluir
-    /// "mova o jogo" aqui manda a pessoa passar a tarde movendo oitenta
-    /// gigabytes para tratar um sintoma de RAM.
     #[test]
     fn memoria_no_fim_ganha_da_midia_lenta() {
         let mut pares = partida_ruim();
@@ -433,11 +329,9 @@ mod tests {
         assert_eq!(a.veredito, Veredito::AssetsDeMidiaLenta);
         let passo = a.proximo_passo.expect("passo");
         assert!(passo.contains("Mover"));
-        // E o passo vem grudado em como comprovar que valeu.
         assert!(passo.contains("linha de base"), "{passo}");
     }
 
-    /// A latência medida basta, mesmo sem saber onde o jogo mora.
     #[test]
     fn latencia_ruim_conclui_sem_o_tipo_de_midia() {
         let mut pares = partida_ruim();
@@ -450,7 +344,6 @@ mod tests {
         assert!(a.explicacao.contains("31.0 ms"), "{}", a.explicacao);
     }
 
-    /// Disco rápido e ocupado é outra resposta, e é a que evita a mudança inútil.
     #[test]
     fn disco_rapido_e_ocupado_nao_manda_mover_nada() {
         let mut pares = partida_ruim();
@@ -465,7 +358,6 @@ mod tests {
         assert!(a.explicacao.contains("shader"), "{}", a.explicacao);
     }
 
-    /// Mídia que não deu para ler não vira SSD nem mecânico.
     #[test]
     fn midia_ilegivel_nao_e_absolvida_nem_condenada() {
         let mut pares = partida_ruim();
@@ -474,12 +366,9 @@ mod tests {
 
         let a = analisar(&com(&pares), Some(Midia::NaoDeuParaLer));
 
-        // O disco responde rápido, então a mídia não é o problema — mas a
-        // ausência do dado continua declarada.
         assert_eq!(a.veredito, Veredito::OutraCoisaNoDisco);
     }
 
-    /// O que faltou é sempre dito, mesmo quando deu para concluir.
     #[test]
     fn a_conclusao_nao_apaga_o_que_faltou() {
         let a = analisar(&com(&partida_ruim()), None);
