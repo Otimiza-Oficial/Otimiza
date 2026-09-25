@@ -1,37 +1,7 @@
-// A licença
-//
-// COMO ISTO FUNCIONA, EM UMA FRASE
-//
-// O dono assina uma licença com uma chave que só ele tem; o programa confere a
-// assinatura com uma chave que qualquer um pode ver. Assinar e conferir são
-// operações diferentes, e a chave que viaja no instalador só sabe conferir.
-//
-// POR QUE NÃO É UM SEGREDO DENTRO DO PROGRAMA
-//
-// O jeito comum de fazer chave de licença é guardar no programa o segredo que
-// gera a chave, e comparar. O problema é que esse segredo viaja dentro do
-// executável que o cliente baixa: quem abrir o arquivo acha o segredo e escreve
-// um gerador. Foi assim que praticamente todo software dos anos 90 foi
-// pirateado.
-//
-// Aqui o programa carrega apenas a chave PÚBLICA. Ela confere assinatura e não
-// cria nenhuma. Extraí-la do executável não serve para nada.
-//
-// O FORMATO DA CHAVE
-//
-// Duas partes separadas por ponto, no mesmo espírito de um token da web:
-//
-//     <dados em base64>.<assinatura em base64>
-//
-// Os dados são legíveis por quem quiser olhar — não há segredo neles. O que
-// impede alteração é a assinatura: mudar um caractere dos dados invalida.
-//
-// O QUE ISTO NÃO FAZ, E PRECISA ESTAR ESCRITO
-//
-// Licença conferida no PC do cliente pode ser contornada editando o executável
-// e arrancando a conferência. Nenhuma é inquebrável. O que esta entrega é
-// impedir o repasse casual — a chave do vizinho não abre aqui — e exigir
-// habilidade real de quem quiser quebrar.
+// Licença por assinatura: o dono assina com a chave privada; o programa só carrega a PÚBLICA, que confere e não
+// cria (segredo dentro do executável vira gerador). Chave `<dados base64>.<assinatura base64>`: os dados são
+// legíveis, a assinatura impede alteração. Não é inquebrável (dá para arrancar a conferência do executável):
+// impede o repasse casual.
 
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -39,71 +9,33 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// A chave pública do Otimiza, em base64.
-///
-/// PODE aparecer no código, no executável e em qualquer lugar público: é o que
-/// confere assinatura, não o que cria. A chave privada correspondente vive na
-/// máquina do dono e no segredo do bot, e nunca entra neste repositório.
-///
-/// Instalada em 29/08/2026, gerada pelo dono. É a chave de produção.
-///
-/// Trocar este valor invalida TODAS as licenças já emitidas: as assinaturas
-/// que estão com os clientes foram feitas pela privada correspondente a esta,
-/// e nenhuma outra as reconhece. Trocar antes da primeira venda não custa
-/// nada; depois, obriga a reemitir a chave de todo mundo.
-///
-/// Esta é a TERCEIRA. As duas anteriores vazaram do mesmo jeito, com quinze
-/// minutos de diferença: a privada foi colada em `.env.example` — arquivo
-/// versionado, ao contrário do `.env` — e apareceu numa captura de tela.
-///
-/// Duas vezes seguidas não é desatenção; é projeto que pede a coisa errada. O
-/// gerador imprimia as duas metades e mandava copiar cada uma para o seu
-/// lugar, e um segredo que passa pela tela e pela área de transferência até um
-/// arquivo de nome quase idêntico ao errado vai parar no arquivo errado.
-///
-/// Por isso o gerador mudou: a privada agora é escrita direto no `.env` do bot
-/// e nunca é impressa. Só esta pública aparece — e ela pode ser vista por
-/// qualquer um. Nenhuma venda tinha acontecido, então as duas trocas custaram
-/// zero.
+/// Pode ser pública. A privada vive na máquina do dono e no segredo do bot, nunca neste repositório.
+/// Trocar este valor invalida TODAS as licenças emitidas. É a terceira: as duas anteriores vazaram pelo
+/// `.env.example` (versionado) e numa captura de tela, e por isso o gerador escreve a privada direto no `.env` do
+/// bot e nunca a imprime.
 const CHAVE_PUBLICA: &str = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
-/// O que a licença afirma.
-///
-/// Tudo aqui é público: qualquer um que tenha a chave pode ler estes campos. O
-/// que a assinatura garante não é sigilo, é que ninguém mudou nada.
+/// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Dados {
-    /// O identificador da máquina para a qual esta licença foi emitida.
     /// É o que faz a chave não valer em outro PC.
     pub maquina: String,
-    /// Nome ou identificação do comprador. Só para o dono saber de quem é.
     pub comprador: String,
-    /// Quando foi emitida, em "AAAA-MM-DD".
     pub emitida: String,
-    /// Quando expira, quando expira. `None` é vitalícia.
+    /// `None` é vitalícia.
     pub expira: Option<String>,
 }
 
-/// Por que a licença não vale.
-///
-/// Cada motivo tem um texto próprio porque o cliente que pagou merece saber a
-/// diferença entre "digitei errado" e "esta chave é de outro PC".
 #[derive(Debug, Clone, PartialEq)]
 pub enum Recusa {
-    /// Não tem o formato de uma chave.
     Malformada,
-    /// A assinatura não confere. Ou foi alterada, ou não saiu daqui.
     AssinaturaInvalida,
-    /// A chave é válida, mas foi emitida para outra máquina.
     OutraMaquina { emitida_para: String },
-    /// A chave venceu.
     Expirada { em: String },
-    /// Não foi possível identificar esta máquina.
     MaquinaDesconhecida,
 }
 
 impl Recusa {
-    /// O que o cliente lê na tela.
     pub fn explicacao(&self) -> String {
         match self {
             Recusa::Malformada => "Esta chave não está completa. Confira se copiou tudo, \
@@ -130,14 +62,10 @@ impl Recusa {
     }
 }
 
-/// Separa a chave nas duas partes e devolve os bytes.
-///
-/// **Função pura.** Não confere assinatura — só desmonta.
 pub fn desmontar(chave: &str) -> Result<(Vec<u8>, Vec<u8>), Recusa> {
     let motor = base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-    // Espaço e quebra de linha entram sempre que alguém copia de uma mensagem
-    // do Discord. Tirar é mais gentil que recusar.
+    // Espaço e quebra de linha vêm de toda cópia do Discord: tirar é mais gentil que recusar.
     let limpa: String = chave.chars().filter(|c| !c.is_whitespace()).collect();
 
     let (dados, assinatura) = limpa.split_once('.').ok_or(Recusa::Malformada)?;
@@ -152,26 +80,12 @@ pub fn desmontar(chave: &str) -> Result<(Vec<u8>, Vec<u8>), Recusa> {
     Ok((dados, assinatura))
 }
 
-/// Confere a chave contra uma máquina e uma data.
-///
-/// **Função pura**, e é de propósito: a decisão que separa cliente pagante de
-/// não pagante precisa ser testável sem depender da máquina de quem roda os
-/// testes nem da data de hoje.
+/// **Pura**: a decisão entre pagante e não pagante precisa ser testável sem a máquina nem a data de hoje.
 pub fn conferir(chave: &str, maquina: &str, hoje: &str) -> Result<Dados, Recusa> {
     conferir_com(chave_publica()?, chave, maquina, hoje)
 }
 
-/// O mesmo de [`conferir`], mas recebendo a chave pública em vez de usar a
-/// constante.
-///
-/// Existe por causa dos testes. Um teste que prove que a assinatura está sendo
-/// conferida de verdade precisa ASSINAR alguma coisa, e assinar exige a chave
-/// privada — que não pode viver neste arquivo. Amarrar o teste à
-/// [`CHAVE_PUBLICA`] também não serve: no dia em que ela for trocada, os testes
-/// quebrariam sem nada de errado ter acontecido.
-///
-/// Com a chave como parâmetro, o teste gera o próprio par, assina, confere, e
-/// não depende de nenhuma chave de verdade.
+/// Chave por parâmetro para o teste gerar o próprio par e assinar, sem depender da chave de verdade.
 pub fn conferir_com(
     publica: VerifyingKey,
     chave: &str,
@@ -184,9 +98,7 @@ pub fn conferir_com(
 
     let (dados_bytes, assinatura_bytes) = desmontar(chave)?;
 
-    // A ORDEM IMPORTA. A assinatura é conferida ANTES de qualquer campo ser
-    // lido como verdade. Ler primeiro e conferir depois deixaria o programa
-    // tomar decisão com dado que ainda não se sabe se é legítimo.
+    // A ORDEM IMPORTA: a assinatura é conferida ANTES de qualquer campo ser lido como verdade.
 
     let assinatura: [u8; 64] = assinatura_bytes
         .try_into()
@@ -206,8 +118,7 @@ pub fn conferir_com(
     }
 
     if let Some(vencimento) = &dados.expira {
-        // Data em "AAAA-MM-DD" compara certo como texto, e não precisa de
-        // biblioteca de calendário para isso.
+        // "AAAA-MM-DD" compara certo como texto.
         if hoje > vencimento.as_str() {
             return Err(Recusa::Expirada {
                 em: vencimento.clone(),
@@ -228,16 +139,12 @@ fn chave_publica() -> Result<VerifyingKey, Recusa> {
     VerifyingKey::from_bytes(&bytes).map_err(|_| Recusa::AssinaturaInvalida)
 }
 
-// ------------------------------------------------------------------- em disco
-
-/// A licença guardada, do jeito que fica em disco.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Guardada {
     pub chave: String,
 }
 
 impl Guardada {
-    /// Mesmo padrão dos outros cinco arquivos do produto.
     fn path() -> PathBuf {
         let base = std::env::var("APPDATA")
             .or_else(|_| std::env::var("HOME"))
@@ -247,24 +154,16 @@ impl Guardada {
         base.join("pc-optimizer").join("licenca.json")
     }
 
-    /// Lê a licença gravada, separando "não existe" de "não consegui ler".
-    ///
-    /// A DIFERENÇA É O CLIENTE QUE PAGOU. Antes, qualquer falha caía em
-    /// `unwrap_or_default()` — chave vazia, `ativa: false`, portão de ativação
-    /// na cara de quem já comprou, sem nenhuma indicação de que existe uma
-    /// licença gravada ali. Ele abriria um chamado dizendo "paguei e o programa
-    /// não abre", e ninguém saberia por quê.
+    /// `unwrap_or_default()` punha o portão de ativação na cara de quem já comprou, sem dizer que havia licença
+    /// gravada.
     pub fn load() -> Leitura {
         Self::ler(&Self::path())
     }
 
-    /// Caminho por parâmetro para os testes não mexerem no `%APPDATA%` de quem
-    /// roda a esteira — inclusive no do dono.
+    /// Caminho por parâmetro: os testes não mexem no `%APPDATA%` de quem roda a esteira.
     fn ler(caminho: &Path) -> Leitura {
         let bruto = match fs::read_to_string(caminho) {
             Ok(bruto) => bruto,
-            // Não existe arquivo: é o estado de quem ainda não ativou, e é o
-            // caminho normal de toda primeira abertura.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return Leitura::Ok(Guardada::default())
             }
@@ -281,11 +180,7 @@ impl Guardada {
         Self::gravar(&Self::path(), self)
     }
 
-    /// Gravação ATÔMICA: escreve ao lado e renomeia por cima.
-    ///
-    /// Mesmo motivo do histórico de mudanças. A diferença é o preço: um
-    /// `licenca.json` truncado por uma queda de energia tranca o produto para
-    /// quem pagou, e a única saída é o suporte.
+    /// ATÔMICA: um `licenca.json` truncado por queda de energia tranca o produto para quem pagou.
     fn gravar(caminho: &Path, guardada: &Guardada) -> Result<(), String> {
         if let Some(pasta) = caminho.parent() {
             fs::create_dir_all(pasta)
@@ -305,30 +200,21 @@ impl Guardada {
     }
 }
 
-/// O que saiu da tentativa de ler a licença gravada.
-///
-/// Existe para o portão poder dizer a verdade. `Ok` com chave vazia é "nunca
-/// ativou"; `Ilegivel` é "existe algo aqui e eu não consegui ler" — e tratar os
-/// dois igual é o que punia o cliente pagante por um arquivo truncado.
+/// `Ok` com chave vazia é "nunca ativou"; `Ilegivel` é "existe e não consegui ler".
 pub enum Leitura {
     Ok(Guardada),
     Ilegivel(String),
 }
 
-/// O estado da licença desta máquina, para a tela.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Estado {
     pub ativa: bool,
-    /// O código desta máquina, que o cliente manda no Discord.
     pub maquina: String,
-    /// De onde o código foi tirado, em português. A tela mostra isso porque
     /// "OTZ-WPYY-0J4F-77AB" sozinho não explica nada a quem está comprando.
     pub origem: String,
-    /// Se este código sobrevive a uma formatação.
     pub sobrevive_formatacao: bool,
     pub comprador: Option<String>,
     pub expira: Option<String>,
-    /// Por que não está ativa, em português, quando não está.
     pub motivo: Option<String>,
 }
 
@@ -336,11 +222,7 @@ fn hoje() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-/// Lê a licença guardada e diz se ela vale AGORA.
-///
-/// É conferida a cada chamada, e não uma vez na abertura: uma licença com prazo
-/// vence enquanto o programa está aberto, e guardar a resposta faria o produto
-/// continuar liberado depois do vencimento.
+/// A cada chamada, não na abertura: licença com prazo vence com o programa aberto.
 pub fn estado() -> Estado {
     let quem = crate::modules::maquina::identidade();
 
@@ -357,9 +239,7 @@ pub fn estado() -> Estado {
     let guardada = match Guardada::load() {
         Leitura::Ok(guardada) => guardada,
 
-        // O PORTÃO CONTINUA FECHADO — isto não é caminho de contorno. O que
-        // muda é a frase: em vez de tratar quem pagou como se nunca tivesse
-        // comprado, o produto diz o que aconteceu e dá o próximo passo.
+        // O PORTÃO CONTINUA FECHADO: muda só a frase.
         Leitura::Ilegivel(motivo) => {
             return Estado {
                 motivo: Some(format!(
@@ -391,10 +271,7 @@ pub fn estado() -> Estado {
     }
 }
 
-/// Guarda uma chave, depois de conferir que ela vale.
-///
-/// Gravar primeiro e conferir depois deixaria o disco com chave inválida, e a
-/// próxima abertura mostraria um erro que o cliente não provocou.
+/// Conferir antes de gravar: chave inválida no disco daria um erro que o cliente não provocou.
 pub fn ativar(chave: &str) -> Result<Dados, String> {
     let quem = crate::modules::maquina::identidade();
 
@@ -408,27 +285,12 @@ pub fn ativar(chave: &str) -> Result<Dados, String> {
     Ok(dados)
 }
 
-/// O produto está liberado?
-///
-/// É esta função que os comandos que ALTERAM o sistema consultam.
 pub fn liberado() -> bool {
     estado().ativa
 }
 
-/// A guarda dos comandos que ALTERAM o sistema.
-///
-/// Devolve erro em português quando não há licença, e esse erro sobe até a
-/// tela do jeito que qualquer outro erro sobe — sem tratamento especial no
-/// caminho.
-///
-/// POR QUE AQUI E NÃO SÓ NA TELA
-///
-/// A tela é HTML rodando dentro de uma janela que tem ferramentas de
-/// desenvolvedor. Esconder um botão não impede ninguém de chamar o comando por
-/// trás dele. Esta função é o ponto onde a decisão realmente acontece.
-///
-/// É conferida a cada chamada, e não uma vez na abertura, porque uma licença
-/// com prazo vence enquanto o programa está aberto.
+/// Aqui e não só na tela: a tela é HTML numa janela com ferramentas de desenvolvedor, e esconder o botão não
+/// impede chamar o comando. Conferida a cada chamada.
 pub fn exigir() -> Result<(), String> {
     if liberado() {
         return Ok(());
@@ -438,7 +300,6 @@ pub fn exigir() -> Result<(), String> {
         .to_string())
 }
 
-/// As provas de ponta a ponta da assinatura. Só existe em compilação de teste.
 #[cfg(test)]
 mod tests_1_8 {
     use super::*;
@@ -450,8 +311,6 @@ mod tests_1_8 {
         dir
     }
 
-    /// Arquivo ausente e o estado de quem nunca ativou. Continua sendo Ok, com
-    /// chave vazia — e nao um alarme.
     #[test]
     fn licenca_ausente_e_leitura_ok_sem_chave() {
         let caminho = pasta("ausente").join("licenca.json");
@@ -462,8 +321,6 @@ mod tests_1_8 {
         }
     }
 
-    /// O caso que este conserto existe para pegar: um arquivo truncado por
-    /// queda de energia nao pode virar "esse cliente nunca comprou".
     #[test]
     fn licenca_truncada_nao_vira_cliente_sem_licenca() {
         let caminho = pasta("truncada").join("licenca.json");
@@ -477,7 +334,6 @@ mod tests_1_8 {
         }
     }
 
-    /// Ida e volta pelo caminho atomico.
     #[test]
     fn gravar_e_ler_devolve_a_mesma_chave() {
         let caminho = pasta("ida-e-volta").join("licenca.json");
@@ -491,7 +347,6 @@ mod tests_1_8 {
         }
     }
 
-    /// A gravacao nao pode deixar o temporario para tras na pasta de dados.
     #[test]
     fn a_gravacao_da_licenca_nao_deixa_temporario() {
         let dir = pasta("temporario");
@@ -519,14 +374,8 @@ mod tests {
 
     #[test]
     fn a_chave_privada_nunca_entra_no_produto() {
-        // A conferência mais importante deste arquivo. Se a chave privada
-        // aparecer aqui um dia, qualquer pessoa que baixe o instalador passa a
-        // conseguir emitir licença — e o sistema inteiro deixa de valer.
-        //
-        // A busca é só na parte de PRODUÇÃO do arquivo, e a razão é dupla:
-        // código de teste não entra no executável do cliente, e a própria
-        // lista de palavras proibidas mora no teste — procurar no arquivo
-        // inteiro faria a guarda se encontrar e reprovar sozinha.
+        // A conferência mais importante: com a privada aqui, qualquer um que baixe o instalador emite licença. Só a
+        // parte de PRODUÇÃO: a lista proibida mora no teste, e procurar no arquivo inteiro faria a guarda se acusar.
         let fonte = include_str!("licenca.rs");
 
         let producao = fonte
@@ -565,9 +414,6 @@ mod tests {
 
     #[test]
     fn espaco_e_quebra_de_linha_sao_perdoados() {
-        // Copiar de uma mensagem do Discord traz espaço e quebra de linha
-        // junto. Recusar por isso seria transformar um problema nosso em
-        // suporte para o dono.
         let com_sujeira = "  YWJj\n.ZGVm  ";
         let limpa = desmontar(com_sujeira);
 
@@ -576,8 +422,7 @@ mod tests {
 
     #[test]
     fn maquina_sem_identidade_nao_ativa() {
-        // Sem identificar a máquina não há licença presa a ela, e liberar
-        // assim mesmo seria abrir a porta em toda máquina virtual.
+        // Liberar sem identificar a máquina abriria a porta em toda máquina virtual.
         assert_eq!(
             conferir("qualquer.coisa", "", "2026-01-01").unwrap_err(),
             Recusa::MaquinaDesconhecida
@@ -586,8 +431,6 @@ mod tests {
 
     #[test]
     fn cada_recusa_explica_o_que_fazer() {
-        // O cliente que pagou merece saber a diferença entre "digitei errado" e
-        // "esta chave é de outro PC" — a segunda tem solução, a primeira não.
         let de_outra = Recusa::OutraMaquina {
             emitida_para: "OTZ-AAAA-BBBB-CCCC".to_string(),
         };
@@ -603,8 +446,6 @@ mod tests {
 
     #[test]
     fn a_data_em_texto_compara_certo() {
-        // Formato "AAAA-MM-DD" ordena como texto exatamente como ordena no
-        // calendário. É por isso que não há biblioteca de data aqui.
         assert!("2026-01-02" > "2026-01-01");
         assert!("2027-01-01" > "2026-12-31");
         assert!("2026-10-01" > "2026-09-30");
@@ -620,8 +461,7 @@ mod tests {
 
     #[test]
     fn sem_licenca_o_produto_fica_bloqueado() {
-        // O estado padrão precisa ser "trancado". Um erro de leitura, um
-        // arquivo corrompido ou um disco cheio não podem virar liberação.
+        // O padrão é "trancado": erro de leitura, arquivo corrompido ou disco cheio não viram liberação.
         let vazia = Guardada::default();
         assert!(vazia.chave.is_empty());
     }
@@ -638,7 +478,6 @@ mod tests {
             println!("  motivo  : {}", motivo);
         }
 
-        // Sem chave gravada, o produto tem que estar trancado.
         if let Leitura::Ok(guardada) = Guardada::load() {
             if guardada.chave.trim().is_empty() {
                 assert!(!e.ativa);
