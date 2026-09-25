@@ -1,6 +1,4 @@
 mod ci_coverage;
-// PC Performance Optimizer - Main Library
-// Tauri + Rust implementation
 
 mod core;
 mod modules;
@@ -13,28 +11,15 @@ use modules::PerformanceMonitor;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
-/// Quanto da tela o Otimiza ocupa ao abrir.
-///
-/// Sao fracoes, e nao pixels, pelo motivo explicado no `setup`: nenhum numero
-/// fixo serve para 1366x768 e para 4K ao mesmo tempo.
+/// Frações, não pixels: nenhum número fixo serve para 1366x768 e para 4K.
 const FRACAO_DA_LARGURA: f64 = 0.66;
 const FRACAO_DA_ALTURA: f64 = 0.75;
 
-/// O menor tamanho util, em pixels logicos. Bate com o `minWidth`/`minHeight`
-/// do tauri.conf.json de proposito: abaixo disso a tabela de otimizacoes
-/// comeca a rolar na horizontal.
+/// Igual ao `minWidth`/`minHeight` do tauri.conf.json: abaixo disso a tabela rola na horizontal.
 const LARGURA_MINIMA: f64 = 900.0;
 const ALTURA_MINIMA: f64 = 640.0;
 
-/// O tamanho que cabe nesta tela, a partir da area util dela.
-///
-/// Funcao pura para poder ser testada sem monitor: as contas sao o que erra,
-/// nao a chamada ao sistema.
-///
-/// A ordem importa. O minimo e aplicado DEPOIS da fracao e ANTES do teto da
-/// tela — assim, numa tela pequena demais para o minimo, o resultado e a
-/// propria tela, e nao uma janela que nao cabe. Preferir o minimo ali faria
-/// exatamente o defeito que esta funcao existe para corrigir.
+/// O mínimo entra DEPOIS da fração e ANTES do teto da tela: numa tela menor que o mínimo, a janela é a tela.
 fn tamanho_que_cabe(largura_util: f64, altura_util: f64) -> (f64, f64) {
     let largura = (largura_util * FRACAO_DA_LARGURA)
         .max(LARGURA_MINIMA)
@@ -47,11 +32,7 @@ fn tamanho_que_cabe(largura_util: f64, altura_util: f64) -> (f64, f64) {
     (largura, altura)
 }
 
-/// Redimensiona e recentraliza a janela para caber no monitor atual.
-///
-/// Falhar aqui nao pode derrubar a abertura: sem conseguir medir a tela, o
-/// tamanho do tauri.conf.json vale, e ele e conservador o bastante para caber
-/// na esmagadora maioria dos monitores.
+/// Falhar aqui não derruba a abertura: vale o tamanho conservador do tauri.conf.json.
 fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
     let Ok(Some(monitor)) = janela.current_monitor() else {
         return;
@@ -60,8 +41,7 @@ fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
     let escala = monitor.scale_factor();
     let fisico = monitor.size();
 
-    // Em pixels logicos: e a unidade em que o tauri.conf.json fala, e a unica
-    // que faz sentido numa tela com escala de 125% ou 150% — comum em notebook.
+    // Pixels lógicos: a única unidade que faz sentido com escala de 125% ou 150%.
     let largura_util = fisico.width as f64 / escala;
     let altura_util = fisico.height as f64 / escala;
 
@@ -261,13 +241,8 @@ pub fn run() {
             commands::versao_mais_nova,
         ])
         .setup(|app| {
-            // O REGISTRO COMEÇA DIZENDO EM QUE MÁQUINA ISTO ESTÁ ACONTECENDO.
-            //
-            // Sem esta linha, `otimiza.log` conta o que o produto fez e nada
-            // sobre onde fez — e é o arquivo que o cliente manda quando algo dá
-            // errado. Roda numa thread própria: a coleta chama PowerShell e
-            // `powercfg`, e a abertura tem orçamento de tempo. Ver
-            // `cabecalho::anotar_em_segundo_plano`.
+            // `otimiza.log` começa dizendo em que máquina: é o arquivo que o cliente manda. Em thread própria (PowerShell e
+            // `powercfg`), fora do orçamento da abertura.
             #[cfg(target_os = "windows")]
             modules::windows::cabecalho::anotar_em_segundo_plano();
 
@@ -277,41 +252,16 @@ pub fn run() {
                 window.open_devtools();
             }
 
-            // ── A JANELA PRECISA CABER NA TELA DE QUEM ABRE ──────────────────
-            //
-            // Ate a 1.8 o tamanho era fixo em 1440x900. Num monitor de
-            // 1920x1080 isso ocupa quase tudo, e o cliente reclamou disso. Mas
-            // o problema real e pior e ninguem tinha visto: num notebook de
-            // 1366x768 — que e resolucao comum — a janela NASCIA MAIOR QUE A
-            // TELA, nas duas dimensoes.
-            //
-            // Numero fixo nao resolve, porque nao existe numero que sirva para
-            // 1366x768 e para 4K ao mesmo tempo: o que cabe num deixa o outro
-            // minusculo. Entao a janela mede a area util do monitor — util, e
-            // nao total, porque a barra de tarefas ocupa espaco — e toma uma
-            // fracao dela.
-            //
-            // Dois tercos da largura e tres quartos da altura deixam o Otimiza
-            // grande o bastante para a tabela de otimizacoes caber sem rolagem
-            // horizontal, e pequeno o bastante para o cliente ver a area de
-            // trabalho atras. Quem quiser tela cheia maximiza — e agora isso e
-            // escolha dele, nao imposicao nossa.
+            // A janela fixa em 1440x900 nascia maior que a tela num notebook de 1366x768. Mede a área ÚTIL (sem a barra
+            // de tarefas) e toma dois terços da largura e três quartos da altura.
             if let Some(janela) = app.get_webview_window("main") {
                 ajustar_a_janela_a_tela(&janela);
             }
 
             utils::Logger::info("PC Performance Optimizer iniciado");
 
-            // TERCEIRA REDE DE SEGURANÇA DA SUSPENSÃO: fim de sessão do Windows.
-            //
-            // As outras duas (mais abaixo, e `retomar_pendentes` acima) cobrem
-            // "o Otimiza não está mais rodando". Esta cobre o intervalo entre o
-            // Otimiza morrer e o cliente desligar ou fazer logoff: uma thread
-            // suspensa não responde à mensagem de fim de sessão, o Windows não
-            // descarrega a colmeia de registro do usuário, e o Explorer para de
-            // abrir na sessão seguinte. Foi exatamente essa cadeia que originou
-            // este conserto — ver o comentário de `modules::windows::sessao`
-            // para a investigação completa de por que é janela e não console.
+            // Rede da suspensão (versões antigas): fim de sessão. Thread suspensa não responde ao fim de sessão, a colmeia
+            // do usuário não descarrega e o Explorer não abre na sessão seguinte (ver `modules::windows::sessao`).
             #[cfg(target_os = "windows")]
             {
                 if let Some(janela) = app.get_webview_window("main") {
@@ -332,25 +282,8 @@ pub fn run() {
                 }
             }
 
-            // PRIMEIRA REDE DE SEGURANÇA DA SUSPENSÃO — antes de qualquer outra
-            // coisa.
-            //
-            // A 2.0 TIROU O CONGELAMENTO DO PRODUTO, E ESTA CHAMADA FICA DE
-            // PROPÓSITO.
-            //
-            // Até a 1.9, o modo jogo automático suspendia Discord, navegador e
-            // afins durante a partida. Foi a opção que mais machucou cliente: na
-            // 1.1.1 quebrou o Explorador ("clicar na barra de tarefas não abre
-            // nada"), na 1.1.2 congelou a Steam, e o relatório de suporte nasceu
-            // de alguém dizendo que os programas não abriam mais. O ganho de
-            // memória nunca pagou isso, e a opção saiu.
-            //
-            // Mas quem atualiza de uma versão antiga pode chegar com programas
-            // registrados como suspensos no disco — o Otimiza velho morreu no
-            // meio de uma partida, por exemplo. Esta chamada devolve esses
-            // programas na primeira abertura da versão nova, antes de tudo. Com
-            // o registro vazio, que é o caso de todo mundo daqui para frente,
-            // ela não faz nada.
+            // Rede da suspensão, antes de tudo: o congelamento saiu na 2.0, mas quem atualiza pode chegar com programas
+            // registrados como suspensos. Com o registro vazio, não faz nada.
             #[cfg(target_os = "windows")]
             {
                 let devolvidos = modules::windows::suspend::retomar_pendentes();
@@ -365,17 +298,8 @@ pub fn run() {
                 }
             }
 
-            // Vigia do modo jogo.
-            //
-            // Roda sempre, mas só age quando a preferência está ligada — e ela
-            // vem desligada de fábrica. A preferência é lida a cada volta, e
-            // não uma vez só: assim ligar e desligar na tela vale na hora, sem
-            // reiniciar o programa.
-            //
-            // Seis segundos é de propósito. Mais rápido que isso gasta CPU do
-            // próprio otimizador para vigiar, o que num PC fraco é o oposto do
-            // trabalho; mais devagar e o jogo já está carregando quando o modo
-            // entra.
+            // Lê a preferência a cada volta, para ligar e desligar valer na hora. Seis segundos: mais rápido gasta CPU do
+            // próprio otimizador; mais devagar o jogo já carregou.
             #[cfg(target_os = "windows")]
             {
                 let handle = app.handle().clone();
@@ -386,24 +310,10 @@ pub fn run() {
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(6)).await;
 
-                        // A amostragem de pressão roda SEMPRE, independente do
-                        // modo jogo, porque a pergunta que ela responde é sobre
-                        // a rotina da máquina e não sobre o jogo. É de graça:
-                        // uma leitura de memória em memória, sub-milissegundo.
-                        // Nunca PowerShell aqui — a cada seis segundos isso
-                        // seria o próprio otimizador pesando no PC do cliente.
+                        // Sempre, independente do modo jogo: leitura em memória, sub-milissegundo. Nunca PowerShell aqui.
                         modules::windows::pressao::amostrar();
 
-                        // QUARTA REDE DE SEGURANÇA DA SUSPENSÃO: prazo máximo.
-                        //
-                        // Roda ANTES da checagem da preferência, de propósito: o
-                        // cliente pode ter desligado o modo jogo automático
-                        // depois que algo já ficou suspenso, e mesmo assim os
-                        // programas precisam voltar. `retomar_se_expirado` só
-                        // faz alguma coisa quando há suspenso pendente E não há
-                        // jogo algum rodando agora — nunca interrompe uma
-                        // partida em andamento, por mais longa que seja. Ver a
-                        // justificativa do prazo em `suspend::PRAZO_MAXIMO_SEGUNDOS`.
+                        // Rede da suspensão por prazo, ANTES da preferência: o modo pode ter sido desligado com algo ainda suspenso.
                         let expirados = modules::windows::suspend::retomar_se_expirado(
                             modules::windows::suspend::PRAZO_MAXIMO_SEGUNDOS,
                         );
@@ -417,11 +327,7 @@ pub fn run() {
                             );
                             utils::Logger::info(&mensagem);
 
-                            // A tela só sabe que algo foi devolvido através deste
-                            // evento — o mesmo que o vigia emite quando o modo
-                            // jogo liga ou desliga. Só entra neste `if`: emitir a
-                            // cada seis segundos sem nada ter mudado faria a tela
-                            // recarregar à toa o tempo todo.
+                            // Só com mudança: emitir a cada seis segundos recarregaria a tela à toa.
                             let _ = handle.emit("gamemode:changed", mensagem);
                         }
 
@@ -432,8 +338,6 @@ pub fn run() {
                         let estado = handle.state::<commands::AppState>();
                         let mut log = estado.changes.lock().await;
 
-                        // `passo` não faz nada quando não há mudança, então o
-                        // caso comum desta volta é não tocar em nada.
                         if let Some(mensagem) =
                             modules::windows::gamemode::passo(&mut log)
                         {
@@ -444,8 +348,7 @@ pub fn run() {
                 });
             }
 
-            // GOVERNADOR INTERROMPIDO: o Otimiza fechou com um jogo aberto e
-            // programas em modo econômico. Devolve antes de qualquer outra coisa.
+            // O Otimiza fechou com jogo aberto e programas em modo econômico: devolve antes de tudo.
             #[cfg(windows)]
             tauri::async_runtime::spawn(async {
                 match tokio::task::spawn_blocking(modules::windows::gamemode::recuperar_na_abertura).await {
@@ -466,7 +369,6 @@ pub fn run() {
                 }
             });
 
-            // TESTE DE ENERGIA INTERROMPIDO: volta ao plano de antes.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::windows::motorenergia_maquina::recuperar_teste_interrompido).await {
@@ -474,11 +376,7 @@ pub fn run() {
                 }
             });
 
-            // O MODO DINÂMICO DO MOTOR DE ENERGIA.
-            //
-            // NORMAL → JOGO ABRIU → PERFIL DE BAIXA LATÊNCIA → JOGO FECHOU →
-            // NORMAL. Olha a cada três segundos só os executáveis que têm
-            // perfil salvo, e só age com o modo ligado e o Otimiza elevado.
+            // Olha a cada três segundos só os executáveis com perfil salvo; só age com o modo ligado e elevado.
             #[cfg(target_os = "windows")]
             {
                 let handle = app.handle().clone();
@@ -505,21 +403,13 @@ pub fn run() {
                 });
             }
 
-            // AQUECE AS CONDIÇÕES DOS AJUSTES CONDICIONAIS (2.9).
-            //
-            // Ler o espaço livre do disco custa segundos na primeira vez, e a
-            // lista de ajustes pergunta isso. Medido aqui, fora do caminho da
-            // tela, a primeira listagem já encontra a resposta pronta — e se
-            // não encontrar, ela não espera (ver `condicao_atendida_sem_esperar`).
+            // O espaço livre do disco custa segundos na primeira leitura: aquecido aqui, a listagem já o encontra.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 let _ = tokio::task::spawn_blocking(modules::windows::aquecer_condicoes).await;
             });
 
-            // AUTO CPU SET (2.9): reaplica "só núcleos de desempenho" nos jogos
-            // em que isso foi MEDIDO e rendeu. Afinidade morre com o processo,
-            // então cada abertura do jogo precisa dela de novo. Sem nenhum
-            // resultado guardado, a volta não varre processo nenhum.
+            // Afinidade morre com o processo: reaplica a cada abertura do jogo, só onde foi MEDIDO e rendeu.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 let mut ja = std::collections::HashSet::new();
@@ -538,16 +428,8 @@ pub fn run() {
                 }
             });
 
-            // A PROVA QUE ACONTECE SOZINHA.
-            //
-            // Um vigia à parte do modo jogo, e não um passo a mais dentro dele:
-            // detectar o jogo consulta o motor 3D pelo PowerShell, e medir
-            // escuta o canal de eventos por vinte segundos. Nada disso pode
-            // atrasar a volta de seis segundos, que amostra a pressão de memória
-            // e liga o modo jogo. As duas coisas lentas rodam fora do runtime.
-            //
-            // Ver `modules::medicoes` para quando mede, e para o que ela NÃO faz:
-            // comparar uma medição com outra.
+            // Vigia à parte: detectar pelo PowerShell e escutar vinte segundos não podem atrasar a volta de seis segundos.
+            // Ver `modules::medicoes`.
             #[cfg(target_os = "windows")]
             {
                 let handle = app.handle().clone();
@@ -564,8 +446,6 @@ pub fn run() {
                         ))
                         .await;
 
-                        // Sem a preferência ou sem administrador não há medição
-                        // possível, e procurar o jogo seria PowerShell à toa.
                         if !modules::preferences::Preferences::load().medir_quadros_sozinho
                             || !modules::windows::registry::is_elevated()
                         {
@@ -596,12 +476,7 @@ pub fn run() {
 
                         let executavel = jogo.executavel.clone();
 
-                        // Os contadores do processador rodam EM PARALELO com a
-                        // contagem de quadros, na mesma janela. Medir um depois
-                        // do outro compararia dois momentos da partida, e a
-                        // variação entre eles viraria conclusão — é a mesma
-                        // razão pela qual o medidor de quadros conta os dois
-                        // processos na mesma sessão.
+                        // Em paralelo, na mesma janela: medir depois compararia dois momentos da partida.
                         let parar = std::sync::Arc::new(
                             std::sync::atomic::AtomicBool::new(false),
                         );
@@ -613,42 +488,21 @@ pub fn run() {
                             )
                         });
 
-                        // A placa também, na mesma janela, e por contador de
-                        // desempenho. Pela consulta ao WMI isto era impossível:
-                        // mais de um segundo por leitura, abrindo PowerShell
-                        // dentro de uma medição de desempenho — virar a carga
-                        // que se está medindo.
+                        // Por contador: o WMI passa de um segundo e abriria PowerShell dentro da medição.
                         let parar_placa = parar.clone();
                         let placa = std::thread::spawn(move || {
                             use std::sync::atomic::Ordering;
                             let contadores = modules::windows::placa::Contadores::novo()?;
                             let mut gpu: Vec<f64> = Vec::new();
-                            // OS SENSORES DA PLACA, NA MESMA JANELA (2.9).
-                            //
-                            // Temperatura, clock, potência e o motivo de o
-                            // driver estar segurando o clock. Pela NVML em
-                            // processo: abrir o nvidia-smi a cada 200 ms
-                            // dentro de uma medição de desempenho seria virar
-                            // a carga que se está medindo.
+                            // Pela NVML em processo: o nvidia-smi a cada 200 ms viraria a carga que se mede.
                             let limite_w = modules::windows::nvml::limite_de_potencia_w();
                             let mut sensores: Vec<crate::core::sensores::AmostraGpu> = Vec::new();
-                            // A pergunta do MOTIVO custa 11 ms nesta máquina
-                            // (medido), e este laço carimba o disco para
-                            // correlacionar travadas: pedir o motivo a cada
-                            // volta empurraria esse carimbo. A cada cinco
-                            // voltas — um segundo — não empurra, e um
-                            // engasgo térmico dura muito mais que isso.
+                            // O motivo custa 11 ms e atrasaria o carimbo do disco: a cada cinco voltas (um segundo).
                             let mut volta: u32 = 0;
-                            // Cada leitura de disco vai CARIMBADA no contador
-                            // de alta resolução — o mesmo relógio dos quadros.
-                            // É o que permite perguntar depois o que o disco
-                            // estava fazendo no instante de cada tranco.
+                            // Carimbada no mesmo relógio dos quadros, para cruzar com cada tranco.
                             let mut disco: Vec<(i64, f64)> = Vec::new();
 
-                            // 200 ms, e não 500: a janela de correlação é de
-                            // 300 ms para cada lado do tranco, e amostrar mais
-                            // espaçado que isso deixaria trancos sem nenhuma
-                            // leitura perto o bastante para valer.
+                            // 200 ms: a janela de correlação é de 300 ms para cada lado.
                             while !parar_placa.load(Ordering::Relaxed) {
                                 std::thread::sleep(std::time::Duration::from_millis(200));
                                 let a = contadores.coletar();
@@ -670,19 +524,14 @@ pub fn run() {
                                 }
                             }
 
-                            // Sem leitura nenhuma não há média: lista vazia
-                            // viraria zero, e "placa parada" é a conclusão
-                            // oposta à que se quer tirar daqui.
+                            // Lista vazia viraria zero, "placa parada".
                             let media = (!gpu.is_empty())
                                 .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
 
                             Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
-                        // De que lado da vigília do governador esta medição
-                        // fica (`modules::portao`): o estado no começo e no
-                        // fim precisa ser o mesmo, senão não fica em lado
-                        // nenhum.
+                        // O estado do governador precisa ser o mesmo no começo e no fim (`modules::portao`).
                         let governador_no_inicio =
                             modules::windows::gamemode::governador_na_partida(&executavel);
 
@@ -722,13 +571,7 @@ pub fn run() {
                                         None => (None, None, None),
                                     };
 
-                                // A correlação entre cada tranco e o disco.
-                                //
-                                // 300 ms para cada lado: um asset que o jogo
-                                // esperou aparece como disco ocupado colado ao
-                                // buraco, não meio segundo depois. 40% é o
-                                // ponto em que o disco deixa de estar de
-                                // passagem e passa a estar trabalhando.
+                                // 300 ms para cada lado; 40% é quando o disco deixa de estar de passagem e passa a trabalhar.
                                 let correlacao = modules::windows::frames::frequencia_qpc()
                                     .and_then(|hz| {
                                         modules::windows::frames::trancos_com_disco(
@@ -775,8 +618,6 @@ pub fn run() {
                                         ));
                                         let _ = handle.emit("prova:automatica", ());
 
-                                        // NUNCA MENOS FPS: cada partida medida pode
-                                        // decidir um ajuste em observação.
                                         let decididos = {
                                             let estado = handle.state::<commands::AppState>();
                                             let mut log = estado.changes.lock().await;
@@ -814,16 +655,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
-            // SEGUNDA REDE DE SEGURANÇA DA SUSPENSÃO: fechar o Otimiza.
-            //
-            // `ExitRequested` cobre o caminho comum — o cliente fechou a
-            // janela, ou pediu para sair pelo tray — e `Exit` cobre o
-            // instante final do laço de eventos, de propósito redundante com
-            // o de cima: `retomar_tudo` devolver um processo que já está
-            // rodando não faz nada (ver o comentário em
-            // `suspend::api::retomar`), então chamar duas vezes não tem
-            // custo, e cobre o caso de o primeiro evento não chegar a rodar
-            // por algum motivo do próprio Tauri.
+            // Rede da suspensão ao fechar. `Exit` é redundante com `ExitRequested` de propósito: retomar o que já roda não
+            // custa nada.
             #[cfg(target_os = "windows")]
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
                 let devolvidos = modules::windows::suspend::retomar_tudo().unwrap_or_default();
@@ -844,21 +677,16 @@ pub fn run() {
 mod tests_da_janela {
     use super::*;
 
-    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
-    ///
-    /// Até a 1.8 o tamanho era fixo em 1440x900. Num notebook de 1366x768 —
-    /// resolução comum — a janela nascia maior que a tela nas DUAS dimensões.
-    /// O cliente abria o programa e não conseguia ver as bordas nem alcançar
-    /// parte da interface.
+    /// O notebook de 1366x768 em que a janela fixa nascia maior que a tela.
     #[test]
     fn a_janela_nunca_nasce_maior_que_a_tela() {
         for (largura_tela, altura_tela) in [
-            (1366.0, 768.0),  // o notebook que quebrava
+            (1366.0, 768.0),
             (1280.0, 720.0),
             (1920.0, 1080.0),
             (2560.0, 1440.0),
             (3840.0, 2160.0),
-            (1024.0, 600.0),  // menor que o proprio minimo
+            (1024.0, 600.0),
         ] {
             let (largura, altura) = tamanho_que_cabe(largura_tela, altura_tela);
 
@@ -876,8 +704,6 @@ mod tests_da_janela {
         }
     }
 
-    /// E o pedido do outro dono: em monitor grande, o Otimiza para de ocupar
-    /// quase tudo. Quem quiser tela cheia maximiza.
     #[test]
     fn em_monitor_grande_sobra_area_de_trabalho_atras() {
         let (largura, altura) = tamanho_que_cabe(1920.0, 1080.0);
@@ -891,8 +717,6 @@ mod tests_da_janela {
         assert!(altura < 1080.0 * 0.85, "altura de {} ainda e quase tudo", altura);
     }
 
-    /// Numa tela normal a janela nao pode encolher a ponto de a tabela de
-    /// otimizacoes rolar na horizontal.
     #[test]
     fn em_tela_normal_a_janela_respeita_o_minimo_util() {
         let (largura, altura) = tamanho_que_cabe(1920.0, 1080.0);
@@ -901,11 +725,7 @@ mod tests_da_janela {
         assert!(altura >= ALTURA_MINIMA);
     }
 
-    /// A ORDEM DAS CONTAS IMPORTA, e este teste trava ela.
-    ///
-    /// Numa tela menor que o proprio minimo util, a resposta certa e a tela
-    /// inteira — nao o minimo. Aplicar o minimo por ultimo faria a janela
-    /// nascer maior que a tela de novo, que e exatamente o defeito original.
+    /// Numa tela menor que o mínimo, a resposta é a tela inteira.
     #[test]
     fn tela_menor_que_o_minimo_devolve_a_propria_tela() {
         let (largura, altura) = tamanho_que_cabe(800.0, 600.0);

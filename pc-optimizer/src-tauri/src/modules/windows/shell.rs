@@ -1,21 +1,6 @@
-// Execução de comandos do sistema no Windows
-//
-// Todo comando roda com CREATE_NO_WINDOW: sem esse flag, cada `sc`, `powercfg`
-// ou `netsh` abriria um console preto piscando na tela do usuário.
-//
-// E TODO COMANDO TEM PRAZO.
-//
-// Até a 1.9, `run` esperava o programa terminar para sempre, e a sessão do
-// PowerShell lia a resposta sem limite. Um `powercfg` ou um `sc` que travasse
-// prendia o "Otimizar agora" inteiro, com a tela parada em "Aplicando…" e sem
-// rastro de qual passo tinha parado. No PC do dono, em 10 e 11/09/2026, o clique
-// no "Otimizar agora" foi seguido de "os programas não abriam" — e não havia
-// como provar nem descartar um comando pendurado.
-//
-// Estourado o prazo, o processo é encerrado, a chamada vira erro com o nome do
-// comando, e a linha vai para o registro em arquivo (`utils::logger`). O motor
-// de otimização trata esse erro como qualquer outra falha: desfaz o que o item
-// já tinha feito.
+// Comandos do sistema. Todo comando roda com CREATE_NO_WINDOW (sem console piscando) e TEM PRAZO: sem limite,
+// um `powercfg` travado prendia o "Otimizar agora" em "Aplicando…" sem rastro. Estourado, o processo é
+// encerrado, vira erro com o nome do comando e vai para o log.
 
 use std::io::Read;
 use std::os::windows::process::CommandExt;
@@ -25,44 +10,24 @@ use std::time::{Duration, Instant};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Quanto um programa do sistema tem para terminar, quando quem chama não diz.
-///
-/// `sc`, `powercfg`, `bcdedit`, `fsutil` e `ipconfig` respondem em menos de um
-/// segundo numa máquina saudável. Um minuto é folga de sobra para máquina lenta
-/// — e é finito, que é o que importa.
+/// Um minuto: essas ferramentas respondem em menos de um segundo, e o que importa é ser finito.
 pub const PRAZO_PADRAO: Duration = Duration::from_secs(60);
 
-/// Quanto um script do PowerShell tem para terminar, quando quem chama não diz.
-///
-/// Maior que o dos programas porque o PowerShell faz consulta de WMI e de log de
-/// eventos, que num PC fraco com o disco ocupado passam de dez segundos. Quem
-/// sabe que vai demorar mais — ponto de restauração, esvaziar a lixeira — passa
-/// o próprio prazo.
+/// Maior: WMI e log de eventos passam de dez segundos em PC fraco. Quem demora mais passa o próprio prazo.
 pub const PRAZO_DO_POWERSHELL: Duration = Duration::from_secs(120);
 
 pub struct CommandOutput {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
-    /// O número que o programa devolveu ao terminar.
-    ///
-    /// `success` é ele reduzido a sim ou não, e o número tem informação que o
-    /// booleano joga fora: o `powercfg` devolve 1 tanto para "este ajuste não
-    /// existe" quanto para "acesso negado", mas outros programas do Windows
-    /// separam os casos por código — e é isso que se procura no registro
-    /// quando um cliente manda o log.
-    ///
-    /// `None` quando o processo foi encerrado por um sinal em vez de terminar
-    /// sozinho: aqui, o caminho do prazo estourado.
+    /// O número guarda o que o booleano joga fora. `None` quando encerrado por sinal (o prazo estourado).
     pub codigo: Option<i32>,
 }
 
-/// Executa um programa do sistema e captura a saída, com o `PRAZO_PADRAO`.
 pub fn run(program: &str, args: &[&str]) -> Result<CommandOutput, String> {
     run_com_prazo(program, args, PRAZO_PADRAO)
 }
 
-/// Executa um programa do sistema e captura a saída, desistindo em `prazo`.
 pub fn run_com_prazo(
     program: &str,
     args: &[&str],
@@ -95,14 +60,7 @@ fn executar_com_rotulo(
     esperar_com_prazo(&mut filho, rotulo, prazo)
 }
 
-/// Sobe um programa do sistema e devolve o processo VIVO, com a saída ligada
-/// num cano — sem esperar ele terminar.
-///
-/// Serve a quem precisa do processo na mão, como a análise do DISM, que passa o
-/// processo para `esperar_com_prazo` e confere no teste que ele morreu.
-///
-/// O `CREATE_NO_WINDOW` mora aqui pelo mesmo motivo de sempre: um console preto
-/// piscando na tela do cliente.
+/// Devolve o processo VIVO, com a saída num cano, para quem precisa dele na mão (a análise do DISM).
 pub fn spawn_capturando(program: &str, args: &[&str]) -> Result<std::process::Child, String> {
     Command::new(program)
         .args(args)
@@ -114,19 +72,8 @@ pub fn spawn_capturando(program: &str, args: &[&str]) -> Result<std::process::Ch
         .map_err(|e| format!("Failed to spawn `{}`: {}", program, e))
 }
 
-/// Espera um processo terminar por um prazo — e, se o prazo estourar, ENCERRA o
-/// processo em vez de deixá-lo rodando sozinho.
-///
-/// Recebe o `Child` emprestado (e não por valor) de propósito: quem chamou
-/// continua dono do processo e pode conferir, no teste, que ele de fato morreu.
-///
-/// Os canos são lidos em threads à parte por dois motivos: ler um cano até o fim
-/// bloqueia até o processo fechá-lo, e um processo que escreve muito sem ninguém
-/// ler trava com o cano cheio. Encerrar o processo fecha os canos, a leitura
-/// termina e as threads morrem junto.
-///
-/// Sai sempre com o processo esperado, inclusive depois de encerrá-lo: sem o
-/// `wait`, o processo morto fica como zumbi até o Otimiza fechar.
+/// Encerra no prazo em vez de deixar rodando. `Child` emprestado: o teste confere que morreu. Canos em threads
+/// à parte (processo que escreve muito sem leitor trava). Sempre com `wait`, senão fica zumbi.
 pub fn esperar_com_prazo(
     filho: &mut Child,
     rotulo: &str,
@@ -154,9 +101,7 @@ pub fn esperar_com_prazo(
         }
     }
 
-    // Os dois canos fecharam, o que quase sempre quer dizer que o processo
-    // saiu. "Quase": um programa pode fechar a saída e seguir vivo, e um `wait`
-    // sem prazo aqui devolveria exatamente o defeito que esta função conserta.
+    // Um programa pode fechar a saída e seguir vivo: `wait` sem prazo aqui seria o defeito que a função conserta.
     let status = loop {
         match filho.try_wait() {
             Ok(Some(status)) => break status,
@@ -184,8 +129,6 @@ fn ler_em_segundo_plano<R: Read + Send + 'static>(
     tx: mpsc::Sender<(bool, Vec<u8>)>,
 ) {
     let Some(mut cano) = cano else {
-        // Cano não canalizado (o `stderr` de `spawn_capturando`): não há o que
-        // ler, e não vale uma thread para descobrir isso.
         let _ = tx.send((e_saida, Vec::new()));
         return;
     };
@@ -197,8 +140,6 @@ fn ler_em_segundo_plano<R: Read + Send + 'static>(
     });
 }
 
-/// Encerra o processo que estourou o prazo, anota no registro e devolve a
-/// mensagem de erro.
 fn encerrar(filho: &mut Child, rotulo: &str, prazo: Duration) -> String {
     let _ = filho.kill();
     let _ = filho.wait();
@@ -220,9 +161,7 @@ fn descrever_prazo(prazo: Duration) -> String {
     }
 }
 
-/// Um rótulo curto para erro e registro: o script de um PowerShell pode ter
-/// centenas de caracteres e várias linhas. Corta por caractere, não por byte —
-/// cortar no meio de um "ç" derrubaria o programa.
+/// Por caractere: cortar no meio de um "ç" derrubaria o programa.
 fn resumir(texto: &str) -> String {
     const MAXIMO: usize = 160;
 
@@ -235,36 +174,18 @@ fn resumir(texto: &str) -> String {
     }
 }
 
-/// Prefixo obrigatório de todo script do PowerShell.
-///
-/// Sem isto, o PowerShell escreve a saída na página de código do console — CP850
-/// num Windows em português — e não em UTF-8. O resultado é que todo nome com
-/// acento chega corrompido: "Serviço do Brave Update" vira "Servi?o do Brave
-/// Update". Como quase tudo que este produto lê do sistema é nome escolhido por
-/// terceiros (serviço, tarefa agendada, programa instalado), o estrago aparecia
-/// em lista, em painel e no relatório entregue ao cliente.
-///
-/// Uma linha resolve na origem, e resolver na origem é melhor que adivinhar a
-/// página de código na hora de decodificar — ela muda com o idioma do Windows.
+/// Sem isto o PowerShell escreve em CP850 e "Serviço" vira "Servi?o" em nomes de terceiros. Resolver na origem:
+/// a página de código muda com o idioma do Windows.
 const FORCAR_UTF8: &str = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;";
 
-/// Executa um script do PowerShell com a saída em UTF-8, com o
-/// `PRAZO_DO_POWERSHELL`.
-///
-/// É por aqui que todo PowerShell do projeto passa. Chamar `run("powershell", …)`
-/// direto funciona, mas devolve acento quebrado — ver `FORCAR_UTF8`.
+/// Todo PowerShell passa por aqui: `run("powershell", …)` direto devolve acento quebrado.
 pub fn powershell(script: &str) -> Result<CommandOutput, String> {
     powershell_com_prazo(script, PRAZO_DO_POWERSHELL)
 }
 
-/// Igual a `powershell`, desistindo em `prazo`.
 pub fn powershell_com_prazo(script: &str, prazo: Duration) -> Result<CommandOutput, String> {
-    // Tenta a sessão viva; se ela não estiver disponível por qualquer motivo,
-    // cai para o processo de uma vez só, que sempre funciona.
-    //
-    // O prazo estourado NÃO cai para o avulso. O script já rodou o prazo inteiro
-    // e travou; rodá-lo de novo dobraria a espera, e num script que escreve no
-    // sistema repetiria a escrita.
+    // Sessão viva, ou o processo avulso. Prazo estourado NÃO cai para o avulso: dobraria a espera e repetiria a
+    // escrita.
     if let Some(resposta) = sessao::executar(script, prazo) {
         return resposta;
     }
@@ -272,7 +193,6 @@ pub fn powershell_com_prazo(script: &str, prazo: Duration) -> Result<CommandOutp
     powershell_avulso(script, prazo)
 }
 
-/// Um processo do PowerShell por chamada. O caminho de reserva.
 fn powershell_avulso(script: &str, prazo: Duration) -> Result<CommandOutput, String> {
     let completo = format!("{} {}", FORCAR_UTF8, script);
     let rotulo = resumir(&format!("powershell: {}", script));
@@ -280,37 +200,9 @@ fn powershell_avulso(script: &str, prazo: Duration) -> Result<CommandOutput, Str
     executar_com_rotulo("powershell", &["-NoProfile", "-Command", &completo], &rotulo, prazo)
 }
 
-/// Uma sessão do PowerShell viva, reaproveitada entre consultas.
-///
-/// POR QUE ISTO EXISTE
-///
-/// Medido nesta máquina: abrir um `powershell.exe` VAZIO — um processo que só
-/// executa `1` e sai — custa **2,26 segundos**. Não é a consulta que é cara: é
-/// o processo. Os módulos que fazem uma única chamada custavam exatamente
-/// isso, e o diagnóstico inicial abria dez processos.
-///
-/// Vinte e dois dos trinta e um segundos de abertura eram só o Windows subindo
-/// o PowerShell, dez vezes.
-///
-/// A alternativa óbvia era juntar as consultas num script gigante, o que
-/// obrigaria a reescrever dez módulos. Manter UM processo vivo paga o custo uma
-/// vez e não pede mudança em nenhum chamador: `powershell()` continua com a
-/// mesma assinatura, e quem chama nem sabe que a sessão existe.
-///
-/// COMO SE SABE ONDE ACABA UMA RESPOSTA
-///
-/// O processo lê comandos da entrada padrão e nunca termina, então não há
-/// código de saída nem fim de arquivo para esperar. Depois de cada script a
-/// sessão imprime uma marca com um número que só aquela consulta conhece, e a
-/// leitura para ali. A marca carrega também se o script deu erro, que é o que
-/// `success` significa no caminho de reserva.
-///
-/// QUANDO A SESSÃO NÃO SERVE
-///
-/// Se ela morrer ou não subir, `executar` devolve `None` e a chamada segue pelo
-/// processo avulso. Um diagnóstico lento é muito melhor que um diagnóstico que
-/// não acontece. Se ela TRAVAR, o prazo estoura, a sessão é derrubada e a
-/// chamada volta como erro.
+/// Abrir um `powershell.exe` vazio custa 2,26 s (medido), e a abertura abria dez: um processo vivo paga uma vez,
+/// sem mudar os chamadores. Cada resposta termina numa marca com número próprio e o sucesso do script. Sessão
+/// morta cai no avulso; travada estoura o prazo e é derrubada.
 mod sessao {
     use super::{CommandOutput, CREATE_NO_WINDOW, FORCAR_UTF8};
     use std::io::{BufRead, BufReader, Write};
@@ -323,38 +215,27 @@ mod sessao {
     pub(super) struct Viva {
         processo: Child,
         entrada: ChildStdin,
-        /// As linhas que o PowerShell escreve, lidas por uma thread à parte.
-        ///
-        /// Até a 1.9 a leitura era direto do cano, com `read_line`, que bloqueia
-        /// sem limite: um script travado prendia quem chamou para sempre. Pelo
-        /// canal, a espera tem prazo.
+        /// `read_line` sem limite prendia quem chamou: pelo canal, a espera tem prazo.
         linhas: mpsc::Receiver<String>,
     }
 
     impl Viva {
         pub(super) fn encerrar(&mut self) {
-            // Matar o processo fecha o cano; a thread de leitura recebe o fim de
-            // arquivo e termina sozinha.
             let _ = self.processo.kill();
             let _ = self.processo.wait();
         }
     }
 
-    /// O que aconteceu com um script mandado à sessão.
     pub(super) enum Resposta {
         Respondeu(CommandOutput),
-        /// A sessão caiu antes da marca. O script pode ser repetido pelo avulso.
         Morreu,
-        /// O prazo acabou sem a marca. O script NÃO deve ser repetido.
         Estourou,
     }
 
     static SESSAO: Mutex<Option<Viva>> = Mutex::new(None);
     static CONTADOR: AtomicU64 = AtomicU64::new(0);
 
-    /// Uma sessão que morreu ou travou no meio de uma resposta não é
-    /// reaproveitável, e insistir nela transformaria um diagnóstico lento num
-    /// que não termina.
+    /// Sessão que morreu ou travou no meio não é reaproveitável.
     static DESISTIMOS: AtomicBool = AtomicBool::new(false);
 
     pub(super) fn abrir() -> Option<Viva> {
@@ -375,8 +256,6 @@ mod sessao {
             let mut linha = String::new();
 
             match saida.read_line(&mut linha) {
-                // Fim de arquivo ou erro: a sessão morreu. Soltar o canal é o
-                // aviso — quem espera recebe `Disconnected` na hora.
                 Ok(0) | Err(_) => break,
                 Ok(_) => {
                     if tx.send(linha).is_err() {
@@ -392,8 +271,6 @@ mod sessao {
             linhas,
         };
 
-        // A codificação é acertada UMA vez, na abertura — no processo avulso
-        // ela era reenviada em cada chamada.
         viva.entrada.write_all(FORCAR_UTF8.as_bytes()).ok()?;
         viva.entrada.write_all(b"\n").ok()?;
         viva.entrada.flush().ok()?;
@@ -401,34 +278,14 @@ mod sessao {
         Some(viva)
     }
 
-    /// Roda o script na sessão viva.
-    ///
-    /// `None` significa "use o caminho avulso". `Some(Err)` é o prazo estourado,
-    /// que não se repete pelo avulso.
+    /// `None` = use o avulso. `Some(Err)` = prazo estourado, que não se repete.
     pub fn executar(script: &str, prazo: Duration) -> Option<Result<CommandOutput, String>> {
         if DESISTIMOS.load(Ordering::Relaxed) {
             return None;
         }
 
-        // SCRIPT COM ACENTO NÃO PASSA POR AQUI.
-        //
-        // A codificação tem dois lados, e a sessão só resolve um. A SAÍDA vem
-        // certa: `[Console]::OutputEncoding` é acertado na abertura, e os bytes
-        // de "Ação" chegam como UTF-8 válido — foi medido.
-        //
-        // A ENTRADA não. O PowerShell lê a entrada padrão usando a página de
-        // código do console, e não há como acertar isso de dentro do próprio
-        // fluxo: quando a primeira linha chega, ele já leu com a página errada.
-        // Um script contendo "Ação" chegava lá dentro como "A├º├úo", e o erro
-        // acontecia ANTES de o script rodar.
-        //
-        // O processo avulso não sofre disso, porque ali o script viaja como
-        // argumento da linha de comando e não pela entrada padrão.
-        //
-        // Então a regra é simples e não depende de auditar os scripts de hoje:
-        // qualquer coisa fora do ASCII vai pelo caminho lento. Custa a
-        // lentidão de um processo nos poucos casos em que isso acontece, e
-        // remove por construção uma classe inteira de corrupção silenciosa.
+        // SCRIPT COM ACENTO NÃO PASSA POR AQUI: o PowerShell lê a entrada padrão na página do console ("Ação" chega
+        // "A├º├úo") antes de o script rodar. No avulso o script vai na linha de comando. Fora do ASCII, caminho lento.
         if !script.is_ascii() {
             return None;
         }
@@ -461,10 +318,7 @@ mod sessao {
         }
     }
 
-    /// Manda um script a uma sessão e espera a marca de fim até o prazo.
-    ///
-    /// Separada de `executar` para o teste poder travar uma sessão PRÓPRIA: a
-    /// global, derrubada, faria os outros testes caírem no avulso no meio.
+    /// Separada para o teste travar uma sessão PRÓPRIA sem derrubar a global.
     pub(super) fn conversar(viva: &mut Viva, script: &str, prazo: Duration) -> Resposta {
         let limite = Instant::now() + prazo;
         let marca = format!(
@@ -472,9 +326,7 @@ mod sessao {
             CONTADOR.fetch_add(1, Ordering::Relaxed)
         );
 
-        // `$global:LASTEXITCODE` não serve: nem todo script chama programa
-        // externo. O que interessa é se o script LANÇOU erro, e é isso que o
-        // `try/catch` captura.
+        // `$LASTEXITCODE` não serve (nem todo script chama programa externo): o `try/catch` diz se o script LANÇOU erro.
         let bloco = format!(
             "$ErrorActionPreference='Continue'; $__ok=$true; try {{ {} }} catch {{ $__ok=$false }}; Write-Output ('{}' + $__ok)\n",
             script, marca
@@ -493,20 +345,13 @@ mod sessao {
             {
                 Ok(linha) => linha,
                 Err(mpsc::RecvTimeoutError::Timeout) => return Resposta::Estourou,
-                // A thread de leitura soltou o canal: fim de arquivo sem a
-                // marca, a sessão morreu no meio.
                 Err(mpsc::RecvTimeoutError::Disconnected) => return Resposta::Morreu,
             };
 
             if let Some(resto) = linha.trim_end().strip_prefix(marca.as_str()) {
                 return Resposta::Respondeu(CommandOutput {
                     success: !resto.trim().eq_ignore_ascii_case("False"),
-                    // A SESSÃO DO POWERSHELL NÃO TEM CÓDIGO DE SAÍDA.
-                    //
-                    // Aqui o processo continua vivo para o próximo comando: o
-                    // que chega é o `$?` do último, que já é o `success` acima.
-                    // Inventar um número seria pior que não ter: o log passaria
-                    // a afirmar um código que o Windows nunca devolveu.
+                    // Não há código de saída numa sessão viva: inventar um faria o log afirmar o que o Windows nunca devolveu.
                     codigo: None,
                     stdout: coletado,
                     stderr: String::new(),
@@ -522,27 +367,14 @@ mod sessao {
             viva.encerrar();
         }
 
-        // Uma sessão que caiu costuma cair de novo. Desistir de vez custa a
-        // lentidão do caminho avulso; insistir custa uma falha por consulta.
+        // Sessão que caiu costuma cair de novo.
         DESISTIMOS.store(true, Ordering::Relaxed);
     }
 }
 
-/// Interpreta a resposta JSON de um PowerShell sem achatar falha em vazio.
-///
-/// Os quatro módulos que diziam "nada encontrado" em verde quando a leitura
-/// falhava — conflitos, tarefas agendadas, serviços de terceiros e programas de
-/// fábrica — faziam isto cada um do seu jeito, e todos terminavam em
-/// `_ => Vec::new()`. Aqui fica uma regra só:
-///
-/// - o comando não rodou, ou saiu com erro → `Err`;
-/// - saída vazia → `Err`: todo script do produto embrulha a lista em `@(…)`,
-///   que devolve `[]` quando não há nada — vazio é resposta que não chegou;
-/// - JSON que não casa com o tipo → `Err`.
-///
-/// Lembrete para quem escrever o script: dentro da sessão viva um erro que não
-/// interrompe o script não conta como falha. A consulta precisa de
-/// `-ErrorAction Stop` para chegar aqui como `success: false`.
+/// JSON de PowerShell sem achatar falha em vazio (quatro módulos pintavam "nada encontrado" de verde): não rodou
+/// ou erro → `Err`; saída vazia → `Err` (todo script embrulha em `@(…)`, que dá `[]`); tipo errado → `Err`. Na
+/// sessão viva, a consulta precisa de `-ErrorAction Stop` para uma falha chegar como `success: false`.
 pub fn json_da_saida<T: serde::de::DeserializeOwned>(
     saida: Result<CommandOutput, String>,
     o_que: &str,
@@ -578,12 +410,10 @@ pub fn json_da_saida<T: serde::de::DeserializeOwned>(
     })
 }
 
-/// Igual a `powershell`, mas devolve `Err` quando o script falha.
 pub fn powershell_checked(script: &str) -> Result<String, String> {
     powershell_checked_com_prazo(script, PRAZO_DO_POWERSHELL)
 }
 
-/// Igual a `powershell_checked`, desistindo em `prazo`.
 pub fn powershell_checked_com_prazo(script: &str, prazo: Duration) -> Result<String, String> {
     let saida = powershell_com_prazo(script, prazo)?;
 
@@ -599,12 +429,10 @@ pub fn powershell_checked_com_prazo(script: &str, prazo: Duration) -> Result<Str
     }
 }
 
-/// Executa e falha com erro descritivo se o comando retornar código diferente de zero.
 pub fn run_checked(program: &str, args: &[&str]) -> Result<String, String> {
     run_checked_com_prazo(program, args, PRAZO_PADRAO)
 }
 
-/// Igual a `run_checked`, desistindo em `prazo`.
 pub fn run_checked_com_prazo(
     program: &str,
     args: &[&str],
@@ -630,8 +458,7 @@ mod tests {
 
     #[test]
     fn saida_do_powershell_chega_com_acento_intacto() {
-        // O texto tem ç, ã e á de propósito: são os que quebram em CP850, a
-        // página de código padrão do console num Windows em português.
+        // ç, ã e á: os que quebram em CP850.
         let saida = powershell("Write-Output 'Serviço de Configuração Básica'")
             .expect("o PowerShell precisa rodar");
 
@@ -640,14 +467,11 @@ mod tests {
             "acento corrompido na saída: {:?}",
             saida.stdout.trim()
         );
-        // O caractere de substituição é o sintoma exato do erro que isto corrige.
         assert!(!saida.stdout.contains('\u{FFFD}'));
     }
 
     #[test]
     fn json_com_acento_sobrevive_a_desserializacao() {
-        // O caminho real do produto: PowerShell devolve JSON, o serde lê. Se a
-        // codificação estiver errada, o JSON chega com bytes inválidos.
         let saida = powershell(
             "ConvertTo-Json -Compress -InputObject @{ nome = 'Ação de Manutenção' }",
         )
@@ -667,25 +491,16 @@ mod tests {
 
     #[test]
     fn a_sessao_viva_recusa_script_com_acento() {
-        // A armadilha que este teste tranca é silenciosa: um script com acento
-        // passando pela sessão não FALHA, ele devolve o resultado errado.
-        //
-        // O PowerShell lê a entrada padrão na página de código do console, e
-        // "Ação" chega lá dentro como "A├º├úo" — antes de o script rodar. O
-        // processo avulso não sofre disso porque o script viaja na linha de
-        // comando.
+        // Silencioso: acento pela sessão não FALHA, devolve errado.
         assert!(super::sessao::executar("Write-Output 'Ação'", PRAZO_DO_POWERSHELL).is_none());
 
-        // E o caminho completo continua entregando o texto certo, porque cai
-        // no avulso sozinho.
         let saida = powershell("Write-Output 'Ação de Manutenção'").unwrap();
         assert!(saida.stdout.contains("Ação de Manutenção"), "veio: {}", saida.stdout);
     }
 
     #[test]
     fn a_sessao_viva_devolve_o_mesmo_que_o_processo_avulso() {
-        // O ganho de velocidade não vale nada se a resposta mudar. Um script
-        // ASCII precisa dar exatamente o mesmo resultado pelos dois caminhos.
+        // Um script ASCII precisa dar o mesmo resultado pelos dois caminhos.
         let script = "ConvertTo-Json -Compress -InputObject ([ordered]@{ a = 1; b = 'dois' })";
 
         let pela_sessao = super::sessao::executar(script, PRAZO_DO_POWERSHELL)
@@ -699,9 +514,6 @@ mod tests {
 
     #[test]
     fn script_que_lanca_erro_e_reportado_como_falha_pela_sessao() {
-        // Sem isto, a sessão diria "deu certo" para tudo, e quem chama deixaria
-        // de perceber a diferença entre "não há dado" e "a consulta quebrou" —
-        // que é a distinção que este produto inteiro se apoia.
         let saida = super::sessao::executar("throw 'quebrou'", PRAZO_DO_POWERSHELL)
             .expect("script ASCII usa a sessão")
             .expect("a sessão respondeu no prazo");
@@ -710,17 +522,10 @@ mod tests {
 
     #[test]
     fn a_sessao_que_trava_e_encerrada_no_prazo() {
-        // O DEFEITO: a sessão lia a resposta com `read_line` sem limite. Um
-        // script que travasse prendia quem chamou para sempre — no "Otimizar
-        // agora", a tela parada em "Aplicando…" sem fim.
-        //
-        // Sessão própria, e não a global: estourar o prazo derruba a sessão, e
-        // derrubar a global faria os outros testes deste arquivo caírem no
-        // caminho avulso no meio da execução.
+        // Sessão própria: estourar o prazo derruba a sessão, e a global faria os outros testes caírem no avulso.
         let mut viva = super::sessao::abrir().expect("o PowerShell sobe");
 
-        // Antes de travar, a sessão própria responde normalmente — senão o
-        // estouro abaixo poderia ser só uma sessão que nunca funcionou.
+        // Antes de travar, ela responde: senão o estouro poderia ser uma sessão que nunca funcionou.
         let normal = super::sessao::conversar(&mut viva, "Write-Output 'ok'", PRAZO_DO_POWERSHELL);
         let respondeu = matches!(
             &normal,
@@ -750,16 +555,8 @@ mod tests {
 
     #[test]
     fn desistir_de_esperar_mata_o_processo_em_vez_de_deixar_rodando() {
-        // O DEFEITO: o `recv_timeout` devolvia o controle, mas o `Dism.exe`
-        // seguia até o fim — de 1 a 5 minutos de disco e CPU numa máquina que,
-        // por definição, é o "PC fraco" que este produto existe para ajudar. E
-        // como cada clique em "Limpar" refazia a varredura, eles empilhavam.
-        //
-        // (O teste morava em `diskspace.rs`. Subiu para cá junto com a função,
-        // que desde a 2.0 serve todo comando do produto e não só o DISM.)
-        //
-        // `ping -n 30` no lugar do DISM: um processo que demora muito mais que
-        // o prazo, sem precisar de administrador nem mexer no sistema.
+        // O `recv_timeout` devolvia o controle e o `Dism.exe` seguia minutos, empilhando a cada clique. `ping -n 30` faz
+        // o papel sem administrador.
         let mut filho = spawn_capturando("ping", &["-n", "30", "127.0.0.1"])
             .expect("o ping do Windows sobe");
 
@@ -773,8 +570,6 @@ mod tests {
             inicio.elapsed()
         );
 
-        // A prova: o processo precisa estar MORTO agora. Sem o `kill`, ele
-        // continuaria vivo aqui pelos ~30 s do ping.
         let mut morreu = false;
         for _ in 0..100 {
             if matches!(filho.try_wait(), Ok(Some(_))) {
@@ -793,10 +588,7 @@ mod tests {
 
     #[test]
     fn um_comando_rapido_devolve_saida_erro_e_codigo_como_antes() {
-        // `run` passou a ter prazo, e isso não pode ter custado o que ele já
-        // entregava: a saída, o erro e se o programa terminou bem. Os módulos
-        // de serviço leem o código 1056/1062 da saída do `sc` — perder a saída
-        // aqui faria "serviço já parado" virar falha.
+        // O prazo não pode custar a saída: os módulos de serviço leem 1056/1062 do `sc`.
         let saida = run("cmd", &["/c", "echo saida& echo erro 1>&2& exit 3"])
             .expect("o cmd do Windows roda");
 
@@ -813,8 +605,6 @@ mod tests {
             .expect("um ping de 30 s com prazo de meio segundo precisa falhar");
 
         assert!(inicio.elapsed() < Duration::from_secs(10));
-        // O erro diz QUAL comando parou — é o que vai para o registro e o que
-        // permite saber, depois, onde o lote travou.
         assert!(erro.contains("ping -n 30"), "o erro não diz o comando: {}", erro);
     }
 
@@ -839,8 +629,6 @@ mod tests {
 
     #[test]
     fn leitura_que_falha_nunca_vira_lista_vazia() {
-        // O defeito dos quatro módulos calados: cada caminho abaixo virava
-        // `Vec::new()`, e a tela pintava "nada encontrado" de verde.
         let nao_rodou: Result<Vec<u32>, String> =
             json_da_saida(Err("não subiu".to_string()), "a lista");
         let saiu_com_erro: Result<Vec<u32>, String> =
@@ -857,8 +645,7 @@ mod tests {
 
     #[test]
     fn lista_vazia_de_verdade_continua_sendo_vazia() {
-        // O outro lado da regra: `@()` sem nada vira `[]`, e isso é "não há",
-        // que precisa continuar chegando como lista vazia.
+        // `@()` vazio vira `[]`, e isso é "não há": continua lista vazia.
         let vazia: Result<Vec<u32>, String> = json_da_saida(saida(true, "[]\r\n", ""), "a lista");
         let cheia: Result<Vec<u32>, String> = json_da_saida(saida(true, "[1,2]", ""), "a lista");
 
@@ -868,11 +655,7 @@ mod tests {
 
     #[test]
     fn as_quatro_consultas_param_no_erro() {
-        // `json_da_saida` só enxerga a falha que chega como `success: false`.
-        // Dentro da sessão viva, um erro que não interrompe o script chega como
-        // SUCESSO com `[]` — e a lista vazia voltaria a ser pintada de verde.
-        // Foi assim nos quatro módulos até a 2.0, todos com
-        // `-ErrorAction SilentlyContinue` na consulta principal.
+        // Com `-ErrorAction SilentlyContinue`, o erro chega como SUCESSO com `[]`.
         let consultas = [
             ("tasks.rs", "Get-ScheduledTask -ErrorAction Stop"),
             ("servicesaudit.rs", "Win32_Service -ErrorAction Stop"),
@@ -899,10 +682,7 @@ mod tests {
 
     #[test]
     fn ninguem_chama_o_powershell_por_fora_do_helper() {
-        // Chamar `run("powershell", …)` direto compila e funciona — e devolve
-        // acento quebrado, silenciosamente. O erro só aparece na tela do
-        // cliente, num nome de serviço ou de programa. Uma trava é mais barata
-        // que descobrir isso de novo daqui a seis meses.
+        // `run("powershell", …)` direto devolve acento quebrado, calado.
         let raiz = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let mut infratores = Vec::new();
 
@@ -925,9 +705,7 @@ mod tests {
                 let Ok(conteudo) = std::fs::read_to_string(&caminho) else { continue };
 
                 for (numero, linha) in conteudo.lines().enumerate() {
-                    // A única exceção legítima: reabrir o programa como
-                    // administrador. Não lê saída nenhuma, então codificação
-                    // não se aplica, e ela precisa de `-WindowStyle Hidden`.
+                    // Reabrir como administrador: não lê saída, e precisa de `-WindowStyle Hidden`.
                     if linha.contains("\"powershell\"") && !conteudo.contains("Start-Process -FilePath") {
                         achados.push(format!("{}:{}", nome, numero + 1));
                     }
