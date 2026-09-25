@@ -1,21 +1,12 @@
-// Onde fica a configuração gráfica de um jogo em Unreal Engine
-//
-// A escolha do jogador fica no `GameUserSettings.ini` do aparelho, na seção
-// `[ScalabilityGroups]` (documentação da Epic: Scalability Reference). Este
-// módulo só ACHA o arquivo: quem lê é `tetos.rs`, que procura limite de FPS
-// escondido. O ajustador que gravava nele saiu na 3.0, junto da Biblioteca;
-// o desfazer do que ele gravou continua no histórico (`ChangeRecord::GameConfig`).
+// Acha o `GameUserSettings.ini` de um jogo Unreal (seção `[ScalabilityGroups]`); quem lê é `tetos.rs`. O ajustador
+// saiu na 3.0 com a Biblioteca; o desfazer segue no histórico (`ChangeRecord::GameConfig`).
 
 use std::path::{Path, PathBuf};
 
 // ------------------------------------------------------------ achar o arquivo
 
-/// Nomes que podem ser a pasta do jogo em `%LOCALAPPDATA%`, a partir do
-/// executável. **Função pura.**
-///
-/// Layout do Unreal: `...\<Projeto>\Binaries\Win64\<Nome>-Win64-Shipping.exe`.
-/// A pasta de configuração usa às vezes o projeto (`FortniteGame`, `TslGame`)
-/// e às vezes o nome do executável (`VALORANT`), então os dois entram.
+/// **Pura.** `...\<Projeto>\Binaries\Win64\<Nome>-Win64-Shipping.exe`: a pasta de configuração usa às vezes o
+/// projeto (`FortniteGame`, `TslGame`), às vezes o executável (`VALORANT`).
 pub fn candidatos(executavel: &Path) -> Vec<String> {
     let mut v = Vec::new();
     if let Some(stem) = executavel.file_stem().and_then(|s| s.to_str()) {

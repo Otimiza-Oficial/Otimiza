@@ -1,26 +1,7 @@
-// O registro central: tudo o que o Otimiza altera nesta máquina (2.9)
-//
-// POR QUE ELE EXISTE
-//
-// A auditoria da 2.9 achou nove ajustes sem efeito, dois botões que aplicavam
-// receita fixa por cima de um motor que mede, e um limpador que apagava a fila
-// de downloads do Windows. Nenhum deles era segredo: estavam espalhados por
-// vinte e poucos módulos, cada um com a própria porta, e ninguém conseguia ver
-// a lista inteira de uma vez — nem quem escreveu o produto.
-//
-// Este arquivo é essa lista. Cada coisa que o produto muda no computador
-// aparece aqui com: onde ela mora no código, o que ela altera, o risco, se
-// pede reinício e COMO SE DESFAZ. É o que o pedido do dono chama de registro
-// central de alterações.
-//
-// O QUE ELE NÃO É (ainda)
-//
-// Não é o motor que executa. Cada módulo continua aplicando o que aplica; o
-// que este registro garante é que nada mude no computador do cliente sem estar
-// escrito aqui, com o desfazer declarado. A trava
-// `todo_modulo_que_escreve_esta_no_registro` reprova a compilação quando um
-// módulo novo passa a escrever e ninguém o registrou — o mesmo remédio que o
-// `ci_coverage.rs` deu para os módulos fora da esteira.
+// Registro central do que o Otimiza altera nesta máquina: onde mora no código, o que altera, o risco, se pede
+// reinício e COMO SE DESFAZ (a auditoria da 2.9 achou ajustes sem efeito espalhados que ninguém via juntos). Não
+// executa nada. `todo_modulo_que_escreve_esta_no_registro` reprova o build quando um módulo novo escreve sem
+// registro.
 
 use serde::Serialize;
 
@@ -409,12 +390,7 @@ mod tests {
         fora
     }
 
-    /// A TRAVA DESTE ARQUIVO.
-    ///
-    /// Módulo novo que passa a escrever precisa aparecer no registro — ou na
-    /// lista dos que não alteram o Windows, com o motivo. Sem isto, a lista do
-    /// que o produto muda envelhece em silêncio, que foi exatamente o que a
-    /// auditoria da 2.9 encontrou.
+    /// Módulo novo que escreve aparece aqui, ou na lista dos que não alteram o Windows com o motivo.
     #[test]
     fn todo_modulo_que_escreve_esta_no_registro() {
         let registrados: Vec<&str> = FORA_DO_CATALOGO
