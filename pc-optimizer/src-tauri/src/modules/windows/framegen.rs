@@ -1,37 +1,11 @@
-// ---------------------------------------------------------------------------
-// LABORATÓRIO DE GERAÇÃO DE QUADROS
-//
-// Geração de quadros não é "FPS grátis". O quadro gerado é uma imagem
-// INTERPOLADA entre dois quadros que o jogo realmente desenhou: a tela fica
-// mais fluida, mas o jogo não responde mais rápido — para interpolar, o
-// quadro real mais novo precisa esperar o gerado ser mostrado antes dele.
-//
-// Por isso este módulo nunca responde "ligue" ou "desligue" por palpite. Ele
-// separa sempre as duas contas que o mercado mistura:
-//
-//   * quadros RENDERIZADOS — os que o jogo desenhou, e que definem a resposta;
-//   * quadros EXIBIDOS     — os que chegaram à tela, e que definem a fluidez.
-//
-// E cada número carrega de onde veio: MEDIDO (o Windows contou), ESTIMADO (uma
-// conta a partir do medido, com a base dita) ou DESCONHECIDO (não há como
-// saber sem hardware de medição, e o produto diz isso em vez de inventar).
-//
-// O QUE ESTE MÓDULO NÃO FAZ, e as travas no fim do arquivo seguram:
-//   * não liga geração de quadros em jogo nenhum — quem liga é a pessoa, no
-//     menu do jogo ou no painel do driver; o Otimiza mede antes e depois;
-//   * não injeta nada no processo do jogo (a medição é o canal de eventos do
-//     Windows, o mesmo de `frames.rs`);
-//   * não grava ajuste de driver fora do cabeçalho público.
-//
-// Tudo que decide é função pura, testada sem jogo aberto. O que lê a máquina
-// fica no fim, separado.
-// ---------------------------------------------------------------------------
+// Laboratório de geração de quadros. O quadro gerado é INTERPOLADO: a tela fica mais fluida, o jogo não responde
+// mais rápido (o real mais novo espera o gerado). Separa RENDERIZADOS (resposta) de EXIBIDOS (fluidez), cada número
+// MEDIDO, ESTIMADO (base dita) ou DESCONHECIDO. Não liga geração em jogo nenhum, não injeta nada, não grava ajuste
+// de driver fora do cabeçalho público (as travas no fim seguram).
 
 use serde::{Deserialize, Serialize};
 
 use super::bottleneck::Limite;
-
-// ------------------------------------------------------------------- a placa
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Fabricante {
@@ -62,11 +36,9 @@ pub enum Arquitetura {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Placa {
-    /// O nome como o Windows escreveu. Evidência, não traduz.
     pub nome: String,
     pub fabricante: Fabricante,
     pub arquitetura: Arquitetura,
-    /// Versão do driver como o Windows escreveu, quando foi possível ler.
     pub driver: Option<String>,
 }
 
@@ -124,11 +96,7 @@ fn classificar_uma(nome: &str) -> (Fabricante, Arquitetura) {
     (Fabricante::Desconhecido, Arquitetura::Desconhecida)
 }
 
-/// Classifica a placa pelo nome que o Windows devolve.
-///
-/// Notebook com duas placas chega como `"Intel(R) UHD Graphics + NVIDIA
-/// GeForce RTX 4060 Laptop GPU"`. O jogo roda na dedicada, então é ela que
-/// decide o que existe: a integrada só vale quando é a única.
+/// Notebook com duas placas chega como "Intel(R) UHD Graphics + NVIDIA ... Laptop GPU": decide a dedicada.
 pub fn classificar_placa(nome: &str, driver: Option<String>) -> Placa {
     let prioridade = |f: Fabricante| match f {
         Fabricante::Nvidia | Fabricante::Amd => 2,
@@ -160,8 +128,6 @@ pub fn classificar_placa(nome: &str, driver: Option<String>) -> Placa {
     }
 }
 
-// -------------------------------------------------------------- as tecnologias
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tecnologia {
     /// NVIDIA DLSS Frame Generation (DLSS 3 e 4). Dentro do jogo.
@@ -179,7 +145,6 @@ pub enum Tecnologia {
     Otimiza,
 }
 
-/// Onde a geração acontece. Muda o que dá para medir.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tipo {
     /// O jogo gera. Os quadros gerados saem pela mesma entrega do jogo.
@@ -221,14 +186,9 @@ pub struct OpcaoDeGeracao {
     pub tecnologia: Tecnologia,
     pub tipo: Tipo,
     pub disponibilidade: Disponibilidade,
-    /// Multiplicadores que a tecnologia oferece NESTA placa. Vazio quando não
-    /// há suporte.
     pub multiplicadores: Vec<u8>,
-    /// Este jogo, se reconhecido, traz a opção no menu.
     pub o_jogo_oferece: Option<bool>,
 }
-
-// ------------------------------------------------------------------ os jogos
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JogoConhecido {
@@ -262,8 +222,6 @@ fn geracoes_nativas(jogo: JogoConhecido) -> &'static [Tecnologia] {
     }
 }
 
-/// O que existe para esta placa, este jogo e esta máquina.
-///
 /// `lossless_instalado` é `None` quando não houve como procurar.
 pub fn catalogo(
     placa: &Placa,
@@ -353,8 +311,6 @@ pub fn catalogo(
     ]
 }
 
-// ------------------------------------------------------- de onde veio o número
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BaseDaEstimativa {
     /// Quadros medidos vezes o multiplicador que a pessoa escolheu.
@@ -402,8 +358,6 @@ fn arredondar(x: f64, casas: i32) -> f64 {
     (x * f).round() / f
 }
 
-// ------------------------------------------------------------------- o ritmo
-
 /// Abaixo disto os percentis viram meia dúzia de quadros.
 const AMOSTRAS_MINIMAS: usize = 300;
 
@@ -425,7 +379,6 @@ pub struct Ritmo {
     pub confiavel: bool,
 }
 
-/// Percentil pelo posto mais próximo, sobre intervalos já ordenados.
 fn percentil(ordenados: &[f64], p: f64) -> f64 {
     if ordenados.is_empty() {
         return 0.0;
@@ -506,8 +459,6 @@ fn ritmo_irregular(r: &Ritmo) -> bool {
     r.confiavel && (r.consistencia < 70.0 || r.picos_por_minuto > 10.0)
 }
 
-// -------------------------------------------------------------- a prontidão
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Prontidao {
     NaoRecomendada,
@@ -551,8 +502,7 @@ fn rebaixar(p: Prontidao) -> Prontidao {
     }
 }
 
-/// Quão pronta esta máquina está para geração de quadros, a partir dos
-/// quadros REAIS medidos com a geração desligada.
+/// Pelos quadros REAIS medidos com a geração desligada.
 pub fn prontidao(
     fps_base: f64,
     hz: u32,
@@ -600,14 +550,11 @@ pub fn cpu_limitada(limite: Limite) -> bool {
     matches!(limite, Limite::CpuUmNucleo | Limite::CpuTodos)
 }
 
-// --------------------------------------------------------------- o atraso
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Latencia {
     /// Quanto dura um quadro real. Piso do que o jogo consegue responder.
     pub renderizacao_ms: Valor,
-    /// O que a geração acrescenta. NUNCA é negativo: geração de quadros não
-    /// reduz atraso, e nenhum número daqui vai dizer isso.
+    /// NUNCA negativo: geração de quadros não reduz atraso.
     pub acrescimo_da_geracao_ms: Valor,
     pub jogo_ms: Valor,
     pub tela_ms: Valor,
@@ -635,9 +582,6 @@ pub fn latencia(fps_renderizado: Option<f64>, geracao_ligada: bool) -> Latencia 
     }
 }
 
-// ---------------------------------------------------------------- a rodada
-
-/// Uma medição do Windows, já reduzida ao que o laboratório usa.
 #[derive(Debug, Clone)]
 pub struct Contagem {
     pub fps: f64,
@@ -654,16 +598,11 @@ pub struct Rodada {
     pub multiplicador: u8,
     pub fps_renderizado: Valor,
     pub fps_exibido: Valor,
-    /// Ritmo dos quadros do jogo.
     pub ritmo_renderizado: Ritmo,
-    /// Ritmo do que foi para a tela, quando dá para medir separado.
     pub ritmo_exibido: Option<Ritmo>,
     pub latencia: Latencia,
-    /// Exibidos ÷ renderizados, quando os DOIS foram medidos (geração
-    /// externa). Confere se o multiplicador escolhido é o que chegou à tela:
-    /// com limite de quadros ou vsync no gerador, chega menos.
+    /// Exibidos ÷ renderizados, só na geração externa: com limite ou vsync no gerador, chega menos que o escolhido.
     pub multiplicador_medido: Option<f64>,
-    /// Os primeiros intervalos medidos, para o gráfico de tempo de quadro.
     pub amostra_ms: Vec<f64>,
     pub segundos: f64,
 }
@@ -739,8 +678,6 @@ pub fn montar_rodada(
     }
 }
 
-// -------------------------------------------------------------- a pontuação
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Perfil {
     /// Resposta acima de tudo. Quadro exibido não vale ponto nenhum.
@@ -797,8 +734,6 @@ pub fn pontuar(r: &Rodada, perfil: Perfil, hz: u32) -> Pontuacao {
         estabilidade: arredondar(estabilidade, 0),
     }
 }
-
-// ------------------------------------------------------- o teste de artefatos
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Artefato {
@@ -869,8 +804,6 @@ pub fn avaliar_artefatos(respostas: &[(Artefato, Intensidade)]) -> NotaDeArtefat
     NotaDeArtefatos { nota: arredondar(nota, 0), nivel }
 }
 
-// --------------------------------------------------------------- a decisão
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Decisao {
     Manter,
@@ -905,9 +838,7 @@ pub struct Comparacao {
     pub perfil: Perfil,
     pub pontos_desligado: Pontuacao,
     pub pontos_ligado: Pontuacao,
-    /// Variação dos quadros exibidos, em %. `None` quando não há número.
     pub exibido_pct: Option<f64>,
-    /// Variação dos quadros renderizados, em %. Quase sempre negativa.
     pub renderizado_pct: Option<f64>,
     pub atraso_acrescentado_ms: Option<f64>,
     pub decisao: Decisao,
@@ -956,10 +887,7 @@ fn variacao(antes: Option<f64>, depois: Option<f64>) -> Option<f64> {
 pub const QUEDA_MAXIMA_COMPETITIVO_PCT: f64 = 5.0;
 pub const QUEDA_MAXIMA_PCT: f64 = 20.0;
 pub const ATRASO_MAXIMO_COMPETITIVO_MS: f64 = 10.0;
-/// A guarda de atraso vale para TODO perfil desde a 2.9, não só para quem
-/// escolheu "resposta acima de tudo": acima disto (mais de um quadro de 60 Hz
-/// e um pouco), o controle fica pesado o bastante para ser sentido por
-/// qualquer jogador, e a imagem mais lisa não compensa.
+/// Vale para TODO perfil desde a 2.9: acima disto o controle pesa para qualquer jogador.
 pub const ATRASO_MAXIMO_MS: f64 = 20.0;
 
 /// Liga contra desliga, com a mesma régua para os dois lados.
@@ -1093,8 +1021,6 @@ pub fn melhor_rodada(
         .map(|(i, _)| i)
 }
 
-// ----------------------------------------------------- limite e a taxa da tela
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Casamento {
     /// Mais quadros do que a tela mostra: os excedentes viram rasgo ou fila.
@@ -1135,8 +1061,6 @@ pub fn ajuste_de_tela(fps_exibido: Option<f64>, hz: u32, multiplicador: u8) -> A
     AjusteDeTela { casamento, limite_sugerido: limite_sugerido(hz, multiplicador.max(1)) }
 }
 
-// ------------------------------------------------------------- a detecção
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Tela {
     pub largura: u32,
@@ -1150,7 +1074,6 @@ pub struct Deteccao {
     pub placa: Placa,
     pub tela: Option<Tela>,
     pub jogo: Option<JogoConhecido>,
-    /// O processo do jogo aberto, se algum foi pedido e achado.
     pub processo: Option<String>,
     pub lossless_scaling: Option<bool>,
     pub opcoes: Vec<OpcaoDeGeracao>,
@@ -1158,11 +1081,8 @@ pub struct Deteccao {
 
 pub const PROCESSO_LOSSLESS: &str = "losslessscaling";
 
-/// Procura o Lossless Scaling aberto ou na biblioteca padrão da Steam.
-///
-/// Só a biblioteca padrão: ler o `libraryfolders.vdf` de cada disco seria
-/// outro parser para uma resposta que a pessoa sabe dar. Não achar vira
-/// `NaoEncontrado`, que a tela explica — e não "não tem".
+/// Só a biblioteca padrão (outro parser de `libraryfolders.vdf` não se paga). Não achar é `NaoEncontrado`, não
+/// "não tem".
 #[cfg(target_os = "windows")]
 fn procurar_lossless() -> Option<bool> {
     if super::frames::encontrar_processo(PROCESSO_LOSSLESS).is_some() {
@@ -1263,10 +1183,7 @@ pub struct ResultadoDaRodada {
     pub tela: AjusteDeTela,
 }
 
-/// Mede uma rodada. Bloqueia pelo tempo pedido.
-///
-/// O uso de processador e placa é amostrado AO MESMO TEMPO, numa linha
-/// própria: medir depois seria medir outra cena.
+/// Bloqueia pelo tempo pedido. Processador e placa são amostrados AO MESMO TEMPO: depois seria outra cena.
 #[cfg(target_os = "windows")]
 pub fn medir_rodada(
     processo: &str,
@@ -1331,8 +1248,6 @@ pub fn medir_rodada(
     Ok(ResultadoDaRodada { rodada, prontidao, gargalo, tela })
 }
 
-// ------------------------------------------------------------------ testes
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1348,8 +1263,6 @@ mod tests {
     fn rodada_off(fps: f64) -> Rodada {
         montar_rodada(None, 1, &contagem(fps, 1000), None, 20.0)
     }
-
-    // ---- placa
 
     #[test]
     fn classifica_as_series_nvidia() {
@@ -1375,8 +1288,6 @@ mod tests {
         assert_eq!(p.arquitetura, Arquitetura::Rtx40);
         assert_eq!(p.nome, "NVIDIA GeForce RTX 4060 Laptop GPU");
     }
-
-    // ---- catálogo
 
     fn opcao(lista: &[OpcaoDeGeracao], t: Tecnologia) -> OpcaoDeGeracao {
         lista.iter().find(|o| o.tecnologia == t).cloned().expect("toda tecnologia aparece")
@@ -1444,8 +1355,6 @@ mod tests {
         catalogo(&classificar_placa("RTX 4070", None), None, None)
     }
 
-    // ---- ritmo
-
     #[test]
     fn ritmo_constante_e_totalmente_consistente() {
         let r = ritmo(&estavel(16.67, 1000));
@@ -1481,8 +1390,6 @@ mod tests {
         assert_eq!(ritmo(&[]).amostras, 0);
     }
 
-    // ---- prontidão
-
     #[test]
     fn faixas_de_prontidao_pelo_fps_real() {
         let r = ritmo(&estavel(20.0, 1000));
@@ -1517,8 +1424,6 @@ mod tests {
         assert!(leitura.motivos.contains(&MotivoDaProntidao::LimitadoPeloProcessador));
         assert!(!prontidao(60.0, 144, &r, Some(Limite::Gpu)).motivos.contains(&MotivoDaProntidao::LimitadoPeloProcessador));
     }
-
-    // ---- rodada: o que é medido e o que é estimado
 
     #[test]
     fn desligado_mede_os_dois_e_nao_acrescenta_atraso() {
@@ -1587,8 +1492,6 @@ mod tests {
         assert_eq!(r.multiplicador, 4);
         assert_eq!(rodada_off(60.0).multiplicador, 1);
     }
-
-    // ---- pontuação e decisão
 
     #[test]
     fn no_competitivo_quadro_exibido_nao_vale_ponto() {
@@ -1698,8 +1601,6 @@ mod tests {
         assert_eq!(melhor_rodada(&off, &testadas, Perfil::Competitivo, 144), None);
     }
 
-    // ---- artefatos
-
     #[test]
     fn artefatos_forte_e_incomodo_nenhum_e_limpo() {
         assert_eq!(avaliar_artefatos(&[(Artefato::Fantasmas, Intensidade::Nenhuma)]).nivel, NivelDeArtefato::Limpo);
@@ -1710,8 +1611,6 @@ mod tests {
                 < avaliar_artefatos(&[(Artefato::Borrado, Intensidade::Leve)]).nota
         );
     }
-
-    // ---- tela
 
     #[test]
     fn limite_sugerido_fica_abaixo_do_monitor_depois_de_multiplicar() {
@@ -1737,8 +1636,6 @@ mod tests {
         assert_eq!(ajuste_de_tela(None, 144, 2).casamento, Casamento::MonitorDesconhecido);
     }
 
-    // ---- travas
-
     fn fonte_sem_testes() -> String {
         let fonte = include_str!("framegen.rs");
         fonte.split("#[cfg(test)]").next().unwrap_or_default().to_string()
@@ -1746,8 +1643,7 @@ mod tests {
 
     #[test]
     fn o_laboratorio_nao_escreve_no_driver_nem_no_jogo() {
-        // Ligar geração é da pessoa, no jogo ou no painel do fabricante. Este
-        // módulo mede. Se alguém chamar escrita daqui, a trava reprova.
+        // Ligar geração é da pessoa: se alguém chamar escrita daqui, a trava reprova.
         let fonte = fonte_sem_testes();
         for proibido in [
             "nvdriver::aplicar",

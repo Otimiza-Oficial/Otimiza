@@ -1,25 +1,7 @@
-// O veredito
-//
-// POR QUE ESTE ARQUIVO EXISTE
-//
-// O Otimiza foi testado em duas máquinas reais e falhou nas duas. Não por falta
-// de diagnóstico: os módulos tinham medido tudo certo. Falhou porque o cliente
-// precisava clicar em dezessete botões espalhados por cinco abas para ver os
-// pedaços, e nenhum deles dizia qual era O problema. Numa máquina que travava o
-// PC inteiro ao abrir o jogo, a tela dizia "memória e paginação sem problemas".
-//
-// Este módulo faz a coisa que faltava: recolhe os diagnósticos baratos, traduz
-// todos para o mesmo vocabulário, e elege UMA frase. Não um placar, não uma
-// nota de 0 a 100 — uma frase com o número que a sustenta.
-//
-// A REGRA DE ELEIÇÃO, E POR QUE ELA É ASSIM
-//
-// A ordem não é a intuitiva. Um disco morrendo vence a memória em canal único,
-// e não é porque hardware vence software (os dois são hardware). É porque falta
-// de memória custa desempenho, e disco morrendo custa os arquivos do cliente —
-// e porque toda otimização vendida em cima de um disco que está morrendo é
-// trabalho cobrado e perdido. Dizer primeiro a coisa que o produto NÃO pode
-// vender é o que sustenta a promessa comercial dele.
+// O veredito: recolhe os diagnósticos baratos, traduz para o mesmo vocabulário e elege UMA frase com o número
+// que a sustenta (numa máquina que travava ao abrir o jogo, a tela dizia "memória sem problemas" porque cada
+// pedaço morava numa aba). Disco morrendo vence memória em canal único: custa os arquivos do cliente, e otimizar
+// sobre ele é trabalho perdido.
 
 use super::achados::{
     peso_confianca, peso_severidade, Acao, Achado, Causa, Confianca, EmAchados, FindingSeverity,
@@ -29,25 +11,21 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Veredito {
-    /// A frase única. É isto que o cliente lê primeiro.
     pub frase: String,
     /// O que foi medido para poder afirmar aquilo.
     pub detalhe: String,
     /// O achado que decidiu a frase. Ausente quando nada foi encontrado.
     pub principal: Option<Achado>,
-    /// Outros achados da MESMA causa. É o que junta na tela o canal único e a
-    /// memória prometida acima da física, que hoje moram em módulos diferentes.
+    /// Outros achados da MESMA causa: junta canal único e memória prometida acima da física, de módulos diferentes.
     pub corroboracoes: Vec<Achado>,
     /// Todos os achados, já ordenados pela regra de eleição.
     pub achados: Vec<Achado>,
-    /// O que não deu para verificar. Nunca fica escondido.
+    /// Nunca fica escondido.
     pub lacunas: Vec<Lacuna>,
     /// O relatório de desempenho perdido (2.9): há desempenho que o hardware
     /// deveria entregar e não entrega? Com prioridade por achado.
     pub recuperacao: Recuperacao,
 }
-
-// ------------------------------------------------- desempenho perdido (2.9)
 
 /// Prioridade de um problema. Sempre resolver P0 e P1 primeiro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -133,20 +111,14 @@ pub fn recuperacao(achados: &[Achado], lacunas: &[Lacuna]) -> Recuperacao {
     Recuperacao { perdido, itens: itens.into_iter().map(|(id, p, _)| (id, p)).collect() }
 }
 
-// ------------------------------------------------------------------ eleição
-
-/// Chave de ordenação. Menor vem primeiro; o primeiro é o veredito.
-///
-/// Lexicográfica de propósito: cada critério só é consultado quando o anterior
-/// empata, e a ordem dos critérios é a decisão de produto deste arquivo.
+/// Lexicográfica: cada critério só conta quando o anterior empata; a ordem é a decisão de produto.
 fn peso(a: &Achado) -> (u8, u8, u8, u8) {
     (
         // 1. Severidade. Inegociável.
         peso_severidade(a.severity),
         // 2. Risco de perder arquivo antes de risco de perder desempenho.
         if a.causa == Causa::Armazenamento { 0 } else { 1 },
-        // 3. Evidência que persiste vence foto do instante do clique — o
-        //    cliente abre o Otimiza com o jogo fechado.
+        // 3. Evidência que persiste vence a foto do instante: o cliente abre o Otimiza com o jogo fechado.
         peso_confianca(a.confianca),
         // 4. Só então onde se conserta.
         match a.fix_location {
@@ -158,8 +130,7 @@ fn peso(a: &Achado) -> (u8, u8, u8, u8) {
     )
 }
 
-/// Elege a frase. **Função pura**: é o que permite testar a decisão com os
-/// números de uma máquina real sem tocar em máquina nenhuma.
+/// **Pura**: testa a decisão com números de uma máquina real sem tocar em máquina nenhuma.
 pub fn veredito(achados: &[Achado], lacunas: &[Lacuna]) -> Veredito {
     let mut ordenados = achados.to_vec();
     ordenados.sort_by_key(peso);
@@ -181,9 +152,7 @@ pub fn veredito(achados: &[Achado], lacunas: &[Lacuna]) -> Veredito {
 
             (p.title.clone(), p.measured.clone(), corroboracoes)
         }
-        // Não achar nada é um resultado de primeira classe, com os números que
-        // sustentam a afirmação. Admitir que o ganho é zero é regra da casa —
-        // inventar um problema para justificar a compra é o oposto do produto.
+        // Não achar nada é resultado de primeira classe, com os números que sustentam.
         None => (
             "Não encontramos causa de travamento nesta máquina".to_string(),
             detalhe_de_maquina_sadia(&ordenados, lacunas),
@@ -226,13 +195,7 @@ fn detalhe_de_maquina_sadia(ordenados: &[Achado], lacunas: &[Lacuna]) -> String 
     texto
 }
 
-// ------------------------------------------- conversão dos módulos existentes
-
-/// A causa por trás de cada achado, por identificador.
-///
-/// Tabela explícita e não heurística de propósito: é ela que decide o que
-/// aparece agrupado na tela, e um agrupamento errado inventa uma relação que
-/// não existe. Vale conferir linha a linha numa revisão.
+/// Tabela explícita: um agrupamento errado inventaria uma relação. Confira linha a linha numa revisão.
 fn causa_de(origem: Origem, id: &str) -> Causa {
     match origem {
         Origem::Memoria | Origem::Pressao => Causa::Memoria,
@@ -249,9 +212,7 @@ fn causa_de(origem: Origem, id: &str) -> Causa {
             }
         }
 
-        // Firmware cobre memória, arranque, VBS e queda de desempenho sob carga.
-        // O canal único da memória precisa cair em `Memoria` — é justamente ele
-        // que tem de aparecer junto do "prometido acima do físico".
+        // O canal único precisa cair em `Memoria`, junto do "prometido acima do físico".
         Origem::Firmware => {
             if id.starts_with("memory_") {
                 Causa::Memoria
@@ -272,11 +233,8 @@ fn causa_de(origem: Origem, id: &str) -> Causa {
             }
         }
 
-        // Do registro de eventos vêm duas coisas muito diferentes: o
-        // esgotamento de memória, que o Windows declarou textualmente, e o
-        // programa que parou de responder, que pode ter várias causas. O
-        // segundo NÃO pode ser agrupado sob memória — isso afirmaria uma
-        // relação que ninguém mediu.
+        // Esgotamento de memória é declarado pelo Windows; programa que parou de responder tem várias causas e NÃO pode
+        // ser agrupado sob memória.
         Origem::Esgotamento => {
             if id == "windows_registrou_esgotamento" {
                 Causa::Memoria
@@ -293,11 +251,7 @@ fn causa_de(origem: Origem, id: &str) -> Causa {
     }
 }
 
-/// Achados que vêm de leitura de configuração, sem medir efeito.
-///
-/// A distinção importa: "XMP desligado" é uma configuração observada, e não a
-/// prova de que a máquina trava. Marcar como `Inferido` impede que ele vença um
-/// esgotamento de memória registrado pelo próprio Windows.
+/// "XMP desligado" é configuração observada, não prova: `Inferido` impede que vença um esgotamento registrado.
 fn confianca_de(origem: Origem, id: &str) -> Confianca {
     match (origem, id) {
         // Marca d'água e log de eventos valem para o que já aconteceu, mesmo
@@ -326,21 +280,11 @@ fn confianca_de(origem: Origem, id: &str) -> Confianca {
     }
 }
 
-/// O conserto que o Otimiza sabe fazer para cada achado, quando existe.
-///
-/// A tabela é curta de propósito, e vai continuar curta: a maior parte dos
-/// achados deste produto aponta para memória insuficiente, disco morrendo ou
-/// configuração de BIOS — nenhum desses tem botão, e fingir que tem seria
-/// exatamente a promessa que o Otimiza existe para não fazer.
-///
-/// O que entra aqui é só o que já existe como comando registrado, testado, e
-/// reversível pelo histórico de mudanças.
+/// Curta de propósito: memória insuficiente, disco morrendo e BIOS não têm botão. Só entra comando registrado,
+/// testado e reversível pelo histórico.
 fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
     let (comando, argumento, rotulo, exige_admin) = match (origem, id) {
-        // Devolver a paginação ao Windows. Era o conserto mais escondido do
-        // produto: existia como botão dentro de um painel de aba, e o cliente
-        // com paginação desligada — que é quem mais precisa dele — nunca
-        // chegava lá.
+        // Existia só como botão dentro de um painel, e quem mais precisava nunca chegava lá.
         (Origem::Memoria, "pagefile_off") | (Origem::Memoria, "pagefile_manual") => (
             "set_automatic_pagefile",
             None,
@@ -348,19 +292,9 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
-        // ── OS QUATRO QUE FALTAVAM ────────────────────────────────────────
-        //
-        // Todos os quatro ja tinham conserto no backend, e o achado ja dizia
-        // ao cliente para ir aplicar noutra aba. Ler um problema e receber o
-        // endereco de onde resolve-lo e melhor que nada, mas e pior que o
-        // botao — sobretudo porque o produto ja sabia o id da otimizacao.
-        //
-        // `apply_optimization` recebe `id: String`, que casa com o
-        // `{ id: argumento }` que a tela ja manda. Nenhuma assinatura mudou.
+        // `apply_optimization` recebe `id: String`, que casa com o `{ id: argumento }` da tela.
 
-        // O caso mais comum de todos, segundo o proprio thermal.rs: o plano de
-        // energia com teto no processador. "O caso mais facil de resolver e o
-        // que mais aparece" — e mandava o cliente para a aba Otimizacoes.
+        // O caso mais comum segundo o `thermal.rs`: teto no plano de energia.
         (Origem::Termico, "teto_no_plano_de_energia") => (
             "apply_optimization",
             Some("plano_otimiza"),
@@ -368,8 +302,6 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
-        // Mesmo caso: o firmware.rs escrevia "A otimizacao 'Liberar limites de
-        // inicializacao' corrige" e parava ai.
         (Origem::Firmware, "boot_limits_present") => (
             "apply_optimization",
             Some("clear_boot_limits"),
@@ -385,9 +317,7 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
-        // Paginacao pequena demais para o que a maquina ja usou. Devolver a
-        // decisao ao Windows e a mesma cura de `pagefile_off`, e o comando ja
-        // estava mapeado para o irmao dele.
+        // A mesma cura de `pagefile_off`: devolver a decisão ao Windows.
         (Origem::Memoria, "pagefile_small") => (
             "set_automatic_pagefile",
             None,
@@ -513,8 +443,7 @@ fn achados_do_microcodigo() -> Result<Vec<Achado>, String> {
     })
 }
 
-/// Usada tanto pelo relatório completo de firmware quanto pelo diagnóstico
-/// rápido da tela inicial, que só recolhe os achados de memória.
+/// Serve ao relatório completo de firmware e ao diagnóstico rápido, que só recolhe os de memória.
 fn achados_de_firmware(findings: &[super::firmware::FirmwareFinding]) -> Vec<Achado> {
     findings
         .iter()
@@ -629,16 +558,8 @@ impl EmAchados for super::display::DisplayReport {
                     f.fix_location,
                 );
 
-                // O único achado do produto que o Otimiza resolve com um
-                // clique e que muda o que a tela mostra na hora.
-                //
-                // Até aqui ele só apontava: "seu monitor está em 60 Hz e
-                // aceita 180". O cliente tinha que ir sozinho nas
-                // configurações do Windows, num caminho que quase ninguém
-                // conhece — e é exatamente por isso que tanta gente joga a
-                // 60 Hz num monitor de 180.
-                // Só o achado de taxa tem botão: o do cabo na placa-mãe se
-                // resolve com a mão, atrás do gabinete.
+                // O único achado resolvido com um clique que muda a tela na hora (quase ninguém acha o caminho no Windows). O do
+                // cabo na placa-mãe se resolve com a mão.
                 if !f.id.starts_with("hz_abaixo_") {
                     return achado;
                 }
@@ -698,9 +619,7 @@ impl EmAchados for super::conflicts::ConflictReport {
         self.conflicts
             .iter()
             .map(|c| {
-                // O "nenhum conflito" não tem nome para listar, e "Encontrados: ."
-                // violava a regra de que `measured` nunca fica vazio. O número
-                // medido ali é quantos programas foram examinados.
+                // `measured` nunca fica vazio: o número é quantos programas foram examinados.
                 let medido = if c.found.is_empty() {
                     match self.programs_scanned {
                         Some(n) => format!(
@@ -713,8 +632,6 @@ impl EmAchados for super::conflicts::ConflictReport {
                     format!("Encontrados: {}.", c.found.join(", "))
                 };
 
-                // Conflito não tem `fix_location` próprio: dois antivírus se
-                // resolvem desinstalando um, que é software.
                 montar(
                     Origem::Conflitos,
                     c.id.clone(),
@@ -733,20 +650,11 @@ impl EmAchados for super::thermal::ThermalReport {
     fn achados(&self) -> Vec<Achado> {
         use super::thermal::Culprit;
 
-        // NADA SEGURANDO O PROCESSADOR NÃO VIRA ACHADO.
-        //
-        // E `Bateria` também não: um notebook na bateria é limitado de
-        // propósito pelo Windows, e chamar isso de problema seria vender
-        // conserto para o comportamento correto do aparelho.
+        // Nada segurando NÃO vira achado, e `Bateria` também não: é limitação correta do Windows.
         let (id, titulo, severidade, onde) = match self.culprit {
             Culprit::Nenhum | Culprit::Bateria => return Vec::new(),
 
-            // A ÚNICA SITUAÇÃO EM QUE O MÓDULO DIZ A PALAVRA CALOR.
-            //
-            // E é a que mais importa para este produto: um processador em
-            // throttling térmico entrega uma fração do que pode, nenhum ajuste
-            // de software resolve, e o técnico otimiza, mede, e não melhora
-            // nada — porque o problema é físico.
+            // A ÚNICA situação em que o módulo diz "calor": problema físico que nenhum ajuste resolve.
             Culprit::Calor => (
                 "throttling_termico",
                 "O processador está sendo segurado por temperatura",
@@ -762,8 +670,7 @@ impl EmAchados for super::thermal::ThermalReport {
                 FixLocation::Software,
             ),
 
-            // Limite elétrico é outra conversa, e não pode ser vendido como
-            // sujeira no cooler.
+            // Limite elétrico não pode ser vendido como sujeira no cooler.
             Culprit::LimiteEletrico => (
                 "limite_eletrico",
                 "O processador está limitado por energia, não por temperatura",
@@ -771,8 +678,7 @@ impl EmAchados for super::thermal::ThermalReport {
                 FixLocation::Hardware,
             ),
 
-            // Frequência baixa sem causa conhecida: o fato é medido, a causa
-            // não. `Indefinida` existe exatamente para isso.
+            // O fato é medido, a causa não: `Indefinida`.
             Culprit::NaoIdentificado => (
                 "frequencia_baixa_sem_causa",
                 "O processador está abaixo do que pode, e não sei dizer por quê",
@@ -793,11 +699,7 @@ impl EmAchados for super::thermal::ThermalReport {
     }
 }
 
-/// Driver de vídeo velho demais para o jogo que o cliente joga.
-///
-/// Não é sobre "atualizar sempre": driver novo às vezes regride. É sobre a
-/// distância — um driver de dois anos não conhece as otimizações que a placa
-/// ganhou desde então, e para jogo recente isso é perda de quadros de graça.
+/// Não é "atualizar sempre" (driver novo regride): é a distância, dois anos sem as otimizações da placa.
 const DIAS_QUE_TORNAM_O_DRIVER_VELHO: i64 = 365;
 
 impl EmAchados for super::shaders::ShaderReport {
@@ -828,33 +730,19 @@ impl EmAchados for super::shaders::ShaderReport {
              mais antigas."
                 .to_string(),
             FindingSeverity::Important,
-            // `None` porque o Otimiza NÃO conserta isto: instalar driver baixa
-            // da internet e troca componente de vídeo, e errar aí deixa a
-            // máquina sem imagem. Marcar como `Software` faria a interface
-            // oferecer um botão que não existe.
+            // `None`: instalar driver baixa da internet e troca componente de vídeo; errar deixa sem imagem.
             FixLocation::None,
         )]
     }
 }
 
-/// Abaixo disto o Windows passa a falhar de formas que ninguém associa a disco:
-/// atualização que não instala, jogo que não salva, arquivo temporário que não
-/// cabe.
+/// Abaixo disto o Windows falha de formas que ninguém associa a disco.
 const GB_LIVRES_QUE_JA_E_PROBLEMA: f64 = 10.0;
 
 impl EmAchados for super::diskspace::DiskReport {
     fn achados(&self) -> Vec<Achado> {
-        // SEM MEDICAO NAO HA ACHADO, E A DIFERENCA E CARA.
-        //
-        // `disk_usage` devolvia (0, 0) quando nao achava o volume do sistema, e
-        // esta funcao lia isso como disco cheio: "Restam 0.0 GB livres no disco
-        // do Windows", severidade Critical, na primeira tela. Numero inventado
-        // no lugar mais visivel do produto.
-        //
-        // Disco genuinamente cheio tem `free_bytes` zero e `total_bytes` maior
-        // que zero, e continua sendo Critical — e o que muda aqui e so o caso
-        // em que ninguem mediu. Quem transforma isso em lacuna e a tarefa que
-        // coleta, logo abaixo.
+        // Sem medição, sem achado: `disk_usage` devolvia (0, 0) sem volume e virava "Restam 0.0 GB" Critical. Disco
+        // cheio de verdade (total > 0) continua Critical; o não medido vira lacuna na coleta.
         if self.medida_do_espaco != super::diskspace::Medida::Medido {
             return Vec::new();
         }
@@ -865,10 +753,7 @@ impl EmAchados for super::diskspace::DiskReport {
             return Vec::new();
         }
 
-        // O QUE DÁ PARA LIMPAR ENTRA NA FRASE.
-        //
-        // "Seu disco está cheio" sem dizer quanto o produto consegue devolver é
-        // uma reclamação; com o número, é uma ação.
+        // Com o quanto dá para limpar, a reclamação vira ação.
         let limpavel = self
             .findings
             .iter()
@@ -900,20 +785,11 @@ impl EmAchados for super::diskspace::DiskReport {
     }
 }
 
-// ------------------------------------------------------------ coleta rápida
-
-/// Quantos diagnósticos podem rodar ao mesmo tempo.
-///
-/// NÃO é um número escolhido por velocidade. Cada diagnóstico dispara um
-/// `powershell.exe`, que custa uns 40 MB de memória prometida. Disparar os
-/// quatro de uma vez acrescentaria mais de 150 MB de pressão **na máquina que
-/// estamos diagnosticando justamente por pressão de memória** — o produto se
-/// desmentiria na própria medição. Três é o teto; em máquina fraca, um só.
+/// Cada diagnóstico abre um `powershell.exe` (~40 MB prometidos): quatro juntos pesariam 150 MB na máquina
+/// diagnosticada por falta de memória. Três no máximo; em máquina fraca, um.
 const DIAGNOSTICOS_SIMULTANEOS: usize = 3;
 
 fn limite_de_simultaneos() -> usize {
-    // Mesmo critério que a interface já usa para reduzir animação em máquina
-    // fraca: até dois núcleos, nada roda em paralelo.
     let nucleos = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1);
@@ -925,27 +801,18 @@ fn limite_de_simultaneos() -> usize {
     }
 }
 
-/// O grupo barato: o que pode rodar sozinho ao abrir o programa.
-///
-/// Ficam de fora, de propósito, os diagnósticos que custam caro ou que mentem
-/// quando rodados na hora errada — o analisador de gargalo, por exemplo, leva
-/// de quatro a trinta segundos e, com o PC parado na área de trabalho, devolve
-/// "sem carga". Rodá-lo ao abrir produziria lixo com aparência de diagnóstico.
+/// Fora os caros ou que mentem na hora errada: o gargalo leva até 30 s e, parado, devolve "sem carga".
 pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
     type Tarefa = (Origem, fn() -> Result<Vec<Achado>, String>);
 
-    // Ordem deliberada: os caros primeiro. Com um limite de três simultâneos, a
-    // fila termina em torno do mais demorado se ele começar cedo, e em torno da
-    // soma se ele começar por último. Medido nesta máquina em 12/08/2026:
-    // prontidão 4,8 s · saúde 4,5 s · memória 1,1 s · firmware 0,9 s.
+    // Os caros primeiro: a fila termina no mais demorado, não na soma. Medido em 12/08/2026: prontidão 4,8 s, saúde
+    // 4,5 s, memória 1,1 s, firmware 0,9 s.
     let tarefas: Vec<Tarefa> = vec![
         (Origem::Prontidao, || Ok(super::readiness::analyze().achados())),
         (Origem::Saude, || {
             let relatorio = super::health::analyze();
 
-            // Sem administrador o SMART não é legível. Isso precisa virar
-            // lacuna visível, e não silêncio — silêncio aqui é indistinguível
-            // de "seu disco está bem".
+            // Sem administrador o SMART não se lê: lacuna, nunca silêncio.
             if relatorio.needs_admin && relatorio.findings.is_empty() {
                 return Err(
                     "Ler a saúde do disco exige executar o Otimiza como administrador."
@@ -955,11 +822,7 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
 
             Ok(relatorio.achados())
         }),
-        // NAO CONSEGUIR LER A MEMORIA VIRA LACUNA.
-        //
-        // Sem isto, a falha do WMI sumia do diagnostico — e sumia junto com o
-        // achado mais valioso do produto, a memoria em canal unico. Silencio
-        // aqui e indistinguivel de "esta tudo bem".
+        // Não ler a memória vira lacuna: some junto o canal único, o achado mais valioso.
         (Origem::Memoria, || {
             let relatorio = super::memory::analyze();
 
@@ -969,27 +832,13 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
 
             Ok(relatorio.achados())
         }),
-        // A janela dos últimos dias. Custa uma leitura de arquivo — é o
-        // diagnóstico mais barato do produto, e o único que vê o que aconteceu
-        // enquanto o cliente jogava, com o Otimiza aberto em segundo plano.
+        // Uma leitura de arquivo, e a única que vê o que aconteceu enquanto o cliente jogava.
         (Origem::Pressao, || Ok(super::pressao::analyze().achados())),
-        // Monitor rodando abaixo da taxa que aceita é a maior diferença de
-        // fluidez que existe num PC, e some do diagnóstico de todo mundo. Custa
-        // uma enumeração de modos de vídeo, que é local e barata.
         (Origem::Monitor, || Ok(super::display::analyze().achados())),
-        // Jogo rodando na placa fraca é o maior ganho de FPS que o produto
-        // consegue entregar — e só existe em máquina com duas placas, que é
-        // praticamente todo notebook. Num desktop de placa única, fica calado.
         (Origem::PlacaDeVideo, || Ok(super::gpupref::analyze().achados())),
-        // A configuração do próprio jogo. É de longe o maior lever que existe
-        // num PC fraco — uma linha dela custa mais que todos os ajustes de
-        // Windows somados. O módulo só LÊ: quem decide como o jogo se parece é
-        // quem joga. Custa uma leitura de arquivo.
+        // A maior alavanca num PC fraco. Uma leitura de arquivo.
         (Origem::ConfigDoJogo, || Ok(super::configjogo::analyze().achados())),
-        // A evidência mais forte que temos, e a mais barata: o Windows já
-        // anotou o esgotamento de memória e o programa que travou. Fica no
-        // grupo automático porque é justamente o que responde a pergunta do
-        // cliente — "por que o PC inteiro congela quando abro o jogo".
+        // A evidência mais forte e mais barata: o Windows já anotou o esgotamento e o programa que travou.
         (Origem::Esgotamento, || {
             let relatorio = super::exhaustion::analyze();
 
@@ -998,58 +847,21 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
                 None => Ok(relatorio.achados()),
             }
         }),
-        // A versão que devolve `Err` quando a leitura falha, e não lista vazia.
-        // Antes, uma consulta de memória que não respondesse produzia
-        // `Ok(vec![])` — sem achado e sem lacuna —, e a tela ficava calada
-        // sobre memória. Silêncio aqui é indistinguível de "está tudo bem", e
-        // some justamente com o canal único, o achado mais valioso do produto.
+        // `Err` na falha: `Ok(vec![])` deixava a tela calada sobre memória.
         (Origem::Firmware, || {
             super::firmware::analyze_memory_ou_lacuna().map(|f| achados_de_firmware(&f))
         }),
-        // QUATRO MÓDULOS QUE MEDIAM E NÃO CHEGAVAM À FRASE.
-        //
-        // Cada um tinha painel próprio e ficava fora da eleição — exatamente o
-        // defeito que este arquivo foi criado para consertar, metade resolvido.
-        //
-        // O custo foi medido nesta máquina em 31/08/2026 antes de entrarem:
-        // térmico 1,33 s · disco 0,44 s · shaders 0,13 s · conflitos 0,14 s.
-        // Todos abaixo do `readiness`, que já custa 4,38 s e domina a fila — o
-        // diagnóstico rápido continua limitado por ele, e não por estes.
-        //
-        // OS 0,44 s DO DISCO SÓ VALEM SEM O DISM. Quando o liberador ganhou a
-        // categoria do WinSxS, o `scan()` passou a esperar até 3 s por um
-        // `Dism /AnalyzeComponentStore` — e a medida acima virou mentira. Por
-        // isso aqui é `scan_para_o_veredito()`, que pula o DISM: o veredito só
-        // usa espaço livre e o que é limpável, e o WinSxS não é nem um nem
-        // outro. A guarda `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`
-        // impede o `scan()` completo de voltar para esta lista.
-        //
-        // BOOT E BLOATWARE FICARAM DE FORA DE PROPÓSITO, e a razão importa: o
-        // veredito elege UMA frase. Inicialização lenta e programa de fábrica
-        // são higiene, não causa de travamento — e disputando a eleição com a
-        // causa real, o que fariam é empurrar a resposta certa para baixo. Eles
-        // continuam nos painéis deles, onde respondem a pergunta que são.
-        //
-        // Um processador em throttling térmico entrega uma fração do que pode,
-        // nenhum ajuste de software resolve, e é a resposta que falta em todo
-        // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
+        // Térmico, disco, shaders e conflitos entram na eleição (medido em 31/08/2026: 1,33 s, 0,44 s, 0,13 s, 0,14 s,
+        // todos abaixo do `readiness`). O disco é `scan_para_o_veredito()`, sem DISM (guarda
+        // `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`). Boot e bloatware ficam fora: são higiene e empurrariam
+        // a causa real para baixo.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
-        // 3.0. A janela e o microcódigo leem o registro; eventos e X3D passam
-        // pelo PowerShell (o X3D só nos quatro processadores dele).
+        // 3.0: janela e microcódigo pelo registro; eventos e X3D pelo PowerShell (X3D só nos quatro processadores dele).
         (Origem::Prontidao, achados_da_janela),
-        // Driver de vídeo que caiu e erro de hardware: evento do próprio
-        // Windows, que o cliente confere no Visualizador de Eventos.
         (Origem::Esgotamento, achados_de_eventos_de_hardware),
-        // Ryzen X3D de dois blocos: só lê mais quando o processador é um deles.
         (Origem::Prontidao, || Ok(achados_do_x3d())),
         (Origem::Firmware, achados_do_microcodigo),
-        // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
-        //
-        // Enquanto esta tarefa era sempre `Ok`, um disco que nao pode ser lido
-        // sumia do diagnostico sem deixar rastro — o mesmo defeito que o
-        // firmware e a saude ja tiveram e que este mecanismo existe para
-        // resolver. A tela agora diz que nao conseguiu olhar, em vez de nao
-        // dizer nada.
+        // Não medir o disco vira lacuna, não silêncio.
         (Origem::Disco, || {
             let relatorio = super::diskspace::scan_para_o_veredito();
 
@@ -1063,10 +875,7 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Conflitos, || {
             let relatorio = super::conflicts::analyze();
 
-            // Leitura falha e nada encontrado: não há o que afirmar, e vira
-            // lacuna em vez de verificação aprovada. Conflito ENCONTRADO com
-            // leitura parcial continua sendo verdade e fica; o que faltou
-            // aparece no painel de conflitos.
+            // Leitura falha sem nada encontrado é lacuna; conflito encontrado com leitura parcial fica.
             if relatorio.conflicts.is_empty() && !relatorio.lacunas.is_empty() {
                 return Err(relatorio.lacunas.join(" · "));
             }
@@ -1078,53 +887,28 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
     coletar_em_paralelo(tarefas)
 }
 
-/// O laço paralelo em si, separado de `coletar_rapido` só para poder receber
-/// uma tarefa que entra em pânico de propósito no teste — sem isolar isto,
-/// não há como provar que o efeito dominó de uma tranca envenenada foi
-/// corrigido, só confiar na leitura do código.
+/// Separado para o teste passar uma tarefa que entra em pânico de propósito.
 fn coletar_em_paralelo(
     tarefas: Vec<(Origem, fn() -> Result<Vec<Achado>, String>)>,
 ) -> (Vec<Achado>, Vec<Lacuna>) {
-    // Fila de trabalho, e não lotes fixos: com lotes, um módulo rápido esperaria
-    // o lote inteiro terminar antes de o próximo começar, e o diagnóstico
-    // passaria a custar a SOMA dos mais lentos de cada lote em vez do mais lento
-    // de todos. A primeira versão deste arquivo cometia esse erro e levava 16 s
-    // onde 5 bastavam.
+    // Fila, não lotes fixos: com lotes o custo é a soma dos mais lentos de cada lote (16 s onde 5 bastavam).
     let fila = std::sync::Mutex::new(tarefas.into_iter());
     let coletado = std::sync::Mutex::new((Vec::new(), Vec::new()));
 
     std::thread::scope(|escopo| {
         for _ in 0..limite_de_simultaneos() {
             escopo.spawn(|| loop {
-                // TRANCA ENVENENADA NÃO PODE DERRUBAR O DIAGNÓSTICO.
-                //
-                // `lock().unwrap()` entra em pânico quando outra thread entrou em
-                // pânico segurando a tranca. Numa coleta paralela isso vira efeito
-                // dominó: um módulo instável mata todos os trabalhadores e o
-                // cliente perde a tela inteira — justamente a que é livre e a que
-                // vende o produto.
-                //
-                // `unwrap_or_else(|e| e.into_inner())` segue com o dado que estava
-                // lá. Ele pode estar pela metade, e é por isso que a tarefa que
-                // falhou vira LACUNA DECLARADA logo abaixo: o produto diz o que
-                // não conseguiu ver, em vez de calar.
+                // `lock().unwrap()` com tranca envenenada derrubaria todos os trabalhadores e a tela inteira. Segue com o dado; a
+                // tarefa que falhou vira lacuna declarada.
                 let proximo = fila.lock().unwrap_or_else(|e| e.into_inner()).next();
                 let Some((origem, tarefa)) = proximo else {
                     return;
                 };
 
-                // Isola o pânico de UMA tarefa dentro da própria tarefa: sem
-                // `catch_unwind`, o pânico atravessa o `spawn` e derruba a thread
-                // inteira, envenenando a tranca de `coletado` para todo mundo que
-                // ainda não terminou. Com ele, o pânico vira o mesmo tipo de
-                // lacuna que um `Err` normal já produz — nunca silêncio, nunca
-                // queda do diagnóstico inteiro.
+                // Sem `catch_unwind` o pânico atravessa o `spawn` e envenena `coletado` para todos; com ele, vira lacuna.
                 let resultado = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(tarefa)) {
                     Ok(resultado) => resultado,
-                    // `payload.as_ref()`, e não `&payload`: `Box<dyn Any + Send>`
-                    // também implementa `Any` (impl geral para todo `T: 'static`),
-                    // então `&payload` faz `downcast_ref` checar o tipo da CAIXA em
-                    // vez do conteúdo dela, e nunca casa com `&str`/`String`.
+                    // `payload.as_ref()`: com `&payload` o `downcast_ref` confere o tipo da CAIXA e nunca casa com `&str`/`String`.
                     Err(payload) => Err(mensagem_de_panico(payload.as_ref())),
                 };
 
@@ -1133,8 +917,6 @@ fn coletar_em_paralelo(
 
                 match resultado {
                     Ok(mut novos) => achados.append(&mut novos),
-                    // Diagnóstico que falhou vira lacuna visível, nunca ausência
-                    // silenciosa. É a mesma regra que o relatório em PDF segue.
                     Err(motivo) => lacunas.push(Lacuna {
                         origem,
                         o_que: nome_da_origem(origem).to_string(),
@@ -1148,22 +930,8 @@ fn coletar_em_paralelo(
     coletado.into_inner().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Extrai um texto legível do que `catch_unwind` capturou. A maioria dos
-/// pânicos em Rust carrega `&str` (literal) ou `String` (formatado); qualquer
-/// outra coisa vira um aviso genérico em vez de travar tentando formatar algo
-/// que não sabemos formatar.
-///
-/// O prefixo "(pânico)" é DELIBERADO, e é a única mensagem deste arquivo que
-/// tem um — os outros `Err` (ex.: "Ler a saúde do disco exige..." em
-/// `coletar_rapido`) são frases soltas porque o módulo que as escreveu sabia
-/// o que estava dizendo. `texto`, aqui, não: ele é o que `catch_unwind`
-/// pescou de um crash, muitas vezes uma mensagem de asserção do Rust nunca
-/// escrita para o cliente ler. Sem o prefixo, essa frase crua se misturaria
-/// com as lacunas normais do painel como se fosse mais uma explicação
-/// educada — quando na verdade é o sintoma de um bug. O prefixo marca a
-/// diferença para quem for investigar (e para quem cola isto num ticket de
-/// suporte), sem inventar um tom próprio: a severidade continua vindo de
-/// `Lacuna`, nunca desta frase.
+/// O prefixo "(pânico)" marca que o texto é sintoma de bug, não explicação para o cliente; a severidade continua
+/// vindo de `Lacuna`.
 fn mensagem_de_panico(payload: &(dyn std::any::Any + Send)) -> String {
     let texto = payload
         .downcast_ref::<&str>()
@@ -1193,7 +961,6 @@ fn nome_da_origem(origem: Origem) -> &'static str {
     }
 }
 
-/// O diagnóstico completo da tela inicial: recolhe e já elege a frase.
 pub fn diagnostico_rapido() -> Veredito {
     let (achados, lacunas) = coletar_rapido();
     veredito(&achados, &lacunas)
@@ -1201,17 +968,7 @@ pub fn diagnostico_rapido() -> Veredito {
 
 #[cfg(test)]
 mod medicao_de_tempo {
-    //! Onde o tempo do próprio Otimiza vai, medido nesta máquina.
-    //!
-    //! O comentário de `coletar_rapido` guarda uma medição de 12/08/2026, e é
-    //! ela que justifica a ordem "caros primeiro" e o limite de simultâneos.
-    //! Medição envelhece: o produto ganhou módulos depois daquela data, e a
-    //! ordem só continua certa se os números continuarem valendo.
-    //!
-    //! Este teste existe para a régua que o produto aplica no PC do cliente
-    //! valer também para ele mesmo — otimizar o otimizador sem medir seria o
-    //! chute que o resto do código recusa.
-    //!
+    //! Mede de novo a ordem "caros primeiro" e o limite de simultâneos: medição envelhece.
     //! `cargo test --lib -- --ignored --nocapture onde_vai_o_tempo`
 
     use std::time::Instant;
@@ -1292,8 +1049,6 @@ mod medicao_de_tempo {
 
         println!("\n  soma se fosse em série: {} ms", soma);
 
-        // O que o cliente espera de verdade: a tela inicial inteira, já com a
-        // paralelização e o limite de simultâneos.
         let inicio = Instant::now();
         let veredito = super::diagnostico_rapido();
         let real = inicio.elapsed().as_millis();
@@ -1316,11 +1071,6 @@ mod medicao_de_tempo {
 mod tests_1_9_acoes {
     use super::*;
 
-    /// Os quatro achados que passaram a ter conserto de um clique.
-    ///
-    /// Todos os quatro JÁ tinham comando no backend antes da 1.9. O que
-    /// faltava era o mapa — e sem ele o produto escrevia ao cliente o
-    /// endereço da aba onde resolver, em vez do botão que resolve.
     #[test]
     fn os_quatro_consertos_que_faltavam_ganharam_botao() {
         let esperados = [
@@ -1344,11 +1094,7 @@ mod tests_1_9_acoes {
         }
     }
 
-    /// O que NÃO pode ganhar botão: achado cuja cura é trocar peça.
-    ///
-    /// Oferecer um clique para o que só se resolve comprando memória seria
-    /// prometer o que o produto não faz — e é o erro simétrico do que a 1.9
-    /// veio consertar.
+    /// O que se resolve comprando peça não ganha botão.
     #[test]
     fn achado_de_hardware_continua_sem_botao() {
         for (origem, id) in [
@@ -1372,7 +1118,6 @@ mod tests_1_8_memoria {
     use super::*;
     use crate::modules::windows::memory::MemoryReport;
 
-    /// O relatório que uma falha de WMI produz.
     fn nao_medido() -> MemoryReport {
         MemoryReport {
             medido: false,
@@ -1387,12 +1132,7 @@ mod tests_1_8_memoria {
         }
     }
 
-    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
-    ///
-    /// Zero de RAM com zero de paginação satisfazia exatamente as condições do
-    /// achado mais grave do módulo: pouca_ram porque 0 <= 8.5, e paginação
-    /// desligada porque 0 <= 0.01. A tela anunciava "Nenhuma paginação
-    /// configurada, com 0.0 GB de RAM" com severidade Critical.
+    /// RAM zero com paginação zero satisfazia o achado mais grave ("Nenhuma paginação, com 0.0 GB de RAM", Critical).
     #[test]
     fn memoria_nao_medida_nao_produz_achado() {
         assert!(
@@ -1401,13 +1141,7 @@ mod tests_1_8_memoria {
         );
     }
 
-    /// A METADE QUE MAIS DÓI.
-    ///
-    /// O achado de paginação desligada é mapeado para set_automatic_pagefile,
-    /// que ESCREVE no sistema. Sem medição não pode existir achado, e sem
-    /// achado não existe botão — mas isso precisa estar travado, porque o
-    /// caminho entre um e outro passa por dois arquivos, e quem mexer num
-    /// deles amanhã não vai lembrar do outro.
+    /// O achado de paginação tem botão que ESCREVE: sem medição, nem achado nem botão, travado entre os dois arquivos.
     #[test]
     fn memoria_nao_medida_nao_oferece_botao_que_escreve() {
         let com_acao: Vec<String> = nao_medido()
@@ -1425,8 +1159,6 @@ mod tests_1_8_memoria {
         );
     }
 
-    /// O CASO OPOSTO, que o conserto não pode ter quebrado: paginação
-    /// realmente desligada com pouca RAM continua sendo crítica, com botão.
     #[test]
     fn paginacao_realmente_desligada_continua_com_achado_e_acao() {
         let relatorio = MemoryReport {
@@ -1459,7 +1191,6 @@ mod tests_1_8_disco {
     use super::*;
     use crate::modules::windows::diskspace::{DiskReport, Medida};
 
-    /// Monta um relatório de disco sem tocar no disco de verdade.
     fn relatorio(total_bytes: u64, free_bytes: u64, medida: Medida) -> DiskReport {
         let free_percent = if total_bytes > 0 {
             free_bytes as f64 / total_bytes as f64 * 100.0
@@ -1479,13 +1210,6 @@ mod tests_1_8_disco {
         }
     }
 
-    /// O DEFEITO QUE ESTE CONSERTO EXISTE PARA PEGAR.
-    ///
-    /// `disk_usage` devolvia (0, 0) quando não achava o volume do sistema —
-    /// drive mapeado, `SystemDrive` divergente, volume sem letra. O veredito
-    /// lia isso como disco cheio e anunciava "Restam 0.0 GB livres", severidade
-    /// Critical, na primeira tela, sobre uma máquina que podia estar com meio
-    /// terabyte livre.
     #[test]
     fn disco_nao_medido_nao_produz_achado() {
         let achados = relatorio(0, 0, Medida::NaoConsegui).achados();
@@ -1497,10 +1221,6 @@ mod tests_1_8_disco {
         );
     }
 
-    /// O CASO OPOSTO, QUE NÃO PODE SER QUEBRADO PELO CONSERTO.
-    ///
-    /// Disco genuinamente cheio tem zero livre e um total real. Isso continua
-    /// sendo o achado mais importante que o produto sabe dar.
     #[test]
     fn disco_realmente_cheio_continua_sendo_achado() {
         let achados = relatorio(500_000_000_000, 0, Medida::Medido).achados();
@@ -1510,7 +1230,6 @@ mod tests_1_8_disco {
         assert_eq!(achados[0].severity, FindingSeverity::Critical);
     }
 
-    /// Disco com folga não vira achado nenhum, medido ou não.
     #[test]
     fn disco_com_folga_nao_produz_achado() {
         let achados = relatorio(500_000_000_000, 300_000_000_000, Medida::Medido).achados();
@@ -1518,7 +1237,6 @@ mod tests_1_8_disco {
         assert!(achados.is_empty());
     }
 
-    /// A fronteira: abaixo de 10 GB livres o achado aparece.
     #[test]
     fn abaixo_de_dez_gb_livres_o_achado_aparece() {
         let apertado = relatorio(500_000_000_000, 5_000_000_000, Medida::Medido).achados();
@@ -1552,9 +1270,7 @@ mod tests {
 
     #[test]
     fn todo_botao_de_conserto_aponta_para_otimizacao_que_existe() {
-        // A 2.7 tinha dois botões chamando "power_high_performance", id que
-        // não existia no catálogo: o clique dava erro. Esta trava varre todas
-        // as origens com os ids que têm botão.
+        // A 2.7 tinha dois botões chamando "power_high_performance", que não existia: o clique dava erro.
         let casos = [
             (Origem::Termico, "teto_no_plano_de_energia"),
             (Origem::Firmware, "boot_limits_present"),
@@ -1580,23 +1296,16 @@ mod tests {
         assert_eq!(prioridade(&xmp), Some(Prioridade::P1));
         assert_eq!(prioridade(&ok), None);
 
-        // Boot limitado é medido: desempenho perdido = sim, e ele vem primeiro.
         let r = recuperacao(&[xmp.clone(), boot.clone(), ok.clone()], &[]);
         assert_eq!(r.perdido, Perdido::Sim);
         assert_eq!(r.itens[0], ("boot_limits_present".to_string(), Prioridade::P0));
 
-        // Só o XMP (deduzido de configuração, sem medir efeito): incerto.
         assert_eq!(recuperacao(&[xmp, ok.clone()], &[]).perdido, Perdido::Incerto);
-        // Tudo certo e nada deixou de ser verificado: não.
         assert_eq!(recuperacao(&[ok], &[]).perdido, Perdido::Nao);
     }
 
-    /// O caso que motivou este arquivo inteiro.
-    ///
-    /// Máquina do dono, 12/08/2026: 7,9 GB num único pente, 9,5 GB prometidos,
-    /// pico de 8,6 GB de paginação. O FiveM travava o PC inteiro. A tela dizia
-    /// que a memória estava sem problemas, porque o achado de memória morava
-    /// numa aba e o de canal único em outra, e nenhum dos dois era "o" veredito.
+    /// Máquina do dono, 12/08/2026: 7,9 GB num único pente, 9,5 GB prometidos, pico de 8,6 GB de paginação, FiveM
+    /// travando o PC, e a tela dizendo memória sem problemas.
     #[test]
     fn a_maquina_que_travava_recebe_veredito_de_memoria() {
         let achados = vec![
@@ -1624,12 +1333,9 @@ mod tests {
         let v = veredito(&achados, &[]);
         let principal = v.principal.as_ref().unwrap();
 
-        // Vence o histórico: é o único que não depende de o jogo estar aberto.
         assert_eq!(principal.id, "memoria_esgotada_historico");
         assert_eq!(principal.causa, Causa::Memoria);
 
-        // E o canal único, que mora em OUTRO módulo, aparece junto. É esta
-        // linha que representa o conserto do produto.
         assert!(
             v.corroboracoes.iter().any(|c| c.id == "memory_single_channel"),
             "canal único tem que aparecer junto do esgotamento: é a mesma causa"
@@ -1639,9 +1345,6 @@ mod tests {
 
     #[test]
     fn disco_morrendo_vence_memoria() {
-        // Não porque hardware vence software — os dois são hardware. Porque
-        // falta de memória custa FPS e disco morrendo custa os arquivos do
-        // cliente, e otimização vendida sobre disco morrendo é trabalho perdido.
         let achados = vec![
             achado(
                 "memoria_esgotada_historico",
@@ -1663,8 +1366,6 @@ mod tests {
 
     #[test]
     fn evidencia_historica_vence_configuracao_observada() {
-        // "XMP desligado" é configuração lida, não prova de travamento. Não
-        // pode passar na frente de um esgotamento que já aconteceu.
         let achados = vec![
             achado(
                 "memory_xmp_off",
@@ -1706,7 +1407,6 @@ mod tests {
 
     #[test]
     fn maquina_sadia_admite_que_esta_tudo_bem_com_numeros() {
-        // Inventar problema para justificar a compra é o oposto do produto.
         let achados = vec![
             achado("pagefile_ok", Origem::Memoria, FindingSeverity::Ok, FixLocation::None),
             achado(
@@ -1720,13 +1420,11 @@ mod tests {
         let v = veredito(&achados, &[]);
         assert!(v.principal.is_none());
         assert!(v.frase.contains("Não encontramos"));
-        // A afirmação de que está tudo bem também vem com o que foi medido.
         assert!(v.detalhe.contains("medida de pagefile_ok"));
     }
 
     #[test]
     fn atestado_de_saude_com_lacuna_diz_que_nao_e_completo() {
-        // Silêncio não pode ser indistinguível de aprovação.
         let achados = vec![achado(
             "pagefile_ok",
             Origem::Memoria,
@@ -1746,8 +1444,6 @@ mod tests {
 
     #[test]
     fn canal_unico_da_memoria_cai_na_causa_memoria() {
-        // Se este teste quebrar, o canal único volta a aparecer sozinho numa
-        // aba de firmware, longe do achado de memória — que foi o defeito.
         assert_eq!(causa_de(Origem::Firmware, "memory_single_channel"), Causa::Memoria);
         assert_eq!(causa_de(Origem::Firmware, "vbs_running"), Causa::Configuracao);
         assert_eq!(causa_de(Origem::Saude, "disk_wear_0"), Causa::Armazenamento);
@@ -1756,31 +1452,13 @@ mod tests {
 
     #[test]
     fn nunca_dispara_diagnosticos_demais_de_uma_vez() {
-        // Se este limite subir sem querer, o diagnóstico passa a acrescentar
-        // centenas de MB de pressão na máquina que está sendo diagnosticada
-        // por pressão de memória.
         assert!(limite_de_simultaneos() <= DIAGNOSTICOS_SIMULTANEOS);
         assert!(limite_de_simultaneos() >= 1);
     }
 
-    /// O DIAGNÓSTICO RÁPIDO NÃO PODE CHAMAR OS MÓDULOS QUE MEDEM POR SEGUNDOS.
-    ///
-    /// A versão 0.17 levou o diagnóstico de 31 s para 6 s, e o ganho não veio de
-    /// otimizar consulta: veio de parar de abrir dez processos do PowerShell.
-    /// É um ganho fácil de desfazer sem perceber — basta acrescentar um módulo
-    /// útil que por acaso mede durante alguns segundos, e a primeira tela do
-    /// produto volta a demorar meio minuto.
-    ///
-    /// Os cinco abaixo são úteis e ficam FORA de propósito, cada um por medir
-    /// com o relógio: gargalo amostra a máquina por segundos, rede cronometra
-    /// consultas de DNS, FiveM e navegadores percorrem dezenas de milhares de
-    /// arquivos em disco, e a varredura completa do liberador espera até três
-    /// segundos por um `Dism /AnalyzeComponentStore` que o veredito nem lê.
-    /// Eles rodam quando o cliente aperta o botão deles.
-    ///
-    /// Guarda por leitura do fonte e não por cronômetro: teste que mede tempo
-    /// numa esteira compartilhada falha por vizinho barulhento, e teste que
-    /// falha sozinho é teste que alguém desliga.
+    /// A 0.17 levou o diagnóstico de 31 s para 6 s parando de abrir PowerShell; basta um módulo que mede por segundos
+    /// para voltar a meio minuto. Gargalo, rede, FiveM, navegadores e `scan()` completo ficam fora. Pelo fonte, não por
+    /// cronômetro: tempo numa esteira compartilhada falha por vizinho barulhento.
     #[test]
     fn o_diagnostico_rapido_nao_chama_quem_mede_por_segundos() {
         let fonte = include_str!("veredito.rs");
@@ -1790,18 +1468,14 @@ mod tests {
             .nth(1)
             .expect("coletar_rapido precisa existir");
 
-        // Só o corpo da função: a explicação acima cita os nomes de propósito,
-        // e sem este corte a guarda se encontraria sozinha.
+        // Só o corpo da função: a explicação acima cita os nomes, e a guarda se acharia sozinha.
         let corpo: String = coleta
             .lines()
             .take_while(|l| !l.starts_with('}'))
             .collect::<Vec<_>>()
             .join("\n");
 
-        // `diskspace::scan()` com parênteses, e não o módulo inteiro: o
-        // veredito PRECISA do disco (espaço livre é achado barato e crítico) —
-        // o que não pode voltar é a varredura completa, que espera segundos
-        // pelo DISM do WinSxS. `scan_para_o_veredito()` continua liberada.
+        // `diskspace::scan()` com parênteses: `scan_para_o_veredito()` continua liberada.
         for caro in [
             "bottleneck::",
             "network::",
@@ -1843,16 +1517,8 @@ mod tests {
 
     #[test]
     fn uma_tarefa_em_panico_nao_derruba_o_diagnostico() {
-        // As tarefas rodam em paralelo com trancas compartilhadas. Um pânico em
-        // qualquer uma envenenava a tranca, e todos os outros trabalhadores
-        // morriam no `unwrap` seguinte — um módulo instável derrubava a tela
-        // que o cliente vê PRIMEIRO, que é a parte livre e a que vende.
-        //
-        // O painel silencia o hook de pânico padrão do processo enquanto este
-        // teste roda: sem isso, `catch_unwind` continua funcionando, mas o
-        // Rust ainda imprime a mensagem do pânico no stderr por conta própria,
-        // e quem lê o resultado do teste vê um "panicked at" no meio de uma
-        // suíte que passou — parece falha sem ser.
+        // Um pânico envenenava a tranca e derrubava a primeira tela. O hook de pânico fica silenciado durante o teste,
+        // senão aparece um "panicked at" numa suíte que passou.
         let hook_original = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
 
@@ -1882,9 +1548,6 @@ mod tests {
 
     #[test]
     fn achado_de_hardware_nunca_ganha_botao() {
-        // Nenhum programa acrescenta um pente de memória nem troca um disco. Um
-        // botão nesses achados seria prometer o que o produto não cumpre — que
-        // é o defeito que ele existe para não ter.
         for (origem, id) in [
             (Origem::Memoria, "low_ram"),
             (Origem::Memoria, "memoria_esgotada_historico"),
@@ -1904,11 +1567,7 @@ mod tests {
 
     #[test]
     fn todo_botao_do_diagnostico_chama_comando_que_existe() {
-        // O defeito que este teste existe para pegar não aparece em nenhum
-        // outro lugar: um botão que chama comando não registrado compila,
-        // passa em tudo, e só falha no clique do cliente — com uma mensagem
-        // de erro que ele não entende, num momento em que ele acabou de
-        // confiar no diagnóstico.
+        // Botão com comando não registrado compila, passa em tudo e só falha no clique do cliente.
         let fonte = include_str!("veredito.rs");
         let lib = include_str!("../../lib.rs");
 
@@ -1924,16 +1583,8 @@ mod tests {
 
         let mut comandos: Vec<&str> = Vec::new();
 
-        // Duas formas no arquivo: a tabela do `acao_de`, que abre a tupla logo
-        // depois da seta, e o achado do monitor, que monta o `Acao` à mão
-        // porque precisa do dispositivo e da frequência, que não cabem no id.
-        // A tabela do `acao_de`, e SÓ ela. Procurar "=> (" no arquivo inteiro
-        // pegava toda tupla de qualquer outro `match` — o primeiro texto que
-        // apareceu foi uma frase do veredito.
-        //
-        // O recorte é por linha, e não por "\n}": este arquivo usa quebra de
-        // linha do Windows, e um padrão com "\n" dentro nunca casaria — a
-        // guarda passaria a não achar nada e viraria enfeite.
+        // Duas formas: a tabela do `acao_de` (tupla depois da seta) e o achado do monitor, montado à mão. Só a tabela,
+        // recortada por linha: o arquivo é CRLF e um padrão com "\n}" nunca casaria.
         let tabela: String = producao
             .lines()
             .skip_while(|l| !l.contains("fn acao_de("))
@@ -1953,9 +1604,6 @@ mod tests {
                     continue;
                 };
 
-                // Entre a marca e a aspa só pode haver espaço em branco. Sem
-                // isto, um braço que devolve algo que não é texto arrastaria a
-                // aspa de outra linha para dentro da lista.
                 if !antes.trim().is_empty() {
                     continue;
                 }
@@ -1969,9 +1617,7 @@ mod tests {
         comandos.sort_unstable();
         comandos.dedup();
 
-        // Três comandos distintos hoje. O piso existe para que uma mudança de
-        // formato que faça a varredura parar de enxergar apareça como teste
-        // vermelho, e não como uma lista vazia passando calada.
+        // Um piso: se a varredura parar de enxergar, o teste fica vermelho em vez de uma lista vazia passar calada.
         assert!(
             comandos.len() >= 3,
             "achei só {} comando(s) — o formato do arquivo mudou e esta guarda              parou de enxergar: {:?}",
