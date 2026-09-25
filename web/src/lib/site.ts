@@ -13,7 +13,7 @@ export const site = {
    * O número do botão de baixar: primeiro a tag v<versao>, depois este arquivo.
    * links.baixar aponta para releases/latest; subir antes faria o botão prometer uma versão e entregar a anterior.
    */
-  versao: "3.0.0",
+  versao: "3.1.0",
 } as const;
 
 export const links = {
@@ -33,11 +33,9 @@ export const nav = [
 
 export const telas = [
   { id: "painel", nome: "Início", legenda: "O que está travando este PC, medido na hora — e os outros problemas da máquina logo abaixo." },
-  { id: "diagnostico", nome: "Diagnóstico", legenda: "Monitores, memória instalada e os achados desta máquina." },
   { id: "otimizacoes", nome: "Otimizações", legenda: "Medir antes, otimizar, medir de novo — e o catálogo dizendo o que já está otimizado." },
   { id: "jogos", nome: "Jogos", legenda: "A placa de vídeo, o driver e a configuração do jogo que mais mexe no FPS." },
   { id: "bios", nome: "BIOS", legenda: "A ficha do firmware e o que olhar no menu. O Otimiza lê a BIOS, nunca grava nela." },
-  { id: "reparo", nome: "Reparo", legenda: "As ferramentas do Windows que devolvem arquivo de sistema danificado ao original." },
 ] as const;
 
 /*

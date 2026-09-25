@@ -1,21 +1,17 @@
 "use client";
 
 import {
-  Activity,
   ChevronLeft,
   CircuitBoard,
   Cpu,
   Gamepad2,
-  HardDrive,
   Layers,
   LayoutGrid,
   Microchip,
-  Package,
   Plug,
   Search,
   SlidersHorizontal,
   Sparkles,
-  Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -29,22 +25,18 @@ import s from "./AppJanela.module.css";
  * os mesmos das capturas que esta vitrine substituiu; não invente outros.
  */
 
-export type TelaId = "painel" | "diagnostico" | "otimizacoes" | "jogos" | "bios" | "reparo";
+export type TelaId = "painel" | "otimizacoes" | "jogos" | "bios";
 
 const LATERAL: { grupo?: string; id?: TelaId; nome: string; icone: LucideIcon }[] = [
   { grupo: "MONITORAR", id: "painel", nome: "Início", icone: LayoutGrid },
-  { id: "diagnostico", nome: "Diagnóstico", icone: Activity },
   { grupo: "AGIR", id: "otimizacoes", nome: "Otimizações", icone: Zap },
   { nome: "Núcleos", icone: Cpu },
-  { nome: "Programas", icone: Package },
   { nome: "Placa de vídeo", icone: CircuitBoard },
   { id: "jogos", nome: "Jogos", icone: Gamepad2 },
   { nome: "Geração de quadros", icone: Layers },
   { nome: "Energia", icone: Plug },
-  { nome: "Espaço", icone: HardDrive },
   { id: "bios", nome: "BIOS", icone: Microchip },
   { nome: "Sistema", icone: SlidersHorizontal },
-  { id: "reparo", nome: "Reparo", icone: Wrench },
 ];
 
 const saida = [0.22, 1, 0.36, 1] as const;
@@ -159,7 +151,6 @@ function Inicio({ parado }: { parado: boolean }) {
           >
             <i className={s.ponto} style={{ background: "#f0b93b" }} />
             <span className={s.texto}>Memória em canal único — 1 pente de 8 GB em 4 slots da placa.</span>
-            <span className={cn(s.acao, s.acaoBotao)}>VER NO DIAGNÓSTICO</span>
           </motion.div>
         </div>
       </div>
@@ -210,60 +201,6 @@ function Inicio({ parado }: { parado: boolean }) {
           ))}
         </Cartao>
       </div>
-    </>
-  );
-}
-
-function Diagnostico() {
-  return (
-    <>
-      <Cabeca nome="Diagnóstico" icone={Activity} />
-      <Cartao titulo="MONITORES" canto="2 NO MÁXIMO">
-        <div style={{ display: "flex", justifyContent: "space-around" }}>
-          {["24G4 · principal", "24G4"].map((nome) => (
-            <div key={nome} className={s.monitor}>
-              <div className={s.tela}>
-                <div className={s.anelMeio}>
-                  <strong>180</strong>
-                  <div className={s.rotulo}>HZ</div>
-                </div>
-              </div>
-              <div className={s.pe} />
-              <div className={s.forte} style={{ fontSize: "0.62em" }}>
-                {nome}
-              </div>
-              <div className={s.rotulo}>1920×1080 · NO MÁXIMO</div>
-            </div>
-          ))}
-        </div>
-      </Cartao>
-      <Cartao titulo="MEMÓRIA INSTALADA" canto="CANAL ÚNICO" className={s.fileiraTopo}>
-        <div style={{ display: "flex", gap: "1.6em", alignItems: "center", marginTop: "0" }}>
-          <div className={s.pentes}>
-            <div className={cn(s.pente, s.penteCheio)} />
-            <div className={s.pente} />
-            <div className={s.pente} />
-            <div className={s.pente} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div className={s.texto}>
-              Um pente só, e 3 encaixes livres. A memória trabalha em metade da largura que a placa aceita.
-            </div>
-            <div style={{ display: "flex", gap: "2em", marginTop: "0.7em" }}>
-              {[
-                ["INSTALADO", "8 GB"],
-                ["ENCAIXES USADOS", "1 de 4"],
-                ["VELOCIDADE REAL", "2667 MHz"],
-              ].map(([r, v]) => (
-                <div key={r}>
-                  <div className={s.rotulo}>{r}</div>
-                  <div className={s.forte}>{v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Cartao>
     </>
   );
 }
@@ -446,46 +383,16 @@ function Bios() {
   );
 }
 
-function Reparo() {
-  return (
-    <>
-      <Cabeca nome="Reparo" icone={Wrench} />
-      <Cartao titulo="REPARO DO WINDOWS" canto="PRONTO">
-        {[
-          ["Verificar arquivos do sistema", "5–15 minutos", "Confere os arquivos do Windows contra o original e corrige o que estiver corrompido (sfc /scannow)."],
-          ["Reparar a imagem do Windows", "10–30 minutos", "Busca arquivos originais no Windows Update para o que a verificação sozinha não corrigiu (DISM)."],
-          ["Verificar o disco", "2–20 minutos", "Procura erros de estrutura no disco sem consertar nada, com o Windows ligado (chkdsk /scan)."],
-        ].map(([nome, tempo, desc]) => (
-          <div key={nome} className={s.cartao} style={{ padding: "0.9em 1.1em", marginBottom: "0.7em" }}>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span className={s.forte}>{nome}</span>
-              <span className={s.rotulo}>{tempo}</span>
-            </div>
-            <div className={s.texto} style={{ margin: "0.4em 0 0.6em" }}>
-              {desc}
-            </div>
-            <span className={s.botao}>EXECUTAR</span>
-          </div>
-        ))}
-      </Cartao>
-    </>
-  );
-}
-
 function Conteudo({ tela, parado }: { tela: TelaId; parado: boolean }) {
   switch (tela) {
     case "painel":
       return <Inicio parado={parado} />;
-    case "diagnostico":
-      return <Diagnostico />;
     case "otimizacoes":
       return <Otimizacoes parado={parado} />;
     case "jogos":
       return <Jogos parado={parado} />;
     case "bios":
       return <Bios />;
-    case "reparo":
-      return <Reparo />;
   }
 }
 

@@ -278,9 +278,6 @@
 .vermelho {
   color: #ff5a6e;
 }
-.amarelo {
-  color: #f0b93b;
-}
 .verde {
   color: #6ee7a0;
 }
@@ -383,51 +380,6 @@
   display: block;
   height: 100%;
   background: #f2f2f0;
-}
-
-.monitor {
-  display: grid;
-  place-items: center;
-  gap: 0.5em;
-}
-.tela {
-  display: grid;
-  place-items: center;
-  width: 12em;
-  height: 7em;
-  border: 0.35em solid #1b1b1b;
-  outline: 1px solid rgb(255 255 255 / 0.12);
-  border-radius: 0.4em;
-  background: #030303;
-}
-.tela strong {
-  font-size: 1.8em;
-  font-weight: 400;
-  line-height: 1;
-}
-.pe {
-  width: 1.2em;
-  height: 0.8em;
-  margin-top: -0.5em;
-  background: #1b1b1b;
-}
-
-.pentes {
-  display: flex;
-  gap: 0.35em;
-  padding: 0.7em;
-  border: 1px solid rgb(255 255 255 / 0.1);
-  border-radius: 0.4em;
-}
-.pente {
-  width: 3.4em;
-  height: 4.2em;
-  border: 1px dashed rgb(240 185 59 / 0.7);
-  border-radius: 0.2em;
-}
-.penteCheio {
-  border: 1px solid rgb(255 255 255 / 0.2);
-  background: linear-gradient(to top, #d4a72c 0 12%, #1a1a1a 12%);
 }
 
 .placa {
