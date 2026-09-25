@@ -420,6 +420,19 @@ fn achados_do_x3d() -> Vec<Achado> {
         .collect()
 }
 
+/// O PowerShell só roda com processador da lista da Intel e Windows 11.
+fn achados_do_apo() -> Vec<Achado> {
+    let Some(cpu) = super::x3d::cpu().filter(|c| super::apo::processador_validado(c)) else { return Vec::new() };
+    let windows_11 = super::apo::windows_11();
+    if !windows_11 {
+        return Vec::new();
+    }
+    super::apo::achados(&cpu, windows_11, super::apo::driver_presente())
+        .into_iter()
+        .map(|a| montar(Origem::Prontidao, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .collect()
+}
+
 fn achados_de_eventos_de_hardware() -> Result<Vec<Achado>, String> {
     Ok(super::eventoshw::achados(&super::eventoshw::ler()?)
         .into_iter()
@@ -860,6 +873,7 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Prontidao, achados_da_janela),
         (Origem::Esgotamento, achados_de_eventos_de_hardware),
         (Origem::Prontidao, || Ok(achados_do_x3d())),
+        (Origem::Prontidao, || Ok(achados_do_apo())),
         (Origem::Firmware, achados_do_microcodigo),
         // Não medir o disco vira lacuna, não silêncio.
         (Origem::Disco, || {
@@ -1034,6 +1048,9 @@ mod medicao_de_tempo {
             }),
             cronometrar("x3d (3.0)", || {
                 let _ = super::achados_do_x3d();
+            }),
+            cronometrar("apo (3.0)", || {
+                let _ = super::achados_do_apo();
             }),
         ];
 

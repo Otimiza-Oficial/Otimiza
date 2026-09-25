@@ -420,7 +420,10 @@ fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
                 advice: "Custa desempenho em jogos, mais em processadores de 8ª a 10ª \
                          geração. A otimização \"Desligar virtualização de segurança\" \
                          desliga — leia o aviso de segurança antes, porque aqui você \
-                         perde proteção real que está em uso."
+                         perde proteção real que está em uso. Se você nunca ligou isto: \
+                         a partir de outubro de 2026 o Windows 11 liga a Integridade de Memória \
+                         sozinho, por atualização, nos PCs compatíveis. Quem já tinha \
+                         desligado continua desligado, diz a Microsoft."
                     .to_string(),
                 severity: FindingSeverity::Important,
                 fix_location: FixLocation::Software,
