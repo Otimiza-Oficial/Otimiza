@@ -1,68 +1,20 @@
-// A geração do processador, e o que ela muda no plano de energia
-//
-// O pedido diz, com todas as letras: **"NÃO EXISTE UM ÚNICO CONJUNTO DE VALORES
-// PERFEITO PARA TODOS OS PCs."** Está certo, e o exemplo concreto apareceu
-// atendendo um cliente de verdade.
-//
-// O PC dele: i5-3470, de 2012. O Otimiza grava ali o EPP — a preferência entre
-// energia e desempenho, que é o ajuste que comanda a frequência nos
-// processadores modernos. Só que o EPP só é obedecido por processador com Speed
-// Shift, que a Intel introduziu na 6ª geração. Naquela máquina, o EPP é escrito,
-// conferido, e ignorado pelo silício.
-//
-// Isso não é um defeito: escrever não faz mal, e o Windows aceita o valor. O
-// defeito seria o produto dizer que aquilo vai render quando não vai.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A REGRA QUE SEPARA ESTE MÓDULO DE UM PALPITE
-//
-// **A geração NÃO decide nada. Ela só EXPLICA.**
-//
-// Quem decide é a leitura: `planoenergia::governa_o_processador` pergunta ao
-// Windows se o processador está em modo autônomo, e essa resposta vem da
-// máquina, não de uma tabela de modelos. A geração entra depois, para dizer ao
-// cliente POR QUE a resposta é aquela.
-//
-// A distinção importa porque tabela de modelo envelhece e erra: processador
-// novo com nome esquisito, engenharia de amostra, máquina virtual. Uma tabela
-// que DECIDE erra calada; uma que EXPLICA, quando erra, produz no máximo um
-// texto impreciso ao lado de um número que continua certo.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// O QUE É LIDO, E DE ONDE
-//
-// Do nome que o próprio processador declara — `Intel(R) Core(TM) i5-3470 CPU @
-// 3.20GHz`. O esquema de numeração da Intel é público e estável há mais de dez
-// anos: no `i5-3470`, o dígito antes dos três últimos é a geração.
-//
-// Conferido nesta máquina: `Intel(R) Core(TM) i3-10100F` → 10ª geração.
-//
-// Quando não dá para ler com confiança, a resposta é `None` — e `None` faz o
-// produto não dizer nada sobre geração, em vez de chutar um número.
+// A geração do processador e o que ela muda na energia: o EPP só é obedecido com Speed Shift (Intel a partir da
+// 6ª geração). A geração NÃO decide nada, só EXPLICA: quem decide é a leitura
+// (`planoenergia::governa_o_processador`), porque tabela de modelo envelhece e erra. Nome ilegível dá `None`, e o
+// produto não diz nada sobre geração.
 
 use serde::{Deserialize, Serialize};
 
 use super::planoenergia::{FabricanteDaCpu, GovernoDoProcessador};
 
-/// A geração Intel a partir da qual o EPP é obedecido.
-///
-/// Sexta — Skylake, 2015 —, quando a Intel introduziu o Speed Shift. Antes
-/// dela, quem governa a frequência é o Windows pelos estados mínimo e máximo.
+/// Skylake (2015), quando a Intel introduziu o Speed Shift.
 pub const PRIMEIRA_GERACAO_COM_SPEED_SHIFT: u32 = 6;
 
-/// A geração de um processador Intel, pelo nome que ele declara.
-///
-/// **Função pura.** `None` quando não dá para ler com confiança — e `None` faz
-/// o produto calar sobre geração, em vez de chutar.
-///
-/// O esquema: `i5-3470` é 3ª, `i7-8700K` é 8ª, `i3-10100F` é 10ª, `i5-12400` é
-/// 12ª. O número do modelo tem 4 ou 5 dígitos; os três últimos identificam o
-/// chip, e o que sobra na frente é a geração.
+/// `i5-3470` é 3ª, `i3-10100F` é 10ª: os três últimos dígitos são o chip, o resto é a geração.
 pub fn geracao_intel(nome: &str) -> Option<u32> {
     let baixo = nome.to_lowercase();
 
-    // Só as linhas Core i. Pentium, Celeron, Xeon e Atom têm outros esquemas de
-    // numeração, e aplicar este aqui produziria números inventados.
+    // Só Core i: Pentium, Celeron, Xeon e Atom têm outros esquemas, e este inventaria números.
     let marcador = ["i3-", "i5-", "i7-", "i9-"]
         .iter()
         .find_map(|m| baixo.find(m).map(|i| i + m.len()))?;
@@ -72,8 +24,7 @@ pub fn geracao_intel(nome: &str) -> Option<u32> {
         .take_while(|c| c.is_ascii_digit())
         .collect();
 
-    // Quatro ou cinco dígitos. Menos que isso não é modelo; mais, não é o
-    // esquema que este código conhece — e nos dois casos a resposta é não sei.
+    // Fora de 4 ou 5 dígitos é "não sei".
     if digitos.len() < 4 || digitos.len() > 5 {
         return None;
     }
@@ -81,19 +32,11 @@ pub fn geracao_intel(nome: &str) -> Option<u32> {
     digitos[..digitos.len() - 3].parse::<u32>().ok()
 }
 
-/// A família Zen de um Ryzen, pelo nome.
-///
-/// **Função pura.** `Ryzen 5 3600` é Zen 2; `Ryzen 5 5600X` é Zen 3; `Ryzen 5
-/// 7600` é Zen 4. O primeiro dígito do modelo dá a série, e a série mapeia para
-/// a família — com uma exceção conhecida que este código NÃO tenta adivinhar:
-/// a série 5000 tem modelos Zen 2 rebatizados em portáteis. Por isso o resultado
-/// é a SÉRIE, e o texto fala em série, não em família.
+/// Devolve a SÉRIE, não a família: a série 5000 tem Zen 2 rebatizados em portáteis.
 pub fn serie_ryzen(nome: &str) -> Option<u32> {
     let baixo = nome.to_lowercase();
     let pos = baixo.find("ryzen")?;
 
-    // Depois de "ryzen 5 " vem o modelo. Pula o dígito da linha (3, 5, 7, 9) e
-    // pega o primeiro número de quatro dígitos.
     baixo[pos..]
         .split(|c: char| !c.is_ascii_digit())
         .filter(|p| p.len() == 4)
@@ -101,24 +44,16 @@ pub fn serie_ryzen(nome: &str) -> Option<u32> {
         .map(|modelo| modelo / 1000)
 }
 
-/// O que a geração muda, para este cliente.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum OQueGoverna {
-    /// O EPP manda: processador recente escolhendo a própria frequência.
     OEpp { porque: String },
-    /// O estado mínimo manda: o Windows escolhe.
     OEstadoMinimo { porque: String },
-    /// Não deu para saber, e o produto aplica os dois sem prometer qual pesa.
+    /// Aplica os dois sem prometer qual pesa.
     NaoDeuParaSaber { porque: String },
 }
 
-/// Junta a LEITURA com a geração.
-///
-/// **Função pura**, e a ordem dos argumentos conta a hierarquia: `governo` vem
-/// primeiro porque é ele que decide. A geração só entra para explicar, e quando
-/// as duas discordam, quem vale é a leitura — ela veio da máquina, a geração
-/// veio de um nome.
+/// `governo` decide; a geração só explica, e quando discordam vale a leitura.
 pub fn o_que_governa(
     governo: GovernoDoProcessador,
     fabricante: FabricanteDaCpu,
@@ -151,22 +86,8 @@ pub fn o_que_governa(
     }
 }
 
-/// A frase que a geração acrescenta, quando ela é legível.
-///
-/// Sempre começa com espaço e termina com ponto, para colar no fim das frases
-/// acima sem o chamador precisar saber disso.
-/// A FRASE PRECISA COMBINAR OS DOIS FATOS, e a primeira versão não combinava.
-///
-/// Rodando contra esta máquina — i3-10100F, com o Windows governando —, o texto
-/// saía assim:
-///
-/// > "O Windows respondeu que é ELE quem escolhe a frequência. (…) Este é um
-/// > Intel de 10ª geração, que TEM Speed Shift."
-///
-/// As duas metades estão certas e juntas soam como contradição. O que elas
-/// significam é melhor que isso, e é o que o cliente precisa saber: **este
-/// processador tem o modo bom e ele está desligado no plano de energia desta
-/// máquina.** Isso é um achado, não um detalhe.
+/// Combina os dois fatos: "o Windows escolhe" + "tem Speed Shift" soavam contradição; o certo é "o modo bom
+/// existe e está desligado no plano desta máquina", que é um achado.
 fn detalhe_da_geracao(
     governo: GovernoDoProcessador,
     fabricante: FabricanteDaCpu,
@@ -209,14 +130,6 @@ fn detalhe_da_geracao(
 mod tests {
     use super::*;
 
-    /// O processador do cliente que motivou este módulo, e o desta máquina.
-
-    /// O CASO DESTA MÁQUINA, e o que a primeira versão errava.
-    ///
-    /// i3-10100F com o Windows governando: as duas metades da frase estavam
-    /// certas e juntas soavam como contradição — "o Windows escolhe" + "este
-    /// processador tem Speed Shift". O que elas significam é melhor: o modo bom
-    /// existe e está desligado.
     #[test]
     fn processador_moderno_com_o_windows_no_comando_e_um_achado() {
         let OQueGoverna::OEstadoMinimo { porque } = o_que_governa(
@@ -260,10 +173,6 @@ mod tests {
         assert_eq!(geracao_intel("intel core i3-4130"), Some(4));
     }
 
-    /// Pentium, Celeron, Xeon e Atom têm outros esquemas de numeração. Aplicar
-    /// o esquema do Core i neles produziria um número inventado — e um número
-    /// inventado numa frase sobre a máquina do cliente é exatamente o que este
-    /// produto não faz.
     #[test]
     fn linha_que_nao_e_core_i_nao_vira_geracao() {
         assert_eq!(geracao_intel("Intel(R) Pentium(R) Gold G6400"), None);
@@ -273,8 +182,6 @@ mod tests {
         assert_eq!(geracao_intel(""), None);
     }
 
-    /// Modelo com contagem de dígitos fora do esquema conhecido é `None`, e não
-    /// um palpite. É o mesmo princípio dos três estados do resto do produto.
     #[test]
     fn modelo_fora_do_esquema_conhecido_e_nao_sei() {
         assert_eq!(geracao_intel("Intel Core i5-999"), None);
@@ -290,11 +197,6 @@ mod tests {
         assert_eq!(serie_ryzen("Intel Core i5-12400"), None);
     }
 
-    /// A REGRA CENTRAL DO MÓDULO: quem decide é a LEITURA, não a geração.
-    ///
-    /// Com um processador antigo e o Windows respondendo "o processador
-    /// escolhe", vale a resposta do Windows — ela veio da máquina, a geração
-    /// veio de um nome.
     #[test]
     fn a_leitura_manda_e_a_geracao_so_explica() {
         let r = o_que_governa(
@@ -309,8 +211,6 @@ mod tests {
         );
     }
 
-    /// E no caso do cliente — processador antigo, Windows no comando — a frase
-    /// precisa DIZER que o EPP não tem a quem obedecer ali.
     #[test]
     fn o_processador_antigo_e_explicado_ao_cliente() {
         let OQueGoverna::OEstadoMinimo { porque } = o_que_governa(
@@ -329,7 +229,6 @@ mod tests {
         );
     }
 
-    /// Processador moderno: a frase muda, e não fala em ajuste inerte.
     #[test]
     fn o_processador_moderno_ganha_outra_frase() {
         let OQueGoverna::OEpp { porque } = o_que_governa(
@@ -345,8 +244,6 @@ mod tests {
         assert!(!porque.contains("não tem a quem obedecer"));
     }
 
-    /// Nome ilegível não acrescenta frase nenhuma — e não estraga a explicação
-    /// da leitura, que continua inteira.
     #[test]
     fn nome_ilegivel_nao_acrescenta_palpite() {
         let r = o_que_governa(
@@ -363,8 +260,6 @@ mod tests {
         assert!(!porque.contains("geração"), "não inventou geração");
     }
 
-    /// E a lacuna não vira promessa: sem saber quem governa, o produto aplica
-    /// os dois e DIZ que não sabe qual pesa.
     #[test]
     fn sem_saber_quem_governa_o_produto_nao_promete() {
         let OQueGoverna::NaoDeuParaSaber { porque } = o_que_governa(

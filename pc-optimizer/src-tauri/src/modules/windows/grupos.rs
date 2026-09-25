@@ -1,70 +1,21 @@
-// Os grupos de ajuste, para poder testar um de cada vez
-//
-// POR QUE ISTO EXISTE: um cliente aplicou tudo de uma vez, o FPS caiu pela
-// metade, e nem ele nem eu tínhamos como saber QUAL dos vinte ajustes fez isso.
-// A investigação levou dias e terminou comigo lendo a árvore de registro do
-// Windows à mão.
-//
-// Com o catálogo dividido em grupos, a pergunta muda de "o Otimiza piorou meu
-// PC?" para "qual destes nove grupos piorou meu PC?" — e essa segunda pergunta
-// se responde com quatro medições em vez de uma investigação.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A DIVISÃO NÃO É POR CATEGORIA DA TELA, e isso é deliberado
-//
-// As categorias (`Category::Gaming`, `System`, `Network`) existem para o cliente
-// ENCONTRAR um ajuste. Os grupos existem para ISOLAR uma causa, e as duas coisas
-// pedem cortes diferentes: o modo MSI da placa e o agendamento por hardware são
-// os dois "Gaming" na tela, mas mexem em camadas completamente diferentes e
-// falham de jeitos diferentes.
-//
-// O corte aqui é por ONDE O AJUSTE TOCA. Dois ajustes ficam no mesmo grupo
-// quando uma falha de um seria confundida com a falha do outro.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A REGRA QUE MUDA O QUE É POSSÍVEL: REINÍCIO
-//
-// Um grupo que exige reiniciar NÃO PODE ser testado na mesma sessão. O antes é
-// medido, a máquina reinicia, e o depois é outra sessão — outra ocupação de
-// memória, outros programas abertos, outro lugar do mapa. Comparar isso e
-// reverter sozinho seria reverter em cima de ruído.
-//
-// E O RESULTADO DESSA CONTA É DESCONFORTÁVEL, então ele fica escrito aqui em
-// vez de escondido: **só três dos nove grupos dispensam reinício — F, G e I —,
-// e os três são justamente os que menos mexem em FPS.** Energia, agendamento,
-// vídeo e memória, que são os que pesam, todos exigem reiniciar.
-//
-// Ou seja: o rollback automático, do jeito que o pedido descreve, cobre pouco.
-// O que cobre muito é o resto do protocolo — testar UM GRUPO DE CADA VEZ em vez
-// de vinte ajustes de uma vez. Essa parte funciona em todos os nove, e é ela
-// que transforma "o Otimiza piorou meu PC" em "o grupo C piorou meu PC".
-//
-// Eu descobri isso escrevendo um teste que AFIRMAVA que o grupo de energia
-// cabia numa sessão. Ele falhou. Ver
-// `so_tres_grupos_cabem_numa_sessao_e_o_produto_sabe_quais`.
+// Os grupos de ajuste, para testar um de cada vez: "qual destes nove grupos piorou meu PC?" se responde com
+// quatro medições. O corte é por ONDE O AJUSTE TOCA, não pela categoria da tela. Grupo que exige reiniciar não
+// pode ser revertido sozinho (o depois é outra sessão), e só F, G e I dispensam reinício, os que menos mexem em
+// FPS. O que cobre todos é testar UM GRUPO DE CADA VEZ.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Grupo {
-    /// A: o plano de energia inteiro.
     Energia,
-    /// B: quem ganha o processador — prioridade, MMCSS, fatia de fundo.
     Agendamento,
-    /// C: a placa de vídeo — agendamento por hardware, interrupções.
     Video,
-    /// D: memória do sistema.
     Memoria,
-    /// E: rede.
     Rede,
-    /// F: serviços e coisas rodando de fundo.
     Fundo,
-    /// G: efeitos visuais do Windows.
     Visual,
-    /// H: configuração de inicialização — HPET, limites de boot, VBS.
     Boot,
-    /// I: privacidade e higiene. Não promete quadro, e está aqui para poder ser
-    /// descartado como suspeito em vez de ficar misturado com o resto.
+    /// Não promete quadro: está aqui para poder ser descartado como suspeito.
     Higiene,
 }
 
@@ -81,8 +32,7 @@ impl Grupo {
         Grupo::Higiene,
     ];
 
-    /// A letra do protocolo, para o cliente e o atendimento falarem a mesma
-    /// língua: "o grupo C piorou aqui" cabe numa mensagem.
+    /// "O grupo C piorou aqui" cabe numa mensagem.
     pub fn letra(self) -> char {
         match self {
             Grupo::Energia => 'A',
@@ -111,7 +61,6 @@ impl Grupo {
         }
     }
 
-    /// O que este grupo mexe, em uma frase, e o que esperar dele.
     pub fn descricao(self) -> &'static str {
         match self {
             Grupo::Energia => {
@@ -158,12 +107,8 @@ impl Grupo {
     }
 }
 
-/// A que grupo um ajuste pertence.
-///
-/// A LISTA É EXPLÍCITA e não deduzida da categoria de propósito: dedução
-/// silenciosa é como um ajuste novo acabaria num grupo errado sem ninguém
-/// perceber, e aí o teste A/B apontaria o culpado errado. Há trava exigindo que
-/// todo item do catálogo que entra em lote apareça aqui.
+/// Lista explícita: deduzir da categoria poria um ajuste novo no grupo errado, e o A/B apontaria o culpado
+/// errado. Há trava exigindo que todo item de lote apareça aqui.
 pub fn grupo_de(id: &str) -> Option<Grupo> {
     Some(match id {
         "plano_otimiza" => Grupo::Energia,
@@ -205,14 +150,7 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
 
         "clear_boot_limits" => Grupo::Boot,
         "remove_forced_hpet" => Grupo::Boot,
-        // `disable_vbs` mora no Boot por natureza e NÃO está aqui: ele troca
-        // segurança por desempenho, e é o ÚNICO ajuste do catálogo que faz
-        // isso — os outros dois que faziam (desligar o UAC e desligar o
-        // firewall) saíram do produto, porque o que eles cobravam em segurança
-        // não era pago em quadro nenhum; o motivo de cada um está em
-        // `naofazemos.rs`. O protocolo aplica grupos INTEIROS — um grupo com
-        // "desligar a virtualização de segurança" dentro desligaria isso na
-        // máquina de quem pediu só um teste de FPS.
+        // `disable_vbs` NÃO está aqui: troca segurança por desempenho, e o protocolo aplica grupos INTEIROS.
 
         "disable_telemetry" => Grupo::Higiene,
         "telemetry_policy" => Grupo::Higiene,
@@ -228,22 +166,11 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
     })
 }
 
-/// Pode ser testado pelo protocolo: volta atrás e não troca segurança.
-///
-/// NÃO é `entra_no_lote`, e a diferença é o ponto inteiro do protocolo. O lote
-/// automático exclui o que pode custar quadro — porque ninguém deve apostar o
-/// FPS de alguém num clique genérico. O teste A/B faz o contrário: ele existe
-/// JUSTAMENTE para descobrir, com medição, se aquele ajuste rende NESTA máquina.
-///
-/// Eu escrevi este filtro como `entra_no_lote` na primeira versão, e o teste
-/// de grupo vazio pegou: o grupo Memória ficou sem nenhum item, porque o único
-/// ajuste dele é um dos que saíram do lote. O protocolo teria nascido cego para
-/// exatamente os ajustes que ele foi feito para julgar.
+/// NÃO é `entra_no_lote`: o lote exclui o que pode custar quadro; o A/B existe justamente para medir esses.
 fn testavel(spec: &super::catalog::OptimizationSpec) -> bool {
     spec.reversible && !spec.security_tradeoff
 }
 
-/// Os identificadores de um grupo, na ordem do catálogo.
 pub fn itens_do_grupo(grupo: Grupo) -> Vec<&'static str> {
     super::catalog::CATALOG
         .iter()
@@ -253,10 +180,6 @@ pub fn itens_do_grupo(grupo: Grupo) -> Vec<&'static str> {
         .collect()
 }
 
-/// Este grupo exige reiniciar?
-///
-/// Quando exige, o antes e o depois caem em sessões diferentes, e comparar as
-/// duas é comparar duas tardes diferentes. Ver o cabeçalho.
 pub fn exige_reinicio(grupo: Grupo) -> bool {
     super::catalog::CATALOG
         .iter()
@@ -265,11 +188,7 @@ pub fn exige_reinicio(grupo: Grupo) -> bool {
         .any(|spec| spec.requires_restart)
 }
 
-/// Este grupo pode ser desfeito SOZINHO quando a medição piorar?
-///
-/// Só quando o teste cabe numa sessão. Reverter em cima de uma comparação entre
-/// duas sessões diferentes é reverter em cima de ruído — e desfazer sozinho o
-/// trabalho que a pessoa pediu, sem ela por perto, é pior que não desfazer.
+/// Só quando o teste cabe numa sessão: reverter comparando duas sessões é reverter em cima de ruído.
 pub fn pode_reverter_sozinho(grupo: Grupo) -> bool {
     !exige_reinicio(grupo) && !itens_do_grupo(grupo).is_empty()
 }
@@ -279,20 +198,8 @@ mod tests {
     use super::*;
     use crate::modules::windows::catalog::CATALOG;
 
-    /// A TRAVA CENTRAL. Um ajuste reversível que não está em grupo nenhum é um
-    /// ajuste que o protocolo A/B nunca testaria — e que continuaria podendo
-    /// derrubar o FPS sem ninguém conseguir isolar.
+    /// Ajuste reversível fora de grupo é um ajuste que o A/B nunca testaria.
 
-    /// QUAIS GRUPOS CABEM NUMA SESSÃO — e a resposta é desconfortável.
-    ///
-    /// Eu tinha escrito um teste afirmando que o grupo de energia cabe. Ele
-    /// falhou: `disable_power_throttling` exige reiniciar, e ele é de energia
-    /// por natureza. Rodando a conta em todos os nove, só três cabem — e os
-    /// três são justamente os que menos mexem em FPS.
-    ///
-    /// Isso NÃO é limitação da implementação. É o que o dado permite afirmar, e
-    /// o produto prefere dizer isso a fingir que reverte sozinho em cima de uma
-    /// comparação entre duas tardes diferentes.
     #[test]
     fn so_tres_grupos_cabem_numa_sessao_e_o_produto_sabe_quais() {
         let cabem: Vec<char> = Grupo::TODOS
@@ -308,7 +215,6 @@ mod tests {
              atualize este teste E o texto que explica o protocolo ao cliente"
         );
 
-        // E os quatro que mais pesam em FPS estão TODOS fora dela.
         for g in [Grupo::Energia, Grupo::Agendamento, Grupo::Video, Grupo::Memoria] {
             assert!(
                 exige_reinicio(g),
@@ -334,8 +240,6 @@ mod tests {
         }
     }
 
-    /// O contrário: um id em `grupo_de` que não existe mais no catálogo é
-    /// lixo que faz o grupo parecer maior do que é.
     #[test]
     fn todo_id_com_grupo_existe_no_catalogo() {
         for grupo in Grupo::TODOS {
@@ -348,9 +252,6 @@ mod tests {
         }
     }
 
-    /// Trocar segurança por desempenho nunca pode entrar num grupo: o protocolo
-    /// aplica grupos inteiros, e um grupo com "desligar o firewall" dentro
-    /// desligaria o firewall de alguém que pediu um teste de FPS.
     #[test]
     fn o_que_troca_seguranca_fica_fora_dos_grupos() {
         for spec in CATALOG {
@@ -376,8 +277,6 @@ mod tests {
         assert_eq!(antes, 9, "o protocolo fala em nove grupos");
     }
 
-    /// Nenhum grupo pode ficar vazio: um grupo sem itens aparece na tela como
-    /// uma etapa do teste que não faz nada, e o cliente espera por nada.
     #[test]
     fn nenhum_grupo_esta_vazio() {
         for grupo in Grupo::TODOS {
@@ -390,16 +289,12 @@ mod tests {
         }
     }
 
-    /// O grupo de vídeo tem os dois ajustes que mais variam entre máquinas, e
-    /// os dois exigem reiniciar — então ele NÃO pode ser revertido sozinho.
-    /// Este teste existe para que alguém que mude isso pare aqui e pense.
+    /// Os dois ajustes que mais variam entre máquinas, e ambos exigem reiniciar: quem mudar isto, pare e pense.
     #[test]
     fn o_grupo_de_video_nao_se_reverte_sozinho() {
         assert!(exige_reinicio(Grupo::Video));
         assert!(!pode_reverter_sozinho(Grupo::Video));
     }
-
-
 
     #[test]
     fn todo_grupo_se_descreve() {
