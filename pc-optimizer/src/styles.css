@@ -1,23 +1,12 @@
 /*
-  Otimiza — console de desempenho
-
-  A direção é instrumento, não painel de marketing: fundo quase preto, molduras
-  de fio de cabelo com cantoneiras, tipografia monoespaçada e números tabulares.
-  A cor só aparece onde carrega significado — carga, veredito, aviso.
-*/
+ * Otimiza — console de desempenho. Instrumento, não painel de marketing: a cor só aparece onde carrega
+ * significado (carga, veredito, aviso).
+ */
 
 /*
-  AS FONTES, EMBUTIDAS NO PROGRAMA.
-
-  Os três arquivos são variáveis (um arquivo cobre todos os pesos) e vêm
-  empacotados: o Otimiza precisa abrir igual sem internet, e uma fonte baixada
-  em tempo de execução deixaria a primeira tela trocando de letra na frente do
-  cliente. Somam 79 KB.
-
-  São as MESMAS do site — Plus Jakarta Sans nos títulos, Geist no texto e Geist
-  Mono nos números —, porque o programa e a página são o mesmo produto.
-  Ambas têm licença SIL Open Font License 1.1; ver src/assets/fontes/LEIA-ME.md.
-*/
+ * Fontes variáveis embutidas (79 KB): o app abre igual sem internet, sem trocar de letra na frente do cliente.
+ * As mesmas do site. SIL Open Font License 1.1 (ver src/assets/fontes/LEIA-ME.md).
+ */
 @font-face {
   font-family: "Jakarta";
   src: url("./assets/fontes/jakarta-variavel.woff2") format("woff2");
@@ -40,40 +29,31 @@
 }
 
 :root {
-  /* AS TRÊS SUPERFÍCIES, E O FIO QUE AS SEPARA.
-
-     Fundo, painel e painel em relevo são a MESMA cor de propósito, e quem
-     separa um do outro é só o fio de cabelo. A regra do produto sempre foi que
-     cor só aparece onde carrega significado, e um cinza a mais ou a menos no
-     fundo não carregava nenhum.
-
-     ESTE BLOCO É O TEMA CLARO. O escuro está logo abaixo, em
-     `:root[data-tema="escuro"]`, e redefine estes mesmos nomes — nenhum
-     componente do produto sabe qual dos dois está valendo, e é isso que
-     permite os dois existirem sem duplicar uma única regra de layout. */
+  /*
+   * Tema CLARO. Fundo, painel e painel em relevo são a mesma cor; quem separa é o fio. O escuro, em
+   * `:root[data-tema="escuro"]`, redefine estes nomes: nenhum componente sabe qual vale.
+   */
   --bg: #f4f4f3;
   --panel: #ffffff;
   --panel-raised: #ffffff;
 
-  /* O fundo dos campos onde se digita ou se copia.
-     Existe como token porque ele NÃO deve seguir o painel: um campo tem que
-     ser encontrável, e num fundo todo preto quem o desenha é a borda. */
+  /*
+   * Não segue o painel: um campo precisa ser encontrável.
+   */
   --campo: #ffffff;
 
-  /* A estética de fio de cabelo estava tão fraca que a moldura não se lia:
-     #242424 sobre o painel dá 1,21:1 de contraste, abaixo do mínimo de 3:1
-     que a norma pede para elemento de interface. Subir para #2e2e2e devolve a
-     estrutura sem perder a discrição. */
+  /*
+   * #242424 dava 1,21:1, abaixo dos 3:1 que a norma pede para interface.
+   */
   --hairline: rgba(var(--text-rgb), 0.09);
   --hairline-strong: rgba(var(--text-rgb), 0.16);
 
   --text: #0a0a0a;
   --text-dim: #3f3f3f;
-  /* Era #726e69: 3,70:1 sobre o painel, reprovado no AA da WCAG — e ele
-     carrega 43 regras, ou seja, praticamente todo o texto explicativo do
-     produto. O argumento de honestidade do Otimiza mora nesses parágrafos, e
-     eles estavam apagados demais para serem lidos. #8a8681 dá 5,18:1 e ainda
-     fica claramente abaixo de --text-dim (7,38:1), preservando a hierarquia. */
+  /*
+   * #726e69 reprovava no AA (3,70:1) em quase todo o texto explicativo; #8a8681 dá 5,18:1 e fica abaixo de
+   * --text-dim (7,38:1).
+   */
   --text-muted: #6b6b6b;
 
   --accent: #0a0a0a;
@@ -86,15 +66,9 @@
   --borda-forte: rgba(var(--text-rgb), 0.16);
   --anim-rapida: 0.18s;
 
-  /* ================================================================
-     A CAMADA NOVA DE NOMES, no claro.
-
-     Os mesmos papéis do tema escuro, com os valores do claro. Componente
-     novo escreve `--surface` e `--text-secondary` e funciona nos dois; se
-     um deles só existisse no escuro, todo componente novo precisaria de uma
-     regra extra para o claro — que é exatamente o que o bloco de tema
-     existe para não ter.
-     ================================================================ */
+  /*
+   * Os nomes novos no claro: componente novo escreve `--surface` e funciona nos dois temas.
+   */
   --sidebar: #efefee;
   --surface: #ffffff;
   --surface-2: #fafaf9;
@@ -115,30 +89,20 @@
   --danger: #b42318;
 
   /*
-    AS SUPERFÍCIES POR PAPEL, e não por tom.
-
-    Estes cinco nasceram de uma varredura: o tema escuro acendeu 88 cores
-    escritas direto na regra, e a maior parte delas era a mesma ideia repetida
-    — "fundo de chip", "fundo afundado", "texto sobre botão preenchido".
-    Escritas como tom, elas não têm como virar escuro; escritas como papel,
-    viram sozinhas.
-  */
+   * Superfícies por PAPEL, não por tom: escritas como tom, as 88 cores soltas não tinham como virar escuro.
+   */
   --sup-selecionada: var(--sup-selecionada);
   --sup-afundada: var(--sup-afundada);
   --sup-sutil: var(--sup-sutil);
-  /* O texto de cima de um elemento PREENCHIDO com a cor de destaque. No claro
-     o destaque é quase-preto e o texto é branco; no escuro inverte. */
+  /*
+   * No claro o destaque é quase-preto e o texto branco; no escuro inverte.
+   */
   --sobre-accent: #ffffff;
   --accent-hover: #262626;
 
   /*
-    A ESCALA DAS PEÇAS DESENHADAS.
-
-    A placa de vídeo, os pentes de memória e os monitores da tela são
-    desenhos vetoriais com uma escala de cinzas própria — eram catorze tons
-    escritos à mão, e no tema escuro todos eles viravam um borrão branco no
-    meio da tela. Cinco degraus, do corpo da peça ao traço.
-  */
+   * Cinzas das peças desenhadas (placa, pentes, monitores): os catorze tons à mão viravam borrão branco no escuro.
+   */
   --peca-1: #f1f1ef;
   --peca-2: #ececea;
   --peca-3: #e5e5e3;
@@ -146,14 +110,8 @@
   --peca-5: #c4c4c1;
 
   /*
-    AS MESMAS CORES, EM COMPONENTES — para quando é preciso transparência.
-
-    `rgba()` não aceita uma variável de cor inteira, só os três números. Sem
-    estes tokens, cada lugar que queria um vermelho a 8% reescrevia
-    `rgba(255, 92, 115, .08)` à mão — e eram 23 dessas espalhadas pelo arquivo,
-    recriando cores que já existiam logo acima. Trocar o vermelho da marca
-    exigia caçar todas.
-  */
+   * Componentes RGB, porque `rgba()` não aceita a variável de cor inteira (eram 23 rgba à mão).
+   */
   --accent-rgb: 10, 10, 10;
   --green-rgb: 10, 10, 10;
   --amber-rgb: 138, 97, 0;
@@ -162,55 +120,35 @@
   --text-rgb: 10, 10, 10;
   --panel-rgb: 255, 255, 255;
 
-  /* Trilho vazio de qualquer barra. Estava escrito à mão em quatro lugares,
-     e a matriz de núcleos usava um branco diferente — dois cinzas para a
-     mesma ideia, lado a lado no mesmo painel. */
   --track: rgba(var(--text-rgb), 0.08);
 
   --font-mono: "GeistMono", ui-monospace, "Cascadia Mono", "Consolas", monospace;
   --font-sans: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  /* Só título usa a de exibição: ela é mais estreita e aguenta o tracking
-     negativo que dá o ar de produto acabado. */
+  /*
+   * Só título usa a de exibição: mais estreita, aguenta o tracking negativo.
+   */
   --font-display: "Jakarta", "Geist", "Segoe UI", system-ui, sans-serif;
 
   /*
-    ESCALA DE ESPAÇAMENTO
-    Havia 21 valores distintos de padding, margin e gap espalhados pelo arquivo
-    — 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 26, 28, 32, 34
-    — escolhidos caso a caso. Blocos irmãos ficavam separados por 10, 12 ou 14
-    conforme o dia, e é isso que faz a tela parecer montada por acréscimo.
-    Seis degraus, todos múltiplos de 4.
-  */
+   * Espaçamento: seis degraus múltiplos de 4 (eram 21 valores soltos).
+   */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
   --s4: 16px;
   --s5: 24px;
   --s6: 32px;
-  /* Os três degraus grandes entraram com o redesenho: a especificação do
-     dono pede 40, 48 e 64 para o respiro das páginas, e sem eles cada
-     página inventaria o próprio número — que é como os 21 valores soltos
-     de antes nasceram. */
+  /*
+   * 40, 48 e 64 para o respiro das páginas, da especificação do dono.
+   */
   --s7: 40px;
   --s8: 48px;
   --s9: 64px;
 
   /*
-    ESCALA TIPOGRÁFICA
-    Eram 11 tamanhos entre 8px e 16px. 8px e 9px em fonte monoespaçada, num
-    notebook de 1366×768 — que é exatamente o público de "PC fraco" — não são
-    legíveis. O piso agora é 10px.
-
-    NA 1.9 O TEXTO DE LEITURA SUBIU UM DEGRAU, E O RÓTULO NÃO.
-    Pedido do outro dono ("deixar as coisas maiores ou deixa assim mesmo").
-    Body, lead e value ganharam 1px cada; micro, label e nota ficaram onde
-    estavam de propósito — são rótulos em MAIÚSCULA com espaçamento entre
-    letras, e maiúscula espaçada fica PIOR de ler quando cresce: a palavra
-    alarga, a linha quebra, e o rótulo passa a competir com o dado que ele
-    nomeia. O que se lê cresceu; o que se etiqueta, não.
-
-    Os números grandes também ficaram: --number e --huge já dominam a tela.
-  */
+   * Piso de 10px (8 e 9px em mono não se leem a 1366×768). Na 1.9 o texto de leitura subiu um degrau; os rótulos
+   * em MAIÚSCULA espaçada não, porque crescidos competem com o dado.
+   */
   --t-micro: 10px;
   --t-label: 11px;
   --t-body: 13px;
@@ -225,15 +163,9 @@
   --gap: var(--s4);
   --pad: var(--s4);
 
-  /* Duração única para transição de estado. Estava fixa em 0.18s, 0.15s,
-     0.45s e 0.5s em lugares diferentes. */
   /*
-    ARREDONDAMENTO
-    Tudo era canto vivo. Canto vivo é uma escolha estética legítima e passa
-    seriedade, mas em quantidade vira dureza: uma tela com quarenta retângulos
-    de canto reto parece um formulário, não um produto. Três degraus, do
-    controle pequeno ao painel.
-  */
+   * Três degraus de arredondamento, do controle ao painel.
+   */
   --r1: 6px;
   --r2: 8px;
   --r3: 10px;
@@ -243,78 +175,47 @@
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 
   /*
-    Multiplicador global de animação. O JavaScript zera isto quando a máquina é
-    fraca ou quando o sistema pede menos movimento — ver `.sem-animacao`.
-    Um otimizador que engasga na própria interface se desmente na frente do
-    cliente, então a animação é a primeira coisa a ser cortada.
-  */
+   * O JavaScript zera isto em máquina fraca ou com menos movimento pedido (ver `.sem-animacao`).
+   */
   --anim: 1;
 }
 
 /*
-  O TEMA ESCURO — e, a partir da 2.8, o desenho principal do produto.
-
-  UMA CÓPIA SÓ DA LISTA DE CORES, e é por isso que ele mora atrás de um
-  atributo em vez de uma consulta de mídia. O caminho comum obriga a escrever a
-  lista duas vezes, e duas listas de cor discordam assim que alguém corrigir
-  uma. Quem resolve a preferência do sistema é o script síncrono do `<head>`,
-  antes do primeiro desenho; o CSS conhece só o atributo.
-
-  OS NOMES NOVOS SÃO A FONTE, OS ANTIGOS VIRARAM APELIDO.
-
-  O produto tinha vinte e poucos nomes de cor herdados (`--panel`, `--hairline`,
-  `--text-dim`) espalhados por quase seis mil linhas de CSS. Renomear tudo de
-  uma vez seria um diff que ninguém revisa e uma noite inteira caçando o que
-  quebrou.
-
-  Então a camada nova — `--surface`, `--border`, `--text-primary` — é quem
-  carrega o VALOR, e os nomes antigos passam a apontar para ela. Trocar uma cor
-  acontece num lugar só, componente novo usa o nome novo, e as seis mil linhas
-  continuam de pé. Quem for migrar um bloco antigo: troque o nome, não o valor.
-
-  SOBRE O QUASE-PRETO: #090a0a e não #000. Preto puro é pixel desligado em
-  OLED, o que é bonito, mas encosta o contraste do texto no máximo e cansa numa
-  tela que o cliente deixa aberta durante a partida.
-*/
+ * Tema ESCURO, o desenho principal desde a 2.8. Atrás de um atributo, não de consulta de mídia: uma lista de cores
+ * só (a preferência do sistema é resolvida no <head>). Os nomes novos (`--surface`, `--border`, `--text-primary`)
+ * carregam o valor e os antigos apontam para eles: ao migrar um bloco antigo, troque o nome, não o valor.
+ * #090a0a e não #000: preto puro encosta o contraste do texto no máximo e cansa.
+ */
 :root[data-tema="escuro"] {
   /* ---------------------------------------------------- superfícies */
   --bg: #090a0a;
-  /* A lateral é UM DEGRAU mais escura que o conteúdo, e não mais clara. É o
-     que a faz recuar: a barra é moldura, não é o assunto. */
+  /*
+   * Um degrau mais escura: a lateral é moldura, não o assunto.
+   */
   --sidebar: #0b0c0c;
   --surface: #101111;
   --surface-2: #121313;
   --surface-3: #151616;
   --surface-hover: #181919;
 
-  /* Duas bordas, e a diferença entre elas é o que separa "há algo aqui" de
-     "isto está selecionado". Mais de duas viram ruído. */
+  /*
+   * Duas bordas: "há algo aqui" e "está selecionado". Mais viram ruído.
+   */
   --border: rgba(255, 255, 255, 0.07);
   --border-strong: rgba(255, 255, 255, 0.1);
 
-  /* ---------------------------------------------------- texto
-     QUATRO DEGRAUS, e cada um tem um trabalho:
-
-     primary    o número, o título, o que decide
-     secondary  a descrição embaixo do título
-     muted      o rótulo de seção em maiúscula
-     disabled   o que não dá para clicar
-
-     O degrau `--text-dim` fica entre o primeiro e o segundo. Ele não está na
-     especificação e existe porque o produto o usa em parágrafo longo de
-     explicação — e é justamente nesses parágrafos que mora o argumento de
-     honestidade do Otimiza. Apagá-los para o cinza de rótulo deixaria
-     ilegível o que mais precisa ser lido. */
+  /*
+   * Texto em quatro degraus (primary, secondary, muted, disabled). `--text-dim` fica entre os dois primeiros para os
+   * parágrafos longos de explicação.
+   */
   --text-primary: #f2f2f2;
   --text-secondary: #a0a0a0;
   --text-tertiary: #656565;
   --text-disabled: #444444;
 
-  /* ---------------------------------------------------- estados
-     Cor SÓ onde ela carrega significado. O destaque do produto é branco, e
-     não azul: num painel que passa a vida mostrando número, uma cor de marca
-     competindo com o número é uma cor a menos disponível para dizer
-     "isto aqui é um problema". */
+  /*
+   * Cor só onde carrega significado: o destaque é branco, não azul, para a cor ficar livre para dizer "problema".
+   */
   --accent-base: #f1f1f1;
   --success: #57d68d;
   --warning: #e0a458;
@@ -322,10 +223,9 @@
 
   color-scheme: dark;
 
-  /* ================================================================
-     OS NOMES ANTIGOS, APONTANDO PARA OS NOVOS.
-     Nada abaixo desta linha tem valor próprio.
-     ================================================================ */
+  /*
+   * Os nomes antigos, apontando para os novos. Nada abaixo tem valor próprio.
+   */
   --panel: var(--surface);
   --panel-raised: var(--surface-3);
   --campo: #0d0e0e;
@@ -372,27 +272,13 @@
   color-scheme: light;
 }
 
-
-
 /*
-  Desligamento global do movimento.
-  Duas fontes: a preferência do sistema operacional e o perfil de hardware que
-  o próprio Otimiza já mede. Nos dois casos a interface continua inteira — só
-  para de se mexer.
-*/
+ * Desliga o movimento (preferência do sistema ou hardware fraco medido): a interface continua inteira.
+ */
 /*
-  ATENÇÃO AO `::before` E `::after`.
-
-  Até a versão 0.15 esta regra era só `.sem-animacao, .sem-animacao *`. O
-  seletor universal NÃO casa com pseudo-elemento — o bloco de
-  `prefers-reduced-motion` logo abaixo sempre soube disso e lista os dois
-  explicitamente; este aqui não.
-
-  Na prática: qualquer animação declarada num `::before` continuava rodando na
-  máquina fraca, com o interruptor ligado. Como o fundo do produto mora num
-  pseudo-elemento, isso seria o otimizador gastando GPU para se enfeitar
-  exatamente no PC que ele foi contratado para aliviar.
-*/
+ * `::before` e `::after` explícitos: o seletor universal não casa com pseudo-elemento, e animações ali seguiam
+ * rodando na máquina fraca.
+ */
 .sem-animacao,
 .sem-animacao *,
 .sem-animacao *::before,
@@ -411,19 +297,17 @@
   }
 }
 
-/* Seleção de texto herdando o tema: sem isto, marcar qualquer texto pinta de
-   azul do Windows no meio de uma interface monocromática. */
+/*
+ * Sem isto a seleção pinta de azul do Windows.
+ */
 ::selection {
   background: var(--accent);
   color: var(--sobre-accent);
 }
 
 /*
-  Anel de foco único para tudo que recebe teclado.
-  Antes só .tab, .btn e .profile-chip tinham foco próprio; os filtros, o botão
-  de limpar busca, as caixas de preferência e todos os <summary> caíam no anel
-  laranja de 1px do motor — uma cor que não existe na paleta.
-*/
+ * Anel de foco único: os outros elementos caíam no anel laranja do motor, fora da paleta.
+ */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -434,28 +318,11 @@
   box-sizing: border-box;
 }
 
-/* ==========================================================================
-   `hidden` TEM QUE VENCER, SEMPRE.
-
-   O navegador esconde `[hidden]` por uma regra da folha padrão, e ela tem
-   especificidade quase nula. QUALQUER regra nossa que declare `display` — e há
-   dezenas, porque quase todo componente é `flex` ou `grid` — a derrota. O
-   elemento continua desenhado com o atributo `hidden` posto nele.
-
-   O efeito é traiçoeiro porque o código que esconde está certo: `elemento.hidden
-   = true` faz exatamente o que promete. Some o conteúdo, fica a casca — uma
-   bolinha acesa e vazia, uma lista sem itens ocupando espaço. E ninguém
-   desconfia do `hidden`, que é a coisa mais básica que existe; a suspeita vai
-   para o JavaScript, que não tem culpa nenhuma.
-
-   Aconteceu em três lugares antes de alguém perceber: as bolinhas de contagem
-   da lateral e as duas listas do cartão de veredito. Foram encontrados varrendo
-   a interface atrás de `[hidden]` com `display` diferente de `none` — não um
-   por um, porque um por um não termina.
-
-   `!important` aqui é o uso legítimo dele: `hidden` significa "isto não é
-   relevante agora", e não existe caso em que uma regra de aparência deva
-   discordar disso. */
+/*
+ * `hidden` TEM QUE VENCER: a regra padrão do navegador perde para qualquer `display` nosso, e sobrava a casca
+ * (bolinha acesa vazia, lista sem itens). `!important` legítimo: nenhuma regra de aparência deve discordar de
+ * `hidden`.
+ */
 [hidden] {
   display: none !important;
 }
@@ -467,9 +334,9 @@ body {
 }
 
 body {
-  /* A pintura do fundo mudou de casa: agora mora em `.fundo`, um elemento
-     fixo atrás de tudo. Aqui fica só a cor de base, que é o que aparece
-     enquanto o resto carrega. */
+  /*
+   * A pintura do fundo mora em `.fundo`; aqui fica a cor de base enquanto o resto carrega.
+   */
   background-color: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -479,11 +346,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-
-/* O fundo. Elemento real, e não `body::before`, por um motivo concreto: o
-   interruptor de movimento do produto (`.sem-animacao`) precisa alcançá-lo,
-   e o seletor universal não casa com pseudo-elemento do próprio `body`.
-*/
+/*
+ * Elemento real, não `body::before`: o `.sem-animacao` precisa alcançá-lo.
+ */
 .fundo {
   position: fixed;
   inset: 0;
@@ -493,63 +358,21 @@ body {
   background-color: var(--bg);
 }
 
-/* PRETO, E MAIS NADA.
- *
- * Aqui moravam três camadas: manchas de luz em gradiente radial, uma animação
- * de 140 segundos que as fazia derivar para sempre, e uma textura de grão em
- * SVG com ruído fractal.
- *
- * Saíram todas, e não é só gosto do dono. Aquilo era uma camada de composição
- * que a placa de vídeo repintava o tempo inteiro — num produto que promete não
- * pesar na máquina fraca que veio consertar, o próprio fundo da janela era
- * trabalho constante em troca de um brilho que ninguém olha. O `will-change:
- * transform` chegava a pedir uma camada de GPU dedicada para isso.
- *
- * O que sobra é `background-color: var(--bg)` na regra acima, que é #000. Em
- * monitor OLED, que é o que boa parte do público de jogo usa, isso é pixel
- * desligado: zero energia e preto absoluto, em vez de um cinza muito escuro
- * fingindo ser preto.
- *
- * A hierarquia da tela passa a vir inteira do fio de cabelo e do espaço, que é
- * de onde ela já vinha — as manchas nunca separaram nada.
+/*
+ * Preto e mais nada: as manchas animadas e o grão eram trabalho de GPU constante, no produto que promete não
+ * pesar na máquina fraca. Em OLED, #000 é pixel desligado.
  */
 
-/* A ÊNFASE PRIMÁRIA É PARA O QUE ALTERA A MÁQUINA.
+/*
+ * Ênfase primária só para o que ALTERA a máquina (dezenove botões de medir gritavam como "Otimizar agora").
+ * Acima de oito, a verificação de desenvolvimento em `main.ts` reclama.
+ */
 
-   Até a versão 0.15 dezenove botões de MEDIR usavam `.btn-primary` — a mesma
-   ênfase de "Otimizar agora". A tela gritava dezenove vezes por atenção para
-   ações que não mudam nada no PC do cliente, e o botão que de fato altera o
-   sistema se perdia no meio.
-
-   Sobraram seis: otimizar, gerar o relatório, fixar prioridade, ligar o modo
-   jogo, reabrir como administrador, e o conserto do veredito. Todos alteram
-   alguma coisa. Medir é botão comum.
-
-   Se algum dia a contagem passar de oito, a ênfase deixou de ser ênfase — há
-   uma verificação disso em `main.ts`, no modo de desenvolvimento.
-*/
-
-/* ================================== O QUE VAI APARECER AQUI, ANTES DO CLIQUE
-
-   Dezoito caixas de resultado ficavam completamente vazias — sem texto, sem
-   contorno, sem nada — até alguém clicar. A pessoa precisava clicar para
-   descobrir o que o botão fazia, e depois esperar para descobrir quanto
-   demorava.
-
-   A solução não custa uma linha de TypeScript: o texto mora num atributo e o
-   CSS o mostra enquanto a caixa estiver vazia. `:empty` casa exatamente
-   enquanto não há filho, e todo caminho de desenho do produto escreve
-   `innerHTML` — então o texto some sozinho no primeiro resultado e VOLTA
-   sozinho se alguém limpar. Nenhum estado para sincronizar.
-
-   Cada texto diz três coisas, nesta ordem: o que o exame lê, quanto demora, e
-   se altera alguma coisa. O terceiro item é o argumento do produto, e até
-   agora não era dito em lugar nenhum antes do clique.
-
-   Contorno tracejado, e não sólido: diz "aqui vai aparecer coisa" sem fingir
-   que já apareceu. É o oposto de um esqueleto de carregamento, que simula um
-   conteúdo que ainda não existe.
-*/
+/*
+ * O que vai aparecer aqui, antes do clique: o texto mora num atributo e o CSS o mostra enquanto a caixa estiver
+ * `:empty` (some no primeiro resultado, volta se limpar). Diz o que lê, quanto demora e se altera algo.
+ * Tracejado: "aqui vai aparecer", sem simular conteúdo.
+ */
 .resultado:empty::before {
   content: attr(data-vazio);
   display: block;
@@ -563,7 +386,6 @@ body {
   border-radius: var(--r2);
 }
 
-/* O custo também no botão, para quem não lê o parágrafo. */
 .btn[data-custo]::after {
   content: attr(data-custo);
   margin-left: var(--s2);
@@ -594,16 +416,17 @@ button {
   min-height: 100vh;
   padding: 0;
   gap: 0;
-  /* Sem isto, em 1920 o console ocupava a tela inteira e os textos do produto
-     chegavam a 319 caracteres por linha. A faixa legivel e 45 a 75: o olho
-     perde a linha no retorno, e sao justamente esses paragrafos que carregam
-     o argumento de honestidade do Otimiza. */
+  /*
+   * Em 1920 as linhas chegavam a 319 caracteres; a faixa legível é 45 a 75.
+   */
   max-width: 1440px;
   width: 100%;
   margin-inline: auto;
 }
 
-/* Medida de linha. Aplicada ao texto corrido, nunca a numero ou lista. */
+/*
+ * Só no texto corrido, nunca em número ou lista.
+ */
 .lead,
 .hint,
 .empty,
@@ -630,11 +453,6 @@ button {
   display: none;
 }
 
-/*
-  Grades por aba em vez de três colunas fixas para tudo. Cada seção recebe o
-  espaço que o conteúdo dela pede, e some o aperto de empilhar dez painéis numa
-  tela só.
-*/
 .grid {
   display: grid;
   gap: var(--gap);
@@ -684,8 +502,6 @@ button {
   outline-offset: -2px;
 }
 
-/* O selo diz que a aba tem algo esperando — a navegação carrega informação,
-   não é só um rótulo. */
 .tab-badge {
   min-width: 17px;
   height: 17px;
@@ -713,39 +529,10 @@ button {
 /* ------------------------------------------------------------------ painéis */
 
 /*
-  Cantoneiras nos cantos opostos, desenhadas no próprio painel. Sem elemento
-  extra no HTML: a moldura é do painel, não um enfeite colado por cima.
-*/
-/*
-  As cantoneiras nos cantos opostos saíram junto com o canto vivo. Elas eram
-  duas marcas de 9px em cantos diagonais — assimétricas de propósito — e não
-  convivem com borda arredondada: viravam dois riscos soltos fora da curva.
-*/
-/* ============================================================== O CARTÃO
-
-   Até a versão 0.15 era cor chapada mais uma borda de 1px. Sem profundidade,
-   sem direção de luz, e nada distinguindo o cartão que importa dos outros 34.
-
-   TRÊS PINTURAS NA MESMA CAIXA
-
-   A borda vira `transparent` e é preenchida por gradiente. São três camadas
-   com recorte diferente:
-
-     1. a queda de luz no topo do corpo   (recortada no padding)
-     2. a cor do painel                   (recortada no padding)
-     3. a moldura                         (recortada na borda)
-
-   Isso dá moldura em gradiente sem elemento extra e sem pseudo-elemento — que
-   importa porque são 35 cartões, e um nó de pintura a mais em cada um é custo
-   real de composição.
-
-   O QUE FOI RECUSADO
-
-   `backdrop-filter`. É a tentação óbvia com um fundo bonito atrás, e a mais
-   cara que existe nesta tela: obriga o compositor a reler e desfocar a região
-   atrás de CADA cartão, a cada rolagem. Trinta e cinco vezes. O cartão é
-   opaco, e continua opaco.
-*/
+ * O cartão: borda `transparent` preenchida por gradiente, em três camadas (luz do topo e cor do painel recortadas
+ * no padding, moldura recortada na borda), sem pseudo-elemento, porque são 35 cartões. Sem `backdrop-filter`:
+ * desfocaria atrás de cada cartão a cada rolagem.
+ */
 .panel {
   position: relative;
   isolation: isolate;
@@ -755,14 +542,15 @@ button {
   min-width: 0;
   background: var(--panel);
 
-  /* Uma sombra curta, de contato, e nada mais. No escuro o cartão precisava de
-     três camadas de gradiente para existir; no papel ele existe sozinho — o
-     que o assenta é o fio de 1px e um contato de 2px. */
+  /*
+   * No claro basta o fio de 1px e um contato de 2px.
+   */
   box-shadow: 0 1px 2px rgba(var(--text-rgb), 0.04);
 }
 
-/* Um único degrau de ênfase de ênfase, e ele só vale enquanto for raro: no momento em
-   que o terceiro cartão receber destaque, nenhum tem destaque. */
+/*
+ * Um degrau de ênfase só, e raro: no terceiro cartão destacado, nenhum tem destaque.
+ */
 .panel[data-realce] {
   border-color: rgba(var(--text-rgb), 0.16);
   box-shadow:
@@ -770,9 +558,9 @@ button {
     0 18px 40px -24px rgba(var(--text-rgb), 0.28);
 }
 
-/* O cabeçalho sangra até a borda do cartão e carrega o degrau de luz, para o
-   resto do corpo poder ficar quieto. A margem negativa desfaz o `padding` do
-   `.panel` nos três lados de cima. */
+/*
+ * A margem negativa desfaz o padding do `.panel` nos três lados de cima.
+ */
 .panel-head {
   display: flex;
   align-items: center;
@@ -784,11 +572,10 @@ button {
   border-radius: var(--r3) var(--r3) 0 0;
 }
 
-/* O nome da secao, a navegacao e o botao renderizavam no mesmo tamanho, mesma
-   caixa alta e tracking quase igual. Com tres papeis semanticos no mesmo peso
-   otico o olho nao tem por onde entrar na tela — a causa raiz de "nao parece
-   bonito" era essa planicie, nao a falta de enfeite. Agora ha um degrau claro:
-   titulo 13px cheio, aba 11px medio, botao 10px discreto. */
+/*
+ * Degrau claro entre título (13px cheio), aba (11px médio) e botão (10px discreto): no mesmo peso, o olho não
+ * tinha por onde entrar.
+ */
 .panel-head h2 {
   font-family: var(--font-sans);
   font-size: 12.5px;
@@ -805,9 +592,9 @@ button {
   white-space: nowrap;
 }
 
-/* Painel irmao acompanha a altura do maior. Sem isto cada grade terminava em
-   degrau — o hero da primeira tela tinha 296px de um lado e 119px do outro,
-   com 177px de vazio ao lado do medidor principal. */
+/*
+ * Sem isto cada grade terminava em degrau (296px de um lado, 119px do outro).
+ */
 .grid-two > *,
 .grid-hero > * {
   height: 100%;
@@ -822,9 +609,8 @@ button {
 }
 
 /*
-  A marca entra como máscara CSS, não como imagem colorida: assim a estrela
-  herda a cor do tema e continua nítida em qualquer densidade de tela.
-*/
+ * Máscara, não imagem: a estrela herda a cor do tema e fica nítida em qualquer densidade.
+ */
 .brand-logo {
   width: 30px;
   height: 30px;
@@ -922,17 +708,9 @@ button {
 }
 
 /*
-  `transform: scaleY`, e não `height`.
-
-  Animar altura obriga o navegador a refazer o layout da matriz inteira, e isso
-  acontecia a CADA 2 SEGUNDOS, em todas as barras de uma vez. Num processador de
-  8 threads são 8 relayouts por atualização; num de 16, o dobro. Medido: 0,417 ms
-  por quadro contra 0,231 ms com transform — e a medição nem inclui pintura, então
-  no PC fraco do cliente a diferença é bem maior.
-
-  Era o próprio otimizador fazendo, na própria interface, exatamente o tipo de
-  desperdício que ele cobra para remover do PC dos outros.
-*/
+ * `scaleY`, não `height`: animar altura refazia o layout da matriz a cada 2 s (0,417 ms contra 0,231 ms por
+ * quadro, sem contar pintura).
+ */
 .core i {
   display: block;
   width: 100%;
@@ -945,8 +723,9 @@ button {
     background-color var(--dur-slow) ease;
 }
 
-/* Cascata da esquerda para a direita quando a matriz aparece pela primeira vez.
-   Só na entrada: uma matriz que recomeça a cada 2 s pareceria quebrada, não cara. */
+/*
+ * Só na entrada: recomeçar a cada 2 s pareceria quebrado.
+ */
 .core-matrix[data-entrada="true"] i {
   transition-delay: calc(var(--i, 0) * 14ms);
 }
@@ -1065,10 +844,9 @@ button {
   min-width: 0;
 }
 
-/* A versão em coluna nasceu para a coluna estreita ao lado do medidor. Num
-   painel de largura inteira ela vira quatro linhas soltas com muito vazio à
-   direita, então aqui as leituras ficam lado a lado e quebram sozinhas quando
-   não couberem. */
+/*
+ * Em painel de largura inteira, as leituras lado a lado.
+ */
 .readouts-row {
   flex-direction: row;
   flex-wrap: wrap;
@@ -1122,20 +900,16 @@ button {
   font-family: var(--font-sans);
 }
 
-/* A nota vira aviso quando o próprio número é o problema — hoje, muitos dias
-   sem reiniciar. Sem destaque ela some entre as outras legendas. */
 .readout-note.warn {
   color: var(--amber);
 }
 
 /* ------------------------------------------------------------------ botões */
 
-/* O BOTÃO DEIXOU DE GRITAR.
-
-   Eram todos em MAIÚSCULA espaçada de 10px — a letra de etiqueta de máquina,
-   e com ela qualquer tela parece um painel de controle industrial. Agora é
-   frase normal, no peso do texto, e a hierarquia vem do preenchimento: o
-   primário é tinta cheia, o secundário é papel com fio. */
+/*
+ * Frase normal, no peso do texto: em maiúscula espaçada a tela parecia painel industrial. A hierarquia vem do
+ * preenchimento.
+ */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1196,8 +970,9 @@ button {
   margin-bottom: var(--s3);
 }
 
-/* Campo de texto que fica na mesma linha dos botões — hoje só o nome do
-   processo a medir. Toma a altura do botão para a linha não ficar torta. */
+/*
+ * Toma a altura do botão para a linha não ficar torta.
+ */
 .campo-inline {
   min-width: 140px;
   padding: var(--s2) var(--s3);
@@ -1258,22 +1033,15 @@ button {
   color: var(--accent);
 }
 
-/* Nem tudo que não deu certo é erro. "Faltou permissão para ler" precisa de cor
-   própria: pintar de verde esconderia que a checagem ficou incompleta, e pintar
-   de vermelho faria parecer que a máquina tem um problema que não temos como
-   afirmar que existe. */
+/*
+ * "Faltou permissão" tem cor própria: nem verde (esconderia a checagem incompleta) nem vermelho (afirmaria um
+ * problema).
+ */
 .status.warn {
   color: var(--amber);
 }
 
 /* ------------------------------------------------------------- diagnóstico */
-
-/* A nota de saúde de 0 a 100 morava aqui, e foi removida na versão 0.13
-   junto com o módulo que a calculava: aquele número não consultava nenhum dos
-   diagnósticos que medem a máquina de verdade, e mesmo assim era o elemento
-   mais visível da tela. O estilo dela ficou para trás por mais uma versão —
-   trinta linhas de CSS mantendo viva uma ideia que o produto já tinha
-   abandonado. */
 
 .bottleneck {
   border-left: 2px solid var(--hairline-strong);
@@ -1335,10 +1103,6 @@ button {
   color: var(--accent);
 }
 
-/*
-  A lista rola dentro do próprio painel. Antes ela empurrava a página inteira
-  para baixo e obrigava a percorrer a tela toda para chegar num item.
-*/
 .optimization-list {
   max-height: min(52vh, 520px);
   overflow-y: auto;
@@ -1357,7 +1121,6 @@ button {
   background: var(--hairline-strong);
 }
 
-/* Grupos por categoria, recolhíveis. */
 .opt-group {
   border-bottom: 1px solid var(--hairline);
 }
@@ -1407,7 +1170,6 @@ button {
   margin-left: auto;
 }
 
-/* Linha compacta: uma otimização cabe em 34px e continua legível. */
 .optimization {
   border-top: 1px solid var(--hairline);
   background: var(--panel);
@@ -1443,15 +1205,9 @@ button {
   opacity: 0.45;
 }
 
-/* NÃO APAGADO COMO O "não se aplica", E ÂMBAR EM VEZ DE CINZA.
-
-   "Não se aplica" é uma conclusão, e conclusão pode desbotar. "Não deu para
-   verificar" é uma pergunta em aberto sobre o PC do cliente, e é justamente
-   nas máquinas onde ela aparece — imagem modificada, permissão negada,
-   política de domínio — que o produto precisa ser visto, não escondido.
-
-   Âmbar é o mesmo tom que o resto do programa usa para "olhe para isto", e não
-   o verde de coisa resolvida: ver o comentário de `OptimizationState::Unknown`. */
+/*
+ * Âmbar, não apagado: "não deu para verificar" é pergunta em aberto (ver `OptimizationState::Unknown`).
+ */
 .optimization[data-state="Unknown"] .opt-row {
   border-left-color: var(--amber);
 }
@@ -1476,22 +1232,9 @@ button {
 }
 
 /*
-  O NOME DA OTIMIZAÇÃO NÃO PODE SER CORTADO.
-
-  Ele era `nowrap` com reticências, e o catálogo tem nomes longos de propósito
-  — "Rede de baixa latência (desativar Nagle)" diz o que faz e por quê. Cortado,
-  vira "Rede de baixa latência (desativar Nagl…", que é pior que o nome curto
-  que evitamos escrever.
-
-  E a lista existe para a pessoa DECIDIR. Reticências no título de uma lista de
-  decisão obrigam a clicar item por item só para ler o nome.
-
-  Duas linhas em vez de uma reticência. A lista fica alguns pixels mais alta e
-  passa a caber a frase inteira.
-
-  As outras reticências do produto ficam: `.process-name` e `.startup-name` são
-  listas ao vivo, e lista que reflui a cada segundo é pior que lista cortada.
-*/
+ * O nome não é cortado: duas linhas em vez de reticência ("desativar Nagl…"). As listas ao vivo continuam
+ * cortadas: refluir a cada segundo é pior.
+ */
 .opt-name {
   font-size: var(--t-body);
   overflow-wrap: anywhere;
@@ -1614,9 +1357,9 @@ button {
   color: var(--text-muted);
 }
 
-/* O aviso dos serviços essenciais carrega uma lista com o que cada serviço
-   desligado quebra; na largura do pedido de administrador, cada linha virava
-   três. */
+/*
+ * Na largura do pedido de administrador cada linha virava três.
+ */
 .modal-card-largo {
   max-width: 560px;
 }
@@ -1645,9 +1388,9 @@ button {
   color: var(--text);
 }
 
-/* O limite de FPS por jogo mora dentro do painel do driver, separado dos
-   ajustes globais por uma linha: são dois alcances diferentes — todos os jogos
-   e um jogo só — e a diferença precisa ser visível. */
+/*
+ * Global e por jogo são alcances diferentes, e a diferença precisa aparecer.
+ */
 .nvlimite {
   margin-top: var(--s5);
   padding-top: var(--s4);
@@ -1787,7 +1530,6 @@ button {
   }
 }
 
-/* O que não fazemos — a lista de recusas é argumento de venda, não rodapé. */
 .refusals {
   border: 1px solid var(--hairline);
   border-left: 2px solid var(--red);
@@ -1836,7 +1578,6 @@ button {
   font-weight: 500;
 }
 
-/* Achados de firmware e hardware */
 .finding {
   border-left: 2px solid var(--hairline-strong);
   padding: var(--s3) 0 var(--s3) var(--s3);
@@ -1855,12 +1596,9 @@ button {
   border-left-color: var(--green);
 }
 
-/* Bloco de texto pronto para copiar: o relatório de compatibilidade.
-
-   ROLA DENTRO DE SI, e não empurra a página. O relatório passa de cinquenta
-   linhas e tem uma tabela larga; deixá-lo crescer solto faria a aba inteira
-   rolar na horizontal, que é a única coisa que o resto desta folha nunca
-   permite. */
+/*
+ * Rola dentro de si: com a tabela larga, a aba inteira rolaria na horizontal.
+ */
 .bloco-de-texto {
   margin-top: var(--s3);
   max-height: 320px;
@@ -1876,13 +1614,9 @@ button {
   tab-size: 2;
 }
 
-/* NEM VERDE NEM ÂMBAR, DE PROPÓSITO.
-
-   "Este Windows não tem este ajuste" não é um problema — o plano segue sem ele
-   — mas também não é uma verificação aprovada. Pintar de verde inflaria a
-   contagem de coisas que deram certo, que é a conta que este produto se recusa
-   a fabricar. Fica no cinza da borda padrão, e a regra está escrita para não
-   virar verde por descuido de alguém depois. */
+/*
+ * Cinza: "este Windows não tem" não é problema, mas também não é verificação aprovada.
+ */
 .finding[data-severity="Neutral"] {
   border-left-color: var(--hairline-strong);
 }
@@ -1915,8 +1649,6 @@ button {
   margin-top: var(--s2);
 }
 
-/* Onde o problema se resolve é a informação mais importante do achado:
-   um cliente que entende que precisa trocar peça não espera milagre de software. */
 .chip[data-fix="Hardware"] {
   color: var(--red);
   border-color: rgba(var(--red-rgb), 0.4);
@@ -1936,7 +1668,6 @@ button {
   display: none;
 }
 
-/* Quem está pesando agora */
 .process-list {
   display: flex;
   flex-direction: column;
@@ -1993,18 +1724,15 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* Registro ao vivo */
 .live-log {
   border: 1px solid var(--hairline);
   background: var(--bg);
   margin-bottom: var(--s3);
 }
 
-/* A BARRA ANDA POR CONTAGEM, NUNCA POR TEMPO.
-   Sem transição de largura de propósito: uma transição faria o preenchimento
-   deslizar entre dois passos, e deslizar é exatamente a aparência de progresso
-   inventado que este produto recusa. Ela pula de item para item, porque é
-   assim que o trabalho acontece. */
+/*
+ * Sem transição de largura: deslizar é a aparência de progresso inventado. Pula de item para item.
+ */
 .live-log-barra {
   width: 100%;
   height: 4px;
@@ -2056,7 +1784,6 @@ button {
   border-bottom: none;
 }
 
-/* O marcador à esquerda conta o estado antes de qualquer texto ser lido. */
 .log-line::before {
   position: absolute;
   left: 0;
@@ -2108,7 +1835,6 @@ button {
   color: var(--hairline-strong);
 }
 
-/* Inicialização */
 .startup-list {
   display: flex;
   flex-direction: column;
@@ -2163,32 +1889,11 @@ button {
 /* --------------------------------------------------------- sinais vitais */
 
 /*
-  Ficam no topo, visíveis em qualquer aba. A troca de aba não pode custar o
-  contato com o que a máquina está fazendo agora — é isso que separa um console
-  de um formulário com páginas.
-*/
+ * Largura fixa para as barras se compararem de relance, ancoradas na borda.
+ */
 /*
-  OS MEDIDORES DO TOPO
-
-  Eles seguem visíveis em qualquer aba: trocar de seção não pode significar
-  perder de vista o que a máquina está fazendo agora.
-
-  DUAS COISAS ESTAVAM ERRADAS, e as duas eram a mesma causa — os medidores
-  eram tratados como texto, e não como instrumento:
-
-  1. A largura vinha do conteúdo, então cada barra tinha um comprimento
-     diferente. Três barras de comprimentos diferentes não se comparam de
-     relance, que é a única coisa que elas existem para permitir.
-
-  2. Ficavam centralizados, flutuando num vão entre a busca e o selo de acesso.
-     Instrumento se lê na borda, ancorado, não no meio do nada.
-*/
-/* DENTRO DA FAIXA, CADA SINAL É UMA LINHA SÓ.
-
-   Fora dela o vital é um bloco de três andares — rótulo, número e barra —, e
-   três andares não cabem numa barra de 34px: eles transbordavam por baixo e o
-   selo de acesso ficava cortado. Aqui o rótulo e o número andam lado a lado, e
-   a barrinha sai: quem quer a leitura contínua tem o medidor do Painel. */
+ * Na faixa de 34px cada sinal é uma linha só: os três andares transbordavam e cortavam o selo de acesso.
+ */
 .vitals {
   display: flex;
   align-items: center;
@@ -2232,32 +1937,17 @@ button {
 .vital {
   display: grid;
 
-  /* O RÓTULO E O NÚMERO ANDAM JUNTOS, E ISSO ERA UM DEFEITO DE VERDADE.
-
-     Antes eram `1fr auto`: o rótulo grudava na esquerda e o número era
-     empurrado para a direita da caixa de 124px, deixando uns setenta pixels de
-     vazio no meio. Só que a distância até o vital SEGUINTE era de vinte e
-     quatro.
-
-     O olho agrupa pela proximidade, não pela intenção de quem desenhou: com o
-     vazio de dentro maior que o de fora, lia-se "19% MEMÓRIA" como um par, e
-     cada número parecia pertencer ao rótulo do vizinho. Numa barra que existe
-     para dizer quanto de memória está em uso, ler o número errado não é
-     desconforto — é informação trocada.
-
-     A terceira coluna é VAZIA de propósito, e é ela que resolve o conflito
-     com a regra de baixo. Só `auto auto` juntava o texto, mas encolhia a
-     caixa até o tamanho dele — e aí as três barras ficavam com larguras
-     diferentes, que é exatamente o que a largura fixa existe para impedir:
-     barras de tamanhos diferentes não são comparáveis entre si. A coluna
-     vazia come a sobra, o texto fica junto à esquerda, e a barra continua
-     atravessando os 124px inteiros. */
+  /*
+   * Rótulo e número juntos: com `1fr auto` o vazio de dentro era maior que o de fora, e cada número parecia do
+   * vizinho. A terceira coluna VAZIA come a sobra e mantém a barra nos 124px.
+   */
   grid-template-columns: auto auto 1fr;
   align-items: baseline;
   gap: 5px var(--s2);
 
-  /* LARGURA FIXA. É o que faz as três barras serem comparáveis, e é o que
-     impede o número mais longo de empurrar os vizinhos. */
+  /*
+   * Largura fixa: barras comparáveis, sem o número longo empurrar os vizinhos.
+   */
   width: 124px;
 }
 
@@ -2272,8 +1962,9 @@ button {
 .vital-value {
   font-family: var(--font-mono);
   font-size: var(--t-body);
-  /* Dígito de largura fixa: sem isto o valor treme a cada leitura, e número
-     que treme parece instável mesmo com a medição estável. */
+  /*
+   * Dígito tabular: sem isto o valor treme.
+   */
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -2297,18 +1988,16 @@ button {
 }
 
 /*
-  A COR DIZ O ESTADO, E SÓ QUANDO HÁ ESTADO A DIZER.
-
-  Abaixo de 75% a barra fica neutra. Pintar tudo — inclusive o normal — faz a
-  cor perder o significado justamente quando ela precisa avisar.
-*/
+ * Abaixo de 75% neutra: pintar o normal tira o significado da cor.
+ */
 .vital[data-nivel="atencao"] .vital-bar i { background: var(--amber); }
 .vital[data-nivel="critico"] .vital-bar i { background: var(--red); }
 .vital[data-nivel="critico"] .vital-value { color: var(--red); }
 
 @media (max-width: 1180px) {
-  /* Em janela estreita o disco sai primeiro: é o que muda mais devagar, e
-     portanto o que menos se perde deixando de ver. */
+  /*
+   * O disco sai primeiro: é o que muda mais devagar.
+   */
   .vital:last-child { display: none; }
 }
 
@@ -2361,7 +2050,6 @@ button {
   flex: none;
 }
 
-/* O que pesa mais nesta máquina em particular */
 .chip[data-recommended="true"] {
   color: var(--green);
   border-color: rgba(var(--green-rgb), 0.45);
@@ -2371,7 +2059,6 @@ button {
   box-shadow: 0 0 0 3px rgba(var(--green-rgb), 0.22);
 }
 
-/* Liberador de espaço */
 .finding-size {
   font-size: var(--t-body);
   font-variant-numeric: tabular-nums;
@@ -2383,7 +2070,6 @@ button {
   margin: var(--s1) 0 var(--s4);
 }
 
-/* Lista de programas em conflito */
 .conflict-list {
   margin: var(--s2) 0 var(--s2);
   padding-left: var(--s4);
@@ -2425,8 +2111,9 @@ button {
   white-space: nowrap;
 }
 
-/* Pasta cortada pelo prazo tem número que é piso, não total. A barra âmbar
-   diz isso antes de a pessoa ler a legenda. */
+/*
+ * Pasta cortada pelo prazo: o número é piso, e a barra âmbar diz antes da legenda.
+ */
 .folder[data-partial="true"] .folder-size {
   color: var(--amber);
 }
@@ -2486,8 +2173,9 @@ button {
   border-color: var(--text-muted);
 }
 
-/* O perfil escolhido é o único estado de cor cheia da tela. Ele muda o que a
-   lista ao lado mostra, e essa consequência precisa estar visível. */
+/*
+ * O único estado de cor cheia: muda o que a lista mostra.
+ */
 .profile-chip[aria-pressed="true"] {
   background: var(--accent);
   border-color: var(--accent);
@@ -2546,8 +2234,9 @@ button {
   border-color: var(--accent);
 }
 
-/* O X nativo do type=search não aparece em todos os motores e não herda o
-   tema; o nosso é previsível. */
+/*
+ * O X nativo do type=search não aparece em todos os motores nem herda o tema.
+ */
 .search input::-webkit-search-cancel-button {
   display: none;
 }
@@ -2572,18 +2261,10 @@ button {
   color: var(--text);
 }
 
-/* ============================================================== movimento
-
-   Tudo aqui anima apenas `transform` e `opacity` — as duas propriedades que o
-   navegador resolve sem refazer layout nem repintar. Animar largura, altura,
-   `top` ou `margin` custa quase o dobro por quadro, e num PC de 2 núcleos isso
-   aparece como engasgo.
-
-   Nenhuma biblioteca. Foi uma decisão medida: o GSAP custa 71 KB — mais que o
-   dobro do aplicativo inteiro — para fazer entrada e saída que o CSS já faz em
-   zero byte. Num programa vendido para tirar gordura de PC fraco, embutir isso
-   seria o produto se contradizendo dentro do próprio instalador.
-   ========================================================================= */
+/*
+ * Movimento: só `transform` e `opacity`, sem layout nem repintura. Sem biblioteca (o GSAP custa 71 KB para o que o
+ * CSS faz de graça).
+ */
 
 @keyframes surgir {
   from {
@@ -2611,15 +2292,13 @@ button {
   }
 }
 
-/* Troca de aba. O painel entra de baixo, curto e sem elástico: é navegação,
-   não espetáculo. */
 .tab-panel:not([hidden]) {
   animation: surgir 0.26s var(--ease) both;
 }
 
-/* Entrada de lista escalonada. O índice vem do JavaScript como `--i`; o teto de
-   12 existe porque uma lista de 40 itens com 22 ms cada levaria quase um
-   segundo para terminar de aparecer, e aí a animação vira espera. */
+/*
+ * O teto de 12: uma lista de 40 itens a 22 ms cada viraria espera.
+ */
 .optimization,
 .finding,
 .folder,
@@ -2636,25 +2315,10 @@ button {
   overflow: hidden;
 }
 
-/* Estado de carregamento. Antes, um painel esperando o backend mostrava texto
-   parado e sem fim — se a chamada travasse, o cliente concluía que o programa
-   quebrou. Agora o texto respira e há uma faixa correndo por baixo.
-   
-   PRECISA DA CLASSE `carregando`, E ISSO É UM CONSERTO.
-
-   O pulso estava em `.empty` inteiro, e `.empty` é a classe de TODA mensagem
-   sem lista — inclusive das que já terminaram: "Nada encontrado", "Nenhuma
-   otimização nesta categoria", "Nenhum problema encontrado". Onze das
-   dezessete usavam a classe para dizer um resultado final, e todas ficavam
-   piscando para sempre.
-
-   Duas coisas erradas de uma vez. A pessoa lia "movimento" como "ainda está
-   trabalhando" e esperava por algo que nunca ia chegar. E uma animação
-   infinita, com uma faixa varrendo por baixo, consumia GPU sem parar — no PC
-   fraco que este produto foi contratado para aliviar.
-
-   As irmãs de `.status` já tinham interruptor (`.status.ok`, `.error`,
-   `.warn` desligam o pulso). `.empty` não tinha nenhum. */
+/*
+ * Precisa da classe `carregando`: o pulso em `.empty` inteiro fazia piscar para sempre as mensagens de resultado
+ * final ("Nada encontrado"), e a faixa consumia GPU sem parar.
+ */
 .status.progress,
 .empty.carregando {
   animation: pulsar 1.6s ease-in-out infinite;
@@ -2669,17 +2333,15 @@ button {
   animation: varrer 1.8s linear infinite;
 }
 
-/* Painel que não está mais esperando não deve pulsar. */
 .status.ok,
 .status.error,
 .status.warn {
   animation: none;
 }
 
-/* O medidor de CPU já animava; o que faltava era a entrada. Sobe de zero até a
-   primeira leitura uma única vez, como instrumento ligando. Nas atualizações
-   seguintes só a transição normal age — um medidor que reinicia a cada 2 s
-   pareceria quebrado, não caro. */
+/*
+ * Sobe de zero uma vez só: reiniciar a cada 2 s pareceria quebrado.
+ */
 .gauge-fill {
   transition: stroke-dashoffset 0.5s var(--ease), stroke 0.5s ease;
 }
@@ -2688,8 +2350,6 @@ button {
   transition-duration: 0.9s;
 }
 
-/* Reação ao toque. Nenhum botão do aplicativo afundava ao ser clicado — falta
-   o retorno físico que faz a interface parecer sólida. */
 .btn:active,
 .filter:active,
 .profile-chip:active {
@@ -2703,7 +2363,6 @@ button {
     background-color var(--dur), transform 0.08s ease;
 }
 
-/* Linhas que eram clicáveis e não reagiam ao mouse. */
 .startup,
 .folder,
 .finding,
@@ -2717,9 +2376,6 @@ button {
   background-color: var(--panel-raised);
 }
 
-/* Barra de rolagem no tema, nos três contêineres que rolam — antes só a lista
-   de otimizações tinha, e as outras duas ficavam com a barra clara padrão do
-   WebView2 sobre painel quase preto. */
 .startup-list::-webkit-scrollbar,
 .live-log ol::-webkit-scrollbar,
 .optimization-list::-webkit-scrollbar {
@@ -2744,14 +2400,10 @@ button {
   background: var(--text-muted);
 }
 
-/* Grade que se ajusta à quantidade de painéis. A aba Sistema tem três, e com
-   duas colunas fixas o terceiro ficava órfão numa segunda linha com metade da
-   tela vazia ao lado. */
 .grid-auto {
-  /* `min(300px, 100%)` e não `300px` direto: numa janela estreita, uma coluna
-     de largura mínima fixa é maior que o espaço disponível, e a grade empurra
-     o conteúdo para fora da tela. Acontecia na aba Sistema abaixo de ~420px de
-     largura útil. */
+  /*
+   * `min(300px, 100%)`: abaixo de ~420px a coluna fixa empurrava o conteúdo para fora da tela.
+   */
   grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
 }
 
@@ -2759,15 +2411,13 @@ button {
   height: 100%;
 }
 
-/* A faixa de abas tem uma hairline de 1px embaixo; o indicador da aba ativa
-   tem 2px. Sem puxar o indicador para baixo, sobrava uma linha cinza por
-   BAIXO do traço branco — defeito de 1px, no elemento mais olhado da tela. */
+/*
+ * Puxa o indicador de 2px por cima da hairline de 1px, senão sobra uma linha cinza por baixo.
+ */
 .tab {
   margin-bottom: -1px;
 }
 
-/* Subtítulo dentro de painel. Faltava um degrau entre o título da seção e o
-   texto corrido — os blocos de resultado longos vinham todos no mesmo nível. */
 .sub {
   margin: var(--s5) 0 var(--s3);
   font-size: var(--t-label);
@@ -2777,7 +2427,6 @@ button {
   color: var(--text-dim);
 }
 
-/* Campo de texto ao lado de um botão, na mesma linha de ação. */
 .fps-input {
   padding: var(--s2) var(--s3);
   background: var(--bg);
@@ -2793,12 +2442,9 @@ button {
   border-color: var(--accent);
 }
 
-/* ==================================================== navegação lateral
-
-   Substituiu a faixa de abas no topo. Com sete seções aquela faixa já vivia
-   apertada e cada painel novo piorava; a lateral cresce para baixo sem disputar
-   espaço, agrupa por assunto e tem lugar para a contagem de cada área.
-   ===================================================================== */
+/*
+ * Navegação lateral: cresce para baixo, agrupa por assunto e tem lugar para a contagem.
+ */
 
 .corpo {
   display: grid;
@@ -2809,7 +2455,6 @@ button {
   background: var(--bg);
 }
 
-/* O conteúdo respira por dentro, e não por uma margem em volta da janela. */
 .stage,
 .secao-cabecalho {
   padding-inline: var(--s4);
@@ -2881,45 +2526,31 @@ button {
   background: rgba(var(--text-rgb), 0.045);
 }
 
-/* A seção aberta é o único item com fundo cheio: quem olha de relance precisa
-   saber onde está sem ler. */
 .nav[aria-selected="true"] {
   color: var(--text);
   font-weight: 600;
   background: var(--sup-selecionada);
 }
 
-/* ==========================================================================
-   ÍCONES DE TRAÇO
-
-   Um desenho por símbolo, definido uma vez no HTML e reaproveitado por `use`.
-   Nada é baixado: o produto precisa abrir sem internet.
-
-   A ESPESSURA É A MESMA EM TODOS, e é isso que faz o conjunto parecer um
-   conjunto. Um ícone de dois traços e outro de oito pesam igual na tela quando
-   a espessura é constante — foi o que a versão recortada não conseguia dar,
-   porque silhueta cheia fica tão pesada quanto o desenho for detalhado.
-
-   `vector-effect: non-scaling-stroke` mantém a espessura em pixels mesmo
-   quando o ícone é desenhado maior ou menor: sem ela, o mesmo desenho a 15px e
-   a 22px sairia com traços de grossuras diferentes.
-   ========================================================================== */
+/*
+ * Ícones de traço, definidos uma vez no HTML (`use`). A espessura igual faz o conjunto; `vector-effect:
+ * non-scaling-stroke` a mantém em pixels a 15 ou 22px.
+ */
 
 .nav-icone,
 .busca-topo-icone,
 .secao-icone svg {
   fill: none;
   stroke: currentColor;
-  /* 1,5 e não 1,8: o traço mais fino é o que separa um ícone de
-     aplicativo de um ícone de barra de ferramentas antiga. A 18 pixels
-     ele ainda lê, e a 1,8 a lateral inteira pesava. */
+  /*
+   * 1,5 e não 1,8: a 1,8 a lateral inteira pesava.
+   */
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 
-/* O sprite não se desenha: ele é só o depósito das formas. */
 .sprite-icones {
   position: absolute;
   width: 0;
@@ -2969,7 +2600,6 @@ button {
   letter-spacing: 0.04em;
 }
 
-/* Botão de recolher. Fica no canto da lateral, discreto. */
 .lateral-recolher {
   position: absolute;
   top: var(--s2);
@@ -3000,8 +2630,9 @@ button {
   transform: rotate(-45deg) translate(1px, 1px);
 }
 
-/* Recolhida: só os ícones. O rótulo some sem tirar o elemento do fluxo de
-   acessibilidade — leitor de tela continua lendo o nome da seção. */
+/*
+ * O rótulo some sem sair da acessibilidade.
+ */
 .corpo[data-recolhida="true"] .nav-rotulo,
 .corpo[data-recolhida="true"] .lateral-grupo,
 .corpo[data-recolhida="true"] .nav-atalho {
@@ -3026,29 +2657,11 @@ button {
   padding: 0;
 }
 
-/* ==========================================================================
-   A BOLINHA DE CONTAGEM NA LATERAL RECOLHIDA
-
-   O DEFEITO NÃO ERA A BOLINHA ESTAR TORTA: ERA ELA EMPURRANDO O ÍCONE.
-
-   Recolhida, o rótulo some mas a bolinha continuava sendo IRMÃ do ícone dentro
-   de um `justify-content: center`. Os dois passavam a dividir os 56px, e o
-   resultado é o que se vê: nenhum ícone no centro, cada linha deslocada de um
-   tanto diferente conforme o número tivesse um ou dois dígitos, e as bolinhas
-   encostando na borda direita. Uma coluna de ícones que não se alinham entre si
-   parece defeito de montagem, e era.
-
-   Além de torta, ali ela não informava: um número de 17px espremido ao lado de
-   um ícone, sem o nome da seção do lado, não se lê nem se sabe do que é.
-
-   Então ela sai do fluxo e vira um PONTO no canto do ícone. O ícone volta ao
-   centro, e o sinal que sobrevive é o único que cabe naquele tamanho: "tem
-   alguma coisa aqui, e a cor diz a gravidade". O número continua inteiro na
-   lateral aberta, que é onde ele tem contexto para significar algo.
-
-   O anel escuro em volta não é enfeite: sem ele o ponto encosta no traço do
-   ícone e os dois viram uma mancha só.
-   ========================================================================== */
+/*
+ * Na lateral recolhida a bolinha vira um PONTO no canto do ícone: irmã do ícone num `justify-content: center`, ela
+ * empurrava cada ícone de um tanto diferente. O número fica na lateral aberta. O anel escuro separa o ponto do
+ * traço.
+ */
 
 .corpo[data-recolhida="true"] .nav {
   position: relative;
@@ -3066,14 +2679,16 @@ button {
   border-radius: 50%;
   border: 2px solid var(--panel);
 
-  /* Esconde o número sem esconder a bolinha. `display: none` mataria o sinal
-     junto com o texto. */
+  /*
+   * `display: none` mataria o sinal junto com o texto.
+   */
   font-size: 0;
   line-height: 0;
 }
 
-/* Em tela estreita a lateral vira uma faixa de ícones, e não some: perder a
-   navegação inteira num notebook de 1366 seria pior que apertar. */
+/*
+ * Em tela estreita vira faixa de ícones, não some.
+ */
 @media (max-width: 900px) {
   .corpo {
     grid-template-columns: 56px minmax(0, 1fr);
@@ -3095,9 +2710,9 @@ button {
     padding-inline: 0;
   }
 
-  /* Mesmo tratamento da lateral recolhida, e pelo mesmo motivo: aqui os
-     rótulos também sumiram, então a bolinha voltaria a empurrar o ícone para
-     fora do centro. A explicação longa está no bloco lá de cima. */
+  /*
+   * Mesmo tratamento da lateral recolhida (ver acima).
+   */
   .corpo .tab-badge {
     position: absolute;
     top: 4px;
@@ -3116,13 +2731,6 @@ button {
     display: none;
   }
 }
-
-/* ================================================== paleta de comandos
-
-   O aplicativo passou de quarenta botões espalhados por sete seções. Quem usa
-   isto todo dia sabe o nome do que quer e não deveria precisar lembrar em qual
-   aba mora — caçar botão é o gesto mais repetido de um console cheio.
-   ===================================================================== */
 
 .comandos {
   position: fixed;
@@ -3209,12 +2817,9 @@ button {
   color: var(--text-muted);
 }
 
-/* ============================================ arredondamento e respiro
-
-   Passe final sobre os elementos que já existiam com canto vivo. Fica no fim
-   do arquivo de propósito: assim a mudança de linguagem visual é uma coisa só,
-   legível de uma vez, em vez de ficar espalhada por trinta regras antigas.
-   ===================================================================== */
+/*
+ * Passe final de arredondamento, no fim do arquivo: a mudança de linguagem visual legível de uma vez.
+ */
 
 .lateral,
 .comandos-caixa,
@@ -3260,8 +2865,9 @@ button {
   border-radius: 999px;
 }
 
-/* O item da lateral vira pastilha inteira, e não uma faixa com traço à
-   esquerda: com canto redondo, a barra lateral de 2px fica torta na curva. */
+/*
+ * Pastilha inteira: com canto redondo, o traço lateral de 2px ficaria torto na curva.
+ */
 .nav {
   border-left: none;
   margin-bottom: 2px;
@@ -3317,11 +2923,9 @@ button {
 /* ------------------------------------------------------- busca no topo */
 
 .busca-topo {
-  /* CENTRADA NA FAIXA, E NÃO NO QUE SOBRA DELA.
-
-     Com `margin: auto` ela ficava no meio do espaço livre entre a marca e os
-     sinais vitais — ou seja, à esquerda. Posicionada, ela fica no meio da
-     janela mesmo quando o lado direito cresce. */
+  /*
+   * Posicionada no meio da janela: com `margin: auto` ficava no meio do espaço livre, à esquerda.
+   */
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -3359,7 +2963,6 @@ button {
   text-align: left;
 }
 
-/* Lupa desenhada em CSS: um anel e um cabo. */
 .busca-topo-icone {
   width: 12px;
   height: 12px;
@@ -3388,11 +2991,6 @@ button {
 
 /* -------------------------------------------------------------- respiro */
 
-/*
-  A referência que orientou este passe é bem mais espaçada que a tela antiga.
-  Densidade alta serve para tabela de números; para texto explicativo — que é
-  onde vive o argumento deste produto — ela cansa.
-*/
 .panel-head {
   padding-bottom: var(--s3);
   margin-bottom: var(--s4);
@@ -3444,8 +3042,6 @@ button {
   margin-top: var(--s2);
 }
 
-/* O nome da seção é o maior texto da tela e o único em fonte de exibição:
-   é por ele que o olho entra. */
 .secao-titulo h2 {
   font-family: var(--font-display);
   font-size: 17px;
@@ -3455,8 +3051,6 @@ button {
   color: var(--text);
 }
 
-/* O ícone da seção reaproveita as mesmas silhuetas da navegação, num quadrado
-   de destaque — mesma linguagem, escala maior. */
 .secao-icone {
   width: 30px;
   height: 30px;
@@ -3475,16 +3069,10 @@ button {
   color: var(--accent);
 }
 
-/* ============================================================== O VEREDITO
-
-   O primeiro bloco da tela, e o único que fala em voz de gente. Todo o resto
-   do painel é número; aqui é uma frase.
-
-   A regra visual é uma só: o peso vem da COR DA MARCA lateral e do tamanho da
-   frase, não de caixa colorida. Um cartão vermelho inteiro grita o tempo todo,
-   inclusive quando a notícia é boa — e este cartão tem de conseguir dizer
-   "está tudo bem" com a mesma naturalidade com que diz "sua memória acabou".
-*/
+/*
+ * O veredito: o peso vem da marca lateral e do tamanho da frase, não de caixa colorida, para dizer "está tudo bem"
+ * com a mesma naturalidade.
+ */
 .panel-veredito {
   display: flex;
   gap: var(--s5);
@@ -3494,8 +3082,6 @@ button {
   overflow: hidden;
 }
 
-/* A marca lateral carrega a severidade sozinha. Largura fixa, altura cheia:
-   lida antes da leitura, como a lombada de uma pasta. */
 .veredito-marca {
   flex: 0 0 4px;
   border-radius: 0 var(--r1) var(--r1) 0;
@@ -3508,17 +3094,8 @@ button {
 .panel-veredito[data-nivel="ok"] .veredito-marca { background-color: var(--green); }
 
 /*
-  A ESFERA — a máquina desenhada com as próprias medições.
-
-  Fica à ESQUERDA do texto e não à direita, e a ordem importa: em português se
-  lê da esquerda para a direita, então ela é a primeira coisa que o olho
-  encontra ao entrar no painel. É a abertura da frase, não a ilustração no fim
-  dela.
-
-  Ela some em janela estreita. Não por ser supérflua, mas porque a frase do
-  veredito é o que precisa ser lido — e num notebook de 1366 de largura, dividir
-  a linha com uma imagem de 220 pixels espremeria o texto que carrega o número.
-*/
+ * À esquerda: é a primeira coisa que o olho encontra. Some em janela estreita, onde espremeria a frase.
+ */
 .veredito-esfera {
   flex: 0 0 220px;
   width: 220px;
@@ -3526,8 +3103,9 @@ button {
   align-self: center;
   margin-left: var(--s5);
 
-  /* O ponto é desenhado como retângulo de 1 a 2 pixels. Suavizar transformaria
-     a nuvem num borrão cinza. */
+  /*
+   * Pontos de 1 a 2 pixels: suavizar faria da nuvem um borrão.
+   */
   image-rendering: pixelated;
 }
 
@@ -3553,8 +3131,9 @@ button {
 .panel-veredito[data-nivel="importante"] .veredito-rotulo { color: var(--amber); }
 .panel-veredito[data-nivel="ok"] .veredito-rotulo { color: var(--green); }
 
-/* O único texto grande do produto inteiro. Se mais alguma coisa crescer para
-   este tamanho, o veredito deixa de ser o veredito. */
+/*
+ * O único texto grande: se outra coisa crescer até aqui, o veredito deixa de ser o veredito.
+ */
 .veredito-frase {
   font-size: var(--t-big);
   font-weight: 500;
@@ -3564,8 +3143,9 @@ button {
   margin: 0;
 }
 
-/* O número que sustenta a frase. Fica em mono porque é medição, e porque a
-   diferença de fonte é o que impede o leitor de confundir afirmação com dado. */
+/*
+ * Mono porque é medição: impede confundir afirmação com dado.
+ */
 .veredito-detalhe {
   font-family: var(--font-mono);
   font-size: var(--t-body);
@@ -3584,8 +3164,6 @@ button {
 
 .veredito-conselho:empty { display: none; }
 
-/* Os achados da mesma causa, que antes moravam em abas diferentes e nunca se
-   encontravam na tela. Esta lista é, literalmente, o conserto do produto. */
 .veredito-junto,
 .veredito-lacunas {
   list-style: none;
@@ -3622,8 +3200,9 @@ button {
   font-weight: 500;
 }
 
-/* Lacuna não é achado: é o produto admitindo que não olhou. Fica em itálico
-   para não se confundir com medição, e nunca some da tela. */
+/*
+ * Itálico: lacuna não é achado, e nunca some.
+ */
 .veredito-lacunas li {
   font-style: italic;
 }
@@ -3638,12 +3217,9 @@ button {
   .veredito-frase { font-size: var(--t-value); }
 }
 
-/* O conserto do veredito, quando existe.
-
-   A maior parte dos achados deste produto NÃO tem botão — falta de memória e
-   disco morrendo se resolvem com peça, não com clique. Por isso este bloco é
-   discreto: ele não pode dar a impressão de que todo problema tem um botão,
-   que é justamente a mentira que os outros otimizadores vendem. */
+/*
+ * Discreto: a maioria dos achados não tem botão, e não pode parecer que todo problema tem.
+ */
 .veredito-acao {
   display: flex;
   align-items: center;
@@ -3666,11 +3242,6 @@ button {
   display: none;
 }
 
-/* O que esperar da lista de otimizações, antes de aplicar qualquer coisa.
-
-   Fica em mono e discreto de propósito: é uma constatação medida, não uma
-   chamada de venda. O cliente precisa ler isto antes de contar itens e esperar
-   um resultado proporcional à contagem. */
 .expectativa {
   font-family: var(--font-mono);
   font-size: var(--t-body);
@@ -3687,11 +3258,9 @@ button {
   display: none;
 }
 
-/* O aviso que não sai da tela.
-
-   Só para crítico. Um alerta que está sempre ligado deixa de ser lido em uma
-   semana — e o que sobra é um produto que grita o tempo todo, que é
-   exatamente o comportamento dos otimizadores que o Otimiza não quer imitar. */
+/*
+ * Só para crítico: alerta sempre ligado deixa de ser lido.
+ */
 .alerta-global {
   display: flex;
   align-items: center;
@@ -3742,25 +3311,10 @@ button {
   color: var(--text-muted);
 }
 
-/* A faixa de versão nova.
-
-   Diferente de `.alerta-global`, que é sobre a saúde do PC e nunca fecha,
-   esta é sobre o próprio Otimiza e o cliente decide se quer vê-la de novo —
-   por isso tem botão de fechar e não é vermelha: não é um problema na
-   máquina, é um aviso neutro.
-
-   FORA DO FLUXO DO DOCUMENTO DE PROPÓSITO — `position: fixed`, e não um
-   lugar reservado lá em cima perto do `.alerta-global`.
-
-   `alerta-global` é preenchido por um comando LOCAL, que responde antes de a
-   pessoa conseguir clicar em qualquer coisa. Esta faixa depende de uma
-   consulta ao GitHub que pode levar até dez segundos — o cliente já pode
-   estar com o mouse em cima de um "Aplicar" quando a resposta chega. Se ela
-   ocupasse espaço no fluxo normal (mesmo que reservado desde o início vazio),
-   aparecer empurraria tudo que vem depois, e o clique que estava mirado num
-   botão acertaria outro. Fixa no canto inferior direito, sobreposta e fora do
-   fluxo, ela nunca desloca nada que já esteja na tela — o pior que acontece é
-   cobrir um canto que, nesta tela, não tem nenhum controle. */
+/*
+ * Faixa de versão nova: neutra, com fechar. `position: fixed` fora do fluxo: a resposta do GitHub pode levar dez
+ * segundos, e aparecer no fluxo empurraria o botão que a pessoa ia clicar.
+ */
 .atualizacao-faixa {
   position: fixed;
   right: var(--s5);
@@ -3819,12 +3373,9 @@ button {
   color: var(--text);
 }
 
-/* Exames que já rodaram sozinhos, recolhidos.
-
-   A aba Diagnóstico tinha nove cartões, e quatro deles remediam o que o
-   veredito já mede na abertura do programa. Não foram apagados: continuam
-   inteiros aqui dentro, só deixaram de disputar a atenção com o que a pessoa
-   abriu a aba para ver. */
+/*
+ * Os quatro exames que o veredito já mede na abertura, recolhidos (não apagados).
+ */
 .exames-detalhados {
   margin-top: var(--s5);
 }
@@ -3847,8 +3398,9 @@ button {
   display: none;
 }
 
-/* O triângulo é desenhado à mão para poder girar sem depender do marcador
-   padrão, que muda de forma entre navegadores. */
+/*
+ * Desenhado à mão: o marcador padrão muda de forma entre navegadores.
+ */
 .exames-detalhados > summary::before {
   content: "";
   width: 0;
@@ -3873,21 +3425,13 @@ button {
   color: var(--text-muted);
 }
 
-/* Os cartões de dentro respiram no mesmo ritmo do resto da aba. */
 .exames-detalhados[open] > .panel {
   margin-top: var(--s4);
 }
 
-/* ==========================================================================
-   O PORTÃO — a tela de licença
-
-   Cobre a janela inteira antes de qualquer outra coisa. Não usa nenhuma cor,
-   espaço ou raio fora da escala: uma tela de venda que inventa a própria
-   identidade visual faz o produto parecer dois programas colados.
-
-   O fundo do console continua visível por trás, borrado. É de propósito — a
-   pessoa vê que existe um programa ali, e não uma tela de bloqueio avulsa.
-   ========================================================================== */
+/*
+ * O portão: nenhuma cor, espaço ou raio fora da escala, senão pareceria outro programa.
+ */
 
 .portao {
   position: fixed;
@@ -3898,11 +3442,10 @@ button {
   padding: var(--s5);
   overflow: auto;
 
-  /* Papel liso. Os dois halos de cor que existiam aqui vinham da paleta
-     antiga; no claro eles viravam duas manchas sujas atrás de uma caixa
-     branca. E o desfoque do fundo saiu junto: ele custava uma releitura da
-     tela inteira a cada quadro para produzir um efeito que ninguém vê, porque
-     a caixa cobre quase tudo. */
+  /*
+   * Papel liso: os halos da paleta antiga viravam manchas no claro, e o desfoque custava uma releitura da tela a
+   * cada quadro.
+   */
   background: var(--bg);
 }
 
@@ -3913,8 +3456,9 @@ button {
 .portao-caixa {
   width: min(1180px, 100%);
 
-  /* Alta o bastante para a arte ser cortada em cima e embaixo. É o corte que
-     transforma um desenho redondo em um lugar. */
+  /*
+   * Alta o bastante para cortar a arte em cima e embaixo.
+   */
   height: min(780px, calc(100vh - var(--s5) * 2));
 
   border: 1px solid var(--hairline);
@@ -3922,18 +3466,14 @@ button {
   overflow: hidden;
   background: var(--panel);
 
-  /* Uma sombra só, larga e baixa: dá o descolamento do fundo sem virar
-     aquele halo escuro que denuncia caixa flutuante mal feita. */
   box-shadow:
     0 1px 2px rgba(var(--text-rgb), 0.05),
     0 32px 64px -32px rgba(var(--text-rgb), 0.3);
 }
 
-/* A PROPORÇÃO É O DESENHO INTEIRO.
-
-   Duas colunas de peso igual faziam nada parecer importante. Aqui o formulário
-   fica em pouco mais de um terço e o resto é a esfera: a diferença de escala é
-   o que diz onde olhar, sem precisar de nenhum enfeite para apontar. */
+/*
+ * Formulário em pouco mais de um terço: a diferença de escala diz onde olhar.
+ */
 .portao-colunas {
   display: grid;
   grid-template-columns: minmax(360px, 0.56fr) 1fr;
@@ -3943,9 +3483,6 @@ button {
 .portao-forma {
   display: grid;
 
-  /* Centrado na altura, e é daí que vem o ar. A coluna não estica para
-     preencher: fica do tamanho do conteúdo, no meio, com vazio em cima e
-     embaixo. */
   align-content: center;
 
   padding: var(--s6);
@@ -3957,15 +3494,14 @@ button {
   display: flex;
   flex-direction: column;
 
-  /* Largura de leitura curta. Linha longa ao lado de um campo estreito é o que
-     fazia a coluna antiga parecer um documento em vez de um formulário. */
   width: 100%;
   max-width: 360px;
   margin: 0 auto;
 }
 
-/* A marca de verdade, e não a palavra sozinha: o símbolo entra como máscara
-   sobre a cor do texto, exatamente como no site. */
+/*
+ * O símbolo como máscara sobre a cor do texto, como no site.
+ */
 .portao-marca {
   display: inline-flex;
   align-items: center;
@@ -4005,10 +3541,9 @@ button {
   color: var(--text-muted);
 }
 
-/* O ACHADO — UMA LINHA, E NÃO UM CARTÃO.
-
-   Como cartão, com moldura e fundo próprios, ele disputava com o formulário.
-   Como linha com um ponto na frente, informa sem virar um segundo bloco. */
+/*
+ * Linha, não cartão: como cartão disputava com o formulário.
+ */
 .portao-achado {
   display: flex;
   align-items: baseline;
@@ -4030,9 +3565,9 @@ button {
   height: 6px;
   border-radius: 50%;
 
-  /* A cor vem do nível do achado, posto por `mostrarAchadoNoPortao`. Fixa em
-     âmbar, ela punha um ponto de "atenção" ao lado de uma frase que diz que a
-     máquina está no limite. */
+  /*
+   * A cor vem do nível do achado (`mostrarAchadoNoPortao`).
+   */
   background: var(--aviso);
 }
 
@@ -4049,8 +3584,6 @@ button {
   color: var(--text-muted);
 }
 
-/* A expectativa vem logo abaixo do achado, no tom de leitura: é informação
-   para decidir, não alarme. */
 .portao-expectativa {
   margin: var(--s2) 0 0;
   font-size: var(--t-body);
@@ -4095,8 +3628,6 @@ button {
   border-radius: var(--r1);
   box-shadow: 0 0 0 1px rgba(var(--text-rgb), 0.14);
 
-  /* O código é para copiar, não para digitar: selecionável, mas sem quebrar
-     no meio de um bloco. */
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -4148,10 +3679,9 @@ button {
   box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px rgba(var(--text-rgb), 0.08);
 }
 
-/* A AÇÃO PRINCIPAL É A ÚNICA COISA BRANCA DA TELA.
-
-   Onde tudo é cinza sobre preto, contraste puro é mais barato e mais claro que
-   qualquer cor de destaque. */
+/*
+ * A única coisa branca da tela.
+ */
 .portao-botao {
   width: 100%;
   margin-top: var(--s5);
@@ -4170,8 +3700,6 @@ button {
   display: none;
 }
 
-/* O separador. A palavra no meio existe porque um "ou" solto não diz para quem
-   é a segunda opção — e quem chegou aqui sem chave precisa ser endereçado. */
 .portao-ou {
   display: flex;
   align-items: center;
@@ -4189,9 +3717,9 @@ button {
   background: var(--hairline);
 }
 
-/* A AÇÃO SECUNDÁRIA. Mesma largura e mesma altura da principal, cor invertida:
-   quem já tem chave usa a de cima, quem não tem usa a de baixo, e as duas
-   parecem igualmente possíveis. */
+/*
+ * Mesmas medidas da principal, cor invertida: as duas saídas parecem igualmente possíveis.
+ */
 .portao-discord {
   display: flex;
   align-items: center;
@@ -4240,17 +3768,9 @@ button {
   color: var(--text-muted);
 }
 
-/* ==========================================================================
-   OS TRÊS PILARES
-
-   Nas referências que o dono trouxe, a imagem pontilhada não é um quadro
-   pendurado ao lado do texto: ela É o material da página, grande e cortada
-   pela moldura. É o que separa uma tela de produto de um formulário com
-   ilustração.
-
-   E ela tem uma vantagem que ilustração comprada não tem: é o computador da
-   pessoa. Cada coluna se desfaz pela medição da peça que representa.
-   ========================================================================== */
+/*
+ * Os três pilares: a imagem pontilhada é o material da página, cortada pela moldura, e é o computador da pessoa.
+ */
 
 .portao-arte {
   position: relative;
@@ -4263,8 +3783,9 @@ button {
 .portao-pilares {
   position: absolute;
 
-  /* Cortada pelas bordas do cartão, sem máscara nenhuma. O corte reto é o que
-     faz a imagem parecer parte da página em vez de um adesivo colado nela. */
+  /*
+   * O corte reto faz a imagem parte da página, não adesivo.
+   */
   top: 50%;
   left: 50%;
   width: 780px;
@@ -4273,15 +3794,15 @@ button {
 
   pointer-events: none;
 
-  /* A grade é desenhada em pixels inteiros; sem isto o navegador suaviza os
-     quadrados e o meio-tom vira borrão. */
+  /*
+   * Pixels inteiros: suavizado, o meio-tom vira borrão.
+   */
   image-rendering: pixelated;
 }
 
 /*
-  Uma coluna em janela estreita. O produto roda em notebook de 1366×768, e
-  duas colunas de 500px ali deixariam a chave num campo de meia palavra.
-*/
+ * Uma coluna em janela estreita: a 1366×768 duas colunas de 500px deixariam a chave num campo de meia palavra.
+ */
 @media (max-width: 900px) {
   .portao-caixa {
     height: auto;
@@ -4296,22 +3817,14 @@ button {
     padding: var(--s5);
   }
 
-  /* Em uma coluna a esfera roubaria a altura que o texto precisa. */
   .portao-arte {
     display: none;
   }
 }
 
-/* ==========================================================================
-   GUIAS DENTRO DE UM PAINEL
-
-   Servem quando um painel responde uma pergunta em mais de um lugar — "o que
-   sobe junto com o Windows" tem três. Não são uma segunda navegação: a
-   pergunta continua sendo uma só, no título do painel.
-
-   A contagem mora na própria guia. É o que permite ver onde está o peso sem
-   precisar abrir nenhuma delas.
-   ========================================================================== */
+/*
+ * Guias dentro de um painel quando a mesma pergunta tem mais de um lugar; a contagem mora na guia.
+ */
 
 .subabas {
   display: flex;
@@ -4341,9 +3854,6 @@ button {
   background: var(--panel-raised);
 }
 
-/* A guia ativa é a única com fundo e com texto cheio. Sublinhado ou negrito
-   sozinhos não bastam num painel que já tem título, etiqueta e texto de apoio
-   competindo por atenção. */
 .subaba[aria-selected="true"] {
   color: var(--text);
   background: var(--panel-raised);
@@ -4351,8 +3861,9 @@ button {
 }
 
 .subaba .panel-tag {
-  /* A etiqueta herda o tom da guia em vez de ter o seu: numa guia apagada ela
-     precisa apagar junto, senão o número salta mais que o nome. */
+  /*
+   * Numa guia apagada a etiqueta apaga junto.
+   */
   color: inherit;
   opacity: 0.75;
 }
@@ -4361,27 +3872,17 @@ button {
   display: none;
 }
 
-/* ==========================================================================
-   A BARRA DA JANELA
-
-   O Windows desenha a dele com botões grandes no canto direito, numa cor que
-   não é a nossa. Desenhar a própria é o que faz o programa parecer um produto
-   em vez de uma página dentro de uma moldura emprestada.
-
-   Os três círculos à esquerda vêm do macOS de propósito: é a convenção que
-   mais gente reconhece sem legenda, e a ordem — fechar, minimizar, maximizar —
-   é a de lá, não a do Windows. Trocar a ordem para agradar os dois lados
-   deixaria a fileira estranha nos dois.
-   ========================================================================== */
+/*
+ * A barra da janela é nossa. Os três círculos seguem o macOS, inclusive a ordem: misturar deixaria estranho nos
+ * dois.
+ */
 
 .janela {
   position: relative;
   z-index: 70;
-  /* TRÊS COLUNAS, E A DO MEIO É A BUSCA.
-
-     Centrar por `margin: auto` põe a busca no meio do espaço que sobra, e não
-     no meio da janela — foi assim que ela passou por cima dos sinais vitais.
-     Com a grade, o meio é o meio, e os dois lados crescem sem empurrá-la. */
+  /*
+   * Grade de três colunas: com `margin: auto` a busca ficava no meio do que sobra, não da janela.
+   */
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -4389,26 +3890,18 @@ button {
   padding: 0 var(--s2) 0 var(--s3);
   flex: none;
 
-  /* A FAIXA É PRETA, E ELA É A MOLDURA DO PRODUTO INTEIRO.
-
-     Antes era branca e carregava só o nome. Agora carrega a marca, a busca e
-     os controles — a mesma barra do painel do site, e uma linha a menos entre
-     o alto da tela e o trabalho. */
   background: var(--bg);
   color: var(--sobre-accent);
 
-  /* Sem isto, arrastar a janela seleciona o título como se fosse texto. */
+  /*
+   * Sem isto, arrastar a janela seleciona o título.
+   */
   user-select: none;
 }
 
-/* A MARCA DA BARRA DE TÍTULO ESTAVA DESENHADA NA COR ERRADA.
-
-   Ela usava `--panel`, que sobrou de quando a barra tinha fundo próprio e a
-   marca era vazada nele. Com os dois temas, `--panel` é branco no claro e
-   quase-preto no escuro — ou seja, a marca ficava da mesma cor do fundo da
-   barra nos DOIS, e sumia nos dois.
-
-   `--text` é a cor de quem desenha em cima do fundo, que é o que ela é. */
+/*
+ * `--text`, não `--panel`: com os dois temas o `--panel` era da cor do fundo da barra, e a marca sumia.
+ */
 .janela-marca {
   width: 18px;
   height: 18px;
@@ -4434,57 +3927,25 @@ button {
   cursor: pointer;
   transition: filter var(--dur) var(--ease);
 
-  /* COLORIDOS SEMPRE, E ISSO DESFAZ UMA DECISÃO ANTERIOR DE PROPÓSITO.
-
-     Eles nasciam cinzas e só acendiam quando o ponteiro chegava na faixa. O
-     argumento era de disciplina de cor: três bolinhas coloridas competiriam
-     com os indicadores de status, que são a única coisa aqui que a cor
-     deveria estar dizendo. O argumento continua correto e mesmo assim perde.
-
-     Como a decoração do Windows está desligada, estes botões são o ÚNICO jeito
-     de fechar o programa com o mouse. Escondidos até o hover, num canto onde
-     quem usa Windows nem olha — porque no Windows o X fica em cima à direita —,
-     o dono do produto precisou perguntar como sair. Se o autor não acha, o
-     cliente não acha.
-
-     Colorido é também o comportamento de verdade do sistema em que eles foram
-     inspirados: lá as bolinhas ficam acesas enquanto a janela está em foco, e
-     apagam quando ela vai para trás. */
+  /*
+   * Coloridos sempre: com a decoração do Windows desligada são o único jeito de fechar com o mouse, e escondidos
+   * até o hover nem o dono achou como sair.
+   */
   background: var(--cor-botao);
 }
 
-/* MONOCROMÁTICOS, E O MOTIVO É A PALETA.
-
-   Eles eram as três bolinhas coloridas do sistema em que foram inspirados. No
-   escuro elas passavam despercebidas; sobre papel branco viram as três manchas
-   de cor mais fortes da tela inteira, logo no canto — e o produto acabou de
-   trocar toda a sua cor por tinta preta. Continuam três, no mesmo lugar e com
-   a mesma área de clique: só perderam o croma. Quem está por baixo do ponteiro
-   escurece, e é assim que se sabe qual é qual. */
+/*
+ * Monocromáticos: sobre papel branco as três bolinhas coloridas eram as manchas mais fortes da tela. O que está
+ * sob o ponteiro escurece.
+ */
 .janela-botao { --cor-botao: rgba(255, 255, 255, 0.3); }
 
 .janela-botao:hover { --cor-botao: var(--text); }
 
-/* ÁREA DE CLIQUE MAIOR QUE O DESENHO.
-
-   Doze pixels é o tamanho certo para a bolinha e é pequeno demais para o alvo:
-   a norma de acessibilidade pede 24 no mínimo, e mesmo sem norma, errar o botão
-   de fechar três vezes seguidas é uma experiência ruim de programa pago.
-
-   O `::after` estica a área sensível sem mexer no que se vê. O crescimento é
-   DESIGUAL de propósito: 6px em cima e embaixo, 4px nas laterais.
-
-   O motivo saiu de um teste de acerto, não de estimativa. Com 6px em todos os
-   lados as áreas invadiam a do vizinho — o vão entre as bolinhas é de 8, e
-   6+6 passa disso. O resultado era pior que o defeito original: quem mirasse
-   em Fechar acertava Minimizar, porque a área de quem vem depois no HTML fica
-   por cima. Errar o botão de fechar é ruim; apertar minimizar achando que
-   fechou é ruim de um jeito que a pessoa nem entende o que houve.
-
-   Com 4px na lateral, 4+4 fecha exatamente os 8 do vão: as áreas encostam e
-   nunca se sobrepõem. Em cima e embaixo não há vizinho nenhum, então os 6px
-   são de graça — e é dali que vem a altura de 24px que a norma de
-   acessibilidade pede. */
+/*
+ * Área de clique maior que o desenho (24px pedidos pela norma): o `::after` cresce 6px em cima e embaixo e 4px
+ * nas laterais, porque o vão é de 8 e com 6 dos lados as áreas se sobrepunham e Fechar acertava Minimizar.
+ */
 .janela-botao::after {
   content: "";
   position: absolute;
@@ -4497,14 +3958,12 @@ button {
   outline-offset: 2px;
 }
 
-/* Espelha a largura dos botões, para o título ficar centrado de verdade e não
-   deslocado pela fileira da esquerda. */
 /*
-  O CANTO ARREDONDADO, E POR QUE ELE SOME MAXIMIZADO.
-
-  Canto redondo colado na borda do monitor deixa quatro triângulos da área de
-  trabalho aparecendo, e o efeito é de janela mal encaixada.
-*/
+ * Espelha a largura dos botões para o título ficar centrado de verdade.
+ */
+/*
+ * Maximizada, o canto redondo some: senão sobram quatro triângulos da área de trabalho.
+ */
 body {
   border-radius: 10px;
 }
@@ -4513,19 +3972,9 @@ body.janela-cheia {
   border-radius: 0;
 }
 
-/* ==========================================================================
-   A CHEGADA
-
-   O instante entre colar a chave e usar o programa.
-
-   O DESENHO É O DA REFERÊNCIA QUE O DONO TROUXE: a imagem ocupa a esquerda
-   inteira, sangrando pelas bordas, e o texto fica num bloco estreito à direita.
-   Não é uma ilustração ao lado de um parágrafo — a imagem é metade da página.
-
-   Tudo aqui é curto. É a única tela do produto que não tem nada para o cliente
-   decidir, e por isso a única que pode se dar ao luxo de ser uma frase e um
-   botão.
-   ========================================================================== */
+/*
+ * A chegada: a imagem é metade da página e o texto um bloco estreito. A única tela sem nada a decidir.
+ */
 
 .chegada {
   position: fixed;
@@ -4554,8 +4003,6 @@ body.janela-cheia {
 .chegada-pilares {
   position: absolute;
 
-  /* SANGRA PELAS TRÊS BORDAS. Colunas cortadas pela moldura continuam para
-     fora da tela; colunas inteiras e centradas viram um adesivo. */
   top: 50%;
   left: 0;
   width: 900px;
@@ -4577,13 +4024,12 @@ body.janela-cheia {
   z-index: 1;
 }
 
-/* Cartão com profundidade por trás do texto */
-
 .chegada-titulo {
   margin: 0;
 
-  /* O maior tamanho do produto inteiro, usado uma vez só. Guardar o extremo
-     da escala para um momento único é o que faz ele significar alguma coisa. */
+  /*
+   * O maior tamanho do produto, usado uma vez só.
+   */
   font-family: var(--font-display);
   font-size: var(--t-huge);
   font-weight: 600;
@@ -4610,7 +4056,6 @@ body.janela-cheia {
   margin-top: var(--s3);
 }
 
-/* A entrada. Uma vez, devagar, e nada mais se mexe na tela. */
 .chegada-texto > * {
   animation: chegar 0.7s var(--ease) both;
 }
@@ -4625,7 +4070,6 @@ body.janela-cheia {
   to { opacity: 1; transform: none; }
 }
 
-/* Em janela estreita a imagem some: o agradecimento é o que precisa caber. */
 @media (max-width: 900px) {
   .chegada {
     grid-template-columns: 1fr;
@@ -4641,19 +4085,10 @@ body.janela-cheia {
   }
 }
 
-
-/* ==========================================================================
-   A PLACA DE VÍDEO, DESENHADA
-
-   O concorrente pede para a pessoa escolher entre AMD e NVIDIA. Aqui a placa é
-   reconhecida e mostrada — a escolha manual só aparece quando a leitura falha.
-
-   A COR VEM DO FABRICANTE, e é a única cor de marca em todo o produto. Ela se
-   justifica porque é informação: o verde diz "NVIDIA" antes de qualquer texto
-   ser lido, do mesmo jeito que o vermelho da barra de memória diz "crítico".
-   Enquanto a placa não é conhecida, o desenho fica no cinza do resto da
-   interface — em vez de chutar uma cor e acertar por sorte.
-   ========================================================================== */
+/*
+ * A placa desenhada. A cor do fabricante é a única cor de marca do produto, porque é informação; desconhecida,
+ * fica cinza.
+ */
 
 .placa {
   display: grid;
@@ -4668,7 +4103,6 @@ body.janela-cheia {
   display: block;
 }
 
-/* Cada fabricante traz a sua cor. Desconhecido continua cinza. */
 .placa[data-marca="nvidia"] { --marca: #76b900; }
 .placa[data-marca="amd"]    { --marca: #ed1c24; }
 .placa[data-marca="intel"]  { --marca: #0071c5; }
@@ -4687,9 +4121,9 @@ body.janela-cheia {
   fill: none;
 }
 
-/* As pás giram devagar. É o único movimento da tela, e ele diz "a máquina está
-   viva" sem custar quase nada: uma transformação por elemento, sem repintura de
-   layout. */
+/*
+ * O único movimento da tela: uma transformação por elemento, sem repintura de layout.
+ */
 .placa-ventilador {
   fill: var(--peca-3);
   stroke: var(--hairline);
@@ -4697,9 +4131,9 @@ body.janela-cheia {
   transform-origin: center;
 }
 
-/* Dois aros: o de fora é o rebaixo da carenagem, o de dentro é a boca do
-   ventilador. É esse par que dá a impressão de profundidade — sem ele, o
-   ventilador fica colado na superfície como um adesivo. */
+/*
+ * Dois aros dão a profundidade; sem eles o ventilador parece adesivo.
+ */
 .placa-aro {
   fill: var(--peca-2);
   stroke: var(--hairline-strong);
@@ -4744,8 +4178,6 @@ circle.placa-parafuso {
   stroke-linecap: round;
 }
 
-/* A luz do logotipo. Acesa na cor do fabricante, apagada quando ele é
-   desconhecido — como o resto do desenho. */
 .placa-luz {
   fill: var(--marca);
   opacity: 0.9;
@@ -4755,8 +4187,6 @@ circle.placa-parafuso {
 
 .placa-tarja {
   fill: var(--marca);
-  /* A tarja acesa demais viraria o assunto da tela. Ela é assinatura, não
-     anúncio. */
   opacity: 0.85;
 }
 
@@ -4801,25 +4231,14 @@ circle.placa-parafuso {
 
 .placa-escolha { margin-top: var(--s4); }
 
-/* Em janela estreita o desenho sai da frente: o nome da placa e o driver é que
-   precisam caber. */
 @media (max-width: 900px) {
   .placa { grid-template-columns: 1fr; }
   .placa-arte { max-width: 260px; }
 }
 
-/* ==========================================================================
-   A MEMÓRIA, DESENHADA SLOT A SLOT
-
-   "Canal único" é jargão. Quatro encaixes com um ocupado e três vazios não
-   precisam de tradução: quem olha entende que falta alguma coisa ali, mesmo sem
-   saber o nome.
-
-   Os slots são desenhados pelo JavaScript porque a quantidade vem da máquina —
-   duas em notebook, quatro na maioria dos desktops, oito em placa de entusiasta.
-   Desenhar quatro fixos e esconder os que sobram mostraria encaixes que aquela
-   placa não tem.
-   ========================================================================== */
+/*
+ * A memória slot a slot, desenhada pelo JavaScript: a quantidade vem da máquina.
+ */
 
 .memoria-corpo {
   display: grid;
@@ -4847,7 +4266,6 @@ circle.placa-parafuso {
   opacity: 0.7;
 }
 
-/* O encaixe vazio: só o contorno e as travas das pontas. */
 .memoria-slot-vazio {
   fill: var(--peca-1);
   stroke: var(--hairline-strong);
@@ -4860,7 +4278,6 @@ circle.placa-parafuso {
   stroke-width: 1;
 }
 
-/* O pente encaixado. */
 .memoria-pente {
   fill: var(--peca-2);
   stroke: var(--hairline-strong);
@@ -4877,7 +4294,6 @@ circle.placa-parafuso {
   fill: var(--peca-4);
 }
 
-/* A etiqueta de capacidade em cima do pente. */
 .memoria-gb {
   fill: var(--text-dim);
   font-family: var(--font-mono);
@@ -4885,11 +4301,9 @@ circle.placa-parafuso {
   text-anchor: middle;
 }
 
-/* ENCAIXE VAZIO NUM PC DE CANAL ÚNICO GANHA DESTAQUE.
-
-   É o único lugar do desenho que muda de cor, e ele muda para âmbar — o mesmo
-   âmbar de "vale corrigir" do resto do produto. Sem isso, três retângulos
-   vazios são só três retângulos vazios. */
+/*
+ * O único lugar que muda de cor, em âmbar de "vale corrigir".
+ */
 .memoria[data-estado="canal-unico"] .memoria-slot-vazio {
   stroke: var(--amber);
   stroke-dasharray: 4 3;
@@ -4902,14 +4316,9 @@ circle.placa-parafuso {
   .memoria-arte { max-width: 300px; }
 }
 
-
-/* ==========================================================================
-   OS MONITORES, DESENHADOS
-
-   "60 Hz num monitor que aceita 180" e uma frase que passa batida porque nao
-   doi. Com o numero DENTRO da tela desenhada, ele deixa de ser um detalhe no
-   meio de um parágrafo.
-   ========================================================================== */
+/*
+ * Os monitores: com o número DENTRO da tela desenhada, os 60 Hz deixam de passar batido.
+ */
 
 .monitores-lista {
   display: grid;
@@ -4964,8 +4373,9 @@ circle.placa-parafuso {
   letter-spacing: 0.16em;
 }
 
-/* ABAIXO DO MÁXIMO, O NÚMERO FICA ÂMBAR — e é o único momento em que ele muda
-   de cor. É a mesma regra do resto do produto: cor só onde ela informa. */
+/*
+ * Âmbar só abaixo do máximo.
+ */
 .monitor[data-abaixo="true"] .monitor-hz { fill: var(--amber); }
 .monitor[data-abaixo="true"] .monitor-moldura { stroke: var(--amber); }
 
@@ -4980,22 +4390,18 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* ==========================================================================
-   O REPARO DO WINDOWS
-
-   Aqui não existe desfazer, e a tela precisa dizer isso antes de qualquer
-   botão — por isso `.reparo-aviso-geral` usa a borda âmbar em vez da cinza
-   comum do `.hint`: é o único aviso do produto que precisa ser lido antes de
-   agir, não depois.
-   ========================================================================== */
+/*
+ * Reparo: sem desfazer, e `.reparo-aviso-geral` tem borda âmbar porque é o aviso que precisa ser lido antes.
+ */
 
 .reparo-aviso-geral {
   border-left-color: var(--amber);
   color: var(--text);
 }
 
-/* A legenda da linha de resultado. Menor e mais apagada que a propria linha:
-   ela nomeia o assunto, e quem responde e o texto colorido logo abaixo. */
+/*
+ * Menor e mais apagada: nomeia o assunto; quem responde é a linha colorida.
+ */
 .reparo-resultado-legenda {
   margin-bottom: var(--s1);
   font-family: var(--font-sans);
@@ -5029,10 +4435,9 @@ circle.placa-parafuso {
   color: var(--text);
 }
 
-/* A DURAÇÃO TÍPICA FICA NO CABEÇALHO, ANTES DE QUALQUER BOTÃO.
-   Quem não sabe que um DISM leva de dez a trinta minutos conclui, no minuto
-   oito parado em 20%, que travou — e desliga a máquina no meio de uma
-   escrita. Este número é o que evita essa conclusão. */
+/*
+ * A duração no cabeçalho, antes do botão: no minuto oito parado em 20% o cliente conclui que travou.
+ */
 .reparo-item-duracao {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
@@ -5049,9 +4454,9 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* O aviso de cada ferramenta — o "parado em 20% é normal" do RepararImagem, o
-   "exige reiniciar" do ConsertarDisco — mora junto do item, e não numa nota
-   de rodapé geral que ninguém associa à ferramenta certa. */
+/*
+ * O aviso de cada ferramenta mora junto do item.
+ */
 .reparo-item-aviso {
   margin-top: var(--s3);
   padding-left: var(--s3);
@@ -5062,10 +4467,9 @@ circle.placa-parafuso {
   color: var(--text);
 }
 
-/* O /ResetBase fica DESLIGADO por padrão (o HTML não marca `checked`), e o
-   aviso de que a atualização já aplicada some para sempre mora ao lado do
-   próprio interruptor — reaproveita `.pref`, o mesmo padrão das preferências
-   da aba Sistema. */
+/*
+ * O /ResetBase nasce desligado (sem `checked`), com o aviso ao lado do interruptor.
+ */
 .reparo-resetbase {
   margin-top: var(--s4);
   padding: var(--s3);
@@ -5080,9 +4484,9 @@ circle.placa-parafuso {
   margin-top: var(--s4);
 }
 
-/* A saída bruta do programa (sfc, DISM, chkdsk), linha a linha, à medida que
-   chega pelo evento `reparo-andamento`. É o que prova, pra quem está
-   olhando, que a ferramenta continua viva mesmo parada em 20%. */
+/*
+ * A saída ao vivo prova que a ferramenta está viva mesmo parada em 20%.
+ */
 .reparo-saida {
   max-height: 220px;
   overflow-y: auto;
@@ -5098,21 +4502,17 @@ circle.placa-parafuso {
   word-break: break-word;
 }
 
-/* A origem de cada linha vem do backend (`Origem::Saida`/`Origem::Erro`,
-   ver `tarefa_longa.rs`) — a tela só traduz para cor, nunca decide olhando
-   o texto. O `stderr` do DISM é onde mora o motivo de uma falha ("precisa
-   de internet" vs. "a imagem está corrompida"), embaralhado no meio de
-   centenas de linhas de percentagem do `stdout`; sem destaque, essa linha
-   se perdia. */
+/*
+ * A cor vem da origem que o backend manda (`tarefa_longa.rs`): o motivo de falha do DISM está no stderr.
+ */
 .reparo-linha-erro {
   color: var(--red);
   background: rgba(var(--red-rgb), 0.12);
 }
 
-/* ── Qual placa cada jogo usa ─────────────────────────────────────────────
-   A linha do jogo preso na placa fraca e a unica que ganha cor. As outras
-   sao informacao, e informacao que grita deixa de informar: se tudo chama
-   atencao, o problema real some no meio. */
+/*
+ * Qual placa cada jogo usa: só a linha do jogo na placa fraca ganha cor.
+ */
 .gpupref-linha {
   display: flex;
   align-items: center;
@@ -5145,8 +4545,6 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* O jogo na placa errada: filete a esquerda, do jeito que a lista de
-   otimizacoes ja marca estado. Mesma linguagem visual, sem paleta nova. */
 .gpupref-linha[data-fraca="true"] {
   border-left: 2px solid var(--accent);
   padding-left: 12px;
@@ -5157,25 +4555,14 @@ circle.placa-parafuso {
 }
 
 /*
-  A FAIXA DE REGRESSÃO — o Otimiza avisando que piorou a máquina.
-
-  Mesma forma da faixa de atualização, cor de alerta. A cor sai daqui e não de
-  comparação de texto no TypeScript: é a regra da casa desde
-  `a_tela_nao_decide_cor_comparando_texto_do_backend`.
-
-  `bottom` maior que o da faixa de atualização para as duas não se cobrirem
-  quando aparecem juntas — que é justamente o dia em que a pessoa mais precisa
-  ler as duas.
-*/
+ * Faixa de regressão: `bottom` maior que o da faixa de atualização, para as duas não se cobrirem.
+ */
 .faixa-regressao {
   bottom: calc(var(--s5) * 2 + 56px);
   border-color: var(--amber);
   /*
-    Empilhado, e a faixa de atualização não é: esta mensagem carrega quatro
-    números medidos, e na coluna estreita que sobra ao lado dos botões ela
-    quebra em sete linhas. Quem está lendo que perdeu FPS não pode ter que
-    decifrar a frase também.
-  */
+   * Empilhada: quatro números medidos na coluna estreita viravam sete linhas.
+   */
   flex-direction: column;
   align-items: stretch;
   width: min(520px, calc(100vw - var(--s5) * 2));
@@ -5191,12 +4578,8 @@ circle.placa-parafuso {
 }
 
 /*
-  A LINHA DE ONDE O JOGO ESTÁ INSTALADO.
-
-  A severidade vem do backend pela tabela `NA_TELA_DO_DISCO`, e a cor sai daqui.
-  "Neutral" existe porque o tipo de disco pode não ter sido lido — e nesse caso
-  a linha não pode ser verde nem âmbar.
-*/
+ * "Neutral" para o disco que não se leu: nem verde nem âmbar.
+ */
 .linha-do-disco {
   padding: var(--s3) 0;
   border-bottom: 1px solid var(--hairline);
@@ -5222,12 +4605,8 @@ circle.placa-parafuso {
 }
 
 /*
-  OS SUSPEITOS DE FPS BAIXO.
-
-  Só o "pode ter sido o próprio Otimiza" ganha âmbar. Os outros são fatos da
-  máquina, não defeitos — pintar "sua placa tem 2 GB" de alerta faria o cliente
-  achar que o PC dele está quebrado quando ele só é o que é.
-*/
+ * Só "pode ter sido o Otimiza" ganha âmbar; o resto são fatos da máquina.
+ */
 .causa {
   padding: var(--s3) 0 var(--s3) var(--s3);
   border-left: 2px solid var(--hairline-strong);
@@ -5257,12 +4636,8 @@ circle.placa-parafuso {
 }
 
 /*
-  O PAINEL DE AVISO DE CONTA.
-
-  A cor sai do `data-severity` que o TypeScript escreve a partir do ESTADO do
-  backend — nunca de comparação de texto. "Não deu para ler" é neutro e não
-  âmbar: é uma verificação que não aconteceu, e não um problema encontrado.
-*/
+ * "Não deu para ler" é neutro: verificação que não aconteceu, não problema.
+ */
 #conta-painel[data-severity="Important"] {
   border-left: 2px solid var(--amber);
 }
@@ -5276,17 +4651,9 @@ circle.placa-parafuso {
 }
 
 /*
-  A MESMA CAIXA, PARA PROSA.
-
-  `.bloco-de-texto` existe para texto PRÉ-FORMATADO — o relatório de suporte,
-  que o cliente copia e cola no atendimento e cujas quebras de linha fazem
-  parte do conteúdo. Por isso ele tem `white-space: pre`.
-
-  Eu usei essa classe para parágrafos comuns em quatro telas, e o resultado foi
-  uma barra de rolagem horizontal no meio do texto — pego numa captura da tela
-  de BIOS, onde o nome da placa-mãe é longo. Esta variante é a mesma caixa com
-  quebra de linha normal.
-*/
+ * Prosa na mesma caixa: `.bloco-de-texto` é `white-space: pre` para o relatório, e em parágrafo dava rolagem
+ * horizontal.
+ */
 .bloco-de-prosa {
   margin-top: var(--s3);
   padding: var(--s3);
@@ -5302,9 +4669,9 @@ circle.placa-parafuso {
   color: var(--text);
 }
 
-/* O lado direito da faixa. Os sinais vitais são companhia, não assunto: em
-   janela estreita eles somem antes do selo de acesso e dos controles, que são
-   o que a pessoa precisa alcançar. */
+/*
+ * Em janela estreita os sinais vitais somem antes do selo de acesso e dos controles.
+ */
 .janela-direita {
   margin-left: auto;
   display: flex;
@@ -5320,9 +4687,9 @@ circle.placa-parafuso {
   }
 }
 
-/* ======================================================= GERAÇÃO DE QUADROS
-   O laboratório (src/framegen.ts). Mesmo papel e tinta do resto: a cor só
-   aparece onde o número tem estado — atenção, erro ou "não dá para saber". */
+/*
+ * Geração de quadros (src/framegen.ts). A cor só onde o número tem estado.
+ */
 
 .fg { display: flex; flex-direction: column; gap: var(--s4); }
 .fg-painel { display: flex; flex-direction: column; gap: var(--s3); }
@@ -5448,9 +4815,9 @@ circle.placa-parafuso {
   .fg-pipeline div + div { border-left: 0; border-top: 1px solid var(--hairline); }
 }
 
-/* ================================================== MOTOR DE ENERGIA ADAPTATIVO
-   A aba Energia (src/energia.ts). Reusa as peças do laboratório de geração de
-   quadros (.fg-*) e acrescenta só o mapa de resposta e os cartões de candidato. */
+/*
+ * Motor de energia (src/energia.ts): reusa as peças .fg-*.
+ */
 
 .en-mapa { display: flex; align-items: stretch; gap: var(--s2); flex-wrap: wrap; }
 .en-mapa > i { align-self: center; font-style: normal; color: var(--text-muted); }
@@ -5493,7 +4860,6 @@ circle.placa-parafuso {
 @keyframes en-vai { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .sem-animacao .en-indeterminada { animation: none; width: 100% !important; opacity: .4; }
 
-/* ============================================================ Mapa de desempenho (2.9) */
 .mapa-fluxo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s2); }
 .mapa-no { display: flex; flex-direction: column; gap: 4px; padding: var(--s3); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline-strong); min-width: 0; }
 .mapa-no span { font-size: 9.5px; font-weight: 700; letter-spacing: .06em; color: var(--text-muted); }
@@ -5505,7 +4871,6 @@ circle.placa-parafuso {
 .mapa-gargalo header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .mapa-gargalo p { margin: 0; line-height: 1.5; color: var(--text-dim); font-size: 13px; }
 
-/* ============================================================ Seus jogos (2.9) */
 .bib-jogo { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--hairline); }
 .bib-jogo > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .bib-jogo > header > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -5513,15 +4878,9 @@ circle.placa-parafuso {
 .bib-previa:empty { display: none; }
 .bib-previa { display: flex; flex-direction: column; gap: var(--s2); }
 .fg-segmento[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-/* ===================================================== PAINEL DE EVIDÊNCIA
-
-   De onde veio cada número. O painel existe para mostrar o que o produto NÃO
-   mediu com o mesmo destaque do que ele mediu — ver o comentário no index.html.
-
-   A cor aqui segue a mesma disciplina do resto do arquivo: só o que carrega
-   aviso ganha tom. "Medido" é preto normal, porque é o esperado; estimado é
-   âmbar, porque pede cautela; não medido fica apagado, porque é ausência e não
-   erro. */
+/*
+ * Painel de evidência: medido é preto normal, estimado âmbar, não medido apagado (ausência, não erro).
+ */
 
 .evidencia-detalhe {
   margin-top: var(--s4);
@@ -5552,9 +4911,6 @@ circle.placa-parafuso {
 
 .evidencia-linha {
   display: grid;
-  /* O id em largura fixa mantém a coluna do meio alinhada mesmo com nomes de
-     tamanhos muito diferentes — `fps.rendered` e `storage.capacity_used` na
-     mesma lista. */
   grid-template-columns: minmax(0, 15rem) minmax(0, 7rem) minmax(0, 1fr);
   gap: var(--s3);
   align-items: baseline;
@@ -5584,8 +4940,6 @@ circle.placa-parafuso {
   color: var(--amber);
 }
 
-/* Não medido: o id continua legível — é ele que nomeia o que falta — e o
-   travessão no lugar do valor apaga junto com o motivo. */
 .evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-id,
 .evidencia-linha[data-qualidade="UNKNOWN"] .evidencia-valor {
   color: var(--text-muted);
@@ -5595,12 +4949,9 @@ circle.placa-parafuso {
   color: var(--red);
 }
 
-/* Memória de vídeo.
-
-   "Cheia" e "transbordando" precisam de cores DIFERENTES, e é esse o ponto do
-   painel inteiro: placa cheia é o estado normal de uma placa, e pintá-la de
-   âmbar junto com o transbordo devolveria o alarme falso que a etapa veio
-   desfazer. Só o derramamento medido acende. */
+/*
+ * "Cheia" e "transbordando" com cores diferentes: só o derramamento medido acende.
+ */
 #vram-estado[data-estado="ok"] {
   color: var(--text-muted);
 }
@@ -5618,12 +4969,9 @@ circle.placa-parafuso {
   color: var(--amber);
 }
 
-/* Do clique ao pixel.
-
-   A etapa sem medida ocupa a MESMA linha e o mesmo espaço da etapa medida, de
-   propósito: encolher ou esconder o que não foi medido devolveria a lista
-   curta e bonita que faz o piso parecer o total. O que muda é a cor, e o
-   "não medida" no lugar do número. */
+/*
+ * A etapa sem medida ocupa o mesmo espaço: encolher faria o piso parecer o total.
+ */
 .latencia-etapa {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -5660,8 +5008,9 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* Barra de medidor sem leitura. Vazia e vazia-marcada não podem parecer a
-   mesma coisa: uma diz "0%", a outra diz "não sei". */
+/*
+ * Vazia e vazia-marcada: "0%" e "não sei".
+ */
 .vital[data-estado="desconhecido"] .vital-bar,
 .vital[data-estado="desconhecido"] .bar {
   background-image: repeating-linear-gradient(
@@ -5671,12 +5020,9 @@ circle.placa-parafuso {
   );
 }
 
-/* ======================================================= PAINEL DE GARGALO
-
-   Duas colunas: o que foi encontrado e o que não foi verificado. A segunda
-   não é rodapé nem nota de rodapé — ela tem o mesmo peso visual da primeira,
-   porque é ela que impede "não encontramos gargalo" de soar como "está tudo
-   bem". */
+/*
+ * Gargalo: a coluna do não verificado tem o mesmo peso da do encontrado.
+ */
 
 .gargalo-colunas {
   display: grid;
@@ -5710,8 +5056,9 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* Causa em âmbar, hipótese apagada. O cliente precisa ver a diferença sem ler:
-   uma é o sistema afirmando o fato, a outra é uma leitura que sugere. */
+/*
+ * Causa em âmbar, hipótese apagada.
+ */
 .gargalo-achado[data-forca="Causa"] .gargalo-forca {
   color: var(--amber);
 }
@@ -5730,11 +5077,9 @@ circle.placa-parafuso {
   max-width: 48ch;
 }
 
-/* O perfil que a medição escolheu.
-
-   A marca fica no BOTÃO, e não numa lista à parte: o cliente lê o plano e o
-   dedo já está sobre o botão certo. Os outros dois continuam clicáveis — a
-   escolha é dele, e o produto recomenda em vez de decidir por ele. */
+/*
+ * A marca no BOTÃO recomendado; os outros continuam clicáveis.
+ */
 .btn[data-recomendado="sim"] {
   border-color: var(--amber);
   box-shadow: inset 0 0 0 1px var(--amber);
@@ -5746,34 +5091,23 @@ circle.placa-parafuso {
   font-size: 0.85em;
 }
 
-/* O bloco de lacunas, igual em todo painel.
-
-   A borda à esquerda existe para ele ser reconhecível de relance: o cliente
-   aprende que aquela marca é sempre "isto aqui ninguém mediu", e passa a
-   procurar por ela em vez de acreditar que o painel está completo. */
+/*
+ * A borda à esquerda é sempre "isto ninguém mediu".
+ */
 .faltas {
   border-left: 2px solid var(--hairline);
   padding-left: var(--s3);
 }
 
-/* =====================================================================
-   A ABERTURA DO PAINEL
-
-   Cabeçalho, monitores ao vivo e ficha da máquina. O conjunto existe para
-   responder em meio segundo "esta máquina está viva e está sendo lida
-   agora", antes de a tela entregar o veredito.
-
-   Tudo aqui herda os tokens: nenhuma cor, espaçamento ou fonte escrita à
-   mão. Um bloco novo que traga os próprios valores é como a tela volta a
-   parecer montada por acréscimo.
-   ===================================================================== */
+/*
+ * A abertura do Painel. Tudo herda os tokens: bloco com valores próprios faz a tela parecer montada por
+ * acréscimo.
+ */
 
 .abertura {
   margin-bottom: var(--s5);
 }
 
-/* O sobrenome pequeno acima do título. Dá hierarquia sem precisar de mais
-   uma linha de texto explicando onde a pessoa está. */
 .abertura-sobrenome {
   font-size: 0.7rem;
   letter-spacing: 0.12em;
@@ -5795,9 +5129,9 @@ circle.placa-parafuso {
   margin: var(--s2) 0 0;
 }
 
-/* O rótulo que separa as faixas. Mesmo tamanho do sobrenome de propósito:
-   são a mesma voz, e dois tamanhos parecidos lado a lado é o que faz uma
-   tela parecer desalinhada sem ninguém saber dizer por quê. */
+/*
+ * Mesmo tamanho do sobrenome: tamanhos parecidos lado a lado parecem desalinhados.
+ */
 .secao-rotulo {
   font-size: 0.7rem;
   letter-spacing: 0.12em;
@@ -5838,8 +5172,9 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* O selo do canto. Só aparece quando há o que dizer — um selo permanente
-   vira decoração e deixa de ser lido. */
+/*
+ * Só quando há o que dizer.
+ */
 .vivo-marca {
   font-size: 0.66rem;
   letter-spacing: 0.04em;
@@ -5877,8 +5212,6 @@ circle.placa-parafuso {
   letter-spacing: 0;
 }
 
-/* A linha do tempo do cartão. Altura fixa e pequena: ela é contexto, não
-   gráfico — quem quer o gráfico tem o painel de histórico logo abaixo. */
 .vivo-linha {
   width: 100%;
   height: 28px;
@@ -5896,8 +5229,9 @@ circle.placa-parafuso {
   vector-effect: non-scaling-stroke;
 }
 
-/* Sem leitura, sem linha inventada: o cartão fica com o traço tracejado e
-   apagado, que é diferente de uma linha reta no zero. */
+/*
+ * Sem leitura, tracejado e apagado, diferente de uma linha no zero.
+ */
 .vivo[data-sem-leitura="sim"] .vivo-traco {
   opacity: 0.25;
   stroke-dasharray: 2 3;
@@ -5916,9 +5250,6 @@ circle.placa-parafuso {
   white-space: nowrap;
 }
 
-/* A ficha da máquina: uma faixa só, dividida. Quatro cartões separados
-   davam a mesma informação com quatro bordas a mais — e isto aqui é o que
-   menos muda na tela inteira. */
 .ficha {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -5949,11 +5280,9 @@ circle.placa-parafuso {
   white-space: nowrap;
 }
 
-/* O botão do tema.
-
-   Um desenho só, com as duas metades no mesmo SVG: o sol aparece no escuro
-   (é o que o clique vai trazer) e a lua no claro. Dois ícones trocados por
-   JavaScript exigiriam o estado do tema em dois lugares. */
+/*
+ * Sol e lua no mesmo SVG: trocar ícones por JavaScript exigiria o estado do tema em dois lugares.
+ */
 .tema-botao {
   display: inline-flex;
   align-items: center;
@@ -5987,8 +5316,9 @@ circle.placa-parafuso {
   stroke-linejoin: round;
 }
 
-/* No claro mostra a lua; no escuro, o sol. O ícone anuncia PARA ONDE o clique
-   leva, que é como todo interruptor de tema que não confunde funciona. */
+/*
+ * O ícone anuncia PARA ONDE o clique leva.
+ */
 :root[data-tema="claro"] .tema-sol,
 :root[data-tema="claro"] .tema-raios {
   display: none;
@@ -6049,10 +5379,6 @@ circle.placa-parafuso {
 
 /* ---- a ficha de um jogo */
 
-/* =====================================================================
-   A ABA DA PLACA DE VÍDEO
-   ===================================================================== */
-
 .abertura-gpu {
   display: flex;
   align-items: flex-start;
@@ -6108,9 +5434,9 @@ circle.placa-parafuso {
   border-bottom-color: var(--accent);
 }
 
-/* A aba da AMD fica visível e desligada, dizendo por quê. Escondê-la faria o
-   cliente com Radeon concluir que o produto não sabe que a placa dele existe;
-   ligá-la sem ter o que fazer seria pior ainda. */
+/*
+ * A aba AMD visível e desligada, dizendo por quê.
+ */
 .gpu-marca:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -6151,9 +5477,9 @@ circle.placa-parafuso {
   margin-top: var(--s3);
 }
 
-/* Perfil já inteiro fica marcado, e o botão dele desligado. O cliente precisa
-   ver que não há o que fazer ali — um botão vivo que não muda nada é o tipo de
-   clique que faz o produto parecer que agiu. */
+/*
+ * Perfil inteiro marcado e botão desligado: botão vivo que não muda nada parece que agiu.
+ */
 .gpu-perfil[data-inteiro="true"] {
   border-color: var(--borda-forte);
 }
@@ -6196,11 +5522,9 @@ circle.placa-parafuso {
   line-height: 1.7;
 }
 
-/* A lista de programas. Uma linha por programa: nome, para que serve, botão.
-
-   O "para que serve" não é opcional. Uma lista de nomes obriga quem lê a já
-   saber o que cada um faz — e quem precisa desta aba é exatamente quem não
-   sabe. */
+/*
+ * O "para que serve" não é opcional: quem precisa desta aba não sabe o que cada programa faz.
+ */
 .programa-linha {
   display: flex;
   align-items: center;
@@ -6244,8 +5568,9 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* "Não deu para conferir" fica em itálico e não ganha cor de estado: ele não
-   é uma resposta sobre a máquina, é a ausência de uma. */
+/*
+ * Itálico sem cor de estado: ausência de resposta.
+ */
 .programa-estado[data-tom="desconhecido"] {
   font-style: italic;
 }
@@ -6254,12 +5579,9 @@ circle.placa-parafuso {
   color: var(--amber);
 }
 
-/* A limpeza, item a item.
-
-   Cada item tem DUAS linhas de texto abaixo do nome: o que aquilo e, e o que
-   se perde ao apagar. Parece muito texto para uma lista, e e justamente o que
-   separa isto de um limpador que pede uma decisao sobre algo que nao
-   explicou. */
+/*
+ * Duas linhas: o que é e o que se perde ao apagar.
+ */
 .limpeza-item {
   display: flex;
   align-items: flex-start;
@@ -6304,7 +5626,6 @@ circle.placa-parafuso {
   color: var(--text-muted);
 }
 
-/* Em italico e sem numero: nao e uma medida pequena, e a ausencia de medida. */
 .limpeza-tamanho[data-tom="desconhecido"] {
   font-style: italic;
 }
@@ -6321,18 +5642,16 @@ circle.placa-parafuso {
   line-height: 1.5;
 }
 
-/* O custo em ambar quando o item apaga arquivo do cliente. E o unico da lista
-   sem volta, e ele nao pode parecer com os outros. */
+/*
+ * Âmbar no item que apaga arquivo do cliente, o único sem volta.
+ */
 .limpeza-item[data-custa="true"] .limpeza-custo {
   color: var(--amber);
 }
 
-/* A matriz de nucleos.
-
-   Um quadrado por nucleo logico, na ordem do indice. A cor diz a classe; a
-   borda diz se o jogo pode rodar ali. Sao duas informacoes diferentes e elas
-   precisam de dois canais: um jogo preso nos nucleos de eficiencia e
-   exatamente o caso que esta tela existe para tornar visivel de relance. */
+/*
+ * A cor diz a classe; a borda diz se o jogo pode rodar ali: dois canais para duas informações.
+ */
 .nucleos-matriz {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
@@ -6359,14 +5678,13 @@ circle.placa-parafuso {
   font-weight: 600;
 }
 
-/* Os de eficiencia ficam apagados de proposito: eles nao sao piores, sao
-   OUTRA coisa, e o jogo nao deveria estar neles. */
+/*
+ * Os de eficiência não são piores, são outra coisa.
+ */
 .nucleo[data-classe="Eficiencia"] {
   opacity: 0.6;
 }
 
-/* Onde o jogo pode rodar agora. Borda e nao cor de fundo: a cor ja esta
-   dizendo a classe, e duas informacoes no mesmo canal se anulam. */
 .nucleo[data-no-jogo="true"] {
   border-color: var(--amber);
   box-shadow: inset 0 0 0 1px var(--amber);
@@ -6408,13 +5726,9 @@ circle.placa-parafuso {
   box-shadow: inset 0 0 0 1px var(--amber);
 }
 
-/* =====================================================================
-   A LATERAL RECOLHIDA
-
-   Ela passou a ser o padrao, entao ela precisa funcionar sozinha: o icone
-   e a unica coisa que identifica a secao, e o item ativo precisa ser
-   obvio sem o rotulo ao lado.
-   ===================================================================== */
+/*
+ * Lateral recolhida, o padrão: o ícone identifica a seção e o ativo precisa ser óbvio sem rótulo.
+ */
 
 .corpo[data-recolhida="true"] .nav {
   position: relative;
@@ -6422,12 +5736,9 @@ circle.placa-parafuso {
   border-radius: var(--r2);
 }
 
-/* A BARRA NA BORDA, e nao so o fundo.
-
-   Com rotulo, o fundo mais claro basta para dizer qual item esta aberto.
-   Sem rotulo, os itens viram uma coluna de quadrados iguais e o fundo
-   sozinho fica fraco demais para achar de relance. A barra resolve, e e o
-   mesmo desenho que todo aplicativo de lateral estreita usa. */
+/*
+ * Sem rótulo o fundo sozinho fica fraco: a barra na borda marca o ativo.
+ */
 .corpo[data-recolhida="true"] .nav[aria-selected="true"]::before {
   content: "";
   position: absolute;
@@ -6444,9 +5755,9 @@ circle.placa-parafuso {
   height: 19px;
 }
 
-/* Os grupos viram um fio. Sem rotulo eles nao podem sumir de vez: e o fio
-   que separa "monitorar" de "agir", e sem ele a coluna fica um bloco unico
-   de onze icones sem hierarquia nenhuma. */
+/*
+ * Os grupos viram um fio: sem ele, onze ícones sem hierarquia.
+ */
 .corpo[data-recolhida="true"] .lateral-grupo {
   height: 1px;
   margin: var(--s2) auto;
@@ -6455,7 +5766,6 @@ circle.placa-parafuso {
   overflow: hidden;
 }
 
-/* O cabecalho da secao, no mesmo desenho das aberturas das abas novas. */
 .secao-cabecalho {
   margin-bottom: var(--s5);
 }
@@ -6464,24 +5774,15 @@ circle.placa-parafuso {
   font-size: 1.75rem;
 }
 
-/* =====================================================================
-   O RESPIRO DO PALCO
-
-   As referencias do dono sao notavelmente mais folgadas que esta tela
-   estava: mais margem do lado da lateral, mais ar entre as faixas, e
-   cartoes com mais folga por dentro.
-
-   Nao e gosto: numa tela cheia de numero e paragrafo curto, o que separa
-   um painel de controle de uma planilha e o espaco. O conteudo e o mesmo.
-   ===================================================================== */
+/*
+ * Mais respiro, das referências do dono: o que separa painel de planilha é o espaço.
+ */
 
 .palco {
   padding: var(--s5) var(--s6) var(--s6) var(--s5);
   gap: var(--s5);
 }
 
-/* O cabecalho da secao ja tem a propria margem embaixo; o padding de cima
-   era para compensar uma trilha que nao existe mais. */
 .secao-cabecalho {
   padding: 0;
 }
@@ -6490,7 +5791,6 @@ circle.placa-parafuso {
   gap: var(--s5);
 }
 
-/* Os cartoes de leitura ao vivo e a ficha, com a folga das referencias. */
 .vivo,
 .ficha {
   padding: var(--s5);
@@ -6500,18 +5800,10 @@ circle.placa-parafuso {
   gap: var(--s3);
 }
 
-/* =====================================================================
-   A CAMADA DE COMPONENTES — redesenho 2.8
-
-   O que vem abaixo é o desenho que o dono especificou: escuro, quase
-   monocromático, silencioso. Ele vale para a tela inteira, e por isso
-   mora num lugar só.
-
-   A REGRA PARA QUEM MEXER AQUI: nenhum valor de cor escrito à mão.
-   Tudo sai dos tokens. Uma cor escrita direto numa regra é uma cor que
-   não tem como virar clara — foi assim que o tema escuro acendeu 88
-   delas quando foi ligado pela primeira vez.
-   ===================================================================== */
+/*
+ * Camada de componentes (redesenho 2.8). Nenhuma cor escrita à mão: tudo dos tokens, senão não vira clara (o
+ * escuro acendeu 88 delas).
+ */
 
 /* ------------------------------------------------------------ o casco */
 
@@ -6520,19 +5812,15 @@ circle.placa-parafuso {
   border-right: 1px solid var(--border);
 }
 
-/* A barra de título recua: ela é moldura, não conteudo. Sem fundo
-   proprio, sem sombra, so o fio embaixo separando do palco. */
 .janela {
   height: 52px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
-/* ------------------------------------------------- itens da lateral
-
-   Tres estados e so. O item parado fica a 55% — visivel o bastante para
-   ser reconhecido, apagado o bastante para nao competir com o conteudo.
-   O ativo nao ganha fundo colorido: ganha opacidade cheia e um risco. */
+/*
+ * Parado a 55%, ativo em opacidade cheia com um risco, sem fundo colorido.
+ */
 .corpo[data-recolhida="true"] .nav {
   opacity: 0.55;
   background: transparent;
@@ -6551,10 +5839,9 @@ circle.placa-parafuso {
   background: transparent;
 }
 
-/* --------------------------------------------------------- tipografia
-
-   A escala da especificacao. Ela e mais leve que a anterior de proposito:
-   negrito em tudo e o que faz uma tela tecnica parecer um site de venda. */
+/*
+ * Mais leve de propósito: negrito em tudo faz a tela técnica parecer site de venda.
+ */
 
 .abertura-sobrenome,
 .secao-rotulo,
@@ -6586,11 +5873,9 @@ circle.placa-parafuso {
   letter-spacing: -0.01em;
 }
 
-/* ----------------------------------------------------------- switch
-
-   OFF: trilho escuro, botao cinza. ON: trilho branco, botao escuro.
-   Sem brilho, sem cor de marca — o estado ligado e a propria inversao,
-   que e o sinal mais forte que existe e nao gasta cor nenhuma. */
+/*
+ * Ligado é a inversão do trilho: o sinal mais forte, sem gastar cor.
+ */
 .switch {
   position: relative;
   display: inline-flex;
@@ -6714,15 +5999,9 @@ input:focus-visible {
   border-color: rgba(var(--text-rgb), 0.22);
 }
 
-/* -------------------------------------------------- linha de ajuste
-
-   A FORMA CANONICA de toda configuracao do produto: titulo e descricao
-   a esquerda, controle a direita, um fio embaixo.
-
-   NAO E CARTAO, e essa e a decisao. Dezessete cartoes empilhados fazem
-   uma pagina de ajustes parecer um catalogo; dezessete linhas fazem ela
-   parecer o painel de configuracoes de um sistema operacional — que e o
-   que ela e. */
+/*
+ * Título e descrição à esquerda, controle à direita, fio embaixo: linhas, não cartões.
+ */
 .linha-ajuste {
   display: flex;
   align-items: center;
@@ -6759,18 +6038,9 @@ input:focus-visible {
 
 /* --------------------------------------------------------- separador */
 
-/* `.divisor` MORAVA AQUI e saiu. Eu a escrevi junto com o resto da camada de
-   componentes e nunca a usei em lugar nenhum do HTML: as separações desta
-   interface acabaram todas saindo de `border-bottom` nas próprias linhas, que
-   é o certo — um traço que pertence à linha some junto com ela, e um traço
-   solto no meio da página não sabe quando sair. Regra de CSS que ninguém usa
-   é a mesma dívida que função morta em Rust: alguém vai achar que existe uma
-   convenção aqui, e não existe. */
-
-/* ------------------------------------------------------------ modais
-
-   Sem sombra gigante e sem cartao flutuando no meio do nada: o modal e
-   uma superficie do proprio aplicativo, com a mesma borda de tudo. */
+/*
+ * O modal é superfície do app, com a mesma borda: sem sombra gigante.
+ */
 .modal {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(2px);
@@ -6800,12 +6070,9 @@ input:focus-visible {
   color: var(--danger);
 }
 
-/* -------------------------------------------------- linha de software
-
-   Linha, e não cartão: uma lista de vinte programas em cartões vira um
-   catálogo de loja. A altura é a da especificação, e o hover é quase
-   imperceptível de propósito — ele serve para dizer "esta é a linha sob
-   o cursor", e não para chamar atenção. */
+/*
+ * Linha, não cartão; o hover quase imperceptível só indica a linha sob o cursor.
+ */
 .programa-linha {
   min-height: 74px;
   padding: var(--s3) var(--s3);
@@ -6829,11 +6096,9 @@ input:focus-visible {
   color: var(--text-secondary);
 }
 
-/* ------------------------------------------------- cartão de métrica
-
-   O NÚMERO É O ELEMENTO DOMINANTE. Tudo o mais no cartão — o rótulo em
-   cima, a linha do tempo, a nota embaixo — existe para dar contexto a
-   ele, e nenhum deles pode competir em peso. */
+/*
+ * O número domina: rótulo, linha do tempo e nota só dão contexto.
+ */
 .vivo {
   background: var(--surface);
   border-radius: 7px;
@@ -6865,9 +6130,6 @@ input:focus-visible {
   border-radius: 7px;
 }
 
-/* ------------------------------------------------------ vazio e carga
-
-   Dois estados que o produto precisava ter e não tinha nome para. */
 .vazio {
   padding: var(--s8) var(--s5);
   text-align: center;
@@ -6887,9 +6149,9 @@ input:focus-visible {
   animation: esqueleto 1.4s ease-in-out infinite;
 }
 
-/* DUAS FORMAS, porque o esqueleto só cumpre o papel dele se tiver a forma do
-   que está vindo. Uma fileira de barrinhas no lugar de uma grade de capas
-   anuncia a coisa errada, e a tela "pula" quando o conteúdo real entra. */
+/*
+ * O esqueleto tem a forma do que vem, senão a tela pula quando o conteúdo entra.
+ */
 .esqueleto-linha {
   height: 74px;
   margin-bottom: 1px;
@@ -6901,9 +6163,9 @@ input:focus-visible {
   border-radius: 9px;
 }
 
-/* Cada bloco começa a animação um pouco depois do anterior: doze retângulos
-   pulsando no mesmo compasso viram um piscar de tela inteira, que incomoda
-   mais do que informa. */
+/*
+ * Escalonado: doze blocos no mesmo compasso piscam a tela inteira.
+ */
 .esqueleto:nth-child(3n + 2) {
   animation-delay: 160ms;
 }
@@ -6918,18 +6180,15 @@ input:focus-visible {
   }
 }
 
-/* Quem pediu menos animação não recebe nenhuma. */
 @media (prefers-reduced-motion: reduce) {
   .esqueleto {
     animation: none;
   }
 }
 
-/* ---------------------------------------------------------- atalhos
-
-   Os tres cartoes do fim do Inicio. Eles sao NAVEGACAO, entao pesam
-   menos que os monitores acima: mesma borda, mesmo fundo, e o unico
-   destaque e o hover. */
+/*
+ * Atalhos: navegação, pesam menos que os monitores.
+ */
 .atalhos {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -6982,18 +6241,10 @@ input:focus-visible {
   color: var(--text-secondary);
 }
 
-/* =====================================================================
-   AS PAGINAS TECNICAS — GPU e Nucleos
+/*
+ * Páginas técnicas (GPU e Núcleos) em SEÇÕES separadas por espaço, não caixas.
+ */
 
-   A especificacao pede que elas deixem de ser uma pilha de paineis e
-   passem a ser SECOES separadas por espaco. A diferenca nao e estetica:
-   um painel com borda diz "isto e uma caixa"; uma secao com titulo diz
-   "isto e um assunto". Numa pagina que tem tres assuntos — o hardware, os
-   ajustes, os perfis — sao tres secoes, e nao tres caixas.
-   ===================================================================== */
-
-/* O painel perde a borda e o fundo nestas paginas: o que separa uma
-   secao da outra passa a ser o espaco, e o titulo. */
 #tab-gpu .panel,
 #tab-nucleos .panel {
   padding: 0;
@@ -7021,19 +6272,17 @@ input:focus-visible {
   gap: var(--s9);
 }
 
-/* A largura das paginas de ajuste. Uma lista de configuracoes com 1600px
-   de largura obriga o olho a atravessar a tela inteira entre o nome e o
-   interruptor — e ai ninguem sabe mais qual interruptor e de qual nome. */
+/*
+ * Largura limitada: a 1600px ninguém sabe qual interruptor é de qual nome.
+ */
 #tab-gpu .gpu-coluna,
 #tab-nucleos .panel {
   max-width: 1000px;
 }
 
-/* ------------------------------------------------------ cartao de perfil
-
-   Escolha unica, entao o cartao inteiro e a area de clique. Um quadrado
-   de 14px como unico alvo e o tipo de coisa que faz a pessoa clicar tres
-   vezes achando que o programa travou. */
+/*
+ * O cartão inteiro é a área de clique.
+ */
 .gpu-perfil {
   border-radius: 8px;
   background: var(--surface);
@@ -7109,10 +6358,9 @@ input:focus-visible {
   color: var(--text-tertiary);
 }
 
-/* ------------------------------------------------------ matriz de nucleos
-
-   Quadrado menor e mais folga: a matriz de 32 nucleos de um processador
-   moderno precisa caber numa fileira ou duas sem virar um tabuleiro. */
+/*
+ * Quadrado menor: 32 núcleos numa ou duas fileiras.
+ */
 .nucleos-matriz {
   grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
   gap: var(--s2);
@@ -7143,11 +6391,9 @@ input:focus-visible {
   color: var(--text-tertiary);
 }
 
-/* ------------------------------------------- o painel de alavancas
-
-   Os ajustes do driver viram linhas de configuracao, como os do Windows:
-   e a mesma coisa — um nome, o que ele faz, e um controle. Duas formas
-   diferentes para a mesma ideia sao duas coisas para o cliente aprender. */
+/*
+ * Ajustes do driver como linhas de configuração, igual aos do Windows.
+ */
 #nvdriver-lista .gpupref-linha {
   display: flex;
   align-items: center;
@@ -7174,34 +6420,19 @@ input:focus-visible {
   color: var(--text-secondary);
 }
 
-/* A MONOESPACADA SAI DOS NOMES DE AJUSTE.
-
-   Ela veio de quando esta lista mostrava caminho de executavel, onde
-   monoespacada e a escolha certa — caminho tem barra, ponto e underline, e
-   a largura fixa e o que deixa os dois lados alinhados. Mas o que esta ali
-   agora e uma FRASE em portugues, e frase em monoespacada le pior e ainda
-   parece saida de terminal no meio de uma tela de produto. */
+/*
+ * Frase em português não usa mono (vinha de quando a lista mostrava caminho de executável).
+ */
 #nvdriver-lista .gpupref-nome {
   font-family: var(--font-sans);
   font-size: 14px;
   overflow-wrap: normal;
 }
 
-/* ------------------------------------------------------- só para o leitor
-
-   A classe era USADA em dois lugares do HTML e não existia em lugar nenhum
-   do CSS — então os dois rótulos, que só deviam existir para quem navega por
-   leitor de tela, apareciam desenhados ao lado do próprio campo que
-   descrevem. "Buscar jogo" impresso à esquerda de uma caixa cujo texto de
-   apoio já diz "Buscar jogo".
-
-   Apagar os `<span>` seria o conserto errado: o campo ficaria sem nome para
-   quem não enxerga o desenho. O conserto é a regra que faltava.
-
-   E ela não usa `display: none` nem `visibility: hidden` — os dois tiram o
-   elemento da árvore de acessibilidade, que é exatamente a árvore para a
-   qual ele existe. O recorte de um pixel some da tela e continua sendo
-   lido. */
+/*
+ * Só para leitor de tela: sem esta regra os rótulos apareciam desenhados. Não usa `display: none` nem
+ * `visibility: hidden`, que tirariam da árvore de acessibilidade.
+ */
 .sr-only {
   position: absolute;
   width: 1px;

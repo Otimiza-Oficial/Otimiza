@@ -8,22 +8,9 @@
     <script type="module" src="/src/main.ts" defer></script>
 
     <!--
-      O TEMA, RESOLVIDO ANTES DO PRIMEIRO DESENHO.
-
-      Este script é síncrono e mora no `<head>` de propósito. O resto do
-      programa carrega com `defer`, ou seja, depois da primeira pintura — e um
-      app que abre branco e vira preto meio segundo depois pisca na cara de
-      quem usa toda vez que abre.
-
-      Ele faz UMA coisa: escreve em `<html>` se o tema é claro ou escuro. Quem
-      decide é a escolha guardada do cliente; sem escolha, a preferência do
-      Windows. O CSS não conhece consulta de mídia nenhuma — assim a lista de
-      cores do escuro existe uma vez só, em vez de uma cópia para o sistema e
-      outra para o botão.
-
-      Falhar aqui não pode derrubar a tela: `localStorage` lança em algumas
-      situações, e um app que não abre por causa da cor do fundo é pior que um
-      app da cor errada.
+      O tema antes da primeira pintura: síncrono no <head> (o resto carrega com defer, e o app piscaria branco).
+      Escreve em <html> claro ou escuro, pela escolha guardada ou pelo Windows: as cores do escuro existem uma vez
+      só. Não pode derrubar a tela se o localStorage lançar.
     -->
     <script>
       (function () {
@@ -44,41 +31,14 @@
   </head>
   <body>
     <!--
-      OS ÍCONES, DEFINIDOS UMA VEZ.
-
-      Antes cada um era um quadrado sólido recortado por `clip-path: polygon()`.
-      A ideia era boa e resolvia o problema certo — nenhum arquivo externo, nada
-      baixado, e um aplicativo que precisa funcionar sem internet não pode
-      depender de biblioteca de ícone. O limite é que forma recortada não tem
-      TRAÇO: é sempre uma silhueta cheia, sem espessura constante e sem detalhe
-      interno. A 15 pixels isso vira mancha.
-
-      Ícone de traço é o que se usa em ferramenta profissional, e pela mesma
-      razão: a espessura constante mantém o peso visual igual entre um ícone
-      simples e um cheio de detalhe, e o vazado deixa a forma legível no
-      tamanho pequeno.
-
-      A troca não custa nada do que a solução antiga protegia: continua tudo
-      dentro do HTML, sem requisição e sem arquivo para manter em sincronia.
-      `currentColor` faz cada ícone herdar a cor de onde ele está — o mesmo
-      desenho serve à lateral, ao título da seção e ao que vier depois.
+      Ícones de traço, definidos uma vez, dentro do HTML (o app funciona sem internet). currentColor herda a cor de
+      onde o ícone está.
     -->
     <svg class="sprite-icones" aria-hidden="true">
       <defs>
-        <!--
-          O TRAÇO É O MESMO EM TODOS.
+        <!-- Grade de 24, margens de 3 e 21, só linha de 1,5 com cantos arredondados. Na dúvida, legível a 18 pixels. -->
 
-          Todo desenho daqui cabe numa grade de 24, encosta nas margens de 3 e
-          21, e usa só linha — nenhum preenchido. Não é preciosismo: ícone de
-          espessura diferente na mesma coluna faz a lateral parecer montada de
-          pedaços, e é o tipo de coisa que o olho percebe sem saber nomear.
-
-          Quem for acrescentar um: linha de 1,5, cantos arredondados, e a forma
-          mais simples que ainda diz o que é. Na dúvida entre bonito e legível
-          a 18 pixels, legível ganha.
-        -->
-
-        <!-- Início: a casa, e não um painel de blocos. É a primeira parada. -->
+        <!-- Início: a casa. -->
         <symbol id="i-painel" viewBox="0 0 24 24">
           <path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19Z" />
           <path d="M9.5 20.5v-6h5v6" />
@@ -183,43 +143,19 @@
       </defs>
     </svg>
 
-    <!--
-      O fundo. Elemento real, e não `body::before`, por um motivo concreto: o
-      interruptor de movimento do produto (`.sem-animacao`) precisa alcançá-lo,
-      e o seletor universal não casa com pseudo-elemento do próprio `body`.
-    -->
+    <!-- Elemento real, não body::before: o .sem-animacao precisa alcançá-lo. -->
     <div class="fundo" aria-hidden="true"></div>
 
     <!--
-      O PORTÃO
-
-      A primeira coisa que a pessoa vê depois de instalar. Ocupa a janela
-      inteira e some assim que a licença é aceita.
-
-      A esquerda é a única parte do produto que pode soar como venda; a direita
-      é o trabalho de ativar. Separar as duas evita a tela mista em que o
-      cliente que já comprou tem que caçar o campo da chave no meio da
-      propaganda.
-
-      O diagnóstico roda por trás enquanto ele lê. O que aparece em
-      `portao-achado` é o problema real desta máquina, medido agora — vale mais
-      que qualquer frase de vitrine, porque é sobre o computador dele.
+      O portão: a esquerda é a única parte que pode soar como venda; a direita é o trabalho de ativar. O
+      portao-achado é o problema real desta máquina, medido agora.
     -->
     <section class="portao" id="portao" hidden aria-labelledby="portao-titulo">
       <div class="portao-caixa">
         <div class="portao-colunas">
           <!--
-            A COLUNA ESTREITA, E A ESTREITEZA É A DECISÃO.
-
-            Antes esta tela tinha duas colunas de peso igual, e o resultado era
-            que nada parecia importante. Aqui o formulário ocupa pouco mais de
-            um terço e fica centrado na altura: o vazio em volta é o que faz o
-            olho cair nos dois campos.
-
-            A ORDEM É A DA VIDA REAL, e não a de um formulário de cadastro.
-            Copia o código, vai ao Discord, volta e cola a chave. Por isso o
-            código vem antes do campo da chave, e o botão do Discord fica entre
-            o que a pessoa acabou de fazer e o que ela vai fazer depois.
+            Coluna estreita e centrada: o vazio em volta faz o olho cair nos dois campos. Na ordem da vida real: copiar o
+            código, ir ao Discord, colar a chave.
           -->
           <div class="portao-forma">
             <div class="portao-forma-miolo">
@@ -234,28 +170,14 @@
                 correções.
               </p>
 
-              <!--
-                Nasce escondido e só aparece quando o veredito volta com alguma
-                coisa. Cartão vazio prometendo conteúdo é ruído.
-
-                É o argumento de venda mais forte da tela, e o único que não
-                foi escrito por ninguém: é o PC da pessoa falando.
-              -->
+              <!-- Escondido até o veredito voltar com algo: é o PC da pessoa falando. -->
               <p class="portao-achado" id="portao-achado" hidden>
                 <span class="portao-achado-marca" aria-hidden="true"></span>
                 <strong id="portao-achado-titulo"></strong>
                 <span id="portao-achado-detalhe"></span>
               </p>
 
-              <!--
-                A EXPECTATIVA HONESTA, ANTES DE PAGAR.
-
-                O que o Otimiza corrige neste PC e o que ele não resolve,
-                tirado dos achados do próprio diagnóstico. Nasceu de um
-                reembolso: o cliente aplicou tudo, o jogo continuou igual, e o
-                teto dele era peça. Dizer isso depois da compra perde a venda e
-                a confiança; dizer antes perde só a venda que não ia dar certo.
-              -->
+              <!-- O que o Otimiza corrige neste PC e o que não resolve, antes de pagar (nasceu de um reembolso cujo teto era peça). -->
               <p class="portao-expectativa" id="portao-expectativa" hidden></p>
 
               <div class="portao-campos">
@@ -295,12 +217,7 @@
                 <small id="portao-discord-endereco"></small>
               </a>
 
-              <!--
-                Uma frase, e só. A segunda metade disto — o que fazer se trocar
-                de placa-mãe — saiu daqui porque a nota embaixo do código já
-                responde isso, e com a informação certa para ESTA máquina:
-                nem todo PC perde o código ao formatar.
-              -->
+              <!-- Uma frase: a nota embaixo do código já diz o que acontece ao trocar de placa-mãe. -->
               <p class="portao-depois">
                 A chave vale em um computador só, e fica gravada aqui — você não
                 digita de novo.
@@ -308,17 +225,7 @@
             </div>
           </div>
 
-          <!--
-            OS TRÊS PILARES.
-
-            Uma coluna para cada peça que sustenta o desempenho — processador,
-            memória e disco —, e cada uma se desfazendo de cima para baixo pela
-            SUA medição. Enquanto a pessoa lê a oferta, o diagnóstico já rodou:
-            ela está vendo o próprio computador, e não uma ilustração de estoque.
-
-            É desenho, não imagem carregada: geometria passada por um meio-tom
-            de grade grossa. Nada entra no instalador por causa disto.
-          -->
+          <!-- Os três pilares (processador, memória, disco), cada um pela sua medição. Desenho, não imagem carregada. -->
           <div class="portao-arte" aria-hidden="true">
             <canvas class="portao-pilares" id="portao-pilares"
                     width="780" height="800"></canvas>
@@ -328,51 +235,23 @@
     </section>
 
     <!--
-      A BARRA DA JANELA.
-
-      O Windows desenha a dele com botões enormes no canto direito, numa cor
-      que não é a nossa. Desligar a decoração (`decorations: false`) e desenhar
-      a própria é o que faz o programa parecer um produto e não uma página
-      dentro de uma moldura emprestada.
-
-      O preço: arrastar, minimizar, maximizar e fechar passam a ser nossa
-      responsabilidade. É pouco código e está todo em `janela.ts`.
-
-      `data-tauri-drag-region` é o que transforma a faixa em área de arrastar —
-      sem ele a janela ficaria presa no lugar.
-
-      O valor é `deep`, e não o atributo pelado, por um motivo medido no código
-      do próprio Tauri: pelado, ele só arrasta em cliques DIRETOS no elemento.
-      Os vãos entre os botões e a faixa vazia da direita — que é justamente
-      onde se pega uma janela — ficariam mortos. Com `deep` a barra inteira
-      arrasta, e os botões continuam clicando porque o Tauri desiste do arrasto
-      assim que encontra um `<button>` no caminho do clique.
-
-      O duplo-clique para maximizar também vem do Tauri, e ele fala por um
-      comando SEPARADO (`internal_toggle_maximize`), com permissão própria em
-      `capabilities/default.json`. Sem ela o duplo-clique falha calado.
+      A barra da janela é nossa (decorations: false); o código está em janela.ts. data-tauri-drag-region="deep": sem
+      o deep só arrasta em clique direto no elemento, e os vãos entre os botões ficariam mortos; o Tauri desiste do
+      arrasto ao encontrar um <button>. O duplo-clique usa internal_toggle_maximize, com permissão própria em
+      capabilities/default.json.
     -->
     <header class="janela" data-tauri-drag-region="deep">
       <span class="janela-marca" aria-hidden="true"></span>
 
-      <!--
-        A busca mora no meio da faixa preta. É a mesma paleta do Ctrl K: clicar
-        aqui abre a mesma coisa, então existe um só caminho para achar qualquer
-        ação do programa.
-      -->
+      <!-- A mesma paleta do Ctrl K: um só caminho para achar qualquer ação. -->
       <button class="busca-topo" id="abrir-comandos-topo">
         <svg class="busca-topo-icone" aria-hidden="true"><use href="#i-busca" /></svg>
         <span class="busca-topo-texto">Pesquisar no Otimiza</span>
         <kbd class="nav-atalho">Ctrl K</kbd>
       </button>
 
-      <!-- O lado direito da faixa: o que a máquina está fazendo agora, o nível
-           de acesso e os controles da janela. -->
       <div class="janela-direita">
-        <!--
-          Sinais vitais fixos: seguem visíveis em qualquer aba. Trocar de aba não
-          pode significar perder de vista o que a máquina está fazendo agora.
-        -->
+        <!-- Visíveis em qualquer aba. -->
         <div class="vitals" id="vitals">
           <div class="vital">
             <span class="vital-label">CPU</span>
@@ -396,13 +275,7 @@
           <span class="access-text">Verificando acesso</span>
         </div>
 
-        <!--
-          O BOTÃO DO TEMA.
-
-          Ele alterna, e ao alternar GUARDA a escolha: a partir daí o app para
-          de seguir o Windows. É o que se espera — quem mexeu no interruptor
-          não quer que o sistema desfaça a escolha dele à noite.
-        -->
+        <!-- Ao alternar, guarda a escolha e o app para de seguir o Windows. -->
         <button class="tema-botao" id="tema-botao" type="button"
                 title="Alternar entre tema claro e escuro"
                 aria-label="Alternar entre tema claro e escuro">
@@ -414,9 +287,7 @@
           </svg>
         </button>
 
-        <!-- Os controles ficam à DIREITA: é onde quem usa Windows procura o X.
-             Sem eles não há como fechar o programa: a decoração do Windows está
-             desligada e esta faixa é a única moldura que existe. -->
+        <!-- À direita, onde quem usa Windows procura o X. É a única moldura que existe. -->
         <div class="janela-botoes">
           <button class="janela-botao janela-minimizar" id="janela-minimizar"
                   type="button" title="Minimizar" aria-label="Minimizar"></button>
@@ -428,23 +299,9 @@
       </div>
     </header>
 
-    <!--
-      A CHEGADA.
-
-      O instante entre colar a chave e usar o programa. Sem isto, o portão
-      simplesmente some e a pessoa cai no painel — que funciona, mas trata a
-      compra como um formulário que passou.
-
-      Ela pagou. O mínimo é o programa reconhecer quem chegou, pelo nome, uma
-      vez. O nome vem da própria licença, no campo que o bot preencheu na hora
-      de emitir — não há consulta a lugar nenhum.
-    -->
+    <!-- A chegada: o programa reconhece quem pagou, pelo nome que o bot gravou na licença. -->
     <section class="chegada" id="chegada" hidden aria-live="polite">
-      <!--
-        A imagem ocupa a esquerda inteira, sangrando pelas três bordas, e se
-        dissolve em direção ao texto — sem borda reta separando os dois, que
-        entregaria dois retângulos colados em vez de uma página só.
-      -->
+      <!-- Sangra pelas três bordas e se dissolve na direção do texto, sem borda reta. -->
       <div class="chegada-arte" aria-hidden="true">
         <canvas class="chegada-pilares" id="chegada-pilares"
                 width="900" height="900"></canvas>
@@ -454,12 +311,7 @@
         <h1 class="chegada-titulo" id="chegada-titulo">Obrigado.</h1>
         <p class="chegada-frase" id="chegada-frase"></p>
 
-        <!--
-          A segunda frase não muda e diz a coisa que precisa ficar clara antes
-          de qualquer botão: NADA foi alterado na máquina ainda. Uma tela de
-          agradecimento que soasse como "pronto, seu PC foi otimizado" seria a
-          primeira mentira do produto, logo depois do pagamento.
-        -->
+        <!-- Diz que NADA foi alterado ainda: "seu PC foi otimizado" seria a primeira mentira do produto. -->
         <p class="chegada-nota">
           Nada foi alterado neste computador ainda. O Otimiza mede primeiro,
           mostra o que achou, e só mexe no que você mandar.
@@ -474,14 +326,8 @@
     <div class="console">
 
       <!--
-        O AVISO QUE NÃO SAI DA TELA
-
-        Só aparece quando o veredito é crítico. Existe porque a máquina que
-        motivou este trabalho travava por falta de memória, e o cliente podia
-        passar a sessão inteira na aba de Otimizações aplicando itens de
-        higiene sem nunca ver o achado que explicava o travamento.
-
-        Clicar leva ao Painel, onde está o veredito com os números.
+        Só com veredito crítico: sem ele, o cliente passava a sessão aplicando higiene sem ver o que explicava o
+        travamento.
       -->
       <button class="alerta-global" id="alerta-global" hidden>
         <span class="alerta-marca" aria-hidden="true"></span>
@@ -490,20 +336,8 @@
       </button>
 
       <!--
-        O AVISO DE QUE O OTIMIZA PIOROU A MÁQUINA.
-
-        Existe por causa do incidente da 2.1.0: um cliente aplicou tudo e o FPS
-        dele caiu pela metade. O produto tinha as duas medições gravadas no
-        disco daquela máquina — antes e depois — e nunca as comparou. Quem
-        percebeu foi ele, olhando o contador de quadros, e quem contou foi ele,
-        dias depois, por mensagem.
-
-        Este aviso INTERROMPE de propósito. Um alerta que só aparece para quem
-        foi olhar a aba certa não teria evitado nada: no incidente, o cliente
-        não estava procurando defeito no Otimiza, estava jogando.
-
-        Os números são os medidos nesta máquina. O botão leva para as
-        otimizações, onde dá para desfazer.
+        O Otimiza piorou a máquina (incidente da 2.1.0: as duas medições estavam no disco e ninguém comparou).
+        INTERROMPE de propósito: quem joga não está procurando defeito no Otimiza.
       -->
       <div class="atualizacao-faixa faixa-regressao" id="regressao-faixa" hidden role="alert">
         <span class="atualizacao-texto" id="regressao-texto"></span>
@@ -518,14 +352,8 @@
       </div>
 
       <!--
-        A FAIXA DE VERSÃO NOVA.
-
-        O Otimiza não se atualiza sozinho e não abre porta nenhuma: este texto
-        só aparece porque o programa PERGUNTOU ao GitHub na abertura da tela.
-        Diferente do `alerta-global` acima, esta faixa é dispensável — o
-        cliente vê e fecha, e o clique em "Baixar" abre o navegador para ele
-        escolher instalar quando quiser. O programa não baixa nem instala nada
-        por conta própria.
+        Só aparece porque o programa perguntou ao GitHub; dispensável, e "Baixar" abre o navegador. Não baixa nem
+        instala nada sozinho.
       -->
       <div class="atualizacao-faixa" id="atualizacao-faixa" hidden role="status" aria-live="polite">
         <span class="atualizacao-texto" id="atualizacao-texto"></span>
@@ -540,15 +368,7 @@
       </div>
 
       <div class="corpo">
-        <!--
-          Navegação lateral, no lugar das abas no topo.
-
-          Com sete seções a faixa de abas já vivia apertada, e cada painel novo
-          piorava. A lateral cresce para baixo sem disputar espaço, agrupa por
-          assunto e ainda dá lugar para a contagem de cada área — o número na
-          navegação é informação, não enfeite: dá para saber que há algo
-          esperando sem abrir a seção.
-        -->
+        <!-- Lateral: cresce para baixo, agrupa por assunto e tem lugar para a contagem de cada área. -->
         <nav class="lateral" role="tablist" aria-label="Seções do console">
           <div class="lateral-marca">
             <span class="brand-logo" aria-hidden="true"></span>
@@ -646,64 +466,19 @@
             <span class="nav-rotulo">Reparo</span>
           </button>
 
-          <!--
-            A BUSCA SAIU DAQUI.
-
-            Ela existia em dois lugares ao mesmo tempo: aqui e no topo. Mesma
-            ação, mesmo atalho, duas portas — e a tela toda inteira dizia, em
-            dois pontos diferentes, a mesma coisa.
-
-            Ficou a do topo, porque é onde as pessoas procuram busca. O Ctrl K
-            continua funcionando de qualquer lugar.
-          -->
         </nav>
 
         <div class="palco">
-          <!--
-            Cabeçalho da seção. O conteúdo vem do JavaScript a partir da própria
-            navegação, então nome e ícone nunca divergem do item da lateral —
-            duplicar isso em sete blocos de HTML seria pedir para eles saírem de
-            sincronia na primeira renomeação.
-          -->
-          <!--
-            O CABEÇALHO DA SEÇÃO, NO MESMO DESENHO DE TODAS AS ABERTURAS.
-
-            Era uma trilha ("Otimiza / Início") mais um ícone mais o nome —
-            três elementos para dizer uma coisa. A trilha não levava a lugar
-            nenhum: não há nível acima de uma aba, então ela era enfeite com
-            cara de navegação. O ícone repetia o da lateral, a dois
-            centímetros de distância.
-
-            Ficou o par que as abas novas já usavam: um rótulo pequeno em
-            maiúscula dizendo o GRUPO, e o nome grande embaixo. Um desenho só
-            para a tela inteira.
-
-            E ele SOME nas abas que já trazem a própria abertura — duas vezes
-            o mesmo título, um grande e um maior, é o tipo de coisa que faz a
-            tela parecer montada por acréscimo.
-          -->
+          <!-- Montado pelo JavaScript a partir da navegação: nome e ícone nunca divergem da lateral. -->
+          <!-- Rótulo do GRUPO e nome grande, o mesmo desenho em toda aba; some nas abas que já trazem a própria abertura. -->
           <header class="secao-cabecalho" id="secao-cabecalho">
             <p class="abertura-sobrenome" id="secao-grupo">Monitorar</p>
             <h2 class="abertura-titulo" id="secao-nome">Início</h2>
           </header>
 
         <main class="stage">
-        <!-- ============================================================ PAINEL -->
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
-          <!--
-            A ABERTURA.
-
-            O que vem antes do veredito é de propósito UMA LINHA DE SINAIS
-            VITAIS, e não um segundo diagnóstico. Serve para a tela responder
-            em meio segundo "esta máquina está viva e está sendo lida agora" —
-            que é o que o olho procura ao abrir qualquer monitor — e só então
-            entregar a frase que interessa.
-
-            A REGRA DO PRODUTO VALE AQUI TAMBÉM. Cada cartão mostra "—" quando
-            a leitura não veio, e a linha de baixo diz de onde o número saiu.
-            Um cartão grande e bonito com um zero inventado seria pior que a
-            tela feia que ele substituiu.
-          -->
+          <!-- Uma linha de sinais vitais antes do veredito, não um segundo diagnóstico. Cada cartão mostra "—" sem leitura. -->
           <header class="abertura">
             <p class="abertura-sobrenome">Otimização</p>
             <h1 class="abertura-titulo">Início</h1>
@@ -758,15 +533,7 @@
               <p class="vivo-nota" id="monitor-ram-nota">—</p>
             </article>
 
-            <!--
-              LATÊNCIA, e não "ping".
-
-              O selo ao lado diz ESTÁVEL ou INSTÁVEL, e ele olha o jitter — não
-              o número grande. Um ping de 120 ms estável dá partida jogável; um
-              de 40 que vira 90 e volta é o que produz o teletransporte. Marcar
-              de verde um ping baixo e instável seria elogiar exatamente o que
-              estraga a partida.
-            -->
+            <!-- O selo olha o jitter, não o número grande: ping baixo que pula é o que estraga a partida. -->
             <article class="vivo" data-metrica="rede">
               <header class="vivo-topo">
                 <span class="vivo-nome">Latência</span>
@@ -804,20 +571,7 @@
             </div>
           </div>
 
-          <!--
-            OS ATALHOS DO INÍCIO.
-
-            Três, e não nove. O Início existe para responder "como está esta
-            máquina agora" — os atalhos são a saída dali, e uma parede de
-            atalhos transforma a página de abertura num menu, que é
-            exatamente o que a lateral já é.
-
-            SEM FOTO. As referências usam fotografia de teclado e controle
-            para encher esses cartões. Não tenho essas fotos, e pôr imagem de
-            banco de imagens num produto que se vende é a mesma conversa das
-            capas de jogo. O ícone de linha faz o trabalho: ele diz para onde
-            o cartão leva, que é tudo o que se pede dele.
-          -->
+          <!-- Três atalhos, não nove, e sem foto de banco de imagens: o ícone de linha diz para onde leva. -->
           <p class="secao-rotulo">Atalhos</p>
 
           <div class="atalhos">
@@ -834,35 +588,11 @@
             </button>
           </div>
 
-          <!--
-            O VEREDITO
-
-            Vem antes de qualquer botão de otimizar, e é de propósito. A versão
-            anterior deste produto abria com números de uso e dezessete botões
-            de análise: o cliente aplicava trinta otimizações sem nunca saber
-            qual era o problema da máquina dele. Numa que travava o PC inteiro,
-            a tela chegou a dizer que a memória estava sem problemas.
-
-            Aqui é uma frase só, com o número que a sustenta.
-          -->
+          <!-- Antes de qualquer botão de otimizar: uma frase só, com o número que a sustenta. -->
           <section class="panel panel-veredito" id="veredito" aria-live="polite">
             <div class="veredito-marca" id="veredito-marca" aria-hidden="true"></div>
 
-            <!--
-              A MÁQUINA, DESENHADA COM AS PRÓPRIAS MEDIÇÕES.
-
-              Uma nuvem de pontos em forma de esfera, onde cada propriedade sai
-              de uma leitura de verdade: quantos pontos vêm dos núcleos, o quanto
-              vibram vem do uso de CPU, os buracos no casco vêm da memória
-              ocupada, e a cor vem do veredito.
-
-              Não é enfeite, e não podia ser: numa tela cuja regra fundadora é
-              nunca mostrar número que não foi medido, uma imagem inventada
-              contradiz o produto em silêncio.
-
-              `aria-hidden` porque ela não acrescenta informação que o texto ao
-              lado já não diga — quem usa leitor de tela não perde nada.
-            -->
+            <!-- A máquina desenhada com as próprias medições. aria-hidden: não acrescenta nada ao texto ao lado. -->
             <canvas class="veredito-esfera" id="veredito-esfera"
                     width="260" height="260" aria-hidden="true"></canvas>
 
@@ -874,23 +604,17 @@
               <p class="veredito-detalhe" id="veredito-detalhe"></p>
               <p class="veredito-conselho" id="veredito-conselho"></p>
 
-              <!-- Só aparece quando o Otimiza sabe consertar sozinho. Falta de
-                   memória e disco morrendo não ganham botão: nenhum programa
-                   acrescenta um pente. -->
+              <!-- Só quando o Otimiza conserta sozinho. -->
               <div class="veredito-acao" id="veredito-acao" hidden>
                 <button id="veredito-corrigir" class="btn btn-primary"></button>
                 <span class="veredito-acao-nota" id="veredito-acao-nota"></span>
               </div>
 
-              <!-- Achados da mesma causa, que antes moravam em abas diferentes. -->
               <ul class="veredito-junto" id="veredito-junto" hidden></ul>
 
-              <!-- Desempenho perdido (2.9): há desempenho que o hardware deveria
-                   entregar e não entrega? P0 e P1 primeiro. -->
               <div class="veredito-recuperacao" id="veredito-recuperacao" hidden></div>
 
-              <!-- O que não deu para verificar. Nunca fica escondido: silêncio
-                   aqui seria indistinguível de aprovação. -->
+              <!-- Nunca fica escondido: silêncio seria aprovação. -->
               <ul class="veredito-lacunas" id="veredito-lacunas" hidden></ul>
             </div>
           </section>
@@ -904,12 +628,7 @@
             <div id="pronto-jogar-resultado"></div>
           </section>
 
-          <!--
-            ÚLTIMAS PARTIDAS MEDIDAS (2.9). O Painel responde "como está a
-            máquina"; isto responde "e nos meus jogos?", com o que foi medido
-            sozinho durante as partidas. Sem partida medida, diz isso — e diz o
-            que falta ligar.
-          -->
+          <!-- "E nos meus jogos?", com o que foi medido sozinho nas partidas; sem partida medida, diz o que falta ligar. -->
           <section class="panel" id="ultimas-partidas-painel">
             <header class="panel-head">
               <h2>Suas últimas partidas</h2>
@@ -918,15 +637,7 @@
             <div id="ultimas-partidas"></div>
           </section>
 
-          <!--
-            O MAPA DE DESEMPENHO (2.9).
-
-            Mede o que limita o PC agora — processador, núcleo mais ocupado,
-            memória, disco, placa de vídeo e memória de vídeo — e, com um jogo
-            aberto, os quadros dele no mesmo intervalo. Aponta todos os
-            gargalos que se sustentaram, cada um com a evidência numérica.
-            Montado por `src/mapa.ts`.
-          -->
+          <!-- Mapa de desempenho (2.9), montado por src/mapa.ts. -->
           <section class="panel" id="mapa-desempenho-painel">
             <header class="panel-head">
               <h2>Mapa de desempenho</h2>
@@ -937,22 +648,7 @@
             <div id="mapa-desempenho"></div>
           </section>
 
-          <!--
-            POR QUE O FPS ESTÁ BAIXO.
-
-            Este painel existe porque eu fiz esta investigação À MÃO duas vezes
-            numa semana: um cliente que caiu de 200 para 80-120 FPS depois de
-            otimizar, e outro pegando 15 a 20 "dependendo de onde eu fico". As
-            duas foram a mesma investigação — uma lista curta de suspeitos, cada
-            um com um jeito de confirmar.
-
-            Enquanto isso não era código, quem fazia era uma pessoa. E uma
-            pessoa não atende cem clientes.
-
-            Fica DEPOIS do veredito de propósito: o veredito responde "o que há
-            de errado com esta máquina", e este responde a pergunta seguinte,
-            que é a que o cliente de jogo faz primeiro.
-          -->
+          <!-- Por que o FPS está baixo: suspeitos, cada um com um jeito de confirmar. Depois do veredito. -->
           <section class="panel" id="causas-painel" hidden>
             <header class="panel-head">
               <h2>Por que o FPS está baixo aqui</h2>
@@ -964,24 +660,8 @@
             <div id="causas" data-vazio="Procurando…"></div>
           </section>
 
-          <!--
-            O QUE O OTIMIZA NÃO FAZ.
-
-            O cliente compara lista com lista. Ele abre um vídeo de "50 tweaks
-            para aumentar FPS", vê trinta coisas que o Otimiza não faz, e conclui
-            que o produto é fraco — o que é razoável de fora, porque ninguém tem
-            como saber que metade daquela lista não faz nada e que um quarto dela
-            piora a máquina.
-
-            Fica DEPOIS das causas e fechado por padrão: quem veio resolver FPS
-            baixo resolve primeiro, e quem veio comparar abre.
-          -->
-<!--
-            O REGISTRO CENTRAL (2.9). O outro lado da recusa: tudo o que o
-            produto ALTERA, num lugar só, com risco, reinício e como se desfaz.
-            A lista sai do código (`registro.rs`), e um teste reprova a versão
-            se um módulo passar a escrever sem estar nela.
-          -->
+          <!-- O que o Otimiza não faz: fechado por padrão, depois das causas. -->
+<!-- O registro central: tudo o que o produto altera, com risco, reinício e desfazer (registro.rs). -->
           <details class="panel" id="o-que-altera-painel">
             <summary class="panel-head-resumo">
               <h2>Tudo o que o Otimiza altera neste computador</h2>
@@ -996,12 +676,6 @@
             <div id="nao-fazemos"></div>
           </details>
 
-          <!--
-            Os painéis "Uso agora", "Carga por núcleo", "Histórico de CPU" e
-            "Movimento agora" saíram na 2.9: repetiam os vivos do topo e a matriz
-            da aba Núcleos. Fica a lista de quem está pesando — é o que diz O QUE
-            tirar do caminho do jogo.
-          -->
           <section class="panel">
             <div class="panel-head">
               <h2>Quem está pesando agora</h2>
@@ -1016,19 +690,7 @@
             </p>
           </section>
 
-          <!--
-            O QUE ESTÁ SEGURANDO A MÁQUINA AGORA.
-
-            Duas listas, e as duas importam. À esquerda o que foi encontrado,
-            separado entre CAUSA — o Windows afirmando o fato, agora — e
-            HIPÓTESE — número real, mas indireto ou de alguns segundos atrás.
-            À direita o que NÃO foi verificado, com o que faltou para olhar.
-
-            A segunda lista é a que impede a primeira de mentir. "Não
-            encontramos gargalo" sem dizer que sete das catorze classes não
-            puderam ser avaliadas é a frase de um otimizador que finge ter
-            olhado tudo.
-          -->
+          <!-- À esquerda o encontrado (CAUSA ou HIPÓTESE); à direita o NÃO verificado, que impede a primeira lista de mentir. -->
           <section class="panel" id="gargalo">
             <div class="panel-head">
               <h2>O que está segurando a máquina</h2>
@@ -1050,18 +712,8 @@
           </section>
 
           <!--
-            MEMÓRIA DE VÍDEO: O PAINEL QUE EXISTE PARA NÃO VENDER UM AJUSTE.
-
-            Placa de vídeo cheia é o estado NORMAL de uma placa de vídeo. O
-            driver é um cache: carrega textura e não devolve enquanto ninguém
-            precisar do espaço. Todo painel de otimizador que mostra "VRAM 95%"
-            em vermelho está cobrando por um problema que não existe.
-
-            O que existe é a placa DERRAMANDO para a memória do sistema quando
-            não coube — e isso tem preço medido, porque o que está do outro lado
-            do PCIe é lido muito mais devagar. Este painel mostra os dois
-            estados com nomes diferentes, e diz quanto liberar só quando há
-            derramamento medido acima do piso desta máquina.
+            Placa cheia é normal (o driver é cache); o problema é DERRAMAR para a memória do sistema, acima do piso desta
+            máquina.
           -->
           <section class="panel" id="vram">
             <div class="panel-head">
@@ -1089,20 +741,7 @@
             <p class="readout-note" id="vram-conselho">—</p>
           </section>
 
-          <!--
-            DO CLIQUE AO PIXEL.
-
-            Este painel mostra um PISO, não uma latência. Medir latência de
-            verdade exige instrumentar o jogo ou apontar um aparelho para o
-            monitor; nenhuma das duas coisas está ao alcance de um programa
-            rodando ao lado. O que dá para fazer é medir alguns pedaços da
-            corrente e dizer quais são os outros.
-
-            Por isso a lista tem as cinco etapas SEMPRE, e as que ninguém mediu
-            aparecem com o motivo no lugar do número. Uma etapa sem medição não
-            vira zero: zero somaria como se aquele pedaço não custasse nada, e é
-            assim que se fabrica o "1 ms de latência" que se vê por aí.
-          -->
+          <!-- Um PISO, não uma latência: as cinco etapas SEMPRE, com o motivo no lugar do número que ninguém mediu. -->
           <section class="panel" id="latencia">
             <div class="panel-head">
               <h2>Do clique ao pixel</h2>
@@ -1116,18 +755,7 @@
             <p class="readout-note" id="latencia-observacoes"></p>
           </section>
 
-          <!--
-            DE ONDE VÊM ESTES NÚMEROS.
-
-            Nenhum outro painel do produto admite o que ele NÃO sabe. Este
-            admite, e por isso ele é o que torna os outros confiáveis: quando a
-            tela diz 43%, dá para vir aqui e ver quem leu esse 43, quando, e com
-            que qualidade — e ver, na mesma lista, que temperatura e GPU ainda
-            não têm quem leia nesta versão.
-
-            Um otimizador que só mostra o que conseguiu medir é indistinguível
-            de um que inventa.
-          -->
+          <!-- De onde vêm estes números: quem leu, quando, com que qualidade, e o que não tem quem leia. -->
           <section class="panel" id="evidencia">
             <div class="panel-head">
               <h2>De onde vêm estes números</h2>
@@ -1169,20 +797,8 @@
           </section>
 
           <!--
-            O CAMINHO DO MOUSE.
-
-            Este painel NÃO mede mira. Mira é habilidade de pessoa, e um
-            programa que a mede sem estar dentro do jogo está inventando um
-            número — enquanto um que se mete dentro do jogo para medir está do
-            lado errado de qualquer anticheat, arriscando a conta do cliente
-            para entregar um gráfico.
-
-            O que ele olha é o caminho, que é do sistema: o que o Windows faz
-            com o movimento antes de ele chegar ao jogo. Duas coisas quebram a
-            relação 1:1, e as duas são do Windows, não do jogo — a aceleração,
-            que o produto já sabia desligar, e a barra de velocidade do
-            ponteiro, que quase ninguém olha e que faz o sistema DESCARTAR
-            contagem abaixo do meio e PULAR pixel acima dele.
+            Não mede mira: olha o que o Windows faz com o movimento antes do jogo (aceleração e a barra de velocidade, que
+            descarta contagem abaixo do meio e pula pixel acima).
           -->
           <section class="panel" id="mouse">
             <div class="panel-head">
@@ -1208,20 +824,8 @@
           </section>
 
           <!--
-            QUANDO FOI QUE PIOROU.
-
-            A ordem desta aba não é decorativa, e é esta: o que está segurando a
-            máquina (gargalo) → a memória de vídeo → do clique ao pixel → de
-            onde vêm estes números → e, por último, o tempo. Cada painel
-            responde uma pergunta diferente, e o tempo vem no fim porque é o
-            único que precisa de mais de uma visita ao produto para ter o que
-            dizer.
-
-            "Estava bom semana passada e agora está ruim" é a queixa mais
-            difícil do suporte. Este painel é a única coisa no produto que
-            consegue respondê-la — e a resposta vem com o aviso de que as
-            mudanças listadas apenas COINCIDEM no tempo com a queda. Provar
-            exige desfazer uma de cada vez e medir de novo.
+            Por último porque precisa de mais de uma visita para ter o que dizer. As mudanças listadas só COINCIDEM com a
+            queda: provar exige desfazer uma de cada vez.
           -->
           <section class="panel" id="historico">
             <div class="panel-head">
@@ -1247,23 +851,10 @@
           </section>
         </section>
 
-        <!-- ======================================================= OTIMIZAÇÕES -->
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
           <!--
-            A CONTA QUE ESTÁ RODANDO O OTIMIZA.
-
-            Vinte e um ajustes do catálogo são por CONTA e não pela máquina. Se
-            o cliente elevar o Otimiza digitando a senha de OUTRA conta — o que
-            acontece toda vez que a conta dele não é administradora —, esses
-            ajustes vão para um perfil que ninguém usa.
-
-            E o produto confere e diz que deu certo: ele relê a chave que acabou
-            de escrever, encontra o valor, e reporta sucesso. A verificação está
-            certa e a resposta está errada, porque a pergunta era sobre a conta
-            errada.
-
-            Some da tela quando as contas são a mesma. Aviso que aparece sempre
-            é aviso que ninguém lê.
+            Vinte e um ajustes são por CONTA: elevado com a senha de outra conta, vão para um perfil que ninguém usa, e a
+            conferência diz que deu certo. Some quando as contas são a mesma.
           -->
           <section class="panel" id="conta-painel" hidden data-severity="Important">
             <header class="panel-head">
@@ -1272,21 +863,7 @@
             <div id="conta-aviso"></div>
           </section>
 
-          <!--
-            AJUSTES DO OTIMIZA QUE BRIGAM ENTRE SI.
-
-            Diferente do detector de conflitos entre PROGRAMAS, que procura dois
-            antivírus varrendo ou dois otimizadores se desfazendo. Este procura
-            o problema de dentro de casa: dois ajustes NOSSOS que se anulam, se
-            somam mal, ou que ficam sem sentido juntos.
-
-            Importa porque o protocolo A/B afirma "este grupo rendeu aqui", e
-            essa afirmação só vale se os grupos forem independentes. Dois ajustes
-            que brigam fazem o teste do segundo medir o efeito do primeiro.
-
-            Só aparece quando há conflito de verdade entre o que ESTÁ aplicado.
-            Aviso que aparece sempre é aviso que ninguém lê.
-          -->
+          <!-- Ajustes nossos que se anulam: fariam o A/B medir o efeito do outro. Só com conflito real no que está aplicado. -->
           <section class="panel" id="conflitos-de-ajuste-painel" hidden>
             <header class="panel-head">
               <h2>Ajustes aplicados que brigam entre si</h2>
@@ -1294,18 +871,7 @@
             <div id="conflitos-de-ajuste"></div>
           </section>
 
-          <!--
-            A PROVA DE GANHO, NO LUGAR ONDE A OTIMIZAÇÃO ACONTECE
-
-            Ela morava numa aba própria chamada "Resultado", e uma aba própria
-            para dois painéis é o que faz um produto crescer em largura sem
-            crescer em utilidade. Pior: quem aplicava otimização estava AQUI, e
-            a prova de que aquilo funcionou ficava a um clique de distância que
-            quase ninguém dava.
-
-            A sequência dos botões — medir antes, aplicar, medir depois — só faz
-            sentido junto do que se aplica.
-          -->
+          <!-- A prova fica onde a otimização acontece: medir antes, aplicar, medir depois. -->
           <section class="panel">
             <div class="panel-head">
               <h2>Prova de resultado</h2>
@@ -1327,23 +893,8 @@
           </section>
 
           <!--
-            O PLANO DE ENERGIA, NUM PAINEL PRÓPRIO E NÃO NUMA LINHA DA LISTA.
-
-            Ele saiu de três itens de lista ("Alto Desempenho", "estacionamento
-            de núcleos", "estado mínimo do processador") e virou um só, porque
-            os três escreviam DENTRO DO PLANO DO CLIENTE e agora há um plano
-            nosso. Só que um item de lista tem espaço para um rótulo e uma
-            marca de "aplicado", e este resultado tem onze linhas com quatro
-            desfechos possíveis cada uma.
-
-            É justamente aqui que o produto tem o que os outros não têm: ele
-            releu cada valor do Windows depois de gravar, e consegue dizer
-            quais entraram, quais já estavam bons e quais NÃO EXISTEM neste
-            Windows. Esconder isso atrás de um tique verde seria jogar fora a
-            única parte da otimização de energia que dá para conferir.
-
-            O item continua na lista e continua entrando no "Otimizar agora" —
-            este painel é onde se vê o detalhe, não uma segunda porta.
+            Painel próprio: onze linhas relidas do Windows, com quatro desfechos cada. O item continua na lista e no
+            "Otimizar agora".
           -->
           <section class="panel" id="painel-plano-energia">
             <div class="panel-head">
@@ -1363,32 +914,14 @@
               <button id="plano-diagnostico" class="btn">O que este PC permite</button>
               <button id="plano-simular" class="btn">Ver o que mudaria</button>
               <button id="plano-aplicar" class="btn btn-primary">Criar e ativar o plano OTIMIZA</button>
-              <!--
-                O REPARO NASCE ESCONDIDO E SÓ APARECE QUANDO HÁ O QUE REPARAR.
-
-                Um botão "Reparar" sempre visível é o vocabulário dos
-                otimizadores que este produto acusa: sugere um problema
-                permanente para justificar um clique permanente. Aqui ele só
-                existe depois que a vistoria ACHOU um ajuste fora do lugar, e a
-                faixa acima diz qual.
-              -->
+              <!-- Só aparece depois que a vistoria ACHOU um ajuste fora do lugar. -->
               <button id="plano-reparar" class="btn btn-primary" hidden>Reparar o plano</button>
               <button id="plano-desfazer" class="btn" hidden>Voltar ao meu plano</button>
             </div>
 
             <!--
-              O DIAGNÓSTICO VEM ANTES DOS OUTROS DOIS BOTÕES NA ORDEM DE LEITURA,
-              e é de propósito: ele responde "o Otimiza consegue fazer alguma
-              coisa aqui?", que é a pergunta anterior a "o que mudaria?".
-
-              Ele existia como comando e não tinha tela — ou seja, a resposta
-              para "por que não funcionou no seu PC?" estava pronta dentro do
-              produto e ninguém conseguia alcançá-la. É o mesmo defeito que o
-              `suporte.rs` veio consertar, repetido num andar acima.
-
-              Área própria, e não a mesma do relatório do plano: são duas
-              respostas diferentes, e uma sobrescrevendo a outra obrigaria a
-              clicar de novo para comparar.
+              O diagnóstico primeiro: responde se o Otimiza consegue fazer algo aqui. Área própria, para não sobrescrever o
+              relatório do plano.
             -->
             <div id="plano-diagnostico-result" class="resultado" hidden></div>
 
@@ -1409,25 +942,10 @@
                 <span class="panel-tag" id="optimization-count">—</span>
               </div>
 
-              <!--
-                O que esperar, antes de clicar.
-
-                Sem esta linha o cliente conta itens: aplica trinta e espera
-                trinta vezes o resultado. Das 35 do catálogo, 7 tocam FPS de
-                forma mensurável e 17 são higiene de Windows que não muda FPS.
-                Dizer isso ANTES é o que separa este produto dos outros — e é
-                mais barato de sustentar do que a decepção depois.
-              -->
+              <!-- Das 35, 7 tocam FPS de forma mensurável e 17 são higiene: dizer ANTES do clique. -->
               <p class="expectativa" id="optimization-expectativa"></p>
 
-              <!--
-                AVISO DE HISTORICO ILEGIVEL.
-                Nasce escondido e so aparece quando o backend diz que nao
-                conseguiu ler o changes.json. Sem ele, a tela mostraria a lista
-                inteira como disponivel e o "Desfazer tudo" nao acharia nada -
-                identico a uma maquina limpa, sobre uma maquina que pode estar
-                cheia de mudancas aplicadas.
-              -->
+              <!-- Escondido até o backend dizer que não leu o changes.json: sem ele a tela pareceria uma máquina limpa. -->
               <p class="status warn" id="optimization-historico-aviso" hidden></p>
 
               <div class="row-actions">
@@ -1442,18 +960,7 @@
                 escolha item a item.
               </p>
 
-              <!--
-                ESTA LINHA EXISTE PORQUE O BOTÃO PASSOU A MEXER NO JOGO.
-
-                Mexer no arquivo do jogo do cliente é mais invasivo que mexer no
-                Windows, e ele tem que ler isso ANTES de clicar — não descobrir
-                depois, no registro ao vivo. A frase diz as três coisas que
-                importam: o que muda, que não muda a aparência, e que volta.
-
-                O "sem mudar a aparência" é o que justifica isto estar num botão
-                genérico. Os perfis que derrubam grama, sombra e reflexo mudam a
-                cara do jogo e continuam sendo escolha na aba Jogos.
-              -->
+              <!-- O botão passou a mexer no jogo: diz o que muda, que não muda a aparência, e que volta. -->
               <p class="hint">
                 Ele também <strong>tira o limite de quadros do seu jogo</strong> (VSync
                 e teto de FPS), que costuma ser o maior ganho isolado e não muda a
@@ -1462,9 +969,6 @@
                 isso não é feito — ele reescreve o arquivo ao fechar.
               </p>
 
-              <!-- Perfis: a pergunta certa não é "quer otimizar?", é "para que
-                   serve este PC?". Desligar a indexação de busca é ótimo num PC
-                   de jogos e péssimo num de escritório. -->
               <div class="profiles">
                 <p class="profiles-label">Para que serve este PC?</p>
                 <div class="profile-chips" id="profile-chips"></div>
@@ -1472,19 +976,8 @@
               </div>
 
               <!--
-                OS TRÊS NÍVEIS.
-
-                Os perfis acima respondem "para que serve este PC?". Estes
-                respondem a outra pergunta, e é a que faltava quando um cliente
-                aplicou tudo e o FPS dele caiu pela metade: "o que você aceita
-                trocar?".
-
-                As duas são independentes de propósito. O perfil diz ONDE mexer;
-                o nível diz ATÉ ONDE ir.
-
-                O Experimental não ganha botão de aplicar tudo — o backend manda
-                `aplica_de_uma_vez: false` e a tela obedece. Aplicar aqueles
-                ajustes juntos é exatamente o que causou o incidente.
+                Os níveis respondem "o que você aceita trocar?"; o perfil diz ONDE, o nível ATÉ ONDE. O Experimental não ganha
+                botão de aplicar tudo (aplica_de_uma_vez: false).
               -->
               <div class="profiles">
                 <p class="profiles-label">O que você aceita trocar?</p>
@@ -1494,22 +987,10 @@
 
               <p id="optimization-status" class="status"></p>
 
-              <!-- Registro ao vivo: o cliente vê cada mudança acontecendo, com o
-                   valor que existia antes.
-
-                   E A BARRA ABAIXO NÃO CONTRADIZ ISSO, apesar de este
-                   comentário já ter dito que o registro "é o oposto de uma
-                   barra de progresso".
-
-                   O que o produto recusa é a barra que anda sozinha, num ritmo
-                   inventado, escondendo o que está sendo feito — é a primeira
-                   coisa que o README acusa nos concorrentes. Esta anda por
-                   CONTAGEM: ela só avança quando um item termina de verdade, e
-                   o registro embaixo continua dizendo qual foi.
-
-                   É o elemento <progress> nativo, e isso é de propósito: ele
-                   não tem como ser estilizado para mentir sobre o próprio
-                   valor, e leitor de tela já sabe anunciá-lo. -->
+              <!--
+                A barra anda por CONTAGEM, só quando um item termina: não é a barra de ritmo inventado. <progress> nativo não
+                tem como mentir e o leitor de tela anuncia.
+              -->
               <div id="live-log" class="live-log" hidden>
                 <div class="live-log-head">
                   <span id="live-log-title">Aplicando</span>
@@ -1552,21 +1033,13 @@
                 <h2>Catálogo</h2>
                 <span class="panel-tag">por categoria</span>
               </div>
-              <!--
-                MODO EXPERT (2.9). O Simples mostra o que vale para esta máquina.
-                O Expert acrescenta o que pode render numa máquina e custar em
-                outra (agendamento de GPU, MSI, VBS, indexação) — sempre um a
-                um, nunca em lote. Qualquer elemento com data-so-expert segue
-                a mesma chave.
-              -->
+              <!-- Expert acrescenta o que rende numa máquina e custa em outra, sempre um a um. data-so-expert segue a mesma chave. -->
               <label class="modo-expert">
                 <input type="checkbox" id="modo-expert" />
                 <span><strong>Modo Expert</strong> — mostra os ajustes que dependem da máquina e pedem teste antes e depois.</span>
               </label>
               <div class="filters" id="filters"></div>
 
-              <!-- Busca: com 35 itens, rolar a lista atrás de um nome específico
-                   é o gesto mais repetido de quem usa isto todo dia. -->
               <div class="search">
                 <input type="search" id="optimization-search"
                        placeholder="Buscar por nome, efeito ou id…"
@@ -1581,20 +1054,8 @@
           </div>
         </section>
 
-        <!-- ======================================================== DIAGNÓSTICO -->
         <section class="tab-panel" id="tab-diagnostico" role="tabpanel" aria-labelledby="tabbtn-diagnostico" hidden>
-          <!--
-            O MONITOR, DESENHADO.
-
-            A taxa de atualização é o achado mais fácil de ignorar do produto:
-            "60 Hz num monitor que aceita 180" é uma frase que passa batida
-            porque não dói. Só que é a maior diferença de fluidez que existe num
-            PC, e a única que o cliente sente ANTES de abrir qualquer jogo.
-
-            Desenhado, o número fica na tela do monitor. E quando há dois, cada
-            um aparece com o seu — que é a informação que a frase sozinha nunca
-            conseguiu dar.
-          -->
+          <!-- Desenhado, o número fica na tela do monitor, e com dois cada um mostra o seu. -->
           <section class="panel monitores" id="monitores-painel">
             <div class="panel-head">
               <h2>Monitores</h2>
@@ -1606,19 +1067,7 @@
             </div>
           </section>
 
-          <!--
-            A MEMÓRIA, DESENHADA SLOT A SLOT.
-
-            Este é o desenho que mais explica neste produto. "Canal único" é
-            jargão: ninguém que não monta PC sabe o que significa, e a frase
-            sozinha some no meio do diagnóstico. Quatro encaixes com um ocupado
-            e três vazios não precisam de tradução — quem olha entende que falta
-            alguma coisa ali, mesmo sem saber o nome.
-
-            É também o achado mais valioso da máquina que motivou o produto: um
-            pente de 8 GB sozinho, em quatro slots. Metade da banda de memória
-            parada, e nenhum ajuste de software devolve isso.
-          -->
+          <!-- Quatro encaixes com um ocupado explicam "canal único" sem tradução. -->
           <section class="panel memoria" id="memoria-painel" data-estado="lendo">
             <div class="panel-head">
               <h2>Memória instalada</h2>
@@ -1628,14 +1077,13 @@
             <div class="memoria-corpo">
               <div class="memoria-arte" aria-hidden="true">
                 <svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg">
-                  <!-- A placa-mãe atrás, só para os slots terem onde morar -->
                   <rect class="memoria-placa" x="4" y="6" width="292" height="120" rx="6" />
                   <g class="memoria-trilhas">
                     <path d="M14 116 h60 M14 110 h48 M14 104 h72" />
                     <path d="M226 116 h60 M238 110 h48 M214 104 h72" />
                   </g>
 
-                  <!-- Os quatro encaixes. `data-slot` diz qual está ocupado. -->
+                  <!-- data-slot diz qual está ocupado. -->
                   <g id="memoria-slots"></g>
                 </svg>
               </div>
@@ -1656,19 +1104,7 @@
                 <h2>Achados desta máquina</h2>
                 <button id="run-diagnostic" class="btn btn-ghost">Analisar</button>
               </div>
-              <!--
-                Aqui havia uma nota de saúde de 0 a 100.
-
-                Ela foi removida na versão 0.13. O número não consultava nenhum
-                dos módulos que realmente medem esta máquina — nem a memória,
-                nem o disco, nem o firmware — e ainda assim era a coisa mais
-                visível da tela. Um cliente fotografa uma nota; ninguém
-                fotografa um parágrafo. Manter as duas coisas lado a lado
-                significava deixar a mais chamativa ser a menos verdadeira.
-
-                No lugar dela vai a lista de achados, cada um com o que foi
-                medido para sustentá-lo.
-              -->
+              <!-- No lugar da nota de 0 a 100 (removida na 0.13, não consultava nada), a lista de achados com o que foi medido. -->
               <div id="diagnostic-result" class="diagnostic">
                 <p class="empty">Rode a análise para ver todos os achados desta máquina.</p>
               </div>
@@ -1715,12 +1151,7 @@
             <p id="thermal-status" class="status"></p>
             <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador ou a placa de vídeo estão sendo limitados, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Com o jogo aberto a leitura da placa diz mais. Cerca de 5 segundos, e não altera nada."></div>
           </section>
-          <!--
-            MSI POR DISPOSITIVO (2.9, modo Expert). Só leitura: ligar MSI num
-            dispositivo cujo driver não aguenta trava o boot, e aí não há como
-            desfazer pelo Otimiza. A escrita continua só na placa de vídeo, no
-            item próprio do catálogo.
-          -->
+          <!-- Só leitura: ligar MSI num driver que não aguenta trava o boot. A escrita segue só na placa de vídeo. -->
           <section class="panel" data-so-expert hidden>
             <div class="panel-head">
               <h2>Interrupções por dispositivo (MSI)</h2>
@@ -1736,7 +1167,6 @@
             <div id="msi-resultado" class="resultado" data-vazio="Lista cada dispositivo PCI com driver e como ele avisa o processador: por mensagem (MSI) ou pela linha compartilhada. Só leitura."></div>
           </section>
 
-          <!-- DPC E INTERRUPÇÕES (2.9, modo Expert). Só leitura. -->
           <section class="panel" data-so-expert hidden>
             <div class="panel-head">
               <h2>Drivers prendendo o processador (DPC)</h2>
@@ -1752,8 +1182,6 @@
             <button id="dpc-medir" class="btn" data-custo="~10 s">Medir 10 s</button>
             <div id="dpc-resultado" class="resultado" data-vazio="Mostra, núcleo por núcleo, quanto do tempo foi para DPC e interrupção durante a medição. Diz qual núcleo, não qual driver. Só leitura."></div>
           </section>
-
-<!-- Rede e DNS: retirado na 2.9. DNS não participa dos pacotes da partida — não muda ping nem FPS. Ver naofazemos.rs (dns_para_ping). -->
 
 <section class="panel">
             <div class="panel-head">
@@ -1802,17 +1230,8 @@
           </section>
 
           <!--
-            OS EXAMES QUE JÁ RODARAM SOZINHOS
-
-            Estes quatro painéis não são exames novos: firmware, prontidão,
-            saúde e memória já foram medidos na abertura do programa, por
-            `veredito::coletar_rapido()`, e os achados deles estão na lista
-            acima. Clicar em "Analisar" aqui remede o que já foi medido.
-
-            Ficavam abertos ocupando quatro cartões inteiros, cada um com um
-            parágrafo de explicação, numa aba que já tinha nove. Continuam
-            inteiros e acessíveis — só deixaram de disputar a atenção com o
-            que a pessoa veio ver.
+            Firmware, prontidão, saúde e memória já rodaram na abertura (veredito::coletar_rapido()): fechados, para não
+            disputar atenção.
           -->
           <details class="exames-detalhados">
             <summary>
@@ -1899,11 +1318,6 @@
             <p id="memory-status" class="status"></p>
             <div id="memory-result" class="resultado" data-vazio="Lê a memória instalada, a prometida a programas e o pico de paginação desde que o PC ligou. Cerca de 3 segundos, e não altera nada."></div>
           </section>
-          <!--
-            O relatório sai daqui porque é isto que ele exporta: o levantamento
-            da máquina que está nesta aba, mais cada mudança aplicada com o
-            valor que existia antes.
-          -->
           <section class="panel">
             <div class="panel-head">
               <h2>Relatório para entregar ao cliente</h2>
@@ -1934,27 +1348,10 @@
 
           </details>
 
-
-        <!-- ============================================================== ESPAÇO -->
         <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
           <!--
-            A LIMPEZA, ITEM A ITEM.
-
-            Três coisas separam isto de um "limpador de PC":
-
-            1. CADA ITEM DIZ O QUE SE PERDE. "Cache de miniaturas · 29 MB" não
-               é informação suficiente para decidir; "as miniaturas são
-               redesenhadas na primeira vez que você abrir cada pasta" é.
-
-            2. TAMANHO AUSENTE NÃO É ZERO. Pasta que não abriu aparece como
-               "não deu para ler", e não como 0 B — que afirmaria que não há
-               nada ali e faria o técnico não tentar como administrador.
-
-            3. O QUE É DO CLIENTE NÃO VEM MARCADO. A lixeira é a única coisa
-               da lista com arquivo que ele criou, e apagá-la não tem volta.
-
-            É a única operação do produto sem Desfazer. Por isso ela mostra o
-            total antes, e apaga só o que estiver marcado.
+            Cada item diz o que se perde; tamanho ausente não é zero; o que é do cliente (a lixeira) não vem marcado. A única
+            operação sem Desfazer.
           -->
           <section class="panel" id="limpeza-painel">
             <div class="panel-head">
@@ -2052,24 +1449,8 @@
         </section>
 
         <!--
-          OS NÚCLEOS.
-
-          A área mais cheia de promessa vazia que existe, e por isso a tela
-          abre dizendo o que a afinidade NÃO faz:
-
-          - Não é ganho grátis. Tirar núcleos de um jogo que usa todos eles
-            REDUZ o que a máquina entrega. Prender só ajuda quando o jogo
-            estava nos núcleos errados.
-          - Não dura. Afinidade é propriedade do processo aberto: fechou o
-            jogo, acabou. Vender isso como ajuste permanente é vender uma
-            coisa que some sozinha.
-          - Empurrar programa de fundo para outro núcleo quase não faz nada no
-            Windows moderno. O escalonador já evita o núcleo ocupado.
-
-          O que SOBRA é real e é medível: em processador híbrido, um jogo que
-          cai nos núcleos de eficiência entrega muito menos quadro, e nada na
-          tela do Windows diz que foi isso. Num processador de núcleos iguais
-          — que é a maioria — esta tela diz que não há o que fazer.
+          O que a afinidade NÃO faz: não é ganho grátis, não dura, e empurrar programa de fundo quase não faz nada. O real:
+          jogo caído nos núcleos de eficiência de um híbrido. Com núcleos iguais, diz que não há o que fazer.
         -->
         <section class="tab-panel" id="tab-nucleos" role="tabpanel"
                  aria-labelledby="tabbtn-nucleos" hidden>
@@ -2087,12 +1468,7 @@
 
             <p class="lead" id="nucleos-conselho">—</p>
 
-            <!--
-              A MATRIZ. Um quadrado por núcleo lógico, com a classe na cor.
-              Os irmãos de SMT — dois lógicos no mesmo núcleo físico —
-              aparecem colados, porque prender o jogo em um e não no irmão é
-              um erro que a matriz precisa deixar visível.
-            -->
+            <!-- Os irmãos de SMT colados: prender o jogo em um e não no irmão é erro que precisa aparecer. -->
             <div class="nucleos-matriz" id="nucleos-matriz"></div>
 
             <div class="nucleos-legenda" id="nucleos-legenda"></div>
@@ -2116,12 +1492,7 @@
 
             <p id="nucleos-status" class="status"></p>
 
-            <!--
-              AUTO CPU SET (2.9). Não se sabe de antemão se o jogo rende mais
-              só nos núcleos de desempenho ou em todos: o teste mede os dois,
-              alternando, e fica com o que rendeu. Empate volta para todos.
-              A escolha fica guardada e é reaplicada quando o jogo abrir.
-            -->
+            <!-- Mede os dois, alternando, e fica com o que rendeu; empate volta para todos. -->
             <div class="row-actions">
               <button id="cpuset-testar" class="btn" data-custo="~1 min" disabled>Testar e decidir (1 minuto)</button>
             </div>
@@ -2130,19 +1501,7 @@
           </section>
         </section>
 
-        <!--
-          OS PROGRAMAS.
-
-          O Otimiza NÃO hospeda instalador nenhum, não baixa binário de
-          endereço escolhido por nós, e não tem cópia de programa de terceiro
-          dentro do instalador. Quem instala é o winget, o gerenciador de
-          pacotes do próprio Windows: o pacote vem da fonte oficial do
-          fabricante, e a conta de "de onde veio este .exe" é da Microsoft.
-
-          Um otimizador que baixa executável de um servidor próprio é
-          indistinguível de um que entrega vírus, e o cliente não tem como
-          saber a diferença antes de rodar.
-        -->
+        <!-- Quem instala é o winget, da fonte oficial: o Otimiza não hospeda nem baixa executável de endereço próprio. -->
         <section class="tab-panel" id="tab-programas" role="tabpanel"
                  aria-labelledby="tabbtn-programas" hidden>
           <header class="abertura">
@@ -2154,14 +1513,7 @@
             </p>
           </header>
 
-          <!--
-            O ESTADO DO INSTALADOR FICA NO ALTO, E NÃO ESCONDIDO.
-
-            O winget pode não existir — Windows "lite", debloat agressivo e
-            Loja removida deixam esse estado, e é o perfil do cliente que mais
-            precisa desta lista. Sem ele a aba não some nem quebra: ela lista,
-            diz o que já está instalado, e diz o que falta para instalar daqui.
-          -->
+          <!-- Sem winget (Windows lite, Loja removida) a aba lista e diz o que falta para instalar daqui. -->
           <p class="panel-note" id="programas-winget"></p>
 
           <section class="panel">
@@ -2188,17 +1540,8 @@
         </section>
 
         <!--
-          A PLACA DE VÍDEO TEM ABA PRÓPRIA.
-
-          Os ajustes de driver estavam no meio da aba Jogos, entre a
-          configuração do jogo e o cache de shader. São coisas diferentes: um
-          é o que o JOGO pede, o outro é o que o DRIVER faz com todos os jogos.
-
-          A DIVISÃO DA TELA É A DIVISÃO DA RESPONSABILIDADE. À esquerda, os
-          ajustes um a um, cada um com o que ele faz escrito. À direita, os
-          perfis, que são combinações desses MESMOS ajustes — e não outra
-          coisa. Um perfil que ligasse algo que não está na lista da esquerda
-          seria um botão que o cliente não tem como conferir.
+          O que o JOGO pede e o que o DRIVER faz com todos. À esquerda os ajustes; à direita perfis que são combinações
+          desses MESMOS ajustes.
         -->
         <section class="tab-panel" id="tab-gpu" role="tabpanel"
                  aria-labelledby="tabbtn-gpu" hidden>
@@ -2214,15 +1557,7 @@
             </div>
           </header>
 
-          <!--
-            AS DUAS ABAS DE FABRICANTE, E A HONESTIDADE DE UMA DELAS.
-
-            A AMD aparece DESLIGADA e dizendo por quê. É recomendação literal
-            do estudo que decidiu este pilar: "entrar com a NVIDIA e dizer na
-            tela que a AMD ainda não é coberta, em vez de fazer meia coisa nas
-            duas". Cliente com Radeon lê "ainda não cobrimos sua placa" — e
-            não uma tela vazia, que ele leria como programa quebrado.
-          -->
+          <!-- A AMD aparece desligada, dizendo que ainda não é coberta. -->
           <div class="gpu-marcas" role="tablist" aria-label="Fabricante da placa">
             <button class="gpu-marca" role="tab" data-marca="nvidia" aria-selected="true">
               NVIDIA
@@ -2236,16 +1571,8 @@
           <div class="gpu-colunas">
             <div class="gpu-coluna">
           <!--
-            OS AJUSTES DO DRIVER NVIDIA.
-
-            O motor (`nvdriver.rs`) existia desde a 1.9 com o desfazer e sem o
-            fazer: seis ajustes documentados pela NVIDIA, cada um conferido
-            pelo nome no próprio driver antes de escrever, e cada um com volta
-            ao padrão de fábrica. Isto é a tela.
-
-            Sem placa NVIDIA o painel aparece do mesmo jeito, com a frase que
-            diz que a placa ainda não é coberta — tela vazia seria lida como
-            programa quebrado.
+            Seis ajustes documentados pela NVIDIA, conferidos pelo nome no driver, com volta ao padrão (nvdriver.rs). Sem
+            NVIDIA, a frase que diz isso.
           -->
           <section class="panel" id="nvdriver-painel">
             <div class="panel-head">
@@ -2256,14 +1583,7 @@
             <p class="panel-note" id="nvdriver-nota"></p>
             <div id="nvdriver-lista"></div>
 
-            <!--
-              O LIMITE DE FPS FICA NO PERFIL DO JOGO, NUNCA NO GLOBAL.
-
-              Um limite global prenderia a área de trabalho e todo outro jogo no
-              mesmo número. O executável é o do jogo aberto, pelo mesmo detector
-              de quatro sinais da prova de FPS: pedir o nome do arquivo à pessoa
-              seria fazê-la adivinhar "FiveM_b3258_GTAProcess.exe".
-            -->
+            <!-- No perfil do jogo, nunca no global. O executável vem do detector de quatro sinais. -->
             <div class="nvlimite" id="nvlimite" hidden>
               <h3 class="nvlimite-titulo">Limite de FPS por jogo</h3>
               <p class="panel-note" id="nvlimite-nota">
@@ -2304,18 +1624,7 @@
           </section>
             </div>
 
-            <!--
-              OS PERFIS SÃO COMBINAÇÕES DOS AJUSTES DA ESQUERDA.
-
-              Três, e não sete. A referência que inspirou esta tela tem sete —
-              "Básico", "Casual", "FPS", "FPS 2.0", "Avançado" —, e sobre cinco
-              opções de liga-desliga sete perfis não são sete respostas: são
-              sete nomes para três. Nome a mais é promessa a mais.
-
-              Cada perfil LISTA o que liga. É o que permite o cliente conferir
-              que o botão grande não faz nada além do que os interruptores do
-              lado fazem — e desfazer um a um se quiser.
-            -->
+            <!-- Três perfis, não sete; cada um LISTA o que liga. -->
             <div class="gpu-coluna">
               <section class="panel" id="gpu-perfis-painel">
                 <div class="panel-head">
@@ -2336,17 +1645,7 @@
         </section>
 
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
-          <!--
-            EM QUE DISCO O JOGO ESTÁ.
-
-            Veio de um cliente com SSD de 224 GB e HD de 466 GB pegando 15 a 20
-            FPS no FiveM, "dependendo de onde eu fico". Num PC assim o jogo quase
-            sempre foi parar no HD, porque foi onde coube — e nenhum ajuste de
-            registro conserta um disco de prato entregando textura no meio da rua.
-
-            O produto só LÊ e conta. Mover são dezenas de gigabytes e um caminho
-            que outros programas conhecem: é decisão e trabalho do dono da máquina.
-          -->
+          <!-- SSD pequeno e HD grande: o jogo foi parar no HD. Só lê: mover é decisão do dono. -->
           <section class="panel" id="disco-do-jogo-painel" hidden>
             <header class="panel-head">
               <h2>Onde os seus jogos estão instalados</h2>
@@ -2355,30 +1654,12 @@
           </section>
 
           <!--
-            A PLACA DE VÍDEO, DESENHADA.
-
-            O concorrente pede para a pessoa ESCOLHER entre AMD e NVIDIA. Isso é
-            um passo para trás: o Otimiza já lê a placa, o driver e a memória de
-            vídeo — perguntar o que o produto já sabe é fazer o cliente trabalhar
-            de graça, e ainda arrisca ele escolher errado.
-
-            Então aqui não há escolha: há reconhecimento. A placa aparece
-            desenhada, com o nome dela e a cor do fabricante. A escolha manual só
-            existe quando a detecção falha, que é quando ela realmente ajuda.
-
-            O desenho é SVG inline, e isso não é detalhe: o produto não busca
-            imagem na internet e não carrega arquivo externo. São vinte linhas de
-            geometria que escalam em qualquer tela e mudam de cor com o
-            fabricante.
-
+            Reconhecimento, não escolha: o Otimiza já lê placa, driver e memória. SVG inline, nada baixado. A escolha manual
+            só quando a detecção falha.
           -->
           <section class="panel placa" id="placa-painel" data-marca="desconhecida">
             <div class="placa-arte" aria-hidden="true">
               <svg viewBox="0 0 330 152" xmlns="http://www.w3.org/2000/svg">
-                <!--
-                  A placa vista de frente, um pouco de cima. Tudo em geometria:
-                  nenhuma imagem, nada baixado, e escala em qualquer tela.
-                -->
 
                 <!-- A chapa traseira, deslocada, que dá a espessura -->
                 <rect class="placa-tras" x="28" y="30" width="292" height="92" rx="7" />
@@ -2482,18 +1763,8 @@
                 <div><dt>Memória de vídeo</dt><dd id="placa-vram">—</dd></div>
               </dl>
 
-              <!--
-                Nasce escondido. Só aparece quando a leitura falha — e aí a
-                escolha manual deixa de ser trabalho inútil e passa a ser a
-                única saída.
-              -->
-              <!--
-                DRIVER (2.9). Sem "mais novo é mais rápido": driver novo às
-                vezes melhora um jogo e piora outro. O Otimiza mostra o que
-                está instalado, avisa quando é o genérico do Windows (aí muda
-                FPS de verdade) e aponta a página do fabricante. Não instala
-                nada: instalador de terceiros não tem desfazer confiável.
-              -->
+              <!-- Só quando a leitura falha. -->
+              <!-- Mostra o instalado, avisa quando é o genérico do Windows e aponta o fabricante; não instala nada. -->
               <p class="hint" id="placa-driver-nota"></p>
               <div class="row-actions"><button class="btn btn-ghost" id="placa-driver-site" hidden>Página de drivers do fabricante</button></div>
 
@@ -2509,25 +1780,8 @@
           </section>
 
           <!--
-            QUAL PLACA CADA JOGO USA — o maior ganho que este produto tem.
-
-            Notebook de jogo tem duas placas: a integrada, que gasta pouco e
-            desenha pouco, e a dedicada, que é a placa de verdade. O Windows
-            escolhe qual usar por jogo, e às vezes escolhe errado — o jogo abre
-            na integrada e roda a uma fração do que a máquina consegue.
-
-            O cliente não tem como perceber. O jogo abre, roda mal, e ele
-            conclui que o PC é fraco. Muitas vezes não é: é a placa boa parada
-            do lado. Quando o Otimiza acerta esse caso, o ganho é de duas a
-            cinco vezes — mais do que todo o resto do catálogo somado.
-
-            O motor disso existe desde antes da 1.9, testado e reversível, e
-            NÃO TINHA TELA NENHUMA: o diagnóstico acusava o problema como
-            crítico e o cliente não tinha onde clicar.
-
-            NASCE ESCONDIDO. Em máquina de uma placa só o ganho é exatamente
-            zero, e um painel dizendo "nada a fazer aqui" seria ocupar espaço
-            para não oferecer nada.
+            Notebook com duas placas: o jogo na integrada roda a uma fração. O maior ganho do produto. Escondido com uma
+            placa só.
           -->
           <section class="panel" id="gpupref-painel" hidden>
             <div class="panel-head">
@@ -2540,16 +1794,7 @@
             <p class="hint" id="gpupref-rodape" hidden></p>
           </section>
 
-
-          <!--
-            O PAINEL DA CONFIGURAÇÃO DO JOGO VEM PRIMEIRO NA ABA.
-
-            A ordem aqui não é estética: é a hierarquia do ganho, medida.
-            Uma configuração de jogo mal escolhida custa dezenas de por cento;
-            os quarenta e dois ajustes de Windows deste produto, somados, valem
-            alguns. Pôr a limpeza de cache antes disto seria pôr o menor ganho
-            na frente do maior porque ele existe há mais tempo.
-          -->
+          <!-- Primeiro na aba: a configuração do jogo vale dezenas de por cento; os ajustes de Windows somados, alguns. -->
           <section class="panel">
             <div class="panel-head">
               <h2>Configuração do jogo</h2>
@@ -2580,19 +1825,7 @@
               arquivo ao sair, apagando o que fizermos agora.
             </p>
 
-            <!--
-              OS TRÊS BOTÕES ABAIXO SÃO A PERGUNTA ERRADA FEITA AO CLIENTE.
-
-              Ele não tem como saber qual dos três o problema DELE pede — e em
-              boa parte dos casos a resposta certa é nenhum: num jogo preso no
-              processador, baixar configuração gráfica tira trabalho da placa,
-              que já estava sobrando. O jogo fica feio e o número não sai do
-              lugar.
-
-              "Qual o meu caso pede" responde a partir do que foi medido, e
-              responde "nenhum" quando é o caso. É a regra do produto — nenhum
-              ajuste genérico antes de classificar o gargalo — virando botão.
-            -->
+            <!-- "Qual o meu caso pede" responde pelo que foi medido, inclusive "nenhum". -->
             <div class="row-actions">
               <button id="cfgjogo-analisar" class="btn" data-custo="~1 s">Analisar</button>
               <button id="cfgjogo-plano" class="btn" data-custo="~3 s">Qual o meu caso pede?</button>
@@ -2607,13 +1840,7 @@
             <div id="cfgjogo-result" class="resultado" data-vazio="Lê a configuração do jogo instalado e mostra o que está pesando. Nada é alterado sem você confirmar o que vai mudar."></div>
           </section>
 
-          <!--
-            A PROVA.
-
-            O concorrente vende "até +300 FPS" e empurra a medição para o
-            cliente. Este painel mede sozinho, nos dois momentos, e diz o número
-            — inclusive quando ele não mudou, e inclusive quando piorou.
-          -->
+          <!-- Mede sozinho antes e depois e diz o número, inclusive quando não mudou ou piorou. -->
           <section class="panel">
             <div class="panel-head">
               <h2>Antes e depois, medido</h2>
@@ -2636,17 +1863,7 @@
             </p>
 
             <div class="row-actions">
-              <!--
-                SEM VALOR CHUMBADO. Até a 1.8 este campo nascia com "FiveM"
-                escrito, e o cliente que joga outra coisa precisava apagar e
-                digitar o nome do processo — uma informação que a maioria das
-                pessoas não sabe onde ver.
-
-                O Otimiza tem um detector de jogo por quatro sinais desde a
-                0.13, construído justamente porque lista de nomes não servia.
-                Ele preenche isto sozinho, e o campo continua editável para o
-                caso de o detector não achar.
-              -->
+              <!-- Sem valor chumbado: o detector preenche, e o campo continua editável. -->
               <input id="prova-processo" class="campo-inline" type="text"
                      placeholder="abra o jogo e clique em Medir" spellcheck="false"
                      aria-label="Nome do processo do jogo" />
@@ -2657,30 +1874,13 @@
             <p id="prova-status" class="status"></p>
             <div id="prova-result" class="resultado" data-vazio="Nenhuma medição guardada. Abra o jogo, entre numa partida, e meça."></div>
 
-            <!--
-              O QUE O VIGIA MEDIU SOZINHO, DURANTE AS PARTIDAS.
-
-              Lado a lado e sem conclusão: cada linha foi medida num lugar
-              diferente do jogo, e dizer "subiu" comparando duas delas seria
-              fabricar a prova que este painel se recusa a fabricar.
-            -->
+            <!-- Lado a lado e sem conclusão: cada linha foi medida num lugar diferente do jogo. -->
             <div id="prova-automaticas" class="resultado" hidden></div>
           </section>
 
           <!--
-            O PROTOCOLO A/B — UM GRUPO DE CADA VEZ.
-
-            Nasceu do cliente que aplicou tudo e caiu de 200 para 80-120 FPS.
-            Nem ele nem nós tínhamos como saber QUAL dos vinte ajustes fez isso,
-            e a investigação levou dias.
-
-            Com o catálogo em nove grupos, a pergunta deixa de ser "o Otimiza
-            piorou meu PC?" e vira "qual destes nove grupos piorou meu PC?" — e
-            essa segunda se responde com quatro medições.
-
-            Os grupos aparecem TODOS, inclusive os que já foram testados e não
-            mudaram nada: "aqui não rende" é a resposta que deixa a pessoa parar
-            de mexer naquilo, e escondê-la faria o teste ser refeito para sempre.
+            Um grupo de cada vez: "qual destes nove grupos piorou meu PC?" se responde com quatro medições. Todos aparecem,
+            inclusive os que não mudaram nada.
           -->
           <section class="panel" id="protocolo-painel">
             <header class="panel-head">
@@ -2794,19 +1994,8 @@
           </section>
 
           <!--
-            LABORATÓRIO DE STREAMING DE ASSETS.
-
-            "O jogo trava quando eu ando pelo mapa" é a reclamação mais comum
-            que existe, e a resposta padrão da internet é "instala no SSD". Às
-            vezes é isso. Muitas vezes não é, e a pessoa passa uma tarde movendo
-            oitenta gigabytes para continuar travando igual.
-
-            Este laboratório não conclui pela configuração. Saber que o jogo
-            está num HD é um fato, não um diagnóstico: o que prova é o INSTANTE
-            dos trancos batendo com atividade de disco. E, quando bate, ainda há
-            três causas diferentes por trás do mesmo gráfico — memória trocando
-            página, asset vindo de mídia lenta, e outra coisa mexendo no disco.
-            Só uma delas se resolve movendo o jogo.
+            Não conclui pela configuração: prova pelo INSTANTE dos trancos com o disco, e separa três causas; só uma se
+            resolve movendo o jogo.
           -->
           <section class="panel">
             <div class="panel-head">
@@ -2963,13 +2152,7 @@
             </p>
 
             <div class="row-actions">
-              <!--
-                MESMO CONSERTO DO CAMPO DA PROVA, NA 1.9.
-
-                Este nascia com "FiveM" escrito. Quem joga outra coisa tinha de
-                apagar aquilo e digitar o nome de um executavel — e o programa
-                sabe descobrir isso sozinho, por quatro sinais, desde a 0.13.
-              -->
+              <!-- Sem "FiveM" chumbado: o detector preenche. -->
               <input type="text" id="fps-process" class="fps-input"
                      placeholder="abra o jogo e clique em Analisar"
                      autocomplete="off" spellcheck="false" />
@@ -2981,24 +2164,9 @@
           </section>
         </section>
 
-        <!-- ============================================================= SISTEMA -->
         <section class="tab-panel" id="tab-sistema" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
 
-          <!--
-            TRÊS CARTÕES QUE ERAM A MESMA PERGUNTA
-
-            Inicialização, Tarefas agendadas e Serviços viviam como três painéis
-            lado a lado, cada um com o seu próprio título, o seu próprio texto e
-            a sua própria contagem. E o texto do painel de Serviços já dizia, em
-            voz alta, que eram a mesma coisa: "é a terceira perna do problema,
-            junto com inicialização e tarefas agendadas".
-
-            Três respostas para uma pergunta só, apresentadas como três
-            assuntos, obrigam o cliente a fazer sozinho a soma que o produto já
-            sabia fazer. Agora é um painel com a pergunta no título e três
-            guias — e a contagem de cada uma fica na própria guia, então dá para
-            ver onde está o peso sem abrir nenhuma.
-          -->
+          <!-- Inicialização, tarefas e serviços são a mesma pergunta: um painel com três guias, a contagem em cada guia. -->
           <section class="panel">
             <div class="panel-head">
               <h2>O que sobe junto com o Windows</h2>
@@ -3130,15 +2298,7 @@
               <label class="pref">
                 <input type="checkbox" id="pref-gamemode" />
                 <span>Ligar o modo jogo sozinho quando um jogo abrir</span>
-                <!--
-                  ATÉ A 1.9 ESTA OPÇÃO TAMBÉM CONGELAVA PROGRAMAS, E ISSO SAIU.
-                  Quando um jogo abria, o Discord, o navegador e o Spotify eram
-                  suspensos para sobrar memória. Foi o que mais machucou cliente:
-                  o Explorador parou de abrir (1.1.1), a Steam congelou (1.1.2),
-                  e houve quem escrevesse dizendo que os programas não abriam
-                  mais. Na 2.0 o congelamento saiu do produto inteiro. Este texto
-                  diz só o que a opção faz hoje.
-                -->
+                <!-- O congelamento saiu na 2.0; este texto diz só o que a opção faz hoje. -->
                 <span class="pref-note">
                   Desligado por padrão. Quando um jogo abre, o Otimiza liga o
                   plano de alto desempenho e dá prioridade ao jogo no
@@ -3239,23 +2399,8 @@
           </section>
 
           <!--
-            O RELATÓRIO DE COMPATIBILIDADE, AO LADO DO DE ATENDIMENTO E NÃO
-            DENTRO DELE.
-
-            São artefatos parecidos — os dois o cliente manda — e servem a
-            coisas diferentes. O de cima cabe numa mensagem e responde "o que
-            está acontecendo neste PC agora". Este é longo de propósito e
-            responde "esta MÁQUINA aceitou o que o Otimiza faz?", no formato de
-            laboratório que o projeto usa para registrar classe de hardware.
-
-            POR QUE ELE EXISTE. O produto é desenvolvido num único computador:
-            um desktop Intel com Windows 10 e placa NVIDIA. Notebook, AMD,
-            Windows 11, processador híbrido — nada disso pode ser testado aqui.
-            Quem tem essas máquinas é quem comprou. Cada cliente que manda este
-            relatório fecha um buraco que nenhum commit fecha sozinho.
-
-            Fica junto do atendimento porque é aí que o cliente chega quando
-            algo não funcionou, que é exatamente a hora em que o relatório vale.
+            Ao lado do de atendimento: este responde se esta MÁQUINA aceitou o que o Otimiza faz, no formato do laboratório.
+            As máquinas que não temos são as dos clientes.
           -->
           <section class="panel">
             <div class="panel-head">
@@ -3286,21 +2431,11 @@
           </section>
         </section>
 
-        <!-- ============================================================== BIOS -->
         <section class="tab-panel" id="tab-bios" role="tabpanel" aria-labelledby="tabbtn-bios" hidden>
-          <!-- Montada por `src/bios.ts` ao abrir a aba: a leitura passa pelo PowerShell. -->
           <div id="bios-aba" class="fg"></div>
           <!--
-            O PASSO A PASSO DA BIOS.
-
-            Este painel NÃO tem botão, e é a decisão central dele: o Windows não
-            altera firmware de PC de mesa, e uma ferramenta que encontrasse um
-            jeito de fazer isso seria uma ferramenta capaz de deixar a máquina do
-            cliente sem ligar.
-
-            O que ele faz é montar a lista do que vale olhar EM ORDEM DE RISCO,
-            com o modelo da placa-mãe ao lado — porque com esse dado a pessoa
-            acha o manual certo em vez de seguir um vídeo de outra placa.
+            Sem botão: o Otimiza não altera firmware. Lista em ordem de risco, com o modelo da placa-mãe para achar o manual
+            certo.
           -->
           <details class="panel" id="bios-painel" open>
             <summary class="panel-head-resumo">
@@ -3310,55 +2445,23 @@
           </details>
         </section>
 
-        <!-- ================================================= MOTOR DE ENERGIA -->
         <section class="tab-panel" id="tab-energia" role="tabpanel" aria-labelledby="tabbtn-energia" hidden>
-          <!--
-            Montado por `src/energia.ts` ao abrir a aba: a leitura passa pelo
-            PowerShell e pelo `powercfg`, e não pode entrar na abertura.
-          -->
           <div id="energia-motor" class="fg"></div>
         </section>
 
-        <!-- ================================================ GERAÇÃO DE QUADROS -->
         <section class="tab-panel" id="tab-framegen" role="tabpanel" aria-labelledby="tabbtn-framegen" hidden>
-          <!--
-            O laboratório é montado por `src/framegen.ts` ao abrir a aba. Ele
-            mede e compara; quem liga a geração é a pessoa, no jogo ou no driver.
-          -->
           <div id="framegen-lab" class="fg"></div>
         </section>
 
-        <!-- ============================================================ REPARO -->
         <section class="tab-panel" id="tab-reparo" role="tabpanel" aria-labelledby="tabbtn-reparo" hidden>
-          <!--
-            A ABA DE REPARO.
-
-            Ela existe separada do catálogo porque aqui NÃO EXISTE DESFAZER — e não
-            por descuido: estas ferramentas não mudam ajuste nenhum, elas devolvem
-            um arquivo do sistema danificado ao original. Não há valor anterior a
-            guardar, e desfazer significaria recorromper de propósito.
-
-            O aviso disso vem ANTES da lista de ferramentas, e antes de qualquer
-            botão — é a única forma de garantir que o cliente leia antes de clicar,
-            e não depois de já ter clicado.
-          -->
+          <!-- Sem desfazer: estas ferramentas devolvem arquivo danificado ao original. O aviso vem antes de qualquer botão. -->
           <section class="panel">
             <div class="panel-head">
               <h2>Reparo do Windows</h2>
               <span class="panel-tag" id="reparo-tag">—</span>
             </div>
 
-            <!--
-              A LEGENDA NAO E ENFEITE.
-
-              Esta linha mostra o veredito do `sfc`, lido do CBS.log — e so
-              dele. Sem legenda, um cliente que acabou de rodar "Reparar a
-              imagem do Windows" e viu o DISM falhar lia o verde de "Nenhuma
-              corrupcao encontrada" logo acima como se fosse o resultado do que
-              ele tinha acabado de fazer. A legenda diz de que verificacao a
-              linha esta falando; a tela so a repinta depois do
-              `VerificarArquivos`.
-            -->
+            <!-- A legenda diz que a linha é o veredito do sfc, e só dele: depois de um DISM falho, o verde parecia o resultado. -->
             <p class="reparo-resultado-legenda">Última verificação de arquivos do sistema:</p>
             <p class="status" id="reparo-resultado">Lendo o registro do Windows…</p>
 
@@ -3383,10 +2486,7 @@
         </div>
       </div>
 
-      <!--
-        Paleta de comandos. Ctrl K abre de qualquer lugar.
-        Fica fora do corpo porque cobre a tela toda.
-      -->
+      <!-- Fora do corpo: cobre a tela toda. -->
       <div class="comandos" id="comandos" hidden>
         <div class="comandos-caixa" role="dialog" aria-modal="true" aria-label="Buscar ação">
           <input type="text" id="comandos-busca" class="comandos-busca"
@@ -3404,28 +2504,13 @@
           <span id="status-left">Otimiza · tudo roda no seu PC</span>
         </span>
 
-        <!--
-          FICA NO RODAPÉ PORQUE O RODAPÉ NÃO SOME.
-
-          A mensagem de entrega com o tutorial é lida uma vez, no dia da
-          compra. Quem fica confuso semanas depois não volta a ela — mas está
-          com o programa aberto, em alguma aba. O rodapé é a única faixa
-          visível em qualquer uma delas, então é aqui que o link precisa
-          morar para valer três semanas depois e não só no primeiro dia.
-        -->
+        <!-- No rodapé, que não some: quem fica confuso semanas depois está com o programa aberto. -->
         <a class="statusbar-tutorial" id="statusbar-tutorial" href="#"
            target="_blank" rel="noreferrer">
           Tutorial em vídeo
         </a>
 
-        <!--
-          O CAMINHO ATÉ O SUPORTE, PELO MESMO MOTIVO DO TUTORIAL AO LADO.
-          E por um segundo, que só apareceu quando alguém foi procurar: até a
-          1.7 o endereço do Discord existia num único ponto do programa —
-          dentro do portão de ativação. O portão some quando a licença é
-          aceita. Ou seja, o cliente que PAGOU era exatamente quem ficava sem
-          nenhum caminho até o dono, de dentro do produto.
-        -->
+        <!-- O Discord só existia no portão, que some depois da ativação: quem pagou ficava sem caminho até o dono. -->
         <a class="statusbar-tutorial" id="statusbar-suporte" href="#"
            target="_blank" rel="noreferrer">
           Falar com o suporte
@@ -3435,8 +2520,6 @@
       </footer>
     </div>
 
-    <!-- Pedido de elevação. O Windows só concede privilégio a um processo novo,
-         então a única saída honesta é avisar e reabrir com a permissão do usuário. -->
     <div class="modal" id="admin-modal" hidden>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <div class="brand-logo modal-logo" aria-hidden="true"></div>
@@ -3456,15 +2539,10 @@
       </div>
     </div>
 
-    <!-- Serviços essenciais desligados antes do clique.
-
-         Nasceu do PC do dono, em 10 e 11/09/2026: um Windows "lite" com o Plug
-         and Play, as licenças da Loja e o Gerente de Contas de Segurança
-         desligados, onde clicar em "Otimizar agora" foi seguido de "os
-         programas não abriam". Com esses serviços desligados, programa trava
-         com ou sem otimização, e o cliente precisa saber disso ANTES do
-         clique. Sem fechar ao clicar fora: é uma decisão, não um aviso de
-         passagem. -->
+    <!--
+      Serviços essenciais desligados antes do clique (Windows lite do dono, 10 e 11/09/2026). Não fecha ao clicar fora:
+      é uma decisão.
+    -->
     <div class="modal" id="essenciais-modal" hidden>
       <div class="modal-card modal-card-largo" role="dialog" aria-modal="true" aria-labelledby="essenciais-titulo">
         <h2 id="essenciais-titulo">Serviços essenciais desligados</h2>
