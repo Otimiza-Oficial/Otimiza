@@ -1,29 +1,6 @@
-// Rede
-//
-// Esta é a área do mercado com mais promessa falsa por metro quadrado. Quase
-// todo otimizador vende "reduzir ping", e é preciso dizer com todas as letras:
-// ping é distância física mais roteamento. Nenhum ajuste no PC do cliente
-// encurta o cabo até o servidor. Quem promete isso está mentindo, e o produto
-// não vai entrar nessa fila.
-//
-// O QUE REALMENTE EXISTE, E O QUE CADA COISA FAZ
-//
-// Trocar o servidor de DNS acelera a RESOLUÇÃO DE NOMES: o tempo entre pedir
-// "servidor-de-rp.com" e receber o endereço numérico. Isso aparece em carregar
-// página, em abrir lista de servidores e em baixar arquivo. NÃO aparece no ping
-// dentro do jogo, porque depois de conectado a conversa é direta com o IP e o
-// DNS não participa mais.
-//
-// Limpar o cache de DNS resolve um caso específico e real — endereço que mudou
-// e o PC continua indo no antigo — e fora dele não faz nada. É inofensivo e
-// quase sempre inútil, e o produto diz isso.
-//
-// A DECISÃO QUE DEFINE O MÓDULO
-//
-// Em vez de afirmar que um DNS é mais rápido, ele MEDE. Faz consultas reais aos
-// servidores candidatos, cronometra cada uma e mostra os números lado a lado.
-// Se o DNS que o cliente já usa for o mais rápido, é isso que aparece na tela —
-// inclusive quando isso significa não ter nada a vender.
+// Rede. Ping é distância mais roteamento: nenhum ajuste no PC encurta o cabo até o servidor. Trocar o DNS
+// acelera a resolução de nomes (lista de servidores, páginas), não o ping dentro do jogo. Por isso o módulo MEDE os
+// DNS lado a lado, e diz quando o atual já é o melhor.
 
 use super::{registry, shell};
 use crate::modules::changelog::ChangeRecord;
@@ -31,11 +8,7 @@ use serde::{Deserialize, Serialize};
 
 const INTERFACES: &str = r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces";
 
-/// Servidores públicos medidos, além do que a máquina já usa.
-///
-/// Só resolvedores grandes e conhecidos, com política de privacidade pública.
-/// A lista é curta de propósito: cada entrada é uma consulta a mais na medição,
-/// e mais opção não deixa a escolha melhor.
+/// Só resolvedores grandes, com política de privacidade pública. Lista curta: cada um é uma consulta a mais.
 pub const CANDIDATOS: &[(&str, &str, &str)] = &[
     (
         "cloudflare",
@@ -51,12 +24,9 @@ pub struct DnsMeasurement {
     pub id: String,
     pub name: String,
     pub servers: String,
-    /// Mediana do tempo de resposta, em milissegundos.
     pub median_ms: Option<f64>,
-    /// Quantas consultas falharam. Servidor bloqueado pela operadora aparece
-    /// aqui, e não como "lento".
+    /// Servidor bloqueado pela operadora aparece aqui, e não como "lento".
     pub failures: usize,
-    /// Se este é o que a máquina usa agora.
     pub current: bool,
 }
 
@@ -64,7 +34,7 @@ pub struct DnsMeasurement {
 pub struct Adapter {
     pub guid: String,
     pub name: String,
-    /// Vazio quando o endereço vem do roteador automaticamente.
+    /// Vazio quando o endereço vem do roteador.
     pub dns: String,
     pub automatic: bool,
 }
@@ -73,13 +43,9 @@ pub struct Adapter {
 pub struct NetworkReport {
     pub adapters: Vec<Adapter>,
     pub measurements: Vec<DnsMeasurement>,
-    /// Ganho da melhor opção contra o que está em uso, em milissegundos.
-    /// `None` quando não dá para comparar.
     pub gain_ms: Option<f64>,
     pub note: String,
 }
-
-// ------------------------------------------------------------- adaptadores
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -88,11 +54,7 @@ struct RawAdapter {
     interface_guid: Option<String>,
 }
 
-/// Adaptadores de rede fisicamente presentes e ligados.
-///
-/// O filtro por `ComponentId` começando em `pci\` ou `usb\` já foi necessário
-/// antes neste projeto: sem ele entram WAN Miniport, adaptadores do Hyper-V e
-/// o depurador de kernel, que não são placas de rede de ninguém.
+/// `ComponentId` em `pci\` ou `usb\`: senão entram WAN Miniport, Hyper-V e o depurador de kernel.
 fn adaptadores() -> Vec<RawAdapter> {
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-NetAdapter \
                   -Physical -ErrorAction SilentlyContinue | \
@@ -106,10 +68,7 @@ fn adaptadores() -> Vec<RawAdapter> {
         .unwrap_or_default()
 }
 
-/// DNS configurado à mão para um adaptador, lido do registro.
-///
-/// Vazio significa que o endereço vem do roteador por DHCP — que é o padrão e
-/// não é defeito. `Err` é não ter conseguido ler — que NÃO é o mesmo que DHCP.
+/// Vazio = DHCP, o padrão. `Err` = não se leu, que NÃO é o mesmo que DHCP.
 fn dns_do_adaptador(guid: &str) -> Result<String, String> {
     Ok(
         registry::read_text("HKLM", &format!("{}\\{}", INTERFACES, guid), "NameServer")?
@@ -117,12 +76,7 @@ fn dns_do_adaptador(guid: &str) -> Result<String, String> {
     )
 }
 
-// ---------------------------------------------------------------- medição
-
-/// Domínios usados na medição.
-///
-/// Três domínios diferentes, e nenhum deles é da nossa infraestrutura: medir
-/// contra um domínio só daria um número que depende de um cache específico.
+/// Três domínios que não são nossos: um só daria um número de um cache específico.
 const DOMINIOS: [&str; 3] = ["cloudflare.com", "wikipedia.org", "github.com"];
 
 #[derive(Debug, Deserialize, Default)]
@@ -131,18 +85,14 @@ struct RawTempo {
     ok: Option<bool>,
 }
 
-/// Cronometra consultas a um servidor de DNS.
-///
-/// `None` no servidor significa "use o que a máquina já usa", que é o
-/// comparativo mais importante da tela.
+/// `None` no servidor = o que a máquina já usa, o comparativo mais importante.
 fn medir(servidor: Option<&str>) -> (Option<f64>, usize) {
     let alvo = match servidor {
         Some(ip) => format!("-Server {} ", ip),
         None => String::new(),
     };
 
-    // `-DnsOnly` e `-NoHostsFile` evitam que o arquivo hosts ou o cache do
-    // NetBIOS respondam no lugar do servidor, o que daria um tempo falso.
+    // `-DnsOnly` e `-NoHostsFile`: o hosts ou o NetBIOS respondendo dariam um tempo falso.
     let script = format!(
         "$r = @(); foreach ($d in @('{}')) {{ \
            $t = Get-Date; $ok = $true; \
@@ -173,16 +123,12 @@ fn medir(servidor: Option<&str>) -> (Option<f64>, usize) {
         return (None, falhas.max(DOMINIOS.len()));
     }
 
-    // Mediana, e não média: uma consulta que caiu num tempo esquisito não pode
-    // decidir sozinha qual servidor o cliente vai usar.
+    // Mediana: uma consulta esquisita não pode decidir sozinha.
     bons.sort_by(f64::total_cmp);
     (Some(bons[bons.len() / 2]), falhas)
 }
 
-/// Monta a frase de resumo a partir dos números medidos.
-///
-/// É aqui que o módulo se recusa a vender: quando o ganho é pequeno, ele diz
-/// que é pequeno.
+/// Ganho pequeno é dito pequeno.
 pub fn montar_nota(ganho: Option<f64>, melhor: Option<&str>) -> String {
     let base = "Trocar o DNS acelera a busca do endereço de um site — carregar página, abrir \
                 lista de servidores, começar um download. Não muda o seu ping dentro do jogo: \
@@ -207,11 +153,8 @@ pub fn montar_nota(ganho: Option<f64>, melhor: Option<&str>) -> String {
     }
 }
 
-/// Levantamento completo.
 pub fn analyze() -> NetworkReport {
-    // Adaptador cujo DNS não deu para ler sai da lista em vez de entrar como
-    // "automático" — e marca que houve leitura falha, para a comparação abaixo
-    // não afirmar que a máquina usa o DNS do roteador.
+    // Adaptador de DNS ilegível sai da lista em vez de entrar como "automático".
     let mut dns_ilegivel = false;
 
     let adapters: Vec<Adapter> = adaptadores()
@@ -235,8 +178,6 @@ pub fn analyze() -> NetworkReport {
         })
         .collect();
 
-    // O que a máquina usa hoje entra na comparação como qualquer outro. Sem
-    // isso não há como dizer se a troca vale.
     let (atual_ms, atual_falhas) = medir(None);
 
     let mut measurements = vec![DnsMeasurement {
@@ -272,8 +213,7 @@ pub fn analyze() -> NetworkReport {
         });
     }
 
-    // Melhor alternativa que respondeu a tudo. Servidor com falha não é
-    // recomendado por mais rápido que pareça nas consultas que sobraram.
+    // Servidor com falha não é recomendado, por mais rápido que pareça nas consultas que sobraram.
     let melhor = measurements
         .iter()
         .filter(|m| !m.current && m.failures == 0)
@@ -295,17 +235,13 @@ pub fn analyze() -> NetworkReport {
     }
 }
 
-// ------------------------------------------------------------------- ações
-
-/// Define o DNS de um adaptador, com registro para reversão.
 pub fn definir_dns(guid: &str, servidores: &str) -> Result<ChangeRecord, String> {
     if !registry::is_elevated() {
         return Err("Trocar o DNS exige executar como administrador.".to_string());
     }
 
-    // Só endereços da lista conhecida, ou a volta para automático. O comando é
-    // exposto por IPC, e apontar o DNS de alguém para um servidor arbitrário é
-    // exatamente como se sequestra a navegação de uma máquina.
+    // Só a lista conhecida ou automático: o comando vem por IPC, e apontar o DNS de alguém para um servidor
+    // arbitrário é como se sequestra a navegação.
     let permitido = servidores.trim().is_empty()
         || CANDIDATOS.iter().any(|(_, _, ips)| *ips == servidores);
 
@@ -320,19 +256,12 @@ pub fn definir_dns(guid: &str, servidores: &str) -> Result<ChangeRecord, String>
 
     let caminho = format!("{}\\{}", INTERFACES, guid);
 
-    // SEM `unwrap_or` AQUI, E O MOTIVO É CARO.
-    //
-    // Enquanto `registry::read` só falhava com hive desconhecida, esta linha era
-    // inalcançável. Agora que ela distingue "não existe" de "não consegui ler",
-    // engolir o erro converteria uma leitura falha em "não havia DNS antes" — e
-    // o desfazer APAGARIA o DNS que o cliente tinha, em vez de restaurá-lo.
-    //
-    // Falhar aqui não custa nada ao cliente: ainda não escrevemos.
+    // Sem `unwrap_or`: leitura falha viraria "não havia DNS antes", e o desfazer APAGARIA o DNS do cliente.
     let anterior = registry::read("HKLM", &caminho, "NameServer")?;
 
     registry::set_string("HKLM", &caminho, "NameServer", servidores)?;
 
-    // Sem isto a mudança só passa a valer no próximo boot.
+    // Sem isto a mudança só vale no próximo boot.
     let _ = shell::run("ipconfig", &["/flushdns"]);
 
     Ok(ChangeRecord::RegistryValue {
@@ -343,10 +272,7 @@ pub fn definir_dns(guid: &str, servidores: &str) -> Result<ChangeRecord, String>
     })
 }
 
-/// Limpa o cache de resolução de nomes.
-///
-/// Não é reversível e nem precisa ser: o cache se refaz sozinho na próxima
-/// consulta. O texto diz que quase sempre não muda nada, porque é verdade.
+/// Não reversível e não precisa ser: o cache se refaz sozinho. Quase sempre não muda nada, e o texto diz.
 pub fn limpar_cache_dns() -> Result<String, String> {
     shell::run_checked("ipconfig", &["/flushdns"])
         .map_err(|e| format!("Não foi possível limpar o cache de DNS: {}", e))?;
@@ -363,8 +289,6 @@ mod tests {
 
     #[test]
     fn a_nota_desmente_a_promessa_de_reduzir_ping() {
-        // A frase que separa este módulo do resto do mercado. Tem que estar
-        // presente em qualquer resultado de medição.
         for ganho in [Some(50.0), Some(8.0), Some(0.5), None] {
             let nota = montar_nota(ganho, Some("Cloudflare"));
 
@@ -385,16 +309,12 @@ mod tests {
         let pequeno = montar_nota(Some(8.0), Some("Cloudflare"));
         assert!(pequeno.contains("pequena"));
 
-        // E ganho irrelevante vira "não vale a troca", em vez de virar venda.
         let nenhum = montar_nota(Some(1.0), Some("Cloudflare"));
         assert!(nenhum.contains("não mostrou ganho que valha a troca"));
     }
 
     #[test]
     fn dns_arbitrario_e_recusado() {
-        // Apontar o DNS de uma máquina para um servidor qualquer é o mecanismo
-        // clássico de sequestro de navegação. O comando é exposto por IPC e não
-        // pode aceitar endereço vindo de fora.
         let erro = definir_dns("{qualquer}", "203.0.113.66").unwrap_err();
 
         assert!(
@@ -409,8 +329,7 @@ mod tests {
         assert!(CANDIDATOS.iter().any(|(_, _, ips)| ips.starts_with("1.1.1.1")));
         assert!(CANDIDATOS.iter().any(|(_, _, ips)| ips.starts_with("8.8.8.8")));
 
-        // Todo candidato tem endereço secundário: um resolvedor sozinho deixa a
-        // máquina sem internet se ele cair.
+        // Um resolvedor sozinho deixa a máquina sem internet se ele cair.
         for (_, nome, ips) in CANDIDATOS {
             assert!(ips.contains(','), "{} não tem servidor secundário", nome);
         }
@@ -445,12 +364,9 @@ mod tests {
         }
 
         assert!(!r.note.is_empty());
-        // O que a máquina usa hoje precisa estar na comparação, senão não há
-        // como saber se a troca vale.
         assert!(r.measurements.iter().any(|m| m.current));
         assert_eq!(r.measurements.len(), CANDIDATOS.len() + 1);
 
-        // Tempo negativo seria erro de medição virando recomendação.
         for m in &r.measurements {
             if let Some(ms) = m.median_ms {
                 assert!(ms >= 0.0, "{} mediu {} ms", m.name, ms);

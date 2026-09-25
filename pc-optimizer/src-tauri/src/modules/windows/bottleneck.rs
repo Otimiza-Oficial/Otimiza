@@ -1,66 +1,26 @@
-// Analisador de gargalo
-//
-// A pergunta que todo cliente faz e que nenhum otimizador responde: "por que
-// meu FPS é baixo?". A resposta honesta quase nunca é "falta otimizar" — é uma
-// peça específica que chegou no limite enquanto as outras estão sobrando.
-//
-// Este módulo mede as cinco durante alguns segundos e diz qual travou. Ele não
-// otimiza nada: só explica. E explicar é o que permite a próxima decisão ser
-// certa, seja ela mexer numa configuração, trocar uma peça, ou não fazer nada.
-//
-// O CASO QUE MAIS APARECE, E QUE QUASE NINGUÉM SABE EXPLICAR
-//
-// O FiveM, como o GTA V, depende muito de um único núcleo. Numa máquina de oito
-// núcleos é comum ver um deles a 100% e os outros sete quase parados, com a
-// placa de vídeo a 40%. O dono olha o Gerenciador de Tarefas, vê "CPU 25%",
-// conclui que sobra máquina, e não entende por que trava.
-//
-// Sobra máquina — só que na parte errada. Comprar mais núcleos não resolve
-// nada; um processador com núcleo mais rápido resolve. Essa frase, dita com o
-// número na mão, vale mais que qualquer ajuste que este programa possa aplicar.
-//
-// A REGRA QUE IMPEDE O CHUTE
-//
-// Sem carga não há gargalo a encontrar. Uma máquina parada não tem limite
-// nenhum, e apontar um seria inventar. Quando nada está perto do limite, o
-// veredito é "não identificamos", nunca o palpite mais vendável.
+// Gargalo: mede CPU, núcleos, placa, VRAM, RAM e disco por alguns segundos e diz qual chegou ao limite. O caso
+// clássico: FiveM com um núcleo a 100% e a placa a 40%, e o Gerenciador de Tarefas mostrando "CPU 25%". Sem
+// carga não há gargalo: o veredito é "não identificamos", nunca o palpite mais vendável.
 
 use super::shell;
 use serde::{Deserialize, Serialize};
 
-/// A partir de quanto um recurso é considerado no limite.
-///
-/// Não é 100 porque nenhum contador fica cravado no topo: oscila. E não é
-/// menos que isto porque um recurso a 80% ainda tem folga — chamar aquilo de
-/// gargalo mandaria o cliente trocar peça à toa.
+/// Não é 100 (nenhum contador fica cravado) nem 80 (ainda tem folga, e mandaria trocar peça à toa).
 pub const SATURADO: f64 = 92.0;
 
-/// Abaixo disto o recurso está claramente sobrando.
-///
-/// Serve para o contraste: um núcleo a 99% ao lado de placa de vídeo a 35% é
-/// uma história diferente de tudo a 95%.
 pub const FOLGADO: f64 = 60.0;
 
-/// Carga mínima para valer a pena julgar.
 pub const CARGA_MINIMA: f64 = 15.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Limite {
-    /// Um núcleo no talo e os outros sobrando. O caso clássico de jogo.
     CpuUmNucleo,
-    /// Todos os núcleos no limite.
     CpuTodos,
-    /// A placa de vídeo é o teto. Em jogo isso costuma ser boa notícia.
     Gpu,
-    /// A memória de vídeo acabou.
     MemoriaVideo,
-    /// A memória do sistema acabou.
     MemoriaRam,
-    /// O disco não dá conta.
     Disco,
-    /// Nada está perto do limite.
     NaoIdentificado,
-    /// A máquina está parada; não há o que julgar.
     SemCarga,
 }
 
@@ -69,13 +29,11 @@ pub struct BottleneckReport {
     pub limite: Limite,
     pub summary: String,
     pub advice: String,
-    /// Média do uso total do processador na janela medida.
     pub cpu_total: f64,
-    /// O núcleo mais carregado. É este que denuncia o gargalo de um núcleo só.
+    /// É este que denuncia o gargalo de um núcleo só.
     pub cpu_max_core: f64,
     pub gpu_percent: f64,
     pub vram_used_mb: f64,
-    /// `None` quando não foi possível ler o total da placa.
     pub vram_total_mb: Option<f64>,
     pub ram_available_gb: f64,
     pub ram_total_gb: f64,
@@ -83,8 +41,6 @@ pub struct BottleneckReport {
     pub samples: usize,
     pub seconds: f64,
 }
-
-// ------------------------------------------------------------ leituras
 
 #[derive(Debug, Clone, Copy, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -94,13 +50,9 @@ pub struct RawContadores {
     pub disco: Option<f64>,
 }
 
-/// Uma amostra dos contadores que não vêm do sysinfo.
-///
-/// Placa de vídeo e disco em uma só consulta: cada chamada ao WMI custa mais de
-/// um segundo, e duas por amostra dobrariam o tempo da análise.
+/// Placa e disco numa consulta só: cada chamada ao WMI custa mais de um segundo.
 pub fn amostrar_wmi() -> RawContadores {
-    // O uso da placa é somado sobre os motores 3D. Uma placa expõe vários
-    // motores — 3D, cópia, vídeo — e só o 3D representa o que um jogo pede.
+    // Só o motor 3D representa o que um jogo pede (há também cópia e vídeo).
     let script = "\
         $g = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine \
                -ErrorAction SilentlyContinue | Where-Object Name -like '*engtype_3D*'); \
@@ -120,23 +72,13 @@ pub fn amostrar_wmi() -> RawContadores {
         .unwrap_or_default()
 }
 
-/// Memória total da placa de vídeo, lida do registro.
-///
-/// `Win32_VideoController.AdapterRAM` é um campo de 32 bits e estoura em placa
-/// de 4 GB ou mais, devolvendo número errado. O valor real fica no registro,
-/// gravado pelo driver, e não depende de idioma.
-/// Memória da placa de vídeo, em GB. Zero quando não deu para ler — e zero
-/// aqui significa "não sabemos", nunca "placa fraca".
+/// `AdapterRAM` é 32 bits e estoura em placa de 4 GB ou mais: o valor real está no registro do driver. Zero
+/// aqui é "não sabemos", nunca "placa fraca".
 pub fn vram_total_gb() -> f64 {
     vram_total_mb().map(|mb| mb / 1024.0).unwrap_or(0.0)
 }
 
-/// A mesma leitura, sem o zero no lugar da ausência.
-///
-/// `vram_total_gb` devolve `0.0` quando não consegue ler, e os dois chamadores
-/// dele conferem `<= 0.0` antes de usar. Quem precisa da resposta honesta —
-/// a telemetria central, onde zero e "não sei" são coisas diferentes — usa
-/// esta.
+/// Sem o zero no lugar da ausência, para a telemetria central, onde zero e "não sei" são coisas diferentes.
 pub fn vram_total_gb_opt() -> Option<f64> {
     vram_total_mb().map(|mb| mb / 1024.0)
 }
@@ -165,13 +107,8 @@ fn vram_total_mb() -> Option<f64> {
     None
 }
 
-// ------------------------------------------------------------- veredito
-
-/// Decide qual recurso é o limite.
-///
-/// A ordem importa: memória esgotada explica tudo o mais que aparece junto, e
-/// por isso vem antes. Um núcleo saturado só é diagnóstico quando os outros
-/// estão sobrando — senão é só a máquina trabalhando.
+/// Memória esgotada vem antes: explica tudo o que aparece junto. Núcleo saturado só é diagnóstico com os
+/// outros sobrando.
 pub fn decidir(
     cpu_total: f64,
     cpu_max_core: f64,
@@ -181,19 +118,14 @@ pub fn decidir(
     ram_livre_gb: f64,
     disco: f64,
 ) -> Limite {
-    // Sem carga nenhuma não existe gargalo. Julgar aqui seria inventar.
     if cpu_total < CARGA_MINIMA && gpu < CARGA_MINIMA && disco < CARGA_MINIMA {
         return Limite::SemCarga;
     }
 
-    // Memória do sistema no fim: explica travada, disco alto e tudo o mais que
-    // aparecer junto, então é o primeiro a ser considerado.
     if ram_livre_gb < 0.5 {
         return Limite::MemoriaRam;
     }
 
-    // Memória de vídeo no fim: causa engasgo severo e não aparece em nenhum
-    // outro indicador.
     if let Some(total) = vram_total {
         if total > 0.0 && vram_usada / total * 100.0 >= 95.0 {
             return Limite::MemoriaVideo;
@@ -208,8 +140,6 @@ pub fn decidir(
         return Limite::Gpu;
     }
 
-    // Um núcleo no talo com o conjunto folgado: a assinatura do jogo preso em
-    // uma linha de execução só.
     if cpu_max_core >= SATURADO && cpu_total < FOLGADO {
         return Limite::CpuUmNucleo;
     }
@@ -221,7 +151,6 @@ pub fn decidir(
     Limite::NaoIdentificado
 }
 
-/// Texto para a tela.
 pub fn explicar(limite: Limite, cpu_total: f64, cpu_max_core: f64, gpu: f64) -> (String, String) {
     match limite {
         Limite::SemCarga => (
@@ -302,9 +231,7 @@ pub fn explicar(limite: Limite, cpu_total: f64, cpu_max_core: f64, gpu: f64) -> 
     }
 }
 
-/// Mede por alguns segundos e diz o que está limitando.
-///
-/// Bloqueia. Deve ser chamada fora do runtime assíncrono.
+/// Bloqueia: chamar fora do runtime assíncrono.
 pub fn analisar(segundos: u64) -> BottleneckReport {
     use sysinfo::System;
 
@@ -321,8 +248,7 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
     let vram_total = vram_total_mb();
     let ram_total_gb = sistema.total_memory() as f64 / 1_073_741_824.0;
 
-    // Cada volta custa mais de um segundo por causa do WMI, então o número de
-    // amostras acompanha o tempo pedido em vez de ser fixo.
+    // Cada volta custa mais de um segundo pelo WMI: as amostras acompanham o tempo pedido.
     while inicio.elapsed().as_secs() < segundos {
         sistema.refresh_cpu_all();
         std::thread::sleep(std::time::Duration::from_millis(300));
@@ -338,9 +264,7 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
 
         ram_livre_min = ram_livre_min.min(sistema.available_memory() as f64 / 1_073_741_824.0);
 
-        // Consulta que não respondeu não entra na média. Antes ela entrava
-        // como zero, e uma placa a 95% com uma leitura perdida no meio saía
-        // como 63% — o suficiente para o veredito deixar de dizer GPU.
+        // Consulta que não respondeu não entra: como zero, uma placa a 95% saía 63%.
         let bruto = amostrar_wmi();
         if let Some(g) = bruto.gpu {
             gpus.push(g);
@@ -361,8 +285,7 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
         }
     };
 
-    // Para o núcleo mais carregado vale o pico, e não a média: o gargalo de um
-    // núcleo só aparece em rajadas, e a média o esconderia.
+    // O pico, e não a média: o gargalo de um núcleo aparece em rajadas.
     let cpu_max_core = cpu_maximos.iter().cloned().fold(0.0, f64::max);
     let cpu_total = media(&cpu_totais);
     let gpu = media(&gpus);
@@ -395,8 +318,6 @@ mod tests {
 
     #[test]
     fn maquina_parada_nao_recebe_diagnostico() {
-        // A regra que impede o chute. Sem carga não existe gargalo, e apontar
-        // um seria inventar.
         assert_eq!(
             decidir(3.0, 8.0, 1.0, 500.0, Some(4096.0), 6.0, 0.0),
             Limite::SemCarga
@@ -408,8 +329,6 @@ mod tests {
 
     #[test]
     fn um_nucleo_no_talo_com_o_resto_sobrando() {
-        // O caso do FiveM: um núcleo a 99%, média em 25%, placa em 40%.
-        // O Gerenciador de Tarefas mostra 25% e o dono acha que sobra máquina.
         assert_eq!(
             decidir(25.0, 99.0, 40.0, 1500.0, Some(4096.0), 5.0, 10.0),
             Limite::CpuUmNucleo
@@ -418,14 +337,12 @@ mod tests {
         let (resumo, conselho) = explicar(Limite::CpuUmNucleo, 25.0, 99.0, 40.0);
         assert!(resumo.contains("99%") && resumo.contains("25%"));
 
-        // A frase que evita o cliente comprar a peça errada.
         assert!(conselho.contains("núcleo mais rápido, não um"));
         assert!(conselho.contains("Placa de vídeo melhor também não resolve"));
     }
 
     #[test]
     fn nucleo_alto_com_maquina_cheia_nao_e_gargalo_de_um_nucleo() {
-        // Com tudo carregado, um núcleo a 99% é só a máquina trabalhando.
         assert_eq!(
             decidir(95.0, 99.0, 50.0, 1500.0, Some(4096.0), 5.0, 10.0),
             Limite::CpuTodos
@@ -434,8 +351,6 @@ mod tests {
 
     #[test]
     fn memoria_no_fim_vem_antes_de_tudo() {
-        // Memória esgotada explica disco alto e travada; se ela for julgada
-        // depois, o relatório apontaria o disco e mandaria trocar a peça errada.
         assert_eq!(
             decidir(95.0, 99.0, 99.0, 4000.0, Some(4096.0), 0.2, 99.0),
             Limite::MemoriaRam
@@ -460,7 +375,6 @@ mod tests {
             Limite::MemoriaVideo
         );
 
-        // Sem saber o total da placa, não dá para dizer que ela encheu.
         assert_ne!(
             decidir(40.0, 60.0, 70.0, 3980.0, None, 5.0, 10.0),
             Limite::MemoriaVideo
@@ -483,8 +397,7 @@ mod tests {
         match vram_total_mb() {
             Some(mb) => {
                 println!("memória de vídeo: {:.0} MB", mb);
-                // Uma placa com menos de 128 MB ou mais de 128 GB seria erro
-                // de leitura, não hardware.
+                // Menos de 128 MB ou mais de 128 GB seria erro de leitura.
                 assert!(mb >= 128.0 && mb <= 131_072.0, "valor implausível: {}", mb);
             }
             None => println!("não foi possível ler o total da placa"),
@@ -509,7 +422,6 @@ mod tests {
         assert!(!r.summary.is_empty());
         assert!(r.samples > 0, "nenhuma amostra coletada");
 
-        // O pico de um núcleo nunca pode ser menor que a média de todos.
         assert!(
             r.cpu_max_core >= r.cpu_total - 0.5,
             "pico {} menor que a média {}",
@@ -517,8 +429,6 @@ mod tests {
             r.cpu_total
         );
 
-        // Percentuais dentro da faixa: contador estourado viraria diagnóstico
-        // falso.
         for (nome, valor) in [
             ("cpu", r.cpu_total),
             ("núcleo", r.cpu_max_core),
