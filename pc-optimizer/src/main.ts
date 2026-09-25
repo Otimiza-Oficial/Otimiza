@@ -4932,6 +4932,8 @@ interface BootReport {
   note: string;
   /** `false` = a lista dos que atrasam não pôde ser lida (não é "nenhum"). */
   culpados_lidos?: boolean;
+  /** Quanto a placa-mãe levou antes do Windows. */
+  firmware_ms?: number | null;
 }
 
 const BOOT_TYPE_LABELS: Record<BootType, string> = {
@@ -4993,6 +4995,22 @@ function renderBootReport(report: BootReport) {
     `);
   } else {
     text("boot-tag", report.needs_admin ? "precisa de administrador" : "sem medição");
+  }
+
+  // A placa-mãe vem antes de tudo e se lê sem administrador. Acima de 15 s
+  // o tempo está na BIOS, e nenhum ajuste do Windows chega lá.
+  if (report.firmware_ms) {
+    const lenta = report.firmware_ms > 15000;
+    partes.push(`
+      <div class="readouts readouts-row">
+        <div class="readout">
+          <span class="readout-label">Placa-mãe (BIOS)</span>
+          <span class="readout-value">${duracao(report.firmware_ms)}</span>
+          <span class="readout-note">antes do Windows começar</span>
+        </div>
+      </div>
+      ${lenta ? `<p class="hint">A placa-mãe está levando mais que o Windows costuma levar. A aba BIOS mostra o que olhar: Fast Boot, modo CSM e, em placa AM5 com EXPO, o Memory Context Restore.</p>` : ""}
+    `);
   }
 
   if (!report.needs_admin && report.culpados_lidos === false) {

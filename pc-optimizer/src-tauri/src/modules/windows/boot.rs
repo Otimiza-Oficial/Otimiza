@@ -92,6 +92,10 @@ pub struct BootReport {
     pub culpados_lidos: bool,
     /// Explicação em português do que foi possível medir e do que não foi.
     pub note: String,
+    /// Quanto a placa-mãe levou antes do Windows no último boot ("Último tempo
+    /// do BIOS" do Gerenciador de Tarefas). Lido sem administrador.
+    #[serde(default)]
+    pub firmware_ms: Option<u64>,
 }
 
 /// Limpa texto vindo de metadados de terceiro.
@@ -388,6 +392,12 @@ pub fn analyze() -> BootReport {
         recent_types,
         culpados_lidos,
         note,
+        firmware_ms: super::registry::read("HKLM", r"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "FwPOSTTime")
+            .ok()
+            .and_then(|v| match v {
+                crate::modules::changelog::PreviousValue::Dword(ms) if ms > 0 => Some(ms as u64),
+                _ => None,
+            }),
     }
 }
 
