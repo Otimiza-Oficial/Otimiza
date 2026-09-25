@@ -1,35 +1,17 @@
-// Firmware e hardware
-//
-// A BIOS é onde estão os maiores ganhos de desempenho de um PC — e é justamente
-// onde nenhum programa pode escrever com segurança.
-//
-// Em placas de consumo (ASUS, MSI, Gigabyte, ASRock) as configurações não ficam
-// em variáveis UEFI documentadas: ficam num bloco proprietário da NVRAM, com
-// checksum próprio de cada fabricante e sem API pública. Só Dell, HP e Lenovo
-// corporativos publicam interface WMI para isso. Escrever no lugar errado dessa
-// NVRAM não derruba o Windows — inutiliza a placa-mãe.
-//
-// Então este módulo faz a única coisa honesta possível: LÊ o que a BIOS e o
-// hardware estão fazendo com o desempenho, e diz a verdade — inclusive quando a
-// verdade é "não existe software que resolva isto".
+// Firmware e hardware: SÓ LÊ. Em placas de consumo a configuração da BIOS fica num bloco proprietário da NVRAM,
+// com checksum de cada fabricante e sem API pública; escrever no lugar errado inutiliza a placa-mãe.
 
 use super::shell;
 use serde::{Deserialize, Serialize};
 
-// Severidade e local de conserto nasceram aqui e hoje servem ao produto
-// inteiro — meia dúzia de módulos importa os dois deste arquivo. Passaram a
-// morar em `achados.rs`, junto do resto do vocabulário comum. A reexportação
-// mantém todos os `use super::firmware::{FindingSeverity, FixLocation}` que já
-// existem funcionando sem alteração.
+// Reexporta de `achados.rs`, para os `use super::firmware::{FindingSeverity, FixLocation}` existentes.
 pub use super::achados::{FindingSeverity, FixLocation};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FirmwareFinding {
     pub id: String,
     pub title: String,
-    /// O que foi medido nesta máquina, com números.
     pub measured: String,
-    /// O que fazer. Vazio quando não há nada a fazer.
     pub advice: String,
     pub severity: FindingSeverity,
     pub fix_location: FixLocation,
@@ -42,25 +24,17 @@ pub struct FirmwareReport {
     pub findings: Vec<FirmwareFinding>,
 }
 
-// ---------------------------------------------------------------- memória
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct MemoryModule {
     device_locator: Option<String>,
     bank_label: Option<String>,
-    /// Velocidade nominal do pente, em MHz.
     speed: Option<u32>,
-    /// Velocidade em que ele está realmente rodando.
     configured_clock_speed: Option<u32>,
     capacity: Option<u64>,
 }
 
-/// Consulta o WMI devolvendo JSON.
-///
-/// Os nomes das propriedades do WMI são estáveis em qualquer idioma do Windows,
-/// ao contrário do texto formatado de quase todo comando do sistema. Serializar
-/// para JSON evita depender de alinhamento de colunas.
+/// Nomes de propriedade do WMI são estáveis em qualquer idioma; o JSON evita depender de colunas.
 fn query_json(script: &str) -> Option<String> {
     let output = shell::powershell(script).ok()?;
 
@@ -71,12 +45,9 @@ fn query_json(script: &str) -> Option<String> {
     }
 }
 
-/// Os pentes de memória, com `None` para "não consegui perguntar".
-///
-/// A distinção existe porque `unwrap_or_default()` juntava a leitura que falhou
-/// com a máquina que não reporta pente, e as duas viravam silêncio na tela.
+/// `None` = não consegui perguntar: `unwrap_or_default()` juntava a falha com a máquina que não reporta pente.
 fn memory_modules() -> Option<Vec<MemoryModule>> {
-    // O `@()` força array mesmo com um único pente, senão o JSON viria como objeto.
+    // `@()` força array mesmo com um pente só.
     let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-CimInstance \
                   Win32_PhysicalMemory | Select-Object DeviceLocator,BankLabel,Speed,\
                   ConfiguredClockSpeed,Capacity,PartNumber)";
@@ -84,32 +55,20 @@ fn memory_modules() -> Option<Vec<MemoryModule>> {
     query_json(script).and_then(|json| serde_json::from_str(&json).ok())
 }
 
-/// A memória instalada, do jeito que a tela precisa para desenhá-la.
-///
-/// Existe porque o relatório de firmware só devolve ACHADOS — frases sobre o
-/// que está errado. Para desenhar quatro slots com um ocupado é preciso o dado
-/// cru, e ele já era lido aqui dentro, sem sair.
-///
-/// Um desenho de slots explica canal único melhor que qualquer frase: quem vê
-/// três encaixes vazios entende na hora, mesmo sem saber o que é um canal.
+/// O dado cru para desenhar os slots (o relatório só devolve achados): três encaixes vazios explicam canal único
+/// melhor que uma frase.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MemoriaInstalada {
-    /// Slots que a placa-mãe tem. `None` quando não deu para ler.
     pub slots: Option<u32>,
-    /// Um por pente instalado, em GB.
     pub pentes_gb: Vec<f64>,
-    /// Canais distintos em uso. Um só, com dois ou mais slots livres, é o
-    /// achado que mais aparece em PC de jogo montado barato.
+    /// Canal único com slots livres: o achado mais comum em PC de jogo montado barato.
     pub canais: usize,
-    /// Velocidade em que os pentes estão REALMENTE rodando.
     pub mhz: Option<u32>,
 }
 
 #[cfg(target_os = "windows")]
 pub fn memoria_instalada() -> MemoriaInstalada {
-    // Aqui a lista vazia serve: este relatório descreve o que foi encontrado, e
-    // quem precisa distinguir "não consegui ler" de "não há pente" é o
-    // diagnóstico, via `achados_de_memoria`.
+    // Aqui a lista vazia serve: quem distingue "não li" de "não há" é `achados_de_memoria`.
     let modules = memory_modules().unwrap_or_default();
 
     MemoriaInstalada {
@@ -120,8 +79,7 @@ pub fn memoria_instalada() -> MemoriaInstalada {
             .map(|bytes| bytes as f64 / 1_073_741_824.0)
             .collect(),
         canais: occupied_channels(&modules),
-        // A configurada, e não a nominal: um pente de 3200 rodando a 2133 é
-        // exatamente o caso que o cliente não vê e paga.
+        // A configurada, não a nominal: um pente de 3200 a 2133 é o caso que o cliente não vê.
         mhz: modules.iter().filter_map(|m| m.configured_clock_speed).max(),
     }
 }
@@ -131,22 +89,13 @@ pub fn memoria_instalada() -> MemoriaInstalada {
     MemoriaInstalada { slots: None, pentes_gb: Vec::new(), canais: 0, mhz: None }
 }
 
-/// Total de slots de memória da placa.
 fn memory_slots() -> Option<u32> {
     let script = "(Get-CimInstance Win32_PhysicalMemoryArray).MemoryDevices";
     query_json(script)?.trim().parse().ok()
 }
 
-/// Conta canais distintos ocupados.
-///
-/// O Windows nomeia os slots como "Controller0-ChannelA-DIMM0". Duas armadilhas
-/// aqui, e errar qualquer uma inverte o diagnóstico:
-///
-/// - O número do DIMM precisa sair do identificador, senão dois pentes no MESMO
-///   canal (DIMM0 e DIMM1) contariam como dois canais.
-/// - O número do controlador precisa FICAR, porque em placas Intel os dois canais
-///   costumam ser "Controller0-ChannelA" e "Controller1-ChannelA": olhar só a
-///   letra juntaria os dois e acusaria canal único num PC saudável.
+/// Slots como "Controller0-ChannelA-DIMM0". O DIMM sai (senão DIMM0 e DIMM1 no mesmo canal contariam dois); o
+/// controlador FICA (em placas Intel os canais são "Controller0-ChannelA" e "Controller1-ChannelA").
 fn occupied_channels(modules: &[MemoryModule]) -> usize {
     let mut channels: Vec<String> = modules
         .iter()
@@ -161,7 +110,6 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
                 return None;
             }
 
-            // Mantém controlador e canal, descarta a posição do pente.
             let key: Vec<&str> = label
                 .split('-')
                 .filter(|part| !part.starts_with("DIMM"))
@@ -174,8 +122,7 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
     channels.sort();
     channels.dedup();
 
-    // Sem rótulo de canal reconhecível, cada pente conta como um canal: é o
-    // palpite menos alarmista, e não inventamos um problema que não vimos.
+    // Sem rótulo reconhecível, cada pente conta como um canal: o palpite menos alarmista.
     if channels.is_empty() {
         modules.len()
     } else {
@@ -183,30 +130,10 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
     }
 }
 
-/// Só o que o firmware sabe sobre a MEMÓRIA: canal único, slots livres e XMP.
-///
-/// Existe separado do `analyze()` completo por causa do diagnóstico automático
-/// da tela inicial. O `analyze()` mede queda de desempenho sob carga sustentada
-/// e leva perto de doze segundos — rodar isso ao abrir o programa seria
-/// inaceitável. Isto aqui é uma consulta ao WMI e volta em milissegundos.
-///
-/// E é justamente aqui que mora o achado de canal único, que precisa aparecer
-/// junto do diagnóstico de memória logo na primeira tela.
-// `analyze_memory_only` morava aqui. Foi substituída por
-// `analyze_memory_ou_lacuna`, que devolve `Err` quando a leitura falha em vez de
-// uma lista vazia indistinguível de "não há nada a reportar" — e o veredito
-// transforma esse `Err` em lacuna visível na tela.
+/// Só memória, em milissegundos pelo WMI, para a tela inicial: o `analyze()` completo leva ~12 s de carga.
 
-/// Os achados de memória, com a leitura falha separada da máquina sem pente.
-///
-/// `None` é "não consegui perguntar ao Windows"; `Some(vec![])` é "perguntei e
-/// não há pente a reportar". Antes os dois eram a mesma lista vazia, e o
-/// veredito devolvia `Ok(vec![])` nos dois casos — sem achado e sem lacuna. A
-/// tela ficava calada sobre memória, o que é indistinguível de dizer que ela
-/// está bem.
-///
-/// Custa caro justamente aqui: o canal único é o achado que, segundo este mesmo
-/// documento, rende mais que todo o catálogo de software somado.
+/// `None` = não consegui perguntar; `Some(vec![])` = perguntei e não há pente. Juntos, a tela calava sobre
+/// memória, e o canal único é o achado mais valioso.
 fn achados_de_memoria(
     modules: Option<Vec<MemoryModule>>,
 ) -> Result<Vec<FirmwareFinding>, String> {
@@ -227,7 +154,6 @@ fn achados_de_memoria(
     Ok(findings)
 }
 
-/// A mesma análise do `analyze_memory`, já com os pentes em mãos.
 pub fn analyze_memory_ou_lacuna() -> Result<Vec<FirmwareFinding>, String> {
     achados_de_memoria(memory_modules())
 }
@@ -244,11 +170,6 @@ fn analyze_memory(findings: &mut Vec<FirmwareFinding>) {
     analisar_pentes(&modules, findings);
 }
 
-/// A análise em si, já com os pentes lidos.
-///
-/// Separada de `analyze_memory` para que `achados_de_memoria` — que distingue
-/// leitura falha de máquina sem pente — possa reaproveitá-la sem duplicar
-/// regra nenhuma.
 fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>) {
     let slots = memory_slots().unwrap_or(0);
     let channels = occupied_channels(&modules);
@@ -258,7 +179,6 @@ fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>
         .sum::<u64>() as f64
         / 1_073_741_824.0;
 
-    // --- canal único ---
     if channels < 2 && slots >= 2 {
         findings.push(FirmwareFinding {
             id: "memory_single_channel".to_string(),
@@ -288,12 +208,11 @@ fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>
         });
     }
 
-    // --- XMP / EXPO ---
     let nominal = modules.iter().filter_map(|m| m.speed).max();
     let running = modules.iter().filter_map(|m| m.configured_clock_speed).max();
 
     if let (Some(nominal), Some(running)) = (nominal, running) {
-        // Margem de 1 MHz: o firmware costuma reportar 2667 para um pente de 2666.
+        // O firmware costuma reportar 2667 para um pente de 2666.
         if running + 1 < nominal {
             findings.push(FirmwareFinding {
                 id: "memory_xmp_off".to_string(),
@@ -323,13 +242,8 @@ fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>
     }
 }
 
-// ------------------------------------------------------- limites de boot
-
-/// Limites de núcleos e memória gravados na configuração de inicialização.
-///
-/// Quase sempre é sequela de alguém ter mexido no `msconfig` seguindo tutorial
-/// ruim: o Windows passa a usar só parte do processador ou da RAM, para sempre.
-/// Os nomes das opções do `bcdedit` são em inglês em qualquer idioma.
+/// Sequela de `msconfig` seguindo tutorial ruim: o Windows usa só parte do processador ou da RAM, para sempre.
+/// Os nomes do `bcdedit` são em inglês em qualquer idioma.
 pub fn parse_boot_limits(output: &str) -> Vec<(String, String)> {
     const LIMITS: [&str; 3] = ["numproc", "truncatememory", "removememory"];
 
@@ -344,40 +258,11 @@ pub fn parse_boot_limits(output: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Se alguém forçou o relógio de plataforma (HPET) na configuração de boot.
-///
-/// É uma das "dicas de FPS" mais repetidas da internet e uma das mais erradas:
-/// forçar o HPET obriga o Windows a usar um temporizador mais lento que o
-/// escolhido automaticamente, e o efeito comum é engasgo, não ganho. Quando a
-/// opção está presente, o certo é remover — não é otimizar, é desfazer estrago.
-/// O valor IMPRESSO pelo `bcdedit`, traduzido para a palavra-chave que o
-/// `bcdedit /set` aceita de volta.
-///
-/// POR QUE ISTO PRECISA EXISTIR. O produto lê o valor, guarda no histórico, e no
-/// desfazer manda `bcdedit /set {current} <elemento> <valor guardado>`. Ou seja:
-/// o texto que o `bcdedit` IMPRIME vira ARGUMENTO do `bcdedit`. Os dois lados
-/// só coincidem enquanto o Windows imprimir em inglês.
-///
-/// Conferido nesta máquina, em português: o `bcdedit` traduz o cabeçalho
-/// ("Carregador de Inicialização do Windows") e imprime os valores em INGLÊS —
-/// `recoveryenabled Yes`, `useplatformtick No`. Então aqui o round-trip
-/// funciona por sorte, não por desenho. Não dá para afirmar o mesmo de todos os
-/// idiomas a partir desta máquina, e a reversibilidade é promessa do produto.
-///
-/// `None` é "não reconheço este valor" — e quem chama não deve oferecer a
-/// otimização, porque não há como prometer a volta.
-/// CADA ELEMENTO DO `bcdedit` TEM SEU PRÓPRIO VOCABULÁRIO, e misturá-los
-/// quebraria o desfazer.
-///
-/// Um elemento booleano aceita `yes`/`no`; o `hypervisorlaunchtype` aceita
-/// `off`/`auto`/`on` e RECUSA `no`. Uma função só para os dois traduzia um `Off`
-/// de hipervisor em `no`, e o `bcdedit /set` do desfazer devolveria erro — o
-/// teste que já existia pegou isso na hora.
+/// O valor IMPRESSO pelo `bcdedit` como a palavra-chave que o `bcdedit /set` aceita: no desfazer, o impresso vira
+/// argumento, e só coincidiria enquanto o Windows imprimisse em inglês (aqui, em português, os valores saem em
+/// inglês por sorte). `None`: não reconhecido, e o item não é oferecido. Cada elemento tem seu vocabulário: o
+/// `hypervisorlaunchtype` aceita `off`/`auto`/`on` e RECUSA `no` (ver `palavra_chave_do_hipervisor`).
 pub fn palavra_chave_booleana(valor: &str) -> Option<&'static str> {
-    // À esquerda, a palavra-chave que o `bcdedit /set` aceita; à direita, as
-    // formas que ele pode ter impresso. O inglês é o que esta máquina mostrou;
-    // as traduções entram como rede de segurança, e o que não bater vira `None`
-    // em vez de virar argumento inválido.
     const SIM: &[&str] = &["yes", "true", "on", "1", "sim", "oui", "ja", "si", "sí", "sì"];
     const NAO: &[&str] = &["no", "false", "off", "0", "não", "nao", "non", "nein"];
 
@@ -392,7 +277,6 @@ pub fn palavra_chave_booleana(valor: &str) -> Option<&'static str> {
     }
 }
 
-/// O vocabulário do `hypervisorlaunchtype`, que não é booleano.
 pub fn palavra_chave_do_hipervisor(valor: &str) -> Option<&'static str> {
     match valor.trim().to_lowercase().as_str() {
         "off" | "desativado" | "désactivé" | "deaktiviert" => Some("off"),
@@ -402,6 +286,8 @@ pub fn palavra_chave_do_hipervisor(valor: &str) -> Option<&'static str> {
     }
 }
 
+/// HPET forçado na configuração de boot: "dica de FPS" que obriga um temporizador mais lento e costuma dar
+/// engasgo. Remover é desfazer estrago, não otimizar.
 pub fn forced_platform_clock() -> Option<String> {
     let output = shell::run("bcdedit", &["/enum", "{current}"]).ok()?;
 
@@ -414,10 +300,7 @@ pub fn forced_platform_clock() -> Option<String> {
         .lines()
         .map(|line| line.trim().to_lowercase())
         .find(|line| line.starts_with("useplatformclock"))
-        // SEM `unwrap_or`. Havia um `"sim"` cravado aqui como reserva — um
-        // literal em português que ia direto para `bcdedit /set` no desfazer,
-        // onde é recusado. Linha sem valor agora devolve `None`, e o item nem
-        // é oferecido.
+        // SEM `unwrap_or`: um `"sim"` cravado ia para `bcdedit /set` no desfazer e era recusado.
         .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
         .and_then(|valor| palavra_chave_booleana(&valor).map(str::to_string))
 }
@@ -429,13 +312,8 @@ pub fn boot_limits() -> Vec<(String, String)> {
     }
 }
 
-/// O achado dos limites de boot, separado da leitura para poder ser testado.
-///
-/// A elevação entra aqui porque sem ela o `bcdedit` não responde e a lista volta
-/// vazia — indistinguível de uma máquina limpa. O lado do catálogo já tratava
-/// esse caso; este painel não tratava, e os dois se contradiziam na mesma tela:
-/// a lista de otimizações dizia "só dá para conferir como administrador"
-/// enquanto o diagnóstico dava a inicialização por limpa.
+/// Sem elevação o `bcdedit` não responde e a lista volta vazia: sem isto o painel dava a inicialização por limpa
+/// enquanto o catálogo dizia "só como administrador".
 fn boot_limits_finding(limits: &[(String, String)], elevated: bool) -> FirmwareFinding {
     if limits.is_empty() && !elevated {
         return FirmwareFinding {
@@ -488,12 +366,7 @@ fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
     ));
 }
 
-// ------------------------------------------------------------------- VBS
-
-/// Se a virtualização de segurança está em execução.
-///
-/// `VirtualizationBasedSecurityStatus`: 0 desligada, 1 ativada sem rodar,
-/// 2 ativada e rodando.
+/// 0 desligada, 1 ativada sem rodar, 2 ativada e rodando.
 pub fn vbs_running() -> Option<bool> {
     let script = "(Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard \
                   -ClassName Win32_DeviceGuard).VirtualizationBasedSecurityStatus";
@@ -502,17 +375,8 @@ pub fn vbs_running() -> Option<bool> {
     Some(value == 2)
 }
 
-/// Quantos serviços de segurança estão realmente USANDO o VBS.
-///
-/// `SecurityServicesRunning` lista o que roda em cima da virtualização:
-/// 1 = Credential Guard (protege as senhas do Windows), 2 = integridade de
-/// código imposta pelo hypervisor, 3 = System Guard.
-///
-/// A distinção é o ponto todo deste bloco. O VBS pode estar LIGADO E VAZIO:
-/// cobrando o custo de desempenho da virtualização sem nenhuma proteção
-/// rodando em cima dela. Nesse caso desligar não é trocar segurança por FPS —
-/// é parar de pagar por proteção que não existe. É uma conversa diferente com
-/// o cliente, e o produto precisa saber diferenciar as duas.
+/// 1 Credential Guard, 2 integridade de código pelo hypervisor, 3 System Guard. VBS LIGADO E VAZIO cobra o custo
+/// sem proteção nenhuma: desligar aí não é trocar segurança por FPS.
 pub fn vbs_servicos_ativos() -> Option<usize> {
     let script = "$g = Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard \
                   -ClassName Win32_DeviceGuard; \
@@ -526,7 +390,6 @@ fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
         Some(true) => {
             let servicos = vbs_servicos_ativos().unwrap_or(1);
 
-            // Ligado e vazio: custo sem contrapartida.
             if servicos == 0 {
                 findings.push(FirmwareFinding {
                     id: "vbs_sem_uso".to_string(),
@@ -575,15 +438,8 @@ fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
     }
 }
 
-// -------------------------------------------------- estrangulamento térmico
-
-/// Perda de desempenho da CPU sob carga sustentada.
-///
-/// Não perguntamos ao Windows a frequência: no Windows o valor reportado é quase
-/// sempre o nominal, não o real. Medimos a consequência — quanto de trabalho a
-/// CPU entrega no fim de dez segundos de carga comparado ao primeiro segundo.
-/// Se o trabalho cai, o processador está sendo freado por temperatura ou por
-/// limite de energia, e isso se resolve na BIOS ou na refrigeração.
+/// Mede a consequência, não a frequência (o Windows reporta a nominal): trabalho no fim de dez segundos de carga
+/// contra o primeiro segundo.
 pub fn measure_sustained_decay() -> f64 {
     use std::hint::black_box;
     use std::time::{Duration, Instant};
@@ -617,8 +473,6 @@ pub fn measure_sustained_decay() -> f64 {
     decay_percent(&throughput)
 }
 
-/// Queda percentual do fim em relação ao início da carga.
-/// Exposto para teste porque é o cálculo que decide o veredito.
 pub fn decay_percent(throughput: &[f64]) -> f64 {
     if throughput.len() < 4 {
         return 0.0;
@@ -629,8 +483,7 @@ pub fn decay_percent(throughput: &[f64]) -> f64 {
         return 0.0;
     }
 
-    // Média das duas últimas fatias, para um soluço isolado no fim não virar
-    // diagnóstico de superaquecimento.
+    // Duas fatias, para um soluço no fim não virar superaquecimento.
     let tail = &throughput[throughput.len() - 2..];
     let last = tail.iter().sum::<f64>() / tail.len() as f64;
 
@@ -640,8 +493,7 @@ pub fn decay_percent(throughput: &[f64]) -> f64 {
 fn analyze_throttling(findings: &mut Vec<FirmwareFinding>) {
     let decay = measure_sustained_decay();
 
-    // 8% é a fronteira: abaixo disso a variação se explica por outros processos
-    // disputando a CPU durante a medição.
+    // Abaixo de 8%, outros processos disputando a CPU explicam a variação.
     if decay >= 8.0 {
         findings.push(FirmwareFinding {
             id: "sustained_decay".to_string(),
@@ -661,8 +513,7 @@ fn analyze_throttling(findings: &mut Vec<FirmwareFinding>) {
         findings.push(FirmwareFinding {
             id: "sustained_ok".to_string(),
             title: "Processador sustenta o desempenho".to_string(),
-            // Uma CPU que termina mais rápido do que começou não "ganhou força":
-            // é variação de medição. Zero é a leitura honesta.
+            // Terminar mais rápido é variação de medição: zero.
             measured: format!(
                 "Perdeu apenas {:.0}% ao fim de 10 segundos de carga.",
                 decay.max(0.0)
@@ -674,8 +525,6 @@ fn analyze_throttling(findings: &mut Vec<FirmwareFinding>) {
     }
 }
 
-// --------------------------------------------------------------- relatório
-
 fn board_name() -> String {
     let script = "$b = Get-CimInstance Win32_BaseBoard; \"$($b.Manufacturer) $($b.Product)\"";
     query_json(script)
@@ -686,9 +535,7 @@ fn board_name() -> String {
 fn cpu_name() -> String {
     let mut system = sysinfo::System::new();
 
-    // Mesmo motivo do `hardware::profile`: daqui sai só o NOME do processador,
-    // e `refresh_cpu_all()` pagaria o intervalo de amostragem que o percentual
-    // de uso exige — quase um segundo — para um dado que não depende disso.
+    // Só o NOME do processador: `refresh_cpu_all()` pagaria quase um segundo de amostragem à toa.
     system.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing());
 
     system
@@ -698,7 +545,6 @@ fn cpu_name() -> String {
         .unwrap_or_else(|| "processador não identificado".to_string())
 }
 
-/// Análise completa. Leva cerca de 12 segundos por causa da carga sustentada.
 pub fn analyze() -> FirmwareReport {
     let mut findings = Vec::new();
 
@@ -707,7 +553,6 @@ pub fn analyze() -> FirmwareReport {
     analyze_vbs(&mut findings);
     analyze_throttling(&mut findings);
 
-    // Problemas primeiro, o que está certo depois.
     findings.sort_by_key(|finding| match finding.severity {
         FindingSeverity::Critical => 0,
         FindingSeverity::Important => 1,
@@ -725,16 +570,7 @@ pub fn analyze() -> FirmwareReport {
 mod tests_1_7 {
     use super::*;
 
-    /// Leitura de memória que falha não pode virar silêncio.
-    ///
-    /// `memory_modules()` caía em `unwrap_or_default()`, e `analyze_memory`
-    /// retornava na hora com a lista vazia. No veredito, a tarefa devolvia
-    /// `Ok(vec![])` — sem achado E sem lacuna. A tela não dizia nada sobre
-    /// memória, o que é indistinguível de "sua memória está bem".
-    ///
-    /// Custa caro justamente aqui: o canal único é, segundo o próprio
-    /// PROGRESS, o achado que "rende mais que todo o catálogo de software
-    /// somado". Sumir com ele em silêncio é perder o mais valioso.
+    /// Leitura falha não pode virar silêncio sobre memória.
     #[test]
     fn leitura_de_memoria_que_falhou_vira_lacuna_e_nao_silencio() {
         let erro = achados_de_memoria(None)
@@ -749,8 +585,7 @@ mod tests_1_7 {
 
     #[test]
     fn maquina_sem_pente_reportado_nao_e_falha_de_leitura() {
-        // Perguntamos e o Windows respondeu que não há pente a reportar.
-        // Acontece em máquina virtual, e ali não há o que dizer.
+        // Acontece em máquina virtual.
         let achados = achados_de_memoria(Some(Vec::new()))
             .expect("máquina sem pente reportado não é falha de leitura");
 
@@ -764,10 +599,6 @@ mod tests_1_6 {
 
     #[test]
     fn sem_elevacao_uma_leitura_vazia_nao_e_boot_limpo() {
-        // Sem administrador o `bcdedit` não responde, e a lista volta vazia.
-        // Dizer "inicialização sem limites" a partir daí é afirmar o que não foi
-        // verificado. O lado do catálogo já respeitava isso; o painel de
-        // diagnóstico não — e os dois se contradiziam na mesma tela.
         let finding = boot_limits_finding(&[], false);
         assert_ne!(finding.severity, FindingSeverity::Ok);
         assert!(finding.measured.contains("administrador"));
@@ -780,8 +611,6 @@ mod tests_1_6 {
 
     #[test]
     fn limite_encontrado_vale_com_ou_sem_elevacao() {
-        // Se conseguimos ler um limite, ele vale — conseguir ler já prova que a
-        // leitura funcionou.
         let limites = vec![("numproc".to_string(), "4".to_string())];
         assert_eq!(
             boot_limits_finding(&limites, false).severity,
@@ -815,7 +644,6 @@ mod tests {
 
     #[test]
     fn two_sticks_in_the_same_channel_is_still_single_channel() {
-        // O erro clássico de montagem: dois pentes lado a lado, no mesmo canal.
         let modules = vec![
             module("Controller0-ChannelA-DIMM0"),
             module("Controller0-ChannelA-DIMM1"),
@@ -825,9 +653,7 @@ mod tests {
 
     #[test]
     fn two_controllers_with_the_same_channel_letter_are_two_channels() {
-        // Arranjo comum em placas Intel. Olhar só a letra do canal juntaria os
-        // dois e acusaria canal único num PC que está correto — o pior erro
-        // possível aqui, porque mandaria o cliente comprar RAM sem precisar.
+        // Olhar só a letra acusaria canal único num PC correto e mandaria comprar RAM.
         let modules = vec![
             module("Controller0-ChannelA-DIMM0"),
             module("Controller1-ChannelA-DIMM0"),
@@ -843,11 +669,6 @@ mod tests {
 
     #[test]
     fn o_valor_lido_do_bcdedit_volta_como_palavra_chave_que_ele_aceita() {
-        // O TEXTO IMPRESSO VIRA ARGUMENTO no desfazer. Medido nesta máquina: o
-        // `bcdedit` traduz o cabeçalho ("Carregador de Inicialização do
-        // Windows") e imprime os valores em INGLÊS (`recoveryenabled Yes`). O
-        // round-trip funciona aqui por sorte; a normalização faz funcionar por
-        // desenho.
         assert_eq!(palavra_chave_booleana("Yes"), Some("yes"));
         assert_eq!(palavra_chave_booleana("No"), Some("no"));
         assert_eq!(palavra_chave_booleana("  TRUE "), Some("yes"));
@@ -857,18 +678,12 @@ mod tests {
 
     #[test]
     fn valor_desconhecido_nao_vira_argumento_invalido() {
-        // O código tinha um `.unwrap_or("sim")` — um literal em PORTUGUÊS que ia
-        // direto para `bcdedit /set`, onde é recusado. Sem reconhecer o valor
-        // não há como prometer a volta, e o item não é oferecido.
         assert_eq!(palavra_chave_booleana("talvez"), None);
         assert_eq!(palavra_chave_booleana(""), None);
     }
 
     #[test]
     fn o_hipervisor_tem_vocabulario_proprio() {
-        // `hypervisorlaunchtype` aceita off/auto/on e RECUSA `no`. Uma função só
-        // para os dois traduzia `Off` em `no`, e o desfazer quebrava — o teste
-        // que já existia em `power.rs` pegou isso na hora.
         assert_eq!(palavra_chave_do_hipervisor("Off"), Some("off"));
         assert_eq!(palavra_chave_do_hipervisor("Auto"), Some("auto"));
         assert_eq!(palavra_chave_do_hipervisor("On"), Some("on"));
@@ -898,15 +713,12 @@ mod tests {
 
     #[test]
     fn falling_throughput_is_detected_as_decay() {
-        // Perda de 30%: comportamento de CPU freada por temperatura.
         let throughput = vec![100.0, 95.0, 88.0, 80.0, 72.0, 70.0];
         assert!(decay_percent(&throughput) > 25.0);
     }
 
     #[test]
     fn a_single_slow_slice_at_the_end_does_not_alone_decide() {
-        // Média das duas últimas fatias evita que um soluço isolado vire
-        // diagnóstico de superaquecimento.
         let throughput = vec![100.0, 100.0, 100.0, 100.0, 100.0, 60.0];
         let decay = decay_percent(&throughput);
         assert!(decay > 0.0 && decay < 25.0);
@@ -925,7 +737,6 @@ mod tests {
         }
 
         assert!(!report.findings.is_empty());
-        // Problemas precisam vir antes do que está certo.
         let severities: Vec<u8> = report
             .findings
             .iter()

@@ -1,24 +1,6 @@
-// As ferramentas de reparo do Windows
-//
-// O produto tinha 42 ajustes e nenhum reparo. Numa máquina com arquivo de
-// sistema corrompido, nenhum dos 42 adianta — e é a explicação, sem supor
-// nada, para "os comandos do terminal ajudaram mais que o Otimiza".
-//
-// REPARO NÃO É OTIMIZAÇÃO, E POR ISSO NÃO ESTÁ NO CATÁLOGO.
-//
-// Toda mudança do produto é reversível com o valor anterior guardado. O `sfc`
-// não muda ajuste nenhum: devolve um arquivo corrompido ao original. Não há
-// valor anterior a guardar, e desfazer significaria recorromper de propósito.
-//
-// Este módulo só descreve as ferramentas — programa, argumentos, duração
-// típica, se cancelar é seguro. Ele não sabe rodar processo nem ler log; quem
-// executa e quem interpreta a saída são módulos à parte.
-//
-// A trava do disco importa `health` (o tipo `HealthReport`) e `tarefa_longa`
-// (o tipo `Desfecho`), e nada além disso. Isso não quebra a separação acima:
-// ler um diagnóstico JÁ PRONTO e um desfecho JÁ ACONTECIDO para decidir se um
-// argumento pode existir ainda é DESCREVER. Rodar processo e interpretar log
-// continuam de fora — este arquivo não chama nenhum dos dois.
+// Descrição das ferramentas de reparo do Windows (programa, argumentos, duração, se cancelar é seguro); quem
+// executa e interpreta são outros módulos. Reparo não está no catálogo: não há valor anterior a guardar, e
+// desfazer seria recorromper. Ler `health` e `tarefa_longa` já prontos para decidir um argumento ainda é descrever.
 
 use super::health::{FindingSeverity, HealthReport};
 use super::tarefa_longa::Desfecho;
@@ -31,16 +13,13 @@ pub enum Ferramenta {
     ConsertarDisco,
     AnalisarWinSxS,
     LimparWinSxS { resetar_base: bool },
-    /// A volta atrás do `ConsertarDisco`, enquanto a máquina ainda não
-    /// reiniciou.
     DesmarcarConsertoDoDisco,
 }
 
 pub struct Receita {
     pub programa: &'static str,
     pub args: Vec<String>,
-    /// Para a tela poder dizer "de 10 a 30 minutos" antes de começar. É o que
-    /// impede o cliente de desistir no meio.
+    /// Dizer "de 10 a 30 minutos" antes impede o cliente de desistir no meio.
     pub minutos_tipicos: (u32, u32),
     pub cancelar_e_seguro: bool,
     pub aviso: Option<&'static str>,
@@ -56,7 +35,6 @@ pub fn receita(f: &Ferramenta) -> Receita {
             programa: "sfc",
             args: args(&["/scannow"]),
             minutos_tipicos: (5, 15),
-            // Interrompido, ele para. Rodar de novo recomeça do zero.
             cancelar_e_seguro: true,
             aviso: None,
         },
@@ -67,7 +45,6 @@ pub fn receita(f: &Ferramenta) -> Receita {
                 "/Online",
                 "/Cleanup-Image",
                 "/RestoreHealth",
-                // Saída que não muda com o idioma do Windows.
                 "/English",
             ]),
             minutos_tipicos: (10, 30),
@@ -78,7 +55,6 @@ pub fn receita(f: &Ferramenta) -> Receita {
             ),
         },
 
-        // `/scan` roda com o Windows LIGADO, em NTFS. Acha sem consertar.
         Ferramenta::VerificarDisco => Receita {
             programa: "chkdsk",
             args: args(&["C:", "/scan"]),
@@ -87,51 +63,16 @@ pub fn receita(f: &Ferramenta) -> Receita {
             aviso: None,
         },
 
-        // POR QUE NÃO É `chkdsk C: /f`.
-        //
-        // No volume do sistema EM USO, o `chkdsk /f` não consegue travar o
-        // volume e faz uma PERGUNTA: "Would you like to schedule this volume
-        // to be checked the next time the system restarts? (Y/N)" — traduzida,
-        // num Windows em português, para "(S/N)". O filho nasce com
-        // `CREATE_NO_WINDOW` e sem console: não há para onde a pergunta ir, e
-        // ninguém a responde. No melhor caso o `chkdsk` desiste e a tela pinta
-        // "Terminou." de verde sem nada ter sido agendado; no pior ele fica
-        // preso na pergunta e trava o executor. Nos dois, o cliente é
-        // informado de que o conserto foi feito quando não foi.
-        //
-        // Responder pelo cano também não serve: a letra da resposta é
-        // TRADUZIDA. Um "Y" enviado a um Windows em português não é aceito, e
-        // adivinhar o idioma do console é a mesma armadilha que o `shell.rs`
-        // já documenta para a página de código.
-        //
-        // Então não se pergunta. O que o "S" faria — marcar o volume como
-        // sujo, para o `autochk` rodar o conserto completo antes de o Windows
-        // abrir — é exatamente o que o `fsutil dirty set` faz direto, sem
-        // pergunta nenhuma e com código de saída que dá para conferir. É o
-        // MESMO mecanismo, acionado pela porta que não depende de um diálogo
-        // que não existe.
-        // ESTA RECEITA SOZINHA NÃO BASTA. `fsutil dirty set` marca o bit; o
-        // `autochk` só olha esse bit se o volume não estiver na lista de
-        // exclusão que `chkntfs /X` cria (ver `DesmarcarConsertoDoDisco`
-        // abaixo). Se uma sessão anterior desmarcou um conserto, o volume
-        // continua nessa lista PARA SEMPRE — `/X` não é "cancele o próximo
-        // boot", é "pare de checar este volume", e nada nesta receita desfaz
-        // isso. Quem chama precisa rodar `receita_reinclusao_do_disco()`
-        // ANTES desta, ou o `fsutil` sai 0, a tela diz "agendado", e o
-        // conserto simplesmente não acontece — a mentira exata que este
-        // módulo existe para impedir. O executor (`reparo_executar`, em
-        // `commands.rs`) é quem sequencia as duas: esta receita continua
-        // descrevendo um comando só.
+        // Não é `chkdsk C: /f`: no volume em uso ele PERGUNTA se agenda ("(S/N)" traduzido), o filho não tem console, e
+        // a tela dizia "Terminou" sem nada agendado. `fsutil dirty set` marca o mesmo bit, sem diálogo e com código de
+        // saída conferível. Sozinho não basta: com o volume na lista de exclusão de um `chkntfs /X` antigo, o `autochk`
+        // o pula para sempre; o executor (`reparo_executar`) roda `receita_reinclusao_do_disco()` ANTES.
         Ferramenta::ConsertarDisco => Receita {
             programa: "fsutil",
             args: args(&["dirty", "set", "C:"]),
-            // O clique volta em segundos; estes minutos são os do conserto em
-            // si, que acontece na próxima inicialização — e é isso que o aviso
-            // abaixo diz com todas as letras.
+            // O clique volta em segundos; os minutos são do conserto na próxima inicialização.
             minutos_tipicos: (10, 60),
-            // Não dá para cancelar: fica agendado para a inicialização. Quem
-            // desmarca é o `DesmarcarConsertoDoDisco`, e a tela oferece isso
-            // enquanto a máquina não reiniciou.
+            // Agendado não se cancela; a tela oferece `DesmarcarConsertoDoDisco` até o reinício.
             cancelar_e_seguro: false,
             aviso: Some(
                 "Este clique volta em segundos — só marca o agendamento. Os \
@@ -142,21 +83,8 @@ pub fn receita(f: &Ferramenta) -> Receita {
             ),
         },
 
-        // A saída de emergência. O `ConsertarDisco` é a única operação do
-        // produto que não dá para cancelar depois de começar; poder desmarcar
-        // antes do reinício é o que impede o aviso "não dá para voltar atrás"
-        // de virar uma porta trancada.
-        //
-        // `chkntfs /X` NÃO É "cancele o check agendado". É "acrescente este
-        // volume à lista de exclusão do boot check, e deixe-o lá". A lista é
-        // persistente — sobrevive ao reinício, à sessão, ao próprio produto
-        // fechando — e é consultada em TODO boot daqui em diante, não só no
-        // próximo. Um cliente que desmarca uma vez e, meses depois, tem o
-        // `/scan` achando erro de novo: o `fsutil dirty set` roda, sai 0, a
-        // tela diz "agendado" — e o `autochk` pula o volume no boot seguinte
-        // porque ele nunca saiu daquela lista. É por isso que
-        // `Ferramenta::ConsertarDisco` precisa reincluir o volume antes de
-        // marcar: ver `receita_reinclusao_do_disco` e o comentário acima.
+        // A saída de emergência do único reparo que não se cancela. `chkntfs /X` não cancela o próximo boot: põe o
+        // volume numa lista de exclusão PERSISTENTE. Por isso o `ConsertarDisco` reinclui antes de marcar.
         Ferramenta::DesmarcarConsertoDoDisco => Receita {
             programa: "chkntfs",
             args: args(&["/X", "C:"]),
@@ -194,9 +122,7 @@ pub fn receita(f: &Ferramenta) -> Receita {
                 programa: "DISM",
                 args: lista,
                 minutos_tipicos: (5, 25),
-                // Mexe no WinSxS mesmo sem `/ResetBase`: uma limpeza cortada no
-                // meio pode deixar o componente pela metade, do mesmo jeito que
-                // o `/RestoreHealth` acima — cancelar não é de graça aqui também.
+                // Mexe no WinSxS mesmo sem `/ResetBase`: cortada no meio, pode deixar o componente pela metade.
                 cancelar_e_seguro: false,
                 aviso: if *resetar_base {
                     Some(
@@ -212,22 +138,8 @@ pub fn receita(f: &Ferramenta) -> Receita {
     }
 }
 
-/// O passo que precisa rodar ANTES de `receita(&Ferramenta::ConsertarDisco)`,
-/// toda vez.
-///
-/// `chkntfs /C C:` devolve o volume à lista de "verificar no boot" —
-/// desfazendo um `/X` de qualquer sessão passada, inclusive uma de antes
-/// desta função existir. NÃO é uma `Ferramenta` do catálogo: ninguém pede
-/// "reincluir o disco" na tela, `reparo_disponivel` nunca a oferece, e ela
-/// não tem estado próprio em `EstadoDoDisco` — é sempre um passo interno do
-/// agendamento, nunca uma escolha do cliente.
-///
-/// NÃO É DESTRUTIVO. `/C` só restaura o comportamento padrão do Windows para
-/// o volume; rodar num volume que nunca foi excluído não muda nada. Por isso
-/// dá para chamar sempre, sem precisar saber se um `/X` aconteceu antes —
-/// saber isso exigiria um registro que este produto não guarda hoje, e
-/// exigiria confiar nesse registro sobre o que o Windows realmente tem
-/// gravado no volume.
+/// `chkntfs /C C:` desfaz um `/X` de qualquer sessão passada. Passo interno, nunca oferecido na tela. Não é
+/// destrutivo: num volume nunca excluído não muda nada, então roda sempre, sem precisar de registro.
 pub fn receita_reinclusao_do_disco() -> Receita {
     Receita {
         programa: "chkntfs",
@@ -238,67 +150,26 @@ pub fn receita_reinclusao_do_disco() -> Receita {
     }
 }
 
-/// Se a reinclusão deu certo — a condição que autoriza o executor a seguir
-/// para o `fsutil dirty set`.
-///
-/// Função pura pelo mesmo motivo de `EstadoDoDisco::apos_execucao`: é a
-/// regra que decide se o cliente pode ouvir "agendado" depois do
-/// `ConsertarDisco`, e precisa ser conferível sem rodar `chkntfs` de
-/// verdade. Só o código 0 conta — o mesmo corte que `EstadoDoDisco` já usa
-/// para o `fsutil` e para o próprio `chkntfs /X`: um `Cancelada`, um
-/// `NaoComecou` ou um código diferente de zero são "não sei se reincluiu", e
-/// "não sei" não pode virar "pode marcar sujo".
+/// Pura. Só o código 0 autoriza o `fsutil dirty set`: cancelada, não começou ou código diferente é "não sei".
 pub fn reinclusao_deu_certo(desfecho: &Desfecho) -> bool {
     matches!(desfecho, Desfecho::Terminou { codigo: 0 })
 }
 
-/// O que se sabe sobre o disco DESTA MÁQUINA, nesta sessão.
-///
-/// A especificação diz: "Só se oferece `/f` DEPOIS de o `/scan` achar alguma
-/// coisa. Sem achado, não há motivo para reiniciar a máquina de ninguém."
-/// Essa trava não existia, e nada em lugar nenhum registrava se o
-/// `VerificarDisco` tinha rodado ou o que ele tinha achado — a oferta saía só
-/// da saúde do disco, e a tela ainda descrevia o botão como "corrige os erros
-/// que a verificação encontrou", uma frase que afirma uma medição que nunca
-/// foi feita. Num produto cuja regra fundadora é "nunca mostrar número que não
-/// foi medido", isso é um achado declarado sem medição.
-///
-/// É UM VALOR SÓ, E NÃO UMA COLEÇÃO DE BANDEIRAS. Duas bandeiras
-/// independentes ("já verificou" e "achou alguma coisa") admitiriam o estado
-/// sem sentido "não verificou mas achou", e alguém teria que lembrar de nunca
-/// produzi-lo. Aqui esse estado não existe para ser produzido.
-///
-/// Nasce em `SemVerificacao`: começar do "não sei" é o que faz a ausência de
-/// medição negar por padrão, e não abrir por descuido.
+/// Um valor só (não bandeiras, que admitiriam "não verificou mas achou"): o `/f` só é oferecido DEPOIS de o
+/// `/scan` achar algo. Nasce em `SemVerificacao`, que nega por padrão.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EstadoDoDisco {
-    /// Ninguém verificou nada nesta sessão. Nada a oferecer.
     #[default]
     SemVerificacao,
-    /// O `/scan` rodou até o fim e não achou erro de estrutura.
     VerificadoSemAchado,
-    /// O `/scan` rodou e achou. É o ÚNICO estado que autoriza o conserto.
+    /// O ÚNICO estado que autoriza o conserto.
     VerificadoComAchado,
-    /// O conserto já está marcado para a próxima inicialização. A partir daqui
-    /// o que se oferece é a volta atrás, não o conserto de novo.
     ConsertoAgendado,
 }
 
 impl EstadoDoDisco {
-    /// O que o disco passa a ser depois de uma ferramenta ter rodado.
-    ///
-    /// Função pura de propósito: é a regra que decide se alguém pode agendar
-    /// um `chkdsk` na máquina do cliente, e ela precisa ser conferível sem
-    /// disco, sem reinício e sem elevação.
-    ///
-    /// OS CÓDIGOS DE SAÍDA DO `chkdsk`. `0` é "nenhum erro"; `1` e `2` são
-    /// "achou" (o `2` é o que o `/scan` devolve quando há coisa para o
-    /// conserto offline resolver); `3` é "não consegui verificar". O `3`, o
-    /// cancelamento e a tarefa que nem começou levam de volta a
-    /// `SemVerificacao` — não a `VerificadoSemAchado`. É a mesma regra do
-    /// `NaoSei` do `cbslog`: "não consegui conferir" nunca vira "está tudo
-    /// bem", e aqui isso significa que a oferta do conserto some em vez de
-    /// aparecer sobre nada.
+    /// Pura. Códigos do `chkdsk`: 0 nenhum erro; 1 e 2 achou; 3 não conseguiu verificar. O 3, o cancelamento e o que
+    /// nem começou voltam a `SemVerificacao`, nunca a `VerificadoSemAchado`.
     pub fn apos_execucao(self, ferramenta: &Ferramenta, desfecho: &Desfecho) -> EstadoDoDisco {
         match ferramenta {
             Ferramenta::VerificarDisco => match desfecho {
@@ -309,120 +180,45 @@ impl EstadoDoDisco {
                 _ => EstadoDoDisco::SemVerificacao,
             },
 
-            // O agendamento só conta quando o `fsutil` confirma que marcou.
-            // Um código diferente de zero mantém o achado de pé: o cliente
-            // continua vendo a oferta e pode tentar de novo, em vez de a tela
-            // afirmar que agendou algo que não agendou.
+            // Só conta com o `fsutil` confirmando; senão o achado fica de pé e a oferta continua.
             Ferramenta::ConsertarDisco => match desfecho {
                 Desfecho::Terminou { codigo: 0 } => EstadoDoDisco::ConsertoAgendado,
                 _ => self,
             },
 
-            // Desmarcado, a máquina volta a não ter medição nenhuma válida: o
-            // achado que autorizava o conserto foi consumido no agendamento, e
-            // oferecer o conserto de novo sem novo `/scan` seria repetir o
-            // defeito que está enum existe para fechar.
+            // O achado foi consumido no agendamento: oferecer de novo exige novo `/scan`.
             Ferramenta::DesmarcarConsertoDoDisco => match desfecho {
                 Desfecho::Terminou { codigo: 0 } => EstadoDoDisco::SemVerificacao,
                 _ => self,
             },
 
-            // As ferramentas de arquivo e de componente não dizem nada sobre a
-            // estrutura do disco.
             _ => self,
         }
     }
 
-    /// Se o `chkdsk` pode ser agendado — a metade da trava que fala de
-    /// MEDIÇÃO. A outra metade, que fala da SAÚDE do disco, é
-    /// `consertar_disco_e_permitido`; as duas precisam valer.
+    /// A metade da trava que fala de MEDIÇÃO; a da SAÚDE é `consertar_disco_e_permitido`. As duas precisam valer.
     pub fn autoriza_consertar(self) -> bool {
         self == EstadoDoDisco::VerificadoComAchado
     }
 
-    /// Se há o que desmarcar. Oferecer a volta atrás de algo que nunca foi
-    /// agendado seria afirmar um estado da máquina que ninguém mediu.
     pub fn tem_conserto_agendado(self) -> bool {
         self == EstadoDoDisco::ConsertoAgendado
     }
 }
 
-/// Prova de que um disco foi lido e passou no exame — não um bool solto.
-///
-/// O campo é privado de propósito. Um `bool` na assinatura de
-/// `consertar_disco_e_permitido` podia vir de qualquer lugar: um valor fixo, um
-/// `unwrap_or(true)` esquecido, uma inversão de sinal — o compilador não via
-/// diferença entre isso e uma leitura real do disco. Sem um construtor que
-/// exige o `HealthReport`, não existe caminho para produzir um `DiscoSaudavel`
-/// que não tenha vindo de um diagnóstico de verdade.
+/// Campo privado: um `bool` na assinatura podia vir de `unwrap_or(true)`; só um `HealthReport` real produz isto.
 pub struct DiscoSaudavel(bool);
 
-/// O prefixo de TODO achado de disco do `health.rs`.
-///
-/// São quatro famílias hoje — `disk_status_*`, `disk_wear_*`, `disk_errors_*`,
-/// `disk_temp_*` — e um quinto informativo (`disk_hours_*`). A trava olhava só
-/// a primeira, e era isso que a deixava aberta num SSD com 97% da vida
-/// consumida: o Windows ainda reportava `Healthy`, então `disk_status_0` saía
-/// `Ok` enquanto `disk_wear_0` e `disk_errors_0` gritavam `Critical`. O
-/// produto dizia numa aba que o disco estava morrendo e noutra reescrevia a
-/// estrutura dele.
-///
-/// Filtrar pelo prefixo curto — e não por uma lista de nomes — é de propósito:
-/// uma quinta família de achado de disco criada amanhã no `health.rs` entra
-/// nesta trava sozinha, sem ninguém precisar lembrar de vir aqui.
+/// O prefixo de todo achado de disco: olhando só `disk_status_*`, um SSD com 97% de vida gasta (ainda `Healthy`)
+/// liberava o `chkdsk`. Por prefixo, uma família nova entra sozinha.
 const PREFIXO_DE_DISCO: &str = "disk_";
 
-/// O achado que prova que o Windows conseguiu falar com o disco.
 const PREFIXO_DE_ESTADO: &str = "disk_status_";
 
 impl DiscoSaudavel {
-    /// Único jeito de obter um `DiscoSaudavel`: a partir do relatório real.
-    ///
-    /// A TRAVA RECUSA POR PADRÃO. A pergunta não é "apareceu algum motivo para
-    /// recusar", é "apareceu evidência que justifique deixar o `chkdsk`
-    /// reescrever estrutura por cima dos setores deste disco". Sem essa
-    /// evidência, a resposta é não — e é essa inversão, e não uma checagem a
-    /// mais, que fecha o buraco.
-    ///
-    /// São três as condições, e todas precisam valer:
-    ///
-    /// - `needs_admin` falso. `needs_admin` significa que a checagem não
-    ///   conseguiu ler o disco. "Não sei" não pode virar "está bem" — é a
-    ///   mesma regra do `NaoSei` do `cbslog`, que nunca colapsa em
-    ///   `SemCorrupcao`, e do monitor de pagamento, que separa "não sei se
-    ///   pagou" de "não pagou".
-    ///
-    /// - Existe pelo menos um achado `disk_status_*`. Esse achado é o recibo
-    ///   de que o Windows leu o disco e disse algo reconhecível sobre ele:
-    ///   `avaliar_estado` só devolve `Some` para `Healthy`, `Warning` e
-    ///   `Unhealthy`. Um `"Unknown"` — comum em RAID, USB, máquina virtual e
-    ///   controladora antiga — não produz achado nenhum, e a versão anterior
-    ///   lia essa AUSÊNCIA como aprovação. O mesmo valia para uma máquina em
-    ///   que o PowerShell falhou e a lista de discos voltou vazia: nenhum
-    ///   achado, nenhum `needs_admin`, e a trava abria sobre nada.
-    ///
-    /// - NENHUM achado `disk_*` com severidade diferente de `Ok`. Não só o de
-    ///   estado: desgaste, erros acumulados e temperatura são, neste produto,
-    ///   a própria definição de disco morrendo. E o corte é "qualquer coisa
-    ///   que não seja `Ok`", e não "só `Critical`", porque a pergunta aqui não
-    ///   é "isto já é grave o bastante para preocupar o cliente" (isso é o que
-    ///   a severidade mede para a TELA), é "o Windows já viu algo de errado
-    ///   neste disco" — e `Important` já é isso.
-    ///
-    /// UMA LACUNA TOLERADA DE PROPÓSITO: `disk_errors_naosei_*` — o achado que
-    /// `health.rs` emite quando `ReadErrorsTotal`/`WriteErrorsTotal` não vêm
-    /// do Windows para aquele disco — sai com severidade `Ok`, então passa por
-    /// este filtro e a trava continua liberando o `chkdsk /f`. Isto é decisão,
-    /// não descuido: a evidência que esta trava exige é que a SAÚDE do disco
-    /// tenha sido lida, e `disco_foi_lido` já comprova isso via
-    /// `disk_status_*`. O contador de erros é um dado A MAIS, que boa parte
-    /// dos SSDs simplesmente não publica — recusar o reparo a todo SSD sem
-    /// esse contador seria negar o conserto pela falta de um dado que a
-    /// maioria dos discos nunca teve. A lacuna que a trava NÃO tolera continua
-    /// sendo não saber a saúde (`needs_admin`, ausência de `disk_status_*`) ou
-    /// saber que algo está errado (severidade diferente de `Ok`); não saber
-    /// sobre um contador específico e pouco publicado é outra categoria — mais
-    /// estreita, e aceita.
+    /// RECUSA POR PADRÃO: exige `needs_admin` falso, ao menos um `disk_status_*` (o recibo de que o disco foi lido;
+    /// `Unknown` e lista vazia não produzem nenhum) e NENHUM `disk_*` fora de `Ok`. `disk_errors_naosei_*` sai `Ok` e
+    /// passa de propósito: a maioria dos SSDs não publica o contador, e a saúde já foi lida.
     pub fn a_partir_do_relatorio(relatorio: &HealthReport) -> DiscoSaudavel {
         if relatorio.needs_admin {
             return DiscoSaudavel(false);
@@ -435,10 +231,7 @@ impl DiscoSaudavel {
                 .filter(|achado| achado.id.starts_with(PREFIXO_DE_DISCO))
         };
 
-        // Sem o recibo de que o disco foi lido, não há o que aprovar. Isto
-        // cobre de uma vez os três jeitos de não ter evidência: relatório sem
-        // achado nenhum, disco que só respondeu `Unknown`, e leitura que
-        // trouxe desgaste ou temperatura mas nunca chegou ao estado.
+        // Cobre relatório vazio, disco `Unknown` e leitura que trouxe desgaste sem chegar ao estado.
         let disco_foi_lido = achados_de_disco().any(|a| a.id.starts_with(PREFIXO_DE_ESTADO));
 
         if !disco_foi_lido {
@@ -451,12 +244,7 @@ impl DiscoSaudavel {
     }
 }
 
-/// Se `chkdsk /f` pode ser oferecido.
-///
-/// Num disco em más condições, o `chkdsk` é justamente o que costuma matá-lo de
-/// vez: ele reescreve estrutura em setores que já estão falhando. `DiscoSaudavel`
-/// só existe quando veio de um `HealthReport` de verdade, então está trava não
-/// tem como ser furada por um bool inventado na chamada.
+/// Num disco em más condições o `chkdsk` reescreve estrutura em setores que já falham.
 pub fn consertar_disco_e_permitido(disco: &DiscoSaudavel) -> bool {
     disco.0
 }
@@ -467,9 +255,7 @@ mod tests {
 
     #[test]
     fn verificar_disco_roda_sem_reiniciar() {
-        // O que se ensina por aí é `chkdsk /f`, que reinicia a máquina e prende
-        // a pessoa numa tela azul por tempo indeterminado. `/scan` roda com o
-        // Windows ligado e acha o problema sem consertar.
+        // `/scan` roda com o Windows ligado e acha sem consertar, sem prender a pessoa no boot.
         let r = receita(&Ferramenta::VerificarDisco);
         assert!(r.args.iter().any(|a| a == "/scan"), "args: {:?}", r.args);
         assert!(!r.args.iter().any(|a| a == "/f"), "ofereceu /f na verificação");
@@ -508,8 +294,6 @@ mod tests {
 
     #[test]
     fn relatorio_sem_permissao_nao_recebe_consertar() {
-        // `needs_admin` é "não sei", não "está bem" — não sei não pode virar
-        // sim, do mesmo jeito que o NaoSei do cbslog nunca vira SemCorrupcao.
         let relatorio = HealthReport {
             findings: Vec::new(),
             needs_admin: true,
@@ -521,8 +305,6 @@ mod tests {
 
     #[test]
     fn disco_reprovado_no_relatorio_nao_recebe_consertar() {
-        // Num disco morrendo, o chkdsk é justamente o que costuma matá-lo de
-        // vez — e o health.rs já sabe reconhecer esse disco.
         let relatorio = HealthReport {
             findings: vec![achado_de_disco(FindingSeverity::Critical)],
             needs_admin: false,
@@ -545,20 +327,11 @@ mod tests {
 
     #[test]
     fn sem_evidencia_nenhuma_o_disco_nao_recebe_consertar() {
-        // O caminho do "não consegui conferir" virando "está tudo bem": o
-        // PowerShell falhou, `discos()` voltou vazio, e `analisar_discos` só
-        // marca `needs_admin` quando a lista NÃO está vazia. Resultado:
-        // relatorio limpo, sem achado nenhum, numa máquina onde nada do disco
-        // pode ser lido. A trava antiga abria aqui.
         assert!(!permite(Vec::new()));
     }
 
     #[test]
     fn estado_que_o_windows_nao_soube_dizer_nao_recebe_consertar() {
-        // `avaliar_estado` devolve `None` para qualquer coisa que não seja
-        // `Healthy`/`Warning`/`Unhealthy`. `"Unknown"` e comum em RAID, USB,
-        // máquina virtual e controladora antiga: nenhum `disk_status_*` e
-        // emitido. A trava antiga lia essa AUSÊNCIA como aprovacao.
         assert!(!permite(vec![
             achado("disk_wear_0", FindingSeverity::Ok),
             achado("disk_hours_0", FindingSeverity::Ok),
@@ -567,10 +340,6 @@ mod tests {
 
     #[test]
     fn desgaste_critico_nao_recebe_consertar_mesmo_com_o_windows_dizendo_healthy() {
-        // O cenario exato do achado: SSD com 97% da vida consumida. O Windows
-        // ainda reporta `Healthy`, então `disk_status_0` sai `Ok` — e a trava
-        // antiga, que só olhava `disk_status_*`, abria. O produto dizia numa
-        // aba que o disco estava morrendo e noutra reescrevia a estrutura.
         assert!(!permite(vec![
             achado("disk_status_0", FindingSeverity::Ok),
             achado("disk_wear_0", FindingSeverity::Critical),
@@ -587,10 +356,6 @@ mod tests {
 
     #[test]
     fn disco_quente_nao_recebe_consertar() {
-        // `disk_temp_*` nasce `Important`, e não `Critical`. O corte da trava e
-        // "qualquer coisa que não seja Ok" justamente para isto: a pergunta e
-        // "o Windows já viu algo de errado neste disco", não "já e grave o
-        // bastante para assustar o cliente".
         assert!(!permite(vec![
             achado("disk_status_0", FindingSeverity::Ok),
             achado("disk_temp_0", FindingSeverity::Important),
@@ -599,9 +364,7 @@ mod tests {
 
     #[test]
     fn achado_informativo_de_outra_area_nao_reprova_o_disco() {
-        // O filtro e por prefixo `disk_`: um achado de memória ou de energia
-        // marcado `Critical` no mesmo relatorio não tem nada a ver com a
-        // estrutura do disco e não pode fechar a trava por tabela.
+        // Achado `Critical` de memória ou energia não fecha a trava do disco.
         assert!(permite(vec![
             achado("disk_status_0", FindingSeverity::Ok),
             achado("disk_hours_0", FindingSeverity::Ok),
@@ -611,10 +374,6 @@ mod tests {
 
     #[test]
     fn o_consertar_nasce_sem_autorizacao() {
-        // A especificacao: "Só se oferece /f DEPOIS de o /scan achar alguma
-        // coisa. Sem achado, não há motivo para reiniciar a máquina de
-        // ninguém." Antes disto, um cliente com NTFS limpo abria a aba pela
-        // primeira vez e já via "Consertar a estrutura do disco".
         assert!(!EstadoDoDisco::default().autoriza_consertar());
         assert!(!EstadoDoDisco::default().tem_conserto_agendado());
     }
@@ -646,8 +405,6 @@ mod tests {
 
     #[test]
     fn scan_que_nao_conseguiu_verificar_nao_autoriza_nada() {
-        // Código 3 do chkdsk e "não consegui verificar". Isso e "não sei", e
-        // "não sei" nunca vira "achei" nem "está limpo".
         for desfecho in [
             Desfecho::Terminou { codigo: 3 },
             Desfecho::Cancelada,
@@ -687,9 +444,6 @@ mod tests {
 
     #[test]
     fn agendamento_que_falhou_nao_e_contado_como_feito() {
-        // O pior desfecho possível aqui e a tela dizer que agendou o conserto
-        // sem nada ter sido agendado — foi exatamente isso que o `chkdsk /f`
-        // sem resposta para a pergunta produzia.
         let depois = EstadoDoDisco::VerificadoComAchado
             .apos_execucao(&Ferramenta::ConsertarDisco, &Desfecho::Terminou { codigo: 1 });
 
@@ -699,10 +453,6 @@ mod tests {
 
     #[test]
     fn o_conserto_do_disco_nao_faz_pergunta_a_ninguem() {
-        // `chkdsk C: /f` no volume do sistema em uso PERGUNTA se deve agendar,
-        // e a pergunta e traduzida. O filho nasce sem console: ninguém
-        // responde. O `fsutil dirty set` marca o mesmo bit que a resposta "S"
-        // marcaria, sem diálogo nenhum.
         let r = receita(&Ferramenta::ConsertarDisco);
         assert_eq!(r.programa, "fsutil");
         assert!(
@@ -711,7 +461,6 @@ mod tests {
             r.args
         );
 
-        // E existe volta atras enquanto a máquina não reiniciou.
         let volta = receita(&Ferramenta::DesmarcarConsertoDoDisco);
         assert_eq!(volta.programa, "chkntfs");
         assert!(volta.cancelar_e_seguro);
@@ -719,14 +468,6 @@ mod tests {
 
     #[test]
     fn consertar_disco_diz_de_quem_e_o_tempo() {
-        // O clique volta em segundos; o "10 a 60 minutos" mostrado do lado
-        // dele (`minutos_tipicos`, lido em `main.ts`) é o do conserto no
-        // próximo boot. O aviso já mencionava "reiniciar", mas não dizia que
-        // o clique em si é rápido — sem isso, quem lê os dois números juntos
-        // (o rótulo de minutos e o clique) ainda pode achar que vai esperar
-        // aqui. "reinici" sozinho não é prova: já existia antes desta tarefa.
-        // A prova é dizer explicitamente que a espera deste clique é de
-        // segundos, não dos minutos ao lado.
         let r = receita(&Ferramenta::ConsertarDisco);
         let aviso = r.aviso.unwrap_or_default().to_lowercase();
 
@@ -740,10 +481,6 @@ mod tests {
 
     #[test]
     fn a_reinclusao_desfaz_exatamente_o_que_o_x_faz() {
-        // `chkntfs /X` exclui o volume do boot check PARA SEMPRE, não só uma
-        // vez. `/C` é o comando documentado pela Microsoft para desfazer
-        // isso — e precisa ser ESTE volume (`C:`), com ESTE programa
-        // (`chkntfs`), ou não reverte nada.
         let reinclusao = receita_reinclusao_do_disco();
         let desmarcar = receita(&Ferramenta::DesmarcarConsertoDoDisco);
 
@@ -753,25 +490,15 @@ mod tests {
         assert!(reinclusao.args.iter().any(|a| a == "C:"));
         assert!(desmarcar.args.iter().any(|a| a == "/X"));
 
-        // Não é a mesma receita do `DesmarcarConsertoDoDisco`: uma exclui, a
-        // outra reinclui, e confundi-las apagaria o efeito uma da outra.
+        // Uma exclui, a outra reinclui: confundi-las anularia uma a outra.
         assert_ne!(reinclusao.args, desmarcar.args);
 
-        // Não é destrutiva: cancelar no meio não deixa nada pela metade,
-        // então oferecer cancelamento dela nunca seria arriscado (mesmo que
-        // hoje ela não seja oferecida como botão nenhum).
         assert!(reinclusao.cancelar_e_seguro);
     }
 
     #[test]
     fn conserto_do_disco_nao_marca_sujo_sem_reincluir_antes() {
-        // A receita do `ConsertarDisco`, sozinha, continua sendo só o
-        // `fsutil dirty set` — `Receita` carrega um programa só de propósito.
-        // A reinclusão é um passo À PARTE, que o executor roda ANTES desta
-        // receita (ver `reparo_executar` em commands.rs); este teste prova
-        // que a receita e o passo de reinclusão continuam sendo comandos
-        // DIFERENTES, para o dia em que alguém tentar "simplificar" fundindo
-        // os dois numa `Receita` só e apagando a reinclusão sem perceber.
+        // `Receita` carrega um programa só: este teste impede que alguém funda os dois e apague a reinclusão.
         let marcar = receita(&Ferramenta::ConsertarDisco);
         let reinclusao = receita_reinclusao_do_disco();
 
@@ -782,12 +509,7 @@ mod tests {
 
     #[test]
     fn reinclusao_que_terminou_com_erro_nao_autoriza_marcar_sujo() {
-        // O cenário do achado: `/C` falha (permissão, volume ocupado, o que
-        // for) e o executor segue para o `fsutil` mesmo assim. O `fsutil`
-        // quase sempre funciona — ele só grava um bit — então o desfecho
-        // final sai 0 e a tela diria "agendado" sobre um volume que
-        // continua fora do boot check. `reinclusao_deu_certo` é o freio que
-        // impede o executor de seguir nesse caso.
+        // Com o `/C` falho e o `fsutil` bem-sucedido, a tela diria "agendado" com o volume fora do boot check.
         for desfecho in [
             Desfecho::Terminou { codigo: 1 },
             Desfecho::Cancelada,
@@ -816,26 +538,20 @@ mod tests {
         assert!(!sem.args.iter().any(|a| a == "/ResetBase"));
         assert!(com.args.iter().any(|a| a == "/ResetBase"));
 
-        // O cliente perde a capacidade de desinstalar atualizações. Isso não
-        // pode ficar só na cabeça de quem escreveu a tela.
+        // O cliente perde a capacidade de desinstalar atualizações.
         assert!(com.aviso.is_some(), "/ResetBase saiu sem aviso");
         assert!(sem.aviso.is_none());
     }
 
     #[test]
     fn cancelar_o_dism_nao_e_de_graca() {
-        // Interrompido no meio de uma escrita, o DISM pode deixar uma operação
-        // pendente que só se resolve rodando de novo até o fim.
         assert!(!receita(&Ferramenta::RepararImagem).cancelar_e_seguro);
         assert!(receita(&Ferramenta::VerificarArquivos).cancelar_e_seguro);
     }
 
     #[test]
     fn o_dism_pede_saida_estavel() {
-        // `/English` dá uma saída que não muda com o idioma do Windows. As três
-        // ferramentas rodam DISM, e as três precisam do argumento — uma
-        // regressão que tirasse `/English` só de uma delas ficaria invisível
-        // se o teste checasse uma única variante.
+        // As três rodam DISM e as três precisam de `/English`.
         for ferramenta in [
             Ferramenta::RepararImagem,
             Ferramenta::AnalisarWinSxS,

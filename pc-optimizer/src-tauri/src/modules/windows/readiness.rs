@@ -1,27 +1,12 @@
-// Prontidão do sistema
-//
-// Coisas que precisam estar certas ANTES de otimizar. Não são otimizações: são
-// condições que, quando erradas, fazem o atendimento inteiro dar errado por um
-// motivo que ninguém procura.
-//
-// O exemplo que motivou o módulo: máquina com reinício pendente. Parte das
-// mudanças não fixa até reiniciar, o técnico aplica tudo, mede, não vê ganho, e
-// conclui que o produto não funciona. O motivo estava lá desde o começo, numa
-// chave de registro que ninguém olha.
-//
-// Cada verificação aqui responde uma pergunta do tipo "isto vai atrapalhar o
-// resto?", e todas são baratas — o levantamento inteiro leva menos de um
-// segundo, então pode rodar antes de qualquer coisa.
+// Prontidão: condições que, erradas, fazem o atendimento inteiro dar errado (reinício pendente: parte das
+// mudanças não fixa, o técnico mede, não vê ganho e culpa o produto). Tudo barato: menos de um segundo.
 
 use super::{power, registry, shell};
 use serde::{Deserialize, Serialize};
 
 pub use super::firmware::{FindingSeverity, FixLocation};
 
-/// Plano de energia oculto do Windows, mais agressivo que o de alto desempenho.
-///
-/// Ele não aparece na lista até ser criado a partir deste identificador, e o
-/// Windows não o cria sozinho em máquina de consumo.
+/// Não aparece na lista até ser criado a partir deste identificador.
 pub const DESEMPENHO_MAXIMO_GUID: &str = "e9a42b02-d5df-448d-aa00-03f14749eb61";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +17,6 @@ pub struct ReadinessFinding {
     pub advice: String,
     pub severity: FindingSeverity,
     pub fix_location: FixLocation,
-    /// Verdadeiro quando o próprio Otimiza sabe corrigir isto.
     pub actionable: bool,
 }
 
@@ -42,11 +26,7 @@ pub struct ReadinessReport {
     pub note: String,
 }
 
-// ------------------------------------------------------ reinício pendente
-
-/// Se o Windows está esperando um reinício para concluir alguma coisa.
-///
-/// Três origens, e basta uma. As chaves são estruturais e não mudam de idioma.
+/// Três origens, e basta uma. As chaves não mudam de idioma.
 pub fn reinicio_pendente() -> Vec<&'static str> {
     let mut motivos = Vec::new();
 
@@ -66,8 +46,7 @@ pub fn reinicio_pendente() -> Vec<&'static str> {
         motivos.push("atualização do Windows");
     }
 
-    // Arquivo esperando para ser renomeado ou apagado no próximo boot. É o mais
-    // comum dos três e o menos conhecido.
+    // O mais comum dos três e o menos conhecido.
     if registry::read(
         "HKLM",
         r"SYSTEM\CurrentControlSet\Control\Session Manager",
@@ -81,12 +60,7 @@ pub fn reinicio_pendente() -> Vec<&'static str> {
     motivos
 }
 
-// ------------------------------------------------------------------- TRIM
-
-/// Se o Windows está enviando TRIM ao disco.
-///
-/// `DisableDeleteNotify = 0` significa ligado. A saída do `fsutil` é traduzida,
-/// então o que se lê é o número na linha, nunca a frase.
+/// `DisableDeleteNotify = 0` é ligado. A saída do `fsutil` é traduzida: lê-se o número, nunca a frase.
 pub fn trim_ligado() -> Option<bool> {
     let saida = shell::run("fsutil", &["behavior", "query", "DisableDeleteNotify"]).ok()?;
 
@@ -94,7 +68,6 @@ pub fn trim_ligado() -> Option<bool> {
         return None;
     }
 
-    // A linha do NTFS é a que interessa; ReFS quase nunca é o disco do sistema.
     saida
         .stdout
         .lines()
@@ -105,8 +78,6 @@ pub fn trim_ligado() -> Option<bool> {
         .map(|v| v == 0)
 }
 
-// -------------------------------------------------------- arquivo de troca
-
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 struct RawPaginacao {
@@ -114,22 +85,10 @@ struct RawPaginacao {
     mecanico: Option<bool>,
 }
 
-/// Descobre se o arquivo de paginação está num disco mecânico.
-///
-/// É um erro de configuração real e caro: numa máquina com SSD e HD, deixar a
-/// paginação no HD faz o Windows usar a peça mais lenta justamente quando a
-/// memória acaba, que é o pior momento possível.
+/// Com SSD e HD, a paginação no HD usa a peça mais lenta quando a memória acaba.
 fn paginacao_em_disco_lento() -> Option<(String, bool)> {
-    // UMA chamada, não duas.
-    //
-    // Até a versão 0.15 este diagnóstico abria dois `powershell.exe`: um para
-    // descobrir onde está o arquivo de paginação, outro para descobrir se
-    // aquele disco é mecânico. Cada processo custa uns 200 a 400 ms e cerca de
-    // 40 MB de memória prometida — na máquina que estamos diagnosticando
-    // justamente por falta de memória.
-    //
-    // Eram dois porque o segundo dependia do resultado do primeiro. Aqui a
-    // dependência vira uma variável dentro do mesmo script.
+    // UMA chamada: cada `powershell.exe` custa 200-400 ms e ~40 MB prometidos, na máquina diagnosticada justamente
+    // por falta de memória.
     let script = "$p = Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue |                     Select-Object -First 1;                   if ($p) {                     $letra = $p.Name.Substring(0,1);                     $part = Get-Partition -ErrorAction SilentlyContinue |                             Where-Object DriveLetter -eq $letra | Select-Object -First 1;                     $mec = $false;                     if ($part) {                       $d = Get-PhysicalDisk -ErrorAction SilentlyContinue |                            Where-Object DeviceId -eq (Get-Disk -Number $part.DiskNumber).Number;                       $mec = ($d.MediaType -eq 'HDD') };                     ConvertTo-Json -Compress -InputObject ([ordered]@{                       Name = $p.Name; Mecanico = [bool]$mec }) }";
 
     let bruto: RawPaginacao = shell::powershell(script)
@@ -140,13 +99,10 @@ fn paginacao_em_disco_lento() -> Option<(String, bool)> {
     Some((bruto.name?, bruto.mecanico.unwrap_or(false)))
 }
 
-// ------------------------------------------------------------- montagem
-
-/// Levantamento completo.
 pub fn analyze() -> ReadinessReport {
     let mut findings = Vec::new();
 
-    // 1. Reinício pendente. Vem primeiro porque atrapalha todo o resto.
+    // Primeiro: atrapalha todo o resto.
     let motivos = reinicio_pendente();
 
     if !motivos.is_empty() {
@@ -165,8 +121,7 @@ pub fn analyze() -> ReadinessReport {
         });
     }
 
-    // 2. TRIM. Desligado num SSD, o disco vai perdendo velocidade de escrita ao
-    //    longo de meses, e nada no sistema avisa.
+    // Desligado num SSD, a escrita perde velocidade ao longo de meses sem aviso.
     if super::hardware::profile().system_storage == super::hardware::StorageKind::Ssd {
         if trim_ligado() == Some(false) {
             findings.push(ReadinessFinding {
@@ -185,7 +140,6 @@ pub fn analyze() -> ReadinessReport {
         }
     }
 
-    // 3. Paginação em disco mecânico.
     if let Some((caminho, mecanico)) = paginacao_em_disco_lento() {
         if mecanico {
             findings.push(ReadinessFinding {
@@ -204,9 +158,7 @@ pub fn analyze() -> ReadinessReport {
         }
     }
 
-    // 4. Plano de desempenho máximo. Informativo: é oportunidade, não defeito.
-    // Plano de terceiro ativo: o cliente acha que está no "alto desempenho" do
-    // Windows e está num plano que ninguém auditou.
+    // Plano de terceiro ativo: o cliente acha que está no "alto desempenho" e está num plano que ninguém auditou.
     if let Some(nome) = plano_ativo_e_de_terceiro() {
         findings.push(ReadinessFinding {
             id: "plano_de_terceiro".to_string(),
@@ -220,9 +172,7 @@ pub fn analyze() -> ReadinessReport {
         });
     }
 
-    // O achado "plano de desempenho máximo não existe" saiu na 2.9: criar o
-    // Ultimate Performance é receita universal, e a energia é do motor
-    // adaptativo (aba Energia), que mede o plano certo para cada máquina.
+    // O achado "plano de desempenho máximo não existe" saiu na 2.9: a energia é do motor adaptativo.
 
     findings.sort_by_key(|f| match f.severity {
         FindingSeverity::Critical => 0,
@@ -250,51 +200,18 @@ pub fn analyze() -> ReadinessReport {
     ReadinessReport { findings, note }
 }
 
-/// Se o plano de desempenho máximo já foi criado.
-///
-/// A verificação NÃO pode ser pelo identificador de origem.
-///
-/// `powercfg -duplicatescheme` cria uma cópia com identificador NOVO — o
-/// `e9a42b02-…` é o molde, e nunca aparece na lista de planos da máquina. Na
-/// máquina onde este defeito foi encontrado, o plano existia como
-/// `d1664682-…` e o produto respondia que não existia, oferecendo criar um
-/// segundo.
-///
-/// O nome também não serve: ele é traduzido, e comparar "Desempenho Máximo"
-/// quebraria em qualquer Windows que não seja português.
-///
-/// O que sobra, e é o certo: perguntar ao próprio `powercfg` quais
-/// configurações o plano tem. O plano de desempenho máximo é o único que
-/// desliga o estacionamento de núcleos por padrão — mas ler isso plano a plano
-/// custa caro. Então a checagem passa a ser por CONTAGEM: se existe mais plano
-/// do que os quatro que o Windows traz de fábrica, algum foi acrescentado.
-/// `None` é NÃO CONSEGUI LER a lista de planos, e não "não existe".
+/// Não pelo identificador de origem (`duplicatescheme` cria GUID NOVO, e o produto oferecia um segundo) nem pelo
+/// nome (traduzido): por CONTAGEM, mais planos que os quatro de fábrica. `None` é não conseguir ler a lista.
 pub fn plano_maximo_existe() -> Option<bool> {
     Some(planos_instalados()?.iter().any(|(guid, nome)| {
         guid.eq_ignore_ascii_case(DESEMPENHO_MAXIMO_GUID)
-            // O molde tem identificador fixo; a cópia herda o nome que o
-            // Windows deu na criação. Comparar os dois cobre a máquina que
-            // criou pelo Otimiza e a que já tinha o plano.
             || sem_acento(nome).contains(&sem_acento("desempenho máximo"))
             || sem_acento(nome).contains("ultimate performance")
     }))
 }
 
-/// Deixa só o esqueleto ASCII, em minúsculas.
-///
-/// POR QUE ISTO É NECESSÁRIO AQUI
-///
-/// `powercfg` não é PowerShell, então não passa pelo `shell::powershell()` que
-/// força UTF-8 — e a saída dele vem no código de página do console. Nesta
-/// máquina, "Desempenho Máximo" chega como `M` + caractere de substituição +
-/// `ximo`, com os bytes `239 191 189` no lugar do acento.
-///
-/// Resultado prático: `contains("máximo")` devolvia falso para uma máquina que
-/// TINHA o plano, e o produto oferecia criar um segundo.
-///
-/// Descartar tudo que não é ASCII resolve os dois lados de uma vez — funciona
-/// se o acento sobreviveu e funciona se ele virou lixo, porque o texto
-/// procurado passa pela mesma peneira.
+/// O `powercfg` não passa pelo UTF-8 forçado: "Máximo" chega com caractere de substituição. Descartar o não ASCII
+/// funciona com o acento intacto ou corrompido, porque o texto procurado passa pela mesma peneira.
 fn sem_acento(texto: &str) -> String {
     texto
         .to_lowercase()
@@ -303,16 +220,8 @@ fn sem_acento(texto: &str) -> String {
         .collect()
 }
 
-/// Todos os planos de energia da máquina: identificador e nome.
-///
-/// O resultado é guardado por alguns segundos porque UMA análise consulta esta
-/// lista três vezes — para dizer se o plano ativo é de terceiro, para saber se
-/// o de desempenho máximo existe, e de novo dentro da primeira. Eram três
-/// processos `powercfg` para responder a mesma pergunta, e o diagnóstico
-/// inteiro já custa caro demais na máquina fraca que é o público do produto.
-///
-/// A validade é curta de propósito: plano de energia muda quando o cliente
-/// clica em alguma coisa, e uma lista velha faria a tela mentir.
+/// Guardada por alguns segundos: uma análise consultava a mesma lista três vezes. Curta porque o plano muda quando
+/// o cliente clica.
 pub fn planos_instalados() -> Option<Vec<(String, String)>> {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -328,13 +237,8 @@ pub fn planos_instalados() -> Option<Vec<(String, String)>> {
         }
     }
 
-    // LISTA VAZIA NÃO É "NÃO TEM PLANO NENHUM": todo Windows tem pelo menos um.
-    //
-    // Devolver `Vec::new()` aqui reabria, por outra porta, o defeito dos planos
-    // órfãos que já custou caro: `plano_maximo_existe` virava `false`, a guarda
-    // de `criar_plano_maximo` passava, e cada clique deixava mais uma cópia do
-    // plano no PC do cliente. E o diagnóstico afirmava que o plano não existe
-    // numa máquina que o tem.
+    // Todo Windows tem pelo menos um plano: vazio faria `plano_maximo_existe` falso e cada clique deixaria mais uma
+    // cópia do plano.
     let Ok(saida) = shell::run("powercfg", &["/list"]) else {
         return None;
     };
@@ -352,11 +256,7 @@ pub fn planos_instalados() -> Option<Vec<(String, String)>> {
     Some(lista)
 }
 
-/// Extrai os planos da saída do `powercfg /list`.
-///
-/// **Função pura.** O formato é `GUID do Esquema de Energia: <guid>  (<nome>)`,
-/// com o rótulo traduzido — por isso a leitura se apoia no formato do
-/// identificador e nos parênteses, e nunca no texto do rótulo.
+/// **Pura.** O rótulo é traduzido: a leitura se apoia no formato do identificador e nos parênteses.
 pub fn analisar_lista_de_planos(saida: &str) -> Vec<(String, String)> {
     let mut planos = Vec::new();
 
@@ -368,9 +268,6 @@ pub fn analisar_lista_de_planos(saida: &str) -> Vec<(String, String)> {
         let resto = linha[inicio + 1..].trim();
         let guid: String = resto.chars().take(36).collect();
 
-        // Um identificador tem 36 caracteres com hífen na quarta posição a
-        // partir de cada bloco. A conferência simples evita casar com qualquer
-        // linha que tenha dois-pontos.
         if guid.len() != 36 || guid.matches('-').count() != 4 {
             continue;
         }
@@ -386,12 +283,7 @@ pub fn analisar_lista_de_planos(saida: &str) -> Vec<(String, String)> {
     planos
 }
 
-/// O plano ATIVO é de terceiro?
-///
-/// Programas como o IObit Driver Booster criam um plano próprio e o deixam
-/// ativo. O cliente acha que está no "alto desempenho" do Windows e está num
-/// plano que ninguém auditou — na máquina onde este código foi escrito, o plano
-/// ativo era o "Driver Booster Power Plan".
+/// O IObit Driver Booster, por exemplo, cria um plano e o deixa ativo.
 pub fn plano_ativo_e_de_terceiro() -> Option<String> {
     let ativo = super::power::active_scheme().ok()?;
 
@@ -399,17 +291,7 @@ pub fn plano_ativo_e_de_terceiro() -> Option<String> {
         .into_iter()
         .find(|(guid, _)| guid.eq_ignore_ascii_case(&ativo))?;
 
-    // PELO GUID PRIMEIRO, e o nome só como reserva.
-    //
-    // A lista de nomes cobria português e inglês, e só. Num Windows em espanhol
-    // o plano de fábrica se chama "Alto rendimiento"; em francês, "Performances
-    // élevées"; em alemão, "Höchstleistung". Nenhum casava, e o produto acusava
-    // o plano DE FÁBRICA de ser plano de terceiro — um alarme falso sobre o
-    // Windows do próprio cliente.
-    //
-    // Os quatro planos internos têm GUID fixo em toda instalação do Windows, em
-    // qualquer idioma. Perguntar pelo GUID elimina a dependência de tradução,
-    // que é a mesma lição do `TIPO_DE_INÍCIO` e do `ESTADO: 1 STOPPED`.
+    // PELO GUID PRIMEIRO: por nome, o plano de fábrica em espanhol, francês ou alemão virava "de terceiro".
     if e_guid_de_fabrica(&ativo) || nome_e_do_windows(&nome) {
         None
     } else {
@@ -417,19 +299,11 @@ pub fn plano_ativo_e_de_terceiro() -> Option<String> {
     }
 }
 
-/// Os quatro planos que vêm com o Windows, por GUID.
-///
-/// Fixos e iguais em toda instalação — são constantes que a Microsoft publica,
-/// não identificadores de máquina. É o único jeito de reconhecer um plano de
-/// fábrica sem depender do idioma do sistema.
+/// Constantes publicadas pela Microsoft, iguais em toda instalação e em qualquer idioma.
 const GUIDS_DE_FABRICA: [&str; 4] = [
-    // Equilibrado / Balanced / Equilibrado / Ausbalanciert
     "381b4222-f694-41f0-9685-ff5bb260df2e",
-    // Alto desempenho / High performance / Alto rendimiento / Höchstleistung
     "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
-    // Economia de energia / Power saver / Economizador
     "a1841308-3541-4fab-bc81-f71556f20b4a",
-    // Desempenho máximo / Ultimate Performance
     "e9a42b02-d5df-448d-aa00-03f14749eb61",
 ];
 
@@ -438,10 +312,7 @@ pub fn e_guid_de_fabrica(guid: &str) -> bool {
     GUIDS_DE_FABRICA.iter().any(|g| g.eq_ignore_ascii_case(limpo))
 }
 
-/// Nomes que o Windows dá aos planos de fábrica, nos idiomas que o produto
-/// atende. Qualquer outro nome veio de fora.
 fn nome_e_do_windows(nome: &str) -> bool {
-    // Pelo esqueleto ASCII: a saída do `powercfg` chega com o acento corrompido.
     let minusculo = sem_acento(nome);
 
     [
@@ -455,26 +326,17 @@ fn nome_e_do_windows(nome: &str) -> bool {
         "ultimate performance",
     ]
     .iter()
-    // Os dois lados passam pela mesma peneira: `sem_acento` DESCARTA o
-    // caractere acentuado em vez de trocá-lo pelo sem acento, então comparar
-    // um lado dobrado com o outro cru daria falso.
+    // `sem_acento` DESCARTA o acentuado: os dois lados precisam passar pela mesma peneira.
     .any(|conhecido| minusculo.contains(&sem_acento(conhecido)))
 }
 
-/// Cria o plano de desempenho máximo, sem ativá-lo.
-///
-/// Criar e ativar são passos separados de propósito: quem está na bateria pode
-/// querer ter o plano disponível sem ligá-lo agora.
+/// Criar e ativar são separados: quem está na bateria pode querer só ter o plano.
 pub fn criar_plano_maximo() -> Result<String, String> {
     if !registry::is_elevated() {
         return Err("Criar um plano de energia exige executar como administrador.".to_string());
     }
 
-    // A GUARDA QUE IMPEDE O PLANO DUPLICADO, e ela não pode passar no escuro.
-    //
-    // Sem a lista de planos não dá para saber se ele já existe — e `duplicatescheme`
-    // não checa nada: cada clique deixaria mais uma cópia no PC do cliente. É o
-    // mesmo estrago dos planos órfãos, e recusar é o único lado seguro.
+    // Sem a lista, recusa: `duplicatescheme` não confere nada e cada clique deixaria mais uma cópia.
     match plano_maximo_existe() {
         Some(true) => {
             return Err("O plano de desempenho máximo já existe nesta máquina.".to_string())
@@ -498,7 +360,6 @@ pub fn criar_plano_maximo() -> Result<String, String> {
         .to_string())
 }
 
-/// Religa o TRIM.
 pub fn ligar_trim() -> Result<String, String> {
     if !registry::is_elevated() {
         return Err("Alterar o comportamento do sistema de arquivos exige administrador.".to_string());
@@ -512,7 +373,6 @@ pub fn ligar_trim() -> Result<String, String> {
         .to_string())
 }
 
-/// Usado pelo relatório para citar o plano ativo.
 #[allow(dead_code)]
 pub fn plano_ativo() -> Option<String> {
     power::active_scheme().ok()
@@ -522,15 +382,8 @@ pub fn plano_ativo() -> Option<String> {
 mod tests {
     use super::*;
 
-
-    /// O DEFEITO QUE ESTE CONSERTO TIRA: num Windows em espanhol, francês ou
-    /// alemão, o plano DE FÁBRICA não casava com nenhum nome da lista, e o
-    /// produto acusava o Windows do próprio cliente de ter plano de terceiro.
-    ///
-    /// Pelo GUID, o idioma deixa de importar.
     #[test]
     fn o_plano_de_fabrica_e_reconhecido_em_qualquer_idioma() {
-        // Os quatro, escritos como o `powercfg` os imprime.
         for guid in [
             "381b4222-f694-41f0-9685-ff5bb260df2e",
             "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
@@ -543,23 +396,14 @@ mod tests {
         }
     }
 
-    /// E um plano criado por terceiro — ou por nós — tem GUID próprio e NÃO
-    /// pode ser confundido com os de fábrica.
     #[test]
     fn plano_com_guid_proprio_nao_passa_por_de_fabrica() {
-        // O plano ativo desta máquina, que é um plano próprio.
         assert!(!e_guid_de_fabrica("fd6bfd99-f5ef-41bb-9663-a1ec92d69712"));
         assert!(!e_guid_de_fabrica(""));
         assert!(!e_guid_de_fabrica("não é guid"));
     }
 
     #[test]
-    /// Onde vão os segundos da prontidão.
-    ///
-    /// A medição do veredito apontou este módulo como **58% do tempo da tela
-    /// inicial** — 3,8 s de 6,5 s somados. O número sozinho não diz em qual
-    /// etapa, e consertar sem saber seria o chute que o produto recusa.
-    ///
     /// `cargo test --lib -- --ignored --nocapture onde_vai_o_tempo_da_prontidao`
     #[ignore]
     fn onde_vai_o_tempo_da_prontidao() {
@@ -605,24 +449,19 @@ mod tests {
         let motivos = reinicio_pendente();
         println!("motivos de reinício pendente: {:?}", motivos);
 
-        // Todo motivo relatado tem texto; motivo vazio na tela não explica nada.
         assert!(motivos.iter().all(|m| !m.is_empty()));
     }
 
     #[test]
     fn trim_e_lido_pelo_numero_e_nao_pelo_texto() {
-        // A saída do fsutil vem traduzida. Este projeto já quebrou uma vez por
-        // ler texto localizado, e a leitura aqui é do número depois do sinal.
         let estado = trim_ligado();
         println!("TRIM ligado: {:?}", estado);
 
-        // Numa máquina Windows a resposta existe; `None` seria falha de leitura.
         assert!(estado.is_some(), "não foi possível ler o estado do TRIM");
     }
 
     #[test]
     fn le_a_lista_de_planos_sem_depender_do_idioma() {
-        // O rótulo é traduzido; o formato do identificador não é.
         let saida = "
 Esquemas de Energia Existentes (* Ativos)
              -----------------------------------
@@ -636,19 +475,15 @@ Esquemas de Energia Existentes (* Ativos)
         assert_eq!(planos.len(), 3);
         assert_eq!(planos[1].1, "Driver Booster Power Plan");
         assert_eq!(planos[2].0, "d1664682-a7b9-4796-b248-286ed3cc2d01");
-        // A linha de cabeçalho tem dois-pontos e não pode virar plano.
         assert!(planos.iter().all(|(g, _)| g.len() == 36));
     }
 
     #[test]
     fn plano_de_terceiro_e_reconhecido_como_de_fora() {
-        // O defeito real: o cliente acha que está no alto desempenho e está num
-        // plano criado por um otimizador que ele nem lembra de ter instalado.
         assert!(!nome_e_do_windows("Driver Booster Power Plan"));
         assert!(!nome_e_do_windows("Razer Game Booster"));
         assert!(!nome_e_do_windows("Lenovo Vantage"));
 
-        // E os de fábrica não podem virar alarme falso, em nenhum dos idiomas.
         for oficial in [
             "Equilibrado",
             "Balanced",
@@ -664,7 +499,6 @@ Esquemas de Energia Existentes (* Ativos)
 
     #[test]
     fn plano_maximo_e_detectado_pelo_identificador() {
-        // Pelo identificador, nunca pelo nome — o nome do plano é traduzido.
         let existe = plano_maximo_existe();
         println!("plano de desempenho máximo existe: {:?}", existe);
 
@@ -678,9 +512,6 @@ Esquemas de Energia Existentes (* Ativos)
                 let erro = criar_plano_maximo().unwrap_err();
                 assert!(erro.contains("já existe") || erro.contains("administrador"));
             }
-            // SEM A LISTA, CRIAR É PROIBIDO. É a guarda que impede o plano
-            // duplicado: `duplicatescheme` não confere nada, então cada clique
-            // no escuro deixaria mais uma cópia no PC do cliente.
             None => {
                 let erro = criar_plano_maximo().unwrap_err();
                 assert!(
@@ -710,14 +541,11 @@ Esquemas de Energia Existentes (* Ativos)
 
         assert!(!r.note.is_empty());
 
-        // Todo achado tem texto medido e conselho: achado sem explicação vira
-        // alarme que ninguém sabe o que fazer com.
         for f in &r.findings {
             assert!(!f.measured.is_empty(), "{} sem medida", f.title);
             assert!(!f.advice.is_empty(), "{} sem conselho", f.title);
         }
 
-        // Problemas antes do que é só oportunidade.
         let ordem: Vec<u8> = r
             .findings
             .iter()
