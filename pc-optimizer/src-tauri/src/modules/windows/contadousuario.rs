@@ -1,74 +1,21 @@
-// A conta que vai jogar, e a conta que está rodando o Otimiza
-//
-// ESTE É O DEFEITO MAIS SILENCIOSO QUE ESTE PROJETO TEM, e ele explica uma
-// classe inteira de "funcionou aqui e não lá".
-//
-// Vinte e uma das otimizações do catálogo escrevem em `HKEY_CURRENT_USER` —
-// aceleração do mouse, transparência, notificações, efeitos visuais, busca na
-// internet do menu Iniciar, aplicativos em segundo plano. `HKEY_CURRENT_USER`
-// não é "o usuário da máquina": é a conta do PROCESSO que está escrevendo.
-//
-// Agora o cenário real, e ele é comum no público deste produto:
-//
-//   O PC do cliente tem uma conta comum, sem privilégio. O Otimiza precisa de
-//   administrador. O Windows pergunta a senha, e o cliente digita a senha da
-//   conta de administrador — que é OUTRA CONTA, muitas vezes a do técnico que
-//   montou a máquina, ou a conta "Admin" que veio de fábrica.
-//
-//   A partir daí, `HKEY_CURRENT_USER` aponta para o perfil dessa outra conta.
-//   As vinte e uma otimizações são gravadas num perfil que ninguém usa.
-//
-// E o pior: **o produto confere e diz que deu certo.** Ele relê a chave que
-// acabou de escrever, encontra o valor certo, e reporta "aplicado e conferido".
-// A verificação está correta e a resposta está errada — porque a pergunta era
-// sobre a conta errada.
-//
-// O cliente reinicia, joga, não vê diferença nenhuma no mouse, e conclui que o
-// produto não faz nada. Ele tem razão: naquela máquina, não fez.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// COMO SE DESCOBRE
-//
-// A conta que vai jogar é a dona do `explorer.exe` — o shell do Windows roda
-// sempre como o usuário que está na frente da máquina, e continua rodando como
-// ele mesmo quando outra conta eleva alguma coisa por cima.
-//
-// Comparar o dono do shell com a conta do processo responde a pergunta. Os dois
-// nomes vêm do próprio Windows, no formato `DOMÍNIO\usuário`, e não são
-// traduzidos.
-//
-// Conferido nesta máquina: processo `SNYX-PC\User`, shell `SNYX-PC\User`.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// O QUE O PRODUTO FAZ COM ISSO
-//
-// AVISA, e não tenta consertar. Escrever no perfil de outro usuário exige
-// carregar a colmeia dele (`reg load`) e adivinhar qual é — e uma ferramenta
-// que escreve no registro de outra conta é uma ferramenta que ninguém deveria
-// instalar. O conserto é a pessoa abrir o Otimiza pela conta dela, com ela
-// sendo administradora, e isso o aviso explica.
+// A conta que vai jogar e a conta que roda o Otimiza. Os ajustes de `HKEY_CURRENT_USER` vão para a conta do
+// PROCESSO: se o cliente eleva com a senha de OUTRA conta (a "Admin" de fábrica, a do técnico), vão para um
+// perfil que ninguém usa, e a releitura confere e diz "aplicado". A conta que joga é a dona do `explorer.exe`.
+// O produto AVISA e não tenta escrever no perfil de outra conta.
 
 use serde::{Deserialize, Serialize};
 
-/// Quem está rodando, comparado com quem vai jogar.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum Conta {
-    /// A mesma. É o caso normal, e o único em que os ajustes de usuário valem.
     Mesma { usuario: String },
-    /// Contas diferentes: os ajustes de usuário vão para o perfil errado.
     Diferente { processo: String, shell: String },
-    /// Não deu para descobrir. NÃO é "está tudo bem" — é uma verificação que
-    /// não aconteceu, e ela fica dita como tal.
+    /// NÃO é "está tudo bem": é uma verificação que não aconteceu.
     NaoDeuParaLer { motivo: String },
 }
 
 impl Conta {
-    /// Os ajustes de usuário vão para o perfil certo?
-    ///
-    /// `NaoDeuParaLer` responde `None`, e não `false`: quem chama precisa poder
-    /// distinguir "está errado" de "não sei", porque as duas frases mandam a
-    /// pessoa fazer coisas diferentes.
+    /// `None` e não `false`: "está errado" e "não sei" mandam a pessoa fazer coisas diferentes.
     pub fn ajustes_de_usuario_valem(&self) -> Option<bool> {
         match self {
             Conta::Mesma { .. } => Some(true),
@@ -78,12 +25,7 @@ impl Conta {
     }
 }
 
-/// Compara os dois nomes. **Função pura.**
-///
-/// Sem diferença entre maiúscula e minúscula: o Windows não distingue nome de
-/// usuário por caixa, e `SNYX-PC\User` e `snyx-pc\user` são a mesma conta. Uma
-/// comparação sensível a caixa acusaria contas diferentes onde não há — que é o
-/// alarme falso mais fácil de cometer aqui.
+/// Sem diferença de caixa: o Windows não distingue, e acusar contas diferentes aí é o alarme falso mais fácil.
 pub fn comparar(processo: &str, shell: &str) -> Conta {
     let p = processo.trim();
     let s = shell.trim();
@@ -104,16 +46,9 @@ pub fn comparar(processo: &str, shell: &str) -> Conta {
     }
 }
 
-/// Lê o dono do `explorer.exe` e a conta do processo.
 #[cfg(target_os = "windows")]
 pub fn verificar() -> Conta {
-    // DUAS SAÍDAS SEPARADAS, e não uma linha com `\n` no meio.
-    //
-    // A primeira versão montava as duas com `'{0}`n{1}' -f ...`. Em PowerShell,
-    // aspas SIMPLES são literais: o `n não vira quebra de linha, vira os dois
-    // caracteres. A saída chegava numa linha só, o módulo respondia "não deu
-    // para ler", e a verificação que existe para pegar defeito silencioso
-    // falhava em silêncio. Pego rodando contra esta máquina.
+    // Duas saídas separadas: em aspas simples do PowerShell o `n é literal, e a saída chegava numa linha só.
     let script = "[Security.Principal.WindowsIdentity]::GetCurrent().Name; \
                   $e = Get-CimInstance Win32_Process -Filter \"name='explorer.exe'\" \
                        -ErrorAction SilentlyContinue | Select-Object -First 1; \
@@ -140,12 +75,8 @@ pub fn verificar() -> Conta {
     Conta::NaoDeuParaLer { motivo: "só no Windows.".to_string() }
 }
 
-/// **Função pura**: a saída são duas linhas, processo e shell.
-///
-/// Com UMA linha só, o `explorer.exe` não foi encontrado — acontece em sessão
-/// sem shell, como conexão remota recém-aberta ou máquina em modo de segurança.
-/// Isso é `NaoDeuParaLer` e não "as contas são iguais": presumir igualdade ali
-/// devolveria o produto ao defeito que este módulo existe para pegar.
+/// Uma linha só = `explorer.exe` não encontrado (sessão remota, modo de segurança): `NaoDeuParaLer`, nunca
+/// "as contas são iguais".
 pub fn ler_duas_linhas(saida: &str) -> Conta {
     let linhas: Vec<&str> = saida.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
 
@@ -162,7 +93,6 @@ pub fn ler_duas_linhas(saida: &str) -> Conta {
     }
 }
 
-/// A frase que o cliente lê. Regra de produto, e por isso tem teste.
 pub fn explicar(conta: &Conta, quantos_ajustes: usize) -> String {
     match conta {
         Conta::Mesma { usuario } => format!(
@@ -193,11 +123,7 @@ pub fn explicar(conta: &Conta, quantos_ajustes: usize) -> String {
     }
 }
 
-/// Quantos ajustes do catálogo dependem da conta.
-///
-/// Contado do catálogo e não escrito à mão: um número na frase que diverge da
-/// lista é a mesma classe de mentira que o resto do produto passou versões
-/// consertando.
+/// Contado do catálogo, e não escrito à mão.
 pub fn quantos_sao_por_conta() -> usize {
     use super::catalog::{Action, CATALOG};
 
@@ -223,9 +149,6 @@ mod tests {
         );
     }
 
-    /// O alarme falso mais fácil de cometer aqui: o Windows não distingue conta
-    /// por caixa, e `snyx-pc\user` é a mesma conta que `SNYX-PC\User`. Acusar
-    /// diferença ali mandaria o cliente reinstalar a máquina por nada.
     #[test]
     fn a_caixa_das_letras_nao_cria_conta_diferente() {
         assert!(matches!(
@@ -248,8 +171,6 @@ mod tests {
         assert_eq!(c.ajustes_de_usuario_valem(), Some(false));
     }
 
-    /// Sem Explorer, o produto NÃO presume que as contas são iguais. Presumir
-    /// ali devolveria exatamente o defeito que este módulo existe para pegar.
     #[test]
     fn sem_explorer_o_produto_nao_presume_que_esta_tudo_bem() {
         let c = ler_duas_linhas("PC\\Admin\n");
@@ -277,8 +198,7 @@ mod tests {
         );
     }
 
-    /// O aviso precisa dizer O QUE FAZER, e precisa dizer que o resto continua
-    /// funcionando — senão o cliente acha que o produto inteiro não serve.
+    /// Diz O QUE FAZER, e que o resto continua funcionando.
     #[test]
     fn o_aviso_diz_o_que_fazer_e_o_que_continua_valendo() {
         let frase = explicar(
@@ -311,9 +231,6 @@ mod tests {
         assert!(frase.contains("não quer dizer que esteja tudo bem"));
     }
 
-    /// O número na frase sai do catálogo e não da minha memória. Vinte e um é o
-    /// que havia quando este módulo nasceu; o teste existe para que a mudança
-    /// desse número seja percebida, não para travá-lo.
     #[test]
     fn a_contagem_de_ajustes_por_conta_vem_do_catalogo() {
         let n = quantos_sao_por_conta();

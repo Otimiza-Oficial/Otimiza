@@ -1,27 +1,6 @@
-// Onde cada alvo da limpeza mora, quanto ele tem, e como apagá-lo
-//
-// O CATÁLOGO ESTÁ EM `modules::limpeza`, e ele é puro: o que cada item é, o que
-// se perde ao apagar, e qual vem marcado. Aqui ficam só os caminhos e as
-// chamadas — a parte que só existe no Windows.
-//
-// A SEPARAÇÃO NÃO É ARRUMAÇÃO. A decisão de produto — "a lixeira não vem
-// marcada porque contém arquivo do cliente" — precisa ser testável em qualquer
-// máquina, inclusive numa que não tem lixeira nenhuma. Se ela morasse junto do
-// código que varre `C:\$Recycle.Bin`, ela só seria testável no Windows.
-//
-// MEDIR É ANDAR NA PASTA, E ANDAR NA PASTA PODE FALHAR
-//
-// Falta de permissão, arquivo travado, caminho longo demais. Nenhum desses é
-// erro fatal: a soma continua, e o que não deu para ler sai como DESCONHECIDO
-// em vez de zero. Zero afirmaria que não há nada ali, e é o que faria o técnico
-// não rodar como administrador quando era exatamente isso que faltava.
-//
-// APAGAR NUNCA PARA NO PRIMEIRO ERRO
-//
-// Um arquivo em uso por programa aberto é o caso comum, não a exceção. Parar
-// ali deixaria a limpeza pela metade e diria "falhou" sobre uma operação que
-// liberou dois gigabytes. O que se conta é o que foi apagado, o que foi pulado,
-// e quanto sobrou.
+// Os caminhos e as chamadas da limpeza (o catálogo puro está em `modules::limpeza`). O que não se lê sai
+// DESCONHECIDO, nunca zero: zero faria o técnico não tentar como administrador. Apagar nunca para no primeiro
+// erro: arquivo em uso é o caso comum.
 
 #![cfg(target_os = "windows")]
 
@@ -31,15 +10,13 @@ use crate::modules::limpeza::{alvo_por_id, AlvoMedido, ALVOS};
 
 use super::shell;
 
-/// O que sobrou depois de apagar.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Resultado {
     pub id: String,
     pub bytes_liberados: u64,
     pub arquivos_apagados: usize,
-    /// Em uso por um programa aberto. NÃO é erro: é o caso comum.
+    /// NÃO é erro: é o caso comum.
     pub arquivos_pulados: usize,
-    /// O que impediu de apagar, quando impediu por completo.
     pub erro: Option<String>,
 }
 
@@ -47,10 +24,7 @@ fn variavel(nome: &str) -> Option<PathBuf> {
     std::env::var(nome).ok().map(PathBuf::from)
 }
 
-/// As pastas de cada alvo nesta máquina.
-///
-/// Lista vazia significa "este alvo não existe aqui" — Windows sem Entrega
-/// Otimizada, por exemplo. Diferente de pasta que existe e está vazia.
+/// Lista vazia = o alvo não existe aqui, diferente de pasta que existe e está vazia.
 pub fn pastas_de(id: &str) -> Vec<PathBuf> {
     let windows = variavel("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
     let local = variavel("LOCALAPPDATA");
@@ -67,15 +41,12 @@ pub fn pastas_de(id: &str) -> Vec<PathBuf> {
             .join("SoftwareDistribution")
             .join("DeliveryOptimization")],
 
-        // O cache de miniaturas são ARQUIVOS soltos numa pasta que tem outras
-        // coisas dentro, então ele não é tratado como pasta inteira: ver
-        // `apagar_miniaturas`.
+        // Arquivos soltos numa pasta que tem outras coisas: ver `apagar_miniaturas`.
         "miniaturas" => local
             .map(|l| vec![l.join("Microsoft").join("Windows").join("Explorer")])
             .unwrap_or_default(),
 
-        // Os da sua conta e os do sistema (`ProgramData`, exige
-        // administrador — sem ele os arquivos são contados como pulados).
+        // `ProgramData` exige administrador; sem ele os arquivos contam como pulados.
         "relatorios_de_erro" => [local, variavel("ProgramData")]
             .into_iter()
             .flatten()
@@ -85,9 +56,7 @@ pub fn pastas_de(id: &str) -> Vec<PathBuf> {
             })
             .collect(),
 
-        // A lixeira fica na raiz de CADA disco, com uma subpasta por usuário.
-        // Varrer para medir é seguro; apagar é feito pelo Windows, que sabe
-        // qual subpasta é de quem. Ver `esvaziar_lixeira`.
+        // Uma subpasta por usuário em cada disco: medir por varredura, apagar pelo Windows (`esvaziar_lixeira`).
         "lixeira" => discos()
             .into_iter()
             .map(|d| d.join("$Recycle.Bin"))
@@ -97,7 +66,6 @@ pub fn pastas_de(id: &str) -> Vec<PathBuf> {
     }
 }
 
-/// As raízes dos discos fixos, para a lixeira.
 fn discos() -> Vec<PathBuf> {
     ('C'..='Z')
         .map(|letra| PathBuf::from(format!("{letra}:\\")))
@@ -105,11 +73,7 @@ fn discos() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Soma o tamanho de uma pasta, andando nela.
-///
-/// `None` quando nem a pasta abriu. Arquivo solto que falhar no meio é pulado
-/// — o total sai menor, e isso é melhor que sair ausente por causa de um
-/// arquivo.
+/// `None` quando nem a pasta abriu; arquivo que falha no meio é pulado.
 fn tamanho_de(pasta: &Path) -> Option<u64> {
     if !pasta.is_dir() {
         return None;
@@ -119,8 +83,7 @@ fn tamanho_de(pasta: &Path) -> Option<u64> {
     let mut pendentes = vec![pasta.to_path_buf()];
     let mut abriu_alguma = false;
 
-    // Iterativo e não recursivo: uma pasta de temporários com milhares de
-    // níveis — que acontece com instalador mal feito — estouraria a pilha.
+    // Iterativo: instalador mal feito deixa milhares de níveis e estouraria a pilha.
     while let Some(atual) = pendentes.pop() {
         let Ok(entradas) = std::fs::read_dir(&atual) else {
             continue;
@@ -132,9 +95,7 @@ fn tamanho_de(pasta: &Path) -> Option<u64> {
                 continue;
             };
 
-            // Link simbólico NÃO é seguido: um atalho para `C:\` dentro de uma
-            // pasta de temporários faria a medição varrer o disco inteiro, e o
-            // apagar seguir atrás dela.
+            // Link NÃO é seguido: um atalho para `C:\` faria medir e apagar o disco inteiro.
             if tipo.is_symlink() {
                 continue;
             }
@@ -150,16 +111,12 @@ fn tamanho_de(pasta: &Path) -> Option<u64> {
     abriu_alguma.then_some(total)
 }
 
-/// Mede todos os alvos.
 pub fn medir() -> Vec<AlvoMedido> {
     ALVOS
         .iter()
         .map(|a| {
             let pastas = pastas_de(a.id);
 
-            // Soma só o que deu para ler. Nenhuma pasta lida vira ausente, e
-            // não zero — a diferença é o que diz ao técnico se vale tentar
-            // como administrador.
             let medidas: Vec<u64> = pastas.iter().filter_map(|p| tamanho_de(p)).collect();
 
             AlvoMedido {
@@ -174,10 +131,6 @@ pub fn medir() -> Vec<AlvoMedido> {
         .collect()
 }
 
-/// Apaga o conteúdo de uma pasta, sem apagar a pasta.
-///
-/// Devolve (bytes, apagados, pulados). Nunca para no primeiro erro: arquivo em
-/// uso é o caso comum, e desistir ali deixaria a limpeza pela metade.
 fn esvaziar(pasta: &Path) -> (u64, usize, usize) {
     let (mut bytes, mut apagados, mut pulados) = (0u64, 0usize, 0usize);
 
@@ -222,11 +175,7 @@ fn esvaziar(pasta: &Path) -> (u64, usize, usize) {
     (bytes, apagados, pulados)
 }
 
-/// O cache de miniaturas são arquivos com nome conhecido dentro da pasta do
-/// Explorer, que tem outras coisas.
-///
-/// Apagar a pasta inteira levaria junto a configuração de exibição das pastas
-/// — que é do cliente, e que ele nunca pediu para perder.
+/// Apagar a pasta inteira levaria a configuração de exibição das pastas, que é do cliente.
 fn apagar_miniaturas(pasta: &Path) -> (u64, usize, usize) {
     let (mut bytes, mut apagados, mut pulados) = (0u64, 0usize, 0usize);
 
@@ -247,8 +196,6 @@ fn apagar_miniaturas(pasta: &Path) -> (u64, usize, usize) {
                 bytes += tamanho;
                 apagados += 1;
             }
-            // Em uso pelo Explorer é o caso normal: o arquivo fica travado
-            // enquanto ele está aberto. Pular é a resposta certa.
             Err(_) => pulados += 1,
         }
     }
@@ -256,12 +203,7 @@ fn apagar_miniaturas(pasta: &Path) -> (u64, usize, usize) {
     (bytes, apagados, pulados)
 }
 
-/// Esvazia a lixeira pelo próprio Windows.
-///
-/// NÃO por varredura de `$Recycle.Bin`. Aquela pasta tem uma subpasta por
-/// usuário e um índice que o Explorer mantém; apagar arquivo dali por fora
-/// deixa a lixeira mostrando item que não existe mais. O Windows sabe fazer
-/// isso direito, e esta é uma operação sem volta — não é hora de improvisar.
+/// Pelo Windows, e não varrendo `$Recycle.Bin`: por fora, a lixeira mostraria item que não existe mais.
 fn esvaziar_lixeira() -> Result<(), String> {
     let saida = shell::powershell("Clear-RecycleBin -Force -ErrorAction Stop")?;
 
@@ -269,7 +211,7 @@ fn esvaziar_lixeira() -> Result<(), String> {
         Ok(())
     } else {
         let texto = saida.stderr.trim();
-        // Lixeira já vazia devolve erro no PowerShell, e não é falha nenhuma.
+        // Lixeira já vazia devolve erro no PowerShell, e não é falha.
         if texto.contains("empty") || texto.contains("vazi") {
             Ok(())
         } else {
@@ -278,7 +220,6 @@ fn esvaziar_lixeira() -> Result<(), String> {
     }
 }
 
-/// Apaga um alvo. `Err` só quando nada pôde ser feito.
 pub fn apagar(id: &str) -> Resultado {
     let mut resultado = Resultado {
         id: id.to_string(),
@@ -294,7 +235,6 @@ pub fn apagar(id: &str) -> Resultado {
     }
 
     if id == "lixeira" {
-        // O tamanho é medido ANTES, porque depois não há o que medir.
         let antes: u64 = pastas_de(id).iter().filter_map(|p| tamanho_de(p)).sum();
 
         match esvaziar_lixeira() {
@@ -305,10 +245,8 @@ pub fn apagar(id: &str) -> Resultado {
         return resultado;
     }
 
-    // Apagar o cache com uma atualização em andamento deixa a atualização pela
-    // metade: os serviços que são donos dele param antes e voltam depois (só
-    // os que estavam rodando). Veio do liberador de espaço, que já fazia isso
-    // antes da unificação da 2.9.
+    // Com atualização em andamento, apagar o cache a deixa pela metade: os serviços donos param antes e voltam
+    // depois (só os que estavam rodando).
     let servicos: &[&str] = match id {
         "windows_update" | "entregas_otimizadas" => &["wuauserv", "bits", "dosvc"],
         _ => &[],
@@ -331,8 +269,7 @@ pub fn apagar(id: &str) -> Resultado {
     resultado
 }
 
-/// Para os serviços que estão rodando e devolve quais parou. `None` na
-/// leitura é "não sei", e a dúvida pende para parar.
+/// `None` na leitura é "não sei", e a dúvida pende para parar.
 pub fn parar_servicos(servicos: &[&str]) -> Vec<String> {
     let mut parados = Vec::new();
     for s in servicos {
@@ -354,20 +291,12 @@ pub fn religar_servicos(parados: &[String]) {
 mod tests {
     use super::*;
 
-    /// Todo alvo do catálogo sabe onde mora, ou declara que não mora aqui.
-    ///
-    /// Um alvo sem caminho nenhum apareceria na tela com tamanho desconhecido
-    /// para sempre, e o técnico ficaria tentando como administrador uma coisa
-    /// que nunca ia medir.
     #[test]
     fn todo_alvo_do_catalogo_tem_caminho_ou_nao_existe_aqui() {
         for a in ALVOS {
             let pastas = pastas_de(a.id);
             println!("{}: {} pasta(s)", a.id, pastas.len());
 
-            // `entregas_otimizadas` pode não existir em Windows antigo, e a
-            // lixeira depende de haver disco — os dois são casos legítimos de
-            // lista vazia. O que não pode é um id do catálogo cair no `_`.
             assert!(
                 !pastas.is_empty() || a.id == "entregas_otimizadas",
                 "{} não sabe onde mora",
@@ -376,11 +305,6 @@ mod tests {
         }
     }
 
-    /// A medição desta máquina, de verdade.
-    ///
-    /// Não afirma tamanho nenhum — afirma o CONTRATO: todo alvo do catálogo
-    /// sai da medição, cada um com número ou com ausência declarada, e nunca
-    /// com um zero que ninguém mediu.
     #[test]
     fn a_medicao_desta_maquina_responde_por_todos() {
         let medidos = medir();
@@ -396,9 +320,6 @@ mod tests {
             );
         }
 
-        // Nenhum alvo pode sair com zero: ou tem tamanho, ou tem a ausência
-        // declarada. Um zero aqui seria o produto afirmando que a pasta está
-        // vazia sem ter conseguido abri-la.
         for m in &medidos {
             if let Some(b) = m.bytes {
                 assert!(
@@ -417,7 +338,6 @@ mod tests {
         assert!(pastas_de("inventado").is_empty());
     }
 
-    /// A trava que impede apagar coisa que não está no catálogo.
     #[test]
     fn apagar_o_que_nao_existe_nao_faz_nada() {
         let r = apagar("prefetch");
@@ -427,8 +347,6 @@ mod tests {
         assert!(r.erro.is_some(), "tem de recusar, e dizer que recusou");
     }
 
-    /// Medir não apaga. Óbvio, e por isso mesmo com teste: é a separação que
-    /// deixa o cliente ver o total antes de decidir.
     #[test]
     fn medir_nao_apaga_nada() {
         let pasta = std::env::temp_dir().join("otimiza-limpeza-medir");
@@ -469,8 +387,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&pasta);
     }
 
-    /// Só os arquivos de cache saem da pasta do Explorer — a configuração de
-    /// exibição das pastas é do cliente e fica.
     #[test]
     fn as_miniaturas_nao_levam_junto_o_resto_da_pasta() {
         let pasta = std::env::temp_dir().join("otimiza-limpeza-miniaturas");

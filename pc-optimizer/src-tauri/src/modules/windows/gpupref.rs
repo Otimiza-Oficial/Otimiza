@@ -1,32 +1,7 @@
-// Qual placa de vídeo cada jogo usa
-//
-// Este é o maior ganho de FPS que o Otimiza consegue entregar — e só existe em
-// máquina com duas placas de vídeo, que é o caso de praticamente todo notebook.
-//
-// O DEFEITO QUE ELE CONSERTA
-//
-// Notebook de jogo tem duas placas: a integrada ao processador, que gasta pouco
-// e desenha pouco, e a dedicada, que é a placa de verdade. O Windows escolhe
-// qual usar por jogo, e às vezes escolhe errado — o jogo abre na integrada e
-// roda a uma fração do que a máquina consegue.
-//
-// O cliente não tem como perceber isso. O jogo abre, roda mal, e ele conclui
-// que o PC é fraco. Muitas vezes não é: é a placa boa parada do lado.
-//
-// Quando o Otimiza acerta esse caso, o ganho é de duas a cinco vezes — mais do
-// que todo o resto do catálogo somado. Quando a máquina tem uma placa só, o
-// ganho é EXATAMENTE ZERO, e o produto não pode oferecer nada.
-//
-// COMO ISSO É GRAVADO
-//
-// `HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences`, um valor de texto por
-// jogo. O nome do valor é o caminho completo do executável; o conteúdo é
-// `GpuPreference=N;` — e o ponto e vírgula faz parte, não é enfeite.
-//
-// É a mesma chave que a tela de Configurações do Windows usa. Não exige
-// administrador, não exige reiniciar o PC, e é reversível: guardamos o valor
-// anterior como qualquer outra mudança do produto. O jogo precisa ser reaberto
-// para valer.
+// Qual placa cada jogo usa: em notebook com duas placas, o jogo na integrada roda a uma fração do que a máquina
+// consegue, e acertar isso rende de duas a cinco vezes. Com uma placa só, o ganho é zero e o produto fica calado.
+// `HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences`, um valor por jogo (`GpuPreference=N;`, com o ponto e
+// vírgula), a mesma chave das Configurações do Windows.
 
 use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
@@ -34,14 +9,10 @@ use std::path::Path;
 
 const CHAVE: &str = r"SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
 
-/// Qual placa o Windows deve usar para um programa.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Preferencia {
-    /// O Windows decide. É o padrão de fábrica.
     Automatica,
-    /// A placa que gasta menos — a integrada, num notebook.
     Economia,
-    /// A placa de verdade.
     Desempenho,
 }
 
@@ -72,17 +43,12 @@ impl Preferencia {
     }
 }
 
-/// Monta o texto que vai para o registro.
-///
-/// O formato é o do Windows, e o ponto e vírgula final faz parte dele.
+/// O ponto e vírgula final faz parte do formato.
 pub fn texto_da_preferencia(preferencia: Preferencia) -> String {
     format!("GpuPreference={};", preferencia.codigo())
 }
 
-/// Lê a preferência de um texto do registro.
-///
-/// O valor pode carregar mais de um ajuste separado por ponto e vírgula, então
-/// não dá para comparar a string inteira — é preciso procurar o campo.
+/// O valor pode ter mais de um ajuste: procura o campo, não compara a string inteira.
 pub fn preferencia_do_texto(bruto: &str) -> Option<Preferencia> {
     bruto
         .split(';')
@@ -104,26 +70,17 @@ pub struct GpuPrefFinding {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuPrefReport {
-    /// Quantas placas de vídeo a máquina tem. Com uma só, este módulo inteiro
-    /// não tem o que fazer.
     pub placas: Vec<String>,
     pub tem_placa_dupla: bool,
-    /// Jogos com preferência gravada, e qual.
     pub definidos: Vec<(String, Preferencia)>,
     pub findings: Vec<GpuPrefFinding>,
-    /// Preenchido quando a chave de preferências existe e não deu para ler. Aí
-    /// `definidos` vazio NÃO quer dizer "nenhum jogo fixado".
+    /// Aí `definidos` vazio NÃO quer dizer "nenhum jogo fixado".
     pub erro_de_leitura: Option<String>,
 }
 
-// ------------------------------------------------------------------- leitura
-
-/// As placas de vídeo da máquina.
 #[cfg(target_os = "windows")]
 pub fn placas() -> Vec<String> {
-    // `PNPDeviceID` começando com `PCI\` descarta adaptador virtual de área de
-    // trabalho remota e software de captura, que aparecem como placa de vídeo
-    // e fariam qualquer PC parecer ter duas.
+    // `PCI\` descarta adaptador de área de trabalho remota e software de captura.
     let script = "@(Get-CimInstance Win32_VideoController | \
                   Where-Object { $_.PNPDeviceID -like 'PCI\\*' } | \
                   Select-Object -ExpandProperty Name)";
@@ -144,18 +101,11 @@ pub fn placas() -> Vec<String> {
     Vec::new()
 }
 
-/// O que já está gravado, jogo por jogo.
-///
-/// `Err` quando a chave existe e não dá para ler. Até a 2.0 isso virava lista
-/// vazia, e a tela escrevia "Nenhum programa tem placa fixada neste computador:
-/// o Windows está escolhendo sozinho para todos" — uma afirmação sobre o
-/// comportamento do Windows apoiada numa leitura que não aconteceu.
+/// `Err` quando a chave existe e não se lê: lista vazia afirmaria que o Windows escolhe sozinho para todos.
 pub fn definidos() -> Result<Vec<(String, Preferencia)>, String> {
     let mut definidos = Vec::new();
 
     for caminho in super::registry::value_names("HKCU", CHAVE)? {
-        // Valor que não é texto, ou texto sem `GpuPreference`, não é preferência
-        // de placa: não há o que listar.
         let Some(bruto) = super::registry::read_text("HKCU", CHAVE, &caminho)? else {
             continue;
         };
@@ -168,20 +118,13 @@ pub fn definidos() -> Result<Vec<(String, Preferencia)>, String> {
     Ok(definidos)
 }
 
-// --------------------------------------------------------------- diagnóstico
-
-/// Regras puras.
-///
-/// Recebe tudo pronto para poder ser testada numa máquina de uma placa só —
-/// que é justamente o caso em que a resposta certa é ficar calado.
 pub fn diagnosticar(
     placas: &[String],
     definidos: &[(String, Preferencia)],
 ) -> Vec<GpuPrefFinding> {
     use super::achados::{FindingSeverity, FixLocation};
 
-    // Com uma placa só, escolher placa não existe. Falar aqui seria inventar
-    // uma otimização para vender — exatamente o que este produto não faz.
+    // Com uma placa só, escolher placa não existe.
     if placas.len() < 2 {
         return Vec::new();
     }
@@ -245,16 +188,8 @@ pub fn analyze() -> GpuPrefReport {
     }
 }
 
-// ------------------------------------------------------------------ escrita
-
-/// Fixa qual placa um jogo deve usar.
-///
-/// Devolve o registro da mudança para o histórico: como toda alteração do
-/// produto, esta volta atrás com o valor exato que existia antes.
 pub fn definir(executavel: &Path, preferencia: Preferencia) -> Result<ChangeRecord, String> {
-    // O nome do valor é o caminho completo, então ele precisa ser um caminho
-    // completo de verdade — e de um arquivo que exista. Sem isso, esta função
-    // viraria uma forma de escrever texto arbitrário no registro do cliente.
+    // O nome do valor é o caminho: precisa ser completo e existir, senão isto gravaria texto arbitrário no registro.
     if !executavel.is_absolute() {
         return Err("O caminho do jogo precisa ser completo.".to_string());
     }
@@ -268,17 +203,7 @@ pub fn definir(executavel: &Path, preferencia: Preferencia) -> Result<ChangeReco
 
     let chave_do_valor = executavel.to_string_lossy().to_string();
 
-    // SEM `unwrap_or` AQUI, PELO MESMO MOTIVO DO `network.rs`.
-    //
-    // Desde a 1.8 o `registry::read` distingue "não existe" de "não consegui
-    // ler". Engolir o erro converteria uma leitura falha em "não havia
-    // preferência antes" — e o desfazer APAGARIA a escolha de placa que o
-    // cliente já tinha, em vez de devolvê-la.
-    //
-    // Isto pesa mais aqui do que pesava lá: a 1.9 pôs um BOTÃO em cima desta
-    // função. Antes dela, ninguém chegava neste caminho pela tela.
-    //
-    // Falhar aqui não custa nada ao cliente: ainda não escrevemos.
+    // Sem `unwrap_or`: leitura falha viraria "não havia preferência", e o desfazer APAGARIA a escolha do cliente.
     let anterior = super::registry::read("HKCU", CHAVE, &chave_do_valor)?;
 
     super::registry::set_string(
@@ -302,8 +227,7 @@ mod tests {
 
     #[test]
     fn o_formato_do_windows_leva_ponto_e_virgula() {
-        // Sem o ponto e vírgula o Windows ignora o valor em silêncio, e o
-        // produto acharia que aplicou.
+        // Sem o ponto e vírgula o Windows ignora o valor em silêncio.
         assert_eq!(texto_da_preferencia(Preferencia::Desempenho), "GpuPreference=2;");
         assert_eq!(texto_da_preferencia(Preferencia::Economia), "GpuPreference=1;");
         assert_eq!(texto_da_preferencia(Preferencia::Automatica), "GpuPreference=0;");
@@ -311,8 +235,6 @@ mod tests {
 
     #[test]
     fn le_a_preferencia_mesmo_com_outros_ajustes_na_mesma_linha() {
-        // O valor pode carregar mais de um ajuste. Comparar a string inteira
-        // faria o produto não reconhecer o que ele mesmo gravou.
         assert_eq!(
             preferencia_do_texto("GpuPreference=2;"),
             Some(Preferencia::Desempenho)
@@ -328,9 +250,6 @@ mod tests {
 
     #[test]
     fn maquina_de_uma_placa_nao_ganha_achado_nenhum() {
-        // A regra mais importante deste arquivo. Num desktop com uma placa só,
-        // escolher placa não existe — e oferecer isso seria vender uma
-        // otimização que não pode entregar nada.
         let definidos = vec![(
             r"C:\Jogo\jogo.exe".to_string(),
             Preferencia::Economia,
@@ -357,9 +276,7 @@ mod tests {
 
     #[test]
     fn jogo_apagado_nao_conta() {
-        // O Windows nunca limpa esta chave, então ela guarda jogo desinstalado
-        // há anos. Contar aqueles faria o produto acusar um problema que já não
-        // existe na máquina.
+        // O Windows nunca limpa esta chave: jogo desinstalado há anos não pode virar achado.
         let placas = vec![
             "Intel UHD Graphics".to_string(),
             "NVIDIA GeForce RTX 4060".to_string(),
@@ -374,9 +291,6 @@ mod tests {
 
     #[test]
     fn caminho_relativo_ou_inexistente_e_recusado() {
-        // O nome do valor é o caminho, então esta função escreve texto vindo de
-        // fora no registro do cliente. Sem estas travas ela viraria uma forma
-        // de gravar qualquer coisa lá.
         assert!(definir(Path::new("jogo.exe"), Preferencia::Desempenho).is_err());
         assert!(definir(
             Path::new(r"C:\Nao\Existe\jogo.exe"),
@@ -398,7 +312,6 @@ mod tests {
             println!("  [{:?}] {}", f.severity, f.measured);
         }
 
-        // Numa máquina de uma placa só o módulo tem que ficar calado.
         if !r.tem_placa_dupla {
             assert!(
                 r.findings.is_empty(),
