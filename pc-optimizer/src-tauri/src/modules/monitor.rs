@@ -1,49 +1,9 @@
-// Monitor de desempenho — a coleta contínua da tela principal
-//
-// Toda leitura daqui sai também pelo contrato de `telemetry.rs`, com origem e
-// qualidade. Os campos antigos continuam existindo para a tela que já os lê,
-// mas os que antes eram sempre número agora são OPCIONAIS: o que não foi medido
-// chega como `null`, e não como zero. O cabeçalho de `telemetry.rs` conta por
-// que essa diferença é o ponto de partida do produto inteiro.
-//
-// O QUE ESTE COLETOR MEDE DE VERDADE
-//
-// Pelo sysinfo: uso de CPU agregado e por núcleo, memória, capacidade dos
-// volumes, taxa de rede e uptime.
-//
-// Pelos contadores de desempenho do Windows, no Windows: clock REPORTADO e
-// clock EFETIVO — que são grandezas diferentes e por isso têm ids diferentes —,
-// as duas flags de limite de firmware, o `% Performance Limit` e quantos
-// núcleos estão estacionados. É o mesmo amostrador que o motor de energia usa
-// para decidir se um plano de energia fica ou é revertido; a tela só não tinha
-// acesso a ele.
-//
-// Temperatura sai como ESTIMATED: é zona térmica ACPI, que pode não ser o
-// sensor do processador, e muitas placas publicam um valor fixo. A janela de
-// leituras aqui aplica a mesma regra do motor de energia e DESCARTA a zona que
-// não se move sob carga.
-//
-// Uso da placa, memória de vídeo, ocupação e LATÊNCIA do disco vêm dos mesmos
-// contadores de desempenho, em `windows::placa`. Eram lidos por WMI através do
-// PowerShell, a mais de um segundo por consulta, o que obrigava o painel a
-// guardar o número por dez segundos e mostrá-lo com a idade escrita. Pelo
-// contador custam microssegundos e são lidos a cada coleta — medição de agora,
-// sem idade e sem rebaixamento para estimativa.
-//
-// Sobraram na tarefa de fundo só o modo de vídeo e o histórico de quadros em
-// disco, que são as duas leituras que ainda custam.
-//
-// QUADROS não são medidos aqui e também não são inventados: o coletor LÊ a
-// última medição que o vigia de `medicoes.rs` guardou — feita por rastreamento
-// de eventos do Windows, durante a partida — e publica com a idade real, até
-// meia hora. Só existe uma sessão de rastreamento no sistema, e disputá-la a
-// partir do painel derrubaria justamente a medição que vira prova para o
-// cliente. `fps.rendered`, `fps.generated` e `fps.displayed` continuam
-// desconhecidos: separar os três exige a medição em par, e preencher um com o
-// outro esconderia o FPS nativo atrás do exibido.
-//
-// Sensor da placa (clock, temperatura, potência), potência de pacote da CPU,
-// latência e entrada saem como UNKNOWN, cada um dizendo o que exigiria.
+// Coleta contínua da tela principal, publicada também pelo contrato de `telemetry.rs`: o que não foi medido chega
+// como `null`, não zero. sysinfo: CPU, memória, volumes, rede, uptime. PDH: clock reportado e EFETIVO, limites de
+// firmware, `% Performance Limit`, núcleos estacionados (o amostrador do motor de energia), e placa, VRAM e disco
+// (`windows::placa`). Temperatura é ESTIMATED (zona ACPI, descartada se não se move sob carga). Quadros não são
+// medidos aqui: lê o que `medicoes.rs` guardou (só existe uma sessão de rastreamento). Sensor da placa, potência
+// de pacote, latência e entrada saem UNKNOWN, com o motivo.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -53,13 +13,11 @@ use super::telemetry::{id_do_nucleo, Metric, Telemetry, Unit};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CPUMetrics {
-    /// Média do uso dos núcleos, 0-100%. `None` quando a leitura não fecha.
     pub overall: Option<f32>,
     pub per_core: Vec<f32>,
-    /// Sem provedor neste coletor. Era `0.0` com um comentário "Placeholder"
-    /// ao lado, o que chegava à tela como zero grau.
+    /// Sem provedor. Era `0.0` com um "Placeholder" ao lado, e chegava à tela como zero grau.
     pub temperature: Option<f32>,
-    /// Clock informado pelo sistema, em MHz. Não é clock efetivo.
+    /// Informado pelo sistema: não é clock efetivo.
     pub frequency: Option<f32>,
 }
 
@@ -68,7 +26,6 @@ pub struct RAMMetrics {
     pub total_gb: f64,
     pub used_gb: f64,
     pub available_gb: f64,
-    /// Sem provedor neste coletor.
     pub cached_gb: Option<f64>,
     pub usage_percent: Option<f32>,
 }
@@ -85,11 +42,9 @@ pub struct GPUMetrics {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DiskMetrics {
-    /// `None` na primeira leitura da sessão e sempre que os contadores não
-    /// permitem distinguir disco parado de leitura que falhou.
+    /// `None` na primeira leitura e quando os contadores não separam disco parado de leitura que falhou.
     pub read_speed_mbps: Option<f64>,
     pub write_speed_mbps: Option<f64>,
-    /// Espaço ocupado, não atividade.
     pub usage_percent: Option<f32>,
 }
 
@@ -109,120 +64,56 @@ pub struct PerformanceMetrics {
     pub gpu: Option<GPUMetrics>,
     pub disk: DiskMetrics,
     pub network: NetworkMetrics,
-    /// Horas desde o último boot. Ver `uptime_hours`.
     pub uptime_hours: f64,
-    /// A mesma coleta, com procedência por métrica. Ver `telemetry.rs`.
     pub telemetry: Telemetry,
-    /// Qual recurso está no limite, segundo esta coleta. Ver `gargalo.rs`.
-    ///
-    /// Vem junto e não num comando separado de propósito: classificar é uma
-    /// função pura da telemetria que acabou de ser lida. Num segundo comando,
-    /// a tela mostraria um diagnóstico de uma coleta e números de outra.
+    /// Junto, não num comando separado: senão a tela mostraria o diagnóstico de uma coleta e os números de outra.
     pub gargalo: super::gargalo::Diagnostico,
-    /// Pressão de memória de vídeo, medida pelo derramamento. Ver `vram.rs`.
-    ///
-    /// Vem junto pela mesma razão do gargalo: é função pura desta telemetria,
-    /// e num comando separado a tela mostraria a análise de uma coleta ao lado
-    /// dos números de outra.
+    /// Junto pela mesma razão do gargalo.
     pub vram: super::vram::Analise,
-    /// Do clique ao pixel, com o que falta declarado. Ver `latencia.rs`.
-    ///
-    /// É um PISO, não um total: três das cinco etapas do caminho não têm como
-    /// ser medidas por um programa rodando ao lado do jogo, e o orçamento diz
-    /// quais são em vez de somar zeros no lugar delas.
+    /// Um PISO: três das cinco etapas não se medem daqui, e o orçamento diz quais.
     pub latencia: super::latencia::Orcamento,
 }
 
-/// Quanto a amostragem de CPU espera entre as duas leituras.
-///
-/// Uso de CPU é diferença entre dois instantes; uma única leitura não tem com o
-/// que comparar. O `sysinfo` exige pelo menos 200 ms entre os dois refreshes
-/// para o número significar alguma coisa.
+/// Uso de CPU é diferença entre dois instantes; o `sysinfo` exige pelo menos 200 ms entre os refreshes.
 const ESPERA_DE_AMOSTRAGEM_MS: u64 = 200;
 
-/// Intervalo mínimo entre coletas para que uma taxa seja calculável.
-///
-/// Duas chamadas coladas dividiriam por um número perto de zero e produziriam
-/// uma taxa absurda.
+/// Duas chamadas coladas dividiriam por quase zero.
 const INTERVALO_MINIMO_S: f64 = 0.05;
 
 pub struct PerformanceMonitor {
     monitoring_active: bool,
     system: System,
-    /// Mantidos vivos entre chamadas: velocidade de disco e de rede só existe
-    /// como diferença entre duas leituras. Um coletor recriado a cada chamada
-    /// não tem passado com o que comparar.
+    /// Vivos entre chamadas: disco e rede só existem como diferença entre duas leituras.
     disks: Disks,
     networks: Networks,
     last_sample: Option<std::time::Instant>,
-    /// Quais dispositivos existiam na leitura anterior.
-    ///
-    /// Se a lista muda — pendrive plugado, volume montado, adaptador ligado —
-    /// a diferença entre as duas leituras deixa de ser sobre o mesmo conjunto,
-    /// e a taxa calculada em cima dela não quer dizer nada.
+    /// Com a lista mudada (pendrive, volume, adaptador), a diferença deixa de ser sobre o mesmo conjunto.
     discos_vistos: Option<BTreeSet<String>>,
     interfaces_vistas: Option<BTreeSet<String>>,
-    /// O menor derramamento para memória do sistema já visto nesta máquina
-    /// com a placa em repouso. Ver `vram::Piso`.
-    ///
-    /// Vive no monitor porque é uma medida acumulada: uma coleta sozinha não
-    /// sabe quanto esta máquina já derramava parada, e sem essa referência
-    /// toda máquina ligada seria acusada de transbordo.
+    /// Medida acumulada: sem ela toda máquina ligada seria acusada de transbordo. Ver `vram::Piso`.
     piso_compartilhada: super::vram::Piso,
-    /// Contadores de desempenho do Windows, vivos entre as coletas.
-    ///
-    /// É o mesmo amostrador que o motor de energia usa para decidir se um
-    /// plano fica ou é revertido (`motorenergia_maquina::Amostrador`). Ele já
-    /// existia e já era testado; o que faltava era a tela ter acesso ao que
-    /// ele mede — clock EFETIVO, temperatura e os limites de firmware ficavam
-    /// desconhecidos no painel enquanto o provedor rodava no mesmo executável.
-    ///
-    /// Vive entre as chamadas porque o PDH entrega a diferença entre dois
-    /// `PdhCollectQueryData`: recriado a cada coleta, ele mediria uma janela
-    /// de zero segundo.
+    /// O amostrador do motor de energia (`motorenergia_maquina::Amostrador`), agora também para a tela. Vivo entre
+    /// coletas: o PDH entrega a diferença entre dois `PdhCollectQueryData`.
     #[cfg(target_os = "windows")]
     contadores: Option<crate::modules::windows::motorenergia_maquina::Amostrador>,
-    /// As últimas leituras dos contadores, guardadas para julgar a zona
-    /// térmica.
-    ///
-    /// Uma leitura sozinha não distingue "28 °C" de "esta placa publica 28 °C
-    /// o dia inteiro". A regra que separa os dois já existe e já é testada em
-    /// `motorenergia::resumir_cpu`; o que faltava era ter amostras suficientes
-    /// para aplicá-la. Com uma coleta a cada poucos segundos, a janela fecha em
-    /// menos de meio minuto de painel aberto.
+    /// Uma leitura não distingue "28 °C" de "publica 28 °C o dia inteiro": a janela aplica
+    /// `motorenergia::resumir_cpu`.
     #[cfg(target_os = "windows")]
     amostras_recentes:
         std::collections::VecDeque<crate::modules::windows::motorenergia::AmostraCpu>,
-    /// A última leitura cara, com a hora em que foi feita.
-    ///
-    /// Compartilhada com a tarefa de fundo que a atualiza — por isso o `Arc`.
-    /// A coleta nunca espera por ela: serve o que tem, com a idade escrita.
+    /// `Arc` com a tarefa de fundo. A coleta nunca espera: serve o que tem, com a idade escrita.
     #[cfg(target_os = "windows")]
     placa: std::sync::Arc<std::sync::Mutex<Option<(std::time::Instant, LeituraLenta)>>>,
-    /// Uma leitura cara já está em curso.
-    ///
-    /// Sem isto, um laço atrasado dispararia uma consulta ao WMI por coleta e
-    /// elas se empilhariam — o mesmo defeito que a tela já tinha no `tick`.
+    /// Sem isto, um laço atrasado empilharia leituras de fundo.
     #[cfg(target_os = "windows")]
     placa_em_curso: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    /// Memória total da placa, lida do registro uma vez.
-    ///
-    /// É fato de hardware: não muda enquanto o programa estiver aberto, e
-    /// reler a cada coleta seria oito consultas ao registro por nada.
+    /// Fato de hardware: não muda com o programa aberto.
     #[cfg(target_os = "windows")]
     vram_total_gb: Option<Option<f64>>,
-    /// Contadores de placa de vídeo e disco, vivos entre as coletas.
-    ///
-    /// Mesma razão do amostrador da CPU: o PDH entrega a diferença entre duas
-    /// consultas, então a consulta precisa sobreviver de uma coleta para a
-    /// outra. Recriada a cada leitura, ela mediria uma janela de zero segundo.
+    /// Vivos entre coletas: o PDH entrega a diferença entre duas consultas.
     #[cfg(target_os = "windows")]
     contadores_placa: Option<crate::modules::windows::placa::Contadores>,
-    /// A última medição de rede, com a hora em que foi feita.
-    ///
-    /// Vive separada da outra leitura de fundo porque tem OUTRO ritmo: são
-    /// vinte pings contra o servidor do jogo, e repetir isso a cada dez
-    /// segundos seria o Otimiza martelando a hospedagem do cliente.
+    /// Outro ritmo: são vinte pings contra o servidor do jogo, e o Otimiza não vai martelar a hospedagem do cliente.
     #[cfg(target_os = "windows")]
     rede: std::sync::Arc<
         std::sync::Mutex<
@@ -236,54 +127,27 @@ pub struct PerformanceMonitor {
     rede_em_curso: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// De quanto em quanto tempo a rede é medida de novo.
-///
-/// Um minuto. Cada medição são vinte pings contra o servidor do jogo, e o
-/// produto não vai martelar a hospedagem de ninguém para manter um número
-/// fresco na tela.
 #[cfg(target_os = "windows")]
 const INTERVALO_DA_REDE: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// Até quando a medição de rede ainda descreve a partida.
-///
-/// Cinco minutos. Passado isso o cliente pode ter trocado de servidor, saído
-/// do jogo, ou a rota pode ter mudado — e o número deixa de ser sobre o que
-/// está acontecendo agora.
+/// Passado isso o cliente pode ter trocado de servidor ou saído do jogo.
 #[cfg(target_os = "windows")]
 const VALIDADE_DA_REDE: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
-/// Quantas leituras a janela térmica guarda.
-///
-/// `resumir_cpu` só julga a zona travada com oito ou mais; doze dá alguma
-/// folga sem virar histórico.
+/// `resumir_cpu` só julga com oito ou mais; doze dá folga.
 #[cfg(target_os = "windows")]
 const JANELA_TERMICA: usize = 12;
 
-/// O que só dá para ler devagar.
-///
-/// Placa de vídeo, VRAM em uso e ocupação do disco saem de uma consulta ao WMI
-/// que custa MAIS DE UM SEGUNDO — o comentário em `bottleneck.rs` já dizia
-/// isso. A frequência do monitor vem junto por ser barata e igualmente estável.
+/// O que só dá para ler devagar: o modo de vídeo e o histórico de quadros em disco.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Clone, Default)]
 struct LeituraLenta {
     hz: Option<u32>,
-    /// A medição de quadros mais recente do histórico automático.
-    ///
-    /// NÃO é medida aqui. Quem mede é o vigia de `medicoes.rs`, que abre uma
-    /// sessão de rastreamento do Windows durante a partida. Abrir uma segunda
-    /// sessão a partir do painel disputaria a mesma sessão com ele — só existe
-    /// uma — e o perdedor seria justamente a medição que vira prova para o
-    /// cliente. Aqui só se LÊ o que ele já guardou, com a idade real.
+    /// Só LÊ o que o vigia de `medicoes.rs` guardou: uma segunda sessão de rastreamento derrubaria a dele.
     quadros: Option<crate::modules::medicoes::MedicaoAutomatica>,
 }
 
-/// De quanto em quanto tempo a leitura cara é refeita.
-///
-/// Dez segundos. Sobraram aqui duas leituras: o modo de vídeo, que só muda
-/// quando alguém o troca, e o histórico de quadros, que é um arquivo em disco
-/// reescrito no máximo a cada vinte minutos. Nenhuma das duas justifica ser
-/// refeita a cada dois segundos.
+/// O modo de vídeo só muda quando alguém o troca, e o histórico é reescrito no máximo a cada vinte minutos.
 #[cfg(target_os = "windows")]
 const INTERVALO_DA_PLACA: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -291,8 +155,7 @@ impl PerformanceMonitor {
     pub fn new() -> Self {
         PerformanceMonitor {
             monitoring_active: false,
-            // `System::new()` e não `new_all()`: este coletor não olha
-            // processos, e `new_all` varre a tabela inteira deles no arranque.
+            // `new_all()` varreria a tabela de processos no arranque, e este coletor não olha processos.
             system: System::new(),
             disks: Disks::new_with_refreshed_list(),
             networks: Networks::new_with_refreshed_list(),
@@ -300,9 +163,7 @@ impl PerformanceMonitor {
             discos_vistos: None,
             interfaces_vistas: None,
             piso_compartilhada: super::vram::Piso::default(),
-            // Aberto na primeira coleta, não aqui: abrir a consulta do PDH
-            // custa, e o monitor é construído mesmo em sessão que nunca vai
-            // olhar o painel.
+            // Na primeira coleta: abrir a consulta do PDH custa, e muita sessão nunca olha o painel.
             #[cfg(target_os = "windows")]
             contadores: None,
             #[cfg(target_os = "windows")]
@@ -322,35 +183,25 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Inicia o monitoramento contínuo
     pub fn start_monitoring(&mut self) {
         self.monitoring_active = true;
     }
 
-    /// Para o monitoramento
     pub fn stop_monitoring(&mut self) {
         self.monitoring_active = false;
     }
 
-    /// O piso de memória compartilhada aprendido em repouso (ver `vram.rs`),
-    /// para quem classifica fora deste laço — o Mapa de desempenho.
+    /// Para quem classifica fora deste laço (o Mapa de desempenho).
     pub fn piso_de_vram(&self) -> super::vram::Piso {
         self.piso_compartilhada
     }
 
-    /// Coleta snapshot das métricas atuais.
-    ///
-    /// Não há `refresh_all` aqui. Ele varria a tabela de processos a cada
-    /// coleta e logo em seguida cada coletor refazia o refresh específico de
-    /// que precisava — a varredura cara acontecia e era jogada fora. Um
-    /// monitor de desempenho que pesa no desempenho é o pior defeito possível
-    /// neste produto.
+    /// Sem `refresh_all`: varria os processos e cada coletor refazia o próprio refresh. Monitor que pesa no
+    /// desempenho é o pior defeito possível aqui.
     pub async fn collect_metrics(&mut self) -> Result<PerformanceMetrics, String> {
         let comeco = std::time::Instant::now();
 
-        // O intervalo é medido uma vez e passado para os dois coletores: se
-        // cada um marcasse o próprio tempo, eles dividiriam os respectivos
-        // deltas por janelas diferentes da mesma leitura.
+        // O intervalo é medido uma vez: cada coletor dividiria por uma janela diferente.
         let elapsed = self.elapsed_since_last();
 
         let timestamp = std::time::SystemTime::now()
@@ -374,8 +225,7 @@ impl PerformanceMonitor {
 
         declarar_o_que_este_laco_nao_mede(&mut telemetry);
 
-        // Depois da declaração geral, de propósito: onde há medição de quadros
-        // guardada, ela entra por cima do motivo genérico.
+        // Onde há medição de quadros guardada, ela entra por cima do motivo genérico.
         #[cfg(target_os = "windows")]
         self.telemetria_dos_quadros(&mut telemetry);
 
@@ -384,10 +234,7 @@ impl PerformanceMonitor {
 
         let telemetry = telemetry.finish(comeco.elapsed().as_millis() as u64);
 
-        // O piso aprende ANTES de a análise usá-lo: uma coleta com a placa em
-        // repouso já vale como referência para ela mesma, e esperar a próxima
-        // atrasaria em um tique o momento em que o transbordo passa a ser
-        // detectável.
+        // O piso aprende ANTES da análise: a coleta em repouso já serve de referência para si mesma.
         self.piso_compartilhada.observar(
             telemetry.value("vram.shared_used"),
             telemetry.value("gpu.usage"),
@@ -411,23 +258,13 @@ impl PerformanceMonitor {
     }
 
     async fn collect_cpu_metrics(&mut self, t: &mut Telemetry) -> CPUMetrics {
-        // ANTES da espera, não depois.
-        //
-        // Um contador do PDH é a diferença entre duas consultas, e abrir a
-        // consulta já conta como a primeira. Abrindo aqui, a leitura lá
-        // embaixo cobre pelo menos a espera de amostragem; abrindo junto da
-        // leitura, a janela seria de zero segundo e o Windows devolveria
-        // números sem sentido — `% Processor Time` sai 100 e o clock efetivo
-        // empata com o reportado, que foi exatamente o que apareceu quando
-        // esta ponte foi ligada pela primeira vez.
+        // ANTES da espera: abrir a consulta já conta como a primeira leitura. Aberta junto da leitura, a janela seria de
+        // zero segundo (`% Processor Time` 100 e o efetivo empatando com o reportado, visto na primeira ligação).
         #[cfg(target_os = "windows")]
         if self.contadores.is_none() {
             self.contadores = crate::modules::windows::motorenergia_maquina::Amostrador::novo();
         }
 
-        // Pela mesma razão, e no mesmo lugar: os contadores da placa também
-        // medem a diferença entre duas consultas, e a leitura deles acontece
-        // depois da espera de amostragem lá embaixo.
         #[cfg(target_os = "windows")]
         if self.contadores_placa.is_none() {
             self.contadores_placa = crate::modules::windows::placa::Contadores::novo();
@@ -447,9 +284,7 @@ impl PerformanceMonitor {
             );
         }
 
-        // Sem núcleo nenhum a média seria uma divisão por zero, e o resultado
-        // viajaria como NaN. Não é um caso que aconteça numa máquina sã — é o
-        // caso em que o coletor precisa dizer que não sabe.
+        // Sem núcleo a média viraria NaN: o coletor diz que não sabe.
         let overall = if per_core.is_empty() {
             t.set(
                 "cpu.usage.overall",
@@ -476,14 +311,8 @@ impl PerformanceMonitor {
             aceita
         };
 
-        // Frequência do primeiro núcleo, em MHz.
-        //
-        // ESTIMATED, e não MEASURED, por duas razões que não se resolvem aqui:
-        // é o clock que o sistema informa a partir da tabela de frequências —
-        // não o clock efetivo que os núcleos sustentaram no período — e é o de
-        // um núcleo só, o que em CPU híbrida nem representa os outros.
-        // `cpu.clock.effective` fica UNKNOWN de propósito: são grandezas
-        // diferentes, e preencher uma com a outra seria inventar.
+        // ESTIMATED: é o clock da tabela de frequências, e de um núcleo só (em CPU híbrida não representa os outros).
+        // `cpu.clock.effective` é outra grandeza.
         let frequency = match cpus.first().map(|cpu| cpu.frequency()) {
             Some(mhz) if mhz > 0 => {
                 t.set(
@@ -521,8 +350,6 @@ impl PerformanceMonitor {
             ),
         );
 
-        // Os contadores do Windows entram por cima do que o sysinfo deu: eles
-        // medem o que o sysinfo não alcança e, no caso do clock, medem melhor.
         #[cfg(target_os = "windows")]
         let temperatura = self.telemetria_dos_contadores(t);
         #[cfg(not(target_os = "windows"))]
@@ -536,14 +363,7 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Enche o contrato com o que os contadores de desempenho do Windows
-    /// sabem, e devolve a temperatura para o campo antigo da tela.
-    ///
-    /// UMA AMOSTRA SÓ. O motor de energia coleta dezenas antes de decidir
-    /// qualquer coisa, e é assim que ele descarta zona térmica travada —
-    /// precisa de oito leituras para ver que o número não se move. Aqui há uma
-    /// leitura por coleta, então a temperatura sai como ESTIMATED dizendo isso:
-    /// serve para a tela, não serve para fechar veredito térmico.
+    /// UMA AMOSTRA por coleta: a temperatura sai ESTIMATED; serve à tela, não a veredito térmico.
     #[cfg(target_os = "windows")]
     fn telemetria_dos_contadores(&mut self, t: &mut Telemetry) -> Option<f32> {
         let Some(amostrador) = self.contadores.as_ref() else {
@@ -570,9 +390,6 @@ impl PerformanceMonitor {
             ),
         }
 
-        // O clock reportado pelo PDH substitui o do sysinfo: é medido sobre o
-        // intervalo entre duas coletas, e não a entrada da tabela de
-        // frequências para o primeiro núcleo.
         if let Some(mhz) = a.clock_reportado_mhz() {
             t.set(
                 "cpu.clock.reported",
@@ -626,13 +443,8 @@ impl PerformanceMonitor {
         self.julgar_temperatura(a, t)
     }
 
-    /// Decide o que dizer sobre a temperatura, com a janela de leituras.
-    ///
-    /// A regra é a de `motorenergia::resumir_cpu`, reusada inteira em vez de
-    /// reescrita: com carga na máquina e uma zona térmica que não se move
-    /// nada, a leitura é descartada. Muitas placas publicam uma zona ACPI fixa
-    /// — esta aqui publica 27,85 °C com a CPU a 50% —, e uma folga térmica
-    /// tirada de um número congelado é pior do que não ter folga nenhuma.
+    /// A regra de `motorenergia::resumir_cpu`, reusada: com carga e zona que não se move, a leitura é descartada
+    /// (esta máquina publica 27,85 °C com a CPU a 50%).
     #[cfg(target_os = "windows")]
     fn julgar_temperatura(
         &mut self,
@@ -662,7 +474,6 @@ impl PerformanceMonitor {
         let julgada = fechada.then(|| resumir_cpu(&janela).and_then(|r| r.temperatura_max_c));
 
         match julgada {
-            // Janela fechada e a zona se mexeu: vale como leitura.
             Some(Some(_)) | None => {
                 let atual = a.temperatura_c.expect("verificado acima");
                 let motivo = if fechada {
@@ -676,7 +487,6 @@ impl PerformanceMonitor {
                 );
                 Some(atual as f32)
             }
-            // Janela fechada e o número não se moveu sob carga: não é sensor.
             Some(None) => {
                 t.set(
                     "cpu.temperature",
@@ -722,8 +532,7 @@ impl PerformanceMonitor {
             ),
         );
 
-        // Sem memória total não existe porcentagem. Zero seria dizer que a
-        // máquina está com a RAM livre.
+        // Zero diria que a RAM está livre.
         let usage_percent = if total_bytes == 0 {
             t.set(
                 "ram.usage",
@@ -747,16 +556,9 @@ impl PerformanceMonitor {
         }
     }
 
-    /// GPU e VRAM não têm provedor neste coletor.
-    ///
-    /// Ler isso de verdade exige NVML, ADL ou o equivalente da Intel, cada um
-    /// presente só na máquina com aquela placa. Até lá, o contrato diz que não
-    /// sabe — o que é diferente de a GPU não aparecer na resposta.
+    /// Uso e memória da placa vêm do PDH; o sensor (clock, temperatura, potência) exige NVML, ADL ou o equivalente da
+    /// Intel.
     fn collect_gpu_metrics(&mut self, t: &mut Telemetry) -> Option<GPUMetrics> {
-        // Clock, temperatura e potência da placa continuam sem quem leia: o
-        // contador do Windows entrega uso e memória, não sensor. Isso exige
-        // NVML, ADL ou o equivalente da Intel, cada um só presente na máquina
-        // com aquela placa.
         const SEM_SENSOR: &str = "exige NVML/ADL/Intel; o contador do Windows não expõe sensor";
         t.set("gpu.clock", Metric::unknown(Unit::Megahertz, SEM_SENSOR));
         t.set(
@@ -765,12 +567,8 @@ impl PerformanceMonitor {
         );
         t.set("gpu.power", Metric::unknown(Unit::Watts, SEM_SENSOR));
 
-        // A taxa de varredura do mouse. O motivo é escrito aqui e não deixado
-        // no padrão do catálogo porque este não é um sensor que falta: é uma
-        // medição que o produto SABE fazer (`modules::mouse::taxa_de_varredura`)
-        // e que depende de contar os relatos que chegam à janela do aplicativo.
-        // A diferença entre "ninguém escreveu isto" e "falta ligar a captura"
-        // é a diferença entre uma lacuna e uma tarefa.
+        // Motivo escrito aqui: o produto SABE medir (`modules::mouse::taxa_de_varredura`), falta ligar a captura. É uma
+        // tarefa, não uma lacuna.
         t.set(
             "input.polling_rate",
             Metric::unknown(
@@ -795,28 +593,13 @@ impl PerformanceMonitor {
             t.set("display.refresh", Metric::unknown(Unit::Hertz, FORA));
         }
 
-        // O bloco `gpu` antigo da resposta exigia utilização, memória,
-        // temperatura, ventoinha e potência ao mesmo tempo, todos como número
-        // obrigatório. Não dá para preenchê-lo sem inventar três deles, então
-        // ele continua ausente — o que a placa entrega vai pelo contrato, onde
-        // cada campo pode faltar sozinho.
+        // O bloco `gpu` antigo exigia cinco números obrigatórios; preenchê-lo inventaria três. O que a placa entrega vai
+        // pelo contrato.
         None
     }
 
-    /// Publica a última medição de quadros que o vigia guardou.
-    ///
-    /// O QUE ESTE MÉTODO NÃO FAZ: medir. Quem mede é `medicoes.rs`, que escuta
-    /// o canal de eventos do Windows por vinte segundos durante a partida. Só
-    /// existe UMA sessão de rastreamento, então abrir outra a partir do painel
-    /// faria as duas disputarem — e quem perderia seria a medição que vira
-    /// prova para o cliente.
-    ///
-    /// O QUE ELE NÃO PREENCHE: `fps.rendered`, `fps.generated` e
-    /// `fps.displayed`. O vigia mede UM processo, então o número dele é a taxa
-    /// daquele processo — não dá para saber se é o renderizado ou o exibido sem
-    /// a medição em par que `frames::medir_par` faz. Preencher os três com o
-    /// mesmo valor seria esconder o FPS nativo atrás do exibido, que é
-    /// exatamente o placebo que este produto existe para não fazer.
+    /// Não mede (só existe UMA sessão de rastreamento) e não preenche `fps.rendered`, `generated` nem `displayed`: o
+    /// vigia mede um processo, e separar os três exige `frames::medir_par`.
     #[cfg(target_os = "windows")]
     fn telemetria_dos_quadros(&mut self, t: &mut Telemetry) {
         let Some((quando, leitura)) = self.placa.lock().ok().and_then(|g| g.clone()) else {
@@ -833,8 +616,7 @@ impl PerformanceMonitor {
             return;
         };
 
-        // A medição tem carimbo em tempo de relógio; a leitura do arquivo tem
-        // carimbo em tempo de processo. A idade real é a soma das duas.
+        // Carimbo de relógio mais carimbo de processo: a idade real é a soma.
         let agora = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -867,9 +649,7 @@ impl PerformanceMonitor {
             .com_idade(idade_ms),
         );
 
-        // Amostra curta demais não sustenta 1% low nem contagem de engasgo: os
-        // dois dependem da cauda da distribuição, e cauda de amostra curta é
-        // ruído. O próprio vigia já marca isso.
+        // Cauda de amostra curta é ruído: 1% low e engasgos ficam de fora.
         if !medicao.confiavel {
             const CURTA: &str =
                 "a amostra foi curta demais para a cauda da distribuição significar algo";
@@ -902,11 +682,7 @@ impl PerformanceMonitor {
             .com_idade(idade_ms),
         );
 
-        // A correlação entre os trancos e o disco.
-        //
-        // Poucos trancos não sustentam proporção: com três buracos, "67% com
-        // disco" são dois deles, e dois não descrevem uma partida. O número de
-        // trancos vem junto do resultado para que esse corte possa existir.
+        // Com três buracos, "67% com disco" são dois: o total vem junto para o corte existir.
         const TRANCOS_MINIMOS: usize = 8;
 
         match (medicao.trancos_com_disco_pct, medicao.trancos_medidos) {
@@ -937,7 +713,6 @@ impl PerformanceMonitor {
             ),
         }
 
-        // O contexto da partida: como a máquina estava ENQUANTO o jogo rodava.
         for (id, valor) in [
             ("match.cpu_usage", medicao.cpu_uso_pct),
             ("match.gpu_usage", medicao.gpu_uso_pct),
@@ -964,12 +739,7 @@ impl PerformanceMonitor {
             }
         }
 
-        // O RITMO, e não só o resultado.
-        //
-        // Uma configuração com FPS maior e ritmo pior não é uma melhora, e é
-        // o P99 que denuncia isso. Medição gravada antes desta versão não tem
-        // os campos — chega como `None`, e aí o contrato diz que não sabe em
-        // vez de inventar.
+        // FPS maior com ritmo pior não é melhora, e é o P99 que denuncia. Medição antiga chega `None`.
         for (id, valor) in [
             ("frametime.mean", medicao.frametime_medio_ms),
             ("frametime.p95", medicao.frametime_p95_ms),
@@ -997,19 +767,8 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Mede a rede de tempos em tempos, e publica a última medição.
-    ///
-    /// Quem mede é `windows::rede`, que já existia e já carrega as decisões
-    /// difíceis: ela só mede contra o SERVIDOR DO JOGO, descoberto pelas
-    /// conexões do processo, e se recusa a medir contra um alvo qualquer —
-    /// vinte pings contra a CDN apresentados como "o servidor do jogo" seriam
-    /// um número fabricado.
-    ///
-    /// E ela distingue perda REAL de ping descartado por regra do servidor.
-    /// Hospedagem de jogo costuma filtrar ICMP; sem essa distinção, um servidor
-    /// saudável apareceria na tela como "100% de perda, rede fora do ar". Este
-    /// método não recria nada disso: só traduz o resultado para o contrato, e
-    /// o que ela diz que não sabe chega como UNKNOWN.
+    /// Mede com `windows::rede`, que só mede contra o SERVIDOR DO JOGO e separa perda real de ping descartado por
+    /// regra. Aqui só se traduz para o contrato.
     #[cfg(target_os = "windows")]
     fn telemetria_da_rede(&mut self, t: &mut Telemetry) {
         use crate::modules::windows::rede::Perda;
@@ -1104,9 +863,7 @@ impl PerformanceMonitor {
             }
         }
 
-        // Só `Medida` é uma medição. As outras três variantes são a sonda
-        // dizendo que NÃO SABE, cada uma por um motivo, e nenhuma delas pode
-        // virar "0% de perda" nem "100%".
+        // Só `Medida` é medição: as outras variantes são a sonda dizendo que não sabe.
         match medida.perda {
             Perda::Medida { enviados, perdidos } if enviados > 0 => t.set(
                 "network.packet_loss",
@@ -1144,12 +901,7 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Dispara a leitura cara quando é hora, e publica a última que existe.
-    ///
-    /// A coleta NUNCA espera pela consulta ao WMI. Ela olha o que a tarefa de
-    /// fundo deixou, carimba a idade e segue — um painel que trava dois
-    /// segundos para perguntar o uso da placa é um painel que atrapalha o
-    /// jogo que ele está medindo.
+    /// A coleta NUNCA espera a leitura de fundo: olha o que ela deixou, carimba a idade e segue.
     #[cfg(target_os = "windows")]
     fn telemetria_da_placa(&mut self, t: &mut Telemetry) {
         use std::sync::atomic::Ordering;
@@ -1175,7 +927,6 @@ impl PerformanceMonitor {
             });
         }
 
-        // Total da placa: fato de hardware, lido do registro uma vez só.
         let total = *self
             .vram_total_gb
             .get_or_insert_with(crate::modules::windows::bottleneck::vram_total_gb_opt);
@@ -1194,9 +945,7 @@ impl PerformanceMonitor {
             ),
         }
 
-        // A frequência do monitor continua vindo da tarefa de fundo, porque
-        // ler o modo de vídeo é a única parte dela que ainda custa. Ela não
-        // envelhece como o resto: muda quando alguém troca o modo, não sozinha.
+        // Não envelhece como o resto: muda quando alguém troca o modo.
         match guardada {
             Some((quando, leitura)) => marcar_hz(t, leitura.hz, agora.duration_since(quando)),
             None => t.set(
@@ -1208,8 +957,6 @@ impl PerformanceMonitor {
             ),
         }
 
-        // O resto é lido AGORA, dos contadores de desempenho. Sem idade, sem
-        // rebaixamento para estimativa: é medição desta coleta.
         let Some(contadores) = self.contadores_placa.as_ref() else {
             const SEM: &str = "os contadores de placa e disco não abriram nesta máquina";
             t.set("gpu.usage", Metric::unknown(Unit::Percent, SEM));
@@ -1248,9 +995,7 @@ impl PerformanceMonitor {
             ),
         }
 
-        // Latência é outra pergunta que ocupação, e agora as duas têm resposta
-        // separada: um disco 100% ocupado com 0,2 ms está dando conta, e um a
-        // 40% com 30 ms é o que trava o jogo.
+        // 100% ocupado com 0,2 ms dá conta; 40% com 30 ms trava o jogo.
         match a.disco_latencia_ms {
             Some(ms) => t.set(
                 "storage.latency",
@@ -1292,10 +1037,7 @@ impl PerformanceMonitor {
             }
         }
 
-        // A memória do sistema em uso pela placa. É esta leitura que separa
-        // "cache cheio", que é normal, de "não coube e está indo pelo PCIe",
-        // que é o que o cliente sente como engasgo. Quem interpreta é
-        // `modules::vram`; aqui ela só entra no contrato.
+        // Separa cache cheio (normal) de "não coube, indo pelo PCIe". Interpretada em `modules::vram`.
         match a.vram_compartilhada_mb {
             Some(mb) => t.set(
                 "vram.shared_used",
@@ -1311,7 +1053,6 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Segundos desde a leitura anterior, ou `None` na primeira.
     fn elapsed_since_last(&mut self) -> Option<f64> {
         let agora = std::time::Instant::now();
         let anterior = self.last_sample.replace(agora)?;
@@ -1322,9 +1063,7 @@ impl PerformanceMonitor {
     }
 
     fn collect_disk_metrics(&mut self, elapsed: Option<f64>, t: &mut Telemetry) -> DiskMetrics {
-        // A lista é mantida entre chamadas de propósito: os bytes lidos e
-        // gravados que o sysinfo entrega são a diferença desde o refresh
-        // anterior. Recriar a lista a cada leitura zera essa diferença.
+        // Mantida entre chamadas: o sysinfo entrega a diferença desde o refresh anterior.
         self.disks.refresh(true);
 
         let mut total_space = 0u64;
@@ -1332,8 +1071,7 @@ impl PerformanceMonitor {
         let mut read_bytes = 0u64;
         let mut written_bytes = 0u64;
         let mut agora: BTreeSet<String> = BTreeSet::new();
-        // Um mesmo volume pode aparecer duas vezes na lista, montado em dois
-        // lugares. Somar os dois contaria o espaço em dobro.
+        // O mesmo volume pode aparecer montado em dois lugares.
         let mut volumes_contados: BTreeSet<String> = BTreeSet::new();
 
         for disk in &self.disks {
@@ -1344,10 +1082,7 @@ impl PerformanceMonitor {
             read_bytes += usage.read_bytes;
             written_bytes += usage.written_bytes;
 
-            // Pendrive e imagem montada em modo leitura não são o disco do
-            // cliente, e um ISO montado está sempre 100% cheio — entrar na
-            // conta só puxaria o número para cima sem dizer nada sobre a
-            // máquina.
+            // ISO montado está sempre 100% cheio e não diz nada da máquina.
             if disk.is_removable() || disk.is_read_only() {
                 continue;
             }
@@ -1373,9 +1108,7 @@ impl PerformanceMonitor {
             None
         } else {
             let pct = used_space as f64 / total_space as f64 * 100.0;
-            // ESTIMATED: é a soma de todos os volumes fixos tratada como um
-            // número só. Dois volumes no mesmo disco físico entram separados,
-            // e um disco cheio dividido com outro vazio some na média.
+            // ESTIMATED: um disco cheio dividido com outro vazio some na soma.
             let metrica = Metric::estimated(
                 pct,
                 Unit::Percent,
@@ -1391,10 +1124,8 @@ impl PerformanceMonitor {
         let (read, write) =
             match self.taxa_de_disco(elapsed, lista_mudou, read_bytes, written_bytes) {
                 Ok((r, w)) => {
-                    // ESTIMATED e não MEASURED: o sysinfo não devolve erro quando o
-                    // IOCTL de contador falha num volume — ele devolve zero. Um
-                    // total que avançou prova que ALGUM volume respondeu, não que
-                    // todos responderam.
+                    // ESTIMATED: o sysinfo devolve zero quando o IOCTL falha num volume; um total que avançou prova só que ALGUM
+                    // respondeu.
                     const MOTIVO: &str =
                         "contadores do sysinfo; falha de leitura em um volume chega como zero";
                     t.set(
@@ -1427,13 +1158,7 @@ impl PerformanceMonitor {
         }
     }
 
-    /// Taxa de disco, ou o motivo de não haver taxa.
-    ///
-    /// O caso importante é o último: quando nenhum contador avançou, o produto
-    /// NÃO diz "0 MB/s". Os contadores do sysinfo no Windows devolvem zero
-    /// tanto para disco realmente parado quanto para consulta que falhou, e não
-    /// há como separar os dois daqui. Afirmar "parado" com base nisso seria
-    /// inventar a metade da informação que falta.
+    /// Sem contador avançando, NÃO é "0 MB/s": o sysinfo devolve zero tanto para parado quanto para falha.
     fn taxa_de_disco(
         &self,
         elapsed: Option<f64>,
@@ -1466,8 +1191,6 @@ impl PerformanceMonitor {
         elapsed: Option<f64>,
         t: &mut Telemetry,
     ) -> NetworkMetrics {
-        // Mesma razão do disco: `received()` é o que chegou desde o refresh
-        // anterior, então a lista precisa sobreviver entre as chamadas.
         self.networks.refresh(true);
 
         let mut total_received = 0u64;
@@ -1494,9 +1217,7 @@ impl PerformanceMonitor {
                 let d = bytes_to_mb(received) / segundos;
                 let u = bytes_to_mb(transmitted) / segundos;
 
-                // Aqui MEASURED é honesto: interface que falha some da lista do
-                // sysinfo em vez de reportar zero, então zero recebido é zero
-                // recebido.
+                // MEASURED honesto: interface que falha some da lista em vez de reportar zero.
                 t.set(
                     "network.download_rate",
                     Metric::measured(d, Unit::MegabytesPerSecond, "sysinfo"),
@@ -1534,10 +1255,6 @@ impl PerformanceMonitor {
             }
         };
 
-        // Latência, jitter e perda de pacote são três perguntas distintas, e
-        // nenhuma delas se responde contando bytes. Quem responde é a sonda de
-        // `windows::rede`, mais abaixo; aqui elas ficam declaradas como não
-        // medidas para que ninguém as confunda com a taxa acima.
         const SEM_SONDA: &str = "a taxa de rede não responde latência; ver a sonda";
         t.set(
             "network.latency",
@@ -1567,14 +1284,8 @@ impl Default for PerformanceMonitor {
     }
 }
 
-/// Diz, com precisão, por que as métricas que faltam faltam.
-///
-/// O motivo padrão do catálogo é "sem provedor de medição nesta versão", e
-/// para quadros isso seria falso: o Otimiza MEDE quadros, por ETW, em
-/// `windows::frames`. Só que mede durante uma partida, com o jogo em primeiro
-/// plano e o programa como administrador — não num laço de painel a cada dois
-/// segundos. Dizer "não existe" sobre algo que existe em outro lugar manda o
-/// próximo módulo construir um provedor que já está construído.
+/// Para quadros "sem provedor" seria falso: o Otimiza mede por ETW em `windows::frames`, durante a partida, e não
+/// num laço de painel.
 fn declarar_o_que_este_laco_nao_mede(t: &mut Telemetry) {
     const QUADROS: &str = "medido durante a partida por ETW (windows::frames), \
                            com o jogo em primeiro plano; o painel não mede quadros";
@@ -1616,11 +1327,6 @@ fn declarar_o_que_este_laco_nao_mede(t: &mut Telemetry) {
     );
 }
 
-/// A frequência do monitor principal.
-///
-/// Não envelhece como o uso da placa: ela só muda quando alguém troca o modo
-/// de vídeo. A idade vai junto mesmo assim, porque quem lê o contrato decide
-/// sozinho o que é velho demais para o que está fazendo.
 #[cfg(target_os = "windows")]
 fn marcar_hz(t: &mut Telemetry, hz: Option<u32>, idade: std::time::Duration) {
     match hz {
@@ -1639,28 +1345,17 @@ fn marcar_hz(t: &mut Telemetry, hz: Option<u32>, idade: std::time::Duration) {
     }
 }
 
-/// A leitura cara, fora do laço de coleta.
-///
-/// Roda numa thread de bloqueio porque a consulta ao WMI abre um PowerShell e
-/// leva mais de um segundo.
+/// Numa thread de bloqueio: o modo de vídeo e o arquivo de quadros bloqueiam.
 #[cfg(target_os = "windows")]
 fn ler_placa_devagar() -> LeituraLenta {
     use crate::modules::windows::display;
 
-    // A consulta ao WMI saiu daqui.
-    //
-    // Uso da placa, memória de vídeo e ocupação do disco agora vêm dos
-    // contadores de desempenho, em `windows::placa`: microssegundos em vez de
-    // mais de um segundo, e por isso lidos a cada coleta em vez de guardados
-    // e envelhecidos. Ficaram nesta tarefa de fundo só as duas leituras que
-    // realmente custam — o modo de vídeo e o histórico de quadros em disco.
     let hz = display::monitores()
         .into_iter()
         .find(|m| m.principal)
         .map(|m| m.hz_atual);
 
-    // A mais recente pelo CARIMBO, e não pela posição: o arquivo é acrescido
-    // no fim hoje, mas uma ordem no disco não é uma garantia sobre o tempo.
+    // Pelo CARIMBO, não pela posição no arquivo.
     let quadros = crate::modules::medicoes::ler()
         .unwrap_or_default()
         .into_iter()
@@ -1669,12 +1364,7 @@ fn ler_placa_devagar() -> LeituraLenta {
     LeituraLenta { hz, quadros }
 }
 
-/// Até quando uma medição de quadros ainda diz algo sobre a máquina de agora.
-///
-/// Trinta minutos. O vigia mede no máximo uma vez a cada vinte, então durante
-/// uma partida há quase sempre uma dentro da janela. Passado isso a partida
-/// acabou, e o número descreve outra sessão — sai do contrato em vez de
-/// envelhecer na tela.
+/// O vigia mede no máximo a cada vinte minutos: quase sempre há uma na janela durante a partida.
 #[cfg(target_os = "windows")]
 const VALIDADE_DOS_QUADROS: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
@@ -1686,12 +1376,7 @@ fn bytes_to_gb(bytes: u64) -> f64 {
     bytes as f64 / 1_073_741_824.0
 }
 
-/// Há quantas horas o Windows está ligado.
-///
-/// Vale como métrica porque é uma causa real de lentidão que não aparece em
-/// lugar nenhum: depois de muitos dias sem reiniciar, memória vazada por
-/// programas e drivers se acumula, e o PC melhora sozinho com um reinício. É
-/// também a primeira coisa a descartar antes de sair otimizando.
+/// Muitos dias sem reiniciar acumulam memória vazada: é a primeira coisa a descartar.
 pub fn uptime_hours() -> f64 {
     System::uptime() as f64 / 3600.0
 }
@@ -1708,9 +1393,7 @@ mod tests {
 
         assert_eq!(m.telemetry.schema_version, SCHEMA_VERSION);
 
-        // Nenhuma métrica com valor pode estar marcada como desconhecida, e
-        // nenhuma desconhecida pode carregar valor. É a invariante que sustenta
-        // o resto: quem lê `value` sabe que alguém mediu aquilo.
+        // A invariante: quem lê `value` sabe que alguém mediu.
         for (id, metric) in &m.telemetry.metrics {
             match metric.quality {
                 Quality::Unknown => {
@@ -1733,8 +1416,7 @@ mod tests {
         let mut monitor = PerformanceMonitor::new();
         let m = monitor.collect_metrics().await.expect("coleta");
 
-        // O defeito que este módulo veio consertar: na primeira leitura não há
-        // leitura anterior, e o coletor antigo devolvia `(0.0, 0.0)` — "parado".
+        // O coletor antigo devolvia `(0.0, 0.0)`, "parado", na primeira leitura.
         assert_eq!(m.network.download_speed_mbps, None);
         assert_eq!(m.network.upload_speed_mbps, None);
         assert_eq!(m.disk.read_speed_mbps, None);
@@ -1751,10 +1433,6 @@ mod tests {
 
         assert_eq!(m.ram.cached_gb, None);
 
-        // O que continua sem quem leia, cada um por um motivo diferente:
-        // sensor da placa exige biblioteca do fabricante, potência de pacote
-        // exige driver assinado, quadros exigem partida em andamento, latência
-        // de rede e polling do mouse não têm provedor nenhum.
         for id in [
             "cpu.package_power",
             "gpu.clock",
@@ -1773,11 +1451,7 @@ mod tests {
         }
     }
 
-    /// O que os contadores de desempenho do Windows passaram a entregar.
-    ///
-    /// Clock EFETIVO, limites de firmware e estacionamento de núcleo já eram
-    /// medidos pelo motor de energia no mesmo executável; a tela é que não
-    /// tinha acesso. Este teste é a garantia de que a ponte não se solte.
+    /// Garantia de que a ponte com o amostrador do motor de energia não se solte.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn os_contadores_do_windows_chegam_ao_contrato() {
@@ -1802,9 +1476,7 @@ mod tests {
             assert_eq!(metric.source, "pdh", "{id}");
         }
 
-        // Efetivo é reportado DESCONTADO o tempo parado. Só empatam com a CPU
-        // cravada em 100%, o que não acontece numa coleta de teste — e foi
-        // exatamente o empate que denunciou a janela de PDH com zero segundo.
+        // Só empatam com a CPU cravada em 100%: o empate denunciou a janela de PDH de zero segundo.
         let reportado = m.telemetry.value("cpu.clock.reported").expect("medido");
         let efetivo = m.telemetry.value("cpu.clock.effective").expect("medido");
         assert!(
@@ -1814,19 +1486,14 @@ mod tests {
         assert!(reportado > 0.0);
     }
 
-    /// Zona térmica travada não vira temperatura.
-    ///
-    /// Esta máquina publica 27,85 °C fixos, então aqui o caminho testado é o
-    /// do descarte. Em máquina com sensor de verdade o teste passa pelo outro
-    /// lado — por isso ele afirma a INVARIANTE (valor presente ⟺ qualidade
-    /// diferente de UNKNOWN), e não um número.
+    /// Esta máquina publica 27,85 °C fixos: afirma a INVARIANTE (valor presente ⟺ qualidade não UNKNOWN), não um
+    /// número.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn zona_termica_travada_e_descartada_ao_vivo() {
         let mut monitor = PerformanceMonitor::new();
 
         let mut ultima = None;
-        // A janela precisa de oito leituras para julgar.
         for _ in 0..9 {
             ultima = Some(monitor.collect_metrics().await.expect("coleta"));
         }
@@ -1847,7 +1514,6 @@ mod tests {
             _ => {
                 let c = metric.value.expect("tem valor");
                 assert!((5.0..=120.0).contains(&c), "{c} °C não é leitura de CPU");
-                // Com a janela cheia, o motivo não pode mais ser o de espera.
                 assert!(
                     !metric
                         .reason
@@ -1865,8 +1531,6 @@ mod tests {
         let mut monitor = PerformanceMonitor::new();
         let m = monitor.collect_metrics().await.expect("coleta");
 
-        // Uso de CPU, núcleos e memória são o piso: se nem isso sair medido, o
-        // coletor não está coletando.
         for id in [
             "cpu.usage.overall",
             "cpu.cores.logical",
@@ -1902,33 +1566,21 @@ mod tests {
             .since_previous_ms
             .expect("a segunda leitura tem anterior");
 
-        // A espera de amostragem da CPU já garante esse piso.
         assert!(
             intervalo >= ESPERA_DE_AMOSTRAGEM_MS,
             "intervalo de {intervalo} ms"
         );
 
-        // A duração da coleta INCLUI essa espera — está documentado no contrato
-        // justamente para ninguém a ler como overhead.
         assert!(segunda.telemetry.collection_duration_ms >= ESPERA_DE_AMOSTRAGEM_MS);
     }
 
-    /// Retrato do que esta máquina entrega, impresso para quem for depurar.
-    ///
-    /// Roda com `cargo test -- --nocapture` para ver a lista. A asserção é
-    /// sobre a soma: se medidas, estimadas e desconhecidas não fecham o total,
-    /// alguma métrica ficou fora da contagem e o painel de evidências estaria
-    /// mostrando um número que não corresponde à coleta.
+    /// `cargo test -- --nocapture`. Se medidas, estimadas e desconhecidas não fecham o total, alguma métrica ficou fora.
     #[tokio::test]
     async fn retrato_desta_maquina() {
         let mut monitor = PerformanceMonitor::new();
 
-        // Várias coletas, e não uma: é o painel depois de alguns segundos
-        // aberto, com a janela térmica fechada e a leitura cara já de volta.
-        // Uma coleta só mostraria o pior caso e não o estado normal.
+        // Várias coletas: o painel depois de alguns segundos aberto, não o pior caso.
         let mut m = monitor.collect_metrics().await.expect("coleta");
-        // Espera pelo modo de vídeo, que é a última leitura a chegar: o resto
-        // já vem pronto na primeira coleta.
         let limite = std::time::Instant::now() + std::time::Duration::from_secs(25);
         while std::time::Instant::now() < limite && m.telemetry.value("display.refresh").is_none() {
             m = monitor.collect_metrics().await.expect("coleta");
@@ -1963,20 +1615,11 @@ mod tests {
         assert_eq!(s.measured + s.estimated + s.unknown, s.total);
     }
 
-    /// A leitura cara chega, e chega com a idade escrita.
-    ///
-    /// A consulta ao WMI custa mais de um segundo e roda fora do laço. Até ela
-    /// voltar, a métrica é UNKNOWN dizendo que a primeira consulta não chegou
-    /// — nunca um zero no lugar. Quando chega, vale como ESTIMATED: descreve
-    /// um instante que já passou, e `age_ms` diz quanto.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn a_placa_e_lida_agora_e_nao_envelhecida() {
         let mut monitor = PerformanceMonitor::new();
 
-        // Logo na PRIMEIRA coleta. A consulta ao WMI levava segundos e obrigava
-        // a tela a esperar, mostrando "ainda não voltou"; o contador de
-        // desempenho responde dentro da própria coleta.
         let m = monitor.collect_metrics().await.expect("coleta");
 
         for id in [
@@ -1988,9 +1631,7 @@ mod tests {
         ] {
             let metric = m.telemetry.get(id).unwrap_or_else(|| panic!("{id} sumiu"));
 
-            // Numa máquina sem o contador, a resposta continua sendo "não sei"
-            // — nunca um zero. O teste aceita os dois desfechos e exige que o
-            // contrato seja coerente em cada um.
+            // Sem o contador, "não sei", nunca zero: aceita os dois desfechos, coerentes.
             match metric.quality {
                 Quality::Unknown => assert!(metric.value.is_none() && metric.reason.is_some()),
                 _ => {
@@ -2002,19 +1643,12 @@ mod tests {
         }
     }
 
-    /// Sem jogo aberto, a sonda de rede não mede contra ninguém.
-    ///
-    /// É a regra de `windows::rede`: medir contra um alvo qualquer e
-    /// apresentar o número como "o servidor do jogo" é fabricar prova. Este
-    /// teste roda numa máquina sem jogo, então o desfecho esperado é que as
-    /// três métricas fiquem desconhecidas COM motivo — e nunca com zero.
+    /// Sem jogo, a sonda não mede contra ninguém: as três métricas ficam desconhecidas COM motivo.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn sem_jogo_a_rede_nao_inventa_numero() {
         let mut monitor = PerformanceMonitor::new();
 
-        // A medição roda fora do laço; vinte pings com timeout levam tempo
-        // mesmo quando não há alvo.
         let limite = std::time::Instant::now() + std::time::Duration::from_secs(40);
         let mut ultima = monitor.collect_metrics().await.expect("coleta");
 
@@ -2035,10 +1669,6 @@ mod tests {
         for id in ["network.latency", "network.jitter", "network.packet_loss"] {
             let metric = ultima.telemetry.get(id).expect("catálogo");
 
-            // Num ambiente de teste não há jogo, então o esperado é UNKNOWN.
-            // Se alguém rodar isto com jogo aberto, o valor é legítimo — o que
-            // NÃO pode acontecer, em nenhum dos dois casos, é valor sem
-            // qualidade ou qualidade sem motivo.
             match metric.quality {
                 Quality::Unknown => {
                     assert!(metric.value.is_none(), "{id} é UNKNOWN e tem valor");
@@ -2052,10 +1682,6 @@ mod tests {
         }
     }
 
-    /// A frequência do monitor continua vindo da tarefa de fundo.
-    ///
-    /// É a única leitura que sobrou lá, e a que justifica o campo de idade
-    /// continuar existindo no caminho da placa.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn o_modo_de_video_chega_pela_tarefa_de_fundo() {
@@ -2097,13 +1723,11 @@ mod tests {
         );
         assert!(velha.reason.unwrap().contains("12 s"));
 
-        // Não existe UNKNOWN envelhecido: não há leitura para ficar velha.
         let ausente = Metric::unknown(Unit::Percent, "sem provedor").com_idade(9_000);
         assert_eq!(ausente.age_ms, None);
         assert_eq!(ausente.quality, Quality::Unknown);
     }
 
-    /// O diagnóstico vem da MESMA coleta que os números da tela.
     #[tokio::test]
     async fn o_gargalo_acompanha_a_coleta() {
         use crate::modules::gargalo::{Conclusao, Forca};
@@ -2112,16 +1736,12 @@ mod tests {
         let m = monitor.collect_metrics().await.expect("coleta");
         let g = &m.gargalo;
 
-        // Alguma coisa foi medida, então há classificação a fazer.
         assert_ne!(g.conclusao, Conclusao::SemEvidencia);
         assert!(g.classes_avaliadas > 0);
 
-        // E a cobertura nunca finge estar completa: sete classes do produto
-        // dependem de medição de quadros, latência ou rede.
         assert!(g.classes_avaliadas < g.classes_totais);
         assert!(!g.nao_verificado.is_empty());
 
-        // Todo achado precisa citar a métrica que o sustenta.
         for a in &g.achados {
             assert!(!a.evidencia.is_empty(), "achado sem evidência");
             if a.forca == Forca::Causa {
@@ -2133,12 +1753,7 @@ mod tests {
         }
     }
 
-    /// Dois retratos reais desta máquina, comparados.
-    ///
-    /// É o caminho inteiro: coleta → contrato → baseline → comparação. Sem
-    /// mexer em nada entre os dois, o esperado é que a maior parte das
-    /// diferenças fique dentro do ruído — e, principalmente, que NENHUMA
-    /// métrica desconhecida vire delta.
+    /// Coleta → contrato → baseline → comparação, sem mexer em nada: nenhuma métrica desconhecida pode virar delta.
     #[cfg(target_os = "windows")]
     #[tokio::test]
     async fn dois_retratos_seguidos_comparam_sem_inventar() {
@@ -2161,19 +1776,15 @@ mod tests {
 
         assert!(!c.deltas.is_empty(), "alguma coisa foi medida nos dois");
 
-        // A invariante que este trabalho inteiro persegue: o que não foi
-        // medido não vira número. Todo delta tem os dois lados de verdade.
         for d in &c.deltas {
             assert!(d.antes.is_finite() && d.depois.is_finite(), "{}", d.id);
             assert!(d.firme || d.ressalva.is_some(), "{} sem ressalva", d.id);
         }
 
-        // E o que ficou de fora diz por quê.
         for n in &c.nao_comparaveis {
             assert!(!n.motivo.is_empty(), "{} sem motivo", n.id);
         }
 
-        // Uma métrica que ninguém mede nunca aparece como delta.
         assert!(
             !c.deltas.iter().any(|d| d.id == "gpu.temperature"),
             "sensor sem provedor não pode virar diferença"
