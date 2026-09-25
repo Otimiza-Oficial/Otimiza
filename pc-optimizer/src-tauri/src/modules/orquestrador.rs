@@ -1,47 +1,7 @@
-// Orquestrador de renderização: qual ajuste o que foi medido autoriza
-//
-// A REGRA DO PRODUTO QUE ESTE MÓDULO TORNA EXECUTÁVEL
-//
-// "Nenhum ajuste genérico antes da classificação do gargalo." Até aqui isso era
-// uma frase no cabeçalho de `gargalo.rs`. Na prática, os três perfis de
-// configuração de jogo (`windows::configjogo::Perfil`) ficavam lado a lado na
-// tela com um botão cada, e quem escolhia era o cliente — que não tem como
-// saber qual deles o problema DELE pede.
-//
-// Este módulo escolhe, e escolhe a partir do que foi medido. Ele não inventa
-// nenhuma alavanca nova: as que existem já estão escritas, testadas e com
-// caminho de volta. O que ele acrescenta é a decisão — e, principalmente, a
-// RECUSA.
-//
-// AS RECUSAS SÃO A PARTE VALIOSA
-//
-// Três casos em que baixar configuração gráfica é placebo, e em que um produto
-// que só sabe recomendar acabaria recomendando:
-//
-//   1. GARGALO NO PROCESSADOR. Baixar textura, sombra e reflexo tira trabalho
-//      da PLACA. Num jogo preso no processador — que é o caso clássico de
-//      simulação pesada, e o do FiveM — a placa já está sobrando, e aliviá-la
-//      mais não devolve um quadro sequer. O cliente mexe em tudo, vê o jogo
-//      ficar feio e o número não sair do lugar.
-//   2. LIMITE DE FIRMWARE. Com o Windows segurando o processador por
-//      temperatura ou por energia, o limite é físico. Nenhuma linha de arquivo
-//      de configuração muda refrigeração.
-//   3. ESPERANDO O DISCO. Tranco de asset chegando devagar não melhora com
-//      sombra mais baixa: o jogo continua esperando o mesmo arquivo.
-//
-// E O CASO EM QUE O AJUSTE É O CERTO E NINGUÉM FALA DELE
-//
-// Teto de quadros. Um jogo entregando exatamente a taxa do monitor pode estar
-// preso num número escrito num arquivo, e tirar aquilo devolve o que a máquina
-// já era capaz de fazer — sem custo visual nenhum. É o perfil `SemTeto`, e é o
-// único que este módulo recomenda sem pedir nada em troca.
-//
-// NADA É APLICADO AQUI
-//
-// O módulo devolve um PLANO. Quem aplica é o caminho que já existe, com diário
-// de intenção e desfazer (`transacao`, `changelog`). E o plano sai com
-// `exige_baseline` ligado sempre que muda alguma coisa: aplicar sem o retrato
-// de antes é abrir mão de poder responder "melhorou?" depois.
+// Qual perfil de configuração de jogo o que foi medido autoriza ("nenhum ajuste genérico antes da classificação
+// do gargalo"). O valor está nas RECUSAS, onde baixar gráfico é placebo: gargalo no processador (a placa já sobra),
+// limite de firmware (físico) e esperando o disco. Teto de quadros (`SemTeto`) é o caso sem custo visual. Não
+// aplica nada: devolve um plano, com `exige_baseline` sempre que muda algo.
 
 use serde::{Deserialize, Serialize};
 
@@ -49,28 +9,17 @@ use super::gargalo::{Classe, Conclusao, Diagnostico};
 use super::streaming::{Analise as Streaming, Veredito};
 use super::vram::{Analise as Vram, Estado};
 
-/// O perfil de configuração de jogo que o plano pede.
-///
-/// Espelha `windows::configjogo::Perfil` em vez de importá-lo, pela mesma razão
-/// de `streaming::Midia`: a decisão é aritmética sobre diagnósticos e precisa
-/// ser testável em qualquer sistema.
+/// Espelha `windows::configjogo::Perfil` em vez de importar: a decisão precisa ser testável em qualquer sistema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Perfil {
-    /// Só tira os tetos. Não muda como o jogo se parece.
     SemTeto,
-    /// Tira os tetos e desliga o que é caro e pouco visível.
     Equilibrado,
-    /// Derruba tudo que custa quadro.
     Competitivo,
 }
 
 impl Perfil {
-    /// O nome que o comando de aplicar espera.
-    ///
-    /// O plano devolve ESTE texto, e não um enum que a tela teria de traduzir:
-    /// uma tradução na tela é uma tabela a mais para sair do lugar sem ninguém
-    /// perceber. O teste `o_plano_fala_a_lingua_de_quem_aplica`, em
-    /// `commands.rs`, exige que os três nomes continuem sendo aceitos lá.
+    /// O plano devolve o nome que o comando de aplicar espera, sem tradução na tela; o teste
+    /// `o_plano_fala_a_lingua_de_quem_aplica` (`commands.rs`) confere os três.
     pub fn nome(self) -> &'static str {
         match self {
             Perfil::SemTeto => "sem_teto",
@@ -79,52 +28,30 @@ impl Perfil {
         }
     }
 
-    /// Os três, para a guarda que confere os nomes contra quem aplica.
-    ///
-    /// Só existe no teste de propósito: no produto ninguém varre os perfis —
-    /// o plano escolhe UM. Deixá-la pública fora do teste seria oferecer uma
-    /// varredura que não tem uso e que alguém acabaria usando para montar uma
-    /// lista de botões, que é exatamente o que este módulo veio substituir.
+    /// Só no teste: o plano escolhe UM, e uma lista pública viraria de novo uma fileira de botões.
     #[cfg(test)]
     pub const TODOS: [Perfil; 3] = [Perfil::SemTeto, Perfil::Equilibrado, Perfil::Competitivo];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Decisao {
-    /// Não há medição que autorize mexer em nada.
     SemEvidencia,
-    /// O que foi medido diz que o ajuste gráfico não resolve este caso.
     NaoResolveAqui,
-    /// Há um perfil que o que foi medido justifica.
     Aplicar(Perfil),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Plano {
     pub decisao: Decisao,
-    /// A medida que sustenta a decisão, em português, com o id da métrica.
     pub porque: Vec<String>,
-    /// O que este ajuste NÃO vai resolver, mesmo quando é o certo.
-    ///
-    /// Sai junto da recomendação, e não escondido: metade das reclamações de
-    /// "não adiantou nada" vem de um ganho real que não era o que a pessoa
-    /// esperava.
+    /// Sai junto da recomendação: metade do "não adiantou" é um ganho real que não era o esperado.
     pub contra: Vec<String>,
-    /// Classes que ninguém pôde avaliar e que mudariam esta decisão.
     pub nao_verificado: Vec<String>,
-    /// Guardar a linha de base antes de aplicar.
-    ///
-    /// Verdadeiro sempre que o plano muda alguma coisa. Aplicar sem o retrato
-    /// de antes é abrir mão de responder "melhorou?" depois — e "melhorou?" é a
-    /// única pergunta que o cliente realmente faz.
+    /// Sempre que o plano muda algo: sem o retrato de antes, não há como responder "melhorou?".
     pub exige_baseline: bool,
 }
 
-/// Decide o que fazer com a configuração do jogo.
-///
-/// `tem_arquivo` diz se o arquivo de configuração do jogo foi encontrado. Sem
-/// ele não há alavanca nenhuma, e recomendar um perfil seria recomendar uma
-/// ação impossível.
+/// Sem arquivo de configuração (`tem_arquivo`) não há alavanca, e recomendar seria recomendar o impossível.
 pub fn planejar(
     gargalo: &Diagnostico,
     vram: &Vram,
@@ -156,10 +83,7 @@ pub fn planejar(
         );
     }
 
-    // ---- sem classificação não há ajuste
-    //
-    // A regra do produto, aplicada literalmente. Máquina parada ou sem medição
-    // não autoriza mexer em arquivo do cliente.
+    // Sem medição, nada de mexer em arquivo do cliente.
     match gargalo.conclusao {
         Conclusao::SemEvidencia => {
             return vazio(
@@ -187,10 +111,7 @@ pub fn planejar(
 
     let tem = |c: Classe| gargalo.achados.iter().any(|a| a.classe == c);
 
-    // ---- recusa 1: limite de firmware
-    //
-    // Vem antes de tudo porque é o único caso em que nem a melhor configuração
-    // possível muda o resultado: o limite é físico.
+    // Antes de tudo: é o único caso em que nem a melhor configuração muda o resultado.
     if tem(Classe::LimiteTermico) || tem(Classe::LimiteEletrico) {
         return vazio(
             Decisao::NaoResolveAqui,
@@ -207,7 +128,6 @@ pub fn planejar(
         );
     }
 
-    // ---- recusa 2: esperando o disco
     if streaming.veredito == Veredito::AssetsDeMidiaLenta {
         return vazio(
             Decisao::NaoResolveAqui,
@@ -224,11 +144,7 @@ pub fn planejar(
         );
     }
 
-    // ---- o caso sem custo: teto de quadros
-    //
-    // Antes das recusas de processador de propósito. Tirar um teto devolve
-    // quadros mesmo num jogo preso no processador — o teto é um número escrito
-    // num arquivo, e não um limite de hardware.
+    // Antes da recusa do processador: o teto é um número num arquivo, não um limite de hardware.
     if tem(Classe::TetoDeQuadros) {
         porque.push(
             "os quadros estão colados na taxa do monitor, o que é sinal de teto escrito no \
@@ -250,11 +166,6 @@ pub fn planejar(
         };
     }
 
-    // ---- recusa 3: gargalo no processador
-    //
-    // A mais importante das três, porque é a que o mercado erra todo dia.
-    // Baixar textura, sombra e reflexo tira trabalho da PLACA; num jogo preso
-    // no processador a placa já está sobrando.
     if tem(Classe::CpuTodosNucleos) || tem(Classe::CpuUmNucleo) {
         let mut porque_cpu =
             vec!["o processador é que está no limite, e não a placa de vídeo".to_string()];
@@ -277,10 +188,7 @@ pub fn planejar(
         );
     }
 
-    // ---- memória de vídeo transbordando: o ajuste certo, pela medida certa
-    //
-    // O único caso em que baixar textura está apoiado numa medição direta, e
-    // não numa suposição sobre o que costuma pesar.
+    // O único caso em que baixar textura se apoia numa medição direta.
     if vram.estado == Estado::Transbordando {
         porque.push(match vram.derramado_gb {
             Some(gb) => format!(
@@ -304,7 +212,6 @@ pub fn planejar(
         };
     }
 
-    // ---- placa no limite: aqui a configuração gráfica é a alavanca certa
     if tem(Classe::Gpu) {
         porque.push(
             "a placa de vídeo está no limite medido, e é dela que a configuração gráfica tira \
@@ -326,7 +233,6 @@ pub fn planejar(
         };
     }
 
-    // ---- há carga e nada encostou no limite
     vazio(
         Decisao::NaoResolveAqui,
         vec![
@@ -404,7 +310,6 @@ mod tests {
         )
     }
 
-    /// A regra do produto, aplicada: sem classificação, nenhum ajuste.
     #[test]
     fn sem_medicao_nao_recomenda_nada() {
         let (v, s) = calmo();
@@ -435,11 +340,6 @@ mod tests {
         assert_eq!(p.decisao, Decisao::SemEvidencia);
     }
 
-    /// A recusa que o mercado erra todo dia.
-    ///
-    /// Jogo preso no processador: baixar configuração gráfica tira trabalho da
-    /// placa, que já está sobrando. O cliente mexe em tudo, o jogo fica feio e
-    /// o número não sai do lugar.
     #[test]
     fn gargalo_no_processador_recusa_o_ajuste_grafico() {
         let (v, s) = calmo();
@@ -464,7 +364,6 @@ mod tests {
         let p = planejar(
             &diagnostico(
                 Conclusao::Encontrado,
-                // Placa no limite TAMBÉM: ainda assim o firmware manda.
                 &[Classe::LimiteTermico, Classe::Gpu],
             ),
             &v,
@@ -497,8 +396,6 @@ mod tests {
         );
     }
 
-    /// O teto vale mesmo com o processador no limite: é um número num arquivo,
-    /// não um limite de hardware.
     #[test]
     fn teto_de_quadros_vale_ate_com_o_processador_no_limite() {
         let (v, s) = calmo();
@@ -516,8 +413,6 @@ mod tests {
         assert!(p.exige_baseline);
     }
 
-    /// Transbordo medido é o único caso em que baixar textura está apoiado em
-    /// medição direta.
     #[test]
     fn transbordo_de_memoria_de_video_pede_o_equilibrado() {
         let p = planejar(
@@ -533,7 +428,6 @@ mod tests {
             "{:?}",
             p.porque
         );
-        // E o que o ajuste NÃO entrega sai junto.
         assert!(
             p.contra.iter().any(|c| c.contains("média")),
             "{:?}",
@@ -566,7 +460,6 @@ mod tests {
 
         assert_eq!(p.decisao, Decisao::Aplicar(Perfil::Competitivo));
         assert!(p.exige_baseline);
-        // Sem promessa de número: o ganho se mede depois.
         assert!(
             p.contra.iter().any(|c| c.contains("medir")),
             "{:?}",
@@ -574,7 +467,6 @@ mod tests {
         );
     }
 
-    /// O que não foi verificado acompanha toda decisão, inclusive as boas.
     #[test]
     fn o_plano_carrega_o_que_nao_foi_verificado() {
         let (v, s) = calmo();

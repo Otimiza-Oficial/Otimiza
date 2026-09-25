@@ -1,88 +1,31 @@
-// Por que o FPS está baixo nesta máquina
-//
-// ESTE MÓDULO EXISTE PORQUE EU FIZ ISTO À MÃO DUAS VEZES NUMA SEMANA.
-//
-// Um cliente caiu de 200 para 80-120 FPS depois de otimizar, e eu abri o
-// registro do Windows, li a árvore de definições de energia e achei um valor
-// que o produto gravava errado. Outro cliente pegava 15 a 20 FPS "dependendo de
-// onde eu fico", e eu olhei as especificações, vi 2 GB de memória de vídeo e um
-// HD mecânico ao lado de um SSD, e apontei as duas causas.
-//
-// As duas investigações foram a mesma investigação: uma lista curta de suspeitos
-// conhecidos, cada um com um jeito de CONFIRMAR, em ordem de probabilidade. Isso
-// é código, e enquanto não for código quem faz é uma pessoa — e essa pessoa não
-// escala para cem clientes.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// AS QUATRO REGRAS
-//
-// 1. CADA SUSPEITO PRECISA DE UMA LEITURA. Nada entra nesta lista por ser
-//    "comum" ou por estar num vídeo. Se o produto não consegue medir, o
-//    suspeito não aparece — e a ausência dele é dita como lacuna, não como
-//    absolvição.
-//
-// 2. A ORDEM É POR FORÇA DA EVIDÊNCIA, não por gravidade. Um achado que o
-//    Windows declarou vale mais que um que o Otimiza inferiu, e o cliente
-//    precisa ver primeiro o que ele consegue conferir sozinho.
-//
-// 3. CADA CAUSA DIZ COMO CONFIRMAR. "Pode ser a memória de vídeo" sem o próximo
-//    passo é o que o mercado vende. Aqui cada suspeito carrega a frase do que
-//    fazer para ter certeza.
-//
-// 4. O QUE NÃO SE MEDE NÃO VIRA SUSPEITO E NEM VIRA SILÊNCIO. Vira lacuna, com
-//    o motivo — pelo mesmo princípio de todo o resto do produto.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// O QUE NÃO ESTÁ AQUI, e por quê
-//
-// Não há "causa provável" tirada de correlação. O módulo não diz "seu FPS caiu
-// PORQUE você aplicou X": isso quem responde é `regressao.rs`, comparando
-// medição com medição. Aqui só entra o que é um fato lido da máquina agora.
+// Por que o FPS está baixo: suspeitos conhecidos, cada um com uma leitura que o confirma (nasceu de duas
+// investigações feitas à mão). Regras: sem leitura, não é suspeito (vira lacuna, nem absolvição nem silêncio);
+// ordem pela força da evidência; cada causa diz como confirmar. Correlação com ajuste aplicado é com `regressao.rs`.
 
 use serde::{Deserialize, Serialize};
 
 use super::achados::Confianca;
 
-/// O que se sabe fazer para confirmar um suspeito.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Suspeito {
-    /// Identificador estável, para a tela e para o relatório de suporte.
     pub id: String,
     pub titulo: String,
-    /// O que foi LIDO desta máquina. Nunca vazio — afirmação sem número medido
-    /// é a coisa que este produto não faz.
+    /// Nunca vazio: afirmação sem número medido é o que este produto não faz.
     pub medido: String,
-    /// Por que isso derruba quadro.
     pub porque: String,
-    /// Como a pessoa confirma que é isto, sem depender da palavra do Otimiza.
     pub como_confirmar: String,
     pub confianca: Confianca,
 }
 
-/// O resultado da investigação.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Investigacao {
-    /// Do mais provável para o menos. Vazio quando nada foi encontrado — e aí
-    /// a tela precisa dizer isso com essas palavras, não ficar em branco.
+    /// Vazio quando nada foi encontrado, e a tela diz isso com palavras.
     pub suspeitos: Vec<Suspeito>,
-    /// O que não deu para verificar. A ausência de suspeito aqui NÃO significa
-    /// que a máquina esteja limpa.
+    /// Suspeito ausente NÃO significa máquina limpa.
     pub lacunas: Vec<String>,
 }
 
-// ─── As regras, todas puras ──────────────────────────────────────────────
-//
-// Cada uma recebe o que foi lido e devolve um suspeito ou nada. Separadas da
-// coleta de propósito: é assim que a decisão de produto pode ser provada sem
-// máquina, e é assim que eu consigo escrever o teste com os números do cliente
-// de verdade em vez de com números inventados.
-
-/// Quanta memória de vídeo o jogo pede num servidor de RP com asset custom.
-///
-/// Quatro gigabytes. Não é chute de fórum: é o piso em que o FiveM de servidor
-/// movimentado para de caber, e abaixo dele o sintoma é sempre o mesmo — o FPS
-/// muda conforme o lugar do mapa, porque o que estoura é o que está carregado
-/// naquele pedaço da cidade.
+/// 4 GB: o piso em que FiveM de servidor movimentado para de caber (o FPS muda conforme o lugar do mapa).
 pub const VRAM_MINIMA_PARA_RP_GB: f64 = 4.0;
 
 pub fn suspeito_da_vram(vram_gb: Option<f64>) -> Option<Suspeito> {
@@ -112,7 +55,6 @@ pub fn suspeito_da_vram(vram_gb: Option<f64>) -> Option<Suspeito> {
     })
 }
 
-/// O jogo num disco mecânico.
 pub fn suspeito_do_disco(jogos_no_hd: &[String]) -> Option<Suspeito> {
     if jogos_no_hd.is_empty() {
         return None;
@@ -136,7 +78,6 @@ pub fn suspeito_do_disco(jogos_no_hd: &[String]) -> Option<Suspeito> {
     })
 }
 
-/// A placa com menos faixas do que suporta.
 pub fn suspeito_das_faixas(faixas: &super::pcie::Faixas) -> Option<Suspeito> {
     let super::pcie::Faixas::Estreito { atual, maxima } = faixas else {
         return None;
@@ -159,7 +100,6 @@ pub fn suspeito_das_faixas(faixas: &super::pcie::Faixas) -> Option<Suspeito> {
     })
 }
 
-/// A memória abaixo da velocidade do próprio pente, ou em canal único.
 pub fn suspeito_da_memoria(canal_unico: bool, abaixo_do_nominal: Option<(u32, u32)>) -> Option<Suspeito> {
     let mut partes = Vec::new();
 
@@ -194,7 +134,6 @@ pub fn suspeito_da_memoria(canal_unico: bool, abaixo_do_nominal: Option<(u32, u3
     })
 }
 
-/// O processador ou a placa segurados por temperatura ou por energia.
 pub fn suspeito_do_limite(causa: Option<&str>) -> Option<Suspeito> {
     let causa = causa?;
 
@@ -215,12 +154,8 @@ pub fn suspeito_do_limite(causa: Option<&str>) -> Option<Suspeito> {
     })
 }
 
-/// O que o produto acabou de fazer, quando ele mesmo é o suspeito.
-///
-/// ESTE VEM PRIMEIRO QUANDO EXISTE, e é a única regra de ordem que não segue a
-/// força da evidência. O motivo é comercial e é honesto: se o Otimiza pode ter
-/// sido a causa, o cliente precisa ler isso antes de qualquer outra coisa, e não
-/// depois de uma lista de defeitos da máquina dele.
+/// Vem primeiro quando existe, fora da ordem por evidência: se o Otimiza pode ser a causa, o cliente lê isso
+/// antes dos defeitos da máquina dele.
 pub fn suspeito_do_proprio_otimiza(piorou: Option<(&str, f64)>) -> Option<Suspeito> {
     let (jogo, queda_pct) = piorou?;
 
@@ -245,11 +180,6 @@ pub fn suspeito_do_proprio_otimiza(piorou: Option<(&str, f64)>) -> Option<Suspei
     })
 }
 
-/// Monta a lista na ordem certa.
-///
-/// **Função pura**, e a ordem é a decisão de produto: o Otimiza primeiro quando
-/// ele é suspeito, depois o que é físico e a pessoa consegue conferir, depois o
-/// resto.
 pub fn ordenar(suspeitos: Vec<Suspeito>) -> Vec<Suspeito> {
     let peso = |s: &Suspeito| match s.id.as_str() {
         "foi_o_otimiza" => 0,
@@ -266,11 +196,7 @@ pub fn ordenar(suspeitos: Vec<Suspeito>) -> Vec<Suspeito> {
     ordenados
 }
 
-/// A frase de quando não se achou nada.
-///
-/// NÃO é "está tudo bem": é "não achei nenhuma destas seis coisas". A diferença
-/// importa porque a lista é curta de propósito, e o cliente precisa saber o que
-/// foi procurado.
+/// Não é "está tudo bem": é "não achei nenhuma destas seis coisas".
 pub fn nada_encontrado(lacunas: usize) -> String {
     let ressalva = if lacunas > 0 {
         format!(
@@ -291,15 +217,7 @@ pub fn nada_encontrado(lacunas: usize) -> String {
     )
 }
 
-/// Junta tudo, lendo a máquina.
-///
-/// A ÚNICA função deste módulo que toca o sistema. Todas as regras acima são
-/// puras de propósito: é assim que elas podem ser provadas com os números de um
-/// cliente de verdade, sem depender de a esteira ter a máquina dele.
-///
-/// `regressao` entra de fora em vez de ser lida aqui porque ela depende do
-/// histórico de mudanças, que vive atrás do estado do aplicativo — e porque o
-/// comando que chama isto já tem esse número na mão.
+/// A única função que toca o sistema. `regressao` vem de fora: depende do histórico que vive no estado do app.
 #[cfg(target_os = "windows")]
 pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
     let mut suspeitos = Vec::new();
@@ -311,7 +229,6 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
         }
     }
 
-    // --- memória de vídeo
     let vram = super::bottleneck::vram_total_gb();
     if vram <= 0.0 {
         lacunas.push(
@@ -323,7 +240,6 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
         suspeitos.push(s);
     }
 
-    // --- o jogo no disco mecânico
     let discos = super::discodojogo::analisar();
     let no_hd: Vec<String> = super::discodojogo::em_disco_mecanico(&discos.jogos)
         .iter()
@@ -335,7 +251,6 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
     }
     lacunas.extend(discos.lacunas);
 
-    // --- faixas do PCI Express
     let faixas = super::pcie::analisar();
     if let super::pcie::Faixas::NaoDeuParaLer { .. } = faixas {
         lacunas.push(super::pcie::explicar(&faixas));
@@ -343,7 +258,6 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
         suspeitos.push(s);
     }
 
-    // --- memória do sistema
     match super::firmware::analyze_memory_ou_lacuna() {
         Ok(achados) => {
             let canal_unico = achados.iter().any(|a| a.id == "memory_single_channel");
@@ -352,9 +266,7 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
                 .find(|a| a.id == "memory_xmp_off")
                 .map(|a| a.measured.clone());
 
-            // O número vem do texto que `firmware` já montou, e não de uma
-            // segunda leitura: duas leituras da mesma coisa é como o produto
-            // acaba dizendo dois números diferentes para o mesmo fato.
+            // Reusa o texto de `firmware`: duas leituras do mesmo fato acabam dando dois números.
             let par = abaixo.as_deref().and_then(dois_numeros);
 
             if let Some(s) = suspeito_da_memoria(canal_unico, par) {
@@ -367,12 +279,8 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
         )),
     }
 
-    // --- limite térmico ou elétrico
     let termico = super::thermal::analyze();
-    // `percent_of_max` em `None` é NÃO CONSEGUI MEDIR, e é isso que vira
-    // lacuna. `Culprit::NaoIdentificado` é outra coisa: a frequência foi medida,
-    // está baixa, e nenhuma causa conhecida explica — isso é um achado, e ele
-    // continua com `thermal`, que tem os números para descrevê-lo.
+    // `percent_of_max` `None` é não medido (lacuna); `NaoIdentificado` é medido e baixo sem causa (achado de `thermal`).
     if termico.percent_of_max.is_none() {
         lacunas.push(
             "Não deu para medir a frequência do processador nesta máquina, então não foi \
@@ -400,12 +308,6 @@ pub fn investigar(_regressao: Option<(String, f64)>) -> Investigacao {
     Investigacao::default()
 }
 
-/// Os dois primeiros números de um texto, na ordem em que aparecem.
-///
-/// **Função pura.** Serve para reaproveitar a frase que `firmware` já montou —
-/// "Rodando a 2133 MHz; o pente é de 3200 MHz" — em vez de ler o hardware de
-/// novo. Duas leituras da mesma coisa é como um produto acaba mostrando dois
-/// números diferentes para o mesmo fato em duas telas.
 pub fn dois_numeros(texto: &str) -> Option<(u32, u32)> {
     let mut achados = texto
         .split(|c: char| !c.is_ascii_digit())
@@ -419,9 +321,7 @@ pub fn dois_numeros(texto: &str) -> Option<(u32, u32)> {
 mod tests {
     use super::*;
 
-
-    /// Roda a investigação inteira contra o Windows desta máquina. Não é teste
-    /// de lógica — é a conferência de que as seis leituras respondem aqui.
+    /// Contra o Windows desta máquina: confere que as seis leituras respondem aqui.
     #[test]
     #[ignore = "toca o Windows desta máquina"]
     fn investiga_esta_maquina_de_verdade() {
@@ -454,7 +354,6 @@ mod tests {
         assert_eq!(dois_numeros("só 1600"), None);
     }
 
-    /// Os números do cliente de verdade: GTX 770 de 2 GB.
     #[test]
     fn dois_gigas_de_vram_viram_suspeito() {
         let s = suspeito_da_vram(Some(2.0)).expect("2 GB precisa virar suspeito");
@@ -473,8 +372,6 @@ mod tests {
         assert!(suspeito_da_vram(Some(4.0)).is_none());
     }
 
-    /// Não conseguir ler a memória de vídeo não vira acusação NEM absolvição:
-    /// vira nada, e a lacuna é dita em outro lugar.
     #[test]
     fn vram_ilegivel_nao_vira_suspeito() {
         assert!(suspeito_da_vram(None).is_none());
@@ -495,9 +392,6 @@ mod tests {
         assert!(suspeito_da_memoria(false, None).is_none());
     }
 
-    /// A ordem é a decisão de produto mais importante do módulo: se o Otimiza
-    /// pode ter sido a causa, o cliente lê isso ANTES da lista de defeitos da
-    /// máquina dele.
     #[test]
     fn quando_o_otimiza_e_suspeito_ele_vem_primeiro() {
         let lista = ordenar(vec![
@@ -535,7 +429,6 @@ mod tests {
         assert!(!s.como_confirmar.to_lowercase().contains("desative o limite"));
     }
 
-    /// "Nada encontrado" não pode soar como "está tudo bem".
     #[test]
     fn nada_encontrado_nao_e_atestado_de_saude() {
         let frase = nada_encontrado(0);
@@ -550,8 +443,6 @@ mod tests {
         assert!(frase.contains("não é completa"));
     }
 
-    /// Toda causa precisa dizer como confirmar. Sem isso é o que o mercado
-    /// vende: um alarme sem próximo passo.
     #[test]
     fn toda_causa_diz_como_confirmar_e_o_que_foi_medido() {
         let todos = vec![
@@ -575,8 +466,6 @@ mod tests {
         }
     }
 
-    /// As faixas completas não viram suspeito — nem a geração baixa em repouso,
-    /// que `pcie::julgar` já trata.
     #[test]
     fn faixas_completas_nao_viram_suspeito() {
         assert!(suspeito_das_faixas(&super::super::pcie::Faixas::Completo { largura: 16 }).is_none());
