@@ -1,46 +1,20 @@
-// A janela dos últimos dias
-//
-// O evento 2004 do Windows é a evidência mais forte que o produto tem, mas ele
-// só é gravado quando a memória acaba DE VERDADE. Existe um estado anterior a
-// esse — a máquina que passa a noite raspando o limite, paginando sem parar,
-// travando por segundos de cada vez — que não gera evento nenhum e some do
-// diagnóstico, porque quando o cliente abre o Otimiza o jogo já foi fechado.
-//
-// Este módulo é a janela que faltava. Ele amostra a pressão de memória no
-// mesmo laço de seis segundos que o vigia do modo jogo já usa, e guarda o
-// resultado em disco.
-//
-// O QUE É GUARDADO, E POR QUE NÃO É A AMOSTRA CRUA
-//
-// Uma amostra a cada seis segundos são 14.400 por dia. Guardar isso viraria
-// dezenas de megabytes por semana no PC do cliente — um otimizador que engorda
-// o disco é uma piada de mau gosto.
-//
-// Então o que vai para o arquivo é UM registro por hora, com os extremos
-// daquela hora: o maior commit, a menor memória disponível, quantos minutos
-// ficaram acima do limite, e os processos do PIOR instante. Duas semanas cabem
-// em poucos kilobytes.
-//
-// Esse último campo é o que transforma "você precisa de mais memória" em
-// "Discord e FiveM juntos prometeram 12 GB na terça às 21:40". A primeira frase
-// é opinião; a segunda o cliente reconhece.
+// A janela dos últimos dias: a máquina que passa a noite no limite de memória, paginando, não gera o evento
+// 2004 e some do diagnóstico. Amostra no laço de 6 s do vigia e guarda UM registro por hora, com os extremos e os
+// processos do PIOR instante ("Discord e FiveM prometeram 12 GB na terça às 21:40"). Duas semanas cabem em
+// poucos kilobytes.
 
 use super::achados::{FindingSeverity, FixLocation};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// Uma hora de observação, já resumida.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Hora {
-    /// Início da hora, em "AAAA-MM-DDTHH".
     pub quando: String,
     pub commit_max_gb: f64,
     pub disponivel_min_gb: f64,
-    /// Quantas amostras ficaram acima do limite de pressão.
     pub amostras_apertadas: u32,
     pub amostras: u32,
-    /// Os maiores consumidores no pior instante desta hora.
     pub piores: Vec<(String, f64)>,
 }
 
@@ -49,19 +23,13 @@ pub struct Janela {
     pub horas: Vec<Hora>,
 }
 
-/// Quanto tempo de histórico o produto guarda.
-///
-/// Duas semanas cobrem a rotina de quem joga no fim de semana sem virar um
-/// arquivo grande nem uma memória longa demais para ser relevante: o que
-/// aconteceu há dois meses provavelmente já mudou.
+/// Duas semanas: a rotina de quem joga no fim de semana, sem guardar o que já mudou.
 pub const DIAS_GUARDADOS: usize = 14;
 const HORAS_GUARDADAS: usize = DIAS_GUARDADOS * 24;
 
-/// Abaixo disto o Windows já está espremendo memória para caber.
 const DISPONIVEL_APERTADO_GB: f64 = 0.7;
 
-/// Quantos minutos apertados numa hora já contam como problema, e não como
-/// pico isolado. Com amostragem de 6 segundos, 50 amostras são 5 minutos.
+/// Com amostragem de 6 s, 50 amostras são 5 minutos.
 const AMOSTRAS_PARA_CONTAR: u32 = 50;
 
 impl Janela {
@@ -95,9 +63,7 @@ impl Janela {
         fs::write(&path, json).map_err(|e| format!("Não foi possível gravar a janela: {}", e))
     }
 
-    /// Só o teste apaga a janela. O produto nunca descarta observação por
-    /// conta própria: o que ela registra é a única memória que o Otimiza tem do
-    /// que aconteceu enquanto o cliente jogava.
+    /// Só o teste apaga: o produto nunca descarta observação por conta própria.
     #[cfg(test)]
     pub fn limpar() -> Result<(), String> {
         let path = Self::path();
@@ -110,18 +76,13 @@ impl Janela {
     }
 }
 
-/// Uma leitura instantânea.
 #[derive(Debug, Clone, Copy)]
 pub struct Amostra {
     pub commit_gb: f64,
     pub disponivel_gb: f64,
 }
 
-/// Acrescenta uma amostra à hora corrente.
-///
-/// **Função pura**: recebe a janela e devolve a janela. Toda a lógica de
-/// agregação e de descarte do que envelheceu fica testável sem tocar em disco
-/// nem esperar uma hora passar.
+/// Pura: agregação e descarte testáveis sem disco nem esperar uma hora.
 pub fn agregar(
     mut janela: Janela,
     hora_atual: &str,
@@ -137,8 +98,7 @@ pub fn agregar(
                 hora.amostras_apertadas += 1;
             }
 
-            // Os processos guardados são os do PIOR instante da hora, e não os
-            // do último. É o instante que interessa reconstituir depois.
+            // Os do PIOR instante da hora, e não os do último.
             if amostra.commit_gb > hora.commit_max_gb {
                 hora.commit_max_gb = amostra.commit_gb;
                 hora.piores = piores;
@@ -158,8 +118,7 @@ pub fn agregar(
         }),
     }
 
-    // Descarta o que passou da janela. Sem isto o arquivo cresce para sempre no
-    // PC do cliente, que é o oposto do serviço que este programa vende.
+    // Sem isto o arquivo cresce para sempre no PC do cliente.
     if janela.horas.len() > HORAS_GUARDADAS {
         let excesso = janela.horas.len() - HORAS_GUARDADAS;
         janela.horas.drain(0..excesso);
@@ -167,8 +126,6 @@ pub fn agregar(
 
     janela
 }
-
-// --------------------------------------------------------------- diagnóstico
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PressaoFinding {
@@ -180,7 +137,6 @@ pub struct PressaoFinding {
     pub fix_location: FixLocation,
 }
 
-/// Traduz "AAAA-MM-DDTHH" para algo que se lê numa frase.
 fn hora_legivel(chave: &str) -> String {
     let Some((data, hora)) = chave.split_once('T') else {
         return chave.to_string();
@@ -195,7 +151,6 @@ fn hora_legivel(chave: &str) -> String {
     }
 }
 
-/// Regras de diagnóstico, puras.
 pub fn diagnosticar(janela: &Janela) -> Vec<PressaoFinding> {
     let apertadas: Vec<&Hora> = janela
         .horas
@@ -207,7 +162,6 @@ pub fn diagnosticar(janela: &Janela) -> Vec<PressaoFinding> {
         return Vec::new();
     }
 
-    // A pior hora é a que fica na frase — com os processos dela pelo nome.
     let pior = apertadas
         .iter()
         .max_by(|a, b| a.commit_max_gb.total_cmp(&b.commit_max_gb))
@@ -249,17 +203,7 @@ pub fn diagnosticar(janela: &Janela) -> Vec<PressaoFinding> {
     }]
 }
 
-// ---------------------------------------------------------------- amostragem
-
-/// Lê a memória agora e acrescenta à janela.
-///
-/// Chamada a cada seis segundos pelo laço que já existe. Tudo aqui é leitura
-/// de memória em memória, sub-milissegundo — nenhuma chamada ao PowerShell,
-/// que a esta frequência faria o próprio otimizador virar o programa que mais
-/// pesa no PC do cliente.
-///
-/// Grava em disco no máximo uma vez por minuto: a agregação acontece em RAM, e
-/// escrever a cada seis segundos castigaria o SSD sem nenhum ganho.
+/// A cada 6 s: só leitura em memória, nenhum PowerShell. Grava no máximo uma vez por minuto.
 pub fn amostrar() {
     use std::sync::Mutex;
     use std::time::Instant;
@@ -274,9 +218,8 @@ pub fn amostrar() {
     let em_gb = 1_073_741_824.0;
 
     let amostra = Amostra {
-        // Sem o commit do sistema (que só o WMI dá), o uso físico é a melhor
-        // aproximação disponível de graça. É honesto porque o que o achado
-        // afirma é "a memória viveu no limite", e não um valor de commit.
+        // Sem o commit (só o WMI dá), o uso físico é a melhor aproximação de graça; o achado afirma "viveu no limite",
+        // não um valor de commit.
         commit_gb: (total - disponivel) / em_gb,
         disponivel_gb: disponivel / em_gb,
     };
@@ -284,8 +227,7 @@ pub fn amostrar() {
     let piores = if amostra.disponivel_gb < DISPONIVEL_APERTADO_GB {
         maiores_consumidores()
     } else {
-        // Só vale o custo de percorrer os processos quando o instante é
-        // apertado — que é o único instante cujos nomes interessam guardar.
+        // Percorre os processos só quando o instante é apertado.
         Vec::new()
     };
 
@@ -307,11 +249,8 @@ pub fn amostrar() {
     }
 }
 
-/// A hora atual em "AAAA-MM-DDTHH".
 fn hora_corrente() -> String {
-    // O projeto não carrega biblioteca de data, e acrescentar uma só para
-    // formatar uma chave de agregação não se paga. O PowerShell também não
-    // serve: a esta frequência ele custaria mais que tudo o resto junto.
+    // Sem biblioteca de data por uma chave de agregação, e sem PowerShell nesta frequência.
     let segundos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -320,7 +259,7 @@ fn hora_corrente() -> String {
     let dias = segundos / 86_400;
     let hora = (segundos % 86_400) / 3_600;
 
-    // Conversão de dias desde 1970 para data civil, algoritmo de Howard Hinnant.
+    // Dias desde 1970 para data civil, algoritmo de Howard Hinnant.
     let z = dias as i64 + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -335,7 +274,6 @@ fn hora_corrente() -> String {
     format!("{:04}-{:02}-{:02}T{:02}", y, m, d, hora)
 }
 
-/// Os processos que mais seguram memória agora.
 fn maiores_consumidores() -> Vec<(String, f64)> {
     use std::collections::HashMap;
 
@@ -346,8 +284,7 @@ fn maiores_consumidores() -> Vec<(String, f64)> {
         sysinfo::ProcessRefreshKind::nothing().with_memory(),
     );
 
-    // Agrupa por nome: um navegador com quinze abas são quinze processos, e
-    // quinze linhas de 300 MB escondem o fato de que ele segura 4,5 GB.
+    // Por nome: quinze abas de 300 MB escondem um navegador com 4,5 GB.
     let mut por_nome: HashMap<String, f64> = HashMap::new();
 
     for processo in sistema.processes().values() {
@@ -396,8 +333,6 @@ mod tests {
 
     #[test]
     fn amostras_da_mesma_hora_viram_um_registro_so() {
-        // 14.400 amostras por dia não podem virar 14.400 linhas no disco do
-        // cliente: um otimizador que engorda o disco é uma piada de mau gosto.
         let mut j = Janela::default();
 
         for i in 0..600 {
@@ -419,9 +354,6 @@ mod tests {
 
     #[test]
     fn guarda_os_processos_do_pior_instante_e_nao_do_ultimo() {
-        // O nome do processo é o que transforma "falta memória" em algo que o
-        // cliente reconhece. Guardar o do último instante mostraria quem estava
-        // aberto quando a hora acabou, que não é a mesma pergunta.
         let mut j = Janela::default();
 
         j = agregar(
@@ -439,7 +371,6 @@ mod tests {
 
         assert_eq!(j.horas[0].commit_max_gb, 12.0);
         assert_eq!(j.horas[0].piores[0].0, "FiveM.exe");
-        // E o mínimo de disponível também é o extremo, não o último.
         assert_eq!(j.horas[0].disponivel_min_gb, 0.3);
     }
 
@@ -457,14 +388,12 @@ mod tests {
         }
 
         assert_eq!(j.horas.len(), HORAS_GUARDADAS);
-        // O que sobrou é o mais recente, não o mais antigo.
         assert_eq!(j.horas.last().unwrap().quando, format!("hora-{:05}", HORAS_GUARDADAS + 49));
     }
 
     #[test]
     fn pico_isolado_nao_vira_achado() {
-        // Uma hora com dois minutos apertados é uso normal de PC. Transformar
-        // isso em alerta seria inventar problema para justificar a compra.
+        // Dois minutos apertados numa hora é uso normal: alertar seria inventar problema.
         let janela = Janela {
             horas: vec![hora("2026-08-11T21", 9.0, 0.4, 10)],
         };
@@ -491,7 +420,6 @@ mod tests {
         assert_eq!(achado.severity, FindingSeverity::Critical);
         assert_eq!(achado.fix_location, FixLocation::Hardware);
         assert!(achado.measured.contains("3 hora(s)"));
-        // A pior hora é a de maior commit, com os processos dela pelo nome.
         assert!(achado.measured.contains("11/08 por volta das 21h"));
         assert!(achado.measured.contains("FiveM.exe com 7.2 GB"));
     }
