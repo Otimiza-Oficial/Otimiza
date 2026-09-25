@@ -3200,6 +3200,30 @@ button {
   font-weight: 500;
 }
 
+.veredito-outros-rotulo {
+  margin: var(--s4) 0 0;
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.veredito-outros .veredito-junto {
+  margin-top: var(--s2);
+}
+
+.veredito-outros-acao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s1);
+}
+
+.veredito-outros-mais {
+  margin-top: var(--s3);
+}
+
 /*
  * Itálico: lacuna não é achado, e nunca some.
  */

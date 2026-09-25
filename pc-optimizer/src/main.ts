@@ -911,7 +911,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // Só em desenvolvimento: em produção o app roda de `tauri://`.
   if (location.hostname.startsWith("localhost")) {
-    (window as unknown as { esfera?: Esfera }).esfera = esfera;
+    (window as unknown as { esfera?: Esfera; aplicarVeredito?: typeof aplicarVeredito }).esfera = esfera;
+    (window as unknown as { aplicarVeredito?: typeof aplicarVeredito }).aplicarVeredito = aplicarVeredito;
   }
 
   wireControls();
@@ -5686,6 +5687,7 @@ function aplicarVeredito(v: Veredito) {
     .join("");
 
   mostrarAcaoDoVeredito(v.principal?.acao ?? null);
+  mostrarOutrosProblemas(v);
   mostrarRecuperacao(v);
 
   mostrarAchadoNoPortao(v);
@@ -5713,6 +5715,46 @@ function aplicarVeredito(v: Veredito) {
       (l) => `<li>${escapeHtml(l.o_que)}: ${escapeHtml(l.por_que)}</li>`
     )
     .join("");
+}
+
+const OUTROS_NO_PAINEL = 4;
+
+/**
+ * Os outros problemas, de causas diferentes do eleito, na ordem do backend. Cada um com o conserto de um clique
+ * quando existe; o resto da lista fica no Diagnóstico.
+ */
+function mostrarOutrosProblemas(v: Veredito) {
+  const bloco = element("veredito-outros");
+  const jaNaTela = new Set([v.principal?.id, ...v.corroboracoes.map((c) => c.id)]);
+  const outros = v.achados.filter((a) => a.severity !== "Ok" && !jaNaTela.has(a.id));
+  bloco.hidden = outros.length === 0;
+  if (outros.length === 0) return;
+
+  const visiveis = outros.slice(0, OUTROS_NO_PAINEL);
+  const itens = visiveis
+    .map((a, i) => {
+      const acao = a.acao
+        ? `<div class="veredito-outros-acao">
+             <button class="btn btn-small" type="button" data-outro="${i}">${escapeHtml(a.acao.rotulo)}</button>
+             <span class="veredito-acao-nota">${a.acao.exige_admin && !isElevated ? "Exige abrir o Otimiza como administrador." : ""}</span>
+           </div>`
+        : "";
+      return `<li><strong>${escapeHtml(a.title)}</strong> — ${escapeHtml(a.measured)}${acao}</li>`;
+    })
+    .join("");
+  const resto = outros.length - visiveis.length;
+  const mais = resto > 0
+    ? `<button class="btn btn-ghost btn-small veredito-outros-mais" type="button" data-outros-todos>${resto === 1 ? "Ver o outro" : `Ver os outros ${resto}`} no Diagnóstico</button>`
+    : "";
+
+  bloco.innerHTML = `<p class="veredito-outros-rotulo">Também nesta máquina</p><ul class="veredito-junto">${itens}</ul>${mais}`;
+
+  bloco.querySelectorAll<HTMLButtonElement>("[data-outro]").forEach((botao) => {
+    const acao = visiveis[Number(botao.dataset.outro)]?.acao;
+    const nota = botao.parentElement?.querySelector<HTMLElement>(".veredito-acao-nota");
+    if (acao && nota) botao.onclick = () => void executarAcaoDoAchado(acao, botao, nota);
+  });
+  bloco.querySelector<HTMLButtonElement>("[data-outros-todos]")?.addEventListener("click", () => showTab("diagnostico"));
 }
 
 /** Só quando o Otimiza resolve sozinho, a minoria dos casos. */
