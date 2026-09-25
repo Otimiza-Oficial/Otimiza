@@ -1,6 +1,3 @@
-// Tauri Commands
-// IPC commands exposed to the frontend
-
 use crate::core::PlatformDetector;
 use crate::modules::benchmark::{
     self, BaselineResult, BaselineStore, Benchmark, BenchmarkComparison, BenchmarkSnapshot,
@@ -76,29 +73,18 @@ use serde::Serialize;
 use tauri::State;
 use tokio::sync::Mutex;
 
-// Estado global do aplicativo.
-// Usa tokio::sync::Mutex porque os guards atravessam pontos de `.await`
-// dentro dos comandos — um std::sync::MutexGuard não é Send e faria
-// o future do comando falhar em compilar.
+// `tokio::sync::Mutex`: os guards atravessam `.await`, e um `std::sync::MutexGuard` não é Send.
 pub struct AppState {
     pub monitor: Mutex<PerformanceMonitor>,
     pub changes: Mutex<ChangeLog>,
-    /// Mantido entre chamadas: o uso de CPU por processo só existe comparando
-    /// duas leituras consecutivas. Recriar o monitor a cada chamada devolveria
-    /// sempre zero.
+    /// Mantido: uso de CPU por processo só existe comparando duas leituras.
     #[cfg(target_os = "windows")]
     pub processes: Mutex<crate::modules::windows::processes::ProcessMonitor>,
-    /// Sem `Mutex`: `TarefaLonga` já guarda o próprio estado internamente, e
-    /// é o que impede duas ferramentas de reparo de rodar ao mesmo tempo.
+    /// Sem `Mutex`: `TarefaLonga` guarda o próprio estado e impede dois reparos juntos.
     #[cfg(target_os = "windows")]
     pub reparo: crate::modules::windows::tarefa_longa::TarefaLonga,
-    /// O que se sabe sobre o disco desta máquina nesta sessão — é isto que
-    /// autoriza (ou não) agendar o `chkdsk`.
-    ///
-    /// `std::sync::Mutex`, e não o `tokio::sync::Mutex` dos vizinhos: os
-    /// comandos de reparo são funções SÍNCRONAS marcadas `(async)`, então
-    /// nenhum guarda daqui atravessa um `.await` — e um `blocking_lock()` do
-    /// tokio chamado de dentro do runtime entraria em pânico.
+    /// Autoriza (ou não) agendar o `chkdsk`. `std::sync::Mutex`: os comandos de reparo são síncronos marcados
+    /// `(async)`, e um `blocking_lock()` do tokio dentro do runtime entraria em pânico.
     #[cfg(target_os = "windows")]
     pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
 }
@@ -111,7 +97,6 @@ pub struct PlatformInfoResponse {
     pub version: String,
 }
 
-/// Comando: Obter informações da plataforma
 #[tauri::command]
 pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
     let info = PlatformDetector::get_info();
@@ -123,21 +108,14 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
     })
 }
 
-/// Comando: Obter métricas de performance em tempo real
 #[tauri::command]
 pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<PerformanceMetrics, String> {
     let mut monitor = state.monitor.lock().await;
     monitor.collect_metrics().await
 }
 
-/// Comando: a lista de programas, com o que já está instalado.
-///
-/// SÓ LÊ. Abrir a aba não instala nada.
-///
-/// Quem responde "o que já está instalado" é o REGISTRO, e não o winget:
-/// as três chaves de desinstalação respondem na hora e existem em toda
-/// máquina — inclusive nas que não têm winget, que são justamente as que mais
-/// precisam desta lista.
+/// SÓ LÊ. O instalado vem do REGISTRO (três chaves de desinstalação), não do winget, que falta justamente nas
+/// máquinas que mais precisam.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
@@ -150,9 +128,7 @@ pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
     .await
     .map_err(|e| format!("a leitura de programas não terminou: {e}"))?;
 
-    // Falha na leitura do registro NÃO vira lista vazia nem lista de "não
-    // instalados": vira estado desconhecido em todos, e a tela diz isso. O
-    // contrário faria o técnico instalar por cima do que já estava lá.
+    // Falha na leitura vira desconhecido em todos, não lista vazia: senão o técnico instalaria por cima.
     let lidos = instalados.as_deref().ok();
 
     Ok(ProgramasNaTela {
@@ -162,23 +138,15 @@ pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
     })
 }
 
-/// A lista com o estado do instalador.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct ProgramasNaTela {
     pub programas: Vec<crate::modules::programas::NaLista>,
     pub winget: crate::modules::windows::winget::Disponibilidade,
-    /// Por que o estado de instalação não pôde ser lido, quando não pôde.
     pub lacuna: Option<String>,
 }
 
-/// Comando: instala um programa do catálogo pelo winget.
-///
-/// O IDENTIFICADOR VEM DO CATÁLOGO, e nunca da tela. A tela manda o id curto
-/// ("7zip"), e é aqui que ele vira o pacote do winget. Aceitar o nome do
-/// pacote direto da tela seria deixar a escolha de O QUE INSTALAR na máquina
-/// do cliente fora do nosso controle — a mesma razão pela qual o catálogo de
-/// jogos não desserializa.
+/// O pacote do winget sai do CATÁLOGO pelo id curto, nunca da tela: o que instalar não fica fora do nosso controle.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn instalar_programa(id: String) -> Result<String, String> {
@@ -195,22 +163,14 @@ pub async fn instalar_programa(id: String) -> Result<String, String> {
         .map_err(|e| format!("a instalação não terminou: {e}"))?
 }
 
-/// Comando: mede o que a limpeza pode liberar, sem apagar nada.
-///
-/// SEPARADO DE APAGAR de propósito. É a medição que o cliente vê antes de
-/// decidir, e ela precisa poder ser feita quantas vezes ele quiser sem
-/// consequência nenhuma.
-///
-/// Alvo que não pôde ser medido sai com tamanho AUSENTE, e não com zero.
-/// Zero afirmaria que a pasta está vazia; ausente diz que ninguém conseguiu
-/// abri-la — e é a diferença que decide se vale tentar como administrador.
+/// Separado de apagar: medir precisa ser repetível sem consequência. Alvo não medido sai AUSENTE, não zero (que
+/// diria pasta vazia).
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn medir_limpeza() -> Result<LimpezaNaTela, String> {
     use crate::modules::limpeza;
     use crate::modules::windows::limpar;
 
-    // Andar em pastas grandes é leitura de disco: fora da thread do executor.
     let alvos = tokio::task::spawn_blocking(limpar::medir)
         .await
         .map_err(|e| format!("a medição não terminou: {e}"))?;
@@ -221,23 +181,16 @@ pub async fn medir_limpeza() -> Result<LimpezaNaTela, String> {
     })
 }
 
-/// A medição, com o que vem marcado de fábrica.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct LimpezaNaTela {
     pub alvos: Vec<crate::modules::limpeza::AlvoMedido>,
-    /// Os ids que vêm marcados. Nada que contenha arquivo do cliente entra.
+    /// Nada que contenha arquivo do cliente vem marcado.
     pub marcados: Vec<String>,
 }
 
-/// Comando: apaga os alvos escolhidos.
-///
-/// É A ÚNICA OPERAÇÃO DO PRODUTO QUE NÃO TEM DESFAZER — arquivo apagado não
-/// volta. Por isso ela recebe a lista EXPLÍCITA do que apagar, em vez de um
-/// "limpar tudo": o que vai embora é o que o cliente marcou, item a item.
-///
-/// Id fora do catálogo é recusado. Aceitar caminho vindo da tela seria deixar
-/// a escolha do que apagar na máquina do cliente fora do nosso controle.
+/// A ÚNICA OPERAÇÃO SEM DESFAZER: recebe a lista EXPLÍCITA marcada item a item. Id fora do catálogo é recusado;
+/// caminho vindo da tela nunca.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, String> {
@@ -255,15 +208,8 @@ pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, Stri
 #[cfg(target_os = "windows")]
 pub type LimparResultado = crate::modules::windows::limpar::Resultado;
 
-/// Comando: os núcleos desta máquina, e se vale mexer na afinidade.
-///
-/// SÓ LÊ. A classe de cada núcleo vem do Windows, e não de uma tabela de
-/// modelos escrita à mão — uma tabela fica errada no lançamento seguinte e
-/// erra em todo processador que não estiver nela.
-///
-/// Num processador uniforme a resposta é que NÃO HÁ O QUE FAZER, e ela vem
-/// escrita. É a maioria das máquinas, e oferecer um botão de afinidade ali
-/// seria oferecer um jeito de piorar.
+/// SÓ LÊ. A classe de cada núcleo vem do Windows, não de tabela de modelos. Processador uniforme: NÃO HÁ O QUE
+/// FAZER, escrito (um botão ali seria um jeito de piorar).
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
@@ -280,10 +226,7 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
          prender o jogo em núcleo nenhum — prender no núcleo errado é pior que não prender.",
     )?;
 
-    // O jogo aberto, quando há um. A afinidade dele é lida junto: é ela que
-    // diz se ele JÁ está preso em algum lugar, e um jogo preso nos núcleos de
-    // eficiência por outro programa é exatamente o caso que esta tela existe
-    // para achar.
+    // A afinidade atual diz se o jogo JÁ está preso, por exemplo nos núcleos de eficiência por outro programa.
     let (jogo_nome, jogo_pid, jogo_mascara, jogo_exe) = match &jogo {
         Some(j) => {
             let mascara = afinidade::ler(j.pid).ok().map(|(processo, _)| processo);
@@ -294,9 +237,7 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
 
     Ok(NucleosNaTela {
         conselho: nucleos::conselho(&topologia),
-        // A contagem de físicos vem DAQUI, e não da tela. Ela é uma conta
-        // sobre a topologia — dois lógicos no mesmo físico são irmãos de
-        // SMT —, e duas versões dela acabam discordando.
+        // Daqui, não da tela: duas versões da conta de físicos discordariam.
         fisicos: topologia.fisicos(),
         mascara_de_desempenho: nucleos::mascara_de_desempenho(&topologia).map(|m| m.to_string()),
         topologia,
@@ -307,38 +248,22 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
     })
 }
 
-/// Os núcleos, com o jogo aberto quando há um.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct NucleosNaTela {
     pub topologia: crate::modules::nucleos::Topologia,
     pub conselho: crate::modules::nucleos::Conselho,
-    /// Quantos núcleos FÍSICOS há. Dois lógicos no mesmo físico são
-    /// irmãos de SMT.
     pub fisicos: usize,
-    /// A máscara dos núcleos rápidos, em texto.
-    ///
-    /// TEXTO e não número: uma máscara de 64 bits não cabe no número do
-    /// JavaScript sem perder os bits altos, e o bit perdido é um núcleo que
-    /// some da conta sem ninguém notar.
+    /// TEXTO: uma máscara de 64 bits perde os bits altos no número do JavaScript.
     pub mascara_de_desempenho: Option<String>,
     pub jogo_nome: Option<String>,
     pub jogo_pid: Option<u32>,
-    /// Em que núcleos o jogo está agora.
     pub jogo_mascara: Option<String>,
-    /// O executável do jogo, para o Auto CPU Set guardar o resultado.
     pub jogo_exe: Option<String>,
 }
 
-/// Comando: prende o jogo aberto nos núcleos de desempenho, ou o solta.
-///
-/// NÃO ENTRA NO HISTÓRICO DE MUDANÇAS, e é de propósito. O histórico existe
-/// para o Desfazer achar o valor anterior de coisas que PERSISTEM; afinidade
-/// é propriedade do processo aberto e some quando o jogo fecha. Uma linha lá
-/// ficaria para sempre oferecendo desfazer um processo que já não existe.
-///
-/// O desfazer dela é o botão ao lado, enquanto o jogo está aberto — e fechar
-/// o jogo também desfaz.
+/// NÃO entra no histórico: afinidade morre com o processo, e uma linha lá ofereceria para sempre desfazer um
+/// processo que não existe. O desfazer é o botão ao lado, ou fechar o jogo.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String, String> {
@@ -355,8 +280,7 @@ pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String,
 
         let t = topologia::ler().ok_or("o Windows não informou a lista de núcleos.")?;
 
-        // A recusa que impede o botão que piora: num processador uniforme não
-        // existe núcleo melhor, e prender em parte deles só tira máquina.
+        // Processador uniforme não tem núcleo melhor: prender só tira máquina.
         let mascara = nucleos::mascara_de_desempenho(&t).ok_or(
             "este processador tem todos os núcleos iguais: prender o jogo em parte deles só \
              reduziria o que a máquina entrega.",
@@ -374,9 +298,7 @@ pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String,
     .map_err(|e| format!("a mudança não terminou: {e}"))?
 }
 
-
-/// Comando: Auto CPU Set — mede o jogo aberto em todos os núcleos e só nos de
-/// desempenho, alternando, e fica com o que rendeu (2.9). `EXIGEM_LICENCA`.
+/// Auto CPU Set (2.9): mede o jogo em todos os núcleos e só nos de desempenho, alternando, e fica com o que rendeu.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::modules::windows::cpuset::ResultadoCpuSet, String> {
@@ -386,40 +308,27 @@ pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::module
         .map_err(|e| format!("o teste não terminou: {e}"))?
 }
 
-/// Comando: os resultados guardados do Auto CPU Set. `LIVRES`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cpuset_resultados() -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
     Ok(crate::modules::windows::cpuset::ler().into_values().collect())
 }
 
-/// Comando: esquece o resultado de um jogo (ele volta a abrir em todos os
-/// núcleos). `LIVRES`: só tira.
+/// `LIVRES`: só tira.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cpuset_esquecer(executavel: String) -> Result<(), String> {
     crate::modules::windows::cpuset::esquecer(&executavel)
 }
 
-/// Comando: o caminho do mouse, do movimento da mão ao pixel.
-///
-/// NÃO MEDE MIRA e não olha para dentro de jogo nenhum. Lê duas chaves do
-/// registro do próprio usuário e responde o que o Windows está fazendo com o
-/// movimento antes de ele chegar ao jogo. Ver o cabeçalho de `modules::mouse`
-/// para o que ficou de fora e por quê.
-///
-/// `intervalos_us` são os intervalos entre relatos de movimento que a TELA
-/// contou na janela deste aplicativo. Lista vazia ou curta demais devolve taxa
-/// ausente — declarada como ausente, e nunca como zero.
+/// NÃO mede mira nem olha dentro do jogo: duas chaves do registro do usuário. `intervalos_us` vêm da tela; lista
+/// curta dá taxa ausente, nunca zero.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
     use crate::modules::mouse;
 
-    // Os intervalos vêm da JANELA DESTE aplicativo, contados pela tela
-    // enquanto o cliente mexe o mouse por cima dela. É a nossa própria
-    // janela: nenhum gancho global, nenhum outro processo, nada que um
-    // anticheat precise vigiar. Lista vazia é taxa ausente, e não zero.
+    // Da janela DESTE aplicativo: nenhum gancho global, nada que um anticheat precise vigiar.
     let taxa = mouse::taxa_de_varredura(&intervalos_us);
     let caminho = mouse::desta_maquina(taxa);
 
@@ -429,27 +338,15 @@ pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
     }
 }
 
-/// O caminho do mouse com o texto de cada achado pronto.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct CaminhoNaTela {
     pub caminho: crate::modules::mouse::Caminho,
-    /// Os mesmos achados de `caminho`, com o texto que a tela mostra.
     pub achados: Vec<crate::modules::mouse::AchadoNaTela>,
 }
 
-/// Comando: o próximo passo de uma sessão de autoajuste.
-///
-/// SEM ESTADO NO BACKEND, de propósito. A sessão vem da tela e volta para a
-/// tela; aqui só se calcula o passo. Um laço guardado do lado de cá teria de
-/// sobreviver a fechar o programa no meio, e uma sessão interrompida com a
-/// mudança aplicada e não medida é o pior estado em que a máquina do cliente
-/// pode ficar. Com o estado na tela, fechar o programa encerra a sessão — e o
-/// que estiver aplicado continua no histórico de desfazer como qualquer outra
-/// mudança.
-///
-/// NÃO APLICA E NÃO DESFAZ. Devolve o passo; quem executa é o caminho que já
-/// tem diário de intenção e desfazer.
+/// SEM ESTADO NO BACKEND: a sessão vem da tela e volta; fechar o programa encerra a sessão, e o aplicado segue no
+/// histórico. Não aplica nem desfaz: devolve o passo.
 #[tauri::command]
 pub fn passo_do_autoajuste(
     sessao: crate::modules::autoajuste::Sessao,
@@ -457,15 +354,8 @@ pub fn passo_do_autoajuste(
     crate::modules::autoajuste::proximo_passo(&sessao)
 }
 
-/// Comando: o que fazer com a configuração do jogo, segundo o que foi medido.
-///
-/// NÃO APLICA NADA. Devolve um plano, e o plano sai com o nome do perfil que
-/// `apply_game_profile` aceita — junto com as razões medidas, o que o ajuste
-/// não resolve, e o que ninguém pôde verificar.
-///
-/// Junta as três leituras que decidem: a classificação de gargalo e a pressão
-/// de memória de vídeo, que vêm da coleta, e o laboratório de streaming, que
-/// precisa saber em que disco o jogo mora.
+/// NÃO APLICA NADA: devolve um plano com o nome que `apply_game_profile` aceita, as razões medidas e o que não foi
+/// verificado.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNaTela, String> {
@@ -477,8 +367,6 @@ pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNa
         monitor.collect_metrics().await?
     };
 
-    // As duas leituras caras saem da thread do executor, como todo o resto que
-    // custa neste produto.
     let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
         .await
         .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
@@ -499,8 +387,7 @@ pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNa
     );
 
     Ok(PlanoNaTela {
-        // O nome sai daqui e não da tela: uma segunda tabela de nomes na tela
-        // sairia do lugar sem ninguém perceber.
+        // Daqui e não da tela: uma segunda tabela de nomes sairia do lugar calada.
         perfil_para_aplicar: match plano.decisao {
             orquestrador::Decisao::Aplicar(p) => Some(p.nome().to_string()),
             _ => None,
@@ -510,28 +397,16 @@ pub async fn plano_de_renderizacao(state: State<'_, AppState>) -> Result<PlanoNa
     })
 }
 
-/// O plano com o nome que o comando de aplicar aceita.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct PlanoNaTela {
     pub plano: crate::modules::orquestrador::Plano,
-    /// Ausente quando o plano não manda aplicar nada.
     pub perfil_para_aplicar: Option<String>,
     pub jogo: String,
 }
 
-/// Comando: o laboratório de streaming de assets.
-///
-/// COMANDO, e não um campo da coleta a cada dois segundos. Descobrir em que
-/// disco cada jogo mora custa uma consulta ao sistema de arquivos e ao WMI —
-/// o mesmo custo que tirou a leitura da placa de vídeo do caminho do painel.
-/// E, ao contrário do uso de CPU, a resposta não muda de segundo em segundo:
-/// ninguém reinstala um jogo enquanto olha a tela.
-///
-/// O jogo cujo disco entra na análise é o PRIMEIRO em disco mecânico, quando
-/// há algum. É o único que muda a conclusão: se nenhum jogo está em mídia
-/// lenta, a mídia não explica o tranco, e a análise segue sem ela em vez de
-/// sortear um jogo para representar os outros.
+/// Comando, não campo da coleta: descobrir o disco de cada jogo custa sistema de arquivos e WMI, e não muda de
+/// segundo em segundo. Entra o PRIMEIRO jogo em disco mecânico: é o único que muda a conclusão.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn laboratorio_de_streaming(
@@ -545,8 +420,6 @@ pub async fn laboratorio_de_streaming(
         monitor.collect_metrics().await?
     };
 
-    // A leitura de disco é bloqueante e mexe com WMI: fora da thread do
-    // executor, como todo o resto que custa neste produto.
     let relatorio = tokio::task::spawn_blocking(discodojogo::analisar)
         .await
         .map_err(|e| format!("a leitura dos discos não terminou: {e}"))?;
@@ -562,26 +435,16 @@ pub async fn laboratorio_de_streaming(
     })
 }
 
-/// O laboratório com o jogo que sustentou a conclusão.
-///
-/// O jogo vai junto porque "o disco está lento" sem dizer QUAL jogo está nele
-/// é uma frase que o cliente não consegue conferir nem agir sobre.
+/// O jogo vai junto: "o disco está lento" sem dizer qual jogo não se confere.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct LaboratorioNaTela {
     pub analise: crate::modules::streaming::Analise,
-    /// O jogo em mídia lenta que entrou na conta, quando há um.
     pub jogo: Option<crate::modules::windows::discodojogo::OndeMora>,
-    /// O que a leitura de discos não conseguiu descobrir.
     pub lacunas: Vec<String>,
 }
 
-/// Comando: guardar o retrato de ANTES sob um perfil de carga.
-///
-/// O perfil vem de fora porque ele não é detectável: a carga diz o que a
-/// máquina está fazendo, não o que quem mediu quis medir. Rotular sozinho um
-/// retrato de "ocioso" com um jogo abrindo no fundo autorizaria depois uma
-/// comparação que não devia existir — ver o cabeçalho de `baseline.rs`.
+/// O perfil vem de fora: não é detectável, e rotular errado autorizaria comparação indevida (ver `baseline.rs`).
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn capturar_baseline(
@@ -607,11 +470,7 @@ pub async fn capturar_baseline(
 
     baseline::guardar(retrato.clone())?;
 
-    // O histórico entra DEPOIS do baseline e não no lugar dele: são perguntas
-    // diferentes. O baseline responde "como estava antes desta mexida"; o
-    // histórico responde "quando foi que isto piorou". Falhar aqui não pode
-    // derrubar a captura — o retrato já está guardado, e perder a linha do
-    // tempo é menos grave que perder a medição que o cliente acabou de esperar.
+    // O histórico DEPOIS do baseline, e falhar nele não derruba a captura: o retrato já está guardado.
     if let Err(erro) = anotar_no_historico(&retrato) {
         eprintln!("histórico de desempenho não foi atualizado: {erro}");
     }
@@ -619,10 +478,7 @@ pub async fn capturar_baseline(
     Ok(retrato)
 }
 
-/// Grava no histórico as métricas que respondem "piorou?".
-///
-/// Só as de `METRICAS_GUARDADAS`: o contrato tem mais de cinquenta, e gravar
-/// todas a cada captura encheria o teto do arquivo em nove capturas.
+/// Só `METRICAS_GUARDADAS`: as cinquenta encheriam o teto em nove capturas.
 #[cfg(target_os = "windows")]
 fn anotar_no_historico(retrato: &crate::modules::baseline::Baseline) -> Result<(), String> {
     use crate::modules::historico;
@@ -642,11 +498,7 @@ fn anotar_no_historico(retrato: &crate::modules::baseline::Baseline) -> Result<(
     historico::guardar(&h)
 }
 
-/// Comando: a linha do tempo de desempenho desta máquina.
-///
-/// As mudanças vêm do `changelog` na hora de responder, e não de uma segunda
-/// lista gravada em paralelo: duas listas do mesmo fato acabam discordando, e
-/// a que o cliente lê seria a errada.
+/// As mudanças vêm do `changelog` na hora: duas listas do mesmo fato discordam.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn historico_de_desempenho(
@@ -657,9 +509,7 @@ pub async fn historico_de_desempenho(
     let aplicadas = state.changes.lock().await.applied().to_vec();
     let h = historico::ler()?.com_mudancas(&aplicadas);
 
-    // Uma regressão por métrica guardada, com o sentido vindo da tabela — e
-    // não de um palpite de quem chama. Métrica com menos de duas medições não
-    // entra: não há o que comparar.
+    // Sentido pela tabela, não palpite. Menos de duas medições não entra.
     let regressoes = historico::METRICAS_GUARDADAS
         .iter()
         .filter_map(|id| {
@@ -674,55 +524,35 @@ pub async fn historico_de_desempenho(
     })
 }
 
-/// A linha do tempo com as regressões já calculadas.
 #[cfg(target_os = "windows")]
 #[derive(Debug, Serialize)]
 pub struct HistoricoNaTela {
     pub historico: crate::modules::historico::Historico,
-    /// Uma por métrica com pelo menos duas medições.
     pub regressoes: Vec<crate::modules::historico::Regressao>,
 }
 
-/// Comando: como este perfil vai ser medido, e quanto tempo vai levar.
-///
-/// A tela chama isto ANTES de `capturar_baseline_repetido`. Um benchmark que
-/// prende a máquina por mais de um minuto sem avisar é um benchmark que o
-/// cliente cancela no meio — e um que descarta a primeira repetição sem dizer
-/// está a um passo de descartar a que não convém.
+/// Chamado ANTES de `capturar_baseline_repetido`: benchmark que prende a máquina sem avisar é cancelado no meio.
 #[tauri::command]
 pub fn protocolo_do_perfil(perfil: crate::modules::baseline::Perfil) -> ProtocoloNaTela {
     let p = crate::modules::repeticoes::protocolo(perfil);
 
     ProtocoloNaTela {
-        // Contas feitas AQUI e não na tela: `execucoes` inclui a repetição
-        // descartada e `duracao` depende dela. Duas versões da mesma conta
-        // acabam discordando, e a que o cliente lê seria a errada.
+        // Contas aqui: `execucoes` inclui a descartada e `duracao` depende dela.
         execucoes: p.execucoes(),
         duracao_estimada_s: p.duracao_estimada_s(),
         protocolo: p,
     }
 }
 
-/// O protocolo com as contas prontas.
 #[derive(Debug, Serialize)]
 pub struct ProtocoloNaTela {
     pub protocolo: crate::modules::repeticoes::Protocolo,
-    /// Quantas repetições serão EXECUTADAS, incluindo a descartada.
     pub execucoes: usize,
     pub duracao_estimada_s: u64,
 }
 
-/// Comando: guardar o retrato de ANTES medindo várias vezes.
-///
-/// A diferença para `capturar_baseline` é a incerteza. Uma coleta só entrega
-/// um número; várias entregam o número E o quanto ele balança nesta máquina.
-/// Com isso, "esta diferença é ganho ou é ruído?" deixa de ser respondida por
-/// um limiar de 3% que vale para toda máquina e passa a ser respondida pelas
-/// medições — ver `repeticoes.rs`.
-///
-/// O protocolo (quantas repetições, quanto tempo, se descarta a primeira) sai
-/// do perfil de carga, e a duração estimada volta no relatório para a tela
-/// poder avisar antes de começar.
+/// Várias coletas entregam o número E o quanto balança nesta máquina (ver `repeticoes.rs`). O protocolo sai do
+/// perfil de carga, com a duração para a tela avisar antes.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn capturar_baseline_repetido(
@@ -744,9 +574,7 @@ pub async fn capturar_baseline_repetido(
             monitor.collect_metrics().await?
         };
 
-        // A primeira roda com cache frio e o Windows ainda se acomodando. Ela
-        // é sistematicamente pior que as outras, e entra no relatório como
-        // descartada em vez de sumir em silêncio.
+        // A primeira (cache frio) entra no relatório como descartada, em vez de sumir.
         let aquecimento = protocolo.descarta_primeira && volta == 0;
 
         if !aquecimento {
@@ -786,12 +614,7 @@ pub async fn capturar_baseline_repetido(
     Ok(retrato)
 }
 
-/// Comando: comparar o retrato guardado com a máquina de agora.
-///
-/// Devolve `Err` com a explicação quando a comparação não pode ser feita —
-/// máquina diferente, carga diferente, ou nada medido dos dois lados. Uma
-/// recusa explicada vale mais que uma tabela de diferenças que não significa
-/// nada.
+/// `Err` explicado quando não dá para comparar: vale mais que uma tabela sem sentido.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn comparar_com_baseline(
@@ -827,41 +650,24 @@ pub async fn comparar_com_baseline(
     baseline::comparar(&antes, &agora).map_err(|recusa| recusa.explicacao())
 }
 
-/// Comando: há uma operação que ficou pela metade?
-///
-/// A tela chama isto na abertura. `None` é o caso normal. Um `Some` significa
-/// que o Otimiza foi interrompido no meio de aplicar ou desfazer algo — e o
-/// que vem junto são os valores anteriores, que é o que permite terminar o
-/// serviço.
-///
-/// O produto NÃO conserta sozinho. Completar uma reversão sem perguntar é
-/// decidir pelo cliente sobre a máquina dele, com base num arquivo que já
-/// provou que algo deu errado.
+/// `None` é o normal; `Some` traz os valores anteriores de uma operação interrompida. NÃO conserta sozinho: seria
+/// decidir pelo cliente com base num arquivo que já provou que algo deu errado.
 #[tauri::command]
 pub fn recuperacao_pendente() -> Result<Option<PendenciaNaTela>, String> {
     Ok(crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
-        // A frase é montada AQUI e não na tela: quem sabe o que "aplicar" e
-        // "desfazer" significam neste produto é este lado, e duas versões da
-        // mesma explicação acabam discordando.
+        // A frase aqui e não na tela: duas versões da explicação discordariam.
         explicacao: p.explicacao(),
         pendencia: p,
     }))
 }
 
-/// A pendência com a frase pronta.
 #[derive(Debug, Serialize)]
 pub struct PendenciaNaTela {
     pub pendencia: crate::modules::transacao::Pendencia,
     pub explicacao: String,
 }
 
-/// Comando: terminar o serviço que ficou pela metade.
-///
-/// Devolve os valores anteriores guardados no diário, limpa o histórico do id
-/// envolvido e apaga a pendência. Devolve quantas mudanças foram desfeitas.
-///
-/// Só roda quando o cliente pede. O produto não conserta sozinho na abertura —
-/// ver `recuperacao_pendente`.
+/// Só quando o cliente pede (ver `recuperacao_pendente`). Devolve quantas mudanças desfez.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn concluir_recuperacao(state: State<'_, AppState>) -> Result<usize, String> {
@@ -873,16 +679,12 @@ pub async fn concluir_recuperacao(state: State<'_, AppState>) -> Result<usize, S
     crate::modules::windows::concluir_recuperacao(&pendencia, &mut log)
 }
 
-/// Comando: descartar a pendência sem completar nada.
-///
-/// O cliente olhou o que ficou pela metade e decidiu deixar como está. O nome
-/// não disfarça o que a função faz: não "resolver", DESCARTAR.
+/// O nome não disfarça: DESCARTAR, não resolver.
 #[tauri::command]
 pub fn descartar_pendencia() -> Result<(), String> {
     crate::modules::transacao::descartar()
 }
 
-/// Comando: Iniciar monitoramento contínuo
 #[tauri::command]
 pub async fn start_monitoring(state: State<'_, AppState>) -> Result<String, String> {
     let mut monitor = state.monitor.lock().await;
@@ -890,7 +692,6 @@ pub async fn start_monitoring(state: State<'_, AppState>) -> Result<String, Stri
     Ok("Monitoring started".to_string())
 }
 
-/// Comando: Parar monitoramento
 #[tauri::command]
 pub async fn stop_monitoring(state: State<'_, AppState>) -> Result<String, String> {
     let mut monitor = state.monitor.lock().await;
@@ -898,17 +699,9 @@ pub async fn stop_monitoring(state: State<'_, AppState>) -> Result<String, Strin
     Ok("Monitoring stopped".to_string())
 }
 
-// ---------------------------------------------------------------------------
-// Medição de desempenho
-//
-// O benchmark ocupa a CPU por vários segundos, então roda em `spawn_blocking`:
-// executá-lo direto no runtime async travaria a interface e, pior, distorceria a
-// própria medição.
-// ---------------------------------------------------------------------------
+// O benchmark ocupa a CPU por segundos: `spawn_blocking`, senão trava a interface e distorce a medição.
 
-/// Comando: Mede o desempenho atual e grava como ponto de partida.
-/// O baseline vai para disco, então otimizações que exigem reiniciar o PC
-/// continuam mensuráveis depois do boot.
+/// Em disco: o que exige reiniciar continua mensurável.
 #[tauri::command]
 pub async fn measure_baseline() -> Result<BaselineResult, String> {
     let snapshot = tokio::task::spawn_blocking(|| Benchmark::new().run())
@@ -919,13 +712,11 @@ pub async fn measure_baseline() -> Result<BaselineResult, String> {
     Ok(BaselineResult::from(snapshot))
 }
 
-/// Comando: Devolve o baseline gravado, se existir.
 #[tauri::command]
 pub fn get_baseline() -> Option<BenchmarkSnapshot> {
     BaselineStore::load()
 }
 
-/// Comando: Mede de novo e compara com o baseline.
 #[tauri::command]
 pub async fn measure_and_compare() -> Result<BenchmarkComparison, String> {
     let before = BaselineStore::load().ok_or(
@@ -939,16 +730,9 @@ pub async fn measure_and_compare() -> Result<BenchmarkComparison, String> {
     Ok(benchmark::compare(&before, &after))
 }
 
-// ---------------------------------------------------------------------------
-// Otimizações
-//
-// Os comandos abaixo existem em todas as plataformas para manter uma única
-// interface, mas hoje só o Windows tem catálogo implementado. Em outros sistemas
-// eles falham com uma mensagem clara em vez de fingir que otimizaram algo.
-// ---------------------------------------------------------------------------
+// Existem em todas as plataformas para uma interface só; fora do Windows falham com mensagem clara.
 
-/// Comando: O programa está rodando como administrador?
-/// A interface usa isso para avisar antes que o usuário tente aplicar algo e falhe.
+/// Para avisar antes de o usuário tentar aplicar e falhar.
 #[tauri::command]
 pub fn is_elevated() -> bool {
     #[cfg(target_os = "windows")]
@@ -964,7 +748,6 @@ pub fn is_elevated() -> bool {
 
 #[derive(Serialize)]
 pub struct HardwareProfileResponse {
-    /// "SSD", "HD mecânico" ou "não identificado".
     pub storage: String,
     pub total_ram_gb: f64,
     pub logical_cores: usize,
@@ -972,8 +755,7 @@ pub struct HardwareProfileResponse {
     pub gpu_name: String,
 }
 
-/// Comando: Perfil de hardware desta máquina.
-/// É o que permite ao produto recusar otimizações que fariam mal a este PC.
+/// Permite recusar o que faria mal a este PC.
 #[tauri::command]
 pub fn get_hardware_profile() -> Result<HardwareProfileResponse, String> {
     #[cfg(target_os = "windows")]
@@ -1000,10 +782,7 @@ pub fn get_hardware_profile() -> Result<HardwareProfileResponse, String> {
     }
 }
 
-/// Comando: Os processos que mais pesam no PC agora.
-///
-/// Responde a pergunta que o cliente realmente faz — "o que está deixando meu PC
-/// lento?" — apontando o culpado pelo nome e dizendo se ele volta no próximo boot.
+/// Aponta o culpado pelo nome e se ele volta no próximo boot.
 #[tauri::command]
 pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpact>, String> {
     #[cfg(target_os = "windows")]
@@ -1019,34 +798,23 @@ pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpa
     }
 }
 
-/// Comando: Preferências gravadas.
 #[tauri::command]
 pub fn get_preferences() -> Preferences {
     Preferences::load()
 }
 
-/// Comando: Grava as preferências.
 #[tauri::command]
 pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> {
     preferences.save()?;
-    // Devolve o que ficou de fato gravado: valores fora da faixa são corrigidos
-    // na gravação, e a interface precisa refletir o valor real, não o pedido.
+    // Valores fora da faixa são corrigidos: a interface reflete o gravado, não o pedido.
     Ok(Preferences::load())
 }
 
-// ---------------------------------------------------------------------------
-// Espaço em disco
-//
-// Num PC fraco, disco cheio é o problema que mais se disfarça de "PC lento".
-// ---------------------------------------------------------------------------
-
-/// Comando: Varre o disco por categoria de espaço recuperável. Não apaga nada.
+/// Não apaga nada.
 #[tauri::command]
 pub async fn scan_disk_space() -> Result<DiskReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // A varredura percorre pastas grandes; fora do runtime para não travar
-        // a interface enquanto soma.
         tokio::task::spawn_blocking(crate::modules::windows::diskspace::scan)
             .await
             .map_err(|e| format!("Falha na varredura: {}", e))
@@ -1058,7 +826,6 @@ pub async fn scan_disk_space() -> Result<DiskReport, String> {
     }
 }
 
-/// Comando: Limpa uma categoria de espaço.
 #[tauri::command]
 pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
     crate::modules::licenca::exigir()?;
@@ -1077,14 +844,8 @@ pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
     }
 }
 
-// O "Esvaziar Lixeira" do liberador saiu na 2.9: a Lixeira é um item da
-// Limpeza do sistema, que diz o que se perde e vem desmarcada.
+// A Lixeira saiu do liberador na 2.9: é item da Limpeza do sistema, desmarcado.
 
-// ---------------------------------------------------------------------------
-// Memória e paginação
-// ---------------------------------------------------------------------------
-
-/// Comando: Diagnostica memória e arquivo de paginação.
 #[tauri::command]
 pub async fn analyze_memory() -> Result<MemoryReport, String> {
     #[cfg(target_os = "windows")]
@@ -1100,7 +861,6 @@ pub async fn analyze_memory() -> Result<MemoryReport, String> {
     }
 }
 
-/// Comando: Devolve ao Windows o gerenciamento do arquivo de paginação.
 #[tauri::command]
 pub async fn set_automatic_pagefile() -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -1118,16 +878,8 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
     }
 }
 
-/// Comando: o que olhar na BIOS desta máquina, em fases.
-///
-/// Fica em `LIVRES`: **este comando não escreve absolutamente nada.** O Windows
-/// não altera firmware de PC de mesa, e uma ferramenta que encontrasse um jeito
-/// de fazer isso seria uma ferramenta capaz de deixar a máquina do cliente sem
-/// ligar.
-///
-/// Os dois achados que tornam passos relevantes — memória abaixo do nominal e
-/// Resizable BAR desligado — vêm de quem já mede isso. Remedir aqui faria o
-/// produto poder mostrar dois números diferentes para o mesmo fato.
+/// `LIVRES`: **não escreve absolutamente nada** (uma ferramenta capaz de alterar firmware deixaria a máquina sem
+/// ligar). Memória abaixo do nominal e Resizable BAR vêm de quem já mede: remedir daria dois números.
 #[tauri::command]
 pub fn passo_a_passo_da_bios() -> BiosNaTela {
     #[cfg(target_os = "windows")]
@@ -1162,8 +914,7 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
     }
 }
 
-/// Comando: a tela avisa que está pronta; devolve quanto a abertura levou, em
-/// ms. `LIVRES`: só mede.
+/// `LIVRES`: só mede.
 #[tauri::command]
 pub fn abertura_pronta() -> Option<u64> {
     let ms = crate::modules::abertura::marcar_pronta();
@@ -1173,7 +924,7 @@ pub fn abertura_pronta() -> Option<u64> {
     ms
 }
 
-/// Comando: a ficha do firmware da aba BIOS. `LIVRES`: só lê.
+/// `LIVRES`: só lê.
 #[tauri::command]
 pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha, String> {
     tokio::task::spawn_blocking(crate::modules::windows::fichabios::ler)
@@ -1181,8 +932,7 @@ pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha
         .map_err(|e| format!("Falha ao ler o firmware: {}", e))
 }
 
-/// Comando: reinicia o PC direto na tela da BIOS (UEFI). `LIVRES`: não
-/// altera configuração nenhuma; a tela pede confirmação antes.
+/// `LIVRES`: não altera configuração; a tela confirma antes.
 #[tauri::command]
 pub fn reiniciar_na_bios() -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -1201,15 +951,8 @@ pub struct BiosNaTela {
     pub passos: Vec<crate::modules::windows::bios::Passo>,
 }
 
-/// Comando: os três níveis — Seguro, Competitivo, Experimental.
-///
-/// Fica em `LIVRES`: é a definição dos níveis, montada do catálogo. Não aplica
-/// nada; aplicar continua sendo `optimize_now` com a lista de identificadores.
-///
-/// Diferente dos perfis: os perfis respondem "para que você usa a máquina", e
-/// estes respondem "o que você aceita trocar". As duas perguntas são
-/// independentes, e responder as duas com a mesma lista seria fingir que o
-/// cliente que joga e o cliente que aceita risco são a mesma pessoa.
+/// `LIVRES`: definição montada do catálogo; aplicar é `optimize_now`. Perfis respondem "para que você usa"; níveis,
+/// "o que você aceita trocar": perguntas independentes.
 #[tauri::command]
 pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
     use crate::modules::windows::niveis::{acrescenta, aplica_de_uma_vez, itens_do_nivel, Nivel};
@@ -1228,28 +971,20 @@ pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
         .collect()
 }
 
-/// Um nível, do jeito que a tela precisa dele.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NivelNaTela {
     pub id: String,
     pub nome: String,
-    /// O que o nível faz. Sem adjetivo de marketing.
     pub promessa: String,
-    /// O que ele exige de quem escolhe. Parte do contrato, não nota de rodapé.
+    /// Parte do contrato, não nota de rodapé.
     pub exigencia: String,
     pub itens: Vec<String>,
-    /// O que ESTE nível acrescenta ao anterior — é a diferença que ajuda a
-    /// decidir, e não a lista inteira.
     pub acrescenta: Vec<String>,
-    /// Falso no Experimental: aplicar todos de uma vez é o que derrubou o FPS
-    /// de um cliente, e a tela precisa saber disso para não oferecer o botão.
+    /// Falso no Experimental: aplicar tudo de uma vez derrubou o FPS de um cliente.
     pub aplica_de_uma_vez: bool,
 }
 
-/// Comando: Perfis de otimização recomendados por tipo de uso.
-///
-/// Perfil aqui é sugestão que marca caixas na lista, não pacote fechado: a
-/// pessoa continua vendo e podendo desmarcar cada item.
+/// Sugestão que marca caixas, não pacote fechado.
 #[tauri::command]
 pub fn list_profiles() -> Vec<crate::modules::windows::profiles::ProfileInfo> {
     #[cfg(target_os = "windows")]
@@ -1263,16 +998,12 @@ pub fn list_profiles() -> Vec<crate::modules::windows::profiles::ProfileInfo> {
     }
 }
 
-/// Comando: Mapa das maiores pastas do perfil do usuário.
-///
-/// Responde a pergunta que vem antes do liberador de espaço: não "o que dá para
-/// apagar", mas "cadê o meu disco".
+/// Não "o que dá para apagar", mas "cadê o meu disco".
 #[tauri::command]
 pub async fn map_folders() -> Result<FolderMap, String> {
     #[cfg(target_os = "windows")]
     {
-        // Percorre centenas de milhares de arquivos: fora do runtime async,
-        // senão trava a interface inteira durante a varredura.
+        // Centenas de milhares de arquivos: fora do runtime async.
         tokio::task::spawn_blocking(|| {
             use crate::modules::windows::foldermap;
             foldermap::mapear_o_disco(12)
@@ -1287,15 +1018,7 @@ pub async fn map_folders() -> Result<FolderMap, String> {
     }
 }
 
-/// Comando: o Resizable BAR desta máquina.
-///
-/// Fica em `LIVRES`: é leitura pura — o módulo `rbar` não escreve em lugar
-/// nenhum, e nem teria como: quem liga o Resizable BAR é a BIOS. O que este
-/// comando entrega é a explicação de qual dos quatro estados a máquina está,
-/// para a tela não confundir "desligado" com "esta placa não tem".
-///
-/// `(async)`: chama `nvidia-smi`, que é processo externo e pode demorar — na
-/// thread da interface isso trava a janela inteira.
+/// `LIVRES`: o `rbar` só lê, e só a BIOS liga. `(async)`: chama `nvidia-smi`, processo externo.
 #[tauri::command(async)]
 pub fn analyze_rbar() -> Result<crate::modules::windows::rbar::RelatorioDoRbar, String> {
     #[cfg(target_os = "windows")]
@@ -1309,18 +1032,8 @@ pub fn analyze_rbar() -> Result<crate::modules::windows::rbar::RelatorioDoRbar, 
     }
 }
 
-// ---------------------------------------------------------------------------
-// Relatório de atendimento
-// ---------------------------------------------------------------------------
-
-/// Levanta o estado da máquina para o relatório.
-///
-/// Cada análise é independente e nenhuma derruba as outras: se a leitura do
-/// boot falhar, o documento sai sem essa seção e diz que ela não estava
-/// disponível — em vez de o relatório inteiro deixar de existir.
-///
-/// O mapa de pastas e a varredura de espaço ficam de fora de propósito: levam
-/// quase um minuto cada, e o relatório é gerado com o cliente esperando.
+/// Cada análise é independente: seção que falha sai dita como indisponível. Mapa de pastas e varredura de espaço
+/// ficam fora: quase um minuto cada, com o cliente esperando.
 #[cfg(target_os = "windows")]
 fn coletar_para_relatorio() -> crate::modules::report::ReportData {
     use crate::modules::windows;
@@ -1331,13 +1044,9 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
         health: Some(windows::health::analyze()),
         memory: Some(windows::memory::analyze()),
         browsers: Some(windows::browsers::analyze()),
-        // Chave de inicialização ilegível chega ao PDF como erro, e vira uma
-        // lacuna escrita na seção. Antes vinha como lista vazia: a seção sumia
-        // do documento inteira, e o laudo afirmava por omissão que a máquina
-        // não tem nada abrindo com o Windows.
+        // Ilegível vira lacuna escrita; como lista vazia, a seção sumia e o laudo afirmava por omissão.
         startup: windows::startup::entries(),
-        // O mesmo veredito que a tela mostra, para que o papel e o programa
-        // não possam discordar sobre a mesma máquina.
+        // O mesmo veredito da tela: papel e programa não discordam.
         veredito: Some(windows::veredito::diagnostico_rapido()),
     }
 }
@@ -1347,19 +1056,13 @@ fn coletar_para_relatorio() -> crate::modules::report::ReportData {
     crate::modules::report::ReportData::default()
 }
 
-/// Comando: Gera o relatório entregável e grava na Área de Trabalho.
-///
-/// A comparação vem da interface porque ela já tem o resultado da última
-/// medição em mãos. Refazer o benchmark aqui custaria vários segundos e, pior,
-/// mediria um momento diferente daquele que o usuário está vendo na tela.
+/// A comparação vem da interface: refazer o benchmark mediria outro momento.
 #[tauri::command]
 pub async fn export_report(
     state: State<'_, AppState>,
     comparison: Option<BenchmarkComparison>,
 ) -> Result<crate::modules::report::ReportSaved, String> {
-    // O levantamento roda fora do runtime: são várias consultas ao WMI e ao
-    // log de eventos, e juntas passam de dez segundos. Feito aqui dentro,
-    // travaria a interface enquanto o técnico espera.
+    // WMI e log de eventos passam de dez segundos: fora do runtime.
     let dados = tokio::task::spawn_blocking(coletar_para_relatorio)
         .await
         .map_err(|e| format!("Falha ao levantar os dados da maquina: {}", e))?;
@@ -1368,7 +1071,7 @@ pub async fn export_report(
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
 }
 
-/// Comando: DPC e interrupções por núcleo, por 10 s (2.9, modo Expert). `LIVRES`.
+/// (2.9, modo Expert). `LIVRES`.
 #[tauri::command]
 pub async fn diagnostico_dpc() -> Result<crate::modules::windows::dpc::DiagnosticoDpc, String> {
     #[cfg(target_os = "windows")]
@@ -1383,7 +1086,7 @@ pub async fn diagnostico_dpc() -> Result<crate::modules::windows::dpc::Diagnosti
     }
 }
 
-/// Comando: o MSI de cada dispositivo PCI, só leitura (2.9, modo Expert). `LIVRES`.
+/// (2.9, modo Expert). `LIVRES`.
 #[tauri::command]
 pub async fn msi_dispositivos() -> Result<Vec<crate::modules::windows::devices::DispositivoMsi>, String> {
     #[cfg(target_os = "windows")]
@@ -1398,9 +1101,7 @@ pub async fn msi_dispositivos() -> Result<Vec<crate::modules::windows::devices::
     }
 }
 
-/// Comando: as alterações aplicadas, em planilha (CSV) na Área de Trabalho. `LIVRES`.
-///
-/// Só lê o histórico; é o que a pessoa leva para conferir o que o Otimiza fez.
+/// `LIVRES`: só lê o histórico.
 #[tauri::command]
 pub async fn exportar_alteracoes(state: State<'_, AppState>) -> Result<String, String> {
     let log = state.changes.lock().await;
@@ -1408,7 +1109,6 @@ pub async fn exportar_alteracoes(state: State<'_, AppState>) -> Result<String, S
     crate::modules::report::salvar_csv(&csv)
 }
 
-/// O valor que o Otimiza escreveu, quando o catálogo o conhece.
 #[cfg(target_os = "windows")]
 fn valor_novo_da_alteracao(id: &str, c: &crate::modules::changelog::ChangeRecord) -> Option<String> {
     use crate::modules::changelog::ChangeRecord;
@@ -1439,11 +1139,6 @@ fn valor_novo_da_alteracao(_: &str, _: &crate::modules::changelog::ChangeRecord)
     None
 }
 
-// ---------------------------------------------------------------------------
-// Cache de shader, prontidão e prioridade permanente
-// ---------------------------------------------------------------------------
-
-/// Comando: Cache de shader e idade do driver de vídeo.
 #[tauri::command]
 pub async fn analyze_shaders() -> Result<ShaderReport, String> {
     #[cfg(target_os = "windows")]
@@ -1459,7 +1154,6 @@ pub async fn analyze_shaders() -> Result<ShaderReport, String> {
     }
 }
 
-/// Comando: Apaga um cache de shader.
 #[tauri::command]
 pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String> {
     crate::modules::licenca::exigir()?;
@@ -1478,15 +1172,7 @@ pub async fn clean_shader_cache(id: String) -> Result<ShaderCleanOutcome, String
     }
 }
 
-/// Comando: O veredito da máquina.
-///
-/// É o diagnóstico que roda sozinho ao abrir o programa, antes de qualquer
-/// botão de otimizar. Recolhe só o que é barato e devolve UMA frase com o
-/// número que a sustenta — o resto dos diagnósticos continua sob demanda.
-///
-/// Existe porque o produto foi testado em máquina que travava e disse que
-/// estava tudo bem: os achados estavam corretos, mas espalhados por cinco abas,
-/// e nenhum deles era o veredito.
+/// Roda sozinho ao abrir: só o barato, e UMA frase com o número que a sustenta.
 #[tauri::command]
 pub async fn diagnostico_rapido() -> Result<Veredito, String> {
     #[cfg(target_os = "windows")]
@@ -1502,7 +1188,6 @@ pub async fn diagnostico_rapido() -> Result<Veredito, String> {
     }
 }
 
-/// Comando: Qual placa de vídeo cada jogo usa.
 #[tauri::command]
 pub async fn analyze_gpu_preference() -> Result<GpuPrefReport, String> {
     #[cfg(target_os = "windows")]
@@ -1518,10 +1203,7 @@ pub async fn analyze_gpu_preference() -> Result<GpuPrefReport, String> {
     }
 }
 
-/// Comando: Fixa qual placa de vídeo um jogo deve usar.
-///
-/// Em notebook com duas placas, é o maior ganho de FPS que este produto tem
-/// para dar — e não exige administrador nem reiniciar o PC.
+/// Em notebook com duas placas é o maior ganho que o produto dá, sem administrador nem reinício.
 #[tauri::command]
 pub async fn set_gpu_preference(
     caminho: String,
@@ -1552,11 +1234,7 @@ pub async fn set_gpu_preference(
     }
 }
 
-/// Comando: Os ajustes do driver NVIDIA que o Otimiza sabe aplicar e desfazer, e
-/// em que pé está a NVAPI nesta máquina.
-///
-/// Só leitura. Máquina sem placa NVIDIA recebe a frase que diz isso, não uma
-/// tela vazia.
+/// Só leitura. Sem placa NVIDIA, a frase que diz isso.
 #[tauri::command]
 pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<PainelDoDriver, String> {
     #[cfg(target_os = "windows")]
@@ -1564,9 +1242,7 @@ pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<Pain
         use crate::modules::changelog::ChangeRecord;
         use crate::modules::windows::nvdriver::LimiteNaTela;
 
-        // O que o histórico sabe sai antes da chamada ao driver, e a trava do
-        // histórico é solta aqui mesmo: carregar a DLL não pode prender quem
-        // quer aplicar ou desfazer outra coisa.
+        // A trava do histórico é solta antes do driver: carregar a DLL não prende quem quer aplicar outra coisa.
         let (aplicados, limites) = {
             let log = state.changes.lock().await;
 
@@ -1608,10 +1284,7 @@ pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<Pain
     }
 }
 
-/// Comando: Aplica um ajuste do driver NVIDIA no perfil global.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador. O desfazer é o
-/// `revert_optimization` de sempre, com o id que o painel recebe pronto.
+/// `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`, com o id que o painel recebe pronto.
 #[tauri::command]
 pub async fn aplicar_ajuste_nvidia(
     opcao: String,
@@ -1632,11 +1305,7 @@ pub async fn aplicar_ajuste_nvidia(
     }
 }
 
-/// Comando: Limita os quadros por segundo de um jogo, no perfil do executável
-/// dele no driver da NVIDIA.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador. O desfazer é o
-/// `revert_optimization`, com o id que o painel recebe pronto.
+/// `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`.
 #[tauri::command]
 pub async fn limitar_fps_nvidia(
     executavel: String,
@@ -1658,7 +1327,6 @@ pub async fn limitar_fps_nvidia(
     }
 }
 
-/// Comando: Condições que atrapalham antes de otimizar.
 #[tauri::command]
 pub async fn analyze_readiness() -> Result<ReadinessReport, String> {
     #[cfg(target_os = "windows")]
@@ -1674,7 +1342,6 @@ pub async fn analyze_readiness() -> Result<ReadinessReport, String> {
     }
 }
 
-/// Comando: Corrige um item de prontidão que o Otimiza sabe resolver.
 #[tauri::command]
 pub async fn fix_readiness(id: String) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -1700,31 +1367,12 @@ pub async fn fix_readiness(id: String) -> Result<String, String> {
     }
 }
 
-/// Comando: Executável do jogo aberto agora, para fixar a prioridade dele.
 #[tauri::command]
 pub fn running_game_executable() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        // O DETECTOR POR SINAIS VEM PRIMEIRO, E O MOTIVO FOI MEDIDO.
-        //
-        // `executavel_do_jogo` varre a lista de nomes conhecidos e devolve o
-        // PRIMEIRO processo que casa. Com FiveM aberto nesta maquina isso
-        // devolvia `FiveM_ChromeBrowser` — um subprocesso do navegador embutido
-        // — em vez de `FiveM_b3258_GTAProcess.exe`, que e o jogo. Os dois casam
-        // com a chave `fivem_`, e qual vence depende da ordem de enumeracao dos
-        // processos: e sorteio.
-        //
-        // Medir FPS do subprocesso de navegador nao mede nada. E a tela da
-        // prova, que e a que fecha a venda, nasceria comparando o numero errado
-        // com o numero errado.
-        //
-        // `deteccao::procurar` decide por quatro sinais — janela em primeiro
-        // plano, uso do motor 3D, tempo aberto e nome conhecido. Um subprocesso
-        // de navegador nao passa nos dois primeiros.
-        //
-        // A varredura por lista fica como reserva: ela acerta quando o jogo
-        // esta aberto mas nao em primeiro plano, que e o caso de quem alterna
-        // para o Otimiza para medir.
+        // O detector por sinais primeiro: a lista de nomes devolvia `FiveM_ChromeBrowser` (subprocesso do navegador) em
+        // vez do jogo, por ordem de enumeração. A lista fica de reserva para o jogo aberto fora do primeiro plano.
         crate::modules::windows::deteccao::procurar()
             .map(|jogo| jogo.executavel)
             .or_else(crate::modules::windows::gamemode::executavel_do_jogo)
@@ -1736,7 +1384,6 @@ pub fn running_game_executable() -> Option<String> {
     }
 }
 
-/// Comando: Fixa ou remove a prioridade alta permanente de um jogo.
 #[tauri::command]
 pub async fn set_persistent_priority(
     executable: String,
@@ -1745,9 +1392,7 @@ pub async fn set_persistent_priority(
 ) -> Result<OptimizationOutcome, String> {
     crate::modules::licenca::exigir()?;
 
-    // RETIRADO NA 2.9: prioridade alta fixa é "prioridade cega" — só rende
-    // com disputa real de processador, e é a escrita mais visível para um
-    // anticheat. Quem fixou numa versão anterior continua podendo remover.
+    // RETIRADO NA 2.9 (prioridade cega, e a escrita mais visível a um anticheat): quem fixou antes ainda remove.
     if enable {
         return Err("Fixar prioridade foi retirado na 2.9: não mostrava ganho medido. Ainda dá para remover o que foi fixado antes.".to_string());
     }
@@ -1765,21 +1410,12 @@ pub async fn set_persistent_priority(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Analisador de gargalo
-// ---------------------------------------------------------------------------
-
-/// Comando: Descobre qual recurso está limitando o desempenho.
-///
-/// Não otimiza nada — só explica. É a resposta para "por que meu FPS é baixo",
-/// e a resposta honesta quase nunca é "falta otimizar".
+/// Só explica, não otimiza.
 #[tauri::command]
 pub async fn analyze_bottleneck(seconds: u64) -> Result<BottleneckReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // Amostra contadores em laço pelo tempo pedido: bloqueia, então sai do
-        // runtime. Entre 4 e 30 segundos — menos não dá amostra suficiente,
-        // mais é o técnico parado olhando a tela.
+        // Bloqueia: sai do runtime. Entre 4 e 30 s.
         tokio::task::spawn_blocking(move || {
             crate::modules::windows::bottleneck::analisar(seconds.clamp(4, 30))
         })
@@ -1794,11 +1430,6 @@ pub async fn analyze_bottleneck(seconds: u64) -> Result<BottleneckReport, String
     }
 }
 
-// ---------------------------------------------------------------------------
-// Modo jogo
-// ---------------------------------------------------------------------------
-
-/// Comando: Situação do modo jogo.
 #[tauri::command]
 pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStatus, String> {
     #[cfg(target_os = "windows")]
@@ -1814,7 +1445,6 @@ pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStat
     }
 }
 
-/// Comando: Liga ou desliga o modo jogo na mão.
 #[tauri::command]
 pub async fn set_game_mode(
     active: bool,
@@ -1842,8 +1472,7 @@ pub async fn set_game_mode(
     }
 }
 
-/// Comando: zera a anotação do governador quando ela estragou. `LIVRES`: só
-/// devolve e esquece, não otimiza nada.
+/// `LIVRES`: só devolve e esquece.
 #[tauri::command]
 pub async fn zerar_modo_jogo(state: State<'_, AppState>) -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -1859,16 +1488,10 @@ pub async fn zerar_modo_jogo(state: State<'_, AppState>) -> Result<String, Strin
     }
 }
 
-// ---------------------------------------------------------------------------
-// Rede e quadros
-// ---------------------------------------------------------------------------
-
-/// Comando: Mede os resolvedores de DNS e mostra o que a máquina usa.
 #[tauri::command]
 pub async fn analyze_network() -> Result<NetworkReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // São várias consultas de DNS cronometradas; leva alguns segundos.
         tokio::task::spawn_blocking(crate::modules::windows::network::analyze)
             .await
             .map_err(|e| format!("Falha ao medir a rede: {}", e))
@@ -1880,7 +1503,6 @@ pub async fn analyze_network() -> Result<NetworkReport, String> {
     }
 }
 
-/// Comando: Troca o DNS de um adaptador, com registro para reversão.
 #[tauri::command]
 pub async fn set_dns(
     guid: String,
@@ -1902,7 +1524,6 @@ pub async fn set_dns(
     }
 }
 
-/// Comando: Limpa o cache de resolução de nomes.
 #[tauri::command]
 pub async fn flush_dns() -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -1920,22 +1541,13 @@ pub async fn flush_dns() -> Result<String, String> {
     }
 }
 
-/// Comando: mede perda de pacote, jitter de rede e tempo de resposta contra o
-/// servidor em que o cliente está jogando agora.
-///
-/// O alvo sai das conexões ativas do processo do jogo — ver
-/// `modules::windows::rede::servidor_do_jogo`. Não descobrir o servidor não é
-/// erro: é o próprio resultado, escrito na nota (regra 1 do módulo).
-///
-/// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que evita o
-/// cliente concluir, errado, que o produto o enganou quando otimiza o PC e a
-/// travada continua — porque a travada era de rede, não de FPS.
+/// O alvo sai das conexões do jogo (`rede::servidor_do_jogo`); não descobrir é o resultado. `LIVRES`: é o
+/// diagnóstico que evita culpar o produto por travada de rede.
 #[tauri::command]
 pub async fn medir_perda_de_pacote() -> Result<crate::modules::windows::rede::MedidaDeRede, String>
 {
     #[cfg(target_os = "windows")]
     {
-        // São até vinte pings sequenciais; leva alguns segundos.
         tokio::task::spawn_blocking(crate::modules::windows::rede::medir_agora)
             .await
             .map_err(|e| format!("Falha ao medir a perda de pacote: {}", e))
@@ -1947,15 +1559,11 @@ pub async fn medir_perda_de_pacote() -> Result<crate::modules::windows::rede::Me
     }
 }
 
-/// Comando: Conta os quadros que um jogo está entregando.
-///
-/// Mede de fora, escutando o canal de eventos do Windows — nada é injetado no
-/// processo do jogo.
+/// Mede de fora, pelo canal de eventos do Windows.
 #[tauri::command]
 pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasurement, String> {
     #[cfg(target_os = "windows")]
     {
-        // A medição bloqueia pelo tempo pedido: precisa sair do runtime.
         tokio::task::spawn_blocking(move || {
             use crate::modules::windows::frames;
 
@@ -1966,8 +1574,7 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
                 )
             })?;
 
-            // Entre 3 e 30 segundos: menos que isso não estabiliza, mais que
-            // isso é o técnico parado olhando a tela.
+            // Entre 3 e 30 s.
             frames::medir(pid, &nome, seconds.clamp(3, 30))
         })
         .await
@@ -1981,10 +1588,7 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
     }
 }
 
-/// Comando: o que existe de geração de quadros nesta placa, neste monitor e
-/// neste jogo.
-///
-/// Só leitura. Fica em `LIVRES`: saber o que a máquina suporta não altera nada.
+/// `LIVRES`: saber o que a máquina suporta não altera nada.
 #[tauri::command]
 pub async fn framegen_detectar(processo: Option<String>) -> Result<Deteccao, String> {
     #[cfg(target_os = "windows")]
@@ -2001,10 +1605,7 @@ pub async fn framegen_detectar(processo: Option<String>) -> Result<Deteccao, Str
     }
 }
 
-/// Comando: mede uma rodada do laboratório de geração de quadros.
-///
-/// Mede de fora, como `measure_frames`: nada é injetado no jogo, e nada é
-/// ligado — quem liga a geração é a pessoa. Fica em `LIVRES`.
+/// De fora, como `measure_frames`; quem liga a geração é a pessoa. `LIVRES`.
 #[tauri::command]
 pub async fn framegen_medir(
     processo: String,
@@ -2035,7 +1636,6 @@ pub async fn framegen_medir(
     }
 }
 
-/// Comando: compara a rodada desligada com uma ligada. Conta pura, em `LIVRES`.
 #[tauri::command]
 pub fn framegen_comparar(
     desligado: Rodada,
@@ -2054,10 +1654,7 @@ pub fn framegen_comparar(
     }
 }
 
-/// Comando: liga o gerador de quadros do Otimiza sobre a janela do jogo.
-///
-/// `EXIGEM_LICENCA`: é recurso do produto. Não altera o computador — nada é
-/// gravado, e desligar (ou fechar o Otimiza) some com a sobreposição.
+/// `EXIGEM_LICENCA` por ser recurso do produto; nada é gravado, e desligar some com a sobreposição.
 #[tauri::command]
 pub async fn gerador_ligar(
     processo: String,
@@ -2076,20 +1673,17 @@ pub async fn gerador_ligar(
     .map_err(|e| format!("Falha ao ligar o gerador: {}", e))?
 }
 
-/// Comando: desliga o gerador. `LIVRES`.
 #[tauri::command]
 pub async fn gerador_desligar() -> crate::modules::windows::geracao::Estado {
     let _ = tokio::task::spawn_blocking(crate::modules::windows::geracao::desligar).await;
     crate::modules::windows::geracao::estado()
 }
 
-/// Comando: como o gerador está agora. `LIVRES`.
 #[tauri::command]
 pub fn gerador_estado() -> crate::modules::windows::geracao::Estado {
     crate::modules::windows::geracao::estado()
 }
 
-/// Comando: o modo inteligente. Entre as rodadas ligadas, qual ganhou.
 #[tauri::command]
 pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil, hz: u32) -> Option<usize> {
     crate::modules::windows::framegen::melhor_rodada(&desligado, &testadas, perfil, hz)
@@ -2101,25 +1695,20 @@ pub struct FramegenComparacao {
     pub artefatos: Option<crate::modules::windows::framegen::NotaDeArtefatos>,
 }
 
-// ─── Motor de energia adaptativo ──────────────────────────────────────────────
-
 #[derive(serde::Serialize)]
 pub struct PainelDeEnergia {
     pub impressao: crate::modules::windows::motorenergia::Impressao,
     pub bateria: crate::modules::windows::motorenergia_maquina::Bateria,
-    /// Os ajustes do plano ATIVO que o motor sabe interpretar.
     pub ppm_atual: Vec<crate::modules::windows::motorenergia::Configuracao>,
     pub plano_otimiza_ativo: bool,
     pub backup: Option<crate::modules::windows::motorenergia_maquina::Backup>,
     pub perfis_de_jogo: Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>,
     pub dinamico: bool,
     pub elevado: bool,
-    /// Um autoajuste ficou pela metade (app fechado no meio) e o plano não
-    /// pôde voltar sozinho — normalmente por falta de administrador.
+    /// Normalmente por falta de administrador.
     pub teste_interrompido: bool,
 }
 
-/// Comando: HARDWARE FINGERPRINT, enumeração e candidatos. Só leitura, `LIVRES`.
 #[tauri::command]
 pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
     tokio::task::spawn_blocking(|| {
@@ -2158,10 +1747,7 @@ pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
     .map_err(|e| format!("Falha ao ler a máquina: {}", e))?
 }
 
-/// Comando: aplica um candidato no plano OTIMIZA e mede.
-///
-/// `EXIGEM_LICENCA`: escreve no plano de energia. O plano do cliente não é
-/// tocado; o backup é feito antes da primeira escrita.
+/// `EXIGEM_LICENCA`: escreve no plano OTIMIZA; o do cliente não é tocado, e o backup vem antes.
 #[tauri::command]
 pub async fn energia_testar_candidato(
     candidato: crate::modules::windows::motorenergia::Candidato,
@@ -2192,7 +1778,6 @@ pub async fn energia_testar_candidato(
     .map_err(|e| format!("Falha ao testar o candidato: {}", e))?
 }
 
-/// Comando: só mede o que está ativo (rajada + contadores + jogo). `LIVRES`.
 #[tauri::command]
 pub async fn energia_medir_atual(
     processo: Option<String>,
@@ -2206,17 +1791,12 @@ pub async fn energia_medir_atual(
     .map_err(|e| format!("Falha ao medir: {}", e))?
 }
 
-
-
-/// Comando: limites de FPS escondidos (driver, RTSS, arquivo do jogo). `LIVRES`.
 #[tauri::command]
 pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relatorio, String> {
     tokio::task::spawn_blocking(crate::modules::windows::tetos::procurar)
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
-/// Comando: jogos cujo FPS caiu com o tempo, e o que mudou junto (driver,
-/// Windows ou nada). `LIVRES`: só lê as medições automáticas.
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
     tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::deriva::procurar(&m)))
@@ -2224,7 +1804,6 @@ pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva
         .map_err(|e| format!("Falha ao ler as medições: {}", e))?
 }
 
-/// Comando: pronto para jogar? Scan de ~2 s antes de abrir o jogo. `LIVRES`.
 #[tauri::command]
 pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::Prontidao, String> {
     tokio::task::spawn_blocking(crate::modules::windows::prontojogo::verificar)
@@ -2232,43 +1811,30 @@ pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::
         .map_err(|e| format!("Falha na verificação: {}", e))
 }
 
-// ============================================================ diagnóstico ao vivo (2.9)
-
-/// O que está limitando o PC AGORA: telemetria do Windows amostrada a cada
-/// meio segundo e, se houver jogo aberto, os quadros dele medidos no mesmo
-/// intervalo. O classificador (`core::gargalo`) aponta todos os gargalos que
-/// se sustentaram na janela, cada um com a evidência numérica.
+/// O classificador (`core::gargalo`) aponta os gargalos sustentados na janela, com a evidência.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DiagnosticoAoVivo {
     pub placa: Option<crate::core::telemetria::Placa>,
     pub jogo: Option<String>,
     pub amostras: Vec<crate::core::telemetria::Amostra>,
     pub saude: Option<crate::core::fluidez::SaudeDosQuadros>,
-    /// Por que não há `saude`, quando havia jogo e a medição falhou.
     pub quadros_erro: Option<String>,
-    /// O veredito do MESMO classificador do painel ao vivo
-    /// (`modules::gargalo`), sobre a janela inteira.
     pub gargalo: crate::modules::gargalo::Diagnostico,
-    /// Cada travada da partida com o que coincidiu com ela (detetive).
     pub travadas: Option<crate::core::travadas::Investigacao>,
-    /// O que a placa fez NESTA janela: temperatura, clock, potência e quanto
-    /// do tempo o driver segurou o clock, e por quê (2.9). `None` sem placa
-    /// NVIDIA.
+    /// `None` sem placa NVIDIA.
     pub sensores_da_placa: Option<crate::core::sensores::ResumoGpu>,
 }
 
 #[tauri::command]
 pub async fn diagnostico_ao_vivo(segundos: u64, state: State<'_, AppState>) -> Result<DiagnosticoAoVivo, String> {
     let segundos = segundos.clamp(5, 60);
-    // O piso de memória compartilhada que o monitor aprendeu em repouso: sem
-    // ele o transbordo de VRAM não é distinguível do normal da placa.
+    // Sem o piso o transbordo de VRAM não se distingue do normal.
     let piso = state.monitor.lock().await.piso_de_vram();
     tokio::task::spawn_blocking(move || diagnostico_na_janela(segundos, piso))
         .await
         .map_err(|e| format!("Falha no diagnóstico: {}", e))?
 }
 
-/// A medição do Mapa, fora do comando (para o teste ao vivo chamar direto).
 pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) -> Result<DiagnosticoAoVivo, String> {
     {
         use crate::core::telemetria;
@@ -2278,19 +1844,14 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         let jogo = crate::modules::windows::gamemode::jogo_aberto_com_pid();
         coletor.acompanhar_processos(jogo.as_ref().map(|(_, pid)| *pid));
 
-        // Os quadros são medidos numa thread ao lado, pelo mesmo tempo. O
-        // instante de início amarra o relógio dos quadros ao das amostras.
+        // O instante de início amarra o relógio dos quadros ao das amostras.
         let inicio_dos_quadros = coletor.decorrido_ms();
         let medicao = jogo.clone().map(|(nome, pid)| {
             std::thread::spawn(move || crate::modules::windows::frames::medir_par(pid, &nome, None, segundos))
         });
 
         let mut amostras = Vec::new();
-        // Os sensores da placa entram na MESMA janela: temperatura lida depois
-        // é temperatura de placa fria, e não diz nada sobre o teste.
-        //
-        // O motivo do clock estar segurado custa 11 ms (medido), então ele é
-        // perguntado a cada duas voltas — um segundo — e o resto a cada volta.
+        // Na MESMA janela: temperatura lida depois é de placa fria. O motivo do clock custa 11 ms: a cada duas voltas.
         let limite_w = crate::modules::windows::nvml::limite_de_potencia_w();
         let mut sensores: Vec<crate::core::sensores::AmostraGpu> = Vec::new();
         let mut volta: u32 = 0;
@@ -2324,7 +1885,6 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         let t = crate::core::janela::para_telemetria(&amostras, ram_total_mb, vram_total, saude.as_ref(), travadas.as_ref(), hz, agora);
         let gargalo = crate::modules::gargalo::classificar_com(&t, &crate::modules::vram::avaliar(&t, &piso));
 
-
         Ok(DiagnosticoAoVivo {
             placa: coletor.placa().cloned(),
             jogo: jogo.map(|(n, _)| n),
@@ -2337,7 +1897,6 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         })
     }
 }
-/// Comando: os vizinhos do vencedor, já como candidatos desta máquina. `LIVRES`.
 #[tauri::command]
 pub async fn energia_vizinhos(
     parametros: crate::modules::windows::motorenergia::Parametros,
@@ -2356,7 +1915,6 @@ pub async fn energia_vizinhos(
     .map_err(|e| format!("Falha ao gerar o refino: {}", e))?
 }
 
-/// Comando: escolhe entre resultados já medidos. Conta pura, `LIVRES`.
 #[tauri::command]
 pub fn energia_escolher(
     resultados: Vec<crate::modules::windows::motorenergia::ResultadoDoCandidato>,
@@ -2365,7 +1923,6 @@ pub fn energia_escolher(
     crate::modules::windows::motorenergia::escolher(&resultados, &base)
 }
 
-/// Comando: aplica os parâmetros escolhidos e deixa ativo. `EXIGEM_LICENCA`.
 #[tauri::command]
 pub async fn energia_aplicar(
     parametros: crate::modules::windows::motorenergia::Parametros,
@@ -2375,7 +1932,6 @@ pub async fn energia_aplicar(
     tokio::task::spawn_blocking(move || {
         let r = crate::modules::windows::motorenergia_maquina::aplicar_parametros("escolhido", parametros);
         if r.is_ok() {
-            // O plano escolhido de propósito não é mais "teste em andamento".
             crate::modules::windows::motorenergia_maquina::marcar_teste_em_andamento(false);
         }
         r
@@ -2384,8 +1940,7 @@ pub async fn energia_aplicar(
         .map_err(|e| format!("Falha ao aplicar: {}", e))?
 }
 
-/// Comando: RESTORE PREVIOUS PLAN. `LIVRES`: desfazer nunca pode depender de
-/// licença válida.
+/// `LIVRES`: desfazer nunca depende de licença válida.
 #[tauri::command]
 pub async fn energia_restaurar_anterior() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
     tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_anterior)
@@ -2393,7 +1948,6 @@ pub async fn energia_restaurar_anterior() -> Result<crate::modules::windows::mot
         .map_err(|e| format!("Falha ao restaurar: {}", e))?
 }
 
-/// Comando: RESTORE WINDOWS DEFAULT. `LIVRES`, pelo mesmo motivo.
 #[tauri::command]
 pub async fn energia_restaurar_windows() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
     tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows)
@@ -2401,7 +1955,6 @@ pub async fn energia_restaurar_windows() -> Result<crate::modules::windows::moto
         .map_err(|e| format!("Falha ao restaurar: {}", e))?
 }
 
-/// Comando: guarda o perfil de um jogo. Só grava a preferência, `LIVRES`.
 #[tauri::command]
 pub fn energia_salvar_perfil_de_jogo(
     executavel: String,
@@ -2418,7 +1971,6 @@ pub fn energia_salvar_perfil_de_jogo(
     )
 }
 
-/// Comando: apaga o perfil de um jogo. `LIVRES`.
 #[tauri::command]
 pub fn energia_remover_perfil_de_jogo(
     executavel: String,
@@ -2426,26 +1978,14 @@ pub fn energia_remover_perfil_de_jogo(
     crate::modules::windows::motorenergia_maquina::remover_perfil_de_jogo(&executavel)
 }
 
-/// Comando: liga ou desliga o modo dinâmico de jogo.
-///
-/// `EXIGEM_LICENCA`: ligado, o Otimiza passa a trocar o plano sozinho quando
-/// um jogo com perfil abre e fecha.
+/// `EXIGEM_LICENCA`: ligado, troca o plano sozinho.
 #[tauri::command]
 pub fn energia_modo_dinamico(ligado: bool) -> Result<bool, String> {
     crate::modules::licenca::exigir()?;
     crate::modules::windows::motorenergia_maquina::definir_dinamico(ligado).map(|d| d.ligado)
 }
 
-/// Comando: lê o `CitizenFX.ini` e mostra o que está em `PoolSizesIncrease`.
-///
-/// SÓ LEITURA. Não escreve nada, e não sugere aumentar nada — só mostra o que
-/// já está configurado, quando há algo. Ver `modules::windows::citizenfx`
-/// para o porquê: aumentar pool sem evidência de estouro no registro do
-/// FiveM é o "aplique e torça" que o produto recusa, e ninguém viu esse
-/// registro ainda.
-///
-/// Fica em `LIVRES`: é leitura, e nem exige o cliente ter licença para saber
-/// o que já está configurado na máquina dele.
+/// SÓ LEITURA e não sugere aumentar nada (ver `modules::windows::citizenfx`).
 #[tauri::command]
 pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
     #[cfg(target_os = "windows")]
@@ -2459,17 +1999,10 @@ pub async fn analyze_citizenfx() -> Result<CitizenFxReport, String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// FiveM
-// ---------------------------------------------------------------------------
-
-/// Comando: Levantamento da instalação do FiveM.
 #[tauri::command]
 pub async fn analyze_fivem() -> Result<FiveMReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // A pasta de cache tem dezenas de milhares de arquivos: somar tudo
-        // leva segundos e não pode travar a interface.
         tokio::task::spawn_blocking(crate::modules::windows::fivem::analyze)
             .await
             .map_err(|e| format!("Falha ao ler a instalação do FiveM: {}", e))
@@ -2481,9 +2014,7 @@ pub async fn analyze_fivem() -> Result<FiveMReport, String> {
     }
 }
 
-/// Comando: Apaga uma pasta descartável do FiveM.
-///
-/// Recusa pasta protegida e recusa com o jogo aberto. Não tem volta.
+/// Recusa pasta protegida e jogo aberto. Sem volta.
 #[tauri::command]
 pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
     crate::modules::licenca::exigir()?;
@@ -2502,17 +2033,10 @@ pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Navegador
-// ---------------------------------------------------------------------------
-
-/// Comando: O que o navegador está consumindo, e o que dá para recuperar.
 #[tauri::command]
 pub async fn analyze_browsers() -> Result<BrowserReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // Percorre as pastas de perfil somando tamanho: fora do runtime, senão
-        // trava a interface durante a varredura.
         tokio::task::spawn_blocking(crate::modules::windows::browsers::analyze)
             .await
             .map_err(|e| format!("Falha ao ler os navegadores: {}", e))
@@ -2524,10 +2048,7 @@ pub async fn analyze_browsers() -> Result<BrowserReport, String> {
     }
 }
 
-/// Comando: Limpa o cache descartável de um navegador.
-///
-/// Não tem volta, e recusa se o navegador estiver aberto. Dado de aplicativo —
-/// IndexedDB e afins — nunca é tocado.
+/// Sem volta, recusa com o navegador aberto; dado de aplicativo nunca é tocado.
 #[tauri::command]
 pub async fn clean_browser_cache(executable: String) -> Result<BrowserCleanOutcome, String> {
     crate::modules::licenca::exigir()?;
@@ -2548,14 +2069,6 @@ pub async fn clean_browser_cache(executable: String) -> Result<BrowserCleanOutco
     }
 }
 
-// ---------------------------------------------------------------------------
-// Inicialização e limitação do processador
-// ---------------------------------------------------------------------------
-
-/// Comando: Quanto o PC demora para ligar, e quem atrasa.
-///
-/// É a medição que o cliente percebe. Ajuste de registro rende pouco que se
-/// sinta; boot que cai de dois minutos para quarenta segundos, todo mundo nota.
 #[tauri::command]
 pub async fn analyze_boot() -> Result<BootReport, String> {
     #[cfg(target_os = "windows")]
@@ -2571,14 +2084,11 @@ pub async fn analyze_boot() -> Result<BootReport, String> {
     }
 }
 
-/// Comando: Por que o processador não está entregando tudo.
 #[tauri::command]
 pub async fn analyze_thermal() -> Result<ThermalReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // Amostra contadores e varre o log térmico; fora do runtime porque a
-        // consulta WMI custa mais de um segundo.
-        // 2.9: o processador e a placa de vídeo no mesmo diagnóstico.
+        // WMI passa de um segundo: fora do runtime. O processador e a placa no mesmo diagnóstico (2.9).
         tokio::task::spawn_blocking(|| {
             let mut r = crate::modules::windows::thermal::analyze();
             r.placa = Some(crate::modules::windows::sensoresgpu::ler());
@@ -2594,19 +2104,10 @@ pub async fn analyze_thermal() -> Result<ThermalReport, String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Saúde do hardware
-// ---------------------------------------------------------------------------
-
-/// Comando: Lê a saúde física do disco e da bateria.
-///
-/// É a checagem que evita o pior desperdício de tempo do técnico: otimizar por
-/// uma tarde uma máquina cujo problema é peça morrendo.
 #[tauri::command]
 pub async fn analyze_health() -> Result<HealthReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // Consulta WMI de armazenamento e bateria; fora do runtime porque
         // `Get-StorageReliabilityCounter` conversa com o disco e demora.
         tokio::task::spawn_blocking(crate::modules::windows::health::analyze)
             .await
@@ -2619,17 +2120,10 @@ pub async fn analyze_health() -> Result<HealthReport, String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Conflitos entre programas e tarefas agendadas
-// ---------------------------------------------------------------------------
-
-/// Comando: Procura programas que brigam entre si.
 #[tauri::command]
 pub async fn analyze_conflicts() -> Result<ConflictReport, String> {
     #[cfg(target_os = "windows")]
     {
-        // Percorre o registro de programas instalados e a lista de processos;
-        // fora do runtime para não travar a interface.
         tokio::task::spawn_blocking(crate::modules::windows::conflicts::analyze)
             .await
             .map_err(|e| format!("Falha ao procurar conflitos: {}", e))
@@ -2641,7 +2135,6 @@ pub async fn analyze_conflicts() -> Result<ConflictReport, String> {
     }
 }
 
-/// Comando: Tarefas agendadas de terceiros.
 #[tauri::command]
 pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
     #[cfg(target_os = "windows")]
@@ -2657,10 +2150,7 @@ pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
     }
 }
 
-/// Comando: Liga ou desliga uma tarefa agendada.
-///
-/// Entra no histórico com id próprio, então "Desfazer tudo" também devolve as
-/// tarefas ao estado original.
+/// Id próprio no histórico: "Desfazer tudo" alcança.
 #[tauri::command]
 pub async fn set_scheduled_task(
     path: String,
@@ -2684,7 +2174,6 @@ pub async fn set_scheduled_task(
     }
 }
 
-/// Comando: Serviços deixados por programas instalados.
 #[tauri::command]
 pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
     #[cfg(target_os = "windows")]
@@ -2700,7 +2189,6 @@ pub async fn list_third_party_services() -> Result<Vec<ServiceEntry>, String> {
     }
 }
 
-/// Comando: Leva um serviço para Manual, ou devolve para Automático.
 #[tauri::command]
 pub async fn set_service_start(
     name: String,
@@ -2723,12 +2211,6 @@ pub async fn set_service_start(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Programas de fábrica
-// ---------------------------------------------------------------------------
-
-/// Comando: Procura utilitário de fabricante, antivírus em teste e app da Loja
-/// pré-instalado.
 #[tauri::command]
 pub async fn analyze_bloatware() -> Result<BloatReport, String> {
     #[cfg(target_os = "windows")]
@@ -2744,11 +2226,7 @@ pub async fn analyze_bloatware() -> Result<BloatReport, String> {
     }
 }
 
-/// Comando: Remove um aplicativo da Microsoft Store.
-///
-/// Só aplicativos da Loja: eles voltam pela Loja quando o usuário quiser.
-/// Programa comum nunca é desinstalado por nós — para esses, abrimos a tela
-/// oficial do Windows.
+/// Só apps da Loja (voltam pela Loja); programa comum vai pela tela oficial do Windows.
 #[tauri::command]
 pub async fn remove_store_app(package: String) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -2769,11 +2247,7 @@ pub async fn remove_store_app(package: String) -> Result<String, String> {
     }
 }
 
-/// Comando: Abre a tela de programas instalados do Windows.
-///
-/// Desinstalar programa comum é feito pelo desinstalador do próprio fabricante,
-/// que costuma fazer perguntas. Levar o usuário até a tela oficial é mais seguro
-/// que imitar esse processo e arriscar deixar instalação pela metade.
+/// O desinstalador do fabricante faz perguntas: imitá-lo arriscaria instalação pela metade.
 #[tauri::command]
 pub fn open_apps_settings() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -2791,7 +2265,6 @@ pub fn open_apps_settings() -> Result<String, String> {
     }
 }
 
-/// Comando: Estado dos pontos de restauração do Windows.
 #[tauri::command]
 pub async fn restore_status() -> Result<RestoreStatus, String> {
     #[cfg(target_os = "windows")]
@@ -2807,8 +2280,7 @@ pub async fn restore_status() -> Result<RestoreStatus, String> {
     }
 }
 
-/// Comando: Cria um ponto de restauração agora.
-/// Pode levar dezenas de segundos: o Windows tira um instantâneo do volume.
+/// Pode levar dezenas de segundos.
 #[tauri::command]
 pub async fn create_restore_point() -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -2828,7 +2300,6 @@ pub async fn create_restore_point() -> Result<String, String> {
     }
 }
 
-/// Comando: Liga a Proteção do Sistema no disco do Windows.
 #[tauri::command]
 pub async fn enable_system_protection() -> Result<String, String> {
     crate::modules::licenca::exigir()?;
@@ -2846,7 +2317,6 @@ pub async fn enable_system_protection() -> Result<String, String> {
     }
 }
 
-/// Comando: Programas que sobem com o Windows.
 #[tauri::command]
 pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
     #[cfg(target_os = "windows")]
@@ -2860,10 +2330,7 @@ pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
     }
 }
 
-/// Comando: Liga ou desliga um programa de inicialização.
-///
-/// Não remove a entrada do cliente: escreve no mesmo lugar que o Gerenciador de
-/// Tarefas do Windows escreve, e o valor anterior vai para o histórico.
+/// Escreve onde o Gerenciador de Tarefas escreve, com o anterior no histórico.
 #[tauri::command]
 pub async fn set_startup_enabled(
     hive: String,
@@ -2879,8 +2346,6 @@ pub async fn set_startup_enabled(
         let outcome = crate::modules::windows::WindowsOptimizer::new()
             .set_startup(&hive, &name, enabled, &mut log)?;
 
-        // O monitor de processos marca quem sobe no boot; a lista dele precisa
-        // refletir a mudança na próxima leitura.
         state.processes.lock().await.refresh_startup();
 
         Ok(outcome)
@@ -2893,14 +2358,7 @@ pub async fn set_startup_enabled(
     }
 }
 
-/// Comando: Analisa firmware e hardware.
-///
-/// Não escreve nada na BIOS — em placa de consumo isso não é possível com
-/// segurança. Lê o que a BIOS e o hardware estão fazendo com o desempenho e
-/// aponta onde se resolve: software, BIOS ou troca de peça.
-///
-/// Leva ~12 segundos por causa da medição de carga sustentada, então roda em
-/// `spawn_blocking` para não travar a interface.
+/// Não escreve na BIOS. ~12 s de carga sustentada: `spawn_blocking`.
 #[tauri::command]
 pub async fn analyze_firmware() -> Result<FirmwareReport, String> {
     #[cfg(target_os = "windows")]
@@ -2916,15 +2374,8 @@ pub async fn analyze_firmware() -> Result<FirmwareReport, String> {
     }
 }
 
-/// Comando: Reabre o programa como administrador.
-///
-/// Um processo não consegue ganhar privilégios sozinho no Windows: é preciso
-/// iniciar um novo processo e deixar o próprio sistema pedir a autorização ao
-/// usuário. Se ele recusar no aviso do Windows, nada acontece e o programa
-/// continua rodando normalmente com acesso limitado.
-///
-/// Devolve a mensagem a ser mostrada ao usuário. Em versão final ela fica vazia,
-/// porque este processo encerra e o elevado assume sem que haja o que explicar.
+/// Um processo não se eleva sozinho: abre outro e o Windows pergunta; recusado, nada acontece. Na versão final a
+/// mensagem fica vazia, porque este processo encerra.
 #[tauri::command]
 pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -2936,14 +2387,11 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
         let executable = std::env::current_exe()
             .map_err(|e| format!("Não foi possível localizar o programa: {}", e))?;
 
-        // Aspas simples são escapadas dobrando, conforme a regra do PowerShell.
+        // Aspas simples escapadas dobrando, regra do PowerShell.
         let path = executable.to_string_lossy().replace('\'', "''");
         let script = format!("Start-Process -FilePath '{}' -Verb RunAs", path);
 
-        // Prazo longo de propósito: o `Start-Process -Verb RunAs` só volta
-        // quando a pessoa responde ao aviso do Windows, e encerrar o PowerShell
-        // antes disso deixaria o aviso na tela sem ninguém para abrir o
-        // programa elevado.
+        // `Start-Process -Verb RunAs` só volta quando a pessoa responde ao aviso.
         crate::modules::windows::shell::run_checked_com_prazo(
             "powershell",
             &["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script],
@@ -2953,13 +2401,7 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
             "Você recusou a permissão de administrador. Nada foi alterado.".to_string()
         })?;
 
-        // Em desenvolvimento, este processo é filho do `tauri dev`, que também
-        // hospeda o servidor do Vite. Encerrá-lo derruba o servidor junto, e a
-        // janela elevada abriria numa página de erro por não achar o localhost.
-        //
-        // A saída é esconder a janela em vez de encerrar o processo: fica só uma
-        // janela na tela, como o usuário espera, e o processo continua vivo em
-        // segundo plano apenas para manter o servidor no ar.
+        // Em desenvolvimento, encerrar derrubaria o servidor do Vite hospedado pelo `tauri dev`: esconde a janela.
         if cfg!(debug_assertions) {
             for (_, window) in app.webview_windows() {
                 let _ = window.hide();
@@ -2973,9 +2415,7 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
             return Ok(String::new());
         }
 
-        // Na versão final os arquivos vão embutidos no programa: o processo
-        // elevado se basta, e manter os dois abertos só confundiria o usuário e
-        // faria os dois disputarem o mesmo arquivo de histórico.
+        // Na versão final, dois abertos disputariam o mesmo arquivo de histórico.
         app.exit(0);
         Ok(String::new())
     }
@@ -2987,21 +2427,8 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
     }
 }
 
-/// Comando: o endereço do Discord que a tela deve abrir.
-///
-/// Recebe o convite embutido no produto e devolve o que valer mais: o
-/// publicado no repositório, quando ele responde e tem forma de convite, ou o
-/// próprio embutido.
-///
-/// POR QUE A RESERVA VEM DA TELA, E NÃO DAQUI
-///
-/// O embutido já existe em `main.ts`, onde é o único endereço que a tela de
-/// compra oferece. Duplicá-lo aqui criaria dois valores para manter, e um dia
-/// eles discordariam — provavelmente no dia da troca, que é justamente quando
-/// isso não pode acontecer.
-///
-/// Fica em `LIVRES`: quem ainda não ativou é exatamente quem mais precisa
-/// chegar ao suporte.
+/// O convite embutido vem da tela (é o único em `main.ts`): duplicá-lo aqui faria dois valores discordarem.
+/// `LIVRES`: quem não ativou é quem mais precisa do suporte.
 #[tauri::command]
 pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
     Ok(crate::modules::convite::consultar()
@@ -3009,15 +2436,7 @@ pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
         .unwrap_or(embutido))
 }
 
-/// Comando: o histórico de mudanças pôde ser lido?
-///
-/// A tela precisa disto para não dizer "nada a desfazer" sobre uma máquina em
-/// que ela apenas não conseguiu ler o que foi aplicado. Vazio por não haver
-/// nada e vazio por não saber são estados diferentes, e só um deles é uma boa
-/// notícia.
-///
-/// Fica em `LIVRES`: é leitura, e é justamente o aviso que impede o produto de
-/// mentir para quem ainda nem ativou.
+/// Vazio por não haver nada e vazio por não saber são diferentes. `LIVRES`.
 #[tauri::command]
 pub async fn estado_do_historico(
     state: State<'_, AppState>,
@@ -3027,7 +2446,6 @@ pub async fn estado_do_historico(
     Ok(log.leitura().clone())
 }
 
-/// Comando: Lista o catálogo de otimizações com o estado atual de cada uma
 #[tauri::command]
 pub async fn list_optimizations(
     state: State<'_, AppState>,
@@ -3045,7 +2463,6 @@ pub async fn list_optimizations(
     }
 }
 
-/// Comando: Aplica uma otimização específica
 #[tauri::command]
 pub async fn apply_optimization(
     id: String,
@@ -3066,13 +2483,7 @@ pub async fn apply_optimization(
     }
 }
 
-/// Comando: os monitores, para a tela desenhá-los.
-///
-/// `display::monitores()` já existia e só alimentava o veredito. A tela nunca
-/// via a lista — então o cliente lia "seu monitor está em 60 Hz e aceita 180"
-/// sem nunca ver QUAL monitor, numa máquina com dois.
-///
-/// Fica em `LIVRES`: é leitura.
+/// Sem a lista, o cliente lia "seu monitor está em 60 Hz" sem saber QUAL. `LIVRES`.
 #[tauri::command]
 pub async fn monitores() -> Result<Vec<crate::modules::windows::display::Monitor>, String> {
     #[cfg(target_os = "windows")]
@@ -3086,10 +2497,7 @@ pub async fn monitores() -> Result<Vec<crate::modules::windows::display::Monitor
     }
 }
 
-/// Comando: a memória instalada, para a tela desenhá-la slot a slot.
-///
-/// Fica em `LIVRES`: é leitura, e é justamente o diagnóstico que faz o cliente
-/// entender por que o PC dele trava — sem pagar nada para descobrir.
+/// `LIVRES`.
 #[tauri::command]
 pub async fn memoria_instalada(
 ) -> Result<crate::modules::windows::firmware::MemoriaInstalada, String> {
@@ -3104,31 +2512,20 @@ pub async fn memoria_instalada(
     }
 }
 
-/// A placa de vídeo desta máquina, para a tela desenhar.
 #[derive(serde::Serialize)]
 pub struct PlacaDeVideo {
-    /// `nvidia`, `amd`, `intel` ou `desconhecida`. É o que escolhe a cor.
     pub marca: String,
     pub nome: Option<String>,
     pub driver: Option<String>,
     pub driver_data: Option<String>,
     pub driver_dias: Option<i64>,
-    /// Quem publicou o driver (2.9): o fabricante, ou a Microsoft.
     pub driver_origem: Option<String>,
-    /// É o driver genérico do Windows. Aí sim atualizar muda FPS.
     pub driver_generico: bool,
     pub vram_gb: f64,
 }
 
-/// Deduz o fabricante pelo nome que o Windows dá à placa.
-///
-/// Pelo NOME e não por identificador de fornecedor no PCI: o nome é o que já
-/// está lido e disponível de graça, e é o mesmo texto que o cliente vê no
-/// Gerenciador de Dispositivos — então quando erra, ele consegue perceber que
-/// errou. Um número de fornecedor certo mas invisível não daria a ele essa
-/// chance.
-///
-/// Na dúvida devolve `desconhecida`, e a tela pergunta em vez de chutar.
+/// Pelo NOME, o mesmo texto do Gerenciador de Dispositivos: quando erra, o cliente percebe. Na dúvida,
+/// `desconhecida`.
 pub fn marca_da_placa(nome: &str) -> &'static str {
     let n = nome.to_lowercase();
 
@@ -3143,14 +2540,7 @@ pub fn marca_da_placa(nome: &str) -> &'static str {
     }
 }
 
-/// Comando: a placa de vídeo, para o painel que a desenha.
-///
-/// Junta o que três módulos já sabiam separados — o nome vem de `shaders`, que
-/// já lia driver e data para decidir se o cache estava obsoleto, e a memória vem
-/// de `bottleneck`, que já a lia do registro porque o valor do WMI satura em
-/// 4 GB e mentiria justamente na faixa que interessa.
-///
-/// Fica em `LIVRES`: é leitura.
+/// O nome de `shaders`, a memória de `bottleneck` (o WMI satura em 4 GB). `LIVRES`.
 #[tauri::command]
 pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
     #[cfg(target_os = "windows")]
@@ -3183,11 +2573,7 @@ pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
     }
 }
 
-/// Comando: lê a configuração do jogo instalado e diz o que está pesando.
-///
-/// Só lê. Fica em `LIVRES` pelo mesmo motivo que todo o diagnóstico fica: o
-/// cliente pode descobrir de graça que o MSAA dele custa 40% dos quadros. É
-/// essa descoberta que faz ele querer a chave.
+/// `LIVRES`: descobrir de graça que o MSAA custa 40% é o que faz querer a chave.
 #[tauri::command]
 pub async fn analyze_game_config(
 ) -> Result<crate::modules::windows::configjogo::ConfigJogoReport, String> {
@@ -3202,15 +2588,7 @@ pub async fn analyze_game_config(
     }
 }
 
-/// Comando: mede o jogo agora e guarda como o "antes".
-///
-/// O jogo precisa estar ABERTO — é o contrário de `apply_game_profile`, que
-/// exige o jogo fechado. Não é contradição: mede-se o que está rodando, e
-/// escreve-se no arquivo de quem não está.
-///
-/// Fica em `LIVRES`: medir é diagnóstico, e o diagnóstico do produto é livre.
-/// Um cliente sem chave pode medir o próprio PC — e é justamente isso que faz
-/// ele querer a chave.
+/// Jogo ABERTO (o contrário de `apply_game_profile`): mede-se o que roda, escreve-se no de quem não roda. `LIVRES`.
 #[tauri::command]
 pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
     let medicao = measure_frames(process, seconds).await?;
@@ -3229,7 +2607,6 @@ pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules
     Ok(prova)
 }
 
-/// Comando: mede de novo e compara com o "antes".
 #[tauri::command]
 pub async fn medir_depois(
     process: String,
@@ -3256,28 +2633,18 @@ pub async fn medir_depois(
     Ok(prova::comparar(&antes, &depois))
 }
 
-/// Comando: a medição do "antes" que estiver guardada.
 #[tauri::command]
 pub fn prova_guardada() -> Option<crate::modules::prova::Prova> {
     crate::modules::prova::guardada()
 }
 
-/// Comando: as medições de quadros que o Otimiza fez sozinho durante as
-/// partidas.
-///
-/// Só leitura. `Err` quando o arquivo existe e não dá para ler — "nenhuma
-/// medição" sobre isso seria a lista vazia fingindo ser resposta.
+/// `Err` quando existe e não se lê.
 #[tauri::command]
 pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAutomatica>, String> {
     crate::modules::medicoes::ler()
 }
 
-/// Comando: o Otimiza está rodando pela mesma conta que está usando o PC?
-///
-/// Fica em `LIVRES`: só lê. É a verificação que pega a classe mais silenciosa
-/// de "funcionou aqui e não lá" — vinte e um ajustes do catálogo são por CONTA,
-/// e elevados por outra eles vão para um perfil que ninguém usa, com o produto
-/// conferindo e dizendo que deu certo.
+/// Vinte e um ajustes são por CONTA: elevado por outra, iriam para um perfil que ninguém usa. `LIVRES`.
 #[tauri::command]
 pub fn conta_que_esta_rodando() -> ContaDoUsuario {
     #[cfg(target_os = "windows")]
@@ -3298,7 +2665,6 @@ pub fn conta_que_esta_rodando() -> ContaDoUsuario {
     }
 }
 
-/// O que a tela recebe: o estado, o número, e a frase já escolhida pelo Rust.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ContaDoUsuario {
     #[cfg(target_os = "windows")]
@@ -3317,15 +2683,7 @@ impl Default for ContaDoUsuario {
     }
 }
 
-/// Comando: os ajustes do Otimiza que brigam entre si, nesta máquina.
-///
-/// Fica em `LIVRES`: compara a lista de aplicados com a tabela de conflitos
-/// conhecidos e não toca em nada. NÃO impede nada — há casos legítimos de
-/// querer os dois, e bloquear seria o produto decidindo no lugar da pessoa
-/// sobre a máquina dela.
-///
-/// É diferente de `detect_conflicts`, que procura dois PROGRAMAS disputando a
-/// mesma função. Este procura o problema de dentro de casa.
+/// `LIVRES`: não impede nada (há casos legítimos). Diferente de `detect_conflicts`, que é entre PROGRAMAS.
 #[tauri::command]
 pub async fn conflitos_entre_ajustes(
     state: State<'_, AppState>,
@@ -3345,16 +2703,12 @@ pub async fn conflitos_entre_ajustes(
         .collect())
 }
 
-/// Comando: a nota de jogo da medição mais recente.
-///
-/// Fica em `LIVRES`: lê o arquivo de medições e calcula. A nota pesa 60% no 1%
-/// pior e 40% na média, porque ninguém sente média — a pessoa sente a travada.
+/// `LIVRES`. 60% no 1% pior e 40% na média: ninguém sente média.
 #[tauri::command]
 pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
     let medicoes = crate::modules::medicoes::ler()?;
 
-    // A MAIS RECENTE CONFIÁVEL, e não a mais recente: uma amostra curta
-    // sobrepondo uma boa faria a nota piscar sem nada ter mudado na máquina.
+    // A mais recente CONFIÁVEL: amostra curta faria a nota piscar.
     let Some(m) = medicoes.iter().rev().find(|m| m.confiavel) else {
         return Ok(crate::modules::pontuacao::Nota::SemAmostra);
     };
@@ -3362,15 +2716,8 @@ pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
     Ok(crate::modules::pontuacao::calcular(m.fps, m.low_1pct, m.confiavel))
 }
 
-/// Comando: o protocolo A/B, grupo por grupo.
-///
-/// Fica em `LIVRES`: só lê. Aplicar um grupo continua passando pelo caminho que
-/// já existe — `optimize_now` com a lista de ids —, e desfazer pelo `revert`.
-/// Este comando é o que diz EM QUE PÉ está cada um dos nove testes.
-///
-/// O jogo entra como parâmetro porque a comparação é por jogo: FPS de jogos
-/// diferentes não se compara, e misturar dois produz "queda" onde só houve o
-/// cliente trocar de jogo. Sem jogo informado, usa o mais medido.
+/// `LIVRES`. Aplicar é `optimize_now`; desfazer é `revert`. Por jogo: FPS de jogos diferentes não se compara;
+/// sem jogo, o mais medido.
 #[tauri::command]
 pub async fn protocolo_de_grupos(
     state: State<'_, AppState>,
@@ -3396,9 +2743,7 @@ pub async fn protocolo_de_grupos(
         Ok(Grupo::TODOS
             .iter()
             .map(|grupo| {
-                // "Aplicado" é TODO o grupo estar no histórico, e não algum
-                // item dele: com metade aplicada, a comparação mediria uma
-                // mistura e responderia sobre um grupo que nunca existiu.
+                // TODO o grupo no histórico: metade aplicada mediria uma mistura.
                 let itens = crate::modules::windows::grupos::itens_do_grupo(*grupo);
                 let aplicado =
                     !itens.is_empty() && itens.iter().all(|id| log.is_applied(id));
@@ -3415,10 +2760,7 @@ pub async fn protocolo_de_grupos(
     }
 }
 
-/// O jogo com mais medições guardadas.
-///
-/// Mais medições e não a mais recente: o protocolo precisa de amostra dos dois
-/// lados, e o jogo que a pessoa abriu uma vez ontem nunca vai ter isso.
+/// Mais medições, não a mais recente: o protocolo precisa de amostra dos dois lados.
 #[cfg(target_os = "windows")]
 fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> Option<String> {
     let mut contagem: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
@@ -3433,42 +2775,26 @@ fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) ->
         .map(|(jogo, _)| jogo.to_string())
 }
 
-/// Comando: os ajustes famosos que o Otimiza se recusa a fazer, e por quê.
-///
-/// Fica em `LIVRES`: é uma lista fixa, não toca a máquina. Existe porque o
-/// cliente compara lista com lista — ele vê um vídeo de "50 tweaks", conta
-/// trinta que o Otimiza não faz, e conclui que o produto é fraco. A conclusão é
-/// razoável de fora: ninguém tem como saber que metade daquela lista não faz
-/// nada e um quarto dela piora a máquina.
+/// `LIVRES`. O cliente compara com vídeos de "50 tweaks" sem saber que metade não faz nada.
 #[tauri::command]
 pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemos> {
     crate::modules::windows::naofazemos::LISTA.to_vec()
 }
 
-/// Comando: TUDO o que o Otimiza altera nesta máquina, com risco, reinício e
-/// como se desfaz (2.9). O outro lado do "o que não fazemos". `LIVRES`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn o_que_o_otimiza_altera() -> Vec<crate::modules::windows::registro::Alteracao> {
     crate::modules::windows::registro::todas()
 }
 
-/// Comando: por que o FPS está baixo nesta máquina.
-///
-/// Fica em `LIVRES`: é leitura pura. Junta as seis verificações que eu fiz À MÃO
-/// nos dois atendimentos desta semana, e passa junto a regressão medida — se o
-/// próprio Otimiza pode ter sido a causa, ele aparece como PRIMEIRO suspeito, e
-/// não escondido no fim de uma lista de defeitos da máquina do cliente.
+/// `LIVRES`. Com a regressão medida: se o Otimiza pode ser a causa, é o PRIMEIRO suspeito.
 #[tauri::command]
 pub async fn por_que_o_fps_esta_baixo(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::causas::Investigacao, String> {
     #[cfg(target_os = "windows")]
     {
-        // A regressão é lida aqui porque ela depende do histórico de mudanças,
-        // que vive atrás do estado do aplicativo. Falhar em lê-la NÃO impede a
-        // investigação: as outras cinco causas continuam valendo, e uma lista
-        // de cinco é melhor que um erro.
+        // Falhar a regressão não impede a investigação.
         let piorou = match crate::modules::medicoes::ler() {
             Ok(medicoes) => {
                 let aplicadas = state.changes.lock().await.applied().len();
@@ -3489,11 +2815,7 @@ pub async fn por_que_o_fps_esta_baixo(
     }
 }
 
-/// Comando: em que disco cada jogo está instalado.
-///
-/// Fica em `LIVRES`: é leitura pura, e é justamente o tipo de achado que vale
-/// ANTES de a pessoa comprar — num PC com SSD pequeno e HD grande, o jogo quase
-/// sempre foi parar no HD, e nenhum ajuste de registro conserta isso.
+/// `LIVRES`: com SSD pequeno e HD grande o jogo quase sempre está no HD.
 #[tauri::command]
 pub fn onde_os_jogos_moram(
 ) -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
@@ -3508,16 +2830,8 @@ pub fn onde_os_jogos_moram(
     }
 }
 
-/// Comando: o Otimiza conferindo o próprio trabalho, jogo por jogo.
-///
-/// Compara os quadros medidos ANTES das otimizações com os medidos DEPOIS, com
-/// o histórico que o vigia já vinha gravando na máquina. Existe porque no
-/// incidente da 2.1.0 os dois números estavam no disco do cliente, um embaixo
-/// do outro, e ninguém comparou — quem percebeu a queda foi ele, dias depois.
-///
-/// Só leitura. `Err` quando o arquivo de medições não pôde ser lido: uma lista
-/// vazia ali significaria "nenhum jogo piorou", que é uma afirmação e não uma
-/// falha de leitura.
+/// Antes contra depois, pelo histórico do vigia (na 2.1.0 os dois números estavam no disco e ninguém comparou).
+/// `Err` quando não se lê: lista vazia afirmaria que nenhum jogo piorou.
 #[tauri::command]
 pub async fn conferir_o_proprio_trabalho(
     state: State<'_, AppState>,
@@ -3528,12 +2842,7 @@ pub async fn conferir_o_proprio_trabalho(
     Ok(crate::modules::regressao::todos(&medicoes, aplicadas))
 }
 
-/// Comando: mostra o que um perfil MUDARIA na configuração do jogo.
-///
-/// Não escreve nada. Existe para a tela poder listar chave por chave, com o
-/// valor de agora, o valor novo e o que se perde — antes de o cliente decidir.
-///
-/// Fica em `LIVRES`: é leitura, e o diagnóstico do produto é livre.
+/// `LIVRES`: chave por chave antes de decidir.
 #[tauri::command]
 pub async fn preview_game_profile(
     perfil: String,
@@ -3565,13 +2874,7 @@ pub async fn preview_game_profile(
     }
 }
 
-/// Comando: aplica um perfil na configuração do jogo.
-///
-/// É A ÚNICA COISA DO PRODUTO QUE ESCREVE NUM ARQUIVO DO CLIENTE, e por isso
-/// registra no histórico de desfazer como qualquer outra otimização — só que
-/// guardando o arquivo INTEIRO em vez de um valor de registro.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador.
+/// A única escrita num arquivo do cliente: guarda o arquivo INTEIRO no histórico. `EXIGEM_LICENCA`.
 #[cfg(target_os = "windows")]
 fn perfil_por_nome(nome: &str) -> Result<crate::modules::windows::configjogo::Perfil, String> {
     use crate::modules::windows::configjogo::Perfil;
@@ -3599,19 +2902,14 @@ pub async fn apply_game_profile(
         let escolhido = perfil_por_nome(&perfil)?;
         let feito = configjogo::aplicar_perfil(escolhido)?;
 
-        // NADA MUDOU, NADA É REGISTRADO.
-        //
-        // Gravar um registro de desfazer para uma mudança que não houve daria
-        // ao cliente um item no histórico que não desfaz nada — e a sensação de
-        // que algo foi mexido quando não foi.
+        // Nada mudou, nada é registrado.
         if feito.mudou.is_empty() {
             return Ok(feito.mudou);
         }
 
         let mut log = state.changes.lock().await;
 
-        // Nunca menos FPS: o ajuste entra em observação (`modules::portao`).
-        // O processo do FiveM é "FiveM_b3258_GTAProcess.exe"; o do GTA, "GTA5.exe".
+        // Nunca menos FPS: em observação (`modules::portao`). FiveM é "FiveM_b3258_GTAProcess.exe"; GTA, "GTA5.exe".
         let processo = if feito.jogo.to_lowercase().contains("fivem") { "fivem_" } else { "gta5" };
         crate::modules::portao::vigiar(&format!("config_jogo_{}", perfil), &feito.jogo, processo, now_timestamp());
 
@@ -3636,7 +2934,6 @@ pub async fn apply_game_profile(
     }
 }
 
-/// Comando: Desfaz uma otimização específica
 #[tauri::command]
 pub async fn revert_optimization(
     id: String,
@@ -3659,10 +2956,7 @@ pub async fn revert_optimization(
     }
 }
 
-/// Comando: "Otimizar agora" — aplica todo o catálogo de uma vez.
-///
-/// `only` restringe o lote a uma lista de ids: é como um perfil aplica só o que
-/// recomenda. Os filtros de segurança do motor valem igual nos dois casos.
+/// `only` restringe a uma lista de ids (perfis); os filtros de segurança valem igual.
 #[tauri::command]
 pub async fn optimize_now(
     app: tauri::AppHandle,
@@ -3675,9 +2969,7 @@ pub async fn optimize_now(
     {
         let mut log = state.changes.lock().await;
 
-        // Rede de segurança antes de qualquer mudança. Não bloqueia o lote se
-        // falhar — nosso histórico já reverte item por item — mas o cliente é
-        // informado do que aconteceu de verdade, inclusive quando não deu.
+        // Rede de segurança antes de mudar: falhar não bloqueia, mas o cliente sabe.
         if Preferences::load().restore_point_before_batch {
             let inicio = std::time::Instant::now();
             crate::utils::Logger::info("ponto de restauração antes do lote: começou");
@@ -3710,8 +3002,7 @@ pub async fn optimize_now(
             );
         }
 
-        // Cada passo é emitido na hora que acontece: a interface mostra o que
-        // está sendo mexido, em vez de uma barra de progresso sem informação.
+        // Cada passo emitido na hora, não uma barra de progresso.
         let mut resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(
             only.as_deref(),
             &mut log,
@@ -3720,28 +3011,9 @@ pub async fn optimize_now(
             },
         );
 
-        // ─── O TETO DE FPS DO JOGO, NO MESMO CLIQUE ───────────────────────
-        //
-        // O cliente olha o FPS, e os ajustes de Windows quase não mexem nele:
-        // das 41 otimizações do catálogo, 7 são declaradas com ganho
-        // mensurável. Quem move FPS em dezenas é a configuração do jogo — foi
-        // essa a causa do reembolso, com o FiveM preso em MSAA 4x.
-        //
-        // Só que quem aperta "Otimizar agora" não vai explorar o programa até a
-        // aba Jogos. Ele aperta um botão e olha o número. Deixar a maior
-        // alavanca do produto atrás de um segundo clique era garantir que a
-        // maioria nunca a receberia.
-        //
-        // SÓ O `SemTeto`, E ISSO NÃO É TIMIDEZ. Ele tira VSync e limite de
-        // quadros: preço visual EXATAMENTE ZERO, e costuma ser o maior ganho
-        // isolado — um jogo travado em 60 não está travado pela placa, está
-        // travado por um número num arquivo. Os perfis que derrubam grama,
-        // sombra e reflexo mudam a cara do jogo, e isso é escolha do dono,
-        // nunca efeito colateral de um botão genérico.
-        //
-        // `only` sendo `Some` quer dizer que um PERFIL DE USO pediu uma lista
-        // específica; aí o cliente já escolheu o que quer e não se acrescenta
-        // nada por fora.
+        // O teto de FPS do jogo no mesmo clique: a configuração do jogo move FPS em dezenas, e quem aperta o botão não
+        // vai até a aba Jogos. SÓ o `SemTeto` (VSync e limite, preço visual zero); os que mudam a cara do jogo são
+        // escolha do dono. Com `only` de um perfil, nada é acrescentado.
         if only.is_none() {
             if let Some(resultado) = aplicar_teto_do_jogo(&app, &mut log).await {
                 resultados.push(resultado);
@@ -3758,15 +3030,8 @@ pub async fn optimize_now(
     }
 }
 
-/// Tira o teto de quadros do jogo, como último passo do "Otimizar agora".
-///
-/// Devolve `None` quando não há nada a dizer — sem jogo instalado, ou o arquivo
-/// já sem teto. Nesses casos um passo a mais na tela só confundiria.
-///
-/// O JOGO ABERTO NÃO É FALHA DO LOTE, e por isso não devolve erro: o jogo guarda
-/// a configuração em memória e reescreve o arquivo ao sair, apagando o que for
-/// mudado agora. O cliente precisa saber disso — mas o lote de Windows foi bem,
-/// e reportar "falhou" apagaria esse fato.
+/// `None` sem nada a dizer. Jogo aberto não é falha do lote (ele reescreve ao sair): o cliente precisa saber, mas
+/// o lote de Windows foi bem.
 #[cfg(target_os = "windows")]
 async fn aplicar_teto_do_jogo(
     app: &tauri::AppHandle,
@@ -3779,7 +3044,6 @@ async fn aplicar_teto_do_jogo(
     const ID: &str = "config_jogo_sem_teto";
     const NOME: &str = "Limite de quadros do jogo";
 
-    // Já aplicado antes: o histórico manda, como em toda otimização.
     if log.is_applied(ID) {
         return None;
     }
@@ -3788,16 +3052,12 @@ async fn aplicar_teto_do_jogo(
 
     let (mensagem, sucesso, mudou) = match configjogo::aplicar_perfil(Perfil::SemTeto) {
         Ok(feito) if feito.mudou.is_empty() => {
-            // Nada a tirar: o jogo já estava sem teto. Não é passo, não é
-            // registro, não é linha na tela.
             return None;
         }
         Ok(feito) => {
             let resumo = format!("{}: {}", feito.jogo, feito.mudou.join(", "));
 
-            // O ARQUIVO ANTERIOR INTEIRO VAI PARA O HISTÓRICO. É o que faz o
-            // "Desfazer tudo" devolver a configuração do cliente byte a byte,
-            // em vez de tentar reescrever chave por chave.
+            // O arquivo inteiro: "Desfazer tudo" devolve byte a byte.
             let gravou = log.record(AppliedOptimization {
                 optimization_id: ID.to_string(),
                 name: NOME.to_string(),
@@ -3811,7 +3071,6 @@ async fn aplicar_teto_do_jogo(
 
             match gravou {
                 Ok(()) => (resumo, true, feito.mudou),
-                // Sem histórico não há desfazer, e isso o cliente precisa ler.
                 Err(erro) => (
                     format!("{} — mas o histórico não pôde ser gravado: {}", resumo, erro),
                     false,
@@ -3857,7 +3116,7 @@ async fn aplicar_teto_do_jogo(
     })
 }
 
-/// Comando: Desfaz todas as otimizações aplicadas
+/// Desfaz todas as otimizações aplicadas.
 #[tauri::command]
 pub async fn revert_all_optimizations(
     app: tauri::AppHandle,
@@ -3879,11 +3138,8 @@ pub async fn revert_all_optimizations(
     }
 }
 
-/// Comando: Confere se o Windows veio com serviços essenciais desativados.
-///
-/// Só leitura. A tela chama antes do "Otimizar agora" e de um perfil: com esses
-/// serviços desligados, programa trava ou não abre com ou sem otimização, e o
-/// cliente precisa saber disso antes do clique. Ver `essenciais.rs`.
+/// Só leitura, antes do "Otimizar agora" e dos perfis: com esses serviços desligados, programa trava com ou sem
+/// otimização. Ver `essenciais.rs`.
 #[tauri::command]
 pub async fn checar_essenciais() -> Result<Checagem, String> {
     #[cfg(target_os = "windows")]
@@ -3892,8 +3148,7 @@ pub async fn checar_essenciais() -> Result<Checagem, String> {
             .await
             .map_err(|e| format!("Falha ao conferir os serviços essenciais: {}", e))?;
 
-        // No registro também: se o lote que vier depois travar, a checagem que
-        // o precedeu fica escrita logo acima.
+        // No log também, logo acima do lote.
         let desativados: Vec<&str> = checagem
             .servicos
             .iter()
@@ -3918,11 +3173,7 @@ pub async fn checar_essenciais() -> Result<Checagem, String> {
     }
 }
 
-/// Comando: Religa os serviços essenciais que estão desativados, cada um no tipo
-/// de início padrão do Windows.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador. Entra no histórico, e o
-/// "Desfazer" os devolve a desligados.
+/// `EXIGEM_LICENCA`. O "Desfazer" os devolve a desligados.
 #[tauri::command]
 pub async fn religar_essenciais(state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
     crate::modules::licenca::exigir()?;
@@ -3940,11 +3191,7 @@ pub async fn religar_essenciais(state: State<'_, AppState>) -> Result<Optimizati
     }
 }
 
-/// Coloca um monitor na maior taxa de atualização que ele aceita.
-///
-/// O parâmetro chama-se `id` porque é assim que o botão do diagnóstico manda o
-/// argumento — um só, sempre com esse nome. Aqui ele é o dispositivo, no
-/// formato `\.\DISPLAY1`.
+/// `id` porque é o nome que o botão do diagnóstico manda; aqui é o dispositivo (`\.\DISPLAY1`).
 #[tauri::command]
 pub async fn set_max_refresh_rate(
     id: String,
@@ -3968,69 +3215,29 @@ pub async fn set_max_refresh_rate(
     }
 }
 
-// =========================================================== REPARO
-//
-// OS QUATRO COMANDOS DESTA SECAO LEVAM O ATRIBUTO `async` NA MARCA DE COMANDO
-// DO TAURI, E ISSO NAO E DECORACAO. (A marca nao aparece escrita neste
-// comentario de proposito: a guarda do fim do arquivo conta comandos
-// procurando por ela no proprio fonte, e contaria um fantasma.)
-//
-// Sem o atributo, o Tauri classifica a funcao como `ExecutionContext::Blocking`
-// (tauri-macros-2.6.3, `src/command/wrapper.rs`: o contexto so vira `Async` se
-// `function.sig.asyncness.is_some()` ou se o atributo estiver escrito), e o
-// corpo roda EM LINHA dentro do manipulador de invoke — que o wry chama de
-// forma sincrona a partir do callback de IPC, na thread do laco de eventos.
-// Um `DISM` de trinta minutos ali para de repintar a janela, o Windows marca
-// "Nao Responde", o `app.emit("reparo-andamento")` enfileira trabalho para o
-// mesmo laco travado (o painel de andamento fica vazio) e — o pior — o
-// `reparo_cancelar`, que tambem e uma mensagem de IPC, so consegue executar
-// depois que a tarefa que ele deveria interromper ja terminou. O botao
-// Interromper existiria sem funcionar, e a unica saida do cliente seria matar
-// o programa no meio de uma escrita do DISM: exatamente o que
-// `cancelar_e_seguro: false` existe para evitar.
-//
-// O atributo e valido numa funcao SINCRONA que recebe `State<'_, AppState>`:
-// a restricao do Tauri contra referencias na entrada (`wrapper.rs`, o bloco
-// `async_command_check`) so e emitida quando `asyncness.is_some()`. Com a
-// funcao sincrona e o atributo presente, o Tauri gera o corpo assincrono e
-// chama a funcao dentro dele — o que o proprio macro rotula `sync_threadpool`.
+// Os quatro comandos de reparo levam o atributo `async` do Tauri. Sem ele o Tauri os classifica como Blocking
+// (tauri-macros-2.6.3, `src/command/wrapper.rs`) e o corpo roda na thread do laço de eventos: um DISM de trinta
+// minutos congela a janela e o `reparo_cancelar` só executaria depois do fim. Numa função SÍNCRONA com
+// `State<'_, AppState>` o atributo é válido (`sync_threadpool`). (A marca não aparece escrita aqui: a guarda do fim
+// do arquivo conta comandos por ela no fonte.)
 
-/// Monta a trava do disco a partir de um diagnóstico de verdade.
-///
-/// Só existe no Windows: `HealthReport` e `DiscoSaudavel` vêm de
-/// `modules::windows`, que nem compila fora dele.
+/// Só no Windows: `HealthReport` e `DiscoSaudavel` vêm de `modules::windows`.
 #[cfg(target_os = "windows")]
 fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
     let relatorio = crate::modules::windows::health::analyze();
     crate::modules::windows::reparo::DiscoSaudavel::a_partir_do_relatorio(&relatorio)
 }
 
-/// Uma ferramenta de reparo oferecida nesta máquina, com tudo que a tela
-/// precisa para avisar ANTES do clique — duração típica, se cancelar é
-/// seguro e os avisos de segurança — lido de `Receita`
-/// (`modules::windows::reparo`) e nunca reescrito à mão na tela.
-///
-/// NÃO leva `programa` nem `args`: são detalhe de execução, não informação
-/// que o cliente precisa ver, e expô-los sem necessidade só aumentaria a
-/// superfície que alguém poderia tentar forjar numa chamada direta.
-/// `titulo`/`descricao` também ficam de fora de propósito — continuam sendo
-/// texto de apresentação escrito pela própria tela, e não um FATO DE
-/// SEGURANÇA como o aviso do `/ResetBase`; só o que muda o risco de um clique
-/// tem que ter dono único no backend.
+/// Lido de `Receita`, nunca reescrito na tela. Sem `programa` nem `args`: detalhe de execução, e mais superfície
+/// para forjar numa chamada direta.
 #[derive(Serialize)]
 pub struct FerramentaDeReparo {
-    /// O mesmo nome que `reparo_executar` espera no campo `ferramenta`.
     pub nome: String,
     pub minutos_tipicos: (u32, u32),
     pub cancelar_e_seguro: bool,
     pub aviso: Option<String>,
-    /// Só `true` em `LimparWinSxS`: só ela oferece o interruptor do
-    /// `/ResetBase`.
     pub oferece_reset_base: bool,
-    /// O aviso de que ligar o `/ResetBase` tira a capacidade de desinstalar
-    /// atualizações já aplicadas. Vem de `Receita` com `resetar_base: true`,
-    /// e não de um texto próprio da tela — é a mesma garantia de fonte única
-    /// que o aviso comum acima já tem.
+    /// Da `Receita` com `resetar_base: true`: fonte única do aviso.
     pub aviso_reset_base: Option<String>,
 }
 
@@ -4061,16 +3268,8 @@ fn descrever_ferramenta(
     }
 }
 
-/// O que dá para oferecer nesta máquina.
-///
-/// Fica em `LIVRES`: é leitura, e é o diagnóstico que mostra ao cliente que o
-/// problema dele existe antes de qualquer cobrança.
-///
-/// O disco NÃO chega como parâmetro da tela — o comando lê o `HealthReport`
-/// aqui dentro e monta o próprio `DiscoSaudavel`. Um `bool` vindo do
-/// frontend reabriria exatamente o buraco que `DiscoSaudavel` foi criado
-/// para fechar: a mesma regra do fluxo de compra, em que só um código de
-/// cupom viaja do cliente e é o servidor sozinho quem decide o preço.
+/// `LIVRES`. O disco NÃO vem da tela: o comando lê o `HealthReport` e monta o `DiscoSaudavel`; um `bool` do
+/// frontend reabriria o buraco.
 #[tauri::command(async)]
 pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> {
     #[cfg(target_os = "windows")]
@@ -4090,10 +3289,7 @@ pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> 
 
         let medicao = estado_do_disco(&state);
 
-        // DUAS PROVAS, E NÃO UMA. `DiscoSaudavel` diz que o disco aguenta a
-        // operação; `EstadoDoDisco` diz que houve MEDIÇÃO que a justifique.
-        // Faltando qualquer uma, o botão não existe — e é assim que ele deixa
-        // de ser um clique disponível para quem tem um NTFS limpo.
+        // DUAS PROVAS: `DiscoSaudavel` (aguenta) e `EstadoDoDisco` (houve medição). Faltando uma, o botão não existe.
         let disco = disco_saudavel_agora();
         if reparo::consertar_disco_e_permitido(&disco) && medicao.autoriza_consertar() {
             lista.push(descrever_ferramenta(Ferramenta::ConsertarDisco, "ConsertarDisco"));
@@ -4116,26 +3312,14 @@ pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> 
     }
 }
 
-/// Lê o que se sabe do disco nesta sessão.
-///
-/// Tranca envenenada devolve `SemVerificacao`, que é o estado que NÃO autoriza
-/// nada: aqui "não sei" fecha a porta, como em todo o resto deste caminho.
+/// Tranca envenenada devolve `SemVerificacao`, que não autoriza nada.
 #[cfg(target_os = "windows")]
 fn estado_do_disco(state: &State<'_, AppState>) -> crate::modules::windows::reparo::EstadoDoDisco {
     state.disco.lock().map(|d| *d).unwrap_or_default()
 }
 
-/// O tom com que a tela deve colorir `UltimoResultadoReparo` — "ok",
-/// "atencao" ou "erro" na borda do IPC.
-///
-/// Existe para a tela nunca precisar decidir isso sozinha. A versão anterior
-/// devolvia só a frase, e a tela escolhia a cor comparando o INÍCIO do texto
-/// (`resultado.startsWith("Corrigiu ")`) — só que a frase de
-/// `CorrigiuEmParte` ("Corrigiu 2 arquivo(s), mas 1 continua...") também
-/// começa com "Corrigiu ", e a tela pintava de verde um resultado que o
-/// próprio comentário deste arquivo já dizia que NÃO é sucesso. A cor agora
-/// nasce de `ResultadoSfc::severidade()` — do dado estruturado, não da
-/// prosa — então essa colisão de vocabulário deixou de ser possível.
+/// Da `ResultadoSfc::severidade()`: a tela escolhia a cor com `startsWith("Corrigiu ")` e pintava
+/// `CorrigiuEmParte` de verde.
 #[derive(Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TomResultado {
@@ -4157,11 +3341,7 @@ impl From<crate::modules::windows::cbslog::Severidade> for TomResultado {
     }
 }
 
-/// O mesmo princípio, agora para o desfecho de uma EXECUÇÃO de reparo — este
-/// é o defeito da vez: a tela decidia a cor comparando a frase formatada
-/// (`desfecho === "Terminou."`), e `CorrigiuEmParte` já provou que prosa e
-/// cor divergem. O tom nasce aqui, da variante de `Desfecho`, antes de a
-/// frase existir.
+/// Da variante de `Desfecho`, antes da frase: a tela comparava `desfecho === "Terminou."`.
 #[cfg(target_os = "windows")]
 impl From<&crate::modules::windows::tarefa_longa::Desfecho> for TomResultado {
     fn from(d: &crate::modules::windows::tarefa_longa::Desfecho) -> Self {
@@ -4169,50 +3349,37 @@ impl From<&crate::modules::windows::tarefa_longa::Desfecho> for TomResultado {
 
         match d {
             Desfecho::Terminou { codigo: 0 } => TomResultado::Ok,
-            // Código diferente de zero é falha do programa — mesmo tom que
-            // "não consegui verificar" já usa em `UltimoResultadoReparo`.
             Desfecho::Terminou { codigo: _ } => TomResultado::Erro,
-            // Cancelar foi uma escolha do cliente, não uma falha: nem verde
-            // (nada terminou) nem vermelho (ninguém errou).
+            // Cancelar foi escolha: nem verde nem vermelho.
             Desfecho::Cancelada => TomResultado::Atencao,
             Desfecho::NaoComecou { .. } => TomResultado::Erro,
         }
     }
 }
 
-/// O desfecho de `reparo_executar`, com o tom já decidido — mesma forma de
-/// `UltimoResultadoReparo`, pelo mesmo motivo: a tela lê `tom`, nunca
-/// compara a prosa de `texto`.
+/// A tela lê `tom`, nunca a prosa de `texto`.
 #[derive(Serialize)]
 pub struct DesfechoReparo {
     pub tom: TomResultado,
     pub texto: String,
 }
 
-/// O resultado da última verificação de arquivos de sistema, com o tom já
-/// decidido — a tela lê `tom`, nunca a prosa de `texto`.
+/// A tela lê `tom`, nunca a prosa de `texto`.
 #[derive(Serialize)]
 pub struct UltimoResultadoReparo {
     pub tom: TomResultado,
     pub texto: String,
 }
 
-/// O resultado da última verificação de arquivos de sistema.
-///
-/// Fica em `LIVRES`: é leitura de um registro que o Windows já escreveu.
+/// `LIVRES`.
 #[tauri::command(async)]
 pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
     #[cfg(target_os = "windows")]
     {
         use crate::modules::windows::cbslog::{self, ResultadoSfc};
 
-        // O `unwrap_or_default()` que estava aqui ENGOLIA o erro de leitura e
-        // entregava uma string vazia ao `interpretar`, que respondia "o
-        // registro do Windows não trouxe nenhuma verificação". Num programa
-        // aberto sem elevação — o CBS.log só abre como administrador — essa
-        // frase nomeia a causa errada: não é que o Windows não verificou, é
-        // que nós não conseguimos ler. O cliente então clicava em Executar e
-        // recebia um vermelho seco "Terminou com o código 1".
+        // Sem `unwrap_or_default()`: o CBS.log só abre como administrador, e a string vazia virava "o Windows não
+        // verificou" em vez de "não conseguimos ler".
         let resultado = match std::fs::read_to_string(cbslog::caminho_do_log()) {
             Ok(conteudo) => cbslog::interpretar(&conteudo),
             Err(e) => ResultadoSfc::NaoSei {
@@ -4230,17 +3397,12 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
         let tom = TomResultado::from(resultado.severidade());
 
         let texto = match resultado {
-            // Este é o resultado mais comum, e é um resultado BOM. A tela diz
-            // isso com todas as letras, sem inventar benefício — mesma regra
-            // do `prova.rs`, que se recusa a chamar ruído de ganho.
+            // O resultado mais comum, e BOM.
             ResultadoSfc::SemCorrupcao => "Nenhuma corrupção encontrada.".into(),
             ResultadoSfc::Corrigiu { quantos } => {
                 format!("Corrigiu {} arquivo(s) corrompido(s).", quantos)
             }
-            // Misto: parte foi consertada, parte não. Isto NÃO é sucesso —
-            // ainda sobra corrupção na máquina, e dizer só "corrigiu" faria o
-            // cliente achar que o problema acabou quando não acabou. O tom
-            // (`Atencao`, não `Ok`) já carrega essa distinção sozinho.
+            // Misto NÃO é sucesso: o tom `Atencao` carrega isso.
             ResultadoSfc::CorrigiuEmParte {
                 corrigidos,
                 restantes,
@@ -4254,10 +3416,7 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
                  O próximo passo é reparar a imagem do Windows.",
                 quantos
             ),
-            // Corrigiu tudo que deu para nomear, mas o registro também
-            // tinha linha de falha sem nome legível — não dá para garantir
-            // que não sobrou corrupção nelas. O tom (`Atencao`, não `Ok`)
-            // já carrega essa ressalva sozinho.
+            // Linhas de falha sem nome legível: `Atencao`, não `Ok`.
             ResultadoSfc::CorrigiuComRessalva {
                 quantos,
                 linhas_ilegiveis,
@@ -4285,19 +3444,8 @@ pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
     }
 }
 
-/// Roda uma ferramenta de reparo, transmitindo o andamento pelo evento
-/// `reparo-andamento`.
-///
-/// Exige licença: é correção, como todas as outras.
-///
-/// O parâmetro chama `resetbase`, uma palavra só, e não `reset_base` — a
-/// tela chamaria isto de `resetbase` (sem separador) ou dependeria da
-/// conversão automática de nome que o Tauri faz entre camelCase no
-/// JavaScript e snake_case no Rust. A conversão provavelmente está certa,
-/// mas o `/ResetBase` é consequente demais (custa a capacidade de
-/// desinstalar atualizações já aplicadas, sem volta) para valer a pena
-/// alguém ter que raciocinar sobre ela. Uma palavra só fecha essa dúvida de
-/// vez — a mesma lógica que fez `DiscoSaudavel` virar tipo em vez de `bool`.
+/// Exige licença. O parâmetro é `resetbase`, uma palavra só: o `/ResetBase` é caro demais (sem volta) para depender
+/// da conversão camelCase/snake_case do Tauri.
 #[tauri::command(async)]
 pub fn reparo_executar(
     app: tauri::AppHandle,
@@ -4318,10 +3466,7 @@ pub fn reparo_executar(
             "RepararImagem" => Ferramenta::RepararImagem,
             "VerificarDisco" => Ferramenta::VerificarDisco,
             "ConsertarDisco" => {
-                // AS DUAS TRAVAS SÃO CONFERIDAS AQUI TAMBÉM, e não só na tela
-                // que chamou `reparo_disponivel`: a tela pode ser contornada,
-                // esta chamada não — tudo é lido de novo, na hora, e nada do
-                // que veio do cliente é levado em conta.
+                // As duas travas conferidas de novo aqui: a tela pode ser contornada, esta chamada não.
                 let disco = disco_saudavel_agora();
                 if !reparo::consertar_disco_e_permitido(&disco) {
                     return Err(
@@ -4356,16 +3501,8 @@ pub fn reparo_executar(
             outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
         };
 
-        // O `ConsertarDisco` sozinho pode mentir: se uma sessão anterior
-        // desmarcou um conserto (`DesmarcarConsertoDoDisco`, `chkntfs /X`),
-        // o volume fica EXCLUÍDO do boot check para sempre — não só naquela
-        // vez. Sem reincluir agora, o `fsutil dirty set` abaixo sai 0, o
-        // retorno diz "agendado", e o `autochk` pula o volume no próximo
-        // boot mesmo assim. `receita_reinclusao_do_disco` (reparo.rs) desfaz
-        // isso, e quem sequencia as duas chamadas é este executor — não
-        // `reparo.rs`, que só descreve receitas, e não `Receita`, que carrega
-        // um programa só. Rodar a reinclusão sempre, mesmo sem `/X` anterior,
-        // é seguro: ela só restaura o padrão do Windows.
+        // Reincluir antes: um `chkntfs /X` antigo deixa o volume fora do boot check para sempre, e o `fsutil dirty set`
+        // sairia 0 com o `autochk` pulando o volume. Quem sequencia é este executor; rodar sempre é seguro.
         if escolhida == Ferramenta::ConsertarDisco {
             let reinclusao = reparo::receita_reinclusao_do_disco();
             let args_reinclusao: Vec<&str> =
@@ -4378,12 +3515,7 @@ pub fn reparo_executar(
                         let _ = app_reinclusao.emit("reparo-andamento", &a);
                     })?;
 
-            // Falhar aqui e seguir para o `fsutil` mesmo assim seria recriar
-            // a mentira que esta reinclusão existe para fechar: o bit sujo
-            // marcado (o `fsutil` quase sempre funciona) enquanto o volume
-            // continua fora do boot check porque a reinclusão não pegou. O
-            // cliente não pode ouvir "agendado" nesse caso — não seria
-            // verdade.
+            // Seguir para o `fsutil` com a reinclusão falha recriaria a mentira: "agendado" sem boot check.
             if !reparo::reinclusao_deu_certo(&desfecho_reinclusao) {
                 return Err(
                     "Não consegui preparar o disco para o conserto (a \
@@ -4400,19 +3532,12 @@ pub fn reparo_executar(
             let _ = app.emit("reparo-andamento", &a);
         })?;
 
-        // O QUE ACABOU DE ACONTECER É A ÚNICA FONTE DA PRÓXIMA OFERTA.
-        // Registrado a partir do desfecho real, e não de um `true` posto à mão
-        // depois de um clique: um `/scan` cancelado, ou que devolveu "não
-        // consegui verificar", apaga a autorização em vez de deixá-la de pé.
+        // Do desfecho real: `/scan` cancelado ou "não consegui verificar" apaga a autorização.
         if let Ok(mut atual) = state.disco.lock() {
             *atual = atual.apos_execucao(&escolhida, &desfecho);
         }
 
-        // O tom é lido da VARIANTE, antes de `desfecho` ser consumido pelo
-        // `match` que monta a frase — é a mesma ordem de
-        // `reparo_ultimo_resultado`, e existe pelo mesmo motivo: se o tom
-        // nascesse depois, olhando para `texto`, seria a prosa decidindo de
-        // novo, só que num lugar mais difícil de notar.
+        // O tom é lido da VARIANTE antes do `match` consumir `desfecho`.
         let tom = TomResultado::from(&desfecho);
         let texto = match desfecho {
             Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),
@@ -4431,11 +3556,7 @@ pub fn reparo_executar(
     }
 }
 
-/// Interrompe a ferramenta de reparo em andamento.
-///
-/// Fica em `LIVRES` DE PROPÓSITO, pelo mesmo motivo que `revert` fica: uma
-/// licença que vence no meio de um `DISM` de vinte minutos não pode deixar o
-/// cliente preso nele.
+/// `LIVRES` como o `revert`: licença vencida no meio de um DISM não pode prender o cliente nele.
 #[tauri::command(async)]
 pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
     #[cfg(target_os = "windows")]
@@ -4450,25 +3571,9 @@ pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
     }
 }
 
-// ========================================================== ATENDIMENTO
-
-/// O relatório que o cliente cola no atendimento — versão, Windows, RAM,
-/// congelados, mudanças aplicadas, disco e térmico, e o que não deu para ler.
-///
-/// Fica em `LIVRES`: é leitura, e é o diagnóstico que o produto já dá de
-/// graça — inclusive porque é justamente esta a informação que faltou
-/// quando um cliente com o produto JÁ INSTALADO precisou de um script de
-/// PowerShell escrito à mão para alguém entender o que estava acontecendo
-/// na máquina dele. Ver `modules::windows::suporte` para o porquê de cada
-/// regra que o texto obedece.
-/// SÍNCRONO NÃO: este comando chama `health::analyze()` e
-/// `thermal::analyze()`, que o resto deste arquivo tira do runtime de
-/// propósito — o primeiro conversa com o disco via WMI e a tela etiqueta os
-/// dois com "~5 s" cada. Somados ao `Get-CimInstance` do sistema e ao resto,
-/// dão 12 a 15 segundos NA THREAD PRINCIPAL: janela sem redesenhar, sem
-/// arrastar, e o "Otimiza não está respondendo" do Windows. É exatamente a
-/// queixa que o relatório de congelados existe para investigar, causada pelo
-/// botão que investiga.
+/// `LIVRES` (faltou quando um cliente precisou de script de PowerShell à mão; ver `modules::windows::suporte`). NÃO
+/// síncrono: `health::analyze()` e `thermal::analyze()` somam 12 a 15 s, e na thread principal congelariam a
+/// janela.
 #[tauri::command(async)]
 pub fn relatorio_de_suporte() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -4484,15 +3589,7 @@ pub fn relatorio_de_suporte() -> Result<String, String> {
     }
 }
 
-// ========================================================= ATUALIZAÇÃO
-
-/// O que a tela precisa para decidir se mostra a faixa de versão nova.
-///
-/// `comparacao` é a única coisa que a tela decide a partir de — nunca
-/// `versao_publicada`, que é texto solto para exibir, não para comparar. Ver
-/// a guarda `a_tela_nao_decide_cor_comparando_texto_do_backend`, que reprova
-/// o build se `main.ts` comparar por igualdade ou substring um texto que
-/// parece prosa.
+/// A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir).
 #[derive(Debug, Clone, Serialize)]
 pub struct AvisoDeVersao {
     pub comparacao: crate::modules::atualizacao::Comparacao,
@@ -4500,14 +3597,7 @@ pub struct AvisoDeVersao {
     pub pagina: Option<String>,
 }
 
-/// Pergunta ao GitHub se existe versão publicada mais nova que a instalada.
-///
-/// Fica em `LIVRES`: é leitura — pergunta ao GitHub e não altera nada neste
-/// computador. Não instala nada sozinho: a resposta é só a faixa que o
-/// cliente vê e, se quiser, clica para baixar por conta própria.
-///
-/// A versão instalada vem de `CARGO_PKG_VERSION`, o mesmo número que já
-/// alimenta `relatorio_de_suporte` — não é hardcoded aqui de novo.
+/// `LIVRES`: só pergunta ao GitHub; não instala nada. A versão instalada é `CARGO_PKG_VERSION`.
 #[tauri::command]
 pub async fn versao_mais_nova() -> AvisoDeVersao {
     let instalada = env!("CARGO_PKG_VERSION");
@@ -4518,9 +3608,7 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
             versao_publicada: Some(ultima.versao),
             pagina: ultima.pagina,
         },
-        // Falha de rede é silêncio, não alarme: `NaoSei` faz a tela não
-        // mostrar nada, em vez de arriscar um "atualize" sem versão nenhuma
-        // por trás.
+        // Falha de rede é silêncio: `NaoSei` não mostra nada.
         None => AvisoDeVersao {
             comparacao: crate::modules::atualizacao::Comparacao::NaoSei,
             versao_publicada: None,
@@ -4529,30 +3617,19 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
     }
 }
 
-// =========================================================== LICENÇA
-
-/// O estado da licença desta máquina.
-///
-/// Livre de propósito: é o comando que alimenta a tela de compra, e uma tela
-/// de compra que precisa de licença para abrir não faria sentido nenhum.
+/// Livre: alimenta a tela de compra.
 #[tauri::command]
 pub fn licenca_estado() -> crate::modules::licenca::Estado {
     crate::modules::licenca::estado()
 }
 
-/// Ativa uma chave. Confere ANTES de gravar.
 #[tauri::command]
 pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, String> {
     crate::modules::licenca::ativar(&chave)?;
     Ok(crate::modules::licenca::estado())
 }
 
-// ==================================================== O PLANO DE ENERGIA OTIMIZA
-
-/// Diz o que o Otimiza consegue fazer nesta máquina, sem mexer em nada.
-///
-/// Fica em `LIVRES`: é leitura pura, e é justamente o diagnóstico que responde
-/// "por que não funcionou no seu PC?" antes de o cliente pagar por alguma coisa.
+/// `LIVRES`: responde "por que não funcionou?" antes de pagar.
 #[tauri::command]
 pub async fn diagnostico_de_energia() -> Result<
     crate::modules::windows::planoenergia::Diagnostico,
@@ -4569,10 +3646,7 @@ pub async fn diagnostico_de_energia() -> Result<
     }
 }
 
-/// Mostra o que o plano OTIMIZA mudaria, SEM MUDAR NADA.
-///
-/// Fica em `LIVRES` pelo mesmo motivo do diagnóstico: quem ainda não comprou é
-/// exatamente quem precisa ver o que mudaria na máquina dele.
+/// `LIVRES`: quem não comprou é quem precisa ver.
 #[tauri::command]
 pub async fn simular_plano_otimiza() -> Result<
     crate::modules::windows::planoenergia::RelatorioDoPlano,
@@ -4589,14 +3663,7 @@ pub async fn simular_plano_otimiza() -> Result<
     }
 }
 
-/// Cria (ou reencontra), configura, ativa e CONFERE o plano OTIMIZA.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador.
-///
-/// O QUE ENTRA NO HISTÓRICO É UMA LINHA SÓ, e isso é a arquitetura falando: o
-/// plano do cliente não é tocado, então desfazer é reativar o plano anterior.
-/// Não há trinta valores para escrever de volta, e por isso não há trinta jeitos
-/// de a reversão falhar pela metade.
+/// `EXIGEM_LICENCA`. UMA linha no histórico: o plano do cliente não é tocado, desfazer é reativar o anterior.
 #[tauri::command]
 pub async fn aplicar_plano_otimiza(
     state: State<'_, AppState>,
@@ -4610,9 +3677,7 @@ pub async fn aplicar_plano_otimiza(
         let relatorio =
             crate::modules::windows::planoenergia::montar(false)?;
 
-        // SÓ REGISTRA SE O PLANO REALMENTE FICOU ATIVO. Um registro de desfazer
-        // para uma troca que não aconteceu daria ao cliente um item no histórico
-        // que não desfaz nada.
+        // Só registra se o plano ficou ativo: registro de troca que não houve não desfaz nada.
         if relatorio.plano_ativo {
             if let Some(anterior) = relatorio.guid_anterior.clone() {
                 let mut log = state.changes.lock().await;
@@ -4638,11 +3703,7 @@ pub async fn aplicar_plano_otimiza(
     }
 }
 
-/// O plano OTIMIZA continua de pé como o deixamos?
-///
-/// Fica em `LIVRES`: é leitura pura. E é a pergunta que o cliente faz quando
-/// "aplicou e depois voltou tudo" — a resposta precisa existir antes de
-/// qualquer venda ou renovação.
+/// `LIVRES`: a pergunta de quem "aplicou e depois voltou tudo".
 #[tauri::command]
 pub async fn vistoriar_plano_otimiza() -> Result<
     crate::modules::windows::planoenergia::Vistoria,
@@ -4659,15 +3720,8 @@ pub async fn vistoriar_plano_otimiza() -> Result<
     }
 }
 
-/// Reaplica só o que saiu do alvo no plano OTIMIZA.
-///
-/// Vai para `EXIGEM_LICENCA`: altera o computador.
-///
-/// NÃO MEXE NO HISTÓRICO, e isso é a decisão central deste comando. O registro
-/// de desfazer guarda qual era o plano do cliente ANTES de tudo, e isso não
-/// mudou: o plano dele continua sendo o dele. Gravar uma linha nova aqui daria
-/// ao cliente dois "desfazer" para uma troca só, e o segundo reativaria um
-/// plano que já estava ativo.
+/// `EXIGEM_LICENCA`. NÃO mexe no histórico: o anterior guardado continua certo, e uma linha nova daria dois
+/// "desfazer" para uma troca só.
 #[tauri::command]
 pub async fn reparar_plano_otimiza() -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     crate::modules::licenca::exigir()?;
@@ -4683,12 +3737,7 @@ pub async fn reparar_plano_otimiza() -> Result<crate::modules::windows::planoene
     }
 }
 
-/// Gera o relatório de compatibilidade desta máquina, no formato do lab.
-///
-/// Fica em `LIVRES`: é leitura pura, e é justamente de quem AINDA não comprou —
-/// ou de quem comprou e reclamou — que vem a evidência que falta. Trancar isso
-/// atrás da licença seria fechar a única porta por onde entra o dado das
-/// máquinas que este projeto não tem.
+/// `LIVRES`: é de quem ainda não comprou, ou reclamou, que vem o dado das máquinas que o projeto não tem.
 #[tauri::command]
 pub async fn relatorio_de_compatibilidade() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -4702,17 +3751,8 @@ pub async fn relatorio_de_compatibilidade() -> Result<String, String> {
     }
 }
 
-// ==================================================== A GUARDA DA GUARDA
-
-/// Confere que todo comando está classificado e que os que alteram o sistema
-/// pedem licença.
-///
-/// Existe porque a falha mais provável deste sistema não é alguém quebrar a
-/// assinatura — é alguém acrescentar um comando novo daqui a seis meses e
-/// esquecer a linha da guarda. Um comando esquecido é uma porta aberta que
-/// ninguém percebe, e revisão de código não pega isso de forma confiável.
-///
-/// Com este teste, comando novo sem classificação REPROVA O BUILD.
+/// Comando novo sem classificação REPROVA O BUILD: a falha provável não é quebrar a assinatura, é esquecer a
+/// linha da guarda.
 #[cfg(test)]
 mod tests {
     #[test]
@@ -4726,22 +3766,8 @@ mod tests {
         assert!(d.amostras.len() >= 10);
     }
 
-    /// Rodam sem licença: leitura, medição, e o desfazer.
-    ///
-    /// O desfazer está aqui de propósito. Se a licença vencer, o cliente
-    /// precisa conseguir voltar o PC dele ao que era. Trancar o `revert`
-    /// deixaria a máquina alterada sem caminho de volta pela nossa tela.
-    /// O botão genérico NUNCA muda a aparência do jogo do cliente.
-    ///
-    /// O "Otimizar agora" passou a mexer no arquivo do jogo, e essa permissão
-    /// tem um limite estreito: tirar o teto de quadros, que não muda nada na
-    /// tela. Os perfis que derrubam grama, sombra e reflexo mudam a cara do
-    /// jogo — isso é escolha do dono, feita na aba Jogos, e não pode virar
-    /// efeito colateral de um clique genérico.
-    ///
-    /// Trava de FORMA: varre o corpo da função em vez de confiar em revisão.
-    /// Alguém "melhorando" o lote para o perfil competitivo estaria degradando
-    /// a imagem do jogo do cliente sem ele ter pedido.
+    /// O botão genérico NUNCA muda a aparência do jogo: no lote, só o teto de quadros sai do arquivo. Trava de FORMA
+    /// sobre o corpo da função.
     #[test]
     fn o_lote_automatico_so_tira_o_teto_do_jogo() {
         let fonte = include_str!("commands.rs");
@@ -4767,20 +3793,14 @@ mod tests {
             );
         }
 
-        // E a volta precisa continuar existindo: sem o arquivo anterior no
-        // histórico, o "Desfazer tudo" não devolve a configuração do cliente.
         assert!(
             corpo.contains("anterior"),
             "o lote parou de guardar o arquivo anterior do jogo"
         );
     }
 
-    /// O plano fala a língua de quem aplica.
-    ///
-    /// O orquestrador devolve o nome do perfil em texto, e é esse texto que a
-    /// tela manda para `apply_game_profile`. Se as duas tabelas saírem do
-    /// lugar, o cliente recebe "perfil desconhecido" depois de o produto ter
-    /// recomendado aquele perfil — e ninguém descobre até acontecer.
+    /// O nome que o orquestrador devolve é o que a tela manda para `apply_game_profile`: tabelas divergentes dariam
+    /// "perfil desconhecido" depois de recomendar.
     #[cfg(target_os = "windows")]
     #[test]
     fn o_plano_fala_a_lingua_de_quem_aplica() {
@@ -4792,6 +3812,7 @@ mod tests {
         }
     }
 
+    /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
         "zerar_modo_jogo",
         "placa_de_video",
@@ -4957,9 +3978,7 @@ mod tests {
         "limitar_fps_nvidia",
     ];
 
-    /// Só a parte de produção do arquivo. O código de teste também contém as
-    /// palavras que estamos procurando, e olhar o arquivo inteiro faria a
-    /// guarda se encontrar sozinha.
+    /// Só a parte de produção: os testes contêm as palavras procuradas.
     fn producao() -> &'static str {
         let fonte = include_str!("commands.rs");
 
@@ -4977,18 +3996,13 @@ mod tests {
         corte
     }
 
-    /// Os nomes de todos os comandos, lidos do próprio fonte.
     fn comandos() -> Vec<&'static str> {
         let marca = concat!("#[tauri::", "command");
 
         producao()
             .split(marca)
             .skip(1)
-            // A marca aceita argumento: os comandos de reparo sao
-            // `(async)` para nao rodarem na thread da interface. Procurar
-            // so pela forma sem argumento deixaria os quatro invisiveis
-            // para a guarda — que existe justamente para nenhum comando
-            // escapar da classificacao.
+            // A marca aceita argumento: os de reparo são `(async)`, e sem isto ficariam invisíveis à guarda.
             .filter(|bloco| bloco.starts_with(']') || bloco.starts_with("(async)]"))
             .map(|bloco| {
                 let assinatura = bloco
@@ -5006,11 +4020,7 @@ mod tests {
             .collect()
     }
 
-    /// A marca sai do nome que o Windows dá à placa.
-    ///
-    /// Na dúvida, `desconhecida` — e a tela pergunta em vez de chutar. Chutar
-    /// aqui pintaria a placa de verde para quem tem uma Radeon, que é o tipo de
-    /// erro que faz o cliente duvidar de todo o resto que a tela afirma.
+    /// Chutar pintaria a placa de verde para quem tem Radeon.
     #[test]
     fn a_marca_da_placa_sai_do_nome() {
         for (nome, esperado) in [
@@ -5020,7 +4030,6 @@ mod tests {
             ("Radeon(TM) Graphics", "amd"),
             ("Intel(R) UHD Graphics 630", "intel"),
             ("Intel(R) Arc(TM) A750", "intel"),
-            // Uma placa que nenhum dos três nomes cobre não vira chute.
             ("Microsoft Basic Display Adapter", "desconhecida"),
             ("", "desconhecida"),
         ] {
@@ -5067,9 +4076,7 @@ mod tests {
             let corpo = &fonte[inicio..];
             let abre = corpo.find('{').expect("corpo do comando");
 
-            // A guarda precisa ser a PRIMEIRA coisa do corpo. Depois de
-            // qualquer trabalho já é tarde: o comando já teria começado a
-            // mexer no computador de quem não pagou.
+            // A guarda é a PRIMEIRA coisa do corpo: depois já se mexeu no computador de quem não pagou.
             let primeiras = corpo[abre + 1..]
                 .lines()
                 .find(|l| !l.trim().is_empty())
@@ -5087,9 +4094,7 @@ mod tests {
 
     #[test]
     fn quem_so_le_nao_pede_licenca() {
-        // O outro lado do erro. Se o diagnóstico passar a exigir licença, a
-        // tela de compra fica vazia — e o argumento de venda do produto é
-        // justamente mostrar o problema real da máquina antes de cobrar.
+        // Diagnóstico com licença esvaziaria a tela de compra.
         let fonte = producao();
 
         for nome in LIVRES {
@@ -5097,10 +4102,7 @@ mod tests {
                 continue;
             };
 
-            // O fim da função é a primeira linha que é só `}`. Procurar por
-            // "\n}\n" direto NÃO serve: este arquivo tem quebra de linha do
-            // Windows, e a busca nunca acha — a fatia iria até o fim do
-            // arquivo e o teste acusaria todo mundo de exigir licença.
+            // O fim é a primeira linha só com `}`: o arquivo é CRLF, e "\n}\n" nunca casaria.
             let corpo: String = fonte[inicio..]
                 .lines()
                 .take_while(|l| l.trim_end() != "}")
@@ -5129,45 +4131,26 @@ mod tests {
 
     #[test]
     fn verificar_e_livre_e_consertar_pede_licenca() {
-        // A regra da casa: diagnóstico livre, correção paga. Se a verificação
-        // passar a exigir licença, o cliente não consegue nem descobrir que o
-        // problema dele existe — e é justamente esse achado que vende.
+        // Diagnóstico livre, correção paga.
         assert!(LIVRES.contains(&"reparo_disponivel"));
         assert!(LIVRES.contains(&"reparo_ultimo_resultado"));
         assert!(EXIGEM_LICENCA.contains(&"reparo_executar"));
 
-        // Cancelar é livre DE PROPÓSITO, pelo mesmo motivo que `revert` é: uma
-        // licença vencida no meio de um DISM não pode prender a pessoa nele.
         assert!(LIVRES.contains(&"reparo_cancelar"));
     }
 
-    /// A BARRA DA JANELA É DESENHADA POR NÓS, E ISSO TEM UM PREÇO EM PERMISSÃO.
-    ///
-    /// Com `decorations: false` o Windows não desenha mais fechar, minimizar e
-    /// maximizar: quem faz isso é o nosso HTML, chamando comandos do Tauri. E
-    /// no Tauri 2 todo comando precisa estar declarado em
-    /// `capabilities/default.json` — o que não está declarado falha CALADO, sem
-    /// erro na tela.
-    ///
-    /// Foi exatamente assim que o duplo-clique para maximizar nasceu quebrado:
-    /// ele fala por um comando separado (`internal_toggle_maximize`), e a
-    /// permissão dele não é a mesma do botão de maximizar.
-    ///
-    /// Um botão de janela que não faz nada é o tipo de defeito que ninguém
-    /// reporta e todo mundo sente. Esta guarda existe para ele não voltar.
+    /// Com `decorations: false` a barra é nosso HTML chamando comandos do Tauri, e no Tauri 2 comando não declarado
+    /// em `capabilities/default.json` falha CALADO (o duplo-clique usa `internal_toggle_maximize`, outra permissão).
     #[test]
     fn a_barra_da_janela_tem_todas_as_permissoes_que_usa() {
         let permissoes = include_str!("../capabilities/default.json");
 
         for comando in [
-            // Os três botões.
             "core:window:allow-close",
             "core:window:allow-minimize",
             "core:window:allow-toggle-maximize",
-            // Arrastar a barra, e o duplo-clique nela.
             "core:window:allow-start-dragging",
             "core:window:allow-internal-toggle-maximize",
-            // Saber se está maximizada, para tirar o canto arredondado.
             "core:window:allow-is-maximized",
         ] {
             assert!(
@@ -5178,9 +4161,6 @@ mod tests {
         }
     }
 
-    /// O tom de `DesfechoReparo` nasce da VARIANTE de `Desfecho`, nunca da
-    /// frase formatada — é a mesma regra de `UltimoResultadoReparo`, agora
-    /// no vizinho que ainda não tinha essa proteção.
     #[cfg(target_os = "windows")]
     #[test]
     fn o_tom_do_desfecho_vem_da_variante_nao_da_prosa() {
@@ -5206,16 +4186,7 @@ mod tests {
         ));
     }
 
-    // =============================== A TELA NÃO DECIDE COR COMPARANDO PROSA
-
-    /// Extrai, de uma linha de TypeScript, cada literal de string (aspas
-    /// simples, duplas ou template sem interpolação) junto com o texto que
-    /// vem ANTES dela — é nesse texto anterior que mora o operador de
-    /// comparação que denuncia o defeito.
-    ///
-    /// Trabalha em `char`, não em byte: este arquivo tem acento
-    /// ("não", "código"), e indexar por byte cortaria um caractere
-    /// multibyte ao meio.
+    /// Literais de string com o texto ANTES deles, onde mora o operador. Em `char`, não byte: há acento.
     fn literais_com_contexto(linha: &str) -> Vec<(String, String)> {
         let chars: Vec<char> = linha.chars().collect();
         let mut achados = Vec::new();
@@ -5254,13 +4225,7 @@ mod tests {
             .collect()
     }
 
-    /// A impressão digital de prosa do backend: tem espaço, ou termina em
-    /// pontuação de frase. Um rótulo que a PRÓPRIA tela inventou — um id de
-    /// aba, o nome de uma ferramenta, um `data-state` — é uma palavra só,
-    /// sem espaço e sem ponto final: "Applied", "VerificarArquivos",
-    /// "localhost". "Terminou.", "Corrigiu ", "Interrompida por você." não
-    /// são: nasceram como frase, no backend, para gente ler — não para a
-    /// tela comparar.
+    /// Prosa do backend: tem espaço ou termina em pontuação. Rótulo que a tela inventou é uma palavra só.
     fn parece_prosa_do_backend(literal: &str) -> bool {
         if literal.trim().is_empty() {
             return false;
@@ -5268,12 +4233,7 @@ mod tests {
         literal.contains(' ') || literal.trim_end().ends_with(['.', '!', '?'])
     }
 
-    /// O contexto termina com um operador que decide alguma coisa a partir
-    /// do valor: igualdade, prefixo, substring, posição, ou um `case` de
-    /// `switch`. Estes são os únicos jeitos que este arquivo tem de tomar
-    /// uma decisão comparando uma string — e é exatamente o repertório que
-    /// já causou o defeito três vezes (igualdade exata, `startsWith`,
-    /// prefixo por acidente).
+    /// Igualdade, prefixo, substring, posição ou `case`: o repertório que já causou o defeito três vezes.
     fn termina_em_operador_de_decisao(contexto: &str) -> bool {
         let c = contexto.trim_end();
         c.ends_with("===")
@@ -5285,24 +4245,8 @@ mod tests {
             || c.trim_start().ends_with("case")
     }
 
-    /// Tira `//` até o fim da linha e `/* ... */` (mesmo cruzando linha) do
-    /// texto, ANTES da varredura de literais.
-    ///
-    /// Sem isto a guarda reprova por CITAÇÃO, não por defeito: esta base
-    /// explica no comentário justamente os defeitos que já consertou — e
-    /// `desfecho === "Terminou."`, o antipadrão desta própria tarefa, é
-    /// exatamente o tipo de frase que um comentário de "antes era assim"
-    /// cita entre aspas normais. Achar essa citação não prova nada sobre o
-    /// código.
-    ///
-    /// Caminha o MESMO estado de aspas que `literais_com_contexto` usa —
-    /// comentário é o terceiro estado da mesma máquina — para não confundir
-    /// `//` ou `/*` que apareçam DENTRO de uma string (`"https://..."`) com
-    /// o início de um comentário de verdade.
-    ///
-    /// Cada caractere de comentário vira espaço, mas toda quebra de linha do
-    /// original sobrevive: é o que mantém os números de linha que a guarda
-    /// relata batendo com o arquivo de verdade, mesmo depois da limpeza.
+    /// Tira comentários antes (senão a guarda reprova por CITAÇÃO do antipadrão), com o mesmo estado de aspas de
+    /// `literais_com_contexto` para não confundir `"https://"`. Mantém as quebras de linha para os números baterem.
     fn remover_comentarios(fonte: &str) -> String {
         let chars: Vec<char> = fonte.chars().collect();
         let mut saida = String::with_capacity(chars.len());
@@ -5359,11 +4303,7 @@ mod tests {
         saida
     }
 
-    /// A varredura completa: tira comentário, depois procura literal de
-    /// prosa comparado por operador de decisão. Compartilhada pela guarda de
-    /// verdade (que lê `main.ts` do disco) e pelo teste que prova, com
-    /// fontes sintéticas, que comentário não dispara e código equivalente
-    /// dispara.
+    /// Compartilhada pela guarda real (`main.ts` do disco) e pelo teste com fontes sintéticas.
     fn achados_de_prosa_comparada(fonte: &str) -> Vec<String> {
         let sem_comentarios = remover_comentarios(fonte);
         let mut achados = Vec::new();
@@ -5387,26 +4327,9 @@ mod tests {
 
     #[test]
     fn a_tela_nao_decide_cor_comparando_texto_do_backend() {
-        // ESTE DEFEITO JÁ VOLTOU TRÊS VEZES:
-        //   1. `Corrigiu` escondendo arquivos não reparados
-        //   2. a tela pintando `CorrigiuEmParte` de verde por prefixo
-        //   3. o desfecho da execução, por igualdade exata
-        // Da terceira vez vira regra, não conserto.
-        //
-        // A guarda não procura as três strings de hoje — isso só provaria
-        // que ninguém vai escrever "desfecho === \"Terminou.\"" de novo,
-        // e a quarta vez viria com outro nome de variável. Ela procura a
-        // FORMA do defeito: um literal que parece PROSA (tem espaço, ou
-        // termina em pontuação de frase — ninguém escreve um id de aba ou
-        // um nome de ferramenta assim) comparado por igualdade, prefixo,
-        // substring, posição, ou `case`. Um id, um nome de aba, um
-        // `custom_id` — a própria tela inventou essas palavras, e elas não
-        // têm espaço nem ponto final, então não acionam a guarda.
-        //
-        // `../src/main.ts` relativo ao diretório de trabalho do teste
-        // funciona hoje, mas depende de onde `cargo test` é chamado —
-        // `CARGO_MANIFEST_DIR` não depende disso: aponta sempre para
-        // `src-tauri`, e o `main.ts` mora um nível acima, em `src/`.
+        // O defeito voltou três vezes (`Corrigiu` escondendo, `CorrigiuEmParte` verde por prefixo, desfecho por
+        // igualdade): procura a FORMA, literal com cara de prosa comparado por operador de decisão.
+        // `CARGO_MANIFEST_DIR` aponta sempre para `src-tauri`; o `main.ts` está em `../src/`.
         let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("src")
@@ -5425,10 +4348,7 @@ mod tests {
 
     #[test]
     fn a_guarda_da_prosa_reconhece_o_defeito_original() {
-        // Canário da própria guarda: se `parece_prosa_do_backend` ou
-        // `termina_em_operador_de_decisao` regredirem a ponto de não
-        // reconhecer mais o defeito que motivou esta tarefa, este teste
-        // acusa antes que o guarda de verdade fique cego.
+        // Canário da própria guarda.
         assert!(parece_prosa_do_backend("Terminou."));
         assert!(parece_prosa_do_backend("Interrompida por você."));
         assert!(parece_prosa_do_backend("Corrigiu "));
@@ -5441,12 +4361,7 @@ mod tests {
         assert!(!termina_em_operador_de_decisao("const titulo = "));
     }
 
-    /// O conserto do fix round 1: um comentário CITANDO o antipadrão antigo
-    /// entre aspas normais (não entre crases — o defeito que fez o próprio
-    /// `main.ts:4312` passar por acidente) não pode reprovar a guarda, mas o
-    /// mesmo texto fora de comentário, como código de verdade, precisa
-    /// continuar disparando. Sem este par, um "conserto" na guarda que só
-    /// afrouxasse a heurística de prosa passaria despercebido.
+    /// Comentário citando o antipadrão não reprova; o mesmo texto como código dispara.
     #[test]
     fn comentario_que_cita_prosa_do_backend_nao_dispara_mas_o_codigo_equivalente_dispara() {
         let comentado = "// antes era: desfecho === \"Terminou.\"\n\
@@ -5464,9 +4379,6 @@ mod tests {
         );
     }
 
-    /// `//` e `/*` dentro de uma string não abrem comentário — sem isso uma
-    /// URL como `"https://..."` perderia metade dela, apagada como se fosse
-    /// comentário.
     #[test]
     fn remover_comentarios_nao_confunde_barra_dentro_de_string() {
         let fonte =
@@ -5485,11 +4397,6 @@ mod tests {
         );
     }
 
-    /// A limpeza troca comentário por espaço, mas as quebras de linha do
-    /// arquivo original têm que sobreviver — inclusive as que estão DENTRO
-    /// de um bloco `/* */` de várias linhas — porque são elas que mantêm o
-    /// número de linha que a guarda relata batendo com o arquivo de
-    /// verdade.
     #[test]
     fn remover_comentarios_preserva_a_contagem_de_linhas() {
         let fonte = "linha1\n/* bloco\nde duas\nlinhas */\nlinha5";
@@ -5498,31 +4405,9 @@ mod tests {
         assert_eq!(limpo.lines().count(), fonte.lines().count());
     }
 
-    // ==================================================================
-    // A TELA DO MAPA E A TELA DO RESIZABLE BAR
-    // ==================================================================
-
-    /// Extrai PEÇAS de tela do `main.ts`, transpila com o TypeScript do próprio
-    /// projeto e RODA no Node.
-    ///
-    /// Guarda que lê o fonte já foi burlada nesta branch: o revisor guardou a
-    /// decisão errada numa variável intermediária, deixou o campo tipado
-    /// aparecendo em algo cosmético, e a leitura de texto passou com o defeito
-    /// inteiro na tela. Executando a função não há texto para enganar — o que
-    /// se olha é o HTML que o cliente veria.
-    ///
-    /// `pecas` são as marcas de início de cada declaração a extrair, na ordem
-    /// em que devem ser coladas — `"function renderFolder("`, `"const
-    /// NA_TELA_DO_RBAR"`, `"async function analyzeRbar("`. Cada peça vai até a
-    /// primeira linha que começa em coluna 0 com `}` (inclusive), o que serve
-    /// tanto para função quanto para tabela. **A marca precisa incluir o
-    /// `async` quando ele existe**, senão o `await` do corpo fica órfão.
-    ///
-    /// `retorno` é a expressão JS que o laboratório devolve como `render`, e
-    /// `chamadas` é o pedaço de JS que a usa e imprime JSON no stdout. O
-    /// laboratório oferece dublês de `element`, `setStatus`, `text` e `invoke`,
-    /// mais um `registro` com o que cada um recebeu, e as variáveis `resposta`
-    /// e `erro` que dizem o que o `invoke` dublê devolve.
+    /// Extrai PEÇAS do `main.ts`, transpila com o TypeScript do projeto e RODA no Node: a guarda por leitura já foi
+    /// burlada com variável intermediária. Cada peça vai até o primeiro `}` na coluna 0; a marca inclui `async` quando
+    /// existe. Dublês de `element`, `setStatus`, `text` e `invoke`.
     fn roda_a_tela(pecas: &[&str], retorno: &str, chamadas: &str) -> serde_json::Value {
         let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
         let main_ts = raiz.join("src").join("main.ts");
@@ -5534,9 +4419,7 @@ mod tests {
             typescript
         );
 
-        // O `(` faz parte da marca de função de propósito: sem ele, procurar
-        // `function renderFolder` acharia antes o `renderFolderMap`, que vem
-        // primeiro no arquivo, e o laboratório rodaria a função errada.
+        // O `(` evita achar `renderFolderMap` antes de `renderFolder`.
         let modelo = r#"
 const fs = require("fs");
 const ts = require(process.argv[3]);
@@ -5613,12 +4496,7 @@ const render = new Function(
 
     #[test]
     fn a_tela_do_mapa_decide_por_natureza_e_nao_por_texto() {
-        // A GUARDA QUE JÁ PEGOU O MESMO DEFEITO TRÊS VEZES NESTE PRODUTO.
-        //
-        // `natureza` é campo tipado justamente para a tela não precisar
-        // interpretar frase. Exigir `natureza.tipo`, e não só `natureza`:
-        // aceitar a palavra solta deixaria o teste passar com ela aparecendo
-        // num comentário qualquer, sem uma linha de decisão por trás.
+        // Exige `natureza.tipo`, não só `natureza`, que passaria aparecendo num comentário.
         let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("src")
@@ -5633,8 +4511,7 @@ const render = new Function(
 
     #[test]
     fn o_comando_do_rbar_esta_registrado() {
-        // Comando que existe e não está no `generate_handler!` falha em tempo
-        // de execução, na máquina do cliente, e nunca no build.
+        // Comando fora do `generate_handler!` só falha na máquina do cliente.
         let lib = std::fs::read_to_string(
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("src")
@@ -5647,12 +4524,7 @@ const render = new Function(
         );
     }
 
-    /// A regra que não tem desfazer: a linha marcada como `Seu` mostra o
-    /// caminho e mais nada.
-    ///
-    /// As três linhas são IGUAIS em tudo — mesmo nome, mesmo caminho, mesmo
-    /// tamanho. A única diferença é a `natureza`, então qualquer diferença no
-    /// HTML só pode ter vindo dela.
+    /// As três linhas só diferem na `natureza`: qualquer diferença no HTML vem dela.
     #[test]
     fn a_tela_do_mapa_so_oferece_limpar_o_que_e_limpavel() {
         let telas = roda_a_tela(
@@ -5687,13 +4559,8 @@ console.log(
         let seu = telas["seu"].as_str().expect("html do arquivo do cliente");
         let nao_sei = telas["naoSei"].as_str().expect("html do ilegível");
 
-        // A REGRA É SOBRE A POSSIBILIDADE DE LIMPAR, E NÃO SOBRE A TAG
-        // `<button>`. Só `!contains("<button")` era burlável em uma linha: o
-        // revisor pôs `data-mapa-limpar="1"` no `<article>` inteiro e afrouxou
-        // o seletor do ouvinte para `closest("[data-mapa-limpar]")` — a linha
-        // `Steam — 122 GB` inteira virou clicável para limpeza, e os 598 testes
-        // passaram. A marca é o que o ouvinte procura, então é ela que precisa
-        // estar ausente.
+        // Sobre a POSSIBILIDADE de limpar, não a tag `<button>`: `data-mapa-limpar` no `<article>` inteiro passou nos
+        // testes. A marca é o que o ouvinte procura.
         for (nome, html) in [
             ("do arquivo do cliente", seu),
             ("da pasta que não deu para ler", nao_sei),
@@ -5720,13 +4587,7 @@ console.log(
             pode_limpar
         );
 
-        // O RÓTULO É UMA PROMESSA SOBRE A OUTRA TELA. `Windows.old` e
-        // `Windows\servicing\LogFiles` chegam aqui como `SoOWindowsLimpa`
-        // porque o liberador não limpa nem uma nem outra — a primeira tem
-        // categoria `cleanable: false` de propósito, a segunda não tem
-        // categoria nenhuma. Oferecer "Limpar no liberador" mandava o cliente
-        // esperar uma varredura inteira para encontrar uma categoria sem botão,
-        // ou tela nenhuma sobre a pasta que ele clicou.
+        // `SoOWindowsLimpa` não pode oferecer "Limpar no liberador".
         assert_ne!(
             outro_lugar, pode_limpar,
             "a pasta que o liberador não limpa sai igual à que ele limpa"
@@ -5744,8 +4605,6 @@ console.log(
             outro_lugar
         );
 
-        // E `NaoSei` não pode parecer o caso resolvido: pasta ilegível não é
-        // pasta em ordem.
         assert_ne!(
             seu, nao_sei,
             "a tela pinta IGUAL a pasta do cliente e a pasta que não deu para \
@@ -5764,11 +4623,7 @@ console.log(
         );
     }
 
-    /// Os quatro estados do Resizable BAR chegam DIFERENTES na tela.
-    ///
-    /// De novo os relatórios são iguais exceto pelo `estado`. E o que este
-    /// teste protege é a terceira regra: `NaoSei` não pode sair com o selo
-    /// verde de assunto resolvido — placa não verificada não é placa em ordem.
+    /// `NaoSei` não sai com o selo verde.
     #[test]
     fn a_tela_do_rbar_separa_os_quatro_estados() {
         let telas = roda_a_tela(
@@ -5804,7 +4659,6 @@ console.log(
             }
         }
 
-        // "Desligado e dá para ligar" é o único que pede ação do cliente.
         assert!(
             ligado.contains(r#"data-severity="Ok""#),
             "rBAR ligado é assunto resolvido:\n{}",
@@ -5816,7 +4670,6 @@ console.log(
             suportado
         );
 
-        // A TERCEIRA REGRA: não verificado não vira "está tudo bem".
         assert!(
             !nao_sei.contains(r#"data-severity="Ok""#),
             "a placa que não deu para verificar saiu com o selo verde:\n{}",
@@ -5828,8 +4681,6 @@ console.log(
             nao_sei
         );
 
-        // E "esta placa não tem" não pode virar "ligado" nem mandar o cliente
-        // para a BIOS atrás de uma opção que não existe para ele.
         assert!(
             sem_suporte.contains("não tem"),
             "a placa sem o recurso precisa dizer isso:\n{}",
@@ -5837,19 +4688,8 @@ console.log(
         );
     }
 
-    /// A FAIXA DE STATUS É O TEXTO GRANDE, o primeiro que o cliente lê depois
-    /// de clicar Analisar — e ela não estava provada.
-    ///
-    /// `renderRbar` tinha sete mutações mortas. `analyzeRbar` não tinha
-    /// nenhuma: ele decidia o tom da faixa por uma SEGUNDA tabela, separada da
-    /// que o card usa. Trocar `NaoSei` dessa segunda tabela para "ok" passava
-    /// pelos 598 testes e entregava ao cliente de placa AMD a frase "não
-    /// consegui verificar o Resizable BAR nesta máquina: ainda não cobrimos
-    /// placas AMD" pintada de VERDE DE ASSUNTO RESOLVIDO.
-    ///
-    /// Este teste roda o `analyzeRbar` de verdade, com dublês de DOM e de
-    /// backend, e olha o tom que chegou ao `setStatus` — que é exatamente a cor
-    /// que o cliente veria.
+    /// `analyzeRbar` decidia o tom por uma SEGUNDA tabela: `NaoSei` como "ok" pintaria de verde o "ainda não cobrimos
+    /// placas AMD" com a suíte passando. Roda o `analyzeRbar` real e olha o `setStatus`.
     #[test]
     fn a_faixa_de_status_do_rbar_nao_pinta_de_verde_o_que_ninguem_mediu() {
         let faixas = roda_a_tela(
@@ -5893,8 +4733,6 @@ async function tom(estado) {
                 .to_string()
         };
 
-        // A TERCEIRA REGRA, agora do lado da faixa: não verificado não vira
-        // "está tudo bem". Esta é a linha que o revisor mutou impunemente.
         assert_ne!(
             tom_de("naoSei"),
             "ok",
@@ -5903,15 +4741,13 @@ async function tom(estado) {
              assunto resolvido"
         );
 
-        // E o que de fato pede ação também não pode sair verde.
         assert_ne!(
             tom_de("desligadoESuportado"),
             "ok",
             "a faixa deu por resolvido um rBAR desligado numa placa que aceita"
         );
 
-        // O verde continua existindo para quem merece, senão o teste acima
-        // passaria com a faixa sempre amarela.
+        // Senão o teste passaria com a faixa sempre amarela.
         assert_eq!(
             tom_de("ligado"),
             "ok",
@@ -5923,10 +4759,7 @@ async function tom(estado) {
             "esta placa não tem o recurso: não há nada pendente para o cliente"
         );
 
-        // A FAIXA E O CARD SAEM DA MESMA TABELA. Duas tabelas para a mesma
-        // pergunta é uma tabela a mais para divergir em silêncio — foi
-        // exatamente assim que o defeito nasceu. Aqui a coerência é conferida
-        // par a par, e não por leitura de fonte.
+        // Faixa e card da MESMA tabela, conferidos par a par.
         for chave in [
             "ligado",
             "desligadoESuportado",
@@ -5946,8 +4779,6 @@ async function tom(estado) {
             );
         }
 
-        // E a faixa mostra a `nota` do backend, que é o texto escrito para o
-        // cliente ler — não uma frase inventada aqui.
         assert_eq!(
             faixas["naoSei"]["mensagem"].as_str(),
             Some("nota do backend"),
