@@ -56,6 +56,10 @@ pub struct Monitor {
     pub hz_atual: u32,
     /// Frequências que o Windows aceita NESTA resolução, em ordem crescente.
     pub hz_disponiveis: Vec<u32>,
+    /// A placa de vídeo em que o monitor está ligado ("Intel(R) UHD Graphics
+    /// 630", "NVIDIA GeForce RTX 4060").
+    #[serde(default)]
+    pub adaptador: String,
 }
 
 impl Monitor {
@@ -212,6 +216,7 @@ pub fn monitores() -> Vec<Monitor> {
                 altura: atual.dmPelsHeight,
                 hz_atual: atual.dmDisplayFrequency,
                 hz_disponiveis,
+                adaptador: texto(&dispositivo.DeviceString),
             });
         }
     }
@@ -427,9 +432,64 @@ fn explicar_recusa(codigo: i32, hz: u32) -> String {
     )
 }
 
+/// Vídeo integrado ao processador, pelo nome. **Função pura.**
+pub fn e_integrada(nome: &str) -> bool {
+    let n = nome.to_lowercase();
+    if n.contains("intel") {
+        return !n.contains("arc");
+    }
+    // Os Ryzen com vídeo chegam como "AMD Radeon(TM) Graphics" ou "Radeon(TM)
+    // Vega 8 Graphics": sem o "RX" das placas dedicadas.
+    (n.contains("radeon") && n.contains("graphics") && !n.contains(" rx") && !n.contains("pro"))
+        || n.contains("vega") && n.contains("graphics")
+}
+
+/// Placa dedicada, pelo nome. **Função pura.**
+pub fn e_dedicada(nome: &str) -> bool {
+    let n = nome.to_lowercase();
+    n.contains("nvidia") || n.contains("radeon rx") || n.contains("radeon pro") || (n.contains("intel") && n.contains("arc"))
+}
+
+/// Monitor ligado no vídeo integrado de um PC de mesa que tem placa dedicada:
+/// o cabo está na placa-mãe, e o jogo roda no vídeo do processador.
+/// Notebook fica de fora: lá a tela interna passa pela integrada de propósito.
+/// **Função pura.**
+pub fn ligados_na_integrada(monitores: &[Monitor], placas: &[String], notebook: bool) -> Vec<DisplayFinding> {
+    use super::achados::{FindingSeverity, FixLocation};
+    if notebook {
+        return Vec::new();
+    }
+    let Some(dedicada) = placas.iter().find(|p| e_dedicada(p)) else { return Vec::new() };
+    monitores
+        .iter()
+        .filter(|m| e_integrada(&m.adaptador))
+        .map(|m| DisplayFinding {
+            id: format!("monitor_na_integrada_{}", m.dispositivo.replace(['\\', '.'], "")),
+            dispositivo: m.dispositivo.clone(),
+            hz_alvo: 0,
+            title: format!("{} está ligado no vídeo da placa-mãe", m.descricao),
+            measured: format!("O monitor recebe imagem de {}, e este PC tem {}.", m.adaptador, dedicada),
+            advice: "O cabo está na saída da placa-mãe, e o jogo roda no vídeo do processador: uma fração do \
+                     que a placa de vídeo entrega. Passe o cabo para uma das saídas da placa de vídeo, \
+                     aquelas mais embaixo na traseira do gabinete, deitadas."
+                .to_string(),
+            severity: FindingSeverity::Critical,
+            fix_location: FixLocation::Hardware,
+        })
+        .collect()
+}
+
 pub fn analyze() -> DisplayReport {
     let monitores = monitores();
-    let findings = diagnosticar(&monitores);
+    let mut findings = diagnosticar(&monitores);
+
+    // As duas leituras extras (placas e chassi) só acontecem quando algum
+    // monitor está num adaptador integrado, que é a exceção.
+    if monitores.iter().any(|m| e_integrada(&m.adaptador)) {
+        let placas = super::gpupref::placas();
+        let notebook = super::planoenergia::detectar().notebook;
+        findings.extend(ligados_na_integrada(&monitores, &placas, notebook));
+    }
 
     DisplayReport {
         monitores,
@@ -450,7 +510,39 @@ mod tests {
             altura: 1080,
             hz_atual,
             hz_disponiveis: disponiveis.to_vec(),
+            adaptador: "NVIDIA GeForce RTX 4060".to_string(),
         }
+    }
+
+    #[test]
+    fn classifica_integrada_e_dedicada_pelo_nome() {
+        assert!(e_integrada("Intel(R) UHD Graphics 630"));
+        assert!(e_integrada("AMD Radeon(TM) Graphics"));
+        assert!(e_integrada("AMD Radeon(TM) Vega 8 Graphics"));
+        assert!(!e_integrada("AMD Radeon RX 7600"));
+        assert!(!e_integrada("Intel(R) Arc(TM) A770 Graphics"));
+        assert!(!e_integrada("NVIDIA GeForce RTX 4060"));
+        assert!(e_dedicada("NVIDIA GeForce GTX 1650"));
+        assert!(e_dedicada("AMD Radeon RX 6600"));
+        assert!(e_dedicada("Intel(R) Arc(TM) A750 Graphics"));
+        assert!(!e_dedicada("Intel(R) UHD Graphics 630"));
+    }
+
+    #[test]
+    fn monitor_na_integrada_so_acusa_desktop_com_dedicada() {
+        let mut m = monitor(144, &[60, 144]);
+        m.adaptador = "Intel(R) UHD Graphics 630".to_string();
+        let placas = vec!["Intel(R) UHD Graphics 630".to_string(), "NVIDIA GeForce RTX 3060".to_string()];
+
+        let achados = ligados_na_integrada(&[m.clone()], &placas, false);
+        assert_eq!(achados.len(), 1);
+        assert!(achados[0].measured.contains("RTX 3060"));
+
+        assert!(ligados_na_integrada(&[m.clone()], &placas, true).is_empty(), "notebook fica de fora");
+        assert!(ligados_na_integrada(&[m.clone()], &placas[..1], false).is_empty(), "sem dedicada não há o que trocar");
+
+        let certo = monitor(144, &[60, 144]);
+        assert!(ligados_na_integrada(&[certo], &placas, false).is_empty());
     }
 
     /// Ensaio na máquina de quem roda o teste. Ignorado por padrão porque

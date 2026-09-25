@@ -629,6 +629,11 @@ impl EmAchados for super::display::DisplayReport {
                 // configurações do Windows, num caminho que quase ninguém
                 // conhece — e é exatamente por isso que tanta gente joga a
                 // 60 Hz num monitor de 180.
+                // Só o achado de taxa tem botão: o do cabo na placa-mãe se
+                // resolve com a mão, atrás do gabinete.
+                if !f.id.starts_with("hz_abaixo_") {
+                    return achado;
+                }
                 achado.acao = Some(Acao {
                     comando: "set_max_refresh_rate".to_string(),
                     argumento: Some(f.dispositivo.clone()),
