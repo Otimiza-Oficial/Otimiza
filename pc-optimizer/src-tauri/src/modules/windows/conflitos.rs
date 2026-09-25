@@ -1,50 +1,17 @@
-// Ajustes que brigam entre si
-//
-// `conflicts.rs` já existe e procura outra coisa: dois PROGRAMAS disputando a
-// mesma função — dois antivírus varrendo, três sobreposições injetando no mesmo
-// jogo, dois otimizadores desfazendo a configuração um do outro.
-//
-// Este módulo procura o problema de dentro de casa: **dois AJUSTES do próprio
-// Otimiza que se anulam, se somam mal, ou que ficam sem sentido juntos.**
-//
-// ─────────────────────────────────────────────────────────────────────────
-// POR QUE ISSO IMPORTA, e não é firula
-//
-// O protocolo A/B testa grupo por grupo e responde "este grupo rendeu aqui". A
-// resposta só vale se os grupos forem independentes. Quando dois ajustes de
-// grupos diferentes brigam, o teste do segundo mede o efeito do primeiro, e o
-// veredito sai trocado — que é pior que não ter veredito nenhum.
-//
-// E há o caso mais simples e mais caro: o ajuste que só faz sentido se o outro
-// estiver de um certo jeito. Aplicado sozinho, ele não faz nada, e o cliente
-// pagou por um item da lista que nunca teve efeito.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A REGRA DE ENTRADA
-//
-// Um conflito só entra aqui quando dá para DIZER O MECANISMO. "Esses dois
-// podem interferir" é palpite; "o segundo escreve na mesma chave que o
-// primeiro" é fato. Há trava exigindo mecanismo escrito em todos.
-//
-// E este módulo NÃO impede nada. Ele avisa, e a decisão continua de quem usa —
-// há casos legítimos de querer os dois. Bloquear seria o produto decidindo no
-// lugar da pessoa sobre a máquina dela.
+// Dois AJUSTES do próprio Otimiza que se anulam, se somam mal ou só fazem sentido juntos (dois PROGRAMAS
+// brigando é `conflicts.rs`). Entra só com o MECANISMO escrito, não "podem interferir"; há trava para isso. Só
+// avisa: a decisão continua de quem usa.
 
 use serde::{Deserialize, Serialize};
 
 use super::grupos::{grupo_de, Grupo};
 
-/// Que tipo de briga é.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Tipo {
-    /// Os dois escrevem no mesmo lugar. O último a rodar ganha, e o resultado
-    /// depende da ORDEM — que é a pior espécie de ajuste, porque muda sozinho.
+    /// O último a rodar ganha: o resultado depende da ORDEM.
     MesmoLugar,
-    /// Um desfaz o efeito do outro. Aplicar os dois é aplicar nenhum.
     SeAnulam,
-    /// O segundo só faz sentido com o primeiro. Sozinho, não faz nada.
     DependeDoOutro,
-    /// Juntos custam mais do que rendem — cada um por si é defensável.
     JuntosCustamCaro,
 }
 
@@ -62,13 +29,11 @@ impl Tipo {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Conflito {
     pub id: &'static str,
-    /// Os dois ajustes, por identificador do catálogo.
     pub um: &'static str,
     pub outro: &'static str,
     pub tipo: Tipo,
-    /// O MECANISMO. Não "podem interferir": o que exatamente acontece.
     pub mecanismo: &'static str,
-    /// O que fazer. Nunca "escolha um": qual escolher, e por quê.
+    /// Nunca "escolha um": qual escolher, e por quê.
     pub conselho: &'static str,
 }
 
@@ -145,9 +110,6 @@ pub static CONHECIDOS: &[Conflito] = &[
     },
 ];
 
-/// Os conflitos entre uma lista de ajustes aplicados ou selecionados.
-///
-/// **Função pura.** Recebe os ids e devolve o que briga entre eles. Não lê nada.
 pub fn entre(ids: &[String]) -> Vec<&'static Conflito> {
     CONHECIDOS
         .iter()
@@ -157,16 +119,8 @@ pub fn entre(ids: &[String]) -> Vec<&'static Conflito> {
         .collect()
 }
 
-/// Os conflitos que atravessam grupos do protocolo.
-///
-/// SÃO OS QUE MAIS IMPORTAM, e por isso têm função própria: o protocolo testa
-/// grupo por grupo e afirma "este grupo rendeu". Essa afirmação só vale se os
-/// grupos forem independentes — dois ajustes que brigam e moram em grupos
-/// diferentes fazem o teste do segundo medir o efeito do primeiro, e o veredito
-/// sai trocado.
-///
-/// Conflito DENTRO do mesmo grupo não tem esse problema: o grupo é aplicado
-/// inteiro, e o veredito é do conjunto.
+/// Os que atravessam grupos quebram o protocolo A/B: o teste do segundo mede o efeito do primeiro, e o
+/// veredito sai trocado. Dentro do mesmo grupo não: o grupo é aplicado inteiro.
 pub fn atravessam_grupos() -> Vec<&'static Conflito> {
     CONHECIDOS
         .iter()
@@ -177,7 +131,6 @@ pub fn atravessam_grupos() -> Vec<&'static Conflito> {
         .collect()
 }
 
-/// O par de grupos que um conflito liga, quando ele atravessa.
 pub fn grupos_ligados(conflito: &Conflito) -> Option<(Grupo, Grupo)> {
     let a = grupo_de(conflito.um)?;
     let b = grupo_de(conflito.outro)?;
@@ -190,8 +143,7 @@ mod tests {
     use super::*;
     use crate::modules::windows::catalog::CATALOG;
 
-    /// Um conflito que aponta para um id que não existe é um aviso que nunca
-    /// aparece — e ninguém descobre, porque a ausência de aviso parece paz.
+    /// Id que não existe é um aviso que nunca aparece, e a ausência de aviso parece paz.
     #[test]
     fn todo_conflito_aponta_para_ajustes_que_existem() {
         for c in CONHECIDOS {
@@ -205,8 +157,6 @@ mod tests {
         }
     }
 
-    /// A REGRA DE ENTRADA: mecanismo, não palpite. "Podem interferir" é o que o
-    /// mercado escreve quando não sabe.
     #[test]
     fn todo_conflito_diz_o_mecanismo_e_nao_um_palpite() {
         for c in CONHECIDOS {
@@ -225,7 +175,6 @@ mod tests {
         }
     }
 
-    /// "Escolha um" não é conselho: o cliente já sabia que tinha que escolher.
     #[test]
     fn todo_conselho_diz_qual_escolher_e_por_que() {
         for c in CONHECIDOS {
@@ -281,8 +230,7 @@ mod tests {
         assert_eq!(achados[0].id, "compressao_e_sysmain");
     }
 
-    /// Um dos dois sozinho não é conflito. Avisar aí seria alarme falso, e
-    /// alarme falso gasta a confiança que o aviso de verdade precisa ter.
+    /// Um dos dois sozinho não é conflito: alarme falso gasta a confiança do aviso de verdade.
     #[test]
     fn um_dos_dois_sozinho_nao_e_conflito() {
         let so_um = vec!["disable_memory_compression".to_string()];
@@ -294,15 +242,7 @@ mod tests {
         assert!(entre(&[]).is_empty());
     }
 
-    /// Os que atravessam grupos são os que quebram o protocolo A/B. Este teste
-    /// documenta quais são hoje — se a lista mudar, o texto que explica o
-    /// protocolo ao cliente precisa mudar junto.
-    ///
-    /// Eu tinha escrito DOIS aqui, contando o par `plano_otimiza` +
-    /// `disable_power_throttling`. O teste corrigiu: os dois moram no mesmo
-    /// grupo A, então o protocolo os aplica juntos e o veredito é do par. A
-    /// divisão em grupos já estava certa, e é isso que este teste confirma —
-    /// de cinco conflitos conhecidos, só UM escapa dos grupos.
+    /// Se esta lista mudar, o texto que explica o protocolo ao cliente muda junto.
     #[test]
     fn so_um_conflito_atravessa_grupos() {
         let ids: Vec<&str> = atravessam_grupos().iter().map(|c| c.id).collect();
@@ -315,7 +255,6 @@ mod tests {
         );
     }
 
-    /// E o de energia NÃO atravessa, porque a divisão em grupos já o resolveu.
     #[test]
     fn o_par_de_energia_esta_no_mesmo_grupo() {
         let par = CONHECIDOS
@@ -328,8 +267,6 @@ mod tests {
         assert!(grupos_ligados(par).is_none());
     }
 
-    /// E os que ficam dentro do mesmo grupo NÃO atravessam — o grupo é aplicado
-    /// inteiro e o veredito é do conjunto, então ali não há veredito trocado.
     #[test]
     fn conflito_dentro_do_mesmo_grupo_nao_atravessa() {
         let dentro = CONHECIDOS

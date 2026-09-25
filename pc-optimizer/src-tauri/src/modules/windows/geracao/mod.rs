@@ -1,23 +1,7 @@
-// ---------------------------------------------------------------------------
-// GERADOR DE QUADROS DO OTIMIZA
-//
-// A geração de quadros do próprio Otimiza, feita POR FORA do jogo — o mesmo
-// caminho que o Lossless Scaling usa, e por isso seguro com anticheat:
-//
-//   1. captura a área do jogo pela Duplicação de Área de Trabalho (DXGI);
-//   2. estima o movimento entre os dois últimos quadros reais, na GPU;
-//   3. monta os quadros intermediários e os apresenta numa janela por cima do
-//      jogo — que não recebe clique, não rouba foco e fica fora de captura;
-//   4. obedece a agenda de `ritmo.rs`: gerados no meio, real no fim.
-//
-// O QUE ISTO FAZ E O QUE NÃO FAZ, SEM ENFEITE: aumenta os quadros EXIBIDOS
-// (2×, 3×, 4×). Não aumenta os quadros que o jogo desenha, e acrescenta atraso
-// — (M−1)/M de um quadro real, mais o atraso da captura. O laboratório mede
-// os dois lados.
-//
-// Exige o jogo em JANELA ou JANELA SEM BORDAS: tela cheia exclusiva não passa
-// pela composição do Windows e não pode ser capturada assim.
-// ---------------------------------------------------------------------------
+// Gerador de quadros POR FORA do jogo (como o Lossless Scaling, seguro com anticheat): captura pela Duplicação
+// de Área de Trabalho, estima o movimento na GPU e apresenta numa janela por cima, fora de captura. Aumenta os
+// quadros EXIBIDOS, não os que o jogo desenha, e acrescenta atraso. Exige janela ou sem bordas: tela cheia
+// exclusiva não passa pela composição.
 
 pub mod gpu;
 pub mod guarda;
@@ -41,18 +25,13 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use gpu::Gpu;
 use ritmo::{Apresentacao, Contadores, Fase, Intervalo, Retangulo};
 
-// ================================================================== estado
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Situacao {
     Parado,
     ProcurandoJanela,
     Gerando,
-    /// O jogo está aberto, mas nenhum quadro novo chega à captura: tela cheia
-    /// exclusiva, minimizado ou parado.
     SemQuadros,
     Erro,
-    /// A guarda mediu que o gerador tirava FPS real do jogo e o desligou.
     DesligadoPorPerdaDeFps,
 }
 
@@ -66,14 +45,9 @@ pub struct Estado {
     pub fps_apresentados: f64,
     pub contadores: Contadores,
     pub erro: Option<String>,
-    /// FPS real com geração ÷ sem geração, medido pela guarda. 1,0 = sem perda.
     pub razao_fps: Option<f64>,
-    /// ATRASO MEDIDO, em ms: do instante em que o Windows compôs o quadro do
-    /// jogo até o gerador mostrar esse mesmo quadro real. É o atraso que o
-    /// gerador acrescenta (captura + espera da interpolação). Média móvel.
+    /// Do instante em que o Windows compôs o quadro do jogo até o gerador mostrá-lo: o atraso que ele acrescenta.
     pub atraso_ms: Option<f64>,
-    /// PID deste processo: é por ele que o medidor de quadros conta o que o
-    /// gerador apresenta.
     pub pid_do_gerador: u32,
 }
 
@@ -97,7 +71,6 @@ impl Default for Estado {
 
 static ESTADO: Mutex<Option<Estado>> = Mutex::new(None);
 
-/// Diagnóstico: grava os próximos quadros apresentados como BMP nesta pasta.
 static CAPTURA_DE_DIAGNOSTICO: Mutex<Option<(std::path::PathBuf, u32)>> = Mutex::new(None);
 
 pub fn gravar_proximos_quadros(pasta: std::path::PathBuf, quantos: u32) {
@@ -158,7 +131,6 @@ pub fn estado() -> Estado {
 pub struct Configuracao {
     pub processo: String,
     pub multiplicador: u8,
-    /// Só para diagnóstico: deixa a janela do gerador aparecer em capturas.
     #[serde(default)]
     pub visivel_em_captura: bool,
 }
@@ -216,8 +188,6 @@ pub fn desligar() {
     });
 }
 
-// ============================================================ a janela do jogo
-
 struct Busca {
     pid: u32,
     melhor: Option<(HWND, i64)>,
@@ -259,8 +229,6 @@ fn area_do_cliente(hwnd: HWND) -> Option<Retangulo> {
     }
 }
 
-// ======================================================= a saída do monitor
-
 struct Saida {
     adaptador: IDXGIAdapter1,
     saida: IDXGIOutput1,
@@ -292,8 +260,6 @@ fn saida_do_monitor(hwnd: HWND) -> Result<Saida, String> {
     }
     Err("Não achei a saída de vídeo do monitor onde o jogo está.".to_string())
 }
-
-// =========================================================== a sobreposição
 
 const CLASSE: PCWSTR = windows::core::w!("OtimizaGeradorDeQuadros");
 
@@ -346,8 +312,7 @@ impl Sobreposicao {
 
             let _ = SetLayeredWindowAttributes(hwnd, windows::Win32::Foundation::COLORREF(0), 255, LWA_ALPHA);
             if !visivel_em_captura {
-                // Fora da captura: sem isto, o gerador capturaria o próprio
-                // quadro gerado e interpolaria em cima dele.
+                // Sem isto o gerador capturaria o próprio quadro gerado e interpolaria em cima dele.
                 let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
             }
 
@@ -439,7 +404,6 @@ impl Drop for Sobreposicao {
     }
 }
 
-/// Devolve `true` quando o atalho de desligar foi apertado.
 fn bombear_mensagens() -> bool {
     let mut desligar = false;
     unsafe {
@@ -457,8 +421,6 @@ fn bombear_mensagens() -> bool {
 
 /// Ctrl+Alt+G desliga o gerador de qualquer lugar, inclusive de dentro do jogo.
 const ATALHO: i32 = 0x4F47;
-
-// ================================================================ o laço
 
 fn segundos(inicio: Instant) -> f64 {
     inicio.elapsed().as_secs_f64()
@@ -481,10 +443,8 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
 
 fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
     let multiplicador = config.multiplicador.clamp(2, 4);
-    // Taxa do monitor principal: o teto de quadros que vale a pena gerar.
     let hz = if std::env::var_os("OTIMIZA_FG_SEM_TETO").is_some() { 0 } else { super::display::monitores().into_iter().find(|m| m.principal).map(|m| m.hz_atual).unwrap_or(0) };
 
-    // Procura o jogo por até 30 segundos.
     let limite = Instant::now() + Duration::from_secs(30);
     let (pid, _nome) = loop {
         if parar.load(Ordering::Relaxed) {
@@ -531,8 +491,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut ultimo_real = Instant::now();
 
     let mut escondida = false;
-    // Relógio do Windows (QPC) no mesmo instante do `inicio`: é nele que vem o
-    // carimbo de quando o quadro do jogo foi composto.
+    // O relógio do carimbo de composição do quadro.
     let (qpc_inicio, qpc_frequencia) = unsafe {
         use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
         let mut f = 0i64;
@@ -550,9 +509,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             return Ok(());
         }
 
-        // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO. Sem quadro real por
-        // meio segundo (tela de carregamento travada, tela cheia exclusiva,
-        // captura parada), a sobreposição some e o jogo aparece por baixo.
+        // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO: meio segundo sem quadro real e a sobreposição some.
         let parado = ultimo_real.elapsed() > Duration::from_millis(500);
         if parado != escondida {
             unsafe {
@@ -561,7 +518,6 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             escondida = parado;
         }
 
-        // A janela do jogo mudou de lugar ou fechou: para, e a tela diz.
         if ultima_checagem.elapsed() > Duration::from_millis(500) {
             ultima_checagem = Instant::now();
             if unsafe { !IsWindow(Some(hwnd)).as_bool() } {
@@ -574,10 +530,8 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             let dt = agora - janela_de_contagem.0;
             if dt > 0.0 {
                 let reais = contadores.reais - janela_de_contagem.1;
-                // TETO PELA TAXA DO MONITOR, decidido pelo FPS de meio segundo e
-                // não pelo intervalo entre dois quadros: a captura chega
-                // irregular (5 ms, 14 ms, 5 ms…) e decidir quadro a quadro nunca
-                // estabiliza. Troca só depois de duas janelas pedindo a mesma coisa.
+                // Pelo FPS de meio segundo, e não quadro a quadro: a captura chega irregular e nunca estabilizaria. Troca só
+                // depois de duas janelas pedindo a mesma coisa.
                 let fps_janela = reais as f64 / dt;
                 if fps_janela > 1.0 {
                     let quer = ritmo::multiplicador_que_cabe(multiplicador, 1.0 / fps_janela, hz);
@@ -605,14 +559,12 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             janela_de_contagem = (agora, contadores.reais, contadores.reais + contadores.gerados);
         }
 
-        // Espera o próximo quadro real só até a próxima apresentação marcada.
         let espera_ms = agenda
             .front()
             .map(|a| ((a.instante - segundos(inicio)) * 1000.0).floor().max(0.0) as u32)
             .unwrap_or(8)
             .min(8);
 
-        // GUARDA DE FPS: pausa a geração por instantes e compara o FPS real.
         match guarda.passo(segundos(inicio), contadores.reais) {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
@@ -647,8 +599,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
 
                         contadores.descartados += agenda.len() as u64;
                         agenda.clear();
-                        // cabe_atual == 1: a tela já recebe o que o monitor mostra. Não gasta
-                        // placa estimando movimento que não vai ser usado.
+                        // A tela já recebe o que o monitor mostra: não gasta placa à toa.
                         if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() && cabe_atual > 1 {
                             gpu.estimar();
                             let nota = gpu.fracao_ruim();
@@ -656,16 +607,13 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                             nota_media = nota.map(|n| nota_media * 0.9 + n as f64 * 0.1).unwrap_or(nota_media);
                             let custo = medido.elapsed().as_secs_f64() * 1000.0;
                             contadores.custo_ms = if contadores.custo_ms == 0.0 { custo } else { contadores.custo_ms * 0.9 + custo * 0.1 };
-                            // A agenda começa quando a GPU terminou, e reparte só o
-                            // tempo que sobra até o próximo quadro real.
                             let pronto = segundos(inicio);
                             let janela = intervalo.estimado.unwrap_or(0.0) - (pronto - chegada);
                             let cabe = cabe_atual;
                             if ritmo::quadro_aprovado(nota) {
                                 agenda.extend(ritmo::agenda(pronto, janela.max(0.0), cabe));
                             } else {
-                                // Movimento que não dá para interpolar: só o real.
-                                // Fica igual a jogar sem gerador, nunca pior.
+                                // Movimento que não dá para interpolar: só o real, igual a jogar sem gerador, nunca pior.
                                 contadores.recusados += 1;
                                 agenda.push_back(Apresentacao { instante: pronto, fase: Fase::Real });
                             }
@@ -685,7 +633,6 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             Err(e) => return Err(format!("captura: {}", e.message())),
         }
 
-        // Apresenta o que venceu. Se mais de um venceu, só o último vai à tela.
         let agora = segundos(inicio);
         let mut vencido = None;
         while agenda.front().is_some_and(|a| a.instante <= agora + 0.0005) {
@@ -720,8 +667,6 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
 mod tests {
     use super::*;
 
-    /// Liga o gerador sobre o `jogo_de_teste` já aberto, grava quadros e
-    /// imprime o estado. Roda com:
     /// `cargo test --lib -- --ignored geracao::tests::sobre_o_jogo_de_teste --nocapture`
     #[test]
     #[ignore]
@@ -731,7 +676,6 @@ mod tests {
         let e = ligar(Configuracao { processo: std::env::var("OTIMIZA_FG_PROCESSO").unwrap_or_else(|_| "jogo_de_teste".into()), multiplicador: mult, visivel_em_captura: std::env::var_os("OTIMIZA_FG_VISIVEL").is_some() }).unwrap();
         println!("inicio: {:?}", e);
         std::thread::sleep(Duration::from_secs(2));
-        // Capturas espalhadas: 2 quadros a cada 0,4 s, em pastas numeradas.
         for n in 0..12 {
             let sub = pasta.join(format!("{:02}", n));
             let _ = std::fs::create_dir_all(&sub);
@@ -750,8 +694,6 @@ mod tests {
 
 #[cfg(test)]
 mod teste_do_limite {
-    /// Aplica (ou desfaz) o limite de FPS no driver NVIDIA pelo MESMO caminho
-    /// do app, gravando no histórico real — para aparecer em "Desfazer".
     /// `OTIMIZA_FG_EXE=... OTIMIZA_FG_LIMITE=90` aplica; `OTIMIZA_FG_LIMITE=0` desfaz.
     #[test]
     #[ignore]
@@ -785,8 +727,7 @@ mod teste_do_monitor {
 mod teste_sem_gerador {
     use super::*;
 
-    /// Conta os quadros do jogo pela mesma captura, SEM gerar nada nem abrir
-    /// janela. É a base "desligado" para comparar com o gerador ligado.
+    /// A base "desligado" para comparar com o gerador ligado.
     #[test]
     #[ignore]
     fn quadros_do_jogo_sem_gerador() {

@@ -1,32 +1,9 @@
-// O cabeçalho do registro: em QUE máquina isto aconteceu
-//
-// A 2.0 fez o registro ir para um arquivo (`utils::logger`). Faltava a metade
-// que torna o arquivo útil no atendimento: o arquivo diz o que o produto fez,
-// e não dizia nada sobre o computador onde fez.
-//
-// A DIFERENÇA, NA PRÁTICA. Uma linha como "aplicar `disable_vbs`: ação 2/3
-// falhou" não responde nada sozinha. Com o cabeçalho, ela responde quase tudo:
-// o processo estava elevado? é notebook ou desktop? qual build do Windows? qual
-// plano de energia estava ativo? Sem isso o atendimento volta a pedir print,
-// pedir AnyDesk, ou pedir que o cliente rode script de PowerShell à mão — que
-// foi exatamente o que motivou o `suporte.rs`.
-//
-// E NÃO É O MESMO QUE O `suporte.rs`. Aquele monta um bloco curto para o
-// cliente COLAR numa mensagem, e por isso cabe em 1900 caracteres e corta o que
-// não couber. Este é escrito no arquivo, onde não há limite de tamanho, e
-// existe para o caso em que o cliente MANDA O ARQUIVO porque algo deu errado —
-// o cenário em que o bloco curto já não basta.
-//
-// AS REGRAS DO `suporte.rs` VALEM AQUI IGUAL, e a segunda é a que exige
-// cuidado: NADA QUE IDENTIFIQUE A PESSOA. Sem nome de usuário do Windows, sem
-// caminho de perfil, sem número de série. O cabeçalho descreve uma MÁQUINA, não
-// um dono — e o arquivo vai parar no Discord de um atendimento.
+// O cabeçalho do registro: em QUE máquina aconteceu (elevado? notebook? build? plano ativo?). Diferente do
+// `suporte.rs`, vai no arquivo, sem limite de tamanho, para quando o cliente manda o arquivo inteiro. NADA QUE
+// IDENTIFIQUE A PESSOA: sem nome de usuário, caminho de perfil ou número de série.
 
 use super::{hardware, planoenergia, power, registry};
 
-/// Tudo que o cabeçalho imprime. Nenhum campo aqui lê o sistema: a coleta é
-/// separada da montagem para que a montagem possa ser testada sem máquina, do
-/// mesmo jeito que o `suporte::Entrada`.
 pub struct Dados {
     pub versao: String,
     pub windows: String,
@@ -43,10 +20,7 @@ pub struct Dados {
     pub nome_do_plano_ativo: Option<String>,
 }
 
-/// `None` vira "não deu para ler", e nunca um valor inventado.
-///
-/// Um campo em branco num relatório de suporte faz o atendimento supor — e a
-/// suposição mais comum é a benigna ("deve estar normal"), que é a errada.
+/// `None` vira "não deu para ler": campo em branco faz o atendimento supor o benigno, que é o errado.
 fn ou_nao_lido(valor: &Option<String>) -> &str {
     match valor {
         Some(v) if !v.trim().is_empty() => v,
@@ -62,7 +36,6 @@ fn sim_ou_nao(valor: bool) -> &'static str {
     }
 }
 
-/// Monta o bloco. Função pura.
 pub fn montar(d: &Dados) -> String {
     let mut linhas = Vec::new();
 
@@ -80,10 +53,7 @@ pub fn montar(d: &Dados) -> String {
     campo("Edição", d.edicao.clone());
     campo("Arquitetura do Windows", d.arquitetura_do_windows.clone());
 
-    // AS DUAS ARQUITETURAS, E NÃO UMA SÓ. Um processo de 32 bits num Windows de
-    // 64 lê o registro pelo espelho `WOW6432Node` e enxerga outra máquina — as
-    // otimizações "aplicam" e não valem. Ver as duas lado a lado é o que deixa
-    // isso óbvio em vez de virar uma caça de uma tarde.
+    // As DUAS arquiteturas: processo de 32 bits num Windows de 64 lê o `WOW6432Node` e enxerga outra máquina.
     campo(
         "Arquitetura do processo",
         d.arquitetura_do_processo.to_string(),
@@ -132,8 +102,6 @@ pub fn montar(d: &Dados) -> String {
     linhas.join("\n")
 }
 
-/// Lê a máquina. Custa PowerShell e `powercfg` — por isso roda fora da abertura,
-/// numa thread própria. Ver `anotar_em_segundo_plano`.
 pub fn coletar() -> Dados {
     let perfil = hardware::profile();
     let maquina = planoenergia::detectar();
@@ -144,12 +112,8 @@ pub fn coletar() -> Dados {
             .flatten()
     };
 
-    // O UBR É DWORD, E O `CurrentBuildNumber` É TEXTO — na mesma chave.
-    //
-    // Lido como texto, o UBR sumia e o build saía "19045" em vez de
-    // "19045.4046". A revisão de build é o que separa um Windows atualizado de
-    // um parado há um ano, e é justamente o tipo de diferença que faz uma
-    // otimização funcionar aqui e não lá.
+    // O UBR é DWORD e o `CurrentBuildNumber` é texto, na mesma chave: lido como texto, o build saía "19045" e
+    // não "19045.4046".
     let numero = |nome: &str| -> Option<u32> {
         use crate::modules::changelog::PreviousValue;
 
@@ -161,10 +125,7 @@ pub fn coletar() -> Dados {
 
     let plano_ativo = power::active_scheme().ok();
 
-    // O NOME DO PLANO SAI DA LISTA, e não de uma tradução nossa. O `powercfg`
-    // devolve o nome no idioma do Windows do cliente, e é esse nome que ele vê
-    // no painel — escrever outro no relatório faria o atendimento e o cliente
-    // falarem de coisas diferentes.
+    // O nome sai do `powercfg`, no idioma do cliente: é o nome que ele vê no painel.
     let nome_do_plano_ativo = plano_ativo.as_ref().and_then(|guid| {
         let lista = super::shell::run_checked("powercfg", &["/list"]).ok()?;
 
@@ -200,23 +161,13 @@ pub fn coletar() -> Dados {
     }
 }
 
-/// Escreve o cabeçalho no registro, numa thread própria.
-///
-/// FORA DA ABERTURA DE PROPÓSITO. A coleta chama PowerShell e `powercfg`, e a
-/// 1.7 gastou uma versão inteira derrubando o tempo de abertura de 3,7 s para
-/// 1,2 s. Devolver parte disso para escrever um cabeçalho que ninguém lê na
-/// hora seria desfazer aquele trabalho pelo motivo errado — o cabeçalho existe
-/// para ser lido DEPOIS, quando algo deu errado.
-///
-/// Chega no arquivo alguns segundos depois da primeira linha, e isso não
-/// atrapalha: cada linha do registro tem horário próprio.
+/// FORA DA ABERTURA: custa PowerShell e `powercfg`, e o cabeçalho existe para ser lido depois. Cada linha tem
+/// horário próprio.
 pub fn anotar_em_segundo_plano() {
     std::thread::spawn(|| {
         let bloco = montar(&coletar());
 
-        // Linha a linha, e não um bloco só, para cada uma sair com o horário e
-        // o nível que o resto do arquivo usa — um bloco cru no meio de linhas
-        // datadas é o que faz alguém achar que o arquivo está corrompido.
+        // Linha a linha, com o horário e o nível do resto do arquivo.
         for linha in bloco.lines() {
             crate::utils::Logger::info(linha);
         }
@@ -284,9 +235,6 @@ mod tests {
 
     #[test]
     fn as_duas_arquiteturas_aparecem_separadas() {
-        // Um processo de 32 bits num Windows de 64 lê o registro pelo espelho
-        // WOW6432Node e enxerga outra máquina. Mostrar só uma das duas esconde
-        // exatamente a causa que este par existe para revelar.
         let texto = montar(&dados_de_teste());
 
         assert!(texto.contains("Arquitetura do Windows"));
@@ -295,8 +243,6 @@ mod tests {
 
     #[test]
     fn leitura_que_falhou_aparece_escrita() {
-        // Campo em branco faz o atendimento supor, e a suposição mais comum é a
-        // benigna — que é a errada. A lacuna precisa estar escrita.
         let mut d = dados_de_teste();
         d.nome_do_plano_ativo = None;
         d.plano_ativo = None;
@@ -309,8 +255,6 @@ mod tests {
 
     #[test]
     fn campo_vazio_conta_como_nao_lido() {
-        // O registro devolve string vazia com mais frequência do que se imagina,
-        // e uma linha "Edição:" sozinha é pior que dizer que não foi lida.
         assert_eq!(ou_nao_lido(&Some("  ".to_string())), "(não deu para ler)");
         assert_eq!(ou_nao_lido(&Some("Pro".to_string())), "Pro");
         assert_eq!(ou_nao_lido(&None), "(não deu para ler)");
@@ -318,13 +262,7 @@ mod tests {
 
     #[test]
     fn o_cabecalho_nao_leva_nada_que_identifique_a_pessoa() {
-        // MESMA REGRA DO `suporte.rs`, e aqui ela é mais importante: este bloco
-        // vai dentro de um ARQUIVO que o cliente manda inteiro, sem ler. O
-        // cabeçalho descreve uma máquina, não um dono.
-        //
-        // A trava é sobre a ESTRUTURA: nenhum campo do `Dados` pode carregar
-        // nome de usuário ou caminho de perfil. Se alguém acrescentar um, este
-        // teste reprova.
+        // A trava é sobre a ESTRUTURA: nenhum campo de `Dados` pode carregar nome de usuário ou caminho de perfil.
         let texto = montar(&dados_de_teste());
 
         for proibido in ["\\Users\\", "C:\\Users", "USERNAME", "USERPROFILE"] {
@@ -336,9 +274,7 @@ mod tests {
         }
     }
 
-    /// Imprime o cabeçalho desta máquina. Só lê, não escreve nada.
-    ///
-    ///   cargo test --lib cabecalho -- --ignored --nocapture
+    /// `cargo test --lib cabecalho -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn cabecalho_desta_maquina() {

@@ -1,50 +1,13 @@
-// O que o Otimiza NÃO faz, e por quê
-//
-// O cliente compara lista com lista. Ele abre um vídeo de "50 tweaks para
-// aumentar FPS", vê trinta coisas que o Otimiza não faz, e conclui que o
-// produto é fraco. A conclusão é razoável do ponto de vista dele: ninguém tem
-// como saber, olhando de fora, que metade daquela lista não faz nada e que um
-// quarto dela piora a máquina.
-//
-// Então o produto passa a dizer. Esta é a lista dos ajustes famosos que o
-// Otimiza SE RECUSA a fazer, cada um com o motivo — e o motivo é sempre um
-// fato, nunca "não recomendamos".
-//
-// ─────────────────────────────────────────────────────────────────────────
-// AS TRÊS CATEGORIAS, e por que elas não são a mesma coisa
-//
-// PLACEBO — o ajuste faz exatamente nada. A chave não existe, ou existe e o
-//   Windows ignora, ou ela já está naquele valor em toda máquina. Não é
-//   perigoso; é perda de tempo vendida como ganho.
-//
-// REDUNDANTE — o Windows já faz isso sozinho, e melhor. Mexer só tira a
-//   decisão de quem tem mais informação que nós.
-//
-// PREJUDICIAL — o ajuste faz alguma coisa, e a coisa é ruim. É a categoria que
-//   mais aparece em lista de internet, porque o efeito costuma ser invisível
-//   no dia seguinte e só dói semanas depois.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A REGRA DESTA LISTA
-//
-// Entrar aqui exige ser AFIRMÁVEL. Não basta eu achar que não funciona: o
-// motivo escrito precisa ser uma coisa que o cliente consegue conferir, ou uma
-// consequência que se explica sozinha. "Placebo" sem explicação é só o nosso
-// palpite contra o do vídeo — e aí o cliente está escolhendo entre duas
-// opiniões, que é exatamente onde ele já estava.
-//
-// E há uma trava disso logo abaixo: todo item precisa de um motivo com tamanho
-// de explicação, não de rótulo.
+// Os ajustes famosos que o Otimiza SE RECUSA a fazer, cada um com o motivo em fato: placebo (não faz nada),
+// redundante (o Windows já faz, e melhor) ou prejudicial. O motivo precisa ser conferível; uma trava abaixo
+// exige que ele tenha tamanho de explicação, não de rótulo.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Natureza {
-    /// Não faz nada. Perda de tempo vendida como ganho.
     Placebo,
-    /// O Windows já faz, e melhor.
     Redundante,
-    /// Faz alguma coisa, e a coisa é ruim.
     Prejudicial,
 }
 
@@ -61,15 +24,12 @@ impl Natureza {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NaoFazemos {
     pub id: &'static str,
-    /// Como o ajuste é chamado nos vídeos e nas listas.
     pub nome: &'static str,
     pub natureza: Natureza,
-    /// O motivo, em fato. Nunca "não recomendamos".
     pub porque: &'static str,
 }
 
 pub static LISTA: &[NaoFazemos] = &[
-    // --- retirados do próprio catálogo na 2.9 (`catalog::RETIRADOS`) ---
     NaoFazemos {
         id: "network_throttling_index",
         nome: "NetworkThrottlingIndex, SystemResponsiveness e prioridades MMCSS de \"Games\"",
@@ -258,18 +218,8 @@ pub static LISTA: &[NaoFazemos] = &[
                  ao padrão. Valor sem documentação não tem como ser conferido nem revertido, \
                  e um driver que não reconhece o número simplesmente ignora.",
     },
-    // ──────────────────────────────────────────────────────────────────────
-    // OS QUATRO QUE SAÍRAM DO PRODUTO
-    //
-    // Estes não nasceram aqui: os dois primeiros ERAM ajustes do catálogo, e
-    // os dois últimos eram a promessa que quase todo otimizador faz sobre
-    // núcleos. Saíram porque nenhum deles passou na régua do próprio produto.
-    //
-    // E sair não podia ser sumir. Um cliente que vem de outro programa vai
-    // procurar "desligar o firewall" na nossa lista, não achar, e concluir que
-    // falta função — que é a conclusão errada pelo motivo certo. Tirar do
-    // catálogo e não explicar aqui seria trocar um botão ruim por um buraco.
-    // ──────────────────────────────────────────────────────────────────────
+    // Firewall, UAC e as promessas de núcleos saíram do produto. Sair não podia ser sumir: quem vem de outro
+    // programa procura aqui e precisa achar o motivo.
     NaoFazemos {
         id: "uac_desligado",
         nome: "Desligar o Controle de Conta de Usuário (UAC)",
@@ -324,8 +274,7 @@ pub static LISTA: &[NaoFazemos] = &[
     },
 ];
 
-/// Quantos de cada natureza. Serve para a tela poder resumir sem contar no
-/// TypeScript — contagem no lado da tela é como dois lugares passam a discordar.
+/// Contagem aqui, e não no TypeScript: contar dos dois lados é como os dois passam a discordar.
 pub fn contar(natureza: Natureza) -> usize {
     LISTA.iter().filter(|n| n.natureza == natureza).count()
 }
@@ -334,9 +283,6 @@ pub fn contar(natureza: Natureza) -> usize {
 mod tests {
     use super::*;
 
-    /// A trava da lista: motivo é EXPLICAÇÃO, não rótulo. Sem isso o cliente
-    /// está escolhendo entre duas opiniões — a nossa e a do vídeo —, que é
-    /// exatamente onde ele já estava antes de abrir o Otimiza.
     #[test]
     fn todo_item_explica_em_vez_de_so_rotular() {
         for n in LISTA {
@@ -349,8 +295,6 @@ mod tests {
         }
     }
 
-    /// "Não recomendamos" é a frase que não diz nada. Se ela aparecer aqui, a
-    /// lista virou opinião.
     #[test]
     fn nenhum_motivo_e_apelo_a_autoridade() {
         for n in LISTA {
@@ -379,9 +323,7 @@ mod tests {
         assert_eq!(ids.len(), antes, "há id repetido na lista");
     }
 
-    /// As três naturezas precisam existir de verdade na lista. Uma lista só de
-    /// "prejudicial" viraria alarmismo, e uma só de "placebo" esconderia o que
-    /// realmente machuca a máquina.
+    /// Só "prejudicial" viraria alarmismo; só "placebo" esconderia o que machuca.
     #[test]
     fn as_tres_naturezas_aparecem() {
         assert!(contar(Natureza::Placebo) > 0);
@@ -404,15 +346,11 @@ mod tests {
         assert_eq!(v.len(), antes);
     }
 
-    /// COERÊNCIA COM O PRODUTO: se a lista diz que não fazemos uma coisa, o
-    /// catálogo não pode estar fazendo. Esta é a trava que impede a página de
-    /// marketing de mentir sobre o próprio programa.
+    /// Se a lista diz que não fazemos, o catálogo não pode estar fazendo.
     #[test]
     fn o_que_dizemos_que_nao_fazemos_nao_esta_no_catalogo() {
         use crate::modules::windows::catalog::CATALOG;
 
-        // A prioridade de tempo real é o caso concreto e o mais perigoso: há
-        // uma trava separada em `gamemode.rs` sobre o mesmo assunto.
         let proibidos = ["Tempo Real", "desfragment"];
 
         for spec in CATALOG {

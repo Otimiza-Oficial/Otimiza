@@ -1,48 +1,18 @@
-// Telemetria — o que a máquina está fazendo agora, num lugar só
-//
-// Antes da 2.9 cada módulo lia o que precisava do seu jeito: o gargalo por
-// PowerShell + CIM (lento, ~1 s por leitura), o motor de energia por PDH, o
-// monitor por `sysinfo`, e a GPU por ninguém — `monitor.rs` devolvia "not yet
-// implemented". Aqui fica UMA coleta, barata (PDH lido em processo, sem abrir
-// PowerShell), que todos os módulos usam.
-//
-// O QUE É MEDIDO, E DE ONDE (tudo contador do próprio Windows):
-//
-//   CPU total ............ \Processor Information(_Total)\% Processor Utility
-//   núcleo mais ocupado .. \Processor Information(*)\% Processor Utility
-//                          É o sinal da "thread principal": CPU total a 40%
-//                          com um núcleo a 100% é jogo preso num núcleo.
-//   clock efetivo ........ DERIVADO: Processor Frequency × % Processor
-//                          Performance ÷ 100 (o clock que o núcleo entregou,
-//                          e não o que o monitor de hardware anuncia)
-//   GPU .................. \GPU Engine(*)\Utilization Percentage, somado por
-//                          motor e por placa, o maior motor vence — a mesma
-//                          conta do Gerenciador de Tarefas
-//   VRAM usada ........... \GPU Adapter Memory(*)\Dedicated Usage
-//   VRAM total ........... DXGI (DedicatedVideoMemory do adaptador)
-//   RAM disponível ....... \Memory\Available MBytes
-//   commit ............... \Memory\% Committed Bytes In Use
-//   paginação ............ \Memory\Pages Input/sec (leitura do disco por
-//                          falta de página: é o que vira engasgo)
-//   disco ................ \PhysicalDisk(_Total)\Avg. Disk sec/Transfer,
-//                          Current Disk Queue Length, % Idle Time
-//
-// O QUE NÃO É MEDIDO: temperatura e potência do processador. Exigem ler
-// registradores da CPU por driver de kernel, e o Otimiza não instala driver.
-// Ficam UNKNOWN no contrato da 2.8 (`modules::telemetry::Quality`), nunca zero.
+// Telemetria: UMA coleta barata (PDH em processo, sem PowerShell) que todos os módulos usam. Tudo contador do
+// Windows: CPU total e o núcleo mais ocupado (CPU a 40% com um núcleo a 100% é jogo preso num núcleo), clock
+// efetivo derivado, GPU somada por motor como no Gerenciador de Tarefas, VRAM, RAM, commit, paginação e disco.
+// Temperatura e potência do processador exigem driver de kernel, que o Otimiza não instala: ficam UNKNOWN,
+// nunca zero.
 
 use serde::{Deserialize, Serialize};
 
-/// Uma leitura. Todo campo é `Option`: `None` = o contador não existe ou
-/// não respondeu nesta máquina, e a tela diz isso.
+/// `None` = o contador não existe ou não respondeu nesta máquina, e a tela diz isso.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Amostra {
-    /// Milissegundos desde o início da coleta.
     pub instante_ms: u64,
     pub cpu_total_pct: Option<f64>,
     pub cpu_nucleo_max_pct: Option<f64>,
     pub nucleos: Option<u32>,
-    /// DERIVADO.
     pub clock_efetivo_mhz: Option<f64>,
     pub clock_nominal_mhz: Option<f64>,
     pub gpu_pct: Option<f64>,
@@ -55,15 +25,12 @@ pub struct Amostra {
     pub disco_latencia_ms: Option<f64>,
     pub disco_fila: Option<f64>,
     pub disco_ocupado_pct: Option<f64>,
-    /// Os programas que mais usavam processador nesta amostra (fora o jogo e
-    /// o Otimiza). Só preenchido quando o coletor acompanha processos — é o
-    /// que o detetive de travadas usa para apontar quem disparou.
+    /// Os 3 programas que mais usavam processador (fora o jogo e o Otimiza): é o que o detetive de travadas usa.
     #[serde(default)]
     pub processos: Vec<ProcessoNaAmostra>,
-    /// Uso de cada núcleo lógico, na ordem do Windows.
     #[serde(default, skip_serializing)]
     pub nucleos_pct: Vec<f64>,
-    /// `Performance Limit Flags` do processador: bit 0 térmico, bit 1 energia.
+    /// Bit 0 térmico, bit 1 energia.
     #[serde(default)]
     pub limite_flags: Option<u64>,
 }
@@ -71,14 +38,10 @@ pub struct Amostra {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ProcessoNaAmostra {
     pub nome: String,
-    /// Fração da máquina inteira (0–1).
     pub cpu: f64,
 }
 
-// ------------------------------------------------------------ contas puras
-
-/// Instância do contador `GPU Engine`, por exemplo
-/// `pid_1234_luid_0x00000000_0x0000D1B5_phys_0_eng_3_engtype_3D`.
+/// Ex.: `pid_1234_luid_0x00000000_0x0000D1B5_phys_0_eng_3_engtype_3D`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MotorDeGpu {
     pub pid: Option<u32>,
@@ -90,7 +53,6 @@ pub fn ler_instancia_de_motor(nome: &str) -> Option<MotorDeGpu> {
     let minusculo = nome.to_ascii_lowercase();
     let luid_ini = minusculo.find("luid_")?;
     let resto = &minusculo[luid_ini + 5..];
-    // luid_0xHHHHHHHH_0xLLLLLLLL
     let partes: Vec<&str> = resto.splitn(3, '_').collect();
     if partes.len() < 2 || !partes[0].starts_with("0x") || !partes[1].starts_with("0x") {
         return None;
@@ -104,8 +66,7 @@ pub fn ler_instancia_de_motor(nome: &str) -> Option<MotorDeGpu> {
     Some(MotorDeGpu { pid, luid, tipo })
 }
 
-/// Uso de GPU por placa (luid): soma cada tipo de motor entre processos e
-/// fica com o tipo mais ocupado. Devolve (luid, uso %, uso do motor 3D %).
+/// Soma cada tipo de motor entre processos e fica com o mais ocupado.
 pub fn uso_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64, f64)> {
     use std::collections::BTreeMap;
     let mut por_placa: BTreeMap<String, BTreeMap<String, f64>> = BTreeMap::new();
@@ -124,8 +85,6 @@ pub fn uso_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64, f64)> {
         .collect()
 }
 
-/// Maior valor por placa em contadores de memória de GPU
-/// (`luid_..._phys_0` → bytes). Devolve (luid, MB).
 pub fn memoria_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64)> {
     instancias
         .iter()
@@ -138,13 +97,10 @@ pub fn memoria_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64)> {
         .collect()
 }
 
-/// O identificador de placa no formato das instâncias do PDH, a partir do
-/// LUID do DXGI.
 pub fn luid_como_no_pdh(alto: i32, baixo: u32) -> String {
     format!("0x{:08x}_0x{:08x}", alto as u32, baixo)
 }
 
-/// Núcleos lógicos: instâncias do tipo "0,3" (grupo,núcleo), sem os totais.
 pub fn so_nucleos(instancias: &[(String, f64)]) -> Vec<f64> {
     instancias
         .iter()
@@ -153,9 +109,6 @@ pub fn so_nucleos(instancias: &[(String, f64)]) -> Vec<f64> {
         .collect()
 }
 
-// ------------------------------------------------------------ a placa
-
-/// A placa de vídeo que a telemetria acompanha.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Placa {
     pub nome: String,
@@ -163,9 +116,7 @@ pub struct Placa {
     pub vram_total_mb: f64,
 }
 
-/// Placas pelo DXGI, a de mais memória dedicada primeiro (em notebook, é a
-/// dedicada; a integrada tem pouca ou nenhuma). Adaptador de software fica
-/// de fora.
+/// A de mais memória dedicada primeiro (em notebook, a dedicada). Adaptador de software fica de fora.
 #[cfg(windows)]
 pub fn placas() -> Vec<Placa> {
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
@@ -192,9 +143,7 @@ pub fn placas() -> Vec<Placa> {
     v
 }
 
-/// Versão do driver de vídeo da placa principal, pelo DXGI
-/// (`IDXGIAdapter::CheckInterfaceSupport` devolve a versão do driver de modo
-/// usuário em quatro partes de 16 bits). Sem PowerShell.
+/// Pelo DXGI (`CheckInterfaceSupport`), sem PowerShell.
 #[cfg(windows)]
 pub fn versao_do_driver() -> Option<String> {
     use windows::core::Interface;
@@ -218,7 +167,6 @@ pub fn versao_do_driver() -> Option<String> {
     melhor.map(|(_, t)| t)
 }
 
-/// Build do Windows com a revisão ("19045.4046"), do registro.
 #[cfg(windows)]
 pub fn build_do_windows() -> Option<String> {
     use crate::modules::changelog::PreviousValue;
@@ -230,8 +178,6 @@ pub fn build_do_windows() -> Option<String> {
         _ => build,
     })
 }
-
-// ------------------------------------------------------------ o coletor
 
 #[cfg(windows)]
 pub struct Coletor {
@@ -252,14 +198,12 @@ pub struct Coletor {
     disco_fila: super::pdh::Contador,
     disco_ocioso: super::pdh::Contador,
     limite_flags: super::pdh::Contador,
-    /// Acompanhamento de processos (sysinfo) e o PID que fica de fora (o jogo).
     processos: Option<(sysinfo::System, Option<u32>)>,
 }
 
 #[cfg(windows)]
 impl Coletor {
-    /// Abre a consulta e faz a primeira coleta (contadores de taxa só valem
-    /// a partir da segunda). `None` quando o PDH não abre nesta máquina.
+    /// Contadores de taxa só valem a partir da segunda coleta. `None` quando o PDH não abre.
     pub fn novo() -> Option<Self> {
         let q = super::pdh::Consulta::nova()?;
         let c = |p: &str| q.adicionar(p);
@@ -287,7 +231,6 @@ impl Coletor {
         Some(coletor)
     }
 
-    /// Milissegundos desde a abertura do coletor (o relógio de `instante_ms`).
     pub fn decorrido_ms(&self) -> u64 {
         self.inicio.elapsed().as_millis() as u64
     }
@@ -296,8 +239,6 @@ impl Coletor {
         self.placa.as_ref()
     }
 
-    /// Passa a registrar os 3 programas que mais usam processador em cada
-    /// amostra, deixando `fora` (o jogo) de lado.
     pub fn acompanhar_processos(&mut self, fora: Option<u32>) {
         let mut s = sysinfo::System::new();
         s.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_cpu());
@@ -321,7 +262,7 @@ impl Coletor {
         v
     }
 
-    /// Uma leitura. Chame com intervalo de pelo menos ~250 ms entre elas.
+    /// Intervalo de pelo menos ~250 ms entre leituras.
     pub fn amostra(&mut self) -> Amostra {
         let processos = self.top_processos();
         let q = &self.q;
@@ -331,7 +272,6 @@ impl Coletor {
         let desempenho = q.valor(self.desempenho);
         let frequencia = q.valor(self.frequencia).filter(|f| *f > 0.0);
 
-        // A placa acompanhada; sem DXGI, a mais ocupada.
         let gpus = uso_por_placa(&q.lista(self.gpu_motores));
         let gpu = match &self.placa {
             Some(p) => gpus.iter().find(|(l, _, _)| *l == p.luid).cloned(),

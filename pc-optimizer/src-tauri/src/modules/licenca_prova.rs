@@ -1,28 +1,11 @@
-//! As provas de ponta a ponta da licença.
-//!
-//! Este arquivo existe SÓ em compilação de teste (`#[cfg(test)]` na declaração
-//! dele em `licenca.rs`), e é o único do lado do produto que toca em chave
-//! privada. A chave que ele usa é sorteada na hora, vive alguns milissegundos
-//! em memória e não é a de ninguém.
-//!
-//! Está separado de `licenca.rs` porque lá existe uma guarda que reprova o
-//! build se a palavra `SigningKey` aparecer. Essa guarda é boa e não vai sair;
-//! o que muda é onde a prova mora.
-//!
-//! O que aqui se prova são os itens 1, 2 e 3 do plano:
-//!
-//!   1. Uma chave emitida para esta máquina ativa.
-//!   2. A MESMA chave com um caractere trocado é recusada — é o teste que
-//!      prova que a assinatura está sendo conferida de verdade, e não apenas
-//!      que o texto tem o formato certo.
-//!   3. Uma chave emitida para outro ID não ativa aqui. É o teste do
-//!      "uma chave, um PC".
+//! Provas de ponta a ponta da licença, só em compilação de teste: o único arquivo do produto que toca em chave
+//! privada, sorteada na hora. Fica fora de `licenca.rs` porque lá uma guarda reprova o build se `SigningKey`
+//! aparecer. Prova: a chave desta máquina ativa; um caractere trocado é recusado; chave de outro ID não ativa.
 
 use super::*;
 use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 
-/// Sorteia um par de chaves para o teste.
 fn par() -> (SigningKey, VerifyingKey) {
     let mut semente = [0u8; 32];
     getrandom::getrandom(&mut semente).expect("sortear semente");
@@ -33,11 +16,7 @@ fn par() -> (SigningKey, VerifyingKey) {
     (privada, publica)
 }
 
-/// Emite uma licença do mesmo jeito que `examples/gerar_chave.rs` emite.
-///
-/// Se os dois formatos divergirem um dia, estes testes param de valer como
-/// prova. Por isso existe, no fim do arquivo, uma guarda que confere que o
-/// emissor de verdade continua montando a chave da mesma forma.
+/// Igual a `examples/gerar_chave.rs`; a guarda do fim do arquivo confere que os dois não divergem.
 fn emitir(privada: &SigningKey, maquina: &str, expira: Option<&str>) -> String {
     let dados = serde_json::json!({
         "maquina": maquina,
@@ -54,8 +33,6 @@ fn emitir(privada: &SigningKey, maquina: &str, expira: Option<&str>) -> String {
     format!("{}.{}", url.encode(&corpo), url.encode(assinatura.to_bytes()))
 }
 
-// ------------------------------------------------------------ 1. ela ativa
-
 #[test]
 fn chave_emitida_para_esta_maquina_e_aceita() {
     let (privada, publica) = par();
@@ -69,20 +46,14 @@ fn chave_emitida_para_esta_maquina_e_aceita() {
     assert_eq!(dados.expira, None, "sem prazo é vitalícia");
 }
 
-// ---------------------------------------- 2. um caractere trocado derruba
-
 #[test]
 fn um_caractere_trocado_derruba_a_chave() {
-    // O teste mais importante do arquivo. Se ele passar por acidente — porque
-    // a conferência não está acontecendo —, todo o resto é teatro: qualquer
-    // pessoa escreveria a própria licença num editor de texto.
+    // Se este passar por acidente, todo o resto é teatro: qualquer um escreveria a própria licença.
     let (privada, publica) = par();
     let boa = emitir(&privada, "OTZ-WPYY-0J4F-77AB", None);
 
     let (dados, assinatura) = boa.split_once('.').unwrap();
 
-    // Mexe nos DADOS, mantendo a assinatura. É a tentativa óbvia: pegar a
-    // chave de alguém e trocar o ID da máquina para o seu.
     let mut mexida: Vec<char> = dados.chars().collect();
     mexida[10] = if mexida[10] == 'A' { 'B' } else { 'A' };
     let com_dados_mexidos = format!("{}.{}", mexida.iter().collect::<String>(), assinatura);
@@ -95,7 +66,6 @@ fn um_caractere_trocado_derruba_a_chave() {
         "dados alterados passaram na conferência"
     );
 
-    // E mexe na ASSINATURA, mantendo os dados.
     let mut mexida: Vec<char> = assinatura.chars().collect();
     let ultimo = mexida.len() - 1;
     mexida[ultimo] = if mexida[ultimo] == 'A' { 'B' } else { 'A' };
@@ -109,14 +79,12 @@ fn um_caractere_trocado_derruba_a_chave() {
         "assinatura alterada passou na conferência"
     );
 
-    // A original continua valendo — senão o teste acima não prova nada.
+    // A original continua valendo; senão o teste acima não prova nada.
     assert!(conferir_com(publica, &boa, "OTZ-WPYY-0J4F-77AB", "2026-08-29").is_ok());
 }
 
 #[test]
 fn chave_assinada_por_outro_par_nao_vale() {
-    // O caso de quem monta o próprio emissor: o formato está certo, a
-    // assinatura é uma assinatura de verdade — só que de outra chave.
     let (privada_do_impostor, _) = par();
     let (_, publica_do_otimiza) = par();
 
@@ -127,8 +95,6 @@ fn chave_assinada_por_outro_par_nao_vale() {
         Recusa::AssinaturaInvalida
     );
 }
-
-// ------------------------------------------- 3. uma chave, um computador
 
 #[test]
 fn chave_de_outra_maquina_nao_ativa_aqui() {
@@ -144,19 +110,15 @@ fn chave_de_outra_maquina_nao_ativa_aqui() {
         }
     );
 
-    // E a mensagem precisa dizer o que fazer, não só que deu errado.
     assert!(recusa.explicacao().contains("Discord"));
 }
-
-// ---------------------------------------------------------------- prazo
 
 #[test]
 fn a_licenca_com_prazo_vence_no_dia_seguinte() {
     let (privada, publica) = par();
     let chave = emitir(&privada, "OTZ-WPYY-0J4F-77AB", Some("2026-12-31"));
 
-    // No próprio dia do vencimento ainda vale. Cortar no dia seria cobrar um
-    // dia a menos do que foi vendido.
+    // No dia do vencimento ainda vale: cortar no dia seria cobrar um dia a menos do que foi vendido.
     assert!(conferir_com(publica, &chave, "OTZ-WPYY-0J4F-77AB", "2026-12-31").is_ok());
 
     assert_eq!(
@@ -169,8 +131,7 @@ fn a_licenca_com_prazo_vence_no_dia_seguinte() {
 
 #[test]
 fn maquina_nao_identificada_nunca_libera() {
-    // Em máquina virtual pode não haver série de placa nem MachineGuid. O
-    // padrão nesse caso é trancar, não liberar.
+    // Sem série de placa nem MachineGuid (máquina virtual), o padrão é trancar, não liberar.
     let (privada, publica) = par();
     let chave = emitir(&privada, "OTZ-WPYY-0J4F-77AB", None);
 
@@ -180,23 +141,9 @@ fn maquina_nao_identificada_nunca_libera() {
     );
 }
 
-// --------------------------------------------- o bot fala a mesma língua
-
-/// Um par e uma licença emitidos pelo `bot/otimiza-licenca.cjs`.
-///
-/// Nada de segredo: este par existe só para este teste e nunca abriu nada.
-///
-/// POR QUE ISTO É UM VALOR FIXO, E NÃO GERADO NA HORA
-///
-/// Gerar aqui provaria que o Rust conversa com o Rust, que é o que os outros
-/// testes deste arquivo já fazem. O que precisa ser provado é OUTRA coisa: que
-/// a chave saída do bot, em JavaScript, abre o produto escrito em Rust.
-///
-/// São duas implementações independentes do mesmo formato, e elas podem
-/// divergir de um jeito que nenhum lado percebe sozinho — uma vírgula a mais no
-/// JSON, um base64 com `+` em vez de `-`, um byte de padding. O prejuízo desse
-/// erro é o pior que este produto pode ter: o cliente paga, recebe a chave, e
-/// ela não abre.
+/// Par e licença emitidos pelo `bot/otimiza-licenca.cjs`, fixos de propósito: prova que a chave saída do bot, em
+/// JavaScript, abre o produto em Rust. Duas implementações do mesmo formato divergem sem ninguém perceber, e o
+/// prejuízo é o cliente pagar e a chave não abrir. Este par nunca abriu nada.
 const PUBLICA_DO_BOT: &str = "0g5yK2+hntwcBt/QTqD1gtkWJD9YNpG5DhNnZednrTk=";
 
 const LICENCA_DO_BOT: &str = "eyJtYXF1aW5hIjoiT1RaLVRFU1QtQjBUMC0wMDAxIiwiY29tcHJhZG9yIjoiUHJvdmEgZGUgY29tcGF0aWJpbGlkYWRlIiwiZW1pdGlkYSI6IjIwMjYtMDEtMDEiLCJleHBpcmEiOm51bGx9.MKtQhvO4EKP_onlDTG68381zNsIOiPF2wdKB4FrFJlVtliYfWBYUGFmZiHam_CHTVI5aSzn690ioD0Q6RjUrCQ";
@@ -226,8 +173,6 @@ fn a_chave_emitida_pelo_bot_abre_o_produto() {
 
 #[test]
 fn a_chave_do_bot_tambem_e_presa_a_uma_maquina() {
-    // O bot não é uma porta dos fundos: a chave que ele emite obedece à mesma
-    // regra de uma máquina só.
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(PUBLICA_DO_BOT)
         .unwrap();
@@ -239,14 +184,8 @@ fn a_chave_do_bot_tambem_e_presa_a_uma_maquina() {
     ));
 }
 
-// ---------------------------------------------------------------- guarda
-
 #[test]
 fn o_emissor_de_verdade_monta_a_chave_do_mesmo_jeito() {
-    // Estes testes só provam alguma coisa enquanto a `emitir` daqui e a de
-    // `examples/gerar_chave.rs` produzirem o mesmo formato. Se alguém mudar o
-    // emissor e esquecer deste arquivo, as provas acima continuariam passando
-    // enquanto o produto real deixaria de aceitar as chaves emitidas.
     let emissor = include_str!("../../examples/gerar_chave.rs");
 
     for parte in [

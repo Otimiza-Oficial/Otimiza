@@ -1,9 +1,3 @@
-// Programas de inicialização
-//
-// Serve para cruzar com o monitor de processos: saber que um programa consome CPU
-// é útil, mas saber que ele *volta sozinho a cada boot* é o que explica por que o
-// PC do cliente vive lento.
-
 use super::registry;
 use crate::modules::changelog::{ChangeRecord, PreviousValue};
 use serde::{Deserialize, Serialize};
@@ -11,44 +5,28 @@ use std::collections::HashSet;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 
-/// Onde o Windows guarda quais entradas de inicialização estão desligadas.
-/// É a mesma chave que o Gerenciador de Tarefas usa quando você clica em
-/// "Desabilitar" — não removemos a entrada do cliente, apenas a desligamos.
+/// A chave que o Gerenciador de Tarefas usa ao clicar em "Desabilitar": a entrada do cliente não é removida.
 const APPROVED_KEY: &str =
     r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
-/// Primeiro byte do valor em `StartupApproved`: 0x02 habilitado, 0x03 desabilitado.
 const ENABLED_MARK: u8 = 0x02;
 const DISABLED_MARK: u8 = 0x03;
 
-/// Um programa que sobe com o Windows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartupEntry {
-    /// Nome do valor no registro. É a chave para ligar/desligar.
     pub name: String,
     pub command: String,
-    /// Nome do executável em minúsculas, usado para cruzar com os processos.
     pub executable: String,
-    /// "HKCU" (só este usuário) ou "HKLM" (todos os usuários, exige administrador).
     pub hive: String,
     pub enabled: bool,
-    /// O que este programa é (2.9). Quem decide desligar é a pessoa; a classe
-    /// só diz o que costuma acontecer se ele não abrir com o Windows.
     pub classe: Classe,
 }
 
-/// Classe de um programa de inicialização.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Classe {
-    /// Segurança, áudio, vídeo, touchpad: desligar tira algo do sistema.
     Essencial,
-    /// Sincronização de nuvem e software de periférico (mouse, teclado,
-    /// fone): útil, mas dá para abrir na mão.
     Util,
-    /// Lojas de jogo, mensageiros, música, navegador pré-aberto: só ocupam
-    /// memória e processador desde o boot até alguém abrir.
     Opcional,
-    /// Não reconhecido pelo nome. Sem palpite.
     Desconhecido,
 }
 
@@ -68,8 +46,6 @@ const OPCIONAIS: &[&str] = &[
     "ccleaner", "cortana", "yourphone", "phonelink", "roblox",
 ];
 
-/// Classifica pelo executável (e pelo comando, quando o executável é
-/// genérico, como `rundll32`). **Pura.**
 pub fn classificar(executavel: &str, comando: &str) -> Classe {
     let alvo = format!("{} {}", executavel, comando).to_lowercase();
     let tem = |lista: &[&str]| lista.iter().any(|n| alvo.contains(n));
@@ -84,21 +60,15 @@ pub fn classificar(executavel: &str, comando: &str) -> Classe {
     }
 }
 
-/// Monta o valor de 12 bytes que o Windows espera em `StartupApproved`.
-///
-/// O Gerenciador de Tarefas grava a data/hora do desligamento nos bytes 4 a 11.
-/// Zeros funcionam igual — o Windows só lê o primeiro byte para decidir — e
-/// evitam inventar um horário falso no registro do cliente.
+/// O Gerenciador de Tarefas grava a data nos bytes 4 a 11; zeros funcionam igual (o Windows só lê o primeiro
+/// byte) e não inventam um horário no registro do cliente.
 fn approval_bytes(enabled: bool) -> Vec<u8> {
     let mut bytes = vec![0u8; 12];
     bytes[0] = if enabled { ENABLED_MARK } else { DISABLED_MARK };
     bytes
 }
 
-/// Lê se uma entrada está habilitada.
-///
-/// Ausência de valor em `StartupApproved` significa habilitada: o Windows só
-/// grava ali quando alguém desliga alguma coisa.
+/// Ausência em `StartupApproved` significa habilitada: o Windows só grava ali quando alguém desliga algo.
 pub fn is_entry_enabled(hive: &str, name: &str) -> bool {
     match registry::read(hive, APPROVED_KEY, name) {
         Ok(PreviousValue::Binary(bytes)) => bytes.first() != Some(&DISABLED_MARK),
@@ -106,17 +76,12 @@ pub fn is_entry_enabled(hive: &str, name: &str) -> bool {
     }
 }
 
-/// Todos os programas de inicialização das chaves `Run`.
-///
-/// `Err` quando uma das chaves não pôde ser lida. Até a 2.0 a leitura que
-/// falhava virava lista vazia, e a tela escrevia "Nenhum programa nas chaves de
-/// inicialização" sobre uma máquina que podia ter vinte.
+/// `Err` quando uma chave não se lê: lista vazia diria "nenhum programa" sobre uma máquina que pode ter vinte.
 pub fn entries() -> Result<Vec<StartupEntry>, String> {
     let mut entries = Vec::new();
 
     for hive in ["HKCU", "HKLM"] {
         for name in registry::value_names(hive, RUN_KEY)? {
-            // Valor que não é texto não é linha de comando: não há o que listar.
             let Some(command) = registry::read_text(hive, RUN_KEY, &name)? else {
                 continue;
             };
@@ -137,10 +102,6 @@ pub fn entries() -> Result<Vec<StartupEntry>, String> {
     Ok(entries)
 }
 
-/// Liga ou desliga um programa de inicialização.
-///
-/// Devolve o registro da mudança para o histórico, com o valor anterior — assim
-/// "Desfazer tudo" também devolve a inicialização ao estado original.
 pub fn set_enabled(hive: &str, name: &str, enabled: bool) -> Result<ChangeRecord, String> {
     let previous = registry::set_binary(hive, APPROVED_KEY, name, &approval_bytes(enabled))?;
 
@@ -152,15 +113,8 @@ pub fn set_enabled(hive: &str, name: &str, enabled: bool) -> Result<ChangeRecord
     })
 }
 
-/// Nomes de executável que sobem com o Windows, em minúsculas.
-///
-/// Guardamos o nome do arquivo, não a linha de comando inteira: é o nome que dá
-/// para casar com o processo em execução.
-///
-/// Uma chave ou um valor ilegível fica de fora do conjunto. É uma perda que
-/// fica registrada aqui de propósito: o conjunto só marca, na lista de
-/// processos, quem sobe com o Windows, e ali não há onde dizer "não consegui
-/// ler". A lista de inicialização em si (`entries`) devolve o erro.
+/// Pelo nome do arquivo, que casa com o processo. Chave ilegível fica de fora do conjunto; a lista em si
+/// (`entries`) devolve o erro.
 pub fn startup_executables() -> HashSet<String> {
     let mut executables = HashSet::new();
 
@@ -181,29 +135,20 @@ pub fn startup_executables() -> HashSet<String> {
     executables
 }
 
-/// Extrai o nome do executável de uma linha de comando do registro.
-///
-/// As entradas vêm em formatos variados: com aspas, com argumentos, com caminho
-/// completo ou sem. Pegar o trecho errado faria o cruzamento com os processos
-/// falhar silenciosamente — o pior tipo de bug, porque a tela continua bonita.
+/// Pegar o trecho errado faria o cruzamento com os processos falhar em silêncio.
 pub fn executable_from_command(command: &str) -> Option<String> {
     let trimmed = command.trim();
 
-    // Discord, Slack, Teams e todo aplicativo empacotado com Squirrel registram
-    // um lançador (`Update.exe --processStart Discord.exe`). O que aparece na
-    // lista de processos é o alvo, não o lançador — casar pelo lançador daria
-    // "não está na inicialização" para justamente os programas mais pesados.
+    // Discord, Slack e Teams (Squirrel) registram `Update.exe --processStart Discord.exe`: o processo é o alvo, não
+    // o lançador.
     if let Some(target) = process_start_target(trimmed) {
         return Some(target);
     }
 
-    // Com aspas, o caminho é o que está entre elas: "C:\App\app.exe" --minimized
     let path = if trimmed.starts_with('"') {
         trimmed[1..].split('"').next()?.to_string()
     } else {
-        // Sem aspas, cortar no primeiro espaço quebra em caminhos como
-        // `C:\Riot Games\...\RiotClientServices.exe`, e o resultado sai "riot".
-        // Cortar no fim do ".exe" acerta esses casos.
+        // Sem aspas, cortar no primeiro espaço quebra `C:\Riot Games\...` em "riot": corta no fim do ".exe".
         let lowered = trimmed.to_lowercase();
 
         match lowered.find(".exe") {
@@ -225,14 +170,12 @@ pub fn executable_from_command(command: &str) -> Option<String> {
     }
 }
 
-/// Alvo de um lançador Squirrel, se houver.
 fn process_start_target(command: &str) -> Option<String> {
     let lowered = command.to_lowercase();
     let position = lowered
         .find("--processstart")
         .or_else(|| lowered.find("--process-start"))?;
 
-    // O alvo é o primeiro argumento depois da flag.
     lowered[position..]
         .split_whitespace()
         .nth(1)
@@ -263,7 +206,6 @@ mod tests {
 
     #[test]
     fn resolves_squirrel_launcher_to_its_target() {
-        // O Discord registra o lançador, mas quem consome CPU é o Discord.exe.
         assert_eq!(
             executable_from_command("\"C:\\Users\\x\\AppData\\Local\\Discord\\Update.exe\" --processStart Discord.exe").as_deref(),
             Some("discord.exe")
@@ -288,8 +230,6 @@ mod tests {
 
     #[test]
     fn reads_unquoted_path_containing_spaces() {
-        // Instaladores desleixados gravam sem aspas. Cortar no primeiro espaço
-        // devolveria "riot" e o programa jamais casaria com o processo real.
         assert_eq!(
             executable_from_command("C:\\Riot Games\\Riot Client\\RiotClientServices.exe --launch")
                 .as_deref(),
@@ -319,14 +259,11 @@ mod tests {
     fn approval_bytes_use_the_marks_windows_expects() {
         assert_eq!(approval_bytes(true)[0], ENABLED_MARK);
         assert_eq!(approval_bytes(false)[0], DISABLED_MARK);
-        // O Windows espera exatamente 12 bytes nesse valor.
         assert_eq!(approval_bytes(true).len(), 12);
     }
 
     #[test]
     fn missing_approval_value_means_enabled() {
-        // O Windows só grava em StartupApproved quando algo é desligado.
-        // Tratar ausência como "desligado" mostraria a lista inteira errada.
         assert!(is_entry_enabled("HKCU", "EntradaQueNaoExiste_123"));
     }
 
@@ -344,8 +281,6 @@ mod tests {
             );
         }
 
-        // Cada entrada precisa ter nome e comando: uma linha vazia na tela do
-        // cliente é pior que não mostrar a linha.
         for entry in &list {
             assert!(!entry.name.trim().is_empty());
             assert!(!entry.command.trim().is_empty());
@@ -356,7 +291,5 @@ mod tests {
     fn reads_this_machine_startup_list() {
         let executables = startup_executables();
         println!("{:?}", executables);
-        // A lista pode ser vazia num Windows recém-instalado; o que não pode é
-        // a leitura estourar.
     }
 }
