@@ -690,6 +690,14 @@ pub fn salvar_csv(conteudo: &str) -> Result<String, String> {
     Ok(caminho.to_string_lossy().to_string())
 }
 
+/// Grava um texto na Área de Trabalho com nome fixo pelo backend (`Otimiza - <assunto> - data.txt`). Só `.txt`.
+pub fn salvar_texto(assunto: &str, conteudo: &str) -> Result<String, String> {
+    let nome = format!("Otimiza - {} - {}.txt", assunto, chrono::Local::now().format("%Y-%m-%d %Hh%M"));
+    let caminho = desktop_dir().join(nome);
+    std::fs::write(&caminho, conteudo).map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
+    Ok(caminho.to_string_lossy().to_string())
+}
+
 fn secao_recusas() -> String {
     secao(
         11,

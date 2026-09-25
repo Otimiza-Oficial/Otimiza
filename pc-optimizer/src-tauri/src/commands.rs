@@ -932,6 +932,17 @@ pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha
         .map_err(|e| format!("Falha ao ler o firmware: {}", e))
 }
 
+/// `LIVRES`: grava a ficha num arquivo da Área de Trabalho, com nome escolhido aqui. O texto vem da tela (é o que
+/// ela mostra), limitado em tamanho.
+#[tauri::command]
+pub fn salvar_ficha_da_bios(texto: String) -> Result<String, String> {
+    const LIMITE: usize = 64 * 1024;
+    if texto.trim().is_empty() || texto.len() > LIMITE {
+        return Err("A ficha está vazia ou grande demais para salvar.".to_string());
+    }
+    crate::modules::report::salvar_texto("ficha da BIOS", &texto)
+}
+
 /// `LIVRES`: não altera configuração; a tela confirma antes.
 #[tauri::command]
 pub fn reiniciar_na_bios() -> Result<(), String> {
@@ -3894,6 +3905,7 @@ mod tests {
         "analyze_thermal",
         "export_report",
         "exportar_alteracoes",
+        "salvar_ficha_da_bios",
         "msi_dispositivos",
         "diagnostico_dpc",
         "cpuset_resultados",

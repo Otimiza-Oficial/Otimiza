@@ -114,6 +114,9 @@ pub fn defeitos(l: &Leitura) -> Vec<Defeito> {
 pub struct Ficha {
     pub leitura: Leitura,
     pub defeitos: Vec<Defeito>,
+    /// Processador de notebook: o fabricante costuma travar a maior parte do menu da BIOS.
+    #[serde(default)]
+    pub notebook: bool,
 }
 
 /// Lê a máquina. Cada campo que não se lê vira lacuna, e não zero.
@@ -145,7 +148,7 @@ ConvertTo-Json -Compress -InputObject ([ordered]@{ Cpu = [string]$p.ProcessorNam
         .and_then(|s| serde_json::from_str(s.stdout.trim()).ok());
     let Some(b) = bruto else {
         l.lacunas.push("Não deu para ler o processador, o microcódigo nem o tempo de boot desta máquina.".to_string());
-        return Ficha { leitura: l, defeitos: Vec::new() };
+        return Ficha { leitura: l, defeitos: Vec::new(), notebook: false };
     };
 
     l.cpu = b.cpu.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
@@ -170,7 +173,8 @@ ConvertTo-Json -Compress -InputObject ([ordered]@{ Cpu = [string]$p.ProcessorNam
     }
 
     let defeitos = defeitos(&l);
-    Ficha { leitura: l, defeitos }
+    let notebook = l.cpu.as_deref().is_some_and(e_de_notebook);
+    Ficha { leitura: l, defeitos, notebook }
 }
 
 #[cfg(not(windows))]

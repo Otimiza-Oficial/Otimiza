@@ -172,6 +172,7 @@ pub fn run() {
             commands::analyze_thermal,
             commands::export_report,
             commands::exportar_alteracoes,
+            commands::salvar_ficha_da_bios,
             commands::msi_dispositivos,
             commands::diagnostico_dpc,
             commands::cpuset_testar,

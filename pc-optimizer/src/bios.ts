@@ -20,7 +20,10 @@ type Ficha = {
     lacunas: string[];
   };
   defeitos: Defeito[];
+  notebook: boolean;
 };
+
+type Passo = { fase: string; titulo: string; onde: string; o_que_faz: string; risco_e_volta: string; medido_aqui: boolean };
 
 type Firmware = {
   leitura: {
@@ -31,6 +34,7 @@ type Firmware = {
     secure_boot: boolean | null;
     lacunas: string[];
   };
+  passos: Passo[];
 };
 
 type Memoria = { slots: number | null; pentes_gb: number[]; canais: number; mhz: number | null };
@@ -85,6 +89,25 @@ function fraseDoDefeito(d: Defeito): string {
   }
 }
 
+const semHtml = (s: string) => s.replace(/<[^>]+>/g, "");
+
+/** O texto de copiar e de salvar: a ficha, os defeitos e o passo a passo, como a tela mostra. */
+function textoCompleto(linhas: [string, string][], f: Ficha | null, fw: Firmware | null): string {
+  const partes = ["Ficha do firmware (Otimiza)", ...linhas.map(([k, v]) => `${k}: ${v}`)];
+  const defeitos = f?.defeitos ?? [];
+  partes.push("", "Defeitos conhecidos:", ...(defeitos.length ? defeitos.map((d) => "- " + semHtml(fraseDoDefeito(d))) : [f?.leitura.cpu ? "- nenhum" : "- não conferido"]));
+  const passos = fw?.passos ?? [];
+  if (passos.length) {
+    partes.push("", "O que olhar na BIOS, em ordem de risco:");
+    for (const p of passos) {
+      partes.push(`- ${p.titulo}${p.medido_aqui ? " (medido aqui)" : ""}`, `  Onde: ${p.onde}`, `  O que faz: ${p.o_que_faz}`, `  Risco e volta: ${p.risco_e_volta}`);
+    }
+  }
+  const lacunas = [...(fw?.leitura.lacunas ?? []), ...(f?.leitura.lacunas ?? [])];
+  if (lacunas.length) partes.push("", "Não deu para ler:", ...lacunas.map((l) => "- " + l));
+  return partes.join("\n");
+}
+
 function montarValores(f: Ficha | null, fw: Firmware | null, m: Memoria | null): [string, string][] {
   const l = fw?.leitura;
   const c = f?.leitura;
@@ -131,7 +154,7 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
   if (!raiz) return;
   const linhas = montarValores(f, fw, m);
   valoresAgora = Object.fromEntries(linhas);
-  textoDaFicha = ["Ficha do firmware (Otimiza)", ...linhas.map(([k, v]) => `${k}: ${v}`)].join("\n");
+  textoDaFicha = textoCompleto(linhas, f, fw);
 
   const defeitos = f?.defeitos ?? [];
   // Sem o processador lido, "nenhum defeito" seria afirmar o que não se conferiu.
@@ -148,6 +171,7 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
       ${lacunas.length ? `<p class="fg-nota">${lacunas.map(esc).join(" ")}</p>` : ""}
       <div class="fg-linha">
         <button class="btn" type="button" data-bios="copiar">Copiar a ficha</button>
+        <button class="btn" type="button" data-bios="salvar">Salvar em arquivo</button>
         <span class="fg-nota" id="bios-copiada" role="status"></span>
       </div>
     </section>
@@ -163,6 +187,7 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
 
     <section class="panel fg-painel">
       <div class="panel-head"><h2>Antes e depois da BIOS</h2></div>
+      ${f?.notebook ? `<p class="fg-nota">Em notebook o fabricante costuma travar a maior parte do menu da BIOS (perfil de memória, Resizable BAR, limites de energia). Se a opção não aparecer, ela não existe nesta máquina.</p>` : ""}
       ${blocoDaComparacao()}
       <div class="fg-linha">
         <button class="btn" type="button" data-bios="foto">Guardar como está agora</button>
@@ -203,6 +228,16 @@ function ligarEventos() {
         if (aviso) aviso.textContent = "Copiada. Cole no Discord ou mande ao suporte.";
       } catch {
         if (aviso) aviso.textContent = "Não deu para copiar.";
+      }
+    }
+
+    if (acao === "salvar") {
+      const aviso = raiz.querySelector<HTMLElement>("#bios-copiada");
+      try {
+        const caminho = await invoke<string>("salvar_ficha_da_bios", { texto: textoDaFicha });
+        if (aviso) aviso.textContent = `Salva em ${caminho}`;
+      } catch (erro) {
+        if (aviso) aviso.textContent = String(erro);
       }
     }
 
