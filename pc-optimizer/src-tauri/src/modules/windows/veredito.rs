@@ -482,6 +482,13 @@ fn achados_da_janela() -> Result<Vec<Achado>, String> {
     })
 }
 
+fn achados_de_eventos_de_hardware() -> Result<Vec<Achado>, String> {
+    Ok(super::eventoshw::achados(&super::eventoshw::ler()?)
+        .into_iter()
+        .map(|a| montar(Origem::Esgotamento, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .collect())
+}
+
 /// Intel de mesa da 13ª ou 14ª geração sem o microcódigo 0x12F.
 fn achados_do_microcodigo() -> Vec<Achado> {
     match super::fichabios::defeito_de_microcodigo() {
@@ -1016,6 +1023,9 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
         // 3.0: dois achados de leitura de registro, sem PowerShell.
         (Origem::Prontidao, achados_da_janela),
+        // Driver de vídeo que caiu e erro de hardware: evento do próprio
+        // Windows, que o cliente confere no Visualizador de Eventos.
+        (Origem::Esgotamento, achados_de_eventos_de_hardware),
         (Origem::Firmware, || Ok(achados_do_microcodigo())),
         // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
         //
