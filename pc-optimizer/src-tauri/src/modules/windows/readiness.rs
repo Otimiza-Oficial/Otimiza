@@ -212,7 +212,7 @@ pub fn analyze() -> ReadinessReport {
             id: "plano_de_terceiro".to_string(),
             title: "O plano de energia ativo não é do Windows".to_string(),
             measured: format!("Plano em uso: \"{}\".", nome),
-            advice: "Programas de otimização e fabricantes de notebook criam planos de                      energia próprios e os deixam ativos. Alguns são bons; outros limitam o                      processador para economizar bateria, e quem instalou já desinstalou o                      programa faz tempo. O Otimiza não mexe nele sem você mandar — mas você                      merece saber que o plano em uso não é nenhum dos que o Windows traz."
+            advice: "Programas de otimização e fabricantes de notebook criam planos de energia próprios e os deixam ativos. Alguns são bons; outros limitam o processador para economizar bateria, e quem instalou já desinstalou o programa faz tempo. O Otimiza não mexe nele sem você mandar — mas você merece saber que o plano em uso não é nenhum dos que o Windows traz."
                 .to_string(),
             severity: FindingSeverity::Important,
             fix_location: FixLocation::Software,

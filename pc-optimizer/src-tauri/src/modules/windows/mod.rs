@@ -920,7 +920,7 @@ impl WindowsOptimizer {
             success: true,
             applied: true,
             message: format!(
-                "`{}` passa a abrir sempre em prioridade alta. Atenção: quando o jogo                  atualizar, o nome do executável muda e este ajuste precisa ser aplicado de                  novo — o Otimiza avisa quando isso acontecer.",
+                "`{}` passa a abrir sempre em prioridade alta. Atenção: quando o jogo atualizar, o nome do executável muda e este ajuste precisa ser aplicado de novo — o Otimiza avisa quando isso acontecer.",
                 executable
             ),
             requires_restart: false,
@@ -995,7 +995,7 @@ impl WindowsOptimizer {
             // ela mais importa: o cliente acabou de clicar e vai olhar o
             // contador de FPS esperando um número maior.
             message: format!(
-                "{} passou de {} para {} Hz. O jogo fica visivelmente mais suave, e o                  contador de FPS continua onde estava — a taxa do monitor não cria                  quadros, ela deixa de segurar os que a placa já entrega.",
+                "{} passou de {} para {} Hz. O jogo fica visivelmente mais suave, e o contador de FPS continua onde estava — a taxa do monitor não cria quadros, ela deixa de segurar os que a placa já entrega.",
                 alvo.descricao, anterior, maximo
             ),
             requires_restart: false,
