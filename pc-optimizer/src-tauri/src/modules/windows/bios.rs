@@ -1,58 +1,17 @@
-// O que olhar na BIOS, em fases
-//
-// ESTE MÓDULO NÃO ESCREVE NADA, e isso não é limitação — é a decisão central
-// dele. O Windows não tem como alterar a configuração de firmware de um PC de
-// mesa, e uma ferramenta que encontrasse um jeito de fazer isso seria uma
-// ferramenta capaz de deixar a máquina do cliente sem ligar.
-//
-// O que ele faz é montar a lista do que vale olhar, EM ORDEM DE RISCO, com o
-// modelo da placa-mãe e a versão da BIOS ao lado — porque com esses dois dados
-// a pessoa acha o manual certo em vez de seguir um vídeo de outra placa.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// AS CINCO FASES, e por que a ordem é essa
-//
-//   FASE 1 — ligar o que a pessoa JÁ COMPROU. XMP/EXPO, Resizable BAR, sair do
-//            modo Legacy. Nada aqui é overclock: é usar a peça na velocidade
-//            que está escrita na caixa dela.
-//
-//   FASE 2 — o que o fabricante documenta e reverte num clique. Costuma ser
-//            uma opção só, e o pior caso é voltar como estava.
-//
-//   FASE 3 — o que exige TESTE DE ESTABILIDADE. Curve Optimizer, undervolt. A
-//            falha aqui não aparece na hora: aparece como travada aleatória
-//            três semanas depois, quando ninguém mais lembra do que mexeu.
-//
-//   FASE 4 — overclock manual. O Otimiza NÃO orienta, e diz por quê.
-//
-//   FASE 5 — atualizar a BIOS. NUNCA automaticamente, nunca sem plano de
-//            recuperação, e só quando há um motivo nomeado.
-//
-// A ordem é por risco crescente e por reversibilidade decrescente. Quem parar
-// na fase 1 pegou a maior parte do ganho disponível — e é o que a maioria
-// deveria fazer.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// O QUE ESTE MÓDULO SE RECUSA A DAR
-//
-// **Número de Curve Optimizer.** Não existe valor seguro genérico: cada chip
-// aceita um limite diferente, e um `-30` copiado de um vídeo produz uma máquina
-// que passa em benchmark e trava no jogo. Dizer "use -20" seria o mesmo tipo de
-// palpite que gravou o valor errado de placa de vídeo na 2.1.0, com um custo
-// bem maior — ali o cliente perdeu FPS; aqui ele perderia estabilidade sem
-// saber por quê.
+// O que olhar na BIOS, EM ORDEM DE RISCO, com a placa e a versão ao lado para achar o manual certo. NÃO
+// ESCREVE NADA: uma ferramenta que escrevesse no firmware poderia deixar a máquina sem ligar. Fases: 1) ligar o
+// que já foi comprado (XMP/EXPO, Resizable BAR, sair do Legacy); 2) documentado e reversível; 3) exige teste de
+// estabilidade; 4) overclock manual, sem orientação; 5) atualizar a BIOS, nunca automático. Nunca dá número de
+// Curve Optimizer: um valor copiado passa em teste e trava no jogo semanas depois.
 
 use serde::{Deserialize, Serialize};
 
-/// O que o Windows conseguiu ler do firmware.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Leitura {
-    /// Fabricante e modelo da placa-mãe — o que permite achar o manual certo.
     pub placa_mae: Option<String>,
     pub versao_da_bios: Option<String>,
-    /// Data de lançamento da BIOS, como o Windows a declara.
     pub data_da_bios: Option<String>,
-    /// `Some(true)` para UEFI, `Some(false)` para Legacy/CSM. `None` é não sei.
+    /// `None` é não sei.
     pub uefi: Option<bool>,
     pub secure_boot: Option<bool>,
     pub lacunas: Vec<String>,
@@ -60,15 +19,10 @@ pub struct Leitura {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Fase {
-    /// Ligar o que já foi comprado.
     UsarOQueTem = 1,
-    /// Documentado pelo fabricante, reverte num clique.
     Documentado = 2,
-    /// Exige teste de estabilidade.
     ExigeTeste = 3,
-    /// Overclock manual. O produto não orienta.
     NaoOrientamos = 4,
-    /// Atualizar a BIOS. Nunca automático.
     UltimoRecurso = 5,
 }
 
@@ -115,29 +69,21 @@ impl Fase {
     }
 }
 
-/// Um item para olhar na BIOS.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Passo {
     pub id: String,
     pub fase: Fase,
     pub titulo: String,
-    /// Onde a opção costuma estar. "Costuma" é honesto: o nome muda de placa
-    /// para placa, e é por isso que o modelo da placa aparece junto.
+    /// "Costuma": o nome muda de placa para placa.
     pub onde: String,
     pub o_que_faz: String,
-    /// O que pode dar errado, e como voltar. Nunca vazio.
+    /// Nunca vazio.
     pub risco_e_volta: String,
-    /// Verdadeiro quando o Otimiza MEDIU alguma coisa que torna este passo
-    /// relevante nesta máquina — e não quando ele é só uma boa ideia genérica.
+    /// Verdadeiro quando o Otimiza MEDIU algo que torna o passo relevante aqui, e não só uma boa ideia genérica.
     pub medido_aqui: bool,
 }
 
-/// Monta a lista. **Função pura.**
-///
-/// `memoria_abaixo_do_nominal` e `rebar_desligado` vêm de quem já mede essas
-/// coisas (`firmware`, `rbar`). Este módulo não remede nada: duas leituras da
-/// mesma coisa é como um produto passa a mostrar dois números diferentes para o
-/// mesmo fato em duas telas.
+/// Os achados vêm de quem já os mede (`firmware`, `rbar`): remedir aqui mostraria dois números para o mesmo fato.
 pub fn montar(
     leitura: &Leitura,
     memoria_abaixo_do_nominal: bool,
@@ -146,7 +92,6 @@ pub fn montar(
 ) -> Vec<Passo> {
     let mut passos = Vec::new();
 
-    // ── Fase 1 ────────────────────────────────────────────────────────────
     passos.push(Passo {
         id: "xmp".to_string(),
         fase: Fase::UsarOQueTem,
@@ -206,7 +151,6 @@ pub fn montar(
         });
     }
 
-    // ── Fase 2 ────────────────────────────────────────────────────────────
     if amd {
         passos.push(Passo {
             id: "pbo".to_string(),
@@ -226,7 +170,6 @@ pub fn montar(
         });
     }
 
-    // ── Fase 3 ────────────────────────────────────────────────────────────
     if amd {
         passos.push(Passo {
             id: "curve_optimizer".to_string(),
@@ -250,7 +193,7 @@ pub fn montar(
         });
     }
 
-    // ── Fase 4 e 5: sempre presentes, porque a recusa é parte da orientação ─
+    // Fases 4 e 5 sempre presentes: a recusa é parte da orientação.
     passos.push(Passo {
         id: "overclock_manual".to_string(),
         fase: Fase::NaoOrientamos,
@@ -296,7 +239,6 @@ pub fn montar(
     passos
 }
 
-/// Lê o firmware desta máquina.
 #[cfg(target_os = "windows")]
 pub fn ler() -> Leitura {
     let mut leitura = Leitura::default();
@@ -370,9 +312,7 @@ mod tests {
         }
     }
 
-    /// As fases saem em ordem de risco crescente. Uma lista fora de ordem faria
-    /// o cliente encontrar o Curve Optimizer antes do XMP — e ele mexeria no
-    /// caro antes do barato.
+    /// Fora de ordem, o cliente acharia o Curve Optimizer antes do XMP.
     #[test]
     fn os_passos_saem_em_ordem_de_risco() {
         let passos = montar(&leitura_padrao(), true, true, true);
@@ -385,11 +325,6 @@ mod tests {
         assert_eq!(passos[0].fase, Fase::UsarOQueTem);
     }
 
-    /// A REGRA MAIS IMPORTANTE: o produto não dá número de Curve Optimizer.
-    ///
-    /// Um `-30` copiado de vídeo produz uma máquina que passa em teste e trava
-    /// no jogo semanas depois. Seria o mesmo palpite que gravou o valor errado
-    /// de placa de vídeo na 2.1.0, com um custo bem maior.
     #[test]
     fn o_curve_optimizer_nunca_vem_com_numero() {
         let passos = montar(&leitura_padrao(), false, false, true);
@@ -397,14 +332,12 @@ mod tests {
 
         assert!(curve.risco_e_volta.contains("NÃO DÁ NÚMERO"));
 
-        // Nenhum número negativo de offset no texto inteiro do passo.
         let texto = format!("{} {} {}", curve.titulo, curve.o_que_faz, curve.risco_e_volta);
         for proibido in ["-5", "-10", "-15", "-20", "-25", "-30"] {
             assert!(!texto.contains(proibido), "apareceu o valor {proibido} no texto");
         }
     }
 
-    /// E a atualização de BIOS diz, com todas as letras, que o produto não faz.
     #[test]
     fn a_atualizacao_de_bios_e_recusada_por_escrito() {
         let passos = montar(&leitura_padrao(), false, false, false);
@@ -415,9 +348,7 @@ mod tests {
         assert!(bios.risco_e_volta.contains("sem ligar"), "precisa dizer o pior caso");
     }
 
-    /// Os passos de AMD só aparecem em máquina AMD. Mandar um dono de Intel
-    /// procurar "Precision Boost Overdrive" no menu faria ele desistir do
-    /// passo a passo inteiro na primeira tentativa.
+    /// Mandar dono de Intel procurar "Precision Boost Overdrive" o faria desistir do passo a passo.
     #[test]
     fn pbo_e_curve_optimizer_so_aparecem_em_amd() {
         let intel = montar(&leitura_padrao(), false, false, false);
@@ -429,9 +360,7 @@ mod tests {
         assert!(amd.iter().any(|p| p.id == "pbo"));
     }
 
-    /// O passo do modo Legacy só aparece quando a máquina ESTÁ em Legacy — e
-    /// quando aparece, carrega o aviso de que mudar sem converter o disco faz o
-    /// Windows não iniciar.
+    /// Mudar do Legacy sem converter o disco faz o Windows não iniciar: o aviso vai junto.
     #[test]
     fn o_passo_do_legacy_so_aparece_em_legacy_e_avisa_do_disco() {
         let uefi = montar(&leitura_padrao(), false, false, false);
@@ -446,17 +375,13 @@ mod tests {
         assert!(csm.risco_e_volta.contains("backup") || csm.risco_e_volta.contains("cópia"));
     }
 
-    /// Não saber se é UEFI não pode virar "está em Legacy": seria mandar o
-    /// cliente mexer no boot da máquina dele por causa de uma leitura falha.
+    /// Não saber se é UEFI não pode virar "está em Legacy".
     #[test]
     fn uefi_desconhecido_nao_vira_passo_de_legacy() {
         let sem_saber = Leitura { uefi: None, ..leitura_padrao() };
         assert!(!montar(&sem_saber, false, false, false).iter().any(|p| p.id == "csm"));
     }
 
-    /// `medido_aqui` separa "isto vale para você" de "isto é uma boa ideia em
-    /// geral". Sem essa marca, a lista seria a mesma em toda máquina — que é
-    /// exatamente o que os vídeos de tweak fazem.
     #[test]
     fn o_que_foi_medido_aqui_e_marcado() {
         let com_achado = montar(&leitura_padrao(), true, true, false);
@@ -468,8 +393,6 @@ mod tests {
         assert!(!sem_achado.iter().find(|p| p.id == "xmp").unwrap().medido_aqui);
     }
 
-    /// Todo passo diz o risco E como voltar. Um passo de BIOS sem volta escrita
-    /// é um convite para o cliente ficar sem máquina.
     #[test]
     fn todo_passo_diz_o_risco_e_como_voltar() {
         for passo in montar(&leitura_padrao(), true, true, true) {
@@ -482,8 +405,6 @@ mod tests {
         }
     }
 
-    /// O modelo da placa vai junto do passo de atualização — é ele que faz a
-    /// pessoa achar o arquivo certo em vez de um de outra placa parecida.
     #[test]
     fn o_modelo_da_placa_aparece_onde_importa() {
         let passos = montar(&leitura_padrao(), false, false, false);
@@ -492,7 +413,6 @@ mod tests {
         assert!(bios.onde.contains("PRO H410M-B"));
     }
 
-    /// E sem o modelo, a frase não fica quebrada nem inventa um nome.
     #[test]
     fn sem_o_modelo_a_frase_continua_inteira() {
         let sem = Leitura { placa_mae: None, ..leitura_padrao() };

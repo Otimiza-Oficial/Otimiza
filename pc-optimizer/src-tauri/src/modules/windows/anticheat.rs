@@ -1,50 +1,15 @@
-// Anticheat: onde o Otimiza tira a mão
-//
-// POR QUE ESTE MÓDULO EXISTE ANTES DOS OUTROS
-//
-// O produto faz coisas que, vistas de fora, se parecem com trapaça: abre handle
-// no processo do jogo para mudar a prioridade, e escreve numa chave do registro
-// (IFEO) cujo uso mais conhecido é sequestro de execução. Até a 1.9 havia uma
-// terceira — suspender threads de programas de terceiros —, que saiu do produto
-// na 2.0 junto com o congelamento.
-//
-// Enquanto a lista de jogos tinha cinco nomes e três eram GTA, isso quase nunca
-// encostava num anticheat. Ao abrir a lista para Valorant, Fortnite, PUBG e
-// Rainbow Six, encostou — todos esses carregam anticheat de kernel.
-//
-// Um cliente banido por causa do Otimiza é o pior resultado possível deste
-// produto. Pior do que travar a máquina: travamento se conserta, conta banida
-// não volta. Então este módulo existe para o produto RECUSAR trabalho, e a
-// recusa aparece na tela com o motivo escrito.
-//
-// COMO A DETECÇÃO É FEITA
-//
-// Três evidências, todas somente leitura, todas baratas o bastante para rodar
-// no laço de seis segundos:
-//
-//   processo rodando   — o anticheat está ativo agora
-//   serviço no boot    — sobe junto com o Windows, mesmo sem o jogo aberto
-//   driver instalado   — o cliente joga aquilo, ainda que não agora
-//
-// O caso do Vanguard é o que justifica as três: o driver `vgk` sobe no boot com
-// `Start=0` e fica vigiando a máquina o dia inteiro, com o Valorant fechado.
-// Olhar só para processos abertos daria "nenhum anticheat" numa máquina onde a
-// Riot está observando desde que o PC ligou.
+// Anticheat: onde o Otimiza RECUSA trabalho, com o motivo na tela. Cliente banido é pior que PC travado: conta
+// não volta. Três evidências, só leitura: processo rodando, serviço no boot e driver instalado. O Vanguard (`vgk`)
+// sobe no boot com `Start=0` e vigia o dia inteiro com o Valorant fechado: olhar só processos não o veria.
 
 use super::registry;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AntiCheat {
-    /// Riot Vanguard. Driver de kernel que sobe no boot — Valorant e, desde
-    /// 2024, League of Legends.
     Vanguard,
-    /// Fortnite, Apex, Rust, Elden Ring e vários outros.
     EasyAntiCheat,
-    /// PUBG, Rainbow Six, Tarkov, DayZ, Arma.
     BattlEye,
-    /// Counter-Strike. Modo usuário, mas exige a Steam respondendo durante a
-    /// partida.
     Vac,
     FaceIt,
 }
@@ -60,10 +25,7 @@ impl AntiCheat {
         }
     }
 
-    /// Se roda com privilégio de núcleo do sistema.
-    ///
-    /// Anticheat de kernel enxerga manipulação de processo que nenhum programa
-    /// comum enxergaria. É a linha que separa "melhor não" de "nunca".
+    /// Kernel é a linha entre "melhor não" e "nunca".
     pub fn e_de_kernel(self) -> bool {
         match self {
             AntiCheat::Vanguard | AntiCheat::EasyAntiCheat | AntiCheat::BattlEye => true,
@@ -72,12 +34,9 @@ impl AntiCheat {
     }
 }
 
-/// Como soubemos que ele está aí.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Evidencia {
     ProcessoRodando(String),
-    /// Serviço configurado para subir com o Windows. O número é o valor de
-    /// `Start`: 0 é boot, 1 é sistema, 2 é automático.
     ServicoNoBoot(String, u32),
     DriverInstalado(String),
 }
@@ -86,11 +45,9 @@ pub enum Evidencia {
 pub struct Presenca {
     pub qual: AntiCheat,
     pub evidencia: Evidencia,
-    /// O anticheat está em execução NESTE momento.
     pub ativo_agora: bool,
 }
 
-/// Processos de anticheat, em minúsculas.
 const PROCESSOS: &[(&str, AntiCheat)] = &[
     ("vgc.exe", AntiCheat::Vanguard),
     ("vgtray.exe", AntiCheat::Vanguard),
@@ -102,7 +59,6 @@ const PROCESSOS: &[(&str, AntiCheat)] = &[
     ("faceitservice.exe", AntiCheat::FaceIt),
 ];
 
-/// Serviços, pelo nome da chave em `CurrentControlSet\Services`.
 const SERVICOS: &[(&str, AntiCheat)] = &[
     ("vgc", AntiCheat::Vanguard),
     ("vgk", AntiCheat::Vanguard),
@@ -112,25 +68,17 @@ const SERVICOS: &[(&str, AntiCheat)] = &[
     ("FACEIT", AntiCheat::FaceIt),
 ];
 
-/// O que o Otimiza quer fazer, para consultar se pode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Acao {
-    /// Abrir handle no processo do jogo para mudar a afinidade (núcleos).
-    /// Até a 2.8 servia à prioridade, que saiu.
     AfinidadeNoJogo,
-    /// Escrever em Image File Execution Options para o executável do jogo.
     EscreverIfeo,
-    /// Trocar o plano de energia do Windows.
     PlanoDeEnergia,
-    /// Contar quadros por rastreamento de eventos, sem encostar no processo.
     MedirQuadros,
 }
 
-/// A resposta: pode, ou não pode e por quê.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Permissao {
     Pode,
-    /// Em português, para ir direto à tela do cliente.
     Recusado(String),
 }
 
@@ -147,24 +95,16 @@ impl Permissao {
     }
 }
 
-/// Decide se uma ação é segura, dado o que foi detectado.
-///
-/// **Função pura**, e é de propósito: é a regra mais importante do produto em
-/// matéria de risco ao cliente, e precisa ser testável sem depender de ter um
-/// anticheat instalado na máquina de quem desenvolve.
+/// Pura: a regra de risco mais importante do produto, testável sem anticheat na máquina de quem desenvolve.
 pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
     let qualquer_ativo = presencas.iter().find(|p| p.ativo_agora);
     let instalado_de_kernel = presencas.iter().find(|p| p.qual.e_de_kernel());
 
     match acao {
-        // Nunca encostam em processo nenhum. O rastreamento de eventos do
-        // Windows lê o que o sistema já publica; o plano de energia é
-        // configuração da máquina. Nenhum dos dois é visível como manipulação.
+        // Rastreamento de eventos e plano de energia não encostam no processo do jogo.
         Acao::PlanoDeEnergia | Acao::MedirQuadros => Permissao::Pode,
 
-        // Abrir handle no processo do jogo é a coisa mais visível que o produto
-        // faz. E o ganho é pequeno: prioridade alta só muda alguma coisa quando
-        // há disputa real de processador.
+        // Abrir handle no processo do jogo é a coisa mais visível que o produto faz.
         Acao::AfinidadeNoJogo => match qualquer_ativo {
             Some(p) => Permissao::Recusado(format!(
                 "Não mexi nos núcleos do jogo: o {} está ativo, e alterar o processo \
@@ -175,9 +115,8 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
             None => Permissao::Pode,
         },
 
-        // Escrever em IFEO deixa marca permanente no registro, na mesma chave
-        // usada para sequestro de execução. Para jogo com anticheat de kernel
-        // não fazemos nem com o jogo fechado.
+        // IFEO deixa marca permanente na chave usada para sequestro de execução: com anticheat de kernel, nem com o
+        // jogo fechado.
         Acao::EscreverIfeo => match instalado_de_kernel {
             Some(p) => Permissao::Recusado(format!(
                 "Não gravei a prioridade permanente: esta máquina tem {} instalado. \
@@ -191,12 +130,7 @@ pub fn permite(acao: Acao, presencas: &[Presenca]) -> Permissao {
     }
 }
 
-// ------------------------------------------------------------------- detecção
-
-/// O que está instalado ou rodando nesta máquina.
-///
-/// Recebe a lista de processos de fora para poder rodar no laço de seis
-/// segundos sem varrer os processos duas vezes.
+/// Recebe a lista de processos de fora, para o laço de 6 s não varrer duas vezes.
 pub fn detectar(processos: &[String]) -> Vec<Presenca> {
     let mut achados: Vec<Presenca> = Vec::new();
 
@@ -213,9 +147,6 @@ pub fn detectar(processos: &[String]) -> Vec<Presenca> {
     }
 
     for (servico, qual) in SERVICOS {
-        // `Start` menor que 3 significa que o serviço sobe sozinho: 0 no boot,
-        // 1 com o sistema, 2 automático. É assim que o driver do Vanguard fica
-        // vigiando a máquina o dia inteiro com o Valorant fechado.
         let caminho = format!(r"SYSTEM\CurrentControlSet\Services\{}", servico);
 
         let Ok(crate::modules::changelog::PreviousValue::Dword(inicio)) =
@@ -228,8 +159,6 @@ pub fn detectar(processos: &[String]) -> Vec<Presenca> {
             continue;
         }
 
-        // Se o processo já foi encontrado rodando, aquela evidência é mais
-        // forte — não duplicamos a mesma família na lista.
         if achados.iter().any(|p| p.qual == *qual && p.ativo_agora) {
             continue;
         }
@@ -237,9 +166,7 @@ pub fn detectar(processos: &[String]) -> Vec<Presenca> {
         achados.push(Presenca {
             qual: *qual,
             evidencia: Evidencia::ServicoNoBoot(servico.to_string(), inicio),
-            // Serviço que sobe no boot está de pé agora, mesmo sem o jogo. É o
-            // caso do `vgk` — e tratá-lo como inativo seria o erro que este
-            // módulo existe para não cometer.
+            // Serviço que sobe no boot está de pé agora, mesmo sem o jogo.
             ativo_agora: inicio == 0,
         });
     }
@@ -247,7 +174,6 @@ pub fn detectar(processos: &[String]) -> Vec<Presenca> {
     achados
 }
 
-/// Lê os processos e detecta. Conveniência para quem não tem a lista em mãos.
 pub fn detectar_agora() -> Vec<Presenca> {
     let processos: Vec<String> = super::processes::listar_para_suspensao()
         .into_iter()
@@ -279,8 +205,7 @@ mod tests {
 
     #[test]
     fn maquina_limpa_pode_tudo() {
-        // Recusar sem motivo seria o outro extremo do erro: o produto tem que
-        // entregar o que o cliente comprou quando não há risco.
+        // Recusar sem motivo é o outro erro: sem risco, o produto entrega.
         for acao in [
             Acao::AfinidadeNoJogo,
             Acao::EscreverIfeo,
@@ -293,9 +218,6 @@ mod tests {
 
     #[test]
     fn medir_quadros_e_plano_de_energia_nunca_sao_recusados() {
-        // Rastreamento de eventos não encosta no processo do jogo, e plano de
-        // energia é configuração da máquina. Recusar aqui seria abrir mão de
-        // ganho real sem nenhum risco em troca.
         let todos: Vec<Presenca> = [
             AntiCheat::Vanguard,
             AntiCheat::EasyAntiCheat,
@@ -312,8 +234,6 @@ mod tests {
 
     #[test]
     fn ifeo_e_recusado_mesmo_com_o_jogo_fechado() {
-        // A escrita em IFEO deixa marca permanente no registro. Não adianta
-        // esperar o jogo fechar: a marca continua lá quando ele abrir.
         let p = permite(Acao::EscreverIfeo, &[instalado(AntiCheat::Vanguard)]);
 
         assert!(!p.pode());
@@ -341,8 +261,6 @@ mod tests {
             println!("  nenhum anticheat detectado nesta máquina");
         }
 
-        // Não dá para exigir achado nem ausência: depende do que a máquina tem
-        // instalado. O que dá para exigir é que a detecção não trave.
         assert!(achados.len() < 20, "detecção devolveu lista implausível");
     }
 }

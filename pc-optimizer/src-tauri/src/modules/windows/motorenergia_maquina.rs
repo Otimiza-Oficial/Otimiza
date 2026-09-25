@@ -1,20 +1,6 @@
-// ---------------------------------------------------------------------------
-// ADAPTIVE POWER ENGINE — a parte que conversa com o Windows
-//
-// As regras moram em `motorenergia.rs`, com testes. Aqui ficam só as leituras
-// e escritas: CPUID, topologia, `powercfg /qh`, contadores de desempenho pelo
-// PDH, a rajada de carga, o backup exato do plano anterior e as duas voltas
-// ("plano anterior" e "padrão do Windows").
-//
-// TRÊS REGRAS DESTE ARQUIVO:
-//
-// 1. O plano do cliente nunca é escrito. O motor trabalha dentro do plano
-//    OTIMIZA, copiado do Equilibrado. Voltar é reativar o plano anterior, que
-//    ficou intacto — e o backup existe para PROVAR isso, relendo cada valor.
-// 2. Toda escrita é relida do Windows. Código de saída não é prova.
-// 3. Nenhum núcleo é desligado, nenhuma afinidade é fixada, nenhum processo
-//    vai para tempo real. A rajada usa uma thread comum do próprio Otimiza.
-// ---------------------------------------------------------------------------
+// O motor de energia conversando com o Windows (as regras moram em `motorenergia.rs`). Três regras: o plano do
+// cliente nunca é escrito (o motor trabalha no OTIMIZA, e o backup PROVA a volta relendo cada valor); toda escrita
+// é relida; nenhum núcleo desligado, afinidade fixada ou processo em tempo real.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -25,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use super::motorenergia::{self as motor, AmostraCpu, Candidato, Cpuid, Enumeracao, Impressao, Parametros, Topologia};
 use super::planoenergia::{self as plano, EQUILIBRADO_GUID, NOME_DO_PLANO};
 use super::{power, registry, shell};
-
-// ================================================================ CPUID
 
 #[cfg(target_arch = "x86_64")]
 #[allow(unused_unsafe)]
@@ -66,11 +50,7 @@ pub fn ler_cpuid() -> Cpuid {
     Cpuid::default()
 }
 
-// ============================================================ topologia
-
-/// Núcleos físicos, processadores lógicos e classes de eficiência, lidos do
-/// Windows. A estrutura é percorrida pelos deslocamentos documentados em
-/// `SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX` / `PROCESSOR_RELATIONSHIP`.
+/// Percorrida pelos deslocamentos documentados de `SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX`.
 pub fn ler_topologia() -> Topologia {
     use windows_sys::Win32::System::SystemInformation::{GetLogicalProcessorInformationEx, RelationProcessorCore};
 
@@ -117,8 +97,6 @@ pub fn ler_topologia() -> Topologia {
     t
 }
 
-// ============================================================ impressão
-
 static IMPRESSAO: OnceLock<Impressao> = OnceLock::new();
 
 fn nome_do_plano(guid: &str) -> Option<String> {
@@ -129,8 +107,7 @@ fn nome_do_plano(guid: &str) -> Option<String> {
         .map(|(_, n)| n)
 }
 
-/// HARDWARE FINGERPRINT. A parte cara (PowerShell do chassi) é lida uma vez
-/// por sessão; alimentação e plano ativo são relidos toda vez.
+/// O PowerShell do chassi é lido uma vez por sessão; alimentação e plano ativo, toda vez.
 pub fn impressao() -> Impressao {
     let fixa = IMPRESSAO
         .get_or_init(|| {
@@ -167,8 +144,6 @@ pub fn impressao() -> Impressao {
     }
 }
 
-// =========================================================== enumeração
-
 pub fn enumerar_plano(guid: &str) -> Result<Enumeracao, String> {
     if !plano::e_guid(guid) {
         return Err(format!("`{}` não é um GUID de plano de energia.", guid));
@@ -181,7 +156,6 @@ pub fn enumerar_plano(guid: &str) -> Result<Enumeracao, String> {
     Ok(e)
 }
 
-/// O plano base de todo candidato: o Equilibrado deste Windows.
 pub fn enumerar_base() -> Result<Enumeracao, String> {
     enumerar_plano(EQUILIBRADO_GUID)
 }
@@ -201,7 +175,6 @@ pub fn bateria_de_candidatos(i: &Impressao, base: &Enumeracao) -> Bateria {
     let dispositivos = motor::variacoes_de_dispositivo(i, base, sobre);
     let todos: Vec<Candidato> = autoajuste.iter().chain(&escada_de_epp).chain(&dispositivos).cloned().collect();
     let mut controlados = motor::apelidos_controlados(&todos);
-    // O que o plano OTIMIZA antigo escrevia em todo PC também volta ao base.
     for antigo in [motor::apelidos::PROCTHROTTLEMIN, motor::apelidos::CPMINCORES, motor::apelidos::PERFBOOSTMODE, motor::apelidos::PERFEPP] {
         if base.por_alias(antigo).is_some() && !controlados.iter().any(|c| c == antigo) {
             controlados.push(antigo.to_string());
@@ -209,8 +182,6 @@ pub fn bateria_de_candidatos(i: &Impressao, base: &Enumeracao) -> Bateria {
     }
     Bateria { autoajuste, escada_de_epp, dispositivos, controlados }
 }
-
-// ============================================================== backup
 
 fn pasta() -> PathBuf {
     let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
@@ -239,10 +210,7 @@ pub fn ler_backup() -> Option<Backup> {
     std::fs::read_to_string(pasta().join("backup.json")).ok().and_then(|t| serde_json::from_str(&t).ok())
 }
 
-/// Guarda o plano ativo e TODOS os valores dele antes da primeira mudança.
-///
-/// Se o ativo já é o OTIMIZA, o backup existente continua valendo: o plano
-/// "anterior" é o de antes do Otimiza, não o próprio Otimiza.
+/// Se o ativo já é o OTIMIZA, vale o backup existente: o "anterior" é o de antes do Otimiza.
 fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
     let ativo = power::active_scheme()?;
     if nosso.is_some_and(|n| n.eq_ignore_ascii_case(&ativo)) {
@@ -276,12 +244,8 @@ fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
     Ok(backup)
 }
 
-// ============================================= teste interrompido
-
-/// Marca "há um teste de candidatos em andamento". Se o Otimiza fechar ou
-/// travar no meio do autoajuste, a máquina ficaria presa no último candidato
-/// testado — que não é o plano da pessoa. Na abertura seguinte, a marca
-/// existindo, o plano anterior volta sozinho.
+/// Se o Otimiza fechar no meio do autoajuste, a máquina ficaria no último candidato testado: com a marca, o
+/// plano anterior volta sozinho na abertura seguinte.
 pub fn marcar_teste_em_andamento(em_andamento: bool) {
     let arquivo = pasta().join("teste_em_andamento");
     if em_andamento {
@@ -296,13 +260,11 @@ pub fn teste_foi_interrompido() -> bool {
     pasta().join("teste_em_andamento").exists()
 }
 
-/// Chamado na abertura do app: desfaz um teste interrompido.
 pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !teste_foi_interrompido() {
         return None;
     }
     if !registry::is_elevated() {
-        // Sem administrador não dá para trocar o plano; a tela avisa.
         return None;
     }
     let r = restaurar_anterior();
@@ -311,8 +273,6 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     }
     Some(r)
 }
-
-// ============================================================ escrita
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Aplicacao {
@@ -337,7 +297,6 @@ fn plano_otimiza() -> Result<Option<String>, String> {
     Ok(plano::achar_na_lista(&plano::listar_planos()?, NOME_DO_PLANO))
 }
 
-/// Escreve um candidato no plano OTIMIZA, relê, ativa e confere.
 pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicacao, String> {
     exigir_admin()?;
 
@@ -374,7 +333,7 @@ pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicaca
     }
     recusados.dedup();
 
-    // Reativar é o que faz o Windows carregar os valores novos do plano ativo.
+    // Reativar é o que faz o Windows carregar os valores novos.
     power::set_active_scheme(&guid)?;
     let ativo = power::active_scheme().map(|a| a.eq_ignore_ascii_case(&guid)).unwrap_or(false);
 
@@ -397,13 +356,10 @@ pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicaca
     Ok(Aplicacao { plano: guid, candidato: candidato.id.clone(), escritos: escrita.len(), divergentes, recusados, ativo })
 }
 
-// ============================================================== voltas
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Restauracao {
     pub plano_ativo: String,
-    /// Valores do plano restaurado que não batem com o backup. Vazio é a
-    /// prova de que ele voltou exatamente como estava.
+    /// Vazio é a prova de que o plano voltou exatamente como estava.
     pub divergentes: Vec<String>,
     pub plano_otimiza_apagado: bool,
 }
@@ -415,7 +371,6 @@ fn apagar_plano_otimiza() -> bool {
     }
 }
 
-/// RESTORE PREVIOUS PLAN.
 pub fn restaurar_anterior() -> Result<Restauracao, String> {
     exigir_admin()?;
     let backup = ler_backup().ok_or("Não há backup do plano anterior: o motor nunca mudou o plano nesta máquina.")?;
@@ -444,7 +399,6 @@ pub fn restaurar_anterior() -> Result<Restauracao, String> {
     Ok(Restauracao { plano_ativo: ativo, divergentes, plano_otimiza_apagado: apagado })
 }
 
-/// RESTORE WINDOWS DEFAULT: ativa o Equilibrado e apaga o plano OTIMIZA.
 pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
     exigir_admin()?;
     power::set_active_scheme(EQUILIBRADO_GUID)?;
@@ -457,16 +411,13 @@ pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
     Ok(Restauracao { plano_ativo: ativo, divergentes: Vec::new(), plano_otimiza_apagado: apagado })
 }
 
-// ======================================================== contadores (PDH)
-
 const PDH_OK: u32 = 0;
 
 fn largo(texto: &str) -> Vec<u16> {
     texto.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Contadores de desempenho pelo NOME EM INGLÊS (`PdhAddEnglishCounterW`),
-/// que é o mesmo em qualquer idioma do Windows.
+/// Pelo NOME EM INGLÊS (`PdhAddEnglishCounterW`), igual em qualquer idioma.
 pub struct Amostrador {
     consulta: isize,
     desempenho: isize,
@@ -566,12 +517,8 @@ impl Amostrador {
             .filter(|c| (5.0..=120.0).contains(c))
             .collect();
 
-        // Contador que não responde chega como `None`, e não como número. O
-        // `unwrap_or(0.0)` que estava aqui transformava falha de PDH em "CPU a
-        // 0% de desempenho", e o `unwrap_or(100.0)` do limite transformava
-        // falha em "o firmware não está limitando nada" — os dois viravam
-        // evidência dentro da pontuação que decide se um plano fica na máquina
-        // do cliente ou é revertido.
+        // Falha chega como `None`: virar 0% ou "firmware não limita" entraria como evidência na pontuação que decide
+        // se um plano fica ou é revertido.
         AmostraCpu {
             desempenho_pct: self.valor(self.desempenho),
             frequencia_mhz: self.valor(self.frequencia),
@@ -592,7 +539,6 @@ impl Drop for Amostrador {
     }
 }
 
-/// Amostra os contadores a cada `intervalo` até `parar` virar verdadeiro.
 pub fn amostrar_enquanto(parar: std::sync::Arc<std::sync::atomic::AtomicBool>, intervalo: Duration) -> Vec<AmostraCpu> {
     use std::sync::atomic::Ordering;
     let Some(a) = Amostrador::novo() else { return Vec::new() };
@@ -604,14 +550,11 @@ pub fn amostrar_enquanto(parar: std::sync::Arc<std::sync::atomic::AtomicBool>, i
     v
 }
 
-/// Uma leitura instantânea, para o mapa de resposta.
 pub fn amostra_agora() -> Option<AmostraCpu> {
     let a = Amostrador::novo()?;
     std::thread::sleep(Duration::from_millis(500));
     Some(a.coletar())
 }
-
-// ============================================================== a rajada
 
 const FATIA: Duration = Duration::from_millis(2);
 const FATIAS_POR_RAJADA: usize = 200;
@@ -628,12 +571,8 @@ fn bloco_de_trabalho(estado: &mut u64) {
     }
 }
 
-/// POWER RESPONSE TEST: ocioso → rajada curta → ocioso → rajada…
-///
-/// Cada fatia de 5 ms conta quantos blocos de trabalho fixos couberam nela.
-/// A CPU que demora a subir o desempenho faz menos blocos nas primeiras
-/// fatias. Uma thread comum, sem afinidade e sem prioridade alterada: é o
-/// mesmo caminho que a thread de um jogo percorre.
+/// Cada fatia de 5 ms conta blocos de trabalho fixos: a CPU que demora a subir faz menos nas primeiras. Thread
+/// comum, sem afinidade nem prioridade, o caminho da thread de um jogo.
 pub fn teste_de_rajada() -> (Option<motor::RespostaMedida>, Vec<Vec<f64>>) {
     let rajadas: Vec<Vec<f64>> = std::thread::spawn(|| {
         let mut estado: u64 = 0x2545_F491_4F6C_DD1D;
@@ -660,16 +599,11 @@ pub fn teste_de_rajada() -> (Option<motor::RespostaMedida>, Vec<Vec<f64>>) {
     (motor::analisar_rajadas(&rajadas, FATIA.as_millis() as f64), rajadas)
 }
 
-// ======================================================= teste de quadros
-
-/// Quantos blocos de trabalho cabem em ~4 ms nesta CPU. Medido uma vez por
-/// sessão e usado igual em todos os candidatos — senão os números não se
-/// comparam.
+/// Medido uma vez por sessão e igual para todos os candidatos, senão os números não se comparam.
 fn blocos_por_quadro() -> u64 {
     static BLOCOS: OnceLock<u64> = OnceLock::new();
     *BLOCOS.get_or_init(|| {
         let mut estado: u64 = 0x9E37_79B9_7F4A_7C15;
-        // Aquece: a CPU sobe o desempenho antes de medir.
         let aquecer = Instant::now();
         while aquecer.elapsed() < Duration::from_millis(300) {
             bloco_de_trabalho(&mut estado);
@@ -684,12 +618,8 @@ fn blocos_por_quadro() -> u64 {
     })
 }
 
-/// TESTE DE QUADROS: um laço parecido com a thread principal de um jogo.
-///
-/// Cada "quadro" faz uma quantidade FIXA de trabalho de processador e depois
-/// espera ~3 ms, como o jogo esperando a placa de vídeo. É nessas esperas
-/// curtas que o plano de energia deixa o processador baixar o desempenho — e
-/// o próximo quadro paga. Serve para autoajustar sem precisar do jogo aberto.
+/// Quadro com trabalho FIXO e espera de ~3 ms, como o jogo esperando a placa: é nessas esperas que o plano deixa
+/// o processador baixar, e o próximo quadro paga. Serve para autoajustar sem o jogo aberto.
 pub fn teste_de_quadros(segundos: u64) -> (f64, Vec<f64>) {
     use windows::Win32::Media::{timeBeginPeriod, timeEndPeriod};
     let blocos = blocos_por_quadro();
@@ -716,12 +646,9 @@ pub fn teste_de_quadros(segundos: u64) -> (f64, Vec<f64>) {
     .unwrap_or((0.0, Vec::new()))
 }
 
-// ================================================================ medição
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MedicaoDoCandidato {
     pub resultado: motor::ResultadoDoCandidato,
-    /// A curva média da rajada, em % do sustentado, para o mapa de resposta.
     pub curva_pct: Vec<f64>,
     pub aplicacao: Option<Aplicacao>,
 }
@@ -741,13 +668,11 @@ fn curva_media(rajadas: &[Vec<f64>]) -> Vec<f64> {
     media.iter().map(|v| ((v / sustentado * 100.0) * 10.0).round() / 10.0).collect()
 }
 
-/// Mede o que está ativo agora: rajada (com contadores) e, se houver jogo,
-/// `repeticoes` medições de quadros com contadores e uso de GPU.
 pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: u32) -> Result<MedicaoDoCandidato, String> {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
-    // Dá ao Windows alguns segundos para o plano novo valer de fato.
+    // Alguns segundos para o plano novo valer de fato.
     std::thread::sleep(Duration::from_secs(3));
 
     let parar = Arc::new(AtomicBool::new(false));
@@ -789,7 +714,6 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
         }
         quadros = motor::resumir_quadros(fps_soma / fps_repeticoes.len() as f64, &intervalos_todos);
     } else {
-        // Sem jogo: o teste de quadros do Otimiza, com os contadores rodando.
         amostras.clear();
         let mut intervalos_todos = Vec::new();
         let mut fps_soma = 0.0;
@@ -823,8 +747,6 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
         aplicacao: None,
     })
 }
-
-// =========================================================== perfis de jogo
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerfilDeJogo {
@@ -878,7 +800,6 @@ pub fn definir_dinamico(ligado: bool) -> Result<Dinamico, String> {
     Ok(d)
 }
 
-/// Aplica parâmetros (de um perfil salvo ou do vencedor) nesta máquina.
 pub fn aplicar_parametros(id: &str, parametros: Parametros) -> Result<Aplicacao, String> {
     let i = impressao();
     let base = enumerar_base()?;
@@ -893,7 +814,6 @@ pub fn aplicar_parametros(id: &str, parametros: Parametros) -> Result<Aplicacao,
     aplicar(&candidato, &controlados)
 }
 
-/// Estado do vigia do modo dinâmico, guardado entre olhadas.
 #[derive(Debug, Default)]
 pub struct Vigia {
     pub estado: Option<motor::EstadoDinamico>,
@@ -908,8 +828,7 @@ pub struct EventoDinamico {
     pub erro: Option<String>,
 }
 
-/// Uma olhada do modo dinâmico. Procura só os executáveis com perfil salvo —
-/// uma listagem de processos, sem PowerShell — e troca o plano quando precisa.
+/// Só os executáveis com perfil salvo, sem PowerShell.
 pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
     if !dinamico().ligado || !registry::is_elevated() {
         return None;
@@ -946,8 +865,7 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
 mod tests {
     use super::*;
 
-    /// Leitura real desta máquina, sem escrever nada. Roda com
-    /// `cargo test --lib -- --ignored motorenergia_maquina`.
+    /// Só lê: `cargo test --lib -- --ignored motorenergia_maquina`.
     #[test]
     #[ignore]
     fn teste_de_quadros_real() {
