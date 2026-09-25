@@ -1,15 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /*
- * A ABA BIOS (3.0).
- *
- * O Otimiza não grava na BIOS: em placa de consumo as opções ficam num bloco
- * da NVRAM de cada fabricante, e errar ali deixa a placa sem ligar. A aba faz o
- * resto: a ficha do que o Windows deixa ler, os defeitos conhecidos, o
- * atalho para reiniciar direto na BIOS e, na volta, o que mudou.
- *
- * "O que mudou" compara com uma foto guardada NESTE computador (localStorage)
- * antes de entrar na BIOS. Sem foto, não há comparação — e a tela diz isso.
+ * Aba BIOS (3.0). Não grava na BIOS (NVRAM de cada fabricante; errar deixa a placa sem ligar): ficha do que o
+ * Windows deixa ler, defeitos conhecidos, atalho para reiniciar na BIOS e, na volta, o que mudou contra uma foto
+ * guardada neste computador (localStorage). Sem foto, sem comparação, e a tela diz.
  */
 
 type Defeito =
@@ -232,7 +226,6 @@ function ligarEventos() {
   });
 }
 
-/** Monta a aba na primeira vez que ela é aberta. */
 export async function carregarAbaBios() {
   if (carregado) return;
   carregado = true;

@@ -2,16 +2,9 @@ import { fraseDaPlaca, type ResumoGpu } from "./placa";
 import { invoke } from "@tauri-apps/api/core";
 
 /*
- * O MAPA DE DESEMPENHO (2.9).
- *
- * CPU → memória → disco → GPU → VRAM, lidos pelos contadores do Windows
- * durante uma janela, e — se houver jogo aberto — os quadros dele no mesmo
- * intervalo. O classificador (`core::gargalo`) aponta TODOS os gargalos que
- * se sustentaram, cada um com os números que o justificam.
- *
- * Esta tela só traduz estados em frases. Nenhuma decisão mora aqui e nenhum
- * número é inventado: campo que o Windows não entregou aparece como "não
- * medido".
+ * Mapa de desempenho (2.9): CPU, memória, disco, GPU e VRAM pelos contadores do Windows numa janela, e os quadros
+ * do jogo aberto no mesmo intervalo. `core::gargalo` aponta TODOS os gargalos sustentados, com os números. A tela
+ * só traduz; o que o Windows não entregou aparece como "não medido".
  */
 
 /** As classes do classificador ÚNICO do produto (`modules/gargalo.rs`, 2.8). */
@@ -98,7 +91,6 @@ type Diagnostico = {
   sensores_da_placa: ResumoGpu | null;
 };
 
-/** O que cada gargalo quer dizer, e o que fazer — escrito para quem joga. */
 /** O que cada classe quer dizer, e o que fazer — escrito para quem joga. */
 const NA_TELA: Record<Classe, { titulo: string; explica: string; faz: string; no: No }> = {
   CpuUmNucleo: {
@@ -257,8 +249,7 @@ async function desenharTetos() {
   }
 }
 
-// 40 s: num jogo preso a 60 FPS, 20 s dão ~1.200 quadros, abaixo dos 2.000 que
-// o 1% pior e o P99 exigem para significar alguma coisa.
+// 40 s: a 60 FPS, 20 s dão ~1.200 quadros, abaixo dos 2.000 que o 1% pior e o P99 exigem.
 const SEGUNDOS = 40;
 const ESPERA_PARA_VOLTAR_AO_JOGO = 8;
 
@@ -346,13 +337,8 @@ async function medir(espera: number) {
 }
 
 /*
- * A placa NESTA janela.
- *
- * Fica logo abaixo do mapa e acima dos gargalos, de propósito: "a placa foi
- * limitada por temperatura em 23% do teste" é a resposta que muda o que a
- * pessoa vai fazer — e nenhum ajuste de Windows resolve isso.
- *
- * A frase mora em `placa.ts`, a mesma que a ficha do jogo usa.
+ * Abaixo do mapa e acima dos gargalos: "limitada por temperatura em 23% do teste" é o que muda a decisão, e
+ * nenhum ajuste de Windows resolve. A frase mora em `placa.ts`.
  */
 function linhaDaPlacaNoMapa(d: Diagnostico): string {
   const f = fraseDaPlaca(d.sensores_da_placa, "deste teste");

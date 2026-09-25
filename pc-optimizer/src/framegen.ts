@@ -1,20 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
 /*
- * O LABORATÓRIO DE GERAÇÃO DE QUADROS.
- *
- * O motor mora em `src-tauri/src/modules/windows/framegen.rs`: ele decide, e
- * manda ESTADOS (enums). Esta tela escolhe a frase e a cor para cada estado —
- * nunca o contrário. Nenhuma comparação aqui olha texto vindo do Rust.
- *
- * O que a tela nunca faz: ligar geração de quadros. A pessoa liga no jogo, no
- * driver ou no Lossless Scaling; o Otimiza mede antes e depois e diz o que os
- * números mostram. O único ajuste que o laboratório aplica é o limite de FPS
- * no driver NVIDIA — pelo mesmo comando da aba Jogos, que entra no histórico
- * e é desfeito sozinho se a medição seguinte sair pior.
+ * Laboratório de geração de quadros (`framegen.rs` decide e manda ESTADOS; a tela escolhe frase e cor, sem
+ * comparar texto do Rust). Nunca liga geração: a pessoa liga, o Otimiza mede antes e depois. O único ajuste é o
+ * limite de FPS no driver NVIDIA, pelo comando da aba Jogos, desfeito sozinho se a medição seguinte piorar.
  */
-
-// ------------------------------------------------------------------ os tipos
 
 type Fabricante = "Nvidia" | "Amd" | "Intel" | "Desconhecido";
 type Arquitetura =
@@ -150,8 +140,6 @@ const SITUACAO_DO_GERADOR: Record<SituacaoDoGerador, { rotulo: string; tom: Tom 
 type OptimizationOutcome = { id: string; success: boolean; applied: boolean; message: string };
 
 type Tom = "ok" | "aviso" | "erro" | "neutro";
-
-// ------------------------------------------------------- as frases da tela
 
 const NOME: Record<Tecnologia, string> = {
   DlssFg: "NVIDIA DLSS Frame Generation",
@@ -331,8 +319,6 @@ const NIVEL_ARTEFATO: Record<NivelDeArtefato, { rotulo: string; tom: Tom }> = {
   Incomodo: { rotulo: "incômodo", tom: "erro" },
 };
 
-// ------------------------------------------------------------ utilidades
-
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
@@ -361,8 +347,6 @@ function valor(v: Valor, unidade: string, casas = 0): string {
 }
 
 const $ = <T extends HTMLElement>(raiz: HTMLElement, seletor: string) => raiz.querySelector<T>(seletor);
-
-// ----------------------------------------------------------------- o estado
 
 type Ligada = { resultado: ResultadoDaRodada; artefatos: Partial<Record<Artefato, Intensidade>> };
 
@@ -498,7 +482,9 @@ function guardarNoHistorico(c: ComparacaoDaTela, r: Rodada) {
     todos[chave] = lista;
     localStorage.setItem(CHAVE_HISTORICO, JSON.stringify(todos));
   } catch {
-    /* histórico é conveniência: sem armazenamento, a tela funciona igual */
+    /*
+     * Histórico é conveniência: sem armazenamento a tela funciona igual.
+     */
   }
 }
 
@@ -513,8 +499,6 @@ let raiz: HTMLElement;
 let pedirAdmin: (motivo: string) => void = () => {};
 
 const hz = () => estado.deteccao?.tela?.hz_atual ?? 0;
-
-// ------------------------------------------------------------- as ações
 
 async function detectar() {
   estado.erro = "";
@@ -692,8 +676,6 @@ function iniciarContagem(segundos: number) {
     if (texto) texto.textContent = `Medindo… ${Math.max(0, Math.ceil(segundos - passado))} s. Continue jogando na mesma cena.`;
   }, 250);
 }
-
-// ---------------------------------------------------------------- o desenho
 
 function painel(titulo: string, tag: string, corpo: string, extra = "") {
   return `<section class="panel fg-painel" ${extra}>
@@ -1125,8 +1107,6 @@ function desenhar() {
   ].join("");
 }
 
-// ------------------------------------------------------------ os eventos
-
 function ligarEventos() {
   raiz.addEventListener("click", async (ev) => {
     const alvo = (ev.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -1196,7 +1176,7 @@ function ligarEventos() {
 
 let carregado = false;
 
-/** Chamada ao abrir a aba, uma vez só: a detecção passa pelo PowerShell. */
+/** Uma vez só, ao abrir a aba: a detecção passa pelo PowerShell. */
 export async function carregarLaboratorioDeGeracao(opcoes: { pedirAdmin: (motivo: string) => void }) {
   if (carregado) return;
   carregado = true;

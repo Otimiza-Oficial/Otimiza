@@ -1,16 +1,7 @@
 /*
- * O QUE A PLACA FEZ NUMA JANELA MEDIDA — a frase, num lugar só.
- *
- * Duas telas mostram isto: a ficha do jogo (a última partida medida sozinha) e
- * o Mapa de desempenho (a janela que a pessoa acabou de medir). A conta e os
- * limiares moram no Rust (`core::sensores`); aqui fica só a redação, e ela
- * mora neste arquivo justamente para não existir duas vezes, com duas
- * redações que envelhecem separadas.
- *
- * O NÚMERO QUE IMPORTA NÃO É A TEMPERATURA. É quanto do tempo o DRIVER disse
- * que estava segurando o clock, e por quê. Placa a 78 °C com o clock cheio é
- * uma placa trabalhando; 70 °C segurando o clock metade da partida é um
- * problema físico que nenhum ajuste de Windows resolve.
+ * A frase do que a placa fez numa janela medida, num lugar só (ficha do jogo e Mapa); a conta e os limiares moram
+ * em `core::sensores`. O número que importa é quanto do tempo o DRIVER segurou o clock, e por quê, não a
+ * temperatura.
  */
 
 export type ResumoGpu = {
@@ -27,13 +18,12 @@ export type ResumoGpu = {
   motivos_lidos: boolean;
 };
 
-/** Os mesmos pisos do `core::sensores` — a tela não inventa piso próprio. */
+/** Os mesmos pisos do `core::sensores`. */
 const TERMICO_ALTO_PCT = 5;
 const TETO_DOMINANTE_PCT = 60;
 
 export type FraseDaPlaca = { tom: "aviso" | "nota"; texto: string };
 
-/** Os números crus da janela, em uma linha. */
 function numerosDaPlaca(p: ResumoGpu): string {
   return [
     p.temperatura_max_c !== null ? `máx. ${Math.round(p.temperatura_max_c)} °C` : null,
@@ -46,12 +36,7 @@ function numerosDaPlaca(p: ResumoGpu): string {
     .join(" · ");
 }
 
-/**
- * O que dizer sobre a placa nesta janela. `null` quando não houve amostra —
- * máquina sem placa NVIDIA, ou medição antiga.
- *
- * `janela` é a palavra que entra na frase: "desta partida", "deste teste".
- */
+/** `null` sem amostra (sem NVIDIA, ou medição antiga). `janela` entra na frase: "desta partida", "deste teste". */
 export function fraseDaPlaca(p: ResumoGpu | null | undefined, janela = "desta partida"): FraseDaPlaca | null {
   if (!p || !p.amostras) return null;
   const numeros = numerosDaPlaca(p);

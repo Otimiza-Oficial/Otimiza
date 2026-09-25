@@ -1,54 +1,20 @@
 /**
- * A MÁQUINA, DESENHADA COM AS PRÓPRIAS MEDIÇÕES.
- *
- * Uma nuvem de pontos em forma de esfera. Cada ponto é uma amostra; a esfera é
- * o computador do cliente.
- *
- * ELA NÃO É ENFEITE, E ISSO É A DECISÃO INTEIRA DESTE ARQUIVO.
- *
- * O produto tem uma regra fundadora: nunca mostrar um número que não foi
- * medido. Uma imagem bonita e inventada no meio de uma tela de medições
- * contradiz isso em silêncio — o cliente não tem como saber que aquela metade
- * da tela é decoração e a outra é dado.
- *
- * Então cada propriedade visual sai de uma leitura de verdade:
- *
- *   quantos pontos   ←  núcleos lógicos da CPU
- *   como eles vibram ←  uso de CPU agora
- *   quanto do casco  ←  memória livre; a esfera se esvazia conforme enche
- *   a cor            ←  o veredito: neutro, âmbar ou vermelho
- *
- * Sem leitura nenhuma, ela desenha o estado "não medido" — esparsa e parada —
- * em vez de fingir movimento. Silêncio aqui é honestidade, não tela vazia.
- *
- * O CUSTO, QUE NUM OTIMIZADOR NÃO É DETALHE
- *
- * Este produto é vendido com a promessa de deixar PC fraco mais rápido. Uma
- * animação que engasgue na máquina que ele deveria estar consertando o
- * desmente antes de aplicar a primeira otimização.
- *
- * Por isso ela obedece ao mesmo interruptor global do resto da interface: com
- * `--anim` em zero, ou com `.sem-animacao` no corpo, a esfera desenha UM quadro
- * e para. Continua sendo a mesma imagem, e custa uma vez.
+ * A máquina como nuvem de pontos: cada propriedade sai de uma leitura (pontos ← núcleos lógicos; vibração ← uso de
+ * CPU; casco ← memória livre; cor ← veredito). Sem leitura fica esparsa e parada. Obedece ao interruptor global de
+ * animação (`--anim` zero ou `.sem-animacao`): desenha UM quadro e para.
  */
 
 export interface LeituraDaEsfera {
-  /** Núcleos lógicos. Decide quantos pontos existem. */
   nucleos: number;
-  /** Uso de CPU agora, de 0 a 100. Decide o quanto eles vibram. */
   cpu: number;
-  /** Uso de memória, de 0 a 100. Decide o quanto do casco se abre. */
   memoria: number;
-  /** O veredito, que decide a cor. */
   nivel: "ok" | "importante" | "critico";
 }
 
 interface Ponto {
-  /** Posição na esfera unitária. */
   x: number;
   y: number;
   z: number;
-  /** Fase própria, para os pontos não pulsarem em uníssono. */
   fase: number;
 }
 
@@ -58,14 +24,7 @@ const COR = {
   critico: "180, 35, 24",
 } as const;
 
-/**
- * Distribui pontos por igual sobre a esfera.
- *
- * Sortear latitude e longitude ao acaso AGRUPA nos polos — é o erro clássico, e
- * fica visível: a esfera ganha duas manchas. A espiral de Fibonacci distribui
- * de verdade, e é o que faz a nuvem parecer uma superfície em vez de um
- * amontoado.
- */
+/** Latitude e longitude sorteadas agrupam nos polos; a espiral de Fibonacci distribui de verdade. */
 function semear(quantidade: number): Ponto[] {
   const pontos: Ponto[] = [];
   const dourado = Math.PI * (3 - Math.sqrt(5));
@@ -103,42 +62,25 @@ export class Esfera {
   }
 
   private semearPara(nucleos: number) {
-    // Entre 1.400 e 4.200 pontos. O piso existe para a esfera continuar densa
-    // num PC de 2 núcleos — abaixo disso ela vira uma peneira e perde a forma.
-    // O teto existe para um processador de 32 núcleos não virar um disco branco:
-    // passada certa densidade a silhueta some e o custo sobe à toa.
+    // Piso para continuar densa com 2 núcleos; teto para 32 núcleos não virar um disco branco.
     const quantidade = Math.round(Math.min(4200, Math.max(1400, nucleos * 300)));
 
     if (this.pontos.length !== quantidade) this.pontos = semear(quantidade);
   }
 
-  /** Recebe uma medição nova. Chamar a cada leitura do monitor. */
   atualizar(leitura: LeituraDaEsfera) {
     this.semearPara(leitura.nucleos);
     this.leitura = leitura;
   }
 
-  /**
-   * Troca só a cor, sem esperar a próxima medição.
-   *
-   * O veredito e o monitor chegam por caminhos diferentes e em velocidades
-   * diferentes. Sem isto, a tela conseguia mostrar uma frase vermelha ao lado
-   * de uma esfera neutra — dois pedaços da mesma tela discordando sobre o
-   * estado da máquina, que é exatamente o tipo de coisa que faz o cliente
-   * duvidar do diagnóstico inteiro.
-   */
+  /** Veredito e monitor chegam por caminhos diferentes: sem isto, frase vermelha ao lado de esfera neutra. */
   definirNivel(nivel: LeituraDaEsfera["nivel"]) {
     this.leitura = this.leitura
       ? { ...this.leitura, nivel }
       : { nucleos: 8, cpu: 0, memoria: 0, nivel };
   }
 
-  /**
-   * Desenha um quadro.
-   *
-   * `avancar` só é verdade quando a interface pode se mexer. Em máquina fraca
-   * ele vem falso, e o mesmo desenho acontece uma vez.
-   */
+  /** `avancar` falso em máquina fraca: o mesmo desenho uma vez. */
   private desenhar(avancar: boolean) {
     const ctx = this.ctx;
     if (!ctx) return;
@@ -153,32 +95,25 @@ export class Esfera {
 
     const medida = this.leitura;
 
-    // SEM MEDIÇÃO, A ESFERA NÃO INVENTA MOVIMENTO. Ela fica esparsa e parada —
-    // que é a aparência honesta de "ainda não sei nada desta máquina".
+    // Sem medição não inventa movimento.
     const cpu = medida ? Math.min(100, Math.max(0, medida.cpu)) : 0;
     const memoria = medida ? Math.min(100, Math.max(0, medida.memoria)) : 0;
     const cor = COR[medida?.nivel ?? "ok"];
 
     if (avancar) {
-      // Gira mais rápido sob carga. É a leitura mais direta do desenho: uma
-      // máquina ocupada tem uma esfera inquieta.
       this.giro += 0.0015 + (cpu / 100) * 0.004;
     }
 
     const sen = Math.sin(this.giro);
     const cos = Math.cos(this.giro);
 
-    // A memória abre buracos no casco: quanto mais cheia, mais pontos somem.
-    // É a leitura que o cliente deste produto mais precisa ver — a máquina que
-    // motivou o Otimiza trava por falta de memória.
     const vazios = memoria / 140;
     const tremor = (cpu / 100) * 1.6;
 
     for (let i = 0; i < this.pontos.length; i += 1) {
       const p = this.pontos[i];
 
-      // Um sorteio ESTÁVEL por ponto: o mesmo ponto some sempre, em vez de a
-      // esfera cintilar inteira a cada quadro.
+      // Sorteio ESTÁVEL por ponto, senão a esfera cintilaria.
       if (vazios > 0 && ((p.fase * 7919) % 1000) / 1000 < vazios) continue;
 
       const x = p.x * cos - p.z * sen;
@@ -191,17 +126,9 @@ export class Esfera {
       const px = meioX + x * raio + balanco;
       const py = meioY + p.y * raio + balanco;
 
-      // PROFUNDIDADE E SILHUETA — o que faz uma nuvem de pontos parecer um
-      // corpo, e não um borrão.
-      //
-      // Profundidade sozinha (o de trás mais apagado) dá uma bola cinza chapada.
-      // O que dá volume de verdade é a SILHUETA: num casco de pontos, a vista
-      // atravessa mais material perto da borda do que no centro, então a borda
-      // acumula brilho. É o mesmo motivo pelo qual uma bolha de sabão tem o
-      // contorno mais nítido que o meio.
+      // O volume vem da SILHUETA: perto da borda a vista atravessa mais pontos, e ela acumula brilho.
       const frente = (z + 1) / 2;
 
-      // Distância do centro na tela, de 0 (meio) a 1 (borda).
       const daBorda = Math.sqrt(x * x + p.y * p.y);
       const silhueta = daBorda * daBorda;
 
@@ -213,7 +140,6 @@ export class Esfera {
     }
   }
 
-  /** Liga o desenho. Respeita o interruptor de movimento do produto. */
   ligar() {
     this.parar();
 
@@ -221,7 +147,6 @@ export class Esfera {
       || Number(getComputedStyle(document.body).getPropertyValue("--anim") || 1) === 0;
 
     if (parado) {
-      // Um quadro, e acabou. A imagem continua a mesma; o custo é pago uma vez.
       this.desenhar(false);
       return;
     }
@@ -239,7 +164,6 @@ export class Esfera {
     this.quadro = null;
   }
 
-  /** Redesenha uma vez. Para quando a medição muda com a animação desligada. */
   redesenhar() {
     if (this.quadro === null) this.desenhar(false);
   }

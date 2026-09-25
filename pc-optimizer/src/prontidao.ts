@@ -46,7 +46,6 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
-/** Liga o botão "Verificar antes de jogar" do Painel. */
 export function ligarProntidao() {
   const botao = document.getElementById("pronto-jogar");
   const saida = document.getElementById("pronto-jogar-resultado");

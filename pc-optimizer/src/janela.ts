@@ -1,25 +1,11 @@
 /**
- * A barra da janela.
- *
- * O Windows desenha a dele com botoes grandes no canto direito, numa cor que
- * nao e a nossa e num tamanho que nao combina com nada do resto. Desligar a
- * decoracao e desenhar a propria e o que faz o programa parecer um produto, e
- * nao uma pagina dentro de uma moldura emprestada.
- *
- * O preco e este arquivo: arrastar, minimizar, maximizar e fechar passam a ser
- * nossa responsabilidade.
- *
- * ARRASTAR NAO ESTA AQUI. Ele e feito pelo atributo `data-tauri-drag-region` no
- * HTML, que o proprio Tauri interpreta — e isso importa: arrastar janela pelo
- * JavaScript, ouvindo o mouse, fica visivelmente atrasado em relacao ao
- * ponteiro. O sistema operacional faz isso melhor do que qualquer laco nosso.
+ * A barra da janela, desenhada por nós (a do Windows não combina com nada). Arrastar NÃO está aqui: é o
+ * `data-tauri-drag-region` no HTML, porque arrastar pelo JavaScript fica atrasado em relação ao ponteiro.
  */
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function ligarBarraDaJanela() {
-  // Fora do Tauri — no navegador, durante o desenvolvimento — nao ha janela
-  // para controlar. A barra continua desenhada, e os botoes nao fazem nada em
-  // vez de estourar no console.
+  // Fora do Tauri (navegador em desenvolvimento) os botões não fazem nada em vez de estourar no console.
   const dentroDoTauri = "__TAURI_INTERNALS__" in window;
 
   const janela = dentroDoTauri ? getCurrentWindow() : null;
@@ -38,11 +24,8 @@ export function ligarBarraDaJanela() {
   ligar("janela-maximizar", () => janela!.toggleMaximize());
   ligar("janela-fechar", () => janela!.close());
 
-  // A CLASSE DIZ SE ESTA MAXIMIZADA.
-  //
-  // O canto arredondado da janela precisa sumir quando ela ocupa a tela
-  // inteira: canto redondo colado na borda do monitor deixa quatro triangulos
-  // da area de trabalho aparecendo, e o efeito e de janela mal encaixada.
+  // Maximizada, o canto arredondado some: colado na borda do monitor deixaria quatro triângulos da área de
+  // trabalho aparecendo.
   const conferirMaximizada = async () => {
     if (!janela) return;
 

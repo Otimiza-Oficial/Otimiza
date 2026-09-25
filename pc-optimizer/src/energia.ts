@@ -2,18 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 /*
- * A ABA DO MOTOR DE ENERGIA ADAPTATIVO.
- *
- * O motor (`motorenergia.rs`) identifica a CPU, enumera o que o Windows expõe,
- * gera candidatos para a arquitetura e escolhe pelo que MEDIU. Esta tela só
- * traduz estados em frases e cores — nenhuma decisão mora aqui, e nenhuma
- * comparação olha texto vindo do Rust.
- *
- * Todo ganho exibido é medido. Quando não houve medição daquele número, a
- * tela escreve "não medido", nunca um número.
+ * Aba do motor de energia adaptativo (`motorenergia.rs`): a tela só traduz estados em frases e cores, sem
+ * comparar texto do Rust. Ganho sem medição aparece como "não medido", nunca um número.
  */
-
-// ------------------------------------------------------------------ tipos
 
 type Arquitetura =
   | "IntelLegada" | "IntelModerna" | "IntelHibrida" | "AmdLegada" | "Zen2" | "Zen3" | "Zen4" | "Zen5Mais" | "Desconhecida";
@@ -149,8 +140,6 @@ type Restauracao = { plano_ativo: string; divergentes: string[]; plano_otimiza_a
 
 type Tom = "ok" | "aviso" | "erro" | "neutro";
 
-// ----------------------------------------------------------------- frases
-
 const ARQUITETURA: Record<Arquitetura, string> = {
   IntelLegada: "Intel sem Speed Shift",
   IntelModerna: "Intel com Speed Shift",
@@ -252,8 +241,6 @@ const ROTULO_DO_PAPEL = (p: Papel, notebook: boolean): string =>
     Dispositivo: "Política de dispositivo",
   })[p];
 
-// ------------------------------------------------------------- utilidades
-
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const num = (n: number, casas = 0) =>
@@ -284,8 +271,6 @@ function descreverParametros(p: Parametros): string {
   if (p.usb === "Desligada") partes.push("suspensão USB desligada");
   return partes.join(" · ");
 }
-
-// ------------------------------------------------------------------ estado
 
 const estado = {
   painel: null as Painel | null,
@@ -321,8 +306,6 @@ function todosOsCandidatos(): Candidato[] {
   const b = estado.painel?.bateria;
   return b ? [...b.autoajuste, ...b.escada_de_epp, ...b.dispositivos, ...estado.refino] : [];
 }
-
-// ------------------------------------------------------------------ ações
 
 async function carregar() {
   try {
@@ -514,8 +497,6 @@ async function restaurar(qual: "anterior" | "windows") {
   estado.rodando = "";
   await carregar();
 }
-
-// ------------------------------------------------------------------ desenho
 
 function desenharPrincipio() {
   return painel(
@@ -852,8 +833,6 @@ function desenhar() {
   ].join("");
 }
 
-// ------------------------------------------------------------------ eventos
-
 function ligarEventos() {
   raiz.addEventListener("click", async (ev) => {
     const b = (ev.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -886,7 +865,7 @@ function ligarEventos() {
 
 let carregado = false;
 
-/** Chamada ao abrir a aba, uma vez só: a leitura passa pelo PowerShell e pelo `powercfg`. */
+/** Uma vez só, ao abrir a aba: a leitura passa pelo PowerShell e pelo `powercfg`. */
 export async function carregarMotorDeEnergia(opcoes: { pedirAdmin: (motivo: string) => void }) {
   if (carregado) return;
   carregado = true;
