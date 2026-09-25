@@ -1,55 +1,27 @@
-// O que o Windows já registrou
-//
-// Este é o módulo com a evidência mais forte do produto inteiro, e o mais
-// barato de construir: o Windows já anotou tudo, e ninguém nunca leu.
-//
-// Quando a memória acaba, o Windows grava o evento 2004 do
-// Resource-Exhaustion-Detector — com o commit do sistema, a memória física, e
-// o NOME e o tamanho dos três processos que mais seguravam memória naquele
-// instante. Quando um programa para de responder, grava o evento 1002 com o
-// nome do executável e a hora.
-//
-// É a diferença entre o produto dizer "você precisa de mais memória" e dizer
-// "em 16/07 às 21:22 o Windows registrou falta de memória nesta máquina;
-// claude.exe segurava 10,5 GB". A segunda frase o cliente confere sozinho no
-// Visualizador de Eventos, e é por isso que ela vale.
-//
-// ONDE O DADO MORA, E POR QUE ISSO IMPORTA
-//
-// O 2004 NÃO usa `EventData` como quase todo evento do Windows: usa `UserData`,
-// com um bloco `MemoryExhaustionInfo` em namespace próprio. Ler `EventData`
-// nele devolve vazio — foi a primeira coisa que tentei.
-//
-// E, como em `boot.rs` e `thermal.rs`, nada aqui lê a mensagem renderizada do
-// evento: ela é traduzida pelo idioma do Windows. Os nomes dos elementos XML
-// (`SystemCommitCharge`, `CommitCharge`, `AppName`) são fixos em inglês em
-// qualquer instalação, e é neles que este módulo se apoia.
+// O que o Windows já registrou: evento 2004 (memória esgotada, com os processos que mais seguravam) e 1002
+// (programa parou de responder). É a evidência que o cliente confere no Visualizador de Eventos. O 2004 usa
+// `UserData`, não `EventData`; nada aqui lê a mensagem traduzida, só os nomes de elemento XML, fixos em inglês.
 
 use super::achados::{FindingSeverity, FixLocation};
 use super::shell;
 use serde::{Deserialize, Serialize};
 
-/// Um processo que estava segurando memória quando o Windows desistiu.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Culpado {
     pub nome: String,
     pub gb: f64,
 }
 
-/// Um registro de "a memória acabou", feito pelo próprio Windows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Esgotamento {
-    /// Quando, em formato ordenável.
     pub quando: String,
     pub commit_usado_gb: f64,
     pub commit_limite_gb: f64,
     pub ram_fisica_gb: f64,
-    /// Os maiores consumidores no instante do esgotamento, do maior para o
-    /// menor. O Windows guarda seis lugares e costuma preencher três.
+    /// O Windows guarda seis lugares e costuma preencher três.
     pub culpados: Vec<Culpado>,
 }
 
-/// Um programa que parou de responder.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Travamento {
     pub quando: String,
@@ -72,21 +44,15 @@ pub struct EsgotamentoReport {
     pub travamentos: Vec<Travamento>,
     pub dias_observados: u32,
     pub findings: Vec<EsgotamentoFinding>,
-    /// Preenchido quando o log não pôde ser lido. Vira lacuna visível na tela,
-    /// nunca silêncio — silêncio aqui seria indistinguível de "nunca aconteceu".
+    /// Vira lacuna visível, nunca silêncio: silêncio seria indistinguível de "nunca aconteceu".
     pub erro: Option<String>,
 }
 
 const BYTES_EM_GB: f64 = 1_073_741_824.0;
 const MS_POR_DIA: u64 = 86_400_000;
 
-/// Quantos dias de histórico o produto olha por padrão.
-///
-/// Um mês é o suficiente para pegar a rotina sem trazer de volta um episódio
-/// isolado de um ano atrás e vendê-lo como problema atual.
+/// Um mês pega a rotina sem vender como atual um episódio isolado de um ano atrás.
 pub const DIAS_PADRAO: u32 = 30;
-
-// ------------------------------------------------------------------- leitura
 
 #[derive(Debug, Deserialize)]
 struct RawCulpado {
@@ -113,11 +79,8 @@ fn gb(bytes: Option<f64>) -> f64 {
     (bytes.unwrap_or(0.0) / BYTES_EM_GB * 10.0).round() / 10.0
 }
 
-/// Os registros de memória esgotada, direto do log do Windows.
-///
-/// O XPath usa `local-name()` porque o bloco vem em namespace próprio: sem
-/// isso, todo `SelectSingleNode` volta nulo e o módulo relataria "nunca
-/// aconteceu" numa máquina que esgotou memória três vezes na mesma noite.
+/// `local-name()` porque o bloco vem em namespace próprio: sem isso, tudo volta nulo e o módulo diria "nunca
+/// aconteceu".
 pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
     let script = format!(
         "try {{ $e = Get-WinEvent -LogName System -FilterXPath \
@@ -150,11 +113,8 @@ pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
         );
     }
 
-    // Sem nenhum evento, o Get-WinEvent LANÇA "NoMatchingEventsFound" — e até a
-    // 2.7 isso virava "não consegui ler o registro" numa máquina sadia. O
-    // script agora pega essa exceção PELO NOME e devolve lista vazia; qualquer
-    // outro erro continua sendo erro. Vazio aqui é boa notícia: a memória não
-    // acabou no período.
+    // Sem evento, o Get-WinEvent LANÇA "NoMatchingEventsFound": pego pelo nome, vira lista vazia. Qualquer outro
+    // erro continua erro.
     if saida.stdout.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -169,8 +129,6 @@ pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
                 .processos
                 .unwrap_or_default()
                 .into_iter()
-                // O Windows reserva seis lugares e preenche os que couberem; os
-                // vazios vêm com nome em branco e zero byte.
                 .filter_map(|p| {
                     let nome = p.nome.unwrap_or_default().trim().to_string();
                     let tamanho = gb(p.bytes);
@@ -196,11 +154,7 @@ pub fn esgotamentos(dias: u32) -> Result<Vec<Esgotamento>, String> {
         .collect())
 }
 
-/// Programas que pararam de responder.
-///
-/// O filtro por provedor é obrigatório: o identificador 1002 é reaproveitado
-/// por outros componentes do Windows (o Winlogon, por exemplo), e sem ele a
-/// lista viria com eventos que não têm nada a ver com programa travado.
+/// O filtro por provedor é obrigatório: o 1002 é reaproveitado por outros componentes (o Winlogon, por exemplo).
 pub fn travamentos(dias: u32) -> Result<Vec<Travamento>, String> {
     let script = format!(
         "try {{ $e = Get-WinEvent -LogName Application -FilterXPath \
@@ -246,11 +200,7 @@ pub fn travamentos(dias: u32) -> Result<Vec<Travamento>, String> {
         .collect())
 }
 
-// --------------------------------------------------------------- diagnóstico
-
-/// Só a data, sem o horário com segundos, para caber numa frase.
 fn dia_e_hora(iso: &str) -> String {
-    // O formato é "2026-07-16T21:21:59". Vira "16/07 às 21:21".
     let (data, hora) = match iso.split_once('T') {
         Some(par) => par,
         None => return iso.to_string(),
@@ -266,7 +216,6 @@ fn dia_e_hora(iso: &str) -> String {
     }
 }
 
-/// Regras de diagnóstico, puras, testáveis sem tocar em log de evento.
 pub fn diagnosticar(
     esgotamentos: &[Esgotamento],
     travamentos: &[Travamento],
@@ -275,9 +224,7 @@ pub fn diagnosticar(
     let mut findings = Vec::new();
 
     if let Some(ultimo) = esgotamentos.first() {
-        // O próprio Windows declarou o esgotamento. Não existe falso positivo
-        // aqui, e por isso este achado não precisa de corroboração de ninguém:
-        // é a única evidência do produto que dispensa interpretação.
+        // O próprio Windows declarou: não existe falso positivo, e não precisa de corroboração.
         let culpados = if ultimo.culpados.is_empty() {
             String::new()
         } else {
@@ -321,8 +268,7 @@ pub fn diagnosticar(
     }
 
     if !travamentos.is_empty() {
-        // Agrupa por programa: dez travamentos do mesmo jogo é uma informação,
-        // dez linhas iguais na tela é ruído.
+        // Dez travamentos do mesmo jogo é uma informação; dez linhas iguais na tela é ruído.
         let mut por_programa: Vec<(String, usize, String)> = Vec::new();
 
         for t in travamentos {
@@ -350,9 +296,7 @@ pub fn diagnosticar(
             id: "programas_travaram".to_string(),
             title: "Programas que pararam de responder".to_string(),
             measured: format!("Nos últimos {} dias: {}.", dias, lista.join("; ")),
-            // Um programa parar de responder tem muitas causas, e a honestidade
-            // aqui é não escolher uma. O que este achado faz é dar a data, para
-            // que ela seja comparada com a do esgotamento acima.
+            // Muitas causas possíveis: dá a data, para comparar com a do esgotamento, sem escolher uma.
             advice: "Travar sozinho tem várias causas possíveis — falta de memória, \
                      disco lento, defeito do próprio programa. Se a data bater com a \
                      de um registro de falta de memória, a causa provável é essa."
@@ -365,7 +309,6 @@ pub fn diagnosticar(
     findings
 }
 
-/// Lê os dois logs e diagnostica.
 pub fn analyze() -> EsgotamentoReport {
     analyze_dias(DIAS_PADRAO)
 }
@@ -376,8 +319,7 @@ pub fn analyze_dias(dias: u32) -> EsgotamentoReport {
         Err(e) => (Vec::new(), Some(e)),
     };
 
-    // O log de aplicativos falhar não pode apagar o de sistema, que é o
-    // importante. Cada um responde por si.
+    // O log de aplicativos falhar não pode apagar o de sistema.
     let lista_travamentos = travamentos(dias).unwrap_or_default();
 
     let findings = diagnosticar(&lista_esgotamentos, &lista_travamentos, dias);
@@ -412,8 +354,6 @@ mod tests {
 
     #[test]
     fn esgotamento_registrado_pelo_windows_e_critico_e_nomeia_os_culpados() {
-        // O que dá força a este achado é ele ser conferível: o cliente abre o
-        // Visualizador de Eventos e vê a mesma coisa.
         let f = diagnosticar(&[esgotamento_exemplo()], &[], 30);
         let achado = &f[0];
 
@@ -427,8 +367,6 @@ mod tests {
 
     #[test]
     fn maquina_sem_registro_nao_ganha_achado_nenhum() {
-        // Não achar nada é o resultado esperado numa máquina saudável, e não
-        // pode virar aviso genérico.
         assert!(diagnosticar(&[], &[], 30).is_empty());
     }
 
@@ -458,8 +396,6 @@ mod tests {
 
     #[test]
     fn travamento_nao_afirma_causa_que_nao_pode_provar() {
-        // Um programa travar tem muitas causas. Escolher uma sem prova seria
-        // exatamente o que este produto critica nos outros.
         let f = diagnosticar(
             &[],
             &[Travamento {
@@ -476,7 +412,6 @@ mod tests {
     #[test]
     fn data_vira_texto_legivel() {
         assert_eq!(dia_e_hora("2026-07-16T21:21:59"), "16/07 às 21:21");
-        // Formato inesperado não pode derrubar nem inventar data.
         assert_eq!(dia_e_hora("sem data"), "sem data");
     }
 
@@ -509,9 +444,7 @@ mod tests {
         }
         println!();
 
-        // Não dá para exigir achado: uma máquina saudável não tem nenhum. O que
-        // dá para exigir é que a leitura não devolva erro e silêncio ao mesmo
-        // tempo — isso seria o produto não sabendo se sabe.
+        // Não dá para exigir achado; dá para exigir que a leitura não devolva erro e silêncio ao mesmo tempo.
         assert!(
             r.erro.is_none() || r.esgotamentos.is_empty(),
             "não pode relatar erro e dado ao mesmo tempo"

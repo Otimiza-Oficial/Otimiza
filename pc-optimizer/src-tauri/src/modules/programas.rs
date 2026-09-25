@@ -1,58 +1,15 @@
-// O catálogo de programas que o técnico instala na máquina do cliente
-//
-// O QUE ESTA ABA É, E O QUE ELA NÃO É
-//
-// É uma lista de programas úteis com um botão que os instala sem sair daqui.
-// NÃO é um repositório: o Otimiza não hospeda instalador nenhum, não baixa
-// binário de endereço escolhido por nós, e não tem cópia de programa de
-// terceiro dentro do instalador.
-//
-// Quem instala é o WINGET, o gerenciador de pacotes que vem com o Windows. A
-// diferença não é detalhe de implementação:
-//
-//   - O pacote vem da fonte oficial do fabricante, verificada pela Microsoft.
-//   - A conta de "de onde veio este .exe" é da Microsoft, e não nossa.
-//   - Um "otimizador" que baixa executável de um servidor próprio é
-//     indistinguível de um que entrega vírus, e não há como o cliente saber a
-//     diferença antes de rodar.
-//
-// O IDENTIFICADOR DO PACOTE É O PONTO FRÁGIL
-//
-// Mesma lição das capas de jogo: identificador errado não dá erro, INSTALA
-// OUTRO PROGRAMA na máquina do cliente — e aqui o estrago é bem maior que uma
-// imagem trocada. Todos os identificadores deste arquivo foram conferidos, um
-// por um, contra o repositório público de pacotes do winget antes de entrar.
-// Quem for acrescentar um: confira antes.
-//
-// DETECTAR É UMA PERGUNTA, INSTALAR É OUTRA
-//
-// Saber o que JÁ ESTÁ instalado não passa pelo winget: sai das três chaves de
-// desinstalação do registro, que `windows::conflicts::programas_instalados` já
-// lê e que existem em toda máquina. É rápido e funciona mesmo onde o winget
-// não existe — que, como se descobriu escrevendo isto, é bem mais comum do que
-// parece.
-//
-// O WINGET PODE NÃO EXISTIR, E JUSTO NESTAS MÁQUINAS
-//
-// A máquina onde este módulo foi escrito tem o pacote `DesktopAppInstaller`
-// instalado e NÃO tem `winget.exe`. Windows "lite", debloat agressivo e Loja
-// removida deixam exatamente esse estado — e é o perfil do cliente que mais
-// precisa de uma lista de programas básicos.
-//
-// Por isso a aba não some nem quebra sem winget: ela lista, diz o que está
-// instalado, e diz que para INSTALAR daqui falta o App Installer.
+// Programas úteis instalados pelo WINGET, da fonte oficial de cada fabricante: o Otimiza não hospeda nem baixa
+// instalador de endereço próprio. Identificador errado INSTALA OUTRO PROGRAMA: todos foram conferidos contra o
+// repositório público do winget, e quem acrescentar confere antes. O que está instalado sai do registro, e a aba
+// funciona mesmo sem winget (comum em Windows "lite"), só sem instalar.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Categoria {
-    /// Ferramentas de sistema que o técnico usa para diagnosticar.
     Sistema,
-    /// O que o Windows precisa para jogo rodar: runtimes.
     Base,
-    /// Lojas e lançadores.
     Plataformas,
-    /// Medir e vigiar hardware.
     Monitoramento,
     Web,
     Midia,
@@ -75,21 +32,16 @@ impl Categoria {
 pub struct Programa {
     pub id: &'static str,
     pub nome: &'static str,
-    /// Uma linha dizendo para que serve. Sem adjetivo de propaganda.
+    /// Sem adjetivo de propaganda.
     pub descricao: &'static str,
-    /// O identificador no winget. CONFERIDO contra o repositório público.
+    /// CONFERIDO contra o repositório público.
     pub winget: &'static str,
     pub categoria: Categoria,
-    /// Pedaços de nome que identificam o programa já instalado, em minúsculas.
-    ///
-    /// Comparados contra o que as chaves de desinstalação do registro trazem.
     /// Vários porque o nome muda com a versão e com o idioma.
     pub instalado_como: &'static [&'static str],
 }
 
-/// A lista. Nomes e identificadores — nenhum binário, nenhum instalador.
 pub const CATALOGO: &[Programa] = &[
-    // ---- sistema
     Programa {
         id: "7zip",
         nome: "7-Zip",
@@ -154,11 +106,7 @@ pub const CATALOGO: &[Programa] = &[
         categoria: Categoria::Sistema,
         instalado_como: &["open-shell", "open shell"],
     },
-    // ---- base
-    //
-    // Estes três não são escolha do cliente: são o que falta quando um jogo
-    // "não abre" ou fecha sozinho na abertura. A categoria existe separada
-    // para o técnico achar rápido.
+    // O que falta quando um jogo "não abre" ou fecha na abertura.
     Programa {
         id: "vcredist",
         nome: "Visual C++ 2015-2022 (x64)",
@@ -188,7 +136,6 @@ pub const CATALOGO: &[Programa] = &[
         categoria: Categoria::Base,
         instalado_como: &["java 8", "java(tm)", "java se"],
     },
-    // ---- plataformas
     Programa {
         id: "steam",
         nome: "Steam",
@@ -213,7 +160,6 @@ pub const CATALOGO: &[Programa] = &[
         categoria: Categoria::Plataformas,
         instalado_como: &["discord"],
     },
-    // ---- monitoramento
     Programa {
         id: "hwinfo",
         nome: "HWiNFO",
@@ -246,7 +192,6 @@ pub const CATALOGO: &[Programa] = &[
         categoria: Categoria::Monitoramento,
         instalado_como: &["msi afterburner"],
     },
-    // ---- web e mídia
     Programa {
         id: "chrome",
         nome: "Google Chrome",
@@ -285,23 +230,16 @@ pub fn por_id(id: &str) -> Option<&'static Programa> {
     CATALOGO.iter().find(|p| p.id == id)
 }
 
-/// Um programa do jeito que a tela precisa.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NaLista {
     pub id: String,
     pub nome: String,
     pub descricao: String,
     pub categoria: String,
-    /// `None` quando não deu para ler os programas instalados.
-    ///
-    /// AUSENTE NÃO É "NÃO INSTALADO". Mostrar "instalar" sobre um programa que
-    /// pode já estar lá é o tipo de botão que faz o técnico instalar de novo
-    /// por cima — e alguns instaladores tratam isso como reparo, outros como
-    /// primeira instalação.
+    /// `None`: AUSENTE NÃO É "NÃO INSTALADO"; o botão "instalar" faria o técnico instalar de novo por cima.
     pub instalado: Option<bool>,
 }
 
-/// Este programa aparece na lista do registro?
 pub fn esta_instalado(programa: &Programa, instalados: &[String]) -> bool {
     instalados.iter().any(|nome| {
         let n = nome.to_lowercase();
@@ -309,10 +247,6 @@ pub fn esta_instalado(programa: &Programa, instalados: &[String]) -> bool {
     })
 }
 
-/// Monta a lista para a tela.
-///
-/// `instalados` é `None` quando a leitura do registro falhou — e aí TODOS saem
-/// com estado desconhecido, em vez de saírem como não instalados.
 pub fn montar(instalados: Option<&[String]>) -> Vec<NaLista> {
     CATALOGO
         .iter()
@@ -340,8 +274,6 @@ mod tests {
         assert_eq!(ids.len(), antes, "id repetido");
     }
 
-    /// Identificador repetido significaria dois botões instalando a mesma
-    /// coisa — ou, pior, um deles apontando para o pacote errado.
     #[test]
     fn nao_ha_pacote_repetido() {
         let mut pacotes: Vec<&str> = CATALOGO.iter().map(|p| p.winget).collect();
@@ -352,11 +284,7 @@ mod tests {
         assert_eq!(pacotes.len(), antes, "pacote repetido");
     }
 
-    /// A forma do identificador do winget é `Fabricante.Pacote`.
-    ///
-    /// Não prova que o pacote existe — isso foi conferido à mão contra o
-    /// repositório público. Prova que ninguém escreveu um nome de programa no
-    /// lugar de um identificador, que é o engano fácil.
+    /// Não prova que o pacote existe (conferido à mão): prova que ninguém escreveu um nome no lugar do identificador.
     #[test]
     fn todo_pacote_tem_forma_de_identificador() {
         for p in CATALOGO {
@@ -409,7 +337,6 @@ mod tests {
         assert!(!esta_instalado(por_id("vlc").unwrap(), &instalados));
     }
 
-    /// A regra que evita reinstalar por cima do que já está lá.
     #[test]
     fn registro_ilegivel_deixa_todos_em_desconhecido() {
         let lista = montar(None);
@@ -432,8 +359,6 @@ mod tests {
         );
     }
 
-    /// Toda categoria do enum aparece na lista. Uma categoria sem nenhum
-    /// programa viraria uma aba vazia na tela.
     #[test]
     fn nenhuma_categoria_fica_vazia() {
         for c in [

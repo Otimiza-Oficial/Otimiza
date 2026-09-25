@@ -1,26 +1,13 @@
-// Controle de serviços do Windows
-//
-// Desativar serviço é a otimização mais perigosa do produto: errar aqui quebra
-// o PC do cliente. Por isso o tipo de inicialização anterior é sempre lido antes
-// de qualquer alteração.
-//
-// A LEITURA é feita no registro, não pelo `sc qc`. Num Windows em português o
-// `sc qc` imprime "TIPO_DE_INÍCIO" em vez de "START_TYPE", e ainda usa a página
-// de código OEM — qualquer parsing de texto quebraria justamente nas máquinas do
-// público-alvo. O valor no registro é o mesmo número em todos os idiomas.
-//
-// A ESCRITA usa `sc config`, que avisa o gerenciador de serviços na hora, em vez
-// de só valer no próximo boot.
+// Serviços: a otimização mais perigosa do produto, então o tipo de início anterior é sempre lido antes. A
+// leitura é pelo registro, e não pelo `sc qc`, que é traduzido e usa página de código OEM; a escrita pelo `sc
+// config`, que avisa o gerenciador na hora.
 
 use super::registry;
 use crate::modules::changelog::PreviousValue;
 
 const SERVICES_KEY: &str = r"SYSTEM\CurrentControlSet\Services";
 
-/// Traduz o valor `Start` do registro para a palavra-chave aceita pelo `sc config`.
-///
-/// 0 = boot, 1 = system (drivers de núcleo, nunca reconfigurados),
-/// 2 = automático, 3 = manual, 4 = desativado.
+/// 0 = boot, 1 = system (drivers de núcleo, nunca reconfigurados), 2 = automático, 3 = manual, 4 = desativado.
 pub fn start_type_keyword(code: u32, delayed: bool) -> Option<&'static str> {
     match code {
         2 if delayed => Some("delayed-auto"),
@@ -35,26 +22,9 @@ fn service_key(service: &str) -> String {
     format!("{}\\{}", SERVICES_KEY, service)
 }
 
-/// O ESTADO NUMÉRICO na saída do `sc query`, sem procurar o rótulo.
-///
-/// O CÓDIGO ANTIGO PROCURAVA `"STATE"` OU `"ESTADO"`, e isso é o defeito
-/// clássico de parsear texto traduzido: num Windows em francês o rótulo é
-/// `ÉTAT`, em alemão `STATUS`, em italiano `STATO`. Nenhum bate, a busca falha,
-/// e o resultado antigo era `false` — "o serviço não está rodando".
-///
-/// Conferido nesta máquina, em português:
-///
-/// ```text
-///         TIPO               : 20  WIN32_SHARE_PROCESS
-///         ESTADO              : 1  STOPPED
-/// ```
-///
-/// Duas coisas NÃO são traduzidas e são usadas aqui: o número, e a constante
-/// em inglês ao lado dele. A constante identifica a linha certa mesmo que o
-/// `sc` mude a ordem das linhas um dia.
+/// Pelo NÚMERO, e não pelo rótulo: o rótulo é traduzido (ÉTAT, STATUS, STATO), e a busca por "STATE" ou
+/// "ESTADO" dava "parado" sobre serviço rodando. A constante em inglês ao lado identifica a linha certa.
 pub fn estado_da_saida_do_sc(stdout: &str) -> Option<u32> {
-    // Os sete estados que o Gerenciador de Serviços do Windows define. Aparecem
-    // em inglês em qualquer idioma do sistema.
     const ESTADOS: &[&str] = &[
         "STOPPED",
         "START_PENDING",
@@ -76,8 +46,7 @@ pub fn estado_da_saida_do_sc(stdout: &str) -> Option<u32> {
             continue;
         };
 
-        // A constante ao lado é o que separa a linha do estado da linha do
-        // tipo, que também começa com número.
+        // A constante separa a linha do estado da do tipo, que também começa com número.
         if partes.next().is_some_and(|c| ESTADOS.contains(&c)) {
             return Some(numero);
         }
@@ -86,14 +55,8 @@ pub fn estado_da_saida_do_sc(stdout: &str) -> Option<u32> {
     None
 }
 
-/// `None` é NÃO CONSEGUI SABER, e não "parado".
-///
-/// A diferença é perigosa aqui, e não só imprecisa: esta função decide se o
-/// Windows Update precisa ser parado ANTES de o produto apagar o cache de
-/// atualização. Com `false` falso — `sc` bloqueado, sem elevação, ou Windows em
-/// outro idioma — o Otimiza apagava `SoftwareDistribution\Download` COM A
-/// ATUALIZAÇÃO EM ANDAMENTO, que é exatamente o que os comentários de
-/// `cleanup.rs` dizem querer evitar.
+/// `None` é NÃO CONSEGUI SABER, e não "parado": decide se o Windows Update é parado antes de apagar o cache de
+/// atualização. Um `false` falso apagaria `SoftwareDistribution\Download` com a atualização em andamento.
 pub fn is_running(service: &str) -> Option<bool> {
     let saida = super::shell::run("sc", &["query", service]).ok()?;
 
@@ -104,7 +67,6 @@ pub fn is_running(service: &str) -> Option<bool> {
     estado_da_saida_do_sc(&saida.stdout).map(|estado| estado == 4)
 }
 
-/// Inicia um serviço. Um serviço já em execução não é tratado como erro.
 pub fn start(service: &str) -> Result<(), String> {
     let output = super::shell::run("sc", &["start", service])?;
 
@@ -120,16 +82,12 @@ pub fn start(service: &str) -> Result<(), String> {
     }
 }
 
-/// Verifica se um serviço existe nesta instalação do Windows.
-///
-/// `None` é "não deu para ler", e quem chama precisa tratar separado: dizer
-/// "este Windows não tem o serviço" sobre uma chave que a ACL negou faz a
-/// otimização sumir da lista com a frase errada.
+/// `None` é "não deu para ler": dizer "este Windows não tem o serviço" sobre uma ACL negada tira a otimização
+/// da lista com a frase errada.
 pub fn exists(service: &str) -> Option<bool> {
     registry::key_exists("HKLM", &service_key(service))
 }
 
-/// Lê o tipo de inicialização atual de um serviço.
 pub fn query_start_type(service: &str) -> Result<String, String> {
     let path = service_key(service);
 
@@ -151,16 +109,10 @@ pub fn query_start_type(service: &str) -> Result<String, String> {
     })
 }
 
-/// Define o tipo de inicialização de um serviço.
-/// `start_type` deve ser auto, delayed-auto, demand ou disabled.
-/// ESCREVE E RELÊ. O `sc config` já devolveu código zero em máquina onde a
-/// chave do serviço ficou como estava — política de domínio e ACL negada são os
-/// dois casos que aparecem no PC de cliente e nunca no de quem desenvolve. Um
-/// `Ok(())` em cima do código de saída sozinho é o produto dizendo "desativei"
-/// sobre um serviço que continua ligado, e é exatamente a classe de mentira que
-/// fez as otimizações "funcionarem aqui e não lá".
+/// ESCREVE E RELÊ: `sc config` já devolveu zero com política de domínio e ACL negada, e o serviço ficou como
+/// estava. Sem reler, o produto diria "desativei" sobre um serviço ligado.
 pub fn set_start_type(service: &str, start_type: &str) -> Result<(), String> {
-    // O `sc config` exige o formato `start= valor`, com o espaço depois do sinal.
+    // O `sc config` exige `start= valor`, com o espaço depois do sinal.
     super::shell::run_checked("sc", &["config", service, "start=", start_type])?;
 
     match query_start_type(service) {
@@ -170,8 +122,6 @@ pub fn set_start_type(service: &str, start_type: &str) -> Result<(), String> {
              \"{agora}\" e não em \"{start_type}\". Costuma ser política do \
              Windows ou permissão negada na chave do serviço."
         )),
-        // Não conseguir reler não vira sucesso nem falha de escrita: vira o que
-        // é. Quem chama já sabe transformar isso em "não deu para verificar".
         Err(erro) => Err(format!(
             "O serviço `{service}` foi configurado, mas não deu para reler o \
              estado dele para confirmar: {erro}"
@@ -179,11 +129,10 @@ pub fn set_start_type(service: &str, start_type: &str) -> Result<(), String> {
     }
 }
 
-/// Para um serviço em execução. Um serviço já parado não é tratado como erro.
 pub fn stop(service: &str) -> Result<(), String> {
     let output = super::shell::run("sc", &["stop", service])?;
 
-    // 1062 = serviço não iniciado. O código numérico aparece em qualquer idioma.
+    // 1062 = serviço não iniciado. O código aparece em qualquer idioma.
     if output.success || output.stdout.contains("1062") || output.stderr.contains("1062") {
         Ok(())
     } else {
@@ -199,10 +148,6 @@ pub fn stop(service: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// A classe de defeito que fez as otimizações "funcionarem aqui e não lá":
-    /// escrever, receber código zero, e dar por feito. `sc config` já devolveu
-    /// zero em máquina com política de domínio e com ACL negada na chave do
-    /// serviço, deixando o serviço exatamente como estava.
     #[test]
     fn mudar_um_servico_relê_o_estado_antes_de_dar_por_feito() {
         let producao = include_str!("services.rs").split("#[cfg(test)]").next().unwrap();
@@ -217,9 +162,7 @@ mod tests {
         );
     }
 
-
-    /// Saída REAL desta máquina, em português, com os acentos já estragados
-    /// pelo código de página do console — que é como ela chega ao produto.
+    /// Saída REAL desta máquina, em português, com os acentos estragados pelo código de página do console.
     const SAIDA_EM_PORTUGUES: &str = "NOME_DO_SERVI\u{fffd}O: wuauserv \n\
         \x20       TIPO               : 20  WIN32_SHARE_PROCESS  \n\
         \x20       ESTADO              : 1  STOPPED \n\
@@ -228,9 +171,6 @@ mod tests {
 
     #[test]
     fn o_estado_e_lido_sem_procurar_o_rotulo_traduzido() {
-        // O código antigo procurava "STATE" ou "ESTADO". Num Windows em francês
-        // o rótulo é ÉTAT, em alemão STATUS, em italiano STATO — nenhum batia, e
-        // o resultado era "serviço parado" sobre um serviço rodando.
         assert_eq!(estado_da_saida_do_sc(SAIDA_EM_PORTUGUES), Some(1));
 
         let em_frances = "        \u{c9}TAT               : 4  RUNNING \n";
@@ -242,16 +182,12 @@ mod tests {
 
     #[test]
     fn a_linha_do_tipo_nao_e_confundida_com_a_do_estado() {
-        // As duas começam com número depois dos dois-pontos. O que separa é a
-        // constante em inglês ao lado — `WIN32_SHARE_PROCESS` não é um estado.
         let so_o_tipo = "        TIPO               : 20  WIN32_SHARE_PROCESS  \n";
         assert_eq!(estado_da_saida_do_sc(so_o_tipo), None);
     }
 
     #[test]
     fn saida_que_nao_da_para_entender_vira_nao_sei() {
-        // E `None` NÃO pode virar "parado": é ele que decide se o Windows
-        // Update é parado antes de o produto apagar o cache de atualização.
         assert_eq!(estado_da_saida_do_sc(""), None);
         assert_eq!(estado_da_saida_do_sc("acesso negado"), None);
         assert_eq!(
@@ -291,16 +227,14 @@ mod tests {
 
     #[test]
     fn refuses_kernel_driver_start_codes() {
-        // 0 (boot) e 1 (system) são drivers de núcleo: reconfigurá-los pode
-        // impedir o Windows de iniciar.
+        // 0 (boot) e 1 (system) são drivers de núcleo: reconfigurá-los pode impedir o Windows de iniciar.
         assert_eq!(start_type_keyword(0, false), None);
         assert_eq!(start_type_keyword(1, false), None);
     }
 
     #[test]
     fn reads_real_service_start_type_from_registry() {
-        // RpcSs existe em toda instalação do Windows e é automático.
-        // Este teste falharia se a leitura dependesse do idioma do sistema.
+        // RpcSs existe em toda instalação e é automático; falharia se a leitura dependesse do idioma.
         let start_type = query_start_type("RpcSs").expect("RpcSs deve existir");
         assert!(
             start_type == "auto" || start_type == "delayed-auto",

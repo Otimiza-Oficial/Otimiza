@@ -1,37 +1,7 @@
-// Os três níveis: Seguro, Competitivo, Experimental
-//
-// O produto já tinha quatro perfis — PC fraco, Jogos, Trabalho, Privacidade. Eles
-// respondem "PARA QUE VOCÊ USA A MÁQUINA", e continuam existindo.
-//
-// Estes três respondem outra pergunta, e ela é a que o incidente da 2.1.0
-// mostrou que faltava: **O QUE VOCÊ ACEITA TROCAR.** Um cliente clicou num
-// botão que não perguntou isso, e o FPS dele caiu pela metade.
-//
-// As duas perguntas são independentes de propósito. "Jogos" diz onde mexer;
-// "Competitivo" diz até onde ir.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// OS NÍVEIS SÃO ENCAIXADOS, e isso é a regra que os torna compreensíveis
-//
-//   Seguro ⊂ Competitivo ⊂ Experimental
-//
-// Subir de nível NUNCA tira nada — só acrescenta. Sem isso, "Competitivo" seria
-// um conjunto diferente e não um passo adiante, e o cliente que subisse teria
-// que reler a lista inteira para saber o que perdeu. Há trava para isso.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// O QUE NENHUM DOS TRÊS FAZ
-//
-// **Nenhum nível troca segurança por desempenho.** Desligar o UAC, o firewall
-// ou a virtualização de segurança não está em nível nenhum, nem no
-// Experimental — eles continuam disponíveis item a item, com o aviso vermelho,
-// porque abrir mão de proteção é decisão consciente do dono da máquina e não
-// efeito colateral de escolher um nível numa lista.
-//
-// E o Experimental NÃO é um botão de aplicar tudo. Ele é a porta de entrada do
-// protocolo A/B: os ajustes dele são justamente os que podem custar quadro, e o
-// jeito de usá-los é um grupo de cada vez, com medição dos dois lados. Aplicar
-// todos de uma vez é exatamente o que causou o incidente.
+// Seguro, Competitivo, Experimental: O QUE VOCÊ ACEITA TROCAR (os perfis dizem para que serve a máquina).
+// Encaixados: subir de nível nunca tira nada. Nenhum troca segurança por desempenho, nem o Experimental. O
+// Experimental não é aplicar tudo: é a porta do protocolo A/B, um grupo de cada vez, medido (a 2.1.0 foi aplicar
+// tudo).
 
 use serde::{Deserialize, Serialize};
 
@@ -39,12 +9,8 @@ use super::catalog::{entra_no_lote, OptimizationSpec, CATALOG, FORA_DO_LOTE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Nivel {
-    /// Não pode piorar nada. É o que o botão grande aplica.
     Seguro,
-    /// Troca comodidade e recurso de fundo por resposta. Ainda sem nada que
-    /// possa custar quadro.
     Competitivo,
-    /// Aceita o que PODE custar quadro, com a condição de medir.
     Experimental,
 }
 
@@ -59,7 +25,6 @@ impl Nivel {
         }
     }
 
-    /// O que este nível PROMETE. Sem adjetivo de marketing: o que ele faz.
     pub fn promessa(self) -> &'static str {
         match self {
             Nivel::Seguro => {
@@ -82,8 +47,6 @@ impl Nivel {
         }
     }
 
-    /// O que este nível EXIGE de quem escolhe. Parte do contrato, e não nota de
-    /// rodapé — um nível que pede trabalho e não avisa vira reclamação.
     pub fn exigencia(self) -> &'static str {
         match self {
             Nivel::Seguro => "Nada. Aplique e siga.",
@@ -100,14 +63,9 @@ impl Nivel {
     }
 }
 
-/// Um ajuste pertence a este nível?
-///
-/// **Função pura**, e a definição inteira dos níveis mora aqui. Note que ela é
-/// escrita em cima de predicados que já existiam — `entra_no_lote`,
-/// `FORA_DO_LOTE`, `RiscoDeFps` — em vez de uma quinta lista de identificadores
-/// escrita à mão. Lista escrita à mão é o que envelhece sem ninguém perceber.
+/// Feita dos predicados que já existem (`entra_no_lote`, `FORA_DO_LOTE`, `RiscoDeFps`), e não de uma lista à
+/// mão, que envelhece sem ninguém perceber.
 pub fn pertence(spec: &OptimizationSpec, nivel: Nivel) -> bool {
-    // A REGRA QUE VALE PARA OS TRÊS: segurança não entra em nível nenhum.
     if spec.security_tradeoff || !spec.reversible {
         return false;
     }
@@ -127,10 +85,7 @@ pub fn itens_do_nivel(nivel: Nivel) -> Vec<&'static str> {
         .collect()
 }
 
-/// O que ESTE nível acrescenta ao anterior.
-///
-/// É o que a tela mostra quando a pessoa passa de um para o outro: a lista
-/// inteira não ajuda a decidir, a diferença ajuda.
+/// A diferença para o anterior é o que ajuda a decidir, não a lista inteira.
 pub fn acrescenta(nivel: Nivel) -> Vec<&'static str> {
     let anterior = match nivel {
         Nivel::Seguro => return itens_do_nivel(Nivel::Seguro),
@@ -146,11 +101,7 @@ pub fn acrescenta(nivel: Nivel) -> Vec<&'static str> {
         .collect()
 }
 
-/// Este nível pode ser aplicado de uma vez só?
-///
-/// O Experimental não pode, e essa é a lição mais cara deste projeto: os
-/// ajustes dele são os que rendem numa máquina e custam noutra, então aplicá-los
-/// juntos produz um número e nenhuma informação sobre qual foi o culpado.
+/// O Experimental não: aplicar junto dá um número e nenhuma informação sobre o culpado.
 pub fn aplica_de_uma_vez(nivel: Nivel) -> bool {
     !matches!(nivel, Nivel::Experimental)
 }
@@ -159,11 +110,6 @@ pub fn aplica_de_uma_vez(nivel: Nivel) -> bool {
 mod tests {
     use super::*;
 
-    /// A REGRA QUE TORNA OS NÍVEIS COMPREENSÍVEIS: subir nunca tira nada.
-    ///
-    /// Sem ela, "Competitivo" seria um conjunto diferente e não um passo
-    /// adiante, e quem subisse teria que reler a lista inteira para saber o que
-    /// perdeu.
     #[test]
     fn cada_nivel_contem_o_anterior() {
         let seguro = itens_do_nivel(Nivel::Seguro);
@@ -182,8 +128,6 @@ mod tests {
         }
     }
 
-    /// E cada um acrescenta ALGUMA COISA. Dois níveis com o mesmo conteúdo são
-    /// dois nomes para a mesma escolha, e isso engana quem escolhe.
     #[test]
     fn cada_nivel_acrescenta_alguma_coisa() {
         assert!(!acrescenta(Nivel::Competitivo).is_empty(), "o Competitivo é igual ao Seguro");
@@ -193,8 +137,6 @@ mod tests {
         );
     }
 
-    /// A AFIRMAÇÃO MAIS FORTE DESTE MÓDULO, e ela precisa continuar verdadeira:
-    /// nenhum nível troca segurança por desempenho — nem o Experimental.
     #[test]
     fn nenhum_nivel_troca_seguranca_por_desempenho() {
         for nivel in Nivel::TODOS {
@@ -211,9 +153,7 @@ mod tests {
         }
     }
 
-    /// O Seguro é exatamente o que o botão grande aplica. Se os dois se
-    /// separarem, o cliente que escolher "Seguro" recebe uma coisa e o que
-    /// clicar no botão recebe outra.
+    /// Se os dois se separarem, "Seguro" e o botão entregam coisas diferentes.
     #[test]
     fn o_seguro_e_exatamente_o_que_o_botao_grande_aplica() {
         let do_lote: Vec<&str> = CATALOG
@@ -225,8 +165,6 @@ mod tests {
         assert_eq!(itens_do_nivel(Nivel::Seguro), do_lote);
     }
 
-    /// Nada que possa custar quadro entra no Seguro nem no Competitivo. É a
-    /// trava da 2.1.2 vista pelo outro lado.
     #[test]
     fn nada_que_pode_custar_fps_entra_abaixo_do_experimental() {
         for nivel in [Nivel::Seguro, Nivel::Competitivo] {
@@ -243,8 +181,6 @@ mod tests {
         }
     }
 
-    /// E o Experimental é onde eles ficam — senão o nível não teria razão de
-    /// existir.
     #[test]
     fn o_experimental_e_onde_moram_os_que_podem_custar_fps() {
         let experimental = itens_do_nivel(Nivel::Experimental);
@@ -262,8 +198,6 @@ mod tests {
         }
     }
 
-    /// O Experimental NÃO é um botão de aplicar tudo. Aplicar todos de uma vez
-    /// é literalmente o que derrubou o FPS de um cliente.
     #[test]
     fn o_experimental_nao_se_aplica_de_uma_vez() {
         assert!(aplica_de_uma_vez(Nivel::Seguro));
@@ -271,8 +205,6 @@ mod tests {
         assert!(!aplica_de_uma_vez(Nivel::Experimental));
     }
 
-    /// Promessa e exigência são contrato, não enfeite. Um nível que pede
-    /// trabalho e não avisa vira reclamação.
     #[test]
     fn todo_nivel_promete_e_exige_por_escrito() {
         for nivel in Nivel::TODOS {
@@ -281,8 +213,6 @@ mod tests {
         }
     }
 
-    /// A exigência do Experimental precisa mandar medir. Sem isso ele vira o
-    /// botão perigoso que este projeto passou uma semana consertando.
     #[test]
     fn a_exigencia_do_experimental_e_medir() {
         let e = Nivel::Experimental.exigencia();
@@ -291,8 +221,6 @@ mod tests {
         assert!(e.contains("um por vez") || e.contains("grupo"));
     }
 
-    /// Os itens que o Competitivo acrescenta são os de `FORA_DO_LOTE` — os que
-    /// mudam comportamento que a pessoa notou e escolheu.
     #[test]
     fn o_competitivo_acrescenta_o_que_muda_comportamento() {
         let novos = acrescenta(Nivel::Competitivo);
