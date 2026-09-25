@@ -5,7 +5,6 @@ use crate::modules::benchmark::{
 use crate::modules::changelog::ChangeLog;
 use crate::modules::preferences::Preferences;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::firmware::FirmwareReport;
 use crate::modules::optimizer::{OptimizationInfo, OptimizationOutcome};
 #[cfg(target_os = "windows")]
 use crate::modules::windows::processes::ProcessImpact;
@@ -14,25 +13,19 @@ use crate::modules::windows::startup::StartupEntry;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::restore::RestoreStatus;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::diskspace::{CleanOutcome, DiskReport};
+
 #[cfg(target_os = "windows")]
 use crate::modules::windows::essenciais::Checagem;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::nvdriver::PainelDoDriver;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::memory::MemoryReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::conflicts::ConflictReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::foldermap::FolderMap;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::health::HealthReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::boot::BootReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::browsers::{BrowserReport, CleanOutcome as BrowserCleanOutcome};
+
 #[cfg(target_os = "windows")]
-use crate::modules::windows::thermal::ThermalReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
 #[cfg(target_os = "windows")]
@@ -50,7 +43,6 @@ use crate::modules::windows::bottleneck::BottleneckReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::shaders::{ShaderReport, CleanOutcome as ShaderCleanOutcome};
 #[cfg(target_os = "windows")]
-use crate::modules::windows::readiness::ReadinessReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::veredito::Veredito;
 #[cfg(target_os = "windows")]
@@ -80,13 +72,6 @@ pub struct AppState {
     /// Mantido: uso de CPU por processo só existe comparando duas leituras.
     #[cfg(target_os = "windows")]
     pub processes: Mutex<crate::modules::windows::processes::ProcessMonitor>,
-    /// Sem `Mutex`: `TarefaLonga` guarda o próprio estado e impede dois reparos juntos.
-    #[cfg(target_os = "windows")]
-    pub reparo: crate::modules::windows::tarefa_longa::TarefaLonga,
-    /// Autoriza (ou não) agendar o `chkdsk`. `std::sync::Mutex`: os comandos de reparo são síncronos marcados
-    /// `(async)`, e um `blocking_lock()` do tokio dentro do runtime entraria em pânico.
-    #[cfg(target_os = "windows")]
-    pub disco: std::sync::Mutex<crate::modules::windows::reparo::EstadoDoDisco>,
 }
 
 #[derive(Serialize)]
@@ -113,100 +98,6 @@ pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<Perfo
     let mut monitor = state.monitor.lock().await;
     monitor.collect_metrics().await
 }
-
-/// SÓ LÊ. O instalado vem do REGISTRO (três chaves de desinstalação), não do winget, que falta justamente nas
-/// máquinas que mais precisam.
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn catalogo_de_programas() -> Result<ProgramasNaTela, String> {
-    use crate::modules::programas;
-    use crate::modules::windows::{conflicts, winget};
-
-    let (instalados, winget) = tokio::task::spawn_blocking(|| {
-        (conflicts::programas_instalados(), winget::disponibilidade())
-    })
-    .await
-    .map_err(|e| format!("a leitura de programas não terminou: {e}"))?;
-
-    // Falha na leitura vira desconhecido em todos, não lista vazia: senão o técnico instalaria por cima.
-    let lidos = instalados.as_deref().ok();
-
-    Ok(ProgramasNaTela {
-        programas: programas::montar(lidos),
-        winget,
-        lacuna: instalados.err(),
-    })
-}
-
-#[cfg(target_os = "windows")]
-#[derive(Debug, Serialize)]
-pub struct ProgramasNaTela {
-    pub programas: Vec<crate::modules::programas::NaLista>,
-    pub winget: crate::modules::windows::winget::Disponibilidade,
-    pub lacuna: Option<String>,
-}
-
-/// O pacote do winget sai do CATÁLOGO pelo id curto, nunca da tela: o que instalar não fica fora do nosso controle.
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn instalar_programa(id: String) -> Result<String, String> {
-    crate::modules::licenca::exigir()?;
-
-    use crate::modules::programas;
-    use crate::modules::windows::winget;
-
-    let programa = programas::por_id(&id).ok_or("programa fora do catálogo")?;
-    let pacote = programa.winget;
-
-    tokio::task::spawn_blocking(move || winget::instalar(pacote))
-        .await
-        .map_err(|e| format!("a instalação não terminou: {e}"))?
-}
-
-/// Separado de apagar: medir precisa ser repetível sem consequência. Alvo não medido sai AUSENTE, não zero (que
-/// diria pasta vazia).
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn medir_limpeza() -> Result<LimpezaNaTela, String> {
-    use crate::modules::limpeza;
-    use crate::modules::windows::limpar;
-
-    let alvos = tokio::task::spawn_blocking(limpar::medir)
-        .await
-        .map_err(|e| format!("a medição não terminou: {e}"))?;
-
-    Ok(LimpezaNaTela {
-        marcados: limpeza::marcados_por_padrao(),
-        alvos,
-    })
-}
-
-#[cfg(target_os = "windows")]
-#[derive(Debug, Serialize)]
-pub struct LimpezaNaTela {
-    pub alvos: Vec<crate::modules::limpeza::AlvoMedido>,
-    /// Nada que contenha arquivo do cliente vem marcado.
-    pub marcados: Vec<String>,
-}
-
-/// A ÚNICA OPERAÇÃO SEM DESFAZER: recebe a lista EXPLÍCITA marcada item a item. Id fora do catálogo é recusado;
-/// caminho vindo da tela nunca.
-#[cfg(target_os = "windows")]
-#[tauri::command]
-pub async fn limpar_alvos(ids: Vec<String>) -> Result<Vec<LimparResultado>, String> {
-    crate::modules::licenca::exigir()?;
-
-    use crate::modules::windows::limpar;
-
-    tokio::task::spawn_blocking(move || {
-        ids.iter().map(|id| limpar::apagar(id)).collect()
-    })
-    .await
-    .map_err(|e| format!("a limpeza não terminou: {e}"))
-}
-
-#[cfg(target_os = "windows")]
-pub type LimparResultado = crate::modules::windows::limpar::Resultado;
 
 /// SÓ LÊ. A classe de cada núcleo vem do Windows, não de tabela de modelos. Processador uniforme: NÃO HÁ O QUE
 /// FAZER, escrito (um botão ali seria um jeito de piorar).
@@ -810,56 +701,7 @@ pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> 
     Ok(Preferences::load())
 }
 
-/// Não apaga nada.
-#[tauri::command]
-pub async fn scan_disk_space() -> Result<DiskReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::diskspace::scan)
-            .await
-            .map_err(|e| format!("Falha na varredura: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn clean_disk_category(id: String) -> Result<CleanOutcome, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(move || crate::modules::windows::diskspace::clean(&id))
-            .await
-            .map_err(|e| format!("Falha na limpeza: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = id;
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
 // A Lixeira saiu do liberador na 2.9: é item da Limpeza do sistema, desmarcado.
-
-#[tauri::command]
-pub async fn analyze_memory() -> Result<MemoryReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::memory::analyze)
-            .await
-            .map_err(|e| format!("Falha na análise de memória: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
 
 #[tauri::command]
 pub async fn set_automatic_pagefile() -> Result<String, String> {
@@ -1009,26 +851,6 @@ pub fn list_profiles() -> Vec<crate::modules::windows::profiles::ProfileInfo> {
     }
 }
 
-/// Não "o que dá para apagar", mas "cadê o meu disco".
-#[tauri::command]
-pub async fn map_folders() -> Result<FolderMap, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // Centenas de milhares de arquivos: fora do runtime async.
-        tokio::task::spawn_blocking(|| {
-            use crate::modules::windows::foldermap;
-            foldermap::mapear_o_disco(12)
-        })
-        .await
-        .map_err(|e| format!("Falha ao mapear pastas: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
 /// `LIVRES`: o `rbar` só lê, e só a BIOS liga. `(async)`: chama `nvidia-smi`, processo externo.
 #[tauri::command(async)]
 pub fn analyze_rbar() -> Result<crate::modules::windows::rbar::RelatorioDoRbar, String> {
@@ -1080,36 +902,6 @@ pub async fn export_report(
 
     let changes = state.changes.lock().await;
     crate::modules::report::save(&changes, comparison.as_ref(), &dados)
-}
-
-/// (2.9, modo Expert). `LIVRES`.
-#[tauri::command]
-pub async fn diagnostico_dpc() -> Result<crate::modules::windows::dpc::DiagnosticoDpc, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(|| crate::modules::windows::dpc::medir(10))
-            .await
-            .map_err(|e| e.to_string())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// (2.9, modo Expert). `LIVRES`.
-#[tauri::command]
-pub async fn msi_dispositivos() -> Result<Vec<crate::modules::windows::devices::DispositivoMsi>, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::devices::msi_por_dispositivo)
-            .await
-            .map_err(|e| e.to_string())?
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
 }
 
 /// `LIVRES`: só lê o histórico.
@@ -1339,21 +1131,6 @@ pub async fn limitar_fps_nvidia(
 }
 
 #[tauri::command]
-pub async fn analyze_readiness() -> Result<ReadinessReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::readiness::analyze)
-            .await
-            .map_err(|e| format!("Falha ao verificar o sistema: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
 pub async fn fix_readiness(id: String) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
@@ -1544,24 +1321,6 @@ pub async fn flush_dns() -> Result<String, String> {
         tokio::task::spawn_blocking(crate::modules::windows::network::limpar_cache_dns)
             .await
             .map_err(|e| format!("Falha ao limpar: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// O alvo sai das conexões do jogo (`rede::servidor_do_jogo`); não descobrir é o resultado. `LIVRES`: é o
-/// diagnóstico que evita culpar o produto por travada de rede.
-#[tauri::command]
-pub async fn medir_perda_de_pacote() -> Result<crate::modules::windows::rede::MedidaDeRede, String>
-{
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::rede::medir_agora)
-            .await
-            .map_err(|e| format!("Falha ao medir a perda de pacote: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2045,108 +1804,6 @@ pub async fn clean_fivem(id: String) -> Result<FiveMCleanOutcome, String> {
 }
 
 #[tauri::command]
-pub async fn analyze_browsers() -> Result<BrowserReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::browsers::analyze)
-            .await
-            .map_err(|e| format!("Falha ao ler os navegadores: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// Sem volta, recusa com o navegador aberto; dado de aplicativo nunca é tocado.
-#[tauri::command]
-pub async fn clean_browser_cache(executable: String) -> Result<BrowserCleanOutcome, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(move || {
-            crate::modules::windows::browsers::limpar_cache(&executable)
-        })
-        .await
-        .map_err(|e| format!("Falha ao limpar: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = executable;
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn analyze_boot() -> Result<BootReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::boot::analyze)
-            .await
-            .map_err(|e| format!("Falha ao ler o tempo de inicialização: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn analyze_thermal() -> Result<ThermalReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // WMI passa de um segundo: fora do runtime. O processador e a placa no mesmo diagnóstico (2.9).
-        tokio::task::spawn_blocking(|| {
-            let mut r = crate::modules::windows::thermal::analyze();
-            r.placa = Some(crate::modules::windows::sensoresgpu::ler());
-            r
-        })
-        .await
-        .map_err(|e| format!("Falha ao medir o processador: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn analyze_health() -> Result<HealthReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // `Get-StorageReliabilityCounter` conversa com o disco e demora.
-        tokio::task::spawn_blocking(crate::modules::windows::health::analyze)
-            .await
-            .map_err(|e| format!("Falha ao ler a saúde do hardware: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn analyze_conflicts() -> Result<ConflictReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::conflicts::analyze)
-            .await
-            .map_err(|e| format!("Falha ao procurar conflitos: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
 pub async fn list_scheduled_tasks() -> Result<Vec<ScheduledTask>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -2365,22 +2022,6 @@ pub async fn set_startup_enabled(
     #[cfg(not(target_os = "windows"))]
     {
         let _ = (hive, name, enabled, state);
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// Não escreve na BIOS. ~12 s de carga sustentada: `spawn_blocking`.
-#[tauri::command]
-pub async fn analyze_firmware() -> Result<FirmwareReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::firmware::analyze)
-            .await
-            .map_err(|e| format!("Firmware analysis failed: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -3226,362 +2867,6 @@ pub async fn set_max_refresh_rate(
     }
 }
 
-// Os quatro comandos de reparo levam o atributo `async` do Tauri. Sem ele o Tauri os classifica como Blocking
-// (tauri-macros-2.6.3, `src/command/wrapper.rs`) e o corpo roda na thread do laço de eventos: um DISM de trinta
-// minutos congela a janela e o `reparo_cancelar` só executaria depois do fim. Numa função SÍNCRONA com
-// `State<'_, AppState>` o atributo é válido (`sync_threadpool`). (A marca não aparece escrita aqui: a guarda do fim
-// do arquivo conta comandos por ela no fonte.)
-
-/// Só no Windows: `HealthReport` e `DiscoSaudavel` vêm de `modules::windows`.
-#[cfg(target_os = "windows")]
-fn disco_saudavel_agora() -> crate::modules::windows::reparo::DiscoSaudavel {
-    let relatorio = crate::modules::windows::health::analyze();
-    crate::modules::windows::reparo::DiscoSaudavel::a_partir_do_relatorio(&relatorio)
-}
-
-/// Lido de `Receita`, nunca reescrito na tela. Sem `programa` nem `args`: detalhe de execução, e mais superfície
-/// para forjar numa chamada direta.
-#[derive(Serialize)]
-pub struct FerramentaDeReparo {
-    pub nome: String,
-    pub minutos_tipicos: (u32, u32),
-    pub cancelar_e_seguro: bool,
-    pub aviso: Option<String>,
-    pub oferece_reset_base: bool,
-    /// Da `Receita` com `resetar_base: true`: fonte única do aviso.
-    pub aviso_reset_base: Option<String>,
-}
-
-#[cfg(target_os = "windows")]
-fn descrever_ferramenta(
-    f: crate::modules::windows::reparo::Ferramenta,
-    nome: &str,
-) -> FerramentaDeReparo {
-    use crate::modules::windows::reparo::{self, Ferramenta};
-
-    let r = reparo::receita(&f);
-
-    let (oferece_reset_base, aviso_reset_base) = match f {
-        Ferramenta::LimparWinSxS { .. } => {
-            let com_reset = reparo::receita(&Ferramenta::LimparWinSxS { resetar_base: true });
-            (true, com_reset.aviso.map(str::to_string))
-        }
-        _ => (false, None),
-    };
-
-    FerramentaDeReparo {
-        nome: nome.to_string(),
-        minutos_tipicos: r.minutos_tipicos,
-        cancelar_e_seguro: r.cancelar_e_seguro,
-        aviso: r.aviso.map(str::to_string),
-        oferece_reset_base,
-        aviso_reset_base,
-    }
-}
-
-/// `LIVRES`. O disco NÃO vem da tela: o comando lê o `HealthReport` e monta o `DiscoSaudavel`; um `bool` do
-/// frontend reabriria o buraco.
-#[tauri::command(async)]
-pub fn reparo_disponivel(state: State<'_, AppState>) -> Vec<FerramentaDeReparo> {
-    #[cfg(target_os = "windows")]
-    {
-        use crate::modules::windows::reparo::{self, Ferramenta};
-
-        let mut lista = vec![
-            descrever_ferramenta(Ferramenta::VerificarArquivos, "VerificarArquivos"),
-            descrever_ferramenta(Ferramenta::RepararImagem, "RepararImagem"),
-            descrever_ferramenta(Ferramenta::VerificarDisco, "VerificarDisco"),
-            descrever_ferramenta(Ferramenta::AnalisarWinSxS, "AnalisarWinSxS"),
-            descrever_ferramenta(
-                Ferramenta::LimparWinSxS { resetar_base: false },
-                "LimparWinSxS",
-            ),
-        ];
-
-        let medicao = estado_do_disco(&state);
-
-        // DUAS PROVAS: `DiscoSaudavel` (aguenta) e `EstadoDoDisco` (houve medição). Faltando uma, o botão não existe.
-        let disco = disco_saudavel_agora();
-        if reparo::consertar_disco_e_permitido(&disco) && medicao.autoriza_consertar() {
-            lista.push(descrever_ferramenta(Ferramenta::ConsertarDisco, "ConsertarDisco"));
-        }
-
-        if medicao.tem_conserto_agendado() {
-            lista.push(descrever_ferramenta(
-                Ferramenta::DesmarcarConsertoDoDisco,
-                "DesmarcarConsertoDoDisco",
-            ));
-        }
-
-        lista
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = state;
-        Vec::new()
-    }
-}
-
-/// Tranca envenenada devolve `SemVerificacao`, que não autoriza nada.
-#[cfg(target_os = "windows")]
-fn estado_do_disco(state: &State<'_, AppState>) -> crate::modules::windows::reparo::EstadoDoDisco {
-    state.disco.lock().map(|d| *d).unwrap_or_default()
-}
-
-/// Da `ResultadoSfc::severidade()`: a tela escolhia a cor com `startsWith("Corrigiu ")` e pintava
-/// `CorrigiuEmParte` de verde.
-#[derive(Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TomResultado {
-    Ok,
-    Atencao,
-    Erro,
-}
-
-#[cfg(target_os = "windows")]
-impl From<crate::modules::windows::cbslog::Severidade> for TomResultado {
-    fn from(s: crate::modules::windows::cbslog::Severidade) -> Self {
-        use crate::modules::windows::cbslog::Severidade;
-
-        match s {
-            Severidade::Ok => TomResultado::Ok,
-            Severidade::Atencao => TomResultado::Atencao,
-            Severidade::Erro => TomResultado::Erro,
-        }
-    }
-}
-
-/// Da variante de `Desfecho`, antes da frase: a tela comparava `desfecho === "Terminou."`.
-#[cfg(target_os = "windows")]
-impl From<&crate::modules::windows::tarefa_longa::Desfecho> for TomResultado {
-    fn from(d: &crate::modules::windows::tarefa_longa::Desfecho) -> Self {
-        use crate::modules::windows::tarefa_longa::Desfecho;
-
-        match d {
-            Desfecho::Terminou { codigo: 0 } => TomResultado::Ok,
-            Desfecho::Terminou { codigo: _ } => TomResultado::Erro,
-            // Cancelar foi escolha: nem verde nem vermelho.
-            Desfecho::Cancelada => TomResultado::Atencao,
-            Desfecho::NaoComecou { .. } => TomResultado::Erro,
-        }
-    }
-}
-
-/// A tela lê `tom`, nunca a prosa de `texto`.
-#[derive(Serialize)]
-pub struct DesfechoReparo {
-    pub tom: TomResultado,
-    pub texto: String,
-}
-
-/// A tela lê `tom`, nunca a prosa de `texto`.
-#[derive(Serialize)]
-pub struct UltimoResultadoReparo {
-    pub tom: TomResultado,
-    pub texto: String,
-}
-
-/// `LIVRES`.
-#[tauri::command(async)]
-pub fn reparo_ultimo_resultado() -> UltimoResultadoReparo {
-    #[cfg(target_os = "windows")]
-    {
-        use crate::modules::windows::cbslog::{self, ResultadoSfc};
-
-        // Sem `unwrap_or_default()`: o CBS.log só abre como administrador, e a string vazia virava "o Windows não
-        // verificou" em vez de "não conseguimos ler".
-        let resultado = match std::fs::read_to_string(cbslog::caminho_do_log()) {
-            Ok(conteudo) => cbslog::interpretar(&conteudo),
-            Err(e) => ResultadoSfc::NaoSei {
-                motivo: match e.kind() {
-                    std::io::ErrorKind::PermissionDenied => {
-                        "o registro do Windows só abre com permissão de administrador".to_string()
-                    }
-                    std::io::ErrorKind::NotFound => {
-                        "o registro do Windows ainda não existe nesta máquina".to_string()
-                    }
-                    _ => format!("não consegui abrir o registro do Windows ({})", e),
-                },
-            },
-        };
-        let tom = TomResultado::from(resultado.severidade());
-
-        let texto = match resultado {
-            // O resultado mais comum, e BOM.
-            ResultadoSfc::SemCorrupcao => "Nenhuma corrupção encontrada.".into(),
-            ResultadoSfc::Corrigiu { quantos } => {
-                format!("Corrigiu {} arquivo(s) corrompido(s).", quantos)
-            }
-            // Misto NÃO é sucesso: o tom `Atencao` carrega isso.
-            ResultadoSfc::CorrigiuEmParte {
-                corrigidos,
-                restantes,
-            } => format!(
-                "Corrigiu {} arquivo(s), mas {} continuam corrompidos e sem \
-                 conserto. O próximo passo é reparar a imagem do Windows.",
-                corrigidos, restantes
-            ),
-            ResultadoSfc::NaoConseguiu { quantos } => format!(
-                "Encontrou {} arquivo(s) corrompido(s) e não conseguiu corrigir. \
-                 O próximo passo é reparar a imagem do Windows.",
-                quantos
-            ),
-            // Linhas de falha sem nome legível: `Atencao`, não `Ok`.
-            ResultadoSfc::CorrigiuComRessalva {
-                quantos,
-                linhas_ilegiveis,
-            } => format!(
-                "Corrigiu {} arquivo(s) corrompido(s), mas o registro do Windows tinha \
-                 {} linha(s) de falha que não deram para identificar — não dá para \
-                 garantir que não sobrou corrupção nelas. O próximo passo é rodar a \
-                 verificação de novo: se a corrupção que sobrou já foi consertada, a \
-                 próxima passagem do `sfc` escreve um registro limpo e legível; se não \
-                 foi, ela aparece de novo, desta vez nomeada.",
-                quantos, linhas_ilegiveis
-            ),
-            ResultadoSfc::NaoSei { motivo } => format!("Não consegui conferir: {}.", motivo),
-        };
-
-        UltimoResultadoReparo { tom, texto }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        UltimoResultadoReparo {
-            tom: TomResultado::Atencao,
-            texto: "Disponível apenas no Windows.".to_string(),
-        }
-    }
-}
-
-/// Exige licença. O parâmetro é `resetbase`, uma palavra só: o `/ResetBase` é caro demais (sem volta) para depender
-/// da conversão camelCase/snake_case do Tauri.
-#[tauri::command(async)]
-pub fn reparo_executar(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    ferramenta: String,
-    resetbase: bool,
-) -> Result<DesfechoReparo, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        use crate::modules::windows::reparo::{self, Ferramenta};
-        use crate::modules::windows::tarefa_longa::Desfecho;
-        use tauri::Emitter;
-
-        let escolhida = match ferramenta.as_str() {
-            "VerificarArquivos" => Ferramenta::VerificarArquivos,
-            "RepararImagem" => Ferramenta::RepararImagem,
-            "VerificarDisco" => Ferramenta::VerificarDisco,
-            "ConsertarDisco" => {
-                // As duas travas conferidas de novo aqui: a tela pode ser contornada, esta chamada não.
-                let disco = disco_saudavel_agora();
-                if !reparo::consertar_disco_e_permitido(&disco) {
-                    return Err(
-                        "O disco desta máquina não está em condições para isso. \
-                         Consertar a estrutura num disco que já falha costuma \
-                         terminar de estragá-lo."
-                            .into(),
-                    );
-                }
-
-                if !estado_do_disco(&state).autoriza_consertar() {
-                    return Err(
-                        "Nada foi encontrado no disco para consertar. Rode antes \
-                         \"Verificar o disco\": sem achado, não há motivo para \
-                         reiniciar a sua máquina."
-                            .into(),
-                    );
-                }
-
-                Ferramenta::ConsertarDisco
-            }
-            "DesmarcarConsertoDoDisco" => {
-                if !estado_do_disco(&state).tem_conserto_agendado() {
-                    return Err("Não há conserto de disco agendado para desmarcar.".into());
-                }
-                Ferramenta::DesmarcarConsertoDoDisco
-            }
-            "AnalisarWinSxS" => Ferramenta::AnalisarWinSxS,
-            "LimparWinSxS" => Ferramenta::LimparWinSxS {
-                resetar_base: resetbase,
-            },
-            outra => return Err(format!("não conheço a ferramenta `{}`", outra)),
-        };
-
-        // Reincluir antes: um `chkntfs /X` antigo deixa o volume fora do boot check para sempre, e o `fsutil dirty set`
-        // sairia 0 com o `autochk` pulando o volume. Quem sequencia é este executor; rodar sempre é seguro.
-        if escolhida == Ferramenta::ConsertarDisco {
-            let reinclusao = reparo::receita_reinclusao_do_disco();
-            let args_reinclusao: Vec<&str> =
-                reinclusao.args.iter().map(|s| s.as_str()).collect();
-            let app_reinclusao = app.clone();
-            let desfecho_reinclusao =
-                state
-                    .reparo
-                    .rodar(reinclusao.programa, &args_reinclusao, move |a| {
-                        let _ = app_reinclusao.emit("reparo-andamento", &a);
-                    })?;
-
-            // Seguir para o `fsutil` com a reinclusão falha recriaria a mentira: "agendado" sem boot check.
-            if !reparo::reinclusao_deu_certo(&desfecho_reinclusao) {
-                return Err(
-                    "Não consegui preparar o disco para o conserto (a \
-                     reinclusão no boot check falhou). Nada foi agendado."
-                        .into(),
-                );
-            }
-        }
-
-        let r = reparo::receita(&escolhida);
-        let args: Vec<&str> = r.args.iter().map(|s| s.as_str()).collect();
-
-        let desfecho = state.reparo.rodar(r.programa, &args, move |a| {
-            let _ = app.emit("reparo-andamento", &a);
-        })?;
-
-        // Do desfecho real: `/scan` cancelado ou "não consegui verificar" apaga a autorização.
-        if let Ok(mut atual) = state.disco.lock() {
-            *atual = atual.apos_execucao(&escolhida, &desfecho);
-        }
-
-        // O tom é lido da VARIANTE antes do `match` consumir `desfecho`.
-        let tom = TomResultado::from(&desfecho);
-        let texto = match desfecho {
-            Desfecho::Terminou { codigo: 0 } => "Terminou.".into(),
-            Desfecho::Terminou { codigo } => format!("Terminou com o código {}.", codigo),
-            Desfecho::Cancelada => "Interrompida por você.".into(),
-            Desfecho::NaoComecou { motivo } => motivo,
-        };
-
-        Ok(DesfechoReparo { tom, texto })
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app, state, ferramenta, resetbase);
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-/// `LIVRES` como o `revert`: licença vencida no meio de um DISM não pode prender o cliente nele.
-#[tauri::command(async)]
-pub fn reparo_cancelar(state: State<'_, AppState>) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        state.reparo.cancelar()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = state;
-        false
-    }
-}
-
 /// `LIVRES` (faltou quando um cliente precisou de script de PowerShell à mão; ver `modules::windows::suporte`). NÃO
 /// síncrono: `health::analyze()` e `thermal::analyze()` somam 12 a 15 s, e na thread principal congelariam a
 /// janela.
@@ -3844,8 +3129,6 @@ mod tests {
         "passo_do_autoajuste",
         "historico_de_desempenho",
         "caminho_do_mouse",
-        "catalogo_de_programas",
-        "medir_limpeza",
         "nucleos_da_maquina",
         "recuperacao_pendente",
         "descartar_pendencia",
@@ -3863,23 +3146,18 @@ mod tests {
         "vistoriar_plano_otimiza",
         "relaunch_as_admin",
         "get_hardware_profile",
-        "analyze_firmware",
         "top_processes",
         "get_preferences",
         "set_preferences",
         "analyze_bloatware",
         "open_apps_settings",
-        "analyze_conflicts",
-        "analyze_health",
         "analyze_shaders",
-        "analyze_readiness",
         "diagnostico_rapido",
         "analyze_gpu_preference",
         "running_game_executable",
         "analyze_bottleneck",
         "game_mode_status",
         "analyze_network",
-        "medir_perda_de_pacote",
         "measure_frames",
         "framegen_detectar",
         "framegen_medir",
@@ -3900,23 +3178,15 @@ mod tests {
         "energia_remover_perfil_de_jogo",
         "analyze_fivem",
         "analyze_citizenfx",
-        "analyze_browsers",
-        "analyze_boot",
-        "analyze_thermal",
         "export_report",
         "exportar_alteracoes",
         "salvar_ficha_da_bios",
-        "msi_dispositivos",
-        "diagnostico_dpc",
         "cpuset_resultados",
         "cpuset_esquecer",
-        "map_folders",
         "analyze_rbar",
         "list_profiles",
         "list_third_party_services",
         "list_scheduled_tasks",
-        "scan_disk_space",
-        "analyze_memory",
         "restore_status",
         "list_startup",
         "list_optimizations",
@@ -3926,9 +3196,6 @@ mod tests {
         "revert_all_optimizations",
         "licenca_estado",
         "licenca_ativar",
-        "reparo_disponivel",
-        "reparo_ultimo_resultado",
-        "reparo_cancelar",
         "relatorio_de_suporte",
         "versao_mais_nova",
         "checar_essenciais",
@@ -3948,20 +3215,16 @@ mod tests {
         "ficha_da_bios",
         "abertura_pronta",
         "quedas_de_desempenho",
-        "reiniciar_na_bios",
-    ];
+        "reiniciar_na_bios",];
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
-        "instalar_programa",
-        "limpar_alvos",
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",
-        "clean_disk_category",
         "aplicar_plano_otimiza",
         "reparar_plano_otimiza",
         "set_automatic_pagefile",
@@ -3973,7 +3236,6 @@ mod tests {
         "set_dns",
         "flush_dns",
         "clean_fivem",
-        "clean_browser_cache",
         "set_scheduled_task",
         "set_service_start",
         "remove_store_app",
@@ -3984,11 +3246,9 @@ mod tests {
         "apply_optimization",
         "optimize_now",
         "set_max_refresh_rate",
-        "reparo_executar",
         "religar_essenciais",
         "aplicar_ajuste_nvidia",
-        "limitar_fps_nvidia",
-    ];
+        "limitar_fps_nvidia",];
 
     /// Só a parte de produção: os testes contêm as palavras procuradas.
     fn producao() -> &'static str {
@@ -4141,16 +3401,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn verificar_e_livre_e_consertar_pede_licenca() {
-        // Diagnóstico livre, correção paga.
-        assert!(LIVRES.contains(&"reparo_disponivel"));
-        assert!(LIVRES.contains(&"reparo_ultimo_resultado"));
-        assert!(EXIGEM_LICENCA.contains(&"reparo_executar"));
-
-        assert!(LIVRES.contains(&"reparo_cancelar"));
-    }
-
     /// Com `decorations: false` a barra é nosso HTML chamando comandos do Tauri, e no Tauri 2 comando não declarado
     /// em `capabilities/default.json` falha CALADO (o duplo-clique usa `internal_toggle_maximize`, outra permissão).
     #[test]
@@ -4171,31 +3421,6 @@ mod tests {
                 comando
             );
         }
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn o_tom_do_desfecho_vem_da_variante_nao_da_prosa() {
-        use crate::modules::windows::tarefa_longa::Desfecho;
-
-        assert!(matches!(
-            super::TomResultado::from(&Desfecho::Terminou { codigo: 0 }),
-            super::TomResultado::Ok
-        ));
-        assert!(matches!(
-            super::TomResultado::from(&Desfecho::Terminou { codigo: 1 }),
-            super::TomResultado::Erro
-        ));
-        assert!(matches!(
-            super::TomResultado::from(&Desfecho::Cancelada),
-            super::TomResultado::Atencao
-        ));
-        assert!(matches!(
-            super::TomResultado::from(&Desfecho::NaoComecou {
-                motivo: "Já existe uma tarefa em andamento.".into()
-            }),
-            super::TomResultado::Erro
-        ));
     }
 
     /// Literais de string com o texto ANTES deles, onde mora o operador. Em `char`, não byte: há acento.
@@ -4507,21 +3732,6 @@ const render = new Function(
     }
 
     #[test]
-    fn a_tela_do_mapa_decide_por_natureza_e_nao_por_texto() {
-        // Exige `natureza.tipo`, não só `natureza`, que passaria aparecendo num comentário.
-        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("src")
-            .join("main.ts");
-        let ts = std::fs::read_to_string(&caminho).expect("main.ts");
-
-        assert!(
-            ts.contains("natureza.tipo"),
-            "a tela do mapa precisa decidir pelo campo `natureza.tipo`"
-        );
-    }
-
-    #[test]
     fn o_comando_do_rbar_esta_registrado() {
         // Comando fora do `generate_handler!` só falha na máquina do cliente.
         let lib = std::fs::read_to_string(
@@ -4533,105 +3743,6 @@ const render = new Function(
         assert!(
             lib.contains("analyze_rbar"),
             "analyze_rbar fora do generate_handler!"
-        );
-    }
-
-    /// As três linhas só diferem na `natureza`: qualquer diferença no HTML vem dela.
-    #[test]
-    fn a_tela_do_mapa_so_oferece_limpar_o_que_e_limpavel() {
-        let telas = roda_a_tela(
-            &["function renderFolder("],
-            "renderFolder",
-            r#"
-const base = {
-  name: "Steam",
-  path: "C:\\Program Files (x86)\\Steam",
-  bytes: 131000000000,
-  formatted: "122.0 GB",
-  percent: 40,
-  explanation: "",
-  partial: false,
-};
-
-console.log(
-  JSON.stringify({
-    podeLimpar: render(Object.assign({}, base, { natureza: { tipo: "PodeLimpar" } })),
-    soOWindowsLimpa: render(Object.assign({}, base, { natureza: { tipo: "SoOWindowsLimpa" } })),
-    seu: render(Object.assign({}, base, { natureza: { tipo: "Seu" } })),
-    naoSei: render(Object.assign({}, base, { natureza: { tipo: "NaoSei" } })),
-  })
-);
-"#,
-        );
-
-        let pode_limpar = telas["podeLimpar"].as_str().expect("html do limpável");
-        let outro_lugar = telas["soOWindowsLimpa"]
-            .as_str()
-            .expect("html do que só o Windows limpa");
-        let seu = telas["seu"].as_str().expect("html do arquivo do cliente");
-        let nao_sei = telas["naoSei"].as_str().expect("html do ilegível");
-
-        // Sobre a POSSIBILIDADE de limpar, não a tag `<button>`: `data-mapa-limpar` no `<article>` inteiro passou nos
-        // testes. A marca é o que o ouvinte procura.
-        for (nome, html) in [
-            ("do arquivo do cliente", seu),
-            ("da pasta que não deu para ler", nao_sei),
-            ("da pasta que só o Windows limpa", outro_lugar),
-        ] {
-            assert!(
-                !html.contains("<button"),
-                "a linha {} ganhou botão:\n{}",
-                nome,
-                html
-            );
-            assert!(
-                !html.contains("data-mapa-limpar"),
-                "a linha {} carrega a marca `data-mapa-limpar`, que é o que o \
-                 ouvinte do mapa procura — com ela no HTML a linha vira \
-                 clicável para limpeza, tenha ou não uma tag `<button>`:\n{}",
-                nome,
-                html
-            );
-        }
-        assert!(
-            pode_limpar.contains("<button") && pode_limpar.contains("data-mapa-limpar"),
-            "a pasta limpável perdeu o botão:\n{}",
-            pode_limpar
-        );
-
-        // `SoOWindowsLimpa` não pode oferecer "Limpar no liberador".
-        assert_ne!(
-            outro_lugar, pode_limpar,
-            "a pasta que o liberador não limpa sai igual à que ele limpa"
-        );
-        assert!(
-            outro_lugar.contains("Limpeza de Disco"),
-            "a linha que perdeu o botão precisa dizer ONDE a limpeza acontece, \
-             senão o cliente só vê a recusa:\n{}",
-            outro_lugar
-        );
-        assert!(
-            !outro_lugar.contains("seu arquivo"),
-            "sobra do sistema não é arquivo do cliente — esconderia 24 GB atrás \
-             do rótulo errado:\n{}",
-            outro_lugar
-        );
-
-        assert_ne!(
-            seu, nao_sei,
-            "a tela pinta IGUAL a pasta do cliente e a pasta que não deu para \
-             ler — o cliente não tem como saber a diferença"
-        );
-        assert!(
-            nao_sei.contains("não consegui ler"),
-            "a pasta ilegível não diz que é ilegível:\n{}",
-            nao_sei
-        );
-        assert!(
-            seu.contains("Steam") && seu.contains("Program Files"),
-            "a linha do cliente precisa mostrar o caminho, que é para o que ela \
-             serve:\n{}",
-            seu
         );
     }
 

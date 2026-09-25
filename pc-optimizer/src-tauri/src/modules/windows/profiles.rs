@@ -31,7 +31,6 @@ pub const PROFILES: &[ProfileInfo] = &[
             "disable_widgets",
             "stop_sponsored_apps",
             "disable_gamedvr",
-            "disable_reserved_storage",
             "plano_otimiza",
         ],
     },

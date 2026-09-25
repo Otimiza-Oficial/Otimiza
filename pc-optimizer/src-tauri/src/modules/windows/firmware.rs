@@ -17,13 +17,6 @@ pub struct FirmwareFinding {
     pub fix_location: FixLocation,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FirmwareReport {
-    pub board: String,
-    pub cpu: String,
-    pub findings: Vec<FirmwareFinding>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 struct MemoryModule {
@@ -156,18 +149,6 @@ fn achados_de_memoria(
 
 pub fn analyze_memory_ou_lacuna() -> Result<Vec<FirmwareFinding>, String> {
     achados_de_memoria(memory_modules())
-}
-
-fn analyze_memory(findings: &mut Vec<FirmwareFinding>) {
-    let Some(modules) = memory_modules() else {
-        return;
-    };
-
-    if modules.is_empty() {
-        return;
-    }
-
-    analisar_pentes(&modules, findings);
 }
 
 fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>) {
@@ -312,60 +293,6 @@ pub fn boot_limits() -> Vec<(String, String)> {
     }
 }
 
-/// Sem elevação o `bcdedit` não responde e a lista volta vazia: sem isto o painel dava a inicialização por limpa
-/// enquanto o catálogo dizia "só como administrador".
-fn boot_limits_finding(limits: &[(String, String)], elevated: bool) -> FirmwareFinding {
-    if limits.is_empty() && !elevated {
-        return FirmwareFinding {
-            id: "boot_limits_desconhecido".to_string(),
-            title: "Limites de inicialização não verificados".to_string(),
-            measured: "O Windows só responde a esta consulta para um programa aberto como \
-                       administrador."
-                .to_string(),
-            advice: "Reabra o Otimiza como administrador para conferir se há núcleos ou memória \
-                     limitados na inicialização."
-                .to_string(),
-            severity: FindingSeverity::Important,
-            fix_location: FixLocation::Software,
-        };
-    }
-
-    if limits.is_empty() {
-        return FirmwareFinding {
-            id: "boot_limits_clear".to_string(),
-            title: "Inicialização sem limites artificiais".to_string(),
-            measured: "Nenhum limite de núcleos ou memória na configuração de boot.".to_string(),
-            advice: String::new(),
-            severity: FindingSeverity::Ok,
-            fix_location: FixLocation::None,
-        };
-    }
-
-    let described: Vec<String> = limits
-        .iter()
-        .map(|(key, value)| format!("{} = {}", key, value))
-        .collect();
-
-    FirmwareFinding {
-        id: "boot_limits_present".to_string(),
-        title: "Inicialização limitando o hardware".to_string(),
-        measured: described.join(", "),
-        advice: "O Windows está usando de propósito menos processador ou menos memória do que \
-                 você tem. Isso quase sempre é sobra de mexida no msconfig. A otimização \
-                 \"Liberar limites de inicialização\" corrige."
-            .to_string(),
-        severity: FindingSeverity::Critical,
-        fix_location: FixLocation::Software,
-    }
-}
-
-fn analyze_boot_limits(findings: &mut Vec<FirmwareFinding>) {
-    findings.push(boot_limits_finding(
-        &boot_limits(),
-        super::registry::is_elevated(),
-    ));
-}
-
 /// 0 desligada, 1 ativada sem rodar, 2 ativada e rodando.
 pub fn vbs_running() -> Option<bool> {
     let script = "(Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard \
@@ -383,6 +310,13 @@ pub fn vbs_servicos_ativos() -> Option<usize> {
                   @($g.SecurityServicesRunning | Where-Object { $_ -gt 0 }).Count";
 
     query_json(script)?.trim().parse().ok()
+}
+
+/// Só a virtualização de segurança, para o Início: duas consultas curtas ao Windows, sem carga nenhuma.
+pub fn achados_do_vbs() -> Vec<FirmwareFinding> {
+    let mut findings = Vec::new();
+    analyze_vbs(&mut findings);
+    findings
 }
 
 fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
@@ -441,134 +375,6 @@ fn analyze_vbs(findings: &mut Vec<FirmwareFinding>) {
     }
 }
 
-/// Mede a consequência, não a frequência (o Windows reporta a nominal): trabalho no fim de dez segundos de carga
-/// contra o primeiro segundo.
-pub fn measure_sustained_decay() -> f64 {
-    use std::hint::black_box;
-    use std::time::{Duration, Instant};
-
-    const SLICES: usize = 10;
-    const SLICE: Duration = Duration::from_secs(1);
-
-    let mut throughput = Vec::with_capacity(SLICES);
-
-    for _ in 0..SLICES {
-        let started = Instant::now();
-        let deadline = started + SLICE;
-        let mut operations: u64 = 0;
-        let mut accumulator: u64 = 1;
-
-        while Instant::now() < deadline {
-            for _ in 0..4096 {
-                accumulator = accumulator
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                accumulator ^= accumulator >> 33;
-                black_box(accumulator);
-            }
-            operations += 4096;
-        }
-
-        let seconds = started.elapsed().as_secs_f64();
-        throughput.push(operations as f64 / seconds.max(f64::MIN_POSITIVE));
-    }
-
-    decay_percent(&throughput)
-}
-
-pub fn decay_percent(throughput: &[f64]) -> f64 {
-    if throughput.len() < 4 {
-        return 0.0;
-    }
-
-    let first = throughput[0];
-    if first <= 0.0 {
-        return 0.0;
-    }
-
-    // Duas fatias, para um soluço no fim não virar superaquecimento.
-    let tail = &throughput[throughput.len() - 2..];
-    let last = tail.iter().sum::<f64>() / tail.len() as f64;
-
-    (first - last) / first * 100.0
-}
-
-fn analyze_throttling(findings: &mut Vec<FirmwareFinding>) {
-    let decay = measure_sustained_decay();
-
-    // Abaixo de 8%, outros processos disputando a CPU explicam a variação.
-    if decay >= 8.0 {
-        findings.push(FirmwareFinding {
-            id: "sustained_decay".to_string(),
-            title: "Processador perde força sob carga longa".to_string(),
-            measured: format!(
-                "Entregou {:.0}% menos trabalho no fim de 10 segundos de carga do que no começo.",
-                decay
-            ),
-            advice: "Sinal de limite de temperatura ou de energia. Verifique a refrigeração \
-                     (pasta térmica, poeira, ventoinhas) e, na BIOS, os limites de potência \
-                     do processador. Nenhum ajuste de software recupera isto."
-                .to_string(),
-            severity: FindingSeverity::Critical,
-            fix_location: FixLocation::Hardware,
-        });
-    } else {
-        findings.push(FirmwareFinding {
-            id: "sustained_ok".to_string(),
-            title: "Processador sustenta o desempenho".to_string(),
-            // Terminar mais rápido é variação de medição: zero.
-            measured: format!(
-                "Perdeu apenas {:.0}% ao fim de 10 segundos de carga.",
-                decay.max(0.0)
-            ),
-            advice: String::new(),
-            severity: FindingSeverity::Ok,
-            fix_location: FixLocation::None,
-        });
-    }
-}
-
-fn board_name() -> String {
-    let script = "$b = Get-CimInstance Win32_BaseBoard; \"$($b.Manufacturer) $($b.Product)\"";
-    query_json(script)
-        .map(|value| value.trim().to_string())
-        .unwrap_or_else(|| "placa não identificada".to_string())
-}
-
-fn cpu_name() -> String {
-    let mut system = sysinfo::System::new();
-
-    // Só o NOME do processador: `refresh_cpu_all()` pagaria quase um segundo de amostragem à toa.
-    system.refresh_cpu_specifics(sysinfo::CpuRefreshKind::nothing());
-
-    system
-        .cpus()
-        .first()
-        .map(|cpu| cpu.brand().trim().to_string())
-        .unwrap_or_else(|| "processador não identificado".to_string())
-}
-
-pub fn analyze() -> FirmwareReport {
-    let mut findings = Vec::new();
-
-    analyze_memory(&mut findings);
-    analyze_boot_limits(&mut findings);
-    analyze_vbs(&mut findings);
-    analyze_throttling(&mut findings);
-
-    findings.sort_by_key(|finding| match finding.severity {
-        FindingSeverity::Critical => 0,
-        FindingSeverity::Important => 1,
-        FindingSeverity::Ok => 2,
-    });
-
-    FirmwareReport {
-        board: board_name(),
-        cpu: cpu_name(),
-        findings,
-    }
-}
-
 #[cfg(test)]
 mod tests_1_7 {
     use super::*;
@@ -593,32 +399,6 @@ mod tests_1_7 {
             .expect("máquina sem pente reportado não é falha de leitura");
 
         assert!(achados.is_empty());
-    }
-}
-
-#[cfg(test)]
-mod tests_1_6 {
-    use super::*;
-
-    #[test]
-    fn sem_elevacao_uma_leitura_vazia_nao_e_boot_limpo() {
-        let finding = boot_limits_finding(&[], false);
-        assert_ne!(finding.severity, FindingSeverity::Ok);
-        assert!(finding.measured.contains("administrador"));
-    }
-
-    #[test]
-    fn com_elevacao_uma_leitura_vazia_e_boot_limpo_de_verdade() {
-        assert_eq!(boot_limits_finding(&[], true).severity, FindingSeverity::Ok);
-    }
-
-    #[test]
-    fn limite_encontrado_vale_com_ou_sem_elevacao() {
-        let limites = vec![("numproc".to_string(), "4".to_string())];
-        assert_eq!(
-            boot_limits_finding(&limites, false).severity,
-            FindingSeverity::Critical
-        );
     }
 }
 
@@ -708,47 +488,4 @@ mod tests {
         assert!(parse_boot_limits(output).is_empty());
     }
 
-    #[test]
-    fn stable_throughput_shows_no_decay() {
-        let throughput = vec![100.0, 100.0, 99.0, 100.0, 99.0, 100.0];
-        assert!(decay_percent(&throughput).abs() < 2.0);
-    }
-
-    #[test]
-    fn falling_throughput_is_detected_as_decay() {
-        let throughput = vec![100.0, 95.0, 88.0, 80.0, 72.0, 70.0];
-        assert!(decay_percent(&throughput) > 25.0);
-    }
-
-    #[test]
-    fn a_single_slow_slice_at_the_end_does_not_alone_decide() {
-        let throughput = vec![100.0, 100.0, 100.0, 100.0, 100.0, 60.0];
-        let decay = decay_percent(&throughput);
-        assert!(decay > 0.0 && decay < 25.0);
-    }
-
-    #[test]
-    fn analyzes_this_machine() {
-        let report = analyze();
-        println!("Placa: {}\nCPU:   {}", report.board, report.cpu);
-
-        for finding in &report.findings {
-            println!(
-                "[{:?}/{:?}] {} — {}",
-                finding.severity, finding.fix_location, finding.title, finding.measured
-            );
-        }
-
-        assert!(!report.findings.is_empty());
-        let severities: Vec<u8> = report
-            .findings
-            .iter()
-            .map(|f| match f.severity {
-                FindingSeverity::Critical => 0,
-                FindingSeverity::Important => 1,
-                FindingSeverity::Ok => 2,
-            })
-            .collect();
-        assert!(severities.windows(2).all(|pair| pair[0] <= pair[1]));
-    }
 }

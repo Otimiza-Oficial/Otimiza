@@ -496,7 +496,6 @@ mod tests {
             last_thermal_event: None,
             medido: false,
             eventos_lidos: true,
-            placa: None,
         };
 
         let (resumo, lacunas) = resumir_termico(&relatorio);

@@ -61,10 +61,6 @@ pub fn run() {
             changes: Mutex::new(ChangeLog::load()),
             #[cfg(target_os = "windows")]
             processes: Mutex::new(modules::windows::processes::ProcessMonitor::new()),
-            #[cfg(target_os = "windows")]
-            reparo: modules::windows::tarefa_longa::TarefaLonga::nova(),
-            #[cfg(target_os = "windows")]
-            disco: std::sync::Mutex::new(Default::default()),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_platform_info,
@@ -84,17 +80,13 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::caminho_do_mouse,
             #[cfg(target_os = "windows")]
-            commands::catalogo_de_programas,
             #[cfg(target_os = "windows")]
-            commands::medir_limpeza,
             #[cfg(target_os = "windows")]
             commands::nucleos_da_maquina,
             #[cfg(target_os = "windows")]
             commands::prender_jogo_nos_nucleos,
             #[cfg(target_os = "windows")]
-            commands::limpar_alvos,
             #[cfg(target_os = "windows")]
-            commands::instalar_programa,
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,
@@ -115,18 +107,14 @@ pub fn run() {
             commands::aplicar_plano_otimiza,
             commands::relaunch_as_admin,
             commands::get_hardware_profile,
-            commands::analyze_firmware,
             commands::top_processes,
             commands::get_preferences,
             commands::set_preferences,
             commands::analyze_bloatware,
             commands::remove_store_app,
             commands::open_apps_settings,
-            commands::analyze_conflicts,
-            commands::analyze_health,
             commands::analyze_shaders,
             commands::clean_shader_cache,
-            commands::analyze_readiness,
             commands::diagnostico_rapido,
             commands::analyze_gpu_preference,
             commands::set_gpu_preference,
@@ -140,7 +128,6 @@ pub fn run() {
             commands::analyze_network,
             commands::set_dns,
             commands::flush_dns,
-            commands::medir_perda_de_pacote,
             commands::measure_frames,
             commands::framegen_detectar,
             commands::framegen_medir,
@@ -166,28 +153,18 @@ pub fn run() {
             commands::analyze_fivem,
             commands::clean_fivem,
             commands::analyze_citizenfx,
-            commands::analyze_browsers,
-            commands::clean_browser_cache,
-            commands::analyze_boot,
-            commands::analyze_thermal,
             commands::export_report,
             commands::exportar_alteracoes,
             commands::salvar_ficha_da_bios,
-            commands::msi_dispositivos,
-            commands::diagnostico_dpc,
             commands::cpuset_testar,
             commands::cpuset_resultados,
             commands::cpuset_esquecer,
-            commands::map_folders,
             commands::analyze_rbar,
             commands::list_profiles,
             commands::list_third_party_services,
             commands::set_service_start,
             commands::list_scheduled_tasks,
             commands::set_scheduled_task,
-            commands::scan_disk_space,
-            commands::clean_disk_category,
-            commands::analyze_memory,
             commands::set_automatic_pagefile,
             commands::restore_status,
             commands::create_restore_point,
@@ -234,10 +211,6 @@ pub fn run() {
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
-            commands::reparo_disponivel,
-            commands::reparo_ultimo_resultado,
-            commands::reparo_executar,
-            commands::reparo_cancelar,
             commands::relatorio_de_suporte,
             commands::versao_mais_nova,
         ])

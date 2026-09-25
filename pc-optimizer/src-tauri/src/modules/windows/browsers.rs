@@ -436,79 +436,6 @@ pub fn analyze() -> BrowserReport {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CleanOutcome {
-    pub freed_mb: f64,
-    pub message: String,
-}
-
-/// Sem volta, e a tela avisa antes. Navegador FECHADO (arquivos travados deixariam pela metade); só
-/// `CACHE_DESCARTAVEL`; apaga o CONTEÚDO, não a pasta (alguns navegadores acusam perfil corrompido).
-pub fn limpar_cache(executavel: &str) -> Result<CleanOutcome, String> {
-    let memoria = memoria_por_executavel();
-
-    if memoria.get(executavel).copied().unwrap_or(0.0) > 0.0 {
-        return Err(format!(
-            "O navegador está aberto. Feche-o por completo antes de limpar — com ele \
-             rodando, os arquivos ficam travados e a limpeza sairia pela metade."
-        ));
-    }
-
-    let alvo = navegadores_conhecidos()
-        .into_iter()
-        .find(|(_, exe, _)| *exe == executavel)
-        .ok_or_else(|| format!("Navegador `{}` não é conhecido pelo Otimiza.", executavel))?;
-
-    let (nome, _, user_data) = alvo;
-
-    if !user_data.is_dir() {
-        return Err(format!("`{}` não está instalado nesta máquina.", nome));
-    }
-
-    let mut antes = 0u64;
-    let mut depois = 0u64;
-
-    for perfil in perfis(&user_data) {
-        antes += somar_categorias(&perfil, CACHE_DESCARTAVEL);
-
-        for categoria in CACHE_DESCARTAVEL {
-            esvaziar(&perfil.join(categoria));
-        }
-        esvaziar(&perfil.join("Service Worker").join("ScriptCache"));
-
-        depois += somar_categorias(&perfil, CACHE_DESCARTAVEL);
-    }
-
-    let liberado = antes.saturating_sub(depois);
-
-    Ok(CleanOutcome {
-        freed_mb: mb(liberado),
-        message: format!(
-            "{:.0} MB liberados do {}. Os sites que você usa vão carregar mais devagar \
-             na primeira visita, porque precisam baixar tudo de novo.",
-            mb(liberado),
-            nome
-        ),
-    })
-}
-
-/// Arquivo travado é pulado: o número relatado sai de medir de novo, e é o que foi apagado de verdade.
-fn esvaziar(dir: &Path) {
-    let Ok(entradas) = std::fs::read_dir(dir) else {
-        return;
-    };
-
-    for entrada in entradas.flatten() {
-        let caminho = entrada.path();
-
-        let _ = if caminho.is_dir() {
-            std::fs::remove_dir_all(&caminho)
-        } else {
-            std::fs::remove_file(&caminho)
-        };
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -599,29 +526,6 @@ mod tests {
         assert!(!e_perfil(&falso), "pasta de apoio não é perfil");
 
         let _ = std::fs::remove_dir_all(&temp);
-    }
-
-    #[test]
-    fn navegador_aberto_recusa_limpeza() {
-        let abertos = memoria_por_executavel();
-
-        for (_, executavel, user_data) in navegadores_conhecidos() {
-            if !user_data.is_dir() || abertos.get(executavel).copied().unwrap_or(0.0) <= 0.0 {
-                continue;
-            }
-
-            let erro = limpar_cache(executavel).unwrap_err();
-            assert!(erro.contains("Feche-o"), "recusa inesperada: {}", erro);
-            return;
-        }
-
-        println!("nenhum navegador aberto agora; caso não exercitado");
-    }
-
-    #[test]
-    fn navegador_desconhecido_e_recusado() {
-        let erro = limpar_cache("naoexiste.exe").unwrap_err();
-        assert!(erro.contains("não é conhecido"));
     }
 
     #[test]

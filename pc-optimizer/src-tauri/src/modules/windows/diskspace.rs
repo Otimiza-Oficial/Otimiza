@@ -55,13 +55,25 @@ struct Category {
     paths: fn() -> Vec<PathBuf>,
 }
 
-/// Para o `foldermap.rs` conferir em teste que cada botão "Limpar no liberador" encontra uma categoria limpável.
-pub fn ids_que_o_liberador_limpa() -> Vec<&'static str> {
-    CATEGORIES
-        .iter()
-        .filter(|c| c.cleanable)
-        .map(|c| c.id)
-        .collect()
+/// As pastas que o Windows enche sozinho e que entram na conta do espaço.
+fn pastas_de(id: &str) -> Vec<PathBuf> {
+    let var = |nome: &str| std::env::var(nome).ok().map(PathBuf::from);
+    let windows = var("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:Windows"));
+
+    match id {
+        "temporarios" => [var("TEMP"), Some(windows.join("Temp"))].into_iter().flatten().collect(),
+        "windows_update" => vec![windows.join("SoftwareDistribution").join("Download")],
+        "entregas_otimizadas" => vec![windows.join("SoftwareDistribution").join("DeliveryOptimization")],
+        "relatorios_de_erro" => [var("LOCALAPPDATA"), var("ProgramData")]
+            .into_iter()
+            .flatten()
+            .flat_map(|raiz| {
+                let wer = raiz.join("Microsoft").join("Windows").join("WER");
+                [wer.join("ReportQueue"), wer.join("ReportArchive")]
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 fn local_appdata() -> Option<PathBuf> {
@@ -85,7 +97,7 @@ static CATEGORIES: &[Category] = &[
         requires_admin: false,
         cleanable: true,
         // Pastas e apagar vêm de `limpar.rs`, para as duas telas medirem e apagarem a mesma coisa.
-        paths: || super::limpar::pastas_de("temporarios"),
+        paths: || pastas_de("temporarios"),
     },
     Category {
         id: "update_cache",
@@ -94,7 +106,7 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: true,
         cleanable: true,
-        paths: || super::limpar::pastas_de("windows_update"),
+        paths: || pastas_de("windows_update"),
     },
     Category {
         id: "windows_old",
@@ -117,7 +129,7 @@ static CATEGORIES: &[Category] = &[
         warning: None,
         requires_admin: true,
         cleanable: true,
-        paths: || super::limpar::pastas_de("relatorios_de_erro"),
+        paths: || pastas_de("relatorios_de_erro"),
     },
     Category {
         id: "delivery_optimization",
@@ -128,7 +140,7 @@ static CATEGORIES: &[Category] = &[
         cleanable: true,
         // Até a 2.8 apontava para `ProgramData\Microsoft\Network\Downloader`, a fila do BITS: apagava downloads
         // pendentes.
-        paths: || super::limpar::pastas_de("entregas_otimizadas"),
+        paths: || pastas_de("entregas_otimizadas"),
     },
     Category {
         id: "update_logs",
@@ -433,11 +445,6 @@ fn finding_do_winsxs(c: &Category) -> SpaceFinding {
     finding_do_winsxs_a_partir_da_saida(c, saida.as_deref())
 }
 
-/// A tela chama esta: quem abriu a aba Espaço aceita esperar pelo número do WinSxS.
-pub fn scan() -> DiskReport {
-    varrer(true)
-}
-
 /// O veredito da abertura usa esta: o WinSxS não é limpável e não muda o veredito, e o DISM rodava minutos para
 /// um número que ninguém lia.
 pub fn scan_para_o_veredito() -> DiskReport {
@@ -519,190 +526,9 @@ fn varrer(medir_o_winsxs: bool) -> DiskReport {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CleanOutcome {
-    pub id: String,
-    pub freed_bytes: u64,
-    pub message: String,
-}
-
-pub fn clean(id: &str) -> Result<CleanOutcome, String> {
-    let categoria = CATEGORIES
-        .iter()
-        .find(|c| c.id == id)
-        .ok_or_else(|| format!("Categoria desconhecida: {}", id))?;
-
-    if !categoria.cleanable {
-        return Err(format!(
-            "`{}` não é limpo por aqui. {}",
-            categoria.name,
-            categoria.warning.unwrap_or("")
-        ));
-    }
-
-    if categoria.requires_admin && !super::registry::is_elevated() {
-        return Err(format!(
-            "Limpar `{}` exige executar o Otimiza como administrador.",
-            categoria.name
-        ));
-    }
-
-    // Apagar `LocalCache` na unha arrisca corromper o registro do app: `wsreset.exe` é a ferramenta do Windows.
-    if id == "store_cache" {
-        let liberado: u64 = (categoria.paths)()
-            .iter()
-            .filter(|p| p.exists())
-            .map(|p| directory_size(p))
-            .sum();
-
-        // O `wsreset` fecha, limpa e reabre a Store: numa máquina lenta passa do minuto padrão.
-        shell::run_com_prazo("wsreset.exe", &[], Duration::from_secs(300))
-            .map_err(|_| "Não foi possível limpar o cache da Microsoft Store.".to_string())?;
-
-        return Ok(CleanOutcome {
-            id: id.to_string(),
-            freed_bytes: liberado,
-            message: format!("{} liberados de {}.", format_size(liberado), categoria.name),
-        });
-    }
-
-    if let Some(alvo) = alvo_da_limpeza(id) {
-        let r = super::limpar::apagar(alvo);
-        if let Some(erro) = r.erro {
-            return Err(erro);
-        }
-        let mut message = format!("{} liberados de {}.", format_size(r.bytes_liberados), categoria.name);
-        if r.arquivos_pulados > 0 {
-            message.push_str(&format!(" {} itens em uso foram pulados.", r.arquivos_pulados));
-        }
-        return Ok(CleanOutcome { id: id.to_string(), freed_bytes: r.bytes_liberados, message });
-    }
-
-    let mexe_com_update = matches!(id, "update_cache" | "delivery_optimization" | "update_logs");
-    let mut estavam_rodando = Vec::new();
-    let servicos = ["wuauserv", "bits", "dosvc"];
-
-    if mexe_com_update {
-        for servico in servicos {
-            // `None` é "não sei", e pende para parar: apagar com a atualização em andamento é o estrago evitado.
-            let parar = super::services::is_running(servico) != Some(false);
-            estavam_rodando.push(parar);
-
-            if parar {
-                let _ = super::services::stop(servico);
-            }
-        }
-    }
-
-    let mut liberado = 0u64;
-    let mut pulados = 0usize;
-
-    for caminho in (categoria.paths)().iter().filter(|p| p.exists()) {
-        let (bytes, ignorados) = limpar_caminho(caminho);
-        liberado += bytes;
-        pulados += ignorados;
-    }
-
-    if mexe_com_update {
-        for (servico, estava) in servicos.iter().zip(estavam_rodando) {
-            if estava {
-                let _ = super::services::start(servico);
-            }
-        }
-    }
-
-    let mut message = format!("{} liberados de {}.", format_size(liberado), categoria.name);
-    if pulados > 0 {
-        message.push_str(&format!(" {} itens em uso foram pulados.", pulados));
-    }
-
-    Ok(CleanOutcome {
-        id: id.to_string(),
-        freed_bytes: liberado,
-        message,
-    })
-}
-
-fn limpar_caminho(caminho: &std::path::Path) -> (u64, usize) {
-    let meta = match fs::metadata(caminho) {
-        Ok(meta) => meta,
-        Err(_) => return (0, 0),
-    };
-
-    if meta.is_file() {
-        let tamanho = meta.len();
-        return match fs::remove_file(caminho) {
-            Ok(()) => (tamanho, 0),
-            Err(_) => (0, 1),
-        };
-    }
-
-    limpar_conteudo(caminho)
-}
-
-/// Item em uso é pulado: travar por um arquivo aberto seria pior.
-fn limpar_conteudo(dir: &std::path::Path) -> (u64, usize) {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(_) => return (0, 0),
-    };
-
-    let mut liberado = 0u64;
-    let mut pulados = 0usize;
-
-    for entry in entries.filter_map(|e| e.ok()) {
-        let caminho = entry.path();
-
-        let meta = match entry.metadata() {
-            Ok(meta) => meta,
-            Err(_) => {
-                pulados += 1;
-                continue;
-            }
-        };
-
-        if meta.is_dir() {
-            let tamanho = directory_size(&caminho);
-            match fs::remove_dir_all(&caminho) {
-                Ok(()) => liberado += tamanho,
-                Err(_) => pulados += 1,
-            }
-        } else {
-            match fs::remove_file(&caminho) {
-                Ok(()) => liberado += meta.len(),
-                Err(_) => pulados += 1,
-            }
-        }
-    }
-
-    (liberado, pulados)
-}
-
-/// **Pura.** A categoria do liberador que é a mesma pasta de um alvo da Limpeza do sistema.
-pub fn alvo_da_limpeza(id: &str) -> Option<&'static str> {
-    match id {
-        "temp" => Some("temporarios"),
-        "update_cache" => Some("windows_update"),
-        "error_reports" => Some("relatorios_de_erro"),
-        "delivery_optimization" => Some("entregas_otimizadas"),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn as_categorias_repetidas_medem_as_mesmas_pastas_da_limpeza() {
-        for c in CATEGORIES {
-            if let Some(alvo) = alvo_da_limpeza(c.id) {
-                assert!(super::super::limpar::pastas_de(alvo).len() > 0 || alvo == "entregas_otimizadas");
-                assert_eq!((c.paths)(), super::super::limpar::pastas_de(alvo), "{}", c.id);
-                assert!(crate::modules::limpeza::alvo_por_id(alvo).is_some(), "{alvo} fora da limpeza");
-            }
-        }
-    }
 
     #[test]
     fn a_entrega_otimizada_nao_aponta_mais_para_a_fila_do_bits() {
@@ -792,7 +618,7 @@ mod tests {
         // Trava: `scan()` mexe em `ULTIMA_ANALISE`.
         let _trava = trava_ultima_analise();
 
-        let relatorio = scan();
+        let relatorio = scan_para_o_veredito();
         let soma_limpavel: u64 = relatorio
             .findings
             .iter()
@@ -850,7 +676,7 @@ A operação foi concluída com êxito.";
         // Trava: `scan()` mexe em `ULTIMA_ANALISE`.
         let _trava = trava_ultima_analise();
 
-        let relatorio = scan();
+        let relatorio = scan_para_o_veredito();
 
         for id in ["browser_cache", "store_cache"] {
             if let Some(f) = relatorio.findings.iter().find(|f| f.id == id) {
@@ -883,44 +709,6 @@ A operação foi concluída com êxito.";
     fn as_outras_categorias_medem_de_verdade() {
         for f in scan_para_o_veredito().findings.iter().filter(|f| f.id != "winsxs") {
             assert_eq!(f.medida, Medida::Medido, "{} não é medição do disco", f.id);
-        }
-    }
-
-    /// Guarda por leitura do fonte (`renderSpaceFinding` não pode decidir "vazio" por `bytes`). Sozinha é burlável
-    /// com uma variável intermediária: quem prende o comportamento é
-    /// `a_tela_do_liberador_renderiza_diferente_o_nao_medido_e_o_zero_medido`.
-    #[test]
-    fn a_tela_do_liberador_nao_chama_de_vazio_o_que_nao_foi_medido() {
-        let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("src")
-            .join("main.ts");
-        let fonte = std::fs::read_to_string(&caminho)
-            .unwrap_or_else(|e| panic!("não consegui ler {:?}: {}", caminho, e));
-
-        let corpo: String = fonte
-            .split("function renderSpaceFinding")
-            .nth(1)
-            .expect("renderSpaceFinding precisa existir")
-            .lines()
-            .take_while(|l| !l.starts_with('}'))
-            .collect::<Vec<_>>()
-            .join("
-");
-
-        assert!(
-            corpo.contains("medida"),
-            "renderSpaceFinding não olha `medida`: voltou a tratar todo zero como vazio"
-        );
-
-        for linha in corpo.lines() {
-            let decide = linha.contains("state-label") || linha.contains("data-severity");
-            assert!(
-                !(decide && linha.contains("bytes")),
-                "o rótulo/severidade do liberador voltou a sair de `bytes`:
-  {}",
-                linha.trim()
-            );
         }
     }
 
@@ -1001,115 +789,6 @@ A operação foi concluída com êxito.";
         );
     }
 
-    /// Extrai `renderSpaceFinding` do `main.ts`, transpila com o TypeScript do projeto e RODA com dois achados que só
-    /// diferem na `medida`.
-    #[test]
-    fn a_tela_do_liberador_renderiza_diferente_o_nao_medido_e_o_zero_medido() {
-        let raiz = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-        let main_ts = raiz.join("src").join("main.ts");
-        let typescript = raiz.join("node_modules").join("typescript");
-        assert!(
-            typescript.is_dir(),
-            "esta prova roda a tela de verdade e precisa do TypeScript do projeto: \
-             rode `npm ci` em pc-optimizer ({:?} não existe)",
-            typescript
-        );
-
-        // Só o `escapeHtml` é dublê (o real usa `document`).
-        let laboratorio = r#"
-const fs = require("fs");
-const ts = require(process.argv[3]);
-
-const fonte = fs.readFileSync(process.argv[2], "utf8");
-const depois = fonte.split("function renderSpaceFinding")[1];
-if (depois === undefined) throw new Error("renderSpaceFinding nao existe no main.ts");
-
-const corpo = [];
-for (const linha of depois.split(/\r?\n/)) {
-  if (linha.startsWith("}")) break;
-  corpo.push(linha);
-}
-const trecho = "function renderSpaceFinding" + corpo.join("\n") + "\n}\n";
-const js = ts.transpileModule(trecho, { compilerOptions: { target: "ES2020" } }).outputText;
-
-const escapeHtml = (v) =>
-  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const render = new Function("escapeHtml", js + "\nreturn renderSpaceFinding;")(escapeHtml);
-
-// Os dois achados são IGUAIS em tudo — inclusive `bytes: 0` e o mesmo texto
-// formatado. A única diferença é a `medida`. Qualquer diferença no HTML só
-// pode ter vindo dela.
-const base = {
-  id: "winsxs",
-  name: "Repositorio de componentes",
-  explanation: "explicacao",
-  bytes: 0,
-  formatted: "--",
-  cleanable: false,
-  requires_admin: true,
-  warning: null,
-};
-
-console.log(
-  JSON.stringify({
-    naoMedido: render(Object.assign({}, base, { medida: { tipo: "NaoConsegui" } })),
-    medido: render(Object.assign({}, base, { medida: { tipo: "Medido" } })),
-  })
-);
-"#;
-
-        let script = std::env::temp_dir().join("otimiza_render_space_finding.cjs");
-        std::fs::write(&script, laboratorio).expect("escreve o laboratório no temporário");
-
-        let saida = std::process::Command::new("node")
-            .arg(&script)
-            .arg(&main_ts)
-            .arg(&typescript)
-            .output()
-            .expect("esta prova roda a tela de verdade e precisa do Node no PATH");
-        let _ = std::fs::remove_file(&script);
-
-        assert!(
-            saida.status.success(),
-            "não deu para rodar `renderSpaceFinding`: {}",
-            String::from_utf8_lossy(&saida.stderr)
-        );
-
-        let telas: serde_json::Value =
-            serde_json::from_slice(&saida.stdout).expect("o laboratório imprime JSON");
-        let nao_medido = telas["naoMedido"].as_str().expect("html do não medido");
-        let medido = telas["medido"].as_str().expect("html do zero medido");
-
-        assert_ne!(
-            nao_medido, medido,
-            "a tela pinta IGUAL o que não foi medido e o zero medido — o cliente \
-             não tem como saber a diferença"
-        );
-
-        assert!(
-            medido.contains(r#"data-severity="Ok""#),
-            "zero MEDIDO é assunto resolvido e precisa sair em Ok:\n{}",
-            medido
-        );
-        assert!(
-            medido.contains(">vazio<"),
-            "zero MEDIDO é vazio de verdade e precisa dizer isso:\n{}",
-            medido
-        );
-
-        assert!(
-            !nao_medido.contains(r#"data-severity="Ok""#),
-            "o que não foi medido saiu com selo verde de resolvido:\n{}",
-            nao_medido
-        );
-        assert!(
-            !nao_medido.contains("vazio"),
-            "o que não foi medido saiu como \"vazio\" — o produto afirmando o que \
-             não mediu:\n{}",
-            nao_medido
-        );
-    }
-
     #[test]
     fn a_estimativa_entende_virgula_decimal_do_windows_em_portugues() {
         // O DISM em português escreve "2,34 GB": sem este, apagar o `replace(',', ".")` sumiria a categoria para o
@@ -1129,7 +808,7 @@ console.log(
         // Trava: `scan()` mexe em `ULTIMA_ANALISE`.
         let _trava = trava_ultima_analise();
 
-        let r = scan();
+        let r = scan_para_o_veredito();
         println!(
             "{} — {} livres de {} ({:.0}%)",
             r.drive,

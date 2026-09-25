@@ -22,66 +22,6 @@ fn service_key(service: &str) -> String {
     format!("{}\\{}", SERVICES_KEY, service)
 }
 
-/// Pelo NÚMERO, e não pelo rótulo: o rótulo é traduzido (ÉTAT, STATUS, STATO), e a busca por "STATE" ou
-/// "ESTADO" dava "parado" sobre serviço rodando. A constante em inglês ao lado identifica a linha certa.
-pub fn estado_da_saida_do_sc(stdout: &str) -> Option<u32> {
-    const ESTADOS: &[&str] = &[
-        "STOPPED",
-        "START_PENDING",
-        "STOP_PENDING",
-        "RUNNING",
-        "CONTINUE_PENDING",
-        "PAUSE_PENDING",
-        "PAUSED",
-    ];
-
-    for linha in stdout.lines() {
-        let Some((_, valor)) = linha.split_once(':') else {
-            continue;
-        };
-
-        let mut partes = valor.split_whitespace();
-
-        let Some(numero) = partes.next().and_then(|n| n.parse::<u32>().ok()) else {
-            continue;
-        };
-
-        // A constante separa a linha do estado da do tipo, que também começa com número.
-        if partes.next().is_some_and(|c| ESTADOS.contains(&c)) {
-            return Some(numero);
-        }
-    }
-
-    None
-}
-
-/// `None` é NÃO CONSEGUI SABER, e não "parado": decide se o Windows Update é parado antes de apagar o cache de
-/// atualização. Um `false` falso apagaria `SoftwareDistribution\Download` com a atualização em andamento.
-pub fn is_running(service: &str) -> Option<bool> {
-    let saida = super::shell::run("sc", &["query", service]).ok()?;
-
-    if !saida.success {
-        return None;
-    }
-
-    estado_da_saida_do_sc(&saida.stdout).map(|estado| estado == 4)
-}
-
-pub fn start(service: &str) -> Result<(), String> {
-    let output = super::shell::run("sc", &["start", service])?;
-
-    // 1056 = já está em execução.
-    if output.success || output.stdout.contains("1056") || output.stderr.contains("1056") {
-        Ok(())
-    } else {
-        Err(format!(
-            "Não foi possível iniciar o serviço `{}`: {}",
-            service,
-            output.stdout.trim()
-        ))
-    }
-}
-
 /// `None` é "não deu para ler": dizer "este Windows não tem o serviço" sobre uma ACL negada tira a otimização
 /// da lista com a frase errada.
 pub fn exists(service: &str) -> Option<bool> {
@@ -160,61 +100,6 @@ mod tests {
             corpo.contains("query_start_type"),
             "`set_start_type` voltou a confiar no código de saída do `sc` sem reler"
         );
-    }
-
-    /// Saída REAL desta máquina, em português, com os acentos estragados pelo código de página do console.
-    const SAIDA_EM_PORTUGUES: &str = "NOME_DO_SERVI\u{fffd}O: wuauserv \n\
-        \x20       TIPO               : 20  WIN32_SHARE_PROCESS  \n\
-        \x20       ESTADO              : 1  STOPPED \n\
-        \x20       C\u{fffd}DIGO_DE_SA\u{fffd}DA_DO_WIN32    : 1077  (0x435)\n\
-        \x20       PONTO_DE_VERIFICA\u{fffd}\u{fffd}O         : 0x0\n";
-
-    #[test]
-    fn o_estado_e_lido_sem_procurar_o_rotulo_traduzido() {
-        assert_eq!(estado_da_saida_do_sc(SAIDA_EM_PORTUGUES), Some(1));
-
-        let em_frances = "        \u{c9}TAT               : 4  RUNNING \n";
-        assert_eq!(estado_da_saida_do_sc(em_frances), Some(4));
-
-        let em_alemao = "        STATUS             : 4  RUNNING \n";
-        assert_eq!(estado_da_saida_do_sc(em_alemao), Some(4));
-    }
-
-    #[test]
-    fn a_linha_do_tipo_nao_e_confundida_com_a_do_estado() {
-        let so_o_tipo = "        TIPO               : 20  WIN32_SHARE_PROCESS  \n";
-        assert_eq!(estado_da_saida_do_sc(so_o_tipo), None);
-    }
-
-    #[test]
-    fn saida_que_nao_da_para_entender_vira_nao_sei() {
-        assert_eq!(estado_da_saida_do_sc(""), None);
-        assert_eq!(estado_da_saida_do_sc("acesso negado"), None);
-        assert_eq!(
-            estado_da_saida_do_sc("[SC] EnumQueryServicesStatus:OpenService FALHOU 1060"),
-            None
-        );
-    }
-
-    #[test]
-    fn todos_os_sete_estados_sao_reconhecidos() {
-        for (numero, constante) in [
-            (1, "STOPPED"),
-            (2, "START_PENDING"),
-            (3, "STOP_PENDING"),
-            (4, "RUNNING"),
-            (5, "CONTINUE_PENDING"),
-            (6, "PAUSE_PENDING"),
-            (7, "PAUSED"),
-        ] {
-            let linha = format!("        ESTADO : {}  {} \n", numero, constante);
-            assert_eq!(
-                estado_da_saida_do_sc(&linha),
-                Some(numero),
-                "estado {} não foi reconhecido",
-                constante
-            );
-        }
     }
 
     #[test]

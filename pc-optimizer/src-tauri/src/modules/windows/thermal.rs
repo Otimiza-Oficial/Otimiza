@@ -41,9 +41,6 @@ pub struct ThermalReport {
     /// `false` = não se leu, e "nenhum evento" NÃO pode ser afirmado.
     #[serde(default = "sim")]
     pub eventos_lidos: bool,
-    /// `None` quando o chamador não leu.
-    #[serde(default)]
-    pub placa: Option<super::sensoresgpu::SensoresGpu>,
 }
 
 fn sim() -> bool {
@@ -290,7 +287,6 @@ fn montar_relatorio(
         last_thermal_event: ultimo_evento,
         medido: !nao_medido,
         eventos_lidos: true,
-        placa: None,
     }
 }
 

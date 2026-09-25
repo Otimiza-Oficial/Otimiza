@@ -17,7 +17,7 @@ type Prontidao = { pronto: boolean; itens: ItemDeProntidao[]; conferido: string[
 function fraseDaProntidao(i: ItemDeProntidao): string {
   switch (i.tipo) {
     case "MonitorAbaixo":
-      return `<strong>${esc(i.monitor)} está a ${i.hz_atual} Hz e aguenta ${i.hz_maximo} Hz.</strong> É a maior diferença de fluidez que existe — corrija na aba Diagnóstico, em Monitores.`;
+      return `<strong>${esc(i.monitor)} está a ${i.hz_atual} Hz e aguenta ${i.hz_maximo} Hz.</strong> É a maior diferença de fluidez que existe — o Início tem o botão que corrige.`;
     case "LimitesEscondidos":
       return `<strong>${i.quantos} limite(s) de FPS escondido(s).</strong> Veja quais e onde tirar no Mapa de desempenho (Painel).`;
     case "SegundoPlanoPesado":

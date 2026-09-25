@@ -138,7 +138,7 @@ const NA_TELA: Record<Classe, { titulo: string; explica: string; faz: string; no
   LimiteEletrico: {
     titulo: "O processador está sendo segurado por energia",
     explica: "O firmware limitou a potência (notebook na bateria, fonte ou limite da placa-mãe).",
-    faz: "No notebook, jogue na tomada. Em desktop, confira os limites de potência na BIOS (aba Diagnóstico).",
+    faz: "No notebook, jogue na tomada. Em desktop, confira os limites de potência na BIOS (aba BIOS).",
     no: "cpu",
   },
   TetoDeQuadros: {
@@ -168,7 +168,7 @@ const NA_TELA: Record<Classe, { titulo: string; explica: string; faz: string; no
   Rede: {
     titulo: "A conexão está instável ou perdendo pacote",
     explica: "Rede que engasga parece FPS baixo: teleporte, tiro que não registra.",
-    faz: "Meça a perda de pacote até o servidor (aba Diagnóstico). Cabo em vez de Wi-Fi resolve a maioria.",
+    faz: "Perda de pacote vem do Wi-Fi, do provedor ou do servidor, não do PC. Cabo em vez de Wi-Fi resolve a maioria.",
     no: "tela",
   },
 };

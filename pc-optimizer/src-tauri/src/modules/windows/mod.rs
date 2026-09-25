@@ -11,24 +11,20 @@ pub mod bottleneck;
 pub mod browsers;
 pub mod cabecalho;
 pub mod catalog;
-pub mod cbslog;
 pub mod citizenfx;
 pub mod configjogo;
 pub mod conflicts;
 pub mod deteccao;
 pub mod devices;
 pub mod diskspace;
-pub mod sensoresgpu;
 pub mod cpuset;
 pub mod registro;
 pub mod nvml;
-pub mod dpc;
 pub mod display;
 pub mod essenciais;
 pub mod exhaustion;
 pub mod firmware;
 pub mod fivem;
-pub mod foldermap;
 pub mod frames;
 pub mod motorenergia;
 pub mod motorenergia_maquina;
@@ -52,7 +48,6 @@ pub mod discodojogo;
 pub mod jogos;
 pub mod labcompat;
 pub mod health;
-pub mod limpar;
 pub mod memory;
 pub mod network;
 pub mod nvdriver;
@@ -72,7 +67,6 @@ pub mod rbar;
 pub mod readiness;
 pub mod rede;
 pub mod registry;
-pub mod reparo;
 pub mod restore;
 pub mod services;
 pub mod servicesaudit;
@@ -83,14 +77,12 @@ pub mod startup;
 pub mod suporte;
 pub mod suspend;
 pub mod sysparams;
-pub mod tarefa_longa;
 pub mod tasks;
 pub mod tetos;
 pub mod thermal;
 pub mod unreal;
 pub mod topologia;
 pub mod veredito;
-pub mod winget;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{
@@ -3073,7 +3065,7 @@ mod tests {
         let optimizer = WindowsOptimizer::new();
         let log = ChangeLog::load();
 
-        for id in ["disable_reserved_storage", "remove_forced_hpet", "clear_boot_limits"] {
+        for id in ["remove_forced_hpet", "clear_boot_limits"] {
             let spec = catalog::find(id).expect("otimização deveria existir");
 
             if log.is_applied(id) {

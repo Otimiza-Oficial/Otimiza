@@ -150,7 +150,6 @@ pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("visual_effects_performance", Condicao::PcFraco),
     ("disable_transparency", Condicao::PcFraco),
     ("disable_hibernation", Condicao::PoucoEspaco),
-    ("disable_reserved_storage", Condicao::PoucoEspaco),
     ("disable_widgets", Condicao::MemoriaApertada),
     ("edge_background_off", Condicao::MemoriaApertada),
     ("disable_startup_delay", Condicao::SoSePedir),
@@ -193,6 +192,8 @@ pub const RETIRADOS: &[&str] = &[
     "telemetry_policy",
     "start_menu_web_search_off",
     "disable_copilot",
+    // Terceira rodada (3.1): liberar disco não muda o jogo, fora a pedido do dono.
+    "disable_reserved_storage",
 ];
 
 pub fn retirado(id: &str) -> bool {

@@ -474,12 +474,6 @@ fn achados_de_firmware(findings: &[super::firmware::FirmwareFinding]) -> Vec<Ach
         .collect()
 }
 
-impl EmAchados for super::firmware::FirmwareReport {
-    fn achados(&self) -> Vec<Achado> {
-        achados_de_firmware(&self.findings)
-    }
-}
-
 impl EmAchados for super::health::HealthReport {
     fn achados(&self) -> Vec<Achado> {
         self.findings
@@ -864,6 +858,8 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Firmware, || {
             super::firmware::analyze_memory_ou_lacuna().map(|f| achados_de_firmware(&f))
         }),
+        // A Integridade de Memória custa FPS e o Windows 11 passa a ligá-la sozinho: tem de aparecer no Início.
+        (Origem::Firmware, || Ok(achados_de_firmware(&super::firmware::achados_do_vbs()))),
         // Térmico, disco, shaders e conflitos entram na eleição (medido em 31/08/2026: 1,33 s, 0,44 s, 0,13 s, 0,14 s,
         // todos abaixo do `readiness`). O disco é `scan_para_o_veredito()`, sem DISM (guarda
         // `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`). Boot e bloatware ficam fora: são higiene e empurrariam

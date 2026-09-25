@@ -44,10 +44,6 @@
           <path d="M9.5 20.5v-6h5v6" />
         </symbol>
 
-        <!-- Diagnóstico: o traçado de um monitor cardíaco -->
-        <symbol id="i-diagnostico" viewBox="0 0 24 24">
-          <path d="M3 12h3.5l2-5.5 3.5 11 2.5-7 1.5 1.5H21" />
-        </symbol>
 
         <!-- Ajustes: os controles deslizantes, em pé -->
         <symbol id="i-otimizacoes" viewBox="0 0 24 24">
@@ -62,12 +58,6 @@
           <path d="M16 12h.01M18 14.5h.01" />
         </symbol>
 
-        <!-- Instaladores: a seta que desce para a bandeja -->
-        <symbol id="i-instaladores" viewBox="0 0 24 24">
-          <path d="M12 3.5v11" />
-          <path d="M7.5 10.5 12 15l4.5-4.5" />
-          <path d="M4 16.5v2A2 2 0 0 0 6 20.5h12a2 2 0 0 0 2-2v-2" />
-        </symbol>
 
         <!-- Placa de vídeo: a placa com os dois ventiladores -->
         <symbol id="i-gpu" viewBox="0 0 24 24">
@@ -109,12 +99,6 @@
           <path d="M3 17h3l2.5-7 3 10 3-14 2.5 11H21" />
         </symbol>
 
-        <!-- Espaço: o disco visto de lado, com os pratos empilhados -->
-        <symbol id="i-espaco" viewBox="0 0 24 24">
-          <path d="M20 6.5c0 1.4-3.6 2.5-8 2.5S4 7.9 4 6.5 7.6 4 12 4s8 1.1 8 2.5Z" />
-          <path d="M4 6.5v11C4 18.9 7.6 20 12 20s8-1.1 8-2.5v-11" />
-          <path d="M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" />
-        </symbol>
 
         <!-- Sistema: a janela com a lista do que roda atrás -->
         <symbol id="i-sistema" viewBox="0 0 24 24">
@@ -123,11 +107,6 @@
           <path d="M7 12.5h10M7 16h6" />
         </symbol>
 
-        <!-- Reparo: a chave de fenda consertando o que quebrou -->
-        <symbol id="i-reparo" viewBox="0 0 24 24">
-          <path d="M14.7 9.3a3.7 3.7 0 0 1-4.9 4.9L4 20l-1-1 5.8-5.8a3.7 3.7 0 0 1 4.9-4.9l-2.6 2.6 1 1Z" />
-          <path d="M17.5 3.5 21 7l-2.2 2.2-3.5-3.5Z" />
-        </symbol>
 
         <!-- Busca: a lupa -->
         <symbol id="i-busca" viewBox="0 0 24 24">
@@ -387,13 +366,6 @@
             <span class="nav-rotulo">Início</span>
           </button>
 
-          <button class="nav" role="tab" data-tab="diagnostico" aria-selected="false"
-                  aria-controls="tab-diagnostico" id="tabbtn-diagnostico">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-diagnostico" /></svg>
-            <span class="nav-rotulo">Diagnóstico</span>
-            <span class="tab-badge" id="badge-diagnostico" hidden></span>
-          </button>
-
           <p class="lateral-grupo">Agir</p>
 
           <button class="nav" role="tab" data-tab="otimizacoes" aria-selected="false"
@@ -407,12 +379,6 @@
                   aria-controls="tab-nucleos" id="tabbtn-nucleos">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-affinity" /></svg>
             <span class="nav-rotulo">Núcleos</span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="programas" aria-selected="false"
-                  aria-controls="tab-programas" id="tabbtn-programas">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-instaladores" /></svg>
-            <span class="nav-rotulo">Programas</span>
           </button>
 
           <button class="nav" role="tab" data-tab="gpu" aria-selected="false"
@@ -440,13 +406,6 @@
             <span class="nav-rotulo">Energia</span>
           </button>
 
-          <button class="nav" role="tab" data-tab="espaco" aria-selected="false"
-                  aria-controls="tab-espaco" id="tabbtn-espaco">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-espaco" /></svg>
-            <span class="nav-rotulo">Espaço</span>
-            <span class="tab-badge" id="badge-espaco" hidden></span>
-          </button>
-
           <button class="nav" role="tab" data-tab="bios" aria-selected="false"
                   aria-controls="tab-bios" id="tabbtn-bios">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-bios" /></svg>
@@ -458,12 +417,6 @@
             <svg class="nav-icone" aria-hidden="true"><use href="#i-sistema" /></svg>
             <span class="nav-rotulo">Sistema</span>
             <span class="tab-badge" id="badge-sistema" hidden></span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="reparo" aria-selected="false"
-                  aria-controls="tab-reparo" id="tabbtn-reparo">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-reparo" /></svg>
-            <span class="nav-rotulo">Reparo</span>
           </button>
 
         </nav>
@@ -612,7 +565,7 @@
 
               <ul class="veredito-junto" id="veredito-junto" hidden></ul>
 
-              <!-- Os outros problemas desta máquina, de causas diferentes: o veredito elege um, e o resto não pode ficar só no Diagnóstico. -->
+              <!-- Os outros problemas desta máquina, de causas diferentes: o veredito elege um, e o resto aparece aqui. -->
               <div class="veredito-outros" id="veredito-outros" hidden></div>
 
               <div class="veredito-recuperacao" id="veredito-recuperacao" hidden></div>
@@ -1055,272 +1008,6 @@
               </div>
             </section>
           </div>
-        </section>
-
-        <section class="tab-panel" id="tab-diagnostico" role="tabpanel" aria-labelledby="tabbtn-diagnostico" hidden>
-          <!-- Desenhado, o número fica na tela do monitor, e com dois cada um mostra o seu. -->
-          <section class="panel monitores" id="monitores-painel">
-            <div class="panel-head">
-              <h2>Monitores</h2>
-              <span class="panel-tag" id="monitores-tag">—</span>
-            </div>
-
-            <div class="monitores-lista" id="monitores-lista">
-              <p class="hint">Lendo os monitores…</p>
-            </div>
-          </section>
-
-          <!-- Quatro encaixes com um ocupado explicam "canal único" sem tradução. -->
-          <section class="panel memoria" id="memoria-painel" data-estado="lendo">
-            <div class="panel-head">
-              <h2>Memória instalada</h2>
-              <span class="panel-tag" id="memoria-tag">—</span>
-            </div>
-
-            <div class="memoria-corpo">
-              <div class="memoria-arte" aria-hidden="true">
-                <svg viewBox="0 0 300 132" xmlns="http://www.w3.org/2000/svg">
-                  <rect class="memoria-placa" x="4" y="6" width="292" height="120" rx="6" />
-                  <g class="memoria-trilhas">
-                    <path d="M14 116 h60 M14 110 h48 M14 104 h72" />
-                    <path d="M226 116 h60 M238 110 h48 M214 104 h72" />
-                  </g>
-
-                  <!-- data-slot diz qual está ocupado. -->
-                  <g id="memoria-slots"></g>
-                </svg>
-              </div>
-
-              <div class="memoria-info">
-                <p class="lead" id="memoria-frase">Lendo os pentes de memória…</p>
-                <dl class="placa-dados">
-                  <div><dt>Instalado</dt><dd id="memoria-total">—</dd></div>
-                  <div><dt>Encaixes usados</dt><dd id="memoria-usados">—</dd></div>
-                  <div><dt>Velocidade real</dt><dd id="memoria-mhz">—</dd></div>
-                </dl>
-              </div>
-            </div>
-          </section>
-
-<section class="panel">
-              <div class="panel-head">
-                <h2>Achados desta máquina</h2>
-                <button id="run-diagnostic" class="btn btn-ghost">Analisar</button>
-              </div>
-              <!-- No lugar da nota de 0 a 100 (removida na 0.13, não consultava nada), a lista de achados com o que foi medido. -->
-              <div id="diagnostic-result" class="diagnostic">
-                <p class="empty">Rode a análise para ver todos os achados desta máquina.</p>
-              </div>
-            </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Quanto o seu PC demora para ligar</h2>
-              <span class="panel-tag" id="boot-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Ninguém percebe 5% de FPS. Todo mundo percebe um PC que ligava em
-              dois minutos e passa a ligar em quarenta segundos. O Windows mede
-              isso sozinho a cada inicialização e guarda o nome de cada programa
-              que atrasou, com os segundos de cada um — e nenhum otimizador do
-              mercado mostra isso. Não é promessa nossa: é o registro do próprio
-              Windows.
-            </p>
-
-            <button id="analyze-boot" class="btn" data-custo="~3 s">Analisar</button>
-            <p id="boot-status" class="status"></p>
-            <div id="boot-result" class="resultado" data-vazio="Lê o registro que o próprio Windows já mantém: quanto o PC demorou no último boot e quais programas atrasaram, com os segundos de cada um. Cerca de 3 segundos, e não altera nada."></div>
-          </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Temperatura e limites: processador e placa de vídeo</h2>
-              <span class="panel-tag" id="thermal-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Um notebook empoeirado a 95 graus corta o processador para uma
-              fração da velocidade, e nenhum ajuste de software resolve isso.
-              Mas plano de energia mal configurado causa exatamente o mesmo
-              sintoma e se resolve num clique. Aqui a gente elimina causa por
-              causa — bateria, plano de energia, registro térmico do Windows — e
-              só fala em calor quando o próprio Windows registrou o evento, com
-              data. Quando não dá para saber, dizemos que não sabemos: chute
-              aqui faz você trocar peça à toa.
-            </p>
-
-            <button id="analyze-thermal" class="btn" data-custo="~5 s">Analisar</button>
-            <p id="thermal-status" class="status"></p>
-            <div id="thermal-result" class="resultado" data-vazio="Descobre se o processador ou a placa de vídeo estão sendo limitados, e por quê — bateria, plano de energia, temperatura ou limite elétrico. Com o jogo aberto a leitura da placa diz mais. Cerca de 5 segundos, e não altera nada."></div>
-          </section>
-          <!-- Só leitura: ligar MSI num driver que não aguenta trava o boot. A escrita segue só na placa de vídeo. -->
-          <section class="panel" data-so-expert hidden>
-            <div class="panel-head">
-              <h2>Interrupções por dispositivo (MSI)</h2>
-              <span class="panel-tag">Expert · só leitura</span>
-            </div>
-            <p class="lead">
-              Como cada dispositivo avisa o processador: por mensagem (MSI) ou
-              pela linha compartilhada antiga. O Otimiza só muda isto na placa
-              de vídeo — em outro dispositivo, um driver que não aguenta MSI
-              impede o Windows de ligar, e aí não há desfazer.
-            </p>
-            <button id="msi-ler" class="btn" data-custo="~1 s">Ler dispositivos</button>
-            <div id="msi-resultado" class="resultado" data-vazio="Lista cada dispositivo PCI com driver e como ele avisa o processador: por mensagem (MSI) ou pela linha compartilhada. Só leitura."></div>
-          </section>
-
-          <section class="panel" data-so-expert hidden>
-            <div class="panel-head">
-              <h2>Drivers prendendo o processador (DPC)</h2>
-              <span class="panel-tag">Expert · só leitura</span>
-            </div>
-            <p class="lead">
-              Driver mal escrito prende um núcleo atendendo interrupção, e o que se
-              sente é engasgo e som estalando com FPS médio normal. Isto mede, por 10
-              segundos, quanto de cada núcleo foi para DPC e interrupção. Diz qual
-              núcleo e quanto — não diz qual driver: isso exige rastreamento do kernel,
-              que o Otimiza ainda não faz. Meça com o jogo aberto para valer.
-            </p>
-            <button id="dpc-medir" class="btn" data-custo="~10 s">Medir 10 s</button>
-            <div id="dpc-resultado" class="resultado" data-vazio="Mostra, núcleo por núcleo, quanto do tempo foi para DPC e interrupção durante a medição. Diz qual núcleo, não qual driver. Só leitura."></div>
-          </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Perda de pacote até o servidor</h2>
-              <span class="panel-tag" id="perda-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Uma rede que engasga sente <strong>exatamente igual a FPS
-              baixo</strong>: o carro que teleporta, o tiro que não registra,
-              a tela que congela por um instante. Se você já otimizou o PC e
-              não sentiu diferença, o problema pode estar aqui — e não no seu
-              computador.
-            </p>
-
-            <p class="hint">
-              Perda de pacote é quase sempre do provedor, do cabo, do Wi-Fi
-              ou do servidor do jogo — nunca do PC. O Otimiza mede contra o
-              servidor em que você está jogando agora e mostra onde está o
-              problema, sem prometer consertar o que não está aqui. Se não
-              der para identificar o servidor com confiança, a tela diz isso
-              em vez de inventar um número.
-            </p>
-
-            <button id="medir-perda" class="btn" data-custo="~10 s">Medir agora</button>
-            <p id="perda-status" class="status"></p>
-            <div id="perda-result" class="resultado" data-vazio="Precisa do jogo aberto: o servidor sai das conexões ativas do processo. Cerca de 10 segundos, usa a rede, e não altera nada."></div>
-          </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Conflitos entre programas</h2>
-              <span class="panel-tag" id="conflicts-summary">—</span>
-            </div>
-
-            <p class="lead">
-              PC lento raramente é culpa de um programa só. É de dois fazendo a
-              mesma coisa ao mesmo tempo: dois antivírus varrendo um ao outro,
-              três sobreposições injetando código no mesmo jogo, dois otimizadores
-              desfazendo a configuração um do outro.
-            </p>
-
-            <button id="analyze-conflicts" class="btn" data-custo="~4 s">Analisar</button>
-            <p id="conflicts-status" class="status"></p>
-            <div id="conflicts-result" class="resultado" data-vazio="Procura programas que fazem a mesma coisa e brigam entre si: dois antivírus, dois otimizadores, sobreposições de jogo. Cerca de 4 segundos, e não altera nada."></div>
-          </section>
-
-          <!--
-            Firmware, prontidão, saúde e memória já rodaram na abertura (veredito::coletar_rapido()): fechados, para não
-            disputar atenção.
-          -->
-          <details class="exames-detalhados">
-            <summary>
-              Ver cada exame em detalhe
-              <span class="exames-nota">firmware, prontidão, saúde do disco e memória — já medidos na abertura</span>
-            </summary>
-
-<section class="panel">
-              <div class="panel-head">
-                <h2>Firmware e hardware</h2>
-                <span class="panel-tag" id="firmware-board">—</span>
-              </div>
-
-              <p class="lead">
-                Não escrevemos na BIOS: em placa de consumo as configurações ficam
-                num bloco proprietário da NVRAM, e errar ali não trava o Windows —
-                inutiliza a placa-mãe. O que fazemos é ler o que a BIOS e o hardware
-                estão fazendo com o seu desempenho, e dizer onde se resolve.
-              </p>
-
-              <button id="analyze-firmware" class="btn" data-custo="~12 s">Analisar</button>
-              <p id="firmware-status" class="status"></p>
-              <div id="firmware-result" class="resultado" data-vazio="Lê a memória instalada, o arranque e a segurança da BIOS, e mede queda de desempenho sob carga sustentada. Leva cerca de 12 segundos e não altera nada."></div>
-            </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Antes de otimizar</h2>
-              <span class="panel-tag" id="prontidao-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Estas verificações não são otimizações: são condições que, quando
-              estão erradas, fazem o atendimento inteiro parecer sem efeito. O
-              caso mais comum é máquina com reinício pendente — parte das
-              mudanças não fixa até reiniciar, o técnico aplica tudo, mede, não
-              vê ganho e conclui que o produto não funciona. O motivo estava lá
-              desde o começo, numa chave que ninguém olha.
-            </p>
-
-            <button id="analyze-readiness" class="btn" data-custo="~4 s">Analisar</button>
-            <p id="prontidao-status" class="status"></p>
-            <div id="prontidao-result" class="resultado" data-vazio="Confere o que atrapalha antes de qualquer otimização: reinício pendente, TRIM do SSD, paginação em disco mecânico, plano de energia. Cerca de 4 segundos, e não altera nada."></div>
-          </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Saúde física do disco e da bateria</h2>
-              <span class="panel-tag" id="health-summary">—</span>
-            </div>
-
-            <p class="lead">
-              Existe um caso que otimizador nenhum detecta e que explica boa parte
-              dos "otimizei e não melhorou": a peça está morrendo. SSD no fim da
-              vida e HD com setor com defeito ficam lentos de um jeito que nenhum
-              ajuste conserta. Em notebook, bateria muito gasta faz o Windows
-              limitar o processador — e o dono jura que ficou lento do nada.
-              Antes de otimizar, vale saber se o problema é físico.
-            </p>
-
-            <button id="analyze-health" class="btn" data-custo="~5 s">Analisar</button>
-            <p id="health-status" class="status"></p>
-            <div id="health-result" class="resultado" data-vazio="Lê os contadores de desgaste do disco e a saúde da bateria, direto do que o hardware informa. Cerca de 5 segundos e não altera nada. Exige administrador."></div>
-          </section>
-
-<section class="panel">
-            <div class="panel-head">
-              <h2>Memória e paginação</h2>
-              <span class="panel-tag" id="memory-summary">—</span>
-            </div>
-
-            <p class="lead">
-              Em PC de 4 a 8 GB, a maioria dos travamentos que o dono descreve como
-              "o PC congela" é memória acabando — não falta de processador. E o
-              culpado mais comum é alguém ter desativado o arquivo de paginação
-              seguindo tutorial ruim.
-            </p>
-
-            <div class="row-actions">
-              <button id="analyze-memory" class="btn" data-custo="~3 s">Analisar</button>
-              <button id="fix-pagefile" class="btn" hidden>Deixar o Windows gerenciar</button>
-            </div>
-
-            <p id="memory-status" class="status"></p>
-            <div id="memory-result" class="resultado" data-vazio="Lê a memória instalada, a prometida a programas e o pico de paginação desde que o PC ligou. Cerca de 3 segundos, e não altera nada."></div>
-          </section>
           <section class="panel">
             <div class="panel-head">
               <h2>Relatório para entregar ao cliente</h2>
@@ -1345,109 +1032,6 @@
               <button id="exportar-alteracoes" class="btn btn-ghost" title="Uma linha por alteração: data, ajuste, valor de antes e valor novo">Exportar alterações (planilha)</button>
             </div>
             <p id="report-status" class="status"></p>
-          </section>
-
-        </section>
-
-          </details>
-
-        <section class="tab-panel" id="tab-espaco" role="tabpanel" aria-labelledby="tabbtn-espaco" hidden>
-          <!--
-            Cada item diz o que se perde; tamanho ausente não é zero; o que é do cliente (a lixeira) não vem marcado. A única
-            operação sem Desfazer.
-          -->
-          <section class="panel" id="limpeza-painel">
-            <div class="panel-head">
-              <h2>Limpeza do sistema</h2>
-              <span class="panel-tag" id="limpeza-total">—</span>
-            </div>
-
-            <p class="lead">
-              Remove temporários e caches. Nenhum arquivo pessoal — e o que
-              contém arquivo seu vem desmarcado.
-            </p>
-
-            <div id="limpeza-lista"></div>
-
-            <div class="row-actions">
-              <button id="limpeza-medir" class="btn" data-custo="~5 s">Analisar</button>
-              <button id="limpeza-limpar" class="btn btn-primary" disabled>Limpar</button>
-            </div>
-
-            <p id="limpeza-status" class="status"></p>
-            <p class="hint" id="limpeza-aviso" hidden></p>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Liberador de espaço</h2>
-              <span class="panel-tag" id="disk-summary">—</span>
-            </div>
-
-            <p class="lead">
-              Em PC fraco, disco cheio é o problema que mais se disfarça de "PC
-              lento". Abaixo de 10% livre o Windows perde folga para o arquivo de
-              paginação e para atualizações — e a culpa cai no processador.
-            </p>
-
-            <div class="row-actions">
-              <button id="scan-disk" class="btn" data-custo="~10 s">Analisar</button>
-            </div>
-
-            <p id="disk-status" class="status"></p>
-            <div id="disk-meter" hidden>
-              <div class="bar"><i id="disk-used-bar"></i></div>
-              <p class="readout-note" id="disk-meter-note"></p>
-            </div>
-            <div id="disk-result" class="resultado" data-vazio="Soma o que dá para liberar por categoria, dizendo o que é descartável e o que só parece. Cerca de 10 segundos, e não apaga nada sem você confirmar."></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Cadê o meu disco?</h2>
-              <span class="panel-tag" id="map-summary">—</span>
-            </div>
-
-            <p class="lead">
-              O liberador acima responde "o que dá para apagar com segurança".
-              Esta é a pergunta que vem antes, e é a que o dono do PC realmente
-              faz: "tenho 500 GB, não baixei nada, cadê o espaço?". Sem essa
-              resposta dá para limpar 2 GB de temporários num disco que tem 400 GB
-              de jogo esquecido e backup de celular — e o cliente continua sem
-              espaço. Aqui <strong>nada é apagado</strong>: só mostramos onde
-              está, com o caminho exato, para você decidir.
-            </p>
-
-            <button id="map-folders" class="btn" data-custo="~45 s">Analisar</button>
-            <p id="map-status" class="status"></p>
-            <div id="map-result" class="resultado" data-vazio="Percorre as suas pastas e mostra quais ocupam mais espaço, com um prazo de 45 segundos para não travar. Não apaga nada."></div>
-          </section>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>O navegador</h2>
-              <span class="panel-tag" id="browser-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Em PC fraco, o navegador costuma ser o programa que mais consome
-              memória — mais que todo o resto junto. Nenhum otimizador do mercado
-              olha para dentro dele. Aqui você vê quanto ele está usando agora,
-              quais extensões estão instaladas com o nome real de cada uma, e
-              quanto de cache dá para recuperar.
-            </p>
-
-            <p class="hint">
-              <strong>O que não fazemos:</strong> não abrimos histórico, senhas,
-              cookies, favoritos nem nada de navegação — nem para contar. E não
-              mostramos memória por extensão: de fora do navegador isso não é
-              mensurável, várias dividem o mesmo processo, e qualquer número ali
-              seria inventado.
-            </p>
-
-            <button id="analyze-browsers" class="btn" data-custo="~6 s">Analisar</button>
-            <p id="browser-status" class="status"></p>
-            <div id="browser-result" class="resultado" data-vazio="Lista as extensões instaladas e separa cache descartável de dado de aplicativo — que parece cache e não é. Cerca de 6 segundos, e não apaga nada sem você confirmar."></div>
           </section>
         </section>
 
@@ -1501,44 +1085,6 @@
             </div>
             <p class="hint">Com o jogo aberto e em partida: mede 10 segundos em todos os núcleos e 10 só nos de desempenho, três vezes cada. Fica nos de desempenho só se o FPS ou o 1% piores melhorarem de verdade sem nenhum dos dois piorar. Precisa do Otimiza como administrador.</p>
             <div id="cpuset-resultados"></div>
-          </section>
-        </section>
-
-        <!-- Quem instala é o winget, da fonte oficial: o Otimiza não hospeda nem baixa executável de endereço próprio. -->
-        <section class="tab-panel" id="tab-programas" role="tabpanel"
-                 aria-labelledby="tabbtn-programas" hidden>
-          <header class="abertura">
-            <p class="abertura-sobrenome">Software</p>
-            <h1 class="abertura-titulo">Programas</h1>
-            <p class="abertura-sub">
-              Instalados pelo gerenciador de pacotes do Windows, direto da fonte
-              oficial de cada fabricante.
-            </p>
-          </header>
-
-          <!-- Sem winget (Windows lite, Loja removida) a aba lista e diz o que falta para instalar daqui. -->
-          <p class="panel-note" id="programas-winget"></p>
-
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Catálogo</h2>
-              <span class="panel-tag" id="programas-tag">—</span>
-            </div>
-
-            <div class="biblioteca-topo">
-              <div class="biblioteca-filtros" id="programas-filtros" role="tablist"
-                   aria-label="Filtrar por categoria"></div>
-
-              <label class="biblioteca-busca">
-                <span class="sr-only">Buscar programa</span>
-                <input type="search" id="programas-busca" placeholder="Buscar programa"
-                       autocomplete="off" spellcheck="false" />
-              </label>
-            </div>
-
-            <div id="programas-lista"></div>
-            <p id="programas-status" class="status"></p>
-            <p class="hint" id="programas-lacuna" hidden></p>
           </section>
         </section>
 
@@ -2454,36 +2000,6 @@
 
         <section class="tab-panel" id="tab-framegen" role="tabpanel" aria-labelledby="tabbtn-framegen" hidden>
           <div id="framegen-lab" class="fg"></div>
-        </section>
-
-        <section class="tab-panel" id="tab-reparo" role="tabpanel" aria-labelledby="tabbtn-reparo" hidden>
-          <!-- Sem desfazer: estas ferramentas devolvem arquivo danificado ao original. O aviso vem antes de qualquer botão. -->
-          <section class="panel">
-            <div class="panel-head">
-              <h2>Reparo do Windows</h2>
-              <span class="panel-tag" id="reparo-tag">—</span>
-            </div>
-
-            <!-- A legenda diz que a linha é o veredito do sfc, e só dele: depois de um DISM falho, o verde parecia o resultado. -->
-            <p class="reparo-resultado-legenda">Última verificação de arquivos do sistema:</p>
-            <p class="status" id="reparo-resultado">Lendo o registro do Windows…</p>
-
-            <p class="hint reparo-aviso-geral">
-              <strong>Aqui não existe desfazer.</strong> Diferente do resto do
-              Otimiza, estas ferramentas não mudam ajuste nenhum — elas devolvem
-              arquivos do sistema danificados ao estado original. Não existe um
-              valor anterior para guardar, e desfazer significaria corromper o
-              arquivo de propósito.
-            </p>
-
-            <div class="reparo-lista" id="reparo-lista">
-              <p class="hint">Lendo o que esta máquina pode oferecer…</p>
-            </div>
-
-            <p class="status" id="reparo-execucao"></p>
-            <pre class="reparo-saida" id="reparo-saida" hidden></pre>
-            <button class="btn" id="reparo-cancelar" hidden>Interromper</button>
-          </section>
         </section>
         </main>
         </div>
