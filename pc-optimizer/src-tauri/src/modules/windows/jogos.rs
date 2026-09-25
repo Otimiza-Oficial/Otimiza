@@ -1,52 +1,18 @@
-// Que jogos existem nesta máquina
-//
-// O produto precisa saber isto por três motivos, em ordem de importância:
-//
-// 1. SEGURANÇA. A escrita em IFEO — a chave do registro que fixa prioridade de
-//    processo — é o mesmo mecanismo usado para sequestrar a execução de um
-//    programa. Até agora a trava era uma lista de nomes de jogo escrita à mão.
-//    Com a detecção genérica, a trava passa a ser: o executável precisa estar
-//    DENTRO de uma biblioteca de jogo de verdade. Este módulo é quem sabe onde
-//    essas bibliotecas ficam.
-//
-// 2. Limpar o cache do jogo certo, medir o FPS do jogo certo.
-//
-// 3. Abrir dizendo o nome do que a pessoa joga, em vez de pedir que ela digite.
-//
-// A DIFERENÇA ENTRE "INSTALADO" E "JÁ JOGOU" — e por que ela importa
-//
-// `HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences` parece a fonte perfeita:
-// o próprio Windows lista os jogos com caminho completo. Só que ele NUNCA
-// limpa essa lista.
-//
-// Na máquina onde este módulo foi escrito, a chave lista o Fortnite num caminho
-// dentro de `C:\Program Files\Epic Games` — e nem o Fortnite nem a Epic existem
-// mais ali. Tratar aquilo como "jogo instalado" faria o produto afirmar que o
-// cliente tem um jogo que ele desinstalou, e afirmação errada é o defeito que
-// este produto existe para não ter.
-//
-// Então: a lista do Windows entra como HISTÓRICO, e cada caminho é conferido no
-// disco antes de virar afirmação.
+// Que jogos existem nesta máquina. Principal motivo: SEGURANÇA. A escrita em IFEO é o mecanismo de sequestrar
+// execução, e só vale para executável DENTRO de uma biblioteca de jogo. `UserGpuPreferences` do Windows NUNCA é
+// limpa (listava um Fortnite desinstalado): entra como histórico, e cada caminho é conferido no disco.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// De onde a informação veio.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Origem {
     Steam,
     Epic,
-    /// A lista de preferência de GPU do próprio Windows, com o arquivo
-    /// confirmado no disco.
     Windows,
-    /// "Programas instalados" do Windows, com editora de jogo. É onde Riot,
-    /// Blizzard, EA, Ubisoft, GOG, Rockstar, Roblox e o FiveM registram o
-    /// que instalam — um leitor só para todas, pelo mecanismo do próprio
-    /// Windows, em vez de um leitor por formato interno de cada loja.
+    /// Riot, Blizzard, EA, Ubisoft, GOG, Rockstar, Roblox e FiveM registram aqui: um leitor para todas.
     Instalado,
-    /// O Otimiza viu este jogo RODANDO (`deteccao.rs`: janela cobrindo o
-    /// monitor, motor 3D em uso). É o que garante que nenhum jogo fica de
-    /// fora da biblioteca por não estar numa loja conhecida.
+    /// Garante que nenhum jogo fica de fora por não estar numa loja conhecida.
     Detectado,
 }
 
@@ -54,19 +20,10 @@ pub enum Origem {
 pub struct JogoInstalado {
     pub nome: String,
     pub origem: Origem,
-    /// Pasta onde o jogo está. É o que a trava do IFEO confere.
     pub pasta: PathBuf,
-    /// Executável, quando a loja informa. A Steam não informa; a Epic sim.
     pub executavel: Option<PathBuf>,
-    /// Quando foi jogado pela última vez, em segundos desde 1970. Zero quando
-    /// a loja não guarda essa informação.
     pub ultima_vez: u64,
     pub bytes: u64,
-    /// O número do jogo na Steam, quando a origem é a Steam.
-    ///
-    /// Guardado por causa da CAPA: é por este número que a Steam nomeia a
-    /// imagem que ela mesma baixou para desenhar a própria biblioteca. Ver
-    /// `modules::capas`.
     #[serde(default)]
     pub appid: Option<u32>,
 }
@@ -74,27 +31,16 @@ pub struct JogoInstalado {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Biblioteca {
     pub jogos: Vec<JogoInstalado>,
-    /// Raízes de biblioteca encontradas. É esta lista que autoriza a escrita
-    /// em IFEO — um executável fora de todas elas não é jogo instalado.
+    /// Autoriza a escrita em IFEO: executável fora de todas não é jogo instalado.
     pub raizes: Vec<PathBuf>,
-    /// O que não deu para ler, dito em voz alta.
     pub lacunas: Vec<String>,
-    /// Onde a Steam está instalada, quando está.
-    ///
-    /// Não é a mesma coisa que uma raiz de biblioteca: os jogos podem estar em
-    /// outro disco, mas o cache de capas fica sempre junto do programa.
+    /// Não é raiz de biblioteca: os jogos podem estar em outro disco.
     #[serde(default)]
     pub raiz_steam: Option<PathBuf>,
 }
 
-// ------------------------------------------------------------------ leitura
-
-/// Extrai o valor de uma chave num arquivo no formato da Valve.
-///
-/// O formato é `"chave"<tab>"valor"`, um par por linha, com blocos entre
-/// chaves. Não vale trazer uma biblioteca de VDF para o instalador do produto
-/// por causa de duas dúzias de linhas — e um analisador completo teria mais
-/// superfície de erro do que este, que só olha pares na mesma linha.
+/// Formato `"chave"<tab>"valor"`, um par por linha. Sem biblioteca de VDF: um analisador completo teria mais
+/// superfície de erro que este.
 pub fn valor_vdf(conteudo: &str, chave: &str) -> Option<String> {
     pares_vdf(conteudo)
         .into_iter()
@@ -102,7 +48,6 @@ pub fn valor_vdf(conteudo: &str, chave: &str) -> Option<String> {
         .map(|(_, v)| v)
 }
 
-/// Todos os pares `"chave" "valor"` do arquivo, na ordem em que aparecem.
 pub fn pares_vdf(conteudo: &str) -> Vec<(String, String)> {
     let mut pares = Vec::new();
 
@@ -113,8 +58,7 @@ pub fn pares_vdf(conteudo: &str) -> Vec<(String, String)> {
             continue;
         };
 
-        // Terceiro campo na mesma linha significa que a linha não é um par
-        // simples, e interpretá-la assim traria lixo.
+        // Terceiro campo na linha: não é par simples, e interpretar traria lixo.
         if partes.next().is_some() {
             continue;
         }
@@ -125,20 +69,15 @@ pub fn pares_vdf(conteudo: &str) -> Vec<(String, String)> {
     pares
 }
 
-/// As pastas de biblioteca declaradas no `libraryfolders.vdf`.
-///
-/// A Steam permite instalar jogo em qualquer disco, e é comum o jogo pesado
-/// estar num HD separado. Ler só a pasta da Steam perderia justamente esse.
+/// O jogo pesado costuma estar num HD separado.
 pub fn raizes_steam(libraryfolders: &str) -> Vec<PathBuf> {
     pares_vdf(libraryfolders)
         .into_iter()
         .filter(|(chave, _)| chave.eq_ignore_ascii_case("path"))
-        // No VDF a barra invertida vem escapada.
         .map(|(_, valor)| PathBuf::from(valor.replace("\\\\", "\\")))
         .collect()
 }
 
-/// Lê um `appmanifest_*.acf`.
 pub fn jogo_do_manifest(conteudo: &str, raiz: &Path) -> Option<JogoInstalado> {
     let nome = valor_vdf(conteudo, "name")?;
     let pasta_relativa = valor_vdf(conteudo, "installdir")?;
@@ -157,9 +96,7 @@ pub fn jogo_do_manifest(conteudo: &str, raiz: &Path) -> Option<JogoInstalado> {
         nome,
         origem: Origem::Steam,
         pasta: raiz.join("steamapps").join("common").join(pasta_relativa),
-        // A Steam não guarda qual é o executável. Quem quiser o binário precisa
-        // varrer a pasta — e isso é caro, então fica para quem realmente
-        // precisar, não para a varredura.
+        // A Steam não guarda o executável; varrer a pasta é caro e fica para quem precisar.
         executavel: None,
         ultima_vez: numero("LastPlayed"),
         bytes: numero("SizeOnDisk"),
@@ -177,8 +114,6 @@ fn pasta_da_steam() -> Option<PathBuf> {
         return None;
     };
 
-    // O valor vem com barras normais e em minúsculas — o Windows aceita, mas
-    // fica feio na tela e atrapalha comparação de caminho.
     Some(PathBuf::from(caminho.replace('/', "\\")))
 }
 
@@ -192,8 +127,7 @@ fn ler_steam(biblioteca: &mut Biblioteca) {
         return;
     };
 
-    // Guardada ANTES de qualquer leitura poder falhar: o cache de capas fica
-    // aqui, e ele continua servindo mesmo que a lista de bibliotecas não abra.
+    // Guardada ANTES de qualquer leitura poder falhar.
     biblioteca.raiz_steam = Some(steam.clone());
 
     let arquivo = steam.join("steamapps").join("libraryfolders.vdf");
@@ -208,8 +142,7 @@ fn ler_steam(biblioteca: &mut Biblioteca) {
 
     for raiz in raizes_steam(&conteudo) {
         if !raiz.exists() {
-            // Disco removido, ou biblioteca em pendrive que não está plugado.
-            // Não é erro: é uma raiz que não vale hoje.
+            // Disco removido ou pendrive fora: não é erro, é raiz que não vale hoje.
             continue;
         }
 
@@ -232,9 +165,7 @@ fn ler_steam(biblioteca: &mut Biblioteca) {
             };
 
             if let Some(jogo) = jogo_do_manifest(&conteudo, &raiz) {
-                // A Steam instala pacotes de bibliotecas de sistema como se
-                // fossem jogos. Eles têm pasta, tamanho e manifest — e não são
-                // jogo nenhum.
+                // Pacotes de sistema que a Steam instala como jogo, com pasta e manifest.
                 if e_pacote_de_sistema(&jogo.nome) {
                     continue;
                 }
@@ -247,7 +178,6 @@ fn ler_steam(biblioteca: &mut Biblioteca) {
     }
 }
 
-/// Pacotes que a Steam instala como se fossem jogos.
 fn e_pacote_de_sistema(nome: &str) -> bool {
     let minusculo = nome.to_lowercase();
 
@@ -269,7 +199,6 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
         .join("Manifests");
 
     let Ok(entradas) = std::fs::read_dir(&pasta) else {
-        // A Epic não estar instalada é o caso comum, e não é lacuna nenhuma.
         return;
     };
 
@@ -284,8 +213,6 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
             continue;
         };
 
-        // Ao contrário da Steam, a Epic guarda o executável — e em JSON, que o
-        // projeto já sabe ler.
         let Ok(json) = serde_json::from_str::<serde_json::Value>(&conteudo) else {
             continue;
         };
@@ -317,16 +244,12 @@ fn ler_epic(biblioteca: &mut Biblioteca) {
             executavel,
             ultima_vez: 0,
             bytes: 0,
-            // Fora da Steam não existe número de Steam.
             appid: None,
         });
     }
 }
 
-/// Jogos que o próprio Windows registrou, conferidos no disco.
-///
-/// Esta é a fonte que exige mais cuidado. Ver a explicação no topo do arquivo:
-/// o Windows nunca limpa a lista, então ela guarda jogo desinstalado há anos.
+/// O Windows nunca limpa esta lista (ver o topo do arquivo).
 #[cfg(target_os = "windows")]
 fn ler_windows(biblioteca: &mut Biblioteca) {
     const CHAVE: &str = r"SOFTWARE\Microsoft\DirectX\UserGpuPreferences";
@@ -342,9 +265,7 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
     };
 
     for caminho_texto in caminhos {
-        // O nome do valor é o caminho completo do executável. Só entra se o
-        // arquivo ainda existir: sem esta conferência o produto afirmaria que
-        // o cliente tem um jogo que ele apagou.
+        // Só entra se o arquivo ainda existir.
         let executavel = PathBuf::from(&caminho_texto);
 
         if !executavel.exists() {
@@ -355,8 +276,6 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
             continue;
         };
 
-        // Se a Steam ou a Epic já contaram este jogo, a informação delas é
-        // melhor: tem nome oficial e tamanho.
         if biblioteca
             .jogos
             .iter()
@@ -385,7 +304,6 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
 #[cfg(not(target_os = "windows"))]
 fn ler_windows(_biblioteca: &mut Biblioteca) {}
 
-/// Varre as lojas e devolve o que existe de verdade no disco.
 pub fn varrer() -> Biblioteca {
     let mut biblioteca = Biblioteca::default();
 
@@ -395,7 +313,6 @@ pub fn varrer() -> Biblioteca {
     ler_detectados(&mut biblioteca);
     ler_windows(&mut biblioteca);
 
-    // O mais jogado primeiro; o que a loja não datou vai para o fim.
     biblioteca.jogos.sort_by(|a, b| b.ultima_vez.cmp(&a.ultima_vez));
     biblioteca.raizes.sort();
     biblioteca.raizes.dedup();
@@ -403,10 +320,6 @@ pub fn varrer() -> Biblioteca {
     biblioteca
 }
 
-// ------------------------------------------------------ programas instalados
-
-/// Editoras de jogo, como aparecem no campo "Editor" dos programas
-/// instalados. Comparação por pedaço, sem diferenciar maiúsculas.
 const EDITORAS_DE_JOGO: &[&str] = &[
     "riot games", "blizzard", "activision", "electronic arts", "ubisoft", "gog.com", "rockstar",
     "roblox", "mojang", "cfx.re", "bethesda", "hoyoverse", "mihoyo", "garena", "krafton",
@@ -414,22 +327,18 @@ const EDITORAS_DE_JOGO: &[&str] = &[
     "embark studios", "respawn", "bungie", "epic games", "valve",
 ];
 
-/// O que também usa essas editoras e não é jogo: lojas, SDKs, editores.
 const NAO_E_JOGO: &[&str] = &[
     "launcher", "sdk", "studio", "redistributable", "riot client", "battle.net", "ea app",
     "ubisoft connect", "gog galaxy", "social club", "epic online services", "steam", "anti-cheat",
     "anticheat", "vanguard", "easyanticheat", "battleye", "uninstall", "setup",
 ];
 
-/// Um programa instalado é jogo? **Função pura.**
 pub fn instalado_e_jogo(nome: &str, editora: &str) -> bool {
     let editora = editora.to_lowercase();
     let nome = nome.to_lowercase();
     EDITORAS_DE_JOGO.iter().any(|e| editora.contains(e)) && !NAO_E_JOGO.iter().any(|n| nome.contains(n))
 }
 
-/// O executável que o Windows usa de ícone, quando é o jogo e não um
-/// instalador. `"C:\x\GTA5.exe",0` → `C:\x\GTA5.exe`. **Função pura.**
 pub fn executavel_do_icone(icone: &str) -> Option<PathBuf> {
     let limpo = icone.trim();
     let sem_indice = match limpo.rfind(',') {
@@ -477,12 +386,10 @@ fn ler_instalados(biblioteca: &mut Biblioteca) {
             if !pasta.exists() {
                 continue;
             }
-            // Steam e Epic têm informação melhor (tamanho, última vez jogado).
             if biblioteca.jogos.iter().any(|j| j.pasta == pasta || pasta.starts_with(&j.pasta)) {
                 continue;
             }
-            // NÃO entra em `raizes`: raiz autoriza escrita em IFEO, e isso só
-            // vale para biblioteca de loja lida do arquivo da própria loja.
+            // NÃO entra em `raizes`: só biblioteca lida do arquivo da própria loja autoriza IFEO.
             biblioteca.jogos.push(JogoInstalado {
                 nome,
                 origem: Origem::Instalado,
@@ -499,9 +406,6 @@ fn ler_instalados(biblioteca: &mut Biblioteca) {
 #[cfg(not(target_os = "windows"))]
 fn ler_instalados(_biblioteca: &mut Biblioteca) {}
 
-// ------------------------------------------------------ jogos vistos rodando
-
-/// Um jogo que o Otimiza viu rodando nesta máquina.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct JogoVisto {
     pub nome: String,
@@ -515,8 +419,7 @@ fn arquivo_de_vistos() -> Option<PathBuf> {
     std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("jogos_vistos.json"))
 }
 
-/// Lê a lista. Arquivo ausente = lista vazia; ilegível = erro (nunca vira
-/// "nenhum jogo" em silêncio).
+/// Ilegível é erro, nunca "nenhum jogo" em silêncio.
 pub fn ler_vistos_de(caminho: &Path) -> Result<Vec<JogoVisto>, String> {
     match std::fs::read_to_string(caminho) {
         Ok(texto) => serde_json::from_str(&texto).map_err(|e| format!("jogos_vistos.json ilegível: {}", e)),
@@ -525,8 +428,6 @@ pub fn ler_vistos_de(caminho: &Path) -> Result<Vec<JogoVisto>, String> {
     }
 }
 
-/// Junta uma observação à lista. **Função pura.** Devolve se mudou algo que
-/// valha gravar (jogo novo, ou a última vez avançou mais de uma hora).
 pub fn anotar_visto(lista: &mut Vec<JogoVisto>, nome: &str, executavel: &Path, agora: u64) -> bool {
     const UMA_HORA: u64 = 3600;
     if let Some(v) = lista.iter_mut().find(|v| v.executavel.as_os_str().eq_ignore_ascii_case(executavel.as_os_str())) {
@@ -548,8 +449,6 @@ pub fn anotar_visto(lista: &mut Vec<JogoVisto>, nome: &str, executavel: &Path, a
     true
 }
 
-/// Anota um jogo detectado rodando. Barato: só grava quando muda algo, e a
-/// lembrança da última gravação fica em memória.
 pub fn registrar_visto(nome: &str, executavel: &Path) {
     use std::sync::Mutex;
     static RECENTES: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
@@ -560,7 +459,7 @@ pub fn registrar_visto(nome: &str, executavel: &Path) {
         }
     }
     let Some(arquivo) = arquivo_de_vistos() else { return };
-    // Ilegível: não sobrescreve (apagaria o histórico); só registra no log.
+    // Ilegível: não sobrescreve (apagaria o histórico).
     let mut lista = match ler_vistos_de(&arquivo) {
         Ok(l) => l,
         Err(e) => {
@@ -601,8 +500,6 @@ fn ler_detectados(biblioteca: &mut Biblioteca) {
         if !v.executavel.exists() {
             continue;
         }
-        // Já contado por uma loja: a loja manda no nome, mas a data de
-        // quando jogou é a nossa, que é real.
         if let Some(j) = biblioteca.jogos.iter_mut().find(|j| v.executavel.starts_with(&j.pasta)) {
             if j.executavel.is_none() {
                 j.executavel = Some(v.executavel.clone());
@@ -623,17 +520,10 @@ fn ler_detectados(biblioteca: &mut Biblioteca) {
     }
 }
 
-/// Este executável está dentro de uma biblioteca de jogo?
-///
-/// **É a trava de segurança da escrita em IFEO.** Até a versão 0.13 quem
-/// autorizava aquela escrita era uma lista de nomes de jogo escrita à mão; com
-/// a detecção genérica essa lista deixa de servir, e passa a valer o caminho.
-///
-/// Função pura de propósito: a decisão de segurança do produto não pode
-/// depender de ter Steam instalada na máquina de quem roda os testes.
+/// **Trava de segurança da escrita em IFEO.** Pura de propósito: não pode depender de ter Steam na máquina dos
+/// testes.
 pub fn dentro_de_biblioteca(executavel: &Path, raizes: &[PathBuf]) -> bool {
-    // Caminho relativo, ou com `..`, não é caminho de jogo instalado — é
-    // tentativa de escapar da pasta.
+    // Relativo ou com `..` é tentativa de escapar da pasta.
     if !executavel.is_absolute()
         || executavel
             .components()
@@ -731,8 +621,6 @@ mod tests {
 
     #[test]
     fn le_as_bibliotecas_de_todos_os_discos() {
-        // O jogo pesado costuma estar num disco separado. Ler só a pasta da
-        // Steam perderia justamente esse.
         let raizes = raizes_steam(LIBRARYFOLDERS);
 
         assert_eq!(raizes.len(), 2);
@@ -762,7 +650,6 @@ mod tests {
 
     #[test]
     fn pacote_de_sistema_nao_e_jogo() {
-        // A Steam instala isto como se fosse jogo, com pasta e tamanho.
         assert!(e_pacote_de_sistema("Steamworks Common Redistributables"));
         assert!(e_pacote_de_sistema("Proton 9.0"));
         assert!(!e_pacote_de_sistema("Grand Theft Auto V Legacy"));
@@ -770,9 +657,6 @@ mod tests {
 
     #[test]
     fn a_trava_do_ifeo_so_aceita_caminho_dentro_da_biblioteca() {
-        // Esta é a decisão de segurança mais importante deste arquivo: é ela
-        // que substitui a lista de nomes como autorização para escrever numa
-        // chave do registro usada por programas que sequestram execução.
         let raizes = vec![
             PathBuf::from(r"C:\Program Files (x86)\Steam"),
             PathBuf::from(r"D:\SteamLibrary"),
@@ -783,7 +667,6 @@ mod tests {
             &raizes
         ));
 
-        // Fora de qualquer biblioteca.
         assert!(!dentro_de_biblioteca(
             Path::new(r"C:\Windows\System32\sethc.exe"),
             &raizes
@@ -793,14 +676,12 @@ mod tests {
             &raizes
         ));
 
-        // Tentativa de escapar da pasta, e caminho relativo.
         assert!(!dentro_de_biblioteca(
             Path::new(r"D:\SteamLibrary\..\..\Windows\System32\cmd.exe"),
             &raizes
         ));
         assert!(!dentro_de_biblioteca(Path::new(r"jogo.exe"), &raizes));
 
-        // Sem biblioteca nenhuma, nada é autorizado.
         assert!(!dentro_de_biblioteca(
             Path::new(r"D:\SteamLibrary\steamapps\common\Jogo\jogo.exe"),
             &[]
@@ -809,7 +690,6 @@ mod tests {
 
     #[test]
     fn linha_com_tres_campos_nao_vira_par() {
-        // Robustez do analisador: linha estranha não pode virar dado.
         let pares = pares_vdf("\"a\" \"b\" \"c\"\n\"d\" \"e\"");
 
         assert_eq!(pares.len(), 1);
@@ -834,10 +714,7 @@ mod tests {
             println!("  não deu para ler: {}", l);
         }
 
-        // Nada a exigir: uma máquina pode não ter loja nenhuma. O que dá para
-        // exigir é que tudo que foi relatado exista de verdade no disco — a
-        // regra que impede o produto de afirmar que o cliente tem um jogo que
-        // ele desinstalou.
+        // Uma máquina pode não ter loja; o que se exige é que o relatado exista no disco.
         for j in &b.jogos {
             assert!(j.pasta.exists(), "{} relatado e não existe", j.pasta.display());
         }
