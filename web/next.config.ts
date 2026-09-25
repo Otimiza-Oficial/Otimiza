@@ -9,7 +9,7 @@ import type { NextConfig } from "next";
  * - `basePath`: o site mora na subpasta /Otimiza. A esteira passa
  *   PAGES_BASE_PATH=/Otimiza; no computador fica vazio e tudo abre na raiz.
  * - `images.unoptimized`: o otimizador de imagens do Next precisa de servidor.
- *   As capturas já são PNG leves e os retratos vêm recortados pelo Unsplash.
+ *   Os retratos já vêm recortados pelo Unsplash.
  */
 const basePath = process.env.PAGES_BASE_PATH ?? "";
 

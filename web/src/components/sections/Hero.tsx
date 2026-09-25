@@ -23,14 +23,14 @@ export function Hero() {
           <Reveal delay={0.04}>
             <h1
               id="hero-titulo"
-              className="font-display mt-7 max-w-[760px] text-[28px] leading-[1.12] font-semibold tracking-[-0.045em] text-balance text-fg sm:text-[34px] lg:text-[40px] lg:leading-[1.1]"
+              className="font-display mt-7 max-w-[620px] text-[26px] leading-[1.15] font-semibold tracking-[-0.04em] text-balance text-fg sm:text-[30px] lg:text-[34px]"
             >
-              Seu PC medido, otimizado e provado com número.{" "}
-              <span className="text-muted">
-                Diagnóstico na hora, ajustes que se desfazem byte a byte e o antes e depois de cada mudança —
-                inclusive quando nada mudou.
-              </span>
+              Seu PC medido, otimizado e provado com número.
             </h1>
+            <p className="mt-4 max-w-[560px] text-[15.5px] leading-[1.6] text-pretty text-muted sm:text-[16.5px]">
+              Diagnóstico na hora, ajustes que se desfazem byte a byte e o antes e depois de cada mudança — inclusive
+              quando nada mudou.
+            </p>
           </Reveal>
 
           <Reveal delay={0.1}>

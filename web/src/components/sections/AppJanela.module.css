@@ -1,0 +1,464 @@
+/*
+ * A janela é desenhada em 1060 px de largura e medida em em: a letra-base acompanha a largura da moldura
+ * (100cqw / 66.25 = 16 px quando a moldura tem 1060 px), então tudo escala junto e continua nítido.
+ */
+.caixa {
+  container-type: inline-size;
+}
+
+.janela {
+  font-size: calc(100cqw / 66.25);
+  aspect-ratio: 1060 / 655;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #050505;
+  color: #e8e8e6;
+  font-family: var(--font-mono);
+  line-height: 1.45;
+}
+
+.titulo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  height: 2.1em;
+  padding: 0 0.9em;
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
+}
+.bolinha {
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+}
+.tituloTexto {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.55em;
+  letter-spacing: 0.3em;
+  color: #b98a55;
+}
+
+.topo {
+  display: flex;
+  align-items: center;
+  gap: 1.4em;
+  margin: 0.8em 0.8em 0;
+  padding: 0.7em 1em;
+  border: 1px solid rgb(255 255 255 / 0.06);
+  border-radius: 0.8em;
+  background: #0b0b0b;
+}
+.busca {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  width: 17em;
+  padding: 0.55em 0.7em;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-radius: 0.5em;
+  font-size: 0.72em;
+  color: #8a8a88;
+}
+.tecla {
+  margin-left: auto;
+  padding: 0.1em 0.5em;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 0.3em;
+  font-size: 0.85em;
+}
+.medidores {
+  display: flex;
+  gap: 1.6em;
+  margin-left: auto;
+}
+.medidor {
+  width: 7.5em;
+  font-size: 0.62em;
+  letter-spacing: 0.12em;
+  color: #8a8a88;
+}
+.medidor b {
+  margin-left: 0.5em;
+  color: #fff;
+  font-weight: 600;
+}
+.trilho {
+  height: 0.28em;
+  margin-top: 0.5em;
+  border-radius: 1em;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.trilho > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f2f2f0;
+}
+.admin {
+  padding: 0.55em 0.9em;
+  border: 1px solid rgb(74 222 128 / 0.35);
+  border-radius: 0.45em;
+  font-size: 0.6em;
+  letter-spacing: 0.12em;
+  color: #6ee7a0;
+}
+
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  margin: 0.8em 0.8em 0;
+  padding: 0.7em 1.2em;
+  background: #150a0c;
+  border-bottom: 1px solid rgb(255 90 110 / 0.12);
+  font-size: 0.7em;
+  color: #f4f4f2;
+}
+.aviso i {
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: #ff5a6e;
+}
+.aviso small {
+  margin-left: auto;
+  font-size: 0.9em;
+  letter-spacing: 0.15em;
+  color: #8a8a88;
+}
+
+.corpo {
+  flex: 1;
+  display: flex;
+  gap: 1em;
+  min-height: 0;
+  padding: 0.8em;
+}
+
+.lateral {
+  flex: none;
+  width: 12.5em;
+  align-self: flex-start;
+  padding: 0.9em 0.6em;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  border-radius: 0.8em;
+  background: #080808;
+}
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0 0.5em 0.8em;
+  margin-bottom: 0.5em;
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
+  font-size: 0.82em;
+  font-weight: 700;
+}
+.grupo {
+  margin: 0.9em 0 0.35em 0.8em;
+  font-size: 0.52em;
+  letter-spacing: 0.2em;
+  color: #b98a55;
+}
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  height: 1.9em;
+  padding: 0 0.7em;
+  font-size: 0.68em;
+  color: #d6d6d3;
+}
+.item svg {
+  position: relative;
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+}
+.item span {
+  position: relative;
+}
+.itemAtivo {
+  color: #0a0a0a;
+}
+.realce {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.55em;
+  background: #f2f1ec;
+  box-shadow: 0 0 0 1px #fff;
+}
+
+.conteudo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.migalha {
+  font-size: 0.55em;
+  letter-spacing: 0.15em;
+  color: #8a8a88;
+}
+.cabeca {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0.45em 0 0.8em;
+  font-size: 1.12em;
+  font-weight: 700;
+}
+.cabeca > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 1.7em;
+  height: 1.7em;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.4em;
+}
+.cabeca svg {
+  width: 0.9em;
+  height: 0.9em;
+}
+
+.cartao {
+  border: 1px solid rgb(255 255 255 / 0.07);
+  border-radius: 0.8em;
+  background: #0a0a0a;
+  overflow: hidden;
+}
+.cartaoTopo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85em 1.2em;
+  border-bottom: 1px solid rgb(255 255 255 / 0.06);
+  font-size: 0.66em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.cartaoTopo small {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: #8a8a88;
+}
+.cartaoCorpo {
+  padding: 1em 1.2em;
+}
+.fileira {
+  display: flex;
+  gap: 0.8em;
+  margin-top: 0.8em;
+}
+.fileira > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.rotulo {
+  font-size: 0.55em;
+  letter-spacing: 0.16em;
+  color: #8a8a88;
+}
+.texto {
+  font-size: 0.66em;
+  line-height: 1.65;
+  color: #bdbdb9;
+}
+.forte {
+  font-size: 0.72em;
+  font-weight: 600;
+  color: #fff;
+}
+.vermelho {
+  color: #ff5a6e;
+}
+.amarelo {
+  color: #f0b93b;
+}
+.verde {
+  color: #6ee7a0;
+}
+
+.botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6em;
+  margin-top: 0.8em;
+}
+.botao {
+  padding: 0.75em 1.1em;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 0.45em;
+  font-size: 0.55em;
+  letter-spacing: 0.1em;
+  color: #cfcfcc;
+}
+.botaoForte {
+  border-color: rgb(255 255 255 / 0.5);
+  color: #fff;
+  font-weight: 700;
+}
+
+.veredito {
+  display: flex;
+  border-left: 0.2em solid #ff5a6e;
+}
+.esfera {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15em;
+}
+.esfera svg {
+  width: 9.5em;
+  height: 9.5em;
+}
+
+.linha {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  padding: 0.6em 0;
+  border-top: 1px solid rgb(255 255 255 / 0.06);
+}
+.linha:first-child {
+  border-top: 0;
+}
+.ponto {
+  flex: none;
+  width: 0.4em;
+  height: 0.4em;
+  border-radius: 50%;
+}
+.acao {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.52em;
+  letter-spacing: 0.14em;
+  color: #8a8a88;
+}
+.acaoBotao {
+  padding: 0.55em 0.9em;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 0.4em;
+  color: #e8e8e6;
+}
+
+.anel {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 8.5em;
+  height: 8.5em;
+  position: relative;
+}
+.anel svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+}
+.anel strong {
+  font-size: 2.1em;
+  font-weight: 400;
+  line-height: 1;
+}
+.anelMeio {
+  text-align: center;
+}
+
+.barra {
+  margin-top: 0.3em;
+  height: 0.22em;
+  border-radius: 1em;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.barra > span {
+  display: block;
+  height: 100%;
+  background: #f2f2f0;
+}
+
+.monitor {
+  display: grid;
+  place-items: center;
+  gap: 0.5em;
+}
+.tela {
+  display: grid;
+  place-items: center;
+  width: 12em;
+  height: 7em;
+  border: 0.35em solid #1b1b1b;
+  outline: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.4em;
+  background: #030303;
+}
+.tela strong {
+  font-size: 1.8em;
+  font-weight: 400;
+  line-height: 1;
+}
+.pe {
+  width: 1.2em;
+  height: 0.8em;
+  margin-top: -0.5em;
+  background: #1b1b1b;
+}
+
+.pentes {
+  display: flex;
+  gap: 0.35em;
+  padding: 0.7em;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.4em;
+}
+.pente {
+  width: 3.4em;
+  height: 4.2em;
+  border: 1px dashed rgb(240 185 59 / 0.7);
+  border-radius: 0.2em;
+}
+.penteCheio {
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: linear-gradient(to top, #d4a72c 0 12%, #1a1a1a 12%);
+}
+
+.placa {
+  flex: none;
+  position: relative;
+  width: 16em;
+  height: 6.5em;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 0.5em;
+  background: #151515;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 1em;
+}
+.placa::after {
+  content: "";
+  position: absolute;
+  left: 1em;
+  right: 1em;
+  bottom: 0.7em;
+  height: 0.25em;
+  border-radius: 1em;
+  background: #76b900;
+}
+.ventoinha {
+  width: 4.4em;
+  height: 4.4em;
+  color: #76b900;
+}
+
+.fileiraTopo {
+  margin-top: 0.8em;
+}
