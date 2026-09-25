@@ -1,30 +1,15 @@
-// Detector de programas de fábrica
-//
-// Notebook de loja chega com vários GB de utilitário do fabricante, antivírus em
-// teste e joguinho patrocinado. É justamente a máquina mais fraca que vem com
-// mais peso morto — e o dono nem sabe que aquilo está lá.
-//
-// AQUI O RISCO É INVERTIDO. Na maior parte deste projeto, errar significa não
-// otimizar. Aqui, errar significa marcar o driver de vídeo como lixo e o cliente
-// desinstalar. Por isso a ordem das regras é: PRIMEIRO o que nunca pode ser
-// marcado, depois o que pode.
-//
-// E não desinstalamos nada de escondido. Programa comum abre o desinstalador
-// oficial do próprio fabricante; aplicativo da Loja é removido pela chamada do
-// Windows e pode ser reinstalado pela Loja a qualquer momento.
+// Programas de fábrica. Aqui o risco é invertido: errar é marcar o driver de vídeo como lixo e o cliente
+// desinstalar. Por isso PRIMEIRO o que nunca pode ser marcado, depois o resto. Nada é desinstalado escondido:
+// programa comum abre o desinstalador do fabricante; app da Loja sai pela chamada do Windows e volta pela Loja.
 
 use super::{registry, shell};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BloatKind {
-    /// Utilitário que veio com a marca do computador.
     OemUtility,
-    /// Segurança em teste, que expira e fica pedindo renovação.
     TrialSecurity,
-    /// Jogo ou aplicativo patrocinado, pré-instalado sem o dono pedir.
     Sponsored,
-    /// Aplicativo da Microsoft Store que vem de fábrica no Windows.
     StoreApp,
 }
 
@@ -33,46 +18,25 @@ pub struct BloatItem {
     pub name: String,
     pub publisher: String,
     pub kind: BloatKind,
-    /// Tamanho em disco, quando dá para saber.
-    ///
-    /// `None` para aplicativos da Loja: eles ficam numa pasta protegida do
-    /// Windows e o tamanho não é legível. Mostrar "0 MB" nesse caso passaria a
-    /// impressão de que não ocupam espaço — e o cliente decidiria com base numa
-    /// informação que nós inventamos.
+    /// `None` para apps da Loja (pasta protegida): "0 MB" daria a impressão de que não ocupam espaço.
     pub size_mb: Option<f64>,
-    /// Por que este programa foi marcado. Sempre presente: marcar sem explicar
-    /// é o que faz o cliente desinstalar coisa errada.
+    /// Sempre presente: marcar sem explicar é o que faz o cliente desinstalar coisa errada.
     pub reason: String,
-    /// Identificador do pacote da Loja, quando for um.
     pub package: Option<String>,
-    /// Se dá para remover pelo Otimiza. Programas comuns abrem o desinstalador
-    /// do fabricante em vez disso.
     pub removable_here: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BloatReport {
     pub items: Vec<BloatItem>,
-    /// Soma só do que foi realmente medido.
     pub total_mb: f64,
-    /// Quantos itens não têm tamanho conhecido, para a interface poder dizer
-    /// que o total é parcial em vez de deixar parecer completo.
     pub unmeasured: usize,
     pub programs_scanned: usize,
-    /// O que não deu para ler. Até a 2.0, o serviço de aplicativos da Loja
-    /// desligado fazia a lista sair sem nenhum app da Loja e sem uma palavra
-    /// sobre isso — "nenhum programa de fábrica" sobre metade da procura.
+    /// Com o serviço da Loja desligado, a lista saía sem nenhum app da Loja e sem uma palavra sobre isso.
     pub lacunas: Vec<String>,
 }
 
-// ------------------------------------------------------------ nunca marcar
-
-/// Termos que impedem um programa de ser marcado, aconteça o que acontecer.
-///
-/// Esta lista é consultada ANTES de qualquer regra de detecção. Driver, runtime
-/// e biblioteca de sistema jamais podem aparecer como "lixo de fábrica": o
-/// cliente confiaria, desinstalaria, e o PC ficaria sem vídeo, sem som ou sem
-/// conseguir abrir os programas dele.
+/// Consultada ANTES de qualquer regra: driver, runtime e biblioteca de sistema jamais aparecem como lixo.
 const NUNCA_MARCAR: [&str; 18] = [
     "driver",
     "chipset",
@@ -94,15 +58,11 @@ const NUNCA_MARCAR: [&str; 18] = [
     "service pack",
 ];
 
-/// Se este programa está protegido de ser marcado.
 pub fn protegido(nome: &str, editor: &str) -> bool {
     let alvo = format!("{} {}", nome, editor).to_lowercase();
     NUNCA_MARCAR.iter().any(|termo| alvo.contains(termo))
 }
 
-// ----------------------------------------------------------- o que é marcado
-
-/// (termo procurado, tipo, motivo mostrado ao cliente)
 const PADROES: [(&str, BloatKind, &str); 22] = [
     ("hp support assistant", BloatKind::OemUtility, "Utilitário da HP que roda em segundo plano procurando atualizações."),
     ("hp jumpstart", BloatKind::OemUtility, "Assistente de configuração da HP, útil só na primeira semana de uso."),
@@ -128,11 +88,7 @@ const PADROES: [(&str, BloatKind, &str); 22] = [
     ("expressvpn", BloatKind::Sponsored, "VPN em teste, pré-instalada de fábrica."),
 ];
 
-/// Aplicativos da Loja que o Windows instala sozinho.
-///
-/// Lista curta e conservadora de propósito: nada que alguém possa estar usando
-/// de verdade como ferramenta. Spotify, Netflix e afins ficam de fora mesmo
-/// vindo pré-instalados — quem usa, usa.
+/// Curta e conservadora: nada que alguém use de verdade. Spotify, Netflix e afins ficam de fora.
 const APPS_DA_LOJA: [(&str, &str); 10] = [
     ("Microsoft.BingNews", "Notícias da Microsoft, pré-instalado."),
     ("Microsoft.BingWeather", "Previsão do tempo da Microsoft, pré-instalado."),
@@ -146,8 +102,6 @@ const APPS_DA_LOJA: [(&str, &str); 10] = [
     ("Clipchamp.Clipchamp", "Editor de vídeo pré-instalado."),
 ];
 
-// ---------------------------------------------------- leitura dos programas
-
 const UNINSTALL_KEYS: [(&str, &str); 3] = [
     ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
     ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
@@ -160,11 +114,7 @@ struct ProgramaInstalado {
     tamanho_kb: u32,
 }
 
-/// Programas instalados, das três chaves de desinstalação.
-///
-/// `Err` quando uma das chaves não abre. Uma ENTRADA cuja `DisplayName` não se
-/// lê fica de fora sozinha — e não entra na contagem de examinados, que continua
-/// dizendo só o que foi examinado de verdade.
+/// `Err` quando uma chave não abre; entrada com `DisplayName` ilegível fica de fora sozinha e não conta.
 fn ler_programas() -> Result<Vec<ProgramaInstalado>, String> {
     let mut programas = Vec::new();
 
@@ -212,10 +162,8 @@ fn ler_apps_da_loja() -> Result<Vec<RawAppx>, String> {
     shell::json_da_saida(shell::powershell(script), "os aplicativos da Microsoft Store")
 }
 
-/// Classifica um programa comum. `None` quando não é peso morto conhecido.
 pub fn classificar(nome: &str, editor: &str) -> Option<(BloatKind, String)> {
-    // A proteção vem primeiro, sempre. Um programa com "driver" no nome não é
-    // avaliado por nenhuma regra seguinte.
+    // A proteção vem primeiro: com "driver" no nome, nenhuma regra seguinte avalia.
     if protegido(nome, editor) {
         return None;
     }
@@ -228,9 +176,7 @@ pub fn classificar(nome: &str, editor: &str) -> Option<(BloatKind, String)> {
         .map(|(_, kind, motivo)| (*kind, motivo.to_string()))
 }
 
-/// `Err` quando os programas instalados não dão para ler — sem eles não há
-/// análise. Os aplicativos da Loja que não dão para ler viram lacuna: a parte
-/// dos programas comuns continua valendo.
+/// `Err` sem os programas instalados; os apps da Loja ilegíveis viram lacuna.
 pub fn analyze() -> Result<BloatReport, String> {
     let programas = ler_programas()?;
     let programs_scanned = programas.len();
@@ -250,8 +196,7 @@ pub fn analyze() -> Result<BloatReport, String> {
                 },
                 reason,
                 package: None,
-                // Programa comum tem desinstalador próprio, muitas vezes com
-                // perguntas. Abrir o oficial é mais seguro que tentar imitar.
+                // Abrir o desinstalador oficial é mais seguro que imitá-lo.
                 removable_here: false,
             });
         }
@@ -281,8 +226,7 @@ pub fn analyze() -> Result<BloatReport, String> {
         }
     }
 
-    // Maior primeiro; os de tamanho desconhecido vão para o fim, porque não dá
-    // para afirmar que são pequenos.
+    // Os de tamanho desconhecido vão para o fim: não dá para afirmar que são pequenos.
     items.sort_by(|a, b| match (a.size_mb, b.size_mb) {
         (Some(x), Some(y)) => y.partial_cmp(&x).unwrap_or(std::cmp::Ordering::Equal),
         (Some(_), None) => std::cmp::Ordering::Less,
@@ -302,14 +246,9 @@ pub fn analyze() -> Result<BloatReport, String> {
     })
 }
 
-/// Remove um aplicativo da Loja.
-///
-/// Só aplicativos da Loja passam por aqui: eles têm remoção limpa pelo próprio
-/// Windows e voltam pela Loja quando o usuário quiser. Programa comum nunca é
-/// desinstalado por nós.
+/// Só apps da Loja passam por aqui. Programa comum nunca é desinstalado por nós.
 pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
-    // O nome do pacote vem do Windows, mas nunca se monta comando com texto de
-    // fora sem checar: aqui só passam os caracteres que um pacote pode ter.
+    // O nome entra num comando do PowerShell: só passam os caracteres que um pacote pode ter.
     if package.is_empty()
         || !package
             .chars()
@@ -335,8 +274,6 @@ mod tests {
 
     #[test]
     fn driver_nunca_e_marcado_como_lixo() {
-        // O teste mais importante deste módulo. Marcar driver como peso morto
-        // faria o cliente desinstalar e ficar sem vídeo, som ou rede.
         let drivers = [
             ("NVIDIA Graphics Driver 566.36", "NVIDIA Corporation"),
             ("Realtek High Definition Audio Driver", "Realtek"),
@@ -373,14 +310,12 @@ mod tests {
     fn antivirus_de_fabrica_e_marcado_como_teste() {
         let (kind, motivo) = classificar("McAfee LiveSafe", "McAfee, LLC").unwrap();
         assert_eq!(kind, BloatKind::TrialSecurity);
-        // Precisa explicar o conflito com o Defender, que é o custo real.
         assert!(motivo.to_lowercase().contains("defender"));
     }
 
     #[test]
     fn a_protecao_vence_o_padrao() {
-        // Um driver da McAfee (existe: drivers de firewall) casaria com o
-        // padrão "mcafee". A proteção precisa vencer, e vem antes.
+        // Um driver da McAfee casaria com "mcafee": a proteção precisa vencer.
         assert!(classificar("McAfee Firewall Driver", "McAfee").is_none());
     }
 
@@ -400,8 +335,6 @@ mod tests {
 
     #[test]
     fn recusa_identificador_de_pacote_com_comando_embutido() {
-        // O nome do pacote entra num comando do PowerShell. Nunca se monta
-        // comando com texto de fora sem checar o que ele contém.
         assert!(remover_app_da_loja("").is_err());
         assert!(remover_app_da_loja("App'; Remove-Item C:\\ -Recurse; '").is_err());
         assert!(remover_app_da_loja("App Nome Com Espaco").is_err());
@@ -409,8 +342,6 @@ mod tests {
 
     #[test]
     fn nada_de_programa_comum_e_removido_por_aqui() {
-        // Programa comum abre o desinstalador do fabricante; imitá-lo é o
-        // caminho para deixar instalação pela metade.
         let r = analyze().expect("os programas instalados desta máquina precisam ser legíveis");
         for item in r.items.iter().filter(|i| i.kind != BloatKind::StoreApp) {
             assert!(
@@ -442,10 +373,7 @@ mod tests {
             println!("  [{:?}] {:<45} {}", i.kind, i.name, tamanho);
         }
 
-        // Todo item marcado precisa dizer por quê.
         assert!(r.items.iter().all(|i| !i.reason.trim().is_empty()));
-        // Os medidos vêm primeiro, do maior para o menor; os sem tamanho ficam
-        // no fim, porque não dá para afirmar que são pequenos.
         let medidos: Vec<f64> = r.items.iter().filter_map(|i| i.size_mb).collect();
         assert!(medidos.windows(2).all(|p| p[0] >= p[1]));
 

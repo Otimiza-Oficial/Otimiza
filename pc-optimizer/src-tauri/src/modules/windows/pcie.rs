@@ -1,57 +1,13 @@
-// As faixas do PCI Express até a placa de vídeo
-//
-// A placa de vídeo conversa com o processador por um número de faixas. Uma placa
-// de jogo espera dezesseis. Quando ela roda em oito, ou em quatro, o custo
-// aparece no jogo — e não há ajuste de registro, plano de energia ou perfil que
-// conserte, porque o problema é físico:
-//
-//   - a placa foi espetada no slot de baixo da placa-mãe, que costuma ser x4;
-//   - há um SSD M.2 dividindo as faixas com o slot da placa (comum em placa-mãe
-//     de entrada, e o manual avisa em letra miúda);
-//   - a placa está num cabo de extensão (riser) que negociou menos;
-//   - o encaixe está sujo ou mal encostado.
-//
-// Nenhuma dessas quatro coisas o cliente descobre sozinho, e todas custam
-// quadro. É leitura pura e vale a pena dizer.
-//
-// ─────────────────────────────────────────────────────────────────────────
-// A ARMADILHA, e é por ela que este módulo existe em vez de ser três linhas
-//
-// A leitura traz DOIS pares: geração e largura, cada um com o valor atual e o
-// máximo. E eles não valem a mesma coisa:
-//
-//   LARGURA (x16, x8, x4) é negociada quando a máquina liga e não muda depois.
-//   Largura atual menor que a máxima é achado de verdade.
-//
-//   GERAÇÃO (1, 2, 3, 4...) MUDA SOZINHA. Com a placa parada, o driver derruba
-//   o enlace para a geração 1 para economizar energia, e sobe de volta quando o
-//   jogo abre. Ler a geração com a área de trabalho aberta e gritar "sua placa
-//   está em PCIe 1.0" seria criar um problema que não existe — e é exatamente o
-//   tipo de alarme falso que os otimizadores do mercado vendem.
-//
-// Então: a largura vira achado a qualquer momento; a geração SÓ é julgada com a
-// placa sob carga, e fora disso o produto cala a boca sobre ela.
-//
-// Conferido nesta máquina, com a área de trabalho aberta e a GPU a 2%:
-//
-//     gen atual 3 · gen máx 3 · largura atual 16 · largura máx 16
-//
-// ─────────────────────────────────────────────────────────────────────────
-//
-// SÓ NVIDIA POR ENQUANTO. O `nvidia-smi` vem com o driver e fica em
-// `C:\Windows\system32`, então não há nada a instalar. A AMD não tem
-// equivalente de linha de comando, e a resposta ali é "não deu para ler" — que
-// é honesta e melhor que um palpite.
+// As faixas do PCIe até a placa. Menos que o máximo é físico e custa quadro: slot de baixo, M.2 dividindo
+// faixas, riser, encaixe sujo. A LARGURA é negociada no boot e vale a qualquer momento; a GERAÇÃO cai sozinha
+// com a placa parada, e só é julgada com a placa sob carga (senão seria o alarme falso "sua placa está em PCIe
+// 1.0"). Só NVIDIA (`nvidia-smi`); na AMD, "não deu para ler".
 
 use serde::{Deserialize, Serialize};
 
-/// Abaixo de quanto da carga a geração não pode ser julgada.
-///
-/// Vinte por cento: acima disso a placa já saiu do repouso e subiu o enlace.
-/// Abaixo, qualquer leitura de geração é do estado de economia.
+/// Acima de 20% de carga a placa já saiu do repouso e subiu o enlace.
 pub const CARGA_PARA_JULGAR_A_GERACAO: f64 = 20.0;
 
-/// O que se leu do enlace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Enlace {
     pub geracao_atual: u32,
@@ -60,25 +16,18 @@ pub struct Enlace {
     pub largura_maxima: u32,
 }
 
-/// O veredito sobre as faixas.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum Faixas {
-    /// A placa está com todas as faixas que ela suporta.
     Completo { largura: u32 },
-    /// Menos faixas do que a placa suporta. Isto é físico e custa quadro.
     Estreito { atual: u32, maxima: u32 },
-    /// A geração está abaixo da máxima E a placa está sob carga — aí vale
-    /// dizer. Em repouso este estado nunca é produzido.
+    /// Em repouso este estado nunca é produzido.
     GeracaoAbaixoSobCarga { atual: u32, maxima: u32, largura: u32 },
-    /// Não deu para ler. Não é "está tudo bem".
+    /// Não é "está tudo bem".
     NaoDeuParaLer { motivo: String },
 }
 
-/// Lê a saída do `nvidia-smi` no formato CSV sem cabeçalho.
-///
-/// **Função pura.** `None` quando a linha não traz os quatro números — e uma
-/// linha incompleta não vira zero, que seria "a placa está em zero faixas".
+/// `None` sem os quatro números: linha incompleta não vira "zero faixas".
 pub fn ler_enlace(saida: &str) -> Option<Enlace> {
     let linha = saida.lines().find(|l| !l.trim().is_empty())?;
 
@@ -93,8 +42,6 @@ pub fn ler_enlace(saida: &str) -> Option<Enlace> {
         return None;
     }
 
-    // Zero em qualquer um dos quatro é resposta inválida do driver, não uma
-    // placa com zero faixas.
     if numeros[..4].iter().any(|n| *n == 0) {
         return None;
     }
@@ -107,12 +54,8 @@ pub fn ler_enlace(saida: &str) -> Option<Enlace> {
     })
 }
 
-/// A REGRA. **Função pura**, e é a parte que precisa estar certa.
-///
-/// `carga_gpu` é a utilização da placa no momento da leitura. Ela existe só
-/// para decidir se a geração pode ser julgada — a largura não depende dela.
+/// `carga_gpu` só decide se a geração pode ser julgada; a largura não depende dela.
 pub fn julgar(enlace: Enlace, carga_gpu: Option<f64>) -> Faixas {
-    // A largura primeiro, porque é a que importa e a que não mente.
     if enlace.largura_atual < enlace.largura_maxima {
         return Faixas::Estreito {
             atual: enlace.largura_atual,
@@ -120,8 +63,7 @@ pub fn julgar(enlace: Enlace, carga_gpu: Option<f64>) -> Faixas {
         };
     }
 
-    // A geração só é julgada com a placa trabalhando. Sem saber a carga, o
-    // produto NÃO julga: `None` aqui é "não medi", e não "está parada".
+    // Sem saber a carga, NÃO julga: `None` é "não medi", não "está parada".
     let sob_carga = carga_gpu.is_some_and(|c| c >= CARGA_PARA_JULGAR_A_GERACAO);
 
     if sob_carga && enlace.geracao_atual < enlace.geracao_maxima {
@@ -135,7 +77,6 @@ pub fn julgar(enlace: Enlace, carga_gpu: Option<f64>) -> Faixas {
     Faixas::Completo { largura: enlace.largura_atual }
 }
 
-/// A frase que o cliente lê. Regra de produto, e por isso tem teste.
 pub fn explicar(faixas: &Faixas) -> String {
     match faixas {
         Faixas::Completo { largura } => format!(
@@ -166,9 +107,6 @@ pub fn explicar(faixas: &Faixas) -> String {
 
 #[cfg(target_os = "windows")]
 pub fn analisar() -> Faixas {
-    // `nvidia-smi` vem com o driver e mora em `System32`. Não é dependência
-    // nova: ou o driver da NVIDIA está instalado e ele existe, ou a máquina
-    // não é NVIDIA e a resposta é "não deu para ler".
     let saida = super::shell::run(
         "nvidia-smi",
         &[
@@ -205,10 +143,7 @@ pub fn analisar() -> Faixas {
     Faixas::NaoDeuParaLer { motivo: "só no Windows.".to_string() }
 }
 
-/// A utilização da placa, que é o quinto campo da mesma linha.
-///
-/// **Função pura.** `None` quando não veio — e `None` faz a geração NÃO ser
-/// julgada, que é o lado seguro.
+/// `None` faz a geração NÃO ser julgada, que é o lado seguro.
 pub fn carga_da_saida(saida: &str) -> Option<f64> {
     let linha = saida.lines().find(|l| !l.trim().is_empty())?;
     linha.split(',').nth(4)?.trim().replace('%', "").trim().parse::<f64>().ok()
@@ -236,9 +171,6 @@ mod tests {
         assert_eq!(enlace.largura_maxima, 16);
     }
 
-    /// A ARMADILHA DO MÓDULO. Com a área de trabalho aberta, a placa derruba o
-    /// enlace para economizar energia. Gritar "sua placa está em PCIe 1.0" aí é
-    /// inventar um problema — e é o alarme falso que o mercado vende.
     #[test]
     fn geracao_baixa_com_a_placa_parada_nao_e_achado() {
         let parada = Enlace {
@@ -251,8 +183,6 @@ mod tests {
         assert_eq!(julgar(parada, Some(2.0)), Faixas::Completo { largura: 16 });
     }
 
-    /// Sem saber a carga, o produto também não julga a geração. `None` é "não
-    /// medi", e não "está parada".
     #[test]
     fn sem_saber_a_carga_a_geracao_nao_e_julgada() {
         let enlace = Enlace {
@@ -280,8 +210,6 @@ mod tests {
         );
     }
 
-    /// A largura NÃO depende da carga: ela é negociada quando a máquina liga e
-    /// não muda depois. Uma placa em x4 é uma placa em x4 com a máquina parada.
     #[test]
     fn largura_estreita_e_achado_mesmo_com_a_placa_parada() {
         let estreito = Enlace {
@@ -297,8 +225,7 @@ mod tests {
         );
     }
 
-    /// A largura manda: com as duas coisas erradas, a que aparece é a física,
-    /// porque é a que a pessoa consegue consertar abrindo o gabinete.
+    /// A largura manda: é o que a pessoa conserta abrindo o gabinete.
     #[test]
     fn com_as_duas_erradas_a_largura_vem_primeiro() {
         let tudo_errado = Enlace {
@@ -321,7 +248,6 @@ mod tests {
         assert!(ler_enlace("[N/A], [N/A], [N/A], [N/A]").is_none());
     }
 
-    /// Zero é resposta inválida do driver, não uma placa com zero faixas.
     #[test]
     fn zero_nao_vira_leitura_valida() {
         assert!(ler_enlace("0, 0, 0, 0, 0").is_none());
@@ -339,7 +265,6 @@ mod tests {
         );
     }
 
-    /// A lacuna não pode soar como aprovação.
     #[test]
     fn nao_deu_para_ler_nao_soa_como_esta_tudo_bem() {
         let frase = explicar(&Faixas::NaoDeuParaLer { motivo: "sem driver.".to_string() });

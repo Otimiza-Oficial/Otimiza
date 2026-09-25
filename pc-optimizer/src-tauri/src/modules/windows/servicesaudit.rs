@@ -1,23 +1,6 @@
-// Auditor de serviços de terceiros
-//
-// Programa instalado quase nunca se contenta em ser um programa. Ele deixa um
-// serviço para trás — atualizador, licenciamento, telemetria, "assistente" —
-// que sobe junto com o Windows, antes mesmo de você fazer login, e fica lá o
-// dia inteiro. É a terceira perna do problema: inicialização, tarefa agendada e
-// serviço. As duas primeiras já estão no produto; esta faltava.
-//
-// DUAS DECISÕES QUE DEFINEM ESTE MÓDULO
-//
-// 1. O critério de "terceiro" é o CAMINHO DO EXECUTÁVEL, não o nome. Serviço do
-//    Windows mora dentro de %SystemRoot%. Nome pode ser qualquer coisa — existe
-//    malware chamado "Windows Update Helper" e existe serviço legítimo com nome
-//    esquisito. O caminho não mente e não muda de idioma.
-//
-// 2. Oferecemos MANUAL, não Desativado. Desativar é o que os tutoriais mandam
-//    fazer, e é errado: quando o programa precisa do serviço, ele não sobe, e o
-//    programa quebra de um jeito que ninguém liga ao "otimizador" que rodou
-//    semana passada. Em Manual, o serviço para de subir sozinho no boot mas
-//    ainda sobe quando alguém pede. Você ganha o boot e não quebra nada.
+// Serviços de terceiros (atualizador, licença, telemetria). "Terceiro" pelo CAMINHO do executável fora de
+// %SystemRoot%, não pelo nome, que é texto livre. Oferece MANUAL, não Desativado: em Manual o serviço para de
+// subir no boot mas sobe quando o programa pede, e nada quebra.
 
 use super::{registry, shell};
 use crate::modules::changelog::ChangeRecord;
@@ -25,13 +8,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StartMode {
-    /// Sobe sozinho no boot.
     Automatic,
-    /// Sobe só quando alguém pede. É para cá que levamos os de terceiros.
     Manual,
     Disabled,
-    /// Boot e System: carregados antes do Windows subir. Nunca são de terceiros
-    /// comuns, e nunca são mexidos aqui.
     Kernel,
 }
 
@@ -42,22 +21,13 @@ pub struct ServiceEntry {
     pub path: String,
     pub start_mode: StartMode,
     pub running: bool,
-    /// Memória do processo do serviço, quando ele está rodando e o processo é
-    /// dele sozinho. Serviço hospedado em `svchost` compartilhado não tem como
-    /// ser medido separado, e aí fica em branco em vez de receber um chute.
+    /// Serviço em `svchost` compartilhado não se mede separado: fica em branco, sem chute.
     pub ram_mb: Option<f64>,
-    /// Preenchido quando o serviço não pode ser mexido, com o motivo.
     pub protected: Option<String>,
 }
 
-/// Serviços que nunca são oferecidos para mudar, aconteça o que acontecer.
-///
-/// A lista de proteção vem antes de qualquer classificação, igual ao detector
-/// de programas de fábrica. Antivírus, áudio e vídeo moram fora de %SystemRoot%
-/// e portanto contam como "de terceiros" pelo critério do caminho — mas mexer
-/// neles é a diferença entre otimizar e estragar. Placa de som que emudece e
-/// antivírus que não sobe é o tipo de estrago que o cliente descobre depois e
-/// não perdoa.
+/// Antes de qualquer classificação: antivírus, áudio e vídeo moram fora de %SystemRoot% e contariam como
+/// terceiros, mas mexer neles é estragar.
 const NUNCA_MEXER: [(&str, &str); 12] = [
     ("defender", "proteção do Windows"),
     ("antivir", "antivírus"),
@@ -73,7 +43,6 @@ const NUNCA_MEXER: [(&str, &str); 12] = [
     ("amd", "vídeo ou chipset"),
 ];
 
-/// Motivo pelo qual o serviço não pode ser mexido, se houver.
 pub fn protecao(nome: &str, exibicao: &str) -> Option<String> {
     let alvo = format!("{} {}", nome, exibicao).to_lowercase();
 
@@ -88,18 +57,12 @@ pub fn protecao(nome: &str, exibicao: &str) -> Option<String> {
     })
 }
 
-/// Se o executável do serviço mora dentro da pasta do Windows.
-///
-/// Este é o critério de "é do sistema". Comparar nome não serve: nome é texto
-/// livre que qualquer instalador escolhe.
 pub fn e_do_sistema(caminho: &str, system_root: &str) -> bool {
     if caminho.trim().is_empty() {
-        // Sem caminho não dá para afirmar que é de terceiro, e na dúvida o
-        // serviço fica de fora da lista — errar para o lado de não mexer.
+        // Sem caminho, fica de fora: na dúvida, não mexe.
         return true;
     }
 
-    // O caminho vem com aspas e argumentos: `"C:\Windows\system32\svchost.exe" -k netsvcs`.
     let executavel = caminho.trim().trim_start_matches('"');
     let normalizado = executavel.replace('/', "\\").to_lowercase();
     let raiz = system_root.replace('/', "\\").to_lowercase();
@@ -107,11 +70,7 @@ pub fn e_do_sistema(caminho: &str, system_root: &str) -> bool {
     normalizado.starts_with(&raiz)
 }
 
-/// Traduz o código `Start` do registro.
-///
-/// Os valores são numéricos e iguais em qualquer idioma do Windows — ao
-/// contrário da saída do `sc qc`, que sai traduzida e já quebrou este projeto
-/// uma vez.
+/// Números iguais em qualquer idioma, ao contrário do `sc qc`, que já quebrou este projeto.
 pub fn modo_do_codigo(start: u32) -> StartMode {
     match start {
         0 | 1 => StartMode::Kernel,
@@ -129,13 +88,10 @@ struct RawService {
     display_name: Option<String>,
     path_name: Option<String>,
     state: Option<String>,
-    // O PID em si não é usado: ele serve só para o PowerShell casar processo
-    // com serviço antes de devolver a memória já resolvida.
     #[serde(default, skip)]
     _process_id: Option<u32>,
     working_set_mb: Option<f64>,
-    /// Quantos serviços dividem o mesmo processo. Acima de 1 a memória não é
-    /// atribuível a nenhum deles.
+    /// Acima de 1, a memória não é atribuível a nenhum deles.
     shares_process: Option<u32>,
 }
 
@@ -143,16 +99,10 @@ fn system_root() -> String {
     std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string())
 }
 
-/// `Err` quando o WMI não responde. Até a 2.0 isso virava lista vazia, e a tela
-/// escrevia "Nenhum serviço de terceiros neste PC".
+/// `Err` quando o WMI não responde: lista vazia diria "Nenhum serviço de terceiros".
 fn consultar() -> Result<Vec<RawService>, String> {
-    // Um único PowerShell resolve serviço, processo e quantos serviços dividem
-    // aquele processo. Fazer isso em três chamadas separadas levaria segundos
-    // numa máquina fraca, que é justamente a máquina deste produto.
-    //
-    // Só a lista de serviços para no erro: sem ela não há o que mostrar. A de
-    // processos pode falhar à vontade — a memória de cada serviço vira "sem
-    // medida", que a tela já sabe dizer.
+    // Um PowerShell só resolve serviço, processo e compartilhamento: três chamadas levariam segundos em máquina
+    // fraca. A lista de processos pode falhar: a memória vira "sem medida".
     let script = "\
         $svc = @(Get-CimInstance Win32_Service -ErrorAction Stop); \
         $porProcesso = @{}; \
@@ -170,7 +120,6 @@ fn consultar() -> Result<Vec<RawService>, String> {
     shell::json_da_saida(shell::powershell(script), "os serviços do Windows")
 }
 
-/// Todos os serviços que não são do Windows.
 pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
     let raiz = system_root();
 
@@ -186,8 +135,7 @@ pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
 
             let display_name = bruto.display_name.unwrap_or_else(|| name.clone());
 
-            // O modo vem do registro, não do WMI: é a mesma fonte que a
-            // aplicação usa para escrever, então lista e ação não divergem.
+            // Do registro, a mesma fonte que a escrita usa: lista e ação não divergem.
             let start_mode = match registry::read(
                 "HKLM",
                 &format!(r"SYSTEM\CurrentControlSet\Services\{}", name),
@@ -201,7 +149,6 @@ pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
 
             let running = bruto.state.as_deref() == Some("Running");
 
-            // Memória só quando o processo é deste serviço sozinho.
             let ram_mb = match (running, bruto.shares_process.unwrap_or(0)) {
                 (true, 1) => bruto.working_set_mb,
                 _ => None,
@@ -219,7 +166,6 @@ pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
         })
         .collect();
 
-    // Quem sobe sozinho no boot primeiro: é onde está o custo.
     lista.sort_by(|a, b| {
         let peso = |s: &ServiceEntry| match (s.protected.is_some(), s.start_mode) {
             (false, StartMode::Automatic) => 0,
@@ -236,10 +182,7 @@ pub fn listar_de_terceiros() -> Result<Vec<ServiceEntry>, String> {
     Ok(lista)
 }
 
-/// Leva um serviço de terceiro para Manual, ou devolve para Automático.
-///
-/// Não existe opção de desativar aqui, e isso é de propósito — ver o cabeçalho
-/// do arquivo.
+/// Não há opção de desativar, de propósito.
 pub fn definir_inicio(name: &str, automatico: bool) -> Result<ChangeRecord, String> {
     if !registry::is_elevated() {
         return Err("Mexer em serviços exige executar como administrador.".to_string());
@@ -247,9 +190,7 @@ pub fn definir_inicio(name: &str, automatico: bool) -> Result<ChangeRecord, Stri
 
     let raiz = system_root();
 
-    // A checagem é refeita aqui, e não confiada à interface: o comando é
-    // exposto por IPC, e uma tela com dado velho não pode virar permissão para
-    // mexer num serviço do sistema.
+    // Refeita aqui: o comando vem por IPC, e tela com dado velho não pode virar permissão para mexer no sistema.
     let bruto = consultar()?
         .into_iter()
         .find(|s| s.name.as_deref() == Some(name))
@@ -293,9 +234,7 @@ mod tests {
         let raiz = "C:\\Windows";
 
         assert!(e_do_sistema("C:\\Windows\\system32\\svchost.exe -k netsvcs", raiz));
-        // Vem com aspas na maioria dos serviços.
         assert!(e_do_sistema("\"C:\\Windows\\System32\\spoolsv.exe\"", raiz));
-        // Maiúsculas e minúsculas não podem decidir isso.
         assert!(e_do_sistema("c:\\windows\\system32\\lsass.exe", raiz));
 
         assert!(!e_do_sistema("\"C:\\Program Files\\Google\\Update\\GoogleUpdate.exe\"", raiz));
@@ -304,8 +243,6 @@ mod tests {
 
     #[test]
     fn nome_enganoso_nao_engana_o_criterio() {
-        // O nome diz Windows, o executável está em Program Files. É de terceiro,
-        // e é exatamente por isso que o critério é o caminho.
         assert!(!e_do_sistema(
             "\"C:\\Program Files\\Coisa\\Windows Update Helper.exe\"",
             "C:\\Windows"
@@ -314,8 +251,6 @@ mod tests {
 
     #[test]
     fn caminho_vazio_erra_para_o_lado_de_nao_mexer() {
-        // Sem caminho não dá para afirmar nada, e a resposta segura é tratar
-        // como do sistema — o serviço some da lista em vez de virar um botão.
         assert!(e_do_sistema("", "C:\\Windows"));
         assert!(e_do_sistema("   ", "C:\\Windows"));
     }
@@ -327,7 +262,6 @@ mod tests {
         assert!(protecao("RtkAudioUniversalService", "Realtek Audio Universal").is_some());
         assert!(protecao("NVDisplay.ContainerLocalSystem", "NVIDIA Display").is_some());
 
-        // Atualizador comum não é protegido: é justamente o alvo.
         assert!(protecao("gupdate", "Serviço do Google Update").is_none());
     }
 
@@ -336,7 +270,6 @@ mod tests {
         assert_eq!(modo_do_codigo(2), StartMode::Automatic);
         assert_eq!(modo_do_codigo(3), StartMode::Manual);
         assert_eq!(modo_do_codigo(4), StartMode::Disabled);
-        // Driver de boot: nunca oferecido.
         assert_eq!(modo_do_codigo(0), StartMode::Kernel);
         assert_eq!(modo_do_codigo(1), StartMode::Kernel);
     }
@@ -365,7 +298,6 @@ mod tests {
                 s.display_name,
                 s.path
             );
-            // Driver de boot não tem o que ser oferecido.
             assert_ne!(s.start_mode, StartMode::Kernel, "{}", s.display_name);
         }
     }
@@ -374,7 +306,6 @@ mod tests {
     fn ordem_poe_o_que_custa_no_topo() {
         let lista = listar_de_terceiros().expect("os serviços desta máquina precisam ser legíveis");
 
-        // Os protegidos vão para o fim: eles são informação, não ação.
         let primeiro_protegido = lista.iter().position(|s| s.protected.is_some());
         let ultimo_livre = lista.iter().rposition(|s| s.protected.is_none());
 
@@ -388,11 +319,8 @@ mod tests {
 
     #[test]
     fn servico_do_windows_e_recusado_mesmo_se_pedirem_pelo_nome() {
-        // O comando é exposto por IPC. Uma tela com dado velho, ou qualquer
-        // chamada direta, não pode virar permissão para mexer no sistema.
         let erro = definir_inicio("Spooler", false).unwrap_err();
 
-        // Sem elevação a recusa vem antes, por outro motivo — as duas servem.
         assert!(
             erro.contains("próprio Windows") || erro.contains("administrador"),
             "recusa inesperada: {}",
