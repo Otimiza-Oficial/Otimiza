@@ -482,6 +482,14 @@ fn achados_da_janela() -> Result<Vec<Achado>, String> {
     })
 }
 
+fn achados_do_x3d() -> Vec<Achado> {
+    let Some(cpu) = super::x3d::cpu().filter(|c| super::x3d::e_x3d_de_dois_blocos(c)) else { return Vec::new() };
+    super::x3d::achados(&cpu, &super::x3d::ler())
+        .into_iter()
+        .map(|a| montar(Origem::Prontidao, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .collect()
+}
+
 fn achados_de_eventos_de_hardware() -> Result<Vec<Achado>, String> {
     Ok(super::eventoshw::achados(&super::eventoshw::ler()?)
         .into_iter()
@@ -1031,6 +1039,8 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // Driver de vídeo que caiu e erro de hardware: evento do próprio
         // Windows, que o cliente confere no Visualizador de Eventos.
         (Origem::Esgotamento, achados_de_eventos_de_hardware),
+        // Ryzen X3D de dois blocos: só lê mais quando o processador é um deles.
+        (Origem::Prontidao, || Ok(achados_do_x3d())),
         (Origem::Firmware, || Ok(achados_do_microcodigo())),
         // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
         //

@@ -47,6 +47,7 @@ pub mod bios;
 pub mod eventoshw;
 pub mod fichabios;
 pub mod janelas;
+pub mod x3d;
 pub mod causas;
 pub mod contadousuario;
 pub mod conflitos;
