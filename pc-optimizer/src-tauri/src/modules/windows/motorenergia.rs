@@ -1,40 +1,13 @@
-// ---------------------------------------------------------------------------
-// ADAPTIVE POWER ENGINE — o motor de energia adaptativo
-//
-// O PLANO ANTIGO ERA UMA LISTA FIXA, e é isso que este módulo substitui. Ele
-// escrevia os mesmos números em todo PC: EPP 0, estado mínimo 100%, núcleos
-// 100% acordados, boost agressivo. Num i3 de desktop isso é quase inofensivo;
-// num notebook com Ryzen é temperatura a mais para o mesmo FPS, e num Intel
-// híbrido é tirar do Windows a escolha entre núcleo P e núcleo E.
-//
-// NÃO EXISTE UM PLANO DE ENERGIA IDEAL PARA TODOS OS PCs. O motor faz outra
-// coisa:
-//
-//   1. IDENTIFICA a CPU pela CPUID (família, modelo, híbrida, Speed Shift,
-//      EPP, CPPC) e o formato da máquina;
-//   2. ENUMERA o que este Windows expõe, lendo `powercfg /qh` — sem lista fixa
-//      de GUIDs: ajuste que não aparece não existe, e valor fora da faixa que
-//      o próprio Windows publica não é escrito;
-//   3. GERA CANDIDATOS específicos da arquitetura, cada número com o motivo;
-//   4. MEDE cada candidato: rajada de carga (quanto tempo a CPU leva para
-//      entregar desempenho), clock efetivo, limites de firmware, temperatura
-//      quando exposta, e o jogo quando estiver aberto;
-//   5. ESCOLHE pelo resultado — 1% low, P99 e resposta pesam mais que FPS
-//      médio, e regressão térmica conta contra.
-//
-// O objetivo não é o plano mais agressivo. É o que entrega mais desempenho
-// SUSTENTADO com a menor regressão térmica. Se nenhum candidato ganha do
-// padrão do Windows com margem, a resposta é o padrão do Windows.
-//
-// Este arquivo é só regra pura, testada sem máquina. O que lê e escreve no
-// Windows mora em `motorenergia_maquina.rs`.
-// ---------------------------------------------------------------------------
+// Motor de energia adaptativo. Não existe plano ideal para todos (a lista fixa antiga era calor a mais num
+// Ryzen de notebook e tirava do Windows a escolha P/E num Intel híbrido). Identifica a CPU pela CPUID; enumera o
+// que ESTE Windows expõe em `powercfg /qh` (fora da faixa publicada não se escreve); gera candidatos por
+// arquitetura; mede (rajada, clock efetivo, limites, temperatura, jogo); escolhe por 1% low, P99 e resposta, com
+// regressão térmica contra. Sem ganho com margem, fica o padrão do Windows. Só regra pura; a máquina é
+// `motorenergia_maquina.rs`.
 
 use serde::{Deserialize, Serialize};
 
 use super::planoenergia::e_guid;
-
-// ============================================================ identificação
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Fabricante {
@@ -78,8 +51,7 @@ pub enum Formato {
     Notebook,
 }
 
-/// O que a instrução CPUID respondeu. Números, não nomes: iguais em qualquer
-/// idioma e em qualquer versão do Windows.
+/// Números, não nomes: iguais em qualquer idioma e versão do Windows.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Cpuid {
     pub fabricante_bruto: String,
@@ -192,8 +164,6 @@ pub struct Impressao {
     pub plano_ativo_nome: Option<String>,
 }
 
-// =========================================================== enumeração
-
 /// Um ajuste de energia como ESTE Windows o descreve.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Configuracao {
@@ -248,13 +218,8 @@ fn hexadecimal(texto: &str) -> Option<u32> {
     u32::from_str_radix(t.strip_prefix("0x").or_else(|| t.strip_prefix("0X"))?, 16).ok()
 }
 
-/// Lê a saída de `powercfg /qh`.
-///
-/// NADA AQUI DEPENDE DO IDIOMA. Os rótulos vêm traduzidos ("Índice de
-/// Configurações de Correntes Alternadas Atuais"), então o parser usa só o que
-/// é igual em qualquer Windows: GUIDs, o apelido em maiúsculas, números em
-/// hexadecimal, a indentação e a ORDEM em que o `powercfg` escreve — mínimo,
-/// máximo, incremento; depois tomada; depois bateria.
+/// Nada depende do idioma (os rótulos vêm traduzidos): só GUIDs, o apelido em maiúsculas, hexadecimal, a
+/// indentação e a ORDEM do `powercfg` (mínimo, máximo, incremento; tomada; bateria).
 pub fn enumerar(saida: &str) -> Enumeracao {
     let mut e = Enumeracao::default();
     let mut subgrupo = String::new();
@@ -355,8 +320,6 @@ pub fn enumerar(saida: &str) -> Enumeracao {
     e
 }
 
-// ============================================ os ajustes que o motor conhece
-
 /// Apelidos que o motor sabe interpretar. Todos documentados pela Microsoft em
 /// "Processor power management options". Os com sufixo `1` valem para a
 /// classe de eficiência 1 — em Intel híbrida, os núcleos de DESEMPENHO.
@@ -410,8 +373,6 @@ pub fn epp_para_percentual(bruto: u32) -> u32 {
     ((bruto.min(255) as f64) * 100.0 / 255.0).round() as u32
 }
 
-// ============================================================ candidatos
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Estacionamento {
     /// O que o plano base traz.
@@ -449,8 +410,6 @@ pub enum PoliticaDeDispositivo {
     Desligada,
 }
 
-/// Os parâmetros de comportamento de um candidato. Os números concretos saem
-/// de `gerar`, que conhece a arquitetura e o que o Windows expõe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Parametros {
     /// EPP na escala do processador (0–255). `None` mantém o do plano base.
@@ -479,7 +438,6 @@ impl Parametros {
     };
 }
 
-/// Por que cada número foi escolhido. A tela escolhe a frase.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Motivo {
     EppDoCandidato,
@@ -865,15 +823,8 @@ pub fn divergencias(pedidas: &[Mudanca], relido: &Enumeracao) -> Vec<String> {
         .collect()
 }
 
-// ================================================== teste de resposta (rajada)
-
-/// Medida da rajada: ociosa → carga curta → ociosa → carga.
-///
-/// A CPU é medida PELO TRABALHO QUE ELA ENTREGA, fatia por fatia: nenhum
-/// contador de frequência precisa ser confiável para isto funcionar. Se o
-/// plano demora a subir o desempenho, as primeiras fatias de cada rajada
-/// fazem menos trabalho que as do fim — e isso é exatamente a resposta que
-/// importa para um jogo.
+/// Medida PELO TRABALHO entregue fatia por fatia, sem confiar em contador de frequência: se o plano demora a
+/// subir, as primeiras fatias fazem menos.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RespostaMedida {
     /// Tempo até a CPU entregar 90% do trabalho sustentado (mediana das rajadas).
@@ -939,8 +890,6 @@ pub fn analisar_rajadas(rajadas: &[Vec<f64>], fatia_ms: f64) -> Option<RespostaM
     })
 }
 
-// ======================================================= amostras da CPU
-
 /// Uma amostra dos contadores de desempenho do Windows (nomes em inglês pelo
 /// PDH, então iguais em qualquer idioma).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
@@ -951,12 +900,8 @@ pub struct AmostraCpu {
     pub frequencia_mhz: Option<f64>,
     /// `% Processor Time`: fração do tempo em que a CPU trabalhou.
     pub uso_pct: Option<f64>,
-    /// `% Performance Limit`: 100 = sem limite.
-    ///
-    /// `None` quando o contador não respondeu. Isso NÃO é 100: um contador que
-    /// falhou e um firmware que não limita davam a mesma resposta antes desta
-    /// mudança, e o motor concluía "não há limite" a partir de uma leitura que
-    /// nunca aconteceu.
+    /// `% Performance Limit`: 100 = sem limite. `None` quando não respondeu, que NÃO é 100 (o motor concluía "não há
+    /// limite" de uma leitura que nunca aconteceu).
     pub limite_pct: Option<f64>,
     /// `Performance Limit Flags`: bit 0 térmico, bit 1 elétrico. `None` quando
     /// o contador não respondeu — pela mesma razão de `limite_pct`.
@@ -968,10 +913,7 @@ pub struct AmostraCpu {
 }
 
 impl AmostraCpu {
-    /// Clock reportado desta amostra: nominal × desempenho.
-    ///
-    /// `None` quando falta qualquer uma das duas metades — meia conta não é
-    /// meia resposta, é nenhuma.
+    /// `None` com qualquer metade faltando.
     pub fn clock_reportado_mhz(&self) -> Option<f64> {
         Some(self.frequencia_mhz? * self.desempenho_pct? / 100.0)
     }
@@ -993,9 +935,7 @@ impl AmostraCpu {
 pub struct ResumoCpu {
     /// Quantas amostras entraram na conta de clock.
     pub amostras: usize,
-    /// Quantas foram DESCARTADAS por terem vindo incompletas do PDH. Existe
-    /// para aparecer no relatório: um resumo tirado de três amostras boas e
-    /// trinta perdidas não vale o mesmo que um tirado de trinta e três.
+    /// Três amostras boas e trinta perdidas não valem trinta e três.
     #[serde(default)]
     pub amostras_descartadas: usize,
     /// Frequência nominal × desempenho: o que o Windows REPORTA.
@@ -1003,11 +943,7 @@ pub struct ResumoCpu {
     /// Reportado × uso: trabalho realmente entregue, que cai quando a CPU
     /// "sobe o clock" mas passa o tempo em espera ou limitada.
     pub clock_efetivo_mhz: f64,
-    /// Uso médio do processador na janela, em %.
-    ///
-    /// É o `% Processor Time` das amostras que serviram. Sai separado do clock
-    /// efetivo porque quem quer saber "o quanto a CPU trabalhou" não deve ter
-    /// de desfazer a multiplicação por frequência para chegar lá.
+    /// Separado do clock efetivo para ninguém desfazer a multiplicação por frequência.
     #[serde(default)]
     pub uso_medio_pct: Option<f64>,
     /// `None` quando o contador de limite não respondeu em nenhuma amostra.
@@ -1025,12 +961,8 @@ pub struct ResumoCpu {
     pub nucleos_total: Option<u32>,
 }
 
-/// Resume uma série de amostras do PDH.
-///
-/// `None` quando nenhuma amostra trouxe as três leituras de que a conta de
-/// clock precisa. Antes isto devolvia um `ResumoCpu` ZERADO, e um resumo com
-/// clock efetivo de 0 MHz e "o firmware não limita" seguia para a pontuação
-/// como se fosse medição.
+/// `None` sem nenhuma amostra completa: um resumo ZERADO (0 MHz, "não limita") seguia para a pontuação como
+/// medição.
 pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
     let uteis: Vec<&AmostraCpu> = amostras.iter().filter(|a| a.tem_clock()).collect();
     let n = uteis.len();
@@ -1038,9 +970,7 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
         return None;
     }
     let media = |f: &dyn Fn(&AmostraCpu) -> f64| uteis.iter().map(|a| f(a)).sum::<f64>() / n as f64;
-    // Limite e flags são contadores SEPARADOS dos de clock: podem faltar numa
-    // amostra que serve para o resto. Só entram na conta as amostras em que
-    // eles vieram, e se não vier nenhuma o campo fica desconhecido.
+    // Limite e flags podem faltar numa amostra que serve para o clock: só entram as que os trouxeram.
     let com_limite = uteis.iter().filter(|a| a.limite_pct.is_some() || a.flags.is_some()).count();
     let limitadas = uteis
         .iter()
@@ -1049,10 +979,7 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
     let limites_pct: Vec<f64> = uteis.iter().filter_map(|a| a.limite_pct).collect();
     let com_flags = uteis.iter().filter(|a| a.flags.is_some()).count();
     let mut temps: Vec<f64> = uteis.iter().filter_map(|a| a.temperatura_c).collect();
-    // SENSOR PARADO NÃO É SENSOR. Muitas placas publicam uma zona térmica ACPI
-    // fixa (28 °C o dia inteiro, com a CPU a 100%). Com carga e sem variação
-    // nenhuma, a leitura é descartada: folga térmica inventada é pior que
-    // "não sei".
+    // Zona ACPI fixa (28 °C com a CPU a 100%) é descartada com carga e sem variação.
     if temps.len() >= 8 {
         let (min, max) = temps.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(*t), b.max(*t)));
         let com_carga = uteis.iter().any(|a| a.uso_pct.is_some_and(|u| u >= 10.0));
@@ -1079,11 +1006,8 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
     })
 }
 
-/// THERMAL HEADROOM SCORE, 0–100. `None` quando não há leitura de temperatura
-/// e nenhum limite térmico foi visto — não se inventa folga.
-///
-/// Note o `Some(true)`: flag não observada não conta como "sem limite". Com o
-/// contador mudo e sem temperatura, a resposta continua sendo "não sei".
+/// 0–100. `None` sem temperatura e sem limite térmico visto. `Some(true)`: flag não observada não conta como "sem
+/// limite".
 pub fn folga_termica(r: &ResumoCpu) -> Option<f64> {
     const TETO: f64 = 95.0;
     const CONFORTO: f64 = 45.0;
@@ -1095,8 +1019,6 @@ pub fn folga_termica(r: &ResumoCpu) -> Option<f64> {
         (None, _) => None,
     }
 }
-
-// ================================================================ jogo
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Quadros {
@@ -1126,15 +1048,11 @@ pub fn resumir_quadros(fps: f64, intervalos_ms: &[f64]) -> Option<Quadros> {
     })
 }
 
-// ========================================================= resultado e nota
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResultadoDoCandidato {
     pub candidato: String,
     pub resposta: Option<RespostaMedida>,
-    /// `None` quando o PDH não entregou nenhuma amostra utilizável. Resultado
-    /// antigo gravado em disco tem um objeto aqui e continua desserializando
-    /// como `Some` — o campo só passou a admitir ausência.
+    /// Resultado antigo em disco tem um objeto aqui e continua desserializando como `Some`.
     #[serde(default)]
     pub cpu: Option<ResumoCpu>,
     pub quadros: Option<Quadros>,
@@ -1192,11 +1110,8 @@ fn razao(melhor_se_maior: bool, valor: f64, base: f64) -> Option<f64> {
     Some((r * 100.0).clamp(50.0, 150.0))
 }
 
-/// POWER PERFORMANCE SCORE, relativo ao padrão do Windows.
-///
-/// FPS médio pesa 15%. 1% low, P99 e resposta juntos pesam 55%, e a folga
-/// térmica e a estabilidade sob limite de firmware entram contra quem ganha
-/// FPS esquentando.
+/// FPS médio pesa 15%; 1% low, P99 e resposta juntos 55%; folga térmica e estabilidade sob limite contam contra
+/// quem ganha FPS esquentando.
 pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
     let low_1 = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(true, a.low_1, b.low_1));
     let p99 = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(false, a.p99_ms, b.p99_ms));
@@ -1208,9 +1123,7 @@ pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
         (Some(a), Some(b)) => Some((100.0 + (a - b)).clamp(50.0, 150.0)),
         _ => None,
     };
-    // Sem contador de limite dos dois lados não há estabilidade a comparar.
-    // Antes o campo era sempre preenchido, e um par de leituras que não
-    // aconteceu virava nota 100 — um décimo do peso saindo do nada.
+    // Sem contador dos dois lados não há estabilidade: antes virava nota 100, um décimo do peso do nada.
     let limitado = |x: &ResultadoDoCandidato| x.cpu.as_ref().and_then(|c| c.tempo_limitado_pct);
     let estabilidade = limitado(r).zip(limitado(base)).map(|(a, b)| (100.0 - (a - b)).clamp(50.0, 150.0));
 
@@ -1297,8 +1210,7 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     let b = resultados.iter().find(|r| r.candidato == base)?;
     let mut achados = Vec::new();
 
-    // `== Some(true)`: o achado só é anunciado quando a flag foi LIDA e estava
-    // alta. Contador mudo não vira "o firmware limita" nem o seu contrário.
+    // Só com a flag LIDA e alta.
     let termico = b.cpu.as_ref().and_then(|c| c.limite_termico);
     let eletrico = b.cpu.as_ref().and_then(|c| c.limite_eletrico);
 
@@ -1317,8 +1229,7 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     if b.temp_max().is_none() {
         achados.push(Achado::TemperaturaIndisponivel);
     }
-    // Sem resumo nenhum a amostragem falhou inteira, que é o caso mais grave e
-    // não pode ser o mais silencioso.
+    // Amostragem falha inteira é o caso mais grave e não pode ser o mais silencioso.
     if b.cpu.as_ref().is_none_or(|c| c.amostras_descartadas > c.amostras) {
         achados.push(Achado::AmostragemFalha);
     }
@@ -1390,8 +1301,7 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         achados.push(Achado::QuadrosSinteticos);
     }
 
-    // O PLANO ATUAL É O PISO. Trocar o plano que a pessoa já usa por um que dá
-    // menos FPS — mesmo que ganhe do padrão do Windows — é tirar FPS dela.
+    // Trocar o plano atual por um com menos FPS, mesmo ganhando do padrão, é tirar FPS da pessoa.
     let atual = resultados.iter().find(|r| r.candidato == "atual");
     let vencedor = match (vencedor, atual) {
         (Some(v), Some(_)) if v.candidato == "atual" => {
@@ -1477,8 +1387,6 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     })
 }
 
-// ================================================== modo dinâmico de jogo
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EstadoDinamico {
     Normal,
@@ -1492,11 +1400,8 @@ pub enum Transicao {
     VoltarAoNormal,
 }
 
-/// NORMAL → JOGO ABRIU → PERFIL DE BAIXA LATÊNCIA → JOGO FECHOU → NORMAL.
-///
-/// Para sair do perfil, o jogo precisa ficar fechado por duas olhadas: uma
-/// tela de carregamento que troca de processo não pode derrubar o perfil e
-/// subi-lo de novo três segundos depois.
+/// Sai do perfil só com o jogo fechado por duas olhadas: tela de carregamento que troca de processo não pode
+/// derrubar e subir o perfil.
 pub fn transicao(estado: EstadoDinamico, jogo_aberto: bool, olhadas_sem_jogo: u32) -> Transicao {
     match (estado, jogo_aberto) {
         (EstadoDinamico::Normal, true) => Transicao::EntrarNoPerfilDeJogo,
@@ -1504,8 +1409,6 @@ pub fn transicao(estado: EstadoDinamico, jogo_aberto: bool, olhadas_sem_jogo: u3
         _ => Transicao::Nenhuma,
     }
 }
-
-// ================================================================== testes
 
 #[cfg(test)]
 mod tests {
@@ -1607,8 +1510,6 @@ mod tests {
         Impressao { arquitetura: classificar_arquitetura(&cpuid), controle: Controle::SistemaOperacional, cpuid, ..intel_moderna(Formato::Desktop) }
     }
 
-    // ---- identificação
-
     #[test]
     fn familia_e_modelo_de_exibicao() {
         // i3-10100F: "Intel64 Family 6 Model 165" (0xA5) → EAX 0x000A0653.
@@ -1644,8 +1545,6 @@ mod tests {
         assert!(t.smt());
         assert_eq!(Topologia { nucleos_fisicos: 4, processadores_logicos: 4, classes: vec![(0, 4)] }.nucleos_p_e(), None);
     }
-
-    // ---- enumeração
 
     #[test]
     fn le_o_powercfg_em_portugues_sem_depender_dos_rotulos() {
@@ -1693,8 +1592,6 @@ mod tests {
         assert!(e.por_alias("PERFEPP").unwrap().aceita(100));
         assert!(!e.por_alias("PERFEPP").unwrap().aceita(101));
     }
-
-    // ---- candidatos
 
     #[test]
     fn nenhum_candidato_e_universal() {
@@ -1805,8 +1702,6 @@ mod tests {
         assert_eq!(divergencias(&pedida, &base), vec!["PERFEPP".to_string()]);
     }
 
-    // ---- rajada
-
     #[test]
     fn rajada_que_sobe_devagar_demora_mais() {
         let rapida: Vec<f64> = (0..40).map(|i| if i < 2 { 80.0 } else { 100.0 }).collect();
@@ -1819,8 +1714,6 @@ mod tests {
         assert_eq!(r.rajadas, 2);
         assert!(analisar_rajadas(&[vec![1.0; 3]], 5.0).is_none());
     }
-
-    // ---- cpu
 
     /// Uma amostra completa, como o PDH entrega quando tudo responde.
     fn amostra_cheia() -> AmostraCpu {
@@ -1854,8 +1747,7 @@ mod tests {
 
     #[test]
     fn contador_mudo_nao_vira_leitura() {
-        // O defeito: `unwrap_or(0.0)` e `unwrap_or(100.0)` no amostrador
-        // transformavam PDH calado em "CPU a 0%" e "firmware sem limite".
+        // `unwrap_or(0.0)` e `unwrap_or(100.0)` transformavam PDH calado em "CPU a 0%" e "sem limite".
         let a = amostra_cheia();
 
         // Sem os contadores de clock a amostra não serve e é descartada — não
@@ -1914,8 +1806,6 @@ mod tests {
         assert!(q.low_1 < 100.0);
         assert!(resumir_quadros(60.0, &[16.0; 10]).is_none());
     }
-
-    // ---- escolha
 
     fn resultado(id: &str, fps: f64, low: f64, p99: f64, ate90: f64, temp: f64, clock: (f64, f64)) -> ResultadoDoCandidato {
         ResultadoDoCandidato {
@@ -2041,8 +1931,6 @@ mod tests {
         assert!(e.achados.contains(&Achado::MedicaoInstavel));
         assert!(e.confianca_pct < 60.0);
     }
-
-    // ---- dinâmico
 
     #[test]
     fn transicoes_do_modo_dinamico() {

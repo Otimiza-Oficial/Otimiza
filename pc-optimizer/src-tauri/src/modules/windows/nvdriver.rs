@@ -1,60 +1,15 @@
-// Ajustes de driver NVIDIA pela NVAPI
-//
-// Este é o único módulo do pilar que ESCREVE, e é o último a entrar de
-// propósito: os cinco anteriores só leem, então se alguma coisa tivesse
-// quebrado antes, nada teria sido alterado na máquina de ninguém.
-//
-// O QUE DECIDIU ESTE PILAR, no veredito da investigação anterior:
-//
-//     "A NVAPI tem um subsistema de configuração (DRS) feito exatamente para
-//     isto, oficial e documentado, e — o que decide o pilar para este produto
-//     — com chamada para RESTAURAR O PADRÃO de uma opção. Reversível de
-//     verdade, não 'reversível se a gente anotar direitinho'."
-//
-// É por isso que uma opção SEM restauração de padrão não pode entrar no
-// catálogo: ela quebraria a regra que sustenta o produto inteiro — toda
-// mudança reversível, com o valor anterior registrado. O campo `id_do_padrao`
-// carrega esse nome porque é a chamada de restauração que dá à opção o direito
-// de existir aqui, e há um teste que recusa qualquer entrada sem ele.
-//
-// AMD FICA DE FORA, E A TELA DIZ ISSO. Também é recomendação literal do
-// veredito: "entrar com a NVIDIA e DIZER NA TELA que a AMD ainda não é
-// coberta, em vez de fazer meia coisa nas duas". Cliente com Radeon lê "ainda
-// não cobrimos sua placa"; não uma tela vazia, que ele leria como programa
-// quebrado.
-//
-// POR QUE A DLL É CARREGADA EM TEMPO DE EXECUÇÃO
-//
-// A `nvapi64.dll` acompanha o driver da NVIDIA — mesma escolha do `nvidia-smi`
-// no `rbar.rs`, e pela mesma razão: não acrescentar nada ao instalador. Ligar
-// contra ela em tempo de compilação faria o Otimiza SE RECUSAR A ABRIR em toda
-// máquina sem placa NVIDIA, que é a maioria. Então a carga é por
-// `LoadLibraryW`, e o fracasso dela é um estado do produto, não um erro do
-// programa.
-//
-// A TRAVA QUE PROTEGE DE UM NÚMERO ERRADO NA TABELA
-//
-// Cada ajuste da DRS é endereçado por um número. Um número errado escreveria
-// em OUTRA opção do driver — e o cliente veria mudar algo que não pediu. Por
-// isso, antes de qualquer escrita, este módulo pergunta ao próprio driver como
-// aquele número se chama (`NvAPI_DRS_GetSettingNameFromId`) e confere contra o
-// nome esperado da tabela. Não batendo, ou não dando para perguntar, a escrita
-// é RECUSADA. Fecha por padrão: a dúvida vira "não fiz", nunca "fiz assim
-// mesmo".
+// Ajustes de driver NVIDIA pela NVAPI (DRS). Só entra opção com RESTAURAÇÃO DE PADRÃO da própria NVAPI
+// (`id_do_padrao`; há teste que recusa entrada sem ela). AMD fica de fora e a tela diz "ainda não cobrimos sua
+// placa". A `nvapi64.dll` é carregada em execução (`LoadLibraryW`): ligada na compilação, o Otimiza não abriria sem
+// placa NVIDIA. Antes de escrever, pergunta ao driver o nome do número (`NvAPI_DRS_GetSettingNameFromId`) e confere
+// com a tabela: número errado escreveria em outra opção. Na dúvida, não escreve.
 
 use crate::modules::changelog::ChangeRecord;
 use serde::{Deserialize, Serialize};
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
-// -------------------------------------------------------------- o estado
-
-/// Em que pé está a NVAPI nesta máquina.
-///
-/// São TRÊS casos, e não dois, porque "não deu" tem causas diferentes com
-/// conselhos diferentes: não ter placa NVIDIA é permanente e não tem conserto;
-/// a DLL não responder é passageiro e pede driver novo. Colapsar os dois daria
-/// o conselho errado para metade dos clientes.
+/// TRÊS casos: sem placa NVIDIA (permanente) e DLL que não responde (pede driver novo) têm conselhos opostos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Nvapi {
     Disponivel,
@@ -62,23 +17,18 @@ pub enum Nvapi {
     NaoCarregou,
 }
 
-/// A frase que o cliente lê.
 pub fn nota_do_estado(estado: Nvapi) -> String {
     match estado {
         Nvapi::Disponivel => "Encontrei o driver da NVIDIA. Os ajustes abaixo são aplicados no \
              perfil global do driver, e cada um volta ao padrão de fábrica pelo \
              \"Desfazer\"."
             .to_string(),
-        // SEM A PALAVRA "DRIVER", DE PROPÓSITO. Mandar o dono de uma Radeon
-        // atualizar o driver da NVIDIA o faria perder tempo e concluir que o
-        // produto não sabe do que fala. O que ele precisa ler é que a placa
-        // dele ainda não é coberta — e que isso não é defeito do PC.
+        // Sem a palavra "driver": mandar o dono de uma Radeon atualizar o driver da NVIDIA seria o conselho errado.
         Nvapi::SemPlacaNvidia => "Estes ajustes são só para placas NVIDIA, e ainda não cobrimos \
              placas AMD nem Intel. Não é problema no seu PC: é recurso que \
              ainda não chegou."
             .to_string(),
-        // Aqui a placa é NVIDIA — a `nvapi64.dll` só existe onde o driver dela
-        // foi instalado. O que falhou foi falar com ela, e isso tem conserto.
+        // A `nvapi64.dll` só existe onde o driver da NVIDIA foi instalado: o que falhou tem conserto.
         Nvapi::NaoCarregou => "Encontrei uma placa NVIDIA, mas o driver não respondeu ao Otimiza. \
              Atualize o driver da NVIDIA pelo GeForce Experience ou pelo site \
              da NVIDIA e tente de novo. Nada foi alterado."
@@ -86,15 +36,8 @@ pub fn nota_do_estado(estado: Nvapi) -> String {
     }
 }
 
-/// Decide o estado a partir dos três fatos que a máquina fornece. PURA — é o
-/// que permite provar os três casos sem placa de vídeo nenhuma, inclusive na
-/// esteira, que roda em runner sem GPU.
-///
-/// A ORDEM IMPORTA. A `nvapi64.dll` só é instalada pelo driver da NVIDIA:
-/// máquina sem o arquivo é máquina sem placa NVIDIA, e o conselho certo é
-/// "ainda não cobrimos", não "atualize o driver". O arquivo EXISTIR e mesmo
-/// assim não responder é a outra história — aí sim o driver está quebrado ou
-/// velho demais.
+/// PURA: prova os três casos sem placa (a esteira não tem GPU). Sem o arquivo é sem placa NVIDIA; com o arquivo e
+/// sem resposta é driver quebrado ou velho.
 pub fn classificar(dll_presente: bool, api_respondeu: bool, placas: u32) -> Nvapi {
     if !dll_presente {
         return Nvapi::SemPlacaNvidia;
@@ -104,8 +47,7 @@ pub fn classificar(dll_presente: bool, api_respondeu: bool, placas: u32) -> Nvap
         return Nvapi::NaoCarregou;
     }
 
-    // Driver instalado e falando, mas nenhuma GPU enumerada: acontece com
-    // driver deixado para trás depois de a placa sair da máquina.
+    // Driver deixado para trás depois de a placa sair da máquina.
     if placas == 0 {
         return Nvapi::SemPlacaNvidia;
     }
@@ -113,42 +55,23 @@ pub fn classificar(dll_presente: bool, api_respondeu: bool, placas: u32) -> Nvap
     Nvapi::Disponivel
 }
 
-// -------------------------------------------------------------- o catálogo
-
-/// Um ajuste do driver que o produto sabe aplicar E desfazer.
 #[derive(Debug, Clone, Copy)]
 pub struct Opcao {
-    /// Identificador interno, o que vai gravado no histórico de mudanças.
     pub id: &'static str,
-    /// O que o cliente lê no botão.
     pub titulo: &'static str,
-    /// Por que mexer nisto, em uma frase honesta.
     pub explicacao: &'static str,
-    /// O número da opção na DRS — e, por isso mesmo, o número que a chamada de
-    /// restauração de padrão recebe.
-    ///
-    /// É `Option` porque é ele quem decide se a opção pode existir: um ajuste
-    /// que soubéssemos escrever mas não restaurar entraria aqui como `None`, e
-    /// o teste `toda_opcao_conhecida_tem_como_restaurar_o_padrao` o recusaria
-    /// antes de chegar em máquina de cliente.
+    /// `Option` porque decide se a opção pode existir: sem restauração, `None`, e
+    /// `toda_opcao_conhecida_tem_como_restaurar_o_padrao` a recusa.
     pub id_do_padrao: Option<u32>,
-    /// Pedaço do nome que o próprio driver dá a esse número, em minúsculas.
-    /// A trava contra um número errado na tabela — ver o cabeçalho.
+    /// A trava contra número errado na tabela (ver o cabeçalho).
     pub nome_esperado: &'static str,
-    /// O valor que o Otimiza escreve.
     pub valor_otimizado: u32,
-    /// Só vale no perfil de UM jogo, nunca no global (2.9).
-    ///
-    /// "Desempenho máximo" no global mantém a placa acordada até na área de
-    /// trabalho; V-Sync forçado desligado no global quebra o G-SYNC/VRR de todo
-    /// jogo. Os dois ficam para o perfil do jogo — e o V-Sync, nem lá entra
-    /// sozinho: nenhum perfil automático o usa.
+    /// "Desempenho máximo" global mantém a placa acordada na área de trabalho; V-Sync desligado global quebra o
+    /// G-SYNC/VRR de todo jogo. Só por jogo (2.9), e o V-Sync nem lá sozinho.
     pub so_por_jogo: bool,
 }
 
-/// Os seis ajustes. Números e valores vêm do `NvApiDriverSettings.h` público
-/// da NVIDIA, e cada um é conferido contra o nome que o driver devolve antes
-/// de qualquer escrita.
+/// Números e valores do `NvApiDriverSettings.h` público, conferidos contra o nome do driver antes de escrever.
 pub static OPCOES: &[Opcao] = &[
     Opcao {
         id: "energia",
@@ -180,10 +103,8 @@ pub static OPCOES: &[Opcao] = &[
                      quadros e, em movimento, quase não dá para ver a diferença.",
         id_do_padrao: Some(0x00CE_2691),
         nome_esperado: "texture filtering",
-        // QUALITY_ENHANCEMENTS_PERFORMANCE. Até a 2.0 o título dizia "alto
-        // desempenho", que no `NvApiDriverSettings.h` é outro valor (0x14, que
-        // piora mais a imagem). O valor gravado continua o de "desempenho" —
-        // o que a explicação promete —, e o título passou a dizer o mesmo.
+        // QUALITY_ENHANCEMENTS_PERFORMANCE (0x0A). "Alto desempenho" é 0x14, que piora mais a imagem: o título diz o que
+        // o valor faz.
         valor_otimizado: 0x0000_000A,
         so_por_jogo: false,
     },
@@ -222,22 +143,13 @@ pub static OPCOES: &[Opcao] = &[
     },
 ];
 
-/// Acha um ajuste pelo identificador. `None` para nome desconhecido — e é o
-/// primeiro portão de toda função que escreve.
+/// `None` para nome desconhecido: o primeiro portão de toda escrita.
 pub fn opcao_por_id(id: &str) -> Option<&'static Opcao> {
     OPCOES.iter().find(|opcao| opcao.id == id)
 }
 
-// --------------------------------------------------- o limitador por jogo
-
-/// O limitador de quadros do driver, que só é escrito no PERFIL DE UM JOGO.
-///
-/// Fica fora de `OPCOES` de propósito: aquela lista vai para o perfil global, e
-/// um limite global prenderia a área de trabalho, o navegador e todo outro jogo
-/// no mesmo número. Aqui ele só existe amarrado a um executável.
-///
-/// `FRL_FPS_ID` no `NvApiDriverSettings.h`: de 0 a 1023, e 0 é desligado, que é
-/// o padrão de fábrica.
+/// Fora de `OPCOES`: aquela lista vai para o perfil global, e um limite global prenderia área de trabalho,
+/// navegador e todo jogo. `FRL_FPS_ID`: 0 a 1023, 0 é desligado (padrão de fábrica).
 pub static LIMITADOR: Opcao = Opcao {
     id: "limitador",
     titulo: "Limite de quadros por segundo",
@@ -246,7 +158,6 @@ pub static LIMITADOR: Opcao = Opcao {
                  quer a placa mais fria ou um número estável.",
     id_do_padrao: Some(0x1083_5002),
     nome_esperado: "frame rate limiter",
-    // Não é usado: o valor escrito é o limite que a pessoa escolhe.
     valor_otimizado: 0,
     so_por_jogo: true,
 };
@@ -254,51 +165,38 @@ pub static LIMITADOR: Opcao = Opcao {
 /// `FRL_FPS_MAX` no `NvApiDriverSettings.h`.
 pub const LIMITE_MAXIMO: u32 = 1023;
 
-// ---------------------------------------------------------------- a tela
-
-/// O id com que um ajuste entra no histórico de mudanças.
-///
-/// Mora aqui, e a tela recebe pronto: se o formato mudasse só de um lado, o
-/// botão "Desfazer" procuraria um id que não existe.
+/// Mora aqui e a tela recebe pronto: formato mudado de um lado só faria o "Desfazer" procurar id inexistente.
 pub fn id_no_historico(opcao: &str) -> String {
     format!("driver_nvidia:{}", opcao)
 }
 
-/// Um ajuste do catálogo como a tela o vê.
 #[derive(Debug, Clone, Serialize)]
 pub struct AjusteNaTela {
     pub id: &'static str,
     pub titulo: &'static str,
     pub explicacao: &'static str,
-    /// O id no histórico, para o "Desfazer" deste ajuste.
     pub historico: String,
-    /// Se o OTIMIZA aplicou e ainda não desfez. Não é leitura do driver: um
-    /// ajuste que o cliente pôs à mão no painel da NVIDIA aparece como não
-    /// aplicado, e o "Aplicar" guarda o valor dele para o desfazer devolver.
+    /// Se o OTIMIZA aplicou e não desfez, não leitura do driver: o que o cliente pôs à mão aparece como não aplicado,
+    /// e o "Aplicar" guarda o valor dele.
     pub aplicado: bool,
 }
 
-/// Um limite de jogo que o Otimiza aplicou e ainda não desfez.
 #[derive(Debug, Clone, Serialize)]
 pub struct LimiteNaTela {
     pub executavel: String,
     pub fps: u32,
-    /// O id no histórico, para o "Desfazer" deste limite.
     pub historico: String,
 }
 
-/// O painel de ajustes do driver: em que pé está a NVAPI e o que dá para fazer.
 #[derive(Debug, Clone, Serialize)]
 pub struct PainelDoDriver {
     pub estado: Nvapi,
     pub nota: String,
     pub ajustes: Vec<AjusteNaTela>,
-    /// Os limites por jogo, lidos do histórico.
     pub limites: Vec<LimiteNaTela>,
 }
 
-/// Monta o painel. Só leitura: carrega a DLL e conta as placas, sem abrir
-/// sessão de configuração do driver.
+/// Só leitura: carrega a DLL e conta as placas, sem sessão da DRS.
 pub fn painel(aplicado: impl Fn(&str) -> bool, limites: Vec<LimiteNaTela>) -> PainelDoDriver {
     let estado = estado();
 
@@ -323,24 +221,16 @@ pub fn painel(aplicado: impl Fn(&str) -> bool, limites: Vec<LimiteNaTela>) -> Pa
     }
 }
 
-// ------------------------------------------------- o valor anterior
-
-/// O que fica gravado no histórico quando o valor anterior ERA o padrão de
-/// fábrica do driver.
 pub const ANTERIOR_PADRAO: &str = "padrao";
 
-/// Como desfazer, decidido só a partir do que foi gravado no histórico. PURA.
+/// PURA.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanoDeDesfazer {
-    /// Chama a restauração de padrão da NVAPI — a chamada que decidiu o pilar.
     RestaurarPadrao,
-    /// O cliente já tinha mexido nessa opção antes do Otimiza, e o valor dele
-    /// não era o padrão. Devolver o padrão aqui seria APAGAR uma escolha dele,
-    /// e "desfazer" viraria "mudar de novo".
+    /// O cliente tinha outro valor: devolver o padrão APAGARIA a escolha dele.
     Escrever(u32),
 }
 
-/// Escreve o valor anterior do jeito que o histórico guarda.
 pub fn codificar_anterior(era_o_padrao: bool, valor: u32) -> String {
     if era_o_padrao {
         ANTERIOR_PADRAO.to_string()
@@ -349,12 +239,8 @@ pub fn codificar_anterior(era_o_padrao: bool, valor: u32) -> String {
     }
 }
 
-/// Lê de volta o que `codificar_anterior` gravou.
-///
-/// Texto que não dá para entender cai em `RestaurarPadrao` de propósito: o
-/// padrão do driver é um estado conhecido e definido, e é infinitamente melhor
-/// do que deixar o ajuste como o Otimiza o pôs. Um "desfazer" que não desfaz é
-/// o pior defeito possível neste produto.
+/// Texto ilegível cai em `RestaurarPadrao`: o padrão é estado conhecido, e deixar como o Otimiza pôs seria um
+/// desfazer que não desfaz.
 pub fn plano_de_desfazer(valor_anterior: &str) -> PlanoDeDesfazer {
     match valor_anterior.trim().parse::<u32>() {
         Ok(valor) => PlanoDeDesfazer::Escrever(valor),
@@ -362,7 +248,6 @@ pub fn plano_de_desfazer(valor_anterior: &str) -> PlanoDeDesfazer {
     }
 }
 
-/// Monta o registro que o histórico guarda, para o "Desfazer tudo" alcançar.
 pub fn registro(opcao: &str, valor_anterior: String) -> ChangeRecord {
     ChangeRecord::DriverNvidia {
         opcao: opcao.to_string(),
@@ -370,12 +255,7 @@ pub fn registro(opcao: &str, valor_anterior: String) -> ChangeRecord {
     }
 }
 
-// -------------------------------------------------------- a NVAPI de verdade
-
-// Os números das funções da NVAPI. A biblioteca não exporta as funções pelo
-// nome: exporta UM símbolo, `nvapi_QueryInterface`, que traduz cada número
-// destes no ponteiro da função. É assim que a NVIDIA mantém compatibilidade
-// entre versões de driver, e é a forma documentada de chamá-la.
+// A NVAPI exporta só `nvapi_QueryInterface`, que traduz cada número no ponteiro da função (a forma documentada).
 const ID_INITIALIZE: u32 = 0x0150_E828;
 const ID_ENUM_PHYSICAL_GPUS: u32 = 0xE5AC_921F;
 const ID_DRS_CREATE_SESSION: u32 = 0x0694_D52E;
@@ -388,45 +268,32 @@ const ID_DRS_GET_SETTING: u32 = 0x73BF_8338;
 const ID_DRS_RESTORE_DEFAULT: u32 = 0x53F0_381E;
 const ID_DRS_GET_SETTING_NAME: u32 = 0xD61C_BE6E;
 
-// Os do perfil por jogo. Conferidos em três tabelas independentes (a wiki do
-// nvapi.net, a lista do jNizM e o `FunctionId.cs` do NvAPIWrapper), que também
-// batem com os onze de cima — e esses o driver desta máquina já confirmou. Não
-// há portão de nome para função: um número errado aqui chamaria OUTRA função
-// do driver, e é por isso que a conferência foi tripla.
+// Do perfil por jogo: conferidos em três tabelas independentes (wiki do nvapi.net, lista do jNizM, `FunctionId.cs`
+// do NvAPIWrapper). Não há portão de nome para função: um número errado chamaria OUTRA função.
 const ID_DRS_FIND_PROFILE_BY_NAME: u32 = 0x7E4A_9A0B;
 const ID_DRS_CREATE_PROFILE: u32 = 0xCC17_6068;
 const ID_DRS_DELETE_PROFILE: u32 = 0x1709_3206;
 const ID_DRS_FIND_APPLICATION_BY_NAME: u32 = 0xEEE5_66B2;
 const ID_DRS_CREATE_APPLICATION: u32 = 0x4347_A9DE;
 
-/// `NVAPI_OK`. Todo erro da NVAPI é negativo.
+/// `NVAPI_OK`. Todo erro é negativo.
 const NVAPI_OK: i32 = 0;
 
-/// Tipo do ajuste. Os cinco do catálogo são DWORD, e escrever num ajuste de
-/// outro tipo como se fosse número é a segunda forma de estragar o driver.
+/// Escrever num ajuste de outro tipo como se fosse número é a segunda forma de estragar o driver.
 const NVDRS_DWORD_TYPE: u32 = 0;
 
-/// Um valor da DRS. É uma união em C — binário, texto ou número — e os quatro
-/// primeiros bytes são o número. Todos os cinco ajustes do catálogo são
-/// número, então é por `numero` que se lê e se escreve.
+/// União em C; os quatro primeiros bytes são o número, e todos os ajustes do catálogo são número.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
 struct ValorNvdrs {
     numero: u32,
-    /// O resto da união (o corpo do valor binário). Existe para o tamanho da
-    /// estrutura bater com o que o driver espera, e nunca é lido.
+    /// Existe para o tamanho da estrutura bater; nunca é lido.
     _resto: [u8; 4096],
 }
 
-/// O `NVDRS_SETTING` da NVAPI, versão 1.
-///
-/// O TAMANHO É PARTE DO CONTRATO: o campo `versao` carrega o tamanho da
-/// estrutura nos 16 bits de baixo, e o driver RECUSA a chamada se não bater.
-/// Isso é uma sorte enorme — um desalinhamento aqui seria corrupção de memória
-/// silenciosa; do jeito que a NVIDIA desenhou, vira um código de erro. Ainda
-/// assim há um teste conferindo o tamanho, para o engano aparecer na esteira e
-/// não na máquina do cliente.
+/// O `NVDRS_SETTING` v1. O tamanho vai nos 16 bits de baixo de `versao` e o driver RECUSA se não bater: um
+/// desalinhamento vira código de erro, não corrupção. Há teste do tamanho.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
@@ -442,30 +309,21 @@ struct NvdrsSetting {
     valor_atual: ValorNvdrs,
 }
 
-/// Tamanho da `NVDRS_SETTING` v1, em bytes. Conferido por teste.
 const TAMANHO_NVDRS_SETTING: usize = 12320;
 
-/// `MAKE_NVAPI_VERSION(NVDRS_SETTING_V1, 1)`: o tamanho, com a versão nos bits
-/// altos.
 const NVDRS_SETTING_VER1: u32 = (TAMANHO_NVDRS_SETTING as u32) | (1 << 16);
 
 impl NvdrsSetting {
     fn zerada() -> Self {
-        // Toda a estrutura em zero, menos a versão. Campo não zerado faria o
-        // driver ler lixo como se fosse pedido.
+        // Campo não zerado faria o driver ler lixo como pedido.
         let mut ajuste: NvdrsSetting = unsafe { std::mem::zeroed() };
         ajuste.versao = NVDRS_SETTING_VER1;
         ajuste
     }
 }
 
-/// O `NVDRS_APPLICATION_V3` da NVAPI: um executável amarrado a um perfil.
-///
-/// Campos na ordem da documentação da NVIDIA (`_NVDRS_APPLICATION_V3`): versão,
-/// predefinido, e quatro `NvAPI_UnicodeString` (2048 unidades UTF-16 cada) —
-/// nome do aplicativo, nome amigável, lançador, arquivo na pasta — e um `NvU32`
-/// de bits (`isMetro:1`, `isCommandLine:1`, reservado). Como na `NVDRS_SETTING`,
-/// o tamanho vai na versão, e há teste conferindo.
+/// O `NVDRS_APPLICATION_V3`, na ordem da documentação: versão, predefinido, quatro `NvAPI_UnicodeString` (2048
+/// UTF-16) e um `NvU32` de bits. O tamanho vai na versão, com teste.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
@@ -479,10 +337,8 @@ struct NvdrsApplicationV3 {
     bits: u32,
 }
 
-/// Tamanho da `NVDRS_APPLICATION_V3`, em bytes. Conferido por teste.
 const TAMANHO_NVDRS_APPLICATION_V3: usize = 16396;
 
-/// `MAKE_NVAPI_VERSION(NVDRS_APPLICATION_V3, 3)`.
 const NVDRS_APPLICATION_VER_V3: u32 = (TAMANHO_NVDRS_APPLICATION_V3 as u32) | (3 << 16);
 
 impl NvdrsApplicationV3 {
@@ -493,8 +349,6 @@ impl NvdrsApplicationV3 {
     }
 }
 
-/// O `NVDRS_PROFILE_V1`: nome, suporte de GPU (um `NvU32` de bits), predefinido,
-/// e duas contagens que o driver preenche.
 #[repr(C)]
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
@@ -507,10 +361,8 @@ struct NvdrsProfileV1 {
     quantos_ajustes: u32,
 }
 
-/// Tamanho da `NVDRS_PROFILE_V1`, em bytes. Conferido por teste.
 const TAMANHO_NVDRS_PROFILE_V1: usize = 4116;
 
-/// `MAKE_NVAPI_VERSION(NVDRS_PROFILE_V1, 1)`.
 const NVDRS_PROFILE_VER1: u32 = (TAMANHO_NVDRS_PROFILE_V1 as u32) | (1 << 16);
 
 impl NvdrsProfileV1 {
@@ -521,9 +373,7 @@ impl NvdrsProfileV1 {
     }
 }
 
-/// Um texto no formato `NvAPI_UnicodeString`: 2048 unidades UTF-16, com o zero
-/// final dentro delas. `None` quando não cabe — cortar um nome de executável
-/// amarraria o limite a outro arquivo.
+/// 2048 unidades UTF-16 com o zero final. `None` quando não cabe: cortar amarraria o limite a outro arquivo.
 fn utf16_fixo(texto: &str) -> Option<[u16; 2048]> {
     let unidades: Vec<u16> = texto.encode_utf16().collect();
 
@@ -552,10 +402,7 @@ type FnCriarPerfil = unsafe extern "C" fn(*mut c_void, *mut NvdrsProfileV1, *mut
 type FnCriarApp = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsApplicationV3) -> i32;
 type FnApagarPerfil = unsafe extern "C" fn(*mut c_void, *mut c_void) -> i32;
 
-/// As funções do perfil por jogo.
-///
-/// Carregadas à parte e como `Option`: um driver que não as oferece continua
-/// servindo os cinco ajustes globais, e só o limitador por jogo diz que não dá.
+/// À parte e `Option`: driver sem elas continua servindo os ajustes globais.
 struct ApiDePerfil {
     achar_app: FnAcharApp,
     achar_perfil: FnAcharPerfil,
@@ -564,7 +411,6 @@ struct ApiDePerfil {
     apagar_perfil: FnApagarPerfil,
 }
 
-/// Os ponteiros de função resolvidos uma vez só.
 struct Api {
     enum_gpus: FnEnumGpus,
     criar_sessao: FnSessao,
@@ -575,27 +421,19 @@ struct Api {
     ler_ajuste: FnGetSetting,
     escrever_ajuste: FnSetSetting,
     restaurar_ajuste: FnRestaurar,
-    /// Pode faltar em driver antigo. Sem ela não há como conferir os números da
-    /// tabela, e por isso NENHUMA escrita acontece — ver o cabeçalho.
+    /// Sem ela não há como conferir os números: NENHUMA escrita acontece.
     nome_do_id: Option<FnNomeDoId>,
-    /// O perfil por jogo. `None` num driver que não oferece as cinco funções.
     perfis: Option<ApiDePerfil>,
 }
 
-/// Carrega a `nvapi64.dll` e resolve o que este módulo usa.
-///
-/// A biblioteca NÃO é descarregada depois. É de propósito: o driver guarda
-/// estado próprio a partir do `NvAPI_Initialize`, e devolver a DLL enquanto
-/// esse estado existe é mais arriscado do que segurar um identificador até o
-/// Otimiza fechar.
+/// A DLL NÃO é descarregada: o driver guarda estado desde o `NvAPI_Initialize`.
 fn carregar_api() -> Result<Api, Nvapi> {
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
     let nome: Vec<u16> = "nvapi64.dll\0".encode_utf16().collect();
     let modulo = unsafe { LoadLibraryW(nome.as_ptr()) };
 
-    // Sem o arquivo não há driver NVIDIA instalado — logo, não há placa NVIDIA
-    // para cuidar. Não é erro: é o cliente com AMD.
+    // Sem o arquivo não há driver NVIDIA: é o cliente com AMD, não erro.
     if modulo.is_null() {
         return Err(Nvapi::SemPlacaNvidia);
     }
@@ -603,8 +441,6 @@ fn carregar_api() -> Result<Api, Nvapi> {
     let consulta = unsafe { GetProcAddress(modulo, c"nvapi_QueryInterface".as_ptr() as *const u8) }
         .ok_or(Nvapi::NaoCarregou)?;
 
-    // O único símbolo exportado pela NVAPI: traduz um número de função no
-    // ponteiro dela.
     let consulta: unsafe extern "C" fn(u32) -> *mut c_void =
         unsafe { std::mem::transmute(consulta) };
 
@@ -617,7 +453,6 @@ fn carregar_api() -> Result<Api, Nvapi> {
         }
     };
 
-    // A DLL existe mas não entrega o básico: driver quebrado ou velho demais.
     let inicializar: FnInit =
         unsafe { std::mem::transmute(buscar(ID_INITIALIZE).ok_or(Nvapi::NaoCarregou)?) };
 
@@ -688,16 +523,13 @@ fn api() -> Result<&'static Api, Nvapi> {
     CACHE.get_or_init(carregar_api).as_ref().map_err(|erro| *erro)
 }
 
-/// Em que pé está a NVAPI nesta máquina.
 pub fn estado() -> Nvapi {
     let api = match api() {
         Ok(api) => api,
-        // O erro da carga JÁ É o veredito: DLL ausente vira `SemPlacaNvidia`,
-        // DLL muda vira `NaoCarregou`.
+        // O erro da carga é o veredito: DLL ausente `SemPlacaNvidia`, DLL muda `NaoCarregou`.
         Err(estado) => return estado,
     };
 
-    // `NVAPI_MAX_PHYSICAL_GPUS` é 64.
     let mut placas: [*mut c_void; 64] = [std::ptr::null_mut(); 64];
     let mut quantas: u32 = 0;
     let situacao = unsafe { (api.enum_gpus)(placas.as_mut_ptr(), &mut quantas) };
@@ -705,10 +537,6 @@ pub fn estado() -> Nvapi {
     classificar(true, situacao == NVAPI_OK, quantas)
 }
 
-/// O nome que o driver dá a um número de ajuste, em minúsculas.
-///
-/// É a trava do cabeçalho: se o número da tabela estiver errado, o nome não
-/// bate e a escrita é recusada.
 fn nome_do_ajuste(api: &Api, id: u32) -> Option<String> {
     let funcao = api.nome_do_id?;
     let mut destino: [u16; 2048] = [0; 2048];
@@ -721,13 +549,7 @@ fn nome_do_ajuste(api: &Api, id: u32) -> Option<String> {
     Some(String::from_utf16_lossy(&destino[..fim]).to_lowercase())
 }
 
-/// O veredito sobre o nome, separado da chamada que o obtém. PURA — e é assim
-/// que a trava do cabeçalho fica provável sem placa de vídeo.
-///
-/// FECHA POR PADRÃO. Sem conseguir perguntar (`None`), a resposta é NÃO: um
-/// driver que não sabe dizer o nome de um número também não nos dá como saber
-/// se aquele número é o que pensamos, e escrever no escuro é justamente o que
-/// esta função existe para impedir.
+/// PURA, para a trava ser provada sem placa. FECHA POR PADRÃO: sem conseguir perguntar, a resposta é NÃO.
 fn veredito_do_nome(nome: Option<&str>, opcao: &Opcao, id: u32) -> Result<(), String> {
     match nome {
         Some(nome) if nome.contains(opcao.nome_esperado) => Ok(()),
@@ -744,13 +566,10 @@ fn veredito_do_nome(nome: Option<&str>, opcao: &Opcao, id: u32) -> Result<(), St
     }
 }
 
-/// Confere o número da tabela contra o nome que o driver reporta.
 fn conferir_o_numero(api: &Api, opcao: &Opcao, id: u32) -> Result<(), String> {
     veredito_do_nome(nome_do_ajuste(api, id).as_deref(), opcao, id)
 }
 
-/// Abre a sessão da DRS no perfil global, faz o trabalho e salva — onde moram
-/// os cinco ajustes do catálogo.
 fn na_sessao<T>(
     trabalho: impl FnOnce(&Api, *mut c_void, *mut c_void) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -764,14 +583,8 @@ fn na_sessao<T>(
     })
 }
 
-/// Abre a sessão da DRS, faz o trabalho e salva.
-///
-/// Toda escrita passa por aqui para a sessão ser sempre destruída — inclusive
-/// quando o trabalho falha no meio.
-///
-/// E TRABALHO QUE FALHA NÃO É SALVO: tudo o que ele fez dentro da sessão some
-/// com ela. É isso que deixa o limitador por jogo criar perfil, ligar o
-/// executável e escrever o limite sem nunca deixar metade feita no driver.
+/// A sessão é sempre destruída, e trabalho que falha NÃO é salvo: criar perfil, ligar o executável e escrever o
+/// limite nunca fica pela metade.
 fn na_sessao_da_drs<T>(
     trabalho: impl FnOnce(&Api, *mut c_void) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -789,9 +602,7 @@ fn na_sessao_da_drs<T>(
 
         let valor = trabalho(api, sessao)?;
 
-        // SALVAR É O QUE TORNA A MUDANÇA REAL. Sem esta chamada tudo acontece
-        // só dentro da sessão e some quando ela é destruída — inclusive o
-        // desfazer, que passaria a "funcionar" sem mudar nada.
+        // Sem salvar, tudo some com a sessão, inclusive o desfazer, que "funcionaria" sem mudar nada.
         if unsafe { (api.salvar_ajustes)(sessao) } != NVAPI_OK {
             return Err(
                 "mudei a configuração mas o driver não deixou salvar. Rode o Otimiza como \
@@ -807,7 +618,6 @@ fn na_sessao_da_drs<T>(
     resultado
 }
 
-/// Abre a sessão no perfil global SÓ PARA LER. Nada é salvo.
 fn na_sessao_de_leitura<T>(
     trabalho: impl FnOnce(&Api, *mut c_void, *mut c_void) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -830,11 +640,8 @@ fn na_sessao_de_leitura<T>(
     resultado
 }
 
-// ------------------------------------------------ tetos escondidos (2.9)
-
-/// `VSYNCMODE_*` do `NvApiDriverSettings.h` que PRENDEM o FPS: ligado à
-/// força e os intervalos de 2, 3 e 4 atualizações por quadro. "Controlado pelo
-/// aplicativo" (0x60925292), "desligado" e "rápido" (virtual) não prendem.
+/// Os que PRENDEM o FPS: ligado à força e intervalos de 2, 3 e 4. "Controlado pelo aplicativo" (0x60925292),
+/// "desligado" e "rápido" não prendem.
 pub fn vsync_prende(valor: u32) -> bool {
     const FORCEON: u32 = 0x4781_4940;
     const FLIPINTERVAL2: u32 = 0x3261_0244;
@@ -843,16 +650,12 @@ pub fn vsync_prende(valor: u32) -> bool {
     matches!(valor, FORCEON | FLIPINTERVAL2 | FLIPINTERVAL3 | FLIPINTERVAL4)
 }
 
-/// O que o perfil GLOBAL do driver está impondo a todo jogo.
 #[derive(Debug, Clone, Serialize)]
 pub struct TetosDoDriver {
-    /// Limitador de FPS no perfil global (0 = desligado).
     pub limite_global_fps: u32,
-    /// V-Sync forçado (ou intervalo) no perfil global.
     pub vsync_forcado: bool,
 }
 
-/// Lê, sem escrever nada, os dois tetos que o perfil global pode impor.
 pub fn tetos_no_perfil_global() -> Result<TetosDoDriver, String> {
     na_sessao_de_leitura(|api, sessao, perfil| {
         let limite_id = LIMITADOR.id_do_padrao.expect("o limitador tem número");
@@ -866,27 +669,17 @@ pub fn tetos_no_perfil_global() -> Result<TetosDoDriver, String> {
     })
 }
 
-/// Traduz o que a NVAPI devolveu numa leitura em `(era_o_padrao, valor)`.
-/// PURA — e separada de `ler_valor` justamente para poder ser provada sem
-/// placa de vídeo, que é a única coisa que nenhum teste desta suíte tem.
-///
-/// AJUSTE QUE NÃO ESTÁ NO PERFIL É AJUSTE QUE NINGUÉM TOCOU. A NVAPI responde
-/// com erro quando o ajuste nunca foi gravado no perfil global, e a leitura
-/// certa disso é "está no padrão de fábrica" — não "não sei". A diferença
-/// aparece no desfazer: no primeiro caso o Otimiza chama a restauração de
-/// padrão; no segundo escreveria um zero que nunca existiu, e o cliente ficaria
-/// com uma configuração que não é nem a dele nem a de fábrica.
+/// PURA, para ser provada sem placa. Ajuste ausente do perfil é ajuste que ninguém tocou: "está no padrão", não
+/// "não sei". Senão o desfazer escreveria um zero que nunca existiu.
 fn interpretar_leitura(leitura_deu_certo: bool, e_predefinido: u32, valor: u32) -> (bool, u32) {
     if !leitura_deu_certo {
         return (true, 0);
     }
 
-    // `e_predefinido` é o próprio driver dizendo que o valor de agora é o de
-    // fábrica. Confiar nele é melhor do que comparar números na mão.
+    // `e_predefinido` é o driver dizendo que é o de fábrica: melhor que comparar números.
     (e_predefinido != 0, valor)
 }
 
-/// Lê o valor de um ajuste no perfil global.
 fn ler_valor(api: &Api, sessao: *mut c_void, perfil: *mut c_void, id: u32) -> (bool, u32) {
     let mut ajuste = NvdrsSetting::zerada();
     let situacao = unsafe { (api.ler_ajuste)(sessao, perfil, id, &mut ajuste) };
@@ -920,8 +713,6 @@ fn escrever_valor_cru(
     Ok(())
 }
 
-/// O ajuste do catálogo, ou o erro que explica por que ele não pode ser
-/// mexido. Primeiro portão de tudo que escreve.
 fn numero_de(opcao: &str) -> Result<&'static Opcao, String> {
     let alvo =
         opcao_por_id(opcao).ok_or_else(|| format!("não conheço o ajuste de driver \"{}\".", opcao))?;
@@ -936,11 +727,7 @@ fn numero_de(opcao: &str) -> Result<&'static Opcao, String> {
     Ok(alvo)
 }
 
-/// Aplica um ajuste e DEVOLVE O VALOR ANTERIOR, para o histórico.
-///
-/// A ordem é a de sempre neste produto: lê o que existe, guarda, e só então
-/// escreve. Sem esse registro não existe "desfazer" honesto — apenas a
-/// promessa dele.
+/// Lê, guarda o anterior, e só então escreve.
 pub fn aplicar(opcao: &str) -> Result<String, String> {
     let alvo = numero_de(opcao)?;
     if alvo.so_por_jogo {
@@ -961,10 +748,7 @@ pub fn aplicar(opcao: &str) -> Result<String, String> {
     })
 }
 
-/// Devolve um ajuste ao padrão de fábrica do driver.
-///
-/// É A CHAMADA QUE DECIDIU O PILAR. Não é o Otimiza reescrevendo um número que
-/// anotou: é a própria NVIDIA dizendo qual é o padrão e voltando para ele.
+/// A própria NVIDIA diz qual é o padrão e volta para ele.
 pub fn restaurar_padrao(opcao: &str) -> Result<(), String> {
     let alvo = numero_de(opcao)?;
     let id = alvo.id_do_padrao.expect("numero_de já garantiu");
@@ -983,12 +767,7 @@ pub fn restaurar_padrao(opcao: &str) -> Result<(), String> {
     })
 }
 
-/// Desfaz o que `aplicar` fez, a partir do que ficou no histórico.
-///
-/// É o ramo que o `revert_changes()` chama. Duas saídas, e a diferença entre
-/// elas é o que separa este pilar de um "desfazer" de mentira: se o valor de
-/// antes era o padrão de fábrica, quem restaura é a NVIDIA; se o cliente já
-/// tinha uma escolha própria ali, é a escolha DELE que volta, não o padrão.
+/// Chamado por `revert_changes()`. Anterior de fábrica: restaura a NVIDIA; escolha do cliente: volta a DELE.
 pub fn desfazer(opcao: &str, valor_anterior: &str) -> Result<(), String> {
     match plano_de_desfazer(valor_anterior) {
         PlanoDeDesfazer::RestaurarPadrao => restaurar_padrao(opcao),
@@ -1004,26 +783,17 @@ pub fn desfazer(opcao: &str, valor_anterior: &str) -> Result<(), String> {
     }
 }
 
-// ------------------------------------------- o limitador, no perfil do jogo
-
-/// O id com que o limite de um jogo entra no histórico. Em minúsculas: o
-/// Windows não diferencia maiúsculas no nome do arquivo, e dois registros para
-/// o mesmo jogo deixariam um "desfazer" sem par.
+/// Em minúsculas: dois registros para o mesmo jogo deixariam um desfazer sem par.
 pub fn id_do_limite(executavel: &str) -> String {
     format!("limite_nvidia:{}", executavel.to_lowercase())
 }
 
-/// O nome do perfil que o Otimiza cria quando o jogo ainda não tem um.
-///
-/// É por este nome que o desfazer acha o perfil para apagar: um perfil com ele
-/// é do Otimiza, e nenhum outro perfil é apagado.
+/// É por este nome que o desfazer acha o perfil: nenhum outro perfil é apagado.
 pub fn nome_do_perfil_do_otimiza(executavel: &str) -> String {
     format!("Otimiza - {}", executavel)
 }
 
-/// Se o texto é o NOME DO ARQUIVO de um executável — que é o que o driver amarra
-/// a um perfil. Caminho, pasta ou nome sem `.exe` são recusados antes de
-/// qualquer chamada ao driver.
+/// Caminho, pasta ou nome sem `.exe` são recusados antes de qualquer chamada ao driver.
 pub fn executavel_valido(nome: &str) -> Result<(), String> {
     let valido = !nome.is_empty()
         && nome.trim() == nome
@@ -1042,17 +812,13 @@ pub fn executavel_valido(nome: &str) -> Result<(), String> {
     }
 }
 
-/// O que o limitador fez, para o histórico.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LimiteAplicado {
-    /// O jogo não tinha perfil e o Otimiza criou um. O desfazer apaga esse
-    /// perfil inteiro.
+    /// O desfazer apaga esse perfil inteiro.
     pub perfil_criado: bool,
-    /// O limite que existia antes, no formato de `codificar_anterior`.
     pub valor_anterior: String,
 }
 
-/// O perfil em que o driver já amarrou este executável, se houver.
 fn perfil_do_executavel(
     perfis: &ApiDePerfil,
     sessao: *mut c_void,
@@ -1068,15 +834,8 @@ fn perfil_do_executavel(
     (achou && !perfil.is_null()).then_some(perfil)
 }
 
-/// Limita os quadros por segundo de UM jogo, no perfil do executável dele.
-///
-/// Se o driver já amarra o executável a um perfil — o do próprio jogo, às vezes
-/// criado pela NVIDIA —, o limite vai nele e o valor de antes é guardado. Se
-/// não, o Otimiza cria um perfil com o próprio nome, liga o executável e escreve
-/// o limite. Qualquer falha no meio desfaz tudo, porque a sessão não é salva.
-///
-/// Os portões vêm antes de abrir a sessão: um executável ou um limite inválido
-/// nunca chega perto do driver.
+/// No perfil já amarrado ao executável (guardando o anterior) ou num perfil novo com o nome do Otimiza. Falha no
+/// meio desfaz tudo (sessão não salva). Os portões vêm antes de abrir a sessão.
 pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, String> {
     executavel_valido(executavel)?;
 
@@ -1138,14 +897,8 @@ pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, Stri
     })
 }
 
-// ------------------------------------------ desfazer o perfil NVIDIA por jogo (2.9)
-//
-// Aplicar saiu na 3.0 com a Biblioteca. O desfazer fica: quem aplicou numa
-// versão anterior continua desfazendo pelo histórico.
+// Aplicar saiu na 3.0 com a Biblioteca; o desfazer fica para quem aplicou antes.
 
-/// Desfaz o perfil de um jogo: perfil criado pelo Otimiza é apagado inteiro
-/// (achado pelo nome que só o Otimiza usa); perfil que já existia tem cada
-/// ajuste devolvido — ao padrão pela NVIDIA, ou ao número de antes.
 pub fn desfazer_perfil_do_jogo(executavel: &str, perfil_criado: bool, anteriores: &[(String, String)]) -> Result<(), String> {
     executavel_valido(executavel)?;
     let nome_do_app = utf16_fixo(executavel).ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
@@ -1179,14 +932,8 @@ pub fn desfazer_perfil_do_jogo(executavel: &str, perfil_criado: bool, anteriores
     })
 }
 
-/// Desfaz o limite de um jogo, a partir do que ficou no histórico.
-///
-/// Perfil que o Otimiza criou é achado PELO NOME e apagado inteiro — nenhum
-/// perfil com outro nome é apagado. Perfil que já existia tem só o limite
-/// devolvido: ao padrão de fábrica pela NVIDIA, ou ao número que o cliente tinha.
-///
-/// O que já sumiu por fora (perfil apagado no painel da NVIDIA) não é falha: o
-/// estado que o desfazer quer — este jogo sem limite do Otimiza — já é o atual.
+/// Perfil do Otimiza é achado PELO NOME e apagado; perfil que já existia tem só o limite devolvido. Perfil que
+/// sumiu por fora não é falha: o estado desejado já é o atual.
 pub fn desfazer_limite(
     executavel: &str,
     perfil_criado: bool,
@@ -1254,12 +1001,6 @@ mod tests {
 
     #[test]
     fn sem_nvapi_o_produto_diz_que_nao_cobre_em_vez_de_tela_vazia() {
-        // A RECOMENDACAO LITERAL DO VEREDITO DA INVESTIGACAO ANTERIOR:
-        // "entrar com a NVIDIA e DIZER NA TELA que a AMD ainda nao e coberta, em
-        // vez de fazer meia coisa nas duas".
-        //
-        // Cliente com AMD lendo "ainda nao cobrimos sua placa" entende. Vendo tela
-        // vazia, acha que o programa quebrou.
         let nota = nota_do_estado(Nvapi::SemPlacaNvidia);
 
         assert!(
@@ -1272,9 +1013,6 @@ mod tests {
 
     #[test]
     fn nao_carregar_a_dll_e_diferente_de_nao_ter_placa_nvidia() {
-        // Dois "nao deu" com causas diferentes e conselhos diferentes: um pede
-        // atualizar o driver, o outro diz que a placa nao e coberta. Colapsar os
-        // dois daria o conselho errado para metade dos casos.
         assert_ne!(
             nota_do_estado(Nvapi::NaoCarregou),
             nota_do_estado(Nvapi::SemPlacaNvidia)
@@ -1286,12 +1024,6 @@ mod tests {
 
     #[test]
     fn toda_opcao_conhecida_tem_como_restaurar_o_padrao() {
-        // O QUE DECIDIU ESTE PILAR, segundo o veredito: a NVAPI tem chamada para
-        // restaurar o padrao de uma opcao. "Reversivel de verdade, nao reversivel
-        // se a gente anotar direitinho."
-        //
-        // Uma opcao sem restauracao nao pode entrar no catalogo: quebraria a regra
-        // que sustenta o produto inteiro.
         for opcao in OPCOES {
             assert!(
                 opcao.id_do_padrao.is_some(),
@@ -1303,15 +1035,11 @@ mod tests {
 
     #[test]
     fn a_nota_do_estado_disponivel_tambem_fala_alguma_coisa() {
-        // As tres notas precisam ser tres frases distintas. Duas iguais fariam a
-        // tela mentir sobre qual dos casos aconteceu.
         let disponivel = nota_do_estado(Nvapi::Disponivel);
         assert!(!disponivel.trim().is_empty());
         assert_ne!(disponivel, nota_do_estado(Nvapi::SemPlacaNvidia));
         assert_ne!(disponivel, nota_do_estado(Nvapi::NaoCarregou));
 
-        // E a nota da placa nao coberta NAO pode mandar mexer no driver: e o
-        // conselho de outro caso, e faria o dono de uma Radeon perder tempo.
         assert!(!nota_do_estado(Nvapi::SemPlacaNvidia)
             .to_lowercase()
             .contains("driver"));
@@ -1319,9 +1047,6 @@ mod tests {
 
     #[test]
     fn dll_ausente_e_placa_amd_e_nao_driver_quebrado() {
-        // O conselho errado aqui custa caro: mandar o dono de uma Radeon
-        // atualizar o driver da NVIDIA. A `nvapi64.dll` so existe onde o driver
-        // da NVIDIA foi instalado, entao arquivo ausente e placa nao coberta.
         assert_eq!(classificar(false, false, 0), Nvapi::SemPlacaNvidia);
         assert_eq!(
             classificar(false, true, 4),
@@ -1338,8 +1063,6 @@ mod tests {
 
     #[test]
     fn driver_falando_mas_sem_nenhuma_placa_nao_e_disponivel() {
-        // Driver deixado para tras depois de a placa sair da maquina. Oferecer os
-        // ajustes aqui daria erro na cara do cliente na hora de aplicar.
         assert_eq!(classificar(true, true, 0), Nvapi::SemPlacaNvidia);
         assert_eq!(classificar(true, true, 1), Nvapi::Disponivel);
         assert_eq!(classificar(true, true, 3), Nvapi::Disponivel);
@@ -1363,8 +1086,7 @@ mod tests {
             assert!(opcao_por_id(opcao.id).is_some(), "{}", opcao.id);
         }
 
-        // Dois ajustes com o MESMO numero seriam dois botoes escrevendo na mesma
-        // opcao do driver -- e um "desfazer" desfaria o do outro.
+        // Mesmo número em dois ajustes: um "desfazer" desfaria o do outro.
         for (i, a) in OPCOES.iter().enumerate() {
             for b in OPCOES.iter().skip(i + 1) {
                 assert_ne!(a.id, b.id, "identificador repetido: {}", a.id);
@@ -1379,14 +1101,9 @@ mod tests {
 
     #[test]
     fn o_painel_marca_como_aplicado_so_o_que_esta_no_historico() {
-        // O painel lê a NVAPI desta máquina, mas a marca de "aplicado" vem só
-        // do histórico — é ela que decide se o botão diz "Aplicar" ou
-        // "Desfazer", e um "Desfazer" sem registro não teria o que devolver.
         let vsync = id_no_historico("vsync");
         let painel = painel(|id| id == vsync, Vec::new());
 
-        // O que só vale por jogo some do painel global — menos o que já foi
-        // aplicado por uma versão antiga, que precisa continuar desfazível.
         let esperados = OPCOES.iter().filter(|o| !o.so_por_jogo || o.id == "vsync").count();
         assert_eq!(painel.ajustes.len(), esperados);
         assert!(painel.ajustes.iter().all(|a| a.id != "energia"));
@@ -1407,8 +1124,6 @@ mod tests {
 
     #[test]
     fn as_estruturas_de_perfil_tem_o_tamanho_que_o_driver_espera() {
-        // Mesmo contrato da `NVDRS_SETTING`: o tamanho vai na versão, e o
-        // driver recusa a chamada se não bater.
         assert_eq!(
             std::mem::size_of::<NvdrsApplicationV3>(),
             TAMANHO_NVDRS_APPLICATION_V3,
@@ -1441,7 +1156,6 @@ mod tests {
         let fim = fixo.iter().position(|c| *c == 0).unwrap();
         assert_eq!(String::from_utf16_lossy(&fixo[..fim]), "FiveM_GTAProcess.exe");
 
-        // Cortar amarraria o limite a outro arquivo.
         assert!(utf16_fixo(&"a".repeat(2048)).is_none());
         assert!(utf16_fixo(&"a".repeat(2047)).is_some());
     }
@@ -1457,15 +1171,13 @@ mod tests {
         assert!(executavel_valido("pasta/jogo.exe").is_err());
         assert!(executavel_valido(" jogo.exe").is_err());
 
-        // O histórico não pode ter dois ids para o mesmo jogo.
         assert_eq!(id_do_limite("FiveM.EXE"), id_do_limite("fivem.exe"));
         assert_eq!(nome_do_perfil_do_otimiza("cs2.exe"), "Otimiza - cs2.exe");
     }
 
     #[test]
     fn limite_invalido_nao_chega_perto_do_driver() {
-        // Roda na máquina do dono, que TEM placa NVIDIA: os portões precisam vir
-        // antes da sessão, senão este teste abriria a DRS de verdade.
+        // A máquina do dono TEM NVIDIA: os portões precisam vir antes da sessão, ou o teste abriria a DRS.
         assert!(aplicar_limite("FiveM_GTAProcess.exe", 0).is_err());
         assert!(aplicar_limite("FiveM_GTAProcess.exe", LIMITE_MAXIMO + 1).is_err());
         assert!(aplicar_limite(r"C:\Jogos\FiveM.exe", 60).is_err());
@@ -1475,9 +1187,7 @@ mod tests {
 
     #[test]
     fn os_portoes_do_limitador_vem_antes_da_sessao() {
-        // O teste acima só prova os casos que ele escreve. Este prende a ORDEM:
-        // se a validação descer para dentro da sessão, um caso novo que ninguém
-        // testou chegaria ao driver.
+        // Prende a ORDEM: validação dentro da sessão deixaria um caso não testado chegar ao driver.
         let fonte = codigo_fonte_deste_arquivo();
         let corpo = fonte
             .split("pub fn aplicar_limite")
@@ -1504,9 +1214,6 @@ mod tests {
 
     #[test]
     fn a_textura_grava_o_valor_que_o_titulo_diz() {
-        // No `NvApiDriverSettings.h`: PERFORMANCE = 0x0A, HIGHPERFORMANCE = 0x14.
-        // O título dizia "alto desempenho" sobre o valor de "desempenho" — o
-        // cliente lia um nível e o driver recebia outro.
         let textura = opcao_por_id("textura").expect("o ajuste de textura existe");
 
         assert_eq!(textura.valor_otimizado, 0x0000_000A);
@@ -1519,9 +1226,7 @@ mod tests {
 
     #[test]
     fn ajuste_desconhecido_nao_chega_perto_do_driver() {
-        // Este teste roda na maquina do dono, QUE TEM PLACA NVIDIA. Se o portao
-        // do nome desconhecido nao viesse antes de tudo, ele abriria uma sessao
-        // da DRS de verdade. Nenhum teste desta suite pode escrever no driver.
+        // Nenhum teste desta suíte pode escrever no driver (a máquina do dono tem NVIDIA).
         assert!(opcao_por_id("ajuste-que-nao-existe").is_none());
 
         let erro = numero_de("ajuste-que-nao-existe").unwrap_err();
@@ -1535,9 +1240,6 @@ mod tests {
 
     #[test]
     fn o_valor_anterior_sobrevive_a_ida_e_volta_do_historico() {
-        // O historico guarda TEXTO. Se a ida e a volta nao baterem, o "desfazer"
-        // devolve outro numero -- e o cliente fica com uma terceira configuracao,
-        // que nao e nem a dele nem a nossa.
         assert_eq!(codificar_anterior(true, 999), ANTERIOR_PADRAO);
         assert_eq!(codificar_anterior(false, 0x0841_6747), "138504007");
 
@@ -1550,9 +1252,7 @@ mod tests {
             PlanoDeDesfazer::Escrever(42)
         );
 
-        // Zero NAO e "padrao": e valor legitimo de varios ajustes da NVIDIA.
-        // Confundir os dois faria o desfazer restaurar o padrao onde o cliente
-        // tinha escolhido zero.
+        // Zero NÃO é "padrão": é valor legítimo em vários ajustes.
         assert_eq!(
             plano_de_desfazer(&codificar_anterior(false, 0)),
             PlanoDeDesfazer::Escrever(0)
@@ -1561,9 +1261,6 @@ mod tests {
 
     #[test]
     fn historico_ilegivel_cai_no_padrao_do_driver_e_nao_no_silencio() {
-        // Texto que nao da para entender e um estado que nao deveria existir.
-        // Mas se existir, deixar o ajuste como o Otimiza o pos e o pior desfecho
-        // possivel: o padrao do driver e um estado conhecido e definido.
         for lixo in [
             "",
             "   ",
@@ -1594,8 +1291,6 @@ mod tests {
             } => {
                 assert_eq!(opcao, "vsync");
                 assert_eq!(valor_anterior, "7");
-                // E o que foi gravado tem que ser lido de volta como escrita, e
-                // nao como restauracao de padrao.
                 assert_eq!(
                     plano_de_desfazer(&valor_anterior),
                     PlanoDeDesfazer::Escrever(7)
@@ -1607,9 +1302,6 @@ mod tests {
 
     #[test]
     fn a_estrutura_da_nvapi_tem_o_tamanho_que_o_driver_espera() {
-        // O TAMANHO E PARTE DO CONTRATO: o campo `versao` carrega o tamanho nos
-        // 16 bits de baixo e o driver recusa a chamada se nao bater. Este teste
-        // faz o engano aparecer na esteira, e nao na maquina do cliente.
         assert_eq!(
             std::mem::size_of::<NvdrsSetting>(),
             TAMANHO_NVDRS_SETTING,
@@ -1618,8 +1310,6 @@ mod tests {
         assert_eq!(std::mem::size_of::<ValorNvdrs>(), 4100);
         assert_eq!(NVDRS_SETTING_VER1, 0x0001_3020);
 
-        // E a estrutura zerada precisa sair com a versao preenchida e o resto em
-        // zero -- campo com lixo vira pedido que ninguem fez.
         let zerada = NvdrsSetting::zerada();
         assert_eq!(zerada.versao, NVDRS_SETTING_VER1);
         assert_eq!(zerada.id, 0);
@@ -1632,28 +1322,17 @@ mod tests {
         assert_eq!(zerada.nome[0], 0);
     }
 
-    /// LE O ESTADO DESTA MAQUINA. Nao escreve nada: `estado()` so carrega a
-    /// biblioteca, inicializa e conta as placas.
+    /// Não escreve: `estado()` só carrega, inicializa e conta as placas.
     #[test]
     fn le_o_estado_desta_maquina() {
         let estado = estado();
         println!("[{:?}] {}", estado, nota_do_estado(estado));
 
-        // O que vale em qualquer maquina, com placa NVIDIA ou sem: a frase
-        // acompanha o estado e nunca sai vazia.
         assert!(!nota_do_estado(estado).trim().is_empty());
     }
 
-    /// A PROVA DE QUE OS NUMEROS DA TABELA SAO OS CERTOS.
-    ///
-    /// Na maquina do dono, com placa NVIDIA, este teste pergunta ao driver como
-    /// ele chama cada numero da tabela e confere contra o nome esperado. Um
-    /// numero trocado escreveria em outra opcao do driver, e nenhum teste de
-    /// logica pegaria isso.
-    ///
-    /// Na esteira, que roda em runner sem placa NVIDIA, nao ha a quem perguntar
-    /// e o teste passa sem afirmar nada -- de proposito: e verificacao de campo,
-    /// nao requisito de compilacao.
+    /// A PROVA DOS NÚMEROS: na máquina do dono, pergunta ao driver o nome de cada um. Sem NVIDIA (a esteira) passa sem
+    /// afirmar nada: verificação de campo.
     #[test]
     fn os_numeros_da_tabela_batem_com_o_que_o_driver_chama() {
         let Ok(api) = api() else {
@@ -1661,8 +1340,6 @@ mod tests {
             return;
         };
 
-        // O limitador por jogo entra na mesma prova: ele fica fora do catalogo
-        // global, mas o numero dele passa pelo mesmo portao do nome.
         for opcao in OPCOES.iter().chain(std::iter::once(&LIMITADOR)) {
             let id = opcao.id_do_padrao.expect("o catalogo ja garante");
             match nome_do_ajuste(api, id) {
@@ -1680,11 +1357,7 @@ mod tests {
                         opcao.nome_esperado
                     );
                 }
-                // NUMERO QUE O DRIVER NAO CONHECE E NUMERO ERRADO. Sem esta
-                // exigencia, um digito trocado na tabela passaria batido: a
-                // trava do `conferir_o_numero` recusaria a escrita em
-                // silencio e o botao simplesmente nunca funcionaria, sem
-                // ninguem saber por que.
+                // Número que o driver não conhece é número errado: sem isto o botão nunca funcionaria, calado.
                 None => panic!(
                     "{}: este driver nao conhece o ajuste {:#010X} -- o numero da tabela \n                     esta errado, ou nao existe mais nesta versao do driver",
                     opcao.id, id
@@ -1693,9 +1366,7 @@ mod tests {
         }
     }
 
-    /// Lê o CÓDIGO deste próprio arquivo — só a parte de fora de `mod tests` —
-    /// para os canários de texto-fonte abaixo. Mesmo truque do `rbar.rs`:
-    /// cortar em `#[cfg(test)]` evita que o `.contains` se ache a si mesmo.
+    /// Só fora de `mod tests`, para o `.contains` não se achar.
     fn codigo_fonte_deste_arquivo() -> String {
         let caminho = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("src")
@@ -1710,16 +1381,8 @@ mod tests {
             .unwrap_or(fonte)
     }
 
-    // A LOGICA DE `classificar` ESTA PROVADA ACIMA -- mas com `bool`s escritos
-    // a mao no teste. Isso nao amarra o que `estado()` REALMENTE passa: trocar
-    // a chamada por `classificar(true, true, 1)` deixaria a suite inteira verde
-    // e o produto diria "Disponivel" em toda maquina do planeta, inclusive nas
-    // com Radeon.
-    //
-    // Provar isso de verdade exigiria injetar a NVAPI como parametro -- costura
-    // que so existiria para o teste, num modulo cujo unico ponto de entrada real
-    // e a DLL do driver. O canario de texto-fonte fecha o fio pelo lado barato,
-    // como o `rbar.rs` ja faz nesta mesma branch.
+    // Trocar a chamada por `classificar(true, true, 1)` diria "Disponível" até com Radeon, com a suíte verde. O
+    // canário fecha o fio sem injetar a NVAPI.
     #[test]
     fn estado_classifica_com_o_que_a_maquina_devolveu() {
         let fonte = codigo_fonte_deste_arquivo();
@@ -1734,12 +1397,7 @@ mod tests {
 
     #[test]
     fn ajuste_ausente_do_perfil_conta_como_padrao_de_fabrica() {
-        // A NVAPI responde com erro quando o ajuste nunca foi gravado no perfil
-        // global -- e isso quer dizer "esta no padrao", nao "nao sei". Lido como
-        // "nao sei", o desfazer escreveria um zero que nunca existiu, e o
-        // cliente ficaria com uma configuracao que nao e nem a dele nem a de
-        // fabrica. E o caso MAIS COMUM de todos: perfil limpo, cliente que
-        // nunca abriu o Painel de Controle da NVIDIA.
+        // O caso MAIS COMUM: perfil limpo, cliente que nunca abriu o painel da NVIDIA.
         assert_eq!(interpretar_leitura(false, 0, 0), (true, 0));
         assert_eq!(
             interpretar_leitura(false, 0, 12345),
@@ -1747,15 +1405,11 @@ mod tests {
             "leitura que falhou nao tem valor para aproveitar"
         );
 
-        // Leitura boa: quem decide se e o padrao e o driver.
         assert_eq!(interpretar_leitura(true, 1, 7), (true, 7));
         assert_eq!(interpretar_leitura(true, 0, 7), (false, 7));
 
-        // E o valor zero de um ajuste que o cliente escolheu NAO pode virar
-        // "padrao": zero e valor legitimo em varios ajustes da NVIDIA.
         assert_eq!(interpretar_leitura(true, 0, 0), (false, 0));
 
-        // A ida e volta pelo historico precisa preservar os dois casos.
         let (era_padrao, valor) = interpretar_leitura(true, 0, 0);
         assert_eq!(
             plano_de_desfazer(&codificar_anterior(era_padrao, valor)),
@@ -1768,11 +1422,8 @@ mod tests {
         );
     }
 
-    // A leitura de verdade precisa passar o que a NVAPI devolveu, e nao
-    // constantes: `interpretar_leitura(true, 1, 0)` ali dentro faria todo
-    // ajuste parecer estar no padrao, e o desfazer restauraria o padrao por
-    // cima da escolha do cliente. Nenhum teste de logica pega isso -- a suite
-    // nao tem como chamar `ler_valor`, que precisa de uma sessao de verdade.
+    // `interpretar_leitura(true, 1, 0)` ali faria tudo parecer padrão e o desfazer passaria por cima da escolha do
+    // cliente; `ler_valor` exige sessão real.
     #[test]
     fn a_leitura_real_interpreta_o_que_a_nvapi_devolveu() {
         let fonte = codigo_fonte_deste_arquivo();
@@ -1787,34 +1438,26 @@ mod tests {
 
     #[test]
     fn o_portao_do_nome_recusa_o_que_nao_bate_e_o_que_nao_da_para_conferir() {
-        // A UNICA COISA entre um numero errado na tabela e uma escrita na opcao
-        // errada do driver. Aqui ela e provada sem placa de video nenhuma.
         let vsync = opcao_por_id("vsync").expect("o catalogo tem vsync");
 
-        // O caso bom: o nome do driver contem o que a tabela espera.
         assert!(veredito_do_nome(Some("vertical sync"), vsync, 0x00A8_79CF).is_ok());
 
-        // Numero errado apontando para OUTRA opcao conhecida do driver. E o
-        // caso perigoso: a escrita daria certo, na opcao errada.
+        // O caso perigoso: número errado apontando para OUTRA opção conhecida; a escrita daria certo, no lugar errado.
         let erro = veredito_do_nome(Some("shader cache"), vsync, 0x0019_8FFF)
             .expect_err("nome que nao bate precisa recusar");
         assert!(erro.contains("shader cache"), "{}", erro);
         assert!(erro.contains("vertical sync"), "{}", erro);
 
-        // E o caso em que nao da para perguntar: FECHA POR PADRAO.
         let erro = veredito_do_nome(None, vsync, 0x00A8_79CF)
             .expect_err("sem saber o nome, a resposta e nao");
         assert!(!erro.trim().is_empty());
 
-        // A comparacao e por conteudo, e nao por igualdade: o driver acrescenta
-        // sufixos ("texture filtering - quality") e a tabela guarda so o miolo.
+        // Por conteúdo: o driver acrescenta sufixos ("texture filtering - quality").
         let textura = opcao_por_id("textura").expect("o catalogo tem textura");
         assert!(veredito_do_nome(Some("texture filtering - quality"), textura, 0).is_ok());
     }
 
-    // E o portao precisa perguntar AO DRIVER, e nao a uma constante: um
-    // `veredito_do_nome(Some(opcao.nome_esperado), ...)` ali dentro passaria em
-    // todo teste puro acima e nao conferiria coisa nenhuma.
+    // O portão pergunta AO DRIVER, não a uma constante.
     #[test]
     fn o_portao_pergunta_o_nome_ao_driver() {
         let fonte = codigo_fonte_deste_arquivo();
@@ -1825,10 +1468,7 @@ mod tests {
         );
     }
 
-    // O PORTAO DO NOME e a unica coisa entre um numero errado na tabela e uma
-    // escrita na opcao errada do driver. Ele nao pode sumir de nenhum dos tres
-    // caminhos que escrevem, e teste de logica nao pega isso: a suite nao pode
-    // chamar nenhum deles com um ajuste de verdade.
+    // O portão do nome não pode sumir de nenhum dos três caminhos que escrevem.
     #[test]
     fn os_tres_caminhos_de_escrita_conferem_o_numero_antes() {
         let fonte = codigo_fonte_deste_arquivo();
@@ -1842,10 +1482,7 @@ mod tests {
         );
     }
 
-    // E o salvamento: sem ele, tudo acontece so dentro da sessao e some quando
-    // ela e destruida. O "desfazer" passaria em todo teste e nao mudaria nada
-    // na maquina do cliente -- exatamente o defeito que este produto nao pode
-    // ter. Nenhum teste desta suite pode salvar de verdade para provar isso.
+    // E o salvamento: sem ele o desfazer passaria em todo teste sem mudar nada.
     #[test]
     fn a_sessao_salva_antes_de_ser_destruida() {
         let fonte = codigo_fonte_deste_arquivo();
