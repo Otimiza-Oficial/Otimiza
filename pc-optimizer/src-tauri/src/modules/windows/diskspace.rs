@@ -58,7 +58,7 @@ struct Category {
 /// As pastas que o Windows enche sozinho e que entram na conta do espaço.
 fn pastas_de(id: &str) -> Vec<PathBuf> {
     let var = |nome: &str| std::env::var(nome).ok().map(PathBuf::from);
-    let windows = var("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:Windows"));
+    let windows = var("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
 
     match id {
         "temporarios" => [var("TEMP"), Some(windows.join("Temp"))].into_iter().flatten().collect(),

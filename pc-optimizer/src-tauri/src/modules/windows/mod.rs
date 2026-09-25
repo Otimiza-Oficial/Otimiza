@@ -3057,6 +3057,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "lê esta máquina: o histórico e a elevação são do PC que roda o teste"]
     fn nao_afirma_estar_otimizado_o_que_nao_conseguiu_conferir() {
         if registry::is_elevated() {
             return;

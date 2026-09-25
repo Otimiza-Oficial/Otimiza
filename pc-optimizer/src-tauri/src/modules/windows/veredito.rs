@@ -776,8 +776,8 @@ impl EmAchados for super::diskspace::DiskReport {
             format!("Restam {:.1} GB livres no disco do Windows.", livres_gb),
             if limpavel >= 1.0 {
                 format!(
-                    "A aba Espaço encontrou cerca de {:.1} GB de lixo que dá para \
-                     apagar aqui mesmo.",
+                    "Cerca de {:.1} GB são temporários e cache que o Windows refaz sozinho: \
+                     a Limpeza de Disco do próprio Windows (cleanmgr) apaga.",
                     limpavel
                 )
             } else {
@@ -858,8 +858,11 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         (Origem::Firmware, || {
             super::firmware::analyze_memory_ou_lacuna().map(|f| achados_de_firmware(&f))
         }),
-        // A Integridade de Memória custa FPS e o Windows 11 passa a ligá-la sozinho: tem de aparecer no Início.
-        (Origem::Firmware, || Ok(achados_de_firmware(&super::firmware::achados_do_vbs()))),
+        // A Integridade de Memória custa FPS e o Windows 11 passa a ligá-la sozinho: tem de aparecer no Início. Ela e os
+        // limites do boot mediram 12 ms e 49 ms em 25/09/2026, sem mudar o tempo da tela inicial (530 → 525 ms).
+        (Origem::Firmware, || super::firmware::achados_do_vbs().map(|f| achados_de_firmware(&f))),
+        // Núcleo ou memória limitados no boot: P0.
+        (Origem::Firmware, || super::firmware::achados_de_boot().map(|f| achados_de_firmware(&f))),
         // Térmico, disco, shaders e conflitos entram na eleição (medido em 31/08/2026: 1,33 s, 0,44 s, 0,13 s, 0,14 s,
         // todos abaixo do `readiness`). O disco é `scan_para_o_veredito()`, sem DISM (guarda
         // `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`). Boot e bloatware ficam fora: são higiene e empurrariam
@@ -1047,6 +1050,12 @@ mod medicao_de_tempo {
             }),
             cronometrar("apo (3.0)", || {
                 let _ = super::achados_do_apo();
+            }),
+            cronometrar("integridade de memória (3.1)", || {
+                let _ = super::super::firmware::achados_do_vbs();
+            }),
+            cronometrar("limites do boot (3.1)", || {
+                let _ = super::super::firmware::achados_de_boot();
             }),
         ];
 

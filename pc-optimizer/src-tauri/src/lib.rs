@@ -80,13 +80,9 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             commands::caminho_do_mouse,
             #[cfg(target_os = "windows")]
-            #[cfg(target_os = "windows")]
-            #[cfg(target_os = "windows")]
             commands::nucleos_da_maquina,
             #[cfg(target_os = "windows")]
             commands::prender_jogo_nos_nucleos,
-            #[cfg(target_os = "windows")]
-            #[cfg(target_os = "windows")]
             #[cfg(target_os = "windows")]
             commands::comparar_com_baseline,
             commands::recuperacao_pendente,

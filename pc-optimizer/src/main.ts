@@ -2525,11 +2525,12 @@ async function executarAcaoDoAchado(acao: Acao, botao: HTMLButtonElement, nota: 
   botao.disabled = true;
 
   try {
-    const mensagem = acao.argumento
-      ? await invoke<string>(acao.comando, { id: acao.argumento })
-      : await invoke<string>(acao.comando);
+    const resposta = acao.argumento
+      ? await invoke<string | { message?: string }>(acao.comando, { id: acao.argumento })
+      : await invoke<string | { message?: string }>(acao.comando);
 
-    nota.textContent = mensagem;
+    // `apply_optimization` devolve o resultado inteiro; os outros consertos, só a frase.
+    nota.textContent = typeof resposta === "string" ? resposta : resposta.message ?? "Feito.";
 
     await carregarVeredito();
   } catch (error) {
