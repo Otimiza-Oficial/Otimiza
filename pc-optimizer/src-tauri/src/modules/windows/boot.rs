@@ -1,109 +1,56 @@
-// Tempo de inicialização
-//
-// O cliente não percebe 5% de FPS. Percebe muito bem "meu PC ligava em dois
-// minutos e agora liga em quarenta segundos". E o Windows mede isso sozinho,
-// desde sempre, guardando no log de eventos o tempo total do boot e o nome de
-// cada programa que atrasou, com os milissegundos de cada um.
-//
-// Nenhum otimizador do mercado mostra isso. É o número mais convincente que
-// este produto pode dar, porque não é uma promessa: é o próprio Windows
-// dizendo "o Discord custou 142 segundos da sua inicialização".
-//
-// TRÊS COISAS QUE ESTE MÓDULO PRECISA ACERTAR
-//
-// 1. Ler pelos campos estruturados, nunca pela mensagem. A `Message` do evento
-//    vem traduzida ("Duração da Inicialização"); os nomes dentro de
-//    `EventData/Data[@Name]` vêm do manifesto do provedor e são fixos em inglês
-//    em qualquer idioma do Windows. Este projeto já quebrou uma vez por ler
-//    texto localizado, e não vai quebrar de novo pelo mesmo motivo.
-//
-// 2. Casar por NOME do campo, não por posição. O evento 100 tem 44 campos na
-//    versão 2 e bem menos nas versões antigas do Windows. Índice fixo quebra
-//    em silêncio numa máquina mais velha, que é exatamente o público daqui.
-//
-// 3. Admitir quando não há dado. O log exige administrador, e mesmo elevado ele
-//    pode estar vazio — em várias máquinas o coletor de desempenho de boot
-//    simplesmente para de gravar. Ausência de dado não é "seu boot está ótimo".
+// Tempo de inicialização e quem o atrasou, medidos pelo próprio Windows (evento 100/101). Lê pelos campos
+// estruturados (`EventData/Data[@Name]`, fixos em inglês), nunca pela mensagem traduzida; casa por NOME do campo,
+// não por posição (o evento muda de versão). Log vazio ou sem administrador não é "seu boot está ótimo".
 
 use super::{registry, shell};
 use serde::{Deserialize, Serialize};
 
 const LOG_DESEMPENHO: &str = "Microsoft-Windows-Diagnostics-Performance/Operational";
 
-/// Uma inicialização medida pelo Windows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootMeasurement {
-    /// Quando esta inicialização aconteceu, como o Windows registrou.
     pub when: String,
-    /// Tempo total até a máquina estar realmente utilizável.
     pub total_ms: u64,
-    /// Até a área de trabalho aparecer.
     pub main_path_ms: u64,
-    /// Depois da área de trabalho aparecer: os programas de inicialização
-    /// brigando pelo disco. É quase sempre a maior fatia, e é o que o dono da
-    /// máquina sente como "liga mas não dá para usar".
+    /// Quase sempre a maior fatia: "liga mas não dá para usar".
     pub post_boot_ms: u64,
-    /// Contador do Windows, crescente a cada boot. Serve de eixo do histórico.
     pub instance: u32,
-    /// O próprio Windows comparando com a média histórica desta máquina.
     pub degraded: bool,
 }
 
-/// Um programa que atrasou a inicialização.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootCulprit {
     pub name: String,
     pub path: String,
-    /// Quanto este programa levou no total.
     pub total_ms: u64,
-    /// Quanto ele piorou em relação ao normal dele nesta máquina.
     pub degradation_ms: u64,
 }
 
-/// Como a máquina foi ligada da última vez.
-///
-/// Vem de um log diferente, que é legível SEM administrador — e responde uma
-/// pergunta que aparece muito: "reiniciei e não melhorou".
+/// Log legível SEM administrador; responde "reiniciei e não melhorou".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BootType {
-    /// Boot completo de verdade.
     Full,
-    /// Inicialização Rápida: o Windows não desligou, hibernou o núcleo do
-    /// sistema e o restaurou. Nada que dependa de reiniciar tem efeito aqui.
+    /// O Windows não desligou: hibernou o núcleo e restaurou. Nada que dependa de reiniciar vale aqui.
     FastStartup,
-    /// Retomada de hibernação.
     Resume,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootReport {
-    /// Faltou elevação para ler o log de desempenho.
     pub needs_admin: bool,
     pub last: Option<BootMeasurement>,
-    /// Da mais recente para a mais antiga. Serve para mostrar evolução real
-    /// depois de otimizar, em vez de prometer.
     pub history: Vec<BootMeasurement>,
     pub culprits: Vec<BootCulprit>,
-    /// Tipo das últimas inicializações. Lido sem administrador.
     pub recent_types: Vec<(String, BootType)>,
-    /// Os programas que atrasam a inicialização foram lidos. `false` quando
-    /// a leitura falhou — aí "nenhum programa atrasando" não pode ser dito.
+    /// `false` quando falhou: aí "nenhum programa atrasando" não pode ser dito.
     #[serde(default)]
     pub culpados_lidos: bool,
-    /// Explicação em português do que foi possível medir e do que não foi.
     pub note: String,
-    /// Quanto a placa-mãe levou antes do Windows no último boot ("Último tempo
-    /// do BIOS" do Gerenciador de Tarefas). Lido sem administrador.
     #[serde(default)]
     pub firmware_ms: Option<u64>,
 }
 
-/// Limpa texto vindo de metadados de terceiro.
-///
-/// O nome e a empresa de um executável são texto arbitrário escolhido por quem
-/// o compilou. Numa varredura real apareceu `№じ 尐乄鈊~→☆` no campo de empresa
-/// de um programa. Isso vai para a tela do cliente e para o relatório que ele
-/// recebe, então passa por aqui antes.
+/// Nome e empresa do executável são texto arbitrário (visto: `№じ 尐乄鈊~→☆`) e vão para a tela e o relatório.
 pub fn limpar(bruto: &str) -> String {
     let limpo: String = bruto
         .chars()
@@ -114,10 +61,6 @@ pub fn limpar(bruto: &str) -> String {
     limpo.trim().to_string()
 }
 
-/// Converte milissegundos em algo que uma pessoa lê.
-///
-/// Usada pelos testes e pelo relatório de atendimento; a interface formata por
-/// conta própria porque precisa do texto em elementos separados.
 #[allow(dead_code)]
 pub fn formatar_duracao(ms: u64) -> String {
     let segundos = ms as f64 / 1000.0;
@@ -130,8 +73,6 @@ pub fn formatar_duracao(ms: u64) -> String {
         format!("{:.1} s", segundos)
     }
 }
-
-// --------------------------------------------------------------- leitura
 
 #[derive(Debug, Deserialize, Default)]
 struct RawBoot {
@@ -167,11 +108,7 @@ struct RawBootType {
     kind: Option<String>,
 }
 
-/// Trecho de PowerShell que transforma os campos estruturados de um evento num
-/// objeto com os nomes originais.
-///
-/// `$_.Name` é o atributo do manifesto do provedor — inglês em qualquer idioma.
-/// A `Message` do evento nem é tocada.
+/// `$_.Name` é o atributo do manifesto, inglês em qualquer idioma; a `Message` nem é tocada.
 const EXTRAIR_CAMPOS: &str = "\
     function Campos($e) { \
       $o = [ordered]@{ when = $e.TimeCreated.ToString('s') }; \
@@ -204,7 +141,7 @@ fn ler_boots() -> Option<Vec<RawBoot>> {
     serde_json::from_str(&saida.stdout).ok()
 }
 
-/// `None` = não consegui ler; vazio = lido, sem nenhum evento.
+/// `None` = não consegui ler; vazio = lido, sem evento.
 fn ler_culpados() -> Option<Vec<RawCulprit>> {
     let script = format!(
         "{} try {{ $e = Get-WinEvent -LogName '{}' -FilterXPath '*[System[EventID=101]]' \
@@ -220,10 +157,6 @@ fn ler_culpados() -> Option<Vec<RawCulprit>> {
     serde_json::from_str(&s.stdout).ok()
 }
 
-/// Tipo das últimas inicializações, do log System.
-///
-/// Este log é legível sem elevação, então esta parte do relatório funciona
-/// mesmo quando o resto não funciona.
 fn ler_tipos() -> Vec<RawBootType> {
     let script = format!(
         "{} $e = Get-WinEvent -LogName System -FilterXPath \
@@ -240,7 +173,6 @@ fn ler_tipos() -> Vec<RawBootType> {
         .unwrap_or_default()
 }
 
-/// Traduz o código de tipo de boot do Kernel-Boot.
 pub fn tipo_do_codigo(codigo: u32) -> Option<BootType> {
     match codigo {
         0 => Some(BootType::Full),
@@ -250,10 +182,7 @@ pub fn tipo_do_codigo(codigo: u32) -> Option<BootType> {
     }
 }
 
-/// Explica o que foi possível medir — e, quando não foi, por quê.
-///
-/// Esta função é o coração honesto do módulo. A tentação comercial é tratar
-/// ausência de dado como boa notícia; aqui ela é dita como é.
+/// Ausência de dado é dita como é, nunca como boa notícia.
 pub fn montar_nota(
     elevado: bool,
     tem_medicao: bool,
@@ -288,8 +217,6 @@ pub fn montar_nota(
         "Números medidos pelo próprio Windows a cada inicialização, não estimados por nós.",
     );
 
-    // A Inicialização Rápida é a explicação mais comum para "reiniciei e não
-    // mudou nada": a máquina não desligou de verdade.
     if rapidas > 0 && total_tipos > 0 {
         nota.push_str(&format!(
             " Atenção: {} das últimas {} inicializações foram por Inicialização Rápida, \
@@ -303,12 +230,10 @@ pub fn montar_nota(
     nota
 }
 
-/// Relatório completo de inicialização.
 pub fn analyze() -> BootReport {
     let elevado = registry::is_elevated();
 
-    // O tipo de boot vem primeiro porque é o único que funciona sem elevação:
-    // mesmo sem nenhum outro dado, o relatório tem algo verdadeiro a dizer.
+    // O tipo de boot vem primeiro: é o único que funciona sem elevação.
     let recent_types: Vec<(String, BootType)> = ler_tipos()
         .into_iter()
         .filter_map(|t| {
@@ -330,8 +255,7 @@ pub fn analyze() -> BootReport {
         .filter_map(|b| {
             let total_ms = numero(&b.boot_time);
 
-            // Sem tempo total não há medição, e zero não é medição: seria
-            // exatamente o número inventado que este módulo existe para evitar.
+            // Sem tempo total não há medição, e zero não é medição.
             if total_ms == 0 {
                 return None;
             }
@@ -363,8 +287,7 @@ pub fn analyze() -> BootReport {
 
                 Some(BootCulprit {
                     name,
-                    // O caminho é a chave confiável: o nome amigável vem vazio
-                    // em boa parte dos programas.
+                    // O caminho é a chave confiável: o nome amigável vem vazio em boa parte dos programas.
                     path: limpar(&c.path.unwrap_or_default()),
                     total_ms,
                     degradation_ms: numero(&c.degradation),
@@ -375,8 +298,7 @@ pub fn analyze() -> BootReport {
         Vec::new()
     };
 
-    // O mesmo programa aparece uma vez por boot. Fica o pior caso de cada um,
-    // que é o que o cliente sente no dia ruim.
+    // Fica o pior caso de cada programa, que é o que o cliente sente no dia ruim.
     culprits.sort_by(|a, b| a.path.cmp(&b.path).then(b.total_ms.cmp(&a.total_ms)));
     culprits.dedup_by(|a, b| a.path == b.path && !a.path.is_empty());
     culprits.sort_by(|a, b| b.total_ms.cmp(&a.total_ms));
@@ -407,9 +329,6 @@ mod tests {
 
     #[test]
     fn metadado_hostil_de_terceiro_e_limpo() {
-        // Apareceu de verdade numa varredura: campo de empresa com caracteres
-        // de controle e lixo. Isso vai para a tela do cliente e para o
-        // relatório que ele recebe.
         let sujo = "Programa\u{0}\u{1}\tRuim\r\n";
         let limpo = limpar(sujo);
 
@@ -417,7 +336,6 @@ mod tests {
         assert!(!limpo.contains('\r'));
         assert!(limpo.starts_with("Programa"));
 
-        // E nome gigante não pode esticar a lista.
         assert!(limpar(&"a".repeat(500)).chars().count() <= 80);
     }
 
@@ -425,7 +343,6 @@ mod tests {
     fn duracao_vira_texto_legivel() {
         assert_eq!(formatar_duracao(1500), "1.5 s");
         assert_eq!(formatar_duracao(45_000), "45.0 s");
-        // Acima de um minuto ninguém lê "97,6 s" e entende.
         assert_eq!(formatar_duracao(97_666), "1 min 38 s");
     }
 
@@ -434,7 +351,6 @@ mod tests {
         assert_eq!(tipo_do_codigo(0), Some(BootType::Full));
         assert_eq!(tipo_do_codigo(1), Some(BootType::FastStartup));
         assert_eq!(tipo_do_codigo(2), Some(BootType::Resume));
-        // Código desconhecido não vira palpite.
         assert_eq!(tipo_do_codigo(9), None);
     }
 
@@ -443,7 +359,6 @@ mod tests {
         let nota = montar_nota(false, false, 0, 0);
 
         assert!(nota.contains("administrador"));
-        // O que não pode acontecer de jeito nenhum.
         assert!(!nota.to_lowercase().contains("ótimo"));
         assert!(!nota.to_lowercase().contains("rápido"));
     }
@@ -452,7 +367,6 @@ mod tests {
     fn elevado_e_sem_dado_admite_que_nao_sabe() {
         let nota = montar_nota(true, false, 0, 5);
 
-        // A frase que separa este produto do resto do mercado.
         assert!(nota.contains("não vamos inventar"));
         assert!(nota.contains("não temos como dizer") || nota.contains("Não temos como dizer"));
     }
@@ -461,7 +375,6 @@ mod tests {
     fn inicializacao_rapida_e_avisada_quando_ha_medicao() {
         let nota = montar_nota(true, true, 4, 10);
 
-        // Responde "reiniciei e não melhorou" antes de o cliente perguntar.
         assert!(nota.contains("Inicialização Rápida"));
         assert!(nota.contains("4 das últimas 10"));
     }
@@ -472,7 +385,6 @@ mod tests {
         assert_eq!(numero(&Some("  55 ".into())), 55);
         assert_eq!(numero(&None), 0);
         assert_eq!(numero(&Some("texto".into())), 0);
-        // Negativo não existe em duração.
         assert_eq!(numero(&Some("-5".into())), 0);
     }
 
@@ -501,22 +413,17 @@ mod tests {
             println!("  atraso: {} — {}", c.name, formatar_duracao(c.total_ms));
         }
 
-        // A nota nunca pode ficar vazia: se não há dado, o motivo precisa estar
-        // escrito. Silêncio aqui viraria "está tudo bem" na cabeça de quem lê.
         assert!(!r.note.is_empty());
 
-        // Culpados só existem com medição; e todo culpado tem tempo.
         assert!(r.culprits.iter().all(|c| c.total_ms > 0));
         assert!(r.culprits.iter().all(|c| !c.name.is_empty()));
 
-        // Do pior para o melhor.
         assert!(r
             .history
             .iter()
             .all(|m| m.total_ms >= m.main_path_ms));
         assert!(r.culprits.windows(2).all(|p| p[0].total_ms >= p[1].total_ms));
 
-        // Sem elevação não pode haver medição nenhuma — seria dado inventado.
         if r.needs_admin {
             assert!(r.last.is_none());
             assert!(r.culprits.is_empty());

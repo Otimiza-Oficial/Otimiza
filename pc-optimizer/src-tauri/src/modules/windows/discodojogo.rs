@@ -1,79 +1,43 @@
-// Em que disco o jogo mora
-//
-// NASCEU DE UM CLIENTE DE VERDADE. A máquina: i5-3470 de 2012, GTX 770 de 2 GB,
-// 12 GB de RAM, um SSD de 224 GB e um HD mecânico de 466 GB. O relato: **15 a 20
-// FPS no FiveM, às vezes 30, "depende de onde eu fico"**.
-//
-// Aquele processador é velho, mas não é de 15 FPS. Duas coisas explicam um
-// número tão abaixo do que a máquina deveria dar, e as duas aparecem como
-// "depende de onde eu fico": a memória de vídeo estourando, e o jogo lendo
-// asset de um disco MECÂNICO enquanto a pessoa anda pelo mapa.
-//
-// A segunda o produto não sabia responder. Ele sabia se o WINDOWS está em SSD —
-// `hardware::detect_system_storage` —, e essa é a pergunta errada: numa máquina
-// com SSD pequeno e HD grande, o Windows quase sempre está no SSD e o jogo
-// quase sempre está no HD, porque foi ali que coube.
-//
-// Este módulo responde a pergunta certa: **o disco onde ESTE JOGO está**.
-//
-// SÓ LÊ. Mover o jogo é decisão e trabalho do dono da máquina — são dezenas de
-// gigabytes e um caminho que outros programas conhecem. O que o produto faz é
-// dizer, com o nome do jogo e a letra da unidade, que o arquivo está no lugar
-// que engasga.
+// Em que disco o JOGO mora (não o Windows): com SSD pequeno e HD grande, o Windows fica no SSD e o jogo no HD.
+// Nasceu de um cliente com 15 a 20 FPS no FiveM, "depende de onde eu fico". Só lê: mover é decisão do dono.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-/// O tipo de mídia de uma unidade.
-///
-/// Três estados, e o terceiro não vira nenhum dos outros: chamar de SSD um
-/// disco que não deu para ler faria o produto absolver justamente a causa que
-/// ele foi procurar.
+/// Três estados: chamar de SSD um disco ilegível absolveria a causa procurada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Midia {
     Ssd,
-    /// Disco com prato girando. É o que engasga ao carregar textura.
     Mecanico,
     NaoDeuParaLer,
 }
 
-/// Onde um jogo está instalado, e em que tipo de disco.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OndeMora {
     pub jogo: String,
     pub caminho: String,
-    /// A letra da unidade, em maiúscula. `None` quando o caminho não começa com
-    /// uma letra de unidade — caminho de rede, por exemplo.
+    /// `None` fora de letra de unidade (caminho de rede, por exemplo).
     pub unidade: Option<char>,
     pub midia: Midia,
-    /// O modelo do disco, quando deu para ler. Vai para a tela mesmo quando a
-    /// mídia é `NaoDeuParaLer`: "o jogo está no ST3500418AS" é informação que a
-    /// pessoa consegue pesquisar, e é muito melhor que o silêncio.
+    /// Vai para a tela mesmo sem a mídia: um modelo de disco a pessoa consegue pesquisar.
     pub modelo: Option<String>,
 }
 
-/// O que se conseguiu saber de uma unidade.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnidadeLida {
     pub midia: Midia,
     pub modelo: Option<String>,
 }
 
-/// O resultado da leitura de todas as unidades, com o que não deu para ler.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Leitura {
     pub unidades: HashMap<char, UnidadeLida>,
-    /// O que falhou, em voz alta. Nunca omitido: numa imagem modificada esta
-    /// lista é a explicação de por que o produto não sabe responder.
+    /// Nunca omitido: numa imagem modificada, é a explicação de por que o produto não sabe.
     pub lacunas: Vec<String>,
 }
 
-/// A letra de unidade de um caminho do Windows.
-///
-/// **Função pura.** `None` para caminho de rede (`\\servidor\pasta`) e para
-/// qualquer coisa que não comece com `letra:`. Caminho de rede não é engano do
-/// cliente: gente com NAS instala jogo lá, e ali a resposta certa é não opinar.
+/// Caminho de rede não é engano: com NAS, a resposta certa é não opinar.
 pub fn unidade_do_caminho(caminho: &str) -> Option<char> {
     let mut chars = caminho.chars();
 
@@ -89,26 +53,9 @@ pub fn unidade_do_caminho(caminho: &str) -> Option<char> {
     Some(letra)
 }
 
-/// Lê o disco de cada unidade numa consulta só.
-///
-/// UMA CONSULTA E NÃO UMA POR JOGO: a cadeia partição → disco → mídia é a parte
-/// cara, e uma máquina com cinco jogos pagaria cinco vezes pela mesma resposta.
-///
-/// A CLASSE RÁPIDA NÃO RESPONDE EM TODA MÁQUINA, e descobri isso aqui.
-///
-/// `MSFT_PhysicalDisk` devolve uma lista VAZIA nesta máquina, mesmo com o
-/// processo elevado — ela vive no espaço de nomes `root\Microsoft\Windows\
-/// Storage`, que depende do serviço de armazenamento, e esta é uma imagem
-/// modificada com cerca de 180 serviços desligados. Ou seja: falha exatamente
-/// no tipo de Windows que este produto mais precisa atender.
-///
-/// `hardware::detect_system_storage` depende da mesma classe nos DOIS caminhos
-/// dele, e por isso responde "não sei" em toda máquina assim.
-///
-/// A reserva é a cadeia antiga do WMI — `Win32_DiskDrive` → `Win32_DiskPartition`
-/// → `Win32_LogicalDisk` —, que responde aqui. Ela NÃO diz se o disco é SSD: o
-/// `MediaType` dela é "Fixed hard disk media" para os dois. O que ela entrega é
-/// o MODELO, e o modelo vai para a tela como está.
+/// Uma consulta para todas as unidades. `MSFT_PhysicalDisk` vem VAZIA em Windows modificado (depende do serviço
+/// de armazenamento); a reserva é a cadeia `Win32_DiskDrive` → `Partition` → `LogicalDisk`, que não diz se é SSD,
+/// mas entrega o MODELO.
 #[cfg(target_os = "windows")]
 pub fn ler_unidades() -> Leitura {
     let rapida = "$ns = 'root\\Microsoft\\Windows\\Storage'; \
@@ -130,8 +77,7 @@ pub fn ler_unidades() -> Leitura {
         }
     }
 
-    // A reserva. O `-join` de cada campo evita que um modelo com espaço quebre
-    // a linha em pedaços.
+    // O `-join` evita que um modelo com espaço quebre a linha.
     let reserva = "Get-CimInstance Win32_DiskDrive | ForEach-Object { \
                      $d = $_; \
                      Get-CimAssociatedInstance -InputObject $_ \
@@ -168,12 +114,7 @@ pub fn ler_unidades() -> Leitura {
     Leitura::default()
 }
 
-/// Lê a saída `LETRA|MODELO` da consulta de reserva.
-///
-/// A mídia fica `NaoDeuParaLer` mesmo com o modelo em mãos, EXCETO quando o
-/// próprio nome do disco diz — vários trazem "SSD" ou "NVMe" no modelo. Deduzir
-/// "é SSD porque a marca costuma ser" seria o mesmo erro que derrubou o FPS de
-/// um cliente na 2.1.0: afirmar sem ler.
+/// A mídia só sai do nome quando ele diz ("SSD", "NVMe"): deduzir pela marca é afirmar sem ler.
 pub fn ler_modelos(saida: &str) -> HashMap<char, UnidadeLida> {
     let mut mapa = HashMap::new();
 
@@ -211,10 +152,6 @@ pub fn ler_modelos(saida: &str) -> HashMap<char, UnidadeLida> {
     mapa
 }
 
-/// Lê a saída `LETRA=MEDIATYPE`, uma por linha.
-///
-/// **Função pura**, e é onde este tipo de código erra calado — por isso ela tem
-/// teste com a saída real em vez de ser embutida na consulta.
 pub fn ler_pares(saida: &str) -> HashMap<char, UnidadeLida> {
     let mut mapa = HashMap::new();
 
@@ -240,12 +177,8 @@ pub fn ler_pares(saida: &str) -> HashMap<char, UnidadeLida> {
     mapa
 }
 
-/// O `MediaType` da classe `MSFT_PhysicalDisk`: 3 = mecânico, 4 = SSD.
-///
-/// Qualquer outra coisa é `NaoDeuParaLer`, INCLUSIVE "Unspecified" e o número 0,
-/// que é o que vários NVMe atrás de controlador RAID devolvem. Chutar SSD ali
-/// seria confortável e errado: num NVMe o palpite acerta, e num cartão SD ou num
-/// disco externo lento ele absolve a causa do engasgo.
+/// 3 = mecânico, 4 = SSD. "Unspecified" e 0 (NVMe atrás de RAID) são `NaoDeuParaLer`: chutar SSD absolveria um
+/// cartão SD.
 pub fn classificar(tipo: &str) -> Midia {
     let t = tipo.trim().to_uppercase();
 
@@ -264,9 +197,6 @@ pub fn classificar(tipo: &str) -> Midia {
     }
 }
 
-/// Junta os jogos encontrados com a mídia da unidade de cada um.
-///
-/// **Função pura**, para a regra poder ser provada sem jogo instalado.
 pub fn juntar(jogos: &[(String, String)], unidades: &HashMap<char, UnidadeLida>) -> Vec<OndeMora> {
     jogos
         .iter()
@@ -285,18 +215,11 @@ pub fn juntar(jogos: &[(String, String)], unidades: &HashMap<char, UnidadeLida>)
         .collect()
 }
 
-/// Os jogos que estão em disco mecânico.
-///
-/// `NaoDeuParaLer` fica de fora de propósito: este resultado vira uma afirmação
-/// na tela do cliente, e afirmar "seu jogo está no HD" sobre uma leitura que
-/// falhou é a mentira que este produto existe para não contar. O que não deu
-/// para ler aparece como lacuna, em outro lugar.
+/// `NaoDeuParaLer` fica de fora: "seu jogo está no HD" sobre leitura falha é mentira.
 pub fn em_disco_mecanico(onde: &[OndeMora]) -> Vec<&OndeMora> {
     onde.iter().filter(|o| o.midia == Midia::Mecanico).collect()
 }
 
-/// A frase que o cliente lê. Mora aqui porque é regra de produto, e regra de
-/// produto tem teste; a tela recebe pronta.
 pub fn explicar(jogo: &str, unidade: char) -> String {
     format!(
         "O {jogo} está instalado na unidade {unidade}:, que é um disco mecânico. \
@@ -308,7 +231,6 @@ pub fn explicar(jogo: &str, unidade: char) -> String {
     )
 }
 
-/// O relatório desta máquina: onde cada jogo mora, e o que não deu para ler.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Relatorio {
     pub jogos: Vec<OndeMora>,
@@ -326,8 +248,7 @@ pub fn analisar() -> Relatorio {
         .map(|j| (j.nome.clone(), j.pasta.to_string_lossy().to_string()))
         .collect();
 
-    // As lacunas da biblioteca entram junto: um jogo que não foi ENCONTRADO
-    // não pode virar "nenhum jogo está no disco errado".
+    // Jogo não ENCONTRADO não pode virar "nenhum jogo está no disco errado".
     let mut lacunas = leitura.lacunas;
     lacunas.extend(biblioteca.lacunas);
 
@@ -339,10 +260,7 @@ pub fn analisar() -> Relatorio {
     Relatorio::default()
 }
 
-/// O caminho de um processo já detectado, classificado.
-///
-/// Serve para o jogo que está ABERTO agora, que é o caso em que a resposta mais
-/// importa — e que não depende de o jogo estar numa biblioteca conhecida.
+/// O jogo ABERTO agora, que não depende de estar numa biblioteca conhecida.
 pub fn do_caminho(jogo: &str, caminho: &Path) -> OndeMora {
     let texto = caminho.to_string_lossy().to_string();
     let leitura = ler_unidades();
@@ -368,8 +286,6 @@ mod tests {
         assert_eq!(unidade_do_caminho(r"c:\jogos"), Some('C'));
     }
 
-    /// Caminho de rede não é engano do cliente: gente com NAS instala jogo lá.
-    /// A resposta certa ali é não opinar, e não chutar uma unidade.
     #[test]
     fn caminho_de_rede_nao_vira_unidade() {
         assert_eq!(unidade_do_caminho(r"\\servidor\jogos\GTAV"), None);
@@ -387,8 +303,6 @@ mod tests {
         assert_eq!(mapa[&'E'].midia, Midia::Ssd);
     }
 
-    /// "Unspecified" e `0` são o que vários NVMe atrás de controlador RAID
-    /// devolvem. Chutar SSD ali acerta no NVMe e absolve um cartão SD.
     #[test]
     fn tipo_desconhecido_nao_vira_ssd() {
         assert_eq!(classificar("0"), Midia::NaoDeuParaLer);
@@ -416,9 +330,6 @@ mod tests {
         assert_eq!(mecanicos[0].unidade, Some('D'));
     }
 
-    /// A regra mais importante do módulo: uma leitura que falhou NÃO vira
-    /// acusação. "Seu jogo está no HD" sobre um disco que não deu para ler é
-    /// exatamente a mentira que este produto existe para não contar.
     #[test]
     fn unidade_ilegivel_nao_vira_acusacao_de_disco_mecanico() {
         let midias = HashMap::new(); // nenhuma unidade pôde ser lida

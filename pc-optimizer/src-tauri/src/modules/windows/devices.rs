@@ -1,30 +1,15 @@
-// Ajustes por dispositivo
-//
-// As duas otimizações mais profundas do catálogo moram aqui, e nenhuma delas
-// pode ser escrita como um caminho fixo de registro: o identificador do
-// dispositivo muda de PC para PC. É preciso enumerar e descobrir qual é qual.
-//
-// - MSI (Message Signaled Interrupts) na placa de vídeo: muda COMO a GPU avisa a
-//   CPU de que terminou algo. No modo antigo, por linha de interrupção, o aviso
-//   disputa uma fila compartilhada com outros dispositivos. Com MSI cada aviso é
-//   direto. É latência de verdade, e é o tipo de ajuste que quase nenhum
-//   "otimizador" faz porque dá trabalho.
-//
-// - Economia de energia da placa de rede: o Windows pode desligar a placa para
-//   poupar energia. Ao acordar, o primeiro pacote atrasa — e é isso que aparece
-//   como pico de ping no meio da partida.
+// Ajustes por dispositivo, que exigem enumerar (o identificador muda de PC para PC): MSI na placa de vídeo
+// (interrupção direta, e não por linha compartilhada) e a economia de energia da placa de rede (acordar atrasa o
+// primeiro pacote, o pico de ping no meio da partida).
 
 use super::registry;
 use crate::modules::changelog::{ChangeRecord, PreviousValue};
 
 const PCI_ENUM: &str = r"SYSTEM\CurrentControlSet\Enum\PCI";
-/// Classe "Adaptadores de rede" do Windows. O GUID é fixo em qualquer instalação.
 const NET_CLASS: &str =
     r"SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}";
 
-/// Serviços de driver de vídeo conhecidos, em minúsculas.
-/// Identificar a GPU pelo driver é mais confiável que por nome comercial, que
-/// varia com o modelo e o idioma.
+/// Pelo driver, mais confiável que o nome comercial, que muda com o modelo e o idioma.
 const DRIVERS_DE_VIDEO: [&str; 6] = [
     "nvlddmkm", // NVIDIA
     "amdkmdag", // AMD moderna
@@ -34,11 +19,7 @@ const DRIVERS_DE_VIDEO: [&str; 6] = [
     "iigd",     // Intel
 ];
 
-/// Caminhos de "Device Parameters" das placas de vídeo instaladas.
-///
-/// A árvore é PCI\<dispositivo>\<instância>, então são dois níveis de
-/// enumeração. Um dispositivo sem `Service` reconhecido é ignorado — mexer em
-/// interrupção do dispositivo errado é o tipo de erro que trava o boot.
+/// Dispositivo sem `Service` reconhecido é ignorado: mexer na interrupção do dispositivo errado trava o boot.
 pub fn caminhos_msi_das_gpus() -> Vec<String> {
     let mut caminhos = Vec::new();
 
@@ -58,11 +39,7 @@ pub fn caminhos_msi_das_gpus() -> Vec<String> {
         for instancia in instancias {
             let caminho = format!("{}\\{}", caminho_dispositivo, instancia);
 
-            // Dispositivo cujo `Service` não dá para ler fica de fora, e AQUI esse
-            // é o lado seguro: a lista serve para escrever, e escrever na
-            // interrupção de um dispositivo que não se identificou é o erro que
-            // trava o boot. A enumeração passa por todo dispositivo PCI da
-            // máquina, e uma ponte ilegível não pode derrubar a placa de vídeo.
+            // `Service` ilegível fica de fora, e aqui esse é o lado seguro: a lista serve para escrever.
             let servico = match registry::read_text("HKLM", &caminho, "Service") {
                 Ok(Some(servico)) => servico.to_lowercase(),
                 Ok(None) | Err(_) => continue,
@@ -82,7 +59,6 @@ pub fn caminhos_msi_das_gpus() -> Vec<String> {
     caminhos
 }
 
-/// Se todas as GPUs encontradas já estão em modo MSI.
 pub fn msi_ja_ativo() -> Option<bool> {
     let caminhos = caminhos_msi_das_gpus();
 
@@ -98,14 +74,7 @@ pub fn msi_ja_ativo() -> Option<bool> {
     }))
 }
 
-/// Liga o modo MSI em cada placa de vídeo encontrada.
-/// Liga o MSI das placas de vídeo, acumulando no histórico do chamador.
-///
-/// **Recebe o vetor em vez de devolvê-lo.** Devolvendo `Result<Vec<_>>`, uma
-/// falha na segunda placa descartaria o registro da primeira — que JÁ foi
-/// gravada no registro do cliente — e a reversão automática não teria como
-/// desfazê-la. O sistema ficaria pela metade sem rastro, exatamente o que a
-/// regra nº 2 do `mod.rs` proíbe.
+/// Recebe o vetor em vez de devolvê-lo: uma falha na segunda placa descartaria o registro da primeira, já gravada.
 pub fn ativar_msi(mudancas: &mut Vec<ChangeRecord>) -> Result<(), String> {
     let caminhos = caminhos_msi_das_gpus();
 
@@ -126,37 +95,26 @@ pub fn ativar_msi(mudancas: &mut Vec<ChangeRecord>) -> Result<(), String> {
     Ok(())
 }
 
-// ─── MSI por dispositivo: SÓ LEITURA (2.9) ───────────────────────────────
-//
-// A auditoria pediu MSI por dispositivo. A leitura entra; a escrita, fora da
-// placa de vídeo, NÃO. Ligar MSI num dispositivo cujo driver não aguenta é o
-// erro que trava o boot — e aí o Otimiza nem abre para desfazer. Passa no
-// critério "como desfazer?" só a placa de vídeo, que já tem o item próprio no
-// catálogo. Para o resto, a tela mostra o estado de cada dispositivo e quem
-// quiser mexer sabe onde, por conta própria.
+// MSI por dispositivo: SÓ LEITURA. Ligar MSI num driver que não aguenta trava o boot, e aí o Otimiza nem abre
+// para desfazer. Só a placa de vídeo passa no "como desfazer?".
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct DispositivoMsi {
     pub nome: String,
     pub servico: String,
-    /// `Some(true)` ligado, `Some(false)` declarado e desligado, `None` o
-    /// driver não declara MSI (a chave não existe).
+    /// `None`: o driver não declara MSI (a chave não existe).
     pub msi: Option<bool>,
-    /// É placa de vídeo — a única em que o Otimiza escreve.
     pub placa_de_video: bool,
 }
 
-/// **Pura.** O nome que o Gerenciador de Dispositivos mostra: `FriendlyName`,
-/// senão o que vem depois do último `;` do `DeviceDesc`
-/// (`@oem11.inf,%rtl8168.devicedesc%;Realtek PCIe GbE`).
+/// `FriendlyName`, senão o que vem depois do último `;` do `DeviceDesc`.
 pub fn nome_legivel(amigavel: Option<&str>, descricao: Option<&str>) -> Option<String> {
     let bruto = amigavel.map(str::trim).filter(|a| !a.is_empty()).or(descricao.map(str::trim))?;
     let nome = resolver_nome(bruto);
     (!nome.is_empty()).then_some(nome)
 }
 
-/// Resolve os dois formatos do registro: `@recurso;Nome` e o molde com
-/// argumentos, `@recurso;%1 USB %2 Controller;(Intel(R),3.20)`.
+/// Os dois formatos: `@recurso;Nome` e o molde com argumentos `@recurso;%1 USB %2 Controller;(Intel(R),3.20)`.
 fn resolver_nome(bruto: &str) -> String {
     let partes: Vec<&str> = bruto.split(';').collect();
     let ultima = partes.last().copied().unwrap_or(bruto).trim();
@@ -172,7 +130,6 @@ fn resolver_nome(bruto: &str) -> String {
     ultima.to_string()
 }
 
-/// Todos os dispositivos PCI com driver, e o estado do MSI de cada um.
 pub fn msi_por_dispositivo() -> Result<Vec<DispositivoMsi>, String> {
     let dispositivos = registry::subkeys("HKLM", PCI_ENUM)?;
     let mut lista = Vec::new();
@@ -207,26 +164,11 @@ pub fn msi_por_dispositivo() -> Result<Vec<DispositivoMsi>, String> {
     Ok(lista)
 }
 
-/// Valor de `PnPCapabilities` que desliga o gerenciamento de energia da placa.
-///
-/// 24 = 0x18: soma de "não desligar o dispositivo para economizar energia" (8) e
-/// "não permitir que ele acorde o computador" (16).
+/// 24 = 0x18: não desligar para economizar (8) + não acordar o computador (16).
 const PNP_SEM_ECONOMIA: u32 = 24;
 
-/// Caminhos das placas de rede FÍSICAS instaladas.
-///
-/// A classe de rede do Windows lista muito mais que placas: WAN Miniports do
-/// VPN, adaptadores virtuais do Hyper-V, o adaptador do depurador de kernel.
-/// Nenhum deles tem energia para economizar, e escrever neles seria uma mexida
-/// inútil no registro de dez dispositivos.
-///
-/// O `ComponentId` separa os dois mundos: dispositivo físico começa com o
-/// barramento (`pci\`, `usb\`), enquanto os virtuais da Microsoft começam com
-/// `ms_` ou `vms_`.
-///
-/// `Err` quando a classe ou o `ComponentId` de um adaptador não dá para ler. Até
-/// a 2.0 isso virava "não é placa física": a placa de verdade do cliente era
-/// descartada como virtual, e a otimização de rede dela sumia sem uma palavra.
+/// Só as FÍSICAS, pelo `ComponentId` (`pci\`, `usb\`; os virtuais são `ms_` ou `vms_`). `Err` quando não se
+/// lê: "não é placa física" descartava a placa de verdade do cliente.
 pub fn caminhos_das_placas_de_rede() -> Result<Vec<String>, String> {
     let mut caminhos = Vec::new();
 
@@ -244,18 +186,11 @@ pub fn caminhos_das_placas_de_rede() -> Result<Vec<String>, String> {
     Ok(caminhos)
 }
 
-/// Só as subchaves numeradas (`0000`, `0001`…) são adaptadores.
-///
-/// A classe tem também `Properties`, que o Windows não deixa ler. Enquanto a
-/// leitura ilegível virava "não é placa", ela saía da lista sozinha; com o erro
-/// passando a subir, lê-la como adaptador faria TODA máquina dar erro.
+/// Só `0000`, `0001`...: `Properties` o Windows não deixa ler, e lida como adaptador daria erro em toda máquina.
 fn e_indice_de_adaptador(nome: &str) -> bool {
     !nome.is_empty() && nome.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Se o adaptador está num barramento físico. Sem `ComponentId` nenhum, a
-/// resposta é não: dispositivo que não declara barramento não é placa que se
-/// possa ajustar.
 fn e_placa_fisica(caminho: &str) -> Result<bool, String> {
     let componente = registry::read_text("HKLM", caminho, "ComponentId")?
         .unwrap_or_default()
@@ -265,9 +200,6 @@ fn e_placa_fisica(caminho: &str) -> Result<bool, String> {
 }
 
 pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
-    // A lista que não deu para ler vira `None`, como a máquina sem placa: a
-    // leitura que falhou não vira resposta. Quem aplica (`desligar_…`) recebe o
-    // erro de verdade.
     let caminhos = caminhos_das_placas_de_rede().ok()?;
 
     if caminhos.is_empty() {
@@ -282,13 +214,7 @@ pub fn economia_de_energia_da_rede_desligada() -> Option<bool> {
     }))
 }
 
-/// Desliga a economia de energia das placas de rede, acumulando no histórico do
-/// chamador.
-///
-/// Mesma razão do `ativar_msi`, e aqui o risco é maior: uma máquina comum tem
-/// vários adaptadores — cinco na máquina de desenvolvimento —, então uma falha
-/// no terceiro deixaria dois já alterados sem registro para desfazer. E é
-/// justamente a otimização que mexe em placa de rede de cliente.
+/// Mesma razão do `ativar_msi`, com risco maior: uma máquina tem vários adaptadores.
 pub fn desligar_economia_de_energia_da_rede(
     mudancas: &mut Vec<ChangeRecord>,
 ) -> Result<(), String> {
@@ -324,7 +250,6 @@ mod tests {
         assert_eq!(nome_legivel(Some(" Placa X "), Some("@a;Y")).as_deref(), Some("Placa X"));
         assert_eq!(nome_legivel(Some(""), Some("Controlador")).as_deref(), Some("Controlador"));
         assert_eq!(nome_legivel(None, None), None);
-        // Visto nesta máquina: o controlador USB guarda o nome como molde.
         assert_eq!(
             nome_legivel(
                 Some(r"@System32\drivers\usbxhci.sys,#1073807361;%1 USB %2 eXtensible Host Controller - %3 (Microsoft);(Intel(R),3.20,1.20)"),
@@ -343,8 +268,6 @@ mod tests {
             println!("GPU: {}", caminho);
         }
 
-        // Todo caminho precisa terminar na chave certa: escrever `MSISupported`
-        // no lugar errado é mexer em interrupção de dispositivo alheio.
         for caminho in &caminhos {
             assert!(caminho.ends_with("MessageSignaledInterruptProperties"));
             assert!(caminho.starts_with(PCI_ENUM));
@@ -364,13 +287,7 @@ mod tests {
             println!("Rede: {} — {}", nome, caminho);
         }
 
-        // A conferência é pelo ComponentId, não pelo nome do driver.
-        //
-        // A primeira versão deste teste rejeitava qualquer nome contendo
-        // "virtual", e quebrou numa máquina virtual da Azure: a placa de lá se
-        // chama "Mellanox ConnectX Virtual Ethernet Adapter" e é um dispositivo
-        // PCI de verdade, com energia real para gerenciar. Nome é marketing;
-        // o barramento é fato — a mesma lição do `TIPO_DE_INÍCIO`.
+        // Pelo ComponentId, não pelo nome: a placa da Azure se chama "...Virtual Ethernet Adapter" e é PCI de verdade.
         for caminho in &caminhos {
             let componente = registry::read_text("HKLM", caminho, "ComponentId")
                 .expect("o ComponentId de uma placa da lista foi lido para ela entrar")
@@ -383,8 +300,6 @@ mod tests {
                 componente
             );
 
-            // Os que motivaram o filtro — WAN Miniport de VPN, comutador do
-            // Hyper-V, depurador de kernel — são todos `ms_*` ou `vms_*`.
             assert!(
                 !componente.starts_with("ms_") && !componente.starts_with("vms_"),
                 "adaptador virtual da Microsoft entrou na lista: {}",
@@ -397,8 +312,6 @@ mod tests {
     fn so_subchave_numerada_e_adaptador() {
         assert!(e_indice_de_adaptador("0000"));
         assert!(e_indice_de_adaptador("0012"));
-        // `Properties` é negada pelo Windows a qualquer um; lida como
-        // adaptador, derrubaria a lista de toda máquina.
         assert!(!e_indice_de_adaptador("Properties"));
         assert!(!e_indice_de_adaptador("Configuration"));
         assert!(!e_indice_de_adaptador(""));
@@ -406,7 +319,6 @@ mod tests {
 
     #[test]
     fn valor_de_pnp_desliga_economia_e_despertar() {
-        // 8 = não desligar para economizar energia; 16 = não deixar acordar o PC.
         assert_eq!(PNP_SEM_ECONOMIA, 8 | 16);
     }
 }
