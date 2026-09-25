@@ -12,7 +12,8 @@ export type Release = {
   versao: string;
   publicadaEm: string;
   resumo: string;
-  instalador: { tamanhoBytes: number; url: string } | null;
+  /** sha256: o código que o GitHub calcula do arquivo publicado (campo `digest` da API). */
+  instalador: { tamanhoBytes: number; url: string; sha256: string | null } | null;
 };
 
 export type EstadoRelease =
@@ -28,7 +29,7 @@ type Bruta = {
   tag_name: string;
   published_at: string;
   body: string | null;
-  assets: { name: string; size: number; browser_download_url: string }[];
+  assets: { name: string; size: number; browser_download_url: string; digest?: string | null }[];
 };
 
 function resumir(corpo: string | null): string {
@@ -43,7 +44,13 @@ function converter(b: Bruta): Release {
     versao: b.tag_name.replace(/^v/, ""),
     publicadaEm: b.published_at,
     resumo: resumir(b.body),
-    instalador: exe ? { tamanhoBytes: exe.size, url: exe.browser_download_url } : null,
+    instalador: exe
+      ? {
+          tamanhoBytes: exe.size,
+          url: exe.browser_download_url,
+          sha256: exe.digest?.startsWith("sha256:") ? exe.digest.slice(7) : null,
+        }
+      : null,
   };
 }
 

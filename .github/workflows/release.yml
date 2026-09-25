@@ -307,6 +307,10 @@ jobs:
 
           cp "$instalador" Otimiza-instalador.exe
 
+          # O código para quem quer conferir o download na mão. O GitHub também
+          # o calcula (campo digest da API), e é esse que a área do cliente mostra.
+          sha256sum Otimiza-instalador.exe > Otimiza-instalador.exe.sha256
+
           # `--clobber` porque republicar a mesma tag tem que substituir, e não
           # falhar com "asset já existe".
-          gh release upload "${{ github.ref_name }}" Otimiza-instalador.exe --clobber
+          gh release upload "${{ github.ref_name }}" Otimiza-instalador.exe Otimiza-instalador.exe.sha256 --clobber

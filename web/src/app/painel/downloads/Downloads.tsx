@@ -3,6 +3,7 @@
 import { Download, FileDown, ShieldAlert } from "lucide-react";
 import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
 import { ButtonLink } from "@/components/ui/Button";
+import { CampoCopiavel } from "@/components/ui/CampoCopiavel";
 import { formatarDataHora, formatarTamanho, useUltimaRelease } from "@/lib/release";
 import { links, site } from "@/lib/site";
 
@@ -47,6 +48,15 @@ export function Downloads() {
           Windows 10 ou 11, 64 bits. Não há versão para macOS ou Linux: o que o Otimiza faz depende do registro e dos
           serviços do Windows.
         </div>
+        {r?.instalador?.sha256 && (
+          <div className="border-t border-line px-5 py-4 sm:px-6">
+            <CampoCopiavel rotulo="SHA-256 do instalador, calculado pelo GitHub" valor={r.instalador.sha256} />
+            <p className="mt-2 text-[12.5px] leading-[1.55] text-muted">
+              Para conferir que o arquivo baixado é o original: no PowerShell, na pasta do download, rode{" "}
+              <code className="font-mono text-[12px]">Get-FileHash .\Otimiza-instalador.exe</code> e compare o código.
+            </p>
+          </div>
+        )}
       </Cartao>
 
       {r?.resumo && (
