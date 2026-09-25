@@ -1,10 +1,5 @@
-// Otimizador do Windows
-//
-// Aplica e desfaz as otimizações do catálogo. Duas regras governam este módulo:
-//
-// 1. Nenhuma mudança é feita sem antes gravar o estado anterior no ChangeLog.
-// 2. Se uma ação falhar no meio de uma otimização, as ações já aplicadas são
-//    desfeitas antes de reportar o erro — o sistema nunca fica pela metade.
+// Otimizador do Windows: aplica e desfaz o catálogo. Nenhuma mudança sem gravar antes o estado anterior; ação
+// que falha no meio desfaz as já aplicadas antes de reportar.
 
 pub mod acessibilidade;
 pub mod achados;
@@ -103,33 +98,15 @@ use crate::modules::optimizer::{
 use crate::modules::safety::SafetyValidator;
 use catalog::{Action, OptimizationSpec, RegValue};
 
-/// Caminho das interfaces de rede. Cada subchave é o GUID de um adaptador.
 const TCPIP_INTERFACES: &str = r"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces";
 
-/// Situação de uma ação isolada dentro de uma otimização.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ActionState {
-    /// O sistema já está no estado desejado.
     Satisfied,
-    /// Precisa ser aplicada.
     Pending,
-    /// Não faz sentido nesta máquina (serviço inexistente, chave sem suporte).
     NotApplicable,
-    /// NÃO DEU PARA LER o estado atual.
-    ///
-    /// Este estado existe porque as leituras que falhavam caíam em
-    /// `NotApplicable`, e a tela então dizia ao cliente "não se aplica a esta
-    /// máquina" — uma afirmação sobre o computador dele que ninguém verificou.
-    /// O caminho mais provável disso é justamente a máquina do cliente: chave
-    /// de registro com permissão negada, imagem modificada, política de
-    /// domínio. Ou seja, o produto ficava mais calado exatamente onde ele
-    /// precisa falar.
-    ///
-    /// `registry::read` já separa "não existe" (que volta `Ok`) de "não
-    /// consegui ler" (que volta `Err`) desde a 1.8. Quem achatava os dois era
-    /// esta camada.
-    ///
-    /// Não confundir com `NotApplicable`: lá o produto SABE que não se aplica.
+    /// NÃO DEU PARA LER. Caía em `NotApplicable`, e a tela dizia "não se aplica" sobre algo que ninguém verificou
+    /// (ACL negada, imagem modificada, domínio). Em `NotApplicable` o produto SABE que não se aplica.
     Desconhecido,
 }
 
@@ -140,17 +117,12 @@ impl WindowsOptimizer {
         WindowsOptimizer
     }
 
-    /// Lista o catálogo com a situação real de cada otimização nesta máquina.
     pub fn list(&self, log: &ChangeLog) -> Vec<OptimizationInfo> {
         catalog::CATALOG
             .iter()
-            // Retirado só aparece enquanto está aplicado, para poder ser
-            // desfeito. Ver `catalog::RETIRADOS`.
             .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
-            // Condicional cuja condição foi medida e NÃO vale aqui some — o
-            // ajuste certo para este computador, não a lista mais longa. Fica
-            // se já estiver aplicado (para poder desfazer) ou se a condição
-            // não pôde ser medida (esconder seria afirmar o que ninguém viu).
+            // Condicional com a condição medida e falsa some; fica se já aplicado (para desfazer) ou se não foi possível
+            // medir (esconder afirmaria o que ninguém viu).
             .filter(|spec| match catalog::classe(spec.id) {
                 catalog::Classe::Condicional(c) => condicao_atendida_sem_esperar(c) != Some(false) || log.is_applied(spec.id),
                 _ => true,
@@ -158,14 +130,7 @@ impl WindowsOptimizer {
             .map(|spec| {
                 let state = self.inspect(spec, log);
 
-                // UM RÓTULO SEM MOTIVO NÃO AJUDA NINGUÉM. "Não deu para
-                // verificar" sozinho deixa o cliente sem saber se o problema é
-                // dele, do produto, ou do Windows — e é essa a frase que ele vai
-                // colar no suporte. A causa quase sempre é uma destas três, e
-                // dizer quais são já encurta a conversa pela metade.
-                //
-                // Só quando o `detail` do item não tem nada mais específico a
-                // dizer: medida concreta vence explicação genérica.
+                // Rótulo sem motivo não ajuda: diz as três causas prováveis, a menos que o `detail` tenha algo mais específico.
                 let detail = self.detail(spec).or_else(|| {
                     (state == OptimizationState::Unknown).then(|| {
                         "Não foi possível ler o estado atual desta configuração. \
@@ -180,48 +145,31 @@ impl WindowsOptimizer {
             .collect()
     }
 
-    /// Junta o estado das ações no estado da otimização.
-    ///
-    /// Função pura, separada do `inspect` de propósito: é aqui que mora a regra
-    /// de o que o cliente vê, e ela precisa de teste sem depender de máquina.
-    ///
-    /// A ORDEM DAS PERGUNTAS É A REGRA. Uma ação pendente vence o
-    /// desconhecimento — se sabemos que há trabalho a fazer, esconder o item
-    /// atrás de "não deu para verificar" tiraria do cliente uma otimização real
-    /// por causa de uma leitura alheia que falhou. Mas quando o que sobra é
-    /// desconhecimento, ele não pode virar nem "já está bom" nem "não se aplica":
-    /// as duas são afirmações sobre o PC do cliente que ninguém verificou.
+    /// Pura. A ORDEM É A REGRA: pendente vence desconhecido (uma leitura alheia não esconde uma otimização real); o
+    /// desconhecido que sobra não vira "já está bom" nem "não se aplica".
     fn compor(states: &[ActionState]) -> OptimizationState {
-        // Sabemos que há o que fazer. Isto vem primeiro.
         if states.iter().any(|s| *s == ActionState::Pending) {
             return OptimizationState::Available;
         }
 
-        // Alguma leitura falhou, e nada acima provou que há trabalho.
         if states.iter().any(|s| *s == ActionState::Desconhecido) {
             return OptimizationState::Unknown;
         }
 
-        // Nenhuma ação pode rodar aqui: a otimização não serve para esta máquina.
         if states.iter().all(|s| *s == ActionState::NotApplicable) {
             return OptimizationState::Unavailable;
         }
 
-        // Satisfeita em todo lugar que se aplica: o PC já estava assim.
         OptimizationState::AlreadyOptimal
     }
 
-    /// Descobre a situação de uma otimização olhando o sistema, não um arquivo.
-    ///
-    /// Sem isso o programa ofereceria "otimizar" coisas que o PC já tem — o
-    /// truque clássico de quem cobra por serviço que não executou.
+    /// Pelo sistema, não por arquivo: senão ofereceria "otimizar" o que o PC já tem.
     fn inspect(&self, spec: &OptimizationSpec, log: &ChangeLog) -> OptimizationState {
         if log.is_applied(spec.id) {
             return OptimizationState::Applied;
         }
 
-        // A máquina decide antes do catálogo: uma otimização que faria mal a
-        // este hardware nem chega a ser oferecida.
+        // Otimização que faria mal a este hardware nem é oferecida.
         if !meets_requirement(spec) {
             return OptimizationState::Unavailable;
         }
@@ -231,8 +179,6 @@ impl WindowsOptimizer {
         Self::compor(&states)
     }
 
-    /// Informação medida agora, quando a otimização tem um número ou um motivo
-    /// concreto a mostrar sobre ESTA máquina.
     fn detail(&self, spec: &OptimizationSpec) -> Option<String> {
         if let Some(requirement) = spec.requirement {
             if !meets_requirement(spec) {
@@ -240,30 +186,15 @@ impl WindowsOptimizer {
             }
         }
 
-        // O VBS É O ÚNICO ITEM ONDE A CHAVE DE REGISTRO NÃO É A VERDADE.
-        //
-        // `EnableVirtualizationBasedSecurity = 0` entra sempre, e a releitura
-        // devolve 0 — então a lista marcava a otimização como aplicada. Só que
-        // quem manda é o que está RODANDO, e o VBS pode continuar de pé depois
-        // do reinício: por política de domínio, por bloqueio em UEFI, ou porque
-        // a Integridade de Memória foi religada. O cliente reiniciava o PC,
-        // perdia o Hyper-V e o WSL, não ganhava o FPS, e a tela dizia "feito".
-        //
-        // A resposta verdadeira já existia no produto — `firmware::vbs_running`
-        // lê `Win32_DeviceGuard`, que devolve NÚMERO e não texto traduzido — e
-        // era usada só no diagnóstico. Aqui ela custa uma chamada ao PowerShell
-        // por atualização da lista, e vale: é a diferença entre mostrar o
-        // registro e mostrar a máquina.
-        //
-        // Por id e não por ação porque a primeira ação deste item é uma escrita
-        // de registro comum, indistinguível das outras.
+        // O VBS é o único item em que o registro não é a verdade: `EnableVirtualizationBasedSecurity = 0` entra e relê 0,
+        // mas o VBS pode seguir rodando (domínio, UEFI, Integridade de Memória religada). Pergunta a
+        // `firmware::vbs_running` (`Win32_DeviceGuard`, número). Por id, porque a primeira ação é uma escrita comum.
         if spec.id == "disable_vbs" {
             return Some(
                 match firmware::vbs_running() {
                     Some(true) => "Agora: VBS ligado e em execução nesta máquina.",
                     Some(false) => "Agora: VBS não está em execução nesta máquina.",
-                    // Não saber não pode virar "está desligado": é justamente o
-                    // silêncio que faria o cliente reiniciar por nada.
+                    // Não saber não vira "está desligado".
                     None => "Não foi possível ler se o VBS está em execução nesta máquina.",
                 }
                 .to_string(),
@@ -271,10 +202,7 @@ impl WindowsOptimizer {
         }
 
         match spec.actions.first()? {
-            // Sem elevação não conseguimos sequer LER estas configurações. Dizer
-            // isso é obrigatório: o usuário precisa saber que o item aparece
-            // como disponível porque não foi possível conferir, não porque
-            // sabemos que falta aplicar.
+            // Sem elevação nem se LÊ: o item aparece porque não foi possível conferir, e o detalhe diz isso.
             Action::ReservedStorage { .. }
             | Action::RemoveForcedPlatformClock
             | Action::ClearBootLimits
@@ -283,11 +211,7 @@ impl WindowsOptimizer {
                 Some("Só dá para conferir o estado atual como administrador.".to_string())
             }
 
-            // Elevado e ainda assim sem resposta. Medido no Windows 11 Pro da
-            // máquina de desenvolvimento: o comando existe e devolve "acesso
-            // negado". O item aparece como disponível porque não foi possível
-            // conferir — e isso precisa estar escrito, senão vira promessa de
-            // conserto para um problema que talvez nem exista.
+            // Elevado e ainda "acesso negado" (Windows 11 Pro): disponível porque não se conferiu, e escrito.
             Action::ReservedStorage { .. }
                 if power::estado_do_armazenamento_reservado()
                     == power::EstadoReservado::NaoVerificavel =>
@@ -303,7 +227,6 @@ impl WindowsOptimizer {
         }
     }
 
-    /// Verifica se uma ação já está satisfeita, sem alterar nada.
     fn inspect_action(&self, action: &Action) -> ActionState {
         match action {
             Action::Registry {
@@ -329,12 +252,9 @@ impl WindowsOptimizer {
             Action::DisableService { name } => {
                 match services::exists(name) {
                     Some(true) => {}
-                    // O Windows realmente não tem este serviço. Instalações
-                    // variam, e isso o produto SABE.
+                    // Instalações variam: isso o produto SABE.
                     Some(false) => return ActionState::NotApplicable,
-                    // A chave do serviço não pôde ser lida — ACL de domínio,
-                    // endurecimento, antivírus. Dizer "não se aplica" faria a
-                    // otimização sumir da lista com a frase errada.
+                    // ACL negando a chave do serviço: "não se aplica" sumiria com o item com a frase errada.
                     None => return ActionState::Desconhecido,
                 }
 
@@ -345,18 +265,12 @@ impl WindowsOptimizer {
                 }
             }
 
-            // Comparado com o plano de alto desempenho QUE EXISTE NESTA
-            // MÁQUINA, e não com o GUID fixo: onde o Windows não traz o Alto
-            // Desempenho, o produto usa uma cópia com GUID próprio, e comparar
-            // com o fixo deixaria a otimização eternamente "pendente" mesmo
-            // depois de aplicada.
+            // Contra o plano de alto desempenho QUE EXISTE AQUI, não o GUID fixo, senão ficaria eternamente pendente.
             Action::PlanoOtimiza => match planoenergia::onde_esta_o_plano() {
                 planoenergia::EstadoDoPlano::Ativo => ActionState::Satisfied,
                 planoenergia::EstadoDoPlano::ExisteEnaoEstaAtivo
                 | planoenergia::EstadoDoPlano::NaoExiste => ActionState::Pending,
-                // Não conseguir ler NÃO É "não está aplicado": oferecer aplicar
-                // de novo aqui seria pedir ao cliente que refizesse algo que
-                // talvez já esteja feito.
+                // Não ler NÃO é "não aplicado": seria pedir para refazer o que talvez já esteja feito.
                 planoenergia::EstadoDoPlano::NaoConsegui => ActionState::Desconhecido,
             },
 
@@ -378,12 +292,8 @@ impl WindowsOptimizer {
                         ActionState::Pending
                     }
                 }
-                // Sem nenhuma interface listada, não há placa de rede em que
-                // mexer — isso o produto SABE.
                 Ok(_) => ActionState::NotApplicable,
-                // A lista não pôde ser lida. Antes caía junto com o caso acima e
-                // virava "não se aplica a esta máquina", sobre um PC que tem
-                // placa de rede como qualquer outro.
+                // A lista ilegível virava "não se aplica" num PC com placa de rede.
                 Err(_) => ActionState::Desconhecido,
             },
 
@@ -391,30 +301,22 @@ impl WindowsOptimizer {
                 match power::hibernation_enabled() {
                     Some(true) => ActionState::Pending,
                     Some(false) => ActionState::Satisfied,
-                    // Não ler não pode virar "já está desativada": seria dizer
-                    // ao cliente que o espaço já foi liberado sem ter olhado.
+                    // Não ler não vira "já está desativada" (espaço liberado sem olhar).
                     None => ActionState::Desconhecido,
                 }
             }
 
             Action::MemoryCompression { enabled } => {
-                // A condição de RAM já foi checada em `meets_requirement`; aqui
-                // só resta comparar o estado atual com o desejado.
+                // A RAM já foi checada em `meets_requirement`.
                 match power::memory_compression_enabled() {
                     Some(current) if current == *enabled => ActionState::Satisfied,
                     Some(_) => ActionState::Pending,
-                    // O `Get-MMAgent` não respondeu. A compressão de memória
-                    // existe em todo Windows 10 e 11 — dizer "não se aplica a
-                    // esta máquina" era inventar uma limitação que ela não tem.
+                    // A compressão existe em todo Windows 10 e 11: `Get-MMAgent` calado não é "não se aplica".
                     None => ActionState::Desconhecido,
                 }
             }
 
-            // As três verificações abaixo dependem de comandos que o Windows só
-            // responde com elevação. Sem ela, a leitura volta vazia — e concluir
-            // "está tudo certo" a partir de uma leitura que não aconteceu seria
-            // afirmar o que não foi verificado. Nesses casos oferecemos o item e
-            // dizemos, no detalhe, que a conferência exige administrador.
+            // Estas três só respondem com elevação: sem ela, oferece e diz que a conferência exige administrador.
             Action::ClearBootLimits => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -430,8 +332,7 @@ impl WindowsOptimizer {
             Action::GpuMsiMode => match devices::msi_ja_ativo() {
                 Some(true) => ActionState::Satisfied,
                 Some(false) => ActionState::Pending,
-                // Sem placa reconhecida, não há o que ajustar — e chutar qual
-                // dispositivo é a GPU seria mexer em interrupção alheia.
+                // Chutar qual dispositivo é a GPU seria mexer em interrupção alheia.
                 None => ActionState::NotApplicable,
             },
 
@@ -441,7 +342,6 @@ impl WindowsOptimizer {
                 None => ActionState::NotApplicable,
             },
 
-            // Só faz sentido oferecer a limpeza se houver algo a limpar.
             Action::ReservedStorage { enabled } => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -453,23 +353,13 @@ impl WindowsOptimizer {
                     EstadoReservado::Ligado if *enabled => ActionState::Satisfied,
                     EstadoReservado::Desligado if !*enabled => ActionState::Satisfied,
                     EstadoReservado::Ligado | EstadoReservado::Desligado => ActionState::Pending,
-                    // O comando respondeu e não trouxe estado: este Windows não
-                    // tem o recurso.
                     EstadoReservado::SemRecurso => ActionState::NotApplicable,
-                    // O comando não respondeu. Não sabemos — e "não sabemos"
-                    // nunca pode virar "não se aplica a esta máquina".
-                    //
-                    // Era `Pending` porque `Desconhecido` não existia, e
-                    // `Pending` ao menos não escondia o item. Agora há o estado
-                    // certo: `Pending` afirmava que HÁ o que aplicar, o que
-                    // também não tinha sido verificado.
+                    // Não sabemos, e "não sabemos" não vira "não se aplica" nem `Pending` (que afirmaria haver o que aplicar).
                     EstadoReservado::NaoVerificavel => ActionState::Desconhecido,
                 }
             }
 
-            // Só é oferecida quando alguma das três está de fato ligada. Numa
-            // máquina no padrão do Windows — que é a maioria — esta linha nem
-            // aparece, em vez de virar mais um item para inflar a lista.
+            // Só quando alguma está ligada: no padrão do Windows a linha nem aparece.
             Action::AccessibilityKeysOff => {
                 if acessibilidade::ligadas().is_empty() {
                     ActionState::Satisfied
@@ -485,9 +375,6 @@ impl WindowsOptimizer {
                 Err(_) => ActionState::Desconhecido,
             },
 
-            // Mesma regra dos outros itens que dependem do `bcdedit`: sem
-            // elevação a leitura não acontece, e não se afirma o que não foi
-            // verificado.
             Action::DisableHypervisor => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -496,16 +383,11 @@ impl WindowsOptimizer {
                 match power::hypervisor_launch_type() {
                     Some(tipo) if tipo == "off" => ActionState::Satisfied,
                     Some(_) => ActionState::Pending,
-                    // O `bcdedit` não respondeu, ou a linha não estava lá. O
-                    // próprio `hypervisor_launch_type` documenta que `None` é
-                    // "não conseguimos ler" e não "desligado" — esta camada é
-                    // que transformava isso em "não se aplica".
+                    // `None` é "não conseguimos ler", não "desligado".
                     None => ActionState::Desconhecido,
                 }
             }
 
-            // Só aparece como disponível se alguém realmente forçou o relógio.
-            // Num PC saudável esta linha nunca é oferecida.
             Action::RemoveForcedPlatformClock => {
                 if !registry::is_elevated() {
                     return ActionState::Pending;
@@ -520,11 +402,8 @@ impl WindowsOptimizer {
         }
     }
 
-    /// Aplica uma otimização, registrando tudo o que for alterado.
-    ///
-    /// Cada aplicação deixa rastro no registro em arquivo (`utils::logger`):
-    /// quando começou, cada ação antes de executá-la, e como terminou — inclusive
-    /// a falha que se desfez sozinha, que o histórico de desfazer não guarda.
+    /// Deixa rastro no `utils::logger`: início, cada ação antes de executar, e o fim, inclusive a falha que se
+    /// desfez sozinha.
     pub fn apply(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let inicio = std::time::Instant::now();
         crate::utils::Logger::info(&format!("aplicar `{}`: começou", id));
@@ -569,14 +448,11 @@ impl WindowsOptimizer {
         let mut acoes: Vec<ActionResult> = Vec::new();
         let total_de_acoes = spec.actions.len();
 
-        // O diário desta aplicação, aberto assim que existir a primeira
-        // mudança a proteger. `None` enquanto nada foi mexido: não há o que
-        // recuperar de uma operação que ainda não tocou em nada.
+        // `None` enquanto nada foi mexido.
         let mut diario: Option<crate::modules::transacao::Diario> = None;
 
         for (numero, action) in spec.actions.iter().enumerate() {
-            // Antes de executar, e não depois: se esta ação travar, a última
-            // linha do registro diz qual foi.
+            // Antes de executar: se travar, a última linha do log diz qual.
             crate::utils::Logger::info(&format!(
                 "aplicar `{}`: ação {}/{} — {:?}",
                 spec.id,
@@ -585,15 +461,8 @@ impl WindowsOptimizer {
                 action
             ));
 
-            // O DETALHE É CRIADO AQUI E EMPRESTADO AO RAMO, em vez de cada ramo
-            // montar o seu. Nome, relógio e estado padrão saem de um lugar só; o
-            // ramo preenche apenas o que ele é o único a saber — o valor de
-            // antes, o que foi pedido, o que ficou, e a saída do comando.
-            //
-            // O estado nasce `Verified` porque, depois da releitura obrigatória
-            // que todo ramo de escrita agora faz, um `Ok` significa exatamente
-            // isso. Os ramos que sabem mais — já estava bom, não existe aqui —
-            // corrigem antes de sair.
+            // Nome, relógio e estado padrão saem daqui; o ramo preenche o que só ele sabe. Nasce `Verified` porque todo
+            // ramo de escrita relê; os que sabem mais corrigem.
             let relogio = std::time::Instant::now();
             let mut detalhe = ActionResult {
                 name: nome_da_acao(action),
@@ -604,17 +473,7 @@ impl WindowsOptimizer {
             let resultado = self.execute(action, &mut changes, &mut detalhe);
             detalhe.duration_ms = relogio.elapsed().as_millis() as u64;
 
-            // O DIÁRIO É REESCRITO A CADA AÇÃO, e não uma vez antes do laço.
-            //
-            // Uma otimização é uma sequência de mudanças, e `changes` cresce
-            // conforme elas acontecem. Um diário gravado antes do laço estaria
-            // vazio — saberia que algo começou e não saberia desfazer nada. O
-            // que precisa sobreviver a uma queda de energia é a lista de
-            // valores anteriores COMO ELA ESTÁ AGORA.
-            //
-            // Custa um `sync_all` por ação. Uma otimização tem um punhado de
-            // ações, e cada uma já escreveu no registro — o custo do diário
-            // desaparece ao lado disso.
+            // Reescrito a cada ação: gravado antes do laço estaria vazio. Um `sync_all` por ação some ao lado das escritas.
             if !changes.is_empty() {
                 diario = Some(crate::modules::transacao::abrir(
                     &crate::modules::transacao::Pendencia::nova(
@@ -627,10 +486,7 @@ impl WindowsOptimizer {
                 )?);
             }
 
-            // DEPOIS DO RAMO, E NÃO DENTRO DELE. O ramo sabe o que aconteceu
-            // com o ajuste; quem manda na máquina é outra pergunta, e a mesma
-            // para todos os ramos. Repeti-la em cada um seria dezessete cópias
-            // da mesma regra.
+            // Depois do ramo: quem manda na máquina é a mesma pergunta para todos (dezessete cópias seriam demais).
             detalhe.status = refinar_status(detalhe.status, governanca());
 
             match resultado {
@@ -646,9 +502,7 @@ impl WindowsOptimizer {
                     acoes.push(detalhe);
                 }
                 Err(error) => {
-                    // `VerificationFailed` é diferente de `Failed`, e quem sabe
-                    // qual dos dois é o ramo — ele classifica antes de devolver
-                    // o erro. Só quem não disse nada vira `Failed`.
+                    // Só quem não classificou vira `Failed`; `VerificationFailed` é decisão do ramo.
                     if detalhe.status == ActionStatus::Verified {
                         detalhe.status = ActionStatus::Failed;
                     }
@@ -666,9 +520,7 @@ impl WindowsOptimizer {
                         changes.len()
                     ));
 
-                    // Desfaz o que já foi aplicado para não deixar o sistema num estado misto.
-                    // Se a própria reversão falhar, isso precisa ir para o log: é a
-                    // única situação em que o PC pode ficar num estado intermediário.
+                    // Se a própria reversão falhar vai para o log: é o único caso de PC em estado intermediário.
                     if let Err(failures) = revert_changes(&changes) {
                         crate::utils::Logger::error(&format!(
                             "reversão parcial de `{}` falhou: {}",
@@ -677,10 +529,7 @@ impl WindowsOptimizer {
                         ));
                     }
 
-                    // Falha TRATADA fecha o diário: a reversão parcial acima
-                    // já pôs a máquina de volta, e deixar a pendência no disco
-                    // faria a próxima abertura oferecer desfazer o que já foi
-                    // desfeito.
+                    // Falha TRATADA fecha o diário: a máquina já voltou, e a pendência faria oferecer desfazer o desfeito.
                     if let Some(d) = diario.take() {
                         if let Err(erro) = d.concluir() {
                             crate::utils::Logger::warn(&format!(
@@ -705,10 +554,7 @@ impl WindowsOptimizer {
             changes,
         })?;
 
-        // DEPOIS do `record`, e não antes. O diário existe para cobrir
-        // exatamente a janela entre mexer no sistema e o histórico saber
-        // disso; fechá-lo antes de o histórico estar gravado deixaria essa
-        // janela descoberta, que é o defeito que ele veio corrigir.
+        // DEPOIS do `record`: o diário cobre a janela entre mexer no sistema e o histórico saber.
         if let Some(d) = diario.take() {
             d.concluir()?;
         }
@@ -716,10 +562,7 @@ impl WindowsOptimizer {
         Ok(OptimizationOutcome {
             id: spec.id.to_string(),
             name: spec.name.to_string(),
-            // DERIVADO DAS AÇÕES, e não `true` cravado. Chegar até aqui já
-            // significa que nada devolveu erro — mas o `success` passa a sair
-            // do mesmo lugar que o cliente vê ação por ação, e não de uma
-            // afirmação paralela que pode divergir no próximo conserto.
+            // Derivado das ações, não `true` cravado, para não divergir do que o cliente vê.
             success: acoes.iter().all(|a| a.status.deu_certo()),
             applied: true,
             message: success_message(spec, &notes),
@@ -732,11 +575,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Desfaz uma otimização, restaurando cada valor ao estado anterior.
-    ///
-    /// Funciona também para o que não está no catálogo — como as entradas de
-    /// inicialização desligadas pelo usuário. O histórico guarda o suficiente para
-    /// reverter qualquer coisa que a gente tenha mexido, e é ele quem manda aqui.
+    /// Serve também ao que não está no catálogo (inicialização desligada pelo usuário): quem manda é o histórico.
     pub fn revert(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         let inicio = std::time::Instant::now();
         crate::utils::Logger::info(&format!("desfazer `{}`: começou", id));
@@ -781,16 +620,8 @@ impl WindowsOptimizer {
         let changes_count = entry.changes.len();
         let described: Vec<String> = entry.changes.iter().map(|change| change.describe()).collect();
 
-        // O DIÁRIO, ABERTO ANTES DE TOCAR NO SISTEMA.
-        //
-        // `log.take` acima já removeu o registro do histórico E GRAVOU EM
-        // DISCO. Daqui até o fim desta função, o valor anterior de cada
-        // mudança só existe na memória deste processo: morrer agora deixa a
-        // mudança aplicada e o número original perdido para sempre.
-        //
-        // O `if let Err` abaixo cobre a reversão FALHAR. Ele não cobre o
-        // processo ser morto, e não há `catch` para a tomada sendo puxada.
-        // O diário cobre.
+        // `log.take` já tirou e gravou o registro: daqui ao fim o valor anterior só existe na memória. O `if let Err`
+        // cobre a reversão falhar; o diário cobre o processo morrer.
         let diario = crate::modules::transacao::abrir(&crate::modules::transacao::Pendencia::nova(
             id,
             &name,
@@ -800,11 +631,8 @@ impl WindowsOptimizer {
         ))?;
 
         if let Err(errors) = revert_changes(&entry.changes) {
-            // A reversão falhou: o registro volta ao histórico para que o usuário
-            // possa tentar de novo em vez de perder o estado original.
+            // O registro volta ao histórico para tentar de novo.
             log.record(entry)?;
-            // Falha TRATADA fecha o diário: o estado original está de volta no
-            // histórico, que é onde ele deve estar.
             diario.concluir()?;
             return Err(format!("Falha ao reverter `{}`: {}", name, errors.join("; ")));
         }
@@ -824,11 +652,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Liga ou desliga uma tarefa agendada de terceiros.
-    ///
-    /// Segue o mesmo desenho da inicialização: desligar grava no histórico com
-    /// id próprio, ligar de volta desfaz esse registro. Assim "Desfazer tudo"
-    /// devolve também as tarefas ao estado em que estavam.
+    /// Desligar grava com id próprio; ligar desfaz esse registro. "Desfazer tudo" alcança.
     pub fn set_scheduled_task(
         &self,
         path: &str,
@@ -880,10 +704,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Fixa a prioridade alta de um jogo, valendo em toda abertura.
-    ///
-    /// Entra no histórico, então "Desfazer tudo" remove o ajuste junto com o
-    /// resto — inclusive se o programa fechar no meio.
+    /// No histórico: "Desfazer tudo" remove, inclusive se o programa fechar no meio.
     pub fn set_persistent_priority(
         &self,
         executable: &str,
@@ -930,15 +751,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Escolhe qual placa de vídeo um jogo deve usar.
-    ///
-    /// Entra no histórico com id próprio por jogo, então "Desfazer tudo"
-    /// devolve a preferência que existia antes — inclusive a ausência dela.
-    /// Coloca um monitor na maior taxa que ele aceita na resolução atual.
-    ///
-    /// É a única ação do produto que muda o que a tela mostra na hora, e por
-    /// isso é a que mais precisa de caminho de volta: entra no histórico com a
-    /// frequência anterior, e o "Desfazer" a devolve.
+    /// A única ação que muda a tela na hora: entra no histórico com a frequência anterior.
     pub fn set_max_refresh_rate(
         &self,
         dispositivo: &str,
@@ -966,8 +779,7 @@ impl WindowsOptimizer {
         }
 
         if log.is_applied(&id) {
-            // Reaplicar por cima perderia o valor original: o histórico
-            // guardaria como "anterior" aquilo que nós mesmos escrevemos.
+            // Reaplicar por cima guardaria como "anterior" o que nós escrevemos.
             self.revert(&id, log)?;
         }
 
@@ -991,9 +803,7 @@ impl WindowsOptimizer {
             name: alvo.descricao.clone(),
             success: true,
             applied: true,
-            // A honestidade que o achado já dizia, repetida no momento em que
-            // ela mais importa: o cliente acabou de clicar e vai olhar o
-            // contador de FPS esperando um número maior.
+            // O cliente acabou de clicar e vai olhar o contador esperando mais FPS.
             message: format!(
                 "{} passou de {} para {} Hz. O jogo fica visivelmente mais suave, e o contador de FPS continua onde estava — a taxa do monitor não cria quadros, ela deixa de segurar os que a placa já entrega.",
                 alvo.descricao, anterior, maximo
@@ -1005,15 +815,8 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Aplica um ajuste do driver NVIDIA no perfil global e registra o valor que
-    /// existia antes.
-    ///
-    /// Até a 2.0 o `nvdriver.rs` tinha o desfazer e não tinha quem chamasse o
-    /// fazer. Esta é a porta.
-    ///
-    /// O histórico é gravado logo depois da escrita no driver. Se ele não
-    /// gravar, o ajuste é desfeito na hora: mudança no driver sem registro é
-    /// mudança sem caminho de volta pelo Otimiza.
+    /// Histórico gravado logo depois da escrita no driver; se não gravar, desfaz na hora (mudança sem caminho de
+    /// volta).
     pub fn aplicar_ajuste_nvidia(
         &self,
         opcao: &str,
@@ -1024,8 +827,6 @@ impl WindowsOptimizer {
         let id = nvdriver::id_no_historico(opcao);
 
         if log.is_applied(&id) {
-            // Reaplicar por cima gravaria como "anterior" o valor que nós
-            // mesmos escrevemos, e o desfazer devolveria o nosso.
             return Ok(OptimizationOutcome {
                 id,
                 name: alvo.titulo.to_string(),
@@ -1082,13 +883,8 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Limita os quadros por segundo de um jogo, no perfil do executável dele no
-    /// driver da NVIDIA.
-    ///
-    /// NUNCA NO PERFIL GLOBAL: um limite global prenderia a área de trabalho e
-    /// todo outro jogo no mesmo número. Trocar o número de um jogo já limitado
-    /// desfaz o limite anterior primeiro — senão o histórico guardaria como
-    /// "anterior" o limite que nós mesmos pusemos.
+    /// NUNCA no perfil global (prenderia área de trabalho e todo jogo). Trocar o número de um jogo já limitado desfaz o
+    /// anterior primeiro.
     pub fn limitar_fps_nvidia(
         &self,
         executavel: &str,
@@ -1152,6 +948,7 @@ impl WindowsOptimizer {
         })
     }
 
+    /// Id próprio por jogo no histórico: "Desfazer tudo" devolve a preferência anterior, inclusive a ausência dela.
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
@@ -1161,8 +958,6 @@ impl WindowsOptimizer {
         let id = format!("placa:{}", caminho.to_lowercase());
 
         if log.is_applied(&id) {
-            // Reaplicar por cima perderia o valor original: o histórico
-            // guardaria como "anterior" aquilo que nós mesmos escrevemos.
             self.revert(&id, log)?;
         }
 
@@ -1200,11 +995,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Troca o servidor de DNS de um adaptador.
-    ///
-    /// Entra no histórico com id próprio, então "Desfazer tudo" devolve o DNS
-    /// original junto com o resto. Voltar para automático desfaz o registro em
-    /// vez de criar um segundo.
+    /// Voltar para automático desfaz o registro em vez de criar um segundo.
     pub fn set_dns(
         &self,
         guid: &str,
@@ -1248,16 +1039,8 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Volta ao tipo de início padrão do Windows cada serviço essencial que está
-    /// desativado (`essenciais::ESSENCIAIS`).
-    ///
-    /// Cada chamada entra no histórico com um id próprio, marcado com o instante:
-    /// um Windows modificado pode ter os serviços desligados de novo por fora, e
-    /// cada religada precisa poder ser desfeita sozinha, sem apagar a anterior.
-    ///
-    /// Falha num serviço não impede os outros. Cada um é independente, e o que
-    /// foi religado entra no histórico mesmo quando outro falhou — senão ficaria
-    /// mudado sem caminho de volta.
+    /// Id com o instante: um Windows modificado religa os desligados por fora, e cada religada se desfaz sozinha. Falha
+    /// num não impede os outros, e o religado entra no histórico mesmo assim.
     pub fn religar_essenciais(&self, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
         if !registry::is_elevated() {
             return Err(
@@ -1354,11 +1137,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Leva um serviço de terceiro para Manual, ou devolve para Automático.
-    ///
-    /// Segue o mesmo desenho das tarefas agendadas: o id próprio faz a mudança
-    /// entrar no "Desfazer tudo" junto com o resto, e voltar para Automático
-    /// desfaz o registro em vez de criar um segundo.
+    /// Voltar para Automático desfaz o registro em vez de criar um segundo.
     pub fn set_service_start(
         &self,
         name: &str,
@@ -1401,7 +1180,6 @@ impl WindowsOptimizer {
             name: name.to_string(),
             success: true,
             applied: true,
-            // A frase importa: o usuário precisa entender que não quebrou nada.
             message: format!(
                 "`{}` não sobe mais sozinho no boot. Ele ainda sobe quando o programa pedir.",
                 name
@@ -1413,11 +1191,7 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Liga ou desliga um programa de inicialização.
-    ///
-    /// Desligar grava no histórico com um id próprio, então "Desfazer tudo"
-    /// devolve a inicialização ao estado original junto com o resto. Ligar de novo
-    /// desfaz esse registro, restaurando exatamente o valor que existia antes.
+    /// Ligar de novo restaura exatamente o valor anterior.
     pub fn set_startup(
         &self,
         hive: &str,
@@ -1425,7 +1199,6 @@ impl WindowsOptimizer {
         enabled: bool,
         log: &mut ChangeLog,
     ) -> Result<OptimizationOutcome, String> {
-        // Entradas de HKLM valem para todos os usuários da máquina.
         if hive.eq_ignore_ascii_case("HKLM") && !registry::is_elevated() {
             return Err(format!(
                 "`{}` vale para todos os usuários do PC e exige executar como administrador.",
@@ -1436,7 +1209,6 @@ impl WindowsOptimizer {
         let id = startup_change_id(hive, name);
 
         if enabled {
-            // Se fomos nós que desligamos, reverter restaura o valor exato.
             if log.is_applied(&id) {
                 return self.revert(&id, log);
             }
@@ -1478,23 +1250,9 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Aplica um lote do que é seguro aplicar sem o usuário escolher item a item.
-    ///
-    /// `only` restringe a lista: `Some(ids)` é o caminho dos perfis, que aplicam
-    /// só o que recomendam, e `None` é o "Otimizar agora", que pega tudo que
-    /// está pendente.
-    ///
-    /// Três exclusões deliberadas, em `catalog::entra_no_lote`, e elas vêm
-    /// DEPOIS do filtro de ids — um perfil não pode arrastar nenhuma das três só
-    /// porque citou o id:
-    /// - o que não é reversível (apagar arquivo nunca acontece por um clique genérico)
-    /// - o que troca segurança por desempenho
-    /// - o que está em `catalog::FORA_DO_LOTE`, cujo efeito o cliente só sente dias depois
-    ///
-    /// Já aplicado ou já padrão da máquina também fica de fora, pela inspeção.
-    ///
-    /// A falha de uma otimização não interrompe as demais — cada uma é independente
-    /// e já se desfez sozinha antes de reportar o erro.
+    /// `Some(ids)` é o caminho dos perfis; `None` é o "Otimizar agora". As exclusões de `catalog::entra_no_lote` vêm
+    /// DEPOIS do filtro de ids: um perfil não arrasta o irreversível, a troca de segurança nem `FORA_DO_LOTE`. Uma
+    /// falha não interrompe as outras.
     pub fn apply_selection<F>(
         &self,
         only: Option<&[String]>,
@@ -1511,13 +1269,8 @@ impl WindowsOptimizer {
                 None => true,
             })
             .filter(|spec| catalog::entra_no_lote_se(spec, |c| condicao_atendida(c) == Some(true)))
-            // SÓ `Available`, E ISSO AGORA DEIXA `Unknown` DE FORA DE PROPÓSITO.
-            //
-            // O "Otimizar agora" é o botão que o cliente aperta sem ler item a
-            // item, e por isso ele só leva o que o produto CONFERIU que falta.
-            // Item cujo estado não pôde ser lido continua na lista, com a frase
-            // dizendo o porquê, para a pessoa decidir — mas não entra num lote
-            // que ninguém revisou.
+            // SÓ `Available`: o botão que ninguém revisa leva só o que o produto CONFERIU que falta. `Unknown` fica na lista
+            // para a pessoa decidir.
             .filter(|spec| self.inspect(spec, log) == OptimizationState::Available)
             .collect();
 
@@ -1564,7 +1317,6 @@ impl WindowsOptimizer {
             .collect()
     }
 
-    /// Desfaz tudo o que foi aplicado, devolvendo o PC ao estado original.
     pub fn revert_all<F>(&self, log: &mut ChangeLog, mut on_step: F) -> Vec<OptimizationOutcome>
     where
         F: FnMut(BatchStep),
@@ -1617,7 +1369,6 @@ impl WindowsOptimizer {
             .collect()
     }
 
-    /// Executa uma ação e acumula os registros necessários para desfazê-la.
     fn execute(
         &self,
         action: &Action,
@@ -1633,24 +1384,12 @@ impl WindowsOptimizer {
             } => {
                 let mut nao_confirmado: Option<String> = None;
 
-                // O QUE HAVIA ANTES, lido antes de escrever. É o campo que
-                // responde "o Otimiza mudou o quê, exatamente?" sem o cliente
-                // ter que confiar na nossa palavra.
+                // O antes, lido antes de escrever.
                 let antes = registry::read(hive, path, name);
                 detalhe.before_value = antes.as_ref().ok().map(descrever_valor);
                 detalhe.expected_value = Some(descrever_alvo(value));
 
-                // JÁ ESTAVA NO ALVO: não escreve e não registra.
-                //
-                // Todos os outros ramos já faziam isso, e este não — ele
-                // gravava o valor por cima do mesmo valor e devolvia
-                // `Verified`, dizendo ao cliente que mudou o que não mudou. Foi
-                // visto num resultado real: `antes=0 esperado=0 depois=0` com
-                // estado "conferido".
-                //
-                // Também evita uma linha inútil no histórico: um desfazer que
-                // reescreve o mesmo número não desfaz nada, e ocupa espaço na
-                // lista do cliente como se desfizesse.
+                // Já no alvo: não escreve nem registra (gravava por cima e devolvia `Verified`, `antes=0 esperado=0 depois=0`).
                 if matches!(conferir_escrita(value, &antes), Confirmacao::Igual) {
                     detalhe.status = ActionStatus::AlreadyOptimized;
                     detalhe.after_value.clone_from(&detalhe.before_value);
@@ -1663,9 +1402,7 @@ impl WindowsOptimizer {
                     RegValue::Text(v) => registry::set_string(hive, path, name, v)?,
                 };
 
-                // ANTES DE CONFERIR, E NÃO DEPOIS. Se a conferência reprovar, o
-                // valor JÁ ESTÁ GRAVADO no PC do cliente — e é este registro que
-                // faz a reversão automática do `apply` conseguir devolvê-lo.
+                // ANTES de conferir: se reprovar, o valor já está gravado, e este registro permite a reversão automática.
                 changes.push(ChangeRecord::RegistryValue {
                     hive: hive.to_string(),
                     path: path.to_string(),
@@ -1673,26 +1410,15 @@ impl WindowsOptimizer {
                     previous,
                 });
 
-                // NÃO CONFIE QUE FUNCIONOU: RELÊ.
-                //
-                // A escrita retornar `Ok` só diz que o Windows aceitou o pedido,
-                // não que o valor ficou. Em máquina gerenciada por política de
-                // domínio, o valor volta sozinho; em processo de 32 bits sobre
-                // Windows de 64, a escrita cai no espelho `WOW6432Node` e o
-                // sistema continua lendo a chave verdadeira. Nos dois casos o
-                // produto dizia "aplicado" sobre um PC que não mudou.
-                //
-                // É a mesma regra que o plano de energia já seguia, agora no
-                // caminho por onde passa a maior parte do catálogo.
+                // Relê: `Ok` só diz que o Windows aceitou. Domínio reescreve a chave; em 32 bits sobre 64 a escrita cai no
+                // `WOW6432Node`.
                 let relido = registry::read(hive, path, name);
                 detalhe.after_value = relido.as_ref().ok().map(descrever_valor);
 
                 match conferir_escrita(value, &relido) {
                     Confirmacao::Igual => {}
                     Confirmacao::Diferente(lido) => {
-                        // `VerificationFailed`, e não `Failed`: o comando foi
-                        // aceito. A diferença diz ao atendimento que o problema
-                        // não está no Otimiza.
+                        // Aceito e não ficou: o problema não está no Otimiza.
                         detalhe.status = ActionStatus::VerificationFailed;
 
                         return Err(format!(
@@ -1702,9 +1428,7 @@ impl WindowsOptimizer {
                             name, lido
                         ))
                     }
-                    // Gravou e não deu para reler. Não é falha — desfazer aqui
-                    // seria descartar uma mudança que provavelmente valeu — mas
-                    // também não pode passar como confirmado.
+                    // Não é falha (desfazer descartaria uma mudança que provavelmente valeu) nem confirmação.
                     Confirmacao::NaoDeuParaLer => {
                         detalhe.status = ActionStatus::NotConfirmed;
                         nao_confirmado = Some(format!(
@@ -1714,20 +1438,12 @@ impl WindowsOptimizer {
                     }
                 }
 
-                // Gravar não basta: as preferências de `HKCU\Control Panel`
-                // ficam em memória desde o logon, e sem avisar o Windows a
-                // otimização valeria só no próximo — numa tela que promete
-                // efeito imediato.
+                // `HKCU\Control Panel` fica em memória desde o logon: sem avisar o Windows, valeria só no próximo.
                 if sysparams::precisa_sincronizar_interface(hive, path) {
                     sysparams::sincronizar_interface();
                 }
 
-                // Quando o shell só relê a chave ao iniciar, o cliente precisa
-                // saber disso — senão aplica, não vê nada mudar na barra de
-                // tarefas e conclui que o produto não funcionou.
-                // As duas notas podem existir juntas, e nenhuma pode engolir a
-                // outra: uma diz que o efeito só aparece depois de reiniciar o
-                // shell, a outra diz que não deu para confirmar a gravação.
+                // As duas notas coexistem: reiniciar o shell e não ter confirmado a gravação.
                 let ativacao = sysparams::nota_de_ativacao(hive, path, name).map(|n| n.to_string());
 
                 Ok(match (nao_confirmado, ativacao) {
@@ -1738,14 +1454,12 @@ impl WindowsOptimizer {
             }
 
             Action::DisableService { name } => {
-                // Segunda barreira, além dos testes do catálogo: nem uma alteração
-                // futura no catálogo consegue desativar um serviço crítico.
+                // Segunda barreira: nem uma mudança futura no catálogo desativa um serviço crítico.
                 let validation = SafetyValidator::new().validate_operation("service_disable", name);
                 if !validation.valid {
                     return Err(format!("Serviço crítico bloqueado: {}", name));
                 }
 
-                // Um serviço ausente não é falha: instalações do Windows variam.
                 match services::exists(name) {
                     Some(true) => {}
                     Some(false) => {
@@ -1754,9 +1468,7 @@ impl WindowsOptimizer {
                             Some(format!("O serviço {} não existe neste Windows.", name));
                         return Ok(None);
                     }
-                    // Sem conseguir ler a chave do serviço não dá para saber o
-                    // tipo de inicialização atual, e sem isso não há caminho de
-                    // volta — a mesma regra do hipervisor e da hibernação.
+                    // Sem o tipo de inicialização atual não há volta.
                     None => {
                         detalhe.status = ActionStatus::Skipped;
                         detalhe.message = format!(
@@ -1771,7 +1483,6 @@ impl WindowsOptimizer {
                 detalhe.before_value = Some(previous.clone());
                 detalhe.expected_value = Some("disabled".to_string());
 
-                // Já desativado: nada a fazer e nada a registrar.
                 if previous == "disabled" {
                     detalhe.status = ActionStatus::AlreadyOptimized;
                     detalhe.after_value = Some(previous);
@@ -1784,10 +1495,7 @@ impl WindowsOptimizer {
                     previous,
                 });
 
-                // NÃO CONFIE QUE FUNCIONOU. `sc config` devolver 0 diz que o
-                // Gerenciador de Serviços aceitou o pedido; em máquina com
-                // política de domínio, ou com o serviço trancado pelo próprio
-                // Windows, o tipo volta ao que era.
+                // `sc config` devolver 0 não prova: com domínio ou serviço trancado, o tipo volta.
                 let agora = services::query_start_type(name).ok();
                 detalhe.after_value.clone_from(&agora);
 
@@ -1797,8 +1505,7 @@ impl WindowsOptimizer {
                 )
                 .inspect_err(|_| detalhe.status = ActionStatus::VerificationFailed)?;
 
-                // Parar o serviço é o que libera recursos agora; a falha em parar
-                // não invalida a otimização, que já vale a partir do próximo boot.
+                // Falhar ao parar não invalida: vale do próximo boot.
                 if let Err(error) = services::stop(name) {
                     crate::utils::Logger::warn(&format!("serviço {} não parou agora: {}", name, error));
                 }
@@ -1817,8 +1524,6 @@ impl WindowsOptimizer {
                 }
 
                 let Some(anterior) = relatorio.guid_anterior.clone() else {
-                    // Sem saber qual era o plano de antes não há caminho de
-                    // volta, e aplicar sem volta é o que este produto não faz.
                     return Err(
                         "Não foi possível ler qual plano de energia estava ativo antes. \
                          O plano OTIMIZA não foi ativado."
@@ -1826,10 +1531,7 @@ impl WindowsOptimizer {
                     );
                 };
 
-                // O plano OTIMIZA já era o ativo: os ajustes podem ter sido
-                // conferidos ou corrigidos, mas não houve troca de plano para
-                // desfazer. Gravar `previous_guid` igual ao nosso faria o
-                // "Desfazer" reativar o próprio plano que ele deveria remover.
+                // O OTIMIZA já era o ativo: `previous_guid` igual ao nosso faria o desfazer reativar o próprio plano a remover.
                 if anterior.eq_ignore_ascii_case(
                     relatorio.guid_do_plano.as_deref().unwrap_or_default(),
                 ) {
@@ -1846,9 +1548,6 @@ impl WindowsOptimizer {
             Action::DisableHibernation => {
                 detalhe.expected_value = Some("false".to_string());
 
-                // SEM SABER O ESTADO ANTERIOR NÃO SE MEXE. É a mesma regra do
-                // hipervisor: não há como prometer a volta do que não foi lido,
-                // e o histórico guardaria um "antes" inventado.
                 let Some(previously_enabled) = power::hibernation_enabled() else {
                     detalhe.status = ActionStatus::Skipped;
                     detalhe.message =
@@ -1868,15 +1567,8 @@ impl WindowsOptimizer {
                 power::set_hibernation(false)?;
                 changes.push(ChangeRecord::Hibernation { previously_enabled });
 
-                // `HibernateEnabled` muda na hora, então dá para conferir agora
-                // — e aqui a conferência tem um valor extra: quando a hibernação
-                // não desliga, o `hiberfil.sys` continua ocupando o disco, e o
-                // cliente ia atrás do espaço que a tela prometeu.
-                // `Option` direto, e não embrulhado num `Some`: era esse embrulho
-                // que fazia a conferência validar a si mesma. Com a leitura
-                // quebrada devolvendo `false`, o "depois" batia com o alvo e o
-                // produto dava por conferido o que nunca leu. Agora `None` cai
-                // em `NaoDeuParaLer`, que é a verdade.
+                // Muda na hora e dá para conferir: sem desligar, o `hiberfil.sys` fica. `Option` direto: um `Some` embrulhando o
+                // `false` da leitura quebrada validava a si mesmo; `None` cai em `NaoDeuParaLer`.
                 let depois = power::hibernation_enabled();
                 detalhe.after_value = depois.map(|v| v.to_string());
 
@@ -1885,7 +1577,6 @@ impl WindowsOptimizer {
                     None => Ok(Some("Arquivo de hibernação removido.".to_string())),
                 }
             }
-
 
             Action::MemoryCompression { enabled } => {
                 let previously_enabled = power::memory_compression_enabled()
@@ -1925,10 +1616,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
             Action::GpuMsiMode => {
                 devices::ativar_msi(changes)?;
 
-                // O ajuste mais profundo do catálogo escreve numa chave de
-                // dispositivo que o Windows pode reescrever ao reenumerar o
-                // hardware. O efeito só vale depois do reinício, mas o valor é
-                // legível agora — e é o valor que estamos prometendo.
+                // O Windows pode reescrever a chave ao reenumerar o hardware; o valor é legível agora.
                 exigir_confirmacao(
                     conferir(&true, devices::msi_ja_ativo()),
                     "o modo MSI da placa de vídeo",
@@ -1947,14 +1635,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
             Action::ReservedStorage { enabled } => {
                 use power::EstadoReservado;
 
-                // A MESMA distinção que a inspeção passou a fazer. Sem ela aqui,
-                // a inspeção dizia "não sabemos, então oferecemos" e a aplicação
-                // respondia "este Windows não tem o recurso" — afirmando, na
-                // hora de agir, exatamente o que se acabou de admitir não saber.
-                //
-                // O ciclo real contra a máquina pegou esta contradição: o item
-                // virou disponível pela correção da inspeção e falhou aqui com a
-                // mensagem antiga.
+                // A mesma distinção da inspeção: senão a inspeção diria "não sabemos" e a aplicação "não tem o recurso".
                 let anterior = match power::estado_do_armazenamento_reservado() {
                     EstadoReservado::Ligado => true,
                     EstadoReservado::Desligado => false,
@@ -1981,9 +1662,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                     previously_enabled: anterior,
                 });
 
-                // O Windows recusa mexer no Armazenamento Reservado quando há
-                // atualização em andamento — e nem sempre pela via do erro. Sem
-                // reler, a tela prometia vários GB de volta que não voltaram.
+                // Com atualização em andamento o Windows recusa, nem sempre por erro.
                 let agora = match power::estado_do_armazenamento_reservado() {
                     EstadoReservado::Ligado => Some(true),
                     EstadoReservado::Desligado => Some(false),
@@ -2007,15 +1686,10 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
-                // O vetor vai por referência: se a segunda chave falhar, a
-                // primeira — já gravada — continua no histórico e a reversão
-                // automática a desfaz.
+                // Por referência: se a segunda chave falhar, a primeira continua no histórico e a reversão a desfaz.
                 acessibilidade::desligar(changes)?;
 
-                // O Windows guarda estas preferências em memória desde o logon,
-                // como as do mouse. Sem o aviso, o teclado continuaria atrasando
-                // até o próximo logon — numa otimização que promete efeito
-                // imediato.
+                // Em memória desde o logon, como as do mouse.
                 sysparams::sincronizar_interface();
 
                 Ok(Some(format!("{} desligada(s).", ligadas.join(", "))))
@@ -2040,12 +1714,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
 
             Action::DisableHypervisor => {
                 let Some(anterior) = power::hypervisor_launch_type() else {
-                    // Sem conseguir ler o estado atual não há como prometer a
-                    // volta, e mexer sem poder reverter está fora de questão.
-                    //
-                    // NEM "já estava bom" NEM falha: não sabemos. Marcar como
-                    // aplicada diria que o hipervisor está desligado sobre uma
-                    // leitura que não aconteceu.
+                    // Sem o estado atual não há volta, e marcar aplicada afirmaria o hipervisor desligado sem ler.
                     detalhe.status = ActionStatus::Skipped;
                     detalhe.message =
                         "Não foi possível ler como o hipervisor sobe no boot.".to_string();
@@ -2062,16 +1731,11 @@ detalhe.status = ActionStatus::AlreadyOptimized;
 
                 shell::run_checked("bcdedit", &["/set", "{current}", "hypervisorlaunchtype", "off"])?;
 
-                // Reaproveita o registro dos limites de boot: ele já sabe
-                // devolver um valor do `bcdedit` ao que estava.
                 changes.push(ChangeRecord::BootLimits {
                     removed: vec![("hypervisorlaunchtype".to_string(), anterior)],
                 });
 
-                // O VALOR É LEGÍVEL NA HORA, mesmo o efeito só valendo no boot.
-                // Em máquina com VBS imposto por política ou trancado em UEFI, o
-                // `bcdedit` devolve 0 e o valor não fica — e era esse o caso em
-                // que o cliente reiniciava, perdia o Hyper-V e não ganhava nada.
+                // Com VBS imposto por política ou UEFI o `bcdedit` devolve 0 e o valor não fica.
                 match exigir_confirmacao(
                     conferir(&"off".to_string(), power::hypervisor_launch_type()),
                     "o hipervisor no boot",
@@ -2085,8 +1749,6 @@ detalhe.status = ActionStatus::AlreadyOptimized;
 
             Action::RemoveForcedPlatformClock => {
                 let Some(valor) = firmware::forced_platform_clock() else {
-                    // Nenhum relógio forçado: a máquina já está saudável neste
-                    // ponto, e é isso que o resultado precisa dizer.
                     detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 };
@@ -2096,14 +1758,10 @@ detalhe.status = ActionStatus::AlreadyOptimized;
 
                 shell::run_checked("bcdedit", &["/deletevalue", "{current}", "useplatformclock"])?;
 
-                // Reaproveita o registro de limites de boot: a reversão dele já
-                // sabe devolver um valor do bcdedit ao que estava.
                 changes.push(ChangeRecord::BootLimits {
                     removed: vec![("useplatformclock".to_string(), valor.clone())],
                 });
 
-                // Apagar tem que ter apagado: `forced_platform_clock` devolve
-                // `None` quando a linha não está mais lá, que é o alvo aqui.
                 match firmware::forced_platform_clock() {
                     None => Ok(Some(format!(
                         "Relógio de plataforma forçado removido (estava em {}).",
@@ -2134,14 +1792,8 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                             previous,
                         });
 
-                        // Esta ação escreve direto, sem passar pelo ramo
-                        // `Action::Registry`, então precisa da mesma conferência
-                        // por conta própria.
-                        //
-                        // O ERRO AQUI DERRUBA A OTIMIZAÇÃO INTEIRA, de propósito:
-                        // Nagle meio desligado — numa placa sim e na outra não —
-                        // é pior do que não mexer, porque a latência passa a
-                        // depender de qual placa o Windows escolher.
+                        // Escreve direto, sem o ramo `Action::Registry`: confere por conta própria. O erro derruba a otimização: Nagle
+                        // meio desligado deixa a latência dependendo da placa que o Windows escolher.
                         match conferir_escrita(
                             &RegValue::Dword(1),
                             &registry::read("HKLM", &path, name),
@@ -2176,23 +1828,13 @@ impl Default for WindowsOptimizer {
     }
 }
 
-/// Identificador de uma entrada de inicialização no histórico.
-///
-/// O prefixo separa essas entradas dos ids do catálogo, então nunca há colisão
-/// entre um programa chamado "SysMain" e a otimização de mesmo nome.
+/// O prefixo evita colisão entre um programa "SysMain" e a otimização de mesmo nome.
 fn startup_change_id(hive: &str, name: &str) -> String {
     format!("startup:{}:{}", hive.to_uppercase(), name)
 }
 
-/// Se esta otimização pesa muito mais nesta máquina do que na média.
-///
-/// É o que permite dizer ao dono de um PC de 4 GB quais ajustes valem a pena
-/// para ELE, em vez de entregar a mesma lista de vinte itens para todo mundo e
-/// deixar a pessoa adivinhar.
-/// A condição de um item condicional, MEDIDA nesta máquina.
-///
-/// `None` quando não deu para medir: nem aparece como "não se aplica" nem
-/// entra num lote.
+/// A condição de um item condicional, MEDIDA nesta máquina. `None` quando não deu para medir: nem "não se aplica"
+/// nem lote.
 type CacheDasCondicoes = std::sync::Mutex<Vec<(catalog::Condicao, std::time::Instant, Option<bool>)>>;
 
 fn cache_das_condicoes() -> &'static CacheDasCondicoes {
@@ -2200,12 +1842,8 @@ fn cache_das_condicoes() -> &'static CacheDasCondicoes {
     LEMBRADO.get_or_init(Default::default)
 }
 
-/// Quanto tempo a resposta continua valendo. Curto o bastante para a pessoa
-/// liberar espaço, desligar a gravação do Game Bar e ver a lista mudar sem
-/// reabrir o programa.
 const VALIDADE_DA_CONDICAO: std::time::Duration = std::time::Duration::from_secs(30);
 
-/// A resposta guardada, quando ainda vale. `None` externo = ninguém mediu.
 fn condicao_lembrada(c: catalog::Condicao) -> Option<Option<bool>> {
     let cache = cache_das_condicoes().lock().ok()?;
     cache
@@ -2216,15 +1854,7 @@ fn condicao_lembrada(c: catalog::Condicao) -> Option<Option<bool>> {
 }
 
 pub fn condicao_atendida(c: catalog::Condicao) -> Option<bool> {
-    // LEMBRA POR MEIO MINUTO, E A RAZÃO É TEMPO DE TELA.
-    //
-    // A condição de espaço em disco enumera os volumes, e isso custou 850 ms
-    // por chamada nesta máquina. A listagem do catálogo pergunta uma vez por
-    // item condicional, então sem lembrança a lista inteira ficava segundos
-    // mais lenta — desfazendo o trabalho de abertura que a 1.7 comprou.
-    //
-    // Meio minuto é curto o bastante para a pessoa liberar espaço, desligar a
-    // gravação do Game Bar e ver a lista mudar sem reabrir o programa.
+    // Meio minuto: o espaço em disco custou 850 ms por chamada, uma por item condicional.
     if let Some(valor) = condicao_lembrada(c) {
         return valor;
     }
@@ -2240,16 +1870,8 @@ fn guardar_condicao(c: catalog::Condicao, valor: Option<bool>) {
     }
 }
 
-/// A condição, SEM ESPERAR por leitura lenta.
-///
-/// A listagem do catálogo passa por aqui. Ler o espaço livre do disco custou
-/// 3,4 s na primeira vez nesta máquina (é o Windows enumerando volumes), e a
-/// lista de ajustes não pode parar por isso — a abertura rápida foi comprada a
-/// peso de versão na 1.7.
-///
-/// Sem resposta guardada ainda: devolve `None` — que é "não deu para medir",
-/// e faz o item CONTINUAR aparecendo — e manda medir numa thread à parte, para
-/// a próxima listagem já saber. Nunca esconde por pressa.
+/// Sem esperar: a primeira leitura de espaço custou 3,4 s. Sem resposta, `None` (o item CONTINUA aparecendo) e
+/// mede numa thread à parte. Nunca esconde por pressa.
 pub fn condicao_atendida_sem_esperar(c: catalog::Condicao) -> Option<bool> {
     if let Some(valor) = condicao_lembrada(c) {
         return valor;
@@ -2261,7 +1883,6 @@ pub fn condicao_atendida_sem_esperar(c: catalog::Condicao) -> Option<bool> {
     None
 }
 
-/// Mede todas as condições fora do caminho da tela. Chamada na abertura.
 pub fn aquecer_condicoes() {
     for c in [
         catalog::Condicao::GameDvrLigado,
@@ -2289,9 +1910,7 @@ fn medir_condicao(c: catalog::Condicao) -> Option<bool> {
     }
 }
 
-/// **Pura.** O Game DVR está ligado? `GameDVR_Enabled` ausente é o padrão do
-/// Windows, que é ligado; `AppCaptureEnabled = 1` também liga. Qualquer
-/// leitura que falhou vira `None`.
+/// **Pura.** `GameDVR_Enabled` ausente é o padrão, ligado; `AppCaptureEnabled = 1` também liga.
 fn gamedvr_ligado(dvr: Option<PreviousValue>, captura: Option<PreviousValue>) -> Option<bool> {
     let ligado = |v: &PreviousValue| match v {
         PreviousValue::Dword(n) => Some(*n != 0),
@@ -2310,18 +1929,14 @@ fn pesa_nesta_maquina(spec: &OptimizationSpec) -> bool {
     let perfil = hardware::profile();
 
     spec.highlight_when.iter().any(|condicao| match condicao {
-        // 8 GB é a fronteira prática: abaixo disso o Windows já começa a
-        // comprimir memória e a paginar em uso comum.
+        // Abaixo de 8 GB o Windows já comprime e pagina em uso comum.
         Boost::LowRam => perfil.total_ram_gb <= 8.5,
         Boost::MechanicalDisk => perfil.system_storage == StorageKind::Hdd,
         Boost::FewCores => perfil.logical_cores <= 4,
     })
 }
 
-/// Se esta máquina atende à condição de hardware da otimização.
-///
-/// Quando o tipo do disco é desconhecido, a resposta é "não atende": preferimos
-/// não oferecer a arriscar deixar o PC do cliente pior por um palpite.
+/// Disco desconhecido não atende: não se arrisca piorar o PC por palpite.
 fn meets_requirement(spec: &OptimizationSpec) -> bool {
     use catalog::Requirement;
     use hardware::StorageKind;
@@ -2338,19 +1953,8 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
     }
 }
 
-/// Por que uma otimização não é oferecida nesta máquina.
-///
-/// ENCONTRADO NA MÁQUINA, e não num teste. Este computador roda uma imagem
-/// modificada onde o provedor WMI de armazenamento foi removido: tanto
-/// `Get-PhysicalDisk` quanto `Get-Partition -DriveLetter C` voltam vazios.
-/// `hardware::detect_system_storage` faz a coisa certa e devolve `Unknown` —
-/// mas a frase de recusa dizia, textualmente, **"seu disco de sistema não é
-/// SSD"**. Uma afirmação sobre o computador do cliente tirada de uma leitura
-/// que falhou, na tela, a caminho da decisão de compra dele.
-///
-/// A RECUSA CONTINUA, e é o lado certo: desligar o SysMain num disco mecânico
-/// piora a máquina, e sem saber o tipo do disco não dá para correr esse risco. O
-/// que muda é a frase — ela passa a dizer a verdade sobre o que aconteceu.
+/// Numa imagem sem o provedor WMI de armazenamento o disco é `Unknown`, e a frase dizia "seu disco não é SSD". A
+/// recusa continua (SysMain em HD piora); a frase diz o que aconteceu.
 pub fn motivo_da_recusa(requirement: catalog::Requirement) -> String {
     use catalog::Requirement;
     use hardware::StorageKind;
@@ -2360,14 +1964,10 @@ pub fn motivo_da_recusa(requirement: catalog::Requirement) -> String {
             StorageKind::Hdd => "Não oferecemos: seu disco de sistema é mecânico, e aqui isso \
                                  deixaria o PC mais lento."
                 .to_string(),
-            // O caso desta máquina, e de qualquer Windows "lite" que tenha
-            // tirado o provedor de armazenamento.
             StorageKind::Unknown => "Não oferecemos: não foi possível ler se o disco de sistema é \
                                      SSD ou mecânico nesta máquina. Em disco mecânico este ajuste \
                                      piora o PC, e sem saber o tipo não dá para arriscar."
                 .to_string(),
-            // Chegar aqui significaria que o requisito foi atendido e a
-            // otimização foi recusada mesmo assim.
             StorageKind::Ssd => "Não oferecemos, e o motivo não pôde ser determinado.".to_string(),
         },
         Requirement::MinRamGb(minimo) => format!(
@@ -2380,23 +1980,14 @@ pub fn motivo_da_recusa(requirement: catalog::Requirement) -> String {
     }
 }
 
-/// Quem manda nesta máquina além do dono dela.
-///
-/// Existe porque duas causas muito comuns de "não funcionou no PC do cliente"
-/// não são defeito do produto nem do Windows — são de quem administra a máquina
-/// e de quem montou a imagem. Sem separá-las, as duas chegavam ao atendimento
-/// como "falhou", e o atendimento procurava no lugar errado.
+/// Política de grupo e imagem de terceiros chegavam ao atendimento como "falhou".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Governanca {
-    /// Há política de grupo APLICADA — não apenas a chave existindo.
     pub com_politica_de_grupo: bool,
-    /// A imagem do Windows foi montada por terceiros E tem serviço essencial
-    /// desativado.
     pub imagem_de_terceiros: bool,
 }
 
-/// Lida uma vez por execução: são leituras de registro baratas, mas o motor
-/// consulta isto uma vez por AÇÃO, e são dezenas por lote.
+/// Consultado uma vez por AÇÃO, dezenas por lote.
 static GOVERNANCA: std::sync::OnceLock<Governanca> = std::sync::OnceLock::new();
 
 pub fn governanca() -> Governanca {
@@ -2405,22 +1996,14 @@ pub fn governanca() -> Governanca {
 
         Governanca {
             com_politica_de_grupo: ha_politica_aplicada(),
-            // FABRICANTE DECLARADO NÃO BASTA: todo PC de marca declara um. O
-            // sinal é o fabricante JUNTO de serviço essencial desligado, que é
-            // imagem modificada e não Windows de fábrica. Mesma regra do
-            // relatório de compatibilidade, e de propósito: duas definições da
-            // mesma coisa divergiriam.
+            // Todo PC de marca declara fabricante: o sinal é ele JUNTO de serviço essencial desligado. A mesma definição do
+            // relatório de compatibilidade.
             imagem_de_terceiros: checagem.fabricante.is_some() && checagem.desativados > 0,
         }
     })
 }
 
-/// Há GPO aplicada nesta máquina?
-///
-/// A CHAVE EXISTIR NÃO É SINAL, e conferir isso valeu: nesta máquina, sem
-/// domínio e sem política nenhuma, `Group Policy\History` EXISTE e está vazia.
-/// Usar a existência teria acusado política de grupo em todo computador do
-/// mundo. O sinal é ter subchave — cada uma é um objeto de política aplicado.
+/// A chave existir não é sinal (existe vazia sem domínio): o sinal é ter subchave.
 fn ha_politica_aplicada() -> bool {
     registry::subkeys(
         "HKLM",
@@ -2430,34 +2013,18 @@ fn ha_politica_aplicada() -> bool {
     .unwrap_or(false)
 }
 
-/// Dá nome à causa quando ela é de quem administra a máquina, e não do produto.
-///
-/// Função pura, separada da leitura: é uma regra de produto, e regra de produto
-/// precisa de teste que não dependa de uma máquina com domínio.
-///
-/// SÓ REFINA, NUNCA INVENTA. Um estado que já é conclusivo — aplicado, já estava
-/// bom, falhou de vez — não vira outra coisa por causa do ambiente.
+/// Pura. SÓ REFINA, NUNCA INVENTA: estado conclusivo não muda por causa do ambiente.
 pub fn refinar_status(status: ActionStatus, g: Governanca) -> ActionStatus {
     match status {
-        // O comando foi aceito e o valor não ficou, numa máquina com GPO. É a
-        // assinatura de política sobrescrevendo, e nomear isso poupa o cliente
-        // de procurar defeito no Otimiza — não há.
         ActionStatus::VerificationFailed if g.com_politica_de_grupo => {
             ActionStatus::BlockedByPolicy
         }
-        // O recurso não está aqui, e a imagem foi montada por terceiros. O
-        // Windows TEM o recurso; esta instalação é que não.
         ActionStatus::Unsupported if g.imagem_de_terceiros => ActionStatus::UserOrOemManaged,
         outro => outro,
     }
 }
 
-/// Escreve, no resultado, a frase que o estado refinado passou a merecer.
-///
-/// Um estado novo sem frase nova não serve para nada: quem lê o relatório vê
-/// `BlockedByPolicy` e continua sem saber o que fazer. A frase diz com quem
-/// falar — e ela nomeia a IMAGEM quando há uma, porque "Team AntiLag / SnyX OS"
-/// é uma informação que o cliente reconhece e que o atendimento pode pesquisar.
+/// Estado novo sem frase nova não serve: nomeia a IMAGEM quando há uma ("Team AntiLag / SnyX OS" se pesquisa).
 fn explicar_governanca(detalhe: &mut ActionResult) {
     match detalhe.status {
         ActionStatus::BlockedByPolicy => {
@@ -2491,16 +2058,9 @@ fn explicar_governanca(detalhe: &mut ActionResult) {
     }
 }
 
-/// O nome de uma ação no resultado padronizado.
-///
-/// É PARA SER LIDO POR UMA PESSOA no atendimento, e por isso não é o `{:?}` do
-/// enum: `Registry { hive: "HKLM", path: "SYSTEM\\…", name: "HwSchMode", … }`
-/// tem a informação toda e é ilegível. O caminho e os valores já viajam nos
-/// campos próprios do `ActionResult`.
+/// Para ler no atendimento, não o `{:?}` do enum; caminho e valores viajam nos campos do `ActionResult`.
 pub fn nome_da_acao(action: &Action) -> String {
     match action {
-        // Para o registro, o NOME DO VALOR é o que identifica a ação — é ele
-        // que se pesquisa quando se quer saber o que aquela chave faz.
         Action::Registry { hive, name, .. } => format!("registro {}\\…\\{}", hive, name),
         Action::DisableService { name } => format!("serviço {}", name),
         Action::PlanoOtimiza => "plano de energia OTIMIZA".to_string(),
@@ -2518,12 +2078,7 @@ pub fn nome_da_acao(action: &Action) -> String {
     }
 }
 
-/// A otimização só mostra efeito depois de sair e entrar na conta?
-///
-/// DERIVADO, e não um campo novo no catálogo. `sysparams::nota_de_ativacao` já
-/// sabe quais chaves o shell só relê ao iniciar — é a mesma tabela que escreve
-/// a frase mostrada ao cliente. Declarar de novo no catálogo criaria uma
-/// segunda fonte, e duas fontes divergem no primeiro conserto.
+/// Derivado de `sysparams::nota_de_ativacao`, não campo novo no catálogo: duas fontes divergem.
 pub fn exige_logoff(spec: &catalog::OptimizationSpec) -> bool {
     spec.actions.iter().any(|action| match action {
         Action::Registry {
@@ -2533,31 +2088,14 @@ pub fn exige_logoff(spec: &catalog::OptimizationSpec) -> bool {
     })
 }
 
-/// O que a releitura de uma escrita de registro diz.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Confirmacao {
-    /// O valor lido é o que pedimos. Só aqui a otimização está provada.
     Igual,
-    /// O Windows aceitou a gravação e o valor é OUTRO.
     Diferente(String),
-    /// Não deu para reler. Não é falha, e não é confirmação.
     NaoDeuParaLer,
 }
 
-/// Confere uma escrita de registro relendo o valor.
-///
-/// POR QUE ISTO NÃO É PARANOIA. `set_dword` devolver `Ok` diz que o Windows
-/// aceitou o pedido, não que o valor ficou. Dois casos reais, os dois na
-/// máquina do cliente e nenhum na de desenvolvimento:
-///
-/// - política de domínio reescrevendo a chave logo depois;
-/// - processo de 32 bits sobre Windows de 64, onde a escrita cai no espelho
-///   `WOW6432Node` e o sistema continua lendo a chave verdadeira.
-///
-/// Nos dois o produto dizia "aplicado" sobre um PC que não mudou — que é
-/// exatamente a queixa que abriu este trabalho.
-///
-/// Função pura, separada da execução para poder ser testada.
+/// Pura. `set_dword` `Ok` não prova (domínio reescreve; `WOW6432Node`).
 pub fn conferir_escrita(alvo: &RegValue, lido: &Result<PreviousValue, String>) -> Confirmacao {
     let Ok(atual) = lido else {
         return Confirmacao::NaoDeuParaLer;
@@ -2567,9 +2105,7 @@ pub fn conferir_escrita(alvo: &RegValue, lido: &Result<PreviousValue, String>) -
         (RegValue::Dword(esperado), PreviousValue::Dword(v)) => v == esperado,
         (RegValue::Text(esperado), PreviousValue::Text(v)) => v == esperado,
         (RegValue::Binary(esperado), PreviousValue::Binary(v)) => v.as_slice() == *esperado,
-        // TIPO DIFERENTE É VALOR DIFERENTE. Gravamos DWORD e lemos texto quando
-        // a chave é de um tipo que o sistema impõe — o número entrou como outra
-        // coisa, e o Windows não vai lê-lo como nós queríamos.
+        // Tipo diferente é valor diferente: o Windows não leria como queríamos.
         _ => false,
     };
 
@@ -2580,18 +2116,8 @@ pub fn conferir_escrita(alvo: &RegValue, lido: &Result<PreviousValue, String>) -
     }
 }
 
-/// A mesma conferência da escrita de registro, para tudo que NÃO é registro.
-///
-/// Serviços, `bcdedit`, MSI da placa, hibernação e compressão de memória
-/// passavam pelo código de saída do comando e nada mais. `sc config` devolver 0
-/// diz que o Gerenciador de Serviços aceitou o pedido — e numa máquina com
-/// política de domínio, ou com o serviço trancado pelo próprio Windows, o tipo
-/// de inicialização volta ao que era. O produto anotava no histórico uma
-/// mudança que não existia, e o cliente depois mandava desfazer algo que nunca
-/// foi feito.
-///
-/// `None` em `lido` é "não deu para reler", e não "diferente": ver
-/// `exigir_confirmacao`.
+/// Para o que NÃO é registro (serviços, `bcdedit`, MSI, hibernação, compressão): `sc config` 0 não prova, e o
+/// histórico anotava mudança inexistente. `None` em `lido` é "não deu para reler" (ver `exigir_confirmacao`).
 pub fn conferir<T>(esperado: &T, lido: Option<T>) -> Confirmacao
 where
     T: PartialEq + std::fmt::Debug,
@@ -2603,11 +2129,7 @@ where
     }
 }
 
-/// O que fazer com o resultado de `conferir`, em uma regra só.
-///
-/// Existe para que as nove ações não-registro não escrevam nove versões
-/// ligeiramente diferentes da mesma decisão — que é como uma delas acaba
-/// tratando "não consegui ler" como sucesso.
+/// Uma regra só para nove ações, senão uma delas acaba tratando "não li" como sucesso.
 pub fn exigir_confirmacao(c: Confirmacao, o_que: &str) -> Result<Option<String>, String> {
     match c {
         Confirmacao::Igual => Ok(None),
@@ -2615,9 +2137,7 @@ pub fn exigir_confirmacao(c: Confirmacao, o_que: &str) -> Result<Option<String>,
             "O Windows aceitou o comando, mas ao reler {} continua {}. Nada ficou aplicado.",
             o_que, atual
         )),
-        // Não desfaz: a mudança provavelmente valeu, e descartá-la por causa de
-        // uma leitura que falhou seria trocar um erro por outro. Mas também não
-        // passa calado.
+        // Não desfaz (provavelmente valeu), mas não passa calado.
         Confirmacao::NaoDeuParaLer => Ok(Some(format!(
             "{} foi alterado, mas não foi possível reler para confirmar.",
             o_que
@@ -2625,11 +2145,7 @@ pub fn exigir_confirmacao(c: Confirmacao, o_que: &str) -> Result<Option<String>,
     }
 }
 
-/// O valor que a otimização vai gravar, na mesma forma do que foi lido.
-///
-/// Mesma função de impressão dos dois lados de propósito: o cliente compara
-/// "antes" com "esperado" olhando, e duas formatações diferentes para o mesmo
-/// número fazem parecer que mudou quando não mudou.
+/// Mesma impressão dos dois lados: formatações diferentes fariam parecer que mudou.
 pub fn descrever_alvo(valor: &RegValue) -> String {
     match valor {
         RegValue::Dword(v) => v.to_string(),
@@ -2638,8 +2154,6 @@ pub fn descrever_alvo(valor: &RegValue) -> String {
     }
 }
 
-/// Como o valor lido aparece na mensagem de erro. Curto: ele vai para uma frase
-/// que o cliente lê na tela, não para um despejo de memória.
 fn descrever_valor(valor: &PreviousValue) -> String {
     match valor {
         PreviousValue::Dword(v) => v.to_string(),
@@ -2650,12 +2164,7 @@ fn descrever_valor(valor: &PreviousValue) -> String {
     }
 }
 
-/// A linha que o registro ao vivo mostra depois de montar o plano.
-///
-/// Ela diz os quatro números porque um "pronto" sozinho seria o que este
-/// produto acusa nos concorrentes. "Já estava bom" não é enfeite: num PC que já
-/// usava um plano de desempenho ele é a resposta inteira, e o cliente merece
-/// saber disso em vez de achar que comprou um ganho que não houve.
+/// "Já estava bom" é a resposta inteira num PC que já usava plano de desempenho.
 pub fn nota_do_plano(r: &planoenergia::RelatorioDoPlano) -> String {
     let mut partes = vec![format!("{} ajuste(s) aplicados e conferidos", r.aplicados)];
 
@@ -2677,7 +2186,6 @@ pub fn nota_do_plano(r: &planoenergia::RelatorioDoPlano) -> String {
     format!("Plano OTIMIZA ativo: {}.", partes.join(", "))
 }
 
-/// A linha de fim de uma aplicação ou de um desfazer, com a duração.
 fn anotar_fim(
     verbo: &str,
     id: &str,
@@ -2698,11 +2206,8 @@ fn anotar_fim(
     }
 }
 
-/// Desfaz uma lista de mudanças na ordem inversa em que foram aplicadas.
-/// Tenta reverter todas mesmo se alguma falhar, e devolve as falhas acumuladas.
-/// O portão "nunca menos FPS": avalia cada ajuste em observação contra as
-/// medições automáticas e DESFAZ o que piorou. Devolve o que foi decidido
-/// agora (para avisar a tela).
+/// O portão "nunca menos FPS": avalia cada ajuste em observação contra as medições automáticas e DESFAZ o que
+/// piorou. Devolve o decidido agora, para a tela.
 pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidido> {
     use crate::modules::portao::{self, Decidido, Veredito};
     let mut estado = portao::ler();
@@ -2715,7 +2220,6 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
     let mut decididos = Vec::new();
     let mut ficam = Vec::new();
     for v in std::mem::take(&mut estado.vigiados) {
-        // Desfeito por outro caminho (Desfazer tudo): não há o que vigiar.
         if !log.is_applied(&v.id) {
             continue;
         }
@@ -2744,8 +2248,6 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             erro,
         });
     }
-    // O governador do modo jogo: partidas sem ele contra partidas com ele.
-    // Piorou: ele devolve o que acalmou e fica parado naquele jogo.
     for g in estado.governador.iter_mut().filter(|g| g.decidido.is_none()) {
         let a = portao::avaliar_governador(&g.processo, &medicoes);
         if matches!(a.veredito, Veredito::Aguardando { .. }) {
@@ -2771,7 +2273,6 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
     }
     estado.vigiados = ficam;
     estado.decididos.extend(decididos.iter().cloned());
-    // Guarda só os últimos 50 vereditos.
     let excesso = estado.decididos.len().saturating_sub(50);
     estado.decididos.drain(..excesso);
     if let Err(e) = portao::gravar(&estado) {
@@ -2780,27 +2281,9 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
     decididos
 }
 
-/// Termina uma operação que ficou pela metade, devolvendo os valores
-/// anteriores guardados no diário.
-///
-/// AS DUAS INTENÇÕES TERMINAM NO MESMO LUGAR, e isso não é preguiça.
-///
-/// Se o Otimiza morreu DESFAZENDO, o que falta é justamente desfazer — os
-/// valores anteriores são o destino.
-///
-/// Se ele morreu APLICANDO, parte das mudanças foi feita e o histórico não
-/// soube. A resposta conservadora é a mesma: pôr a máquina de volta onde ela
-/// estava antes da operação interrompida. Completar uma aplicação pela metade
-/// exigiria saber quais ações faltavam e em que ordem, e o diário não guarda
-/// isso — ele guarda o caminho de volta, que é o que sempre se pode garantir.
-///
-/// Escrever um valor de registro que já está lá não faz nada, então repetir a
-/// reversão de uma mudança já revertida é inofensivo. É o que permite este
-/// conserto rodar sem saber até onde a operação anterior chegou.
-///
-/// O histórico é limpo no fim: se a aplicação chegou a ser registrada antes de
-/// o diário fechar, deixar o registro lá faria o produto afirmar que uma
-/// otimização está aplicada logo depois de desfazê-la.
+/// Termina uma operação interrompida devolvendo os anteriores do diário, aplicando ou desfazendo: o diário guarda
+/// o caminho de volta, não as ações que faltavam. Reverter o já revertido é inofensivo. O histórico é limpo no fim,
+/// senão diria aplicada uma otimização desfeita.
 #[cfg(target_os = "windows")]
 pub fn concluir_recuperacao(
     pendencia: &crate::modules::transacao::Pendencia,
@@ -2815,15 +2298,13 @@ pub fn concluir_recuperacao(
     Ok(pendencia.mudancas.len())
 }
 
+/// Desfaz na ordem inversa da aplicação. Tenta todas mesmo se alguma falhar, e devolve as falhas acumuladas.
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
-    // Desfazer também precisa valer na hora. Sem isto, "Desfazer" devolveria o
-    // registro e deixaria a sessão com o comportamento que o cliente pediu para
-    // remover — o mesmo defeito, espelhado.
+    // Desfazer também precisa valer na hora.
     let mut sincronizar_interface = false;
 
     for change in changes.iter().rev() {
-        // Antes, como na aplicação: um desfazer que trava deixa dito qual foi.
         crate::utils::Logger::info(&format!("desfazendo: {}", change.describe()));
 
         let result = match change {
@@ -2844,11 +2325,7 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 services::set_start_type(service, previous)
             }
 
-            // Pelo `planoenergia`, e não pelo `set_active_scheme` cru, por duas
-            // razões: ele CONFERE relendo qual plano ficou ativo — o `powercfg`
-            // devolve zero e não é prova —, e apaga o plano OTIMIZA depois de a
-            // volta estar confirmada, para não deixar plano nosso parado na
-            // máquina de quem desfez.
+            // Pelo `planoenergia`: confere relendo o plano ativo e apaga o OTIMIZA depois da volta confirmada.
             ChangeRecord::PowerPlan { previous_guid } => planoenergia::desfazer(previous_guid),
 
             ChangeRecord::Hibernation { previously_enabled } => {
@@ -2904,23 +2381,13 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 }
             }
 
-            // O ÚNICO RAMO QUE VOLTA POR UMA CHAMADA DO FABRICANTE.
-            //
-            // Todos os outros aqui reescrevem um valor que o Otimiza anotou.
-            // Este pergunta à própria NVIDIA qual era o padrão de fábrica e
-            // volta para ele — a diferença entre "reversível de verdade" e
-            // "reversível se a gente anotar direitinho", que é o que decidiu
-            // este pilar. O caso em que o cliente já tinha uma escolha própria
-            // no ajuste continua voltando escrito, e quem separa os dois é o
-            // `nvdriver::desfazer`.
+            // O único ramo que volta por uma chamada do fabricante; o cliente com escolha própria volta escrito
+            // (`nvdriver::desfazer` separa).
             ChangeRecord::DriverNvidia {
                 opcao,
                 valor_anterior,
             } => nvdriver::desfazer(opcao, valor_anterior),
 
-            // O limite de um jogo. Perfil criado pelo Otimiza é apagado
-            // inteiro; perfil que já existia só tem o limite devolvido — quem
-            // separa os dois é o `nvdriver::desfazer_limite`.
             ChangeRecord::LimiteNvidia {
                 executavel,
                 perfil_criado,
@@ -2932,11 +2399,7 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 nvdriver::desfazer_perfil_do_jogo(executavel, *perfil_criado, anteriores)
             }
 
-            // O arquivo do jogo volta INTEIRO ao que era.
-            //
-            // Sem `anterior`, o arquivo não existia antes de o Otimiza mexer, e
-            // desfazer é apagá-lo. Apagar um arquivo que já não está lá não é
-            // falha: o estado desejado — ele não existir — já é o estado atual.
+            // Sem `anterior` o arquivo não existia: desfazer é apagar, e já não estar lá não é falha.
             ChangeRecord::GameConfig {
                 caminho, anterior, ..
             } => match anterior {
@@ -2956,8 +2419,7 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
         }
     }
 
-    // Depois de restaurar tudo, e uma vez só: a sincronização lê o registro já
-    // devolvido ao estado original.
+    // Uma vez só, depois de restaurar tudo.
     if sincronizar_interface {
         sysparams::sincronizar_interface();
     }
@@ -2976,24 +2438,10 @@ mod tests {
 
     const STARTUP_DELAY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
 
-    // ------------------------------------------ o que a leitura falha vira
-
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
 
-    // ------------------------------------ provar que a escrita ficou de pé
-
-    // ------------------------------------------ o resultado padronizado
-
-    /// Aplica uma otimização de registro REAL e imprime o resultado
-    /// padronizado, depois desfaz.
-    ///
-    /// `disable_startup_delay` é a escolhida por ser em `HKCU`, invisível,
-    /// instantânea e reversível — ela muda um atraso de alguns segundos ao
-    /// entrar na conta, e nada mais.
-    ///
-    /// `#[ignore]`: escreve no registro da máquina que roda o teste.
-    ///
-    ///   cargo test --lib resultado_padronizado -- --ignored --nocapture
+    /// `disable_startup_delay`: HKCU, invisível, instantâneo e reversível. Escreve no registro.
+    /// `cargo test --lib resultado_padronizado -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn resultado_padronizado_de_uma_otimizacao_real() {
@@ -3035,29 +2483,19 @@ mod tests {
             Err(e) => println!("FALHOU: {}", e),
         }
 
-        // Devolve a máquina ao que estava, tenha a aplicação dado certo ou não.
         if aplicar.is_ok() {
             let desfazer = otimizador.revert(id, &mut log);
             println!("desfazer: {:?}", desfazer.map(|r| r.message));
         }
     }
 
-    // ----------------------------------- quem manda na máquina além do dono
-
     const SEM_GOVERNANCA: Governanca = Governanca {
         com_politica_de_grupo: false,
         imagem_de_terceiros: false,
     };
 
-    /// O catálogo INTEIRO visto por esta máquina, item a item. SÓ LÊ.
-    ///
-    /// É o mais perto que dá para chegar da pergunta "o que aconteceria no PC
-    /// do cliente" sem aplicar nada. Cada item aparece com o estado que a lista
-    /// mostraria e com o detalhe medido — e o que interessa não são os
-    /// `Available`, é tudo o que NÃO é: `Unavailable` diz que o produto se
-    /// recusa a oferecer, e `Unknown` diz que ele não conseguiu nem olhar.
-    ///
-    ///   cargo test --lib catalogo_visto_por -- --ignored --nocapture
+    /// O catálogo inteiro visto por esta máquina, SÓ LÊ: interessa o que não é `Available`.
+    /// `cargo test --lib catalogo_visto_por -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn catalogo_visto_por_esta_maquina() {
@@ -3096,9 +2534,7 @@ mod tests {
         }
     }
 
-    /// O que o produto conclui sobre QUEM MANDA nesta máquina. Só lê.
-    ///
-    ///   cargo test --lib governanca_desta -- --ignored --nocapture
+    /// `cargo test --lib governanca_desta -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn governanca_desta_maquina() {
@@ -3125,9 +2561,6 @@ mod tests {
 
     #[test]
     fn sem_politica_na_maquina_nao_se_acusa_politica() {
-        // ACUSAR POLÍTICA SEM POLÍTICA mandaria o cliente falar com um
-        // administrador que não existe — e faria o produto parecer que sabe de
-        // algo que não sabe.
         assert_eq!(
             refinar_status(ActionStatus::VerificationFailed, SEM_GOVERNANCA),
             ActionStatus::VerificationFailed
@@ -3149,9 +2582,6 @@ mod tests {
 
     #[test]
     fn imagem_de_terceiros_separa_o_windows_da_instalacao() {
-        // "Este Windows não tem" e "quem montou o seu Windows tirou" são duas
-        // frases muito diferentes para o cliente: a segunda explica por que o
-        // mesmo PC, com um Windows normal, se comportaria de outro jeito.
         let com_imagem = Governanca {
             imagem_de_terceiros: true,
             ..SEM_GOVERNANCA
@@ -3165,8 +2595,6 @@ mod tests {
 
     #[test]
     fn o_refinamento_nunca_mexe_num_estado_conclusivo() {
-        // Só dá nome à causa; não muda o que aconteceu. Um ajuste aplicado numa
-        // máquina com GPO continua aplicado.
         let tudo = Governanca {
             com_politica_de_grupo: true,
             imagem_de_terceiros: true,
@@ -3190,14 +2618,8 @@ mod tests {
 
     #[test]
     fn os_sete_termos_do_protocolo_existem_no_motor() {
-        // O motor e o relatório de laboratório classificam com o MESMO
-        // vocabulário. Se um dos dois perder um termo, o relatório do cliente
-        // deixa de se agrupar com o do laboratório — que é a razão de o
-        // relatório existir.
-        //
-        // `partial` e `requires restart/logoff` ficam de fora aqui de propósito:
-        // o primeiro é do conjunto, não da ação, e o segundo é CAMPO no
-        // resultado, porque uma ação pode ter sido aplicada E exigir reinício.
+        // O motor e o lab usam o MESMO vocabulário. `partial` é do conjunto e `requires restart/logoff` é campo (aplicada
+        // E exige reinício).
         let por_acao = [
             ActionStatus::Verified,
             ActionStatus::Unsupported,
@@ -3213,9 +2635,6 @@ mod tests {
 
     #[test]
     fn ajuste_que_este_windows_nao_tem_nao_e_vermelho() {
-        // Não é problema do cliente nem do produto, e pintar de vermelho manda
-        // procurar defeito onde não há. É a mesma regra que o plano de energia
-        // já seguia, agora no vocabulário comum.
         assert!(ActionStatus::Unsupported.deu_certo());
         assert!(ActionStatus::AlreadyOptimized.deu_certo());
         assert!(ActionStatus::Verified.deu_certo());
@@ -3228,8 +2647,6 @@ mod tests {
 
     #[test]
     fn o_nome_da_acao_e_para_uma_pessoa_ler() {
-        // O `{:?}` do enum tem a informação toda e é ilegível. O caminho e os
-        // valores viajam nos campos próprios do resultado.
         let nome = nome_da_acao(&Action::Registry {
             hive: "HKLM",
             path: r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
@@ -3249,8 +2666,6 @@ mod tests {
 
     #[test]
     fn todo_item_do_catalogo_tem_nome_legivel_em_cada_acao() {
-        // Trava de forma: uma ação nova sem nome sairia com o nome de outra, ou
-        // vazia, justamente no relatório que o cliente manda quando algo falha.
         for spec in catalog::CATALOG {
             for action in spec.actions {
                 let nome = nome_da_acao(action);
@@ -3267,10 +2682,6 @@ mod tests {
 
     #[test]
     fn o_logoff_e_derivado_e_nao_declarado() {
-        // A tabela que sabe quais chaves o shell só relê ao iniciar é a do
-        // `sysparams`, e ela já escreve a frase mostrada ao cliente. Se algum
-        // item do catálogo mexe numa dessas chaves, o resultado precisa dizer
-        // que exige logoff — sem ninguém ter declarado isso à mão.
         let com_logoff: Vec<&str> = catalog::CATALOG
             .iter()
             .filter(|spec| exige_logoff(spec))
@@ -3286,9 +2697,6 @@ mod tests {
 
     #[test]
     fn antes_e_esperado_sao_impressos_do_mesmo_jeito() {
-        // O cliente compara as duas colunas olhando. Duas formatações
-        // diferentes para o mesmo número fazem parecer que mudou quando não
-        // mudou.
         assert_eq!(
             descrever_alvo(&RegValue::Dword(2)),
             descrever_valor(&PreviousValue::Dword(2))
@@ -3306,18 +2714,11 @@ mod tests {
             conferir(&"disabled".to_string(), Some("auto".to_string())),
             Confirmacao::Diferente("\"auto\"".to_string())
         );
-        // `None` é "não deu para reler". Se virasse `Diferente`, o produto
-        // desfaria uma mudança que provavelmente valeu, por causa de uma
-        // leitura que falhou.
         assert_eq!(conferir(&true, None::<bool>), Confirmacao::NaoDeuParaLer);
     }
 
     #[test]
     fn a_regra_da_confirmacao_e_uma_so() {
-        // Nove ações usam esta função. Se cada uma escrevesse a própria versão
-        // da decisão, uma delas acabaria tratando "não consegui ler" como
-        // sucesso — que é exatamente o defeito que o produto passou três
-        // versões consertando em outros lugares.
         assert_eq!(exigir_confirmacao(Confirmacao::Igual, "o serviço X"), Ok(None));
 
         let falhou = exigir_confirmacao(Confirmacao::Diferente("\"auto\"".into()), "o serviço X");
@@ -3331,11 +2732,7 @@ mod tests {
 
     #[test]
     fn nenhuma_acao_que_escreve_devolve_sucesso_sem_conferir() {
-        // TRAVA DE FORMA, e não de ocorrência — o mesmo recurso da guarda de
-        // prosa do `commands.rs`. Ela procura, no corpo do `execute`, ramos que
-        // terminam em `Ok(None)` logo depois de empilhar uma mudança no
-        // histórico: gravar e sair sem reler é exatamente o defeito que este
-        // trabalho fechou, e é o que a ação número dez vai fazer por descuido.
+        // Trava de FORMA: ramos do `execute` que terminam em `Ok(None)` logo depois de empilhar no histórico, sem reler.
         let fonte = include_str!("mod.rs");
 
         let Some(corpo) = fonte.split("fn execute(").nth(1) else {
@@ -3352,16 +2749,8 @@ mod tests {
                 continue;
             }
 
-            // PARA OS DOIS LADOS, E NÃO SÓ PARA A FRENTE.
-            //
-            // Conferir ANTES de empilhar é um padrão válido — e no ramo do plano
-            // de energia é o único correto: não se grava registro de desfazer
-            // para uma troca que ainda não se provou que aconteceu. Olhando só
-            // adiante, esta trava acusou esse ramo de não conferir, e foi um
-            // edit sem relação que deslocou as linhas e revelou a fragilidade.
-            //
-            // A janela é uma aproximação do ramo do `match`; achar a fronteira
-            // exata por texto seria mais frágil do que o problema que resolve.
+            // Para os dois lados: conferir ANTES de empilhar é válido (e o único correto no plano de energia). A janela
+            // aproxima o ramo do `match`.
             let inicio = i.saturating_sub(30);
             let janela = linhas[inicio..]
                 .iter()
@@ -3373,13 +2762,9 @@ mod tests {
             let confere = janela.contains("exigir_confirmacao")
                 || janela.contains("conferir_escrita")
                 || janela.contains("forced_platform_clock()")
-                // O plano de energia confere relendo qual plano ficou ativo,
-                // dentro do `montar`. Ver `planoenergia::montar`.
                 || janela.contains("plano_ativo");
 
             if !confere {
-                // O trecho, e não só a contagem: um teste que diz "há 1
-                // problema" e não diz onde custa a mesma busca toda vez.
                 suspeitos.push(linha.trim().to_string());
             }
         }
@@ -3416,9 +2801,6 @@ mod tests {
 
     #[test]
     fn o_windows_aceitar_nao_e_o_valor_ter_ficado() {
-        // O CASO DA MÁQUINA GERENCIADA: a gravação volta `Ok`, a política de
-        // domínio reescreve a chave, e o produto dizia "aplicado" sobre um PC
-        // que não mudou.
         assert_eq!(
             conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Dword(1))),
             Confirmacao::Diferente("1".to_string())
@@ -3427,8 +2809,6 @@ mod tests {
 
     #[test]
     fn valor_que_sumiu_depois_da_escrita_nao_passa() {
-        // O caso do espelho `WOW6432Node`: escrevemos num lugar e o sistema lê
-        // outro, onde continua não havendo nada.
         assert_eq!(
             conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Absent)),
             Confirmacao::Diferente("inexistente".to_string())
@@ -3441,8 +2821,6 @@ mod tests {
 
     #[test]
     fn tipo_diferente_e_valor_diferente() {
-        // O número entrou como texto: o Windows não vai lê-lo como nós
-        // queríamos, e "2" não é 2.
         assert_eq!(
             conferir_escrita(&RegValue::Dword(2), &Ok(PreviousValue::Text("2".into()))),
             Confirmacao::Diferente("\"2\"".to_string())
@@ -3451,27 +2829,15 @@ mod tests {
 
     #[test]
     fn nao_conseguir_reler_nao_e_falha_nem_confirmacao() {
-        // Desfazer aqui descartaria uma mudança que provavelmente valeu; dar
-        // por confirmado afirmaria o que não foi lido. O terceiro estado existe
-        // para não ter que escolher entre os dois erros.
         assert_eq!(
             conferir_escrita(&RegValue::Dword(2), &Err("acesso negado".into())),
             Confirmacao::NaoDeuParaLer
         );
     }
 
-    /// A conferência contra o REGISTRO DE VERDADE, e não contra um valor
-    /// montado à mão.
-    ///
-    /// O que os testes puros acima não cobrem é o encontro das duas pontas: o
-    /// tipo que `set_dword` grava precisa ser o mesmo que `read` devolve, senão
-    /// a conferência reprovaria TODA otimização de registro do catálogo por um
-    /// detalhe de tipo — um estrago bem maior que o defeito que ela conserta.
-    ///
-    /// Escreve numa chave de rascunho nossa, confere, e apaga a chave inteira.
-    /// `#[ignore]`: toca no registro da máquina que roda o teste.
-    ///
-    ///   cargo test --lib conferencia_contra_o_registro -- --ignored --nocapture
+    /// Contra o REGISTRO DE VERDADE: o tipo gravado por `set_dword` precisa ser o que `read` devolve, senão toda
+    /// otimização de registro reprovaria. Chave de rascunho apagada no fim.
+    /// `cargo test --lib conferencia_contra_o_registro -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn conferencia_contra_o_registro_de_verdade() {
@@ -3506,9 +2872,6 @@ mod tests {
 
     #[test]
     fn leitura_que_falhou_nao_vira_nao_se_aplica() {
-        // O DEFEITO QUE ESTE ESTADO VEIO CONSERTAR. Antes, `Err` na leitura do
-        // registro caía em `NotApplicable`, e o cliente lia "não se aplica a
-        // esta máquina" — uma afirmação sobre o PC dele que ninguém verificou.
         assert_eq!(
             WindowsOptimizer::compor(&[Desconhecido]),
             OptimizationState::Unknown
@@ -3517,8 +2880,6 @@ mod tests {
 
     #[test]
     fn leitura_que_falhou_nao_vira_ja_esta_bom() {
-        // A mentira mais cara das duas: dizer "seu PC já está assim" faz o
-        // cliente PARAR DE PROCURAR.
         assert_eq!(
             WindowsOptimizer::compor(&[Satisfied, Desconhecido]),
             OptimizationState::Unknown
@@ -3527,8 +2888,6 @@ mod tests {
 
     #[test]
     fn saber_que_ha_o_que_fazer_vence_o_desconhecimento() {
-        // O outro lado do erro: esconder atrás de "não deu para verificar" uma
-        // otimização real, por causa de uma leitura alheia que falhou.
         assert_eq!(
             WindowsOptimizer::compor(&[Pending, Desconhecido]),
             OptimizationState::Available
@@ -3541,8 +2900,6 @@ mod tests {
 
     #[test]
     fn os_estados_conhecidos_continuam_como_eram() {
-        // Trava de não-regressão: o quarto estado não pode ter mudado o que o
-        // produto já respondia certo.
         assert_eq!(
             WindowsOptimizer::compor(&[NotApplicable, NotApplicable]),
             OptimizationState::Unavailable
@@ -3563,10 +2920,7 @@ mod tests {
 
     #[test]
     fn o_lote_automatico_nunca_leva_o_que_nao_foi_conferido() {
-        // O "Otimizar agora" filtra por `Available`. Este teste existe para que
-        // alguém que um dia afrouxe esse filtro para incluir `Unknown` tenha
-        // que encarar a decisão: seria aplicar, sem revisão, o que o produto
-        // não conseguiu ler.
+        // Afrouxar o filtro para `Unknown` aplicaria, sem revisão, o que não se leu.
         for estados in [
             vec![Desconhecido],
             vec![Satisfied, Desconhecido],
@@ -3580,19 +2934,8 @@ mod tests {
         }
     }
 
-    /// O ramo do driver NVIDIA existe e chama o `nvdriver` DE VERDADE.
-    ///
-    /// NENHUM TESTE DESTA SUÍTE PODE ESCREVER NO DRIVER: a máquina que roda os
-    /// testes é a do dono, e a esteira roda em runner sem placa NVIDIA. Então a
-    /// prova é feita com um ajuste que não existe no catálogo — o `nvdriver`
-    /// recusa pelo nome antes de abrir qualquer sessão da NVAPI, e o erro sobe
-    /// por este ramo.
-    ///
-    /// O QUE ISSO PEGA: um ramo que devolvesse `Ok(())` sem chamar nada — o
-    /// "desfazer" que não desfaz, o pior defeito possível neste produto — e um
-    /// ramo ligado no módulo errado. O que não pega é o desfazer com um ajuste
-    /// de verdade: esse é o Passo 5 do plano, na máquina, com o Painel de
-    /// Controle da NVIDIA aberto.
+    /// Nenhum teste pode escrever no driver: um ajuste inexistente é recusado pelo nome antes da sessão, e o erro sobe
+    /// por este ramo. Pega o ramo que devolvesse `Ok(())` sem chamar nada.
     #[test]
     fn desfazer_um_ajuste_de_driver_inexistente_reclama_em_vez_de_fingir() {
         let registro = ChangeRecord::DriverNvidia {
@@ -3611,21 +2954,13 @@ mod tests {
         );
     }
 
-    /// Desfazer a configuração de um jogo tem que devolver o arquivo BYTE A BYTE.
-    ///
-    /// É o teste que sustenta o produto passar a escrever no jogo. Enquanto ele
-    /// só mexia no registro, cada mudança era um par de chave e valor com dono
-    /// conhecido; um arquivo de configuração é do jogo, e devolver "quase" o que
-    /// era deixaria o cliente com um arquivo que não é nem o de antes nem o de
-    /// agora.
+    /// O arquivo do jogo volta BYTE A BYTE.
     #[test]
     fn desfazer_a_configuracao_do_jogo_devolve_o_arquivo_inteiro() {
         let dir = std::env::temp_dir().join(format!("otz-conf-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("criar pasta de teste");
         let alvo = dir.join("settings.xml");
 
-        // Um arquivo com acento, aspas e quebra de linha do Windows: se a volta
-        // passar por alguma conversão de texto, é aqui que aparece.
         let original = "<Settings>\r\n  <MSAA value=\"4\" />\r\n  <!-- resolução -->\r\n</Settings>\r\n";
         std::fs::write(&alvo, original).expect("escrever o original");
 
@@ -3635,7 +2970,6 @@ mod tests {
             jogo: "FiveM".to_string(),
         };
 
-        // O "jogo" é alterado, como o Pilar 1 fará.
         std::fs::write(&alvo, "<Settings><MSAA value=\"0\" /></Settings>").expect("alterar");
         assert_ne!(std::fs::read_to_string(&alvo).unwrap(), original);
 
@@ -3650,13 +2984,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Arquivo que não existia antes: desfazer é apagá-lo, e apagar duas vezes
-    /// não é falha.
-    ///
-    /// O segundo caso importa porque `revert_all` pode passar pelo mesmo
-    /// registro depois de uma reversão parcial que já tinha limpado o arquivo.
-    /// Tratar "já não está lá" como erro faria a tela acusar falha de uma
-    /// reversão que deu certo.
+    /// `revert_all` pode passar pelo mesmo registro depois de uma reversão parcial que já limpou o arquivo.
     #[test]
     fn desfazer_apaga_o_arquivo_que_o_otimiza_criou() {
         let dir = std::env::temp_dir().join(format!("otz-conf-novo-{}", std::process::id()));
@@ -3679,8 +3007,6 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// A inspeção lê o sistema real: nenhuma otimização pode aparecer com estado
-    /// errado por causa de exceção não tratada.
     #[test]
     fn inspects_every_optimization_against_this_machine() {
         let optimizer = WindowsOptimizer::new();
@@ -3690,7 +3016,6 @@ mod tests {
             println!("{:<45} {:?} {:?}", info.name, info.state, info.detail);
         }
 
-        // Retirado só aparece enquanto aplicado (ver `catalog::RETIRADOS`).
         let esperado = catalog::CATALOG
             .iter()
             .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
@@ -3705,12 +3030,10 @@ mod tests {
     #[test]
     fn o_game_dvr_ligado_e_lido_como_o_windows_decide() {
         use PreviousValue::*;
-        // Ausente é o padrão do Windows: ligado.
         assert_eq!(gamedvr_ligado(Some(Absent), Some(Absent)), Some(true));
         assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(0))), Some(false));
         assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Absent)), Some(false));
         assert_eq!(gamedvr_ligado(Some(Dword(0)), Some(Dword(1))), Some(true));
-        // Leitura que falhou não vira resposta.
         assert_eq!(gamedvr_ligado(None, Some(Dword(0))), None);
     }
 
@@ -3725,7 +3048,6 @@ mod tests {
         }
     }
 
-    /// "Otimizar Agora" nunca pode apagar arquivos do cliente sem ele escolher isso.
     #[test]
     fn lote_nunca_inclui_operacao_sem_volta() {
         let optimizer = WindowsOptimizer::new();
@@ -3741,12 +3063,8 @@ mod tests {
         assert!(batch.iter().all(|id| catalog::find(id).is_some_and(|s| s.reversible)));
     }
 
-    /// Sem elevação, o Windows nega a leitura de algumas configurações. Nesses
-    /// casos o produto não pode dizer "já otimizado" — isso seria afirmar o que
-    /// não foi verificado, que é exatamente o que ele existe para não fazer.
     #[test]
     fn nao_afirma_estar_otimizado_o_que_nao_conseguiu_conferir() {
-        // Com elevação a leitura funciona e a regra não se aplica.
         if registry::is_elevated() {
             return;
         }
@@ -3757,7 +3075,6 @@ mod tests {
         for id in ["disable_reserved_storage", "remove_forced_hpet", "clear_boot_limits"] {
             let spec = catalog::find(id).expect("otimização deveria existir");
 
-            // Já aplicada por nós é outra história: aí o histórico é a prova.
             if log.is_applied(id) {
                 continue;
             }
@@ -3778,7 +3095,6 @@ mod tests {
         }
     }
 
-    /// "Otimizar Agora" nunca pode abrir mão de segurança por conta própria.
     #[test]
     fn lote_nunca_troca_seguranca_por_desempenho() {
         let optimizer = WindowsOptimizer::new();
@@ -3801,8 +3117,6 @@ mod tests {
         }
     }
 
-    /// Toda otimização que reduz segurança precisa gritar isso no texto que o
-    /// cliente lê, não esconder numa etiqueta.
     #[test]
     fn security_tradeoffs_warn_loudly() {
         for spec in catalog::CATALOG.iter().filter(|spec| spec.security_tradeoff) {
@@ -3815,13 +3129,7 @@ mod tests {
         }
     }
 
-    /// Ciclo real de uma entrada de inicialização: desliga, confere, religa e
-    /// confere que os bytes voltaram EXATAMENTE como estavam.
-    ///
-    /// Byte-exato importa: o Windows guarda a data/hora do desligamento nos bytes
-    /// 4 a 11. Restaurar "equivalente" deixaria rastro nosso no registro do
-    /// cliente. Restaurar idêntico não deixa nenhum.
-    ///
+    /// Byte-exato: o Windows guarda a data do desligamento nos bytes 4 a 11.
     /// `cargo test --lib -- --ignored --nocapture real_startup_cycle`
     #[test]
     #[ignore]
@@ -3832,8 +3140,6 @@ mod tests {
         let optimizer = WindowsOptimizer::new();
         let mut log = ChangeLog::load();
 
-        // Usa a primeira entrada de HKCU: não exige administrador e vale só para
-        // este usuário.
         let entry = startup::entries()
             .expect("as chaves de inicialização desta máquina precisam ser legíveis")
             .into_iter()
@@ -3869,14 +3175,7 @@ mod tests {
         println!("bytes após o ciclo: {:?}", restored);
     }
 
-    /// Ciclo real de TODAS as otimizações que exigem administrador.
-    ///
-    /// Cada uma é aplicada, conferida contra o sistema e desfeita, e no fim o
-    /// estado precisa estar idêntico ao do começo. É o teste que faltava: até
-    /// aqui só o que roda sem elevação tinha sido executado de verdade.
-    ///
-    /// Exige sessão elevada:
-    /// `cargo test --lib -- --ignored --nocapture real_admin_optimizations`
+    /// Exige elevação: `cargo test --lib -- --ignored --nocapture real_admin_optimizations`
     #[test]
     #[ignore]
     fn real_admin_optimizations_apply_and_revert() {
@@ -3888,9 +3187,7 @@ mod tests {
         let optimizer = WindowsOptimizer::new();
         let mut log = ChangeLog::load();
 
-        // Só as que exigem elevação, são reversíveis e não trocam segurança por
-        // desempenho. `AlreadyOptimal` fica de fora: testá-la exigiria
-        // desconfigurar a máquina de quem está rodando o teste.
+        // `AlreadyOptimal` fica de fora: testá-la desconfiguraria a máquina de quem roda.
         let alvos: Vec<&OptimizationSpec> = catalog::CATALOG
             .iter()
             .filter(|spec| spec.requires_admin && spec.reversible && !spec.security_tradeoff)
@@ -3909,9 +3206,6 @@ mod tests {
         for spec in alvos {
             let estado_inicial = optimizer.inspect(spec, &log);
 
-            // Cada uma percorre o ciclo completo e termina exatamente no estado em
-            // que começou. Quem já está aplicada percorre o caminho inverso —
-            // mesmos códigos, ordem trocada — em vez de ficar sem cobertura.
             let (primeiro, segundo, esperado_no_meio) = match estado_inicial {
                 OptimizationState::Applied => ("desfazer", "aplicar", OptimizationState::Available),
                 _ => ("aplicar", "desfazer", OptimizationState::Applied),
@@ -3925,19 +3219,8 @@ mod tests {
             let meio = match executar(primeiro, &mut log) {
                 Ok(resultado) => resultado,
 
-                // RECUSA HONESTA NÃO É FALHA DO CICLO.
-                //
-                // Duas coisas acontecem nesta máquina, e nas duas o produto age
-                // certo: o Windows nega informar o Armazenamento Reservado, e
-                // nega a escrita na política dos Widgets — as duas mesmo com o
-                // programa elevado. Em ambas o Otimiza explica e NÃO altera
-                // nada, que é exatamente a regra que este ciclo existe para
-                // proteger.
-                //
-                // Tratar por categoria, e não por lista de exceções: lista de
-                // ids envelhece e vira teste que ignora tudo que incomoda. O
-                // critério é o contrato da mensagem — se o produto recusou
-                // agir, ele precisa dizer que nada foi alterado.
+                // Recusa honesta não é falha do ciclo (aqui: Armazenamento Reservado e política dos Widgets negados mesmo
+                // elevado). Por categoria, não por lista de ids: se recusou, precisa dizer que nada foi alterado.
                 Err(erro) if e_recusa_honesta(&erro) => {
                     println!("  {} → recusado sem alterar nada: {}", spec.id, erro);
                     recusadas += 1;
@@ -3990,24 +3273,13 @@ mod tests {
         );
     }
 
-    /// Se o erro é o produto recusando agir, e dizendo que não alterou nada.
-    ///
-    /// É o CONTRATO das mensagens de recusa, e existe como função para poder
-    /// ser testado: um `contains` solto dentro do ciclo viraria uma peneira
-    /// invisível, que passa a aceitar falha de verdade no dia em que alguém
-    /// escrever a frase errada.
-    ///
-    /// A frase é obrigatória porque é ela que separa "não fiz, e o sistema está
-    /// intacto" de "falhei no meio". O ciclo pode tolerar a primeira; a segunda
-    /// é exatamente o que ele existe para pegar.
+    /// O CONTRATO da recusa, testável: um `contains` solto aceitaria falha de verdade no dia de uma frase errada.
     fn e_recusa_honesta(erro: &str) -> bool {
         erro.to_lowercase().contains("nada foi alterado")
     }
 
     #[test]
     fn recusa_honesta_exige_dizer_que_nada_mudou() {
-        // As duas recusas reais desta máquina, com o texto que o produto
-        // realmente emite.
         assert!(e_recusa_honesta(
             "O Windows recusou informar se há espaço reservado, mesmo com o Otimiza como \
              administrador. Sem saber o estado atual não há como desfazer depois, então nada \
@@ -4023,17 +3295,12 @@ mod tests {
 
     #[test]
     fn falha_no_meio_nao_passa_por_recusa() {
-        // O caso que o ciclo existe para pegar: algo quebrou DEPOIS de mexer.
-        // Sem a frase, não é recusa — é falha, e tem que derrubar o teste.
         assert!(!e_recusa_honesta("Falha ao reverter `X`: acesso negado"));
         assert!(!e_recusa_honesta("Este ajuste não existe neste Windows"));
         assert!(!e_recusa_honesta(""));
     }
 
-    /// Fluxo completo do produto: medir → otimizar → medir de novo → comparar → desfazer.
-    ///
-    /// Valida o encadeamento inteiro contra o sistema real. Leva ~20 segundos.
-    /// `cargo test --release --lib -- --ignored --nocapture real_full_cycle`
+    /// ~20 s. `cargo test --release --lib -- --ignored --nocapture real_full_cycle`
     #[test]
     #[ignore]
     fn real_full_cycle_with_measurement() {
@@ -4070,14 +3337,8 @@ mod tests {
         assert!(!log.is_applied(id));
     }
 
-    /// Ciclo real contra o registro do Windows: aplica, confere, desfaz e confere
-    /// que o sistema voltou EXATAMENTE ao estado anterior.
-    ///
-    /// Marcado como `ignore` porque altera o sistema de verdade. Rode com:
+    /// `disable_startup_delay`, HKCU e sem administrador.
     /// `cargo test --lib -- --ignored --nocapture real_apply_and_revert`
-    ///
-    /// Usa `disable_startup_delay`: fica em HKCU, não exige administrador e é
-    /// totalmente reversível — a escolha certa para validar o mecanismo.
     #[test]
     #[ignore]
     fn real_apply_and_revert_cycle_restores_the_system() {
@@ -4130,8 +3391,7 @@ fn success_message(spec: &OptimizationSpec, notes: &[String]) -> String {
 
 #[cfg(test)]
 mod custo_das_condicoes {
-    /// Quanto custa perguntar a condição, e quanto a lembrança economiza.
-    /// `cargo test --lib -- --ignored quanto_custa_listar --nocapture`.
+    /// `cargo test --lib -- --ignored quanto_custa_listar --nocapture`
     #[test]
     #[ignore]
     fn quanto_custa_listar() {
