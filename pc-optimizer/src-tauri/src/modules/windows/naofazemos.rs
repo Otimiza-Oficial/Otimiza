@@ -252,7 +252,7 @@ pub static LISTA: &[NaoFazemos] = &[
         id: "gpu_tweaks_sem_documentacao",
         nome: "Valores \"secretos\" do driver de vídeo tirados de fórum",
         natureza: Natureza::Placebo,
-        porque: "O Otimiza escreve cinco ajustes do driver NVIDIA, e todos os cinco estão no \
+        porque: "O Otimiza escreve seis ajustes do driver NVIDIA, e todos os seis estão no \
                  cabeçalho público que a NVIDIA distribui — com o nome conferido no driver \
                  antes de qualquer escrita, e só aceita ajuste que o driver saiba devolver \
                  ao padrão. Valor sem documentação não tem como ser conferido nem revertido, \

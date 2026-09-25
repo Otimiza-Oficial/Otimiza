@@ -9166,7 +9166,7 @@ const NA_TAG_DA_NVAPI: Record<EstadoDaNvapi, string> = {
 };
 
 /**
- * Os cinco ajustes do driver NVIDIA, com aplicar e desfazer.
+ * Os seis ajustes do driver NVIDIA, com aplicar e desfazer.
  *
  * A lista só aparece com o driver respondendo: botão que o driver vai recusar
  * é teatro. Sem ele, fica a frase do backend dizendo por quê.
@@ -9261,7 +9261,7 @@ async function carregarAjustesDoDriver() {
 // ------------------------------------------------------- perfis da placa
 
 /**
- * Os perfis, que são COMBINAÇÕES dos cinco ajustes do driver.
+ * Os perfis, que são COMBINAÇÕES dos seis ajustes do driver.
  *
  * TRÊS, e não sete. A referência que inspirou esta tela tem sete perfis sobre
  * um punhado de opções de liga-desliga — "Básico", "Casual", "FPS", "FPS 2.0",
@@ -9283,22 +9283,22 @@ const PERFIS_DA_PLACA: {
     id: "equilibrado",
     nome: "Equilibrado",
     resumo:
-      "O que quase toda máquina ganha sem trocar nada de lugar: a placa para de baixar o clock entre quadros e o cache de shader fica ligado.",
-    ajustes: ["energia", "cache_shader"],
+      "O que quase toda máquina ganha sem trocar nada de lugar: a placa para de baixar o clock entre quadros e o cache de shader fica ligado e sem limite de tamanho.",
+    ajustes: ["energia", "cache_shader", "cache_shader_tamanho"],
   },
   {
     id: "competitivo",
     nome: "Competitivo",
     resumo:
       "O de cima, mais a fila de quadros curta e a sincronia vertical desligada. Troca suavidade por resposta — e pode aparecer rasgo na imagem.",
-    ajustes: ["energia", "cache_shader", "latencia", "vsync"],
+    ajustes: ["energia", "cache_shader", "cache_shader_tamanho", "latencia", "vsync"],
   },
   {
     id: "maximo",
     nome: "Tudo que há",
     resumo:
-      "Os cinco ajustes. Inclui a filtragem de textura em desempenho, que é o único deles que muda como o jogo se parece.",
-    ajustes: ["energia", "cache_shader", "latencia", "vsync", "textura"],
+      "Os seis ajustes. Inclui a filtragem de textura em desempenho, que é o único deles que muda como o jogo se parece.",
+    ajustes: ["energia", "cache_shader", "cache_shader_tamanho", "latencia", "vsync", "textura"],
   },
 ];
 

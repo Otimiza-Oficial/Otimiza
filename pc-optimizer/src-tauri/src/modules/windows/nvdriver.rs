@@ -146,7 +146,7 @@ pub struct Opcao {
     pub so_por_jogo: bool,
 }
 
-/// Os cinco ajustes. Números e valores vêm do `NvApiDriverSettings.h` público
+/// Os seis ajustes. Números e valores vêm do `NvApiDriverSettings.h` público
 /// da NVIDIA, e cada um é conferido contra o nome que o driver devolve antes
 /// de qualquer escrita.
 pub static OPCOES: &[Opcao] = &[
@@ -208,6 +208,16 @@ pub static OPCOES: &[Opcao] = &[
         nome_esperado: "shader cache",
         // PS_SHADERDISKCACHE_ON
         valor_otimizado: 0x0000_0001,
+        so_por_jogo: false,
+    },
+    Opcao {
+        id: "cache_shader_tamanho",
+        titulo: "Tamanho do cache de shader: sem limite",
+        explicacao: "Com o cache cheio, o driver apaga shaders antigos e o jogo volta a                      compilar e engasgar onde já não engasgava. Sem limite, o cache                      ocupa mais espaço no disco do sistema: a aba Espaço mostra quanto.",
+        id_do_padrao: Some(0x00AC_8497),
+        nome_esperado: "shader disk cache maximum size",
+        // PS_SHADERDISKCACHE_MAX_SIZE_MAX
+        valor_otimizado: 0xFFFF_FFFF,
         so_por_jogo: false,
     },
 ];
@@ -1336,8 +1346,8 @@ mod tests {
     }
 
     #[test]
-    fn o_catalogo_tem_as_cinco_e_nenhuma_repetida() {
-        assert_eq!(OPCOES.len(), 5, "o pilar prometeu cinco ajustes");
+    fn o_catalogo_tem_as_seis_e_nenhuma_repetida() {
+        assert_eq!(OPCOES.len(), 6, "o pilar prometeu seis ajustes");
 
         for opcao in OPCOES {
             assert!(!opcao.id.trim().is_empty());
