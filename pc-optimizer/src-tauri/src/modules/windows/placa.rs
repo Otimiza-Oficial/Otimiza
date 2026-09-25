@@ -1,37 +1,6 @@
-// Contadores da placa de vídeo e do disco, pelo caminho barato
-//
-// POR QUE ISTO EXISTE
-//
-// A mesma informação já era lida em `bottleneck.rs`, por WMI através do
-// PowerShell. O comentário lá diz o custo com todas as letras: cada chamada
-// passa de um segundo. Isso obrigou o painel a ler a placa de vídeo só a cada
-// dez segundos, e a mostrar o número com a idade escrita porque ele não era
-// de agora.
-//
-// Pior: dentro da janela em que o Otimiza mede os quadros de um jogo, não cabe
-// nenhuma consulta dessas. Abrir um PowerShell no meio de uma medição de
-// desempenho é virar a carga que se está medindo. Sem o uso da placa naquela
-// janela, "o jogo está limitado pelo motor e não pelo hardware" ficou sem como
-// ser respondido.
-//
-// Os mesmos números existem como contadores de desempenho do Windows, que é o
-// que este módulo lê. Não abre processo nenhum, custa microssegundos, e pode
-// rodar ao lado da medição de quadros sem pesar nela.
-//
-// O QUE MUDA E O QUE NÃO MUDA
-//
-// Muda a origem e o custo. NÃO muda a regra: contador que não responde chega
-// como `None`. O `unwrap_or(0.0)` que existia no laço do `bottleneck.rs`
-// transformava consulta falha em "placa a 0%", e uma placa a 95% com uma
-// leitura perdida no meio saía como 63% — o suficiente para o veredito deixar
-// de dizer GPU.
-//
-// SOBRE OS NOMES EM INGLÊS
-//
-// `PdhAddEnglishCounterW`, e não `PdhAddCounterW`: os caminhos de contador são
-// TRADUZIDOS no Windows em português, e a versão em inglês é a única que
-// funciona em qualquer idioma. É a mesma escolha do amostrador do motor de
-// energia.
+// Placa e disco pelos contadores do Windows (PDH), sem abrir processo: pode rodar ao lado da medição de quadros
+// sem pesar nela, o que o WMI por PowerShell (mais de um segundo) não pode. Contador que não responde chega como
+// `None`, nunca 0. Nomes em inglês (`PdhAddEnglishCounterW`): os caminhos são traduzidos no Windows em português.
 
 #![cfg(target_os = "windows")]
 
@@ -43,35 +12,16 @@ fn largo(texto: &str) -> Vec<u16> {
     texto.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Uma leitura dos contadores, com o que não respondeu ausente.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Amostra {
-    /// Uso somado dos motores 3D, 0-100%.
-    ///
-    /// Só os motores 3D: uma placa expõe vários — 3D, cópia, vídeo, codec — e
-    /// somar todos daria número acima de 100 que não representa o que um jogo
-    /// pede.
+    /// Só os motores 3D: somar cópia, vídeo e codec passaria de 100 e não representaria o que o jogo pede.
     pub gpu_pct: Option<f64>,
-    /// Memória dedicada em uso, em MB. O MAIOR entre os adaptadores.
-    ///
-    /// Máximo e não soma: numa máquina com placa integrada e dedicada, somar
-    /// as duas produziria um total que nenhuma das duas tem.
+    /// O MAIOR entre os adaptadores: somar integrada e dedicada daria um total que nenhuma tem.
     pub vram_mb: Option<f64>,
-    /// Memória do SISTEMA que a placa está usando, em MB.
-    ///
-    /// Do MESMO adaptador de `vram_mb`, e não o maior de todos: as duas
-    /// leituras só respondem juntas a pergunta que interessa — "a dedicada
-    /// acabou e o driver começou a derramar para a RAM?". Cruzar o
-    /// derramamento de um adaptador com a dedicada de outro responderia essa
-    /// pergunta sobre uma placa que não existe.
+    /// Do MESMO adaptador de `vram_mb`: juntas respondem "a dedicada acabou e começou a derramar para a RAM?".
     pub vram_compartilhada_mb: Option<f64>,
-    /// `% Disk Time` do total dos discos físicos.
     pub disco_ocupado_pct: Option<f64>,
-    /// `Avg. Disk sec/Transfer`, convertido para milissegundos.
-    ///
-    /// É a LATÊNCIA, que é outra pergunta que a ocupação: um disco 100%
-    /// ocupado com latência de 0,2 ms está dando conta, e um disco a 40% com
-    /// latência de 30 ms é o que trava o jogo.
+    /// A LATÊNCIA: disco a 100% com 0,2 ms dá conta; a 40% com 30 ms trava o jogo.
     pub disco_latencia_ms: Option<f64>,
 }
 
@@ -84,16 +34,11 @@ pub struct Contadores {
     disco_latencia: isize,
 }
 
-// Os campos são alças do Windows, não ponteiros para memória deste processo.
-// A consulta é usada por uma thread de cada vez.
+// Alças do Windows, não ponteiros; uma thread por vez.
 unsafe impl Send for Contadores {}
 
 impl Contadores {
-    /// Abre a consulta. `None` quando o Windows recusa.
-    ///
-    /// Uma máquina sem os contadores de GPU — Windows mais antigo que o
-    /// 10 1709, ou driver que não os publica — devolve alça zero para eles, e
-    /// a leitura correspondente sai como ausente em vez de zero.
+    /// Sem os contadores de GPU (Windows antes do 10 1709, ou driver que não publica) a leitura sai ausente.
     pub fn novo() -> Option<Self> {
         use windows_sys::Win32::System::Performance::{
             PdhAddEnglishCounterW, PdhCollectQueryData, PdhOpenQueryW,
@@ -123,9 +68,7 @@ impl Contadores {
             disco_latencia: adicionar(r"\PhysicalDisk(_Total)\Avg. Disk sec/Transfer"),
         };
 
-        // A primeira coleta é a linha de base: contador de taxa é a diferença
-        // entre duas coletas, e sem esta a leitura seguinte não teria com o que
-        // comparar.
+        // Contador de taxa é a diferença entre duas coletas: esta é a base.
         unsafe { PdhCollectQueryData(consulta) };
 
         Some(c)
@@ -152,7 +95,6 @@ impl Contadores {
         }
     }
 
-    /// Todas as instâncias de um contador curinga, com o nome de cada uma.
     fn lista(&self, contador: isize) -> Vec<(String, f64)> {
         use windows_sys::Win32::System::Performance::{
             PdhGetFormattedCounterArrayW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
@@ -166,8 +108,7 @@ impl Contadores {
         let mut tamanho: u32 = 0;
         let mut itens: u32 = 0;
 
-        // A primeira chamada só descobre o tamanho do buffer; ela DEVE falhar
-        // com `MORE_DATA`. Qualquer outra resposta é motivo para desistir.
+        // A primeira chamada DEVE falhar com `MORE_DATA`; qualquer outra resposta é desistir.
         let r = unsafe {
             PdhGetFormattedCounterArrayW(
                 contador,
@@ -214,18 +155,11 @@ impl Contadores {
             .collect()
     }
 
-    /// Lê os contadores agora.
-    ///
-    /// A janela medida é o tempo desde a coleta anterior desta mesma consulta.
-    /// Chamar duas vezes coladas devolve números sem sentido — o mesmo cuidado
-    /// que o amostrador do motor de energia exige.
+    /// Chamar duas vezes coladas devolve números sem sentido.
     pub fn coletar(&self) -> Amostra {
         use windows_sys::Win32::System::Performance::PdhCollectQueryData;
         unsafe { PdhCollectQueryData(self.consulta) };
 
-        // Instância de motor 3D tem o nome terminando em `engtype_3D`. As
-        // outras — cópia, vídeo, codec — descrevem trabalho que não é o que um
-        // jogo pede, e entrariam somando acima de 100.
         let motores: Vec<f64> = self
             .lista(self.gpu)
             .into_iter()
@@ -233,22 +167,16 @@ impl Contadores {
             .map(|(_, v)| v)
             .collect();
 
-        // Lista vazia é lista vazia, não placa parada: quando o contador não
-        // existe nesta máquina, a resposta é que não se sabe.
+        // Lista vazia é "não se sabe", não placa parada.
         let gpu_pct = (!motores.is_empty()).then(|| motores.iter().sum::<f64>().min(100.0));
 
-        // O adaptador que mais usa memória dedicada é o que está rodando o
-        // jogo. Máximo e não soma: numa máquina com integrada e dedicada,
-        // somar as duas produziria um total que nenhuma das duas tem.
         let dedicada = self
             .lista(self.vram)
             .into_iter()
             .map(|(nome, bytes)| (nome, bytes / 1_048_576.0))
             .reduce(|a, b| if b.1 > a.1 { b } else { a });
 
-        // A compartilhada é lida pelo NOME da instância escolhida acima. Se o
-        // contador existir mas não trouxer aquela instância, a resposta é
-        // ausente — e não zero, que significaria "não está derramando nada".
+        // Instância ausente é `None`, e não zero, que diria "não está derramando nada".
         let vram_compartilhada_mb = dedicada.as_ref().and_then(|(nome, _)| {
             self.lista(self.vram_compartilhada)
                 .into_iter()
@@ -261,10 +189,7 @@ impl Contadores {
             vram_mb: dedicada.map(|(_, mb)| mb),
             vram_compartilhada_mb,
             disco_ocupado_pct: self.valor(self.disco_tempo).map(|v| v.min(100.0)),
-            // O contador vem em SEGUNDOS por transferência. Publicar isso como
-            // milissegundo sem converter erraria por mil, que é exatamente o
-            // tipo de engano que o contrato de telemetria passou a barrar com
-            // unidade tipada.
+            // Vem em SEGUNDOS por transferência: sem converter, erraria por mil.
             disco_latencia_ms: self.valor(self.disco_latencia).map(|s| s * 1000.0),
         }
     }
@@ -281,25 +206,16 @@ impl Drop for Contadores {
 mod tests {
     use super::*;
 
-    /// A consulta abre nesta máquina e devolve números possíveis.
-    ///
-    /// Não afirma que a placa está a tal por cento: afirma o CONTRATO — o que
-    /// vier tem de estar na faixa possível, e o que não vier tem de vir
-    /// ausente em vez de zero.
+    /// Afirma o CONTRATO: o que vier está na faixa possível, e o que não vier vem ausente.
     #[test]
     fn os_contadores_respondem_dentro_do_possivel() {
         let Some(c) = Contadores::novo() else {
-            // Máquina sem PDH. O teste não inventa aprovação nem reprovação.
             return;
         };
 
-        // Uma janela mínima: contador de taxa precisa de duas coletas
-        // separadas no tempo.
         std::thread::sleep(std::time::Duration::from_millis(300));
         let a = c.coletar();
 
-        // Impresso com `--nocapture` para quem for depurar numa máquina que
-        // responde diferente desta.
         println!("{a:?}");
 
         if let Some(gpu) = a.gpu_pct {
@@ -315,8 +231,6 @@ mod tests {
         if let Some(mb) = a.vram_compartilhada_mb {
             assert!(mb >= 0.0, "memória compartilhada em {mb} MB");
             assert!(mb < 1_048_576.0, "1 TB compartilhado é leitura errada");
-            // As duas saem da MESMA instância de adaptador: ou as duas
-            // respondem, ou a escolha da instância está errada.
             assert!(
                 a.vram_mb.is_some(),
                 "compartilhada sem dedicada é instância de adaptador trocada"
@@ -327,17 +241,13 @@ mod tests {
         }
         if let Some(ms) = a.disco_latencia_ms {
             assert!(ms >= 0.0);
-            // Latência de mais de dez segundos por transferência não é disco
-            // lento, é leitura estragada.
             assert!(ms < 10_000.0, "latência de {ms} ms");
         }
     }
 
     #[test]
     fn duas_consultas_convivem() {
-        // O painel e a medição de quadros abrem consultas separadas ao mesmo
-        // tempo. Se o PDH não aguentasse isso, medir a placa durante a partida
-        // seria impossível — que é justamente o caso de uso deste módulo.
+        // Painel e medição de quadros abrem consultas ao mesmo tempo: o PDH precisa aguentar.
         let (Some(a), Some(b)) = (Contadores::novo(), Contadores::novo()) else {
             return;
         };
@@ -345,8 +255,6 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(300));
         let (x, y) = (a.coletar(), b.coletar());
 
-        // Não se exige o MESMO número: são janelas ligeiramente diferentes.
-        // Exige-se que as duas tenham respondido às mesmas perguntas.
         assert_eq!(x.gpu_pct.is_some(), y.gpu_pct.is_some());
         assert_eq!(x.vram_mb.is_some(), y.vram_mb.is_some());
         assert_eq!(
