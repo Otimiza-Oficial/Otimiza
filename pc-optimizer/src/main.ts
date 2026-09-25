@@ -10335,7 +10335,39 @@ async function carregarUltimasPartidas() {
         )
         .join("")}</tbody>
     </table>
-    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou.</p>`;
+    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou.</p>
+    <div id="quedas-de-desempenho"></div>`;
+
+  try {
+    const quedas = await invoke<Deriva[]>("quedas_de_desempenho");
+    const caixa = document.getElementById("quedas-de-desempenho");
+    if (caixa && quedas.length) caixa.innerHTML = quedas.map((q) => `<p class="fg-aviso">${fraseDaQueda(q)}</p>`).join("");
+  } catch {
+    // Sem a leitura das quedas a tabela continua valendo: o aviso é um extra.
+  }
+}
+
+type Deriva = {
+  jogo: string;
+  mudou: { tipo: "Driver" | "Windows"; de: string; para: string } | { tipo: "Nada" };
+  fps_antes: number;
+  fps_depois: number;
+  queda_pct: number;
+  partidas_antes: number;
+  partidas_depois: number;
+};
+
+/** O que caiu, de quanto, e o que mudou junto. Sem culpado, diz o que olhar. */
+function fraseDaQueda(q: Deriva): string {
+  const numeros = `<strong>${escapeHtml(q.jogo)} caiu ${Math.round(q.queda_pct)}%</strong>: ${Math.round(q.fps_antes)} → ${Math.round(q.fps_depois)} FPS de média (${q.partidas_antes} partidas antes, ${q.partidas_depois} depois)`;
+  switch (q.mudou.tipo) {
+    case "Driver":
+      return `${numeros}, depois que o driver de vídeo mudou de ${escapeHtml(q.mudou.de)} para ${escapeHtml(q.mudou.para)}. Voltar ao driver anterior costuma devolver; jogue de novo depois e compare.`;
+    case "Windows":
+      return `${numeros}, depois que o Windows atualizou (${escapeHtml(q.mudou.de)} → ${escapeHtml(q.mudou.para)}). Confira se o driver de vídeo continua o do fabricante, e não o genérico do Windows.`;
+    case "Nada":
+      return `${numeros}, sem mudança de driver nem de Windows. Vale olhar a temperatura (aba Diagnóstico) e o que está rodando junto com o jogo.`;
+  }
 }
 
 async function carregarOQueNaoFazemos() {

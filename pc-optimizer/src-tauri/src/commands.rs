@@ -2204,6 +2204,15 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
+/// Comando: jogos cujo FPS caiu com o tempo, e o que mudou junto (driver,
+/// Windows ou nada). `LIVRES`: só lê as medições automáticas.
+#[tauri::command]
+pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::deriva::procurar(&m)))
+        .await
+        .map_err(|e| format!("Falha ao ler as medições: {}", e))?
+}
+
 /// Comando: pronto para jogar? Scan de ~2 s antes de abrir o jogo. `LIVRES`.
 #[tauri::command]
 pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::Prontidao, String> {
@@ -4893,6 +4902,7 @@ mod tests {
         "niveis_de_otimizacao",
         "passo_a_passo_da_bios",
         "ficha_da_bios",
+        "quedas_de_desempenho",
         "reiniciar_na_bios",
     ];
 

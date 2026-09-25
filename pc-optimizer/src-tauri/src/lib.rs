@@ -246,6 +246,7 @@ pub fn run() {
             commands::niveis_de_otimizacao,
             commands::passo_a_passo_da_bios,
             commands::ficha_da_bios,
+            commands::quedas_de_desempenho,
             commands::reiniciar_na_bios,
             commands::set_max_refresh_rate,
             commands::licenca_estado,
