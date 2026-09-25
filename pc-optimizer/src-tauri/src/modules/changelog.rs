@@ -1,31 +1,22 @@
-// Change Log
-// Registra cada mudança aplicada no sistema para permitir rollback granular.
-//
-// Toda otimização reversível grava aqui o valor ANTERIOR antes de escrever o novo.
-// Sem esse registro não existe "desfazer" honesto — apenas a promessa dele.
+// Registro de cada mudança aplicada, com o valor ANTERIOR gravado antes do novo: sem ele não existe desfazer
+// honesto.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Valor que existia antes da otimização ser aplicada.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value")]
 pub enum PreviousValue {
-    /// A chave existia, mas o valor não — reverter significa apagar o valor.
     Absent,
-    /// Nem a chave existia. Reverter apaga o valor E a chave criada,
-    /// para não deixar sujeira no registro do cliente.
+    /// Reverter apaga o valor E a chave criada.
     AbsentKey,
     Dword(u32),
     Text(String),
-    /// Valor bruto (REG_BINARY). O Windows guarda o estado dos programas de
-    /// inicialização assim, e é o único jeito de mexer nisso do modo que o
-    /// Gerenciador de Tarefas mexe.
+    /// É assim que o Windows guarda o estado dos programas de inicialização, como o Gerenciador de Tarefas faz.
     Binary(Vec<u8>),
 }
 
-/// Uma mudança atômica no sistema, com informação suficiente para desfazê-la.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ChangeRecord {
@@ -37,7 +28,6 @@ pub enum ChangeRecord {
     },
     ServiceStartType {
         service: String,
-        /// Tipo de inicialização anterior, no formato do `sc config` (auto/demand/disabled/delayed-auto)
         previous: String,
     },
     PowerPlan {
@@ -46,102 +36,53 @@ pub enum ChangeRecord {
     Hibernation {
         previously_enabled: bool,
     },
-    /// Ajuste fino do plano de energia. O valor anterior pode não existir: nesse
-    /// caso o plano estava herdando o padrão do Windows, e reverter é apagá-lo.
+    /// Sem valor anterior o plano herdava o padrão do Windows: reverter é apagar.
     PowerSetting {
         scheme: String,
         subgroup: String,
         setting: String,
         previous: PreviousValue,
-        /// O valor anterior no modo bateria.
-        ///
-        /// `Option` com padrão porque existe `changes.json` em máquina de
-        /// cliente gravado antes de o produto passar a escrever a bateria. Ler
-        /// um desses arquivos precisa continuar funcionando: `None` significa
-        /// "esta mudança é antiga e só mexeu na tomada", e a reversão respeita
-        /// isso em vez de inventar um valor para a bateria.
+        /// `None` = mudança gravada antes de o produto escrever a bateria: reverte só a tomada, sem inventar valor.
         #[serde(default)]
         previous_dc: Option<PreviousValue>,
     },
     MemoryCompression {
         previously_enabled: bool,
     },
-    /// Limites de inicialização removidos, guardados para poder voltar.
     BootLimits {
         removed: Vec<(String, String)>,
     },
-    /// Armazenamento Reservado do Windows ligado ou desligado.
     ReservedStorage {
         previously_enabled: bool,
     },
-    /// Taxa de atualização de um monitor.
-    ///
-    /// Guarda o dispositivo e a frequência anterior. Sem isto o cliente que
-    /// não gostou do resultado — ou cuja tela ficou instável — não teria
-    /// caminho de volta pelo produto.
     RefreshRate {
         device: String,
         previous_hz: u32,
     },
-    /// Tarefa agendada ligada ou desligada.
     ScheduledTask {
         path: String,
         name: String,
         previously_enabled: bool,
     },
 
-    /// Um arquivo de configuração de jogo, guardado INTEIRO antes de ser
-    /// alterado.
-    ///
-    /// POR QUE O ARQUIVO INTEIRO, E NÃO AS CHAVES QUE MUDARAM
-    ///
-    /// Todas as outras variantes guardam o valor anterior de uma coisa só, e
-    /// isso funciona porque registro e serviço são pares de chave e valor com
-    /// dono conhecido. Um arquivo de configuração de jogo não é: o próprio jogo
-    /// reescreve o arquivo quando quer, reordena as linhas, acrescenta chaves
-    /// que não existiam na versão passada e muda o formato entre atualizações.
-    ///
-    /// Guardando só as chaves mexidas, "desfazer" depois de o jogo ter
-    /// reescrito o arquivo devolveria um valor antigo para dentro de uma
-    /// estrutura nova — e o resultado seria um arquivo que nem é o de antes nem
-    /// o de agora. O arquivo inteiro é a única coisa que garante que voltar
-    /// significa voltar.
-    ///
-    /// Custa alguns kilobytes por mudança. É o preço mais barato deste projeto.
+    /// O arquivo INTEIRO: o jogo reescreve, reordena e muda o formato, e devolver só as chaves mexidas geraria um
+    /// arquivo que não é nem o de antes nem o de agora.
     GameConfig {
-        /// Caminho completo, para o desfazer não depender de reencontrar a
-        /// pasta do jogo — que pode ter sido movida ou desinstalada.
+        /// Caminho completo: a pasta do jogo pode ter sido movida ou desinstalada.
         caminho: String,
-        /// O conteúdo que existia antes. `None` quando o arquivo não existia:
-        /// desfazer, nesse caso, é apagá-lo.
+        /// `None` quando o arquivo não existia: desfazer é apagá-lo.
         anterior: Option<String>,
-        /// Nome do jogo, só para a descrição que o cliente lê.
         jogo: String,
     },
 
-    /// Um ajuste do driver da NVIDIA, aplicado pela NVAPI.
-    ///
-    /// POR QUE ESTA VARIANTE GUARDA TEXTO, E NÃO UM NÚMERO
-    ///
-    /// O valor anterior de um ajuste da NVIDIA tem DOIS estados que precisam
-    /// caber no mesmo campo: um número que o cliente já tinha escolhido, ou "o
-    /// padrão de fábrica do driver". Os dois são reversíveis, mas por caminhos
-    /// diferentes — o número volta escrito, o padrão volta pela chamada de
-    /// restauração da própria NVAPI, que é o que permitiu este pilar existir.
-    ///
-    /// A tradução dos dois sentidos mora no `nvdriver.rs`, junto da chamada que
-    /// os usa; aqui fica só o texto que atravessa o disco.
+    /// Texto porque o anterior tem dois estados: um número escolhido (volta escrito) ou o padrão de fábrica (volta
+    /// pela restauração da NVAPI). A tradução mora no `nvdriver.rs`.
     DriverNvidia {
-        /// O identificador do ajuste no catálogo do `nvdriver.rs`.
         opcao: String,
-        /// O valor que existia antes, ou `nvdriver::ANTERIOR_PADRAO` quando o
-        /// que existia antes era o padrão de fábrica.
         valor_anterior: String,
     },
 
-    /// O perfil NVIDIA de UM jogo (2.9): vários ajustes no perfil do
-    /// executável. Perfil criado pelo Otimiza é apagado inteiro no desfazer;
-    /// perfil que já existia tem cada ajuste devolvido.
+    /// Perfil criado pelo Otimiza é apagado inteiro; perfil que já existia tem cada ajuste devolvido.
     PerfilNvidia {
         executavel: String,
         perfil: String,
@@ -149,27 +90,18 @@ pub enum ChangeRecord {
         anteriores: Vec<(String, String)>,
     },
 
-    /// O limite de quadros de UM jogo, no perfil do executável dele no driver
-    /// da NVIDIA.
-    ///
-    /// `perfil_criado` decide o desfazer: o perfil que o Otimiza criou é
-    /// apagado inteiro, achado pelo nome que só o Otimiza usa; o perfil que já
-    /// existia só tem o limite devolvido ao que era.
+    /// `perfil_criado` decide o desfazer: criado pelo Otimiza é apagado inteiro (pelo nome que só ele usa); o que já
+    /// existia só tem o limite devolvido.
     LimiteNvidia {
         executavel: String,
         fps: u32,
         perfil_criado: bool,
-        /// Como no `DriverNvidia`: um número, ou `nvdriver::ANTERIOR_PADRAO`.
         valor_anterior: String,
     },
 }
 
 impl ChangeRecord {
-    /// Descrição em português do que foi alterado, para o cliente acompanhar ao
-    /// vivo em vez de confiar numa barra de progresso.
-    ///
-    /// Mostrar exatamente o que se mexeu é o que separa uma ferramenta de
-    /// confiança de uma caixa preta que diz "otimizado!".
+    /// Mostrar exatamente o que se mexeu, ao vivo, em vez de "otimizado!".
     pub fn describe(&self) -> String {
         match self {
             ChangeRecord::RegistryValue {
@@ -187,9 +119,7 @@ impl ChangeRecord {
                 )
             }
             ChangeRecord::ServiceStartType { service, previous } => {
-                // O mesmo registro serve aos dois sentidos: desligar um serviço
-                // que subia, e religar um essencial que o Windows modificado
-                // trouxe desligado — este, com "antes: disabled".
+                // Serve aos dois sentidos: desligar um serviço e religar um essencial que o Windows modificado trouxe desligado.
                 if previous == "disabled" {
                     format!("serviço · {} religado (antes: desativado)", service)
                 } else {
@@ -267,7 +197,6 @@ impl ChangeRecord {
                 } else if valor_anterior == crate::modules::windows::nvdriver::ANTERIOR_PADRAO
                     || valor_anterior == "0"
                 {
-                    // 0 é o limitador desligado no driver.
                     "antes: sem limite".to_string()
                 } else {
                     format!("antes: {} FPS", valor_anterior)
@@ -277,7 +206,6 @@ impl ChangeRecord {
                 "{} · configuração alterada ({})",
                 jogo,
                 match anterior {
-                    // O tamanho é a prova visível de que há para onde voltar.
                     Some(texto) => format!("cópia de {} bytes guardada", texto.len()),
                     None => "o arquivo não existia".to_string(),
                 }
@@ -293,7 +221,6 @@ impl PreviousValue {
             PreviousValue::Dword(value) => value.to_string(),
             PreviousValue::Text(value) if value.is_empty() => "vazio".to_string(),
             PreviousValue::Text(value) => value.clone(),
-            // O primeiro byte é o que decide habilitado (0x02) ou desabilitado (0x03).
             PreviousValue::Binary(bytes) => match bytes.first() {
                 Some(2) => "habilitado".to_string(),
                 Some(3) => "desabilitado".to_string(),
@@ -303,7 +230,6 @@ impl PreviousValue {
     }
 }
 
-/// Uma otimização aplicada e todas as mudanças que ela causou.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppliedOptimization {
     pub optimization_id: String,
@@ -312,38 +238,22 @@ pub struct AppliedOptimization {
     pub changes: Vec<ChangeRecord>,
 }
 
-/// Por que o histórico está do jeito que está.
-///
-/// Vazio tem dois significados, e confundi-los é a diferença entre "não há
-/// nada aplicado" e "não sei o que foi aplicado". O segundo caso PRECISA
-/// aparecer na tela: sem ele, o produto diz que não há nada a desfazer sobre
-/// uma máquina que pode estar cheia de mudanças aplicadas.
+/// Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(tag = "estado")]
 pub enum LeituraDoHistorico {
-    /// Li o arquivo, ou ele não existe. Vazio aqui é vazio de verdade.
     #[default]
     Ok,
-    /// O arquivo existia e não deu para ler. Vazio aqui é DESCONHECIMENTO.
-    ///
-    /// `guardado_em` é para onde o arquivo ilegível foi movido. Ele não é
-    /// apagado: pode ser a única cópia do que o cliente tem aplicado, e um
-    /// humano ainda consegue ler JSON truncado.
+    /// `guardado_em`: para onde o ilegível foi movido. Não é apagado: pode ser a única cópia, e um humano lê JSON
+    /// truncado.
     Ilegivel {
         motivo: String,
         guardado_em: Option<String>,
     },
 }
 
-/// Um nome de arquivo temporário que ninguém mais vai usar.
-///
-/// NOME FIXO NÃO SERVE, e o teste provou antes do cliente: dois caminhos
-/// gravando ao mesmo tempo disputam o mesmo temporário, o primeiro a renomear
-/// leva o arquivo embora, e o segundo falha com "não encontrado".
-///
-/// No produto isso aconteceria com duas janelas abertas, ou com um `persist`
-/// disparado enquanto outro ainda não terminou. Identificador do processo mais
-/// o relógio em nanossegundos separa os dois casos sem custo.
+/// Nome fixo não serve: duas gravações simultâneas disputavam o temporário e a segunda falhava com "não
+/// encontrado". PID mais nanossegundos separa.
 pub(crate) fn caminho_temporario(destino: &Path) -> PathBuf {
     let marca = format!(
         "{}-{}",
@@ -357,7 +267,6 @@ pub(crate) fn caminho_temporario(destino: &Path) -> PathBuf {
     destino.with_extension(format!("novo-{}", marca))
 }
 
-/// Histórico persistente de otimizações aplicadas.
 pub struct ChangeLog {
     path: PathBuf,
     entries: Vec<AppliedOptimization>,
@@ -365,10 +274,7 @@ pub struct ChangeLog {
 }
 
 impl ChangeLog {
-    /// Carrega o histórico do disco.
-    ///
-    /// NÃO devolve erro, para não travar o app — mas também não finge que
-    /// arquivo ilegível é arquivo vazio. Ver `LeituraDoHistorico`.
+    /// Não devolve erro, para não travar o app, mas não finge que ilegível é vazio (ver `LeituraDoHistorico`).
     pub fn load() -> Self {
         let path = Self::storage_path();
         let (entries, leitura) = Self::ler(&path);
@@ -380,8 +286,7 @@ impl ChangeLog {
         }
     }
 
-    /// Histórico vazio num arquivo temporário próprio, para testes de outros
-    /// módulos. Nome único pelo mesmo motivo do `in_memory` dos testes daqui.
+    /// Nome único pelo mesmo motivo do `in_memory` dos testes daqui.
     #[cfg(test)]
     pub(crate) fn em_memoria() -> Self {
         use std::sync::atomic::{AtomicU32, Ordering};
@@ -398,20 +303,14 @@ impl ChangeLog {
         }
     }
 
-    /// A leitura deu certo, ou o vazio é desconhecimento?
     pub fn leitura(&self) -> &LeituraDoHistorico {
         &self.leitura
     }
 
-    /// Lê o arquivo, separando "não existe" de "não consegui ler".
-    ///
-    /// Função com o caminho por parâmetro de propósito: o caminho de verdade
-    /// sai de `%APPDATA%`, e um teste que dependesse disso escreveria no perfil
-    /// de quem roda a esteira.
+    /// Caminho por parâmetro: o real está em `%APPDATA%`, e o teste escreveria no perfil de quem roda a esteira.
     fn ler(path: &Path) -> (Vec<AppliedOptimization>, LeituraDoHistorico) {
         let bruto = match fs::read_to_string(path) {
             Ok(bruto) => bruto,
-            // Arquivo ausente é o estado normal de quem nunca aplicou nada.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 return (Vec::new(), LeituraDoHistorico::Ok)
             }
@@ -429,9 +328,6 @@ impl ChangeLog {
         match serde_json::from_str(&bruto) {
             Ok(entries) => (entries, LeituraDoHistorico::Ok),
             Err(e) => {
-                // JSON truncado é o resultado esperado de uma queda no meio da
-                // escrita — foi para isso que `persist` virou atômica. Aqui
-                // trata-se do arquivo que JÁ ficou assim.
                 let guardado = Self::guardar_ilegivel(path);
 
                 (
@@ -445,11 +341,7 @@ impl ChangeLog {
         }
     }
 
-    /// Move o arquivo ilegível para o lado, em vez de deixá-lo ser sobrescrito.
-    ///
-    /// Sem isto, a primeira gravação seguinte passa por cima dele e a última
-    /// pista do que estava aplicado na máquina do cliente some para sempre.
-    /// Mover também libera o caminho, para o produto seguir funcionando.
+    /// Sem isto, a próxima gravação passa por cima da última pista do que estava aplicado.
     fn guardar_ilegivel(path: &Path) -> Option<String> {
         let carimbo = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -476,20 +368,8 @@ impl ChangeLog {
         Self::gravar(&self.path, &self.entries)
     }
 
-    /// Grava o histórico de forma ATÔMICA: escreve ao lado e renomeia por cima.
-    ///
-    /// A gravação direta com `fs::write` deixava uma janela real de perda: uma
-    /// queda de energia, ou o processo morto no meio, produzia um JSON truncado
-    /// — e o arquivo truncado era lido depois como histórico vazio. Todas as
-    /// otimizações voltavam a aparecer como disponíveis, "Desfazer tudo"
-    /// respondia que não havia nada a fazer, e as mudanças continuavam
-    /// aplicadas no registro do cliente. A promessa central do produto morria
-    /// em silêncio, por causa de uma tomada.
-    ///
-    /// Com temporário + `rename`, o arquivo de destino ou é o antigo inteiro ou
-    /// é o novo inteiro. No Windows o `rename` do Rust substitui o destino.
-    ///
-    /// Caminho por parâmetro pelo mesmo motivo de `ler`: testabilidade.
+    /// ATÔMICA: um JSON truncado por queda de energia era lido como vazio, e "Desfazer tudo" dizia que não havia
+    /// nada com as mudanças ainda aplicadas.
     fn gravar(path: &Path, entries: &[AppliedOptimization]) -> Result<(), String> {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
@@ -500,18 +380,8 @@ impl ChangeLog {
 
         let temporario = caminho_temporario(path);
 
-        // `write` + `rename` NÃO bastava, e a falta estava justamente no caso
-        // que esta função existe para cobrir.
-        //
-        // `fs::write` devolve sucesso quando o conteúdo chegou ao cache do
-        // sistema, não ao disco. Renomeando em seguida, uma queda de energia
-        // podia deixar o rename gravado e o conteúdo não — e o destino virava
-        // um arquivo truncado ou vazio. O arquivo antigo, que estava íntegro,
-        // já tinha sido substituído. Era o mesmo desfecho que o comentário
-        // acima descreve como inaceitável, por um caminho diferente.
-        //
-        // `sync_all` antes do rename fecha isso: o conteúdo está em disco
-        // antes de o nome apontar para ele.
+        // `sync_all` antes do rename: `fs::write` volta com o conteúdo no cache, e a queda podia gravar o rename sem o
+        // conteúdo.
         {
             use std::io::Write;
 
@@ -530,9 +400,8 @@ impl ChangeLog {
         fs::rename(&temporario, path).map_err(|e| format!("Failed to replace change log: {}", e))
     }
 
-    /// Registra uma otimização aplicada. Substitui um registro anterior da mesma
-    /// otimização para que o histórico guarde sempre o estado original mais antigo
-    /// que ainda não foi revertido.
+    /// Substitui o registro anterior da mesma otimização, para guardar o estado original mais antigo ainda não
+    /// revertido.
     pub fn record(&mut self, entry: AppliedOptimization) -> Result<(), String> {
         if !self
             .entries
@@ -545,7 +414,6 @@ impl ChangeLog {
         Ok(())
     }
 
-    /// Remove e devolve o registro de uma otimização, para que ela possa ser revertida.
     pub fn take(&mut self, optimization_id: &str) -> Result<Option<AppliedOptimization>, String> {
         match self
             .entries
@@ -561,12 +429,10 @@ impl ChangeLog {
         }
     }
 
-    /// Otimizações atualmente aplicadas.
     pub fn applied(&self) -> &[AppliedOptimization] {
         &self.entries
     }
 
-    /// Verifica se uma otimização específica está aplicada.
     pub fn is_applied(&self, optimization_id: &str) -> bool {
         self.entries
             .iter()
@@ -585,10 +451,6 @@ pub fn now_timestamp() -> u64 {
 mod tests_1_8 {
     use super::*;
 
-    /// Uma pasta só deste teste, dentro do temporário do sistema.
-    ///
-    /// O caminho de verdade sai de `%APPDATA%`, e um teste que escrevesse lá
-    /// mexeria no histórico real de quem roda a esteira — inclusive no do dono.
     fn pasta(nome: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("otimiza-teste-{}", nome));
         let _ = fs::remove_dir_all(&dir);
@@ -596,8 +458,6 @@ mod tests_1_8 {
         dir
     }
 
-    /// Arquivo que não existe é o estado normal de quem nunca aplicou nada.
-    /// Vazio aqui é vazio de verdade, e não pode virar alarme.
     #[test]
     fn arquivo_ausente_e_historico_vazio_de_verdade() {
         let caminho = pasta("ausente").join("changes.json");
@@ -608,18 +468,11 @@ mod tests_1_8 {
         assert_eq!(leitura, LeituraDoHistorico::Ok);
     }
 
-    /// O caso que este conserto existe para pegar.
-    ///
-    /// Antes, um JSON truncado — o resultado de uma queda no meio da escrita —
-    /// era lido como histórico vazio. Todas as otimizações voltavam a aparecer
-    /// como disponíveis e "Desfazer tudo" dizia que não havia nada a fazer,
-    /// enquanto as mudanças seguiam aplicadas no registro do cliente.
     #[test]
     fn arquivo_truncado_nao_vira_historico_vazio_em_silencio() {
         let dir = pasta("truncado");
         let caminho = dir.join("changes.json");
 
-        // Exatamente o que sobra de um `fs::write` interrompido.
         fs::write(&caminho, r#"[{"optimization_id":"algo","name":"Te"#).unwrap();
 
         let (entradas, leitura) = ChangeLog::ler(&caminho);
@@ -651,7 +504,6 @@ mod tests_1_8 {
         }
     }
 
-    /// Histórico válido continua sendo lido normalmente.
     #[test]
     fn arquivo_valido_e_lido_inteiro() {
         let caminho = pasta("valido").join("changes.json");
@@ -664,8 +516,6 @@ mod tests_1_8 {
         assert_eq!(leitura, LeituraDoHistorico::Ok);
     }
 
-    /// A gravação não pode deixar o temporário para trás: ele seria lido como
-    /// lixo por quem abrisse a pasta, e ocuparia espaço para sempre.
     #[test]
     fn a_gravacao_nao_deixa_arquivo_temporario_para_tras() {
         let dir = pasta("temporario");
@@ -682,8 +532,6 @@ mod tests_1_8 {
         assert_eq!(sobraram, vec!["changes.json".to_string()]);
     }
 
-    /// Gravar por cima de um histórico que já existe substitui o conteúdo
-    /// inteiro — é o que a troca por `rename` precisa continuar fazendo.
     #[test]
     fn gravar_por_cima_substitui_o_conteudo() {
         let caminho = pasta("substitui").join("changes.json");
@@ -724,17 +572,7 @@ mod tests {
         }
     }
 
-    /// ChangeLog em memória, sem tocar no disco do usuário durante os testes.
-    /// UM ARQUIVO POR CHAMADA, e não um nome fixo compartilhado.
-    ///
-    /// Todos os testes daqui usavam `pc-optimizer-test-changes.json` — o MESMO
-    /// caminho — e o `record` grava em disco. O `cargo test` roda os testes em
-    /// paralelo, então eles disputavam o arquivo entre si: a suíte passava quase
-    /// sempre e reprovava de vez em quando, no teste que perdesse a corrida.
-    /// Visto acontecer com `records_and_reports_applied`, que passa sozinho.
-    ///
-    /// Um contador atômico é suficiente: os testes rodam todos no mesmo
-    /// processo, e o nome único tira a disputa.
+    /// Um arquivo por chamada: com nome fixo os testes em paralelo disputavam o arquivo e falhavam de vez em quando.
     fn in_memory() -> ChangeLog {
         use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -744,17 +582,12 @@ mod tests {
         ChangeLog {
             path: std::env::temp_dir().join(format!("pc-optimizer-test-changes-{}.json", numero)),
             entries: Vec::new(),
-            // Comeca vazio de verdade, e nao por nao ter conseguido ler.
             leitura: LeituraDoHistorico::Ok,
         }
     }
 
     #[test]
     fn servico_religado_nao_aparece_como_desativado() {
-        // O mesmo registro serve para desligar um serviço e para religar um
-        // essencial. Religar o Plug and Play e escrever "desativado" no
-        // acompanhamento ao vivo seria dizer ao cliente o contrário do que
-        // aconteceu.
         let religado = ChangeRecord::ServiceStartType {
             service: "PlugPlay".to_string(),
             previous: "disabled".to_string(),
@@ -808,13 +641,8 @@ mod tests {
         assert!(log.take("never_applied").unwrap().is_none());
     }
 
-    /// A linha que o cliente le sobre um ajuste do driver da NVIDIA precisa
-    /// dizer O QUE ERA ANTES em portugues, e nao cuspir o codigo interno.
-    ///
-    /// Os dois casos sao opostos e nao podem ser trocados: "o padrao do driver"
-    /// e um estado de fabrica; um numero e uma escolha que o cliente ja tinha
-    /// feito. Confundir os dois na tela faria o cliente achar que o Otimiza
-    /// apagou a configuracao dele -- ou o contrario.
+    /// "Padrão do driver" e um número escolhido não podem ser trocados na tela: o cliente acharia que o Otimiza
+    /// apagou a configuração dele.
     #[test]
     fn a_linha_do_driver_nvidia_diz_o_que_existia_antes() {
         let do_padrao = ChangeRecord::DriverNvidia {

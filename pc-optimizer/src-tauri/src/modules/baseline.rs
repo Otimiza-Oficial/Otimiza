@@ -1,83 +1,30 @@
-// Baseline: o estado de antes, com o contexto que autoriza comparar
-//
-// POR QUE ISTO EXISTE
-//
-// Nenhuma otimização deste produto pode ser mantida sem antes e depois. O
-// antes e o depois de QUADROS já existiam em `prova.rs`, e o cabeçalho de lá
-// conta a armadilha que derruba qualquer comparação: no FiveM o menu roda a
-// 300 quadros e uma rua movimentada a 90, a mesma máquina no mesmo minuto.
-// Medir o antes no trânsito e o depois no menu fabrica um ganho de 200% sem
-// mudar nada.
-//
-// Este módulo generaliza essa desconfiança para a MÁQUINA INTEIRA, e não só
-// para os quadros. Um baseline aqui é um retrato da telemetria com duas coisas
-// grudadas nele: sob que carga foi tirado, e em que máquina.
-//
-// AS TRÊS RECUSAS
-//
-// 1. PERFIL DIFERENTE NÃO COMPARA. Um retrato com a máquina ociosa contra um
-//    tirado durante a partida não mede otimização: mede a diferença entre
-//    estar parado e estar jogando. É a regra do menu contra a rua, aplicada à
-//    carga em vez de ao lugar do mapa.
-//
-// 2. MÁQUINA DIFERENTE NÃO COMPARA. Trocou a placa, o driver, a versão do
-//    Windows ou o plano de energia entre os dois retratos, e a diferença deixa
-//    de ser sobre o que o Otimiza fez.
-//
-// 3. MÉTRICA QUE NÃO FOI MEDIDA DOS DOIS LADOS NÃO ENTRA. É o que o contrato
-//    de `telemetry.rs` finalmente torna verificável: comparar um número
-//    medido contra um desconhecido não é comparação, e comparar duas leituras
-//    velhas é uma comparação fraca que precisa dizer que é.
-//
-// O QUE ESTE MÓDULO NÃO FAZ
-//
-// Não decide se a mudança foi boa. Ele entrega a diferença por métrica, com a
-// ressalva de cada uma, e diz o que não pôde comparar. Quem decide precisa de
-// um alvo — e o alvo depende do modo que o cliente escolheu, que é outra
-// etapa.
+// Baseline: um retrato da telemetria com a carga em que foi tirado e a identidade da máquina (no FiveM o menu
+// roda a 300 e a rua a 90: comparar os dois fabrica ganho). Recusa: perfil de carga diferente, máquina diferente
+// (placa, driver, Windows, plano) e métrica sem valor dos dois lados. Não decide se a mudança foi boa: entrega a
+// diferença com a ressalva de cada métrica.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use super::telemetry::{Quality, Telemetry};
 
-/// Versão do formato gravado em disco.
-///
-/// Um arquivo de versão desconhecida é ERRO, e não lista vazia: "não há
-/// baseline" sobre um arquivo que existe e não foi entendido seria apagar o
-/// passado do cliente em silêncio na próxima gravação.
+/// Versão desconhecida é ERRO: "não há baseline" apagaria o passado do cliente na próxima gravação.
 pub const SCHEMA_VERSION: u32 = 1;
 
-/// Abaixo disto a diferença é ruído de medição, e não ganho.
-///
-/// Os mesmos 3% de `prova.rs`, pela mesma razão: duas medições seguidas sem
-/// mexer em nada variam nessa ordem de grandeza por causa do que o Windows
-/// está fazendo no fundo. Chamar isso de ganho seria vender ruído.
+/// Os mesmos 3% de `prova.rs`: duas medições seguidas sem mexer em nada variam nessa ordem.
 pub const RUIDO_PCT: f64 = 3.0;
 
-/// Acima desta idade, a leitura que entrou no retrato já era velha quando foi
-/// guardada, e a comparação em cima dela é fraca.
 pub const IDADE_FIRME_MS: u64 = 5_000;
 
-/// Sob que carga o retrato foi tirado.
-///
-/// Os perfis são os do prompt do produto. Eles não são detectados sozinhos: a
-/// carga diz o que a máquina está fazendo, não o que quem mediu QUIS medir —
-/// e um retrato rotulado errado é pior que retrato nenhum, porque autoriza uma
-/// comparação que não devia existir.
+/// Não detectado sozinho: a carga diz o que a máquina faz, não o que se QUIS medir, e retrato rotulado errado
+/// autoriza uma comparação que não devia existir.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Perfil {
-    /// Máquina parada, sem nada em primeiro plano.
     Ocioso,
-    /// Uso comum: navegador, editor, janelas abertas.
     AreaDeTrabalho,
-    /// Carga deliberada de processador.
     Cpu,
-    /// Carga deliberada de placa de vídeo.
     Gpu,
-    /// Jogo em primeiro plano.
     Jogo,
-    /// Carga deliberada de disco.
     Disco,
 }
 
@@ -94,12 +41,7 @@ impl Perfil {
     }
 }
 
-/// O que precisa ser igual para dois retratos falarem da mesma coisa.
-///
-/// Cada campo aqui é uma pergunta que já custou dinheiro a alguém: o cliente
-/// que trocou de placa entre o antes e o depois, o que atualizou o driver, o
-/// que mudou o plano de energia por fora. Sem isto, a diferença medida vira
-/// mérito do Otimiza por acidente.
+/// Sem isto, trocar placa, driver ou plano por fora vira mérito do Otimiza por acidente.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Identidade {
     pub cpu: String,
@@ -107,18 +49,13 @@ pub struct Identidade {
     pub nucleos_logicos: usize,
     pub ram_gb: f64,
     pub windows_build: u32,
-    /// Plano de energia ativo. Trocá-lo por fora muda tudo o que se mede.
     pub plano_de_energia: Option<String>,
-    /// Quantas mudanças do Otimiza estavam aplicadas quando o retrato foi
-    /// tirado. É o que separa "antes" de "depois" quando o resto é igual.
+    /// Separa "antes" de "depois" quando o resto é igual.
     pub mudancas_aplicadas: usize,
 }
 
 impl Identidade {
-    /// O que MUDOU entre duas identidades, em português.
-    ///
-    /// A contagem de mudanças do Otimiza não entra: ela é justamente o que se
-    /// espera que seja diferente entre o antes e o depois.
+    /// A contagem de mudanças do Otimiza não entra: é o que se espera que mude.
     pub fn diferencas(&self, outra: &Identidade) -> Vec<String> {
         let mut fora = Vec::new();
 
@@ -160,22 +97,14 @@ impl Identidade {
     }
 }
 
-/// Um retrato da máquina, com o contexto grudado.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Baseline {
     pub schema_version: u32,
-    /// Segundos desde 1970.
     pub quando: u64,
     pub perfil: Perfil,
     pub identidade: Identidade,
-    /// A telemetria inteira, com qualidade e idade por métrica. É daqui que
-    /// sai a decisão sobre o que pode ou não ser comparado.
     pub telemetria: Telemetry,
-    /// A incerteza de cada métrica, quando o retrato veio de repetições.
-    ///
-    /// Vazio num retrato de uma coleta só — que continua valendo, só não
-    /// permite dizer se uma diferença é maior que o ruído DESTA máquina. Ver
-    /// `repeticoes.rs`.
+    /// Vazio num retrato de coleta só: continua valendo, mas não diz se a diferença passa do ruído desta máquina.
     #[serde(default)]
     pub incerteza: Vec<super::repeticoes::Resumo>,
 }
@@ -197,7 +126,6 @@ impl Baseline {
         }
     }
 
-    /// O mesmo retrato, com a incerteza medida por repetições.
     pub fn com_incerteza(mut self, incerteza: Vec<super::repeticoes::Resumo>) -> Self {
         self.incerteza = incerteza;
         self
@@ -208,21 +136,15 @@ impl Baseline {
     }
 }
 
-/// Por que esta comparação não pode ser feita.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Recusa {
-    /// A máquina mudou entre os dois retratos.
     MaquinaDiferente(Vec<String>),
-    /// Os dois retratos foram tirados sob cargas diferentes.
     PerfilDiferente { antes: Perfil, depois: Perfil },
-    /// Um dos retratos veio de um formato que este código não entende.
     VersaoDesconhecida { encontrada: u32 },
-    /// Nenhuma métrica foi medida dos dois lados.
     NadaEmComum,
 }
 
 impl Recusa {
-    /// A frase que a tela mostra.
     pub fn explicacao(&self) -> String {
         match self {
             Recusa::MaquinaDiferente(mudou) => format!(
@@ -247,44 +169,26 @@ impl Recusa {
     }
 }
 
-/// A diferença de UMA métrica entre os dois retratos.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Delta {
     pub id: String,
     pub antes: f64,
     pub depois: f64,
-    /// Variação em %. `None` quando o "antes" era zero — não existe
-    /// porcentagem de aumento sobre zero.
+    /// `None` quando o "antes" era zero.
     pub variacao_pct: Option<f64>,
-    /// Os dois lados foram medidos, agora, sem estimativa nem idade.
     pub firme: bool,
-    /// Por que não é firme. Presente exatamente quando `firme` é falso.
     pub ressalva: Option<String>,
-    /// A variação passou do ruído de medição.
     pub acima_do_ruido: bool,
-    /// De onde saiu o julgamento do ruído.
-    ///
-    /// Existe porque as duas respostas têm peso diferente e a tela precisa
-    /// poder dizer qual é qual: um ganho aprovado pelo limiar fixo é um
-    /// palpite calibrado, e um aprovado pelos intervalos é uma medição.
+    /// Aprovado pelo limiar fixo é palpite calibrado; pelos intervalos, é medição. A tela precisa separar.
     pub criterio: Criterio,
 }
 
-/// Como o "isto é ganho ou é ruído?" foi decidido.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Criterio {
-    /// Os dois retratos vieram de repetições e os intervalos foram comparados.
-    ///
-    /// É a resposta forte: o ruído é o DESTA máquina, nesta métrica, hoje.
     Intervalos { folga: Option<f64> },
-    /// Um dos lados não tem repetições que bastem. Vale o limiar de 3%.
-    ///
-    /// É um palpite bem calibrado sobre toda máquina e toda métrica — melhor
-    /// que nada, e pior que medir.
     LimiarFixo,
 }
 
-/// Uma métrica que existia em um dos lados e não no outro.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NaoComparavel {
     pub id: String,
@@ -294,14 +198,11 @@ pub struct NaoComparavel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Comparacao {
     pub perfil: Perfil,
-    /// Ordenados: o que mais mudou primeiro.
     pub deltas: Vec<Delta>,
     pub nao_comparaveis: Vec<NaoComparavel>,
-    /// Quantos dos deltas são firmes.
     pub firmes: usize,
 }
 
-/// Compara dois retratos, ou explica por que não dá.
 pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recusa> {
     for b in [antes, depois] {
         if b.schema_version != SCHEMA_VERSION {
@@ -335,9 +236,7 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
             continue;
         };
 
-        // A regra que o contrato tornou verificável: sem valor dos DOIS lados,
-        // não há comparação. Um lado desconhecido não vale como zero, e não
-        // vale como "igual".
+        // Um lado desconhecido não vale como zero nem como "igual".
         let (Some(va), Some(vd)) = (a.value, d.value) else {
             nao_comparaveis.push(NaoComparavel {
                 id: id.clone(),
@@ -350,8 +249,7 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
             continue;
         };
 
-        // Unidade diferente para o mesmo id é defeito, não diferença. Comparar
-        // MHz com porcentagem produziria um número gigante e sem sentido.
+        // Unidade diferente para o mesmo id é defeito, não diferença.
         if a.unit != d.unit {
             nao_comparaveis.push(NaoComparavel {
                 id: id.clone(),
@@ -363,12 +261,7 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
         let ressalva = ressalva_da_comparacao(a, d);
         let variacao_pct = (va != 0.0).then(|| (vd - va) / va.abs() * 100.0);
 
-        // O RUÍDO MEDIDO GANHA DO RUÍDO SUPOSTO.
-        //
-        // Com repetições dos dois lados, a pergunta deixa de ser "a diferença
-        // é maior que 3%?" e passa a ser "estas medições conseguem distinguir
-        // os dois?" — que é a pergunta certa. O limiar fixo continua como
-        // resposta para quem mediu uma vez só.
+        // O ruído medido ganha do suposto; o limiar fixo fica para quem mediu uma vez só.
         let (acima_do_ruido, criterio) = match (antes.incerteza_de(id), depois.incerteza_de(id)) {
             (Some(ia), Some(id_)) => match super::repeticoes::comparar(ia, id_) {
                 super::repeticoes::Diferenca::Real { folga, .. } => {
@@ -377,7 +270,6 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
                 super::repeticoes::Diferenca::Indistinguivel { .. } => {
                     (false, Criterio::Intervalos { folga: None })
                 }
-                // Resumo sem repetições que bastem: cai no limiar.
                 super::repeticoes::Diferenca::SemRepeticoes { .. } => (
                     variacao_pct.is_some_and(|p| p.abs() >= RUIDO_PCT),
                     Criterio::LimiarFixo,
@@ -405,8 +297,7 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
         return Err(Recusa::NadaEmComum);
     }
 
-    // O que mais mudou primeiro. Delta sem porcentagem vai para o fim: não dá
-    // para ordenar pelo que não tem medida relativa.
+    // Delta sem porcentagem vai para o fim.
     deltas.sort_by(|x, y| {
         let px = x.variacao_pct.map(f64::abs).unwrap_or(-1.0);
         let py = y.variacao_pct.map(f64::abs).unwrap_or(-1.0);
@@ -423,7 +314,6 @@ pub fn comparar(antes: &Baseline, depois: &Baseline) -> Result<Comparacao, Recus
     })
 }
 
-/// O que enfraquece a comparação de uma métrica, se algo enfraquecer.
 fn ressalva_da_comparacao(
     a: &super::telemetry::Metric,
     d: &super::telemetry::Metric,
@@ -442,17 +332,10 @@ fn ressalva_da_comparacao(
     }
 }
 
-// ------------------------------------------------------------- em disco
-
-/// Lê os retratos guardados.
-///
-/// Arquivo que não existe é lista vazia. Arquivo que existe e não dá para ler
-/// é ERRO — "nenhum baseline" sobre um arquivo ilegível seria a lista vazia
-/// fingindo ser resposta, e a gravação seguinte apagaria o que estava lá.
+/// Existe e não se lê é ERRO: a lista vazia fingiria resposta e a gravação seguinte apagaria o que havia.
 pub fn ler_de(caminho: &Path) -> Result<Vec<Baseline>, String> {
-    // Um temporário sobrevivente é sinal de gravação interrompida. Ele NÃO é
-    // apagado nem promovido em silêncio: os dois são decisões sobre os dados
-    // do cliente que este código não pode tomar sozinho.
+    // Temporário sobrevivente (gravação interrompida) não é apagado nem promovido: são decisões sobre os dados do
+    // cliente.
     let pendente = caminho.with_extension("json.pending");
     if pendente.exists() {
         return Err(format!(
@@ -481,15 +364,8 @@ pub fn ler_de(caminho: &Path) -> Result<Vec<Baseline>, String> {
     }
 }
 
-/// Guarda um retrato, substituindo o anterior DO MESMO PERFIL.
-///
-/// Um perfil, um retrato: o "antes" de ocioso não tem nada a ver com o "antes"
-/// de jogo, e guardar os dois na mesma gaveta faria a comparação pegar o
-/// errado.
-///
-/// A gravação é em temporário exclusivo e renomeia por cima. Escrever direto
-/// no arquivo bom significa que uma queda de energia no meio deixa o cliente
-/// sem o passado dele E sem o presente.
+/// Um retrato por perfil. Temporário e rename: escrever direto no arquivo bom, com queda de energia no meio,
+/// deixa o cliente sem passado e sem presente.
 pub fn guardar_em(caminho: &Path, baseline: Baseline) -> Result<(), String> {
     let mut todos = ler_de(caminho)?;
     todos.retain(|b| b.perfil != baseline.perfil);
@@ -506,8 +382,7 @@ pub fn guardar_em(caminho: &Path, baseline: Baseline) -> Result<(), String> {
 
     let pendente = caminho.with_extension("json.pending");
 
-    // `create_new`: se o temporário já existe, outra gravação está em curso ou
-    // uma anterior morreu. Nos dois casos, passar por cima seria pior.
+    // `create_new`: temporário existente é gravação em curso ou morta, e passar por cima seria pior.
     {
         use std::io::Write;
 
@@ -521,8 +396,7 @@ pub fn guardar_em(caminho: &Path, baseline: Baseline) -> Result<(), String> {
             .write_all(bruto.as_bytes())
             .map_err(|e| format!("não consegui gravar o temporário: {e}"))?;
 
-        // Antes do rename, e não depois: renomear um arquivo cujo conteúdo
-        // ainda está no cache do sistema troca um arquivo bom por um vazio.
+        // `sync_all` antes do rename: renomear com o conteúdo ainda em cache troca um arquivo bom por um vazio.
         arquivo
             .sync_all()
             .map_err(|e| format!("não consegui confirmar a gravação em disco: {e}"))?;
@@ -549,12 +423,7 @@ pub fn guardar(baseline: Baseline) -> Result<(), String> {
     guardar_em(&caminho_padrao(), baseline)
 }
 
-/// A identidade desta máquina, agora.
-///
-/// Tudo vem de leitura barata: o perfil de hardware já é detectado uma vez e
-/// reaproveitado, e o plano de energia sai do registro em vez do `powercfg`,
-/// que abre processo. Montar a identidade não pode custar mais que o retrato
-/// que ela acompanha.
+/// Só leitura barata: plano de energia pelo registro, não pelo `powercfg`, que abre processo.
 #[cfg(target_os = "windows")]
 pub fn identidade_desta_maquina(mudancas_aplicadas: usize) -> Identidade {
     let h = super::windows::hardware::profile();
@@ -571,10 +440,6 @@ pub fn identidade_desta_maquina(mudancas_aplicadas: usize) -> Identidade {
     }
 }
 
-/// O GUID do plano de energia ativo, lido do registro.
-///
-/// O `powercfg` responderia a mesma coisa abrindo um processo e imprimindo em
-/// português. O registro é a mesma verdade, barata e sem tradução.
 #[cfg(target_os = "windows")]
 fn plano_ativo_do_registro() -> Option<String> {
     use crate::modules::changelog::PreviousValue;
@@ -606,9 +471,7 @@ mod tests {
         }
     }
 
-    /// A unidade tem de bater com a do catálogo: o contrato recusa gravação
-    /// com unidade divergente, e um teste que ignorasse isso mediria outra
-    /// coisa — foi assim que dois testes deste módulo falharam ao nascer.
+    /// A unidade tem de bater com a do catálogo: o contrato recusa a gravação divergente.
     fn unidade(id: &str) -> Unit {
         if id.starts_with("fps.") {
             Unit::Fps
@@ -635,8 +498,6 @@ mod tests {
 
     #[test]
     fn carga_diferente_nao_e_comparacao() {
-        // A regra do menu contra a rua, aplicada à carga: comparar ocioso com
-        // jogo mede a diferença entre estar parado e estar jogando.
         let antes = retrato(
             Perfil::Ocioso,
             &[("cpu.usage.overall", 5.0, Quality::Measured)],
@@ -676,7 +537,6 @@ mod tests {
 
     #[test]
     fn a_contagem_de_mudancas_nao_impede_comparar() {
-        // É justamente o que se espera que seja diferente entre antes e depois.
         let antes = retrato(
             Perfil::Jogo,
             &[("cpu.usage.overall", 50.0, Quality::Measured)],
@@ -712,8 +572,6 @@ mod tests {
         assert_eq!(c.deltas.len(), 1);
         assert_eq!(c.deltas[0].id, "cpu.usage.overall");
 
-        // A placa NÃO aparece como "caiu de 90 para 0". Ela aparece como não
-        // comparável, com o motivo.
         let gpu = c
             .nao_comparaveis
             .iter()
@@ -738,7 +596,6 @@ mod tests {
         assert!(d.ressalva.as_deref().unwrap().contains("estimativa"));
         assert_eq!(c.firmes, 0);
 
-        // O NÚMERO continua lá. A ressalva não apaga a medição, ela a qualifica.
         assert_eq!(d.antes, 40.0);
         assert_eq!(d.depois, 80.0);
         assert_eq!(d.variacao_pct, Some(100.0));
@@ -765,8 +622,6 @@ mod tests {
             .expect("delta");
 
         assert!(!delta.firme);
-        // `com_idade` já rebaixa para estimativa, então a ressalva cita as duas
-        // coisas. O que importa é que a comparação não passa por firme.
         assert!(delta.ressalva.is_some());
     }
 
@@ -774,8 +629,6 @@ mod tests {
     fn com_repeticoes_o_ruido_medido_ganha_do_suposto() {
         use crate::modules::repeticoes::resumir;
 
-        // 84 → 87 é 3,57%: o limiar fixo de 3% aprovaria. Mas as repetições
-        // desta máquina mostram dispersão larga, e os intervalos se tocam.
         let antes = retrato(
             Perfil::Jogo,
             &[("cpu.usage.overall", 84.0, Quality::Measured)],
@@ -806,8 +659,6 @@ mod tests {
     fn com_repeticoes_apertadas_um_ganho_pequeno_e_real() {
         use crate::modules::repeticoes::resumir;
 
-        // 2% — abaixo do limiar fixo, que o descartaria. Com a máquina
-        // medindo apertado, ele é real.
         let antes = retrato(Perfil::Jogo, &[("fps.average", 100.0, Quality::Measured)])
             .com_incerteza(vec![
                 resumir("fps.average", &[100.0, 100.1, 99.9, 100.0]).expect("quatro")
@@ -833,8 +684,6 @@ mod tests {
 
     #[test]
     fn sem_repeticoes_o_criterio_diz_que_e_limiar_fixo() {
-        // A tela precisa poder separar um ganho medido de um ganho aprovado
-        // por palpite calibrado.
         let antes = retrato(Perfil::Jogo, &[("fps.average", 100.0, Quality::Measured)]);
         let depois = retrato(Perfil::Jogo, &[("fps.average", 110.0, Quality::Measured)]);
 
@@ -875,7 +724,6 @@ mod tests {
         let c = comparar(&antes, &depois).expect("comparável");
         assert_eq!(c.deltas[0].variacao_pct, None);
         assert!(!c.deltas[0].acima_do_ruido);
-        // Os dois números absolutos continuam sendo entregues.
         assert_eq!(c.deltas[0].depois, 30.0);
     }
 
@@ -897,8 +745,6 @@ mod tests {
             Recusa::VersaoDesconhecida { encontrada: 99 }
         ));
     }
-
-    // ---- disco
 
     fn pasta(nome: &str) -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!("otimiza-baseline-{nome}"));
@@ -927,7 +773,6 @@ mod tests {
             ),
         )
         .expect("grava");
-        // O segundo retrato de ocioso substitui o primeiro.
         guardar_em(
             &arquivo,
             retrato(
@@ -974,13 +819,11 @@ mod tests {
         )
         .expect("grava");
 
-        // Simula uma queda no meio da gravação anterior.
         std::fs::write(arquivo.with_extension("json.pending"), "meio arquivo").expect("escreve");
 
         let erro = ler_de(&arquivo).expect_err("pendente bloqueia");
         assert!(erro.contains("interrompida"), "{erro}");
 
-        // E o arquivo BOM continua lá, intacto.
         let bruto = std::fs::read_to_string(&arquivo).expect("o bom sobreviveu");
         assert!(bruto.contains("cpu.usage.overall"));
     }

@@ -1,33 +1,7 @@
-// Relatório técnico de atendimento
-//
-// Quem usa o Otimiza profissionalmente tem um problema que nenhum ajuste de
-// registro resolve: provar o serviço. O cliente entrega um PC lento, recebe um
-// PC melhor e não tem como saber o que foi feito — o que coloca o técnico
-// honesto no mesmo balaio de quem só reinicia a máquina e cobra.
-//
-// Este módulo gera um PDF que o técnico entrega junto com o computador. Ele
-// levanta o estado real da máquina, lista cada mudança pelo nome com o valor
-// que existia antes, e diz que tudo pode ser desfeito.
-//
-// COMO O PDF É PRODUZIDO
-//
-// O documento é escrito em HTML com folha de estilo de impressão, e convertido
-// pelo Microsoft Edge em modo sem interface. A escolha foi deliberada: o Edge
-// existe em toda instalação de Windows 10 e 11, então não há dependência nova
-// no instalador, e o resultado é tipografia de verdade — o que uma biblioteca
-// de PDF em Rust só entregaria com muito código e uma fonte embarcada.
-//
-// Se o Edge não estiver disponível, o HTML é gravado assim mesmo e o programa
-// diz o que aconteceu. Melhor entregar o documento em outro formato do que
-// falhar em silêncio.
-//
-// TRÊS REGRAS DO TEXTO GERADO
-//
-// 1. Nada de número inventado. Se não houve medição, o relatório diz que não
-//    houve — em vez de estampar uma porcentagem decorativa.
-// 2. O veredito da medição vai como saiu, inclusive "sem diferença" e "piorou".
-// 3. Nenhum símbolo decorativo. É um documento técnico que pode acabar anexado
-//    a uma nota de serviço.
+// Relatório técnico em PDF que o técnico entrega com o computador: estado real, cada mudança com o valor de
+// antes, e que tudo pode ser desfeito. HTML convertido pelo Edge sem interface (existe em todo Windows 10 e 11,
+// sem dependência nova); sem Edge, fica o HTML e o programa diz. Regras: nenhum número inventado, veredito como
+// saiu (inclusive "piorou"), nenhum símbolo decorativo.
 
 use crate::modules::benchmark::{BenchmarkComparison, MetricDelta, Verdict};
 use crate::modules::changelog::ChangeLog;
@@ -37,19 +11,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Serialize)]
 pub struct ReportSaved {
     pub path: String,
-    /// Verdadeiro quando saiu PDF; falso quando só foi possível gravar o HTML.
     pub is_pdf: bool,
     pub optimizations: usize,
     pub changes: usize,
-    /// Explicação, quando o PDF não pôde ser gerado.
     pub note: String,
 }
 
-/// Tudo que o relatório mostra sobre a máquina.
-///
-/// Coletado pelo comando antes de montar o documento. Cada campo é opcional
-/// porque cada análise pode falhar por conta própria — e uma seção ausente é
-/// dita como ausente, não omitida em silêncio.
+/// Cada campo é opcional porque cada análise falha sozinha; seção ausente é dita, não omitida.
 pub struct ReportData {
     #[cfg(target_os = "windows")]
     pub boot: Option<crate::modules::windows::boot::BootReport>,
@@ -62,22 +30,15 @@ pub struct ReportData {
     #[cfg(target_os = "windows")]
     pub browsers: Option<crate::modules::windows::browsers::BrowserReport>,
     #[cfg(target_os = "windows")]
-    /// `Result` e não `Vec`: a chave `Run` ilegível devolvia lista vazia, a
-    /// seção sumia do PDF inteira, e o relatório ficava dizendo por omissão
-    /// que a máquina não tem nada na inicialização. É a mesma regra que o
-    /// resto do produto já segue: ausente e ilegível não são o mesmo estado.
+    /// `Result`: a chave `Run` ilegível sumia com a seção e o PDF dizia por omissão que não havia nada na
+    /// inicialização.
     pub startup: Result<Vec<crate::modules::windows::startup::StartupEntry>, String>,
-    /// O mesmo veredito que a tela mostra. Vem pronto de fora em vez de ser
-    /// coletado aqui: se o relatório recolhesse por conta própria, o papel e o
-    /// programa poderiam discordar sobre a mesma máquina.
+    /// O mesmo veredito da tela, vindo de fora: papel e programa não podem discordar sobre a mesma máquina.
     #[cfg(target_os = "windows")]
     pub veredito: Option<crate::modules::windows::veredito::Veredito>,
 }
 
-/// `Default` escrito à mão porque `startup` virou `Result`, e `Result` não tem
-/// padrão. O padrão certo aqui é a LISTA VAZIA, e não um erro: `ReportData`
-/// vazio é o que os testes usam para montar um relatório sem máquina nenhuma, e
-/// inventar uma falha de leitura ali seria mentir do outro lado.
+/// À mão porque `Result` não tem padrão; o certo é a lista VAZIA (os testes montam relatório sem máquina).
 impl Default for ReportData {
     fn default() -> Self {
         ReportData {
@@ -99,11 +60,7 @@ impl Default for ReportData {
     }
 }
 
-/// Escapa texto para HTML.
-///
-/// Nome de programa instalado entra neste relatório, e nome de programa é texto
-/// de terceiro: sem escapar, um instalador com `<script>` no nome viraria código
-/// executando na máquina de quem abrir o arquivo.
+/// Nome de programa instalado é texto de terceiro: sem escapar, um `<script>` no nome executaria em quem abrir.
 fn escape(raw: &str) -> String {
     raw.chars()
         .map(|c| match c {
@@ -149,19 +106,7 @@ fn duracao(ms: u64) -> String {
     }
 }
 
-// ------------------------------------------------------------------ seções
-
-/// A conclusão, antes de qualquer dado.
-///
-/// Vem primeiro de propósito, e contra a intuição de quem escreve laudo: o
-/// cliente que paga por um atendimento quer saber o que há de errado com a
-/// máquina dele, não percorrer onze seções de medição até descobrir. As
-/// medições continuam todas aqui, logo abaixo, para quem quiser conferir cada
-/// afirmação — mas a afirmação vem primeiro.
-///
-/// O texto sai do MESMO veredito que a tela mostra. Coletar de novo aqui faria
-/// o papel e o programa poderem discordar sobre a mesma máquina, e é o tipo de
-/// contradição que destrói a confiança num laudo.
+/// A conclusão vem primeiro: o cliente quer saber o que há de errado, e as medições ficam abaixo para conferir.
 #[cfg(target_os = "windows")]
 fn secao_veredito(dados: &ReportData) -> String {
     use crate::modules::windows::achados::FindingSeverity;
@@ -203,8 +148,7 @@ fn secao_veredito(dados: &ReportData) -> String {
         corpo.push_str("</tbody></table>");
     }
 
-    // O que NÃO foi verificado entra na conclusão, e não numa nota de rodapé.
-    // Um laudo que omite o próprio alcance é um laudo que engana por seleção.
+    // O que NÃO foi verificado vai na conclusão, não no rodapé: omitir o alcance é enganar por seleção.
     if !v.lacunas.is_empty() {
         corpo.push_str(
             "<p><b>Limites deste levantamento.</b> Os itens abaixo não puderam ser \
@@ -375,8 +319,6 @@ fn secao_processador(dados: &ReportData) -> String {
         r.thermal_events
     ));
 
-    // O critério é a parte mais importante desta seção: ele é o que permite ao
-    // cliente conferir que não houve chute.
     if r.culprit == Culprit::Calor || r.culprit == Culprit::NaoIdentificado {
         corpo.push_str(
             "<p class=\"nota\">Criterio adotado: descartar bateria, depois o teto do plano de \
@@ -411,7 +353,7 @@ fn secao_saude(dados: &ReportData) -> String {
         .findings
         .iter()
         .map(|f| {
-            // Nome de classe fica em ASCII; o acento vai só no texto visível.
+            // Nome de classe em ASCII; o acento vai só no texto visível.
             let classe = match f.severity {
                 FindingSeverity::Critical => "ruim",
                 FindingSeverity::Important => "atencao",
@@ -440,8 +382,6 @@ fn secao_saude(dados: &ReportData) -> String {
         ));
     }
 
-    // Conselho de item crítico vai por extenso: é a informação que justifica
-    // trocar peça, e ela não pode caber numa palavra de tabela.
     for f in r.findings.iter().filter(|f| f.severity == FindingSeverity::Critical) {
         if !f.advice.is_empty() {
             corpo.push_str(&format!(
@@ -485,8 +425,6 @@ fn secao_memoria(dados: &ReportData) -> String {
         r.pagefile_peak_gb
     );
 
-    // Memória prometida acima da física é a explicação mais comum de "congela
-    // do nada" em máquina de 4 a 8 GB.
     if r.committed_gb > r.total_ram_gb {
         corpo.push_str(&format!(
             "<p class=\"achado\">Os programas em uso pediram {:.1} GB, mais que os {:.1} GB \
@@ -547,7 +485,6 @@ fn secao_navegador(dados: &ReportData) -> String {
         ));
     }
 
-    // A ausência é tão informativa quanto a presença, e evita a pergunta óbvia.
     corpo.push_str(
         "<p class=\"nota\">Consumo de memória por extensão não consta deste relatório porque \
          não e mensurável a partir do sistema operacional: diversas extensões compartilham um \
@@ -560,10 +497,7 @@ fn secao_navegador(dados: &ReportData) -> String {
 
 #[cfg(target_os = "windows")]
 fn secao_inicializacao(dados: &ReportData) -> String {
-    // A LACUNA APARECE. Antes, uma leitura que falhou e uma máquina realmente
-    // sem nada na inicialização produziam a mesma coisa: a seção desaparecia. O
-    // cliente recebia um relatório que afirmava, pelo silêncio, o que o produto
-    // não tinha conseguido conferir.
+    // A lacuna aparece: leitura falha e máquina sem nada na inicialização davam a mesma seção sumida.
     let entradas = match &dados.startup {
         Ok(entradas) => entradas,
         Err(erro) => {
@@ -626,9 +560,7 @@ fn linha_metrica(metric: &MetricDelta) -> String {
 
 fn secao_medicao(comparison: Option<&BenchmarkComparison>) -> String {
     let Some(c) = comparison else {
-        // O caso mais importante deste módulo. Sem medição, o relatório precisa
-        // dizer isso em voz alta — é exatamente aqui que um produto desonesto
-        // colocaria "desempenho melhorado em 40%".
+        // Sem medição, o relatório diz isso em voz alta.
         return secao(
             9,
             "Medição de desempenho",
@@ -710,8 +642,7 @@ fn secao_mudancas(log: &ChangeLog) -> (String, usize, usize) {
     (html, aplicadas.len(), total_mudancas)
 }
 
-/// Data local legível de um instante do histórico. `0` é histórico antigo sem
-/// hora gravada, e aparece como tal em vez de 01/01/1970.
+/// `0` é histórico antigo sem hora, e aparece como tal em vez de 01/01/1970.
 fn data_de(ts: u64) -> String {
     use chrono::TimeZone;
     if ts == 0 {
@@ -723,19 +654,13 @@ fn data_de(ts: u64) -> String {
     }
 }
 
-// ─── Relatório de alterações em planilha (2.9) ──────────────────────────
-//
-// Uma linha por alteração: quando, qual ajuste, o que mudou e o valor de antes
-// (que é o que volta no desfazer), e o valor novo quando o catálogo o conhece.
-// Separador ";" e BOM UTF-8 porque é assim que o Excel em português abre um
-// CSV sem embaralhar acento nem coluna.
+// CSV de alterações: uma linha por mudança, com o valor de antes. Separador ";" e BOM UTF-8 para o Excel em
+// português não embaralhar acento nem coluna.
 
 fn campo_csv(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\"").replace(['\n', '\r'], " "))
 }
 
-/// **Pura**, a menos do fuso da data. `valor_novo` responde o valor escrito
-/// para um id e uma alteração, quando se sabe.
 pub fn csv_das_alteracoes(
     log: &ChangeLog,
     valor_novo: impl Fn(&str, &crate::modules::changelog::ChangeRecord) -> Option<String>,
@@ -758,7 +683,6 @@ pub fn csv_das_alteracoes(
     s
 }
 
-/// Grava o CSV na Área de Trabalho e devolve o caminho.
 pub fn salvar_csv(conteudo: &str) -> Result<String, String> {
     let nome = format!("Otimiza - alteracoes - {}.csv", chrono::Local::now().format("%Y-%m-%d %Hh%M"));
     let caminho = desktop_dir().join(nome);
@@ -791,8 +715,6 @@ fn secao_recusas() -> String {
             .to_string(),
     )
 }
-
-// ------------------------------------------------------------------- estilo
 
 const ESTILO: &str = r#"
 @page { size: A4; margin: 20mm 18mm 22mm; }
@@ -865,7 +787,6 @@ footer.fim p { margin-bottom: 2.5mm }
 }
 "#;
 
-/// Monta o documento completo.
 pub fn build_html(
     log: &ChangeLog,
     comparison: Option<&BenchmarkComparison>,
@@ -877,9 +798,7 @@ pub fn build_html(
     #[allow(unused_mut)]
     let mut diagnostico = String::new();
 
-    // A conclusão é a seção 1 e vai antes de tudo, inclusive da identificação
-    // da máquina. Fica em variável própria e não dentro de `diagnostico`
-    // porque a identificação (seção 2) precisa aparecer ENTRE as duas.
+    // Em variável própria: a identificação (seção 2) aparece ENTRE a conclusão e o diagnóstico.
     #[allow(unused_mut)]
     let mut conclusao = String::new();
 
@@ -936,14 +855,8 @@ pub fn build_html(
     )
 }
 
-// -------------------------------------------------------------- gravação
-
-/// Pasta da Área de Trabalho do usuário.
-///
-/// Lê do registro em vez de montar `%USERPROFILE%\Desktop`: com OneDrive ligado
-/// — o padrão em notebook de loja — a Área de Trabalho real fica dentro da pasta
-/// do OneDrive, e o caminho montado na mão apontaria para uma pasta órfã que o
-/// usuário nunca vê. O nome da pasta também muda de idioma; o registro, não.
+/// Do registro, não `%USERPROFILE%\Desktop`: com OneDrive a Área de Trabalho real fica dentro dele, e o nome
+/// da pasta muda de idioma.
 fn desktop_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -965,10 +878,6 @@ fn desktop_dir() -> PathBuf {
         .unwrap_or_else(|_| PathBuf::from("."))
 }
 
-/// Onde o Microsoft Edge está instalado.
-///
-/// Os dois caminhos cobrem instalação de 64 e de 32 bits. O Edge acompanha o
-/// Windows 10 e 11, então na prática ele está sempre em um dos dois.
 #[cfg(target_os = "windows")]
 pub fn caminho_do_edge() -> Option<PathBuf> {
     [
@@ -980,24 +889,20 @@ pub fn caminho_do_edge() -> Option<PathBuf> {
     .find(|p| p.is_file())
 }
 
-/// Converte o HTML em PDF usando o Edge sem interface.
 #[cfg(target_os = "windows")]
 fn imprimir_pdf(html: &Path, pdf: &Path) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
 
     let edge = caminho_do_edge().ok_or("Microsoft Edge não encontrado nesta máquina")?;
 
-    // `file:///` com barras normais: o Chromium não aceita barra invertida na
-    // URL, mesmo no Windows.
+    // O Chromium não aceita barra invertida na URL.
     let url = format!("file:///{}", html.to_string_lossy().replace('\\', "/"));
 
     let saida = std::process::Command::new(edge)
         .args([
             "--headless",
             "--disable-gpu",
-            // Sem isto o Edge carimba a URL do arquivo e um cabeçalho de
-            // navegador em toda página, o que estraga um documento entregue
-            // a cliente.
+            // Sem isto o Edge carimba URL e cabeçalho em toda página.
             "--no-pdf-header-footer",
             &format!("--print-to-pdf={}", pdf.to_string_lossy()),
             &url,
@@ -1006,8 +911,7 @@ fn imprimir_pdf(html: &Path, pdf: &Path) -> Result<(), String> {
         .output()
         .map_err(|e| format!("Não foi possível executar o Edge: {}", e))?;
 
-    // O código de saída do Edge não é confiável aqui, e ele escreve avisos no
-    // stderr mesmo quando dá certo. O que decide é o arquivo ter sido criado.
+    // O código de saída do Edge não é confiável e ele escreve no stderr mesmo dando certo: decide o arquivo existir.
     if !pdf.is_file() {
         return Err(format!(
             "O Edge não gerou o PDF. {}",
@@ -1018,7 +922,6 @@ fn imprimir_pdf(html: &Path, pdf: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Gera o relatório e grava na Área de Trabalho.
 pub fn save(
     log: &ChangeLog,
     comparison: Option<&BenchmarkComparison>,
@@ -1026,7 +929,6 @@ pub fn save(
 ) -> Result<ReportSaved, String> {
     let agora = chrono::Local::now();
     let data = agora.format("%d/%m/%Y as %H:%M").to_string();
-    // Ano-mês-dia no nome mantém os relatórios em ordem na pasta.
     let base = format!("Otimiza - relatorio - {}", agora.format("%Y-%m-%d %Hh%M"));
 
     let html = build_html(log, comparison, dados, &data);
@@ -1043,8 +945,7 @@ pub fn save(
     {
         match imprimir_pdf(&caminho_html, &caminho_pdf) {
             Ok(()) => {
-                // O HTML era só o insumo do PDF; deixá-lo na Área de Trabalho
-                // faria o cliente receber dois arquivos e não saber qual abrir.
+                // Deixar o HTML junto faria o cliente receber dois arquivos sem saber qual abrir.
                 let _ = std::fs::remove_file(&caminho_html);
 
                 return Ok(ReportSaved {
@@ -1115,9 +1016,6 @@ mod tests {
 
     #[test]
     fn nome_de_programa_com_html_nao_vira_codigo() {
-        // Um instalador chamado `<script>alert(1)</script>` existe no mundo real
-        // como brincadeira e como ataque. O relatório é entregue ao cliente:
-        // ele não pode carregar código de terceiro.
         let escapado = escape("<script>alert('x')</script> & \"aspas\"");
 
         assert!(!escapado.contains('<'));
@@ -1131,15 +1029,12 @@ mod tests {
         let secao = secao_medicao(None);
 
         assert!(secao.contains("Não foi realizada medição"));
-        // A frase que separa este produto do resto do mercado.
         assert!(secao.contains("não estima números que não foram medidos"));
-        // E nenhuma porcentagem decorativa apareceu junto.
         assert!(!secao.contains('%'));
     }
 
     #[test]
     fn veredito_ruim_chega_ao_cliente() {
-        // A tentação comercial é omitir o que piorou. O relatório não omite.
         let (rotulo, classe) = verdict_label(&Verdict::Worsened);
         assert_eq!(rotulo, "piorou");
         assert_eq!(classe, "ruim");
@@ -1147,8 +1042,6 @@ mod tests {
 
     #[test]
     fn documento_nao_tem_simbolo_decorativo() {
-        // Pedido explícito: documento técnico, sem emoji. Um símbolo desses num
-        // anexo de nota de serviço tira a seriedade do laudo inteiro.
         let log = ChangeLog::load();
         let html = build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00");
 
@@ -1170,19 +1063,15 @@ mod tests {
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("lang=\"pt-BR\""));
 
-        // Abrir sem internet é requisito: o arquivo pode chegar por pendrive,
-        // ou ser aberto daqui a dois anos.
+        // Precisa abrir sem internet: pode chegar por pendrive, ou daqui a dois anos.
         assert!(!html.contains("http://"));
         assert!(!html.contains("https://"));
         assert!(!html.contains("<script"));
 
-        // Folha de impressão de verdade, e não uma página de tela salva em PDF.
         assert!(html.contains("@page"));
         assert!(html.contains("size: A4"));
 
-        // A promessa central do produto aparece no fechamento.
         assert!(html.contains("Reversibilidade"));
-        // E a lista do que recusamos fazer, que é o argumento de venda.
         assert!(html.contains("Procedimentos deliberadamente não executados"));
     }
 
@@ -1191,7 +1080,6 @@ mod tests {
         let log = ChangeLog::load();
         let html = build_html(&log, None, &ReportData::default(), "31/07/2026 as 14:00");
 
-        // A frase que impede o cliente de ler uma seção vazia como aprovação.
         assert!(html.contains("não que o item esteja em conformidade"));
     }
 
@@ -1211,9 +1099,6 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn edge_esta_disponivel_para_gerar_pdf() {
-        // Se isto falhar numa máquina de cliente, o relatório sai em HTML e o
-        // programa explica. O teste existe para saber se o caminho principal
-        // está funcionando aqui.
         match caminho_do_edge() {
             Some(p) => println!("Edge encontrado em {:?}", p),
             None => println!("Edge NAO encontrado; o relatório sairia em HTML"),
@@ -1241,16 +1126,12 @@ mod tests {
             Ok(()) => {
                 let bytes = std::fs::read(&pdf).unwrap();
 
-                // Assinatura de PDF de verdade, e não um arquivo vazio criado
-                // por engano.
                 assert!(bytes.starts_with(b"%PDF"), "arquivo gerado não e um PDF");
                 assert!(bytes.len() > 3000, "PDF pequeno demais: {} bytes", bytes.len());
 
                 println!("PDF gerado com {} bytes", bytes.len());
             }
             Err(motivo) => {
-                // Sem Edge, o caminho alternativo é o que vale — e ele é
-                // exercitado pelos outros testes.
                 println!("PDF não gerado nesta máquina: {}", motivo);
             }
         }
@@ -1261,8 +1142,7 @@ mod tests {
 
 #[cfg(test)]
 mod inspecao {
-    /// Gera o documento com os dados reais desta máquina para conferência
-    /// visual. Não roda na esteira: escreve arquivo e depende do Edge.
+    /// Dados reais desta máquina, para conferência visual. Fora da esteira: escreve arquivo e depende do Edge.
     #[test]
     #[ignore]
     fn dump() {
@@ -1302,7 +1182,6 @@ mod inspecao {
 
 #[cfg(test)]
 mod csv_desta_maquina {
-    /// Só leitura do histórico real; imprime o CSV sem gravar.
     #[test]
     #[ignore]
     fn csv_desta_maquina() {
