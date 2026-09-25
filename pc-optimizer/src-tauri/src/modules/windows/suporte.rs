@@ -76,6 +76,8 @@ pub struct Entrada {
     pub termico: String,
     /// O que não deu para ler. Vazio quando tudo foi lido — nunca omitido.
     pub lacunas: Vec<String>,
+    /// Quanto esta execução levou para abrir, em ms.
+    pub abertura_ms: Option<u64>,
 }
 
 /// Monta o texto que vai para a área de transferência.
@@ -99,6 +101,10 @@ pub fn montar(entrada: &Entrada) -> String {
 
     linhas.push(format!("Mudanças aplicadas: {}", entrada.mudancas_aplicadas));
     linhas.push(format!("Disco: {} · Térmico: {}", entrada.disco, entrada.termico));
+    linhas.push(match entrada.abertura_ms {
+        Some(ms) => format!("Abertura: {} ms", ms),
+        None => "Abertura: não medida".to_string(),
+    });
 
     // Regra 3: a lacuna aparece. Sem este `if`, uma lista vazia de lacunas e
     // uma leitura que falhou silenciosamente ficariam indistinguíveis para
@@ -323,6 +329,7 @@ pub fn gerar() -> Entrada {
         disco,
         termico,
         lacunas,
+        abertura_ms: crate::modules::abertura::medida(),
     }
 }
 
@@ -358,6 +365,7 @@ mod tests {
                     "limite do processador".to_string(),
                     "versão do Windows".to_string(),
                 ],
+                abertura_ms: Some(1234),
             }
         }
 
@@ -378,6 +386,7 @@ mod tests {
                 disco: "saudável".to_string(),
                 termico: "sem limite ativo".to_string(),
                 lacunas: vec!["contador de erros do disco".to_string()],
+                abertura_ms: Some(1234),
             }
         }
     }

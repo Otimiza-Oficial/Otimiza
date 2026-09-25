@@ -41,17 +41,17 @@ pub fn com_ligada(texto: &str) -> String {
     format!("{};", pares.join(";"))
 }
 
-fn build_do_windows() -> u32 {
-    registry::read_text("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber")
-        .ok()
-        .flatten()
+/// Falha de leitura é `Err`: com `unwrap_or(0)` ela virava "este Windows não
+/// tem a opção", uma afirmação sobre a máquina que ninguém conferiu.
+fn build_do_windows() -> Result<u32, String> {
+    registry::read_text("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber")?
         .and_then(|v| v.trim().parse().ok())
-        .unwrap_or(0)
+        .ok_or_else(|| "não deu para ler a versão do Windows".to_string())
 }
 
 /// `Ok(None)`: a opção não existe neste Windows. `Err`: não deu para ler.
 pub fn ligada() -> Result<Option<bool>, String> {
-    if build_do_windows() < WINDOWS_11 {
+    if build_do_windows()? < WINDOWS_11 {
         return Ok(None);
     }
     let texto = registry::read_text("HKCU", CHAVE, VALOR)?.unwrap_or_default();

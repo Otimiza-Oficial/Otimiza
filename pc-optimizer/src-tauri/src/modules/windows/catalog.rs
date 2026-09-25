@@ -188,7 +188,10 @@ pub struct OptimizationSpec {
 /// plano de TODO aplicativo instalado pela Loja, inclusive os que o cliente usa
 /// o dia inteiro. É o tipo de efeito que só aparece dias depois, sem ninguém
 /// ligar ao clique — e decidir isso é do dono do PC, item por item.
-pub const FORA_DO_LOTE: &[&str] = &["background_apps_off"];
+///
+/// `windowed_game_optimizations` (3.0) muda como o jogo entrega os quadros ao
+/// Windows, e não foi medido aqui: entra quando a pessoa escolhe, nunca num lote.
+pub const FORA_DO_LOTE: &[&str] = &["background_apps_off", "windowed_game_optimizations"];
 
 // ─── Classes da auditoria 2.9 ────────────────────────────────────────────
 //
@@ -1393,7 +1396,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         id: "windowed_game_optimizations",
         name: "Otimizações para jogos em janela",
         description: "Liga a opção do Windows 11 que tira o atraso dos jogos em tela cheia sem borda.",
-        honest_effect: "Vale para jogos DirectX 10 e 11 em janela ou em tela cheia sem borda, o modo em que o FiveM costuma rodar. O ganho é menos atraso entre o comando e a imagem, e o VRR (G-Sync, FreeSync) passa a funcionar nesse modo; o FPS médio não muda. Jogo em tela cheia exclusiva e em DirectX 12 já usa esse caminho. Só existe no Windows 11. Se algum jogo passar a piscar, desfaça.",
+        honest_effect: "Vale para jogos DirectX 10 e 11 em janela ou em tela cheia sem borda, o modo em que o FiveM costuma rodar. O ganho é menos atraso entre o comando e a imagem, e o VRR (G-Sync, FreeSync) passa a funcionar nesse modo. Não é um ajuste para aumentar o FPS, e o Otimiza não mediu o efeito dele na sua máquina: aplique um a um e compare. Jogo em tela cheia exclusiva e em DirectX 12 já usa esse caminho. Só existe no Windows 11. Se algum jogo passar a piscar, desfaça.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Responsiveness,
         risco_de_fps: RiscoDeFps::Nenhum,

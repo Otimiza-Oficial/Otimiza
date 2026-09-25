@@ -469,11 +469,12 @@ pub fn ligados_na_integrada(monitores: &[Monitor], placas: &[String], notebook: 
             hz_alvo: 0,
             title: format!("{} está ligado no vídeo da placa-mãe", m.descricao),
             measured: format!("O monitor recebe imagem de {}, e este PC tem {}.", m.adaptador, dedicada),
-            advice: "O cabo está na saída da placa-mãe, e o jogo roda no vídeo do processador: uma fração do \
-                     que a placa de vídeo entrega. Passe o cabo para uma das saídas da placa de vídeo, \
-                     aquelas mais embaixo na traseira do gabinete, deitadas."
+            advice: "O cabo está na saída da placa-mãe. Ou o jogo roda no vídeo do processador, que entrega \
+                     uma fração da placa de vídeo, ou a placa desenha e o Windows copia cada quadro para \
+                     essa saída, o que também custa desempenho e atraso. Passe o cabo para uma das saídas da \
+                     placa de vídeo, aquelas mais embaixo na traseira do gabinete, deitadas."
                 .to_string(),
-            severity: FindingSeverity::Critical,
+            severity: FindingSeverity::Important,
             fix_location: FixLocation::Hardware,
         })
         .collect()

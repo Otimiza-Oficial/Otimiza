@@ -1162,6 +1162,17 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
     }
 }
 
+/// Comando: a tela avisa que está pronta; devolve quanto a abertura levou, em
+/// ms. `LIVRES`: só mede.
+#[tauri::command]
+pub fn abertura_pronta() -> Option<u64> {
+    let ms = crate::modules::abertura::marcar_pronta();
+    if let Some(ms) = ms {
+        crate::utils::Logger::info(&format!("abertura: {} ms", ms));
+    }
+    ms
+}
+
 /// Comando: a ficha do firmware da aba BIOS. `LIVRES`: só lê.
 #[tauri::command]
 pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha, String> {
@@ -4902,6 +4913,7 @@ mod tests {
         "niveis_de_otimizacao",
         "passo_a_passo_da_bios",
         "ficha_da_bios",
+        "abertura_pronta",
         "quedas_de_desempenho",
         "reiniciar_na_bios",
     ];

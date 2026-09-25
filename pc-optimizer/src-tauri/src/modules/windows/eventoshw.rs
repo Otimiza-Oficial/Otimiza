@@ -17,6 +17,9 @@ use serde::Deserialize;
 const DIAS: u64 = 30;
 const MS_POR_DIA: u64 = 86_400_000;
 
+/// O teto da consulta. Atingido, a contagem é "pelo menos", e não o número real.
+pub const LIMITE_DE_EVENTOS: usize = 2000;
+
 /// Acima disto, erros corrigidos deixam de ser ruído.
 const CORRIGIDOS_DEMAIS: usize = 10;
 
@@ -68,6 +71,7 @@ fn quando_legivel(s: &str) -> String {
 pub fn achados(eventos: &[Evento]) -> Vec<Achado> {
     let mut ordenados: Vec<&Evento> = eventos.iter().collect();
     ordenados.sort_by(|a, b| b.quando.cmp(&a.quando));
+    let pelo_menos = if eventos.len() >= LIMITE_DE_EVENTOS { "pelo menos " } else { "" };
     let de = |t: Tipo| ordenados.iter().filter(|e| tipo(e) == Some(t.clone())).copied().collect::<Vec<_>>();
 
     let mut v = Vec::new();
@@ -78,7 +82,8 @@ pub fn achados(eventos: &[Evento]) -> Vec<Achado> {
             id: "driver_de_video_reiniciou",
             titulo: "O driver de vídeo caiu e foi reiniciado".to_string(),
             medido: format!(
-                "{} vez(es) nos últimos {} dias; a última em {}.",
+                "{}{} vez(es) nos últimos {} dias; a última em {}.",
+                pelo_menos,
                 video.len(),
                 DIAS,
                 quando_legivel(&ultimo.quando)
@@ -99,7 +104,8 @@ pub fn achados(eventos: &[Evento]) -> Vec<Achado> {
             id: "erro_de_hardware_whea",
             titulo: "O Windows registrou erro de hardware".to_string(),
             medido: format!(
-                "{} erro(s) do WHEA nos últimos {} dias; o último em {}.",
+                "{}{} erro(s) do WHEA nos últimos {} dias; o último em {}.",
+                pelo_menos,
                 falhas.len(),
                 DIAS,
                 quando_legivel(&ultimo.quando)
@@ -119,7 +125,7 @@ pub fn achados(eventos: &[Evento]) -> Vec<Achado> {
         v.push(Achado {
             id: "erros_corrigidos_whea",
             titulo: "Muitos erros de hardware corrigidos".to_string(),
-            medido: format!("{} nos últimos {} dias.", corrigidos.len(), DIAS),
+            medido: format!("{}{} nos últimos {} dias.", pelo_menos, corrigidos.len(), DIAS),
             conselho: "O hardware corrigiu sozinho, e nada travou por isso. Tantos assim costumam vir de \
                        memória ou processador no limite (XMP, overclock) ou do PCIe: vale conferir antes \
                        que vire erro de verdade."
@@ -139,10 +145,11 @@ pub fn ler() -> Result<Vec<Evento>, String> {
         "try {{ $e = Get-WinEvent -LogName System -FilterXPath \
            \"*[System[(Provider[@Name='Display'] and EventID=4101) or Provider[@Name='Microsoft-Windows-WHEA-Logger']] \
              and System[TimeCreated[timediff(@SystemTime) <= {}]]]\" \
-           -MaxEvents 200 -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
+           -MaxEvents {} -ErrorAction Stop }} catch {{ if ($_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') {{ $e = @() }} else {{ throw }} }}; \
          ConvertTo-Json -Compress -InputObject @($e | ForEach-Object {{ [ordered]@{{ \
            quando = $_.TimeCreated.ToString('s'); provedor = $_.ProviderName; id = [int]$_.Id; nivel = [int]$_.Level }} }})",
-        DIAS * MS_POR_DIA
+        DIAS * MS_POR_DIA,
+        LIMITE_DE_EVENTOS
     );
     let saida = super::shell::powershell(&script).map_err(|e| format!("Não foi possível ler o registro de eventos: {}", e))?;
     if !saida.success {

@@ -28,6 +28,8 @@ pub struct Leitura {
     pub game_bar_instalada: Option<bool>,
     /// GUID do plano ativo, em minúsculas.
     pub plano_ativo: Option<String>,
+    /// O plano ativo é o OTIMIZA (cópia do Equilibrado com ajustes).
+    pub plano_do_otimiza: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -50,7 +52,9 @@ pub fn achados(cpu: &str, l: &Leitura) -> Vec<Achado> {
         faltas.push("a Xbox Game Bar não está instalada");
     }
     let plano_outro = l.plano_ativo.as_deref().is_some_and(|g| g != EQUILIBRADO);
-    if plano_outro {
+    if plano_outro && l.plano_do_otimiza {
+        faltas.push("o plano ativo é o OTIMIZA, uma cópia do Equilibrado com ajustes, e a AMD recomenda o Equilibrado original");
+    } else if plano_outro {
         faltas.push("o plano de energia ativo não é o Equilibrado do Windows");
     }
     if faltas.is_empty() {
@@ -81,17 +85,19 @@ pub fn cpu() -> Option<String> {
 /// Lê o que falta. Só chamado com X3D de dois blocos.
 #[cfg(windows)]
 pub fn ler() -> Leitura {
-    let script = "$s = Get-Service -DisplayName '*V-Cache*' -ErrorAction SilentlyContinue | Select-Object -First 1; \
-                  $g = Get-AppxPackage -Name Microsoft.XboxGamingOverlay -ErrorAction SilentlyContinue; \
-                  ConvertTo-Json -Compress -InputObject ([ordered]@{ \
-                    Servico = $(if ($s) { [string]$s.Status } else { 'ausente' }); \
-                    GameBar = [bool]$g })";
+    // Consulta que falha fica nula, e não "ausente": sem isso, um erro de
+    // permissão viraria "o serviço da AMD não está instalado".
+    let script = "$servico = $null; $gamebar = $null; \
+                  try { $s = Get-Service -DisplayName '*V-Cache*' -ErrorAction Stop | Select-Object -First 1; \
+                        $servico = if ($s) { [string]$s.Status } else { 'ausente' } } catch { }; \
+                  try { $gamebar = [bool](Get-AppxPackage -Name Microsoft.XboxGamingOverlay -ErrorAction Stop) } catch { }; \
+                  ConvertTo-Json -Compress -InputObject ([ordered]@{ Servico = $servico; GameBar = $gamebar })";
 
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "PascalCase")]
     struct Bruto {
-        servico: String,
-        game_bar: bool,
+        servico: Option<String>,
+        game_bar: Option<bool>,
     }
 
     let bruto: Option<Bruto> = super::shell::powershell(script)
@@ -99,15 +105,14 @@ pub fn ler() -> Leitura {
         .filter(|s| s.success)
         .and_then(|s| serde_json::from_str(s.stdout.trim()).ok());
 
-    let plano_ativo = super::shell::run_checked("powercfg", &["/getactivescheme"])
-        .ok()
-        .and_then(|s| super::power::parse_active_guid(&s))
-        .map(|g| g.to_lowercase());
+    let saida_do_plano = super::shell::run_checked("powercfg", &["/getactivescheme"]).ok();
+    let plano_ativo = saida_do_plano.as_deref().and_then(super::power::parse_active_guid).map(|g| g.to_lowercase());
 
     Leitura {
-        servico_rodando: bruto.as_ref().map(|b| b.servico == "Running"),
-        game_bar_instalada: bruto.as_ref().map(|b| b.game_bar),
+        servico_rodando: bruto.as_ref().and_then(|b| b.servico.as_deref()).map(|s| s == "Running"),
+        game_bar_instalada: bruto.as_ref().and_then(|b| b.game_bar),
         plano_ativo,
+        plano_do_otimiza: saida_do_plano.is_some_and(|s| s.to_uppercase().contains("OTIMIZA")),
     }
 }
 
@@ -125,13 +130,13 @@ mod testes {
 
     #[test]
     fn tudo_certo_nao_acusa() {
-        let l = Leitura { servico_rodando: Some(true), game_bar_instalada: Some(true), plano_ativo: Some(EQUILIBRADO.into()) };
+        let l = Leitura { servico_rodando: Some(true), game_bar_instalada: Some(true), plano_ativo: Some(EQUILIBRADO.into()), plano_do_otimiza: false };
         assert!(achados("AMD Ryzen 9 7950X3D", &l).is_empty());
     }
 
     #[test]
     fn diz_cada_coisa_que_falta() {
-        let l = Leitura { servico_rodando: Some(false), game_bar_instalada: Some(true), plano_ativo: Some("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c".into()) };
+        let l = Leitura { servico_rodando: Some(false), game_bar_instalada: Some(true), plano_ativo: Some("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c".into()), plano_do_otimiza: false };
         let a = achados("AMD Ryzen 9 9950X3D", &l);
         assert_eq!(a.len(), 1);
         assert!(a[0].medido.contains("serviço") && a[0].medido.contains("Equilibrado"), "{}", a[0].medido);

@@ -213,7 +213,7 @@ pub static OPCOES: &[Opcao] = &[
     Opcao {
         id: "cache_shader_tamanho",
         titulo: "Tamanho do cache de shader: sem limite",
-        explicacao: "Com o cache cheio, o driver apaga shaders antigos e o jogo volta a                      compilar e engasgar onde já não engasgava. Sem limite, o cache                      ocupa mais espaço no disco do sistema: a aba Espaço mostra quanto.",
+        explicacao: "Com o cache cheio, o driver apaga shaders antigos e o jogo volta a compilar e engasgar onde já não engasgava. Sem limite, o cache ocupa mais espaço no disco do sistema: a aba Espaço mostra quanto.",
         id_do_padrao: Some(0x00AC_8497),
         nome_esperado: "shader disk cache maximum size",
         // PS_SHADERDISKCACHE_MAX_SIZE_MAX

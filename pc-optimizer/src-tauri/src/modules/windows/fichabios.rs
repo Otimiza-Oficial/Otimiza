@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Leitura {
     pub cpu: Option<String>,
+    /// O modelo do chip no CPUID ("Intel64 Family 6 Model 183 Stepping 1" →
+    /// 183). É ele, e não o nome comercial, que diz qual silício é.
+    #[serde(default)]
+    pub modelo: Option<u32>,
     /// A revisão do microcódigo carregada agora (Intel: a palavra alta do
     /// "Update Revision" do registro).
     pub microcodigo: Option<u32>,
@@ -38,6 +42,23 @@ pub enum Defeito {
 /// A primeira revisão que a Intel publicou como a correção completa da
 /// instabilidade Vmin (13ª e 14ª geração de mesa).
 pub const MICROCODIGO_INTEL_CORRIGIDO: u32 = 0x12F;
+
+/// O chip Raptor Lake (CPUID família 6, modelo 0xB7). A instabilidade é dele.
+/// Parte dos "13ª/14ª geração" (i3-13100/14100, i5-13400/14400 C0, 13500 e
+/// 13600 sem K) usa o chip da 12ª (modelo 0x97 ou 0xBF), com outra numeração
+/// de microcódigo e sem o defeito: pelo nome comercial eles seriam acusados.
+pub const MODELO_RAPTOR_LAKE: u32 = 0xB7;
+
+/// "Intel64 Family 6 Model 183 Stepping 1" → 183. **Função pura.**
+pub fn modelo_do_identificador(id: &str) -> Option<u32> {
+    let mut partes = id.split_whitespace();
+    while let Some(p) = partes.next() {
+        if p.eq_ignore_ascii_case("model") {
+            return partes.next()?.parse().ok();
+        }
+    }
+    None
+}
 
 /// Acima disto o firmware está gastando tempo que se nota ao ligar o PC.
 const BOOT_LENTO_S: f64 = 15.0;
@@ -73,8 +94,8 @@ pub fn e_de_notebook(nome: &str) -> bool {
 pub fn defeitos(l: &Leitura) -> Vec<Defeito> {
     let mut v = Vec::new();
     let cpu = l.cpu.as_deref().unwrap_or("");
-    let geracao = super::cpugeracao::geracao_intel(cpu);
-    if matches!(geracao, Some(13) | Some(14)) && !e_de_notebook(cpu) {
+    let intel = cpu.to_lowercase().contains("intel");
+    if intel && l.modelo == Some(MODELO_RAPTOR_LAKE) && !e_de_notebook(cpu) {
         if let Some(atual) = l.microcodigo {
             if atual < MICROCODIGO_INTEL_CORRIGIDO {
                 v.push(Defeito::MicrocodigoIntelAntigo { atual });
@@ -105,12 +126,13 @@ $hvci = $null
 if ($dg) { $hvci = [bool](@($dg.SecurityServicesRunning) -contains 2) }
 $rev = $null
 if ($p -and $p.'Update Revision') { $rev = [int[]]$p.'Update Revision' }
-ConvertTo-Json -Compress -InputObject ([ordered]@{ Cpu = [string]$p.ProcessorNameString; Revisao = $rev; FwMs = $fw; Hvci = $hvci })"#;
+ConvertTo-Json -Compress -InputObject ([ordered]@{ Cpu = [string]$p.ProcessorNameString; Id = [string]$p.Identifier; Revisao = $rev; FwMs = $fw; Hvci = $hvci })"#;
 
     #[derive(Deserialize)]
     #[serde(rename_all = "PascalCase")]
     struct Bruto {
         cpu: Option<String>,
+        id: Option<String>,
         revisao: Option<Vec<u8>>,
         fw_ms: Option<u64>,
         hvci: Option<bool>,
@@ -127,11 +149,15 @@ ConvertTo-Json -Compress -InputObject ([ordered]@{ Cpu = [string]$p.ProcessorNam
     };
 
     l.cpu = b.cpu.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    if l.cpu.is_none() {
+        l.lacunas.push("Não deu para ler o processador: os defeitos conhecidos não foram conferidos.".to_string());
+    }
+    l.modelo = b.id.as_deref().and_then(modelo_do_identificador);
     let intel = l.cpu.as_deref().is_some_and(|c| c.to_lowercase().contains("intel"));
     if intel {
         l.microcodigo = b.revisao.as_deref().and_then(microcodigo_intel);
-        if l.microcodigo.is_none() {
-            l.lacunas.push("Não deu para ler a revisão do microcódigo.".to_string());
+        if l.microcodigo.is_none() || l.modelo.is_none() {
+            l.lacunas.push("Não deu para ler o modelo do chip ou a revisão do microcódigo.".to_string());
         }
     }
     l.tempo_da_bios_s = b.fw_ms.filter(|ms| *ms > 0).map(|ms| ms as f64 / 1000.0);
@@ -153,18 +179,27 @@ pub fn ler() -> Ficha {
 }
 
 /// Só o defeito de microcódigo, lido direto do registro: barato o bastante
-/// para o diagnóstico da abertura (sem PowerShell).
+/// para o diagnóstico da abertura (sem PowerShell). `Err` quando a leitura
+/// falhou num Intel: "não conferido" não pode virar "sem defeito".
 #[cfg(windows)]
-pub fn defeito_de_microcodigo() -> Option<Defeito> {
+pub fn defeito_de_microcodigo() -> Result<Option<Defeito>, String> {
     use crate::modules::changelog::PreviousValue;
     const CPU: &str = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0";
-    let cpu = super::registry::read_text("HKLM", CPU, "ProcessorNameString").ok().flatten()?;
-    let microcodigo = match super::registry::read("HKLM", CPU, "Update Revision") {
-        Ok(PreviousValue::Binary(b)) => microcodigo_intel(&b),
+    let cpu = super::registry::read_text("HKLM", CPU, "ProcessorNameString")?
+        .ok_or("o registro não diz qual é o processador")?;
+    if !cpu.to_lowercase().contains("intel") {
+        return Ok(None);
+    }
+    let modelo = super::registry::read_text("HKLM", CPU, "Identifier")?.as_deref().and_then(modelo_do_identificador);
+    let microcodigo = match super::registry::read("HKLM", CPU, "Update Revision")? {
+        PreviousValue::Binary(b) => microcodigo_intel(&b),
         _ => None,
     };
-    let l = Leitura { cpu: Some(cpu.trim().to_string()), microcodigo, ..Default::default() };
-    defeitos(&l).into_iter().find(|d| matches!(d, Defeito::MicrocodigoIntelAntigo { .. }))
+    if modelo.is_none() || microcodigo.is_none() {
+        return Err("não deu para ler o modelo do chip ou o microcódigo".to_string());
+    }
+    let l = Leitura { cpu: Some(cpu.trim().to_string()), modelo, microcodigo, ..Default::default() };
+    Ok(defeitos(&l).into_iter().find(|d| matches!(d, Defeito::MicrocodigoIntelAntigo { .. })))
 }
 
 /// Reinicia direto na tela de configuração da BIOS (UEFI).
@@ -186,7 +221,31 @@ mod testes {
     use super::*;
 
     fn leitura(cpu: &str, micro: Option<u32>, bios_s: Option<f64>) -> Leitura {
-        Leitura { cpu: Some(cpu.into()), microcodigo: micro, tempo_da_bios_s: bios_s, ..Default::default() }
+        Leitura { cpu: Some(cpu.into()), modelo: Some(MODELO_RAPTOR_LAKE), microcodigo: micro, tempo_da_bios_s: bios_s, ..Default::default() }
+    }
+
+    #[test]
+    fn o_modelo_sai_do_identificador() {
+        assert_eq!(modelo_do_identificador("Intel64 Family 6 Model 183 Stepping 1"), Some(183));
+        assert_eq!(modelo_do_identificador("Intel64 Family 6 Model 165 Stepping 3"), Some(165));
+        assert_eq!(modelo_do_identificador("AMD64 Family 25 Model 97 Stepping 2"), Some(97));
+        assert_eq!(modelo_do_identificador("lixo"), None);
+    }
+
+    #[test]
+    fn treze_e_quatorze_com_chip_da_doze_nao_sao_acusados() {
+        // i5-14400F C0 e i3-13100: nome de 13ª/14ª, silício da 12ª (0x97/0xBF),
+        // microcódigo na casa de 0x3x. Pela regra antiga, acusados à toa.
+        for (cpu, modelo) in [
+            ("14th Gen Intel(R) Core(TM) i5-14400F", 0xBF),
+            ("13th Gen Intel(R) Core(TM) i3-13100F", 0xBF),
+            ("13th Gen Intel(R) Core(TM) i5-13400", 0x97),
+        ] {
+            let l = Leitura { cpu: Some(cpu.into()), modelo: Some(modelo), microcodigo: Some(0x35), ..Default::default() };
+            assert!(defeitos(&l).is_empty(), "{cpu} foi acusado");
+        }
+        let sem_modelo = Leitura { cpu: Some("13th Gen Intel(R) Core(TM) i9-13900K".into()), microcodigo: Some(0x100), ..Default::default() };
+        assert!(defeitos(&sem_modelo).is_empty(), "sem o modelo não acusa");
     }
 
     #[test]
@@ -216,7 +275,8 @@ mod testes {
     #[test]
     fn notebook_e_outras_geracoes_nao_acusam_microcodigo() {
         assert!(defeitos(&leitura("13th Gen Intel(R) Core(TM) i9-14900HX", Some(0x100), None)).is_empty());
-        assert!(defeitos(&leitura("12th Gen Intel(R) Core(TM) i5-12400F", Some(0x10), None)).is_empty());
+        let doze = Leitura { cpu: Some("12th Gen Intel(R) Core(TM) i5-12400F".into()), modelo: Some(0x97), microcodigo: Some(0x10), ..Default::default() };
+        assert!(defeitos(&doze).is_empty());
         assert!(defeitos(&leitura("13th Gen Intel(R) Core(TM) i9-13900K", None, None)).is_empty(), "sem leitura não acusa");
     }
 

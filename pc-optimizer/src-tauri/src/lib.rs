@@ -73,6 +73,7 @@ fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    modules::abertura::marcar_inicio();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
@@ -246,6 +247,7 @@ pub fn run() {
             commands::niveis_de_otimizacao,
             commands::passo_a_passo_da_bios,
             commands::ficha_da_bios,
+            commands::abertura_pronta,
             commands::quedas_de_desempenho,
             commands::reiniciar_na_bios,
             commands::set_max_refresh_rate,

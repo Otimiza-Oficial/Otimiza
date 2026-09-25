@@ -474,7 +474,7 @@ fn achados_da_janela() -> Result<Vec<Achado>, String> {
             "janelas_otimizadas_desligada".to_string(),
             "Otimizações para jogos em janela desligada".to_string(),
             "A opção do Windows 11 está desligada nesta máquina.".to_string(),
-            "Ligada, ela tira o atraso dos jogos em tela cheia sem borda e deixa o VRR funcionar nesse modo. O FPS médio não muda.".to_string(),
+            "Ligada, ela tira o atraso dos jogos em tela cheia sem borda e deixa o VRR funcionar nesse modo. Não é um ajuste para aumentar o FPS.".to_string(),
             FindingSeverity::Important,
             FixLocation::Software,
         )],
@@ -498,19 +498,19 @@ fn achados_de_eventos_de_hardware() -> Result<Vec<Achado>, String> {
 }
 
 /// Intel de mesa da 13ª ou 14ª geração sem o microcódigo 0x12F.
-fn achados_do_microcodigo() -> Vec<Achado> {
-    match super::fichabios::defeito_de_microcodigo() {
+fn achados_do_microcodigo() -> Result<Vec<Achado>, String> {
+    Ok(match super::fichabios::defeito_de_microcodigo()? {
         Some(super::fichabios::Defeito::MicrocodigoIntelAntigo { atual }) => vec![montar(
             Origem::Firmware,
             "microcodigo_intel_antigo".to_string(),
             "BIOS sem a correção de instabilidade da Intel".to_string(),
             format!("O microcódigo carregado é o 0x{:X}; a correção da Intel é o 0x12F.", atual),
-            "Processadores de mesa da 13ª e 14ª geração degradam com o tempo sem essa correção. Ela chega por atualização de BIOS, na página oficial da sua placa-mãe. A aba BIOS mostra o modelo da placa.".to_string(),
+            "Processadores de mesa da 13ª e 14ª geração com o chip Raptor Lake, como este, degradam com o tempo sem essa correção. Ela chega por atualização de BIOS, na página oficial da sua placa-mãe. A aba BIOS mostra o modelo da placa.".to_string(),
             FindingSeverity::Critical,
             FixLocation::Bios,
         )],
         _ => Vec::new(),
-    }
+    })
 }
 
 /// Usada tanto pelo relatório completo de firmware quanto pelo diagnóstico
@@ -1034,14 +1034,15 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // nenhum ajuste de software resolve, e é a resposta que falta em todo
         // atendimento: o técnico limpa, otimiza, mede, e nada melhora.
         (Origem::Termico, || Ok(super::thermal::analyze().achados())),
-        // 3.0: dois achados de leitura de registro, sem PowerShell.
+        // 3.0. A janela e o microcódigo leem o registro; eventos e X3D passam
+        // pelo PowerShell (o X3D só nos quatro processadores dele).
         (Origem::Prontidao, achados_da_janela),
         // Driver de vídeo que caiu e erro de hardware: evento do próprio
         // Windows, que o cliente confere no Visualizador de Eventos.
         (Origem::Esgotamento, achados_de_eventos_de_hardware),
         // Ryzen X3D de dois blocos: só lê mais quando o processador é um deles.
         (Origem::Prontidao, || Ok(achados_do_x3d())),
-        (Origem::Firmware, || Ok(achados_do_microcodigo())),
+        (Origem::Firmware, achados_do_microcodigo),
         // NAO MEDIR O DISCO VIRA LACUNA, e nao silencio.
         //
         // Enquanto esta tarefa era sempre `Ok`, um disco que nao pode ser lido
@@ -1264,6 +1265,18 @@ mod medicao_de_tempo {
             }),
             cronometrar("resizable bar", || {
                 let _ = super::super::rbar::analyze();
+            }),
+            cronometrar("jogos em janela (3.0)", || {
+                let _ = super::achados_da_janela();
+            }),
+            cronometrar("microcódigo (3.0)", || {
+                let _ = super::achados_do_microcodigo();
+            }),
+            cronometrar("eventos de hardware (3.0)", || {
+                let _ = super::achados_de_eventos_de_hardware();
+            }),
+            cronometrar("x3d (3.0)", || {
+                let _ = super::achados_do_x3d();
             }),
         ];
 

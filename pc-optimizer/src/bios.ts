@@ -83,7 +83,7 @@ function guardarFoto(): boolean {
 function fraseDoDefeito(d: Defeito): string {
   switch (d.tipo) {
     case "MicrocodigoIntelAntigo":
-      return `<strong>O microcódigo do processador é o 0x${d.atual.toString(16).toUpperCase()}.</strong> A Intel publicou o 0x12F como correção da instabilidade que degrada processadores de mesa da 13ª e 14ª geração com o tempo. Ele chega por atualização de BIOS: procure na página oficial da sua placa uma versão que cite o microcódigo 0x12F. O Otimiza não atualiza BIOS.`;
+      return `<strong>O microcódigo do processador é o 0x${d.atual.toString(16).toUpperCase()}.</strong> A Intel publicou o 0x12F como correção da instabilidade que degrada com o tempo os processadores de mesa da 13ª e 14ª geração com o chip Raptor Lake, como este. Ele chega por atualização de BIOS: procure na página oficial da sua placa uma versão que cite o microcódigo 0x12F. O Otimiza não atualiza BIOS.`;
     case "BootLentoAm5":
       return `<strong>A placa-mãe levou ${d.segundos} s no último boot.</strong> Em placas AM5 com o perfil EXPO ligado, o mais comum é a placa treinar a memória a cada boot. A opção <em>Memory Context Restore</em> reaproveita o treino e costuma cortar esse tempo. Se o PC ficar instável depois de ligar, desligue de novo.`;
     case "BootLento":
@@ -116,15 +116,21 @@ function blocoDaComparacao(): string {
   if (!foto) {
     return `<p class="fg-nota">Antes de mexer na BIOS, guarde como está agora. Na volta, esta aba mostra o que mudou.</p>`;
   }
-  const mudou = Object.entries(valoresAgora).filter(([k, v]) => foto.valores[k] !== undefined && foto.valores[k] !== v);
+  // O que não se leu em um dos lados não entra: "não deu para ler" igual dos
+  // dois lados não é "nada mudou".
+  const lido = (v: string | undefined) => v !== undefined && v !== "não deu para ler" && v !== "não registrado";
+  const comparaveis = Object.entries(valoresAgora).filter(([k, v]) => lido(foto.valores[k]) && lido(v));
+  const mudou = comparaveis.filter(([k, v]) => foto.valores[k] !== v);
   const quando = new Date(foto.quando).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const semLeitura = Object.keys(valoresAgora).length - comparaveis.length;
+  const nota = semLeitura ? ` ${semLeitura} item(ns) não foram lidos em um dos lados e ficaram fora da comparação.` : "";
   if (mudou.length === 0) {
-    return `<p class="fg-aviso">Nada mudou desde a foto de ${esc(quando)}.</p>`;
+    return `<p class="fg-aviso">Nada mudou desde a foto de ${esc(quando)} no que foi lido dos dois lados.${nota}</p>`;
   }
   return `<p class="fg-aviso"><strong>Desde a foto de ${esc(quando)}:</strong></p>
     <dl class="fg-grade">${mudou
       .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(foto.valores[k])} → <strong>${esc(v)}</strong></dd></div>`)
-      .join("")}</dl>`;
+      .join("")}</dl>${nota ? `<p class="fg-nota">${nota.trim()}</p>` : ""}`;
 }
 
 function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro: string | null) {
@@ -134,6 +140,8 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
   textoDaFicha = ["Ficha do firmware (Otimiza)", ...linhas.map(([k, v]) => `${k}: ${v}`)].join("\n");
 
   const defeitos = f?.defeitos ?? [];
+  // Sem o processador lido, "nenhum defeito" seria afirmar o que não se conferiu.
+  const conferido = !!f?.leitura.cpu;
   const lacunas = [...(fw?.leitura.lacunas ?? []), ...(f?.leitura.lacunas ?? [])];
   const uefi = fw?.leitura.uefi;
 
@@ -151,10 +159,12 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
     </section>
 
     <section class="panel fg-painel">
-      <div class="panel-head"><h2>Defeitos conhecidos</h2><span class="panel-tag">${defeitos.length ? `${defeitos.length} nesta máquina` : "nenhum"}</span></div>
+      <div class="panel-head"><h2>Defeitos conhecidos</h2><span class="panel-tag">${defeitos.length ? `${defeitos.length} nesta máquina` : conferido ? "nenhum" : "não conferido"}</span></div>
       ${defeitos.length
         ? defeitos.map((d) => `<p class="fg-aviso">${fraseDoDefeito(d)}</p>`).join("")
-        : `<p class="fg-nota">Nenhum defeito conhecido para este processador e esta leitura.</p>`}
+        : conferido
+          ? `<p class="fg-nota">Nenhum defeito conhecido para este processador e esta leitura.</p>`
+          : `<p class="fg-nota">Não deu para ler o processador, e sem ele os defeitos conhecidos não foram conferidos.</p>`}
     </section>
 
     <section class="panel fg-painel">

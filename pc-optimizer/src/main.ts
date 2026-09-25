@@ -1136,6 +1136,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   wireControls();
+  // Quanto a abertura levou: medido quando a tela já pintou, e registrado no
+  // log e no relatório de suporte.
+  requestAnimationFrame(() => setTimeout(() => void invoke("abertura_pronta").catch(() => {}), 0));
   ligarSubabas();
   conferirInvariantesDaTela();
 
@@ -10342,8 +10345,11 @@ async function carregarUltimasPartidas() {
     const quedas = await invoke<Deriva[]>("quedas_de_desempenho");
     const caixa = document.getElementById("quedas-de-desempenho");
     if (caixa && quedas.length) caixa.innerHTML = quedas.map((q) => `<p class="fg-aviso">${fraseDaQueda(q)}</p>`).join("");
-  } catch {
-    // Sem a leitura das quedas a tabela continua valendo: o aviso é um extra.
+  } catch (erro) {
+    // A tabela continua valendo; o que falhou é só a procura por quedas, e a
+    // tela diz isso em vez de ficar calada.
+    const caixa = document.getElementById("quedas-de-desempenho");
+    if (caixa) caixa.innerHTML = `<p class="hint">Não deu para procurar quedas de FPS nas partidas: ${escapeHtml(String(erro))}</p>`;
   }
 }
 
