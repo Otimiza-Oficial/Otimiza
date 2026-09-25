@@ -1,151 +1,62 @@
-// Classificador de gargalo sobre a telemetria central
-//
-// POR QUE ISTO EXISTE, SE JÁ HÁ UM ANALISADOR DE GARGALO
-//
-// `windows::bottleneck` é uma SESSÃO de medição: ele abre a própria amostragem,
-// mede alguns segundos com o cliente parado esperando, e responde uma vez. Vale
-// o que vale — é a análise que o cliente pede de propósito.
-//
-// Este aqui é outra coisa. Ele não mede nada: recebe a telemetria que o painel
-// já coletou e classifica o que estiver lá, a cada leitura, sem custo nenhum.
-// E, principalmente, ele classifica com o que o contrato traz junto do número:
-// a qualidade e a idade.
-//
-// AS DUAS REGRAS QUE ESTE MÓDULO EXISTE PARA SUSTENTAR
-//
-// 1. MÉTRICA AUSENTE NÃO É MÉTRICA FOLGADA.
-//
-//    Um classificador que lê `vram.usage` como `None` e segue em frente está
-//    dizendo "a memória de vídeo está bem" sobre algo que ninguém olhou. Aqui
-//    a classe que não pôde ser avaliada entra em `nao_verificado`, com o id da
-//    métrica que faltou. A resposta "não olhei isto" aparece ao lado da
-//    resposta "olhei e está no limite".
-//
-// 2. HIPÓTESE NÃO É CAUSA.
-//
-//    A flag de limite térmico do firmware ligada é uma CAUSA: o Windows está
-//    dizendo, agora, que está segurando o processador. Uma placa de vídeo a
-//    95% numa leitura de dez segundos atrás é uma HIPÓTESE: o número é real,
-//    mas descreve um instante que já passou e veio de um contador agregado.
-//    As duas coisas não podem aparecer na tela com o mesmo peso — é essa
-//    diferença que separa um diagnóstico de um palpite bem formatado.
-//
-// O QUE ELE NÃO FAZ
-//
-// Não recomenda ajuste. O prompt do produto é explícito: nenhum tweak genérico
-// antes da classificação. A recomendação é de quem tem o veredito na mão, e
-// depende de um baseline que ainda não existe.
+// Classifica a telemetria que o painel já coletou (sem medir nada; a sessão de medição é `windows::bottleneck`),
+// com a qualidade e a idade de cada número. Métrica ausente não é folgada: vai para `nao_verificado`. Hipótese não
+// é causa: flag de firmware ligada agora é causa; placa a 95% de dez segundos atrás é hipótese. Não recomenda
+// ajuste.
 
 use serde::{Deserialize, Serialize};
 
 use super::telemetry::{Quality, Telemetry};
 
-/// A partir de quanto um recurso é considerado no limite.
-///
-/// Os mesmos 92% de `windows::bottleneck`, pela mesma razão: nenhum contador
-/// fica cravado em 100, ele oscila; e um recurso a 80% ainda tem folga, então
-/// chamar aquilo de gargalo mandaria o cliente trocar peça à toa.
+/// Os mesmos 92% de `windows::bottleneck`: contador nenhum fica cravado em 100, e 80% ainda tem folga.
 pub const SATURADO: f64 = 92.0;
 
-/// Abaixo disto o recurso está claramente sobrando.
-///
-/// Serve para o contraste: um núcleo a 99% ao lado de placa de vídeo a 35% é
-/// uma história diferente de tudo a 95%.
+/// Para o contraste: um núcleo a 99% com a placa a 35% é outra história que tudo a 95%.
 pub const FOLGADO: f64 = 60.0;
 
-/// Carga mínima para valer a pena julgar.
-///
-/// Máquina parada não tem gargalo, e apontar um seria inventar.
+/// Máquina parada não tem gargalo.
 pub const CARGA_MINIMA: f64 = 15.0;
 
-/// Memória cheia dói antes dos 92%.
-///
-/// RAM e VRAM não se comportam como processador: o sistema começa a paginar e
-/// a despejar textura muito antes de o contador encostar no topo, e a partir
-/// daí o problema aparece como engasgo, não como número alto.
+/// RAM e VRAM: o sistema pagina e despeja textura muito antes de o contador encostar no topo.
 pub const MEMORIA_APERTADA: f64 = 90.0;
 
-/// A partir de quantos engasgos por minuto vale falar no assunto.
-///
-/// Seis é um a cada dez segundos — o ponto em que deixa de ser um tranco
-/// isolado e vira a experiência da partida. Abaixo disso, apontar engasgo
-/// mandaria o cliente caçar um problema que ele não sente.
+/// Um a cada dez segundos: deixa de ser tranco isolado e vira a experiência da partida.
 pub const ENGASGOS_POR_MINUTO: f64 = 6.0;
 
-/// A partir de que proporção o disco deixa de ser coincidência.
-///
-/// Sessenta por cento: a maioria clara dos trancos caindo junto com atividade
-/// de disco. Abaixo disso é ruído — numa partida qualquer o disco trabalha de
-/// vez em quando, e algum tranco vai cair por cima sem ter relação nenhuma.
+/// Abaixo de 60%, algum tranco cai sobre atividade de disco sem relação nenhuma.
 pub const TRANCOS_COM_DISCO_PCT: f64 = 60.0;
 
-/// A partir de quanta variação a rede atrapalha a partida.
-///
-/// Trinta milissegundos. Não é o ping: é o quanto ele PULA de uma resposta
-/// para a outra. Um ping de 120 ms estável dá uma partida jogável; um de 40 ms
-/// que vira 90 e volta é o que produz o teletransporte que o cliente reclama.
+/// O quanto o ping PULA: 120 ms estável é jogável; 40 que vira 90 é o teletransporte.
 pub const JITTER_QUE_ATRAPALHA: f64 = 30.0;
 
-/// A partir de quanta perda de pacote a partida sente.
-///
-/// Dois por cento. Abaixo disso o jogo reconstrói o que faltou sem que ninguém
-/// perceba; acima, começa a aparecer como engasgo de movimento.
+/// Abaixo de 2% o jogo reconstrói o que faltou sem ninguém perceber.
 pub const PERDA_QUE_ATRAPALHA: f64 = 2.0;
 
-/// Acima desta idade a leitura vira hipótese, nunca causa.
-///
-/// Cinco segundos é mais que o intervalo do painel: o que passa disso não
-/// descreve o instante que a tela está mostrando.
+/// Mais que o intervalo do painel: não descreve o instante que a tela mostra.
 pub const IDADE_DE_CAUSA_MS: u64 = 5_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Classe {
-    /// Todos os núcleos no limite.
     CpuTodosNucleos,
-    /// Um núcleo no talo e os outros sobrando. O caso clássico de jogo.
     CpuUmNucleo,
     Gpu,
     MemoriaRam,
     MemoriaVideo,
     Disco,
-    /// O firmware está segurando o processador por temperatura.
     LimiteTermico,
-    /// O firmware está segurando o processador por energia.
     LimiteEletrico,
-    /// O jogo está entregando exatamente a taxa do monitor.
     TetoDeQuadros,
-    /// Quadros muito acima do normal daquela partida, com frequência.
-    ///
-    /// A contagem é medida; a causa NÃO está nesta classe. Shader compilando,
-    /// asset chegando do disco e disputa de memória dão o mesmo sintoma.
+    /// A contagem é medida; a causa NÃO está nesta classe.
     Engasgo,
-    /// Processador e placa SOBRANDO os dois, durante a partida.
-    ///
-    /// O limite não está no hardware. Pode ser o motor do jogo, um teto de
-    /// quadros, ou uma espera que nenhum dos dois contadores mostra — e é por
-    /// isso que a classe diz onde o limite NÃO está, em vez de nomear a causa.
+    /// Diz onde o limite NÃO está (motor do jogo, teto, espera): nomear a causa pediria evidência que não há.
     ForaDoHardware,
-    /// Os trancos caem quando o disco está ocupado.
-    ///
-    /// O jogo esperando o disco entregar conteúdo. Separado do engasgo genérico
-    /// porque aqui há uma evidência a mais: o INSTANTE de cada tranco bateu com
-    /// atividade de disco, e não com o disco quieto.
+    /// Evidência a mais que o engasgo genérico: o INSTANTE de cada tranco bateu com o disco ocupado.
     StreamingDeAssets,
-    /// A conexão está instável ou perdendo pacote.
-    ///
-    /// LATÊNCIA ALTA NÃO ENTRA AQUI. Ping é distância: um servidor do outro
-    /// lado do mundo responde em 200 ms porque a luz leva esse tempo, e
-    /// nenhum ajuste no PC muda isso — `windows::network` abre dizendo
-    /// exatamente isso. O que estraga a partida e TEM conserto é a variação e
-    /// a perda.
+    /// LATÊNCIA ALTA NÃO ENTRA: ping é distância. Variação e perda têm conserto.
     Rede,
 }
 
 impl Classe {
-    /// Nenhum plano de energia, ajuste de registro ou perfil resolve.
-    ///
-    /// Marca as classes em que a resposta honesta é sobre hardware ou
-    /// refrigeração — e onde vender otimização seria vender fumaça.
+    /// Classes em que a resposta é hardware ou refrigeração: vender otimização aqui seria vender fumaça.
     pub fn software_nao_resolve(self) -> bool {
         matches!(self, Classe::LimiteTermico | Classe::LimiteEletrico)
     }
@@ -153,9 +64,7 @@ impl Classe {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Forca {
-    /// O próprio sistema afirmou o fato, agora, por medição direta.
     Causa,
-    /// O número é real, mas é indireto, agregado ou de alguns segundos atrás.
     Hipotese,
 }
 
@@ -163,71 +72,45 @@ pub enum Forca {
 pub struct Achado {
     pub classe: Classe,
     pub forca: Forca,
-    /// O número que sustenta o achado, em texto, com o id da métrica.
     pub evidencia: String,
-    /// Idade da leitura que sustentou o achado, quando não é desta coleta.
     pub idade_ms: Option<u64>,
 }
 
-/// Uma classe que o produto se propõe a detectar e não pôde avaliar agora.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NaoVerificado {
-    /// Nome da classe, na língua do cliente.
     pub classe: String,
-    /// O que faltou para poder olhar.
     pub falta: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Conclusao {
-    /// Nada foi medido: não há o que classificar.
     SemEvidencia,
-    /// A máquina está parada.
     SemCarga,
-    /// Há carga e nada encostou no limite.
     NadaNoLimite,
-    /// Pelo menos um recurso no limite.
     Encontrado,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostico {
     pub conclusao: Conclusao,
-    /// Causas primeiro, hipóteses depois.
     pub achados: Vec<Achado>,
     pub nao_verificado: Vec<NaoVerificado>,
-    /// Quantas das classes que o produto promete detectar puderam ser
-    /// avaliadas nesta leitura, e quantas existem.
-    ///
-    /// É o número que impede o diagnóstico de parecer completo quando não é.
+    /// Impede o diagnóstico de parecer completo quando não é.
     pub classes_avaliadas: usize,
     pub classes_totais: usize,
 }
 
-/// Todas as classes de gargalo que o produto se propõe a detectar.
-///
-/// A lista é a do prompt do produto, e não a do que o código alcança hoje. É
-/// dela que sai o denominador de `classes_avaliadas`: a distância entre o
-/// prometido e o verificável precisa ser visível, e não some junto com as
-/// classes que ninguém implementou.
+/// A lista do prometido, não do alcançado hoje: é o denominador de `classes_avaliadas`.
 const CLASSES_PROMETIDAS: usize = 14;
 
-/// Classifica com a análise de memória de vídeo já feita.
-///
-/// A separação existe porque a pressão de memória de vídeo depende de uma
-/// medida que a telemetria de uma coleta não carrega: o piso de derramamento
-/// DESTA máquina, que só se conhece observando várias leituras em repouso.
+/// A pressão de VRAM depende do piso de derramamento desta máquina, que uma coleta sozinha não carrega.
 pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostico {
     let mut achados = Vec::new();
     let mut nao_verificado = Vec::new();
     let mut avaliadas = 0usize;
 
-    // ---- limites de firmware
-    //
-    // Vêm primeiro porque são os únicos em que o sistema AFIRMA o fato em vez
-    // de deixar deduzir, e porque são os únicos que nenhum ajuste resolve.
-    // O bloco existe para encerrar os empréstimos do fecho antes do resto da
-    // função voltar a mexer nas mesmas listas.
+    // Primeiro: o sistema AFIRMA o fato, e nenhum ajuste resolve. O bloco encerra os empréstimos do fecho antes de
+    // o resto voltar às mesmas listas.
     {
         let mut limite = |id: &str, classe: Classe, nome: &str| match leitura(t, id) {
             Some(l) => {
@@ -259,7 +142,6 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         );
     }
 
-    // ---- processador
     let uso_cpu = leitura(t, "cpu.usage.overall");
     let pior_nucleo = pior_nucleo(t);
 
@@ -282,9 +164,7 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // UM núcleo no talo com a média folgada. Só dá para dizer isso com as duas
-    // leituras: a média sozinha esconde o caso, e o pico sozinho não prova que
-    // os outros estão sobrando.
+    // Só com as duas leituras: a média esconde o caso, e o pico sozinho não prova que os outros sobram.
     match (uso_cpu, pior_nucleo) {
         (Some(media), Some((indice, pico))) => {
             avaliadas += 1;
@@ -306,15 +186,8 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // ---- memória de vídeo
-    //
-    // NÃO entra no laço abaixo, e a razão é o erro que este bloco corrige.
-    // `vram.usage` alto não é pressão de memória: o driver é um cache e não
-    // devolve textura que já carregou. Uma placa a 95% depois de meia hora de
-    // jogo é o estado NORMAL, e apontá-la como gargalo mandava o cliente
-    // baixar a qualidade das texturas à toa. O que mede pressão é o
-    // derramamento para a memória do sistema, e quem faz essa conta — com o
-    // piso desta máquina — é `modules::vram`.
+    // Fora do laço: `vram.usage` alto é cache cheio, o estado normal. Pressão é derramamento acima do piso
+    // (`modules::vram`).
     match vram.estado {
         super::vram::Estado::NaoAvaliado => nao_verificado.push(NaoVerificado {
             classe: "Memória de vídeo".to_string(),
@@ -328,8 +201,7 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
             avaliadas += 1;
             achados.push(Achado {
                 classe: Classe::MemoriaVideo,
-                // Causa, e não hipótese: as duas pontas são leitura direta do
-                // contador desta coleta, e o piso é medida desta máquina.
+                // Causa: as duas pontas são leitura direta desta coleta, e o piso é medida desta máquina.
                 forca: Forca::Causa,
                 evidencia: match vram.derramado_gb {
                     Some(gb) => format!("vram.shared_used: {gb:.1} GB acima do piso da máquina"),
@@ -341,7 +213,6 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         _ => avaliadas += 1,
     }
 
-    // ---- os três recursos com um número só
     for (id, classe, nome, teto) in [
         ("gpu.usage", Classe::Gpu, "Placa de vídeo", SATURADO),
         (
@@ -371,14 +242,8 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }
     }
 
-    // ---- teto de quadros
-    //
-    // O jogo entregando exatamente a taxa do monitor é o sinal de V-Sync, de
-    // limite dentro do próprio jogo ou de limitador do driver. Vale como
-    // hipótese e nunca como causa, por uma razão que precisa ficar DITA na
-    // evidência: os dois números são de momentos diferentes — o FPS é da
-    // partida, a taxa do monitor é de agora. Eles só podem ser comparados
-    // porque a taxa do monitor não muda sozinha.
+    // Hipótese, nunca causa: o FPS é da partida e a taxa do monitor é de agora (só comparáveis porque ela não muda
+    // sozinha).
     match (t.value("fps.average"), t.value("display.refresh")) {
         (Some(fps), Some(hz)) if hz > 0.0 => {
             avaliadas += 1;
@@ -401,13 +266,8 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // ---- engasgo
-    //
-    // A CONTAGEM é medida. A CAUSA não: shader compilando, asset chegando do
-    // disco e disputa de memória produzem o mesmo sintoma, e separá-los exige
-    // a série de frametime junto da atividade de disco na MESMA janela. O
-    // achado diz o que foi visto e para aí — apontar "shader" sem essa
-    // correlação seria escolher a causa mais vendável.
+    // Separar shader, asset e memória exige frametime e disco na mesma janela: apontar "shader" sem isso seria
+    // escolher a causa mais vendável.
     match leitura(t, "frametime.stutters_per_minute") {
         Some(l) => {
             avaliadas += 1;
@@ -430,17 +290,7 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // ---- streaming de assets
-    //
-    // A proporção já vem do cruzamento entre o instante de cada tranco e a
-    // atividade de disco na mesma janela (`frames::trancos_com_disco`). Aqui
-    // só se lê o resultado e se aplica o corte.
-    //
-    // O CORTE PARA CIMA APONTA; O CORTE PARA BAIXO NÃO APONTA O CONTRÁRIO.
-    // Trancos em sua maioria com o disco ocupado é indício de o jogo estar
-    // esperando o disco. Trancos com o disco quieto descartam o disco — e só
-    // isso: shader compilando, disputa de memória e simulação pesada continuam
-    // todos possíveis, e escolher um deles seria escolher o mais vendável.
+    // A proporção vem de `frames::trancos_com_disco`. O corte para cima aponta o disco; para baixo só o descarta.
     match leitura(t, "frametime.stutters_with_disk") {
         Some(l) => {
             avaliadas += 1;
@@ -463,15 +313,7 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // ---- limite fora do hardware
-    //
-    // Os dois usos são da MESMA janela em que os quadros foram contados, e é
-    // só por isso que a conclusão se sustenta: processador e placa sobrando
-    // AGORA não diriam nada sobre uma partida que já acabou.
-    //
-    // A classe diz onde o limite NÃO está. Nomear a causa — motor do jogo,
-    // teto de quadros, espera de memória — exigiria evidência que estes dois
-    // números não trazem, e escolher uma delas seria escolher a mais vendável.
+    // Só se sustenta porque os dois usos são da MESMA janela dos quadros.
     match (t.value("match.cpu_usage"), t.value("match.gpu_usage")) {
         (Some(cpu), Some(gpu)) => {
             avaliadas += 1;
@@ -494,15 +336,8 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }),
     }
 
-    // ---- rede
-    //
-    // Jitter e perda, e NÃO latência. A latência é medida e publicada, mas não
-    // vira achado: ping é distância, e apontá-lo como gargalo mandaria o
-    // cliente procurar conserto para a velocidade da luz.
-    //
-    // A classe é avaliada quando QUALQUER um dos dois existe. Perda que a
-    // sonda não conseguiu determinar — servidor que filtra ICMP — chega como
-    // ausente, e aí só o jitter responde.
+    // Jitter e perda, NÃO latência. Perda indeterminada (servidor que filtra ICMP) chega ausente, e só o jitter
+    // responde.
     let jitter = leitura(t, "network.jitter");
     let perda = leitura(t, "network.packet_loss");
 
@@ -538,17 +373,8 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         }
     }
 
-    // ---- o que este classificador ainda não alcança
-    //
-    // Cinco classes dependem de correlação temporal, de histórico de driver ou
-    // de sondagem que o painel não faz. Elas não somem da resposta: aparecem
-    // aqui dizendo o que falta, para que ninguém leia "não achei gargalo" como
-    // "olhei tudo".
+    // Classes que dependem de correlação temporal, histórico de driver ou sondagem: aparecem dizendo o que falta.
     for (nome, falta) in [
-        // A distribuição já é guardada — média, P95 e P99. O que ainda falta
-        // para separar shader de streaming é o EIXO DO TEMPO: saber em que
-        // instante cada tranco caiu, e o que o disco estava fazendo naquele
-        // instante. Sem isso os dois continuam sendo o mesmo sintoma.
         (
             "Engasgo de shader",
             "descartar o disco não prova shader: memória e simulação dão o mesmo buraco",
@@ -572,8 +398,7 @@ pub fn classificar_com(t: &Telemetry, vram: &super::vram::Analise) -> Diagnostic
         });
     }
 
-    // Causa antes de hipótese, e dentro de cada uma o que o software não
-    // resolve primeiro: é a informação que muda a decisão do cliente.
+    // Causa antes de hipótese; dentro de cada, o que o software não resolve primeiro.
     achados.sort_by_key(|a| (a.forca == Forca::Hipotese, !a.classe.software_nao_resolve()));
 
     let conclusao = concluir(t, &achados, avaliadas);
@@ -595,9 +420,7 @@ fn concluir(t: &Telemetry, achados: &[Achado], avaliadas: usize) -> Conclusao {
         return Conclusao::Encontrado;
     }
 
-    // Sem carga em lugar nenhum não há gargalo a encontrar — e é diferente de
-    // "procurei e não achei". Um limite de firmware ligado é carga por si só:
-    // o firmware não segura máquina parada.
+    // Parado é diferente de "procurei e não achei". Limite de firmware ligado é carga por si só.
     let cargas = ["cpu.usage.overall", "gpu.usage", "storage.busy"];
     let vistas: Vec<f64> = cargas.iter().filter_map(|id| t.value(id)).collect();
 
@@ -608,7 +431,6 @@ fn concluir(t: &Telemetry, achados: &[Achado], avaliadas: usize) -> Conclusao {
     Conclusao::NadaNoLimite
 }
 
-/// Um número do contrato, com o que decide o peso dele.
 #[derive(Debug, Clone, Copy)]
 struct Leitura {
     valor: f64,
@@ -617,12 +439,7 @@ struct Leitura {
 }
 
 impl Leitura {
-    /// Causa exige medição direta e recente.
-    ///
-    /// ESTIMATED não vira causa por definição: o contrato marca assim
-    /// justamente o que é derivado, agregado ou reaproveitado de uma leitura
-    /// anterior. E medição recente é o que descreve a tela que o cliente está
-    /// olhando agora.
+    /// ESTIMATED não vira causa por definição.
     fn forca(&self) -> Forca {
         let recente = self.idade_ms.is_none_or(|ms| ms <= IDADE_DE_CAUSA_MS);
 
@@ -643,7 +460,6 @@ fn leitura(t: &Telemetry, id: &str) -> Option<Leitura> {
     })
 }
 
-/// O núcleo mais carregado, e qual é ele.
 fn pior_nucleo(t: &Telemetry) -> Option<(usize, f64)> {
     let mut pior: Option<(usize, f64)> = None;
 
@@ -669,12 +485,7 @@ mod tests {
         Telemetry::new(0, None)
     }
 
-    /// Classifica sem piso de derramamento conhecido.
-    ///
-    /// É o pior caso de propósito: a maioria dos testes aqui não fala de
-    /// memória de vídeo, e sem o piso essa classe cai em "não verificada" em
-    /// vez de sair como folgada. Um atalho que a desse por folgada esconderia,
-    /// em todo teste do arquivo, exatamente o engano que o módulo combate.
+    /// Sem piso a classe de VRAM cai em "não verificada": um atalho que a desse por folgada esconderia o engano.
     fn classificar(t: &Telemetry) -> Diagnostico {
         classificar_com(
             t,
@@ -711,15 +522,12 @@ mod tests {
         assert!(d.achados.is_empty());
         assert_eq!(d.classes_avaliadas, 0);
 
-        // E o que não foi olhado continua listado. Um diagnóstico vazio que
-        // não diz o que deixou de olhar é indistinguível de "está tudo bem".
         assert!(!d.nao_verificado.is_empty());
     }
 
     #[test]
     fn metrica_ausente_nao_conta_como_folgada() {
-        // Só a CPU foi medida, e está tranquila. O diagnóstico NÃO pode dizer
-        // que não há gargalo: ninguém olhou placa, memória nem disco.
+        // Só a CPU medida: não pode dizer que não há gargalo.
         let d = classificar(&com(&[("cpu.usage.overall", 20.0)]).finish(0));
 
         assert!(d.achados.is_empty());
@@ -750,7 +558,6 @@ mod tests {
         assert_eq!(primeiro.forca, Forca::Causa);
         assert!(primeiro.classe.software_nao_resolve());
 
-        // As outras duas continuam no relatório, atrás.
         let classes: Vec<Classe> = d.achados.iter().map(|a| a.classe).collect();
         assert!(classes.contains(&Classe::CpuTodosNucleos));
         assert!(classes.contains(&Classe::Gpu));
@@ -760,8 +567,7 @@ mod tests {
     fn flag_baixa_e_resposta_e_nao_ausencia() {
         let d = classificar(&com(&[("cpu.throttling.thermal", 0.0)]).finish(0));
 
-        // A classe foi AVALIADA — a flag foi lida e estava baixa. Isso é
-        // diferente de não ter olhado, e por isso não entra em nao_verificado.
+        // Avaliada (a flag foi lida baixa) é diferente de não olhada.
         assert!(d.achados.is_empty());
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(!faltando.contains(&"Limite térmico"));
@@ -790,7 +596,6 @@ mod tests {
         );
         assert_eq!(gpu.idade_ms, Some(12_000));
 
-        // A mesma leitura, agora, é causa.
         let mut fresca = vazia();
         fresca.set("gpu.usage", Metric::measured(97.0, Unit::Percent, "wmi"));
         let d = classificar(&fresca.finish(0));
@@ -799,9 +604,7 @@ mod tests {
 
     #[test]
     fn um_nucleo_no_talo_com_media_folgada() {
-        // O caso do FiveM: um núcleo a 99%, sete quase parados, média em 20%.
-        // A média sozinha diz "sobra máquina" e manda o cliente comprar a peça
-        // errada.
+        // O caso do FiveM: um núcleo a 99%, sete quase parados, média 20%.
         let mut t = vazia();
         t.set(
             "cpu.usage.overall",
@@ -835,7 +638,6 @@ mod tests {
         );
         assert!(achado.evidencia.contains("99"));
 
-        // E não pode virar "todos os núcleos": a média está em 20%.
         assert!(!d
             .achados
             .iter()
@@ -872,15 +674,11 @@ mod tests {
             .finish(0),
         );
 
-        // "Há carga e nada no limite" e "a máquina está parada" são vereditos
-        // diferentes, e o cliente faz coisas diferentes com cada um.
         assert_eq!(d.conclusao, Conclusao::NadaNoLimite);
     }
 
     #[test]
     fn memoria_do_sistema_aperta_antes_dos_noventa_e_dois() {
-        // 91% de RAM não passa do teto do processador, mas o sistema já está
-        // paginando. Os dois recursos não têm o mesmo limiar.
         let d = classificar(&com(&[("ram.usage", 91.0)]).finish(0));
         assert!(d.achados.iter().any(|a| a.classe == Classe::MemoriaRam));
 
@@ -888,13 +686,6 @@ mod tests {
         assert!(d.achados.is_empty(), "91% de placa ainda tem folga");
     }
 
-    /// A crença que esta etapa desfez.
-    ///
-    /// Até aqui, `vram.usage` alto sozinho virava achado de memória de vídeo —
-    /// e mandava o cliente baixar textura numa placa que estava apenas com o
-    /// cache cheio, que é o estado normal dela. Agora a porcentagem sozinha
-    /// não conclui nada: ela é o número que HABILITA a pergunta do
-    /// derramamento, feita em `modules::vram`.
     #[test]
     fn dedicada_cheia_sozinha_nao_acusa_memoria_de_video() {
         let d = classificar(&com(&[("vram.used", 7.8), ("vram.total", 8.0)]).finish(0));
@@ -906,7 +697,6 @@ mod tests {
         );
     }
 
-    /// Derramamento medido acima do piso da máquina: aí sim é causa.
     #[test]
     fn transbordo_medido_vira_causa_de_memoria_de_video() {
         use crate::modules::vram;
@@ -934,7 +724,6 @@ mod tests {
         assert!(achado.evidencia.contains("vram.shared_used"));
     }
 
-    /// Sem o piso, a classe fica em "não verificado" — e não em "está bem".
     #[test]
     fn memoria_de_video_sem_medida_fica_declarada_como_nao_verificada() {
         let d = classificar(&vazia().finish(0));
@@ -967,12 +756,9 @@ mod tests {
             .find(|a| a.classe == Classe::TetoDeQuadros)
             .expect("teto de quadros");
 
-        // Nunca causa: os dois números são de momentos diferentes, e a
-        // evidência precisa dizer isso na cara.
         assert_eq!(achado.forca, Forca::Hipotese);
         assert!(achado.evidencia.contains("momentos diferentes"));
 
-        // 42 quadros num monitor de 60 Hz não é teto nenhum.
         let mut longe = vazia();
         longe.set(
             "display.refresh",
@@ -1004,7 +790,6 @@ mod tests {
         assert_eq!(achado.forca, Forca::Hipotese);
         assert!(achado.evidencia.contains("não é separável"));
 
-        // E as duas causas possíveis continuam declaradas como não olhadas.
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(faltando.contains(&"Engasgo de shader"));
         assert!(faltando.contains(&"Streaming de assets"));
@@ -1018,7 +803,6 @@ mod tests {
             d.achados.is_empty(),
             "dois por minuto não é o que o cliente sente"
         );
-        // Mas a classe FOI avaliada: a contagem existe e estava baixa.
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(!faltando.contains(&"Engasgo"));
     }
@@ -1052,8 +836,6 @@ mod tests {
 
     #[test]
     fn um_dos_dois_no_limite_nao_e_limite_fora_do_hardware() {
-        // Placa a 95% durante a partida é gargalo DE hardware. A classe só
-        // existe quando os DOIS sobram.
         let mut t = vazia();
         t.set(
             "match.cpu_usage",
@@ -1070,8 +852,6 @@ mod tests {
 
     #[test]
     fn um_lado_so_nao_autoriza_a_conclusao() {
-        // Só o processador medido na janela. Não dá para dizer nada sobre o
-        // par, e a classe volta para a lista do que não foi verificado.
         let mut t = vazia();
         t.set(
             "match.cpu_usage",
@@ -1106,9 +886,6 @@ mod tests {
 
     #[test]
     fn disco_quieto_descarta_o_disco_e_nao_prova_shader() {
-        // 10% dos trancos com o disco ocupado: o disco está fora. Mas isso NÃO
-        // aponta shader — memória e simulação pesada dão o mesmo buraco, e
-        // escolher uma delas seria escolher a mais vendável.
         let mut t = vazia();
         t.set(
             "frametime.stutters_with_disk",
@@ -1124,8 +901,6 @@ mod tests {
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(faltando.contains(&"Engasgo de shader"));
 
-        // E "Streaming de assets" NÃO volta para a lista do não verificado: a
-        // pergunta foi feita e respondida com não.
         assert!(!faltando.contains(&"Streaming de assets"));
     }
 
@@ -1138,8 +913,6 @@ mod tests {
 
     #[test]
     fn jitter_e_perda_apontam_a_rede_mas_ping_alto_nao() {
-        // Ping alto e ESTÁVEL: é distância, não é gargalo. Apontar isso
-        // mandaria o cliente procurar conserto para a velocidade da luz.
         let mut estavel = vazia();
         estavel.set(
             "network.latency",
@@ -1156,7 +929,6 @@ mod tests {
             "190 ms estáveis não são gargalo de rede"
         );
 
-        // O mesmo ping, agora pulando: é isso que produz teletransporte.
         let mut instavel = vazia();
         instavel.set(
             "network.jitter",
@@ -1175,8 +947,6 @@ mod tests {
 
     #[test]
     fn perda_que_a_sonda_nao_determinou_nao_vira_zero() {
-        // Servidor que filtra ICMP: a sonda diz que não sabe, e o contrato
-        // entrega a perda ausente. Só o jitter responde, e ele está bom.
         let mut t = vazia();
         t.set(
             "network.jitter",
@@ -1190,7 +960,6 @@ mod tests {
         let d = classificar(&t.finish(0));
         assert!(!d.achados.iter().any(|a| a.classe == Classe::Rede));
 
-        // A classe FOI avaliada — havia jitter. Não volta para o não verificado.
         let faltando: Vec<&str> = d.nao_verificado.iter().map(|n| n.classe.as_str()).collect();
         assert!(!faltando.contains(&"Limitado pela rede"));
     }
@@ -1204,8 +973,7 @@ mod tests {
 
     #[test]
     fn a_cobertura_nunca_finge_estar_completa() {
-        // Mesmo com tudo o que o painel consegue medir, sete classes do
-        // produto continuam fora de alcance. O denominador é o prometido.
+        // O denominador é o prometido.
         let d = classificar(
             &com(&[
                 ("cpu.throttling.thermal", 0.0),
