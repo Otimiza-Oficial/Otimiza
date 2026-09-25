@@ -1,37 +1,24 @@
-// O que os sensores da placa dizem sobre UMA partida
-//
-// A leitura mora em `modules::windows::nvml` (que carrega a `nvml.dll`);
-// aqui fica só a conta, pura e testável sem placa nenhuma: juntar as amostras
-// da janela medida e dizer o que segurou a placa, se é que algo segurou.
-//
-// A separação é a mesma do resto do núcleo: quem toca a máquina fica em
-// `modules/windows`, quem decide fica aqui — e a decisão tem teste que roda
-// em qualquer máquina, inclusive sem NVIDIA.
+// A conta sobre os sensores da placa numa partida, pura e testável sem placa. A leitura mora em
+// `modules::windows::nvml`.
 
 use serde::{Deserialize, Serialize};
 
-/// Bits de motivo que a NVML publica (`nvmlClocksThrottleReason*`). Ficam
-/// aqui porque é esta conta que os interpreta.
 pub const MOTIVO_TETO_DE_ENERGIA: u64 = 0x0000_0004;
 pub const MOTIVO_FREIO_DE_HARDWARE: u64 = 0x0000_0008;
 pub const MOTIVO_TERMICO_SW: u64 = 0x0000_0020;
 pub const MOTIVO_TERMICO_HW: u64 = 0x0000_0040;
 pub const MOTIVO_FREIO_DE_ENERGIA_HW: u64 = 0x0000_0080;
 
-/// Uma leitura instantânea. Campo que não veio é `None` — nunca zero.
+/// Campo que não veio é `None`, nunca zero.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct AmostraGpu {
     pub temperatura_c: Option<u32>,
     pub clock_mhz: Option<u32>,
     pub potencia_w: Option<f64>,
     pub uso_pct: Option<u32>,
-    /// Bits crus do motivo do clock estar segurado, como a NVML publica.
     pub motivos: Option<u64>,
 }
 
-// ─────────────────────────────── o resumo da janela (puro) ───────────────
-
-/// O que a placa fez durante a partida medida.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ResumoGpu {
     pub amostras: usize,
@@ -41,29 +28,19 @@ pub struct ResumoGpu {
     pub potencia_media_w: Option<f64>,
     pub limite_w: Option<f64>,
     pub uso_medio_pct: Option<f64>,
-    /// Percentual do tempo medido em que o driver disse estar segurando o
-    /// clock por CADA motivo.
     pub pct_termico: f64,
     pub pct_teto_de_energia: f64,
     pub pct_freio_de_hardware: f64,
-    /// Falso quando o driver não publica os motivos (placa ou driver antigo).
     pub motivos_lidos: bool,
 }
 
-/// A partir de quanto tempo segurado por temperatura isso vira um achado.
-///
-/// Cinco por cento da partida. Abaixo disso é o pico de um instante — que toda
-/// placa tem — e acusar seria mandar a pessoa limpar um cooler que está bom.
+/// Abaixo de 5% da partida é pico de um instante, que toda placa tem: acusar mandaria limpar um cooler bom.
 pub const TERMICO_ALTO_PCT: f64 = 5.0;
 
-/// A partir de quanto o teto de energia deixa de ser normal e vira achado.
-///
-/// Placa em carga máxima batendo no teto de energia é o funcionamento normal
-/// dela — o boost sobe até o limite e para ali. Só vira conversa quando é a
-/// maior parte da partida E o clock está bem abaixo do que a placa faz.
+/// Teto de energia em carga é o normal; só vira conversa na maior parte da partida E com o clock bem abaixo do
+/// que a placa faz.
 pub const TETO_DOMINANTE_PCT: f64 = 60.0;
 
-/// **Pura.** Junta as amostras da janela medida.
 pub fn resumir(amostras: &[AmostraGpu], limite_w: Option<f64>) -> Option<ResumoGpu> {
     if amostras.is_empty() {
         return None;
@@ -93,25 +70,17 @@ pub fn resumir(amostras: &[AmostraGpu], limite_w: Option<f64>) -> Option<ResumoG
     })
 }
 
-/// O que dizer sobre a placa nesta partida.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum LimiteDaPlaca {
-    /// O driver segurou o clock por temperatura em parte relevante da partida.
     Temperatura { pct: f64, temperatura_max_c: Option<u32> },
-    /// Freio de hardware: fonte, conector de energia ou proteção da placa.
     FreioDeHardware { pct: f64 },
-    /// No teto de energia a maior parte do tempo. É o normal de uma placa em
-    /// carga — aparece como informação, não como defeito.
     TetoDeEnergia { pct: f64 },
-    /// Nada segurou a placa além do normal.
     Livre,
-    /// O driver não publica os motivos nesta máquina.
     NaoDeuParaLer,
 }
 
-/// **Pura.** A ordem importa: temperatura e freio são problema; teto de
-/// energia é informação, e só quando dominou a partida.
+/// A ordem importa: temperatura e freio são problema; teto de energia é informação.
 pub fn julgar(r: &ResumoGpu) -> LimiteDaPlaca {
     if !r.motivos_lidos {
         return LimiteDaPlaca::NaoDeuParaLer;
@@ -160,7 +129,6 @@ mod tests {
 
     #[test]
     fn conta_o_tempo_de_cada_motivo() {
-        // 4 amostras: 1 térmica, 3 no teto de energia.
         let r = resumir(
             &[a(80, 1500, MOTIVO_TERMICO_HW), a(70, 1800, MOTIVO_TETO_DE_ENERGIA), a(70, 1800, MOTIVO_TETO_DE_ENERGIA), a(70, 1800, MOTIVO_TETO_DE_ENERGIA)],
             None,
@@ -182,7 +150,6 @@ mod tests {
 
     #[test]
     fn pico_termico_de_um_instante_nao_vira_achado() {
-        // 1 em 50 amostras = 2%, abaixo do piso: toda placa tem esse pico.
         let mut amostras = vec![a(70, 1800, 0); 49];
         amostras.push(a(79, 1700, MOTIVO_TERMICO_HW));
         let r = resumir(&amostras, None).unwrap();
@@ -205,7 +172,6 @@ mod tests {
         let r = resumir(&[sem, sem], None).unwrap();
         assert!(!r.motivos_lidos);
         assert_eq!(julgar(&r), LimiteDaPlaca::NaoDeuParaLer);
-        // O que deu para ler continua valendo.
         assert_eq!(r.temperatura_max_c, Some(70));
     }
 }

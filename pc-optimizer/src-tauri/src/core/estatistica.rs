@@ -1,15 +1,6 @@
-// Contas básicas de medição
-//
-// Média, mediana, desvio e percentil, puros, para quem descreve UMA série
-// (a saúde dos quadros, o detetive de travadas, a janela do Mapa).
-//
-// COMPARAR duas séries — "melhorou ou é ruído?" — NÃO mora aqui: a regra do
-// produto para isso é `modules::repeticoes` (intervalos de 95% que não se
-// tocam), publicada na 2.8. Até a junção com a 2.8 havia aqui um teste de
-// Welch em paralelo; dois critérios para a mesma pergunta davam respostas
-// diferentes para os mesmos números, e ele saiu.
+// Média, mediana, desvio e percentil de UMA série. Comparar duas séries ("melhorou ou é ruído?") é
+// `modules::repeticoes`: um critério só para a mesma pergunta.
 
-/// Média aritmética. `None` para lista vazia.
 pub fn media(xs: &[f64]) -> Option<f64> {
     if xs.is_empty() {
         return None;
@@ -17,7 +8,6 @@ pub fn media(xs: &[f64]) -> Option<f64> {
     Some(xs.iter().sum::<f64>() / xs.len() as f64)
 }
 
-/// Mediana. `None` para lista vazia.
 pub fn mediana(xs: &[f64]) -> Option<f64> {
     if xs.is_empty() {
         return None;
@@ -28,7 +18,7 @@ pub fn mediana(xs: &[f64]) -> Option<f64> {
     Some(if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 })
 }
 
-/// Desvio padrão AMOSTRAL (divide por n-1). `None` com menos de 2 valores.
+/// Amostral (divide por n-1). `None` com menos de 2 valores.
 pub fn desvio(xs: &[f64]) -> Option<f64> {
     if xs.len() < 2 {
         return None;
@@ -38,8 +28,7 @@ pub fn desvio(xs: &[f64]) -> Option<f64> {
     Some((soma / (xs.len() - 1) as f64).sqrt())
 }
 
-/// Coeficiente de variação: desvio / média. Mede o quanto as rodadas
-/// concordam entre si, independente da escala.
+/// Desvio / média: o quanto as rodadas concordam, sem depender da escala.
 pub fn coeficiente_de_variacao(xs: &[f64]) -> Option<f64> {
     let m = media(xs)?;
     if m.abs() < f64::EPSILON {
@@ -48,8 +37,7 @@ pub fn coeficiente_de_variacao(xs: &[f64]) -> Option<f64> {
     Some(desvio(xs)? / m.abs())
 }
 
-/// Percentil pelo método do posto mais próximo (o mesmo das ferramentas de
-/// análise de quadros). `p` em [0, 100].
+/// Posto mais próximo, como as ferramentas de análise de quadros. `p` em [0, 100].
 pub fn percentil(xs: &[f64], p: f64) -> Option<f64> {
     if xs.is_empty() {
         return None;

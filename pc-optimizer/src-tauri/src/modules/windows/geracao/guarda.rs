@@ -1,37 +1,17 @@
-// ---------------------------------------------------------------------------
-// A GUARDA DE FPS — o gerador nunca pode tirar quadro real do jogo
-//
-// O gerador usa a mesma placa de vídeo que o jogo. Numa placa no limite, os
-// ~2 ms dele por quadro podem virar quadro a menos para o jogo — e aí a pessoa
-// perde FPS de verdade para ganhar imagem inventada. A regra do produto é o
-// contrário: nunca diminuir o FPS do jogo.
-//
-// COMO A GUARDA CONFERE, sem palpite: de tempos em tempos a geração PAUSA por
-// um instante, e o FPS real do jogo é medido com e sem ela, colados no tempo.
-// Uma comparação isolada é ruído (a cena muda), então a decisão usa a média de
-// várias. Perdeu mais que a tolerância: o gerador se desliga e diz por quê.
-//
-// Função pura, com o relógio e o contador de quadros entrando por parâmetro.
-// ---------------------------------------------------------------------------
+// A GUARDA DE FPS: o gerador usa a mesma placa que o jogo, e nunca pode tirar quadro real dele. De tempos em
+// tempos a geração pausa e o FPS real é medido com e sem ela, colados no tempo; a decisão usa a média de várias
+// comparações. Perdeu mais que a tolerância: o gerador desliga e diz por quê.
 
-/// Duração de cada janela de medição (com e sem geração).
 pub const JANELA: f64 = 1.5;
-/// Intervalo entre comparações nas primeiras rodadas: decide rápido.
 pub const INTERVALO_INICIAL: f64 = 5.0;
-/// Depois de decidir que está tudo bem, confere de vez em quando.
 pub const INTERVALO_DE_ROTINA: f64 = 30.0;
-/// Quantas comparações antes de poder decidir.
 pub const MINIMO_DE_AMOSTRAS: usize = 3;
-/// Razão FPS com geração ÷ sem geração abaixo da qual o gerador desliga.
 pub const RAZAO_MINIMA: f64 = 0.96;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Fase {
-    /// Gerando; a próxima comparação começa em `proxima`.
     Gerando { proxima: f64 },
-    /// Medindo a janela COM geração, que termina em `ate`.
     MedindoComGeracao { desde: f64, reais_no_inicio: u64, ate: f64 },
-    /// Geração pausada, medindo SEM ela até `ate`.
     MedindoSemGeracao { fps_com: f64, desde: f64, reais_no_inicio: u64, ate: f64 },
 }
 
@@ -40,14 +20,12 @@ pub enum Acao {
     Nada,
     Pausar,
     Retomar,
-    /// Perda de FPS confirmada: desligar a geração.
     Desligar,
 }
 
 #[derive(Debug, Clone)]
 pub struct Guarda {
     fase: Fase,
-    /// Razões FPS com ÷ sem geração, uma por comparação.
     pub razoes: Vec<f64>,
 }
 
@@ -56,12 +34,10 @@ impl Guarda {
         Guarda { fase: Fase::Gerando { proxima: agora + INTERVALO_INICIAL }, razoes: Vec::new() }
     }
 
-    /// A geração deve estar pausada neste instante?
     pub fn pausada(&self) -> bool {
         matches!(self.fase, Fase::MedindoSemGeracao { .. })
     }
 
-    /// Média das razões medidas, quando já há alguma.
     pub fn razao_media(&self) -> Option<f64> {
         (!self.razoes.is_empty()).then(|| self.razoes.iter().sum::<f64>() / self.razoes.len() as f64)
     }
@@ -100,7 +76,6 @@ impl Guarda {
 mod tests {
     use super::*;
 
-    /// Simula `segundos` com o jogo a `fps_com` gerando e `fps_sem` pausado.
     fn simular(fps_com: f64, fps_sem: f64, segundos: f64) -> (Guarda, Vec<Acao>) {
         let mut g = Guarda::nova(0.0);
         let mut reais = 0.0f64;

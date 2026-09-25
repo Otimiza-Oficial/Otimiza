@@ -1,22 +1,9 @@
-// Pronto para jogar? (2.9)
-//
-// Um scan de poucos segundos ANTES de abrir o jogo, com as coisas que fazem
-// a partida começar pior do que devia e que dá para resolver em um minuto:
-//
-//   - monitor abaixo da taxa que ele suporta;
-//   - limite de FPS escondido (driver, RTSS, arquivo do jogo);
-//   - programa em segundo plano comendo processador agora;
-//   - memória já apertada antes de o jogo abrir;
-//   - modo jogo desligado (o governador de segundo plano não vai agir).
-//
-// Cada item é MEDIDO agora. Nada aqui é escrito — o resultado aponta, e o
-// Mapa de desempenho e as outras abas consertam.
+// Pronto para jogar? Poucos segundos antes de abrir o jogo: monitor abaixo da taxa, limite de FPS escondido,
+// programa pesando agora, memória já apertada e modo jogo desligado. Cada item é MEDIDO agora; nada é escrito.
 
 use serde::Serialize;
 
-/// Uso de processador em segundo plano, por programa, que já atrapalha.
 const PROGRAMA_PESADO: f64 = 0.05;
-/// RAM livre abaixo da qual o jogo vai começar paginando.
 const RAM_LIVRE_MINIMA_MB: f64 = 1_500.0;
 const COMMIT_ALTO_PCT: f64 = 85.0;
 
@@ -34,25 +21,20 @@ pub enum Item {
 pub struct Prontidao {
     pub pronto: bool,
     pub itens: Vec<Item>,
-    /// O que foi conferido e passou, para a tela dizer com números.
     pub conferido: Vec<String>,
 }
 
-/// O que foi lido da máquina. Separado para a regra ser testável.
 #[derive(Debug, Clone, Default)]
 pub struct Leitura {
     pub monitores: Vec<(String, u32, u32)>,
     pub limites: usize,
-    /// (programa, fração da máquina)
     pub processos_cpu: Vec<(String, f64)>,
     pub ram_livre_mb: Option<f64>,
     pub commit_pct: Option<f64>,
-    /// (programa, MB)
     pub maiores_em_memoria: Vec<(String, f64)>,
     pub modo_jogo_ligado: bool,
 }
 
-/// A regra. **Pura.**
 pub fn avaliar(l: &Leitura) -> Prontidao {
     let mut itens = Vec::new();
     let mut conferido = Vec::new();
@@ -95,12 +77,10 @@ pub fn avaliar(l: &Leitura) -> Prontidao {
     } else {
         itens.push(Item::ModoJogoDesligado);
     }
-    // Modo jogo desligado sozinho não impede de jogar: é recomendação.
     let pronto = itens.iter().all(|i| matches!(i, Item::ModoJogoDesligado));
     Prontidao { pronto, itens, conferido }
 }
 
-/// Lê a máquina (cerca de 1,5 s) e avalia.
 #[cfg(windows)]
 pub fn verificar() -> Prontidao {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
@@ -120,7 +100,6 @@ pub fn verificar() -> Prontidao {
     let nucleos = num_cpus::get().max(1) as f64;
     let eu = std::process::id();
 
-    // Soma por nome: o navegador tem dezenas de processos.
     let mut cpu: std::collections::HashMap<String, f64> = Default::default();
     let mut mem: std::collections::HashMap<String, f64> = Default::default();
     for (pid, p) in s.processes() {

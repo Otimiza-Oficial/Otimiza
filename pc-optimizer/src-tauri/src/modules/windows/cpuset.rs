@@ -1,27 +1,7 @@
-// Auto CPU Set: núcleos de desempenho por jogo, só quando MEDIDO que rende (2.9)
-//
-// O `nucleos.rs` já diz a regra: em processador híbrido, um jogo que cai nos
-// núcleos de eficiência entrega menos quadro, e prender o jogo nos de
-// desempenho corrige ESSE caso — e só ele. Num jogo que usa todos os núcleos,
-// prender REDUZ o que a máquina entrega.
-//
-// Como não dá para saber de antemão qual dos dois é o jogo desta pessoa, o
-// Auto CPU Set mede:
-//
-//   todos · desempenho · todos · desempenho · todos · desempenho
-//
-// 10 segundos cada, com o jogo aberto. Alternar (e não medir 30 s de um e 30 s
-// do outro) é o que impede a partida ficar mais pesada com o tempo e isso
-// virar conclusão.
-//
-// A DECISÃO É A REGRA "NUNCA MENOS FPS": fica nos núcleos de desempenho só se
-// FPS médio OU 1% piores melhorarem de verdade (intervalos de 95% que não se
-// tocam, `repeticoes::comparar`) E nenhum dos dois piorar de verdade. Empate
-// volta para todos os núcleos — sem ganho medido, não se tira nada do jogo.
-//
-// O resultado fica guardado por executável, e o vigia reaplica a escolha
-// quando o jogo abrir de novo. Afinidade morre com o processo; é por isso que
-// o vigia existe. Desfazer é "Esquecer": o jogo volta a abrir em todos.
+// Auto CPU Set: prende o jogo nos núcleos de desempenho só quando MEDIDO que rende. Alterna todos e desempenho,
+// 10 s cada, três rodadas: alternar impede que a partida ficar pesada com o tempo vire conclusão. Fica só se FPS
+// médio ou 1% piores melhorarem de verdade (`repeticoes::comparar`) e nenhum piorar; empate volta para todos.
+// Afinidade morre com o processo: por isso o vigia reaplica quando o jogo abre de novo.
 
 #![cfg(target_os = "windows")]
 
@@ -34,16 +14,12 @@ use super::{afinidade, frames, topologia};
 use crate::modules::nucleos;
 use crate::modules::repeticoes::{self, Diferenca};
 
-/// Segundos de cada fase.
 pub const SEGUNDOS_POR_FASE: u64 = 10;
-/// Rodadas (cada rodada mede os dois lados).
 pub const RODADAS: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Escolha {
-    /// Medido: rende nos núcleos de desempenho.
     SoDesempenho,
-    /// Medido: não rende (ou empata). Fica em todos.
     TodosOsNucleos,
 }
 
@@ -60,7 +36,6 @@ pub struct ResultadoCpuSet {
     pub diferenca_low: Diferenca,
 }
 
-/// **Pura.** A regra "nunca menos FPS" aplicada às duas métricas.
 pub fn decidir(fps: &Diferenca, low: &Diferenca) -> Escolha {
     let melhora = |d: &Diferenca| matches!(d, Diferenca::Real { delta, .. } if *delta > 0.0);
     let piora = |d: &Diferenca| matches!(d, Diferenca::Real { delta, .. } if *delta < 0.0);
@@ -71,14 +46,11 @@ pub fn decidir(fps: &Diferenca, low: &Diferenca) -> Escolha {
     }
 }
 
-// ------------------------------------------------------------ guardado
-
 fn arquivo() -> PathBuf {
     let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
     base.join("pc-optimizer").join("cpuset.json")
 }
 
-/// Os resultados guardados, por executável em minúsculas.
 pub fn ler() -> BTreeMap<String, ResultadoCpuSet> {
     std::fs::read_to_string(arquivo())
         .ok()
@@ -95,17 +67,12 @@ fn gravar(todos: &BTreeMap<String, ResultadoCpuSet>) -> Result<(), String> {
     std::fs::write(&caminho, texto).map_err(|e| format!("não consegui guardar o resultado: {e}"))
 }
 
-/// Esquece o resultado de um jogo: ele volta a abrir em todos os núcleos.
 pub fn esquecer(executavel: &str) -> Result<(), String> {
     let mut todos = ler();
     todos.remove(&executavel.to_lowercase());
     gravar(&todos)
 }
 
-// ------------------------------------------------------------ o teste
-
-/// Mede o jogo aberto nos dois lados e decide. Termina com o jogo no lado
-/// escolhido, e guarda a escolha.
 pub fn testar(pid: u32, executavel: &str) -> Result<ResultadoCpuSet, String> {
     let t = topologia::ler().ok_or("o Windows não informou a lista de núcleos desta máquina.")?;
     let mascara = nucleos::mascara_de_desempenho(&t).ok_or(
@@ -173,10 +140,6 @@ pub fn testar(pid: u32, executavel: &str) -> Result<ResultadoCpuSet, String> {
     Ok(resultado)
 }
 
-// ------------------------------------------------------------ o vigia
-
-/// Reaplica a escolha "só desempenho" nos jogos abertos que a têm guardada.
-/// `ja` lembra os processos já tratados, para não reescrever a cada volta.
 /// Recusa do anticheat e processo que fechou não são erro: só não aplica.
 pub fn reaplicar(ja: &mut HashSet<u32>) -> Vec<String> {
     let guardados: Vec<String> = ler()
@@ -233,12 +196,9 @@ mod tests {
 
     #[test]
     fn nunca_menos_fps() {
-        // Ganhou num, perdeu no outro: volta para todos.
         assert_eq!(decidir(&real(5.0), &real(-2.0)), Escolha::TodosOsNucleos);
         assert_eq!(decidir(&real(-4.0), &real(6.0)), Escolha::TodosOsNucleos);
-        // Empate não tira núcleo do jogo.
         assert_eq!(decidir(&empate(), &empate()), Escolha::TodosOsNucleos);
-        // Sem repetições que bastem, não decide por prender.
         let sem = Diferenca::SemRepeticoes { falta: "x".into() };
         assert_eq!(decidir(&sem, &sem), Escolha::TodosOsNucleos);
     }

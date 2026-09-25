@@ -1,29 +1,12 @@
-// Deriva de desempenho (2.9)
-//
-// O jogo que rodava a 140 na semana passada roda a 110 hoje, e ninguém mexeu
-// em nada — só o driver de vídeo atualizou sozinho, ou o Windows. O cliente
-// culpa o otimizador; o otimizador não sabe de nada.
-//
-// Cada medição automática passa a carregar a versão do driver de vídeo e do
-// Windows daquele momento. Este módulo procura, por jogo, a última vez em que
-// um dos dois mudou, e compara as partidas de antes e de depois com a regra
-// comum do produto (`modules::repeticoes`: intervalos de 95% que não se
-// tocam): piora com os intervalos separados e de pelo menos 5% vira
-// "desempenho caiu depois de X", com os números dos dois lados.
-//
-// Sem mudança de driver ou de Windows, compara as 3 partidas mais recentes
-// com as anteriores — a deriva sem culpado aparente (poeira, temperatura,
-// algo novo rodando junto) também é informação.
-//
-// Ele não desfaz driver nem Windows: aponta, com número, e diz o que conferir.
-// Função pura.
+// Deriva: o jogo que rodava a 140 roda a 110, e só o driver ou o Windows mudou. Compara as partidas de antes e
+// de depois da última troca com a regra de `modules::repeticoes`; sem troca, as 3 últimas contra as anteriores.
+// Só aponta, com número: não desfaz driver nem Windows.
 
 use serde::{Deserialize, Serialize};
 
 use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
 
-/// O ambiente em que uma medição foi feita.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Ambiente {
     pub driver: Option<String>,
@@ -35,7 +18,6 @@ pub struct Ambiente {
 pub enum OQueMudou {
     Driver { de: String, para: String },
     Windows { de: String, para: String },
-    /// Nenhuma mudança registrada: só o tempo passou.
     Nada,
 }
 
@@ -63,12 +45,10 @@ fn queda(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Option<
     }
 }
 
-/// Procura deriva num jogo (medições já filtradas para ele, qualquer ordem).
 pub fn procurar_no_jogo(jogo: &str, medicoes: &[MedicaoAutomatica]) -> Option<Deriva> {
     let mut ms: Vec<&MedicaoAutomatica> = medicoes.iter().collect();
     ms.sort_by_key(|m| m.quando);
 
-    // A última troca de ambiente com partidas suficientes dos dois lados.
     for i in (1..ms.len()).rev() {
         let (a, b) = (&ms[i - 1].ambiente, &ms[i].ambiente);
         let mudou = match (a, b) {
@@ -98,7 +78,6 @@ pub fn procurar_no_jogo(jogo: &str, medicoes: &[MedicaoAutomatica]) -> Option<De
         });
     }
 
-    // Sem troca de ambiente: as 3 últimas contra as anteriores.
     if ms.len() >= MINIMO * 2 {
         let n = ms.len();
         let depois: Vec<&MedicaoAutomatica> = ms[n - MINIMO..].to_vec();
@@ -116,7 +95,6 @@ pub fn procurar_no_jogo(jogo: &str, medicoes: &[MedicaoAutomatica]) -> Option<De
     None
 }
 
-/// Todas as derivas, uma por jogo.
 pub fn procurar(medicoes: &[MedicaoAutomatica]) -> Vec<Deriva> {
     let mut jogos: Vec<String> = medicoes.iter().map(|m| m.jogo.to_lowercase()).collect();
     jogos.sort();

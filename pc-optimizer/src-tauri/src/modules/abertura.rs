@@ -1,8 +1,4 @@
-// Quanto o Otimiza leva para abrir (3.0)
-//
-// Do começo do processo até a tela estar pronta para uso. O número vai para o
-// log e para o relatório de suporte: abertura lenta passa a ter número, em vez
-// de "demorou um pouco". Medido uma vez por execução.
+// Quanto o Otimiza leva para abrir, do começo do processo até a tela pronta. Vai para o log e para o relatório de suporte.
 
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -10,13 +6,11 @@ use std::time::Instant;
 static INICIO: OnceLock<Instant> = OnceLock::new();
 static PRONTA_MS: OnceLock<u64> = OnceLock::new();
 
-/// Chamado na primeira linha de `run()`.
 pub fn marcar_inicio() {
     let _ = INICIO.set(Instant::now());
 }
 
-/// A tela avisou que está pronta. Só a primeira vez conta: recarregar a tela
-/// não é abrir o programa.
+/// Só a primeira vez conta: recarregar a tela não é abrir o programa.
 pub fn marcar_pronta() -> Option<u64> {
     let inicio = INICIO.get()?;
     Some(*PRONTA_MS.get_or_init(|| inicio.elapsed().as_millis() as u64))

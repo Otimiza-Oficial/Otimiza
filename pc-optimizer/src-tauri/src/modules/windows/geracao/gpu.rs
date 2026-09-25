@@ -1,8 +1,5 @@
-// A parte Direct3D 11 do gerador: texturas de trabalho, passes e composição.
-//
-// Um objeto `Gpu` vive dentro da linha de execução do gerador e nunca sai
-// dela. As texturas do quadro "anterior" e "atual" alternam de papel a cada
-// quadro real (índice `atual`), para não copiar imagem inteira à toa.
+// A parte Direct3D 11 do gerador. `Gpu` nunca sai da linha de execução dele; as texturas "anterior" e "atual"
+// alternam de papel a cada quadro real, para não copiar imagem inteira à toa.
 
 use windows::core::{Interface, PCSTR};
 use windows::Win32::Foundation::HMODULE;
@@ -16,8 +13,7 @@ use super::ritmo::{niveis, Retangulo};
 
 const FONTE: &str = include_str!("shaders.hlsl");
 
-/// Diagnóstico: `OTIMIZA_FG_INVERTER` inverte as cores do quadro real, para
-/// provar que a sobreposição está na tela. Lido uma vez.
+/// `OTIMIZA_FG_INVERTER` inverte as cores do quadro real, para provar que a sobreposição está na tela.
 fn inverter_para_diagnostico() -> bool {
     static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *V.get_or_init(|| std::env::var_os("OTIMIZA_FG_INVERTER").is_some())
@@ -68,13 +64,10 @@ struct Trabalho {
     vet_grosso: Alvo,
     vet_fino: Alvo,
     vet_suave: Alvo,
-    /// Vetor escolhido e discordância, em meia resolução. Refeito a cada
-    /// quadro gerado, porque depende de `t`.
+    /// Refeito a cada quadro gerado, porque depende de `t`.
     escolhido: Alvo,
-    /// Máscara de interface (ping-pong): índice `mascara_atual` é a mais nova.
     mascara: [Alvo; 2],
     mascara_atual: usize,
-    /// 1×1 lido pela CPU: a média do canal "ruim" do quadro.
     nota_leitura: ID3D11Texture2D,
     niveis_escolhido: u32,
 }
@@ -86,9 +79,7 @@ pub struct Gpu {
     amostrador: ID3D11SamplerState,
     buffer: ID3D11Buffer,
     trabalho: Option<Trabalho>,
-    /// Índice do quadro real mais novo em `imagem`, `luma_q`, `luma_s`.
     atual: usize,
-    /// Quantos quadros reais já chegaram desde a criação dos recursos.
     pub reais: u64,
 }
 
@@ -127,7 +118,6 @@ fn compilar(entrada: &str, alvo: &str) -> Result<ID3DBlob, String> {
     codigo.ok_or_else(|| format!("shader {} sem código", entrada))
 }
 
-/// Meio-float (16 bits) para f32.
 fn meio_float(h: u16) -> f32 {
     let sinal = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
     let expoente = ((h >> 10) & 0x1f) as i32;
@@ -305,9 +295,8 @@ impl Gpu {
         textura.ok_or_else(|| "leitura".to_string())
     }
 
-    /// NOTA DO QUADRO: fração da imagem em que os dois quadros reais discordam
-    /// muito, medida no ponto do meio (t = 0,5). Giro rapidíssimo de câmera,
-    /// troca de cena e explosão dão nota alta — e aí o quadro gerado não sai.
+    /// Fração da imagem em que os dois reais discordam muito (t = 0,5). Giro rápido, troca de cena e explosão
+    /// dão nota alta, e o quadro gerado não sai.
     pub fn fracao_ruim(&self) -> Option<f32> {
         let tr = self.trabalho.as_ref()?;
         if !self.tem_par() {
@@ -340,7 +329,6 @@ impl Gpu {
         }
     }
 
-    /// Cria (ou recria) as texturas para uma área de jogo deste tamanho.
     pub fn preparar(&mut self, largura: u32, altura: u32) -> Result<(), String> {
         if self.trabalho.as_ref().is_some_and(|t| t.largura == largura && t.altura == altura) {
             return Ok(());
@@ -414,13 +402,12 @@ impl Gpu {
             self.ctx.PSSetSamplers(0, Some(&[Some(self.amostrador.clone())]));
             self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.buffer.clone())]));
             self.ctx.Draw(3, 0);
-            // Desliga as entradas: a mesma textura vira alvo no passe seguinte.
+            // A mesma textura vira alvo no passe seguinte.
             self.ctx.PSSetShaderResources(0, Some(&[None, None, None, None]));
             self.ctx.OMSetRenderTargets(None, None);
         }
     }
 
-    /// Um quadro real chegou: copia o recorte e calcula a luma dele.
     pub fn receber(&mut self, area_de_trabalho: &ID3D11Texture2D, recorte: Retangulo) {
         let Some(t) = self.trabalho.as_ref() else { return };
         let novo = if self.reais == 0 { self.atual } else { 1 - self.atual };
@@ -483,7 +470,6 @@ impl Gpu {
                 ..Default::default()
             },
         );
-        // Máscara de interface: entre o real anterior e este.
         if self.reais >= 1 {
             let anterior = 1 - novo;
             let (de, para) = (t.mascara_atual, 1 - t.mascara_atual);
@@ -504,9 +490,8 @@ impl Gpu {
         self.reais += 1;
     }
 
-    /// Espera a GPU terminar o que foi enviado. Faz o custo medido ser o da
-    /// placa, e não só o do envio — e garante que o quadro gerado já existe
-    /// quando a agenda mandar mostrá-lo.
+    /// Espera a GPU: o custo medido é o da placa, e não só o do envio, e o quadro gerado já existe quando a
+    /// agenda mandar mostrá-lo.
     pub fn esperar(&self) {
         unsafe {
             let mut consulta = None;
@@ -530,7 +515,6 @@ impl Gpu {
         self.reais >= 2
     }
 
-    /// Campo de movimento entre o real anterior e o atual.
     pub fn estimar(&self) {
         let Some(t) = self.trabalho.as_ref() else { return };
         if !self.tem_par() {
@@ -589,7 +573,6 @@ impl Gpu {
         );
     }
 
-    /// Desenha no alvo final: `Some(t)` gera o quadro em `t`; `None` copia o real.
     pub fn compor(&self, destino: &ID3D11RenderTargetView, largura: u32, altura: u32, t_gerado: Option<f32>) {
         let Some(tr) = self.trabalho.as_ref() else { return };
         let (a, b) = (1 - self.atual, self.atual);

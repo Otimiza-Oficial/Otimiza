@@ -1,6 +1,3 @@
-// Platform Detection System
-// Detects OS, version, and architecture
-
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -23,7 +20,6 @@ pub struct PlatformInfo {
 pub struct PlatformDetector;
 
 impl PlatformDetector {
-    /// Detecta a plataforma atual do sistema
     pub fn detect() -> Platform {
         match env::consts::OS {
             "windows" => Platform::Windows,
@@ -33,7 +29,6 @@ impl PlatformDetector {
         }
     }
 
-    /// Retorna informações detalhadas da plataforma
     pub fn get_info() -> PlatformInfo {
         PlatformInfo {
             platform: Self::detect(),
@@ -43,7 +38,6 @@ impl PlatformDetector {
         }
     }
 
-    /// Obtém a versão do sistema operacional
     fn get_os_version() -> String {
         #[cfg(target_os = "windows")]
         {
@@ -70,7 +64,6 @@ impl PlatformDetector {
     fn get_windows_version() -> String {
         use std::process::Command;
         
-        // Tenta obter versão via comando systeminfo
         if let Ok(output) = Command::new("cmd")
             .args(&["/C", "ver"])
             .output()
@@ -87,7 +80,6 @@ impl PlatformDetector {
     fn get_linux_version() -> String {
         use std::fs;
         
-        // Tenta ler /etc/os-release
         if let Ok(content) = fs::read_to_string("/etc/os-release") {
             for line in content.lines() {
                 if line.starts_with("PRETTY_NAME=") {

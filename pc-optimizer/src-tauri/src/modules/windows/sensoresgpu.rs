@@ -1,23 +1,6 @@
-// Sensores da placa de vídeo NVIDIA (2.9)
-//
-// Fecha o "limitado por temperatura" do lado da placa. O processador já tinha
-// o `thermal.rs`; a placa não tinha nada, e é ela que esquenta primeiro num PC
-// de jogo com pouco fluxo de ar.
-//
-// POR QUE `nvidia-smi`, E NÃO A NVML DIRETO
-//
-// O `nvidia-smi` é o cliente oficial da NVML, vem junto com o driver e mora em
-// `System32` — o `pcie.rs` já o usa. Ele devolve o MOTIVO de a placa estar
-// segurando o clock, do jeito que o próprio driver decide: limite térmico por
-// software, desaceleração térmica de hardware, teto de energia e freio de
-// hardware. Não é dependência nova e não carrega DLL nenhuma no processo.
-//
-// A REGRA DE HONESTIDADE DESTE MÓDULO
-//
-// Placa em carga máxima batendo no teto de energia é o COMPORTAMENTO NORMAL de
-// qualquer placa moderna: o boost sobe até o limite de potência e para ali.
-// Chamar isso de problema faria a pessoa trocar fonte à toa. Só temperatura e
-// freio de hardware viram alerta; teto de energia é informação.
+// Sensores da placa NVIDIA, pelo motivo que o próprio driver dá para segurar o clock. Teto de energia em carga
+// é o normal de qualquer placa moderna: só temperatura e freio de hardware viram alerta. Chamar teto de energia
+// de problema faria a pessoa trocar fonte à toa.
 
 use serde::{Deserialize, Serialize};
 
@@ -38,16 +21,11 @@ pub struct LeituraGpu {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum EstadoGpu {
-    /// O driver está segurando o clock por temperatura.
     Temperatura,
-    /// Freio de hardware: sinal da fonte, do conector de energia ou proteção
-    /// térmica da própria placa.
+    /// Sinal da fonte, do conector de energia ou proteção térmica da própria placa.
     FreioDeHardware,
-    /// Em carga, no teto de energia: normal.
     TetoDeEnergiaNormal,
-    /// Em carga e nada segurando.
     Livre,
-    /// Sem carga agora: os limites só aparecem com jogo aberto.
     SemCarga,
 }
 
@@ -71,7 +49,6 @@ fn ativo(s: &str) -> bool {
     s.trim().eq_ignore_ascii_case("active")
 }
 
-/// **Pura.** A primeira placa da saída CSV do `nvidia-smi`.
 pub fn ler_linha(saida: &str) -> Option<LeituraGpu> {
     let linha = saida.lines().find(|l| !l.trim().is_empty())?;
     let c: Vec<&str> = linha.split(',').collect();
@@ -92,8 +69,7 @@ pub fn ler_linha(saida: &str) -> Option<LeituraGpu> {
     })
 }
 
-/// **Pura.** Temperatura e freio valem com ou sem carga — são o driver dizendo
-/// que segurou. O resto só se julga com a placa trabalhando.
+/// Temperatura e freio valem com ou sem carga; o resto só se julga com a placa trabalhando.
 pub fn julgar(l: &LeituraGpu) -> EstadoGpu {
     if l.termico {
         return EstadoGpu::Temperatura;
@@ -113,11 +89,7 @@ pub fn julgar(l: &LeituraGpu) -> EstadoGpu {
     }
 }
 
-/// A MESMA LEITURA, PELA NVML — sem abrir processo (2.9).
-///
-/// O `nvidia-smi` continua como reserva logo abaixo: driver antigo pode não
-/// exportar tudo que este caminho usa, e aí é melhor pagar os 100 ms do
-/// processo do que não mostrar nada.
+/// Pela NVML, sem abrir processo. O `nvidia-smi` fica de reserva: driver antigo pode não exportar tudo.
 #[cfg(target_os = "windows")]
 fn ler_pela_nvml() -> Option<LeituraGpu> {
     use super::nvml;
@@ -218,8 +190,7 @@ mod nesta_maquina {
 
 #[cfg(test)]
 mod custo_da_leitura {
-    /// Quanto o painel térmico economiza lendo pela NVML em vez de abrir o
-    /// `nvidia-smi`: `cargo test --lib -- --ignored quanto_custa_ler --nocapture`.
+    /// `cargo test --lib -- --ignored quanto_custa_ler --nocapture`.
     #[test]
     #[ignore]
     fn quanto_custa_ler() {

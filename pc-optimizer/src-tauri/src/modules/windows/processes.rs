@@ -1,12 +1,3 @@
-// Monitor de processos em tempo real
-//
-// Responde à pergunta que o cliente faz de verdade: "o que está deixando meu PC
-// lento AGORA?". Otimizador nenhum responde isso — todos mostram uma barra de
-// progresso e um número inventado no fim.
-//
-// Aqui o programa aponta o culpado pelo nome, com quanto ele consome, e diz se
-// ele volta sozinho no próximo boot.
-
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -18,16 +9,13 @@ pub struct ProcessImpact {
     /// Porcentagem da CPU TOTAL da máquina, não de um núcleo.
     pub cpu_percent: f64,
     pub ram_mb: f64,
-    /// Quantos processos com este nome estão rodando. O Discord abre vários.
     pub instances: usize,
-    /// Se este programa sobe junto com o Windows.
     pub in_startup: bool,
 }
 
 pub struct ProcessMonitor {
     system: System,
     startup: HashSet<String>,
-    /// Núcleos lógicos, usado para normalizar o uso de CPU.
     cores: f64,
 }
 
@@ -40,23 +28,12 @@ impl ProcessMonitor {
         }
     }
 
-    /// Relê a lista de programas de inicialização.
-    /// Chamado depois de otimizar, quando algo pode ter mudado.
     pub fn refresh_startup(&mut self) {
         self.startup = super::startup::startup_executables();
     }
 
-    /// Os processos que mais pesam agora, agrupados por nome.
-    ///
-    /// Duas correções que a maioria das ferramentas erra:
-    ///
-    /// 1. O `sysinfo` reporta uso de CPU relativo a UM núcleo — um processo pode
-    ///    aparecer com 380% numa máquina de 4 núcleos. Dividimos pelo número de
-    ///    núcleos para virar porcentagem da máquina, que é o que o cliente lê no
-    ///    Gerenciador de Tarefas.
-    /// 2. Programas modernos abrem vários processos com o mesmo nome. Somar por
-    ///    nome mostra "Discord: 12%" em vez de seis linhas de 2% que o cliente
-    ///    não consegue interpretar.
+    /// O `sysinfo` dá uso relativo a UM núcleo (380% numa máquina de 4): dividido pelos núcleos, vira o número do
+    /// Gerenciador de Tarefas. Somado por nome, vira "Discord: 12%" em vez de seis linhas de 2%.
     pub fn top(&mut self, limit: usize) -> Vec<ProcessImpact> {
         self.system.refresh_processes_specifics(
             ProcessesToUpdate::All,
@@ -95,19 +72,8 @@ impl ProcessMonitor {
     }
 }
 
-/// Processos vivos: identificador, nome do executável e instante de início.
-///
-/// Não agrupa por nome, ao contrário do `top()` acima, porque quem usa isto
-/// precisa do PID de cada processo: a detecção de anticheat, e a devolução dos
-/// programas que versões até a 1.9 deixaram suspensos — um Chrome com quinze
-/// abas são quinze processos.
-///
-/// O nome da função ficou de quando o modo jogo ainda congelava programas. A
-/// 2.0 tirou isso; renomear agora só mexeria em chamadores sem mudar nada.
-///
-/// O instante de início vai junto porque o Windows RECICLA identificadores. Sem
-/// essa assinatura, o Otimiza poderia retomar um processo novo que nunca
-/// suspendeu, mexendo num programa que não é o dele.
+/// Um por processo, com o instante de início: o Windows recicla identificadores, e sem essa assinatura o
+/// Otimiza poderia retomar um processo novo que nunca suspendeu.
 pub fn listar_para_suspensao() -> Vec<(u32, String, u64)> {
     let mut sistema = System::new();
     sistema.refresh_processes_specifics(

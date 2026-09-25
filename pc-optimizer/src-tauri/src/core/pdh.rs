@@ -1,13 +1,5 @@
-// Contadores de desempenho do Windows (PDH), num lugar só
-//
-// Os contadores são adicionados pelo NOME EM INGLÊS (`PdhAddEnglishCounterW`),
-// que é o mesmo em qualquer idioma do Windows. Um contador que não existe
-// nesta máquina (Windows modificado sem o serviço de contadores, placa sem
-// driver de GPU com contador) fica com alça zero e devolve `None` — nunca 0.
-//
-// Documentação: learn.microsoft.com/windows/win32/perfctrs (PdhOpenQuery,
-// PdhAddEnglishCounter, PdhCollectQueryData, PdhGetFormattedCounterValue,
-// PdhGetFormattedCounterArray).
+// Contadores PDH pelo nome em inglês (`PdhAddEnglishCounterW`), igual em qualquer idioma do Windows.
+// Contador que não existe aqui devolve `None`, nunca 0.
 
 #[cfg(windows)]
 mod imp {
@@ -18,15 +10,14 @@ mod imp {
     };
 
     const PDH_OK: u32 = 0;
-    /// Pede ao PDH que não limite o valor a 100 (a soma de motores de GPU e
-    /// bytes de memória passam de 100 legitimamente).
+    /// Sem limitar a 100: a soma de motores de GPU e bytes de memória passam de 100.
     const PDH_FMT_NOCAP100: u32 = 0x0000_8000;
 
     fn largo(texto: &str) -> Vec<u16> {
         texto.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
-    /// Alça de um contador dentro de uma consulta. Zero = não existe aqui.
+    /// Zero = não existe aqui.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Contador(isize);
 
@@ -34,7 +25,7 @@ mod imp {
         alca: isize,
     }
 
-    // A consulta PDH é usada por uma thread de cada vez (quem a possui).
+    // Usada por uma thread de cada vez (quem a possui).
     unsafe impl Send for Consulta {}
 
     impl Consulta {
@@ -53,8 +44,7 @@ mod imp {
             }
         }
 
-        /// Coleta uma amostra. Contadores de taxa (%, por segundo) só têm
-        /// valor a partir da SEGUNDA coleta.
+        /// Contadores de taxa só têm valor a partir da SEGUNDA coleta.
         pub fn coletar(&self) -> bool {
             unsafe { PdhCollectQueryData(self.alca) == PDH_OK }
         }
@@ -70,8 +60,6 @@ mod imp {
             (r == PDH_OK).then(|| unsafe { v.Anonymous.doubleValue }).filter(|x| x.is_finite())
         }
 
-        /// Todas as instâncias de um contador com curinga, com o nome de cada.
-        /// Lista vazia quando o contador não existe ou não tem instância.
         pub fn lista(&self, c: Contador) -> Vec<(String, f64)> {
             if c.0 == 0 {
                 return Vec::new();
@@ -86,7 +74,7 @@ mod imp {
                 return Vec::new();
             }
             let item = std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
-            // Alinhado para a estrutura: um Vec<u64> garante 8 bytes.
+            // Um Vec<u64> garante o alinhamento de 8 bytes.
             let mut buffer = vec![0u64; (tamanho as usize + item) / 8 + 1];
             let r = unsafe {
                 PdhGetFormattedCounterArrayW(

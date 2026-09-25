@@ -1,14 +1,3 @@
-// Módulos do Otimiza
-//
-// O antigo `diagnostic.rs` foi removido nesta versão. Ele calculava uma "nota
-// de saúde" de 0 a 100 que não consultava nenhum dos módulos de medição de
-// verdade, escrevia em inglês para cliente brasileiro, e ficava lado a lado com
-// um veredito honesto na mesma tela. Manter os dois era o pior desfecho
-// possível: o cliente fotografa a nota, não o parágrafo.
-//
-// Quem responde "o que há de errado com este PC" agora é
-// `windows::veredito`, que elege uma frase a partir dos módulos que medem.
-
 pub mod abertura;
 pub mod atualizacao;
 pub mod autoajuste;

@@ -1,17 +1,5 @@
-// Logger utility
-// Centralized logging system
-//
-// NA 2.0 O REGISTRO PASSOU A IR PARA UM ARQUIVO.
-//
-// Até a 1.9 isto só fazia `println!`, e num programa de janela no Windows a
-// saída padrão não vai a lugar nenhum. Quando o "Otimizar agora" foi seguido de
-// "os programas não abriam" no PC do dono, duas vezes, não havia como saber
-// qual passo rodou, quanto demorou nem onde parou. O histórico de desfazer não
-// ajuda nisso: ele só guarda o que deu certo.
-//
-// Agora cada linha vai também para `%APPDATA%\pc-optimizer\otimiza.log`, aberta,
-// escrita e fechada na hora — um travamento no passo seguinte não leva a linha
-// junto. O arquivo gira em 2 MB e guarda um anterior (`otimiza.log.1`).
+// Registro em arquivo: `%APPDATA%\pc-optimizer\otimiza.log`, aberto, escrito e fechado a cada linha, para
+// que um travamento no passo seguinte não leve a linha junto. Gira em 2 MB e guarda um anterior.
 
 use std::fmt;
 use std::io::Write;
@@ -35,19 +23,16 @@ impl fmt::Display for LogLevel {
     }
 }
 
-/// Tamanho a partir do qual o arquivo gira.
 const LIMITE_DO_ARQUIVO: u64 = 2 * 1024 * 1024;
 
-/// Uma escrita por vez: duas threads anotando juntas podiam girar o arquivo
-/// duas vezes ou intercalar pedaços de linha.
+/// Uma escrita por vez: duas threads podiam girar o arquivo duas vezes ou intercalar pedaços de linha.
 static ESCRITA: Mutex<()> = Mutex::new(());
 
 pub struct Logger;
 
 impl Logger {
     pub fn log(level: LogLevel, message: &str) {
-        // Com milissegundos: dois passos do lote costumam cair no mesmo
-        // segundo, e a ordem e a duração entre eles é o que se quer ler.
+        // Com milissegundos: dois passos do lote costumam cair no mesmo segundo.
         let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
         let linha = format!("[{}] [{}] {}", timestamp, level, message);
 
@@ -59,10 +44,7 @@ impl Logger {
         }
     }
 
-    /// Onde o registro mora.
-    ///
-    /// `None` nos testes: um teste que anotasse no `%APPDATA%` de quem roda
-    /// misturaria linha de teste com o registro real da máquina.
+    /// `None` nos testes: linha de teste não se mistura com o registro real da máquina.
     pub fn caminho() -> Option<PathBuf> {
         if cfg!(test) {
             return None;
@@ -85,11 +67,7 @@ impl Logger {
     }
 }
 
-/// Acrescenta uma linha ao arquivo, girando antes se ele já passou de `limite`.
-///
-/// Abre e fecha a cada linha de propósito. Manter o arquivo aberto seria mais
-/// rápido, mas o que se quer daqui é justamente a última linha antes de um
-/// travamento — e ela precisa já estar com o Windows quando o travamento vier.
+/// Abre e fecha a cada linha de propósito: a última linha antes de um travamento precisa já estar no disco.
 fn anotar_em(caminho: &Path, linha: &str, limite: u64) -> std::io::Result<()> {
     let _vez = ESCRITA.lock().unwrap_or_else(|envenenado| envenenado.into_inner());
 
@@ -98,7 +76,6 @@ fn anotar_em(caminho: &Path, linha: &str, limite: u64) -> std::io::Result<()> {
     }
 
     if std::fs::metadata(caminho).map(|m| m.len() >= limite).unwrap_or(false) {
-        // No Windows o `rename` substitui o anterior que já existir.
         std::fs::rename(caminho, caminho.with_extension("log.1"))?;
     }
 
@@ -129,8 +106,7 @@ mod tests {
         let caminho = pasta.join("otimiza.log");
 
         anotar_em(&caminho, "aplicar `x`: começou", LIMITE_DO_ARQUIVO).unwrap();
-        // Lido ANTES da segunda linha: é a garantia de que um travamento logo
-        // depois de "começou" ainda deixa o "começou" no disco.
+        // Lido ANTES da segunda linha: um travamento logo depois de "começou" ainda deixa o "começou" no disco.
         let depois_da_primeira = std::fs::read_to_string(&caminho).unwrap();
         anotar_em(&caminho, "aplicar `x`: terminou", LIMITE_DO_ARQUIVO).unwrap();
         let conteudo = std::fs::read_to_string(&caminho).unwrap();
@@ -156,8 +132,7 @@ mod tests {
         let anterior = std::fs::read_to_string(caminho.with_extension("log.1")).unwrap();
         let _ = std::fs::remove_dir_all(&pasta);
 
-        // O atual nunca cresce muito além do limite, e a linha mais recente
-        // está nele — girar não pode perder justamente a última.
+        // Girar não pode perder justamente a linha mais recente.
         assert!(atual.len() < 64 + 40, "o arquivo não girou: {} bytes", atual.len());
         assert!(atual.contains("linha 09"), "a última linha sumiu: {:?}", atual);
         assert!(!anterior.is_empty(), "o arquivo anterior não foi guardado");

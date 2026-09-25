@@ -1,6 +1,3 @@
-// Safety Validator and Backup Manager
-// Ensures all operations are safe and reversible
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +46,6 @@ impl SafetyValidator {
         }
     }
 
-    /// Carrega lista de serviços críticos que não devem ser modificados
     fn load_critical_services() -> Vec<String> {
         vec![
             "wuauserv".to_string(),    // Windows Update
@@ -63,7 +59,6 @@ impl SafetyValidator {
         ]
     }
 
-    /// Carrega lista de chaves de registro críticas
     fn load_critical_registry_keys() -> Vec<String> {
         vec![
             "HKLM\\SYSTEM\\CurrentControlSet\\Control".to_string(),
@@ -72,21 +67,18 @@ impl SafetyValidator {
         ]
     }
 
-    /// Verifica se um serviço é crítico
     pub fn is_critical_service(&self, service_name: &str) -> bool {
         self.critical_services
             .iter()
             .any(|s| s.eq_ignore_ascii_case(service_name))
     }
 
-    /// Verifica se uma chave de registro é segura para modificação
     pub fn is_safe_registry_key(&self, key: &str) -> bool {
         !self.critical_registry_keys
             .iter()
             .any(|critical| key.starts_with(critical))
     }
 
-    /// Valida se uma operação é segura
     pub fn validate_operation(&self, operation_type: &str, target: &str) -> ValidationResult {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();

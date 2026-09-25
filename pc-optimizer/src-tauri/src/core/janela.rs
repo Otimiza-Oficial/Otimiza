@@ -1,15 +1,5 @@
-// A janela do Mapa de desempenho, no contrato de telemetria da 2.8
-//
-// O Mapa mede 40 segundos com o jogo aberto: uma amostra de contadores a cada
-// meio segundo (`core::telemetria`) e os quadros do jogo no mesmo intervalo.
-// Para o veredito de gargalo existe UM classificador no produto —
-// `modules::gargalo`, que a 2.8 publicou e que o painel ao vivo usa. Este
-// módulo traduz a janela para a `Telemetry` que ele lê, para as duas telas
-// darem a mesma resposta para os mesmos números.
-//
-// Cada métrica é a MEDIANA da janela: uma leitura de pico de meio segundo não
-// vira veredito, e uma que se sustentou a maior parte do tempo vira. A fonte
-// diz isso ("pdh, mediana de N leituras").
+// A janela do Mapa traduzida para a `Telemetry` que `modules::gargalo` lê: as duas telas dão a mesma resposta
+// para os mesmos números. Cada métrica é a MEDIANA da janela: um pico de meio segundo não vira veredito.
 
 use crate::core::estatistica::mediana;
 use crate::core::fluidez::SaudeDosQuadros;
@@ -21,7 +11,7 @@ fn med(amostras: &[Amostra], f: impl Fn(&Amostra) -> Option<f64>) -> Option<f64>
     mediana(&amostras.iter().filter_map(f).collect::<Vec<_>>())
 }
 
-/// Traduz a janela. `hz`: taxa do monitor principal, quando conhecida.
+/// `hz`: taxa do monitor principal, quando conhecida.
 pub fn para_telemetria(
     amostras: &[Amostra],
     ram_total_mb: Option<f64>,
@@ -41,8 +31,7 @@ pub fn para_telemetria(
 
     let cpu = med(amostras, |a| a.cpu_total_pct);
     medida(&mut t, "cpu.usage.overall", cpu, Unit::Percent);
-    // Núcleo por núcleo, em índices contíguos (o classificador para no
-    // primeiro que faltar).
+    // Índices contíguos: o classificador para no primeiro que faltar.
     let n = amostras.iter().map(|a| a.nucleos_pct.len()).max().unwrap_or(0);
     for i in 0..n {
         let v = med(amostras, |a| a.nucleos_pct.get(i).copied());
@@ -53,7 +42,7 @@ pub fn para_telemetria(
             t.set_series(id_do_nucleo(i), Metric::measured(v, Unit::Percent, fonte.clone()));
         }
     }
-    // Flags de limite do firmware: "ligada" se ligada na maior parte da janela.
+    // "Ligada" se ligada na maior parte da janela.
     let flag = |bit: u64| -> Option<f64> {
         let lidas: Vec<bool> = amostras.iter().filter_map(|a| a.limite_flags.map(|f| f & bit != 0)).collect();
         (!lidas.is_empty()).then(|| (lidas.iter().filter(|b| **b).count() * 2 > lidas.len()) as u8 as f64)
@@ -72,7 +61,6 @@ pub fn para_telemetria(
         }
     }
     medida(&mut t, "vram.shared_used", med(amostras, |a| a.vram_compartilhada_mb).map(|m| m / 1024.0), Unit::Gigabytes);
-    // Mesma conta do monitor da 2.8: memória em uso sobre a total.
     let ram = match ram_total_mb.filter(|t| *t > 0.0) {
         Some(total) => med(amostras, |a| a.ram_disponivel_mb).map(|livre| (1.0 - livre / total) * 100.0),
         None => None,
@@ -90,8 +78,7 @@ pub fn para_telemetria(
             "frametime.stutters_per_minute",
             Metric::measured(s.engasgos_graves_por_minuto, Unit::Count, "etw, na mesma janela"),
         );
-        // CPU e placa DURANTE a partida: é o par que separa "limite fora do
-        // hardware" de gargalo de peça.
+        // O par CPU e placa DURANTE a partida separa limite fora do hardware de gargalo de peça.
         medida(&mut t, "match.cpu_usage", cpu, Unit::Percent);
         medida(&mut t, "match.gpu_usage", gpu, Unit::Percent);
     }

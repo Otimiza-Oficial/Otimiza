@@ -1,21 +1,5 @@
-// Limites de FPS escondidos (2.9)
-//
-// Um jogo preso em 60 num monitor de 144 não está limitado pela placa: está
-// limitado por um número escrito em algum lugar que ninguém lembra de ter
-// mexido. É o ganho mais barato que existe — devolve o que a máquina já
-// entregava — e por isso é a alavanca nº 4 do plano.
-//
-// Onde o teto pode morar, e o que este módulo olha:
-//
-//   - perfil GLOBAL do driver NVIDIA: limitador de FPS e V-Sync forçado
-//     (lido pela NVAPI, sem escrever — `nvdriver::tetos_no_perfil_global`);
-//   - RTSS (RivaTuner) aberto: é o limitador mais comum que vem junto com o
-//     MSI Afterburner;
-//   - arquivo de configuração de jogo em Unreal: `FrameRateLimit` abaixo da
-//     taxa do monitor, ou `bUseVSync=True`.
-//
-// O Otimiza NUNCA põe teto (regra da 2.9). Aqui ele só encontra e explica.
-// Tirar é decisão da pessoa — às vezes o teto foi escolhido de propósito.
+// Limites de FPS escondidos: perfil global da NVIDIA (limitador e V-Sync forçado), RTSS aberto, `FrameRateLimit`
+// ou `bUseVSync` do jogo em Unreal, e o limite do Roblox. O Otimiza NUNCA põe teto: só encontra e explica.
 
 use serde::Serialize;
 
@@ -27,10 +11,8 @@ pub enum Teto {
     Rtss,
     LimiteNoJogo { jogo: String, fps: u32, arquivo: String },
     VsyncNoJogo { jogo: String, arquivo: String },
-    /// O Roblox com o limite de quadros no padrão de fábrica (60 FPS), ou num
-    /// valor abaixo do monitor. Visto nesta máquina: Roblox a 59,5 FPS com
-    /// processador e placa a ~35% num monitor de 180 Hz. O próprio jogo tem a
-    /// opção "Taxa de quadros máxima" para subir.
+    /// Padrão de fábrica (60 FPS) ou abaixo do monitor. Visto aqui: Roblox a 59,5 FPS com CPU e placa a ~35% num
+    /// monitor de 180 Hz.
     RobloxLimitado { fps: Option<u32>, arquivo: String },
 }
 
@@ -38,13 +20,10 @@ pub enum Teto {
 pub struct Relatorio {
     pub monitor_hz: Option<u32>,
     pub tetos: Vec<Teto>,
-    /// O que não deu para ler (ex.: sem placa NVIDIA não há o que ler lá, e
-    /// isso NÃO entra aqui; entra quando havia e a leitura falhou).
+    /// Sem placa NVIDIA não entra aqui; entra quando havia o que ler e a leitura falhou.
     pub lacunas: Vec<String>,
 }
 
-/// Lê `FrameRateLimit` e `bUseVSync` de um GameUserSettings.ini. **Pura.**
-/// Devolve (limite em FPS, 0 = sem limite; vsync ligado).
 pub fn ler_unreal(texto: &str) -> (Option<u32>, bool) {
     let mut limite = None;
     let mut vsync = false;
@@ -62,7 +41,6 @@ pub fn ler_unreal(texto: &str) -> (Option<u32>, bool) {
     (limite, vsync)
 }
 
-/// `FramerateCap` das configurações do Roblox. **Pura.** `Some(-1)` = padrão.
 pub fn ler_roblox(xml: &str) -> Option<i64> {
     let i = xml.find("name=\"FramerateCap\"")?;
     let resto = &xml[i..];
@@ -71,7 +49,7 @@ pub fn ler_roblox(xml: &str) -> Option<i64> {
     resto.get(ini..fim)?.trim().parse().ok()
 }
 
-/// O limite do Roblox prende o jogo? -1 é o padrão de fábrica (60 FPS).
+/// -1 é o padrão de fábrica (60 FPS).
 pub fn roblox_prende(cap: i64, monitor_hz: Option<u32>) -> Option<Option<u32>> {
     const PADRAO_DO_ROBLOX: u32 = 60;
     match cap {
@@ -81,8 +59,7 @@ pub fn roblox_prende(cap: i64, monitor_hz: Option<u32>) -> Option<Option<u32>> {
     }
 }
 
-/// Um limite é teto quando fica abaixo da taxa do monitor. Sem saber o
-/// monitor, qualquer limite acima de zero conta.
+/// Sem saber o monitor, qualquer limite acima de zero conta.
 pub fn prende(limite: u32, monitor_hz: Option<u32>) -> bool {
     limite > 0 && monitor_hz.map(|hz| limite + 1 < hz).unwrap_or(true)
 }
@@ -124,8 +101,7 @@ pub fn procurar() -> Relatorio {
         }
     }
 
-    // Roblox: configurações do jogador em %LOCALAPPDATA%\Roblox (a do
-    // Studio fica de fora — não é o jogo).
+    // A do Studio fica de fora: não é o jogo.
     if let Ok(pasta) = std::env::var("LOCALAPPDATA").map(|l| std::path::PathBuf::from(l).join("Roblox")) {
         if let Ok(entradas) = std::fs::read_dir(&pasta) {
             for e in entradas.flatten() {
