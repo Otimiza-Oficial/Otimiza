@@ -1,37 +1,12 @@
-// O navegador
-//
-// Em PC fraco, o navegador costuma ser o programa que mais consome memória —
-// mais que todo o resto junto. Nenhum otimizador do mercado olha para dentro
-// dele, e é onde está boa parte da dor.
-//
-// O QUE A INVESTIGAÇÃO MUDOU NESTE DESENHO
-//
-// A hipótese inicial era "24 extensões consumindo 1,8 GB". Ela não se sustenta:
-// medindo de fora do navegador, NÃO EXISTE jeito de saber quanto cada extensão
-// gasta de memória. Várias dividem um mesmo processo, e a linha de comando dele
-// não diz quais. O Gerenciador de Tarefas do próprio Chrome consegue porque roda
-// dentro do processo; nós não. Qualquer número "por extensão" que este programa
-// mostrasse seria inventado — então ele não mostra.
-//
-// Na máquina onde isto foi investigado o agregado das extensões era 39 MB, e as
-// ABAS custavam 665 MB, com uma única aba em 709 MB. O número honesto e que o
-// cliente sente ao fechar é o do navegador inteiro.
-//
-// A LINHA QUE NÃO SE ATRAVESSA
-//
-// Este módulo lê manifesto de extensão, traduções de extensão e TAMANHO de
-// pastas. Nunca abre `History`, `Cookies`, `Login Data`, `Web Data`,
-// `Bookmarks`, `Top Sites` ou `Sessions`. Nem para contar. E ao medir o
-// `IndexedDB` soma só o total: os nomes das subpastas ali dentro revelam quais
-// sites a pessoa usa.
+// O navegador. De fora NÃO dá para medir memória por extensão (várias dividem um processo): o número honesto é
+// o do navegador inteiro (as abas pesam; as extensões somavam 39 MB). Lê manifesto, traduções e TAMANHO de pastas;
+// nunca abre `History`, `Cookies`, `Login Data`, `Web Data`, `Bookmarks`, `Top Sites` ou `Sessions`, nem para
+// contar. Do `IndexedDB` só o total: os nomes das subpastas revelam os sites.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-/// Pastas cujo conteúdo é descartável: o navegador refaz sozinho.
-///
-/// Lista fechada e conservadora. Cada uma foi conferida individualmente — o
-/// critério não é "parece cache pelo nome".
+/// Lista fechada, cada pasta conferida: o critério não é "parece cache pelo nome".
 const CACHE_DESCARTAVEL: &[&str] = &[
     "Cache",
     "Code Cache",
@@ -41,15 +16,8 @@ const CACHE_DESCARTAVEL: &[&str] = &[
     "Shared Dictionary",
 ];
 
-/// Pastas que PARECEM cache e não são.
-///
-/// `IndexedDB` guarda dado de aplicativo: conversa do WhatsApp Web, e-mail
-/// baixado para uso offline, arquivo do Figma, progresso de jogo. Numa máquina
-/// real ele tinha 1,7 GB — de longe a maior pasta do perfil, e o alvo óbvio de
-/// quem varre por tamanho. Apagar desloga a pessoa de tudo e destrói dado que
-/// não está em lugar nenhum.
-///
-/// Isto aqui é medido e mostrado, e nunca oferecido para limpeza.
+/// `IndexedDB` guarda dado de aplicativo (WhatsApp Web, e-mail offline, Figma): 1,7 GB numa máquina real, o alvo
+/// óbvio de quem varre por tamanho. Apagar desloga de tudo. Medido e mostrado, nunca oferecido para limpeza.
 const DADO_DE_APLICATIVO: &[&str] = &["IndexedDB", "Local Storage", "Local Extension Settings"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,13 +26,9 @@ pub struct Extension {
     pub name: String,
     pub version: String,
     pub size_mb: f64,
-    /// Quantas permissões a extensão pede. Número alto não é acusação, mas é
-    /// informação que ninguém dá ao usuário.
     pub permissions: usize,
-    /// `None` quando não foi possível determinar. Não vira "false" por padrão:
-    /// acusar instalação fora da loja sem certeza seria difamar um programa.
+    /// `None` quando não se sabe: acusar instalação fora da loja sem certeza seria difamar um programa.
     pub from_webstore: Option<bool>,
-    /// Versões antigas da mesma extensão que ficaram em disco sem uso.
     pub stale_versions: usize,
 }
 
@@ -72,9 +36,7 @@ pub struct Extension {
 pub struct BrowserProfile {
     pub name: String,
     pub extensions: Vec<Extension>,
-    /// Bytes que dá para apagar com segurança.
     pub cache_bytes: u64,
-    /// Bytes de dado de aplicativo. Medido para informar, nunca para limpar.
     pub app_data_bytes: u64,
 }
 
@@ -84,7 +46,6 @@ pub struct BrowserInfo {
     pub executable: String,
     pub is_default: bool,
     pub running: bool,
-    /// Memória somada de todos os processos deste navegador.
     pub ram_mb: f64,
     pub profiles: Vec<BrowserProfile>,
 }
@@ -95,17 +56,12 @@ pub struct BrowserReport {
     pub total_cache_mb: f64,
     pub total_app_data_mb: f64,
     pub total_ram_mb: f64,
-    /// Fatia da memória da máquina que os navegadores estão ocupando agora.
     pub ram_percent: f64,
     pub total_extensions: usize,
     pub note: String,
 }
 
-// ------------------------------------------------------ onde os perfis moram
-
-/// Navegadores conhecidos: nome, executável e caminho da pasta de dados.
-///
-/// O caminho é relativo à pasta local do usuário, exceto onde indicado.
+/// Relativo à pasta local do usuário, exceto onde indicado.
 fn navegadores_conhecidos() -> Vec<(&'static str, &'static str, PathBuf)> {
     let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
     let base = PathBuf::from(local);
@@ -135,12 +91,8 @@ fn navegadores_conhecidos() -> Vec<(&'static str, &'static str, PathBuf)> {
     ]
 }
 
-/// Perfis dentro da pasta de dados de um navegador.
-///
-/// O critério é a presença do arquivo `Preferences`, e não o nome da pasta.
-/// Filtrar por "Default" e "Profile N" perderia perfis renomeados e ainda
-/// deixaria passar `System Profile`, `ShaderCache` e `GrShaderCache`, que não
-/// são perfis de ninguém.
+/// Pelo arquivo `Preferences`, não pelo nome: perfis renomeados existem, e `System Profile` e `ShaderCache` não
+/// são perfis.
 pub fn e_perfil(dir: &Path) -> bool {
     dir.is_dir() && dir.join("Preferences").is_file()
 }
@@ -160,9 +112,7 @@ fn perfis(user_data: &Path) -> Vec<PathBuf> {
     achados
 }
 
-// ------------------------------------------------------------ tamanho em disco
-
-/// Soma recursiva, sem seguir link e sem olhar conteúdo de arquivo.
+/// Sem seguir link e sem olhar conteúdo.
 fn somar_pasta(dir: &Path) -> u64 {
     let Ok(entradas) = std::fs::read_dir(dir) else {
         return 0;
@@ -187,13 +137,9 @@ fn somar_categorias(perfil: &Path, categorias: &[&str]) -> u64 {
         .iter()
         .map(|c| somar_pasta(&perfil.join(c)))
         .sum::<u64>()
-        // O cache de service worker fica numa subpasta, e só o de script é
-        // descartável: `CacheStorage` guarda resposta que o site pediu para
-        // manter offline.
+        // Só o cache de script é descartável: `CacheStorage` guarda o que o site pediu para manter offline.
         + somar_pasta(&perfil.join("Service Worker").join("ScriptCache"))
 }
-
-// -------------------------------------------------- nome legível da extensão
 
 #[derive(Debug, Deserialize, Default)]
 struct Manifest {
@@ -204,16 +150,11 @@ struct Manifest {
     host_permissions: Option<Vec<serde_json::Value>>,
 }
 
-/// Extrai a chave de um nome no formato `__MSG_chave__`.
 pub fn chave_de_traducao(nome: &str) -> Option<&str> {
     nome.strip_prefix("__MSG_")?.strip_suffix("__")
 }
 
-/// Procura a tradução de uma chave num `messages.json` já lido.
-///
-/// A busca é insensível a maiúsculas de propósito: a especificação do Chrome
-/// diz que a chave é insensível, e existem extensões que escrevem `extname` no
-/// manifesto e `extName` no arquivo de mensagens. Comparar exato perderia essas.
+/// Insensível a maiúsculas, como a especificação do Chrome: há `extname` no manifesto e `extName` nas mensagens.
 pub fn traduzir_no_json(conteudo: &str, chave: &str) -> Option<String> {
     let raiz: serde_json::Value = serde_json::from_str(conteudo).ok()?;
     let objeto = raiz.as_object()?;
@@ -228,11 +169,7 @@ pub fn traduzir_no_json(conteudo: &str, chave: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Ordem de idiomas em que a tradução é procurada.
-///
-/// Português primeiro porque é o público do produto; depois o idioma que a
-/// própria extensão declara como padrão; depois inglês. Sem isso, um terço das
-/// extensões de uma máquina real apareceria na tela como `__MSG_appName__`.
+/// Português, o padrão da extensão, inglês: sem isso um terço aparecia como `__MSG_appName__`.
 fn ordem_de_locales(default_locale: Option<&str>) -> Vec<String> {
     let mut ordem = vec!["pt_BR".to_string(), "pt".to_string()];
 
@@ -245,11 +182,7 @@ fn ordem_de_locales(default_locale: Option<&str>) -> Vec<String> {
     ordem
 }
 
-/// Resolve o nome de exibição de uma extensão.
-///
-/// Quando nada resolve, devolve o id. Inventar um nome seria pior que mostrar
-/// o identificador cru: o técnico consegue pesquisar o id, não consegue
-/// desfazer um palpite.
+/// Sem tradução, o id: o técnico pesquisa o id, não desfaz um palpite.
 fn nome_legivel(versao_dir: &Path, manifesto: &Manifest, id: &str) -> String {
     let bruto = manifesto.name.clone().unwrap_or_default();
 
@@ -273,8 +206,6 @@ fn nome_legivel(versao_dir: &Path, manifesto: &Manifest, id: &str) -> String {
         }
     }
 
-    // Última tentativa: qualquer idioma que exista. Um nome em alemão é melhor
-    // que `__MSG_extName__` na tela do cliente.
     if let Ok(entradas) = std::fs::read_dir(&locales) {
         for entrada in entradas.flatten() {
             let arquivo = entrada.path().join("messages.json");
@@ -290,10 +221,7 @@ fn nome_legivel(versao_dir: &Path, manifesto: &Manifest, id: &str) -> String {
     id.to_string()
 }
 
-/// A versão instalada mais recente de uma extensão, e quantas sobraram atrás.
-///
-/// O Chromium deixa versões antigas em disco depois de atualizar. Elas não
-/// rodam e continuam ocupando espaço — é lixo que ninguém mostra ao usuário.
+/// O Chromium deixa as versões antigas em disco depois de atualizar.
 fn versao_ativa(dir_extensao: &Path) -> Option<(PathBuf, usize)> {
     let mut versoes: Vec<PathBuf> = std::fs::read_dir(dir_extensao)
         .ok()?
@@ -325,8 +253,7 @@ fn ler_extensoes(perfil: &Path) -> Vec<Extension> {
             let dir = entrada.path();
             let id = dir.file_name()?.to_string_lossy().to_string();
 
-            // Id de extensão do Chromium tem 32 letras minúsculas. O filtro
-            // evita tratar pasta de apoio como extensão.
+            // Id de extensão: 32 letras minúsculas.
             if id.len() != 32 || !id.chars().all(|c| c.is_ascii_lowercase()) {
                 return None;
             }
@@ -354,11 +281,6 @@ fn ler_extensoes(perfil: &Path) -> Vec<Extension> {
     lista
 }
 
-// ------------------------------------------------------------------ memória
-
-/// Memória por navegador, somando todos os processos de cada um.
-///
-/// Por navegador, e não por extensão: ver o cabeçalho do arquivo.
 fn memoria_por_executavel() -> std::collections::HashMap<String, f64> {
     use sysinfo::System;
 
@@ -375,11 +297,7 @@ fn memoria_por_executavel() -> std::collections::HashMap<String, f64> {
     total
 }
 
-/// Executável do navegador padrão do sistema.
-///
-/// Sai do registro pelo `ProgId`, e a identificação é feita pelo nome do
-/// executável. O nome amigável — "Microsoft Edge HTML Document" — vem traduzido
-/// e não serve para comparar.
+/// Pelo nome do executável: o nome amigável vem traduzido.
 pub fn navegador_padrao() -> Option<String> {
     let progid = super::registry::read_text(
         "HKCU",
@@ -389,8 +307,6 @@ pub fn navegador_padrao() -> Option<String> {
     .ok()
     .flatten()?;
 
-    // `None` quando não deu para ler também: a função responde "qual é o
-    // navegador padrão", e sem a leitura a resposta honesta é não saber.
     let comando = super::registry::read_text(
         "HKCR",
         &format!(r"{}\shell\open\command", progid),
@@ -411,10 +327,7 @@ fn mb(bytes: u64) -> f64 {
     bytes as f64 / 1_048_576.0
 }
 
-/// Monta a frase de resumo.
-///
-/// Ela precisa dizer as duas contrapartidas: que limpar cache deixa o primeiro
-/// carregamento mais lento, e que o dado de aplicativo não é lixo.
+/// Diz as duas contrapartidas: o primeiro carregamento fica mais lento, e dado de aplicativo não é lixo.
 pub fn montar_nota(cache_mb: f64, app_data_mb: f64, algum_aberto: bool) -> String {
     let mut nota = String::new();
 
@@ -450,7 +363,6 @@ pub fn montar_nota(cache_mb: f64, app_data_mb: f64, algum_aberto: bool) -> Strin
     nota
 }
 
-/// Análise completa dos navegadores.
 pub fn analyze() -> BrowserReport {
     let memoria = memoria_por_executavel();
     let padrao = navegador_padrao();
@@ -504,7 +416,6 @@ pub fn analyze() -> BrowserReport {
         });
     }
 
-    // Quem está consumindo mais primeiro.
     browsers.sort_by(|a, b| b.ram_mb.total_cmp(&a.ram_mb));
 
     let ram_total_maquina = super::hardware::profile().total_ram_gb * 1024.0;
@@ -525,26 +436,14 @@ pub fn analyze() -> BrowserReport {
     }
 }
 
-// ------------------------------------------------------------------ limpeza
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanOutcome {
     pub freed_mb: f64,
     pub message: String,
 }
 
-/// Apaga o cache descartável de um navegador.
-///
-/// Três travas, e nenhuma delas é opcional:
-///
-/// 1. O navegador precisa estar FECHADO. Com ele aberto os arquivos estão
-///    travados e a limpeza sairia pela metade, sem aviso.
-/// 2. Só as pastas de `CACHE_DESCARTAVEL`. `IndexedDB` e `Local Storage` não
-///    passam nem por engano — ver a constante e o comentário dela.
-/// 3. Apaga o CONTEÚDO, não a pasta. Remover a pasta faz parte dos navegadores
-///    reclamar de perfil corrompido no próximo início.
-///
-/// Isto não tem volta, e a interface precisa dizer isso antes.
+/// Sem volta, e a tela avisa antes. Navegador FECHADO (arquivos travados deixariam pela metade); só
+/// `CACHE_DESCARTAVEL`; apaga o CONTEÚDO, não a pasta (alguns navegadores acusam perfil corrompido).
 pub fn limpar_cache(executavel: &str) -> Result<CleanOutcome, String> {
     let memoria = memoria_por_executavel();
 
@@ -593,11 +492,7 @@ pub fn limpar_cache(executavel: &str) -> Result<CleanOutcome, String> {
     })
 }
 
-/// Esvazia o conteúdo de uma pasta, mantendo a pasta.
-///
-/// Arquivo travado é pulado em silêncio de propósito: a conferência do que
-/// sobrou é feita medindo de novo depois, então o número relatado é o que foi
-/// realmente apagado, e não o que se esperava apagar.
+/// Arquivo travado é pulado: o número relatado sai de medir de novo, e é o que foi apagado de verdade.
 fn esvaziar(dir: &Path) {
     let Ok(entradas) = std::fs::read_dir(dir) else {
         return;
@@ -622,16 +517,12 @@ mod tests {
     fn chave_de_traducao_e_extraida() {
         assert_eq!(chave_de_traducao("__MSG_extName__"), Some("extName"));
         assert_eq!(chave_de_traducao("__MSG_appName__"), Some("appName"));
-        // Nome normal não é chave.
         assert_eq!(chave_de_traducao("Google Docs Offline"), None);
         assert_eq!(chave_de_traducao("__MSG_"), None);
     }
 
     #[test]
     fn traducao_ignora_maiusculas_da_chave() {
-        // A especificação do Chrome diz que a chave é insensível a maiúsculas,
-        // e existem extensões que escrevem `extname` no manifesto e `extName`
-        // no arquivo de mensagens. Comparar exato perderia essas.
         let json = r#"{ "extName": { "message": "Bloqueador de Anúncios" } }"#;
 
         assert_eq!(
@@ -647,7 +538,6 @@ mod tests {
 
     #[test]
     fn acento_sobrevive_a_traducao() {
-        // O nome vai para a tela e para o relatório do cliente.
         let json = r#"{ "n": { "message": "Tradução — versãoção" } }"#;
         assert_eq!(
             traduzir_no_json(json, "n").as_deref(),
@@ -662,15 +552,11 @@ mod tests {
         let pos = |s: &str| ordem.iter().position(|x| x == s).unwrap();
 
         assert!(pos("pt_BR") < pos("en_US"));
-        // O idioma declarado pela extensão vem antes do inglês genérico.
         assert!(pos("de") < pos("en_US"));
     }
 
     #[test]
     fn dado_de_aplicativo_nunca_entra_no_que_se_apaga() {
-        // A confusão mais cara possível deste módulo. IndexedDB tinha 1,7 GB
-        // numa máquina real — é o alvo óbvio de quem varre por tamanho, e
-        // apagar desloga a pessoa de tudo.
         for protegido in DADO_DE_APLICATIVO {
             assert!(
                 !CACHE_DESCARTAVEL.contains(protegido),
@@ -687,9 +573,7 @@ mod tests {
     fn nota_avisa_as_duas_contrapartidas() {
         let nota = montar_nota(800.0, 1700.0, true);
 
-        // Limpar cache não é ganho puro, e isso precisa estar dito.
         assert!(nota.contains("mais devagar na primeira vez"));
-        // E o dado de aplicativo precisa ser explicado, não só listado.
         assert!(nota.contains("desloga você"));
         assert!(nota.contains("não oferece limpar"));
         assert!(nota.contains("Feche o navegador"));
@@ -703,8 +587,6 @@ mod tests {
 
     #[test]
     fn perfil_e_reconhecido_pelo_arquivo_e_nao_pelo_nome() {
-        // `System Profile`, `ShaderCache` e `GrShaderCache` moram ao lado dos
-        // perfis de verdade e não têm `Preferences`.
         let temp = std::env::temp_dir().join("otimiza_teste_perfil");
         let real = temp.join("Perfil Renomeado");
         let falso = temp.join("ShaderCache");
@@ -721,8 +603,6 @@ mod tests {
 
     #[test]
     fn navegador_aberto_recusa_limpeza() {
-        // Com o navegador rodando os arquivos ficam travados e a limpeza sairia
-        // pela metade, sem ninguém perceber.
         let abertos = memoria_por_executavel();
 
         for (_, executavel, user_data) in navegadores_conhecidos() {
@@ -790,8 +670,6 @@ mod tests {
 
         assert!(!r.note.is_empty());
 
-        // Nenhuma extensão pode chegar à tela com a chave crua de tradução.
-        // Um terço delas apareceria assim sem a resolução de idioma.
         for b in &r.browsers {
             for p in &b.profiles {
                 for e in &p.extensions {
@@ -805,7 +683,6 @@ mod tests {
             }
         }
 
-        // Do que mais consome para o que menos consome.
         assert!(r.browsers.windows(2).all(|p| p[0].ram_mb >= p[1].ram_mb));
         assert!(r.ram_percent >= 0.0 && r.ram_percent <= 100.0);
     }

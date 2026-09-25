@@ -1,52 +1,18 @@
-// O lab de compatibilidade, preenchido pela máquina do cliente
-//
-// POR QUE ISTO EXISTE
-//
-// A Fase 4 do roadmap — Intel desktop, Intel notebook, Intel híbrido, AMD
-// desktop, AMD notebook, NVIDIA, AMD GPU, Intel GPU — está parada por um motivo
-// que nenhum commit resolve: não existem essas máquinas aqui. Há um i3-10100F
-// com uma GTX 1650, desktop, Windows 10.
-//
-// E os labs de compatibilidade do second brain (`229 - Windows Customer
-// Compatibility Labs`) são MODELOS COM AS CAIXAS VAZIAS. Eles descrevem um
-// protocolo muito bom e não têm uma medição sequer.
-//
-// A saída não é comprar hardware: é que O CLIENTE JÁ TEM A MÁQUINA. Cada pessoa
-// que instala o Otimiza está sentada em cima de exatamente o dado que falta, e o
-// produto já lê quase tudo que o protocolo pede.
-//
-// Este módulo fecha essa distância: gera a nota do lab já preenchida, no formato
-// que o vault usa, para o cliente mandar junto da queixa. Uma reclamação vira
-// uma evidência.
-//
-// O QUE ELE NÃO FAZ, E É DE PROPÓSITO:
-//
-// - não escreve nada na máquina. É relatório, e relatório que altera o objeto
-//   medido não é relatório;
-// - não inventa classificação. Os sete termos são os do protocolo do vault, e
-//   cada um sai de uma leitura, não de um palpite;
-// - não leva nada que identifique a pessoa. Mesma regra do `suporte.rs` e do
-//   `cabecalho.rs`: descreve uma MÁQUINA, não um dono. O arquivo vai inteiro
-//   para o Discord do atendimento.
+// Nota de laboratório de compatibilidade preenchida pela máquina do cliente, no formato do vault
+// (`229 - Windows Customer Compatibility Labs`): as máquinas que faltam para a Fase 4 são as dos clientes. Não
+// escreve nada; os sete termos são os do protocolo, cada um de uma leitura; não leva nada que identifique a pessoa
+// (o arquivo vai inteiro para o Discord do atendimento).
 
 use super::{cabecalho, essenciais, firmware, hardware, planoenergia};
 use planoenergia::{Alimentacao, DesfechoDoPlano, RelatorioDoPlano, StatusDoAjuste};
 
-/// A capacidade sob teste. Hoje só há uma; o campo existe porque o protocolo do
-/// vault é por capacidade, e a próxima nota vai ser de outra.
 pub const CAPACIDADE: &str = "power plan creation";
 
-/// Em que condição a máquina foi encontrada.
-///
-/// O vocabulário sai da lista de testes do protocolo — `clean machine`,
-/// `already-applied`, `non-admin`, `policy/OEM conflict` — para que as notas
-/// geradas por clientes se agrupem com as escritas à mão.
+/// Vocabulário da lista de testes do protocolo, para as notas se agruparem com as escritas à mão.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Condicao {
     MaquinaLimpa,
     JaAplicado,
-    /// O plano existe e alguém mexeu nele depois. É a condição das duas notas
-    /// que já estão no vault (WIN-COMPAT-0366 e 0677).
     ClienteMudouManualmente,
     SemAdministrador,
 }
@@ -62,27 +28,15 @@ impl Condicao {
     }
 }
 
-/// Os SETE termos que o protocolo permite, e nenhum outro.
-///
-/// Dois deles — `blocked by policy` e `user/OEM-managed` — o produto descobriu
-/// na prática antes de saber que o vault já tinha nome para eles, e estava
-/// jogando os dois no mesmo balde de "falhou". Nomes diferentes porque são
-/// conversas diferentes com o cliente: um é a empresa dele mandando, o outro é a
-/// imagem de Windows que ele instalou.
+/// Os SETE termos do protocolo, e nenhum outro.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Classificacao {
     Verified,
     Partial,
     Unsupported,
     BlockedByPolicy,
-    /// NENHUM AJUSTE DO PLANO DE ENERGIA EXIGE REINÍCIO, então esta variante
-    /// hoje não é construída — e isso é informação, não sobra.
-    ///
-    /// Ela fica porque o vocabulário é do PROTOCOLO, não desta capacidade: a
-    /// próxima nota de lab vai ser de agendamento de GPU por hardware ou de
-    /// VBS, e as duas só valem depois de reiniciar. Remover agora obrigaria a
-    /// próxima capacidade a reinventar o termo, provavelmente com outro nome —
-    /// e notas que não usam as mesmas palavras não se agrupam.
+    /// Nenhum ajuste de energia exige reinício, mas o termo é do PROTOCOLO: a próxima capacidade (HAGS, VBS)
+    /// precisará dele, e com outro nome as notas não se agrupam.
     #[allow(dead_code)]
     RequiresRestartOrLogoff,
     Failed,
@@ -103,12 +57,7 @@ impl Classificacao {
     }
 }
 
-/// O que o protocolo chama de "machine class": o rótulo que agrupa notas de
-/// máquinas parecidas.
-///
-/// Segue a forma das notas que já existem no vault — "64GB workstation",
-/// "AMD Ryzen laptop" —, e é só isso: um rótulo. Nenhuma decisão do produto sai
-/// daqui.
+/// Só um rótulo, na forma das notas do vault ("64GB workstation"); nenhuma decisão sai daqui.
 pub fn classe_da_maquina(
     ram_gb: f64,
     notebook: bool,
@@ -118,8 +67,6 @@ pub fn classe_da_maquina(
 
     let forma = if notebook { "laptop" } else { "desktop" };
 
-    // 64 GB e acima já não é "desktop", é estação de trabalho — e o vault usa
-    // esse nome. Abaixo disso, o fabricante diz mais do que a memória.
     if !notebook && ram_gb >= 60.0 {
         return format!("{}GB workstation", arredondar_ram(ram_gb));
     }
@@ -133,11 +80,7 @@ pub fn classe_da_maquina(
     format!("{} {} ({}GB)", marca, forma, arredondar_ram(ram_gb))
 }
 
-/// A memória como o dono da máquina a conhece.
-///
-/// O Windows relata menos do que está instalado — parte fica com o vídeo
-/// integrado e com o firmware. 7,9 GB são 8 GB para quem comprou, e um rótulo
-/// que diz "7GB" faz o cliente achar que falta um pente.
+/// O Windows relata menos que o instalado: 7,9 GB são 8 GB para quem comprou.
 pub fn arredondar_ram(gb: f64) -> u32 {
     const COMUNS: &[u32] = &[2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
 
@@ -148,7 +91,6 @@ pub fn arredondar_ram(gb: f64) -> u32 {
         .unwrap_or_else(|| gb.round() as u32)
 }
 
-/// Em que condição esta máquina foi encontrada. Função pura.
 pub fn condicao(
     elevado: bool,
     plano_existia: bool,
@@ -159,19 +101,14 @@ pub fn condicao(
     }
 
     match (plano_existia, ha_ajuste_fora_do_alvo) {
-        // O plano é nosso e alguém mexeu: é exatamente a condição das duas notas
-        // que já estão no vault.
         (true, true) => Condicao::ClienteMudouManualmente,
         (true, false) => Condicao::JaAplicado,
         (false, _) => Condicao::MaquinaLimpa,
     }
 }
 
-/// A classificação, pelos sete termos. Função pura.
-///
-/// A ORDEM É A REGRA, e ela vai do mais específico para o mais geral: uma
-/// máquina gerenciada por OEM que também tem um ajuste sem suporte é uma nota
-/// sobre a gerência, não sobre o ajuste — o segundo é consequência do primeiro.
+/// A ORDEM É A REGRA, do mais específico ao mais geral: gerência de OEM com ajuste sem suporte é nota sobre a
+/// gerência.
 pub fn classificar(
     desfecho: DesfechoDoPlano,
     gerenciada_por_oem: bool,
@@ -183,10 +120,8 @@ pub fn classificar(
         return Classificacao::UserOrOemManaged;
     }
 
-    // O COMANDO FOI ACEITO E O VALOR NÃO FICOU. É a assinatura de alguém
-    // reescrevendo a chave por baixo — política de domínio, na esmagadora
-    // maioria. Distinguir de `failed` importa: aqui não há nada a consertar no
-    // produto, e há uma conversa a ter com quem administra a máquina.
+    // Aceito e o valor não ficou: alguém reescreve por baixo (política de domínio). Não há o que consertar no
+    // produto.
     if houve_falha_de_verificacao {
         return Classificacao::BlockedByPolicy;
     }
@@ -205,10 +140,8 @@ pub fn classificar(
     }
 }
 
-/// Tudo que a nota imprime. Nada aqui lê o sistema.
 pub struct Lab {
-    /// A data, em `AAAA-MM-DD`. Entra no `Lab` em vez de ser lida dentro do
-    /// `montar` para a montagem continuar pura e testável.
+    /// Entra no `Lab` para a montagem continuar pura.
     pub data: String,
     pub classe: String,
     pub condicao: Condicao,
@@ -221,7 +154,6 @@ pub struct Lab {
     pub modelo_da_imagem: Option<String>,
     pub essenciais_desativados: usize,
     pub relatorio: RelatorioDoPlano,
-    /// Quais testes do protocolo esta execução de fato exerceu.
     pub testes: Vec<(&'static str, bool)>,
 }
 
@@ -240,14 +172,10 @@ fn valor(v: Option<u32>) -> String {
     }
 }
 
-/// Um identificador estável para esta máquina, derivado do hardware.
-///
-/// NÃO IDENTIFICA A PESSOA: sai do modelo do processador, da memória e do build
-/// do Windows — três coisas que milhares de máquinas compartilham. Serve para
-/// que dois relatórios do MESMO cliente caiam no mesmo id e dê para ver que é a
-/// mesma máquina antes e depois, sem saber quem ela é.
+/// Não identifica a pessoa (processador, memória e build, que milhares compartilham): serve para dois relatórios
+/// da mesma máquina caírem no mesmo id.
 pub fn identificador(d: &cabecalho::Dados) -> String {
-    // FNV-1a, 32 bits. Não é criptografia e não precisa ser: é um rótulo.
+    // FNV-1a de 32 bits: é um rótulo, não criptografia.
     let semente = format!(
         "{}|{}|{:.0}|{}",
         d.maquina.cpu, d.gpu, d.ram_gb, d.build
@@ -263,16 +191,11 @@ pub fn identificador(d: &cabecalho::Dados) -> String {
     format!("{:08x}", hash)
 }
 
-/// Monta a nota, no formato das que já estão em
-/// `229 - Windows Customer Compatibility Labs`. Função pura.
 pub fn montar(lab: &Lab) -> String {
     let d = &lab.cabecalho;
     let mut s = String::new();
 
-    // O NÚMERO NÃO É INVENTADO. A série do vault (0366, 0677) é numerada à mão,
-    // e escolher um número aqui colidiria com o próximo que alguém criar. Data
-    // mais identificador da máquina não colide, diz quando foi medido, e a
-    // forma `AAAA-MM-DD-xxxxxxxx` não se confunde com a série de quatro dígitos.
+    // Número não inventado: a série do vault é à mão, e `AAAA-MM-DD-xxxxxxxx` não colide com os quatro dígitos.
     s.push_str("---\ntype: windows-compatibility-lab\nproject: OTIMIZA\n");
     s.push_str("source: generated-by-otimiza\n");
     s.push_str(&format!("otimiza-version: {}\n", d.versao));
@@ -296,7 +219,6 @@ pub fn montar(lab: &Lab) -> String {
     s.push_str(&format!("Capability under test: **{}**\n\n", CAPACIDADE));
     s.push_str(&format!("Condition: **{}**\n\n", lab.condicao.termo()));
 
-    // ── Detect ────────────────────────────────────────────────────────────
     s.push_str("## Detect\n\n");
 
     let campo = |s: &mut String, k: &str, v: String| {
@@ -342,9 +264,6 @@ pub fn montar(lab: &Lab) -> String {
     campo(&mut s, "Modern Standby", sim_nao_nao_sei(Some(d.maquina.modern_standby)).to_string());
     campo(&mut s, "VBS running", sim_nao_nao_sei(lab.vbs_rodando).to_string());
 
-    // "relevant OEM or policy ownership" — o item do protocolo que só esta
-    // máquina sabe responder, e o que separa "o produto falhou" de "esta imagem
-    // de Windows não é a da Microsoft".
     campo(
         &mut s,
         "OEM/image owner",
@@ -370,7 +289,6 @@ pub fn montar(lab: &Lab) -> String {
         ),
     );
 
-    // ── Read before / Read after ──────────────────────────────────────────
     s.push_str("\n## Read before / Read after\n\n");
     s.push_str("| Setting | Supported | AC before | AC target | AC after | DC before | DC target | DC after | Status |\n");
     s.push_str("|---|---|---|---|---|---|---|---|---|\n");
@@ -390,7 +308,6 @@ pub fn montar(lab: &Lab) -> String {
         ));
     }
 
-    // ── Classify ──────────────────────────────────────────────────────────
     s.push_str("\n## Classify\n\n");
     s.push_str(&format!("**{}**\n\n", lab.classificacao.termo()));
     s.push_str(&format!(
@@ -401,7 +318,6 @@ pub fn montar(lab: &Lab) -> String {
         lab.relatorio.falhas
     ));
 
-    // ── Tests ─────────────────────────────────────────────────────────────
     s.push_str("\n## Tests\n\n");
 
     for (nome, feito) in &lab.testes {
@@ -423,14 +339,11 @@ pub fn montar(lab: &Lab) -> String {
     s
 }
 
-/// Lê a máquina e monta o lab. NÃO ESCREVE NADA: a montagem do plano roda em
-/// modo de simulação.
+/// NÃO ESCREVE NADA: o plano roda em simulação.
 pub fn gerar() -> Result<String, String> {
     let dados = cabecalho::coletar();
 
-    // Simulação: lê o estado de cada ajuste sem tocar em nada. Numa máquina onde
-    // o cliente JÁ aplicou, ela lê os valores reais de depois — que é o que
-    // torna a coluna "AC after" verdadeira sem precisar reaplicar.
+    // Numa máquina já aplicada, a simulação lê os valores reais de depois, sem reaplicar.
     let relatorio = planoenergia::montar(true)?;
 
     let checagem = essenciais::checar();
@@ -452,11 +365,7 @@ pub fn gerar() -> Result<String, String> {
 
     let sem_suporte = relatorio.nao_suportados > 0;
 
-    // A MESMA DEFINIÇÃO QUE O MOTOR USA, e não uma cópia. Ela morava aqui e foi
-    // para `windows::governanca` quando o motor passou a classificar ações com
-    // os mesmos sete termos deste relatório — duas definições da mesma coisa
-    // divergiriam no primeiro conserto, e o relatório passaria a discordar do
-    // produto que ele descreve.
+    // A mesma definição do motor (`windows::governanca`), não uma cópia: duas divergiriam no primeiro conserto.
     let gerenciada_por_oem = super::governanca().imagem_de_terceiros;
 
     let condicao = condicao(dados.elevado, relatorio.plano_existia, fora_do_alvo);
@@ -484,17 +393,14 @@ pub fn gerar() -> Result<String, String> {
         fabricante_da_imagem: checagem.fabricante.clone(),
         modelo_da_imagem: checagem.modelo.clone(),
         essenciais_desativados: checagem.desativados,
-        // As caixas marcadas dizem o que ESTA execução exerceu, e só isso. Um
-        // relatório que marca tudo é um relatório que não vale nada.
+        // Marca só o que ESTA execução exerceu.
         testes: vec![
             ("clean machine", condicao == Condicao::MaquinaLimpa),
             ("already-applied", condicao == Condicao::JaAplicado),
             ("non-admin if relevant", !dados.elevado),
             ("unsupported hardware/OS", sem_suporte),
             ("policy/OEM conflict", gerenciada_por_oem || falha_de_verificacao),
-            // Estes três exigem aplicar, reiniciar e desfazer de verdade. Uma
-            // leitura nunca os exerce, e marcá-los seria mentir no campo que o
-            // protocolo criou justamente para não deixar mentir.
+            // Exigem aplicar, reiniciar e desfazer: uma leitura nunca os exerce.
             ("restart persistence", false),
             ("rollback", false),
             ("app crash mid-operation", false),
@@ -511,9 +417,7 @@ mod tests {
     use super::*;
     use planoenergia::FabricanteDaCpu as F;
 
-    /// Imprime a nota desta máquina. Só lê.
-    ///
-    ///   cargo test --lib labcompat -- --ignored --nocapture
+    /// `cargo test --lib labcompat -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn nota_desta_maquina() {
@@ -525,10 +429,6 @@ mod tests {
 
     #[test]
     fn a_classe_segue_os_nomes_que_o_vault_ja_usa() {
-        // As duas notas existentes chamam "64GB workstation" e "AMD Ryzen
-        // laptop". Gerar "Intel desktop (64GB)" para a primeira faria as notas
-        // do cliente não se agruparem com as escritas à mão — que é o motivo
-        // inteiro de existir um rótulo de classe.
         assert_eq!(classe_da_maquina(63.8, false, F::Intel), "64GB workstation");
         assert_eq!(
             classe_da_maquina(15.8, true, F::Amd),
@@ -542,8 +442,6 @@ mod tests {
 
     #[test]
     fn a_memoria_e_arredondada_para_o_que_o_dono_comprou() {
-        // O Windows relata menos do que está instalado: parte fica com o vídeo
-        // integrado e com o firmware. "7GB" faz o cliente achar que falta pente.
         assert_eq!(arredondar_ram(7.9), 8);
         assert_eq!(arredondar_ram(15.8), 16);
         assert_eq!(arredondar_ram(31.7), 32);
@@ -553,8 +451,6 @@ mod tests {
 
     #[test]
     fn plano_existente_com_ajuste_fora_do_alvo_e_mudanca_manual() {
-        // É a condição das duas notas que já estão no vault, e o produto agora
-        // sabe reconhecê-la sozinho.
         assert_eq!(
             condicao(true, true, true),
             Condicao::ClienteMudouManualmente
@@ -565,17 +461,12 @@ mod tests {
 
     #[test]
     fn sem_administrador_vence_tudo() {
-        // Sem elevação nada foi de fato exercido, e qualquer outra condição
-        // seria uma conclusão tirada de uma leitura que não aconteceu.
         assert_eq!(condicao(false, true, true), Condicao::SemAdministrador);
         assert_eq!(condicao(false, false, false), Condicao::SemAdministrador);
     }
 
     #[test]
     fn comando_aceito_com_valor_que_nao_ficou_e_politica_e_nao_falha() {
-        // A distinção que o produto não tinha e o vault já nomeava. Importa
-        // porque não há nada a consertar no Otimiza: há uma conversa a ter com
-        // quem administra a máquina.
         assert_eq!(
             classificar(DesfechoDoPlano::EmParte, false, true, false, false),
             Classificacao::BlockedByPolicy
@@ -584,9 +475,6 @@ mod tests {
 
     #[test]
     fn imagem_modificada_vence_o_resto() {
-        // Uma máquina com imagem de terceiros e um ajuste sem suporte é uma nota
-        // sobre a imagem: o segundo é consequência do primeiro, e classificar
-        // como "unsupported" mandaria o atendimento procurar no lugar errado.
         assert_eq!(
             classificar(DesfechoDoPlano::EmParte, true, false, false, true),
             Classificacao::UserOrOemManaged
@@ -595,8 +483,7 @@ mod tests {
 
     #[test]
     fn os_sete_termos_sao_os_do_protocolo() {
-        // Se alguém renomear um destes, as notas geradas param de se agrupar
-        // com as do vault e o lab perde a razão de existir.
+        // Renomear um destes desagrupa as notas geradas das do vault.
         assert_eq!(Classificacao::Verified.termo(), "verified");
         assert_eq!(Classificacao::Partial.termo(), "partial");
         assert_eq!(Classificacao::Unsupported.termo(), "unsupported");
@@ -627,9 +514,6 @@ mod tests {
 
     #[test]
     fn o_titulo_nao_se_confunde_com_a_serie_numerada_do_vault() {
-        // A série do vault é `WIN-COMPAT-0366`. Um título gerado que caísse na
-        // mesma forma de quatro dígitos viraria colisão com a próxima nota que
-        // alguém criasse à mão.
         let lab = lab_de_teste();
         let titulo = montar(&lab);
 
@@ -671,10 +555,6 @@ mod tests {
 
     #[test]
     fn o_identificador_nao_carrega_nada_da_pessoa() {
-        // Ele sai de processador, placa de vídeo, memória e build — coisas que
-        // milhares de máquinas compartilham. E precisa ser ESTÁVEL: dois
-        // relatórios do mesmo cliente têm que cair no mesmo id para dar para
-        // comparar antes e depois.
         let a = cabecalho_de_teste();
         let b = cabecalho_de_teste();
 
@@ -716,10 +596,6 @@ mod tests {
 
     #[test]
     fn o_relatorio_nao_marca_teste_que_nao_aconteceu() {
-        // Persistência no reinício, rollback e queda no meio da operação exigem
-        // aplicar de verdade. Uma leitura nunca os exerce, e marcá-los seria
-        // mentir exatamente no campo que o protocolo criou para não deixar
-        // mentir.
         for nome in ["restart persistence", "rollback", "app crash mid-operation"] {
             assert!(
                 !PODEM_SER_MARCADOS_POR_LEITURA.contains(&nome),
@@ -729,7 +605,6 @@ mod tests {
         }
     }
 
-    /// Os testes do protocolo que uma execução de LEITURA consegue exercer.
     const PODEM_SER_MARCADOS_POR_LEITURA: &[&str] = &[
         "clean machine",
         "already-applied",
