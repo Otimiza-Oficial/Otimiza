@@ -1,63 +1,21 @@
-// O plano de energia OTIMIZA
-//
-// POR QUE ESTE MÓDULO EXISTE, E O DEFEITO QUE ELE VEIO CONSERTAR
-//
-// O produto trocava o plano de energia do cliente ativando o "Alto Desempenho"
-// pelo GUID FIXO `8c5e7fda-…`, que é o mesmo em toda instalação do Windows — e
-// escrevia os ajustes finos DENTRO DO PLANO QUE O CLIENTE JÁ USAVA. Duas coisas
-// dão errado com isso, e nenhuma delas aparece na máquina de desenvolvimento:
-//
-// 1. O GUID FIXO NÃO EXISTE EM TODA MÁQUINA. Em notebook com Modern Standby, e
-//    em imagem OEM enxuta, o "Alto Desempenho" não vem. O código de antes
-//    chamava `powercfg -duplicatescheme <guid fixo>`, que CRIA UMA CÓPIA COM
-//    GUID NOVO, JOGAVA ESSE GUID FORA, e em seguida mandava ativar o GUID FIXO
-//    — que continua não existindo. Medido aqui: `-duplicatescheme` do Alto
-//    Desempenho respondeu `GUID do Esquema de Energia: 15a86c79-…`, um GUID
-//    diferente do pedido. Na máquina do cliente aquilo falhava, e cada tentativa
-//    deixava para trás mais um plano órfão chamado "Alto desempenho".
-//
-// 2. ESCREVER NO PLANO DO CLIENTE NÃO TEM VOLTA LIMPA. Desfazer dependia de ter
-//    lido certo cada valor anterior e de conseguir gravar cada um de volta.
-//
-// A saída é a mesma para os dois: O OTIMIZA PASSA A TER PLANO PRÓPRIO. Ele cria
-// um plano chamado OTIMIZA, descobre o GUID QUE O WINDOWS DEVOLVEU, guarda esse
-// GUID, configura só dentro dele e o ativa. O plano do cliente não é tocado, e
-// desfazer é reativar o plano que estava ativo antes — uma operação só, que não
-// depende de ter lido trinta valores corretamente.
-//
-// A REGRA DA CASA, APLICADA AQUI: NÃO CONFIE QUE FUNCIONOU.
-//
-// `powercfg` devolve 0 em quase tudo que aceita, e devolve 1 quando o ajuste não
-// existe naquele Windows — conferido nesta máquina com um GUID de ajuste
-// inventado. Mas código de saída não é prova de que o valor entrou. Cada ajuste
-// aqui é LIDO DE VOLTA DO REGISTRO depois de gravado, e só então vira
-// `Aplicado`. Se o número não bateu, vira `FalhouNaVerificacao` — que é
-// diferente de `FalhouAoAplicar`, e a diferença é o que faz o registro de
-// suporte servir para alguma coisa.
-//
-// E AJUSTE QUE NÃO EXISTE NÃO É FALHA DO PLANO. O produto conferia o ajuste
-// executando e olhando a mensagem de erro — que é traduzida. Agora confere
-// ANTES, na árvore `Control\Power\PowerSettings`, que é a mesma em qualquer
-// idioma. Ajuste ausente vira `NaoSuportado` e o plano segue — antes, uma opção
-// que não existe no Windows do cliente derrubava a otimização inteira e desfazia
-// o que já tinha dado certo.
+// O plano de energia OTIMIZA, próprio. Antes o produto ativava o "Alto Desempenho" por GUID fixo (que não existe
+// em Modern Standby ou imagem OEM enxuta: o `-duplicatescheme` criava cópia com GUID NOVO, jogado fora, e cada
+// tentativa deixava um plano órfão) e escrevia DENTRO do plano do cliente. Agora cria o OTIMIZA, guarda o GUID que o
+// Windows devolveu, configura só nele e o ativa; desfazer é reativar o anterior. Cada ajuste é RELIDO depois de
+// gravado (`FalhouNaVerificacao` ≠ `FalhouAoAplicar`). Ajuste ausente (conferido em `Control\Power\PowerSettings`,
+// igual em qualquer idioma) vira `NaoSuportado` e o plano segue.
 
 use super::{hardware, power, registry, shell};
 use serde::{Deserialize, Serialize};
 
-/// O nome do plano. É por ele que o plano é reencontrado na execução seguinte,
-/// e é por isso que ele não pode ser traduzido.
+/// É por ele que o plano é reencontrado: não pode ser traduzido.
 pub const NOME_DO_PLANO: &str = "OTIMIZA";
 
 const DESCRICAO_DO_PLANO: &str =
     "Plano criado pelo Otimiza para este computador. Pode ser apagado a qualquer momento.";
 
-/// O plano "Equilibrado". Ao contrário do Alto Desempenho, ESTE existe em toda
-/// instalação do Windows — é o padrão de fábrica, e o Windows não o esconde nem
-/// em Modern Standby. Serve de molde quando o Alto Desempenho não está lá.
+/// Existe em toda instalação, inclusive Modern Standby.
 pub const EQUILIBRADO_GUID: &str = "381b4222-f694-41f0-9685-ff5bb260df2e";
-
-// ─── Os subgrupos e ajustes, todos documentados pela Microsoft ────────────────
 
 pub const SUB_PROCESSADOR: &str = "54533251-82be-4824-96c1-47b60b740d00";
 const PROCTHROTTLEMIN: &str = "893dee8e-2bef-41e0-89c6-b55d0929964c";
@@ -65,55 +23,17 @@ const PROCTHROTTLEMAX: &str = "bc5038f7-23e0-4960-96da-33abaf5935ec";
 const CPMINCORES: &str = "0cc5b647-c1df-4637-891a-dec35c318583";
 const PERFBOOSTMODE: &str = "be337238-0d82-4146-a960-4f3749d470c7";
 
-/// Preferência entre energia e desempenho, de 0 a 100 POR CENTO.
-///
-/// Lido da árvore `PowerSettings` desta máquina, palavra por palavra:
-///
-/// > "Specify how much processors should favor **energy savings over
-/// > performance** when operating in autonomous mode."
-/// > `ValueMin 0 · ValueMax 100 · unidade: percent`
-///
-/// A escala é de ECONOMIA, não de desempenho: **0 é desempenho total** e 100 é
-/// economia total. Escrever 100 aqui achando que "100 é o máximo" seria repetir
-/// exatamente o erro que derrubou o FPS de um cliente na 2.1.0.
+/// 0 a 100 POR CENTO de ECONOMIA ("favor energy savings over performance"): 0 é desempenho total. Escrever 100
+/// achando que é o máximo repetiria o erro da 2.1.0.
 const PERFEPP: &str = "36687f9e-e3a5-4dbf-b1dc-15eb381c6863";
 
-/// Se o processador escolhe sozinho o estado de desempenho.
-///
-/// Documentado nesta máquina:
-///
-/// > "Specify whether processors should autonomously determine their target
-/// > performance state."
-/// > `0 = Disabled — determine target performance state using operating system
-/// > algorithms` · `1 = Enabled — using autonomous selection`
-///
-/// O produto LÊ e RELATA, e não escreve: é o interruptor que decide QUEM manda
-/// no processador, e trocar isso por cima do que o fabricante entregou é a
-/// definição do tweak de internet que este projeto recusa.
-///
-/// Com ele em `1`, o processador escolhe a própria frequência e quem governa é
-/// o EPP acima; com `0`, quem governa é o estado mínimo/máximo.
-///
-/// UMA CORREÇÃO AO QUE EU MESMO ESCREVI AQUI ANTES: a primeira versão deste
-/// comentário afirmava que `1` é o padrão em "praticamente todo PC recente", e
-/// que por isso o estado mínimo seria quase inerte. Conferindo a árvore de
-/// padrões desta máquina, os TRÊS planos internos do Windows trazem `0`:
-///
-/// ```text
-/// Equilibrado      AC=0  DC=0
-/// Alto desempenho  AC=0  DC=0
-/// Economia         AC=0  DC=0
-/// ```
-///
-/// Eu tinha inferido de novo, em vez de ler. Por isso o produto pergunta à
-/// máquina em vez de afirmar. Ver `governa_o_processador`.
+/// Só LÊ e relata: trocar quem manda no processador por cima do fabricante é o tweak de internet que o projeto
+/// recusa. Com `1` governa o EPP; com `0`, o mínimo/máximo. Os TRÊS planos internos trazem `0` (conferido; a
+/// primeira versão deste comentário inferia o contrário). Ver `governa_o_processador`.
 const PERFAUTONOMOUS: &str = "8baa4a8a-14c6-4451-8e8b-14bdbd197537";
 
-/// O plano Equilibrado do Windows. GUID fixo e igual em toda instalação — é uma
-/// das três constantes que a Microsoft publica, e não um GUID de máquina.
-///
-/// Usado só para LER o padrão de fábrica de um ajuste quando o plano ativo é um
-/// plano próprio, que não aparece em `DefaultPowerSchemeValues`.
+/// Constante publicada pela Microsoft. Só para LER o padrão de fábrica quando o plano ativo é próprio (fora de
+/// `DefaultPowerSchemeValues`).
 const EQUILIBRADO: &str = "381b4222-f694-41f0-9685-ff5bb260df2e";
 
 const SUB_PCIEXPRESS: &str = "501a4d13-42af-4429-9fd1-a8218c268e20";
@@ -137,8 +57,6 @@ const IDLEBACKGROUND: &str = "03680956-93bc-4294-bba6-4e0f09bb717f";
 const SUB_SUSPENSAO: &str = "238c9fa8-0aad-41ed-83f4-97be242c8f20";
 const STANDBYIDLE: &str = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da";
 
-// ─── O que sabemos da máquina antes de escolher qualquer número ───────────────
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FabricanteDaCpu {
     Intel,
@@ -153,15 +71,13 @@ pub struct Maquina {
     pub fabricante_da_cpu: FabricanteDaCpu,
     pub cpu: String,
     pub nucleos_logicos: usize,
-    /// `CsEnabled` do registro: 1 quando a máquina usa Modern Standby (S0).
-    /// Lido do registro e não da saída do `powercfg /a`, que é traduzida.
+    /// Do registro, não do `powercfg /a`, que é traduzido.
     pub modern_standby: bool,
     pub build_do_windows: u32,
     pub windows11: bool,
 }
 
-/// Windows 11 começa no build 22000. É a única separação que o registro dá:
-/// `CurrentVersion` diz 10.0 nos dois.
+/// `CurrentVersion` diz 10.0 nos dois: o build 22000 é a única separação.
 pub fn e_windows11(build: u32) -> bool {
     build >= 22000
 }
@@ -178,8 +94,7 @@ pub fn fabricante_pelo_nome(cpu: &str) -> FabricanteDaCpu {
     }
 }
 
-/// `PCSystemType` do WMI: 2 é móvel. A bateria confirma — e em imagem
-/// modificada, onde o `PCSystemType` pode vir errado, é a bateria que decide.
+/// Em imagem modificada o `PCSystemType` pode vir errado: a bateria decide.
 pub fn e_notebook(pc_system_type: Option<u32>, tem_bateria: bool) -> bool {
     matches!(pc_system_type, Some(2)) || tem_bateria
 }
@@ -205,8 +120,6 @@ fn build_do_windows() -> u32 {
     .unwrap_or(0)
 }
 
-/// Lê a máquina. As duas perguntas que não têm resposta no registro — tipo de
-/// chassi e presença de bateria — saem de uma chamada só ao PowerShell.
 pub fn detectar() -> Maquina {
     let (tipo, tem_bateria) = chassi_e_bateria();
     let perfil = hardware::profile();
@@ -227,25 +140,15 @@ pub fn detectar() -> Maquina {
     }
 }
 
-/// Como a máquina está alimentada NESTE MOMENTO.
-///
-/// Diferente de "tem bateria": um notebook na tomada e o mesmo notebook fora
-/// dela usam lados opostos do plano de energia. Sem isto, um relatório que diz
-/// "estado mínimo do processador = 5%" não quer dizer nada — pode ser o valor
-/// certo da bateria ou o valor errado da tomada.
+/// Tomada e bateria usam lados opostos do plano: sem isto, "mínimo = 5%" não quer dizer nada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Alimentacao {
     Tomada,
     Bateria,
-    /// O Windows respondeu 255, que é o valor documentado para "desconhecido".
     NaoSei,
 }
 
-/// Regra pura da leitura do `ACLineStatus`, separada para poder ser testada.
-///
-/// Os valores são os documentados em `SYSTEM_POWER_STATUS`: 0 fora da tomada,
-/// 1 na tomada, 255 desconhecido. São NÚMEROS, e portanto iguais em qualquer
-/// idioma do Windows.
+/// `SYSTEM_POWER_STATUS`: 0 fora da tomada, 1 na tomada, 255 desconhecido. Números, iguais em qualquer idioma.
 pub fn alimentacao_do_status(ac_line_status: u8) -> Alimentacao {
     match ac_line_status {
         0 => Alimentacao::Bateria,
@@ -266,9 +169,7 @@ pub fn alimentacao() -> Alimentacao {
         BatteryFullLifeTime: u32::MAX,
     };
 
-    // A chamada falhar é diferente de a máquina não saber, mas o produto trata
-    // os dois igual de propósito: nos dois casos não temos a resposta, e
-    // `NaoSei` já diz exatamente isso.
+    // Chamada falha e máquina que não sabe dão `NaoSei`: nos dois casos não temos a resposta.
     if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
         return Alimentacao::NaoSei;
     }
@@ -276,8 +177,7 @@ pub fn alimentacao() -> Alimentacao {
     alimentacao_do_status(status.ACLineStatus)
 }
 
-/// Separada da execução para poder ser testada: é ela que decide desktop ou
-/// notebook, e essa decisão muda todos os valores da bateria.
+/// Decide desktop ou notebook, e isso muda todos os valores da bateria.
 pub fn ler_chassi_e_bateria(saida: &str) -> (Option<u32>, bool) {
     let mut tipo = None;
     let mut baterias = 0u32;
@@ -305,13 +205,7 @@ fn chassi_e_bateria() -> (Option<u32>, bool) {
     }
 }
 
-// ─── Classificação e resultado ────────────────────────────────────────────────
-
-/// O quanto o produto se compromete com cada ajuste.
-///
-/// Por padrão só entram `Segura` e `Recomendada`. `Avancada` existe para que o
-/// relatório possa DIZER que ela existe e não foi aplicada, em vez de o produto
-/// fingir que o assunto não existe.
+/// Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Classe {
     Segura,
@@ -321,25 +215,13 @@ pub enum Classe {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StatusDoAjuste {
-    /// Gravado E CONFERIDO relendo do Windows.
     Aplicado,
-    /// A máquina já estava no valor desejado. Não se escreveu nada.
     JaEstavaBom,
-    /// Este Windows não tem este ajuste. Não é falha.
     NaoSuportado,
-    /// O `powercfg` recusou.
     FalhouAoAplicar,
-    /// O `powercfg` aceitou e o valor relido NÃO é o que pedimos.
     FalhouNaVerificacao,
-    /// SÓ EM SIMULAÇÃO: este ajuste mudaria, e nada foi escrito.
-    ///
-    /// Existe separado de `Pulado` por uma mentira que a tela contou antes de
-    /// ele existir. Os dois casos chegavam como `Pulado`, e o painel dizia "não
-    /// se aplica aqui" sobre o modo de boost — que mudaria de 1 para 2 se o
-    /// cliente clicasse. Era a simulação desencorajando exatamente o que ela
-    /// existe para mostrar.
+    /// Separado de `Pulado`: a tela dizia "não se aplica aqui" sobre o boost que mudaria de 1 para 2.
     Mudaria,
-    /// Não se aplica a esta máquina.
     Pulado,
 }
 
@@ -359,24 +241,15 @@ pub struct ResultadoDoAjuste {
     pub dc_depois: Option<u32>,
     pub status: StatusDoAjuste,
     pub mensagem: String,
-    /// Os `powercfg` que rodaram por este ajuste, para o registro em arquivo.
-    ///
-    /// FORA DO QUE VAI PARA A TELA, de propósito. Comando cru, código de saída
-    /// e stderr servem a quem está depurando uma máquina pelo log; na tela do
-    /// cliente seriam a poluição que faz um otimizador parecer um terminal. A
-    /// tela já recebe o antes, o alvo, o depois e a frase — que é a mesma
-    /// informação, dita para quem vai ler.
+    /// Fora da tela de propósito: comando cru e stderr são para o log.
     #[serde(skip)]
     pub execucoes: Vec<Execucao>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DesfechoDoPlano {
-    /// Todo ajuste aplicável entrou e foi conferido.
     Sucesso,
-    /// Entrou o que dava; alguma coisa não existe nesta máquina ou não entrou.
     EmParte,
-    /// O plano não pôde ser criado ou ativado.
     Falhou,
 }
 
@@ -396,9 +269,7 @@ pub struct RelatorioDoPlano {
     pub desfecho: DesfechoDoPlano,
 }
 
-/// O alvo de um ajuste nos dois modos. `None` quer dizer NÃO MEXER — é o que
-/// protege a autonomia do notebook na bateria, e é diferente de "mexer para o
-/// padrão".
+/// `None` é NÃO MEXER, diferente de "mexer para o padrão": protege a autonomia do notebook na bateria.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Alvo {
     pub ac: Option<u32>,
@@ -433,16 +304,8 @@ pub struct Ajuste {
     pub alvo: fn(&Maquina) -> Alvo,
 }
 
-/// O DESKTOP LEVA O VALOR NOS DOIS MODOS; O NOTEBOOK, SÓ NA TOMADA.
-///
-/// Um desktop também tem `DCSettingIndex`, e ele não é decoração: numa queda de
-/// energia com nobreak o Windows passa a usar o lado da bateria. Deixar os dois
-/// iguais num desktop é o que faz o ajuste valer sempre.
-///
-/// No notebook, a bateria fica com o padrão do Windows de propósito. Estado
-/// mínimo de processador em 100% fora da tomada é autonomia queimada e
-/// temperatura alta por nada — e quem comprou um otimizador de jogo não pediu
-/// isso.
+/// Desktop nos dois lados (com nobreak o Windows usa o da bateria). Notebook só na tomada: mínimo 100% fora dela é
+/// autonomia queimada.
 fn tomada_sempre_bateria_se_desktop(m: &Maquina, v: u32) -> Alvo {
     if m.notebook {
         Alvo::so_na_tomada(v)
@@ -500,21 +363,9 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_PROCESSADOR,
         ajuste: PERFBOOSTMODE,
         classe: Classe::Avancada,
-        // A JUSTIFICATIVA ANTERIOR ERA INVENTADA. Ela dizia que o modo agressivo
-        // "deixa o processador subir sem esperar a média de carga confirmar", o
-        // que descreve outro ajuste. O Windows documenta o valor 2 assim, lido
-        // da árvore `PowerSettings` desta máquina:
-        //
-        //     2 = Aggressive — "Always select the highest possible target
-        //         frequency above nominal frequency."
-        //
-        // (Os outros: 0 Disabled, 1 Enabled, 3 Efficient Enabled, 4 Efficient
-        // Aggressive, 5 Aggressive At Guaranteed, 6 Efficient Aggressive At
-        // Guaranteed.)
-        //
-        // NÃO desliga proteção térmica: o limite de temperatura e o de potência
-        // do processador continuam valendo acima disto. O que muda é qual
-        // frequência o Windows PEDE, e não até onde o silício deixa chegar.
+        // O Windows documenta 2 = Aggressive, "Always select the highest possible target frequency above nominal" (0
+        // Disabled, 1 Enabled, 3 Efficient Enabled, 4 Efficient Aggressive, 5 Aggressive At Guaranteed, 6 Efficient
+        // Aggressive At Guaranteed). NÃO desliga proteção térmica: muda o que o Windows PEDE.
         porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
                  maior frequência possível acima da nominal. É o que mantém o turbo ligado no \
                  jogo em vez de ele subir e descer. Os limites de temperatura e de potência \
@@ -549,31 +400,10 @@ pub static AJUSTES: &[Ajuste] = &[
                  parados. Na bateria continua ligado, porque ali ele economiza de verdade.",
         alvo: |_| Alvo::so_na_tomada(0),
     },
-    // ─────────────────────────────────────────────────────────────────────
-    // INCIDENTE 2.1.0 — ESTE AJUSTE DERRUBOU O FPS DE CLIENTES.
-    //
-    // Ele foi escrito com alvo `1` e o comentário dizia "preferir desempenho".
-    // Isso estava ERRADO. O Windows documenta esta chave assim, lido da árvore
-    // `PowerSettings` numa máquina real:
-    //
-    //     dd848b2a-…  "Policy to determine GPU preference"
-    //        0 => None      — "No preference"
-    //        1 => Low Power — "Prefer low-power GPU"
-    //
-    // Não existe valor "preferir alto desempenho" aqui. O `1` empurra o jogo
-    // para a placa de BAIXO CONSUMO — em notebook e em desktop com vídeo
-    // integrado, isso é o jogo saindo da placa dedicada. Um cliente relatou
-    // cair de 200 para 80-120 FPS.
-    //
-    // POR QUE O ALVO É 0 EM VEZ DE O AJUSTE SER REMOVIDO: remover faria as
-    // máquinas novas escaparem e deixaria as já atingidas com o `1` gravado
-    // para sempre. Com alvo `0` — que é o padrão do Windows — quem já recebeu a
-    // 2.1.0 é corrigido sozinho ao aplicar ou reparar o plano.
-    //
-    // A LIÇÃO, e ela vale mais que o conserto: eu inferi o significado de um
-    // valor a partir do nome da chave em vez de ler a descrição que o próprio
-    // Windows publica ao lado dela. Ver `os_valores_de_cada_ajuste_sao_os_que_o_windows_documenta`.
-    // ─────────────────────────────────────────────────────────────────────
+    // INCIDENTE 2.1.0: alvo `1` "preferir desempenho" derrubou FPS (200 → 80-120). O Windows documenta 0 = "No
+    // preference", 1 = "Prefer low-power GPU": o jogo saía da placa dedicada. Alvo `0` (o padrão), e não remoção, para
+    // quem já recebeu o `1` ser corrigido ao aplicar ou reparar. O significado veio do nome da chave em vez da
+    // descrição do Windows. Ver `os_valores_de_cada_ajuste_sao_os_que_o_windows_documenta`.
     Ajuste {
         nome: "Preferência de placa de vídeo do Windows",
         subgrupo: SUB_GRAFICOS,
@@ -613,15 +443,11 @@ pub static AJUSTES: &[Ajuste] = &[
     },
 ];
 
-/// As classes que entram sem ninguém pedir.
 pub fn entra_por_padrao(classe: Classe) -> bool {
     matches!(classe, Classe::Segura | Classe::Recomendada)
 }
 
-// ─── Achar, criar e nomear o plano ────────────────────────────────────────────
-
-/// Lê a lista do `powercfg /list`. Só o GUID e o nome entre parênteses são
-/// estáveis; o resto da linha é traduzido.
+/// Só o GUID e o nome entre parênteses são estáveis; o resto é traduzido.
 pub fn planos_da_saida(saida: &str) -> Vec<(String, String)> {
     let mut planos = Vec::new();
 
@@ -648,9 +474,7 @@ pub fn planos_da_saida(saida: &str) -> Vec<(String, String)> {
     planos
 }
 
-/// Um GUID de plano tem 36 caracteres, quatro hífens nas posições conhecidas e
-/// só dígitos hexadecimais no resto. Conferir isso é o que impede um pedaço de
-/// texto traduzido de virar GUID.
+/// Impede texto traduzido de virar GUID.
 pub fn e_guid(token: &str) -> bool {
     token.len() == 36
         && token.chars().enumerate().all(|(i, c)| {
@@ -662,7 +486,6 @@ pub fn e_guid(token: &str) -> bool {
         })
 }
 
-/// O GUID do plano com este nome, se ele já existir.
 pub fn achar_na_lista(planos: &[(String, String)], nome: &str) -> Option<String> {
     planos
         .iter()
@@ -675,23 +498,13 @@ pub(crate) fn listar_planos() -> Result<Vec<(String, String)>, String> {
     Ok(planos_da_saida(&saida))
 }
 
-/// De qual plano o OTIMIZA é copiado.
-///
-/// O Alto Desempenho é o molde melhor — já vem com estacionamento de núcleos
-/// desligado e o mínimo do processador alto. Mas ELE PODE NÃO EXISTIR: em
-/// notebook com Modern Standby o Windows não o oferece. O Equilibrado existe
-/// sempre, e é a rede de segurança que faltava.
 pub fn escolher_molde(_planos: &[(String, String)]) -> &'static str {
-    // O MOLDE É SEMPRE O EQUILIBRADO desde o motor de energia adaptativo. O
-    // Alto Desempenho traz embutidos exatamente os números universais que o
-    // motor recusa — núcleos todos acordados e estado mínimo alto — e copiar
-    // dele seria aplicá-los em todo PC antes de medir qualquer coisa.
+    // SEMPRE o Equilibrado desde o motor adaptativo: o Alto Desempenho traz núcleos todos acordados e mínimo alto, os
+    // números universais que o motor recusa.
     EQUILIBRADO_GUID
 }
 
-/// Cria o plano e devolve O GUID QUE O WINDOWS GEROU — nunca o do molde.
-///
-/// Esta função é o conserto do defeito principal.
+/// Devolve O GUID QUE O WINDOWS GEROU, nunca o do molde: o conserto do defeito principal.
 pub(crate) fn criar_plano(molde: &str) -> Result<String, String> {
     let saida = shell::run_checked("powercfg", &["-duplicatescheme", molde])?;
 
@@ -704,9 +517,7 @@ pub(crate) fn criar_plano(molde: &str) -> Result<String, String> {
 
     validar_guid_novo(&novo, molde)?;
 
-    // O nome é o que reencontra o plano na próxima execução. Se ele não puder
-    // ser trocado, o plano ficaria chamado como o molde e a execução seguinte
-    // criaria outro — é a duplicação que este módulo existe para não fazer.
+    // Sem renomear, a execução seguinte não o reencontraria e criaria outro.
     shell::run_checked(
         "powercfg",
         &["-changename", &novo, NOME_DO_PLANO, DESCRICAO_DO_PLANO],
@@ -716,10 +527,7 @@ pub(crate) fn criar_plano(molde: &str) -> Result<String, String> {
     Ok(novo)
 }
 
-/// O GUID devolvido precisa ser um GUID, e precisa ser OUTRO.
-///
-/// Se um dia o `powercfg` responder o GUID do molde, gravar em cima dele seria
-/// escrever no plano do cliente achando que se está escrevendo no nosso.
+/// Se o `powercfg` devolver o GUID do molde, gravaríamos no plano do cliente.
 pub fn validar_guid_novo(novo: &str, molde: &str) -> Result<(), String> {
     if !e_guid(novo) {
         return Err(format!("`{}` não é um GUID de plano de energia.", novo));
@@ -736,23 +544,15 @@ pub fn validar_guid_novo(novo: &str, molde: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Onde o plano OTIMIZA está, do ponto de vista da LISTA de otimizações.
-///
-/// Quatro estados e não dois, pelo motivo de sempre: "não consegui ler" não pode
-/// virar "não está aplicado", senão a lista oferece ao cliente aplicar de novo o
-/// que talvez já esteja lá.
+/// "Não consegui ler" não pode virar "não está aplicado", senão a lista oferece aplicar de novo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EstadoDoPlano {
-    /// Existe e é o plano ativo.
     Ativo,
-    /// Existe, mas o computador está usando outro.
     ExisteEnaoEstaAtivo,
     NaoExiste,
-    /// O `powercfg` não respondeu.
     NaoConsegui,
 }
 
-/// Regra pura, separada da execução para poder ser testada.
 pub fn estado_do_plano(nosso: Option<&str>, ativo: Option<&str>) -> EstadoDoPlano {
     match (nosso, ativo) {
         (_, None) => EstadoDoPlano::NaoConsegui,
@@ -762,11 +562,7 @@ pub fn estado_do_plano(nosso: Option<&str>, ativo: Option<&str>) -> EstadoDoPlan
     }
 }
 
-/// Checagem barata para a lista de otimizações: dois comandos, sem PowerShell.
-///
-/// A lista é redesenhada a cada atualização e chama isto uma vez por item do
-/// catálogo. O relatório completo — ajuste por ajuste — sai do painel, que o
-/// cliente abre quando quer.
+/// Dois comandos, sem PowerShell: a lista chama isto uma vez por item a cada atualização.
 pub fn onde_esta_o_plano() -> EstadoDoPlano {
     let Ok(planos) = listar_planos() else {
         return EstadoDoPlano::NaoConsegui;
@@ -778,37 +574,23 @@ pub fn onde_esta_o_plano() -> EstadoDoPlano {
     estado_do_plano(nosso.as_deref(), ativo.as_deref())
 }
 
-// ─── Vistoria: o plano continua de pé como o deixamos? ───────────────────────
-
-/// O que uma vistoria encontrou. É LEITURA PURA: nada é escrito para descobrir.
+/// LEITURA PURA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum Vistoria {
-    /// Não há plano OTIMIZA nesta máquina.
     NaoExiste,
-    /// Existe, está ativo, e todo ajuste está onde o deixamos.
     Integro,
-    /// Existe e está íntegro, mas o computador está usando outro plano.
-    ///
-    /// Acontece sozinho com mais frequência do que se imagina: instalador de
-    /// driver de vídeo, utilitário do fabricante e "otimizadores" concorrentes
-    /// trocam o plano ativo sem avisar.
+    /// Instalador de driver, utilitário do fabricante e concorrentes trocam o plano ativo sem avisar.
     DesativadoPorFora,
-    /// Existe e algum ajuste saiu do alvo.
     Desviado {
         ativo: bool,
-        /// Os ajustes que mudaram, pelo nome. É o que transforma "algo mudou"
-        /// em uma frase que o cliente consegue conferir.
+        /// O nome do ajuste é o que o cliente consegue conferir.
         ajustes: Vec<String>,
     },
     NaoConsegui,
 }
 
-/// Regra pura da vistoria, separada da leitura para poder ser testada.
-///
-/// A ORDEM IMPORTA: desvio vence "não está ativo". Um plano alterado E
-/// desativado é, antes de tudo, um plano alterado — reativá-lo sem reparar
-/// devolveria ao cliente os valores errados, com a tela dizendo que está tudo
+/// Desvio vence "não está ativo": reativar sem reparar devolveria os valores errados com a tela dizendo que está
 /// certo.
 pub fn classificar_vistoria(existe: bool, ativo: bool, desviados: Vec<String>) -> Vistoria {
     if !existe {
@@ -829,11 +611,8 @@ pub fn classificar_vistoria(existe: bool, ativo: bool, desviados: Vec<String>) -
     }
 }
 
-/// Vistoria o plano. Não escreve nada.
 pub fn vistoriar() -> Vistoria {
-    // Simulação: lê cada ajuste do nosso plano sem tocar em nada. Num plano que
-    // existe, `Mudaria` quer dizer exatamente "este valor não é o que
-    // deixamos" — que é a definição de desvio.
+    // Num plano que existe, `Mudaria` é exatamente "não é o que deixamos".
     let Ok(relatorio) = montar(true) else {
         return Vistoria::NaoConsegui;
     };
@@ -854,22 +633,8 @@ pub fn vistoriar() -> Vistoria {
     classificar_vistoria(true, ativo, desviados)
 }
 
-/// Reaplica só o que saiu do alvo, e reativa o plano se preciso.
-///
-/// POR QUE ISTO É UM CAMINHO PRÓPRIO, E NÃO "aplicar de novo".
-///
-/// O motor recusa reaplicar uma otimização que já está no histórico — e com
-/// razão, senão o "Otimizar agora" refaria tudo a cada clique. Só que o plano de
-/// energia é a única otimização do catálogo que OUTRO PROGRAMA PODE DESFAZER
-/// pelas costas: instalador de driver, utilitário do fabricante, ou um
-/// concorrente trocando o plano ativo. Quando isso acontece, o histórico diz
-/// "aplicada", a máquina discorda, e o cliente não tem botão nenhum — a lista
-/// responde "Otimização já estava aplicada" sobre um PC que não está.
-///
-/// O reparo é a saída: ele não cria plano (se não existe, é criação, e criação
-/// tem o seu próprio caminho com o registro de desfazer) e não mexe no
-/// histórico, porque o estado anterior guardado lá continua sendo o certo — o
-/// plano do cliente nunca deixou de ser o plano do cliente.
+/// Caminho próprio: o motor recusa reaplicar o que está no histórico, e o plano é a única otimização que OUTRO
+/// programa desfaz pelas costas. Não cria plano (criação tem o registro de desfazer) e não mexe no histórico.
 pub fn reparar() -> Result<RelatorioDoPlano, String> {
     if !registry::is_elevated() {
         return Err(
@@ -888,25 +653,12 @@ pub fn reparar() -> Result<RelatorioDoPlano, String> {
 
     crate::utils::Logger::info("plano OTIMIZA: reparo pedido");
 
-    // Daqui para frente é o mesmo caminho da aplicação, e é de propósito: ele
-    // já só escreve o que está fora do alvo e já confere cada escrita relendo.
-    // Reparo não é um motor diferente; é o mesmo motor com outra porta.
+    // O mesmo motor com outra porta: só escreve o que está fora do alvo e relê.
     montar(false)
 }
 
-// ─── Aplicar um ajuste, e provar que ele entrou ───────────────────────────────
-
-/// Este Windows tem este ajuste?
-///
-/// Lido da árvore de definições, que é a mesma em qualquer idioma e não depende
-/// de executar nada. Antes isto era descoberto executando e lendo a mensagem de
-/// erro — que é traduzida.
-///
-/// Leitura negada conta como SUPORTADO, e não como ausente — o contrário do
-/// resto do módulo, de propósito. Se a árvore de definições não pôde ser lida, a
-/// alternativa seria marcar os onze ajustes como "este Windows não tem", que é
-/// uma afirmação muito mais forte e muito mais provável de estar errada. Dizendo
-/// que existe, a escrita é tentada e a releitura decide — e ela não mente.
+/// Pela árvore de definições, igual em qualquer idioma. Leitura negada conta como SUPORTADO: marcar os onze como
+/// inexistentes seria mais forte e mais provável de errar; a escrita é tentada e a releitura decide.
 pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
     registry::key_exists(
         "HKLM",
@@ -918,39 +670,16 @@ pub fn suportado(subgrupo: &str, ajuste: &str) -> bool {
     .unwrap_or(true)
 }
 
-/// Quem decide a frequência do processador nesta máquina.
-///
-/// Três estados, e o terceiro não pode virar nenhum dos outros dois. A pergunta
-/// importa porque ela muda qual metade deste plano tem efeito: com o processador
-/// em modo autônomo, o "estado mínimo" é quase decorativo e quem governa é o
-/// EPP; sem ele, é o contrário.
-///
-/// O produto LÊ e CONTA. Não escreve: mudar quem comanda o processador por cima
-/// do que o fabricante entregou é a definição do tweak de internet que este
-/// projeto recusa.
+/// Três estados: com o processador autônomo o "estado mínimo" é quase decorativo e governa o EPP. Só LÊ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GovernoDoProcessador {
-    /// O próprio processador escolhe (Intel Speed Shift, AMD CPPC).
     OProcessador,
-    /// O Windows escolhe pelos algoritmos dele.
     OWindows,
     NaoDeuParaLer,
 }
 
-/// UM PLANO PRÓPRIO NÃO TEM PADRÃO DECLARADO, e isso quase enterrou esta
-/// leitura. `power::valor_efetivo` procura o valor dentro do plano e, não
-/// achando, o padrão em `DefaultPowerSchemeValues\<guid do plano>` — que só
-/// existe para os TRÊS planos internos do Windows. Num plano duplicado, que é o
-/// caso do OTIMIZA e de todo plano que o cliente criou, os dois caminhos falham
-/// e a resposta vinha `None` para qualquer ajuste sem índice próprio.
-///
-/// Conferido nesta máquina: o plano ativo é próprio, e nem o modo autônomo nem
-/// o EPP têm chave dentro dele.
-///
-/// A saída é ler o padrão do EQUILIBRADO, e dizer que foi isso que se leu. O
-/// Equilibrado é a base de fábrica do Windows para o que nunca foi gravado, e
-/// afirmar "não sei" tendo esse número na mão seria esconder informação boa —
-/// desde que o produto não finja que leu do plano do cliente.
+/// Plano próprio não tem padrão declarado: `DefaultPowerSchemeValues` só existe para os três planos internos, e a
+/// resposta vinha `None`. Lê o padrão do EQUILIBRADO e diz que foi isso que leu.
 pub fn governa_o_processador(plano: &str, bateria: bool) -> GovernoDoProcessador {
     let lido = power::valor_efetivo(plano, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria).or_else(
         || power::valor_efetivo(EQUILIBRADO, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria),
@@ -963,10 +692,7 @@ pub fn governa_o_processador(plano: &str, bateria: bool) -> GovernoDoProcessador
     }
 }
 
-/// A frase que explica o que muda por causa disso.
-///
-/// Mora aqui e não na tela porque é regra de produto, e regra de produto tem
-/// teste. A tela recebe o ESTADO e escolhe como mostrar.
+/// Regra de produto, com teste: a tela recebe o ESTADO.
 pub fn explicar_governo(governo: GovernoDoProcessador) -> &'static str {
     match governo {
         GovernoDoProcessador::OProcessador => {
@@ -988,10 +714,7 @@ pub fn explicar_governo(governo: GovernoDoProcessador) -> &'static str {
     }
 }
 
-/// O que o relatório diz de um ajuste, dado o antes, o alvo e o depois.
-///
-/// Separada da execução de propósito: é aqui que mora a regra de "não confie no
-/// código de saída", e ela precisa de teste sem depender de máquina nenhuma.
+/// Aqui mora "não confie no código de saída", testável sem máquina.
 pub fn classificar(
     suportado: bool,
     alvo: &Alvo,
@@ -1021,35 +744,24 @@ pub fn classificar(
     }
 }
 
-/// O alvo já está satisfeito pelo que a máquina usa hoje?
 pub fn ja_satisfeito(alvo: &Alvo, ac: Option<u32>, dc: Option<u32>) -> bool {
     alvo.mexe_em_alguma_coisa()
         && alvo.ac.map_or(true, |q| ac == Some(q))
         && alvo.dc.map_or(true, |q| dc == Some(q))
 }
 
-/// O que um `powercfg` deixou para trás, para o registro poder contar.
-///
-/// Você pediu comando, código de saída, stdout e stderr no log de cada ajuste,
-/// e a razão é boa: sem o comando exato, quem lê o arquivo não consegue REPETIR
-/// o que o produto fez — e repetir à mão é a primeira coisa que se faz para
-/// entender uma falha numa máquina que não está na sua frente.
+/// Sem o comando exato, quem lê o log não consegue REPETIR à mão o que o produto fez.
 #[derive(Debug, Clone)]
 pub struct Execucao {
     pub comando: String,
     pub codigo: Option<i32>,
     pub stdout: String,
     pub stderr: String,
-    /// `None` quando o comando deu certo.
     pub erro: Option<String>,
 }
 
 impl Execucao {
-    /// Uma linha só, para caber no registro ao lado dos outros campos.
-    ///
-    /// Saída vazia não vira `stdout= stderr=`: campo vazio é ruído, e a linha
-    /// já é longa. O `powercfg` que dá certo não escreve nada, que é o caso
-    /// comum.
+    /// Saída vazia não vira `stdout= stderr=`: o `powercfg` que dá certo não escreve nada.
     pub fn resumo(&self) -> String {
         let mut partes = vec![format!("`{}`", self.comando)];
 
@@ -1074,10 +786,7 @@ fn escrever(indice: &str, plano: &str, sub: &str, ajuste: &str, valor: u32) -> E
     let valor = valor.to_string();
     let args = [indice, plano, sub, ajuste, &valor];
 
-    // O COMANDO É MONTADO A PARTIR DOS MESMOS ARGUMENTOS QUE RODAM, e não
-    // escrito à mão numa string ao lado. Duas fontes divergem no primeiro
-    // conserto, e um log que mostra um comando diferente do que rodou é pior
-    // que um log sem comando nenhum.
+    // Montado dos MESMOS argumentos que rodam: um log com comando diferente do que rodou é pior que nenhum.
     let comando = format!("powercfg {}", args.join(" "));
 
     match shell::run("powercfg", &args) {
@@ -1096,7 +805,6 @@ fn escrever(indice: &str, plano: &str, sub: &str, ajuste: &str, valor: u32) -> E
             stdout: saida.stdout,
             stderr: saida.stderr,
         },
-        // Nem chegou a rodar, ou estourou o prazo. Não há código nem saída.
         Err(e) => Execucao {
             comando,
             codigo: None,
@@ -1107,29 +815,16 @@ fn escrever(indice: &str, plano: &str, sub: &str, ajuste: &str, valor: u32) -> E
     }
 }
 
-/// A linha que cada ajuste deixa em `otimiza.log`.
-///
-/// POR QUE ELA TEM TANTO NÚMERO. Esta é a linha que o cliente manda quando diz
-/// "não funcionou no meu PC". Sozinha, ela precisa responder: o ajuste existe
-/// naquele Windows? qual era o valor antes? qual pedimos? qual ficou depois? e
-/// quanto tempo levou — que é o que separa "falhou" de "travou".
-///
-/// O antes E o depois juntos são o ponto. Uma linha dizendo só "falhou" manda o
-/// atendimento adivinhar; uma dizendo `tomada 5->100 ficou 5` mostra que o
-/// `powercfg` aceitou e o Windows não obedeceu, que é um problema completamente
-/// diferente de o comando ter sido recusado.
-///
-/// Função pura, separada da execução para poder ser testada — e para que o
-/// formato não mude por acidente quando alguém mexer no motor.
+/// A linha que o cliente manda: existe no Windows? antes, pedido, depois, e quanto levou ("falhou" ou "travou").
+/// `tomada 5->100 ficou 5` mostra que o `powercfg` aceitou e o Windows não obedeceu. Pura, para o formato não mudar
+/// por acidente.
 pub fn linha_do_log(r: &ResultadoDoAjuste, duracao: std::time::Duration) -> String {
     let n = |v: Option<u32>| match v {
         Some(v) => v.to_string(),
         None => "-".to_string(),
     };
 
-    // ESPAÇO EM VOLTA DA SETA, e não `5->100`. Quando o valor é ausente ele sai
-    // como `-`, e `-->-` é ilegível justamente na linha que existe para ser
-    // lida por alguém tentando entender uma falha.
+    // Espaço em volta da seta: ausente sai `-`, e `-->-` é ilegível.
     let mut linha = format!(
         "plano OTIMIZA: [{:?}] {} | suportado={} | tomada {} -> {}, ficou {} | bateria {} -> {}, ficou {} | {} ms",
         r.status,
@@ -1144,17 +839,13 @@ pub fn linha_do_log(r: &ResultadoDoAjuste, duracao: std::time::Duration) -> Stri
         duracao.as_millis()
     );
 
-    // A mensagem de erro do Windows entra INTEIRA e sem tradução. Traduzir uma
-    // mensagem do `powercfg` a torna impesquisável, que é exatamente o que se
-    // faz com ela.
+    // A mensagem do Windows INTEIRA e sem tradução: traduzida, não se pesquisa.
     if !r.mensagem.is_empty() {
         linha.push_str(" | ");
         linha.push_str(&r.mensagem);
     }
 
-    // O comando exato, o código e a saída, por último: são o que permite
-    // REPETIR à mão o que o produto fez, numa máquina que não está na sua
-    // frente. Ficam no fim porque quem lê procura primeiro o estado.
+    // Por último: quem lê procura primeiro o estado.
     for execucao in &r.execucoes {
         linha.push_str("\n    ");
         linha.push_str(&execucao.resumo());
@@ -1219,8 +910,7 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
         resultado.execucoes.push(execucao);
     }
 
-    // Só tenta a bateria se a tomada deu certo: num ajuste que o Windows recusa,
-    // repetir o comando do outro lado só enche o registro com a mesma recusa.
+    // Recusado na tomada, repetir na bateria só enche o log.
     if erro.is_none() {
         if let Some(v) = alvo.dc {
             let execucao = escrever("-setdcvalueindex", plano, a.subgrupo, a.ajuste, v);
@@ -1229,7 +919,6 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
         }
     }
 
-    // NÃO CONFIE QUE FUNCIONOU: relê do Windows.
     resultado.ac_depois = power::valor_efetivo(plano, a.subgrupo, a.ajuste, false);
     resultado.dc_depois = power::valor_efetivo(plano, a.subgrupo, a.ajuste, true);
 
@@ -1257,8 +946,6 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
     resultado
 }
 
-// ─── O fluxo inteiro ──────────────────────────────────────────────────────────
-
 pub fn contar(ajustes: &[ResultadoDoAjuste]) -> (usize, usize, usize, usize) {
     let conta = |alvo: StatusDoAjuste| ajustes.iter().filter(|r| r.status == alvo).count();
 
@@ -1270,11 +957,7 @@ pub fn contar(ajustes: &[ResultadoDoAjuste]) -> (usize, usize, usize, usize) {
     )
 }
 
-/// O desfecho geral.
-///
-/// TRINTA AJUSTES BONS E DOIS QUE NÃO EXISTEM NAQUELE WINDOWS NÃO É FALHA. Essa
-/// distinção é a diferença entre um relatório que ajuda e um "FALHOU" que não
-/// diz nada.
+/// Trinta bons e dois inexistentes naquele Windows NÃO é falha.
 pub fn desfecho(
     plano_ativo: bool,
     aplicados: usize,
@@ -1297,16 +980,9 @@ pub fn desfecho(
     DesfechoDoPlano::Sucesso
 }
 
-/// Cria (ou reencontra), configura, ativa e CONFERE o plano OTIMIZA.
-///
-/// Em `simulacao`, nada é escrito: o relatório diz o que mudaria. É o modo para
-/// olhar a máquina de um cliente antes de mexer nela.
-/// UM DONO POR AJUSTE (2.9). O plano OTIMIZA aplica só o que vale igual em
-/// qualquer máquina (disco, Wi-Fi, multimídia, preferência de placa, teto do
-/// processador). O que é processador — mínimo, EPP, estacionamento, boost — e
-/// ASPM/USB é do motor de energia, que mede nesta máquina antes de escolher.
-/// Os `Avancada` continuam no relatório, dizendo que ficaram com o motor, e
-/// não há mais caminho para o plano escrevê-los.
+/// Em `simulacao` nada é escrito. UM DONO POR AJUSTE (2.9): o plano aplica só o que vale igual em qualquer máquina
+/// (disco, Wi-Fi, multimídia, preferência de placa, teto do processador); mínimo, EPP, estacionamento, boost e
+/// ASPM/USB são do motor de energia, que mede antes. Os `Avancada` ficam no relatório, sem caminho de escrita.
 pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
     let maquina = detectar();
 
@@ -1328,8 +1004,7 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
 
     let guid = match (&existente, simulacao) {
         (Some(g), _) => g.clone(),
-        // Em simulação não se cria nada. Sem plano nosso, a leitura do "antes"
-        // sai do plano ATIVO, que é a máquina como ela está hoje.
+        // Em simulação sem plano nosso, o "antes" sai do plano ATIVO.
         (None, true) => guid_anterior
             .clone()
             .ok_or("Não foi possível ler o plano de energia ativo.")?,
@@ -1366,9 +1041,7 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
             continue;
         }
 
-        // O relógio começa ANTES da leitura do "antes", e não só na escrita: um
-        // `powercfg` que trava, trava em qualquer um dos dois, e a duração é o
-        // que separa "falhou" de "ficou preso aqui".
+        // O relógio começa ANTES da leitura: um `powercfg` trava em qualquer um dos dois.
         let relogio = std::time::Instant::now();
         let resultado = aplicar_um(&guid, a, &maquina, simulacao);
 
@@ -1377,7 +1050,6 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
         ajustes.push(resultado);
     }
 
-    // Ativar depois de configurar, e CONFERIR relendo qual plano está ativo.
     let plano_ativo = if simulacao {
         false
     } else {
@@ -1421,10 +1093,7 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
     })
 }
 
-/// Reativa o plano que estava ativo antes e apaga o plano OTIMIZA.
-///
-/// Desfazer é UMA operação, e não trinta escritas de volta — porque nada foi
-/// escrito no plano do cliente. É a razão inteira de o plano ser próprio.
+/// UMA operação, e não trinta escritas de volta: nada foi escrito no plano do cliente.
 pub fn desfazer(guid_anterior: &str) -> Result<(), String> {
     if !e_guid(guid_anterior) {
         return Err(format!("`{}` não é um GUID de plano de energia.", guid_anterior));
@@ -1441,12 +1110,9 @@ pub fn desfazer(guid_anterior: &str) -> Result<(), String> {
         ));
     }
 
-    // Só depois de o plano anterior estar ATIVO E CONFERIDO. Um plano ativo não
-    // pode ser apagado, e tentar antes deixaria a máquina sem plano nenhum se a
-    // ativação tivesse falhado em silêncio.
+    // Só com o anterior ATIVO E CONFERIDO: plano ativo não se apaga, e antes arriscaria deixar a máquina sem plano.
     if let Some(nosso) = achar_na_lista(&listar_planos()?, NOME_DO_PLANO) {
         if let Err(e) = shell::run_checked("powercfg", &["-delete", &nosso]) {
-            // O plano é inofensivo parado. A reversão já valeu.
             crate::utils::Logger::warn(&format!("plano OTIMIZA não foi apagado: {}", e));
         }
     }
@@ -1454,48 +1120,28 @@ pub fn desfazer(guid_anterior: &str) -> Result<(), String> {
     Ok(())
 }
 
-// ─── Diagnóstico: o que dá para saber ANTES de mexer em qualquer coisa ────────
-
-/// O que o Otimiza consegue e não consegue nesta máquina.
-///
-/// Nada aqui escreve. Existe para responder, com o cliente do outro lado do
-/// Discord, a pergunta que hoje não tem resposta: "por que não funcionou no seu
-/// PC?". Cada campo é uma causa possível, conferida de verdade em vez de
-/// suposta.
+/// Nada escreve: responde "por que não funcionou no seu PC?" com causas conferidas.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostico {
     pub maquina: Maquina,
-    /// O PROCESSO está elevado — não é "o usuário pertence ao grupo
-    /// Administradores", que é outra pergunta e não serve para nada aqui.
+    /// O PROCESSO elevado, não o usuário no grupo Administradores.
     pub elevado: bool,
-    /// O `powercfg` responde nesta máquina.
     pub powercfg_responde: bool,
-    /// Os planos de energia puderam ser listados.
     pub planos_legiveis: bool,
     pub planos: Vec<(String, String)>,
-    /// O plano OTIMIZA já existe aqui.
     pub plano_otimiza_existe: bool,
-    /// A árvore de definições de energia do registro pôde ser lida. Quando não,
-    /// todo ajuste apareceria como "não suportado" — e seria mentira.
+    /// Sem ela todo ajuste apareceria como "não suportado", e seria mentira.
     pub registro_de_energia_legivel: bool,
-    /// Quantos dos ajustes do produto existem neste Windows.
     pub ajustes_suportados: usize,
     pub ajustes_totais: usize,
-    /// Os ajustes que este Windows não tem, pelo nome.
     pub ajustes_ausentes: Vec<String>,
-    /// O processo é de 64 bits. Num processo de 32 bits sobre Windows de 64, as
-    /// leituras do registro caem no espelho `WOW6432Node` e saem erradas.
+    /// Num processo de 32 bits o registro cai no `WOW6432Node` e sai errado.
     pub processo_64_bits: bool,
-    /// Quem escolhe a frequência do processador nesta máquina, e o que isso
-    /// muda. Sem essa resposta, metade das explicações deste plano descreve um
-    /// comportamento que a máquina do cliente não tem.
     pub governo_do_processador: GovernoDoProcessador,
     pub explicacao_do_governo: String,
     pub avisos: Vec<String>,
 }
 
-/// Regra pura de quais avisos o diagnóstico levanta, separada da execução para
-/// poder ser testada sem máquina.
 pub fn avisos_do_diagnostico(
     elevado: bool,
     powercfg_responde: bool,
@@ -1556,8 +1202,7 @@ pub fn diagnosticar() -> Diagnostico {
     let powercfg_responde = lista.is_ok();
     let planos = lista.unwrap_or_default();
 
-    // `None` (leitura negada) conta como ilegível: é exatamente o caso que
-    // este campo do diagnóstico existe para denunciar.
+    // `None` (leitura negada) é exatamente o caso que este campo denuncia.
     let registro_de_energia_legivel = registry::key_exists(
         "HKLM",
         r"SYSTEM\CurrentControlSet\Control\Power\PowerSettings",
@@ -1569,19 +1214,15 @@ pub fn diagnosticar() -> Diagnostico {
         .map(|a| a.nome.to_string())
         .collect();
 
-
     let processo_64_bits = cfg!(target_pointer_width = "64");
 
-    // Lido no plano ATIVO, e na tomada: é a combinação em que o cliente joga.
-    // Sem plano ativo legível não há o que perguntar, e "não deu para ler" é
-    // uma resposta válida deste campo.
+    // No plano ATIVO e na tomada: é onde o cliente joga.
     let governo = power::active_scheme()
         .map(|plano| governa_o_processador(&plano, false))
         .unwrap_or(GovernoDoProcessador::NaoDeuParaLer);
 
-    // A explicação é montada aqui, ANTES de `maquina` ir para a struct: ela
-    // precisa do nome do processador, e mover primeiro deixaria a frase sem
-    // ele. A leitura decide; a geração só explica.
+    // Montada ANTES de `maquina` ir para a struct: precisa do nome do processador. A leitura decide; a geração só
+    // explica.
     let explicacao_do_governo = match super::cpugeracao::o_que_governa(
         governo,
         maquina.fabricante_da_cpu,
@@ -1613,10 +1254,6 @@ pub fn diagnosticar() -> Diagnostico {
         registro_de_energia_legivel,
         processo_64_bits,
         governo_do_processador: governo,
-        // A EXPLICAÇÃO PASSA PELA GERAÇÃO DO PROCESSADOR: `explicar_governo`
-        // diz o que a LEITURA respondeu, e `cpugeracao` acrescenta o porquê.
-        // A leitura decide; a geração só explica. Montada acima, porque
-        // precisa do nome do processador antes de `maquina` ser movida.
         explicacao_do_governo,
         avisos,
     }
@@ -1626,28 +1263,11 @@ pub fn diagnosticar() -> Diagnostico {
 mod tests {
     use super::*;
 
+    /// Contra o Windows desta máquina: confere que os GUIDs novos existem aqui (o passo pulado na 2.1.0).
 
-    /// Roda contra o Windows desta máquina. Não é teste de lógica — é a
-    /// conferência de que os dois GUIDs novos existem e respondem aqui, que é
-    /// exatamente o passo que eu pulei ao escrever o ajuste de placa de vídeo
-    /// da 2.1.0.
+    /// Equilibrado EPP na tomada = 33, Alto desempenho = 0: plano feito do Equilibrado nasce com um terço puxado para
+    /// economia.
 
-    /// O ACHADO QUE JUSTIFICA O AJUSTE DE EPP, lido desta máquina:
-    ///
-    /// ```text
-    /// Equilibrado      EPP na tomada = 33
-    /// Alto desempenho  EPP na tomada = 0
-    /// ```
-    ///
-    /// Um plano feito a partir do Equilibrado — o que acontece em toda máquina
-    /// sem "Alto desempenho", que é o caso comum em notebook e em imagem
-    /// modificada — nasce com um terço da escala puxado para economia. O
-    /// produto nunca escreveu esse número, e ele é o que comanda a frequência
-    /// quando o processador está em modo autônomo.
-
-    /// O diagnóstico completo desta máquina, com a explicação já passada pela
-    /// geração do processador. É a conferência de que as duas peças se
-    /// encaixam de verdade, e não só nos testes de função pura.
     #[test]
     #[ignore = "toca o Windows desta máquina"]
     fn a_explicacao_do_governo_desta_maquina() {
@@ -1742,8 +1362,7 @@ mod tests {
 
     #[test]
     fn o_cabecalho_com_parenteses_nao_vira_plano() {
-        // "(* Ativos)" tem parênteses e nenhum GUID. Sem a conferência de GUID,
-        // ele entraria na lista como um plano chamado "* Ativos".
+        // "(* Ativos)" tem parênteses e nenhum GUID.
         let saida = "Esquemas de Energia Existentes (* Ativos)\r\n";
         assert!(planos_da_saida(saida).is_empty());
     }
@@ -1769,9 +1388,7 @@ mod tests {
 
     #[test]
     fn sem_alto_desempenho_o_molde_e_o_equilibrado() {
-        // O CASO DO CLIENTE. Notebook com Modern Standby não tem Alto
-        // Desempenho, e era exatamente aí que o produto de antes tentava ativar
-        // um GUID inexistente e falhava — deixando um plano órfão por tentativa.
+        // O caso do cliente: notebook com Modern Standby, sem Alto Desempenho.
         let planos = vec![
             (
                 "381b4222-f694-41f0-9685-ff5bb260df2e".to_string(),
@@ -1798,8 +1415,6 @@ mod tests {
 
     #[test]
     fn o_guid_do_molde_devolvido_como_novo_e_recusado() {
-        // Se isto passasse, gravaríamos dentro do plano do cliente achando que
-        // era o nosso.
         assert!(validar_guid_novo(EQUILIBRADO_GUID, EQUILIBRADO_GUID).is_err());
         assert!(validar_guid_novo("nao-e-guid", EQUILIBRADO_GUID).is_err());
         assert!(validar_guid_novo("15a86c79-6f77-4d39-ab92-138b83b1b489", EQUILIBRADO_GUID).is_ok());
@@ -1815,9 +1430,7 @@ mod tests {
 
     #[test]
     fn ajuste_inexistente_nao_e_falha() {
-        // O DEFEITO QUE MAIS DOÍA NO PC DO CLIENTE: uma opção que não existe
-        // naquele Windows derrubava a otimização inteira e desfazia o que já
-        // tinha dado certo.
+        // Uma opção inexistente derrubava a otimização inteira e desfazia o que já tinha dado certo.
         let alvo = Alvo::nos_dois(100);
         assert_eq!(
             classificar(false, &alvo, None, None, None),
@@ -1827,7 +1440,6 @@ mod tests {
 
     #[test]
     fn comando_aceito_com_valor_errado_nao_e_sucesso() {
-        // A regra da casa: código de saída zero não é prova.
         let alvo = Alvo::nos_dois(100);
         assert_eq!(
             classificar(true, &alvo, Some(5), Some(5), None),
@@ -1846,8 +1458,6 @@ mod tests {
 
     #[test]
     fn quando_a_bateria_nao_e_alvo_ela_nao_atrapalha() {
-        // Notebook: a bateria fica no padrão do Windows de propósito, e isso
-        // não pode fazer o ajuste da tomada parecer falho.
         let alvo = Alvo::so_na_tomada(0);
         assert_eq!(
             classificar(true, &alvo, Some(0), Some(2), None),
@@ -1866,7 +1476,6 @@ mod tests {
 
     #[test]
     fn maquina_ja_no_alvo_nao_e_escrita_de_novo() {
-        // Idempotência: rodar duas vezes não reescreve nada.
         assert!(ja_satisfeito(&Alvo::nos_dois(100), Some(100), Some(100)));
         assert!(!ja_satisfeito(&Alvo::nos_dois(100), Some(100), Some(5)));
         assert!(ja_satisfeito(&Alvo::so_na_tomada(0), Some(0), Some(2)));
@@ -1875,15 +1484,8 @@ mod tests {
 
     #[test]
     fn bateria_herdando_o_padrao_do_windows_nao_conta_como_aplicada() {
-        // VEIO DE `power::power_setting_satisfeito`, QUE FOI REMOVIDA NA
-        // MIGRAÇÃO. O defeito que ela guardava foi medido na máquina do dono:
-        // gravávamos só o lado da tomada, e a bateria seguia herdando o padrão
-        // do Windows — 5% de estado mínimo do processador. Num notebook fora da
-        // tomada a otimização não fazia nada, e a lista dizia que estava
-        // aplicada.
-        //
-        // Num DESKTOP os dois lados são alvo, e herdar 5% na bateria continua
-        // não sendo "aplicado".
+        // Medido: só a tomada era gravada e a bateria herdava 5%; num notebook fora da tomada nada mudava e a lista
+        // dizia aplicada. No desktop os dois lados são alvo.
         let alvo = Alvo::nos_dois(100);
 
         assert!(!ja_satisfeito(&alvo, Some(100), power::resolver_valor(None, Some(5))));
@@ -1906,8 +1508,6 @@ mod tests {
 
     #[test]
     fn notebook_nao_leva_estado_minimo_alto_na_bateria() {
-        // Não é detalhe: 100% de estado mínimo fora da tomada queima autonomia e
-        // esquenta o notebook por nada.
         let a = AJUSTES.iter().find(|a| a.ajuste == PROCTHROTTLEMIN).unwrap();
 
         assert_eq!((a.alvo)(&maquina_de_teste(true)), Alvo::so_na_tomada(100));
@@ -1916,7 +1516,6 @@ mod tests {
 
     #[test]
     fn desktop_leva_o_valor_nos_dois_modos() {
-        // Desktop também usa o lado "bateria" quando há nobreak.
         for a in AJUSTES.iter().filter(|a| entra_por_padrao(a.classe)) {
             let alvo = (a.alvo)(&maquina_de_teste(false));
 
@@ -1936,9 +1535,7 @@ mod tests {
 
     #[test]
     fn nenhum_ajuste_desliga_protecao_termica() {
-        // Trava de escopo: nada aqui pode mexer em limite térmico nem em política
-        // de resfriamento. Se um ajuste desses for acrescentado um dia, este
-        // teste obriga a encarar a decisão de propósito.
+        // Trava de escopo: nada aqui mexe em limite térmico nem em política de resfriamento.
         const PROIBIDOS: &[&str] = &[
             // Política de resfriamento do sistema
             "94d3a615-a899-4ac5-ae2b-e4d8f634367f",
@@ -1990,7 +1587,6 @@ mod tests {
 
     #[test]
     fn plano_que_nao_ativou_e_falha_mesmo_com_tudo_gravado() {
-        // Ajuste gravado em plano que não está ativo não muda nada na máquina.
         assert_eq!(desfecho(false, 30, 0, 0, 0), DesfechoDoPlano::Falhou);
     }
 
@@ -2009,7 +1605,6 @@ mod tests {
 
     #[test]
     fn bateria_sozinha_ja_faz_notebook() {
-        // O `PCSystemType` pode vir errado em imagem modificada. A bateria não.
         assert!(e_notebook(Some(1), true));
         assert!(e_notebook(None, true));
         assert!(e_notebook(Some(2), false));
@@ -2039,11 +1634,7 @@ mod tests {
 
     #[test]
     fn simulacao_nao_chama_de_inaplicavel_o_que_mudaria() {
-        // O defeito estava na TELA e foi visto na tela: o painel escrevia "não
-        // se aplica aqui" sobre o modo de boost, que mudaria de 1 para 2. Os
-        // dois casos chegavam como `Pulado`. O conserto é o estado separado —
-        // e não uma frase diferente no TypeScript, que voltaria a se confundir
-        // no primeiro campo novo.
+        // O conserto é o estado separado, não uma frase diferente no TypeScript.
         assert_ne!(StatusDoAjuste::Mudaria, StatusDoAjuste::Pulado);
     }
 
@@ -2069,9 +1660,6 @@ mod tests {
 
     #[test]
     fn o_resumo_da_execucao_traz_o_comando_e_o_codigo() {
-        // O COMANDO EXATO É O PONTO. Sem ele, quem lê o log não consegue
-        // repetir à mão o que o produto fez — e repetir à mão é a primeira
-        // coisa que se faz numa máquina que não está na sua frente.
         let e = Execucao {
             comando: "powercfg -setacvalueindex SCHEME_CURRENT SUB AJUSTE 100".to_string(),
             codigo: Some(0),
@@ -2088,8 +1676,6 @@ mod tests {
 
     #[test]
     fn saida_vazia_nao_vira_campo_vazio() {
-        // O `powercfg` que dá certo não escreve nada, e esse é o caso comum.
-        // "stdout= stderr=" em toda linha é ruído numa linha que já é longa.
         let e = Execucao {
             comando: "powercfg /x".to_string(),
             codigo: Some(0),
@@ -2116,16 +1702,14 @@ mod tests {
         let r = e.resumo();
 
         assert!(r.contains("saiu 1"), "{}", r);
-        // Numa linha só: o registro é lido linha a linha, e uma quebra no meio
-        // parte a informação em duas que ninguém junta de volta.
+        // O registro é lido linha a linha.
         assert!(r.contains("especificada não existe."), "{}", r);
         assert!(!r.contains('\n'), "{}", r);
     }
 
     #[test]
     fn processo_sem_codigo_e_dito_e_nao_virado_zero() {
-        // Prazo estourado: o processo foi encerrado por nós e não terminou
-        // sozinho. Escrever "saiu 0" ali seria afirmar que deu certo.
+        // Encerrado por nós: "saiu 0" afirmaria que deu certo.
         let e = Execucao {
             comando: "powercfg /x".to_string(),
             codigo: None,
@@ -2139,9 +1723,7 @@ mod tests {
 
     #[test]
     fn a_linha_do_log_mostra_o_antes_e_o_depois() {
-        // O PONTO INTEIRO DESTA LINHA. Sem o "ficou", o atendimento não consegue
-        // separar "o Windows recusou o comando" de "o Windows aceitou e não
-        // obedeceu" — dois problemas completamente diferentes.
+        // Sem o "ficou", não se separa "recusou" de "aceitou e não obedeceu".
         let linha = linha_do_log(
             &resultado_de_teste(StatusDoAjuste::Aplicado),
             std::time::Duration::from_millis(42),
@@ -2155,9 +1737,7 @@ mod tests {
 
     #[test]
     fn o_valor_ausente_vira_traco_e_nao_zero() {
-        // "0" é um valor válido de vários ajustes de energia — ASPM desligado é
-        // 0. Imprimir ausência como zero faria o registro afirmar um valor que
-        // não existe, justamente no arquivo que serve de prova.
+        // "0" é valor válido (ASPM desligado): ausência não pode sair como zero.
         let mut r = resultado_de_teste(StatusDoAjuste::Aplicado);
         r.dc_antes = None;
         r.dc_alvo = None;
@@ -2171,8 +1751,6 @@ mod tests {
 
     #[test]
     fn a_mensagem_do_windows_entra_inteira() {
-        // Sem tradução e sem corte: mensagem de erro traduzida é mensagem
-        // impesquisável, e pesquisar é a primeira coisa que se faz com ela.
         let mut r = resultado_de_teste(StatusDoAjuste::FalhouAoAplicar);
         r.mensagem = "Acesso negado. (5)".to_string();
 
@@ -2193,10 +1771,6 @@ mod tests {
 
     #[test]
     fn desvio_vence_o_plano_estar_desativado() {
-        // Um plano alterado E desativado é, antes de tudo, um plano alterado.
-        // Reativá-lo sem reparar devolveria ao cliente os valores errados, com
-        // a tela dizendo que está tudo certo — que é pior do que deixá-lo
-        // desativado.
         assert_eq!(
             classificar_vistoria(true, false, vec!["Estacionamento de núcleos".into()]),
             Vistoria::Desviado {
@@ -2208,9 +1782,6 @@ mod tests {
 
     #[test]
     fn a_vistoria_diz_quais_ajustes_mudaram() {
-        // "Algo mudou" não serve para nada. O nome do ajuste é o que o cliente
-        // consegue conferir sozinho no painel do Windows — e é o que separa
-        // este aviso de um alarme genérico de otimizador.
         let v = classificar_vistoria(
             true,
             true,
@@ -2228,9 +1799,7 @@ mod tests {
 
     #[test]
     fn plano_intacto_mas_trocado_por_fora_tem_nome_proprio() {
-        // Instalador de driver de vídeo e utilitário de fabricante trocam o
-        // plano ativo sem avisar. É diferente de alguém ter mexido nos valores,
-        // e o conserto é outro: aqui basta reativar.
+        // Aqui basta reativar.
         assert_eq!(
             classificar_vistoria(true, false, vec![]),
             Vistoria::DesativadoPorFora
@@ -2241,9 +1810,7 @@ mod tests {
     #[test]
     fn sem_plano_nao_ha_o_que_vistoriar() {
         assert_eq!(classificar_vistoria(false, false, vec![]), Vistoria::NaoExiste);
-        // Nem mesmo com desvio: sem plano nosso, os valores lidos são do plano
-        // do cliente, e chamá-los de "desvio" seria acusar o dono da máquina de
-        // ter mexido no que é dele.
+        // Sem plano nosso, os valores são do cliente: chamá-los de desvio acusaria o dono de mexer no que é dele.
         assert_eq!(
             classificar_vistoria(false, false, vec!["qualquer".into()]),
             Vistoria::NaoExiste
@@ -2252,9 +1819,7 @@ mod tests {
 
     #[test]
     fn reparar_sem_plano_recusa_em_vez_de_criar() {
-        // Criar tem caminho próprio, com o registro de desfazer. Se o reparo
-        // criasse, o cliente ficaria com um plano ativo e SEM linha no
-        // histórico — ou seja, sem botão de voltar.
+        // Reparo que criasse deixaria um plano ativo SEM linha no histórico, sem botão de voltar.
         if registry::is_elevated() && onde_esta_o_plano() == EstadoDoPlano::NaoExiste {
             let erro = reparar().unwrap_err();
             assert!(erro.contains("Criar e ativar"), "{}", erro);
@@ -2263,17 +1828,12 @@ mod tests {
 
     #[test]
     fn nao_conseguir_ler_nao_e_plano_ausente() {
-        // Se isto virasse `NaoExiste`, a lista ofereceria aplicar de novo o que
-        // talvez já esteja aplicado — e o cliente criaria um plano em cima do
-        // outro por causa de um `powercfg` que não respondeu.
         assert_eq!(estado_do_plano(Some("a"), None), EstadoDoPlano::NaoConsegui);
         assert_eq!(estado_do_plano(None, None), EstadoDoPlano::NaoConsegui);
     }
 
     #[test]
     fn o_plano_so_esta_aplicado_quando_e_o_ativo() {
-        // Existir e estar ativo são coisas diferentes: ajuste gravado em plano
-        // parado não muda nada na máquina.
         assert_eq!(
             estado_do_plano(Some("AAAAAAAA-bbbb-cccc-dddd-eeeeeeeeeeee"), Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
             EstadoDoPlano::Ativo
@@ -2307,20 +1867,13 @@ mod tests {
 
     #[test]
     fn ajuste_ausente_vira_aviso_e_nao_erro() {
-        // A frase precisa dizer que NÃO é falha: é exatamente a confusão que
-        // fazia o produto reportar fracasso na máquina do cliente.
         let avisos = avisos_do_diagnostico(true, true, true, 2, true);
         assert_eq!(avisos.len(), 1);
         assert!(avisos[0].contains("não é falha"));
     }
 
-    /// Roda o diagnóstico e a SIMULAÇÃO contra a máquina de verdade e imprime o
-    /// relatório. Não escreve nada.
-    ///
-    /// `#[ignore]` de propósito: depende da máquina, e o resto da suíte é de
-    /// função pura para poder rodar na esteira. Para ver:
-    ///
-    ///   cargo test --lib planoenergia -- --ignored --nocapture
+    /// Diagnóstico e SIMULAÇÃO contra a máquina real, sem escrever.
+    /// `cargo test --lib planoenergia -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn relatorio_desta_maquina() {
@@ -2365,14 +1918,8 @@ mod tests {
         }
     }
 
-    /// O CAMINHO INTEIRO, contra o Windows de verdade: cria o plano, configura,
-    /// ativa, confere relendo, RODA DE NOVO para provar a idempotência, e
-    /// desfaz — deixando a máquina como estava.
-    ///
-    /// `#[ignore]`: escreve na máquina. Só roda quando alguém pede, e precisa de
-    /// administrador.
-    ///
-    ///   cargo test --lib planoenergia -- --ignored --nocapture
+    /// Cria, configura, ativa, relê, RODA DE NOVO (idempotência) e desfaz. Escreve na máquina e precisa de
+    /// administrador. `cargo test --lib planoenergia -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn cria_configura_ativa_confere_e_desfaz() {
@@ -2410,8 +1957,6 @@ mod tests {
         let guid = primeira.guid_do_plano.clone().unwrap();
         assert_ne!(guid, antes, "o plano criado é o mesmo que já estava ativo");
 
-        // IDEMPOTÊNCIA: a segunda passada não cria plano nenhum e não escreve
-        // nada — tudo que ela toca já está no alvo.
         let segunda = montar(false).expect("segunda passada");
 
         println!(
@@ -2423,7 +1968,6 @@ mod tests {
         assert_eq!(segunda.guid_do_plano, primeira.guid_do_plano, "criou um plano duplicado");
         assert_eq!(segunda.aplicados, 0, "a segunda passada reescreveu o que já estava bom");
 
-        // E o Windows precisa ter UM plano chamado OTIMIZA, e não três.
         let lista = listar_planos().unwrap();
         let nossos = lista.iter().filter(|(_, n)| n.eq_ignore_ascii_case(NOME_DO_PLANO)).count();
         assert_eq!(nossos, 1, "sobrou mais de um plano OTIMIZA na máquina");
@@ -2439,15 +1983,8 @@ mod tests {
         println!("desfeito: plano ativo voltou a {} e o OTIMIZA foi apagado", antes);
     }
 
-    /// O CAMINHO DO REPARO, contra o Windows de verdade.
-    ///
-    /// Cria o plano, **estraga um ajuste por fora** — como faria um instalador
-    /// de driver ou um concorrente —, confere que a vistoria acha e nomeia o
-    /// ajuste, repara, confere que ficou íntegro, e desfaz.
-    ///
-    /// `#[ignore]`: escreve na máquina e precisa de administrador.
-    ///
-    ///   cargo test --lib planoenergia -- --ignored --nocapture
+    /// Estraga um ajuste por fora, confere que a vistoria o nomeia, repara e desfaz. Escreve e precisa de
+    /// administrador. `cargo test --lib planoenergia -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn vistoria_acha_o_desvio_e_o_reparo_conserta() {
@@ -2464,11 +2001,7 @@ mod tests {
 
         let guid = inicial.guid_do_plano.clone().unwrap();
 
-        // ── Alguém mexe no plano por fora ────────────────────────────────
-        //
-        // Estacionamento de núcleos de 100 para 50: valor válido, aceito pelo
-        // Windows, e diferente do que deixamos. É exatamente o que um
-        // "otimizador" concorrente faz.
+        // Estacionamento de 100 para 50: valor válido e diferente do que deixamos, como faria um concorrente.
         shell::run_checked(
             "powercfg",
             &["-setacvalueindex", &guid, SUB_PROCESSADOR, CPMINCORES, "50"],
@@ -2490,7 +2023,6 @@ mod tests {
             outro => panic!("a vistoria não viu o desvio: {:?}", outro),
         }
 
-        // ── O reparo ─────────────────────────────────────────────────────
         let reparo = reparar().expect("reparar");
 
         println!(
@@ -2518,13 +2050,8 @@ mod tests {
         assert!(avisos.iter().any(|a| a.contains("WOW6432Node")));
     }
 
-    // ── Incidente 2.1.0: a preferência de placa de vídeo ──────────────────
-    //
-    // A 2.1.0 gravou 1 nesta chave achando que era "preferir desempenho". O
-    // Windows documenta 1 como "Prefer low-power GPU". Em máquina com gráficos
-    // híbridos isso tira o jogo da placa dedicada, e um cliente caiu de ~200
-    // para 80-120 FPS. As três travas abaixo existem para que esse valor não
-    // volte por descuido nem sobreviva num PC já atingido.
+    // A 2.1.0 gravou 1 ("Prefer low-power GPU") e tirou o jogo da placa dedicada. As três travas abaixo impedem a
+    // volta e corrigem o PC já atingido.
 
     #[test]
     fn a_preferencia_de_placa_de_video_nunca_pede_a_placa_de_baixo_consumo() {
@@ -2547,10 +2074,7 @@ mod tests {
 
     #[test]
     fn a_preferencia_de_placa_de_video_desfaz_o_estrago_da_2_1_0() {
-        // Não basta parar de escrever 1: quem já aplicou a 2.1.0 tem o 1
-        // gravado. `montar` e `reparar` só tocam o que está na tabela, então o
-        // alvo precisa ser 0 nos dois modos, em notebook e em desktop, para que
-        // a próxima aplicação ou reparo devolva a máquina ao padrão do Windows.
+        // Quem já aplicou a 2.1.0 tem o 1 gravado: o alvo precisa ser 0 nos dois modos, notebook e desktop.
         let ajuste = AJUSTES
             .iter()
             .find(|a| a.ajuste == GPUPREFERENCEPOLICY)
@@ -2565,11 +2089,8 @@ mod tests {
 
     #[test]
     fn os_valores_de_cada_ajuste_sao_os_que_o_windows_documenta() {
-        // A causa raiz do incidente não foi o número: foi eu ter deduzido o
-        // significado do valor a partir do NOME da chave. O texto de `porque`
-        // é o único lugar onde esse significado fica escrito, então ele não
-        // pode ser vago. Cada ajuste que grava um número precisa explicar o
-        // que o número quer dizer para o Windows.
+        // A causa raiz foi deduzir o significado pelo NOME da chave: todo ajuste que grava número explica, em `porque`, o
+        // que ele quer dizer para o Windows.
         for ajuste in AJUSTES {
             assert!(
                 ajuste.porque.len() >= 60,
