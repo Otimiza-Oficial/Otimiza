@@ -1,31 +1,19 @@
-// Catálogo de otimizações do Windows
-//
-// Cada entrada declara o que muda, o ganho REAL esperado e se é reversível.
-// A honestidade aqui é o produto: um ganho descrito como "pequeno" vale mais que
-// um número inventado que o cliente não consegue medir.
-//
-// Nada neste catálogo desativa Windows Update, antivírus, firewall ou serviços de
-// núcleo — as três coisas que "otimizadores" de má qualidade quebram.
+// Catálogo de otimizações: o que muda, o ganho REAL esperado e se é reversível. Nada desativa Windows Update,
+// antivírus, firewall ou serviços de núcleo.
 
 use serde::{Deserialize, Serialize};
 use crate::modules::optimizer::{
     Category, ExpectedGain, OQuePodeCustar, OptimizationInfo, OptimizationState, RiscoDeFps,
 };
 
-/// Valor a ser escrito no registro.
 #[derive(Debug, Clone)]
 pub enum RegValue {
     Dword(u32),
     Text(&'static str),
-    /// Valor binário bruto.
-    ///
-    /// Existe por causa da `UserPreferencesMask`, que é onde o Windows guarda,
-    /// bit a bit, quais efeitos visuais estão ligados. Sem escrever binário só
-    /// dá para mudar o rótulo "melhor desempenho" e deixar os efeitos rodando.
+    /// Para a `UserPreferencesMask`: os efeitos visuais ficam bit a bit ali, e sem ela só mudaria o rótulo.
     Binary(&'static [u8]),
 }
 
-/// Uma ação concreta que a otimização executa no sistema.
 #[derive(Debug, Clone)]
 pub enum Action {
     Registry {
@@ -34,105 +22,47 @@ pub enum Action {
         name: &'static str,
         value: RegValue,
     },
-    /// Desativa um serviço e o para. O tipo de inicialização anterior é preservado.
     DisableService { name: &'static str },
-    /// Cria, configura, ativa e CONFERE o plano de energia OTIMIZA.
-    ///
-    /// SUBSTITUIU TRÊS AÇÕES, e a troca não é de arrumação: `HighPerformancePowerPlan`
-    /// ativava um GUID fixo que não existe em toda máquina, e as duas
-    /// `PowerSetting` escreviam DENTRO DO PLANO DO CLIENTE — o que fazia o
-    /// desfazer depender de ter lido e regravado cada valor certo. O plano
-    /// próprio não toca no plano de ninguém, e desfazer é reativar o anterior.
-    /// Ver o cabeçalho de `planoenergia.rs`.
+    /// Plano próprio: `HighPerformancePowerPlan` ativava um GUID que não existe em toda máquina, e `PowerSetting`
+    /// escrevia DENTRO do plano do cliente. Desfazer é reativar o anterior (ver `planoenergia.rs`).
     PlanoOtimiza,
-    /// Desativa o algoritmo de Nagle em cada interface de rede ativa.
-    /// Precisa enumerar as interfaces em tempo de execução — os GUIDs mudam de PC para PC.
+    /// Os GUIDs das interfaces mudam de PC para PC.
     DisableNagle,
-    /// Desliga a hibernação, liberando do disco um arquivo do tamanho da RAM.
     DisableHibernation,
-    // `PowerSetting` MORAVA AQUI, e saiu com a migração para o plano próprio.
-    //
-    // Ela escrevia o ajuste dentro do plano ATIVO do cliente, e por isso o
-    // desfazer precisava ter lido o valor anterior de cada um e conseguir
-    // gravá-lo de volta. `ChangeRecord::PowerSetting` continua existindo de
-    // propósito: há `changes.json` em máquina de cliente gravado por versões
-    // anteriores, e essas mudanças precisam continuar podendo ser desfeitas.
-    /// Liga ou desliga a compressão de memória do Windows.
+    // `ChangeRecord::PowerSetting` continua: há `changes.json` de versões anteriores a desfazer.
     MemoryCompression { enabled: bool },
-    /// Remove limites de núcleos e memória gravados na configuração de boot.
     ClearBootLimits,
-    /// Liga interrupções por mensagem (MSI) nas placas de vídeo encontradas.
     GpuMsiMode,
-    /// Impede o Windows de desligar a placa de rede para economizar energia.
     NicPowerSaving,
-    /// Liga ou desliga o Armazenamento Reservado do Windows.
     ReservedStorage { enabled: bool },
-    /// Remove o relógio de plataforma forçado na configuração de boot.
     RemoveForcedPlatformClock,
-    /// Impede o hipervisor de subir no boot.
-    ///
-    /// Anda junto com o desligamento do VBS, e não por capricho: o VBS roda em
-    /// cima do hipervisor. Zerar só as chaves de registro tira a proteção e
-    /// deixa o hipervisor sendo carregado — o cliente paga o preço em segurança
-    /// e não recebe o desempenho que a otimização prometeu.
+    /// Anda com o desligamento do VBS, que roda em cima do hipervisor: sem isto o cliente paga em segurança e não
+    /// recebe o desempenho.
     DisableHypervisor,
-    /// Desliga Filtragem de Teclas, Teclas de Aderência e Teclas Alternadas.
-    ///
-    /// Ação própria, e não três escritas de registro, porque o estado mora num
-    /// campo de bits: só o bit 0 pode mudar, senão as preferências do usuário
-    /// sobre atalho, som e aviso vão junto.
+    /// O estado é um campo de bits: só o bit 0 muda, senão atalho, som e aviso iriam junto.
     AccessibilityKeysOff,
-    /// Liga as Otimizações para jogos em janela do Windows 11.
-    ///
-    /// Ação própria porque o valor é um texto com várias escolhas gráficas:
-    /// só o pedaço desta muda (`janelas.rs`).
+    /// O valor é um texto com várias escolhas gráficas: só este pedaço muda (`janelas.rs`).
     JanelasOtimizadas,
 }
 
-/// Condição de hardware em que uma otimização pesa MUITO mais que a média.
-///
-/// Não é promessa de milagre: é reconhecer que desligar efeito visual muda pouco
-/// num PC forte e muda muito num PC de 4 GB. O produto usa isso para dizer ao
-/// cliente o que vale a pena na máquina dele, em vez de entregar a mesma lista
-/// para todo mundo.
+/// Desligar efeito visual muda pouco num PC forte e muito num de 4 GB.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Boost {
-    /// Pouca memória RAM.
     LowRam,
-    /// Disco mecânico, onde qualquer leitura extra custa caro.
     MechanicalDisk,
-    /// Poucos núcleos, onde cada processo de fundo disputa espaço de verdade.
     FewCores,
 }
 
-/// Condição de hardware para uma otimização fazer sentido.
-///
-/// Existe para o produto poder dizer "isto não serve para a SUA máquina" — a
-/// diferença entre ler o hardware e despejar uma lista de tweaks igual para todos.
 #[derive(Debug, Clone, Copy)]
 pub enum Requirement {
-    /// Só ajuda em SSD. Em disco mecânico faz mal.
     SsdSystemDrive,
-    /// Só ajuda a partir desta quantidade de memória.
     MinRamGb(f64),
-    /// Exige que o driver de vídeo declare pelo menos esta versão de WDDM,
-    /// no formato do registro: 2700 é WDDM 2.7.
-    ///
-    /// POR QUE ISTO EXISTE. O agendamento de GPU por hardware era escrito em
-    /// qualquer máquina. A escrita dá certo sempre — é um DWORD num caminho que
-    /// existe em todo Windows —, e a releitura devolve o valor gravado, então o
-    /// produto marcava a otimização como APLICADA. Só que abaixo de WDDM 2.7 o
-    /// Windows simplesmente ignora a chave: o cliente reiniciava o PC por nada e
-    /// a lista dizia que estava tudo certo.
-    ///
-    /// É o defeito da casa — confiar na escrita em vez de conferir o efeito —
-    /// num lugar onde nem reler o valor resolve, porque o valor entra e não vale.
-    /// A única saída honesta é perguntar antes se esta máquina consegue.
+    /// `2700` é WDDM 2.7. Abaixo disso o Windows ignora o agendamento por hardware: a escrita dá certo, a releitura
+    /// confere, e o cliente reiniciava por nada. Só perguntar antes resolve.
     MinWddm(u32),
 }
 
 impl Requirement {
-    /// Motivo mostrado ao usuário quando a máquina dele não atende à condição.
     pub fn unmet_reason(&self) -> &'static str {
         match self {
             Requirement::SsdSystemDrive => {
@@ -141,10 +71,7 @@ impl Requirement {
             Requirement::MinRamGb(_) => {
                 "Não oferecemos: sua memória RAM é pouca para isso, e aplicar pioraria o desempenho."
             }
-            // A FRASE PRECISA SER VERDADE NOS DOIS CASOS que chegam aqui: o
-            // driver é antigo, ou a versão não pôde ser lida. Dizer "o seu
-            // driver é anterior ao WDDM 2.7" seria afirmar o que não foi
-            // verificado quando a leitura é que falhou.
+            // Verdade nos dois casos: driver antigo ou versão ilegível.
             Requirement::MinWddm(_) => {
                 "Não oferecemos: não deu para confirmar que o driver de vídeo desta máquina é WDDM 2.7 ou mais novo. Abaixo disso o Windows ignora este ajuste — aplicar marcaria como feito o que não teria efeito nenhum."
             }
@@ -156,79 +83,43 @@ pub struct OptimizationSpec {
     pub id: &'static str,
     pub name: &'static str,
     pub description: &'static str,
-    /// O que o cliente realmente deve esperar. Aparece na interface sem maquiagem.
     pub honest_effect: &'static str,
     pub category: Category,
     pub expected_gain: ExpectedGain,
-    /// Se este ajuste pode DERRUBAR o FPS em alguma máquina, e em qual caso.
     /// Quando pode, `entra_no_lote` o exclui do "Otimizar agora".
     pub risco_de_fps: RiscoDeFps,
     pub requires_admin: bool,
     pub requires_restart: bool,
-    /// Quase todas as otimizações são reversíveis por construção, porque cada ação
-    /// registra o estado anterior. A exceção é apagar arquivo, que não volta.
+    /// A exceção é apagar arquivo, que não volta.
     pub reversible: bool,
-    /// Condição de hardware. `None` significa que serve para qualquer máquina.
     pub requirement: Option<Requirement>,
-    /// Troca segurança por desempenho. Nunca entra no "Otimizar agora": abrir mão
-    /// de proteção é decisão consciente do dono do PC, não efeito colateral de um
-    /// clique genérico.
+    /// Nunca no "Otimizar agora": abrir mão de proteção é decisão consciente.
     pub security_tradeoff: bool,
-    /// Em que tipo de máquina esta otimização pesa muito mais que a média.
-    /// Vazio significa que o ganho não depende do porte do hardware.
     pub highlight_when: &'static [Boost],
     pub actions: &'static [Action],
 }
 
-/// Itens que nunca entram num lote — nem no "Otimizar agora", nem num perfil —,
-/// mesmo sendo reversíveis e sem troca de segurança. Continuam disponíveis um a
-/// um, com o aviso na tela.
-///
-/// `background_apps_off` saiu do lote na 2.0. Ele corta a execução em segundo
-/// plano de TODO aplicativo instalado pela Loja, inclusive os que o cliente usa
-/// o dia inteiro. É o tipo de efeito que só aparece dias depois, sem ninguém
-/// ligar ao clique — e decidir isso é do dono do PC, item por item.
-///
-/// `windowed_game_optimizations` (3.0) muda como o jogo entrega os quadros ao
-/// Windows, e não foi medido aqui: entra quando a pessoa escolhe, nunca num lote.
+/// Nunca em lote, mesmo reversíveis e sem troca de segurança; continuam um a um, com aviso.
+/// `background_apps_off`: corta todo app da Loja, efeito que aparece dias depois. `windowed_game_optimizations`
+/// (3.0): muda a entrega de quadros e não foi medido aqui.
 pub const FORA_DO_LOTE: &[&str] = &["background_apps_off", "windowed_game_optimizations"];
 
-// ─── Classes da auditoria 2.9 ────────────────────────────────────────────
-//
-// "Menos ajustes, e melhores": o ajuste certo PARA ESTE COMPUTADOR, não a
-// lista mais longa. Cada item do catálogo é de uma de três classes
-// (`docs/auditorias/AUDITORIA-2.9.md`, seção 2):
-//
-// - **Essencial**: vale em qualquer máquina, entra no "Otimizar agora".
-// - **Condicional**: só faz diferença quando a máquina tem um problema que dá
-//   para MEDIR (gravação do Game Bar ligada, pouco espaço, pouca memória, PC
-//   fraco). Só aparece — e só entra no lote — quando a condição foi medida
-//   aqui. Os de "só se pedir" aparecem sempre, mas nunca entram em lote.
-// - **Expert**: pode render numa máquina e custar em outra, ou troca algo que
-//   a pessoa precisa entender. Só aparece no modo Expert, e nunca em lote.
-//
-// As listas são curtas e têm trava: id errado aqui não classifica nada, em
-// silêncio, e o teste `toda_classe_aponta_para_um_item_do_catalogo` pega.
+// Classes da auditoria 2.9 (`docs/auditorias/AUDITORIA-2.9.md`): Essencial (qualquer máquina, entra no lote);
+// Condicional (só com a condição MEDIDA aqui; os "só se pedir" aparecem e nunca entram em lote); Expert (só no
+// modo Expert, nunca em lote). `toda_classe_aponta_para_um_item_do_catalogo` pega id errado.
 
-/// O que precisa ser verdade nesta máquina para um item condicional valer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Condicao {
-    /// A gravação em segundo plano do Game Bar está ligada.
     GameDvrLigado,
-    /// PC fraco: até 8 GB de RAM ou até 4 núcleos lógicos. Os ajustes de área
-    /// de trabalho só são sentidos aqui.
+    /// Os ajustes de área de trabalho só são sentidos aqui.
     PcFraco,
-    /// Menos de 20 GB livres no disco do Windows.
     PoucoEspaco,
-    /// Até 16 GB de RAM: processo de fundo disputa memória com o jogo.
     MemoriaApertada,
-    /// Nada que dê para medir decide por você. Aparece, mas só entra se a
-    /// pessoa escolher o item — nunca num lote.
+    /// Aparece, mas só entra se a pessoa escolher o item.
     SoSePedir,
 }
 
 impl Condicao {
-    /// Por que o item aparece, na tela.
     pub fn quando(self) -> &'static str {
         match self {
             Condicao::GameDvrLigado => "Aparece porque a gravação em segundo plano do Game Bar está ligada nesta máquina.",
@@ -247,19 +138,13 @@ pub enum Classe {
     Expert,
 }
 
-/// Só no modo Expert, nunca em lote, sempre com antes e depois.
 pub const EXPERT: &[&str] = &[
-    // Depende de placa e driver; já causou engasgo em driver antigo.
     "gpu_hardware_scheduling",
-    // A maioria dos drivers atuais já usa MSI; só age se estiver desligado.
     "gpu_msi_mode",
-    // Ganho real em parte dos jogos presos na CPU, com custo de segurança real.
     "disable_vbs",
-    // A busca do Windows fica lenta; ganho só em disco mecânico.
     "disable_search_indexing",
 ];
 
-/// Itens que só valem quando a máquina tem o problema que eles resolvem.
 pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("disable_gamedvr", Condicao::GameDvrLigado),
     ("visual_effects_performance", Condicao::PcFraco),
@@ -268,15 +153,11 @@ pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("disable_reserved_storage", Condicao::PoucoEspaco),
     ("disable_widgets", Condicao::MemoriaApertada),
     ("edge_background_off", Condicao::MemoriaApertada),
-    // Boot, não jogo.
     ("disable_startup_delay", Condicao::SoSePedir),
-    // Real quando a placa dorme e perde pacote — o Otimiza ainda não mede
-    // perda de pacote, então não decide sozinho.
+    // Real quando a placa dorme e perde pacote, e a perda não é medida aqui: não decide sozinho.
     ("nic_power_saving_off", Condicao::SoSePedir),
     ("delivery_optimization_off", Condicao::SoSePedir),
-    // Os apps da Loja ficam desatualizados.
     ("store_auto_download_off", Condicao::SoSePedir),
-    // Perde o registro da falha quando um jogo cai.
     ("error_reporting_off", Condicao::SoSePedir),
 ];
 
@@ -290,29 +171,12 @@ pub fn classe(id: &str) -> Classe {
     }
 }
 
-/// Itens RETIRADOS na 2.9: não mudam FPS, 1% low, engasgo, atraso,
-/// carregamento nem responsividade, e não protegem a máquina.
-///
-/// A regra da 2.9 é "as mudanças certas para aquele computador, não a lista
-/// mais longa". Um item que não muda nada que o cliente sinta só ocupa lugar
-/// na tela e dá a impressão de que o produto "fez 40 coisas". Dois deles (UAC
-/// e Firewall) ainda tiravam proteção em troca de nada.
-///
-/// Eles ficam no catálogo SÓ para o desfazer: quem aplicou numa versão antiga
-/// continua vendo o item na lista, com o botão de desfazer, até desfazer. Nada
-/// aqui pode ser aplicado de novo — nem um a um, nem em lote, nem por perfil.
-/// O motivo de cada um mora em `naofazemos.rs`.
+/// RETIRADOS na 2.9: não mudam nada que o cliente sinta (UAC e Firewall ainda tiravam proteção). Ficam SÓ para o
+/// desfazer de quem aplicou antes; nada aqui se aplica de novo. Os motivos moram em `naofazemos.rs`.
 pub const RETIRADOS: &[&str] = &[
-    // Segunda rodada (auditoria da 2.9, docs/auditorias/AUDITORIA-2.9.md):
-    // - SystemResponsiveness/NetworkThrottlingIndex, Win32PrioritySeparation e
-    //   as prioridades MMCSS de "Games": sem ganho reproduzível em jogo;
-    // - SysMain e compressão de memória: o Windows gerencia; com pouca RAM,
-    //   desligar a compressão piora;
-    // - PowerThrottlingOff: desliga o EcoQoS no sistema inteiro, que é
-    //   justamente o que o modo jogo (governador) usa nos programas de fundo;
-    // - notificações: o Windows 11 já silencia durante o jogo;
-    // - limpezas de temporários e do cache do Windows Update: duplicadas da
-    //   tela Limpeza do sistema.
+    // Segunda rodada (AUDITORIA-2.9): SystemResponsiveness, Win32PrioritySeparation e MMCSS de "Games" sem ganho
+    // reproduzível; SysMain e compressão o Windows gerencia; PowerThrottlingOff desliga o EcoQoS que o governador usa;
+    // notificações o Windows 11 já silencia; limpezas duplicavam a Limpeza do sistema.
     "system_responsiveness_gaming",
     "foreground_priority",
     "disable_sysmain",
@@ -331,32 +195,18 @@ pub const RETIRADOS: &[&str] = &[
     "disable_copilot",
 ];
 
-/// Se o item foi retirado do produto (ver `RETIRADOS`).
 pub fn retirado(id: &str) -> bool {
     RETIRADOS.contains(&id)
 }
 
-/// Se um item pode ser aplicado por um lote, sem a pessoa escolher item a item.
-///
-/// As quatro exclusões moram juntas aqui para o motor e os testes lerem a mesma
-/// regra: o que não volta, o que troca segurança por desempenho, o que está em
-/// `FORA_DO_LOTE`, e — desde o incidente da 2.1.0 — **o que pode custar FPS**.
-///
-/// A quarta é a mais importante das quatro, e a mais cara de aprender. Um
-/// cliente aplicou tudo que o produto oferece e o FPS dele caiu pela metade.
-/// O produto é vendido para quem olha o contador de quadros: um lote que pode
-/// derrubar esse número, sem a pessoa ter escolhido a troca, não é otimização
-/// — é uma aposta feita no lugar dela.
-///
-/// O item não some: continua no catálogo, item a item, com o caso escrito em
-/// `RiscoDeFps::PodeCustar` aparecendo na tela. A diferença é quem decide.
+/// As quatro exclusões juntas: não volta, troca segurança, `FORA_DO_LOTE` e, desde a 2.1.0 (FPS de um cliente
+/// caiu pela metade), **pode custar FPS**. O item continua item a item, com o caso de `RiscoDeFps::PodeCustar` na
+/// tela.
 pub fn entra_no_lote(spec: &OptimizationSpec) -> bool {
     entra_no_lote_se(spec, |_| false)
 }
 
-/// `entra_no_lote`, mas com a resposta de cada condição medida nesta
-/// máquina. Condicional só entra com a condição atendida; Expert e "só se
-/// pedir" nunca entram. **Pura**: quem mede é o chamador.
+/// Condicional só entra com a condição atendida; Expert e "só se pedir" nunca. **Pura**: quem mede é o chamador.
 pub fn entra_no_lote_se(spec: &OptimizationSpec, atendida: impl Fn(Condicao) -> bool) -> bool {
     let pela_classe = match classe(spec.id) {
         Classe::Essencial => true,
@@ -403,7 +253,6 @@ impl OptimizationSpec {
     }
 }
 
-/// Subgrupo "Gerenciamento de energia do processador" do Windows.
 pub static CATALOG: &[OptimizationSpec] = &[
     OptimizationSpec {
         id: "plano_otimiza",
@@ -472,7 +321,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
         requires_admin: true,
         requires_restart: true,
         reversible: true,
-        // WDDM 2.7 é o piso do agendamento por hardware. Ver `Requirement::MinWddm`.
         requirement: Some(Requirement::MinWddm(2700)),
         security_tradeoff: false,
         highlight_when: &[],
@@ -552,17 +400,9 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 name: "VisualFXSetting",
                 value: RegValue::Dword(2),
             },
-            // Esta é a linha que faz a otimização valer. `VisualFXSetting` é só
-            // o rótulo que a tela de Sistema mostra; os efeitos de verdade
-            // moram nos bits desta máscara, e é ela que o Painel de Controle
-            // grava ao escolher "melhor desempenho". Sem ela, o produto trocava
-            // o rótulo e o Windows seguia animando tudo — medido na máquina do
-            // dono: `VisualFXSetting = 2` com a máscara `9E ...`, ou seja,
-            // rótulo dizendo uma coisa e sistema fazendo outra.
-            //
-            // `90 12 03 80 10 00 00 00` é exatamente o que o Windows escreve
-            // nessa escolha: animação de janela, sombra, deslizar de menu e
-            // arrastar conteúdo desligados; suavização de fonte mantida.
+            // `VisualFXSetting` é só o rótulo; os efeitos moram nesta máscara (a máquina do dono tinha rótulo 2 com máscara
+            // `9E ...`). `90 12 03 80 10 00 00 00` é o que o Windows escreve em "melhor desempenho": animações, sombra, menu e
+            // arrastar conteúdo desligados, suavização de fonte mantida.
             Action::Registry {
                 hive: "HKCU",
                 path: r"Control Panel\Desktop",
@@ -763,8 +603,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
         category: Category::System,
         expected_gain: ExpectedGain::Situational,
         risco_de_fps: RiscoDeFps::custa(
-            // Engasgo e não FPS médio: sem a compressão o Windows vai ao
-            // disco, e o sintoma disso é travada — a média mal se move.
+            // Engasgo e não FPS médio: sem a compressão o Windows vai ao disco.
             OQuePodeCustar::Engasgo,
             "O piso de 12 GB não basta. Quem joga FiveM com navegador e Discord abertos \
              enche 16 GB, e sem a compressão o Windows passa a ir ao disco — que é \
@@ -786,17 +625,8 @@ pub static CATALOG: &[OptimizationSpec] = &[
         honest_effect: "Ataca engasgo e latência, não FPS médio. É o ajuste mais profundo do catálogo e quase nenhum concorrente faz, porque exige achar a placa no registro. Em raríssimos casos de driver antigo pode causar instabilidade — é reversível e exige reiniciar.",
         category: Category::Gaming,
         expected_gain: ExpectedGain::Situational,
-        // FICA NO LOTE, e isso foi reconsiderado de propósito.
-        //
-        // Na primeira passada depois do incidente eu marquei este ajuste como
-        // "pode custar FPS" junto com os outros dois. Revendo: não existe
-        // evidência de que o modo MSI derrube quadro. O que existe é relato de
-        // instabilidade com driver antigo — outro problema, com outro nome.
-        //
-        // Classificar por medo, sem evidência, é exatamente o erro que criou o
-        // incidente: eu afirmei o significado de um valor sem conferir. Marcar
-        // um ajuste de risco sem prova é o mesmo vício virado do avesso, e
-        // esvazia o aviso dos que têm risco de verdade.
+        // Fica no lote: não há evidência de que o MSI derrube quadro (o relato é de instabilidade com driver antigo).
+        // Marcar risco sem prova esvazia o aviso dos que têm risco de verdade.
         risco_de_fps: RiscoDeFps::Nenhum,
         requires_admin: true,
         requires_restart: true,
@@ -944,8 +774,7 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 name: "Enabled",
                 value: RegValue::Dword(0),
             },
-            // Sem esta linha o hipervisor continua subindo no boot, e o custo de
-            // desempenho que a otimização promete devolver fica onde estava.
+            // Sem esta linha o hipervisor continua subindo e o desempenho prometido não volta.
             Action::DisableHypervisor,
         ],
     },
@@ -1163,17 +992,8 @@ pub static CATALOG: &[OptimizationSpec] = &[
             value: RegValue::Dword(0),
         }],
     },
-    // ======================================================================
-    // O CATÁLOGO DO MERCADO
-    //
-    // Itens que todo otimizador concorrente oferece. Entram porque o cliente
-    // compara lista com lista, e sair perdendo numa comparação de catálogo
-    // custa venda mesmo quando o catálogo do outro é feito de nada.
-    //
-    // A condição é a que o produto já tinha: cada um entra com a classificação
-    // honesta. A maioria é `NoGain` — higiene e privacidade, não desempenho —
-    // e a tela conta quantos são, em voz alta, antes de o cliente clicar.
-    // ======================================================================
+    // O catálogo do mercado: entra porque o cliente compara lista com lista, com classificação honesta (a maioria
+    // `NoGain`, e a tela conta quantos antes do clique).
 
     OptimizationSpec {
         id: "notifications_off",
@@ -1289,18 +1109,8 @@ pub static CATALOG: &[OptimizationSpec] = &[
         }],
     },
 
-    // ======================================================================
-    // OS DOIS QUE ENTRARAM NO LUGAR DOS QUE SAÍRAM
-    //
-    // Saíram daqui "desligar o UAC" e "desligar o firewall": ganho declarado
-    // nulo, custo real em segurança. Estes dois entraram sob a régua contrária
-    // — cada um mexe numa chave documentada pelo dono dela, faz uma coisa que
-    // dá para perceber, volta atrás, e traz o preço escrito.
-    //
-    // Nenhum dos dois promete quadro por segundo, e os textos dizem isso na
-    // primeira linha. Trocar dois itens que mentiam alto por dois que dizem
-    // "isto não é FPS" é a troca que este produto precisa fazer.
-    // ======================================================================
+    // No lugar de "desligar UAC" e "desligar firewall" (ganho nulo, custo em segurança): chaves documentadas, efeito
+    // perceptível, reversíveis, preço escrito. Nenhum promete FPS.
 
     OptimizationSpec {
         id: "error_reporting_off",
@@ -1354,27 +1164,8 @@ pub static CATALOG: &[OptimizationSpec] = &[
         ],
     },
 
-    // ======================================================================
-    // POR QUE NÃO EXISTE "DESLIGAR O WINDOWS DEFENDER" NESTA LISTA
-    //
-    // Não é escrúpulo: é que não funciona, e um botão que não funciona é pior
-    // que a ausência dele.
-    //
-    // Desde o Windows 10 versão 1903, a Proteção contra Adulteração vem ligada
-    // de fábrica. Com ela ligada, o Windows IGNORA a chave `DisableAntiSpyware`,
-    // recusa parar o serviço `WinDefend` e reverte sozinho o que for escrito.
-    // Só o próprio usuário desliga isso, à mão, na janela de Segurança do
-    // Windows — nenhum programa consegue por ele.
-    //
-    // Ou seja: todo concorrente que oferece "desativar Defender" ou escreve
-    // chave que o Windows descarta, ou avisa em letra miúda que o cliente
-    // precisa desligar a Proteção antes. No primeiro caso o botão mente; no
-    // segundo, quem faz o trabalho é o cliente.
-    //
-    // Este produto não tem um botão que finge. Se um dia a Proteção contra
-    // Adulteração puder ser lida de forma confiável, o caminho honesto é um
-    // aviso explicando o que fazer — não um interruptor.
-    // ======================================================================
+    // Sem "desligar o Windows Defender": desde o 1903 a Proteção contra Adulteração ignora `DisableAntiSpyware` e
+    // reverte sozinha; só o usuário a desliga à mão. O botão mentiria. O caminho honesto seria um aviso.
 
     OptimizationSpec {
         id: "accessibility_keys_off",
@@ -1410,7 +1201,6 @@ pub static CATALOG: &[OptimizationSpec] = &[
     },
 ];
 
-/// Busca uma otimização pelo identificador.
 pub fn find(id: &str) -> Option<&'static OptimizationSpec> {
     CATALOG.iter().find(|spec| spec.id == id)
 }
@@ -1419,10 +1209,6 @@ pub fn find(id: &str) -> Option<&'static OptimizationSpec> {
 mod tests_1_6 {
     use super::*;
 
-    /// `VisualFXSetting = 2` é só o RÓTULO de "melhor desempenho". Quem governa
-    /// as animações é a `UserPreferencesMask`, e o Painel de Controle escreve as
-    /// duas coisas. Na máquina do dono o resultado era `VisualFXSetting = 2` com
-    /// a máscara `9E ...`: rótulo dizendo uma coisa, sistema fazendo outra.
     #[test]
     fn efeitos_visuais_escrevem_a_mascara_que_realmente_governa() {
         let spec = find("visual_effects_performance").expect("otimização deveria existir");
@@ -1437,8 +1223,6 @@ mod tests_1_6 {
         );
     }
 
-    /// Arrastar janela redesenhando todo o conteúdo é um dos efeitos mais caros
-    /// em PC fraco, e é justamente o que "melhor desempenho" desliga.
     #[test]
     fn efeitos_visuais_desligam_o_arrasto_de_janela_cheia() {
         let spec = find("visual_effects_performance").expect("otimização deveria existir");
@@ -1450,15 +1234,6 @@ mod tests_1_6 {
         )));
     }
 
-    /// O VBS roda EM CIMA do hipervisor. Zerar as duas chaves do DeviceGuard
-    /// desliga a camada de segurança, mas se o hipervisor continuar sendo
-    /// carregado no boot o custo de desempenho continua exatamente onde estava
-    /// — e é justamente esse custo que a otimização promete devolver.
-    ///
-    /// Sem `hypervisorlaunchtype off`, o cliente abre mão da proteção das senhas
-    /// do Windows, que é o que o aviso vermelho desta otimização anuncia, e
-    /// recebe menos do que foi prometido. Aqui a conta é pior que em qualquer
-    /// outro item: esta é a única que cobra em segurança.
     #[test]
     fn desligar_vbs_tambem_impede_o_hipervisor_de_subir() {
         let spec = find("disable_vbs").expect("otimização deveria existir");
@@ -1494,18 +1269,8 @@ mod tests {
         }
     }
 
-    /// A TRAVA QUE SUBSTITUIU O TESTE DO UAC.
-    ///
-    /// Havia aqui um teste conferindo que o aviso de "desligar o UAC" dizia
-    /// que aquilo quebra aplicativo da Loja da Microsoft. O ajuste saiu do
-    /// catálogo — ele não rendia quadro nenhum e cobrava segurança —, e junto
-    /// com ele saiu "desligar o firewall", pelo mesmo motivo.
-    ///
-    /// Apagar o teste e não pôr nada no lugar deixaria a porta aberta para os
-    /// dois voltarem por descuido, numa revisão futura em que alguém repita a
-    /// lista de um concorrente. Então a regra virou geral: ajuste que troca
-    /// segurança PRECISA entregar alguma coisa. `NoGain` com `security_tradeoff`
-    /// é, por definição, custo sem contrapartida.
+    /// Ajuste que troca segurança PRECISA entregar algo: `NoGain` com `security_tradeoff` é custo sem contrapartida
+    /// (substituiu o teste do UAC, para os dois não voltarem por descuido).
     #[test]
     fn nenhum_ajuste_cobra_seguranca_sem_entregar_nada() {
         for spec in CATALOG {
@@ -1520,10 +1285,7 @@ mod tests {
 
     #[test]
     fn o_que_saiu_do_catalogo_esta_explicado_na_lista_de_recusas() {
-        // Tirar do catálogo sem explicar troca um botão ruim por um buraco: o
-        // cliente que vem de outro programa procura, não acha, e conclui que
-        // falta função. Estes dois ids são o contrato de que a explicação
-        // continua existindo.
+        // Estes ids são o contrato de que a explicação continua existindo.
         use super::super::naofazemos::LISTA;
 
         for id in ["uac_desligado", "firewall_desligado"] {
@@ -1536,7 +1298,6 @@ mod tests {
 
     #[test]
     fn no_optimization_touches_windows_update_or_defender() {
-        // Estes são exatamente os serviços que otimizadores ruins quebram.
         let forbidden = ["wuauserv", "BITS", "WinDefend", "mpssvc", "SecurityHealthService"];
 
         for spec in CATALOG {
@@ -1555,10 +1316,7 @@ mod tests {
 
     #[test]
     fn only_file_deletion_is_irreversible() {
-        // Qualquer nova otimização irreversível precisa ser decisão consciente:
-        // este teste falha e obriga a revisão. As duas que existem apagam
-        // arquivo, e arquivo apagado não volta — nenhuma outra pode entrar aqui
-        // sem alguém decidir que ela merece.
+        // Irreversível novo precisa de decisão consciente: este teste falha.
         let mut irreversible: Vec<&str> = CATALOG
             .iter()
             .filter(|spec| !spec.reversible)
@@ -1566,8 +1324,6 @@ mod tests {
             .collect();
         irreversible.sort();
 
-        // 2.9: as duas limpezas saíram do catálogo (moram na Limpeza do sistema,
-        // que mostra o que se perde antes). O catálogo inteiro tem desfazer.
         assert!(irreversible.is_empty(), "{:?}", irreversible);
     }
 
@@ -1585,13 +1341,7 @@ mod tests {
 
     #[test]
     fn quem_nao_promete_ganho_diz_isso_na_cara() {
-        // A tentação de um catálogo pago é crescer. Cada item novo faz a lista
-        // parecer maior que a do concorrente, e o jeito silencioso de crescer é
-        // acrescentar ajuste de higiene com texto que soa como desempenho.
-        //
-        // Um item marcado `NoGain` precisa dizer, no texto que o cliente lê,
-        // que não muda desempenho. Sem isto o nível vira uma etiqueta interna
-        // que ninguém fora do código enxerga.
+        // `NoGain` precisa dizer, no texto que o cliente lê, que não muda desempenho.
         for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
             let texto = spec.honest_effect.to_lowercase();
 
@@ -1608,9 +1358,6 @@ mod tests {
 
     #[test]
     fn nada_que_promete_fps_entra_como_sem_ganho() {
-        // O erro contrário: classificar como `NoGain` alguma coisa que a
-        // própria descrição diz que acelera. Aí o produto está escondendo um
-        // ganho real, e o cliente deixa de aplicar o que funcionaria.
         for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
             let texto = format!("{} {}", spec.description, spec.honest_effect).to_lowercase();
 
@@ -1622,14 +1369,7 @@ mod tests {
         }
     }
 
-    // ─── O lote automático e o que não pode entrar nele ──────────────────
-
-    /// A trava central do incidente da 2.1.0.
-    ///
-    /// O cliente clicou no botão grande, aplicou tudo, e o FPS caiu pela
-    /// metade. Depois disso a regra virou código: o lote automático só aplica
-    /// o que não pode custar quadro. Se alguém marcar um item como
-    /// `PodeCustar` e ele continuar entrando no lote, a compilação para aqui.
+    /// A trava da 2.1.0: `PodeCustar` entrando no lote para a compilação.
     #[test]
     fn nada_que_pode_custar_fps_entra_no_lote_automatico() {
         for spec in CATALOG {
@@ -1644,9 +1384,7 @@ mod tests {
         }
     }
 
-    /// Marcar o risco sem dizer QUANDO ele acontece não serve para nada: o
-    /// cliente fica com um aviso que não o ajuda a decidir, e o suporte fica
-    /// com um "pode variar" para explicar. O texto vai para a tela como está.
+    /// Risco sem dizer QUANDO não ajuda a decidir.
     #[test]
     fn todo_risco_de_fps_diz_em_que_caso_ele_custa() {
         for spec in CATALOG {
@@ -1661,9 +1399,7 @@ mod tests {
         }
     }
 
-    /// Os dois que saíram do lote depois do incidente. O teste existe para que
-    /// tirá-los da lista seja uma decisão consciente, com este nome falhando,
-    /// e não um efeito colateral de mexer noutra coisa.
+    /// Tirá-los da lista precisa ser decisão consciente.
     #[test]
     fn os_ajustes_do_incidente_continuam_fora_do_lote() {
         for id in ["gpu_hardware_scheduling", "disable_memory_compression"] {
@@ -1682,14 +1418,9 @@ mod tests {
 
     #[test]
     fn aplicativos_em_segundo_plano_nao_entram_no_lote() {
-        // Na 2.0 este item saiu do "Otimizar agora" e dos perfis: ele corta
-        // aplicativo da Loja que o cliente usa o dia inteiro, e o efeito só
-        // aparece dias depois, sem ligação com o clique.
         let item = find("background_apps_off").expect("o item continua existindo, um a um");
 
         assert!(!entra_no_lote(item), "`background_apps_off` voltou a entrar no lote");
-        // Sair do lote não é sair do produto: ele continua reversível e
-        // aplicável sozinho.
         assert!(item.reversible);
         assert!(
             item.honest_effect.contains("não entra no \"Otimizar agora\""),
@@ -1699,7 +1430,7 @@ mod tests {
 
     #[test]
     fn todo_id_fora_do_lote_existe_no_catalogo() {
-        // Um id escrito errado na lista não exclui nada, e em silêncio.
+        // Um id errado na lista não exclui nada, em silêncio.
         for id in FORA_DO_LOTE {
             assert!(find(id).is_some(), "`{}` está em FORA_DO_LOTE e não existe no catálogo", id);
         }
