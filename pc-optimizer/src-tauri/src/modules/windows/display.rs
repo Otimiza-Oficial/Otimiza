@@ -1,74 +1,28 @@
-// Monitor: resolução e taxa de atualização
-//
-// Monitor de 144Hz rodando a 60Hz é comum — acontece depois de troca de driver,
-// de cabo, ou porque o Windows escolheu o modo conservador e ninguém notou. É
-// a maior diferença de fluidez que existe num PC, e é invisível para quem não
-// sabe onde olhar.
-//
-// TRÊS FONTES, DUAS ERRADAS — E ELAS ERRAM PARA LADOS OPOSTOS
-//
-// Escolher a fonte aqui é a decisão inteira deste módulo, e as duas fontes
-// óbvias falham. Fica registrado porque quem vier depois vai tropeçar nas
-// mesmas pedras.
-//
-// 1. `Win32_VideoController.MaxRefreshRate` — erra PARA MAIS. Informa o que a
-//    PLACA consegue emitir, não o que o monitor mostra. Numa máquina com placa
-//    boa e monitor simples, acusaria uma perda de fluidez que não existe.
-//
-// 2. `root\wmi WmiMonitorListedSupportedSourceModes` — erra PARA MENOS, e foi
-//    a que quase me convenceu. Parece a fonte definitiva, porque vem da EDID
-//    do próprio monitor. Mas ela só expõe as tabelas de temporização BÁSICAS
-//    da EDID; os modos de alta taxa moram nos blocos de extensão, que essa
-//    classe não devolve.
-//
-//    Na máquina onde este módulo foi escrito, ela informou 1920x1080 @ 60Hz
-//    como único modo — para dois monitores AOC 24G4, que são painéis de 180Hz.
-//    Confiar nela teria feito o produto ficar CALADO diante de dois monitores
-//    de 180Hz rodando a 60, que é exatamente o achado mais valioso que ele tem
-//    para dar.
-//
-// 3. `EnumDisplaySettingsExW` — a que este módulo usa. Enumera os modos que o
-//    Windows aceita de fato para aquele monitor, com o driver e o cabo que
-//    estão ali. É a MESMA função que aplicaria a mudança: se ela não lista, a
-//    mudança não aconteceria; se lista, acontece.
-//
-// A lição, e ela vale para o produto inteiro: a fonte certa é a que decide o
-// resultado, não a que parece mais oficial.
-//
-// E um cuidado a mais: a enumeração precisa fixar resolução e profundidade de
-// cor nos valores atuais. Sem isso a lista vem cheia de modo de 8 bits e de
-// resolução menor, e o produto ofereceria uma frequência que não existe na
-// configuração em que a pessoa está.
+// Monitor de 144 Hz rodando a 60 é comum e invisível. A fonte é a decisão: `MaxRefreshRate` erra PARA MAIS (o
+// que a placa emite); `WmiMonitorListedSupportedSourceModes` erra PARA MENOS (só as temporizações básicas da
+// EDID: dois AOC 24G4 de 180 Hz saíam como 60). `EnumDisplaySettingsExW` é a mesma função que aplica: se lista,
+// acontece. Fixando resolução e profundidade de cor atuais, senão viriam modos que não existem nesta configuração.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Monitor {
-    /// Nome interno do dispositivo, do tipo `\\.\DISPLAY1`. É o que a API pede
-    /// de volta na hora de mudar o modo.
     pub dispositivo: String,
-    /// Nome comercial do monitor ("AOC 24G4"), com o nome do adaptador como
-    /// reserva quando a EDID não puder ser lida.
     pub descricao: String,
     pub principal: bool,
     pub largura: u32,
     pub altura: u32,
     pub hz_atual: u32,
-    /// Frequências que o Windows aceita NESTA resolução, em ordem crescente.
     pub hz_disponiveis: Vec<u32>,
-    /// A placa de vídeo em que o monitor está ligado ("Intel(R) UHD Graphics
-    /// 630", "NVIDIA GeForce RTX 4060").
     #[serde(default)]
     pub adaptador: String,
 }
 
 impl Monitor {
-    /// A maior frequência disponível na resolução atual.
     pub fn hz_maximo(&self) -> u32 {
         self.hz_disponiveis.iter().copied().max().unwrap_or(self.hz_atual)
     }
 
-    /// Está abaixo do que o monitor aceita nesta resolução.
     pub fn abaixo_do_maximo(&self) -> bool {
         self.hz_maximo() > self.hz_atual
     }
@@ -77,10 +31,7 @@ impl Monitor {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisplayFinding {
     pub id: String,
-    /// O monitor a corrigir, no formato `\.\DISPLAY1`. É o que a API pede de
-    /// volta na hora de mudar o modo, e é o que vai no botão do diagnóstico.
     pub dispositivo: String,
-    /// A frequência que o botão vai aplicar.
     pub hz_alvo: u32,
     pub title: String,
     pub measured: String,
@@ -95,21 +46,11 @@ pub struct DisplayReport {
     pub findings: Vec<DisplayFinding>,
 }
 
-/// Abaixo disto não vale falar: 60 para 62 não é diferença que alguém sinta, e
-/// alguns monitores anunciam 59 e 60 como modos distintos.
+/// Alguns monitores anunciam 59 e 60 como modos distintos.
 const DIFERENCA_QUE_IMPORTA: u32 = 15;
 
-// ------------------------------------------------------------------- leitura
-
-/// Nomes comerciais dos monitores, na ordem em que o Windows os enumera.
-///
-/// `EnumDisplayDevicesW` devolve o nome do ADAPTADOR ("NVIDIA GeForce GTX
-/// 1650"), o mesmo para todos os monitores ligados nele. Num PC com dois
-/// monitores isso faz o produto escrever a mesma frase duas vezes, e o cliente
-/// não tem como saber de qual tela estamos falando.
-///
-/// O nome de verdade — "AOC 24G4" — está na EDID, e só sai por aqui. Falhar
-/// nesta leitura não é grave: o nome do adaptador continua servindo de reserva.
+/// `EnumDisplayDevicesW` dá o nome do ADAPTADOR, igual para todos os monitores dele; o nome real está na EDID.
+/// Falhar aqui não é grave: o do adaptador fica de reserva.
 #[cfg(target_os = "windows")]
 fn nomes_comerciais() -> Vec<String> {
     let script = "@(Get-CimInstance -Namespace root\\wmi -ClassName WmiMonitorID \
@@ -153,9 +94,7 @@ pub fn monitores() -> Vec<Monitor> {
                 break;
             }
 
-            // Monitor desligado ou desconectado não interessa. E driver de
-            // espelhamento não é monitor: é software de captura fingindo ser
-            // um, e mexer no modo dele não muda nada na tela de ninguém.
+            // Driver de espelhamento é software de captura fingindo ser monitor.
             let ligado = dispositivo.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP != 0;
             let espelho = dispositivo.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER != 0;
 
@@ -175,9 +114,6 @@ pub fn monitores() -> Vec<Monitor> {
                 continue;
             }
 
-            // Os modos aceitos NESTA resolução e NESTA profundidade de cor.
-            // Sem esse filtro a lista vem poluída e o produto ofereceria uma
-            // frequência que não existe na configuração em que a pessoa está.
             let mut hz_disponiveis: Vec<u32> = Vec::new();
 
             for modo in 0..1024u32 {
@@ -192,7 +128,7 @@ pub fn monitores() -> Vec<Monitor> {
                     && candidato.dmPelsHeight == atual.dmPelsHeight
                     && candidato.dmBitsPerPel == atual.dmBitsPerPel;
 
-                // 0 e 1 são códigos de "taxa padrão do hardware", não valores.
+                // 0 e 1 são "taxa padrão do hardware", não valores.
                 if mesmo_modo && candidato.dmDisplayFrequency > 1 {
                     hz_disponiveis.push(candidato.dmDisplayFrequency);
                 }
@@ -201,7 +137,6 @@ pub fn monitores() -> Vec<Monitor> {
             hz_disponiveis.sort_unstable();
             hz_disponiveis.dedup();
 
-            // O nome comercial quando ele existe; o do adaptador como reserva.
             // A ordem de `WmiMonitorID` acompanha a de `EnumDisplayDevicesW`.
             let descricao = comerciais
                 .get(encontrados.len())
@@ -229,9 +164,6 @@ pub fn monitores() -> Vec<Monitor> {
     Vec::new()
 }
 
-// --------------------------------------------------------------- diagnóstico
-
-/// Regras puras, testáveis sem depender do monitor de quem roda os testes.
 pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
     use super::achados::{FindingSeverity, FixLocation};
 
@@ -257,10 +189,7 @@ pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
                 monitor.largura,
                 monitor.altura
             ),
-            // A honestidade que ninguém escreve: subir a taxa não sobe o FPS.
-            // Sobe o TETO. Se a placa entrega 70 quadros, continuam 70 — só que
-            // agora eles aparecem quando ficam prontos, em vez de esperar a
-            // tela. Prometer FPS aqui seria mentira fácil de vender.
+            // Subir a taxa não sobe o FPS, sobe o TETO: prometer FPS aqui seria mentira fácil de vender.
             advice: format!(
                 "Colocar o monitor em {} Hz é a maior diferença de fluidez que existe num \
                  PC, e não custa desempenho nenhum. Mas não espere um número de FPS maior: \
@@ -276,41 +205,14 @@ pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
     findings
 }
 
-// ------------------------------------------------------------------ aplicar
-
-/// Coloca um monitor na maior frequência que ele aceita na resolução atual.
-///
-/// Devolve a frequência ANTERIOR, que é o que o histórico precisa guardar para
-/// saber voltar.
-///
-/// POR QUE O TESTE ANTES
-///
-/// Errar um modo de vídeo apaga a tela, e uma tela apagada é o pior defeito que
-/// um otimizador pode causar: o cliente não consegue nem desfazer, porque não
-/// enxerga o botão. Por isso são duas chamadas.
-///
-/// A primeira, com `CDS_TEST`, pergunta ao driver se o modo é aceito e não muda
-/// nada. Só depois de ela aprovar é que a segunda aplica de verdade. É a mesma
-/// sequência que a janela de configuração do próprio Windows usa.
-///
-/// A segurança de fundo é a mesma do módulo inteiro: só é oferecida frequência
-/// que veio de `EnumDisplaySettingsExW` na resolução e profundidade de cor
-/// atuais. A função que lista é a mesma que aplica — se ela listou, o modo
-/// existe.
+/// Devolve a frequência ANTERIOR, para o histórico saber voltar. Duas chamadas: `CDS_TEST` pergunta ao driver
+/// sem mudar nada, e só então aplica. Um modo errado apaga a tela, e aí o cliente nem enxerga o desfazer.
 #[cfg(target_os = "windows")]
 pub fn aplicar_hz(dispositivo: &str, hz: u32) -> Result<u32, String> {
     mudar_hz(dispositivo, hz, false)
 }
 
-/// Faz tudo que [`aplicar_hz`] faz — inclusive perguntar ao driver se o modo é
-/// aceito — e para antes de mexer na tela.
-///
-/// Existe para que o caminho inteiro possa ser conferido numa máquina de
-/// verdade sem apagar a tela de ninguém.
-///
-/// Só em compilação de teste: nada em produção chama, e código que existe "por
-/// via das dúvidas" é código que ninguém executa e ninguém mantém. No dia em
-/// que a tela quiser conferir antes de oferecer o botão, o `cfg` sai.
+/// Todo o caminho de [`aplicar_hz`] até o `CDS_TEST`, sem mexer na tela. Só em teste: nada em produção chama.
 #[cfg(all(test, target_os = "windows"))]
 pub fn ensaiar_hz(dispositivo: &str, hz: u32) -> Result<u32, String> {
     mudar_hz(dispositivo, hz, true)
@@ -339,9 +241,7 @@ fn mudar_hz(dispositivo: &str, hz: u32, apenas_ensaio: bool) -> Result<u32, Stri
         return Ok(hz);
     }
 
-    // A conferência que impede o produto de pedir ao driver um modo que ele não
-    // ofereceu. Sem ela, uma mudança de cabo entre o diagnóstico e o clique
-    // viraria uma tentativa de aplicar frequência inexistente.
+    // Uma troca de cabo entre o diagnóstico e o clique viraria pedido de frequência inexistente.
     if !alvo.hz_disponiveis.contains(&hz) {
         return Err(format!(
             "{} não aceita {} Hz em {}x{}. As taxas disponíveis agora são: {}.",
@@ -410,10 +310,7 @@ pub fn aplicar_hz(_dispositivo: &str, _hz: u32) -> Result<u32, String> {
     Err("Mudar a taxa do monitor só existe no Windows.".to_string())
 }
 
-/// Traduz o código de recusa do Windows para o que o cliente precisa saber.
-///
-/// O valor cru (`-2`, `-4`) não ajuda ninguém, e é o que a maioria dos
-/// programas mostra.
+/// O valor cru (`-2`, `-4`) não ajuda ninguém.
 #[cfg(target_os = "windows")]
 fn explicar_recusa(codigo: i32, hz: u32) -> String {
     let motivo = match codigo {
@@ -432,28 +329,22 @@ fn explicar_recusa(codigo: i32, hz: u32) -> String {
     )
 }
 
-/// Vídeo integrado ao processador, pelo nome. **Função pura.**
 pub fn e_integrada(nome: &str) -> bool {
     let n = nome.to_lowercase();
     if n.contains("intel") {
         return !n.contains("arc");
     }
-    // Os Ryzen com vídeo chegam como "AMD Radeon(TM) Graphics" ou "Radeon(TM)
-    // Vega 8 Graphics": sem o "RX" das placas dedicadas.
+    // Ryzen com vídeo: "AMD Radeon(TM) Graphics", sem o "RX" das dedicadas.
     (n.contains("radeon") && n.contains("graphics") && !n.contains(" rx") && !n.contains("pro"))
         || n.contains("vega") && n.contains("graphics")
 }
 
-/// Placa dedicada, pelo nome. **Função pura.**
 pub fn e_dedicada(nome: &str) -> bool {
     let n = nome.to_lowercase();
     n.contains("nvidia") || n.contains("radeon rx") || n.contains("radeon pro") || (n.contains("intel") && n.contains("arc"))
 }
 
-/// Monitor ligado no vídeo integrado de um PC de mesa que tem placa dedicada:
-/// o cabo está na placa-mãe, e o jogo roda no vídeo do processador.
-/// Notebook fica de fora: lá a tela interna passa pela integrada de propósito.
-/// **Função pura.**
+/// Notebook fica de fora: a tela interna passa pela integrada de propósito.
 pub fn ligados_na_integrada(monitores: &[Monitor], placas: &[String], notebook: bool) -> Vec<DisplayFinding> {
     use super::achados::{FindingSeverity, FixLocation};
     if notebook {
@@ -484,8 +375,6 @@ pub fn analyze() -> DisplayReport {
     let monitores = monitores();
     let mut findings = diagnosticar(&monitores);
 
-    // As duas leituras extras (placas e chassi) só acontecem quando algum
-    // monitor está num adaptador integrado, que é a exceção.
     if monitores.iter().any(|m| e_integrada(&m.adaptador)) {
         let placas = super::gpupref::placas();
         let notebook = super::planoenergia::detectar().notebook;
@@ -546,14 +435,7 @@ mod tests {
         assert!(ligados_na_integrada(&[certo], &placas, false).is_empty());
     }
 
-    /// Ensaio na máquina de quem roda o teste. Ignorado por padrão porque
-    /// depende do monitor que estiver ligado ali.
-    ///
-    ///     cargo test --lib -- --ignored ensaio_de_taxa --nocapture
-    ///
-    /// Ele NÃO muda a tela: para no `CDS_TEST`, que é a pergunta ao driver.
-    /// Serve para provar que o caminho inteiro — encontrar o monitor, montar o
-    /// modo, falar com o Windows — funciona antes de alguém clicar no botão.
+    /// Para no `CDS_TEST`, sem mudar a tela. `cargo test --lib -- --ignored ensaio_de_taxa --nocapture`
     #[test]
     #[ignore]
     #[cfg(target_os = "windows")]
@@ -564,10 +446,7 @@ mod tests {
                 m.descricao, m.dispositivo, m.largura, m.altura, m.hz_atual, m.hz_disponiveis
             );
 
-            // Numa máquina já ajustada — que é o caso depois que o produto
-            // funciona — pedir o máximo sai pelo atalho e não exercita nada.
-            // Então o ensaio pergunta por OUTRA frequência da lista. A chamada
-            // ao driver é a mesma; só o número muda, e nada é aplicado.
+            // Numa máquina já ajustada, pedir o máximo sai pelo atalho: o ensaio pergunta por OUTRA frequência da lista.
             let alvo = if m.abaixo_do_maximo() {
                 m.hz_maximo()
             } else {
@@ -609,8 +488,6 @@ mod tests {
 
     #[test]
     fn nao_promete_fps_onde_o_ganho_e_de_fluidez() {
-        // A mentira mais fácil de vender neste módulo seria "ganhe FPS
-        // colocando o monitor em 144Hz". A taxa não cria quadro nenhum.
         let f = diagnosticar(&[monitor(60, &[60, 144])]);
 
         assert!(f[0].advice.contains("não espere um número de FPS maior"));
@@ -619,17 +496,12 @@ mod tests {
 
     #[test]
     fn monitor_de_60_que_so_aceita_60_fica_calado() {
-        // O caso da máquina onde este módulo foi escrito. A placa emite até
-        // 180 Hz; os monitores aceitam 60. Falar aqui seria inventar um
-        // problema que não existe.
         assert!(diagnosticar(&[monitor(60, &[60])]).is_empty());
         assert!(diagnosticar(&[monitor(60, &[59, 60])]).is_empty());
     }
 
     #[test]
     fn diferenca_pequena_demais_nao_vira_achado() {
-        // Alguns monitores anunciam 59 e 60 como modos distintos, e uma tela de
-        // 75 Hz rodando a 74 não é problema de ninguém.
         assert!(diagnosticar(&[monitor(60, &[60, 61, 62])]).is_empty());
         assert!(diagnosticar(&[monitor(144, &[144, 150])]).is_empty());
     }
@@ -648,8 +520,7 @@ mod tests {
         let f = diagnosticar(&[monitor(60, &[60, 144]), segundo]);
 
         assert_eq!(f.len(), 2);
-        // Identificadores distintos: senão o segundo monitor sobrescreve o
-        // primeiro no histórico e some da tela.
+        // Senão o segundo monitor sobrescreve o primeiro no histórico.
         assert_ne!(f[0].id, f[1].id);
     }
 
@@ -673,9 +544,7 @@ mod tests {
             println!("  [{:?}] {}", f.severity, f.measured);
         }
 
-        // Toda máquina com tela tem pelo menos um monitor ligado. Zero aqui
-        // significa que a leitura falhou, e falha silenciosa é o defeito que
-        // este produto não pode ter.
+        // Zero monitores significa leitura falha.
         assert!(
             !r.monitores.is_empty(),
             "nenhum monitor lido — a enumeração falhou"

@@ -1,11 +1,5 @@
-// Tarefas que demoram minutos, e não milissegundos
-//
-// Todo comando do Otimiza responde em milissegundos, e a interface espera a
-// resposta. Um `DISM` de vinte minutos nesse formato congela a janela.
-//
-// Este módulo não sabe o que é reparo. Ele roda um processo, entrega as linhas
-// conforme elas saem, e aceita ser interrompido — e é isso que o torna útil
-// também para a limpeza do WinSxS e para o que vier depois.
+// Tarefas de minutos (DISM, limpeza do WinSxS): roda um processo, entrega as linhas conforme saem e aceita ser
+// interrompido, sem congelar a janela. Não sabe o que é reparo.
 
 use serde::Serialize;
 use std::io::{BufReader, Read};
@@ -15,19 +9,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-/// Sem isto, cada comando abre um console preto piscando na tela do cliente.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// De onde a linha veio.
-///
-/// O `stderr` é drenado numa thread separada e caía no mesmo lugar do
-/// progresso: a razão da falha do DISM — "precisa de internet" contra "a
-/// imagem está corrompida" — chegava embaralhada no meio de centenas de
-/// linhas de percentagem, e o cliente não tinha como saber qual era qual.
-/// Com a origem viajando junto de cada linha, quem decide destacar isso na
-/// tela é o dado, não uma adivinhação por palavra-chave no texto — a mesma
-/// regra que tirou a tela de decidir cor comparando prosa em todo o resto
-/// deste caminho.
+/// A origem viaja com a linha: a razão de falha do DISM (no stderr) chegava embaralhada nas porcentagens, e
+/// destacá-la por palavra-chave seria a tela decidindo por prosa.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Origem {
@@ -35,17 +20,6 @@ pub enum Origem {
     Erro,
 }
 
-/// Uma linha de saída, com de onde ela veio.
-///
-/// Chegou a carregar um `numero` de posição, pensado para a tela dizer
-/// "parado há 4 minutos na mesma linha". Nunca ganhou o outro lado — nem
-/// timer, nem leitura na tela — e atravessava o IPC por sessão nenhuma:
-/// `grep` no frontend confirma que só `linha` e `origem` são lidos. A mesma
-/// regra que tirou `ocupada()` daqui do lado do Rust ("ou serve para alguma
-/// coisa, ou sai") tirou este campo: implementar o timer de verdade é
-/// funcionalidade nova, não correção, e não dá para verificar na tela sem
-/// sessão de desktop — não é o tipo de coisa para entrar no último portão
-/// antes do release.
 #[derive(Debug, Clone, Serialize)]
 pub struct Andamento {
     pub linha: String,
@@ -59,37 +33,21 @@ pub enum Desfecho {
     NaoComecou { motivo: String },
 }
 
-/// O que existe enquanto a tarefa está reservada.
-///
-/// `pid` nasce vazio: a reserva acontece ANTES de o processo existir, para
-/// fechar a janela entre "ninguém está rodando" e "o processo foi criado".
-/// É essa reserva — não o PID, que só chega depois do `spawn` — que faz uma
-/// segunda chamada concorrente ser recusada.
+/// A reserva acontece ANTES do processo existir (`pid` vazio): é ela, e não o PID, que recusa a segunda chamada.
 struct Estado {
     pid: Option<u32>,
 }
 
-/// Devolve a reserva quando `rodar` sai — por retorno, por `?` ou por pânico.
-///
-/// A reserva é o que impede duas ferramentas de reparo de rodar ao mesmo
-/// tempo. Uma reserva que sobrevive à tarefa não é um vazamento discreto: ela
-/// desliga a aba de reparo pelo resto da sessão. Por isso a devolução não pode
-/// ficar por conta de alguém lembrar de escrevê-la em cada caminho de saída.
+/// Devolve a reserva em qualquer saída (retorno, `?`, pânico): uma reserva que sobrevive desliga o reparo pelo
+/// resto da sessão.
 struct Reserva<'a> {
     dono: &'a TarefaLonga,
 }
 
 impl Drop for Reserva<'_> {
     fn drop(&mut self) {
-        // Se a saída foi um pânico, a tranca fica envenenada. Um `rodar`
-        // seguinte que tentasse o lock aqui receberia esse veneno como
-        // "estado corrompido" e recusaria rodar — a resposta certa para
-        // "não sei" — mas responder isso PARA SEMPRE seria trocar um
-        // defeito por outro.
-        // Aqui a reserva é limpa mesmo com veneno e o veneno é retirado em
-        // seguida: o estado que ele protege é um `Option<Estado>` que acabou
-        // de ser zerado, e não sobra nada pela metade para contaminar a
-        // próxima tarefa.
+        // Limpa mesmo com veneno: o estado protegido acabou de ser zerado, e recusar para sempre trocaria um defeito
+        // por outro.
         match self.dono.atual.lock() {
             Ok(mut atual) => *atual = None,
             Err(envenenada) => {
@@ -100,27 +58,9 @@ impl Drop for Reserva<'_> {
     }
 }
 
-/// Lê a saída de um processo em BYTES, e nunca em UTF-8 estrito.
-///
-/// `BufRead::lines()` devolve `Err(InvalidData)` na primeira sequência que não
-/// é UTF-8 válido, e `map_while(Result::ok)` ENCERRA o iterador ali. Num
-/// Windows em português isso acontece no primeiro `ç`: o `chkdsk` escreve
-/// texto traduzido na página de código do console (CP-850) e o `sfc` escreve
-/// a saída canalizada em UTF-16. O laço terminava, ninguém drenava mais o
-/// cano, o filho travava na primeira escrita que não coubesse no buffer, e o
-/// `wait()` nunca voltava — a mesma classe de travamento que a leitura do
-/// stderr já tinha evitado, entrando pela porta da frente.
-///
-/// Este projeto já tinha aprendido a lição e escrito o motivo: ver
-/// `shell.rs` (`FORCAR_UTF8` e o bloco da sessão viva), que decodifica com
-/// `from_utf8_lossy` justamente porque adivinhar a página de código do
-/// console é impossível — ela muda com o idioma do Windows. Um caminho de
-/// execução novo não pode reabrir isso.
-///
-/// A quebra é em `\r` E em `\n`. O `sfc` e o `DISM` desenham a porcentagem
-/// com retorno de carro, redesenhando a MESMA linha: quebrando só em `\n`, o
-/// "fica parado em 20%" — o número que a especificação diz ser o que impede o
-/// cliente de desistir — nunca chegaria à tela.
+/// Em BYTES, nunca UTF-8 estrito: `lines()` + `map_while` ENCERRAVA no primeiro `ç` (o `chkdsk` escreve CP-850,
+/// o `sfc` UTF-16), ninguém drenava o cano e o `wait()` nunca voltava (ver `shell.rs`). Quebra em `\r` E `\n`:
+/// `sfc` e DISM redesenham a porcentagem com retorno de carro.
 fn drenar<L, F>(saida: L, origem: Origem, ao_progredir: &Mutex<F>)
 where
     L: Read,
@@ -133,10 +73,7 @@ where
     let entregar = |pedaco: &[u8]| {
         let linha = decodificar(pedaco);
 
-        // Pedaço vazio não vira linha. Quebrando no retorno de carro E na
-        // quebra de linha, todo par "CR LF" produz um pedaço vazio entre os
-        // dois — sem este descarte, a tela receberia uma linha em branco a
-        // cada linha de verdade.
+        // Todo "CR LF" gera um pedaço vazio entre os dois.
         if linha.is_empty() {
             return;
         }
@@ -150,8 +87,7 @@ where
             Ok(0) => break,
             Ok(n) => n,
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            // Erro DE CANO, não de conteúdo: o duto fechou. Não há como
-            // continuar lendo, e insistir seria um laço infinito.
+            // Erro de cano, não de conteúdo: insistir seria laço infinito.
             Err(_) => break,
         };
 
@@ -167,21 +103,12 @@ where
         pendente.drain(..inicio);
     }
 
-    // O que sobrou sem quebra no fim ainda é saída, e costuma ser a última
-    // linha do `DISM` — a que diz se deu certo.
+    // Costuma ser a última linha do DISM, a que diz se deu certo.
     entregar(&pendente);
 }
 
-/// Decodifica um pedaço de saída sem nunca falhar.
-///
-/// Os NUL vêm do UTF-16 do `sfc`: nele um "A" viaja como `41 00`, e o `00` é
-/// UTF-8 perfeitamente válido (U+0000), então `from_utf8_lossy` o preserva e
-/// a tela receberia texto com um buraco entre cada letra. Texto de console
-/// nunca tem NUL legítimo, então descartá-los deixa a saída ASCII do `sfc`
-/// legível sem estragar a saída CP-850 ou UTF-8 de ninguém. Não é uma
-/// decodificação de UTF-16 completa — acento em UTF-16 continua chegando
-/// substituído — e não precisa ser: o veredito do `sfc` vem do CBS.log, e
-/// está saída serve de sinal de vida.
+/// Os NUL vêm do UTF-16 do `sfc` ("A" = `41 00`) e sobreviveriam ao `from_utf8_lossy`. Não decodifica UTF-16
+/// completo e não precisa: o veredito do `sfc` vem do CBS.log, e esta saída é sinal de vida.
 fn decodificar(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .chars()
@@ -192,7 +119,6 @@ fn decodificar(bytes: &[u8]) -> String {
 }
 
 pub struct TarefaLonga {
-    /// `Some` significa reservado — com ou sem processo ainda rodando.
     atual: Mutex<Option<Estado>>,
     cancelar_pedido: Arc<AtomicBool>,
 }
@@ -211,29 +137,17 @@ impl TarefaLonga {
         }
     }
 
-    /// Pede para a tarefa parar. Devolve `false` se não havia nada rodando.
     pub fn cancelar(&self) -> bool {
         let Ok(atual) = self.atual.lock() else {
             return false;
         };
 
-        // Reservado mas sem PID ainda: o `spawn` está no meio, e não há
-        // processo para matar.
         let Some(Estado { pid: Some(pid) }) = *atual else {
             return false;
         };
 
-        // `taskkill /T` leva junto os processos filhos. O `DISM` cria um, e
-        // matar só o pai deixaria o filho segurando os arquivos.
-        //
-        // O RETORNO É O CÓDIGO DE SAÍDA, NÃO O NASCIMENTO DO TASKKILL.
-        // `output().is_ok()` só dizia que o `taskkill` conseguiu ser criado —
-        // era verdadeiro também quando ele saía com 1 e "Acesso negado"
-        // (matar filho elevado a partir de programa não elevado, falha
-        // parcial do `/T`). E a bandeira de cancelamento era levantada ANTES
-        // da morte: o `DISM` terminava inteiro, com sucesso, e o desfecho
-        // ainda saía `Cancelada`. O cliente era informado com certeza de que o
-        // reparo tinha sido interrompido justamente quando ele terminou.
+        // `/T` leva os filhos (o DISM cria um). O retorno é o CÓDIGO DE SAÍDA: "conseguiu nascer" era verdadeiro também
+        // com "Acesso negado", e o DISM terminava com sucesso sob o rótulo `Cancelada`.
         let morreu = Command::new("taskkill")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .creation_flags(CREATE_NO_WINDOW)
@@ -248,11 +162,7 @@ impl TarefaLonga {
         morreu
     }
 
-    /// Roda o programa até o fim, chamando `ao_progredir` a cada linha.
-    ///
-    /// BLOQUEIA a thread que chamou. Quem chama é um comando do Tauri
-    /// declarado `#[tauri::command(async)]`, que por isso já roda fora da
-    /// thread da interface.
+    /// BLOQUEIA: quem chama é `#[tauri::command(async)]`, fora da thread da interface.
     pub fn rodar<F>(
         &self,
         programa: &str,
@@ -262,10 +172,7 @@ impl TarefaLonga {
     where
         F: FnMut(Andamento) + Send + 'static,
     {
-        // A verificação e a reserva acontecem sob o MESMO lock, antes de
-        // qualquer processo existir. Checar e só depois reservar em dois
-        // passos deixaria uma brecha: duas chamadas concorrentes passariam
-        // pela checagem antes de qualquer uma reservar, e as duas rodariam.
+        // Verificação e reserva sob o MESMO lock: em dois passos, duas chamadas passariam juntas.
         {
             let Ok(mut atual) = self.atual.lock() else {
                 return Err("o estado da tarefa está corrompido".to_string());
@@ -280,15 +187,8 @@ impl TarefaLonga {
             *atual = Some(Estado { pid: None });
         }
 
-        // A PARTIR DAQUI A RESERVA É DEVOLVIDA POR SAÍDA DE ESCOPO.
-        //
-        // Antes eram três atribuições `*atual = None` colocadas à mão, e
-        // faltava uma: o `?` do `filho.wait()` voltava sem passar por
-        // nenhuma delas. Um erro do `wait` prendia o executor pelo resto da
-        // sessão — todo reparo seguinte respondia "Já existe uma tarefa em
-        // andamento". Um pânico no laço de leitura ou no callback fazia o
-        // mesmo, e ainda envenenava a tranca. A guarda cobre os três
-        // caminhos porque não depende de ninguém lembrar dela.
+        // A reserva é devolvida por saída de escopo: o `?` do `wait()` escapava das atribuições à mão e prendia o
+        // executor pelo resto da sessão.
         let _reserva = Reserva { dono: self };
 
         self.cancelar_pedido.store(false, Ordering::SeqCst);
@@ -307,16 +207,8 @@ impl TarefaLonga {
             });
         }
 
-        // O `stderr` é canalizado (`Stdio::piped()`) e não pode ficar sem
-        // leitor: o cano do Windows tem um buffer pequeno, e um `DISM` que
-        // escreve o bastante ali trava para sempre esperando alguém drenar —
-        // o mesmo travamento que o comentário abaixo descreve para o stdout,
-        // só que no duto que ninguém olhava. Descartar essa saída não é
-        // opção: é nela que mora o motivo de um `DISM` falhar ("precisa de
-        // internet" vs. "a imagem está corrompida"), e sem esse texto a
-        // falha fica muda para o cliente. A solução é uma thread dedicada,
-        // lendo o stderr e alimentando o MESMO callback — a UI não distingue
-        // de onde veio a linha, só precisa vê-la.
+        // O stderr precisa de leitor: o cano do Windows tem buffer pequeno e um DISM trava esperando dreno. E é nele
+        // que mora o motivo da falha.
         let ao_progredir = Arc::new(Mutex::new(ao_progredir));
 
         let leitor_stderr = filho.stderr.take().map(|saida| {
@@ -324,19 +216,14 @@ impl TarefaLonga {
             thread::spawn(move || drenar(saida, Origem::Erro, &callback))
         });
 
-        // A saída é lida ENQUANTO o processo roda. Guardar para ler no fim
-        // seria o mesmo que não ter andamento nenhum — e pior, encheria o cano
-        // do sistema até o processo travar esperando alguém ler.
+        // Lida ENQUANTO roda: no fim, o cano encheria e travaria o processo.
         if let Some(saida) = filho.stdout.take() {
             drenar(saida, Origem::Saida, &ao_progredir);
         }
 
         let status = filho.wait().map_err(|e| format!("o processo sumiu: {}", e))?;
 
-        // O processo já terminou, então o stderr dele já fechou — a thread
-        // sai do laço sozinha. Ainda assim é preciso esperar por ela: sem o
-        // `join`, uma linha de stderr que chegou por último podia nunca ser
-        // entregue antes de `rodar` devolver o desfecho.
+        // Sem o `join`, a última linha de stderr podia não chegar antes do desfecho.
         if let Some(leitor_stderr) = leitor_stderr {
             let _ = leitor_stderr.join();
         }
@@ -372,10 +259,6 @@ mod tests {
         assert!(matches!(desfecho, Desfecho::Terminou { codigo: 0 }));
     }
 
-    /// A origem viaja com a linha, e é ela — não uma adivinhação de palavra
-    /// no texto — que diz se a linha veio do `stdout` ou do `stderr`. Sem
-    /// isso a tela não tem como destacar a razão de uma falha do DISM no
-    /// meio de centenas de linhas de percentagem.
     #[test]
     fn a_origem_da_linha_e_a_do_cano_de_onde_ela_veio() {
         let tarefa = TarefaLonga::nova();
@@ -406,14 +289,7 @@ mod tests {
 
     #[test]
     fn uma_de_cada_vez() {
-        // Duas ferramentas de reparo ao mesmo tempo disputam os mesmos
-        // arquivos, e o resultado é imprevisível para as duas. Este teste
-        // prende o comportamento real — `rodar` recusando uma segunda
-        // chamada enquanto a primeira está de pé — e não um método (`ocupada`)
-        // que só existia para um teste ler o estado interno; um método
-        // público que existe só para um teste passar é teste medindo a si
-        // mesmo, e a exclusão que ele tentava provar é a de `rodar`, não a
-        // de um getter.
+        // Prende o comportamento real (`rodar` recusando a segunda chamada), e não um getter que existia só para o teste.
         let tarefa = Arc::new(TarefaLonga::nova());
         let dentro = tarefa.clone();
         let (comecou_envia, comecou_recebe) = std::sync::mpsc::channel();
@@ -421,11 +297,7 @@ mod tests {
         let primeira = std::thread::spawn(move || {
             dentro.rodar(
                 "cmd",
-                // A saída de "echo" garante que o callback dispare assim que
-                // o processo nasce — e a reserva é feita ANTES do `spawn`,
-                // então nesse ponto ela já existe havia tempo. O `ping`
-                // segura o processo vivo tempo suficiente para a segunda
-                // chamada, abaixo, encontrá-lo ainda reservado.
+                // O `ping` segura o processo vivo até a segunda chamada.
                 &["/c", "echo comecei&ping -n 3 127.0.0.1 >nul"],
                 move |_| {
                     let _ = comecou_envia.send(());
@@ -452,16 +324,8 @@ mod tests {
         );
     }
 
-    /// Um `stderr` canalizado e nunca lido enche o buffer do cano do Windows
-    /// e trava o processo filho para sempre — exatamente a classe de
-    /// travamento que o comentário acima do laço do stdout já evitava lá,
-    /// só que no duto vizinho. Roda `rodar` numa thread à parte e usa um
-    /// prazo: se o `stderr` não for drenado, o `recv_timeout` estoura antes
-    /// da tarefa terminar, e o teste falha em vez de travar o CI para sempre.
-    ///
-    /// O prazo é folgado de propósito: sozinho este teste leva uns 15 s, e o
-    /// `cargo test` roda tudo em paralelo. Um prazo justo reprovava o CI por
-    /// disputa de CPU, não por regressão — foi o que aconteceu aqui com 20 s.
+    /// Prazo em vez de travar o CI se o stderr não for drenado. Folgado de propósito: sozinho leva ~15 s, e 20 s
+    /// reprovava por disputa de CPU.
     #[test]
     fn stderr_nao_trava_a_tarefa() {
         let tarefa = std::sync::Arc::new(TarefaLonga::nova());
@@ -469,8 +333,7 @@ mod tests {
         let (envia, recebe) = std::sync::mpsc::channel();
 
         std::thread::spawn(move || {
-            // Mais que o buffer do cano (uns 4 KB): sem drenar, o `cmd`
-            // trava na primeira escrita que não coube.
+            // Mais que o buffer do cano (~4 KB).
             let resultado = dentro.rodar(
                 "cmd",
                 &["/c", "for /l %i in (1,1,5000) do @echo linha%i 1>&2"],
@@ -486,7 +349,6 @@ mod tests {
         assert!(matches!(resultado, Ok(Desfecho::Terminou { codigo: 0 })));
     }
 
-    /// Junta o que `drenar` entregou, para os testes de decodificação.
     fn drenado(bytes: &[u8]) -> Vec<String> {
         let colhidas = Arc::new(Mutex::new(Vec::new()));
         let dentro = colhidas.clone();
@@ -502,10 +364,6 @@ mod tests {
 
     #[test]
     fn byte_invalido_nao_interrompe_a_drenagem() {
-        // Num Windows em português o primeiro "c cedilha" do `chkdsk` chega em
-        // CP-850 (0xE7), que não e UTF-8 válido. Com `lines()` + `map_while`, o
-        // iterador ENCERRAVA ali: ninguém drenava mais o cano, o filho travava
-        // na primeira escrita que não coubesse, e o `wait()` nunca voltava.
         let bytes = b"comecou\nservi\xE7o quebrado\nterminou\n";
         let linhas = drenado(bytes);
 
@@ -520,9 +378,6 @@ mod tests {
 
     #[test]
     fn retorno_de_carro_tambem_quebra_linha() {
-        // O `sfc` e o `DISM` redesenham a MESMA linha com retorno de carro. Só
-        // quebrando em `\n`, o "20%... 40%... 100%" — o número que impede o
-        // cliente de desistir no meio — chegaria como uma linha só, no fim.
         let linhas = drenado(b"20%\r40%\r100%\r\nPronto\n");
 
         assert_eq!(linhas, vec!["20%", "40%", "100%", "Pronto"]);
@@ -530,27 +385,19 @@ mod tests {
 
     #[test]
     fn nul_do_utf16_nao_vira_buraco_no_texto() {
-        // O `sfc` escreve a saída canalizada em UTF-16: "ok" viaja como
-        // `6F 00 6B 00`. O `00` e UTF-8 válido, então sobreviveria a
-        // decodificação e a tela mostraria letra e buraco alternados.
         let linhas = drenado(b"o\0k\0\n\0");
         assert_eq!(linhas, vec!["ok"]);
     }
 
     #[test]
     fn saida_sem_quebra_no_fim_ainda_e_entregue() {
-        // A última linha do `DISM` — a que diz se deu certo — costuma chegar
-        // sem quebra depois dela.
         assert_eq!(
             drenado(b"A operacao foi concluida"),
             vec!["A operacao foi concluida"]
         );
     }
 
-    /// A prova de ponta a ponta do mesmo defeito: um processo DE VERDADE que
-    /// escreve bytes inválidos no meio e continua escrevendo depois. Se a
-    /// drenagem parar na sequência inválida, o `cmd` trava esperando alguém
-    /// ler o resto e o prazo estoura — em vez de o CI ficar preso para sempre.
+    /// De ponta a ponta: se a drenagem parar nos bytes inválidos, o `cmd` trava e o prazo estoura.
     #[test]
     fn processo_com_saida_invalida_termina_e_nao_trunca() {
         let dir = std::env::temp_dir().join("otimiza_drenagem");
@@ -559,10 +406,8 @@ mod tests {
 
         let mut conteudo: Vec<u8> = Vec::new();
         conteudo.extend_from_slice(b"primeira\n");
-        conteudo.extend_from_slice(&[0xE7, 0xE3, 0xF5]); // "cao" em CP-850
+        conteudo.extend_from_slice(&[0xE7, 0xE3, 0xF5]); /* "cao" em CP-850 */
         conteudo.extend_from_slice(b"\n");
-        // Mais que o buffer do cano: se a drenagem parar acima, o `type`
-        // bloqueia aqui e a tarefa nunca termina.
         for i in 0..5000 {
             conteudo.extend_from_slice(format!("linha{}\n", i).as_bytes());
         }
@@ -606,16 +451,11 @@ mod tests {
 
     #[test]
     fn a_reserva_volta_mesmo_quando_o_programa_nao_existe() {
-        // Sem a guarda `Drop`, qualquer saída por erro deixava a reserva
-        // presa: todo reparo seguinte respondia "Já existe uma tarefa em
-        // andamento" pelo resto da sessão.
         let tarefa = TarefaLonga::nova();
         let erro = tarefa.rodar("programa_que_nao_existe_no_windows", &[], |_| {});
         assert!(erro.is_err(), "esperava falha ao iniciar: {:?}", erro);
 
-        // A prova real de que a reserva voltou não é ler um campo interno —
-        // é uma segunda chamada CONSEGUIR rodar. Se a reserva tivesse ficado
-        // presa, esta receberia `NaoComecou`.
+        // A prova é uma segunda chamada CONSEGUIR rodar, não ler um campo interno.
         let depois = tarefa.rodar("cmd", &["/c", "echo ok"], |_| {});
         assert!(
             matches!(depois, Ok(Desfecho::Terminou { codigo: 0 })),
@@ -626,15 +466,10 @@ mod tests {
 
     #[test]
     fn panico_no_callback_devolve_a_reserva_e_limpa_o_veneno() {
-        // Um pânico dentro do callback de emissão envenenava a tranca. A
-        // prova de que a `Reserva` limpa esse veneno no `Drop` não é ler um
-        // campo interno — é uma chamada seguinte de `rodar` CONSEGUIR
-        // rodar de novo, em vez de ficar recusando para sempre.
         let tarefa = Arc::new(TarefaLonga::nova());
         let dentro = tarefa.clone();
 
-        // O pânico do callback e esperado: sem silenciar o relator, ele suja a
-        // saída do teste com um rastro de pilha que não e falha nenhuma.
+        // Pânico esperado: silencia o relator para não sujar a saída.
         let relator = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let panico = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -645,7 +480,6 @@ mod tests {
         std::panic::set_hook(relator);
 
         assert!(panico.is_err(), "o panico de teste nao aconteceu");
-        // E o executor volta a funcionar, em vez de ficar ocupado para sempre.
         let depois = tarefa.rodar("cmd", &["/c", "echo depois"], |_| {});
         assert!(
             matches!(depois, Ok(Desfecho::Terminou { codigo: 0 })),
@@ -656,12 +490,6 @@ mod tests {
 
     #[test]
     fn cancelar_sem_nada_rodando_nao_levanta_a_bandeira() {
-        // A bandeira era gravada ANTES da morte, e o retorno era só "o
-        // taskkill conseguiu nascer". Uma morte que falha ("Acesso negado" ao
-        // matar filho elevado) deixava a bandeira de pé, o `DISM` terminava
-        // inteiro com sucesso, e o desfecho ainda saía `Cancelada` — o cliente
-        // informado com certeza de que o reparo foi interrompido quando ele
-        // terminou.
         let tarefa = TarefaLonga::nova();
         assert!(!tarefa.cancelar(), "disse que cancelou sem nada rodando");
 

@@ -1,14 +1,10 @@
-// Acesso ao registro do Windows
-//
-// Toda escrita passa por `set_dword`/`set_string`, que devolvem o valor anterior
-// para ser guardado no ChangeLog. Escrever sem capturar o valor anterior torna a
-// mudança irreversível — o que este produto não faz.
+// Registro do Windows. Toda escrita devolve o valor anterior, para o ChangeLog: sem ele a mudança seria
+// irreversível.
 
 use crate::modules::changelog::PreviousValue;
 use winreg::enums::{RegType, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE};
 use winreg::{RegKey, RegValue};
 
-/// Resolve o nome textual da hive para a chave raiz correspondente.
 fn root(hive: &str) -> Result<RegKey, String> {
     match hive.to_uppercase().as_str() {
         "HKLM" => Ok(RegKey::predef(HKEY_LOCAL_MACHINE)),
@@ -17,34 +13,19 @@ fn root(hive: &str) -> Result<RegKey, String> {
     }
 }
 
-/// A chave não existe, ou eu não consegui abri-la?
-///
-/// A diferença decide se o desfazer APAGA a chave do cliente. `AbsentKey` quer
-/// dizer "não existia antes de eu mexer", e a reversão trata isso ao pé da
-/// letra: apaga o valor e, se a chave ficar vazia, apaga a chave.
-///
-/// Enquanto QUALQUER erro de abertura virava `AbsentKey`, uma chave que EXISTIA
-/// e não pôde ser lida — ACL restritiva, elevação perdida no meio do caminho —
-/// era gravada no histórico como "não existia". O desfazer então apagava uma
-/// chave preexistente, em nome de restaurar o estado anterior. Perder o que o
-/// cliente tinha é pior que não conseguir mudar.
-///
-/// Função pura de propósito: reproduzir o caso real exigiria uma chave com DACL
-/// restritiva, que não se monta numa esteira. Aqui a decisão fica testável
-/// sozinha, e o resto do caminho continua sendo o mesmo.
+/// `AbsentKey` faz o desfazer APAGAR a chave. Qualquer erro virava `AbsentKey`, e uma chave que existia e não se
+/// leu (ACL restritiva) era apagada "restaurando o anterior". Pura: o caso real pede DACL restritiva, que não se
+/// monta na esteira.
 pub fn chave_inexistente(erro: std::io::ErrorKind) -> bool {
     matches!(erro, std::io::ErrorKind::NotFound)
 }
 
-/// Lê o valor atual, seja ele DWORD, texto ou inexistente.
 pub fn read(hive: &str, path: &str, name: &str) -> Result<PreviousValue, String> {
     let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
         Ok(key) => key,
-        // Chave inexistente é um estado válido, e é distinto de "chave existe sem
-        // o valor": só no primeiro caso a reversão precisa apagar a chave também.
+        // Distinto de "chave existe sem o valor": só aqui a reversão apaga a chave também.
         Err(e) if chave_inexistente(e.kind()) => return Ok(PreviousValue::AbsentKey),
-        // Qualquer outro motivo é desconhecimento, e desconhecimento não pode
-        // virar permissão para apagar.
+        // Desconhecimento não pode virar permissão para apagar.
         Err(e) => {
             return Err(format!(
                 "Não consegui ler {}\\{}: {}. Nada foi alterado.",
@@ -61,8 +42,7 @@ pub fn read(hive: &str, path: &str, name: &str) -> Result<PreviousValue, String>
         return Ok(PreviousValue::Text(value));
     }
 
-    // Último recurso: valor bruto. É como o Windows guarda o estado dos
-    // programas de inicialização.
+    // O estado dos programas de inicialização é guardado assim.
     if let Ok(raw) = key.get_raw_value(name) {
         return Ok(PreviousValue::Binary(raw.bytes));
     }
@@ -70,7 +50,6 @@ pub fn read(hive: &str, path: &str, name: &str) -> Result<PreviousValue, String>
     Ok(PreviousValue::Absent)
 }
 
-/// Escreve um valor binário (REG_BINARY) e devolve o valor anterior.
 pub fn set_binary(hive: &str, path: &str, name: &str, bytes: &[u8]) -> Result<PreviousValue, String> {
     let previous = read(hive, path, name)?;
 
@@ -96,7 +75,6 @@ pub fn set_binary(hive: &str, path: &str, name: &str, bytes: &[u8]) -> Result<Pr
     Ok(previous)
 }
 
-/// Escreve um DWORD, criando a chave se necessário, e devolve o valor anterior.
 pub fn set_dword(hive: &str, path: &str, name: &str, value: u32) -> Result<PreviousValue, String> {
     let previous = read(hive, path, name)?;
 
@@ -116,16 +94,8 @@ pub fn set_dword(hive: &str, path: &str, name: &str, value: u32) -> Result<Previ
     Ok(previous)
 }
 
-/// Traduz a falha de escrita no registro para uma frase que o cliente entende.
-///
-/// "os error 5" não diz nada a ninguém. E o caso que motivou isto é pior que
-/// feio: na máquina de desenvolvimento, com o programa JÁ elevado, a escrita em
-/// `HKLM\SOFTWARE\Policies\Microsoft\Dsh` (a política dos Widgets) volta negada,
-/// enquanto o PowerShell escreve na mesma chave sem reclamar. Quando somos
-/// administrador e ainda assim o Windows nega, a causa não é permissão que o
-/// usuário possa conceder — é alguma coisa na máquina barrando a escrita,
-/// tipicamente antivírus ou proteção de política. Dizer "execute como
-/// administrador" nesse caso manda o cliente fazer o que ele já fez.
+/// Elevado e ainda negado (a política dos Widgets em `HKLM\SOFTWARE\Policies\Microsoft\Dsh`, que o PowerShell
+/// grava): é algo barrando a escrita, e "execute como administrador" manda repetir o que já foi feito.
 pub fn explicar_falha_de_escrita(caminho: &str, erro: &str, elevado: bool) -> String {
     let baixo = erro.to_lowercase();
     let negado = baixo.contains("os error 5")
@@ -151,7 +121,6 @@ pub fn explicar_falha_de_escrita(caminho: &str, erro: &str, elevado: bool) -> St
     )
 }
 
-/// Escreve um valor de texto, criando a chave se necessário, e devolve o valor anterior.
 pub fn set_string(hive: &str, path: &str, name: &str, value: &str) -> Result<PreviousValue, String> {
     let previous = read(hive, path, name)?;
 
@@ -171,7 +140,6 @@ pub fn set_string(hive: &str, path: &str, name: &str, value: &str) -> Result<Pre
     Ok(previous)
 }
 
-/// Restaura um valor ao estado registrado antes da otimização.
 pub fn restore(hive: &str, path: &str, name: &str, previous: &PreviousValue) -> Result<(), String> {
     match previous {
         PreviousValue::Dword(value) => {
@@ -189,8 +157,7 @@ pub fn restore(hive: &str, path: &str, name: &str, previous: &PreviousValue) -> 
         PreviousValue::AbsentKey => {
             delete_value(hive, path, name)?;
 
-            // A chave foi criada por nós. Removê-la completa a reversão, mas só
-            // se estiver vazia: outro programa pode ter escrito ali nesse meio-tempo.
+            // Só se estiver vazia: outro programa pode ter escrito ali.
             if is_empty_key(hive, path) {
                 let _ = root(hive)?.delete_subkey(path);
             }
@@ -200,27 +167,11 @@ pub fn restore(hive: &str, path: &str, name: &str, previous: &PreviousValue) -> 
     Ok(())
 }
 
-/// Apaga um valor.
-///
-/// ESTADO DESEJADO JÁ ATINGIDO NÃO É ERRO. Chave ausente ou valor ausente
-/// querem dizer que não há o que apagar, e a reversão terminou o trabalho dela.
-///
-/// TUDO O MAIS É ERRO, E PRECISA SUBIR. Antes, esta função engolia duas falhas
-/// diferentes — não conseguir abrir a chave para escrita, e não conseguir
-/// apagar o valor — e devolvia `Ok(())` nos dois casos.
-///
-/// O estrago não era só a mensagem errada na tela. `ChangeLog::take` já tinha
-/// consumido a entrada do histórico quando a reversão começa; então o valor
-/// continuava no registro do cliente, a tela dizia que tinha desfeito, e o
-/// produto perdia a capacidade de desfazer aquilo de novo — a única anotação de
-/// como voltar já tinha sido gasta.
-///
-/// Falhar em voz alta preserva a entrada do histórico, e o cliente pode tentar
-/// outra vez com elevação.
+/// Estado desejado já atingido não é erro; todo o resto sobe. Engolir a falha dizia "desfeito" com o valor
+/// ainda lá, e `ChangeLog::take` já tinha gasto a única anotação de como voltar.
 fn delete_value(hive: &str, path: &str, name: &str) -> Result<(), String> {
     let key = match root(hive)?.open_subkey_with_flags(path, KEY_WRITE) {
         Ok(key) => key,
-        // A chave sumiu: não há valor para apagar, e é isso que se queria.
         Err(e) if chave_inexistente(e.kind()) => return Ok(()),
         Err(e) => {
             return Err(format!(
@@ -232,7 +183,6 @@ fn delete_value(hive: &str, path: &str, name: &str) -> Result<(), String> {
 
     match key.delete_value(name) {
         Ok(()) => Ok(()),
-        // O valor já não estava lá.
         Err(e) if chave_inexistente(e.kind()) => Ok(()),
         Err(e) => Err(format!(
             "Não consegui apagar {}\\{}\\{} ao desfazer: {}. A mudança continua aplicada.",
@@ -241,7 +191,6 @@ fn delete_value(hive: &str, path: &str, name: &str) -> Result<(), String> {
     }
 }
 
-/// Uma chave sem valores e sem subchaves pode ser removida com segurança.
 fn is_empty_key(hive: &str, path: &str) -> bool {
     match root(hive).and_then(|root| {
         root.open_subkey_with_flags(path, KEY_READ)
@@ -252,12 +201,7 @@ fn is_empty_key(hive: &str, path: &str) -> bool {
     }
 }
 
-/// Lista as subchaves de um caminho. Usado para enumerar interfaces de rede,
-/// cujos GUIDs são diferentes em cada máquina.
-///
-/// Mesma regra do `value_names`: chave que não existe não tem subchaves, e isso
-/// é resposta — a chave de programas instalados só para o usuário atual nem
-/// sempre foi criada. Só não conseguir abrir vira `Err`.
+/// Chave inexistente é lista vazia; só não conseguir abrir vira `Err`.
 pub fn subkeys(hive: &str, path: &str) -> Result<Vec<String>, String> {
     let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
         Ok(key) => key,
@@ -273,12 +217,6 @@ mod tests_1_8 {
     use super::*;
     use std::io::ErrorKind;
 
-    /// A classificação que decide se o desfazer APAGA a chave do cliente.
-    ///
-    /// Só "não encontrado" pode virar `AbsentKey`. Qualquer outro motivo é
-    /// desconhecimento, e desconhecimento não autoriza apagar: uma chave que
-    /// existia e não pôde ser lida seria gravada como "não existia", e a
-    /// reversão a removeria em nome de restaurar o estado anterior.
     #[test]
     fn so_chave_nao_encontrada_pode_virar_ausente() {
         assert!(chave_inexistente(ErrorKind::NotFound));
@@ -297,9 +235,7 @@ mod tests_1_8 {
         }
     }
 
-    /// Ler uma chave que realmente não existe continua sendo `AbsentKey`, e não
-    /// erro. Esse caminho é o normal — a maioria das otimizações escreve em
-    /// chave que o Windows ainda não criou.
+    /// O caminho normal: a maioria das otimizações escreve em chave que o Windows ainda não criou.
     #[test]
     fn chave_que_nao_existe_continua_sendo_ausente() {
         let lido = read(
@@ -311,15 +247,11 @@ mod tests_1_8 {
         assert_eq!(lido, Ok(PreviousValue::AbsentKey));
     }
 
-    /// Hive desconhecida continua sendo erro, e não ausência.
     #[test]
     fn hive_desconhecida_e_erro_e_nao_ausencia() {
         assert!(read("HKXX", r"Software\Otimiza", "X").is_err());
     }
 
-    /// Apagar um valor que não está lá é sucesso: o estado desejado já foi
-    /// atingido. É o caso que o `delete_value` precisa continuar perdoando
-    /// depois de deixar de perdoar todo o resto.
     #[test]
     fn desfazer_valor_ja_ausente_e_sucesso() {
         let apagado = delete_value(
@@ -344,10 +276,6 @@ mod tests_1_6 {
 
     #[test]
     fn negado_ja_elevado_nao_manda_fazer_o_que_ja_foi_feito() {
-        // Medido na máquina do dono: elevado, e o Windows nega a escrita na
-        // política dos Widgets mesmo assim, enquanto o PowerShell elevado grava
-        // na mesma chave. Mandar "execute como administrador" aqui é mandar o
-        // cliente repetir o que ele já fez, e deixá-lo achando que errou.
         let msg = explicar_falha_de_escrita(
             "HKLM\\SOFTWARE\\Policies\\Microsoft\\Dsh\\AllowNewsAndInterests",
             "Acesso negado. (os error 5)",
@@ -375,13 +303,8 @@ mod tests_1_6 {
 mod tests {
     use super::*;
 
-    /// Confere a detecção de elevação contra uma fonte independente do nosso
-    /// código: o nível de integridade do token, informado pelo próprio Windows.
-    ///
-    /// Os SIDs são iguais em qualquer idioma — S-1-16-12288 é "alto"
-    /// (administrador) e S-1-16-16384 é "sistema". Este teste existe porque a
-    /// implementação anterior errava silenciosamente, e um erro aqui trava o
-    /// usuário num pedido de permissão que ele já tem.
+    /// Confere contra o nível de integridade do token (SIDs iguais em qualquer idioma): a implementação anterior
+    /// errava calada e prendia o usuário num pedido de permissão que ele já tinha.
     #[test]
     fn elevation_matches_the_token_integrity_level() {
         let saida = super::super::shell::run("whoami", &["/groups"])
@@ -400,10 +323,7 @@ mod tests {
 
     #[test]
     fn chave_que_nao_existe_nao_tem_valores_e_nao_e_falha() {
-        // A distinção que o C.1 trouxe corta nos dois sentidos: não conseguir
-        // ler deixou de virar vazio, e chave inexistente NÃO pode ter virado
-        // erro — senão toda máquina sem preferência de placa gravada, ou sem
-        // programa na chave `Run` do usuário, passaria a mostrar lacuna.
+        // Chave inexistente NÃO pode virar erro: toda máquina sem preferência de placa mostraria lacuna.
         const NAO_EXISTE: &str = r"Software\OtimizaChaveQueNaoExiste2026";
 
         assert_eq!(value_names("HKCU", NAO_EXISTE), Ok(Vec::new()));
@@ -419,26 +339,8 @@ mod tests {
     }
 }
 
-/// Nomes dos valores de uma chave.
-///
-/// DEVOLVE `Result`, E A DOC ANTIGA EXPLICA POR QUÊ.
-///
-/// Até a 2.0 esta função devolvia `Vec<String>` e a doc dizia "lista vazia
-/// quando a chave não existe". Ela mentia por omissão: o `Err(_) => Vec::new()`
-/// devolvia vazio também para acesso negado, chave corrompida e hive
-/// indisponível — e o chamador não tinha COMO saber a diferença.
-///
-/// O estrago aparecia longe daqui. `startup.rs` enumera as chaves `Run` com
-/// isto; uma leitura que falhasse fazia a tela escrever "Nenhum programa nas
-/// chaves de inicialização" sobre uma máquina que podia ter vinte.
-///
-/// A 1.8 aplicou essa disciplina ao `read` e ao `delete_value`, e parou ali.
-/// Isto é a mesma regra descendo até o alicerce.
-///
-/// Chave que NÃO EXISTE continua sendo lista vazia, e isso não é a mesma
-/// mentira: a chave `Run` de um usuário novo e a de preferência de placa de quem
-/// nunca fixou nenhuma simplesmente não foram criadas. Não ter valores é a
-/// resposta certa ali. O que deixou de virar vazio é não conseguir abrir.
+/// `Result`: o `Err(_) => Vec::new()` fazia a tela dizer "nenhum programa na inicialização" sobre uma leitura
+/// negada. Chave que não existe continua lista vazia.
 pub fn value_names(hive: &str, path: &str) -> Result<Vec<String>, String> {
     let key = match root(hive)?.open_subkey_with_flags(path, KEY_READ) {
         Ok(key) => key,
@@ -452,20 +354,8 @@ pub fn value_names(hive: &str, path: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Lê um valor de texto. Três respostas, não duas.
-///
-/// - `Ok(Some(_))` — leu, e é texto.
-/// - `Ok(None)` — a chave ou o valor não existe, ou existe e é de outro tipo.
-///   As duas são "não há texto aqui", que é uma resposta legítima.
-/// - `Err(_)` — NÃO CONSEGUIU LER. Não é o mesmo que ausência.
-///
-/// O `Option` sozinho não dava conta: o `_ => None` jogava fora justamente a
-/// distinção que o `read` de baixo tinha acabado de fazer na 1.8. Em
-/// `devices.rs`, isso decidia se uma placa de rede era FÍSICA — o filtro que o
-/// PROGRESS.md registra como "o que mais deu trabalho acertar", porque separa a
-/// placa real dos WAN Miniports de VPN. Um `ComponentId` ilegível fazia a placa
-/// de verdade do cliente ser descartada como virtual, e as otimizações de rede
-/// dela sumiam da lista sem uma palavra.
+/// Três respostas: `Ok(Some)` texto, `Ok(None)` ausente ou outro tipo, `Err` não se leu. Com `Option`, um
+/// `ComponentId` ilegível descartava a placa de rede física como virtual.
 pub fn read_text(hive: &str, path: &str, name: &str) -> Result<Option<String>, String> {
     match read(hive, path, name)? {
         PreviousValue::Text(value) => Ok(Some(value)),
@@ -473,42 +363,19 @@ pub fn read_text(hive: &str, path: &str, name: &str) -> Result<Option<String>, S
     }
 }
 
-/// Verifica se uma chave existe.
-/// `None` é NÃO DEU PARA SABER, e não "não existe".
-///
-/// Este era o último ponto do módulo que ainda confundia os dois — `read`,
-/// `value_names` e `delete_value` já separavam desde a 1.8. E era o que mais
-/// doía, porque `services::exists` sai daqui: numa máquina onde a leitura de
-/// `HKLM\SYSTEM\CurrentControlSet\Services\<svc>` é negada por ACL (política de
-/// domínio, endurecimento, antivírus), QUATRO otimizações do catálogo sumiam da
-/// lista dizendo "não se aplica a esta máquina" — sobre um Windows que tem os
-/// quatro serviços.
-///
-/// Sumir com a frase errada é a pior forma de falhar num produto que se vende
-/// por honestidade: o cliente não vê erro nenhum, e conclui que comprou um
-/// otimizador que não faz nada no PC dele.
+/// `None` é NÃO DEU PARA SABER: com a ACL negando `Services\<svc>`, quatro itens sumiam como "não se aplica".
 pub fn key_exists(hive: &str, path: &str) -> Option<bool> {
     let raiz = root(hive).ok()?;
 
     match raiz.open_subkey_with_flags(path, KEY_READ) {
         Ok(_) => Some(true),
-        // Só a ausência de verdade responde "não existe". Qualquer outro
-        // motivo é desconhecimento — a mesma regra que `read` já segue.
         Err(e) if chave_inexistente(e.kind()) => Some(false),
         Err(_) => None,
     }
 }
 
-/// Verifica se o processo tem privilégios de administrador.
-///
-/// Pergunta ao próprio Windows, lendo o token do processo. A versão anterior
-/// tentava abrir `HKLM\SOFTWARE` para escrita e concluía elevação a partir disso
-/// — e estava errada: essa chave tem permissões restritas em parte das máquinas,
-/// então falhava MESMO com administrador. O sintoma seria o pior possível: o app
-/// pedindo elevação para quem já é administrador, num laço sem saída.
-///
-/// A lição vale além daqui: permissão de chave é um palpite sobre elevação; o
-/// token é a resposta.
+/// Pelo token do processo: abrir `HKLM\SOFTWARE` para escrita falhava mesmo com administrador, num laço de
+/// pedido de elevação sem saída.
 pub fn is_elevated() -> bool {
     use std::mem;
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
@@ -546,31 +413,9 @@ mod tests_2_0 {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
-    /// Nenhuma escrita PRESUME o estado anterior.
-    ///
-    /// POR QUE ESTA TRAVA EXISTE
-    ///
-    /// A 1.8 ensinou `registry::read` a distinguir "não existe" de "não
-    /// consegui ler", e consertou o único chamador que na época convertia essa
-    /// falha em ausência (`network.rs`, o DNS). A disciplina parou ali.
-    ///
-    /// Duas outras escritas continuaram presumindo, e as duas doem:
-    ///
-    ///   - `gpupref::definir` gravava `PreviousValue::Absent` diante de uma
-    ///     leitura falha. O desfazer APAGARIA a escolha de placa que o cliente
-    ///     já tinha. A 1.9 pôs um botão em cima dessa função.
-    ///   - `gamemode` gravava `AbsentKey`, e ali o estrago era imediato: o
-    ///     caminho de desativar RESTAURA `anterior` na hora, então a leitura
-    ///     falha virava escrita errada sem esperar desfazer nenhum.
-    ///
-    /// Consertar os dois casos de hoje não impede o terceiro. Esta varredura
-    /// impede — é o mesmo recurso da trava de prosa em `commands.rs`: procurar
-    /// a FORMA do defeito, e não as ocorrências conhecidas.
-    ///
-    /// A regra é estreita de propósito: só reprova `registry::read(...)`
-    /// seguido de `.unwrap_or`. Um `.unwrap_or_default()` sobre `read_text`
-    /// não cai aqui, porque aquilo é leitura para MOSTRAR, não para desfazer —
-    /// é outro problema, com outro conserto.
+    /// Nenhuma escrita PRESUME o estado anterior: reprova `registry::read(...)` seguido de `.unwrap_or` (gravava
+    /// `Absent` diante de leitura falha, e o desfazer apagaria a escolha do cliente). Procura a FORMA do defeito.
+    /// `.unwrap_or_default()` sobre `read_text` fica fora: é leitura para mostrar.
     fn arquivos_rust(dir: &Path, achados: &mut Vec<PathBuf>) {
         let Ok(entradas) = std::fs::read_dir(dir) else {
             return;
@@ -587,11 +432,7 @@ mod tests_2_0 {
         }
     }
 
-    /// O texto entre `registry::read(` e o fim da expressão, sem comentários.
-    ///
-    /// Junta as linhas porque a chamada costuma quebrar em duas — foi assim
-    /// que os dois defeitos se escondiam: o `.unwrap_or` ficava na linha de
-    /// baixo, longe do olho de quem lia a de cima.
+    /// Junta as linhas: o `.unwrap_or` se escondia na linha de baixo.
     fn sem_comentarios(conteudo: &str) -> String {
         conteudo
             .lines()
@@ -624,7 +465,6 @@ mod tests_2_0 {
                 continue;
             };
 
-            // Este arquivo fala de si mesmo nos comentários acima.
             if arquivo.file_name().and_then(|n| n.to_str()) == Some("registry.rs") {
                 continue;
             }
@@ -634,7 +474,6 @@ mod tests_2_0 {
             for trecho in plano.split("registry::read(").skip(1) {
                 chamadas += 1;
 
-                // O que vem logo depois do fecha-parênteses da chamada.
                 let Some(fim) = trecho.find(')') else { continue };
                 let depois = trecho[fim..].trim_start_matches(')').trim_start();
 

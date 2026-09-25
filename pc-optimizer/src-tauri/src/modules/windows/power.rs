@@ -1,16 +1,9 @@
-// Planos de energia do Windows
-//
-// Em notebooks e em muitos desktops o plano "Equilibrado" reduz a frequência da
-// CPU sob carga leve, o que causa engasgos e perda de FPS. Trocar para Alto
-// Desempenho é uma das poucas otimizações com ganho consistente e mensurável.
+// Planos de energia do Windows.
 
 use super::shell;
 
-/// GUID fixo do plano "Alto Desempenho" — igual em todas as instalações do Windows.
 pub const HIGH_PERFORMANCE_GUID: &str = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c";
 
-/// Extrai o GUID da saída do `powercfg /getactivescheme`.
-/// Formato: `Power Scheme GUID: 381b4222-... (Balanced)`
 pub fn parse_active_guid(output: &str) -> Option<String> {
     let after_colon = output.split(':').nth(1)?;
     let guid = after_colon.split_whitespace().next()?;
@@ -22,7 +15,6 @@ pub fn parse_active_guid(output: &str) -> Option<String> {
     }
 }
 
-/// GUID do plano de energia ativo.
 pub fn active_scheme() -> Result<String, String> {
     let output = shell::run_checked("powercfg", &["/getactivescheme"])?;
 
@@ -30,28 +22,13 @@ pub fn active_scheme() -> Result<String, String> {
         .ok_or_else(|| format!("Could not parse active power scheme from: {}", output.trim()))
 }
 
-/// Ativa um plano de energia pelo GUID.
 pub fn set_active_scheme(guid: &str) -> Result<(), String> {
     shell::run_checked("powercfg", &["/setactive", guid])?;
     Ok(())
 }
 
-// `garantir_alto_desempenho` e a cópia "OTIMIZA Alto Desempenho" saíram na
-// 2.9: o modo jogo não liga mais plano fixo nenhum (ver `gamemode::ativar`).
-
-/// `None` é NÃO CONSEGUI LER, e não "desligada".
-///
-/// Devolvia `bool`, e a diferença custava caro: erro de leitura, permissão
-/// negada e valor ausente caíam todos em `false`. Três consequências, todas
-/// invisíveis:
-///
-/// 1. a lista dizia "hibernação já desativada" num PC onde o `hiberfil.sys`
-///    continua ocupando o tamanho da RAM;
-/// 2. a otimização nunca rodava, e o espaço prometido nunca aparecia;
-/// 3. pior de tudo, esta MESMA função era usada para CONFERIR a escrita — a
-///    verificação validava a si mesma. Leitura quebrada devolvia "antes:
-///    desligada" e "depois: desligada", e o produto dava por conferido o que
-///    nunca leu.
+/// `None` é NÃO CONSEGUI LER, não "desligada": com `bool`, a leitura quebrada dizia "já desativada" com o
+/// `hiberfil.sys` no disco, e a mesma função conferia a escrita, validando a si mesma.
 pub fn hibernation_enabled() -> Option<bool> {
     use crate::modules::changelog::PreviousValue;
 
@@ -61,24 +38,19 @@ pub fn hibernation_enabled() -> Option<bool> {
         "HibernateEnabled",
     ) {
         Ok(PreviousValue::Dword(v)) => Some(v == 1),
-        // Valor ausente: o Windows trata a ausência como desligada, e aqui a
-        // ausência foi LIDA — é resposta, não silêncio.
+        // Ausência LIDA: o Windows a trata como desligada.
         Ok(PreviousValue::Absent) | Ok(PreviousValue::AbsentKey) => Some(false),
         _ => None,
     }
 }
 
-/// Liga ou desliga a hibernação. Desligar apaga o `hiberfil.sys`, liberando do
-/// disco o equivalente à RAM instalada.
 pub fn set_hibernation(enabled: bool) -> Result<(), String> {
     shell::run_checked("powercfg", &["/hibernate", if enabled { "on" } else { "off" }])?;
     Ok(())
 }
 
-/// Onde o Windows guarda os ajustes de cada plano de energia.
-///
-/// Ler daqui, e não da saída do `powercfg /q`, é o que faz a reversão funcionar
-/// em Windows de qualquer idioma: o comando traduz os rótulos, o registro não.
+/// Do registro, não do `powercfg /q`: o comando traduz os rótulos, e a reversão precisa funcionar em qualquer
+/// idioma.
 fn power_setting_path(scheme: &str, subgroup: &str, setting: &str) -> String {
     format!(
         r"SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{}\{}\{}",
@@ -86,8 +58,7 @@ fn power_setting_path(scheme: &str, subgroup: &str, setting: &str) -> String {
     )
 }
 
-/// Valor atual de um ajuste no modo "ligado na tomada".
-/// Ausente significa que o plano está herdando o padrão do Windows.
+/// Ausente: o plano herda o padrão do Windows.
 pub fn read_power_setting(
     scheme: &str,
     subgroup: &str,
@@ -100,21 +71,9 @@ pub fn read_power_setting(
     )
 }
 
-/// Lê `hypervisorlaunchtype` da saída do `bcdedit`.
-///
-/// Separado da execução para poder ser testado: é esta linha que decide se o
-/// hipervisor sobe no boot, e é dela que sai o valor guardado para reverter.
-///
-/// O NOME do elemento é inglês em qualquer idioma — conferido nesta máquina, que
-/// imprime o cabeçalho em português e os nomes em inglês. O VALOR é normalizado
-/// para a palavra-chave que o `bcdedit /set` aceita.
-///
-/// Sem isso, o texto que o `bcdedit` imprime viraria argumento do `bcdedit` no
-/// desfazer, e os dois lados só coincidem enquanto o Windows imprimir em inglês.
-/// Ver `firmware::palavra_chave_do_hipervisor`.
-///
-/// `None` continua sendo "não consegui ler" — agora inclui "li e não reconheço",
-/// que dá no mesmo para quem precisa prometer a volta.
+/// O NOME do elemento é inglês em qualquer idioma; o VALOR é normalizado para a palavra-chave do `bcdedit /set`
+/// (ver `firmware::palavra_chave_do_hipervisor`), senão o desfazer só funcionaria com o Windows em inglês. `None`
+/// inclui "li e não reconheço".
 pub fn parse_hypervisor_launch_type(saida: &str) -> Option<String> {
     saida
         .lines()
@@ -126,11 +85,7 @@ pub fn parse_hypervisor_launch_type(saida: &str) -> Option<String> {
         })
 }
 
-/// Como o hipervisor está configurado para subir nesta máquina.
-///
-/// `None` quer dizer que não conseguimos ler — sem elevação, por exemplo. Não
-/// significa "desligado", e a diferença importa: sem saber o estado anterior não
-/// há como prometer a reversão.
+/// `None` = não se leu (sem elevação, por exemplo): sem o estado anterior não há como prometer a reversão.
 pub fn hypervisor_launch_type() -> Option<String> {
     let saida = shell::run("bcdedit", &["/enum", "{current}"]).ok()?;
 
@@ -141,14 +96,8 @@ pub fn hypervisor_launch_type() -> Option<String> {
     parse_hypervisor_launch_type(&saida.stdout)
 }
 
-/// O valor que o próprio Windows declara como padrão para um ajuste.
-///
-/// Serve à reversão de um ajuste que não tinha valor antes: o plano herdava o
-/// padrão, e o `powercfg` não sabe apagar um valor. Ler o padrão declarado é a
-/// única forma de devolver o estado original sem inventar número — e esta
-/// chave, ao contrário das de `PowerSchemes`, é legível.
+/// O `powercfg` não apaga valor: devolver o padrão declarado é a única volta sem inventar número.
 fn valor_padrao(scheme: &str, subgroup: &str, setting: &str, indice: &str) -> Option<u32> {
-
     let caminho = format!(
         r"SYSTEM\CurrentControlSet\Control\Power\PowerSettings\{}\{}\DefaultPowerSchemeValues\{}",
         subgroup, setting, scheme
@@ -160,30 +109,13 @@ fn valor_padrao(scheme: &str, subgroup: &str, setting: &str, indice: &str) -> Op
     }
 }
 
-/// O valor lido do plano, ou o padrão que ele herda quando não tem o próprio.
 pub fn resolver_valor(no_plano: Option<u32>, padrao: Option<u32>) -> Option<u32> {
     no_plano.or(padrao)
 }
 
-/// O número dentro de um `ACSettingIndex` / `DCSettingIndex`.
-///
-/// NEM TODO ÍNDICE É `REG_DWORD`, e descobrir isso custou um teste contra a
-/// máquina de verdade. Medido aqui: depois de gravar a economia de energia do
-/// adaptador sem fio (`12bbebe6-…`), o `powercfg /query` mostrava o valor certo
-/// e o registro guardava `REG_BINARY {0,0,0,0}` — enquanto todos os outros dez
-/// ajustes do mesmo plano ficaram `REG_DWORD`. O tipo acompanha o que o plano de
-/// origem já tinha, e plano de origem varia de máquina para máquina.
-///
-/// Ler só `Dword` fazia duas coisas erradas, e as duas calado:
-///
-/// 1. O ajuste nunca parecia satisfeito, então era REESCRITO toda vez;
-/// 2. Pior, o valor anterior guardado para desfazer virava `Binary`, e
-///    `restore_power_setting` trata o que não é `Dword` como "não havia valor" —
-///    ou seja, o desfazer GRAVAVA O PADRÃO DO WINDOWS POR CIMA da configuração
-///    que o cliente tinha.
-///
-/// Quatro bytes em little-endian é como o Windows guarda esse índice quando ele
-/// vem binário. Tamanho diferente disso não é um índice, e não vira palpite.
+/// NEM TODO ÍNDICE É `REG_DWORD`: medido, o ajuste do adaptador sem fio ficou `REG_BINARY {0,0,0,0}` (o tipo
+/// segue o plano de origem). Lendo só `Dword`, o ajuste era reescrito sempre e o desfazer gravava o padrão do
+/// Windows por cima do valor do cliente. Quatro bytes little-endian; outro tamanho não vira palpite.
 pub fn indice_do_valor(valor: &crate::modules::changelog::PreviousValue) -> Option<u32> {
     use crate::modules::changelog::PreviousValue;
 
@@ -196,9 +128,7 @@ pub fn indice_do_valor(valor: &crate::modules::changelog::PreviousValue) -> Opti
     }
 }
 
-/// O valor que a máquina realmente usa para um ajuste.
 pub fn valor_efetivo(scheme: &str, subgroup: &str, setting: &str, bateria: bool) -> Option<u32> {
-
     let indice = if bateria { "DCSettingIndex" } else { "ACSettingIndex" };
 
     let no_plano = match super::registry::read(
@@ -213,18 +143,7 @@ pub fn valor_efetivo(scheme: &str, subgroup: &str, setting: &str, bateria: bool)
     resolver_valor(no_plano, valor_padrao(scheme, subgroup, setting, indice))
 }
 
-// `power_setting_satisfeito` MORAVA AQUI.
-//
-// A regra que ela carregava — o ajuste precisa valer na TOMADA E NA BATERIA,
-// senão um notebook fora da tomada não mudava nada e a tela dizia que sim —
-// não foi perdida: ela virou `planoenergia::ja_satisfeito`, que sabe além
-// disso que no notebook a bateria pode NÃO ser alvo de propósito. Os testes
-// foram junto, inclusive o que combina a herança do padrão do Windows.
-
-
-/// Devolve o ajuste ao estado anterior. Quando não havia valor, a chave é
-/// apagada para o plano voltar a herdar o padrão em vez de ficar com um número
-/// fixo que nós inventamos.
+/// Sem valor anterior, volta a herdar o padrão em vez de ficar com um número que inventamos.
 pub fn restore_power_setting(
     scheme: &str,
     subgroup: &str,
@@ -232,11 +151,7 @@ pub fn restore_power_setting(
     previous: &crate::modules::changelog::PreviousValue,
     previous_dc: Option<&crate::modules::changelog::PreviousValue>,
 ) -> Result<(), String> {
-
-    // SÓ pelo `powercfg`. As chaves de `PowerSchemes` pertencem ao SISTEMA e
-    // negam escrita direta mesmo a um administrador — conferido contra a
-    // máquina do dono, onde a tentativa volta com "acesso negado" e a reversão
-    // falha, deixando aplicado no PC do cliente o que ele mandou desfazer.
+    // SÓ pelo `powercfg`: as chaves de `PowerSchemes` são do SISTEMA e negam escrita até a administrador.
     let escrever = |indice: &str, valor: u32| -> Result<(), String> {
         shell::run_checked(
             "powercfg",
@@ -245,16 +160,10 @@ pub fn restore_power_setting(
         .map(|_| ())
     };
 
-    // `indice_do_valor`, e não `PreviousValue::Dword` direto: o índice pode ter
-    // sido lido como `REG_BINARY`, e nesse caso o braço de baixo gravaria o
-    // PADRÃO DO WINDOWS por cima do valor que o cliente tinha. Ver o comentário
-    // de `indice_do_valor`.
+    // `indice_do_valor`, não `PreviousValue::Dword`: um índice `REG_BINARY` cairia no braço de baixo e gravaria o
+    // padrão por cima.
     match indice_do_valor(previous) {
         Some(valor) => escrever("-setacvalueindex", valor)?,
-        // Não havia valor: o plano herdava o padrão. Devolvemos o padrão que o
-        // próprio Windows declara — não há como apagar o valor pelo `powercfg`,
-        // e o padrão declarado é o estado que o cliente tinha, não um número
-        // inventado por nós.
         None => {
             if let Some(padrao) = valor_padrao(scheme, subgroup, setting, "ACSettingIndex") {
                 escrever("-setacvalueindex", padrao)?;
@@ -269,18 +178,14 @@ pub fn restore_power_setting(
                 escrever("-setdcvalueindex", padrao)?;
             }
         }
-        // `None` é mudança gravada antes de o produto escrever a bateria: nunca
-        // mexemos nela, então não se mexe agora.
+        // `None`: mudança gravada antes de o produto escrever a bateria; ela nunca foi mexida.
         None => {}
     }
 
     set_active_scheme(scheme)
 }
 
-/// Se a compressão de memória está ligada.
-///
-/// `Get-MMAgent` devolve nomes de propriedade em inglês em qualquer idioma do
-/// Windows, então `True`/`False` são estáveis.
+/// `Get-MMAgent` responde em inglês em qualquer idioma.
 pub fn memory_compression_enabled() -> Option<bool> {
     let output = shell::powershell("(Get-MMAgent).MemoryCompression").ok()?;
 
@@ -306,30 +211,16 @@ pub fn set_memory_compression(enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
-/// Se o Armazenamento Reservado está ligado.
-///
-/// O Windows 10 e 11 reservam vários GB do disco para atualizações. Em SSD
-/// pequeno isso pesa. `Get-WindowsReservedStorageState` devolve `Enabled` ou
-/// `Disabled` em inglês em qualquer idioma do sistema.
-/// O que sabemos sobre o Armazenamento Reservado desta máquina.
-///
-/// Os dois últimos existem separados por um defeito real: numa leitura recusada
-/// o produto concluía que o Windows não tem o recurso, e dizia ao cliente "não
-/// se aplica a esta máquina". Medido no Windows 11 Pro da máquina de
-/// desenvolvimento, com o programa **elevado**,
-/// `Get-WindowsReservedStorageState` responde "Acesso negado" — e a máquina pode
-/// muito bem ter o recurso.
+/// Leitura recusada não é "sem recurso": elevado, no Windows 11 Pro, `Get-WindowsReservedStorageState` responde
+/// "Acesso negado", e o produto dizia "não se aplica".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EstadoReservado {
     Ligado,
     Desligado,
-    /// O comando respondeu e não trouxe estado: este Windows não tem o recurso.
     SemRecurso,
-    /// O comando não respondeu. Não sabemos, e não vamos fingir que sabemos.
     NaoVerificavel,
 }
 
-/// Regra pura da classificação, separada da execução para poder ser testada.
 pub fn classificar_armazenamento_reservado(sucesso: bool, saida: &str) -> EstadoReservado {
     if !sucesso {
         return EstadoReservado::NaoVerificavel;
@@ -348,12 +239,6 @@ pub fn estado_do_armazenamento_reservado() -> EstadoReservado {
         Err(_) => EstadoReservado::NaoVerificavel,
     }
 }
-
-// `reserved_storage_enabled` morava aqui, devolvendo `Option<bool>`. Foi
-// removida porque o `None` dela era a própria conflação que a 1.7 veio
-// desfazer: juntava "o Windows respondeu que não tem o recurso" com "o Windows
-// recusou responder". Os dois lados — inspeção e aplicação — agora usam
-// `estado_do_armazenamento_reservado`, que separa os dois casos.
 
 pub fn set_reserved_storage(enabled: bool) -> Result<(), String> {
     let estado = if enabled { "Enabled" } else { "Disabled" };
@@ -379,11 +264,6 @@ mod tests {
 
     #[test]
     fn leitura_recusada_nao_vira_recurso_inexistente() {
-        // Medido na máquina do dono, Windows 11 Pro, com o programa ELEVADO:
-        // `Get-WindowsReservedStorageState` existe e responde "Acesso negado".
-        // Concluir daí que o Windows não tem o recurso é afirmar o que não foi
-        // verificado — e faz o produto dizer "não se aplica a esta máquina"
-        // sobre uma máquina onde ele pode muito bem se aplicar.
         assert_eq!(
             classificar_armazenamento_reservado(false, ""),
             EstadoReservado::NaoVerificavel
@@ -424,8 +304,6 @@ mod tests {
 
     #[test]
     fn saida_sem_a_linha_nao_vira_palpite() {
-        // Ausente significa que não conseguimos ler — e sem saber o estado
-        // anterior não há como prometer a volta.
         let saida = "identifier              {current}\nnx                      OptOut\n";
         assert_eq!(parse_hypervisor_launch_type(saida), None);
     }
@@ -437,9 +315,7 @@ mod tests {
 
     #[test]
     fn sem_valor_no_plano_vale_o_padrao_declarado() {
-        // Ausente não é vazio: é herdar o padrão, e o padrão é o que a máquina
-        // de fato usa. Tratar como "não aplicado" faria o produto aplicar e
-        // depois desfazer para o mesmo número.
+        // Ausente é herdar o padrão: tratar como "não aplicado" aplicaria e desfaria para o mesmo número.
         assert_eq!(resolver_valor(None, Some(5)), Some(5));
         assert_eq!(resolver_valor(None, Some(100)), Some(100));
     }
@@ -451,12 +327,6 @@ mod tests {
 
     #[test]
     fn indice_gravado_como_binario_e_lido_igual_ao_dword() {
-        // MEDIDO NA MÁQUINA, e não deduzido: depois de gravar a economia de
-        // energia do adaptador sem fio, o registro guardou `REG_BINARY
-        // {0,0,0,0}` enquanto os outros dez ajustes do mesmo plano ficaram
-        // `REG_DWORD`. Sem isto, o ajuste era reescrito toda vez e — o que
-        // machuca — o desfazer gravava o padrão do Windows por cima do valor do
-        // cliente, porque o que não era `Dword` contava como "não havia valor".
         use crate::modules::changelog::PreviousValue;
 
         assert_eq!(indice_do_valor(&PreviousValue::Dword(100)), Some(100));
@@ -470,8 +340,6 @@ mod tests {
 
     #[test]
     fn binario_de_outro_tamanho_nao_vira_palpite() {
-        // Ausência de valor é diferente de um valor que não sabemos ler, e
-        // inventar um número aqui é escrever no PC do cliente por adivinhação.
         use crate::modules::changelog::PreviousValue;
 
         assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![1, 0])), None);
@@ -492,7 +360,7 @@ mod tests {
 
     #[test]
     fn parses_localized_output() {
-        // A saída é traduzida conforme o idioma do Windows; só o GUID é estável.
+        // A saída é traduzida; só o GUID é estável.
         let output = "GUID do Esquema de Energia: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (Alto desempenho)\r\n";
         assert_eq!(
             parse_active_guid(output).as_deref(),
