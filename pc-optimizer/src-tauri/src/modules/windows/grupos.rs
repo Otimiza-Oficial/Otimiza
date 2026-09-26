@@ -1,7 +1,7 @@
-// Os grupos de ajuste, para testar um de cada vez: "qual destes nove grupos piorou meu PC?" se responde com
-// quatro medições. O corte é por ONDE O AJUSTE TOCA, não pela categoria da tela. Grupo que exige reiniciar não
-// pode ser revertido sozinho (o depois é outra sessão), e só F, G e I dispensam reinício, os que menos mexem em
-// FPS. O que cobre todos é testar UM GRUPO DE CADA VEZ.
+// Os grupos de ajuste, para testar um de cada vez: "qual destes grupos piorou meu PC?" se responde com quatro
+// medições. O corte é por ONDE O AJUSTE TOCA, não pela categoria da tela. Grupo que exige reiniciar não pode ser
+// revertido sozinho (o depois é outra sessão). O que cobre todos é testar UM GRUPO DE CADA VEZ. Aposentado não
+// entra em grupo (só existe para o desfazer), e grupo que ficou sem item sai de `TODOS` mantendo a letra.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,14 +20,12 @@ pub enum Grupo {
 }
 
 impl Grupo {
+    /// B (Agendamento), D (Memória) e G (Visual) ficaram vazios com os cortes da 2.9 e da A3.2.
     pub const TODOS: &'static [Grupo] = &[
         Grupo::Energia,
-        Grupo::Agendamento,
         Grupo::Video,
-        Grupo::Memoria,
         Grupo::Rede,
         Grupo::Fundo,
-        Grupo::Visual,
         Grupo::Boot,
         Grupo::Higiene,
     ];
@@ -65,8 +63,8 @@ impl Grupo {
         match self {
             Grupo::Energia => {
                 "O plano de energia: frequência mínima do processador, preferência entre \
-                 energia e desempenho, estacionamento de núcleos, e o que dorme sozinho. \
-                 É o grupo com o maior efeito medido na maioria das máquinas."
+                 energia e desempenho e estacionamento de núcleos. É o grupo com o maior \
+                 efeito medido na maioria das máquinas."
             }
             Grupo::Agendamento => {
                 "Como o Windows reparte o processador entre o jogo e o resto: prioridade \
@@ -83,12 +81,13 @@ impl Grupo {
                  quando sobra memória DURANTE o jogo."
             }
             Grupo::Rede => {
-                "Atraso de rede: agrupamento de pacotes e economia de energia da placa de \
-                 rede. Mexe em ping e em variação de ping, não em FPS."
+                "A economia de energia da placa de rede, que faz a placa cochilar e perder \
+                 pacote. Mexe em ping e em variação de ping, não em FPS."
             }
             Grupo::Fundo => {
-                "Serviços e programas que rodam sem ninguém pedir. Libera processador e \
-                 disco, e o efeito aparece mais em máquina apertada."
+                "As teclas de acessibilidade que o Windows liga sozinho por atalho \
+                 (Filtragem de Teclas, Teclas de Aderência). Mexe no teclado responder na \
+                 hora, não em FPS."
             }
             Grupo::Visual => {
                 "Animação, transparência e sombra das janelas do Windows. Melhora a \
@@ -99,8 +98,7 @@ impl Grupo {
                  memória, virtualização de segurança. Exige reiniciar para valer."
             }
             Grupo::Higiene => {
-                "Coleta de dados, sugestões, aplicativos instalados sozinhos. Não promete \
-                 quadro nenhum, e está separado justamente para poder ser descartado como \
+                "A aceleração do mouse. Não promete quadro nenhum: muda a mira, e está separado justamente para poder ser descartado como \
                  suspeito quando alguma coisa piorar."
             }
         }
@@ -168,7 +166,7 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
 
 /// NÃO é `entra_no_lote`: o lote exclui o que pode custar quadro; o A/B existe justamente para medir esses.
 fn testavel(spec: &super::catalog::OptimizationSpec) -> bool {
-    spec.reversible && !spec.security_tradeoff
+    spec.reversible && !spec.security_tradeoff && !super::catalog::retirado(spec.id)
 }
 
 pub fn itens_do_grupo(grupo: Grupo) -> Vec<&'static str> {
@@ -201,7 +199,7 @@ mod tests {
     /// Ajuste reversível fora de grupo é um ajuste que o A/B nunca testaria.
 
     #[test]
-    fn so_tres_grupos_cabem_numa_sessao_e_o_produto_sabe_quais() {
+    fn os_grupos_que_cabem_numa_sessao_sao_conhecidos() {
         let cabem: Vec<char> = Grupo::TODOS
             .iter()
             .filter(|g| pode_reverter_sozinho(**g))
@@ -210,12 +208,12 @@ mod tests {
 
         assert_eq!(
             cabem,
-            vec!['F', 'G', 'I'],
+            vec!['A', 'E', 'F', 'I'],
             "a lista de grupos que dispensam reinício mudou; se foi de propósito, \
              atualize este teste E o texto que explica o protocolo ao cliente"
         );
 
-        for g in [Grupo::Energia, Grupo::Agendamento, Grupo::Video, Grupo::Memoria] {
+        for g in [Grupo::Video, Grupo::Boot] {
             assert!(
                 exige_reinicio(g),
                 "o grupo {} deixou de exigir reinício — vale reconferir, porque isso \
@@ -237,6 +235,15 @@ mod tests {
                 "`{}` entra no lote e não tem grupo — o A/B nunca o testaria",
                 spec.id
             );
+        }
+    }
+
+    #[test]
+    fn aposentado_nao_entra_em_grupo() {
+        for grupo in Grupo::TODOS {
+            for id in itens_do_grupo(*grupo) {
+                assert!(!crate::modules::windows::catalog::retirado(id), "`{id}` foi aposentado e está no grupo");
+            }
         }
     }
 
@@ -266,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    fn as_nove_letras_sao_diferentes() {
+    fn as_letras_sao_diferentes() {
         let mut letras: Vec<char> = Grupo::TODOS.iter().map(|g| g.letra()).collect();
         let antes = letras.len();
 
@@ -274,7 +281,7 @@ mod tests {
         letras.dedup();
 
         assert_eq!(letras.len(), antes, "duas letras repetidas");
-        assert_eq!(antes, 9, "o protocolo fala em nove grupos");
+        assert_eq!(antes, 6, "a tela fala em seis grupos");
     }
 
     #[test]

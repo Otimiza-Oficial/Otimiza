@@ -1,5 +1,5 @@
 // O protocolo A/B: medir, aplicar UM grupo, medir, comparar, manter ou reverter. Vinte ajustes juntos dão um
-// número e nenhuma informação; nove grupos em sequência dão nove respostas, inclusive "aqui não mudou nada".
+// número e nenhuma informação; seis grupos em sequência dão seis respostas, inclusive "aqui não mudou nada".
 // Veredito só com o mesmo jogo, amostra confiável, duas medições de cada lado e diferença acima do ruído (regras
 // de `regressao`, não reimplementadas); reverter sozinho só se o grupo não exigir reinício.
 

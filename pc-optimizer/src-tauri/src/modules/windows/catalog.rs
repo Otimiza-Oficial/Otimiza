@@ -100,9 +100,8 @@ pub struct OptimizationSpec {
 }
 
 /// Nunca em lote, mesmo reversíveis e sem troca de segurança; continuam um a um, com aviso.
-/// `background_apps_off`: corta todo app da Loja, efeito que aparece dias depois. `windowed_game_optimizations`
-/// (3.0): muda a entrega de quadros e não foi medido aqui.
-pub const FORA_DO_LOTE: &[&str] = &["background_apps_off", "windowed_game_optimizations"];
+/// `windowed_game_optimizations` (3.0): muda a entrega de quadros; só entra quando o PresentMon mostrar o ganho.
+pub const FORA_DO_LOTE: &[&str] = &["windowed_game_optimizations"];
 
 // Classes da auditoria 2.9 (`docs/auditorias/AUDITORIA-2.9.md`): Essencial (qualquer máquina, entra no lote);
 // Condicional (só com a condição MEDIDA aqui; os "só se pedir" aparecem e nunca entram em lote); Expert (só no
@@ -142,22 +141,12 @@ pub const EXPERT: &[&str] = &[
     "gpu_hardware_scheduling",
     "gpu_msi_mode",
     "disable_vbs",
-    "disable_search_indexing",
 ];
 
 pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("disable_gamedvr", Condicao::GameDvrLigado),
-    ("visual_effects_performance", Condicao::PcFraco),
-    ("disable_transparency", Condicao::PcFraco),
-    ("disable_hibernation", Condicao::PoucoEspaco),
-    ("disable_widgets", Condicao::MemoriaApertada),
-    ("edge_background_off", Condicao::MemoriaApertada),
-    ("disable_startup_delay", Condicao::SoSePedir),
     // Real quando a placa dorme e perde pacote, e a perda não é medida aqui: não decide sozinho.
     ("nic_power_saving_off", Condicao::SoSePedir),
-    ("delivery_optimization_off", Condicao::SoSePedir),
-    ("store_auto_download_off", Condicao::SoSePedir),
-    ("error_reporting_off", Condicao::SoSePedir),
 ];
 
 pub fn classe(id: &str) -> Classe {
@@ -194,6 +183,20 @@ pub const RETIRADOS: &[&str] = &[
     "disable_copilot",
     // Terceira rodada (3.1): liberar disco não muda o jogo, fora a pedido do dono.
     "disable_reserved_storage",
+    // Quarta rodada (A3.2, docs/planos/A3.2-ANALISE.md seção 5): conforto, aparência e higiene do Windows sem efeito
+    // medido em jogo. O botão "Otimizar" fica só com o que tem causa e medida.
+    "visual_effects_performance",
+    "disable_transparency",
+    "disable_startup_delay",
+    "disable_hibernation",
+    "background_apps_off",
+    "delivery_optimization_off",
+    "disable_search_indexing",
+    "stop_sponsored_apps",
+    "disable_widgets",
+    "store_auto_download_off",
+    "error_reporting_off",
+    "edge_background_off",
 ];
 
 pub fn retirado(id: &str) -> bool {

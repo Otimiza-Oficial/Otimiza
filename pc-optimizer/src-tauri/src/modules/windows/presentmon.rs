@@ -284,12 +284,6 @@ pub fn executavel() -> Option<std::path::PathBuf> {
     fonte.is_file().then_some(fonte)
 }
 
-/// Captura `segundos` do processo e devolve o resumo. Exige administrador (ETW), como o canal antigo.
-#[cfg(target_os = "windows")]
-pub fn medir(pid: u32, segundos: u32) -> Result<Resumo, String> {
-    resumir(&capturar(pid, segundos)?)
-}
-
 /// No formato da medição antiga, para quem já consome `frames::MedicaoCrua` (medição automática, prova, portão):
 /// os mesmos cálculos sobre os quadros DO JOGO que o PresentMon separou. O resumo novo vem junto.
 #[cfg(target_os = "windows")]

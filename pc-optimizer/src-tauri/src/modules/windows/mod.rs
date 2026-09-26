@@ -412,7 +412,7 @@ impl WindowsOptimizer {
 
         if catalog::retirado(id) && !log.is_applied(id) {
             return Err(format!(
-                "`{}` foi retirado do Otimiza na 2.9: não muda FPS nem fluidez. \
+                "`{}` foi retirado do Otimiza: não mudou FPS nem fluidez em jogo. \
                  Se estiver aplicado, ainda dá para desfazer.",
                 spec.name
             ));
@@ -1878,12 +1878,8 @@ pub fn condicao_atendida_sem_esperar(c: catalog::Condicao) -> Option<bool> {
 }
 
 pub fn aquecer_condicoes() {
-    for c in [
-        catalog::Condicao::GameDvrLigado,
-        catalog::Condicao::PcFraco,
-        catalog::Condicao::MemoriaApertada,
-        catalog::Condicao::PoucoEspaco,
-    ] {
+    // Só as condições que algum item de `CONDICIONAIS` ainda usa: medir o resto na abertura é trabalho à toa.
+    for c in [catalog::Condicao::GameDvrLigado] {
         let valor = medir_condicao(c);
         guardar_condicao(c, valor);
     }
@@ -2430,11 +2426,11 @@ mod tests {
     use super::*;
     use crate::modules::changelog::PreviousValue;
 
-    const STARTUP_DELAY_PATH: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize";
+    const MOUSE_PATH: &str = r"Control Panel\Mouse";
 
     use ActionState::{Desconhecido, NotApplicable, Pending, Satisfied};
 
-    /// `disable_startup_delay`: HKCU, invisível, instantâneo e reversível. Escreve no registro.
+    /// `mouse_precision_off`: HKCU, instantâneo e reversível. Escreve no registro e mexe no mouse até desfazer.
     /// `cargo test --lib resultado_padronizado -- --ignored --nocapture`
     #[test]
     #[ignore]
@@ -2443,7 +2439,7 @@ mod tests {
 
         let otimizador = WindowsOptimizer::new();
         let mut log = ChangeLog::load();
-        let id = "disable_startup_delay";
+        let id = "mouse_precision_off";
 
         let aplicar = otimizador.apply(id, &mut log);
 
@@ -3303,7 +3299,7 @@ mod tests {
 
         let optimizer = WindowsOptimizer::new();
         let mut log = ChangeLog::load();
-        let id = "disable_startup_delay";
+        let id = "mouse_precision_off";
 
         let before = Benchmark::new().run();
         println!("ANTES:  {:?}", before);
@@ -3332,16 +3328,16 @@ mod tests {
         assert!(!log.is_applied(id));
     }
 
-    /// `disable_startup_delay`, HKCU e sem administrador.
+    /// `mouse_precision_off`, HKCU e sem administrador.
     /// `cargo test --lib -- --ignored --nocapture real_apply_and_revert`
     #[test]
     #[ignore]
     fn real_apply_and_revert_cycle_restores_the_system() {
         let optimizer = WindowsOptimizer::new();
         let mut log = ChangeLog::load();
-        let id = "disable_startup_delay";
+        let id = "mouse_precision_off";
 
-        let original = registry::read("HKCU", STARTUP_DELAY_PATH, "StartupDelayInMSec")
+        let original = registry::read("HKCU", MOUSE_PATH, "MouseSpeed")
             .expect("leitura inicial falhou");
         println!("estado original: {:?}", original);
 
@@ -3351,8 +3347,8 @@ mod tests {
         assert!(applied.applied);
         assert!(log.is_applied(id), "otimização não foi registrada no histórico");
         assert_eq!(
-            registry::read("HKCU", STARTUP_DELAY_PATH, "StartupDelayInMSec").unwrap(),
-            PreviousValue::Dword(0),
+            registry::read("HKCU", MOUSE_PATH, "MouseSpeed").unwrap(),
+            PreviousValue::Text("0".into()),
             "o valor não foi realmente escrito no registro"
         );
 
@@ -3362,7 +3358,7 @@ mod tests {
         assert!(!reverted.applied);
         assert!(!log.is_applied(id), "histórico ainda marca a otimização como aplicada");
         assert_eq!(
-            registry::read("HKCU", STARTUP_DELAY_PATH, "StartupDelayInMSec").unwrap(),
+            registry::read("HKCU", MOUSE_PATH, "MouseSpeed").unwrap(),
             original,
             "o registro não voltou ao estado original"
         );
