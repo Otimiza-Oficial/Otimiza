@@ -318,6 +318,14 @@
         O Otimiza piorou a máquina (incidente da 2.1.0: as duas medições estavam no disco e ninguém comparou).
         INTERROMPE de propósito: quem joga não está procurando defeito no Otimiza.
       -->
+      <!-- Modo seguro (`utils::diagnostico`): duas quedas seguidas param as tarefas automáticas até a pessoa religar. -->
+      <div class="atualizacao-faixa faixa-regressao" id="seguro-faixa" hidden role="alert">
+        <span class="atualizacao-texto" id="seguro-texto"></span>
+        <div class="atualizacao-acoes">
+          <button class="btn btn-ghost" id="seguro-religar" type="button">Religar as tarefas automáticas</button>
+        </div>
+      </div>
+
       <div class="atualizacao-faixa faixa-regressao" id="regressao-faixa" hidden role="alert">
         <span class="atualizacao-texto" id="regressao-texto"></span>
         <div class="atualizacao-acoes">

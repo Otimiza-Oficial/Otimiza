@@ -874,6 +874,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   element("regressao-fechar").addEventListener("click", () => {
     element("regressao-faixa").hidden = true;
   });
+  void mostrarModoSeguro();
+  element("seguro-religar").addEventListener("click", async () => {
+    try {
+      await invoke("sair_do_modo_seguro");
+      element("seguro-faixa").hidden = true;
+    } catch (erro) {
+      text("seguro-texto", `Não consegui religar: ${String(erro)}`);
+    }
+  });
   await loadPreferences();
 
   await Promise.all([
@@ -6958,6 +6967,28 @@ async function carregarOndeOsJogosMoram() {
     : "";
 
   alvo.innerHTML = linhas + lacunas;
+}
+
+interface ModoSeguro {
+  ativo: boolean;
+  quedas_seguidas: number;
+}
+
+/** Duas quedas seguidas: as tarefas automáticas ficam paradas até a pessoa religar. */
+async function mostrarModoSeguro() {
+  try {
+    const m = await invoke<ModoSeguro>("modo_seguro");
+    if (!m.ativo) return;
+    text(
+      "seguro-texto",
+      `O Otimiza terminou ${m.quedas_seguidas} vezes seguidas sem fechar normalmente (caiu, travou, foi encerrado, ou o Windows desligou com ele aberto). Por segurança, o que ele faz sozinho ` +
+        "(o modo jogo acalmar programas, o modo dinâmico de energia, os núcleos do jogo e a medição das partidas) está parado nesta sessão. " +
+        "Desfazer e aplicar à mão continuam funcionando."
+    );
+    element("seguro-faixa").hidden = false;
+  } catch {
+    // Sem resposta, a faixa fica escondida: não é motivo para assustar ninguém.
+  }
 }
 
 async function conferirOProprioTrabalho() {

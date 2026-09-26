@@ -138,7 +138,11 @@ fn governador_para(jogo: &str, pid: u32) -> (Governador, Option<String>) {
         let aviso = format!("O governador fica parado: {}. Sem conseguir ler o que uma sessão anterior acalmou, ele não mexe em nada.", e);
         return (sondagem, Some(aviso));
     }
-    let medindo = crate::modules::preferences::Preferences::load().medir_quadros_sozinho && super::registry::is_elevated();
+    // No modo seguro a medição automática está parada: sem ela o portão deixa o governador parado, e ninguém acalma
+    // programa numa partida que não vai ser medida.
+    let medindo = crate::modules::preferences::Preferences::load().medir_quadros_sozinho
+        && super::registry::is_elevated()
+        && !crate::utils::diagnostico::modo_seguro();
     let medicoes = crate::modules::medicoes::ler_para_comparar().ok();
     let estado = portao::ler_estrito();
     let rodada = portao::rodada_do_governador(estado.as_ref().ok(), &processo, medicoes.as_deref(), medindo);

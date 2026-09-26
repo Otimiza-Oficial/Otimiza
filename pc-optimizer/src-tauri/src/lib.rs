@@ -179,6 +179,8 @@ pub fn run() {
             commands::provar_o_otimizar,
             commands::prova_alternada_guardada,
             commands::prova_guardada,
+            commands::modo_seguro,
+            commands::sair_do_modo_seguro,
             commands::preview_game_profile,
             commands::apply_game_profile,
             commands::revert_optimization,
@@ -227,6 +229,12 @@ pub fn run() {
             // de tarefas) e toma dois terços da largura e três quartos da altura.
             if let Some(janela) = app.get_webview_window("main") {
                 ajustar_a_janela_a_tela(&janela);
+            }
+
+            // Página que cai vira linha no log e é recarregada, em vez de janela em branco sem rastro.
+            #[cfg(target_os = "windows")]
+            if let Some(janela) = app.get_webview_window("main") {
+                utils::webview::vigiar(&janela);
             }
 
             utils::Logger::info("PC Performance Optimizer iniciado");
@@ -302,6 +310,8 @@ pub fn run() {
                             let _ = handle.emit("gamemode:changed", mensagem);
                         }
 
+                        // Roda também no modo seguro: o governador fica parado (sem medição), e é este passo que
+                        // devolve o que ficou acalmado quando o jogo fecha.
                         if !modules::preferences::Preferences::load().auto_game_mode {
                             continue;
                         }
@@ -389,6 +399,9 @@ pub fn run() {
                 let mut ja = std::collections::HashSet::new();
                 loop {
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    if utils::diagnostico::modo_seguro() {
+                        continue;
+                    }
                     let (volta, aplicados) = tokio::task::spawn_blocking(move || {
                         let a = modules::windows::cpuset::reaplicar(&mut ja);
                         (ja, a)
@@ -427,8 +440,9 @@ pub fn run() {
                             continue;
                         }
 
-                        // Uma partida meio com um plano, meio com outro, não vai para o histórico.
-                        if modules::provaalternada::em_andamento() {
+                        // Uma partida meio com um plano, meio com outro, não vai para o histórico. No modo seguro, nada
+                        // automático roda.
+                        if modules::provaalternada::em_andamento() || utils::diagnostico::modo_seguro() {
                             continue;
                         }
 
