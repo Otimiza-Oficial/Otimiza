@@ -744,7 +744,18 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
             let p2 = parar.clone();
             let amostrador = std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
             let gargalo = std::thread::spawn(move || super::bottleneck::analisar(segundos));
-            let medido = super::frames::medir_par(pid, &executavel, None, segundos);
+            // PresentMon primeiro (só os quadros do próprio jogo, a mesma fonte da medição automática e da prova); o canal
+            // antigo fica de reserva, e o log diz qual mediu.
+            let medido = match super::presentmon::medir_como_antes(pid, &executavel, segundos as u32) {
+                Ok((crua, _)) => Ok((crua, None)),
+                Err(erro) => {
+                    crate::utils::Logger::warn(&format!(
+                        "motor de energia: PresentMon não mediu ({}); medindo pelo canal antigo",
+                        erro
+                    ));
+                    super::frames::medir_par(pid, &executavel, None, segundos)
+                }
+            };
             parar.store(true, Ordering::Relaxed);
             amostras.extend(amostrador.join().unwrap_or_default());
             if let Ok(g) = gargalo.join() {
