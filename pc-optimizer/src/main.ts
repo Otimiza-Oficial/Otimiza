@@ -6335,6 +6335,76 @@ async function restaurarProvaGuardada() {
     "em \"Medir de novo\" para comparar. Medir o \"antes\" outra vez substitui esta.</p>";
 }
 
+interface CrashDoJogo {
+  quando: number;
+  erro: string | null;
+  hash: string | null;
+  memoria_pct: number | null;
+  veiculo: string | null;
+  minutos_de_jogo: number | null;
+  mudancas_antes: string[];
+}
+
+interface RelatorioDeCrashes {
+  crashes: CrashDoJogo[];
+  leituras: { pista: string; frase: string }[];
+  antes_do_otimiza: number;
+  depois_do_otimiza: number;
+  sem_fivem: boolean;
+}
+
+async function lerCrashes() {
+  const alvo = element("crashes-result");
+  let r: RelatorioDeCrashes;
+  try {
+    r = await invoke<RelatorioDeCrashes>("crashes_do_jogo");
+  } catch (erro) {
+    alvo.innerHTML = `<p class="bloco-de-prosa">${escapeHtml(String(erro))}</p>`;
+    return;
+  }
+
+  if (r.sem_fivem) {
+    text("crashes-tag", "sem FiveM");
+    alvo.innerHTML = `<p class="bloco-de-prosa">Não achei a pasta de relatórios do FiveM neste computador.</p>`;
+    return;
+  }
+  text("crashes-tag", `${r.crashes.length} crash(es)`);
+  if (r.crashes.length === 0) {
+    alvo.innerHTML = `<p class="bloco-de-prosa">O FiveM não registrou nenhum crash nesta máquina.</p>`;
+    return;
+  }
+
+  const leituras = r.leituras.map((l) => `<li>${escapeHtml(l.frase)}</li>`).join("");
+  const linhas = r.crashes
+    .slice(0, 15)
+    .map((c) => {
+      const quando = new Date(c.quando * 1000).toLocaleString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const partes = [
+        c.erro ? escapeHtml(c.erro) : "sem a mensagem do erro (log da sessão já apagado)",
+        c.hash ? `assinatura ${escapeHtml(c.hash)}` : "",
+        c.memoria_pct != null ? `memória ${c.memoria_pct}%` : "",
+        c.veiculo ? `no veículo ${escapeHtml(c.veiculo)}` : "",
+        c.minutos_de_jogo != null ? `${c.minutos_de_jogo} min de jogo` : "",
+      ].filter(Boolean);
+      const antes = c.mudancas_antes.length
+        ? `<br><span class="detail">O Otimiza mudou nas 48 h antes: ${c.mudancas_antes
+            .map((id) => escapeHtml(nomeDaOtimizacao(id)))
+            .join(", ")}</span>`
+        : `<br><span class="detail">O Otimiza não mudou nada nas 48 h antes.</span>`;
+      return `<li><strong>${escapeHtml(quando)}</strong>: ${partes.join(" · ")}${antes}</li>`;
+    })
+    .join("");
+
+  alvo.innerHTML =
+    (leituras ? `<ul class="lista">${leituras}</ul>` : "") +
+    `<details open><summary>Os crashes, do mais novo</summary><ul class="lista">${linhas}</ul></details>`;
+}
+
 interface MedicaoAutomatica {
   jogo: string;
   quando: number;
@@ -7570,6 +7640,7 @@ function wireControls() {
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
   element("alternada-provar").addEventListener("click", provarAlternada);
+  element("crashes-ler").addEventListener("click", () => void lerCrashes());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
 

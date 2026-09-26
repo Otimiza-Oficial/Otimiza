@@ -180,6 +180,7 @@ pub fn run() {
             commands::prova_alternada_guardada,
             commands::prova_guardada,
             commands::modo_seguro,
+            commands::crashes_do_jogo,
             commands::sair_do_modo_seguro,
             commands::preview_game_profile,
             commands::apply_game_profile,
