@@ -6671,3 +6671,16 @@ input:focus-visible {
   font-size: 12px;
   opacity: 0.7;
 }
+
+/* O texto do diagnóstico que foi copiado, para a pessoa ver o que manda. */
+.diagnostico-copiado {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  margin: 8px 0 0;
+}
