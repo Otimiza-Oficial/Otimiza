@@ -2619,7 +2619,7 @@ pub async fn preview_game_profile(
         let conteudo = std::fs::read_to_string(&caminho)
             .map_err(|e| format!("não consegui ler {}: {}", caminho.display(), e))?;
 
-        Ok(configjogo::prever(&conteudo, escolhido)
+        Ok(configjogo::prever(&conteudo, escolhido, configjogo::manter_janela())
             .into_iter()
             .map(|(chave, atual, novo, custo)| (chave, atual, novo, custo.to_string()))
             .collect())
@@ -2660,9 +2660,11 @@ pub async fn apply_game_profile(
         let escolhido = perfil_por_nome(&perfil)?;
         let feito = configjogo::aplicar_perfil(escolhido)?;
 
+        let aviso = feito.tela_cheia_suprimida.then(|| configjogo::AVISO_JANELA.to_string());
+
         // Nada mudou, nada é registrado.
         if feito.mudou.is_empty() {
-            return Ok(feito.mudou);
+            return Ok(aviso.into_iter().collect());
         }
 
         let mut log = state.changes.lock().await;
@@ -2682,7 +2684,7 @@ pub async fn apply_game_profile(
             }],
         })?;
 
-        Ok(feito.mudou)
+        Ok(feito.mudou.into_iter().chain(aviso).collect())
     }
 
     #[cfg(not(target_os = "windows"))]
