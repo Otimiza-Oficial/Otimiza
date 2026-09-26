@@ -272,7 +272,8 @@ const CAROS_E_POUCO_VISIVEIS: &[Mudanca] = &[
 
 /// Tela cheia exclusiva: o jogo fala direto com a placa, sem o compositor, imagem igual. Fora do botão automático:
 /// alternar de janela fica mais lento, e quem usa Discord ou live no segundo monitor sente. `0` tela cheia, `1`
-/// janela, `2` sem borda.
+/// janela, `2` sem borda. Nunca para quem usa gerador por captura (Lossless, o do Otimiza): em tela cheia exclusiva
+/// ele não vê o jogo e para de gerar (`manter_janela`).
 const TELA_CHEIA: &[Mudanca] = &[Mudanca {
     chave: "Windowed",
     valor: "0",
@@ -357,8 +358,36 @@ fn taxa_a_corrigir_com(conteudo: &str, hz_do_monitor: u32) -> Option<(String, u3
     Some((atual, hz_do_monitor))
 }
 
+/// Gerador de quadros por captura em uso agora, ou numa das últimas partidas medidas (o jogo costuma estar fechado
+/// quando o perfil é aplicado, e o gerador junto).
+pub fn manter_janela() -> bool {
+    use crate::modules::medicoes;
+    matches!(
+        medicoes::geracao_agora(None),
+        medicoes::GeracaoNaPartida::OtimizaFg | medicoes::GeracaoNaPartida::LosslessScaling
+    ) || medicoes::ler().is_ok_and(|m| gerou_por_captura(&m))
+}
+
+/// Pura. AFMF e XeFG (identificados nos quadros) não entram: são do driver e funcionam em tela cheia.
+pub fn gerou_por_captura(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> bool {
+    use crate::modules::medicoes::GeracaoNaPartida;
+    medicoes.iter().rev().take(10).any(|m| {
+        matches!(m.geracao, Some(GeracaoNaPartida::OtimizaFg | GeracaoNaPartida::LosslessScaling))
+    })
+}
+
+pub const AVISO_JANELA: &str = "tela cheia não foi gravada: você usa gerador de quadros (Lossless ou o do Otimiza), \
+     e em tela cheia exclusiva ele para de gerar";
+
+/// O perfil queria pôr tela cheia e `manter_janela` impediu: a pessoa precisa saber por quê. Pura.
+pub fn tela_cheia_suprimida(conteudo: &str, perfil: Perfil, manter_janela: bool) -> bool {
+    manter_janela
+        && perfil.mudancas_para(None).iter().any(|m| m.chave == "Windowed")
+        && valor(conteudo, "Windowed").is_some_and(|v| v.trim() != "0")
+}
+
 /// Só chaves que EXISTEM e diferem: listar as que já estão certas prometeria ganho que não vem.
-pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'static str)> {
+pub fn prever(conteudo: &str, perfil: Perfil, manter_janela: bool) -> Vec<(String, String, String, &'static str)> {
     let mut previsto = Vec::new();
 
     // Em TODOS os perfis: a velocidade do monitor não muda como o jogo se parece.
@@ -372,6 +401,9 @@ pub fn prever(conteudo: &str, perfil: Perfil) -> Vec<(String, String, String, &'
     }
 
     for m in perfil.mudancas_para(Some(vram_gb())) {
+        if manter_janela && m.chave == "Windowed" {
+            continue;
+        }
         let Some(atual) = valor(conteudo, m.chave) else {
             continue;
         };
@@ -397,6 +429,7 @@ pub fn aplicar_no_texto_com(
     conteudo: &str,
     perfil: Perfil,
     vram_gb: Option<f64>,
+    manter_janela: bool,
 ) -> (String, Vec<String>) {
     let mut saida = conteudo.to_string();
     let mut mexidas = Vec::new();
@@ -409,6 +442,9 @@ pub fn aplicar_no_texto_com(
     }
 
     for m in perfil.mudancas_para(vram_gb) {
+        if manter_janela && m.chave == "Windowed" {
+            continue;
+        }
         let Some(atual) = valor(&saida, m.chave) else {
             continue;
         };
@@ -463,6 +499,9 @@ pub struct AplicacaoNoJogo {
     pub arquivo: PathBuf,
     pub mudou: Vec<String>,
     pub anterior: String,
+    /// O perfil pedia tela cheia e ela ficou de fora por causa do gerador de quadros.
+    #[serde(default)]
+    pub tela_cheia_suprimida: bool,
 }
 
 /// A ÚNICA função do produto que escreve num arquivo do cliente. Recusa com o jogo aberto (ele reescreve ao
@@ -483,8 +522,10 @@ pub fn aplicar_perfil(perfil: Perfil) -> Result<AplicacaoNoJogo, String> {
             continue;
         };
 
-        // A VRAM real decide se a textura entra.
-        let (novo, mudou) = aplicar_no_texto_com(&conteudo, perfil, Some(vram_gb()));
+        // A VRAM real decide se a textura entra; o gerador de quadros, se a tela cheia entra.
+        let janela = manter_janela();
+        let suprimida = tela_cheia_suprimida(&conteudo, perfil, janela);
+        let (novo, mudou) = aplicar_no_texto_com(&conteudo, perfil, Some(vram_gb()), janela);
 
         if mudou.is_empty() {
             return Ok(AplicacaoNoJogo {
@@ -492,6 +533,7 @@ pub fn aplicar_perfil(perfil: Perfil) -> Result<AplicacaoNoJogo, String> {
                 arquivo: caminho,
                 mudou,
                 anterior: conteudo,
+                tela_cheia_suprimida: suprimida,
             });
         }
 
@@ -503,6 +545,7 @@ pub fn aplicar_perfil(perfil: Perfil) -> Result<AplicacaoNoJogo, String> {
             arquivo: caminho,
             mudou,
             anterior: conteudo,
+            tela_cheia_suprimida: suprimida,
         });
     }
 
@@ -594,7 +637,7 @@ mod tests {
             ("EQUILIBRADO", Perfil::Equilibrado),
             ("COMPETITIVO", Perfil::Competitivo),
         ] {
-            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, perfil, Some(4.0));
+            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, perfil, Some(4.0), false);
 
             println!("\n=== {} — {} mudança(s) ===", nome, mexidas.len());
             for m in &mexidas {
@@ -605,7 +648,7 @@ mod tests {
 
     #[test]
     fn o_competitivo_alcanca_o_que_e_caro_num_arquivo_completo() {
-        let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None);
+        let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None, false);
 
         for esperado in [
             "MSAA:",
@@ -633,7 +676,7 @@ mod tests {
     fn o_filtro_anisotropico_nunca_e_mexido() {
         // Quase não custa quadro e muda bastante a aparência de perto.
         for vram in [None, Some(4.0), Some(12.0)] {
-            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, vram);
+            let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, vram, false);
 
             assert!(
                 !mexidas.iter().any(|m| m.starts_with("AnisotropicFiltering:")),
@@ -645,24 +688,55 @@ mod tests {
 
     #[test]
     fn a_textura_so_cai_quando_a_memoria_de_video_nao_cabe() {
-        let (_, com_placa_boa) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(12.0));
+        let (_, com_placa_boa) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(12.0), false);
         assert!(
             !com_placa_boa.iter().any(|m| m.starts_with("TextureQuality:")),
             "textura derrubada numa placa que tem folga de sobra"
         );
 
         let (_, com_placa_apertada) =
-            aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(4.0));
+            aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(4.0), false);
         assert!(
             com_placa_apertada.iter().any(|m| m.starts_with("TextureQuality:")),
             "a textura não caiu numa placa de 4 GB, onde ela vira engasgo"
         );
 
-        let (_, sem_saber) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None);
+        let (_, sem_saber) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, None, false);
         assert!(
             !sem_saber.iter().any(|m| m.starts_with("TextureQuality:")),
             "a textura caiu sem o produto saber quanta memória de vídeo existe"
         );
+    }
+
+    #[test]
+    fn com_gerador_por_captura_a_tela_cheia_fica_de_fora() {
+        let com_janela = CONFIG_REAL.replace("</graphics>", "  <Windowed value=\"2\" />\n  </graphics>");
+        let (_, mexidas) = aplicar_no_texto_com(&com_janela, Perfil::Equilibrado, None, true);
+        assert!(!mexidas.iter().any(|m| m.starts_with("Windowed:")), "{mexidas:?}");
+        assert!(tela_cheia_suprimida(&com_janela, Perfil::Equilibrado, true));
+
+        let (_, sem_gerador) = aplicar_no_texto_com(&com_janela, Perfil::Equilibrado, None, false);
+        assert!(sem_gerador.iter().any(|m| m.starts_with("Windowed:")));
+        assert!(!tela_cheia_suprimida(&com_janela, Perfil::Equilibrado, false));
+        assert!(!tela_cheia_suprimida(&com_janela, Perfil::SemTeto, true), "o perfil sem custo nunca pediu tela cheia");
+    }
+
+    #[test]
+    fn so_gerador_por_captura_segura_a_janela() {
+        use crate::modules::medicoes::{GeracaoNaPartida, MedicaoAutomatica};
+        let partida = |g| {
+            let mut m: MedicaoAutomatica = serde_json::from_value(serde_json::json!({
+                "jogo": "FiveM_b3258_GTAProcess.exe", "quando": 0, "fps": 70.0, "low_1pct": 30.0,
+                "engasgos_por_minuto": 0.0, "segundos": 20.0, "confiavel": true, "mudancas_aplicadas": 0
+            }))
+            .unwrap();
+            m.geracao = g;
+            m
+        };
+        assert!(!gerou_por_captura(&[partida(None), partida(Some(GeracaoNaPartida::NenhumaVisivel))]));
+        assert!(!gerou_por_captura(&[partida(Some(GeracaoNaPartida::IdentificadaNosQuadros))]));
+        assert!(gerou_por_captura(&[partida(Some(GeracaoNaPartida::LosslessScaling))]));
+        assert!(gerou_por_captura(&[partida(Some(GeracaoNaPartida::OtimizaFg))]));
     }
 
     #[test]
@@ -685,7 +759,7 @@ mod tests {
     #[test]
     fn chave_que_nao_existe_no_arquivo_nao_faz_nada() {
         // O arquivo varia por versão e mod: chave ausente precisa ser não-evento.
-        let (saida, mexidas) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None);
+        let (saida, mexidas) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None, false);
 
         for inexistente in ["ReflectionMSAA", "DoF", "LodScale", "PedLodBias"] {
             assert!(
@@ -844,7 +918,7 @@ mod tests {
 
     #[test]
     fn aplicar_no_arquivo_real_derruba_o_msaa() {
-        let (novo, mudou) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Equilibrado, None);
+        let (novo, mudou) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Equilibrado, None, false);
 
         assert_eq!(valor(&novo, "MSAA").as_deref(), Some("0"));
         assert!(
@@ -861,8 +935,8 @@ mod tests {
 
     #[test]
     fn aplicar_e_idempotente() {
-        let (uma, _) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None);
-        let (duas, mudou) = aplicar_no_texto_com(&uma, Perfil::Competitivo, None);
+        let (uma, _) = aplicar_no_texto_com(CONFIG_REAL, Perfil::Competitivo, None, false);
+        let (duas, mudou) = aplicar_no_texto_com(&uma, Perfil::Competitivo, None, false);
 
         assert_eq!(uma, duas);
         assert!(
@@ -874,7 +948,7 @@ mod tests {
 
     #[test]
     fn prever_lista_chave_valor_e_custo() {
-        let previsto = prever(CONFIG_REAL, Perfil::Equilibrado);
+        let previsto = prever(CONFIG_REAL, Perfil::Equilibrado, false);
 
         let msaa = previsto
             .iter()
