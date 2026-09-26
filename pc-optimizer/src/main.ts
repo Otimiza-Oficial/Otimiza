@@ -1324,7 +1324,9 @@ function limparMetricas(motivo: string) {
   }
 
   for (const id of ["clock-note", "gpu-note", "vram-note"]) {
-    const nota = element(id);
+    // Os três saíram com a aba Diagnóstico (3.1): sem o `?`, a falha da leitura derrubava o monitoramento.
+    const nota = document.getElementById(id);
+    if (!nota) continue;
     nota.textContent = "sem leitura";
     nota.className = "readout-note";
   }
