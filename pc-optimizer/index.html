@@ -1481,6 +1481,23 @@
             <div id="protocolo" data-vazio="Carregando…"></div>
           </section>
 
+          <!-- Lê os relatórios que o próprio FiveM grava; não envia nada e não muda nada. -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>Por que o jogo crashou</h2>
+              <span class="panel-tag" id="crashes-tag">—</span>
+            </div>
+            <p class="lead">
+              O FiveM guarda um relatório a cada crash. O Otimiza lê esses relatórios e mostra a
+              assinatura do erro, a memória no momento, e o que ele mesmo mudou nas 48 horas antes
+              de cada um. Se o crash já acontecia antes, ou se é do servidor, a leitura diz.
+            </p>
+            <div class="row-actions">
+              <button id="crashes-ler" class="btn" data-custo="~1 s">Ler os crashes</button>
+            </div>
+            <div id="crashes-result" class="resultado" data-vazio="Ainda não lido."></div>
+          </section>
+
           <section class="panel">
             <div class="panel-head">
               <h2>FiveM</h2>

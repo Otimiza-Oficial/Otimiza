@@ -13,6 +13,7 @@ pub mod cabecalho;
 pub mod catalog;
 pub mod citizenfx;
 pub mod configjogo;
+pub mod crashes;
 pub mod conflicts;
 pub mod deteccao;
 pub mod devices;

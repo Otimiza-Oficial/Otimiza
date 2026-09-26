@@ -2332,6 +2332,33 @@ pub async fn provar_o_otimizar(
     }
 }
 
+/// `LIVRES`: só lê os relatórios do FiveM e o histórico.
+#[tauri::command]
+pub async fn crashes_do_jogo(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::crashes::Relatorio, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mudancas: Vec<(u64, String)> = state
+            .changes
+            .lock()
+            .await
+            .applied()
+            .iter()
+            .map(|a| (a.timestamp, a.optimization_id.clone()))
+            .collect();
+        tokio::task::spawn_blocking(move || crate::modules::windows::crashes::relatorio(&mudancas))
+            .await
+            .map_err(|e| format!("Falha ao ler os crashes: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// `LIVRES`. Quantas sessões seguidas caíram e se as tarefas automáticas estão paradas por isso.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ModoSeguro {
@@ -3197,6 +3224,7 @@ mod tests {
         "prova_guardada",
         "prova_alternada_guardada",
         "modo_seguro",
+        "crashes_do_jogo",
         "sair_do_modo_seguro",
         "get_platform_info",
         "get_performance_metrics",
