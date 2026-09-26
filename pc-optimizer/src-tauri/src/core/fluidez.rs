@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use super::estatistica::{coeficiente_de_variacao, desvio, mediana, percentil};
 
-pub const AMOSTRA_PARA_1PCT: usize = 2_000;
+/// Mil quadros: o 1% pior é a média de dez, e 20 s de partida a 50 FPS já bastam. Uma regra só no produto:
+/// `frames.rs` e `presentmon.rs` usam esta.
+pub const AMOSTRA_PARA_1PCT: usize = 1_000;
 /// Com menos que isso o "0,1% pior" seria um ou dois quadros: sorte, não medida.
 pub const AMOSTRA_PARA_01PCT: usize = 10_000;
 

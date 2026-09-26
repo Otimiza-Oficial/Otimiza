@@ -119,9 +119,9 @@ pub struct Resumo {
     /// Tudo o que chegou à tela por segundo, gerados incluídos. Sempre ao lado do FPS do jogo, nunca no lugar dele.
     pub fps_exibido: f64,
     /// Média do 1% pior, em FPS: a mesma definição de `frames::estatistica` (uma só no produto). `None` com
-    /// menos de 100 quadros: o 1% pior de 50 quadros é meio quadro.
+    /// menos de `fluidez::AMOSTRA_PARA_1PCT` quadros (mil).
     pub low_1pct: Option<f64>,
-    /// Média do 0,1% pior. `None` com menos de 1000 quadros.
+    /// Média do 0,1% pior. `None` com menos de `fluidez::AMOSTRA_PARA_01PCT` (dez mil).
     pub low_01pct: Option<f64>,
     pub quadro_medio_ms: f64,
     pub quadro_p95_ms: f64,
@@ -222,8 +222,10 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         fps_do_jogo_medio: 1000.0 / quadro_medio,
         fps_do_jogo_mediana: 1000.0 / mediana,
         fps_exibido: exibidos as f64 / segundos,
-        low_1pct: (intervalos.len() >= 100).then(|| media_dos_piores(&intervalos, 0.01)),
-        low_01pct: (intervalos.len() >= 1000).then(|| media_dos_piores(&intervalos, 0.001)),
+        low_1pct: (intervalos.len() >= crate::core::fluidez::AMOSTRA_PARA_1PCT)
+            .then(|| media_dos_piores(&intervalos, 0.01)),
+        low_01pct: (intervalos.len() >= crate::core::fluidez::AMOSTRA_PARA_01PCT)
+            .then(|| media_dos_piores(&intervalos, 0.001)),
         quadro_medio_ms: quadro_medio,
         quadro_p95_ms: percentil(&intervalos, 95.0),
         quadro_p99_ms: percentil(&intervalos, 99.0),
@@ -380,7 +382,7 @@ mod tests {
         let r = resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap();
         assert!((r.fps_do_jogo_mediana - 100.0).abs() < 0.01);
         assert!((r.low_1pct.unwrap() - 12.5).abs() < 0.01, "1% low: {:?}", r.low_1pct);
-        assert!(r.low_01pct.is_some(), "1020 quadros bastam para o 0,1%");
+        assert_eq!(r.low_01pct, None, "1020 quadros não bastam para o 0,1% pior (regra: dez mil)");
         assert!(r.engasgos_por_minuto > 0.0);
         assert_eq!(r.trancos_qpc.len(), 20, "cada travada leva o seu instante para o cruzamento com o disco");
         assert_eq!(r.gargalo, GargaloProvavel::Cpu);

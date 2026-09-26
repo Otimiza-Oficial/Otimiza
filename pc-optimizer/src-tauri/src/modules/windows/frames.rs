@@ -103,8 +103,8 @@ unsafe extern "system" fn ao_receber_evento(registro: *mut EVENT_RECORD) {
     }
 }
 
-/// Com 600 quadros o "1% pior" são seis: abaixo disto mostra a média e diz que falta amostra.
-const AMOSTRAS_PARA_DETALHE: usize = 2_000;
+/// Abaixo disto mostra a média e diz que falta amostra (a regra única fica em `core::fluidez`).
+const AMOSTRAS_PARA_DETALHE: usize = crate::core::fluidez::AMOSTRA_PARA_1PCT;
 
 /// **Pura**: testável sem abrir jogo.
 pub fn estatistica(mut intervalos_ms: Vec<f64>) -> (f64, f64, f64, bool) {
