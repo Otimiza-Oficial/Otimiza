@@ -115,6 +115,9 @@ windows = { version = "0.61", features = [
     "Win32_System_Performance",
 ] }
 
+# Só para ouvir a falha do processo do WebView2 (`utils::webview`). Mesma versão que o Tauri já traz.
+webview2-com = "0.38"
+
 
 # A ferramenta que EMITE licença vive em `examples/gerar_chave.rs`.
 #

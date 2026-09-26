@@ -2332,6 +2332,28 @@ pub async fn provar_o_otimizar(
     }
 }
 
+/// `LIVRES`. Quantas sessões seguidas caíram e se as tarefas automáticas estão paradas por isso.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ModoSeguro {
+    pub ativo: bool,
+    pub quedas_seguidas: u32,
+}
+
+#[tauri::command(async)]
+pub fn modo_seguro() -> ModoSeguro {
+    ModoSeguro {
+        ativo: crate::utils::diagnostico::modo_seguro(),
+        quedas_seguidas: crate::utils::diagnostico::quedas_seguidas(),
+    }
+}
+
+/// `LIVRES`: só religa o que o próprio Otimiza parou.
+#[tauri::command(async)]
+pub fn sair_do_modo_seguro() {
+    crate::utils::diagnostico::sair_do_modo_seguro();
+    crate::utils::Logger::info("modo seguro: desligado pela pessoa; tarefas automáticas religadas");
+}
+
 #[tauri::command(async)]
 pub fn prova_alternada_guardada() -> Option<crate::modules::provaalternada::Resultado> {
     crate::modules::provaalternada::guardada()
@@ -3174,6 +3196,8 @@ mod tests {
         "medir_depois",
         "prova_guardada",
         "prova_alternada_guardada",
+        "modo_seguro",
+        "sair_do_modo_seguro",
         "get_platform_info",
         "get_performance_metrics",
         "capturar_baseline",

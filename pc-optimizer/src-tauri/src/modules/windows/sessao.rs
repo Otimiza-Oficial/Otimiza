@@ -25,6 +25,10 @@ mod api {
         if mensagem == WM_QUERYENDSESSION || mensagem == WM_ENDSESSION {
             let _ = super::super::suspend::retomar_tudo();
         }
+        // O Windows está desligando com o Otimiza aberto: é fim normal, não queda (`utils::diagnostico`).
+        if mensagem == WM_ENDSESSION && wparam != 0 {
+            crate::utils::diagnostico::fechar_sessao();
+        }
 
         // Sempre encadeia: é o que deixa o `tao` receber as mensagens dele.
         DefSubclassProc(janela, mensagem, wparam, lparam)
