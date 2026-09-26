@@ -16,6 +16,11 @@ pub fn marcar_pronta() -> Option<u64> {
     Some(*PRONTA_MS.get_or_init(|| inicio.elapsed().as_millis() as u64))
 }
 
+/// Milissegundos desde o começo do processo, para marcar as etapas da abertura no log.
+pub fn desde_o_inicio() -> Option<u64> {
+    INICIO.get().map(|i| i.elapsed().as_millis() as u64)
+}
+
 pub fn medida() -> Option<u64> {
     PRONTA_MS.get().copied()
 }
@@ -31,5 +36,26 @@ mod testes {
         std::thread::sleep(std::time::Duration::from_millis(5));
         assert_eq!(marcar_pronta(), Some(primeira));
         assert_eq!(medida(), Some(primeira));
+    }
+}
+
+/// Quanto custa, nesta máquina, o que roda antes da janela: `cargo test --lib -- --ignored --nocapture custo_antes_da_janela`.
+#[cfg(all(test, target_os = "windows"))]
+mod custo {
+    #[test]
+    #[ignore]
+    fn custo_antes_da_janela() {
+        let t = std::time::Instant::now();
+        let _ = crate::modules::changelog::ChangeLog::load();
+        println!("ChangeLog::load: {} ms", t.elapsed().as_millis());
+        let t = std::time::Instant::now();
+        let _ = crate::modules::PerformanceMonitor::new();
+        println!("PerformanceMonitor::new: {} ms", t.elapsed().as_millis());
+        let t = std::time::Instant::now();
+        let _ = crate::modules::windows::processes::ProcessMonitor::new();
+        println!("ProcessMonitor::new: {} ms", t.elapsed().as_millis());
+        let t = std::time::Instant::now();
+        crate::utils::diagnostico::abrir_sessao();
+        println!("abrir_sessao: {} ms", t.elapsed().as_millis());
     }
 }

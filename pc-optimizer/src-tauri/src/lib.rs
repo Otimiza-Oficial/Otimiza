@@ -240,6 +240,9 @@ pub fn run() {
             }
 
             utils::Logger::info("PC Performance Optimizer iniciado");
+            if let Some(ms) = modules::abertura::desde_o_inicio() {
+                utils::Logger::info(&format!("abertura: janela pedida em {} ms", ms));
+            }
 
             // Rede da suspensão (versões antigas): fim de sessão. Thread suspensa não responde ao fim de sessão, a colmeia
             // do usuário não descarrega e o Explorer não abre na sessão seguinte (ver `modules::windows::sessao`).

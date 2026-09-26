@@ -757,10 +757,19 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
 
 /// `LIVRES`: só mede.
 #[tauri::command(async)]
-pub fn abertura_pronta() -> Option<u64> {
+/// `pagina_ms`: quanto a própria página levou, da navegação ao primeiro desenho (`performance.now()`). O resto até o
+/// total é o WebView2 nascendo: a divisão diz onde cortar.
+pub fn abertura_pronta(pagina_ms: Option<f64>) -> Option<u64> {
     let ms = crate::modules::abertura::marcar_pronta();
     if let Some(ms) = ms {
-        crate::utils::Logger::info(&format!("abertura: {} ms", ms));
+        match pagina_ms {
+            Some(p) => crate::utils::Logger::info(&format!(
+                "abertura: {} ms (página: {} ms da navegação ao primeiro desenho)",
+                ms,
+                p.round() as u64
+            )),
+            None => crate::utils::Logger::info(&format!("abertura: {} ms", ms)),
+        }
     }
     ms
 }

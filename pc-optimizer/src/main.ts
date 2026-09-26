@@ -840,7 +840,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   wireControls();
-  requestAnimationFrame(() => setTimeout(() => void invoke("abertura_pronta").catch(() => {}), 0));
+  requestAnimationFrame(() =>
+    setTimeout(() => void invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {}), 0)
+  );
   ligarSubabas();
   conferirInvariantesDaTela();
 
