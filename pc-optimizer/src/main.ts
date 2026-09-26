@@ -1020,6 +1020,36 @@ let biosCarregada = false;
  * Separada de `showTab` porque roda TAMBÉM na abertura (o programa abria com dois "Início"); `showTab` na
  * abertura dispararia as leituras caras.
  */
+/** A área de cada tela. As telas que não são a primeira da área aparecem como sub-aba dela. */
+const AREAS: Record<string, { area: string; telas: [string, string][] }> = {
+  painel: { area: "painel", telas: [] },
+  otimizacoes: { area: "otimizacoes", telas: [] },
+  historico: { area: "historico", telas: [] },
+  jogos: { area: "jogos", telas: [["jogos", "Jogos"], ["framegen", "Geração de quadros"], ["gpu", "Placa de vídeo"]] },
+  sistema: { area: "sistema", telas: [["sistema", "Windows"], ["energia", "Energia"], ["nucleos", "Núcleos"], ["bios", "BIOS"]] },
+};
+
+/** A área da tela: a própria, ou a que a lista como sub-aba. */
+function areaDa(tela: string): string {
+  for (const [area, def] of Object.entries(AREAS)) {
+    if (area === tela || def.telas.some(([t]) => t === tela)) return area;
+  }
+  return tela;
+}
+
+/** Sub-abas da área da tela aberta; some nas áreas de uma tela só. */
+function desenharSubnav(tela: string) {
+  const barra = element("subnav");
+  const telas = AREAS[areaDa(tela)]?.telas ?? [];
+  barra.hidden = telas.length === 0;
+  barra.innerHTML = telas
+    .map(
+      ([id, rotulo]) =>
+        `<button type="button" class="subnav-item" role="tab" data-subtela="${id}" aria-selected="${id === tela}">${escapeHtml(rotulo)}</button>`
+    )
+    .join("");
+}
+
 function sincronizarCabecalho(item: HTMLElement, name: string) {
   const rotulo = item.querySelector(".nav-rotulo")?.textContent?.trim() ?? "";
   text("secao-nome", rotulo);
@@ -1077,8 +1107,10 @@ function showTab(name: string) {
     panel.hidden = panel.id !== `tab-${name}`;
   });
 
+  desenharSubnav(name);
+  const area = areaDa(name);
   document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]").forEach((item) => {
-    const escolhida = item.dataset.tab === name;
+    const escolhida = item.dataset.tab === area;
     item.setAttribute("aria-selected", String(escolhida));
 
     // Do próprio item da navegação: escrever duas vezes sairia de sincronia.
@@ -5353,6 +5385,12 @@ function montarComandos(secoes: HTMLButtonElement[]): Comando[] {
     secao: "Navegação",
     executar: () => showTab(item.dataset.tab!),
   }));
+  // As sub-abas também: "Ir para BIOS" continua achando a tela.
+  for (const def of Object.values(AREAS)) {
+    for (const [id, rotulo] of def.telas.slice(1)) {
+      comandos.push({ rotulo: `Ir para ${rotulo}`, secao: "Navegação", executar: () => showTab(id) });
+    }
+  }
 
   // Os botões gerados por linha ficam fora: só fazem sentido junto do item.
   document.querySelectorAll<HTMLButtonElement>(".tab-panel .btn").forEach((botao) => {
@@ -7526,6 +7564,14 @@ function wireControls() {
   const secoes = Array.from(
     document.querySelectorAll<HTMLButtonElement>(".nav[data-tab]")
   );
+
+  // Outros módulos (framegen.ts) pedem uma tela sem conhecer a navegação.
+  window.addEventListener("otimiza:ir", (event) => showTab(String((event as CustomEvent).detail)));
+
+  element("subnav").addEventListener("click", (event) => {
+    const botao = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-subtela]");
+    if (botao) showTab(botao.dataset.subtela!);
+  });
 
   secoes.forEach((item) => {
     item.addEventListener("click", () => showTab(item.dataset.tab!));

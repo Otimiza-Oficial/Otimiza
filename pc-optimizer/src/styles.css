@@ -6468,3 +6468,30 @@ input:focus-visible {
   white-space: nowrap;
   border: 0;
 }
+
+/* Sub-abas das áreas (A3.2): Jogos e Sistema juntam telas que eram abas soltas. */
+.subnav {
+  display: flex;
+  gap: 4px;
+  padding: 0 0 14px;
+  flex-wrap: wrap;
+}
+.subnav[hidden] {
+  display: none;
+}
+.subnav-item {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.subnav-item[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}

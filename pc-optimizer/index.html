@@ -366,33 +366,17 @@
             </button>
           </div>
 
-          <p class="lateral-grupo">Monitorar</p>
-
           <button class="nav" role="tab" data-tab="painel" aria-selected="true"
                   aria-controls="tab-painel" id="tabbtn-painel">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-painel" /></svg>
             <span class="nav-rotulo">Início</span>
           </button>
 
-          <p class="lateral-grupo">Agir</p>
-
           <button class="nav" role="tab" data-tab="otimizacoes" aria-selected="false"
                   aria-controls="tab-otimizacoes" id="tabbtn-otimizacoes">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-otimizacoes" /></svg>
-            <span class="nav-rotulo">Otimizações</span>
+            <span class="nav-rotulo">Otimizar</span>
             <span class="tab-badge" id="badge-otimizacoes" hidden></span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="nucleos" aria-selected="false"
-                  aria-controls="tab-nucleos" id="tabbtn-nucleos">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-affinity" /></svg>
-            <span class="nav-rotulo">Núcleos</span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="gpu" aria-selected="false"
-                  aria-controls="tab-gpu" id="tabbtn-gpu">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-gpu" /></svg>
-            <span class="nav-rotulo">Placa de vídeo</span>
           </button>
 
           <button class="nav" role="tab" data-tab="jogos" aria-selected="false"
@@ -402,29 +386,17 @@
             <span class="tab-badge" id="badge-jogos" hidden></span>
           </button>
 
-          <button class="nav" role="tab" data-tab="framegen" aria-selected="false"
-                  aria-controls="tab-framegen" id="tabbtn-framegen">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-framegen" /></svg>
-            <span class="nav-rotulo">Geração de quadros</span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="energia" aria-selected="false"
-                  aria-controls="tab-energia" id="tabbtn-energia">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-energia" /></svg>
-            <span class="nav-rotulo">Energia</span>
-          </button>
-
-          <button class="nav" role="tab" data-tab="bios" aria-selected="false"
-                  aria-controls="tab-bios" id="tabbtn-bios">
-            <svg class="nav-icone" aria-hidden="true"><use href="#i-bios" /></svg>
-            <span class="nav-rotulo">BIOS</span>
-          </button>
-
           <button class="nav" role="tab" data-tab="sistema" aria-selected="false"
                   aria-controls="tab-sistema" id="tabbtn-sistema">
             <svg class="nav-icone" aria-hidden="true"><use href="#i-sistema" /></svg>
             <span class="nav-rotulo">Sistema</span>
             <span class="tab-badge" id="badge-sistema" hidden></span>
+          </button>
+
+          <button class="nav" role="tab" data-tab="historico" aria-selected="false"
+                  aria-controls="tab-historico" id="tabbtn-historico">
+            <svg class="nav-icone" aria-hidden="true"><use href="#i-assistente" /></svg>
+            <span class="nav-rotulo">Histórico</span>
           </button>
 
         </nav>
@@ -436,6 +408,8 @@
             <p class="abertura-sobrenome" id="secao-grupo">Monitorar</p>
             <h2 class="abertura-titulo" id="secao-nome">Início</h2>
           </header>
+          <!-- Sub-abas das áreas com mais de uma tela (Jogos, Sistema); montadas por `AREAS` em main.ts. -->
+          <div class="subnav" id="subnav" role="tablist" aria-label="Telas da área" hidden></div>
 
         <main class="stage">
         <section class="tab-panel" id="tab-painel" role="tabpanel" aria-labelledby="tabbtn-painel">
@@ -625,13 +599,6 @@
           </section>
 
           <!-- O que o Otimiza não faz: fechado por padrão, depois das causas. -->
-<!-- O registro central: tudo o que o produto altera, com risco, reinício e desfazer (registro.rs). -->
-          <details class="panel" id="o-que-altera-painel">
-            <summary class="panel-head-resumo">
-              <h2>Tudo o que o Otimiza altera neste computador</h2>
-            </summary>
-            <div id="o-que-altera"></div>
-          </details>
 
           <details class="panel" id="nao-fazemos-painel">
             <summary class="panel-head-resumo">
@@ -787,32 +754,6 @@
             <div id="mouse-result" class="resultado" data-vazio="Lê a aceleração do ponteiro e a barra de velocidade, e diz se o Windows está mexendo no movimento antes de o jogo recebê-lo. Não altera nada."></div>
           </section>
 
-          <!--
-            Por último porque precisa de mais de uma visita para ter o que dizer. As mudanças listadas só COINCIDEM com a
-            queda: provar exige desfazer uma de cada vez.
-          -->
-          <section class="panel" id="historico">
-            <div class="panel-head">
-              <h2>Quando foi que piorou</h2>
-              <span class="panel-tag" id="historico-tag">—</span>
-            </div>
-
-            <p class="lead">
-              Compara as duas últimas medições repetidas de cada métrica e lista
-              o que aconteceu entre elas.
-            </p>
-
-            <p class="hint">
-              A comparação é entre as <strong>duas últimas</strong>, e não
-              contra o melhor já medido. O melhor de sempre é a medição que mais
-              teve sorte — comparar contra ela acusaria queda em toda máquina,
-              inclusive nas que não mudaram nada.
-            </p>
-
-            <button id="historico-ler" class="btn" data-custo="instantâneo">Ver o histórico</button>
-            <p id="historico-status" class="status"></p>
-            <div id="historico-result" class="resultado" data-vazio="Precisa de pelo menos duas capturas de linha de base com repetição, em visitas diferentes. Com uma só não há o que comparar."></div>
-          </section>
         </section>
 
         <section class="tab-panel" id="tab-otimizacoes" role="tabpanel" aria-labelledby="tabbtn-otimizacoes" hidden>
@@ -1057,7 +998,7 @@
           jogo caído nos núcleos de eficiência de um híbrido. Com núcleos iguais, diz que não há o que fazer.
         -->
         <section class="tab-panel" id="tab-nucleos" role="tabpanel"
-                 aria-labelledby="tabbtn-nucleos" hidden>
+                 aria-labelledby="tabbtn-sistema" hidden>
           <header class="abertura">
             <p class="abertura-sobrenome">Processador</p>
             <h1 class="abertura-titulo">Núcleos</h1>
@@ -1110,7 +1051,7 @@
           desses MESMOS ajustes.
         -->
         <section class="tab-panel" id="tab-gpu" role="tabpanel"
-                 aria-labelledby="tabbtn-gpu" hidden>
+                 aria-labelledby="tabbtn-jogos" hidden>
           <header class="abertura abertura-gpu">
             <div>
               <p class="abertura-sobrenome">Hardware</p>
@@ -2044,7 +1985,7 @@
           </section>
         </section>
 
-        <section class="tab-panel" id="tab-bios" role="tabpanel" aria-labelledby="tabbtn-bios" hidden>
+        <section class="tab-panel" id="tab-bios" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
           <div id="bios-aba" class="fg"></div>
           <!--
             Sem botão: o Otimiza não altera firmware. Lista em ordem de risco, com o modelo da placa-mãe para achar o manual
@@ -2058,12 +1999,50 @@
           </details>
         </section>
 
-        <section class="tab-panel" id="tab-energia" role="tabpanel" aria-labelledby="tabbtn-energia" hidden>
+        <section class="tab-panel" id="tab-energia" role="tabpanel" aria-labelledby="tabbtn-sistema" hidden>
           <div id="energia-motor" class="fg"></div>
         </section>
 
-        <section class="tab-panel" id="tab-framegen" role="tabpanel" aria-labelledby="tabbtn-framegen" hidden>
+        <section class="tab-panel" id="tab-framegen" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
           <div id="framegen-lab" class="fg"></div>
+        </section>
+
+        <!-- Tudo o que mudou nesta máquina e quando piorou. Desfazer item a item continua em Otimizar. -->
+        <section class="tab-panel" id="tab-historico" role="tabpanel" aria-labelledby="tabbtn-historico" hidden>
+          <!-- O registro central: tudo o que o produto altera, com risco, reinício e desfazer (registro.rs). -->
+          <details class="panel" id="o-que-altera-painel">
+            <summary class="panel-head-resumo">
+              <h2>Tudo o que o Otimiza altera neste computador</h2>
+            </summary>
+            <div id="o-que-altera"></div>
+          </details>
+
+          <!--
+            Por último porque precisa de mais de uma visita para ter o que dizer. As mudanças listadas só COINCIDEM com a
+            queda: provar exige desfazer uma de cada vez.
+          -->
+          <section class="panel" id="historico">
+            <div class="panel-head">
+              <h2>Quando foi que piorou</h2>
+              <span class="panel-tag" id="historico-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Compara as duas últimas medições repetidas de cada métrica e lista
+              o que aconteceu entre elas.
+            </p>
+
+            <p class="hint">
+              A comparação é entre as <strong>duas últimas</strong>, e não
+              contra o melhor já medido. O melhor de sempre é a medição que mais
+              teve sorte — comparar contra ela acusaria queda em toda máquina,
+              inclusive nas que não mudaram nada.
+            </p>
+
+            <button id="historico-ler" class="btn" data-custo="instantâneo">Ver o histórico</button>
+            <p id="historico-status" class="status"></p>
+            <div id="historico-result" class="resultado" data-vazio="Precisa de pelo menos duas capturas de linha de base com repetição, em visitas diferentes. Com uma só não há o que comparar."></div>
+          </section>
         </section>
         </main>
         </div>

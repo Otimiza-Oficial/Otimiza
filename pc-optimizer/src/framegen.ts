@@ -1138,7 +1138,8 @@ function ligarEventos() {
     } else if (acao === "conferir-cena") {
       await conferirCena();
     } else if (acao === "ir-energia") {
-      document.getElementById("tabbtn-energia")?.click();
+      // A Energia virou sub-aba de Sistema (A3.2): quem troca de tela é o main.ts.
+      window.dispatchEvent(new CustomEvent("otimiza:ir", { detail: "energia" }));
     } else if (alvo.dataset.perfil) {
       estado.perfil = alvo.dataset.perfil as Perfil;
       await recalcular();
