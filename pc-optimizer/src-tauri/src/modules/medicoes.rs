@@ -1,5 +1,5 @@
 // Medições de quadros automáticas durante as partidas (quase ninguém lembra de medir). Com o jogo em primeiro
-// plano há alguns minutos e o app como administrador, escuta vinte segundos pelo canal de `frames.rs`, no máximo
+// plano há alguns minutos e o app como administrador, mede vinte segundos pelo PresentMon (reserva: `frames.rs`), no máximo
 // uma vez a cada vinte minutos. Cada medição é de um lugar diferente do jogo: uma contra outra não prova nada. Só
 // grupos de partidas se comparam (portão, regressão, deriva), e só as de `ler_para_comparar`.
 
@@ -57,22 +57,34 @@ pub struct MedicaoAutomatica {
     /// Geração de quadros visível de fora na hora da medição. `None` em medição antiga.
     #[serde(default)]
     pub geracao: Option<GeracaoNaPartida>,
+
+    /// Pelo PresentMon: FPS exibido ao lado do FPS do jogo, quadros gerados, 0,1% pior, modo de apresentação e
+    /// gargalo provável. `None` quando mediu pelo canal antigo (reserva) ou em medição antiga.
+    #[serde(default)]
+    pub presentmon: Option<crate::modules::windows::presentmon::Resumo>,
 }
 
-/// O que dá para ver de fora. DLSS FG, FSR FG, AFMF e Smooth Motion rodam dentro do jogo ou do driver e não aparecem
-/// aqui: com eles, o FPS medido já inclui quadro gerado (só o PresentMon separa, previsto na A3.2).
+/// O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
+/// FPS medido inclui quadro gerado, e a tela diz isso.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GeracaoNaPartida {
     NenhumaVisivel,
     OtimizaFg,
     /// O programa estava aberto; não dá para saber se gerando.
     LosslessScaling,
+    /// Quadros gerados que se identificaram ao PresentMon (AFMF, XeFG).
+    IdentificadaNosQuadros,
 }
 
 /// Gerador externo divide a placa com o jogo: o FPS do jogo cai, e comparar essa partida com uma sem gerador faria
 /// uma otimização parecer que piorou (ou o contrário). Medição antiga, sem o campo, continua comparável.
 pub fn comparavel(m: &MedicaoAutomatica) -> bool {
-    !matches!(m.geracao, Some(GeracaoNaPartida::OtimizaFg) | Some(GeracaoNaPartida::LosslessScaling))
+    !matches!(
+        m.geracao,
+        Some(GeracaoNaPartida::OtimizaFg)
+            | Some(GeracaoNaPartida::LosslessScaling)
+            | Some(GeracaoNaPartida::IdentificadaNosQuadros)
+    )
 }
 
 /// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.
@@ -209,6 +221,7 @@ mod tests {
             trancos_medidos: Some(15),
             governador: None,
             geracao: None,
+            presentmon: None,
         }
     }
 

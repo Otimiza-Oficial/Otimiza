@@ -58,6 +58,12 @@
         "displayLanguageSelector": false,
         "installMode": "currentUser"
       }
+    },
+    "externalBin": [
+      "binaries/PresentMon"
+    ],
+    "resources": {
+      "binaries/PresentMon-LICENSE.txt": "PresentMon-LICENSE.txt"
     }
   }
 }

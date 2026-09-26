@@ -418,7 +418,7 @@ fn medir_interno(
     Ok((principal, secundaria))
 }
 
-fn montar(
+pub(crate) fn montar(
     nome: &str,
     pid: u32,
     frames: u64,

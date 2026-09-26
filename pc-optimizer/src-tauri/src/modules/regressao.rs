@@ -202,6 +202,7 @@ mod tests {
             trancos_medidos: None,
             governador: None,
             geracao: None,
+            presentmon: None,
         }
     }
 
