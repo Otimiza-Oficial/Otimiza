@@ -1569,7 +1569,7 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
 }
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
-    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::deriva::procurar(&m)))
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m)))
         .await
         .map_err(|e| format!("Falha ao ler as medições: {}", e))?
 }
@@ -2379,7 +2379,7 @@ pub async fn protocolo_de_grupos(
     {
         use crate::modules::windows::{experimento, grupos::Grupo};
 
-        let medicoes = crate::modules::medicoes::ler()?;
+        let medicoes = crate::modules::medicoes::ler_para_comparar()?;
 
         let Some(jogo) = jogo.or_else(|| jogo_mais_medido(&medicoes)) else {
             return Err(
@@ -2447,7 +2447,7 @@ pub async fn por_que_o_fps_esta_baixo(
     #[cfg(target_os = "windows")]
     {
         // Falhar a regressão não impede a investigação.
-        let piorou = match crate::modules::medicoes::ler() {
+        let piorou = match crate::modules::medicoes::ler_para_comparar() {
             Ok(medicoes) => {
                 let aplicadas = state.changes.lock().await.applied().len();
                 let vereditos = crate::modules::regressao::todos(&medicoes, aplicadas);
@@ -2488,7 +2488,7 @@ pub fn onde_os_jogos_moram(
 pub async fn conferir_o_proprio_trabalho(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::modules::regressao::Veredito>, String> {
-    let medicoes = crate::modules::medicoes::ler()?;
+    let medicoes = crate::modules::medicoes::ler_para_comparar()?;
     let aplicadas = state.changes.lock().await.applied().len();
 
     Ok(crate::modules::regressao::todos(&medicoes, aplicadas))

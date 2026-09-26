@@ -357,6 +357,7 @@ mod testes {
             trancos_medidos: None,
             ambiente: None,
             governador: None,
+            geracao: None,
         }
     }
 

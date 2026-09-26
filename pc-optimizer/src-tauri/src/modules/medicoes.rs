@@ -1,7 +1,7 @@
 // Medições de quadros automáticas durante as partidas (quase ninguém lembra de medir). Com o jogo em primeiro
 // plano há alguns minutos e o app como administrador, escuta vinte segundos pelo canal de `frames.rs`, no máximo
-// uma vez a cada vinte minutos. NÃO compara medições entre si: foram feitas em lugares diferentes do jogo, e
-// comparar menu com rua movimentada é fabricar prova.
+// uma vez a cada vinte minutos. Cada medição é de um lugar diferente do jogo: uma contra outra não prova nada. Só
+// grupos de partidas se comparam (portão, regressão, deriva), e só as de `ler_para_comparar`.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -53,6 +53,31 @@ pub struct MedicaoAutomatica {
     /// Separa os dois lados da vigília do governador em `modules::portao`. `None`: não se aplica, mudou no meio ou antiga.
     #[serde(default)]
     pub governador: Option<crate::modules::portao::GovernadorNaPartida>,
+
+    /// Geração de quadros visível de fora na hora da medição. `None` em medição antiga.
+    #[serde(default)]
+    pub geracao: Option<GeracaoNaPartida>,
+}
+
+/// O que dá para ver de fora. DLSS FG, FSR FG, AFMF e Smooth Motion rodam dentro do jogo ou do driver e não aparecem
+/// aqui: com eles, o FPS medido já inclui quadro gerado (só o PresentMon separa, previsto na A3.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GeracaoNaPartida {
+    NenhumaVisivel,
+    OtimizaFg,
+    /// O programa estava aberto; não dá para saber se gerando.
+    LosslessScaling,
+}
+
+/// Gerador externo divide a placa com o jogo: o FPS do jogo cai, e comparar essa partida com uma sem gerador faria
+/// uma otimização parecer que piorou (ou o contrário). Medição antiga, sem o campo, continua comparável.
+pub fn comparavel(m: &MedicaoAutomatica) -> bool {
+    !matches!(m.geracao, Some(GeracaoNaPartida::OtimizaFg) | Some(GeracaoNaPartida::LosslessScaling))
+}
+
+/// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.
+pub fn ler_para_comparar() -> Result<Vec<MedicaoAutomatica>, String> {
+    Ok(ler()?.into_iter().filter(comparavel).collect())
 }
 
 pub const GUARDADAS: usize = 60;
@@ -183,7 +208,20 @@ mod tests {
             trancos_com_disco_pct: Some(20.0),
             trancos_medidos: Some(15),
             governador: None,
+            geracao: None,
         }
+    }
+
+    #[test]
+    fn partida_com_gerador_externo_fica_fora_da_comparacao() {
+        let sem = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::NenhumaVisivel), ..exemplo(90.0) };
+        let otimiza = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::OtimizaFg), ..exemplo(70.0) };
+        let lossless = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::LosslessScaling), ..exemplo(70.0) };
+
+        assert!(comparavel(&sem));
+        assert!(!comparavel(&otimiza), "gerador do Otimiza divide a placa com o jogo");
+        assert!(!comparavel(&lossless), "Lossless aberto divide a placa com o jogo");
+        assert!(comparavel(&exemplo(90.0)), "medição antiga, sem o campo, continua valendo");
     }
 
     fn pasta_de_teste(nome: &str) -> PathBuf {

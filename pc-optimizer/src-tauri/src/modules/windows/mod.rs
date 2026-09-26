@@ -2208,7 +2208,7 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
     if estado.vigiados.is_empty() && !governador_em_aberto {
         return Vec::new();
     }
-    let Ok(medicoes) = crate::modules::medicoes::ler() else { return Vec::new() };
+    let Ok(medicoes) = crate::modules::medicoes::ler_para_comparar() else { return Vec::new() };
     let agora = crate::modules::changelog::now_timestamp();
     let mut decididos = Vec::new();
     let mut ficam = Vec::new();

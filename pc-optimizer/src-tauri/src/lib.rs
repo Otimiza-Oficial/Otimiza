@@ -580,6 +580,19 @@ pub fn run() {
                                     trancos_com_disco_pct,
                                     trancos_medidos: correlacao.map(|(_, total)| total),
                                     governador: governador_na_medicao,
+                                    geracao: Some(if modules::windows::geracao::estado().situacao
+                                        == modules::windows::geracao::Situacao::Gerando
+                                    {
+                                        medicoes::GeracaoNaPartida::OtimizaFg
+                                    } else if modules::windows::frames::encontrar_processo(
+                                        modules::windows::framegen::PROCESSO_LOSSLESS,
+                                    )
+                                    .is_some()
+                                    {
+                                        medicoes::GeracaoNaPartida::LosslessScaling
+                                    } else {
+                                        medicoes::GeracaoNaPartida::NenhumaVisivel
+                                    }),
                                 };
 
                                 match medicoes::registrar(registro) {
