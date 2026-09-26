@@ -5493,12 +5493,37 @@ interface MonitorLido {
   hz_atual: number;
 }
 
-/** O limite para G-Sync sai da taxa do monitor principal. Sem leitura, a sugestão só não aparece. */
+interface MonitorVrr {
+  nome: string | null;
+  min_hz: number | null;
+  max_hz: number | null;
+  vrr: "Anunciado" | "Provavel" | "NaoAnunciado";
+}
+
+/**
+ * O limite para G-Sync sai da taxa do monitor principal, e só é oferecido quando algum monitor ligado anuncia VRR no
+ * EDID: sem VRR, o limite só tiraria FPS. Sem leitura do EDID, fica como antes (oferece com o aviso).
+ */
 async function carregarLimiteParaVrr() {
+  let vrr: MonitorVrr[] | null = null;
+  try {
+    vrr = await invoke<MonitorVrr[]>("vrr_dos_monitores");
+  } catch {
+    vrr = null;
+  }
+  const comVrr = vrr?.find((m) => m.vrr !== "NaoAnunciado");
+  if (vrr && vrr.length > 0 && !comVrr) {
+    text(
+      "nvlimite-vrr",
+      "O seu monitor não anuncia taxa variável (G-Sync ou FreeSync): o limite \"para G-Sync\" não aparece aqui, porque sem VRR ele só tiraria FPS."
+    );
+    element("nvlimite-vrr").hidden = false;
+    return;
+  }
   try {
     const monitores = await invoke<MonitorLido[]>("monitores");
     const principal = monitores.find((m) => m.principal) ?? monitores[0];
-    if (principal) sugerirLimiteParaVrr(principal.hz_atual);
+    if (principal) sugerirLimiteParaVrr(principal.hz_atual, comVrr ?? null);
   } catch {
     // Sem monitor lido, o limitador segue com as opções fixas.
   }
@@ -5510,7 +5535,7 @@ function limiteParaVrr(hz: number): number {
 }
 
 /** SÓ OFERECE: o Otimiza nunca limita sozinho, e sem G-Sync ou FreeSync o limite só tira FPS. */
-function sugerirLimiteParaVrr(hz: number) {
+function sugerirLimiteParaVrr(hz: number, monitor: MonitorVrr | null) {
   if (!Number.isFinite(hz) || hz < 100) return;
   const alvo = limiteParaVrr(hz);
   const grupo = element("nvlimite-fps");
@@ -5525,6 +5550,9 @@ function sugerirLimiteParaVrr(hz: number) {
 
   text(
     "nvlimite-vrr",
+    (monitor && monitor.min_hz != null && monitor.max_hz != null
+      ? `O seu monitor${monitor.nome ? ` (${monitor.nome})` : ""} anuncia taxa variável de ${monitor.min_hz} a ${monitor.max_hz} Hz; ligue o G-Sync ou FreeSync no painel da placa para ela valer. `
+      : "") +
     `Com G-Sync ou FreeSync ligado, o limite certo neste monitor de ${hz} Hz é ${alvo}: acima da taxa do monitor o G-Sync vira V-Sync comum, com atraso. Sem G-Sync ou FreeSync, não use. E dentro do jogo, se o menu tiver NVIDIA Reflex, deixe ligado: com a placa no limite ele esvazia a fila de quadros e o controle responde mais rápido. Use "Ligado", não "Ligado + Boost", que só esquenta a placa.`,
   );
   element("nvlimite-vrr").hidden = false;
@@ -6473,6 +6501,8 @@ interface ResumoPresentMon {
   modo_de_apresentacao: string;
   /** Ausente em partida gravada antes deste campo. */
   apresentacao?: "Direta" | "Composta" | "Copiada" | "Desconhecida";
+  /** Ausente em partida gravada antes deste campo. */
+  api?: "DirectX" | "DirectX9" | "Outra" | "Desconhecida";
   cpu_ocupada_media_ms: number | null;
   gpu_ocupada_media_ms: number | null;
   gargalo: "Gpu" | "Cpu" | "Espera" | "NaoDeuParaSaber";
@@ -6493,6 +6523,12 @@ function fraseDoModo(r: ResumoPresentMon): string {
       return `modo "${r.modo_de_apresentacao}".`;
   }
 }
+
+const NOME_DA_API: Record<string, string> = {
+  DirectX: "DirectX (10, 11 ou 12)",
+  DirectX9: "DirectX 9",
+  Outra: "fora do DirectX (em geral Vulkan ou OpenGL)",
+};
 
 /** A última partida medida pelo PresentMon, em frases: o que limitou o FPS e por onde o quadro chegou à tela. */
 function leituraDaPartida(m: MedicaoAutomatica): string {
@@ -6516,7 +6552,8 @@ function leituraDaPartida(m: MedicaoAutomatica): string {
       : `O jogo desenhou <strong>${Math.round(r.fps_do_jogo_medio)} FPS</strong>, todos quadros do próprio jogo.`;
   const descartados = r.quadros_descartados > 0 ? ` ${r.quadros_descartados} quadros foram desenhados e nunca chegaram à tela.` : "";
   const atraso = r.ate_a_tela_media_ms != null ? ` Do quadro pronto até a tela: ${Math.round(r.ate_a_tela_media_ms)} ms; ` : " Apresentação: ";
-  return `<p class="bloco-de-prosa"><strong>Última partida de ${escapeHtml(m.jogo)}:</strong> ${tela}${ocupacao}${gargalo}${descartados}${atraso}${escapeHtml(fraseDoModo(r))}</p>`;
+  const api = r.api && NOME_DA_API[r.api] ? ` Ele apresenta por ${NOME_DA_API[r.api]}.` : "";
+  return `<p class="bloco-de-prosa"><strong>Última partida de ${escapeHtml(m.jogo)}:</strong> ${tela}${api}${ocupacao}${gargalo}${descartados}${atraso}${escapeHtml(fraseDoModo(r))}</p>`;
 }
 
 /** LADO A LADO, SEM CONCLUSÃO: medições de lugares diferentes do jogo. */

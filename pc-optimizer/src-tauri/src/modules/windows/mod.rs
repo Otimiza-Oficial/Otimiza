@@ -84,6 +84,7 @@ pub mod thermal;
 pub mod unreal;
 pub mod topologia;
 pub mod veredito;
+pub mod vrr;
 
 use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
 use crate::modules::optimizer::{
