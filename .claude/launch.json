@@ -25,6 +25,21 @@
         "3100"
       ],
       "port": 3100
+    },
+    {
+      "name": "otimiza-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "pc-optimizer",
+        "vite",
+        "preview",
+        "pc-optimizer",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }
