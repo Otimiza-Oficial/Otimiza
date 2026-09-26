@@ -181,6 +181,7 @@ pub fn run() {
             commands::prova_guardada,
             commands::modo_seguro,
             commands::crashes_do_jogo,
+            commands::vrr_dos_monitores,
             commands::sair_do_modo_seguro,
             commands::preview_game_profile,
             commands::apply_game_profile,

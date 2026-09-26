@@ -2344,6 +2344,22 @@ pub async fn provar_o_otimizar(
     }
 }
 
+/// `LIVRES`: o que os monitores ligados anunciam de taxa variável, pelo EDID.
+#[tauri::command]
+pub async fn vrr_dos_monitores() -> Result<Vec<crate::modules::windows::vrr::MonitorVrr>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::modules::windows::vrr::monitores)
+            .await
+            .map_err(|e| format!("Falha ao ler os monitores: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// `LIVRES`: só lê os relatórios do FiveM e o histórico.
 #[tauri::command]
 pub async fn crashes_do_jogo(
@@ -3237,6 +3253,7 @@ mod tests {
         "prova_alternada_guardada",
         "modo_seguro",
         "crashes_do_jogo",
+        "vrr_dos_monitores",
         "sair_do_modo_seguro",
         "get_platform_info",
         "get_performance_metrics",

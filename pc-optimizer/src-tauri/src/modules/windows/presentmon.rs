@@ -25,6 +25,8 @@ pub struct Quadro {
     pub cadeia: String,
     pub tipo: TipoDeQuadro,
     pub modo: String,
+    /// Coluna `PresentRuntime`: "DXGI", "D3D9" ou "Other".
+    pub runtime: String,
     /// Relógio de alta precisão do Windows (`--qpc_time`): o mesmo dos eventos de disco, para cruzar os trancos.
     pub inicio_qpc: Option<i64>,
     pub intervalo_ms: Option<f64>,
@@ -63,6 +65,7 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
         ));
     };
     let c_qpc = coluna("CPUStartQPC");
+    let c_runtime = coluna("PresentRuntime");
     let c_tipo = coluna("FrameType");
     let c_cpu = coluna("CPUBusy");
     let c_gpu = coluna("GPUBusy");
@@ -86,6 +89,7 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
             cadeia: campos[c_cadeia].trim().to_string(),
             tipo,
             modo: campos[c_modo].trim().to_string(),
+            runtime: c_runtime.and_then(|c| campos.get(c)).map(|v| v.trim().to_string()).unwrap_or_default(),
             inicio_qpc: c_qpc.and_then(|c| campos.get(c)).and_then(|v| v.trim().parse::<i64>().ok()),
             intervalo_ms: numero(campos.get(c_intervalo)).filter(|v| *v > 0.0),
             cpu_ocupada_ms: c_cpu.and_then(|c| numero(campos.get(c))),
@@ -108,6 +112,28 @@ pub enum Apresentacao {
     Copiada,
     #[default]
     Desconhecida,
+}
+
+/// A API pela qual o jogo apresenta, lida pelo PresentMon sem encostar no processo do jogo (anticheat).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ApiGrafica {
+    /// DXGI: DirectX 10, 11 ou 12. O modo "Copy" só existe do 11 para trás (o 12 exige o modelo novo).
+    DirectX,
+    DirectX9,
+    /// "Other": fora do DirectX, em geral Vulkan ou OpenGL.
+    Outra,
+    #[default]
+    Desconhecida,
+}
+
+/// Pura.
+pub fn classificar_runtime(runtime: &str) -> ApiGrafica {
+    match runtime.trim() {
+        "DXGI" => ApiGrafica::DirectX,
+        "D3D9" => ApiGrafica::DirectX9,
+        "Other" => ApiGrafica::Outra,
+        _ => ApiGrafica::Desconhecida,
+    }
 }
 
 /// Pura.
@@ -160,6 +186,9 @@ pub struct Resumo {
     /// `Desconhecida` em medição gravada antes deste campo.
     #[serde(default)]
     pub apresentacao: Apresentacao,
+    /// `Desconhecida` em medição gravada antes deste campo.
+    #[serde(default)]
+    pub api: ApiGrafica,
     pub cpu_ocupada_media_ms: Option<f64>,
     pub gpu_ocupada_media_ms: Option<f64>,
     pub gargalo: GargaloProvavel,
@@ -235,6 +264,11 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         *modos.entry(q.modo.as_str()).or_default() += 1;
     }
     let modo = modos.into_iter().max_by_key(|(_, n)| *n).map(|(m, _)| m.to_string()).unwrap_or_default();
+    let mut runtimes: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for q in &do_jogo {
+        *runtimes.entry(q.runtime.as_str()).or_default() += 1;
+    }
+    let api = runtimes.into_iter().max_by_key(|(_, n)| *n).map(|(r, _)| classificar_runtime(r)).unwrap_or_default();
 
     let cpu = media(&do_jogo.iter().filter_map(|q| q.cpu_ocupada_ms).collect::<Vec<_>>());
     let gpu = media(&do_jogo.iter().filter_map(|q| q.gpu_ocupada_ms).collect::<Vec<_>>());
@@ -263,6 +297,7 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         quadro_desvio_ms: desvio,
         engasgos_por_minuto: engasgos as f64 / (segundos / 60.0),
         apresentacao: classificar_modo(&modo),
+        api,
         modo_de_apresentacao: modo,
         cpu_ocupada_media_ms: cpu,
         gpu_ocupada_media_ms: gpu,
@@ -517,6 +552,20 @@ mod tests {
         }
         drop(v);
         assert!(total > 0, "nenhum quadro do dwm em 6 s");
+    }
+
+    #[test]
+    fn a_api_vem_do_runtime() {
+        assert_eq!(classificar_runtime("DXGI"), ApiGrafica::DirectX);
+        assert_eq!(classificar_runtime("D3D9"), ApiGrafica::DirectX9);
+        assert_eq!(classificar_runtime("Other"), ApiGrafica::Outra);
+        assert_eq!(classificar_runtime(""), ApiGrafica::Desconhecida);
+        let mut linhas = vec![CABECALHO.to_string()];
+        for i in 0..120 {
+            linhas.push(linha("Application", i as f64 * 16.6667, 16.6667, 6.0, 15.5, Some(8.33)));
+        }
+        let r = resumir(&ler_csv(&linhas.join("\n")).unwrap()).unwrap();
+        assert_eq!(r.api, ApiGrafica::DirectX);
     }
 
     #[test]
