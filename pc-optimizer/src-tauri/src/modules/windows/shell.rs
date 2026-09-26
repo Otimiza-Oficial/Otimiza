@@ -290,6 +290,13 @@ mod sessao {
             return None;
         }
 
+        // SCRIPT DE VÁRIAS LINHAS TAMBÉM NÃO: lido da entrada padrão, o `try {` aberto numa linha e fechado noutra fica
+        // "incompleto" e o PowerShell espera uma linha em branco que nunca vem. Foi o que travava a aba BIOS por 120 s
+        // (reproduzido: uma linha responde em ~1 s, a mesma em várias estoura o prazo).
+        if script.contains('\n') || script.contains('\r') {
+            return None;
+        }
+
         let mut guarda = SESSAO.lock().ok()?;
 
         if guarda.is_none() {
@@ -455,6 +462,24 @@ pub fn run_checked_com_prazo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A aba BIOS travava 120 s: script de várias linhas pela entrada padrão da sessão viva nunca terminava.
+    #[test]
+    fn script_de_varias_linhas_responde_sem_travar() {
+        let inicio = std::time::Instant::now();
+        let saida = powershell("$a = 1
+$b = 2
+if ($a) {
+  Write-Output ($a + $b)
+}")
+            .expect("o PowerShell precisa rodar");
+        assert_eq!(saida.stdout.trim(), "3");
+        assert!(
+            inicio.elapsed() < std::time::Duration::from_secs(30),
+            "script de várias linhas levou {:?}: voltou a travar a sessão",
+            inicio.elapsed()
+        );
+    }
 
     #[test]
     fn saida_do_powershell_chega_com_acento_intacto() {
