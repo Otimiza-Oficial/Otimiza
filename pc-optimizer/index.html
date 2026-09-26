@@ -1011,6 +1011,15 @@
                 <button id="search-clear" class="search-clear" hidden aria-label="Limpar busca">×</button>
               </div>
 
+              <!-- Quem veio de versão antiga pode ter ajustes que o Otimiza aposentou ainda aplicados. -->
+              <div id="aposentados" class="resultado" hidden>
+                <p id="aposentados-texto"></p>
+                <div class="row-actions">
+                  <button id="aposentados-desfazer" class="btn" type="button">Desfazer os aposentados</button>
+                </div>
+                <p id="aposentados-status" class="status"></p>
+              </div>
+
               <div id="optimization-list" class="optimization-list">
                 <p class="empty carregando">Lendo o estado da máquina…</p>
               </div>

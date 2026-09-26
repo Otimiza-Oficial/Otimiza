@@ -26,7 +26,7 @@ interface OptimizationInfo {
   requires_restart: boolean;
   reversible: boolean;
   security_tradeoff: boolean;
-  /** Retirado na 2.9: só aparece enquanto aplicado, para poder ser desfeito. */
+  /** Aposentado (2.9 e A3.2): só aparece enquanto aplicado, para poder ser desfeito. */
   retirado?: boolean;
   /** Só no modo Expert (2.9). */
   expert?: boolean;
@@ -4199,6 +4199,7 @@ async function loadOptimizations() {
     optimizations = await invoke<OptimizationInfo[]>("list_optimizations");
     renderFilters();
     renderOptimizations();
+    mostrarAposentados();
     await avisarSeOHistoricoNaoFoiLido();
     // Depois da lista: o aviso mostra os NOMES, que vêm dela.
     await carregarConflitosDeAjuste();
@@ -4209,6 +4210,47 @@ async function loadOptimizations() {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
   }
+}
+
+/** Aplicados por versão antiga e aposentados: não mudavam FPS, e alguns pesam em PC de 8 GB. */
+function aposentadosAplicados(): OptimizationInfo[] {
+  return optimizations.filter((o) => o.retirado && o.state === "Applied");
+}
+
+function mostrarAposentados() {
+  const lista = aposentadosAplicados();
+  const caixa = element("aposentados");
+  caixa.hidden = lista.length === 0;
+  if (lista.length === 0) return;
+  text(
+    "aposentados-texto",
+    `${lista.length} ajuste(s) aplicados por uma versão antiga continuam ligados, e o Otimiza os aposentou porque ` +
+      `não mudavam FPS nem fluidez: ${lista.map((o) => o.name).join(", ")}. Desfazer devolve cada um ao que era antes.`
+  );
+}
+
+async function desfazerAposentados() {
+  const botao = element<HTMLButtonElement>("aposentados-desfazer");
+  const lista = aposentadosAplicados();
+  botao.disabled = true;
+  const falhas: string[] = [];
+  for (const [i, o] of lista.entries()) {
+    setStatus("aposentados-status", `Desfazendo ${i + 1} de ${lista.length}: ${o.name}…`, "progress");
+    try {
+      await invoke("revert_optimization", { id: o.id });
+    } catch (erro) {
+      falhas.push(`${o.name}: ${String(erro)}`);
+    }
+  }
+  setStatus(
+    "aposentados-status",
+    falhas.length
+      ? `Não deu para desfazer ${falhas.length}: ${falhas.join(" · ")}`
+      : "Pronto. Alguns só valem depois de reiniciar o computador.",
+    falhas.length ? "warn" : "ok"
+  );
+  botao.disabled = false;
+  await loadOptimizations();
 }
 
 interface ProfileInfo {
@@ -4613,7 +4655,7 @@ function renderOptimization(item: OptimizationInfo): string {
     chips.push(`<span class="chip" data-warn="true">reduz segurança</span>`);
   if (item.expert) chips.push(`<span class="chip" data-warn="true">Expert — meça antes e depois</span>`);
   if (item.retirado)
-    chips.push(`<span class="chip" data-warn="true">retirado na 2.9 — só desfazer</span>`);
+    chips.push(`<span class="chip" data-warn="true">aposentado — só desfazer</span>`);
 
   // O rótulo vem do backend: "pode custar FPS" sobre um ajuste que ataca o engasgo faria recusar a troca certa.
   const risco_ = item.risco_de_fps;
@@ -7641,6 +7683,7 @@ function wireControls() {
   element("prova-depois").addEventListener("click", medirDepois);
   element("alternada-provar").addEventListener("click", provarAlternada);
   element("crashes-ler").addEventListener("click", () => void lerCrashes());
+  element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
 
