@@ -6037,6 +6037,8 @@ interface Prova {
   engasgos_por_minuto: number;
   segundos: number;
   confiavel: boolean;
+  /** Pelo PresentMon (3.2 em diante). */
+  presentmon?: ResumoPresentMon | null;
 }
 
 interface ComparacaoDaProva {
@@ -6050,6 +6052,8 @@ interface ComparacaoDaProva {
   veredito: string;
   ressalvas: string[];
   vale_como_prova: boolean;
+  mudou_a_configuracao_do_jogo?: boolean;
+  mudou_a_geracao?: boolean;
 }
 
 const PERFIS: Record<string, { botao: string; nome: string; aviso: string }> = {
@@ -6344,7 +6348,10 @@ interface ResumoPresentMon {
   low_1pct: number | null;
   low_01pct: number | null;
   quadro_medio_ms: number;
+  quadro_p99_ms: number;
   modo_de_apresentacao: string;
+  /** Ausente em partida gravada antes deste campo. */
+  apresentacao?: "Direta" | "Composta" | "Copiada" | "Desconhecida";
   cpu_ocupada_media_ms: number | null;
   gpu_ocupada_media_ms: number | null;
   gargalo: "Gpu" | "Cpu" | "Espera" | "NaoDeuParaSaber";
@@ -6352,18 +6359,18 @@ interface ResumoPresentMon {
   geradores: string[];
 }
 
-/** O modo de apresentação em palavras. Os nomes são os do PresentMon. */
-function fraseDoModo(modo: string): string {
-  if (modo.startsWith("Hardware") && modo.includes("Flip")) {
-    return "o jogo apresenta direto na tela, o caminho com menos atraso.";
+/** O modo de apresentação em palavras, pelo tipo que o Rust classificou. */
+function fraseDoModo(r: ResumoPresentMon): string {
+  switch (r.apresentacao) {
+    case "Direta":
+      return "o jogo apresenta direto na tela, o caminho com menos atraso.";
+    case "Composta":
+      return "o Windows compõe o quadro antes de mostrar: um pouco mais de atraso que tela cheia.";
+    case "Copiada":
+      return "o Windows copia cada quadro antes de mostrar, o caminho com mais atraso. Em tela cheia o jogo apresentaria direto; só que tela cheia desliga a geração de quadros externa (Lossless, a do Otimiza).";
+    default:
+      return `modo "${r.modo_de_apresentacao}".`;
   }
-  if (modo === "Composed: Flip") {
-    return "o Windows compõe o quadro antes de mostrar: um pouco mais de atraso que tela cheia.";
-  }
-  if (modo.startsWith("Composed: Copy")) {
-    return "o Windows copia cada quadro antes de mostrar, o caminho com mais atraso. Em tela cheia o jogo apresentaria direto; só que tela cheia desliga a geração de quadros externa (Lossless, a do Otimiza).";
-  }
-  return `modo "${modo}".`;
 }
 
 /** A última partida medida pelo PresentMon, em frases: o que limitou o FPS e por onde o quadro chegou à tela. */
@@ -6388,7 +6395,7 @@ function leituraDaPartida(m: MedicaoAutomatica): string {
       : `O jogo desenhou <strong>${Math.round(r.fps_do_jogo_medio)} FPS</strong>, todos quadros do próprio jogo.`;
   const descartados = r.quadros_descartados > 0 ? ` ${r.quadros_descartados} quadros foram desenhados e nunca chegaram à tela.` : "";
   const atraso = r.ate_a_tela_media_ms != null ? ` Do quadro pronto até a tela: ${Math.round(r.ate_a_tela_media_ms)} ms; ` : " Apresentação: ";
-  return `<p class="bloco-de-prosa"><strong>Última partida de ${escapeHtml(m.jogo)}:</strong> ${tela}${ocupacao}${gargalo}${descartados}${atraso}${escapeHtml(fraseDoModo(r.modo_de_apresentacao))}</p>`;
+  return `<p class="bloco-de-prosa"><strong>Última partida de ${escapeHtml(m.jogo)}:</strong> ${tela}${ocupacao}${gargalo}${descartados}${atraso}${escapeHtml(fraseDoModo(r))}</p>`;
 }
 
 /** LADO A LADO, SEM CONCLUSÃO: medições de lugares diferentes do jogo. */
@@ -7140,17 +7147,26 @@ async function medirDepois() {
 }
 
 function renderComparacao(c: ComparacaoDaProva) {
-  // A etiqueta nunca mente sobre o sinal.
+  // A etiqueta nunca mente sobre o sinal, nem chama de ganho o que veio de qualidade menor ou de quadro gerado.
+  const semComparacaoJusta = c.mudou_a_configuracao_do_jogo || c.mudou_a_geracao;
   const sinal = c.fps_delta > 0 ? "+" : "";
-  text("prova-tag", `${sinal}${c.fps_delta.toFixed(0)} FPS`);
+  text("prova-tag", semComparacaoJusta ? "sem comparação justa" : `${sinal}${c.fps_delta.toFixed(0)} FPS`);
 
-  const linha = (rotulo: string, antes: number, depois: number, unidade = "FPS") => {
+  const linha = (rotulo: string, antes: number, depois: number, unidade = "FPS", casas = 0) => {
     const d = depois - antes;
     const seta = d > 0 ? "↑" : d < 0 ? "↓" : "=";
-    return `<li>${rotulo}: <strong>${antes.toFixed(0)}</strong> → <strong>${depois.toFixed(
-      0
-    )}</strong> ${unidade} ${seta}</li>`;
+    const numero = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+    return `<li>${rotulo}: <strong>${numero(antes)}</strong> → <strong>${numero(depois)}</strong> ${unidade} ${seta}</li>`;
   };
+  const a = c.antes.presentmon;
+  const d = c.depois.presentmon;
+  const extras = a && d
+    ? [
+        linha("Na tela (conta quadros gerados)", a.fps_exibido, d.fps_exibido),
+        a.low_01pct != null && d.low_01pct != null ? linha("0,1% piores", a.low_01pct, d.low_01pct) : "",
+        linha("Tempo de quadro nos 1% piores (P99)", a.quadro_p99_ms, d.quadro_p99_ms, "ms", 1),
+      ].join("")
+    : "";
 
   const ressalvas = c.ressalvas.length
     ? `<p class="hint"><strong>Antes de tirar conclusão:</strong></p><ul class="lista">${c.ressalvas
@@ -7161,9 +7177,10 @@ function renderComparacao(c: ComparacaoDaProva) {
   element("prova-result").innerHTML =
     `<p class="lead">${escapeHtml(c.veredito)}</p>` +
     `<ul class="lista">
-       ${linha("Média", c.antes.fps, c.depois.fps)}
+       ${linha("FPS do jogo", c.antes.fps, c.depois.fps)}
        ${linha("1% piores", c.antes.low_1pct, c.depois.low_1pct)}
        ${linha("Engasgos", c.antes.engasgos_por_minuto, c.depois.engasgos_por_minuto, "por minuto")}
+       ${extras}
      </ul>` +
     ressalvas;
 }

@@ -87,6 +87,22 @@ pub fn comparavel(m: &MedicaoAutomatica) -> bool {
     )
 }
 
+/// A geração de quadros visível agora: quadros que se identificaram ao PresentMon, o gerador do Otimiza ou o
+/// Lossless aberto. Usada pela medição automática e pela prova.
+#[cfg(target_os = "windows")]
+pub fn geracao_agora(presentmon: Option<&crate::modules::windows::presentmon::Resumo>) -> GeracaoNaPartida {
+    use crate::modules::windows::{frames, framegen, geracao};
+    if presentmon.is_some_and(|r| !r.geradores.is_empty()) {
+        GeracaoNaPartida::IdentificadaNosQuadros
+    } else if geracao::estado().situacao == geracao::Situacao::Gerando {
+        GeracaoNaPartida::OtimizaFg
+    } else if frames::encontrar_processo(framegen::PROCESSO_LOSSLESS).is_some() {
+        GeracaoNaPartida::LosslessScaling
+    } else {
+        GeracaoNaPartida::NenhumaVisivel
+    }
+}
+
 /// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.
 pub fn ler_para_comparar() -> Result<Vec<MedicaoAutomatica>, String> {
     Ok(ler()?.into_iter().filter(comparavel).collect())
@@ -117,7 +133,16 @@ fn caminho() -> PathBuf {
 /// Arquivo inexistente é vazio; existente e ilegível é `Err`, nunca a lista vazia fingindo resposta.
 pub fn ler_de(caminho: &Path) -> Result<Vec<MedicaoAutomatica>, String> {
     match fs::read_to_string(caminho) {
-        Ok(bruto) => serde_json::from_str(&bruto)
+        Ok(bruto) => serde_json::from_str::<Vec<MedicaoAutomatica>>(&bruto)
+            .map(|mut todas| {
+                // Gravada antes do campo `apresentacao`: classifica pelo modo guardado.
+                for r in todas.iter_mut().filter_map(|m| m.presentmon.as_mut()) {
+                    if r.apresentacao == crate::modules::windows::presentmon::Apresentacao::Desconhecida {
+                        r.apresentacao = crate::modules::windows::presentmon::classificar_modo(&r.modo_de_apresentacao);
+                    }
+                }
+                todas
+            })
             .map_err(|e| format!("o histórico de medições está ilegível: {}", e)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(format!("não consegui ler o histórico de medições: {}", e)),

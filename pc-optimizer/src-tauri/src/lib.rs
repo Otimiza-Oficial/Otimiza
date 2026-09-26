@@ -596,21 +596,7 @@ pub fn run() {
                                     trancos_com_disco_pct,
                                     trancos_medidos: correlacao.map(|(_, total)| total),
                                     governador: governador_na_medicao,
-                                    geracao: Some(if presentmon.as_ref().is_some_and(|r| !r.geradores.is_empty()) {
-                                        medicoes::GeracaoNaPartida::IdentificadaNosQuadros
-                                    } else if modules::windows::geracao::estado().situacao
-                                        == modules::windows::geracao::Situacao::Gerando
-                                    {
-                                        medicoes::GeracaoNaPartida::OtimizaFg
-                                    } else if modules::windows::frames::encontrar_processo(
-                                        modules::windows::framegen::PROCESSO_LOSSLESS,
-                                    )
-                                    .is_some()
-                                    {
-                                        medicoes::GeracaoNaPartida::LosslessScaling
-                                    } else {
-                                        medicoes::GeracaoNaPartida::NenhumaVisivel
-                                    }),
+                                    geracao: Some(medicoes::geracao_agora(presentmon.as_ref())),
                                     presentmon,
                                 };
 

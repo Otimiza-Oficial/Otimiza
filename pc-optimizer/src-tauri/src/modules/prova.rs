@@ -15,6 +15,14 @@ pub struct Prova {
     pub engasgos_por_minuto: f64,
     pub segundos: f64,
     pub confiavel: bool,
+    /// Pelo PresentMon: FPS exibido, quadros gerados, modo de apresentação, gargalo. `None` pelo canal antigo.
+    #[serde(default)]
+    pub presentmon: Option<crate::modules::windows::presentmon::Resumo>,
+    #[serde(default)]
+    pub geracao: Option<crate::modules::medicoes::GeracaoNaPartida>,
+    /// Impressão digital do arquivo de configuração gráfica do jogo (`configjogo::impressao_da_configuracao`).
+    #[serde(default)]
+    pub configuracao_do_jogo: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +39,12 @@ pub struct Comparacao {
     pub veredito: String,
     pub ressalvas: Vec<String>,
     pub vale_como_prova: bool,
+    /// A configuração gráfica do jogo mudou entre as medições: ganho de qualidade menor, não de otimização.
+    #[serde(default)]
+    pub mudou_a_configuracao_do_jogo: bool,
+    /// Com gerador de um lado e sem do outro: o FPS não mede a otimização.
+    #[serde(default)]
+    pub mudou_a_geracao: bool,
 }
 
 /// Duas medições seguidas do MESMO jogo, sem mexer em nada, variam nessa ordem: abaixo disso é ruído.
@@ -121,8 +135,48 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
 
     let passou_do_ruido = fps_pct.abs() >= RUIDO_PCT;
 
+    // Ganho que não é da otimização: quadro gerado ou qualidade gráfica menor. A tela não pode somar isso ao produto.
+    let mudou_a_geracao = matches!((antes.geracao, depois.geracao), (Some(a), Some(d)) if a != d);
+    let mudou_a_configuracao_do_jogo =
+        matches!((&antes.configuracao_do_jogo, &depois.configuracao_do_jogo), (Some(a), Some(d)) if a != d);
+
+    if mudou_a_geracao {
+        ressalvas.push(
+            "A geração de quadros estava diferente nas duas medições. Gerador divide a placa com o jogo: com ele \
+             ligado de um lado só, a diferença de FPS não mede a otimização."
+                .to_string(),
+        );
+    }
+    if mudou_a_configuracao_do_jogo {
+        ressalvas.push(
+            "A configuração gráfica do jogo mudou entre as medições. O que mudou de FPS por isso é qualidade menor, \
+             não otimização do Windows."
+                .to_string(),
+        );
+    }
+    if let (Some(a), Some(d)) = (&antes.presentmon, &depois.presentmon) {
+        if a.modo_de_apresentacao != d.modo_de_apresentacao {
+            ressalvas.push(format!(
+                "O jeito de o jogo chegar à tela mudou: de \"{}\" para \"{}\". Isso muda o atraso, e às vezes o FPS.",
+                a.modo_de_apresentacao, d.modo_de_apresentacao
+            ));
+        }
+    }
+
     let veredito = if !jogos_batem {
         "Não dá para comparar medições de jogos diferentes.".to_string()
+    } else if mudou_a_geracao {
+        format!(
+            "O FPS do jogo foi de {:.0} para {:.0}, mas a geração de quadros não estava igual nas duas medições: \
+             meça as duas com ela desligada (ou as duas com ela ligada) para saber o que a otimização fez.",
+            antes.fps, depois.fps
+        )
+    } else if mudou_a_configuracao_do_jogo && passou_do_ruido && fps_delta > 0.0 {
+        format!(
+            "De {:.0} para {:.0} quadros por segundo ({:+.0}%), mas a configuração gráfica do jogo mudou entre as \
+             medições: esse ganho vem da qualidade menor, não de otimização.",
+            antes.fps, depois.fps, fps_pct
+        )
     } else if !passou_do_ruido {
         format!(
             "O FPS médio praticamente não mudou: {:.0} antes, {:.0} depois. \
@@ -159,7 +213,11 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
             && passou_do_ruido
             && fps_delta > 0.0
             && antes.confiavel
-            && depois.confiavel,
+            && depois.confiavel
+            && !mudou_a_geracao
+            && !mudou_a_configuracao_do_jogo,
+        mudou_a_geracao,
+        mudou_a_configuracao_do_jogo,
         antes: antes.clone(),
         depois: depois.clone(),
         fps_delta,
@@ -185,7 +243,40 @@ mod tests {
             engasgos_por_minuto: engasgos,
             segundos: 20.0,
             confiavel: true,
+            presentmon: None,
+            geracao: None,
+            configuracao_do_jogo: None,
         }
+    }
+
+    #[test]
+    fn ganho_com_a_configuracao_do_jogo_mudada_nao_e_otimizacao() {
+        let mut antes = prova("FiveM", 70.0, 34.0, 2.0);
+        let mut depois = prova("FiveM", 110.0, 60.0, 1.0);
+        antes.configuracao_do_jogo = Some("aaaa".into());
+        depois.configuracao_do_jogo = Some("bbbb".into());
+
+        let c = comparar(&antes, &depois);
+        assert!(!c.vale_como_prova);
+        assert!(c.mudou_a_configuracao_do_jogo);
+        assert!(c.veredito.contains("qualidade menor"), "{}", c.veredito);
+
+        depois.configuracao_do_jogo = Some("aaaa".into());
+        assert!(comparar(&antes, &depois).vale_como_prova, "mesma configuração: o ganho vale");
+    }
+
+    #[test]
+    fn gerador_de_um_lado_so_nao_mede_a_otimizacao() {
+        use crate::modules::medicoes::GeracaoNaPartida;
+        let mut antes = prova("FiveM", 70.0, 34.0, 2.0);
+        let mut depois = prova("FiveM", 62.0, 30.0, 2.0);
+        antes.geracao = Some(GeracaoNaPartida::NenhumaVisivel);
+        depois.geracao = Some(GeracaoNaPartida::LosslessScaling);
+
+        let c = comparar(&antes, &depois);
+        assert!(!c.vale_como_prova);
+        assert!(c.mudou_a_geracao);
+        assert!(!c.veredito.contains("CAIU"), "a queda é do gerador, não da otimização: {}", c.veredito);
     }
 
     #[test]

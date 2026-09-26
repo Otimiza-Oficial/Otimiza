@@ -211,6 +211,27 @@ fn caminhos() -> Vec<(PathBuf, &'static str)> {
     lista
 }
 
+/// Impressão digital do arquivo de configuração gráfica do jogo medido: se muda entre o antes e o depois, parte do
+/// ganho é qualidade menor, e a prova não pode chamar isso de otimização. FNV-1a de 64 bits: estável entre versões
+/// do Otimiza (o hash da biblioteca padrão não é). `None`: jogo sem arquivo conhecido ou ilegível.
+pub fn impressao_da_configuracao(processo: &str) -> Option<String> {
+    let p = processo.to_lowercase();
+    let qual = if p.contains("fivem") {
+        "FiveM"
+    } else if p.contains("gta5") || p.contains("gtav") {
+        "GTA V"
+    } else {
+        return None;
+    };
+    let (caminho, _) = caminhos().into_iter().find(|(_, jogo)| *jogo == qual)?;
+    let bytes = std::fs::read(caminho).ok()?;
+    Some(format!("{:016x}", fnv1a(&bytes)))
+}
+
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3))
+}
+
 /// Ordem pelo custo real, não pelo menu: o MSAA primeiro em todos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Perfil {

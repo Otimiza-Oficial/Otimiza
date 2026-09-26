@@ -2243,20 +2243,60 @@ pub async fn analyze_game_config(
 /// Jogo ABERTO (o contrário de `apply_game_profile`): mede-se o que roda, escreve-se no de quem não roda. `LIVRES`.
 #[tauri::command]
 pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
-    let medicao = measure_frames(process, seconds).await?;
-
-    let prova = crate::modules::prova::Prova {
-        jogo: medicao.process,
-        quando: crate::modules::changelog::now_timestamp(),
-        fps: medicao.fps,
-        low_1pct: medicao.low_1pct,
-        engasgos_por_minuto: medicao.engasgos_por_minuto,
-        segundos: medicao.seconds,
-        confiavel: medicao.detalhe_confiavel,
-    };
-
+    let prova = medir_para_prova(process, seconds).await?;
     crate::modules::prova::guardar(&prova)?;
     Ok(prova)
+}
+
+/// Uma medição da prova: PresentMon (canal antigo de reserva), com a geração de quadros e a impressão digital da
+/// configuração gráfica do jogo no momento, para a comparação separar otimização de qualidade e de quadro gerado.
+async fn medir_para_prova(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            use crate::modules::windows::{configjogo, frames, presentmon};
+
+            let (pid, nome) = frames::encontrar_processo(&process).ok_or_else(|| {
+                format!(
+                    "Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de medir.",
+                    process
+                )
+            })?;
+            let segundos = seconds.clamp(3, 30);
+
+            let (medicao, resumo) = match presentmon::medir_como_antes(pid, &nome, segundos as u32) {
+                Ok((crua, resumo)) => (crua.resumo, Some(resumo)),
+                Err(erro) => {
+                    crate::utils::Logger::warn(&format!(
+                        "prova: PresentMon não mediu ({}); medindo pelo canal antigo",
+                        erro
+                    ));
+                    (frames::medir(pid, &nome, segundos)?, None)
+                }
+            };
+
+            Ok(crate::modules::prova::Prova {
+                jogo: medicao.process,
+                quando: crate::modules::changelog::now_timestamp(),
+                fps: medicao.fps,
+                low_1pct: medicao.low_1pct,
+                engasgos_por_minuto: medicao.engasgos_por_minuto,
+                segundos: medicao.seconds,
+                confiavel: medicao.detalhe_confiavel,
+                geracao: Some(crate::modules::medicoes::geracao_agora(resumo.as_ref())),
+                presentmon: resumo,
+                configuracao_do_jogo: configjogo::impressao_da_configuracao(&nome),
+            })
+        })
+        .await
+        .map_err(|e| format!("Falha ao medir os quadros: {}", e))?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (process, seconds);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
 }
 
 #[tauri::command]
@@ -2270,17 +2310,7 @@ pub async fn medir_depois(
         "Não há medição inicial. Meça com o jogo aberto ANTES de aplicar as mudanças.",
     )?;
 
-    let medicao = measure_frames(process, seconds).await?;
-
-    let depois = prova::Prova {
-        jogo: medicao.process,
-        quando: crate::modules::changelog::now_timestamp(),
-        fps: medicao.fps,
-        low_1pct: medicao.low_1pct,
-        engasgos_por_minuto: medicao.engasgos_por_minuto,
-        segundos: medicao.seconds,
-        confiavel: medicao.detalhe_confiavel,
-    };
+    let depois = medir_para_prova(process, seconds).await?;
 
     Ok(prova::comparar(&antes, &depois))
 }

@@ -95,6 +95,32 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
     Ok(quadros)
 }
 
+/// Por onde o quadro chega à tela. A tela escolhe a frase por aqui, nunca comparando o texto do PresentMon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Apresentacao {
+    /// "Hardware: Independent Flip", "Hardware: Legacy Flip", "Hardware Composed: Independent Flip": direto na tela.
+    Direta,
+    /// "Composed: Flip": o Windows compõe antes de mostrar.
+    Composta,
+    /// "Composed: Copy with GPU/CPU GDI": o Windows copia cada quadro, o caminho com mais atraso.
+    Copiada,
+    #[default]
+    Desconhecida,
+}
+
+/// Pura.
+pub fn classificar_modo(modo: &str) -> Apresentacao {
+    if modo.starts_with("Hardware") && modo.contains("Flip") {
+        Apresentacao::Direta
+    } else if modo == "Composed: Flip" {
+        Apresentacao::Composta
+    } else if modo.starts_with("Composed: Copy") {
+        Apresentacao::Copiada
+    } else {
+        Apresentacao::Desconhecida
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GargaloProvavel {
     /// A GPU trabalhou quase o quadro inteiro.
@@ -129,6 +155,9 @@ pub struct Resumo {
     pub quadro_desvio_ms: f64,
     pub engasgos_por_minuto: f64,
     pub modo_de_apresentacao: String,
+    /// `Desconhecida` em medição gravada antes deste campo.
+    #[serde(default)]
+    pub apresentacao: Apresentacao,
     pub cpu_ocupada_media_ms: Option<f64>,
     pub gpu_ocupada_media_ms: Option<f64>,
     pub gargalo: GargaloProvavel,
@@ -231,6 +260,7 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         quadro_p99_ms: percentil(&intervalos, 99.0),
         quadro_desvio_ms: desvio,
         engasgos_por_minuto: engasgos as f64 / (segundos / 60.0),
+        apresentacao: classificar_modo(&modo),
         modo_de_apresentacao: modo,
         cpu_ocupada_media_ms: cpu,
         gpu_ocupada_media_ms: gpu,
@@ -346,6 +376,17 @@ mod tests {
         assert_eq!(q[0].modo, "Hardware: Legacy Flip");
         assert_eq!(q[1].intervalo_ms, Some(272.2641));
         assert_eq!(q[0].na_tela_ms, Some(272.2096));
+    }
+
+    #[test]
+    fn o_modo_de_apresentacao_vira_tipo_fixo() {
+        assert_eq!(classificar_modo("Hardware: Independent Flip"), Apresentacao::Direta);
+        assert_eq!(classificar_modo("Hardware: Legacy Flip"), Apresentacao::Direta);
+        assert_eq!(classificar_modo("Hardware Composed: Independent Flip"), Apresentacao::Direta);
+        assert_eq!(classificar_modo("Composed: Flip"), Apresentacao::Composta);
+        assert_eq!(classificar_modo("Composed: Copy with GPU GDI"), Apresentacao::Copiada);
+        assert_eq!(classificar_modo("Composed: Copy with CPU GDI"), Apresentacao::Copiada);
+        assert_eq!(classificar_modo("Other"), Apresentacao::Desconhecida);
     }
 
     #[test]
