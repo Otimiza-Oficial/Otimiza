@@ -31,7 +31,6 @@ use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutc
 #[cfg(target_os = "windows")]
 use crate::modules::windows::citizenfx::CitizenFxReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::network::NetworkReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::frames::FrameMeasurement;
 #[cfg(target_os = "windows")]
@@ -1272,59 +1271,6 @@ pub async fn zerar_modo_jogo(state: State<'_, AppState>) -> Result<String, Strin
     #[cfg(not(target_os = "windows"))]
     {
         let _ = state;
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn analyze_network() -> Result<NetworkReport, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::network::analyze)
-            .await
-            .map_err(|e| format!("Falha ao medir a rede: {}", e))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn set_dns(
-    guid: String,
-    servers: String,
-    state: State<'_, AppState>,
-) -> Result<OptimizationOutcome, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        let mut log = state.changes.lock().await;
-        crate::modules::windows::WindowsOptimizer::new().set_dns(&guid, &servers, &mut log)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (guid, servers, state);
-        Err(UNSUPPORTED_PLATFORM.to_string())
-    }
-}
-
-#[tauri::command]
-pub async fn flush_dns() -> Result<String, String> {
-    crate::modules::licenca::exigir()?;
-
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(crate::modules::windows::network::limpar_cache_dns)
-            .await
-            .map_err(|e| format!("Falha ao limpar: {}", e))?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -3266,7 +3212,6 @@ mod tests {
         "running_game_executable",
         "analyze_bottleneck",
         "game_mode_status",
-        "analyze_network",
         "measure_frames",
         "framegen_detectar",
         "framegen_medir",
@@ -3342,8 +3287,6 @@ mod tests {
         "fix_readiness",
         "set_persistent_priority",
         "set_game_mode",
-        "set_dns",
-        "flush_dns",
         "clean_fivem",
         "set_scheduled_task",
         "set_service_start",

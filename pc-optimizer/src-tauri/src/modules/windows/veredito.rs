@@ -1500,7 +1500,6 @@ mod tests {
         // `diskspace::scan()` com parênteses: `scan_para_o_veredito()` continua liberada.
         for caro in [
             "bottleneck::",
-            "network::",
             "fivem::",
             "browsers::",
             "diskspace::scan()",
