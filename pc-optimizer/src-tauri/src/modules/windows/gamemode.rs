@@ -139,7 +139,7 @@ fn governador_para(jogo: &str, pid: u32) -> (Governador, Option<String>) {
         return (sondagem, Some(aviso));
     }
     let medindo = crate::modules::preferences::Preferences::load().medir_quadros_sozinho && super::registry::is_elevated();
-    let medicoes = crate::modules::medicoes::ler().ok();
+    let medicoes = crate::modules::medicoes::ler_para_comparar().ok();
     let estado = portao::ler_estrito();
     let rodada = portao::rodada_do_governador(estado.as_ref().ok(), &processo, medicoes.as_deref(), medindo);
     let agora = crate::modules::changelog::now_timestamp();
