@@ -1427,6 +1427,36 @@
             <div id="prova-automaticas" class="resultado" hidden></div>
           </section>
 
+          <!-- Com o jogo aberto, alterna o plano de antes e o do Otimiza: o veredito vem das rodadas, não de uma medição. -->
+          <section class="panel">
+            <div class="panel-head">
+              <h2>O Otimizar, provado no seu jogo</h2>
+              <span class="panel-tag" id="alternada-tag">—</span>
+            </div>
+
+            <p class="lead">
+              Com o jogo aberto, o Otimiza troca sozinho entre o plano de energia
+              que você tinha e o dele, oito rodadas intercaladas, e compara o FPS
+              do jogo e os <strong>1% piores quadros</strong>. Se o dele piorar o
+              seu jogo, ele é desfeito no fim da prova.
+            </p>
+
+            <p class="hint">
+              Aperte "Otimizar agora" antes. Durante os cerca de oito minutos,
+              <strong>fique jogando no mesmo tipo de lugar</strong> (andando pela
+              cidade, por exemplo) e não mude o gráfico do jogo. Só o plano de energia
+              é testado aqui: é o único ajuste do botão que muda o FPS sem fechar o jogo
+              aberto. O resto vale depois de reabrir o jogo ou reiniciar.
+            </p>
+
+            <div class="row-actions">
+              <button id="alternada-provar" class="btn btn-primary" data-custo="~8 min">Provar com o jogo aberto</button>
+            </div>
+
+            <p id="alternada-status" class="status"></p>
+            <div id="alternada-result" class="resultado" data-vazio="Nenhuma prova feita ainda nesta máquina."></div>
+          </section>
+
           <!--
             Um grupo de cada vez: "qual destes grupos piorou meu PC?" se responde com quatro medições. Todos aparecem,
             inclusive os que não mudaram nada.

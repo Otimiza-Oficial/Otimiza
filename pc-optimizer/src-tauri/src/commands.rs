@@ -1526,6 +1526,10 @@ pub async fn energia_testar_candidato(
     repeticoes: u32,
 ) -> Result<crate::modules::windows::motorenergia_maquina::MedicaoDoCandidato, String> {
     crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    if crate::modules::provaalternada::em_andamento() {
+        return Err("A prova do Otimizar está rodando e troca o plano de energia. Espere ela terminar.".to_string());
+    }
 
     tokio::task::spawn_blocking(move || {
         use crate::modules::windows::motorenergia_maquina as maquina;
@@ -2313,6 +2317,78 @@ pub async fn medir_depois(
     let depois = medir_para_prova(process, seconds).await?;
 
     Ok(prova::comparar(&antes, &depois))
+}
+
+/// `EXIGEM_LICENCA`: troca o plano de energia ativo durante o teste e desfaz o do Otimiza se ele piorar o jogo.
+/// O histórico fica livre durante as rodadas (só lido no começo, escrito no fim): minutos com ele preso travariam a tela.
+#[tauri::command]
+pub async fn provar_o_otimizar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    process: String,
+    seconds: u64,
+) -> Result<crate::modules::provaalternada::Resultado, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::provaalternada::{self as prova, Desfecho};
+
+        if prova::em_andamento() {
+            return Err("Já há uma prova rodando.".to_string());
+        }
+        let planos = prova::planos(&*state.changes.lock().await)?;
+        let (pid, nome) = crate::modules::windows::frames::encontrar_processo(&process).ok_or_else(|| {
+            format!("Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de provar.", process)
+        })?;
+
+        let contra_o_equilibrado = planos.contra_o_equilibrado;
+        let nome_da_thread = nome.clone();
+        let planos_da_volta = planos.clone();
+        let rodadas = tokio::task::spawn_blocking(move || {
+            prova::executar(pid, &nome_da_thread, seconds, &planos, &|passo| {
+                let _ = app.emit("prova-alternada:passo", passo);
+            })
+        })
+        .await
+        .map_err(|e| format!("Falha na prova: {}", e))??;
+
+        let segundos = seconds.clamp(prova::SEGUNDOS_POR_RODADA_MIN, prova::SEGUNDOS_POR_RODADA_MAX);
+        let mut resultado = prova::decidir(
+            &nome,
+            crate::modules::changelog::now_timestamp(),
+            segundos,
+            rodadas,
+            contra_o_equilibrado,
+        );
+
+        if resultado.desfecho == Desfecho::Piorou {
+            let mut log = state.changes.lock().await;
+            if let Err(e) = prova::voltar_ao_de_antes(&planos_da_volta, &mut log) {
+                prova::marcar_falha_ao_desfazer(&mut resultado, e);
+            }
+        }
+
+        crate::utils::Logger::info(&format!(
+            "prova alternada em {}: {:?}, ficou com o Otimiza: {}",
+            resultado.jogo, resultado.desfecho, resultado.ficou_com_otimiza
+        ));
+        if let Err(e) = prova::guardar(&resultado) {
+            crate::utils::Logger::warn(&format!("prova alternada não foi guardada: {}", e));
+        }
+        Ok(resultado)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state, process, seconds);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+#[tauri::command(async)]
+pub fn prova_alternada_guardada() -> Option<crate::modules::provaalternada::Resultado> {
+    crate::modules::provaalternada::guardada()
 }
 
 #[tauri::command(async)]
@@ -3149,6 +3225,7 @@ mod tests {
         "medir_antes",
         "medir_depois",
         "prova_guardada",
+        "prova_alternada_guardada",
         "get_platform_info",
         "get_performance_metrics",
         "capturar_baseline",
@@ -3275,6 +3352,7 @@ mod tests {
         "apply_game_profile",
         "apply_optimization",
         "optimize_now",
+        "provar_o_otimizar",
         "set_max_refresh_rate",
         "religar_essenciais",
         "aplicar_ajuste_nvidia",

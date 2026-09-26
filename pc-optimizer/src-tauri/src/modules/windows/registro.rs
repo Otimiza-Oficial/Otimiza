@@ -60,6 +60,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Reativa o plano que estava ativo antes (fica no histórico).",
     },
     Alteracao {
+        id: "prova_alternada",
+        titulo: "Prova do Otimizar no jogo",
+        modulo: "provaalternada",
+        o_que_muda: "Durante uns oito minutos, com o jogo aberto, troca o plano de energia ativo entre o que você usava e o OTIMIZA, oito vezes. Se o OTIMIZA piorar o jogo, desfaz o plano OTIMIZA.",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Termina sempre reativando o OTIMIZA (ou o plano medido contra ele, se o OTIMIZA piorou); se o programa cair no meio, a próxima abertura reativa o OTIMIZA.",
+    },
+    Alteracao {
         id: "motor_energia",
         titulo: "Motor de energia adaptativo",
         modulo: "motorenergia_maquina",
@@ -349,6 +360,31 @@ mod tests {
                     };
                     fora.push(nome);
                 }
+            }
+        }
+
+        // Fora de `windows/`, só as escritas no Windows: ali `fs::write` é a pasta de dados do próprio programa.
+        let modulos = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/modules");
+        for e in std::fs::read_dir(modulos).into_iter().flatten().flatten() {
+            let caminho = e.path();
+            if caminho.extension().and_then(|x| x.to_str()) != Some("rs") {
+                continue;
+            }
+            let Ok(fonte) = std::fs::read_to_string(&caminho) else { continue };
+            let producao = fonte.split("#[cfg(test)]").next().unwrap_or("");
+            let escreve = [
+                "registry::set_",
+                "registry::delete_value",
+                "services::set_start_type",
+                "services::stop(",
+                "shell::powershell_checked",
+                "SetProcessAffinityMask",
+                "power::set_active_scheme",
+            ]
+            .iter()
+            .any(|p| producao.contains(p));
+            if escreve {
+                fora.push(caminho.file_stem().unwrap().to_string_lossy().to_string());
             }
         }
         fora

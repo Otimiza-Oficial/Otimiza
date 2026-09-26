@@ -7146,6 +7146,163 @@ async function medirDepois() {
   }
 }
 
+/** `modules::repeticoes::Resumo`. */
+interface ResumoDasRodadas {
+  n: number;
+  media: number;
+  margem: number | null;
+}
+
+type DesfechoDaAlternada = "Ganhou" | "Piorou" | "Indistinguivel" | "SemComparacaoJusta";
+type LadoDaAlternada = "SemOtimiza" | "ComOtimiza";
+
+interface RodadaAlternada {
+  lado: LadoDaAlternada;
+  fps_do_jogo: number;
+  low_1pct: number | null;
+  fps_exibido: number | null;
+  quadros: number;
+}
+
+interface ProvaAlternada {
+  jogo: string;
+  quando: number;
+  segundos_por_rodada: number;
+  rodadas: RodadaAlternada[];
+  fps_sem: ResumoDasRodadas | null;
+  fps_com: ResumoDasRodadas | null;
+  low_sem: ResumoDasRodadas | null;
+  low_com: ResumoDasRodadas | null;
+  desfecho: DesfechoDaAlternada;
+  leitura: string;
+  contra_o_equilibrado: boolean;
+  ficou_com_otimiza: boolean;
+  falha_ao_desfazer?: string | null;
+}
+
+interface PassoDaAlternada {
+  indice: number;
+  total: number;
+  lado: LadoDaAlternada | null;
+  segundos: number;
+}
+
+const NA_TELA_DA_ALTERNADA: Record<DesfechoDaAlternada, { severidade: string; rotulo: string }> = {
+  Ganhou: { severidade: "Ok", rotulo: "ganho medido" },
+  Piorou: { severidade: "Important", rotulo: "piorou: desfeito" },
+  Indistinguivel: { severidade: "Neutral", rotulo: "dentro do ruído" },
+  SemComparacaoJusta: { severidade: "Neutral", rotulo: "sem comparação justa" },
+};
+
+function numeroBr(v: number, casas = 1): string {
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+/** Média ± margem de 95%, e quantas rodadas: margem sem o n esconde se veio de três ou de trinta. */
+function comMargem(r: ResumoDasRodadas | null): string {
+  if (!r) return "sem amostra";
+  const margem = r.margem != null ? ` ± ${numeroBr(r.margem)}` : "";
+  return `${numeroBr(r.media)}${margem} FPS (${r.n} rodadas)`;
+}
+
+function renderAlternada(p: ProvaAlternada) {
+  // Piorou e o Windows não deixou voltar: a etiqueta não pode dizer "desfeito".
+  const naTela = p.desfecho === "Piorou" && p.ficou_com_otimiza
+    ? { severidade: "Critical", rotulo: "piorou: não desfeito" }
+    : NA_TELA_DA_ALTERNADA[p.desfecho];
+  text("alternada-tag", naTela.rotulo);
+
+  const plano = p.contra_o_equilibrado ? "Equilibrado do Windows" : "seu plano de antes";
+  const rodadas = p.rodadas
+    .map(
+      (r, i) =>
+        `<li>${i + 1}. ${r.lado === "ComOtimiza" ? "Otimiza" : escapeHtml(plano)}: ` +
+        `<strong>${numeroBr(r.fps_do_jogo)}</strong> FPS do jogo` +
+        (r.low_1pct != null ? `, 1% piores ${numeroBr(r.low_1pct)}` : "") +
+        `</li>`
+    )
+    .join("");
+
+  const quando = new Date(p.quando * 1000).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  element("alternada-result").innerHTML = `
+    <article class="finding" data-severity="${naTela.severidade}" style="--i:0">
+      <div class="finding-top"><h3>${escapeHtml(p.jogo)}, ${escapeHtml(quando)}</h3></div>
+      <p>${escapeHtml(p.leitura)}</p>
+      <ul class="lista">
+        <li>FPS do jogo, ${escapeHtml(plano)}: ${comMargem(p.fps_sem)}</li>
+        <li>FPS do jogo, plano do Otimiza: ${comMargem(p.fps_com)}</li>
+        <li>1% piores, ${escapeHtml(plano)}: ${comMargem(p.low_sem)}</li>
+        <li>1% piores, plano do Otimiza: ${comMargem(p.low_com)}</li>
+      </ul>
+      <details><summary>As ${p.rodadas.length} rodadas, na ordem</summary><ul class="lista">${rodadas}</ul></details>
+    </article>`;
+}
+
+async function provarAlternada() {
+  const botao = element<HTMLButtonElement>("alternada-provar");
+
+  await preencherJogoDetectado();
+  const processo = element<HTMLInputElement>("prova-processo").value.trim();
+
+  if (!processo) {
+    setStatus(
+      "alternada-status",
+      "Não achei nenhum jogo aberto. Abra o jogo, entre numa partida, e clique de novo.",
+      "error"
+    );
+    return;
+  }
+
+  botao.disabled = true;
+  setStatus("alternada-status", `Preparando a prova em ${processo}… continue jogando.`, "progress");
+
+  const parar = await listen<PassoDaAlternada>("prova-alternada:passo", (evento) => {
+    const p = evento.payload;
+    const mensagem =
+      p.indice === 0
+        ? `Aquecendo ${p.segundos} s (não conta)… continue jogando.`
+        : `Rodada ${p.indice} de ${p.total}: ${
+            p.lado === "ComOtimiza" ? "plano do Otimiza" : "plano de antes"
+          }, ${p.segundos} s… continue jogando no mesmo tipo de lugar.`;
+    setStatus("alternada-status", mensagem, "progress");
+  });
+
+  try {
+    const p = await invoke<ProvaAlternada>("provar_o_otimizar", { process: processo, seconds: 45 });
+    renderAlternada(p);
+    if (p.desfecho === "Piorou" && p.ficou_com_otimiza) {
+      setStatus("alternada-status", "O plano do Otimiza piorou o jogo e não foi desfeito: veja abaixo.", "error");
+    } else {
+      setStatus(
+        "alternada-status",
+        p.ficou_com_otimiza ? "Prova concluída." : "Prova concluída: o plano do Otimiza foi desfeito.",
+        p.desfecho === "Ganhou" ? "ok" : "warn"
+      );
+    }
+    if (p.desfecho === "Piorou") void loadOptimizations();
+  } catch (error) {
+    setStatus("alternada-status", String(error), "error");
+  } finally {
+    parar();
+    botao.disabled = false;
+  }
+}
+
+async function restaurarAlternada() {
+  try {
+    const p = await invoke<ProvaAlternada | null>("prova_alternada_guardada");
+    if (p) renderAlternada(p);
+  } catch {
+    // Sem prova guardada a caixa fica com o texto de vazio.
+  }
+}
+
 function renderComparacao(c: ComparacaoDaProva) {
   // A etiqueta nunca mente sobre o sinal, nem chama de ganho o que veio de qualidade menor ou de quadro gerado.
   const semComparacaoJusta = c.mudou_a_configuracao_do_jogo || c.mudou_a_geracao;
@@ -7381,6 +7538,8 @@ function wireControls() {
   void carregarMedicoesAutomaticas();
   element("prova-antes").addEventListener("click", medirAntes);
   element("prova-depois").addEventListener("click", medirDepois);
+  element("alternada-provar").addEventListener("click", provarAlternada);
+  void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
 
   element("shader-result").addEventListener("click", async (event) => {

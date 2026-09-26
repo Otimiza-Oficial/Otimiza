@@ -20,6 +20,7 @@ pub mod optimizer;
 pub mod orquestrador;
 pub mod preferences;
 pub mod prova;
+pub mod provaalternada;
 pub mod repeticoes;
 pub mod report;
 pub mod safety;
