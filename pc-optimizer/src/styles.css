@@ -6572,3 +6572,63 @@ input:focus-visible {
   font-size: 14px;
   opacity: 0.85;
 }
+
+/* O Otimizar em passos (A3.2, direção C). O estado vem de data-estado, lido desta máquina. */
+.fluxo-passos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  counter-reset: passo;
+}
+.fluxo-passo {
+  counter-increment: passo;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px 4px;
+  border-top: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+.fluxo-passo:first-child {
+  border-top: 0;
+}
+.fluxo-marca {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1.5px solid currentColor;
+  opacity: 0.45;
+}
+.fluxo-marca::before {
+  content: counter(passo);
+}
+.fluxo-passo[data-estado="agora"] .fluxo-marca {
+  opacity: 1;
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.fluxo-passo[data-estado="feito"] .fluxo-marca {
+  opacity: 1;
+}
+.fluxo-passo[data-estado="feito"] .fluxo-marca::before {
+  content: "✓";
+}
+.fluxo-corpo h3 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+.fluxo-corpo p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+  max-width: 760px;
+}
+.fluxo-passo[data-estado="a-fazer"] .fluxo-corpo {
+  opacity: 0.6;
+}
