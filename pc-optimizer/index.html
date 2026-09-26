@@ -1239,6 +1239,29 @@
         </section>
 
         <section class="tab-panel" id="tab-jogos" role="tabpanel" aria-labelledby="tabbtn-jogos" hidden>
+          <!-- Os números da última partida medida (A3.2, direção B). Sem partida, os cartões dizem "—" e o texto explica. -->
+          <div class="numeros-da-partida" id="numeros-da-partida" aria-label="Última partida medida">
+            <div class="numero-da-partida">
+              <p class="numero-da-partida-rotulo">FPS do jogo</p>
+              <p class="numero-da-partida-valor" id="np-fps">—</p>
+              <p class="numero-da-partida-nota" id="np-fps-nota">nenhuma partida medida ainda</p>
+            </div>
+            <div class="numero-da-partida">
+              <p class="numero-da-partida-rotulo">Quem limita</p>
+              <p class="numero-da-partida-valor" id="np-limita">—</p>
+              <p class="numero-da-partida-nota" id="np-limita-nota"></p>
+            </div>
+            <div class="numero-da-partida">
+              <p class="numero-da-partida-rotulo">Até a tela</p>
+              <p class="numero-da-partida-valor" id="np-tela">—</p>
+              <p class="numero-da-partida-nota" id="np-tela-nota"></p>
+            </div>
+            <div class="numero-da-partida">
+              <p class="numero-da-partida-rotulo">Monitor</p>
+              <p class="numero-da-partida-valor" id="np-monitor">—</p>
+              <p class="numero-da-partida-nota" id="np-monitor-nota"></p>
+            </div>
+          </div>
           <!-- SSD pequeno e HD grande: o jogo foi parar no HD. Só lê: mover é decisão do dono. -->
           <section class="panel" id="disco-do-jogo-painel" hidden>
             <header class="panel-head">

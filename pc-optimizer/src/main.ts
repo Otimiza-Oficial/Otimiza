@@ -6598,6 +6598,41 @@ const PROVA_CURTA: Record<DesfechoDaAlternada, string> = {
   SemComparacaoJusta: "Última prova no jogo: sem comparação justa.",
 };
 
+const QUEM_LIMITA: Record<ResumoPresentMon["gargalo"], string> = {
+  Cpu: "Processador",
+  Gpu: "Placa de vídeo",
+  Espera: "Limite ou V-Sync",
+  NaoDeuParaSaber: "Não ficou claro",
+};
+
+const VRR_CURTO: Record<MonitorVrr["vrr"], string> = {
+  Anunciado: "VRR anunciado (FreeSync)",
+  Provavel: "VRR provável",
+  NaoAnunciado: "sem VRR anunciado",
+};
+
+/** Os quatro números de Jogos (A3.2, direção B), da mesma partida que o veredito do Início. */
+function desenharNumerosDaPartida(ultima: MedicaoAutomatica | undefined, monitores: MonitorVrr[] | null) {
+  const r = ultima?.presentmon;
+  if (r && ultima) {
+    text("np-fps", numeroBr(r.fps_do_jogo_medio));
+    text(
+      "np-fps-nota",
+      `${nomeDoJogo(ultima.jogo)} · ${r.quadros_gerados} gerados · ${r.quadros_descartados} descartados`
+    );
+    text("np-limita", QUEM_LIMITA[r.gargalo]);
+    const ms = (v: number | null) => (v == null ? "—" : numeroBr(v));
+    text("np-limita-nota", `processador ${ms(r.cpu_ocupada_media_ms)} · placa ${ms(r.gpu_ocupada_media_ms)} de ${numeroBr(r.quadro_medio_ms)} ms`);
+    text("np-tela", r.ate_a_tela_media_ms != null ? `${numeroBr(r.ate_a_tela_media_ms)} ms` : "—");
+    text("np-tela-nota", TELA_CURTA[r.apresentacao ?? ""] ?? "");
+  }
+  const m = monitores?.find((x) => x.vrr !== "NaoAnunciado") ?? monitores?.[0];
+  if (m) {
+    text("np-monitor", m.min_hz != null && m.max_hz != null ? `${m.min_hz}–${m.max_hz} Hz` : "—");
+    text("np-monitor-nota", `${m.nome ?? "monitor"} · ${VRR_CURTO[m.vrr]}`);
+  }
+}
+
 /** O veredito do Início (A3.2): tudo de medição gravada, nada adivinhado. */
 async function carregarVereditoDoInicio() {
   let medicoes: MedicaoAutomatica[] = [];
@@ -6607,6 +6642,9 @@ async function carregarVereditoDoInicio() {
     medicoes = [];
   }
   const ultima = medicoes.filter((m) => m.presentmon).sort((a, b) => b.quando - a.quando)[0];
+  void invoke<MonitorVrr[]>("vrr_dos_monitores")
+    .then((m) => desenharNumerosDaPartida(ultima, m))
+    .catch(() => desenharNumerosDaPartida(ultima, null));
 
   if (!ultima || !ultima.presentmon) {
     text("vi-frase", "Ainda não há partida medida nesta máquina.");
