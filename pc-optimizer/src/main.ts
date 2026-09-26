@@ -4232,6 +4232,7 @@ async function loadOptimizations() {
     renderFilters();
     renderOptimizations();
     mostrarAposentados();
+    atualizarFluxo();
     await avisarSeOHistoricoNaoFoiLido();
     // Depois da lista: o aviso mostra os NOMES, que vêm dela.
     await carregarConflitosDeAjuste();
@@ -4242,6 +4243,61 @@ async function loadOptimizations() {
     element("optimization-list").innerHTML =
       `<p class="status error">${escapeHtml(String(error))}</p>`;
   }
+}
+
+let provaDoFluxo: ProvaAlternada | null = null;
+
+type EstadoDoPasso = "feito" | "agora" | "a-fazer";
+
+function marcarPasso(n: number, estado: EstadoDoPasso) {
+  element(`fluxo-${n}`).dataset.estado = estado;
+}
+
+/** Primeira frase do efeito honesto: o motivo, sem o parágrafo inteiro. */
+function primeiraFrase(texto: string): string {
+  const fim = texto.search(/[.!?](\s|$)/);
+  return fim > 0 ? texto.slice(0, fim + 1) : texto;
+}
+
+/**
+ * O estado de cada passo sai do que foi lido desta máquina: o lote do nível Seguro (o mesmo do botão), o que já está
+ * aplicado, a prova guardada. Nada de "passo concluído" por clique.
+ */
+function atualizarFluxo(prova?: ProvaAlternada) {
+  if (prova) provaDoFluxo = prova;
+  if (!document.getElementById("fluxo")) return;
+
+  const frase = element("vi-frase").textContent?.trim() ?? "";
+  const sub = element("vi-sub").textContent?.trim() ?? "";
+  text("fluxo-diagnostico", [frase, sub].filter(Boolean).join(" "));
+
+  const seguro = new Set(niveis.find((n) => n.id === "Seguro")?.itens ?? []);
+  const pendentes = optimizations.filter((o) => seguro.has(o.id) && o.state === "Available");
+  element("fluxo-mudancas").innerHTML = pendentes.length
+    ? pendentes
+        .map((o) => `<li><strong>${escapeHtml(o.name)}</strong>: ${escapeHtml(primeiraFrase(o.honest_effect))}</li>`)
+        .join("")
+    : "<li>Nada novo a aplicar: o que o botão faz já está aplicado nesta máquina.</li>";
+
+  const velhos = aposentadosAplicados();
+  element("fluxo-aposentados").hidden = velhos.length === 0;
+  text(
+    "fluxo-aposentados-texto",
+    `E ${velhos.length} ajuste(s) de versões antigas que não mudavam FPS continuam ligados.`
+  );
+
+  const aplicado = pendentes.length === 0;
+  marcarPasso(2, aplicado ? "feito" : "agora");
+  marcarPasso(3, aplicado ? "feito" : "agora");
+  element<HTMLButtonElement>("fluxo-aplicar").disabled = aplicado;
+
+  const p = provaDoFluxo;
+  // Prova de antes de aplicar não vale para o que ainda vai mudar: com mudança pendente, a prova volta a ser a fazer.
+  marcarPasso(4, !aplicado ? "a-fazer" : p ? "feito" : "agora");
+  marcarPasso(5, aplicado && p ? "feito" : "a-fazer");
+  element("fluxo-resultado").innerHTML = p
+    ? `${escapeHtml(PROVA_CURTA[p.desfecho])}<br>FPS do jogo: antes ${comMargem(p.fps_sem)}; com o Otimiza ${comMargem(p.fps_com)}.`
+    : "Aparece aqui depois da prova no jogo.";
 }
 
 /** Aplicados por versão antiga e aposentados: não mudavam FPS, e alguns pesam em PC de 8 GB. */
@@ -4423,6 +4479,7 @@ async function carregarNiveis() {
   try {
     niveis = await invoke<NivelNaTela[]>("niveis_de_otimizacao");
     renderNiveis();
+    atualizarFluxo();
   } catch {
     element("nivel-chips").innerHTML = "";
   }
@@ -7553,15 +7610,21 @@ function renderAlternada(p: ProvaAlternada) {
     </article>`;
 }
 
+/** O andamento da prova vai para o painel de Jogos e para o passo 4 do Otimizar. */
+function statusDaProva(mensagem: string, tipo: "ok" | "warn" | "error" | "progress") {
+  setStatus("alternada-status", mensagem, tipo);
+  setStatus("fluxo-prova-status", mensagem, tipo);
+}
+
 async function provarAlternada() {
-  const botao = element<HTMLButtonElement>("alternada-provar");
+  const botoes = [element<HTMLButtonElement>("alternada-provar"), element<HTMLButtonElement>("fluxo-provar")];
+  const botao = { set disabled(v: boolean) { botoes.forEach((b) => (b.disabled = v)); } };
 
   await preencherJogoDetectado();
   const processo = element<HTMLInputElement>("prova-processo").value.trim();
 
   if (!processo) {
-    setStatus(
-      "alternada-status",
+    statusDaProva(
       "Não achei nenhum jogo aberto. Abra o jogo, entre numa partida, e clique de novo.",
       "error"
     );
@@ -7569,7 +7632,7 @@ async function provarAlternada() {
   }
 
   botao.disabled = true;
-  setStatus("alternada-status", `Preparando a prova em ${processo}… continue jogando.`, "progress");
+  statusDaProva( `Preparando a prova em ${processo}… continue jogando.`, "progress");
 
   const parar = await listen<PassoDaAlternada>("prova-alternada:passo", (evento) => {
     const p = evento.payload;
@@ -7579,24 +7642,24 @@ async function provarAlternada() {
         : `Rodada ${p.indice} de ${p.total}: ${
             p.lado === "ComOtimiza" ? "plano do Otimiza" : "plano de antes"
           }, ${p.segundos} s… continue jogando no mesmo tipo de lugar.`;
-    setStatus("alternada-status", mensagem, "progress");
+    statusDaProva( mensagem, "progress");
   });
 
   try {
     const p = await invoke<ProvaAlternada>("provar_o_otimizar", { process: processo, seconds: 45 });
     renderAlternada(p);
+    atualizarFluxo(p);
     if (p.desfecho === "Piorou" && p.ficou_com_otimiza) {
-      setStatus("alternada-status", "O plano do Otimiza piorou o jogo e não foi desfeito: veja abaixo.", "error");
+      statusDaProva( "O plano do Otimiza piorou o jogo e não foi desfeito: veja abaixo.", "error");
     } else {
-      setStatus(
-        "alternada-status",
+      statusDaProva(
         p.ficou_com_otimiza ? "Prova concluída." : "Prova concluída: o plano do Otimiza foi desfeito.",
         p.desfecho === "Ganhou" ? "ok" : "warn"
       );
     }
     if (p.desfecho === "Piorou") void loadOptimizations();
   } catch (error) {
-    setStatus("alternada-status", String(error), "error");
+    statusDaProva( String(error), "error");
   } finally {
     parar();
     botao.disabled = false;
@@ -7606,7 +7669,9 @@ async function provarAlternada() {
 async function restaurarAlternada() {
   try {
     const p = await invoke<ProvaAlternada | null>("prova_alternada_guardada");
+    provaDoFluxo = p;
     if (p) renderAlternada(p);
+    atualizarFluxo();
   } catch {
     // Sem prova guardada a caixa fica com o texto de vazio.
   }
@@ -7858,8 +7923,11 @@ function wireControls() {
   element("alternada-provar").addEventListener("click", provarAlternada);
   element("crashes-ler").addEventListener("click", () => void lerCrashes());
   element("vi-otimizar").addEventListener("click", () => showTab("otimizacoes"));
+  element("fluxo-aplicar").addEventListener("click", () => element<HTMLButtonElement>("optimize-now").click());
+  element("fluxo-provar").addEventListener("click", () => void provarAlternada());
+  element("fluxo-aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
-  setTimeout(() => void carregarVereditoDoInicio(), 0);
+  setTimeout(() => void carregarVereditoDoInicio().then(() => atualizarFluxo()), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));

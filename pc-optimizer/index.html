@@ -807,6 +807,62 @@
             <div id="conflitos-de-ajuste"></div>
           </section>
 
+          <!--
+            O Otimizar em passos (A3.2, direção C): o que trava, o que vai mudar e por quê, aplicar, provar no jogo e o
+            resultado. Cada passo diz se já foi feito, pelo estado lido desta máquina; os painéis de baixo continuam para
+            quem quer mexer item a item.
+          -->
+          <section class="panel fluxo" id="fluxo">
+            <div class="panel-head">
+              <h2>Otimizar, passo a passo</h2>
+            </div>
+            <ol class="fluxo-passos">
+              <li class="fluxo-passo" id="fluxo-1" data-estado="feito">
+                <span class="fluxo-marca" aria-hidden="true"></span>
+                <div class="fluxo-corpo">
+                  <h3>O que trava este PC</h3>
+                  <p id="fluxo-diagnostico">Lendo a última partida…</p>
+                </div>
+              </li>
+              <li class="fluxo-passo" id="fluxo-2" data-estado="agora">
+                <span class="fluxo-marca" aria-hidden="true"></span>
+                <div class="fluxo-corpo">
+                  <h3>O que vai mudar, e por quê</h3>
+                  <ul class="lista" id="fluxo-mudancas"></ul>
+                  <div id="fluxo-aposentados" hidden>
+                    <p id="fluxo-aposentados-texto"></p>
+                    <button type="button" class="btn" id="fluxo-aposentados-desfazer">Desfazer os aposentados</button>
+                  </div>
+                </div>
+              </li>
+              <li class="fluxo-passo" id="fluxo-3" data-estado="a-fazer">
+                <span class="fluxo-marca" aria-hidden="true"></span>
+                <div class="fluxo-corpo">
+                  <h3>Aplicar</h3>
+                  <p>Tudo volta num clique em "Desfazer tudo". O que exige reiniciar avisa antes.</p>
+                  <button type="button" class="btn btn-primary" id="fluxo-aplicar">Aplicar as mudanças</button>
+                </div>
+              </li>
+              <li class="fluxo-passo" id="fluxo-4" data-estado="a-fazer">
+                <span class="fluxo-marca" aria-hidden="true"></span>
+                <div class="fluxo-corpo">
+                  <h3>Provar no jogo</h3>
+                  <p>Com o jogo aberto, uns 8 minutos jogando no mesmo tipo de lugar. O Otimiza alterna o plano de antes e o
+                    dele e desfaz o dele se o FPS ou os 1% piores caírem.</p>
+                  <button type="button" class="btn" id="fluxo-provar">Provar com o jogo aberto</button>
+                  <p id="fluxo-prova-status" class="status"></p>
+                </div>
+              </li>
+              <li class="fluxo-passo" id="fluxo-5" data-estado="a-fazer">
+                <span class="fluxo-marca" aria-hidden="true"></span>
+                <div class="fluxo-corpo">
+                  <h3>Resultado</h3>
+                  <p id="fluxo-resultado">Aparece aqui depois da prova no jogo.</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
           <!-- A prova fica onde a otimização acontece: medir antes, aplicar, medir depois. -->
           <section class="panel">
             <div class="panel-head">
