@@ -6513,6 +6513,97 @@ async function lerCrashes() {
     `<details open><summary>Os crashes, do mais novo</summary><ul class="lista">${linhas}</ul></details>`;
 }
 
+/** Nome de gente para o executável medido ("fivem_b3258_gtaprocess.exe" → "FiveM"). Só exibição. */
+function nomeDoJogo(executavel: string): string {
+  if (/fivem/i.test(executavel)) return "FiveM";
+  if (/redm/i.test(executavel)) return "RedM";
+  if (/gta5/i.test(executavel)) return "GTA V";
+  return executavel.replace(/\.exe$/i, "");
+}
+
+const FRASE_DO_GARGALO: Record<ResumoPresentMon["gargalo"], (jogo: string) => string> = {
+  Cpu: (jogo) => `O processador limita o FPS no ${jogo}. A placa de vídeo fica com folga.`,
+  Gpu: (jogo) => `A placa de vídeo limita o FPS no ${jogo}.`,
+  Espera: (jogo) => `O FPS do ${jogo} está preso por limite de FPS ou V-Sync, não pelo hardware.`,
+  NaoDeuParaSaber: (jogo) => `Na última partida do ${jogo}, nenhum gargalo ficou claro.`,
+};
+
+const TELA_CURTA: Record<string, string> = {
+  Direta: "o jogo apresenta direto na tela",
+  Composta: "o Windows compõe cada quadro",
+  Copiada: "o Windows copia cada quadro",
+};
+
+const PROVA_CURTA: Record<DesfechoDaAlternada, string> = {
+  Ganhou: "Última prova no jogo: o plano do Otimiza ganhou além do ruído.",
+  Piorou: "Última prova no jogo: o plano do Otimiza piorou e foi desfeito.",
+  Indistinguivel: "Última prova no jogo: dentro do ruído, sem ganho comprovado.",
+  SemComparacaoJusta: "Última prova no jogo: sem comparação justa.",
+};
+
+/** O veredito do Início (A3.2): tudo de medição gravada, nada adivinhado. */
+async function carregarVereditoDoInicio() {
+  let medicoes: MedicaoAutomatica[] = [];
+  try {
+    medicoes = await invoke<MedicaoAutomatica[]>("medicoes_automaticas");
+  } catch {
+    medicoes = [];
+  }
+  const ultima = medicoes.filter((m) => m.presentmon).sort((a, b) => b.quando - a.quando)[0];
+
+  if (!ultima || !ultima.presentmon) {
+    text("vi-frase", "Ainda não há partida medida nesta máquina.");
+    text(
+      "vi-sub",
+      "Abra o jogo e jogue alguns minutos com o Otimiza aberto: ele mede sozinho e diz aqui o que trava o FPS."
+    );
+  } else {
+    const r = ultima.presentmon;
+    const jogo = nomeDoJogo(ultima.jogo);
+    text("vi-frase", FRASE_DO_GARGALO[r.gargalo](jogo));
+    const pct = (v: number | null) => (v == null ? null : Math.min(100, Math.round((v / r.quadro_medio_ms) * 100)));
+    const cpu = pct(r.cpu_ocupada_media_ms);
+    const gpu = pct(r.gpu_ocupada_media_ms);
+    text(
+      "vi-sub",
+      cpu != null && gpu != null
+        ? `Na última partida o processador ficou ocupado em ${cpu}% de cada quadro e a placa de vídeo em ${gpu}%.`
+        : ""
+    );
+    text("vi-fps", numeroBr(r.fps_do_jogo_medio));
+    text(
+      "vi-fps-nota",
+      r.quadros_gerados > 0 ? `mais ${r.quadros_gerados} gerados, fora desta conta` : "todos quadros do próprio jogo"
+    );
+    text("vi-tela", r.ate_a_tela_media_ms != null ? `${numeroBr(r.ate_a_tela_media_ms)} ms` : "—");
+    text("vi-tela-nota", TELA_CURTA[r.apresentacao ?? ""] ?? "");
+  }
+
+  try {
+    const p = await invoke<ProvaAlternada | null>("prova_alternada_guardada");
+    text("vi-prova", p ? PROVA_CURTA[p.desfecho] : "Ainda sem prova no jogo: o Otimizar leva até ela.");
+  } catch {
+    text("vi-prova", "");
+  }
+
+  try {
+    const c = await invoke<RelatorioDeCrashes>("crashes_do_jogo");
+    if (c.sem_fivem) {
+      text("vi-crashes", "—");
+      text("vi-crashes-nota", "só o FiveM é lido por enquanto");
+    } else {
+      text("vi-crashes", String(c.crashes.length));
+      const repetido = c.leituras.find((l) => l.pista === "MesmoDefeito");
+      text(
+        "vi-crashes-nota",
+        c.crashes.length === 0 ? "nenhum registrado" : repetido ? "o mesmo defeito se repete: veja em Jogos" : "veja o motivo em Jogos"
+      );
+    }
+  } catch {
+    text("vi-crashes-nota", "");
+  }
+}
+
 interface MedicaoAutomatica {
   jogo: string;
   quando: number;
@@ -7766,6 +7857,9 @@ function wireControls() {
   element("prova-depois").addEventListener("click", medirDepois);
   element("alternada-provar").addEventListener("click", provarAlternada);
   element("crashes-ler").addEventListener("click", () => void lerCrashes());
+  element("vi-otimizar").addEventListener("click", () => showTab("otimizacoes"));
+  // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
+  setTimeout(() => void carregarVereditoDoInicio(), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));

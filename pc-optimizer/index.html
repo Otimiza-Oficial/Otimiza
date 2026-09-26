@@ -420,6 +420,37 @@
             <p class="abertura-sub" id="abertura-sub">Lendo esta máquina…</p>
           </header>
 
+          <!--
+            O veredito da última partida medida (A3.2): o que trava o FPS, três números e o caminho até a prova.
+            Tudo vem de medição gravada; sem partida medida, diz isso em vez de adivinhar.
+          -->
+          <section class="veredito-inicio" id="veredito-inicio" aria-labelledby="vi-frase">
+            <p class="veredito-rotulo" id="vi-rotulo">O que trava este PC</p>
+            <h2 class="veredito-frase" id="vi-frase">Lendo a última partida…</h2>
+            <p class="veredito-sub" id="vi-sub"></p>
+            <div class="veredito-numeros">
+              <div class="veredito-numero">
+                <p class="veredito-numero-rotulo">FPS do jogo</p>
+                <p class="veredito-numero-valor" id="vi-fps">—</p>
+                <p class="veredito-numero-nota" id="vi-fps-nota"></p>
+              </div>
+              <div class="veredito-numero">
+                <p class="veredito-numero-rotulo">Até a tela</p>
+                <p class="veredito-numero-valor" id="vi-tela">—</p>
+                <p class="veredito-numero-nota" id="vi-tela-nota"></p>
+              </div>
+              <div class="veredito-numero">
+                <p class="veredito-numero-rotulo">Crashes do jogo</p>
+                <p class="veredito-numero-valor" id="vi-crashes">—</p>
+                <p class="veredito-numero-nota" id="vi-crashes-nota"></p>
+              </div>
+            </div>
+            <div class="veredito-acoes">
+              <button type="button" class="btn btn-primary" id="vi-otimizar">Otimizar e provar</button>
+              <p class="veredito-prova" id="vi-prova"></p>
+            </div>
+          </section>
+
           <p class="secao-rotulo">Monitores ao vivo</p>
 
           <div class="vivos" id="vivos">
