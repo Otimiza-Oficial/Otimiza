@@ -6632,3 +6632,42 @@ input:focus-visible {
 .fluxo-passo[data-estado="a-fazer"] .fluxo-corpo {
   opacity: 0.6;
 }
+
+/* Os números da partida em Jogos (A3.2, direção B). */
+.numeros-da-partida {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) {
+  .numeros-da-partida {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.numero-da-partida {
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.numero-da-partida p {
+  margin: 0;
+}
+.numero-da-partida-rotulo {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.numero-da-partida-valor {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.numero-da-partida-nota {
+  font-size: 12px;
+  opacity: 0.7;
+}
