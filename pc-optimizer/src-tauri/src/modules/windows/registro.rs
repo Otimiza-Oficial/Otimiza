@@ -60,6 +60,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Reativa o plano que estava ativo antes (fica no histórico).",
     },
     Alteracao {
+        id: "trim",
+        titulo: "Religar o TRIM do SSD",
+        modulo: "readiness",
+        o_que_muda: "Só quando o diagnóstico acha o TRIM desligado num SSD e você clica: volta a avisar o disco sobre blocos apagados (o padrão do Windows).",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Pelo Prompt como administrador: fsutil behavior set DisableDeleteNotify 1. O Otimiza não oferece o botão porque desligar o TRIM só desgasta o SSD.",
+    },
+    Alteracao {
         id: "prova_alternada",
         titulo: "Prova do Otimizar no jogo",
         modulo: "provaalternada",
@@ -277,7 +288,6 @@ pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("devices", "MSI da placa e economia da placa de rede são itens do catálogo"),
     ("gamemode", "item do catálogo (Modo Jogo do Windows)"),
     ("gpupref", "item do catálogo (preferência de placa por programa)"),
-    ("network", "item do catálogo (rede)"),
     ("acessibilidade", "item do catálogo (teclas de aderência)"),
     ("janelas", "item do catálogo (otimizações para jogos em janela)"),
 ];

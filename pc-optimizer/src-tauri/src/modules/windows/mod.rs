@@ -50,7 +50,6 @@ pub mod jogos;
 pub mod labcompat;
 pub mod health;
 pub mod memory;
-pub mod network;
 pub mod nvdriver;
 pub mod planoenergia;
 pub mod experimento;
@@ -981,50 +980,6 @@ impl WindowsOptimizer {
                  estiver aberto agora, feche e abra de novo.",
                 nome_curto,
                 preferencia.nome()
-            ),
-            requires_restart: false,
-            changes_count: 1,
-            changes: vec![described],
-            ..Default::default()
-        })
-    }
-
-    /// Voltar para automático desfaz o registro em vez de criar um segundo.
-    pub fn set_dns(
-        &self,
-        guid: &str,
-        servers: &str,
-        log: &mut ChangeLog,
-    ) -> Result<OptimizationOutcome, String> {
-        let id = format!("dns:{}", guid);
-
-        if servers.trim().is_empty() {
-            if log.is_applied(&id) {
-                return self.revert(&id, log);
-            }
-
-            return Err("Este adaptador já usa o DNS que veio do roteador.".to_string());
-        }
-
-        let change = network::definir_dns(guid, servers)?;
-        let described = change.describe();
-
-        log.record(AppliedOptimization {
-            optimization_id: id.clone(),
-            name: format!("DNS do adaptador ({})", servers),
-            timestamp: now_timestamp(),
-            changes: vec![change],
-        })?;
-
-        Ok(OptimizationOutcome {
-            id,
-            name: "DNS".to_string(),
-            success: true,
-            applied: true,
-            message: format!(
-                "DNS trocado para {}. Isso acelera achar o endereço dos sites; não muda o \
-                 ping dentro do jogo.",
-                servers
             ),
             requires_restart: false,
             changes_count: 1,

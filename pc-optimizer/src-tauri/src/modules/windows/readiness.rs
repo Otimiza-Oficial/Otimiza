@@ -368,6 +368,11 @@ pub fn ligar_trim() -> Result<String, String> {
     shell::run_checked("fsutil", &["behavior", "set", "DisableDeleteNotify", "0"])
         .map_err(|e| format!("Não foi possível religar o TRIM: {}", e))?;
 
+    // Relido, não presumido: o comando aceitar não é o Windows obedecer.
+    if trim_ligado() != Some(true) {
+        return Err("O Windows aceitou o comando, mas o TRIM continua desligado na releitura.".to_string());
+    }
+
     Ok("TRIM religado. O SSD volta a ser avisado sobre blocos apagados, e a velocidade de \
         escrita para de se degradar com o tempo."
         .to_string())
