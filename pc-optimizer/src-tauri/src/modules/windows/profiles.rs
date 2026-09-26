@@ -15,26 +15,6 @@ pub struct ProfileInfo {
 
 pub const PROFILES: &[ProfileInfo] = &[
     ProfileInfo {
-        id: "pc_fraco",
-        name: "PC fraco",
-        description:
-            "Para a máquina de 4 a 8 GB que trava ao abrir o navegador. Tudo aqui \
-             ataca a mesma coisa: parar de gastar memória e disco com o que roda \
-             sozinho em segundo plano, para sobrar máquina para o que você abriu.",
-        tradeoff:
-            "Deixa a interface mais seca: sem transparência, sem animação, sem \
-             Widgets. Em PC fraco isso é o que devolve resposta ao clique — mas é \
-             uma troca de aparência por velocidade, e você vai notar.",
-        optimization_ids: &[
-            "visual_effects_performance",
-            "disable_transparency",
-            "disable_widgets",
-            "stop_sponsored_apps",
-            "disable_gamedvr",
-            "plano_otimiza",
-        ],
-    },
-    ProfileInfo {
         id: "jogos",
         name: "Jogos",
         description:
@@ -52,26 +32,6 @@ pub const PROFILES: &[ProfileInfo] = &[
             "plano_otimiza",
             "remove_forced_hpet",
             "clear_boot_limits",
-        ],
-    },
-    ProfileInfo {
-        id: "trabalho",
-        name: "Trabalho",
-        description:
-            "Para quem passa o dia em planilha, navegador e reunião. Tira o que \
-             consome máquina em segundo plano e não mexe em nada que você use \
-             para trabalhar.",
-        tradeoff:
-            "De propósito, NÃO desliga a indexação de busca nem a hibernação. As \
-             duas rendem desempenho, mas quem procura arquivo o dia inteiro e \
-             fecha o notebook sem salvar sente a falta muito mais do que sente o \
-             ganho.",
-        optimization_ids: &[
-            "visual_effects_performance",
-            "disable_widgets",
-            "stop_sponsored_apps",
-            "disable_gamedvr",
-            "plano_otimiza",
         ],
     },
 ];
@@ -167,30 +127,6 @@ mod tests {
                 perfil.id
             );
         }
-    }
-
-    #[test]
-    fn perfil_de_trabalho_nao_atrapalha_quem_trabalha() {
-        let trabalho = find("trabalho").unwrap();
-
-        for proibida in ["disable_search_indexing", "disable_hibernation"] {
-            assert!(
-                !trabalho.optimization_ids.contains(&proibida),
-                "`{}` quebra a promessa escrita no perfil Trabalho",
-                proibida
-            );
-        }
-    }
-
-    #[test]
-    fn perfil_de_pc_fraco_ataca_memoria_e_segundo_plano() {
-        let fraco = find("pc_fraco").unwrap();
-
-        for essencial in ["disable_widgets", "visual_effects_performance"] {
-            assert!(fraco.optimization_ids.contains(&essencial));
-        }
-
-        assert!(!fraco.optimization_ids.contains(&"mouse_precision_off"));
     }
 
     #[test]

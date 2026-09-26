@@ -33,10 +33,9 @@ impl Nivel {
                  É o que o botão \"Otimizar agora\" aplica."
             }
             Nivel::Competitivo => {
-                "Tudo do Seguro, mais o que troca comodidade por recurso. Aplicativos que \
-                 param de rodar em segundo plano, indexação de busca desligada: coisas que \
-                 você vai NOTAR no dia a dia, e que devolvem processador e disco para o \
-                 jogo. Continua sem nada que possa custar quadro."
+                "Tudo do Seguro, mais o que muda o jeito de o quadro chegar à tela e ainda \
+                 não tem medida para entrar no botão (otimizações para jogos em janela). \
+                 Continua sem nada que possa custar quadro."
             }
             Nivel::Experimental => {
                 "Tudo do Avançado, mais os ajustes que rendem numa máquina e custam \
@@ -51,8 +50,8 @@ impl Nivel {
         match self {
             Nivel::Seguro => "Nada. Aplique e siga.",
             Nivel::Competitivo => {
-                "Aceitar que alguns programas parem de atualizar sozinhos em segundo plano \
-                 — mensageiro, música, os aplicativos da Loja. Tudo volta atrás num clique."
+                "Conferir na medição da próxima partida: o modo de apresentação e o atraso \
+                 até a tela aparecem em \"Suas últimas partidas\". Tudo volta atrás num clique."
             }
             Nivel::Experimental => {
                 "Medir. Sem medição dos dois lados, este nível é um chute com passos extras \
@@ -66,7 +65,8 @@ impl Nivel {
 /// Feita dos predicados que já existem (`entra_no_lote`, `FORA_DO_LOTE`, `RiscoDeFps`), e não de uma lista à
 /// mão, que envelhece sem ninguém perceber.
 pub fn pertence(spec: &OptimizationSpec, nivel: Nivel) -> bool {
-    if spec.security_tradeoff || !spec.reversible {
+    // Aposentado só existe para o desfazer: o Experimental mostrava até os retirados da 2.9.
+    if spec.security_tradeoff || !spec.reversible || super::catalog::retirado(spec.id) {
         return false;
     }
 
@@ -187,7 +187,7 @@ mod tests {
 
         let arriscados: Vec<&str> = CATALOG
             .iter()
-            .filter(|s| s.risco_de_fps.pode_custar())
+            .filter(|s| s.risco_de_fps.pode_custar() && !super::super::catalog::retirado(s.id))
             .map(|s| s.id)
             .collect();
 
@@ -225,9 +225,11 @@ mod tests {
     fn o_competitivo_acrescenta_o_que_muda_comportamento() {
         let novos = acrescenta(Nivel::Competitivo);
 
-        assert!(
-            novos.contains(&"background_apps_off"),
-            "o item que corta aplicativos de segundo plano é o caso típico deste nível"
-        );
+        assert!(!novos.is_empty(), "o Competitivo precisa acrescentar alguma coisa ao Seguro");
+        for nivel in [Nivel::Seguro, Nivel::Competitivo, Nivel::Experimental] {
+            for id in itens_do_nivel(nivel) {
+                assert!(!super::super::catalog::retirado(id), "{id} foi aposentado e ainda aparece num nível");
+            }
+        }
     }
 }
