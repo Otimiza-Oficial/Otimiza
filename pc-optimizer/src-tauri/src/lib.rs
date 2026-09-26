@@ -507,13 +507,29 @@ pub fn run() {
                         let governador_no_inicio =
                             modules::windows::gamemode::governador_na_partida(&executavel);
 
+                        // PresentMon primeiro (separa quadro do jogo de gerado e sabe se chegou à tela); o canal antigo
+                        // fica de reserva, e o log diz qual mediu.
                         let medido = tokio::task::spawn_blocking(move || {
-                            modules::windows::frames::medir_par(
+                            match modules::windows::presentmon::medir_como_antes(
                                 jogo.pid,
                                 &jogo.executavel,
-                                None,
-                                medicoes::SEGUNDOS_DE_MEDICAO,
-                            )
+                                medicoes::SEGUNDOS_DE_MEDICAO as u32,
+                            ) {
+                                Ok((crua, resumo)) => Ok((crua, Some(resumo))),
+                                Err(erro) => {
+                                    utils::Logger::warn(&format!(
+                                        "PresentMon não mediu ({}); medindo pelo canal antigo",
+                                        erro
+                                    ));
+                                    modules::windows::frames::medir_par(
+                                        jogo.pid,
+                                        &jogo.executavel,
+                                        None,
+                                        medicoes::SEGUNDOS_DE_MEDICAO,
+                                    )
+                                    .map(|(principal, _)| (principal, None))
+                                }
+                            }
                         })
                         .await;
 
@@ -534,8 +550,8 @@ pub fn run() {
                             None => (None, Vec::new(), None),
                         };
 
-                        match medido.map(|r| r.map(|(principal, _)| principal)) {
-                            Ok(Ok(crua)) => {
+                        match medido {
+                            Ok(Ok((crua, presentmon))) => {
                                 let m = crua.resumo;
                                 let (medio, p95, p99) =
                                     match modules::windows::frames::percentis(&crua.intervalos_ms) {
@@ -580,7 +596,9 @@ pub fn run() {
                                     trancos_com_disco_pct,
                                     trancos_medidos: correlacao.map(|(_, total)| total),
                                     governador: governador_na_medicao,
-                                    geracao: Some(if modules::windows::geracao::estado().situacao
+                                    geracao: Some(if presentmon.as_ref().is_some_and(|r| !r.geradores.is_empty()) {
+                                        medicoes::GeracaoNaPartida::IdentificadaNosQuadros
+                                    } else if modules::windows::geracao::estado().situacao
                                         == modules::windows::geracao::Situacao::Gerando
                                     {
                                         medicoes::GeracaoNaPartida::OtimizaFg
@@ -593,6 +611,7 @@ pub fn run() {
                                     } else {
                                         medicoes::GeracaoNaPartida::NenhumaVisivel
                                     }),
+                                    presentmon,
                                 };
 
                                 match medicoes::registrar(registro) {

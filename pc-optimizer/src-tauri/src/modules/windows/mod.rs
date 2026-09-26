@@ -26,6 +26,7 @@ pub mod exhaustion;
 pub mod firmware;
 pub mod fivem;
 pub mod frames;
+pub mod presentmon;
 pub mod motorenergia;
 pub mod motorenergia_maquina;
 pub mod framegen;

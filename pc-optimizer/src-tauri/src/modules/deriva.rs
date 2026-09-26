@@ -133,6 +133,7 @@ mod testes {
             trancos_medidos: None,
             governador: None,
             geracao: None,
+            presentmon: None,
             ambiente: Some(Ambiente { driver: Some(driver.into()), windows: Some("19045.1".into()) }),
         }
     }
