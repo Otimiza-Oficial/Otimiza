@@ -2985,7 +2985,11 @@ async function copiarDiagnostico() {
   try {
     const texto = await invoke<string>("relatorio_de_suporte");
     await navigator.clipboard.writeText(texto);
-    setStatus("diagnostico-status", "Copiado. Cole no atendimento.", "ok");
+    // O que foi copiado, na íntegra: a pessoa decide mandar sabendo o que manda.
+    const previa = element("diagnostico-copiado");
+    previa.textContent = texto;
+    previa.hidden = false;
+    setStatus("diagnostico-status", "Copiado. Cole no atendimento; o texto está aqui embaixo.", "ok");
   } catch (error) {
     // Falha do comando ou recusa da área de transferência: sempre uma frase.
     setStatus("diagnostico-status", String(error), "error");
