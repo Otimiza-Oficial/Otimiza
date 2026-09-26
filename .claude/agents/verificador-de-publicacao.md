@@ -39,6 +39,10 @@ O cargo não está no PATH do bash: `& "$env:USERPROFILE\.cargo\bin\cargo.exe"`.
    os testes que rodam a tela (`roda_a_tela`) falham por falta do TypeScript e
    isso NÃO é defeito — não reporte como tal.
 4. `npx tsc --noEmit` em `pc-optimizer` do clone.
+4b. `npm run fumaca` em `pc-optimizer` do clone: monta a página de produção e clica em
+   todas as áreas e sub-abas num Chrome sem janela, com nenhum comando do Windows
+   respondendo. Qualquer exceção não tratada reprova (foi assim que a aba BIOS derrubava o
+   programa na 3.1). Sem Chrome instalado, diga que não rodou; não pule calado.
 5. `cargo test --lib` em `pc-optimizer\src-tauri` do clone, com
    `$env:CARGO_TARGET_DIR = "C:\Users\User\Desktop\Otimiza\pc-optimizer\src-tauri\target"`
    para reaproveitar a compilação. É a suíte inteira: um superconjunto dos
