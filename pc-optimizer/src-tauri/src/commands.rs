@@ -1640,7 +1640,9 @@ pub fn energia_escolher(
     resultados: Vec<crate::modules::windows::motorenergia::ResultadoDoCandidato>,
     base: String,
 ) -> Option<crate::modules::windows::motorenergia::Escolha> {
-    crate::modules::windows::motorenergia::escolher(&resultados, &base)
+    use crate::modules::windows::motorenergia as motor;
+    // A tela mede a base de novo no meio da bateria; a escolha compara cada candidato já sem a deriva.
+    motor::escolher(&motor::corrigir_deriva(&resultados, &base), &base)
 }
 
 #[tauri::command]
