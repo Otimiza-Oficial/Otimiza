@@ -53,6 +53,8 @@ fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    utils::diagnostico::instalar_gancho_de_panico();
+    utils::diagnostico::abrir_sessao();
     modules::abertura::marcar_inicio();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -625,6 +627,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                utils::diagnostico::fechar_sessao();
+            }
+
             // Rede da suspensão ao fechar. `Exit` é redundante com `ExitRequested` de propósito: retomar o que já roda não
             // custa nada.
             #[cfg(target_os = "windows")]

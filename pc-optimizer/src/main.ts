@@ -6,7 +6,7 @@ import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
 import { carregarLaboratorioDeGeracao } from "./framegen";
 import { carregarMotorDeEnergia } from "./energia";
-import { carregarAbaBios } from "./bios";
+import { carregarAbaBios, lerPassoAPassoDaBios } from "./bios";
 import { carregarMapaDeDesempenho } from "./mapa";
 import { ligarProntidao } from "./prontidao";
 
@@ -4278,7 +4278,7 @@ async function carregarPassoAPassoDaBios() {
   let b: BiosNaTela;
 
   try {
-    b = await invoke<BiosNaTela>("passo_a_passo_da_bios");
+    b = await lerPassoAPassoDaBios<BiosNaTela>();
   } catch (erro) {
     alvo.innerHTML = `<p class="status warn">${escapeHtml(String(erro))}</p>`;
     return;

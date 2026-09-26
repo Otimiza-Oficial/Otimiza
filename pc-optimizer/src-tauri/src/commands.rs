@@ -82,7 +82,7 @@ pub struct PlatformInfoResponse {
     pub version: String,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
     let info = PlatformDetector::get_info();
     Ok(PlatformInfoResponse {
@@ -215,7 +215,7 @@ pub async fn cpuset_esquecer(executavel: String) -> Result<(), String> {
 /// NÃO mede mira nem olha dentro do jogo: duas chaves do registro do usuário. `intervalos_us` vêm da tela; lista
 /// curta dá taxa ausente, nunca zero.
 #[cfg(target_os = "windows")]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
     use crate::modules::mouse;
 
@@ -238,7 +238,7 @@ pub struct CaminhoNaTela {
 
 /// SEM ESTADO NO BACKEND: a sessão vem da tela e volta; fechar o programa encerra a sessão, e o aplicado segue no
 /// histórico. Não aplica nem desfaz: devolve o passo.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn passo_do_autoajuste(
     sessao: crate::modules::autoajuste::Sessao,
 ) -> crate::modules::autoajuste::Passo {
@@ -423,7 +423,7 @@ pub struct HistoricoNaTela {
 }
 
 /// Chamado ANTES de `capturar_baseline_repetido`: benchmark que prende a máquina sem avisar é cancelado no meio.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn protocolo_do_perfil(perfil: crate::modules::baseline::Perfil) -> ProtocoloNaTela {
     let p = crate::modules::repeticoes::protocolo(perfil);
 
@@ -543,7 +543,7 @@ pub async fn comparar_com_baseline(
 
 /// `None` é o normal; `Some` traz os valores anteriores de uma operação interrompida. NÃO conserta sozinho: seria
 /// decidir pelo cliente com base num arquivo que já provou que algo deu errado.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn recuperacao_pendente() -> Result<Option<PendenciaNaTela>, String> {
     Ok(crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
         // A frase aqui e não na tela: duas versões da explicação discordariam.
@@ -571,7 +571,7 @@ pub async fn concluir_recuperacao(state: State<'_, AppState>) -> Result<usize, S
 }
 
 /// O nome não disfarça: DESCARTAR, não resolver.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn descartar_pendencia() -> Result<(), String> {
     crate::modules::transacao::descartar()
 }
@@ -603,7 +603,7 @@ pub async fn measure_baseline() -> Result<BaselineResult, String> {
     Ok(BaselineResult::from(snapshot))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_baseline() -> Option<BenchmarkSnapshot> {
     BaselineStore::load()
 }
@@ -624,7 +624,7 @@ pub async fn measure_and_compare() -> Result<BenchmarkComparison, String> {
 // Existem em todas as plataformas para uma interface só; fora do Windows falham com mensagem clara.
 
 /// Para avisar antes de o usuário tentar aplicar e falhar.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn is_elevated() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -647,7 +647,7 @@ pub struct HardwareProfileResponse {
 }
 
 /// Permite recusar o que faria mal a este PC.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_hardware_profile() -> Result<HardwareProfileResponse, String> {
     #[cfg(target_os = "windows")]
     {
@@ -689,12 +689,12 @@ pub async fn top_processes(state: State<'_, AppState>) -> Result<Vec<ProcessImpa
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_preferences() -> Preferences {
     Preferences::load()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> {
     preferences.save()?;
     // Valores fora da faixa são corrigidos: a interface reflete o gravado, não o pedido.
@@ -722,7 +722,7 @@ pub async fn set_automatic_pagefile() -> Result<String, String> {
 
 /// `LIVRES`: **não escreve absolutamente nada** (uma ferramenta capaz de alterar firmware deixaria a máquina sem
 /// ligar). Memória abaixo do nominal e Resizable BAR vêm de quem já mede: remedir daria dois números.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn passo_a_passo_da_bios() -> BiosNaTela {
     #[cfg(target_os = "windows")]
     {
@@ -757,7 +757,7 @@ pub fn passo_a_passo_da_bios() -> BiosNaTela {
 }
 
 /// `LIVRES`: só mede.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn abertura_pronta() -> Option<u64> {
     let ms = crate::modules::abertura::marcar_pronta();
     if let Some(ms) = ms {
@@ -776,7 +776,7 @@ pub async fn ficha_da_bios() -> Result<crate::modules::windows::fichabios::Ficha
 
 /// `LIVRES`: grava a ficha num arquivo da Área de Trabalho, com nome escolhido aqui. O texto vem da tela (é o que
 /// ela mostra), limitado em tamanho.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn salvar_ficha_da_bios(texto: String) -> Result<String, String> {
     const LIMITE: usize = 64 * 1024;
     if texto.trim().is_empty() || texto.len() > LIMITE {
@@ -786,7 +786,7 @@ pub fn salvar_ficha_da_bios(texto: String) -> Result<String, String> {
 }
 
 /// `LIVRES`: não altera configuração; a tela confirma antes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reiniciar_na_bios() -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -806,7 +806,7 @@ pub struct BiosNaTela {
 
 /// `LIVRES`: definição montada do catálogo; aplicar é `optimize_now`. Perfis respondem "para que você usa"; níveis,
 /// "o que você aceita trocar": perguntas independentes.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
     use crate::modules::windows::niveis::{acrescenta, aplica_de_uma_vez, itens_do_nivel, Nivel};
 
@@ -838,7 +838,7 @@ pub struct NivelNaTela {
 }
 
 /// Sugestão que marca caixas, não pacote fechado.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_profiles() -> Vec<crate::modules::windows::profiles::ProfileInfo> {
     #[cfg(target_os = "windows")]
     {
@@ -1155,7 +1155,7 @@ pub async fn fix_readiness(id: String) -> Result<String, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn running_game_executable() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
@@ -1406,7 +1406,7 @@ pub async fn framegen_medir(
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn framegen_comparar(
     desligado: Rodada,
     ligado: Rodada,
@@ -1449,12 +1449,12 @@ pub async fn gerador_desligar() -> crate::modules::windows::geracao::Estado {
     crate::modules::windows::geracao::estado()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn gerador_estado() -> crate::modules::windows::geracao::Estado {
     crate::modules::windows::geracao::estado()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil, hz: u32) -> Option<usize> {
     crate::modules::windows::framegen::melhor_rodada(&desligado, &testadas, perfil, hz)
 }
@@ -1685,7 +1685,7 @@ pub async fn energia_vizinhos(
     .map_err(|e| format!("Falha ao gerar o refino: {}", e))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn energia_escolher(
     resultados: Vec<crate::modules::windows::motorenergia::ResultadoDoCandidato>,
     base: String,
@@ -1725,7 +1725,7 @@ pub async fn energia_restaurar_windows() -> Result<crate::modules::windows::moto
         .map_err(|e| format!("Falha ao restaurar: {}", e))?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn energia_salvar_perfil_de_jogo(
     executavel: String,
     parametros: crate::modules::windows::motorenergia::Parametros,
@@ -1741,7 +1741,7 @@ pub fn energia_salvar_perfil_de_jogo(
     )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn energia_remover_perfil_de_jogo(
     executavel: String,
 ) -> Result<Vec<crate::modules::windows::motorenergia_maquina::PerfilDeJogo>, String> {
@@ -1749,7 +1749,7 @@ pub fn energia_remover_perfil_de_jogo(
 }
 
 /// `EXIGEM_LICENCA`: ligado, troca o plano sozinho.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn energia_modo_dinamico(ligado: bool) -> Result<bool, String> {
     crate::modules::licenca::exigir()?;
     crate::modules::windows::motorenergia_maquina::definir_dinamico(ligado).map(|d| d.ligado)
@@ -1916,7 +1916,7 @@ pub async fn remove_store_app(package: String) -> Result<String, String> {
 }
 
 /// O desinstalador do fabricante faz perguntas: imitá-lo arriscaria instalação pela metade.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn open_apps_settings() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -1985,7 +1985,7 @@ pub async fn enable_system_protection() -> Result<String, String> {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -2028,7 +2028,7 @@ pub async fn set_startup_enabled(
 
 /// Um processo não se eleva sozinho: abre outro e o Windows pergunta; recusado, nada acontece. Na versão final a
 /// mensagem fica vazia, porque este processo encerra.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -2285,19 +2285,19 @@ pub async fn medir_depois(
     Ok(prova::comparar(&antes, &depois))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn prova_guardada() -> Option<crate::modules::prova::Prova> {
     crate::modules::prova::guardada()
 }
 
 /// `Err` quando existe e não se lê.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn medicoes_automaticas() -> Result<Vec<crate::modules::medicoes::MedicaoAutomatica>, String> {
     crate::modules::medicoes::ler()
 }
 
 /// Vinte e um ajustes são por CONTA: elevado por outra, iriam para um perfil que ninguém usa. `LIVRES`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn conta_que_esta_rodando() -> ContaDoUsuario {
     #[cfg(target_os = "windows")]
     {
@@ -2356,7 +2356,7 @@ pub async fn conflitos_entre_ajustes(
 }
 
 /// `LIVRES`. 60% no 1% pior e 40% na média: ninguém sente média.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
     let medicoes = crate::modules::medicoes::ler()?;
 
@@ -2428,13 +2428,13 @@ fn jogo_mais_medido(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) ->
 }
 
 /// `LIVRES`. O cliente compara com vídeos de "50 tweaks" sem saber que metade não faz nada.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn o_que_nao_fazemos() -> Vec<crate::modules::windows::naofazemos::NaoFazemos> {
     crate::modules::windows::naofazemos::LISTA.to_vec()
 }
 
 #[cfg(target_os = "windows")]
-#[tauri::command]
+#[tauri::command(async)]
 pub fn o_que_o_otimiza_altera() -> Vec<crate::modules::windows::registro::Alteracao> {
     crate::modules::windows::registro::todas()
 }
@@ -2468,7 +2468,7 @@ pub async fn por_que_o_fps_esta_baixo(
 }
 
 /// `LIVRES`: com SSD pequeno e HD grande o jogo quase sempre está no HD.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn onde_os_jogos_moram(
 ) -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
     #[cfg(target_os = "windows")]
@@ -2914,12 +2914,12 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
 }
 
 /// Livre: alimenta a tela de compra.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn licenca_estado() -> crate::modules::licenca::Estado {
     crate::modules::licenca::estado()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, String> {
     crate::modules::licenca::ativar(&chave)?;
     Ok(crate::modules::licenca::estado())
@@ -3266,6 +3266,26 @@ mod tests {
         );
 
         corte
+    }
+
+    /// Comando síncrono sem `(async)` roda na thread da janela: um PowerShell lento ali congelava a aba BIOS por
+    /// 130 s (reproduzido) até o Windows ou a pessoa fechar o programa.
+    #[test]
+    fn nenhum_comando_roda_na_thread_da_janela() {
+        let marca = concat!("#[tauri::", "command");
+        let na_janela: Vec<String> = producao()
+            .split(marca)
+            .skip(1)
+            .filter(|bloco| bloco.starts_with(']'))
+            .filter_map(|bloco| bloco.lines().find(|l| l.contains("fn ")).map(str::to_string))
+            .filter(|assinatura| !assinatura.contains("async fn "))
+            .collect();
+
+        assert!(
+            na_janela.is_empty(),
+            "comando síncrono sem `(async)`, roda na thread da janela: {:?}",
+            na_janela
+        );
     }
 
     fn comandos() -> Vec<&'static str> {

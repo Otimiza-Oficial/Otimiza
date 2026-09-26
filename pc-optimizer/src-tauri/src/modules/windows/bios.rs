@@ -262,7 +262,8 @@ pub fn ler() -> Leitura {
         secure: Option<bool>,
     }
 
-    let bruto: Option<Bruto> = super::shell::powershell(script)
+    // 20 s e não os 120 do padrão: leitura que demora vira lacuna na aba, em vez de segurar a tela.
+    let bruto: Option<Bruto> = super::shell::powershell_com_prazo(script, std::time::Duration::from_secs(20))
         .ok()
         .filter(|s| s.success && !s.stdout.trim().is_empty())
         .and_then(|s| serde_json::from_str(&s.stdout).ok());

@@ -199,10 +199,21 @@ function desenhar(f: Ficha | null, fw: Firmware | null, m: Memoria | null, erro:
     </section>`;
 }
 
+let passoAPasso: Promise<unknown> | null = null;
+
+/** Uma leitura só: a ficha da aba e o painel de passos do main.ts usavam o mesmo comando duas vezes por clique. */
+export function lerPassoAPassoDaBios<T>(): Promise<T> {
+  passoAPasso ??= invoke<T>("passo_a_passo_da_bios").catch((erro) => {
+    passoAPasso = null;
+    throw erro;
+  });
+  return passoAPasso as Promise<T>;
+}
+
 async function carregar() {
   const [f, fw, m] = await Promise.allSettled([
     invoke<Ficha>("ficha_da_bios"),
-    invoke<Firmware>("passo_a_passo_da_bios"),
+    lerPassoAPassoDaBios<Firmware>(),
     invoke<Memoria>("memoria_instalada"),
   ]);
   const erro = [f, fw].find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
