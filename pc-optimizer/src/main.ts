@@ -6331,6 +6331,64 @@ interface MedicaoAutomatica {
   segundos: number;
   confiavel: boolean;
   mudancas_aplicadas: number;
+  /** Só nas partidas medidas pelo PresentMon (3.2 em diante). */
+  presentmon?: ResumoPresentMon | null;
+}
+
+interface ResumoPresentMon {
+  quadros_do_jogo: number;
+  quadros_gerados: number;
+  quadros_descartados: number;
+  fps_do_jogo_medio: number;
+  fps_exibido: number;
+  low_1pct: number | null;
+  low_01pct: number | null;
+  quadro_medio_ms: number;
+  modo_de_apresentacao: string;
+  cpu_ocupada_media_ms: number | null;
+  gpu_ocupada_media_ms: number | null;
+  gargalo: "Gpu" | "Cpu" | "Espera" | "NaoDeuParaSaber";
+  ate_a_tela_media_ms: number | null;
+  geradores: string[];
+}
+
+/** O modo de apresentação em palavras. Os nomes são os do PresentMon. */
+function fraseDoModo(modo: string): string {
+  if (modo.startsWith("Hardware") && modo.includes("Flip")) {
+    return "o jogo apresenta direto na tela, o caminho com menos atraso.";
+  }
+  if (modo === "Composed: Flip") {
+    return "o Windows compõe o quadro antes de mostrar: um pouco mais de atraso que tela cheia.";
+  }
+  if (modo.startsWith("Composed: Copy")) {
+    return "o Windows copia cada quadro antes de mostrar, o caminho com mais atraso. Em tela cheia o jogo apresentaria direto; só que tela cheia desliga a geração de quadros externa (Lossless, a do Otimiza).";
+  }
+  return `modo "${modo}".`;
+}
+
+/** A última partida medida pelo PresentMon, em frases: o que limitou o FPS e por onde o quadro chegou à tela. */
+function leituraDaPartida(m: MedicaoAutomatica): string {
+  const r = m.presentmon;
+  if (!r) return "";
+  const pct = (v: number | null) => (v == null ? null : Math.round((v / r.quadro_medio_ms) * 100));
+  const cpu = pct(r.cpu_ocupada_media_ms);
+  const gpu = pct(r.gpu_ocupada_media_ms);
+  const ocupacao = cpu != null && gpu != null ? ` O processador ficou ocupado em ${Math.min(cpu, 100)}% de cada quadro e a placa de vídeo em ${Math.min(gpu, 100)}%.` : "";
+  const gargalo =
+    r.gargalo === "Cpu"
+      ? " Quem limita o FPS aqui é o processador: ajuste de placa de vídeo não sobe esse número. Sobem: menos programa pesando junto, configuração do jogo que pesa na CPU (distância de visão, população) e memória em dois canais."
+      : r.gargalo === "Gpu"
+        ? " Quem limita o FPS aqui é a placa de vídeo: resolução, qualidade gráfica ou upscaling (DLSS, FSR) sobem esse número."
+        : r.gargalo === "Espera"
+          ? " Nem processador nem placa estavam no limite: o FPS está preso por limite de FPS, V-Sync ou espera do próprio jogo."
+          : "";
+  const tela =
+    r.quadros_gerados > 0
+      ? `O jogo desenhou <strong>${Math.round(r.fps_do_jogo_medio)} FPS</strong>; na tela chegaram ${Math.round(r.fps_exibido)} por segundo, ${r.quadros_gerados} deles gerados por ${escapeHtml(r.geradores.join(", "))}.`
+      : `O jogo desenhou <strong>${Math.round(r.fps_do_jogo_medio)} FPS</strong>, todos quadros do próprio jogo.`;
+  const descartados = r.quadros_descartados > 0 ? ` ${r.quadros_descartados} quadros foram desenhados e nunca chegaram à tela.` : "";
+  const atraso = r.ate_a_tela_media_ms != null ? ` Do quadro pronto até a tela: ${Math.round(r.ate_a_tela_media_ms)} ms; ` : " Apresentação: ";
+  return `<p class="bloco-de-prosa"><strong>Última partida de ${escapeHtml(m.jogo)}:</strong> ${tela}${ocupacao}${gargalo}${descartados}${atraso}${escapeHtml(fraseDoModo(r.modo_de_apresentacao))}</p>`;
 }
 
 /** LADO A LADO, SEM CONCLUSÃO: medições de lugares diferentes do jogo. */
@@ -6714,20 +6772,22 @@ async function carregarUltimasPartidas() {
 
   alvo.innerHTML = `
     <table class="fg-tabela">
-      <thead><tr><th>Jogo</th><th>Quando</th><th>FPS</th><th>1% piores</th><th>Partidas medidas</th></tr></thead>
+      <thead><tr><th>Jogo</th><th>Quando</th><th>FPS do jogo</th><th>Na tela</th><th>1% piores</th><th>Partidas medidas</th></tr></thead>
       <tbody>${linhas
         .map(
           (l) => `<tr>
             <td class="fg-mono">${escapeHtml(l.jogo)}</td>
             <td>${new Date(l.ultima.quando * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td>
             <td>${Math.round(l.ultima.fps)}</td>
-            <td>${l.ultima.confiavel ? Math.round(l.ultima.low_1pct).toString() : "amostra curta"}</td>
+            <td>${l.ultima.presentmon ? Math.round(l.ultima.presentmon.fps_exibido).toString() : "—"}</td>
+            <td>${l.ultima.presentmon?.low_1pct != null ? Math.round(l.ultima.presentmon.low_1pct).toString() : l.ultima.confiavel ? Math.round(l.ultima.low_1pct).toString() : "amostra curta"}</td>
             <td>${l.quantas}</td>
           </tr>`,
         )
         .join("")}</tbody>
     </table>
-    <p class="hint">Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou.</p>
+    ${linhas.map((l) => leituraDaPartida(l.ultima)).find((frase) => frase) ?? ""}
+    <p class="hint">"Na tela" conta também quadros gerados; "—" é partida medida antes da 3.2. Cada ajuste de jogo fica em observação: com pelo menos três partidas de cada lado, o Otimiza compara e desfaz sozinho o que piorou.</p>
     <div id="quedas-de-desempenho"></div>`;
 
   try {
