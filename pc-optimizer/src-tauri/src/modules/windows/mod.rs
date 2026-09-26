@@ -591,6 +591,11 @@ impl WindowsOptimizer {
             }
         }
 
+        // Plano de energia é uma pilha: desfazer um registro MAIS ANTIGO que o OTIMIZA (o modo jogo das versões antigas)
+        // não troca o plano ativo, só passa a volta dele para o OTIMIZA. Trocar agora apagaria o OTIMIZA e deixaria o
+        // histórico dizendo que ele está aplicado. Registro mais novo que o OTIMIZA desfaz normal (volta ao OTIMIZA).
+        repassar_se_mais_antigo(id, log)?;
+
         let entry = match log.take(id)? {
             Some(entry) => entry,
             None => {
@@ -632,6 +637,11 @@ impl WindowsOptimizer {
         }
 
         diario.concluir()?;
+
+        // O OTIMIZA saiu: o que o motor de energia guardava sobre ele não vale mais, e o modo dinâmico o recriaria.
+        if id == "plano_otimiza" {
+            motorenergia_maquina::esquecer_o_plano();
+        }
 
         Ok(OptimizationOutcome {
             id: id.to_string(),
@@ -2244,6 +2254,55 @@ pub fn concluir_recuperacao(
     Ok(pendencia.mudancas.len())
 }
 
+/// Pura. Tira a volta de plano de `mais_antigo` e a põe no OTIMIZA: desfazer o OTIMIZA depois vai direto ao plano de
+/// antes de tudo. Sem volta própria (o OTIMIZA já era o ativo ao aplicar), ganha a do mais antigo.
+fn repassar_volta_do_plano(mais_antigo: &mut Vec<ChangeRecord>, otimiza: &mut Vec<ChangeRecord>) {
+    let Some(i) = mais_antigo.iter().position(|c| matches!(c, ChangeRecord::PowerPlan { .. })) else { return };
+    let ChangeRecord::PowerPlan { previous_guid } = mais_antigo.remove(i) else { return };
+    match otimiza.iter_mut().find_map(|c| match c {
+        ChangeRecord::PowerPlan { previous_guid } => Some(previous_guid),
+        _ => None,
+    }) {
+        Some(volta) => *volta = previous_guid,
+        None => otimiza.push(ChangeRecord::PowerPlan { previous_guid }),
+    }
+}
+
+/// Pura: só registro com volta de plano, mais antigo que o OTIMIZA e cuja volta não é o próprio OTIMIZA.
+fn deve_repassar(registro: &AppliedOptimization, otimiza: &AppliedOptimization, guid_do_otimiza: Option<&str>) -> bool {
+    registro.optimization_id != "plano_otimiza"
+        && registro.timestamp <= otimiza.timestamp
+        && registro.changes.iter().any(|c| match c {
+            ChangeRecord::PowerPlan { previous_guid } => {
+                !guid_do_otimiza.is_some_and(|g| g.eq_ignore_ascii_case(previous_guid))
+            }
+            _ => false,
+        })
+}
+
+pub(crate) fn repassar_se_mais_antigo(id: &str, log: &mut ChangeLog) -> Result<(), String> {
+    let (Some(registro), Some(otimiza)) = (
+        log.applied().iter().find(|e| e.optimization_id == id),
+        log.applied().iter().find(|e| e.optimization_id == "plano_otimiza"),
+    ) else {
+        return Ok(());
+    };
+    // Só registro com volta de plano paga a consulta ao `powercfg`.
+    if !deve_repassar(registro, otimiza, None) {
+        return Ok(());
+    }
+    let guid = planoenergia::listar_planos()
+        .ok()
+        .and_then(|l| planoenergia::achar_na_lista(&l, planoenergia::NOME_DO_PLANO));
+    if !deve_repassar(registro, otimiza, guid.as_deref()) {
+        return Ok(());
+    }
+    log.editar_dois(id, "plano_otimiza", |registro, otimiza| {
+        repassar_volta_do_plano(&mut registro.changes, &mut otimiza.changes)
+    })?;
+    Ok(())
+}
+
 /// Desfaz na ordem inversa da aplicação. Tenta todas mesmo se alguma falhar, e devolve as falhas acumuladas.
 fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
@@ -2380,6 +2439,53 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plano(guid: &str) -> ChangeRecord {
+        ChangeRecord::PowerPlan { previous_guid: guid.to_string() }
+    }
+
+    fn volta(changes: &[ChangeRecord]) -> Option<String> {
+        changes.iter().find_map(|c| match c {
+            ChangeRecord::PowerPlan { previous_guid } => Some(previous_guid.clone()),
+            _ => None,
+        })
+    }
+
+    /// O caso da máquina do dono: o modo jogo antigo trocou o SnyX pelo Alto desempenho, e o OTIMIZA veio por cima.
+    #[test]
+    fn desfazer_o_plano_mais_antigo_passa_a_volta_para_o_otimiza() {
+        let mut modo_jogo = vec![plano("snyx")];
+        let mut otimiza = vec![plano("alto-desempenho")];
+        repassar_volta_do_plano(&mut modo_jogo, &mut otimiza);
+        assert_eq!(volta(&modo_jogo), None, "o plano ativo não é trocado agora");
+        assert_eq!(volta(&otimiza).as_deref(), Some("snyx"), "desfazer o OTIMIZA volta ao de antes de tudo");
+    }
+
+    fn registro(id: &str, quando: u64, volta: &str) -> AppliedOptimization {
+        AppliedOptimization { optimization_id: id.into(), name: id.into(), timestamp: quando, changes: vec![plano(volta)] }
+    }
+
+    /// Entre 14/09 e 21/09 o modo jogo podia gravar a troca DEPOIS do OTIMIZA, com a volta apontando para ele: repassar
+    /// perderia o plano do cliente.
+    #[test]
+    fn so_repassa_o_que_e_mais_antigo_que_o_otimiza() {
+        let otimiza = registro("plano_otimiza", 200, "snyx");
+        assert!(deve_repassar(&registro("gamemode:energia", 100, "snyx"), &otimiza, Some("otimiza-guid")));
+        assert!(!deve_repassar(&registro("gamemode:energia", 300, "alto"), &otimiza, Some("otimiza-guid")), "mais novo");
+        assert!(
+            !deve_repassar(&registro("gamemode:energia", 100, "OTIMIZA-GUID"), &otimiza, Some("otimiza-guid")),
+            "a volta é o próprio OTIMIZA"
+        );
+        assert!(!deve_repassar(&otimiza, &otimiza, Some("otimiza-guid")));
+    }
+
+    #[test]
+    fn otimiza_sem_volta_propria_herda_a_do_mais_antigo() {
+        let mut modo_jogo = vec![plano("snyx")];
+        let mut otimiza = Vec::new();
+        repassar_volta_do_plano(&mut modo_jogo, &mut otimiza);
+        assert_eq!(volta(&otimiza).as_deref(), Some("snyx"));
+    }
     use crate::modules::changelog::PreviousValue;
 
     const MOUSE_PATH: &str = r"Control Panel\Mouse";

@@ -136,7 +136,8 @@ type Escolha = {
   resposta_pct: number | null;
   temperatura_delta_c: number | null;
 };
-type Restauracao = { plano_ativo: string; divergentes: string[]; plano_otimiza_apagado: boolean };
+/** `otimiza_refeito`: com o plano OTIMIZA do botão aplicado, voltar é voltar a ele, sem os valores do motor. */
+type Restauracao = { plano_ativo: string; divergentes: string[]; plano_otimiza_apagado: boolean; otimiza_refeito?: boolean };
 
 type Tom = "ok" | "aviso" | "erro" | "neutro";
 
@@ -486,7 +487,12 @@ async function restaurar(qual: "anterior" | "windows") {
   try {
     const r = await invoke<Restauracao>(qual === "anterior" ? "energia_restaurar_anterior" : "energia_restaurar_windows");
     estado.aviso =
-      qual === "anterior"
+      qual === "anterior" && r.otimiza_refeito
+        ? (r.plano_otimiza_apagado
+            ? "O plano OTIMIZA foi refeito como o botão Otimizar monta, sem os valores do motor."
+            : "O plano OTIMIZA foi reescrito como o botão Otimizar monta; o Windows não deixou apagá-lo antes, então algum valor do motor pode ter ficado.") +
+          " Para voltar ao plano de antes do Otimiza, desfaça o Plano de energia OTIMIZA na lista."
+        : qual === "anterior"
         ? r.divergentes.length
           ? `Plano anterior ativo, mas ${r.divergentes.length} valor(es) não batem com o backup: ${r.divergentes.join(", ")}.`
           : "Plano anterior ativo, e cada valor relido bate com o backup."

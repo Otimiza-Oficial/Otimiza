@@ -336,6 +336,8 @@ pub fn desativar(log: &mut ChangeLog) -> Result<String, String> {
     };
 
     let mut plano = false;
+    // Com o OTIMIZA aplicado depois, a volta do modo jogo vira a volta do OTIMIZA e o plano ativo fica (`mod.rs`).
+    super::repassar_se_mais_antigo(ID, log)?;
     if let Some(registro) = log.take(ID)? {
         for mudanca in &registro.changes {
             if let ChangeRecord::PowerPlan { previous_guid } = mudanca {

@@ -1662,17 +1662,29 @@ pub async fn energia_aplicar(
 
 /// `LIVRES`: desfazer nunca depende de licença válida.
 #[tauri::command]
-pub async fn energia_restaurar_anterior() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
-    tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_anterior)
+pub async fn energia_restaurar_anterior(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
+    let otimiza = state.changes.lock().await.is_applied("plano_otimiza");
+    tokio::task::spawn_blocking(move || crate::modules::windows::motorenergia_maquina::restaurar_anterior(otimiza))
         .await
         .map_err(|e| format!("Falha ao restaurar: {}", e))?
 }
 
 #[tauri::command]
-pub async fn energia_restaurar_windows() -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
-    tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows)
+pub async fn energia_restaurar_windows(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
+    let r = tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows)
         .await
-        .map_err(|e| format!("Falha ao restaurar: {}", e))?
+        .map_err(|e| format!("Falha ao restaurar: {}", e))??;
+    // O plano OTIMIZA foi apagado junto: o histórico não pode seguir dizendo que ele está aplicado.
+    if r.plano_otimiza_apagado {
+        if let Err(e) = state.changes.lock().await.take("plano_otimiza") {
+            crate::utils::Logger::warn(&format!("o plano OTIMIZA foi apagado, mas o histórico não gravou: {}", e));
+        }
+    }
+    Ok(r)
 }
 
 #[tauri::command(async)]

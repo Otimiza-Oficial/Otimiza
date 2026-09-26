@@ -267,7 +267,7 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !registry::is_elevated() {
         return None;
     }
-    let r = restaurar_anterior();
+    let r = restaurar_anterior(crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza"));
     if r.is_ok() {
         marcar_teste_em_andamento(false);
     }
@@ -362,6 +362,46 @@ pub struct Restauracao {
     /// Vazio é a prova de que o plano voltou exatamente como estava.
     pub divergentes: Vec<String>,
     pub plano_otimiza_apagado: bool,
+    /// O plano OTIMIZA do botão estava aplicado: o motor voltou a ele (refeito do zero, sem os valores do motor), e não
+    /// ao plano de antes do Otimiza, que é trabalho do desfazer do próprio plano.
+    #[serde(default)]
+    pub otimiza_refeito: bool,
+}
+
+/// O plano OTIMIZA foi desfeito: backup, teste e modo dinâmico do motor apontavam para ele.
+pub fn esquecer_o_plano() {
+    let _ = std::fs::remove_file(pasta().join("backup.json"));
+    marcar_teste_em_andamento(false);
+    if dinamico().ligado {
+        let _ = definir_dinamico(false);
+        crate::utils::Logger::info("motor de energia: modo dinâmico desligado junto com o plano OTIMIZA");
+    }
+}
+
+/// Com o plano OTIMIZA do botão aplicado, "voltar" do motor é voltar ao OTIMIZA base: apagar o plano com os valores
+/// do motor e refazê-lo como o botão faz. O plano ativo passa pelo Equilibrado por um instante (plano ativo não se
+/// apaga).
+fn refazer_o_otimiza() -> Result<Restauracao, String> {
+    power::set_active_scheme(EQUILIBRADO_GUID)?;
+    let apagado = apagar_plano_otimiza();
+    let no_meio = |e: String| {
+        format!(
+            "{} O plano ativo agora é o Equilibrado do Windows. Tente de novo, ou desfaça o Plano de energia OTIMIZA \
+             na lista para voltar ao plano de antes do Otimiza.",
+            e
+        )
+    };
+    let relatorio = plano::montar(false).map_err(no_meio)?;
+    if !relatorio.plano_ativo {
+        return Err(no_meio("O plano OTIMIZA foi refeito, mas o Windows não o deixou ativo.".to_string()));
+    }
+    esquecer_o_plano();
+    Ok(Restauracao {
+        plano_ativo: power::active_scheme()?,
+        divergentes: Vec::new(),
+        plano_otimiza_apagado: apagado,
+        otimiza_refeito: true,
+    })
 }
 
 fn apagar_plano_otimiza() -> bool {
@@ -371,8 +411,12 @@ fn apagar_plano_otimiza() -> bool {
     }
 }
 
-pub fn restaurar_anterior() -> Result<Restauracao, String> {
+/// `otimiza_no_historico`: o plano OTIMIZA do botão está aplicado (ver `refazer_o_otimiza`).
+pub fn restaurar_anterior(otimiza_no_historico: bool) -> Result<Restauracao, String> {
     exigir_admin()?;
+    if otimiza_no_historico {
+        return refazer_o_otimiza();
+    }
     let backup = ler_backup().ok_or("Não há backup do plano anterior: o motor nunca mudou o plano nesta máquina.")?;
 
     power::set_active_scheme(&backup.plano_anterior)
@@ -396,7 +440,7 @@ pub fn restaurar_anterior() -> Result<Restauracao, String> {
     let apagado = apagar_plano_otimiza();
     let _ = std::fs::remove_file(pasta().join("backup.json"));
     marcar_teste_em_andamento(false);
-    Ok(Restauracao { plano_ativo: ativo, divergentes, plano_otimiza_apagado: apagado })
+    Ok(Restauracao { plano_ativo: ativo, divergentes, plano_otimiza_apagado: apagado, otimiza_refeito: false })
 }
 
 pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
@@ -407,8 +451,8 @@ pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
         return Err(format!("O Windows aceitou, mas o plano ativo continua {}.", ativo));
     }
     let apagado = apagar_plano_otimiza();
-    marcar_teste_em_andamento(false);
-    Ok(Restauracao { plano_ativo: ativo, divergentes: Vec::new(), plano_otimiza_apagado: apagado })
+    esquecer_o_plano();
+    Ok(Restauracao { plano_ativo: ativo, divergentes: Vec::new(), plano_otimiza_apagado: apagado, otimiza_refeito: false })
 }
 
 const PDH_OK: u32 = 0;

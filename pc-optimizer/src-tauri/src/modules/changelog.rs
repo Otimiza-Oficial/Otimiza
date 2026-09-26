@@ -400,6 +400,34 @@ impl ChangeLog {
         fs::rename(&temporario, path).map_err(|e| format!("Failed to replace change log: {}", e))
     }
 
+    /// Muda dois registros em memória e grava UMA vez: sem estado intermediário no disco. `false` se um dos dois falta.
+    pub fn editar_dois(
+        &mut self,
+        a: &str,
+        b: &str,
+        f: impl FnOnce(&mut AppliedOptimization, &mut AppliedOptimization),
+    ) -> Result<bool, String> {
+        let (Some(i), Some(j)) = (
+            self.entries.iter().position(|e| e.optimization_id == a),
+            self.entries.iter().position(|e| e.optimization_id == b),
+        ) else {
+            return Ok(false);
+        };
+        if i == j {
+            return Ok(false);
+        }
+        let (menor, maior) = (i.min(j), i.max(j));
+        let (esquerda, direita) = self.entries.split_at_mut(maior);
+        let (x, y) = (&mut esquerda[menor], &mut direita[0]);
+        if i < j {
+            f(x, y);
+        } else {
+            f(y, x);
+        }
+        self.persist()?;
+        Ok(true)
+    }
+
     /// Substitui o registro anterior da mesma otimização, para guardar o estado original mais antigo ainda não
     /// revertido.
     pub fn record(&mut self, entry: AppliedOptimization) -> Result<(), String> {
