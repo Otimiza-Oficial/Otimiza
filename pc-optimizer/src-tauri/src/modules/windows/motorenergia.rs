@@ -1206,6 +1206,63 @@ fn variacao(a: f64, b: f64) -> Option<f64> {
 }
 
 /// Escolhe o candidato. `base` é o id do padrão do Windows.
+/// Uma nova medição da base no meio da bateria: `<base>#2`, `<base>#3`… A primeira é a própria `base`.
+pub fn e_repeticao_da_base(candidato: &str, base: &str) -> bool {
+    candidato.strip_prefix(base).is_some_and(|resto| resto.starts_with('#'))
+}
+
+/// Pura. A bateria mede a base de novo entre os candidatos (base, A, B, base#2, C, D, base#3). A máquina esquenta ao
+/// longo de minutos, e sem isto o primeiro candidato ganharia só por ter vindo antes. Cada candidato é trazido para as
+/// condições da PRIMEIRA base: fator = FPS da primeira base ÷ FPS da base interpolada no instante dele (entre a
+/// medição anterior e a seguinte, pela posição). As repetições da base saem da lista. Sem repetição, nada muda.
+pub fn corrigir_deriva(em_ordem: &[ResultadoDoCandidato], base: &str) -> Vec<ResultadoDoCandidato> {
+    let fps_da_base: Vec<(usize, f64)> = em_ordem
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.candidato == base || e_repeticao_da_base(&r.candidato, base))
+        .filter_map(|(i, r)| r.quadros.map(|q| (i, q.fps)).filter(|(_, f)| *f > 0.0))
+        .collect();
+    let Some(&(_, primeira)) = fps_da_base.first() else {
+        return em_ordem.to_vec();
+    };
+    if fps_da_base.len() < 2 {
+        return em_ordem.iter().filter(|r| !e_repeticao_da_base(&r.candidato, base)).cloned().collect();
+    }
+
+    let base_em = |p: usize| -> f64 {
+        let antes = fps_da_base.iter().rev().find(|(i, _)| *i <= p);
+        let depois = fps_da_base.iter().find(|(i, _)| *i >= p);
+        match (antes, depois) {
+            (Some(&(a, fa)), Some(&(c, fc))) if c > a => fa + (fc - fa) * (p - a) as f64 / (c - a) as f64,
+            (Some(&(_, fa)), _) => fa,
+            (None, Some(&(_, fc))) => fc,
+            (None, None) => primeira,
+        }
+    };
+
+    em_ordem
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| !e_repeticao_da_base(&r.candidato, base))
+        .map(|(p, r)| {
+            let mut r = r.clone();
+            if r.candidato != base {
+                let k = primeira / base_em(p);
+                if let Some(q) = r.quadros.as_mut() {
+                    q.fps *= k;
+                    q.low_1 *= k;
+                    q.low_01 *= k;
+                    q.p99_ms /= k;
+                }
+                for f in r.fps_repeticoes.iter_mut() {
+                    *f *= k;
+                }
+            }
+            r
+        })
+        .collect()
+}
+
 pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escolha> {
     let b = resultados.iter().find(|r| r.candidato == base)?;
     let mut achados = Vec::new();
@@ -1407,6 +1464,57 @@ pub fn transicao(estado: EstadoDinamico, jogo_aberto: bool, olhadas_sem_jogo: u3
         (EstadoDinamico::Normal, true) => Transicao::EntrarNoPerfilDeJogo,
         (EstadoDinamico::Jogo, false) if olhadas_sem_jogo >= 2 => Transicao::VoltarAoNormal,
         _ => Transicao::Nenhuma,
+    }
+}
+
+#[cfg(test)]
+mod testes_da_deriva {
+    use super::*;
+
+    fn medido(id: &str, fps: f64) -> ResultadoDoCandidato {
+        ResultadoDoCandidato {
+            candidato: id.into(),
+            resposta: None,
+            cpu: None,
+            quadros: Some(Quadros { fps, low_1: fps / 2.0, low_01: fps / 3.0, p99_ms: 1000.0 / (fps / 2.0) }),
+            fps_repeticoes: vec![fps],
+            gpu_pct: None,
+            uso_cpu_pct: None,
+            quadros_sinteticos: false,
+        }
+    }
+
+    /// A máquina perde 1 FPS por medição (esquentando): sem a correção, A (medido cedo) ganharia de C.
+    #[test]
+    fn a_deriva_nao_da_vitoria_a_quem_veio_primeiro() {
+        let ordem = vec![
+            medido("base", 100.0),
+            medido("A", 104.0),
+            medido("B", 98.0),
+            medido("base#2", 97.0),
+            medido("C", 101.0),
+            medido("base#3", 95.0),
+        ];
+        let corrigido = corrigir_deriva(&ordem, "base");
+        let fps = |id: &str| corrigido.iter().find(|r| r.candidato == id).unwrap().quadros.unwrap().fps;
+        assert!(corrigido.iter().all(|r| !e_repeticao_da_base(&r.candidato, "base")), "as repetições saem");
+        assert_eq!(fps("base"), 100.0);
+        // C foi medido quando a base estava em 96: 101 × 100/96 ≈ 105,2, à frente de A (104 × 100/99 ≈ 105,1).
+        assert!(fps("C") > fps("A"), "A {} C {}", fps("A"), fps("C"));
+        assert!((fps("A") - 104.0 * 100.0 / 99.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn sem_repeticao_da_base_nada_muda() {
+        let ordem = vec![medido("base", 100.0), medido("A", 104.0)];
+        assert_eq!(corrigir_deriva(&ordem, "base"), ordem);
+    }
+
+    #[test]
+    fn o_nome_da_repeticao_nao_pega_outro_candidato() {
+        assert!(e_repeticao_da_base("PadraoWindows#2", "PadraoWindows"));
+        assert!(!e_repeticao_da_base("PadraoWindows", "PadraoWindows"));
+        assert!(!e_repeticao_da_base("PadraoWindowsX", "PadraoWindows"));
     }
 }
 

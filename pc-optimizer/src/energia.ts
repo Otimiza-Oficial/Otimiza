@@ -364,7 +364,32 @@ async function testarBateria() {
     return;
   }
 
+  // A base é medida de novo a cada dois candidatos e no fim: a máquina esquenta, e o Rust (`corrigir_deriva`)
+  // compara cada candidato com a base interpolada no instante dele, não com a do começo.
+  let repeticoesDaBase = 1;
+  const medirBaseDeNovo = async (): Promise<boolean> => {
+    repeticoesDaBase += 1;
+    estado.progresso = `Conferindo o plano padrão de novo (${repeticoesDaBase}ª vez), para descontar o aquecimento da máquina…`;
+    desenhar();
+    try {
+      const m = await invoke<Medicao>("energia_testar_candidato", {
+        candidato: base,
+        processo: estado.processo || null,
+        segundos: estado.segundos,
+        repeticoes: estado.repeticoes,
+      });
+      const id = `${base.id}#${repeticoesDaBase}`;
+      m.resultado.candidato = id;
+      estado.resultados[id] = m;
+      return true;
+    } catch (e) {
+      estado.erro = `Parou ao medir o plano padrão de novo: ${e}`;
+      return false;
+    }
+  };
+
   for (const [i, c] of lista.entries()) {
+    if (i >= 2 && i % 2 === 1 && !(await medirBaseDeNovo())) break;
     estado.progresso = `Candidato ${i + 1} de ${lista.length}: ${esc(ROTULO_DO_PAPEL(c.papel, notebook()))}${
       c.papel === "Epp" || c.papel === "Dispositivo" ? ` (${esc(descreverParametros(c.parametros))})` : ""
     }. ${estado.processo ? "Continue jogando na mesma cena." : "Deixe o PC parado."}`;
@@ -383,6 +408,7 @@ async function testarBateria() {
       break;
     }
   }
+  if (!estado.erro && lista.length > 1) await medirBaseDeNovo();
 
   const resultados = Object.values(estado.resultados).map((m) => m.resultado);
   if (resultados.length) {
@@ -415,6 +441,7 @@ async function testarBateria() {
         break;
       }
     }
+    if (!estado.erro && estado.refino.length) await medirBaseDeNovo();
     const todos = Object.values(estado.resultados).map((m) => m.resultado);
     estado.escolha = await invoke<Escolha | null>("energia_escolher", { resultados: todos, base: base.id });
   }
