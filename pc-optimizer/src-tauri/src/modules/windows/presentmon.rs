@@ -312,6 +312,9 @@ fn cadeia_principal(quadros: &[Quadro]) -> Option<String> {
 #[cfg(target_os = "windows")]
 pub fn capturar(pid: u32, segundos: u32) -> Result<Vec<Quadro>, String> {
     let exe = executavel().ok_or("o PresentMon não está junto do Otimiza: reinstale o programa")?;
+    // Uma captura por vez: com o mesmo nome de sessão, a segunda pararia a primeira (`--stop_existing_session`).
+    static UMA_POR_VEZ: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _vez = UMA_POR_VEZ.lock().unwrap_or_else(|e| e.into_inner());
     let pid = pid.to_string();
     let tempo = segundos.to_string();
     let saida = super::shell::run_com_prazo(

@@ -179,6 +179,8 @@ pub fn run() {
             commands::analyze_game_config,
             commands::medir_antes,
             commands::medir_depois,
+            commands::provar_o_otimizar,
+            commands::prova_alternada_guardada,
             commands::prova_guardada,
             commands::preview_game_profile,
             commands::apply_game_profile,
@@ -346,6 +348,9 @@ pub fn run() {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::windows::motorenergia_maquina::recuperar_teste_interrompido).await {
                     utils::Logger::info(&format!("motor de energia: teste interrompido desfeito na abertura: {:?}", r.map(|x| x.plano_ativo)));
                 }
+                if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::provaalternada::recuperar_na_abertura).await {
+                    utils::Logger::info(&format!("prova alternada interrompida: plano do Otimiza reativado na abertura: {:?}", r));
+                }
             });
 
             // Olha a cada três segundos só os executáveis com perfil salvo; só age com o modo ligado e elevado.
@@ -422,6 +427,11 @@ pub fn run() {
                             || !modules::windows::registry::is_elevated()
                         {
                             acompanhamento = Acompanhamento::default();
+                            continue;
+                        }
+
+                        // Uma partida meio com um plano, meio com outro, não vai para o histórico.
+                        if modules::provaalternada::em_andamento() {
                             continue;
                         }
 

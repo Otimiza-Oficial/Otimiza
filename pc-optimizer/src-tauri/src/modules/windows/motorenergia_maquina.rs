@@ -833,6 +833,10 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
     if !dinamico().ligado || !registry::is_elevated() {
         return None;
     }
+    // A prova alternada troca o plano de propósito: trocar junto misturaria os dois lados.
+    if crate::modules::provaalternada::em_andamento() {
+        return None;
+    }
     let perfis = perfis_de_jogo();
     if perfis.is_empty() {
         return None;
