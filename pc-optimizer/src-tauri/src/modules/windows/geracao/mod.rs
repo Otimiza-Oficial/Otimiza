@@ -504,13 +504,60 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
     let mut atraso_medio: Option<f64> = None;
     let mut guarda = guarda::Guarda::nova(0.0);
     let mut nota_media = 0.0f64;
+    // A guarda conta os quadros do PRÓPRIO jogo pelo PresentMon; sem ele, a captura da tela (presa ao Hz do monitor),
+    // como antes. Com ele, a pausa da guarda é o jogo puro: sem sobreposição e sem captura.
+    let mut vivo = match super::presentmon::Vivo::iniciar(pid) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            crate::utils::Logger::warn(&format!("gerador: a guarda conta pela captura (PresentMon: {})", e));
+            None
+        }
+    };
+    let mut quadros_do_jogo = guarda::LinhaDoTempo::default();
+    let mut quadros_capturados = guarda::LinhaDoTempo::default();
+    // Quando o PresentMon saiu: janela que começou antes disso não é contada por nenhuma das duas fontes (metade de cada
+    // uma inflaria a razão e a guarda nunca desligaria).
+    let mut troca_de_fonte: Option<f64> = None;
+    let mut ultima_conferencia_do_vivo = 0.0f64;
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(());
         }
 
-        // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO: meio segundo sem quadro real e a sobreposição some.
-        let parado = ultimo_real.elapsed() > Duration::from_millis(500);
+        if let Some(v) = vivo.as_mut() {
+            match v.novos() {
+                Some(lote) => {
+                    for qpc in lote {
+                        quadros_do_jogo.registrar(qpc as f64 / qpc_frequencia - qpc_inicio);
+                    }
+                }
+                None => {
+                    crate::utils::Logger::warn("gerador: o PresentMon parou; a guarda volta a contar pela captura");
+                    vivo = None;
+                    troca_de_fonte = Some(segundos(inicio));
+                }
+            }
+        }
+        // PresentMon vivo mas mudo (outro processo apresenta, eventos perdidos): a captura vê o jogo andando e ele não.
+        let agora_do_laco = segundos(inicio);
+        if vivo.is_some()
+            && agora_do_laco > guarda::ATRASO_DA_CONTAGEM + 6.0
+            && agora_do_laco - ultima_conferencia_do_vivo > 5.0
+        {
+            ultima_conferencia_do_vivo = agora_do_laco;
+            let ate = agora_do_laco - guarda::ATRASO_DA_CONTAGEM;
+            let de = ate - 4.0;
+            if !guarda.pausada() && quadros_do_jogo.contar(de, ate) == 0 && quadros_capturados.contar(de, ate) >= 30 {
+                crate::utils::Logger::warn("gerador: o PresentMon não vê quadros do jogo; a guarda volta a contar pela captura");
+                vivo = None;
+                troca_de_fonte = Some(agora_do_laco);
+            }
+        }
+        let pausa_completa = vivo.is_some() && guarda.pausada();
+
+        // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO: meio segundo sem quadro real e a sobreposição some. Na pausa
+        // completa da guarda também: o que aparece é o jogo, sem nada do Otimiza no caminho.
+        let parado = ultimo_real.elapsed() > Duration::from_millis(500) || pausa_completa;
         if parado != escondida {
             unsafe {
                 let _ = ShowWindow(sobreposicao.hwnd, if parado { SW_HIDE } else { SW_SHOWNOACTIVATE });
@@ -565,7 +612,17 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             .unwrap_or(8)
             .min(8);
 
-        match guarda.passo(segundos(inicio), contadores.reais) {
+        let pelo_jogo = vivo.is_some();
+        let acao = guarda.passo(segundos(inicio), |de, ate| {
+            if pelo_jogo {
+                Some(quadros_do_jogo.contar(de, ate))
+            } else if troca_de_fonte.is_some_and(|t| de < t) {
+                None
+            } else {
+                Some(quadros_capturados.contar(de, ate))
+            }
+        });
+        match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
                 crate::utils::Logger::warn(&format!("gerador desligado pela guarda: razão de FPS {:?}", razao));
@@ -583,6 +640,12 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
             _ => {}
         }
 
+        // Pausa completa: nem captura nem apresenta; a janela do jogo aparece sozinha por baixo.
+        if pausa_completa {
+            std::thread::sleep(Duration::from_millis(8));
+            continue;
+        }
+
         let mut info = DXGI_OUTDUPL_FRAME_INFO::default();
         let mut recurso: Option<IDXGIResource> = None;
         match unsafe { duplicacao.AcquireNextFrame(espera_ms, &mut info, &mut recurso) } {
@@ -594,6 +657,7 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
                         composto_do_real = Some(info.LastPresentTime as f64 / qpc_frequencia - qpc_inicio);
                         gpu.receber(&tex, recorte);
                         intervalo.registrar(chegada);
+                        quadros_capturados.registrar(chegada);
                         contadores.reais += 1;
                         ultimo_real = Instant::now();
 

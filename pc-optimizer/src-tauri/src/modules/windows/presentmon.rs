@@ -75,10 +75,12 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
         if campos.len() < cabecalho.len() {
             continue;
         }
-        let tipo = match c_tipo.and_then(|c| campos.get(c)).map(|t| t.trim()) {
-            None | Some("Application") | Some("NA") | Some("NotSet") | Some("Unspecified") | Some("") => TipoDeQuadro::Jogo,
+        let bruto = c_tipo.and_then(|c| campos.get(c)).map(|t| t.trim());
+        let tipo = match bruto {
+            _ if e_quadro_do_jogo(bruto) => TipoDeQuadro::Jogo,
             Some("Repeated") => TipoDeQuadro::Repetido,
             Some(outro) => TipoDeQuadro::Gerado(outro.to_string()),
+            None => TipoDeQuadro::Jogo,
         };
         quadros.push(Quadro {
             cadeia: campos[c_cadeia].trim().to_string(),
@@ -340,6 +342,104 @@ pub fn capturar(pid: u32, segundos: u32) -> Result<Vec<Quadro>, String> {
     ler_csv(&saida.stdout)
 }
 
+/// Quadro do jogo pelo `FrameType` (gerado e repetido não contam). Pura; a mesma regra de `ler_csv`.
+pub fn e_quadro_do_jogo(tipo: Option<&str>) -> bool {
+    matches!(tipo.map(str::trim), None | Some("Application") | Some("NA") | Some("NotSet") | Some("Unspecified") | Some(""))
+}
+
+/// Pura: o instante (QPC) de uma linha do CSV, quando for quadro do jogo. `colunas`: (CPUStartQPC, FrameType).
+pub fn instante_do_quadro(linha: &str, colunas: (usize, Option<usize>)) -> Option<i64> {
+    let campos: Vec<&str> = linha.split(',').collect();
+    if !e_quadro_do_jogo(colunas.1.and_then(|c| campos.get(c).copied())) {
+        return None;
+    }
+    campos.get(colunas.0)?.trim().parse().ok()
+}
+
+/// PresentMon sem prazo, entregando o instante (QPC) de cada quadro do jogo enquanto ele roda. Para a guarda do
+/// gerador de quadros: contar o FPS do PRÓPRIO jogo, e não a captura da tela (presa ao Hz do monitor). Sessão com
+/// nome próprio, para não parar a medição automática; morre com o `Drop` ou quando o jogo fecha.
+#[cfg(target_os = "windows")]
+pub struct Vivo {
+    filho: std::process::Child,
+    quadros: std::sync::mpsc::Receiver<i64>,
+}
+
+#[cfg(target_os = "windows")]
+impl Vivo {
+    pub fn iniciar(pid: u32) -> Result<Vivo, String> {
+        use std::io::BufRead;
+        use std::os::windows::process::CommandExt;
+
+        let exe = executavel().ok_or("o PresentMon não está junto do Otimiza")?;
+        let mut filho = std::process::Command::new(exe)
+            .args([
+                "--process_id", &pid.to_string(),
+                "--output_stdout",
+                "--no_console_stats",
+                "--v2_metrics",
+                "--track_frame_type",
+                "--qpc_time",
+                "--terminate_on_proc_exit",
+                "--session_name", "OtimizaGerador",
+                "--stop_existing_session",
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .creation_flags(0x0800_0000)
+            .spawn()
+            .map_err(|e| format!("o PresentMon não abriu: {}", e))?;
+        let Some(saida) = filho.stdout.take() else {
+            let _ = filho.kill();
+            return Err("sem a saída do PresentMon".to_string());
+        };
+        let (envia, recebe) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut linhas = std::io::BufReader::new(saida).lines();
+            let Some(Ok(cabecalho)) = linhas.next() else { return };
+            let nomes: Vec<&str> = cabecalho.split(',').map(str::trim).collect();
+            let Some(qpc) = nomes.iter().position(|n| *n == "CPUStartQPC") else { return };
+            let tipo = nomes.iter().position(|n| *n == "FrameType");
+            for linha in linhas.map_while(Result::ok) {
+                if let Some(t) = instante_do_quadro(&linha, (qpc, tipo)) {
+                    if envia.send(t).is_err() {
+                        return;
+                    }
+                }
+            }
+        });
+        Ok(Vivo { filho, quadros: recebe })
+    }
+
+    /// Os instantes que chegaram desde a última chamada. `None`: o PresentMon parou (a contagem não vale mais).
+    pub fn novos(&mut self) -> Option<Vec<i64>> {
+        let mut lote = Vec::new();
+        loop {
+            match self.quadros.try_recv() {
+                Ok(t) => lote.push(t),
+                Err(std::sync::mpsc::TryRecvError::Empty) => return Some(lote),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => return None,
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for Vivo {
+    fn drop(&mut self) {
+        let _ = self.filho.kill();
+        let _ = self.filho.wait();
+        // Matar o processo não fecha a sessão de rastreamento do Windows: ela ficaria ligada no jogo sem ninguém lendo.
+        if let Some(exe) = executavel() {
+            let _ = super::shell::run_com_prazo(
+                &exe.to_string_lossy(),
+                &["--session_name", "OtimizaGerador", "--terminate_existing_session"],
+                std::time::Duration::from_secs(10),
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,6 +490,43 @@ mod tests {
     fn saida_sem_as_colunas_e_erro_e_nao_zero_quadros() {
         assert!(ler_csv("Erro: precisa de administrador").is_err());
         assert!(ler_csv("").is_err());
+    }
+
+    /// Precisa de administrador: `cargo test --lib -- --ignored --nocapture vivo_conta_o_dwm`.
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn vivo_conta_o_dwm() {
+        let (pid, _) = crate::modules::windows::frames::encontrar_processo("dwm").expect("dwm");
+        let mut v = Vivo::iniciar(pid).expect("iniciar");
+        let mut total = 0;
+        for s in 1..=12 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            let lote = v.novos().expect("o PresentMon parou");
+            total += lote.len();
+            // Quanto o quadro mais velho do lote demorou para chegar: é o que `ATRASO_DA_CONTAGEM` precisa cobrir.
+            let (agora, freq) = unsafe {
+                use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+                let (mut c, mut f) = (0i64, 0i64);
+                let _ = QueryPerformanceCounter(&mut c);
+                let _ = QueryPerformanceFrequency(&mut f);
+                (c, f.max(1))
+            };
+            let atraso = lote.iter().min().map(|q| (agora - q) as f64 / freq as f64);
+            println!("{s} s: +{} quadros (total {total}), atraso do mais velho {:?} s", lote.len(), atraso);
+        }
+        drop(v);
+        assert!(total > 0, "nenhum quadro do dwm em 6 s");
+    }
+
+    #[test]
+    fn o_vivo_so_entrega_quadro_do_jogo() {
+        let col = (9, Some(8));
+        let jogo = linha("Application", 1.0, 16.6667, 6.0, 15.5, Some(8.33));
+        let gerado = linha("AMD_AFMF", 1.0, 16.6667, 6.0, 15.5, Some(8.33));
+        assert_eq!(instante_do_quadro(&jogo, col), Some(10_000));
+        assert_eq!(instante_do_quadro(&gerado, col), None);
+        assert!(e_quadro_do_jogo(Some("NA")) && !e_quadro_do_jogo(Some("Repeated")));
     }
 
     #[test]
