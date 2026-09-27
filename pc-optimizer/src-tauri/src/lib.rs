@@ -499,6 +499,8 @@ pub fn run() {
                             let mut volta: u32 = 0;
                             // Carimbada no mesmo relógio dos quadros, para cruzar com cada tranco.
                             let mut disco: Vec<(i64, f64)> = Vec::new();
+                            // Os motivos de freio, no mesmo relógio: viram eventos da partida (T1.3).
+                            let mut freios: Vec<(i64, u64)> = Vec::new();
 
                             // 200 ms: a janela de correlação é de 300 ms para cada lado.
                             while !parar_placa.load(Ordering::Relaxed) {
@@ -512,6 +514,11 @@ pub fn run() {
                                 if let Some(amostra) =
                                     modules::windows::nvml::amostrar_com_motivos(volta % 5 == 1)
                                 {
+                                    if let (Some(quando), Some(motivos)) =
+                                        (modules::windows::frames::agora_qpc(), amostra.motivos)
+                                    {
+                                        freios.push((quando, motivos));
+                                    }
                                     sensores.push(amostra);
                                 }
                                 if let (Some(quando), Some(pct)) = (
@@ -526,7 +533,7 @@ pub fn run() {
                             let media = (!gpu.is_empty())
                                 .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
 
-                            Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
+                            Some((media, disco, freios, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
                         // O estado do governador precisa ser o mesmo no começo e no fim (`modules::portao`).
@@ -559,6 +566,7 @@ pub fn run() {
                         })
                         .await;
 
+                        let fim_da_medicao = modules::windows::frames::agora_qpc();
                         parar.store(true, std::sync::atomic::Ordering::Relaxed);
                         let governador_na_medicao = modules::portao::marcar(
                             governador_no_inicio,
@@ -571,10 +579,11 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
-                        let (gpu_uso_pct, disco_da_janela, sensores_da_placa) = match placa.join().ok().flatten() {
-                            Some((media, disco, sensores)) => (media, disco, sensores),
-                            None => (None, Vec::new(), None),
-                        };
+                        let (gpu_uso_pct, disco_da_janela, freios_da_janela, sensores_da_placa) =
+                            match placa.join().ok().flatten() {
+                                Some((media, disco, freios, sensores)) => (media, disco, freios, sensores),
+                                None => (None, Vec::new(), Vec::new(), None),
+                            };
 
                         match medido {
                             Ok(Ok((crua, presentmon))) => {
@@ -604,6 +613,18 @@ pub fn run() {
                                 let quadros = Some(crua.intervalos_ms.len());
                                 let configuracao_do_jogo =
                                     modules::windows::configjogo::impressao_da_configuracao(&m.process);
+                                // A janela é a que mediu de fato: termina quando a medição voltou e dura o que ela
+                                // durou. Uma tentativa do PresentMon que falhou antes do canal antigo fica fora.
+                                let eventos = match (fim_da_medicao, modules::windows::frames::frequencia_qpc()) {
+                                    (Some(fim), Some(hz)) => medicoes::eventos_da_partida(
+                                        (fim - (m.seconds * hz as f64) as i64, fim),
+                                        hz,
+                                        &crua.trancos_qpc,
+                                        &disco_da_janela,
+                                        &freios_da_janela,
+                                    ),
+                                    _ => None,
+                                };
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,
@@ -631,6 +652,7 @@ pub fn run() {
                                     quadros,
                                     configuracao_do_jogo,
                                     versao_do_formato: medicoes::FORMATO_DA_MEDICAO,
+                                    eventos,
                                 };
 
                                 match medicoes::registrar(registro) {

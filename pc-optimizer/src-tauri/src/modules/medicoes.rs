@@ -75,6 +75,98 @@ pub struct MedicaoAutomatica {
     pub configuracao_do_jogo: Option<String>,
     #[serde(default)]
     pub versao_do_formato: u32,
+    /// Em que segundo da medição aconteceu cada coisa (T1.3). `None`: medição antiga, ou o relógio não foi lido.
+    #[serde(default)]
+    pub eventos: Option<EventosDaPartida>,
+}
+
+/// Os eventos e o que foi lido para achá-los: lista vazia sem isso confundiria "nada aconteceu" com "ninguém olhou".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventosDaPartida {
+    pub lista: Vec<Evento>,
+    /// A NVML leu os motivos de freio ao menos uma vez na janela. `false` (placa AMD ou Intel, falha da leitura):
+    /// não se sabe nada de freio, e a tela precisa dizer isso.
+    pub freios_lidos: bool,
+    /// A placa já freava na primeira leitura: não é "começou a frear", é "já vinha freando".
+    pub freando_no_inicio: bool,
+    /// Trancos com instante, antes do corte da lista. Menos que os engasgos contados = parte veio sem relógio.
+    pub trancos_com_instante: usize,
+}
+
+/// Coisa que aconteceu num instante da medição. Coincidência no tempo não é causa: a tela mostra junto, não conclui.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Evento {
+    /// Segundos desde o começo da janela medida.
+    pub segundo: f64,
+    pub tipo: TipoDeEvento,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TipoDeEvento {
+    /// Quadro muito acima da mediana; `com_disco`: o disco estava ocupado em volta dele (mesma regra da contagem).
+    Tranco { com_disco: bool },
+    /// A placa começou a frear por temperatura (NVML).
+    FreioTermico,
+    /// A placa começou a frear por um motivo de hardware que a NVML junta num bit só: proteção de consumo, sinal
+    /// externo de energia e, às vezes, troca de estado de clock. Não afirma a causa. O teto de energia normal em
+    /// carga NÃO entra, e junto de um freio térmico no mesmo instante conta como o térmico.
+    FreioDeHardware,
+}
+
+/// Um evento por segundo de medição, no máximo: 20 s não precisam de mais, e a lista vive em 60 medições guardadas.
+pub const EVENTOS_POR_MEDICAO: usize = 50;
+
+/// **Pura.** Os eventos da janela `[inicio, fim]`, em ordem, no relógio do contador (QPC). `freios`:
+/// `(carimbo, motivos da NVML)` das amostras que leram os motivos; fora da janela não entram (a amostragem da placa
+/// pode cobrir uma tentativa do PresentMon que falhou antes do canal antigo medir). Um freio vira evento quando
+/// COMEÇA; o estado da primeira leitura vira `freando_no_inicio`. Passando de `EVENTOS_POR_MEDICAO`, os freios ficam
+/// e os trancos mais tarde saem.
+pub fn eventos_da_partida(
+    (inicio, fim): (i64, i64),
+    frequencia: i64,
+    trancos: &[i64],
+    disco: &[(i64, f64)],
+    freios: &[(i64, u64)],
+) -> Option<EventosDaPartida> {
+    use crate::core::sensores::{MOTIVO_FREIO_DE_ENERGIA_HW, MOTIVO_FREIO_DE_HARDWARE, MOTIVO_TERMICO_HW, MOTIVO_TERMICO_SW};
+    if frequencia <= 0 || fim <= inicio {
+        return None;
+    }
+    let segundo = |qpc: i64| (qpc - inicio) as f64 / frequencia as f64;
+    let dentro = |qpc: i64| (inicio..=fim).contains(&qpc);
+    let estado = |motivos: u64| {
+        let termico = motivos & (MOTIVO_TERMICO_SW | MOTIVO_TERMICO_HW) != 0;
+        let hardware = !termico && motivos & (MOTIVO_FREIO_DE_ENERGIA_HW | MOTIVO_FREIO_DE_HARDWARE) != 0;
+        (termico, hardware)
+    };
+
+    let na_janela: Vec<(i64, u64)> = freios.iter().copied().filter(|(q, _)| dentro(*q)).collect();
+    let mut deles: Vec<Evento> = Vec::new();
+    let (mut termico_antes, mut hardware_antes) = na_janela.first().map(|(_, m)| estado(*m)).unwrap_or((false, false));
+    let freando_no_inicio = termico_antes || hardware_antes;
+    for (quando, motivos) in na_janela.iter().skip(1) {
+        let (termico, hardware) = estado(*motivos);
+        if termico && !termico_antes {
+            deles.push(Evento { segundo: segundo(*quando), tipo: TipoDeEvento::FreioTermico });
+        }
+        if hardware && !hardware_antes && !termico_antes {
+            deles.push(Evento { segundo: segundo(*quando), tipo: TipoDeEvento::FreioDeHardware });
+        }
+        (termico_antes, hardware_antes) = (termico, hardware);
+    }
+
+    let mut ordenados: Vec<i64> = trancos.iter().copied().filter(|q| dentro(*q)).collect();
+    ordenados.sort_unstable();
+    let trancos_com_instante = ordenados.len();
+    let cabem = EVENTOS_POR_MEDICAO.saturating_sub(deles.len());
+    deles.extend(ordenados.into_iter().take(cabem).map(|q| Evento {
+        segundo: segundo(q),
+        tipo: TipoDeEvento::Tranco {
+            com_disco: crate::modules::windows::frames::tranco_com_disco(q, disco, frequencia, 300.0, 40.0),
+        },
+    }));
+    deles.sort_by(|a, b| a.segundo.total_cmp(&b.segundo));
+    Some(EventosDaPartida { lista: deles, freios_lidos: !na_janela.is_empty(), freando_no_inicio, trancos_com_instante })
 }
 
 /// Sobe quando um campo novo muda o que a medição quer dizer; 0 é a medição gravada antes deste campo.
@@ -295,6 +387,7 @@ mod tests {
             quadros: Some(1200),
             configuracao_do_jogo: None,
             versao_do_formato: FORMATO_DA_MEDICAO,
+            eventos: None,
         }
     }
 
@@ -314,13 +407,97 @@ mod tests {
         assert_eq!(lidas[0].versao_do_formato, 0);
         assert_eq!(lidas[0].quadros, None);
         assert_eq!(lidas[0].configuracao_do_jogo, None);
+        assert_eq!(lidas[0].eventos, None);
         assert_eq!(lidas[0].fonte(), Fonte::CanalAntigo);
         assert_eq!(lidas[0].id(), "FiveM_b3258_GTAProcess.exe@1757600000");
     }
 
+    const HZ: i64 = 10_000_000;
+
+    #[test]
+    fn tranco_e_freio_saem_no_segundo_certo_e_em_ordem() {
+        let inicio = 5 * HZ;
+        let trancos = [inicio + 12 * HZ, inicio + 3 * HZ];
+        let disco = [(inicio + 3 * HZ + HZ / 10, 80.0), (inicio + 12 * HZ, 5.0)];
+        let t = crate::core::sensores::MOTIVO_TERMICO_HW;
+        let freios = [(inicio + HZ, 0), (inicio + 7 * HZ, t), (inicio + 8 * HZ, t), (inicio + 9 * HZ, 0), (inicio + 10 * HZ, t)];
+        let e = eventos_da_partida((inicio, inicio + 20 * HZ), HZ, &trancos, &disco, &freios).unwrap();
+        assert_eq!(
+            e.lista,
+            vec![
+                Evento { segundo: 3.0, tipo: TipoDeEvento::Tranco { com_disco: true } },
+                Evento { segundo: 7.0, tipo: TipoDeEvento::FreioTermico },
+                Evento { segundo: 10.0, tipo: TipoDeEvento::FreioTermico },
+                Evento { segundo: 12.0, tipo: TipoDeEvento::Tranco { com_disco: false } },
+            ],
+            "o freio conta quando começa; o disco ocupado a 100 ms marca o tranco"
+        );
+        assert!(e.freios_lidos && !e.freando_no_inicio);
+        assert_eq!(e.trancos_com_instante, 2);
+    }
+
+    #[test]
+    fn teto_de_energia_normal_nao_vira_evento() {
+        let freios = [(HZ, 0), (2 * HZ, crate::core::sensores::MOTIVO_TETO_DE_ENERGIA)];
+        assert!(eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &freios).unwrap().lista.is_empty());
+    }
+
+    #[test]
+    fn freio_termico_com_o_de_hardware_junto_e_um_so() {
+        use crate::core::sensores::{MOTIVO_FREIO_DE_HARDWARE, MOTIVO_TERMICO_HW};
+        let freios = [(HZ, 0), (2 * HZ, MOTIVO_TERMICO_HW | MOTIVO_FREIO_DE_HARDWARE), (3 * HZ, MOTIVO_FREIO_DE_HARDWARE)];
+        let e = eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &freios).unwrap();
+        assert_eq!(e.lista, vec![Evento { segundo: 2.0, tipo: TipoDeEvento::FreioTermico }]);
+    }
+
+    #[test]
+    fn quem_ja_freava_no_comeco_nao_comecou_a_frear() {
+        let t = crate::core::sensores::MOTIVO_TERMICO_SW;
+        let e = eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &[(HZ, t), (2 * HZ, t)]).unwrap();
+        assert!(e.lista.is_empty());
+        assert!(e.freando_no_inicio);
+    }
+
+    #[test]
+    fn fora_da_janela_nao_entra_e_sem_nvml_diz_que_nao_leu() {
+        let t = crate::core::sensores::MOTIVO_TERMICO_SW;
+        let inicio = 30 * HZ;
+        let e = eventos_da_partida((inicio, inicio + 20 * HZ), HZ, &[inicio - HZ, inicio + HZ], &[], &[(0, 0), (5 * HZ, t)])
+            .unwrap();
+        assert_eq!(e.lista.len(), 1, "só o tranco de dentro");
+        assert!(!e.freios_lidos, "freio de uma tentativa anterior não conta como leitura desta");
+        assert_eq!(e.trancos_com_instante, 1);
+    }
+
+    #[test]
+    fn muitos_trancos_cortam_os_mais_tarde_e_o_freio_fica() {
+        let trancos: Vec<i64> = (0..200).map(|i| i * HZ / 10).collect();
+        let freios = [(0, 0), (19 * HZ, crate::core::sensores::MOTIVO_TERMICO_SW)];
+        let e = eventos_da_partida((0, 20 * HZ), HZ, &trancos, &[], &freios).unwrap();
+        assert_eq!(e.lista.len(), EVENTOS_POR_MEDICAO);
+        assert_eq!(e.trancos_com_instante, 200);
+        assert!(e.lista.iter().any(|x| x.tipo == TipoDeEvento::FreioTermico));
+        assert!(e.lista.iter().filter(|x| matches!(x.tipo, TipoDeEvento::Tranco { .. })).all(|x| x.segundo < 5.0));
+    }
+
+    #[test]
+    fn sem_relogio_nao_ha_eventos_nem_lista_vazia_fingindo() {
+        assert_eq!(eventos_da_partida((0, 20 * HZ), 0, &[10], &[], &[]), None);
+        assert_eq!(eventos_da_partida((5, 5), HZ, &[], &[], &[]), None);
+    }
+
     #[test]
     fn os_campos_novos_voltam_iguais_depois_de_gravar() {
-        let m = MedicaoAutomatica { configuracao_do_jogo: Some("00ff".into()), ..exemplo(90.0) };
+        let m = MedicaoAutomatica {
+            configuracao_do_jogo: Some("00ff".into()),
+            eventos: Some(EventosDaPartida {
+                lista: vec![Evento { segundo: 2.5, tipo: TipoDeEvento::Tranco { com_disco: true } }],
+                freios_lidos: false,
+                freando_no_inicio: false,
+                trancos_com_instante: 1,
+            }),
+            ..exemplo(90.0)
+        };
         let volta: MedicaoAutomatica = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(volta, m);
         assert_eq!(volta.versao_do_formato, FORMATO_DA_MEDICAO);
