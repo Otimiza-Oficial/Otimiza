@@ -600,13 +600,8 @@ pub fn run() {
                                 let trancos_com_disco_pct = correlacao
                                     .map(|(com, total)| com as f64 / total as f64 * 100.0);
 
-                                // Contados antes de o resumo ser consumido; pelo PresentMon, só os quadros do jogo.
-                                let quadros = Some(
-                                    presentmon
-                                        .as_ref()
-                                        .map(|r| r.quadros_do_jogo)
-                                        .unwrap_or(crua.intervalos_ms.len()),
-                                );
+                                // A mesma conta nos dois canais: os intervalos de que saíram o 1% e o 0,1% piores.
+                                let quadros = Some(crua.intervalos_ms.len());
                                 let configuracao_do_jogo =
                                     modules::windows::configjogo::impressao_da_configuracao(&m.process);
                                 let registro = MedicaoAutomatica {

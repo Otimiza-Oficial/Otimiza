@@ -41,6 +41,9 @@ do bot, nessa ordem e só com ordem.
   `quadros` (contagem, para a regra de amostra), `eventos` (tranco, calor, processo, com instante relativo)
   e `versao_do_formato`. Uma função pura `comparavel(a, b) -> Result<(), Motivo>` concentra as regras que
   hoje estão em `portao`, `regressao` e `provaalternada` (mesma fonte, mesmo gerador, mesma config).
+- **Feito (branch `servico-t1`):** T1.1 e T1.2. A revisão achou que filtrar a série automática pela
+  configuração do jogo cegaria o portão: o item vigiado é o próprio perfil gráfico, que muda o arquivo. Por
+  isso a série não passa por `evidencia`; só as provas passam. Ficou aberta a T1.2b.
 - **Dependencies:** nenhuma.
 - **Risks:** migração quebrar histórico antigo. Mitigação: todos os campos novos com `serde(default)` e
   teste de leitura de arquivo da 3.1 e da 3.2.
@@ -61,6 +64,7 @@ do bot, nessa ordem e só com ordem.
 |---|---|---|---|---|---|---|---|---|---|---|
 | T1.1 | Campos novos na medição | Dar identidade e fonte a cada partida | `medicoes.rs` | — | `id`, `fonte`, `quadros`, `configuracao_do_jogo`, `versao_do_formato`, todos `serde(default)` | Ler JSON de 3.1 e 3.2 gravados | Lê tudo, nada zerado | Reverter commit | Baixo | NOW |
 | T1.2 | `comparavel(a, b)` | Uma regra de comparabilidade | novo `modules/evidencia.rs` | T1.1 | Função pura com `Motivo` enum; migrar os casos de `portao`, `regressao`, `provaalternada` | Um teste por motivo; os testes antigos dos três módulos seguem verdes | Três módulos chamam a função | Reverter | Médio | NOW |
+| T1.2b | Os dois medidores na mesma partida | Decidir se a série automática pode misturar PresentMon e canal antigo | script de laboratório, `docs/` | T1.2 | Medir a mesma cena pelos dois canais ao mesmo tempo, várias vezes, e registrar o viés | — | Viés medido e decisão escrita | — | Baixo | NOW |
 | T1.3 | Eventos da partida | Instante do tranco, calor e processo | `medicoes.rs`, `core/travadas.rs` | T1.1 | Lista curta (máx. 50) de eventos com instante relativo | Fixture de sessão com trancos conhecidos | Eventos batem com a fixture | Reverter | Baixo | NOW |
 | T1.4 | Guarda de arquitetura | Ninguém compara fora do contrato | `tests/` | T1.2 | Teste que procura comparação de FPS entre medições fora de `evidencia.rs` | O próprio teste falha se alguém comparar na mão | Guarda verde | Remover o teste | Baixo | NOW |
 

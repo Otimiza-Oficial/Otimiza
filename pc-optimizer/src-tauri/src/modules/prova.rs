@@ -136,14 +136,30 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
     let passou_do_ruido = fps_pct.abs() >= RUIDO_PCT;
 
     // Ganho que não é da otimização: quadro gerado ou qualidade gráfica menor. A tela não pode somar isso ao produto.
-    let mudou_a_geracao = matches!((antes.geracao, depois.geracao), (Some(a), Some(d)) if a != d);
-    let mudou_a_configuracao_do_jogo =
-        matches!((&antes.configuracao_do_jogo, &depois.configuracao_do_jogo), (Some(a), Some(d)) if a != d);
+    fn contexto(p: &Prova) -> crate::modules::evidencia::Contexto<'_> {
+        crate::modules::evidencia::Contexto {
+            configuracao_do_jogo: p.configuracao_do_jogo.as_deref(),
+            geracao: p.geracao,
+            fonte: Some(crate::modules::medicoes::Fonte::de(p.presentmon.is_some())),
+        }
+    }
+    let motivos = crate::modules::evidencia::diferencas(&[contexto(antes), contexto(depois)]);
+    let mudou_a_geracao = motivos.contains(&crate::modules::evidencia::Motivo::GeracaoMudou);
+    let mudou_a_configuracao_do_jogo = motivos.contains(&crate::modules::evidencia::Motivo::ConfiguracaoDoJogoMudou);
+    let mudou_o_medidor = motivos.contains(&crate::modules::evidencia::Motivo::MedidorMudou);
 
     if mudou_a_geracao {
         ressalvas.push(
             "A geração de quadros estava diferente nas duas medições. Gerador divide a placa com o jogo: com ele \
              ligado de um lado só, a diferença de FPS não mede a otimização."
+                .to_string(),
+        );
+    }
+    if mudou_o_medidor {
+        ressalvas.push(
+            "Uma das medições foi feita pelo PresentMon e a outra pelo canal antigo. O canal antigo conta todo \
+             quadro que o processo apresenta, no tempo do relógio; o PresentMon só os do jogo, na janela principal. \
+             Diferença pequena pode ser do medidor."
                 .to_string(),
         );
     }

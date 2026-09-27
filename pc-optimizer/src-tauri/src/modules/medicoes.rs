@@ -94,7 +94,14 @@ impl MedicaoAutomatica {
     }
 
     pub fn fonte(&self) -> Fonte {
-        if self.presentmon.is_some() {
+        Fonte::de(self.presentmon.is_some())
+    }
+}
+
+impl Fonte {
+    /// Onde quer que a medição guarde "foi pelo PresentMon?", a fonte sai daqui.
+    pub fn de(pelo_presentmon: bool) -> Fonte {
+        if pelo_presentmon {
             Fonte::PresentMon
         } else {
             Fonte::CanalAntigo

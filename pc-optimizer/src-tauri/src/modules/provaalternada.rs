@@ -9,7 +9,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::modules::medicoes::GeracaoNaPartida;
+use crate::modules::evidencia;
+use crate::modules::medicoes::{Fonte, GeracaoNaPartida};
 use crate::modules::repeticoes::{self, Diferenca, Resumo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,11 +104,6 @@ fn do_lado(rodadas: &[Rodada], lado: Lado) -> impl Iterator<Item = &Rodada> {
 }
 
 /// Dois valores `Some` diferentes: `None` é "não deu para ler", não "mudou".
-fn mudou<T: PartialEq>(valores: impl Iterator<Item = Option<T>>) -> bool {
-    let lidos: Vec<T> = valores.flatten().collect();
-    lidos.windows(2).any(|par| par[0] != par[1])
-}
-
 fn piora(d: &Option<Diferenca>) -> bool {
     matches!(d, Some(Diferenca::Real { delta, .. }) if *delta < 0.0)
 }
@@ -145,9 +141,18 @@ pub fn decidir(
     let faltou_rodada = [Lado::SemOtimiza, Lado::ComOtimiza]
         .iter()
         .any(|l| do_lado(&rodadas, *l).count() < repeticoes::REPETICOES_MINIMAS);
-    let mudou_a_configuracao = mudou(rodadas.iter().map(|r| r.configuracao_do_jogo.clone()));
-    let mudou_a_geracao = mudou(rodadas.iter().map(|r| r.geracao));
-    let mudou_o_medidor = mudou(rodadas.iter().map(|r| Some(r.pelo_presentmon)));
+    let contextos: Vec<evidencia::Contexto> = rodadas
+        .iter()
+        .map(|r| evidencia::Contexto {
+            configuracao_do_jogo: r.configuracao_do_jogo.as_deref(),
+            geracao: r.geracao,
+            fonte: Some(Fonte::de(r.pelo_presentmon)),
+        })
+        .collect();
+    let motivos = evidencia::diferencas(&contextos);
+    let mudou_a_configuracao = motivos.contains(&evidencia::Motivo::ConfiguracaoDoJogoMudou);
+    let mudou_a_geracao = motivos.contains(&evidencia::Motivo::GeracaoMudou);
+    let mudou_o_medidor = motivos.contains(&evidencia::Motivo::MedidorMudou);
 
     let (desfecho, leitura) = if mudou_a_configuracao {
         (
