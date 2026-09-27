@@ -134,6 +134,9 @@ mod testes {
             governador: None,
             geracao: None,
             presentmon: None,
+            quadros: None,
+            configuracao_do_jogo: None,
+            versao_do_formato: 0,
             ambiente: Some(Ambiente { driver: Some(driver.into()), windows: Some("19045.1".into()) }),
         }
     }

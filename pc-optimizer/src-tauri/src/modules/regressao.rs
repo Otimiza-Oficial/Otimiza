@@ -203,6 +203,9 @@ mod tests {
             governador: None,
             geracao: None,
             presentmon: None,
+            quadros: None,
+            configuracao_do_jogo: None,
+            versao_do_formato: 0,
         }
     }
 

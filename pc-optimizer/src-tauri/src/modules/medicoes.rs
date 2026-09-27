@@ -62,6 +62,44 @@ pub struct MedicaoAutomatica {
     /// gargalo provável. `None` quando mediu pelo canal antigo (reserva) ou em medição antiga.
     #[serde(default)]
     pub presentmon: Option<crate::modules::windows::presentmon::Resumo>,
+
+    // Núcleo de Sessão e Evidência (MASTER-PLAN, T1.1). Todos com `serde(default)`: a medição da 3.1 e da 3.2
+    // continua lendo, com `versao_do_formato` 0.
+    /// Intervalos de quadro contados: a regra de amostra (1% pior só com 1000, 0,1% só com 10000) precisa do
+    /// número, e pelo canal antigo ele não fica em lugar nenhum. `None` em medição antiga.
+    #[serde(default)]
+    pub quadros: Option<usize>,
+    /// Impressão digital da configuração gráfica do jogo (`configjogo::impressao_da_configuracao`): partida com
+    /// gráfico diferente não compara. `None`: jogo sem arquivo conhecido, ou medição antiga.
+    #[serde(default)]
+    pub configuracao_do_jogo: Option<String>,
+    #[serde(default)]
+    pub versao_do_formato: u32,
+}
+
+/// Sobe quando um campo novo muda o que a medição quer dizer; 0 é a medição gravada antes deste campo.
+pub const FORMATO_DA_MEDICAO: u32 = 1;
+
+/// De onde vieram os quadros: o PresentMon separa quadro do jogo de quadro gerado; o canal antigo não.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Fonte {
+    PresentMon,
+    CanalAntigo,
+}
+
+impl MedicaoAutomatica {
+    /// Estável e sem campo gravado a mais: no máximo uma medição por jogo por segundo.
+    pub fn id(&self) -> String {
+        format!("{}@{}", self.jogo, self.quando)
+    }
+
+    pub fn fonte(&self) -> Fonte {
+        if self.presentmon.is_some() {
+            Fonte::PresentMon
+        } else {
+            Fonte::CanalAntigo
+        }
+    }
 }
 
 /// O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
@@ -247,7 +285,38 @@ mod tests {
             governador: None,
             geracao: None,
             presentmon: None,
+            quadros: Some(1200),
+            configuracao_do_jogo: None,
+            versao_do_formato: FORMATO_DA_MEDICAO,
         }
+    }
+
+    #[test]
+    fn medicao_da_versao_anterior_le_com_formato_zero() {
+        // Como a 3.2 grava: sem os campos do núcleo de sessão.
+        let antiga = r#"[{"jogo":"FiveM_b3258_GTAProcess.exe","quando":1757600000,"fps":90.0,"low_1pct":45.0,
+            "engasgos_por_minuto":3.0,"segundos":20.0,"confiavel":true,"mudancas_aplicadas":4}]"#;
+        let pasta = std::env::temp_dir().join(format!("otimiza-medicoes-antigas-{}", std::process::id()));
+        std::fs::create_dir_all(&pasta).unwrap();
+        let arquivo = pasta.join("medicoes.json");
+        std::fs::write(&arquivo, antiga).unwrap();
+        let lidas = ler_de(&arquivo).unwrap();
+        let _ = std::fs::remove_dir_all(&pasta);
+
+        assert_eq!(lidas.len(), 1);
+        assert_eq!(lidas[0].versao_do_formato, 0);
+        assert_eq!(lidas[0].quadros, None);
+        assert_eq!(lidas[0].configuracao_do_jogo, None);
+        assert_eq!(lidas[0].fonte(), Fonte::CanalAntigo);
+        assert_eq!(lidas[0].id(), "FiveM_b3258_GTAProcess.exe@1757600000");
+    }
+
+    #[test]
+    fn os_campos_novos_voltam_iguais_depois_de_gravar() {
+        let m = MedicaoAutomatica { configuracao_do_jogo: Some("00ff".into()), ..exemplo(90.0) };
+        let volta: MedicaoAutomatica = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        assert_eq!(volta, m);
+        assert_eq!(volta.versao_do_formato, FORMATO_DA_MEDICAO);
     }
 
     #[test]

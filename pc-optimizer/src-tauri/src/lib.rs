@@ -600,6 +600,15 @@ pub fn run() {
                                 let trancos_com_disco_pct = correlacao
                                     .map(|(com, total)| com as f64 / total as f64 * 100.0);
 
+                                // Contados antes de o resumo ser consumido; pelo PresentMon, só os quadros do jogo.
+                                let quadros = Some(
+                                    presentmon
+                                        .as_ref()
+                                        .map(|r| r.quadros_do_jogo)
+                                        .unwrap_or(crua.intervalos_ms.len()),
+                                );
+                                let configuracao_do_jogo =
+                                    modules::windows::configjogo::impressao_da_configuracao(&m.process);
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,
@@ -624,6 +633,9 @@ pub fn run() {
                                     governador: governador_na_medicao,
                                     geracao: Some(medicoes::geracao_agora(presentmon.as_ref())),
                                     presentmon,
+                                    quadros,
+                                    configuracao_do_jogo,
+                                    versao_do_formato: medicoes::FORMATO_DA_MEDICAO,
                                 };
 
                                 match medicoes::registrar(registro) {
