@@ -2132,6 +2132,28 @@
           </details>
 
           <!--
+            Das partidas que o Otimiza já mede sozinho: não pede benchmark. Mostra junto, não conclui: queda só com o
+            critério da deriva (MASTER-PLAN, item 4).
+          -->
+          <section class="panel" id="o-que-mudou">
+            <div class="panel-head">
+              <h2>O que mudou no seu jogo</h2>
+              <span class="panel-tag" id="o-que-mudou-tag">—</span>
+            </div>
+            <p class="lead">
+              As partidas medidas de cada jogo, com o que trocou em volta da máquina (driver, Windows, placa, BIOS,
+              versão do Otimiza) e o que o Otimiza mudou no meio.
+            </p>
+            <p class="hint">
+              Estar no mesmo período não prova que foi a causa. A queda só é dita quando as partidas de antes e de
+              depois de uma troca passam da margem de erro.
+            </p>
+            <button id="o-que-mudou-ler" class="btn" data-custo="instantâneo">Ver o que mudou</button>
+            <p id="o-que-mudou-status" class="status"></p>
+            <div id="o-que-mudou-result" class="resultado" data-vazio="Ainda não há partida medida. Com a medição automática ligada, jogue uns minutos e volte aqui."></div>
+          </section>
+
+          <!--
             Por último porque precisa de mais de uma visita para ter o que dizer. As mudanças listadas só COINCIDEM com a
             queda: provar exige desfazer uma de cada vez.
           -->

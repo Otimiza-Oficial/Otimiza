@@ -2169,6 +2169,107 @@ interface HistoricoNaTela {
   regressoes: RegressaoNaTela[];
 }
 
+type CampoDaTroca = "Driver" | "Windows" | "Placa" | "Bios" | "Otimiza";
+type MarcoDaLinha =
+  | { tipo: "Partida"; quando: number; fps: number; low_1pct: number; fonte: "PresentMon" | "CanalAntigo"; comparavel: boolean }
+  | { tipo: "Troca"; quando: number; troca: { campo: CampoDaTroca; de: string; para: string } }
+  | { tipo: "Otimiza"; quando: number; nome: string };
+interface LinhaDoJogo {
+  jogo: string;
+  marcos: MarcoDaLinha[];
+  julgamento:
+    | {
+        estado: "Caiu";
+        queda: {
+          mudou: { tipo: "Driver" | "Windows"; de: string; para: string } | { tipo: "Nada" };
+          fps_antes: number;
+          fps_depois: number;
+          queda_pct: number;
+          partidas_antes: number;
+          partidas_depois: number;
+        };
+      }
+    | { estado: "NaoCaiu" }
+    | { estado: "PoucasPartidas"; comparaveis: number; precisa: number };
+  partidas: number;
+  otimiza_antes_da_primeira: number;
+}
+
+const NOME_DO_CAMPO: Record<CampoDaTroca, string> = {
+  Driver: "Driver de vídeo",
+  Windows: "Windows",
+  Placa: "Placa de vídeo",
+  Bios: "BIOS",
+  Otimiza: "Versão do Otimiza",
+};
+
+const MARCOS_NA_TELA = 15;
+
+function desenharLinhaDoJogo(l: LinhaDoJogo, i: number): string {
+  const numero = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+  const data = (q: number) => new Date(q * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const j = l.julgamento;
+  let veredito: string;
+  if (j.estado === "Caiu") {
+    const q = j.queda;
+    const onde =
+      q.mudou.tipo === "Nada"
+        ? "nas últimas partidas contra as anteriores"
+        : `antes e depois da troca de ${q.mudou.tipo === "Driver" ? "driver de vídeo" : "Windows"} (${escapeHtml(q.mudou.de)} → ${escapeHtml(q.mudou.para)})`;
+    veredito = `O FPS médio caiu ${numero(q.queda_pct)}%, de ${numero(q.fps_antes)} para ${numero(q.fps_depois)}, ${onde}: ${q.partidas_antes} partidas antes, ${q.partidas_depois} depois.`;
+  } else if (j.estado === "NaoCaiu") {
+    veredito = "O FPS médio das últimas partidas não caiu além da margem de erro. O 1% pior não entra nesta conta.";
+  } else {
+    veredito = `${j.comparaveis} partida(s) comparável(is) de ${j.precisa} necessárias: ainda não dá para dizer se caiu. Partidas com gerador de quadros não contam.`;
+  }
+  const severidade = j.estado === "Caiu" ? "Important" : j.estado === "NaoCaiu" ? "Ok" : "Info";
+  const etiqueta = j.estado === "Caiu" ? "caiu" : j.estado === "NaoCaiu" ? "não caiu" : "poucas partidas";
+  const linhas = l.marcos.slice(0, MARCOS_NA_TELA).map((m) => {
+    if (m.tipo === "Partida") {
+      const fonte = m.fonte === "PresentMon" ? "" : " · canal antigo";
+      const gerador = m.comparavel ? "" : " · com gerador de quadros, fora da comparação";
+      return `<li><span class="linha-data">${data(m.quando)}</span> Partida: ${numero(m.fps)} FPS, 1% piores ${numero(m.low_1pct)}${fonte}${gerador}</li>`;
+    }
+    if (m.tipo === "Troca") {
+      return `<li><span class="linha-data">${data(m.quando)}</span> <strong>${NOME_DO_CAMPO[m.troca.campo]}:</strong> ${escapeHtml(m.troca.de)} → ${escapeHtml(m.troca.para)}</li>`;
+    }
+    return `<li><span class="linha-data">${data(m.quando)}</span> <strong>Otimiza aplicou:</strong> ${escapeHtml(m.nome)}</li>`;
+  });
+  const antes =
+    l.otimiza_antes_da_primeira > 0
+      ? `<p class="hint">${l.otimiza_antes_da_primeira} mudança(s) do Otimiza já estavam aplicadas desde a primeira partida.</p>`
+      : "";
+  const resto = l.marcos.length > MARCOS_NA_TELA ? `<p class="hint">E mais ${l.marcos.length - MARCOS_NA_TELA} registro(s) mais antigos.</p>` : "";
+  return `
+    <article class="finding" data-severity="${severidade}" style="--i:${i}">
+      <div class="finding-top">
+        <h3>${escapeHtml(nomeDoJogo(l.jogo))}</h3>
+        <span class="finding-size">${etiqueta}</span>
+      </div>
+      <p class="finding-measured">${veredito}</p>
+      <ul class="linha-do-tempo">${linhas.join("")}</ul>
+      ${antes}${resto}
+      <p class="hint">Das mudanças do Otimiza, só aparecem as que continuam aplicadas.</p>
+    </article>`;
+}
+
+async function lerOQueMudou() {
+  const botao = element<HTMLButtonElement>("o-que-mudou-ler");
+  botao.disabled = true;
+  setStatus("o-que-mudou-status", "Montando a linha do tempo…", "progress");
+  try {
+    const linhas = await invoke<LinhaDoJogo[]>("o_que_mudou");
+    const caiu = linhas.filter((l) => l.julgamento.estado === "Caiu").length;
+    text("o-que-mudou-tag", linhas.length === 0 ? "sem partida medida" : caiu > 0 ? `${caiu} jogo(s) caíram` : "nenhuma queda provada");
+    element("o-que-mudou-result").innerHTML = linhas.map(desenharLinhaDoJogo).join("");
+    setStatus("o-que-mudou-status", "", "ok");
+  } catch (error) {
+    setStatus("o-que-mudou-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 async function lerHistorico() {
   const botao = element<HTMLButtonElement>("historico-ler");
   botao.disabled = true;
@@ -7991,6 +8092,7 @@ function wireControls() {
 
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
+  element("o-que-mudou-ler").addEventListener("click", lerOQueMudou);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {
       // A escolha manual só pinta o desenho: nenhum ajuste muda por ela.

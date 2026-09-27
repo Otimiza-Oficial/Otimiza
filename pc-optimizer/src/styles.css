@@ -1641,6 +1641,26 @@ button {
   margin-top: var(--s1);
 }
 
+/* "O que mudou no seu jogo": partidas, trocas e mudanças do Otimiza, do mais novo para o mais antigo. */
+.linha-do-tempo {
+  list-style: none;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  font-size: var(--t-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.linha-do-tempo li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+.linha-data {
+  color: var(--text-muted);
+  margin-right: var(--s1);
+}
+
 .finding-advice {
   font-family: var(--font-sans);
   font-size: var(--t-label);

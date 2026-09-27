@@ -146,10 +146,16 @@ pub fn placas() -> Vec<Placa> {
 /// Pelo DXGI (`CheckInterfaceSupport`), sem PowerShell.
 #[cfg(windows)]
 pub fn versao_do_driver() -> Option<String> {
+    placa_principal().map(|(_, versao)| versao)
+}
+
+/// A placa com mais memória dedicada (a que roda o jogo), com o nome e a versão do driver.
+#[cfg(windows)]
+pub fn placa_principal() -> Option<(String, String)> {
     use windows::core::Interface;
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
     let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
-    let mut melhor: Option<(u64, String)> = None;
+    let mut melhor: Option<(u64, String, String)> = None;
     let mut i = 0;
     while let Ok(a) = unsafe { fabrica.EnumAdapters1(i) } {
         i += 1;
@@ -160,11 +166,25 @@ pub fn versao_do_driver() -> Option<String> {
         let Ok(v) = (unsafe { a.CheckInterfaceSupport(&IDXGIDevice::IID) }) else { continue };
         let v = v as u64;
         let texto = format!("{}.{}.{}.{}", v >> 48, (v >> 32) & 0xFFFF, (v >> 16) & 0xFFFF, v & 0xFFFF);
-        if melhor.as_ref().is_none_or(|(mem, _)| d.DedicatedVideoMemory as u64 > *mem) {
-            melhor = Some((d.DedicatedVideoMemory as u64, texto));
+        if melhor.as_ref().is_none_or(|(mem, _, _)| d.DedicatedVideoMemory as u64 > *mem) {
+            let fim = d.Description.iter().position(|c| *c == 0).unwrap_or(d.Description.len());
+            let nome = String::from_utf16_lossy(&d.Description[..fim]).trim().to_string();
+            melhor = Some((d.DedicatedVideoMemory as u64, nome, texto));
         }
     }
-    melhor.map(|(_, t)| t)
+    melhor.map(|(_, nome, versao)| (nome, versao))
+}
+
+/// A versão do firmware como o Windows a guardou no boot. SÓ LEITURA do registro: o Otimiza nunca escreve na BIOS.
+#[cfg(windows)]
+pub fn versao_da_bios() -> Option<String> {
+    use crate::modules::windows::registry;
+    const CHAVE: &str = r"HARDWARE\DESCRIPTION\System\BIOS";
+    let versao = registry::read_text("HKLM", CHAVE, "BIOSVersion").ok().flatten()?;
+    Some(match registry::read_text("HKLM", CHAVE, "BIOSReleaseDate").ok().flatten() {
+        Some(data) => format!("{} ({})", versao.trim(), data.trim()),
+        None => versao.trim().to_string(),
+    })
 }
 
 #[cfg(windows)]

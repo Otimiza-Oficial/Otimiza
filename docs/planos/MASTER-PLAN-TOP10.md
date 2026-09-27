@@ -142,6 +142,10 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** `Identidade` ganha driver de vídeo, versão da BIOS (leitura), monitores e Hz, notebook,
   versão do Otimiza. Linha do tempo = medições (TOP 1) + eventos de identidade (quando algo mudou) +
   changelog. A resposta continua a de `historico.rs`: suspeitos, não causas.
+- **Feito (branch `servico-t1`):** a identidade saiu das medições automáticas que o cliente já tem, e não do
+  benchmark: cada partida grava placa, driver, Windows, BIOS (só lida) e versão do Otimiza. A área Histórico
+  ganhou "O que mudou no seu jogo", com partidas, trocas e mudanças do Otimiza, e um veredito de três estados
+  (caiu / não caiu / poucas partidas). "Poucas partidas" nunca aparece como verde (achado da revisão).
 - **Dependencies:** T1.1.
 - **Risks:** identidade com dado pessoal. Mitigação: nada de nome de usuário, serial ou SID; teste que
   procura esses padrões.

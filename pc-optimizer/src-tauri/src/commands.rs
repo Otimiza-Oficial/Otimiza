@@ -1526,6 +1526,19 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
+/// "O que mudou?" por jogo (`modules::linhadotempo`): partidas, trocas em volta da máquina e mudanças do Otimiza.
+/// Só leitura.
+#[tauri::command]
+pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::modules::linhadotempo::LinhaDoJogo>, String> {
+    let aplicadas: Vec<(u64, String)> =
+        state.changes.lock().await.applied().iter().map(|a| (a.timestamp, a.name.clone())).collect();
+    tokio::task::spawn_blocking(move || {
+        crate::modules::medicoes::ler().map(|m| crate::modules::linhadotempo::todos(&m, &aplicadas))
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar a linha do tempo: {}", e))?
+}
+
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
     tokio::task::spawn_blocking(|| crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m)))
@@ -3348,6 +3361,7 @@ mod tests {
         "checar_essenciais",
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",
+        "o_que_mudou",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
