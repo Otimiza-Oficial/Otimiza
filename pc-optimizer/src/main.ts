@@ -5141,6 +5141,62 @@ async function runBatch(
   }
 }
 
+type ParteDaRestauracao = "Automaticos" | "MotorDeEnergia" | "NucleosPorJogo" | "Historico" | "PlanoOtimiza";
+interface ResultadoDaParte {
+  parte: ParteDaRestauracao;
+  desfecho: { estado: "Voltou" | "NadaAFazer" } | { estado: "Falhou"; motivo: string };
+  feito: string[];
+}
+interface RelatorioDaRestauracao {
+  partes: ResultadoDaParte[];
+  itens: OptimizationOutcome[];
+  tudo_voltou: boolean;
+}
+
+const NOME_DA_PARTE: Record<ParteDaRestauracao, string> = {
+  Automaticos: "modos automáticos",
+  MotorDeEnergia: "motor de energia",
+  NucleosPorJogo: "regras de núcleos por jogo",
+  Historico: "histórico de mudanças",
+  PlanoOtimiza: "plano de energia OTIMIZA",
+};
+
+/** "Desfazer tudo" de verdade: o histórico e as peças com estado próprio, parte a parte. */
+async function restaurarTudo() {
+  const buttons = document.querySelectorAll<HTMLButtonElement>("#optimize-now, #revert-all");
+  buttons.forEach((button) => (button.disabled = true));
+  setStatus("optimization-status", "Desfazendo tudo o que o Otimiza mudou…", "progress");
+  resetLog("Desfazendo");
+
+  try {
+    const r = await invoke<RelatorioDaRestauracao>("restaurar_tudo");
+    const feitas = r.partes.filter((p) => p.desfecho.estado === "Voltou");
+    const falhas = r.partes.flatMap((p) =>
+      p.desfecho.estado === "Falhou" ? [`${NOME_DA_PARTE[p.parte]}: ${p.desfecho.motivo}`] : []
+    );
+    if (feitas.length === 0 && falhas.length === 0) {
+      setStatus("optimization-status", "Nada a desfazer: o Otimiza não tem nenhuma mudança ativa neste PC.", "ok");
+    } else if (r.tudo_voltou) {
+      const restart = r.itens.some((i) => i.success && i.requires_restart);
+      setStatus(
+        "optimization-status",
+        `Tudo desfeito: ${feitas.map((p) => NOME_DA_PARTE[p.parte]).join(", ")}.${restart ? " Reinicie o PC para tudo valer." : ""}`,
+        "ok"
+      );
+    } else {
+      const itens = r.itens.filter((i) => !i.success).map((i) => `${i.name}: ${i.message}`);
+      setStatus("optimization-status", `Desfeito só em parte. ${[...falhas, ...itens].join(" · ")}`, "error");
+    }
+  } catch (error) {
+    setStatus("optimization-status", String(error), "error");
+  } finally {
+    buttons.forEach((button) => (button.disabled = false));
+    await loadOptimizations();
+    // O modo jogo automático pode ter sido desligado aqui.
+    await loadPreferences();
+  }
+}
+
 async function loadPreferences() {
   try {
     preferences = await invoke<Preferences>("get_preferences");
@@ -8184,9 +8240,7 @@ function wireControls() {
     busca.focus();
     renderOptimizations();
   });
-  element("revert-all").addEventListener("click", () =>
-    runBatch("revert_all_optimizations", "Desfazendo…")
-  );
+  element("revert-all").addEventListener("click", restaurarTudo);
 
   element("modal-confirm").addEventListener("click", relaunchAsAdmin);
   element("modal-cancel").addEventListener("click", closeAdminModal);

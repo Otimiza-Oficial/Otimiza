@@ -275,6 +275,7 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
 /// Cada um com o motivo, para a trava não virar uma lista que ninguém lê.
 pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("afinidade", "põe o processo do jogo em alguns núcleos; a alteração está registrada como auto_cpu_set, que é o único caminho que a usa com medição"),
+    ("restaurar", "só DESFAZ: chama o desfazer de cada peça registrada (histórico, motor de energia, núcleos, modos automáticos) e grava o resultado para o desinstalador em dados do Otimiza"),
     ("suspend", "só RETOMA programa que versão antiga suspendeu; o produto não congela mais nada"),
     ("governador", "muda prioridade em memória e volta quando o jogo fecha (registrado como modo jogo)"),
     ("jogos", "cache da biblioteca de jogos, em dados do Otimiza"),

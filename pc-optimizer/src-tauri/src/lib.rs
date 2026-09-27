@@ -53,6 +53,24 @@ fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // O desinstalador chama o próprio programa para restaurar o PC, sem janela (`modules::windows::restaurar`).
+    #[cfg(target_os = "windows")]
+    {
+        use modules::windows::restaurar::{ler_argumentos, pela_linha_de_comando, Pedido};
+        let argumentos: Vec<String> = std::env::args().skip(1).collect();
+        match ler_argumentos(&argumentos) {
+            Pedido::Nenhum => {}
+            Pedido::Restaurar { dados } => {
+                utils::diagnostico::instalar_gancho_de_panico();
+                std::process::exit(pela_linha_de_comando(dados));
+            }
+            Pedido::Invalido(motivo) => {
+                utils::Logger::warn(&format!("argumento recusado: {}", motivo));
+                std::process::exit(64);
+            }
+        }
+    }
+
     utils::diagnostico::instalar_gancho_de_panico();
     utils::diagnostico::abrir_sessao();
     modules::abertura::marcar_inicio();
@@ -187,7 +205,7 @@ pub fn run() {
             commands::apply_game_profile,
             commands::revert_optimization,
             commands::optimize_now,
-            commands::revert_all_optimizations,
+            commands::restaurar_tudo,
             commands::checar_essenciais,
             commands::religar_essenciais,
             commands::ajustes_do_driver_nvidia,

@@ -20,6 +20,7 @@ pub mod devices;
 pub mod diskspace;
 pub mod cpuset;
 pub mod registro;
+pub mod restaurar;
 pub mod nvml;
 pub mod display;
 pub mod essenciais;

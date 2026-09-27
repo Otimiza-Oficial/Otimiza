@@ -209,6 +209,11 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Success Criteria:** na VM, depois de desinstalar com "sim", nenhuma mudança do Otimiza sobra.
 - **Failure Criteria:** qualquer mudança não relatada; desinstalador travado.
 - **Rollback:** remover o gancho do NSIS; o botão é independente.
+- **Feito (branch `servico-t1`):** T6.1–T6.3. O "Desfazer tudo" passou a cobrir o motor de energia, as
+  regras de núcleos e os modos automáticos, não só o histórico; recusa com mudança pela metade ou prova rodando;
+  histórico ou backup ilegível viram falha com motivo. O desinstalador pergunta, fecha o Otimiza, pede
+  administrador, lê o resultado e só segue sem restaurar se o cliente confirmar. Na atualização (`/UPDATE`) não
+  faz nada. Falta: o teste numa VM limpa, e conferir a ordem modo jogo × motor quando os dois agiram no mesmo jogo.
 - **Priority:** NOW.
 
 | TASK ID | TITLE | PURPOSE | FILES | DEPENDENCIES | IMPLEMENTATION | TEST PLAN | SUCCESS | ROLLBACK | RISK | PRIORITY |

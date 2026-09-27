@@ -2910,19 +2910,20 @@ async fn aplicar_teto_do_jogo(
     })
 }
 
-/// Desfaz todas as otimizações aplicadas.
+/// "Desfazer tudo": o histórico E o que tem estado próprio (motor de energia, perfis por jogo, regras de núcleos,
+/// modos automáticos). Ver `modules::windows::restaurar`. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
-pub async fn revert_all_optimizations(
+pub async fn restaurar_tudo(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<Vec<OptimizationOutcome>, String> {
+) -> Result<crate::modules::windows::restaurar::Relatorio, String> {
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
 
-        Ok(crate::modules::windows::WindowsOptimizer::new().revert_all(&mut log, |step| {
+        crate::modules::windows::restaurar::restaurar_tudo(&mut log, |step| {
             let _ = app.emit("optimize:step", step);
-        }))
+        })
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -3339,7 +3340,7 @@ mod tests {
         "estado_do_historico",
         "convite_do_discord",
         "revert_optimization",
-        "revert_all_optimizations",
+        "restaurar_tudo",
         "licenca_estado",
         "licenca_ativar",
         "relatorio_de_suporte",
