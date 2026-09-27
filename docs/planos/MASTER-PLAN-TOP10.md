@@ -44,6 +44,8 @@ do bot, nessa ordem e só com ordem.
 - **Feito (branch `servico-t1`):** T1.1 e T1.2. A revisão achou que filtrar a série automática pela
   configuração do jogo cegaria o portão: o item vigiado é o próprio perfil gráfico, que muda o arquivo. Por
   isso a série não passa por `evidencia`; só as provas passam. Ficou aberta a T1.2b.
+  T1.3 feita (eventos só da janela medida, dizendo o que foi lido). A T1.4 virou o guarda
+  `ninguem_compara_contexto_fora_daqui`, dentro da T1.2. O laboratório da T1.2b está pronto e espera uma partida.
 - **Dependencies:** nenhuma.
 - **Risks:** migração quebrar histórico antigo. Mitigação: todos os campos novos com `serde(default)` e
   teste de leitura de arquivo da 3.1 e da 3.2.
