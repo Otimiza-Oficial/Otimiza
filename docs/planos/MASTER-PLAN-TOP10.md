@@ -239,6 +239,9 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** ao fechar o jogo, um resumo curto na janela do Otimiza (não notificação que rouba
   foco): FPS do jogo, 1% piores, trancos com instante, gargalo, calor, diferença para a mediana das
   últimas partidas comparáveis (por `comparavel`).
+- **Feito (branch `servico-t1`):** o cartão "Sua última partida" no Início, montado depois, das janelas já
+  medidas: nada novo roda no jogo, então o orçamento de custo não se aplica a ele. A revisão pegou três frases
+  desonestas (freio contínuo como "não freou", 1% de janela curta, disco contado sobre a lista cortada), corrigidas.
 - **Dependencies:** TOP 1; **orçamento medido** (seção H do plano) antes de ligar por padrão.
 - **Risks:** comparar partida em cena diferente. Mitigação: diz "partidas parecidas" só quando comparável,
   e mostra a dispersão.
