@@ -45,7 +45,9 @@ do bot, nessa ordem e só com ordem.
   configuração do jogo cegaria o portão: o item vigiado é o próprio perfil gráfico, que muda o arquivo. Por
   isso a série não passa por `evidencia`; só as provas passam. Ficou aberta a T1.2b.
   T1.3 feita (eventos só da janela medida, dizendo o que foi lido). A T1.4 virou o guarda
-  `ninguem_compara_contexto_fora_daqui`, dentro da T1.2. O laboratório da T1.2b está pronto e espera uma partida.
+  `ninguem_compara_contexto_fora_daqui`, dentro da T1.2. T1.2b feita em 28/09/2026 no FiveM do dono (8 rodadas
+  simultâneas): o canal antigo conta 2,00× os quadros do PresentMon. Conserto na 3.2 (main 5f62c80): a série
+  só compara o medidor da medição mais recente, e o portão chama de "sem base" o ajuste que perdeu o "antes".
 - **Dependencies:** nenhuma.
 - **Risks:** migração quebrar histórico antigo. Mitigação: todos os campos novos com `serde(default)` e
   teste de leitura de arquivo da 3.1 e da 3.2.

@@ -185,7 +185,8 @@ pub fn lembrancas(estado: &portao::Estado, prova: Option<&ProvaAlternada>, medic
             Veredito::Desfazer => Resultado::Piorou,
             Veredito::Melhorou => Resultado::Ganhou,
             Veredito::SemMudanca => Resultado::SemDiferenca,
-            Veredito::Aguardando { .. } => continue,
+            // Sem base (o medidor mudou) não diz nada sobre o ajuste: não vira lembrança.
+            Veredito::Aguardando { .. } | Veredito::SemBase => continue,
         };
         let jogo = chave_do_jogo(&d.vigiado.processo);
         saida.push(Lembranca { estrategia, ambiente: ambiente_da_decisao(d.quando, &jogo, medicoes), jogo, resultado, quando: d.quando });

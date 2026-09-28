@@ -75,8 +75,37 @@ fn media(v: &[f64]) -> Option<f64> {
     (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
 }
 
-fn fps_da_partida(janelas: &[&MedicaoAutomatica]) -> Option<f64> {
-    media(&janelas.iter().filter(|m| medicoes::comparavel(m)).map(|m| m.fps).collect::<Vec<_>>())
+/// `pelo_presentmon`: só as janelas desse medidor (o canal antigo dobra os quadros do FiveM); `None`, todas.
+fn fps_da_partida(janelas: &[&MedicaoAutomatica], pelo_presentmon: Option<bool>) -> Option<f64> {
+    media(
+        &janelas
+            .iter()
+            .filter(|m| medicoes::comparavel(m))
+            .filter(|m| pelo_presentmon.is_none_or(|p| m.presentmon.is_some() == p))
+            .map(|m| m.fps)
+            .collect::<Vec<_>>(),
+    )
+}
+
+/// Para os testes de outros módulos: um resumo do PresentMon qualquer.
+#[cfg(test)]
+pub fn tests_resumo() -> Option<crate::modules::windows::presentmon::Resumo> {
+    use crate::modules::windows::presentmon::{resumir, Quadro, TipoDeQuadro};
+    let q: Vec<Quadro> = (0..200)
+        .map(|i| Quadro {
+            cadeia: "0x1".into(),
+            tipo: TipoDeQuadro::Jogo,
+            modo: "Hardware: Independent Flip".into(),
+            runtime: "DXGI".into(),
+            inicio_qpc: Some(i),
+            intervalo_ms: Some(10.0),
+            cpu_ocupada_ms: Some(5.0),
+            gpu_ocupada_ms: Some(9.5),
+            na_tela_ms: Some(1.0),
+            ate_a_tela_ms: Some(12.0),
+        })
+        .collect();
+    resumir(&q).ok()
 }
 
 /// **Pura.** Só com um gargalo à frente dos outros; empate vira "nenhum ficou claro".
@@ -128,7 +157,9 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
             .count()
     });
 
-    let mut anteriores: Vec<f64> = antes.iter().rev().filter_map(|p| fps_da_partida(p)).take(PARTIDAS_NA_FAIXA).collect();
+    let medidor = esta.last().map(|m| m.presentmon.is_some());
+    let mut anteriores: Vec<f64> =
+        antes.iter().rev().filter_map(|p| fps_da_partida(p, medidor)).take(PARTIDAS_NA_FAIXA).collect();
     anteriores.sort_by(f64::total_cmp);
     let faixa = (anteriores.len() >= 2).then(|| Faixa {
         partidas: anteriores.len(),
@@ -147,7 +178,7 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
         fim: esta.last()?.quando,
         janelas: esta.len(),
         janelas_comparaveis: comparaveis.len(),
-        fps_medio: fps_da_partida(esta),
+        fps_medio: fps_da_partida(esta, None),
         pior_low_1pct: comparaveis.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).min_by(f64::total_cmp),
         gargalo: gargalo_da_maioria(&contagem),
         trancos,
@@ -273,6 +304,13 @@ mod tests {
     fn uma_medicao_que_falhou_no_meio_nao_parte_a_partida() {
         let ms = [janela("FiveM.exe", 0, 90.0), janela("FiveM.exe", 2 * SEGUNDOS_ENTRE_MEDICOES + 60, 91.0)];
         assert_eq!(partidas("FiveM.exe", &ms).len(), 1);
+    }
+
+    #[test]
+    fn a_faixa_nao_mistura_o_canal_antigo_com_o_presentmon() {
+        let nova = MedicaoAutomatica { presentmon: tests_resumo(), ..janela("FiveM.exe", 3 * P, 90.0) };
+        let ms = [janela("FiveM.exe", 0, 180.0), janela("FiveM.exe", P, 190.0), janela("FiveM.exe", 2 * P, 170.0), nova];
+        assert_eq!(ultima(&ms).unwrap().anteriores, None, "as anteriores são do canal antigo: não entram na faixa da nova");
     }
 
     #[test]

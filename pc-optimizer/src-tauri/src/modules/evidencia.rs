@@ -49,10 +49,9 @@ pub fn diferencas<'a>(contextos: &[Contexto<'a>]) -> Vec<Motivo> {
 // A série automática (portão, regressão, deriva, governador) NÃO passa por aqui, de propósito:
 // - configuração: o item que o portão vigia é o próprio perfil gráfico (`config_jogo_*`), que muda o arquivo e a
 //   impressão digital. Separar a série pela configuração tiraria o "antes" dele e o portão nunca decidiria.
-// - medidor: o canal antigo conta todo Present do processo no tempo do relógio, o PresentMon só os quadros do jogo
-//   na cadeia principal; não são a mesma conta. A série já mistura os dois (a medição cai no canal antigo quando o
-//   PresentMon falha); separar zeraria o portão de todo cliente na atualização. Decidir isso pede os dois canais
-//   medidos na mesma partida (MASTER-PLAN-TOP10, T1.2).
+// - medidor: medido no FiveM (T1.2b, 28/09/2026, os dois ao mesmo tempo, 8 rodadas), o canal antigo contou 2,00× os
+//   quadros do PresentMon em todas. A série agora usa, de cada jogo, só o medidor da medição mais recente
+//   (`medicoes::so_do_medidor_atual`), e o portão chama de "sem base" o ajuste que perdeu o "antes" por isso.
 
 #[cfg(test)]
 mod tests {

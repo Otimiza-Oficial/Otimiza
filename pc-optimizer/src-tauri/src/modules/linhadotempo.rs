@@ -94,7 +94,10 @@ pub fn montar(jogo: &str, medicoes: &[MedicaoAutomatica], aplicadas: &[(u64, Str
     };
     marcos.sort_by(|a, b| b.quando().cmp(&a.quando()).then(ordem(a).cmp(&ordem(b))));
 
-    let comparaveis: Vec<MedicaoAutomatica> = do_jogo.iter().filter(|m| medicoes::comparavel(m)).map(|m| (*m).clone()).collect();
+    // Só o medidor da mais recente: o canal antigo dobra os quadros do FiveM (`medicoes::so_do_medidor_atual`).
+    let comparaveis: Vec<MedicaoAutomatica> = medicoes::so_do_medidor_atual(
+        do_jogo.iter().filter(|m| medicoes::comparavel(m)).map(|m| (*m).clone()).collect(),
+    );
     LinhaDoJogo {
         jogo: do_jogo.last().map(|m| m.jogo.clone()).unwrap_or_else(|| jogo.to_string()),
         marcos,
@@ -215,6 +218,16 @@ mod tests {
     fn com_partidas_suficientes_e_sem_queda_e_nao_caiu() {
         let ms: Vec<MedicaoAutomatica> = (0..6).map(|i| partida("FiveM.exe", i, 140.0 + (i % 2) as f64, None)).collect();
         assert_eq!(montar("FiveM.exe", &ms, &[]).julgamento, Julgamento::NaoCaiu);
+    }
+
+    #[test]
+    fn medidores_diferentes_nao_entram_na_mesma_conta() {
+        // Cinco partidas antigas (canal antigo) e uma nova: não há seis comparáveis do mesmo medidor.
+        let mut ms: Vec<MedicaoAutomatica> = (0..5).map(|i| partida("FiveM.exe", i, 180.0, Some("a"))).collect();
+        let mut nova = partida("FiveM.exe", 10, 90.0, Some("a"));
+        nova.presentmon = crate::modules::relatoriodapartida::tests_resumo();
+        ms.push(nova);
+        assert!(matches!(montar("FiveM.exe", &ms, &[]).julgamento, Julgamento::PoucasPartidas { comparaveis: 1, .. }));
     }
 
     #[test]
