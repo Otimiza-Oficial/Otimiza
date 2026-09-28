@@ -1539,6 +1539,44 @@ pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::module
     .map_err(|e| format!("Falha ao montar a linha do tempo: {}", e))?
 }
 
+/// "Por que meu jogo roda assim?" (`modules::doctor`): a última partida medida e os limites de FPS escondidos.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnostico, String> {
+    tokio::task::spawn_blocking(|| {
+        let medicoes = crate::modules::medicoes::ler()?;
+        let ultima: Vec<crate::modules::medicoes::MedicaoAutomatica> = medicoes
+            .iter()
+            .max_by_key(|m| m.quando)
+            .map(|m| m.jogo.clone())
+            .and_then(|jogo| {
+                crate::modules::relatoriodapartida::partidas(&jogo, &medicoes)
+                    .pop()
+                    .map(|p| p.into_iter().cloned().collect())
+            })
+            .unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let (tetos, monitor_hz) = {
+            // Em cache por dez minutos: `procurar` varre jogos, lê a NVAPI e pergunta ao WMI (PowerShell) pelos
+            // monitores, e o diagnóstico roda a cada medição, com o jogo aberto. Limite de FPS muda só quando alguém mexe.
+            static GUARDADO: std::sync::Mutex<Option<(std::time::Instant, crate::modules::windows::tetos::Relatorio)>> =
+                std::sync::Mutex::new(None);
+            let mut g = GUARDADO.lock().unwrap_or_else(|e| e.into_inner());
+            let valido = g.as_ref().is_some_and(|(q, _)| q.elapsed() < std::time::Duration::from_secs(600));
+            if !valido {
+                *g = Some((std::time::Instant::now(), crate::modules::windows::tetos::procurar()));
+            }
+            let r = &g.as_ref().expect("acabou de ser preenchido").1;
+            (Some(r.tetos.clone()), r.monitor_hz)
+        };
+        #[cfg(not(target_os = "windows"))]
+        let (tetos, monitor_hz): (Option<Vec<crate::modules::windows::tetos::Teto>>, Option<u32>) = (None, None);
+        Ok(crate::modules::doctor::diagnosticar(&ultima, tetos.as_deref(), monitor_hz))
+    })
+    .await
+    .map_err(|e| format!("Falha ao diagnosticar a partida: {}", e))?
+}
+
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
 #[tauri::command]
 pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
@@ -3419,6 +3457,7 @@ mod tests {
         "medicoes_automaticas",
         "o_que_mudou",
         "relatorio_da_ultima_partida",
+        "diagnostico_da_partida",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",

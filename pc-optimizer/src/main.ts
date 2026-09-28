@@ -867,6 +867,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     // Conferir a cada medição faz o aviso aparecer DURANTE a sessão em que o jogo piorou.
     void conferirOProprioTrabalho();
     void carregarRelatorioDaPartida();
+    void carregarDiagnosticoDaPartida();
   });
 
   element("regressao-ver").addEventListener("click", () => {
@@ -6881,6 +6882,91 @@ function desenharNumerosDaPartida(ultima: MedicaoAutomatica | undefined, monitor
   }
 }
 
+type TipoDeCausa = "Processador" | "PlacaDeVideo" | "PresoNaTaxaDoMonitor" | "LimiteDeFps" | "CalorOuEnergia" | "DiscoNosTrancos" | "QuadroCopiado";
+type AjusteDoDoctor =
+  | "PerfilGraficoMaisLeve"
+  | "MenosCargaNoProcessador"
+  | "PlanoDeEnergiaOtimiza"
+  | "FecharProgramasPesados"
+  | "TirarLimiteDeFps"
+  | "ConferirRefrigeracao"
+  | "JogoNoSsd"
+  | "TelaCheiaOuSemBordaComFlip"
+  | "MaisResolucaoOuQualidade"
+  | "BaixarResolucao";
+interface DiagnosticoDaPartida {
+  jogo: string | null;
+  janelas_lidas: number;
+  causas: {
+    tipo: TipoDeCausa;
+    confianca: "Alta" | "Media" | "Hipotese";
+    evidencia: string;
+    ajuda: AjusteDoDoctor[];
+    nao_ajuda: AjusteDoDoctor[];
+    janelas: number;
+  }[];
+  lacunas: string[];
+}
+
+const TITULO_DA_CAUSA: Record<TipoDeCausa, string> = {
+  Processador: "O processador segura o FPS",
+  PlacaDeVideo: "A placa de vídeo segura o FPS",
+  PresoNaTaxaDoMonitor: "O FPS já está no máximo que o monitor mostra",
+  LimiteDeFps: "Um limite de FPS segura o jogo",
+  CalorOuEnergia: "A placa freou por calor ou energia",
+  DiscoNosTrancos: "Os trancos vêm do disco",
+  QuadroCopiado: "O Windows copia cada quadro",
+};
+const NOME_DO_AJUSTE: Record<AjusteDoDoctor, string> = {
+  PerfilGraficoMaisLeve: "gráfico mais leve no jogo",
+  MenosCargaNoProcessador: "menos distância de visão e população no jogo",
+  PlanoDeEnergiaOtimiza: "plano de energia OTIMIZA",
+  FecharProgramasPesados: "fechar programas pesados",
+  TirarLimiteDeFps: "tirar o limite de FPS",
+  ConferirRefrigeracao: "conferir a ventilação e a limpeza do PC",
+  JogoNoSsd: "jogo instalado num SSD",
+  TelaCheiaOuSemBordaComFlip: "tela cheia exclusiva (no Windows 10, janela sem borda nem sempre resolve)",
+  MaisResolucaoOuQualidade: "subir a qualidade",
+  BaixarResolucao: "baixar a resolução",
+};
+// A causa é sempre inferida dos números medidos: "evidência forte", não "medido".
+const CONFIANCA_CURTA = { Alta: "evidência forte", Media: "provável", Hipotese: "hipótese" } as const;
+
+async function carregarDiagnosticoDaPartida() {
+  let d: DiagnosticoDaPartida;
+  try {
+    d = await invoke<DiagnosticoDaPartida>("diagnostico_da_partida");
+  } catch (erro) {
+    element("doctor").hidden = false;
+    text("doctor-tag", "não lido");
+    element("doctor-causas").innerHTML = "";
+    text("doctor-lacunas", `Não consegui montar o diagnóstico agora: ${String(erro)}`);
+    return;
+  }
+  element("doctor").hidden = false;
+  text("doctor-tag", d.jogo ? nomeDoJogo(d.jogo) : "sem partida");
+  const lista = (a: AjusteDoDoctor[]) => a.map((x) => NOME_DO_AJUSTE[x]).join(", ");
+  element("doctor-causas").innerHTML =
+    d.causas.length === 0
+      ? d.janelas_lidas > 0
+        ? `<p class="finding-measured">Nas ${d.janelas_lidas} janela(s) medidas, nenhuma causa apareceu com clareza.</p>`
+        : ""
+      : d.causas
+          .map(
+            (c, i) => `
+      <article class="finding" data-severity="${c.confianca === "Alta" ? "Important" : "Info"}" style="--i:${i}">
+        <div class="finding-top">
+          <h3>${c.confianca === "Hipotese" ? "Talvez: " : ""}${TITULO_DA_CAUSA[c.tipo]}</h3>
+          <span class="finding-size">${CONFIANCA_CURTA[c.confianca]}</span>
+        </div>
+        <p class="finding-measured">${escapeHtml(c.evidencia)}</p>
+        <p class="finding-advice">${c.ajuda.length ? `<strong>Ajuda:</strong> ${lista(c.ajuda)}. ` : "<strong>Não há o que fazer pelo FPS aqui.</strong> "}<strong>Não ajuda:</strong> ${lista(c.nao_ajuda)}.</p>
+      </article>`
+          )
+          .join("");
+  text("doctor-lacunas", d.lacunas.join(" "));
+}
+
 interface RelatorioDaPartida {
   jogo: string;
   inicio: number;
@@ -8290,6 +8376,7 @@ function wireControls() {
   // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
   setTimeout(() => void carregarVereditoDoInicio().then(() => atualizarFluxo()), 0);
   setTimeout(() => void carregarRelatorioDaPartida(), 0);
+  setTimeout(() => void carregarDiagnosticoDaPartida(), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
