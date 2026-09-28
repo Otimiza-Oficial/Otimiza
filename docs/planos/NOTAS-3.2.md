@@ -47,6 +47,14 @@ vídeo, limite de FPS ou V-Sync) e quanto o quadro levou para chegar à tela.
 Se a configuração gráfica do jogo mudou entre o antes e o depois, a
 comparação avisa: ganho de qualidade menor não é otimização.
 
+**No FiveM, as versões anteriores mostravam o dobro do FPS real.** O
+medidor antigo contava todo quadro que o processo manda para a tela, e o
+FiveM manda dois por quadro do jogo (medido: exatamente 2× em oito
+rodadas). A 3.2 conta só os quadros do jogo. Se o número caiu pela metade
+depois de atualizar, o jogo não piorou: ele sempre foi esse. Por isso as
+partidas medidas antes não são comparadas com as de agora, e o ajuste que
+ficou sem essa comparação é avisado na área Otimizar.
+
 ## Cinco áreas no lugar de nove abas
 
 Início, Otimizar, Jogos, Sistema e Histórico. Geração de quadros e Placa de
