@@ -218,6 +218,7 @@ pub fn run() {
             commands::relatorio_da_ultima_partida,
             commands::diagnostico_da_partida,
             commands::receita_da_partida,
+            commands::resultado_para_compartilhar,
             commands::conferir_o_proprio_trabalho,
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,

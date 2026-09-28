@@ -25,6 +25,7 @@ pub mod linhadotempo;
 pub mod relatoriodapartida;
 pub mod doctor;
 pub mod receita;
+pub mod compartilhar;
 pub mod evidencia;
 pub mod repeticoes;
 pub mod report;

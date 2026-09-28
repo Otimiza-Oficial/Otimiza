@@ -8128,6 +8128,24 @@ function renderAlternada(p: ProvaAlternada) {
     </article>`;
 }
 
+/** O texto da prova, com a margem de erro, para colar no Discord. Sem prova válida, a tela diz por quê. */
+async function copiarResultadoDaProva() {
+  let texto: string;
+  try {
+    texto = await invoke<string>("resultado_para_compartilhar");
+  } catch (erro) {
+    statusDaProva(String(erro), "warn");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(texto);
+    statusDaProva("Copiado. Cole no Discord: vai com a margem de erro, como foi medido.", "ok");
+  } catch {
+    // O Windows só deixa copiar com a janela do Otimiza em foco.
+    statusDaProva("Não consegui copiar: deixe a janela do Otimiza em foco e clique de novo.", "warn");
+  }
+}
+
 /** O andamento da prova vai para o painel de Jogos e para o passo 4 do Otimizar. */
 function statusDaProva(mensagem: string, tipo: "ok" | "warn" | "error" | "progress") {
   setStatus("alternada-status", mensagem, tipo);
@@ -8661,6 +8679,7 @@ function wireControls() {
   });
   element("revert-all").addEventListener("click", restaurarTudo);
   element("guardiao-lista").addEventListener("click", acaoDoGuardiao);
+  element("alternada-compartilhar").addEventListener("click", copiarResultadoDaProva);
 
   element("modal-confirm").addEventListener("click", relaunchAsAdmin);
   element("modal-cancel").addEventListener("click", closeAdminModal);

@@ -1629,6 +1629,37 @@ pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::mod
     .map_err(|e| format!("Falha ao montar a receita: {}", e))?
 }
 
+/// O texto da última prova no jogo para colar no Discord (`modules::compartilhar`). Só leitura, `LIVRES`; a recusa
+/// volta como erro, já com a frase para a tela.
+#[tauri::command]
+pub async fn resultado_para_compartilhar() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        let prova = crate::modules::provaalternada::guardada();
+        let data = prova
+            .as_ref()
+            .and_then(|p| chrono::DateTime::from_timestamp(p.quando as i64, 0))
+            .map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+            .unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let (cpu, gpu) = (
+            crate::modules::windows::registry::read_text(
+                "HKLM",
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+                "ProcessorNameString",
+            )
+            .ok()
+            .flatten(),
+            crate::core::telemetria::placa_principal().map(|(nome, _)| nome),
+        );
+        #[cfg(not(target_os = "windows"))]
+        let (cpu, gpu): (Option<String>, Option<String>) = (None, None);
+        crate::modules::compartilhar::texto(prova.as_ref(), (cpu.as_deref(), gpu.as_deref()), &data)
+            .map_err(|r| r.frase().to_string())
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar o texto: {}", e))?
+}
+
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
 #[tauri::command]
 pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
@@ -3511,6 +3542,7 @@ mod tests {
         "relatorio_da_ultima_partida",
         "diagnostico_da_partida",
         "receita_da_partida",
+        "resultado_para_compartilhar",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
