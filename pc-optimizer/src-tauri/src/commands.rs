@@ -2121,6 +2121,53 @@ pub async fn apply_optimization(
     }
 }
 
+/// Guardião (`modules::windows::guardiao`): relê cada ajuste do catálogo que o histórico diz estar aplicado.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn vistoriar_mudancas(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::guardiao::Vistoria, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Copia a lista e solta o histórico: a leitura passa por bcdedit, powercfg e PowerShell.
+        let aplicadas: Vec<(String, String)> = state
+            .changes
+            .lock()
+            .await
+            .applied()
+            .iter()
+            .map(|a| (a.optimization_id.clone(), a.name.clone()))
+            .collect();
+        tokio::task::spawn_blocking(move || crate::modules::windows::WindowsOptimizer::new().vistoriar(&aplicadas))
+            .await
+            .map_err(|e| format!("Falha ao conferir as mudanças: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Desfaz e aplica de novo o que não está mais como o Otimiza deixou. `EXIGEM_LICENCA`, como aplicar.
+#[tauri::command]
+pub async fn refazer_mudanca(id: String, state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().refazer(&id, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (id, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// Sem a lista, o cliente lia "seu monitor está em 60 Hz" sem saber QUAL. `LIVRES`.
 #[tauri::command]
 pub async fn monitores() -> Result<Vec<crate::modules::windows::display::Monitor>, String> {
@@ -3266,6 +3313,7 @@ mod tests {
 
     /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
+        "vistoriar_mudancas",
         "zerar_modo_jogo",
         "placa_de_video",
         "memoria_instalada",
@@ -3403,6 +3451,7 @@ mod tests {
         "set_startup_enabled",
         "apply_game_profile",
         "apply_optimization",
+        "refazer_mudanca",
         "optimize_now",
         "provar_o_otimizar",
         "set_max_refresh_rate",

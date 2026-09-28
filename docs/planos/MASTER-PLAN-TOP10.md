@@ -174,6 +174,10 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** para cada `ChangeRecord` aplicado, uma leitura "o valor atual ainda é o que o Otimiza
   gravou?". Resultado: Intacto, MudouPorFora (com o valor encontrado), NaoLeu. Roda na abertura e depois de
   mudança de build detectada pelo TOP 4. **Nunca restaura sozinho:** mostra e pergunta.
+- **Feito (branch `servico-t1`):** a vistoria relê cada item do catálogo aplicado e avisa na área Otimizar o
+  que não está mais como o Otimiza deixou. "Refazer" é desfazer + aplicar pelo caminho normal: escrever por
+  fora do histórico deixaria mudanças sem volta (achado da revisão). Sem administrador, o que não se lê fica
+  "não conferido"; o plano OTIMIZA fica fora (o próprio Otimiza o troca e ele tem vistoria própria).
 - **Dependencies:** T4.1.
 - **Risks:** restaurar algo que o cliente mudou de propósito. Mitigação: só pergunta; mostra o valor atual e o nosso.
 - **Security Impact:** leitura; a restauração usa o mesmo caminho de aplicação.

@@ -188,6 +188,8 @@ pub fn run() {
             commands::estado_do_historico,
             commands::convite_do_discord,
             commands::apply_optimization,
+            commands::vistoriar_mudancas,
+            commands::refazer_mudanca,
             commands::placa_de_video,
             commands::memoria_instalada,
             commands::monitores,

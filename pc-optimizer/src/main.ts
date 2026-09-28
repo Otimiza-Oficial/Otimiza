@@ -4335,12 +4335,94 @@ async function avisarSeOHistoricoNaoFoiLido() {
   caixa.hidden = false;
 }
 
+type EstadoDaVistoria = "Intacto" | "MudouPorFora" | "NaoLeu" | "NaoSeAplicaMais";
+interface VistoriaDasMudancas {
+  itens: { id: string; nome: string; estado: EstadoDaVistoria; retirado: boolean }[];
+  fora_da_vistoria: string[];
+  com_politica_de_grupo: boolean;
+}
+
+/** O que o Windows (ou outro programa) desfez por fora. Nada é refeito sem clique. */
+async function carregarGuardiao() {
+  let v: VistoriaDasMudancas;
+  try {
+    v = await invoke<VistoriaDasMudancas>("vistoriar_mudancas");
+  } catch {
+    element("guardiao").hidden = true;
+    return;
+  }
+  const mudaram = v.itens.filter((i) => i.estado === "MudouPorFora");
+  const naoLidos = v.itens.filter((i) => i.estado === "NaoLeu");
+  element("guardiao").hidden = mudaram.length === 0 && naoLidos.length === 0;
+  if (element("guardiao").hidden) return;
+
+  const partes: string[] = [];
+  if (mudaram.length > 0) {
+    partes.push(
+      `${mudaram.length} ajuste(s) do Otimiza não estão mais como ele deixou: pode ter sido atualização do Windows, hardware novo, política da empresa, outro programa ou você mesmo. Enquanto isso, não estão valendo. "Refazer" desfaz e aplica de novo.`
+    );
+    if (v.com_politica_de_grupo) {
+      partes.push("Este PC tem política de grupo: o que ela desfez, ela tende a desfazer de novo.");
+    }
+  }
+  if (naoLidos.length > 0) {
+    partes.push(`${naoLidos.length} ajuste(s) não puderam ser conferidos agora (permissão ou política).`);
+  }
+  if (v.fora_da_vistoria.length > 0) {
+    partes.push(`${v.fora_da_vistoria.length} mudança(s) não entram nesta conferência (plano de energia e ajustes de jogo têm conferência própria).`);
+  }
+  element("guardiao").dataset.politica = v.com_politica_de_grupo ? "sim" : "nao";
+  text("guardiao-texto", partes.join(" "));
+  element("guardiao-lista").innerHTML = [...mudaram, ...naoLidos]
+    .map((i) => {
+      const acao =
+        i.estado !== "MudouPorFora"
+          ? '<span class="linha-data">não conferido</span>'
+          : i.retirado
+            ? `<button class="btn" type="button" data-guardiao-desfazer="${escapeHtml(i.id)}">Desfazer</button>`
+            : `<button class="btn" type="button" data-guardiao-refazer="${escapeHtml(i.id)}">Refazer</button>
+               <button class="btn" type="button" data-guardiao-desfazer="${escapeHtml(i.id)}">Desfazer</button>`;
+      return `<li><strong>${escapeHtml(i.nome)}</strong> ${acao}</li>`;
+    })
+    .join("");
+}
+
+async function acaoDoGuardiao(event: Event) {
+  const botao = (event.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+  if (!botao) return;
+  const refazer = botao.dataset.guardiaoRefazer;
+  const desfazer = botao.dataset.guardiaoDesfazer;
+  if (!refazer && !desfazer) return;
+  // Com política de grupo, uma chave travada reprova o item inteiro, e o aplicar desfaz também o que ainda valia.
+  if (
+    refazer &&
+    element("guardiao").dataset.politica === "sim" &&
+    !confirm("Este PC tem política de grupo. Se ela travar uma das chaves, refazer desliga o ajuste inteiro, inclusive a parte que ainda valia. Refazer mesmo assim?")
+  ) {
+    return;
+  }
+  botao.disabled = true;
+  setStatus("guardiao-status", refazer ? "Refazendo…" : "Desfazendo…", "progress");
+  try {
+    const r = refazer
+      ? await invoke<OptimizationOutcome>("refazer_mudanca", { id: refazer })
+      : await invoke<OptimizationOutcome>("revert_optimization", { id: desfazer });
+    setStatus("guardiao-status", r.message, r.success ? "ok" : "error");
+  } catch (error) {
+    setStatus("guardiao-status", String(error), "error");
+  } finally {
+    await loadOptimizations();
+  }
+}
+
 async function loadOptimizations() {
   try {
     optimizations = await invoke<OptimizationInfo[]>("list_optimizations");
     renderFilters();
     renderOptimizations();
     mostrarAposentados();
+    // Sem esperar: a conferência passa por bcdedit e PowerShell, e a lista não depende dela.
+    void carregarGuardiao();
     atualizarFluxo();
     await avisarSeOHistoricoNaoFoiLido();
     // Depois da lista: o aviso mostra os NOMES, que vêm dela.
@@ -8343,6 +8425,7 @@ function wireControls() {
     renderOptimizations();
   });
   element("revert-all").addEventListener("click", restaurarTudo);
+  element("guardiao-lista").addEventListener("click", acaoDoGuardiao);
 
   element("modal-confirm").addEventListener("click", relaunchAsAdmin);
   element("modal-cancel").addEventListener("click", closeAdminModal);
