@@ -862,6 +862,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     void loadGameMode();
     void loadOptimizations();
   });
+  // Decisão do portão sobre um ajuste (perfil do jogo): desfeito, aprovado ou sem base para comparar.
+  await listen<string>("portao:frase", (evento) => {
+    setStatus("optimization-status", evento.payload, "ok");
+    void loadOptimizations();
+  });
   await listen("prova:automatica", () => {
     void carregarMedicoesAutomaticas();
     // Conferir a cada medição faz o aviso aparecer DURANTE a sessão em que o jogo piorou.

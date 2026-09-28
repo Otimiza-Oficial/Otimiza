@@ -2175,6 +2175,10 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
         return Vec::new();
     }
     let Ok(medicoes) = crate::modules::medicoes::ler_para_comparar() else { return Vec::new() };
+    // Sem o filtro do medidor: para saber se o "antes" existia e foi o medidor que o tirou.
+    let todas: Vec<crate::modules::medicoes::MedicaoAutomatica> = crate::modules::medicoes::ler()
+        .map(|m| m.into_iter().filter(crate::modules::medicoes::comparavel).collect())
+        .unwrap_or_default();
     let agora = crate::modules::changelog::now_timestamp();
     let mut decididos = Vec::new();
     let mut ficam = Vec::new();
@@ -2182,7 +2186,10 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
         if !log.is_applied(&v.id) {
             continue;
         }
-        let a = portao::avaliar(&v, &medicoes);
+        let mut a = portao::avaliar(&v, &medicoes);
+        if matches!(a.veredito, Veredito::Aguardando { antes: 0, .. }) && portao::tinha_antes(&v, &todas) {
+            a.veredito = Veredito::SemBase;
+        }
         if matches!(a.veredito, Veredito::Aguardando { .. }) {
             ficam.push(v);
             continue;

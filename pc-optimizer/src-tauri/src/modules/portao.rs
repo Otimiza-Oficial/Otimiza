@@ -29,6 +29,14 @@ pub enum Veredito {
     Desfazer,
     Melhorou,
     SemMudanca,
+    /// As partidas de antes foram medidas pelo canal antigo, que conta os quadros de outro jeito (no FiveM, o dobro):
+    /// não há base para comparar. O ajuste fica e deixa de ser vigiado, e a tela diz isso em vez de esperar calada.
+    SemBase,
+}
+
+/// Havia partidas de antes deste vigiado na série inteira, sem o filtro do medidor?
+pub fn tinha_antes(v: &Vigiado, todas: &[MedicaoAutomatica]) -> bool {
+    todas.iter().any(|m| e_do_jogo(m, &v.processo) && m.quando < v.aplicado_em)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -232,6 +240,11 @@ pub fn frase_do_governador(d: &Decidido) -> String {
             ),
         },
         Veredito::Melhorou => format!("O {} passou na comparação: o jogo rodou melhor com ele{}.", d.vigiado.nome, numeros),
+        Veredito::SemBase => format!(
+            "Não dá mais para comparar o {} com as partidas de antes: o Otimiza passou a medir pelo PresentMon, que conta \
+             os quadros de outro jeito. O ajuste continua aplicado e deixou de ser vigiado; se o jogo piorou, desfaça.",
+            d.vigiado.nome
+        ),
         _ => format!("O {} passou na comparação: sem diferença além do ruído{}.", d.vigiado.nome, numeros),
     }
 }
@@ -431,6 +444,14 @@ mod testes {
             governador: vec![GovernadorNoJogo { processo: "fivem_".into(), nome: "FiveM".into(), desde: 1, decidido, sessoes_agindo: Vec::new() }],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn as_partidas_de_antes_contam_pela_serie_inteira() {
+        let v = vig();
+        let antes = m("X-Win64-Shipping.exe", v.aplicado_em - 10, 100.0, 50.0);
+        assert!(tinha_antes(&v, &[antes]));
+        assert!(!tinha_antes(&v, &[m("X-Win64-Shipping.exe", v.aplicado_em + 10, 100.0, 50.0)]));
     }
 
     #[test]
