@@ -866,6 +866,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     void carregarMedicoesAutomaticas();
     // Conferir a cada medição faz o aviso aparecer DURANTE a sessão em que o jogo piorou.
     void conferirOProprioTrabalho();
+    void carregarRelatorioDaPartida();
   });
 
   element("regressao-ver").addEventListener("click", () => {
@@ -6880,6 +6881,80 @@ function desenharNumerosDaPartida(ultima: MedicaoAutomatica | undefined, monitor
   }
 }
 
+interface RelatorioDaPartida {
+  jogo: string;
+  inicio: number;
+  fim: number;
+  janelas: number;
+  janelas_comparaveis: number;
+  fps_medio: number | null;
+  pior_low_1pct: number | null;
+  gargalo: ResumoPresentMon["gargalo"] | null;
+  trancos: number | null;
+  janelas_com_trancos: number;
+  trancos_com_disco: number | null;
+  freios: number | null;
+  janelas_com_freio_lido: number;
+  ja_freava: boolean;
+  anteriores: { partidas: number; mediana_fps: number; menor_fps: number; maior_fps: number } | null;
+}
+
+const GARGALO_CURTO: Record<ResumoPresentMon["gargalo"], string> = {
+  Cpu: "o processador",
+  Gpu: "a placa de vídeo",
+  Espera: "limite de FPS ou V-Sync",
+  NaoDeuParaSaber: "nenhum ficou claro",
+};
+
+/** Só o que foi medido; o que não se leu diz que não se leu, sem virar zero. */
+async function carregarRelatorioDaPartida() {
+  let r: RelatorioDaPartida | null = null;
+  try {
+    r = await invoke<RelatorioDaPartida | null>("relatorio_da_ultima_partida");
+  } catch {
+    r = null;
+  }
+  element("partida").hidden = !r;
+  if (!r) return;
+
+  const n = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+  const hora = (q: number) => new Date(q * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const minutos = Math.round((r.fim - r.inicio) / 60);
+  text("partida-tag", nomeDoJogo(r.jogo));
+
+  const linhas: string[] = [];
+  linhas.push(
+    `<li><span class="linha-data">quando</span> ${hora(r.inicio)}${minutos > 0 ? `, medida ao longo de ${minutos} min` : ""} (${r.janelas} janela(s) de 20 s)</li>`
+  );
+  linhas.push(
+    r.fps_medio == null
+      ? `<li><span class="linha-data">FPS</span> todas as janelas tinham gerador de quadros: fora da conta</li>`
+      : `<li><span class="linha-data">FPS</span> ${n(r.fps_medio)} de média${r.pior_low_1pct != null ? `, 1% piores chegaram a ${n(r.pior_low_1pct)}` : ""}${r.janelas_comparaveis < r.janelas ? ` (${r.janelas - r.janelas_comparaveis} janela(s) com gerador ficaram fora)` : ""}</li>`
+  );
+  if (r.gargalo) linhas.push(`<li><span class="linha-data">limite</span> ${GARGALO_CURTO[r.gargalo]}</li>`);
+  // "Em N de M janelas" sempre que a leitura não cobriu a partida inteira.
+  const cobertura = (lidas: number) => (lidas < r.janelas ? ` (em ${lidas} de ${r.janelas} janelas)` : "");
+  linhas.push(
+    r.trancos == null
+      ? `<li><span class="linha-data">trancos</span> sem o instante de cada um nesta partida</li>`
+      : `<li><span class="linha-data">trancos</span> ${r.trancos} nas janelas medidas${r.trancos_com_disco ? `, ${r.trancos_com_disco} com o disco ocupado na hora` : ""}${cobertura(r.janelas_com_trancos)}</li>`
+  );
+  let placa: string;
+  if (r.freios == null) placa = "freio não lido (só placas NVIDIA informam)";
+  else if (r.ja_freava) placa = "já estava freando por calor ou energia quando a medição começou";
+  else if (r.freios === 0) placa = "não freou por calor ou energia nas janelas medidas";
+  else placa = `começou a frear ${r.freios} vez(es) nas janelas medidas`;
+  linhas.push(`<li><span class="linha-data">placa</span> ${placa}${r.freios == null ? "" : cobertura(r.janelas_com_freio_lido)}</li>`);
+  element("partida-lista").innerHTML = linhas.join("");
+
+  text(
+    "partida-nota",
+    r.anteriores
+      ? `Nas suas ${r.anteriores.partidas} partidas anteriores deste jogo, o FPS médio ficou entre ${n(r.anteriores.menor_fps)} e ${n(r.anteriores.maior_fps)} (mediana ${n(r.anteriores.mediana_fps)}). Lugares diferentes do mapa dão números diferentes: isto é referência, não prova. Queda provada aparece em Histórico.`
+      : "Com mais partidas medidas, aparece aqui a faixa das anteriores para comparar."
+  );
+}
+
 /** O veredito do Início (A3.2): tudo de medição gravada, nada adivinhado. */
 async function carregarVereditoDoInicio() {
   let medicoes: MedicaoAutomatica[] = [];
@@ -8214,6 +8289,7 @@ function wireControls() {
   element("fluxo-aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
   setTimeout(() => void carregarVereditoDoInicio().then(() => atualizarFluxo()), 0);
+  setTimeout(() => void carregarRelatorioDaPartida(), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));

@@ -22,6 +22,7 @@ pub mod preferences;
 pub mod prova;
 pub mod provaalternada;
 pub mod linhadotempo;
+pub mod relatoriodapartida;
 pub mod evidencia;
 pub mod repeticoes;
 pub mod report;

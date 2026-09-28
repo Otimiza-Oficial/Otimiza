@@ -1539,6 +1539,14 @@ pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::module
     .map_err(|e| format!("Falha ao montar a linha do tempo: {}", e))?
 }
 
+/// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
+#[tauri::command]
+pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::relatoriodapartida::ultima(&m)))
+        .await
+        .map_err(|e| format!("Falha ao montar o relatório da partida: {}", e))?
+}
+
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
     tokio::task::spawn_blocking(|| crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m)))
@@ -3410,6 +3418,7 @@ mod tests {
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",
         "o_que_mudou",
+        "relatorio_da_ultima_partida",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",

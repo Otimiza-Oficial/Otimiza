@@ -215,6 +215,7 @@ pub fn run() {
             commands::limitar_fps_nvidia,
             commands::medicoes_automaticas,
             commands::o_que_mudou,
+            commands::relatorio_da_ultima_partida,
             commands::conferir_o_proprio_trabalho,
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,
