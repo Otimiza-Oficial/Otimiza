@@ -1543,14 +1543,20 @@ pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::module
 /// Só leitura, `LIVRES`.
 #[tauri::command]
 pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnostico, String> {
-    tokio::task::spawn_blocking(|| {
-        let medicoes = crate::modules::medicoes::ler()?;
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| diagnosticar_agora(&m)))
+        .await
+        .map_err(|e| format!("Falha ao diagnosticar a partida: {}", e))?
+}
+
+/// O diagnóstico da última partida, com os limites de FPS em cache.
+fn diagnosticar_agora(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> crate::modules::doctor::Diagnostico {
+    {
         let ultima: Vec<crate::modules::medicoes::MedicaoAutomatica> = medicoes
             .iter()
             .max_by_key(|m| m.quando)
             .map(|m| m.jogo.clone())
             .and_then(|jogo| {
-                crate::modules::relatoriodapartida::partidas(&jogo, &medicoes)
+                crate::modules::relatoriodapartida::partidas(&jogo, medicoes)
                     .pop()
                     .map(|p| p.into_iter().cloned().collect())
             })
@@ -1571,10 +1577,56 @@ pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnost
         };
         #[cfg(not(target_os = "windows"))]
         let (tetos, monitor_hz): (Option<Vec<crate::modules::windows::tetos::Teto>>, Option<u32>) = (None, None);
-        Ok(crate::modules::doctor::diagnosticar(&ultima, tetos.as_deref(), monitor_hz))
+        crate::modules::doctor::diagnosticar(&ultima, tetos.as_deref(), monitor_hz)
+    }
+}
+
+/// A receita (`modules::receita`): o ajuste de cada causa, se já está aplicado, como se prova, e o que já piorou
+/// este jogo nesta máquina. Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::modules::receita::Receita, String> {
+    use crate::modules::changelog::ChangeRecord;
+    use crate::modules::receita::{chave_do_jogo, Aplicados, PerfilDoJogo};
+    let (plano, perfis) = {
+        let log = state.changes.lock().await;
+        let perfis: Vec<(PerfilDoJogo, String)> = log
+            .applied()
+            .iter()
+            .filter_map(|a| {
+                let perfil = PerfilDoJogo::do_id(&a.optimization_id)?;
+                let jogo = a.changes.iter().find_map(|m| match m {
+                    ChangeRecord::GameConfig { jogo, .. } => Some(chave_do_jogo(jogo)),
+                    _ => None,
+                })?;
+                Some((perfil, jogo))
+            })
+            .collect();
+        (log.is_applied("plano_otimiza"), perfis)
+    };
+    tokio::task::spawn_blocking(move || {
+        let medicoes = crate::modules::medicoes::ler()?;
+        let diagnostico = diagnosticar_agora(&medicoes);
+        // Estrito: registro ilegível NÃO vira "nada foi provado", que ofereceria de novo o que já piorou.
+        let (memoria, memoria_ilegivel) = match crate::modules::portao::ler_estrito() {
+            Ok(estado) => (
+                crate::modules::receita::lembrancas(&estado, crate::modules::provaalternada::guardada().as_ref(), &medicoes),
+                None,
+            ),
+            Err(e) => (Vec::new(), Some(e)),
+        };
+        #[cfg(target_os = "windows")]
+        let agora = Some(crate::modules::deriva::Ambiente::agora());
+        #[cfg(not(target_os = "windows"))]
+        let agora = None;
+        let aplicados = Aplicados {
+            plano,
+            modo_jogo: crate::modules::preferences::Preferences::load().auto_game_mode,
+            perfis,
+        };
+        Ok(crate::modules::receita::montar(diagnostico, memoria, memoria_ilegivel, &aplicados, &agora))
     })
     .await
-    .map_err(|e| format!("Falha ao diagnosticar a partida: {}", e))?
+    .map_err(|e| format!("Falha ao montar a receita: {}", e))?
 }
 
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
@@ -3458,6 +3510,7 @@ mod tests {
         "o_que_mudou",
         "relatorio_da_ultima_partida",
         "diagnostico_da_partida",
+        "receita_da_partida",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",

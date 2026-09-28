@@ -6932,10 +6932,72 @@ const NOME_DO_AJUSTE: Record<AjusteDoDoctor, string> = {
 // A causa é sempre inferida dos números medidos: "evidência forte", não "medido".
 const CONFIANCA_CURTA = { Alta: "evidência forte", Media: "provável", Hipotese: "hipótese" } as const;
 
+type PerfilDoJogo = "SemTeto" | "Equilibrado" | "Competitivo";
+type EstrategiaDaReceita = { tipo: "PlanoOtimiza" } | { tipo: "PerfilGrafico"; perfil: PerfilDoJogo } | { tipo: "ModoJogo" };
+type OfertaDaReceita =
+  | { estado: "Oferecer" }
+  | { estado: "NaoOferecer"; quando: number; contexto: "Igual" | "NaoLido" }
+  | { estado: "ProvarDeNovo"; quando: number }
+  | { estado: "JaProvado"; resultado: "Ganhou" | "Piorou" | "SemDiferenca"; quando: number };
+interface PassoDaReceita {
+  ajuste: AjusteDoDoctor;
+  estrategia: EstrategiaDaReceita | null;
+  aplicado: boolean;
+  oferta: OfertaDaReceita;
+  como_provar: "ProvaNoJogo" | "ProximasPartidas" | "PeloCliente";
+}
+interface ReceitaDaPartida {
+  diagnostico: DiagnosticoDaPartida;
+  memoria_ilegivel: string | null;
+  por_causa: [DiagnosticoDaPartida["causas"][number], PassoDaReceita[]][];
+}
+
+/** Onde cada ajuste que o Otimiza aplica mora na tela. */
+const NOME_DO_PERFIL: Record<PerfilDoJogo, string> = { SemTeto: "Sem teto", Equilibrado: "Equilibrado", Competitivo: "Máximo de FPS" };
+function ondeAplicar(e: EstrategiaDaReceita): string {
+  if (e.tipo === "PlanoOtimiza") return "Otimizar → Plano de energia OTIMIZA";
+  if (e.tipo === "ModoJogo") return "Sistema → modo jogo automático";
+  return `Jogos → Configuração do jogo, perfil "${NOME_DO_PERFIL[e.perfil]}"`;
+}
+const COMO_PROVAR: Record<PassoDaReceita["como_provar"], string> = {
+  ProvaNoJogo: "a prova no jogo, na área Otimizar, confirma",
+  ProximasPartidas: "as próximas partidas confirmam sozinhas, e o Otimiza desfaz se piorar",
+  PeloCliente: "é você quem faz; as próximas partidas medidas mostram o efeito",
+};
+
+function frasesDoPasso(p: PassoDaReceita): string {
+  const nome = NOME_DO_AJUSTE[p.ajuste];
+  const data = (q: number) => new Date(q * 1000).toLocaleDateString("pt-BR");
+  if (p.oferta.estado === "NaoOferecer") {
+    const contexto =
+      p.oferta.contexto === "Igual"
+        ? "com o mesmo driver e Windows de agora"
+        : "e não deu para conferir se o driver ou o Windows mudou desde então";
+    return `<li><s>${nome}</s>: já deixou este jogo pior neste PC em ${data(p.oferta.quando)}, ${contexto}. Não é oferecido de novo.</li>`;
+  }
+  const lembranca =
+    p.oferta.estado === "ProvarDeNovo"
+      ? ` Piorou em ${data(p.oferta.quando)}, mas o driver ou o Windows mudou desde então: vale provar de novo.`
+      : p.oferta.estado === "JaProvado"
+        ? p.oferta.resultado === "Ganhou"
+          ? ` Já provou ganho aqui em ${data(p.oferta.quando)}.`
+          : ` Em ${data(p.oferta.quando)} não fez diferença medida aqui.`
+        : "";
+  const onde = p.estrategia ? (p.aplicado ? " (já aplicado)" : ` — em ${ondeAplicar(p.estrategia)}`) : "";
+  return `<li><strong>${nome}</strong>${onde}: ${COMO_PROVAR[p.como_provar]}.${lembranca}</li>`;
+}
+
 async function carregarDiagnosticoDaPartida() {
+  // Uma chamada só: a receita traz o diagnóstico; sem ela, o diagnóstico sozinho.
+  let receita: ReceitaDaPartida | null = null;
+  try {
+    receita = await invoke<ReceitaDaPartida>("receita_da_partida");
+  } catch {
+    receita = null;
+  }
   let d: DiagnosticoDaPartida;
   try {
-    d = await invoke<DiagnosticoDaPartida>("diagnostico_da_partida");
+    d = receita ? receita.diagnostico : await invoke<DiagnosticoDaPartida>("diagnostico_da_partida");
   } catch (erro) {
     element("doctor").hidden = false;
     text("doctor-tag", "não lido");
@@ -6946,6 +7008,7 @@ async function carregarDiagnosticoDaPartida() {
   element("doctor").hidden = false;
   text("doctor-tag", d.jogo ? nomeDoJogo(d.jogo) : "sem partida");
   const lista = (a: AjusteDoDoctor[]) => a.map((x) => NOME_DO_AJUSTE[x]).join(", ");
+  const passosDe = (tipo: TipoDeCausa) => receita?.por_causa.find(([c]) => c.tipo === tipo)?.[1] ?? null;
   element("doctor-causas").innerHTML =
     d.causas.length === 0
       ? d.janelas_lidas > 0
@@ -6960,11 +7023,20 @@ async function carregarDiagnosticoDaPartida() {
           <span class="finding-size">${CONFIANCA_CURTA[c.confianca]}</span>
         </div>
         <p class="finding-measured">${escapeHtml(c.evidencia)}</p>
-        <p class="finding-advice">${c.ajuda.length ? `<strong>Ajuda:</strong> ${lista(c.ajuda)}. ` : "<strong>Não há o que fazer pelo FPS aqui.</strong> "}<strong>Não ajuda:</strong> ${lista(c.nao_ajuda)}.</p>
+        ${(() => {
+          const passos = passosDe(c.tipo);
+          const naoAjuda = `<strong>Não ajuda:</strong> ${lista(c.nao_ajuda)}.`;
+          if (!c.ajuda.length) return `<p class="finding-advice"><strong>Não há o que fazer pelo FPS aqui.</strong> ${naoAjuda}</p>`;
+          if (!passos) return `<p class="finding-advice"><strong>Ajuda:</strong> ${lista(c.ajuda)}. ${naoAjuda}</p>`;
+          return `<ul class="linha-do-tempo receita">${passos.map(frasesDoPasso).join("")}</ul><p class="finding-advice">${naoAjuda}</p>`;
+        })()}
       </article>`
           )
           .join("");
-  text("doctor-lacunas", d.lacunas.join(" "));
+  const avisoDaMemoria = receita?.memoria_ilegivel
+    ? `Não consegui ler o registro do que já foi provado neste PC (${receita.memoria_ilegivel}): não dá para dizer o que já piorou.`
+    : "";
+  text("doctor-lacunas", [...d.lacunas, avisoDaMemoria].filter(Boolean).join(" "));
 }
 
 interface RelatorioDaPartida {
