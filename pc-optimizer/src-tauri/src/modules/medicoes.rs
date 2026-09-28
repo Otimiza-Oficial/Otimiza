@@ -105,7 +105,30 @@ pub fn geracao_agora(presentmon: Option<&crate::modules::windows::presentmon::Re
 
 /// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.
 pub fn ler_para_comparar() -> Result<Vec<MedicaoAutomatica>, String> {
-    Ok(ler()?.into_iter().filter(comparavel).collect())
+    Ok(so_do_medidor_atual(ler()?.into_iter().filter(comparavel).collect()))
+}
+
+/// **Pura.** De cada jogo (pela chave do portão: `fivem_` junta as builds do FiveM), só as medições feitas pelo MESMO
+/// medidor da mais recente. Medido no FiveM (28/09/2026, 8
+/// rodadas simultâneas): o canal antigo conta todo Present do processo e deu 2,00× os quadros do PresentMon em todas
+/// as rodadas (o jogo apresenta duas vezes por quadro). Misturar os dois na série faria a atualização para o
+/// PresentMon parecer uma queda de 50% e o portão desfazer ajuste bom. O lado que sobra espera medições novas.
+pub fn so_do_medidor_atual(medicoes: Vec<MedicaoAutomatica>) -> Vec<MedicaoAutomatica> {
+    let mut atual: std::collections::HashMap<String, (u64, bool)> = std::collections::HashMap::new();
+    for m in &medicoes {
+        let e = atual.entry(chave(&m.jogo)).or_insert((m.quando, m.presentmon.is_some()));
+        if m.quando >= e.0 {
+            *e = (m.quando, m.presentmon.is_some());
+        }
+    }
+    medicoes
+        .into_iter()
+        .filter(|m| atual.get(&chave(&m.jogo)).is_some_and(|(_, pm)| *pm == m.presentmon.is_some()))
+        .collect()
+}
+
+fn chave(jogo: &str) -> String {
+    crate::modules::windows::gamemode::chave_do_processo(jogo)
 }
 
 pub const GUARDADAS: usize = 60;
@@ -224,6 +247,40 @@ impl Acompanhamento {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pelo_presentmon(m: MedicaoAutomatica) -> MedicaoAutomatica {
+        use crate::modules::windows::presentmon::{resumir, Quadro, TipoDeQuadro};
+        let quadros: Vec<Quadro> = (0..200)
+            .map(|i| Quadro {
+                cadeia: "0x1".into(),
+                tipo: TipoDeQuadro::Jogo,
+                modo: "Hardware: Independent Flip".into(),
+                runtime: "DXGI".into(),
+                inicio_qpc: Some(i),
+                intervalo_ms: Some(10.0),
+                cpu_ocupada_ms: Some(5.0),
+                gpu_ocupada_ms: Some(9.5),
+                na_tela_ms: Some(1.0),
+                ate_a_tela_ms: Some(12.0),
+            })
+            .collect();
+        MedicaoAutomatica { presentmon: Some(resumir(&quadros).expect("resumo de teste")), ..m }
+    }
+
+    #[test]
+    fn a_serie_so_compara_o_medidor_da_medicao_mais_recente() {
+        let antiga = |quando| MedicaoAutomatica { quando, ..exemplo(180.0) };
+        let nova = |quando| pelo_presentmon(MedicaoAutomatica { quando, ..exemplo(90.0) });
+        let gta = MedicaoAutomatica { jogo: "GTA5.exe".into(), quando: 1, ..exemplo(70.0) };
+        // Outra build do FiveM, jogada só antes da atualização: é o mesmo jogo para o portão.
+        let build_velha = MedicaoAutomatica { jogo: "FiveM_b2944_GTAProcess.exe".into(), quando: 0, ..exemplo(180.0) };
+        let serie = so_do_medidor_atual(vec![build_velha, antiga(1), antiga(2), nova(3), nova(4), gta]);
+        assert_eq!(
+            serie.iter().map(|m| (m.jogo.as_str(), m.quando)).collect::<Vec<_>>(),
+            vec![("FiveM_b3258_GTAProcess.exe", 3), ("FiveM_b3258_GTAProcess.exe", 4), ("GTA5.exe", 1)],
+            "o canal antigo dobra os quadros do FiveM: não entra junto com o PresentMon; outro jogo segue o seu"
+        );
+    }
 
     fn exemplo(fps: f64) -> MedicaoAutomatica {
         MedicaoAutomatica {

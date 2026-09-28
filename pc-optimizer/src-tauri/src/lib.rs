@@ -643,6 +643,8 @@ pub fn run() {
                                             utils::Logger::info(&format!("portão: {} → {:?}", d.vigiado.nome, d.veredito));
                                             if d.vigiado.id.starts_with("governador:") {
                                                 let _ = handle.emit("gamemode:changed", modules::portao::frase_do_governador(&d));
+                                            } else {
+                                                let _ = handle.emit("portao:frase", modules::portao::frase_do_governador(&d));
                                             }
                                             let _ = handle.emit("portao:decidido", d);
                                         }
