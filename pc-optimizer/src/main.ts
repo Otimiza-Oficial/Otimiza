@@ -7044,6 +7044,69 @@ async function carregarDiagnosticoDaPartida() {
   text("doctor-lacunas", [...d.lacunas, avisoDaMemoria].filter(Boolean).join(" "));
 }
 
+type LimitacaoDoPc =
+  | { tipo: "MonitorAbaixoDoMaximo"; atual: number; maximo: number }
+  | { tipo: "MonitorLimitaATela"; hz: number }
+  | { tipo: "PoucaMemoria"; gb: number }
+  | { tipo: "PoucosNucleos"; nucleos: number }
+  | { tipo: "PoucaMemoriaDeVideo"; gb: number }
+  | { tipo: "VideoIntegrado" }
+  | { tipo: "SistemaEmHd" }
+  | { tipo: "Notebook" };
+interface PerfilDoPc {
+  limitacoes: LimitacaoDoPc[];
+  nao_lido: string[];
+}
+
+/** Uma frase por limitação, com o número e o que ela significa na prática. Nenhuma porcentagem de ganho. */
+function fraseDaLimitacao(l: LimitacaoDoPc): string {
+  switch (l.tipo) {
+    case "MonitorAbaixoDoMaximo":
+      return `<strong>Monitor em ${l.atual} Hz, mas ele aceita ${l.maximo} Hz.</strong> A tela mostra no máximo ${l.atual} quadros por segundo. Subir a taxa deixa o jogo visivelmente mais fluido (o contador de FPS não muda), e o Otimiza faz isso em Sistema.`;
+    case "MonitorLimitaATela":
+      return `<strong>Monitor de ${l.hz} Hz.</strong> A tela mostra no máximo ${l.hz} quadros por segundo: FPS acima disso ainda reduz um pouco o atraso, mas não aparece como quadro a mais. Aqui o que mais se ganha é estabilidade, não número.`;
+    case "PoucaMemoria":
+      return `<strong>${l.gb} GB de memória.</strong> Com menos de 12 GB, FiveM e jogos atuais costumam fazer o Windows trocar memória com o disco no meio da partida, e isso vira tranco. Fechar o navegador antes de jogar ajuda; mais memória costuma resolver.`;
+    case "PoucosNucleos":
+      return `<strong>${l.nucleos} núcleos no processador.</strong> Jogos com muita gente na tela (FiveM, battle royale) seguram o FPS no processador; programas abertos em segundo plano pesam mais aqui.`;
+    case "PoucaMemoriaDeVideo":
+      return `<strong>${numeroBr(l.gb)} GB de memória de vídeo.</strong> Texturas no alto podem não caber: textura média costuma evitar tranco de carregamento, e custa qualidade, não FPS.`;
+    case "VideoIntegrado":
+      return "<strong>Vídeo integrado.</strong> Não há placa de vídeo dedicada: o vídeo usa a memória do sistema. Gráfico no baixo e resolução menor são o que mais pesa aqui.";
+    case "SistemaEmHd":
+      return "<strong>Windows num HD, não SSD.</strong> Carregamento e trancos ao entrar em áreas novas vêm do disco: nenhum ajuste de Windows compensa, só um SSD.";
+    case "Notebook":
+      return "<strong>Notebook.</strong> Energia e calor limitam: jogue na tomada e com a ventilação livre. Na bateria o Windows costuma cortar desempenho.";
+  }
+}
+
+const CHAVE_PERFIL_VISTO = "otimiza.perfil-do-pc.visto";
+
+async function carregarPerfilDoPc() {
+  try {
+    if (localStorage.getItem(CHAVE_PERFIL_VISTO) === "1") return;
+  } catch {
+    // Sem armazenamento local, mostra toda vez: melhor que nunca.
+  }
+  let p: PerfilDoPc;
+  try {
+    p = await invoke<PerfilDoPc>("perfil_do_pc");
+  } catch {
+    return;
+  }
+  element("perfil-pc").hidden = false;
+  text(
+    "perfil-pc-resumo",
+    p.limitacoes.length === 0 && p.nao_lido.length === 0
+      ? "Nada neste PC segura o jogo por si só. O que o Otimiza fizer vai ser medido nas suas partidas: ganho que não aparecer na medição não é contado."
+      : p.limitacoes.length === 0
+        ? "No que deu para ler, nada segura o jogo por si só; parte não foi lida (veja abaixo). O que o Otimiza fizer vai ser medido nas suas partidas."
+      : "Antes de otimizar: o que este hardware permite. O Otimiza não troca peça nenhuma; o que ele fizer vai ser medido nas suas partidas."
+  );
+  element("perfil-pc-lista").innerHTML = p.limitacoes.map((l) => `<li>${fraseDaLimitacao(l)}</li>`).join("");
+  text("perfil-pc-nota", p.nao_lido.length ? `Não deu para ler: ${p.nao_lido.join(", ")}.` : "");
+}
+
 interface RelatorioDaPartida {
   jogo: string;
   inicio: number;
@@ -8471,6 +8534,7 @@ function wireControls() {
   // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
   setTimeout(() => void carregarVereditoDoInicio().then(() => atualizarFluxo()), 0);
   setTimeout(() => void carregarRelatorioDaPartida(), 0);
+  setTimeout(() => void carregarPerfilDoPc(), 0);
   setTimeout(() => void carregarDiagnosticoDaPartida(), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
@@ -8685,6 +8749,14 @@ function wireControls() {
   element("revert-all").addEventListener("click", restaurarTudo);
   element("guardiao-lista").addEventListener("click", acaoDoGuardiao);
   element("alternada-compartilhar").addEventListener("click", copiarResultadoDaProva);
+  element("perfil-pc-ok").addEventListener("click", () => {
+    element("perfil-pc").hidden = true;
+    try {
+      localStorage.setItem(CHAVE_PERFIL_VISTO, "1");
+    } catch {
+      // Sem armazenamento local, volta na próxima abertura.
+    }
+  });
 
   element("modal-confirm").addEventListener("click", relaunchAsAdmin);
   element("modal-cancel").addEventListener("click", closeAdminModal);

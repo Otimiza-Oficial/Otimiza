@@ -1660,6 +1660,23 @@ pub async fn resultado_para_compartilhar() -> Result<String, String> {
     .map_err(|e| format!("Falha ao montar o texto: {}", e))?
 }
 
+/// O perfil do PC para a primeira abertura (`modules::perfil`): o que esta máquina pode esperar, sem porcentagem.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(|| crate::modules::perfil::montar(&crate::modules::perfil::ler()))
+            .await
+            .map_err(|e| format!("Falha ao ler o perfil do PC: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
 #[tauri::command]
 pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
@@ -3543,6 +3560,7 @@ mod tests {
         "diagnostico_da_partida",
         "receita_da_partida",
         "resultado_para_compartilhar",
+        "perfil_do_pc",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",

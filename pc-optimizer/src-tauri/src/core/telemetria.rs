@@ -152,6 +152,18 @@ pub fn versao_do_driver() -> Option<String> {
 /// A placa com mais memória dedicada (a que roda o jogo), com o nome e a versão do driver.
 #[cfg(windows)]
 pub fn placa_principal() -> Option<(String, String)> {
+    adaptador_principal().map(|(_, nome, versao)| (nome, versao))
+}
+
+/// A memória de vídeo DEDICADA da mesma placa, em GB. Pela primeira chave do registro vinha a da integrada em
+/// notebook com duas placas.
+#[cfg(windows)]
+pub fn memoria_da_placa_principal_gb() -> Option<f64> {
+    adaptador_principal().map(|(bytes, _, _)| bytes as f64 / 1_073_741_824.0)
+}
+
+#[cfg(windows)]
+fn adaptador_principal() -> Option<(u64, String, String)> {
     use windows::core::Interface;
     use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
     let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
@@ -172,7 +184,7 @@ pub fn placa_principal() -> Option<(String, String)> {
             melhor = Some((d.DedicatedVideoMemory as u64, nome, texto));
         }
     }
-    melhor.map(|(_, nome, versao)| (nome, versao))
+    melhor
 }
 
 /// A versão do firmware como o Windows a guardou no boot. SÓ LEITURA do registro: o Otimiza nunca escreve na BIOS.
