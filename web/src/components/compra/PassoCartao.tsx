@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Loader2, Lock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Aviso } from "@/components/ui/Aviso";
 import { MP_PUBLIC_KEY } from "@/lib/api";
 
@@ -26,6 +26,23 @@ function iniciarMercadoPago(): Promise<void> {
 }
 
 const PRAZO_PARA_ABRIR_MS = 20_000;
+
+/*
+ * O `CardPayment` do Mercado Pago DESTRÓI e reconstrói o formulário sempre que `initialization`, `customization`
+ * ou qualquer callback muda de identidade (é a lista de dependências do efeito dele). Objeto ou função nova a cada
+ * desenho reconstruía o formulário ao abrir, ao clicar em Pagar (o Checkout limpa o erro e redesenha) e quando o
+ * banco recusava, apagando o que o cliente digitou. Por isso tudo que vai para ele é estável.
+ */
+const PERSONALIZACAO = {
+  paymentMethods: { maxInstallments: 1, types: { included: ["credit_card" as const] } },
+  visual: {
+    hideFormTitle: true,
+    style: {
+      theme: "default",
+      customVariables: { baseColor: "#111111", borderRadiusMedium: "8px", borderRadiusLarge: "12px" },
+    },
+  },
+};
 
 /**
  * Os campos do cartão são janelas do Mercado Pago dentro da página: o número
@@ -52,6 +69,38 @@ export function PassoCartao({
   const [falha, setFalha] = useState<string | null>(null);
   // Trocar a chave monta o formulário de novo do zero.
   const [tentativa, setTentativa] = useState(0);
+
+  const inicializacao = useMemo(() => ({ amount: valor }), [valor]);
+  // A função mais nova do pai, sem mudar a identidade do que o Mercado Pago recebe.
+  const aoPagarAtual = useRef(aoPagar);
+  useEffect(() => {
+    aoPagarAtual.current = aoPagar;
+  }, [aoPagar]);
+  const aoFicarPronto = useCallback(() => setPronto(true), []);
+  const aoErrar = useCallback((e: { type?: string; cause?: string; message?: string }) => {
+    console.warn("Mercado Pago:", e?.type, e?.cause, e?.message);
+    if (e?.type === "critical") setFalha(e.cause || "erro_critico");
+  }, []);
+  const aoEnviar = useCallback(
+    async (dados: {
+      token: string;
+      issuer_id: string;
+      payment_method_id: string;
+      installments: number;
+      payer?: { email?: string; identification?: unknown };
+    }) =>
+      aoPagarAtual.current({
+        token: dados.token,
+        issuer_id: dados.issuer_id,
+        payment_method_id: dados.payment_method_id,
+        installments: dados.installments,
+        payer: {
+          email: dados.payer?.email,
+          identification: dados.payer?.identification as DadosDoCartao["payer"]["identification"],
+        },
+      }),
+    []
+  );
 
   useEffect(() => {
     let vivo = true;
@@ -105,34 +154,11 @@ export function PassoCartao({
           <CardPayment
             key={tentativa}
             locale="pt-BR"
-            initialization={{ amount: valor }}
-            customization={{
-              paymentMethods: { maxInstallments: 1, types: { included: ["credit_card"] } },
-              visual: {
-                hideFormTitle: true,
-                style: {
-                  theme: "default",
-                  customVariables: { baseColor: "#111111", borderRadiusMedium: "8px", borderRadiusLarge: "12px" },
-                },
-              },
-            }}
-            onReady={() => setPronto(true)}
-            onError={(e) => {
-              console.warn("Mercado Pago:", e?.type, e?.cause, e?.message);
-              if (e?.type === "critical") setFalha(e.cause || "erro_critico");
-            }}
-            onSubmit={async (dados) =>
-              aoPagar({
-                token: dados.token,
-                issuer_id: dados.issuer_id,
-                payment_method_id: dados.payment_method_id,
-                installments: dados.installments,
-                payer: {
-                  email: dados.payer?.email,
-                  identification: dados.payer?.identification as DadosDoCartao["payer"]["identification"],
-                },
-              })
-            }
+            initialization={inicializacao}
+            customization={PERSONALIZACAO}
+            onReady={aoFicarPronto}
+            onError={aoErrar}
+            onSubmit={aoEnviar}
           />
         )
       )}
