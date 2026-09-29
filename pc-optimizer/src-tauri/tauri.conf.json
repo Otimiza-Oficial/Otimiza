@@ -56,7 +56,8 @@
           "PortugueseBR"
         ],
         "displayLanguageSelector": false,
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "./windows/hooks.nsh"
       }
     },
     "externalBin": [

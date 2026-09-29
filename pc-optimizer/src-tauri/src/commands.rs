@@ -198,6 +198,46 @@ pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::module
         .map_err(|e| format!("o teste não terminou: {e}"))?
 }
 
+/// `LIVRES`: só mede (PresentMon e contadores do Windows); nada é alterado. Motor V2 da causa da travada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn investigar_travadas(
+    segundos: u32,
+) -> Result<crate::modules::windows::investigacao::ResultadoDaInvestigacao, String> {
+    let segundos = segundos.clamp(30, 120);
+    tokio::task::spawn_blocking(move || crate::modules::windows::investigacao::investigar(segundos))
+        .await
+        .map_err(|e| format!("a investigação não terminou: {e}"))?
+}
+
+/// `EXIGEM_LICENCA`: acalma o programa suspeito em janelas alternadas e devolve; só fica acalmado com a causa
+/// demonstrada, e até o jogo fechar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn testar_causa_da_travada(
+    processo: String,
+    app: tauri::AppHandle,
+) -> Result<crate::modules::windows::investigacao::ResultadoDoTeste, String> {
+    crate::modules::licenca::exigir()?;
+    tokio::task::spawn_blocking(move || {
+        use tauri::Emitter;
+        crate::modules::windows::investigacao::testar(&processo, &|frase| {
+            let _ = app.emit("travada:progresso", frase);
+        })
+    })
+    .await
+    .map_err(|e| format!("o teste não terminou: {e}"))?
+}
+
+/// `LIVRES`: só desfaz o que o teste deixou acalmado.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn devolver_teste_da_travada() -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::investigacao::devolver_mantido)
+        .await
+        .map_err(|e| format!("a devolução não terminou: {e}"))?
+}
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cpuset_resultados() -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
@@ -1526,6 +1566,165 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
         .await
         .map_err(|e| format!("Falha ao procurar limites: {}", e))
 }
+/// "O que mudou?" por jogo (`modules::linhadotempo`): partidas, trocas em volta da máquina e mudanças do Otimiza.
+/// Só leitura.
+#[tauri::command]
+pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::modules::linhadotempo::LinhaDoJogo>, String> {
+    let aplicadas: Vec<(u64, String)> =
+        state.changes.lock().await.applied().iter().map(|a| (a.timestamp, a.name.clone())).collect();
+    tokio::task::spawn_blocking(move || {
+        crate::modules::medicoes::ler().map(|m| crate::modules::linhadotempo::todos(&m, &aplicadas))
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar a linha do tempo: {}", e))?
+}
+
+/// "Por que meu jogo roda assim?" (`modules::doctor`): a última partida medida e os limites de FPS escondidos.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnostico, String> {
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| diagnosticar_agora(&m)))
+        .await
+        .map_err(|e| format!("Falha ao diagnosticar a partida: {}", e))?
+}
+
+/// O diagnóstico da última partida, com os limites de FPS em cache.
+fn diagnosticar_agora(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> crate::modules::doctor::Diagnostico {
+    {
+        let ultima: Vec<crate::modules::medicoes::MedicaoAutomatica> = medicoes
+            .iter()
+            .max_by_key(|m| m.quando)
+            .map(|m| m.jogo.clone())
+            .and_then(|jogo| {
+                crate::modules::relatoriodapartida::partidas(&jogo, medicoes)
+                    .pop()
+                    .map(|p| p.into_iter().cloned().collect())
+            })
+            .unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let (tetos, monitor_hz) = {
+            // Em cache por dez minutos: `procurar` varre jogos, lê a NVAPI e pergunta ao WMI (PowerShell) pelos
+            // monitores, e o diagnóstico roda a cada medição, com o jogo aberto. Limite de FPS muda só quando alguém mexe.
+            static GUARDADO: std::sync::Mutex<Option<(std::time::Instant, crate::modules::windows::tetos::Relatorio)>> =
+                std::sync::Mutex::new(None);
+            let mut g = GUARDADO.lock().unwrap_or_else(|e| e.into_inner());
+            let valido = g.as_ref().is_some_and(|(q, _)| q.elapsed() < std::time::Duration::from_secs(600));
+            if !valido {
+                *g = Some((std::time::Instant::now(), crate::modules::windows::tetos::procurar()));
+            }
+            let r = &g.as_ref().expect("acabou de ser preenchido").1;
+            (Some(r.tetos.clone()), r.monitor_hz)
+        };
+        #[cfg(not(target_os = "windows"))]
+        let (tetos, monitor_hz): (Option<Vec<crate::modules::windows::tetos::Teto>>, Option<u32>) = (None, None);
+        crate::modules::doctor::diagnosticar(&ultima, tetos.as_deref(), monitor_hz)
+    }
+}
+
+/// A receita (`modules::receita`): o ajuste de cada causa, se já está aplicado, como se prova, e o que já piorou
+/// este jogo nesta máquina. Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::modules::receita::Receita, String> {
+    use crate::modules::changelog::ChangeRecord;
+    use crate::modules::receita::{chave_do_jogo, Aplicados, PerfilDoJogo};
+    let (plano, perfis) = {
+        let log = state.changes.lock().await;
+        let perfis: Vec<(PerfilDoJogo, String)> = log
+            .applied()
+            .iter()
+            .filter_map(|a| {
+                let perfil = PerfilDoJogo::do_id(&a.optimization_id)?;
+                let jogo = a.changes.iter().find_map(|m| match m {
+                    ChangeRecord::GameConfig { jogo, .. } => Some(chave_do_jogo(jogo)),
+                    _ => None,
+                })?;
+                Some((perfil, jogo))
+            })
+            .collect();
+        (log.is_applied("plano_otimiza"), perfis)
+    };
+    tokio::task::spawn_blocking(move || {
+        let medicoes = crate::modules::medicoes::ler()?;
+        let diagnostico = diagnosticar_agora(&medicoes);
+        // Estrito: registro ilegível NÃO vira "nada foi provado", que ofereceria de novo o que já piorou.
+        let (memoria, memoria_ilegivel) = match crate::modules::portao::ler_estrito() {
+            Ok(estado) => (
+                crate::modules::receita::lembrancas(&estado, crate::modules::provaalternada::guardada().as_ref(), &medicoes),
+                None,
+            ),
+            Err(e) => (Vec::new(), Some(e)),
+        };
+        #[cfg(target_os = "windows")]
+        let agora = Some(crate::modules::deriva::Ambiente::agora());
+        #[cfg(not(target_os = "windows"))]
+        let agora = None;
+        let aplicados = Aplicados {
+            plano,
+            modo_jogo: crate::modules::preferences::Preferences::load().auto_game_mode,
+            perfis,
+        };
+        Ok(crate::modules::receita::montar(diagnostico, memoria, memoria_ilegivel, &aplicados, &agora))
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar a receita: {}", e))?
+}
+
+/// O texto da última prova no jogo para colar no Discord (`modules::compartilhar`). Só leitura, `LIVRES`; a recusa
+/// volta como erro, já com a frase para a tela.
+#[tauri::command]
+pub async fn resultado_para_compartilhar() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        let prova = crate::modules::provaalternada::guardada();
+        let data = prova
+            .as_ref()
+            .and_then(|p| chrono::DateTime::from_timestamp(p.quando as i64, 0))
+            .map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+            .unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let (cpu, gpu) = (
+            crate::modules::windows::registry::read_text(
+                "HKLM",
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+                "ProcessorNameString",
+            )
+            .ok()
+            .flatten(),
+            crate::core::telemetria::placa_principal().map(|(nome, _)| nome),
+        );
+        #[cfg(not(target_os = "windows"))]
+        let (cpu, gpu): (Option<String>, Option<String>) = (None, None);
+        crate::modules::compartilhar::texto(prova.as_ref(), (cpu.as_deref(), gpu.as_deref()), &data)
+            .map_err(|r| r.frase().to_string())
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar o texto: {}", e))?
+}
+
+/// O perfil do PC para a primeira abertura (`modules::perfil`): o que esta máquina pode esperar, sem porcentagem.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(|| crate::modules::perfil::montar(&crate::modules::perfil::ler()))
+            .await
+            .map_err(|e| format!("Falha ao ler o perfil do PC: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
+#[tauri::command]
+pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
+    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::relatoriodapartida::ultima(&m)))
+        .await
+        .map_err(|e| format!("Falha ao montar o relatório da partida: {}", e))?
+}
+
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
     tokio::task::spawn_blocking(|| crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m)))
@@ -1573,10 +1772,24 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         let jogo = crate::modules::windows::gamemode::jogo_aberto_com_pid();
         coletor.acompanhar_processos(jogo.as_ref().map(|(_, pid)| *pid));
 
-        // O instante de início amarra o relógio dos quadros ao das amostras.
-        let inicio_dos_quadros = coletor.decorrido_ms();
+        // A âncora: o mesmo instante no relógio das amostras (ms do coletor) e no dos quadros (QPC).
+        let ancora_ms = coletor.decorrido_ms();
+        let ancora_qpc = crate::modules::windows::frames::agora_qpc();
+        let frequencia = crate::modules::windows::frames::frequencia_qpc();
+        // PresentMon, nunca o canal antigo: no FiveM ele conta o dobro dos quadros (medido em 28/09/2026).
         let medicao = jogo.clone().map(|(nome, pid)| {
-            std::thread::spawn(move || crate::modules::windows::frames::medir_par(pid, &nome, None, segundos))
+            std::thread::spawn(move || -> Result<(crate::modules::windows::frames::MedicaoCrua, Option<i64>), String> {
+                let crus = crate::modules::windows::presentmon::capturar(pid, segundos as u32)?;
+                let q = crate::modules::windows::investigacao::quadros_do_jogo(&crus);
+                let (Some(primeiro), Some(ultimo), Some(f)) = (q.first(), q.last(), frequencia) else {
+                    return Err("o PresentMon não viu nenhum quadro do jogo".to_string());
+                };
+                let decorrido = (ultimo.qpc - primeiro.qpc) as f64 / f as f64;
+                let intervalos: Vec<f64> = q.iter().map(|x| x.intervalo_ms).collect();
+                // O relógio da V1 soma intervalos a partir do início: o início é o primeiro quadro menos o intervalo dele.
+                let inicio_qpc = primeiro.qpc - (primeiro.intervalo_ms / 1000.0 * f as f64) as i64;
+                Ok((crate::modules::windows::frames::montar(&nome, pid, q.len() as u64, decorrido, intervalos, Vec::new()), Some(inicio_qpc)))
+            })
         });
 
         let mut amostras = Vec::new();
@@ -1594,11 +1807,15 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
             }
         }
 
-        let (saude, intervalos, quadros_erro) = match medicao.map(|h| h.join()) {
-            None => (None, Vec::new(), None),
-            Some(Ok(Ok((m, _)))) => (m.resumo.saude, m.intervalos_ms, None),
-            Some(Ok(Err(e))) => (None, Vec::new(), Some(e)),
-            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string())),
+        let (saude, intervalos, quadros_erro, inicio_qpc) = match medicao.map(|h| h.join()) {
+            None => (None, Vec::new(), None, None),
+            Some(Ok(Ok((m, inicio)))) => (m.resumo.saude, m.intervalos_ms, None, inicio),
+            Some(Ok(Err(e))) => (None, Vec::new(), Some(e), None),
+            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string()), None),
+        };
+        let inicio_dos_quadros = match (inicio_qpc, ancora_qpc, frequencia) {
+            (Some(i), Some(a), Some(f)) if f > 0 => (ancora_ms as i64 + (i - a) * 1000 / f).max(0) as u64,
+            _ => ancora_ms,
         };
         let vram_total = coletor.placa().map(|p| p.vram_total_mb);
         let travadas = (!intervalos.is_empty())
@@ -2099,6 +2316,53 @@ pub async fn apply_optimization(
     {
         let mut log = state.changes.lock().await;
         crate::modules::windows::WindowsOptimizer::new().apply(&id, &mut log)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (id, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Guardião (`modules::windows::guardiao`): relê cada ajuste do catálogo que o histórico diz estar aplicado.
+/// Só leitura, `LIVRES`.
+#[tauri::command]
+pub async fn vistoriar_mudancas(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::windows::guardiao::Vistoria, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // Copia a lista e solta o histórico: a leitura passa por bcdedit, powercfg e PowerShell.
+        let aplicadas: Vec<(String, String)> = state
+            .changes
+            .lock()
+            .await
+            .applied()
+            .iter()
+            .map(|a| (a.optimization_id.clone(), a.name.clone()))
+            .collect();
+        tokio::task::spawn_blocking(move || crate::modules::windows::WindowsOptimizer::new().vistoriar(&aplicadas))
+            .await
+            .map_err(|e| format!("Falha ao conferir as mudanças: {}", e))
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Desfaz e aplica de novo o que não está mais como o Otimiza deixou. `EXIGEM_LICENCA`, como aplicar.
+#[tauri::command]
+pub async fn refazer_mudanca(id: String, state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut log = state.changes.lock().await;
+        crate::modules::windows::WindowsOptimizer::new().refazer(&id, &mut log)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2910,19 +3174,20 @@ async fn aplicar_teto_do_jogo(
     })
 }
 
-/// Desfaz todas as otimizações aplicadas.
+/// "Desfazer tudo": o histórico E o que tem estado próprio (motor de energia, perfis por jogo, regras de núcleos,
+/// modos automáticos). Ver `modules::windows::restaurar`. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
-pub async fn revert_all_optimizations(
+pub async fn restaurar_tudo(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
-) -> Result<Vec<OptimizationOutcome>, String> {
+) -> Result<crate::modules::windows::restaurar::Relatorio, String> {
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
 
-        Ok(crate::modules::windows::WindowsOptimizer::new().revert_all(&mut log, |step| {
+        crate::modules::windows::restaurar::restaurar_tudo(&mut log, |step| {
             let _ = app.emit("optimize:step", step);
-        }))
+        })
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -3252,6 +3517,9 @@ mod tests {
 
     /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
+        "investigar_travadas",
+        "devolver_teste_da_travada",
+        "vistoriar_mudancas",
         "zerar_modo_jogo",
         "placa_de_video",
         "memoria_instalada",
@@ -3339,7 +3607,7 @@ mod tests {
         "estado_do_historico",
         "convite_do_discord",
         "revert_optimization",
-        "revert_all_optimizations",
+        "restaurar_tudo",
         "licenca_estado",
         "licenca_ativar",
         "relatorio_de_suporte",
@@ -3347,6 +3615,12 @@ mod tests {
         "checar_essenciais",
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",
+        "o_que_mudou",
+        "relatorio_da_ultima_partida",
+        "diagnostico_da_partida",
+        "receita_da_partida",
+        "resultado_para_compartilhar",
+        "perfil_do_pc",
         "conferir_o_proprio_trabalho",
         "onde_os_jogos_moram",
         "por_que_o_fps_esta_baixo",
@@ -3368,6 +3642,7 @@ mod tests {
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",
+        "testar_causa_da_travada",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",
@@ -3388,6 +3663,7 @@ mod tests {
         "set_startup_enabled",
         "apply_game_profile",
         "apply_optimization",
+        "refazer_mudanca",
         "optimize_now",
         "provar_o_otimizar",
         "set_max_refresh_rate",

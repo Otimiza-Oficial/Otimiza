@@ -64,7 +64,7 @@
   --aviso: #8a6100;
   --erro: #b42318;
   --borda-forte: rgba(var(--text-rgb), 0.16);
-  --anim-rapida: 0.18s;
+  --anim-rapida: var(--motion-interacao);
 
   /*
    * Os nomes novos no claro: componente novo escreve `--surface` e funciona nos dois temas.
@@ -170,9 +170,15 @@
   --r2: 8px;
   --r3: 10px;
 
-  --dur: 0.18s;
-  --dur-slow: 0.45s;
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion-pressionar: 80ms;
+  --motion-interacao: 120ms;
+  --motion-superficie: 160ms;
+  --motion-contexto: 200ms;
+  --motion-dados: 220ms;
+  --motion-ease: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --dur: var(--motion-interacao);
+  --dur-slow: var(--motion-dados);
+  --ease: var(--motion-ease);
 
   /*
    * O JavaScript zera isto em máquina fraca ou com menos movimento pedido (ver `.sem-animacao`).
@@ -294,6 +300,8 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
   }
 }
 
@@ -718,7 +726,6 @@ button {
   background: var(--accent);
   transform: scaleY(0);
   transform-origin: bottom;
-  will-change: transform;
   transition: transform var(--dur-slow) var(--ease),
     background-color var(--dur-slow) ease;
 }
@@ -727,7 +734,7 @@ button {
  * Só na entrada: recomeçar a cada 2 s pareceria quebrado.
  */
 .core-matrix[data-entrada="true"] i {
-  transition-delay: calc(var(--i, 0) * 14ms);
+  transition-delay: calc(min(var(--i, 0), 4) * 7ms);
 }
 
 .core[data-load="high"] i {
@@ -803,7 +810,7 @@ button {
   stroke-linecap: butt;
   stroke-dasharray: 540;
   stroke-dashoffset: 540;
-  transition: stroke-dashoffset 0.5s ease, stroke 0.5s ease;
+  transition: stroke-dashoffset var(--motion-dados) var(--ease), stroke var(--motion-dados) var(--ease);
 }
 
 .gauge-center {
@@ -888,9 +895,11 @@ button {
 .bar i {
   display: block;
   height: 100%;
-  width: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
   background: var(--accent);
-  transition: width 0.5s ease, background 0.5s ease;
+  transition: transform var(--motion-dados) var(--ease), background-color var(--motion-dados) var(--ease);
 }
 
 .readout-note {
@@ -927,7 +936,7 @@ button {
   letter-spacing: -0.01em;
   text-transform: none;
   cursor: pointer;
-  transition: background 0.18s, box-shadow 0.18s, color 0.18s;
+  transition: background-color var(--dur), box-shadow var(--dur), color var(--dur);
 }
 
 .btn:hover:not(:disabled) {
@@ -1641,6 +1650,35 @@ button {
   margin-top: var(--s1);
 }
 
+/* "O que mudou no seu jogo": partidas, trocas e mudanças do Otimiza, do mais novo para o mais antigo. */
+.linha-do-tempo {
+  list-style: none;
+  margin: var(--s2) 0 0;
+  padding: 0;
+  font-size: var(--t-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.linha-do-tempo li {
+  padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+/* Guardião: nome do ajuste e as duas saídas na mesma linha. */
+#guardiao-lista li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  padding: var(--s1) 0;
+}
+
+.linha-data {
+  color: var(--text-muted);
+  margin-right: var(--s1);
+}
+
 .finding-advice {
   font-family: var(--font-sans);
   font-size: var(--t-label);
@@ -1715,7 +1753,7 @@ button {
   display: block;
   height: 100%;
   background: var(--accent);
-  transition: width 0.5s ease;
+  /* A lista é substituída por leitura: não há estado anterior para interpolar. */
 }
 
 .process-ram {
@@ -1982,9 +2020,11 @@ button {
 .vital-bar i {
   display: block;
   height: 100%;
-  width: 0;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left;
   background: var(--accent);
-  transition: width 0.5s var(--ease), background 0.5s var(--ease);
+  transition: transform var(--motion-dados) var(--ease), background-color var(--motion-dados) var(--ease);
 }
 
 /*
@@ -2165,7 +2205,7 @@ button {
   font-family: var(--font-mono);
   font-size: var(--t-label);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  transition: color var(--dur), border-color var(--dur), background-color var(--dur);
 }
 
 .profile-chip:hover {
@@ -2292,20 +2332,24 @@ button {
   }
 }
 
+@keyframes contexto {
+  from { opacity: 0.65; transform: translateX(calc(var(--motion-direcao, 1) * 5px)); }
+  to { opacity: 1; transform: none; }
+}
+
 .tab-panel:not([hidden]) {
-  animation: surgir 0.26s var(--ease) both;
+  animation: contexto var(--motion-contexto) var(--ease);
 }
 
 /*
- * O teto de 12: uma lista de 40 itens a 22 ms cada viraria espera.
+ * Só os primeiros oito itens: custo limitado mesmo em listas grandes. Sem fila de entrada.
  */
-.optimization,
-.finding,
-.folder,
-.startup,
-.live-log li {
-  animation: surgir 0.3s var(--ease) both;
-  animation-delay: calc(min(var(--i, 0), 12) * 22ms);
+.optimization:nth-child(-n + 8),
+.finding:nth-child(-n + 8),
+.folder:nth-child(-n + 8),
+.startup:nth-child(-n + 8),
+.live-log li:nth-child(-n + 8) {
+  animation: surgir var(--motion-superficie) var(--ease);
 }
 
 .empty {
@@ -2343,11 +2387,11 @@ button {
  * Sobe de zero uma vez só: reiniciar a cada 2 s pareceria quebrado.
  */
 .gauge-fill {
-  transition: stroke-dashoffset 0.5s var(--ease), stroke 0.5s ease;
+  transition: stroke-dashoffset var(--motion-dados) var(--ease), stroke var(--motion-dados) var(--ease);
 }
 
 .gauge[data-entrada="true"] .gauge-fill {
-  transition-duration: 0.9s;
+  transition-duration: var(--motion-dados);
 }
 
 .btn:active,
@@ -2360,7 +2404,7 @@ button {
 .filter,
 .profile-chip {
   transition: color var(--dur), border-color var(--dur),
-    background-color var(--dur), transform 0.08s ease;
+    background-color var(--dur), transform var(--motion-pressionar) var(--ease);
 }
 
 .startup,
@@ -2740,7 +2784,7 @@ button {
   justify-content: center;
   padding-top: 12vh;
   background: rgba(var(--bg-rgb), 0.72);
-  animation: surgir 0.14s var(--ease) both;
+  animation: none;
 }
 
 .comandos[hidden] {
@@ -4081,16 +4125,16 @@ body.janela-cheia {
 }
 
 .chegada-texto > * {
-  animation: chegar 0.7s var(--ease) both;
+  animation: chegar var(--motion-contexto) var(--ease);
 }
 
-.chegada-titulo { animation-delay: 0.1s; }
-.chegada-frase { animation-delay: 0.25s; }
-.chegada-nota { animation-delay: 0.4s; }
-.chegada-botao { animation-delay: 0.55s; }
+.chegada-titulo,
+.chegada-frase,
+.chegada-nota,
+.chegada-botao { animation-delay: 0ms; }
 
 @keyframes chegar {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0.65; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
@@ -5849,8 +5893,8 @@ circle.placa-parafuso {
   opacity: 0.55;
   background: transparent;
   transition:
-    opacity 150ms ease-out,
-    background-color 150ms ease-out;
+    opacity var(--motion-interacao) var(--ease),
+    background-color var(--motion-interacao) var(--ease);
 }
 
 .corpo[data-recolhida="true"] .nav:hover {
@@ -5912,7 +5956,7 @@ circle.placa-parafuso {
   border-radius: 999px;
   background: var(--track);
   cursor: pointer;
-  transition: background-color 160ms ease-out;
+  transition: background-color var(--motion-interacao) var(--ease);
 }
 
 .switch::after {
@@ -5924,8 +5968,8 @@ circle.placa-parafuso {
   border-radius: 50%;
   background: var(--text-tertiary);
   transition:
-    transform 160ms ease-out,
-    background-color 160ms ease-out;
+    transform var(--motion-interacao) var(--ease),
+    background-color var(--motion-interacao) var(--ease);
 }
 
 .switch[aria-checked="true"] {
@@ -5956,9 +6000,9 @@ circle.placa-parafuso {
   font-weight: 500;
   cursor: pointer;
   transition:
-    background-color 150ms ease-out,
-    border-color 150ms ease-out,
-    color 150ms ease-out;
+    background-color var(--motion-interacao) var(--ease),
+    border-color var(--motion-interacao) var(--ease),
+    color var(--motion-interacao) var(--ease);
 }
 
 .btn:hover:not(:disabled) {
@@ -6011,7 +6055,7 @@ input[type="text"],
   color: var(--text);
   font-family: inherit;
   font-size: var(--t-body);
-  transition: border-color 150ms ease-out;
+  transition: border-color var(--motion-interacao) var(--ease);
 }
 
 input::placeholder {
@@ -6034,7 +6078,7 @@ input:focus-visible {
   min-height: 76px;
   padding: var(--s4) 0;
   border-bottom: 1px solid var(--border);
-  transition: background-color 150ms ease-out;
+  transition: background-color var(--motion-interacao) var(--ease);
 }
 
 .linha-ajuste:last-child {
@@ -6103,7 +6147,7 @@ input:focus-visible {
   margin: 0 calc(var(--s3) * -1);
   border-bottom: 1px solid var(--border);
   border-radius: 6px;
-  transition: background-color 150ms ease-out;
+  transition: background-color var(--motion-interacao) var(--ease);
 }
 
 .programa-linha:hover {
@@ -6163,13 +6207,7 @@ input:focus-visible {
 
 .esqueleto {
   border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--surface-2),
-    var(--surface-3),
-    var(--surface-2)
-  );
-  background-size: 200% 100%;
+  background: var(--surface-3);
   animation: esqueleto 1.4s ease-in-out infinite;
 }
 
@@ -6199,9 +6237,7 @@ input:focus-visible {
 }
 
 @keyframes esqueleto {
-  to {
-    background-position: -200% 0;
-  }
+  50% { opacity: 0.5; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6233,8 +6269,8 @@ input:focus-visible {
   text-align: left;
   cursor: pointer;
   transition:
-    background-color 150ms ease-out,
-    border-color 150ms ease-out;
+    background-color var(--motion-interacao) var(--ease),
+    border-color var(--motion-interacao) var(--ease);
 }
 
 .atalho:hover {
@@ -6312,8 +6348,8 @@ input:focus-visible {
   background: var(--surface);
   cursor: pointer;
   transition:
-    border-color 150ms ease-out,
-    background-color 150ms ease-out;
+    border-color var(--motion-interacao) var(--ease),
+    background-color var(--motion-interacao) var(--ease);
 }
 
 .gpu-perfil:hover {
@@ -6353,7 +6389,7 @@ input:focus-visible {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-tertiary);
-  transition: color 150ms ease-out;
+  transition: color var(--motion-interacao) var(--ease);
 }
 
 .gpu-marca:hover:not(:disabled) {
@@ -6684,3 +6720,67 @@ input:focus-visible {
   border-radius: 10px;
   margin: 8px 0 0;
 }
+
+/* Motion compartilhado: estado imediato, deslocamentos curtos, nenhum blur ou spring oscilante. */
+.subpainel:not([hidden]) {
+  animation: contexto var(--motion-superficie) var(--ease);
+}
+
+.btn, .nav, .subnav-item, .subaba, .filter, .profile-chip, .comando,
+.lateral-recolher, .busca-abrir, button[data-vai] {
+  transition: color var(--motion-interacao) var(--ease),
+    background-color var(--motion-interacao) var(--ease),
+    border-color var(--motion-interacao) var(--ease),
+    transform var(--motion-pressionar) var(--ease);
+}
+
+.btn:active:not(:disabled), .filter:active:not(:disabled),
+.profile-chip:active:not(:disabled), .comando:active:not(:disabled),
+button[data-vai]:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled, .filter:disabled, .profile-chip:disabled { transform: none; }
+
+.switch, .switch::after {
+  transition: transform var(--motion-interacao) var(--ease),
+    background-color var(--motion-interacao) var(--ease);
+}
+
+/* O navegador reverte a partir do quadro atual. WebViews antigos degradam para fechamento instantâneo.
+ * hidden/inert são aplicados já no comando: a transição nunca captura clicks nem foco. */
+.modal, .comandos {
+  opacity: 1;
+  transition: opacity var(--motion-superficie) var(--ease),
+    display var(--motion-superficie) allow-discrete;
+}
+.modal[hidden], .comandos[hidden] { opacity: 0; pointer-events: none; }
+.modal-card, .comandos-caixa {
+  opacity: 1;
+  transform: none;
+  transition: transform var(--motion-superficie) var(--ease),
+    opacity var(--motion-superficie) var(--ease);
+}
+.comandos-busca { flex: none; min-height: 48px; }
+.comandos-lista { min-height: 0; overscroll-behavior: contain; }
+.comandos-dica { flex: none; }
+.modal[hidden] .modal-card, .comandos[hidden] .comandos-caixa {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.985);
+}
+@starting-style {
+  .modal:not([hidden]), .comandos:not([hidden]) { opacity: 0; }
+  .modal:not([hidden]) .modal-card, .comandos:not([hidden]) .comandos-caixa {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+
+/* Não gastar frames com indicadores de carregamento numa janela minimizada. */
+:root[data-motion-pausado] *, :root[data-motion-pausado] *::before,
+:root[data-motion-pausado] *::after { animation-play-state: paused !important; }
+
+/* Sem deslocamento nem atrasos residuais, inclusive ao mudar a preferência com o app aberto. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel:not([hidden]), .subpainel:not([hidden]), .chegada-texto > * { animation: none; }
+  .modal-card, .comandos-caixa,
+  .modal[hidden] .modal-card, .comandos[hidden] .comandos-caixa { transform: none; }
+}
+.sem-animacao .modal-card, .sem-animacao .comandos-caixa { transform: none; }

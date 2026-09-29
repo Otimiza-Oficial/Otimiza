@@ -41,6 +41,13 @@ do bot, nessa ordem e só com ordem.
   `quadros` (contagem, para a regra de amostra), `eventos` (tranco, calor, processo, com instante relativo)
   e `versao_do_formato`. Uma função pura `comparavel(a, b) -> Result<(), Motivo>` concentra as regras que
   hoje estão em `portao`, `regressao` e `provaalternada` (mesma fonte, mesmo gerador, mesma config).
+- **Feito (branch `servico-t1`):** T1.1 e T1.2. A revisão achou que filtrar a série automática pela
+  configuração do jogo cegaria o portão: o item vigiado é o próprio perfil gráfico, que muda o arquivo. Por
+  isso a série não passa por `evidencia`; só as provas passam. Ficou aberta a T1.2b.
+  T1.3 feita (eventos só da janela medida, dizendo o que foi lido). A T1.4 virou o guarda
+  `ninguem_compara_contexto_fora_daqui`, dentro da T1.2. T1.2b feita em 28/09/2026 no FiveM do dono (8 rodadas
+  simultâneas): o canal antigo conta 2,00× os quadros do PresentMon. Conserto na 3.2 (main 5f62c80): a série
+  só compara o medidor da medição mais recente, e o portão chama de "sem base" o ajuste que perdeu o "antes".
 - **Dependencies:** nenhuma.
 - **Risks:** migração quebrar histórico antigo. Mitigação: todos os campos novos com `serde(default)` e
   teste de leitura de arquivo da 3.1 e da 3.2.
@@ -61,6 +68,7 @@ do bot, nessa ordem e só com ordem.
 |---|---|---|---|---|---|---|---|---|---|---|
 | T1.1 | Campos novos na medição | Dar identidade e fonte a cada partida | `medicoes.rs` | — | `id`, `fonte`, `quadros`, `configuracao_do_jogo`, `versao_do_formato`, todos `serde(default)` | Ler JSON de 3.1 e 3.2 gravados | Lê tudo, nada zerado | Reverter commit | Baixo | NOW |
 | T1.2 | `comparavel(a, b)` | Uma regra de comparabilidade | novo `modules/evidencia.rs` | T1.1 | Função pura com `Motivo` enum; migrar os casos de `portao`, `regressao`, `provaalternada` | Um teste por motivo; os testes antigos dos três módulos seguem verdes | Três módulos chamam a função | Reverter | Médio | NOW |
+| T1.2b | Os dois medidores na mesma partida | Decidir se a série automática pode misturar PresentMon e canal antigo | script de laboratório, `docs/` | T1.2 | Medir a mesma cena pelos dois canais ao mesmo tempo, várias vezes, e registrar o viés | — | Viés medido e decisão escrita | — | Baixo | NOW |
 | T1.3 | Eventos da partida | Instante do tranco, calor e processo | `medicoes.rs`, `core/travadas.rs` | T1.1 | Lista curta (máx. 50) de eventos com instante relativo | Fixture de sessão com trancos conhecidos | Eventos batem com a fixture | Reverter | Baixo | NOW |
 | T1.4 | Guarda de arquitetura | Ninguém compara fora do contrato | `tests/` | T1.2 | Teste que procura comparação de FPS entre medições fora de `evidencia.rs` | O próprio teste falha se alguém comparar na mão | Guarda verde | Remover o teste | Baixo | NOW |
 
@@ -136,6 +144,10 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** `Identidade` ganha driver de vídeo, versão da BIOS (leitura), monitores e Hz, notebook,
   versão do Otimiza. Linha do tempo = medições (TOP 1) + eventos de identidade (quando algo mudou) +
   changelog. A resposta continua a de `historico.rs`: suspeitos, não causas.
+- **Feito (branch `servico-t1`):** a identidade saiu das medições automáticas que o cliente já tem, e não do
+  benchmark: cada partida grava placa, driver, Windows, BIOS (só lida) e versão do Otimiza. A área Histórico
+  ganhou "O que mudou no seu jogo", com partidas, trocas e mudanças do Otimiza, e um veredito de três estados
+  (caiu / não caiu / poucas partidas). "Poucas partidas" nunca aparece como verde (achado da revisão).
 - **Dependencies:** T1.1.
 - **Risks:** identidade com dado pessoal. Mitigação: nada de nome de usuário, serial ou SID; teste que
   procura esses padrões.
@@ -164,6 +176,10 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** para cada `ChangeRecord` aplicado, uma leitura "o valor atual ainda é o que o Otimiza
   gravou?". Resultado: Intacto, MudouPorFora (com o valor encontrado), NaoLeu. Roda na abertura e depois de
   mudança de build detectada pelo TOP 4. **Nunca restaura sozinho:** mostra e pergunta.
+- **Feito (branch `servico-t1`):** a vistoria relê cada item do catálogo aplicado e avisa na área Otimizar o
+  que não está mais como o Otimiza deixou. "Refazer" é desfazer + aplicar pelo caminho normal: escrever por
+  fora do histórico deixaria mudanças sem volta (achado da revisão). Sem administrador, o que não se lê fica
+  "não conferido"; o plano OTIMIZA fica fora (o próprio Otimiza o troca e ele tem vistoria própria).
 - **Dependencies:** T4.1.
 - **Risks:** restaurar algo que o cliente mudou de propósito. Mitigação: só pergunta; mostra o valor atual e o nosso.
 - **Security Impact:** leitura; a restauração usa o mesmo caminho de aplicação.
@@ -203,6 +219,11 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Success Criteria:** na VM, depois de desinstalar com "sim", nenhuma mudança do Otimiza sobra.
 - **Failure Criteria:** qualquer mudança não relatada; desinstalador travado.
 - **Rollback:** remover o gancho do NSIS; o botão é independente.
+- **Feito (branch `servico-t1`):** T6.1–T6.3. O "Desfazer tudo" passou a cobrir o motor de energia, as
+  regras de núcleos e os modos automáticos, não só o histórico; recusa com mudança pela metade ou prova rodando;
+  histórico ou backup ilegível viram falha com motivo. O desinstalador pergunta, fecha o Otimiza, pede
+  administrador, lê o resultado e só segue sem restaurar se o cliente confirmar. Na atualização (`/UPDATE`) não
+  faz nada. Falta: o teste numa VM limpa, e conferir a ordem modo jogo × motor quando os dois agiram no mesmo jogo.
 - **Priority:** NOW.
 
 | TASK ID | TITLE | PURPOSE | FILES | DEPENDENCIES | IMPLEMENTATION | TEST PLAN | SUCCESS | ROLLBACK | RISK | PRIORITY |
@@ -220,6 +241,9 @@ A ficha está na seção F do `MASTER-PLAN.md`. Plano técnico:
 - **Architecture:** ao fechar o jogo, um resumo curto na janela do Otimiza (não notificação que rouba
   foco): FPS do jogo, 1% piores, trancos com instante, gargalo, calor, diferença para a mediana das
   últimas partidas comparáveis (por `comparavel`).
+- **Feito (branch `servico-t1`):** o cartão "Sua última partida" no Início, montado depois, das janelas já
+  medidas: nada novo roda no jogo, então o orçamento de custo não se aplica a ele. A revisão pegou três frases
+  desonestas (freio contínuo como "não freou", 1% de janela curta, disco contado sobre a lista cortada), corrigidas.
 - **Dependencies:** TOP 1; **orçamento medido** (seção H do plano) antes de ligar por padrão.
 - **Risks:** comparar partida em cena diferente. Mitigação: diz "partidas parecidas" só quando comparável,
   e mostra a dispersão.

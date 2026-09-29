@@ -518,21 +518,26 @@ pub fn trancos_com_disco(
         return None;
     }
 
-    let janela_ticks = (janela_ms / 1000.0 * frequencia as f64) as i64;
-
     let com_disco = trancos_qpc
         .iter()
-        .filter(|tranco| {
-            // Só dentro da janela: leitura de dois segundos depois não descreve o instante do tranco.
-            disco
-                .iter()
-                .filter(|(quando, _)| (*quando - **tranco).abs() <= janela_ticks)
-                .min_by_key(|(quando, _)| (*quando - **tranco).abs())
-                .is_some_and(|(_, pct)| *pct >= ocupado_pct)
-        })
+        .filter(|tranco| tranco_com_disco(**tranco, disco, frequencia, janela_ms, ocupado_pct))
         .count();
 
     Some((com_disco, trancos_qpc.len()))
+}
+
+/// **Pura.** Um tranco só: a leitura de disco mais perto dele, dentro da janela, estava ocupada?
+pub fn tranco_com_disco(tranco: i64, disco: &[(i64, f64)], frequencia: i64, janela_ms: f64, ocupado_pct: f64) -> bool {
+    if frequencia <= 0 {
+        return false;
+    }
+    let janela_ticks = (janela_ms / 1000.0 * frequencia as f64) as i64;
+    // Só dentro da janela: leitura de dois segundos depois não descreve o instante do tranco.
+    disco
+        .iter()
+        .filter(|(quando, _)| (*quando - tranco).abs() <= janela_ticks)
+        .min_by_key(|(quando, _)| (*quando - tranco).abs())
+        .is_some_and(|(_, pct)| *pct >= ocupado_pct)
 }
 
 /// A frequência do contador varia por máquina: tratá-lo como microssegundo daria números plausíveis e errados.

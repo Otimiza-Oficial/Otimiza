@@ -648,3 +648,59 @@ mod tests {
         assert!(!q.is_empty());
     }
 }
+
+/// Laboratório da T1.2b (MASTER-PLAN-TOP10): os dois medidores na MESMA partida, ao mesmo tempo, para saber quanto
+/// o canal antigo difere do PresentMon. A série automática mistura os dois quando o PresentMon falha, e a decisão de
+/// separar ou não depende desse número. Precisa do jogo aberto e do Otimiza rodando como administrador:
+///
+///     cargo test --release --lib dois_medidores -- --ignored --nocapture
+///
+/// `OTIMIZA_LAB_JOGO` troca o começo do nome do processo (padrão `FiveM_`); `OTIMIZA_LAB_RODADAS` o número de rodadas
+/// (padrão 8). Fique parado no mesmo lugar do jogo: os dois começam juntos, mas o PresentMon demora uns segundos para
+/// entregar o primeiro quadro.
+#[cfg(all(test, target_os = "windows"))]
+mod laboratorio {
+    use super::*;
+    use crate::modules::repeticoes;
+    use crate::modules::windows::frames;
+
+    #[test]
+    #[ignore = "laboratório: precisa de um jogo aberto"]
+    fn dois_medidores_na_mesma_partida() {
+        let prefixo = std::env::var("OTIMIZA_LAB_JOGO").unwrap_or_else(|_| "FiveM_".into());
+        let rodadas: usize = std::env::var("OTIMIZA_LAB_RODADAS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
+        let (pid, nome) = frames::encontrar_processo(&prefixo).expect("abra o jogo antes");
+        println!("{nome} (pid {pid}), {rodadas} rodadas de 20 s");
+
+        let (mut fps_diff, mut low_diff) = (Vec::new(), Vec::new());
+        for i in 1..=rodadas {
+            let n = nome.clone();
+            let antigo = std::thread::spawn(move || frames::medir_par(pid, &n, None, 20));
+            let novo = medir_como_antes(pid, &nome, 20);
+            let antigo = antigo.join().expect("a thread do canal antigo não caiu");
+            match (antigo, novo) {
+                (Ok((a, _)), Ok((p, resumo))) => {
+                    let (a, p) = (a.resumo, p.resumo);
+                    println!(
+                        "rodada {i}: canal antigo {:.1} FPS / 1% {:.1} ({} quadros) · PresentMon {:.1} FPS / 1% {:.1} ({} intervalos; {} quadros do jogo, {} gerados)",
+                        a.fps, a.low_1pct, a.frames, p.fps, p.low_1pct, p.frames, resumo.quadros_do_jogo, resumo.quadros_gerados
+                    );
+                    fps_diff.push(a.fps - p.fps);
+                    low_diff.push(a.low_1pct - p.low_1pct);
+                }
+                (a, p) => println!("rodada {i} perdida: antigo {:?} · PresentMon {:?}", a.err(), p.err()),
+            }
+        }
+
+        for (qual, dif) in [("FPS", &fps_diff), ("1% piores", &low_diff)] {
+            match repeticoes::resumir(qual, dif) {
+                Some(r) => println!(
+                    "{qual}: canal antigo − PresentMon = {:+.2} em média (mediana {:+.2}, n = {}, margem 95%: {:?})",
+                    r.media, r.mediana, r.n, r.margem
+                ),
+                None => println!("{qual}: rodadas insuficientes"),
+            }
+        }
+        assert!(!fps_diff.is_empty(), "nenhuma rodada teve os dois medidores");
+    }
+}

@@ -53,6 +53,24 @@ fn ajustar_a_janela_a_tela(janela: &tauri::WebviewWindow) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // O desinstalador chama o próprio programa para restaurar o PC, sem janela (`modules::windows::restaurar`).
+    #[cfg(target_os = "windows")]
+    {
+        use modules::windows::restaurar::{ler_argumentos, pela_linha_de_comando, Pedido};
+        let argumentos: Vec<String> = std::env::args().skip(1).collect();
+        match ler_argumentos(&argumentos) {
+            Pedido::Nenhum => {}
+            Pedido::Restaurar { dados } => {
+                utils::diagnostico::instalar_gancho_de_panico();
+                std::process::exit(pela_linha_de_comando(dados));
+            }
+            Pedido::Invalido(motivo) => {
+                utils::Logger::warn(&format!("argumento recusado: {}", motivo));
+                std::process::exit(64);
+            }
+        }
+    }
+
     utils::diagnostico::instalar_gancho_de_panico();
     utils::diagnostico::abrir_sessao();
     modules::abertura::marcar_inicio();
@@ -152,6 +170,9 @@ pub fn run() {
             commands::exportar_alteracoes,
             commands::salvar_ficha_da_bios,
             commands::cpuset_testar,
+            commands::investigar_travadas,
+            commands::testar_causa_da_travada,
+            commands::devolver_teste_da_travada,
             commands::cpuset_resultados,
             commands::cpuset_esquecer,
             commands::analyze_rbar,
@@ -170,6 +191,8 @@ pub fn run() {
             commands::estado_do_historico,
             commands::convite_do_discord,
             commands::apply_optimization,
+            commands::vistoriar_mudancas,
+            commands::refazer_mudanca,
             commands::placa_de_video,
             commands::memoria_instalada,
             commands::monitores,
@@ -187,13 +210,19 @@ pub fn run() {
             commands::apply_game_profile,
             commands::revert_optimization,
             commands::optimize_now,
-            commands::revert_all_optimizations,
+            commands::restaurar_tudo,
             commands::checar_essenciais,
             commands::religar_essenciais,
             commands::ajustes_do_driver_nvidia,
             commands::aplicar_ajuste_nvidia,
             commands::limitar_fps_nvidia,
             commands::medicoes_automaticas,
+            commands::o_que_mudou,
+            commands::relatorio_da_ultima_partida,
+            commands::diagnostico_da_partida,
+            commands::receita_da_partida,
+            commands::resultado_para_compartilhar,
+            commands::perfil_do_pc,
             commands::conferir_o_proprio_trabalho,
             commands::onde_os_jogos_moram,
             commands::por_que_o_fps_esta_baixo,
@@ -363,6 +392,13 @@ pub fn run() {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::provaalternada::recuperar_na_abertura).await {
                     utils::Logger::info(&format!("prova alternada interrompida: plano do Otimiza reativado na abertura: {:?}", r));
                 }
+                // Teste da travada interrompido (ou mantido e o Otimiza fechou antes do jogo): devolve a prioridade.
+                match tokio::task::spawn_blocking(modules::windows::investigacao::recuperar_na_abertura).await {
+                    Ok(Ok(Some(frase))) => utils::Logger::info(&format!("teste da travada, na abertura: {}", frase)),
+                    Ok(Ok(None)) => {}
+                    Ok(Err(e)) => utils::Logger::warn(&format!("teste da travada, na abertura: {}", e)),
+                    Err(e) => utils::Logger::warn(&format!("teste da travada: a devolução na abertura caiu: {}", e)),
+                }
             });
 
             // Olha a cada três segundos só os executáveis com perfil salvo; só age com o modo ligado e elevado.
@@ -447,7 +483,10 @@ pub fn run() {
 
                         // Uma partida meio com um plano, meio com outro, não vai para o histórico. No modo seguro, nada
                         // automático roda.
-                        if modules::provaalternada::em_andamento() || utils::diagnostico::modo_seguro() {
+                        if modules::provaalternada::em_andamento()
+                            || modules::windows::investigacao::em_andamento()
+                            || utils::diagnostico::modo_seguro()
+                        {
                             continue;
                         }
 
@@ -499,6 +538,8 @@ pub fn run() {
                             let mut volta: u32 = 0;
                             // Carimbada no mesmo relógio dos quadros, para cruzar com cada tranco.
                             let mut disco: Vec<(i64, f64)> = Vec::new();
+                            // Os motivos de freio, no mesmo relógio: viram eventos da partida (T1.3).
+                            let mut freios: Vec<(i64, u64)> = Vec::new();
 
                             // 200 ms: a janela de correlação é de 300 ms para cada lado.
                             while !parar_placa.load(Ordering::Relaxed) {
@@ -512,6 +553,11 @@ pub fn run() {
                                 if let Some(amostra) =
                                     modules::windows::nvml::amostrar_com_motivos(volta % 5 == 1)
                                 {
+                                    if let (Some(quando), Some(motivos)) =
+                                        (modules::windows::frames::agora_qpc(), amostra.motivos)
+                                    {
+                                        freios.push((quando, motivos));
+                                    }
                                     sensores.push(amostra);
                                 }
                                 if let (Some(quando), Some(pct)) = (
@@ -526,7 +572,7 @@ pub fn run() {
                             let media = (!gpu.is_empty())
                                 .then(|| gpu.iter().sum::<f64>() / gpu.len() as f64);
 
-                            Some((media, disco, crate::core::sensores::resumir(&sensores, limite_w)))
+                            Some((media, disco, freios, crate::core::sensores::resumir(&sensores, limite_w)))
                         });
 
                         // O estado do governador precisa ser o mesmo no começo e no fim (`modules::portao`).
@@ -559,6 +605,7 @@ pub fn run() {
                         })
                         .await;
 
+                        let fim_da_medicao = modules::windows::frames::agora_qpc();
                         parar.store(true, std::sync::atomic::Ordering::Relaxed);
                         let governador_na_medicao = modules::portao::marcar(
                             governador_no_inicio,
@@ -571,10 +618,11 @@ pub fn run() {
                                 modules::windows::motorenergia::resumir_cpu(&amostras)
                             })
                             .and_then(|resumo| resumo.uso_medio_pct);
-                        let (gpu_uso_pct, disco_da_janela, sensores_da_placa) = match placa.join().ok().flatten() {
-                            Some((media, disco, sensores)) => (media, disco, sensores),
-                            None => (None, Vec::new(), None),
-                        };
+                        let (gpu_uso_pct, disco_da_janela, freios_da_janela, sensores_da_placa) =
+                            match placa.join().ok().flatten() {
+                                Some((media, disco, freios, sensores)) => (media, disco, freios, sensores),
+                                None => (None, Vec::new(), Vec::new(), None),
+                            };
 
                         match medido {
                             Ok(Ok((crua, presentmon))) => {
@@ -600,6 +648,22 @@ pub fn run() {
                                 let trancos_com_disco_pct = correlacao
                                     .map(|(com, total)| com as f64 / total as f64 * 100.0);
 
+                                // A mesma conta nos dois canais: os intervalos de que saíram o 1% e o 0,1% piores.
+                                let quadros = Some(crua.intervalos_ms.len());
+                                let configuracao_do_jogo =
+                                    modules::windows::configjogo::impressao_da_configuracao(&m.process);
+                                // A janela é a que mediu de fato: termina quando a medição voltou e dura o que ela
+                                // durou. Uma tentativa do PresentMon que falhou antes do canal antigo fica fora.
+                                let eventos = match (fim_da_medicao, modules::windows::frames::frequencia_qpc()) {
+                                    (Some(fim), Some(hz)) => medicoes::eventos_da_partida(
+                                        (fim - (m.seconds * hz as f64) as i64, fim),
+                                        hz,
+                                        &crua.trancos_qpc,
+                                        &disco_da_janela,
+                                        &freios_da_janela,
+                                    ),
+                                    _ => None,
+                                };
                                 let registro = MedicaoAutomatica {
                                     jogo: m.process,
                                     quando: agora,
@@ -610,10 +674,7 @@ pub fn run() {
                                     placa: sensores_da_placa,
                                     confiavel: m.detalhe_confiavel,
                                     mudancas_aplicadas,
-                                    ambiente: Some(modules::deriva::Ambiente {
-                                        driver: core::telemetria::versao_do_driver(),
-                                        windows: core::telemetria::build_do_windows(),
-                                    }),
+                                    ambiente: Some(modules::deriva::Ambiente::agora()),
                                     frametime_medio_ms: medio,
                                     frametime_p95_ms: p95,
                                     frametime_p99_ms: p99,
@@ -624,6 +685,10 @@ pub fn run() {
                                     governador: governador_na_medicao,
                                     geracao: Some(medicoes::geracao_agora(presentmon.as_ref())),
                                     presentmon,
+                                    quadros,
+                                    configuracao_do_jogo,
+                                    versao_do_formato: medicoes::FORMATO_DA_MEDICAO,
+                                    eventos,
                                 };
 
                                 match medicoes::registrar(registro) {

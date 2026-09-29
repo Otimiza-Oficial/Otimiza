@@ -20,6 +20,12 @@ const PROTEGIDOS: &[&str] = &[
     "pc-optimizer", "otimiza",
 ];
 
+/// Anticheats pelo começo do nome (as versões mudam o sufixo): Tencent ACE, EA, PunkBuster, GameGuard, XIGNCODE,
+/// miHoYo, EQU8, nProtect. Mais qualquer nome com "anticheat".
+const PREFIXOS_PROTEGIDOS: &[&str] = &[
+    "sguard", "ace-", "eaanticheat", "pnkbstr", "gamemon", "xhunter", "mhyprot", "equ8", "gameguard", "npggnt",
+];
+
 #[derive(Debug, Clone)]
 pub struct Candidato {
     pub pid: u32,
@@ -32,6 +38,8 @@ pub fn protegido(nome: &str) -> bool {
     let n = nome.to_lowercase();
     let n = n.trim_end_matches(".exe");
     PROTEGIDOS.iter().any(|p| n == *p || n.starts_with(&format!("{}_", p)) || n.starts_with(&format!("{} ", p)) || (p.len() >= 5 && n.starts_with(p)))
+        || PREFIXOS_PROTEGIDOS.iter().any(|p| n.starts_with(p))
+        || n.contains("anticheat")
 }
 
 /// O FiveM roda em vários processos: fica de fora tudo da pasta e do prefixo de nome do jogo.
@@ -122,6 +130,12 @@ fn arquivo() -> Option<PathBuf> {
 
 fn gravar(lista: &[Acalmado]) -> Result<(), String> {
     let a = arquivo().ok_or("APPDATA ausente")?;
+    gravar_em(&a, lista)
+}
+
+/// A mesma anotação num arquivo escolhido (o teste ativo da travada tem a dele: não mistura com o modo jogo). Lista
+/// vazia apaga o arquivo.
+pub fn gravar_em(a: &Path, lista: &[Acalmado]) -> Result<(), String> {
     let resultado = if lista.is_empty() {
         match std::fs::remove_file(&a) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
@@ -131,7 +145,7 @@ fn gravar(lista: &[Acalmado]) -> Result<(), String> {
         if let Some(p) = a.parent() {
             let _ = std::fs::create_dir_all(p);
         }
-        serde_json::to_string(lista).map_err(|e| e.to_string()).and_then(|json| std::fs::write(&a, json).map_err(|e| e.to_string()))
+        serde_json::to_string(lista).map_err(|e| e.to_string()).and_then(|json| std::fs::write(a, json).map_err(|e| e.to_string()))
     };
     if let Err(e) = &resultado {
         crate::utils::Logger::warn(&format!("governador: não gravei a lista do que está acalmado: {}", e));
@@ -142,11 +156,22 @@ fn gravar(lista: &[Acalmado]) -> Result<(), String> {
 /// Existe e não se lê é ERRO, não "nada acalmado".
 fn ler() -> Result<Vec<Acalmado>, String> {
     let Some(a) = arquivo() else { return Ok(Vec::new()) };
-    match std::fs::read_to_string(&a) {
-        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("governador.json ilegível: {}", e)),
+    ler_de(&a)
+}
+
+/// Existe e não se lê é ERRO, não "nada acalmado".
+pub fn ler_de(a: &Path) -> Result<Vec<Acalmado>, String> {
+    let nome = a.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    match std::fs::read_to_string(a) {
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{} ilegível: {}", nome, e)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
-        Err(e) => Err(format!("governador.json: {}", e)),
+        Err(e) => Err(format!("{}: {}", nome, e)),
     }
+}
+
+/// Os nomes que o modo jogo está acalmando agora (pela anotação dele).
+pub fn acalmados_pelo_modo_jogo() -> Result<Vec<String>, String> {
+    Ok(ler()?.into_iter().map(|a| a.nome).collect())
 }
 
 #[cfg(windows)]
@@ -358,6 +383,11 @@ impl Governador {
             }
             let Some(p) = s.process(sysinfo::Pid::from_u32(pid)) else { continue };
             let nome = p.name().to_string_lossy().to_string();
+            // Durante o teste da travada, e com o programa que ele manteve: acalmar por cima gravaria como "antes" o
+            // estado do próprio teste, e o programa ficaria em prioridade baixa para sempre.
+            if super::investigacao::reservado_pelo_teste(&nome) {
+                continue;
+            }
             let novo_aviso = !self.avisados.contains(&pid);
             if self.modo == Modo::Comparar {
                 self.viu_candidatos = true;
@@ -410,6 +440,26 @@ impl Governador {
         self.modo = Modo::Parado;
         self.devolver_tudo()
     }
+}
+
+/// Acalma UM processo e devolve o registro para desfazer (com o horário de início, que confere que é o mesmo
+/// processo na volta). `Err`: o código do Windows (5 = acesso negado), ou 0 quando o processo já não existe.
+#[cfg(windows)]
+pub fn acalmar_um(pid: u32) -> Result<Acalmado, u32> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut s = System::new();
+    let alvo = sysinfo::Pid::from_u32(pid);
+    s.refresh_processes_specifics(ProcessesToUpdate::Some(&[alvo]), true, ProcessRefreshKind::nothing());
+    let p = s.process(alvo).ok_or(0u32)?;
+    let (nome, inicio) = (p.name().to_string_lossy().to_string(), p.start_time());
+    let (prioridade_anterior, ecoqos) = sys::acalmar(pid)?;
+    Ok(Acalmado { pid, nome, inicio, prioridade_anterior, ecoqos })
+}
+
+/// Devolve a lista (só a quem ainda é o mesmo processo). Quem falhar volta em `falharam`.
+#[cfg(windows)]
+pub fn devolver_estes(lista: &[Acalmado]) -> Devolucao {
+    devolver_lista(lista)
 }
 
 #[cfg(windows)]
@@ -556,6 +606,15 @@ mod testes {
 
     fn c(pid: u32, nome: &str, caminho: &str, uso: f64) -> Candidato {
         Candidato { pid, nome: nome.into(), caminho: Some(PathBuf::from(caminho)), uso }
+    }
+
+    #[test]
+    fn anticheats_pelo_prefixo_ficam_protegidos() {
+        for nome in ["SGuard64.exe", "SGuardSvc64.exe", "ACE-Tray.exe", "EAAntiCheat.GameService.exe", "PnkBstrA.exe", "GameMon64.exe", "xhunter1.sys", "mhyprot2.exe", "EQU8_x64.exe", "AlgumAntiCheat.exe"] {
+            assert!(protegido(nome), "{}", nome);
+        }
+        assert!(!protegido("OneDrive.exe"));
+        assert!(!protegido("acessorio.exe"), "\"ace-\" é prefixo com hífen");
     }
 
     #[test]

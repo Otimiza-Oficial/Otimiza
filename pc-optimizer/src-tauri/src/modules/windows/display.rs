@@ -47,7 +47,7 @@ pub struct DisplayReport {
 }
 
 /// Alguns monitores anunciam 59 e 60 como modos distintos.
-const DIFERENCA_QUE_IMPORTA: u32 = 15;
+pub const DIFERENCA_QUE_IMPORTA: u32 = 15;
 
 /// `EnumDisplayDevicesW` dá o nome do ADAPTADOR, igual para todos os monitores dele; o nome real está na EDID.
 /// Falhar aqui não é grave: o do adaptador fica de reserva.
@@ -71,6 +71,17 @@ fn nomes_comerciais() -> Vec<String> {
 
 #[cfg(target_os = "windows")]
 pub fn monitores() -> Vec<Monitor> {
+    monitores_com(true)
+}
+
+/// Sem o nome comercial (que sai do WMI pelo PowerShell): para quem só quer a taxa.
+#[cfg(target_os = "windows")]
+pub fn monitores_sem_nomes() -> Vec<Monitor> {
+    monitores_com(false)
+}
+
+#[cfg(target_os = "windows")]
+fn monitores_com(com_nomes: bool) -> Vec<Monitor> {
     use windows_sys::Win32::Graphics::Gdi::{
         EnumDisplayDevicesW, EnumDisplaySettingsExW, DEVMODEW, DISPLAY_DEVICEW,
         DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICE_MIRRORING_DRIVER,
@@ -82,7 +93,7 @@ pub fn monitores() -> Vec<Monitor> {
         String::from_utf16_lossy(&bruto[..fim])
     }
 
-    let comerciais = nomes_comerciais();
+    let comerciais = if com_nomes { nomes_comerciais() } else { Vec::new() };
     let mut encontrados = Vec::new();
 
     unsafe {

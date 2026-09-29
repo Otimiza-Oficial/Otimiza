@@ -55,10 +55,19 @@ export class Esfera {
   private giro = 0;
 
   private quadro: number | null = null;
+  private visivel = false;
+  private readonly observador: IntersectionObserver;
+  private readonly aoMudarVisibilidade = () => this.ligar();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d");
     this.semearPara(8);
+    this.observador = new IntersectionObserver(([entrada]) => {
+      this.visivel = entrada.isIntersecting;
+      this.ligar();
+    });
+    this.observador.observe(canvas);
+    document.addEventListener("visibilitychange", this.aoMudarVisibilidade);
   }
 
   private semearPara(nucleos: number) {
@@ -142,6 +151,7 @@ export class Esfera {
 
   ligar() {
     this.parar();
+    if (!this.visivel || document.hidden) return;
 
     const parado = document.body.classList.contains("sem-animacao")
       || Number(getComputedStyle(document.body).getPropertyValue("--anim") || 1) === 0;
@@ -165,7 +175,13 @@ export class Esfera {
   }
 
   redesenhar() {
-    if (this.quadro === null) this.desenhar(false);
+    if (this.quadro === null && this.visivel && !document.hidden) this.desenhar(false);
+  }
+
+  destruir() {
+    this.parar();
+    this.observador.disconnect();
+    document.removeEventListener("visibilitychange", this.aoMudarVisibilidade);
   }
 }
 

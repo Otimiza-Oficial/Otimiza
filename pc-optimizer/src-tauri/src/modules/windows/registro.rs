@@ -268,6 +268,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         refaz_sozinho: false,
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
+    Alteracao {
+        id: "teste_da_travada",
+        titulo: "Teste da causa da travada",
+        modulo: "investigacao",
+        o_que_muda: "Só quando a pessoa pede, e só para o programa que a investigação apontou: ele passa para prioridade baixa e modo econômico em janelas de 30 s alternadas com o normal, por até 12 minutos, com o jogo aberto. Nada é fechado nem congelado, e o jogo não é tocado. Fica assim depois do teste só se as travadas caíram 30% ou mais e o FPS médio, medido em janelas vizinhas, não caiu mais de 5%; e só até o jogo fechar.",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Volta sozinho ao fim de cada olhada do teste, quando o jogo fecha, em \"Devolver agora\", no \"Restaurar meu PC\" e na abertura seguinte do Otimiza (cada troca é anotada em disco antes da próxima).",
+    },
 ];
 
 /// Módulos que escrevem, mas NÃO no computador do cliente — dados do próprio
@@ -275,6 +286,7 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
 /// Cada um com o motivo, para a trava não virar uma lista que ninguém lê.
 pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
     ("afinidade", "põe o processo do jogo em alguns núcleos; a alteração está registrada como auto_cpu_set, que é o único caminho que a usa com medição"),
+    ("restaurar", "só DESFAZ: chama o desfazer de cada peça registrada (histórico, motor de energia, núcleos, modos automáticos) e grava o resultado para o desinstalador em dados do Otimiza"),
     ("suspend", "só RETOMA programa que versão antiga suspendeu; o produto não congela mais nada"),
     ("governador", "muda prioridade em memória e volta quando o jogo fecha (registrado como modo jogo)"),
     ("jogos", "cache da biblioteca de jogos, em dados do Otimiza"),

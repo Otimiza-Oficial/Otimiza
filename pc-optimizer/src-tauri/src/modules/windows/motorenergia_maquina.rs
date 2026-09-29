@@ -206,6 +206,21 @@ pub struct Backup {
     pub valores: Vec<ValorGuardado>,
 }
 
+/// `Ok(false)` sem backup, `Ok(true)` com backup legível, `Err` com o arquivo lá e ilegível: "restaurar tudo" não
+/// pode confundir o último com "o motor nunca mexeu".
+pub fn estado_do_backup() -> Result<bool, String> {
+    match std::fs::read_to_string(pasta().join("backup.json")) {
+        Ok(t) => serde_json::from_str::<Backup>(&t).map(|_| true).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// O plano de energia OTIMIZA ainda existe no Windows (a conferência final de "restaurar tudo").
+pub fn sobrou_o_plano_otimiza() -> Result<bool, String> {
+    plano_otimiza().map(|g| g.is_some())
+}
+
 pub fn ler_backup() -> Option<Backup> {
     std::fs::read_to_string(pasta().join("backup.json")).ok().and_then(|t| serde_json::from_str(&t).ok())
 }

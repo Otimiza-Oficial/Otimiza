@@ -7,10 +7,71 @@ use serde::{Deserialize, Serialize};
 use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
 
+/// O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
+/// depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Ambiente {
     pub driver: Option<String>,
     pub windows: Option<String>,
+    /// Nome da placa de vídeo principal: trocar de placa explica qualquer salto.
+    #[serde(default)]
+    pub placa: Option<String>,
+    /// Versão do firmware, só lida.
+    #[serde(default)]
+    pub bios: Option<String>,
+    /// Versão do Otimiza que mediu: uma versão nova pode medir ou agir diferente.
+    #[serde(default)]
+    pub otimiza: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Campo {
+    Driver,
+    Windows,
+    Placa,
+    Bios,
+    Otimiza,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Troca {
+    pub campo: Campo,
+    pub de: String,
+    pub para: String,
+}
+
+impl Ambiente {
+    /// **Pura.** O que trocou de uma medição para a outra. Só conta com os DOIS lados lidos: medição antiga sem o
+    /// campo não é "trocou".
+    pub fn trocas(&self, depois: &Ambiente) -> Vec<Troca> {
+        let pares = [
+            (Campo::Driver, &self.driver, &depois.driver),
+            (Campo::Windows, &self.windows, &depois.windows),
+            (Campo::Placa, &self.placa, &depois.placa),
+            (Campo::Bios, &self.bios, &depois.bios),
+            (Campo::Otimiza, &self.otimiza, &depois.otimiza),
+        ];
+        pares
+            .into_iter()
+            .filter_map(|(campo, a, b)| match (a, b) {
+                (Some(a), Some(b)) if a != b => Some(Troca { campo, de: a.clone(), para: b.clone() }),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Lido agora, para a medição automática. Fora da partida mais pesada: DXGI e registro, sem PowerShell.
+    #[cfg(windows)]
+    pub fn agora() -> Ambiente {
+        let placa = crate::core::telemetria::placa_principal();
+        Ambiente {
+            driver: placa.as_ref().map(|(_, v)| v.clone()),
+            windows: crate::core::telemetria::build_do_windows(),
+            placa: placa.map(|(n, _)| n),
+            bios: crate::core::telemetria::versao_da_bios(),
+            otimiza: Some(env!("CARGO_PKG_VERSION").to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -33,6 +94,8 @@ pub struct Deriva {
 }
 
 const MINIMO: usize = 3;
+/// Com menos partidas comparáveis que isto, `procurar_no_jogo` devolve `None` sem ter julgado nada.
+pub const PARTIDAS_PARA_JULGAR: usize = MINIMO * 2;
 const MAXIMO: usize = 8;
 const QUEDA_MINIMA_PCT: f64 = 5.0;
 
@@ -134,7 +197,11 @@ mod testes {
             governador: None,
             geracao: None,
             presentmon: None,
-            ambiente: Some(Ambiente { driver: Some(driver.into()), windows: Some("19045.1".into()) }),
+            quadros: None,
+            configuracao_do_jogo: None,
+            versao_do_formato: 0,
+            eventos: None,
+            ambiente: Some(Ambiente { driver: Some(driver.into()), windows: Some("19045.1".into()), ..Default::default() }),
         }
     }
 

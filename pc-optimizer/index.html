@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Otimiza — Console de Desempenho</title>
     <script type="module" src="/src/main.ts" defer></script>
+    <script type="module" src="/src/travadas.ts" defer></script>
 
     <!--
       O tema antes da primeira pintura: síncrono no <head> (o resto carrega com defer, e o app piscaria branco).
@@ -449,6 +450,55 @@
               <button type="button" class="btn btn-primary" id="vi-otimizar">Otimizar e provar</button>
               <p class="veredito-prova" id="vi-prova"></p>
             </div>
+          </section>
+
+          <!-- Perfil do PC (MASTER-PLAN, item 10): o que esta máquina pode esperar, antes de otimizar. Some ao dispensar. -->
+          <section class="panel" id="perfil-pc" hidden>
+            <div class="panel-head">
+              <h2>O que esperar deste PC</h2>
+              <button type="button" class="btn" id="perfil-pc-ok">Entendi</button>
+            </div>
+            <p class="lead" id="perfil-pc-resumo"></p>
+            <ul class="linha-do-tempo" id="perfil-pc-lista"></ul>
+            <p class="hint" id="perfil-pc-nota"></p>
+          </section>
+
+          <!-- Relatório da partida (MASTER-PLAN, item 7): as janelas já medidas, juntas. Nada a mais roda no jogo. -->
+          <section class="panel" id="partida" hidden>
+            <div class="panel-head">
+              <h2>Sua última partida</h2>
+              <span class="panel-tag" id="partida-tag">—</span>
+            </div>
+            <ul class="linha-do-tempo" id="partida-lista"></ul>
+            <p class="hint" id="partida-nota"></p>
+          </section>
+
+          <!-- Diagnóstico da partida (MASTER-PLAN, item 2): no máximo três causas, cada uma com o número que a sustenta. -->
+          <section class="panel" id="doctor" hidden>
+            <div class="panel-head">
+              <h2>Por que seu jogo roda assim</h2>
+              <span class="panel-tag" id="doctor-tag">—</span>
+            </div>
+            <div id="doctor-causas"></div>
+            <p class="hint" id="doctor-lacunas"></p>
+          </section>
+
+          <!-- Por que o jogo trava (PIP, motor V2): cada suspeito contra a taxa de base dele; teste ativo dirigido. -->
+          <section class="panel" id="travadas">
+            <div class="panel-head">
+              <h2>Por que o jogo trava</h2>
+              <span class="panel-tag" id="travadas-tag">—</span>
+            </div>
+            <p class="lead">
+              Com o jogo aberto, numa partida, o Otimiza mede 60 s de quadros e do que a máquina fazia no mesmo
+              relógio, e procura o que aparece <strong>mais nas travadas do que fora delas</strong>. Não mexe em nada.
+            </p>
+            <div class="row-actions">
+              <button id="travadas-investigar" class="btn btn-primary" data-custo="~60 s">Investigar travadas</button>
+            </div>
+            <p id="travadas-status" class="status"></p>
+            <div id="travadas-resultado" class="resultado" data-vazio="Nenhuma investigação feita ainda."></div>
+            <div id="travadas-teste" hidden></div>
           </section>
 
           <p class="secao-rotulo">Monitores ao vivo</p>
@@ -1048,6 +1098,13 @@
                 <p id="aposentados-status" class="status"></p>
               </div>
 
+              <!-- Guardião (MASTER-PLAN, item 5): o que o histórico diz aplicado e a máquina já não tem. -->
+              <div id="guardiao" class="resultado" hidden>
+                <p id="guardiao-texto"></p>
+                <ul id="guardiao-lista" class="linha-do-tempo"></ul>
+                <p id="guardiao-status" class="status"></p>
+              </div>
+
               <div id="optimization-list" class="optimization-list">
                 <p class="empty carregando">Lendo o estado da máquina…</p>
               </div>
@@ -1519,6 +1576,7 @@
 
             <div class="row-actions">
               <button id="alternada-provar" class="btn btn-primary" data-custo="~8 min">Provar com o jogo aberto</button>
+              <button id="alternada-compartilhar" class="btn" type="button">Copiar resultado para compartilhar</button>
             </div>
 
             <p id="alternada-status" class="status"></p>
@@ -2130,6 +2188,28 @@
             </summary>
             <div id="o-que-altera"></div>
           </details>
+
+          <!--
+            Das partidas que o Otimiza já mede sozinho: não pede benchmark. Mostra junto, não conclui: queda só com o
+            critério da deriva (MASTER-PLAN, item 4).
+          -->
+          <section class="panel" id="o-que-mudou">
+            <div class="panel-head">
+              <h2>O que mudou no seu jogo</h2>
+              <span class="panel-tag" id="o-que-mudou-tag">—</span>
+            </div>
+            <p class="lead">
+              As partidas medidas de cada jogo, com o que trocou em volta da máquina (driver, Windows, placa, BIOS,
+              versão do Otimiza) e o que o Otimiza mudou no meio.
+            </p>
+            <p class="hint">
+              Estar no mesmo período não prova que foi a causa. A queda só é dita quando as partidas de antes e de
+              depois de uma troca passam da margem de erro.
+            </p>
+            <button id="o-que-mudou-ler" class="btn" data-custo="instantâneo">Ver o que mudou</button>
+            <p id="o-que-mudou-status" class="status"></p>
+            <div id="o-que-mudou-result" class="resultado" data-vazio="Ainda não há partida medida. Com a medição automática ligada, jogue uns minutos e volte aqui."></div>
+          </section>
 
           <!--
             Por último porque precisa de mais de uma visita para ter o que dizer. As mudanças listadas só COINCIDEM com a

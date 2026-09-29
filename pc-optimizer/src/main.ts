@@ -9,6 +9,7 @@ import { carregarMotorDeEnergia } from "./energia";
 import { carregarAbaBios, lerPassoAPassoDaBios } from "./bios";
 import { carregarMapaDeDesempenho } from "./mapa";
 import { ligarProntidao } from "./prontidao";
+import { abrirOverlay, fecharOverlay, ligarMotion } from "./motion";
 
 type Verdict = "Improved" | "Worsened" | "NoMeasurableChange" | "TooNoisyToJudge";
 type State = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable" | "Unknown";
@@ -825,6 +826,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // A do painel gira (o giro carrega o uso de CPU); as grandes não: informam pela erosão, redesenhadas uma vez por
   // medição, sem laço de sessenta quadros na máquina fraca.
   esfera = new Esfera(element<HTMLCanvasElement>("veredito-esfera"));
+  window.addEventListener("pagehide", () => esfera?.destruir(), { once: true });
 
   // `dissolve`: para que lado a imagem some no preto, na direção do texto.
   pilaresDoPortao = new Pilares(element<HTMLCanvasElement>("portao-pilares"));
@@ -840,6 +842,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   wireControls();
+  const desligarMotion = ligarMotion();
+  window.addEventListener("pagehide", desligarMotion, { once: true });
   requestAnimationFrame(() =>
     setTimeout(() => void invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {}), 0)
   );
@@ -871,6 +875,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     void carregarMedicoesAutomaticas();
     // Conferir a cada medição faz o aviso aparecer DURANTE a sessão em que o jogo piorou.
     void conferirOProprioTrabalho();
+    void carregarRelatorioDaPartida();
+    void carregarDiagnosticoDaPartida();
   });
 
   element("regressao-ver").addEventListener("click", () => {
@@ -919,7 +925,7 @@ window.addEventListener("DOMContentLoaded", async () => {
  * coisa cortada: engasgar no PC que ele deveria consertar desmente o produto.
  */
 async function ajustarMovimento() {
-  const sistemaPedeCalma = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const movimento = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   let maquinaFraca = false;
   let maquinaApertada = false;
@@ -936,17 +942,19 @@ async function ajustarMovimento() {
     // Sem perfil, anima.
   }
 
-  const parado = sistemaPedeCalma || maquinaFraca;
-  document.body.classList.toggle("sem-animacao", parado);
-
-  // Só a esfera tem laço para ligar; os pilares são desenhados por medição.
-  esfera?.ligar();
-
-  // O fundo divide a duração da animação por este número: 0,35 transforma 90 s em 257 s.
-  document.documentElement.style.setProperty(
-    "--anim",
-    parado ? "0" : maquinaApertada ? "0.35" : "1"
-  );
+  const aplicar = () => {
+    const parado = movimento.matches || maquinaFraca;
+    document.body.classList.toggle("sem-animacao", parado);
+    document.documentElement.style.setProperty(
+      "--anim",
+      parado ? "0" : maquinaApertada ? "0.35" : "1"
+    );
+    // Primeiro aplica a preferência; só então decide se o canvas deve voltar a rodar.
+    esfera?.ligar();
+  };
+  aplicar();
+  movimento.addEventListener("change", aplicar);
+  window.addEventListener("pagehide", () => movimento.removeEventListener("change", aplicar), { once: true });
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -1047,8 +1055,16 @@ function areaDa(tela: string): string {
 /** Sub-abas da área da tela aberta; some nas áreas de uma tela só. */
 function desenharSubnav(tela: string) {
   const barra = element("subnav");
-  const telas = AREAS[areaDa(tela)]?.telas ?? [];
+  const area = areaDa(tela);
+  const telas = AREAS[area]?.telas ?? [];
   barra.hidden = telas.length === 0;
+  if (barra.dataset.area === area) {
+    barra.querySelectorAll<HTMLButtonElement>("[data-subtela]").forEach(botao => {
+      botao.setAttribute("aria-selected", String(botao.dataset.subtela === tela));
+    });
+    return;
+  }
+  barra.dataset.area = area;
   barra.innerHTML = telas
     .map(
       ([id, rotulo]) =>
@@ -1074,6 +1090,12 @@ function sincronizarCabecalho(item: HTMLElement, name: string) {
 }
 
 function showTab(name: string) {
+  const destino = document.getElementById(`tab-${name}`);
+  if (!destino) return;
+  const atual = document.querySelector<HTMLElement>(".tab-panel:not([hidden])");
+  const paineis = [...document.querySelectorAll<HTMLElement>(".tab-panel")];
+  // Uma única superfície entra, sem atrasar a troca nem manter a anterior interativa.
+  destino.style.setProperty("--motion-direcao", atual && paineis.indexOf(destino) < paineis.indexOf(atual) ? "-1" : "1");
   if (name === "energia") {
     void carregarMotorDeEnergia({ pedirAdmin: askForAdmin });
   }
@@ -2174,6 +2196,107 @@ interface HistoricoNaTela {
   regressoes: RegressaoNaTela[];
 }
 
+type CampoDaTroca = "Driver" | "Windows" | "Placa" | "Bios" | "Otimiza";
+type MarcoDaLinha =
+  | { tipo: "Partida"; quando: number; fps: number; low_1pct: number; fonte: "PresentMon" | "CanalAntigo"; comparavel: boolean }
+  | { tipo: "Troca"; quando: number; troca: { campo: CampoDaTroca; de: string; para: string } }
+  | { tipo: "Otimiza"; quando: number; nome: string };
+interface LinhaDoJogo {
+  jogo: string;
+  marcos: MarcoDaLinha[];
+  julgamento:
+    | {
+        estado: "Caiu";
+        queda: {
+          mudou: { tipo: "Driver" | "Windows"; de: string; para: string } | { tipo: "Nada" };
+          fps_antes: number;
+          fps_depois: number;
+          queda_pct: number;
+          partidas_antes: number;
+          partidas_depois: number;
+        };
+      }
+    | { estado: "NaoCaiu" }
+    | { estado: "PoucasPartidas"; comparaveis: number; precisa: number };
+  partidas: number;
+  otimiza_antes_da_primeira: number;
+}
+
+const NOME_DO_CAMPO: Record<CampoDaTroca, string> = {
+  Driver: "Driver de vídeo",
+  Windows: "Windows",
+  Placa: "Placa de vídeo",
+  Bios: "BIOS",
+  Otimiza: "Versão do Otimiza",
+};
+
+const MARCOS_NA_TELA = 15;
+
+function desenharLinhaDoJogo(l: LinhaDoJogo, i: number): string {
+  const numero = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+  const data = (q: number) => new Date(q * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const j = l.julgamento;
+  let veredito: string;
+  if (j.estado === "Caiu") {
+    const q = j.queda;
+    const onde =
+      q.mudou.tipo === "Nada"
+        ? "nas últimas partidas contra as anteriores"
+        : `antes e depois da troca de ${q.mudou.tipo === "Driver" ? "driver de vídeo" : "Windows"} (${escapeHtml(q.mudou.de)} → ${escapeHtml(q.mudou.para)})`;
+    veredito = `O FPS médio caiu ${numero(q.queda_pct)}%, de ${numero(q.fps_antes)} para ${numero(q.fps_depois)}, ${onde}: ${q.partidas_antes} partidas antes, ${q.partidas_depois} depois.`;
+  } else if (j.estado === "NaoCaiu") {
+    veredito = "O FPS médio das últimas partidas não caiu além da margem de erro. O 1% pior não entra nesta conta.";
+  } else {
+    veredito = `${j.comparaveis} partida(s) comparável(is) de ${j.precisa} necessárias: ainda não dá para dizer se caiu. Partidas com gerador de quadros não contam.`;
+  }
+  const severidade = j.estado === "Caiu" ? "Important" : j.estado === "NaoCaiu" ? "Ok" : "Info";
+  const etiqueta = j.estado === "Caiu" ? "caiu" : j.estado === "NaoCaiu" ? "não caiu" : "poucas partidas";
+  const linhas = l.marcos.slice(0, MARCOS_NA_TELA).map((m) => {
+    if (m.tipo === "Partida") {
+      const fonte = m.fonte === "PresentMon" ? "" : " · canal antigo";
+      const gerador = m.comparavel ? "" : " · com gerador de quadros, fora da comparação";
+      return `<li><span class="linha-data">${data(m.quando)}</span> Partida: ${numero(m.fps)} FPS, 1% piores ${numero(m.low_1pct)}${fonte}${gerador}</li>`;
+    }
+    if (m.tipo === "Troca") {
+      return `<li><span class="linha-data">${data(m.quando)}</span> <strong>${NOME_DO_CAMPO[m.troca.campo]}:</strong> ${escapeHtml(m.troca.de)} → ${escapeHtml(m.troca.para)}</li>`;
+    }
+    return `<li><span class="linha-data">${data(m.quando)}</span> <strong>Otimiza aplicou:</strong> ${escapeHtml(m.nome)}</li>`;
+  });
+  const antes =
+    l.otimiza_antes_da_primeira > 0
+      ? `<p class="hint">${l.otimiza_antes_da_primeira} mudança(s) do Otimiza já estavam aplicadas desde a primeira partida.</p>`
+      : "";
+  const resto = l.marcos.length > MARCOS_NA_TELA ? `<p class="hint">E mais ${l.marcos.length - MARCOS_NA_TELA} registro(s) mais antigos.</p>` : "";
+  return `
+    <article class="finding" data-severity="${severidade}" style="--i:${i}">
+      <div class="finding-top">
+        <h3>${escapeHtml(nomeDoJogo(l.jogo))}</h3>
+        <span class="finding-size">${etiqueta}</span>
+      </div>
+      <p class="finding-measured">${veredito}</p>
+      <ul class="linha-do-tempo">${linhas.join("")}</ul>
+      ${antes}${resto}
+      <p class="hint">Das mudanças do Otimiza, só aparecem as que continuam aplicadas.</p>
+    </article>`;
+}
+
+async function lerOQueMudou() {
+  const botao = element<HTMLButtonElement>("o-que-mudou-ler");
+  botao.disabled = true;
+  setStatus("o-que-mudou-status", "Montando a linha do tempo…", "progress");
+  try {
+    const linhas = await invoke<LinhaDoJogo[]>("o_que_mudou");
+    const caiu = linhas.filter((l) => l.julgamento.estado === "Caiu").length;
+    text("o-que-mudou-tag", linhas.length === 0 ? "sem partida medida" : caiu > 0 ? `${caiu} jogo(s) caíram` : "nenhuma queda provada");
+    element("o-que-mudou-result").innerHTML = linhas.map(desenharLinhaDoJogo).join("");
+    setStatus("o-que-mudou-status", "", "ok");
+  } catch (error) {
+    setStatus("o-que-mudou-status", String(error), "error");
+  } finally {
+    botao.disabled = false;
+  }
+}
+
 async function lerHistorico() {
   const botao = element<HTMLButtonElement>("historico-ler");
   botao.disabled = true;
@@ -2496,7 +2619,7 @@ function setBar(id: string, percent: number | null) {
 
   // Vazia E marcada: só vazia seria igual a 0% medido.
   if (percent === null) {
-    bar.style.width = "0%";
+    bar.style.transform = "scaleX(0)";
     if (medidorOuNada) {
       delete medidorOuNada.dataset.nivel;
       medidorOuNada.dataset.estado = "desconhecido";
@@ -2506,7 +2629,7 @@ function setBar(id: string, percent: number | null) {
 
   const valor = Math.min(100, Math.max(0, percent));
 
-  bar.style.width = `${valor}%`;
+  bar.style.transform = `scaleX(${valor / 100})`;
 
   const medidor = medidorOuNada;
   if (!medidor) return;
@@ -4239,12 +4362,94 @@ async function avisarSeOHistoricoNaoFoiLido() {
   caixa.hidden = false;
 }
 
+type EstadoDaVistoria = "Intacto" | "MudouPorFora" | "NaoLeu" | "NaoSeAplicaMais";
+interface VistoriaDasMudancas {
+  itens: { id: string; nome: string; estado: EstadoDaVistoria; retirado: boolean }[];
+  fora_da_vistoria: string[];
+  com_politica_de_grupo: boolean;
+}
+
+/** O que o Windows (ou outro programa) desfez por fora. Nada é refeito sem clique. */
+async function carregarGuardiao() {
+  let v: VistoriaDasMudancas;
+  try {
+    v = await invoke<VistoriaDasMudancas>("vistoriar_mudancas");
+  } catch {
+    element("guardiao").hidden = true;
+    return;
+  }
+  const mudaram = v.itens.filter((i) => i.estado === "MudouPorFora");
+  const naoLidos = v.itens.filter((i) => i.estado === "NaoLeu");
+  element("guardiao").hidden = mudaram.length === 0 && naoLidos.length === 0;
+  if (element("guardiao").hidden) return;
+
+  const partes: string[] = [];
+  if (mudaram.length > 0) {
+    partes.push(
+      `${mudaram.length} ajuste(s) do Otimiza não estão mais como ele deixou: pode ter sido atualização do Windows, hardware novo, política da empresa, outro programa ou você mesmo. Enquanto isso, não estão valendo. "Refazer" desfaz e aplica de novo.`
+    );
+    if (v.com_politica_de_grupo) {
+      partes.push("Este PC tem política de grupo: o que ela desfez, ela tende a desfazer de novo.");
+    }
+  }
+  if (naoLidos.length > 0) {
+    partes.push(`${naoLidos.length} ajuste(s) não puderam ser conferidos agora (permissão ou política).`);
+  }
+  if (v.fora_da_vistoria.length > 0) {
+    partes.push(`${v.fora_da_vistoria.length} mudança(s) não entram nesta conferência (plano de energia e ajustes de jogo têm conferência própria).`);
+  }
+  element("guardiao").dataset.politica = v.com_politica_de_grupo ? "sim" : "nao";
+  text("guardiao-texto", partes.join(" "));
+  element("guardiao-lista").innerHTML = [...mudaram, ...naoLidos]
+    .map((i) => {
+      const acao =
+        i.estado !== "MudouPorFora"
+          ? '<span class="linha-data">não conferido</span>'
+          : i.retirado
+            ? `<button class="btn" type="button" data-guardiao-desfazer="${escapeHtml(i.id)}">Desfazer</button>`
+            : `<button class="btn" type="button" data-guardiao-refazer="${escapeHtml(i.id)}">Refazer</button>
+               <button class="btn" type="button" data-guardiao-desfazer="${escapeHtml(i.id)}">Desfazer</button>`;
+      return `<li><strong>${escapeHtml(i.nome)}</strong> ${acao}</li>`;
+    })
+    .join("");
+}
+
+async function acaoDoGuardiao(event: Event) {
+  const botao = (event.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+  if (!botao) return;
+  const refazer = botao.dataset.guardiaoRefazer;
+  const desfazer = botao.dataset.guardiaoDesfazer;
+  if (!refazer && !desfazer) return;
+  // Com política de grupo, uma chave travada reprova o item inteiro, e o aplicar desfaz também o que ainda valia.
+  if (
+    refazer &&
+    element("guardiao").dataset.politica === "sim" &&
+    !confirm("Este PC tem política de grupo. Se ela travar uma das chaves, refazer desliga o ajuste inteiro, inclusive a parte que ainda valia. Refazer mesmo assim?")
+  ) {
+    return;
+  }
+  botao.disabled = true;
+  setStatus("guardiao-status", refazer ? "Refazendo…" : "Desfazendo…", "progress");
+  try {
+    const r = refazer
+      ? await invoke<OptimizationOutcome>("refazer_mudanca", { id: refazer })
+      : await invoke<OptimizationOutcome>("revert_optimization", { id: desfazer });
+    setStatus("guardiao-status", r.message, r.success ? "ok" : "error");
+  } catch (error) {
+    setStatus("guardiao-status", String(error), "error");
+  } finally {
+    await loadOptimizations();
+  }
+}
+
 async function loadOptimizations() {
   try {
     optimizations = await invoke<OptimizationInfo[]>("list_optimizations");
     renderFilters();
     renderOptimizations();
     mostrarAposentados();
+    // Sem esperar: a conferência passa por bcdedit e PowerShell, e a lista não depende dela.
+    void carregarGuardiao();
     atualizarFluxo();
     await avisarSeOHistoricoNaoFoiLido();
     // Depois da lista: o aviso mostra os NOMES, que vêm dela.
@@ -4890,12 +5095,12 @@ function appendLogLine(step: BatchStep) {
 /** O Windows não deixa um processo se elevar sozinho: explica e reabre com autorização. */
 function askForAdmin(reason: string) {
   element("modal-text").textContent = reason;
-  element("admin-modal").hidden = false;
+  abrirOverlay(element("admin-modal"));
   element<HTMLButtonElement>("modal-confirm").focus();
 }
 
 function closeAdminModal() {
-  element("admin-modal").hidden = true;
+  fecharOverlay(element("admin-modal"));
 }
 
 async function relaunchAsAdmin() {
@@ -5021,12 +5226,12 @@ function mostrarAvisoDosEssenciais(checagem: ChecagemDosEssenciais) {
     })
     .join("");
 
-  element("essenciais-modal").hidden = false;
+  abrirOverlay(element("essenciais-modal"));
   element<HTMLButtonElement>("essenciais-religar").focus();
 }
 
 function fecharAvisoDosEssenciais() {
-  element("essenciais-modal").hidden = true;
+  fecharOverlay(element("essenciais-modal"));
   loteAguardando = null;
 }
 
@@ -5143,6 +5348,62 @@ async function runBatch(
   } finally {
     buttons.forEach((button) => (button.disabled = false));
     await loadOptimizations();
+  }
+}
+
+type ParteDaRestauracao = "Automaticos" | "MotorDeEnergia" | "NucleosPorJogo" | "Historico" | "PlanoOtimiza";
+interface ResultadoDaParte {
+  parte: ParteDaRestauracao;
+  desfecho: { estado: "Voltou" | "NadaAFazer" } | { estado: "Falhou"; motivo: string };
+  feito: string[];
+}
+interface RelatorioDaRestauracao {
+  partes: ResultadoDaParte[];
+  itens: OptimizationOutcome[];
+  tudo_voltou: boolean;
+}
+
+const NOME_DA_PARTE: Record<ParteDaRestauracao, string> = {
+  Automaticos: "modos automáticos",
+  MotorDeEnergia: "motor de energia",
+  NucleosPorJogo: "regras de núcleos por jogo",
+  Historico: "histórico de mudanças",
+  PlanoOtimiza: "plano de energia OTIMIZA",
+};
+
+/** "Desfazer tudo" de verdade: o histórico e as peças com estado próprio, parte a parte. */
+async function restaurarTudo() {
+  const buttons = document.querySelectorAll<HTMLButtonElement>("#optimize-now, #revert-all");
+  buttons.forEach((button) => (button.disabled = true));
+  setStatus("optimization-status", "Desfazendo tudo o que o Otimiza mudou…", "progress");
+  resetLog("Desfazendo");
+
+  try {
+    const r = await invoke<RelatorioDaRestauracao>("restaurar_tudo");
+    const feitas = r.partes.filter((p) => p.desfecho.estado === "Voltou");
+    const falhas = r.partes.flatMap((p) =>
+      p.desfecho.estado === "Falhou" ? [`${NOME_DA_PARTE[p.parte]}: ${p.desfecho.motivo}`] : []
+    );
+    if (feitas.length === 0 && falhas.length === 0) {
+      setStatus("optimization-status", "Nada a desfazer: o Otimiza não tem nenhuma mudança ativa neste PC.", "ok");
+    } else if (r.tudo_voltou) {
+      const restart = r.itens.some((i) => i.success && i.requires_restart);
+      setStatus(
+        "optimization-status",
+        `Tudo desfeito: ${feitas.map((p) => NOME_DA_PARTE[p.parte]).join(", ")}.${restart ? " Reinicie o PC para tudo valer." : ""}`,
+        "ok"
+      );
+    } else {
+      const itens = r.itens.filter((i) => !i.success).map((i) => `${i.name}: ${i.message}`);
+      setStatus("optimization-status", `Desfeito só em parte. ${[...falhas, ...itens].join(" · ")}`, "error");
+    }
+  } catch (error) {
+    setStatus("optimization-status", String(error), "error");
+  } finally {
+    buttons.forEach((button) => (button.disabled = false));
+    await loadOptimizations();
+    // O modo jogo automático pode ter sido desligado aqui.
+    await loadPreferences();
   }
 }
 
@@ -5511,14 +5772,14 @@ function wireComandos(secoes: HTMLButtonElement[]) {
   const abrir = () => {
     // Na hora de abrir: os painéis carregam conteúdo depois do início.
     comandos = montarComandos(secoes);
-    caixa.hidden = false;
+    abrirOverlay(caixa);
     campo.value = "";
     filtrar("");
     campo.focus();
   };
 
-  const fechar = () => {
-    caixa.hidden = true;
+  const fechar = (restaurarFoco = true) => {
+    fecharOverlay(caixa, restaurarFoco);
   };
 
   function filtrar(termo: string) {
@@ -5533,6 +5794,7 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 
     escolhido = 0;
     desenhar();
+    lista.scrollTop = 0;
   }
 
   function desenhar() {
@@ -5570,14 +5832,17 @@ function wireComandos(secoes: HTMLButtonElement[]) {
       event.preventDefault();
       const passo = event.key === "ArrowDown" ? 1 : visiveis.length - 1;
       escolhido = (escolhido + passo) % Math.max(1, visiveis.length);
-      desenhar();
+      lista.querySelectorAll<HTMLElement>("[data-indice]").forEach((item, i) => {
+        item.setAttribute("aria-selected", String(i === escolhido));
+      });
+      lista.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
       return;
     }
 
     if (event.key === "Enter" && visiveis[escolhido]) {
       event.preventDefault();
-      visiveis[escolhido].executar();
       fechar();
+      visiveis[escolhido].executar();
     }
   });
 
@@ -5587,8 +5852,8 @@ function wireComandos(secoes: HTMLButtonElement[]) {
     const alvo = (event.target as HTMLElement).closest<HTMLElement>("[data-indice]");
     if (!alvo) return;
 
-    visiveis[Number(alvo.dataset.indice)]?.executar();
     fechar();
+    visiveis[Number(alvo.dataset.indice)]?.executar();
   });
 
   caixa.addEventListener("click", (event) => {
@@ -6646,6 +6911,300 @@ function desenharNumerosDaPartida(ultima: MedicaoAutomatica | undefined, monitor
   }
 }
 
+type TipoDeCausa = "Processador" | "PlacaDeVideo" | "PresoNaTaxaDoMonitor" | "LimiteDeFps" | "CalorOuEnergia" | "DiscoNosTrancos" | "QuadroCopiado";
+type AjusteDoDoctor =
+  | "PerfilGraficoMaisLeve"
+  | "MenosCargaNoProcessador"
+  | "PlanoDeEnergiaOtimiza"
+  | "FecharProgramasPesados"
+  | "TirarLimiteDeFps"
+  | "ConferirRefrigeracao"
+  | "JogoNoSsd"
+  | "TelaCheiaOuSemBordaComFlip"
+  | "MaisResolucaoOuQualidade"
+  | "BaixarResolucao";
+interface DiagnosticoDaPartida {
+  jogo: string | null;
+  janelas_lidas: number;
+  causas: {
+    tipo: TipoDeCausa;
+    confianca: "Alta" | "Media" | "Hipotese";
+    evidencia: string;
+    ajuda: AjusteDoDoctor[];
+    nao_ajuda: AjusteDoDoctor[];
+    janelas: number;
+  }[];
+  lacunas: string[];
+}
+
+const TITULO_DA_CAUSA: Record<TipoDeCausa, string> = {
+  Processador: "O processador segura o FPS",
+  PlacaDeVideo: "A placa de vídeo segura o FPS",
+  PresoNaTaxaDoMonitor: "O FPS já está no máximo que o monitor mostra",
+  LimiteDeFps: "Um limite de FPS segura o jogo",
+  CalorOuEnergia: "A placa freou por calor ou energia",
+  DiscoNosTrancos: "Os trancos vêm do disco",
+  QuadroCopiado: "O Windows copia cada quadro",
+};
+const NOME_DO_AJUSTE: Record<AjusteDoDoctor, string> = {
+  PerfilGraficoMaisLeve: "gráfico mais leve no jogo",
+  MenosCargaNoProcessador: "menos distância de visão e população no jogo",
+  PlanoDeEnergiaOtimiza: "plano de energia OTIMIZA",
+  FecharProgramasPesados: "fechar programas pesados",
+  TirarLimiteDeFps: "tirar o limite de FPS",
+  ConferirRefrigeracao: "conferir a ventilação e a limpeza do PC",
+  JogoNoSsd: "jogo instalado num SSD",
+  TelaCheiaOuSemBordaComFlip: "tela cheia exclusiva (no Windows 10, janela sem borda nem sempre resolve)",
+  MaisResolucaoOuQualidade: "subir a qualidade",
+  BaixarResolucao: "baixar a resolução",
+};
+// A causa é sempre inferida dos números medidos: "evidência forte", não "medido".
+const CONFIANCA_CURTA = { Alta: "evidência forte", Media: "provável", Hipotese: "hipótese" } as const;
+
+type PerfilDoJogo = "SemTeto" | "Equilibrado" | "Competitivo";
+type EstrategiaDaReceita = { tipo: "PlanoOtimiza" } | { tipo: "PerfilGrafico"; perfil: PerfilDoJogo } | { tipo: "ModoJogo" };
+type OfertaDaReceita =
+  | { estado: "Oferecer" }
+  | { estado: "NaoOferecer"; quando: number; contexto: "Igual" | "NaoLido" }
+  | { estado: "ProvarDeNovo"; quando: number }
+  | { estado: "JaProvado"; resultado: "Ganhou" | "Piorou" | "SemDiferenca"; quando: number };
+interface PassoDaReceita {
+  ajuste: AjusteDoDoctor;
+  estrategia: EstrategiaDaReceita | null;
+  aplicado: boolean;
+  oferta: OfertaDaReceita;
+  como_provar: "ProvaNoJogo" | "ProximasPartidas" | "PeloCliente";
+}
+interface ReceitaDaPartida {
+  diagnostico: DiagnosticoDaPartida;
+  memoria_ilegivel: string | null;
+  por_causa: [DiagnosticoDaPartida["causas"][number], PassoDaReceita[]][];
+}
+
+/** Onde cada ajuste que o Otimiza aplica mora na tela. */
+const NOME_DO_PERFIL: Record<PerfilDoJogo, string> = { SemTeto: "Sem teto", Equilibrado: "Equilibrado", Competitivo: "Máximo de FPS" };
+function ondeAplicar(e: EstrategiaDaReceita): string {
+  if (e.tipo === "PlanoOtimiza") return "Otimizar → Plano de energia OTIMIZA";
+  if (e.tipo === "ModoJogo") return "Sistema → modo jogo automático";
+  return `Jogos → Configuração do jogo, perfil "${NOME_DO_PERFIL[e.perfil]}"`;
+}
+const COMO_PROVAR: Record<PassoDaReceita["como_provar"], string> = {
+  ProvaNoJogo: "a prova no jogo, na área Otimizar, confirma",
+  ProximasPartidas: "as próximas partidas confirmam sozinhas, e o Otimiza desfaz se piorar",
+  PeloCliente: "é você quem faz; as próximas partidas medidas mostram o efeito",
+};
+
+function frasesDoPasso(p: PassoDaReceita): string {
+  const nome = NOME_DO_AJUSTE[p.ajuste];
+  const data = (q: number) => new Date(q * 1000).toLocaleDateString("pt-BR");
+  if (p.oferta.estado === "NaoOferecer") {
+    const contexto =
+      p.oferta.contexto === "Igual"
+        ? "com o mesmo driver e Windows de agora"
+        : "e não deu para conferir se o driver ou o Windows mudou desde então";
+    return `<li><s>${nome}</s>: já deixou este jogo pior neste PC em ${data(p.oferta.quando)}, ${contexto}. Não é oferecido de novo.</li>`;
+  }
+  const lembranca =
+    p.oferta.estado === "ProvarDeNovo"
+      ? ` Piorou em ${data(p.oferta.quando)}, mas o driver ou o Windows mudou desde então: vale provar de novo.`
+      : p.oferta.estado === "JaProvado"
+        ? p.oferta.resultado === "Ganhou"
+          ? ` Já provou ganho aqui em ${data(p.oferta.quando)}.`
+          : ` Em ${data(p.oferta.quando)} não fez diferença medida aqui.`
+        : "";
+  const onde = p.estrategia ? (p.aplicado ? " (já aplicado)" : ` — em ${ondeAplicar(p.estrategia)}`) : "";
+  return `<li><strong>${nome}</strong>${onde}: ${COMO_PROVAR[p.como_provar]}.${lembranca}</li>`;
+}
+
+async function carregarDiagnosticoDaPartida() {
+  // Uma chamada só: a receita traz o diagnóstico; sem ela, o diagnóstico sozinho.
+  let receita: ReceitaDaPartida | null = null;
+  try {
+    receita = await invoke<ReceitaDaPartida>("receita_da_partida");
+  } catch {
+    receita = null;
+  }
+  let d: DiagnosticoDaPartida;
+  try {
+    d = receita ? receita.diagnostico : await invoke<DiagnosticoDaPartida>("diagnostico_da_partida");
+  } catch (erro) {
+    element("doctor").hidden = false;
+    text("doctor-tag", "não lido");
+    element("doctor-causas").innerHTML = "";
+    text("doctor-lacunas", `Não consegui montar o diagnóstico agora: ${String(erro)}`);
+    return;
+  }
+  element("doctor").hidden = false;
+  text("doctor-tag", d.jogo ? nomeDoJogo(d.jogo) : "sem partida");
+  const lista = (a: AjusteDoDoctor[]) => a.map((x) => NOME_DO_AJUSTE[x]).join(", ");
+  const passosDe = (tipo: TipoDeCausa) => receita?.por_causa.find(([c]) => c.tipo === tipo)?.[1] ?? null;
+  element("doctor-causas").innerHTML =
+    d.causas.length === 0
+      ? d.janelas_lidas > 0
+        ? `<p class="finding-measured">Nas ${d.janelas_lidas} janela(s) medidas, nenhuma causa apareceu com clareza.</p>`
+        : ""
+      : d.causas
+          .map(
+            (c, i) => `
+      <article class="finding" data-severity="${c.confianca === "Alta" ? "Important" : "Info"}" style="--i:${i}">
+        <div class="finding-top">
+          <h3>${c.confianca === "Hipotese" ? "Talvez: " : ""}${TITULO_DA_CAUSA[c.tipo]}</h3>
+          <span class="finding-size">${CONFIANCA_CURTA[c.confianca]}</span>
+        </div>
+        <p class="finding-measured">${escapeHtml(c.evidencia)}</p>
+        ${(() => {
+          const passos = passosDe(c.tipo);
+          const naoAjuda = `<strong>Não ajuda:</strong> ${lista(c.nao_ajuda)}.`;
+          if (!c.ajuda.length) return `<p class="finding-advice"><strong>Não há o que fazer pelo FPS aqui.</strong> ${naoAjuda}</p>`;
+          if (!passos) return `<p class="finding-advice"><strong>Ajuda:</strong> ${lista(c.ajuda)}. ${naoAjuda}</p>`;
+          return `<ul class="linha-do-tempo receita">${passos.map(frasesDoPasso).join("")}</ul><p class="finding-advice">${naoAjuda}</p>`;
+        })()}
+      </article>`
+          )
+          .join("");
+  const avisoDaMemoria = receita?.memoria_ilegivel
+    ? `Não consegui ler o registro do que já foi provado neste PC (${receita.memoria_ilegivel}): não dá para dizer o que já piorou.`
+    : "";
+  text("doctor-lacunas", [...d.lacunas, avisoDaMemoria].filter(Boolean).join(" "));
+}
+
+type LimitacaoDoPc =
+  | { tipo: "MonitorAbaixoDoMaximo"; atual: number; maximo: number }
+  | { tipo: "MonitorLimitaATela"; hz: number }
+  | { tipo: "PoucaMemoria"; gb: number }
+  | { tipo: "PoucosNucleos"; nucleos: number }
+  | { tipo: "PoucaMemoriaDeVideo"; gb: number }
+  | { tipo: "VideoIntegrado" }
+  | { tipo: "SistemaEmHd" }
+  | { tipo: "Notebook" };
+interface PerfilDoPc {
+  limitacoes: LimitacaoDoPc[];
+  nao_lido: string[];
+}
+
+/** Uma frase por limitação, com o número e o que ela significa na prática. Nenhuma porcentagem de ganho. */
+function fraseDaLimitacao(l: LimitacaoDoPc): string {
+  switch (l.tipo) {
+    case "MonitorAbaixoDoMaximo":
+      return `<strong>Monitor em ${l.atual} Hz, mas ele aceita ${l.maximo} Hz.</strong> A tela mostra no máximo ${l.atual} quadros por segundo. Subir a taxa deixa o jogo visivelmente mais fluido (o contador de FPS não muda), e o Otimiza faz isso em Sistema.`;
+    case "MonitorLimitaATela":
+      return `<strong>Monitor de ${l.hz} Hz.</strong> A tela mostra no máximo ${l.hz} quadros por segundo: FPS acima disso ainda reduz um pouco o atraso, mas não aparece como quadro a mais. Aqui o que mais se ganha é estabilidade, não número.`;
+    case "PoucaMemoria":
+      return `<strong>${l.gb} GB de memória.</strong> Com menos de 12 GB, FiveM e jogos atuais costumam fazer o Windows trocar memória com o disco no meio da partida, e isso vira tranco. Fechar o navegador antes de jogar ajuda; mais memória costuma resolver.`;
+    case "PoucosNucleos":
+      return `<strong>${l.nucleos} núcleos no processador.</strong> Jogos com muita gente na tela (FiveM, battle royale) seguram o FPS no processador; programas abertos em segundo plano pesam mais aqui.`;
+    case "PoucaMemoriaDeVideo":
+      return `<strong>${numeroBr(l.gb)} GB de memória de vídeo.</strong> Texturas no alto podem não caber: textura média costuma evitar tranco de carregamento, e custa qualidade, não FPS.`;
+    case "VideoIntegrado":
+      return "<strong>Vídeo integrado.</strong> Não há placa de vídeo dedicada: o vídeo usa a memória do sistema. Gráfico no baixo e resolução menor são o que mais pesa aqui.";
+    case "SistemaEmHd":
+      return "<strong>Windows num HD, não SSD.</strong> Carregamento e trancos ao entrar em áreas novas vêm do disco: nenhum ajuste de Windows compensa, só um SSD.";
+    case "Notebook":
+      return "<strong>Notebook.</strong> Energia e calor limitam: jogue na tomada e com a ventilação livre. Na bateria o Windows costuma cortar desempenho.";
+  }
+}
+
+const CHAVE_PERFIL_VISTO = "otimiza.perfil-do-pc.visto";
+
+async function carregarPerfilDoPc() {
+  try {
+    if (localStorage.getItem(CHAVE_PERFIL_VISTO) === "1") return;
+  } catch {
+    // Sem armazenamento local, mostra toda vez: melhor que nunca.
+  }
+  let p: PerfilDoPc;
+  try {
+    p = await invoke<PerfilDoPc>("perfil_do_pc");
+  } catch {
+    return;
+  }
+  element("perfil-pc").hidden = false;
+  text(
+    "perfil-pc-resumo",
+    p.limitacoes.length === 0 && p.nao_lido.length === 0
+      ? "Nada neste PC segura o jogo por si só. O que o Otimiza fizer vai ser medido nas suas partidas: ganho que não aparecer na medição não é contado."
+      : p.limitacoes.length === 0
+        ? "No que deu para ler, nada segura o jogo por si só; parte não foi lida (veja abaixo). O que o Otimiza fizer vai ser medido nas suas partidas."
+      : "Antes de otimizar: o que este hardware permite. O Otimiza não troca peça nenhuma; o que ele fizer vai ser medido nas suas partidas."
+  );
+  element("perfil-pc-lista").innerHTML = p.limitacoes.map((l) => `<li>${fraseDaLimitacao(l)}</li>`).join("");
+  text("perfil-pc-nota", p.nao_lido.length ? `Não deu para ler: ${p.nao_lido.join(", ")}.` : "");
+}
+
+interface RelatorioDaPartida {
+  jogo: string;
+  inicio: number;
+  fim: number;
+  janelas: number;
+  janelas_comparaveis: number;
+  fps_medio: number | null;
+  pior_low_1pct: number | null;
+  gargalo: ResumoPresentMon["gargalo"] | null;
+  trancos: number | null;
+  janelas_com_trancos: number;
+  trancos_com_disco: number | null;
+  freios: number | null;
+  janelas_com_freio_lido: number;
+  ja_freava: boolean;
+  anteriores: { partidas: number; mediana_fps: number; menor_fps: number; maior_fps: number } | null;
+}
+
+const GARGALO_CURTO: Record<ResumoPresentMon["gargalo"], string> = {
+  Cpu: "o processador",
+  Gpu: "a placa de vídeo",
+  Espera: "limite de FPS ou V-Sync",
+  NaoDeuParaSaber: "nenhum ficou claro",
+};
+
+/** Só o que foi medido; o que não se leu diz que não se leu, sem virar zero. */
+async function carregarRelatorioDaPartida() {
+  let r: RelatorioDaPartida | null = null;
+  try {
+    r = await invoke<RelatorioDaPartida | null>("relatorio_da_ultima_partida");
+  } catch {
+    r = null;
+  }
+  element("partida").hidden = !r;
+  if (!r) return;
+
+  const n = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+  const hora = (q: number) => new Date(q * 1000).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  const minutos = Math.round((r.fim - r.inicio) / 60);
+  text("partida-tag", nomeDoJogo(r.jogo));
+
+  const linhas: string[] = [];
+  linhas.push(
+    `<li><span class="linha-data">quando</span> ${hora(r.inicio)}${minutos > 0 ? `, medida ao longo de ${minutos} min` : ""} (${r.janelas} janela(s) de 20 s)</li>`
+  );
+  linhas.push(
+    r.fps_medio == null
+      ? `<li><span class="linha-data">FPS</span> todas as janelas tinham gerador de quadros: fora da conta</li>`
+      : `<li><span class="linha-data">FPS</span> ${n(r.fps_medio)} de média${r.pior_low_1pct != null ? `, 1% piores chegaram a ${n(r.pior_low_1pct)}` : ""}${r.janelas_comparaveis < r.janelas ? ` (${r.janelas - r.janelas_comparaveis} janela(s) com gerador ficaram fora)` : ""}</li>`
+  );
+  if (r.gargalo) linhas.push(`<li><span class="linha-data">limite</span> ${GARGALO_CURTO[r.gargalo]}</li>`);
+  // "Em N de M janelas" sempre que a leitura não cobriu a partida inteira.
+  const cobertura = (lidas: number) => (lidas < r.janelas ? ` (em ${lidas} de ${r.janelas} janelas)` : "");
+  linhas.push(
+    r.trancos == null
+      ? `<li><span class="linha-data">trancos</span> sem o instante de cada um nesta partida</li>`
+      : `<li><span class="linha-data">trancos</span> ${r.trancos} nas janelas medidas${r.trancos_com_disco ? `, ${r.trancos_com_disco} com o disco ocupado na hora` : ""}${cobertura(r.janelas_com_trancos)}</li>`
+  );
+  let placa: string;
+  if (r.freios == null) placa = "freio não lido (só placas NVIDIA informam)";
+  else if (r.ja_freava) placa = "já estava freando por calor ou energia quando a medição começou";
+  else if (r.freios === 0) placa = "não freou por calor ou energia nas janelas medidas";
+  else placa = `começou a frear ${r.freios} vez(es) nas janelas medidas`;
+  linhas.push(`<li><span class="linha-data">placa</span> ${placa}${r.freios == null ? "" : cobertura(r.janelas_com_freio_lido)}</li>`);
+  element("partida-lista").innerHTML = linhas.join("");
+
+  text(
+    "partida-nota",
+    r.anteriores
+      ? `Nas suas ${r.anteriores.partidas} partidas anteriores deste jogo, o FPS médio ficou entre ${n(r.anteriores.menor_fps)} e ${n(r.anteriores.maior_fps)} (mediana ${n(r.anteriores.mediana_fps)}). Lugares diferentes do mapa dão números diferentes: isto é referência, não prova. Queda provada aparece em Histórico.`
+      : "Com mais partidas medidas, aparece aqui a faixa das anteriores para comparar."
+  );
+}
+
 /** O veredito do Início (A3.2): tudo de medição gravada, nada adivinhado. */
 async function carregarVereditoDoInicio() {
   let medicoes: MedicaoAutomatica[] = [];
@@ -7661,6 +8220,24 @@ function renderAlternada(p: ProvaAlternada) {
     </article>`;
 }
 
+/** O texto da prova, com a margem de erro, para colar no Discord. Sem prova válida, a tela diz por quê. */
+async function copiarResultadoDaProva() {
+  let texto: string;
+  try {
+    texto = await invoke<string>("resultado_para_compartilhar");
+  } catch (erro) {
+    statusDaProva(String(erro), "warn");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(texto);
+    statusDaProva("Copiado. Cole no Discord: vai com a margem de erro, como foi medido.", "ok");
+  } catch {
+    // O Windows só deixa copiar com a janela do Otimiza em foco.
+    statusDaProva("Não consegui copiar: deixe a janela do Otimiza em foco e clique de novo.", "warn");
+  }
+}
+
 /** O andamento da prova vai para o painel de Jogos e para o passo 4 do Otimizar. */
 function statusDaProva(mensagem: string, tipo: "ok" | "warn" | "error" | "progress") {
   setStatus("alternada-status", mensagem, tipo);
@@ -7940,6 +8517,7 @@ function wireControls() {
 
   element("mouse-ler").addEventListener("click", lerCaminhoDoMouse);
   element("historico-ler").addEventListener("click", lerHistorico);
+  element("o-que-mudou-ler").addEventListener("click", lerOQueMudou);
   for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-marca-manual]")) {
     botao.addEventListener("click", () => {
       // A escolha manual só pinta o desenho: nenhum ajuste muda por ela.
@@ -7979,6 +8557,9 @@ function wireControls() {
   element("fluxo-aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   // Depois do primeiro desenho: lê arquivos de medição e de crash, fora do orçamento de abertura.
   setTimeout(() => void carregarVereditoDoInicio().then(() => atualizarFluxo()), 0);
+  setTimeout(() => void carregarRelatorioDaPartida(), 0);
+  setTimeout(() => void carregarPerfilDoPc(), 0);
+  setTimeout(() => void carregarDiagnosticoDaPartida(), 0);
   element("aposentados-desfazer").addEventListener("click", () => void desfazerAposentados());
   void restaurarAlternada();
   element("unfix-priority").addEventListener("click", () => fixPriority(false));
@@ -8189,9 +8770,17 @@ function wireControls() {
     busca.focus();
     renderOptimizations();
   });
-  element("revert-all").addEventListener("click", () =>
-    runBatch("revert_all_optimizations", "Desfazendo…")
-  );
+  element("revert-all").addEventListener("click", restaurarTudo);
+  element("guardiao-lista").addEventListener("click", acaoDoGuardiao);
+  element("alternada-compartilhar").addEventListener("click", copiarResultadoDaProva);
+  element("perfil-pc-ok").addEventListener("click", () => {
+    element("perfil-pc").hidden = true;
+    try {
+      localStorage.setItem(CHAVE_PERFIL_VISTO, "1");
+    } catch {
+      // Sem armazenamento local, volta na próxima abertura.
+    }
+  });
 
   element("modal-confirm").addEventListener("click", relaunchAsAdmin);
   element("modal-cancel").addEventListener("click", closeAdminModal);
