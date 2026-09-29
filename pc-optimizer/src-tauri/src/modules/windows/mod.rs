@@ -22,6 +22,7 @@ pub mod cpuset;
 pub mod registro;
 pub mod restaurar;
 pub mod guardiao;
+pub mod investigacao;
 pub mod nvml;
 pub mod display;
 pub mod essenciais;

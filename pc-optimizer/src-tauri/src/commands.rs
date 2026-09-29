@@ -198,6 +198,46 @@ pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::module
         .map_err(|e| format!("o teste não terminou: {e}"))?
 }
 
+/// `LIVRES`: só mede (PresentMon e contadores do Windows); nada é alterado. Motor V2 da causa da travada.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn investigar_travadas(
+    segundos: u32,
+) -> Result<crate::modules::windows::investigacao::ResultadoDaInvestigacao, String> {
+    let segundos = segundos.clamp(30, 120);
+    tokio::task::spawn_blocking(move || crate::modules::windows::investigacao::investigar(segundos))
+        .await
+        .map_err(|e| format!("a investigação não terminou: {e}"))?
+}
+
+/// `EXIGEM_LICENCA`: acalma o programa suspeito em janelas alternadas e devolve; só fica acalmado com a causa
+/// demonstrada, e até o jogo fechar.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn testar_causa_da_travada(
+    processo: String,
+    app: tauri::AppHandle,
+) -> Result<crate::modules::windows::investigacao::ResultadoDoTeste, String> {
+    crate::modules::licenca::exigir()?;
+    tokio::task::spawn_blocking(move || {
+        use tauri::Emitter;
+        crate::modules::windows::investigacao::testar(&processo, &|frase| {
+            let _ = app.emit("travada:progresso", frase);
+        })
+    })
+    .await
+    .map_err(|e| format!("o teste não terminou: {e}"))?
+}
+
+/// `LIVRES`: só desfaz o que o teste deixou acalmado.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn devolver_teste_da_travada() -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(crate::modules::windows::investigacao::devolver_mantido)
+        .await
+        .map_err(|e| format!("a devolução não terminou: {e}"))?
+}
+
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn cpuset_resultados() -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
@@ -1732,10 +1772,24 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
         let jogo = crate::modules::windows::gamemode::jogo_aberto_com_pid();
         coletor.acompanhar_processos(jogo.as_ref().map(|(_, pid)| *pid));
 
-        // O instante de início amarra o relógio dos quadros ao das amostras.
-        let inicio_dos_quadros = coletor.decorrido_ms();
+        // A âncora: o mesmo instante no relógio das amostras (ms do coletor) e no dos quadros (QPC).
+        let ancora_ms = coletor.decorrido_ms();
+        let ancora_qpc = crate::modules::windows::frames::agora_qpc();
+        let frequencia = crate::modules::windows::frames::frequencia_qpc();
+        // PresentMon, nunca o canal antigo: no FiveM ele conta o dobro dos quadros (medido em 28/09/2026).
         let medicao = jogo.clone().map(|(nome, pid)| {
-            std::thread::spawn(move || crate::modules::windows::frames::medir_par(pid, &nome, None, segundos))
+            std::thread::spawn(move || -> Result<(crate::modules::windows::frames::MedicaoCrua, Option<i64>), String> {
+                let crus = crate::modules::windows::presentmon::capturar(pid, segundos as u32)?;
+                let q = crate::modules::windows::investigacao::quadros_do_jogo(&crus);
+                let (Some(primeiro), Some(ultimo), Some(f)) = (q.first(), q.last(), frequencia) else {
+                    return Err("o PresentMon não viu nenhum quadro do jogo".to_string());
+                };
+                let decorrido = (ultimo.qpc - primeiro.qpc) as f64 / f as f64;
+                let intervalos: Vec<f64> = q.iter().map(|x| x.intervalo_ms).collect();
+                // O relógio da V1 soma intervalos a partir do início: o início é o primeiro quadro menos o intervalo dele.
+                let inicio_qpc = primeiro.qpc - (primeiro.intervalo_ms / 1000.0 * f as f64) as i64;
+                Ok((crate::modules::windows::frames::montar(&nome, pid, q.len() as u64, decorrido, intervalos, Vec::new()), Some(inicio_qpc)))
+            })
         });
 
         let mut amostras = Vec::new();
@@ -1753,11 +1807,15 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
             }
         }
 
-        let (saude, intervalos, quadros_erro) = match medicao.map(|h| h.join()) {
-            None => (None, Vec::new(), None),
-            Some(Ok(Ok((m, _)))) => (m.resumo.saude, m.intervalos_ms, None),
-            Some(Ok(Err(e))) => (None, Vec::new(), Some(e)),
-            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string())),
+        let (saude, intervalos, quadros_erro, inicio_qpc) = match medicao.map(|h| h.join()) {
+            None => (None, Vec::new(), None, None),
+            Some(Ok(Ok((m, inicio)))) => (m.resumo.saude, m.intervalos_ms, None, inicio),
+            Some(Ok(Err(e))) => (None, Vec::new(), Some(e), None),
+            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string()), None),
+        };
+        let inicio_dos_quadros = match (inicio_qpc, ancora_qpc, frequencia) {
+            (Some(i), Some(a), Some(f)) if f > 0 => (ancora_ms as i64 + (i - a) * 1000 / f).max(0) as u64,
+            _ => ancora_ms,
         };
         let vram_total = coletor.placa().map(|p| p.vram_total_mb);
         let travadas = (!intervalos.is_empty())
@@ -3459,6 +3517,8 @@ mod tests {
 
     /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
+        "investigar_travadas",
+        "devolver_teste_da_travada",
         "vistoriar_mudancas",
         "zerar_modo_jogo",
         "placa_de_video",
@@ -3582,6 +3642,7 @@ mod tests {
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",
+        "testar_causa_da_travada",
         "energia_testar_candidato",
         "energia_aplicar",
         "energia_modo_dinamico",

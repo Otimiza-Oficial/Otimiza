@@ -268,6 +268,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         refaz_sozinho: false,
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
+    Alteracao {
+        id: "teste_da_travada",
+        titulo: "Teste da causa da travada",
+        modulo: "investigacao",
+        o_que_muda: "Só quando a pessoa pede, e só para o programa que a investigação apontou: ele passa para prioridade baixa e modo econômico em janelas de 30 s alternadas com o normal, por até 12 minutos, com o jogo aberto. Nada é fechado nem congelado, e o jogo não é tocado. Fica assim depois do teste só se as travadas caíram 30% ou mais e o FPS médio, medido em janelas vizinhas, não caiu mais de 5%; e só até o jogo fechar.",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Volta sozinho ao fim de cada olhada do teste, quando o jogo fecha, em \"Devolver agora\", no \"Restaurar meu PC\" e na abertura seguinte do Otimiza (cada troca é anotada em disco antes da próxima).",
+    },
 ];
 
 /// Módulos que escrevem, mas NÃO no computador do cliente — dados do próprio

@@ -27,6 +27,8 @@ pub mod doctor;
 pub mod receita;
 pub mod compartilhar;
 pub mod perfil;
+pub mod causadatravada;
+pub mod testedatravada;
 pub mod evidencia;
 pub mod repeticoes;
 pub mod report;

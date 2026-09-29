@@ -45,6 +45,10 @@ pub struct Comparacao {
     /// Com gerador de um lado e sem do outro: o FPS não mede a otimização.
     #[serde(default)]
     pub mudou_a_geracao: bool,
+    /// PresentMon de um lado e canal antigo do outro: no FiveM o canal antigo conta o DOBRO dos quadros (medido em
+    /// 28/09/2026), então a diferença pode ser inteira do medidor.
+    #[serde(default)]
+    pub mudou_o_medidor: bool,
 }
 
 /// Duas medições seguidas do MESMO jogo, sem mexer em nada, variam nessa ordem: abaixo disso é ruído.
@@ -158,8 +162,8 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
     if mudou_o_medidor {
         ressalvas.push(
             "Uma das medições foi feita pelo PresentMon e a outra pelo canal antigo. O canal antigo conta todo \
-             quadro que o processo apresenta, no tempo do relógio; o PresentMon só os do jogo, na janela principal. \
-             Diferença pequena pode ser do medidor."
+             quadro que o processo apresenta; o PresentMon só os do jogo, na janela principal. No FiveM o canal \
+             antigo conta o dobro: a diferença pode ser inteira do medidor."
                 .to_string(),
         );
     }
@@ -185,6 +189,12 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
         format!(
             "O FPS do jogo foi de {:.0} para {:.0}, mas a geração de quadros não estava igual nas duas medições: \
              meça as duas com ela desligada (ou as duas com ela ligada) para saber o que a otimização fez.",
+            antes.fps, depois.fps
+        )
+    } else if mudou_o_medidor {
+        format!(
+            "As duas medições vieram de medidores diferentes ({:.0} e {:.0} quadros por segundo) e não se comparam: \
+             no FiveM o medidor antigo conta o dobro dos quadros. Meça o \"antes\" de novo para comparar.",
             antes.fps, depois.fps
         )
     } else if mudou_a_configuracao_do_jogo && passou_do_ruido && fps_delta > 0.0 {
@@ -231,8 +241,10 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
             && antes.confiavel
             && depois.confiavel
             && !mudou_a_geracao
-            && !mudou_a_configuracao_do_jogo,
+            && !mudou_a_configuracao_do_jogo
+            && !mudou_o_medidor,
         mudou_a_geracao,
+        mudou_o_medidor,
         mudou_a_configuracao_do_jogo,
         antes: antes.clone(),
         depois: depois.clone(),
@@ -279,6 +291,43 @@ mod tests {
 
         depois.configuracao_do_jogo = Some("aaaa".into());
         assert!(comparar(&antes, &depois).vale_como_prova, "mesma configuração: o ganho vale");
+    }
+
+    fn resumo_do_presentmon() -> crate::modules::windows::presentmon::Resumo {
+        use crate::modules::windows::presentmon::{resumir, Quadro, TipoDeQuadro};
+        let quadros: Vec<Quadro> = (0..600)
+            .map(|i| Quadro {
+                cadeia: "0xA".into(),
+                tipo: TipoDeQuadro::Jogo,
+                modo: "Hardware: Independent Flip".into(),
+                runtime: "DXGI".into(),
+                inicio_qpc: Some(i * 55_555),
+                intervalo_ms: Some(5.555),
+                cpu_ocupada_ms: None,
+                gpu_ocupada_ms: None,
+                na_tela_ms: Some(5.555),
+                ate_a_tela_ms: None,
+            })
+            .collect();
+        resumir(&quadros).expect("resumo")
+    }
+
+    #[test]
+    fn medidores_diferentes_nao_viram_ganho_nem_queda() {
+        // O caso real desta máquina: "antes" de 346 FPS pelo canal antigo num monitor de 180 Hz.
+        let antes = prova("FiveM", 346.0, 153.0, 0.0);
+        let mut depois = prova("FiveM", 180.0, 150.0, 0.0);
+        depois.presentmon = Some(resumo_do_presentmon());
+
+        let c = comparar(&antes, &depois);
+        assert!(c.mudou_o_medidor);
+        assert!(!c.vale_como_prova);
+        assert!(!c.veredito.contains("CAIU"), "{}", c.veredito);
+        assert!(c.veredito.contains("medidores diferentes"), "{}", c.veredito);
+
+        // Ao contrário: canal antigo depois dobraria o FPS e seria "ganho confirmado".
+        let c = comparar(&depois, &antes);
+        assert!(!c.vale_como_prova, "o dobro do medidor não é ganho");
     }
 
     #[test]

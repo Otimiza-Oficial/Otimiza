@@ -170,6 +170,9 @@ pub fn run() {
             commands::exportar_alteracoes,
             commands::salvar_ficha_da_bios,
             commands::cpuset_testar,
+            commands::investigar_travadas,
+            commands::testar_causa_da_travada,
+            commands::devolver_teste_da_travada,
             commands::cpuset_resultados,
             commands::cpuset_esquecer,
             commands::analyze_rbar,
@@ -389,6 +392,13 @@ pub fn run() {
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::provaalternada::recuperar_na_abertura).await {
                     utils::Logger::info(&format!("prova alternada interrompida: plano do Otimiza reativado na abertura: {:?}", r));
                 }
+                // Teste da travada interrompido (ou mantido e o Otimiza fechou antes do jogo): devolve a prioridade.
+                match tokio::task::spawn_blocking(modules::windows::investigacao::recuperar_na_abertura).await {
+                    Ok(Ok(Some(frase))) => utils::Logger::info(&format!("teste da travada, na abertura: {}", frase)),
+                    Ok(Ok(None)) => {}
+                    Ok(Err(e)) => utils::Logger::warn(&format!("teste da travada, na abertura: {}", e)),
+                    Err(e) => utils::Logger::warn(&format!("teste da travada: a devolução na abertura caiu: {}", e)),
+                }
             });
 
             // Olha a cada três segundos só os executáveis com perfil salvo; só age com o modo ligado e elevado.
@@ -473,7 +483,10 @@ pub fn run() {
 
                         // Uma partida meio com um plano, meio com outro, não vai para o histórico. No modo seguro, nada
                         // automático roda.
-                        if modules::provaalternada::em_andamento() || utils::diagnostico::modo_seguro() {
+                        if modules::provaalternada::em_andamento()
+                            || modules::windows::investigacao::em_andamento()
+                            || utils::diagnostico::modo_seguro()
+                        {
                             continue;
                         }
 

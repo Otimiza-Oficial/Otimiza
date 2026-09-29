@@ -105,6 +105,9 @@ fn impedimento() -> Option<String> {
     if crate::modules::provaalternada::em_andamento() {
         return Some("A prova do Otimizar está rodando. Espere ela terminar e desfaça tudo depois.".to_string());
     }
+    if super::investigacao::em_andamento() {
+        return Some("O teste da travada está rodando. Espere ele terminar (ele devolve tudo) e desfaça depois.".to_string());
+    }
     None
 }
 
@@ -126,6 +129,7 @@ where
     let mut preferencias = Preferences::load();
     let dinamico = motor::dinamico().ligado;
     let modo_jogo = gamemode::status(log).active;
+    let teste_da_travada = super::investigacao::ha_acalmado();
     let regras = cpuset::ler();
     let estado_do_motor = motor::estado_do_backup();
     let historico_ilegivel = match log.leitura() {
@@ -137,7 +141,7 @@ where
         _ => None,
     };
     let planejado = o_que_fazer(
-        preferencias.auto_game_mode || dinamico || modo_jogo,
+        preferencias.auto_game_mode || dinamico || modo_jogo || teste_da_travada,
         match &estado_do_motor {
             Ok(false) => Leitura::Nada,
             Ok(true) => Leitura::Algo,
@@ -178,6 +182,13 @@ where
                     match gamemode::desativar(log) {
                         Ok(frase) => feito.push(frase),
                         Err(e) => falhas.push(e),
+                    }
+                }
+                if teste_da_travada {
+                    match super::investigacao::devolver_mantido() {
+                        Ok(Some(frase)) => feito.push(format!("Teste da travada: {}", frase)),
+                        Ok(None) => {}
+                        Err(e) => falhas.push(format!("teste da travada: {}", e)),
                     }
                 }
                 if dinamico {

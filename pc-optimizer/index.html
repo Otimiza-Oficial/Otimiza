@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Otimiza — Console de Desempenho</title>
     <script type="module" src="/src/main.ts" defer></script>
+    <script type="module" src="/src/travadas.ts" defer></script>
 
     <!--
       O tema antes da primeira pintura: síncrono no <head> (o resto carrega com defer, e o app piscaria branco).
@@ -480,6 +481,24 @@
             </div>
             <div id="doctor-causas"></div>
             <p class="hint" id="doctor-lacunas"></p>
+          </section>
+
+          <!-- Por que o jogo trava (PIP, motor V2): cada suspeito contra a taxa de base dele; teste ativo dirigido. -->
+          <section class="panel" id="travadas">
+            <div class="panel-head">
+              <h2>Por que o jogo trava</h2>
+              <span class="panel-tag" id="travadas-tag">—</span>
+            </div>
+            <p class="lead">
+              Com o jogo aberto, numa partida, o Otimiza mede 60 s de quadros e do que a máquina fazia no mesmo
+              relógio, e procura o que aparece <strong>mais nas travadas do que fora delas</strong>. Não mexe em nada.
+            </p>
+            <div class="row-actions">
+              <button id="travadas-investigar" class="btn btn-primary" data-custo="~60 s">Investigar travadas</button>
+            </div>
+            <p id="travadas-status" class="status"></p>
+            <div id="travadas-resultado" class="resultado" data-vazio="Nenhuma investigação feita ainda."></div>
+            <div id="travadas-teste" hidden></div>
           </section>
 
           <p class="secao-rotulo">Monitores ao vivo</p>
