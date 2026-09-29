@@ -9,6 +9,7 @@ import { carregarMotorDeEnergia } from "./energia";
 import { carregarAbaBios, lerPassoAPassoDaBios } from "./bios";
 import { carregarMapaDeDesempenho } from "./mapa";
 import { ligarProntidao } from "./prontidao";
+import { abrirOverlay, fecharOverlay, ligarMotion } from "./motion";
 
 type Verdict = "Improved" | "Worsened" | "NoMeasurableChange" | "TooNoisyToJudge";
 type State = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable" | "Unknown";
@@ -825,6 +826,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // A do painel gira (o giro carrega o uso de CPU); as grandes não: informam pela erosão, redesenhadas uma vez por
   // medição, sem laço de sessenta quadros na máquina fraca.
   esfera = new Esfera(element<HTMLCanvasElement>("veredito-esfera"));
+  window.addEventListener("pagehide", () => esfera?.destruir(), { once: true });
 
   // `dissolve`: para que lado a imagem some no preto, na direção do texto.
   pilaresDoPortao = new Pilares(element<HTMLCanvasElement>("portao-pilares"));
@@ -840,6 +842,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   wireControls();
+  const desligarMotion = ligarMotion();
+  window.addEventListener("pagehide", desligarMotion, { once: true });
   requestAnimationFrame(() =>
     setTimeout(() => void invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {}), 0)
   );
@@ -921,7 +925,7 @@ window.addEventListener("DOMContentLoaded", async () => {
  * coisa cortada: engasgar no PC que ele deveria consertar desmente o produto.
  */
 async function ajustarMovimento() {
-  const sistemaPedeCalma = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const movimento = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   let maquinaFraca = false;
   let maquinaApertada = false;
@@ -938,17 +942,19 @@ async function ajustarMovimento() {
     // Sem perfil, anima.
   }
 
-  const parado = sistemaPedeCalma || maquinaFraca;
-  document.body.classList.toggle("sem-animacao", parado);
-
-  // Só a esfera tem laço para ligar; os pilares são desenhados por medição.
-  esfera?.ligar();
-
-  // O fundo divide a duração da animação por este número: 0,35 transforma 90 s em 257 s.
-  document.documentElement.style.setProperty(
-    "--anim",
-    parado ? "0" : maquinaApertada ? "0.35" : "1"
-  );
+  const aplicar = () => {
+    const parado = movimento.matches || maquinaFraca;
+    document.body.classList.toggle("sem-animacao", parado);
+    document.documentElement.style.setProperty(
+      "--anim",
+      parado ? "0" : maquinaApertada ? "0.35" : "1"
+    );
+    // Primeiro aplica a preferência; só então decide se o canvas deve voltar a rodar.
+    esfera?.ligar();
+  };
+  aplicar();
+  movimento.addEventListener("change", aplicar);
+  window.addEventListener("pagehide", () => movimento.removeEventListener("change", aplicar), { once: true });
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -1049,8 +1055,16 @@ function areaDa(tela: string): string {
 /** Sub-abas da área da tela aberta; some nas áreas de uma tela só. */
 function desenharSubnav(tela: string) {
   const barra = element("subnav");
-  const telas = AREAS[areaDa(tela)]?.telas ?? [];
+  const area = areaDa(tela);
+  const telas = AREAS[area]?.telas ?? [];
   barra.hidden = telas.length === 0;
+  if (barra.dataset.area === area) {
+    barra.querySelectorAll<HTMLButtonElement>("[data-subtela]").forEach(botao => {
+      botao.setAttribute("aria-selected", String(botao.dataset.subtela === tela));
+    });
+    return;
+  }
+  barra.dataset.area = area;
   barra.innerHTML = telas
     .map(
       ([id, rotulo]) =>
@@ -1076,6 +1090,12 @@ function sincronizarCabecalho(item: HTMLElement, name: string) {
 }
 
 function showTab(name: string) {
+  const destino = document.getElementById(`tab-${name}`);
+  if (!destino) return;
+  const atual = document.querySelector<HTMLElement>(".tab-panel:not([hidden])");
+  const paineis = [...document.querySelectorAll<HTMLElement>(".tab-panel")];
+  // Uma única superfície entra, sem atrasar a troca nem manter a anterior interativa.
+  destino.style.setProperty("--motion-direcao", atual && paineis.indexOf(destino) < paineis.indexOf(atual) ? "-1" : "1");
   if (name === "energia") {
     void carregarMotorDeEnergia({ pedirAdmin: askForAdmin });
   }
@@ -2599,7 +2619,7 @@ function setBar(id: string, percent: number | null) {
 
   // Vazia E marcada: só vazia seria igual a 0% medido.
   if (percent === null) {
-    bar.style.width = "0%";
+    bar.style.transform = "scaleX(0)";
     if (medidorOuNada) {
       delete medidorOuNada.dataset.nivel;
       medidorOuNada.dataset.estado = "desconhecido";
@@ -2609,7 +2629,7 @@ function setBar(id: string, percent: number | null) {
 
   const valor = Math.min(100, Math.max(0, percent));
 
-  bar.style.width = `${valor}%`;
+  bar.style.transform = `scaleX(${valor / 100})`;
 
   const medidor = medidorOuNada;
   if (!medidor) return;
@@ -5075,12 +5095,12 @@ function appendLogLine(step: BatchStep) {
 /** O Windows não deixa um processo se elevar sozinho: explica e reabre com autorização. */
 function askForAdmin(reason: string) {
   element("modal-text").textContent = reason;
-  element("admin-modal").hidden = false;
+  abrirOverlay(element("admin-modal"));
   element<HTMLButtonElement>("modal-confirm").focus();
 }
 
 function closeAdminModal() {
-  element("admin-modal").hidden = true;
+  fecharOverlay(element("admin-modal"));
 }
 
 async function relaunchAsAdmin() {
@@ -5206,12 +5226,12 @@ function mostrarAvisoDosEssenciais(checagem: ChecagemDosEssenciais) {
     })
     .join("");
 
-  element("essenciais-modal").hidden = false;
+  abrirOverlay(element("essenciais-modal"));
   element<HTMLButtonElement>("essenciais-religar").focus();
 }
 
 function fecharAvisoDosEssenciais() {
-  element("essenciais-modal").hidden = true;
+  fecharOverlay(element("essenciais-modal"));
   loteAguardando = null;
 }
 
@@ -5752,14 +5772,14 @@ function wireComandos(secoes: HTMLButtonElement[]) {
   const abrir = () => {
     // Na hora de abrir: os painéis carregam conteúdo depois do início.
     comandos = montarComandos(secoes);
-    caixa.hidden = false;
+    abrirOverlay(caixa);
     campo.value = "";
     filtrar("");
     campo.focus();
   };
 
-  const fechar = () => {
-    caixa.hidden = true;
+  const fechar = (restaurarFoco = true) => {
+    fecharOverlay(caixa, restaurarFoco);
   };
 
   function filtrar(termo: string) {
@@ -5774,6 +5794,7 @@ function wireComandos(secoes: HTMLButtonElement[]) {
 
     escolhido = 0;
     desenhar();
+    lista.scrollTop = 0;
   }
 
   function desenhar() {
@@ -5811,14 +5832,17 @@ function wireComandos(secoes: HTMLButtonElement[]) {
       event.preventDefault();
       const passo = event.key === "ArrowDown" ? 1 : visiveis.length - 1;
       escolhido = (escolhido + passo) % Math.max(1, visiveis.length);
-      desenhar();
+      lista.querySelectorAll<HTMLElement>("[data-indice]").forEach((item, i) => {
+        item.setAttribute("aria-selected", String(i === escolhido));
+      });
+      lista.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
       return;
     }
 
     if (event.key === "Enter" && visiveis[escolhido]) {
       event.preventDefault();
-      visiveis[escolhido].executar();
       fechar();
+      visiveis[escolhido].executar();
     }
   });
 
@@ -5828,8 +5852,8 @@ function wireComandos(secoes: HTMLButtonElement[]) {
     const alvo = (event.target as HTMLElement).closest<HTMLElement>("[data-indice]");
     if (!alvo) return;
 
-    visiveis[Number(alvo.dataset.indice)]?.executar();
     fechar();
+    visiveis[Number(alvo.dataset.indice)]?.executar();
   });
 
   caixa.addEventListener("click", (event) => {
