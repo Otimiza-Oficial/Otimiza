@@ -69,6 +69,61 @@ e **o que o Otimiza mudou nas 48 horas antes** — ou que não mudou nada. Quand
 o mesmo defeito se repete, quando o limite do jogo estourou ou quando o crash
 já acontecia antes do Otimiza, a tela diz.
 
+## Por que o jogo trava
+
+No Início, **Investigar travadas**: com o jogo aberto, o Otimiza mede 60
+segundos dos quadros e do que a máquina fazia no mesmo relógio, e procura o
+que aparece **mais nas travadas do que fora delas** — um programa disputando
+o processador, o disco, a memória, a memória de vídeo. A tela mostra a conta
+e também a evidência contra. Com poucas travadas, ou sem nada que se destaque,
+ela diz "causa ainda não determinada" em vez de chutar.
+
+Quando o suspeito é um programa, dá para **testar**: até 12 minutos jogando,
+com o programa em prioridade baixa em metade do tempo, alternando. Ele só fica
+assim se as travadas caírem pelo menos 30% sem o FPS cair, e só até o jogo
+fechar. Se não funcionar, o Otimiza lembra e não repete o teste.
+
+## O Início conta a sua última partida
+
+- **Sua última partida:** FPS, os piores momentos, os trancos e o que limitou,
+  juntando as medições que o Otimiza já faz sozinho.
+- **Por que seu jogo roda assim:** até três causas, cada uma com o número que
+  a sustenta, e o passo a passo do que ajuda — lembrando o que já piorou nesta
+  máquina para não oferecer de novo.
+- **O que esperar deste PC:** na primeira abertura, os limites do hardware
+  (monitor, memória, núcleos, disco, notebook) antes de otimizar qualquer coisa.
+
+## O que mudou no seu jogo
+
+Em Histórico, uma linha do tempo por jogo: partidas medidas, troca de driver,
+atualização do Windows e o que o Otimiza aplicou ou desfez. Se o FPS caiu
+depois de uma troca, a tela aponta quando. E se uma atualização do Windows
+desfizer um ajuste do Otimiza, ele avisa em vez de fingir que continua valendo.
+
+## Desfazer tudo, de verdade
+
+**Restaurar meu PC** desfaz tudo o que o Otimiza mudou — histórico, plano de
+energia, núcleos por jogo e os modos automáticos — e diz o que não conseguiu.
+O desinstalador oferece o mesmo antes de remover o programa.
+
+## Resultado para compartilhar
+
+O resultado da prova no jogo sai num texto pronto para colar no Discord, com a
+margem de erro junto — nunca só o número bom.
+
+## Números mais honestos
+
+- **"Antes e depois" não confunde medidor:** uma medição pelo PresentMon e
+  outra pelo medidor antigo não viram mais "ganho confirmado".
+- **O Mapa de desempenho mede pelo PresentMon**, e não mais pelo medidor antigo
+  que contava o dobro no FiveM.
+
+## Interface mais leve
+
+Transições mais curtas, janelas que devolvem o foco ao fechar, e a animação do
+Início para quando a janela está escondida ou fora da tela. Com "reduzir
+movimento" ligado no Windows, nada se mexe — mesmo mudando com o Otimiza aberto.
+
 ## Mais cuidado com a sua máquina
 
 - **A aba BIOS não fecha mais o programa.** A leitura do firmware travava a
