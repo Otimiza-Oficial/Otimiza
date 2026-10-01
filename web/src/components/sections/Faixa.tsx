@@ -6,16 +6,16 @@ import { ScrollVelocity } from "@/components/reactbits/ScrollVelocity";
  */
 export function Faixa() {
   return (
-    <section aria-label="O que o Otimiza faz" className="border-t border-line overflow-hidden py-10 sm:py-14">
+    <section aria-label="O que o Otimiza faz" className="overflow-hidden border-t border-line py-7 sm:py-9">
       <ScrollVelocity
         faixas={[
           {
             texto: "Medido · Otimizado · Provado com número ·",
-            className: "font-display px-2 text-[44px] leading-[1.1] font-semibold tracking-[-0.05em] text-fg sm:text-[72px]",
+            className: "font-display px-2 text-[28px] leading-[1.15] font-semibold tracking-[-0.045em] text-fg sm:text-[40px]",
           },
           {
             texto: "Desfaz byte a byte · Diz quando não há ganho ·",
-            className: "font-display texto-contorno px-2 text-[44px] leading-[1.1] font-semibold tracking-[-0.05em] sm:text-[72px]",
+            className: "font-display texto-contorno px-2 text-[28px] leading-[1.15] font-semibold tracking-[-0.045em] sm:text-[40px]",
           },
         ]}
       />

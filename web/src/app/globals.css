@@ -338,3 +338,32 @@
     -webkit-text-stroke: 1.2px rgb(10 10 10 / 0.55);
   }
 }
+
+@layer components {
+  /*
+    Borda que acende perto do mouse (no estilo do Border Glow / Magic Bento do React Bits): um anel de 1px desenhado
+    pela própria camada do Spotlight, recortado por máscara para sobrar só a beirada.
+  */
+  .spotlight {
+    border-radius: inherit;
+  }
+  .spotlight::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: radial-gradient(
+      220px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+      rgb(10 10 10 / 0.45),
+      transparent 70%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+  }
+}
