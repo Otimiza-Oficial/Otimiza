@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 import { useId, useState } from "react";
 import { Reveal } from "@/components/motion/Reveal";
 import { useReducedMotionSafe } from "@/components/motion/useReducedMotionSafe";
-import { Section } from "@/components/ui/Section";
+import { Section, SectionHeading } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
 
 /*
@@ -49,19 +49,23 @@ export function FAQ() {
     <Section id="perguntas" labelledBy="perguntas-titulo">
       <div className="mx-auto max-w-[760px]">
         <Reveal>
-          <h2 id="perguntas-titulo" className="font-display text-[26px] font-semibold tracking-[-0.04em] sm:text-[30px]">
-            Antes de pagar
-          </h2>
+          <SectionHeading id="perguntas-titulo" title="Antes de pagar." lead="O que todo mundo pergunta." />
         </Reveal>
 
-        <Reveal delay={0.05}>
-          <ul className="mt-6">
+        <ul className="mt-10">
             {PERGUNTAS.map((item, i) => {
               const aberto = aberta === i;
               const idBotao = `${base}-botao-${i}`;
               const idPainel = `${base}-painel-${i}`;
               return (
-                <li key={item.p} className="border-b border-line">
+                <motion.li
+                  key={item.p}
+                  className="group border-b border-line"
+                  initial={reduce ? false : { opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "0px 0px -8% 0px" }}
+                  transition={{ duration: reduce ? 0 : 0.45, delay: reduce ? 0 : i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                >
                   <h3>
                     <button
                       type="button"
@@ -69,7 +73,7 @@ export function FAQ() {
                       aria-expanded={aberto}
                       aria-controls={idPainel}
                       onClick={() => setAberta(aberto ? null : i)}
-                      className="flex min-h-14 w-full items-center justify-between gap-6 py-5 text-left text-[15px] font-medium tracking-[-0.01em]"
+                      className="flex min-h-14 w-full items-center justify-between gap-6 py-5 text-left text-[15px] font-medium tracking-[-0.01em] transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:pl-2"
                     >
                       {item.p}
                       <ChevronDown
@@ -96,11 +100,10 @@ export function FAQ() {
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </li>
+                </motion.li>
               );
             })}
           </ul>
-        </Reveal>
       </div>
     </Section>
   );

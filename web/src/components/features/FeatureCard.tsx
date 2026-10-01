@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Spotlight } from "@/components/reactbits/Spotlight";
+import { Tilt } from "@/components/reactbits/Tilt";
 import { cn } from "@/lib/cn";
 
 /**
@@ -37,7 +38,9 @@ export function FeatureCard({
         </h3>
         {text && <p className="mt-3 max-w-[340px] text-[14px] leading-[1.55] text-muted">{text}</p>}
       </div>
-      <div className={cn("relative mt-7 flex-1", stageClassName)}>{children}</div>
+      <div className={cn("relative mt-7 flex-1", stageClassName)}>
+        <Tilt className="h-full">{children}</Tilt>
+      </div>
     </article>
   );
 }

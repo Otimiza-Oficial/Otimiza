@@ -1,7 +1,6 @@
 import { Footer } from "@/components/layout/Footer";
 import { Navbar } from "@/components/layout/Navbar";
 import { FAQ } from "@/components/sections/FAQ";
-import { Faixa } from "@/components/sections/Faixa";
 import { Features } from "@/components/sections/Features";
 import { FinalCTA } from "@/components/sections/FinalCTA";
 import { Hero } from "@/components/sections/Hero";
@@ -20,7 +19,6 @@ export default function Home() {
       <Navbar />
       <main id="conteudo">
         <Hero />
-        <Faixa />
         <Showcase />
         <Features />
         <Support />

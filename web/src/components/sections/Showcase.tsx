@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Reveal } from "@/components/motion/Reveal";
 import { useReducedMotionSafe } from "@/components/motion/useReducedMotionSafe";
+import { GlareHover } from "@/components/reactbits/GlareHover";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
 import { telas, texturaCetim } from "@/lib/site";
@@ -63,7 +64,7 @@ export function Showcase() {
         onViewportLeave={() => setVisivel(false)}
         onMouseEnter={() => setSobre(true)}
         onMouseLeave={() => setSobre(false)}
-        className="grain relative mt-12 overflow-hidden rounded-[22px] bg-[#070707] shadow-[0_0_0_1px_rgb(10_10_10/0.1),0_30px_80px_-40px_rgb(0_0_0/0.55)] lg:mt-14"
+        className="grain glare-alvo relative mt-12 overflow-hidden rounded-[22px] bg-[#070707] shadow-[0_0_0_1px_rgb(10_10_10/0.1),0_30px_80px_-40px_rgb(0_0_0/0.55)] lg:mt-14"
       >
         <Image
           src={texturaCetim}
@@ -73,6 +74,7 @@ export function Showcase() {
           className="object-cover opacity-80"
           priority={false}
         />
+        <GlareHover />
         {/* Vinheta: escurece as bordas para a janela do app ser o ponto de luz. */}
         <div
           aria-hidden="true"

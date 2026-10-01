@@ -4,6 +4,7 @@ import { Ilustrativo } from "@/components/features/FeatureCard";
 import { Reveal } from "@/components/motion/Reveal";
 import { DecryptedText } from "@/components/reactbits/DecryptedText";
 import { Spotlight } from "@/components/reactbits/Spotlight";
+import { Tilt } from "@/components/reactbits/Tilt";
 import { Avatar } from "@/components/ui/Avatar";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { pessoas } from "@/lib/site";
@@ -54,7 +55,10 @@ export function License() {
 
         <Reveal delay={0.1} className="h-full">
           <div className="card grid h-full min-h-[380px] place-items-center p-6 sm:p-10">
-            <AtivacaoMock />
+            <Spotlight />
+            <Tilt graus={7} className="grid w-full place-items-center">
+              <AtivacaoMock />
+            </Tilt>
           </div>
         </Reveal>
       </div>
