@@ -265,7 +265,8 @@
     pointer-events: none;
     position: absolute;
     inset: 0;
-    z-index: 0;
+    /* Atrás do conteúdo do card: com o card isolado, -1 fica entre o fundo do card e o texto. */
+    z-index: -1;
     opacity: 0;
     transition: opacity 0.45s var(--ease-out-soft);
     background: radial-gradient(
@@ -274,14 +275,66 @@
       transparent 70%
     );
   }
+  .card:has(> .spotlight) {
+    isolation: isolate;
+  }
   .card:hover > .spotlight {
     opacity: 1;
   }
 
+  /* StarBorder: duas luzes correm pelas bordas de cima e de baixo, por trás do bloco. */
+  .star-border {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    isolation: isolate;
+    background: rgb(255 255 255 / 0.08);
+  }
+  .star-border-luz {
+    position: absolute;
+    z-index: 0;
+    width: 300%;
+    height: 50%;
+    border-radius: 9999px;
+    opacity: 0.7;
+    background: radial-gradient(circle, var(--star-cor), transparent 10%);
+    animation: var(--star-tempo, 6s) linear infinite alternate;
+  }
+  .star-border-baixo {
+    bottom: -11px;
+    right: -250%;
+    animation-name: star-baixo;
+  }
+  .star-border-cima {
+    top: -10px;
+    left: -250%;
+    animation-name: star-cima;
+  }
+  @keyframes star-baixo {
+    0% { transform: translate(0%, 0%); opacity: 1; }
+    100% { transform: translate(-100%, 0%); opacity: 0; }
+  }
+  @keyframes star-cima {
+    0% { transform: translate(0%, 0%); opacity: 1; }
+    100% { transform: translate(100%, 0%); opacity: 0; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .star-border-luz {
+      animation: none;
+      opacity: 0;
+    }
     .shiny-text {
       animation: none;
       background-position: 150% center;
     }
+  }
+}
+
+@layer components {
+  /* Letra vazada (só contorno): a segunda linha da faixa de frases. */
+  .texto-contorno {
+    color: transparent;
+    -webkit-text-stroke: 1.2px rgb(10 10 10 / 0.55);
   }
 }

@@ -2,6 +2,8 @@ import { Check, KeyRound } from "lucide-react";
 import { OtimizaLogo } from "@/components/brand/OtimizaLogo";
 import { Ilustrativo } from "@/components/features/FeatureCard";
 import { Reveal } from "@/components/motion/Reveal";
+import { DecryptedText } from "@/components/reactbits/DecryptedText";
+import { Spotlight } from "@/components/reactbits/Spotlight";
 import { Avatar } from "@/components/ui/Avatar";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { pessoas } from "@/lib/site";
@@ -41,7 +43,8 @@ export function License() {
           {PASSOS.map((p, i) => (
             <li key={p.titulo}>
               <Reveal delay={i * 0.05} className="card h-full p-6">
-                <span className="tabular font-mono text-[12px] text-subtle">0{i + 1}</span>
+                <Spotlight />
+                <DecryptedText text={`0${i + 1}`} className="tabular font-mono text-[12px] text-subtle" />
                 <h3 className="font-display mt-6 text-[18px] font-semibold tracking-[-0.03em]">{p.titulo}</h3>
                 <p className="mt-2 text-[13.5px] leading-[1.55] text-muted">{p.texto}</p>
               </Reveal>
@@ -69,7 +72,9 @@ function AtivacaoMock() {
         </div>
 
         <p className="mt-5 text-[11.5px] font-medium text-muted">Código desta máquina</p>
-        <p className="tabular mt-1 rounded-[8px] bg-sunken px-3 py-2 font-mono text-[12.5px]">OTZ-4M8C-T2QP-9LZE</p>
+        <p className="tabular mt-1 rounded-[8px] bg-sunken px-3 py-2 font-mono text-[12.5px]">
+          <DecryptedText text="OTZ-4M8C-T2QP-9LZE" passoMs={35} voltasPorLetra={3} />
+        </p>
 
         <p className="mt-4 text-[11.5px] font-medium text-muted">A sua chave</p>
         <div className="mt-1 flex items-center gap-2 rounded-[8px] px-3 py-2 shadow-[0_0_0_1px_rgb(10_10_10/0.14)]">

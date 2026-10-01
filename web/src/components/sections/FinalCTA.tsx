@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { OtimizaLogo } from "@/components/brand/OtimizaLogo";
 import { Reveal } from "@/components/motion/Reveal";
 import { Magnet } from "@/components/reactbits/Magnet";
+import { ShinyText } from "@/components/reactbits/ShinyText";
 import { ButtonLink } from "@/components/ui/Button";
 import { links } from "@/lib/site";
 
@@ -69,7 +70,7 @@ export function FinalCTA() {
                 id="cta-titulo"
                 className="font-display mx-auto mt-7 max-w-[760px] text-[36px] leading-[1.05] font-semibold tracking-[-0.05em] text-balance sm:text-[52px] lg:text-[60px]"
               >
-                Seu PC, medido de verdade.
+                <ShinyText text="Seu PC, medido de verdade." color="#ffffff" shineColor="#7a7a7a" segundos={4.5} />
               </h2>
               <div className="mt-9 flex justify-center">
                 <Magnet>

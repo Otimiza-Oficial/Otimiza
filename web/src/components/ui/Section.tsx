@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ScrollReveal } from "@/components/reactbits/ScrollReveal";
 import { cn } from "@/lib/cn";
 
 /**
@@ -58,8 +59,14 @@ export function SectionHeading({
             : "text-[30px] leading-[1.14] tracking-[-0.045em] sm:text-[36px] lg:text-[42px]",
         )}
       >
-        {title}
-        {lead && <span className="block text-muted">{lead}</span>}
+        {typeof title === "string" && (lead === undefined || typeof lead === "string") ? (
+          <ScrollReveal partes={[{ texto: title }, ...(lead ? [{ texto: lead, className: "block text-muted" }] : [])]} />
+        ) : (
+          <>
+            {title}
+            {lead && <span className="block text-muted">{lead}</span>}
+          </>
+        )}
       </h2>
     </div>
   );

@@ -1,6 +1,8 @@
 import { ArrowRight, Check, Download } from "lucide-react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Reveal } from "@/components/motion/Reveal";
+import { CountUp } from "@/components/reactbits/CountUp";
+import { StarBorder } from "@/components/reactbits/StarBorder";
 import { ButtonLink } from "@/components/ui/Button";
 import { Section, SectionHeading } from "@/components/ui/Section";
 import { cn } from "@/lib/cn";
@@ -55,6 +57,16 @@ const OPCOES = [
   },
 ];
 
+/** O plano em destaque ganha a moldura com luz correndo (StarBorder); os outros ficam como estão. */
+function Moldura({ destaque, children }: { destaque?: boolean; children: React.ReactNode }) {
+  if (!destaque) return <>{children}</>;
+  return (
+    <StarBorder className="w-full shadow-[0_30px_60px_-30px_rgb(0_0_0/0.6)]" cor="rgb(255 255 255 / 0.95)" espessura={1.5}>
+      {children}
+    </StarBorder>
+  );
+}
+
 export function Pricing() {
   return (
     <Section id="preco" labelledBy="preco-titulo">
@@ -69,6 +81,7 @@ export function Pricing() {
         {OPCOES.map((o, i) => (
           <li key={o.id} className="flex">
             <Reveal delay={i * 0.05} className="flex w-full">
+              <Moldura destaque={o.destaque}>
               <article
                 aria-label={o.nome}
                 className={cn(
@@ -94,7 +107,17 @@ export function Pricing() {
 
                 <p className="mt-8 flex items-baseline gap-2">
                   <span className="font-display tabular text-[44px] leading-none font-semibold tracking-[-0.05em]">
-                    {o.preco === 0 ? "Grátis" : formatarReais(o.preco)}
+                    {o.preco === 0 ? (
+                      "Grátis"
+                    ) : (
+                      <>
+                        <span className="sr-only">{formatarReais(o.preco)}</span>
+                        <span aria-hidden="true">
+                          R$&nbsp;
+                          <CountUp to={o.preco} casas={2} />
+                        </span>
+                      </>
+                    )}
                   </span>
                 </p>
                 <p className={cn("mt-2 text-[12.5px]", o.destaque ? "text-[#a3a3a3]" : "text-subtle")}>{o.nota}</p>
@@ -125,6 +148,7 @@ export function Pricing() {
                   </ul>
                 </div>
               </article>
+              </Moldura>
             </Reveal>
           </li>
         ))}
