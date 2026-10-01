@@ -227,3 +227,61 @@
     opacity: 1;
   }
 }
+
+/*
+  Peças adaptadas do React Bits (src/components/reactbits). Só tinta preta e cinza, como o resto do site.
+*/
+@layer components {
+  /* ShinyText: o brilho atravessa o texto e some; pausa no fim de cada passada. */
+  .shiny-text {
+    display: inline-block;
+    background-image: linear-gradient(
+      120deg,
+      var(--shiny-cor) 0%,
+      var(--shiny-cor) 40%,
+      var(--shiny-brilho) 50%,
+      var(--shiny-cor) 60%,
+      var(--shiny-cor) 100%
+    );
+    background-size: 220% auto;
+    background-position: 150% center;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shiny-passa var(--shiny-tempo, 3.2s) linear infinite;
+  }
+  @keyframes shiny-passa {
+    0% {
+      background-position: 150% center;
+    }
+    60%,
+    100% {
+      background-position: -50% center;
+    }
+  }
+
+  /* Spotlight: luz fraca que segue o mouse dentro do card; aparece só com o mouse em cima. */
+  .spotlight {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.45s var(--ease-out-soft);
+    background: radial-gradient(
+      var(--spot-raio, 320px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
+      var(--spot-cor, rgb(10 10 10 / 0.06)),
+      transparent 70%
+    );
+  }
+  .card:hover > .spotlight {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .shiny-text {
+      animation: none;
+      background-position: 150% center;
+    }
+  }
+}

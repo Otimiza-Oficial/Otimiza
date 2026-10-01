@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Spotlight } from "@/components/reactbits/Spotlight";
 import { cn } from "@/lib/cn";
 
 /**
@@ -26,6 +27,7 @@ export function FeatureCard({
 }) {
   return (
     <article className={cn("card group flex h-full flex-col", className)}>
+      <Spotlight />
       <div className="relative z-10 px-6 pt-6 sm:px-7 sm:pt-7">
         <Icon size={22} strokeWidth={2.25} className="text-fg" aria-hidden="true" />
         <h3 className="font-display mt-5 text-[21px] leading-[1.22] font-semibold tracking-[-0.035em] text-fg sm:text-[23px]">

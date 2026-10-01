@@ -1,6 +1,7 @@
 import { Download } from "lucide-react";
 import { OtimizaLogo } from "@/components/brand/OtimizaLogo";
 import { Reveal } from "@/components/motion/Reveal";
+import { Magnet } from "@/components/reactbits/Magnet";
 import { ButtonLink } from "@/components/ui/Button";
 import { links } from "@/lib/site";
 
@@ -71,10 +72,12 @@ export function FinalCTA() {
                 Seu PC, medido de verdade.
               </h2>
               <div className="mt-9 flex justify-center">
-                <ButtonLink href={links.baixar} variant="light" size="md">
-                  <Download size={15} strokeWidth={2.25} aria-hidden="true" />
-                  Baixar para Windows
-                </ButtonLink>
+                <Magnet>
+                  <ButtonLink href={links.baixar} variant="light" size="md">
+                    <Download size={15} strokeWidth={2.25} aria-hidden="true" />
+                    Baixar para Windows
+                  </ButtonLink>
+                </Magnet>
               </div>
             </div>
           </Reveal>
