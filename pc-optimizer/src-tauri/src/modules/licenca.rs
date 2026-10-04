@@ -10,10 +10,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Pode ser pública. A privada vive na máquina do dono e no segredo do bot, nunca neste repositório.
-/// Trocar este valor invalida TODAS as licenças emitidas. É a terceira: as duas anteriores vazaram pelo
+/// Trocar este valor invalida TODAS as licenças emitidas. É a quarta: as duas primeiras vazaram pelo
 /// `.env.example` (versionado) e numa captura de tela, e por isso o gerador escreve a privada direto no `.env` do
-/// bot e nunca a imprime.
-const CHAVE_PUBLICA: &str = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
+/// bot e nunca a imprime. A terceira se perdeu com a hospedagem do bot (3.3.0, 04/10/2026): o .env agora tem backup.
+const CHAVE_PUBLICA: &str = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
 
 /// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

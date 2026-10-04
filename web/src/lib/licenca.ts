@@ -2,7 +2,7 @@
  * A conferência da licença no navegador, com a mesma regra de licenca.rs: <dados>.<assinatura> em base64url, Ed25519.
  * A chave pública confere e não cria. A assinatura é conferida antes de qualquer campo ser lido. Mudou no app, muda aqui.
  */
-export const CHAVE_PUBLICA = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
+export const CHAVE_PUBLICA = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
 
 export type Dados = {
   maquina: string;
