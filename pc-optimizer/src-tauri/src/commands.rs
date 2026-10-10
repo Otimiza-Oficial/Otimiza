@@ -1602,6 +1602,7 @@ pub async fn gerador_ligar(
             visivel_em_captura: false,
             automatico: false,
             sem_limite: false,
+            leve: false,
         })
     })
     .await
@@ -2934,9 +2935,33 @@ pub async fn frame_boost_destravar_base(
             crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log)?;
         }
         drop(log);
+        // A escolha fica: ligar o Frame Boost de novo não trava outra vez sozinho.
+        crate::plataforma::base_do_jogo::soltar(&jogo.executavel, true);
         crate::plataforma::frameboost::anotar_base(Some(
             "FPS base destravado: vale quando você reabrir o jogo.".to_string(),
         ));
+        return Ok(crate::plataforma::frameboost::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("O Frame Boost só existe no Windows.".to_string())
+    }
+}
+
+/// `EXIGEM_LICENCA`: volta a travar o FPS base do jogo aberto (desfaz o Destravar), com o Frame Boost ligado.
+#[tauri::command]
+pub async fn frame_boost_travar_base(
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::frameboost::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        crate::plataforma::base_do_jogo::soltar(&jogo.executavel, false);
+        let mut log = state.changes.lock().await;
+        crate::plataforma::frameboost::travar_base(&mut log);
+        drop(log);
         return Ok(crate::plataforma::frameboost::painel());
     }
     #[cfg(not(target_os = "windows"))]
@@ -4682,6 +4707,7 @@ mod tests {
         "mira_ligar",
         "cores_aplicar",
         "frame_boost_ligar",
+        "frame_boost_travar_base",
         "jogo_liso_aplicar",
         "memoria_fechar",
         "limpeza_executar",

@@ -5,6 +5,7 @@
 
 pub mod gpu;
 pub mod guarda;
+pub mod resumo;
 pub mod ritmo;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -72,6 +73,24 @@ pub struct Estado {
     /// Quantas vezes o gerador se refez sozinho (janela redimensionada, movida, minimizada, troca de modo de vídeo).
     #[serde(default)]
     pub refeitas: u32,
+    /// O tempo de placa que o gerador ocupou nos últimos 10 s, em ms por segundo (MEDIDO pelos carimbos da placa,
+    /// `gpu::Cronometro`). 100 ms/s = 10% da placa tirada do jogo.
+    #[serde(default)]
+    pub placa_ms_por_s: Option<f64>,
+    /// Quadros por segundo que CHEGARAM À TELA, pelo PresentMon no processo do Otimiza (`DisplayedTime`). `None` sem
+    /// PresentMon (sem administrador): aí o painel mostra `fps_apresentados` como estimativa.
+    #[serde(default)]
+    pub fps_exibidos: Option<f64>,
+    /// No modo leve: começou assim (placa sem folga) ou a guarda aliviou depois de ver o jogo perder FPS.
+    #[serde(default)]
+    pub leve: bool,
+    /// Quantas comparações com e sem o gerador valem na `razao_fps` (a guarda decide a partir de
+    /// `guarda::MINIMO_DE_AMOSTRAS`).
+    #[serde(default)]
+    pub comparacoes: u32,
+    /// Desde que ligou, só o tempo gerando e à vista: o "antes × depois" do painel quando desliga.
+    #[serde(default)]
+    pub sessao: resumo::Acumulado,
 }
 
 impl Default for Estado {
@@ -95,6 +114,11 @@ impl Default for Estado {
             placa: None,
             integrada: false,
             refeitas: 0,
+            placa_ms_por_s: None,
+            fps_exibidos: None,
+            leve: false,
+            comparacoes: 0,
+            sessao: resumo::Acumulado::default(),
         }
     }
 }
@@ -208,6 +232,26 @@ pub struct Configuracao {
     /// apresentado, e o Windows mostra o mais novo a cada atualização da tela).
     #[serde(default)]
     pub sem_limite: bool,
+    /// Começa no modo leve (`gpu::NIVEIS_DO_MODO_LEVE`): placa sem folga.
+    #[serde(default)]
+    pub leve: bool,
+}
+
+/// O que fazer quando a guarda vê o jogo perder FPS. Pura.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReacaoAPerda {
+    /// Primeiro alivia a placa e confere de novo, do zero.
+    FicarLeve,
+    /// Já estava leve e o jogo ainda perde: desliga.
+    Desligar,
+}
+
+pub fn reacao_a_perda(ja_leve: bool) -> ReacaoAPerda {
+    if ja_leve {
+        ReacaoAPerda::Desligar
+    } else {
+        ReacaoAPerda::FicarLeve
+    }
 }
 
 /// O teto do automático: com o jogo a 30 fps num monitor de 180 Hz, seis quadros por real.
@@ -227,6 +271,7 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
             multiplicador: config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO),
             automatico: config.automatico,
             sem_limite: config.sem_limite,
+            leve: config.leve,
             ..Estado::default()
         }
     });
@@ -723,9 +768,12 @@ impl Sobreposicao {
         Ok(())
     }
 
-    fn apresentar(&self, gpu: &Gpu, t: Option<f32>) {
+    fn apresentar(&self, gpu: &Gpu, t: Option<f32>, cronometro: Option<&mut gpu::Cronometro>) {
         if let Some(rtv) = &self.rtv {
-            gpu.compor(rtv, self.largura, self.altura, t);
+            match cronometro {
+                Some(c) => c.medir(gpu, || gpu.compor(rtv, self.largura, self.altura, t)),
+                None => gpu.compor(rtv, self.largura, self.altura, t),
+            }
             if let Ok(mut g) = CAPTURA_DE_DIAGNOSTICO.lock() {
                 if let Some((pasta, restantes)) = g.as_mut() {
                     if *restantes > 0 {
@@ -979,6 +1027,8 @@ fn sessao(
     let hz = hz_do_monitor(&saida.dispositivo);
 
     let mut gpu = Gpu::novo(&saida.adaptador)?;
+    // Refeito (janela mudou) depois de a guarda aliviar: continua leve.
+    gpu.modo_leve(config.leve || estado().leve);
     let duplicacao = duplicar(&saida, &gpu)?;
     let formato = match formato_da_captura(&duplicacao) {
         Ok(f) => f.unwrap_or(DXGI_FORMAT_B8G8R8A8_UNORM),
@@ -1109,9 +1159,26 @@ fn sessao(
     // uma inflaria a razão e a guarda nunca desligaria).
     let mut troca_de_fonte: Option<f64> = None;
     let mut ultima_conferencia_do_vivo = 0.0f64;
+    let mut cronometro = gpu::Cronometro::novo(&gpu);
+    // O que chegou à tela, contado pelo PresentMon no próprio Otimiza (a sobreposição é deste processo).
+    let mut na_tela_vivo = super::presentmon::Vivo::iniciar_exibidos(std::process::id(), "OtimizaNaTela").ok();
+    let mut quadros_na_tela = guarda::LinhaDoTempo::default();
     while !parar.load(Ordering::Relaxed) {
         if bombear_mensagens() {
             return Ok(Fim::Parou);
+        }
+        if let Some(c) = cronometro.as_mut() {
+            c.colher(&gpu);
+        }
+        if let Some(v) = na_tela_vivo.as_mut() {
+            match v.novos() {
+                Some(lote) => {
+                    for qpc in lote {
+                        quadros_na_tela.registrar(qpc as f64 / qpc_frequencia - qpc_inicio);
+                    }
+                }
+                None => na_tela_vivo = None,
+            }
         }
 
         if let Some(v) = vivo.as_mut() {
@@ -1190,8 +1257,25 @@ fn sessao(
                 tempo_escondida + escondida_desde.map(|d| d.elapsed()).unwrap_or_default();
             let (desde, antes, escondida_antes) = relatorio;
             let segs = desde.elapsed().as_secs_f64().max(0.001);
+            // A placa que o gerador ocupou (medida): ms por segundo, % do tempo e por quadro real do jogo.
+            let placa = cronometro.as_mut().map(|c| (c.tirar(), c.sem_marca));
+            let reais_na_janela = (contadores.reais - antes.reais).max(1) as f64;
+            let placa_no_log = match placa {
+                Some(((ms, n), sem)) if n > 0 => {
+                    let por_s = ms / segs;
+                    publicar(|e| e.placa_ms_por_s = Some((por_s * 10.0).round() / 10.0));
+                    format!(
+                        "placa {:.0} ms/s ({:.1}% do tempo), {:.2} ms por real{}",
+                        por_s,
+                        por_s / 10.0,
+                        ms / reais_na_janela,
+                        if sem > 0 { format!(", {} sem medir", sem) } else { String::new() }
+                    )
+                }
+                _ => "placa sem medida".to_string(),
+            };
             crate::utils::Logger::info(&format!(
-                "gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s) · {}× · custo {:.1} ms · na tela {:.0}/s, {:.0}% das atualizações repetidas",
+"gerador: 10 s · {:.0} reais/s · {:.0} gerados/s · {:.0} iguais/s · {:.0} fora do jogo/s · {} recusados · escondida {:.0}% (sem quadro {:.1} s, guarda {:.1} s, jogo atrás {:.1} s) · {}× · custo {:.1} ms · {} · na tela {:.0}/s, {:.0}% das atualizações repetidas",
                 (contadores.reais - antes.reais) as f64 / segs,
                 (contadores.gerados - antes.gerados) as f64 / segs,
                 (contadores.iguais - antes.iguais) as f64 / segs,
@@ -1203,6 +1287,7 @@ fn sessao(
                 escondida_por[2].as_secs_f64(),
                 cabe_atual,
                 contadores.custo_ms,
+                placa_no_log,
                 exibicao.exibidos as f64 / segs,
                 exibicao.repetidas_pct()
             ));
@@ -1249,9 +1334,22 @@ fn sessao(
                     }
                 }
                 let apresentados = (contadores.reais + contadores.gerados) - janela_de_contagem.2;
+                // Os 2 s que o PresentMon já entregou (ele entrega de 3 a 4 s depois).
+                let exibidos = na_tela_vivo.as_ref().and_then(|_| {
+                    let ate = agora - guarda::ATRASO_DA_CONTAGEM;
+                    (ate > 2.0).then(|| {
+                        (quadros_na_tela.contar(ate - 2.0, ate) as f64 / 2.0 * 10.0).round() / 10.0
+                    })
+                });
+                let gerando = ultimo_real.elapsed() <= Duration::from_secs(2);
+                let comparacoes = guarda.razoes.len() as u32;
                 publicar(|e| {
                     e.fps_reais = (reais as f64 / dt * 10.0).round() / 10.0;
                     e.fps_apresentados = (apresentados as f64 / dt * 10.0).round() / 10.0;
+                    if gerando && !escondida {
+                        e.sessao.somar(dt, reais as f64 / dt, apresentados as f64 / dt, exibidos);
+                    }
+                    e.comparacoes = comparacoes;
                     e.contadores = contadores;
                     e.multiplicador = if config.automatico {
                         ultimo_do_automatico
@@ -1260,10 +1358,11 @@ fn sessao(
                     };
                     e.razao_fps = guarda.razao_media();
                     e.atraso_ms = atraso_medio.map(|a| (a * 10.0).round() / 10.0);
-                    e.situacao = if ultimo_real.elapsed() > Duration::from_secs(2) {
-                        Situacao::SemQuadros
-                    } else {
+                    e.fps_exibidos = exibidos;
+                    e.situacao = if gerando {
                         Situacao::Gerando
+                    } else {
+                        Situacao::SemQuadros
                     };
                 });
             }
@@ -1298,16 +1397,34 @@ fn sessao(
         match acao {
             guarda::Acao::Desligar => {
                 let razao = guarda.razao_media();
-                crate::utils::Logger::warn(&format!(
-                    "gerador desligado pela guarda: razão de FPS {:?}",
-                    razao
-                ));
-                publicar(|e| {
-                    e.situacao = Situacao::DesligadoPorPerdaDeFps;
-                    e.razao_fps = razao;
-                    e.fps_apresentados = 0.0;
-                });
-                return Ok(Fim::Parou);
+                match reacao_a_perda(gpu.leve()) {
+                    // No FiveM do dono a guarda desligou o gerador 7 vezes (o jogo perdendo de 5% a 35%): antes de
+                    // desistir, alivia a placa e confere de novo do zero (a média de antes condenaria o modo leve).
+                    ReacaoAPerda::FicarLeve => {
+                        gpu.modo_leve(true);
+                        guarda = guarda::Guarda::nova(segundos(inicio));
+                        crate::utils::Logger::warn(&format!(
+                            "gerador: o jogo perdia FPS (razão {:?}); modo leve, conferindo de novo",
+                            razao
+                        ));
+                        publicar(|e| {
+                            e.leve = true;
+                            e.razao_fps = None;
+                        });
+                    }
+                    ReacaoAPerda::Desligar => {
+                        crate::utils::Logger::warn(&format!(
+                            "gerador desligado pela guarda: razão de FPS {:?} (já no modo leve)",
+                            razao
+                        ));
+                        publicar(|e| {
+                            e.situacao = Situacao::DesligadoPorPerdaDeFps;
+                            e.razao_fps = razao;
+                            e.fps_apresentados = 0.0;
+                        });
+                        return Ok(Fim::Parou);
+                    }
+                }
             }
             guarda::Acao::Pausar => {
                 contadores.descartados += agenda.len() as u64;
@@ -1384,7 +1501,10 @@ fn sessao(
                                 .suavizar(composto_do_real.filter(|c| *c > 0.0).unwrap_or(chegada));
                             let anterior = ultimo_carimbo.replace(carimbo);
                             if gpu.tem_par() && intervalo.pode_gerar() && !guarda.pausada() {
-                                gpu.estimar();
+                                match cronometro.as_mut() {
+                                    Some(c) => c.medir(&gpu, || gpu.estimar()),
+                                    None => gpu.estimar(),
+                                }
                                 if let Some(a) = anterior.filter(|a| carimbo > *a) {
                                     par_no_monitor = Some((a, carimbo));
                                     atraso_da_exibicao
@@ -1403,7 +1523,10 @@ fn sessao(
                             // e faziam a placa trocar de contexto com o jogo o tempo todo: o jogo perdia ~30% do FPS.
                             // Movimento que não dá para interpolar (troca de cena, giro rapidíssimo) é decidido pixel a
                             // pixel no `Final`: onde os dois reais discordam demais, sai o real mais próximo.
-                            gpu.estimar();
+                            match cronometro.as_mut() {
+                                Some(c) => c.medir(&gpu, || gpu.estimar()),
+                                None => gpu.estimar(),
+                            }
                             // O que custou para o processador mandar o trabalho (a placa trabalha depois, em paralelo).
                             let custo = medido.elapsed().as_secs_f64() * 1000.0;
                             contadores.custo_ms = if contadores.custo_ms == 0.0 {
@@ -1457,7 +1580,7 @@ fn sessao(
                 .map(|(a, b)| ritmo::t_no_tempo(no_jogo, a, b));
             match t {
                 Some(Some(t)) => {
-                    sobreposicao.apresentar(&gpu, Some(t));
+                    sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
                     exibicao.exibidos += 1;
                 }
@@ -1466,7 +1589,7 @@ fn sessao(
                     if !real_ja_mostrado {
                         exibicao.exibidos += 1;
                     }
-                    sobreposicao.apresentar(&gpu, None);
+                    sobreposicao.apresentar(&gpu, None, cronometro.as_mut());
                     real_ja_mostrado = true;
                     if let Some(composto) = composto_do_real.take() {
                         let atraso = (segundos(inicio) - composto) * 1000.0;
@@ -1492,11 +1615,11 @@ fn sessao(
         if let Some(a) = vencido {
             match a.fase {
                 Fase::Gerado(t) => {
-                    sobreposicao.apresentar(&gpu, Some(t));
+                    sobreposicao.apresentar(&gpu, Some(t), cronometro.as_mut());
                     contadores.gerados += 1;
                 }
                 Fase::Real => {
-                    sobreposicao.apresentar(&gpu, None);
+                    sobreposicao.apresentar(&gpu, None, cronometro.as_mut());
                     if let Some(composto) = composto_do_real.take() {
                         let atraso = (segundos(inicio) - composto) * 1000.0;
                         if (0.0..200.0).contains(&atraso) {
@@ -1541,6 +1664,7 @@ mod tests {
             // OTIMIZA_FG_MULT=0: o automático. OTIMIZA_FG_SEM_LIMITE: passa do limite do monitor.
             automatico: mult == 0,
             sem_limite: std::env::var_os("OTIMIZA_FG_SEM_LIMITE").is_some(),
+            leve: std::env::var_os("OTIMIZA_FG_LEVE").is_some(),
         })
         .unwrap();
         println!("inicio: {:?}", e);
@@ -1561,7 +1685,7 @@ mod tests {
             std::thread::sleep(Duration::from_secs(1));
             let e = estado();
             println!(
-                "{:?} reais={} apresentados={} razao={:?} atraso_ms={:?} hz={} hdr={} refeitas={} placa={:?} contadores={:?} erro={:?}",
+                "{:?} reais={} apresentados={} razao={:?} atraso_ms={:?} hz={} hdr={} refeitas={} placa={:?} placa_ms_por_s={:?} contadores={:?} erro={:?}",
                 e.situacao,
                 e.fps_reais,
                 e.fps_apresentados,
@@ -1571,11 +1695,23 @@ mod tests {
                 e.hdr,
                 e.refeitas,
                 e.placa,
+                e.placa_ms_por_s,
                 e.contadores,
                 e.erro
             );
         }
         desligar();
+    }
+}
+
+#[cfg(test)]
+mod tests_da_guarda_leve {
+    use super::*;
+
+    #[test]
+    fn a_primeira_perda_alivia_e_a_segunda_desliga() {
+        assert_eq!(reacao_a_perda(false), ReacaoAPerda::FicarLeve);
+        assert_eq!(reacao_a_perda(true), ReacaoAPerda::Desligar);
     }
 }
 

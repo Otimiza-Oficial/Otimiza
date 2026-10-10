@@ -462,6 +462,29 @@ pub fn instante_do_quadro(linha: &str, colunas: (usize, Option<usize>)) -> Optio
     campos.get(colunas.0)?.trim().parse().ok()
 }
 
+/// Pura: o instante (QPC) de uma apresentação que CHEGOU À TELA (`DisplayedTime` com número, e não `NA`). É o "na tela"
+/// do gerador de quadros: contar o que ele apresentou inflava o número (quadro descartado ou dois na mesma atualização).
+/// `colunas`: (CPUStartQPC, DisplayedTime).
+pub fn instante_exibido(linha: &str, colunas: (usize, usize)) -> Option<i64> {
+    let campos: Vec<&str> = linha.split(',').collect();
+    campos
+        .get(colunas.1)?
+        .trim()
+        .parse::<f64>()
+        .ok()
+        .filter(|d| *d > 0.0)?;
+    campos.get(colunas.0)?.trim().parse().ok()
+}
+
+/// O que o `Vivo` entrega de cada apresentação.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Contagem {
+    /// Os quadros do próprio jogo (a guarda).
+    DoJogo,
+    /// Só o que chegou à tela (o gerador contando a si mesmo).
+    Exibidos,
+}
+
 /// PresentMon sem prazo, entregando o instante (QPC) de cada quadro do jogo enquanto ele roda. Para a guarda do
 /// gerador de quadros: contar o FPS do PRÓPRIO jogo, e não a captura da tela (presa ao Hz do monitor). Sessão com
 /// nome próprio, para não parar a medição automática; morre com o `Drop` ou quando o jogo fecha.
@@ -481,6 +504,15 @@ impl Vivo {
 
     /// O mesmo, com nome de sessão próprio (o FPS por cima do jogo mede junto com o gerador).
     pub fn iniciar_na_sessao(pid: u32, sessao: &'static str) -> Result<Vivo, String> {
+        Self::iniciar_contando(pid, sessao, Contagem::DoJogo)
+    }
+
+    /// Os quadros que chegaram à tela de um processo (o próprio Otimiza, na sobreposição do gerador).
+    pub fn iniciar_exibidos(pid: u32, sessao: &'static str) -> Result<Vivo, String> {
+        Self::iniciar_contando(pid, sessao, Contagem::Exibidos)
+    }
+
+    fn iniciar_contando(pid: u32, sessao: &'static str, contagem: Contagem) -> Result<Vivo, String> {
         use std::io::BufRead;
         use std::os::windows::process::CommandExt;
 
@@ -519,8 +551,16 @@ impl Vivo {
                 return;
             };
             let tipo = nomes.iter().position(|n| *n == "FrameType");
+            let exibido = nomes.iter().position(|n| *n == "DisplayedTime");
+            if contagem == Contagem::Exibidos && exibido.is_none() {
+                return;
+            }
             for linha in linhas.map_while(Result::ok) {
-                if let Some(t) = instante_do_quadro(&linha, (qpc, tipo)) {
+                let instante = match contagem {
+                    Contagem::DoJogo => instante_do_quadro(&linha, (qpc, tipo)),
+                    Contagem::Exibidos => instante_exibido(&linha, (qpc, exibido.unwrap_or(0))),
+                };
+                if let Some(t) = instante {
                     if envia.send(t).is_err() {
                         return;
                     }
@@ -706,6 +746,16 @@ mod tests {
         assert_eq!(instante_do_quadro(&jogo, col), Some(10_000));
         assert_eq!(instante_do_quadro(&gerado, col), None);
         assert!(e_quadro_do_jogo(Some("NA")) && !e_quadro_do_jogo(Some("Repeated")));
+    }
+
+    #[test]
+    fn na_tela_conta_so_o_que_foi_exibido() {
+        // CPUStartQPC na coluna 9, DisplayedTime na 18 (cabeçalho do PresentMon 2.6.0).
+        let col = (9, 18);
+        let exibido = linha("Application", 1.0, 5.5556, 1.0, 2.0, Some(5.56));
+        let descartado = linha("Application", 1.0, 5.5556, 1.0, 2.0, None);
+        assert_eq!(instante_exibido(&exibido, col), Some(10_000));
+        assert_eq!(instante_exibido(&descartado, col), None, "NA: não chegou à tela");
     }
 
     #[test]

@@ -143,7 +143,17 @@ injetar nada.
   mostra, medido, quantos quadros chegam à tela. Antes de ligar, só uma faixa
   marcada como ESTIMADO.
 - **Nunca passa do monitor:** num monitor de 180 Hz, o máximo é 180.
-- **Desliga sozinho** se o jogo perder FPS de verdade com ele ligado.
+- **Nunca tira FPS do jogo sem dizer.** De tempos em tempos ele compara o FPS do jogo com e sem o gerador. Se o jogo
+  perde, primeiro passa para o **modo leve** (calcula o movimento numa resolução menor) e confere de novo; só desliga
+  se ainda perder. Com a placa já quase cheia, começa leve.
+- **Mostra quanto custa, medido.** Ligado, o painel diz quanto da placa o gerador usa e quanto do FPS o jogo
+  manteve ("manteve 98% do FPS, medido em 3 comparações"). Desligado, mostra a última vez: quanto tempo, o FPS do
+  jogo e quantos quadros chegaram à tela.
+- **"FPS na tela" é o que chegou à tela.** Com o Otimiza como administrador, o número vem do PresentMon contando os
+  quadros que o monitor recebeu; sem administrador, aparece como ESTIMADO.
+- **Otimização de janela do Windows para o jogo.** Ao ligar, o Frame Boost liga para o jogo a opção do Windows que
+  tira o modo sem bordas da cópia de cada quadro (no FiveM, sem bordas rendia 61 fps contra 85 em tela cheia). Vale
+  ao reabrir o jogo e volta ao desfazer.
 - O gerador do Otimiza agora **se refaz sozinho** quando a janela do jogo muda
   de tamanho, é minimizada, vai para outro monitor ou o Windows troca a
   resolução. Antes, ele desligava.
@@ -157,7 +167,8 @@ injetar nada.
   cenário sai liso e o personagem parado no meio da tela não rasga mais.
 - **FPS base travado para o Frame Boost.** Ao ligar, o Otimiza trava o FPS do jogo numa fração do monitor (60 num de
   180 Hz) pela medição do Jogo liso: cada quadro real ganha sempre o mesmo número de gerados, em vez de 2 num momento
-  e 3 no outro. Vale ao reabrir o jogo; o painel diz quando está valendo e tem o botão Destravar.
+  e 3 no outro. Vale ao reabrir o jogo; o painel diz quando está valendo e tem o botão Destravar, que fica valendo até
+  você tocar em Travar de novo. Nunca trava abaixo de um quarto dos Hz (base baixa assim não fica lisa).
 - **Auto: enche o monitor.** Em vez de 2×, 3× ou 4× fixo, o Auto gera
   quantos quadros couberem: com o jogo a 48 fps num monitor de 180 Hz, a tela
   recebe 180 (o 3× parava em 144). É o novo padrão.

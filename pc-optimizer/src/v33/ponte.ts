@@ -277,12 +277,33 @@ export interface PainelFrameBoost {
     pelo_driver: boolean;
     geracao_vista: boolean | null;
     nota: string | null;
+    /** % da placa que o gerador do Otimiza ocupou (medido). */
+    placa_pct: number | null;
+    /** Modo leve: placa sem folga, ou a guarda aliviou depois de ver o jogo perder FPS. */
+    leve: boolean;
+    /** FPS do jogo agora, com o gerador ligado. */
+    fps_do_jogo: number | null;
+    /** Quanto do FPS o jogo mantém com o gerador (medido pela guarda), em %. */
+    manteve_pct: number | null;
+    comparacoes: number;
   } | null;
   aviso: string | null;
   /** O teto do FPS base que o Otimiza gravou para este jogo. */
   base: { fps: number; multiplicador: number; valendo: boolean } | null;
   /** O que aconteceu com o FPS base ao ligar. */
   nota_da_base: string | null;
+  /** A pessoa destravou o FPS base deste jogo: o Frame Boost não trava sozinho. */
+  base_solta: boolean;
+  /** Gerador desligado: a última vez que ele ficou 30 s ou mais ligado. */
+  ultima_sessao: {
+    jogo: string;
+    minutos: number;
+    fps_do_jogo: number;
+    fps_na_tela: Valor;
+    manteve_pct: number | null;
+    comparacoes: number;
+    desligou_por_perda: boolean;
+  } | null;
 }
 
 export interface EstadoDoGerador {
@@ -292,6 +313,8 @@ export interface EstadoDoGerador {
   automatico?: boolean;
   fps_reais: number;
   fps_apresentados: number;
+  /** O que o PresentMon viu chegar à tela (precisa de administrador); sem ele, só o apresentado, como estimativa. */
+  fps_exibidos?: number | null;
   erro: string | null;
   atraso_ms: number | null;
 }
@@ -420,6 +443,7 @@ export const ponte = {
     invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite }),
   frameBoostDesligar: () => invoke<PainelFrameBoost>("frame_boost_desligar"),
   frameBoostDestravarBase: () => invoke<PainelFrameBoost>("frame_boost_destravar_base"),
+  frameBoostTravarBase: () => invoke<PainelFrameBoost>("frame_boost_travar_base"),
   frameBoostMedir: () => invoke<PainelFrameBoost>("frame_boost_medir"),
   jogoLisoMedir: () => invoke<PlanoJogoLiso>("jogo_liso_medir"),
   memoriaParaOJogo: () => invoke<MemoriaParaOJogo>("memoria_para_o_jogo"),

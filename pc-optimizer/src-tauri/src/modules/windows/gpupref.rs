@@ -218,9 +218,74 @@ pub fn definir(executavel: &Path, preferencia: Preferencia) -> Result<ChangeReco
     })
 }
 
+/// A OTIMIZAÇÃO DE JANELA DO WINDOWS para um jogo (Configurações → Tela → Gráficos, "Otimizações para jogos em janela").
+/// Jogo DirectX 10/11 em janela ou sem bordas sai do modelo de cópia (`Composed: Copy with GPU GDI`) para o de flip.
+/// Medido no FiveM do dono: sem bordas, na cópia, 61 fps; em tela cheia (flip direto), 85. O Frame Boost precisa de
+/// janela ou sem bordas, então é aqui que ele perde ou não esses 24 fps. Vale ao reabrir o jogo.
+pub const OTIMIZACAO_DE_JANELA: &str = "SwapEffectUpgradeEnable";
+
+/// Pura: o valor do jogo com a otimização ligada, mantendo o resto da linha (o Windows guarda tudo no mesmo valor:
+/// `GpuPreference`, `AutoHDREnable`, `AppStatus`…). `None` = já estava ligada.
+pub fn com_otimizacao_de_janela(atual: Option<&str>) -> Option<String> {
+    let mut partes: Vec<String> = atual
+        .unwrap_or("")
+        .split(';')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect();
+    let prefixo = format!("{}=", OTIMIZACAO_DE_JANELA);
+    if partes.iter().any(|p| p.eq_ignore_ascii_case(&format!("{}1", prefixo))) {
+        return None;
+    }
+    partes.retain(|p| !p.to_ascii_lowercase().starts_with(&prefixo.to_ascii_lowercase()));
+    partes.push(format!("{}1", prefixo));
+    Some(partes.iter().map(|p| format!("{};", p)).collect())
+}
+
+/// Liga a otimização de janela para o executável (caminho completo), guardando o valor de antes. `Ok(None)`: já estava.
+pub fn ligar_otimizacao_de_janela(executavel: &Path) -> Result<Option<ChangeRecord>, String> {
+    if !executavel.is_absolute() || !executavel.exists() {
+        return Err(format!("`{}` não é o caminho de um jogo instalado.", executavel.display()));
+    }
+    let nome = executavel.to_string_lossy().to_string();
+    let anterior = super::registry::read("HKCU", CHAVE, &nome)?;
+    let texto = super::registry::read_text("HKCU", CHAVE, &nome)?;
+    let Some(novo) = com_otimizacao_de_janela(texto.as_deref()) else {
+        return Ok(None);
+    };
+    super::registry::set_string("HKCU", CHAVE, &nome, &novo)?;
+    Ok(Some(ChangeRecord::RegistryValue {
+        hive: "HKCU".to_string(),
+        path: CHAVE.to_string(),
+        name: nome,
+        previous: anterior,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn otimizacao_de_janela_entra_sem_apagar_o_resto_da_linha() {
+        // O valor do FiveM do dono antes: só `AppStatus=0;`.
+        assert_eq!(
+            com_otimizacao_de_janela(Some("AppStatus=0;")).as_deref(),
+            Some("AppStatus=0;SwapEffectUpgradeEnable=1;")
+        );
+        assert_eq!(
+            com_otimizacao_de_janela(Some("GpuPreference=2;SwapEffectUpgradeEnable=0;")).as_deref(),
+            Some("GpuPreference=2;SwapEffectUpgradeEnable=1;"),
+            "desligada por alguém: liga, sem duplicar a chave"
+        );
+        assert_eq!(com_otimizacao_de_janela(None).as_deref(), Some("SwapEffectUpgradeEnable=1;"));
+        assert_eq!(
+            com_otimizacao_de_janela(Some("SwapEffectUpgradeEnable=1;GpuPreference=1;")),
+            None,
+            "já ligada: nada a gravar"
+        );
+    }
 
     #[test]
     fn o_formato_do_windows_leva_ponto_e_virgula() {

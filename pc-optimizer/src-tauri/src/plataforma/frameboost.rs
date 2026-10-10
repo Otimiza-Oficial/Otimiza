@@ -42,6 +42,32 @@ pub struct Ativo {
     /// Só para os de driver: a medição viu o driver gerar quadros?
     pub geracao_vista: Option<bool>,
     pub nota: Option<String>,
+    /// Quanto da placa o gerador do Otimiza ocupou nos últimos 10 s, em % do tempo (MEDIDO pelos carimbos da placa).
+    #[serde(default)]
+    pub placa_pct: Option<f64>,
+    /// No modo leve (placa sem folga, ou a guarda aliviou).
+    #[serde(default)]
+    pub leve: bool,
+    /// FPS do jogo agora, com o gerador ligado (o que ele capturou de quadros reais).
+    #[serde(default)]
+    pub fps_do_jogo: Option<f64>,
+    /// Quanto do FPS o jogo mantém com o gerador ligado, em %, MEDIDO pela guarda (com e sem ele, colados no tempo).
+    #[serde(default)]
+    pub manteve_pct: Option<f64>,
+    #[serde(default)]
+    pub comparacoes: u32,
+}
+
+/// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
+#[derive(Debug, Clone, Serialize)]
+pub struct UltimaSessao {
+    pub jogo: String,
+    pub minutos: f64,
+    pub fps_do_jogo: f64,
+    pub fps_na_tela: Valor,
+    pub manteve_pct: Option<f64>,
+    pub comparacoes: u32,
+    pub desligou_por_perda: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +87,11 @@ pub struct Painel {
     pub base: Option<super::base_do_jogo::BaseTravada>,
     /// O que aconteceu com o FPS base ao ligar (travou, já estava, falta medir).
     pub nota_da_base: Option<String>,
+    /// A pessoa destravou o FPS base deste jogo: o Frame Boost não trava de novo sozinho.
+    #[serde(default)]
+    pub base_solta: bool,
+    /// Gerador desligado: como foi a última vez.
+    pub ultima_sessao: Option<UltimaSessao>,
 }
 
 /// A frase da última vez que o Frame Boost ligou, para o painel repetir enquanto ele estiver ligado.
@@ -74,13 +105,46 @@ pub fn anotar_base(nota: Option<String>) {
     }
 }
 
-/// Pura: o número da tela. Só MEDIDO, e só gerando de verdade.
+/// Pura: o número da tela, só gerando de verdade. MEDIDO é o que o PresentMon viu chegar à tela (`fps_exibidos`); sem
+/// ele, o que o gerador apresentou, como ESTIMADO (apresentado não é exibido: quadro descartado, dois na mesma
+/// atualização).
 pub fn fps_na_tela(e: &geracao::Estado) -> Valor {
-    if e.situacao == Situacao::Gerando && e.fps_apresentados > 0.0 {
-        Valor::medido(e.fps_apresentados)
-    } else {
-        Valor::desconhecido()
+    if e.situacao != Situacao::Gerando {
+        return Valor::desconhecido();
     }
+    match e.fps_exibidos {
+        Some(f) if f > 0.0 => Valor::medido(f),
+        _ if e.fps_apresentados > 0.0 => Valor::estimado(e.fps_apresentados),
+        _ => Valor::desconhecido(),
+    }
+}
+
+/// Pura: a razão da guarda em %, com uma casa.
+fn manteve_pct(e: &geracao::Estado) -> Option<f64> {
+    e.razao_fps
+        .filter(|_| e.comparacoes > 0)
+        .map(|r| (r * 1000.0).round() / 10.0)
+}
+
+/// Pura: com o gerador parado, o resumo da última vez que ele ligou.
+pub fn ultima_sessao_de(e: &geracao::Estado) -> Option<UltimaSessao> {
+    if ativo_de(e).is_some() || e.processo.is_empty() {
+        return None;
+    }
+    let r = e.sessao.resumo()?;
+    Some(UltimaSessao {
+        jogo: e.processo.clone(),
+        minutos: (r.segundos / 6.0).round() / 10.0,
+        fps_do_jogo: r.fps_do_jogo.round(),
+        fps_na_tela: if r.na_tela_medido {
+            Valor::medido(r.fps_na_tela.round())
+        } else {
+            Valor::estimado(r.fps_na_tela.round())
+        },
+        manteve_pct: manteve_pct(e),
+        comparacoes: e.comparacoes,
+        desligou_por_perda: e.situacao == Situacao::DesligadoPorPerdaDeFps,
+    })
 }
 
 /// Pura.
@@ -107,6 +171,11 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
         pelo_driver: false,
         geracao_vista: None,
         nota: None,
+        placa_pct: e.placa_ms_por_s.map(|ms| (ms / 10.0 * 10.0).round() / 10.0),
+        leve: e.leve,
+        fps_do_jogo: (e.situacao == Situacao::Gerando && e.fps_reais > 0.0).then_some(e.fps_reais.round()),
+        manteve_pct: manteve_pct(e),
+        comparacoes: e.comparacoes,
     })
 }
 
@@ -158,6 +227,11 @@ pub fn ativo_do_driver(recurso: Recurso, medicao: Option<&Medicao>) -> Ativo {
         refeitas: 0,
         atraso_ms: Valor::desconhecido(),
         pelo_driver: true,
+        placa_pct: None,
+        leve: false,
+        fps_do_jogo: None,
+        manteve_pct: None,
+        comparacoes: 0,
         geracao_vista: vista,
         nota: Some(match vista {
             None => "Ligado no driver. Toque em \u{201c}Medir agora\u{201d} com o jogo em movimento para ver o FPS na tela.".to_string(),
@@ -232,6 +306,8 @@ pub fn painel_de(
         aviso: aviso_de(gerador),
         base: None,
         nota_da_base: None,
+        base_solta: false,
+        ultima_sessao: ultima_sessao_de(gerador),
     }
 }
 
@@ -342,6 +418,9 @@ pub fn painel() -> Painel {
     if let (Some(j), Some(hz)) = (jogo.as_ref(), hz) {
         p.base = super::base_do_jogo::travada(j.pid, &j.executavel, hz);
     }
+    p.base_solta = jogo
+        .as_ref()
+        .is_some_and(|j| super::base_do_jogo::solta(&j.executavel));
     if p.ativo.is_some() {
         p.nota_da_base = NOTA_DA_BASE.lock().ok().and_then(|n| n.clone());
     }
@@ -355,12 +434,28 @@ pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {
     let Some(j) = super::sessao::atual().filter(|_| gerando) else {
         return;
     };
-    let nota = match hz_do_jogo(j.pid) {
+    let mut nota = match hz_do_jogo(j.pid) {
         Some(hz) => super::base_do_jogo::travar(&j.executavel, hz, log)
             .unwrap_or_else(|e| format!("Não consegui travar o FPS base: {}", e)),
         None => "Não consegui ler os Hz do monitor do jogo para travar o FPS base.".to_string(),
     };
+    // O Frame Boost precisa de janela ou sem bordas, onde o Windows copiava cada quadro (FiveM do dono: 61 fps contra
+    // 85 em tela cheia). A otimização de janela do Windows passa o jogo para o flip.
+    if let Some(caminho) = crate::modules::windows::frames::caminho_do_processo(&j.executavel) {
+        match crate::modules::windows::WindowsOptimizer::new().otimizar_janela_do_jogo(&caminho, log) {
+            Ok(true) => nota.push_str(
+                " Otimização de janela do Windows ligada para o jogo (sem bordas sem a cópia de cada quadro): vale ao reabrir.",
+            ),
+            Ok(false) => {}
+            Err(e) => crate::utils::Logger::warn(&format!("frame boost: otimização de janela: {}", e)),
+        }
+    }
     anotar_base(Some(nota));
+}
+
+/// Pura: com a placa a partir de 85% ocupada pelo jogo, o gerador começa no modo leve.
+pub fn comecar_leve(placa_pct: Option<u32>) -> bool {
+    placa_pct.is_some_and(|p| p >= 85)
 }
 
 /// Pura: o PC tem folga para o Frame Boost agora? O gerador usa a mesma placa e memória que o jogo: com a placa quase
@@ -470,6 +565,8 @@ pub fn ligar(
                 visivel_em_captura: false,
                 automatico,
                 sem_limite,
+                // Placa já quase cheia com o jogo: começa leve, em vez de esperar a guarda ver o jogo perder FPS.
+                leve: comecar_leve(uso_da_placa_pct()),
             })?;
             // O contador do jogo nunca vê os quadros gerados: o FPS na tela aparece no canto do jogo, pelo Otimiza.
             if let Err(e) = super::overlay::com_frame_boost(app, jogo.pid, jogo.nome.clone()) {
@@ -531,6 +628,14 @@ pub fn medir() -> Result<Painel, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn placa_quase_cheia_comeca_leve() {
+        assert!(comecar_leve(Some(85)));
+        assert!(comecar_leve(Some(97)));
+        assert!(!comecar_leve(Some(77)), "o FiveM do dono: placa a 77%");
+        assert!(!comecar_leve(None), "sem leitura, modo normal");
+    }
 
     #[test]
     fn avisa_quando_o_pc_nao_tem_folga() {
@@ -606,11 +711,16 @@ mod tests {
     }
 
     #[test]
-    fn ligado_mostra_o_apresentado_medido_e_nao_o_nativo() {
-        let e = gerando(204.0);
+    fn ligado_mostra_o_exibido_medido_e_nao_o_nativo() {
+        let mut e = gerando(204.0);
+        e.fps_exibidos = Some(178.0);
         let v = fps_na_tela(&e);
-        assert_eq!(v.valor, Some(204.0), "204 na tela, não 52");
+        assert_eq!(v.valor, Some(178.0), "o que chegou à tela, não o apresentado (204) nem o nativo (52)");
         assert_eq!(v.origem, Origem::Medido);
+        // Sem o PresentMon (sem administrador): o apresentado, marcado como estimativa.
+        e.fps_exibidos = None;
+        assert_eq!(fps_na_tela(&e).origem, Origem::Estimado);
+        assert_eq!(fps_na_tela(&e).valor, Some(204.0));
         let a = ativo_de(&e).expect("ativo");
         assert_eq!(a.fps_na_tela.valor, Some(204.0));
         assert_eq!(a.atraso_ms.origem, Origem::Estimado, "atraso é estimativa");
@@ -636,6 +746,47 @@ mod tests {
         };
         assert!(ativo_de(&e).is_none());
         assert!(aviso_de(&e).unwrap().contains("perdeu FPS"));
+    }
+
+    #[test]
+    fn ligado_mostra_o_fps_do_jogo_e_o_que_ele_manteve_so_depois_de_comparar() {
+        let mut e = gerando(180.0);
+        let a = ativo_de(&e).unwrap();
+        assert_eq!(a.fps_do_jogo, Some(52.0));
+        assert_eq!(a.manteve_pct, None, "sem comparação, nada de porcentagem");
+        e.razao_fps = Some(0.9837);
+        e.comparacoes = 3;
+        assert_eq!(ativo_de(&e).unwrap().manteve_pct, Some(98.4));
+    }
+
+    #[test]
+    fn desligado_mostra_a_ultima_sessao_e_ligado_nao() {
+        let mut e = gerando(180.0);
+        e.processo = "FiveM_b3258_GTAProcess.exe".to_string();
+        e.sessao.somar(120.0, 60.0, 178.0, Some(171.0));
+        e.razao_fps = Some(0.98);
+        e.comparacoes = 4;
+        assert!(ultima_sessao_de(&e).is_none(), "ligado, o painel mostra o vivo");
+        e.situacao = Situacao::Parado;
+        let u = ultima_sessao_de(&e).unwrap();
+        assert_eq!(u.minutos, 2.0);
+        assert_eq!(u.fps_do_jogo, 60.0);
+        assert_eq!(u.fps_na_tela.valor, Some(171.0));
+        assert_eq!(u.fps_na_tela.origem, metricas::Origem::Medido);
+        assert_eq!(u.manteve_pct, Some(98.0));
+        assert!(!u.desligou_por_perda);
+        e.situacao = Situacao::DesligadoPorPerdaDeFps;
+        assert!(ultima_sessao_de(&e).unwrap().desligou_por_perda);
+    }
+
+    #[test]
+    fn ligou_e_desligou_nao_tem_ultima_sessao() {
+        let mut e = geracao::Estado {
+            processo: "FiveM_b3258_GTAProcess.exe".to_string(),
+            ..Default::default()
+        };
+        e.sessao.somar(10.0, 60.0, 178.0, None);
+        assert!(ultima_sessao_de(&e).is_none());
     }
 
     #[test]

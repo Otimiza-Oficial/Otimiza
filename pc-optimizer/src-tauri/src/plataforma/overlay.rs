@@ -1,8 +1,8 @@
 // FPS por cima do jogo, opcional: Desligado (padrão), Mínimo (só o FPS) ou Detalhado (FPS, 1% low e tempo de quadro).
 //
 // Mesma regra do resto do produto: só número MEDIDO. O FPS do jogo vem do PresentMon ao vivo (precisa do Otimiza
-// como administrador); sem ele, o overlay diz isso em vez de inventar. Com o Frame Boost do Otimiza ligado, mostra SÓ
-// o FPS que chegou à tela (o nativo não aparece, como na tela do Frame Boost).
+// como administrador); sem ele, o overlay diz isso em vez de inventar. Com o Frame Boost do Otimiza ligado, mostra o
+// FPS do PRÓPRIO jogo, como o `cl_drawfps` (decisão do dono, 08/10); o que chegou à tela fica no painel do Frame Boost.
 //
 // A janela é do Otimiza, por fora do jogo: não injeta nada. Não pega foco
 // e não recebe clique; aparece em print, como o contador do jogo. Some quando o jogo sai da frente. Anticheat que barra

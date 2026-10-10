@@ -126,6 +126,10 @@ type EstadoDoGerador = {
   contadores: { reais: number; gerados: number; descartados: number; custo_ms: number };
   erro: string | null;
   razao_fps: number | null;
+  /** O tempo de placa do gerador (carimbos da placa), ms por segundo; 100 = 10% da placa. */
+  placa_ms_por_s?: number | null;
+  /** O que o PresentMon viu chegar à tela (com administrador). */
+  fps_exibidos?: number | null;
 };
 
 const SITUACAO_DO_GERADOR: Record<SituacaoDoGerador, { rotulo: string; tom: Tom }> = {
@@ -422,9 +426,9 @@ function desenharGerador(): string {
   const numeros = ligado && g
     ? `<div class="fg-numeros">
         <div><span>Quadros do jogo</span><span class="fg-par"><span class="fg-valor">${num(g.fps_reais)}<small> FPS</small></span></span></div>
-        <div><span>Quadros na tela</span><span class="fg-par"><span class="fg-valor">${num(g.fps_apresentados)}<small> FPS</small></span></span></div>
+        <div><span>${g.fps_exibidos ? "Quadros que chegaram à tela" : "Quadros apresentados"}</span><span class="fg-par"><span class="fg-valor">${num(g.fps_exibidos || g.fps_apresentados)}<small> FPS</small></span></span></div>
         <div><span>FPS do jogo com ÷ sem gerador</span><span class="fg-par"><span class="fg-valor">${g.razao_fps === null ? "medindo…" : `${num(g.razao_fps * 100)}<small>%</small>`}</span></span></div>
-        <div><span>Custo na placa</span><span class="fg-par"><span class="fg-valor">${num(g.contadores.custo_ms, 1)}<small> ms</small></span></span></div>
+        <div><span>Placa usada pelo gerador</span><span class="fg-par"><span class="fg-valor">${g.placa_ms_por_s == null ? "medindo…" : `${num(g.placa_ms_por_s / 10, 1)}<small>%</small>`}</span></span></div>
       </div>
       <p class="fg-nota">Contagem do próprio gerador. Para medir com o canal de eventos do Windows e comparar com a geração desligada, use "Medir ligado" com Otimiza FG no passo 2.${
         hz && g.fps_apresentados > hz * 1.02 ? ` A tela recebe mais que ${hz} Hz: use um multiplicador menor ou limite o FPS do jogo.` : ""

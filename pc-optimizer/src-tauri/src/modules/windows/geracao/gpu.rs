@@ -153,7 +153,15 @@ pub struct Gpu {
     /// Oclusão pelos vetores de ida e volta e mediana dinâmica (`FinalBidirecional`). `OTIMIZA_FG_OCLUSAO=0` desliga, só
     /// para comparar.
     pub oclusao: bool,
+    /// Até que nível a busca principal desce (3 = 1/4 da imagem; 2 = 1/8, o modo leve). Trocável com o gerador ligado:
+    /// cada quadro real refaz o campo inteiro.
+    pub niveis_dis: usize,
 }
+
+/// O modo leve (o "Performance" do Lossless Scaling): a busca principal para em 1/8, sem o passe de 1/4, o mais caro
+/// dela. A oclusão fica (sem ela a troca de cena também sairia). Para placa sem folga, ou quando a guarda vê o jogo
+/// perder FPS.
+pub const NIVEIS_DO_MODO_LEVE: usize = 2;
 
 /// Penalidade por pixel longe da previsão e vantagem da mediana dos pais, na busca do fluxo (diferença somada do bloco
 /// 8×8, luma de 0 a 1). `OTIMIZA_FG_AJUSTE=penalidade,mediana` troca, só para medir.
@@ -408,7 +416,21 @@ impl Gpu {
             busca_por_blocos: std::env::var("OTIMIZA_FG_BUSCA").is_ok_and(|v| v == "blocos"),
             dis: !std::env::var("OTIMIZA_FG_BUSCA").is_ok_and(|v| v == "antiga" || v == "blocos"),
             oclusao: !std::env::var("OTIMIZA_FG_OCLUSAO").is_ok_and(|v| v == "0"),
+            niveis_dis: niveis_do_dis(),
         })
+    }
+
+    /// Liga ou desliga o modo leve (`NIVEIS_DO_MODO_LEVE`).
+    pub fn modo_leve(&mut self, leve: bool) {
+        self.niveis_dis = if leve {
+            NIVEIS_DO_MODO_LEVE.min(niveis_do_dis())
+        } else {
+            niveis_do_dis()
+        };
+    }
+
+    pub fn leve(&self) -> bool {
+        self.niveis_dis < niveis_do_dis()
     }
 
     fn alvo(
@@ -1018,7 +1040,7 @@ impl Gpu {
         if self.busca_por_blocos || self.dis {
             let m = &t.luma_m[novo];
             // O 1/2 só entra na busca por blocos e no DIS com 4 níveis.
-            if self.busca_por_blocos || niveis_do_dis() == 4 {
+            if self.busca_por_blocos || self.niveis_dis == 4 {
                 self.passe(
                     &self.passes.luma_meia,
                     m.rtv.as_ref().unwrap(),
@@ -1052,7 +1074,7 @@ impl Gpu {
                 &t.luma_q[novo],
                 &t.luma_m[novo],
             ];
-            for (luma, par) in lumas.iter().zip(t.luma_grad.iter()).take(niveis_do_dis()) {
+            for (luma, par) in lumas.iter().zip(t.luma_grad.iter()).take(self.niveis_dis) {
                 let g = &par[novo];
                 self.passe(
                     &self.passes.gradiente,
@@ -1262,7 +1284,7 @@ impl Gpu {
     /// O fluxo denso por busca inversa (ver `DisPedaco` no shader), do 1/16 ao 1/2: o campo do meio e, em 1/8, os de ida e
     /// de volta, que dão a oclusão (`Consistencia`).
     fn fluxo_denso(&self, t: &Trabalho, a: usize, b: usize) {
-        self.dis_em(t, a, b, 0, niveis_do_dis(), &t.pedacos, &t.denso);
+        self.dis_em(t, a, b, 0, self.niveis_dis, &t.pedacos, &t.denso);
         if self.oclusao {
             self.dis_em(t, a, b, 1, 2, &t.pedacos_ida, &t.denso_ida);
             self.dis_em(t, a, b, 2, 2, &t.pedacos_volta, &t.denso_volta);
@@ -1413,7 +1435,7 @@ impl Gpu {
                     &[
                         Some(tr.imagem[a].srv.clone()),
                         Some(tr.imagem[b].srv.clone()),
-                        Some(tr.denso[niveis_do_dis() - 1].srv.clone()),
+                        Some(tr.denso[self.niveis_dis - 1].srv.clone()),
                         Some(tr.mascara[tr.mascara_atual].srv.clone()),
                         Some(tr.consistencia.srv.clone()),
                     ],
@@ -1511,6 +1533,129 @@ impl Gpu {
 
     pub fn dxgi_device(&self) -> Result<windows::Win32::Graphics::Dxgi::IDXGIDevice, String> {
         self.device.cast().map_err(|e| erro("dxgi device", e))
+    }
+}
+
+/// O TEMPO DE PLACA DO GERADOR, AO VIVO. O `custo_ms` do log media só o processador mandando o trabalho; a placa faz
+/// depois, em paralelo com o jogo, e é ela que o jogo perde (no FiveM do dono a guarda desligou o gerador 7 vezes, com
+/// o jogo perdendo de 5% a 35%). Carimbos de tempo da placa em volta de cada trabalho, lidos SEM ESPERAR: uma roda de
+/// marcas; a que ainda não terminou fica para a próxima volta do laço (esperar a placa parava o jogo, `mod.rs`).
+pub struct Cronometro {
+    livres: Vec<Marca>,
+    pendentes: std::collections::VecDeque<Marca>,
+    /// Soma desde a última `tirar`, em ms de placa.
+    soma_ms: f64,
+    medidas: u64,
+    /// Trabalhos que ficaram sem medir (todas as marcas ocupadas).
+    pub sem_marca: u64,
+}
+
+struct Marca {
+    disjunto: ID3D11Query,
+    inicio: ID3D11Query,
+    fim: ID3D11Query,
+}
+
+/// Quantos trabalhos podem estar em voo na placa ao mesmo tempo (estimar + até 6 composições por real).
+const MARCAS_EM_VOO: usize = 16;
+
+impl Cronometro {
+    pub fn novo(gpu: &Gpu) -> Option<Cronometro> {
+        let q = |tipo| -> Option<ID3D11Query> {
+            let mut r = None;
+            unsafe {
+                gpu.device
+                    .CreateQuery(
+                        &D3D11_QUERY_DESC {
+                            Query: tipo,
+                            MiscFlags: 0,
+                        },
+                        Some(&mut r),
+                    )
+                    .ok()?;
+            }
+            r
+        };
+        let livres = (0..MARCAS_EM_VOO)
+            .map(|_| {
+                Some(Marca {
+                    disjunto: q(D3D11_QUERY_TIMESTAMP_DISJOINT)?,
+                    inicio: q(D3D11_QUERY_TIMESTAMP)?,
+                    fim: q(D3D11_QUERY_TIMESTAMP)?,
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Cronometro {
+            livres,
+            pendentes: Default::default(),
+            soma_ms: 0.0,
+            medidas: 0,
+            sem_marca: 0,
+        })
+    }
+
+    /// Faz o trabalho entre dois carimbos da placa. Sem marca livre, faz sem medir (nunca segura o gerador).
+    pub fn medir<R>(&mut self, gpu: &Gpu, trabalho: impl FnOnce() -> R) -> R {
+        let Some(m) = self.livres.pop() else {
+            self.sem_marca += 1;
+            return trabalho();
+        };
+        unsafe {
+            gpu.ctx.Begin(&m.disjunto);
+            gpu.ctx.End(&m.inicio);
+        }
+        let r = trabalho();
+        unsafe {
+            gpu.ctx.End(&m.fim);
+            gpu.ctx.End(&m.disjunto);
+        }
+        self.pendentes.push_back(m);
+        r
+    }
+
+    /// Lê as marcas que a placa já terminou, sem esperar e sem forçar a fila (`DONOTFLUSH`).
+    pub fn colher(&mut self, gpu: &Gpu) {
+        const SEM_FORCAR: u32 = D3D11_ASYNC_GETDATA_DONOTFLUSH.0 as u32;
+        while let Some(m) = self.pendentes.front() {
+            let mut dj = D3D11_QUERY_DATA_TIMESTAMP_DISJOINT::default();
+            // O `windows` trata S_FALSE ("ainda não") como sucesso sem escrever: o sentinela diz o que não chegou.
+            let (mut t0, mut t1) = (u64::MAX, u64::MAX);
+            let pronto = unsafe {
+                gpu.ctx
+                    .GetData(
+                        &m.disjunto,
+                        Some(&mut dj as *mut _ as *mut _),
+                        std::mem::size_of_val(&dj) as u32,
+                        SEM_FORCAR,
+                    )
+                    .is_ok_and(|_| dj.Frequency > 0)
+                    && gpu
+                        .ctx
+                        .GetData(&m.inicio, Some(&mut t0 as *mut _ as *mut _), 8, SEM_FORCAR)
+                        .is_ok()
+                    && gpu
+                        .ctx
+                        .GetData(&m.fim, Some(&mut t1 as *mut _ as *mut _), 8, SEM_FORCAR)
+                        .is_ok()
+            };
+            if !pronto || t0 == u64::MAX || t1 == u64::MAX {
+                break;
+            }
+            if !dj.Disjoint.as_bool() && t1 >= t0 {
+                self.soma_ms += (t1 - t0) as f64 * 1000.0 / dj.Frequency as f64;
+                self.medidas += 1;
+            }
+            let m = self.pendentes.pop_front().expect("a frente existe");
+            self.livres.push(m);
+        }
+    }
+
+    /// O tempo de placa somado e quantos trabalhos, desde a última vez; zera.
+    pub fn tirar(&mut self) -> (f64, u64) {
+        let r = (self.soma_ms, self.medidas);
+        self.soma_ms = 0.0;
+        self.medidas = 0;
+        r
     }
 }
 

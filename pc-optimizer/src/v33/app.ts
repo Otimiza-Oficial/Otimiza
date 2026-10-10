@@ -585,10 +585,16 @@ function inicio() {
   const num = $("#r-num");
   const selos: string[] = [];
   if (gerando && estado.gerador) {
-    contar(num, estado.gerador.fps_apresentados, 1300);
+    // A mesma regra do painel do Boost: medido é o que chegou à tela (PresentMon); o apresentado é só estimativa.
+    const exibidos = estado.gerador.fps_exibidos ?? null;
+    contar(num, exibidos !== null && exibidos > 0 ? exibidos : estado.gerador.fps_apresentados, 1300);
     $("#r-un").textContent = "FPS na tela";
     $("#r-d").textContent = `Frame Boost ${estado.gerador.automatico ? "Auto" : `${estado.gerador.multiplicador}×`} · desligue com Ctrl+Alt+G`;
-    selos.push(`<span class="selo medido">medido pelo gerador</span>`);
+    selos.push(
+      exibidos !== null && exibidos > 0
+        ? `<span class="selo medido">medido na tela</span>`
+        : `<span class="selo estimado" title="Quadros apresentados pelo gerador. Abra o Otimiza como administrador para medir o que chega à tela.">estimado</span>`
+    );
   } else if (r?.ultima) {
     contar(num, r.ultima.fps_nativo);
     $("#r-un").textContent = "FPS";
@@ -1160,7 +1166,9 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   const vezes = (m: number) =>
     dois ? { multiplicador: m, faixa: { ...dois.faixa, minimo: Math.min(teto, (dois.faixa.minimo / 2) * m), maximo: Math.min(teto, (dois.faixa.maximo / 2) * m) } } : undefined;
   const est = mult === 0 ? (p.hz ? vezes(6) : undefined) : livre ? vezes(mult) : p.estimativas.find((e) => e.multiplicador === mult);
-  const medido = a?.fps_na_tela.origem === "Medido" ? a.fps_na_tela.valor : null;
+  // Medido: o que o PresentMon viu chegar à tela. Estimado: o que o gerador apresentou (sem PresentMon, sem administrador).
+  const medido = a && (a.fps_na_tela.origem === "Medido" || a.fps_na_tela.origem === "Estimado") ? a.fps_na_tela.valor : null;
+  const naTelaEstimado = a?.fps_na_tela.origem === "Estimado";
 
   let numero_ = "—";
   let rotulo = "FPS na tela";
@@ -1168,16 +1176,24 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   let linha = "";
   if (a) {
     if (medido !== null && a.hz > 0 && medido > a.hz * 1.03) rotulo = "FPS";
-    selos = medido !== null ? `<span class="selo medido">${a.pelo_driver ? "medido pelo PresentMon" : "medido pelo gerador"}</span>` : `<span class="selo">${a.pelo_driver ? "falta medir" : "medindo"}</span>`;
+    selos =
+      medido === null
+        ? `<span class="selo">${a.pelo_driver ? "falta medir" : "medindo"}</span>`
+        : naTelaEstimado
+          ? `<span class="selo estimado" title="Quadros apresentados pelo gerador. Abra o Otimiza como administrador para medir o que chega à tela.">estimado</span>`
+          : `<span class="selo medido" title="Quadros que chegaram à tela, pelo PresentMon">medido na tela</span>`;
     if (a.hdr) selos += `<span class="selo">HDR</span>`;
-    const atraso = a.atraso_ms.valor !== null ? ` · atraso +${numero(a.atraso_ms.valor, 1)} ms (estimado)` : "";
+    if (a.leve) selos += `<span class="selo" title="A placa estava sem folga, ou o jogo perdeu FPS: o gerador calcula o movimento numa resolução menor para não tirar quadros do jogo.">modo leve</span>`;
+    const atraso =
+      (a.atraso_ms.valor !== null ? ` · atraso +${numero(a.atraso_ms.valor, 1)} ms (estimado)` : "") +
+      (a.placa_pct !== null && a.placa_pct !== undefined ? ` · usa ${numero(a.placa_pct, 1)}% da placa (medido)` : "");
     linha = a.pelo_driver
       ? a.nota ?? ""
       : a.situacao === "ProcurandoJanela"
         ? `Ajustando à janela do jogo…${a.refeitas ? ` Ele se refaz sozinho quando a janela muda (${a.refeitas}×).` : ""}`
         : a.situacao === "SemQuadros"
           ? "O jogo parou de desenhar: a sobreposição some até ele voltar."
-          : `O FPS na tela aparece no canto do jogo, no lugar do contador do FiveM: no F8, digite cl_drawfps false para ficar só o do Otimiza. ${a.automatico ? `Auto (agora ${a.multiplicador}×)` : `${a.multiplicador}×`} · monitor de ${a.hz} Hz${a.sem_limite ? ` · passando do limite: o monitor mostra até ${a.hz} por segundo` : ""}${atraso}${!a.sem_limite && !a.automatico && a.multiplicador < multiplicadorPedido() ? `. ${multiplicadorPedido()}× passaria do monitor agora: o gerador nunca mostra mais quadros que os ${a.hz} Hz.` : ""}`;
+          : `${a.automatico ? `Auto (agora ${a.multiplicador}×)` : `${a.multiplicador}×`} · monitor de ${a.hz} Hz${a.sem_limite ? ` · passando do limite: o monitor mostra até ${a.hz} por segundo` : ""}${atraso}${!a.sem_limite && !a.automatico && a.multiplicador < multiplicadorPedido() ? `. ${multiplicadorPedido()}× passaria do monitor agora: o gerador nunca mostra mais quadros que os ${a.hz} Hz.` : ""}`;
   } else if (est) {
     numero_ = `${numero(est.faixa.minimo)}–${numero(est.faixa.maximo)}`;
     rotulo = livre ? (mult === 0 ? "FPS no Auto" : `FPS com ${mult}×`) : mult === 0 ? "FPS na tela no Auto" : `FPS na tela com ${mult}×`;
@@ -1186,6 +1202,27 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   } else if (rec && doOtimiza) {
     linha = "Jogue um minuto para o Otimiza medir o FPS nativo e estimar o ganho. Dá para ligar mesmo assim.";
   }
+  // A prova do custo: o FPS do próprio jogo com o gerador ligado e quanto ele manteve (a guarda compara com e sem).
+  const prova =
+    a && !a.pelo_driver && a.situacao === "Gerando" && a.fps_do_jogo !== null
+      ? `Jogo a ${numero(a.fps_do_jogo)} fps · ${
+          a.manteve_pct !== null
+            ? `manteve ${numero(a.manteve_pct, 1)}% do FPS com o Frame Boost (medido em ${a.comparacoes} ${a.comparacoes === 1 ? "comparação" : "comparações"})`
+            : "conferindo se o jogo perde FPS com o Frame Boost…"
+        }`
+      : "";
+  // Desligado: como foi a última vez (só com 30 s ou mais gerando). Sem estimativa para mostrar, ela vira o número grande.
+  const u = !a ? p.ultima_sessao : null;
+  const ultimaNoTopo = !!u && !!rec && !est && u.fps_na_tela.valor !== null;
+  if (u && ultimaNoTopo) {
+    numero_ = numero(u.fps_na_tela.valor ?? 0);
+    rotulo = "FPS na tela da última vez";
+    selos = u.fps_na_tela.origem === "Medido" ? `<span class="selo medido">medido na tela</span>` : `<span class="selo estimado">estimado</span>`;
+    linha = `${numero(u.minutos, 1)} min com o jogo a ${numero(u.fps_do_jogo)} fps${u.manteve_pct !== null ? ` · o jogo manteve ${numero(u.manteve_pct, 1)}% do FPS com o Frame Boost` : ""}${u.desligou_por_perda ? " · desligou sozinho: o jogo perdia FPS" : ""}.`;
+  }
+  const ultima = u && !ultimaNoTopo
+    ? `<div class="linha" style="margin-top:12px"><div>Da última vez · ${numero(u.minutos, 1)} min<p>Jogo a ${numero(u.fps_do_jogo)} fps → ${u.fps_na_tela.valor !== null ? numero(u.fps_na_tela.valor) : "—"} na tela${u.manteve_pct !== null ? ` · o jogo manteve ${numero(u.manteve_pct, 1)}% do FPS` : ""}${u.desligou_por_perda ? " · desligou sozinho: o jogo perdia FPS" : ""}</p></div><span class="selo ${u.fps_na_tela.origem === "Medido" ? "medido" : "estimado"}">${u.fps_na_tela.origem === "Medido" ? "medido" : "estimado"}</span></div>`
+    : "";
 
   const avisos: string[] = [];
   if (p.aviso) avisos.push(p.aviso);
@@ -1205,10 +1242,13 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
     ${rec ? `<div class="rotulo" style="margin-top:16px">${esc(rotulo)}</div>
     <div class="grande" style="font-size:64px"><span id="fb-num">${a ? (medido !== null ? "" : "—") : numero_}</span><small style="font-size:18px;color:var(--texto-2)">FPS</small></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selos}</div>
-    ${linha ? `<p class="nota" style="margin-top:8px">${esc(linha)}</p>` : ""}` : ""}
-    ${doOtimiza && !a ? `<div class="seg" id="fb-mult" style="margin-top:14px"><button aria-pressed="${mult === 0}" data-m="0" title="Enche o monitor: quantos quadros couberem">Auto</button>${oferecidos.map((m) => `<button aria-pressed="${m === mult}" data-m="${m}">${m}×</button>`).join("")}</div>${mult === 0 && !livre ? `<p class="nota" style="margin-top:6px">Auto enche o monitor: com o jogo a 48 fps num de 180 Hz, a tela recebe 180. Mais liso, e com o mesmo atraso do 2×.</p>` : ""}` : ""}
+    ${linha ? `<p class="nota" style="margin-top:8px">${esc(linha)}</p>` : ""}
+    ${prova ? `<p class="nota" style="margin-top:4px">${esc(prova)}</p>` : ""}` : ""}
+    ${doOtimiza && !a ? `<div class="seg" id="fb-mult" style="margin-top:14px"><button aria-pressed="${mult === 0}" data-m="0" title="Enche o monitor: quantos quadros couberem">Auto</button>${oferecidos.map((m) => `<button aria-pressed="${m === mult}" data-m="${m}">${m}×</button>`).join("")}</div>${mult === 0 && !livre ? `<p class="nota" style="margin-top:6px">Auto enche o monitor: com o jogo a 60 fps num de 180 Hz, a tela recebe 180. Mais liso, mas segura o quadro real por cerca de um quadro do jogo (o 2× segura metade): para jogo competitivo, o 2× tem menos atraso.</p>` : ""}` : ""}
     ${rec ? `<div class="acoes" style="margin-top:14px"><button class="botao ${a ? "" : "prim"}" id="fb-ligar">${a ? "Desligar Frame Boost" : experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Como ligar"}</button>${a?.pelo_driver ? `<button class="botao" id="fb-medir">Medir agora</button>` : ""}${doOtimiza ? `<span class="nota" style="align-self:center">Ctrl+Alt+G desliga de dentro do jogo</span>` : ""}</div>` : ""}
     ${doOtimiza && (p.base || p.nota_da_base) ? `<div class="linha" style="margin-top:12px"><div>FPS base${p.base ? ` <b>${p.base.fps}</b> · ${p.base.multiplicador}× fecham o monitor <span class="selo ${p.base.valendo ? "medido" : ""}">${p.base.valendo ? "valendo" : "vale ao reabrir o jogo"}</span>` : ""}<p>${esc(p.nota_da_base ?? "Base travada numa fração do monitor: cada quadro real ganha sempre o mesmo número de gerados.")}</p></div>${p.base ? `<button class="botao" id="fb-destravar">Destravar</button>` : ""}</div>` : ""}
+    ${doOtimiza && p.base_solta && !p.base ? `<div class="linha" style="margin-top:12px"><div>FPS base solto<p>Você destravou: o Frame Boost não trava a base deste jogo sozinho.${a && !a.pelo_driver ? "" : " Para travar de novo, ligue o Frame Boost."}</p></div>${a && !a.pelo_driver ? `<button class="botao" id="fb-travar">Travar de novo</button>` : ""}</div>` : ""}
+    ${ultima}
     ${avisos.map((t) => `<p class="estado aviso">${esc(t)}</p>`).join("")}
     <p class="estado" id="fb-estado" hidden></p>
     ${p.opcoes.length ? `<div style="margin-top:14px">${p.opcoes.map((r) => `<div class="linha"><div>${esc(r.nome)}${motivo(r.suporte) ? `<p>${esc(motivo(r.suporte))}</p>` : ""}</div>${selo(r.suporte)}</div>`).join("")}</div>` : ""}`;
@@ -1247,6 +1287,18 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
     botao.disabled = true;
     try {
       await painelFrameBoost(await ponte.frameBoostDestravarBase());
+    } catch (erro) {
+      botao.disabled = false;
+      const s = $("#fb-estado");
+      s.hidden = false;
+      s.textContent = String(erro);
+    }
+  });
+  document.querySelector<HTMLButtonElement>("#fb-travar")?.addEventListener("click", async (e) => {
+    const botao = e.currentTarget as HTMLButtonElement;
+    botao.disabled = true;
+    try {
+      await painelFrameBoost(await ponte.frameBoostTravarBase());
     } catch (erro) {
       botao.disabled = false;
       const s = $("#fb-estado");
@@ -1683,11 +1735,11 @@ async function secaoOverlay() {
   const cf = await ponte.contadorFivem().catch(() => null);
   caixa.innerHTML = `
     <div class="titulo-sec"><div class="rotulo">FPS por cima do jogo</div>${e.ligado ? `<span class="pilula"><span class="v-vivo"></span>no ${esc(e.jogo ?? "jogo")}</span>` : ""}</div>
-    <p class="nota" style="margin-top:6px">Só número medido pelo PresentMon (precisa do Otimiza como administrador). Com o Frame Boost, mostra o FPS na tela. Aparece nos prints e gravações (como o cl_drawfps), não pega clique e fica fora de jogos com anticheat que proíbe.</p>
+    <p class="nota" style="margin-top:6px">Só número medido pelo PresentMon (precisa do Otimiza como administrador). Com o Frame Boost, mostra o FPS do próprio jogo; o que chega à tela fica no painel do Frame Boost. Aparece nos prints e gravações (como o cl_drawfps), não pega clique e fica fora de jogos com anticheat que proíbe.</p>
     <div class="seg" id="o-modo" style="margin-top:12px">${MODOS.map(([m, t]) => `<button aria-pressed="${m === modo}" data-m="${m}">${t}</button>`).join("")}</div>
     <div class="seg" id="o-canto" style="margin-top:8px" aria-label="Canto">${CANTOS.map(([c, t]) => `<button aria-pressed="${c === canto}" data-c="${c}" aria-label="${c}">${t}</button>`).join("")}</div>
     <div class="linha" style="margin-top:8px"><div>No lugar do contador do FiveM<p>${cf?.pendente ? "Vale quando o FiveM fechar: o Otimiza troca na hora certa e você não precisa digitar nada no F8." : "Desliga o cl_drawFPS no arquivo de configuração do FiveM (sem tocar no jogo) e deixa o FPS do Otimiza sempre no mesmo canto. Desligar devolve como estava."}</p></div><button class="chave" role="switch" aria-checked="${!!cf?.ligado}" id="o-fivem" aria-label="No lugar do contador do FiveM"></button></div>
-    <div class="linha" style="margin-top:8px"><div>Mostrar com o Frame Boost<p>O contador do próprio jogo nunca vê os quadros gerados. Com isto, o FPS na tela aparece no canto do jogo, igual ao cl_drawfps, enquanto o Frame Boost estiver ligado. No FiveM, desligue o dele no F8: cl_drawfps false.</p></div><button class="chave" role="switch" aria-checked="${e.config.com_frame_boost}" id="o-fb" aria-label="Mostrar com o Frame Boost"></button></div>
+    <div class="linha" style="margin-top:8px"><div>Mostrar com o Frame Boost<p>O contador do próprio jogo nunca vê os quadros gerados. Com isto, o FPS do jogo aparece no canto, igual ao cl_drawfps, enquanto o Frame Boost estiver ligado; quantos quadros chegam à tela fica no painel do Frame Boost. No FiveM, desligue o dele no F8: cl_drawfps false.</p></div><button class="chave" role="switch" aria-checked="${e.config.com_frame_boost}" id="o-fb" aria-label="Mostrar com o Frame Boost"></button></div>
     <div class="acoes" style="margin-top:12px"><button class="botao" id="o-ligar" ${estado.jogo ? "" : "disabled title=\"Abra um jogo\""}>${e.ligado ? "Já está no jogo" : "Mostrar agora no jogo"}</button></div>
     <p id="o-estado" hidden></p>`;
 

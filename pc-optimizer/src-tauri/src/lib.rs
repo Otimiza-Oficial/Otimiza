@@ -285,6 +285,7 @@ pub fn run() {
             commands::energia_de_jogo_definir,
             commands::frame_boost_desligar,
             commands::frame_boost_destravar_base,
+            commands::frame_boost_travar_base,
             commands::frame_boost_medir,
             commands::overlay_estado,
             commands::overlay_gravar,
