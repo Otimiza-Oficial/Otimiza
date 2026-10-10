@@ -8,11 +8,20 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_3.3.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_3.3.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_3.3.1_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_3.3.1_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
+
+---
+
+# 3.3 Ajustes (3.3.1): o Frame Boost não promete o que não foi medido
+
+A 3.3.0 ligava, junto com o Frame Boost, a "otimização para jogos em janela" do Windows para o jogo, prometendo tirar o
+modo sem bordas da cópia de cada quadro. Medimos com o PresentMon: o jogo continuou na cópia em todos os quadros, com a
+opção do jogo e com a global. Ela sai do Frame Boost, e o que a 3.3.0 gravou volta como estava na próxima vez que ele
+ligar. O resto da 3.3 continua igual.
 
 ---
 
@@ -151,9 +160,6 @@ injetar nada.
   jogo e quantos quadros chegaram à tela.
 - **"FPS na tela" é o que chegou à tela.** Com o Otimiza como administrador, o número vem do PresentMon contando os
   quadros que o monitor recebeu; sem administrador, aparece como ESTIMADO.
-- **Otimização de janela do Windows para o jogo.** Ao ligar, o Frame Boost liga para o jogo a opção do Windows que
-  tira o modo sem bordas da cópia de cada quadro (no FiveM, sem bordas rendia 61 fps contra 85 em tela cheia). Vale
-  ao reabrir o jogo e volta ao desfazer.
 - O gerador do Otimiza agora **se refaz sozinho** quando a janela do jogo muda
   de tamanho, é minimizada, vai para outro monitor ou o Windows troca a
   resolução. Antes, ele desligava.

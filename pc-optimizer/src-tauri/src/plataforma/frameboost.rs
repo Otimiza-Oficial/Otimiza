@@ -434,20 +434,21 @@ pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {
     let Some(j) = super::sessao::atual().filter(|_| gerando) else {
         return;
     };
-    let mut nota = match hz_do_jogo(j.pid) {
+    let nota = match hz_do_jogo(j.pid) {
         Some(hz) => super::base_do_jogo::travar(&j.executavel, hz, log)
             .unwrap_or_else(|e| format!("Não consegui travar o FPS base: {}", e)),
         None => "Não consegui ler os Hz do monitor do jogo para travar o FPS base.".to_string(),
     };
-    // O Frame Boost precisa de janela ou sem bordas, onde o Windows copiava cada quadro (FiveM do dono: 61 fps contra
-    // 85 em tela cheia). A otimização de janela do Windows passa o jogo para o flip.
+    // A 3.3.0 ligava a otimização de janela do Windows para o jogo aqui; medida sem efeito (o jogo continuou na cópia,
+    // `gpupref`), ela sai, e o que foi gravado volta como estava.
     if let Some(caminho) = crate::modules::windows::frames::caminho_do_processo(&j.executavel) {
-        match crate::modules::windows::WindowsOptimizer::new().otimizar_janela_do_jogo(&caminho, log) {
-            Ok(true) => nota.push_str(
-                " Otimização de janela do Windows ligada para o jogo (sem bordas sem a cópia de cada quadro): vale ao reabrir.",
-            ),
+        match crate::modules::windows::WindowsOptimizer::new().desfazer_janela_do_jogo(&caminho, log) {
+            Ok(true) => crate::utils::Logger::info(&format!(
+                "frame boost: otimização de janela de {} desfeita (medida sem efeito)",
+                j.executavel
+            )),
             Ok(false) => {}
-            Err(e) => crate::utils::Logger::warn(&format!("frame boost: otimização de janela: {}", e)),
+            Err(e) => crate::utils::Logger::warn(&format!("frame boost: desfazer a otimização de janela: {}", e)),
         }
     }
     anotar_base(Some(nota));

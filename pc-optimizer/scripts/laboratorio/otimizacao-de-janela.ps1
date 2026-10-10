@@ -8,6 +8,13 @@ param(
   [int]$Largura = 1080,
   [int]$Altura = 1920
 )
+$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+  [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $admin) {
+  Write-Host 'Precisa de administrador: o PresentMon só mede assim. Abra o menu Iniciar, procure PowerShell,'
+  Write-Host 'clique com o botão direito em "Executar como administrador" e rode este comando lá.'
+  exit 1
+}
 $Exe = (Resolve-Path $Exe).Path
 $pm = Join-Path $env:LOCALAPPDATA 'Otimiza\PresentMon.exe'
 $chave = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
@@ -19,10 +26,13 @@ function Medir($rotulo) {
   $jogo = Start-Process -FilePath $Exe -ArgumentList @('120', "$Largura", "$Altura", '0') -PassThru
   Start-Sleep -Seconds 3
   $csv = Join-Path $pasta "$rotulo.csv"
-  & $pm --process_name 'jogo_de_teste.exe' --timed 5 --terminate_after_timed --output_file $csv `
-    --no_console_stats --session_name OtimizaLabJanela --stop_existing_session *> $null
+  $log = & $pm --process_name 'jogo_de_teste.exe' --timed 5 --terminate_after_timed --output_file $csv `
+    --no_console_stats --session_name OtimizaLabJanela --stop_existing_session 2>&1
   Stop-Process -Id $jogo.Id -Force
   Start-Sleep -Milliseconds 500
+  if (-not (Test-Path $csv)) {
+    return "{0}: o PresentMon não gravou nada. Saída dele: {1}" -f $rotulo, (($log | Out-String).Trim())
+  }
   $linhas = Import-Csv $csv
   $modos = $linhas | Group-Object PresentMode | Sort-Object Count -Descending | ForEach-Object { "$($_.Name) ($($_.Count))" }
   "{0}: {1}" -f $rotulo, ($modos -join ', ')

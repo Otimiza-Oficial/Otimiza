@@ -242,6 +242,30 @@ jobs:
             echo FIM_DAS_NOTAS
           } >> "$GITHUB_OUTPUT"
 
+      # O título da página da versão. Por padrão "Otimiza v3.3.1"; com
+      # `.github/release-titulo.txt` (ex.: "Otimiza 3.3 Ajustes"), o do arquivo.
+      # Como as notas, o arquivo não muda sozinho: só vale se citar o número
+      # desta versão (3.3 ou 3.3.1), senão a próxima sairia com o título da
+      # anterior.
+      - name: Ler o título da versão
+        id: titulo
+        shell: bash
+        run: |
+          set -euo pipefail
+          versao="${GITHUB_REF_NAME#v}"
+          curta="${versao%.*}"
+          nome="Otimiza ${GITHUB_REF_NAME}"
+          arquivo=.github/release-titulo.txt
+          if [ -s "$arquivo" ]; then
+            linha=$(head -n1 "$arquivo" | tr -d '\r')
+            if grep -qF "$curta" <<<"$linha"; then
+              nome="$linha"
+            else
+              echo "::warning::$arquivo não cita $curta; o título fica \"$nome\"."
+            fi
+          fi
+          echo "nome=$nome" >> "$GITHUB_OUTPUT"
+
       - name: Compilar e publicar
         uses: tauri-apps/tauri-action@v0
         env:
@@ -249,7 +273,7 @@ jobs:
         with:
           projectPath: pc-optimizer
           tagName: ${{ github.ref_name }}
-          releaseName: Otimiza ${{ github.ref_name }}
+          releaseName: ${{ steps.titulo.outputs.nome }}
           releaseBody: ${{ steps.notas.outputs.corpo }}
           # Publica direto, sem passar por rascunho. A descrição já vem revisada
           # de `.github/release-notes.md`, que é versionado e passa por revisão

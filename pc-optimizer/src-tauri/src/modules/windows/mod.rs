@@ -1168,31 +1168,18 @@ impl WindowsOptimizer {
         })
     }
 
-    /// Id próprio por jogo no histórico: "Desfazer tudo" devolve a preferência anterior, inclusive a ausência dela.
-    /// A otimização de janela do Windows para o jogo aberto (`gpupref::ligar_otimizacao_de_janela`), com desfazer.
-    /// `Ok(false)`: já estava ligada (nada gravado).
-    pub fn otimizar_janela_do_jogo(&self, caminho: &str, log: &mut ChangeLog) -> Result<bool, String> {
+    /// Desfaz a otimização de janela que a 3.3.0 gravava para o jogo ao ligar o Frame Boost (medida sem efeito; ver
+    /// `gpupref`). `Ok(true)`: havia e foi desfeita.
+    pub fn desfazer_janela_do_jogo(&self, caminho: &str, log: &mut ChangeLog) -> Result<bool, String> {
         let id = format!("janela:{}", caminho.to_lowercase());
-        if log.is_applied(&id) {
+        if !log.is_applied(&id) {
             return Ok(false);
         }
-        let arquivo = std::path::Path::new(caminho);
-        let Some(change) = gpupref::ligar_otimizacao_de_janela(arquivo)? else {
-            return Ok(false);
-        };
-        let nome_curto = arquivo
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| caminho.to_string());
-        log.record(AppliedOptimization {
-            optimization_id: id,
-            name: format!("{}: otimização de janela do Windows", nome_curto),
-            timestamp: now_timestamp(),
-            changes: vec![change],
-        })?;
+        self.revert(&id, log)?;
         Ok(true)
     }
 
+    /// Id próprio por jogo no histórico: "Desfazer tudo" devolve a preferência anterior, inclusive a ausência dela.
     pub fn set_gpu_preference(
         &self,
         caminho: &str,
