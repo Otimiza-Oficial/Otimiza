@@ -243,7 +243,14 @@ fn main() {
             let _ = swap.Present(0, DXGI_PRESENT(0));
             contagem.1 += 1;
             if contagem.0.elapsed() >= Duration::from_secs(1) {
-                println!("fps {}", contagem.1);
+                // As estatísticas de apresentação só existem no modelo flip: em janela, o de cópia (o do FiveM) devolve
+                // erro. É como saber, sem administrador, se a otimização de janela do Windows passou o jogo para o flip.
+                let mut est = DXGI_FRAME_STATISTICS::default();
+                let modelo = match swap.GetFrameStatistics(&mut est) {
+                    Ok(()) => format!("flip (apresentações {})", est.PresentCount),
+                    Err(e) => format!("cópia ({:#x})", e.code().0),
+                };
+                println!("fps {} · {}", contagem.1, modelo);
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
                 contagem = (Instant::now(), 0);
