@@ -247,7 +247,10 @@ mod tests {
             medicao("gta.exe", 91.0, 68.0, 7),
         ];
 
-        assert_eq!(comparar("gta.exe", &medicoes, 7).desfecho, Desfecho::Melhorou);
+        assert_eq!(
+            comparar("gta.exe", &medicoes, 7).desfecho,
+            Desfecho::Melhorou
+        );
     }
 
     #[test]
@@ -262,7 +265,10 @@ mod tests {
         let v = comparar("fivem.exe", &medicoes, 11);
 
         assert_eq!(v.desfecho, Desfecho::PiorouMuito);
-        assert!(v.variacao_fps_pct.unwrap().abs() < 3.0, "o FPS médio mal se moveu");
+        assert!(
+            v.variacao_fps_pct.unwrap().abs() < 3.0,
+            "o FPS médio mal se moveu"
+        );
     }
 
     #[test]
@@ -296,7 +302,11 @@ mod tests {
         let v = comparar("fivem.exe", &medicoes, 14);
 
         assert_eq!(v.desfecho, Desfecho::Igual);
-        assert_eq!(v.depois.unwrap().amostras, 2, "a medição curta entrou na conta");
+        assert_eq!(
+            v.depois.unwrap().amostras,
+            2,
+            "a medição curta entrou na conta"
+        );
     }
 
     #[test]
@@ -312,7 +322,11 @@ mod tests {
 
         let v = comparar("fivem.exe", &medicoes, 5);
 
-        assert_eq!(v.antes.unwrap().amostras, 2, "o CS entrou na conta do FiveM");
+        assert_eq!(
+            v.antes.unwrap().amostras,
+            2,
+            "o CS entrou na conta do FiveM"
+        );
         assert_eq!(v.desfecho, Desfecho::Igual);
     }
 

@@ -30,7 +30,11 @@ fn emitir(privada: &SigningKey, maquina: &str, expira: Option<&str>) -> String {
 
     let url = base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-    format!("{}.{}", url.encode(&corpo), url.encode(assinatura.to_bytes()))
+    format!(
+        "{}.{}",
+        url.encode(&corpo),
+        url.encode(assinatura.to_bytes())
+    )
 }
 
 #[test]
@@ -60,7 +64,12 @@ fn um_caractere_trocado_derruba_a_chave() {
 
     assert!(
         matches!(
-            conferir_com(publica, &com_dados_mexidos, "OTZ-WPYY-0J4F-77AB", "2026-08-29"),
+            conferir_com(
+                publica,
+                &com_dados_mexidos,
+                "OTZ-WPYY-0J4F-77AB",
+                "2026-08-29"
+            ),
             Err(Recusa::AssinaturaInvalida) | Err(Recusa::Malformada)
         ),
         "dados alterados passaram na conferência"
@@ -73,7 +82,12 @@ fn um_caractere_trocado_derruba_a_chave() {
 
     assert!(
         matches!(
-            conferir_com(publica, &com_assinatura_mexida, "OTZ-WPYY-0J4F-77AB", "2026-08-29"),
+            conferir_com(
+                publica,
+                &com_assinatura_mexida,
+                "OTZ-WPYY-0J4F-77AB",
+                "2026-08-29"
+            ),
             Err(Recusa::AssinaturaInvalida) | Err(Recusa::Malformada)
         ),
         "assinatura alterada passou na conferência"
@@ -91,7 +105,13 @@ fn chave_assinada_por_outro_par_nao_vale() {
     let forjada = emitir(&privada_do_impostor, "OTZ-WPYY-0J4F-77AB", None);
 
     assert_eq!(
-        conferir_com(publica_do_otimiza, &forjada, "OTZ-WPYY-0J4F-77AB", "2026-08-29").unwrap_err(),
+        conferir_com(
+            publica_do_otimiza,
+            &forjada,
+            "OTZ-WPYY-0J4F-77AB",
+            "2026-08-29"
+        )
+        .unwrap_err(),
         Recusa::AssinaturaInvalida
     );
 }
@@ -101,7 +121,8 @@ fn chave_de_outra_maquina_nao_ativa_aqui() {
     let (privada, publica) = par();
     let do_vizinho = emitir(&privada, "OTZ-AAAA-BBBB-CCCC", None);
 
-    let recusa = conferir_com(publica, &do_vizinho, "OTZ-WPYY-0J4F-77AB", "2026-08-29").unwrap_err();
+    let recusa =
+        conferir_com(publica, &do_vizinho, "OTZ-WPYY-0J4F-77AB", "2026-08-29").unwrap_err();
 
     assert_eq!(
         recusa,
@@ -157,13 +178,8 @@ fn a_chave_emitida_pelo_bot_abre_o_produto() {
     let publica = VerifyingKey::from_bytes(&bytes.try_into().expect("32 bytes"))
         .expect("chave pública válida");
 
-    let dados = conferir_com(
-        publica,
-        LICENCA_DO_BOT,
-        "OTZ-TEST-B0T0-0001",
-        "2026-08-29",
-    )
-    .expect("o Rust precisa aceitar o que o bot em JavaScript assinou");
+    let dados = conferir_com(publica, LICENCA_DO_BOT, "OTZ-TEST-B0T0-0001", "2026-08-29")
+        .expect("o Rust precisa aceitar o que o bot em JavaScript assinou");
 
     assert_eq!(dados.maquina, "OTZ-TEST-B0T0-0001");
     assert_eq!(dados.comprador, "Prova de compatibilidade");
@@ -203,4 +219,49 @@ fn o_emissor_de_verdade_monta_a_chave_do_mesmo_jeito() {
             parte
         );
     }
+}
+
+/// Emitida em 10/10/2026 com a privada do `.env` de verdade do bot (lida no script, nunca impressa), para um código de
+/// máquina inventado. O Otimiza 3.2.0 só conhecia a pública anterior e recusava toda chave nova do bot.
+const LICENCA_DO_BOT_DE_HOJE: &str = "eyJtYXF1aW5hIjoiT1RaLVRFU1QtRTJFMC1CT1Q0IiwiY29tcHJhZG9yIjoiVGVzdGUgZG8gcGFyIGRvIGJvdCIsImVtaXRpZGEiOiIyMDI2LTEwLTEwIiwiZXhwaXJhIjpudWxsfQ.9rDpsZYK1SX6ZvPLJdLxd3zbR5_6sWKPvn5H5ZdsO71bR2PE06SXPmYqp9n_KsPGo9YAWVPT4lnxRvDU51PYDw";
+
+#[test]
+fn a_chave_que_o_bot_emite_hoje_abre() {
+    let dados = conferir(LICENCA_DO_BOT_DE_HOJE, "OTZ-TEST-E2E0-BOT4", "2026-10-10")
+        .expect("a chave do bot de hoje tinha que abrir");
+    assert_eq!(dados.comprador, "Teste do par do bot");
+    assert!(matches!(
+        conferir(LICENCA_DO_BOT_DE_HOJE, "OTZ-AAAA-BBBB-CCCC", "2026-10-10"),
+        Err(Recusa::OutraMaquina { .. })
+    ));
+}
+
+#[test]
+fn chave_de_qualquer_das_publicas_aceitas_abre_e_de_outra_nao() {
+    let (atual, publica_atual) = par();
+    let (anterior, publica_anterior) = par();
+    let (estranha, _) = par();
+    let aceitas = [publica_atual, publica_anterior];
+    let m = "OTZ-WPYY-0J4F-77AB";
+
+    for privada in [&atual, &anterior] {
+        let chave = emitir(privada, m, None);
+        assert!(conferir_com_varias(&aceitas, &chave, m, "2026-10-10").is_ok());
+    }
+    assert_eq!(
+        conferir_com_varias(&aceitas, &emitir(&estranha, m, None), m, "2026-10-10").unwrap_err(),
+        Recusa::AssinaturaInvalida
+    );
+}
+
+#[test]
+fn chave_de_outra_maquina_nao_vira_assinatura_invalida_ao_tentar_a_segunda() {
+    // A primeira pública confere a assinatura e recusa a máquina: essa é a resposta, e a tela pede o código certo.
+    let (atual, publica_atual) = par();
+    let (_, publica_anterior) = par();
+    let chave = emitir(&atual, "OTZ-AAAA-BBBB-CCCC", None);
+    assert!(matches!(
+        conferir_com_varias(&[publica_atual, publica_anterior], &chave, "OTZ-WPYY-0J4F-77AB", "2026-10-10"),
+        Err(Recusa::OutraMaquina { .. })
+    ));
 }

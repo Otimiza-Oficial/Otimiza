@@ -128,12 +128,47 @@ const telas = await cdp("Runtime.evaluate", {
 });
 await espera(1500);
 
+// A interface nova (3.3), que é a que abre: cada destino da barra mostra a sua tela, com conteúdo, sem exceção.
+const novas = await cdp("Runtime.evaluate", {
+  expression: `(async () => {
+    const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
+    const falhas = [];
+    const visitadas = [];
+    const destinos = [...document.querySelectorAll('#v33 .ir[data-ir]')];
+    if (destinos.length < 7) falhas.push('a interface nova montou só ' + destinos.length + ' destinos');
+    for (const b of destinos) {
+      const d = b.dataset.ir;
+      b.click();
+      await pausa(700);
+      visitadas.push(d);
+      const tela = document.querySelector('#t-' + d);
+      if (!tela || tela.hidden) falhas.push('a tela ' + d + ' não abriu');
+      else if (tela.textContent.trim().length < 20) falhas.push('a tela ' + d + ' abriu vazia');
+      if (d === 'mira' && !(document.querySelector('#m-fov')?.textContent ?? '').includes('Campo de visão')) {
+        falhas.push('o cartão do FOV não apareceu na Mira');
+      }
+    }
+    document.querySelector('#v33 .ir[data-ir="inicio"]')?.click();
+    await pausa(300);
+    return { visitadas, falhas };
+  })()`,
+  awaitPromise: true,
+  returnByValue: true,
+});
+const resultadoNovas = novas.result?.result?.value;
+if (novas.result?.exceptionDetails) erros.push(novas.result.exceptionDetails.exception?.description ?? novas.result.exceptionDetails.text);
+erros.push(...(resultadoNovas?.falhas ?? ["roteiro da interface nova não retornou"]));
+console.log(`Interface nova (${resultadoNovas?.visitadas?.length ?? 0}): ${(resultadoNovas?.visitadas ?? []).join(", ")}`);
+
 // Regressões de interação: a navegação deve preservar os alvos do teclado.
 const motion = await cdp("Runtime.evaluate", {
   expression: `(async () => {
     const falhas = [];
     const conferir = (ok, mensagem) => { if (!ok) falhas.push(mensagem); };
-    // Só no navegador de teste, sem licença/backend: deixa a UI receber foco.
+    // Só no navegador de teste, sem licença/backend: deixa a UI receber foco. Desde a 3.3 estas telas são o Modo
+    // clássico (o "Personalizado" do Boost): escondidas atrás da interface nova, não recebem foco.
+    document.documentElement.classList.remove('v33-cedo');
+    document.body.classList.remove('v33-ativo');
     document.querySelector('#portao').hidden = true;
     document.querySelector('.console').removeAttribute('inert');
     document.querySelector('.nav[data-tab="sistema"]').click();

@@ -47,10 +47,16 @@ pub fn serie_ryzen(nome: &str) -> Option<u32> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum OQueGoverna {
-    OEpp { porque: String },
-    OEstadoMinimo { porque: String },
+    OEpp {
+        porque: String,
+    },
+    OEstadoMinimo {
+        porque: String,
+    },
     /// Aplica os dois sem prometer qual pesa.
-    NaoDeuParaSaber { porque: String },
+    NaoDeuParaSaber {
+        porque: String,
+    },
 }
 
 /// `governo` decide; a geração só explica, e quando discordam vale a leitura.
@@ -256,7 +262,10 @@ mod tests {
             panic!("era o estado mínimo");
         };
 
-        assert!(porque.contains("é ELE quem escolhe"), "a leitura continua explicada");
+        assert!(
+            porque.contains("é ELE quem escolhe"),
+            "a leitura continua explicada"
+        );
         assert!(!porque.contains("geração"), "não inventou geração");
     }
 
@@ -271,6 +280,9 @@ mod tests {
         };
 
         assert!(porque.contains("não vai prometer"));
-        assert!(porque.contains("série 5000"), "a geração continua explicando");
+        assert!(
+            porque.contains("série 5000"),
+            "a geração continua explicando"
+        );
     }
 }

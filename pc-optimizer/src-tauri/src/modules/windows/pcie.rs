@@ -19,12 +19,23 @@ pub struct Enlace {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum Faixas {
-    Completo { largura: u32 },
-    Estreito { atual: u32, maxima: u32 },
+    Completo {
+        largura: u32,
+    },
+    Estreito {
+        atual: u32,
+        maxima: u32,
+    },
     /// Em repouso este estado nunca é produzido.
-    GeracaoAbaixoSobCarga { atual: u32, maxima: u32, largura: u32 },
+    GeracaoAbaixoSobCarga {
+        atual: u32,
+        maxima: u32,
+        largura: u32,
+    },
     /// Não é "está tudo bem".
-    NaoDeuParaLer { motivo: String },
+    NaoDeuParaLer {
+        motivo: String,
+    },
 }
 
 /// `None` sem os quatro números: linha incompleta não vira "zero faixas".
@@ -74,7 +85,9 @@ pub fn julgar(enlace: Enlace, carga_gpu: Option<f64>) -> Faixas {
         };
     }
 
-    Faixas::Completo { largura: enlace.largura_atual }
+    Faixas::Completo {
+        largura: enlace.largura_atual,
+    }
 }
 
 pub fn explicar(faixas: &Faixas) -> String {
@@ -91,7 +104,11 @@ pub fn explicar(faixas: &Faixas) -> String {
              com o slot da placa — o manual da placa-mãe diz quais slots brigam entre \
              si —, um cabo de extensão, ou o encaixe mal encostado."
         ),
-        Faixas::GeracaoAbaixoSobCarga { atual, maxima, largura } => format!(
+        Faixas::GeracaoAbaixoSobCarga {
+            atual,
+            maxima,
+            largura,
+        } => format!(
             "Com a placa trabalhando, o PCI Express está na geração {atual} e a placa \
              suporta a {maxima}, com as {largura} faixas completas. Costuma ser \
              configuração da BIOS fixando a geração, ou um cabo de extensão. Vale \
@@ -130,8 +147,7 @@ pub fn analisar() -> Faixas {
 
     let Some(enlace) = ler_enlace(&saida) else {
         return Faixas::NaoDeuParaLer {
-            motivo: "o driver respondeu, mas não com os quatro números do enlace."
-                .to_string(),
+            motivo: "o driver respondeu, mas não com os quatro números do enlace.".to_string(),
         };
     };
 
@@ -140,13 +156,22 @@ pub fn analisar() -> Faixas {
 
 #[cfg(not(target_os = "windows"))]
 pub fn analisar() -> Faixas {
-    Faixas::NaoDeuParaLer { motivo: "só no Windows.".to_string() }
+    Faixas::NaoDeuParaLer {
+        motivo: "só no Windows.".to_string(),
+    }
 }
 
 /// `None` faz a geração NÃO ser julgada, que é o lado seguro.
 pub fn carga_da_saida(saida: &str) -> Option<f64> {
     let linha = saida.lines().find(|l| !l.trim().is_empty())?;
-    linha.split(',').nth(4)?.trim().replace('%', "").trim().parse::<f64>().ok()
+    linha
+        .split(',')
+        .nth(4)?
+        .trim()
+        .replace('%', "")
+        .trim()
+        .parse::<f64>()
+        .ok()
 }
 
 #[cfg(test)]
@@ -206,7 +231,11 @@ mod tests {
 
         assert_eq!(
             julgar(enlace, Some(85.0)),
-            Faixas::GeracaoAbaixoSobCarga { atual: 2, maxima: 4, largura: 16 }
+            Faixas::GeracaoAbaixoSobCarga {
+                atual: 2,
+                maxima: 4,
+                largura: 16
+            }
         );
     }
 
@@ -221,7 +250,10 @@ mod tests {
 
         assert_eq!(
             julgar(estreito, Some(0.0)),
-            Faixas::Estreito { atual: 4, maxima: 16 }
+            Faixas::Estreito {
+                atual: 4,
+                maxima: 16
+            }
         );
     }
 
@@ -237,7 +269,10 @@ mod tests {
 
         assert_eq!(
             julgar(tudo_errado, Some(90.0)),
-            Faixas::Estreito { atual: 4, maxima: 16 }
+            Faixas::Estreito {
+                atual: 4,
+                maxima: 16
+            }
         );
     }
 
@@ -255,10 +290,16 @@ mod tests {
 
     #[test]
     fn a_frase_do_estreito_diz_o_que_olhar() {
-        let frase = explicar(&Faixas::Estreito { atual: 4, maxima: 16 });
+        let frase = explicar(&Faixas::Estreito {
+            atual: 4,
+            maxima: 16,
+        });
 
         assert!(frase.contains('4') && frase.contains("16"));
-        assert!(frase.contains("M.2"), "a causa mais comum precisa estar na frase");
+        assert!(
+            frase.contains("M.2"),
+            "a causa mais comum precisa estar na frase"
+        );
         assert!(
             frase.contains("nenhum ajuste de software"),
             "o cliente precisa saber que não adianta otimizar isto"
@@ -267,7 +308,9 @@ mod tests {
 
     #[test]
     fn nao_deu_para_ler_nao_soa_como_esta_tudo_bem() {
-        let frase = explicar(&Faixas::NaoDeuParaLer { motivo: "sem driver.".to_string() });
+        let frase = explicar(&Faixas::NaoDeuParaLer {
+            motivo: "sem driver.".to_string(),
+        });
         assert!(frase.contains("não quer dizer que esteja tudo bem"));
     }
 

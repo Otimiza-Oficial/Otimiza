@@ -34,3 +34,27 @@
     otimiza_fim_da_restauracao:
   ${EndIf}
 !macroend
+
+; ATUALIZAÇÃO com o Otimiza aberto COMO ADMINISTRADOR: o instalador (sem administrador) não consegue fechá-lo nem trocar o
+; programa, e terminava sem erro com a versão velha no lugar (aconteceu com o dono em 09/10/2026: "instalei e não
+; aparece"). Aqui ele confere de verdade se o processo ainda existe e não segue até ele fechar.
+!macro NSIS_HOOK_PREINSTALL
+  StrCpy $R7 0
+  otimiza_confere_aberto:
+    nsExec::ExecToStack 'cmd /c tasklist /NH /FI "IMAGENAME eq ${MAINBINARYNAME}.exe" | find /I "${MAINBINARYNAME}.exe"'
+    Pop $R6
+    Pop $R5
+    ${If} $R6 == "0"
+      IfSilent 0 otimiza_pergunta
+        ; Silencioso: espera até 60 s e desiste, para não instalar pela metade.
+        IntOp $R7 $R7 + 1
+        ${If} $R7 > 30
+          Abort
+        ${EndIf}
+        Sleep 2000
+        Goto otimiza_confere_aberto
+      otimiza_pergunta:
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "O Otimiza ainda está aberto (talvez na bandeja, perto do relógio, ou como administrador) e o Windows não deixa trocar o programa com ele rodando.$\r$\n$\r$\nFeche o Otimiza: clique com o botão direito no ícone da bandeja e saia, ou finalize $\"${MAINBINARYNAME}.exe$\" no Gerenciador de Tarefas (Ctrl+Shift+Esc). Depois clique em Repetir." IDRETRY otimiza_confere_aberto
+      Abort
+    ${EndIf}
+!macroend

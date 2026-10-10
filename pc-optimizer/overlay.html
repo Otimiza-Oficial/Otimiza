@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FPS do Otimiza</title>
+    <!-- O FPS por cima do jogo: fundo transparente, um cartão escuro no canto. Não chama o backend, não recebe clique. -->
+    <style>
+      @font-face {
+        font-family: "GeistMono";
+        src: url("/src/assets/fontes/geist-mono-variavel.woff2") format("woff2");
+        font-weight: 100 900;
+      }
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      body { font-family: "GeistMono", ui-monospace, Consolas, monospace; color: #fff; -webkit-font-smoothing: antialiased; }
+      .cartao { box-sizing: border-box; height: 100%; padding: 8px 12px; border-radius: 12px; background: rgba(6, 6, 8, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+      .linha { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+      .fps { font-size: 26px; font-weight: 400; letter-spacing: -0.04em; line-height: 1; }
+      .un { font-size: 11px; color: rgba(255, 255, 255, 0.6); letter-spacing: 0.04em; }
+      .boost { margin-left: auto; font-size: 10px; padding: 2px 6px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.35); }
+      .mini { font-size: 11.5px; color: rgba(255, 255, 255, 0.72); }
+      .mini b { color: #fff; font-weight: 500; }
+      /* Mínimo: igual ao cl_drawfps do FiveM, medido num quadro do jogo: "46fps" cinza-claro, ~15 px, sem contorno,
+         começando em x≈18 e com o topo do texto em y≈21. */
+      .compacto { padding: 0 0 0 6px; border: none; border-radius: 0; background: transparent; justify-content: flex-start; }
+      .compacto .linha { gap: 0; margin-top: 7px; }
+      .compacto .fps, .compacto .un { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; font-weight: 400; letter-spacing: 0.01em; color: #ececec; text-shadow: none; -webkit-font-smoothing: antialiased; }
+      .nota { font-size: 10.5px; color: rgba(255, 255, 255, 0.6); line-height: 1.25; }
+    </style>
+    <script type="module" src="/src/v33/overlay-janela.ts"></script>
+  </head>
+  <body>
+    <div class="cartao" id="cartao"><div class="linha"><span class="fps">—</span><span class="un">FPS</span></div></div>
+  </body>
+</html>

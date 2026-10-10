@@ -69,13 +69,18 @@ impl Logger {
 
 /// Abre e fecha a cada linha de propósito: a última linha antes de um travamento precisa já estar no disco.
 fn anotar_em(caminho: &Path, linha: &str, limite: u64) -> std::io::Result<()> {
-    let _vez = ESCRITA.lock().unwrap_or_else(|envenenado| envenenado.into_inner());
+    let _vez = ESCRITA
+        .lock()
+        .unwrap_or_else(|envenenado| envenenado.into_inner());
 
     if let Some(pasta) = caminho.parent() {
         std::fs::create_dir_all(pasta)?;
     }
 
-    if std::fs::metadata(caminho).map(|m| m.len() >= limite).unwrap_or(false) {
+    if std::fs::metadata(caminho)
+        .map(|m| m.len() >= limite)
+        .unwrap_or(false)
+    {
         std::fs::rename(caminho, caminho.with_extension("log.1"))?;
     }
 
@@ -97,7 +102,12 @@ mod tests {
             .map(|d| d.as_nanos())
             .unwrap_or(0);
 
-        std::env::temp_dir().join(format!("otimiza-logger-{}-{}-{}", nome, std::process::id(), unico))
+        std::env::temp_dir().join(format!(
+            "otimiza-logger-{}-{}-{}",
+            nome,
+            std::process::id(),
+            unico
+        ))
     }
 
     #[test]
@@ -125,7 +135,12 @@ mod tests {
         let caminho = pasta.join("otimiza.log");
 
         for numero in 0..10 {
-            anotar_em(&caminho, &format!("linha {:02} com algum texto", numero), 64).unwrap();
+            anotar_em(
+                &caminho,
+                &format!("linha {:02} com algum texto", numero),
+                64,
+            )
+            .unwrap();
         }
 
         let atual = std::fs::read_to_string(&caminho).unwrap();
@@ -133,8 +148,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&pasta);
 
         // Girar não pode perder justamente a linha mais recente.
-        assert!(atual.len() < 64 + 40, "o arquivo não girou: {} bytes", atual.len());
-        assert!(atual.contains("linha 09"), "a última linha sumiu: {:?}", atual);
+        assert!(
+            atual.len() < 64 + 40,
+            "o arquivo não girou: {} bytes",
+            atual.len()
+        );
+        assert!(
+            atual.contains("linha 09"),
+            "a última linha sumiu: {:?}",
+            atual
+        );
         assert!(!anterior.is_empty(), "o arquivo anterior não foi guardado");
     }
 

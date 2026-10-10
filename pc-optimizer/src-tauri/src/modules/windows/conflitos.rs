@@ -113,9 +113,7 @@ pub static CONHECIDOS: &[Conflito] = &[
 pub fn entre(ids: &[String]) -> Vec<&'static Conflito> {
     CONHECIDOS
         .iter()
-        .filter(|c| {
-            ids.iter().any(|id| id == c.um) && ids.iter().any(|id| id == c.outro)
-        })
+        .filter(|c| ids.iter().any(|id| id == c.um) && ids.iter().any(|id| id == c.outro))
         .collect()
 }
 
@@ -178,7 +176,11 @@ mod tests {
     #[test]
     fn todo_conselho_diz_qual_escolher_e_por_que() {
         for c in CONHECIDOS {
-            assert!(c.conselho.len() >= 100, "`{}` sem conselho de verdade", c.id);
+            assert!(
+                c.conselho.len() >= 100,
+                "`{}` sem conselho de verdade",
+                c.id
+            );
 
             let baixo = c.conselho.to_lowercase();
             assert!(
@@ -213,7 +215,11 @@ mod tests {
         pares.sort();
         pares.dedup();
 
-        assert_eq!(pares.len(), antes, "há par repetido, com dois conselhos diferentes");
+        assert_eq!(
+            pares.len(),
+            antes,
+            "há par repetido, com dois conselhos diferentes"
+        );
     }
 
     #[test]

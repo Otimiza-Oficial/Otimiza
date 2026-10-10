@@ -15,7 +15,11 @@ pub fn mediana(xs: &[f64]) -> Option<f64> {
     let mut v = xs.to_vec();
     v.sort_by(|a, b| a.total_cmp(b));
     let n = v.len();
-    Some(if n % 2 == 1 { v[n / 2] } else { (v[n / 2 - 1] + v[n / 2]) / 2.0 })
+    Some(if n % 2 == 1 {
+        v[n / 2]
+    } else {
+        (v[n / 2 - 1] + v[n / 2]) / 2.0
+    })
 }
 
 /// Amostral (divide por n-1). `None` com menos de 2 valores.
@@ -72,5 +76,4 @@ mod testes {
         assert_eq!(percentil(&xs, 100.0), Some(100.0));
         assert_eq!(percentil(&xs, 0.0), Some(1.0));
     }
-
 }

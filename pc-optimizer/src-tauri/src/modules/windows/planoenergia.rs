@@ -131,10 +131,8 @@ pub fn detectar() -> Maquina {
         fabricante_da_cpu: fabricante_pelo_nome(&perfil.cpu_name),
         cpu: perfil.cpu_name.clone(),
         nucleos_logicos: perfil.logical_cores,
-        modern_standby: ler_u32_do_registro(
-            r"SYSTEM\CurrentControlSet\Control\Power",
-            "CsEnabled",
-        ) == Some(1),
+        modern_standby: ler_u32_do_registro(r"SYSTEM\CurrentControlSet\Control\Power", "CsEnabled")
+            == Some(1),
         build_do_windows: build,
         windows11: e_windows11(build),
     }
@@ -278,11 +276,17 @@ pub struct Alvo {
 
 impl Alvo {
     const fn nos_dois(v: u32) -> Self {
-        Alvo { ac: Some(v), dc: Some(v) }
+        Alvo {
+            ac: Some(v),
+            dc: Some(v),
+        }
     }
 
     const fn so_na_tomada(v: u32) -> Self {
-        Alvo { ac: Some(v), dc: None }
+        Alvo {
+            ac: Some(v),
+            dc: None,
+        }
     }
 
     #[cfg(test)]
@@ -452,8 +456,12 @@ pub fn planos_da_saida(saida: &str) -> Vec<(String, String)> {
     let mut planos = Vec::new();
 
     for linha in saida.lines() {
-        let Some(inicio) = linha.find('(') else { continue };
-        let Some(fim) = linha.rfind(')') else { continue };
+        let Some(inicio) = linha.find('(') else {
+            continue;
+        };
+        let Some(fim) = linha.rfind(')') else {
+            continue;
+        };
 
         if fim <= inicio {
             continue;
@@ -646,8 +654,7 @@ pub fn reparar() -> Result<RelatorioDoPlano, String> {
 
     if achar_na_lista(&planos, NOME_DO_PLANO).is_none() {
         return Err(
-            "Não há plano OTIMIZA nesta máquina para reparar. Use \"Criar e ativar\"."
-                .to_string(),
+            "Não há plano OTIMIZA nesta máquina para reparar. Use \"Criar e ativar\".".to_string(),
         );
     }
 
@@ -681,9 +688,8 @@ pub enum GovernoDoProcessador {
 /// Plano próprio não tem padrão declarado: `DefaultPowerSchemeValues` só existe para os três planos internos, e a
 /// resposta vinha `None`. Lê o padrão do EQUILIBRADO e diz que foi isso que leu.
 pub fn governa_o_processador(plano: &str, bateria: bool) -> GovernoDoProcessador {
-    let lido = power::valor_efetivo(plano, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria).or_else(
-        || power::valor_efetivo(EQUILIBRADO, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria),
-    );
+    let lido = power::valor_efetivo(plano, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria)
+        .or_else(|| power::valor_efetivo(EQUILIBRADO, SUB_PROCESSADOR, PERFAUTONOMOUS, bateria));
 
     match lido {
         Some(1) => GovernoDoProcessador::OProcessador,
@@ -932,9 +938,7 @@ fn aplicar_um(plano: &str, a: &Ajuste, m: &Maquina, simulacao: bool) -> Resultad
 
     resultado.mensagem = match resultado.status {
         StatusDoAjuste::Aplicado => "Gravado e conferido relendo do Windows.".to_string(),
-        StatusDoAjuste::FalhouAoAplicar => {
-            erro.unwrap_or_else(|| "O Windows recusou.".to_string())
-        }
+        StatusDoAjuste::FalhouAoAplicar => erro.unwrap_or_else(|| "O Windows recusou.".to_string()),
         StatusDoAjuste::FalhouNaVerificacao => format!(
             "O comando foi aceito, mas o valor relido não é o pedido \
              (tomada: {:?}, bateria: {:?}).",
@@ -1069,7 +1073,13 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
     let desfecho_final = if simulacao {
         DesfechoDoPlano::EmParte
     } else {
-        desfecho(plano_ativo, aplicados, ja_estavam_bons, nao_suportados, falhas)
+        desfecho(
+            plano_ativo,
+            aplicados,
+            ja_estavam_bons,
+            nao_suportados,
+            falhas,
+        )
     };
 
     crate::utils::Logger::info(&format!(
@@ -1096,7 +1106,10 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
 /// UMA operação, e não trinta escritas de volta: nada foi escrito no plano do cliente.
 pub fn desfazer(guid_anterior: &str) -> Result<(), String> {
     if !e_guid(guid_anterior) {
-        return Err(format!("`{}` não é um GUID de plano de energia.", guid_anterior));
+        return Err(format!(
+            "`{}` não é um GUID de plano de energia.",
+            guid_anterior
+        ));
     }
 
     power::set_active_scheme(guid_anterior)?;
@@ -1223,15 +1236,12 @@ pub fn diagnosticar() -> Diagnostico {
 
     // Montada ANTES de `maquina` ir para a struct: precisa do nome do processador. A leitura decide; a geração só
     // explica.
-    let explicacao_do_governo = match super::cpugeracao::o_que_governa(
-        governo,
-        maquina.fabricante_da_cpu,
-        &maquina.cpu,
-    ) {
-        super::cpugeracao::OQueGoverna::OEpp { porque }
-        | super::cpugeracao::OQueGoverna::OEstadoMinimo { porque }
-        | super::cpugeracao::OQueGoverna::NaoDeuParaSaber { porque } => porque,
-    };
+    let explicacao_do_governo =
+        match super::cpugeracao::o_que_governa(governo, maquina.fabricante_da_cpu, &maquina.cpu) {
+            super::cpugeracao::OQueGoverna::OEpp { porque }
+            | super::cpugeracao::OQueGoverna::OEstadoMinimo { porque }
+            | super::cpugeracao::OQueGoverna::NaoDeuParaSaber { porque } => porque,
+        };
 
     let avisos = avisos_do_diagnostico(
         elevado,
@@ -1331,7 +1341,10 @@ mod tests {
         println!("veredito: {governo:?}");
         println!("{}", explicar_governo(governo));
 
-        assert!(suportado(SUB_PROCESSADOR, PERFEPP), "o EPP não existe neste Windows");
+        assert!(
+            suportado(SUB_PROCESSADOR, PERFEPP),
+            "o EPP não existe neste Windows"
+        );
         assert!(
             suportado(SUB_PROCESSADOR, PERFAUTONOMOUS),
             "o modo autônomo não existe neste Windows"
@@ -1417,7 +1430,9 @@ mod tests {
     fn o_guid_do_molde_devolvido_como_novo_e_recusado() {
         assert!(validar_guid_novo(EQUILIBRADO_GUID, EQUILIBRADO_GUID).is_err());
         assert!(validar_guid_novo("nao-e-guid", EQUILIBRADO_GUID).is_err());
-        assert!(validar_guid_novo("15a86c79-6f77-4d39-ab92-138b83b1b489", EQUILIBRADO_GUID).is_ok());
+        assert!(
+            validar_guid_novo("15a86c79-6f77-4d39-ab92-138b83b1b489", EQUILIBRADO_GUID).is_ok()
+        );
     }
 
     #[test]
@@ -1488,8 +1503,16 @@ mod tests {
         // dizia aplicada. No desktop os dois lados são alvo.
         let alvo = Alvo::nos_dois(100);
 
-        assert!(!ja_satisfeito(&alvo, Some(100), power::resolver_valor(None, Some(5))));
-        assert!(ja_satisfeito(&alvo, Some(100), power::resolver_valor(None, Some(100))));
+        assert!(!ja_satisfeito(
+            &alvo,
+            Some(100),
+            power::resolver_valor(None, Some(5))
+        ));
+        assert!(ja_satisfeito(
+            &alvo,
+            Some(100),
+            power::resolver_valor(None, Some(100))
+        ));
         assert!(!ja_satisfeito(&alvo, Some(100), None));
     }
 
@@ -1508,7 +1531,10 @@ mod tests {
 
     #[test]
     fn notebook_nao_leva_estado_minimo_alto_na_bateria() {
-        let a = AJUSTES.iter().find(|a| a.ajuste == PROCTHROTTLEMIN).unwrap();
+        let a = AJUSTES
+            .iter()
+            .find(|a| a.ajuste == PROCTHROTTLEMIN)
+            .unwrap();
 
         assert_eq!((a.alvo)(&maquina_de_teste(true)), Alvo::so_na_tomada(100));
         assert_eq!((a.alvo)(&maquina_de_teste(false)), Alvo::nos_dois(100));
@@ -1520,7 +1546,11 @@ mod tests {
             let alvo = (a.alvo)(&maquina_de_teste(false));
 
             if let (Some(ac), Some(dc)) = (alvo.ac, alvo.dc) {
-                assert_eq!(ac, dc, "ajuste {} discorda entre os modos num desktop", a.nome);
+                assert_eq!(
+                    ac, dc,
+                    "ajuste {} discorda entre os modos num desktop",
+                    a.nome
+                );
             }
         }
     }
@@ -1617,8 +1647,14 @@ mod tests {
             fabricante_pelo_nome("Intel(R) Core(TM) i3-10100F"),
             FabricanteDaCpu::Intel
         );
-        assert_eq!(fabricante_pelo_nome("AMD Ryzen 5 5600X"), FabricanteDaCpu::Amd);
-        assert_eq!(fabricante_pelo_nome("Ryzen 7 7800X3D"), FabricanteDaCpu::Amd);
+        assert_eq!(
+            fabricante_pelo_nome("AMD Ryzen 5 5600X"),
+            FabricanteDaCpu::Amd
+        );
+        assert_eq!(
+            fabricante_pelo_nome("Ryzen 7 7800X3D"),
+            FabricanteDaCpu::Amd
+        );
         assert_eq!(
             fabricante_pelo_nome("Qualcomm Snapdragon"),
             FabricanteDaCpu::Outro
@@ -1718,7 +1754,11 @@ mod tests {
             erro: Some("estourou o prazo".to_string()),
         };
 
-        assert!(e.resumo().contains("não terminou sozinho"), "{}", e.resumo());
+        assert!(
+            e.resumo().contains("não terminou sozinho"),
+            "{}",
+            e.resumo()
+        );
     }
 
     #[test]
@@ -1809,7 +1849,10 @@ mod tests {
 
     #[test]
     fn sem_plano_nao_ha_o_que_vistoriar() {
-        assert_eq!(classificar_vistoria(false, false, vec![]), Vistoria::NaoExiste);
+        assert_eq!(
+            classificar_vistoria(false, false, vec![]),
+            Vistoria::NaoExiste
+        );
         // Sem plano nosso, os valores são do cliente: chamá-los de desvio acusaria o dono de mexer no que é dele.
         assert_eq!(
             classificar_vistoria(false, false, vec!["qualquer".into()]),
@@ -1835,11 +1878,17 @@ mod tests {
     #[test]
     fn o_plano_so_esta_aplicado_quando_e_o_ativo() {
         assert_eq!(
-            estado_do_plano(Some("AAAAAAAA-bbbb-cccc-dddd-eeeeeeeeeeee"), Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+            estado_do_plano(
+                Some("AAAAAAAA-bbbb-cccc-dddd-eeeeeeeeeeee"),
+                Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+            ),
             EstadoDoPlano::Ativo
         );
         assert_eq!(
-            estado_do_plano(Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), Some("381b4222-f694-41f0-9685-ff5bb260df2e")),
+            estado_do_plano(
+                Some("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+                Some("381b4222-f694-41f0-9685-ff5bb260df2e")
+            ),
             EstadoDoPlano::ExisteEnaoEstaAtivo
         );
         assert_eq!(
@@ -1880,16 +1929,25 @@ mod tests {
         let d = diagnosticar();
 
         println!("\n=== DIAGNÓSTICO ===");
-        println!("CPU .................. {} ({:?})", d.maquina.cpu, d.maquina.fabricante_da_cpu);
+        println!(
+            "CPU .................. {} ({:?})",
+            d.maquina.cpu, d.maquina.fabricante_da_cpu
+        );
         println!("Notebook ............. {}", d.maquina.notebook);
         println!("Bateria .............. {}", d.maquina.tem_bateria);
         println!("Modern Standby ....... {}", d.maquina.modern_standby);
-        println!("Build do Windows ..... {} (Win11={})", d.maquina.build_do_windows, d.maquina.windows11);
+        println!(
+            "Build do Windows ..... {} (Win11={})",
+            d.maquina.build_do_windows, d.maquina.windows11
+        );
         println!("Elevado .............. {}", d.elevado);
         println!("powercfg responde .... {}", d.powercfg_responde);
         println!("Planos legíveis ...... {}", d.planos_legiveis);
         println!("Plano OTIMIZA existe . {}", d.plano_otimiza_existe);
-        println!("Ajustes suportados ... {}/{}", d.ajustes_suportados, d.ajustes_totais);
+        println!(
+            "Ajustes suportados ... {}/{}",
+            d.ajustes_suportados, d.ajustes_totais
+        );
         println!("Ausentes ............. {:?}", d.ajustes_ausentes);
         println!("Processo 64 bits ..... {}", d.processo_64_bits);
 
@@ -1946,13 +2004,19 @@ mod tests {
         );
 
         for a in primeira.ajustes.iter().filter(|a| {
-            !matches!(a.status, StatusDoAjuste::JaEstavaBom | StatusDoAjuste::Pulado)
+            !matches!(
+                a.status,
+                StatusDoAjuste::JaEstavaBom | StatusDoAjuste::Pulado
+            )
         }) {
             println!("  [{:?}] {} — {}", a.status, a.nome, a.mensagem);
         }
 
         assert!(primeira.plano_ativo, "o plano OTIMIZA não ficou ativo");
-        assert_eq!(primeira.falhas, 0, "houve falha de aplicação ou de verificação");
+        assert_eq!(
+            primeira.falhas, 0,
+            "houve falha de aplicação ou de verificação"
+        );
 
         let guid = primeira.guid_do_plano.clone().unwrap();
         assert_ne!(guid, antes, "o plano criado é o mesmo que já estava ativo");
@@ -1961,26 +2025,48 @@ mod tests {
 
         println!(
             "2ª passada: existia={} guid={:?} aplicados={} já bons={}",
-            segunda.plano_existia, segunda.guid_do_plano, segunda.aplicados, segunda.ja_estavam_bons
+            segunda.plano_existia,
+            segunda.guid_do_plano,
+            segunda.aplicados,
+            segunda.ja_estavam_bons
         );
 
-        assert!(segunda.plano_existia, "a segunda passada não reencontrou o plano");
-        assert_eq!(segunda.guid_do_plano, primeira.guid_do_plano, "criou um plano duplicado");
-        assert_eq!(segunda.aplicados, 0, "a segunda passada reescreveu o que já estava bom");
+        assert!(
+            segunda.plano_existia,
+            "a segunda passada não reencontrou o plano"
+        );
+        assert_eq!(
+            segunda.guid_do_plano, primeira.guid_do_plano,
+            "criou um plano duplicado"
+        );
+        assert_eq!(
+            segunda.aplicados, 0,
+            "a segunda passada reescreveu o que já estava bom"
+        );
 
         let lista = listar_planos().unwrap();
-        let nossos = lista.iter().filter(|(_, n)| n.eq_ignore_ascii_case(NOME_DO_PLANO)).count();
+        let nossos = lista
+            .iter()
+            .filter(|(_, n)| n.eq_ignore_ascii_case(NOME_DO_PLANO))
+            .count();
         assert_eq!(nossos, 1, "sobrou mais de um plano OTIMIZA na máquina");
 
         desfazer(&antes).expect("desfazer");
 
-        assert_eq!(power::active_scheme().unwrap(), antes, "não voltou ao plano de antes");
+        assert_eq!(
+            power::active_scheme().unwrap(),
+            antes,
+            "não voltou ao plano de antes"
+        );
         assert!(
             achar_na_lista(&listar_planos().unwrap(), NOME_DO_PLANO).is_none(),
             "o plano OTIMIZA continua na máquina depois do desfazer"
         );
 
-        println!("desfeito: plano ativo voltou a {} e o OTIMIZA foi apagado", antes);
+        println!(
+            "desfeito: plano ativo voltou a {} e o OTIMIZA foi apagado",
+            antes
+        );
     }
 
     /// Estraga um ajuste por fora, confere que a vistoria o nomeia, repara e desfaz. Escreve e precisa de

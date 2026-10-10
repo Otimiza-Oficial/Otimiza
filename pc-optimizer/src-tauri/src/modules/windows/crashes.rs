@@ -65,7 +65,13 @@ pub struct Relatorio {
 
 fn numero_entre_parenteses(linha: &str) -> Option<u64> {
     let dentro = linha.split('(').nth(1)?.split(')').next()?;
-    dentro.trim().trim_end_matches('%').trim_end_matches("Mb").trim().parse().ok()
+    dentro
+        .trim()
+        .trim_end_matches('%')
+        .trim_end_matches("Mb")
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// Pura: o `.dmp.gamelog` que o FiveM grava junto do crash.
@@ -84,12 +90,17 @@ pub fn ler_gamelog(texto: &str) -> Crash {
             }
         } else if l.starts_with("System Time (") {
             // "System Time (0h 13m 47s)": minutos desde que o jogo abriu.
-            let dentro = l.split('(').nth(1).and_then(|s| s.split(')').next()).unwrap_or("");
+            let dentro = l
+                .split('(')
+                .nth(1)
+                .and_then(|s| s.split(')').next())
+                .unwrap_or("");
             let mut min = 0u64;
             for parte in dentro.split_whitespace() {
                 if let Some(h) = parte.strip_suffix('h').and_then(|n| n.parse::<u64>().ok()) {
                     min += h * 60;
-                } else if let Some(m) = parte.strip_suffix('m').and_then(|n| n.parse::<u64>().ok()) {
+                } else if let Some(m) = parte.strip_suffix('m').and_then(|n| n.parse::<u64>().ok())
+                {
                     min += m;
                 }
             }
@@ -101,7 +112,9 @@ pub fn ler_gamelog(texto: &str) -> Crash {
 
 /// Pura: o bloco "Process crash captured" do `CitizenFX_log`. O erro original vence o genérico.
 pub fn ler_dialogo(log: &str) -> (Option<String>, Option<String>) {
-    let Some(i) = log.rfind("Process crash captured") else { return (None, None) };
+    let Some(i) = log.rfind("Process crash captured") else {
+        return (None, None);
+    };
     let bloco: Vec<&str> = log[i..].lines().skip(1).take(15).collect();
     let conteudo = |l: &str| l.split("/ ").nth(1).map(|s| s.trim().to_string());
 
@@ -141,7 +154,10 @@ pub fn ler(crashes: &[Crash], primeira_mudanca: Option<u64>) -> Vec<Leitura> {
         });
     }
 
-    let pools = crashes.iter().filter(|c| c.erro.as_deref().is_some_and(|e| e.contains("Pool Full"))).count();
+    let pools = crashes
+        .iter()
+        .filter(|c| c.erro.as_deref().is_some_and(|e| e.contains("Pool Full")))
+        .count();
     if pools > 0 {
         leituras.push(Leitura {
             pista: Pista::PoolCheio,
@@ -154,7 +170,10 @@ pub fn ler(crashes: &[Crash], primeira_mudanca: Option<u64>) -> Vec<Leitura> {
 
     let memoria = crashes
         .iter()
-        .filter(|c| c.memoria_pct.is_some_and(|m| m >= MEMORIA_NO_LIMITE_PCT) || c.paginacao_livre_mb.is_some_and(|p| p < 1024))
+        .filter(|c| {
+            c.memoria_pct.is_some_and(|m| m >= MEMORIA_NO_LIMITE_PCT)
+                || c.paginacao_livre_mb.is_some_and(|p| p < 1024)
+        })
         .count();
     if memoria > 0 {
         leituras.push(Leitura {
@@ -171,7 +190,11 @@ pub fn ler(crashes: &[Crash], primeira_mudanca: Option<u64>) -> Vec<Leitura> {
     for v in crashes.iter().filter_map(|c| c.veiculo.as_deref()) {
         *por_veiculo.entry(v).or_insert(0) += 1;
     }
-    if let Some((v, n)) = por_veiculo.into_iter().filter(|(_, n)| *n >= 2).max_by_key(|(_, n)| *n) {
+    if let Some((v, n)) = por_veiculo
+        .into_iter()
+        .filter(|(_, n)| *n >= 2)
+        .max_by_key(|(_, n)| *n)
+    {
         leituras.push(Leitura {
             pista: Pista::MesmoVeiculo,
             frase: format!(
@@ -223,13 +246,19 @@ fn segundos(p: &Path) -> Option<u64> {
 
 /// O log da sessão que caiu termina no mesmo instante do crash (o FiveM fecha o arquivo junto).
 fn log_da_sessao(logs: &[(u64, PathBuf)], quando: u64) -> Option<&PathBuf> {
-    logs.iter().filter(|(t, _)| t.abs_diff(quando) <= 30).min_by_key(|(t, _)| t.abs_diff(quando)).map(|(_, p)| p)
+    logs.iter()
+        .filter(|(t, _)| t.abs_diff(quando) <= 30)
+        .min_by_key(|(t, _)| t.abs_diff(quando))
+        .map(|(_, p)| p)
 }
 
 /// `mudancas`: (instante, id) de cada item do histórico.
 pub fn relatorio(mudancas: &[(u64, String)]) -> Relatorio {
     let Some(raiz) = pasta_do_fivem().filter(|p| p.join("crashes").is_dir()) else {
-        return Relatorio { sem_fivem: true, ..Default::default() };
+        return Relatorio {
+            sem_fivem: true,
+            ..Default::default()
+        };
     };
 
     let logs: Vec<(u64, PathBuf)> = std::fs::read_dir(raiz.join("logs"))
@@ -333,7 +362,13 @@ Current Vehicle : SG 1150
         assert_eq!(ler_dialogo("sessão sem crash"), (None, None));
     }
 
-    fn crash(quando: u64, hash: Option<&str>, erro: Option<&str>, memoria: u32, veiculo: Option<&str>) -> Crash {
+    fn crash(
+        quando: u64,
+        hash: Option<&str>,
+        erro: Option<&str>,
+        memoria: u32,
+        veiculo: Option<&str>,
+    ) -> Crash {
         Crash {
             quando,
             erro: erro.map(Into::into),
@@ -350,7 +385,13 @@ Current Vehicle : SG 1150
         let lista = vec![
             crash(100, Some("bacon-vegan-carbon"), None, 85, Some("SG 1150")),
             crash(200, Some("bacon-vegan-carbon"), None, 84, Some("SG 1150")),
-            crash(300, None, Some("fragInstGta Pool Full, Size == 1600"), 96, None),
+            crash(
+                300,
+                None,
+                Some("fragInstGta Pool Full, Size == 1600"),
+                96,
+                None,
+            ),
             crash(10, None, None, 50, None),
         ];
         let pistas: Vec<Pista> = ler(&lista, Some(50)).into_iter().map(|l| l.pista).collect();
@@ -385,7 +426,10 @@ Current Vehicle : SG 1150
     fn crashes_desta_maquina() {
         let r = relatorio(&[]);
         for c in &r.crashes {
-            println!("{} {:?} {:?} mem {:?} veiculo {:?}", c.quando, c.erro, c.hash, c.memoria_pct, c.veiculo);
+            println!(
+                "{} {:?} {:?} mem {:?} veiculo {:?}",
+                c.quando, c.erro, c.hash, c.memoria_pct, c.veiculo
+            );
         }
         for l in &r.leituras {
             println!("{:?}: {}", l.pista, l.frase);
@@ -394,7 +438,11 @@ Current Vehicle : SG 1150
 
     #[test]
     fn o_log_da_sessao_e_o_que_fechou_junto() {
-        let logs = vec![(1000, PathBuf::from("a.log")), (5000, PathBuf::from("b.log")), (5010, PathBuf::from("c.log"))];
+        let logs = vec![
+            (1000, PathBuf::from("a.log")),
+            (5000, PathBuf::from("b.log")),
+            (5010, PathBuf::from("c.log")),
+        ];
         assert_eq!(log_da_sessao(&logs, 5012), Some(&PathBuf::from("c.log")));
         assert_eq!(log_da_sessao(&logs, 3000), None);
     }

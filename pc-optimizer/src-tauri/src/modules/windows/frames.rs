@@ -230,6 +230,24 @@ pub fn encontrar_processo(prefixo: &str) -> Option<(u32, String)> {
         .map(|(pid, nome, _)| (pid, nome))
 }
 
+/// O caminho completo do executável aberto com este nome (sem diferenciar maiúsculas), ou `None` se não está aberto.
+pub fn caminho_do_processo(executavel: &str) -> Option<String> {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+    let mut sistema = System::new();
+    sistema.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    let alvo = executavel.to_lowercase();
+    sistema
+        .processes()
+        .values()
+        .filter(|p| p.name().to_string_lossy().to_lowercase() == alvo)
+        .find_map(|p| p.exe().map(|c| c.to_string_lossy().into_owned()))
+}
+
 /// Bloqueia pelo tempo pedido: fora do runtime assíncrono.
 pub fn medir(pid: u32, nome: &str, segundos: u64) -> Result<FrameMeasurement, String> {
     medir_par(pid, nome, None, segundos).map(|(principal, _)| principal.resumo)
@@ -527,7 +545,13 @@ pub fn trancos_com_disco(
 }
 
 /// **Pura.** Um tranco só: a leitura de disco mais perto dele, dentro da janela, estava ocupada?
-pub fn tranco_com_disco(tranco: i64, disco: &[(i64, f64)], frequencia: i64, janela_ms: f64, ocupado_pct: f64) -> bool {
+pub fn tranco_com_disco(
+    tranco: i64,
+    disco: &[(i64, f64)],
+    frequencia: i64,
+    janela_ms: f64,
+    ocupado_pct: f64,
+) -> bool {
     if frequencia <= 0 {
         return false;
     }

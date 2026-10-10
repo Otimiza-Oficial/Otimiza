@@ -27,9 +27,18 @@ pub struct ConflictReport {
 }
 
 const UNINSTALL_KEYS: [(&str, &str); 3] = [
-    ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-    ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-    ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    (
+        "HKLM",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
+    (
+        "HKLM",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
+    (
+        "HKCU",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
 ];
 
 /// As três chaves (64 bits, 32 bits e só deste usuário): ler só a primeira perde metade da lista nas máquinas
@@ -258,9 +267,10 @@ pub fn analyze() -> ConflictReport {
             explanation: "Cada cliente de nuvem vigia pastas e lê disco continuamente. Em PC com \
                           disco mecânico ou com pouca memória, dois ou três somam bastante."
                 .to_string(),
-            advice: "Mantenha rodando o que você usa de verdade e feche os demais na inicialização. \
+            advice:
+                "Mantenha rodando o que você usa de verdade e feche os demais na inicialização. \
                      A aba Sistema mostra quais deles sobem com o Windows."
-                .to_string(),
+                    .to_string(),
             severity: FindingSeverity::Important,
         });
     }
@@ -302,7 +312,10 @@ mod tests {
 
     #[test]
     fn estado_de_antivirus_ilegivel_nao_vira_antivirus_desligado() {
-        let producao = include_str!("conflicts.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("conflicts.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
         let corpo = producao
             .split("pub fn antivirus_ativos")
             .nth(1)
@@ -332,8 +345,14 @@ mod tests {
         assert!(tempo_real_ligado(0x061100), "Defender ativo");
         assert!(tempo_real_ligado(0x041000), "antivírus de terceiro ativo");
 
-        assert!(!tempo_real_ligado(0x060000), "instalado, tempo real desligado");
-        assert!(!tempo_real_ligado(0x040000), "instalado, sem proteção ativa");
+        assert!(
+            !tempo_real_ligado(0x060000),
+            "instalado, tempo real desligado"
+        );
+        assert!(
+            !tempo_real_ligado(0x040000),
+            "instalado, sem proteção ativa"
+        );
         assert!(!tempo_real_ligado(0));
     }
 

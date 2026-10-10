@@ -72,7 +72,10 @@ pub fn ler_unidades() -> Leitura {
         if saida.success {
             let unidades = ler_pares(&saida.stdout);
             if !unidades.is_empty() {
-                return Leitura { unidades, lacunas: Vec::new() };
+                return Leitura {
+                    unidades,
+                    lacunas: Vec::new(),
+                };
             }
         }
     }
@@ -170,7 +173,10 @@ pub fn ler_pares(saida: &str) -> HashMap<char, UnidadeLida> {
 
         mapa.insert(
             letra,
-            UnidadeLida { midia: classificar(tipo.trim()), modelo: None },
+            UnidadeLida {
+                midia: classificar(tipo.trim()),
+                modelo: None,
+            },
         );
     }
 
@@ -252,7 +258,10 @@ pub fn analisar() -> Relatorio {
     let mut lacunas = leitura.lacunas;
     lacunas.extend(biblioteca.lacunas);
 
-    Relatorio { jogos: juntar(&jogos, &leitura.unidades), lacunas }
+    Relatorio {
+        jogos: juntar(&jogos, &leitura.unidades),
+        lacunas,
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -314,11 +323,26 @@ mod tests {
     #[test]
     fn junta_o_jogo_com_a_midia_da_unidade_dele() {
         let mut midias = HashMap::new();
-        midias.insert('C', UnidadeLida { midia: Midia::Ssd, modelo: None });
-        midias.insert('D', UnidadeLida { midia: Midia::Mecanico, modelo: None });
+        midias.insert(
+            'C',
+            UnidadeLida {
+                midia: Midia::Ssd,
+                modelo: None,
+            },
+        );
+        midias.insert(
+            'D',
+            UnidadeLida {
+                midia: Midia::Mecanico,
+                modelo: None,
+            },
+        );
 
         let jogos = vec![
-            ("Grand Theft Auto V".to_string(), r"D:\Games\GTAV".to_string()),
+            (
+                "Grand Theft Auto V".to_string(),
+                r"D:\Games\GTAV".to_string(),
+            ),
             ("Counter-Strike 2".to_string(), r"C:\Steam\cs2".to_string()),
         ];
 

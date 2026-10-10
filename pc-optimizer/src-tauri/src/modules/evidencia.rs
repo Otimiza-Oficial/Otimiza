@@ -57,30 +57,61 @@ pub fn diferencas<'a>(contextos: &[Contexto<'a>]) -> Vec<Motivo> {
 mod tests {
     use super::*;
 
-    fn ctx(configuracao: Option<&str>, geracao: Option<GeracaoNaPartida>, fonte: Option<Fonte>) -> Contexto<'_> {
-        Contexto { configuracao_do_jogo: configuracao, geracao, fonte }
+    fn ctx(
+        configuracao: Option<&str>,
+        geracao: Option<GeracaoNaPartida>,
+        fonte: Option<Fonte>,
+    ) -> Contexto<'_> {
+        Contexto {
+            configuracao_do_jogo: configuracao,
+            geracao,
+            fonte,
+        }
     }
 
     #[test]
     fn contextos_iguais_comparam() {
-        let a = ctx(Some("abc"), Some(GeracaoNaPartida::NenhumaVisivel), Some(Fonte::PresentMon));
+        let a = ctx(
+            Some("abc"),
+            Some(GeracaoNaPartida::NenhumaVisivel),
+            Some(Fonte::PresentMon),
+        );
         assert!(diferencas(&[a, a, a]).is_empty());
     }
 
     #[test]
     fn cada_diferenca_tem_o_seu_motivo_e_a_ordem_e_a_de_gravidade() {
-        let a = ctx(Some("abc"), Some(GeracaoNaPartida::NenhumaVisivel), Some(Fonte::PresentMon));
-        let b = ctx(Some("xyz"), Some(GeracaoNaPartida::LosslessScaling), Some(Fonte::CanalAntigo));
+        let a = ctx(
+            Some("abc"),
+            Some(GeracaoNaPartida::NenhumaVisivel),
+            Some(Fonte::PresentMon),
+        );
+        let b = ctx(
+            Some("xyz"),
+            Some(GeracaoNaPartida::LosslessScaling),
+            Some(Fonte::CanalAntigo),
+        );
         assert_eq!(
             diferencas(&[a, b]),
-            vec![Motivo::ConfiguracaoDoJogoMudou, Motivo::GeracaoMudou, Motivo::MedidorMudou]
+            vec![
+                Motivo::ConfiguracaoDoJogoMudou,
+                Motivo::GeracaoMudou,
+                Motivo::MedidorMudou
+            ]
         );
-        assert_eq!(diferencas(&[a, ctx(Some("abc"), a.geracao, Some(Fonte::CanalAntigo))]), vec![Motivo::MedidorMudou]);
+        assert_eq!(
+            diferencas(&[a, ctx(Some("abc"), a.geracao, Some(Fonte::CanalAntigo))]),
+            vec![Motivo::MedidorMudou]
+        );
     }
 
     #[test]
     fn o_que_nao_foi_lido_nao_e_mudanca() {
-        let a = ctx(Some("abc"), Some(GeracaoNaPartida::NenhumaVisivel), Some(Fonte::PresentMon));
+        let a = ctx(
+            Some("abc"),
+            Some(GeracaoNaPartida::NenhumaVisivel),
+            Some(Fonte::PresentMon),
+        );
         let sem_leitura = ctx(None, None, None);
         assert!(diferencas(&[a, sem_leitura, a]).is_empty());
     }
@@ -102,8 +133,12 @@ mod tests {
                     for (n, linha) in codigo.lines().enumerate() {
                         let comparacao_a_mao = linha.contains("configuracao_do_jogo")
                             && (linha.contains("!=") || linha.contains("mudou("));
-                        let fonte_a_mao = linha.contains("Fonte::PresentMon") && !p.ends_with("medicoes.rs");
-                        if comparacao_a_mao || fonte_a_mao || linha.trim_start().starts_with("fn mudou<") {
+                        let fonte_a_mao =
+                            linha.contains("Fonte::PresentMon") && !p.ends_with("medicoes.rs");
+                        if comparacao_a_mao
+                            || fonte_a_mao
+                            || linha.trim_start().starts_with("fn mudou<")
+                        {
                             achados.push(format!("{}:{}", p.display(), n + 1));
                         }
                     }

@@ -48,14 +48,14 @@ impl SafetyValidator {
 
     fn load_critical_services() -> Vec<String> {
         vec![
-            "wuauserv".to_string(),    // Windows Update
-            "BITS".to_string(),         // Background Intelligent Transfer Service
-            "EventLog".to_string(),     // Windows Event Log
-            "RpcSs".to_string(),        // Remote Procedure Call
-            "DcomLaunch".to_string(),   // DCOM Server Process Launcher
-            "PlugPlay".to_string(),     // Plug and Play
-            "BFE".to_string(),          // Base Filtering Engine (Firewall)
-            "mpssvc".to_string(),       // Windows Defender Firewall
+            "wuauserv".to_string(),   // Windows Update
+            "BITS".to_string(),       // Background Intelligent Transfer Service
+            "EventLog".to_string(),   // Windows Event Log
+            "RpcSs".to_string(),      // Remote Procedure Call
+            "DcomLaunch".to_string(), // DCOM Server Process Launcher
+            "PlugPlay".to_string(),   // Plug and Play
+            "BFE".to_string(),        // Base Filtering Engine (Firewall)
+            "mpssvc".to_string(),     // Windows Defender Firewall
         ]
     }
 
@@ -74,7 +74,8 @@ impl SafetyValidator {
     }
 
     pub fn is_safe_registry_key(&self, key: &str) -> bool {
-        !self.critical_registry_keys
+        !self
+            .critical_registry_keys
             .iter()
             .any(|critical| key.starts_with(critical))
     }
@@ -142,11 +143,11 @@ mod tests {
     #[test]
     fn test_service_validation() {
         let validator = SafetyValidator::new();
-        
+
         let result = validator.validate_operation("service_disable", "wuauserv");
         assert!(!result.valid);
         assert!(!result.errors.is_empty());
-        
+
         let result = validator.validate_operation("service_disable", "SafeService");
         assert!(result.valid);
     }

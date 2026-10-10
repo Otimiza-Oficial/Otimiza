@@ -278,7 +278,113 @@ ${linha}
   return { publica: par.publica, criou: !existia };
 }
 
-module.exports = { novoPar, emitir, conferir, instalar };
+/**
+ * O canal de feedbacks. O Otimiza pausa as correções depois de 10 minutos de
+ * uso até existir um feedback do cliente aqui (`plataforma/feedback.rs`).
+ */
+const CANAL_DE_FEEDBACK = "1543436859529629707";
+
+/** O que conta como feedback: pelo menos 30 caracteres e um print (imagem). */
+const MINIMO_DE_CARACTERES = 30;
+
+/**
+ * A mensagem vale como feedback? Recebe os campos crus, não o objeto do
+ * discord.js, para poder ser testada sem o Discord.
+ *
+ * @param {object} m
+ * @param {string} m.canal           ID do canal onde a mensagem foi postada.
+ * @param {string} m.texto           Conteúdo da mensagem.
+ * @param {Array<{tipo?: string, nome?: string}>} m.anexos
+ *   `tipo` é o contentType do anexo ("image/png"); `nome` é o nome do arquivo.
+ * @returns {{vale: boolean, falta: string[]}}
+ */
+function validarFeedback({ canal, texto, anexos = [] }) {
+  const falta = [];
+
+  if (String(canal) !== CANAL_DE_FEEDBACK) {
+    falta.push("a mensagem precisa estar no canal de feedbacks");
+  }
+
+  // Espaços repetidos não contam: "a          b" não é feedback.
+  const limpo = String(texto || "").replace(/\s+/g, " ").trim();
+  if ([...limpo].length < MINIMO_DE_CARACTERES) {
+    falta.push(`pelo menos ${MINIMO_DE_CARACTERES} caracteres`);
+  }
+
+  const temImagem = anexos.some(
+    (a) =>
+      String(a.tipo || "").startsWith("image/") ||
+      /\.(png|jpe?g|webp|gif|bmp)$/i.test(String(a.nome || ""))
+  );
+  if (!temImagem) {
+    falta.push("um print mostrando o FPS");
+  }
+
+  return { vale: falta.length === 0, falta };
+}
+
+/**
+ * Assina a resposta que o Otimiza confere em `GET /v1/feedback/<máquina>`.
+ * Mesmo par de chaves da licença; o campo `tipo` impede que uma licença passe
+ * por atestado e vice-versa.
+ *
+ * @param {object} pedido
+ * @param {string} pedido.privada     Chave privada (a mesma de `emitir`).
+ * @param {string} pedido.maquina     OTZ-XXXX-XXXX-XXXX do comprador.
+ * @param {boolean} pedido.ok         true: há feedback válido. false: foi apagado.
+ * @param {string} [pedido.mensagemId]
+ * @param {Date}   [pedido.quando]    Padrão: agora. O Otimiza recusa atestado
+ *   com mais de 7 dias, então responda sempre com a hora da consulta.
+ * @returns {string}
+ */
+function atestarFeedback({ privada, maquina, ok, mensagemId = null, quando = new Date(), publica = null }) {
+  const bruta = Buffer.from(String(privada || "").trim(), "base64");
+  if (bruta.length !== 32) {
+    throw new Error("A chave privada precisa ter 32 bytes (a mesma usada em emitir).");
+  }
+
+  const codigo = String(maquina || "").trim().toUpperCase();
+  if (!FORMA_DA_MAQUINA.test(codigo)) {
+    throw new Error(`"${maquina}" não tem a forma OTZ-XXXX-XXXX-XXXX.`);
+  }
+
+  const corpo = Buffer.from(
+    JSON.stringify({
+      tipo: "feedback",
+      maquina: codigo,
+      ok: Boolean(ok),
+      mensagem_id: mensagemId ? String(mensagemId) : null,
+      // RFC 3339 em UTC, sem milissegundos: o formato que o Rust lê.
+      verificado_em: quando.toISOString().replace(/\.\d{3}Z$/, "Z"),
+    }),
+    "utf8"
+  );
+
+  const chavePrivada = crypto.createPrivateKey({
+    key: Buffer.concat([DER_PRIVADA, bruta]),
+    format: "der",
+    type: "pkcs8",
+  });
+
+  const atestado = `${base64url(corpo)}.${base64url(crypto.sign(null, corpo, chavePrivada))}`;
+
+  if (publica && !conferir(atestado, publica).valida) {
+    throw new Error("A chave privada e a pública não são do mesmo par.");
+  }
+
+  return atestado;
+}
+
+module.exports = {
+  novoPar,
+  emitir,
+  conferir,
+  instalar,
+  atestarFeedback,
+  validarFeedback,
+  CANAL_DE_FEEDBACK,
+  MINIMO_DE_CARACTERES,
+};
 
 // ----------------------------------------------------------- linha de comando
 
@@ -311,6 +417,9 @@ if (require.main === module) {
     } else if (comando === "emitir") {
       const [privada, maquina, comprador, expira] = resto;
       console.log(emitir({ privada, maquina, comprador, expira: expira || null }));
+    } else if (comando === "atestar") {
+      const [privada, maquina, ok] = resto;
+      console.log(atestarFeedback({ privada, maquina, ok: ok !== "false" }));
     } else {
       console.error(
         [
@@ -319,6 +428,7 @@ if (require.main === module) {
           "  node otimiza-licenca.cjs instalar <caminho do .env do bot>",
           "  node otimiza-licenca.cjs novo-par",
           "  node otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX \"Nome\" [AAAA-MM-DD]",
+          "  node otimiza-licenca.cjs atestar <PRIVADA> OTZ-XXXX-XXXX-XXXX [true|false]",
         ].join("\n")
       );
       process.exit(2);

@@ -95,11 +95,9 @@ pub fn nota_de(estado: EstadoDoRbar) -> String {
                 .to_string()
         }
         // "Placa AMD" é permanente, "driver antigo" tem conserto: juntas, mandam o dono de Radeon atualizar à toa.
-        EstadoDoRbar::NaoSei => {
-            "Não consegui verificar o Resizable BAR nesta máquina: ainda não \
+        EstadoDoRbar::NaoSei => "Não consegui verificar o Resizable BAR nesta máquina: ainda não \
              cobrimos placas AMD. Isso não quer dizer que esteja certo nem errado."
-                .to_string()
-        }
+            .to_string(),
     }
 }
 
@@ -160,7 +158,10 @@ fn ler_do_nvidia_smi() -> (Option<u64>, Option<u64>, String) {
     // Duas chamadas: o BAR1 só aparece no relatório inteiro (`-q`); modelo e VRAM saem limpos do CSV.
     let identidade = shell::run(
         "nvidia-smi",
-        &["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+        &[
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ],
     );
 
     let (modelo, vram) = match identidade {

@@ -446,10 +446,31 @@ pub fn ritmo(intervalos_ms: &[f64]) -> Ritmo {
         media_ms: arredondar(media, 2),
         p95_ms: arredondar(percentil(&ordenados, 95.0), 2),
         p99_ms: arredondar(percentil(&ordenados, 99.0), 2),
-        low_1pct_fps: arredondar(if media_piores > 0.0 { 1000.0 / media_piores } else { 0.0 }, 1),
-        low_01pct_fps: arredondar(if media_piores_01 > 0.0 { 1000.0 / media_piores_01 } else { 0.0 }, 1),
+        low_1pct_fps: arredondar(
+            if media_piores > 0.0 {
+                1000.0 / media_piores
+            } else {
+                0.0
+            },
+            1,
+        ),
+        low_01pct_fps: arredondar(
+            if media_piores_01 > 0.0 {
+                1000.0 / media_piores_01
+            } else {
+                0.0
+            },
+            1,
+        ),
         oscilacao_ms: arredondar(oscilacao, 2),
-        picos_por_minuto: arredondar(if minutos > 0.0 { picos as f64 / minutos } else { 0.0 }, 1),
+        picos_por_minuto: arredondar(
+            if minutos > 0.0 {
+                picos as f64 / minutos
+            } else {
+                0.0
+            },
+            1,
+        ),
         consistencia: arredondar(consistencia, 0),
         confiavel: n >= AMOSTRAS_MINIMAS,
     }
@@ -513,7 +534,10 @@ pub fn prontidao(
 
     if hz > 0 && fps_base >= hz as f64 * 0.95 {
         motivos.push(MotivoDaProntidao::JaNoLimiteDoMonitor);
-        return LeituraDeProntidao { nivel: Prontidao::Desnecessaria, motivos };
+        return LeituraDeProntidao {
+            nivel: Prontidao::Desnecessaria,
+            motivos,
+        };
     }
 
     let (mut nivel, motivo) = if fps_base < 30.0 {
@@ -564,21 +588,38 @@ pub fn latencia(fps_renderizado: Option<f64>, geracao_ligada: bool) -> Latencia 
     let quadro = fps_renderizado.filter(|f| *f > 0.0).map(|f| 1000.0 / f);
 
     let renderizacao_ms = match quadro {
-        Some(ms) => Valor::Estimado { valor: arredondar(ms, 1), base: BaseDaEstimativa::IntervaloDoQuadro },
-        None => Valor::Desconhecido { motivo: MotivoDesconhecido::ExigeSensor },
+        Some(ms) => Valor::Estimado {
+            valor: arredondar(ms, 1),
+            base: BaseDaEstimativa::IntervaloDoQuadro,
+        },
+        None => Valor::Desconhecido {
+            motivo: MotivoDesconhecido::ExigeSensor,
+        },
     };
 
     let acrescimo_da_geracao_ms = match (geracao_ligada, quadro) {
-        (false, _) => Valor::Estimado { valor: 0.0, base: BaseDaEstimativa::SemGeracao },
-        (true, Some(ms)) => Valor::Estimado { valor: arredondar(ms, 1), base: BaseDaEstimativa::UmQuadroRetido },
-        (true, None) => Valor::Desconhecido { motivo: MotivoDesconhecido::ExigeSensor },
+        (false, _) => Valor::Estimado {
+            valor: 0.0,
+            base: BaseDaEstimativa::SemGeracao,
+        },
+        (true, Some(ms)) => Valor::Estimado {
+            valor: arredondar(ms, 1),
+            base: BaseDaEstimativa::UmQuadroRetido,
+        },
+        (true, None) => Valor::Desconhecido {
+            motivo: MotivoDesconhecido::ExigeSensor,
+        },
     };
 
     Latencia {
         renderizacao_ms,
         acrescimo_da_geracao_ms,
-        jogo_ms: Valor::Desconhecido { motivo: MotivoDesconhecido::ExigeSensor },
-        tela_ms: Valor::Desconhecido { motivo: MotivoDesconhecido::ExigeSensor },
+        jogo_ms: Valor::Desconhecido {
+            motivo: MotivoDesconhecido::ExigeSensor,
+        },
+        tela_ms: Valor::Desconhecido {
+            motivo: MotivoDesconhecido::ExigeSensor,
+        },
     }
 }
 
@@ -622,43 +663,69 @@ pub fn montar_rodada(
     gerador: Option<&Contagem>,
     segundos: f64,
 ) -> Rodada {
-    let mult = if tecnologia.is_some() { multiplicador.clamp(2, 4) } else { 1 };
-    let medido = |f: f64| Valor::Medido { valor: arredondar(f, 1) };
+    let mult = if tecnologia.is_some() {
+        multiplicador.clamp(2, 4)
+    } else {
+        1
+    };
+    let medido = |f: f64| Valor::Medido {
+        valor: arredondar(f, 1),
+    };
     let ritmo_jogo = ritmo(&jogo.intervalos_ms);
 
-    let (fps_renderizado, fps_exibido, ritmo_renderizado, ritmo_exibido) = match tecnologia.map(tipo_de) {
-        None => (medido(jogo.fps), medido(jogo.fps), ritmo_jogo.clone(), Some(ritmo_jogo)),
-        Some(Tipo::Driver) => (
-            medido(jogo.fps),
-            Valor::Estimado {
-                valor: arredondar(jogo.fps * mult as f64, 1),
-                base: BaseDaEstimativa::MedidoVezesMultiplicador,
-            },
-            ritmo_jogo,
-            None,
-        ),
-        Some(Tipo::Externa) => match gerador {
-            Some(g) => (medido(jogo.fps), medido(g.fps), ritmo_jogo, Some(ritmo(&g.intervalos_ms))),
+    let (fps_renderizado, fps_exibido, ritmo_renderizado, ritmo_exibido) =
+        match tecnologia.map(tipo_de) {
             None => (
                 medido(jogo.fps),
-                Valor::Desconhecido { motivo: MotivoDesconhecido::GeradorSemQuadros },
+                medido(jogo.fps),
+                ritmo_jogo.clone(),
+                Some(ritmo_jogo),
+            ),
+            Some(Tipo::Driver) => (
+                medido(jogo.fps),
+                Valor::Estimado {
+                    valor: arredondar(jogo.fps * mult as f64, 1),
+                    base: BaseDaEstimativa::MedidoVezesMultiplicador,
+                },
                 ritmo_jogo,
                 None,
             ),
-        },
-        Some(Tipo::Nativa) => {
-            // O ritmo medido é o da tela; o dos quadros reais não é separável.
-            let renderizado = Valor::Estimado {
-                valor: arredondar(jogo.fps / mult as f64, 1),
-                base: BaseDaEstimativa::MedidoDivididoPeloMultiplicador,
-            };
-            (renderizado, medido(jogo.fps), ritmo_jogo.clone(), Some(ritmo_jogo))
-        }
-    };
+            Some(Tipo::Externa) => match gerador {
+                Some(g) => (
+                    medido(jogo.fps),
+                    medido(g.fps),
+                    ritmo_jogo,
+                    Some(ritmo(&g.intervalos_ms)),
+                ),
+                None => (
+                    medido(jogo.fps),
+                    Valor::Desconhecido {
+                        motivo: MotivoDesconhecido::GeradorSemQuadros,
+                    },
+                    ritmo_jogo,
+                    None,
+                ),
+            },
+            Some(Tipo::Nativa) => {
+                // O ritmo medido é o da tela; o dos quadros reais não é separável.
+                let renderizado = Valor::Estimado {
+                    valor: arredondar(jogo.fps / mult as f64, 1),
+                    base: BaseDaEstimativa::MedidoDivididoPeloMultiplicador,
+                };
+                (
+                    renderizado,
+                    medido(jogo.fps),
+                    ritmo_jogo.clone(),
+                    Some(ritmo_jogo),
+                )
+            }
+        };
 
     let latencia = latencia(fps_renderizado.numero(), tecnologia.is_some());
     let multiplicador_medido = match (&fps_renderizado, &fps_exibido) {
-        (Valor::Medido { valor: r }, Valor::Medido { valor: e }) if tecnologia.is_some() && *r > 0.0 => {
+        (Valor::Medido { valor: r }, Valor::Medido { valor: e })
+            if tecnologia.is_some() && *r > 0.0 =>
+        {
             Some(arredondar(e / r, 2))
         }
         _ => None,
@@ -673,7 +740,12 @@ pub fn montar_rodada(
         ritmo_exibido,
         latencia,
         multiplicador_medido,
-        amostra_ms: jogo.intervalos_ms.iter().take(PONTOS_DO_GRAFICO).map(|ms| arredondar(*ms, 2)).collect(),
+        amostra_ms: jogo
+            .intervalos_ms
+            .iter()
+            .take(PONTOS_DO_GRAFICO)
+            .map(|ms| arredondar(*ms, 2))
+            .collect(),
         segundos: arredondar(segundos, 1),
     }
 }
@@ -716,7 +788,11 @@ fn ritmo_visto(r: &Rodada) -> &Ritmo {
 /// estabilidade, pesadas pelo que a pessoa disse que quer.
 pub fn pontuar(r: &Rodada, perfil: Perfil, hz: u32) -> Pontuacao {
     let tela = if hz > 0 { hz as f64 } else { 60.0 };
-    let exibido = r.fps_exibido.numero().or(r.fps_renderizado.numero()).unwrap_or(0.0);
+    let exibido = r
+        .fps_exibido
+        .numero()
+        .or(r.fps_renderizado.numero())
+        .unwrap_or(0.0);
     let fluidez = (exibido / tela * 100.0).clamp(0.0, 100.0);
 
     let resposta = atraso_estimado(r)
@@ -724,7 +800,8 @@ pub fn pontuar(r: &Rodada, perfil: Perfil, hz: u32) -> Pontuacao {
         .unwrap_or(0.0);
 
     let visto = ritmo_visto(r);
-    let estabilidade = (visto.consistencia - (visto.picos_por_minuto * 2.0).min(30.0)).clamp(0.0, 100.0);
+    let estabilidade =
+        (visto.consistencia - (visto.picos_por_minuto * 2.0).min(30.0)).clamp(0.0, 100.0);
 
     let (pf, pr, pe) = pesos(perfil);
     Pontuacao {
@@ -801,7 +878,10 @@ pub fn avaliar_artefatos(respostas: &[(Artefato, Intensidade)]) -> NotaDeArtefat
         NivelDeArtefato::Limpo
     };
 
-    NotaDeArtefatos { nota: arredondar(nota, 0), nivel }
+    NotaDeArtefatos {
+        nota: arredondar(nota, 0),
+        nivel,
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -850,12 +930,16 @@ pub struct Comparacao {
 
 /// Quanto a base desligada mudou entre a primeira medição e a conferência.
 pub fn deriva_da_cena(primeira: &Rodada, conferencia: &Rodada) -> Option<f64> {
-    variacao(primeira.fps_renderizado.numero(), conferencia.fps_renderizado.numero())
+    variacao(
+        primeira.fps_renderizado.numero(),
+        conferencia.fps_renderizado.numero(),
+    )
 }
 
 /// O multiplicador medido bate com o escolhido (tolerância de 0,25)?
 pub fn multiplicador_confere(r: &Rodada) -> Option<bool> {
-    r.multiplicador_medido.map(|m| (m - r.multiplicador as f64).abs() <= 0.25)
+    r.multiplicador_medido
+        .map(|m| (m - r.multiplicador as f64).abs() <= 0.25)
 }
 
 pub const DERIVA_MAXIMA_PCT: f64 = 5.0;
@@ -903,7 +987,10 @@ pub fn comparar(
     let pontos_ligado = pontuar(ligado, perfil, hz);
 
     let exibido_pct = variacao(desligado.fps_exibido.numero(), ligado.fps_exibido.numero());
-    let renderizado_pct = variacao(desligado.fps_renderizado.numero(), ligado.fps_renderizado.numero());
+    let renderizado_pct = variacao(
+        desligado.fps_renderizado.numero(),
+        ligado.fps_renderizado.numero(),
+    );
     let atraso_acrescentado_ms = match (atraso_estimado(desligado), atraso_estimado(ligado)) {
         (Some(a), Some(d)) => Some(arredondar(d - a, 1)),
         _ => None,
@@ -949,13 +1036,21 @@ pub fn comparar(
         contra = true;
     }
 
-    let tolerancia_ritmo = if perfil == Perfil::Competitivo { 5.0 } else { 10.0 };
+    let tolerancia_ritmo = if perfil == Perfil::Competitivo {
+        5.0
+    } else {
+        10.0
+    };
     if ritmo_visto(ligado).consistencia + tolerancia_ritmo < ritmo_visto(desligado).consistencia {
         motivos.push(MotivoDaDecisao::RitmoPiorou);
         contra = true;
     }
 
-    let limite_de_atraso = if perfil == Perfil::Competitivo { ATRASO_MAXIMO_COMPETITIVO_MS } else { ATRASO_MAXIMO_MS };
+    let limite_de_atraso = if perfil == Perfil::Competitivo {
+        ATRASO_MAXIMO_COMPETITIVO_MS
+    } else {
+        ATRASO_MAXIMO_MS
+    };
     if atraso_acrescentado_ms.is_some_and(|ms| ms > limite_de_atraso) {
         motivos.push(MotivoDaDecisao::AtrasoAcrescentadoAlto);
         contra = true;
@@ -966,7 +1061,12 @@ pub fn comparar(
         contra = true;
     }
 
-    if hz > 0 && ligado.fps_exibido.numero().is_some_and(|f| f > hz as f64 * 1.02) {
+    if hz > 0
+        && ligado
+            .fps_exibido
+            .numero()
+            .is_some_and(|f| f > hz as f64 * 1.02)
+    {
         // Não decide sozinho: o conserto é limitar, não desligar.
         motivos.push(MotivoDaDecisao::PassouDoMonitor);
     }
@@ -1058,7 +1158,10 @@ pub fn ajuste_de_tela(fps_exibido: Option<f64>, hz: u32, multiplicador: u8) -> A
         (Some(f), h) if f >= h as f64 * 0.95 => Casamento::NoLimite,
         _ => Casamento::AbaixoDoMonitor,
     };
-    AjusteDeTela { casamento, limite_sugerido: limite_sugerido(hz, multiplicador.max(1)) }
+    AjusteDeTela {
+        casamento,
+        limite_sugerido: limite_sugerido(hz, multiplicador.max(1)),
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1098,7 +1201,7 @@ fn procurar_lossless() -> Option<bool> {
 }
 
 #[cfg(target_os = "windows")]
-fn ler_placa() -> Placa {
+pub(crate) fn ler_placa() -> Placa {
     let script = "Get-CimInstance Win32_VideoController | Where-Object { $_.AdapterRAM -gt 0 } | \
                   ForEach-Object { \"$($_.Name)|$($_.DriverVersion)\" }";
 
@@ -1118,7 +1221,11 @@ fn ler_placa() -> Placa {
         return classificar_placa("", None);
     }
 
-    let nomes = linhas.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(" + ");
+    let nomes = linhas
+        .iter()
+        .map(|(n, _)| n.as_str())
+        .collect::<Vec<_>>()
+        .join(" + ");
     let mut placa = classificar_placa(&nomes, None);
     placa.driver = linhas
         .iter()
@@ -1195,7 +1302,10 @@ pub fn medir_rodada(
     use super::frames;
 
     let (pid, nome) = frames::encontrar_processo(processo).ok_or_else(|| {
-        format!("Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de medir.", processo)
+        format!(
+            "Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de medir.",
+            processo
+        )
     })?;
 
     let gerador = match tecnologia {
@@ -1226,7 +1336,10 @@ pub fn medir_rodada(
         vram_total_mb: b.vram_total_mb,
     });
 
-    let contagem = |m: &frames::MedicaoCrua| Contagem { fps: m.resumo.fps, intervalos_ms: m.intervalos_ms.clone() };
+    let contagem = |m: &frames::MedicaoCrua| Contagem {
+        fps: m.resumo.fps,
+        intervalos_ms: m.intervalos_ms.clone(),
+    };
     let rodada = montar_rodada(
         tecnologia,
         multiplicador,
@@ -1245,7 +1358,12 @@ pub fn medir_rodada(
     });
     let tela = ajuste_de_tela(rodada.fps_exibido.numero(), hz, rodada.multiplicador);
 
-    Ok(ResultadoDaRodada { rodada, prontidao, gargalo, tela })
+    Ok(ResultadoDaRodada {
+        rodada,
+        prontidao,
+        gargalo,
+        tela,
+    })
 }
 
 #[cfg(test)]
@@ -1257,7 +1375,10 @@ mod tests {
     }
 
     fn contagem(fps: f64, n: usize) -> Contagem {
-        Contagem { fps, intervalos_ms: estavel(1000.0 / fps, n) }
+        Contagem {
+            fps,
+            intervalos_ms: estavel(1000.0 / fps, n),
+        }
     }
 
     fn rodada_off(fps: f64) -> Rodada {
@@ -1266,40 +1387,86 @@ mod tests {
 
     #[test]
     fn classifica_as_series_nvidia() {
-        assert_eq!(classificar_placa("NVIDIA GeForce RTX 5070 Ti", None).arquitetura, Arquitetura::Rtx50);
-        assert_eq!(classificar_placa("NVIDIA GeForce RTX 4060 Laptop GPU", None).arquitetura, Arquitetura::Rtx40);
-        assert_eq!(classificar_placa("NVIDIA GeForce RTX 3060", None).arquitetura, Arquitetura::Rtx30);
-        assert_eq!(classificar_placa("NVIDIA GeForce GTX 1650", None).arquitetura, Arquitetura::GtxOuAnterior);
-        assert_eq!(classificar_placa("NVIDIA RTX A4000", None).arquitetura, Arquitetura::Desconhecida);
+        assert_eq!(
+            classificar_placa("NVIDIA GeForce RTX 5070 Ti", None).arquitetura,
+            Arquitetura::Rtx50
+        );
+        assert_eq!(
+            classificar_placa("NVIDIA GeForce RTX 4060 Laptop GPU", None).arquitetura,
+            Arquitetura::Rtx40
+        );
+        assert_eq!(
+            classificar_placa("NVIDIA GeForce RTX 3060", None).arquitetura,
+            Arquitetura::Rtx30
+        );
+        assert_eq!(
+            classificar_placa("NVIDIA GeForce GTX 1650", None).arquitetura,
+            Arquitetura::GtxOuAnterior
+        );
+        assert_eq!(
+            classificar_placa("NVIDIA RTX A4000", None).arquitetura,
+            Arquitetura::Desconhecida
+        );
     }
 
     #[test]
     fn classifica_amd_e_intel() {
-        assert_eq!(classificar_placa("AMD Radeon RX 9070 XT", None).arquitetura, Arquitetura::Rx9000);
-        assert_eq!(classificar_placa("AMD Radeon RX 6600", None).arquitetura, Arquitetura::Rx6000);
-        assert_eq!(classificar_placa("AMD Radeon RX 580 2048SP", None).arquitetura, Arquitetura::RxAnterior);
-        assert_eq!(classificar_placa("Intel(R) Arc(TM) A770", None).arquitetura, Arquitetura::IntelArc);
-        assert_eq!(classificar_placa("Intel(R) UHD Graphics 630", None).fabricante, Fabricante::Intel);
+        assert_eq!(
+            classificar_placa("AMD Radeon RX 9070 XT", None).arquitetura,
+            Arquitetura::Rx9000
+        );
+        assert_eq!(
+            classificar_placa("AMD Radeon RX 6600", None).arquitetura,
+            Arquitetura::Rx6000
+        );
+        assert_eq!(
+            classificar_placa("AMD Radeon RX 580 2048SP", None).arquitetura,
+            Arquitetura::RxAnterior
+        );
+        assert_eq!(
+            classificar_placa("Intel(R) Arc(TM) A770", None).arquitetura,
+            Arquitetura::IntelArc
+        );
+        assert_eq!(
+            classificar_placa("Intel(R) UHD Graphics 630", None).fabricante,
+            Fabricante::Intel
+        );
     }
 
     #[test]
     fn em_notebook_a_dedicada_decide() {
-        let p = classificar_placa("Intel(R) UHD Graphics + NVIDIA GeForce RTX 4060 Laptop GPU", None);
+        let p = classificar_placa(
+            "Intel(R) UHD Graphics + NVIDIA GeForce RTX 4060 Laptop GPU",
+            None,
+        );
         assert_eq!(p.arquitetura, Arquitetura::Rtx40);
         assert_eq!(p.nome, "NVIDIA GeForce RTX 4060 Laptop GPU");
     }
 
     fn opcao(lista: &[OpcaoDeGeracao], t: Tecnologia) -> OpcaoDeGeracao {
-        lista.iter().find(|o| o.tecnologia == t).cloned().expect("toda tecnologia aparece")
+        lista
+            .iter()
+            .find(|o| o.tecnologia == t)
+            .cloned()
+            .expect("toda tecnologia aparece")
     }
 
     #[test]
     fn gtx_nao_tem_dlss_nem_smooth_motion() {
         let placa = classificar_placa("NVIDIA GeForce GTX 1650", None);
         let lista = catalogo(&placa, Some(JogoConhecido::FiveM), Some(false));
-        assert_eq!(opcao(&lista, Tecnologia::DlssFg).disponibilidade, Disponibilidade::NaoSuportada);
-        assert_eq!(opcao(&lista, Tecnologia::SmoothMotion).disponibilidade, Disponibilidade::NaoSuportada);
-        assert_eq!(opcao(&lista, Tecnologia::LosslessScaling).disponibilidade, Disponibilidade::NaoEncontrado);
+        assert_eq!(
+            opcao(&lista, Tecnologia::DlssFg).disponibilidade,
+            Disponibilidade::NaoSuportada
+        );
+        assert_eq!(
+            opcao(&lista, Tecnologia::SmoothMotion).disponibilidade,
+            Disponibilidade::NaoSuportada
+        );
+        assert_eq!(
+            opcao(&lista, Tecnologia::LosslessScaling).disponibilidade,
+            Disponibilidade::NaoEncontrado
+        );
         assert!(opcao(&lista, Tecnologia::DlssFg).multiplicadores.is_empty());
     }
 
@@ -1307,16 +1474,29 @@ mod tests {
     fn so_a_rtx_50_tem_geracao_multipla() {
         let rtx50 = catalogo(&classificar_placa("RTX 5080", None), None, None);
         let rtx40 = catalogo(&classificar_placa("RTX 4080", None), None, None);
-        assert_eq!(opcao(&rtx50, Tecnologia::DlssFg).multiplicadores, vec![2, 3, 4]);
+        assert_eq!(
+            opcao(&rtx50, Tecnologia::DlssFg).multiplicadores,
+            vec![2, 3, 4]
+        );
         assert_eq!(opcao(&rtx40, Tecnologia::DlssFg).multiplicadores, vec![2]);
     }
 
     #[test]
     fn afmf_so_em_radeon_recente() {
-        let rx = catalogo(&classificar_placa("AMD Radeon RX 7800 XT", None), None, None);
+        let rx = catalogo(
+            &classificar_placa("AMD Radeon RX 7800 XT", None),
+            None,
+            None,
+        );
         let rtx = catalogo(&classificar_placa("RTX 4070", None), None, None);
-        assert_eq!(opcao(&rx, Tecnologia::Afmf).disponibilidade, Disponibilidade::DependeDoDriver);
-        assert_eq!(opcao(&rtx, Tecnologia::Afmf).disponibilidade, Disponibilidade::NaoSuportada);
+        assert_eq!(
+            opcao(&rx, Tecnologia::Afmf).disponibilidade,
+            Disponibilidade::DependeDoDriver
+        );
+        assert_eq!(
+            opcao(&rtx, Tecnologia::Afmf).disponibilidade,
+            Disponibilidade::NaoSuportada
+        );
     }
 
     #[test]
@@ -1331,8 +1511,17 @@ mod tests {
 
     #[test]
     fn o_gerador_do_otimiza_existe_em_qualquer_placa() {
-        for nome in ["NVIDIA GeForce GTX 1650", "AMD Radeon RX 580", "Intel(R) UHD Graphics 630", ""] {
-            let lista = catalogo(&classificar_placa(nome, None), Some(JogoConhecido::FiveM), None);
+        for nome in [
+            "NVIDIA GeForce GTX 1650",
+            "AMD Radeon RX 580",
+            "Intel(R) UHD Graphics 630",
+            "",
+        ] {
+            let lista = catalogo(
+                &classificar_placa(nome, None),
+                Some(JogoConhecido::FiveM),
+                None,
+            );
             let o = opcao(&lista, Tecnologia::Otimiza);
             assert_eq!(o.disponibilidade, Disponibilidade::Integrado);
             assert_eq!(o.multiplicadores, vec![2, 3, 4]);
@@ -1341,14 +1530,29 @@ mod tests {
 
     #[test]
     fn fivem_nao_tem_geracao_propria_e_o_enhanced_tem() {
-        assert_eq!(reconhecer_jogo("FiveM_b3258_GTAProcess.exe"), Some(JogoConhecido::FiveM));
-        assert_eq!(reconhecer_jogo("GTA5_Enhanced.exe"), Some(JogoConhecido::GtaVEnhanced));
+        assert_eq!(
+            reconhecer_jogo("FiveM_b3258_GTAProcess.exe"),
+            Some(JogoConhecido::FiveM)
+        );
+        assert_eq!(
+            reconhecer_jogo("GTA5_Enhanced.exe"),
+            Some(JogoConhecido::GtaVEnhanced)
+        );
         let placa = classificar_placa("RTX 4070", None);
         let fivem = catalogo(&placa, Some(JogoConhecido::FiveM), None);
         let enhanced = catalogo(&placa, Some(JogoConhecido::GtaVEnhanced), None);
-        assert_eq!(opcao(&fivem, Tecnologia::DlssFg).o_jogo_oferece, Some(false));
-        assert_eq!(opcao(&enhanced, Tecnologia::DlssFg).o_jogo_oferece, Some(true));
-        assert_eq!(opcao(&placa_sem_jogo(), Tecnologia::DlssFg).o_jogo_oferece, None);
+        assert_eq!(
+            opcao(&fivem, Tecnologia::DlssFg).o_jogo_oferece,
+            Some(false)
+        );
+        assert_eq!(
+            opcao(&enhanced, Tecnologia::DlssFg).o_jogo_oferece,
+            Some(true)
+        );
+        assert_eq!(
+            opcao(&placa_sem_jogo(), Tecnologia::DlssFg).o_jogo_oferece,
+            None
+        );
     }
 
     fn placa_sem_jogo() -> Vec<OpcaoDeGeracao> {
@@ -1379,7 +1583,9 @@ mod tests {
 
     #[test]
     fn alternar_quadros_derruba_a_consistencia_mesmo_com_a_mesma_media() {
-        let alternado: Vec<f64> = (0..1000).map(|i| if i % 2 == 0 { 8.0 } else { 25.0 }).collect();
+        let alternado: Vec<f64> = (0..1000)
+            .map(|i| if i % 2 == 0 { 8.0 } else { 25.0 })
+            .collect();
         let r = ritmo(&alternado);
         assert!(r.consistencia < 30.0, "consistência {}", r.consistencia);
     }
@@ -1393,7 +1599,10 @@ mod tests {
     #[test]
     fn faixas_de_prontidao_pelo_fps_real() {
         let r = ritmo(&estavel(20.0, 1000));
-        assert_eq!(prontidao(25.0, 144, &r, None).nivel, Prontidao::NaoRecomendada);
+        assert_eq!(
+            prontidao(25.0, 144, &r, None).nivel,
+            Prontidao::NaoRecomendada
+        );
         assert_eq!(prontidao(40.0, 144, &r, None).nivel, Prontidao::Marginal);
         assert_eq!(prontidao(50.0, 144, &r, None).nivel, Prontidao::Boa);
         assert_eq!(prontidao(90.0, 144, &r, None).nivel, Prontidao::Excelente);
@@ -1408,21 +1617,33 @@ mod tests {
 
     #[test]
     fn ritmo_irregular_rebaixa_um_nivel() {
-        let irregular: Vec<f64> = (0..1000).map(|i| if i % 2 == 0 { 8.0 } else { 25.0 }).collect();
+        let irregular: Vec<f64> = (0..1000)
+            .map(|i| if i % 2 == 0 { 8.0 } else { 25.0 })
+            .collect();
         let r = ritmo(&irregular);
         let leitura = prontidao(90.0, 144, &r, None);
         assert_eq!(leitura.nivel, Prontidao::Boa);
         assert!(leitura.motivos.contains(&MotivoDaProntidao::RitmoIrregular));
-        assert_eq!(prontidao(40.0, 144, &r, None).nivel, Prontidao::NaoRecomendada);
-        assert_eq!(prontidao(20.0, 144, &r, None).nivel, Prontidao::NaoRecomendada);
+        assert_eq!(
+            prontidao(40.0, 144, &r, None).nivel,
+            Prontidao::NaoRecomendada
+        );
+        assert_eq!(
+            prontidao(20.0, 144, &r, None).nivel,
+            Prontidao::NaoRecomendada
+        );
     }
 
     #[test]
     fn processador_no_limite_aparece_como_motivo() {
         let r = ritmo(&estavel(16.0, 1000));
         let leitura = prontidao(60.0, 144, &r, Some(Limite::CpuUmNucleo));
-        assert!(leitura.motivos.contains(&MotivoDaProntidao::LimitadoPeloProcessador));
-        assert!(!prontidao(60.0, 144, &r, Some(Limite::Gpu)).motivos.contains(&MotivoDaProntidao::LimitadoPeloProcessador));
+        assert!(leitura
+            .motivos
+            .contains(&MotivoDaProntidao::LimitadoPeloProcessador));
+        assert!(!prontidao(60.0, 144, &r, Some(Limite::Gpu))
+            .motivos
+            .contains(&MotivoDaProntidao::LimitadoPeloProcessador));
     }
 
     #[test]
@@ -1435,7 +1656,13 @@ mod tests {
 
     #[test]
     fn geracao_no_driver_estima_o_exibido() {
-        let r = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
+        let r = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
         assert!(matches!(r.fps_renderizado, Valor::Medido { valor } if valor == 60.0));
         assert!(matches!(
             r.fps_exibido,
@@ -1445,7 +1672,13 @@ mod tests {
 
     #[test]
     fn geracao_nativa_estima_o_renderizado() {
-        let r = montar_rodada(Some(Tecnologia::DlssFg), 2, &contagem(120.0, 1000), None, 20.0);
+        let r = montar_rodada(
+            Some(Tecnologia::DlssFg),
+            2,
+            &contagem(120.0, 1000),
+            None,
+            20.0,
+        );
         assert!(matches!(r.fps_exibido, Valor::Medido { valor } if valor == 120.0));
         assert!(matches!(
             r.fps_renderizado,
@@ -1469,15 +1702,39 @@ mod tests {
 
     #[test]
     fn gerador_externo_parado_nao_vira_zero() {
-        let r = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(55.0, 1000), None, 20.0);
-        assert!(matches!(r.fps_exibido, Valor::Desconhecido { motivo: MotivoDesconhecido::GeradorSemQuadros }));
+        let r = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            2,
+            &contagem(55.0, 1000),
+            None,
+            20.0,
+        );
+        assert!(matches!(
+            r.fps_exibido,
+            Valor::Desconhecido {
+                motivo: MotivoDesconhecido::GeradorSemQuadros
+            }
+        ));
     }
 
     #[test]
     fn geracao_nunca_reduz_o_atraso() {
-        for tecnologia in [Tecnologia::DlssFg, Tecnologia::FsrFg, Tecnologia::SmoothMotion, Tecnologia::Afmf, Tecnologia::LosslessScaling, Tecnologia::Otimiza] {
+        for tecnologia in [
+            Tecnologia::DlssFg,
+            Tecnologia::FsrFg,
+            Tecnologia::SmoothMotion,
+            Tecnologia::Afmf,
+            Tecnologia::LosslessScaling,
+            Tecnologia::Otimiza,
+        ] {
             for mult in 2..=4 {
-                let r = montar_rodada(Some(tecnologia), mult, &contagem(60.0, 1000), Some(&contagem(180.0, 3000)), 20.0);
+                let r = montar_rodada(
+                    Some(tecnologia),
+                    mult,
+                    &contagem(60.0, 1000),
+                    Some(&contagem(180.0, 3000)),
+                    20.0,
+                );
                 let acrescimo = r.latencia.acrescimo_da_geracao_ms.numero().unwrap_or(0.0);
                 assert!(acrescimo >= 0.0);
                 assert!(matches!(r.latencia.jogo_ms, Valor::Desconhecido { .. }));
@@ -1488,7 +1745,13 @@ mod tests {
 
     #[test]
     fn multiplicador_fora_da_faixa_e_contido() {
-        let r = montar_rodada(Some(Tecnologia::SmoothMotion), 9, &contagem(60.0, 1000), None, 20.0);
+        let r = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            9,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
         assert_eq!(r.multiplicador, 4);
         assert_eq!(rodada_off(60.0).multiplicador, 1);
     }
@@ -1496,17 +1759,37 @@ mod tests {
     #[test]
     fn no_competitivo_quadro_exibido_nao_vale_ponto() {
         let off = rodada_off(60.0);
-        let dobrado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
+        let dobrado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
         let a = pontuar(&off, Perfil::Competitivo, 144);
         let b = pontuar(&dobrado, Perfil::Competitivo, 144);
-        assert!(b.total < a.total, "competitivo: {} deveria ser menor que {}", b.total, a.total);
-        assert!(pontuar(&dobrado, Perfil::MaximaFluidez, 144).total > pontuar(&off, Perfil::MaximaFluidez, 144).total);
+        assert!(
+            b.total < a.total,
+            "competitivo: {} deveria ser menor que {}",
+            b.total,
+            a.total
+        );
+        assert!(
+            pontuar(&dobrado, Perfil::MaximaFluidez, 144).total
+                > pontuar(&off, Perfil::MaximaFluidez, 144).total
+        );
     }
 
     #[test]
     fn competitivo_desliga_quando_o_atraso_sobe() {
         let off = rodada_off(60.0);
-        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
+        let ligado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
         let c = comparar(&off, &ligado, Perfil::Competitivo, 144, None, None);
         assert_eq!(c.decisao, Decisao::Desligar);
         assert!(c.motivos.contains(&MotivoDaDecisao::AtrasoAcrescentadoAlto));
@@ -1515,7 +1798,13 @@ mod tests {
     #[test]
     fn maxima_fluidez_mantem_quando_dobra_sem_perder_quadro_real() {
         let off = rodada_off(60.0);
-        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(59.0, 1000), None, 20.0);
+        let ligado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(59.0, 1000),
+            None,
+            20.0,
+        );
         let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, None);
         assert_eq!(c.decisao, Decisao::Manter);
         assert!(c.exibido_pct.unwrap() > 90.0);
@@ -1524,8 +1813,18 @@ mod tests {
     #[test]
     fn perda_grande_de_quadro_real_desliga_em_qualquer_perfil() {
         let off = rodada_off(60.0);
-        let ligado = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(40.0, 1000), Some(&contagem(80.0, 2000)), 20.0);
-        for perfil in [Perfil::Competitivo, Perfil::Equilibrado, Perfil::MaximaFluidez] {
+        let ligado = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            2,
+            &contagem(40.0, 1000),
+            Some(&contagem(80.0, 2000)),
+            20.0,
+        );
+        for perfil in [
+            Perfil::Competitivo,
+            Perfil::Equilibrado,
+            Perfil::MaximaFluidez,
+        ] {
             let c = comparar(&off, &ligado, perfil, 144, None, None);
             assert_eq!(c.decisao, Decisao::Desligar, "{:?}", perfil);
             assert!(c.motivos.contains(&MotivoDaDecisao::RenderizadoCaiu));
@@ -1535,15 +1834,34 @@ mod tests {
     #[test]
     fn artefato_incomodo_desliga() {
         let off = rodada_off(60.0);
-        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
-        let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, Some(NivelDeArtefato::Incomodo), None);
+        let ligado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
+        let c = comparar(
+            &off,
+            &ligado,
+            Perfil::MaximaFluidez,
+            144,
+            Some(NivelDeArtefato::Incomodo),
+            None,
+        );
         assert_eq!(c.decisao, Decisao::Desligar);
     }
 
     #[test]
     fn amostra_curta_e_inconclusiva() {
         let off = montar_rodada(None, 1, &contagem(60.0, 50), None, 1.0);
-        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 50), None, 1.0);
+        let ligado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 50),
+            None,
+            1.0,
+        );
         let c = comparar(&off, &ligado, Perfil::Equilibrado, 144, None, None);
         assert_eq!(c.decisao, Decisao::Inconclusivo);
         assert_eq!(c.motivos, vec![MotivoDaDecisao::AmostraCurta]);
@@ -1552,7 +1870,13 @@ mod tests {
     #[test]
     fn exibido_acima_do_monitor_e_avisado() {
         let off = rodada_off(100.0);
-        let ligado = montar_rodada(Some(Tecnologia::DlssFg), 2, &contagem(200.0, 2000), None, 20.0);
+        let ligado = montar_rodada(
+            Some(Tecnologia::DlssFg),
+            2,
+            &contagem(200.0, 2000),
+            None,
+            20.0,
+        );
         let c = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, None);
         assert!(c.motivos.contains(&MotivoDaDecisao::PassouDoMonitor));
     }
@@ -1560,24 +1884,57 @@ mod tests {
     #[test]
     fn cena_que_nao_se_repete_derruba_a_confianca() {
         let off = rodada_off(60.0);
-        let ligado = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(59.0, 1000), None, 20.0);
+        let ligado = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(59.0, 1000),
+            None,
+            20.0,
+        );
         let estavel = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, Some(1.0));
         let instavel = comparar(&off, &ligado, Perfil::MaximaFluidez, 144, None, Some(-18.0));
-        assert!(instavel.motivos.contains(&MotivoDaDecisao::CenaNaoRepetivel));
+        assert!(instavel
+            .motivos
+            .contains(&MotivoDaDecisao::CenaNaoRepetivel));
         assert!(instavel.confianca_pct + 30.0 <= estavel.confianca_pct);
-        assert_eq!(deriva_da_cena(&rodada_off(60.0), &rodada_off(51.0)), Some(-15.0));
+        assert_eq!(
+            deriva_da_cena(&rodada_off(60.0), &rodada_off(51.0)),
+            Some(-15.0)
+        );
     }
 
     #[test]
     fn multiplicador_real_do_gerador_externo_e_conferido() {
-        let certo = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(60.0, 1000), Some(&contagem(119.0, 2000)), 20.0);
-        let errado = montar_rodada(Some(Tecnologia::LosslessScaling), 3, &contagem(60.0, 1000), Some(&contagem(120.0, 2000)), 20.0);
+        let certo = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            2,
+            &contagem(60.0, 1000),
+            Some(&contagem(119.0, 2000)),
+            20.0,
+        );
+        let errado = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            3,
+            &contagem(60.0, 1000),
+            Some(&contagem(120.0, 2000)),
+            20.0,
+        );
         assert_eq!(multiplicador_confere(&certo), Some(true));
         assert_eq!(multiplicador_confere(&errado), Some(false));
-        let driver = montar_rodada(Some(Tecnologia::SmoothMotion), 2, &contagem(60.0, 1000), None, 20.0);
+        let driver = montar_rodada(
+            Some(Tecnologia::SmoothMotion),
+            2,
+            &contagem(60.0, 1000),
+            None,
+            20.0,
+        );
         assert_eq!(multiplicador_confere(&driver), None);
         let off = rodada_off(60.0);
-        assert!(comparar(&off, &errado, Perfil::MaximaFluidez, 144, None, None).motivos.contains(&MotivoDaDecisao::MultiplicadorNaoConfere));
+        assert!(
+            comparar(&off, &errado, Perfil::MaximaFluidez, 144, None, None)
+                .motivos
+                .contains(&MotivoDaDecisao::MultiplicadorNaoConfere)
+        );
     }
 
     #[test]
@@ -1593,19 +1950,52 @@ mod tests {
     #[test]
     fn modo_inteligente_escolhe_a_melhor_ou_nenhuma() {
         let off = rodada_off(60.0);
-        let x2 = montar_rodada(Some(Tecnologia::LosslessScaling), 2, &contagem(58.0, 1000), Some(&contagem(116.0, 2000)), 20.0);
-        let x3 = montar_rodada(Some(Tecnologia::LosslessScaling), 3, &contagem(57.0, 1000), Some(&contagem(140.0, 2800)), 20.0);
-        let ruim = montar_rodada(Some(Tecnologia::LosslessScaling), 4, &contagem(35.0, 1000), Some(&contagem(140.0, 2800)), 20.0);
+        let x2 = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            2,
+            &contagem(58.0, 1000),
+            Some(&contagem(116.0, 2000)),
+            20.0,
+        );
+        let x3 = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            3,
+            &contagem(57.0, 1000),
+            Some(&contagem(140.0, 2800)),
+            20.0,
+        );
+        let ruim = montar_rodada(
+            Some(Tecnologia::LosslessScaling),
+            4,
+            &contagem(35.0, 1000),
+            Some(&contagem(140.0, 2800)),
+            20.0,
+        );
         let testadas = vec![x2, x3, ruim];
-        assert_eq!(melhor_rodada(&off, &testadas, Perfil::MaximaFluidez, 144), Some(1));
-        assert_eq!(melhor_rodada(&off, &testadas, Perfil::Competitivo, 144), None);
+        assert_eq!(
+            melhor_rodada(&off, &testadas, Perfil::MaximaFluidez, 144),
+            Some(1)
+        );
+        assert_eq!(
+            melhor_rodada(&off, &testadas, Perfil::Competitivo, 144),
+            None
+        );
     }
 
     #[test]
     fn artefatos_forte_e_incomodo_nenhum_e_limpo() {
-        assert_eq!(avaliar_artefatos(&[(Artefato::Fantasmas, Intensidade::Nenhuma)]).nivel, NivelDeArtefato::Limpo);
-        assert_eq!(avaliar_artefatos(&[(Artefato::Fantasmas, Intensidade::Leve)]).nivel, NivelDeArtefato::Aceitavel);
-        assert_eq!(avaliar_artefatos(&[(Artefato::Borrado, Intensidade::Forte)]).nivel, NivelDeArtefato::Incomodo);
+        assert_eq!(
+            avaliar_artefatos(&[(Artefato::Fantasmas, Intensidade::Nenhuma)]).nivel,
+            NivelDeArtefato::Limpo
+        );
+        assert_eq!(
+            avaliar_artefatos(&[(Artefato::Fantasmas, Intensidade::Leve)]).nivel,
+            NivelDeArtefato::Aceitavel
+        );
+        assert_eq!(
+            avaliar_artefatos(&[(Artefato::Borrado, Intensidade::Forte)]).nivel,
+            NivelDeArtefato::Incomodo
+        );
         assert!(
             avaliar_artefatos(&[(Artefato::InterfaceTremida, Intensidade::Leve)]).nota
                 < avaliar_artefatos(&[(Artefato::Borrado, Intensidade::Leve)]).nota
@@ -1630,15 +2020,31 @@ mod tests {
 
     #[test]
     fn casamento_com_a_tela() {
-        assert_eq!(ajuste_de_tela(Some(200.0), 144, 2).casamento, Casamento::AcimaDoMonitor);
-        assert_eq!(ajuste_de_tela(Some(140.0), 144, 2).casamento, Casamento::NoLimite);
-        assert_eq!(ajuste_de_tela(Some(90.0), 144, 2).casamento, Casamento::AbaixoDoMonitor);
-        assert_eq!(ajuste_de_tela(None, 144, 2).casamento, Casamento::MonitorDesconhecido);
+        assert_eq!(
+            ajuste_de_tela(Some(200.0), 144, 2).casamento,
+            Casamento::AcimaDoMonitor
+        );
+        assert_eq!(
+            ajuste_de_tela(Some(140.0), 144, 2).casamento,
+            Casamento::NoLimite
+        );
+        assert_eq!(
+            ajuste_de_tela(Some(90.0), 144, 2).casamento,
+            Casamento::AbaixoDoMonitor
+        );
+        assert_eq!(
+            ajuste_de_tela(None, 144, 2).casamento,
+            Casamento::MonitorDesconhecido
+        );
     }
 
     fn fonte_sem_testes() -> String {
         let fonte = include_str!("framegen.rs");
-        fonte.split("#[cfg(test)]").next().unwrap_or_default().to_string()
+        fonte
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap_or_default()
+            .to_string()
     }
 
     #[test]
@@ -1653,7 +2059,11 @@ mod tests {
             "configjogo::aplicar",
             "registry::set",
         ] {
-            assert!(!fonte.contains(proibido), "framegen.rs não pode usar `{}`", proibido);
+            assert!(
+                !fonte.contains(proibido),
+                "framegen.rs não pode usar `{}`",
+                proibido
+            );
         }
     }
 }

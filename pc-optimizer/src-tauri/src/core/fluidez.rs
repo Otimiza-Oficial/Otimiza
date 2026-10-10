@@ -77,7 +77,11 @@ fn low(ordenados_desc: &[f64], fracao: f64) -> Option<f64> {
 }
 
 pub fn analisar(intervalos_ms: &[f64]) -> Option<SaudeDosQuadros> {
-    let validos: Vec<f64> = intervalos_ms.iter().copied().filter(|x| x.is_finite() && *x > 0.0).collect();
+    let validos: Vec<f64> = intervalos_ms
+        .iter()
+        .copied()
+        .filter(|x| x.is_finite() && *x > 0.0)
+        .collect();
     if validos.is_empty() {
         return None;
     }
@@ -109,7 +113,11 @@ pub fn analisar(intervalos_ms: &[f64]) -> Option<SaudeDosQuadros> {
     };
 
     let fps_medio = n as f64 / (duracao_ms / 1000.0);
-    let p99 = if tem_1pct { percentil(&validos, 99.0) } else { None };
+    let p99 = if tem_1pct {
+        percentil(&validos, 99.0)
+    } else {
+        None
+    };
     let low_1 = if tem_1pct { low(&desc, 0.01) } else { None };
 
     let mut saude = SaudeDosQuadros {
@@ -119,7 +127,11 @@ pub fn analisar(intervalos_ms: &[f64]) -> Option<SaudeDosQuadros> {
         frametime_mediano_ms: med,
         frametime_desvio_ms: desvio(&validos),
         frametime_cv: coeficiente_de_variacao(&validos),
-        p95_ms: if tem_1pct { percentil(&validos, 95.0) } else { None },
+        p95_ms: if tem_1pct {
+            percentil(&validos, 95.0)
+        } else {
+            None
+        },
         p99_ms: p99,
         low_1pct_fps: low_1,
         low_01pct_fps: if tem_01pct { low(&desc, 0.001) } else { None },

@@ -41,12 +41,14 @@ pub fn query_start_type(service: &str) -> Result<String, String> {
         PreviousValue::Dword(1)
     );
 
-    start_type_keyword(code, delayed).map(|s| s.to_string()).ok_or_else(|| {
-        format!(
-            "Service `{}` is a kernel driver (start type {}) and must not be modified",
-            service, code
-        )
-    })
+    start_type_keyword(code, delayed)
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            format!(
+                "Service `{}` is a kernel driver (start type {}) and must not be modified",
+                service, code
+            )
+        })
 }
 
 /// ESCREVE E RELÊ: `sc config` já devolveu zero com política de domínio e ACL negada, e o serviço ficou como
@@ -90,7 +92,10 @@ mod tests {
 
     #[test]
     fn mudar_um_servico_relê_o_estado_antes_de_dar_por_feito() {
-        let producao = include_str!("services.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("services.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
         let corpo = producao
             .split("pub fn set_start_type")
             .nth(1)

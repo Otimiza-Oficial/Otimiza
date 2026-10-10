@@ -52,11 +52,7 @@ pub struct BootReport {
 
 /// Nome e empresa do executável são texto arbitrário (visto: `№じ 尐乄鈊~→☆`) e vão para a tela e o relatório.
 pub fn limpar(bruto: &str) -> String {
-    let limpo: String = bruto
-        .chars()
-        .filter(|c| !c.is_control())
-        .take(80)
-        .collect();
+    let limpo: String = bruto.chars().filter(|c| !c.is_control()).take(80).collect();
 
     limpo.trim().to_string()
 }
@@ -183,12 +179,7 @@ pub fn tipo_do_codigo(codigo: u32) -> Option<BootType> {
 }
 
 /// Ausência de dado é dita como é, nunca como boa notícia.
-pub fn montar_nota(
-    elevado: bool,
-    tem_medicao: bool,
-    rapidas: usize,
-    total_tipos: usize,
-) -> String {
+pub fn montar_nota(elevado: bool, tem_medicao: bool, rapidas: usize, total_tipos: usize) -> String {
     if !elevado {
         return "O Windows guarda o tempo de inicialização num log protegido, que só \
                 pode ser lido como administrador. Reabra o Otimiza com permissão para \
@@ -314,12 +305,16 @@ pub fn analyze() -> BootReport {
         recent_types,
         culpados_lidos,
         note,
-        firmware_ms: super::registry::read("HKLM", r"SYSTEM\CurrentControlSet\Control\Session Manager\Power", "FwPOSTTime")
-            .ok()
-            .and_then(|v| match v {
-                crate::modules::changelog::PreviousValue::Dword(ms) if ms > 0 => Some(ms as u64),
-                _ => None,
-            }),
+        firmware_ms: super::registry::read(
+            "HKLM",
+            r"SYSTEM\CurrentControlSet\Control\Session Manager\Power",
+            "FwPOSTTime",
+        )
+        .ok()
+        .and_then(|v| match v {
+            crate::modules::changelog::PreviousValue::Dword(ms) if ms > 0 => Some(ms as u64),
+            _ => None,
+        }),
     }
 }
 
@@ -418,11 +413,11 @@ mod tests {
         assert!(r.culprits.iter().all(|c| c.total_ms > 0));
         assert!(r.culprits.iter().all(|c| !c.name.is_empty()));
 
+        assert!(r.history.iter().all(|m| m.total_ms >= m.main_path_ms));
         assert!(r
-            .history
-            .iter()
-            .all(|m| m.total_ms >= m.main_path_ms));
-        assert!(r.culprits.windows(2).all(|p| p[0].total_ms >= p[1].total_ms));
+            .culprits
+            .windows(2)
+            .all(|p| p[0].total_ms >= p[1].total_ms));
 
         if r.needs_admin {
             assert!(r.last.is_none());

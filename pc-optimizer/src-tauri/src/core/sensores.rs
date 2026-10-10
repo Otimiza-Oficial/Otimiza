@@ -51,18 +51,40 @@ pub fn resumir(amostras: &[AmostraGpu], limite_w: Option<f64>) -> Option<ResumoG
         if com_motivo == 0 {
             return 0.0;
         }
-        let quantas = amostras.iter().filter_map(|a| a.motivos).filter(|m| m & bits != 0).count();
+        let quantas = amostras
+            .iter()
+            .filter_map(|a| a.motivos)
+            .filter(|m| m & bits != 0)
+            .count();
         quantas as f64 / com_motivo as f64 * 100.0
     };
 
     Some(ResumoGpu {
         amostras: amostras.len(),
         temperatura_max_c: amostras.iter().filter_map(|a| a.temperatura_c).max(),
-        temperatura_media_c: media(amostras.iter().filter_map(|a| a.temperatura_c).map(f64::from).collect()),
-        clock_medio_mhz: media(amostras.iter().filter_map(|a| a.clock_mhz).map(f64::from).collect()),
+        temperatura_media_c: media(
+            amostras
+                .iter()
+                .filter_map(|a| a.temperatura_c)
+                .map(f64::from)
+                .collect(),
+        ),
+        clock_medio_mhz: media(
+            amostras
+                .iter()
+                .filter_map(|a| a.clock_mhz)
+                .map(f64::from)
+                .collect(),
+        ),
         potencia_media_w: media(amostras.iter().filter_map(|a| a.potencia_w).collect()),
         limite_w,
-        uso_medio_pct: media(amostras.iter().filter_map(|a| a.uso_pct).map(f64::from).collect()),
+        uso_medio_pct: media(
+            amostras
+                .iter()
+                .filter_map(|a| a.uso_pct)
+                .map(f64::from)
+                .collect(),
+        ),
         pct_termico: pct(MOTIVO_TERMICO_SW | MOTIVO_TERMICO_HW),
         pct_teto_de_energia: pct(MOTIVO_TETO_DE_ENERGIA),
         pct_freio_de_hardware: pct(MOTIVO_FREIO_DE_HARDWARE | MOTIVO_FREIO_DE_ENERGIA_HW),
@@ -73,9 +95,16 @@ pub fn resumir(amostras: &[AmostraGpu], limite_w: Option<f64>) -> Option<ResumoG
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum LimiteDaPlaca {
-    Temperatura { pct: f64, temperatura_max_c: Option<u32> },
-    FreioDeHardware { pct: f64 },
-    TetoDeEnergia { pct: f64 },
+    Temperatura {
+        pct: f64,
+        temperatura_max_c: Option<u32>,
+    },
+    FreioDeHardware {
+        pct: f64,
+    },
+    TetoDeEnergia {
+        pct: f64,
+    },
     Livre,
     NaoDeuParaLer,
 }
@@ -86,13 +115,20 @@ pub fn julgar(r: &ResumoGpu) -> LimiteDaPlaca {
         return LimiteDaPlaca::NaoDeuParaLer;
     }
     if r.pct_termico >= TERMICO_ALTO_PCT {
-        return LimiteDaPlaca::Temperatura { pct: r.pct_termico, temperatura_max_c: r.temperatura_max_c };
+        return LimiteDaPlaca::Temperatura {
+            pct: r.pct_termico,
+            temperatura_max_c: r.temperatura_max_c,
+        };
     }
     if r.pct_freio_de_hardware >= TERMICO_ALTO_PCT {
-        return LimiteDaPlaca::FreioDeHardware { pct: r.pct_freio_de_hardware };
+        return LimiteDaPlaca::FreioDeHardware {
+            pct: r.pct_freio_de_hardware,
+        };
     }
     if r.pct_teto_de_energia >= TETO_DOMINANTE_PCT {
-        return LimiteDaPlaca::TetoDeEnergia { pct: r.pct_teto_de_energia };
+        return LimiteDaPlaca::TetoDeEnergia {
+            pct: r.pct_teto_de_energia,
+        };
     }
     LimiteDaPlaca::Livre
 }
@@ -130,7 +166,12 @@ mod tests {
     #[test]
     fn conta_o_tempo_de_cada_motivo() {
         let r = resumir(
-            &[a(80, 1500, MOTIVO_TERMICO_HW), a(70, 1800, MOTIVO_TETO_DE_ENERGIA), a(70, 1800, MOTIVO_TETO_DE_ENERGIA), a(70, 1800, MOTIVO_TETO_DE_ENERGIA)],
+            &[
+                a(80, 1500, MOTIVO_TERMICO_HW),
+                a(70, 1800, MOTIVO_TETO_DE_ENERGIA),
+                a(70, 1800, MOTIVO_TETO_DE_ENERGIA),
+                a(70, 1800, MOTIVO_TETO_DE_ENERGIA),
+            ],
             None,
         )
         .unwrap();
@@ -141,11 +182,20 @@ mod tests {
     #[test]
     fn temperatura_vence_teto_de_energia() {
         let r = resumir(
-            &[a(83, 1400, MOTIVO_TERMICO_SW | MOTIVO_TETO_DE_ENERGIA), a(70, 1800, MOTIVO_TETO_DE_ENERGIA)],
+            &[
+                a(83, 1400, MOTIVO_TERMICO_SW | MOTIVO_TETO_DE_ENERGIA),
+                a(70, 1800, MOTIVO_TETO_DE_ENERGIA),
+            ],
             None,
         )
         .unwrap();
-        assert_eq!(julgar(&r), LimiteDaPlaca::Temperatura { pct: 50.0, temperatura_max_c: Some(83) });
+        assert_eq!(
+            julgar(&r),
+            LimiteDaPlaca::Temperatura {
+                pct: 50.0,
+                temperatura_max_c: Some(83)
+            }
+        );
     }
 
     #[test]
@@ -159,7 +209,15 @@ mod tests {
 
     #[test]
     fn teto_de_energia_so_aparece_quando_domina() {
-        let poucas = resumir(&[a(70, 1800, MOTIVO_TETO_DE_ENERGIA), a(70, 1800, 0), a(70, 1800, 0)], None).unwrap();
+        let poucas = resumir(
+            &[
+                a(70, 1800, MOTIVO_TETO_DE_ENERGIA),
+                a(70, 1800, 0),
+                a(70, 1800, 0),
+            ],
+            None,
+        )
+        .unwrap();
         assert_eq!(julgar(&poucas), LimiteDaPlaca::Livre);
 
         let muitas = resumir(&[a(70, 1800, MOTIVO_TETO_DE_ENERGIA); 4], None).unwrap();
@@ -168,11 +226,16 @@ mod tests {
 
     #[test]
     fn driver_que_nao_publica_motivo_nao_vira_placa_livre() {
-        let sem = AmostraGpu { temperatura_c: Some(70), clock_mhz: Some(1800), potencia_w: None, uso_pct: None, motivos: None };
+        let sem = AmostraGpu {
+            temperatura_c: Some(70),
+            clock_mhz: Some(1800),
+            potencia_w: None,
+            uso_pct: None,
+            motivos: None,
+        };
         let r = resumir(&[sem, sem], None).unwrap();
         assert!(!r.motivos_lidos);
         assert_eq!(julgar(&r), LimiteDaPlaca::NaoDeuParaLer);
         assert_eq!(r.temperatura_max_c, Some(70));
     }
 }
-

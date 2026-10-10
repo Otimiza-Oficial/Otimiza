@@ -31,19 +31,75 @@ pub enum Classe {
 }
 
 const ESSENCIAIS: &[&str] = &[
-    "securityhealthsystray", "msmpeng", "rtkaud", "rtkngui", "ravcpl", "realtek", "waves", "nahimic",
-    "igfx", "nvcplui", "nvidia", "radeonsoftware", "amdrsserv", "synaptics", "syntp", "etdctrl", "elan",
-    "bthudtask", "bluetooth", "sgrmbroker",
+    "securityhealthsystray",
+    "msmpeng",
+    "rtkaud",
+    "rtkngui",
+    "ravcpl",
+    "realtek",
+    "waves",
+    "nahimic",
+    "igfx",
+    "nvcplui",
+    "nvidia",
+    "radeonsoftware",
+    "amdrsserv",
+    "synaptics",
+    "syntp",
+    "etdctrl",
+    "elan",
+    "bthudtask",
+    "bluetooth",
+    "sgrmbroker",
 ];
 const UTEIS: &[&str] = &[
-    "onedrive", "googledrivefs", "dropbox", "megasync", "icloud", "lghub", "logioptions", "razer",
-    "icue", "steelseries", "hyperx", "corsair", "armoury", "msi center", "dragon center",
+    "onedrive",
+    "googledrivefs",
+    "dropbox",
+    "megasync",
+    "icloud",
+    "lghub",
+    "logioptions",
+    "razer",
+    "icue",
+    "steelseries",
+    "hyperx",
+    "corsair",
+    "armoury",
+    "msi center",
+    "dragon center",
 ];
 const OPCIONAIS: &[&str] = &[
-    "steam", "epicgameslauncher", "riotclient", "battle.net", "eadesktop", "origin", "ubisoftconnect",
-    "upc", "galaxyclient", "rockstar", "spotify", "discord", "teams", "skype", "zoom", "whatsapp",
-    "telegram", "msedge", "chrome", "opera", "brave", "firefox", "utorrent", "qbittorrent", "adobe",
-    "ccleaner", "cortana", "yourphone", "phonelink", "roblox",
+    "steam",
+    "epicgameslauncher",
+    "riotclient",
+    "battle.net",
+    "eadesktop",
+    "origin",
+    "ubisoftconnect",
+    "upc",
+    "galaxyclient",
+    "rockstar",
+    "spotify",
+    "discord",
+    "teams",
+    "skype",
+    "zoom",
+    "whatsapp",
+    "telegram",
+    "msedge",
+    "chrome",
+    "opera",
+    "brave",
+    "firefox",
+    "utorrent",
+    "qbittorrent",
+    "adobe",
+    "ccleaner",
+    "cortana",
+    "yourphone",
+    "phonelink",
+    "roblox",
 ];
 
 pub fn classificar(executavel: &str, comando: &str) -> Classe {
@@ -157,11 +213,7 @@ pub fn executable_from_command(command: &str) -> Option<String> {
         }
     };
 
-    let file = path
-        .rsplit(['\\', '/'])
-        .next()?
-        .trim()
-        .to_lowercase();
+    let file = path.rsplit(['\\', '/']).next()?.trim().to_lowercase();
 
     if file.is_empty() {
         None
@@ -189,11 +241,20 @@ mod tests {
 
     #[test]
     fn classe_pelo_nome() {
-        assert_eq!(classificar("securityhealthsystray.exe", ""), Classe::Essencial);
+        assert_eq!(
+            classificar("securityhealthsystray.exe", ""),
+            Classe::Essencial
+        );
         assert_eq!(classificar("onedrive.exe", ""), Classe::Util);
-        assert_eq!(classificar("steam.exe", r#""C:\Steam\steam.exe" -silent"#), Classe::Opcional);
+        assert_eq!(
+            classificar("steam.exe", r#""C:\Steam\steam.exe" -silent"#),
+            Classe::Opcional
+        );
         assert_eq!(classificar("discord.exe", ""), Classe::Opcional);
-        assert_eq!(classificar("rundll32.exe", "rundll32 algo.dll"), Classe::Desconhecido);
+        assert_eq!(
+            classificar("rundll32.exe", "rundll32 algo.dll"),
+            Classe::Desconhecido
+        );
     }
 
     #[test]
@@ -207,7 +268,10 @@ mod tests {
     #[test]
     fn resolves_squirrel_launcher_to_its_target() {
         assert_eq!(
-            executable_from_command("\"C:\\Users\\x\\AppData\\Local\\Discord\\Update.exe\" --processStart Discord.exe").as_deref(),
+            executable_from_command(
+                "\"C:\\Users\\x\\AppData\\Local\\Discord\\Update.exe\" --processStart Discord.exe"
+            )
+            .as_deref(),
             Some("discord.exe")
         );
     }

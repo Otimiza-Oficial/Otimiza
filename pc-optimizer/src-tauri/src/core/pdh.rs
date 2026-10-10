@@ -5,8 +5,8 @@
 mod imp {
     use windows_sys::Win32::System::Performance::{
         PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW,
-        PdhGetFormattedCounterValue, PdhOpenQueryW, PDH_FMT_COUNTERVALUE, PDH_FMT_COUNTERVALUE_ITEM_W,
-        PDH_FMT_DOUBLE, PDH_MORE_DATA,
+        PdhGetFormattedCounterValue, PdhOpenQueryW, PDH_FMT_COUNTERVALUE,
+        PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_MORE_DATA,
     };
 
     const PDH_OK: u32 = 0;
@@ -31,7 +31,8 @@ mod imp {
     impl Consulta {
         pub fn nova() -> Option<Self> {
             let mut alca: isize = 0;
-            (unsafe { PdhOpenQueryW(std::ptr::null(), 0, &mut alca) } == PDH_OK).then_some(Consulta { alca })
+            (unsafe { PdhOpenQueryW(std::ptr::null(), 0, &mut alca) } == PDH_OK)
+                .then_some(Consulta { alca })
         }
 
         pub fn adicionar(&self, caminho: &str) -> Contador {
@@ -55,9 +56,16 @@ mod imp {
             }
             let mut v: PDH_FMT_COUNTERVALUE = unsafe { std::mem::zeroed() };
             let r = unsafe {
-                PdhGetFormattedCounterValue(c.0, PDH_FMT_DOUBLE | PDH_FMT_NOCAP100, std::ptr::null_mut(), &mut v)
+                PdhGetFormattedCounterValue(
+                    c.0,
+                    PDH_FMT_DOUBLE | PDH_FMT_NOCAP100,
+                    std::ptr::null_mut(),
+                    &mut v,
+                )
             };
-            (r == PDH_OK).then(|| unsafe { v.Anonymous.doubleValue }).filter(|x| x.is_finite())
+            (r == PDH_OK)
+                .then(|| unsafe { v.Anonymous.doubleValue })
+                .filter(|x| x.is_finite())
         }
 
         pub fn lista(&self, c: Contador) -> Vec<(String, f64)> {
@@ -68,7 +76,13 @@ mod imp {
             let mut tamanho: u32 = 0;
             let mut itens: u32 = 0;
             let r = unsafe {
-                PdhGetFormattedCounterArrayW(c.0, formato, &mut tamanho, &mut itens, std::ptr::null_mut())
+                PdhGetFormattedCounterArrayW(
+                    c.0,
+                    formato,
+                    &mut tamanho,
+                    &mut itens,
+                    std::ptr::null_mut(),
+                )
             };
             if r != PDH_MORE_DATA || tamanho == 0 {
                 return Vec::new();

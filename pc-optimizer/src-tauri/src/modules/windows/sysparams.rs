@@ -115,12 +115,18 @@ mod tests {
 
     #[test]
     fn preferencia_do_mouse_precisa_de_aviso() {
-        assert!(precisa_sincronizar_interface("HKCU", r"Control Panel\Mouse"));
+        assert!(precisa_sincronizar_interface(
+            "HKCU",
+            r"Control Panel\Mouse"
+        ));
     }
 
     #[test]
     fn preferencia_de_area_de_trabalho_precisa_de_aviso() {
-        assert!(precisa_sincronizar_interface("HKCU", r"Control Panel\Desktop"));
+        assert!(precisa_sincronizar_interface(
+            "HKCU",
+            r"Control Panel\Desktop"
+        ));
         assert!(precisa_sincronizar_interface(
             "HKCU",
             r"Control Panel\Desktop\WindowMetrics"
@@ -129,7 +135,10 @@ mod tests {
 
     #[test]
     fn o_nome_da_colmeia_nao_diferencia_maiuscula() {
-        assert!(precisa_sincronizar_interface("hkcu", r"control panel\mouse"));
+        assert!(precisa_sincronizar_interface(
+            "hkcu",
+            r"control panel\mouse"
+        ));
     }
 
     #[test]

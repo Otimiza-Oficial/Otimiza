@@ -336,7 +336,13 @@ mod tests {
         Evento::Medicao(
             resumir(
                 "fps.average",
-                &[centro - 0.4, centro, centro + 0.4, centro - 0.2, centro + 0.2],
+                &[
+                    centro - 0.4,
+                    centro,
+                    centro + 0.4,
+                    centro - 0.2,
+                    centro + 0.2,
+                ],
             )
             .expect("resumo"),
         )
@@ -360,7 +366,9 @@ mod tests {
 
     #[test]
     fn a_queda_e_medida_e_os_suspeitos_saem_junto() {
-        let r = com_queda().regressao("fps.average", true).expect("regressão");
+        let r = com_queda()
+            .regressao("fps.average", true)
+            .expect("regressão");
 
         assert!(r.piorou);
         assert_eq!(r.suspeitos.mudancas.len(), 1);
@@ -369,9 +377,15 @@ mod tests {
 
     #[test]
     fn suspeito_nao_e_culpado() {
-        let r = com_queda().regressao("fps.average", true).expect("regressão");
+        let r = com_queda()
+            .regressao("fps.average", true)
+            .expect("regressão");
 
-        assert!(r.suspeitos.aviso.contains("não prova"), "{}", r.suspeitos.aviso);
+        assert!(
+            r.suspeitos.aviso.contains("não prova"),
+            "{}",
+            r.suspeitos.aviso
+        );
         assert!(r.suspeitos.como_provar.contains("uma de cada vez"));
     }
 
@@ -384,7 +398,11 @@ mod tests {
 
         let h = h.com_mudancas(&[mudanca("já estava valendo", 50)]);
         let r = h.regressao("fps.average", true).expect("regressão");
-        assert!(r.suspeitos.mudancas.is_empty(), "{:?}", r.suspeitos.mudancas);
+        assert!(
+            r.suspeitos.mudancas.is_empty(),
+            "{:?}",
+            r.suspeitos.mudancas
+        );
     }
 
     #[test]
@@ -395,7 +413,10 @@ mod tests {
 
         let r = h.regressao("fps.average", true).expect("regressão");
         assert!(
-            r.suspeitos.maquina_mudou.iter().any(|d| d.contains("GT 710")),
+            r.suspeitos
+                .maquina_mudou
+                .iter()
+                .any(|d| d.contains("GT 710")),
             "{:?}",
             r.suspeitos.maquina_mudou
         );
@@ -415,7 +436,9 @@ mod tests {
     fn tempo_de_quadro_subindo_e_que_e_piora() {
         let mut h = Historico::default();
         let subiu = |centro: f64| {
-            Evento::Medicao(resumir("frametime.mean", &[centro - 0.2, centro, centro + 0.2]).unwrap())
+            Evento::Medicao(
+                resumir("frametime.mean", &[centro - 0.2, centro, centro + 0.2]).unwrap(),
+            )
         };
         h.anotar(100, identidade("GTX 770"), subiu(14.0));
         h.anotar(200, identidade("GTX 770"), subiu(22.0));

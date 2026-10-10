@@ -72,7 +72,11 @@ pub fn uso_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64, f64)> {
     let mut por_placa: BTreeMap<String, BTreeMap<String, f64>> = BTreeMap::new();
     for (nome, v) in instancias {
         if let Some(m) = ler_instancia_de_motor(nome) {
-            *por_placa.entry(m.luid).or_default().entry(m.tipo).or_default() += v.max(0.0);
+            *por_placa
+                .entry(m.luid)
+                .or_default()
+                .entry(m.tipo)
+                .or_default() += v.max(0.0);
         }
     }
     por_placa
@@ -92,7 +96,8 @@ pub fn memoria_por_placa(instancias: &[(String, f64)]) -> Vec<(String, f64)> {
             let minusculo = nome.to_ascii_lowercase();
             let ini = minusculo.find("luid_")?;
             let partes: Vec<&str> = minusculo[ini + 5..].splitn(3, '_').collect();
-            (partes.len() >= 2).then(|| (format!("{}_{}", partes[0], partes[1]), bytes / 1_048_576.0))
+            (partes.len() >= 2)
+                .then(|| (format!("{}_{}", partes[0], partes[1]), bytes / 1_048_576.0))
         })
         .collect()
 }
@@ -119,7 +124,9 @@ pub struct Placa {
 /// A de mais memória dedicada primeiro (em notebook, a dedicada). Adaptador de software fica de fora.
 #[cfg(windows)]
 pub fn placas() -> Vec<Placa> {
-    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
+    };
 
     let Ok(fabrica) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
         return Vec::new();
@@ -128,13 +135,21 @@ pub fn placas() -> Vec<Placa> {
     let mut i = 0;
     while let Ok(adaptador) = unsafe { fabrica.EnumAdapters1(i) } {
         i += 1;
-        let Ok(d) = (unsafe { adaptador.GetDesc1() }) else { continue };
+        let Ok(d) = (unsafe { adaptador.GetDesc1() }) else {
+            continue;
+        };
         if d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
             continue;
         }
-        let fim = d.Description.iter().position(|c| *c == 0).unwrap_or(d.Description.len());
+        let fim = d
+            .Description
+            .iter()
+            .position(|c| *c == 0)
+            .unwrap_or(d.Description.len());
         v.push(Placa {
-            nome: String::from_utf16_lossy(&d.Description[..fim]).trim().to_string(),
+            nome: String::from_utf16_lossy(&d.Description[..fim])
+                .trim()
+                .to_string(),
             luid: luid_como_no_pdh(d.AdapterLuid.HighPart, d.AdapterLuid.LowPart),
             vram_total_mb: d.DedicatedVideoMemory as f64 / 1_048_576.0,
         });
@@ -165,22 +180,43 @@ pub fn memoria_da_placa_principal_gb() -> Option<f64> {
 #[cfg(windows)]
 fn adaptador_principal() -> Option<(u64, String, String)> {
     use windows::core::Interface;
-    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, IDXGIDevice, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE,
+    };
     let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
     let mut melhor: Option<(u64, String, String)> = None;
     let mut i = 0;
     while let Ok(a) = unsafe { fabrica.EnumAdapters1(i) } {
         i += 1;
-        let Ok(d) = (unsafe { a.GetDesc1() }) else { continue };
+        let Ok(d) = (unsafe { a.GetDesc1() }) else {
+            continue;
+        };
         if d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
             continue;
         }
-        let Ok(v) = (unsafe { a.CheckInterfaceSupport(&IDXGIDevice::IID) }) else { continue };
+        let Ok(v) = (unsafe { a.CheckInterfaceSupport(&IDXGIDevice::IID) }) else {
+            continue;
+        };
         let v = v as u64;
-        let texto = format!("{}.{}.{}.{}", v >> 48, (v >> 32) & 0xFFFF, (v >> 16) & 0xFFFF, v & 0xFFFF);
-        if melhor.as_ref().is_none_or(|(mem, _, _)| d.DedicatedVideoMemory as u64 > *mem) {
-            let fim = d.Description.iter().position(|c| *c == 0).unwrap_or(d.Description.len());
-            let nome = String::from_utf16_lossy(&d.Description[..fim]).trim().to_string();
+        let texto = format!(
+            "{}.{}.{}.{}",
+            v >> 48,
+            (v >> 32) & 0xFFFF,
+            (v >> 16) & 0xFFFF,
+            v & 0xFFFF
+        );
+        if melhor
+            .as_ref()
+            .is_none_or(|(mem, _, _)| d.DedicatedVideoMemory as u64 > *mem)
+        {
+            let fim = d
+                .Description
+                .iter()
+                .position(|c| *c == 0)
+                .unwrap_or(d.Description.len());
+            let nome = String::from_utf16_lossy(&d.Description[..fim])
+                .trim()
+                .to_string();
             melhor = Some((d.DedicatedVideoMemory as u64, nome, texto));
         }
     }
@@ -192,11 +228,18 @@ fn adaptador_principal() -> Option<(u64, String, String)> {
 pub fn versao_da_bios() -> Option<String> {
     use crate::modules::windows::registry;
     const CHAVE: &str = r"HARDWARE\DESCRIPTION\System\BIOS";
-    let versao = registry::read_text("HKLM", CHAVE, "BIOSVersion").ok().flatten()?;
-    Some(match registry::read_text("HKLM", CHAVE, "BIOSReleaseDate").ok().flatten() {
-        Some(data) => format!("{} ({})", versao.trim(), data.trim()),
-        None => versao.trim().to_string(),
-    })
+    let versao = registry::read_text("HKLM", CHAVE, "BIOSVersion")
+        .ok()
+        .flatten()?;
+    Some(
+        match registry::read_text("HKLM", CHAVE, "BIOSReleaseDate")
+            .ok()
+            .flatten()
+        {
+            Some(data) => format!("{} ({})", versao.trim(), data.trim()),
+            None => versao.trim().to_string(),
+        },
+    )
 }
 
 #[cfg(windows)]
@@ -204,7 +247,9 @@ pub fn build_do_windows() -> Option<String> {
     use crate::modules::changelog::PreviousValue;
     use crate::modules::windows::registry;
     const CHAVE: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
-    let build = registry::read_text("HKLM", CHAVE, "CurrentBuildNumber").ok().flatten()?;
+    let build = registry::read_text("HKLM", CHAVE, "CurrentBuildNumber")
+        .ok()
+        .flatten()?;
     Some(match registry::read("HKLM", CHAVE, "UBR") {
         Ok(PreviousValue::Dword(ubr)) => format!("{}.{}", build, ubr),
         _ => build,
@@ -273,20 +318,35 @@ impl Coletor {
 
     pub fn acompanhar_processos(&mut self, fora: Option<u32>) {
         let mut s = sysinfo::System::new();
-        s.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_cpu());
+        s.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing().with_cpu(),
+        );
         self.processos = Some((s, fora));
     }
 
     fn top_processos(&mut self) -> Vec<ProcessoNaAmostra> {
-        let Some((s, fora)) = self.processos.as_mut() else { return Vec::new() };
-        s.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, sysinfo::ProcessRefreshKind::nothing().with_cpu());
+        let Some((s, fora)) = self.processos.as_mut() else {
+            return Vec::new();
+        };
+        s.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing().with_cpu(),
+        );
         let nucleos = num_cpus::get().max(1) as f64;
         let eu = std::process::id();
         let mut v: Vec<ProcessoNaAmostra> = s
             .processes()
             .iter()
-            .filter(|(pid, _)| Some(pid.as_u32()) != *fora && pid.as_u32() != eu && pid.as_u32() > 4)
-            .map(|(_, p)| ProcessoNaAmostra { nome: p.name().to_string_lossy().to_string(), cpu: p.cpu_usage() as f64 / 100.0 / nucleos })
+            .filter(|(pid, _)| {
+                Some(pid.as_u32()) != *fora && pid.as_u32() != eu && pid.as_u32() > 4
+            })
+            .map(|(_, p)| ProcessoNaAmostra {
+                nome: p.name().to_string_lossy().to_string(),
+                cpu: p.cpu_usage() as f64 / 100.0 / nucleos,
+            })
             .filter(|p| p.cpu > 0.0)
             .collect();
         v.sort_by(|a, b| b.cpu.total_cmp(&a.cpu));
@@ -309,10 +369,17 @@ impl Coletor {
             Some(p) => gpus.iter().find(|(l, _, _)| *l == p.luid).cloned(),
             None => gpus.iter().cloned().max_by(|a, b| a.1.total_cmp(&b.1)),
         };
-        let luid_da_gpu = gpu.as_ref().map(|g| g.0.clone()).or_else(|| self.placa.as_ref().map(|p| p.luid.clone()));
+        let luid_da_gpu = gpu
+            .as_ref()
+            .map(|g| g.0.clone())
+            .or_else(|| self.placa.as_ref().map(|p| p.luid.clone()));
         let da_placa = |lista: Vec<(String, f64)>| -> Option<f64> {
             let luid = luid_da_gpu.as_ref()?;
-            memoria_por_placa(&lista).into_iter().filter(|(l, _)| l == luid).map(|(_, mb)| mb).reduce(f64::max)
+            memoria_por_placa(&lista)
+                .into_iter()
+                .filter(|(l, _)| l == luid)
+                .map(|(_, mb)| mb)
+                .reduce(f64::max)
         };
 
         Amostra {
@@ -334,7 +401,9 @@ impl Coletor {
             paginas_lidas_s: q.valor(self.paginas),
             disco_latencia_ms: q.valor(self.disco_latencia).map(|s| s * 1000.0),
             disco_fila: q.valor(self.disco_fila),
-            disco_ocupado_pct: q.valor(self.disco_ocioso).map(|o| (100.0 - o).clamp(0.0, 100.0)),
+            disco_ocupado_pct: q
+                .valor(self.disco_ocioso)
+                .map(|o| (100.0 - o).clamp(0.0, 100.0)),
             processos,
             limite_flags: q.valor(self.limite_flags).map(|f| f as u64),
             nucleos_pct: nucleos,
@@ -348,7 +417,9 @@ mod testes {
 
     #[test]
     fn le_a_instancia_do_motor() {
-        let m = ler_instancia_de_motor("pid_1234_luid_0x00000000_0x0000D1B5_phys_0_eng_3_engtype_3D").unwrap();
+        let m =
+            ler_instancia_de_motor("pid_1234_luid_0x00000000_0x0000D1B5_phys_0_eng_3_engtype_3D")
+                .unwrap();
         assert_eq!(m.pid, Some(1234));
         assert_eq!(m.luid, "0x00000000_0x0000d1b5");
         assert_eq!(m.tipo, "3d");
@@ -376,8 +447,14 @@ mod testes {
     #[test]
     fn soma_acima_de_cem_nao_passa_de_cem() {
         let inst = vec![
-            ("pid_1_luid_0x0_0x1_phys_0_eng_0_engtype_3D".to_string(), 70.0),
-            ("pid_2_luid_0x0_0x1_phys_0_eng_0_engtype_3D".to_string(), 70.0),
+            (
+                "pid_1_luid_0x0_0x1_phys_0_eng_0_engtype_3D".to_string(),
+                70.0,
+            ),
+            (
+                "pid_2_luid_0x0_0x1_phys_0_eng_0_engtype_3D".to_string(),
+                70.0,
+            ),
         ];
         assert_eq!(uso_por_placa(&inst)[0].1, 100.0);
     }
@@ -385,9 +462,11 @@ mod testes {
     #[test]
     fn luid_do_dxgi_bate_com_o_do_pdh() {
         let l = luid_como_no_pdh(0, 0xD1B5);
-        let m = ler_instancia_de_motor("pid_1_luid_0x00000000_0x0000D1B5_phys_0_eng_0_engtype_3D").unwrap();
+        let m = ler_instancia_de_motor("pid_1_luid_0x00000000_0x0000D1B5_phys_0_eng_0_engtype_3D")
+            .unwrap();
         assert_eq!(l, m.luid);
-        let mem = memoria_por_placa(&[("luid_0x00000000_0x0000D1B5_phys_0".to_string(), 2_097_152.0)]);
+        let mem =
+            memoria_por_placa(&[("luid_0x00000000_0x0000D1B5_phys_0".to_string(), 2_097_152.0)]);
         assert_eq!(mem, vec![(l, 2.0)]);
     }
 
@@ -409,7 +488,11 @@ mod testes {
         std::thread::sleep(std::time::Duration::from_millis(600));
         let a = c.amostra();
         println!("{:?}\n{:#?}", c.placa(), a);
-        println!("driver {:?} · windows {:?}", versao_do_driver(), build_do_windows());
+        println!(
+            "driver {:?} · windows {:?}",
+            versao_do_driver(),
+            build_do_windows()
+        );
         assert!(a.cpu_total_pct.is_some());
     }
 }

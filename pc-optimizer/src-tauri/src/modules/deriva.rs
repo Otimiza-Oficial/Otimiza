@@ -4,8 +4,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
+use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 
 /// O que cerca a partida e não é o jogo nem o Otimiza decidindo: gravado em cada medição automática. Os campos
 /// depois de `windows` vieram com a identidade da máquina (MASTER-PLAN, item 4); medição antiga os tem vazios.
@@ -54,7 +54,11 @@ impl Ambiente {
         pares
             .into_iter()
             .filter_map(|(campo, a, b)| match (a, b) {
-                (Some(a), Some(b)) if a != b => Some(Troca { campo, de: a.clone(), para: b.clone() }),
+                (Some(a), Some(b)) if a != b => Some(Troca {
+                    campo,
+                    de: a.clone(),
+                    para: b.clone(),
+                }),
                 _ => None,
             })
             .collect()
@@ -100,10 +104,20 @@ const MAXIMO: usize = 8;
 const QUEDA_MINIMA_PCT: f64 = 5.0;
 
 fn queda(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Option<(f64, f64, f64)> {
-    let a = resumir("fps.average", &antes.iter().map(|m| m.fps).collect::<Vec<_>>())?;
-    let d = resumir("fps.average", &depois.iter().map(|m| m.fps).collect::<Vec<_>>())?;
+    let a = resumir(
+        "fps.average",
+        &antes.iter().map(|m| m.fps).collect::<Vec<_>>(),
+    )?;
+    let d = resumir(
+        "fps.average",
+        &depois.iter().map(|m| m.fps).collect::<Vec<_>>(),
+    )?;
     match comparar(&a, &d) {
-        Diferenca::Real { delta, pct: Some(p), .. } if delta < 0.0 && -p >= QUEDA_MINIMA_PCT => Some((a.media, d.media, -p)),
+        Diferenca::Real {
+            delta,
+            pct: Some(p),
+            ..
+        } if delta < 0.0 && -p >= QUEDA_MINIMA_PCT => Some((a.media, d.media, -p)),
         _ => None,
     }
 }
@@ -115,14 +129,22 @@ pub fn procurar_no_jogo(jogo: &str, medicoes: &[MedicaoAutomatica]) -> Option<De
     for i in (1..ms.len()).rev() {
         let (a, b) = (&ms[i - 1].ambiente, &ms[i].ambiente);
         let mudou = match (a, b) {
-            (Some(a), Some(b)) if a.driver.is_some() && b.driver.is_some() && a.driver != b.driver => OQueMudou::Driver {
-                de: a.driver.clone().unwrap_or_default(),
-                para: b.driver.clone().unwrap_or_default(),
-            },
-            (Some(a), Some(b)) if a.windows.is_some() && b.windows.is_some() && a.windows != b.windows => OQueMudou::Windows {
-                de: a.windows.clone().unwrap_or_default(),
-                para: b.windows.clone().unwrap_or_default(),
-            },
+            (Some(a), Some(b))
+                if a.driver.is_some() && b.driver.is_some() && a.driver != b.driver =>
+            {
+                OQueMudou::Driver {
+                    de: a.driver.clone().unwrap_or_default(),
+                    para: b.driver.clone().unwrap_or_default(),
+                }
+            }
+            (Some(a), Some(b))
+                if a.windows.is_some() && b.windows.is_some() && a.windows != b.windows =>
+            {
+                OQueMudou::Windows {
+                    de: a.windows.clone().unwrap_or_default(),
+                    para: b.windows.clone().unwrap_or_default(),
+                }
+            }
             _ => continue,
         };
         let antes: Vec<&MedicaoAutomatica> = ms[..i].iter().rev().take(MAXIMO).copied().collect();
@@ -144,7 +166,12 @@ pub fn procurar_no_jogo(jogo: &str, medicoes: &[MedicaoAutomatica]) -> Option<De
     if ms.len() >= MINIMO * 2 {
         let n = ms.len();
         let depois: Vec<&MedicaoAutomatica> = ms[n - MINIMO..].to_vec();
-        let antes: Vec<&MedicaoAutomatica> = ms[..n - MINIMO].iter().rev().take(MAXIMO).copied().collect();
+        let antes: Vec<&MedicaoAutomatica> = ms[..n - MINIMO]
+            .iter()
+            .rev()
+            .take(MAXIMO)
+            .copied()
+            .collect();
         return queda(&antes, &depois).map(|(fa, fd, q)| Deriva {
             jogo: jogo.to_string(),
             mudou: OQueMudou::Nada,
@@ -165,7 +192,11 @@ pub fn procurar(medicoes: &[MedicaoAutomatica]) -> Vec<Deriva> {
     jogos
         .into_iter()
         .filter_map(|j| {
-            let do_jogo: Vec<MedicaoAutomatica> = medicoes.iter().filter(|m| m.jogo.to_lowercase() == j).cloned().collect();
+            let do_jogo: Vec<MedicaoAutomatica> = medicoes
+                .iter()
+                .filter(|m| m.jogo.to_lowercase() == j)
+                .cloned()
+                .collect();
             let nome = do_jogo.last().map(|m| m.jogo.clone()).unwrap_or(j);
             procurar_no_jogo(&nome, &do_jogo)
         })
@@ -201,7 +232,11 @@ mod testes {
             configuracao_do_jogo: None,
             versao_do_formato: 0,
             eventos: None,
-            ambiente: Some(Ambiente { driver: Some(driver.into()), windows: Some("19045.1".into()), ..Default::default() }),
+            ambiente: Some(Ambiente {
+                driver: Some(driver.into()),
+                windows: Some("19045.1".into()),
+                ..Default::default()
+            }),
         }
     }
 
@@ -215,7 +250,13 @@ mod testes {
             v.push(m(100 + i as u64, *f, "32.0.15.7000"));
         }
         let d = procurar_no_jogo("Jogo.exe", &v).expect("deriva");
-        assert_eq!(d.mudou, OQueMudou::Driver { de: "32.0.15.6094".into(), para: "32.0.15.7000".into() });
+        assert_eq!(
+            d.mudou,
+            OQueMudou::Driver {
+                de: "32.0.15.6094".into(),
+                para: "32.0.15.7000".into()
+            }
+        );
         assert!(d.queda_pct > 18.0);
     }
 
@@ -240,12 +281,20 @@ mod testes {
         for (i, f) in [118.0, 117.0, 119.0].iter().enumerate() {
             v.push(m(100 + i as u64, *f, "a"));
         }
-        assert_eq!(procurar_no_jogo("Jogo.exe", &v).unwrap().mudou, OQueMudou::Nada);
+        assert_eq!(
+            procurar_no_jogo("Jogo.exe", &v).unwrap().mudou,
+            OQueMudou::Nada
+        );
     }
 
     #[test]
     fn medicao_antiga_sem_ambiente_nao_quebra() {
-        let mut v: Vec<MedicaoAutomatica> = (0..6).map(|i| MedicaoAutomatica { ambiente: None, ..m(i, 100.0, "a") }).collect();
+        let mut v: Vec<MedicaoAutomatica> = (0..6)
+            .map(|i| MedicaoAutomatica {
+                ambiente: None,
+                ..m(i, 100.0, "a")
+            })
+            .collect();
         v.push(m(10, 100.0, "a"));
         assert!(procurar(&v).is_empty());
     }

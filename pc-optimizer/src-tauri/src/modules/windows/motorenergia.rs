@@ -102,7 +102,11 @@ pub fn classificar_arquitetura(c: &Cpuid) -> Arquitetura {
         Fabricante::Amd => match (c.familia, c.modelo) {
             (0x17, m) if m >= 0x30 => Arquitetura::Zen2,
             (0x17, _) => Arquitetura::AmdLegada,
-            (0x19, m) if (0x10..=0x1F).contains(&m) || (0x60..=0x7F).contains(&m) || (0xA0..=0xAF).contains(&m) => {
+            (0x19, m)
+                if (0x10..=0x1F).contains(&m)
+                    || (0x60..=0x7F).contains(&m)
+                    || (0xA0..=0xAF).contains(&m) =>
+            {
                 Arquitetura::Zen4
             }
             (0x19, _) => Arquitetura::Zen3,
@@ -116,7 +120,9 @@ pub fn classificar_arquitetura(c: &Cpuid) -> Arquitetura {
 pub fn controle(c: &Cpuid, arquitetura: Arquitetura) -> Controle {
     match arquitetura {
         Arquitetura::IntelModerna | Arquitetura::IntelHibrida if c.hwp => Controle::HardwareHwp,
-        Arquitetura::Zen2 | Arquitetura::Zen3 | Arquitetura::Zen4 | Arquitetura::Zen5Mais if c.cppc => {
+        Arquitetura::Zen2 | Arquitetura::Zen3 | Arquitetura::Zen4 | Arquitetura::Zen5Mais
+            if c.cppc =>
+        {
             Controle::HardwareCppc
         }
         _ => Controle::SistemaOperacional,
@@ -142,8 +148,18 @@ impl Topologia {
             return None;
         }
         let maior = self.classes.iter().map(|(c, _)| *c).max()?;
-        let p = self.classes.iter().filter(|(c, _)| *c == maior).map(|(_, n)| n).sum();
-        let e = self.classes.iter().filter(|(c, _)| *c != maior).map(|(_, n)| n).sum();
+        let p = self
+            .classes
+            .iter()
+            .filter(|(c, _)| *c == maior)
+            .map(|(_, n)| n)
+            .sum();
+        let e = self
+            .classes
+            .iter()
+            .filter(|(c, _)| *c != maior)
+            .map(|(_, n)| n)
+            .sum();
         Some((p, e))
     }
 }
@@ -203,9 +219,11 @@ pub struct Enumeracao {
 
 impl Enumeracao {
     pub fn por_alias(&self, alias: &str) -> Option<&Configuracao> {
-        self.configuracoes
-            .iter()
-            .find(|c| c.alias.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(alias)))
+        self.configuracoes.iter().find(|c| {
+            c.alias
+                .as_deref()
+                .is_some_and(|a| a.eq_ignore_ascii_case(alias))
+        })
     }
 }
 
@@ -281,7 +299,9 @@ pub fn enumerar(saida: &str) -> Enumeracao {
         let valor = valor_da_linha(texto);
         let e_apelido = texto.to_lowercase().contains("alias")
             && !valor.is_empty()
-            && valor.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
+            && valor
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
 
         if e_apelido {
             match atual.as_mut() {
@@ -306,7 +326,8 @@ pub fn enumerar(saida: &str) -> Enumeracao {
         }
 
         if recuo > 4 {
-            if !valor.is_empty() && valor.len() <= 4 && valor.chars().all(|ch| ch.is_ascii_digit()) {
+            if !valor.is_empty() && valor.len() <= 4 && valor.chars().all(|ch| ch.is_ascii_digit())
+            {
                 indice_pendente = valor.parse().ok();
             } else if let Some(i) = indice_pendente.take() {
                 c.possiveis.push((i, valor.to_string()));
@@ -357,12 +378,36 @@ pub mod apelidos {
 
     /// Os que a tela avançada mostra, na ordem da resposta da CPU.
     pub const DA_TELA: &[&str] = &[
-        PERFEPP, PERFAUTONOMOUS, PERFBOOSTMODE, PERFBOOSTPOL, PROCTHROTTLEMIN, PROCTHROTTLEMAX, PROCFREQMAX,
-        PERFINCPOL, PERFINCTHRESHOLD, PERFINCTIME, PERFDECPOL, PERFDECTHRESHOLD, PERFDECTIME,
-        LATENCYHINTPERF, LATENCYHINTEPP, LATENCYHINTUNPARK,
-        CPMINCORES, CPMAXCORES, CPINCREASETIME, CPDECREASETIME, CPCONCURRENCY, CPDISTRIBUTION, CPHEADROOM,
-        MODULEUNPARKPOLICY, COMPLEXUNPARKPOLICY, SMTUNPARKPOLICY, SCHEDPOLICY, SHORTSCHEDPOLICY,
-        ASPM, USBSELECTIVESUSPEND,
+        PERFEPP,
+        PERFAUTONOMOUS,
+        PERFBOOSTMODE,
+        PERFBOOSTPOL,
+        PROCTHROTTLEMIN,
+        PROCTHROTTLEMAX,
+        PROCFREQMAX,
+        PERFINCPOL,
+        PERFINCTHRESHOLD,
+        PERFINCTIME,
+        PERFDECPOL,
+        PERFDECTHRESHOLD,
+        PERFDECTIME,
+        LATENCYHINTPERF,
+        LATENCYHINTEPP,
+        LATENCYHINTUNPARK,
+        CPMINCORES,
+        CPMAXCORES,
+        CPINCREASETIME,
+        CPDECREASETIME,
+        CPCONCURRENCY,
+        CPDISTRIBUTION,
+        CPHEADROOM,
+        MODULEUNPARKPOLICY,
+        COMPLEXUNPARKPOLICY,
+        SMTUNPARKPOLICY,
+        SCHEDPOLICY,
+        SHORTSCHEDPOLICY,
+        ASPM,
+        USBSELECTIVESUSPEND,
     ];
 }
 
@@ -527,11 +572,17 @@ struct Gerador<'a> {
 impl Gerador<'_> {
     fn por(&mut self, alias: &str, valor: u32, motivo: Motivo) {
         let Some(c) = self.base.por_alias(alias) else {
-            self.ignorados.push(Ignorado { alias: alias.to_string(), motivo: MotivoIgnorado::NaoExiste });
+            self.ignorados.push(Ignorado {
+                alias: alias.to_string(),
+                motivo: MotivoIgnorado::NaoExiste,
+            });
             return;
         };
         if !c.aceita(valor) {
-            self.ignorados.push(Ignorado { alias: alias.to_string(), motivo: MotivoIgnorado::ForaDaFaixa });
+            self.ignorados.push(Ignorado {
+                alias: alias.to_string(),
+                motivo: MotivoIgnorado::ForaDaFaixa,
+            });
             return;
         }
         // NUNCA APLICAR PERFIL DE DESKTOP NA BATERIA. No notebook, o lado da
@@ -541,7 +592,8 @@ impl Gerador<'_> {
             Formato::Desktop => Some(valor),
             Formato::Notebook => None,
         };
-        self.mudancas.retain(|m| !m.alias.eq_ignore_ascii_case(alias));
+        self.mudancas
+            .retain(|m| !m.alias.eq_ignore_ascii_case(alias));
         self.mudancas.push(Mudanca {
             alias: c.alias.clone().unwrap_or_else(|| alias.to_string()),
             subgrupo: c.subgrupo.clone(),
@@ -555,7 +607,9 @@ impl Gerador<'_> {
     /// Em CPU híbrida, o ajuste com sufixo `1` governa os núcleos P.
     fn nos_nucleos_de_desempenho(&mut self, alias: &str, valor: u32, motivo: Motivo) {
         let com_classe = format!("{}1", alias);
-        if self.impressao.arquitetura == Arquitetura::IntelHibrida && self.base.por_alias(&com_classe).is_some() {
+        if self.impressao.arquitetura == Arquitetura::IntelHibrida
+            && self.base.por_alias(&com_classe).is_some()
+        {
             self.por(&com_classe, valor, motivo);
         } else {
             self.por(alias, valor, motivo);
@@ -563,7 +617,10 @@ impl Gerador<'_> {
     }
 
     fn cpu_nao_suporta(&mut self, alias: &str) {
-        self.ignorados.push(Ignorado { alias: alias.to_string(), motivo: MotivoIgnorado::CpuNaoSuporta });
+        self.ignorados.push(Ignorado {
+            alias: alias.to_string(),
+            motivo: MotivoIgnorado::CpuNaoSuporta,
+        });
     }
 }
 
@@ -572,16 +629,33 @@ fn controle_por_hardware(i: &Impressao) -> bool {
 }
 
 /// Traduz parâmetros em números para ESTA máquina.
-pub fn gerar(impressao: &Impressao, base: &Enumeracao, id: &str, papel: Papel, p: Parametros) -> Candidato {
-    let mut g = Gerador { impressao, base, mudancas: Vec::new(), ignorados: Vec::new() };
+pub fn gerar(
+    impressao: &Impressao,
+    base: &Enumeracao,
+    id: &str,
+    papel: Papel,
+    p: Parametros,
+) -> Candidato {
+    let mut g = Gerador {
+        impressao,
+        base,
+        mudancas: Vec::new(),
+        ignorados: Vec::new(),
+    };
     let notebook = impressao.formato == Formato::Notebook;
 
     // O teto nunca pode estar limitando por acidente. Só entra se o plano
     // base estiver diferente do "sem limite".
-    if base.por_alias(ap::PROCTHROTTLEMAX).is_some_and(|c| c.ac != Some(100)) {
+    if base
+        .por_alias(ap::PROCTHROTTLEMAX)
+        .is_some_and(|c| c.ac != Some(100))
+    {
         g.por(ap::PROCTHROTTLEMAX, 100, Motivo::TetoNaoPodeLimitar);
     }
-    if base.por_alias(ap::PROCFREQMAX).is_some_and(|c| c.ac.is_some_and(|v| v != 0)) {
+    if base
+        .por_alias(ap::PROCFREQMAX)
+        .is_some_and(|c| c.ac.is_some_and(|v| v != 0))
+    {
         g.por(ap::PROCFREQMAX, 0, Motivo::TetoNaoPodeLimitar);
     }
 
@@ -631,7 +705,11 @@ pub fn gerar(impressao: &Impressao, base: &Enumeracao, id: &str, papel: Papel, p
             g.nos_nucleos_de_desempenho(ap::CPMINCORES, reserva, Motivo::ReservaDeNucleosAcordada);
             g.por(ap::CPINCREASETIME, 1, Motivo::NucleosAcordamRapido);
             g.por(ap::CPDECREASETIME, 20, Motivo::NucleosDormemDevagar);
-            g.por(ap::LATENCYHINTUNPARK, 100, Motivo::DicaDeLatenciaAcordaNucleos);
+            g.por(
+                ap::LATENCYHINTUNPARK,
+                100,
+                Motivo::DicaDeLatenciaAcordaNucleos,
+            );
         }
         Estacionamento::TodosAcordados => {
             g.nos_nucleos_de_desempenho(ap::CPMINCORES, 100, Motivo::TodosOsNucleosEmTeste);
@@ -648,7 +726,11 @@ pub fn gerar(impressao: &Impressao, base: &Enumeracao, id: &str, papel: Papel, p
         if controle_por_hardware(impressao) {
             g.cpu_nao_suporta(ap::PROCTHROTTLEMIN);
         } else {
-            g.por(ap::PROCTHROTTLEMIN, minimo, Motivo::MinimoEmCpuSemControleDeHardware);
+            g.por(
+                ap::PROCTHROTTLEMIN,
+                minimo,
+                Motivo::MinimoEmCpuSemControleDeHardware,
+            );
         }
     }
 
@@ -656,10 +738,20 @@ pub fn gerar(impressao: &Impressao, base: &Enumeracao, id: &str, papel: Papel, p
         g.por(ap::ASPM, 0, Motivo::PcieEconomiaDesligadaEmTeste);
     }
     if p.usb == PoliticaDeDispositivo::Desligada {
-        g.por(ap::USBSELECTIVESUSPEND, 0, Motivo::UsbSuspensaoDesligadaEmTeste);
+        g.por(
+            ap::USBSELECTIVESUSPEND,
+            0,
+            Motivo::UsbSuspensaoDesligadaEmTeste,
+        );
     }
 
-    Candidato { id: id.to_string(), papel, parametros: p, mudancas: g.mudancas, ignorados: g.ignorados }
+    Candidato {
+        id: id.to_string(),
+        papel,
+        parametros: p,
+        mudancas: g.mudancas,
+        ignorados: g.ignorados,
+    }
 }
 
 /// A bateria de autoajuste: padrão do Windows e três candidatos, escolhidos
@@ -670,9 +762,24 @@ pub fn candidatos_de_autoajuste(impressao: &Impressao, base: &Enumeracao) -> Vec
 
     let (a, b, c) = if hw {
         (
-            Parametros { epp_bruto: Some(0), estacionamento: Estacionamento::TodosAcordados, resposta: Resposta::Rapida, ..Parametros::WINDOWS },
-            Parametros { epp_bruto: Some(32), estacionamento: Estacionamento::Adaptativo, resposta: Resposta::Rapida, ..Parametros::WINDOWS },
-            Parametros { epp_bruto: Some(64), estacionamento: Estacionamento::Adaptativo, autonomia: Autonomia::Hardware, ..Parametros::WINDOWS },
+            Parametros {
+                epp_bruto: Some(0),
+                estacionamento: Estacionamento::TodosAcordados,
+                resposta: Resposta::Rapida,
+                ..Parametros::WINDOWS
+            },
+            Parametros {
+                epp_bruto: Some(32),
+                estacionamento: Estacionamento::Adaptativo,
+                resposta: Resposta::Rapida,
+                ..Parametros::WINDOWS
+            },
+            Parametros {
+                epp_bruto: Some(64),
+                estacionamento: Estacionamento::Adaptativo,
+                autonomia: Autonomia::Hardware,
+                ..Parametros::WINDOWS
+            },
         )
     } else {
         (
@@ -683,13 +790,28 @@ pub fn candidatos_de_autoajuste(impressao: &Impressao, base: &Enumeracao) -> Vec
                 minimo: (!notebook).then_some(100),
                 ..Parametros::WINDOWS
             },
-            Parametros { estacionamento: Estacionamento::Adaptativo, resposta: Resposta::Rapida, ..Parametros::WINDOWS },
-            Parametros { estacionamento: Estacionamento::Adaptativo, resposta: Resposta::Rapida, boost: Boost::Agressivo, ..Parametros::WINDOWS },
+            Parametros {
+                estacionamento: Estacionamento::Adaptativo,
+                resposta: Resposta::Rapida,
+                ..Parametros::WINDOWS
+            },
+            Parametros {
+                estacionamento: Estacionamento::Adaptativo,
+                resposta: Resposta::Rapida,
+                boost: Boost::Agressivo,
+                ..Parametros::WINDOWS
+            },
         )
     };
 
     let mut v = vec![
-        gerar(impressao, base, "windows", Papel::PadraoWindows, Parametros::WINDOWS),
+        gerar(
+            impressao,
+            base,
+            "windows",
+            Papel::PadraoWindows,
+            Parametros::WINDOWS,
+        ),
         gerar(impressao, base, "a", Papel::A, a),
         gerar(impressao, base, "b", Papel::B, b),
         gerar(impressao, base, "c", Papel::C, c),
@@ -719,19 +841,27 @@ pub fn vizinhos_do_vencedor(p: Parametros, impressao: &Impressao) -> Vec<Paramet
         if controle_por_hardware(impressao) {
             for novo in [epp.saturating_sub(16), (epp + 16).min(255)] {
                 if novo != epp {
-                    v.push(Parametros { epp_bruto: Some(novo), ..p });
+                    v.push(Parametros {
+                        epp_bruto: Some(novo),
+                        ..p
+                    });
                 }
             }
         }
     }
     let outro = match p.estacionamento {
         Estacionamento::TodosAcordados => Some(Estacionamento::Adaptativo),
-        Estacionamento::Adaptativo if impressao.formato == Formato::Desktop => Some(Estacionamento::TodosAcordados),
+        Estacionamento::Adaptativo if impressao.formato == Formato::Desktop => {
+            Some(Estacionamento::TodosAcordados)
+        }
         Estacionamento::Adaptativo => None,
         Estacionamento::Windows => Some(Estacionamento::Adaptativo),
     };
     if let Some(e) = outro {
-        v.push(Parametros { estacionamento: e, ..p });
+        v.push(Parametros {
+            estacionamento: e,
+            ..p
+        });
     }
     v.dedup();
     v
@@ -750,7 +880,11 @@ pub fn escada_de_epp(impressao: &Impressao, base: &Enumeracao) -> Vec<Candidato>
                 base,
                 &format!("epp-{}", bruto),
                 Papel::Epp,
-                Parametros { epp_bruto: Some(bruto), estacionamento: Estacionamento::Adaptativo, ..Parametros::WINDOWS },
+                Parametros {
+                    epp_bruto: Some(bruto),
+                    estacionamento: Estacionamento::Adaptativo,
+                    ..Parametros::WINDOWS
+                },
             )
         })
         .collect()
@@ -758,17 +892,42 @@ pub fn escada_de_epp(impressao: &Impressao, base: &Enumeracao) -> Vec<Candidato>
 
 /// Variações de dispositivo sobre um candidato: ASPM e suspensão do USB. Nunca
 /// entram sozinhas; só medidas contra o mesmo candidato sem elas.
-pub fn variacoes_de_dispositivo(impressao: &Impressao, base: &Enumeracao, sobre: Parametros) -> Vec<Candidato> {
+pub fn variacoes_de_dispositivo(
+    impressao: &Impressao,
+    base: &Enumeracao,
+    sobre: Parametros,
+) -> Vec<Candidato> {
     vec![
-        gerar(impressao, base, "pcie", Papel::Dispositivo, Parametros { pcie: PoliticaDeDispositivo::Desligada, ..sobre }),
-        gerar(impressao, base, "usb", Papel::Dispositivo, Parametros { usb: PoliticaDeDispositivo::Desligada, ..sobre }),
+        gerar(
+            impressao,
+            base,
+            "pcie",
+            Papel::Dispositivo,
+            Parametros {
+                pcie: PoliticaDeDispositivo::Desligada,
+                ..sobre
+            },
+        ),
+        gerar(
+            impressao,
+            base,
+            "usb",
+            Papel::Dispositivo,
+            Parametros {
+                usb: PoliticaDeDispositivo::Desligada,
+                ..sobre
+            },
+        ),
     ]
 }
 
 /// Todo apelido que algum candidato pode tocar. Antes de aplicar um candidato,
 /// esses voltam ao plano base — senão o candidato B herdaria o que o A deixou.
 pub fn apelidos_controlados(candidatos: &[Candidato]) -> Vec<String> {
-    let mut v: Vec<String> = candidatos.iter().flat_map(|c| c.mudancas.iter().map(|m| m.alias.clone())).collect();
+    let mut v: Vec<String> = candidatos
+        .iter()
+        .flat_map(|c| c.mudancas.iter().map(|m| m.alias.clone()))
+        .collect();
     v.sort();
     v.dedup();
     v
@@ -785,8 +944,13 @@ pub fn plano_de_escrita(
     let mut alvo: Vec<Mudanca> = Vec::new();
 
     for alias in controlados {
-        let Some(b) = base.por_alias(alias) else { continue };
-        let do_candidato = candidato.mudancas.iter().find(|m| m.alias.eq_ignore_ascii_case(alias));
+        let Some(b) = base.por_alias(alias) else {
+            continue;
+        };
+        let do_candidato = candidato
+            .mudancas
+            .iter()
+            .find(|m| m.alias.eq_ignore_ascii_case(alias));
         let (ac, dc) = match do_candidato {
             Some(m) => (m.ac.or(b.ac), m.dc.or(b.dc)),
             None => (b.ac, b.dc),
@@ -803,7 +967,9 @@ pub fn plano_de_escrita(
             guid: b.guid.clone(),
             ac: ac_escrever,
             dc: dc_escrever,
-            motivo: do_candidato.map(|m| m.motivo).unwrap_or(Motivo::TetoNaoPodeLimitar),
+            motivo: do_candidato
+                .map(|m| m.motivo)
+                .unwrap_or(Motivo::TetoNaoPodeLimitar),
         });
     }
     alvo
@@ -868,7 +1034,10 @@ pub fn analisar_rajadas(rajadas: &[Vec<f64>], fatia_ms: f64) -> Option<RespostaM
         if sustentado <= 0.0 {
             continue;
         }
-        let indice = r.iter().position(|v| *v >= sustentado * 0.9).unwrap_or(r.len() - 1);
+        let indice = r
+            .iter()
+            .position(|v| *v >= sustentado * 0.9)
+            .unwrap_or(r.len() - 1);
         tempos.push((indice as f64 + 1.0) * fatia_ms);
         primeiras.push((r[0] / sustentado * 100.0).min(150.0));
         sustentados.push(sustentado);
@@ -879,13 +1048,22 @@ pub fn analisar_rajadas(rajadas: &[Vec<f64>], fatia_ms: f64) -> Option<RespostaM
     }
 
     let media = sustentados.iter().sum::<f64>() / sustentados.len() as f64;
-    let desvio = (sustentados.iter().map(|s| (s - media).powi(2)).sum::<f64>() / sustentados.len() as f64).sqrt();
+    let desvio = (sustentados.iter().map(|s| (s - media).powi(2)).sum::<f64>()
+        / sustentados.len() as f64)
+        .sqrt();
 
     Some(RespostaMedida {
         ate_90_ms: arred(mediana(&tempos), 1),
         primeira_fatia_pct: arred(mediana(&primeiras), 0),
         sustentado: arred(media, 1),
-        dispersao_pct: arred(if media > 0.0 { desvio / media * 100.0 } else { 0.0 }, 1),
+        dispersao_pct: arred(
+            if media > 0.0 {
+                desvio / media * 100.0
+            } else {
+                0.0
+            },
+            1,
+        ),
         rajadas: sustentados.len(),
     })
 }
@@ -971,7 +1149,10 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
     }
     let media = |f: &dyn Fn(&AmostraCpu) -> f64| uteis.iter().map(|a| f(a)).sum::<f64>() / n as f64;
     // Limite e flags podem faltar numa amostra que serve para o clock: só entram as que os trouxeram.
-    let com_limite = uteis.iter().filter(|a| a.limite_pct.is_some() || a.flags.is_some()).count();
+    let com_limite = uteis
+        .iter()
+        .filter(|a| a.limite_pct.is_some() || a.flags.is_some())
+        .count();
     let limitadas = uteis
         .iter()
         .filter(|a| a.flags.is_some_and(|f| f != 0) || a.limite_pct.is_some_and(|l| l < 95.0))
@@ -981,13 +1162,18 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
     let mut temps: Vec<f64> = uteis.iter().filter_map(|a| a.temperatura_c).collect();
     // Zona ACPI fixa (28 °C com a CPU a 100%) é descartada com carga e sem variação.
     if temps.len() >= 8 {
-        let (min, max) = temps.iter().fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(*t), b.max(*t)));
+        let (min, max) = temps
+            .iter()
+            .fold((f64::MAX, f64::MIN), |(a, b), t| (a.min(*t), b.max(*t)));
         let com_carga = uteis.iter().any(|a| a.uso_pct.is_some_and(|u| u >= 10.0));
         if com_carga && max - min < 0.5 {
             temps.clear();
         }
     }
-    let acordados: Vec<f64> = uteis.iter().filter_map(|a| a.nucleos_acordados.map(|v| v as f64)).collect();
+    let acordados: Vec<f64> = uteis
+        .iter()
+        .filter_map(|a| a.nucleos_acordados.map(|v| v as f64))
+        .collect();
 
     Some(ResumoCpu {
         amostras: n,
@@ -995,13 +1181,35 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
         clock_reportado_mhz: arred(media(&|a| a.clock_reportado_mhz().unwrap_or_default()), 0),
         clock_efetivo_mhz: arred(media(&|a| a.clock_efetivo_mhz().unwrap_or_default()), 0),
         uso_medio_pct: Some(arred(media(&|a| a.uso_pct.unwrap_or_default()), 1)),
-        limite_medio_pct: (!limites_pct.is_empty()).then(|| arred(limites_pct.iter().sum::<f64>() / limites_pct.len() as f64, 1)),
-        tempo_limitado_pct: (com_limite > 0).then(|| arred(limitadas as f64 / com_limite as f64 * 100.0, 0)),
-        limite_termico: (com_flags > 0).then(|| uteis.iter().filter(|a| a.flags.is_some_and(|f| f & 1 != 0)).count() * 5 >= com_flags),
-        limite_eletrico: (com_flags > 0).then(|| uteis.iter().filter(|a| a.flags.is_some_and(|f| f & 2 != 0)).count() * 5 >= com_flags),
+        limite_medio_pct: (!limites_pct.is_empty()).then(|| {
+            arred(
+                limites_pct.iter().sum::<f64>() / limites_pct.len() as f64,
+                1,
+            )
+        }),
+        tempo_limitado_pct: (com_limite > 0)
+            .then(|| arred(limitadas as f64 / com_limite as f64 * 100.0, 0)),
+        limite_termico: (com_flags > 0).then(|| {
+            uteis
+                .iter()
+                .filter(|a| a.flags.is_some_and(|f| f & 1 != 0))
+                .count()
+                * 5
+                >= com_flags
+        }),
+        limite_eletrico: (com_flags > 0).then(|| {
+            uteis
+                .iter()
+                .filter(|a| a.flags.is_some_and(|f| f & 2 != 0))
+                .count()
+                * 5
+                >= com_flags
+        }),
         temperatura_max_c: temps.iter().copied().reduce(f64::max).map(|t| arred(t, 0)),
-        temperatura_media_c: (!temps.is_empty()).then(|| arred(temps.iter().sum::<f64>() / temps.len() as f64, 0)),
-        nucleos_acordados_medio: (!acordados.is_empty()).then(|| arred(acordados.iter().sum::<f64>() / acordados.len() as f64, 1)),
+        temperatura_media_c: (!temps.is_empty())
+            .then(|| arred(temps.iter().sum::<f64>() / temps.len() as f64, 0)),
+        nucleos_acordados_medio: (!acordados.is_empty())
+            .then(|| arred(acordados.iter().sum::<f64>() / acordados.len() as f64, 1)),
         nucleos_total: uteis.iter().find_map(|a| a.nucleos_total),
     })
 }
@@ -1011,7 +1219,9 @@ pub fn resumir_cpu(amostras: &[AmostraCpu]) -> Option<ResumoCpu> {
 pub fn folga_termica(r: &ResumoCpu) -> Option<f64> {
     const TETO: f64 = 95.0;
     const CONFORTO: f64 = 45.0;
-    let por_temperatura = r.temperatura_max_c.map(|t| ((TETO - t) / (TETO - CONFORTO) * 100.0).clamp(0.0, 100.0));
+    let por_temperatura = r
+        .temperatura_max_c
+        .map(|t| ((TETO - t) / (TETO - CONFORTO) * 100.0).clamp(0.0, 100.0));
     match (por_temperatura, r.limite_termico) {
         (Some(v), Some(true)) => Some(v.min(20.0)),
         (Some(v), _) => Some(arred(v, 0)),
@@ -1029,7 +1239,11 @@ pub struct Quadros {
 }
 
 pub fn resumir_quadros(fps: f64, intervalos_ms: &[f64]) -> Option<Quadros> {
-    let mut o: Vec<f64> = intervalos_ms.iter().copied().filter(|v| v.is_finite() && *v > 0.0).collect();
+    let mut o: Vec<f64> = intervalos_ms
+        .iter()
+        .copied()
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .collect();
     if o.len() < 100 {
         return None;
     }
@@ -1106,18 +1320,37 @@ fn razao(melhor_se_maior: bool, valor: f64, base: f64) -> Option<f64> {
     if base <= 0.0 || valor <= 0.0 {
         return None;
     }
-    let r = if melhor_se_maior { valor / base } else { base / valor };
+    let r = if melhor_se_maior {
+        valor / base
+    } else {
+        base / valor
+    };
     Some((r * 100.0).clamp(50.0, 150.0))
 }
 
 /// FPS médio pesa 15%; 1% low, P99 e resposta juntos 55%; folga térmica e estabilidade sob limite contam contra
 /// quem ganha FPS esquentando.
 pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
-    let low_1 = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(true, a.low_1, b.low_1));
-    let p99 = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(false, a.p99_ms, b.p99_ms));
-    let fps = r.quadros.zip(base.quadros).and_then(|(a, b)| razao(true, a.fps, b.fps));
-    let resposta = r.resposta.zip(base.resposta).and_then(|(a, b)| razao(false, a.ate_90_ms, b.ate_90_ms));
-    let clock = r.clock_efetivo().zip(base.clock_efetivo()).and_then(|(a, b)| razao(true, a, b));
+    let low_1 = r
+        .quadros
+        .zip(base.quadros)
+        .and_then(|(a, b)| razao(true, a.low_1, b.low_1));
+    let p99 = r
+        .quadros
+        .zip(base.quadros)
+        .and_then(|(a, b)| razao(false, a.p99_ms, b.p99_ms));
+    let fps = r
+        .quadros
+        .zip(base.quadros)
+        .and_then(|(a, b)| razao(true, a.fps, b.fps));
+    let resposta = r
+        .resposta
+        .zip(base.resposta)
+        .and_then(|(a, b)| razao(false, a.ate_90_ms, b.ate_90_ms));
+    let clock = r
+        .clock_efetivo()
+        .zip(base.clock_efetivo())
+        .and_then(|(a, b)| razao(true, a, b));
     let folga = |x: &ResultadoDoCandidato| x.cpu.as_ref().and_then(folga_termica);
     let termica = match (folga(r), folga(base)) {
         (Some(a), Some(b)) => Some((100.0 + (a - b)).clamp(50.0, 150.0)),
@@ -1125,7 +1358,9 @@ pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
     };
     // Sem contador dos dois lados não há estabilidade: antes virava nota 100, um décimo do peso do nada.
     let limitado = |x: &ResultadoDoCandidato| x.cpu.as_ref().and_then(|c| c.tempo_limitado_pct);
-    let estabilidade = limitado(r).zip(limitado(base)).map(|(a, b)| (100.0 - (a - b)).clamp(50.0, 150.0));
+    let estabilidade = limitado(r)
+        .zip(limitado(base))
+        .map(|(a, b)| (100.0 - (a - b)).clamp(50.0, 150.0));
 
     let partes = [
         (low_1, 0.25),
@@ -1136,7 +1371,11 @@ pub fn pontuar(r: &ResultadoDoCandidato, base: &ResultadoDoCandidato) -> Nota {
         (termica, 0.10),
         (estabilidade, 0.10),
     ];
-    let peso: f64 = partes.iter().filter(|(v, _)| v.is_some()).map(|(_, p)| p).sum();
+    let peso: f64 = partes
+        .iter()
+        .filter(|(v, _)| v.is_some())
+        .map(|(_, p)| p)
+        .sum();
     let soma: f64 = partes.iter().filter_map(|(v, p)| v.map(|v| v * p)).sum();
 
     Nota {
@@ -1208,7 +1447,9 @@ fn variacao(a: f64, b: f64) -> Option<f64> {
 /// Escolhe o candidato. `base` é o id do padrão do Windows.
 /// Uma nova medição da base no meio da bateria: `<base>#2`, `<base>#3`… A primeira é a própria `base`.
 pub fn e_repeticao_da_base(candidato: &str, base: &str) -> bool {
-    candidato.strip_prefix(base).is_some_and(|resto| resto.starts_with('#'))
+    candidato
+        .strip_prefix(base)
+        .is_some_and(|resto| resto.starts_with('#'))
 }
 
 /// Pura. A bateria mede a base de novo entre os candidatos (base, A, B, base#2, C, D, base#3). A máquina esquenta ao
@@ -1226,14 +1467,20 @@ pub fn corrigir_deriva(em_ordem: &[ResultadoDoCandidato], base: &str) -> Vec<Res
         return em_ordem.to_vec();
     };
     if fps_da_base.len() < 2 {
-        return em_ordem.iter().filter(|r| !e_repeticao_da_base(&r.candidato, base)).cloned().collect();
+        return em_ordem
+            .iter()
+            .filter(|r| !e_repeticao_da_base(&r.candidato, base))
+            .cloned()
+            .collect();
     }
 
     let base_em = |p: usize| -> f64 {
         let antes = fps_da_base.iter().rev().find(|(i, _)| *i <= p);
         let depois = fps_da_base.iter().find(|(i, _)| *i >= p);
         match (antes, depois) {
-            (Some(&(a, fa)), Some(&(c, fc))) if c > a => fa + (fc - fa) * (p - a) as f64 / (c - a) as f64,
+            (Some(&(a, fa)), Some(&(c, fc))) if c > a => {
+                fa + (fc - fa) * (p - a) as f64 / (c - a) as f64
+            }
             (Some(&(_, fa)), _) => fa,
             (None, Some(&(_, fc))) => fc,
             (None, None) => primeira,
@@ -1287,17 +1534,25 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         achados.push(Achado::TemperaturaIndisponivel);
     }
     // Amostragem falha inteira é o caso mais grave e não pode ser o mais silencioso.
-    if b.cpu.as_ref().is_none_or(|c| c.amostras_descartadas > c.amostras) {
+    if b.cpu
+        .as_ref()
+        .is_none_or(|c| c.amostras_descartadas > c.amostras)
+    {
         achados.push(Achado::AmostragemFalha);
     }
 
-    let notas: Vec<(String, Nota)> = resultados.iter().map(|r| (r.candidato.clone(), pontuar(r, b))).collect();
+    let notas: Vec<(String, Nota)> = resultados
+        .iter()
+        .map(|r| (r.candidato.clone(), pontuar(r, b)))
+        .collect();
 
     let sem_regressao = |r: &ResultadoDoCandidato| {
         // NUNCA MENOS FPS. Um plano que tira FPS médio ou 1% low não entra,
         // não importa o que mais ele melhore.
         let quadros_ok = match (r.quadros, b.quadros) {
-            (Some(a), Some(q)) => a.fps >= q.fps * 0.99 && a.low_1 >= q.low_1 * 0.99 && a.p99_ms <= q.p99_ms * 1.03,
+            (Some(a), Some(q)) => {
+                a.fps >= q.fps * 0.99 && a.low_1 >= q.low_1 * 0.99 && a.p99_ms <= q.p99_ms * 1.03
+            }
             _ => true,
         };
         let termica_ok = match (r.temp_max(), b.temp_max(), r.quadros, b.quadros) {
@@ -1311,7 +1566,10 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         quadros_ok && termica_ok && clock_ok
     };
 
-    if resultados.iter().any(|r| r.candidato != base && r.clock_piorou_contra(b) == Some(true)) {
+    if resultados
+        .iter()
+        .any(|r| r.candidato != base && r.clock_piorou_contra(b) == Some(true))
+    {
         achados.push(Achado::ClockReportadoSubiuEfetivoCaiu);
     }
 
@@ -1322,7 +1580,11 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         .map(|(r, (_, n))| (r, *n))
         .collect();
 
-    elegiveis.sort_by(|(_, a), (_, b)| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+    elegiveis.sort_by(|(_, a), (_, b)| {
+        b.total
+            .partial_cmp(&a.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     // PERFORMANCE PER WATT COMO DESEMPATE: dentro da margem do líder, fica o
     // que esquenta menos.
@@ -1331,13 +1593,22 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         [(unico, _)] => Some(*unico),
         [(lider, nl), resto @ ..] => {
             let empatados: Vec<&ResultadoDoCandidato> = std::iter::once(*lider)
-                .chain(resto.iter().filter(|(_, n)| nl.total - n.total < MARGEM).map(|(r, _)| *r))
+                .chain(
+                    resto
+                        .iter()
+                        .filter(|(_, n)| nl.total - n.total < MARGEM)
+                        .map(|(r, _)| *r),
+                )
                 .collect();
             let mais_fresco = empatados
                 .iter()
                 .copied()
                 .filter(|r| r.temp_max().is_some())
-                .min_by(|a, b| a.temp_max().partial_cmp(&b.temp_max()).unwrap_or(std::cmp::Ordering::Equal));
+                .min_by(|a, b| {
+                    a.temp_max()
+                        .partial_cmp(&b.temp_max())
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
             match mais_fresco {
                 Some(f) if empatados.len() > 1 && f.candidato != lider.candidato => {
                     achados.push(Achado::EmpateDesfeitoPelaTemperatura);
@@ -1374,7 +1645,8 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
                 Some(v)
             }
         }
-        (None, Some(a)) if matches!((a.quadros, b.quadros), (Some(qa), Some(q)) if qa.fps >= q.fps * 0.99 && qa.low_1 >= q.low_1 * 0.99) => {
+        (None, Some(a)) if matches!((a.quadros, b.quadros), (Some(qa), Some(q)) if qa.fps >= q.fps * 0.99 && qa.low_1 >= q.low_1 * 0.99) =>
+        {
             achados.push(Achado::PlanoAtualJaEOMelhor);
             Some(a)
         }
@@ -1388,7 +1660,11 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
     // CONFIANÇA: repetições, estabilidade das repetições, jogo medido e a
     // margem sobre o segundo colocado.
     let mut confianca: f64 = 95.0;
-    let reps = resultados.iter().map(|r| r.fps_repeticoes.len()).min().unwrap_or(0);
+    let reps = resultados
+        .iter()
+        .map(|r| r.fps_repeticoes.len())
+        .min()
+        .unwrap_or(0);
     if b.quadros.is_some() && reps < 2 {
         confianca -= 20.0;
         achados.push(Achado::PoucasRepeticoes);
@@ -1401,19 +1677,38 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
         .filter(|r| r.fps_repeticoes.len() >= 2)
         .map(|r| {
             let m = r.fps_repeticoes.iter().sum::<f64>() / r.fps_repeticoes.len() as f64;
-            let d = (r.fps_repeticoes.iter().map(|f| (f - m).powi(2)).sum::<f64>() / r.fps_repeticoes.len() as f64).sqrt();
-            if m > 0.0 { d / m * 100.0 } else { 0.0 }
+            let d = (r
+                .fps_repeticoes
+                .iter()
+                .map(|f| (f - m).powi(2))
+                .sum::<f64>()
+                / r.fps_repeticoes.len() as f64)
+                .sqrt();
+            if m > 0.0 {
+                d / m * 100.0
+            } else {
+                0.0
+            }
         })
         .fold(0.0, f64::max);
     confianca -= (cv * 4.0).min(40.0);
     if cv > 5.0 {
         achados.push(Achado::MedicaoInstavel);
     }
-    if let Some(r) = resultados.iter().filter_map(|r| r.resposta).map(|r| r.dispersao_pct).reduce(f64::max) {
+    if let Some(r) = resultados
+        .iter()
+        .filter_map(|r| r.resposta)
+        .map(|r| r.dispersao_pct)
+        .reduce(f64::max)
+    {
         confianca -= (r * 1.5).min(15.0);
     }
     if let (Some(v), [_, segundo, ..]) = (vencedor, elegiveis.as_slice()) {
-        let nv = notas.iter().find(|(id, _)| *id == v.candidato).map(|(_, n)| n.total).unwrap_or(0.0);
+        let nv = notas
+            .iter()
+            .find(|(id, _)| *id == v.candidato)
+            .map(|(_, n)| n.total)
+            .unwrap_or(0.0);
         if nv - segundo.1.total < 3.0 {
             confianca -= 10.0;
         }
@@ -1422,10 +1717,18 @@ pub fn escolher(resultados: &[ResultadoDoCandidato], base: &str) -> Option<Escol
 
     let (fps_pct, low_1_pct, p99_pct, resposta_pct, temperatura_delta_c) = match vencedor {
         Some(v) => (
-            v.quadros.zip(b.quadros).and_then(|(a, q)| variacao(a.fps, q.fps)),
-            v.quadros.zip(b.quadros).and_then(|(a, q)| variacao(a.low_1, q.low_1)),
-            v.quadros.zip(b.quadros).and_then(|(a, q)| variacao(a.p99_ms, q.p99_ms)),
-            v.resposta.zip(b.resposta).and_then(|(a, q)| variacao(a.ate_90_ms, q.ate_90_ms)),
+            v.quadros
+                .zip(b.quadros)
+                .and_then(|(a, q)| variacao(a.fps, q.fps)),
+            v.quadros
+                .zip(b.quadros)
+                .and_then(|(a, q)| variacao(a.low_1, q.low_1)),
+            v.quadros
+                .zip(b.quadros)
+                .and_then(|(a, q)| variacao(a.p99_ms, q.p99_ms)),
+            v.resposta
+                .zip(b.resposta)
+                .and_then(|(a, q)| variacao(a.ate_90_ms, q.ate_90_ms)),
             v.temp_max().zip(b.temp_max()).map(|(a, q)| arred(a - q, 0)),
         ),
         None => (None, None, None, None, None),
@@ -1476,7 +1779,12 @@ mod testes_da_deriva {
             candidato: id.into(),
             resposta: None,
             cpu: None,
-            quadros: Some(Quadros { fps, low_1: fps / 2.0, low_01: fps / 3.0, p99_ms: 1000.0 / (fps / 2.0) }),
+            quadros: Some(Quadros {
+                fps,
+                low_1: fps / 2.0,
+                low_01: fps / 3.0,
+                p99_ms: 1000.0 / (fps / 2.0),
+            }),
             fps_repeticoes: vec![fps],
             gpu_pct: None,
             uso_cpu_pct: None,
@@ -1496,8 +1804,21 @@ mod testes_da_deriva {
             medido("base#3", 95.0),
         ];
         let corrigido = corrigir_deriva(&ordem, "base");
-        let fps = |id: &str| corrigido.iter().find(|r| r.candidato == id).unwrap().quadros.unwrap().fps;
-        assert!(corrigido.iter().all(|r| !e_repeticao_da_base(&r.candidato, "base")), "as repetições saem");
+        let fps = |id: &str| {
+            corrigido
+                .iter()
+                .find(|r| r.candidato == id)
+                .unwrap()
+                .quadros
+                .unwrap()
+                .fps
+        };
+        assert!(
+            corrigido
+                .iter()
+                .all(|r| !e_repeticao_da_base(&r.candidato, "base")),
+            "as repetições saem"
+        );
         assert_eq!(fps("base"), 100.0);
         // C foi medido quando a base estava em 96: 101 × 100/96 ≈ 105,2, à frente de A (104 × 100/99 ≈ 105,1).
         assert!(fps("C") > fps("A"), "A {} C {}", fps("A"), fps("C"));
@@ -1596,14 +1917,25 @@ mod tests {
 ";
 
     fn intel_moderna(formato: Formato) -> Impressao {
-        let cpuid = Cpuid { fabricante_bruto: "GenuineIntel".into(), familia: 6, modelo: 0xA5, hwp: true, hwp_epp: true, ..Default::default() };
+        let cpuid = Cpuid {
+            fabricante_bruto: "GenuineIntel".into(),
+            familia: 6,
+            modelo: 0xA5,
+            hwp: true,
+            hwp_epp: true,
+            ..Default::default()
+        };
         Impressao {
             cpu: "Intel(R) Core(TM) i3-10100F".into(),
             fabricante: Fabricante::Intel,
             arquitetura: classificar_arquitetura(&cpuid),
             controle: Controle::HardwareHwp,
             cpuid,
-            topologia: Topologia { nucleos_fisicos: 4, processadores_logicos: 8, classes: vec![(0, 4)] },
+            topologia: Topologia {
+                nucleos_fisicos: 4,
+                processadores_logicos: 8,
+                classes: vec![(0, 4)],
+            },
             formato,
             na_tomada: Some(true),
             build_do_windows: 19045,
@@ -1614,8 +1946,18 @@ mod tests {
     }
 
     fn legada() -> Impressao {
-        let cpuid = Cpuid { fabricante_bruto: "GenuineIntel".into(), familia: 6, modelo: 0x3C, ..Default::default() };
-        Impressao { arquitetura: classificar_arquitetura(&cpuid), controle: Controle::SistemaOperacional, cpuid, ..intel_moderna(Formato::Desktop) }
+        let cpuid = Cpuid {
+            fabricante_bruto: "GenuineIntel".into(),
+            familia: 6,
+            modelo: 0x3C,
+            ..Default::default()
+        };
+        Impressao {
+            arquitetura: classificar_arquitetura(&cpuid),
+            controle: Controle::SistemaOperacional,
+            cpuid,
+            ..intel_moderna(Formato::Desktop)
+        }
     }
 
     #[test]
@@ -1630,36 +1972,97 @@ mod tests {
 
     #[test]
     fn arquiteturas() {
-        let amd = |familia, modelo| Cpuid { fabricante_bruto: "AuthenticAMD".into(), familia, modelo, cppc: true, ..Default::default() };
-        assert_eq!(classificar_arquitetura(&amd(0x17, 0x08)), Arquitetura::AmdLegada);
+        let amd = |familia, modelo| Cpuid {
+            fabricante_bruto: "AuthenticAMD".into(),
+            familia,
+            modelo,
+            cppc: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            classificar_arquitetura(&amd(0x17, 0x08)),
+            Arquitetura::AmdLegada
+        );
         assert_eq!(classificar_arquitetura(&amd(0x17, 0x71)), Arquitetura::Zen2);
         assert_eq!(classificar_arquitetura(&amd(0x19, 0x21)), Arquitetura::Zen3);
         assert_eq!(classificar_arquitetura(&amd(0x19, 0x61)), Arquitetura::Zen4);
         assert_eq!(classificar_arquitetura(&amd(0x19, 0x74)), Arquitetura::Zen4);
-        assert_eq!(classificar_arquitetura(&amd(0x1A, 0x44)), Arquitetura::Zen5Mais);
-        assert_eq!(classificar_arquitetura(&amd(0x15, 0x02)), Arquitetura::AmdLegada);
-        let intel = |hibrido, hwp| Cpuid { fabricante_bruto: "GenuineIntel".into(), familia: 6, modelo: 0x97, hibrido, hwp, ..Default::default() };
-        assert_eq!(classificar_arquitetura(&intel(true, true)), Arquitetura::IntelHibrida);
-        assert_eq!(classificar_arquitetura(&intel(false, true)), Arquitetura::IntelModerna);
-        assert_eq!(classificar_arquitetura(&intel(false, false)), Arquitetura::IntelLegada);
-        assert_eq!(controle(&amd(0x19, 0x21), Arquitetura::Zen3), Controle::HardwareCppc);
-        assert_eq!(controle(&Cpuid { cppc: false, ..amd(0x19, 0x21) }, Arquitetura::Zen3), Controle::SistemaOperacional);
+        assert_eq!(
+            classificar_arquitetura(&amd(0x1A, 0x44)),
+            Arquitetura::Zen5Mais
+        );
+        assert_eq!(
+            classificar_arquitetura(&amd(0x15, 0x02)),
+            Arquitetura::AmdLegada
+        );
+        let intel = |hibrido, hwp| Cpuid {
+            fabricante_bruto: "GenuineIntel".into(),
+            familia: 6,
+            modelo: 0x97,
+            hibrido,
+            hwp,
+            ..Default::default()
+        };
+        assert_eq!(
+            classificar_arquitetura(&intel(true, true)),
+            Arquitetura::IntelHibrida
+        );
+        assert_eq!(
+            classificar_arquitetura(&intel(false, true)),
+            Arquitetura::IntelModerna
+        );
+        assert_eq!(
+            classificar_arquitetura(&intel(false, false)),
+            Arquitetura::IntelLegada
+        );
+        assert_eq!(
+            controle(&amd(0x19, 0x21), Arquitetura::Zen3),
+            Controle::HardwareCppc
+        );
+        assert_eq!(
+            controle(
+                &Cpuid {
+                    cppc: false,
+                    ..amd(0x19, 0x21)
+                },
+                Arquitetura::Zen3
+            ),
+            Controle::SistemaOperacional
+        );
     }
 
     #[test]
     fn topologia_hibrida() {
-        let t = Topologia { nucleos_fisicos: 14, processadores_logicos: 20, classes: vec![(0, 8), (1, 6)] };
+        let t = Topologia {
+            nucleos_fisicos: 14,
+            processadores_logicos: 20,
+            classes: vec![(0, 8), (1, 6)],
+        };
         assert_eq!(t.nucleos_p_e(), Some((6, 8)));
         assert!(t.smt());
-        assert_eq!(Topologia { nucleos_fisicos: 4, processadores_logicos: 4, classes: vec![(0, 4)] }.nucleos_p_e(), None);
+        assert_eq!(
+            Topologia {
+                nucleos_fisicos: 4,
+                processadores_logicos: 4,
+                classes: vec![(0, 4)]
+            }
+            .nucleos_p_e(),
+            None
+        );
     }
 
     #[test]
     fn le_o_powercfg_em_portugues_sem_depender_dos_rotulos() {
         let e = enumerar(QH);
-        assert_eq!(e.plano.as_deref(), Some("381b4222-f694-41f0-9685-ff5bb260df2e"));
+        assert_eq!(
+            e.plano.as_deref(),
+            Some("381b4222-f694-41f0-9685-ff5bb260df2e")
+        );
         let inc = e.por_alias("PERFINCTHRESHOLD").unwrap();
-        assert_eq!((inc.minimo, inc.maximo, inc.incremento, inc.ac, inc.dc), (Some(0), Some(100), Some(1), Some(60), Some(60)));
+        assert_eq!(
+            (inc.minimo, inc.maximo, inc.incremento, inc.ac, inc.dc),
+            (Some(0), Some(100), Some(1), Some(60), Some(60))
+        );
         assert_eq!(inc.subgrupo, "54533251-82be-4824-96c1-47b60b740d00");
         assert_eq!(inc.subgrupo_alias.as_deref(), Some("SUB_PROCESSOR"));
         let boost = e.por_alias("PERFBOOSTMODE").unwrap();
@@ -1688,7 +2091,10 @@ mod tests {
 ";
         let e = enumerar(ingles);
         let b = e.por_alias("perfboostmode").unwrap();
-        assert_eq!(b.possiveis, vec![(0, "Disabled".into()), (1, "Enabled".into())]);
+        assert_eq!(
+            b.possiveis,
+            vec![(0, "Disabled".into()), (1, "Enabled".into())]
+        );
         assert_eq!(b.ac, Some(1));
     }
 
@@ -1709,7 +2115,9 @@ mod tests {
         assert_ne!(moderna[2].parametros, antiga[2].parametros);
         // EPP só em CPU com controle por hardware.
         assert!(moderna[2].mudancas.iter().any(|m| m.alias == "PERFEPP"));
-        assert!(!antiga.iter().any(|c| c.mudancas.iter().any(|m| m.alias == "PERFEPP")));
+        assert!(!antiga
+            .iter()
+            .any(|c| c.mudancas.iter().any(|m| m.alias == "PERFEPP")));
     }
 
     #[test]
@@ -1730,7 +2138,15 @@ mod tests {
         let base = enumerar(QH);
         let escada = escada_de_epp(&intel_moderna(Formato::Desktop), &base);
         assert_eq!(escada.len(), 5);
-        assert_eq!(escada[3].mudancas.iter().find(|m| m.alias == "PERFEPP").unwrap().ac, Some(25));
+        assert_eq!(
+            escada[3]
+                .mudancas
+                .iter()
+                .find(|m| m.alias == "PERFEPP")
+                .unwrap()
+                .ac,
+            Some(25)
+        );
         assert!(escada_de_epp(&legada(), &base).is_empty());
     }
 
@@ -1738,7 +2154,11 @@ mod tests {
     fn notebook_nunca_mexe_na_bateria() {
         let base = enumerar(QH);
         for c in candidatos_de_autoajuste(&intel_moderna(Formato::Notebook), &base) {
-            assert!(c.mudancas.iter().all(|m| m.dc.is_none()), "{} tocou a bateria", c.id);
+            assert!(
+                c.mudancas.iter().all(|m| m.dc.is_none()),
+                "{} tocou a bateria",
+                c.id
+            );
         }
         for c in candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base) {
             assert!(c.mudancas.iter().all(|m| m.dc == m.ac));
@@ -1752,34 +2172,71 @@ mod tests {
         assert!(hw.iter().all(|c| c.parametros.minimo.is_none()));
         let so = candidatos_de_autoajuste(&legada(), &base);
         assert_eq!(so[1].parametros.minimo, Some(100));
-        let note = candidatos_de_autoajuste(&Impressao { formato: Formato::Notebook, ..legada() }, &base);
+        let note = candidatos_de_autoajuste(
+            &Impressao {
+                formato: Formato::Notebook,
+                ..legada()
+            },
+            &base,
+        );
         assert!(note.iter().all(|c| c.parametros.minimo.is_none()));
     }
 
     #[test]
     fn ajuste_ausente_vira_ignorado_e_nao_erro() {
         let base = enumerar(QH);
-        let c = gerar(&intel_moderna(Formato::Desktop), &base, "x", Papel::B, Parametros { resposta: Resposta::Rapida, ..Parametros::WINDOWS });
-        assert!(c.ignorados.iter().any(|i| i.alias == "PERFINCTIME" && i.motivo == MotivoIgnorado::NaoExiste));
-        assert!(c.mudancas.iter().any(|m| m.alias == "PERFINCTHRESHOLD" && m.ac == Some(30)));
+        let c = gerar(
+            &intel_moderna(Formato::Desktop),
+            &base,
+            "x",
+            Papel::B,
+            Parametros {
+                resposta: Resposta::Rapida,
+                ..Parametros::WINDOWS
+            },
+        );
+        assert!(c
+            .ignorados
+            .iter()
+            .any(|i| i.alias == "PERFINCTIME" && i.motivo == MotivoIgnorado::NaoExiste));
+        assert!(c
+            .mudancas
+            .iter()
+            .any(|m| m.alias == "PERFINCTHRESHOLD" && m.ac == Some(30)));
     }
 
     #[test]
     fn autonomia_so_com_hardware() {
         let base = enumerar(QH);
-        let p = Parametros { autonomia: Autonomia::Hardware, ..Parametros::WINDOWS };
-        assert!(gerar(&intel_moderna(Formato::Desktop), &base, "x", Papel::C, p).mudancas.iter().any(|m| m.alias == "PERFAUTONOMOUS"));
+        let p = Parametros {
+            autonomia: Autonomia::Hardware,
+            ..Parametros::WINDOWS
+        };
+        assert!(
+            gerar(&intel_moderna(Formato::Desktop), &base, "x", Papel::C, p)
+                .mudancas
+                .iter()
+                .any(|m| m.alias == "PERFAUTONOMOUS")
+        );
         let l = gerar(&legada(), &base, "x", Papel::C, p);
-        assert!(l.ignorados.iter().any(|i| i.alias == "PERFAUTONOMOUS" && i.motivo == MotivoIgnorado::CpuNaoSuporta));
+        assert!(l
+            .ignorados
+            .iter()
+            .any(|i| i.alias == "PERFAUTONOMOUS" && i.motivo == MotivoIgnorado::CpuNaoSuporta));
     }
 
     #[test]
     fn dispositivos_so_como_variacao() {
         let base = enumerar(QH);
         let i = intel_moderna(Formato::Desktop);
-        assert!(candidatos_de_autoajuste(&i, &base).iter().all(|c| !c.mudancas.iter().any(|m| m.alias == "ASPM")));
+        assert!(candidatos_de_autoajuste(&i, &base)
+            .iter()
+            .all(|c| !c.mudancas.iter().any(|m| m.alias == "ASPM")));
         let v = variacoes_de_dispositivo(&i, &base, Parametros::WINDOWS);
-        assert!(v[0].mudancas.iter().any(|m| m.alias == "ASPM" && m.ac == Some(0)));
+        assert!(v[0]
+            .mudancas
+            .iter()
+            .any(|m| m.alias == "ASPM" && m.ac == Some(0)));
     }
 
     #[test]
@@ -1791,14 +2248,22 @@ mod tests {
         // Plano atual está no candidato A; aplicar o padrão precisa desfazer A.
         let mut atual = base.clone();
         for m in &todos[1].mudancas {
-            if let Some(c) = atual.configuracoes.iter_mut().find(|c| c.alias.as_deref() == Some(m.alias.as_str())) {
+            if let Some(c) = atual
+                .configuracoes
+                .iter_mut()
+                .find(|c| c.alias.as_deref() == Some(m.alias.as_str()))
+            {
                 c.ac = m.ac.or(c.ac);
                 c.dc = m.dc.or(c.dc);
             }
         }
         let escrita = plano_de_escrita(&todos[0], &controlados, &base, &atual);
-        assert!(escrita.iter().any(|m| m.alias == "PERFEPP" && m.ac == Some(33)));
-        assert!(escrita.iter().any(|m| m.alias == "CPMINCORES" && m.ac == Some(10)));
+        assert!(escrita
+            .iter()
+            .any(|m| m.alias == "PERFEPP" && m.ac == Some(33)));
+        assert!(escrita
+            .iter()
+            .any(|m| m.alias == "CPMINCORES" && m.ac == Some(10)));
         // Nada a escrever quando já está no alvo.
         assert!(plano_de_escrita(&todos[0], &controlados, &base, &base).is_empty());
     }
@@ -1806,14 +2271,23 @@ mod tests {
     #[test]
     fn divergencia_depois_de_reler() {
         let base = enumerar(QH);
-        let pedida = vec![Mudanca { alias: "PERFEPP".into(), subgrupo: String::new(), guid: String::new(), ac: Some(0), dc: None, motivo: Motivo::EppDoCandidato }];
+        let pedida = vec![Mudanca {
+            alias: "PERFEPP".into(),
+            subgrupo: String::new(),
+            guid: String::new(),
+            ac: Some(0),
+            dc: None,
+            motivo: Motivo::EppDoCandidato,
+        }];
         assert_eq!(divergencias(&pedida, &base), vec!["PERFEPP".to_string()]);
     }
 
     #[test]
     fn rajada_que_sobe_devagar_demora_mais() {
         let rapida: Vec<f64> = (0..40).map(|i| if i < 2 { 80.0 } else { 100.0 }).collect();
-        let lenta: Vec<f64> = (0..40).map(|i| (40.0 + i as f64 * 5.0).min(100.0)).collect();
+        let lenta: Vec<f64> = (0..40)
+            .map(|i| (40.0 + i as f64 * 5.0).min(100.0))
+            .collect();
         let r = analisar_rajadas(&[rapida.clone(), rapida], 5.0).unwrap();
         let l = analisar_rajadas(&[lenta.clone(), lenta], 5.0).unwrap();
         assert_eq!(r.ate_90_ms, 15.0);
@@ -1839,7 +2313,12 @@ mod tests {
     #[test]
     fn clock_efetivo_e_limites() {
         let a = amostra_cheia();
-        let b = AmostraCpu { flags: Some(1), limite_pct: Some(80.0), temperatura_c: Some(96.0), ..a };
+        let b = AmostraCpu {
+            flags: Some(1),
+            limite_pct: Some(80.0),
+            temperatura_c: Some(96.0),
+            ..a
+        };
         let r = resumir_cpu(&[a, a, b]).expect("três amostras completas");
         assert_eq!(r.clock_reportado_mhz, 4320.0);
         assert_eq!(r.clock_efetivo_mhz, 2160.0);
@@ -1849,7 +2328,11 @@ mod tests {
         assert_eq!(r.amostras_descartadas, 0);
         assert_eq!(folga_termica(&r), Some(0.0));
 
-        let sem_sensor = resumir_cpu(&[AmostraCpu { temperatura_c: None, ..a }]).expect("completa");
+        let sem_sensor = resumir_cpu(&[AmostraCpu {
+            temperatura_c: None,
+            ..a
+        }])
+        .expect("completa");
         assert_eq!(folga_termica(&sem_sensor), None);
     }
 
@@ -1860,14 +2343,24 @@ mod tests {
 
         // Sem os contadores de clock a amostra não serve e é descartada — não
         // vira média puxada para baixo.
-        let cega = AmostraCpu { desempenho_pct: None, ..a };
+        let cega = AmostraCpu {
+            desempenho_pct: None,
+            ..a
+        };
         let r = resumir_cpu(&[a, cega, a]).expect("duas amostras boas");
         assert_eq!(r.amostras, 2);
         assert_eq!(r.amostras_descartadas, 1);
-        assert_eq!(r.clock_efetivo_mhz, 2160.0, "a amostra cega não entrou na média");
+        assert_eq!(
+            r.clock_efetivo_mhz, 2160.0,
+            "a amostra cega não entrou na média"
+        );
 
         // Sem flags nem limite, o motor não afirma que a CPU está livre.
-        let sem_limite = AmostraCpu { flags: None, limite_pct: None, ..a };
+        let sem_limite = AmostraCpu {
+            flags: None,
+            limite_pct: None,
+            ..a
+        };
         let r = resumir_cpu(&[sem_limite; 4]).expect("clock presente");
         assert_eq!(r.limite_termico, None);
         assert_eq!(r.limite_eletrico, None);
@@ -1881,12 +2374,30 @@ mod tests {
 
     #[test]
     fn flag_nao_lida_nao_vira_folga_termica() {
-        let muda = AmostraCpu { flags: None, temperatura_c: None, ..amostra_cheia() };
+        let muda = AmostraCpu {
+            flags: None,
+            temperatura_c: None,
+            ..amostra_cheia()
+        };
         let r = resumir_cpu(&[muda; 3]).expect("clock presente");
-        assert_eq!(folga_termica(&r), None, "sem sensor e sem flag, a resposta é não sei");
+        assert_eq!(
+            folga_termica(&r),
+            None,
+            "sem sensor e sem flag, a resposta é não sei"
+        );
 
-        let com_temp = resumir_cpu(&[AmostraCpu { temperatura_c: Some(90.0), ..muda }; 3]).expect("clock");
-        assert_eq!(folga_termica(&com_temp), Some(10.0), "90 °C dá folga baixa, não folga inventada");
+        let com_temp = resumir_cpu(
+            &[AmostraCpu {
+                temperatura_c: Some(90.0),
+                ..muda
+            }; 3],
+        )
+        .expect("clock");
+        assert_eq!(
+            folga_termica(&com_temp),
+            Some(10.0),
+            "90 °C dá folga baixa, não folga inventada"
+        );
     }
 
     #[test]
@@ -1900,8 +2411,14 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(resumir_cpu(&[a; 10]).unwrap().temperatura_max_c, None);
-        let ociosa = AmostraCpu { uso_pct: Some(3.0), ..a };
-        assert_eq!(resumir_cpu(&[ociosa; 10]).unwrap().temperatura_max_c, Some(28.0));
+        let ociosa = AmostraCpu {
+            uso_pct: Some(3.0),
+            ..a
+        };
+        assert_eq!(
+            resumir_cpu(&[ociosa; 10]).unwrap().temperatura_max_c,
+            Some(28.0)
+        );
     }
 
     #[test]
@@ -1915,12 +2432,41 @@ mod tests {
         assert!(resumir_quadros(60.0, &[16.0; 10]).is_none());
     }
 
-    fn resultado(id: &str, fps: f64, low: f64, p99: f64, ate90: f64, temp: f64, clock: (f64, f64)) -> ResultadoDoCandidato {
+    fn resultado(
+        id: &str,
+        fps: f64,
+        low: f64,
+        p99: f64,
+        ate90: f64,
+        temp: f64,
+        clock: (f64, f64),
+    ) -> ResultadoDoCandidato {
         ResultadoDoCandidato {
             candidato: id.into(),
-            resposta: Some(RespostaMedida { ate_90_ms: ate90, primeira_fatia_pct: 80.0, sustentado: 100.0, dispersao_pct: 1.0, rajadas: 5 }),
-            cpu: Some(ResumoCpu { amostras: 20, clock_reportado_mhz: clock.0, clock_efetivo_mhz: clock.1, limite_medio_pct: Some(100.0), tempo_limitado_pct: Some(0.0), limite_termico: Some(false), limite_eletrico: Some(false), temperatura_max_c: Some(temp), ..Default::default() }),
-            quadros: Some(Quadros { fps, low_1: low, low_01: low * 0.8, p99_ms: p99 }),
+            resposta: Some(RespostaMedida {
+                ate_90_ms: ate90,
+                primeira_fatia_pct: 80.0,
+                sustentado: 100.0,
+                dispersao_pct: 1.0,
+                rajadas: 5,
+            }),
+            cpu: Some(ResumoCpu {
+                amostras: 20,
+                clock_reportado_mhz: clock.0,
+                clock_efetivo_mhz: clock.1,
+                limite_medio_pct: Some(100.0),
+                tempo_limitado_pct: Some(0.0),
+                limite_termico: Some(false),
+                limite_eletrico: Some(false),
+                temperatura_max_c: Some(temp),
+                ..Default::default()
+            }),
+            quadros: Some(Quadros {
+                fps,
+                low_1: low,
+                low_01: low * 0.8,
+                p99_ms: p99,
+            }),
             fps_repeticoes: vec![fps, fps],
             gpu_pct: None,
             uso_cpu_pct: None,
@@ -1951,28 +2497,65 @@ mod tests {
 
     #[test]
     fn vizinhos_exploram_em_volta_do_vencedor() {
-        let p = Parametros { epp_bruto: Some(32), estacionamento: Estacionamento::Adaptativo, resposta: Resposta::Rapida, ..Parametros::WINDOWS };
+        let p = Parametros {
+            epp_bruto: Some(32),
+            estacionamento: Estacionamento::Adaptativo,
+            resposta: Resposta::Rapida,
+            ..Parametros::WINDOWS
+        };
         let v = vizinhos_do_vencedor(p, &intel_moderna(Formato::Desktop));
         assert!(v.iter().any(|x| x.epp_bruto == Some(16)));
         assert!(v.iter().any(|x| x.epp_bruto == Some(48)));
-        assert!(v.iter().any(|x| x.estacionamento == Estacionamento::TodosAcordados && x.epp_bruto == Some(32)));
+        assert!(
+            v.iter()
+                .any(|x| x.estacionamento == Estacionamento::TodosAcordados
+                    && x.epp_bruto == Some(32))
+        );
         assert!(!v.contains(&p));
         // EPP 0 não desce abaixo de zero, e notebook não ganha "todos acordados".
-        let zero = Parametros { epp_bruto: Some(0), ..p };
+        let zero = Parametros {
+            epp_bruto: Some(0),
+            ..p
+        };
         let note = vizinhos_do_vencedor(zero, &intel_moderna(Formato::Notebook));
-        assert_eq!(note, vec![Parametros { epp_bruto: Some(16), ..zero }]);
+        assert_eq!(
+            note,
+            vec![Parametros {
+                epp_bruto: Some(16),
+                ..zero
+            }]
+        );
         // CPU sem EPP: só o estacionamento varia.
-        assert!(vizinhos_do_vencedor(p, &legada()).iter().all(|x| x.epp_bruto == Some(32)));
+        assert!(vizinhos_do_vencedor(p, &legada())
+            .iter()
+            .all(|x| x.epp_bruto == Some(32)));
     }
 
     #[test]
     fn candidato_d_so_em_desktop() {
         let base = enumerar(QH);
-        assert!(candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base).iter().any(|c| c.papel == Papel::D));
-        assert!(!candidatos_de_autoajuste(&intel_moderna(Formato::Notebook), &base).iter().any(|c| c.papel == Papel::D));
-        let d = candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base).into_iter().find(|c| c.papel == Papel::D).unwrap();
-        assert!(d.mudancas.iter().any(|m| m.alias == "PERFBOOSTMODE" && m.ac == Some(2)));
-        assert!(d.mudancas.iter().any(|m| m.alias == "PERFEPP" && m.ac == Some(0)));
+        assert!(
+            candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base)
+                .iter()
+                .any(|c| c.papel == Papel::D)
+        );
+        assert!(
+            !candidatos_de_autoajuste(&intel_moderna(Formato::Notebook), &base)
+                .iter()
+                .any(|c| c.papel == Papel::D)
+        );
+        let d = candidatos_de_autoajuste(&intel_moderna(Formato::Desktop), &base)
+            .into_iter()
+            .find(|c| c.papel == Papel::D)
+            .unwrap();
+        assert!(d
+            .mudancas
+            .iter()
+            .any(|m| m.alias == "PERFBOOSTMODE" && m.ac == Some(2)));
+        assert!(d
+            .mudancas
+            .iter()
+            .any(|m| m.alias == "PERFEPP" && m.ac == Some(0)));
     }
 
     #[test]
@@ -2025,7 +2608,10 @@ mod tests {
     #[test]
     fn firmware_limitado_e_dito() {
         let mut base = resultado("windows", 100.0, 60.0, 20.0, 40.0, 70.0, (3600.0, 1800.0));
-        base.cpu.as_mut().expect("resultado de teste tem resumo").limite_eletrico = Some(true);
+        base.cpu
+            .as_mut()
+            .expect("resultado de teste tem resumo")
+            .limite_eletrico = Some(true);
         let e = escolher(&[base], "windows").unwrap();
         assert!(e.achados.contains(&Achado::FirmwareLimitaPorEnergia));
     }
@@ -2042,18 +2628,35 @@ mod tests {
 
     #[test]
     fn transicoes_do_modo_dinamico() {
-        assert_eq!(transicao(EstadoDinamico::Normal, true, 0), Transicao::EntrarNoPerfilDeJogo);
+        assert_eq!(
+            transicao(EstadoDinamico::Normal, true, 0),
+            Transicao::EntrarNoPerfilDeJogo
+        );
         assert_eq!(transicao(EstadoDinamico::Jogo, true, 0), Transicao::Nenhuma);
-        assert_eq!(transicao(EstadoDinamico::Jogo, false, 1), Transicao::Nenhuma);
-        assert_eq!(transicao(EstadoDinamico::Jogo, false, 2), Transicao::VoltarAoNormal);
-        assert_eq!(transicao(EstadoDinamico::Normal, false, 9), Transicao::Nenhuma);
+        assert_eq!(
+            transicao(EstadoDinamico::Jogo, false, 1),
+            Transicao::Nenhuma
+        );
+        assert_eq!(
+            transicao(EstadoDinamico::Jogo, false, 2),
+            Transicao::VoltarAoNormal
+        );
+        assert_eq!(
+            transicao(EstadoDinamico::Normal, false, 9),
+            Transicao::Nenhuma
+        );
     }
 
     #[test]
     fn nunca_desliga_nucleo_e_nem_usa_tempo_real() {
         let fonte = include_str!("motorenergia.rs");
         let codigo = fonte.split("#[cfg(test)]").next().unwrap();
-        for proibido in ["REALTIME_PRIORITY", "SetProcessAffinityMask", "HETEROPOLICY, 0", "CPMAXCORES, 0"] {
+        for proibido in [
+            "REALTIME_PRIORITY",
+            "SetProcessAffinityMask",
+            "HETEROPOLICY, 0",
+            "CPMAXCORES, 0",
+        ] {
             assert!(!codigo.contains(proibido), "{}", proibido);
         }
     }

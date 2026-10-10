@@ -236,7 +236,10 @@ fn calcular_jitter(respostas: &[RespostaPing]) -> Option<f64> {
         return None;
     }
 
-    let diferencas: Vec<f64> = tempos.windows(2).map(|par| (par[1] - par[0]).abs()).collect();
+    let diferencas: Vec<f64> = tempos
+        .windows(2)
+        .map(|par| (par[1] - par[0]).abs())
+        .collect();
     Some(diferencas.iter().sum::<f64>() / diferencas.len() as f64)
 }
 
@@ -329,7 +332,7 @@ pub fn medir(alvo: Option<String>, amostras: u32) -> MedidaDeRede {
                         "{} O endereço do servidor não é um IP válido — a medição não rodou.",
                         BASE_DA_NOTA
                     )
-                        .to_string(),
+                    .to_string(),
                 };
             }
 
@@ -396,12 +399,18 @@ mod tests {
 
         assert_eq!(
             avaliar_perda_total(20, 20, Some(false)),
-            Perda::Medida { enviados: 20, perdidos: 20 }
+            Perda::Medida {
+                enviados: 20,
+                perdidos: 20
+            }
         );
 
         assert_eq!(
             avaliar_perda_total(20, 20, None),
-            Perda::Medida { enviados: 20, perdidos: 20 }
+            Perda::Medida {
+                enviados: 20,
+                perdidos: 20
+            }
         );
     }
 
@@ -528,20 +537,44 @@ mod tests {
 
     #[test]
     fn perda_total_nao_se_confunde_com_nao_medido() {
-        assert_eq!(resumir(10, 0), Perda::Medida { enviados: 10, perdidos: 10 });
+        assert_eq!(
+            resumir(10, 0),
+            Perda::Medida {
+                enviados: 10,
+                perdidos: 10
+            }
+        );
         assert_eq!(resumir(0, 0), Perda::NaoMedi);
     }
 
     #[test]
     fn string_vazia_tambem_e_nao_descobri() {
-        assert!(matches!(decidir_alvo(Some(String::new())), AlvoDaMedida::NaoDescobri));
-        assert!(matches!(decidir_alvo(Some("   ".into())), AlvoDaMedida::NaoDescobri));
+        assert!(matches!(
+            decidir_alvo(Some(String::new())),
+            AlvoDaMedida::NaoDescobri
+        ));
+        assert!(matches!(
+            decidir_alvo(Some("   ".into())),
+            AlvoDaMedida::NaoDescobri
+        ));
     }
 
     #[test]
     fn perda_parcial_e_perda_zero_sao_distintas() {
-        assert_eq!(resumir(20, 20), Perda::Medida { enviados: 20, perdidos: 0 });
-        assert_eq!(resumir(20, 15), Perda::Medida { enviados: 20, perdidos: 5 });
+        assert_eq!(
+            resumir(20, 20),
+            Perda::Medida {
+                enviados: 20,
+                perdidos: 0
+            }
+        );
+        assert_eq!(
+            resumir(20, 15),
+            Perda::Medida {
+                enviados: 20,
+                perdidos: 5
+            }
+        );
     }
 
     #[test]
@@ -550,9 +583,27 @@ mod tests {
         for (perda, sem_alvo) in [
             (Perda::NaoMedi, true),
             (Perda::NaoMedi, false),
-            (Perda::Medida { enviados: 10, perdidos: 10 }, false),
-            (Perda::Medida { enviados: 10, perdidos: 0 }, false),
-            (Perda::Medida { enviados: 10, perdidos: 3 }, false),
+            (
+                Perda::Medida {
+                    enviados: 10,
+                    perdidos: 10,
+                },
+                false,
+            ),
+            (
+                Perda::Medida {
+                    enviados: 10,
+                    perdidos: 0,
+                },
+                false,
+            ),
+            (
+                Perda::Medida {
+                    enviados: 10,
+                    perdidos: 3,
+                },
+                false,
+            ),
             (Perda::NaoRespondePing { enviados: 10 }, false),
             (
                 Perda::PingLimitado {
@@ -586,8 +637,20 @@ mod tests {
     fn a_nota_nunca_promete_melhorar() {
         for (perda, sem_alvo) in [
             (Perda::NaoMedi, true),
-            (Perda::Medida { enviados: 10, perdidos: 10 }, false),
-            (Perda::Medida { enviados: 10, perdidos: 0 }, false),
+            (
+                Perda::Medida {
+                    enviados: 10,
+                    perdidos: 10,
+                },
+                false,
+            ),
+            (
+                Perda::Medida {
+                    enviados: 10,
+                    perdidos: 0,
+                },
+                false,
+            ),
         ] {
             let nota = montar_nota(&perda, sem_alvo);
             assert!(nota.contains("nunca do PC"));
@@ -599,7 +662,13 @@ mod tests {
     fn perda_total_confirmada_pela_porta_nao_ressalva_o_que_nao_ha() {
         // A dúvida mora na RESPOSTA (a porta é consultada), não num parêntese: com as duas testemunhas dizendo o mesmo,
         // a nota de perda total dispensa ressalva.
-        let nota = montar_nota(&Perda::Medida { enviados: 20, perdidos: 20 }, false);
+        let nota = montar_nota(
+            &Perda::Medida {
+                enviados: 20,
+                perdidos: 20,
+            },
+            false,
+        );
 
         assert!(
             nota.contains("a porta do jogo também não respondeu"),
@@ -639,21 +708,48 @@ mod tests {
     #[test]
     fn calculo_de_perda_conta_pelo_tamanho_da_lista_e_nao_por_um_contador_separado() {
         let respostas = vec![
-            RespostaPing { ms: Some(10.0), ok: Some(true) },
-            RespostaPing { ms: None, ok: Some(false) },
-            RespostaPing { ms: Some(12.0), ok: Some(true) },
+            RespostaPing {
+                ms: Some(10.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: None,
+                ok: Some(false),
+            },
+            RespostaPing {
+                ms: Some(12.0),
+                ok: Some(true),
+            },
         ];
-        assert_eq!(calcular_perda(&respostas), Perda::Medida { enviados: 3, perdidos: 1 });
+        assert_eq!(
+            calcular_perda(&respostas),
+            Perda::Medida {
+                enviados: 3,
+                perdidos: 1
+            }
+        );
         assert_eq!(calcular_perda(&[]), Perda::NaoMedi);
     }
 
     #[test]
     fn mediana_ignora_falhas() {
         let respostas = vec![
-            RespostaPing { ms: Some(30.0), ok: Some(true) },
-            RespostaPing { ms: None, ok: Some(false) },
-            RespostaPing { ms: Some(10.0), ok: Some(true) },
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
+            RespostaPing {
+                ms: Some(30.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: None,
+                ok: Some(false),
+            },
+            RespostaPing {
+                ms: Some(10.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
         ];
         assert_eq!(calcular_tempo_mediano(&respostas), Some(20.0));
         assert_eq!(calcular_tempo_mediano(&[]), None);
@@ -662,9 +758,18 @@ mod tests {
     #[test]
     fn jitter_zero_quando_tempo_constante() {
         let respostas = vec![
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
         ];
         assert_eq!(calcular_jitter(&respostas), Some(0.0));
     }
@@ -672,23 +777,41 @@ mod tests {
     #[test]
     fn jitter_mede_a_variacao_entre_tentativas_sucessivas() {
         let respostas = vec![
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
-            RespostaPing { ms: Some(80.0), ok: Some(true) },
-            RespostaPing { ms: Some(20.0), ok: Some(true) },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: Some(80.0),
+                ok: Some(true),
+            },
+            RespostaPing {
+                ms: Some(20.0),
+                ok: Some(true),
+            },
         ];
         assert_eq!(calcular_jitter(&respostas), Some(60.0));
     }
 
     #[test]
     fn jitter_precisa_de_ao_menos_duas_respostas() {
-        let uma = vec![RespostaPing { ms: Some(20.0), ok: Some(true) }];
+        let uma = vec![RespostaPing {
+            ms: Some(20.0),
+            ok: Some(true),
+        }];
         assert_eq!(calcular_jitter(&uma), None);
         assert_eq!(calcular_jitter(&[]), None);
     }
 
     #[test]
     fn endereco_publico_exclui_privado_loopback_e_link_local() {
-        for privado in ["10.0.0.5", "192.168.1.1", "172.16.0.1", "127.0.0.1", "169.254.1.1"] {
+        for privado in [
+            "10.0.0.5",
+            "192.168.1.1",
+            "172.16.0.1",
+            "127.0.0.1",
+            "169.254.1.1",
+        ] {
             let ip: IpAddr = privado.parse().unwrap();
             assert!(!e_endereco_publico(&ip), "{} deveria ser privado", privado);
         }

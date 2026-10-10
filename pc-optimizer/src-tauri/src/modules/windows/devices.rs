@@ -239,5 +239,4 @@ mod tests {
 }
 
 #[cfg(test)]
-mod nesta_maquina {
-}
+mod nesta_maquina {}

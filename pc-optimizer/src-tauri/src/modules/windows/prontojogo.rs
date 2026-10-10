@@ -10,10 +10,22 @@ const COMMIT_ALTO_PCT: f64 = 85.0;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
 pub enum Item {
-    MonitorAbaixo { hz_atual: u32, hz_maximo: u32, monitor: String },
-    LimitesEscondidos { quantos: usize },
-    SegundoPlanoPesado { programas: Vec<(String, f64)> },
-    MemoriaApertada { livre_mb: f64, commit_pct: Option<f64>, maiores: Vec<(String, f64)> },
+    MonitorAbaixo {
+        hz_atual: u32,
+        hz_maximo: u32,
+        monitor: String,
+    },
+    LimitesEscondidos {
+        quantos: usize,
+    },
+    SegundoPlanoPesado {
+        programas: Vec<(String, f64)>,
+    },
+    MemoriaApertada {
+        livre_mb: f64,
+        commit_pct: Option<f64>,
+        maiores: Vec<(String, f64)>,
+    },
     ModoJogoDesligado,
 }
 
@@ -41,7 +53,11 @@ pub fn avaliar(l: &Leitura) -> Prontidao {
 
     for (nome, atual, maximo) in &l.monitores {
         if atual < maximo {
-            itens.push(Item::MonitorAbaixo { hz_atual: *atual, hz_maximo: *maximo, monitor: nome.clone() });
+            itens.push(Item::MonitorAbaixo {
+                hz_atual: *atual,
+                hz_maximo: *maximo,
+                monitor: nome.clone(),
+            });
         } else {
             conferido.push(format!("{} a {} Hz", nome, atual));
         }
@@ -62,14 +78,17 @@ pub fn avaliar(l: &Leitura) -> Prontidao {
     } else {
         itens.push(Item::SegundoPlanoPesado { programas: pesados });
     }
-    let apertada = l.ram_livre_mb.is_some_and(|m| m < RAM_LIVRE_MINIMA_MB) || l.commit_pct.is_some_and(|c| c >= COMMIT_ALTO_PCT);
+    let apertada = l.ram_livre_mb.is_some_and(|m| m < RAM_LIVRE_MINIMA_MB)
+        || l.commit_pct.is_some_and(|c| c >= COMMIT_ALTO_PCT);
     match (apertada, l.ram_livre_mb) {
         (true, livre) => itens.push(Item::MemoriaApertada {
             livre_mb: livre.unwrap_or(0.0),
             commit_pct: l.commit_pct,
             maiores: l.maiores_em_memoria.clone(),
         }),
-        (false, Some(livre)) => conferido.push(format!("{:.1} GB de memória livre", livre / 1024.0)),
+        (false, Some(livre)) => {
+            conferido.push(format!("{:.1} GB de memória livre", livre / 1024.0))
+        }
         (false, None) => {}
     }
     if l.modo_jogo_ligado {
@@ -78,7 +97,11 @@ pub fn avaliar(l: &Leitura) -> Prontidao {
         itens.push(Item::ModoJogoDesligado);
     }
     let pronto = itens.iter().all(|i| matches!(i, Item::ModoJogoDesligado));
-    Prontidao { pronto, itens, conferido }
+    Prontidao {
+        pronto,
+        itens,
+        conferido,
+    }
 }
 
 #[cfg(windows)]
@@ -94,7 +117,9 @@ pub fn verificar() -> Prontidao {
     let mut s = System::new();
     let cpu_e_memoria = ProcessRefreshKind::nothing().with_cpu().with_memory();
     s.refresh_processes_specifics(ProcessesToUpdate::All, true, cpu_e_memoria);
-    std::thread::sleep(sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.max(std::time::Duration::from_millis(1000)));
+    std::thread::sleep(
+        sysinfo::MINIMUM_CPU_UPDATE_INTERVAL.max(std::time::Duration::from_millis(1000)),
+    );
     s.refresh_processes_specifics(ProcessesToUpdate::All, true, cpu_e_memoria);
     s.refresh_memory();
     let nucleos = num_cpus::get().max(1) as f64;
@@ -113,7 +138,10 @@ pub fn verificar() -> Prontidao {
     let mut processos_cpu: Vec<(String, f64)> = cpu.into_iter().collect();
     processos_cpu.sort_by(|a, b| b.1.total_cmp(&a.1));
     processos_cpu.truncate(5);
-    let mut maiores: Vec<(String, f64)> = mem.into_iter().filter(|(n, _)| !super::governador::protegido(n)).collect();
+    let mut maiores: Vec<(String, f64)> = mem
+        .into_iter()
+        .filter(|(n, _)| !super::governador::protegido(n))
+        .collect();
     maiores.sort_by(|a, b| b.1.total_cmp(&a.1));
     maiores.truncate(3);
 
@@ -167,10 +195,20 @@ mod testes {
 
     #[test]
     fn monitor_a_60_nao_esta_pronto() {
-        let l = Leitura { monitores: vec![("Monitor".into(), 60, 144)], ..tudo_certo() };
+        let l = Leitura {
+            monitores: vec![("Monitor".into(), 60, 144)],
+            ..tudo_certo()
+        };
         let p = avaliar(&l);
         assert!(!p.pronto);
-        assert!(matches!(p.itens[0], Item::MonitorAbaixo { hz_atual: 60, hz_maximo: 144, .. }));
+        assert!(matches!(
+            p.itens[0],
+            Item::MonitorAbaixo {
+                hz_atual: 60,
+                hz_maximo: 144,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -188,12 +226,18 @@ mod testes {
         });
         // Discord é voz: protegido, não entra na lista.
         assert_eq!(programas.unwrap(), vec![("OneDrive.exe".to_string(), 0.12)]);
-        assert!(p.itens.iter().any(|i| matches!(i, Item::MemoriaApertada { .. })));
+        assert!(p
+            .itens
+            .iter()
+            .any(|i| matches!(i, Item::MemoriaApertada { .. })));
     }
 
     #[test]
     fn modo_jogo_desligado_e_so_recomendacao() {
-        let l = Leitura { modo_jogo_ligado: false, ..tudo_certo() };
+        let l = Leitura {
+            modo_jogo_ligado: false,
+            ..tudo_certo()
+        };
         let p = avaliar(&l);
         assert!(p.pronto);
         assert_eq!(p.itens, vec![Item::ModoJogoDesligado]);

@@ -69,7 +69,11 @@ fn locais() -> Vec<(&'static str, &'static str, PathBuf)> {
             "Cache temporário (NVIDIA)",
             temp.join("NVIDIA Corporation").join("NV_Cache"),
         ),
-        ("amd_dx", "Cache do DirectX (AMD)", local.join("AMD").join("DxCache")),
+        (
+            "amd_dx",
+            "Cache do DirectX (AMD)",
+            local.join("AMD").join("DxCache"),
+        ),
         (
             "amd_gl",
             "Cache do OpenGL (AMD)",
@@ -80,7 +84,11 @@ fn locais() -> Vec<(&'static str, &'static str, PathBuf)> {
             "Cache de shader (Intel)",
             local.join("Intel").join("ShaderCache"),
         ),
-        ("windows", "Cache de shader do Windows", local.join("D3DSCache")),
+        (
+            "windows",
+            "Cache de shader do Windows",
+            local.join("D3DSCache"),
+        ),
     ]
 }
 
@@ -94,7 +102,9 @@ fn medir(dir: &Path) -> (u64, usize, Option<std::time::SystemTime>) {
     let mut antigo: Option<std::time::SystemTime> = None;
 
     for entrada in entradas.flatten() {
-        let Ok(meta) = entrada.metadata() else { continue };
+        let Ok(meta) = entrada.metadata() else {
+            continue;
+        };
 
         if meta.is_dir() {
             let (b, n, a) = medir(&entrada.path());
@@ -144,7 +154,8 @@ pub fn provedor_do_driver() -> Option<String> {
     static LEMBRADO: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
     LEMBRADO
         .get_or_init(|| {
-            let script = "(Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='DISPLAY'\" \
+            let script =
+                "(Get-CimInstance Win32_PnPSignedDriver -Filter \"DeviceClass='DISPLAY'\" \
                           -ErrorAction Stop | Where-Object { $_.DriverProviderName } | \
                           Select-Object -First 1).DriverProviderName";
             shell::powershell(script)
@@ -167,7 +178,10 @@ fn para_texto(momento: std::time::SystemTime) -> String {
     data.format("%d/%m/%Y").to_string()
 }
 
-pub fn e_obsoleto(cache_mais_antigo: Option<chrono::NaiveDate>, driver: Option<chrono::NaiveDate>) -> bool {
+pub fn e_obsoleto(
+    cache_mais_antigo: Option<chrono::NaiveDate>,
+    driver: Option<chrono::NaiveDate>,
+) -> bool {
     match (cache_mais_antigo, driver) {
         (Some(cache), Some(driver)) => cache < driver,
         _ => false,
@@ -340,10 +354,16 @@ mod tests {
 
     #[test]
     fn driver_da_microsoft_e_generico_e_o_do_fabricante_nao() {
-        assert!(driver_generico("Microsoft", Some("Microsoft Basic Display Adapter")));
+        assert!(driver_generico(
+            "Microsoft",
+            Some("Microsoft Basic Display Adapter")
+        ));
         assert!(driver_generico("  microsoft ", None));
         assert!(!driver_generico("NVIDIA", Some("NVIDIA GeForce GTX 1650")));
-        assert!(driver_generico("NVIDIA", Some("Microsoft Basic Display Adapter")));
+        assert!(driver_generico(
+            "NVIDIA",
+            Some("Microsoft Basic Display Adapter")
+        ));
     }
 
     #[test]

@@ -47,7 +47,9 @@ pub fn decidir(fps: &Diferenca, low: &Diferenca) -> Escolha {
 }
 
 fn arquivo() -> PathBuf {
-    let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
+    let base = std::env::var("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
     base.join("pc-optimizer").join("cpuset.json")
 }
 
@@ -98,7 +100,11 @@ pub fn testar(pid: u32, executavel: &str) -> Result<ResultadoCpuSet, String> {
         for prender in [false, true] {
             match medir(prender) {
                 Ok(m) => {
-                    let (f, l) = if prender { (&mut fps.1, &mut low.1) } else { (&mut fps.0, &mut low.0) };
+                    let (f, l) = if prender {
+                        (&mut fps.1, &mut low.1)
+                    } else {
+                        (&mut fps.0, &mut low.0)
+                    };
                     f.push(m.fps);
                     l.push(m.low_1pct);
                 }
@@ -111,7 +117,8 @@ pub fn testar(pid: u32, executavel: &str) -> Result<ResultadoCpuSet, String> {
         }
     }
 
-    let resumo = |id: &str, v: &[f64]| repeticoes::resumir(id, v).ok_or("medição sem quadros".to_string());
+    let resumo =
+        |id: &str, v: &[f64]| repeticoes::resumir(id, v).ok_or("medição sem quadros".to_string());
     let (ft, fd) = (resumo("fps", &fps.0)?, resumo("fps", &fps.1)?);
     let (lt, ld) = (resumo("low", &low.0)?, resumo("low", &low.1)?);
     let diferenca_fps = repeticoes::comparar(&ft, &fd);
@@ -151,8 +158,12 @@ pub fn reaplicar(ja: &mut HashSet<u32>) -> Vec<String> {
         ja.clear();
         return Vec::new();
     }
-    let Some(t) = topologia::ler() else { return Vec::new() };
-    let Some(mascara) = nucleos::mascara_de_desempenho(&t) else { return Vec::new() };
+    let Some(t) = topologia::ler() else {
+        return Vec::new();
+    };
+    let Some(mascara) = nucleos::mascara_de_desempenho(&t) else {
+        return Vec::new();
+    };
 
     let mut sistema = sysinfo::System::new();
     sistema.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -181,10 +192,17 @@ mod tests {
     use super::*;
 
     fn real(delta: f64) -> Diferenca {
-        Diferenca::Real { delta, pct: Some(delta), folga: 0.5 }
+        Diferenca::Real {
+            delta,
+            pct: Some(delta),
+            folga: 0.5,
+        }
     }
     fn empate() -> Diferenca {
-        Diferenca::Indistinguivel { delta: 0.3, sobreposicao: 1.0 }
+        Diferenca::Indistinguivel {
+            delta: 0.3,
+            sobreposicao: 1.0,
+        }
     }
 
     #[test]

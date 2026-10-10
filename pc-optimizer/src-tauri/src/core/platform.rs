@@ -43,17 +43,17 @@ impl PlatformDetector {
         {
             Self::get_windows_version()
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             Self::get_linux_version()
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             Self::get_macos_version()
         }
-        
+
         #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
         {
             "Unknown".to_string()
@@ -63,23 +63,20 @@ impl PlatformDetector {
     #[cfg(target_os = "windows")]
     fn get_windows_version() -> String {
         use std::process::Command;
-        
-        if let Ok(output) = Command::new("cmd")
-            .args(&["/C", "ver"])
-            .output()
-        {
+
+        if let Ok(output) = Command::new("cmd").args(&["/C", "ver"]).output() {
             if let Ok(version) = String::from_utf8(output.stdout) {
                 return version.trim().to_string();
             }
         }
-        
+
         "Windows (version unknown)".to_string()
     }
 
     #[cfg(target_os = "linux")]
     fn get_linux_version() -> String {
         use std::fs;
-        
+
         if let Ok(content) = fs::read_to_string("/etc/os-release") {
             for line in content.lines() {
                 if line.starts_with("PRETTY_NAME=") {
@@ -90,26 +87,22 @@ impl PlatformDetector {
                 }
             }
         }
-        
+
         "Linux (distribution unknown)".to_string()
     }
 
     #[cfg(target_os = "macos")]
     fn get_macos_version() -> String {
         use std::process::Command;
-        
-        if let Ok(output) = Command::new("sw_vers")
-            .arg("-productVersion")
-            .output()
-        {
+
+        if let Ok(output) = Command::new("sw_vers").arg("-productVersion").output() {
             if let Ok(version) = String::from_utf8(output.stdout) {
                 return format!("macOS {}", version.trim());
             }
         }
-        
+
         "macOS (version unknown)".to_string()
     }
-
 }
 
 #[cfg(test)]
@@ -121,5 +114,4 @@ mod tests {
         let platform = PlatformDetector::detect();
         assert_ne!(platform, Platform::Unknown);
     }
-
 }

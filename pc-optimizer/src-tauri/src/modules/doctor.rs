@@ -82,7 +82,9 @@ const DISCO_NOS_TRANCOS_PCT: f64 = 40.0;
 const TRANCOS_MINIMOS: usize = 10;
 
 fn pct(parte: Option<f64>, quadro: f64) -> Option<f64> {
-    parte.filter(|_| quadro > 0.0).map(|p| (p / quadro * 100.0).min(100.0))
+    parte
+        .filter(|_| quadro > 0.0)
+        .map(|p| (p / quadro * 100.0).min(100.0))
 }
 
 fn confianca_pela_quantidade(de_acordo: usize, lidas: usize) -> Option<Confianca> {
@@ -130,8 +132,17 @@ const BATE_COM_O_TETO: f64 = 0.03;
 fn teto_vale_para(t: &Teto, executavel: &str) -> bool {
     let exe = executavel.to_lowercase();
     let casa = |nome: &str| {
-        let nome: String = nome.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
-        !nome.is_empty() && exe.chars().filter(|c| c.is_alphanumeric()).collect::<String>().contains(&nome)
+        let nome: String = nome
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect();
+        !nome.is_empty()
+            && exe
+                .chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+                .contains(&nome)
     };
     match t {
         Teto::LimiteGlobalNvidia { .. } | Teto::VsyncForcadoNvidia | Teto::Rtss => true,
@@ -142,15 +153,27 @@ fn teto_vale_para(t: &Teto, executavel: &str) -> bool {
 
 /// **Pura.** `janelas`: as da última partida (ver `relatoriodapartida::partidas`). `tetos`: `None` quando não se
 /// conseguiu procurar.
-pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monitor_hz: Option<u32>) -> Diagnostico {
+pub fn diagnosticar(
+    janelas: &[MedicaoAutomatica],
+    tetos: Option<&[Teto]>,
+    monitor_hz: Option<u32>,
+) -> Diagnostico {
     let mut lacunas = Vec::new();
-    let pm: Vec<&Resumo> = janelas.iter().filter_map(|m| m.presentmon.as_ref()).collect();
+    let pm: Vec<&Resumo> = janelas
+        .iter()
+        .filter_map(|m| m.presentmon.as_ref())
+        .collect();
     let lidas = pm.len();
     let jogo = janelas.last().map(|m| m.jogo.clone());
     if janelas.is_empty() {
-        lacunas.push("Ainda não há partida medida: jogue alguns minutos com o Otimiza aberto.".to_string());
+        lacunas.push(
+            "Ainda não há partida medida: jogue alguns minutos com o Otimiza aberto.".to_string(),
+        );
     } else if lidas == 0 {
-        lacunas.push("A última partida foi medida pelo canal antigo, que não separa processador de placa.".to_string());
+        lacunas.push(
+            "A última partida foi medida pelo canal antigo, que não separa processador de placa."
+                .to_string(),
+        );
     }
 
     let mut causas: Vec<Causa> = Vec::new();
@@ -162,7 +185,10 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
     let cpu = media(&|r| pct(r.cpu_ocupada_media_ms, r.quadro_medio_ms));
     let gpu = media(&|r| pct(r.gpu_ocupada_media_ms, r.quadro_medio_ms));
     let ocupacao = || match (cpu, gpu) {
-        (Some(c), Some(g)) => format!("processador ocupado em {:.0}% de cada quadro, placa de vídeo em {:.0}%", c, g),
+        (Some(c), Some(g)) => format!(
+            "processador ocupado em {:.0}% de cada quadro, placa de vídeo em {:.0}%",
+            c, g
+        ),
         _ => "pelo PresentMon".to_string(),
     };
 
@@ -170,8 +196,17 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         causas.push(Causa {
             tipo: TipoDeCausa::Processador,
             confianca: conf,
-            evidencia: format!("Em {} de {} janelas: {}.", conta(GargaloProvavel::Cpu), lidas, ocupacao()),
-            ajuda: vec![Ajuste::MenosCargaNoProcessador, Ajuste::PlanoDeEnergiaOtimiza, Ajuste::FecharProgramasPesados],
+            evidencia: format!(
+                "Em {} de {} janelas: {}.",
+                conta(GargaloProvavel::Cpu),
+                lidas,
+                ocupacao()
+            ),
+            ajuda: vec![
+                Ajuste::MenosCargaNoProcessador,
+                Ajuste::PlanoDeEnergiaOtimiza,
+                Ajuste::FecharProgramasPesados,
+            ],
             nao_ajuda: vec![Ajuste::BaixarResolucao],
             janelas: conta(GargaloProvavel::Cpu),
         });
@@ -180,9 +215,17 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         causas.push(Causa {
             tipo: TipoDeCausa::PlacaDeVideo,
             confianca: conf,
-            evidencia: format!("Em {} de {} janelas: {}.", conta(GargaloProvavel::Gpu), lidas, ocupacao()),
+            evidencia: format!(
+                "Em {} de {} janelas: {}.",
+                conta(GargaloProvavel::Gpu),
+                lidas,
+                ocupacao()
+            ),
             ajuda: vec![Ajuste::PerfilGraficoMaisLeve, Ajuste::BaixarResolucao],
-            nao_ajuda: vec![Ajuste::FecharProgramasPesados, Ajuste::MenosCargaNoProcessador],
+            nao_ajuda: vec![
+                Ajuste::FecharProgramasPesados,
+                Ajuste::MenosCargaNoProcessador,
+            ],
             janelas: conta(GargaloProvavel::Gpu),
         });
     }
@@ -193,9 +236,16 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         lacunas.push("Não deu para ler a taxa do monitor.".to_string());
     }
     let na_taxa = monitor_hz.filter(|hz| *hz > 0).map(|hz| {
-        let (baixo, alto) = (hz as f64 * PERTO_DA_TAXA_ABAIXO, hz as f64 * PERTO_DA_TAXA_ACIMA);
+        let (baixo, alto) = (
+            hz as f64 * PERTO_DA_TAXA_ABAIXO,
+            hz as f64 * PERTO_DA_TAXA_ACIMA,
+        );
         pm.iter()
-            .filter(|r| r.gargalo == GargaloProvavel::Espera && r.fps_do_jogo_medio >= baixo && r.fps_do_jogo_medio <= alto)
+            .filter(|r| {
+                r.gargalo == GargaloProvavel::Espera
+                    && r.fps_do_jogo_medio >= baixo
+                    && r.fps_do_jogo_medio <= alto
+            })
             .count()
     });
     let preso_na_taxa = matches!(na_taxa, Some(n) if n * 2 > lidas && n > 0);
@@ -218,11 +268,17 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         });
     }
     if !preso_na_taxa && esperas * 2 > lidas && esperas > 0 {
-        let deste_jogo: Option<Vec<&Teto>> =
-            tetos.map(|t| t.iter().filter(|x| teto_vale_para(x, jogo.as_deref().unwrap_or(""))).collect());
+        let deste_jogo: Option<Vec<&Teto>> = tetos.map(|t| {
+            t.iter()
+                .filter(|x| teto_vale_para(x, jogo.as_deref().unwrap_or("")))
+                .collect()
+        });
         let batem = |fps: u32| {
             pm.iter()
-                .filter(|r| r.gargalo == GargaloProvavel::Espera && (r.fps_do_jogo_medio - fps as f64).abs() <= fps as f64 * BATE_COM_O_TETO)
+                .filter(|r| {
+                    r.gargalo == GargaloProvavel::Espera
+                        && (r.fps_do_jogo_medio - fps as f64).abs() <= fps as f64 * BATE_COM_O_TETO
+                })
                 .count()
         };
         let (confianca, evidencia) = match deste_jogo.as_deref() {
@@ -272,21 +328,37 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
             confianca,
             evidencia,
             ajuda: vec![Ajuste::TirarLimiteDeFps],
-            nao_ajuda: vec![Ajuste::PlanoDeEnergiaOtimiza, Ajuste::FecharProgramasPesados, Ajuste::PerfilGraficoMaisLeve],
+            nao_ajuda: vec![
+                Ajuste::PlanoDeEnergiaOtimiza,
+                Ajuste::FecharProgramasPesados,
+                Ajuste::PerfilGraficoMaisLeve,
+            ],
             janelas: esperas,
         });
     }
 
-    let lidos: Vec<&crate::modules::medicoes::EventosDaPartida> =
-        janelas.iter().filter_map(|m| m.eventos.as_ref()).filter(|e| e.freios_lidos).collect();
+    let lidos: Vec<&crate::modules::medicoes::EventosDaPartida> = janelas
+        .iter()
+        .filter_map(|m| m.eventos.as_ref())
+        .filter(|e| e.freios_lidos)
+        .collect();
     let com_freio = janelas
         .iter()
-        .filter(|m| m.presentmon.as_ref().is_some_and(|r| r.gargalo == GargaloProvavel::Gpu))
+        .filter(|m| {
+            m.presentmon
+                .as_ref()
+                .is_some_and(|r| r.gargalo == GargaloProvavel::Gpu)
+        })
         .filter_map(|m| m.eventos.as_ref())
         .filter(|e| e.freios_lidos)
         .filter(|e| {
             e.freando_no_inicio
-                || e.lista.iter().any(|ev| matches!(ev.tipo, TipoDeEvento::FreioTermico | TipoDeEvento::FreioDeHardware))
+                || e.lista.iter().any(|ev| {
+                    matches!(
+                        ev.tipo,
+                        TipoDeEvento::FreioTermico | TipoDeEvento::FreioDeHardware
+                    )
+                })
         })
         .count();
     if com_freio > 0 {
@@ -312,13 +384,18 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         });
     }
 
-    let (trancos, com_disco) = janelas.iter().fold((0usize, 0.0f64), |(t, d), m| match (m.trancos_medidos, m.trancos_com_disco_pct) {
-        (Some(n), Some(p)) => (t + n, d + p * n as f64 / 100.0),
-        _ => (t, d),
+    let (trancos, com_disco) = janelas.iter().fold((0usize, 0.0f64), |(t, d), m| {
+        match (m.trancos_medidos, m.trancos_com_disco_pct) {
+            (Some(n), Some(p)) => (t + n, d + p * n as f64 / 100.0),
+            _ => (t, d),
+        }
     });
-    let trancos_sem_disco = janelas
-        .iter()
-        .any(|m| m.trancos_medidos.is_none() && m.eventos.as_ref().is_some_and(|e| e.trancos_com_instante > 0));
+    let trancos_sem_disco = janelas.iter().any(|m| {
+        m.trancos_medidos.is_none()
+            && m.eventos
+                .as_ref()
+                .is_some_and(|e| e.trancos_com_instante > 0)
+    });
     if trancos_sem_disco {
         lacunas.push("Parte dos trancos não foi cruzada com o disco nesta partida.".to_string());
     }
@@ -336,7 +413,10 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
         });
     }
 
-    let copiadas = pm.iter().filter(|r| r.apresentacao == Apresentacao::Copiada).count();
+    let copiadas = pm
+        .iter()
+        .filter(|r| r.apresentacao == Apresentacao::Copiada)
+        .count();
     let com_gerador = janelas.iter().any(|m| !medicoes::comparavel(m));
     if copiadas * 2 > lidas && copiadas > 0 && !com_gerador {
         causas.push(Causa {
@@ -350,9 +430,18 @@ pub fn diagnosticar(janelas: &[MedicaoAutomatica], tetos: Option<&[Teto]>, monit
     }
 
     // Mais forte primeiro: confiança, depois quantas janelas sustentam.
-    causas.sort_by(|a, b| a.confianca.cmp(&b.confianca).then(b.janelas.cmp(&a.janelas)));
+    causas.sort_by(|a, b| {
+        a.confianca
+            .cmp(&b.confianca)
+            .then(b.janelas.cmp(&a.janelas))
+    });
     causas.truncate(CAUSAS_NA_TELA);
-    Diagnostico { jogo, janelas_lidas: lidas, causas, lacunas }
+    Diagnostico {
+        jogo,
+        janelas_lidas: lidas,
+        causas,
+        lacunas,
+    }
 }
 
 #[cfg(test)]
@@ -419,44 +508,101 @@ mod tests {
 
     #[test]
     fn processador_no_limite_em_todas_as_janelas_e_causa_alta() {
-        let js = [janela(Some(resumo(GargaloProvavel::Cpu, 9.7, 6.1))), janela(Some(resumo(GargaloProvavel::Cpu, 9.5, 6.0)))];
+        let js = [
+            janela(Some(resumo(GargaloProvavel::Cpu, 9.7, 6.1))),
+            janela(Some(resumo(GargaloProvavel::Cpu, 9.5, 6.0))),
+        ];
         let d = diagnosticar(&js, Some(&[]), None);
         assert_eq!(d.causas[0].tipo, TipoDeCausa::Processador);
         assert_eq!(d.causas[0].confianca, Confianca::Alta);
-        assert!(d.causas[0].evidencia.contains("96%"), "{}", d.causas[0].evidencia);
+        assert!(
+            d.causas[0].evidencia.contains("96%"),
+            "{}",
+            d.causas[0].evidencia
+        );
         assert!(d.causas[0].nao_ajuda.contains(&Ajuste::BaixarResolucao));
     }
 
     #[test]
     fn uma_janela_so_nunca_e_alta() {
-        let d = diagnosticar(&[janela(Some(resumo(GargaloProvavel::Gpu, 5.0, 9.8)))], Some(&[]), None);
-        assert_eq!((d.causas[0].tipo, d.causas[0].confianca), (TipoDeCausa::PlacaDeVideo, Confianca::Media));
+        let d = diagnosticar(
+            &[janela(Some(resumo(GargaloProvavel::Gpu, 5.0, 9.8)))],
+            Some(&[]),
+            None,
+        );
+        assert_eq!(
+            (d.causas[0].tipo, d.causas[0].confianca),
+            (TipoDeCausa::PlacaDeVideo, Confianca::Media)
+        );
     }
 
     #[test]
     fn empate_nao_vira_causa() {
-        let js = [janela(Some(resumo(GargaloProvavel::Cpu, 9.7, 6.0))), janela(Some(resumo(GargaloProvavel::Gpu, 6.0, 9.7)))];
+        let js = [
+            janela(Some(resumo(GargaloProvavel::Cpu, 9.7, 6.0))),
+            janela(Some(resumo(GargaloProvavel::Gpu, 6.0, 9.7))),
+        ];
         assert!(diagnosticar(&js, Some(&[]), None).causas.is_empty());
     }
 
     #[test]
     fn espera_so_e_causa_alta_com_limite_encontrado() {
-        let js = [janela(Some(resumo(GargaloProvavel::Espera, 4.0, 5.0))), janela(Some(resumo(GargaloProvavel::Espera, 4.0, 5.0)))];
+        let js = [
+            janela(Some(resumo(GargaloProvavel::Espera, 4.0, 5.0))),
+            janela(Some(resumo(GargaloProvavel::Espera, 4.0, 5.0))),
+        ];
         let com = diagnosticar(&js, Some(&[Teto::LimiteGlobalNvidia { fps: 100 }]), None);
-        assert_eq!((com.causas[0].tipo, com.causas[0].confianca), (TipoDeCausa::LimiteDeFps, Confianca::Alta));
-        assert!(com.causas[0].evidencia.contains("100 FPS"), "{}", com.causas[0].evidencia);
+        assert_eq!(
+            (com.causas[0].tipo, com.causas[0].confianca),
+            (TipoDeCausa::LimiteDeFps, Confianca::Alta)
+        );
+        assert!(
+            com.causas[0].evidencia.contains("100 FPS"),
+            "{}",
+            com.causas[0].evidencia
+        );
         let nao_bate = diagnosticar(&js, Some(&[Teto::LimiteGlobalNvidia { fps: 60 }]), None);
-        assert_eq!(nao_bate.causas[0].confianca, Confianca::Media, "limite de 60 com o jogo a 100 não é o que segura");
-        let de_outro_jogo = diagnosticar(&js, Some(&[Teto::RobloxLimitado { fps: Some(60), arquivo: "x".into() }]), None);
-        assert_eq!(de_outro_jogo.causas[0].confianca, Confianca::Hipotese, "limite do Roblox não explica o FiveM");
+        assert_eq!(
+            nao_bate.causas[0].confianca,
+            Confianca::Media,
+            "limite de 60 com o jogo a 100 não é o que segura"
+        );
+        let de_outro_jogo = diagnosticar(
+            &js,
+            Some(&[Teto::RobloxLimitado {
+                fps: Some(60),
+                arquivo: "x".into(),
+            }]),
+            None,
+        );
+        assert_eq!(
+            de_outro_jogo.causas[0].confianca,
+            Confianca::Hipotese,
+            "limite do Roblox não explica o FiveM"
+        );
         let rtss = diagnosticar(&js, Some(&[Teto::Rtss]), None);
-        assert_eq!(rtss.causas[0].confianca, Confianca::Media, "RTSS aberto sem número não é evidência forte");
-        let uma = diagnosticar(&js[..1], Some(&[Teto::LimiteGlobalNvidia { fps: 100 }]), None);
-        assert_eq!(uma.causas[0].confianca, Confianca::Media, "uma janela só nunca é alta");
+        assert_eq!(
+            rtss.causas[0].confianca,
+            Confianca::Media,
+            "RTSS aberto sem número não é evidência forte"
+        );
+        let uma = diagnosticar(
+            &js[..1],
+            Some(&[Teto::LimiteGlobalNvidia { fps: 100 }]),
+            None,
+        );
+        assert_eq!(
+            uma.causas[0].confianca,
+            Confianca::Media,
+            "uma janela só nunca é alta"
+        );
         let sem = diagnosticar(&js, Some(&[]), None);
         assert_eq!(sem.causas[0].confianca, Confianca::Hipotese);
         let sem_leitura = diagnosticar(&js, None, None);
-        assert!(!sem_leitura.lacunas.is_empty(), "não ter procurado é lacuna");
+        assert!(
+            !sem_leitura.lacunas.is_empty(),
+            "não ter procurado é lacuna"
+        );
     }
 
     #[test]
@@ -466,14 +612,33 @@ mod tests {
         r.quadro_medio_ms = 5.56;
         let js = [janela(Some(r.clone())), janela(Some(r))];
         let d = diagnosticar(&js, Some(&[]), Some(180));
-        assert_eq!((d.causas[0].tipo, d.causas[0].confianca), (TipoDeCausa::PresoNaTaxaDoMonitor, Confianca::Alta));
-        assert!(!d.causas.iter().any(|c| c.tipo == TipoDeCausa::LimiteDeFps), "não repete como limite a tirar");
-        assert!(d.causas[0].nao_ajuda.contains(&Ajuste::PlanoDeEnergiaOtimiza));
-        assert!(d.causas[0].ajuda.is_empty(), "não há o que fazer pelo FPS: nada de 'sobe a qualidade'");
+        assert_eq!(
+            (d.causas[0].tipo, d.causas[0].confianca),
+            (TipoDeCausa::PresoNaTaxaDoMonitor, Confianca::Alta)
+        );
+        assert!(
+            !d.causas.iter().any(|c| c.tipo == TipoDeCausa::LimiteDeFps),
+            "não repete como limite a tirar"
+        );
+        assert!(d.causas[0]
+            .nao_ajuda
+            .contains(&Ajuste::PlanoDeEnergiaOtimiza));
+        assert!(
+            d.causas[0].ajuda.is_empty(),
+            "não há o que fazer pelo FPS: nada de 'sobe a qualidade'"
+        );
         let longe = diagnosticar(&js, Some(&[]), Some(240));
-        assert_eq!(longe.causas[0].tipo, TipoDeCausa::LimiteDeFps, "180 num monitor de 240 Hz é outro limite");
+        assert_eq!(
+            longe.causas[0].tipo,
+            TipoDeCausa::LimiteDeFps,
+            "180 num monitor de 240 Hz é outro limite"
+        );
         let reflex = diagnosticar(&js, Some(&[]), Some(190));
-        assert_eq!(reflex.causas[0].tipo, TipoDeCausa::PresoNaTaxaDoMonitor, "5% abaixo da taxa (Reflex, VRR) não vira 'tire o limite'");
+        assert_eq!(
+            reflex.causas[0].tipo,
+            TipoDeCausa::PresoNaTaxaDoMonitor,
+            "5% abaixo da taxa (Reflex, VRR) não vira 'tire o limite'"
+        );
     }
 
     #[test]
@@ -481,12 +646,19 @@ mod tests {
         let vazio = diagnosticar(&[], Some(&[]), None);
         assert!(vazio.causas.is_empty() && !vazio.lacunas.is_empty());
         let antigo = diagnosticar(&[janela(None)], Some(&[]), None);
-        assert!(antigo.causas.is_empty() && antigo.lacunas.iter().any(|l| l.contains("canal antigo")));
+        assert!(
+            antigo.causas.is_empty() && antigo.lacunas.iter().any(|l| l.contains("canal antigo"))
+        );
     }
 
     #[test]
     fn freio_e_disco_entram_com_a_evidencia() {
-        let e = EventosDaPartida { lista: vec![], freios_lidos: true, freando_no_inicio: true, trancos_com_instante: 30 };
+        let e = EventosDaPartida {
+            lista: vec![],
+            freios_lidos: true,
+            freando_no_inicio: true,
+            trancos_com_instante: 30,
+        };
         let j = MedicaoAutomatica {
             eventos: Some(e),
             trancos_medidos: Some(30),
@@ -495,33 +667,67 @@ mod tests {
         };
         let d = diagnosticar(&[j], Some(&[]), None);
         let tipos: Vec<TipoDeCausa> = d.causas.iter().map(|c| c.tipo).collect();
-        assert!(tipos.contains(&TipoDeCausa::CalorOuEnergia) && tipos.contains(&TipoDeCausa::DiscoNosTrancos), "{tipos:?}");
+        assert!(
+            tipos.contains(&TipoDeCausa::CalorOuEnergia)
+                && tipos.contains(&TipoDeCausa::DiscoNosTrancos),
+            "{tipos:?}"
+        );
     }
 
     #[test]
     fn com_gerador_de_quadros_nao_manda_para_tela_cheia() {
         let mut r = resumo(GargaloProvavel::Gpu, 5.0, 9.8);
         r.apresentacao = Apresentacao::Copiada;
-        let j = MedicaoAutomatica { geracao: Some(crate::modules::medicoes::GeracaoNaPartida::LosslessScaling), ..janela(Some(r)) };
-        assert!(!diagnosticar(&[j], Some(&[]), None).causas.iter().any(|c| c.tipo == TipoDeCausa::QuadroCopiado));
+        let j = MedicaoAutomatica {
+            geracao: Some(crate::modules::medicoes::GeracaoNaPartida::LosslessScaling),
+            ..janela(Some(r))
+        };
+        assert!(!diagnosticar(&[j], Some(&[]), None)
+            .causas
+            .iter()
+            .any(|c| c.tipo == TipoDeCausa::QuadroCopiado));
     }
 
     #[test]
     fn freio_com_o_jogo_preso_em_limite_nao_e_causa() {
-        let e = EventosDaPartida { lista: vec![], freios_lidos: true, freando_no_inicio: true, trancos_com_instante: 0 };
-        let j = MedicaoAutomatica { eventos: Some(e), ..janela(Some(resumo(GargaloProvavel::Espera, 3.0, 4.0))) };
-        assert!(!diagnosticar(&[j], Some(&[]), None).causas.iter().any(|c| c.tipo == TipoDeCausa::CalorOuEnergia));
+        let e = EventosDaPartida {
+            lista: vec![],
+            freios_lidos: true,
+            freando_no_inicio: true,
+            trancos_com_instante: 0,
+        };
+        let j = MedicaoAutomatica {
+            eventos: Some(e),
+            ..janela(Some(resumo(GargaloProvavel::Espera, 3.0, 4.0)))
+        };
+        assert!(!diagnosticar(&[j], Some(&[]), None)
+            .causas
+            .iter()
+            .any(|c| c.tipo == TipoDeCausa::CalorOuEnergia));
     }
 
     #[test]
     fn no_maximo_tres_causas_e_a_mais_forte_primeiro() {
-        let e = EventosDaPartida { lista: vec![], freios_lidos: true, freando_no_inicio: true, trancos_com_instante: 30 };
+        let e = EventosDaPartida {
+            lista: vec![],
+            freios_lidos: true,
+            freando_no_inicio: true,
+            trancos_com_instante: 30,
+        };
         let mut r = resumo(GargaloProvavel::Cpu, 9.7, 6.0);
         r.apresentacao = Apresentacao::Copiada;
-        let j = || MedicaoAutomatica { eventos: Some(e.clone()), trancos_medidos: Some(30), trancos_com_disco_pct: Some(60.0), ..janela(Some(r.clone())) };
+        let j = || MedicaoAutomatica {
+            eventos: Some(e.clone()),
+            trancos_medidos: Some(30),
+            trancos_com_disco_pct: Some(60.0),
+            ..janela(Some(r.clone()))
+        };
         let d = diagnosticar(&[j(), j()], Some(&[]), None);
         assert_eq!(d.causas.len(), CAUSAS_NA_TELA);
-        assert!(d.causas.windows(2).all(|p| p[0].confianca <= p[1].confianca));
+        assert!(d
+            .causas
+            .windows(2)
+            .all(|p| p[0].confianca <= p[1].confianca));
     }
 
     /// Laboratório: o diagnóstico com as partidas REAIS desta máquina. `cargo test --release --lib doctor_real -- --ignored --nocapture`
@@ -530,8 +736,18 @@ mod tests {
     #[ignore = "laboratório: lê as medições e os limites desta máquina"]
     fn doctor_real() {
         let medicoes = crate::modules::medicoes::ler().expect("medicoes.json");
-        let jogo = medicoes.iter().max_by_key(|m| m.quando).map(|m| m.jogo.clone()).expect("alguma partida");
-        let ultima: Vec<MedicaoAutomatica> = crate::modules::relatoriodapartida::partidas(&jogo, &medicoes).pop().unwrap().into_iter().cloned().collect();
+        let jogo = medicoes
+            .iter()
+            .max_by_key(|m| m.quando)
+            .map(|m| m.jogo.clone())
+            .expect("alguma partida");
+        let ultima: Vec<MedicaoAutomatica> =
+            crate::modules::relatoriodapartida::partidas(&jogo, &medicoes)
+                .pop()
+                .unwrap()
+                .into_iter()
+                .cloned()
+                .collect();
         let t = crate::modules::windows::tetos::procurar();
         println!("monitor: {:?} Hz, tetos: {:?}", t.monitor_hz, t.tetos);
         println!("{:#?}", diagnosticar(&ultima, Some(&t.tetos), t.monitor_hz));

@@ -225,7 +225,8 @@ impl Benchmark {
         let jitter = crate::modules::jitter::measure();
 
         let cpu_single_thread_mops = measure_single_thread();
-        let (cpu_multi_thread_mops, cpu_frequency_under_load_mhz) = measure_multi_thread(&mut system);
+        let (cpu_multi_thread_mops, cpu_frequency_under_load_mhz) =
+            measure_multi_thread(&mut system);
 
         BenchmarkSnapshot {
             timestamp: crate::modules::changelog::now_timestamp(),
@@ -443,7 +444,11 @@ fn judge(change_percent: f64, higher_is_better: bool, noise_percent: f64) -> Ver
 
 /// Só chamado depois de a diferença absoluta passar do piso da métrica.
 fn judge_by_direction(delta: f64, higher_is_better: bool) -> Verdict {
-    let improved = if higher_is_better { delta > 0.0 } else { delta < 0.0 };
+    let improved = if higher_is_better {
+        delta > 0.0
+    } else {
+        delta < 0.0
+    };
 
     if improved {
         Verdict::Improved
@@ -453,8 +458,14 @@ fn judge_by_direction(delta: f64, higher_is_better: bool) -> Verdict {
 }
 
 fn summarize(metrics: &[MetricDelta]) -> String {
-    let improved = metrics.iter().filter(|m| m.verdict == Verdict::Improved).count();
-    let worsened = metrics.iter().filter(|m| m.verdict == Verdict::Worsened).count();
+    let improved = metrics
+        .iter()
+        .filter(|m| m.verdict == Verdict::Improved)
+        .count();
+    let worsened = metrics
+        .iter()
+        .filter(|m| m.verdict == Verdict::Worsened)
+        .count();
 
     match (improved, worsened) {
         (0, 0) => "Nenhuma diferença mensurável. O PC já estava bem configurado nesses pontos, ou o gargalo é o hardware.".to_string(),
@@ -712,12 +723,22 @@ mod tests {
             let values: Vec<f64> = runs.iter().map(|s| (spec.read)(s)).collect();
             let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
             let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let spread = if min == 0.0 { 0.0 } else { (max - min) / min * 100.0 };
+            let spread = if min == 0.0 {
+                0.0
+            } else {
+                (max - min) / min * 100.0
+            };
 
             println!(
                 "{:<38} {:>28}  variação: {:>6.1}%  limiar atual: {:.0}%",
                 spec.label,
-                format!("{:?}", values.iter().map(|v| (v * 10.0).round() / 10.0).collect::<Vec<_>>()),
+                format!(
+                    "{:?}",
+                    values
+                        .iter()
+                        .map(|v| (v * 10.0).round() / 10.0)
+                        .collect::<Vec<_>>()
+                ),
                 spread,
                 spec.noise_percent
             );

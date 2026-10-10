@@ -27,8 +27,15 @@
             window.matchMedia("(prefers-color-scheme: dark)").matches);
 
         document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
+        // A 3.3 abre por cima do console: até ela montar (ou desistir para o modo clássico), o console não aparece,
+        // senão a tela da 3.2 pisca por alguns segundos.
+        document.documentElement.classList.add("v33-cedo");
       })();
     </script>
+    <style>
+      html.v33-cedo .console { visibility: hidden; }
+      html.v33-cedo body { background: #030303; }
+    </style>
   </head>
   <body>
     <!--
@@ -302,6 +309,9 @@
         </button>
       </div>
     </section>
+
+    <!-- A interface da 3.3 (src/v33). O console abaixo continua inteiro e volta pelo "Modo clássico". -->
+    <div id="v33"></div>
 
     <div class="console">
 

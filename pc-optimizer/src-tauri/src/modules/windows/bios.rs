@@ -175,8 +175,7 @@ pub fn montar(
             id: "curve_optimizer".to_string(),
             fase: Fase::ExigeTeste,
             titulo: "Curve Optimizer".to_string(),
-            onde: "Dentro do PBO, como \"Curve Optimizer\", por núcleo ou para todos."
-                .to_string(),
+            onde: "Dentro do PBO, como \"Curve Optimizer\", por núcleo ou para todos.".to_string(),
             o_que_faz: "Reduz a tensão que o processador pede em cada ponto da curva de \
                         frequência. Menos tensão é menos calor, e menos calor costuma virar \
                         frequência mais alta sustentada. É o ajuste com melhor relação entre \
@@ -263,10 +262,11 @@ pub fn ler() -> Leitura {
     }
 
     // 20 s e não os 120 do padrão: leitura que demora vira lacuna na aba, em vez de segurar a tela.
-    let bruto: Option<Bruto> = super::shell::powershell_com_prazo(script, std::time::Duration::from_secs(20))
-        .ok()
-        .filter(|s| s.success && !s.stdout.trim().is_empty())
-        .and_then(|s| serde_json::from_str(&s.stdout).ok());
+    let bruto: Option<Bruto> =
+        super::shell::powershell_com_prazo(script, std::time::Duration::from_secs(20))
+            .ok()
+            .filter(|s| s.success && !s.stdout.trim().is_empty())
+            .and_then(|s| serde_json::from_str(&s.stdout).ok());
 
     let Some(b) = bruto else {
         leitura.lacunas.push(
@@ -278,7 +278,10 @@ pub fn ler() -> Leitura {
         return leitura;
     };
 
-    leitura.placa_mae = b.placa.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
+    leitura.placa_mae = b
+        .placa
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty());
     leitura.versao_da_bios = b.versao.filter(|v| !v.trim().is_empty());
     leitura.data_da_bios = b.data.filter(|d| !d.trim().is_empty());
     leitura.uefi = b.uefi;
@@ -333,9 +336,15 @@ mod tests {
 
         assert!(curve.risco_e_volta.contains("NÃO DÁ NÚMERO"));
 
-        let texto = format!("{} {} {}", curve.titulo, curve.o_que_faz, curve.risco_e_volta);
+        let texto = format!(
+            "{} {} {}",
+            curve.titulo, curve.o_que_faz, curve.risco_e_volta
+        );
         for proibido in ["-5", "-10", "-15", "-20", "-25", "-30"] {
-            assert!(!texto.contains(proibido), "apareceu o valor {proibido} no texto");
+            assert!(
+                !texto.contains(proibido),
+                "apareceu o valor {proibido} no texto"
+            );
         }
     }
 
@@ -345,8 +354,13 @@ mod tests {
         let bios = passos.iter().find(|p| p.id == "atualizar_bios").unwrap();
 
         assert_eq!(bios.fase, Fase::UltimoRecurso);
-        assert!(bios.risco_e_volta.contains("NUNCA FAZ ISSO E NUNCA VAI FAZER"));
-        assert!(bios.risco_e_volta.contains("sem ligar"), "precisa dizer o pior caso");
+        assert!(bios
+            .risco_e_volta
+            .contains("NUNCA FAZ ISSO E NUNCA VAI FAZER"));
+        assert!(
+            bios.risco_e_volta.contains("sem ligar"),
+            "precisa dizer o pior caso"
+        );
     }
 
     /// Mandar dono de Intel procurar "Precision Boost Overdrive" o faria desistir do passo a passo.
@@ -367,31 +381,63 @@ mod tests {
         let uefi = montar(&leitura_padrao(), false, false, false);
         assert!(!uefi.iter().any(|p| p.id == "csm"));
 
-        let legacy = Leitura { uefi: Some(false), ..leitura_padrao() };
+        let legacy = Leitura {
+            uefi: Some(false),
+            ..leitura_padrao()
+        };
         let passos = montar(&legacy, false, false, false);
-        let csm = passos.iter().find(|p| p.id == "csm").expect("precisa aparecer");
+        let csm = passos
+            .iter()
+            .find(|p| p.id == "csm")
+            .expect("precisa aparecer");
 
         assert!(csm.risco_e_volta.contains("não iniciar"));
-        assert!(csm.risco_e_volta.contains("mbr2gpt"), "precisa nomear a ferramenta");
+        assert!(
+            csm.risco_e_volta.contains("mbr2gpt"),
+            "precisa nomear a ferramenta"
+        );
         assert!(csm.risco_e_volta.contains("backup") || csm.risco_e_volta.contains("cópia"));
     }
 
     /// Não saber se é UEFI não pode virar "está em Legacy".
     #[test]
     fn uefi_desconhecido_nao_vira_passo_de_legacy() {
-        let sem_saber = Leitura { uefi: None, ..leitura_padrao() };
-        assert!(!montar(&sem_saber, false, false, false).iter().any(|p| p.id == "csm"));
+        let sem_saber = Leitura {
+            uefi: None,
+            ..leitura_padrao()
+        };
+        assert!(!montar(&sem_saber, false, false, false)
+            .iter()
+            .any(|p| p.id == "csm"));
     }
 
     #[test]
     fn o_que_foi_medido_aqui_e_marcado() {
         let com_achado = montar(&leitura_padrao(), true, true, false);
 
-        assert!(com_achado.iter().find(|p| p.id == "xmp").unwrap().medido_aqui);
-        assert!(com_achado.iter().find(|p| p.id == "rebar").unwrap().medido_aqui);
+        assert!(
+            com_achado
+                .iter()
+                .find(|p| p.id == "xmp")
+                .unwrap()
+                .medido_aqui
+        );
+        assert!(
+            com_achado
+                .iter()
+                .find(|p| p.id == "rebar")
+                .unwrap()
+                .medido_aqui
+        );
 
         let sem_achado = montar(&leitura_padrao(), false, false, false);
-        assert!(!sem_achado.iter().find(|p| p.id == "xmp").unwrap().medido_aqui);
+        assert!(
+            !sem_achado
+                .iter()
+                .find(|p| p.id == "xmp")
+                .unwrap()
+                .medido_aqui
+        );
     }
 
     #[test]
@@ -402,7 +448,11 @@ mod tests {
                 "`{}` não explica o risco nem a volta",
                 passo.id
             );
-            assert!(!passo.onde.trim().is_empty(), "`{}` não diz onde procurar", passo.id);
+            assert!(
+                !passo.onde.trim().is_empty(),
+                "`{}` não diz onde procurar",
+                passo.id
+            );
         }
     }
 
@@ -416,7 +466,10 @@ mod tests {
 
     #[test]
     fn sem_o_modelo_a_frase_continua_inteira() {
-        let sem = Leitura { placa_mae: None, ..leitura_padrao() };
+        let sem = Leitura {
+            placa_mae: None,
+            ..leitura_padrao()
+        };
         let passos = montar(&sem, false, false, false);
         let bios = passos.iter().find(|p| p.id == "atualizar_bios").unwrap();
 

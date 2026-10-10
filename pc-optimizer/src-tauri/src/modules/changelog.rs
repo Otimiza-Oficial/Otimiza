@@ -82,6 +82,18 @@ pub enum ChangeRecord {
         valor_anterior: String,
     },
 
+    /// Ajuste do driver AMD pelo ADLX. O anterior está no formato de `amddriver::codificar` ("1", "0", "1:141").
+    DriverAmd {
+        opcao: String,
+        valor_anterior: String,
+    },
+
+    /// Ajuste do driver Intel pelo IGCL. O anterior está no formato de `inteldriver::codificar` ("e:1", "l:1:141").
+    DriverIntel {
+        opcao: String,
+        valor_anterior: String,
+    },
+
     /// Perfil criado pelo Otimiza é apagado inteiro; perfil que já existia tem cada ajuste devolvido.
     PerfilNvidia {
         executavel: String,
@@ -95,6 +107,15 @@ pub enum ChangeRecord {
     LimiteNvidia {
         executavel: String,
         fps: u32,
+        perfil_criado: bool,
+        valor_anterior: String,
+        /// O caminho pelo qual o perfil foi achado (o perfil que o driver usa). Ausente nos gravados antes (perfil achado só pelo nome).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caminho: Option<String>,
+    },
+    /// Smooth Motion ligado no perfil do jogo (experimental). O desfazer devolve o valor e não apaga o perfil.
+    SmoothMotionNvidia {
+        executavel: String,
         perfil_criado: bool,
         valor_anterior: String,
     },
@@ -176,18 +197,57 @@ impl ChangeRecord {
                     valor_anterior.clone()
                 }
             ),
-            ChangeRecord::PerfilNvidia { executavel, perfil, perfil_criado, anteriores } => format!(
+            ChangeRecord::DriverAmd {
+                opcao,
+                valor_anterior,
+            } => format!(
+                "driver AMD · {} (antes: {})",
+                opcao,
+                match crate::modules::windows::amddriver::decodificar(valor_anterior) {
+                    Some(crate::modules::windows::amddriver::Anterior::Chave(true)) =>
+                        "ligado".to_string(),
+                    Some(crate::modules::windows::amddriver::Anterior::Chave(false)) =>
+                        "desligado".to_string(),
+                    Some(crate::modules::windows::amddriver::Anterior::Limite { ligado, fps }) =>
+                        format!(
+                            "{} FPS, {}",
+                            fps,
+                            if ligado { "ligado" } else { "desligado" }
+                        ),
+                    None => valor_anterior.clone(),
+                }
+            ),
+            ChangeRecord::DriverIntel {
+                opcao,
+                valor_anterior,
+            } => {
+                format!("driver Intel · {} (antes: {})", opcao, valor_anterior)
+            }
+            ChangeRecord::PerfilNvidia {
+                executavel,
+                perfil,
+                perfil_criado,
+                anteriores,
+            } => format!(
                 "driver NVIDIA · {} no perfil {} ({} ajuste(s){})",
                 executavel,
                 perfil,
                 anteriores.len(),
-                if *perfil_criado { ", perfil criado pelo Otimiza" } else { "" }
+                if *perfil_criado {
+                    ", perfil criado pelo Otimiza"
+                } else {
+                    ""
+                }
             ),
+            ChangeRecord::SmoothMotionNvidia { executavel, .. } => {
+                format!("driver NVIDIA · Smooth Motion ligado em {}", executavel)
+            }
             ChangeRecord::LimiteNvidia {
                 executavel,
                 fps,
                 perfil_criado,
                 valor_anterior,
+                ..
             } => format!(
                 "driver NVIDIA · {} limitado a {} FPS ({})",
                 executavel,

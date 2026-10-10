@@ -296,7 +296,10 @@ mod medicao_de_tempo {
             "\n  profile() com cache quente {:>6} ms",
             inicio.elapsed().as_millis()
         );
-        println!("  ({} · {:.1} GB · {} núcleos)\n", p.cpu_name, p.total_ram_gb, p.logical_cores);
+        println!(
+            "  ({} · {:.1} GB · {} núcleos)\n",
+            p.cpu_name, p.total_ram_gb, p.logical_cores
+        );
     }
 }
 

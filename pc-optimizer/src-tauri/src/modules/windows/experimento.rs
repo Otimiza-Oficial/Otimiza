@@ -13,7 +13,9 @@ use crate::modules::regressao::{comparar, Desfecho, Veredito};
 #[serde(tag = "fase")]
 pub enum Fase {
     FaltaOAntes,
-    ProntoParaAplicar { amostras_antes: usize },
+    ProntoParaAplicar {
+        amostras_antes: usize,
+    },
     EsperandoODepois {
         amostras_depois: usize,
         faltam: usize,
@@ -24,13 +26,22 @@ pub enum Fase {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "decisao")]
 pub enum Decisao {
-    Esperar { falta: String },
-    Manter { ganho_pct: f64 },
+    Esperar {
+        falta: String,
+    },
+    Manter {
+        ganho_pct: f64,
+    },
     /// Também é resposta: deixa a pessoa parar de mexer nisso.
     NaoMudouNada,
-    ReverterSozinho { queda_pct: f64 },
+    ReverterSozinho {
+        queda_pct: f64,
+    },
     /// Atravessou um reinício: avisa e oferece o botão.
-    PiorouMasNaoReverto { queda_pct: f64, porque: String },
+    PiorouMasNaoReverto {
+        queda_pct: f64,
+        porque: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,7 +138,9 @@ pub fn fase(veredito: &Veredito, aplicado: bool) -> Fase {
 
     if !aplicado {
         return if antes >= AMOSTRAS_POR_LADO {
-            Fase::ProntoParaAplicar { amostras_antes: antes }
+            Fase::ProntoParaAplicar {
+                amostras_antes: antes,
+            }
         } else {
             Fase::FaltaOAntes
         };
@@ -172,7 +185,11 @@ mod tests {
 
     fn veredito(desfecho: Desfecho, antes: usize, depois: usize, pct: Option<f64>) -> Veredito {
         let lado = |n: usize| {
-            (n > 0).then(|| Lado { fps: 100.0, low_1pct: 70.0, amostras: n })
+            (n > 0).then(|| Lado {
+                fps: 100.0,
+                low_1pct: 70.0,
+                amostras: n,
+            })
         };
 
         Veredito {
@@ -187,7 +204,10 @@ mod tests {
 
     #[test]
     fn o_protocolo_e_o_comparador_pedem_a_mesma_amostra() {
-        assert_eq!(AMOSTRAS_POR_LADO, crate::modules::regressao::AMOSTRAS_MINIMAS);
+        assert_eq!(
+            AMOSTRAS_POR_LADO,
+            crate::modules::regressao::AMOSTRAS_MINIMAS
+        );
     }
 
     #[test]
@@ -199,7 +219,10 @@ mod tests {
             Decisao::PiorouMasNaoReverto { queda_pct, porque } => {
                 assert_eq!(queda_pct, -40.0);
                 assert!(porque.contains("sessões diferentes"));
-                assert!(porque.contains("botão"), "precisa oferecer o caminho manual");
+                assert!(
+                    porque.contains("botão"),
+                    "precisa oferecer o caminho manual"
+                );
             }
             outro => panic!("era para avisar sem reverter, veio {outro:?}"),
         }
@@ -238,8 +261,14 @@ mod tests {
             panic!("era para esperar");
         };
 
-        assert!(falta.contains("DESLIGADO"), "falta dizer que é com o grupo desligado");
-        assert!(falta.contains("jogar"), "falta dizer o que a pessoa faz: {falta}");
+        assert!(
+            falta.contains("DESLIGADO"),
+            "falta dizer que é com o grupo desligado"
+        );
+        assert!(
+            falta.contains("jogar"),
+            "falta dizer o que a pessoa faz: {falta}"
+        );
     }
 
     #[test]
@@ -268,7 +297,10 @@ mod tests {
 
     #[test]
     fn as_fases_seguem_a_ordem_do_protocolo() {
-        assert_eq!(fase(&veredito(Desfecho::SemAmostra, 0, 0, None), false), Fase::FaltaOAntes);
+        assert_eq!(
+            fase(&veredito(Desfecho::SemAmostra, 0, 0, None), false),
+            Fase::FaltaOAntes
+        );
 
         assert_eq!(
             fase(&veredito(Desfecho::SemAmostra, 2, 0, None), false),
@@ -277,10 +309,16 @@ mod tests {
 
         assert_eq!(
             fase(&veredito(Desfecho::SemAmostra, 2, 1, None), true),
-            Fase::EsperandoODepois { amostras_depois: 1, faltam: 1 }
+            Fase::EsperandoODepois {
+                amostras_depois: 1,
+                faltam: 1
+            }
         );
 
-        assert_eq!(fase(&veredito(Desfecho::Igual, 2, 2, Some(0.0)), true), Fase::Concluido);
+        assert_eq!(
+            fase(&veredito(Desfecho::Igual, 2, 2, Some(0.0)), true),
+            Fase::Concluido
+        );
     }
 
     #[test]

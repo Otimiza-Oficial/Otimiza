@@ -3,59 +3,59 @@ use crate::modules::benchmark::{
     self, BaselineResult, BaselineStore, Benchmark, BenchmarkComparison, BenchmarkSnapshot,
 };
 use crate::modules::changelog::ChangeLog;
-use crate::modules::preferences::Preferences;
+#[cfg(target_os = "windows")]
+use crate::modules::optimizer::BatchStep;
 #[cfg(target_os = "windows")]
 use crate::modules::optimizer::{OptimizationInfo, OptimizationOutcome};
+use crate::modules::preferences::Preferences;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::processes::ProcessImpact;
+use crate::modules::windows::bloatware::BloatReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::startup::StartupEntry;
-#[cfg(target_os = "windows")]
-use crate::modules::windows::restore::RestoreStatus;
-#[cfg(target_os = "windows")]
-
-#[cfg(target_os = "windows")]
-use crate::modules::windows::essenciais::Checagem;
-#[cfg(target_os = "windows")]
-use crate::modules::windows::nvdriver::PainelDoDriver;
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-use crate::modules::windows::fivem::{FiveMReport, CleanOutcome as FiveMCleanOutcome};
+use crate::modules::windows::bottleneck::BottleneckReport;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::citizenfx::CitizenFxReport;
 #[cfg(target_os = "windows")]
 #[cfg(target_os = "windows")]
-use crate::modules::windows::frames::FrameMeasurement;
+use crate::modules::windows::essenciais::Checagem;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::framegen::{Artefato, Deteccao, Intensidade, Perfil, ResultadoDaRodada, Rodada, Tecnologia};
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+use crate::modules::windows::fivem::{CleanOutcome as FiveMCleanOutcome, FiveMReport};
+#[cfg(target_os = "windows")]
+use crate::modules::windows::framegen::{
+    Artefato, Deteccao, Intensidade, Perfil, ResultadoDaRodada, Rodada, Tecnologia,
+};
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+use crate::modules::windows::frames::FrameMeasurement;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::gamemode::GameModeStatus;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::bottleneck::BottleneckReport;
-#[cfg(target_os = "windows")]
-use crate::modules::windows::shaders::{ShaderReport, CleanOutcome as ShaderCleanOutcome};
-#[cfg(target_os = "windows")]
-#[cfg(target_os = "windows")]
-use crate::modules::windows::veredito::Veredito;
-#[cfg(target_os = "windows")]
 use crate::modules::windows::gpupref::GpuPrefReport;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::tasks::ScheduledTask;
+use crate::modules::windows::nvdriver::PainelDoDriver;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::processes::ProcessImpact;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::restore::RestoreStatus;
 #[cfg(target_os = "windows")]
 use crate::modules::windows::servicesaudit::ServiceEntry;
 #[cfg(target_os = "windows")]
-use crate::modules::windows::bloatware::BloatReport;
+use crate::modules::windows::shaders::{CleanOutcome as ShaderCleanOutcome, ShaderReport};
 #[cfg(target_os = "windows")]
-use crate::modules::optimizer::BatchStep;
+use crate::modules::windows::startup::StartupEntry;
+#[cfg(target_os = "windows")]
+use crate::modules::windows::tasks::ScheduledTask;
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
+use crate::modules::windows::veredito::Veredito;
+use crate::modules::{PerformanceMetrics, PerformanceMonitor};
 use tauri::{Emitter, Manager};
-use crate::modules::{PerformanceMonitor, PerformanceMetrics};
 
 #[cfg(not(target_os = "windows"))]
 const UNSUPPORTED_PLATFORM: &str =
@@ -93,7 +93,9 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
 }
 
 #[tauri::command]
-pub async fn get_performance_metrics(state: State<'_, AppState>) -> Result<PerformanceMetrics, String> {
+pub async fn get_performance_metrics(
+    state: State<'_, AppState>,
+) -> Result<PerformanceMetrics, String> {
     let mut monitor = state.monitor.lock().await;
     monitor.collect_metrics().await
 }
@@ -120,7 +122,12 @@ pub async fn nucleos_da_maquina() -> Result<NucleosNaTela, String> {
     let (jogo_nome, jogo_pid, jogo_mascara, jogo_exe) = match &jogo {
         Some(j) => {
             let mascara = afinidade::ler(j.pid).ok().map(|(processo, _)| processo);
-            (Some(j.nome.clone()), Some(j.pid), mascara, Some(j.executavel.clone()))
+            (
+                Some(j.nome.clone()),
+                Some(j.pid),
+                mascara,
+                Some(j.executavel.clone()),
+            )
         }
         None => (None, None, None, None),
     };
@@ -191,7 +198,10 @@ pub async fn prender_jogo_nos_nucleos(pid: u32, prender: bool) -> Result<String,
 /// Auto CPU Set (2.9): mede o jogo em todos os núcleos e só nos de desempenho, alternando, e fica com o que rendeu.
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn cpuset_testar(pid: u32, executavel: String) -> Result<crate::modules::windows::cpuset::ResultadoCpuSet, String> {
+pub async fn cpuset_testar(
+    pid: u32,
+    executavel: String,
+) -> Result<crate::modules::windows::cpuset::ResultadoCpuSet, String> {
     crate::modules::licenca::exigir()?;
     tokio::task::spawn_blocking(move || crate::modules::windows::cpuset::testar(pid, &executavel))
         .await
@@ -240,8 +250,11 @@ pub async fn devolver_teste_da_travada() -> Result<Option<String>, String> {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub async fn cpuset_resultados() -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
-    Ok(crate::modules::windows::cpuset::ler().into_values().collect())
+pub async fn cpuset_resultados(
+) -> Result<Vec<crate::modules::windows::cpuset::ResultadoCpuSet>, String> {
+    Ok(crate::modules::windows::cpuset::ler()
+        .into_values()
+        .collect())
 }
 
 /// `LIVRES`: só tira.
@@ -273,15 +286,6 @@ pub fn caminho_do_mouse(intervalos_us: Vec<u64>) -> CaminhoNaTela {
 pub struct CaminhoNaTela {
     pub caminho: crate::modules::mouse::Caminho,
     pub achados: Vec<crate::modules::mouse::AchadoNaTela>,
-}
-
-/// SEM ESTADO NO BACKEND: a sessão vem da tela e volta; fechar o programa encerra a sessão, e o aplicado segue no
-/// histórico. Não aplica nem desfaz: devolve o passo.
-#[tauri::command(async)]
-pub fn passo_do_autoajuste(
-    sessao: crate::modules::autoajuste::Sessao,
-) -> crate::modules::autoajuste::Passo {
-    crate::modules::autoajuste::proximo_passo(&sessao)
 }
 
 /// NÃO APLICA NADA: devolve um plano com o nome que `apply_game_profile` aceita, as razões medidas e o que não foi
@@ -584,11 +588,13 @@ pub async fn comparar_com_baseline(
 /// decidir pelo cliente com base num arquivo que já provou que algo deu errado.
 #[tauri::command(async)]
 pub fn recuperacao_pendente() -> Result<Option<PendenciaNaTela>, String> {
-    Ok(crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
-        // A frase aqui e não na tela: duas versões da explicação discordariam.
-        explicacao: p.explicacao(),
-        pendencia: p,
-    }))
+    Ok(
+        crate::modules::transacao::pendente()?.map(|p| PendenciaNaTela {
+            // A frase aqui e não na tela: duas versões da explicação discordariam.
+            explicacao: p.explicacao(),
+            pendencia: p,
+        }),
+    )
 }
 
 #[derive(Debug, Serialize)]
@@ -649,9 +655,8 @@ pub fn get_baseline() -> Option<BenchmarkSnapshot> {
 
 #[tauri::command]
 pub async fn measure_and_compare() -> Result<BenchmarkComparison, String> {
-    let before = BaselineStore::load().ok_or(
-        "Nenhuma medição inicial encontrada. Meça o desempenho antes de otimizar.",
-    )?;
+    let before = BaselineStore::load()
+        .ok_or("Nenhuma medição inicial encontrada. Meça o desempenho antes de otimizar.")?;
 
     let after = tokio::task::spawn_blocking(|| Benchmark::new().run())
         .await
@@ -865,7 +870,10 @@ pub fn niveis_de_otimizacao() -> Vec<NivelNaTela> {
             nome: nivel.nome().to_string(),
             promessa: nivel.promessa().to_string(),
             exigencia: nivel.exigencia().to_string(),
-            itens: itens_do_nivel(*nivel).iter().map(|s| s.to_string()).collect(),
+            itens: itens_do_nivel(*nivel)
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
             acrescenta: acrescenta(*nivel).iter().map(|s| s.to_string()).collect(),
             aplica_de_uma_vez: aplica_de_uma_vez(*nivel),
         })
@@ -961,26 +969,49 @@ pub async fn exportar_alteracoes(state: State<'_, AppState>) -> Result<String, S
 }
 
 #[cfg(target_os = "windows")]
-fn valor_novo_da_alteracao(id: &str, c: &crate::modules::changelog::ChangeRecord) -> Option<String> {
+fn valor_novo_da_alteracao(
+    id: &str,
+    c: &crate::modules::changelog::ChangeRecord,
+) -> Option<String> {
     use crate::modules::changelog::ChangeRecord;
     use crate::modules::windows::catalog::{self, Action, RegValue};
     match c {
-        ChangeRecord::RegistryValue { path, name, .. } => catalog::find(id)?.actions.iter().find_map(|a| match a {
-            Action::Registry { path: p, name: n, value, .. } if p.eq_ignore_ascii_case(path) && n.eq_ignore_ascii_case(name) => Some(match value {
-                RegValue::Dword(v) => v.to_string(),
-                RegValue::Text(t) => t.to_string(),
-                RegValue::Binary(b) => b.iter().map(|x| format!("{:02X}", x)).collect::<Vec<_>>().join(" "),
-            }),
-            _ => None,
-        }),
+        ChangeRecord::RegistryValue { path, name, .. } => {
+            catalog::find(id)?.actions.iter().find_map(|a| match a {
+                Action::Registry {
+                    path: p,
+                    name: n,
+                    value,
+                    ..
+                } if p.eq_ignore_ascii_case(path) && n.eq_ignore_ascii_case(name) => {
+                    Some(match value {
+                        RegValue::Dword(v) => v.to_string(),
+                        RegValue::Text(t) => t.to_string(),
+                        RegValue::Binary(b) => b
+                            .iter()
+                            .map(|x| format!("{:02X}", x))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    })
+                }
+                _ => None,
+            })
+        }
         ChangeRecord::LimiteNvidia { fps, .. } => Some(format!("{} FPS", fps)),
         ChangeRecord::PerfilNvidia { perfil, .. } => Some(format!("perfil {}", perfil)),
         ChangeRecord::Hibernation { .. } => Some("desligada".into()),
         ChangeRecord::MemoryCompression { .. } => Some("desligada".into()),
         ChangeRecord::ReservedStorage { .. } => Some("desligado".into()),
-        ChangeRecord::ScheduledTask { previously_enabled, .. } => {
-            Some(if *previously_enabled { "desligada" } else { "ligada" }.into())
-        }
+        ChangeRecord::ScheduledTask {
+            previously_enabled, ..
+        } => Some(
+            if *previously_enabled {
+                "desligada"
+            } else {
+                "ligada"
+            }
+            .into(),
+        ),
         _ => None,
     }
 }
@@ -1074,8 +1105,11 @@ pub async fn set_gpu_preference(
         };
 
         let mut log = state.changes.lock().await;
-        crate::modules::windows::WindowsOptimizer::new()
-            .set_gpu_preference(&caminho, preferencia, &mut log)
+        crate::modules::windows::WindowsOptimizer::new().set_gpu_preference(
+            &caminho,
+            preferencia,
+            &mut log,
+        )
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1087,7 +1121,9 @@ pub async fn set_gpu_preference(
 
 /// Só leitura. Sem placa NVIDIA, a frase que diz isso.
 #[tauri::command]
-pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<PainelDoDriver, String> {
+pub async fn ajustes_do_driver_nvidia(
+    state: State<'_, AppState>,
+) -> Result<PainelDoDriver, String> {
     #[cfg(target_os = "windows")]
     {
         use crate::modules::changelog::ChangeRecord;
@@ -1107,14 +1143,19 @@ pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<Pain
                 .applied()
                 .iter()
                 .flat_map(|entrada| {
-                    entrada.changes.iter().filter_map(move |mudanca| match mudanca {
-                        ChangeRecord::LimiteNvidia { executavel, fps, .. } => Some(LimiteNaTela {
-                            executavel: executavel.clone(),
-                            fps: *fps,
-                            historico: entrada.optimization_id.clone(),
-                        }),
-                        _ => None,
-                    })
+                    entrada
+                        .changes
+                        .iter()
+                        .filter_map(move |mudanca| match mudanca {
+                            ChangeRecord::LimiteNvidia {
+                                executavel, fps, ..
+                            } => Some(LimiteNaTela {
+                                executavel: executavel.clone(),
+                                fps: *fps,
+                                historico: entrada.optimization_id.clone(),
+                            }),
+                            _ => None,
+                        })
                 })
                 .collect();
 
@@ -1122,7 +1163,10 @@ pub async fn ajustes_do_driver_nvidia(state: State<'_, AppState>) -> Result<Pain
         };
 
         tokio::task::spawn_blocking(move || {
-            crate::modules::windows::nvdriver::painel(|id| aplicados.iter().any(|a| a == id), limites)
+            crate::modules::windows::nvdriver::painel(
+                |id| aplicados.iter().any(|a| a == id),
+                limites,
+            )
         })
         .await
         .map_err(|e| format!("Falha ao ler o driver da NVIDIA: {}", e))
@@ -1156,6 +1200,104 @@ pub async fn aplicar_ajuste_nvidia(
     }
 }
 
+#[derive(serde::Serialize)]
+pub struct PainelAmd {
+    pub estado: String,
+    pub nota: String,
+    pub ajustes: Option<crate::modules::windows::amddriver::Ajustes>,
+    pub sensores: Option<crate::modules::windows::amddriver::Sensores>,
+    /// Ids que o OTIMIZA aplicou e não desfez: o que a pessoa ligou à mão não aparece aqui.
+    pub aplicados: Vec<String>,
+}
+
+/// O que o driver AMD tem e como está. `LIVRES`: só lê.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn driver_amd(state: State<'_, AppState>) -> Result<PainelAmd, String> {
+    let aplicados = aplicados_com_prefixo(&state, "amd-").await;
+    tokio::task::spawn_blocking(move || {
+        use crate::modules::windows::amddriver;
+        let estado = amddriver::estado();
+        let disponivel = estado == amddriver::Adlx::Disponivel;
+        PainelAmd {
+            estado: format!("{:?}", estado),
+            nota: amddriver::nota_do_estado(estado).to_string(),
+            ajustes: disponivel.then(amddriver::ler_ajustes).and_then(|r| r.ok()),
+            sensores: disponivel.then(amddriver::sensores).and_then(|r| r.ok()),
+            aplicados,
+        }
+    })
+    .await
+    .map_err(|e| format!("Falha ao ler o driver AMD: {}", e))
+}
+
+/// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn aplicar_ajuste_amd(
+    opcao: String,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    let mut log = state.changes.lock().await;
+    crate::modules::windows::WindowsOptimizer::new().aplicar_ajuste_amd(&opcao, &mut log)
+}
+
+#[derive(serde::Serialize)]
+pub struct PainelIntel {
+    pub estado: String,
+    pub nota: String,
+    pub ajustes: Option<crate::modules::windows::inteldriver::Ajustes>,
+    pub aplicados: Vec<String>,
+}
+
+async fn aplicados_com_prefixo(state: &State<'_, AppState>, prefixo: &str) -> Vec<String> {
+    state
+        .changes
+        .lock()
+        .await
+        .applied()
+        .iter()
+        .map(|a| a.optimization_id.clone())
+        .filter(|id| id.starts_with(prefixo))
+        .collect()
+}
+
+/// O que o driver Intel tem e como está. `LIVRES`: só lê.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn driver_intel(state: State<'_, AppState>) -> Result<PainelIntel, String> {
+    let aplicados = aplicados_com_prefixo(&state, "intel-").await;
+    tokio::task::spawn_blocking(move || {
+        use crate::modules::windows::inteldriver;
+        let estado = inteldriver::estado();
+        PainelIntel {
+            estado: format!("{:?}", estado),
+            nota: inteldriver::nota_do_estado(estado).to_string(),
+            ajustes: (estado == inteldriver::Igcl::Disponivel)
+                .then(inteldriver::ler_ajustes)
+                .and_then(|r| r.ok()),
+            aplicados,
+        }
+    })
+    .await
+    .map_err(|e| format!("Falha ao ler o driver Intel: {}", e))
+}
+
+/// `EXIGEM_LICENCA`. `opcao`: `intel-latencia` ou `intel-limite:<fps>`. O desfazer é o `revert_optimization`.
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn aplicar_ajuste_intel(
+    opcao: String,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
+    crate::modules::licenca::exigir()?;
+
+    let mut log = state.changes.lock().await;
+    crate::modules::windows::WindowsOptimizer::new().aplicar_ajuste_intel(&opcao, &mut log)
+}
+
 /// `EXIGEM_LICENCA`. O desfazer é o `revert_optimization`.
 #[tauri::command]
 pub async fn limitar_fps_nvidia(
@@ -1168,7 +1310,13 @@ pub async fn limitar_fps_nvidia(
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
-        crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(&executavel, fps, &mut log)
+        let caminho = crate::modules::windows::frames::caminho_do_processo(&executavel);
+        crate::modules::windows::WindowsOptimizer::new().limitar_fps_nvidia(
+            &executavel,
+            caminho.as_deref(),
+            fps,
+            &mut log,
+        )
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1235,8 +1383,11 @@ pub async fn set_persistent_priority(
     #[cfg(target_os = "windows")]
     {
         let mut log = state.changes.lock().await;
-        crate::modules::windows::WindowsOptimizer::new()
-            .set_persistent_priority(&executable, enable, &mut log)
+        crate::modules::windows::WindowsOptimizer::new().set_persistent_priority(
+            &executable,
+            enable,
+            &mut log,
+        )
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1282,10 +1433,7 @@ pub async fn game_mode_status(state: State<'_, AppState>) -> Result<GameModeStat
 }
 
 #[tauri::command]
-pub async fn set_game_mode(
-    active: bool,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
+pub async fn set_game_mode(active: bool, state: State<'_, AppState>) -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
@@ -1358,9 +1506,11 @@ pub async fn measure_frames(process: String, seconds: u64) -> Result<FrameMeasur
 pub async fn framegen_detectar(processo: Option<String>) -> Result<Deteccao, String> {
     #[cfg(target_os = "windows")]
     {
-        tokio::task::spawn_blocking(move || crate::modules::windows::framegen::detectar(processo.as_deref()))
-            .await
-            .map_err(|e| format!("Falha ao detectar a geração de quadros: {}", e))
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::framegen::detectar(processo.as_deref())
+        })
+        .await
+        .map_err(|e| format!("Falha ao detectar a geração de quadros: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1414,7 +1564,14 @@ pub fn framegen_comparar(
 
     let nota = (!artefatos.is_empty()).then(|| framegen::avaliar_artefatos(&artefatos));
     FramegenComparacao {
-        comparacao: framegen::comparar(&desligado, &ligado, perfil, hz, nota.map(|n| n.nivel), deriva_pct),
+        comparacao: framegen::comparar(
+            &desligado,
+            &ligado,
+            perfil,
+            hz,
+            nota.map(|n| n.nivel),
+            deriva_pct,
+        ),
         artefatos: nota,
     }
 }
@@ -1428,10 +1585,23 @@ pub async fn gerador_ligar(
     crate::modules::licenca::exigir()?;
 
     tokio::task::spawn_blocking(move || {
+        // A janela do gerador fica por cima do jogo: com anticheat que caça sobreposição aberto, nem liga.
+        use crate::modules::windows::anticheat;
+        if let Some(recusa) = anticheat::permite(
+            anticheat::Acao::SobreporJanela,
+            &anticheat::detectar_agora(),
+        )
+        .motivo()
+        {
+            return Err(recusa.to_string());
+        }
+
         crate::modules::windows::geracao::ligar(crate::modules::windows::geracao::Configuracao {
             processo,
             multiplicador,
             visivel_em_captura: false,
+            automatico: false,
+            sem_limite: false,
         })
     })
     .await
@@ -1450,7 +1620,12 @@ pub fn gerador_estado() -> crate::modules::windows::geracao::Estado {
 }
 
 #[tauri::command(async)]
-pub fn framegen_melhor(desligado: Rodada, testadas: Vec<Rodada>, perfil: Perfil, hz: u32) -> Option<usize> {
+pub fn framegen_melhor(
+    desligado: Rodada,
+    testadas: Vec<Rodada>,
+    perfil: Perfil,
+    hz: u32,
+) -> Option<usize> {
     crate::modules::windows::framegen::melhor_rodada(&desligado, &testadas, perfil, hz)
 }
 
@@ -1477,7 +1652,9 @@ pub struct PainelDeEnergia {
 #[tauri::command]
 pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
     tokio::task::spawn_blocking(|| {
-        use crate::modules::windows::{motorenergia as motor, motorenergia_maquina as maquina, planoenergia};
+        use crate::modules::windows::{
+            motorenergia as motor, motorenergia_maquina as maquina, planoenergia,
+        };
 
         let impressao = maquina::impressao();
         let base = maquina::enumerar_base()?;
@@ -1487,14 +1664,21 @@ pub async fn energia_painel() -> Result<PainelDeEnergia, String> {
             .map(|e| {
                 e.configuracoes
                     .into_iter()
-                    .filter(|c| c.alias.as_deref().is_some_and(|a| {
-                        let sem_classe = a.trim_end_matches('1');
-                        motor::apelidos::DA_TELA.iter().any(|t| t.eq_ignore_ascii_case(a) || t.eq_ignore_ascii_case(sem_classe))
-                    }))
+                    .filter(|c| {
+                        c.alias.as_deref().is_some_and(|a| {
+                            let sem_classe = a.trim_end_matches('1');
+                            motor::apelidos::DA_TELA.iter().any(|t| {
+                                t.eq_ignore_ascii_case(a) || t.eq_ignore_ascii_case(sem_classe)
+                            })
+                        })
+                    })
                     .collect()
             })
             .unwrap_or_default();
-        let plano_otimiza_ativo = impressao.plano_ativo_nome.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(planoenergia::NOME_DO_PLANO));
+        let plano_otimiza_ativo = impressao
+            .plano_ativo_nome
+            .as_deref()
+            .is_some_and(|n| n.eq_ignore_ascii_case(planoenergia::NOME_DO_PLANO));
 
         Ok(PainelDeEnergia {
             impressao,
@@ -1523,7 +1707,10 @@ pub async fn energia_testar_candidato(
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
     if crate::modules::provaalternada::em_andamento() {
-        return Err("A prova do Otimizar está rodando e troca o plano de energia. Espere ela terminar.".to_string());
+        return Err(
+            "A prova do Otimizar está rodando e troca o plano de energia. Espere ela terminar."
+                .to_string(),
+        );
     }
 
     tokio::task::spawn_blocking(move || {
@@ -1539,7 +1726,12 @@ pub async fn energia_testar_candidato(
         }
         maquina::marcar_teste_em_andamento(true);
         let aplicacao = maquina::aplicar(&candidato, &controlados)?;
-        let mut medicao = maquina::medir_atual(&candidato.id, processo.as_deref(), segundos.clamp(10, 60), repeticoes)?;
+        let mut medicao = maquina::medir_atual(
+            &candidato.id,
+            processo.as_deref(),
+            segundos.clamp(10, 60),
+            repeticoes,
+        )?;
         medicao.aplicacao = Some(aplicacao);
         Ok(medicao)
     })
@@ -1554,7 +1746,12 @@ pub async fn energia_medir_atual(
     repeticoes: u32,
 ) -> Result<crate::modules::windows::motorenergia_maquina::MedicaoDoCandidato, String> {
     tokio::task::spawn_blocking(move || {
-        crate::modules::windows::motorenergia_maquina::medir_atual("atual", processo.as_deref(), segundos.clamp(10, 60), repeticoes)
+        crate::modules::windows::motorenergia_maquina::medir_atual(
+            "atual",
+            processo.as_deref(),
+            segundos.clamp(10, 60),
+            repeticoes,
+        )
     })
     .await
     .map_err(|e| format!("Falha ao medir: {}", e))?
@@ -1569,9 +1766,17 @@ pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relato
 /// "O que mudou?" por jogo (`modules::linhadotempo`): partidas, trocas em volta da máquina e mudanças do Otimiza.
 /// Só leitura.
 #[tauri::command]
-pub async fn o_que_mudou(state: State<'_, AppState>) -> Result<Vec<crate::modules::linhadotempo::LinhaDoJogo>, String> {
-    let aplicadas: Vec<(u64, String)> =
-        state.changes.lock().await.applied().iter().map(|a| (a.timestamp, a.name.clone())).collect();
+pub async fn o_que_mudou(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::modules::linhadotempo::LinhaDoJogo>, String> {
+    let aplicadas: Vec<(u64, String)> = state
+        .changes
+        .lock()
+        .await
+        .applied()
+        .iter()
+        .map(|a| (a.timestamp, a.name.clone()))
+        .collect();
     tokio::task::spawn_blocking(move || {
         crate::modules::medicoes::ler().map(|m| crate::modules::linhadotempo::todos(&m, &aplicadas))
     })
@@ -1589,7 +1794,9 @@ pub async fn diagnostico_da_partida() -> Result<crate::modules::doctor::Diagnost
 }
 
 /// O diagnóstico da última partida, com os limites de FPS em cache.
-fn diagnosticar_agora(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> crate::modules::doctor::Diagnostico {
+fn diagnosticar_agora(
+    medicoes: &[crate::modules::medicoes::MedicaoAutomatica],
+) -> crate::modules::doctor::Diagnostico {
     {
         let ultima: Vec<crate::modules::medicoes::MedicaoAutomatica> = medicoes
             .iter()
@@ -1605,18 +1812,30 @@ fn diagnosticar_agora(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) 
         let (tetos, monitor_hz) = {
             // Em cache por dez minutos: `procurar` varre jogos, lê a NVAPI e pergunta ao WMI (PowerShell) pelos
             // monitores, e o diagnóstico roda a cada medição, com o jogo aberto. Limite de FPS muda só quando alguém mexe.
-            static GUARDADO: std::sync::Mutex<Option<(std::time::Instant, crate::modules::windows::tetos::Relatorio)>> =
-                std::sync::Mutex::new(None);
+            static GUARDADO: std::sync::Mutex<
+                Option<(
+                    std::time::Instant,
+                    crate::modules::windows::tetos::Relatorio,
+                )>,
+            > = std::sync::Mutex::new(None);
             let mut g = GUARDADO.lock().unwrap_or_else(|e| e.into_inner());
-            let valido = g.as_ref().is_some_and(|(q, _)| q.elapsed() < std::time::Duration::from_secs(600));
+            let valido = g
+                .as_ref()
+                .is_some_and(|(q, _)| q.elapsed() < std::time::Duration::from_secs(600));
             if !valido {
-                *g = Some((std::time::Instant::now(), crate::modules::windows::tetos::procurar()));
+                *g = Some((
+                    std::time::Instant::now(),
+                    crate::modules::windows::tetos::procurar(),
+                ));
             }
             let r = &g.as_ref().expect("acabou de ser preenchido").1;
             (Some(r.tetos.clone()), r.monitor_hz)
         };
         #[cfg(not(target_os = "windows"))]
-        let (tetos, monitor_hz): (Option<Vec<crate::modules::windows::tetos::Teto>>, Option<u32>) = (None, None);
+        let (tetos, monitor_hz): (
+            Option<Vec<crate::modules::windows::tetos::Teto>>,
+            Option<u32>,
+        ) = (None, None);
         crate::modules::doctor::diagnosticar(&ultima, tetos.as_deref(), monitor_hz)
     }
 }
@@ -1624,7 +1843,9 @@ fn diagnosticar_agora(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) 
 /// A receita (`modules::receita`): o ajuste de cada causa, se já está aplicado, como se prova, e o que já piorou
 /// este jogo nesta máquina. Só leitura, `LIVRES`.
 #[tauri::command]
-pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::modules::receita::Receita, String> {
+pub async fn receita_da_partida(
+    state: State<'_, AppState>,
+) -> Result<crate::modules::receita::Receita, String> {
     use crate::modules::changelog::ChangeRecord;
     use crate::modules::receita::{chave_do_jogo, Aplicados, PerfilDoJogo};
     let (plano, perfis) = {
@@ -1649,7 +1870,11 @@ pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::mod
         // Estrito: registro ilegível NÃO vira "nada foi provado", que ofereceria de novo o que já piorou.
         let (memoria, memoria_ilegivel) = match crate::modules::portao::ler_estrito() {
             Ok(estado) => (
-                crate::modules::receita::lembrancas(&estado, crate::modules::provaalternada::guardada().as_ref(), &medicoes),
+                crate::modules::receita::lembrancas(
+                    &estado,
+                    crate::modules::provaalternada::guardada().as_ref(),
+                    &medicoes,
+                ),
                 None,
             ),
             Err(e) => (Vec::new(), Some(e)),
@@ -1663,7 +1888,13 @@ pub async fn receita_da_partida(state: State<'_, AppState>) -> Result<crate::mod
             modo_jogo: crate::modules::preferences::Preferences::load().auto_game_mode,
             perfis,
         };
-        Ok(crate::modules::receita::montar(diagnostico, memoria, memoria_ilegivel, &aplicados, &agora))
+        Ok(crate::modules::receita::montar(
+            diagnostico,
+            memoria,
+            memoria_ilegivel,
+            &aplicados,
+            &agora,
+        ))
     })
     .await
     .map_err(|e| format!("Falha ao montar a receita: {}", e))?
@@ -1678,7 +1909,11 @@ pub async fn resultado_para_compartilhar() -> Result<String, String> {
         let data = prova
             .as_ref()
             .and_then(|p| chrono::DateTime::from_timestamp(p.quando as i64, 0))
-            .map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+            .map(|d| {
+                d.with_timezone(&chrono::Local)
+                    .format("%d/%m/%Y")
+                    .to_string()
+            })
             .unwrap_or_default();
         #[cfg(target_os = "windows")]
         let (cpu, gpu) = (
@@ -1706,9 +1941,11 @@ pub async fn resultado_para_compartilhar() -> Result<String, String> {
 pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
     #[cfg(target_os = "windows")]
     {
-        tokio::task::spawn_blocking(|| crate::modules::perfil::montar(&crate::modules::perfil::ler()))
-            .await
-            .map_err(|e| format!("Falha ao ler o perfil do PC: {}", e))
+        tokio::task::spawn_blocking(|| {
+            crate::modules::perfil::montar(&crate::modules::perfil::ler())
+        })
+        .await
+        .map_err(|e| format!("Falha ao ler o perfil do PC: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -1719,17 +1956,22 @@ pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
 
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
 #[tauri::command]
-pub async fn relatorio_da_ultima_partida() -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
-    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler().map(|m| crate::modules::relatoriodapartida::ultima(&m)))
-        .await
-        .map_err(|e| format!("Falha ao montar o relatório da partida: {}", e))?
+pub async fn relatorio_da_ultima_partida(
+) -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
+    tokio::task::spawn_blocking(|| {
+        crate::modules::medicoes::ler().map(|m| crate::modules::relatoriodapartida::ultima(&m))
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar o relatório da partida: {}", e))?
 }
 
 #[tauri::command]
 pub async fn quedas_de_desempenho() -> Result<Vec<crate::modules::deriva::Deriva>, String> {
-    tokio::task::spawn_blocking(|| crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m)))
-        .await
-        .map_err(|e| format!("Falha ao ler as medições: {}", e))?
+    tokio::task::spawn_blocking(|| {
+        crate::modules::medicoes::ler_para_comparar().map(|m| crate::modules::deriva::procurar(&m))
+    })
+    .await
+    .map_err(|e| format!("Falha ao ler as medições: {}", e))?
 }
 
 #[tauri::command]
@@ -1754,7 +1996,10 @@ pub struct DiagnosticoAoVivo {
 }
 
 #[tauri::command]
-pub async fn diagnostico_ao_vivo(segundos: u64, state: State<'_, AppState>) -> Result<DiagnosticoAoVivo, String> {
+pub async fn diagnostico_ao_vivo(
+    segundos: u64,
+    state: State<'_, AppState>,
+) -> Result<DiagnosticoAoVivo, String> {
     let segundos = segundos.clamp(5, 60);
     // Sem o piso o transbordo de VRAM não se distingue do normal.
     let piso = state.monitor.lock().await.piso_de_vram();
@@ -1763,7 +2008,10 @@ pub async fn diagnostico_ao_vivo(segundos: u64, state: State<'_, AppState>) -> R
         .map_err(|e| format!("Falha no diagnóstico: {}", e))?
 }
 
-pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) -> Result<DiagnosticoAoVivo, String> {
+pub fn diagnostico_na_janela(
+    segundos: u64,
+    piso: crate::modules::vram::Piso,
+) -> Result<DiagnosticoAoVivo, String> {
     {
         use crate::core::telemetria;
 
@@ -1811,25 +2059,50 @@ pub fn diagnostico_na_janela(segundos: u64, piso: crate::modules::vram::Piso) ->
             None => (None, Vec::new(), None, None),
             Some(Ok(Ok((m, inicio)))) => (m.resumo.saude, m.intervalos_ms, None, inicio),
             Some(Ok(Err(e))) => (None, Vec::new(), Some(e), None),
-            Some(Err(_)) => (None, Vec::new(), Some("A medição de quadros parou no meio.".to_string()), None),
+            Some(Err(_)) => (
+                None,
+                Vec::new(),
+                Some("A medição de quadros parou no meio.".to_string()),
+                None,
+            ),
         };
         let inicio_dos_quadros = match (inicio_qpc, ancora_qpc, frequencia) {
-            (Some(i), Some(a), Some(f)) if f > 0 => (ancora_ms as i64 + (i - a) * 1000 / f).max(0) as u64,
+            (Some(i), Some(a), Some(f)) if f > 0 => {
+                (ancora_ms as i64 + (i - a) * 1000 / f).max(0) as u64
+            }
             _ => ancora_ms,
         };
         let vram_total = coletor.placa().map(|p| p.vram_total_mb);
-        let travadas = (!intervalos.is_empty())
-            .then(|| crate::core::travadas::investigar(&intervalos, &amostras, inicio_dos_quadros, vram_total));
+        let travadas = (!intervalos.is_empty()).then(|| {
+            crate::core::travadas::investigar(
+                &intervalos,
+                &amostras,
+                inicio_dos_quadros,
+                vram_total,
+            )
+        });
 
         let ram_total_mb = {
             let mut s = sysinfo::System::new();
             s.refresh_memory();
             Some(s.total_memory() as f64 / 1_048_576.0)
         };
-        let hz = crate::modules::windows::display::monitores().iter().find(|m| m.principal).map(|m| m.hz_atual);
+        let hz = crate::modules::windows::display::monitores()
+            .iter()
+            .find(|m| m.principal)
+            .map(|m| m.hz_atual);
         let agora = crate::modules::changelog::now_timestamp();
-        let t = crate::core::janela::para_telemetria(&amostras, ram_total_mb, vram_total, saude.as_ref(), travadas.as_ref(), hz, agora);
-        let gargalo = crate::modules::gargalo::classificar_com(&t, &crate::modules::vram::avaliar(&t, &piso));
+        let t = crate::core::janela::para_telemetria(
+            &amostras,
+            ram_total_mb,
+            vram_total,
+            saude.as_ref(),
+            travadas.as_ref(),
+            hz,
+            agora,
+        );
+        let gargalo =
+            crate::modules::gargalo::classificar_com(&t, &crate::modules::vram::avaliar(&t, &piso));
 
         Ok(DiagnosticoAoVivo {
             placa: coletor.placa().cloned(),
@@ -1854,7 +2127,15 @@ pub async fn energia_vizinhos(
         Ok(motor::vizinhos_do_vencedor(parametros, &impressao)
             .into_iter()
             .enumerate()
-            .map(|(i, p)| motor::gerar(&impressao, &base, &format!("refino-{}", i + 1), motor::Papel::Refino, p))
+            .map(|(i, p)| {
+                motor::gerar(
+                    &impressao,
+                    &base,
+                    &format!("refino-{}", i + 1),
+                    motor::Papel::Refino,
+                    p,
+                )
+            })
             .collect())
     })
     .await
@@ -1878,14 +2159,17 @@ pub async fn energia_aplicar(
     crate::modules::licenca::exigir()?;
 
     tokio::task::spawn_blocking(move || {
-        let r = crate::modules::windows::motorenergia_maquina::aplicar_parametros("escolhido", parametros);
+        let r = crate::modules::windows::motorenergia_maquina::aplicar_parametros(
+            "escolhido",
+            parametros,
+        );
         if r.is_ok() {
             crate::modules::windows::motorenergia_maquina::marcar_teste_em_andamento(false);
         }
         r
     })
-        .await
-        .map_err(|e| format!("Falha ao aplicar: {}", e))?
+    .await
+    .map_err(|e| format!("Falha ao aplicar: {}", e))?
 }
 
 /// `LIVRES`: desfazer nunca depende de licença válida.
@@ -1894,22 +2178,29 @@ pub async fn energia_restaurar_anterior(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
     let otimiza = state.changes.lock().await.is_applied("plano_otimiza");
-    tokio::task::spawn_blocking(move || crate::modules::windows::motorenergia_maquina::restaurar_anterior(otimiza))
-        .await
-        .map_err(|e| format!("Falha ao restaurar: {}", e))?
+    tokio::task::spawn_blocking(move || {
+        crate::modules::windows::motorenergia_maquina::restaurar_anterior(otimiza)
+    })
+    .await
+    .map_err(|e| format!("Falha ao restaurar: {}", e))?
 }
 
 #[tauri::command]
 pub async fn energia_restaurar_windows(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::motorenergia_maquina::Restauracao, String> {
-    let r = tokio::task::spawn_blocking(crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows)
-        .await
-        .map_err(|e| format!("Falha ao restaurar: {}", e))??;
+    let r = tokio::task::spawn_blocking(
+        crate::modules::windows::motorenergia_maquina::restaurar_padrao_windows,
+    )
+    .await
+    .map_err(|e| format!("Falha ao restaurar: {}", e))??;
     // O plano OTIMIZA foi apagado junto: o histórico não pode seguir dizendo que ele está aplicado.
     if r.plano_otimiza_apagado {
         if let Err(e) = state.changes.lock().await.take("plano_otimiza") {
-            crate::utils::Logger::warn(&format!("o plano OTIMIZA foi apagado, mas o histórico não gravou: {}", e));
+            crate::utils::Logger::warn(&format!(
+                "o plano OTIMIZA foi apagado, mas o histórico não gravou: {}",
+                e
+            ));
         }
     }
     Ok(r)
@@ -2239,9 +2530,7 @@ pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
             &["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script],
             std::time::Duration::from_secs(600),
         )
-        .map_err(|_| {
-            "Você recusou a permissão de administrador. Nada foi alterado.".to_string()
-        })?;
+        .map_err(|_| "Você recusou a permissão de administrador. Nada foi alterado.".to_string())?;
 
         // Em desenvolvimento, encerrar derrubaria o servidor do Vite hospedado pelo `tauri dev`: esconde a janela.
         if cfg!(debug_assertions) {
@@ -2276,6 +2565,659 @@ pub async fn convite_do_discord(embutido: String) -> Result<String, String> {
     Ok(crate::modules::convite::consultar()
         .await
         .unwrap_or(embutido))
+}
+
+/// Onde está o pedido de feedback: contando, liberado ou exigido. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn feedback_estado() -> Result<crate::plataforma::feedback::Estado, String> {
+    Ok(crate::plataforma::feedback::estado(None))
+}
+
+/// "Já enviei": pergunta ao bot se o feedback desta máquina está no canal. `LIVRES`: quem está com as correções
+/// pausadas é justamente quem precisa chamar.
+#[tauri::command]
+pub async fn feedback_verificar() -> Result<crate::plataforma::feedback::Estado, String> {
+    crate::plataforma::feedback::atualizar_configuracao().await;
+    Ok(crate::plataforma::feedback::verificar().await)
+}
+
+/// O retrato do PC. `atualizar` relê tudo (PowerShell e WMI); sem ele vale o cache de 10 minutos. `LIVRES`.
+#[tauri::command(async)]
+pub fn hardware_perfil(
+    atualizar: bool,
+) -> Result<crate::plataforma::hardware::PerfilDeHardware, String> {
+    Ok(if atualizar {
+        crate::plataforma::hardware::atualizar()
+    } else {
+        crate::plataforma::hardware::perfil()
+    })
+}
+
+/// O último retrato gravado, para a abertura mostrar algo antes da leitura terminar. `LIVRES`.
+#[tauri::command(async)]
+pub fn hardware_ultimo() -> Result<Option<crate::plataforma::hardware::PerfilDeHardware>, String> {
+    Ok(crate::plataforma::hardware::ultimo_conhecido())
+}
+
+/// O que funciona neste PC: Frame Boost, baixa latência, mira, cores. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn compatibilidade() -> Result<crate::plataforma::Compatibilidade, String> {
+    #[cfg(target_os = "windows")]
+    let barrada = {
+        use crate::modules::windows::anticheat;
+        anticheat::permite(
+            anticheat::Acao::SobreporJanela,
+            &anticheat::detectar_agora(),
+        )
+        .motivo()
+        .map(str::to_string)
+    };
+    #[cfg(not(target_os = "windows"))]
+    let barrada = None;
+
+    Ok(crate::plataforma::compatibilidade(
+        crate::plataforma::hardware::perfil(),
+        barrada,
+    ))
+}
+
+/// O jogo aberto agora, se houver (o evento `jogo:sessao` avisa quando muda). `LIVRES`.
+#[tauri::command(async)]
+pub fn jogo_aberto() -> Result<Option<crate::plataforma::sessao::JogoAberto>, String> {
+    Ok(crate::plataforma::sessao::atual())
+}
+
+/// Os jogos que o Otimiza conhece pelo nome, com o que cada um aceita. `LIVRES`.
+#[tauri::command(async)]
+pub fn catalogo_de_jogos() -> Result<Vec<crate::plataforma::jogos::PerfilDoJogo>, String> {
+    Ok(crate::plataforma::jogos::CATALOGO.to_vec())
+}
+
+/// Os jogos instalados neste PC (Steam, Epic e instaladores de jogo), para a prateleira da aba Jogos. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn jogos_instalados() -> Vec<crate::modules::windows::jogos::JogoDaLoja> {
+    crate::modules::windows::jogos::para_a_tela(&crate::modules::windows::jogos::varrer())
+}
+
+/// A biblioteca: cada jogo já medido, com a última partida e o ganho medido. `LIVRES`.
+#[tauri::command(async)]
+pub fn biblioteca_de_jogos() -> Result<Vec<crate::plataforma::historico::ResumoDoJogo>, String> {
+    crate::plataforma::historico::biblioteca()
+}
+
+/// O teste do Lab em andamento e a comparação dele. `LIVRES`.
+#[tauri::command(async)]
+pub fn lab_estado() -> Result<crate::plataforma::lab::Resultado, String> {
+    Ok(crate::plataforma::lab::comparar(
+        &crate::plataforma::lab::atual(),
+    ))
+}
+
+/// Uma rodada do Lab. `LIVRES`: medir não muda o computador.
+#[tauri::command]
+pub async fn lab_medir(
+    processo: String,
+    lado: crate::plataforma::lab::Lado,
+    segundos: u32,
+) -> Result<crate::plataforma::lab::Resultado, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            crate::plataforma::lab::medir_rodada(&processo, lado, segundos)
+                .map(|t| crate::plataforma::lab::comparar(&t))
+        })
+        .await
+        .map_err(|e| format!("Falha ao medir: {}", e))?
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (processo, lado, segundos);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Recomeça o teste do Lab. `LIVRES`: apaga só as rodadas do Lab.
+#[tauri::command(async)]
+pub fn lab_zerar() -> Result<(), String> {
+    crate::plataforma::lab::zerar()
+}
+
+/// A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`.
+#[tauri::command(async)]
+pub fn capa_do_jogo(appid: u32) -> Result<Option<String>, String> {
+    Ok(crate::plataforma::capas::capa(appid))
+}
+
+/// Quanto cada limpeza libera agora (temporários e relatórios de erro, só arquivo com mais de 2 dias). `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn limpeza_medir() -> Vec<crate::plataforma::limpeza::Item> {
+    crate::plataforma::limpeza::medir()
+}
+
+/// Apaga os arquivos velhos de um item da limpeza; o que estiver em uso fica. `EXIGEM_LICENCA`. Sem volta: o cartão
+/// mostra o tamanho antes e só limpa pasta temporária ou de relatório (`limpeza::pasta_permitida`).
+#[tauri::command(async)]
+pub fn limpeza_executar(id: String) -> Result<crate::plataforma::limpeza::Resultado, String> {
+    crate::modules::licenca::exigir()?;
+    crate::plataforma::limpeza::limpar(&id)
+}
+
+/// As imagens do topo do Início que a pessoa escolheu (só neste PC). `LIVRES`: preferência de tela.
+#[tauri::command(async)]
+pub fn fundos_listar() -> Vec<String> {
+    crate::plataforma::fundos::listar()
+}
+
+/// `LIVRES`: guarda uma imagem escolhida na pasta de dados do Otimiza; não mexe no Windows.
+#[tauri::command(async)]
+pub fn fundos_adicionar(imagem: String) -> Result<usize, String> {
+    crate::plataforma::fundos::adicionar(&imagem)
+}
+
+/// `LIVRES`: apaga só as imagens que a pessoa pôs; o topo volta à arte da Steam.
+#[tauri::command(async)]
+pub fn fundos_limpar() -> Result<(), String> {
+    crate::plataforma::fundos::limpar()
+}
+
+/// A arte larga do jogo (a da Steam deste PC), para o topo do Início. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn capa_larga_do_jogo(appid: u32) -> Result<Option<String>, String> {
+    Ok(crate::plataforma::capas::capa_larga(appid))
+}
+
+/// Liga a mira na tela por cima do jogo aberto. `EXIGEM_LICENCA`: recurso do produto; não grava nada no PC e some
+/// ao desligar. Recusa com anticheat que barra sobreposição; com ressalva (servidor de RP), só com `confirmado`.
+#[tauri::command]
+pub async fn mira_ligar(
+    app: tauri::AppHandle,
+    mira: crate::plataforma::mira::Mira,
+    confirmado: bool,
+) -> Result<crate::plataforma::mira::Estado, String> {
+    crate::modules::licenca::exigir()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        use crate::plataforma::jogos::Sobreposicao;
+        let mira = crate::plataforma::mira::validar(&mira)?;
+        let jogo = crate::plataforma::sessao::atual()
+            .ok_or("Abra o jogo primeiro: a mira fica no centro da janela dele.")?;
+
+        let barrada = tokio::task::spawn_blocking(|| {
+            use crate::modules::windows::anticheat;
+            anticheat::permite(
+                anticheat::Acao::SobreporJanela,
+                &anticheat::detectar_agora(),
+            )
+            .motivo()
+            .map(str::to_string)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        if let Some(motivo) = barrada {
+            return Err(motivo);
+        }
+        match jogo.perfil.sobreposicao {
+            Sobreposicao::Barrada(motivo) => return Err(motivo.to_string()),
+            // A tela pergunta e chama de novo com `confirmado`.
+            Sobreposicao::Desaconselhada(motivo) if !confirmado => {
+                return Err(format!("CONFIRMAR:{}", motivo))
+            }
+            _ => {}
+        }
+
+        crate::plataforma::mira::ligar(&app, jogo.pid, jogo.nome.clone(), mira)?;
+        Ok(crate::plataforma::mira::estado())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, mira, confirmado);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Troca o desenho da mira já ligada. `LIVRES`: só redesenha a janela do Otimiza.
+#[tauri::command(async)]
+pub fn mira_atualizar(
+    app: tauri::AppHandle,
+    mira: crate::plataforma::mira::Mira,
+) -> Result<(), String> {
+    let mira = crate::plataforma::mira::validar(&mira)?;
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::mira::atualizar(&app, mira);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, mira);
+        Ok(())
+    }
+}
+
+/// `LIVRES`: desligar nunca depende de licença.
+#[tauri::command(async)]
+pub fn mira_desligar(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    crate::plataforma::mira::desligar(&app);
+    #[cfg(not(target_os = "windows"))]
+    let _ = app;
+    Ok(())
+}
+
+/// `LIVRES`.
+#[tauri::command(async)]
+pub fn mira_estado() -> Result<crate::plataforma::mira::Estado, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::mira::estado());
+    #[cfg(not(target_os = "windows"))]
+    Ok(crate::plataforma::mira::Estado {
+        ligada: false,
+        jogo: None,
+    })
+}
+
+/// Os comandos de console do CS2 para a mesma mira. `LIVRES`: só monta texto.
+#[tauri::command(async)]
+pub fn mira_cs2(mira: crate::plataforma::mira::Mira) -> Result<String, String> {
+    Ok(crate::plataforma::mira::comandos_cs2(
+        &crate::plataforma::mira::validar(&mira)?,
+    ))
+}
+
+/// Por qual caminho as cores vão (driver AMD, vibração NVIDIA ou rampa do Windows), o que cada um sabe mudar e os
+/// perfis por jogo. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn cores_estado() -> Result<crate::plataforma::cores::Estado, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::cores::estado());
+    #[cfg(not(target_os = "windows"))]
+    Err("Cores do monitor só existem no Windows.".to_string())
+}
+
+/// Aplica no monitor agora. Guarda o valor de antes primeiro. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+pub fn cores_aplicar(
+    ajuste: crate::plataforma::cores::Ajuste,
+) -> Result<crate::plataforma::cores::Caminho, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::cores::aplicar(ajuste);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = ajuste;
+        Err("Cores do monitor só existem no Windows.".to_string())
+    }
+}
+
+/// Devolve as cores de antes. `LIVRES`: voltar ao normal nunca depende de licença.
+#[tauri::command(async)]
+pub fn cores_restaurar() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::cores::restaurar();
+    #[cfg(not(target_os = "windows"))]
+    Ok(())
+}
+
+/// Grava o ajuste de um jogo e se ele liga sozinho com o jogo aberto. `LIVRES`: grava só a preferência; quem mexe no
+/// monitor é `cores_aplicar` ou a abertura do jogo, que confere a licença.
+#[tauri::command(async)]
+pub fn cores_salvar_perfil(
+    jogo: Option<String>,
+    ajuste: Option<crate::plataforma::cores::Ajuste>,
+    so_com_jogo: bool,
+) -> Result<crate::plataforma::cores::Perfis, String> {
+    let mut p = crate::plataforma::cores::perfis();
+    if let Some(jogo) = jogo.filter(|j| !j.trim().is_empty()) {
+        let jogo: String = jogo.chars().take(120).collect();
+        match ajuste.map(|a| a.limitado()) {
+            Some(a) if !a.e_normal() => {
+                p.por_jogo.insert(jogo, a);
+            }
+            _ => {
+                p.por_jogo.remove(&jogo);
+            }
+        }
+    }
+    p.so_com_jogo = so_com_jogo;
+    crate::plataforma::cores::gravar_perfis(&p)?;
+    Ok(p)
+}
+
+/// O Frame Boost do jogo aberto: o gerador que o automático escolhe, os multiplicadores que cabem no monitor dele, a
+/// estimativa (ESTIMADA) antes de ligar e o FPS na tela (MEDIDO) depois. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn frame_boost_painel() -> Result<crate::plataforma::frameboost::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::frameboost::painel());
+    #[cfg(not(target_os = "windows"))]
+    Err("O Frame Boost só existe no Windows.".to_string())
+}
+
+/// `EXIGEM_LICENCA`: liga o gerador do Otimiza no jogo aberto (o anticheat é conferido antes) e trava o FPS base
+/// (`base_do_jogo`), no histórico de mudanças do app.
+#[tauri::command]
+pub async fn frame_boost_ligar(
+    app: tauri::AppHandle,
+    multiplicador: u8,
+    sem_limite: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::frameboost::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || {
+            crate::plataforma::frameboost::ligar(&app, multiplicador, sem_limite.unwrap_or(false))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        let mut log = state.changes.lock().await;
+        crate::plataforma::frameboost::travar_base(&mut log);
+        drop(log);
+        return Ok(crate::plataforma::frameboost::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, multiplicador, sem_limite, state);
+        Err("O Frame Boost só existe no Windows.".to_string())
+    }
+}
+
+/// Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença.
+#[tauri::command]
+pub async fn frame_boost_destravar_base(
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::frameboost::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        let id = crate::modules::windows::nvdriver::id_do_limite(&jogo.executavel);
+        let mut log = state.changes.lock().await;
+        if log.is_applied(&id) {
+            crate::modules::windows::WindowsOptimizer::new().revert(&id, &mut log)?;
+        }
+        drop(log);
+        crate::plataforma::frameboost::anotar_base(Some(
+            "FPS base destravado: vale quando você reabrir o jogo.".to_string(),
+        ));
+        return Ok(crate::plataforma::frameboost::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("O Frame Boost só existe no Windows.".to_string())
+    }
+}
+
+/// `LIVRES`: desligar nunca depende de licença.
+#[tauri::command(async)]
+pub fn frame_boost_desligar() -> Result<crate::plataforma::frameboost::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::frameboost::desligar();
+    #[cfg(not(target_os = "windows"))]
+    Err("O Frame Boost só existe no Windows.".to_string())
+}
+
+/// Seis segundos de PresentMon no jogo: o FPS na tela com AFMF ou Smooth Motion, medido. `LIVRES`: só mede.
+#[tauri::command(async)]
+pub fn frame_boost_medir() -> Result<crate::plataforma::frameboost::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::frameboost::medir();
+    #[cfg(not(target_os = "windows"))]
+    Err("O Frame Boost só existe no Windows.".to_string())
+}
+
+/// Mede o jogo aberto e devolve o plano de ritmo estável (o teto que deixa o jogo liso). `LIVRES`: só mede.
+#[tauri::command(async)]
+pub fn jogo_liso_medir() -> Result<crate::plataforma::jogo_liso::Plano, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual()
+            .ok_or("Abra o jogo e entre na partida antes de medir.")?;
+        crate::plataforma::jogo_liso::medir(&jogo.executavel, 20)
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Aplica o teto de FPS estável no perfil do jogo (guardando o anterior). Vale ao reabrir o jogo. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+pub async fn jogo_liso_aplicar(
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::jogo_liso::Plano, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let jogo =
+            crate::plataforma::sessao::atual().ok_or("Abra o jogo e entre na partida antes.")?;
+        let plano = crate::plataforma::jogo_liso::medir(&jogo.executavel, 20)?;
+        let mut log = state.changes.lock().await;
+        crate::plataforma::jogo_liso::aplicar(&jogo.executavel, &plano, &mut log).await?;
+        Ok(plano)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Energia de jogo: o que muda no processador com o jogo aberto e se está ligada. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn energia_de_jogo() -> Result<crate::plataforma::energia_jogo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::plataforma::energia_jogo::painel())
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Liga ou desliga a energia de jogo. Desligar devolve na hora o que estava escrito. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+pub fn energia_de_jogo_definir(
+    ligado: bool,
+) -> Result<crate::plataforma::energia_jogo::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::energia_jogo::definir(ligado)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = ligado;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Quem ocupa a memória agora (o jogo aberto nunca entra). `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn memoria_para_o_jogo() -> Result<crate::plataforma::memoria_jogo::Memoria, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().map(|j| j.executavel);
+        Ok(crate::plataforma::memoria_jogo::agora(jogo.as_deref()))
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Fecha o programa que a pessoa escolheu na lista. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+pub fn memoria_fechar(nome: String) -> Result<crate::plataforma::memoria_jogo::Memoria, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::memoria_jogo::fechar(&nome)?;
+        let jogo = crate::plataforma::sessao::atual().map(|j| j.executavel);
+        Ok(crate::plataforma::memoria_jogo::agora(jogo.as_deref()))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = nome;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// O FPS por cima do jogo: modo, canto e se está na tela agora. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn overlay_estado() -> Result<crate::plataforma::overlay::Estado, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::overlay::estado());
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Grava o modo e o canto. Desligado tira da tela na hora. `LIVRES`: é preferência do Otimiza; quem põe a janela
+/// por cima do jogo é `overlay_ligar` ou a abertura do jogo, que conferem o anticheat.
+#[tauri::command(async)]
+pub fn overlay_gravar(
+    app: tauri::AppHandle,
+    modo: crate::plataforma::overlay::Modo,
+    canto: crate::plataforma::overlay::Canto,
+    com_frame_boost: Option<bool>,
+) -> Result<crate::plataforma::overlay::Estado, String> {
+    let mut c = crate::plataforma::overlay::config();
+    c.modo = modo;
+    c.canto = canto;
+    if let Some(v) = com_frame_boost {
+        c.com_frame_boost = v;
+    }
+    crate::plataforma::overlay::gravar(&c)?;
+    #[cfg(target_os = "windows")]
+    {
+        if modo == crate::plataforma::overlay::Modo::Desligado {
+            crate::plataforma::overlay::desligar(&app);
+        }
+        return Ok(crate::plataforma::overlay::estado());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = app;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Mostra agora no jogo aberto. `EXIGEM_LICENCA`: recurso do produto. Anticheat que barra sobreposição recusa; com
+/// ressalva, só com `confirmado` (e o jogo entra na lista dos que ligam sozinhos).
+#[tauri::command(async)]
+pub fn overlay_ligar(
+    app: tauri::AppHandle,
+    confirmado: bool,
+) -> Result<crate::plataforma::overlay::Estado, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use crate::plataforma::overlay;
+        let jogo = crate::plataforma::sessao::atual()
+            .ok_or("Abra o jogo primeiro: o FPS fica no canto da janela dele.")?;
+        let barrada = {
+            use crate::modules::windows::anticheat;
+            anticheat::permite(
+                anticheat::Acao::SobreporJanela,
+                &anticheat::detectar_agora(),
+            )
+            .motivo()
+            .map(str::to_string)
+        };
+        overlay::pode_mostrar(jogo.perfil.sobreposicao, barrada.as_deref(), confirmado)?;
+        let mut c = overlay::config();
+        if c.modo == overlay::Modo::Desligado {
+            c.modo = overlay::Modo::Minimo;
+        }
+        if confirmado && !c.confirmados.iter().any(|x| x == jogo.perfil.id) {
+            c.confirmados.push(jogo.perfil.id.to_string());
+        }
+        overlay::gravar(&c)?;
+        overlay::ligar(&app, jogo.pid, jogo.nome.clone())?;
+        return Ok(overlay::estado());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, confirmado);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// O contador do Otimiza no lugar do do FiveM (`cl_drawFPS` no fivem.cfg). `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn contador_fivem_estado() -> Result<crate::plataforma::contador_fivem::Estado, String> {
+    Ok(crate::plataforma::contador_fivem::estado())
+}
+
+/// Desliga o `cl_drawFPS` no fivem.cfg (agora, ou quando o FiveM fechar) e deixa o FPS do Otimiza sempre no canto do
+/// jogo. `EXIGEM_LICENCA`: recurso do produto.
+#[tauri::command(async)]
+pub fn contador_fivem_ligar() -> Result<crate::plataforma::contador_fivem::Estado, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        let mut c = crate::plataforma::overlay::config();
+        if c.modo == crate::plataforma::overlay::Modo::Desligado {
+            c.modo = crate::plataforma::overlay::Modo::Minimo;
+            crate::plataforma::overlay::gravar(&c)?;
+        }
+        return crate::plataforma::contador_fivem::pedir(true);
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Devolve o `cl_drawFPS` de antes. `LIVRES`: desfazer nunca depende de licença.
+#[tauri::command(async)]
+pub fn contador_fivem_desligar() -> Result<crate::plataforma::contador_fivem::Estado, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::contador_fivem::pedir(false);
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// O FOV de primeira pessoa do FiveM (`profile_fpsFieldOfView` no fivem.cfg). `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn fov_fivem() -> Result<crate::plataforma::fov_fivem::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::fov_fivem::painel());
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Grava a posição do FOV (agora, ou quando o FiveM fechar), guardando a de antes. `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+pub fn fov_fivem_definir(posicao: u8) -> Result<crate::plataforma::fov_fivem::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::fov_fivem::pedir(Some(posicao));
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = posicao;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Devolve o FOV de antes. `LIVRES`: desfazer nunca depende de licença.
+#[tauri::command(async)]
+pub fn fov_fivem_devolver() -> Result<crate::plataforma::fov_fivem::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::fov_fivem::pedir(None);
+    #[cfg(not(target_os = "windows"))]
+    Err(UNSUPPORTED_PLATFORM.to_string())
+}
+
+/// Erro de JavaScript da tela vai para o `otimiza.log`, o arquivo que o cliente manda ao suporte. `LIVRES`.
+#[tauri::command(async)]
+pub fn anotar_erro_da_tela(texto: String) -> Result<(), String> {
+    let curto: String = texto.chars().take(2000).collect();
+    crate::utils::Logger::warn(&format!("tela: {}", curto));
+    Ok(())
+}
+
+/// `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn flags_ler() -> Result<crate::plataforma::flags::Flags, String> {
+    Ok(crate::plataforma::flags::Flags::load())
+}
+
+/// `LIVRES`: liga e desliga telas do próprio Otimiza, não mexe no computador.
+#[tauri::command(async)]
+pub fn flags_gravar(flags: crate::plataforma::flags::Flags) -> Result<(), String> {
+    flags.save()
 }
 
 /// Vazio por não haver nada e vazio por não saber são diferentes. `LIVRES`.
@@ -2342,9 +3284,11 @@ pub async fn vistoriar_mudancas(
             .iter()
             .map(|a| (a.optimization_id.clone(), a.name.clone()))
             .collect();
-        tokio::task::spawn_blocking(move || crate::modules::windows::WindowsOptimizer::new().vistoriar(&aplicadas))
-            .await
-            .map_err(|e| format!("Falha ao conferir as mudanças: {}", e))
+        tokio::task::spawn_blocking(move || {
+            crate::modules::windows::WindowsOptimizer::new().vistoriar(&aplicadas)
+        })
+        .await
+        .map_err(|e| format!("Falha ao conferir as mudanças: {}", e))
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2356,7 +3300,10 @@ pub async fn vistoriar_mudancas(
 
 /// Desfaz e aplica de novo o que não está mais como o Otimiza deixou. `EXIGEM_LICENCA`, como aplicar.
 #[tauri::command]
-pub async fn refazer_mudanca(id: String, state: State<'_, AppState>) -> Result<OptimizationOutcome, String> {
+pub async fn refazer_mudanca(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<OptimizationOutcome, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
@@ -2448,9 +3395,9 @@ pub async fn placa_de_video() -> Result<PlacaDeVideo, String> {
             driver: s.driver_version.clone(),
             driver_data: s.driver_date.clone(),
             driver_dias: s.driver_age_days,
-            driver_generico: origem
-                .as_deref()
-                .is_some_and(|p| crate::modules::windows::shaders::driver_generico(p, s.gpu.as_deref())),
+            driver_generico: origem.as_deref().is_some_and(|p| {
+                crate::modules::windows::shaders::driver_generico(p, s.gpu.as_deref())
+            }),
             driver_origem: origem,
             vram_gb: crate::modules::windows::bottleneck::vram_total_gb(),
         })
@@ -2479,7 +3426,10 @@ pub async fn analyze_game_config(
 
 /// Jogo ABERTO (o contrário de `apply_game_profile`): mede-se o que roda, escreve-se no de quem não roda. `LIVRES`.
 #[tauri::command]
-pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
+pub async fn medir_antes(
+    process: String,
+    seconds: u64,
+) -> Result<crate::modules::prova::Prova, String> {
     let prova = medir_para_prova(process, seconds).await?;
     crate::modules::prova::guardar(&prova)?;
     Ok(prova)
@@ -2487,7 +3437,10 @@ pub async fn medir_antes(process: String, seconds: u64) -> Result<crate::modules
 
 /// Uma medição da prova: PresentMon (canal antigo de reserva), com a geração de quadros e a impressão digital da
 /// configuração gráfica do jogo no momento, para a comparação separar otimização de qualidade e de quadro gerado.
-async fn medir_para_prova(process: String, seconds: u64) -> Result<crate::modules::prova::Prova, String> {
+async fn medir_para_prova(
+    process: String,
+    seconds: u64,
+) -> Result<crate::modules::prova::Prova, String> {
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
@@ -2501,7 +3454,8 @@ async fn medir_para_prova(process: String, seconds: u64) -> Result<crate::module
             })?;
             let segundos = seconds.clamp(3, 30);
 
-            let (medicao, resumo) = match presentmon::medir_como_antes(pid, &nome, segundos as u32) {
+            let (medicao, resumo) = match presentmon::medir_como_antes(pid, &nome, segundos as u32)
+            {
                 Ok((crua, resumo)) => (crua.resumo, Some(resumo)),
                 Err(erro) => {
                     crate::utils::Logger::warn(&format!(
@@ -2543,9 +3497,8 @@ pub async fn medir_depois(
 ) -> Result<crate::modules::prova::Comparacao, String> {
     use crate::modules::prova;
 
-    let antes = prova::guardada().ok_or(
-        "Não há medição inicial. Meça com o jogo aberto ANTES de aplicar as mudanças.",
-    )?;
+    let antes = prova::guardada()
+        .ok_or("Não há medição inicial. Meça com o jogo aberto ANTES de aplicar as mudanças.")?;
 
     let depois = medir_para_prova(process, seconds).await?;
 
@@ -2571,9 +3524,13 @@ pub async fn provar_o_otimizar(
             return Err("Já há uma prova rodando.".to_string());
         }
         let planos = prova::planos(&*state.changes.lock().await)?;
-        let (pid, nome) = crate::modules::windows::frames::encontrar_processo(&process).ok_or_else(|| {
-            format!("Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de provar.", process)
-        })?;
+        let (pid, nome) = crate::modules::windows::frames::encontrar_processo(&process)
+            .ok_or_else(|| {
+                format!(
+                    "Não encontrei nenhum processo com `{}` no nome. Abra o jogo antes de provar.",
+                    process
+                )
+            })?;
 
         let contra_o_equilibrado = planos.contra_o_equilibrado;
         let nome_da_thread = nome.clone();
@@ -2586,7 +3543,10 @@ pub async fn provar_o_otimizar(
         .await
         .map_err(|e| format!("Falha na prova: {}", e))??;
 
-        let segundos = seconds.clamp(prova::SEGUNDOS_POR_RODADA_MIN, prova::SEGUNDOS_POR_RODADA_MAX);
+        let segundos = seconds.clamp(
+            prova::SEGUNDOS_POR_RODADA_MIN,
+            prova::SEGUNDOS_POR_RODADA_MAX,
+        );
         let mut resultado = prova::decidir(
             &nome,
             crate::modules::changelog::now_timestamp(),
@@ -2769,7 +3729,11 @@ pub fn nota_do_jogo() -> Result<crate::modules::pontuacao::Nota, String> {
         return Ok(crate::modules::pontuacao::Nota::SemAmostra);
     };
 
-    Ok(crate::modules::pontuacao::calcular(m.fps, m.low_1pct, m.confiavel))
+    Ok(crate::modules::pontuacao::calcular(
+        m.fps,
+        m.low_1pct,
+        m.confiavel,
+    ))
 }
 
 /// `LIVRES`. Aplicar é `optimize_now`; desfazer é `revert`. Por jogo: FPS de jogos diferentes não se compara;
@@ -2801,8 +3765,7 @@ pub async fn protocolo_de_grupos(
             .map(|grupo| {
                 // TODO o grupo no histórico: metade aplicada mediria uma mistura.
                 let itens = crate::modules::windows::grupos::itens_do_grupo(*grupo);
-                let aplicado =
-                    !itens.is_empty() && itens.iter().all(|id| log.is_applied(id));
+                let aplicado = !itens.is_empty() && itens.iter().all(|id| log.is_applied(id));
 
                 experimento::montar(*grupo, &jogo, &medicoes, aplicadas, aplicado)
             })
@@ -2873,8 +3836,7 @@ pub async fn por_que_o_fps_esta_baixo(
 
 /// `LIVRES`: com SSD pequeno e HD grande o jogo quase sempre está no HD.
 #[tauri::command(async)]
-pub fn onde_os_jogos_moram(
-) -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
+pub fn onde_os_jogos_moram() -> Result<crate::modules::windows::discodojogo::Relatorio, String> {
     #[cfg(target_os = "windows")]
     {
         Ok(crate::modules::windows::discodojogo::analisar())
@@ -2917,10 +3879,12 @@ pub async fn preview_game_profile(
         let conteudo = std::fs::read_to_string(&caminho)
             .map_err(|e| format!("não consegui ler {}: {}", caminho.display(), e))?;
 
-        Ok(configjogo::prever(&conteudo, escolhido, configjogo::manter_janela())
-            .into_iter()
-            .map(|(chave, atual, novo, custo)| (chave, atual, novo, custo.to_string()))
-            .collect())
+        Ok(
+            configjogo::prever(&conteudo, escolhido, configjogo::manter_janela())
+                .into_iter()
+                .map(|(chave, atual, novo, custo)| (chave, atual, novo, custo.to_string()))
+                .collect(),
+        )
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -2952,13 +3916,15 @@ pub async fn apply_game_profile(
 
     #[cfg(target_os = "windows")]
     {
-        use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+        use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
         use crate::modules::windows::configjogo;
 
         let escolhido = perfil_por_nome(&perfil)?;
         let feito = configjogo::aplicar_perfil(escolhido)?;
 
-        let aviso = feito.tela_cheia_suprimida.then(|| configjogo::AVISO_JANELA.to_string());
+        let aviso = feito
+            .tela_cheia_suprimida
+            .then(|| configjogo::AVISO_JANELA.to_string());
 
         // Nada mudou, nada é registrado.
         if feito.mudou.is_empty() {
@@ -2968,8 +3934,17 @@ pub async fn apply_game_profile(
         let mut log = state.changes.lock().await;
 
         // Nunca menos FPS: em observação (`modules::portao`). FiveM é "FiveM_b3258_GTAProcess.exe"; GTA, "GTA5.exe".
-        let processo = if feito.jogo.to_lowercase().contains("fivem") { "fivem_" } else { "gta5" };
-        crate::modules::portao::vigiar(&format!("config_jogo_{}", perfil), &feito.jogo, processo, now_timestamp());
+        let processo = if feito.jogo.to_lowercase().contains("fivem") {
+            "fivem_"
+        } else {
+            "gta5"
+        };
+        crate::modules::portao::vigiar(
+            &format!("config_jogo_{}", perfil),
+            &feito.jogo,
+            processo,
+            now_timestamp(),
+        );
 
         log.record(AppliedOptimization {
             optimization_id: format!("config_jogo_{}", perfil),
@@ -3032,12 +4007,11 @@ pub async fn optimize_now(
             let inicio = std::time::Instant::now();
             crate::utils::Logger::info("ponto de restauração antes do lote: começou");
 
-            let (message, success) = match crate::modules::windows::restore::create(
-                "Otimiza - antes de otimizar",
-            ) {
-                Ok(message) => (message, true),
-                Err(error) => (error, false),
-            };
+            let (message, success) =
+                match crate::modules::windows::restore::create("Otimiza - antes de otimizar") {
+                    Ok(message) => (message, true),
+                    Err(error) => (error, false),
+                };
 
             crate::utils::Logger::info(&format!(
                 "ponto de restauração antes do lote: {} em {} ms — {}",
@@ -3061,7 +4035,7 @@ pub async fn optimize_now(
         }
 
         // Cada passo emitido na hora, não uma barra de progresso.
-        let mut resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(
+        let resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(
             only.as_deref(),
             &mut log,
             |step| {
@@ -3070,13 +4044,11 @@ pub async fn optimize_now(
         );
 
         // O teto de FPS do jogo no mesmo clique: a configuração do jogo move FPS em dezenas, e quem aperta o botão não
-        // vai até a aba Jogos. SÓ o `SemTeto` (VSync e limite, preço visual zero); os que mudam a cara do jogo são
-        // escolha do dono. Com `only` de um perfil, nada é acrescentado.
-        if only.is_none() {
-            if let Some(resultado) = aplicar_teto_do_jogo(&app, &mut log).await {
-                resultados.push(resultado);
-            }
-        }
+        // O "Otimizar" NÃO tira mais o limite de FPS do jogo. Medido no FiveM do dono (preso no processador, 99% de CPU,
+        // gargalo na CPU): sem limite o tempo de quadro oscila mais, e é a oscilação — não um teto baixo — que o cliente
+        // sente como tranco. Quem quer ritmo liso usa o "Jogo liso", que TRAVA o FPS num valor estável. `aplicar_teto_do_jogo`
+        // fica só para o desfazer de quem já recebeu o SemTeto em versões anteriores.
+        let _ = aplicar_teto_do_jogo;
 
         Ok(resultados)
     }
@@ -3095,7 +4067,7 @@ async fn aplicar_teto_do_jogo(
     app: &tauri::AppHandle,
     log: &mut crate::modules::changelog::ChangeLog,
 ) -> Option<OptimizationOutcome> {
-    use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+    use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
     use crate::modules::optimizer::{ActionResult, ActionStatus};
     use crate::modules::windows::configjogo::{self, Perfil};
 
@@ -3130,7 +4102,10 @@ async fn aplicar_teto_do_jogo(
             match gravou {
                 Ok(()) => (resumo, true, feito.mudou),
                 Err(erro) => (
-                    format!("{} — mas o histórico não pôde ser gravado: {}", resumo, erro),
+                    format!(
+                        "{} — mas o histórico não pôde ser gravado: {}",
+                        resumo, erro
+                    ),
                     false,
                     feito.mudou,
                 ),
@@ -3334,10 +4309,8 @@ pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, 
 
 /// `LIVRES`: responde "por que não funcionou?" antes de pagar.
 #[tauri::command]
-pub async fn diagnostico_de_energia() -> Result<
-    crate::modules::windows::planoenergia::Diagnostico,
-    String,
-> {
+pub async fn diagnostico_de_energia(
+) -> Result<crate::modules::windows::planoenergia::Diagnostico, String> {
     #[cfg(target_os = "windows")]
     {
         Ok(crate::modules::windows::planoenergia::diagnosticar())
@@ -3351,10 +4324,8 @@ pub async fn diagnostico_de_energia() -> Result<
 
 /// `LIVRES`: quem não comprou é quem precisa ver.
 #[tauri::command]
-pub async fn simular_plano_otimiza() -> Result<
-    crate::modules::windows::planoenergia::RelatorioDoPlano,
-    String,
-> {
+pub async fn simular_plano_otimiza(
+) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     #[cfg(target_os = "windows")]
     {
         crate::modules::windows::planoenergia::montar(true)
@@ -3375,10 +4346,9 @@ pub async fn aplicar_plano_otimiza(
 
     #[cfg(target_os = "windows")]
     {
-        use crate::modules::changelog::{AppliedOptimization, ChangeRecord, now_timestamp};
+        use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
 
-        let relatorio =
-            crate::modules::windows::planoenergia::montar(false)?;
+        let relatorio = crate::modules::windows::planoenergia::montar(false)?;
 
         // Só registra se o plano ficou ativo: registro de troca que não houve não desfaz nada.
         if relatorio.plano_ativo {
@@ -3408,10 +4378,8 @@ pub async fn aplicar_plano_otimiza(
 
 /// `LIVRES`: a pergunta de quem "aplicou e depois voltou tudo".
 #[tauri::command]
-pub async fn vistoriar_plano_otimiza() -> Result<
-    crate::modules::windows::planoenergia::Vistoria,
-    String,
-> {
+pub async fn vistoriar_plano_otimiza(
+) -> Result<crate::modules::windows::planoenergia::Vistoria, String> {
     #[cfg(target_os = "windows")]
     {
         Ok(crate::modules::windows::planoenergia::vistoriar())
@@ -3426,7 +4394,8 @@ pub async fn vistoriar_plano_otimiza() -> Result<
 /// `EXIGEM_LICENCA`. NÃO mexe no histórico: o anterior guardado continua certo, e uma linha nova daria dois
 /// "desfazer" para uma troca só.
 #[tauri::command]
-pub async fn reparar_plano_otimiza() -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
+pub async fn reparar_plano_otimiza(
+) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     crate::modules::licenca::exigir()?;
 
     #[cfg(target_os = "windows")]
@@ -3462,7 +4431,10 @@ mod tests {
     #[ignore = "mede esta máquina por 6 s"]
     fn diagnostico_ao_vivo_nesta_maquina() {
         let d = super::diagnostico_na_janela(6, Default::default()).expect("diagnóstico");
-        println!("placa {:?} jogo {:?} erro {:?}", d.placa, d.jogo, d.quadros_erro);
+        println!(
+            "placa {:?} jogo {:?} erro {:?}",
+            d.placa, d.jogo, d.quadros_erro
+        );
         println!("saude {:#?}", d.saude);
         println!("gargalo {:#?}", d.gargalo);
         println!("{}", serde_json::to_string(&d).unwrap().len());
@@ -3472,34 +4444,26 @@ mod tests {
     /// O botão genérico NUNCA muda a aparência do jogo: no lote, só o teto de quadros sai do arquivo. Trava de FORMA
     /// sobre o corpo da função.
     #[test]
-    fn o_lote_automatico_so_tira_o_teto_do_jogo() {
+    fn o_lote_automatico_nao_tira_mais_o_limite_do_jogo() {
+        // Medido no FiveM do dono (preso no processador): tirar o limite de FPS (`SemTeto`) aumenta a oscilação do tempo
+        // de quadro, o tranco que o cliente sente. O "Otimizar" não deve mais aplicar nenhum perfil que mexa no jogo.
         let fonte = include_str!("commands.rs");
-
-        let Some(corpo) = fonte.split("async fn aplicar_teto_do_jogo").nth(1) else {
-            panic!("não achei a função que aplica o perfil no lote");
-        };
-
-        // Até o fim da função: a próxima declaração de item no nível do arquivo.
-        let corpo = corpo.split("\n/// ").next().unwrap_or(corpo);
-
-        assert!(
-            corpo.contains("Perfil::SemTeto"),
-            "o lote deixou de usar o perfil sem custo visual"
-        );
-
-        for proibido in ["Perfil::Equilibrado", "Perfil::Competitivo"] {
+        let corpo = fonte
+            .split("let mut resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(")
+            .nth(1)
+            .and_then(|c| c.split("Ok(resultados)").next())
+            .expect("não achei o corpo do lote automático");
+        for proibido in [
+            "aplicar_teto_do_jogo(&app",
+            "Perfil::SemTeto",
+            "Perfil::Equilibrado",
+        ] {
             assert!(
                 !corpo.contains(proibido),
-                "o lote automático passou a aplicar `{}`, que muda a aparência do \
-                 jogo sem o cliente ter escolhido",
+                "o lote automático voltou a mexer na configuração do jogo (`{}`)",
                 proibido
             );
         }
-
-        assert!(
-            corpo.contains("anterior"),
-            "o lote parou de guardar o arquivo anterior do jogo"
-        );
     }
 
     /// O nome que o orquestrador devolve é o que a tela manda para `apply_game_profile`: tabelas divergentes dariam
@@ -3517,6 +4481,49 @@ mod tests {
 
     /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
+        "feedback_estado",
+        "feedback_verificar",
+        "flags_ler",
+        "flags_gravar",
+        "hardware_perfil",
+        "hardware_ultimo",
+        "compatibilidade",
+        "driver_amd",
+        "driver_intel",
+        "jogo_aberto",
+        "catalogo_de_jogos",
+        "biblioteca_de_jogos",
+        "lab_estado",
+        "lab_medir",
+        "lab_zerar",
+        "capa_do_jogo",
+        "capa_larga_do_jogo",
+        "jogos_instalados",
+        "fundos_listar",
+        "limpeza_medir",
+        "fundos_adicionar",
+        "fundos_limpar",
+        "anotar_erro_da_tela",
+        "mira_atualizar",
+        "mira_desligar",
+        "mira_estado",
+        "mira_cs2",
+        "cores_estado",
+        "frame_boost_painel",
+        "frame_boost_desligar",
+        "frame_boost_destravar_base",
+        "frame_boost_medir",
+        "jogo_liso_medir",
+        "memoria_para_o_jogo",
+        "energia_de_jogo",
+        "overlay_estado",
+        "overlay_gravar",
+        "contador_fivem_estado",
+        "contador_fivem_desligar",
+        "fov_fivem",
+        "fov_fivem_devolver",
+        "cores_restaurar",
+        "cores_salvar_perfil",
         "investigar_travadas",
         "devolver_teste_da_travada",
         "vistoriar_mudancas",
@@ -3541,7 +4548,6 @@ mod tests {
         "protocolo_do_perfil",
         "laboratorio_de_streaming",
         "plano_de_renderizacao",
-        "passo_do_autoajuste",
         "historico_de_desempenho",
         "caminho_do_mouse",
         "nucleos_da_maquina",
@@ -3635,7 +4641,8 @@ mod tests {
         "ficha_da_bios",
         "abertura_pronta",
         "quedas_de_desempenho",
-        "reiniciar_na_bios",];
+        "reiniciar_na_bios",
+    ];
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
@@ -3669,7 +4676,20 @@ mod tests {
         "set_max_refresh_rate",
         "religar_essenciais",
         "aplicar_ajuste_nvidia",
-        "limitar_fps_nvidia",];
+        "limitar_fps_nvidia",
+        "aplicar_ajuste_amd",
+        "aplicar_ajuste_intel",
+        "mira_ligar",
+        "cores_aplicar",
+        "frame_boost_ligar",
+        "jogo_liso_aplicar",
+        "memoria_fechar",
+        "limpeza_executar",
+        "energia_de_jogo_definir",
+        "overlay_ligar",
+        "contador_fivem_ligar",
+        "fov_fivem_definir",
+    ];
 
     /// Só a parte de produção: os testes contêm as palavras procuradas.
     fn producao() -> &'static str {
@@ -3698,7 +4718,12 @@ mod tests {
             .split(marca)
             .skip(1)
             .filter(|bloco| bloco.starts_with(']'))
-            .filter_map(|bloco| bloco.lines().find(|l| l.contains("fn ")).map(str::to_string))
+            .filter_map(|bloco| {
+                bloco
+                    .lines()
+                    .find(|l| l.contains("fn "))
+                    .map(str::to_string)
+            })
             .filter(|assinatura| !assinatura.contains("async fn "))
             .collect();
 
@@ -3769,11 +4794,7 @@ mod tests {
                 nome
             );
 
-            assert!(
-                !(livre && paga),
-                "`{}` está nas duas listas",
-                nome
-            );
+            assert!(!(livre && paga), "`{}` está nas duas listas", nome);
         }
     }
 
@@ -3988,8 +5009,7 @@ mod tests {
 
         for (numero, linha) in sem_comentarios.lines().enumerate() {
             for (contexto, literal) in literais_com_contexto(linha) {
-                if termina_em_operador_de_decisao(&contexto) && parece_prosa_do_backend(&literal)
-                {
+                if termina_em_operador_de_decisao(&contexto) && parece_prosa_do_backend(&literal) {
                     achados.push(format!(
                         "linha {}: `{}\"{}\"…`",
                         numero + 1,

@@ -117,7 +117,10 @@ mod tests {
         let experimental = itens_do_nivel(Nivel::Experimental);
 
         for id in &seguro {
-            assert!(competitivo.contains(id), "`{id}` está no Seguro e não no Competitivo");
+            assert!(
+                competitivo.contains(id),
+                "`{id}` está no Seguro e não no Competitivo"
+            );
         }
 
         for id in &competitivo {
@@ -130,7 +133,10 @@ mod tests {
 
     #[test]
     fn cada_nivel_acrescenta_alguma_coisa() {
-        assert!(!acrescenta(Nivel::Competitivo).is_empty(), "o Competitivo é igual ao Seguro");
+        assert!(
+            !acrescenta(Nivel::Competitivo).is_empty(),
+            "o Competitivo é igual ao Seguro"
+        );
         assert!(
             !acrescenta(Nivel::Experimental).is_empty(),
             "o Experimental é igual ao Competitivo"
@@ -191,10 +197,16 @@ mod tests {
             .map(|s| s.id)
             .collect();
 
-        assert!(!arriscados.is_empty(), "o catálogo não tem nenhum ajuste de risco?");
+        assert!(
+            !arriscados.is_empty(),
+            "o catálogo não tem nenhum ajuste de risco?"
+        );
 
         for id in arriscados {
-            assert!(experimental.contains(&id), "`{id}` não está no Experimental");
+            assert!(
+                experimental.contains(&id),
+                "`{id}` não está no Experimental"
+            );
         }
     }
 
@@ -208,8 +220,16 @@ mod tests {
     #[test]
     fn todo_nivel_promete_e_exige_por_escrito() {
         for nivel in Nivel::TODOS {
-            assert!(nivel.promessa().len() >= 120, "{} sem promessa", nivel.nome());
-            assert!(!nivel.exigencia().trim().is_empty(), "{} sem exigência", nivel.nome());
+            assert!(
+                nivel.promessa().len() >= 120,
+                "{} sem promessa",
+                nivel.nome()
+            );
+            assert!(
+                !nivel.exigencia().trim().is_empty(),
+                "{} sem exigência",
+                nivel.nome()
+            );
         }
     }
 
@@ -217,7 +237,10 @@ mod tests {
     fn a_exigencia_do_experimental_e_medir() {
         let e = Nivel::Experimental.exigencia();
 
-        assert!(e.contains("Medir"), "o Experimental precisa exigir medição: {e}");
+        assert!(
+            e.contains("Medir"),
+            "o Experimental precisa exigir medição: {e}"
+        );
         assert!(e.contains("um por vez") || e.contains("grupo"));
     }
 
@@ -225,10 +248,16 @@ mod tests {
     fn o_competitivo_acrescenta_o_que_muda_comportamento() {
         let novos = acrescenta(Nivel::Competitivo);
 
-        assert!(!novos.is_empty(), "o Competitivo precisa acrescentar alguma coisa ao Seguro");
+        assert!(
+            !novos.is_empty(),
+            "o Competitivo precisa acrescentar alguma coisa ao Seguro"
+        );
         for nivel in [Nivel::Seguro, Nivel::Competitivo, Nivel::Experimental] {
             for id in itens_do_nivel(nivel) {
-                assert!(!super::super::catalog::retirado(id), "{id} foi aposentado e ainda aparece num nível");
+                assert!(
+                    !super::super::catalog::retirado(id),
+                    "{id} foi aposentado e ainda aparece num nível"
+                );
             }
         }
     }

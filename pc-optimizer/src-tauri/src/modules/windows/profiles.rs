@@ -13,28 +13,24 @@ pub struct ProfileInfo {
     pub optimization_ids: &'static [&'static str],
 }
 
-pub const PROFILES: &[ProfileInfo] = &[
-    ProfileInfo {
-        id: "jogos",
-        name: "Jogos",
-        description:
-            "Foco em quadro estável e resposta do mouse, não em número de FPS \
+pub const PROFILES: &[ProfileInfo] = &[ProfileInfo {
+    id: "jogos",
+    name: "Jogos",
+    description: "Foco em quadro estável e resposta do mouse, não em número de FPS \
              médio. Travada de meio segundo estraga mais partida que dez quadros \
              a menos, e é nela que estes ajustes mexem.",
-        tradeoff:
-            "Mantém o PC em desempenho máximo o tempo todo: gasta mais energia e \
+    tradeoff: "Mantém o PC em desempenho máximo o tempo todo: gasta mais energia e \
              esquenta mais. Em notebook na bateria, isso encurta a autonomia de \
              forma bem visível.",
-        optimization_ids: &[
-            "disable_gamedvr",
-            // `gpu_hardware_scheduling` saiu daqui depois da 2.1.0: pode custar quadro, e perfil é lote. Ver `RiscoDeFps`.
-            "mouse_precision_off",
-            "plano_otimiza",
-            "remove_forced_hpet",
-            "clear_boot_limits",
-        ],
-    },
-];
+    optimization_ids: &[
+        "disable_gamedvr",
+        // `gpu_hardware_scheduling` saiu daqui depois da 2.1.0: pode custar quadro, e perfil é lote. Ver `RiscoDeFps`.
+        "mouse_precision_off",
+        "plano_otimiza",
+        "remove_forced_hpet",
+        "clear_boot_limits",
+    ],
+}];
 
 #[allow(dead_code)]
 pub fn find(id: &str) -> Option<&'static ProfileInfo> {
@@ -74,8 +70,7 @@ mod tests {
                 assert!(
                     !spec.security_tradeoff,
                     "o perfil `{}` inclui `{}`, que troca segurança por desempenho",
-                    perfil.id,
-                    id
+                    perfil.id, id
                 );
             }
         }
@@ -90,8 +85,7 @@ mod tests {
                 assert!(
                     spec.reversible,
                     "o perfil `{}` inclui `{}`, que não tem como ser desfeito",
-                    perfil.id,
-                    id
+                    perfil.id, id
                 );
             }
         }

@@ -114,7 +114,11 @@ pub fn medianas_locais(v: &[f64], janela: usize) -> Vec<f64> {
             }
         }
         let n = ordenado.len();
-        saida.push(if n % 2 == 1 { ordenado[n / 2] } else { (ordenado[n / 2 - 1] + ordenado[n / 2]) / 2.0 });
+        saida.push(if n % 2 == 1 {
+            ordenado[n / 2]
+        } else {
+            (ordenado[n / 2 - 1] + ordenado[n / 2]) / 2.0
+        });
     }
     saida
 }
@@ -126,11 +130,16 @@ pub fn detectar_episodios(quadros: &[QuadroDoJogo], frequencia: i64) -> Vec<Epis
     }
     let intervalos: Vec<f64> = quadros.iter().map(|q| q.intervalo_ms).collect();
     let locais = medianas_locais(&intervalos, JANELA_LOCAL);
-    let com_lado = quadros.iter().all(|q| q.cpu_ms.is_some() && q.gpu_ms.is_some());
+    let com_lado = quadros
+        .iter()
+        .all(|q| q.cpu_ms.is_some() && q.gpu_ms.is_some());
     let (cpu_locais, gpu_locais) = if com_lado {
         let c: Vec<f64> = quadros.iter().map(|q| q.cpu_ms.unwrap_or(0.0)).collect();
         let g: Vec<f64> = quadros.iter().map(|q| q.gpu_ms.unwrap_or(0.0)).collect();
-        (medianas_locais(&c, JANELA_LOCAL), medianas_locais(&g, JANELA_LOCAL))
+        (
+            medianas_locais(&c, JANELA_LOCAL),
+            medianas_locais(&g, JANELA_LOCAL),
+        )
     } else {
         (Vec::new(), Vec::new())
     };
@@ -159,7 +168,9 @@ pub fn detectar_episodios(quadros: &[QuadroDoJogo], frequencia: i64) -> Vec<Epis
         let colado = ultimo_qpc.is_some_and(|u| q.qpc - u <= junta);
         ultimo_qpc = Some(q.qpc);
         if colado {
-            let e = episodios.last_mut().expect("colado implica um episódio aberto");
+            let e = episodios
+                .last_mut()
+                .expect("colado implica um episódio aberto");
             e.quadros += 1;
             e.fim_qpc = e.fim_qpc.max(fim_de(q));
             if excesso > e.excesso_ms {
@@ -188,7 +199,9 @@ pub fn detectar_episodios(quadros: &[QuadroDoJogo], frequencia: i64) -> Vec<Epis
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(tag = "tipo")]
 pub enum Hipotese {
-    Processo { nome: String },
+    Processo {
+        nome: String,
+    },
     Disco,
     Paginacao,
     Vram,
@@ -213,7 +226,10 @@ impl Hipotese {
 
     /// O atraso que esta hipótese causa aparece no tempo de processador do quadro.
     fn do_lado_do_processador(&self) -> bool {
-        matches!(self, Hipotese::Processo { .. } | Hipotese::NucleoSaturado | Hipotese::ProcessadorCheio)
+        matches!(
+            self,
+            Hipotese::Processo { .. } | Hipotese::NucleoSaturado | Hipotese::ProcessadorCheio
+        )
     }
 }
 
@@ -233,8 +249,12 @@ pub enum Confianca {
 #[serde(tag = "tipo")]
 pub enum Teste {
     /// Acalmar o processo (prioridade abaixo do normal + EcoQoS) em janelas alternadas: o teste ativo do slice.
-    AcalmarProcesso { processo: String },
-    Recomendacao { texto: String },
+    AcalmarProcesso {
+        processo: String,
+    },
+    Recomendacao {
+        texto: String,
+    },
     Nenhum,
 }
 
@@ -333,16 +353,38 @@ fn salto(valor: Option<f64>, normal: Option<f64>, minimo: f64) -> Option<bool> {
 }
 
 /// Sinal de cada hipótese em cada amostra. `None`: não medido naquela amostra.
-fn sinais(amostras: &[(i64, Amostra)], vram_total_mb: Option<f64>) -> Vec<(Hipotese, Vec<Option<bool>>)> {
-    let med = |f: &dyn Fn(&Amostra) -> Option<f64>| mediana(&amostras.iter().filter_map(|(_, a)| f(a)).collect::<Vec<_>>());
+fn sinais(
+    amostras: &[(i64, Amostra)],
+    vram_total_mb: Option<f64>,
+) -> Vec<(Hipotese, Vec<Option<bool>>)> {
+    let med = |f: &dyn Fn(&Amostra) -> Option<f64>| {
+        mediana(
+            &amostras
+                .iter()
+                .filter_map(|(_, a)| f(a))
+                .collect::<Vec<_>>(),
+        )
+    };
     let disco_n = med(&|a| a.disco_latencia_ms);
     let pag_n = med(&|a| a.paginas_lidas_s);
     let comp_n = med(&|a| a.vram_compartilhada_mb);
     let nucleo_n = med(&|a| a.cpu_nucleo_max_pct);
 
     let mut v: Vec<(Hipotese, Vec<Option<bool>>)> = vec![
-        (Hipotese::Disco, amostras.iter().map(|(_, a)| salto(a.disco_latencia_ms, disco_n, DISCO_MIN_MS)).collect()),
-        (Hipotese::Paginacao, amostras.iter().map(|(_, a)| salto(a.paginas_lidas_s, pag_n, PAGINAS_MIN)).collect()),
+        (
+            Hipotese::Disco,
+            amostras
+                .iter()
+                .map(|(_, a)| salto(a.disco_latencia_ms, disco_n, DISCO_MIN_MS))
+                .collect(),
+        ),
+        (
+            Hipotese::Paginacao,
+            amostras
+                .iter()
+                .map(|(_, a)| salto(a.paginas_lidas_s, pag_n, PAGINAS_MIN))
+                .collect(),
+        ),
         (
             Hipotese::Vram,
             amostras
@@ -368,30 +410,47 @@ fn sinais(amostras: &[(i64, Amostra)], vram_total_mb: Option<f64>) -> Vec<(Hipot
             amostras
                 .iter()
                 .map(|(_, a)| match (a.cpu_nucleo_max_pct, nucleo_n) {
-                    (Some(n), Some(normal)) => Some(n >= NUCLEO_TETO && normal < NUCLEO_TETO - 10.0),
+                    (Some(n), Some(normal)) => {
+                        Some(n >= NUCLEO_TETO && normal < NUCLEO_TETO - 10.0)
+                    }
                     _ => None,
                 })
                 .collect(),
         ),
         (
             Hipotese::ProcessadorCheio,
-            amostras.iter().map(|(_, a)| a.cpu_total_pct.map(|c| c >= PROCESSADOR_CHEIO_PCT)).collect(),
+            amostras
+                .iter()
+                .map(|(_, a)| a.cpu_total_pct.map(|c| c >= PROCESSADOR_CHEIO_PCT))
+                .collect(),
         ),
     ];
 
     // Processos: ausente numa amostra = 0 naquela amostra (a coleta guarda só os maiores).
     let acompanhou = amostras.iter().any(|(_, a)| !a.processos.is_empty());
     if acompanhou {
-        let mut nomes: Vec<String> = amostras.iter().flat_map(|(_, a)| a.processos.iter().map(|p| p.nome.clone())).collect();
+        let mut nomes: Vec<String> = amostras
+            .iter()
+            .flat_map(|(_, a)| a.processos.iter().map(|p| p.nome.clone()))
+            .collect();
         nomes.sort();
         nomes.dedup();
         for nome in nomes {
             let serie: Vec<f64> = amostras
                 .iter()
-                .map(|(_, a)| a.processos.iter().find(|p| p.nome == nome).map(|p| p.cpu).unwrap_or(0.0))
+                .map(|(_, a)| {
+                    a.processos
+                        .iter()
+                        .find(|p| p.nome == nome)
+                        .map(|p| p.cpu)
+                        .unwrap_or(0.0)
+                })
                 .collect();
             let normal = mediana(&serie).unwrap_or(0.0).max(0.005);
-            let ativo: Vec<Option<bool>> = serie.iter().map(|c| Some(*c >= PROCESSO_MIN && *c >= normal * SALTO)).collect();
+            let ativo: Vec<Option<bool>> = serie
+                .iter()
+                .map(|c| Some(*c >= PROCESSO_MIN && *c >= normal * SALTO))
+                .collect();
             if ativo.iter().any(|a| *a == Some(true)) {
                 v.push((Hipotese::Processo { nome }, ativo));
             }
@@ -402,13 +461,22 @@ fn sinais(amostras: &[(i64, Amostra)], vram_total_mb: Option<f64>) -> Vec<(Hipot
 
 /// As amostras cujo intervalo `(c[j-1], c[j]]` toca o trecho `[inicio, fim]` (o contador de taxa mede o intervalo
 /// entre duas leituras). `None`: o trecho sai da cobertura das amostras.
-fn amostras_que_tocam(carimbos: &[i64], inicio: i64, fim: i64) -> Option<std::ops::RangeInclusive<usize>> {
-    let (Some(primeiro), Some(ultimo)) = (carimbos.first(), carimbos.last()) else { return None };
+fn amostras_que_tocam(
+    carimbos: &[i64],
+    inicio: i64,
+    fim: i64,
+) -> Option<std::ops::RangeInclusive<usize>> {
+    let (Some(primeiro), Some(ultimo)) = (carimbos.first(), carimbos.last()) else {
+        return None;
+    };
     if carimbos.len() < 2 || inicio < *primeiro || fim > *ultimo {
         return None;
     }
     let a = carimbos.partition_point(|c| *c < inicio).max(1);
-    let b = carimbos.partition_point(|c| *c < fim).max(a).min(carimbos.len() - 1);
+    let b = carimbos
+        .partition_point(|c| *c < fim)
+        .max(a)
+        .min(carimbos.len() - 1);
     Some(a..=b)
 }
 
@@ -426,7 +494,10 @@ fn chance_de_tocar_ao_acaso(carimbos: &[i64], ligado: &[bool], d: i64) -> f64 {
         if !ligado[j] {
             continue;
         }
-        let (a, b) = ((carimbos[j - 1] - d).max(c0), carimbos[j].min(fim_do_espaco));
+        let (a, b) = (
+            (carimbos[j - 1] - d).max(c0),
+            carimbos[j].min(fim_do_espaco),
+        );
         if b <= a {
             continue;
         }
@@ -513,7 +584,9 @@ pub fn investigar(
     };
     let mut intervalos: Vec<f64> = quadros.iter().map(|q| q.intervalo_ms).collect();
     intervalos.sort_by(f64::total_cmp);
-    let fps_mediano = mediana(&intervalos).filter(|m| *m > 0.0).map(|m| 1000.0 / m);
+    let fps_mediano = mediana(&intervalos)
+        .filter(|m| *m > 0.0)
+        .map(|m| 1000.0 / m);
     let p99_ms = (intervalos.len() >= 1_000).then(|| percentil(&intervalos, 99.0));
     let p999_ms = (intervalos.len() >= 10_000).then(|| percentil(&intervalos, 99.9));
 
@@ -527,17 +600,29 @@ pub fn investigar(
             Severidade::Extrema => severidades.extrema += 1,
         }
     }
-    let lado_processador = episodios.iter().filter(|e| e.lado == Lado::Processador).count();
+    let lado_processador = episodios
+        .iter()
+        .filter(|e| e.lado == Lado::Processador)
+        .count();
     let lado_placa = episodios.iter().filter(|e| e.lado == Lado::Placa).count();
-    let por_minuto = if segundos > 0.0 { episodios.len() as f64 * 60.0 / segundos } else { 0.0 };
+    let por_minuto = if segundos > 0.0 {
+        episodios.len() as f64 * 60.0 / segundos
+    } else {
+        0.0
+    };
 
     let carimbos: Vec<i64> = amostras.iter().map(|(q, _)| *q).collect();
-    let cobertura: Vec<Option<std::ops::RangeInclusive<usize>>> =
-        episodios.iter().map(|e| amostras_que_tocam(&carimbos, e.inicio_qpc, e.fim_qpc)).collect();
+    let cobertura: Vec<Option<std::ops::RangeInclusive<usize>>> = episodios
+        .iter()
+        .map(|e| amostras_que_tocam(&carimbos, e.inicio_qpc, e.fim_qpc))
+        .collect();
     let cobertos = cobertura.iter().filter(|c| c.is_some()).count();
 
     let abstencao = if quadros.len() < QUADROS_MINIMOS {
-        Some(format!("Só {} quadros medidos: pouco para dizer qualquer coisa sobre travadas.", quadros.len()))
+        Some(format!(
+            "Só {} quadros medidos: pouco para dizer qualquer coisa sobre travadas.",
+            quadros.len()
+        ))
     } else if episodios.len() >= MINIMO_DE_EPISODIOS && cobertos < MINIMO_DE_EPISODIOS {
         Some(format!(
             "{} travadas em {:.0} s, mas os contadores do Windows não cobriram esse trecho: não dá para apontar causa \
@@ -558,7 +643,11 @@ pub fn investigar(
 
     let todos = sinais(amostras, vram_total_mb);
     // Bonferroni pelo número de hipóteses medidas: com 10 processos, uma associação "por sorte" apareceria à toa.
-    let medidas = todos.iter().filter(|(_, s)| s.iter().skip(1).any(|x| x.is_some())).count().max(1);
+    let medidas = todos
+        .iter()
+        .filter(|(_, s)| s.iter().skip(1).any(|x| x.is_some()))
+        .count()
+        .max(1);
 
     let mut avaliacoes: Vec<Avaliacao> = todos
         .iter()
@@ -667,25 +756,43 @@ pub fn investigar(
         })
         .collect();
     avaliacoes.sort_by(|a, b| {
-        b.confianca.cmp(&a.confianca).then(b.episodios_com_sinal.cmp(&a.episodios_com_sinal)).then(a.hipotese.cmp(&b.hipotese))
+        b.confianca
+            .cmp(&a.confianca)
+            .then(b.episodios_com_sinal.cmp(&a.episodios_com_sinal))
+            .then(a.hipotese.cmp(&b.hipotese))
     });
 
     // Sem causa: episódio coberto em que nenhuma hipótese Moderada/Forte estava ligada.
     let fortes: Vec<&Vec<Option<bool>>> = todos
         .iter()
-        .filter(|(h, _)| avaliacoes.iter().any(|a| &a.hipotese == h && a.confianca >= Confianca::Moderada))
+        .filter(|(h, _)| {
+            avaliacoes
+                .iter()
+                .any(|a| &a.hipotese == h && a.confianca >= Confianca::Moderada)
+        })
         .map(|(_, s)| s)
         .collect();
     let sem_causa = cobertura
         .iter()
         .flatten()
-        .filter(|faixa| !fortes.iter().any(|s| (**faixa).clone().any(|j| s[j] == Some(true))))
+        .filter(|faixa| {
+            !fortes
+                .iter()
+                .any(|s| (**faixa).clone().any(|j| s[j] == Some(true)))
+        })
         .count();
 
     let conclusao = if let Some(a) = &abstencao {
         a.clone()
-    } else if let Some(melhor) = avaliacoes.first().filter(|a| a.confianca >= Confianca::Moderada) {
-        let forca = if melhor.confianca == Confianca::Forte { "forte" } else { "moderada" };
+    } else if let Some(melhor) = avaliacoes
+        .first()
+        .filter(|a| a.confianca >= Confianca::Moderada)
+    {
+        let forca = if melhor.confianca == Confianca::Forte {
+            "forte"
+        } else {
+            "moderada"
+        };
         format!(
             "Associação {} com {}: {} de {} travadas aconteceram com ele ligado, contra {} esperado ao acaso. \
              Associação ainda não é causa: {}",
@@ -757,7 +864,12 @@ pub(crate) mod simulacao {
     }
 
     /// Quadros de `ms_base` com ruído de 8%, com travadas (quadro de 45–90 ms, lado processador) nos instantes dados (s).
-    pub fn quadros(s: &mut Sorteio, segundos: f64, ms_base: f64, travadas_s: &[f64]) -> Vec<QuadroDoJogo> {
+    pub fn quadros(
+        s: &mut Sorteio,
+        segundos: f64,
+        ms_base: f64,
+        travadas_s: &[f64],
+    ) -> Vec<QuadroDoJogo> {
         let mut v = Vec::new();
         let mut t = 0.0f64;
         let mut i = 0;
@@ -798,8 +910,14 @@ pub(crate) mod simulacao {
                         vram_usada_mb: Some(2000.0),
                         vram_compartilhada_mb: Some(50.0),
                         processos: vec![
-                            ProcessoNaAmostra { nome: "Rajada.exe".into(), cpu: if *a { 0.25 } else { 0.01 } },
-                            ProcessoNaAmostra { nome: "Discord.exe".into(), cpu: 0.02 },
+                            ProcessoNaAmostra {
+                                nome: "Rajada.exe".into(),
+                                cpu: if *a { 0.25 } else { 0.01 },
+                            },
+                            ProcessoNaAmostra {
+                                nome: "Discord.exe".into(),
+                                cpu: 0.02,
+                            },
                         ],
                         ..Default::default()
                     },
@@ -810,7 +928,13 @@ pub(crate) mod simulacao {
 
     /// Sessão de `segundos`: rajadas cobrindo `fracao_ativa` do tempo. `causal`: probabilidade de uma rajada gerar
     /// travada; `fundo_por_min`: travadas independentes de tudo.
-    pub fn sessao(s: &mut Sorteio, segundos: f64, fracao_ativa: f64, causal: f64, fundo_por_min: f64) -> (Vec<QuadroDoJogo>, Vec<(i64, Amostra)>) {
+    pub fn sessao(
+        s: &mut Sorteio,
+        segundos: f64,
+        fracao_ativa: f64,
+        causal: f64,
+        fundo_por_min: f64,
+    ) -> (Vec<QuadroDoJogo>, Vec<(i64, Amostra)>) {
         let n = (segundos * 2.0) as usize + 1;
         let ativo: Vec<bool> = (0..n).map(|i| i > 0 && s.u() < fracao_ativa).collect();
         let mut travadas: Vec<f64> = Vec::new();
@@ -848,7 +972,13 @@ mod tests {
         for i in [0usize, 1, 30, 31, 250, 468, 469, 499] {
             let (a, b) = (i.saturating_sub(meia), (i + meia).min(v.len() - 1));
             let ingenua = mediana(&v[a..=b].to_vec()).unwrap();
-            assert!((rapida[i] - ingenua).abs() < 1e-12, "i={} {} vs {}", i, rapida[i], ingenua);
+            assert!(
+                (rapida[i] - ingenua).abs() < 1e-12,
+                "i={} {} vs {}",
+                i,
+                rapida[i],
+                ingenua
+            );
         }
     }
 
@@ -856,7 +986,11 @@ mod tests {
     fn poisson_binomial_com_chances_iguais_e_a_binomial() {
         let p = vec![0.3; 12];
         for k in 0..=12 {
-            assert!((cauda_poisson_binomial(&p, k) - cauda_binomial(12, k, 0.3)).abs() < 1e-12, "k={}", k);
+            assert!(
+                (cauda_poisson_binomial(&p, k) - cauda_binomial(12, k, 0.3)).abs() < 1e-12,
+                "k={}",
+                k
+            );
         }
         assert!((cauda_poisson_binomial(&[0.5, 0.2], 2) - 0.1).abs() < 1e-12);
     }
@@ -879,7 +1013,11 @@ mod tests {
         let c: Vec<i64> = (0..=10).map(|i| i * 5_000_000).collect();
         assert_eq!(amostras_que_tocam(&c, 19_900_000, 22_000_000), Some(4..=5));
         assert_eq!(amostras_que_tocam(&c, 19_000_000, 19_500_000), Some(4..=4));
-        assert_eq!(amostras_que_tocam(&c, -1, 10), None, "antes da primeira amostra: fora da cobertura");
+        assert_eq!(
+            amostras_que_tocam(&c, -1, 10),
+            None,
+            "antes da primeira amostra: fora da cobertura"
+        );
     }
 
     #[test]
@@ -899,14 +1037,23 @@ mod tests {
         for i in 0..2500 {
             let ms = if i < 2000 { 5.0 } else { 20.0 };
             t += ms;
-            v.push(QuadroDoJogo { qpc: (t * 10_000.0) as i64, intervalo_ms: ms, cpu_ms: None, gpu_ms: None });
+            v.push(QuadroDoJogo {
+                qpc: (t * 10_000.0) as i64,
+                intervalo_ms: ms,
+                cpu_ms: None,
+                gpu_ms: None,
+            });
         }
         assert!(detectar_episodios(&v, FREQ).is_empty());
         v[2200].intervalo_ms = 70.0;
         let e = detectar_episodios(&v, FREQ);
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].severidade, Severidade::Severa);
-        assert_eq!(e[0].lado, Lado::Indefinido, "sem CPUBusy/GPUBusy não se afirma o lado");
+        assert_eq!(
+            e[0].lado,
+            Lado::Indefinido,
+            "sem CPUBusy/GPUBusy não se afirma o lado"
+        );
     }
 
     #[test]
@@ -935,9 +1082,21 @@ mod tests {
         let (q, a) = sessao(&mut s, 120.0, 0.15, 0.6, 1.0);
         let inv = investigar(&q, &a, FREQ, Some(8192.0), &nada_protegido);
         let melhor = &inv.avaliacoes[0];
-        assert_eq!(melhor.hipotese, Hipotese::Processo { nome: "Rajada.exe".into() }, "{:#?}", inv.avaliacoes);
+        assert_eq!(
+            melhor.hipotese,
+            Hipotese::Processo {
+                nome: "Rajada.exe".into()
+            },
+            "{:#?}",
+            inv.avaliacoes
+        );
         assert!(melhor.confianca >= Confianca::Moderada);
-        assert_eq!(melhor.teste, Teste::AcalmarProcesso { processo: "Rajada.exe".into() });
+        assert_eq!(
+            melhor.teste,
+            Teste::AcalmarProcesso {
+                processo: "Rajada.exe".into()
+            }
+        );
         assert!(inv.conclusao.contains("não é causa"), "{}", inv.conclusao);
     }
 
@@ -946,7 +1105,10 @@ mod tests {
         let mut s = Sorteio(11);
         let (q, a) = sessao(&mut s, 120.0, 0.15, 0.6, 1.0);
         let inv = investigar(&q, &a, FREQ, None, &|n: &str| n == "Rajada.exe");
-        assert!(matches!(inv.avaliacoes[0].teste, Teste::Recomendacao { .. }));
+        assert!(matches!(
+            inv.avaliacoes[0].teste,
+            Teste::Recomendacao { .. }
+        ));
     }
 
     #[test]
@@ -956,10 +1118,23 @@ mod tests {
         let mut s = Sorteio(21);
         let (q, a) = sessao(&mut s, 120.0, 0.45, 0.0, 10.0);
         let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
-        let rajada = inv.avaliacoes.iter().find(|x| x.hipotese == Hipotese::Processo { nome: "Rajada.exe".into() }).unwrap();
+        let rajada = inv
+            .avaliacoes
+            .iter()
+            .find(|x| {
+                x.hipotese
+                    == Hipotese::Processo {
+                        nome: "Rajada.exe".into(),
+                    }
+            })
+            .unwrap();
         assert!(rajada.confianca <= Confianca::SemEvidencia, "{:#?}", rajada);
         assert!(rajada.lift.is_some_and(|l| l < 1.5), "{:#?}", rajada);
-        assert!(inv.conclusao.starts_with("Causa ainda não determinada"), "{}", inv.conclusao);
+        assert!(
+            inv.conclusao.starts_with("Causa ainda não determinada"),
+            "{}",
+            inv.conclusao
+        );
 
         let v1 = v1_na_mesma_sessao(&q, &a);
         assert!(
@@ -970,7 +1145,10 @@ mod tests {
         );
     }
 
-    pub(crate) fn v1_na_mesma_sessao(q: &[QuadroDoJogo], a: &[(i64, Amostra)]) -> crate::core::travadas::Investigacao {
+    pub(crate) fn v1_na_mesma_sessao(
+        q: &[QuadroDoJogo],
+        a: &[(i64, Amostra)],
+    ) -> crate::core::travadas::Investigacao {
         let intervalos: Vec<f64> = q.iter().map(|x| x.intervalo_ms).collect();
         let amostras: Vec<Amostra> = a.iter().map(|(_, x)| x.clone()).collect();
         crate::core::travadas::investigar(&intervalos, &amostras, 0, None)
@@ -983,18 +1161,34 @@ mod tests {
         let a = amostras(&vec![false; 121]);
         let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
         assert_eq!(inv.episodios.len(), 3);
-        assert!(inv.abstencao.as_deref().is_some_and(|m| m.contains("poucas")), "{:?}", inv.abstencao);
-        assert!(inv.avaliacoes.iter().all(|x| x.confianca <= Confianca::Inconclusiva));
+        assert!(
+            inv.abstencao
+                .as_deref()
+                .is_some_and(|m| m.contains("poucas")),
+            "{:?}",
+            inv.abstencao
+        );
+        assert!(inv
+            .avaliacoes
+            .iter()
+            .all(|x| x.confianca <= Confianca::Inconclusiva));
 
         // Muitas travadas sem contador cobrindo: "não deu para medir", nunca "bom sinal".
         let q = quadros(&mut s, 60.0, 11.0, &[5.0, 12.0, 20.0, 31.0, 44.0, 52.0]);
         let inv = investigar(&q, &[], FREQ, None, &nada_protegido);
         let m = inv.abstencao.unwrap();
-        assert!(m.contains("não cobriram") && !m.contains("bom sinal"), "{}", m);
+        assert!(
+            m.contains("não cobriram") && !m.contains("bom sinal"),
+            "{}",
+            m
+        );
         let mut s = Sorteio(3);
         let (q, a) = sessao(&mut s, 30.0, 0.2, 0.0, 4.0);
         let inv = investigar(&q[..900], &a, FREQ, None, &nada_protegido);
-        assert!(inv.abstencao.as_deref().is_some_and(|m| m.contains("quadros")));
+        assert!(inv
+            .abstencao
+            .as_deref()
+            .is_some_and(|m| m.contains("quadros")));
     }
 
     #[test]
@@ -1005,9 +1199,16 @@ mod tests {
             x.disco_latencia_ms = None;
         }
         let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
-        let disco = inv.avaliacoes.iter().find(|x| x.hipotese == Hipotese::Disco).unwrap();
+        let disco = inv
+            .avaliacoes
+            .iter()
+            .find(|x| x.hipotese == Hipotese::Disco)
+            .unwrap();
         assert_eq!(disco.confianca, Confianca::NaoMedido);
-        assert_eq!(inv.avaliacoes.last().unwrap().confianca, Confianca::NaoMedido);
+        assert_eq!(
+            inv.avaliacoes.last().unwrap().confianca,
+            Confianca::NaoMedido
+        );
     }
 
     #[test]
@@ -1019,8 +1220,21 @@ mod tests {
             x.gpu_ms = Some(x.intervalo_ms * 0.9);
         }
         let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
-        let rajada = inv.avaliacoes.iter().find(|x| x.hipotese == Hipotese::Processo { nome: "Rajada.exe".into() }).unwrap();
-        assert!(rajada.contra.iter().any(|c| c.contains("placa")), "{:?}", rajada.contra);
+        let rajada = inv
+            .avaliacoes
+            .iter()
+            .find(|x| {
+                x.hipotese
+                    == Hipotese::Processo {
+                        nome: "Rajada.exe".into(),
+                    }
+            })
+            .unwrap();
+        assert!(
+            rajada.contra.iter().any(|c| c.contains("placa")),
+            "{:?}",
+            rajada.contra
+        );
         assert!(inv.lado_placa > inv.lado_processador);
     }
 
@@ -1034,7 +1248,11 @@ mod tests {
             let (q, a) = sessao(&mut s, 120.0, 0.15, 0.6, 1.0);
             let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
             if inv.avaliacoes.first().is_some_and(|x| {
-                x.hipotese == Hipotese::Processo { nome: "Rajada.exe".into() } && x.confianca >= Confianca::Moderada
+                x.hipotese
+                    == Hipotese::Processo {
+                        nome: "Rajada.exe".into(),
+                    }
+                    && x.confianca >= Confianca::Moderada
             }) {
                 acertos += 1;
             }
@@ -1043,17 +1261,31 @@ mod tests {
             let mut s = Sorteio(5000 + semente);
             let (q, a) = sessao(&mut s, 120.0, 0.3, 0.0, 8.0);
             let inv = investigar(&q, &a, FREQ, None, &nada_protegido);
-            if inv.avaliacoes.iter().any(|x| x.confianca >= Confianca::Moderada) {
+            if inv
+                .avaliacoes
+                .iter()
+                .any(|x| x.confianca >= Confianca::Moderada)
+            {
                 falsos += 1;
             }
             let v1 = v1_na_mesma_sessao(&q, &a);
-            if v1.pistas.iter().any(|p| p.forca == crate::core::travadas::Forca::Alta) {
+            if v1
+                .pistas
+                .iter()
+                .any(|p| p.forca == crate::core::travadas::Forca::Alta)
+            {
                 falsos_v1 += 1;
             }
         }
-        let (taxa_acerto, taxa_falso, taxa_falso_v1) =
-            (acertos as f64 / sims as f64, falsos as f64 / sims as f64, falsos_v1 as f64 / sims as f64);
-        println!("V2: acerto {:.3}, falso positivo {:.3} · V1: falso positivo {:.3}", taxa_acerto, taxa_falso, taxa_falso_v1);
+        let (taxa_acerto, taxa_falso, taxa_falso_v1) = (
+            acertos as f64 / sims as f64,
+            falsos as f64 / sims as f64,
+            falsos_v1 as f64 / sims as f64,
+        );
+        println!(
+            "V2: acerto {:.3}, falso positivo {:.3} · V1: falso positivo {:.3}",
+            taxa_acerto, taxa_falso, taxa_falso_v1
+        );
         assert!(taxa_acerto >= 0.90, "acerto {}", taxa_acerto);
         assert!(taxa_falso <= 0.05, "falso positivo {}", taxa_falso);
     }

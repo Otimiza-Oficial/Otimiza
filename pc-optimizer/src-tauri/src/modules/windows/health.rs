@@ -103,7 +103,10 @@ fn confiabilidade() -> Option<Vec<RawReliability>> {
 /// Os valores vêm em inglês em qualquer idioma.
 pub fn avaliar_estado(health_status: &str) -> Option<(FindingSeverity, &'static str)> {
     match health_status {
-        "Healthy" => Some((FindingSeverity::Ok, "O Windows não relata problema neste disco.")),
+        "Healthy" => Some((
+            FindingSeverity::Ok,
+            "O Windows não relata problema neste disco.",
+        )),
         "Warning" => Some((
             FindingSeverity::Critical,
             "O Windows já registrou erro neste disco. Faça backup do que importa HOJE — \
@@ -235,7 +238,11 @@ fn achados_de_confiabilidade(contador: &RawReliability) -> Vec<HealthFinding> {
         findings.push(HealthFinding {
             id: format!("disk_hours_{}", id),
             title: format!("Tempo de uso do disco {}", id),
-            measured: format!("{} horas ligado ({:.1} anos de uso contínuo).", horas, horas as f64 / 8760.0),
+            measured: format!(
+                "{} horas ligado ({:.1} anos de uso contínuo).",
+                horas,
+                horas as f64 / 8760.0
+            ),
             advice: String::new(),
             severity: FindingSeverity::Ok,
             fix_location: FixLocation::None,
@@ -258,15 +265,16 @@ fn analisar_discos(findings: &mut Vec<HealthFinding>) -> bool {
         let tipo = disco.media_type.clone().unwrap_or_default();
         let tamanho = disco.size_gb.unwrap_or(0.0);
 
-        if let Some((severidade, conselho)) = disco
-            .health_status
-            .as_deref()
-            .and_then(avaliar_estado)
+        if let Some((severidade, conselho)) =
+            disco.health_status.as_deref().and_then(avaliar_estado)
         {
             findings.push(HealthFinding {
                 id: format!("disk_status_{}", indice),
                 title: format!("Disco: {}", nome),
-                measured: format!("{} de {:.0} GB, estado relatado pelo Windows.", tipo, tamanho),
+                measured: format!(
+                    "{} de {:.0} GB, estado relatado pelo Windows.",
+                    tipo, tamanho
+                ),
                 advice: conselho.to_string(),
                 severity: severidade,
                 fix_location: if severidade == FindingSeverity::Ok {

@@ -44,9 +44,13 @@ pub fn com_ligada(texto: &str) -> String {
 /// Falha de leitura é `Err`: com `unwrap_or(0)` ela virava "este Windows não
 /// tem a opção", uma afirmação sobre a máquina que ninguém conferiu.
 fn build_do_windows() -> Result<u32, String> {
-    registry::read_text("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber")?
-        .and_then(|v| v.trim().parse().ok())
-        .ok_or_else(|| "não deu para ler a versão do Windows".to_string())
+    registry::read_text(
+        "HKLM",
+        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        "CurrentBuildNumber",
+    )?
+    .and_then(|v| v.trim().parse().ok())
+    .ok_or_else(|| "não deu para ler a versão do Windows".to_string())
 }
 
 /// `Ok(None)`: a opção não existe neste Windows. `Err`: não deu para ler.
@@ -79,8 +83,14 @@ mod testes {
 
     #[test]
     fn le_o_estado_no_meio_do_texto() {
-        assert_eq!(ligada_no_texto("VRROptimizeEnable=0;SwapEffectUpgradeEnable=1;"), Some(true));
-        assert_eq!(ligada_no_texto("SwapEffectUpgradeEnable=0;AutoHDREnable=1;"), Some(false));
+        assert_eq!(
+            ligada_no_texto("VRROptimizeEnable=0;SwapEffectUpgradeEnable=1;"),
+            Some(true)
+        );
+        assert_eq!(
+            ligada_no_texto("SwapEffectUpgradeEnable=0;AutoHDREnable=1;"),
+            Some(false)
+        );
         assert_eq!(ligada_no_texto("AutoHDREnable=1;"), None);
         assert_eq!(ligada_no_texto(""), None);
     }
@@ -88,8 +98,14 @@ mod testes {
     #[test]
     fn ligar_preserva_as_outras_escolhas() {
         assert_eq!(com_ligada(""), "SwapEffectUpgradeEnable=1;");
-        assert_eq!(com_ligada("AutoHDREnable=1;VRROptimizeEnable=0;"), "AutoHDREnable=1;VRROptimizeEnable=0;SwapEffectUpgradeEnable=1;");
-        assert_eq!(com_ligada("SwapEffectUpgradeEnable=0;AutoHDREnable=1;"), "AutoHDREnable=1;SwapEffectUpgradeEnable=1;");
+        assert_eq!(
+            com_ligada("AutoHDREnable=1;VRROptimizeEnable=0;"),
+            "AutoHDREnable=1;VRROptimizeEnable=0;SwapEffectUpgradeEnable=1;"
+        );
+        assert_eq!(
+            com_ligada("SwapEffectUpgradeEnable=0;AutoHDREnable=1;"),
+            "AutoHDREnable=1;SwapEffectUpgradeEnable=1;"
+        );
         assert_eq!(ligada_no_texto(&com_ligada("AutoHDREnable=1")), Some(true));
     }
 }

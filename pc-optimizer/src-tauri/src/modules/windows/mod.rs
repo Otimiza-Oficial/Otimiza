@@ -4,65 +4,64 @@
 pub mod acessibilidade;
 pub mod achados;
 pub mod afinidade;
+pub mod amddriver;
 pub mod anticheat;
+pub mod apo;
+pub mod bios;
 pub mod bloatware;
 pub mod boot;
 pub mod bottleneck;
 pub mod browsers;
 pub mod cabecalho;
 pub mod catalog;
+pub mod causas;
 pub mod citizenfx;
 pub mod configjogo;
-pub mod crashes;
 pub mod conflicts;
+pub mod conflitos;
+pub mod contadousuario;
+pub mod cpugeracao;
+pub mod cpuset;
+pub mod crashes;
 pub mod deteccao;
 pub mod devices;
+pub mod discodojogo;
 pub mod diskspace;
-pub mod cpuset;
-pub mod registro;
-pub mod restaurar;
-pub mod guardiao;
-pub mod investigacao;
-pub mod nvml;
 pub mod display;
 pub mod essenciais;
+pub mod eventoshw;
 pub mod exhaustion;
+pub mod experimento;
+pub mod fichabios;
 pub mod firmware;
 pub mod fivem;
-pub mod frames;
-pub mod presentmon;
-pub mod motorenergia;
-pub mod motorenergia_maquina;
 pub mod framegen;
-pub mod geracao;
+pub mod frames;
 pub mod gamemode;
-pub mod gpupref;
+pub mod geracao;
 pub mod governador;
+pub mod gpupref;
+pub mod grupos;
+pub mod guardiao;
 pub mod hardware;
-pub mod bios;
-pub mod eventoshw;
-pub mod fichabios;
+pub mod health;
+pub mod inteldriver;
+pub mod investigacao;
 pub mod janelas;
-pub mod apo;
-pub mod x3d;
-pub mod causas;
-pub mod contadousuario;
-pub mod conflitos;
-pub mod cpugeracao;
-pub mod discodojogo;
 pub mod jogos;
 pub mod labcompat;
-pub mod health;
 pub mod memory;
-pub mod nvdriver;
-pub mod planoenergia;
-pub mod experimento;
-pub mod grupos;
+pub mod motorenergia;
+pub mod motorenergia_maquina;
 pub mod naofazemos;
 pub mod niveis;
+pub mod nvdriver;
+pub mod nvml;
 pub mod pcie;
 pub mod placa;
+pub mod planoenergia;
 pub mod power;
+pub mod presentmon;
 pub mod pressao;
 pub mod processes;
 pub mod profiles;
@@ -70,7 +69,9 @@ pub mod prontojogo;
 pub mod rbar;
 pub mod readiness;
 pub mod rede;
+pub mod registro;
 pub mod registry;
+pub mod restaurar;
 pub mod restore;
 pub mod services;
 pub mod servicesaudit;
@@ -84,12 +85,15 @@ pub mod sysparams;
 pub mod tasks;
 pub mod tetos;
 pub mod thermal;
-pub mod unreal;
 pub mod topologia;
+pub mod unreal;
 pub mod veredito;
 pub mod vrr;
+pub mod x3d;
 
-use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue};
+use crate::modules::changelog::{
+    now_timestamp, AppliedOptimization, ChangeLog, ChangeRecord, PreviousValue,
+};
 use crate::modules::optimizer::{
     ActionResult, ActionStatus, BatchStep, OptimizationInfo, OptimizationOutcome, OptimizationState,
 };
@@ -122,7 +126,9 @@ impl WindowsOptimizer {
             // Condicional com a condição medida e falsa some; fica se já aplicado (para desfazer) ou se não foi possível
             // medir (esconder afirmaria o que ninguém viu).
             .filter(|spec| match catalog::classe(spec.id) {
-                catalog::Classe::Condicional(c) => condicao_atendida_sem_esperar(c) != Some(false) || log.is_applied(spec.id),
+                catalog::Classe::Condicional(c) => {
+                    condicao_atendida_sem_esperar(c) != Some(false) || log.is_applied(spec.id)
+                }
                 _ => true,
             })
             .map(|spec| {
@@ -172,7 +178,11 @@ impl WindowsOptimizer {
             return OptimizationState::Unavailable;
         }
 
-        let states: Vec<ActionState> = spec.actions.iter().map(|a| self.inspect_action(a)).collect();
+        let states: Vec<ActionState> = spec
+            .actions
+            .iter()
+            .map(|a| self.inspect_action(a))
+            .collect();
 
         Self::compor(&states)
     }
@@ -411,7 +421,11 @@ impl WindowsOptimizer {
         resultado
     }
 
-    fn aplicar_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
+    fn aplicar_sem_registro(
+        &self,
+        id: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id).ok_or_else(|| format!("Unknown optimization: {}", id))?;
 
         if catalog::retirado(id) && !log.is_applied(id) {
@@ -583,7 +597,11 @@ impl WindowsOptimizer {
         resultado
     }
 
-    fn desfazer_sem_registro(&self, id: &str, log: &mut ChangeLog) -> Result<OptimizationOutcome, String> {
+    fn desfazer_sem_registro(
+        &self,
+        id: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
         let spec = catalog::find(id);
 
         if let Some(spec) = spec {
@@ -603,7 +621,9 @@ impl WindowsOptimizer {
         let entry = match log.take(id)? {
             Some(entry) => entry,
             None => {
-                let name = spec.map(|s| s.name.to_string()).unwrap_or_else(|| id.to_string());
+                let name = spec
+                    .map(|s| s.name.to_string())
+                    .unwrap_or_else(|| id.to_string());
                 return Ok(OptimizationOutcome {
                     id: id.to_string(),
                     name,
@@ -621,23 +641,32 @@ impl WindowsOptimizer {
         let requires_restart = spec.map(|s| s.requires_restart).unwrap_or(false);
 
         let changes_count = entry.changes.len();
-        let described: Vec<String> = entry.changes.iter().map(|change| change.describe()).collect();
+        let described: Vec<String> = entry
+            .changes
+            .iter()
+            .map(|change| change.describe())
+            .collect();
 
         // `log.take` já tirou e gravou o registro: daqui ao fim o valor anterior só existe na memória. O `if let Err`
         // cobre a reversão falhar; o diário cobre o processo morrer.
-        let diario = crate::modules::transacao::abrir(&crate::modules::transacao::Pendencia::nova(
-            id,
-            &name,
-            crate::modules::transacao::Intencao::Reverter,
-            crate::modules::changelog::now_timestamp(),
-            entry.changes.clone(),
-        ))?;
+        let diario =
+            crate::modules::transacao::abrir(&crate::modules::transacao::Pendencia::nova(
+                id,
+                &name,
+                crate::modules::transacao::Intencao::Reverter,
+                crate::modules::changelog::now_timestamp(),
+                entry.changes.clone(),
+            ))?;
 
         if let Err(errors) = revert_changes(&entry.changes) {
             // O registro volta ao histórico para tentar de novo.
             log.record(entry)?;
             diario.concluir()?;
-            return Err(format!("Falha ao reverter `{}`: {}", name, errors.join("; ")));
+            return Err(format!(
+                "Falha ao reverter `{}`: {}",
+                name,
+                errors.join("; ")
+            ));
         }
 
         diario.concluir()?;
@@ -685,7 +714,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 1,
                 changes: vec![change.describe()],
-            ..Default::default()
+                ..Default::default()
             });
         }
 
@@ -844,7 +873,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 0,
                 changes: Vec::new(),
-            ..Default::default()
+                ..Default::default()
             });
         }
 
@@ -891,11 +920,196 @@ impl WindowsOptimizer {
         })
     }
 
+    /// O par AMD do `aplicar_ajuste_nvidia`: lê o anterior, aplica, grava no histórico; se o histórico não gravar,
+    /// devolve o driver ao que era antes de responder (mudança sem registro não teria Desfazer).
+    pub fn aplicar_ajuste_amd(
+        &self,
+        opcao: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let alvo = amddriver::Opcao::ler(opcao)
+            .ok_or_else(|| format!("não conheço o ajuste AMD \"{}\".", opcao))?;
+        let id = alvo.id();
+
+        if log.is_applied(&id) {
+            if let amddriver::Opcao::LimiteDeFps(_) = alvo {
+                // Trocar o número: desfaz o limite anterior primeiro para o histórico guardar o valor de antes do Otimiza.
+                self.revert(&id, log)?;
+            } else {
+                return Ok(OptimizationOutcome {
+                    id,
+                    name: alvo.titulo().to_string(),
+                    success: true,
+                    applied: true,
+                    message: "Este ajuste já está aplicado pelo Otimiza.".to_string(),
+                    ..Default::default()
+                });
+            }
+        }
+
+        crate::utils::Logger::info(&format!("driver AMD `{}`: aplicando", opcao));
+        let anterior = amddriver::aplicar(alvo)?;
+        let change = amddriver::registro(alvo, anterior);
+        let described = change.describe();
+
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("{} (driver AMD)", alvo.titulo()),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!(
+                    "{} E não consegui devolver o ajuste ao que era: {}",
+                    erro,
+                    falhas.join("; ")
+                ));
+            }
+            return Err(erro);
+        }
+
+        Ok(OptimizationOutcome {
+            id,
+            name: alvo.titulo().to_string(),
+            success: true,
+            applied: true,
+            message: format!(
+                "\"{}\" ligado no driver da AMD. O Desfazer devolve o que estava antes.",
+                alvo.titulo()
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+            ..Default::default()
+        })
+    }
+
+    /// O par Intel do `aplicar_ajuste_amd`, com o mesmo contrato.
+    pub fn aplicar_ajuste_intel(
+        &self,
+        opcao: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let alvo = inteldriver::Opcao::ler(opcao)
+            .ok_or_else(|| format!("não conheço o ajuste Intel \"{}\".", opcao))?;
+        let id = alvo.id().to_string();
+
+        if log.is_applied(&id) {
+            if let inteldriver::Opcao::LimiteDeFps(_) = alvo {
+                self.revert(&id, log)?;
+            } else {
+                return Ok(OptimizationOutcome {
+                    id,
+                    name: alvo.titulo().to_string(),
+                    success: true,
+                    applied: true,
+                    message: "Este ajuste já está aplicado pelo Otimiza.".to_string(),
+                    ..Default::default()
+                });
+            }
+        }
+
+        crate::utils::Logger::info(&format!("driver Intel `{}`: aplicando", opcao));
+        let anterior = inteldriver::aplicar(alvo)?;
+        let change = inteldriver::registro(alvo, anterior);
+        let described = change.describe();
+
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: alvo.titulo().to_string(),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!(
+                    "{} E não consegui devolver o ajuste ao que era: {}",
+                    erro,
+                    falhas.join("; ")
+                ));
+            }
+            return Err(erro);
+        }
+
+        Ok(OptimizationOutcome {
+            id,
+            name: alvo.titulo().to_string(),
+            success: true,
+            applied: true,
+            message: format!(
+                "\"{}\" ligado no driver da Intel. O Desfazer devolve o que estava antes.",
+                alvo.titulo()
+            ),
+            requires_restart: false,
+            changes_count: 1,
+            changes: vec![described],
+            ..Default::default()
+        })
+    }
+
     /// NUNCA no perfil global (prenderia área de trabalho e todo jogo). Trocar o número de um jogo já limitado desfaz o
     /// anterior primeiro.
+    /// Smooth Motion no perfil do jogo (experimental, atrás de `smooth_motion_drs`). Mesmo caminho do limite: grava o
+    /// anterior e, se o histórico não gravar, desfaz na hora.
+    pub fn ligar_smooth_motion(
+        &self,
+        executavel: &str,
+        log: &mut ChangeLog,
+    ) -> Result<OptimizationOutcome, String> {
+        let id = nvdriver::id_do_smooth_motion(executavel);
+        if log.is_applied(&id) {
+            return Ok(OptimizationOutcome {
+                id,
+                name: executavel.to_string(),
+                success: true,
+                applied: false,
+                message: "O Smooth Motion já estava ligado neste jogo.".to_string(),
+                ..Default::default()
+            });
+        }
+        crate::utils::Logger::info(&format!(
+            "Smooth Motion NVIDIA (experimental) em `{}`",
+            executavel
+        ));
+        let feito = nvdriver::ligar_smooth_motion(executavel)?;
+        let change = ChangeRecord::SmoothMotionNvidia {
+            executavel: executavel.to_string(),
+            perfil_criado: feito.perfil_criado,
+            valor_anterior: feito.valor_anterior,
+        };
+        let described = change.describe();
+        if let Err(erro) = log.record(AppliedOptimization {
+            optimization_id: id.clone(),
+            name: format!("Smooth Motion em {} (driver NVIDIA)", executavel),
+            timestamp: now_timestamp(),
+            changes: vec![change.clone()],
+        }) {
+            if let Err(falhas) = revert_changes(&[change]) {
+                return Err(format!(
+                    "{} E não consegui desligar o que acabei de ligar: {}",
+                    erro,
+                    falhas.join("; ")
+                ));
+            }
+            return Err(erro);
+        }
+        Ok(OptimizationOutcome {
+            id,
+            name: executavel.to_string(),
+            success: true,
+            applied: true,
+            message: "Smooth Motion ligado no perfil do jogo. Feche e abra o jogo para valer."
+                .to_string(),
+            changes_count: 1,
+            changes: vec![described],
+            ..Default::default()
+        })
+    }
+
+    /// `caminho`: o do jogo aberto, quando está aberto. É por ele que o driver acha o perfil (`nvdriver::aplicar_limite`).
     pub fn limitar_fps_nvidia(
         &self,
         executavel: &str,
+        caminho: Option<&str>,
         fps: u32,
         log: &mut ChangeLog,
     ) -> Result<OptimizationOutcome, String> {
@@ -905,17 +1119,15 @@ impl WindowsOptimizer {
             self.revert(&id, log)?;
         }
 
-        crate::utils::Logger::info(&format!(
-            "limite NVIDIA `{}`: {} FPS",
-            executavel, fps
-        ));
-        let feito = nvdriver::aplicar_limite(executavel, fps)?;
+        crate::utils::Logger::info(&format!("limite NVIDIA `{}`: {} FPS", executavel, fps));
+        let feito = nvdriver::aplicar_limite(executavel, caminho, fps)?;
 
         let change = ChangeRecord::LimiteNvidia {
             executavel: executavel.to_string(),
             fps,
             perfil_criado: feito.perfil_criado,
             valor_anterior: feito.valor_anterior,
+            caminho: caminho.map(str::to_string),
         };
         let described = change.describe();
 
@@ -1061,7 +1273,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 0,
                 changes: Vec::new(),
-            ..Default::default()
+                ..Default::default()
             });
         }
 
@@ -1125,7 +1337,7 @@ impl WindowsOptimizer {
                 requires_restart: false,
                 changes_count: 1,
                 changes: vec![change.describe()],
-            ..Default::default()
+                ..Default::default()
             });
         }
 
@@ -1242,9 +1454,17 @@ impl WindowsOptimizer {
 
         crate::utils::Logger::info(&format!(
             "lote{}: {} item(ns) pendente(s): {}",
-            if only.is_some() { " de perfil" } else { " do Otimizar agora" },
+            if only.is_some() {
+                " de perfil"
+            } else {
+                " do Otimizar agora"
+            },
             total,
-            pending.iter().map(|spec| spec.id).collect::<Vec<_>>().join(", ")
+            pending
+                .iter()
+                .map(|spec| spec.id)
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
 
         pending
@@ -1296,7 +1516,11 @@ impl WindowsOptimizer {
         crate::utils::Logger::info(&format!(
             "desfazer tudo: {} item(ns): {}",
             total,
-            applied.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>().join(", ")
+            applied
+                .iter()
+                .map(|(id, _)| id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
 
         applied
@@ -1390,7 +1614,7 @@ impl WindowsOptimizer {
                              Costuma ser política de domínio ou outro programa reescrevendo a \
                              chave. Nada ficou aplicado.",
                             name, lido
-                        ))
+                        ));
                     }
                     // Não é falha (desfazer descartaria uma mudança que provavelmente valeu) nem confirmação.
                     Confirmacao::NaoDeuParaLer => {
@@ -1471,7 +1695,10 @@ impl WindowsOptimizer {
 
                 // Falhar ao parar não invalida: vale do próximo boot.
                 if let Err(error) = services::stop(name) {
-                    crate::utils::Logger::warn(&format!("serviço {} não parou agora: {}", name, error));
+                    crate::utils::Logger::warn(&format!(
+                        "serviço {} não parou agora: {}",
+                        name, error
+                    ));
                 }
                 Ok(nota)
             }
@@ -1496,9 +1723,9 @@ impl WindowsOptimizer {
                 };
 
                 // O OTIMIZA já era o ativo: `previous_guid` igual ao nosso faria o desfazer reativar o próprio plano a remover.
-                if anterior.eq_ignore_ascii_case(
-                    relatorio.guid_do_plano.as_deref().unwrap_or_default(),
-                ) {
+                if anterior
+                    .eq_ignore_ascii_case(relatorio.guid_do_plano.as_deref().unwrap_or_default())
+                {
                     return Ok(Some(nota_do_plano(&relatorio)));
                 }
 
@@ -1547,7 +1774,7 @@ impl WindowsOptimizer {
                     .ok_or("Não foi possível ler o estado da compressão de memória.")?;
 
                 if previously_enabled == *enabled {
-detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1564,7 +1791,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 let removed = firmware::boot_limits();
 
                 if removed.is_empty() {
-detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1617,7 +1844,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 };
 
                 if anterior == *enabled {
-detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1633,10 +1860,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                     EstadoReservado::SemRecurso | EstadoReservado::NaoVerificavel => None,
                 };
 
-                match exigir_confirmacao(
-                    conferir(enabled, agora),
-                    "o Armazenamento Reservado",
-                )? {
+                match exigir_confirmacao(conferir(enabled, agora), "o Armazenamento Reservado")? {
                     Some(ressalva) => Ok(Some(ressalva)),
                     None => Ok(Some("Espaço reservado devolvido ao disco.".to_string())),
                 }
@@ -1646,7 +1870,7 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 let ligadas: Vec<&str> = acessibilidade::ligadas();
 
                 if ligadas.is_empty() {
-detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
@@ -1673,7 +1897,9 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                     Some(false) => {}
                 }
                 changes.push(janelas::ligar()?);
-                Ok(Some("Ligada. Vale a partir da próxima vez que o jogo abrir.".to_string()))
+                Ok(Some(
+                    "Ligada. Vale a partir da próxima vez que o jogo abrir.".to_string(),
+                ))
             }
 
             Action::DisableHypervisor => {
@@ -1689,11 +1915,14 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 detalhe.expected_value = Some("off".to_string());
 
                 if anterior == "off" {
-detalhe.status = ActionStatus::AlreadyOptimized;
+                    detalhe.status = ActionStatus::AlreadyOptimized;
                     return Ok(None);
                 }
 
-                shell::run_checked("bcdedit", &["/set", "{current}", "hypervisorlaunchtype", "off"])?;
+                shell::run_checked(
+                    "bcdedit",
+                    &["/set", "{current}", "hypervisorlaunchtype", "off"],
+                )?;
 
                 changes.push(ChangeRecord::BootLimits {
                     removed: vec![("hypervisorlaunchtype".to_string(), anterior)],
@@ -1720,7 +1949,10 @@ detalhe.status = ActionStatus::AlreadyOptimized;
                 detalhe.before_value = Some(valor.clone());
                 detalhe.expected_value = Some("ausente".to_string());
 
-                shell::run_checked("bcdedit", &["/deletevalue", "{current}", "useplatformclock"])?;
+                shell::run_checked(
+                    "bcdedit",
+                    &["/deletevalue", "{current}", "useplatformclock"],
+                )?;
 
                 changes.push(ChangeRecord::BootLimits {
                     removed: vec![("useplatformclock".to_string(), valor.clone())],
@@ -1799,7 +2031,8 @@ fn startup_change_id(hive: &str, name: &str) -> String {
 
 /// A condição de um item condicional, MEDIDA nesta máquina. `None` quando não deu para medir: nem "não se aplica"
 /// nem lote.
-type CacheDasCondicoes = std::sync::Mutex<Vec<(catalog::Condicao, std::time::Instant, Option<bool>)>>;
+type CacheDasCondicoes =
+    std::sync::Mutex<Vec<(catalog::Condicao, std::time::Instant, Option<bool>)>>;
 
 fn cache_das_condicoes() -> &'static CacheDasCondicoes {
     static LEMBRADO: std::sync::OnceLock<CacheDasCondicoes> = std::sync::OnceLock::new();
@@ -1861,16 +2094,31 @@ fn medir_condicao(c: catalog::Condicao) -> Option<bool> {
     match c {
         Condicao::GameDvrLigado => gamedvr_ligado(
             registry::read("HKCU", r"System\GameConfigStore", "GameDVR_Enabled").ok(),
-            registry::read("HKCU", r"Software\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled").ok(),
+            registry::read(
+                "HKCU",
+                r"Software\Microsoft\Windows\CurrentVersion\GameDVR",
+                "AppCaptureEnabled",
+            )
+            .ok(),
         ),
+        Condicao::ModoDeJogoDesligado => Some(modo_de_jogo_desligado(
+            registry::read("HKCU", r"Software\Microsoft\GameBar", "AutoGameModeEnabled").ok(),
+        )),
         Condicao::PcFraco => Some(perfil.total_ram_gb <= 8.5 || perfil.logical_cores <= 4),
         Condicao::MemoriaApertada => Some(perfil.total_ram_gb > 0.0 && perfil.total_ram_gb <= 16.5),
-        Condicao::PoucoEspaco => diskspace::disk_usage().map(|(_, livre)| livre < 20 * 1024 * 1024 * 1024),
+        Condicao::PoucoEspaco => {
+            diskspace::disk_usage().map(|(_, livre)| livre < 20 * 1024 * 1024 * 1024)
+        }
         Condicao::SoSePedir => Some(false),
     }
 }
 
 /// **Pura.** `GameDVR_Enabled` ausente é o padrão, ligado; `AppCaptureEnabled = 1` também liga.
+/// **Pura.** Sem o valor, o Windows usa o padrão (ligado): só o `0` escrito é desligado.
+pub fn modo_de_jogo_desligado(v: Option<PreviousValue>) -> bool {
+    matches!(v, Some(PreviousValue::Dword(0)))
+}
+
 fn gamedvr_ligado(dvr: Option<PreviousValue>, captura: Option<PreviousValue>) -> Option<bool> {
     let ligado = |v: &PreviousValue| match v {
         PreviousValue::Dword(n) => Some(*n != 0),
@@ -1903,9 +2151,7 @@ fn meets_requirement(spec: &OptimizationSpec) -> bool {
 
     match spec.requirement {
         None => true,
-        Some(Requirement::SsdSystemDrive) => {
-            hardware::profile().system_storage == StorageKind::Ssd
-        }
+        Some(Requirement::SsdSystemDrive) => hardware::profile().system_storage == StorageKind::Ssd,
         Some(Requirement::MinRamGb(minimum)) => hardware::profile().total_ram_gb >= minimum,
         Some(Requirement::MinWddm(minimo)) => {
             hardware::alcanca_wddm(hardware::wddm_version(), minimo)
@@ -2133,10 +2379,7 @@ pub fn nota_do_plano(r: &planoenergia::RelatorioDoPlano) -> String {
     }
 
     if r.nao_suportados > 0 {
-        partes.push(format!(
-            "{} não existem neste Windows",
-            r.nao_suportados
-        ));
+        partes.push(format!("{} não existem neste Windows", r.nao_suportados));
     }
 
     if r.falhas > 0 {
@@ -2175,10 +2418,16 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
     if estado.vigiados.is_empty() && !governador_em_aberto {
         return Vec::new();
     }
-    let Ok(medicoes) = crate::modules::medicoes::ler_para_comparar() else { return Vec::new() };
+    let Ok(medicoes) = crate::modules::medicoes::ler_para_comparar() else {
+        return Vec::new();
+    };
     // Sem o filtro do medidor: para saber se o "antes" existia e foi o medidor que o tirou.
     let todas: Vec<crate::modules::medicoes::MedicaoAutomatica> = crate::modules::medicoes::ler()
-        .map(|m| m.into_iter().filter(crate::modules::medicoes::comparavel).collect())
+        .map(|m| {
+            m.into_iter()
+                .filter(crate::modules::medicoes::comparavel)
+                .collect()
+        })
         .unwrap_or_default();
     let agora = crate::modules::changelog::now_timestamp();
     let mut decididos = Vec::new();
@@ -2188,7 +2437,9 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             continue;
         }
         let mut a = portao::avaliar(&v, &medicoes);
-        if matches!(a.veredito, Veredito::Aguardando { antes: 0, .. }) && portao::tinha_antes(&v, &todas) {
+        if matches!(a.veredito, Veredito::Aguardando { antes: 0, .. })
+            && portao::tinha_antes(&v, &todas)
+        {
             a.veredito = Veredito::SemBase;
         }
         if matches!(a.veredito, Veredito::Aguardando { .. }) {
@@ -2215,7 +2466,11 @@ pub fn decidir_portao(log: &mut ChangeLog) -> Vec<crate::modules::portao::Decidi
             erro,
         });
     }
-    for g in estado.governador.iter_mut().filter(|g| g.decidido.is_none()) {
+    for g in estado
+        .governador
+        .iter_mut()
+        .filter(|g| g.decidido.is_none())
+    {
         let a = portao::avaliar_governador(&g.processo, &medicoes);
         if matches!(a.veredito, Veredito::Aguardando { .. }) {
             continue;
@@ -2268,8 +2523,15 @@ pub fn concluir_recuperacao(
 /// Pura. Tira a volta de plano de `mais_antigo` e a põe no OTIMIZA: desfazer o OTIMIZA depois vai direto ao plano de
 /// antes de tudo. Sem volta própria (o OTIMIZA já era o ativo ao aplicar), ganha a do mais antigo.
 fn repassar_volta_do_plano(mais_antigo: &mut Vec<ChangeRecord>, otimiza: &mut Vec<ChangeRecord>) {
-    let Some(i) = mais_antigo.iter().position(|c| matches!(c, ChangeRecord::PowerPlan { .. })) else { return };
-    let ChangeRecord::PowerPlan { previous_guid } = mais_antigo.remove(i) else { return };
+    let Some(i) = mais_antigo
+        .iter()
+        .position(|c| matches!(c, ChangeRecord::PowerPlan { .. }))
+    else {
+        return;
+    };
+    let ChangeRecord::PowerPlan { previous_guid } = mais_antigo.remove(i) else {
+        return;
+    };
     match otimiza.iter_mut().find_map(|c| match c {
         ChangeRecord::PowerPlan { previous_guid } => Some(previous_guid),
         _ => None,
@@ -2280,7 +2542,11 @@ fn repassar_volta_do_plano(mais_antigo: &mut Vec<ChangeRecord>, otimiza: &mut Ve
 }
 
 /// Pura: só registro com volta de plano, mais antigo que o OTIMIZA e cuja volta não é o próprio OTIMIZA.
-fn deve_repassar(registro: &AppliedOptimization, otimiza: &AppliedOptimization, guid_do_otimiza: Option<&str>) -> bool {
+fn deve_repassar(
+    registro: &AppliedOptimization,
+    otimiza: &AppliedOptimization,
+    guid_do_otimiza: Option<&str>,
+) -> bool {
     registro.optimization_id != "plano_otimiza"
         && registro.timestamp <= otimiza.timestamp
         && registro.changes.iter().any(|c| match c {
@@ -2294,7 +2560,9 @@ fn deve_repassar(registro: &AppliedOptimization, otimiza: &AppliedOptimization, 
 pub(crate) fn repassar_se_mais_antigo(id: &str, log: &mut ChangeLog) -> Result<(), String> {
     let (Some(registro), Some(otimiza)) = (
         log.applied().iter().find(|e| e.optimization_id == id),
-        log.applied().iter().find(|e| e.optimization_id == "plano_otimiza"),
+        log.applied()
+            .iter()
+            .find(|e| e.optimization_id == "plano_otimiza"),
     ) else {
         return Ok(());
     };
@@ -2385,7 +2653,9 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 let mut failures = Vec::new();
 
                 for (key, value) in removed {
-                    if let Err(error) = shell::run_checked("bcdedit", &["/set", "{current}", key, value]) {
+                    if let Err(error) =
+                        shell::run_checked("bcdedit", &["/set", "{current}", key, value])
+                    {
                         failures.push(error);
                     }
                 }
@@ -2408,12 +2678,35 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 executavel,
                 perfil_criado,
                 valor_anterior,
+                caminho,
                 ..
-            } => nvdriver::desfazer_limite(executavel, *perfil_criado, valor_anterior),
+            } => nvdriver::desfazer_limite(
+                executavel,
+                caminho.as_deref(),
+                *perfil_criado,
+                valor_anterior,
+            ),
+            ChangeRecord::SmoothMotionNvidia {
+                executavel,
+                valor_anterior,
+                ..
+            } => nvdriver::desfazer_smooth_motion(executavel, valor_anterior),
 
-            ChangeRecord::PerfilNvidia { executavel, perfil_criado, anteriores, .. } => {
-                nvdriver::desfazer_perfil_do_jogo(executavel, *perfil_criado, anteriores)
-            }
+            ChangeRecord::DriverAmd {
+                opcao,
+                valor_anterior,
+            } => amddriver::desfazer(opcao, valor_anterior),
+            ChangeRecord::DriverIntel {
+                opcao,
+                valor_anterior,
+            } => inteldriver::desfazer(opcao, valor_anterior),
+
+            ChangeRecord::PerfilNvidia {
+                executavel,
+                perfil_criado,
+                anteriores,
+                ..
+            } => nvdriver::desfazer_perfil_do_jogo(executavel, *perfil_criado, anteriores),
 
             // Sem `anterior` o arquivo não existia: desfazer é apagar, e já não estar lá não é falha.
             ChangeRecord::GameConfig {
@@ -2452,7 +2745,9 @@ mod tests {
     use super::*;
 
     fn plano(guid: &str) -> ChangeRecord {
-        ChangeRecord::PowerPlan { previous_guid: guid.to_string() }
+        ChangeRecord::PowerPlan {
+            previous_guid: guid.to_string(),
+        }
     }
 
     fn volta(changes: &[ChangeRecord]) -> Option<String> {
@@ -2469,11 +2764,20 @@ mod tests {
         let mut otimiza = vec![plano("alto-desempenho")];
         repassar_volta_do_plano(&mut modo_jogo, &mut otimiza);
         assert_eq!(volta(&modo_jogo), None, "o plano ativo não é trocado agora");
-        assert_eq!(volta(&otimiza).as_deref(), Some("snyx"), "desfazer o OTIMIZA volta ao de antes de tudo");
+        assert_eq!(
+            volta(&otimiza).as_deref(),
+            Some("snyx"),
+            "desfazer o OTIMIZA volta ao de antes de tudo"
+        );
     }
 
     fn registro(id: &str, quando: u64, volta: &str) -> AppliedOptimization {
-        AppliedOptimization { optimization_id: id.into(), name: id.into(), timestamp: quando, changes: vec![plano(volta)] }
+        AppliedOptimization {
+            optimization_id: id.into(),
+            name: id.into(),
+            timestamp: quando,
+            changes: vec![plano(volta)],
+        }
     }
 
     /// Entre 14/09 e 21/09 o modo jogo podia gravar a troca DEPOIS do OTIMIZA, com a volta apontando para ele: repassar
@@ -2481,10 +2785,25 @@ mod tests {
     #[test]
     fn so_repassa_o_que_e_mais_antigo_que_o_otimiza() {
         let otimiza = registro("plano_otimiza", 200, "snyx");
-        assert!(deve_repassar(&registro("gamemode:energia", 100, "snyx"), &otimiza, Some("otimiza-guid")));
-        assert!(!deve_repassar(&registro("gamemode:energia", 300, "alto"), &otimiza, Some("otimiza-guid")), "mais novo");
+        assert!(deve_repassar(
+            &registro("gamemode:energia", 100, "snyx"),
+            &otimiza,
+            Some("otimiza-guid")
+        ));
         assert!(
-            !deve_repassar(&registro("gamemode:energia", 100, "OTIMIZA-GUID"), &otimiza, Some("otimiza-guid")),
+            !deve_repassar(
+                &registro("gamemode:energia", 300, "alto"),
+                &otimiza,
+                Some("otimiza-guid")
+            ),
+            "mais novo"
+        );
+        assert!(
+            !deve_repassar(
+                &registro("gamemode:energia", 100, "OTIMIZA-GUID"),
+                &otimiza,
+                Some("otimiza-guid")
+            ),
             "a volta é o próprio OTIMIZA"
         );
         assert!(!deve_repassar(&otimiza, &otimiza, Some("otimiza-guid")));
@@ -2604,7 +2923,10 @@ mod tests {
         let g = governanca();
         let checagem = essenciais::checar();
 
-        println!("\npolítica de grupo aplicada .. {}", g.com_politica_de_grupo);
+        println!(
+            "\npolítica de grupo aplicada .. {}",
+            g.com_politica_de_grupo
+        );
         println!("imagem de terceiros ......... {}", g.imagem_de_terceiros);
         println!("fabricante declarado ........ {:?}", checagem.fabricante);
         println!("modelo declarado ............ {:?}", checagem.modelo);
@@ -2618,7 +2940,10 @@ mod tests {
 
         explicar_governanca(&mut exemplo);
 
-        println!("\num `Unsupported` nesta máquina vira: {:?}", exemplo.status);
+        println!(
+            "\num `Unsupported` nesta máquina vira: {:?}",
+            exemplo.status
+        );
         println!("motivo: {:?}", exemplo.unsupported_reason);
     }
 
@@ -2782,7 +3107,10 @@ mod tests {
 
     #[test]
     fn a_regra_da_confirmacao_e_uma_so() {
-        assert_eq!(exigir_confirmacao(Confirmacao::Igual, "o serviço X"), Ok(None));
+        assert_eq!(
+            exigir_confirmacao(Confirmacao::Igual, "o serviço X"),
+            Ok(None)
+        );
 
         let falhou = exigir_confirmacao(Confirmacao::Diferente("\"auto\"".into()), "o serviço X");
         assert!(falhou.is_err());
@@ -2790,7 +3118,10 @@ mod tests {
 
         let ressalva = exigir_confirmacao(Confirmacao::NaoDeuParaLer, "o serviço X");
         assert!(ressalva.clone().is_ok());
-        assert!(ressalva.unwrap().unwrap().contains("não foi possível reler"));
+        assert!(ressalva
+            .unwrap()
+            .unwrap()
+            .contains("não foi possível reler"));
     }
 
     #[test]
@@ -3024,7 +3355,8 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("criar pasta de teste");
         let alvo = dir.join("settings.xml");
 
-        let original = "<Settings>\r\n  <MSAA value=\"4\" />\r\n  <!-- resolução -->\r\n</Settings>\r\n";
+        let original =
+            "<Settings>\r\n  <MSAA value=\"4\" />\r\n  <!-- resolução -->\r\n</Settings>\r\n";
         std::fs::write(&alvo, original).expect("escrever o original");
 
         let registro = ChangeRecord::GameConfig {
@@ -3083,7 +3415,9 @@ mod tests {
             .iter()
             .filter(|spec| !catalog::retirado(spec.id) || log.is_applied(spec.id))
             .filter(|spec| match catalog::classe(spec.id) {
-                catalog::Classe::Condicional(c) => condicao_atendida(c) != Some(false) || log.is_applied(spec.id),
+                catalog::Classe::Condicional(c) => {
+                    condicao_atendida(c) != Some(false) || log.is_applied(spec.id)
+                }
                 _ => true,
             })
             .count();
@@ -3107,7 +3441,11 @@ mod tests {
         for id in catalog::RETIRADOS {
             let spec = catalog::find(id).expect("retirado continua no catálogo para o desfazer");
             assert!(!catalog::entra_no_lote(spec), "`{}` entrou no lote", id);
-            assert!(optimizer.apply(id, &mut log).is_err(), "`{}` foi aplicado", id);
+            assert!(
+                optimizer.apply(id, &mut log).is_err(),
+                "`{}` foi aplicado",
+                id
+            );
         }
     }
 
@@ -3123,7 +3461,9 @@ mod tests {
             .map(|spec| spec.id)
             .collect();
 
-        assert!(batch.iter().all(|id| catalog::find(id).is_some_and(|s| s.reversible)));
+        assert!(batch
+            .iter()
+            .all(|id| catalog::find(id).is_some_and(|s| s.reversible)));
     }
 
     #[test]
@@ -3172,7 +3512,10 @@ mod tests {
             .map(|spec| spec.id)
             .collect();
 
-        for spec in catalog::CATALOG.iter().filter(|spec| spec.security_tradeoff) {
+        for spec in catalog::CATALOG
+            .iter()
+            .filter(|spec| spec.security_tradeoff)
+        {
             assert!(
                 !batch.contains(&spec.id),
                 "{} reduz segurança e não pode entrar no lote automático",
@@ -3183,10 +3526,12 @@ mod tests {
 
     #[test]
     fn security_tradeoffs_warn_loudly() {
-        for spec in catalog::CATALOG.iter().filter(|spec| spec.security_tradeoff) {
+        for spec in catalog::CATALOG
+            .iter()
+            .filter(|spec| spec.security_tradeoff)
+        {
             assert!(
-                spec.honest_effect.contains("SEGURANÇA")
-                    || spec.honest_effect.contains("ATENÇÃO"),
+                spec.honest_effect.contains("SEGURANÇA") || spec.honest_effect.contains("ATENÇÃO"),
                 "{} não avisa que reduz segurança",
                 spec.id
             );
@@ -3410,15 +3755,21 @@ mod tests {
         let mut log = ChangeLog::load();
         let id = "mouse_precision_off";
 
-        let original = registry::read("HKCU", MOUSE_PATH, "MouseSpeed")
-            .expect("leitura inicial falhou");
+        let original =
+            registry::read("HKCU", MOUSE_PATH, "MouseSpeed").expect("leitura inicial falhou");
         println!("estado original: {:?}", original);
 
         let applied = optimizer.apply(id, &mut log).expect("aplicar falhou");
-        println!("aplicado: {} ({} mudanças)", applied.message, applied.changes_count);
+        println!(
+            "aplicado: {} ({} mudanças)",
+            applied.message, applied.changes_count
+        );
 
         assert!(applied.applied);
-        assert!(log.is_applied(id), "otimização não foi registrada no histórico");
+        assert!(
+            log.is_applied(id),
+            "otimização não foi registrada no histórico"
+        );
         assert_eq!(
             registry::read("HKCU", MOUSE_PATH, "MouseSpeed").unwrap(),
             PreviousValue::Text("0".into()),
@@ -3429,7 +3780,10 @@ mod tests {
         println!("revertido: {}", reverted.message);
 
         assert!(!reverted.applied);
-        assert!(!log.is_applied(id), "histórico ainda marca a otimização como aplicada");
+        assert!(
+            !log.is_applied(id),
+            "histórico ainda marca a otimização como aplicada"
+        );
         assert_eq!(
             registry::read("HKCU", MOUSE_PATH, "MouseSpeed").unwrap(),
             original,
@@ -3469,5 +3823,19 @@ mod custo_das_condicoes {
         let log = super::ChangeLog::load();
         let n = super::WindowsOptimizer::new().list(&log).len();
         println!("list() com {n} itens: {:?}", t.elapsed());
+    }
+}
+
+#[cfg(test)]
+mod testes_do_modo_de_jogo {
+    use super::*;
+
+    #[test]
+    fn so_o_zero_escrito_e_modo_de_jogo_desligado() {
+        // O PC do dono: `AutoGameModeEnabled = 0`.
+        assert!(modo_de_jogo_desligado(Some(PreviousValue::Dword(0))));
+        assert!(!modo_de_jogo_desligado(Some(PreviousValue::Dword(1))));
+        assert!(!modo_de_jogo_desligado(Some(PreviousValue::Absent)));
+        assert!(!modo_de_jogo_desligado(None));
     }
 }

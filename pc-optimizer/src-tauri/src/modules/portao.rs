@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 use crate::modules::medicoes::MedicaoAutomatica;
+use crate::modules::repeticoes::{comparar, resumir, Diferenca};
 
 pub const MINIMO_POR_LADO: usize = 3;
 /// Os mais próximos do ajuste.
@@ -25,7 +25,10 @@ pub struct Vigiado {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Veredito {
-    Aguardando { antes: usize, depois: usize },
+    Aguardando {
+        antes: usize,
+        depois: usize,
+    },
     Desfazer,
     Melhorou,
     SemMudanca,
@@ -36,7 +39,9 @@ pub enum Veredito {
 
 /// Havia partidas de antes deste vigiado na série inteira, sem o filtro do medidor?
 pub fn tinha_antes(v: &Vigiado, todas: &[MedicaoAutomatica]) -> bool {
-    todas.iter().any(|m| e_do_jogo(m, &v.processo) && m.quando < v.aplicado_em)
+    todas
+        .iter()
+        .any(|m| e_do_jogo(m, &v.processo) && m.quando < v.aplicado_em)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -55,7 +60,11 @@ pub struct Avaliacao {
 
 fn lados(id: &str, antes: &[f64], depois: &[f64]) -> Option<Lados> {
     let (a, d) = (resumir(id, antes)?, resumir(id, depois)?);
-    Some(Lados { media_base: a.media, media_candidato: d.media, diferenca: comparar(&a, &d) })
+    Some(Lados {
+        media_base: a.media,
+        media_candidato: d.media,
+        diferenca: comparar(&a, &d),
+    })
 }
 
 fn e_do_jogo(m: &MedicaoAutomatica, processo: &str) -> bool {
@@ -63,10 +72,14 @@ fn e_do_jogo(m: &MedicaoAutomatica, processo: &str) -> bool {
 }
 
 pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
-    let mut antes: Vec<&MedicaoAutomatica> =
-        medicoes.iter().filter(|m| e_do_jogo(m, &v.processo) && m.quando < v.aplicado_em).collect();
-    let mut depois: Vec<&MedicaoAutomatica> =
-        medicoes.iter().filter(|m| e_do_jogo(m, &v.processo) && m.quando > v.aplicado_em).collect();
+    let mut antes: Vec<&MedicaoAutomatica> = medicoes
+        .iter()
+        .filter(|m| e_do_jogo(m, &v.processo) && m.quando < v.aplicado_em)
+        .collect();
+    let mut depois: Vec<&MedicaoAutomatica> = medicoes
+        .iter()
+        .filter(|m| e_do_jogo(m, &v.processo) && m.quando > v.aplicado_em)
+        .collect();
     antes.sort_by_key(|m| std::cmp::Reverse(m.quando));
     depois.sort_by_key(|m| m.quando);
     antes.truncate(MAXIMO_POR_LADO);
@@ -77,7 +90,14 @@ pub fn avaliar(v: &Vigiado, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
 /// Serve ao ajuste de jogo (antes/depois de uma data) e ao governador (partidas sem/com ele).
 fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avaliacao {
     if antes.len() < MINIMO_POR_LADO || depois.len() < MINIMO_POR_LADO {
-        return Avaliacao { veredito: Veredito::Aguardando { antes: antes.len(), depois: depois.len() }, fps: None, low_1pct: None };
+        return Avaliacao {
+            veredito: Veredito::Aguardando {
+                antes: antes.len(),
+                depois: depois.len(),
+            },
+            fps: None,
+            low_1pct: None,
+        };
     }
 
     let fps = lados(
@@ -86,14 +106,25 @@ fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avali
         &depois.iter().map(|m| m.fps).collect::<Vec<_>>(),
     );
     // 1% low só das medições com amostra suficiente para ele valer.
-    let a1: Vec<f64> = antes.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).collect();
-    let d1: Vec<f64> = depois.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).collect();
+    let a1: Vec<f64> = antes
+        .iter()
+        .filter(|m| m.confiavel)
+        .map(|m| m.low_1pct)
+        .collect();
+    let d1: Vec<f64> = depois
+        .iter()
+        .filter(|m| m.confiavel)
+        .map(|m| m.low_1pct)
+        .collect();
     let low = lados("fps.low_1pct", &a1, &d1);
 
     let piorou = |c: &Option<Lados>| {
         c.as_ref().is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, pct: Some(p), .. } if delta < 0.0 && -p >= PIORA_MINIMA_PCT))
     };
-    let melhorou = |c: &Option<Lados>| c.as_ref().is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, .. } if delta > 0.0));
+    let melhorou = |c: &Option<Lados>| {
+        c.as_ref()
+            .is_some_and(|c| matches!(c.diferenca, Diferenca::Real { delta, .. } if delta > 0.0))
+    };
 
     let veredito = if piorou(&fps) || piorou(&low) {
         Veredito::Desfazer
@@ -102,7 +133,11 @@ fn decidir(antes: &[&MedicaoAutomatica], depois: &[&MedicaoAutomatica]) -> Avali
     } else {
         Veredito::SemMudanca
     };
-    Avaliacao { veredito, fps, low_1pct: low }
+    Avaliacao {
+        veredito,
+        fps,
+        low_1pct: low,
+    }
 }
 
 // O governador passa pela mesma regra. Sem data de "antes", os lados são PARTIDAS: `Acalmou` (agiu) e
@@ -116,7 +151,10 @@ pub enum GovernadorNaPartida {
 }
 
 /// Estado que mudou no meio da medição não serve a nenhum dos lados.
-pub fn marcar(inicio: Option<GovernadorNaPartida>, fim: Option<GovernadorNaPartida>) -> Option<GovernadorNaPartida> {
+pub fn marcar(
+    inicio: Option<GovernadorNaPartida>,
+    fim: Option<GovernadorNaPartida>,
+) -> Option<GovernadorNaPartida> {
     if inicio == fim {
         inicio
     } else {
@@ -164,13 +202,18 @@ pub fn lados_do_governador<'a>(
     medicoes: &'a [MedicaoAutomatica],
 ) -> (Vec<&'a MedicaoAutomatica>, Vec<&'a MedicaoAutomatica>) {
     let lado = |qual: GovernadorNaPartida| {
-        let mut v: Vec<&MedicaoAutomatica> =
-            medicoes.iter().filter(|m| e_do_jogo(m, processo) && m.governador == Some(qual)).collect();
+        let mut v: Vec<&MedicaoAutomatica> = medicoes
+            .iter()
+            .filter(|m| e_do_jogo(m, processo) && m.governador == Some(qual))
+            .collect();
         v.sort_by_key(|m| std::cmp::Reverse(m.quando));
         v.truncate(MAXIMO_POR_LADO);
         v
     };
-    (lado(GovernadorNaPartida::Absteve), lado(GovernadorNaPartida::Acalmou))
+    (
+        lado(GovernadorNaPartida::Absteve),
+        lado(GovernadorNaPartida::Acalmou),
+    )
 }
 
 pub fn avaliar_governador(processo: &str, medicoes: &[MedicaoAutomatica]) -> Avaliacao {
@@ -187,11 +230,17 @@ pub fn rodada_do_governador(
     medindo: bool,
 ) -> Rodada {
     let Some(estado) = estado else {
-        return Rodada::SemMedicao("não consegui ler o registro do portão, onde fica o veredito dele".into());
+        return Rodada::SemMedicao(
+            "não consegui ler o registro do portão, onde fica o veredito dele".into(),
+        );
     };
     let vigilia = estado.governador.iter().find(|g| g.processo == processo);
     if let Some(d) = vigilia.and_then(|g| g.decidido.as_ref()) {
-        return if d.veredito == Veredito::Desfazer { Rodada::Reprovado(d.clone()) } else { Rodada::Agir };
+        return if d.veredito == Veredito::Desfazer {
+            Rodada::Reprovado(d.clone())
+        } else {
+            Rodada::Agir
+        };
     }
     if !medindo {
         return Rodada::SemMedicao(
@@ -199,7 +248,10 @@ pub fn rodada_do_governador(
         );
     }
     let Some(medicoes) = medicoes else {
-        return Rodada::SemMedicao("não consegui ler as medições das partidas anteriores para conferir o efeito dele".into());
+        return Rodada::SemMedicao(
+            "não consegui ler as medições das partidas anteriores para conferir o efeito dele"
+                .into(),
+        );
     };
     let (sem, com) = lados_do_governador(processo, medicoes);
     // Uma partida de comparação medida zera a conta: prova que a medição voltou a funcionar.
@@ -209,7 +261,14 @@ pub fn rodada_do_governador(
         .map(|m| m.quando)
         .max()
         .unwrap_or(0);
-    let agindo_sem_medicao = vigilia.map(|g| g.sessoes_agindo.iter().filter(|&&t| t > ultima_marca).count()).unwrap_or(0);
+    let agindo_sem_medicao = vigilia
+        .map(|g| {
+            g.sessoes_agindo
+                .iter()
+                .filter(|&&t| t > ultima_marca)
+                .count()
+        })
+        .unwrap_or(0);
     // Empate começa pela comparação: o lado sem governador é a referência.
     if sem.len() <= com.len() || agindo_sem_medicao >= SESSOES_AGINDO_SEM_MEDICAO {
         Rodada::Comparar
@@ -227,7 +286,11 @@ pub fn frase_do_governador(d: &Decidido) -> String {
         (Some(a), Some(b)) => format!("; 1% pior {:.0} sem, {:.0} com)", a, b),
         _ => String::from(")"),
     };
-    let numeros = if numeros == " (" && low == ")" { String::new() } else { format!("{}{}", numeros, low) };
+    let numeros = if numeros == " (" && low == ")" {
+        String::new()
+    } else {
+        format!("{}{}", numeros, low)
+    };
     match d.veredito {
         Veredito::Desfazer => match &d.erro {
             None => format!(
@@ -250,7 +313,12 @@ pub fn frase_do_governador(d: &Decidido) -> String {
 }
 
 /// Erro sem gravar quando o arquivo existe e não se lê: gravar por cima apagaria vigílias e vereditos.
-pub fn observar_governador(processo: &str, nome: &str, agora: u64, agindo: bool) -> Result<(), String> {
+pub fn observar_governador(
+    processo: &str,
+    nome: &str,
+    agora: u64,
+    agindo: bool,
+) -> Result<(), String> {
     let mut e = ler_estrito()?;
     let i = match e.governador.iter().position(|g| g.processo == processo) {
         Some(i) => i,
@@ -295,7 +363,9 @@ pub struct Decidido {
 }
 
 fn arquivo() -> Option<PathBuf> {
-    std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("portao.json"))
+    std::env::var("APPDATA")
+        .ok()
+        .map(|a| PathBuf::from(a).join("pc-optimizer").join("portao.json"))
 }
 
 /// Distingue "não existe" de "existe e não se lê": quem vai GRAVAR depois usa esta.
@@ -330,7 +400,12 @@ pub fn gravar(e: &Estado) -> Result<(), String> {
 pub fn vigiar(id: &str, nome: &str, processo: &str, agora: u64) {
     let mut e = ler();
     if !e.vigiados.iter().any(|v| v.id == id) {
-        e.vigiados.push(Vigiado { id: id.into(), nome: nome.into(), processo: processo.to_lowercase(), aplicado_em: agora });
+        e.vigiados.push(Vigiado {
+            id: id.into(),
+            nome: nome.into(),
+            processo: processo.to_lowercase(),
+            aplicado_em: agora,
+        });
     }
     if let Err(erro) = gravar(&e) {
         crate::utils::Logger::warn(&format!("portão: não gravei a vigília de {}: {}", id, erro));
@@ -380,23 +455,47 @@ mod testes {
     }
 
     fn vig() -> Vigiado {
-        Vigiado { id: "config_unreal_x".into(), nome: "X".into(), processo: "x-win64".into(), aplicado_em: 1000 }
+        Vigiado {
+            id: "config_unreal_x".into(),
+            nome: "X".into(),
+            processo: "x-win64".into(),
+            aplicado_em: 1000,
+        }
     }
 
     #[test]
     fn espera_ter_medicoes_dos_dois_lados() {
-        let ms = vec![m("X-Win64-Shipping.exe", 10, 100.0, 60.0), m("X-Win64-Shipping.exe", 2000, 90.0, 50.0)];
-        assert_eq!(avaliar(&vig(), &ms).veredito, Veredito::Aguardando { antes: 1, depois: 1 });
+        let ms = vec![
+            m("X-Win64-Shipping.exe", 10, 100.0, 60.0),
+            m("X-Win64-Shipping.exe", 2000, 90.0, 50.0),
+        ];
+        assert_eq!(
+            avaliar(&vig(), &ms).veredito,
+            Veredito::Aguardando {
+                antes: 1,
+                depois: 1
+            }
+        );
     }
 
     #[test]
     fn piora_clara_desfaz() {
         let mut ms = Vec::new();
         for (i, f) in [100.0, 102.0, 98.0, 101.0].iter().enumerate() {
-            ms.push(m("X-Win64-Shipping.exe", 100 + i as u64, *f, 60.0 + i as f64));
+            ms.push(m(
+                "X-Win64-Shipping.exe",
+                100 + i as u64,
+                *f,
+                60.0 + i as f64,
+            ));
         }
         for (i, f) in [85.0, 86.0, 84.0, 85.5].iter().enumerate() {
-            ms.push(m("X-Win64-Shipping.exe", 2000 + i as u64, *f, 50.0 + i as f64));
+            ms.push(m(
+                "X-Win64-Shipping.exe",
+                2000 + i as u64,
+                *f,
+                50.0 + i as f64,
+            ));
         }
         assert_eq!(avaliar(&vig(), &ms).veredito, Veredito::Desfazer);
     }
@@ -408,7 +507,12 @@ mod testes {
             ms.push(m("X-Win64-Shipping.exe", 100 + i as u64, *f, 60.0));
         }
         for (i, f) in [130.0, 128.0, 131.0].iter().enumerate() {
-            ms.push(m("X-Win64-Shipping.exe", 2000 + i as u64, *f, 60.0 + i as f64));
+            ms.push(m(
+                "X-Win64-Shipping.exe",
+                2000 + i as u64,
+                *f,
+                60.0 + i as f64,
+            ));
         }
         assert_eq!(avaliar(&vig(), &ms).veredito, Veredito::Melhorou);
     }
@@ -417,10 +521,20 @@ mod testes {
     fn noite_pesada_nao_vira_piora() {
         let mut ms = Vec::new();
         for (i, f) in [100.0, 140.0, 70.0, 120.0].iter().enumerate() {
-            ms.push(m("X-Win64-Shipping.exe", 100 + i as u64, *f, 50.0 + (i * 10) as f64));
+            ms.push(m(
+                "X-Win64-Shipping.exe",
+                100 + i as u64,
+                *f,
+                50.0 + (i * 10) as f64,
+            ));
         }
         for (i, f) in [95.0, 125.0, 65.0, 110.0].iter().enumerate() {
-            ms.push(m("X-Win64-Shipping.exe", 2000 + i as u64, *f, 48.0 + (i * 10) as f64));
+            ms.push(m(
+                "X-Win64-Shipping.exe",
+                2000 + i as u64,
+                *f,
+                48.0 + (i * 10) as f64,
+            ));
         }
         assert_ne!(avaliar(&vig(), &ms).veredito, Veredito::Desfazer);
     }
@@ -432,16 +546,28 @@ mod testes {
             ms.push(m("Outro.exe", 100 + i, 200.0, 100.0));
             ms.push(m("Outro.exe", 2000 + i, 50.0, 20.0));
         }
-        assert!(matches!(avaliar(&vig(), &ms).veredito, Veredito::Aguardando { .. }));
+        assert!(matches!(
+            avaliar(&vig(), &ms).veredito,
+            Veredito::Aguardando { .. }
+        ));
     }
 
     fn g(quando: u64, fps: f64, lado: GovernadorNaPartida) -> MedicaoAutomatica {
-        MedicaoAutomatica { governador: Some(lado), ..m("FiveM_b3258_GTAProcess.exe", quando, fps, fps * 0.6) }
+        MedicaoAutomatica {
+            governador: Some(lado),
+            ..m("FiveM_b3258_GTAProcess.exe", quando, fps, fps * 0.6)
+        }
     }
 
     fn estado_com(decidido: Option<Decidido>) -> Estado {
         Estado {
-            governador: vec![GovernadorNoJogo { processo: "fivem_".into(), nome: "FiveM".into(), desde: 1, decidido, sessoes_agindo: Vec::new() }],
+            governador: vec![GovernadorNoJogo {
+                processo: "fivem_".into(),
+                nome: "FiveM".into(),
+                desde: 1,
+                decidido,
+                sessoes_agindo: Vec::new(),
+            }],
             ..Default::default()
         }
     }
@@ -451,7 +577,10 @@ mod testes {
         let v = vig();
         let antes = m("X-Win64-Shipping.exe", v.aplicado_em - 10, 100.0, 50.0);
         assert!(tinha_antes(&v, &[antes]));
-        assert!(!tinha_antes(&v, &[m("X-Win64-Shipping.exe", v.aplicado_em + 10, 100.0, 50.0)]));
+        assert!(!tinha_antes(
+            &v,
+            &[m("X-Win64-Shipping.exe", v.aplicado_em + 10, 100.0, 50.0)]
+        ));
     }
 
     #[test]
@@ -466,7 +595,11 @@ mod testes {
         }
         let a = avaliar_governador("fivem_", &ms);
         assert_eq!(a.veredito, Veredito::Desfazer);
-        assert_eq!(a.fps.as_ref().map(|l| l.media_base.round()), Some(140.0), "a base é a partida SEM ele");
+        assert_eq!(
+            a.fps.as_ref().map(|l| l.media_base.round()),
+            Some(140.0),
+            "a base é a partida SEM ele"
+        );
     }
 
     #[test]
@@ -477,13 +610,24 @@ mod testes {
             ms.push(g(10 + i as u64, *f, Absteve));
             ms.push(g(50 + i as u64, *f + 0.5, Acalmou));
         }
-        assert_ne!(avaliar_governador("fivem_", &ms).veredito, Veredito::Desfazer);
+        assert_ne!(
+            avaliar_governador("fivem_", &ms).veredito,
+            Veredito::Desfazer
+        );
     }
 
     #[test]
     fn medicao_sem_marca_nao_entra_em_lado_nenhum() {
-        let ms: Vec<MedicaoAutomatica> = (0..8).map(|i| m("FiveM_b3258_GTAProcess.exe", i, 100.0, 60.0)).collect();
-        assert_eq!(avaliar_governador("fivem_", &ms).veredito, Veredito::Aguardando { antes: 0, depois: 0 });
+        let ms: Vec<MedicaoAutomatica> = (0..8)
+            .map(|i| m("FiveM_b3258_GTAProcess.exe", i, 100.0, 60.0))
+            .collect();
+        assert_eq!(
+            avaliar_governador("fivem_", &ms).veredito,
+            Veredito::Aguardando {
+                antes: 0,
+                depois: 0
+            }
+        );
     }
 
     #[test]
@@ -498,18 +642,36 @@ mod testes {
     fn rodadas_alternam_para_encher_o_lado_menor() {
         use GovernadorNaPartida::*;
         let vazio = Estado::default();
-        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), true), Rodada::Comparar), "começa pela referência");
+        assert!(
+            matches!(
+                rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), true),
+                Rodada::Comparar
+            ),
+            "começa pela referência"
+        );
         let ms = vec![g(1, 100.0, Absteve)];
-        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true), Rodada::Agir));
+        assert!(matches!(
+            rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true),
+            Rodada::Agir
+        ));
         let ms = vec![g(1, 100.0, Absteve), g(2, 100.0, Acalmou)];
-        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true), Rodada::Comparar));
+        assert!(matches!(
+            rodada_do_governador(Some(&vazio), "fivem_", Some(&ms), true),
+            Rodada::Comparar
+        ));
     }
 
     #[test]
     fn sem_medicao_o_governador_nao_age() {
         let vazio = Estado::default();
-        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), false), Rodada::SemMedicao(_)));
-        assert!(matches!(rodada_do_governador(Some(&vazio), "fivem_", None, true), Rodada::SemMedicao(_)));
+        assert!(matches!(
+            rodada_do_governador(Some(&vazio), "fivem_", Some(&[]), false),
+            Rodada::SemMedicao(_)
+        ));
+        assert!(matches!(
+            rodada_do_governador(Some(&vazio), "fivem_", None, true),
+            Rodada::SemMedicao(_)
+        ));
     }
 
     #[test]
@@ -525,10 +687,16 @@ mod testes {
             erro: None,
         };
         let reprovado = estado_com(Some(d(Veredito::Desfazer)));
-        assert!(matches!(rodada_do_governador(Some(&reprovado), "fivem_", Some(&[]), true), Rodada::Reprovado(_)));
+        assert!(matches!(
+            rodada_do_governador(Some(&reprovado), "fivem_", Some(&[]), true),
+            Rodada::Reprovado(_)
+        ));
         assert!(frase_do_governador(&d(Veredito::Desfazer)).contains("140 sem ele, 120 com ele"));
         let aprovado = estado_com(Some(d(Veredito::SemMudanca)));
-        assert!(matches!(rodada_do_governador(Some(&aprovado), "fivem_", Some(&[]), true), Rodada::Agir));
+        assert!(matches!(
+            rodada_do_governador(Some(&aprovado), "fivem_", Some(&[]), true),
+            Rodada::Agir
+        ));
     }
 
     #[test]
@@ -539,7 +707,10 @@ mod testes {
 
     #[test]
     fn portao_ilegivel_nao_solta_o_governador() {
-        assert!(matches!(rodada_do_governador(None, "fivem_", Some(&[]), true), Rodada::SemMedicao(_)));
+        assert!(matches!(
+            rodada_do_governador(None, "fivem_", Some(&[]), true),
+            Rodada::SemMedicao(_)
+        ));
     }
 
     #[test]
@@ -556,11 +727,33 @@ mod testes {
             }],
             ..Default::default()
         };
-        assert!(matches!(rodada_do_governador(Some(&com_sessoes(vec![200, 300])), "fivem_", Some(&ms), true), Rodada::Agir));
+        assert!(matches!(
+            rodada_do_governador(
+                Some(&com_sessoes(vec![200, 300])),
+                "fivem_",
+                Some(&ms),
+                true
+            ),
+            Rodada::Agir
+        ));
         let travado = com_sessoes(vec![200, 300, 400]);
-        assert!(matches!(rodada_do_governador(Some(&travado), "fivem_", Some(&ms), true), Rodada::Comparar));
+        assert!(matches!(
+            rodada_do_governador(Some(&travado), "fivem_", Some(&ms), true),
+            Rodada::Comparar
+        ));
         let ms2 = vec![g(100, 140.0, Absteve), g(500, 139.0, Absteve)];
-        assert!(matches!(rodada_do_governador(Some(&travado), "fivem_", Some(&ms2), true), Rodada::Agir));
-        assert!(matches!(rodada_do_governador(Some(&com_sessoes(vec![10, 20, 30])), "fivem_", Some(&ms), true), Rodada::Agir));
+        assert!(matches!(
+            rodada_do_governador(Some(&travado), "fivem_", Some(&ms2), true),
+            Rodada::Agir
+        ));
+        assert!(matches!(
+            rodada_do_governador(
+                Some(&com_sessoes(vec![10, 20, 30])),
+                "fivem_",
+                Some(&ms),
+                true
+            ),
+            Rodada::Agir
+        ));
     }
 }

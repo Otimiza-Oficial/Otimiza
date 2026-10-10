@@ -10,10 +10,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Pode ser pública. A privada vive na máquina do dono e no segredo do bot, nunca neste repositório.
-/// Trocar este valor invalida TODAS as licenças emitidas. É a quarta: as duas primeiras vazaram pelo
-/// `.env.example` (versionado) e numa captura de tela, e por isso o gerador escreve a privada direto no `.env` do
-/// bot e nunca a imprime. A terceira se perdeu com a hospedagem do bot (3.3.0, 04/10/2026): o .env agora tem backup.
+/// É a quarta: as duas primeiras vazaram pelo `.env.example` (versionado) e numa captura de tela, e por isso o gerador
+/// escreve a privada direto no `.env` do bot e nunca a imprime. A terceira se perdeu com a hospedagem do bot (04/10/2026);
+/// o `.env` agora tem backup. É com esta que o bot assina as licenças e os atestados de feedback.
 const CHAVE_PUBLICA: &str = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
+
+/// A terceira, só para licença já emitida: a privada se perdeu (ninguém emite mais com ela), e quem ativou antes de
+/// 04/10/2026 continua aberto ao atualizar. Decisão do dono em 10/10/2026. Nunca vale para o atestado de feedback.
+/// A troca de 04/10 ficou num commit que nunca foi publicado: a 3.2.0 só conhece esta, e toda chave nova do bot
+/// era recusada ("Esta chave não foi reconhecida"), achado num cliente que formatou o PC.
+const CHAVE_PUBLICA_ANTERIOR: &str = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
 /// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,7 +88,26 @@ pub fn desmontar(chave: &str) -> Result<(Vec<u8>, Vec<u8>), Recusa> {
 
 /// **Pura**: a decisão entre pagante e não pagante precisa ser testável sem a máquina nem a data de hoje.
 pub fn conferir(chave: &str, maquina: &str, hoje: &str) -> Result<Dados, Recusa> {
-    conferir_com(chave_publica()?, chave, maquina, hoje)
+    let aceitas = [chave_publica()?, decodificar_publica(CHAVE_PUBLICA_ANTERIOR)?];
+    conferir_com_varias(&aceitas, chave, maquina, hoje)
+}
+
+/// A primeira chave pública cuja assinatura confere decide. Só a assinatura passa para a próxima: chave de outra
+/// máquina ou vencida, assinada de verdade, é recusa final.
+pub fn conferir_com_varias(
+    aceitas: &[VerifyingKey],
+    chave: &str,
+    maquina: &str,
+    hoje: &str,
+) -> Result<Dados, Recusa> {
+    let mut ultima = Recusa::AssinaturaInvalida;
+    for publica in aceitas {
+        match conferir_com(*publica, chave, maquina, hoje) {
+            Err(Recusa::AssinaturaInvalida) => ultima = Recusa::AssinaturaInvalida,
+            resultado => return resultado,
+        }
+    }
+    Err(ultima)
 }
 
 /// Chave por parâmetro para o teste gerar o próprio par e assinar, sem depender da chave de verdade.
@@ -96,17 +121,7 @@ pub fn conferir_com(
         return Err(Recusa::MaquinaDesconhecida);
     }
 
-    let (dados_bytes, assinatura_bytes) = desmontar(chave)?;
-
-    // A ORDEM IMPORTA: a assinatura é conferida ANTES de qualquer campo ser lido como verdade.
-
-    let assinatura: [u8; 64] = assinatura_bytes
-        .try_into()
-        .map_err(|_| Recusa::Malformada)?;
-
-    publica
-        .verify(&dados_bytes, &Signature::from_bytes(&assinatura))
-        .map_err(|_| Recusa::AssinaturaInvalida)?;
+    let dados_bytes = conferir_assinatura(publica, chave)?;
 
     let dados: Dados =
         serde_json::from_slice(&dados_bytes).map_err(|_| Recusa::AssinaturaInvalida)?;
@@ -129,9 +144,32 @@ pub fn conferir_com(
     Ok(dados)
 }
 
-fn chave_publica() -> Result<VerifyingKey, Recusa> {
+/// Os bytes assinados, só depois de a assinatura conferir. Serve à licença e ao atestado de feedback do bot: mesmo
+/// par de chaves, e o campo `tipo` do atestado impede um de passar pelo outro.
+pub(crate) fn conferir_assinatura(publica: VerifyingKey, texto: &str) -> Result<Vec<u8>, Recusa> {
+    let (dados_bytes, assinatura_bytes) = desmontar(texto)?;
+
+    // A ORDEM IMPORTA: a assinatura é conferida ANTES de qualquer campo ser lido como verdade.
+
+    let assinatura: [u8; 64] = assinatura_bytes
+        .try_into()
+        .map_err(|_| Recusa::Malformada)?;
+
+    publica
+        .verify(&dados_bytes, &Signature::from_bytes(&assinatura))
+        .map_err(|_| Recusa::AssinaturaInvalida)?;
+
+    Ok(dados_bytes)
+}
+
+/// A pública de agora: a do bot. O atestado de feedback só vale com ela.
+pub(crate) fn chave_publica() -> Result<VerifyingKey, Recusa> {
+    decodificar_publica(CHAVE_PUBLICA)
+}
+
+fn decodificar_publica(texto: &str) -> Result<VerifyingKey, Recusa> {
     let bytes = base64::engine::general_purpose::STANDARD
-        .decode(CHAVE_PUBLICA)
+        .decode(texto)
         .map_err(|_| Recusa::AssinaturaInvalida)?;
 
     let bytes: [u8; 32] = bytes.try_into().map_err(|_| Recusa::AssinaturaInvalida)?;
@@ -293,7 +331,8 @@ pub fn liberado() -> bool {
 /// impede chamar o comando. Conferida a cada chamada.
 pub fn exigir() -> Result<(), String> {
     if liberado() {
-        return Ok(());
+        // Quem pagou e passou dos minutos de uso sem deixar o feedback: as correções pausam até ele chegar.
+        return crate::plataforma::feedback::exigir();
     }
 
     Err("Esta ação faz parte do Otimiza completo, e este computador ainda não          está ativado. O diagnóstico continua livre: o que você viu sobre esta          máquina é real. Para liberar as correções, ative com a sua chave."
@@ -337,7 +376,9 @@ mod tests_1_8 {
     #[test]
     fn gravar_e_ler_devolve_a_mesma_chave() {
         let caminho = pasta("ida-e-volta").join("licenca.json");
-        let original = Guardada { chave: "uma-chave-qualquer".to_string() };
+        let original = Guardada {
+            chave: "uma-chave-qualquer".to_string(),
+        };
 
         Guardada::gravar(&caminho, &original).unwrap();
 
@@ -352,7 +393,13 @@ mod tests_1_8 {
         let dir = pasta("temporario");
         let caminho = dir.join("licenca.json");
 
-        Guardada::gravar(&caminho, &Guardada { chave: "x".to_string() }).unwrap();
+        Guardada::gravar(
+            &caminho,
+            &Guardada {
+                chave: "x".to_string(),
+            },
+        )
+        .unwrap();
 
         let sobraram: Vec<String> = fs::read_dir(&dir)
             .unwrap()
@@ -439,9 +486,11 @@ mod tests {
         assert!(de_outra.explicacao().contains("Discord"));
 
         assert!(Recusa::Malformada.explicacao().contains("copiou"));
-        assert!(Recusa::Expirada { em: "2026-01-01".to_string() }
-            .explicacao()
-            .contains("2026-01-01"));
+        assert!(Recusa::Expirada {
+            em: "2026-01-01".to_string()
+        }
+        .explicacao()
+        .contains("2026-01-01"));
     }
 
     #[test]

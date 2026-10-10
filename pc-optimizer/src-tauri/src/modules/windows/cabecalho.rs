@@ -107,9 +107,13 @@ pub fn coletar() -> Dados {
     let maquina = planoenergia::detectar();
 
     let texto = |nome: &str| -> Option<String> {
-        registry::read_text("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", nome)
-            .ok()
-            .flatten()
+        registry::read_text(
+            "HKLM",
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+            nome,
+        )
+        .ok()
+        .flatten()
     };
 
     // O UBR é DWORD e o `CurrentBuildNumber` é texto, na mesma chave: lido como texto, o build saía "19045" e
@@ -117,7 +121,11 @@ pub fn coletar() -> Dados {
     let numero = |nome: &str| -> Option<u32> {
         use crate::modules::changelog::PreviousValue;
 
-        match registry::read("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", nome) {
+        match registry::read(
+            "HKLM",
+            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+            nome,
+        ) {
             Ok(PreviousValue::Dword(v)) => Some(v),
             _ => None,
         }

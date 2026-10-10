@@ -118,10 +118,7 @@ pub fn definidos() -> Result<Vec<(String, Preferencia)>, String> {
     Ok(definidos)
 }
 
-pub fn diagnosticar(
-    placas: &[String],
-    definidos: &[(String, Preferencia)],
-) -> Vec<GpuPrefFinding> {
+pub fn diagnosticar(placas: &[String], definidos: &[(String, Preferencia)]) -> Vec<GpuPrefFinding> {
     use super::achados::{FindingSeverity, FixLocation};
 
     // Com uma placa só, escolher placa não existe.
@@ -228,9 +225,18 @@ mod tests {
     #[test]
     fn o_formato_do_windows_leva_ponto_e_virgula() {
         // Sem o ponto e vírgula o Windows ignora o valor em silêncio.
-        assert_eq!(texto_da_preferencia(Preferencia::Desempenho), "GpuPreference=2;");
-        assert_eq!(texto_da_preferencia(Preferencia::Economia), "GpuPreference=1;");
-        assert_eq!(texto_da_preferencia(Preferencia::Automatica), "GpuPreference=0;");
+        assert_eq!(
+            texto_da_preferencia(Preferencia::Desempenho),
+            "GpuPreference=2;"
+        );
+        assert_eq!(
+            texto_da_preferencia(Preferencia::Economia),
+            "GpuPreference=1;"
+        );
+        assert_eq!(
+            texto_da_preferencia(Preferencia::Automatica),
+            "GpuPreference=0;"
+        );
     }
 
     #[test]
@@ -250,10 +256,7 @@ mod tests {
 
     #[test]
     fn maquina_de_uma_placa_nao_ganha_achado_nenhum() {
-        let definidos = vec![(
-            r"C:\Jogo\jogo.exe".to_string(),
-            Preferencia::Economia,
-        )];
+        let definidos = vec![(r"C:\Jogo\jogo.exe".to_string(), Preferencia::Economia)];
 
         assert!(diagnosticar(&["NVIDIA GeForce GTX 1650".to_string()], &definidos).is_empty());
         assert!(diagnosticar(&[], &definidos).is_empty());

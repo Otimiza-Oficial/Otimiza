@@ -49,9 +49,11 @@ fn carregar() -> Option<Nvml> {
         return None;
     }
 
-    let buscar = |simbolo: &std::ffi::CStr| unsafe { GetProcAddress(modulo, simbolo.as_ptr() as *const u8) };
+    let buscar =
+        |simbolo: &std::ffi::CStr| unsafe { GetProcAddress(modulo, simbolo.as_ptr() as *const u8) };
 
-    let iniciar: unsafe extern "C" fn() -> u32 = unsafe { std::mem::transmute(buscar(c"nvmlInit_v2")?) };
+    let iniciar: unsafe extern "C" fn() -> u32 =
+        unsafe { std::mem::transmute(buscar(c"nvmlInit_v2")?) };
     if unsafe { iniciar() } != OK {
         return None;
     }
@@ -69,7 +71,9 @@ fn carregar() -> Option<Nvml> {
         temperatura: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetTemperature")?) },
         clock: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetClockInfo")?) },
         potencia: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetPowerUsage")?) },
-        limite_de_potencia: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetEnforcedPowerLimit")?) },
+        limite_de_potencia: unsafe {
+            std::mem::transmute(buscar(c"nvmlDeviceGetEnforcedPowerLimit")?)
+        },
         utilizacao: unsafe { std::mem::transmute(buscar(c"nvmlDeviceGetUtilizationRates")?) },
         // "ThrottleReasons" virou "EventReasons" em drivers novos; tenta os dois.
         motivos: buscar(c"nvmlDeviceGetCurrentClocksThrottleReasons")
@@ -87,13 +91,17 @@ pub fn amostrar_com_motivos(incluir_motivos: bool) -> Option<AmostraGpu> {
         (unsafe { f(n.dispositivo, arg, &mut v) } == OK).then_some(v)
     };
     let mut miliwatts = 0u32;
-    let potencia = (unsafe { (n.potencia)(n.dispositivo, &mut miliwatts) } == OK).then(|| miliwatts as f64 / 1000.0);
+    let potencia = (unsafe { (n.potencia)(n.dispositivo, &mut miliwatts) } == OK)
+        .then(|| miliwatts as f64 / 1000.0);
     let mut uso = Utilizacao::default();
     let uso_pct = (unsafe { (n.utilizacao)(n.dispositivo, &mut uso) } == OK).then_some(uso.gpu);
-    let motivos = incluir_motivos.then_some(n.motivos).flatten().and_then(|f| {
-        let mut bits = 0u64;
-        (unsafe { f(n.dispositivo, &mut bits) } == OK).then_some(bits)
-    });
+    let motivos = incluir_motivos
+        .then_some(n.motivos)
+        .flatten()
+        .and_then(|f| {
+            let mut bits = 0u64;
+            (unsafe { f(n.dispositivo, &mut bits) } == OK).then_some(bits)
+        });
 
     Some(AmostraGpu {
         temperatura_c: ler(n.temperatura, SENSOR_GPU),
@@ -108,13 +116,12 @@ pub fn amostrar_com_motivos(incluir_motivos: bool) -> Option<AmostraGpu> {
 pub fn limite_de_potencia_w() -> Option<f64> {
     let n = nvml()?;
     let mut miliwatts = 0u32;
-    (unsafe { (n.limite_de_potencia)(n.dispositivo, &mut miliwatts) } == OK).then(|| miliwatts as f64 / 1000.0)
+    (unsafe { (n.limite_de_potencia)(n.dispositivo, &mut miliwatts) } == OK)
+        .then(|| miliwatts as f64 / 1000.0)
 }
 
 #[cfg(test)]
-mod nesta_maquina {
-}
+mod nesta_maquina {}
 
 #[cfg(test)]
-mod custo {
-}
+mod custo {}

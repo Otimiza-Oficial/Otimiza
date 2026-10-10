@@ -90,22 +90,52 @@ const PADROES: [(&str, BloatKind, &str); 22] = [
 
 /// Curta e conservadora: nada que alguém use de verdade. Spotify, Netflix e afins ficam de fora.
 const APPS_DA_LOJA: [(&str, &str); 10] = [
-    ("Microsoft.BingNews", "Notícias da Microsoft, pré-instalado."),
-    ("Microsoft.BingWeather", "Previsão do tempo da Microsoft, pré-instalado."),
+    (
+        "Microsoft.BingNews",
+        "Notícias da Microsoft, pré-instalado.",
+    ),
+    (
+        "Microsoft.BingWeather",
+        "Previsão do tempo da Microsoft, pré-instalado.",
+    ),
     ("Microsoft.GetHelp", "Assistente de suporte da Microsoft."),
     ("Microsoft.Getstarted", "Tour de boas-vindas do Windows."),
-    ("Microsoft.MicrosoftSolitaireCollection", "Coleção de paciência, com anúncios."),
-    ("Microsoft.MicrosoftOfficeHub", "Atalho para comprar o Office."),
-    ("Microsoft.MixedReality.Portal", "Portal de realidade mista, sem uso sem o óculos."),
-    ("Microsoft.People", "Agenda de contatos, substituída pelo Outlook."),
-    ("Microsoft.SkypeApp", "Skype pré-instalado, descontinuado pela Microsoft."),
+    (
+        "Microsoft.MicrosoftSolitaireCollection",
+        "Coleção de paciência, com anúncios.",
+    ),
+    (
+        "Microsoft.MicrosoftOfficeHub",
+        "Atalho para comprar o Office.",
+    ),
+    (
+        "Microsoft.MixedReality.Portal",
+        "Portal de realidade mista, sem uso sem o óculos.",
+    ),
+    (
+        "Microsoft.People",
+        "Agenda de contatos, substituída pelo Outlook.",
+    ),
+    (
+        "Microsoft.SkypeApp",
+        "Skype pré-instalado, descontinuado pela Microsoft.",
+    ),
     ("Clipchamp.Clipchamp", "Editor de vídeo pré-instalado."),
 ];
 
 const UNINSTALL_KEYS: [(&str, &str); 3] = [
-    ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-    ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-    ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+    (
+        "HKLM",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
+    (
+        "HKLM",
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
+    (
+        "HKCU",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    ),
 ];
 
 struct ProgramaInstalado {
@@ -159,7 +189,10 @@ fn ler_apps_da_loja() -> Result<Vec<RawAppx>, String> {
     let script = "ConvertTo-Json -Compress -Depth 2 -InputObject @(Get-AppxPackage \
                   -ErrorAction Stop | Select-Object Name,PackageFullName)";
 
-    shell::json_da_saida(shell::powershell(script), "os aplicativos da Microsoft Store")
+    shell::json_da_saida(
+        shell::powershell(script),
+        "os aplicativos da Microsoft Store",
+    )
 }
 
 pub fn classificar(nome: &str, editor: &str) -> Option<(BloatKind, String)> {
@@ -262,8 +295,7 @@ pub fn remover_app_da_loja(package: &str) -> Result<String, String> {
         package
     );
 
-    shell::powershell_checked(&script)
-        .map_err(|e| format!("Não foi possível remover: {}", e))?;
+    shell::powershell_checked(&script).map_err(|e| format!("Não foi possível remover: {}", e))?;
 
     Ok("Aplicativo removido. Ele pode ser reinstalado pela Microsoft Store.".to_string())
 }
@@ -279,7 +311,10 @@ mod tests {
             ("Realtek High Definition Audio Driver", "Realtek"),
             ("Intel Chipset Device Software", "Intel"),
             ("AMD Radeon Software", "Advanced Micro Devices"),
-            ("Microsoft Visual C++ 2015-2022 Redistributable", "Microsoft"),
+            (
+                "Microsoft Visual C++ 2015-2022 Redistributable",
+                "Microsoft",
+            ),
             (".NET Runtime 8.0.11", "Microsoft"),
             ("DirectX Runtime", "Microsoft"),
         ];
@@ -382,6 +417,9 @@ mod tests {
             assert!(r.items[i..].iter().all(|x| x.size_mb.is_none()));
         }
 
-        assert_eq!(r.unmeasured, r.items.iter().filter(|i| i.size_mb.is_none()).count());
+        assert_eq!(
+            r.unmeasured,
+            r.items.iter().filter(|i| i.size_mb.is_none()).count()
+        );
     }
 }

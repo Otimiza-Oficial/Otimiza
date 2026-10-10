@@ -275,6 +275,7 @@ const ID_DRS_CREATE_PROFILE: u32 = 0xCC17_6068;
 const ID_DRS_DELETE_PROFILE: u32 = 0x1709_3206;
 const ID_DRS_FIND_APPLICATION_BY_NAME: u32 = 0xEEE5_66B2;
 const ID_DRS_CREATE_APPLICATION: u32 = 0x4347_A9DE;
+const ID_DRS_GET_PROFILE_INFO: u32 = 0x61CD_6FD6;
 
 /// `NVAPI_OK`. Todo erro é negativo.
 const NVAPI_OK: i32 = 0;
@@ -398,9 +399,11 @@ type FnNomeDoId = unsafe extern "C" fn(u32, *mut [u16; 2048]) -> i32;
 type FnAcharApp =
     unsafe extern "C" fn(*mut c_void, *const u16, *mut *mut c_void, *mut NvdrsApplicationV3) -> i32;
 type FnAcharPerfil = unsafe extern "C" fn(*mut c_void, *const u16, *mut *mut c_void) -> i32;
-type FnCriarPerfil = unsafe extern "C" fn(*mut c_void, *mut NvdrsProfileV1, *mut *mut c_void) -> i32;
+type FnCriarPerfil =
+    unsafe extern "C" fn(*mut c_void, *mut NvdrsProfileV1, *mut *mut c_void) -> i32;
 type FnCriarApp = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsApplicationV3) -> i32;
 type FnApagarPerfil = unsafe extern "C" fn(*mut c_void, *mut c_void) -> i32;
+type FnInfoDoPerfil = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut NvdrsProfileV1) -> i32;
 
 /// À parte e `Option`: driver sem elas continua servindo os ajustes globais.
 struct ApiDePerfil {
@@ -424,6 +427,8 @@ struct Api {
     /// Sem ela não há como conferir os números: NENHUMA escrita acontece.
     nome_do_id: Option<FnNomeDoId>,
     perfis: Option<ApiDePerfil>,
+    /// Só para dizer o nome do perfil na tela e no log.
+    info_do_perfil: Option<FnInfoDoPerfil>,
 }
 
 /// A DLL NÃO é descarregada: o driver guarda estado desde o `NvAPI_Initialize`.
@@ -490,6 +495,9 @@ fn carregar_api() -> Result<Api, Nvapi> {
         },
         nome_do_id: buscar(ID_DRS_GET_SETTING_NAME)
             .map(|ponteiro| unsafe { std::mem::transmute::<*mut c_void, FnNomeDoId>(ponteiro) }),
+        info_do_perfil: buscar(ID_DRS_GET_PROFILE_INFO).map(|ponteiro| unsafe {
+            std::mem::transmute::<*mut c_void, FnInfoDoPerfil>(ponteiro)
+        }),
         perfis: (|| {
             Some(ApiDePerfil {
                 achar_app: unsafe {
@@ -503,7 +511,9 @@ fn carregar_api() -> Result<Api, Nvapi> {
                     )?)
                 },
                 criar_perfil: unsafe {
-                    std::mem::transmute::<*mut c_void, FnCriarPerfil>(buscar(ID_DRS_CREATE_PROFILE)?)
+                    std::mem::transmute::<*mut c_void, FnCriarPerfil>(buscar(
+                        ID_DRS_CREATE_PROFILE,
+                    )?)
                 },
                 criar_app: unsafe {
                     std::mem::transmute::<*mut c_void, FnCriarApp>(buscar(
@@ -511,7 +521,9 @@ fn carregar_api() -> Result<Api, Nvapi> {
                     )?)
                 },
                 apagar_perfil: unsafe {
-                    std::mem::transmute::<*mut c_void, FnApagarPerfil>(buscar(ID_DRS_DELETE_PROFILE)?)
+                    std::mem::transmute::<*mut c_void, FnApagarPerfil>(buscar(
+                        ID_DRS_DELETE_PROFILE,
+                    )?)
                 },
             })
         })(),
@@ -520,7 +532,10 @@ fn carregar_api() -> Result<Api, Nvapi> {
 
 fn api() -> Result<&'static Api, Nvapi> {
     static CACHE: OnceLock<Result<Api, Nvapi>> = OnceLock::new();
-    CACHE.get_or_init(carregar_api).as_ref().map_err(|erro| *erro)
+    CACHE
+        .get_or_init(carregar_api)
+        .as_ref()
+        .map_err(|erro| *erro)
 }
 
 pub fn estado() -> Nvapi {
@@ -545,7 +560,10 @@ fn nome_do_ajuste(api: &Api, id: u32) -> Option<String> {
         return None;
     }
 
-    let fim = destino.iter().position(|c| *c == 0).unwrap_or(destino.len());
+    let fim = destino
+        .iter()
+        .position(|c| *c == 0)
+        .unwrap_or(destino.len());
     Some(String::from_utf16_lossy(&destino[..fim]).to_lowercase())
 }
 
@@ -647,7 +665,10 @@ pub fn vsync_prende(valor: u32) -> bool {
     const FLIPINTERVAL2: u32 = 0x3261_0244;
     const FLIPINTERVAL3: u32 = 0x7127_1021;
     const FLIPINTERVAL4: u32 = 0x1324_5256;
-    matches!(valor, FORCEON | FLIPINTERVAL2 | FLIPINTERVAL3 | FLIPINTERVAL4)
+    matches!(
+        valor,
+        FORCEON | FLIPINTERVAL2 | FLIPINTERVAL3 | FLIPINTERVAL4
+    )
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -659,7 +680,9 @@ pub struct TetosDoDriver {
 pub fn tetos_no_perfil_global() -> Result<TetosDoDriver, String> {
     na_sessao_de_leitura(|api, sessao, perfil| {
         let limite_id = LIMITADOR.id_do_padrao.expect("o limitador tem número");
-        let vsync_id = opcao_por_id("vsync").and_then(|o| o.id_do_padrao).expect("vsync tem número");
+        let vsync_id = opcao_por_id("vsync")
+            .and_then(|o| o.id_do_padrao)
+            .expect("vsync tem número");
         let (_, limite) = ler_valor(api, sessao, perfil, limite_id);
         let (padrao_vsync, vsync) = ler_valor(api, sessao, perfil, vsync_id);
         Ok(TetosDoDriver {
@@ -714,8 +737,8 @@ fn escrever_valor_cru(
 }
 
 fn numero_de(opcao: &str) -> Result<&'static Opcao, String> {
-    let alvo =
-        opcao_por_id(opcao).ok_or_else(|| format!("não conheço o ajuste de driver \"{}\".", opcao))?;
+    let alvo = opcao_por_id(opcao)
+        .ok_or_else(|| format!("não conheço o ajuste de driver \"{}\".", opcao))?;
 
     if alvo.id_do_padrao.is_none() {
         return Err(format!(
@@ -827,16 +850,23 @@ fn perfil_do_executavel(
     let mut perfil: *mut c_void = std::ptr::null_mut();
     let mut aplicativo = NvdrsApplicationV3::zerada();
 
-    let achou = unsafe {
-        (perfis.achar_app)(sessao, nome_do_app.as_ptr(), &mut perfil, &mut aplicativo)
-    } == NVAPI_OK;
+    let achou =
+        unsafe { (perfis.achar_app)(sessao, nome_do_app.as_ptr(), &mut perfil, &mut aplicativo) }
+            == NVAPI_OK;
 
     (achou && !perfil.is_null()).then_some(perfil)
 }
 
 /// No perfil já amarrado ao executável (guardando o anterior) ou num perfil novo com o nome do Otimiza. Falha no
 /// meio desfaz tudo (sessão não salva). Os portões vêm antes de abrir a sessão.
-pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, String> {
+///
+/// `caminho`: o executável aberto, inteiro. O perfil é achado por ele, como o driver acha quando o jogo abre: o FiveM
+/// cadastra o próprio caminho num perfil dele ("Cfx.re: ..."), e um teto no perfil pelo nome nunca chegava ao jogo.
+pub fn aplicar_limite(
+    executavel: &str,
+    caminho: Option<&str>,
+    fps: u32,
+) -> Result<LimiteAplicado, String> {
     executavel_valido(executavel)?;
 
     if fps == 0 || fps > LIMITE_MAXIMO {
@@ -851,6 +881,8 @@ pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, Stri
         .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
     let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
         .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let busca = utf16_fixo(caminho.unwrap_or(executavel))
+        .ok_or_else(|| "o caminho do jogo é longo demais para o driver.".to_string())?;
 
     na_sessao_da_drs(move |api, sessao| {
         conferir_o_numero(api, &LIMITADOR, id)?;
@@ -859,7 +891,7 @@ pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, Stri
             "este driver não oferece perfil por jogo, então o limite não foi aplicado.".to_string()
         })?;
 
-        let (perfil, perfil_criado) = match perfil_do_executavel(perfis, sessao, &nome_do_app) {
+        let (perfil, perfil_criado) = match perfil_do_executavel(perfis, sessao, &busca) {
             Some(perfil) => (perfil, false),
             None => {
                 let mut dados = NvdrsProfileV1::zerado();
@@ -897,35 +929,105 @@ pub fn aplicar_limite(executavel: &str, fps: u32) -> Result<LimiteAplicado, Stri
     })
 }
 
+/// O perfil que o driver USA para o jogo, achado pelo caminho completo do executável.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerfilEmUso {
+    pub perfil: String,
+    /// Como o app está escrito no perfil: um caminho quando quem cadastrou foi o próprio jogo (o FiveM se cadastra assim).
+    pub app: String,
+    /// O teto de FPS desse perfil; 0 é sem teto.
+    pub teto: u32,
+}
+
+fn texto_utf16(v: &[u16]) -> String {
+    String::from_utf16_lossy(&v[..v.iter().position(|c| *c == 0).unwrap_or(v.len())])
+}
+
+/// Pelo CAMINHO, o driver escolhe o perfil com as mesmas regras de quando o jogo abre: uma entrada com o caminho inteiro
+/// ganha da que tem só o nome. Medido no FiveM do dono: o FiveM cadastra o próprio caminho ("Cfx.re EXE: ...") num
+/// perfil, e o teto que o Otimiza gravava no perfil pelo nome nunca valeu (60 gravado, o jogo seguiu a 80). Só lê.
+pub fn perfil_em_uso(caminho: &str) -> Result<Option<PerfilEmUso>, String> {
+    let id = LIMITADOR.id_do_padrao.expect("o limitador tem número");
+    let alvo = utf16_fixo(caminho)
+        .ok_or_else(|| "o caminho do jogo é longo demais para o driver.".to_string())?;
+    na_sessao_de_leitura(move |api, sessao, _global| {
+        let perfis = api
+            .perfis
+            .as_ref()
+            .ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
+        let mut perfil: *mut c_void = std::ptr::null_mut();
+        let mut app = NvdrsApplicationV3::zerada();
+        let achou =
+            unsafe { (perfis.achar_app)(sessao, alvo.as_ptr(), &mut perfil, &mut app) } == NVAPI_OK;
+        if !achou || perfil.is_null() {
+            return Ok(None);
+        }
+        let mut dados = NvdrsProfileV1::zerado();
+        let nome = api
+            .info_do_perfil
+            .filter(|info| unsafe { info(sessao, perfil, &mut dados) } == NVAPI_OK)
+            .map(|_| texto_utf16(&dados.nome))
+            .unwrap_or_default();
+        Ok(Some(PerfilEmUso {
+            perfil: nome,
+            app: texto_utf16(&app.nome_do_app),
+            teto: ler_valor(api, sessao, perfil, id).1,
+        }))
+    })
+}
+
 // Aplicar saiu na 3.0 com a Biblioteca; o desfazer fica para quem aplicou antes.
 
-pub fn desfazer_perfil_do_jogo(executavel: &str, perfil_criado: bool, anteriores: &[(String, String)]) -> Result<(), String> {
+pub fn desfazer_perfil_do_jogo(
+    executavel: &str,
+    perfil_criado: bool,
+    anteriores: &[(String, String)],
+) -> Result<(), String> {
     executavel_valido(executavel)?;
-    let nome_do_app = utf16_fixo(executavel).ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let nome_do_app = utf16_fixo(executavel)
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
     let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
         .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
     let anteriores = anteriores.to_vec();
     na_sessao_da_drs(move |api, sessao| {
-        let perfis = api.perfis.as_ref().ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
+        let perfis = api
+            .perfis
+            .as_ref()
+            .ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
         if perfil_criado {
             let mut perfil: *mut c_void = std::ptr::null_mut();
-            let achou = unsafe { (perfis.achar_perfil)(sessao, nome_do_perfil.as_ptr(), &mut perfil) } == NVAPI_OK;
-            if achou && !perfil.is_null() && unsafe { (perfis.apagar_perfil)(sessao, perfil) } != NVAPI_OK {
-                return Err(format!("não consegui apagar o perfil \"{}\" do driver da NVIDIA.", nome_do_perfil_do_otimiza(executavel)));
+            let achou =
+                unsafe { (perfis.achar_perfil)(sessao, nome_do_perfil.as_ptr(), &mut perfil) }
+                    == NVAPI_OK;
+            if achou
+                && !perfil.is_null()
+                && unsafe { (perfis.apagar_perfil)(sessao, perfil) } != NVAPI_OK
+            {
+                return Err(format!(
+                    "não consegui apagar o perfil \"{}\" do driver da NVIDIA.",
+                    nome_do_perfil_do_otimiza(executavel)
+                ));
             }
             return Ok(());
         }
-        let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) else { return Ok(()) };
+        let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) else {
+            return Ok(());
+        };
         for (opcao, anterior) in &anteriores {
             let o = numero_de(opcao)?;
             let id = o.id_do_padrao.expect("numero_de já garantiu");
             match plano_de_desfazer(anterior) {
                 PlanoDeDesfazer::RestaurarPadrao => {
                     if unsafe { (api.restaurar_ajuste)(sessao, perfil, id) } != NVAPI_OK {
-                        return Err(format!("não consegui devolver \"{}\" ao padrão neste jogo.", o.titulo));
+                        return Err(format!(
+                            "não consegui devolver \"{}\" ao padrão neste jogo.",
+                            o.titulo
+                        ));
                     }
                 }
-                PlanoDeDesfazer::Escrever(valor) => escrever_valor_cru(api, sessao, perfil, id, valor)?,
+                PlanoDeDesfazer::Escrever(valor) => {
+                    escrever_valor_cru(api, sessao, perfil, id, valor)?
+                }
             }
         }
         Ok(())
@@ -933,17 +1035,18 @@ pub fn desfazer_perfil_do_jogo(executavel: &str, perfil_criado: bool, anteriores
 }
 
 /// Perfil do Otimiza é achado PELO NOME e apagado; perfil que já existia tem só o limite devolvido. Perfil que
-/// sumiu por fora não é falha: o estado desejado já é o atual.
+/// sumiu por fora não é falha: o estado desejado já é o atual. Com `caminho`, o perfil é o que o driver usa por ele.
 pub fn desfazer_limite(
     executavel: &str,
+    caminho: Option<&str>,
     perfil_criado: bool,
     valor_anterior: &str,
 ) -> Result<(), String> {
     executavel_valido(executavel)?;
 
     let id = LIMITADOR.id_do_padrao.expect("o limitador tem número");
-    let nome_do_app = utf16_fixo(executavel)
-        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let busca = utf16_fixo(caminho.unwrap_or(executavel))
+        .ok_or_else(|| "o caminho do jogo é longo demais para o driver.".to_string())?;
     let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
         .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
     let plano = plano_de_desfazer(valor_anterior);
@@ -958,9 +1061,9 @@ pub fn desfazer_limite(
 
         if perfil_criado {
             let mut perfil: *mut c_void = std::ptr::null_mut();
-            let achou = unsafe {
-                (perfis.achar_perfil)(sessao, nome_do_perfil.as_ptr(), &mut perfil)
-            } == NVAPI_OK;
+            let achou =
+                unsafe { (perfis.achar_perfil)(sessao, nome_do_perfil.as_ptr(), &mut perfil) }
+                    == NVAPI_OK;
 
             if !achou || perfil.is_null() {
                 return Ok(());
@@ -976,7 +1079,7 @@ pub fn desfazer_limite(
             return Ok(());
         }
 
-        let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) else {
+        let Some(perfil) = perfil_do_executavel(perfis, sessao, &busca) else {
             return Ok(());
         };
 
@@ -995,9 +1098,199 @@ pub fn desfazer_limite(
     })
 }
 
+// ---------------------------------------------------------------- Smooth Motion (EXPERIMENTAL)
+//
+// O Smooth Motion (RTX 40 e 50) não tem ajuste no `NvApiDriverSettings.h`: o NVIDIA App liga escrevendo no perfil do
+// jogo um número que só a comunidade conhece (0xB0D384C0, "Smooth Motion - Enable", lido no NVIDIA Profile
+// Inspector). Por isso fica atrás do interruptor `smooth_motion_drs`, desligado por padrão, e só no perfil DO JOGO,
+// com o valor de antes guardado. Se o driver der um NOME a esse número e o nome não for de Smooth Motion, o número
+// quer dizer outra coisa neste driver e o Otimiza recusa.
+
+pub const SMOOTH_MOTION: u32 = 0xB0D3_84C0;
+pub const SMOOTH_MOTION_LIGADO: u32 = 1;
+
+/// Em minúsculas, como o limite: um registro por jogo.
+pub fn id_do_smooth_motion(executavel: &str) -> String {
+    format!("smooth_motion_nvidia:{}", executavel.to_lowercase())
+}
+
+/// Pura. Sem nome é o esperado (o ajuste não é público) e passa: quem chega aqui ligou o interruptor experimental.
+/// Nome que não fala de Smooth Motion quer dizer que o número é de outro ajuste neste driver: recusa.
+pub fn veredito_smooth_motion(nome: Option<&str>) -> Result<(), String> {
+    match nome {
+        Some(n) if !n.to_lowercase().contains("smooth") => Err(format!(
+            "recusei ligar o Smooth Motion: neste driver o ajuste {:#010X} se chama \"{}\". Escrever assim mudaria \
+             uma opção que você não pediu.",
+            SMOOTH_MOTION, n
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// O perfil já amarrado ao executável, ou um novo com o nome do Otimiza e o executável ligado a ele.
+fn perfil_ou_novo(
+    perfis: &ApiDePerfil,
+    sessao: *mut c_void,
+    nome_do_app: [u16; 2048],
+    nome_do_perfil: [u16; 2048],
+) -> Result<(*mut c_void, bool), String> {
+    if let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) {
+        return Ok((perfil, false));
+    }
+    let mut dados = NvdrsProfileV1::zerado();
+    dados.nome = nome_do_perfil;
+    let mut perfil: *mut c_void = std::ptr::null_mut();
+    if unsafe { (perfis.criar_perfil)(sessao, &mut dados, &mut perfil) } != NVAPI_OK {
+        return Err(
+            "o driver da NVIDIA não deixou criar o perfil deste jogo. Nada foi alterado."
+                .to_string(),
+        );
+    }
+    let mut aplicativo = NvdrsApplicationV3::zerada();
+    aplicativo.nome_do_app = nome_do_app;
+    if unsafe { (perfis.criar_app)(sessao, perfil, &mut aplicativo) } != NVAPI_OK {
+        return Err(
+            "o driver da NVIDIA não deixou ligar o jogo ao perfil. Nada foi alterado.".to_string(),
+        );
+    }
+    Ok((perfil, true))
+}
+
+/// Liga o Smooth Motion no perfil do jogo. Vale na próxima vez que o jogo abrir (o driver lê o perfil na abertura).
+pub fn ligar_smooth_motion(executavel: &str) -> Result<LimiteAplicado, String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel)
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let nome_do_perfil = utf16_fixo(&nome_do_perfil_do_otimiza(executavel))
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+
+    na_sessao_da_drs(move |api, sessao| {
+        veredito_smooth_motion(nome_do_ajuste(api, SMOOTH_MOTION).as_deref())?;
+        let perfis = api.perfis.as_ref().ok_or_else(|| {
+            "este driver não oferece perfil por jogo, então o Smooth Motion não foi ligado."
+                .to_string()
+        })?;
+        let (perfil, perfil_criado) = perfil_ou_novo(perfis, sessao, nome_do_app, nome_do_perfil)?;
+        let (era_o_padrao, anterior) = ler_valor(api, sessao, perfil, SMOOTH_MOTION);
+        escrever_valor_cru(api, sessao, perfil, SMOOTH_MOTION, SMOOTH_MOTION_LIGADO).map_err(|_| {
+            "este driver da NVIDIA não conhece o Smooth Motion (precisa de RTX 40 ou 50 e driver recente). Nada foi \n             alterado: atualize o driver ou ligue pelo app da NVIDIA."
+                .to_string()
+        })?;
+        Ok(LimiteAplicado {
+            perfil_criado,
+            valor_anterior: codificar_anterior(era_o_padrao, anterior),
+        })
+    })
+}
+
+/// Devolve o valor de antes NO PERFIL, e nunca apaga o perfil: ele pode ter recebido um limite de FPS depois, e apagar
+/// levaria o limite junto. Um perfil vazio do Otimiza não muda nada no jogo.
+pub fn desfazer_smooth_motion(executavel: &str, valor_anterior: &str) -> Result<(), String> {
+    executavel_valido(executavel)?;
+    let nome_do_app = utf16_fixo(executavel)
+        .ok_or_else(|| "o nome do executável é longo demais para o driver.".to_string())?;
+    let plano = plano_de_desfazer(valor_anterior);
+    na_sessao_da_drs(move |api, sessao| {
+        let perfis = api
+            .perfis
+            .as_ref()
+            .ok_or_else(|| "este driver não oferece perfil por jogo.".to_string())?;
+        let Some(perfil) = perfil_do_executavel(perfis, sessao, &nome_do_app) else {
+            return Ok(());
+        };
+        match plano {
+            PlanoDeDesfazer::RestaurarPadrao => {
+                if unsafe { (api.restaurar_ajuste)(sessao, perfil, SMOOTH_MOTION) } != NVAPI_OK {
+                    return Err(format!(
+                        "não consegui desligar o Smooth Motion de \"{}\".",
+                        executavel
+                    ));
+                }
+                Ok(())
+            }
+            PlanoDeDesfazer::Escrever(valor) => {
+                escrever_valor_cru(api, sessao, perfil, SMOOTH_MOTION, valor)
+            }
+        }
+    })
+}
+
+#[cfg(test)]
+mod teste_do_smooth_motion {
+    use super::*;
+
+    fn ler_no_jogo(executavel: &str) -> Option<(bool, u32)> {
+        let nome_do_app = utf16_fixo(executavel)?;
+        na_sessao_de_leitura(move |api, sessao, _| {
+            let perfis = api.perfis.as_ref().ok_or("sem perfis")?;
+            Ok(perfil_do_executavel(perfis, sessao, &nome_do_app)
+                .map(|perfil| ler_valor(api, sessao, perfil, SMOOTH_MOTION)))
+        })
+        .ok()
+        .flatten()
+    }
+
+    /// Escreve no perfil de `jogo_de_teste.exe` (cria "Otimiza - jogo_de_teste.exe"), confere, desfaz e apaga o
+    /// perfil. Numa placa sem Smooth Motion prova só a mecânica e o nome que o driver dá ao número.
+    #[test]
+    #[ignore = "escreve no driver NVIDIA desta máquina (perfil do jogo de teste) e desfaz"]
+    fn liga_e_desfaz_no_perfil_do_jogo_de_teste() {
+        let exe = "jogo_de_teste.exe";
+        let nome =
+            na_sessao_de_leitura(|api, _, _| Ok(nome_do_ajuste(api, SMOOTH_MOTION))).unwrap();
+        println!("o driver chama {:#010X} de {:?}", SMOOTH_MOTION, nome);
+        println!("antes: {:?}", ler_no_jogo(exe));
+        let feito = match ligar_smooth_motion(exe) {
+            Ok(f) => f,
+            Err(e) => {
+                // Driver que não conhece o ajuste (placa sem Smooth Motion): recusa, e a sessão não é salva.
+                println!("recusado: {}", e);
+                assert_eq!(
+                    ler_no_jogo(exe),
+                    None,
+                    "recusa não pode deixar perfil para trás"
+                );
+                return;
+            }
+        };
+        println!(
+            "ligado: {:?} (perfil criado: {}, anterior: {})",
+            ler_no_jogo(exe),
+            feito.perfil_criado,
+            feito.valor_anterior
+        );
+        assert_eq!(ler_no_jogo(exe).map(|v| v.1), Some(SMOOTH_MOTION_LIGADO));
+        desfazer_smooth_motion(exe, &feito.valor_anterior).expect("desfez");
+        let depois = ler_no_jogo(exe);
+        println!("desfeito: {:?}", depois);
+        assert!(depois.map_or(true, |(padrao, v)| padrao || v != SMOOTH_MOTION_LIGADO));
+        if feito.perfil_criado {
+            desfazer_limite(exe, None, true, ANTERIOR_PADRAO).expect("apagou o perfil do teste");
+        }
+        println!("perfil no fim: {:?}", ler_no_jogo(exe));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn smooth_motion_sem_nome_passa_e_com_nome_de_outro_ajuste_e_recusado() {
+        assert!(
+            veredito_smooth_motion(None).is_ok(),
+            "o ajuste não é público: sem nome é o esperado"
+        );
+        assert!(veredito_smooth_motion(Some("smooth motion - enable")).is_ok());
+        assert!(
+            veredito_smooth_motion(Some("Vertical Sync")).is_err(),
+            "número de outro ajuste neste driver"
+        );
+        assert_eq!(
+            id_do_smooth_motion("Cyberpunk2077.exe"),
+            "smooth_motion_nvidia:cyberpunk2077.exe"
+        );
+    }
 
     #[test]
     fn sem_nvapi_o_produto_diz_que_nao_cobre_em_vez_de_tela_vazia() {
@@ -1104,7 +1397,10 @@ mod tests {
         let vsync = id_no_historico("vsync");
         let painel = painel(|id| id == vsync, Vec::new());
 
-        let esperados = OPCOES.iter().filter(|o| !o.so_por_jogo || o.id == "vsync").count();
+        let esperados = OPCOES
+            .iter()
+            .filter(|o| !o.so_por_jogo || o.id == "vsync")
+            .count();
         assert_eq!(painel.ajustes.len(), esperados);
         assert!(painel.ajustes.iter().all(|a| a.id != "energia"));
         for ajuste in &painel.ajustes {
@@ -1154,7 +1450,10 @@ mod tests {
     fn o_nome_vai_ao_driver_inteiro_ou_nao_vai() {
         let fixo = utf16_fixo("FiveM_GTAProcess.exe").expect("cabe");
         let fim = fixo.iter().position(|c| *c == 0).unwrap();
-        assert_eq!(String::from_utf16_lossy(&fixo[..fim]), "FiveM_GTAProcess.exe");
+        assert_eq!(
+            String::from_utf16_lossy(&fixo[..fim]),
+            "FiveM_GTAProcess.exe"
+        );
 
         assert!(utf16_fixo(&"a".repeat(2048)).is_none());
         assert!(utf16_fixo(&"a".repeat(2047)).is_some());
@@ -1178,11 +1477,11 @@ mod tests {
     #[test]
     fn limite_invalido_nao_chega_perto_do_driver() {
         // A máquina do dono TEM NVIDIA: os portões precisam vir antes da sessão, ou o teste abriria a DRS.
-        assert!(aplicar_limite("FiveM_GTAProcess.exe", 0).is_err());
-        assert!(aplicar_limite("FiveM_GTAProcess.exe", LIMITE_MAXIMO + 1).is_err());
-        assert!(aplicar_limite(r"C:\Jogos\FiveM.exe", 60).is_err());
-        assert!(aplicar_limite("FiveM", 60).is_err());
-        assert!(desfazer_limite("", true, ANTERIOR_PADRAO).is_err());
+        assert!(aplicar_limite("FiveM_GTAProcess.exe", None, 0).is_err());
+        assert!(aplicar_limite("FiveM_GTAProcess.exe", None, LIMITE_MAXIMO + 1).is_err());
+        assert!(aplicar_limite(r"C:\Jogos\FiveM.exe", None, 60).is_err());
+        assert!(aplicar_limite("FiveM", None, 60).is_err());
+        assert!(desfazer_limite("", None, true, ANTERIOR_PADRAO).is_err());
     }
 
     #[test]
@@ -1194,7 +1493,9 @@ mod tests {
             .nth(1)
             .expect("aplicar_limite existe");
 
-        let validacao = corpo.find("executavel_valido(executavel)?;").expect("valida o executável");
+        let validacao = corpo
+            .find("executavel_valido(executavel)?;")
+            .expect("valida o executável");
         let faixa = corpo.find("fps > LIMITE_MAXIMO").expect("valida a faixa");
         let sessao = corpo.find("na_sessao_da_drs(").expect("abre a sessão");
 
@@ -1502,5 +1803,136 @@ mod tests {
             salvar < destruir,
             "salvar precisa vir antes de destruir a sessao"
         );
+    }
+}
+
+#[cfg(test)]
+mod laboratorio_do_limite {
+    use super::*;
+
+    /// O que o driver guarda para o FiveM agora (só lê): `cargo test --lib laboratorio_do_limite::o_que_o_driver_guarda
+    /// -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn o_que_o_driver_guarda() {
+        println!("global: {:?}", tetos_no_perfil_global());
+        // Pelo caminho completo o driver aplica as mesmas regras de quando o jogo abre.
+        let caminho = format!(
+            r"{}\FiveM\FiveM.app\data\cache\subprocess\FiveM_b3258_GTAProcess.exe",
+            std::env::var("LOCALAPPDATA").unwrap()
+        );
+        println!("{}: {:?}", caminho, perfil_em_uso(&caminho));
+        println!("só o nome: {:?}", perfil_em_uso("FiveM_b3258_GTAProcess.exe"));
+        println!("GTA5.exe: {:?}", perfil_em_uso("GTA5.exe"));
+    }
+
+    fn exe_do_teste() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("debug")
+            .join("examples")
+            .join("jogo_de_teste.exe")
+    }
+
+    /// Abre o jogo de teste SEM carga (centenas de fps: um teto de 45 aparece) e devolve o FPS dos segundos 2 a 5.
+    fn fps_do_jogo_de_teste() -> Vec<u32> {
+        use std::io::{BufRead, BufReader};
+        let mut jogo = std::process::Command::new(exe_do_teste())
+            .args(["1000", "640", "360", "0"])
+            .env("OTIMIZA_TESTE_X", "1920")
+            .env("OTIMIZA_TESTE_Y", "0")
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("jogo de teste: `cargo build --examples` antes");
+        let linhas: Vec<u32> = BufReader::new(jogo.stdout.take().unwrap())
+            .lines()
+            .take(5)
+            .filter_map(|l| l.ok()?.strip_prefix("fps ")?.parse().ok())
+            .skip(1)
+            .collect();
+        let _ = jogo.kill();
+        linhas
+    }
+
+    /// Cria um perfil com o CAMINHO do jogo de teste, como o FiveM faz com o dele ("Cfx.re: <caminho>").
+    fn perfil_pelo_caminho(nome: &str, caminho: &str) -> Result<(), String> {
+        let nome = utf16_fixo(nome).unwrap();
+        let app = utf16_fixo(caminho).unwrap();
+        na_sessao_da_drs(move |api, sessao| {
+            let perfis = api.perfis.as_ref().unwrap();
+            let mut dados = NvdrsProfileV1::zerado();
+            dados.nome = nome;
+            let mut perfil: *mut c_void = std::ptr::null_mut();
+            if unsafe { (perfis.criar_perfil)(sessao, &mut dados, &mut perfil) } != NVAPI_OK {
+                return Err("criar perfil".into());
+            }
+            let mut aplicativo = NvdrsApplicationV3::zerada();
+            aplicativo.nome_do_app = app;
+            if unsafe { (perfis.criar_app)(sessao, perfil, &mut aplicativo) } != NVAPI_OK {
+                return Err("criar app".into());
+            }
+            Ok(())
+        })
+    }
+
+    fn apagar_perfil(nome: &str) -> Result<(), String> {
+        let nome = utf16_fixo(nome).unwrap();
+        na_sessao_da_drs(move |api, sessao| {
+            let perfis = api.perfis.as_ref().unwrap();
+            let mut perfil: *mut c_void = std::ptr::null_mut();
+            if unsafe { (perfis.achar_perfil)(sessao, nome.as_ptr(), &mut perfil) } == NVAPI_OK
+                && !perfil.is_null()
+            {
+                unsafe { (perfis.apagar_perfil)(sessao, perfil) };
+            }
+            Ok(())
+        })
+    }
+
+    /// O caso do FiveM, com o jogo de teste: um perfil pelo caminho (o do jogo) e o teto do Otimiza. Pelo nome (como
+    /// era), o teto não chega; pelo caminho (agora), chega. Tudo desfeito no fim.
+    /// `cargo test --lib laboratorio_do_limite::o_caminho_ganha_do_nome -- --ignored --nocapture --test-threads 1`.
+    #[test]
+    #[ignore]
+    fn o_caminho_ganha_do_nome() {
+        const EXE: &str = "jogo_de_teste.exe";
+        const PERFIL: &str = "Teste do Otimiza - perfil pelo caminho";
+        let caminho = exe_do_teste().to_string_lossy().into_owned();
+        let _ = apagar_perfil(PERFIL);
+        let _ = apagar_perfil(&nome_do_perfil_do_otimiza(EXE));
+
+        println!("sem teto nenhum: {:?}", fps_do_jogo_de_teste());
+
+        perfil_pelo_caminho(PERFIL, &caminho).expect("perfil pelo caminho");
+        println!("perfil em uso: {:?}", perfil_em_uso(&caminho));
+
+        let pelo_nome = aplicar_limite(EXE, None, 45).expect("teto pelo nome");
+        println!(
+            "teto 45 PELO NOME (como era): {:?} · perfil em uso {:?}",
+            fps_do_jogo_de_teste(),
+            perfil_em_uso(&caminho).map(|p| p.map(|p| (p.perfil, p.teto)))
+        );
+        desfazer_limite(EXE, None, pelo_nome.perfil_criado, &pelo_nome.valor_anterior)
+            .expect("desfazer pelo nome");
+
+        let pelo_caminho = aplicar_limite(EXE, Some(&caminho), 45).expect("teto pelo caminho");
+        println!(
+            "teto 45 PELO CAMINHO (agora): {:?} · perfil em uso {:?} · criado {}",
+            fps_do_jogo_de_teste(),
+            perfil_em_uso(&caminho).map(|p| p.map(|p| (p.perfil, p.teto))),
+            pelo_caminho.perfil_criado
+        );
+        desfazer_limite(
+            EXE,
+            Some(&caminho),
+            pelo_caminho.perfil_criado,
+            &pelo_caminho.valor_anterior,
+        )
+        .expect("desfazer pelo caminho");
+        println!(
+            "desfeito: {:?}",
+            perfil_em_uso(&caminho).map(|p| p.map(|p| (p.perfil, p.teto)))
+        );
+        apagar_perfil(PERFIL).expect("apagar o perfil do teste");
     }
 }

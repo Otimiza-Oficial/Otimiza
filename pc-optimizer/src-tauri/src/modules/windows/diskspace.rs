@@ -61,9 +61,14 @@ fn pastas_de(id: &str) -> Vec<PathBuf> {
     let windows = var("SystemRoot").unwrap_or_else(|| PathBuf::from(r"C:\Windows"));
 
     match id {
-        "temporarios" => [var("TEMP"), Some(windows.join("Temp"))].into_iter().flatten().collect(),
+        "temporarios" => [var("TEMP"), Some(windows.join("Temp"))]
+            .into_iter()
+            .flatten()
+            .collect(),
         "windows_update" => vec![windows.join("SoftwareDistribution").join("Download")],
-        "entregas_otimizadas" => vec![windows.join("SoftwareDistribution").join("DeliveryOptimization")],
+        "entregas_otimizadas" => vec![windows
+            .join("SoftwareDistribution")
+            .join("DeliveryOptimization")],
         "relatorios_de_erro" => [var("LOCALAPPDATA"), var("ProgramData")]
             .into_iter()
             .flatten()
@@ -509,7 +514,11 @@ fn varrer(medir_o_winsxs: bool) -> DiskReport {
     };
 
     // Só o limpável aqui: somar o resto prometeria espaço que o usuário não vai ver.
-    let recoverable_bytes = findings.iter().filter(|f| f.cleanable).map(|f| f.bytes).sum();
+    let recoverable_bytes = findings
+        .iter()
+        .filter(|f| f.cleanable)
+        .map(|f| f.bytes)
+        .sum();
 
     let mut findings = findings;
     findings.sort_by(|a, b| b.bytes.cmp(&a.bytes));
@@ -532,8 +541,13 @@ mod tests {
 
     #[test]
     fn a_entrega_otimizada_nao_aponta_mais_para_a_fila_do_bits() {
-        let c = CATEGORIES.iter().find(|c| c.id == "delivery_optimization").unwrap();
-        assert!((c.paths)().iter().all(|p| !p.to_string_lossy().contains("Downloader")));
+        let c = CATEGORIES
+            .iter()
+            .find(|c| c.id == "delivery_optimization")
+            .unwrap();
+        assert!((c.paths)()
+            .iter()
+            .all(|p| !p.to_string_lossy().contains("Downloader")));
     }
 
     /// Só nos testes: `scan()` lê e escreve o `static` `ULTIMA_ANALISE`, e os testes rodam em paralelo. Um laço de
@@ -644,13 +658,20 @@ Limpeza do Repositório de Componentes Recomendada : Sim
 A operação foi concluída com êxito.";
 
         let bytes = estimativa_do_winsxs(saida).expect("a linha Recuperavel existe nesta saida");
-        assert!(bytes > 2_400_000_000 && bytes < 2_600_000_000, "veio {}", bytes);
+        assert!(
+            bytes > 2_400_000_000 && bytes < 2_600_000_000,
+            "veio {}",
+            bytes
+        );
     }
 
     #[test]
     fn o_achado_do_winsxs_usa_o_numero_do_dism_e_nao_o_tamanho_do_disco() {
         // Se alguém trocar a fonte por `directory_size(...)`, o valor não bate e o teste reprova.
-        let categoria = CATEGORIES.iter().find(|c| c.id == "winsxs").expect("categoria winsxs existe");
+        let categoria = CATEGORIES
+            .iter()
+            .find(|c| c.id == "winsxs")
+            .expect("categoria winsxs existe");
         let saida = "Recuperável : 2.34 GB\n";
 
         let achado = finding_do_winsxs_a_partir_da_saida(categoria, Some(saida));
@@ -661,14 +682,20 @@ A operação foi concluída com êxito.";
 
     #[test]
     fn winsxs_sem_a_linha_de_recuperavel_vira_nao_sei_e_nao_zero() {
-        assert_eq!(estimativa_do_winsxs("A operação falhou. Erro: 0x800f0954"), None);
+        assert_eq!(
+            estimativa_do_winsxs("A operação falhou. Erro: 0x800f0954"),
+            None
+        );
         assert_eq!(estimativa_do_winsxs(""), None);
     }
 
     #[test]
     fn a_estimativa_entende_o_dism_em_ingles_tambem() {
         let saida = "Reclaimable Packages : 12\nReclaimable : 2.34 GB\n";
-        assert!(estimativa_do_winsxs(saida).is_some(), "nao leu a saida em ingles");
+        assert!(
+            estimativa_do_winsxs(saida).is_some(),
+            "nao leu a saida em ingles"
+        );
     }
 
     #[test]
@@ -700,14 +727,23 @@ A operação foi concluída com êxito.";
             "sem a análise do DISM o achado precisa dizer que NÃO MEDIU"
         );
 
-        let com_dism = finding_do_winsxs_a_partir_da_saida(categoria, Some("Recuperável : 2.34 GB
-"));
+        let com_dism = finding_do_winsxs_a_partir_da_saida(
+            categoria,
+            Some(
+                "Recuperável : 2.34 GB
+",
+            ),
+        );
         assert_eq!(com_dism.medida, Medida::Medido);
     }
 
     #[test]
     fn as_outras_categorias_medem_de_verdade() {
-        for f in scan_para_o_veredito().findings.iter().filter(|f| f.id != "winsxs") {
+        for f in scan_para_o_veredito()
+            .findings
+            .iter()
+            .filter(|f| f.id != "winsxs")
+        {
             assert_eq!(f.medida, Medida::Medido, "{} não é medição do disco", f.id);
         }
     }
@@ -730,7 +766,8 @@ A operação foi concluída com êxito.";
     /// nunca produziria prova que a memória foi consultada.
     #[test]
     fn a_analise_lembrada_volta_da_memoria_sem_subir_o_dism_de_novo() {
-        const SENTINELA: &str = "SENTINELA DA MEMORIA (nao veio de Dism.exe)\nRecuperável : 1.00 GB\n";
+        const SENTINELA: &str =
+            "SENTINELA DA MEMORIA (nao veio de Dism.exe)\nRecuperável : 1.00 GB\n";
 
         // Trava: planta na `ULTIMA_ANALISE` e depende de ninguém mexer nela até ler.
         let _trava = trava_ultima_analise();
@@ -793,13 +830,21 @@ A operação foi concluída com êxito.";
     fn a_estimativa_entende_virgula_decimal_do_windows_em_portugues() {
         // O DISM em português escreve "2,34 GB": sem este, apagar o `replace(',', ".")` sumiria a categoria para o
         // brasileiro.
-        let com_virgula = estimativa_do_winsxs("Recuperável : 2,34 GB
-")
-            .expect("a saída em português usa vírgula decimal");
-        let com_ponto = estimativa_do_winsxs("Recuperável : 2.34 GB
-").expect("e a com ponto");
+        let com_virgula = estimativa_do_winsxs(
+            "Recuperável : 2,34 GB
+",
+        )
+        .expect("a saída em português usa vírgula decimal");
+        let com_ponto = estimativa_do_winsxs(
+            "Recuperável : 2.34 GB
+",
+        )
+        .expect("e a com ponto");
 
-        assert_eq!(com_virgula, com_ponto, "vírgula e ponto medem o mesmo espaço");
+        assert_eq!(
+            com_virgula, com_ponto,
+            "vírgula e ponto medem o mesmo espaço"
+        );
         assert!(com_virgula > 2_400_000_000, "veio {}", com_virgula);
     }
 

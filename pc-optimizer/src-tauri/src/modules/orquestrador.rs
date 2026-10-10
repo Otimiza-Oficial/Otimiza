@@ -362,10 +362,7 @@ mod tests {
     fn limite_de_firmware_ganha_de_tudo() {
         let (v, s) = calmo();
         let p = planejar(
-            &diagnostico(
-                Conclusao::Encontrado,
-                &[Classe::LimiteTermico, Classe::Gpu],
-            ),
+            &diagnostico(Conclusao::Encontrado, &[Classe::LimiteTermico, Classe::Gpu]),
             &v,
             &s,
             true,

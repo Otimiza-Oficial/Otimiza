@@ -307,7 +307,10 @@ pub static NAO_ALTERAM_O_WINDOWS: &[(&str, &str)] = &[
 /// Tudo, com o catálogo junto.
 pub fn todas() -> Vec<Alteracao> {
     let mut v: Vec<Alteracao> = FORA_DO_CATALOGO.to_vec();
-    for spec in super::catalog::CATALOG.iter().filter(|s| !super::catalog::retirado(s.id)) {
+    for spec in super::catalog::CATALOG
+        .iter()
+        .filter(|s| !super::catalog::retirado(s.id))
+    {
         v.push(Alteracao {
             id: spec.id,
             titulo: spec.name,
@@ -315,7 +318,12 @@ pub fn todas() -> Vec<Alteracao> {
             o_que_muda: spec.description,
             risco: if spec.security_tradeoff || !spec.reversible {
                 Risco::Alto
-            } else if spec.risco_de_fps.pode_custar() || matches!(super::catalog::classe(spec.id), super::catalog::Classe::Expert) {
+            } else if spec.risco_de_fps.pode_custar()
+                || matches!(
+                    super::catalog::classe(spec.id),
+                    super::catalog::Classe::Expert
+                )
+            {
                 Risco::Medio
             } else {
                 Risco::Baixo
@@ -344,7 +352,9 @@ mod tests {
         let mut fora = Vec::new();
         let mut pilha = vec![raiz];
         while let Some(dir) = pilha.pop() {
-            let Ok(entradas) = std::fs::read_dir(&dir) else { continue };
+            let Ok(entradas) = std::fs::read_dir(&dir) else {
+                continue;
+            };
             for e in entradas.flatten() {
                 let caminho = e.path();
                 if caminho.is_dir() {
@@ -354,7 +364,9 @@ mod tests {
                 if caminho.extension().and_then(|x| x.to_str()) != Some("rs") {
                     continue;
                 }
-                let Ok(fonte) = std::fs::read_to_string(&caminho) else { continue };
+                let Ok(fonte) = std::fs::read_to_string(&caminho) else {
+                    continue;
+                };
                 // Só a parte de fora dos testes: teste que grava num diretório
                 // temporário não altera o computador de ninguém.
                 let producao = fonte.split("#[cfg(test)]").next().unwrap_or("").to_string();
@@ -376,7 +388,11 @@ mod tests {
                 if escreve {
                     let nome = caminho.file_stem().unwrap().to_string_lossy().to_string();
                     let nome = if nome == "mod" {
-                        caminho.parent().and_then(|p| p.file_name()).map(|p| p.to_string_lossy().to_string()).unwrap_or(nome)
+                        caminho
+                            .parent()
+                            .and_then(|p| p.file_name())
+                            .map(|p| p.to_string_lossy().to_string())
+                            .unwrap_or(nome)
                     } else {
                         nome
                     };
@@ -392,7 +408,9 @@ mod tests {
             if caminho.extension().and_then(|x| x.to_str()) != Some("rs") {
                 continue;
             }
-            let Ok(fonte) = std::fs::read_to_string(&caminho) else { continue };
+            let Ok(fonte) = std::fs::read_to_string(&caminho) else {
+                continue;
+            };
             let producao = fonte.split("#[cfg(test)]").next().unwrap_or("");
             let escreve = [
                 "registry::set_",
@@ -451,7 +469,12 @@ mod tests {
             .filter(|a| !a.refaz_sozinho)
             .filter(|a| a.desfazer.contains("NÃO TEM") || a.desfazer.contains("NÃO pelo Otimiza"))
         {
-            assert_eq!(a.risco, Risco::Alto, "{}: sem desfazer e não está como risco alto", a.id);
+            assert_eq!(
+                a.risco,
+                Risco::Alto,
+                "{}: sem desfazer e não está como risco alto",
+                a.id
+            );
         }
     }
 
@@ -471,7 +494,18 @@ mod nesta_maquina {
     #[ignore]
     fn o_registro_inteiro() {
         for a in super::todas() {
-            println!("{:<34} {:?}/{:?}{} — {}", a.id, a.risco, a.escopo, if a.precisa_reiniciar { " (reinício)" } else { "" }, a.desfazer);
+            println!(
+                "{:<34} {:?}/{:?}{} — {}",
+                a.id,
+                a.risco,
+                a.escopo,
+                if a.precisa_reiniciar {
+                    " (reinício)"
+                } else {
+                    ""
+                },
+                a.desfazer
+            );
         }
     }
 }

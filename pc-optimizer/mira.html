@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Mira do Otimiza</title>
+    <!-- A janela da mira: fundo transparente e só o SVG no centro. Não chama o backend, não recebe clique. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+      body { display: grid; place-items: center; }
+      svg { overflow: visible; }
+    </style>
+    <script type="module" src="/src/v33/mira-janela.ts"></script>
+  </head>
+  <body>
+    <svg id="mira" width="200" height="200" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
+  </body>
+</html>

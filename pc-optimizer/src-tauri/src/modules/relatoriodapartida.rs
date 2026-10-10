@@ -58,13 +58,25 @@ pub struct Relatorio {
 }
 
 /// **Pura.** As partidas de um jogo, cada uma com as suas janelas, em ordem.
-pub fn partidas<'a>(jogo: &str, medicoes: &'a [MedicaoAutomatica]) -> Vec<Vec<&'a MedicaoAutomatica>> {
-    let mut do_jogo: Vec<&MedicaoAutomatica> = medicoes.iter().filter(|m| m.jogo.eq_ignore_ascii_case(jogo)).collect();
+pub fn partidas<'a>(
+    jogo: &str,
+    medicoes: &'a [MedicaoAutomatica],
+) -> Vec<Vec<&'a MedicaoAutomatica>> {
+    let mut do_jogo: Vec<&MedicaoAutomatica> = medicoes
+        .iter()
+        .filter(|m| m.jogo.eq_ignore_ascii_case(jogo))
+        .collect();
     do_jogo.sort_by_key(|m| m.quando);
     let mut grupos: Vec<Vec<&MedicaoAutomatica>> = Vec::new();
     for m in do_jogo {
         match grupos.last_mut() {
-            Some(g) if m.quando.saturating_sub(g.last().map(|u| u.quando).unwrap_or(0)) <= INTERVALO_ENTRE_PARTIDAS_S => g.push(m),
+            Some(g)
+                if m.quando
+                    .saturating_sub(g.last().map(|u| u.quando).unwrap_or(0))
+                    <= INTERVALO_ENTRE_PARTIDAS_S =>
+            {
+                g.push(m)
+            }
             _ => grupos.push(vec![m]),
         }
     }
@@ -111,8 +123,16 @@ pub fn tests_resumo() -> Option<crate::modules::windows::presentmon::Resumo> {
 /// **Pura.** Só com um gargalo à frente dos outros; empate vira "nenhum ficou claro".
 fn gargalo_da_maioria(contagem: &[(GargaloProvavel, usize)]) -> Option<GargaloProvavel> {
     let maior = contagem.iter().map(|(_, n)| *n).max()?;
-    let lideres: Vec<GargaloProvavel> = contagem.iter().filter(|(_, n)| *n == maior).map(|(g, _)| *g).collect();
-    Some(if lideres.len() == 1 { lideres[0] } else { GargaloProvavel::NaoDeuParaSaber })
+    let lideres: Vec<GargaloProvavel> = contagem
+        .iter()
+        .filter(|(_, n)| *n == maior)
+        .map(|(g, _)| *g)
+        .collect();
+    Some(if lideres.len() == 1 {
+        lideres[0]
+    } else {
+        GargaloProvavel::NaoDeuParaSaber
+    })
 }
 
 /// **Pura.** O relatório da partida mais recente do jogo que teve a medição mais recente.
@@ -121,18 +141,27 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
     let todas = partidas(&jogo, medicoes);
     let (esta, antes) = todas.split_last()?;
 
-    let comparaveis: Vec<&&MedicaoAutomatica> = esta.iter().filter(|m| medicoes::comparavel(m)).collect();
+    let comparaveis: Vec<&&MedicaoAutomatica> =
+        esta.iter().filter(|m| medicoes::comparavel(m)).collect();
     let mut contagem: Vec<(GargaloProvavel, usize)> = Vec::new();
-    for g in esta.iter().filter_map(|m| m.presentmon.as_ref().map(|r| r.gargalo)) {
+    for g in esta
+        .iter()
+        .filter_map(|m| m.presentmon.as_ref().map(|r| r.gargalo))
+    {
         match contagem.iter_mut().find(|(x, _)| *x == g) {
             Some((_, n)) => *n += 1,
             None => contagem.push((g, 1)),
         }
     }
 
-    let janelas_com_eventos: Vec<&&MedicaoAutomatica> = esta.iter().filter(|m| m.eventos.is_some()).collect();
-    let com_eventos: Vec<&medicoes::EventosDaPartida> = janelas_com_eventos.iter().filter_map(|m| m.eventos.as_ref()).collect();
-    let trancos = (!com_eventos.is_empty()).then(|| com_eventos.iter().map(|e| e.trancos_com_instante).sum());
+    let janelas_com_eventos: Vec<&&MedicaoAutomatica> =
+        esta.iter().filter(|m| m.eventos.is_some()).collect();
+    let com_eventos: Vec<&medicoes::EventosDaPartida> = janelas_com_eventos
+        .iter()
+        .filter_map(|m| m.eventos.as_ref())
+        .collect();
+    let trancos =
+        (!com_eventos.is_empty()).then(|| com_eventos.iter().map(|e| e.trancos_com_instante).sum());
     // A lista de eventos é cortada em 50; a proporção com o disco que a medição gravou é sobre todos.
     let trancos_com_disco = if janelas_com_eventos.is_empty() {
         None
@@ -142,24 +171,40 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
             .map(|m| match (m.trancos_com_disco_pct, m.trancos_medidos) {
                 (Some(pct), Some(total)) => Some((pct * total as f64 / 100.0).round() as usize),
                 (_, Some(0)) => Some(0),
-                _ if m.eventos.as_ref().is_some_and(|e| e.trancos_com_instante == 0) => Some(0),
+                _ if m
+                    .eventos
+                    .as_ref()
+                    .is_some_and(|e| e.trancos_com_instante == 0) =>
+                {
+                    Some(0)
+                }
                 _ => None,
             })
             .sum::<Option<usize>>()
     };
-    let lidos: Vec<&&medicoes::EventosDaPartida> = com_eventos.iter().filter(|e| e.freios_lidos).collect();
+    let lidos: Vec<&&medicoes::EventosDaPartida> =
+        com_eventos.iter().filter(|e| e.freios_lidos).collect();
     let ja_freava = lidos.iter().any(|e| e.freando_no_inicio);
     let freios = (!lidos.is_empty()).then(|| {
         lidos
             .iter()
             .flat_map(|e| e.lista.iter())
-            .filter(|ev| matches!(ev.tipo, TipoDeEvento::FreioTermico | TipoDeEvento::FreioDeHardware))
+            .filter(|ev| {
+                matches!(
+                    ev.tipo,
+                    TipoDeEvento::FreioTermico | TipoDeEvento::FreioDeHardware
+                )
+            })
             .count()
     });
 
     let medidor = esta.last().map(|m| m.presentmon.is_some());
-    let mut anteriores: Vec<f64> =
-        antes.iter().rev().filter_map(|p| fps_da_partida(p, medidor)).take(PARTIDAS_NA_FAIXA).collect();
+    let mut anteriores: Vec<f64> = antes
+        .iter()
+        .rev()
+        .filter_map(|p| fps_da_partida(p, medidor))
+        .take(PARTIDAS_NA_FAIXA)
+        .collect();
     anteriores.sort_by(f64::total_cmp);
     let faixa = (anteriores.len() >= 2).then(|| Faixa {
         partidas: anteriores.len(),
@@ -179,7 +224,11 @@ pub fn ultima(medicoes: &[MedicaoAutomatica]) -> Option<Relatorio> {
         janelas: esta.len(),
         janelas_comparaveis: comparaveis.len(),
         fps_medio: fps_da_partida(esta, None),
-        pior_low_1pct: comparaveis.iter().filter(|m| m.confiavel).map(|m| m.low_1pct).min_by(f64::total_cmp),
+        pior_low_1pct: comparaveis
+            .iter()
+            .filter(|m| m.confiavel)
+            .map(|m| m.low_1pct)
+            .min_by(f64::total_cmp),
         gargalo: gargalo_da_maioria(&contagem),
         trancos,
         janelas_com_trancos: com_eventos.len(),
@@ -229,7 +278,11 @@ mod tests {
 
     #[test]
     fn janelas_proximas_sao_a_mesma_partida_e_afastadas_nao() {
-        let ms = [janela("FiveM.exe", 0, 90.0), janela("FiveM.exe", 1200, 91.0), janela("FiveM.exe", 1200 + P, 92.0)];
+        let ms = [
+            janela("FiveM.exe", 0, 90.0),
+            janela("FiveM.exe", 1200, 91.0),
+            janela("FiveM.exe", 1200 + P, 92.0),
+        ];
         let p = partidas("FiveM.exe", &ms);
         assert_eq!(p.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![2, 1]);
     }
@@ -238,7 +291,10 @@ mod tests {
     fn a_ultima_partida_junta_as_janelas_e_ignora_as_com_gerador_na_conta() {
         let ms = [
             janela("FiveM.exe", 0, 100.0),
-            MedicaoAutomatica { geracao: Some(GeracaoNaPartida::LosslessScaling), ..janela("FiveM.exe", 1200, 60.0) },
+            MedicaoAutomatica {
+                geracao: Some(GeracaoNaPartida::LosslessScaling),
+                ..janela("FiveM.exe", 1200, 60.0)
+            },
             janela("FiveM.exe", 2400, 80.0),
         ];
         let r = ultima(&ms).unwrap();
@@ -258,59 +314,127 @@ mod tests {
     fn freio_so_conta_quando_a_nvml_leu() {
         let eventos = |freios_lidos| EventosDaPartida {
             lista: vec![
-                Evento { segundo: 3.0, tipo: TipoDeEvento::Tranco { com_disco: true } },
-                Evento { segundo: 9.0, tipo: TipoDeEvento::FreioTermico },
+                Evento {
+                    segundo: 3.0,
+                    tipo: TipoDeEvento::Tranco { com_disco: true },
+                },
+                Evento {
+                    segundo: 9.0,
+                    tipo: TipoDeEvento::FreioTermico,
+                },
             ],
             freios_lidos,
             freando_no_inicio: false,
             trancos_com_instante: 4,
         };
-        let com_disco = |m: MedicaoAutomatica| MedicaoAutomatica { trancos_com_disco_pct: Some(25.0), trancos_medidos: Some(4), ..m };
-        let r = ultima(&[com_disco(MedicaoAutomatica { eventos: Some(eventos(true)), ..janela("FiveM.exe", 0, 90.0) })]).unwrap();
-        assert_eq!((r.trancos, r.trancos_com_disco, r.freios), (Some(4), Some(1), Some(1)));
-        let r = ultima(&[MedicaoAutomatica { eventos: Some(eventos(false)), ..janela("FiveM.exe", 0, 90.0) }]).unwrap();
-        assert_eq!(r.freios, None, "sem leitura da NVML não se diz 'nenhum freio'");
+        let com_disco = |m: MedicaoAutomatica| MedicaoAutomatica {
+            trancos_com_disco_pct: Some(25.0),
+            trancos_medidos: Some(4),
+            ..m
+        };
+        let r = ultima(&[com_disco(MedicaoAutomatica {
+            eventos: Some(eventos(true)),
+            ..janela("FiveM.exe", 0, 90.0)
+        })])
+        .unwrap();
+        assert_eq!(
+            (r.trancos, r.trancos_com_disco, r.freios),
+            (Some(4), Some(1), Some(1))
+        );
+        let r = ultima(&[MedicaoAutomatica {
+            eventos: Some(eventos(false)),
+            ..janela("FiveM.exe", 0, 90.0)
+        }])
+        .unwrap();
+        assert_eq!(
+            r.freios, None,
+            "sem leitura da NVML não se diz 'nenhum freio'"
+        );
     }
 
     #[test]
     fn quem_ja_freava_no_comeco_nao_aparece_como_sem_freio() {
-        let e = EventosDaPartida { lista: vec![], freios_lidos: true, freando_no_inicio: true, trancos_com_instante: 0 };
-        let r = ultima(&[MedicaoAutomatica { eventos: Some(e), ..janela("FiveM.exe", 0, 90.0) }]).unwrap();
+        let e = EventosDaPartida {
+            lista: vec![],
+            freios_lidos: true,
+            freando_no_inicio: true,
+            trancos_com_instante: 0,
+        };
+        let r = ultima(&[MedicaoAutomatica {
+            eventos: Some(e),
+            ..janela("FiveM.exe", 0, 90.0)
+        }])
+        .unwrap();
         assert_eq!(r.freios, Some(0));
         assert!(r.ja_freava);
     }
 
     #[test]
     fn o_disco_conta_todos_os_trancos_e_nao_so_os_da_lista_cortada() {
-        let e = EventosDaPartida { lista: vec![], freios_lidos: false, freando_no_inicio: false, trancos_com_instante: 200 };
-        let m = MedicaoAutomatica { eventos: Some(e), trancos_com_disco_pct: Some(100.0), trancos_medidos: Some(200), ..janela("FiveM.exe", 0, 90.0) };
+        let e = EventosDaPartida {
+            lista: vec![],
+            freios_lidos: false,
+            freando_no_inicio: false,
+            trancos_com_instante: 200,
+        };
+        let m = MedicaoAutomatica {
+            eventos: Some(e),
+            trancos_com_disco_pct: Some(100.0),
+            trancos_medidos: Some(200),
+            ..janela("FiveM.exe", 0, 90.0)
+        };
         assert_eq!(ultima(&[m]).unwrap().trancos_com_disco, Some(200));
     }
 
     #[test]
     fn o_1_pct_de_janela_curta_nao_vira_o_da_partida() {
-        let curta = MedicaoAutomatica { confiavel: false, low_1pct: 5.0, ..janela("FiveM.exe", 1200, 90.0) };
+        let curta = MedicaoAutomatica {
+            confiavel: false,
+            low_1pct: 5.0,
+            ..janela("FiveM.exe", 1200, 90.0)
+        };
         let r = ultima(&[janela("FiveM.exe", 0, 90.0), curta]).unwrap();
         assert_eq!(r.pior_low_1pct, Some(45.0));
     }
 
     #[test]
     fn empate_no_gargalo_nao_afirma_nenhum() {
-        assert_eq!(gargalo_da_maioria(&[(GargaloProvavel::Cpu, 1), (GargaloProvavel::Gpu, 1)]), Some(GargaloProvavel::NaoDeuParaSaber));
-        assert_eq!(gargalo_da_maioria(&[(GargaloProvavel::Cpu, 2), (GargaloProvavel::Gpu, 1)]), Some(GargaloProvavel::Cpu));
+        assert_eq!(
+            gargalo_da_maioria(&[(GargaloProvavel::Cpu, 1), (GargaloProvavel::Gpu, 1)]),
+            Some(GargaloProvavel::NaoDeuParaSaber)
+        );
+        assert_eq!(
+            gargalo_da_maioria(&[(GargaloProvavel::Cpu, 2), (GargaloProvavel::Gpu, 1)]),
+            Some(GargaloProvavel::Cpu)
+        );
     }
 
     #[test]
     fn uma_medicao_que_falhou_no_meio_nao_parte_a_partida() {
-        let ms = [janela("FiveM.exe", 0, 90.0), janela("FiveM.exe", 2 * SEGUNDOS_ENTRE_MEDICOES + 60, 91.0)];
+        let ms = [
+            janela("FiveM.exe", 0, 90.0),
+            janela("FiveM.exe", 2 * SEGUNDOS_ENTRE_MEDICOES + 60, 91.0),
+        ];
         assert_eq!(partidas("FiveM.exe", &ms).len(), 1);
     }
 
     #[test]
     fn a_faixa_nao_mistura_o_canal_antigo_com_o_presentmon() {
-        let nova = MedicaoAutomatica { presentmon: tests_resumo(), ..janela("FiveM.exe", 3 * P, 90.0) };
-        let ms = [janela("FiveM.exe", 0, 180.0), janela("FiveM.exe", P, 190.0), janela("FiveM.exe", 2 * P, 170.0), nova];
-        assert_eq!(ultima(&ms).unwrap().anteriores, None, "as anteriores são do canal antigo: não entram na faixa da nova");
+        let nova = MedicaoAutomatica {
+            presentmon: tests_resumo(),
+            ..janela("FiveM.exe", 3 * P, 90.0)
+        };
+        let ms = [
+            janela("FiveM.exe", 0, 180.0),
+            janela("FiveM.exe", P, 190.0),
+            janela("FiveM.exe", 2 * P, 170.0),
+            nova,
+        ];
+        assert_eq!(
+            ultima(&ms).unwrap().anteriores,
+            None,
+            "as anteriores são do canal antigo: não entram na faixa da nova"
+        );
     }
 
     #[test]
@@ -324,6 +448,14 @@ mod tests {
         ];
         let r = ultima(&ms).unwrap();
         assert_eq!(r.jogo, "FiveM.exe");
-        assert_eq!(r.anteriores, Some(Faixa { partidas: 3, mediana_fps: 110.0, menor_fps: 100.0, maior_fps: 120.0 }));
+        assert_eq!(
+            r.anteriores,
+            Some(Faixa {
+                partidas: 3,
+                mediana_fps: 110.0,
+                menor_fps: 100.0,
+                maior_fps: 120.0
+            })
+        );
     }
 }

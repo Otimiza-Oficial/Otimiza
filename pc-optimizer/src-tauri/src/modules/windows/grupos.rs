@@ -116,6 +116,7 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "system_responsiveness_gaming" => Grupo::Agendamento,
         "foreground_priority" => Grupo::Agendamento,
         "mmcss_games" => Grupo::Agendamento,
+        "windows_game_mode_on" => Grupo::Agendamento,
 
         "gpu_hardware_scheduling" => Grupo::Video,
         "gpu_msi_mode" => Grupo::Video,
@@ -149,13 +150,14 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "clear_boot_limits" => Grupo::Boot,
         "remove_forced_hpet" => Grupo::Boot,
         // `disable_vbs` NÃO está aqui: troca segurança por desempenho, e o protocolo aplica grupos INTEIROS.
-
         "disable_telemetry" => Grupo::Higiene,
         "telemetry_policy" => Grupo::Higiene,
         "notifications_off" => Grupo::Higiene,
         "settings_sync_off" => Grupo::Higiene,
         "start_menu_web_search_off" => Grupo::Higiene,
         "mouse_precision_off" => Grupo::Higiene,
+        "mouse_pointer_1to1" => Grupo::Higiene,
+        "keyboard_fast_repeat" => Grupo::Fundo,
         "disable_reserved_storage" => Grupo::Higiene,
 
         "disable_vbs" => return None,
@@ -242,7 +244,10 @@ mod tests {
     fn aposentado_nao_entra_em_grupo() {
         for grupo in Grupo::TODOS {
             for id in itens_do_grupo(*grupo) {
-                assert!(!crate::modules::windows::catalog::retirado(id), "`{id}` foi aposentado e está no grupo");
+                assert!(
+                    !crate::modules::windows::catalog::retirado(id),
+                    "`{id}` foi aposentado e está no grupo"
+                );
             }
         }
     }

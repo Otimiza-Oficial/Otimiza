@@ -3,6 +3,8 @@
  * A chave pública confere e não cria. A assinatura é conferida antes de qualquer campo ser lido. Mudou no app, muda aqui.
  */
 export const CHAVE_PUBLICA = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
+/** A pública anterior (a privada se perdeu com a hospedagem do bot em 04/10/2026): só para licença já emitida. */
+export const CHAVE_PUBLICA_ANTERIOR = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
 export type Dados = {
   maquina: string;
@@ -113,7 +115,7 @@ export async function conferirCom(
   return { ok: true, dados };
 }
 
-const publicaDoOtimiza = () => Uint8Array.from(atob(CHAVE_PUBLICA), (c) => c.charCodeAt(0));
+const bytesDaPublica = (texto: string) => Uint8Array.from(atob(texto), (c) => c.charCodeAt(0));
 
 export const hojeISO = () => {
   const d = new Date();
@@ -121,8 +123,14 @@ export const hojeISO = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
-export function conferir(chave: string, maquina: string | null): Promise<Resultado> {
-  return conferirCom(publicaDoOtimiza(), chave, maquina, hojeISO());
+/** Como `licenca::conferir`: a primeira pública cuja assinatura confere decide; só a assinatura passa para a próxima. */
+export async function conferir(chave: string, maquina: string | null): Promise<Resultado> {
+  let ultimo: Resultado = { ok: false, recusa: { tipo: "assinatura-invalida" } };
+  for (const publica of [CHAVE_PUBLICA, CHAVE_PUBLICA_ANTERIOR]) {
+    ultimo = await conferirCom(bytesDaPublica(publica), chave, maquina, hojeISO());
+    if (ultimo.ok || ultimo.recusa.tipo !== "assinatura-invalida") return ultimo;
+  }
+  return ultimo;
 }
 
 export function formatarData(iso: string): string {

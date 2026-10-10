@@ -43,7 +43,9 @@ impl PerfilDoJogo {
     fn cobre(self, pedido: PerfilDoJogo) -> bool {
         match pedido {
             PerfilDoJogo::SemTeto => self == PerfilDoJogo::SemTeto,
-            PerfilDoJogo::Equilibrado => matches!(self, PerfilDoJogo::Equilibrado | PerfilDoJogo::Competitivo),
+            PerfilDoJogo::Equilibrado => {
+                matches!(self, PerfilDoJogo::Equilibrado | PerfilDoJogo::Competitivo)
+            }
             PerfilDoJogo::Competitivo => self == PerfilDoJogo::Competitivo,
         }
     }
@@ -89,11 +91,19 @@ pub enum Contexto {
 pub enum Oferta {
     Oferecer,
     /// Já piorou este jogo nesta máquina.
-    NaoOferecer { quando: u64, contexto: Contexto },
+    NaoOferecer {
+        quando: u64,
+        contexto: Contexto,
+    },
     /// Piorou antes, mas o driver ou o Windows mudou desde então, e o Otimiza prova de novo.
-    ProvarDeNovo { quando: u64 },
+    ProvarDeNovo {
+        quando: u64,
+    },
     /// Já provou ganho ou ficou sem diferença: a tela mostra, e o cliente decide.
-    JaProvado { resultado: Resultado, quando: u64 },
+    JaProvado {
+        resultado: Resultado,
+        quando: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -138,7 +148,11 @@ pub struct Receita {
 
 /// **Pura.** O mesmo jogo, de build em build: `FiveM_b3258_GTAProcess.exe` e `FiveM_b2944_...` são `fivem`.
 pub fn chave_do_jogo(nome: &str) -> String {
-    let n: String = nome.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect();
+    let n: String = nome
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect();
     if n.contains("fivem") {
         "fivem".into()
     } else if n.contains("gta5") || n.contains("gtav") {
@@ -153,25 +167,45 @@ pub fn estrategia_de(ajuste: Ajuste, jogo: &str) -> Option<Estrategia> {
     let perfil_existe = matches!(chave_do_jogo(jogo).as_str(), "fivem" | "gta5");
     match ajuste {
         Ajuste::PlanoDeEnergiaOtimiza => Some(Estrategia::PlanoOtimiza),
-        Ajuste::PerfilGraficoMaisLeve if perfil_existe => Some(Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado)),
-        Ajuste::MenosCargaNoProcessador if perfil_existe => Some(Estrategia::PerfilGrafico(PerfilDoJogo::Competitivo)),
+        Ajuste::PerfilGraficoMaisLeve if perfil_existe => {
+            Some(Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado))
+        }
+        Ajuste::MenosCargaNoProcessador if perfil_existe => {
+            Some(Estrategia::PerfilGrafico(PerfilDoJogo::Competitivo))
+        }
         Ajuste::FecharProgramasPesados => Some(Estrategia::ModoJogo),
         _ => None,
     }
 }
 
 /// A última medição do jogo antes da decisão (senão, a primeira depois): o ambiente em que a prova foi feita.
-fn ambiente_da_decisao(quando: u64, chave: &str, medicoes: &[MedicaoAutomatica]) -> Option<Ambiente> {
-    let do_jogo = || medicoes.iter().filter(|m| chave_do_jogo(&m.jogo) == chave && m.ambiente.is_some());
+fn ambiente_da_decisao(
+    quando: u64,
+    chave: &str,
+    medicoes: &[MedicaoAutomatica],
+) -> Option<Ambiente> {
+    let do_jogo = || {
+        medicoes
+            .iter()
+            .filter(|m| chave_do_jogo(&m.jogo) == chave && m.ambiente.is_some())
+    };
     do_jogo()
         .filter(|m| m.quando <= quando)
         .max_by_key(|m| m.quando)
-        .or_else(|| do_jogo().filter(|m| m.quando > quando).min_by_key(|m| m.quando))
+        .or_else(|| {
+            do_jogo()
+                .filter(|m| m.quando > quando)
+                .min_by_key(|m| m.quando)
+        })
         .and_then(|m| m.ambiente.clone())
 }
 
 /// **Pura.** As lembranças que as provas guardadas dão.
-pub fn lembrancas(estado: &portao::Estado, prova: Option<&ProvaAlternada>, medicoes: &[MedicaoAutomatica]) -> Vec<Lembranca> {
+pub fn lembrancas(
+    estado: &portao::Estado,
+    prova: Option<&ProvaAlternada>,
+    medicoes: &[MedicaoAutomatica],
+) -> Vec<Lembranca> {
     let mut saida = Vec::new();
     for d in &estado.decididos {
         let estrategia = if let Some(p) = PerfilDoJogo::do_id(&d.vigiado.id) {
@@ -189,7 +223,13 @@ pub fn lembrancas(estado: &portao::Estado, prova: Option<&ProvaAlternada>, medic
             Veredito::Aguardando { .. } | Veredito::SemBase => continue,
         };
         let jogo = chave_do_jogo(&d.vigiado.processo);
-        saida.push(Lembranca { estrategia, ambiente: ambiente_da_decisao(d.quando, &jogo, medicoes), jogo, resultado, quando: d.quando });
+        saida.push(Lembranca {
+            estrategia,
+            ambiente: ambiente_da_decisao(d.quando, &jogo, medicoes),
+            jogo,
+            resultado,
+            quando: d.quando,
+        });
     }
     if let Some(p) = prova {
         let resultado = match p.desfecho {
@@ -237,18 +277,37 @@ fn contexto_mudou(antes: &Option<Ambiente>, agora: &Option<Ambiente>) -> Option<
 }
 
 /// **Pura.** A lembrança mais recente desta estratégia neste jogo decide.
-pub fn oferta(estrategia: Estrategia, jogo: &str, agora: &Option<Ambiente>, memoria: &[Lembranca]) -> Oferta {
+pub fn oferta(
+    estrategia: Estrategia,
+    jogo: &str,
+    agora: &Option<Ambiente>,
+    memoria: &[Lembranca],
+) -> Oferta {
     let chave = chave_do_jogo(jogo);
-    let ultima = memoria.iter().filter(|l| l.estrategia == estrategia && l.jogo == chave).max_by_key(|l| l.quando);
+    let ultima = memoria
+        .iter()
+        .filter(|l| l.estrategia == estrategia && l.jogo == chave)
+        .max_by_key(|l| l.quando);
     match ultima {
         None => Oferta::Oferecer,
         Some(l) if l.resultado == Resultado::Piorou => match contexto_mudou(&l.ambiente, agora) {
             // O governador reprovado fica parado naquele jogo: não há nova prova a prometer.
-            Some(true) if estrategia != Estrategia::ModoJogo => Oferta::ProvarDeNovo { quando: l.quando },
-            Some(false) => Oferta::NaoOferecer { quando: l.quando, contexto: Contexto::Igual },
-            _ => Oferta::NaoOferecer { quando: l.quando, contexto: Contexto::NaoLido },
+            Some(true) if estrategia != Estrategia::ModoJogo => {
+                Oferta::ProvarDeNovo { quando: l.quando }
+            }
+            Some(false) => Oferta::NaoOferecer {
+                quando: l.quando,
+                contexto: Contexto::Igual,
+            },
+            _ => Oferta::NaoOferecer {
+                quando: l.quando,
+                contexto: Contexto::NaoLido,
+            },
         },
-        Some(l) => Oferta::JaProvado { resultado: l.resultado, quando: l.quando },
+        Some(l) => Oferta::JaProvado {
+            resultado: l.resultado,
+            quando: l.quando,
+        },
     }
 }
 
@@ -256,7 +315,9 @@ fn aplicado(e: Estrategia, chave: &str, a: &Aplicados) -> bool {
     match e {
         Estrategia::PlanoOtimiza => a.plano,
         Estrategia::ModoJogo => a.modo_jogo,
-        Estrategia::PerfilGrafico(pedido) => a.perfis.iter().any(|(p, j)| j == chave && p.cobre(pedido)),
+        Estrategia::PerfilGrafico(pedido) => {
+            a.perfis.iter().any(|(p, j)| j == chave && p.cobre(pedido))
+        }
     }
 }
 
@@ -300,7 +361,12 @@ pub fn montar(
             (c.clone(), passos)
         })
         .collect();
-    Receita { diagnostico, por_causa, lembrancas: memoria, memoria_ilegivel }
+    Receita {
+        diagnostico,
+        por_causa,
+        lembrancas: memoria,
+        memoria_ilegivel,
+    }
 }
 
 #[cfg(test)]
@@ -310,11 +376,26 @@ mod tests {
     use crate::modules::portao::{Decidido, Vigiado};
 
     fn amb(driver: &str, windows: &str) -> Option<Ambiente> {
-        Some(Ambiente { driver: Some(driver.into()), windows: Some(windows.into()), ..Default::default() })
+        Some(Ambiente {
+            driver: Some(driver.into()),
+            windows: Some(windows.into()),
+            ..Default::default()
+        })
     }
 
-    fn lembranca(estrategia: Estrategia, resultado: Resultado, quando: u64, driver: &str) -> Lembranca {
-        Lembranca { estrategia, jogo: "fivem".into(), resultado, quando, ambiente: amb(driver, "19045.1") }
+    fn lembranca(
+        estrategia: Estrategia,
+        resultado: Resultado,
+        quando: u64,
+        driver: &str,
+    ) -> Lembranca {
+        Lembranca {
+            estrategia,
+            jogo: "fivem".into(),
+            resultado,
+            quando,
+            ambiente: amb(driver, "19045.1"),
+        }
     }
 
     const FIVEM: &str = "FiveM_b3258_GTAProcess.exe";
@@ -323,48 +404,124 @@ mod tests {
     #[test]
     fn o_que_piorou_neste_contexto_nao_e_oferecido_de_novo() {
         let m = [lembranca(PERFIL, Resultado::Piorou, 10, "a")];
-        assert_eq!(oferta(PERFIL, FIVEM, &amb("a", "19045.1"), &m), Oferta::NaoOferecer { quando: 10, contexto: Contexto::Igual });
+        assert_eq!(
+            oferta(PERFIL, FIVEM, &amb("a", "19045.1"), &m),
+            Oferta::NaoOferecer {
+                quando: 10,
+                contexto: Contexto::Igual
+            }
+        );
     }
 
     #[test]
     fn driver_novo_devolve_a_chance_de_provar_mas_a_atualizacao_mensal_nao() {
         let m = [lembranca(PERFIL, Resultado::Piorou, 10, "a")];
-        assert_eq!(oferta(PERFIL, FIVEM, &amb("b", "19045.1"), &m), Oferta::ProvarDeNovo { quando: 10 });
-        assert!(matches!(oferta(PERFIL, FIVEM, &amb("a", "19045.9"), &m), Oferta::NaoOferecer { contexto: Contexto::Igual, .. }));
+        assert_eq!(
+            oferta(PERFIL, FIVEM, &amb("b", "19045.1"), &m),
+            Oferta::ProvarDeNovo { quando: 10 }
+        );
+        assert!(matches!(
+            oferta(PERFIL, FIVEM, &amb("a", "19045.9"), &m),
+            Oferta::NaoOferecer {
+                contexto: Contexto::Igual,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn sem_leitura_nao_se_diz_que_e_o_mesmo_contexto() {
         let m = [lembranca(PERFIL, Resultado::Piorou, 10, "a")];
-        assert_eq!(oferta(PERFIL, FIVEM, &None, &m), Oferta::NaoOferecer { quando: 10, contexto: Contexto::NaoLido });
+        assert_eq!(
+            oferta(PERFIL, FIVEM, &None, &m),
+            Oferta::NaoOferecer {
+                quando: 10,
+                contexto: Contexto::NaoLido
+            }
+        );
     }
 
     #[test]
     fn modo_jogo_reprovado_nao_promete_nova_prova() {
         let m = [lembranca(Estrategia::ModoJogo, Resultado::Piorou, 10, "a")];
-        assert!(matches!(oferta(Estrategia::ModoJogo, FIVEM, &amb("b", "19045.1"), &m), Oferta::NaoOferecer { .. }));
+        assert!(matches!(
+            oferta(Estrategia::ModoJogo, FIVEM, &amb("b", "19045.1"), &m),
+            Oferta::NaoOferecer { .. }
+        ));
     }
 
     #[test]
     fn build_novo_do_fivem_e_o_mesmo_jogo_e_cada_perfil_tem_a_sua_memoria() {
         let m = [lembranca(PERFIL, Resultado::Piorou, 10, "a")];
-        assert!(matches!(oferta(PERFIL, "FiveM_b2944_GTAProcess.exe", &amb("a", "19045.1"), &m), Oferta::NaoOferecer { .. }));
+        assert!(matches!(
+            oferta(
+                PERFIL,
+                "FiveM_b2944_GTAProcess.exe",
+                &amb("a", "19045.1"),
+                &m
+            ),
+            Oferta::NaoOferecer { .. }
+        ));
         let leve = Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado);
-        assert_eq!(oferta(leve, FIVEM, &amb("a", "19045.1"), &m), Oferta::Oferecer, "o competitivo que piorou não risca o equilibrado");
+        assert_eq!(
+            oferta(leve, FIVEM, &amb("a", "19045.1"), &m),
+            Oferta::Oferecer,
+            "o competitivo que piorou não risca o equilibrado"
+        );
     }
 
     #[test]
     fn sem_teto_aplicado_nao_conta_como_grafico_mais_leve_nem_em_outro_jogo() {
-        let a = Aplicados { perfis: vec![(PerfilDoJogo::SemTeto, "fivem".into()), (PerfilDoJogo::Competitivo, "gta5".into())], ..Default::default() };
-        assert!(!aplicado(Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado), "fivem", &a));
-        assert!(aplicado(Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado), "gta5", &a), "o competitivo cobre o mais leve");
+        let a = Aplicados {
+            perfis: vec![
+                (PerfilDoJogo::SemTeto, "fivem".into()),
+                (PerfilDoJogo::Competitivo, "gta5".into()),
+            ],
+            ..Default::default()
+        };
+        assert!(!aplicado(
+            Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado),
+            "fivem",
+            &a
+        ));
+        assert!(
+            aplicado(
+                Estrategia::PerfilGrafico(PerfilDoJogo::Equilibrado),
+                "gta5",
+                &a
+            ),
+            "o competitivo cobre o mais leve"
+        );
     }
 
     #[test]
     fn as_provas_guardadas_viram_lembrancas_com_o_ambiente_de_antes_da_decisao() {
-        let v = Vigiado { id: "config_jogo_competitivo".into(), nome: "x".into(), processo: "fivem_".into(), aplicado_em: 5 };
-        let d = |veredito| Decidido { vigiado: v.clone(), veredito, quando: 50, fps_antes: None, fps_depois: None, low_antes: None, low_depois: None, erro: None };
-        let estado = portao::Estado { decididos: vec![d(Veredito::Desfazer), d(Veredito::Aguardando { antes: 1, depois: 0 })], ..Default::default() };
+        let v = Vigiado {
+            id: "config_jogo_competitivo".into(),
+            nome: "x".into(),
+            processo: "fivem_".into(),
+            aplicado_em: 5,
+        };
+        let d = |veredito| Decidido {
+            vigiado: v.clone(),
+            veredito,
+            quando: 50,
+            fps_antes: None,
+            fps_depois: None,
+            low_antes: None,
+            low_depois: None,
+            erro: None,
+        };
+        let estado = portao::Estado {
+            decididos: vec![
+                d(Veredito::Desfazer),
+                d(Veredito::Aguardando {
+                    antes: 1,
+                    depois: 0,
+                }),
+            ],
+            ..Default::default()
+        };
         let medicao = |quando, driver: &str| MedicaoAutomatica {
             jogo: FIVEM.into(),
             quando,
@@ -393,31 +550,64 @@ mod tests {
         };
         let l = lembrancas(&estado, None, &[medicao(40, "antigo"), medicao(55, "novo")]);
         assert_eq!(l.len(), 1, "aguardando ainda não é lembrança");
-        assert_eq!((l[0].estrategia, l[0].resultado, l[0].jogo.as_str()), (PERFIL, Resultado::Piorou, "fivem"));
-        assert_eq!(l[0].ambiente.as_ref().and_then(|a| a.driver.as_deref()), Some("antigo"), "o ambiente é o de quando provou");
+        assert_eq!(
+            (l[0].estrategia, l[0].resultado, l[0].jogo.as_str()),
+            (PERFIL, Resultado::Piorou, "fivem")
+        );
+        assert_eq!(
+            l[0].ambiente.as_ref().and_then(|a| a.driver.as_deref()),
+            Some("antigo"),
+            "o ambiente é o de quando provou"
+        );
     }
 
     #[test]
     fn hipotese_nao_entra_e_memoria_ilegivel_nao_afirma_passado() {
-        let causa = |confianca, ajuda: Vec<Ajuste>| Causa { tipo: TipoDeCausa::Processador, confianca, evidencia: String::new(), ajuda, nao_ajuda: vec![], janelas: 2 };
+        let causa = |confianca, ajuda: Vec<Ajuste>| Causa {
+            tipo: TipoDeCausa::Processador,
+            confianca,
+            evidencia: String::new(),
+            ajuda,
+            nao_ajuda: vec![],
+            janelas: 2,
+        };
         let d = Diagnostico {
             jogo: Some(FIVEM.into()),
             janelas_lidas: 2,
             causas: vec![
-                causa(Confianca::Alta, vec![Ajuste::PlanoDeEnergiaOtimiza, Ajuste::MenosCargaNoProcessador, Ajuste::JogoNoSsd]),
+                causa(
+                    Confianca::Alta,
+                    vec![
+                        Ajuste::PlanoDeEnergiaOtimiza,
+                        Ajuste::MenosCargaNoProcessador,
+                        Ajuste::JogoNoSsd,
+                    ],
+                ),
                 causa(Confianca::Hipotese, vec![Ajuste::TirarLimiteDeFps]),
             ],
             lacunas: vec![],
         };
         let memoria = vec![lembranca(PERFIL, Resultado::Piorou, 10, "a")];
-        let a = Aplicados { plano: true, ..Default::default() };
+        let a = Aplicados {
+            plano: true,
+            ..Default::default()
+        };
         let r = montar(d.clone(), memoria.clone(), None, &a, &amb("a", "19045.1"));
         assert_eq!(r.por_causa.len(), 1);
         let passos = &r.por_causa[0].1;
         assert!(passos[0].aplicado && passos[0].como_provar == ComoProvar::ProvaNoJogo);
         assert!(matches!(passos[1].oferta, Oferta::NaoOferecer { .. }));
-        assert_eq!((passos[2].estrategia, passos[2].como_provar), (None, ComoProvar::PeloCliente));
-        let sem_memoria = montar(d, memoria, Some("portao.json ilegível".into()), &a, &amb("a", "19045.1"));
+        assert_eq!(
+            (passos[2].estrategia, passos[2].como_provar),
+            (None, ComoProvar::PeloCliente)
+        );
+        let sem_memoria = montar(
+            d,
+            memoria,
+            Some("portao.json ilegível".into()),
+            &a,
+            &amb("a", "19045.1"),
+        );
         assert_eq!(sem_memoria.por_causa[0].1[1].oferta, Oferta::Oferecer);
     }
 }

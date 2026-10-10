@@ -272,7 +272,10 @@ pub fn diagnosticar(
         let mut por_programa: Vec<(String, usize, String)> = Vec::new();
 
         for t in travamentos {
-            match por_programa.iter_mut().find(|(nome, _, _)| *nome == t.programa) {
+            match por_programa
+                .iter_mut()
+                .find(|(nome, _, _)| *nome == t.programa)
+            {
                 Some((_, quantos, _)) => *quantos += 1,
                 None => por_programa.push((t.programa.clone(), 1, t.quando.clone())),
             }
@@ -345,9 +348,18 @@ mod tests {
             commit_limite_gb: 31.9,
             ram_fisica_gb: 7.9,
             culpados: vec![
-                Culpado { nome: "claude.exe".to_string(), gb: 9.8 },
-                Culpado { nome: "HuntinBuddies-Win64-Shipping.exe".to_string(), gb: 4.4 },
-                Culpado { nome: "Arc.exe".to_string(), gb: 2.2 },
+                Culpado {
+                    nome: "claude.exe".to_string(),
+                    gb: 9.8,
+                },
+                Culpado {
+                    nome: "HuntinBuddies-Win64-Shipping.exe".to_string(),
+                    gb: 4.4,
+                },
+                Culpado {
+                    nome: "Arc.exe".to_string(),
+                    gb: 2.2,
+                },
             ],
         }
     }

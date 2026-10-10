@@ -8,7 +8,10 @@
 
 pub const JANELA: f64 = 1.5;
 pub const INTERVALO_INICIAL: f64 = 5.0;
-pub const INTERVALO_DE_ROTINA: f64 = 30.0;
+/// Cada conferência pausa o Frame Boost por `JANELA` segundos, e a pessoa vê o tranco (o FPS do jogo sozinho por um
+/// instante). Com 30 s, e a conferência que falhava repetindo a cada 13 s para sempre, o log de uma sessão do FiveM
+/// mostrou a sobreposição escondida 15% do tempo. Depois das três primeiras, uma a cada 5 minutos.
+pub const INTERVALO_DE_ROTINA: f64 = 300.0;
 pub const MINIMO_DE_AMOSTRAS: usize = 3;
 pub const RAZAO_MINIMA: f64 = 0.96;
 /// Medido nesta máquina (PresentMon 2.6.0 no dwm, `presentmon::tests::vivo_conta_o_dwm`): os quadros chegam de 3,1 a
@@ -17,11 +20,23 @@ pub const ATRASO_DA_CONTAGEM: f64 = 5.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Fase {
-    Gerando { proxima: f64 },
-    MedindoComGeracao { desde: f64, ate: f64 },
-    MedindoSemGeracao { com: (f64, f64), ate: f64 },
+    Gerando {
+        proxima: f64,
+    },
+    MedindoComGeracao {
+        desde: f64,
+        ate: f64,
+    },
+    MedindoSemGeracao {
+        com: (f64, f64),
+        ate: f64,
+    },
     /// Geração de volta; esperando a contagem das duas janelas chegar.
-    Contando { com: (f64, f64), sem: (f64, f64), pronto: f64 },
+    Contando {
+        com: (f64, f64),
+        sem: (f64, f64),
+        pronto: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,11 +51,19 @@ pub enum Acao {
 pub struct Guarda {
     fase: Fase,
     pub razoes: Vec<f64>,
+    /// Conferências descartadas seguidas (jogo parado, fonte sem contagem): cada uma dobra a espera da próxima.
+    falhas: u32,
 }
 
 impl Guarda {
     pub fn nova(agora: f64) -> Guarda {
-        Guarda { fase: Fase::Gerando { proxima: agora + INTERVALO_INICIAL }, razoes: Vec::new() }
+        Guarda {
+            fase: Fase::Gerando {
+                proxima: agora + INTERVALO_INICIAL,
+            },
+            razoes: Vec::new(),
+            falhas: 0,
+        }
     }
 
     pub fn pausada(&self) -> bool {
@@ -48,7 +71,8 @@ impl Guarda {
     }
 
     pub fn razao_media(&self) -> Option<f64> {
-        (!self.razoes.is_empty()).then(|| self.razoes.iter().sum::<f64>() / self.razoes.len() as f64)
+        (!self.razoes.is_empty())
+            .then(|| self.razoes.iter().sum::<f64>() / self.razoes.len() as f64)
     }
 
     /// `contar(de, ate)`: quadros do jogo no intervalo, no mesmo relógio de `agora`. `None`: a fonte parou de contar
@@ -56,29 +80,50 @@ impl Guarda {
     pub fn passo(&mut self, agora: f64, contar: impl Fn(f64, f64) -> Option<u64>) -> Acao {
         match self.fase {
             Fase::Gerando { proxima } if agora >= proxima => {
-                self.fase = Fase::MedindoComGeracao { desde: agora, ate: agora + JANELA };
+                self.fase = Fase::MedindoComGeracao {
+                    desde: agora,
+                    ate: agora + JANELA,
+                };
                 Acao::Nada
             }
             Fase::MedindoComGeracao { desde, ate } if agora >= ate => {
-                self.fase = Fase::MedindoSemGeracao { com: (desde, agora), ate: agora + JANELA };
+                self.fase = Fase::MedindoSemGeracao {
+                    com: (desde, agora),
+                    ate: agora + JANELA,
+                };
                 Acao::Pausar
             }
             Fase::MedindoSemGeracao { com, ate } if agora >= ate => {
                 let desde = com.1;
-                self.fase = Fase::Contando { com, sem: (desde, agora), pronto: agora + ATRASO_DA_CONTAGEM };
+                self.fase = Fase::Contando {
+                    com,
+                    sem: (desde, agora),
+                    pronto: agora + ATRASO_DA_CONTAGEM,
+                };
                 Acao::Retomar
             }
             Fase::Contando { com, sem, pronto } if agora >= pronto => {
                 let fps = |(a, b): (f64, f64)| contar(a, b).map(|n| n as f64 / (b - a).max(1e-3));
                 // Jogo parado (menu, carregamento) não serve de comparação.
-                if let (Some(fps_com), Some(fps_sem)) = (fps(com), fps(sem)) {
-                    if fps_sem >= 15.0 && fps_com >= 15.0 {
+                let valeu = match (fps(com), fps(sem)) {
+                    (Some(fps_com), Some(fps_sem)) if fps_sem >= 15.0 && fps_com >= 15.0 => {
                         self.razoes.push(fps_com / fps_sem);
+                        true
                     }
-                }
-                let intervalo = if self.razoes.len() < MINIMO_DE_AMOSTRAS { INTERVALO_INICIAL } else { INTERVALO_DE_ROTINA };
-                self.fase = Fase::Gerando { proxima: agora + intervalo };
-                if self.razoes.len() >= MINIMO_DE_AMOSTRAS && self.razao_media().is_some_and(|r| r < RAZAO_MINIMA) {
+                    _ => false,
+                };
+                self.falhas = if valeu { 0 } else { (self.falhas + 1).min(10) };
+                let intervalo = if self.razoes.len() < MINIMO_DE_AMOSTRAS {
+                    (INTERVALO_INICIAL * 2f64.powi(self.falhas as i32)).min(INTERVALO_DE_ROTINA)
+                } else {
+                    INTERVALO_DE_ROTINA
+                };
+                self.fase = Fase::Gerando {
+                    proxima: agora + intervalo,
+                };
+                if self.razoes.len() >= MINIMO_DE_AMOSTRAS
+                    && self.razao_media().is_some_and(|r| r < RAZAO_MINIMA)
+                {
                     Acao::Desligar
                 } else {
                     Acao::Nada
@@ -100,13 +145,20 @@ impl LinhaDoTempo {
 
     pub fn registrar(&mut self, instante: f64) {
         self.instantes.push_back(instante);
-        while self.instantes.front().is_some_and(|t| instante - *t > Self::GUARDA_S) {
+        while self
+            .instantes
+            .front()
+            .is_some_and(|t| instante - *t > Self::GUARDA_S)
+        {
             self.instantes.pop_front();
         }
     }
 
     pub fn contar(&self, de: f64, ate: f64) -> u64 {
-        self.instantes.iter().filter(|t| **t >= de && **t < ate).count() as u64
+        self.instantes
+            .iter()
+            .filter(|t| **t >= de && **t < ate)
+            .count() as u64
     }
 }
 
@@ -197,6 +249,33 @@ mod tests {
             t += 0.01;
         }
         assert!(g.razoes.is_empty());
+    }
+
+    /// O log do FiveM: a conferência que não valia (fonte sem contagem) repetia a cada 13 s, cada vez com o tranco.
+    #[test]
+    fn conferencia_que_falha_espera_cada_vez_mais() {
+        let mut g = Guarda::nova(0.0);
+        let mut pausas = 0;
+        let mut t = 0.0;
+        while t < 600.0 {
+            if g.passo(t, |_, _| None) == Acao::Pausar {
+                pausas += 1;
+            }
+            t += 0.01;
+        }
+        // 5, 10, 20, 40, 80, 160, 300…: umas 6 em 10 minutos, contra ~45 antes.
+        assert!(pausas <= 7, "{} pausas", pausas);
+    }
+
+    #[test]
+    fn depois_de_confirmar_quase_nao_pausa() {
+        let (_, acoes) = simular(70.0, 70.0, 600.0, 1.0);
+        let pausas = acoes.iter().filter(|a| **a == Acao::Pausar).count();
+        assert!(
+            pausas <= MINIMO_DE_AMOSTRAS + 2,
+            "{} pausas em 10 min",
+            pausas
+        );
     }
 
     #[test]

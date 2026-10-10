@@ -8,10 +8,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "estado")]
 pub enum Conta {
-    Mesma { usuario: String },
-    Diferente { processo: String, shell: String },
+    Mesma {
+        usuario: String,
+    },
+    Diferente {
+        processo: String,
+        shell: String,
+    },
     /// NÃO é "está tudo bem": é uma verificação que não aconteceu.
-    NaoDeuParaLer { motivo: String },
+    NaoDeuParaLer {
+        motivo: String,
+    },
 }
 
 impl Conta {
@@ -37,7 +44,9 @@ pub fn comparar(processo: &str, shell: &str) -> Conta {
     }
 
     if p.eq_ignore_ascii_case(s) {
-        Conta::Mesma { usuario: p.to_string() }
+        Conta::Mesma {
+            usuario: p.to_string(),
+        }
     } else {
         Conta::Diferente {
             processo: p.to_string(),
@@ -72,13 +81,19 @@ pub fn verificar() -> Conta {
 
 #[cfg(not(target_os = "windows"))]
 pub fn verificar() -> Conta {
-    Conta::NaoDeuParaLer { motivo: "só no Windows.".to_string() }
+    Conta::NaoDeuParaLer {
+        motivo: "só no Windows.".to_string(),
+    }
 }
 
 /// Uma linha só = `explorer.exe` não encontrado (sessão remota, modo de segurança): `NaoDeuParaLer`, nunca
 /// "as contas são iguais".
 pub fn ler_duas_linhas(saida: &str) -> Conta {
-    let linhas: Vec<&str> = saida.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let linhas: Vec<&str> = saida
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
 
     match linhas.as_slice() {
         [processo, shell] => comparar(processo, shell),
@@ -130,9 +145,9 @@ pub fn quantos_sao_por_conta() -> usize {
     CATALOG
         .iter()
         .filter(|spec| {
-            spec.actions.iter().any(|a| {
-                matches!(a, Action::Registry { hive, .. } if hive.eq_ignore_ascii_case("HKCU"))
-            })
+            spec.actions.iter().any(
+                |a| matches!(a, Action::Registry { hive, .. } if hive.eq_ignore_ascii_case("HKCU")),
+            )
         })
         .count()
 }
@@ -145,7 +160,9 @@ mod tests {
     fn a_mesma_conta_e_reconhecida() {
         assert_eq!(
             comparar("SNYX-PC\\User", "SNYX-PC\\User"),
-            Conta::Mesma { usuario: "SNYX-PC\\User".to_string() }
+            Conta::Mesma {
+                usuario: "SNYX-PC\\User".to_string()
+            }
         );
     }
 
@@ -182,7 +199,10 @@ mod tests {
     #[test]
     fn saida_vazia_nao_vira_conta_igual() {
         assert!(matches!(ler_duas_linhas(""), Conta::NaoDeuParaLer { .. }));
-        assert!(matches!(comparar("", "PC\\Eduardo"), Conta::NaoDeuParaLer { .. }));
+        assert!(matches!(
+            comparar("", "PC\\Eduardo"),
+            Conta::NaoDeuParaLer { .. }
+        ));
     }
 
     #[test]
@@ -209,8 +229,14 @@ mod tests {
             21,
         );
 
-        assert!(frase.contains("21"), "precisa dizer quantos ajustes são afetados");
-        assert!(frase.contains("PC\\Eduardo administrador"), "falta o conserto");
+        assert!(
+            frase.contains("21"),
+            "precisa dizer quantos ajustes são afetados"
+        );
+        assert!(
+            frase.contains("PC\\Eduardo administrador"),
+            "falta o conserto"
+        );
         assert!(
             frase.contains("não são afetados"),
             "precisa dizer que plano de energia e serviços continuam valendo"
@@ -224,7 +250,9 @@ mod tests {
     #[test]
     fn a_lacuna_nao_soa_como_aprovacao() {
         let frase = explicar(
-            &Conta::NaoDeuParaLer { motivo: "sem shell.".to_string() },
+            &Conta::NaoDeuParaLer {
+                motivo: "sem shell.".to_string(),
+            },
             21,
         );
 
@@ -235,7 +263,10 @@ mod tests {
     fn a_contagem_de_ajustes_por_conta_vem_do_catalogo() {
         let n = quantos_sao_por_conta();
 
-        assert!(n >= 5, "só {n} ajustes por conta? a contagem provavelmente quebrou");
+        assert!(
+            n >= 5,
+            "só {n} ajustes por conta? a contagem provavelmente quebrou"
+        );
         assert!(n < super::super::catalog::CATALOG.len());
     }
 

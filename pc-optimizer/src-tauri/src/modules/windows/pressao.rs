@@ -359,13 +359,19 @@ mod tests {
         j = agregar(
             j,
             "2026-08-11T21",
-            Amostra { commit_gb: 12.0, disponivel_gb: 0.3 },
+            Amostra {
+                commit_gb: 12.0,
+                disponivel_gb: 0.3,
+            },
             vec![("FiveM.exe".into(), 7.0), ("Discord.exe".into(), 1.2)],
         );
         j = agregar(
             j,
             "2026-08-11T21",
-            Amostra { commit_gb: 4.0, disponivel_gb: 5.0 },
+            Amostra {
+                commit_gb: 4.0,
+                disponivel_gb: 5.0,
+            },
             vec![("explorer.exe".into(), 0.2)],
         );
 
@@ -382,13 +388,19 @@ mod tests {
             j = agregar(
                 j,
                 &format!("hora-{:05}", i),
-                Amostra { commit_gb: 5.0, disponivel_gb: 3.0 },
+                Amostra {
+                    commit_gb: 5.0,
+                    disponivel_gb: 3.0,
+                },
                 Vec::new(),
             );
         }
 
         assert_eq!(j.horas.len(), HORAS_GUARDADAS);
-        assert_eq!(j.horas.last().unwrap().quando, format!("hora-{:05}", HORAS_GUARDADAS + 49));
+        assert_eq!(
+            j.horas.last().unwrap().quando,
+            format!("hora-{:05}", HORAS_GUARDADAS + 49)
+        );
     }
 
     #[test]

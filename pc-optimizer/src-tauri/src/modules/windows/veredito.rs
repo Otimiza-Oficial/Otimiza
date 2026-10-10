@@ -44,7 +44,11 @@ pub enum Prioridade {
 }
 
 /// Ids que são erro crítico de configuração, independente do resto.
-const P0: &[&str] = &["boot_limits_present", "pagefile_off", "windows_registrou_esgotamento"];
+const P0: &[&str] = &[
+    "boot_limits_present",
+    "pagefile_off",
+    "windows_registrou_esgotamento",
+];
 /// Ids que são oportunidade grande quando aparecem.
 const P1: &[&str] = &[
     "memory_xmp_off",
@@ -63,13 +67,21 @@ pub fn prioridade(a: &Achado) -> Option<Prioridade> {
         return None;
     }
     // Disco com falha é P0 pelo risco de perder arquivo, antes de desempenho.
-    if P0.contains(&a.id.as_str()) || (a.causa == Causa::Armazenamento && a.severity == FindingSeverity::Critical && a.id.starts_with("disk_")) {
+    if P0.contains(&a.id.as_str())
+        || (a.causa == Causa::Armazenamento
+            && a.severity == FindingSeverity::Critical
+            && a.id.starts_with("disk_"))
+    {
         return Some(Prioridade::P0);
     }
     if P1.contains(&a.id.as_str()) || a.severity == FindingSeverity::Critical {
         return Some(Prioridade::P1);
     }
-    Some(if a.confianca == Confianca::Inferido { Prioridade::P3 } else { Prioridade::P2 })
+    Some(if a.confianca == Confianca::Inferido {
+        Prioridade::P3
+    } else {
+        Prioridade::P2
+    })
 }
 
 /// Há desempenho perdido nesta máquina?
@@ -98,7 +110,8 @@ pub fn recuperacao(achados: &[Achado], lacunas: &[Lacuna]) -> Recuperacao {
         .collect();
     itens.sort_by_key(|(_, p, c)| (*p, *c));
     let forte = achados.iter().any(|a| {
-        matches!(prioridade(a), Some(Prioridade::P0 | Prioridade::P1)) && a.confianca != Confianca::Inferido
+        matches!(prioridade(a), Some(Prioridade::P0 | Prioridade::P1))
+            && a.confianca != Confianca::Inferido
     });
     let fraco = itens.iter().any(|(_, p, _)| *p <= Prioridade::P1);
     let perdido = if forte {
@@ -108,7 +121,10 @@ pub fn recuperacao(achados: &[Achado], lacunas: &[Lacuna]) -> Recuperacao {
     } else {
         Perdido::Nao
     };
-    Recuperacao { perdido, itens: itens.into_iter().map(|(id, p, _)| (id, p)).collect() }
+    Recuperacao {
+        perdido,
+        itens: itens.into_iter().map(|(id, p, _)| (id, p)).collect(),
+    }
 }
 
 /// Lexicográfica: cada critério só conta quando o anterior empata; a ordem é a decisão de produto.
@@ -117,7 +133,11 @@ fn peso(a: &Achado) -> (u8, u8, u8, u8) {
         // 1. Severidade. Inegociável.
         peso_severidade(a.severity),
         // 2. Risco de perder arquivo antes de risco de perder desempenho.
-        if a.causa == Causa::Armazenamento { 0 } else { 1 },
+        if a.causa == Causa::Armazenamento {
+            0
+        } else {
+            1
+        },
         // 3. Evidência que persiste vence a foto do instante: o cliente abre o Otimiza com o jogo fechado.
         peso_confianca(a.confianca),
         // 4. Só então onde se conserta.
@@ -144,9 +164,7 @@ pub fn veredito(achados: &[Achado], lacunas: &[Lacuna]) -> Veredito {
         Some(p) => {
             let corroboracoes: Vec<Achado> = ordenados
                 .iter()
-                .filter(|a| {
-                    a.causa == p.causa && a.id != p.id && a.severity != FindingSeverity::Ok
-                })
+                .filter(|a| a.causa == p.causa && a.id != p.id && a.severity != FindingSeverity::Ok)
                 .cloned()
                 .collect();
 
@@ -325,12 +343,7 @@ fn acao_de(origem: Origem, id: &str) -> Option<Acao> {
             true,
         ),
 
-        (Origem::Prontidao, "trim") => (
-            "fix_readiness",
-            Some("trim"),
-            "Ligar o TRIM do SSD",
-            true,
-        ),
+        (Origem::Prontidao, "trim") => ("fix_readiness", Some("trim"), "Ligar o TRIM do SSD", true),
 
         (Origem::Prontidao, "janelas_otimizadas_desligada") => (
             "apply_optimization",
@@ -413,30 +426,64 @@ fn achados_da_janela() -> Result<Vec<Achado>, String> {
 }
 
 fn achados_do_x3d() -> Vec<Achado> {
-    let Some(cpu) = super::x3d::cpu().filter(|c| super::x3d::e_x3d_de_dois_blocos(c)) else { return Vec::new() };
+    let Some(cpu) = super::x3d::cpu().filter(|c| super::x3d::e_x3d_de_dois_blocos(c)) else {
+        return Vec::new();
+    };
     super::x3d::achados(&cpu, &super::x3d::ler())
         .into_iter()
-        .map(|a| montar(Origem::Prontidao, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .map(|a| {
+            montar(
+                Origem::Prontidao,
+                a.id.to_string(),
+                a.titulo,
+                a.medido,
+                a.conselho,
+                a.severidade,
+                a.onde,
+            )
+        })
         .collect()
 }
 
 /// O PowerShell só roda com processador da lista da Intel e Windows 11.
 fn achados_do_apo() -> Vec<Achado> {
-    let Some(cpu) = super::x3d::cpu().filter(|c| super::apo::processador_validado(c)) else { return Vec::new() };
+    let Some(cpu) = super::x3d::cpu().filter(|c| super::apo::processador_validado(c)) else {
+        return Vec::new();
+    };
     let windows_11 = super::apo::windows_11();
     if !windows_11 {
         return Vec::new();
     }
     super::apo::achados(&cpu, windows_11, super::apo::driver_presente())
         .into_iter()
-        .map(|a| montar(Origem::Prontidao, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .map(|a| {
+            montar(
+                Origem::Prontidao,
+                a.id.to_string(),
+                a.titulo,
+                a.medido,
+                a.conselho,
+                a.severidade,
+                a.onde,
+            )
+        })
         .collect()
 }
 
 fn achados_de_eventos_de_hardware() -> Result<Vec<Achado>, String> {
     Ok(super::eventoshw::achados(&super::eventoshw::ler()?)
         .into_iter()
-        .map(|a| montar(Origem::Esgotamento, a.id.to_string(), a.titulo, a.medido, a.conselho, a.severidade, a.onde))
+        .map(|a| {
+            montar(
+                Origem::Esgotamento,
+                a.id.to_string(),
+                a.titulo,
+                a.medido,
+                a.conselho,
+                a.severidade,
+                a.onde,
+            )
+        })
         .collect())
 }
 
@@ -719,7 +766,10 @@ impl EmAchados for super::shaders::ShaderReport {
             return Vec::new();
         }
 
-        let placa = self.gpu.clone().unwrap_or_else(|| "A placa de vídeo".to_string());
+        let placa = self
+            .gpu
+            .clone()
+            .unwrap_or_else(|| "A placa de vídeo".to_string());
 
         vec![montar(
             Origem::Disco,
@@ -815,15 +865,16 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
     // Os caros primeiro: a fila termina no mais demorado, não na soma. Medido em 12/08/2026: prontidão 4,8 s, saúde
     // 4,5 s, memória 1,1 s, firmware 0,9 s.
     let tarefas: Vec<Tarefa> = vec![
-        (Origem::Prontidao, || Ok(super::readiness::analyze().achados())),
+        (Origem::Prontidao, || {
+            Ok(super::readiness::analyze().achados())
+        }),
         (Origem::Saude, || {
             let relatorio = super::health::analyze();
 
             // Sem administrador o SMART não se lê: lacuna, nunca silêncio.
             if relatorio.needs_admin && relatorio.findings.is_empty() {
                 return Err(
-                    "Ler a saúde do disco exige executar o Otimiza como administrador."
-                        .to_string(),
+                    "Ler a saúde do disco exige executar o Otimiza como administrador.".to_string(),
                 );
             }
 
@@ -842,9 +893,13 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         // Uma leitura de arquivo, e a única que vê o que aconteceu enquanto o cliente jogava.
         (Origem::Pressao, || Ok(super::pressao::analyze().achados())),
         (Origem::Monitor, || Ok(super::display::analyze().achados())),
-        (Origem::PlacaDeVideo, || Ok(super::gpupref::analyze().achados())),
+        (Origem::PlacaDeVideo, || {
+            Ok(super::gpupref::analyze().achados())
+        }),
         // A maior alavanca num PC fraco. Uma leitura de arquivo.
-        (Origem::ConfigDoJogo, || Ok(super::configjogo::analyze().achados())),
+        (Origem::ConfigDoJogo, || {
+            Ok(super::configjogo::analyze().achados())
+        }),
         // A evidência mais forte e mais barata: o Windows já anotou o esgotamento e o programa que travou.
         (Origem::Esgotamento, || {
             let relatorio = super::exhaustion::analyze();
@@ -860,9 +915,13 @@ pub fn coletar_rapido() -> (Vec<Achado>, Vec<Lacuna>) {
         }),
         // A Integridade de Memória custa FPS e o Windows 11 passa a ligá-la sozinho: tem de aparecer no Início. Ela e os
         // limites do boot mediram 12 ms e 49 ms em 25/09/2026, sem mudar o tempo da tela inicial (530 → 525 ms).
-        (Origem::Firmware, || super::firmware::achados_do_vbs().map(|f| achados_de_firmware(&f))),
+        (Origem::Firmware, || {
+            super::firmware::achados_do_vbs().map(|f| achados_de_firmware(&f))
+        }),
         // Núcleo ou memória limitados no boot: P0.
-        (Origem::Firmware, || super::firmware::achados_de_boot().map(|f| achados_de_firmware(&f))),
+        (Origem::Firmware, || {
+            super::firmware::achados_de_boot().map(|f| achados_de_firmware(&f))
+        }),
         // Térmico, disco, shaders e conflitos entram na eleição (medido em 31/08/2026: 1,33 s, 0,44 s, 0,13 s, 0,14 s,
         // todos abaixo do `readiness`). O disco é `scan_para_o_veredito()`, sem DISM (guarda
         // `o_diagnostico_rapido_nao_chama_quem_mede_por_segundos`). Boot e bloatware ficam fora: são higiene e empurrariam
@@ -919,7 +978,8 @@ fn coletar_em_paralelo(
                 };
 
                 // Sem `catch_unwind` o pânico atravessa o `spawn` e envenena `coletado` para todos; com ele, vira lacuna.
-                let resultado = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(tarefa)) {
+                let resultado = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(tarefa))
+                {
                     Ok(resultado) => resultado,
                     // `payload.as_ref()`: com `&payload` o `downcast_ref` confere o tipo da CAIXA e nunca casa com `&str`/`String`.
                     Err(payload) => Err(mensagem_de_panico(payload.as_ref())),
@@ -1096,15 +1156,23 @@ mod tests_1_9_acoes {
     #[test]
     fn os_quatro_consertos_que_faltavam_ganharam_botao() {
         let esperados = [
-            (Origem::Termico, "teto_no_plano_de_energia", "apply_optimization"),
-            (Origem::Firmware, "boot_limits_present", "apply_optimization"),
+            (
+                Origem::Termico,
+                "teto_no_plano_de_energia",
+                "apply_optimization",
+            ),
+            (
+                Origem::Firmware,
+                "boot_limits_present",
+                "apply_optimization",
+            ),
             (Origem::Prontidao, "plano_de_terceiro", "apply_optimization"),
             (Origem::Memoria, "pagefile_small", "set_automatic_pagefile"),
         ];
 
         for (origem, id, comando) in esperados {
-            let acao = acao_de(origem, id)
-                .unwrap_or_else(|| panic!("{:?}/{} ficou sem acao", origem, id));
+            let acao =
+                acao_de(origem, id).unwrap_or_else(|| panic!("{:?}/{} ficou sem acao", origem, id));
 
             assert_eq!(acao.comando, comando, "comando errado para {}", id);
 
@@ -1192,9 +1260,7 @@ mod tests_1_8_memoria {
             pagefile_size_gb: 0.0,
             pagefile_peak_gb: 0.0,
             pagefile_location: "nenhum".to_string(),
-            findings: crate::modules::windows::memory::diagnosticar(
-                8.0, 0.0, 0.0, false, 6.0, 5.0,
-            ),
+            findings: crate::modules::windows::memory::diagnosticar(8.0, 0.0, 0.0, false, 6.0, 5.0),
         };
 
         let achados = relatorio.achados();
@@ -1204,7 +1270,10 @@ mod tests_1_8_memoria {
             .expect("paginacao desligada de verdade tem que aparecer");
 
         assert_eq!(off.severity, FindingSeverity::Critical);
-        assert!(off.acao.is_some(), "e o botao de consertar tem que estar la");
+        assert!(
+            off.acao.is_some(),
+            "e o botao de consertar tem que estar la"
+        );
     }
 }
 
@@ -1273,12 +1342,7 @@ mod tests_1_8_disco {
 mod tests {
     use super::*;
 
-    fn achado(
-        id: &str,
-        origem: Origem,
-        severity: FindingSeverity,
-        fix: FixLocation,
-    ) -> Achado {
+    fn achado(id: &str, origem: Origem, severity: FindingSeverity, fix: FixLocation) -> Achado {
         montar(
             origem,
             id.to_string(),
@@ -1302,27 +1366,56 @@ mod tests {
             let acao = acao_de(origem, id).expect("tem botão");
             if acao.comando == "apply_optimization" {
                 let alvo = acao.argumento.as_deref().unwrap();
-                let spec = crate::modules::windows::catalog::find(alvo)
-                    .unwrap_or_else(|| panic!("`{}` aponta para `{}`, que não existe no catálogo", id, alvo));
-                assert!(!crate::modules::windows::catalog::retirado(spec.id), "`{}` aponta para item retirado", id);
+                let spec = crate::modules::windows::catalog::find(alvo).unwrap_or_else(|| {
+                    panic!(
+                        "`{}` aponta para `{}`, que não existe no catálogo",
+                        id, alvo
+                    )
+                });
+                assert!(
+                    !crate::modules::windows::catalog::retirado(spec.id),
+                    "`{}` aponta para item retirado",
+                    id
+                );
             }
         }
     }
 
     #[test]
     fn prioridade_e_desempenho_perdido() {
-        let boot = achado("boot_limits_present", Origem::Firmware, FindingSeverity::Critical, FixLocation::Software);
-        let xmp = achado("memory_xmp_off", Origem::Firmware, FindingSeverity::Important, FixLocation::Bios);
-        let ok = achado("memory_dual_channel", Origem::Firmware, FindingSeverity::Ok, FixLocation::None);
+        let boot = achado(
+            "boot_limits_present",
+            Origem::Firmware,
+            FindingSeverity::Critical,
+            FixLocation::Software,
+        );
+        let xmp = achado(
+            "memory_xmp_off",
+            Origem::Firmware,
+            FindingSeverity::Important,
+            FixLocation::Bios,
+        );
+        let ok = achado(
+            "memory_dual_channel",
+            Origem::Firmware,
+            FindingSeverity::Ok,
+            FixLocation::None,
+        );
         assert_eq!(prioridade(&boot), Some(Prioridade::P0));
         assert_eq!(prioridade(&xmp), Some(Prioridade::P1));
         assert_eq!(prioridade(&ok), None);
 
         let r = recuperacao(&[xmp.clone(), boot.clone(), ok.clone()], &[]);
         assert_eq!(r.perdido, Perdido::Sim);
-        assert_eq!(r.itens[0], ("boot_limits_present".to_string(), Prioridade::P0));
+        assert_eq!(
+            r.itens[0],
+            ("boot_limits_present".to_string(), Prioridade::P0)
+        );
 
-        assert_eq!(recuperacao(&[xmp, ok.clone()], &[]).perdido, Perdido::Incerto);
+        assert_eq!(
+            recuperacao(&[xmp, ok.clone()], &[]).perdido,
+            Perdido::Incerto
+        );
         assert_eq!(recuperacao(&[ok], &[]).perdido, Perdido::Nao);
     }
 
@@ -1349,7 +1442,12 @@ mod tests {
                 FindingSeverity::Critical,
                 FixLocation::Hardware,
             ),
-            achado("trim", Origem::Prontidao, FindingSeverity::Ok, FixLocation::None),
+            achado(
+                "trim",
+                Origem::Prontidao,
+                FindingSeverity::Ok,
+                FixLocation::None,
+            ),
         ];
 
         let v = veredito(&achados, &[]);
@@ -1359,7 +1457,9 @@ mod tests {
         assert_eq!(principal.causa, Causa::Memoria);
 
         assert!(
-            v.corroboracoes.iter().any(|c| c.id == "memory_single_channel"),
+            v.corroboracoes
+                .iter()
+                .any(|c| c.id == "memory_single_channel"),
             "canal único tem que aparecer junto do esgotamento: é a mesma causa"
         );
         assert!(v.corroboracoes.iter().any(|c| c.id == "over_committed"));
@@ -1424,13 +1524,21 @@ mod tests {
             ),
         ];
 
-        assert_eq!(veredito(&achados, &[]).principal.unwrap().id, "over_committed");
+        assert_eq!(
+            veredito(&achados, &[]).principal.unwrap().id,
+            "over_committed"
+        );
     }
 
     #[test]
     fn maquina_sadia_admite_que_esta_tudo_bem_com_numeros() {
         let achados = vec![
-            achado("pagefile_ok", Origem::Memoria, FindingSeverity::Ok, FixLocation::None),
+            achado(
+                "pagefile_ok",
+                Origem::Memoria,
+                FindingSeverity::Ok,
+                FixLocation::None,
+            ),
             achado(
                 "memory_dual_channel",
                 Origem::Firmware,
@@ -1466,10 +1574,19 @@ mod tests {
 
     #[test]
     fn canal_unico_da_memoria_cai_na_causa_memoria() {
-        assert_eq!(causa_de(Origem::Firmware, "memory_single_channel"), Causa::Memoria);
-        assert_eq!(causa_de(Origem::Firmware, "vbs_running"), Causa::Configuracao);
+        assert_eq!(
+            causa_de(Origem::Firmware, "memory_single_channel"),
+            Causa::Memoria
+        );
+        assert_eq!(
+            causa_de(Origem::Firmware, "vbs_running"),
+            Causa::Configuracao
+        );
         assert_eq!(causa_de(Origem::Saude, "disk_wear_0"), Causa::Armazenamento);
-        assert_eq!(causa_de(Origem::Saude, "battery_health"), Causa::Configuracao);
+        assert_eq!(
+            causa_de(Origem::Saude, "battery_health"),
+            Causa::Configuracao
+        );
     }
 
     #[test]
@@ -1498,12 +1615,7 @@ mod tests {
             .join("\n");
 
         // `diskspace::scan()` com parênteses: `scan_para_o_veredito()` continua liberada.
-        for caro in [
-            "bottleneck::",
-            "fivem::",
-            "browsers::",
-            "diskspace::scan()",
-        ] {
+        for caro in ["bottleneck::", "fivem::", "browsers::", "diskspace::scan()"] {
             assert!(
                 !corpo.contains(caro),
                 "`{}` entrou no diagnóstico rápido; ele mede por segundos e a \
@@ -1521,7 +1633,10 @@ mod tests {
 
         println!("\n  VEREDITO: {}", v.frase);
         println!("  {}", v.detalhe);
-        println!("  DESEMPENHO PERDIDO: {:?} {:?}", v.recuperacao.perdido, v.recuperacao.itens);
+        println!(
+            "  DESEMPENHO PERDIDO: {:?} {:?}",
+            v.recuperacao.perdido, v.recuperacao.itens
+        );
         for c in &v.corroboracoes {
             println!("    junto: {} — {}", c.title, c.measured);
         }
@@ -1555,9 +1670,8 @@ mod tests {
 
         std::panic::set_hook(hook_original);
 
-        let (achados, lacunas) = resultado.expect(
-            "o pânico de uma tarefa não pode escapar de coletar_em_paralelo",
-        );
+        let (achados, lacunas) =
+            resultado.expect("o pânico de uma tarefa não pode escapar de coletar_em_paralelo");
         let _ = achados;
 
         assert!(
@@ -1611,8 +1725,10 @@ mod tests {
             .skip_while(|l| !l.contains("fn acao_de("))
             .take_while(|l| l.trim_end() != "}")
             .collect::<Vec<_>>()
-            .join("
-");
+            .join(
+                "
+",
+            );
 
         assert!(
             tabela.contains("match (origem, id)"),

@@ -128,7 +128,9 @@ pub fn eventos_da_partida(
     disco: &[(i64, f64)],
     freios: &[(i64, u64)],
 ) -> Option<EventosDaPartida> {
-    use crate::core::sensores::{MOTIVO_FREIO_DE_ENERGIA_HW, MOTIVO_FREIO_DE_HARDWARE, MOTIVO_TERMICO_HW, MOTIVO_TERMICO_SW};
+    use crate::core::sensores::{
+        MOTIVO_FREIO_DE_ENERGIA_HW, MOTIVO_FREIO_DE_HARDWARE, MOTIVO_TERMICO_HW, MOTIVO_TERMICO_SW,
+    };
     if frequencia <= 0 || fim <= inicio {
         return None;
     }
@@ -136,21 +138,31 @@ pub fn eventos_da_partida(
     let dentro = |qpc: i64| (inicio..=fim).contains(&qpc);
     let estado = |motivos: u64| {
         let termico = motivos & (MOTIVO_TERMICO_SW | MOTIVO_TERMICO_HW) != 0;
-        let hardware = !termico && motivos & (MOTIVO_FREIO_DE_ENERGIA_HW | MOTIVO_FREIO_DE_HARDWARE) != 0;
+        let hardware =
+            !termico && motivos & (MOTIVO_FREIO_DE_ENERGIA_HW | MOTIVO_FREIO_DE_HARDWARE) != 0;
         (termico, hardware)
     };
 
     let na_janela: Vec<(i64, u64)> = freios.iter().copied().filter(|(q, _)| dentro(*q)).collect();
     let mut deles: Vec<Evento> = Vec::new();
-    let (mut termico_antes, mut hardware_antes) = na_janela.first().map(|(_, m)| estado(*m)).unwrap_or((false, false));
+    let (mut termico_antes, mut hardware_antes) = na_janela
+        .first()
+        .map(|(_, m)| estado(*m))
+        .unwrap_or((false, false));
     let freando_no_inicio = termico_antes || hardware_antes;
     for (quando, motivos) in na_janela.iter().skip(1) {
         let (termico, hardware) = estado(*motivos);
         if termico && !termico_antes {
-            deles.push(Evento { segundo: segundo(*quando), tipo: TipoDeEvento::FreioTermico });
+            deles.push(Evento {
+                segundo: segundo(*quando),
+                tipo: TipoDeEvento::FreioTermico,
+            });
         }
         if hardware && !hardware_antes && !termico_antes {
-            deles.push(Evento { segundo: segundo(*quando), tipo: TipoDeEvento::FreioDeHardware });
+            deles.push(Evento {
+                segundo: segundo(*quando),
+                tipo: TipoDeEvento::FreioDeHardware,
+            });
         }
         (termico_antes, hardware_antes) = (termico, hardware);
     }
@@ -162,11 +174,18 @@ pub fn eventos_da_partida(
     deles.extend(ordenados.into_iter().take(cabem).map(|q| Evento {
         segundo: segundo(q),
         tipo: TipoDeEvento::Tranco {
-            com_disco: crate::modules::windows::frames::tranco_com_disco(q, disco, frequencia, 300.0, 40.0),
+            com_disco: crate::modules::windows::frames::tranco_com_disco(
+                q, disco, frequencia, 300.0, 40.0,
+            ),
         },
     }));
     deles.sort_by(|a, b| a.segundo.total_cmp(&b.segundo));
-    Some(EventosDaPartida { lista: deles, freios_lidos: !na_janela.is_empty(), freando_no_inicio, trancos_com_instante })
+    Some(EventosDaPartida {
+        lista: deles,
+        freios_lidos: !na_janela.is_empty(),
+        freando_no_inicio,
+        trancos_com_instante,
+    })
 }
 
 /// Sobe quando um campo novo muda o que a medição quer dizer; 0 é a medição gravada antes deste campo.
@@ -227,8 +246,10 @@ pub fn comparavel(m: &MedicaoAutomatica) -> bool {
 /// A geração de quadros visível agora: quadros que se identificaram ao PresentMon, o gerador do Otimiza ou o
 /// Lossless aberto. Usada pela medição automática e pela prova.
 #[cfg(target_os = "windows")]
-pub fn geracao_agora(presentmon: Option<&crate::modules::windows::presentmon::Resumo>) -> GeracaoNaPartida {
-    use crate::modules::windows::{frames, framegen, geracao};
+pub fn geracao_agora(
+    presentmon: Option<&crate::modules::windows::presentmon::Resumo>,
+) -> GeracaoNaPartida {
+    use crate::modules::windows::{framegen, frames, geracao};
     if presentmon.is_some_and(|r| !r.geradores.is_empty()) {
         GeracaoNaPartida::IdentificadaNosQuadros
     } else if geracao::estado().situacao == geracao::Situacao::Gerando {
@@ -242,7 +263,9 @@ pub fn geracao_agora(presentmon: Option<&crate::modules::windows::presentmon::Re
 
 /// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.
 pub fn ler_para_comparar() -> Result<Vec<MedicaoAutomatica>, String> {
-    Ok(so_do_medidor_atual(ler()?.into_iter().filter(comparavel).collect()))
+    Ok(so_do_medidor_atual(
+        ler()?.into_iter().filter(comparavel).collect(),
+    ))
 }
 
 /// **Pura.** De cada jogo (pela chave do portão: `fivem_` junta as builds do FiveM), só as medições feitas pelo MESMO
@@ -251,16 +274,23 @@ pub fn ler_para_comparar() -> Result<Vec<MedicaoAutomatica>, String> {
 /// as rodadas (o jogo apresenta duas vezes por quadro). Misturar os dois na série faria a atualização para o
 /// PresentMon parecer uma queda de 50% e o portão desfazer ajuste bom. O lado que sobra espera medições novas.
 pub fn so_do_medidor_atual(medicoes: Vec<MedicaoAutomatica>) -> Vec<MedicaoAutomatica> {
-    let mut atual: std::collections::HashMap<String, (u64, bool)> = std::collections::HashMap::new();
+    let mut atual: std::collections::HashMap<String, (u64, bool)> =
+        std::collections::HashMap::new();
     for m in &medicoes {
-        let e = atual.entry(chave(&m.jogo)).or_insert((m.quando, m.presentmon.is_some()));
+        let e = atual
+            .entry(chave(&m.jogo))
+            .or_insert((m.quando, m.presentmon.is_some()));
         if m.quando >= e.0 {
             *e = (m.quando, m.presentmon.is_some());
         }
     }
     medicoes
         .into_iter()
-        .filter(|m| atual.get(&chave(&m.jogo)).is_some_and(|(_, pm)| *pm == m.presentmon.is_some()))
+        .filter(|m| {
+            atual
+                .get(&chave(&m.jogo))
+                .is_some_and(|(_, pm)| *pm == m.presentmon.is_some())
+        })
         .collect()
 }
 
@@ -297,8 +327,12 @@ pub fn ler_de(caminho: &Path) -> Result<Vec<MedicaoAutomatica>, String> {
             .map(|mut todas| {
                 // Gravada antes do campo `apresentacao`: classifica pelo modo guardado.
                 for r in todas.iter_mut().filter_map(|m| m.presentmon.as_mut()) {
-                    if r.apresentacao == crate::modules::windows::presentmon::Apresentacao::Desconhecida {
-                        r.apresentacao = crate::modules::windows::presentmon::classificar_modo(&r.modo_de_apresentacao);
+                    if r.apresentacao
+                        == crate::modules::windows::presentmon::Apresentacao::Desconhecida
+                    {
+                        r.apresentacao = crate::modules::windows::presentmon::classificar_modo(
+                            &r.modo_de_apresentacao,
+                        );
                     }
                 }
                 todas
@@ -401,17 +435,43 @@ mod tests {
                 ate_a_tela_ms: Some(12.0),
             })
             .collect();
-        MedicaoAutomatica { presentmon: Some(resumir(&quadros).expect("resumo de teste")), ..m }
+        MedicaoAutomatica {
+            presentmon: Some(resumir(&quadros).expect("resumo de teste")),
+            ..m
+        }
     }
 
     #[test]
     fn a_serie_so_compara_o_medidor_da_medicao_mais_recente() {
-        let antiga = |quando| MedicaoAutomatica { quando, ..exemplo(180.0) };
-        let nova = |quando| pelo_presentmon(MedicaoAutomatica { quando, ..exemplo(90.0) });
-        let gta = MedicaoAutomatica { jogo: "GTA5.exe".into(), quando: 1, ..exemplo(70.0) };
+        let antiga = |quando| MedicaoAutomatica {
+            quando,
+            ..exemplo(180.0)
+        };
+        let nova = |quando| {
+            pelo_presentmon(MedicaoAutomatica {
+                quando,
+                ..exemplo(90.0)
+            })
+        };
+        let gta = MedicaoAutomatica {
+            jogo: "GTA5.exe".into(),
+            quando: 1,
+            ..exemplo(70.0)
+        };
         // Outra build do FiveM, jogada só antes da atualização: é o mesmo jogo para o portão.
-        let build_velha = MedicaoAutomatica { jogo: "FiveM_b2944_GTAProcess.exe".into(), quando: 0, ..exemplo(180.0) };
-        let serie = so_do_medidor_atual(vec![build_velha, antiga(1), antiga(2), nova(3), nova(4), gta]);
+        let build_velha = MedicaoAutomatica {
+            jogo: "FiveM_b2944_GTAProcess.exe".into(),
+            quando: 0,
+            ..exemplo(180.0)
+        };
+        let serie = so_do_medidor_atual(vec![
+            build_velha,
+            antiga(1),
+            antiga(2),
+            nova(3),
+            nova(4),
+            gta,
+        ]);
         assert_eq!(
             serie.iter().map(|m| (m.jogo.as_str(), m.quando)).collect::<Vec<_>>(),
             vec![("FiveM_b3258_GTAProcess.exe", 3), ("FiveM_b3258_GTAProcess.exe", 4), ("GTA5.exe", 1)],
@@ -453,7 +513,8 @@ mod tests {
         // Como a 3.2 grava: sem os campos do núcleo de sessão.
         let antiga = r#"[{"jogo":"FiveM_b3258_GTAProcess.exe","quando":1757600000,"fps":90.0,"low_1pct":45.0,
             "engasgos_por_minuto":3.0,"segundos":20.0,"confiavel":true,"mudancas_aplicadas":4}]"#;
-        let pasta = std::env::temp_dir().join(format!("otimiza-medicoes-antigas-{}", std::process::id()));
+        let pasta =
+            std::env::temp_dir().join(format!("otimiza-medicoes-antigas-{}", std::process::id()));
         std::fs::create_dir_all(&pasta).unwrap();
         let arquivo = pasta.join("medicoes.json");
         std::fs::write(&arquivo, antiga).unwrap();
@@ -477,15 +538,34 @@ mod tests {
         let trancos = [inicio + 12 * HZ, inicio + 3 * HZ];
         let disco = [(inicio + 3 * HZ + HZ / 10, 80.0), (inicio + 12 * HZ, 5.0)];
         let t = crate::core::sensores::MOTIVO_TERMICO_HW;
-        let freios = [(inicio + HZ, 0), (inicio + 7 * HZ, t), (inicio + 8 * HZ, t), (inicio + 9 * HZ, 0), (inicio + 10 * HZ, t)];
-        let e = eventos_da_partida((inicio, inicio + 20 * HZ), HZ, &trancos, &disco, &freios).unwrap();
+        let freios = [
+            (inicio + HZ, 0),
+            (inicio + 7 * HZ, t),
+            (inicio + 8 * HZ, t),
+            (inicio + 9 * HZ, 0),
+            (inicio + 10 * HZ, t),
+        ];
+        let e =
+            eventos_da_partida((inicio, inicio + 20 * HZ), HZ, &trancos, &disco, &freios).unwrap();
         assert_eq!(
             e.lista,
             vec![
-                Evento { segundo: 3.0, tipo: TipoDeEvento::Tranco { com_disco: true } },
-                Evento { segundo: 7.0, tipo: TipoDeEvento::FreioTermico },
-                Evento { segundo: 10.0, tipo: TipoDeEvento::FreioTermico },
-                Evento { segundo: 12.0, tipo: TipoDeEvento::Tranco { com_disco: false } },
+                Evento {
+                    segundo: 3.0,
+                    tipo: TipoDeEvento::Tranco { com_disco: true }
+                },
+                Evento {
+                    segundo: 7.0,
+                    tipo: TipoDeEvento::FreioTermico
+                },
+                Evento {
+                    segundo: 10.0,
+                    tipo: TipoDeEvento::FreioTermico
+                },
+                Evento {
+                    segundo: 12.0,
+                    tipo: TipoDeEvento::Tranco { com_disco: false }
+                },
             ],
             "o freio conta quando começa; o disco ocupado a 100 ms marca o tranco"
         );
@@ -495,16 +575,32 @@ mod tests {
 
     #[test]
     fn teto_de_energia_normal_nao_vira_evento() {
-        let freios = [(HZ, 0), (2 * HZ, crate::core::sensores::MOTIVO_TETO_DE_ENERGIA)];
-        assert!(eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &freios).unwrap().lista.is_empty());
+        let freios = [
+            (HZ, 0),
+            (2 * HZ, crate::core::sensores::MOTIVO_TETO_DE_ENERGIA),
+        ];
+        assert!(eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &freios)
+            .unwrap()
+            .lista
+            .is_empty());
     }
 
     #[test]
     fn freio_termico_com_o_de_hardware_junto_e_um_so() {
         use crate::core::sensores::{MOTIVO_FREIO_DE_HARDWARE, MOTIVO_TERMICO_HW};
-        let freios = [(HZ, 0), (2 * HZ, MOTIVO_TERMICO_HW | MOTIVO_FREIO_DE_HARDWARE), (3 * HZ, MOTIVO_FREIO_DE_HARDWARE)];
+        let freios = [
+            (HZ, 0),
+            (2 * HZ, MOTIVO_TERMICO_HW | MOTIVO_FREIO_DE_HARDWARE),
+            (3 * HZ, MOTIVO_FREIO_DE_HARDWARE),
+        ];
         let e = eventos_da_partida((0, 20 * HZ), HZ, &[], &[], &freios).unwrap();
-        assert_eq!(e.lista, vec![Evento { segundo: 2.0, tipo: TipoDeEvento::FreioTermico }]);
+        assert_eq!(
+            e.lista,
+            vec![Evento {
+                segundo: 2.0,
+                tipo: TipoDeEvento::FreioTermico
+            }]
+        );
     }
 
     #[test]
@@ -519,10 +615,19 @@ mod tests {
     fn fora_da_janela_nao_entra_e_sem_nvml_diz_que_nao_leu() {
         let t = crate::core::sensores::MOTIVO_TERMICO_SW;
         let inicio = 30 * HZ;
-        let e = eventos_da_partida((inicio, inicio + 20 * HZ), HZ, &[inicio - HZ, inicio + HZ], &[], &[(0, 0), (5 * HZ, t)])
-            .unwrap();
+        let e = eventos_da_partida(
+            (inicio, inicio + 20 * HZ),
+            HZ,
+            &[inicio - HZ, inicio + HZ],
+            &[],
+            &[(0, 0), (5 * HZ, t)],
+        )
+        .unwrap();
         assert_eq!(e.lista.len(), 1, "só o tranco de dentro");
-        assert!(!e.freios_lidos, "freio de uma tentativa anterior não conta como leitura desta");
+        assert!(
+            !e.freios_lidos,
+            "freio de uma tentativa anterior não conta como leitura desta"
+        );
         assert_eq!(e.trancos_com_instante, 1);
     }
 
@@ -534,7 +639,11 @@ mod tests {
         assert_eq!(e.lista.len(), EVENTOS_POR_MEDICAO);
         assert_eq!(e.trancos_com_instante, 200);
         assert!(e.lista.iter().any(|x| x.tipo == TipoDeEvento::FreioTermico));
-        assert!(e.lista.iter().filter(|x| matches!(x.tipo, TipoDeEvento::Tranco { .. })).all(|x| x.segundo < 5.0));
+        assert!(e
+            .lista
+            .iter()
+            .filter(|x| matches!(x.tipo, TipoDeEvento::Tranco { .. }))
+            .all(|x| x.segundo < 5.0));
     }
 
     #[test]
@@ -548,28 +657,50 @@ mod tests {
         let m = MedicaoAutomatica {
             configuracao_do_jogo: Some("00ff".into()),
             eventos: Some(EventosDaPartida {
-                lista: vec![Evento { segundo: 2.5, tipo: TipoDeEvento::Tranco { com_disco: true } }],
+                lista: vec![Evento {
+                    segundo: 2.5,
+                    tipo: TipoDeEvento::Tranco { com_disco: true },
+                }],
                 freios_lidos: false,
                 freando_no_inicio: false,
                 trancos_com_instante: 1,
             }),
             ..exemplo(90.0)
         };
-        let volta: MedicaoAutomatica = serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
+        let volta: MedicaoAutomatica =
+            serde_json::from_str(&serde_json::to_string(&m).unwrap()).unwrap();
         assert_eq!(volta, m);
         assert_eq!(volta.versao_do_formato, FORMATO_DA_MEDICAO);
     }
 
     #[test]
     fn partida_com_gerador_externo_fica_fora_da_comparacao() {
-        let sem = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::NenhumaVisivel), ..exemplo(90.0) };
-        let otimiza = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::OtimizaFg), ..exemplo(70.0) };
-        let lossless = MedicaoAutomatica { geracao: Some(GeracaoNaPartida::LosslessScaling), ..exemplo(70.0) };
+        let sem = MedicaoAutomatica {
+            geracao: Some(GeracaoNaPartida::NenhumaVisivel),
+            ..exemplo(90.0)
+        };
+        let otimiza = MedicaoAutomatica {
+            geracao: Some(GeracaoNaPartida::OtimizaFg),
+            ..exemplo(70.0)
+        };
+        let lossless = MedicaoAutomatica {
+            geracao: Some(GeracaoNaPartida::LosslessScaling),
+            ..exemplo(70.0)
+        };
 
         assert!(comparavel(&sem));
-        assert!(!comparavel(&otimiza), "gerador do Otimiza divide a placa com o jogo");
-        assert!(!comparavel(&lossless), "Lossless aberto divide a placa com o jogo");
-        assert!(comparavel(&exemplo(90.0)), "medição antiga, sem o campo, continua valendo");
+        assert!(
+            !comparavel(&otimiza),
+            "gerador do Otimiza divide a placa com o jogo"
+        );
+        assert!(
+            !comparavel(&lossless),
+            "Lossless aberto divide a placa com o jogo"
+        );
+        assert!(
+            comparavel(&exemplo(90.0)),
+            "medição antiga, sem o campo, continua valendo"
+        );
     }
 
     fn pasta_de_teste(nome: &str) -> PathBuf {

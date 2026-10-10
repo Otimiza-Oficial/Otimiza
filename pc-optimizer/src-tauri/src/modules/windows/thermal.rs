@@ -223,8 +223,7 @@ pub fn explicar(culprit: Culprit, teto: Option<u32>, quando: Option<&str>) -> (S
         ),
 
         Culprit::LimiteEletrico => (
-            "O processador está sendo limitado por orçamento de energia do hardware."
-                .to_string(),
+            "O processador está sendo limitado por orçamento de energia do hardware.".to_string(),
             "Isso não é sujeira no cooler: costuma ser fonte insuficiente, carregador \
              abaixo do que o notebook pede, ou bateria muito gasta. Vale conferir se o \
              carregador é o original antes de qualquer outra coisa."
@@ -330,7 +329,10 @@ mod tests {
             Culprit::PlanoDeEnergia
         );
 
-        assert_eq!(decidir(false, Some(100), Some(100.0), 0, 0), Culprit::Nenhum);
+        assert_eq!(
+            decidir(false, Some(100), Some(100.0), 0, 0),
+            Culprit::Nenhum
+        );
         assert_eq!(decidir(false, None, Some(100.0), 0, 0), Culprit::Nenhum);
     }
 
@@ -363,7 +365,10 @@ mod tests {
     #[test]
     fn oscilacao_normal_nao_vira_diagnostico() {
         assert_eq!(decidir(false, None, Some(97.0), 0, 0), Culprit::Nenhum);
-        assert_eq!(decidir(false, None, Some(89.0), 0, 0), Culprit::NaoIdentificado);
+        assert_eq!(
+            decidir(false, None, Some(89.0), 0, 0),
+            Culprit::NaoIdentificado
+        );
     }
 
     #[test]
@@ -397,8 +402,14 @@ mod tests {
 
     #[test]
     fn limite_nao_lido_nao_vira_sem_throttling() {
-        assert!(matches!(avaliar_limites(None), LimitesDoProcessador::NaoSei));
-        assert!(matches!(avaliar_limites(Some(0)), LimitesDoProcessador::Nenhum));
+        assert!(matches!(
+            avaliar_limites(None),
+            LimitesDoProcessador::NaoSei
+        ));
+        assert!(matches!(
+            avaliar_limites(Some(0)),
+            LimitesDoProcessador::Nenhum
+        ));
         assert!(matches!(
             avaliar_limites(Some(4)),
             LimitesDoProcessador::Ativos(4)

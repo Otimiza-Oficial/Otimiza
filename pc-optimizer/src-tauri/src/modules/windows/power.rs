@@ -18,8 +18,12 @@ pub fn parse_active_guid(output: &str) -> Option<String> {
 pub fn active_scheme() -> Result<String, String> {
     let output = shell::run_checked("powercfg", &["/getactivescheme"])?;
 
-    parse_active_guid(&output)
-        .ok_or_else(|| format!("Could not parse active power scheme from: {}", output.trim()))
+    parse_active_guid(&output).ok_or_else(|| {
+        format!(
+            "Could not parse active power scheme from: {}",
+            output.trim()
+        )
+    })
 }
 
 pub fn set_active_scheme(guid: &str) -> Result<(), String> {
@@ -45,7 +49,10 @@ pub fn hibernation_enabled() -> Option<bool> {
 }
 
 pub fn set_hibernation(enabled: bool) -> Result<(), String> {
-    shell::run_checked("powercfg", &["/hibernate", if enabled { "on" } else { "off" }])?;
+    shell::run_checked(
+        "powercfg",
+        &["/hibernate", if enabled { "on" } else { "off" }],
+    )?;
     Ok(())
 }
 
@@ -80,9 +87,7 @@ pub fn parse_hypervisor_launch_type(saida: &str) -> Option<String> {
         .map(|linha| linha.trim().to_lowercase())
         .find(|linha| linha.starts_with("hypervisorlaunchtype"))
         .and_then(|linha| linha.split_whitespace().nth(1).map(|v| v.to_string()))
-        .and_then(|valor| {
-            super::firmware::palavra_chave_do_hipervisor(&valor).map(str::to_string)
-        })
+        .and_then(|valor| super::firmware::palavra_chave_do_hipervisor(&valor).map(str::to_string))
 }
 
 /// `None` = não se leu (sem elevação, por exemplo): sem o estado anterior não há como prometer a reversão.
@@ -129,7 +134,11 @@ pub fn indice_do_valor(valor: &crate::modules::changelog::PreviousValue) -> Opti
 }
 
 pub fn valor_efetivo(scheme: &str, subgroup: &str, setting: &str, bateria: bool) -> Option<u32> {
-    let indice = if bateria { "DCSettingIndex" } else { "ACSettingIndex" };
+    let indice = if bateria {
+        "DCSettingIndex"
+    } else {
+        "ACSettingIndex"
+    };
 
     let no_plano = match super::registry::read(
         "HKLM",
@@ -293,7 +302,10 @@ mod tests {
     #[test]
     fn le_o_tipo_de_carga_do_hipervisor_na_saida_do_bcdedit() {
         let saida = "identifier              {current}\nhypervisorlaunchtype    Auto\nnx                      OptOut\n";
-        assert_eq!(parse_hypervisor_launch_type(saida), Some("auto".to_string()));
+        assert_eq!(
+            parse_hypervisor_launch_type(saida),
+            Some("auto".to_string())
+        );
     }
 
     #[test]
@@ -330,8 +342,14 @@ mod tests {
         use crate::modules::changelog::PreviousValue;
 
         assert_eq!(indice_do_valor(&PreviousValue::Dword(100)), Some(100));
-        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![0, 0, 0, 0])), Some(0));
-        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![100, 0, 0, 0])), Some(100));
+        assert_eq!(
+            indice_do_valor(&PreviousValue::Binary(vec![0, 0, 0, 0])),
+            Some(0)
+        );
+        assert_eq!(
+            indice_do_valor(&PreviousValue::Binary(vec![100, 0, 0, 0])),
+            Some(100)
+        );
         assert_eq!(
             indice_do_valor(&PreviousValue::Binary(vec![0xff, 0xff, 0xff, 0xff])),
             Some(u32::MAX)
@@ -343,7 +361,10 @@ mod tests {
         use crate::modules::changelog::PreviousValue;
 
         assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![1, 0])), None);
-        assert_eq!(indice_do_valor(&PreviousValue::Binary(vec![1, 0, 0, 0, 0])), None);
+        assert_eq!(
+            indice_do_valor(&PreviousValue::Binary(vec![1, 0, 0, 0, 0])),
+            None
+        );
         assert_eq!(indice_do_valor(&PreviousValue::Absent), None);
         assert_eq!(indice_do_valor(&PreviousValue::AbsentKey), None);
         assert_eq!(indice_do_valor(&PreviousValue::Text("100".into())), None);

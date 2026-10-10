@@ -91,11 +91,7 @@ pub fn arredondar_ram(gb: f64) -> u32 {
         .unwrap_or_else(|| gb.round() as u32)
 }
 
-pub fn condicao(
-    elevado: bool,
-    plano_existia: bool,
-    ha_ajuste_fora_do_alvo: bool,
-) -> Condicao {
+pub fn condicao(elevado: bool, plano_existia: bool, ha_ajuste_fora_do_alvo: bool) -> Condicao {
     if !elevado {
         return Condicao::SemAdministrador;
     }
@@ -176,10 +172,7 @@ fn valor(v: Option<u32>) -> String {
 /// da mesma máquina caírem no mesmo id.
 pub fn identificador(d: &cabecalho::Dados) -> String {
     // FNV-1a de 32 bits: é um rótulo, não criptografia.
-    let semente = format!(
-        "{}|{}|{:.0}|{}",
-        d.maquina.cpu, d.gpu, d.ram_gb, d.build
-    );
+    let semente = format!("{}|{}|{:.0}|{}", d.maquina.cpu, d.gpu, d.ram_gb, d.build);
 
     let mut hash: u32 = 0x811c_9dc5;
 
@@ -227,7 +220,11 @@ pub fn montar(lab: &Lab) -> String {
 
     campo(&mut s, "Windows", format!("{} {}", d.windows, d.edicao));
     campo(&mut s, "Build", d.build.clone());
-    campo(&mut s, "CPU", format!("{} ({:?})", d.maquina.cpu, d.maquina.fabricante_da_cpu));
+    campo(
+        &mut s,
+        "CPU",
+        format!("{} ({:?})", d.maquina.cpu, d.maquina.fabricante_da_cpu),
+    );
     campo(
         &mut s,
         "Cores",
@@ -240,17 +237,38 @@ pub fn montar(lab: &Lab) -> String {
         ),
     );
     campo(&mut s, "GPU", d.gpu.clone());
-    campo(&mut s, "Storage (system)", format!("{:?}", lab.armazenamento));
+    campo(
+        &mut s,
+        "Storage (system)",
+        format!("{:?}", lab.armazenamento),
+    );
     campo(&mut s, "RAM", format!("{:.1} GB", d.ram_gb));
     campo(&mut s, "OS architecture", d.arquitetura_do_windows.clone());
-    campo(&mut s, "Process bitness", d.arquitetura_do_processo.to_string());
-    campo(&mut s, "Elevated", sim_nao_nao_sei(Some(d.elevado)).to_string());
+    campo(
+        &mut s,
+        "Process bitness",
+        d.arquitetura_do_processo.to_string(),
+    );
+    campo(
+        &mut s,
+        "Elevated",
+        sim_nao_nao_sei(Some(d.elevado)).to_string(),
+    );
     campo(
         &mut s,
         "Form factor",
-        if d.maquina.notebook { "laptop" } else { "desktop" }.to_string(),
+        if d.maquina.notebook {
+            "laptop"
+        } else {
+            "desktop"
+        }
+        .to_string(),
     );
-    campo(&mut s, "Battery present", sim_nao_nao_sei(Some(d.maquina.tem_bateria)).to_string());
+    campo(
+        &mut s,
+        "Battery present",
+        sim_nao_nao_sei(Some(d.maquina.tem_bateria)).to_string(),
+    );
     campo(
         &mut s,
         "Power source now",
@@ -261,8 +279,16 @@ pub fn montar(lab: &Lab) -> String {
         }
         .to_string(),
     );
-    campo(&mut s, "Modern Standby", sim_nao_nao_sei(Some(d.maquina.modern_standby)).to_string());
-    campo(&mut s, "VBS running", sim_nao_nao_sei(lab.vbs_rodando).to_string());
+    campo(
+        &mut s,
+        "Modern Standby",
+        sim_nao_nao_sei(Some(d.maquina.modern_standby)).to_string(),
+    );
+    campo(
+        &mut s,
+        "VBS running",
+        sim_nao_nao_sei(lab.vbs_rodando).to_string(),
+    );
 
     campo(
         &mut s,
@@ -321,7 +347,11 @@ pub fn montar(lab: &Lab) -> String {
     s.push_str("\n## Tests\n\n");
 
     for (nome, feito) in &lab.testes {
-        s.push_str(&format!("- [{}] {}\n", if *feito { "x" } else { " " }, nome));
+        s.push_str(&format!(
+            "- [{}] {}\n",
+            if *feito { "x" } else { " " },
+            nome
+        ));
     }
 
     s.push_str("\n## OTIMIZA principle\n\n");
@@ -399,7 +429,10 @@ pub fn gerar() -> Result<String, String> {
             ("already-applied", condicao == Condicao::JaAplicado),
             ("non-admin if relevant", !dados.elevado),
             ("unsupported hardware/OS", sem_suporte),
-            ("policy/OEM conflict", gerenciada_por_oem || falha_de_verificacao),
+            (
+                "policy/OEM conflict",
+                gerenciada_por_oem || falha_de_verificacao,
+            ),
             // Exigem aplicar, reiniciar e desfazer: uma leitura nunca os exerce.
             ("restart persistence", false),
             ("rollback", false),
@@ -517,7 +550,11 @@ mod tests {
         let lab = lab_de_teste();
         let titulo = montar(&lab);
 
-        assert!(titulo.contains("WIN-COMPAT-2026-09-14-"), "{}", &titulo[..200]);
+        assert!(
+            titulo.contains("WIN-COMPAT-2026-09-14-"),
+            "{}",
+            &titulo[..200]
+        );
         assert!(titulo.contains("measured: 2026-09-14"));
         assert!(titulo.contains("otimiza-version: 2.1.0"));
     }

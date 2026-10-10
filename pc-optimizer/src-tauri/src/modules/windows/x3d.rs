@@ -18,7 +18,9 @@ pub const EQUILIBRADO: &str = "381b4222-f694-41f0-9685-ff5bb260df2e";
 /// Dois blocos, um com cache 3D. **Função pura.**
 pub fn e_x3d_de_dois_blocos(cpu: &str) -> bool {
     let n = cpu.to_lowercase();
-    ["7900x3d", "7950x3d", "9900x3d", "9950x3d"].iter().any(|m| n.contains(m))
+    ["7900x3d", "7950x3d", "9900x3d", "9950x3d"]
+        .iter()
+        .any(|m| n.contains(m))
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -77,9 +79,13 @@ pub fn achados(cpu: &str, l: &Leitura) -> Vec<Achado> {
 /// O processador, direto do registro.
 #[cfg(windows)]
 pub fn cpu() -> Option<String> {
-    super::registry::read_text("HKLM", r"HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString")
-        .ok()
-        .flatten()
+    super::registry::read_text(
+        "HKLM",
+        r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+        "ProcessorNameString",
+    )
+    .ok()
+    .flatten()
 }
 
 /// Lê o que falta. Só chamado com X3D de dois blocos.
@@ -106,10 +112,16 @@ pub fn ler() -> Leitura {
         .and_then(|s| serde_json::from_str(s.stdout.trim()).ok());
 
     let saida_do_plano = super::shell::run_checked("powercfg", &["/getactivescheme"]).ok();
-    let plano_ativo = saida_do_plano.as_deref().and_then(super::power::parse_active_guid).map(|g| g.to_lowercase());
+    let plano_ativo = saida_do_plano
+        .as_deref()
+        .and_then(super::power::parse_active_guid)
+        .map(|g| g.to_lowercase());
 
     Leitura {
-        servico_rodando: bruto.as_ref().and_then(|b| b.servico.as_deref()).map(|s| s == "Running"),
+        servico_rodando: bruto
+            .as_ref()
+            .and_then(|b| b.servico.as_deref())
+            .map(|s| s == "Running"),
         game_bar_instalada: bruto.as_ref().and_then(|b| b.game_bar),
         plano_ativo,
         plano_do_otimiza: saida_do_plano.is_some_and(|s| s.to_uppercase().contains("OTIMIZA")),
@@ -122,24 +134,45 @@ mod testes {
 
     #[test]
     fn reconhece_os_quatro_de_dois_blocos() {
-        assert!(e_x3d_de_dois_blocos("AMD Ryzen 9 7950X3D 16-Core Processor"));
-        assert!(e_x3d_de_dois_blocos("AMD Ryzen 9 9900X3D 12-Core Processor"));
-        assert!(!e_x3d_de_dois_blocos("AMD Ryzen 7 7800X3D 8-Core Processor"), "um bloco só");
+        assert!(e_x3d_de_dois_blocos(
+            "AMD Ryzen 9 7950X3D 16-Core Processor"
+        ));
+        assert!(e_x3d_de_dois_blocos(
+            "AMD Ryzen 9 9900X3D 12-Core Processor"
+        ));
+        assert!(
+            !e_x3d_de_dois_blocos("AMD Ryzen 7 7800X3D 8-Core Processor"),
+            "um bloco só"
+        );
         assert!(!e_x3d_de_dois_blocos("AMD Ryzen 9 7950X 16-Core Processor"));
     }
 
     #[test]
     fn tudo_certo_nao_acusa() {
-        let l = Leitura { servico_rodando: Some(true), game_bar_instalada: Some(true), plano_ativo: Some(EQUILIBRADO.into()), plano_do_otimiza: false };
+        let l = Leitura {
+            servico_rodando: Some(true),
+            game_bar_instalada: Some(true),
+            plano_ativo: Some(EQUILIBRADO.into()),
+            plano_do_otimiza: false,
+        };
         assert!(achados("AMD Ryzen 9 7950X3D", &l).is_empty());
     }
 
     #[test]
     fn diz_cada_coisa_que_falta() {
-        let l = Leitura { servico_rodando: Some(false), game_bar_instalada: Some(true), plano_ativo: Some("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c".into()), plano_do_otimiza: false };
+        let l = Leitura {
+            servico_rodando: Some(false),
+            game_bar_instalada: Some(true),
+            plano_ativo: Some("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c".into()),
+            plano_do_otimiza: false,
+        };
         let a = achados("AMD Ryzen 9 9950X3D", &l);
         assert_eq!(a.len(), 1);
-        assert!(a[0].medido.contains("serviço") && a[0].medido.contains("Equilibrado"), "{}", a[0].medido);
+        assert!(
+            a[0].medido.contains("serviço") && a[0].medido.contains("Equilibrado"),
+            "{}",
+            a[0].medido
+        );
         assert!(!a[0].medido.contains("Game Bar"), "{}", a[0].medido);
     }
 

@@ -105,8 +105,14 @@ pub fn montar(entrada: &Entrada) -> String {
         if entrada.monitores == 1 { "" } else { "es" }
     ));
 
-    linhas.push(format!("Mudanças aplicadas: {}", entrada.mudancas_aplicadas));
-    linhas.push(format!("Disco: {} · Térmico: {}", entrada.disco, entrada.termico));
+    linhas.push(format!(
+        "Mudanças aplicadas: {}",
+        entrada.mudancas_aplicadas
+    ));
+    linhas.push(format!(
+        "Disco: {} · Térmico: {}",
+        entrada.disco, entrada.termico
+    ));
     linhas.push(match entrada.abertura_ms {
         Some(ms) => format!("Abertura: {} ms", ms),
         None => "Abertura: não medida".to_string(),
@@ -115,14 +121,22 @@ pub fn montar(entrada: &Entrada) -> String {
         linhas.push(format!(
             "Quedas seguidas: {}{}",
             entrada.quedas_seguidas,
-            if entrada.modo_seguro { " · MODO SEGURO ligado" } else { "" }
+            if entrada.modo_seguro {
+                " · MODO SEGURO ligado"
+            } else {
+                ""
+            }
         ));
     }
     if entrada.falhas > 0 {
         linhas.push(format!(
             "Falhas do Otimiza gravadas: {}{}",
             entrada.falhas,
-            entrada.ultima_falha.as_deref().map(|f| format!(" · última: {}", f)).unwrap_or_default()
+            entrada
+                .ultima_falha
+                .as_deref()
+                .map(|f| format!(" · última: {}", f))
+                .unwrap_or_default()
         ));
     }
     if let Some(p) = &entrada.partida {
@@ -239,7 +253,11 @@ fn resumir_termico(relatorio: &thermal::ThermalReport) -> (String, Vec<String>) 
         thermal::Culprit::NaoIdentificado => "limitado (causa não identificada)",
     };
 
-    let lacunas = if relatorio.eventos_lidos { Vec::new() } else { vec!["eventos térmicos do Windows".to_string()] };
+    let lacunas = if relatorio.eventos_lidos {
+        Vec::new()
+    } else {
+        vec!["eventos térmicos do Windows".to_string()]
+    };
     (resumo.to_string(), lacunas)
 }
 
@@ -307,7 +325,11 @@ pub fn gerar() -> Entrada {
         .map(|l| anonimizar(&l, &pasta_do_usuario, &usuario))
         .collect();
 
-    let mudancas: Vec<(u64, String)> = historico.applied().iter().map(|a| (a.timestamp, a.optimization_id.clone())).collect();
+    let mudancas: Vec<(u64, String)> = historico
+        .applied()
+        .iter()
+        .map(|a| (a.timestamp, a.optimization_id.clone()))
+        .collect();
     let jogo = super::crashes::relatorio(&mudancas);
     let crashes_do_jogo = (!jogo.sem_fivem && !jogo.crashes.is_empty()).then(|| {
         let mut texto = format!("{} no FiveM", jogo.crashes.len());
@@ -322,9 +344,15 @@ pub fn gerar() -> Entrada {
     });
 
     let partida = crate::modules::medicoes::ler().ok().and_then(|m| {
-        let ultima = m.iter().filter(|x| x.presentmon.is_some()).max_by_key(|x| x.quando)?;
+        let ultima = m
+            .iter()
+            .filter(|x| x.presentmon.is_some())
+            .max_by_key(|x| x.quando)?;
         let r = ultima.presentmon.as_ref()?;
-        Some(format!("{} {:.1} FPS do jogo, gargalo {:?}, modo {}", ultima.jogo, r.fps_do_jogo_medio, r.gargalo, r.modo_de_apresentacao))
+        Some(format!(
+            "{} {:.1} FPS do jogo, gargalo {:?}, modo {}",
+            ultima.jogo, r.fps_do_jogo_medio, r.gargalo, r.modo_de_apresentacao
+        ))
     });
 
     Entrada {
@@ -350,7 +378,11 @@ pub fn gerar() -> Entrada {
 
 /// Quantos relatórios de pânico há em `%APPDATA%\pc-optimizer\falhas` e a mensagem do mais recente.
 fn ler_falhas() -> (usize, Option<String>) {
-    let Ok(pasta) = std::env::var("APPDATA").map(|a| std::path::PathBuf::from(a).join("pc-optimizer").join("falhas")) else {
+    let Ok(pasta) = std::env::var("APPDATA").map(|a| {
+        std::path::PathBuf::from(a)
+            .join("pc-optimizer")
+            .join("falhas")
+    }) else {
         return (0, None);
     };
     let mut arquivos: Vec<std::path::PathBuf> = std::fs::read_dir(pasta)
@@ -361,9 +393,15 @@ fn ler_falhas() -> (usize, Option<String>) {
         .filter(|p| p.extension().is_some_and(|x| x == "txt"))
         .collect();
     arquivos.sort();
-    let ultima = arquivos.last().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| {
-        t.lines().find_map(|l| l.strip_prefix("mensagem: ").map(|m| m.chars().take(120).collect::<String>()))
-    });
+    let ultima = arquivos
+        .last()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| {
+            t.lines().find_map(|l| {
+                l.strip_prefix("mensagem: ")
+                    .map(|m| m.chars().take(120).collect::<String>())
+            })
+        });
     (arquivos.len(), ultima)
 }
 
@@ -453,7 +491,10 @@ mod tests {
                    [2026-09-26 13:19:00.000] [WARN] segundo aviso";
         let passos = passos_do_log(log, 2);
         assert_eq!(passos.len(), 2);
-        assert!(passos[0].contains("PÂNICO") && passos[1].contains("segundo aviso"), "{passos:?}");
+        assert!(
+            passos[0].contains("PÂNICO") && passos[1].contains("segundo aviso"),
+            "{passos:?}"
+        );
         assert!(passos[1].starts_with("09-26 13:19"), "{passos:?}");
         assert!(!passos.iter().any(|p| p.contains("tudo certo")));
     }
@@ -470,7 +511,10 @@ mod tests {
         for trecho in ["MODO SEGURO", "índice fora", "bacon-vegan-carbon"] {
             assert!(texto.contains(trecho), "faltou {trecho}:\n{texto}");
         }
-        assert!(!montar(&Entrada::com_leitura_falha()).contains("Quedas seguidas"), "sem queda, a linha não aparece");
+        assert!(
+            !montar(&Entrada::com_leitura_falha()).contains("Quedas seguidas"),
+            "sem queda, a linha não aparece"
+        );
     }
 
     #[test]
@@ -481,7 +525,10 @@ mod tests {
             texto.contains("plano_otimiza"),
             "a contagem sozinha não diagnostica nada; falta a lista:\n{texto}"
         );
-        assert!(texto.contains("mmcss_games"), "a lista veio incompleta:\n{texto}");
+        assert!(
+            texto.contains("mmcss_games"),
+            "a lista veio incompleta:\n{texto}"
+        );
     }
 
     #[test]
@@ -579,7 +626,9 @@ mod tests {
     fn um_relatorio_hipoteticamente_maior_que_o_limite_ainda_cabe() {
         // Garante a Regra 1 se a lista de lacunas crescer.
         let mut entrada = Entrada::exemplo_cheia();
-        entrada.lacunas = (0..200).map(|n| format!("Leitura Hipotética Número {}", n)).collect();
+        entrada.lacunas = (0..200)
+            .map(|n| format!("Leitura Hipotética Número {}", n))
+            .collect();
 
         let texto = montar(&entrada);
 
@@ -670,8 +719,7 @@ mod tests {
             findings: vec![HealthFinding {
                 id: "no_data".to_string(),
                 title: "Sem dados de saúde disponíveis".to_string(),
-                measured: "O Windows não expôs informação de saúde para este hardware."
-                    .to_string(),
+                measured: "O Windows não expôs informação de saúde para este hardware.".to_string(),
                 advice: String::new(),
                 severity: FindingSeverity::Ok,
                 fix_location: FixLocation::None,

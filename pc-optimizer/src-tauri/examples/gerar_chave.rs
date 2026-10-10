@@ -125,5 +125,9 @@ fn emitir(args: &[String]) {
 
     let url = base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
-    println!("{}.{}", url.encode(&corpo), url.encode(assinatura.to_bytes()));
+    println!(
+        "{}.{}",
+        url.encode(&corpo),
+        url.encode(assinatura.to_bytes())
+    );
 }

@@ -197,7 +197,10 @@ pub fn definir_inicio(name: &str, automatico: bool) -> Result<ChangeRecord, Stri
         .ok_or_else(|| format!("Serviço `{}` não existe nesta máquina.", name))?;
 
     let caminho = bruto.path_name.clone().unwrap_or_default();
-    let exibicao = bruto.display_name.clone().unwrap_or_else(|| name.to_string());
+    let exibicao = bruto
+        .display_name
+        .clone()
+        .unwrap_or_else(|| name.to_string());
 
     if e_do_sistema(&caminho, &raiz) {
         return Err(format!(
@@ -233,12 +236,21 @@ mod tests {
     fn caminho_dentro_do_windows_e_do_sistema() {
         let raiz = "C:\\Windows";
 
-        assert!(e_do_sistema("C:\\Windows\\system32\\svchost.exe -k netsvcs", raiz));
+        assert!(e_do_sistema(
+            "C:\\Windows\\system32\\svchost.exe -k netsvcs",
+            raiz
+        ));
         assert!(e_do_sistema("\"C:\\Windows\\System32\\spoolsv.exe\"", raiz));
         assert!(e_do_sistema("c:\\windows\\system32\\lsass.exe", raiz));
 
-        assert!(!e_do_sistema("\"C:\\Program Files\\Google\\Update\\GoogleUpdate.exe\"", raiz));
-        assert!(!e_do_sistema("C:\\Program Files (x86)\\IObit\\service.exe", raiz));
+        assert!(!e_do_sistema(
+            "\"C:\\Program Files\\Google\\Update\\GoogleUpdate.exe\"",
+            raiz
+        ));
+        assert!(!e_do_sistema(
+            "C:\\Program Files (x86)\\IObit\\service.exe",
+            raiz
+        ));
     }
 
     #[test]
@@ -286,7 +298,9 @@ mod tests {
                 s.start_mode,
                 if s.running { ", rodando" } else { "" },
                 s.display_name,
-                s.ram_mb.map(|m| format!("{:.1} MB", m)).unwrap_or_else(|| "sem medida".into()),
+                s.ram_mb
+                    .map(|m| format!("{:.1} MB", m))
+                    .unwrap_or_else(|| "sem medida".into()),
                 s.protected.as_ref().map(|_| " (protegido)").unwrap_or("")
             );
         }

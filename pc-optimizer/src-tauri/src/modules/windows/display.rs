@@ -20,7 +20,11 @@ pub struct Monitor {
 
 impl Monitor {
     pub fn hz_maximo(&self) -> u32 {
-        self.hz_disponiveis.iter().copied().max().unwrap_or(self.hz_atual)
+        self.hz_disponiveis
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(self.hz_atual)
     }
 
     pub fn abaixo_do_maximo(&self) -> bool {
@@ -93,7 +97,11 @@ fn monitores_com(com_nomes: bool) -> Vec<Monitor> {
         String::from_utf16_lossy(&bruto[..fim])
     }
 
-    let comerciais = if com_nomes { nomes_comerciais() } else { Vec::new() };
+    let comerciais = if com_nomes {
+        nomes_comerciais()
+    } else {
+        Vec::new()
+    };
     let mut encontrados = Vec::new();
 
     unsafe {
@@ -119,8 +127,12 @@ fn monitores_com(com_nomes: bool) -> Vec<Monitor> {
             let mut atual: DEVMODEW = std::mem::zeroed();
             atual.dmSize = std::mem::size_of::<DEVMODEW>() as u16;
 
-            if EnumDisplaySettingsExW(nome_utf16.as_mut_ptr(), ENUM_CURRENT_SETTINGS, &mut atual, 0)
-                == 0
+            if EnumDisplaySettingsExW(
+                nome_utf16.as_mut_ptr(),
+                ENUM_CURRENT_SETTINGS,
+                &mut atual,
+                0,
+            ) == 0
             {
                 continue;
             }
@@ -194,11 +206,7 @@ pub fn diagnosticar(monitores: &[Monitor]) -> Vec<DisplayFinding> {
             title: "Monitor rodando abaixo da taxa que ele aceita".to_string(),
             measured: format!(
                 "{} está em {} Hz e aceita até {} Hz em {}x{}.",
-                monitor.descricao,
-                monitor.hz_atual,
-                maximo,
-                monitor.largura,
-                monitor.altura
+                monitor.descricao, monitor.hz_atual, maximo, monitor.largura, monitor.altura
             ),
             // Subir a taxa não sobe o FPS, sobe o TETO: prometer FPS aqui seria mentira fácil de vender.
             advice: format!(
@@ -260,8 +268,7 @@ fn mudar_hz(dispositivo: &str, hz: u32, apenas_ensaio: bool) -> Result<u32, Stri
             hz,
             alvo.largura,
             alvo.altura,
-            alvo
-                .hz_disponiveis
+            alvo.hz_disponiveis
                 .iter()
                 .map(|v| format!("{} Hz", v))
                 .collect::<Vec<_>>()
@@ -269,7 +276,10 @@ fn mudar_hz(dispositivo: &str, hz: u32, apenas_ensaio: bool) -> Result<u32, Stri
         ));
     }
 
-    let mut nome: Vec<u16> = dispositivo.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut nome: Vec<u16> = dispositivo
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
 
     unsafe {
         let mut modo: DEVMODEW = std::mem::zeroed();
@@ -352,16 +362,25 @@ pub fn e_integrada(nome: &str) -> bool {
 
 pub fn e_dedicada(nome: &str) -> bool {
     let n = nome.to_lowercase();
-    n.contains("nvidia") || n.contains("radeon rx") || n.contains("radeon pro") || (n.contains("intel") && n.contains("arc"))
+    n.contains("nvidia")
+        || n.contains("radeon rx")
+        || n.contains("radeon pro")
+        || (n.contains("intel") && n.contains("arc"))
 }
 
 /// Notebook fica de fora: a tela interna passa pela integrada de propósito.
-pub fn ligados_na_integrada(monitores: &[Monitor], placas: &[String], notebook: bool) -> Vec<DisplayFinding> {
+pub fn ligados_na_integrada(
+    monitores: &[Monitor],
+    placas: &[String],
+    notebook: bool,
+) -> Vec<DisplayFinding> {
     use super::achados::{FindingSeverity, FixLocation};
     if notebook {
         return Vec::new();
     }
-    let Some(dedicada) = placas.iter().find(|p| e_dedicada(p)) else { return Vec::new() };
+    let Some(dedicada) = placas.iter().find(|p| e_dedicada(p)) else {
+        return Vec::new();
+    };
     monitores
         .iter()
         .filter(|m| e_integrada(&m.adaptador))
@@ -433,14 +452,23 @@ mod tests {
     fn monitor_na_integrada_so_acusa_desktop_com_dedicada() {
         let mut m = monitor(144, &[60, 144]);
         m.adaptador = "Intel(R) UHD Graphics 630".to_string();
-        let placas = vec!["Intel(R) UHD Graphics 630".to_string(), "NVIDIA GeForce RTX 3060".to_string()];
+        let placas = vec![
+            "Intel(R) UHD Graphics 630".to_string(),
+            "NVIDIA GeForce RTX 3060".to_string(),
+        ];
 
         let achados = ligados_na_integrada(&[m.clone()], &placas, false);
         assert_eq!(achados.len(), 1);
         assert!(achados[0].measured.contains("RTX 3060"));
 
-        assert!(ligados_na_integrada(&[m.clone()], &placas, true).is_empty(), "notebook fica de fora");
-        assert!(ligados_na_integrada(&[m.clone()], &placas[..1], false).is_empty(), "sem dedicada não há o que trocar");
+        assert!(
+            ligados_na_integrada(&[m.clone()], &placas, true).is_empty(),
+            "notebook fica de fora"
+        );
+        assert!(
+            ligados_na_integrada(&[m.clone()], &placas[..1], false).is_empty(),
+            "sem dedicada não há o que trocar"
+        );
 
         let certo = monitor(144, &[60, 144]);
         assert!(ligados_na_integrada(&[certo], &placas, false).is_empty());
@@ -470,8 +498,10 @@ mod tests {
                         *outra
                     }
                     None => {
-                        println!("     só existe uma frequência aqui
-");
+                        println!(
+                            "     só existe uma frequência aqui
+"
+                        );
                         continue;
                     }
                 }
@@ -483,8 +513,11 @@ mod tests {
 ",
                     alvo, anterior
                 ),
-                Err(erro) => println!("     recusado: {}
-", erro),
+                Err(erro) => println!(
+                    "     recusado: {}
+",
+                    erro
+                ),
             }
         }
     }

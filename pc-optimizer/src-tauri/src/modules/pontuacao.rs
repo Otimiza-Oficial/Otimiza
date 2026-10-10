@@ -57,14 +57,24 @@ pub fn calcular(fps_medio: f64, low_1pct: f64, confiavel: bool) -> Nota {
 
 /// Nunca compara com outras máquinas nem diz "ruim": diz o que está segurando a experiência.
 pub fn explicar(nota: &Nota) -> String {
-    let Nota::Calculada { nota, fps_medio, low_1pct, .. } = nota else {
+    let Nota::Calculada {
+        nota,
+        fps_medio,
+        low_1pct,
+        ..
+    } = nota
+    else {
         return "Ainda não houve medição longa o bastante para uma nota. Ela aparece \
                 depois de alguns minutos de jogo — antes disso o 1% pior não significa \
                 nada, e uma nota sem lastro seria só um número bonito."
             .to_string();
     };
 
-    let proporcao = if *fps_medio > 0.0 { low_1pct / fps_medio } else { 0.0 };
+    let proporcao = if *fps_medio > 0.0 {
+        low_1pct / fps_medio
+    } else {
+        0.0
+    };
 
     let diagnostico = if proporcao < 0.4 {
         "O que segura esta nota não é o FPS médio, é o engasgo: os piores quadros estão \
@@ -109,8 +119,11 @@ mod tests {
 
     #[test]
     fn o_um_por_cento_pesa_mais_que_a_media() {
-        let Nota::Calculada { pontos_do_um_por_cento, pontos_da_media, .. } =
-            calcular(140.0, 70.0, true)
+        let Nota::Calculada {
+            pontos_do_um_por_cento,
+            pontos_da_media,
+            ..
+        } = calcular(140.0, 70.0, true)
         else {
             panic!("era para ter calculado");
         };
@@ -119,7 +132,11 @@ mod tests {
             pontos_do_um_por_cento > pontos_da_media,
             "o peso do 1% pior foi invertido"
         );
-        assert_eq!(nota_de(140.0, 70.0), 100, "os dois alvos batidos são nota cheia");
+        assert_eq!(
+            nota_de(140.0, 70.0),
+            100,
+            "os dois alvos batidos são nota cheia"
+        );
     }
 
     #[test]
@@ -137,7 +154,10 @@ mod tests {
     fn a_explicacao_aponta_o_engasgo_quando_e_engasgo() {
         let frase = explicar(&calcular(120.0, 30.0, true));
 
-        assert!(frase.contains("engasgo"), "o diagnóstico errou o alvo: {frase}");
+        assert!(
+            frase.contains("engasgo"),
+            "o diagnóstico errou o alvo: {frase}"
+        );
         assert!(frase.contains("120") && frase.contains("30"));
     }
 
@@ -165,7 +185,10 @@ mod tests {
     fn a_maquina_lenta_mas_estavel_nao_e_acusada_de_engasgo() {
         let frase = explicar(&calcular(18.0, 12.0, true));
 
-        assert!(!frase.contains("é o engasgo"), "acusou engasgo onde não há: {frase}");
+        assert!(
+            !frase.contains("é o engasgo"),
+            "acusou engasgo onde não há: {frase}"
+        );
         assert!(frase.contains("o que segura a nota é o FPS"));
     }
 }

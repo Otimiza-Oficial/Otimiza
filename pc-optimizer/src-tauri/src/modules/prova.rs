@@ -121,8 +121,8 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
         );
     }
 
-    let diferenca_de_duracao = (antes.segundos - depois.segundos).abs()
-        / antes.segundos.max(depois.segundos).max(1.0);
+    let diferenca_de_duracao =
+        (antes.segundos - depois.segundos).abs() / antes.segundos.max(depois.segundos).max(1.0);
 
     if diferenca_de_duracao > DIFERENCA_DE_DURACAO_ACEITAVEL {
         ressalvas.push(format!(
@@ -149,7 +149,8 @@ pub fn comparar(antes: &Prova, depois: &Prova) -> Comparacao {
     }
     let motivos = crate::modules::evidencia::diferencas(&[contexto(antes), contexto(depois)]);
     let mudou_a_geracao = motivos.contains(&crate::modules::evidencia::Motivo::GeracaoMudou);
-    let mudou_a_configuracao_do_jogo = motivos.contains(&crate::modules::evidencia::Motivo::ConfiguracaoDoJogoMudou);
+    let mudou_a_configuracao_do_jogo =
+        motivos.contains(&crate::modules::evidencia::Motivo::ConfiguracaoDoJogoMudou);
     let mudou_o_medidor = motivos.contains(&crate::modules::evidencia::Motivo::MedidorMudou);
 
     if mudou_a_geracao {
@@ -290,7 +291,10 @@ mod tests {
         assert!(c.veredito.contains("qualidade menor"), "{}", c.veredito);
 
         depois.configuracao_do_jogo = Some("aaaa".into());
-        assert!(comparar(&antes, &depois).vale_como_prova, "mesma configuração: o ganho vale");
+        assert!(
+            comparar(&antes, &depois).vale_como_prova,
+            "mesma configuração: o ganho vale"
+        );
     }
 
     fn resumo_do_presentmon() -> crate::modules::windows::presentmon::Resumo {
@@ -323,7 +327,11 @@ mod tests {
         assert!(c.mudou_o_medidor);
         assert!(!c.vale_como_prova);
         assert!(!c.veredito.contains("CAIU"), "{}", c.veredito);
-        assert!(c.veredito.contains("medidores diferentes"), "{}", c.veredito);
+        assert!(
+            c.veredito.contains("medidores diferentes"),
+            "{}",
+            c.veredito
+        );
 
         // Ao contrário: canal antigo depois dobraria o FPS e seria "ganho confirmado".
         let c = comparar(&depois, &antes);
@@ -341,7 +349,11 @@ mod tests {
         let c = comparar(&antes, &depois);
         assert!(!c.vale_como_prova);
         assert!(c.mudou_a_geracao);
-        assert!(!c.veredito.contains("CAIU"), "a queda é do gerador, não da otimização: {}", c.veredito);
+        assert!(
+            !c.veredito.contains("CAIU"),
+            "a queda é do gerador, não da otimização: {}",
+            c.veredito
+        );
     }
 
     #[test]
@@ -385,9 +397,18 @@ mod tests {
     #[test]
     fn a_ressalva_do_lugar_nunca_some() {
         for (antes, depois) in [
-            (prova("FiveM", 200.0, 120.0, 8.0), prova("FiveM", 500.0, 380.0, 2.0)),
-            (prova("FiveM", 200.0, 120.0, 8.0), prova("FiveM", 201.0, 121.0, 8.0)),
-            (prova("FiveM", 200.0, 120.0, 8.0), prova("FiveM", 100.0, 60.0, 20.0)),
+            (
+                prova("FiveM", 200.0, 120.0, 8.0),
+                prova("FiveM", 500.0, 380.0, 2.0),
+            ),
+            (
+                prova("FiveM", 200.0, 120.0, 8.0),
+                prova("FiveM", 201.0, 121.0, 8.0),
+            ),
+            (
+                prova("FiveM", 200.0, 120.0, 8.0),
+                prova("FiveM", 100.0, 60.0, 20.0),
+            ),
         ] {
             let c = comparar(&antes, &depois);
             assert!(
@@ -426,13 +447,19 @@ mod tests {
 
         let c = comparar(&prova("FiveM", 200.0, 120.0, 8.0), &depois);
 
-        assert!(c.ressalvas.iter().any(|r| r.contains("tempos bem diferentes")));
+        assert!(c
+            .ressalvas
+            .iter()
+            .any(|r| r.contains("tempos bem diferentes")));
     }
 
     /// Um "antes" de zero não pode virar divisão por zero nem porcentagem falsa.
     #[test]
     fn antes_zerado_nao_estoura() {
-        let c = comparar(&prova("FiveM", 0.0, 0.0, 0.0), &prova("FiveM", 300.0, 200.0, 1.0));
+        let c = comparar(
+            &prova("FiveM", 0.0, 0.0, 0.0),
+            &prova("FiveM", 300.0, 200.0, 1.0),
+        );
 
         assert!(c.fps_pct.is_finite(), "porcentagem virou infinito");
         assert!(c.low_pct.is_finite());

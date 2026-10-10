@@ -177,7 +177,10 @@ pub fn explicar(limite: Limite, cpu_total: f64, cpu_max_core: f64, gpu: f64) -> 
         ),
 
         Limite::CpuTodos => (
-            format!("O processador é o limite: todos os núcleos em {:.0}%.", cpu_total),
+            format!(
+                "O processador é o limite: todos os núcleos em {:.0}%.",
+                cpu_total
+            ),
             "Diferente do caso de um núcleo só, aqui a máquina está inteira ocupada. Vale \
              conferir na aba Painel se algum programa em segundo plano está consumindo o que \
              deveria ir para o jogo, antes de pensar em trocar peça."
@@ -255,7 +258,11 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
         sistema.refresh_cpu_all();
         sistema.refresh_memory();
 
-        let por_nucleo: Vec<f64> = sistema.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
+        let por_nucleo: Vec<f64> = sistema
+            .cpus()
+            .iter()
+            .map(|c| c.cpu_usage() as f64)
+            .collect();
 
         if !por_nucleo.is_empty() {
             cpu_totais.push(por_nucleo.iter().sum::<f64>() / por_nucleo.len() as f64);
@@ -290,9 +297,21 @@ pub fn analisar(segundos: u64) -> BottleneckReport {
     let cpu_total = media(&cpu_totais);
     let gpu = media(&gpus);
     let disco = media(&discos);
-    let ram_livre = if ram_livre_min == f64::MAX { 0.0 } else { ram_livre_min };
+    let ram_livre = if ram_livre_min == f64::MAX {
+        0.0
+    } else {
+        ram_livre_min
+    };
 
-    let limite = decidir(cpu_total, cpu_max_core, gpu, vram_max, vram_total, ram_livre, disco);
+    let limite = decidir(
+        cpu_total,
+        cpu_max_core,
+        gpu,
+        vram_max,
+        vram_total,
+        ram_livre,
+        disco,
+    );
     let (summary, advice) = explicar(limite, cpu_total, cpu_max_core, gpu);
 
     BottleneckReport {
@@ -416,7 +435,12 @@ mod tests {
         );
         println!(
             "  vram {:.0} MB de {:?} | ram livre {:.1} de {:.1} GB | {} amostras em {:.1} s",
-            r.vram_used_mb, r.vram_total_mb, r.ram_available_gb, r.ram_total_gb, r.samples, r.seconds
+            r.vram_used_mb,
+            r.vram_total_mb,
+            r.ram_available_gb,
+            r.ram_total_gb,
+            r.samples,
+            r.seconds
         );
 
         assert!(!r.summary.is_empty());

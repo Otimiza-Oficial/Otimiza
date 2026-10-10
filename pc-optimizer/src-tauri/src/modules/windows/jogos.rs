@@ -257,9 +257,10 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
     let caminhos = match super::registry::value_names("HKCU", CHAVE) {
         Ok(caminhos) => caminhos,
         Err(erro) => {
-            biblioteca
-                .lacunas
-                .push(format!("Preferências de placa de vídeo do Windows: {}", erro));
+            biblioteca.lacunas.push(format!(
+                "Preferências de placa de vídeo do Windows: {}",
+                erro
+            ));
             return;
         }
     };
@@ -304,6 +305,60 @@ fn ler_windows(biblioteca: &mut Biblioteca) {
 #[cfg(not(target_os = "windows"))]
 fn ler_windows(_biblioteca: &mut Biblioteca) {}
 
+/// O que a aba Jogos mostra de cada jogo instalado. Sem caminho de disco: a tela não precisa dele.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct JogoDaLoja {
+    pub nome: String,
+    pub loja: &'static str,
+    pub appid: Option<u32>,
+    pub ultima_vez: u64,
+    pub gb: f64,
+}
+
+/// Programa da Steam que não é jogo: aparece na biblioteca dela, mas não na prateleira de jogos.
+const NAO_SAO_JOGOS: &[&str] = &[
+    "mydockfinder",
+    "wallpaper engine",
+    "soundpad",
+    "lossless scaling",
+    "fpsmonitor",
+    "steamvr",
+];
+
+/// **Pura.** Só o que veio de uma loja ou de um instalador de jogo (o que veio da lista de placa de vídeo do Windows
+/// ou dos sinais de tela é executável solto, sem nome bonito). Sem repetidos, o jogado por último primeiro.
+pub fn para_a_tela(b: &Biblioteca) -> Vec<JogoDaLoja> {
+    let mut v: Vec<JogoDaLoja> = Vec::new();
+    for j in &b.jogos {
+        let loja = match j.origem {
+            Origem::Steam => "Steam",
+            Origem::Epic => "Epic Games",
+            Origem::Instalado => "Instalado",
+            Origem::Windows | Origem::Detectado => continue,
+        };
+        let minusculo = j.nome.to_lowercase();
+        if NAO_SAO_JOGOS.iter().any(|n| minusculo.contains(n)) {
+            continue;
+        }
+        if v.iter().any(|x| x.nome.eq_ignore_ascii_case(&j.nome)) {
+            continue;
+        }
+        v.push(JogoDaLoja {
+            nome: j.nome.clone(),
+            loja,
+            appid: j.appid,
+            ultima_vez: j.ultima_vez,
+            gb: (j.bytes as f64 / 1_073_741_824.0 * 10.0).round() / 10.0,
+        });
+    }
+    v.sort_by(|a, b| {
+        b.ultima_vez
+            .cmp(&a.ultima_vez)
+            .then_with(|| a.nome.cmp(&b.nome))
+    });
+    v
+}
+
 pub fn varrer() -> Biblioteca {
     let mut biblioteca = Biblioteca::default();
 
@@ -313,7 +368,9 @@ pub fn varrer() -> Biblioteca {
     ler_detectados(&mut biblioteca);
     ler_windows(&mut biblioteca);
 
-    biblioteca.jogos.sort_by(|a, b| b.ultima_vez.cmp(&a.ultima_vez));
+    biblioteca
+        .jogos
+        .sort_by(|a, b| b.ultima_vez.cmp(&a.ultima_vez));
     biblioteca.raizes.sort();
     biblioteca.raizes.dedup();
 
@@ -321,22 +378,63 @@ pub fn varrer() -> Biblioteca {
 }
 
 const EDITORAS_DE_JOGO: &[&str] = &[
-    "riot games", "blizzard", "activision", "electronic arts", "ubisoft", "gog.com", "rockstar",
-    "roblox", "mojang", "cfx.re", "bethesda", "hoyoverse", "mihoyo", "garena", "krafton",
-    "bandai namco", "square enix", "capcom", "warner bros", "2k", "cd projekt", "nexon", "wargaming",
-    "embark studios", "respawn", "bungie", "epic games", "valve",
+    "riot games",
+    "blizzard",
+    "activision",
+    "electronic arts",
+    "ubisoft",
+    "gog.com",
+    "rockstar",
+    "roblox",
+    "mojang",
+    "cfx.re",
+    "bethesda",
+    "hoyoverse",
+    "mihoyo",
+    "garena",
+    "krafton",
+    "bandai namco",
+    "square enix",
+    "capcom",
+    "warner bros",
+    "2k",
+    "cd projekt",
+    "nexon",
+    "wargaming",
+    "embark studios",
+    "respawn",
+    "bungie",
+    "epic games",
+    "valve",
 ];
 
 const NAO_E_JOGO: &[&str] = &[
-    "launcher", "sdk", "studio", "redistributable", "riot client", "battle.net", "ea app",
-    "ubisoft connect", "gog galaxy", "social club", "epic online services", "steam", "anti-cheat",
-    "anticheat", "vanguard", "easyanticheat", "battleye", "uninstall", "setup",
+    "launcher",
+    "sdk",
+    "studio",
+    "redistributable",
+    "riot client",
+    "battle.net",
+    "ea app",
+    "ubisoft connect",
+    "gog galaxy",
+    "social club",
+    "epic online services",
+    "steam",
+    "anti-cheat",
+    "anticheat",
+    "vanguard",
+    "easyanticheat",
+    "battleye",
+    "uninstall",
+    "setup",
 ];
 
 pub fn instalado_e_jogo(nome: &str, editora: &str) -> bool {
     let editora = editora.to_lowercase();
     let nome = nome.to_lowercase();
-    EDITORAS_DE_JOGO.iter().any(|e| editora.contains(e)) && !NAO_E_JOGO.iter().any(|n| nome.contains(n))
+    EDITORAS_DE_JOGO.iter().any(|e| editora.contains(e))
+        && !NAO_E_JOGO.iter().any(|n| nome.contains(n))
 }
 
 pub fn executavel_do_icone(icone: &str) -> Option<PathBuf> {
@@ -355,21 +453,37 @@ pub fn executavel_do_icone(icone: &str) -> Option<PathBuf> {
 fn ler_instalados(biblioteca: &mut Biblioteca) {
     use super::registry::{read_text, subkeys};
     const RAIZES: &[(&str, &str)] = &[
-        ("HKLM", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-        ("HKLM", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-        ("HKCU", r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+        (
+            "HKLM",
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        ),
+        (
+            "HKLM",
+            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        ),
+        (
+            "HKCU",
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        ),
     ];
     for (hive, raiz) in RAIZES {
         let chaves = match subkeys(hive, raiz) {
             Ok(c) => c,
             Err(erro) => {
-                biblioteca.lacunas.push(format!("Programas instalados: {}", erro));
+                biblioteca
+                    .lacunas
+                    .push(format!("Programas instalados: {}", erro));
                 continue;
             }
         };
         for chave in chaves {
             let caminho = format!("{}\\{}", raiz, chave);
-            let ler = |valor: &str| read_text(hive, &caminho, valor).ok().flatten().unwrap_or_default();
+            let ler = |valor: &str| {
+                read_text(hive, &caminho, valor)
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default()
+            };
             let (nome, editora) = (ler("DisplayName"), ler("Publisher"));
             if nome.is_empty() || !instalado_e_jogo(&nome, &editora) {
                 continue;
@@ -386,7 +500,11 @@ fn ler_instalados(biblioteca: &mut Biblioteca) {
             if !pasta.exists() {
                 continue;
             }
-            if biblioteca.jogos.iter().any(|j| j.pasta == pasta || pasta.starts_with(&j.pasta)) {
+            if biblioteca
+                .jogos
+                .iter()
+                .any(|j| j.pasta == pasta || pasta.starts_with(&j.pasta))
+            {
                 continue;
             }
             // NÃO entra em `raizes`: só biblioteca lida do arquivo da própria loja autoriza IFEO.
@@ -416,13 +534,19 @@ pub struct JogoVisto {
 }
 
 fn arquivo_de_vistos() -> Option<PathBuf> {
-    std::env::var("APPDATA").ok().map(|a| PathBuf::from(a).join("pc-optimizer").join("jogos_vistos.json"))
+    std::env::var("APPDATA").ok().map(|a| {
+        PathBuf::from(a)
+            .join("pc-optimizer")
+            .join("jogos_vistos.json")
+    })
 }
 
 /// Ilegível é erro, nunca "nenhum jogo" em silêncio.
 pub fn ler_vistos_de(caminho: &Path) -> Result<Vec<JogoVisto>, String> {
     match std::fs::read_to_string(caminho) {
-        Ok(texto) => serde_json::from_str(&texto).map_err(|e| format!("jogos_vistos.json ilegível: {}", e)),
+        Ok(texto) => {
+            serde_json::from_str(&texto).map_err(|e| format!("jogos_vistos.json ilegível: {}", e))
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(e) => Err(format!("jogos_vistos.json: {}", e)),
     }
@@ -430,7 +554,11 @@ pub fn ler_vistos_de(caminho: &Path) -> Result<Vec<JogoVisto>, String> {
 
 pub fn anotar_visto(lista: &mut Vec<JogoVisto>, nome: &str, executavel: &Path, agora: u64) -> bool {
     const UMA_HORA: u64 = 3600;
-    if let Some(v) = lista.iter_mut().find(|v| v.executavel.as_os_str().eq_ignore_ascii_case(executavel.as_os_str())) {
+    if let Some(v) = lista.iter_mut().find(|v| {
+        v.executavel
+            .as_os_str()
+            .eq_ignore_ascii_case(executavel.as_os_str())
+    }) {
         if agora.saturating_sub(v.ultima_vez) < UMA_HORA {
             return false;
         }
@@ -454,11 +582,16 @@ pub fn registrar_visto(nome: &str, executavel: &Path) {
     static RECENTES: Mutex<Vec<(PathBuf, u64)>> = Mutex::new(Vec::new());
     let agora = crate::modules::changelog::now_timestamp();
     if let Ok(recentes) = RECENTES.lock() {
-        if recentes.iter().any(|(e, t)| e == executavel && agora.saturating_sub(*t) < 3600) {
+        if recentes
+            .iter()
+            .any(|(e, t)| e == executavel && agora.saturating_sub(*t) < 3600)
+        {
             return;
         }
     }
-    let Some(arquivo) = arquivo_de_vistos() else { return };
+    let Some(arquivo) = arquivo_de_vistos() else {
+        return;
+    };
     // Ilegível: não sobrescreve (apagaria o histórico).
     let mut lista = match ler_vistos_de(&arquivo) {
         Ok(l) => l,
@@ -488,11 +621,15 @@ pub fn registrar_visto(nome: &str, executavel: &Path) {
 }
 
 fn ler_detectados(biblioteca: &mut Biblioteca) {
-    let Some(arquivo) = arquivo_de_vistos() else { return };
+    let Some(arquivo) = arquivo_de_vistos() else {
+        return;
+    };
     let vistos = match ler_vistos_de(&arquivo) {
         Ok(v) => v,
         Err(e) => {
-            biblioteca.lacunas.push(format!("Jogos vistos rodando: {}", e));
+            biblioteca
+                .lacunas
+                .push(format!("Jogos vistos rodando: {}", e));
             return;
         }
     };
@@ -500,14 +637,20 @@ fn ler_detectados(biblioteca: &mut Biblioteca) {
         if !v.executavel.exists() {
             continue;
         }
-        if let Some(j) = biblioteca.jogos.iter_mut().find(|j| v.executavel.starts_with(&j.pasta)) {
+        if let Some(j) = biblioteca
+            .jogos
+            .iter_mut()
+            .find(|j| v.executavel.starts_with(&j.pasta))
+        {
             if j.executavel.is_none() {
                 j.executavel = Some(v.executavel.clone());
             }
             j.ultima_vez = j.ultima_vez.max(v.ultima_vez);
             continue;
         }
-        let Some(pasta) = v.executavel.parent().map(PathBuf::from) else { continue };
+        let Some(pasta) = v.executavel.parent().map(PathBuf::from) else {
+            continue;
+        };
         biblioteca.jogos.push(JogoInstalado {
             nome: v.nome,
             origem: Origem::Detectado,
@@ -536,6 +679,44 @@ pub fn dentro_de_biblioteca(executavel: &Path, raizes: &[PathBuf]) -> bool {
 }
 
 #[cfg(test)]
+mod testes_da_prateleira {
+    use super::*;
+
+    fn jogo(nome: &str, origem: Origem, ultima_vez: u64) -> JogoInstalado {
+        JogoInstalado {
+            nome: nome.into(),
+            origem,
+            pasta: PathBuf::from("C:\\x"),
+            executavel: None,
+            ultima_vez,
+            bytes: 2 * 1_073_741_824,
+            appid: Some(1),
+        }
+    }
+
+    #[test]
+    fn a_prateleira_do_pc_do_dono() {
+        // Steam do dono: GTA V Legacy e o MyDockFinder (programa, não jogo).
+        let b = Biblioteca {
+            jogos: vec![
+                jogo("MyDockFinder", Origem::Steam, 50),
+                jogo("Grand Theft Auto V Legacy", Origem::Steam, 10),
+                jogo("FiveM", Origem::Instalado, 0),
+                jogo("Fortnite", Origem::Epic, 20),
+                jogo("algum.exe", Origem::Windows, 99),
+                jogo("FiveM", Origem::Detectado, 0),
+            ],
+            ..Default::default()
+        };
+        let v = para_a_tela(&b);
+        let nomes: Vec<&str> = v.iter().map(|j| j.nome.as_str()).collect();
+        assert_eq!(nomes, ["Fortnite", "Grand Theft Auto V Legacy", "FiveM"]);
+        assert_eq!(v[0].loja, "Epic Games");
+        assert_eq!(v[1].gb, 2.0);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -545,7 +726,10 @@ mod tests {
         assert!(instalado_e_jogo("FiveM", "Cfx.re"));
         assert!(instalado_e_jogo("Roblox Player", "Roblox Corporation"));
         assert!(instalado_e_jogo("VALORANT", "Riot Games, Inc"));
-        assert!(!instalado_e_jogo("Rockstar Games Launcher", "Rockstar Games"));
+        assert!(!instalado_e_jogo(
+            "Rockstar Games Launcher",
+            "Rockstar Games"
+        ));
         assert!(!instalado_e_jogo("Roblox Studio", "Roblox Corporation"));
         assert!(!instalado_e_jogo("Riot Vanguard", "Riot Games, Inc"));
         assert!(!instalado_e_jogo("Google Chrome", "Google LLC"));
@@ -554,14 +738,21 @@ mod tests {
     #[test]
     fn executavel_vem_do_icone_quando_nao_e_instalador() {
         assert_eq!(
-            executavel_do_icone(r#""C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe""#),
-            Some(PathBuf::from(r"C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe"))
+            executavel_do_icone(
+                r#""C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe""#
+            ),
+            Some(PathBuf::from(
+                r"C:\Program Files\Rockstar Games\Games\Grand Theft Auto V\GTA5.exe"
+            ))
         );
         assert_eq!(
             executavel_do_icone(r"C:\Users\U\AppData\Local\FiveM\FiveM.exe,0"),
             Some(PathBuf::from(r"C:\Users\U\AppData\Local\FiveM\FiveM.exe"))
         );
-        assert_eq!(executavel_do_icone(r"C:\R\RobloxPlayerInstaller.exe,0"), None);
+        assert_eq!(
+            executavel_do_icone(r"C:\R\RobloxPlayerInstaller.exe,0"),
+            None
+        );
         assert_eq!(executavel_do_icone(r"C:\x\jogo.ico"), None);
     }
 
@@ -570,11 +761,19 @@ mod tests {
         let mut l = Vec::new();
         let exe = Path::new(r"C:\Jogos\X\x.exe");
         assert!(anotar_visto(&mut l, "X", exe, 1_000));
-        assert!(!anotar_visto(&mut l, "X", exe, 1_500), "menos de uma hora: não regrava");
+        assert!(
+            !anotar_visto(&mut l, "X", exe, 1_500),
+            "menos de uma hora: não regrava"
+        );
         assert!(anotar_visto(&mut l, "X", exe, 1_000 + 3_600));
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].vezes, 2);
-        assert!(anotar_visto(&mut l, "Y", Path::new(r"C:\Jogos\Y\y.exe"), 5_000));
+        assert!(anotar_visto(
+            &mut l,
+            "Y",
+            Path::new(r"C:\Jogos\Y\y.exe"),
+            5_000
+        ));
         assert_eq!(l.len(), 2);
     }
 
@@ -636,7 +835,9 @@ mod tests {
         assert_eq!(jogo.nome, "Grand Theft Auto V Legacy");
         assert_eq!(
             jogo.pasta,
-            raiz.join("steamapps").join("common").join("Grand Theft Auto V")
+            raiz.join("steamapps")
+                .join("common")
+                .join("Grand Theft Auto V")
         );
         assert_eq!(jogo.ultima_vez, 1785616013);
         assert_eq!(jogo.bytes, 129049488815);
@@ -645,7 +846,9 @@ mod tests {
     #[test]
     fn manifest_sem_nome_ou_pasta_e_recusado() {
         assert!(jogo_do_manifest("\"AppState\"\n{\n}\n", Path::new("C:\\")).is_none());
-        assert!(jogo_do_manifest("\"name\" \"\"\n\"installdir\" \"x\"", Path::new("C:\\")).is_none());
+        assert!(
+            jogo_do_manifest("\"name\" \"\"\n\"installdir\" \"x\"", Path::new("C:\\")).is_none()
+        );
     }
 
     #[test]
@@ -716,7 +919,23 @@ mod tests {
 
         // Uma máquina pode não ter loja; o que se exige é que o relatado exista no disco.
         for j in &b.jogos {
-            assert!(j.pasta.exists(), "{} relatado e não existe", j.pasta.display());
+            assert!(
+                j.pasta.exists(),
+                "{} relatado e não existe",
+                j.pasta.display()
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod prateleira_na_maquina {
+    /// Só lê: `cargo test --lib -- --ignored prateleira_na_maquina --nocapture`.
+    #[test]
+    #[ignore]
+    fn mostra_a_prateleira_real() {
+        for j in super::para_a_tela(&super::varrer()) {
+            println!("{:?}", j);
         }
     }
 }

@@ -193,7 +193,10 @@ pub fn diagnosticar(
         findings.push(MemoryFinding {
             id: "pagefile_off".to_string(),
             title: "Arquivo de paginação desativado".to_string(),
-            measured: format!("Nenhuma paginação configurada, com {:.1} GB de RAM.", total_ram_gb),
+            measured: format!(
+                "Nenhuma paginação configurada, com {:.1} GB de RAM.",
+                total_ram_gb
+            ),
             advice: conselho,
             severity: severidade,
             fix_location: FixLocation::Software,
@@ -340,7 +343,9 @@ pub fn diagnosticar(
 /// O Windows cresce o arquivo quando falta e devolve quando sobra. Exige reiniciar.
 pub fn set_automatic_pagefile() -> Result<String, String> {
     if !super::registry::is_elevated() {
-        return Err("Alterar o arquivo de paginação exige executar como administrador.".to_string());
+        return Err(
+            "Alterar o arquivo de paginação exige executar como administrador.".to_string(),
+        );
     }
 
     let script = "$cs = Get-CimInstance Win32_ComputerSystem; \
@@ -351,7 +356,10 @@ pub fn set_automatic_pagefile() -> Result<String, String> {
     shell::powershell_checked(script)
         .map_err(|e| format!("Não foi possível alterar o arquivo de paginação: {}", e))?;
 
-    Ok("O Windows voltou a gerenciar o arquivo de paginação. Reinicie o PC para valer.".to_string())
+    Ok(
+        "O Windows voltou a gerenciar o arquivo de paginação. Reinicie o PC para valer."
+            .to_string(),
+    )
 }
 
 #[cfg(test)]
@@ -413,7 +421,9 @@ mod tests {
         let achado = f.iter().find(|f| f.id == "low_ram").unwrap();
 
         assert_eq!(achado.fix_location, FixLocation::Hardware);
-        assert!(achado.advice.contains("Nenhum ajuste de software cria memória"));
+        assert!(achado
+            .advice
+            .contains("Nenhum ajuste de software cria memória"));
     }
 
     /// O PC que o produto reprovou (máquina do dono, 12/08/2026, jogo fechado): 7,9 GB num pente, pico de 8,6 GB
@@ -438,7 +448,10 @@ mod tests {
         assert_eq!(historico.severity, FindingSeverity::Critical);
         assert_eq!(historico.fix_location, FixLocation::Hardware);
 
-        assert!(tem(&f, "low_ram"), "8 GB não pode mais passar por confortável");
+        assert!(
+            tem(&f, "low_ram"),
+            "8 GB não pode mais passar por confortável"
+        );
         assert!(!tem(&f, "memoria_sem_observacao"));
     }
 
@@ -457,7 +470,10 @@ mod tests {
     #[test]
     fn maquina_folgada_com_pico_alto_nao_vira_emergencia() {
         let f = diagnosticar(32.0, 16.0, 20.0, true, 18.0, 30.0);
-        let historico = f.iter().find(|f| f.id == "memoria_esgotada_historico").unwrap();
+        let historico = f
+            .iter()
+            .find(|f| f.id == "memoria_esgotada_historico")
+            .unwrap();
 
         assert_eq!(historico.severity, FindingSeverity::Important);
         assert!(!tem(&f, "low_ram"));

@@ -115,12 +115,18 @@ pub struct Julgamento {
 }
 
 /// Resume cada janela: travadas (episódios da captura inteira que caem nela), minutos válidos e FPS.
-pub fn resumir_janelas(quadros: &[QuadroDoJogo], janelas: &[Janela], frequencia: i64) -> Vec<ResumoDaJanela> {
+pub fn resumir_janelas(
+    quadros: &[QuadroDoJogo],
+    janelas: &[Janela],
+    frequencia: i64,
+) -> Vec<ResumoDaJanela> {
     let episodios = detectar_episodios(quadros, frequencia);
     let f = frequencia.max(1) as f64;
     let mut intervalos: Vec<f64> = quadros.iter().map(|q| q.intervalo_ms).collect();
     intervalos.sort_by(f64::total_cmp);
-    let fps_da_captura = mediana(&intervalos).filter(|m| *m > 0.0).map(|m| 1000.0 / m);
+    let fps_da_captura = mediana(&intervalos)
+        .filter(|m| *m > 0.0)
+        .map(|m| 1000.0 / m);
 
     janelas
         .iter()
@@ -128,19 +134,35 @@ pub fn resumir_janelas(quadros: &[QuadroDoJogo], janelas: &[Janela], frequencia:
             let inicio = j.inicio_qpc + (DESCARTE_APOS_TROCA_S * f) as i64;
             let fim = j.fim_qpc;
             let segundos = ((fim - inicio) as f64 / f).max(0.0);
-            let dentro: Vec<&QuadroDoJogo> = quadros.iter().filter(|q| q.qpc >= inicio && q.qpc < fim).collect();
-            let travadas = episodios.iter().filter(|e| e.qpc >= inicio && e.qpc < fim).count();
+            let dentro: Vec<&QuadroDoJogo> = quadros
+                .iter()
+                .filter(|q| q.qpc >= inicio && q.qpc < fim)
+                .collect();
+            let travadas = episodios
+                .iter()
+                .filter(|e| e.qpc >= inicio && e.qpc < fim)
+                .count();
             let esperado = fps_da_captura.map(|fps| fps * segundos).unwrap_or(0.0);
             let mut pontos: Vec<i64> = vec![inicio];
             pontos.extend(dentro.iter().map(|q| q.qpc));
             pontos.push(fim);
-            let maior_buraco = pontos.windows(2).map(|w| (w[1] - w[0]) as f64 / f).fold(0.0, f64::max);
+            let maior_buraco = pontos
+                .windows(2)
+                .map(|w| (w[1] - w[0]) as f64 / f)
+                .fold(0.0, f64::max);
             let motivo = if dentro.is_empty() {
                 Some("nenhum quadro do jogo (fechado, minimizado ou a medição parou)".to_string())
             } else if (dentro.len() as f64) < FRACAO_MINIMA_DE_QUADROS * esperado {
-                Some(format!("só {} de ~{:.0} quadros esperados (menu, carregamento ou minimizado)", dentro.len(), esperado))
+                Some(format!(
+                    "só {} de ~{:.0} quadros esperados (menu, carregamento ou minimizado)",
+                    dentro.len(),
+                    esperado
+                ))
             } else if maior_buraco > BURACO_MAXIMO_S {
-                Some(format!("{:.1} s sem nenhum quadro (PC suspenso ou jogo pausado)", maior_buraco))
+                Some(format!(
+                    "{:.1} s sem nenhum quadro (PC suspenso ou jogo pausado)",
+                    maior_buraco
+                ))
             } else {
                 None
             };
@@ -171,7 +193,10 @@ fn dispersao(janelas: &[&ResumoDaJanela]) -> f64 {
             continue;
         }
         let taxa = k as f64 / t;
-        soma += deste.iter().map(|j| (j.travadas as f64 - taxa * j.minutos).powi(2) / (taxa * j.minutos)).sum::<f64>();
+        soma += deste
+            .iter()
+            .map(|j| (j.travadas as f64 - taxa * j.minutos).powi(2) / (taxa * j.minutos))
+            .sum::<f64>();
         gl += deste.len() - 1;
     }
     if gl == 0 {
@@ -186,8 +211,14 @@ fn variacao_do_fps(janelas: &[ResumoDaJanela]) -> Option<f64> {
     let pares: Vec<f64> = janelas
         .chunks(2)
         .filter_map(|b| {
-            let n = b.iter().find(|j| j.lado == LadoDoTeste::Normal && j.valida)?.fps?;
-            let a = b.iter().find(|j| j.lado == LadoDoTeste::Acalmado && j.valida)?.fps?;
+            let n = b
+                .iter()
+                .find(|j| j.lado == LadoDoTeste::Normal && j.valida)?
+                .fps?;
+            let a = b
+                .iter()
+                .find(|j| j.lado == LadoDoTeste::Acalmado && j.valida)?
+                .fps?;
             (n > 0.0).then(|| (a - n) / n)
         })
         .collect();
@@ -201,7 +232,10 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
     let z = Z_POR_OLHADA[olhada - 1];
     let validas: Vec<&ResumoDaJanela> = janelas.iter().filter(|j| j.valida).collect();
     let soma = |lado| -> (usize, f64) {
-        validas.iter().filter(|j| j.lado == lado).fold((0, 0.0), |(k, t), j| (k + j.travadas, t + j.minutos))
+        validas
+            .iter()
+            .filter(|j| j.lado == lado)
+            .fold((0, 0.0), |(k, t), j| (k + j.travadas, t + j.minutos))
     };
     let (kn, tn) = soma(LadoDoTeste::Normal);
     let (ka, ta) = soma(LadoDoTeste::Acalmado);
@@ -223,8 +257,16 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
 
     let invalidas = janelas.len() - validas.len();
     if tn <= 0.0 || ta <= 0.0 {
-        let motivo = janelas.iter().find_map(|j| j.motivo.clone()).unwrap_or_else(|| "sem janelas medidas".to_string());
-        return base(Decisao::Invalido, format!("O teste não vale: faltou medir um dos lados ({}).", motivo), None, None);
+        let motivo = janelas
+            .iter()
+            .find_map(|j| j.motivo.clone())
+            .unwrap_or_else(|| "sem janelas medidas".to_string());
+        return base(
+            Decisao::Invalido,
+            format!("O teste não vale: faltou medir um dos lados ({}).", motivo),
+            None,
+            None,
+        );
     }
     if kn + ka < MINIMO_DE_TRAVADAS {
         return if ultima {
@@ -238,12 +280,21 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
                 None,
             )
         } else {
-            base(Decisao::Continuar, "Poucas travadas até agora: mais oito janelas.".to_string(), None, None)
+            base(
+                Decisao::Continuar,
+                "Poucas travadas até agora: mais oito janelas.".to_string(),
+                None,
+                None,
+            )
         };
     }
 
     // Correção de continuidade só com zero de um lado (log de zero não existe).
-    let (kn_c, ka_c) = if kn == 0 || ka == 0 { (kn as f64 + 0.5, ka as f64 + 0.5) } else { (kn as f64, ka as f64) };
+    let (kn_c, ka_c) = if kn == 0 || ka == 0 {
+        (kn as f64 + 0.5, ka as f64 + 0.5)
+    } else {
+        (kn as f64, ka as f64)
+    };
     let razao = (ka_c / ta) / (kn_c / tn);
     let ep = (phi * (1.0 / kn_c + 1.0 / ka_c)).sqrt();
     let ic = ((razao.ln() - z * ep).exp(), (razao.ln() + z * ep).exp());
@@ -257,8 +308,11 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
         (ic.0 - 1.0) * 100.0,
         (ic.1 - 1.0) * 100.0
     );
-    let aviso_invalidas =
-        if invalidas > 0 { format!(" {} janela(s) ficaram de fora por não valerem.", invalidas) } else { String::new() };
+    let aviso_invalidas = if invalidas > 0 {
+        format!(" {} janela(s) ficaram de fora por não valerem.", invalidas)
+    } else {
+        String::new()
+    };
 
     let fps_caiu = fps.is_some_and(|v| v < -QUEDA_DE_FPS_MAXIMA);
     let fps_despencou = fps.is_some_and(|v| v < -QUEDA_DE_FPS_QUE_PARA);
@@ -299,9 +353,18 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
             format!("Acalmar o {} diminuiu um pouco as travadas, menos que os 30% que valem manter: não fica. {}.", processo, numeros),
         )
     } else if ic.0 > 1.0 {
-        (Decisao::PiorouAsTravadas, format!("Com o {} acalmado o jogo travou MAIS: não fica. {}.", processo, numeros))
+        (
+            Decisao::PiorouAsTravadas,
+            format!(
+                "Com o {} acalmado o jogo travou MAIS: não fica. {}.",
+                processo, numeros
+            ),
+        )
     } else if !ultima {
-        (Decisao::Continuar, format!("Ainda sem resposta: {}. Mais oito janelas.", numeros))
+        (
+            Decisao::Continuar,
+            format!("Ainda sem resposta: {}. Mais oito janelas.", numeros),
+        )
     } else {
         (
             Decisao::SemMelhoriaConfiavel,
@@ -312,7 +375,12 @@ pub fn julgar(janelas: &[ResumoDaJanela], processo: &str, olhada: usize) -> Julg
             ),
         )
     };
-    base(decisao, format!("{}{}", frase, aviso_invalidas), Some(razao), Some(ic))
+    base(
+        decisao,
+        format!("{}{}", frase, aviso_invalidas),
+        Some(razao),
+        Some(ic),
+    )
 }
 
 /// Um teste guardado: a memória de efetividade da travada, com os negativos.
@@ -337,7 +405,13 @@ pub struct Registro {
 
 pub const REGISTROS_GUARDADOS: usize = 200;
 
-pub fn registro(jogo: &str, processo: &str, j: &Julgamento, driver: Option<String>, windows: Option<String>) -> Registro {
+pub fn registro(
+    jogo: &str,
+    processo: &str,
+    j: &Julgamento,
+    driver: Option<String>,
+    windows: Option<String>,
+) -> Registro {
     Registro {
         quando: crate::modules::changelog::now_timestamp(),
         jogo: jogo.to_string(),
@@ -370,7 +444,11 @@ pub fn pode_testar(travadas_por_minuto: f64) -> Result<(), String> {
 
 fn data(quando: u64) -> String {
     chrono::DateTime::from_timestamp(quando as i64, 0)
-        .map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+        .map(|d| {
+            d.with_timezone(&chrono::Local)
+                .format("%d/%m/%Y")
+                .to_string()
+        })
         .unwrap_or_else(|| "data desconhecida".to_string())
 }
 
@@ -385,8 +463,14 @@ pub fn anotar_com_memoria(
 ) {
     use crate::modules::causadatravada::{Hipotese, Teste};
     for a in inv.avaliacoes.iter_mut() {
-        let Hipotese::Processo { nome } = &a.hipotese else { continue };
-        let Some(r) = memoria.iter().rev().find(|r| r.jogo == jogo && r.processo.eq_ignore_ascii_case(nome)) else {
+        let Hipotese::Processo { nome } = &a.hipotese else {
+            continue;
+        };
+        let Some(r) = memoria
+            .iter()
+            .rev()
+            .find(|r| r.jogo == jogo && r.processo.eq_ignore_ascii_case(nome))
+        else {
             continue;
         };
         let resultado = match r.decisao {
@@ -403,7 +487,10 @@ pub fn anotar_com_memoria(
         a.ja_testado = Some(format!("Testado em {}: {}.", data(r.quando), resultado));
         let negativo = matches!(
             r.decisao,
-            Decisao::SemMelhoriaConfiavel | Decisao::SemMelhoriaQueImporta | Decisao::PiorouAsTravadas | Decisao::PiorouOFps
+            Decisao::SemMelhoriaConfiavel
+                | Decisao::SemMelhoriaQueImporta
+                | Decisao::PiorouAsTravadas
+                | Decisao::PiorouOFps
         );
         let mesmo_contexto = r.driver.as_deref() == driver && r.windows.as_deref() == windows;
         if negativo && mesmo_contexto && matches!(a.teste, Teste::AcalmarProcesso { .. }) {
@@ -425,7 +512,13 @@ mod tests {
 
     /// Uma captura com as janelas na ORDEM, travadas Poisson com a cena variando por janela (gama de forma 5) e o FPS
     /// variando 6% por janela. `efeito`: multiplicador da taxa no lado acalmado; `efeito_fps`: idem no FPS.
-    fn teste_simulado(s: &mut Sorteio, janelas: usize, taxa_por_min: f64, efeito: f64, efeito_fps: f64) -> (Vec<QuadroDoJogo>, Vec<Janela>) {
+    fn teste_simulado(
+        s: &mut Sorteio,
+        janelas: usize,
+        taxa_por_min: f64,
+        efeito: f64,
+        efeito_fps: f64,
+    ) -> (Vec<QuadroDoJogo>, Vec<Janela>) {
         let mut todos: Vec<QuadroDoJogo> = Vec::new();
         let mut js = Vec::new();
         let mut t0 = 0.0f64;
@@ -433,7 +526,11 @@ mod tests {
             let lado = &lado_da_janela(i);
             // Gama(5, 1/5) por soma de exponenciais: média 1, CV ~45%.
             let cena: f64 = (0..5).map(|_| s.exp(1.0)).sum::<f64>() / 5.0;
-            let fator = if *lado == LadoDoTeste::Acalmado { efeito } else { 1.0 };
+            let fator = if *lado == LadoDoTeste::Acalmado {
+                efeito
+            } else {
+                1.0
+            };
             let taxa_s = taxa_por_min * cena * fator / 60.0;
             let mut travadas = Vec::new();
             let mut t = s.exp(taxa_s);
@@ -441,7 +538,12 @@ mod tests {
                 travadas.push(t);
                 t += s.exp(taxa_s);
             }
-            let ms = 11.0 * (1.0 + 0.06 * s.normal()) / if *lado == LadoDoTeste::Acalmado { efeito_fps } else { 1.0 };
+            let ms = 11.0 * (1.0 + 0.06 * s.normal())
+                / if *lado == LadoDoTeste::Acalmado {
+                    efeito_fps
+                } else {
+                    1.0
+                };
             let q = quadros(s, SEGUNDOS_POR_JANELA as f64, ms, &travadas);
             let deslocamento = (t0 * FREQ as f64) as i64;
             todos.extend(q.into_iter().map(|mut x| {
@@ -449,7 +551,11 @@ mod tests {
                 x
             }));
             let inicio = deslocamento;
-            js.push(Janela { lado: *lado, inicio_qpc: inicio, fim_qpc: inicio + SEGUNDOS_POR_JANELA as i64 * FREQ });
+            js.push(Janela {
+                lado: *lado,
+                inicio_qpc: inicio,
+                fim_qpc: inicio + SEGUNDOS_POR_JANELA as i64 * FREQ,
+            });
             t0 += SEGUNDOS_POR_JANELA as f64;
         }
         (todos, js)
@@ -478,7 +584,11 @@ mod tests {
         assert!(r.iter().all(|x| x.valida), "{:?}", r);
         let jg = julgar(&r, "Rajada.exe", OLHADAS);
         assert_eq!(jg.decisao, Decisao::Manter, "{}", jg.frase);
-        assert!(jg.frase.contains("Rajada.exe") && jg.frase.contains("por minuto"), "{}", jg.frase);
+        assert!(
+            jg.frase.contains("Rajada.exe") && jg.frase.contains("por minuto"),
+            "{}",
+            jg.frase
+        );
         assert!(jg.ic.unwrap().1 < 1.0);
     }
 
@@ -513,7 +623,10 @@ mod tests {
         let mut s = Sorteio(43);
         let (q, j) = teste_simulado(&mut s, 8, 12.0, 0.2, 0.85);
         let r = resumir_janelas(&q, &j, FREQ);
-        assert_eq!(julgar(&r, "Rajada.exe", OLHADAS).decisao, Decisao::PiorouOFps);
+        assert_eq!(
+            julgar(&r, "Rajada.exe", OLHADAS).decisao,
+            Decisao::PiorouOFps
+        );
     }
 
     #[test]
@@ -526,7 +639,11 @@ mod tests {
         assert!(r[5..].iter().all(|x| !x.valida && x.motivo.is_some()));
         assert!(r[..5].iter().all(|x| x.valida));
         let jg = julgar(&r, "Rajada.exe", OLHADAS);
-        assert!(jg.frase.contains("janela(s) ficaram de fora"), "{}", jg.frase);
+        assert!(
+            jg.frase.contains("janela(s) ficaram de fora"),
+            "{}",
+            jg.frase
+        );
     }
 
     #[test]
@@ -538,13 +655,27 @@ mod tests {
         q.retain(|x| x.qpc < meio || x.qpc > meio + 5 * FREQ);
         let r = resumir_janelas(&q, &j, FREQ);
         assert!(!r[2].valida);
-        assert!(r[2].motivo.as_deref().unwrap().contains("sem nenhum quadro"), "{:?}", r[2]);
+        assert!(
+            r[2].motivo
+                .as_deref()
+                .unwrap()
+                .contains("sem nenhum quadro"),
+            "{:?}",
+            r[2]
+        );
     }
 
     #[test]
     fn um_lado_inteiro_sem_medida_e_invalido() {
         let r = vec![
-            ResumoDaJanela { lado: LadoDoTeste::Normal, travadas: 5, minutos: 0.47, fps: Some(90.0), valida: true, motivo: None },
+            ResumoDaJanela {
+                lado: LadoDoTeste::Normal,
+                travadas: 5,
+                minutos: 0.47,
+                fps: Some(90.0),
+                valida: true,
+                motivo: None,
+            },
             ResumoDaJanela {
                 lado: LadoDoTeste::Acalmado,
                 travadas: 0,
@@ -561,17 +692,46 @@ mod tests {
 
     #[test]
     fn poucas_travadas_continuam_e_depois_invalidam() {
-        let janela = |lado, travadas| ResumoDaJanela { lado, travadas, minutos: 0.47, fps: Some(90.0), valida: true, motivo: None };
-        let r = vec![janela(LadoDoTeste::Normal, 1), janela(LadoDoTeste::Acalmado, 0), janela(LadoDoTeste::Acalmado, 0), janela(LadoDoTeste::Normal, 0)];
+        let janela = |lado, travadas| ResumoDaJanela {
+            lado,
+            travadas,
+            minutos: 0.47,
+            fps: Some(90.0),
+            valida: true,
+            motivo: None,
+        };
+        let r = vec![
+            janela(LadoDoTeste::Normal, 1),
+            janela(LadoDoTeste::Acalmado, 0),
+            janela(LadoDoTeste::Acalmado, 0),
+            janela(LadoDoTeste::Normal, 0),
+        ];
         assert_eq!(julgar(&r, "X.exe", 1).decisao, Decisao::Continuar);
         assert_eq!(julgar(&r, "X.exe", OLHADAS).decisao, Decisao::Invalido);
     }
 
     #[test]
     fn superdispersao_alarga_o_intervalo() {
-        let janela = |lado, travadas| ResumoDaJanela { lado, travadas, minutos: 0.5, fps: Some(90.0), valida: true, motivo: None };
-        let calma = vec![janela(LadoDoTeste::Normal, 6), janela(LadoDoTeste::Acalmado, 3), janela(LadoDoTeste::Acalmado, 3), janela(LadoDoTeste::Normal, 6)];
-        let agitada = vec![janela(LadoDoTeste::Normal, 11), janela(LadoDoTeste::Acalmado, 1), janela(LadoDoTeste::Acalmado, 5), janela(LadoDoTeste::Normal, 1)];
+        let janela = |lado, travadas| ResumoDaJanela {
+            lado,
+            travadas,
+            minutos: 0.5,
+            fps: Some(90.0),
+            valida: true,
+            motivo: None,
+        };
+        let calma = vec![
+            janela(LadoDoTeste::Normal, 6),
+            janela(LadoDoTeste::Acalmado, 3),
+            janela(LadoDoTeste::Acalmado, 3),
+            janela(LadoDoTeste::Normal, 6),
+        ];
+        let agitada = vec![
+            janela(LadoDoTeste::Normal, 11),
+            janela(LadoDoTeste::Acalmado, 1),
+            janela(LadoDoTeste::Acalmado, 5),
+            janela(LadoDoTeste::Normal, 1),
+        ];
         let (a, b) = (julgar(&calma, "X", OLHADAS), julgar(&agitada, "X", OLHADAS));
         assert_eq!(a.dispersao, 1.0);
         assert!(b.dispersao > 1.0);
@@ -604,18 +764,31 @@ mod tests {
         let mut s = Sorteio(11);
         let (q, a) = sessao(&mut s, 120.0, 0.15, 0.6, 1.0);
         let base = investigar(&q, &a, FREQ, None, &|_: &str| false);
-        assert!(matches!(base.avaliacoes[0].teste, Teste::AcalmarProcesso { .. }));
+        assert!(matches!(
+            base.avaliacoes[0].teste,
+            Teste::AcalmarProcesso { .. }
+        ));
         let memoria = [registro_de(Decisao::SemMelhoriaConfiavel, "560.94")];
 
         let mut inv = base.clone();
         anotar_com_memoria(&mut inv, "fivem_", &memoria, Some("560.94"), Some("19045"));
-        assert!(matches!(inv.avaliacoes[0].teste, Teste::Recomendacao { .. }));
-        assert!(inv.avaliacoes[0].ja_testado.as_deref().unwrap().contains("sem melhoria confiável"));
+        assert!(matches!(
+            inv.avaliacoes[0].teste,
+            Teste::Recomendacao { .. }
+        ));
+        assert!(inv.avaliacoes[0]
+            .ja_testado
+            .as_deref()
+            .unwrap()
+            .contains("sem melhoria confiável"));
 
         // Driver novo: vale testar de novo, e a tela ainda mostra o resultado de antes.
         let mut inv = base.clone();
         anotar_com_memoria(&mut inv, "fivem_", &memoria, Some("566.03"), Some("19045"));
-        assert!(matches!(inv.avaliacoes[0].teste, Teste::AcalmarProcesso { .. }));
+        assert!(matches!(
+            inv.avaliacoes[0].teste,
+            Teste::AcalmarProcesso { .. }
+        ));
         assert!(inv.avaliacoes[0].ja_testado.is_some());
 
         // Outro jogo: nada anotado.
@@ -625,8 +798,17 @@ mod tests {
 
         // Teste que confirmou: continua oferecendo (revalidar).
         let mut inv = base;
-        anotar_com_memoria(&mut inv, "fivem_", &[registro_de(Decisao::Manter, "560.94")], Some("560.94"), Some("19045"));
-        assert!(matches!(inv.avaliacoes[0].teste, Teste::AcalmarProcesso { .. }));
+        anotar_com_memoria(
+            &mut inv,
+            "fivem_",
+            &[registro_de(Decisao::Manter, "560.94")],
+            Some("560.94"),
+            Some("19045"),
+        );
+        assert!(matches!(
+            inv.avaliacoes[0].teste,
+            Teste::AcalmarProcesso { .. }
+        ));
     }
 
     #[test]
@@ -672,13 +854,23 @@ mod grade_de_poder {
     use super::*;
     use crate::modules::causadatravada::simulacao::{quadros, Sorteio, FREQ};
 
-    fn simular(s: &mut Sorteio, janelas: usize, segundos: f64, taxa: f64, efeito: f64) -> Vec<ResumoDaJanela> {
+    fn simular(
+        s: &mut Sorteio,
+        janelas: usize,
+        segundos: f64,
+        taxa: f64,
+        efeito: f64,
+    ) -> Vec<ResumoDaJanela> {
         let mut todos = Vec::new();
         let mut js = Vec::new();
         for i in 0..janelas {
             let lado = lado_da_janela(i);
             let cena: f64 = (0..5).map(|_| s.exp(1.0)).sum::<f64>() / 5.0;
-            let f = if lado == LadoDoTeste::Acalmado { efeito } else { 1.0 };
+            let f = if lado == LadoDoTeste::Acalmado {
+                efeito
+            } else {
+                1.0
+            };
             let taxa_s = taxa * cena * f / 60.0;
             let mut tr = Vec::new();
             let mut t = s.exp(taxa_s);
@@ -691,7 +883,11 @@ mod grade_de_poder {
                 x.qpc += desl;
                 x
             }));
-            js.push(Janela { lado, inicio_qpc: desl, fim_qpc: desl + (segundos * FREQ as f64) as i64 });
+            js.push(Janela {
+                lado,
+                inicio_qpc: desl,
+                fim_qpc: desl + (segundos * FREQ as f64) as i64,
+            });
         }
         resumir_janelas(&todos, &js, FREQ)
     }
@@ -737,23 +933,52 @@ mod custo_do_motor {
         let mut js = Vec::new();
         for i in 0..24 {
             let desl = i as i64 * SEGUNDOS_POR_JANELA as i64 * FREQ;
-            todos.extend(quadros(&mut s, SEGUNDOS_POR_JANELA as f64, 5.5, &[3.0, 11.0, 19.0, 27.0]).into_iter().map(|mut x| {
-                x.qpc += desl;
-                x
-            }));
-            js.push(Janela { lado: lado_da_janela(i), inicio_qpc: desl, fim_qpc: desl + SEGUNDOS_POR_JANELA as i64 * FREQ });
+            todos.extend(
+                quadros(
+                    &mut s,
+                    SEGUNDOS_POR_JANELA as f64,
+                    5.5,
+                    &[3.0, 11.0, 19.0, 27.0],
+                )
+                .into_iter()
+                .map(|mut x| {
+                    x.qpc += desl;
+                    x
+                }),
+            );
+            js.push(Janela {
+                lado: lado_da_janela(i),
+                inicio_qpc: desl,
+                fim_qpc: desl + SEGUNDOS_POR_JANELA as i64 * FREQ,
+            });
         }
         let t = std::time::Instant::now();
         let r = resumir_janelas(&todos, &js, FREQ);
         for olhada in 1..=OLHADAS {
             let _ = julgar(&r[..olhada * JANELAS_POR_OLHADA], "X", olhada);
         }
-        println!("teste de 12 min: {} quadros, {:.1} ms", todos.len(), t.elapsed().as_secs_f64() * 1000.0);
+        println!(
+            "teste de 12 min: {} quadros, {:.1} ms",
+            todos.len(),
+            t.elapsed().as_secs_f64() * 1000.0
+        );
 
         let (q, a) = sessao(&mut s, 60.0, 0.15, 0.6, 1.0);
-        let q: Vec<_> = q.into_iter().map(|mut x| { x.intervalo_ms /= 2.0; x }).collect();
+        let q: Vec<_> = q
+            .into_iter()
+            .map(|mut x| {
+                x.intervalo_ms /= 2.0;
+                x
+            })
+            .collect();
         let t = std::time::Instant::now();
         let inv = crate::modules::causadatravada::investigar(&q, &a, FREQ, None, &|_: &str| false);
-        println!("investigação: {} quadros, {} amostras, {:.1} ms ({} hipóteses)", q.len(), a.len(), t.elapsed().as_secs_f64() * 1000.0, inv.avaliacoes.len());
+        println!(
+            "investigação: {} quadros, {} amostras, {:.1} ms ({} hipóteses)",
+            q.len(),
+            a.len(),
+            t.elapsed().as_secs_f64() * 1000.0,
+            inv.avaliacoes.len()
+        );
     }
 }

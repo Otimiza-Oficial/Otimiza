@@ -36,8 +36,8 @@ pub enum Reacao {
 pub fn reacao(tipo: i32) -> Reacao {
     // Valores de COREWEBVIEW2_PROCESS_FAILED_KIND.
     match tipo {
-        0 => Reacao::Reabrir,                // BROWSER_PROCESS_EXITED
-        1 | 2 | 3 => Reacao::Recarregar,     // RENDER_PROCESS_EXITED, RENDER_PROCESS_UNRESPONSIVE, FRAME_RENDER_PROCESS_EXITED
+        0 => Reacao::Reabrir,            // BROWSER_PROCESS_EXITED
+        1 | 2 | 3 => Reacao::Recarregar, // RENDER_PROCESS_EXITED, RENDER_PROCESS_UNRESPONSIVE, FRAME_RENDER_PROCESS_EXITED
         _ => Reacao::SoAnotar,
     }
 }
@@ -59,10 +59,15 @@ unsafe fn instalar(
                 let _ = a.ProcessFailedKind(&mut tipo);
             }
             let r = reacao(tipo.0);
-            super::Logger::error(&format!("WebView2: processo falhou (tipo {}); reação: {:?}", tipo.0, r));
+            super::Logger::error(&format!(
+                "WebView2: processo falhou (tipo {}); reação: {:?}",
+                tipo.0, r
+            ));
             match r {
                 // Três por sessão: página que cai toda vez que abre recarregaria sem parar.
-                Reacao::Recarregar if RECARGAS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3 => {
+                Reacao::Recarregar
+                    if RECARGAS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 3 =>
+                {
                     if let Some(w) = webview {
                         let _ = w.Reload();
                     }

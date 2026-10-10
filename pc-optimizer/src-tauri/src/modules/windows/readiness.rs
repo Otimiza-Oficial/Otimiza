@@ -309,7 +309,9 @@ const GUIDS_DE_FABRICA: [&str; 4] = [
 
 pub fn e_guid_de_fabrica(guid: &str) -> bool {
     let limpo = guid.trim().trim_matches(|c| c == '{' || c == '}');
-    GUIDS_DE_FABRICA.iter().any(|g| g.eq_ignore_ascii_case(limpo))
+    GUIDS_DE_FABRICA
+        .iter()
+        .any(|g| g.eq_ignore_ascii_case(limpo))
 }
 
 fn nome_e_do_windows(nome: &str) -> bool {
@@ -354,15 +356,19 @@ pub fn criar_plano_maximo() -> Result<String, String> {
     shell::run_checked("powercfg", &["-duplicatescheme", DESEMPENHO_MAXIMO_GUID])
         .map_err(|e| format!("Não foi possível criar o plano: {}", e))?;
 
-    Ok("Plano de desempenho máximo criado. Ele aparece agora nas opções de energia do Windows, \
+    Ok(
+        "Plano de desempenho máximo criado. Ele aparece agora nas opções de energia do Windows, \
         e o Otimiza não o ativou — ativar é uma escolha sua, e em notebook na bateria ele custa \
         autonomia."
-        .to_string())
+            .to_string(),
+    )
 }
 
 pub fn ligar_trim() -> Result<String, String> {
     if !registry::is_elevated() {
-        return Err("Alterar o comportamento do sistema de arquivos exige administrador.".to_string());
+        return Err(
+            "Alterar o comportamento do sistema de arquivos exige administrador.".to_string(),
+        );
     }
 
     shell::run_checked("fsutil", &["behavior", "set", "DisableDeleteNotify", "0"])
@@ -370,12 +376,16 @@ pub fn ligar_trim() -> Result<String, String> {
 
     // Relido, não presumido: o comando aceitar não é o Windows obedecer.
     if trim_ligado() != Some(true) {
-        return Err("O Windows aceitou o comando, mas o TRIM continua desligado na releitura.".to_string());
+        return Err(
+            "O Windows aceitou o comando, mas o TRIM continua desligado na releitura.".to_string(),
+        );
     }
 
-    Ok("TRIM religado. O SSD volta a ser avisado sobre blocos apagados, e a velocidade de \
+    Ok(
+        "TRIM religado. O SSD volta a ser avisado sobre blocos apagados, e a velocidade de \
         escrita para de se degradar com o tempo."
-        .to_string())
+            .to_string(),
+    )
 }
 
 #[allow(dead_code)]
@@ -396,8 +406,14 @@ mod tests {
             "e9a42b02-d5df-448d-aa00-03f14749eb61",
         ] {
             assert!(e_guid_de_fabrica(guid), "{guid} é de fábrica");
-            assert!(e_guid_de_fabrica(&guid.to_uppercase()), "a caixa não pode importar");
-            assert!(e_guid_de_fabrica(&format!("{{{guid}}}")), "com chaves também");
+            assert!(
+                e_guid_de_fabrica(&guid.to_uppercase()),
+                "a caixa não pode importar"
+            );
+            assert!(
+                e_guid_de_fabrica(&format!("{{{guid}}}")),
+                "com chaves também"
+            );
         }
     }
 
@@ -446,7 +462,10 @@ mod tests {
 
         let inicio = Instant::now();
         let _ = analyze();
-        println!("\n  analyze() INTEIRO                {:>6} ms\n", inicio.elapsed().as_millis());
+        println!(
+            "\n  analyze() INTEIRO                {:>6} ms\n",
+            inicio.elapsed().as_millis()
+        );
     }
 
     #[test]

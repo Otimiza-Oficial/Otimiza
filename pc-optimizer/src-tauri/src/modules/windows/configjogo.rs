@@ -192,7 +192,9 @@ fn caminhos() -> Vec<(PathBuf, &'static str)> {
 
     if let Ok(roaming) = std::env::var("APPDATA") {
         lista.push((
-            PathBuf::from(&roaming).join("CitizenFX").join("gta5_settings.xml"),
+            PathBuf::from(&roaming)
+                .join("CitizenFX")
+                .join("gta5_settings.xml"),
             "FiveM",
         ));
     }
@@ -229,7 +231,9 @@ pub fn impressao_da_configuracao(processo: &str) -> Option<String> {
 }
 
 fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3))
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ *b as u64).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 /// Ordem pelo custo real, não pelo menu: o MSAA primeiro em todos.
@@ -251,23 +255,67 @@ pub struct Mudanca {
 /// Um teto escrito num arquivo, não da placa: tirá-lo devolve na hora o que a máquina já entregava. Chave ausente
 /// é pulada, nunca criada.
 const SEM_TETO: &[Mudanca] = &[
-    Mudanca { chave: "VSync", valor: "0", custo: "" },
-    Mudanca { chave: "VSyncMode", valor: "0", custo: "" },
-    Mudanca { chave: "FPSLimit", valor: "0", custo: "" },
-    Mudanca { chave: "MaxFPS", valor: "0", custo: "" },
+    Mudanca {
+        chave: "VSync",
+        valor: "0",
+        custo: "",
+    },
+    Mudanca {
+        chave: "VSyncMode",
+        valor: "0",
+        custo: "",
+    },
+    Mudanca {
+        chave: "FPSLimit",
+        valor: "0",
+        custo: "",
+    },
+    Mudanca {
+        chave: "MaxFPS",
+        valor: "0",
+        custo: "",
+    },
 ];
 
 /// Chave que não existe é ignorada: o pior caso de um nome errado é não fazer nada.
 const CAROS_E_POUCO_VISIVEIS: &[Mudanca] = &[
-    Mudanca { chave: "MSAA", valor: "0", custo: "serrilhado nas bordas" },
+    Mudanca {
+        chave: "MSAA",
+        valor: "0",
+        custo: "serrilhado nas bordas",
+    },
     // Separada do MSAA do jogo e das mais caras: renderiza a cena de novo em cada superfície refletiva.
-    Mudanca { chave: "ReflectionMSAA", valor: "0", custo: "reflexos um pouco mais serrilhados" },
-    Mudanca { chave: "Tessellation", valor: "0", custo: "relevo em algumas superfícies" },
-    Mudanca { chave: "SSAO", valor: "0", custo: "sombra suave nos cantos" },
-    Mudanca { chave: "MotionBlurStrength", valor: "0.000000", custo: "sem desfoque de movimento" },
-    Mudanca { chave: "DoF", valor: "false", custo: "fundo sempre nítido" },
+    Mudanca {
+        chave: "ReflectionMSAA",
+        valor: "0",
+        custo: "reflexos um pouco mais serrilhados",
+    },
+    Mudanca {
+        chave: "Tessellation",
+        valor: "0",
+        custo: "relevo em algumas superfícies",
+    },
+    Mudanca {
+        chave: "SSAO",
+        valor: "0",
+        custo: "sombra suave nos cantos",
+    },
+    Mudanca {
+        chave: "MotionBlurStrength",
+        valor: "0.000000",
+        custo: "sem desfoque de movimento",
+    },
+    Mudanca {
+        chave: "DoF",
+        valor: "false",
+        custo: "fundo sempre nítido",
+    },
     // Quanta textura carrega de uma vez: com pouca VRAM vira engasgo.
-    Mudanca { chave: "HdStreamingInFlight", valor: "false", custo: "" },
+    Mudanca {
+        chave: "HdStreamingInFlight",
+        valor: "false",
+        custo: "",
+    },
 ];
 
 /// Tela cheia exclusiva: o jogo fala direto com a placa, sem o compositor, imagem igual. Fora do botão automático:
@@ -289,18 +337,58 @@ const TEXTURA_QUANDO_A_VRAM_NAO_CABE: &[Mudanca] = &[Mudanca {
 }];
 
 const O_RESTO_QUE_CUSTA: &[Mudanca] = &[
-    Mudanca { chave: "ReflectionQuality", valor: "0", custo: "reflexos mais simples" },
-    Mudanca { chave: "ShadowQuality", valor: "0", custo: "sombras mais duras" },
-    Mudanca { chave: "WaterQuality", valor: "0", custo: "água mais simples" },
-    Mudanca { chave: "ParticleQuality", valor: "0", custo: "efeitos mais simples" },
-    Mudanca { chave: "PostFX", valor: "0", custo: "menos brilho e desfoque" },
+    Mudanca {
+        chave: "ReflectionQuality",
+        valor: "0",
+        custo: "reflexos mais simples",
+    },
+    Mudanca {
+        chave: "ShadowQuality",
+        valor: "0",
+        custo: "sombras mais duras",
+    },
+    Mudanca {
+        chave: "WaterQuality",
+        valor: "0",
+        custo: "água mais simples",
+    },
+    Mudanca {
+        chave: "ParticleQuality",
+        valor: "0",
+        custo: "efeitos mais simples",
+    },
+    Mudanca {
+        chave: "PostFX",
+        valor: "0",
+        custo: "menos brilho e desfoque",
+    },
     // Das três mais caras e visível: fica no perfil que assume o custo visual.
-    Mudanca { chave: "GrassQuality", valor: "0", custo: "grama mais rala e mais curta" },
-    Mudanca { chave: "ShaderQuality", valor: "0", custo: "materiais menos detalhados" },
+    Mudanca {
+        chave: "GrassQuality",
+        valor: "0",
+        custo: "grama mais rala e mais curta",
+    },
+    Mudanca {
+        chave: "ShaderQuality",
+        valor: "0",
+        custo: "materiais menos detalhados",
+    },
     // Aliviam o PROCESSADOR, o gargalo do FiveM cheio; qualidade gráfica não encosta nele.
-    Mudanca { chave: "LodScale", valor: "0.000000", custo: "detalhe some mais perto" },
-    Mudanca { chave: "PedLodBias", valor: "0.000000", custo: "pessoas distantes mais simples" },
-    Mudanca { chave: "VehicleLodBias", valor: "0.000000", custo: "carros distantes mais simples" },
+    Mudanca {
+        chave: "LodScale",
+        valor: "0.000000",
+        custo: "detalhe some mais perto",
+    },
+    Mudanca {
+        chave: "PedLodBias",
+        valor: "0.000000",
+        custo: "pessoas distantes mais simples",
+    },
+    Mudanca {
+        chave: "VehicleLodBias",
+        valor: "0.000000",
+        custo: "carros distantes mais simples",
+    },
 ];
 
 /// Depende do monitor (`display::hz_maximo()`): "180" num monitor de 60 pediria um modo que não existe. `None`
@@ -337,7 +425,6 @@ impl Perfil {
 
         lista
     }
-
 }
 
 fn taxa_a_corrigir(conteudo: &str) -> Option<(String, u32)> {
@@ -372,32 +459,38 @@ pub fn manter_janela() -> bool {
 pub fn gerou_por_captura(medicoes: &[crate::modules::medicoes::MedicaoAutomatica]) -> bool {
     use crate::modules::medicoes::GeracaoNaPartida;
     medicoes.iter().rev().take(10).any(|m| {
-        matches!(m.geracao, Some(GeracaoNaPartida::OtimizaFg | GeracaoNaPartida::LosslessScaling))
+        matches!(
+            m.geracao,
+            Some(GeracaoNaPartida::OtimizaFg | GeracaoNaPartida::LosslessScaling)
+        )
     })
 }
 
-pub const AVISO_JANELA: &str = "tela cheia não foi gravada: você usa gerador de quadros (Lossless ou o do Otimiza), \
+pub const AVISO_JANELA: &str =
+    "tela cheia não foi gravada: você usa gerador de quadros (Lossless ou o do Otimiza), \
      e em tela cheia exclusiva ele para de gerar";
 
 /// O perfil queria pôr tela cheia e `manter_janela` impediu: a pessoa precisa saber por quê. Pura.
 pub fn tela_cheia_suprimida(conteudo: &str, perfil: Perfil, manter_janela: bool) -> bool {
     manter_janela
-        && perfil.mudancas_para(None).iter().any(|m| m.chave == "Windowed")
+        && perfil
+            .mudancas_para(None)
+            .iter()
+            .any(|m| m.chave == "Windowed")
         && valor(conteudo, "Windowed").is_some_and(|v| v.trim() != "0")
 }
 
 /// Só chaves que EXISTEM e diferem: listar as que já estão certas prometeria ganho que não vem.
-pub fn prever(conteudo: &str, perfil: Perfil, manter_janela: bool) -> Vec<(String, String, String, &'static str)> {
+pub fn prever(
+    conteudo: &str,
+    perfil: Perfil,
+    manter_janela: bool,
+) -> Vec<(String, String, String, &'static str)> {
     let mut previsto = Vec::new();
 
     // Em TODOS os perfis: a velocidade do monitor não muda como o jogo se parece.
     if let Some((atual, alvo)) = taxa_a_corrigir(conteudo) {
-        previsto.push((
-            "RefreshRate".to_string(),
-            atual,
-            alvo.to_string(),
-            "",
-        ));
+        previsto.push(("RefreshRate".to_string(), atual, alvo.to_string(), ""));
     }
 
     for m in perfil.mudancas_para(Some(vram_gb())) {
@@ -412,12 +505,7 @@ pub fn prever(conteudo: &str, perfil: Perfil, manter_janela: bool) -> Vec<(Strin
             continue;
         }
 
-        previsto.push((
-            m.chave.to_string(),
-            atual,
-            m.valor.to_string(),
-            m.custo,
-        ));
+        previsto.push((m.chave.to_string(), atual, m.valor.to_string(), m.custo));
     }
 
     previsto
@@ -679,7 +767,9 @@ mod tests {
             let (_, mexidas) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, vram, false);
 
             assert!(
-                !mexidas.iter().any(|m| m.starts_with("AnisotropicFiltering:")),
+                !mexidas
+                    .iter()
+                    .any(|m| m.starts_with("AnisotropicFiltering:")),
                 "filtro anisotrópico mexido com vram {:?}",
                 vram
             );
@@ -688,16 +778,21 @@ mod tests {
 
     #[test]
     fn a_textura_so_cai_quando_a_memoria_de_video_nao_cabe() {
-        let (_, com_placa_boa) = aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(12.0), false);
+        let (_, com_placa_boa) =
+            aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(12.0), false);
         assert!(
-            !com_placa_boa.iter().any(|m| m.starts_with("TextureQuality:")),
+            !com_placa_boa
+                .iter()
+                .any(|m| m.starts_with("TextureQuality:")),
             "textura derrubada numa placa que tem folga de sobra"
         );
 
         let (_, com_placa_apertada) =
             aplicar_no_texto_com(CONFIG_CHEIA, Perfil::Competitivo, Some(4.0), false);
         assert!(
-            com_placa_apertada.iter().any(|m| m.starts_with("TextureQuality:")),
+            com_placa_apertada
+                .iter()
+                .any(|m| m.starts_with("TextureQuality:")),
             "a textura não caiu numa placa de 4 GB, onde ela vira engasgo"
         );
 
@@ -710,15 +805,26 @@ mod tests {
 
     #[test]
     fn com_gerador_por_captura_a_tela_cheia_fica_de_fora() {
-        let com_janela = CONFIG_REAL.replace("</graphics>", "  <Windowed value=\"2\" />\n  </graphics>");
+        let com_janela =
+            CONFIG_REAL.replace("</graphics>", "  <Windowed value=\"2\" />\n  </graphics>");
         let (_, mexidas) = aplicar_no_texto_com(&com_janela, Perfil::Equilibrado, None, true);
-        assert!(!mexidas.iter().any(|m| m.starts_with("Windowed:")), "{mexidas:?}");
+        assert!(
+            !mexidas.iter().any(|m| m.starts_with("Windowed:")),
+            "{mexidas:?}"
+        );
         assert!(tela_cheia_suprimida(&com_janela, Perfil::Equilibrado, true));
 
         let (_, sem_gerador) = aplicar_no_texto_com(&com_janela, Perfil::Equilibrado, None, false);
         assert!(sem_gerador.iter().any(|m| m.starts_with("Windowed:")));
-        assert!(!tela_cheia_suprimida(&com_janela, Perfil::Equilibrado, false));
-        assert!(!tela_cheia_suprimida(&com_janela, Perfil::SemTeto, true), "o perfil sem custo nunca pediu tela cheia");
+        assert!(!tela_cheia_suprimida(
+            &com_janela,
+            Perfil::Equilibrado,
+            false
+        ));
+        assert!(
+            !tela_cheia_suprimida(&com_janela, Perfil::SemTeto, true),
+            "o perfil sem custo nunca pediu tela cheia"
+        );
     }
 
     #[test]
@@ -733,22 +839,37 @@ mod tests {
             m.geracao = g;
             m
         };
-        assert!(!gerou_por_captura(&[partida(None), partida(Some(GeracaoNaPartida::NenhumaVisivel))]));
-        assert!(!gerou_por_captura(&[partida(Some(GeracaoNaPartida::IdentificadaNosQuadros))]));
-        assert!(gerou_por_captura(&[partida(Some(GeracaoNaPartida::LosslessScaling))]));
-        assert!(gerou_por_captura(&[partida(Some(GeracaoNaPartida::OtimizaFg))]));
+        assert!(!gerou_por_captura(&[
+            partida(None),
+            partida(Some(GeracaoNaPartida::NenhumaVisivel))
+        ]));
+        assert!(!gerou_por_captura(&[partida(Some(
+            GeracaoNaPartida::IdentificadaNosQuadros
+        ))]));
+        assert!(gerou_por_captura(&[partida(Some(
+            GeracaoNaPartida::LosslessScaling
+        ))]));
+        assert!(gerou_por_captura(&[partida(Some(
+            GeracaoNaPartida::OtimizaFg
+        ))]));
     }
 
     #[test]
     fn a_tela_cheia_nao_entra_no_perfil_sem_custo() {
         // Por isso não está no `SemTeto`, o perfil do botão automático.
         assert!(
-            !Perfil::SemTeto.mudancas_para(None).iter().any(|m| m.chave == "Windowed"),
+            !Perfil::SemTeto
+                .mudancas_para(None)
+                .iter()
+                .any(|m| m.chave == "Windowed"),
             "o perfil sem custo passou a mexer no modo de tela"
         );
 
         assert!(
-            Perfil::Equilibrado.mudancas_para(None).iter().any(|m| m.chave == "Windowed"),
+            Perfil::Equilibrado
+                .mudancas_para(None)
+                .iter()
+                .any(|m| m.chave == "Windowed"),
             "o modo de tela sumiu do perfil do meio"
         );
 
@@ -774,7 +895,11 @@ mod tests {
             );
         }
 
-        assert!(mexidas.iter().any(|m| m.starts_with("MSAA:")), "{:?}", mexidas);
+        assert!(
+            mexidas.iter().any(|m| m.starts_with("MSAA:")),
+            "{:?}",
+            mexidas
+        );
     }
 
     #[test]
@@ -807,7 +932,11 @@ mod tests {
             "PostFX",
         ];
 
-        for chave in Perfil::Equilibrado.mudancas_para(None).iter().map(|m| m.chave) {
+        for chave in Perfil::Equilibrado
+            .mudancas_para(None)
+            .iter()
+            .map(|m| m.chave)
+        {
             assert!(
                 !SO_NO_COMPETITIVO.contains(&chave),
                 "`{}` muda a cara do jogo e não pode estar no perfil do meio",
@@ -856,7 +985,10 @@ mod tests {
             valor(&novo, "Tessellation"),
             valor(CONFIG_REAL, "Tessellation")
         );
-        assert_eq!(valor(&novo, "ShadowQuality"), valor(CONFIG_REAL, "ShadowQuality"));
+        assert_eq!(
+            valor(&novo, "ShadowQuality"),
+            valor(CONFIG_REAL, "ShadowQuality")
+        );
 
         assert!(novo.starts_with("<?xml"));
     }
@@ -874,7 +1006,8 @@ mod tests {
   </video>
 </Settings>"#;
 
-        let (atual, alvo) = taxa_a_corrigir_com(ARQUIVO, 180).expect("60 num monitor de 180 é trava");
+        let (atual, alvo) =
+            taxa_a_corrigir_com(ARQUIVO, 180).expect("60 num monitor de 180 é trava");
 
         assert_eq!(atual, "60");
         assert_eq!(alvo, 180);
@@ -911,7 +1044,10 @@ mod tests {
         }
 
         assert!(
-            !Perfil::SemTeto.mudancas_para(None).iter().any(|m| m.chave == "MSAA"),
+            !Perfil::SemTeto
+                .mudancas_para(None)
+                .iter()
+                .any(|m| m.chave == "MSAA"),
             "o MSAA entrou no perfil que promete não mexer no visual"
         );
     }
@@ -1046,7 +1182,10 @@ mod tests {
             Some(caminho) => {
                 println!("  {} → {}", r.jogo, caminho.display());
                 for c in &r.caros {
-                    println!("    {} em {} · custa {} · {}", c.chave, c.valor, c.ganho, c.onde);
+                    println!(
+                        "    {} em {} · custa {} · {}",
+                        c.chave, c.valor, c.ganho, c.onde
+                    );
                 }
                 for f in &r.findings {
                     println!("  [{:?}] {}", f.severity, f.measured);

@@ -55,7 +55,13 @@ pub fn pasta_do_fivem() -> Option<PathBuf> {
 }
 
 /// Caminho, nome, se pode apagar, explicação e preço. Cada pasta foi aberta e olhada numa instalação real.
-fn catalogo() -> Vec<(&'static str, &'static str, bool, &'static str, Option<&'static str>)> {
+fn catalogo() -> Vec<(
+    &'static str,
+    &'static str,
+    bool,
+    &'static str,
+    Option<&'static str>,
+)> {
     vec![
         (
             "data/server-cache-priv",
@@ -356,7 +362,13 @@ mod tests {
 
     #[test]
     fn perfil_do_jogo_nunca_e_apagavel() {
-        let protegidas = ["data/game-storage", "data/nui-storage", "citizen", "plugins", "mods"];
+        let protegidas = [
+            "data/game-storage",
+            "data/nui-storage",
+            "citizen",
+            "plugins",
+            "mods",
+        ];
 
         for id in protegidas {
             let (_, _, cleanable, explicacao, _) = catalogo()
@@ -435,7 +447,11 @@ mod tests {
         let fonte = codigo_de_producao();
 
         for proibido in ["PriorityClass = 'High'", "PriorityClass = 'RealTime'"] {
-            assert!(!fonte.contains(proibido), "`{}` voltou ao módulo do FiveM", proibido);
+            assert!(
+                !fonte.contains(proibido),
+                "`{}` voltou ao módulo do FiveM",
+                proibido
+            );
         }
     }
 

@@ -20,22 +20,81 @@ pub struct Jogo {
 pub const JOGOS: &[Jogo] = &[
     // O processo da Cfx.re muda de nome a cada compilação (`FiveM_b3570_GTAProcess.exe`). O sublinhado evita casar
     // com o lançador (`FiveM.exe`), que não desenha.
-    Jogo { chave: "fivem_", nome: "FiveM", por_pedaco: true },
-    Jogo { chave: "redm_", nome: "RedM", por_pedaco: true },
-
-    Jogo { chave: "gta5.exe", nome: "GTA V", por_pedaco: false },
-    Jogo { chave: "cs2.exe", nome: "Counter-Strike 2", por_pedaco: false },
-    Jogo { chave: "valorant-win64-shipping.exe", nome: "Valorant", por_pedaco: false },
-    Jogo { chave: "fortniteclient-win64-shipping.exe", nome: "Fortnite", por_pedaco: false },
-    Jogo { chave: "robloxplayerbeta.exe", nome: "Roblox", por_pedaco: false },
-    Jogo { chave: "minecraft.windows.exe", nome: "Minecraft", por_pedaco: false },
-    Jogo { chave: "league of legends.exe", nome: "League of Legends", por_pedaco: false },
-    Jogo { chave: "rocketleague.exe", nome: "Rocket League", por_pedaco: false },
-    Jogo { chave: "r5apex.exe", nome: "Apex Legends", por_pedaco: false },
-    Jogo { chave: "rainbowsix.exe", nome: "Rainbow Six Siege", por_pedaco: false },
-    Jogo { chave: "tslgame.exe", nome: "PUBG", por_pedaco: false },
-    Jogo { chave: "dota2.exe", nome: "Dota 2", por_pedaco: false },
-    Jogo { chave: "csgo.exe", nome: "CS:GO", por_pedaco: false },
+    Jogo {
+        chave: "fivem_",
+        nome: "FiveM",
+        por_pedaco: true,
+    },
+    Jogo {
+        chave: "redm_",
+        nome: "RedM",
+        por_pedaco: true,
+    },
+    Jogo {
+        chave: "gta5.exe",
+        nome: "GTA V",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "cs2.exe",
+        nome: "Counter-Strike 2",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "valorant-win64-shipping.exe",
+        nome: "Valorant",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "fortniteclient-win64-shipping.exe",
+        nome: "Fortnite",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "robloxplayerbeta.exe",
+        nome: "Roblox",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "minecraft.windows.exe",
+        nome: "Minecraft",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "league of legends.exe",
+        nome: "League of Legends",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "rocketleague.exe",
+        nome: "Rocket League",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "r5apex.exe",
+        nome: "Apex Legends",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "rainbowsix.exe",
+        nome: "Rainbow Six Siege",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "tslgame.exe",
+        nome: "PUBG",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "dota2.exe",
+        nome: "Dota 2",
+        por_pedaco: false,
+    },
+    Jogo {
+        chave: "csgo.exe",
+        nome: "CS:GO",
+        por_pedaco: false,
+    },
 ];
 
 /// Pura: testável sem depender do que está aberto.
@@ -98,13 +157,18 @@ static GOVERNADOR: std::sync::Mutex<Option<Governador>> = std::sync::Mutex::new(
 /// Mesmo envenenado: a lista do que foi acalmado continua valendo e é o que o desligar precisa. Tratar o veneno
 /// como "sem governador" dizia "desligado" com programas ainda em prioridade baixa.
 fn trava() -> std::sync::MutexGuard<'static, Option<Governador>> {
-    GOVERNADOR.lock().unwrap_or_else(|envenenado| envenenado.into_inner())
+    GOVERNADOR
+        .lock()
+        .unwrap_or_else(|envenenado| envenenado.into_inner())
 }
 
 /// **Pura.** FiveM e RedM trocam de nome a cada compilação: a chave deles é o pedaço fixo do catálogo.
 pub fn chave_do_processo(executavel: &str) -> String {
     let nome = executavel.trim().to_lowercase();
-    if let Some(jogo) = JOGOS.iter().find(|j| j.por_pedaco && nome.contains(j.chave)) {
+    if let Some(jogo) = JOGOS
+        .iter()
+        .find(|j| j.por_pedaco && nome.contains(j.chave))
+    {
         return jogo.chave.to_string();
     }
     nome.strip_suffix(".exe").unwrap_or(&nome).to_string()
@@ -114,16 +178,26 @@ fn executavel_do_pid(pid: u32) -> Option<String> {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sistema = System::new();
     let alvo = [Pid::from_u32(pid)];
-    sistema.refresh_processes_specifics(ProcessesToUpdate::Some(&alvo), true, ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet));
+    sistema.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&alvo),
+        true,
+        ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::OnlyIfNotSet),
+    );
     let p = sistema.process(alvo[0])?;
-    let do_caminho = p.exe().and_then(|c| c.file_name()).map(|a| a.to_string_lossy().to_string());
+    let do_caminho = p
+        .exe()
+        .and_then(|c| c.file_name())
+        .map(|a| a.to_string_lossy().to_string());
     do_caminho.or_else(|| Some(p.name().to_string_lossy().to_string()))
 }
 
 fn governador_para(jogo: &str, pid: u32) -> (Governador, Option<String>) {
     use crate::modules::portao::{self, Rodada};
 
-    let Some(processo) = executavel_do_pid(pid).map(|e| chave_do_processo(&e)).filter(|p| !p.is_empty()) else {
+    let Some(processo) = executavel_do_pid(pid)
+        .map(|e| chave_do_processo(&e))
+        .filter(|p| !p.is_empty())
+    else {
         return (
             Governador::novo(Modo::Parado, None, pid),
             Some(format!(
@@ -145,12 +219,21 @@ fn governador_para(jogo: &str, pid: u32) -> (Governador, Option<String>) {
         && !crate::utils::diagnostico::modo_seguro();
     let medicoes = crate::modules::medicoes::ler_para_comparar().ok();
     let estado = portao::ler_estrito();
-    let rodada = portao::rodada_do_governador(estado.as_ref().ok(), &processo, medicoes.as_deref(), medindo);
+    let rodada = portao::rodada_do_governador(
+        estado.as_ref().ok(),
+        &processo,
+        medicoes.as_deref(),
+        medindo,
+    );
     let agora = crate::modules::changelog::now_timestamp();
 
     let vigiar = |agindo: bool| {
-        portao::observar_governador(&processo, jogo, agora, agindo)
-            .map_err(|e| (Modo::Parado, Some(format!("O governador fica parado: {}.", e))))
+        portao::observar_governador(&processo, jogo, agora, agindo).map_err(|e| {
+            (
+                Modo::Parado,
+                Some(format!("O governador fica parado: {}.", e)),
+            )
+        })
     };
     let (modo, aviso) = match rodada {
         Rodada::Agir => match vigiar(true) {
@@ -191,7 +274,9 @@ fn passar(guarda: &mut Option<Governador>, jogo: &str, pid: u32) -> Vec<String> 
         frases.extend(aviso);
         *guarda = Some(novo);
     }
-    let Some(g) = guarda.as_mut() else { return frases };
+    let Some(g) = guarda.as_mut() else {
+        return frases;
+    };
     let feito = g.passada(pid);
     if let Some(frase) = mensagem_da_passada(jogo, g.modo(), &feito, sessao_nova) {
         frases.push(frase);
@@ -201,7 +286,12 @@ fn passar(guarda: &mut Option<Governador>, jogo: &str, pid: u32) -> Vec<String> 
 
 /// **Pura.** "Nada disputando" e "o Windows não deixou" são diferentes: o segundo tem solução (abrir como
 /// administrador).
-pub fn mensagem_da_passada(jogo: &str, modo: Modo, p: &Passada, dizer_nada: bool) -> Option<String> {
+pub fn mensagem_da_passada(
+    jogo: &str,
+    modo: Modo,
+    p: &Passada,
+    dizer_nada: bool,
+) -> Option<String> {
     let mut partes = Vec::new();
     if !p.acalmados.is_empty() {
         partes.push(format!(
@@ -223,7 +313,8 @@ pub fn mensagem_da_passada(jogo: &str, modo: Modo, p: &Passada, dizer_nada: bool
         let causa = if p.recusados.iter().all(|r| r.codigo == 5) {
             "acesso negado — costuma ser programa rodando como administrador com o Otimiza sem administrador".to_string()
         } else {
-            let mut codigos: Vec<String> = p.recusados.iter().map(|r| r.codigo.to_string()).collect();
+            let mut codigos: Vec<String> =
+                p.recusados.iter().map(|r| r.codigo.to_string()).collect();
             codigos.dedup();
             format!("erro do Windows {}", codigos.join(", "))
         };
@@ -236,7 +327,10 @@ pub fn mensagem_da_passada(jogo: &str, modo: Modo, p: &Passada, dizer_nada: bool
         ));
     }
     if partes.is_empty() && dizer_nada && modo != Modo::Parado {
-        partes.push(format!("Nada em segundo plano está disputando processador com {} agora.", jogo));
+        partes.push(format!(
+            "Nada em segundo plano está disputando processador com {} agora.",
+            jogo
+        ));
     }
     (!partes.is_empty()).then(|| partes.join(" "))
 }
@@ -245,7 +339,10 @@ fn frase_de_falha(d: &Devolucao) -> String {
     let mut partes = Vec::new();
     if !d.falharam.is_empty() {
         let nomes: Vec<&str> = d.falharam.iter().map(|a| a.nome.as_str()).collect();
-        partes.push(format!("O Windows não deixou devolver ao normal: {}. Continuam em prioridade baixa.", nomes.join(", ")));
+        partes.push(format!(
+            "O Windows não deixou devolver ao normal: {}. Continuam em prioridade baixa.",
+            nomes.join(", ")
+        ));
     }
     match (&d.nao_anotado, d.falharam.is_empty()) {
         (None, false) => partes.push(
@@ -283,7 +380,9 @@ pub fn recuperar_na_abertura() -> Result<Devolucao, String> {
     super::governador::recuperar_na_abertura()
 }
 
-pub fn governador_na_partida(executavel: &str) -> Option<crate::modules::portao::GovernadorNaPartida> {
+pub fn governador_na_partida(
+    executavel: &str,
+) -> Option<crate::modules::portao::GovernadorNaPartida> {
     let guarda = trava();
     let g = guarda.as_ref()?;
     let processo = g.processo()?;
@@ -308,21 +407,10 @@ pub fn reprovar_governador(processo: &str) -> Result<(), String> {
 }
 
 /// Para a trava do IFEO: o caminho separa o jogo instalado de um arquivo batizado com o mesmo nome.
+/// Com `ProcessRefreshKind::nothing()` puro o sysinfo não preenche `exe()` e isto voltava sempre `None`: só a lista
+/// de conhecidos passava na trava. `frames::caminho_do_processo` pede o caminho e compara sem caixa.
 fn caminho_do_executavel(nome: &str) -> Option<std::path::PathBuf> {
-    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
-
-    let mut sistema = System::new();
-    sistema.refresh_processes_specifics(
-        ProcessesToUpdate::All,
-        true,
-        ProcessRefreshKind::nothing(),
-    );
-
-    sistema
-        .processes()
-        .values()
-        .find(|p| p.name().to_string_lossy().to_lowercase() == nome)
-        .and_then(|p| p.exe().map(std::path::PathBuf::from))
+    super::frames::caminho_do_processo(nome).map(std::path::PathBuf::from)
 }
 
 /// O que o Windows não deixar devolver NÃO vira sucesso: erro com o nome, e segue anotado em disco.
@@ -331,7 +419,9 @@ pub fn desativar(log: &mut ChangeLog) -> Result<String, String> {
     // abertura (`recuperar_na_abertura`) mexe no mesmo arquivo.
     let devolucao = {
         let mut guarda = trava();
-        let mut governador = guarda.take().unwrap_or_else(|| Governador::novo(Modo::Parado, None, 0));
+        let mut governador = guarda
+            .take()
+            .unwrap_or_else(|| Governador::novo(Modo::Parado, None, 0));
         governador.devolver_tudo()
     };
 
@@ -360,9 +450,16 @@ fn frase_do_desligar(d: &Devolucao, plano: bool) -> Result<String, String> {
     }
     if !d.falharam.is_empty() || d.nao_anotado.is_some() {
         partes.push(frase_de_falha(d));
-        return Err(format!("Modo jogo desligado só em parte. {}", partes.join(" ")));
+        return Err(format!(
+            "Modo jogo desligado só em parte. {}",
+            partes.join(" ")
+        ));
     }
-    Ok(if partes.is_empty() { "Modo jogo desligado.".to_string() } else { format!("Modo jogo desligado. {}", partes.join(" ")) })
+    Ok(if partes.is_empty() {
+        "Modo jogo desligado.".to_string()
+    } else {
+        format!("Modo jogo desligado. {}", partes.join(" "))
+    })
 }
 
 /// Para quando a anotação estragou e ele ficou parado de vez. Com o modo ligado, zerar perderia o caminho de volta.
@@ -397,8 +494,7 @@ fn status_com(log: &ChangeLog, jogo: Option<String>) -> GameModeStatus {
     }
 }
 
-const IFEO: &str =
-    r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
+const IFEO: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
 
 /// NUNCA 4, que é tempo real (escala do IFEO: 1 baixa, 2 normal, 3 alta, 4 tempo real, 5 abaixo, 6 acima): acima
 /// do próprio sistema, trava som, mouse e teclado.
@@ -537,7 +633,10 @@ fn o_que_o_vigia_faz(jogo_aberto: bool, ligado: bool) -> Vigia {
 }
 
 fn passo_com(log: &mut ChangeLog, aberto: Option<(String, u32)>) -> Option<String> {
-    match (o_que_o_vigia_faz(aberto.is_some(), modo_ligado(log)), aberto) {
+    match (
+        o_que_o_vigia_faz(aberto.is_some(), modo_ligado(log)),
+        aberto,
+    ) {
         (Vigia::NovaPassada, Some((nome, pid))) => {
             let frases = passar(&mut trava(), &nome, pid);
             (!frases.is_empty()).then(|| frases.join(" "))
@@ -568,12 +667,40 @@ fn passo_com(log: &mut ChangeLog, aberto: Option<(String, u32)>) -> Option<Strin
 mod tests {
     use super::*;
 
+    /// O governador é um só para o processo inteiro: o teste que o envenena de propósito põe um governador lá dentro
+    /// por um instante, e os que esperam "nenhum ligado" rodando junto viam esse. Os três passam um de cada vez.
+    static SERIE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn em_serie() -> std::sync::MutexGuard<'static, ()> {
+        SERIE.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// O próprio binário de teste está rodando: o caminho tem de vir, e com o nome em caixa diferente também.
+    #[test]
+    fn caminho_do_executavel_acha_processo_vivo() {
+        let proprio = std::env::current_exe().unwrap();
+        let nome = proprio.file_name().unwrap().to_string_lossy().to_uppercase();
+
+        let achado = caminho_do_executavel(&nome)
+            .expect("o processo do teste está vivo; sem caminho a trava do IFEO só aceita os conhecidos");
+
+        assert_eq!(
+            achado.canonicalize().unwrap(),
+            proprio.canonicalize().unwrap()
+        );
+    }
+
     #[test]
     fn nao_mata_processo() {
         let fonte = include_str!("gamemode.rs");
         let producao = fonte.split("#[cfg(test)]").next().unwrap();
 
-        for proibido in ["TerminateProcess", "Stop-Process", "taskkill", "EmptyWorkingSet"] {
+        for proibido in [
+            "TerminateProcess",
+            "Stop-Process",
+            "taskkill",
+            "EmptyWorkingSet",
+        ] {
             assert!(
                 !producao.contains(proibido),
                 "`{}` apareceu no modo jogo",
@@ -651,7 +778,10 @@ mod tests {
     fn a_prioridade_nao_e_mais_exclusiva_do_fivem() {
         // `fivem::priorizar_jogo()` procurava `FiveM*GTAProcess*` e dizia "o jogo não está aberto" com o CS aberto.
         // Conferido pela IMPORTAÇÃO, não pelo texto, para os comentários poderem citar a função antiga.
-        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("gamemode.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
 
         assert!(
             !producao.contains("use super::{fivem"),
@@ -661,17 +791,34 @@ mod tests {
 
     #[test]
     fn o_modo_jogo_nao_usa_mais_receita_universal() {
-        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
-        for proibido in ["garantir_alto_desempenho", "fn priorizar_pid", "PriorityClass = 'High'"] {
-            assert!(!producao.contains(proibido), "`{}` voltou ao modo jogo", proibido);
+        let producao = include_str!("gamemode.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+        for proibido in [
+            "garantir_alto_desempenho",
+            "fn priorizar_pid",
+            "PriorityClass = 'High'",
+        ] {
+            assert!(
+                !producao.contains(proibido),
+                "`{}` voltou ao modo jogo",
+                proibido
+            );
         }
-        assert!(producao.contains("governador"), "o modo jogo precisa usar o governador");
+        assert!(
+            producao.contains("governador"),
+            "o modo jogo precisa usar o governador"
+        );
     }
 
     #[test]
     fn a_recusa_por_origem_esta_escrita_no_texto_da_mensagem() {
         // Não depende de privilégio: o teste acima só chega à recusa por origem elevado (verde local, quebrou na 0.14.0).
-        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("gamemode.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
 
         assert!(
             producao.contains("pasta de jogo instalado"),
@@ -685,7 +832,10 @@ mod tests {
 
     #[test]
     fn nunca_escreve_tempo_real_nem_depurador() {
-        let producao = include_str!("gamemode.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("gamemode.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
 
         assert_eq!(PRIORIDADE_ALTA, 3);
         assert!(!producao.contains("PRIORIDADE_ALTA: u32 = 4"));
@@ -724,18 +874,30 @@ mod tests {
         use std::path::PathBuf;
 
         let nome = escolher_executavel([
-            (Some(PathBuf::from(r"C:\Windows\notepad.exe")), "notepad.exe".to_string()),
-            (Some(PathBuf::from(r"C:\Steam\steamapps\common\cs2\cs2.exe")), "cs2".to_string()),
+            (
+                Some(PathBuf::from(r"C:\Windows\notepad.exe")),
+                "notepad.exe".to_string(),
+            ),
+            (
+                Some(PathBuf::from(r"C:\Steam\steamapps\common\cs2\cs2.exe")),
+                "cs2".to_string(),
+            ),
         ]);
         assert_eq!(nome.as_deref(), Some("cs2.exe"));
 
-        assert_eq!(escolher_executavel([(None, "cs2".to_string())]).as_deref(), Some("cs2.exe"));
+        assert_eq!(
+            escolher_executavel([(None, "cs2".to_string())]).as_deref(),
+            Some("cs2.exe")
+        );
         assert_eq!(
             escolher_executavel([(None, "RobloxPlayerBeta.exe".to_string())]).as_deref(),
             Some("RobloxPlayerBeta.exe")
         );
 
-        assert_eq!(escolher_executavel([(None, "notepad.exe".to_string())]), None);
+        assert_eq!(
+            escolher_executavel([(None, "notepad.exe".to_string())]),
+            None
+        );
         assert_eq!(escolher_executavel(Vec::new()), None);
     }
 
@@ -747,7 +909,11 @@ mod tests {
 
         if let Some(n) = nome {
             assert!(!n.trim().is_empty(), "nome vazio nao serve para nada");
-            assert!(!n.contains('\\') && !n.contains('/'), "veio um caminho: {:?}", n);
+            assert!(
+                !n.contains('\\') && !n.contains('/'),
+                "veio um caminho: {:?}",
+                n
+            );
         }
     }
 
@@ -760,7 +926,10 @@ mod tests {
         let resposta = desativar(&mut log).expect("desligar sem ter ligado não pode falhar");
 
         assert!(resposta.starts_with("Modo jogo desligado"), "{resposta}");
-        assert!(!resposta.contains("plano de energia"), "não havia plano para devolver: {resposta}");
+        assert!(
+            !resposta.contains("plano de energia"),
+            "não havia plano para devolver: {resposta}"
+        );
         assert!(!log.is_applied(ID));
     }
 
@@ -775,6 +944,7 @@ mod tests {
 
     #[test]
     fn o_vigia_nao_faz_nada_quando_nao_ha_mudanca() {
+        let _serie = em_serie();
         // Histórico em memória e jogo ausente injetado: nenhum teste liga o governador, então o passo é nada.
         let mut log = ChangeLog::em_memoria();
 
@@ -784,6 +954,7 @@ mod tests {
 
     #[test]
     fn o_status_mostra_o_jogo_que_recebeu() {
+        let _serie = em_serie();
         // Uma leitura só: com duas, um jogo abrindo entre elas quebrava o teste.
         let log = ChangeLog::em_memoria();
 
@@ -809,11 +980,17 @@ mod tests {
     fn chave_casa_com_o_nome_que_a_medicao_grava() {
         assert_eq!(chave_do_processo("FiveM_b3258_GTAProcess.exe"), "fivem_");
         assert_eq!(chave_do_processo("cs2.exe"), "cs2");
-        assert_eq!(chave_do_processo("Palworld-Win64-Shipping.exe"), "palworld-win64-shipping");
+        assert_eq!(
+            chave_do_processo("Palworld-Win64-Shipping.exe"),
+            "palworld-win64-shipping"
+        );
     }
 
     fn recusa(nome: &str, codigo: u32) -> super::super::governador::Recusa {
-        super::super::governador::Recusa { nome: nome.into(), codigo }
+        super::super::governador::Recusa {
+            nome: nome.into(),
+            codigo,
+        }
     }
 
     #[test]
@@ -821,19 +998,41 @@ mod tests {
         let nada = mensagem_da_passada("FiveM", Modo::Agir, &Passada::default(), true).unwrap();
         assert!(nada.contains("Nada em segundo plano"));
 
-        let recusado = Passada { recusados: vec![recusa("OneDrive.exe", 5)], ..Default::default() };
+        let recusado = Passada {
+            recusados: vec![recusa("OneDrive.exe", 5)],
+            ..Default::default()
+        };
         let frase = mensagem_da_passada("FiveM", Modo::Agir, &recusado, true).unwrap();
-        assert!(!frase.contains("Nada"), "recusa não pode virar \"nada disputando\": {}", frase);
-        assert!(frase.contains("OneDrive.exe") && frase.contains("administrador"), "{}", frase);
+        assert!(
+            !frase.contains("Nada"),
+            "recusa não pode virar \"nada disputando\": {}",
+            frase
+        );
+        assert!(
+            frase.contains("OneDrive.exe") && frase.contains("administrador"),
+            "{}",
+            frase
+        );
 
-        let outro = Passada { recusados: vec![recusa("x.exe", 87)], ..Default::default() };
-        assert!(mensagem_da_passada("FiveM", Modo::Agir, &outro, false).unwrap().contains("erro do Windows 87"));
+        let outro = Passada {
+            recusados: vec![recusa("x.exe", 87)],
+            ..Default::default()
+        };
+        assert!(mensagem_da_passada("FiveM", Modo::Agir, &outro, false)
+            .unwrap()
+            .contains("erro do Windows 87"));
     }
 
     #[test]
     fn silencio_depois_da_primeira_passada_e_parado_sem_frase() {
-        assert_eq!(mensagem_da_passada("FiveM", Modo::Agir, &Passada::default(), false), None);
-        assert_eq!(mensagem_da_passada("FiveM", Modo::Parado, &Passada::default(), true), None);
+        assert_eq!(
+            mensagem_da_passada("FiveM", Modo::Agir, &Passada::default(), false),
+            None
+        );
+        assert_eq!(
+            mensagem_da_passada("FiveM", Modo::Parado, &Passada::default(), true),
+            None
+        );
     }
 
     #[test]
@@ -842,19 +1041,38 @@ mod tests {
         let falhou = Devolucao {
             devolvidos: 2,
             sumidos: 0,
-            falharam: vec![Acalmado { pid: 7, nome: "chrome.exe".into(), inicio: 1, prioridade_anterior: 32, ecoqos: Eco::NaoMexido }],
+            falharam: vec![Acalmado {
+                pid: 7,
+                nome: "chrome.exe".into(),
+                inicio: 1,
+                prioridade_anterior: 32,
+                ecoqos: Eco::NaoMexido,
+            }],
             nao_anotado: None,
         };
         let erro = frase_do_desligar(&falhou, false).unwrap_err();
-        assert!(erro.contains("só em parte") && erro.contains("chrome.exe"), "{}", erro);
+        assert!(
+            erro.contains("só em parte") && erro.contains("chrome.exe"),
+            "{}",
+            erro
+        );
 
-        assert_eq!(frase_do_desligar(&Devolucao::default(), false).unwrap(), "Modo jogo desligado.");
-        let ok = Devolucao { devolvidos: 3, ..Default::default() };
-        assert!(frase_do_desligar(&ok, true).unwrap().contains("3 programa(s) voltaram ao normal. O plano de energia"));
+        assert_eq!(
+            frase_do_desligar(&Devolucao::default(), false).unwrap(),
+            "Modo jogo desligado."
+        );
+        let ok = Devolucao {
+            devolvidos: 3,
+            ..Default::default()
+        };
+        assert!(frase_do_desligar(&ok, true)
+            .unwrap()
+            .contains("3 programa(s) voltaram ao normal. O plano de energia"));
     }
 
     #[test]
     fn mutex_envenenado_nao_esconde_o_governador() {
+        let _serie = em_serie();
         let _ = std::thread::spawn(|| {
             let mut g = GOVERNADOR.lock().unwrap_or_else(|e| e.into_inner());
             *g = Some(Governador::default());
@@ -862,14 +1080,24 @@ mod tests {
         })
         .join();
         assert!(GOVERNADOR.is_poisoned());
-        assert!(trava().take().is_some(), "o governador continua lá dentro para ser devolvido");
+        assert!(
+            trava().take().is_some(),
+            "o governador continua lá dentro para ser devolvido"
+        );
         GOVERNADOR.clear_poison();
     }
 
     #[test]
     fn lista_que_nao_se_le_nem_grava_nao_vira_desligado() {
-        let d = Devolucao { nao_anotado: Some("governador.json ilegível".into()), ..Default::default() };
+        let d = Devolucao {
+            nao_anotado: Some("governador.json ilegível".into()),
+            ..Default::default()
+        };
         let erro = frase_do_desligar(&d, false).unwrap_err();
-        assert!(erro.contains("governador.json ilegível") && !erro.contains("Estão anotados"), "{}", erro);
+        assert!(
+            erro.contains("governador.json ilegível") && !erro.contains("Estão anotados"),
+            "{}",
+            erro
+        );
     }
 }

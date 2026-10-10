@@ -50,7 +50,12 @@ pub fn read(hive: &str, path: &str, name: &str) -> Result<PreviousValue, String>
     Ok(PreviousValue::Absent)
 }
 
-pub fn set_binary(hive: &str, path: &str, name: &str, bytes: &[u8]) -> Result<PreviousValue, String> {
+pub fn set_binary(
+    hive: &str,
+    path: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Result<PreviousValue, String> {
     let previous = read(hive, path, name)?;
 
     let (key, _) = root(hive)?
@@ -82,8 +87,7 @@ pub fn set_dword(hive: &str, path: &str, name: &str, value: u32) -> Result<Previ
         .create_subkey(path)
         .map_err(|e| format!("Cannot open {}\\{} for writing: {}", hive, path, e))?;
 
-    key.set_value(name, &value)
-        .map_err(|e| {
+    key.set_value(name, &value).map_err(|e| {
         explicar_falha_de_escrita(
             &format!("{}\\{}\\{}", hive, path, name),
             &e.to_string(),
@@ -121,15 +125,19 @@ pub fn explicar_falha_de_escrita(caminho: &str, erro: &str, elevado: bool) -> St
     )
 }
 
-pub fn set_string(hive: &str, path: &str, name: &str, value: &str) -> Result<PreviousValue, String> {
+pub fn set_string(
+    hive: &str,
+    path: &str,
+    name: &str,
+    value: &str,
+) -> Result<PreviousValue, String> {
     let previous = read(hive, path, name)?;
 
     let (key, _) = root(hive)?
         .create_subkey(path)
         .map_err(|e| format!("Cannot open {}\\{} for writing: {}", hive, path, e))?;
 
-    key.set_value(name, &value.to_string())
-        .map_err(|e| {
+    key.set_value(name, &value.to_string()).map_err(|e| {
         explicar_falha_de_escrita(
             &format!("{}\\{}\\{}", hive, path, name),
             &e.to_string(),
@@ -307,8 +315,7 @@ mod tests {
     /// errava calada e prendia o usuário num pedido de permissão que ele já tinha.
     #[test]
     fn elevation_matches_the_token_integrity_level() {
-        let saida = super::super::shell::run("whoami", &["/groups"])
-            .expect("whoami falhou");
+        let saida = super::super::shell::run("whoami", &["/groups"]).expect("whoami falhou");
 
         let alto = saida.stdout.contains("S-1-16-12288");
         let sistema = saida.stdout.contains("S-1-16-16384");
@@ -335,7 +342,11 @@ mod tests {
         let nomes = value_names("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
             .expect("a chave de versão do Windows é legível por qualquer usuário");
 
-        assert!(nomes.iter().any(|nome| nome == "CurrentBuild"), "veio: {:?}", nomes);
+        assert!(
+            nomes.iter().any(|nome| nome == "CurrentBuild"),
+            "veio: {:?}",
+            nomes
+        );
     }
 }
 
@@ -474,7 +485,9 @@ mod tests_2_0 {
             for trecho in plano.split("registry::read(").skip(1) {
                 chamadas += 1;
 
-                let Some(fim) = trecho.find(')') else { continue };
+                let Some(fim) = trecho.find(')') else {
+                    continue;
+                };
                 let depois = trecho[fim..].trim_start_matches(')').trim_start();
 
                 if depois.starts_with(".unwrap_or") {

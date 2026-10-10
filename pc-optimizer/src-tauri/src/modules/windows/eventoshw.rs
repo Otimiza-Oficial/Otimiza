@@ -71,8 +71,18 @@ fn quando_legivel(s: &str) -> String {
 pub fn achados(eventos: &[Evento]) -> Vec<Achado> {
     let mut ordenados: Vec<&Evento> = eventos.iter().collect();
     ordenados.sort_by(|a, b| b.quando.cmp(&a.quando));
-    let pelo_menos = if eventos.len() >= LIMITE_DE_EVENTOS { "pelo menos " } else { "" };
-    let de = |t: Tipo| ordenados.iter().filter(|e| tipo(e) == Some(t.clone())).copied().collect::<Vec<_>>();
+    let pelo_menos = if eventos.len() >= LIMITE_DE_EVENTOS {
+        "pelo menos "
+    } else {
+        ""
+    };
+    let de = |t: Tipo| {
+        ordenados
+            .iter()
+            .filter(|e| tipo(e) == Some(t.clone()))
+            .copied()
+            .collect::<Vec<_>>()
+    };
 
     let mut v = Vec::new();
 
@@ -151,14 +161,18 @@ pub fn ler() -> Result<Vec<Evento>, String> {
         DIAS * MS_POR_DIA,
         LIMITE_DE_EVENTOS
     );
-    let saida = super::shell::powershell(&script).map_err(|e| format!("Não foi possível ler o registro de eventos: {}", e))?;
+    let saida = super::shell::powershell(&script)
+        .map_err(|e| format!("Não foi possível ler o registro de eventos: {}", e))?;
     if !saida.success {
-        return Err("O registro de eventos do Windows não pôde ser lido nesta máquina.".to_string());
+        return Err(
+            "O registro de eventos do Windows não pôde ser lido nesta máquina.".to_string(),
+        );
     }
     if saida.stdout.trim().is_empty() {
         return Ok(Vec::new());
     }
-    serde_json::from_str(saida.stdout.trim()).map_err(|e| format!("Registro de eventos em formato inesperado: {}", e))
+    serde_json::from_str(saida.stdout.trim())
+        .map_err(|e| format!("Registro de eventos em formato inesperado: {}", e))
 }
 
 #[cfg(test)]
@@ -166,15 +180,29 @@ mod testes {
     use super::*;
 
     fn ev(quando: &str, provedor: &str, id: u32, nivel: u32) -> Evento {
-        Evento { quando: quando.into(), provedor: provedor.into(), id, nivel }
+        Evento {
+            quando: quando.into(),
+            provedor: provedor.into(),
+            id,
+            nivel,
+        }
     }
 
     #[test]
     fn classifica_pelo_provedor_numero_e_nivel() {
-        assert_eq!(tipo(&ev("", "Display", 4101, 3)), Some(Tipo::VideoReiniciou));
+        assert_eq!(
+            tipo(&ev("", "Display", 4101, 3)),
+            Some(Tipo::VideoReiniciou)
+        );
         assert_eq!(tipo(&ev("", "Display", 4100, 3)), None);
-        assert_eq!(tipo(&ev("", "Microsoft-Windows-WHEA-Logger", 18, 2)), Some(Tipo::HardwareFalhou));
-        assert_eq!(tipo(&ev("", "Microsoft-Windows-WHEA-Logger", 19, 3)), Some(Tipo::HardwareCorrigiu));
+        assert_eq!(
+            tipo(&ev("", "Microsoft-Windows-WHEA-Logger", 18, 2)),
+            Some(Tipo::HardwareFalhou)
+        );
+        assert_eq!(
+            tipo(&ev("", "Microsoft-Windows-WHEA-Logger", 19, 3)),
+            Some(Tipo::HardwareCorrigiu)
+        );
         assert_eq!(tipo(&ev("", "Kernel-Power", 41, 1)), None);
     }
 
@@ -192,13 +220,34 @@ mod testes {
 
     #[test]
     fn whea_fatal_e_critico_e_poucos_corrigidos_sao_ruido() {
-        let mut eventos = vec![ev("2026-09-10T08:00:00", "Microsoft-Windows-WHEA-Logger", 18, 2)];
-        eventos.extend((0..3).map(|i| ev(&format!("2026-09-1{}T00:00:00", i), "Microsoft-Windows-WHEA-Logger", 19, 3)));
+        let mut eventos = vec![ev(
+            "2026-09-10T08:00:00",
+            "Microsoft-Windows-WHEA-Logger",
+            18,
+            2,
+        )];
+        eventos.extend((0..3).map(|i| {
+            ev(
+                &format!("2026-09-1{}T00:00:00", i),
+                "Microsoft-Windows-WHEA-Logger",
+                19,
+                3,
+            )
+        }));
         let a = achados(&eventos);
         assert_eq!(a.len(), 1);
         assert_eq!(a[0].severidade, FindingSeverity::Critical);
 
-        let muitos: Vec<Evento> = (0..10).map(|_| ev("2026-09-11T00:00:00", "Microsoft-Windows-WHEA-Logger", 19, 3)).collect();
+        let muitos: Vec<Evento> = (0..10)
+            .map(|_| {
+                ev(
+                    "2026-09-11T00:00:00",
+                    "Microsoft-Windows-WHEA-Logger",
+                    19,
+                    3,
+                )
+            })
+            .collect();
         assert_eq!(achados(&muitos)[0].id, "erros_corrigidos_whea");
     }
 

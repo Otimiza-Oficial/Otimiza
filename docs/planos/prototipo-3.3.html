@@ -1,0 +1,1223 @@
+<title>Otimiza 3.3 protótipo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@300;400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* Layout: janela de app em vidro sobre preto. Trilho de ícones, painel de vidro com a biblioteca, e um palco 3D onde o
+   quadro percorre Jogo → Otimiza → CPU/GPU → Frame Boost → Monitor. Só preto, grafite e branco. */
+:root {
+  --fundo: #030303;
+  --janela: #070707;
+  --vidro: rgba(255,255,255,.035);
+  --vidro-forte: rgba(255,255,255,.065);
+  --brilho-vidro: linear-gradient(155deg, rgba(255,255,255,.11), rgba(255,255,255,.02) 38%, rgba(255,255,255,0) 62%);
+  --borda: rgba(255,255,255,.075);
+  --borda-forte: rgba(255,255,255,.15);
+  --texto: #f4f4f4;
+  --texto-2: #9b9b9b;
+  --texto-3: #5c5c5c;
+  --ponto-grade: rgba(255,255,255,.06);
+  --luz: #ffffff;
+  --luz-halo: rgba(255,255,255,.5);
+  --aviso: #e8b46a;
+  --aviso-suave: rgba(232,180,106,.1);
+  --sombra: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08);
+  --corpo: "Geist", "Segoe UI", system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r-l: 22px; --r-xl: 30px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--fundo); }
+body { color: var(--texto); font-family: var(--corpo); font-size: 14px; line-height: 1.5; padding-inline: 16px; padding-block: 20px 48px; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+button:focus-visible { outline: 1.5px solid var(--luz); outline-offset: 3px; }
+h1, h2, h3 { margin: 0; font-weight: 400; letter-spacing: -.02em; text-wrap: balance; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.topo-prot { max-width: 1260px; margin: 0 auto 14px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; color: var(--texto-3); font-size: 12.5px; }
+.topo-prot b { color: var(--texto-2); font-weight: 500; }
+.sim { display: flex; gap: 6px; flex-wrap: wrap; }
+.sim button { border: 1px solid var(--borda); border-radius: 99px; padding: 4px 12px; font-size: 12px; color: var(--texto-2); background: var(--vidro); }
+.sim button[aria-pressed="true"] { color: var(--texto); border-color: var(--borda-forte); }
+
+.janela { max-width: 1260px; margin: 0 auto; position: relative; border-radius: var(--r-xl); background:
+  radial-gradient(900px 420px at 72% -12%, rgba(255,255,255,.06), transparent 60%), var(--janela);
+  border: 1px solid var(--borda); box-shadow: 0 40px 120px rgba(0,0,0,.8); display: grid; grid-template-columns: 68px 272px minmax(0,1fr); min-height: 780px; overflow: hidden; }
+
+.trilho { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 0; border-right: 1px solid var(--borda); }
+.logo { width: 40px; height: 40px; display: grid; place-items: center; margin-bottom: 18px; color: #fff; }
+.logo svg { width: 28px; height: 28px; filter: drop-shadow(0 0 12px rgba(255,255,255,.35)); }
+.trilho .ir { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; color: var(--texto-3); position: relative; transition: color .2s, background .2s; }
+.trilho .ir svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.trilho .ir:hover { color: var(--texto); background: var(--vidro); }
+.trilho .ir[aria-selected="true"] { color: #fff; background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.04)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 0 24px rgba(255,255,255,.06); }
+.trilho .ir .dica { position: absolute; left: 54px; padding: 4px 10px; border-radius: 8px; background: #111; border: 1px solid var(--borda); color: var(--texto); font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transform: translateX(-4px); transition: .15s; z-index: 30; }
+.trilho .ir:hover .dica, .trilho .ir:focus-visible .dica { opacity: 1; transform: none; }
+.trilho .fim { margin-top: auto; }
+
+.painel { margin: 12px 0 12px 12px; border-radius: var(--r-l); background: var(--brilho-vidro), var(--vidro); border: 1px solid var(--borda); box-shadow: var(--sombra); padding: 14px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.busca { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 14px; background: rgba(0,0,0,.4); border: 1px solid var(--borda); color: var(--texto-3); }
+.busca svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.7; }
+.busca kbd { margin-left: auto; font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--borda); border-radius: 6px; padding: 1px 6px; }
+.abas { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; border-radius: 14px; background: rgba(0,0,0,.4); border: 1px solid var(--borda); }
+.abas button { padding: 9px; border-radius: 10px; color: var(--texto-3); font-size: 13.5px; }
+.abas button[aria-pressed="true"] { color: var(--texto); background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.03)); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 6px 18px rgba(0,0,0,.4); }
+.arvore { display: flex; flex-direction: column; gap: 2px; }
+.item { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 12px; color: var(--texto-2); text-align: left; }
+.item:hover { background: var(--vidro); color: var(--texto); }
+.item.ativo { color: var(--texto); background: var(--vidro-forte); }
+.item img { width: 26px; height: 34px; object-fit: cover; border-radius: 6px; border: 1px solid var(--borda); }
+.item svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.5; justify-self: center; }
+.item .cont { font-family: var(--mono); font-size: 11px; color: var(--texto-2); padding: 1px 7px; border-radius: 6px; background: rgba(255,255,255,.06); }
+.item .vivo, .pilula .vivo { width: 7px; height: 7px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px var(--luz-halo); }
+.sub-arvore { margin-left: 22px; padding-left: 12px; border-left: 1px solid var(--borda); display: flex; flex-direction: column; gap: 2px; }
+.sub-arvore .item { font-size: 13px; padding-block: 6px; grid-template-columns: 18px minmax(0,1fr) auto; }
+
+.cartao-score { margin-top: auto; border-radius: 18px; padding: 16px; background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.015)), #0b0b0b; border: 1px solid var(--borda); box-shadow: inset 0 1px 0 rgba(255,255,255,.07); }
+.cartao-score h3 { font-size: 17px; }
+.cartao-score p { margin: 4px 0 0; color: var(--texto-2); font-size: 12.5px; line-height: 1.45; }
+#terreno { width: 100%; height: 140px; display: block; margin-top: 6px; }
+.score { font-family: var(--mono); font-weight: 300; font-size: 40px; letter-spacing: -.04em; line-height: 1; }
+
+.palco { position: relative; min-width: 0; background-image: radial-gradient(var(--ponto-grade) 1px, transparent 1.3px); background-size: 22px 22px; overflow: hidden; }
+.tela { position: relative; padding: 28px 32px 120px; min-height: 100%; }
+.tela[hidden] { display: none; }
+.cabeca { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; position: relative; z-index: 3; }
+.cabeca h1 { font-size: clamp(30px, 3.4vw, 42px); font-weight: 300; display: flex; align-items: center; gap: 14px; }
+.cabeca h1 .barras { width: 9px; height: 26px; border-left: 2px solid var(--texto-3); border-right: 2px solid var(--texto-3); }
+.cabeca p { margin: 6px 0 0 23px; color: var(--texto-2); font-size: 15px; }
+.pilula { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border-radius: 99px; background: var(--brilho-vidro), rgba(255,255,255,.05); border: 1px solid var(--borda); font-size: 12.5px; color: var(--texto-2); box-shadow: var(--sombra); }
+.pilula.parado .vivo { background: var(--texto-3); box-shadow: none; }
+
+.cena { position: relative; height: 600px; margin: -40px -32px 0; }
+.cena canvas { display: block; width: 100%; height: 100%; }
+.cena.sem-3d::before { content: "Seu navegador não abriu a cena 3D. Os números continuam abaixo."; position: absolute; inset: 40% 0 auto; text-align: center; color: var(--texto-3); }
+.etq { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; z-index: 2; white-space: nowrap; padding: 7px 12px; border-radius: 12px; background: var(--brilho-vidro), rgba(12,12,12,.72); border: 1px solid var(--borda-forte); box-shadow: 0 12px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1); backdrop-filter: blur(8px); font-size: 12px; color: var(--texto-2); transition: border-color .3s, box-shadow .3s, color .3s; }
+.etq b { color: var(--texto); font-weight: 500; font-family: var(--mono); margin-left: 6px; }
+.etq.forte { color: var(--texto); border-color: rgba(255,255,255,.4); box-shadow: 0 0 30px rgba(255,255,255,.14), 0 12px 30px rgba(0,0,0,.5); }
+
+.resultado { position: absolute; right: 28px; bottom: 112px; z-index: 4; width: 270px; padding: 18px 20px; border-radius: 22px; background: var(--brilho-vidro), rgba(10,10,10,.78); border: 1px solid var(--borda-forte); box-shadow: 0 30px 70px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.12); backdrop-filter: blur(12px); }
+.resultado .r { font-size: 11px; color: var(--texto-3); letter-spacing: .08em; text-transform: uppercase; }
+.grande { font-family: var(--mono); font-weight: 300; font-size: 80px; line-height: .95; letter-spacing: -.06em; display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.grande small { font-family: var(--corpo); font-size: 14px; letter-spacing: 0; color: var(--texto-2); }
+.resultado.boost .grande { text-shadow: 0 0 40px rgba(255,255,255,.45); }
+.resultado .d { font-size: 12.5px; color: var(--texto-2); margin-top: 4px; }
+.etiquetas { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.etiqueta { font-size: 10.5px; color: var(--texto-2); padding: 3px 8px; border-radius: 7px; border: 1px solid var(--borda); background: rgba(255,255,255,.03); }
+.etiqueta.medido { color: var(--texto); border-color: rgba(255,255,255,.3); }
+.etiqueta.estimado { border-style: dashed; }
+.etiqueta[hidden], .delta[hidden] { display: none; }
+.delta { font-family: var(--mono); font-size: 12.5px; color: var(--texto); }
+
+.passos { position: absolute; left: 32px; bottom: 112px; z-index: 4; display: grid; gap: 4px; font-family: var(--mono); font-size: 12px; color: var(--texto-3); padding: 12px 16px; border-radius: 14px; background: rgba(5,5,5,.8); border: 1px solid var(--borda); backdrop-filter: blur(8px); }
+.passos[hidden] { display: none; }
+.passos .feito { color: var(--texto-2); } .passos .feito::before { content: "✓ "; color: #fff; }
+.passos .agora { color: var(--texto); } .passos .agora::before { content: "› "; }
+.passos .depois::before { content: "· "; }
+
+.doca { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; gap: 4px; padding: 6px; border-radius: 20px; background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.03)), rgba(12,12,12,.86); border: 1px solid var(--borda-forte); box-shadow: 0 20px 60px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.1); backdrop-filter: blur(14px); z-index: 10; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center; }
+.doca button { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px; color: var(--texto-2); font-size: 13.5px; white-space: nowrap; transition: .2s; }
+.doca button svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.doca button:hover { color: var(--texto); background: rgba(255,255,255,.06); }
+.doca button.prim { color: #0a0a0a; background: linear-gradient(180deg, #ffffff, #d6d6d6); box-shadow: 0 0 24px rgba(255,255,255,.2), inset 0 1px 0 #fff; font-weight: 500; }
+.doca button.ligado { color: #fff; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.3), 0 0 20px rgba(255,255,255,.1); }
+.doca .sep { width: 1px; background: var(--borda); margin: 6px 4px; }
+
+.grade { display: grid; gap: 16px; margin-top: 26px; position: relative; z-index: 2; }
+.g-jogos { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.g-2 { grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); }
+.g-3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.vidro { border-radius: var(--r-l); background: var(--brilho-vidro), var(--vidro); border: 1px solid var(--borda); box-shadow: var(--sombra); padding: 20px; min-width: 0; }
+.vidro h2 { font-size: 19px; }
+.rotulo { font-size: 11px; color: var(--texto-3); letter-spacing: .08em; text-transform: uppercase; }
+.nota { font-size: 12.5px; color: var(--texto-2); }
+
+.jogo-card { position: relative; aspect-ratio: 3 / 4; max-width: 100%; border-radius: 20px; overflow: hidden; border: 1px solid var(--borda); text-align: left; box-shadow: 0 24px 60px rgba(0,0,0,.6); transition: transform .3s, border-color .3s; background: #0b0b0b; }
+.jogo-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .6s; }
+.jogo-card:hover { transform: translateY(-4px); border-color: var(--borda-forte); }
+.jogo-card:hover img { transform: scale(1.04); }
+.jogo-card .sobre { position: absolute; inset: auto 0 0; padding: 40px 14px 14px; background: linear-gradient(180deg, transparent, rgba(0,0,0,.92)); }
+.jogo-card .fps { font-family: var(--mono); font-size: 26px; font-weight: 300; letter-spacing: -.03em; }
+.jogo-card .linha { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.jogo-card .topo { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; }
+.restrito { font-size: 11.5px; color: var(--aviso); }
+
+.seg { display: inline-flex; padding: 4px; gap: 2px; border-radius: 14px; background: rgba(0,0,0,.4); border: 1px solid var(--borda); flex-wrap: wrap; }
+.seg button { padding: 8px 14px; border-radius: 10px; color: var(--texto-3); font-size: 13px; }
+.seg button[aria-pressed="true"] { color: var(--texto); background: linear-gradient(180deg, rgba(255,255,255,.1), rgba(255,255,255,.03)); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+.seg button:disabled { opacity: .35; cursor: not-allowed; }
+.ajuste { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--borda); }
+.ajuste:first-child { border-top: 0; }
+.ajuste p { margin: 2px 0 0; font-size: 12.5px; color: var(--texto-2); }
+.chave { width: 42px; height: 24px; border-radius: 99px; background: rgba(255,255,255,.08); border: 1px solid var(--borda-forte); position: relative; }
+.chave::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--texto-3); transition: .2s; }
+.chave[aria-checked="true"] { background: rgba(255,255,255,.9); }
+.chave[aria-checked="true"]::after { left: 21px; background: #0a0a0a; }
+
+.tabela { width: 100%; border-collapse: collapse; }
+.tabela th { text-align: left; font-weight: 400; font-size: 11.5px; color: var(--texto-3); padding: 8px 0; border-bottom: 1px solid var(--borda); }
+.tabela td { padding: 13px 0; border-bottom: 1px solid var(--borda); font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.tabela td:first-child { font-family: var(--corpo); color: var(--texto-2); }
+.tabela th:not(:first-child), .tabela td:not(:first-child) { text-align: right; }
+.tabela .melhor { color: #fff; }
+.rolagem { overflow-x: auto; }
+.grafico svg { width: 100%; height: auto; display: block; overflow: visible; }
+.botao { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 18px; border-radius: 14px; border: 1px solid var(--borda-forte); background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.02)); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); font-size: 13.5px; }
+.botao:hover { border-color: rgba(255,255,255,.28); }
+.botao.prim { color: #0a0a0a; background: linear-gradient(180deg, #fff, #d6d6d6); border-color: transparent; font-weight: 500; }
+
+.veu { position: absolute; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: radial-gradient(600px 400px at 50% 40%, rgba(255,255,255,.05), transparent 70%), rgba(2,2,2,.75); backdrop-filter: blur(10px); }
+.veu[hidden] { display: none; }
+.folha { width: min(470px, 100%); border-radius: 28px; padding: 30px; background: var(--brilho-vidro), rgba(14,14,14,.94); border: 1px solid var(--borda-forte); box-shadow: 0 40px 100px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.1); display: flex; flex-direction: column; gap: 22px; }
+.folha h2 { font-size: 26px; font-weight: 300; }
+.folha ol { list-style: none; margin: 0; padding: 0; counter-reset: p; }
+.folha li { display: grid; grid-template-columns: 30px minmax(0,1fr); gap: 14px; padding-bottom: 16px; counter-increment: p; position: relative; }
+.folha li::before { content: counter(p); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; border: 1px solid var(--borda-forte); background: rgba(255,255,255,.04); position: relative; z-index: 1; }
+.folha li:not(:last-child)::after { content: ""; position: absolute; left: 15px; top: 30px; bottom: 0; width: 1px; background: var(--borda-forte); }
+.folha li h3 { font-size: 14.5px; font-weight: 500; margin-top: 4px; }
+.folha li p { margin: 2px 0 0; color: var(--texto-2); font-size: 13px; }
+.copiar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 8px 8px 14px; border-radius: 12px; background: rgba(0,0,0,.45); border: 1px solid var(--borda); font-family: var(--mono); font-size: 13.5px; letter-spacing: .05em; }
+.copiar button { font-family: var(--corpo); font-size: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--borda-forte); }
+.estado-fb { font-size: 13px; padding: 11px 14px; border-radius: 12px; background: rgba(255,255,255,.04); color: var(--texto-2); }
+.estado-fb.aviso { background: var(--aviso-suave); color: var(--aviso); }
+.estado-fb.ok { background: rgba(255,255,255,.08); color: #fff; }
+.estado-fb[hidden] { display: none; }
+.acoes { display: flex; gap: 10px; flex-wrap: wrap; }
+.acoes .botao { flex: 1; }
+.lembrete { position: absolute; right: 24px; top: 24px; z-index: 40; width: min(300px, calc(100% - 32px)); border-radius: 18px; padding: 16px; background: var(--brilho-vidro), rgba(14,14,14,.94); border: 1px solid var(--borda-forte); box-shadow: 0 24px 60px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 10px; }
+.lembrete[hidden] { display: none; }
+
+/* Trilho com rótulo e ícones em dois tons */
+.janela { grid-template-columns: 84px 272px minmax(0,1fr); }
+.trilho .ir { width: 64px; height: auto; padding: 9px 0 7px; display: flex; flex-direction: column; gap: 4px; align-items: center; border-radius: 16px; }
+.trilho .ir svg { width: 21px; height: 21px; stroke-width: 1.5; }
+.trilho .ir .nome { font-size: 10.5px; letter-spacing: .01em; }
+.trilho .ir .dica { display: none; }
+.trilho .ir .preenche { fill: currentColor; fill-opacity: 0; transition: fill-opacity .2s; }
+.trilho .ir[aria-selected="true"] .preenche { fill-opacity: .16; }
+.trilho .fim { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.trilho .sep-trilho { width: 28px; height: 1px; background: var(--borda); margin: 6px 0; }
+
+/* Jogos */
+.destaque { position: relative; height: 250px; border-radius: 26px; overflow: hidden; border: 1px solid var(--borda); margin-top: 22px; box-shadow: var(--sombra); z-index: 2; }
+.destaque img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; filter: brightness(.75); }
+.destaque::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.6) 45%, rgba(0,0,0,.05) 100%); }
+.dest-c { position: relative; z-index: 1; height: 100%; padding: 26px 28px; display: flex; flex-direction: column; justify-content: space-between; max-width: 560px; }
+.dest-c h2 { font-size: 40px; font-weight: 300; }
+.metricas-linha { display: flex; gap: 28px; flex-wrap: wrap; }
+.metricas-linha .m .v { font-family: var(--mono); font-size: 24px; font-weight: 300; letter-spacing: -.03em; }
+.metricas-linha .m .v small { font-size: 12px; color: var(--texto-2); margin-left: 3px; }
+.filtros { margin-top: 20px; position: relative; z-index: 2; }
+
+/* Boost */
+.modos { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
+.modo { text-align: left; padding: 16px; border-radius: 18px; border: 1px solid var(--borda); background: var(--brilho-vidro), var(--vidro); display: flex; flex-direction: column; gap: 10px; transition: border-color .2s, box-shadow .2s; }
+.modo svg { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; color: var(--texto-2); }
+.modo b { font-weight: 500; font-size: 15px; }
+.modo span { font-size: 12px; color: var(--texto-2); line-height: 1.4; }
+.modo[aria-pressed="true"] { border-color: rgba(255,255,255,.45); box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 0 40px rgba(255,255,255,.06); }
+.modo[aria-pressed="true"] svg { color: #fff; }
+.pilha { position: relative; height: 120px; margin: 10px 0 4px; }
+.pilha i { position: absolute; width: 150px; height: 90px; border-radius: 12px; border: 1.5px solid rgba(255,255,255,.7); left: 50%; top: 50%; background: rgba(255,255,255,.03); transition: transform .5s; }
+.pilha i:nth-child(1) { transform: translate(-50%,-50%); }
+.pilha i:nth-child(2) { transform: translate(-42%,-58%); opacity: .5; }
+.pilha i:nth-child(3) { transform: translate(-34%,-66%); opacity: .25; }
+.pilha:hover i:nth-child(2) { transform: translate(-30%,-66%); }
+.pilha:hover i:nth-child(3) { transform: translate(-10%,-82%); }
+
+/* Lab */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 22px; position: relative; z-index: 2; }
+.tile { padding: 16px; border-radius: 18px; background: var(--brilho-vidro), var(--vidro); border: 1px solid var(--borda); box-shadow: var(--sombra); }
+.tile .v { font-family: var(--mono); font-size: 32px; font-weight: 300; letter-spacing: -.04em; margin-top: 4px; }
+.tile .v small { font-size: 12px; color: var(--texto-2); margin-left: 4px; letter-spacing: 0; }
+.tile svg { width: 100%; height: 34px; display: block; margin-top: 8px; }
+.historico-lista { display: grid; gap: 0; }
+.hl { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 16px; align-items: center; padding: 12px 0; border-top: 1px solid var(--borda); font-size: 13px; }
+.hl:first-child { border-top: 0; }
+.hl .num { color: var(--texto-2); }
+
+/* Ajustes */
+.lista-ajustes { display: grid; gap: 0; }
+.la { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--borda); }
+.la:first-child { border-top: 0; }
+.la .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,.06); border: 1px solid var(--borda); }
+.la .ic svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.la p { margin: 1px 0 0; font-size: 12.5px; color: var(--texto-2); }
+
+/* Mira e Cores */
+.g-mira { grid-template-columns: minmax(0,1.45fr) minmax(0,1fr); }
+.previa { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--borda); aspect-ratio: 16 / 9; max-width: 100%; background: #000; }
+.previa canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.previa svg.mira { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); overflow: visible; pointer-events: none; }
+.previa .tag { position: absolute; left: 12px; bottom: 12px; }
+.estilos { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; }
+.estilos button { aspect-ratio: 1; max-width: 100%; border-radius: 14px; border: 1px solid var(--borda); background: rgba(0,0,0,.35); display: grid; place-items: center; }
+.estilos button svg { width: 26px; height: 26px; overflow: visible; }
+.estilos button[aria-pressed="true"] { border-color: rgba(255,255,255,.5); background: rgba(255,255,255,.07); }
+.cores-mira { display: flex; gap: 8px; flex-wrap: wrap; }
+.cores-mira button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,.2); }
+.cores-mira button[aria-pressed="true"] { border-color: #fff; }
+.controle { display: grid; gap: 6px; padding: 10px 0; }
+.controle .topo-c { display: flex; justify-content: space-between; font-size: 13px; color: var(--texto-2); }
+.controle .topo-c b { font-family: var(--mono); font-weight: 400; color: var(--texto); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, #fff var(--p, 50%), rgba(255,255,255,.12) var(--p, 50%)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; margin-top: -7px; box-shadow: 0 0 0 4px rgba(255,255,255,.12), 0 4px 10px rgba(0,0,0,.5); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); }
+input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: #fff; }
+input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: #fff; }
+input[type=range]:focus-visible { outline: 1.5px solid #fff; outline-offset: 2px; border-radius: 4px; }
+.titulo-sec { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 16px 0 8px; }
+.titulo-sec:first-child { margin-top: 0; }
+.linha-mini { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--borda); font-size: 13px; }
+.linha-mini b { font-family: var(--mono); font-weight: 400; }
+.campo { width: 86px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--borda-forte); background: rgba(0,0,0,.4); color: var(--texto); font-family: var(--mono); font-size: 13px; }
+.divisor { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 20px rgba(255,255,255,.6); pointer-events: none; }
+.divisor::after { content: "⟷"; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; font-size: 15px; }
+.rot-previa { position: absolute; top: 12px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; }
+#cores-split { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+.treino { position: relative; height: 170px; border-radius: 14px; overflow: hidden; border: 1px solid var(--borda); background: #050505; cursor: crosshair; }
+.treino canvas { width: 100%; height: 100%; display: block; }
+.treino .sobre-treino { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.55); }
+.treino .sobre-treino[hidden] { display: none; }
+
+@media (max-width: 1040px) {
+  .modos, .tiles { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .g-mira { grid-template-columns: 1fr; }
+}
+@media (max-width: 1040px) { .janela { grid-template-columns: 76px minmax(0,1fr); } .painel { display: none; } .trilho .ir { width: 60px; } }
+@media (max-width: 760px) {
+  .cena { height: 380px; margin-inline: -18px; }
+  .resultado { position: relative; right: auto; bottom: auto; width: 100%; margin-top: 8px; }
+  .passos { left: 16px; right: 16px; bottom: 150px; }
+  .g-2, .g-3 { grid-template-columns: 1fr; }
+  .tela { padding: 22px 18px 150px; }
+  .etq { font-size: 10.5px; padding: 5px 8px; }
+}
+@media (max-width: 480px) {
+  .janela { grid-template-columns: minmax(0,1fr); }
+  .trilho { flex-direction: row; justify-content: center; border-right: 0; border-bottom: 1px solid var(--borda); padding: 8px; flex-wrap: wrap; }
+  .logo { margin: 0 6px 0 0; } .trilho .fim { margin: 0; }
+  .doca button span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="topo-prot">
+  <div><b>Protótipo da 3.3.</b> Clicável, com números e capas de exemplo. No app, as capas vêm da biblioteca do próprio jogo instalado.</div>
+  <div class="sim" role="group" aria-label="Simular">
+    <button id="sim-jogo" aria-pressed="true">FiveM aberto</button>
+    <button id="sim-sem" aria-pressed="false">Nenhum jogo</button>
+    <button id="sim-fb">Fim dos 10 min</button>
+  </div>
+</div>
+
+<div class="janela">
+  <nav class="trilho" aria-label="Navegação">
+    <div class="logo" aria-label="Otimiza"><svg viewBox="0 0 656 656" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 312 2.601 C 250.207 8.001, 204.352 23.003, 153.661 54.405 C 78.433 101.007, 21.272 185.875, 6.611 272.731 C 3.592 290.617, 1.751 310.770, 2.182 321.225 L 2.500 328.949 21 320.902 C 53.235 306.880, 68.946 300.477, 89.500 292.985 C 100.500 288.976, 116.898 282.951, 125.939 279.598 L 142.378 273.500 147.479 258.500 C 160.034 221.576, 178.498 195.395, 207.500 173.396 C 261.417 132.498, 337.858 122.376, 396.823 148.326 L 406.774 152.705 412.615 150.329 C 450.637 134.860, 485.365 132.482, 524.500 142.666 C 541.367 147.056, 559.430 154.708, 575.650 164.337 C 595.030 175.840, 613.897 191.763, 625.978 206.810 C 629.540 211.247, 632.557 214.776, 632.681 214.652 C 633.601 213.732, 620.638 183.057, 614.305 171.170 C 598.576 141.645, 583.821 121.147, 562.353 99 C 512.083 47.139, 444.300 13.823, 370 4.457 C 358.033 2.948, 321.429 1.777, 312 2.601 M 470.500 197.100 C 445.878 199.666, 420.114 208.460, 399.145 221.454 C 372.037 238.252, 357.276 252.434, 293.981 322.489 C 253.825 366.935, 241.998 378.325, 225.888 388.065 C 198.830 404.425, 167.089 406.582, 136.300 394.153 C 130.910 391.977, 120.875 387.933, 114 385.165 C 84.133 373.142, 53.665 366.684, 16.092 364.412 L 4.685 363.722 5.295 370.111 C 5.630 373.625, 7.030 382.125, 8.406 389 C 20.464 449.257, 53.054 508.717, 99.906 555.936 C 126.759 582.999, 149.017 599.125, 181.500 615.051 C 227.493 637.600, 270.032 648.241, 320 649.695 C 471.954 654.118, 610.772 550.032, 646.484 404.895 C 655.157 369.648, 655.529 332.605, 647.466 307.081 C 625.256 236.773, 548.360 188.984, 470.500 197.100 M 442.500 294.392 C 426.888 297.400, 413.549 303.827, 399.559 315.082 C 391.103 321.884, 355.875 357.966, 310.792 406 C 262.754 457.183, 249.647 468.765, 223.682 482.976 L 215.865 487.255 220.682 490.697 C 266.201 523.218, 333.202 531.930, 391.183 512.866 C 451.172 493.142, 506.279 437.716, 521.406 381.886 C 529.847 350.738, 525.025 328.275, 506.149 310.799 C 491.101 296.867, 464.817 290.091, 442.500 294.392"/></svg></div>
+    <button class="ir" aria-selected="true" data-tela="inicio"><svg viewBox="0 0 24 24"><path class="preenche" d="M5.5 9.2 12 4.3l6.5 4.9V18.5a1.5 1.5 0 0 1-1.5 1.5H7a1.5 1.5 0 0 1-1.5-1.5Z"/><path d="M3.5 10.6 12 4.3l8.5 6.3"/><path d="M5.5 9.2v9.3A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5V9.2"/><path d="M10 20v-4.5a2 2 0 0 1 4 0V20"/></svg><span class="nome">Início</span></button>
+    <button class="ir" aria-selected="false" data-tela="jogos"><svg viewBox="0 0 24 24"><path class="preenche" d="M7.6 7h8.8a5 5 0 0 1 4.9 5.9l-.8 4.3a2.3 2.3 0 0 1-3.9 1.2L14.5 16h-5l-2.1 2.4a2.3 2.3 0 0 1-3.9-1.2l-.8-4.3A5 5 0 0 1 7.6 7Z"/><path d="M7.6 7h8.8a5 5 0 0 1 4.9 5.9l-.8 4.3a2.3 2.3 0 0 1-3.9 1.2L14.5 16h-5l-2.1 2.4a2.3 2.3 0 0 1-3.9-1.2l-.8-4.3A5 5 0 0 1 7.6 7Z"/><path d="M8 9.8v3.4M6.3 11.5h3.4"/><path d="M15.3 10.6h.01M17.2 12.4h.01" stroke-width="2.4"/></svg><span class="nome">Jogos</span></button>
+    <button class="ir" aria-selected="false" data-tela="boost"><svg viewBox="0 0 24 24"><path class="preenche" d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><span class="nome">Boost</span></button>
+    <button class="ir" aria-selected="false" data-tela="mira"><svg viewBox="0 0 24 24"><circle class="preenche" cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="7.5"/><path d="M12 2.5v4.2M12 17.3v4.2M2.5 12h4.2M17.3 12h4.2"/><circle cx="12" cy="12" r=".9" fill="currentColor"/></svg><span class="nome">Mira</span></button>
+    <button class="ir" aria-selected="false" data-tela="cores"><svg viewBox="0 0 24 24"><path class="preenche" d="M12 3.5c3.1 3.7 6.2 7 6.2 10.4a6.2 6.2 0 0 1-12.4 0C5.8 10.5 8.9 7.2 12 3.5Z"/><path d="M12 3.5c3.1 3.7 6.2 7 6.2 10.4a6.2 6.2 0 0 1-12.4 0C5.8 10.5 8.9 7.2 12 3.5Z"/><path d="M8.9 14.4a3.1 3.1 0 0 0 3.1 3.1"/></svg><span class="nome">Cores</span></button>
+    <button class="ir" aria-selected="false" data-tela="lab"><svg viewBox="0 0 24 24"><rect class="preenche" x="3.5" y="4.5" width="17" height="15" rx="3.5"/><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><path d="m7.2 14.8 2.9-3.4 2.4 2 4.3-4.9"/></svg><span class="nome">Lab</span></button>
+    <div class="fim"><span class="sep-trilho"></span><button class="ir" aria-selected="false" data-tela="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7.5h9M17.5 7.5H20M4 16.5h2.5M11 16.5h9"/><circle class="preenche" cx="15.2" cy="7.5" r="2.3"/><circle cx="15.2" cy="7.5" r="2.3"/><circle class="preenche" cx="8.8" cy="16.5" r="2.3"/><circle cx="8.8" cy="16.5" r="2.3"/></svg><span class="nome">Ajustes</span></button></div>
+  </nav>
+
+  <aside class="painel">
+    <div class="busca"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Pesquisar<kbd>Ctrl K</kbd></div>
+    <div class="abas" role="group"><button aria-pressed="true">Jogos</button><button aria-pressed="false">Sistema</button></div>
+    <div class="arvore" id="arvore"></div>
+    <div class="cartao-score">
+      <h3>Fluidez do FiveM</h3>
+      <p>6 partidas medidas: o tempo de quadro ficou estável em 9 de cada 10 segundos.</p>
+      <canvas id="terreno" aria-label="Superfície do tempo de quadro ao longo das partidas"></canvas>
+      <div class="score">87</div>
+    </div>
+  </aside>
+
+  <main class="palco">
+    <section class="tela" id="tela-inicio">
+      <div class="cabeca">
+        <div>
+          <h1><span class="barras" aria-hidden="true"></span><span id="titulo">FiveM</span></h1>
+          <p id="subtitulo">Em execução · DirectX 11 · janela sem bordas</p>
+        </div>
+        <span class="pilula" id="pilula"><span class="vivo"></span><span id="pilula-txt">Medindo ao vivo</span></span>
+      </div>
+
+      <div class="cena" id="cena">
+        <div class="etq" data-alvo="jogo" id="e-jogo">FiveM<b>4 ajustes</b></div>
+        <div class="etq" data-alvo="logo" id="e-logo">Otimiza</div>
+        <div class="etq" data-alvo="cpu" id="e-cpu">Processador<b>61% · 58 °C</b></div>
+        <div class="etq" data-alvo="gpu" id="e-gpu">Placa de vídeo<b>78% · 64 °C</b></div>
+        <div class="etq" data-alvo="boost" id="e-boost">Frame Boost<b id="e-boost-v">~88–101 estimado</b></div>
+        <div class="etq" data-alvo="monitor" id="e-mon">Monitor<b>144 Hz</b></div>
+      </div>
+
+      <div class="resultado" id="resultado">
+        <div class="r" id="res-rot">FPS nativo</div>
+        <div class="grande"><span id="fps">52</span><small id="fps-u">FPS</small></div>
+        <div class="d" id="res-d">1% low 37 · 19,2 ms por quadro</div>
+        <div class="etiquetas"><span class="etiqueta medido" id="res-selo">medido</span><span class="etiqueta estimado" id="res-pot">potencial 62–68</span><span class="delta" id="delta" hidden></span></div>
+      </div>
+
+      <div class="passos" id="passos" hidden></div>
+    </section>
+
+    <section class="tela" id="tela-jogos" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Meus jogos</h1><p>Cada jogo com o próprio perfil e histórico. Ganhos medidos neste PC.</p></div><span class="pilula"><span class="vivo"></span>5 detectados · Steam, Epic e instalados</span></div>
+      <div class="destaque">
+        <img id="dest-img" alt="">
+        <div class="dest-c">
+          <div><span class="pilula" style="box-shadow:none"><span class="vivo"></span>Jogando agora</span><h2 style="margin-top:14px">FiveM</h2><p class="nota" style="margin:4px 0 0">Perfil Máximo FPS · 4 ajustes aplicados · Frame Boost 2×</p></div>
+          <div class="metricas-linha">
+            <div class="m"><div class="rotulo">Na tela</div><div class="v">129<small>FPS</small></div></div>
+            <div class="m"><div class="rotulo">Ganho nativo</div><div class="v">▲ 29<small>%</small></div></div>
+            <div class="m"><div class="rotulo">1% low</div><div class="v">52<small>FPS</small></div></div>
+            <div class="m"><div class="rotulo">Partidas</div><div class="v">12</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="seg filtros" role="group" aria-label="Filtrar"><button aria-pressed="true">Todos</button><button aria-pressed="false">Com Frame Boost</button><button aria-pressed="false">Competitivos</button><button aria-pressed="false">Com anticheat</button></div>
+      <div class="grade g-jogos" id="lista" style="margin-top:16px"></div>
+    </section>
+
+    <section class="tela" id="tela-boost" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Boost</h1><p>Escolha o objetivo. Só entra o que é compatível com o seu PC e o jogo, e tudo se desfaz em um clique.</p></div>
+        <div class="seg" role="group" aria-label="Placa (protótipo)"><button data-v="nvidia" aria-pressed="false">NVIDIA</button><button data-v="amd" aria-pressed="true">AMD</button><button data-v="intel" aria-pressed="false">Intel</button></div></div>
+      <div class="modos" id="modos" style="margin-top:22px;position:relative;z-index:2">
+        <button class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Mais quadros e menos atraso. Gráficos no que mais pesa, baixa latência ligada.</span></button>
+        <button class="modo" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 12h16M7 8l-3 4 3 4M17 8l3 4-3 4"/></svg><b>Balanceado</b><span>FPS estável sem perder muita imagem. O padrão para quem não quer escolher.</span></button>
+        <button class="modo" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 3.5 14.4 9l5.9.5-4.5 3.9 1.4 5.8L12 16.1l-5.2 3.1 1.4-5.8-4.5-3.9L9.6 9z"/></svg><b>Qualidade</b><span>A melhor imagem que segura o FPS alvo do seu monitor.</span></button>
+        <button class="modo" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 7.5h9M17.5 7.5H20M4 16.5h2.5M11 16.5h9"/><circle cx="15.2" cy="7.5" r="2.3"/><circle cx="8.8" cy="16.5" r="2.3"/></svg><b>Personalizado</b><span>Você escolhe cada ajuste. Tudo continua reversível.</span></button>
+      </div>
+      <div class="grade g-2">
+        <div class="vidro">
+          <div class="titulo-sec"><h2 id="drv-titulo">Driver da placa de vídeo</h2><span class="nota" id="drv-nome">Radeon RX 6600 · Adrenalin 25.9.1</span></div>
+          <div id="ajustes"></div>
+        </div>
+        <div class="vidro" style="background: radial-gradient(300px 200px at 80% 0%, rgba(255,255,255,.08), transparent 70%), var(--brilho-vidro), var(--vidro)">
+          <div class="rotulo">Frame Boost · automático</div>
+          <div class="pilha" aria-hidden="true"><i></i><i></i><i></i></div>
+          <h2 id="fb-nome">AMD Fluid Motion Frames 2</h2>
+          <p class="nota" id="fb-pq">Do driver da sua Radeon. Pede tela cheia: o Otimiza troca o modo de tela do jogo e desfaz ao desligar.</p>
+          <div class="rotulo" style="margin:16px 0 8px">Multiplicador</div>
+          <div class="seg" role="group"><button aria-pressed="true">2×</button><button disabled>3×</button><button disabled>4×</button></div>
+          <p class="nota" style="margin-top:10px">3× e 4× aparecem só quando o gerador sabe fazer e o monitor passa de 144 Hz.</p>
+          <p class="nota" style="margin-top:12px;color:var(--aviso)">Valorant: indisponível. O Vanguard não convive com janela por cima do jogo.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tela" id="tela-mira" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Mira</h1><p>Mira na tela, campo de visão e precisão do mouse. Nada aqui mexe no jogo nem mira por você.</p></div>
+        <div class="seg" role="group" aria-label="Jogo" id="mira-jogo"><button aria-pressed="true" data-j="fivem">FiveM</button><button aria-pressed="false" data-j="cs2">CS2</button><button aria-pressed="false" data-j="fortnite">Fortnite</button></div></div>
+      <div class="grade g-mira">
+        <div class="vidro" style="padding:14px">
+          <div class="previa"><canvas id="mira-cena"></canvas><svg class="mira" id="mira-svg" width="120" height="120" viewBox="-60 -60 120 120"></svg><span class="etiqueta tag" id="mira-tag">Sobreposição · fora do jogo</span></div>
+          <p class="nota" style="margin:12px 4px 2px" id="mira-nota">No FiveM a mira é uma janela por cima do jogo, sem tocar nele. Alguns servidores de RP proíbem mira fixa: confira as regras do seu.</p>
+        </div>
+        <div class="vidro">
+          <div class="titulo-sec"><h2>Estilo</h2><button class="chave" role="switch" aria-checked="true" aria-label="Mostrar a mira" id="mira-ligada"></button></div>
+          <div class="estilos" id="estilos"></div>
+          <div class="titulo-sec"><span class="rotulo">Cor</span></div>
+          <div class="cores-mira" id="cores-mira"></div>
+          <div class="controle"><div class="topo-c">Tamanho<b id="v-tam">10</b></div><input type="range" id="r-tam" min="2" max="30" value="10"></div>
+          <div class="controle"><div class="topo-c">Espessura<b id="v-esp">2</b></div><input type="range" id="r-esp" min="1" max="6" value="2"></div>
+          <div class="controle"><div class="topo-c">Abertura do centro<b id="v-ab">4</b></div><input type="range" id="r-ab" min="0" max="14" value="4"></div>
+          <div class="controle"><div class="topo-c">Opacidade<b id="v-op">100%</b></div><input type="range" id="r-op" min="20" max="100" value="100"></div>
+          <div class="linha-mini">Contorno preto<button class="chave" role="switch" aria-checked="true" aria-label="Contorno" id="mira-contorno"></button></div>
+          <div class="linha-mini">Esconder ao mirar com o botão direito<button class="chave" role="switch" aria-checked="false" aria-label="Esconder ao mirar"></button></div>
+        </div>
+      </div>
+      <div class="grade g-3">
+        <div class="vidro">
+          <div class="titulo-sec"><h2>Campo de visão</h2><span class="etiqueta">FiveM</span></div>
+          <div class="previa" style="aspect-ratio:16/8"><canvas id="fov-cena"></canvas></div>
+          <div class="controle"><div class="topo-c">Primeira pessoa<b id="v-fov">70°</b></div><input type="range" id="r-fov" min="50" max="90" value="70"></div>
+          <p class="nota" style="margin:2px 0 0">Gravado na configuração do jogo quando ele fechar. Servidor que fixa o FOV manda mais que o Otimiza.</p>
+        </div>
+        <div class="vidro">
+          <div class="titulo-sec"><h2>Mouse</h2><span class="etiqueta medido">medido</span></div>
+          <div class="linha-mini" style="border-top:0">Aceleração do Windows<b>desligada ✓</b></div>
+          <div class="linha-mini">Taxa de atualização<b>1000 Hz</b></div>
+          <div class="linha-mini">DPI<input class="campo" id="dpi" type="number" value="800" min="100" max="32000" aria-label="DPI"></div>
+          <div class="linha-mini">Sensibilidade no CS2<input class="campo" id="sens" type="number" value="1.2" step="0.05" min="0.05" aria-label="Sensibilidade no CS2"></div>
+          <div class="linha-mini">Volta completa<b id="cm360">43,3 cm</b></div>
+          <div class="linha-mini">Mesma mira no Valorant<b id="sens-val">0,377</b></div>
+        </div>
+        <div class="vidro">
+          <div class="titulo-sec"><h2>Treino de tracking</h2><span class="nota" id="treino-rec">recorde 74%</span></div>
+          <div class="treino" id="treino"><canvas id="treino-cv"></canvas><div class="sobre-treino" id="treino-sobre"><button class="botao prim" id="treino-ir">Começar · 15 s</button></div></div>
+          <p class="nota" style="margin:10px 0 0" id="treino-res">Mantenha o cursor sobre o alvo. Mede quanto tempo você ficou nele.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tela" id="tela-cores" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Cores</h1><p>Saturação e brilho do monitor, por jogo. Tudo volta ao normal quando o jogo fecha.</p></div><span class="pilula" id="cores-vendor"><span class="vivo"></span>AMD · Saturação do Adrenalin</span></div>
+      <div class="grade g-mira">
+        <div class="vidro" style="padding:14px">
+          <div class="previa" id="cores-previa"><canvas id="cores-cv"></canvas><span class="rot-previa" style="left:12px">Antes</span><span class="rot-previa" style="right:12px">Depois</span><span class="divisor" id="divisor" style="left:50%"></span><input type="range" id="cores-split" min="0" max="100" value="50" aria-label="Comparar antes e depois"></div>
+          <p class="nota" style="margin:12px 4px 2px">Arraste para comparar. O ajuste vale para o monitor inteiro enquanto o jogo estiver aberto.</p>
+        </div>
+        <div class="vidro">
+          <div class="seg" role="group" id="predef" aria-label="Predefinições"><button aria-pressed="false" data-p="natural">Natural</button><button aria-pressed="true" data-p="vivo">Vivo</button><button aria-pressed="false" data-p="competitivo">Competitivo</button><button aria-pressed="false" data-p="cinema">Cinema</button></div>
+          <div class="controle" style="margin-top:8px"><div class="topo-c" id="nome-sat">Saturação<b id="v-sat">70%</b></div><input type="range" id="r-sat" min="0" max="100" value="70"></div>
+          <div class="controle"><div class="topo-c">Brilho<b id="v-bri">0</b></div><input type="range" id="r-bri" min="-40" max="40" value="0"></div>
+          <div class="controle"><div class="topo-c">Contraste<b id="v-con">0</b></div><input type="range" id="r-con" min="-40" max="40" value="5"></div>
+          <div class="controle"><div class="topo-c">Gama<b id="v-gam">1,00</b></div><input type="range" id="r-gam" min="70" max="150" value="100"></div>
+          <div class="controle"><div class="topo-c">Matiz<b id="v-mat">0°</b></div><input type="range" id="r-mat" min="-30" max="30" value="0"></div>
+          <div class="linha-mini">Só com o FiveM aberto<button class="chave" role="switch" aria-checked="true" aria-label="Só com o jogo aberto"></button></div>
+          <div class="acoes" style="margin-top:12px"><button class="botao prim">Aplicar</button><button class="botao" id="cores-padrao">Voltar ao padrão</button></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="tela" id="tela-lab" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Lab</h1><p>Mesmo trecho medido antes e depois, com o PresentMon, e quanto dá para confiar no resultado.</p></div><button class="botao prim">Testar performance</button></div>
+      <div class="tiles" id="tiles"></div>
+      <div class="grade g-2">
+        <div class="vidro grafico">
+          <div class="titulo-sec"><span class="rotulo">Tempo de quadro · FiveM</span><span class="nota">6 rodadas de 60 s cada lado</span></div>
+          <svg viewBox="0 0 360 210" role="img" aria-label="Tempo de quadro antes e depois">
+            <defs><filter id="brilho"><feGaussianBlur stdDeviation="3"/></filter></defs>
+            <g font-family="Geist Mono, monospace" font-size="9" fill="#5c5c5c">
+              <line x1="36" x2="356" y1="20" y2="20" stroke="rgba(255,255,255,.05)"/><text x="0" y="23">40 ms</text>
+              <line x1="36" x2="356" y1="70" y2="70" stroke="rgba(255,255,255,.05)"/><text x="0" y="73">30 ms</text>
+              <line x1="36" x2="356" y1="120" y2="120" stroke="rgba(255,255,255,.05)"/><text x="0" y="123">20 ms</text>
+              <line x1="36" x2="356" y1="170" y2="170" stroke="rgba(255,255,255,.05)"/><text x="0" y="173">10 ms</text>
+              <line x1="36" x2="356" y1="136.5" y2="136.5" stroke="rgba(255,255,255,.18)" stroke-dasharray="3 4"/><text x="290" y="131">60 Hz · 16,7</text>
+            </g>
+            <polyline id="antes" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="1.2"/>
+            <polyline id="depois-h" fill="none" stroke="#fff" stroke-width="5" opacity=".25" filter="url(#brilho)"/>
+            <polyline id="depois" fill="none" stroke="#fff" stroke-width="1.6"/>
+          </svg>
+          <p class="nota" style="margin-top:10px">Cinza: antes. Branco: depois. Os picos acima de 30 ms são os engasgos que sumiram. Confiança alta: as faixas de antes e depois não se encostam.</p>
+        </div>
+        <div class="vidro">
+          <div class="titulo-sec"><h2>Testes anteriores</h2></div>
+          <div class="historico-lista">
+            <div class="hl"><span>FiveM · Máximo FPS</span><span class="num">hoje</span><span class="delta">▲ 29%</span></div>
+            <div class="hl"><span>FiveM · driver novo</span><span class="num">01/10</span><span class="delta">▲ 3%</span></div>
+            <div class="hl"><span>CS2 · Máximo FPS</span><span class="num">28/09</span><span class="delta">▲ 18%</span></div>
+            <div class="hl"><span>Fortnite · Balanceado</span><span class="num">22/09</span><span class="delta">▲ 12%</span></div>
+            <div class="hl"><span>FiveM · plano de energia</span><span class="num">19/09</span><span class="num">sem diferença</span></div>
+          </div>
+          <p class="nota" style="margin-top:12px">"Sem diferença" também é resultado: o ajuste foi desfeito sozinho.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="tela" id="tela-ajustes" hidden>
+      <div class="cabeca"><div><h1><span class="barras" aria-hidden="true"></span>Ajustes</h1><p>Licença, sobreposição e o botão que devolve o PC como estava.</p></div></div>
+      <div class="grade g-2">
+        <div class="vidro">
+          <div class="lista-ajustes">
+            <div class="la"><span class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg></span><div>Licença ativa, vitalícia<p class="num">OTZ-WPYY-0J4F-77AB</p></div><span class="etiqueta medido">ativa</span></div>
+            <div class="la"><span class="ic"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/></svg></span><div>Feedback<p>Recebido em 03/10. Obrigado.</p></div><span class="etiqueta">ok</span></div>
+            <div class="la"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="M7 8h5"/></svg></span><div>Sobreposição no jogo<p>FPS e 1% low num canto. Custo medido: 0,3% de um núcleo.</p></div><div class="seg" role="group"><button aria-pressed="false">Não</button><button aria-pressed="true">Mínima</button><button aria-pressed="false">Detalhada</button></div></div>
+            <div class="la"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 4v8l5 3"/><circle cx="12" cy="12" r="8"/></svg></span><div>Medir sozinho ao abrir um jogo<p>Só escuta o Windows, não muda nada.</p></div><button class="chave" role="switch" aria-checked="true" aria-label="Medir sozinho"></button></div>
+            <div class="la"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/></svg></span><div>Ponto de restauração antes de otimizar<p>O Windows guarda uma cópia antes de cada lote.</p></div><button class="chave" role="switch" aria-checked="true" aria-label="Ponto de restauração"></button></div>
+          </div>
+        </div>
+        <div class="vidro">
+          <div class="rotulo">Segurança</div>
+          <h2 style="margin-top:8px">Restaurar meu PC</h2>
+          <p class="nota">Desfaz tudo o que o Otimiza mudou, na ordem inversa, conferindo cada valor com o que estava antes.</p>
+          <button class="botao" style="margin-top:14px">Restaurar tudo</button>
+          <div class="linha-mini" style="margin-top:18px">Mudanças guardadas<b>23</b></div>
+          <div class="linha-mini">Desfeitas sozinhas por piorar o FPS<b>2</b></div>
+          <div class="linha-mini">Versão<b>3.3.0</b></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="doca" id="doca">
+      <button class="prim" id="b-otimizar"><svg viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12z"/></svg><span id="b-otimizar-t">Otimizar</span></button>
+      <button id="b-boost"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="10" rx="2"/><path d="M8 18h11a2 2 0 0 0 2-2V9"/></svg><span>Frame Boost</span></button>
+      <span class="sep"></span>
+      <button data-ir="lab"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l3.5-5 3 3L17 7"/></svg><span>Testar</span></button>
+      <button><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="M14 8h4v3"/></svg><span>Sobreposição</span></button>
+      <button><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg><span>Desfazer</span></button>
+    </div>
+  </main>
+
+  <div class="lembrete" id="lembrete" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-weight:500">Faltam 2 minutos</b><button id="fechar" aria-label="Fechar" style="color:var(--texto-3);font-size:18px">×</button></div>
+    <p class="nota" style="margin:0">Depois dos 10 minutos as correções pausam até chegar seu feedback no Discord. Medir continua livre.</p>
+    <button class="botao" id="abrir">Deixar feedback agora</button>
+  </div>
+
+  <div class="veu" id="veu" hidden>
+    <div class="folha" role="dialog" aria-modal="true" aria-labelledby="fb-t">
+      <div><div class="rotulo">10 minutos de uso</div><h2 id="fb-t" style="margin-top:8px">Conta pra gente como ficou</h2><p class="nota" style="margin:6px 0 0">As correções pausam até chegar o seu feedback. Medir, ver o diagnóstico e desfazer continuam livres.</p></div>
+      <ol>
+        <li><div><h3>Tire um print com o FPS</h3><p>A sobreposição ou o Lab do Otimiza servem.</p></div></li>
+        <li><div><h3>Mande no canal de feedbacks</h3><p>Pelo menos 30 caracteres e o print. Cole este código na mensagem:</p><div class="copiar">OTZ-WPYY-0J4F-77AB<button id="copiar">Copiar</button></div></div></li>
+        <li><div><h3>Volte e confirme</h3><p>O bot leva até um minuto para ver a mensagem.</p></div></li>
+      </ol>
+      <div class="estado-fb" id="fb-estado" hidden></div>
+      <div class="acoes"><button class="botao prim">Abrir o canal</button><button class="botao" id="confirmar">Já mandei</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
+  const reduz = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const LOGO_D = document.querySelector(".logo path").getAttribute("d");
+
+  /* Capas de exemplo, desenhadas e monocromáticas */
+  function rng(s) { return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
+  function capa(id, titulo) {
+    const W = 600, H = 800, c = document.createElement("canvas"); c.width = W; c.height = H;
+    const x = c.getContext("2d"), r = rng((id.split("").reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 2147483647, 7)) || 1);
+    const ceu = x.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, "#1d1d1d"); ceu.addColorStop(.6, "#0a0a0a"); ceu.addColorStop(1, "#030303");
+    x.fillStyle = ceu; x.fillRect(0, 0, W, H);
+    const brilho = (cx, cy, rad, a) => { const g = x.createRadialGradient(cx, cy, 0, cx, cy, rad); g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(0, 0, W, H); };
+    const predios = (base, alt, larg, tom, janelas) => { let px = -20; while (px < W) { const w = larg * (.6 + r() * .8), h = alt * (.4 + r()); x.fillStyle = tom; x.fillRect(px, base - h, w, h + 400); if (janelas) { x.fillStyle = "rgba(255,255,255,.55)"; for (let wy = base - h + 10; wy < base - 8; wy += 11) for (let wx = px + 5; wx < px + w - 5; wx += 9) if (r() < janelas) x.fillRect(wx, wy, 3, 4); } px += w + 2; } };
+    if (id === "fivem") {
+      brilho(420, 210, 260, .22);
+      x.fillStyle = "#e6e6e6"; x.beginPath(); x.arc(420, 210, 74, 0, 7); x.fill();
+      predios(560, 260, 60, "#151515", .12); predios(610, 180, 46, "#0d0d0d", .25);
+      x.strokeStyle = "#070707";
+      for (const [tx, th] of [[90, 330], [150, 280], [510, 300]]) {
+        x.lineWidth = 9; x.beginPath(); x.moveTo(tx, 700); x.quadraticCurveTo(tx + 24, 700 - th / 2, tx + 10, 700 - th); x.stroke();
+        for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; x.lineWidth = 5; x.beginPath(); x.moveTo(tx + 10, 700 - th); x.quadraticCurveTo(tx + 10 + Math.cos(a) * 50, 700 - th - 30 + Math.sin(a) * 10, tx + 10 + Math.cos(a) * 90, 700 - th + 30 + Math.abs(Math.sin(a)) * 30); x.stroke(); }
+      }
+      x.fillStyle = "#050505"; x.fillRect(0, 690, W, 200);
+      x.strokeStyle = "rgba(255,255,255,.25)"; x.lineWidth = 2; for (let k = -6; k <= 6; k++) { x.beginPath(); x.moveTo(300 + k * 8, 690); x.lineTo(300 + k * 120, 800); x.stroke(); }
+    } else if (id === "cs2") {
+      for (let by = 0; by < H; by += 40) for (let bx = (by / 40) % 2 ? -40 : 0; bx < W; bx += 80) { const t = 24 + r() * 14 | 0; x.fillStyle = `rgb(${t},${t},${t})`; x.fillRect(bx + 1, by + 1, 78, 38); }
+      brilho(300, 420, 260, .35);
+      x.fillStyle = "#050505"; x.beginPath(); x.moveTo(150, 800); x.lineTo(150, 420); x.arc(300, 420, 150, Math.PI, 0); x.lineTo(450, 800); x.fill();
+      x.fillStyle = "rgba(255,255,255,.08)"; x.beginPath(); x.moveTo(190, 800); x.lineTo(190, 430); x.arc(300, 430, 110, Math.PI, 0); x.lineTo(410, 800); x.fill();
+      x.fillStyle = "#020202"; x.beginPath(); x.ellipse(300, 610, 34, 40, 0, 0, 7); x.fill(); x.fillRect(262, 640, 76, 160);
+      x.strokeStyle = "rgba(255,255,255,.85)"; x.lineWidth = 2; for (const [a, b, c2, d] of [[300, 330, 300, 360], [300, 380, 300, 410], [255, 370, 285, 370], [315, 370, 345, 370]]) { x.beginPath(); x.moveTo(a, b); x.lineTo(c2, d); x.stroke(); }
+    } else if (id === "fortnite") {
+      brilho(300, 260, 380, .2);
+      x.strokeStyle = "rgba(255,255,255,.12)"; for (let k = 0; k < 26; k++) { x.lineWidth = 1 + r() * 3; x.beginPath(); x.ellipse(300, 260, 60 + k * 14, 26 + k * 6, -.2, r() * 6, r() * 6 + 3.5); x.stroke(); }
+      x.fillStyle = "#0b0b0b"; x.beginPath(); x.moveTo(60, 640); x.bezierCurveTo(160, 520, 260, 560, 300, 500); x.bezierCurveTo(360, 560, 470, 530, 560, 640); x.lineTo(470, 700); x.lineTo(120, 700); x.fill();
+      x.fillStyle = "#050505"; x.beginPath(); x.moveTo(120, 700); x.lineTo(300, 790); x.lineTo(470, 700); x.fill();
+      x.fillStyle = "#cfcfcf"; x.save(); x.translate(430, 150); x.rotate(-.18); x.fillRect(-46, -14, 92, 28); x.fillStyle = "#0a0a0a"; x.fillRect(-40, -6, 18, 10); x.fillRect(-16, -6, 18, 10); x.restore();
+    } else if (id === "cyberpunk") {
+      brilho(300, 120, 300, .16);
+      for (let k = 0; k < 5; k++) predios(800, 520 - k * 60, 70 - k * 8, `rgb(${10 + k * 5},${10 + k * 5},${10 + k * 5})`, .18 + k * .05);
+      x.strokeStyle = "rgba(255,255,255,.12)"; x.lineWidth = 1; for (let k = 0; k < 220; k++) { const rx = r() * W, ry = r() * H; x.beginPath(); x.moveTo(rx, ry); x.lineTo(rx - 8, ry + 30); x.stroke(); }
+      x.fillStyle = "rgba(255,255,255,.9)"; x.fillRect(80, 300, 140, 3); x.fillRect(380, 360, 120, 3);
+    } else if (id === "valorant") {
+      brilho(380, 300, 340, .25);
+      for (let k = 0; k < 9; k++) { x.fillStyle = `rgba(255,255,255,${.03 + r() * .1})`; x.beginPath(); const cx = r() * W, cy = r() * H * .8; x.moveTo(cx, cy); x.lineTo(cx + 260 * (r() - .3), cy + 340 * r()); x.lineTo(cx - 200 * r(), cy + 200 * r()); x.fill(); }
+      x.fillStyle = "#050505"; x.beginPath(); x.moveTo(300, 260); x.lineTo(420, 800); x.lineTo(180, 800); x.fill();
+      x.strokeStyle = "rgba(255,255,255,.7)"; x.lineWidth = 2; x.beginPath(); x.moveTo(300, 260); x.lineTo(420, 800); x.stroke();
+    }
+    const v = x.createRadialGradient(W / 2, H / 2, H * .3, W / 2, H / 2, H * .75); v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.75)"); x.fillStyle = v; x.fillRect(0, 0, W, H);
+    const img = x.getImageData(0, 0, W, H); for (let i = 0; i < img.data.length; i += 4) { const n = (r() - .5) * 18; img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n; } x.putImageData(img, 0, 0);
+    const fundo = x.createLinearGradient(0, H * .62, 0, H); fundo.addColorStop(0, "rgba(0,0,0,0)"); fundo.addColorStop(1, "rgba(0,0,0,.85)"); x.fillStyle = fundo; x.fillRect(0, H * .6, W, H * .4);
+    x.fillStyle = "#fff"; x.font = "300 58px Geist, 'Segoe UI', sans-serif"; try { x.letterSpacing = "6px"; } catch (e) {}
+    x.fillText(titulo.toUpperCase(), 40, H - 70);
+    x.font = "400 20px 'Geist Mono', monospace"; try { x.letterSpacing = "3px"; } catch (e) {} x.fillStyle = "rgba(255,255,255,.55)"; x.fillText("OTIMIZA · PERFIL DO JOGO", 42, H - 36);
+    return c;
+  }
+  const JOGOS = [
+    { id: "fivem", nome: "FiveM", fps: "129", u: "na tela", ganho: "▲ 29% nativo", vivo: true, quando: "em execução" },
+    { id: "cs2", nome: "Counter-Strike 2", fps: "284", u: "FPS", ganho: "▲ 18%", quando: "ontem" },
+    { id: "fortnite", nome: "Fortnite", fps: "196", u: "FPS", ganho: "▲ 12%", quando: "há 3 dias" },
+    { id: "cyberpunk", nome: "Cyberpunk 2077", fps: "118", u: "na tela", ganho: "▲ 9%", quando: "semana passada" },
+    { id: "valorant", nome: "Valorant", fps: "—", u: "", ganho: null, quando: "nunca medido", restrito: "Vanguard: só medição e Windows" },
+  ];
+  const CAPAS = {};
+  function gerarCapas() { JOGOS.forEach((j) => (CAPAS[j.id] = capa(j.id, j.nome === "Counter-Strike 2" ? "CS2" : j.nome))); }
+
+  function montarListas() {
+    $("#arvore").innerHTML = JOGOS.map((j, i) => {
+      const linha = `<button class="item ${i === 0 ? "ativo" : ""}"><img alt="" src="${CAPAS[j.id].toDataURL("image/jpeg", .7)}">${j.nome}${j.vivo ? '<span class="vivo"></span>' : `<span class="cont">${j.fps}</span>`}</button>`;
+      return i === 0 ? linha + `<div class="sub-arvore">
+        <button class="item"><svg viewBox="0 0 24 24"><path d="M4 19h16M6 16l3.5-5 3 3L17 7"/></svg>Medições<span class="cont">6</span></button>
+        <button class="item"><svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></svg>Ajustes aplicados<span class="cont">4</span></button>
+        <button class="item"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Histórico<span class="cont">12</span></button></div>` : linha;
+    }).join("");
+    $("#lista").innerHTML = JOGOS.map((j) => `
+      <button class="jogo-card"><img alt="Capa de ${j.nome}" src="${CAPAS[j.id].toDataURL("image/jpeg", .82)}">
+        <div class="topo">${j.vivo ? '<span class="pilula" style="padding:4px 10px"><span class="vivo"></span>ao vivo</span>' : "<span></span>"}</div>
+        <div class="sobre"><div style="font-size:14px">${j.nome}</div>
+          <div class="linha"><span class="fps">${j.fps}<small style="font-size:11px;color:var(--texto-2)"> ${j.u}</small></span>${j.ganho ? `<span class="delta">${j.ganho}</span>` : ""}</div>
+          ${j.restrito ? `<div class="restrito">${j.restrito}</div>` : `<div class="nota" style="font-size:11.5px">${j.quando}</div>`}</div></button>`).join("");
+  }
+
+  function contar(el, de, ate, ms = 1000) {
+    if (reduz) { el.textContent = ate; return; }
+    const t0 = performance.now();
+    const passo = (t) => { const p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(de + (ate - de) * e); if (p < 1) requestAnimationFrame(passo); else el.textContent = ate; };
+    requestAnimationFrame(passo);
+  }
+  function ir(nome) {
+    $$(".trilho .ir").forEach((b) => b.setAttribute("aria-selected", b.dataset.tela === nome));
+    $$(".tela").forEach((t) => (t.hidden = t.id !== "tela-" + nome));
+    cena3d?.redimensionar();
+  }
+  $$(".trilho .ir").forEach((b) => (b.onclick = () => ir(b.dataset.tela)));
+  $("[data-ir=lab]").onclick = () => ir("lab");
+
+  /* Cena 3D */
+  let cena3d = null;
+  function criarCena() {
+    const host = $("#cena");
+    if (!window.THREE) { host.classList.add("sem-3d"); return null; }
+    const T = THREE;
+    let renderer;
+    try { renderer = new T.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); }
+    catch (e) { host.classList.add("sem-3d"); return null; }
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.outputEncoding = T.sRGBEncoding;
+    renderer.toneMapping = T.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35;
+    host.prepend(renderer.domElement);
+
+    const cena = new T.Scene();
+    const camera = new T.PerspectiveCamera(30, 1, .1, 200);
+
+    // Estúdio de luz para os reflexos: painéis brancos num quarto preto.
+    const pm = new T.PMREMGenerator(renderer);
+    const estudio = new T.Scene();
+    estudio.add(new T.Mesh(new T.BoxGeometry(40, 40, 40), new T.MeshBasicMaterial({ color: 0x030303, side: T.BackSide })));
+    const painelDeLuz = (w, h, p, rot, i) => { const m = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ color: new T.Color(i, i, i), side: T.DoubleSide })); m.position.set(...p); m.rotation.set(...rot); estudio.add(m); };
+    painelDeLuz(18, 4, [0, 14, 0], [Math.PI / 2, 0, 0], 4);
+    painelDeLuz(5, 14, [-15, 5, 3], [0, Math.PI / 2, 0], 2.2);
+    painelDeLuz(5, 14, [15, 5, -4], [0, -Math.PI / 2, 0], 1.2);
+    painelDeLuz(14, 2.5, [0, 3, -15], [0, 0, 0], 1);
+    painelDeLuz(10, 2, [0, 2, 15], [0, Math.PI, 0], .6);
+    cena.environment = pm.fromScene(estudio, .035).texture;
+    const chave = new T.DirectionalLight(0xffffff, .6); chave.position.set(-4, 10, 6); cena.add(chave);
+
+    const M = {
+      vidro: new T.MeshPhysicalMaterial({ color: 0x0c0c0d, metalness: .15, roughness: .16, clearcoat: 1, clearcoatRoughness: .06 }),
+      metal: new T.MeshStandardMaterial({ color: 0x77777b, metalness: 1, roughness: .26 }),
+      metalEscuro: new T.MeshStandardMaterial({ color: 0x26262a, metalness: .9, roughness: .34 }),
+      cromo: new T.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: .07, clearcoat: 1, clearcoatRoughness: .04 }),
+      placaBase: new T.MeshStandardMaterial({ color: 0x0e0e0f, metalness: .35, roughness: .55 }),
+      luzFaixa: new T.MeshStandardMaterial({ color: 0x111111, emissive: 0xffffff, emissiveIntensity: .15 }),
+    };
+    const retangulo = (w, h, r) => { const s = new T.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; };
+    const laje = (w, h, d, r, mat, bev = .035) => { const g = new T.ExtrudeGeometry(retangulo(w, h, r), { depth: d, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 5, curveSegments: 18 }); g.center(); return new T.Mesh(g, mat); };
+    const textura = (canvas) => { const t = new T.CanvasTexture(canvas); t.encoding = T.sRGBEncoding; t.anisotropy = 8; return t; };
+
+    const cvB = document.createElement("canvas"); cvB.width = cvB.height = 128;
+    const gB = cvB.getContext("2d"), rg = gB.createRadialGradient(64, 64, 0, 64, 64, 64); rg.addColorStop(0, "rgba(255,255,255,1)"); rg.addColorStop(.25, "rgba(255,255,255,.35)"); rg.addColorStop(1, "rgba(255,255,255,0)"); gB.fillStyle = rg; gB.fillRect(0, 0, 128, 128);
+    const texBrilho = new T.CanvasTexture(cvB);
+    const halo = (escala, opac = 0) => { const s = new T.Sprite(new T.SpriteMaterial({ map: texBrilho, color: 0xffffff, transparent: true, opacity: opac, blending: T.AdditiveBlending, depthWrite: false })); s.scale.set(escala, escala, 1); return s; };
+
+    const raiz = new T.Group(); cena.add(raiz);
+    const alvos = {};
+
+    const chao = new T.Mesh(new T.PlaneGeometry(44, 44), new T.ShaderMaterial({
+      transparent: true, depthWrite: false,
+      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+      fragmentShader: "varying vec2 vUv; void main(){ vec2 g = fract(vUv*90.0)-0.5; float p = smoothstep(0.09,0.03,length(g)); float f = smoothstep(0.5,0.08,length(vUv-0.5)); gl_FragColor = vec4(vec3(1.0), p*f*0.28); }",
+    }));
+    chao.rotation.x = -Math.PI / 2; chao.position.y = -.02; raiz.add(chao);
+
+    // 1. Jogo: cartão de vidro com a capa
+    const jogo = new T.Group(); jogo.position.set(-5.6, 1.55, .9); jogo.rotation.set(-.05, .5, 0);
+    jogo.add(laje(2.2, 3.0, .07, .2, M.vidro, .03));
+    const texCapa = textura(CAPAS.fivem);
+    const capaMesh = new T.Mesh(new T.PlaneGeometry(2.08, 2.88), new T.MeshBasicMaterial({ map: texCapa, toneMapped: false }));
+    capaMesh.position.z = .071; jogo.add(capaMesh);
+    raiz.add(jogo); alvos.jogo = { obj: jogo, ancora: new T.Vector3(0, 1.75, 0) };
+
+    // 2. A marca do Otimiza em cromo
+    const formas = (() => {
+      const tokens = LOGO_D.match(/[MCLZ]|-?\d*\.?\d+/gi); const caminhos = []; let atual = null, cmd = null, i = 0;
+      const n = () => parseFloat(tokens[i++]);
+      while (i < tokens.length) {
+        const t = tokens[i];
+        if (/^[MCLZ]$/i.test(t)) { cmd = t.toUpperCase(); i++; if (cmd === "M") { atual = new T.Path(); caminhos.push(atual); atual.moveTo(n(), -n()); cmd = "L"; } continue; }
+        if (cmd === "C") atual.bezierCurveTo(n(), -n(), n(), -n(), n(), -n());
+        else if (cmd === "L") atual.lineTo(n(), -n());
+        else i++;
+      }
+      const dentro = (pt, pol) => { let c = false; for (let a = 0, b = pol.length - 1; a < pol.length; b = a++) { if (((pol[a].y > pt.y) !== (pol[b].y > pt.y)) && pt.x < (pol[b].x - pol[a].x) * (pt.y - pol[a].y) / (pol[b].y - pol[a].y) + pol[a].x) c = !c; } return c; };
+      const pols = caminhos.map((c) => c.getPoints(40));
+      const pais = caminhos.map((c, k) => caminhos.findIndex((o, j) => j !== k && dentro(pols[k][0], pols[j])));
+      const formas = {};
+      caminhos.forEach((c, k) => { if (pais[k] === -1) { const s = new T.Shape(); s.curves = c.curves; s.currentPoint = c.currentPoint; formas[k] = s; } });
+      caminhos.forEach((c, k) => { if (pais[k] !== -1 && formas[pais[k]]) formas[pais[k]].holes.push(c); });
+      return Object.values(formas);
+    })();
+    const geoLogo = new T.ExtrudeGeometry(formas, { depth: 70, bevelEnabled: true, bevelThickness: 14, bevelSize: 10, bevelSegments: 6, curveSegments: 28 });
+    geoLogo.center(); geoLogo.scale(.0031, .0031, .0031);
+    const logo = new T.Mesh(geoLogo, M.cromo);
+    const logoGrupo = new T.Group(); logoGrupo.position.set(-1.9, 1.35, 0); logoGrupo.add(logo);
+    const haloLogo = halo(4.5, .18); haloLogo.position.set(0, -1.25, 0); logoGrupo.add(haloLogo);
+    const anel = new T.Mesh(new T.TorusGeometry(1.35, .012, 8, 120), new T.MeshStandardMaterial({ color: 0x111111, emissive: 0xffffff, emissiveIntensity: .5 }));
+    anel.rotation.x = Math.PI / 2; anel.position.y = -1.3; logoGrupo.add(anel);
+    raiz.add(logoGrupo); alvos.logo = { obj: logoGrupo, ancora: new T.Vector3(0, 1.45, 0) };
+
+    // 3. Processador
+    const cpu = new T.Group(); cpu.position.set(1.4, .1, -1.9);
+    const sub = laje(1.8, 1.8, .07, .08, M.placaBase, .015); sub.rotation.x = -Math.PI / 2; cpu.add(sub);
+    const ihs = laje(1.22, 1.22, .1, .14, M.metal, .03); ihs.rotation.x = -Math.PI / 2; ihs.position.y = .12; cpu.add(ihs);
+    const cvChip = document.createElement("canvas"); cvChip.width = cvChip.height = 256; const xc = cvChip.getContext("2d");
+    const marca = new Path2D(LOGO_D); xc.save(); xc.translate(78, 40); xc.scale(.155, .155); xc.fillStyle = "rgba(0,0,0,.4)"; xc.fill(marca, "evenodd"); xc.restore();
+    xc.fillStyle = "rgba(0,0,0,.45)"; xc.font = "500 20px 'Geist Mono', monospace"; xc.textAlign = "center"; xc.fillText("OTIMIZA · CPU", 128, 205);
+    const gravura = new T.Mesh(new T.PlaneGeometry(1.0, 1.0), new T.MeshBasicMaterial({ map: textura(cvChip), transparent: true, toneMapped: false }));
+    gravura.rotation.x = -Math.PI / 2; gravura.position.y = .2; cpu.add(gravura);
+    for (let k = 0; k < 12; k++) for (const [sx, sz, rot] of [[1, 0, 0], [-1, 0, 0], [0, 1, 1], [0, -1, 1]]) {
+      const cap = new T.Mesh(new T.BoxGeometry(.05, .035, .1), M.metal);
+      const o = -0.66 + k * .12; cap.position.set(sx ? sx * .78 : o, .06, sz ? sz * .78 : o); if (rot) cap.rotation.y = Math.PI / 2; cpu.add(cap);
+    }
+    raiz.add(cpu); alvos.cpu = { obj: cpu, ancora: new T.Vector3(0, .65, 0) };
+
+    // 4. Placa de vídeo com duas ventoinhas
+    const gpu = new T.Group(); gpu.position.set(1.6, .25, 2.1); gpu.rotation.y = -.18;
+    const corpo = laje(3.2, 1.36, .3, .12, M.metalEscuro, .03); corpo.rotation.x = -Math.PI / 2; gpu.add(corpo);
+    const tampa = laje(3.08, 1.24, .03, .1, M.vidro, .012); tampa.rotation.x = -Math.PI / 2; tampa.position.y = .2; gpu.add(tampa);
+    const faixa = new T.Mesh(new T.BoxGeometry(2.6, .02, .02), M.luzFaixa); faixa.position.set(0, .05, .7); gpu.add(faixa);
+    const helices = [];
+    for (const fx of [-.76, .76]) {
+      const aro = new T.Mesh(new T.TorusGeometry(.5, .03, 14, 64), M.metal); aro.rotation.x = Math.PI / 2; aro.position.set(fx, .23, 0); gpu.add(aro);
+      const helice = new T.Group(); helice.position.set(fx, .22, 0);
+      helice.add(new T.Mesh(new T.CylinderGeometry(.13, .13, .06, 32), M.metal));
+      for (let k = 0; k < 9; k++) { const p = new T.Mesh(new T.BoxGeometry(.36, .01, .12), M.metalEscuro); const a = k / 9 * Math.PI * 2; p.position.set(Math.cos(a) * .27, 0, Math.sin(a) * .27); p.rotation.set(.4, -a, 0); helice.add(p); }
+      gpu.add(helice); helices.push(helice);
+    }
+    raiz.add(gpu); alvos.gpu = { obj: gpu, ancora: new T.Vector3(0, .75, 0) };
+
+    // 5. Frame Boost: quadros empilhados que se abrem quando liga
+    const boost = new T.Group(); boost.position.set(4.6, 1.3, .1); boost.rotation.y = -.62;
+    const quadros = [];
+    for (let k = 0; k < 3; k++) {
+      const forma = retangulo(1.7, 1.06, .12); forma.holes.push(retangulo(1.52, .88, .07));
+      const g = new T.ExtrudeGeometry(forma, { depth: .03, bevelEnabled: true, bevelThickness: .012, bevelSize: .012, bevelSegments: 3, curveSegments: 12 }); g.center();
+      const mat = new T.MeshPhysicalMaterial({ color: 0xffffff, metalness: .6, roughness: .12, clearcoat: 1, transparent: true, opacity: k === 0 ? 1 : .55, emissive: 0xffffff, emissiveIntensity: 0 });
+      const q = new T.Mesh(g, mat);
+      q.add(new T.Mesh(new T.PlaneGeometry(1.52, .88), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .03, side: T.DoubleSide, depthWrite: false })));
+      boost.add(q); quadros.push(q);
+    }
+    const haloBoost = halo(3.2, 0); boost.add(haloBoost);
+    raiz.add(boost); alvos.boost = { obj: boost, ancora: new T.Vector3(0, .95, 0) };
+
+    // 6. Monitor mostrando o jogo
+    const mon = new T.Group(); mon.position.set(6.9, 1.45, .3); mon.rotation.y = -.5;
+    mon.add(laje(3.1, 1.86, .06, .07, M.metalEscuro, .02));
+    const matTela = new T.MeshBasicMaterial({ map: texCapa, toneMapped: false, color: 0x5a5a5a });
+    const telaGeo = new T.PlaneGeometry(2.96, 1.72); const uv = telaGeo.attributes.uv;
+    for (let k = 0; k < uv.count; k++) uv.setY(k, .32 + uv.getY(k) * .42);
+    const tela = new T.Mesh(telaGeo, matTela); tela.position.z = .052; mon.add(tela);
+    const pescoco = laje(.22, 1.1, .08, .04, M.metal, .02); pescoco.position.set(0, -1.25, -.12); mon.add(pescoco);
+    const pe = laje(1.3, .7, .05, .2, M.metal, .02); pe.rotation.x = -Math.PI / 2; pe.position.set(0, -1.8, -.1); mon.add(pe);
+    const haloTela = halo(5, .05); haloTela.position.set(0, 0, -.3); mon.add(haloTela);
+    raiz.add(mon); alvos.monitor = { obj: mon, ancora: new T.Vector3(0, 1.25, 0) };
+
+    // Conexões: tubos finos pelo chão, com luz passando
+    const P = (x, y, z) => new T.Vector3(x, y, z);
+    const pt = { jogo: P(-4.55, .05, 1.2), logoE: P(-2.9, .05, .1), logoD: P(-.9, .05, 0), cpu: P(.5, .05, -1.8), cpuD: P(2.3, .05, -1.8), gpu: P(.1, .05, 2.0), gpuD: P(3.2, .05, 1.8), boost: P(4.1, .05, .5), boostD: P(5.3, .05, .1), mon: P(6.5, .05, .6) };
+    const ligacoes = {
+      "jogo-logo": [pt.jogo, P(-3.8, .05, .9), pt.logoE],
+      "logo-cpu": [pt.logoD, P(-.2, .05, -1.4), pt.cpu],
+      "logo-gpu": [pt.logoD, P(-.4, .05, 1.6), pt.gpu],
+      "cpu-boost": [pt.cpuD, P(3.4, .05, -1.1), pt.boost],
+      "gpu-boost": [pt.gpuD, P(3.7, .05, 1.2), pt.boost],
+      "boost-mon": [pt.boostD, P(5.9, .05, .2), pt.mon],
+      "gpu-mon": [pt.gpuD, P(5.0, .05, 2.0), pt.mon],
+    };
+    const fios = {};
+    for (const [nome, pts] of Object.entries(ligacoes)) {
+      const curva = new T.CatmullRomCurve3(pts);
+      const mat = new T.MeshStandardMaterial({ color: 0x1c1c1c, metalness: .6, roughness: .35, emissive: 0xffffff, emissiveIntensity: 0 });
+      raiz.add(new T.Mesh(new T.TubeGeometry(curva, 80, .022, 10, false), mat));
+      const faiscas = Array.from({ length: 5 }, (_, k) => { const s = halo(.42, 0); s.userData.t = k / 5; raiz.add(s); return s; });
+      fios[nome] = { curva, mat, faiscas, luz: 0, alvo: 0 };
+    }
+
+    const estado = { pulsos: {}, boost: 0, boostAlvo: 0, acesas: 0 };
+    const etiquetas = $$(".etq");
+    const parallax = { x: 0, y: 0, ax: 0, ay: 0 };
+    host.addEventListener("pointermove", (e) => { const r = host.getBoundingClientRect(); parallax.ax = (e.clientX - r.left) / r.width - .5; parallax.ay = (e.clientY - r.top) / r.height - .5; });
+    host.addEventListener("pointerleave", () => { parallax.ax = parallax.ay = 0; });
+
+    const foco = new T.Vector3(.7, .8, .3);
+    function redimensionar() {
+      const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
+      renderer.setSize(w, h, false); camera.aspect = w / h;
+      const fov = camera.fov * Math.PI / 180;
+      const dist = Math.max(7.8 / (Math.tan(fov / 2) * camera.aspect), 3.75 / Math.tan(fov / 2)) * 1.02;
+      camera.position.copy(foco).addScaledVector(new T.Vector3(0, .5, 1).normalize(), dist); camera.lookAt(foco); camera.updateProjectionMatrix();
+    }
+    addEventListener("resize", redimensionar); redimensionar();
+
+    const v = new T.Vector3(); let t0 = performance.now(), tempo = 0;
+    function quadro() {
+      const agora = performance.now(), dt = Math.min(.05, (agora - t0) / 1000); t0 = agora;
+      if (!$("#tela-inicio").hidden && document.visibilityState === "visible") {
+        if (!reduz) tempo += dt;
+        parallax.x += (parallax.ax - parallax.x) * .05; parallax.y += (parallax.ay - parallax.y) * .05;
+        raiz.rotation.y = parallax.x * .12; raiz.rotation.x = parallax.y * .04;
+        logo.rotation.y = Math.sin(tempo * .6) * .45; logoGrupo.position.y = 1.35 + Math.sin(tempo * 1.2) * .06;
+        anel.material.emissiveIntensity = .35 + Math.sin(tempo * 2) * .15;
+        jogo.position.y = 1.55 + Math.sin(tempo * .9 + 1) * .04;
+        if (!reduz) helices.forEach((h) => (h.rotation.y += dt * (6 + estado.boost * 10)));
+        estado.boost += (estado.boostAlvo - estado.boost) * .06;
+        quadros.forEach((q, k) => { q.position.z = -k * (.1 + estado.boost * .42); q.position.x = k * estado.boost * .12; q.material.emissiveIntensity = estado.boost * (k === 0 ? .25 : .55); q.material.opacity = k === 0 ? 1 : .35 + estado.boost * .45; });
+        haloBoost.material.opacity = estado.boost * .35;
+        matTela.color.setScalar(.3 + estado.acesas * .12 + estado.boost * .45);
+        haloTela.material.opacity = .04 + estado.boost * .22;
+        M.luzFaixa.emissiveIntensity = .15 + estado.boost * 1.6;
+        for (const f of Object.values(fios)) {
+          f.luz += (f.alvo - f.luz) * .07; f.mat.emissiveIntensity = f.luz * 1.4;
+          f.faiscas.forEach((s) => { if (!reduz) s.userData.t = (s.userData.t + dt * .12 * (1 + estado.boost)) % 1; f.curva.getPointAt(s.userData.t, s.position); s.position.y += .04; s.material.opacity = f.luz * .9 * Math.sin(s.userData.t * Math.PI); });
+        }
+        for (const [nome, a] of Object.entries(alvos)) a.obj.scale.setScalar(1 + (estado.pulsos[nome] || 0) * .06);
+        renderer.render(cena, camera);
+        const r = host.getBoundingClientRect();
+        etiquetas.forEach((el) => {
+          const a = alvos[el.dataset.alvo]; if (!a) return;
+          a.obj.updateMatrixWorld(); v.copy(a.ancora).applyMatrix4(a.obj.matrixWorld).project(camera);
+          el.style.transform = `translate(${(v.x * .5 + .5) * r.width}px, ${(-v.y * .5 + .5) * r.height}px) translate(-50%, -100%)`;
+        });
+      }
+      requestAnimationFrame(quadro);
+    }
+    requestAnimationFrame(quadro);
+
+    return {
+      redimensionar: () => requestAnimationFrame(redimensionar),
+      acender(nomes) { for (const [n, f] of Object.entries(fios)) f.alvo = nomes.includes(n) ? 1 : 0; estado.acesas = nomes.length ? 1 : 0; },
+      pulso(nome) { estado.pulsos = nome ? { [nome]: 1 } : {}; },
+      boost(on) { estado.boostAlvo = on ? 1 : 0; },
+    };
+  }
+
+  /* Estados da tela inicial */
+  const SEM_BOOST = ["jogo-logo", "logo-cpu", "logo-gpu", "gpu-mon"], COM_BOOST = ["jogo-logo", "logo-cpu", "logo-gpu", "cpu-boost", "gpu-boost", "boost-mon"];
+  let otimizado = false, boost = false, semJogo = false;
+
+  $("#b-otimizar").onclick = () => {
+    if (otimizado || semJogo) return;
+    const etapas = [["Lendo o perfil do FiveM", "jogo"], ["O Otimiza escolhe os ajustes", "logo"], ["Conferindo processador", "cpu"], ["Conferindo placa de vídeo e driver", "gpu"], ["Conferindo monitor e modo de tela", "monitor"], ["Medindo de novo por 60 s", "monitor"]];
+    const caixa = $("#passos"); caixa.hidden = false; let i = 0;
+    $("#b-otimizar-t").textContent = "Otimizando…";
+    const passo = () => {
+      caixa.innerHTML = etapas.map(([t], k) => `<div class="${k < i ? "feito" : k === i ? "agora" : "depois"}">${t}</div>`).join("");
+      cena3d?.pulso(etapas[i]?.[1]);
+      $$(".etq").forEach((e) => e.classList.toggle("forte", !!etapas[i] && e.dataset.alvo === etapas[i][1]));
+      if (i++ < etapas.length) setTimeout(passo, reduz ? 80 : 650);
+      else {
+        caixa.hidden = true; otimizado = true; cena3d?.pulso(null);
+        contar($("#fps"), 52, 67);
+        $("#res-d").textContent = "1% low 52 · 14,9 ms por quadro";
+        $("#res-pot").hidden = true;
+        const d = $("#delta"); d.hidden = false; d.textContent = "▲ 29% · era 52";
+        $("#e-boost-v").textContent = "~114–130 estimado";
+        $("#b-otimizar-t").textContent = "Otimizado";
+        $("#pilula-txt").textContent = "Otimizado · medido";
+      }
+    };
+    passo();
+  };
+
+  // Frame Boost: o número grande vira o FPS NA TELA medido e o nativo sai da tela.
+  $("#b-boost").onclick = () => {
+    if (semJogo) return;
+    boost = !boost;
+    const nativo = otimizado ? 67 : 52, naTela = otimizado ? 129 : 101;
+    $("#b-boost").classList.toggle("ligado", boost);
+    $("#resultado").classList.toggle("boost", boost);
+    $("#e-boost").classList.toggle("forte", boost);
+    cena3d?.boost(boost); cena3d?.acender(boost ? COM_BOOST : SEM_BOOST);
+    if (boost) {
+      $("#res-rot").textContent = "FPS na tela";
+      contar($("#fps"), nativo, naTela, 1300);
+      $("#res-d").textContent = "Frame Boost 2× · AFMF 2";
+      $("#delta").hidden = true; $("#res-pot").hidden = true;
+      $("#e-boost-v").textContent = "ligado · 2×";
+      $("#pilula-txt").textContent = "Frame Boost ativo";
+    } else {
+      $("#res-rot").textContent = "FPS nativo";
+      contar($("#fps"), naTela, nativo, 700);
+      $("#res-d").textContent = otimizado ? "1% low 52 · 14,9 ms por quadro" : "1% low 37 · 19,2 ms por quadro";
+      $("#delta").hidden = !otimizado; $("#res-pot").hidden = otimizado;
+      $("#e-boost-v").textContent = otimizado ? "~114–130 estimado" : "~88–101 estimado";
+      $("#pilula-txt").textContent = otimizado ? "Otimizado · medido" : "Medindo ao vivo";
+    }
+  };
+
+  function definirSemJogo(sem) {
+    if (sem && boost) $("#b-boost").click();
+    semJogo = sem;
+    $("#sim-jogo").setAttribute("aria-pressed", !sem); $("#sim-sem").setAttribute("aria-pressed", sem);
+    $("#titulo").textContent = sem ? "Boa tarde" : "FiveM";
+    $("#subtitulo").textContent = sem ? "Seu PC está pronto. Abra um jogo e o Otimiza mede sozinho." : "Em execução · DirectX 11 · janela sem bordas";
+    $("#pilula").classList.toggle("parado", sem); $("#pilula-txt").textContent = sem ? "Nenhum jogo aberto" : "Medindo ao vivo";
+    $("#e-jogo").innerHTML = sem ? "Nenhum jogo<b>abra um para medir</b>" : "FiveM<b>4 ajustes</b>";
+    $("#res-rot").textContent = sem ? "Monitor" : "FPS nativo";
+    $("#fps").textContent = sem ? "60" : (otimizado ? 67 : 52);
+    $("#fps-u").textContent = sem ? "Hz" : "FPS";
+    $("#res-d").textContent = sem ? "Suporta 144 Hz · corrigir em um clique" : (otimizado ? "1% low 52 · 14,9 ms por quadro" : "1% low 37 · 19,2 ms por quadro");
+    $("#res-selo").textContent = sem ? "lido do Windows" : "medido";
+    $("#res-pot").hidden = sem || otimizado; $("#delta").hidden = sem || !otimizado;
+    cena3d?.acender(sem ? [] : SEM_BOOST);
+  }
+  $("#sim-jogo").onclick = () => definirSemJogo(false);
+  $("#sim-sem").onclick = () => definirSemJogo(true);
+
+  /* Boost, Lab, abas */
+  const aj = {
+    nvidia: [["Modo de baixa latência", "Perfil do jogo no driver NVIDIA"], ["Limitador de FPS do driver", "3 abaixo do monitor, para o G-SYNC não sair da faixa"], ["Shader cache maior", "Menos travadas em lugar novo"]],
+    amd: [["Radeon Anti-Lag", "Menos atraso com a placa no limite"], ["Frame Rate Target Control", "3 abaixo do monitor, para o FreeSync não sair da faixa"], ["Filtragem de textura: desempenho", "Diferença de imagem difícil de notar"]],
+    intel: [["Baixa latência", "Intel Graphics Software"], ["Limitador de FPS", "3 abaixo do monitor"], ["Sincronização inteligente", "Menos tearing sem o atraso do V-Sync"]],
+  };
+  const ger = { nvidia: ["NVIDIA Smooth Motion", "Do driver das RTX 40 e 50. O Otimiza mostra onde ligar no NVIDIA App e mede o resultado."], amd: ["AMD Fluid Motion Frames 2", "Do driver da sua Radeon. Pede tela cheia: o Otimiza troca o modo de tela do jogo e desfaz ao desligar."], intel: ["Gerador do Otimiza", "Roda fora do jogo, numa janela por cima. O FiveM não tem XeSS com geração de quadros."] };
+  function fab(v) {
+    $$("[data-v]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v));
+    $("#ajustes").innerHTML = aj[v].map(([t, d], k) => `<div class="ajuste"><div><div>${t}</div><p>${d}</p></div><button class="chave" role="switch" aria-checked="${k < 2}" aria-label="${t}"></button></div>`).join("");
+    $$("#ajustes .chave").forEach((c) => (c.onclick = () => c.setAttribute("aria-checked", c.getAttribute("aria-checked") !== "true")));
+    $("#fb-nome").textContent = ger[v][0]; $("#fb-pq").textContent = ger[v][1];
+  }
+  $$("[data-v]").forEach((b) => (b.onclick = () => fab(b.dataset.v))); fab("amd");
+  $$(".seg").forEach((g) => { if (g.querySelector("[data-v]")) return; g.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { if (b.disabled) return; g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); })); });
+  $$(".abas button").forEach((b) => (b.onclick = () => $$(".abas button").forEach((x) => x.setAttribute("aria-pressed", x === b))));
+
+  function serie(base, ruido, picos, s) { const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280); return Array.from({ length: 80 }, (_, i) => base + (r() - .5) * ruido + (picos.includes(i) ? 18 + r() * 8 : 0)); }
+  const pts = (v) => v.map((ms, i) => `${(36 + i * 4.05).toFixed(1)},${Math.max(16, 220 - ms * 5).toFixed(1)}`).join(" ");
+  $("#antes").setAttribute("points", pts(serie(19.2, 5, [12, 33, 34, 58, 71], 7)));
+  const dep = pts(serie(14.9, 2.4, [44], 11)); $("#depois").setAttribute("points", dep); $("#depois-h").setAttribute("points", dep);
+
+  /* Superfície do cartão de fluidez */
+  const cv = $("#terreno"), cx = cv.getContext("2d");
+  function terreno(t) {
+    const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h);
+    const N = 16, tam = Math.min(w, 230) / N * .62, ox = w / 2, oy = h * .42;
+    const alt = (i, j) => Math.sin(i * .55 + t) * Math.cos(j * .45 - t * .7) * 8 + Math.exp(-((i - 11) ** 2 + (j - 5) ** 2) / 6) * 22;
+    const p = (i, j, z = alt(i, j)) => [ox + (i - j) * tam, oy + (i + j - N) * tam * .5 - z];
+    for (let k = 0; k < 7; k++) { cx.fillStyle = `rgba(255,255,255,${.06 - k * .007})`; for (let i = 0; i <= N; i += 2) for (let j = 0; j <= N; j += 2) { const [x, y] = p(i, j, -14 - k * 7); cx.fillRect(x, y, 1, 1); } }
+    cx.lineWidth = .6;
+    for (let i = 0; i <= N; i++) { cx.beginPath(); for (let j = 0; j <= N; j++) { const [x, y] = p(i, j); j ? cx.lineTo(x, y) : cx.moveTo(x, y); } cx.strokeStyle = "rgba(255,255,255,.26)"; cx.stroke(); }
+    for (let j = 0; j <= N; j++) { cx.beginPath(); for (let i = 0; i <= N; i++) { const [x, y] = p(i, j); i ? cx.lineTo(x, y) : cx.moveTo(x, y); } cx.strokeStyle = "rgba(255,255,255,.14)"; cx.stroke(); }
+    cx.beginPath(); for (let i = 0; i <= N; i++) { const [x, y] = p(i, 5); i ? cx.lineTo(x, y) : cx.moveTo(x, y); } cx.strokeStyle = "rgba(255,255,255,.95)"; cx.lineWidth = 1.2; cx.shadowColor = "rgba(255,255,255,.9)"; cx.shadowBlur = 8; cx.stroke(); cx.shadowBlur = 0;
+    const [mx, my] = p(11, 5); cx.beginPath(); cx.arc(mx, my, 4, 0, 7); cx.fillStyle = "#fff"; cx.shadowColor = "#fff"; cx.shadowBlur = 14; cx.fill(); cx.shadowBlur = 0;
+    cx.beginPath(); cx.arc(mx, my, 8, 0, 7); cx.strokeStyle = "rgba(255,255,255,.45)"; cx.lineWidth = 1; cx.stroke();
+  }
+  let tt = 0; const laco = () => { terreno(tt); tt += .012; if (!reduz) requestAnimationFrame(laco); };
+
+  /* Feedback */
+  const veu = $("#veu");
+  $("#sim-fb").onclick = () => ($("#lembrete").hidden = false);
+  $("#fechar").onclick = () => ($("#lembrete").hidden = true);
+  $("#abrir").onclick = () => { $("#lembrete").hidden = true; veu.hidden = false; $("#fb-estado").hidden = true; };
+  veu.onclick = (e) => { if (e.target === veu) veu.hidden = true; };
+  addEventListener("keydown", (e) => { if (e.key === "Escape") veu.hidden = true; });
+  let tentativas = 0;
+  $("#confirmar").onclick = () => {
+    const s = $("#fb-estado"); s.hidden = false; s.className = "estado-fb"; s.textContent = "Conferindo com o bot…";
+    setTimeout(() => { if (++tentativas === 1) { s.className = "estado-fb aviso"; s.textContent = "Ainda não achamos a mensagem. Confira os 30 caracteres e o print, e tente de novo em um minuto."; } else { s.className = "estado-fb ok"; s.textContent = "Feedback encontrado. Correções liberadas."; setTimeout(() => (veu.hidden = true), 1300); } }, 900);
+  };
+  $("#copiar").onclick = (e) => navigator.clipboard?.writeText("OTZ-WPYY-0J4F-77AB").then(() => (e.target.textContent = "Copiado"), () => (e.target.textContent = "Selecione e copie"));
+
+  function montarNovas() {
+  /* Modos do Boost */
+  $$("#modos .modo").forEach((b) => (b.onclick = () => $$("#modos .modo").forEach((x) => x.setAttribute("aria-pressed", x === b))));
+  const drv = { nvidia: ["Driver NVIDIA", "RTX 4060 · Game Ready 581.42"], amd: ["Driver da placa de vídeo", "Radeon RX 6600 · Adrenalin 25.9.1"], intel: ["Driver Intel", "Arc B580 · 32.0.101.8425"] };
+  $$("[data-v]").forEach((b) => b.addEventListener("click", () => {
+    const v = b.dataset.v; $("#drv-titulo").textContent = drv[v][0]; $("#drv-nome").textContent = drv[v][1];
+    const nomeSat = { nvidia: "Vibração digital", amd: "Saturação", intel: "Saturação" }[v];
+    $("#cores-vendor").lastChild.textContent = { nvidia: "NVIDIA · Vibração digital do driver", amd: "AMD · Saturação do Adrenalin", intel: "Intel · Saturação do driver" }[v];
+    $("#nome-sat").firstChild.textContent = nomeSat;
+  }));
+
+  /* Barras dos controles deslizantes */
+  const pintar = (r) => r.style.setProperty("--p", ((r.value - r.min) / (r.max - r.min) * 100) + "%");
+  $$("input[type=range]").forEach((r) => { pintar(r); r.addEventListener("input", () => pintar(r)); });
+
+  /* Lab: blocos de resultado com linha pequena */
+  const tiles = [["FPS médio", "67", "FPS", "▲ 29%", [52, 53, 55, 58, 61, 64, 66, 67]], ["1% low", "52", "FPS", "▲ 41%", [37, 38, 41, 44, 47, 50, 51, 52]], ["Tempo de quadro", "14,9", "ms", "▼ 22%", [19.2, 18.6, 17.9, 17, 16.1, 15.4, 15, 14.9]], ["Engasgos por minuto", "0,4", "", "▼ 4,1", [4.5, 4, 3.1, 2.2, 1.5, .9, .6, .4]]];
+  $("#tiles").innerHTML = tiles.map(([n, v, u, d, s]) => {
+    const mn = Math.min(...s), mx = Math.max(...s);
+    const p = s.map((y, i) => `${(i / (s.length - 1) * 200).toFixed(1)},${(30 - (y - mn) / (mx - mn || 1) * 26).toFixed(1)}`).join(" ");
+    return `<div class="tile"><div class="rotulo">${n}</div><div class="v">${v}<small>${u}</small></div><div class="delta">${d}</div><svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="${p}" fill="none" stroke="#fff" stroke-width="1.4" vector-effect="non-scaling-stroke"/><polyline points="0,34 ${p} 200,34" fill="rgba(255,255,255,.06)" stroke="none"/></svg></div>`;
+  }).join("");
+  $$(".filtros button").forEach((b) => (b.onclick = () => $$(".filtros button").forEach((x) => x.setAttribute("aria-pressed", x === b))));
+
+  /* Mira */
+  const mira = { estilo: "cruz-ponto", cor: "#ffffff", tam: 10, esp: 2, ab: 4, op: 1, contorno: true, ligada: true };
+  const ESTILOS = [["ponto", "Ponto"], ["cruz", "Cruz"], ["cruz-ponto", "Cruz com ponto"], ["circulo", "Círculo"], ["t", "T"]];
+  const CORES = ["#ffffff", "#00e5ff", "#7cff4f", "#ffe14a", "#ff4fd8", "#ff4a4a"];
+  function desenharMira(m, escala = 1) {
+    const s = m.tam * escala, e = m.esp * escala, g = m.ab * escala, cor = m.cor;
+    const borda = m.contorno ? `stroke="#000" stroke-width="${e + 2 * escala}" stroke-linecap="butt"` : "";
+    const linha = (x1, y1, x2, y2) => (m.contorno ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" ${borda}/>` : "") + `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${cor}" stroke-width="${e}"/>`;
+    const ponto = () => (m.contorno ? `<rect x="${-e / 2 - escala}" y="${-e / 2 - escala}" width="${e + 2 * escala}" height="${e + 2 * escala}" fill="#000"/>` : "") + `<rect x="${-e / 2}" y="${-e / 2}" width="${e}" height="${e}" fill="${cor}"/>`;
+    let o = "";
+    if (m.estilo === "ponto") o = ponto();
+    if (m.estilo === "cruz" || m.estilo === "cruz-ponto" || m.estilo === "t") {
+      if (m.estilo !== "t") o += linha(0, -g, 0, -g - s);
+      o += linha(0, g, 0, g + s) + linha(-g, 0, -g - s, 0) + linha(g, 0, g + s, 0);
+      if (m.estilo === "cruz-ponto") o += ponto();
+    }
+    if (m.estilo === "circulo") o = (m.contorno ? `<circle r="${g + s / 2}" fill="none" stroke="#000" stroke-width="${e + 2 * escala}"/>` : "") + `<circle r="${g + s / 2}" fill="none" stroke="${cor}" stroke-width="${e}"/>` + ponto();
+    return `<g opacity="${m.op}">${o}</g>`;
+  }
+  $("#estilos").innerHTML = ESTILOS.map(([id, nome]) => `<button aria-pressed="${id === mira.estilo}" data-e="${id}" aria-label="${nome}" title="${nome}"><svg viewBox="-14 -14 28 28">${desenharMira({ ...mira, estilo: id, tam: 6, esp: 1.6, ab: 2.5, contorno: false, op: 1, cor: "#fff" })}</svg></button>`).join("");
+  $("#cores-mira").innerHTML = CORES.map((c) => `<button aria-pressed="${c === mira.cor}" data-c="${c}" style="background:${c}" aria-label="Cor ${c}"></button>`).join("");
+  function atualizarMira() {
+    $("#mira-svg").innerHTML = mira.ligada ? desenharMira(mira, 1.6) : "";
+    $("#v-tam").textContent = mira.tam; $("#v-esp").textContent = mira.esp; $("#v-ab").textContent = mira.ab; $("#v-op").textContent = Math.round(mira.op * 100) + "%";
+  }
+  $$("#estilos button").forEach((b) => (b.onclick = () => { mira.estilo = b.dataset.e; $$("#estilos button").forEach((x) => x.setAttribute("aria-pressed", x === b)); atualizarMira(); }));
+  $$("#cores-mira button").forEach((b) => (b.onclick = () => { mira.cor = b.dataset.c; $$("#cores-mira button").forEach((x) => x.setAttribute("aria-pressed", x === b)); atualizarMira(); }));
+  [["r-tam", "tam"], ["r-esp", "esp"], ["r-ab", "ab"]].forEach(([id, k]) => $("#" + id).addEventListener("input", (e) => { mira[k] = +e.target.value; atualizarMira(); }));
+  $("#r-op").addEventListener("input", (e) => { mira.op = e.target.value / 100; atualizarMira(); });
+  $$(".chave").forEach((c) => { if (!c.onclick) c.onclick = () => c.setAttribute("aria-checked", c.getAttribute("aria-checked") !== "true"); });
+  $("#mira-contorno").addEventListener("click", () => { mira.contorno = $("#mira-contorno").getAttribute("aria-checked") === "true"; atualizarMira(); });
+  $("#mira-ligada").addEventListener("click", () => { mira.ligada = $("#mira-ligada").getAttribute("aria-checked") === "true"; atualizarMira(); });
+  const NOTAS = {
+    fivem: ["Sobreposição · fora do jogo", "No FiveM a mira é uma janela por cima do jogo, sem tocar nele. Alguns servidores de RP proíbem mira fixa: confira as regras do seu."],
+    cs2: ["Configuração do próprio jogo", "No CS2 a mira vai para a configuração do próprio jogo (cl_crosshair…), sem sobreposição. Vale no servidor oficial e na Faceit."],
+    fortnite: ["Sobreposição · fora do jogo", "No Fortnite a mira é uma janela por cima do jogo. O Easy Anti-Cheat não é tocado."],
+  };
+  function cenaMira(id) {
+    const c = $("#mira-cena"), r = c.getBoundingClientRect(); if (!r.width) return;
+    c.width = r.width * 2; c.height = r.height * 2; const x = c.getContext("2d"), img = CAPAS[id];
+    const esc = Math.max(c.width / img.width, c.height / img.height);
+    x.filter = "brightness(.85)"; x.drawImage(img, (c.width - img.width * esc) / 2, (c.height - img.height * esc) / 2 - c.height * .15, img.width * esc, img.height * esc); x.filter = "none";
+  }
+  $$("#mira-jogo button").forEach((b) => (b.onclick = () => {
+    $$("#mira-jogo button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+    const [tag, nota] = NOTAS[b.dataset.j]; $("#mira-tag").textContent = tag; $("#mira-nota").textContent = nota; cenaMira(b.dataset.j);
+  }));
+
+  /* FOV: corredor em perspectiva que abre e fecha */
+  function cenaFov(fov) {
+    const c = $("#fov-cena"), r = c.getBoundingClientRect(); if (!r.width) return;
+    c.width = r.width * 2; c.height = r.height * 2; const x = c.getContext("2d"), W = c.width, H = c.height;
+    x.fillStyle = "#050505"; x.fillRect(0, 0, W, H);
+    const f = (W / 2) / Math.tan(fov * Math.PI / 360), cx = W / 2, cy = H * .5;
+    const proj = (X, Y, Z) => [cx + X / Z * f, cy - Y / Z * f];
+    x.lineWidth = 2;
+    for (let z = 1; z < 40; z += 1.5) {
+      const a = Math.max(0, 1 - z / 40) * .5;
+      x.strokeStyle = `rgba(255,255,255,${a})`;
+      const [x1, y1] = proj(-3, -1.6, z), [x2] = proj(3, -1.6, z), [, y3] = proj(-3, 2.5, z);
+      x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y1); x.stroke();
+      x.beginPath(); x.moveTo(x1, y1); x.lineTo(x1, y3); x.moveTo(x2, y1); x.lineTo(x2, y3); x.stroke();
+    }
+    x.strokeStyle = "rgba(255,255,255,.35)";
+    for (const X of [-3, -1, 1, 3]) { const [a, b] = proj(X, -1.6, 1), [c2, d] = proj(X, -1.6, 40); x.beginPath(); x.moveTo(a, b); x.lineTo(c2, d); x.stroke(); }
+    x.fillStyle = "rgba(255,255,255,.9)"; x.font = "500 26px 'Geist Mono', monospace"; x.fillText(fov + "°", 24, 44);
+  }
+  $("#r-fov").addEventListener("input", (e) => { $("#v-fov").textContent = e.target.value + "°"; cenaFov(+e.target.value); });
+
+  /* Conversor de sensibilidade: CS2 e Valorant usam 0,022° por contagem e um fator de 3,18 entre eles. */
+  function converter() {
+    const dpi = +$("#dpi").value, s = +$("#sens").value; if (!dpi || !s) return;
+    const cm = 360 / (dpi * s * 0.022) * 2.54;
+    $("#cm360").textContent = cm.toFixed(1).replace(".", ",") + " cm"; $("#sens-val").textContent = (s / 3.18).toFixed(3).replace(".", ",");
+  }
+  $("#dpi").addEventListener("input", converter); $("#sens").addEventListener("input", converter); converter();
+
+  /* Treino de tracking */
+  let recorde = 74;
+  $("#treino-ir").onclick = () => {
+    const cv = $("#treino-cv"), r = cv.getBoundingClientRect(); cv.width = r.width * 2; cv.height = r.height * 2;
+    const x = cv.getContext("2d"); let mx = -99, my = -99, no = 0, total = 0, t0 = performance.now();
+    $("#treino-sobre").hidden = true;
+    const mov = (e) => { const b = cv.getBoundingClientRect(); mx = (e.clientX - b.left) * 2; my = (e.clientY - b.top) * 2; };
+    cv.addEventListener("pointermove", mov);
+    const passo = (t) => {
+      const s = (t - t0) / 1000, W = cv.width, H = cv.height;
+      const ax = W / 2 + Math.sin(s * 1.3) * W * .36 + Math.sin(s * 3.1) * W * .06, ay = H / 2 + Math.sin(s * 1.9 + 1) * H * .3;
+      const raio = 22, dentro = Math.hypot(mx - ax, my - ay) < raio * 1.4;
+      total++; if (dentro) no++;
+      x.fillStyle = "rgba(5,5,5,.35)"; x.fillRect(0, 0, W, H);
+      x.beginPath(); x.arc(ax, ay, raio, 0, 7); x.fillStyle = dentro ? "#fff" : "rgba(255,255,255,.25)"; x.shadowColor = "#fff"; x.shadowBlur = dentro ? 24 : 0; x.fill(); x.shadowBlur = 0;
+      x.fillStyle = "rgba(255,255,255,.7)"; x.font = "500 22px 'Geist Mono', monospace"; x.fillText(`${Math.max(0, 15 - s).toFixed(1)} s · ${Math.round(no / total * 100)}%`, 18, 34);
+      if (s < 15) requestAnimationFrame(passo);
+      else {
+        cv.removeEventListener("pointermove", mov); const pct = Math.round(no / total * 100);
+        if (pct > recorde) { recorde = pct; $("#treino-rec").textContent = "recorde " + pct + "%"; }
+        $("#treino-res").textContent = `No alvo ${pct}% do tempo. Treine com a sensibilidade que você usa no jogo.`;
+        $("#treino-sobre").hidden = false; $("#treino-ir").textContent = "De novo";
+      }
+    };
+    requestAnimationFrame(passo);
+  };
+
+  /* Cores: pôr do sol colorido para a prévia, processado pixel a pixel */
+  const base = document.createElement("canvas"); base.width = 640; base.height = 360;
+  (() => {
+    const x = base.getContext("2d"), W = 640, H = 360, r = rng(99);
+    const ceu = x.createLinearGradient(0, 0, 0, H * .62); ceu.addColorStop(0, "#2b1d5c"); ceu.addColorStop(.45, "#b8456b"); ceu.addColorStop(.8, "#f08a4b"); ceu.addColorStop(1, "#f7c46c");
+    x.fillStyle = ceu; x.fillRect(0, 0, W, H);
+    const sol = x.createRadialGradient(430, 205, 0, 430, 205, 140); sol.addColorStop(0, "rgba(255,235,170,1)"); sol.addColorStop(.25, "rgba(255,200,120,.8)"); sol.addColorStop(1, "rgba(255,150,90,0)"); x.fillStyle = sol; x.fillRect(0, 0, W, H);
+    let px = 0; while (px < W) { const w = 18 + r() * 34, h = 40 + r() * 110; x.fillStyle = "#2a1838"; x.fillRect(px, 225 - h, w, h); x.fillStyle = "rgba(255,210,120,.8)"; for (let wy = 230 - h; wy < 220; wy += 8) for (let wx = px + 3; wx < px + w - 3; wx += 6) if (r() < .2) x.fillRect(wx, wy, 2, 3); px += w + 1; }
+    const mar = x.createLinearGradient(0, 225, 0, H); mar.addColorStop(0, "#1f6f8b"); mar.addColorStop(1, "#0b2a3d"); x.fillStyle = mar; x.fillRect(0, 225, W, H);
+    for (let k = 0; k < 60; k++) { x.fillStyle = `rgba(255,190,120,${.15 + r() * .3})`; x.fillRect(380 + (r() - .5) * 140, 232 + r() * 120, 20 + r() * 50, 2); }
+    x.fillStyle = "#2f7a3a"; x.beginPath(); x.moveTo(0, 300); x.quadraticCurveTo(120, 260, 230, 300); x.lineTo(230, H); x.lineTo(0, H); x.fill();
+    x.strokeStyle = "#1c2a16"; x.lineWidth = 6; x.beginPath(); x.moveTo(90, 300); x.quadraticCurveTo(100, 220, 86, 150); x.stroke();
+    x.fillStyle = "#24461f"; for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; x.beginPath(); x.ellipse(86 + Math.cos(a) * 30, 150 + Math.sin(a) * 10 + 8, 34, 7, a, 0, 7); x.fill(); }
+    x.fillStyle = "#d13b3b"; x.fillRect(300, 290, 90, 26); x.fillStyle = "#f3d23a"; x.fillRect(306, 296, 14, 6); x.fillStyle = "#111"; x.beginPath(); x.arc(318, 318, 9, 0, 7); x.arc(372, 318, 9, 0, 7); x.fill();
+  })();
+  const dadosBase = base.getContext("2d").getImageData(0, 0, 640, 360);
+  const ajuste = { sat: 70, bri: 0, con: 5, gam: 100, mat: 0 };
+  const PREDEF = { natural: { sat: 50, bri: 0, con: 0, gam: 100, mat: 0 }, vivo: { sat: 70, bri: 0, con: 5, gam: 100, mat: 0 }, competitivo: { sat: 80, bri: 8, con: 10, gam: 120, mat: 0 }, cinema: { sat: 42, bri: -6, con: 14, gam: 92, mat: 4 } };
+  function processar() {
+    const c = $("#cores-cv"); c.width = 640; c.height = 360;
+    const x = c.getContext("2d"), saida = x.createImageData(640, 360), d = dadosBase.data, o = saida.data;
+    const s = ajuste.sat / 50, b = ajuste.bri / 100, k = 1 + ajuste.con / 100, g = 1 / (ajuste.gam / 100);
+    const h = ajuste.mat * Math.PI / 180, cosH = Math.cos(h), sinH = Math.sin(h);
+    const m = [.213 + cosH * .787 - sinH * .213, .715 - cosH * .715 - sinH * .715, .072 - cosH * .072 + sinH * .928, .213 - cosH * .213 + sinH * .143, .715 + cosH * .285 + sinH * .140, .072 - cosH * .072 - sinH * .283, .213 - cosH * .213 - sinH * .787, .715 - cosH * .715 + sinH * .715, .072 + cosH * .928 + sinH * .072];
+    const corte = Math.round(+$("#cores-split").value / 100 * 640);
+    for (let i = 0; i < d.length; i += 4) {
+      const px = (i / 4) % 640;
+      if (px < corte) { o[i] = d[i]; o[i + 1] = d[i + 1]; o[i + 2] = d[i + 2]; o[i + 3] = 255; continue; }
+      let r = d[i] / 255, gg = d[i + 1] / 255, bb = d[i + 2] / 255;
+      const r2 = m[0] * r + m[1] * gg + m[2] * bb, g2 = m[3] * r + m[4] * gg + m[5] * bb, b2 = m[6] * r + m[7] * gg + m[8] * bb;
+      const l = .2126 * r2 + .7152 * g2 + .0722 * b2;
+      const f = (v) => { v = l + (v - l) * s; v = (v - .5) * k + .5 + b; v = Math.min(1, Math.max(0, v)); return Math.pow(v, g) * 255; };
+      o[i] = f(r2); o[i + 1] = f(g2); o[i + 2] = f(b2); o[i + 3] = 255;
+    }
+    x.putImageData(saida, 0, 0);
+    $("#divisor").style.left = $("#cores-split").value + "%";
+    $("#v-sat").textContent = ajuste.sat + "%"; $("#v-bri").textContent = (ajuste.bri > 0 ? "+" : "") + ajuste.bri; $("#v-con").textContent = (ajuste.con > 0 ? "+" : "") + ajuste.con;
+    $("#v-gam").textContent = (ajuste.gam / 100).toFixed(2).replace(".", ","); $("#v-mat").textContent = ajuste.mat + "°";
+  }
+  [["r-sat", "sat"], ["r-bri", "bri"], ["r-con", "con"], ["r-gam", "gam"], ["r-mat", "mat"]].forEach(([id, k]) => $("#" + id).addEventListener("input", (e) => { ajuste[k] = +e.target.value; $$("#predef button").forEach((b) => b.setAttribute("aria-pressed", false)); processar(); }));
+  $("#cores-split").addEventListener("input", processar);
+  function aplicarPredef(nome) {
+    Object.assign(ajuste, PREDEF[nome]);
+    [["r-sat", "sat"], ["r-bri", "bri"], ["r-con", "con"], ["r-gam", "gam"], ["r-mat", "mat"]].forEach(([id, k]) => { $("#" + id).value = ajuste[k]; pintar($("#" + id)); });
+    $$("#predef button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.p === nome)); processar();
+  }
+  $$("#predef button").forEach((b) => (b.onclick = () => aplicarPredef(b.dataset.p)));
+  $("#cores-padrao").onclick = () => aplicarPredef("natural");
+
+  /* Ao trocar de tela, desenha o que depende do tamanho */
+  const irOriginal = ir;
+  ir = (nome) => {
+    irOriginal(nome);
+    requestAnimationFrame(() => {
+      if (nome === "mira") { cenaMira($("#mira-jogo [aria-pressed=true]").dataset.j); atualizarMira(); cenaFov(+$("#r-fov").value); }
+      if (nome === "cores") processar();
+    });
+  };
+  $$(".trilho .ir").forEach((b) => (b.onclick = () => ir(b.dataset.tela)));
+
+    $("#dest-img").src = CAPAS.fivem.toDataURL("image/jpeg", .85);
+  }
+
+  const comecar = () => {
+    gerarCapas(); montarListas(); montarNovas(); laco();
+    try { cena3d = criarCena(); } catch (e) { console.error(e); $("#cena").classList.add("sem-3d"); }
+    cena3d?.acender(SEM_BOOST);
+  };
+  (document.fonts ? Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]) : Promise.resolve()).then(comecar);
+})();
+</script>

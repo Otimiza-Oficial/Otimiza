@@ -382,7 +382,11 @@ fn secao_saude(dados: &ReportData) -> String {
         ));
     }
 
-    for f in r.findings.iter().filter(|f| f.severity == FindingSeverity::Critical) {
+    for f in r
+        .findings
+        .iter()
+        .filter(|f| f.severity == FindingSeverity::Critical)
+    {
         if !f.advice.is_empty() {
             corpo.push_str(&format!(
                 "<p class=\"achado\">{}: {}</p>",
@@ -665,7 +669,8 @@ pub fn csv_das_alteracoes(
     log: &ChangeLog,
     valor_novo: impl Fn(&str, &crate::modules::changelog::ChangeRecord) -> Option<String>,
 ) -> String {
-    let mut s = String::from("\u{FEFF}data;id;ajuste;alteracao_e_valor_anterior;valor_novo;desfazer\r\n");
+    let mut s =
+        String::from("\u{FEFF}data;id;ajuste;alteracao_e_valor_anterior;valor_novo;desfazer\r\n");
     for o in log.applied() {
         for c in &o.changes {
             let linha = [
@@ -676,7 +681,13 @@ pub fn csv_das_alteracoes(
                 valor_novo(&o.optimization_id, c).unwrap_or_default(),
                 "pelo Otimiza, item a item ou Desfazer tudo".to_string(),
             ];
-            s.push_str(&linha.iter().map(|x| campo_csv(x)).collect::<Vec<_>>().join(";"));
+            s.push_str(
+                &linha
+                    .iter()
+                    .map(|x| campo_csv(x))
+                    .collect::<Vec<_>>()
+                    .join(";"),
+            );
             s.push_str("\r\n");
         }
     }
@@ -684,17 +695,26 @@ pub fn csv_das_alteracoes(
 }
 
 pub fn salvar_csv(conteudo: &str) -> Result<String, String> {
-    let nome = format!("Otimiza - alteracoes - {}.csv", chrono::Local::now().format("%Y-%m-%d %Hh%M"));
+    let nome = format!(
+        "Otimiza - alteracoes - {}.csv",
+        chrono::Local::now().format("%Y-%m-%d %Hh%M")
+    );
     let caminho = desktop_dir().join(nome);
-    std::fs::write(&caminho, conteudo).map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
+    std::fs::write(&caminho, conteudo)
+        .map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
     Ok(caminho.to_string_lossy().to_string())
 }
 
 /// Grava um texto na Área de Trabalho com nome fixo pelo backend (`Otimiza - <assunto> - data.txt`). Só `.txt`.
 pub fn salvar_texto(assunto: &str, conteudo: &str) -> Result<String, String> {
-    let nome = format!("Otimiza - {} - {}.txt", assunto, chrono::Local::now().format("%Y-%m-%d %Hh%M"));
+    let nome = format!(
+        "Otimiza - {} - {}.txt",
+        assunto,
+        chrono::Local::now().format("%Y-%m-%d %Hh%M")
+    );
     let caminho = desktop_dir().join(nome);
-    std::fs::write(&caminho, conteudo).map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
+    std::fs::write(&caminho, conteudo)
+        .map_err(|e| format!("Não foi possível gravar em {:?}: {}", caminho, e))?;
     Ok(caminho.to_string_lossy().to_string())
 }
 
@@ -923,7 +943,10 @@ fn imprimir_pdf(html: &Path, pdf: &Path) -> Result<(), String> {
     if !pdf.is_file() {
         return Err(format!(
             "O Edge não gerou o PDF. {}",
-            String::from_utf8_lossy(&saida.stderr).lines().next().unwrap_or("")
+            String::from_utf8_lossy(&saida.stderr)
+                .lines()
+                .next()
+                .unwrap_or("")
         ));
     }
 
@@ -1004,8 +1027,12 @@ mod testes_csv {
             name: "Ajuste \"com aspas\"".into(),
             timestamp: 0,
             changes: vec![
-                ChangeRecord::PowerPlan { previous_guid: "a".into() },
-                ChangeRecord::Hibernation { previously_enabled: true },
+                ChangeRecord::PowerPlan {
+                    previous_guid: "a".into(),
+                },
+                ChangeRecord::Hibernation {
+                    previously_enabled: true,
+                },
             ],
         })
         .unwrap();
@@ -1101,7 +1128,10 @@ mod tests {
     fn area_de_trabalho_e_uma_pasta_existente() {
         let dir = desktop_dir();
         println!("área de trabalho: {:?}", dir);
-        assert!(dir.is_dir(), "o relatório precisa de uma pasta real onde gravar");
+        assert!(
+            dir.is_dir(),
+            "o relatório precisa de uma pasta real onde gravar"
+        );
     }
 
     #[cfg(target_os = "windows")]
@@ -1135,7 +1165,11 @@ mod tests {
                 let bytes = std::fs::read(&pdf).unwrap();
 
                 assert!(bytes.starts_with(b"%PDF"), "arquivo gerado não e um PDF");
-                assert!(bytes.len() > 3000, "PDF pequeno demais: {} bytes", bytes.len());
+                assert!(
+                    bytes.len() > 3000,
+                    "PDF pequeno demais: {} bytes",
+                    bytes.len()
+                );
 
                 println!("PDF gerado com {} bytes", bytes.len());
             }
@@ -1174,14 +1208,14 @@ mod inspecao {
         let pdf = saida.join("relatorio.pdf");
 
         let log = ChangeLog::load();
-        std::fs::write(
-            &html,
-            build_html(&log, None, &dados, "31/07/2026 as 20:00"),
-        )
-        .unwrap();
+        std::fs::write(&html, build_html(&log, None, &dados, "31/07/2026 as 20:00")).unwrap();
 
         match imprimir_pdf(&html, &pdf) {
-            Ok(()) => println!("PDF: {:?} ({} bytes)", pdf, std::fs::metadata(&pdf).unwrap().len()),
+            Ok(()) => println!(
+                "PDF: {:?} ({} bytes)",
+                pdf,
+                std::fs::metadata(&pdf).unwrap().len()
+            ),
             Err(e) => println!("sem PDF: {}", e),
         }
         println!("HTML: {:?}", html);

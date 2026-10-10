@@ -183,7 +183,10 @@ mod tests {
 
     #[test]
     fn o_identificador_do_processador_nunca_serve() {
-        let producao = include_str!("maquina.rs").split("#[cfg(test)]").next().unwrap();
+        let producao = include_str!("maquina.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
 
         // Pela CONSULTA, não pela palavra: o cabeçalho precisa continuar citando `Win32_Processor` para explicar por
         // que ele não serve.
@@ -208,7 +211,11 @@ mod tests {
             "   ",
             "ABC",
         ] {
-            assert!(!serie_e_util(lixo), "`{}` não pode passar por identidade", lixo);
+            assert!(
+                !serie_e_util(lixo),
+                "`{}` não pode passar por identidade",
+                lixo
+            );
         }
     }
 
@@ -269,7 +276,10 @@ mod tests {
 
         println!("  id    : {}", quem.id);
         println!("  fonte : {:?} — {}", quem.fonte, quem.fonte.descricao());
-        println!("  sobrevive a formatação: {}", quem.fonte.sobrevive_formatacao());
+        println!(
+            "  sobrevive a formatação: {}",
+            quem.fonte.sobrevive_formatacao()
+        );
 
         if quem.fonte != Fonte::Nenhuma {
             assert!(quem.id.starts_with("OTZ-"));

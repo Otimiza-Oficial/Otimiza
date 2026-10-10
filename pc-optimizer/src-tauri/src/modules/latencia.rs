@@ -58,7 +58,8 @@ pub fn orcar(t: &Telemetry) -> Orcamento {
             ms: Some(ms),
             // Estimativa: conta a chegada ao nosso processo, não o instante do sensor.
             qualidade: Quality::Estimated,
-            origem: "pior caso de um ciclo de varredura do mouse, de input.polling_rate".to_string(),
+            origem: "pior caso de um ciclo de varredura do mouse, de input.polling_rate"
+                .to_string(),
         }),
         None => parcelas.push(Parcela {
             etapa: Etapa::Entrada,

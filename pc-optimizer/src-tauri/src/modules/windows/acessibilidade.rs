@@ -6,9 +6,18 @@ use crate::modules::changelog::{ChangeRecord, PreviousValue};
 
 /// `MouseKeys` fica de fora: não atrapalha quem não usa, e desligar não devolve desempenho.
 pub const CHAVES: &[(&str, &str)] = &[
-    (r"Control Panel\Accessibility\Keyboard Response", "Filtragem de Teclas"),
-    (r"Control Panel\Accessibility\StickyKeys", "Teclas de Aderência"),
-    (r"Control Panel\Accessibility\ToggleKeys", "Teclas Alternadas"),
+    (
+        r"Control Panel\Accessibility\Keyboard Response",
+        "Filtragem de Teclas",
+    ),
+    (
+        r"Control Panel\Accessibility\StickyKeys",
+        "Teclas de Aderência",
+    ),
+    (
+        r"Control Panel\Accessibility\ToggleKeys",
+        "Teclas Alternadas",
+    ),
 ];
 
 const BIT_LIGADO: u32 = 1;

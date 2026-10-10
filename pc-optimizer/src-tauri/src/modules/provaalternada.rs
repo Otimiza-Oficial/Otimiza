@@ -120,7 +120,11 @@ pub fn decidir(
     rodadas: Vec<Rodada>,
     contra_o_equilibrado: bool,
 ) -> Resultado {
-    let fps = |lado| do_lado(&rodadas, lado).map(|r| r.fps_do_jogo).collect::<Vec<f64>>();
+    let fps = |lado| {
+        do_lado(&rodadas, lado)
+            .map(|r| r.fps_do_jogo)
+            .collect::<Vec<f64>>()
+    };
     let fps_sem = repeticoes::resumir("sem", &fps(Lado::SemOtimiza));
     let fps_com = repeticoes::resumir("com", &fps(Lado::ComOtimiza));
 
@@ -250,7 +254,8 @@ pub fn guardar(r: &Resultado) -> Result<(), String> {
     if let Some(dir) = destino.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("não consegui criar a pasta: {}", e))?;
     }
-    let bruto = serde_json::to_string_pretty(r).map_err(|e| format!("não consegui serializar: {}", e))?;
+    let bruto =
+        serde_json::to_string_pretty(r).map_err(|e| format!("não consegui serializar: {}", e))?;
     std::fs::write(destino, bruto).map_err(|e| format!("não consegui gravar a prova: {}", e))
 }
 
@@ -294,7 +299,11 @@ mod maquina {
 
     /// A = o plano que estava antes do Otimiza (o `desfazer` volta para ele); B = o OTIMIZA, que precisa estar ATIVO.
     pub fn planos(log: &ChangeLog) -> Result<Planos, String> {
-        let Some(entrada) = log.applied().iter().find(|e| e.optimization_id == "plano_otimiza") else {
+        let Some(entrada) = log
+            .applied()
+            .iter()
+            .find(|e| e.optimization_id == "plano_otimiza")
+        else {
             return Err(
                 "O plano de energia do Otimiza não está aplicado. Aperte \"Otimizar agora\" primeiro: \
                  a prova compara o plano do Otimiza com o seu, com o jogo aberto."
@@ -302,8 +311,9 @@ mod maquina {
             );
         };
         let lista = planoenergia::listar_planos()?;
-        let nosso = planoenergia::achar_na_lista(&lista, planoenergia::NOME_DO_PLANO)
-            .ok_or("O plano OTIMIZA não existe mais nesta máquina. Aperte \"Otimizar agora\" de novo.")?;
+        let nosso = planoenergia::achar_na_lista(&lista, planoenergia::NOME_DO_PLANO).ok_or(
+            "O plano OTIMIZA não existe mais nesta máquina. Aperte \"Otimizar agora\" de novo.",
+        )?;
         let ativo = power::active_scheme()?;
         if !ativo.eq_ignore_ascii_case(&nosso) {
             return Err(
@@ -320,7 +330,11 @@ mod maquina {
         let existe = |guid: &str| lista.iter().any(|(g, _)| g.eq_ignore_ascii_case(guid));
 
         match anterior.filter(|g| !g.eq_ignore_ascii_case(&nosso) && existe(g)) {
-            Some(sem) => Ok(Planos { sem, com: nosso, contra_o_equilibrado: false }),
+            Some(sem) => Ok(Planos {
+                sem,
+                com: nosso,
+                contra_o_equilibrado: false,
+            }),
             None => Ok(Planos {
                 sem: planoenergia::EQUILIBRADO_GUID.to_string(),
                 com: nosso,
@@ -345,7 +359,10 @@ mod maquina {
         power::set_active_scheme(guid)?;
         let ativo = power::active_scheme()?;
         if !ativo.eq_ignore_ascii_case(guid) {
-            return Err(format!("O Windows aceitou trocar o plano, mas o ativo continua {}.", ativo));
+            return Err(format!(
+                "O Windows aceitou trocar o plano, mas o ativo continua {}.",
+                ativo
+            ));
         }
         Ok(())
     }
@@ -361,7 +378,10 @@ mod maquina {
 
     fn jogo_aberto(pid: u32) -> bool {
         let mut s = sysinfo::System::new();
-        s.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]), true);
+        s.refresh_processes(
+            sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+            true,
+        );
         s.process(sysinfo::Pid::from_u32(pid)).is_some()
     }
 
@@ -379,7 +399,10 @@ mod maquina {
                 pelo_presentmon: true,
             }),
             Err(erro) => {
-                crate::utils::Logger::warn(&format!("prova alternada: PresentMon não mediu ({}); canal antigo", erro));
+                crate::utils::Logger::warn(&format!(
+                    "prova alternada: PresentMon não mediu ({}); canal antigo",
+                    erro
+                ));
                 let m = frames::medir(pid, nome, segundos)?;
                 Ok(Rodada {
                     lado,
@@ -403,7 +426,12 @@ mod maquina {
         emitir: &dyn Fn(Passo),
     ) -> Result<Vec<Rodada>, String> {
         let total = ORDEM.len();
-        emitir(Passo { indice: 0, total, lado: None, segundos: AQUECIMENTO_S });
+        emitir(Passo {
+            indice: 0,
+            total,
+            lado: None,
+            segundos: AQUECIMENTO_S,
+        });
         for _ in 0..AQUECIMENTO_S {
             std::thread::sleep(Duration::from_secs(1));
             if !jogo_aberto(pid) {
@@ -418,15 +446,26 @@ mod maquina {
                 Lado::ComOtimiza => &planos.com,
             };
             ativar(guid)?;
-            emitir(Passo { indice: i + 1, total, lado: Some(*lado), segundos });
+            emitir(Passo {
+                indice: i + 1,
+                total,
+                lado: Some(*lado),
+                segundos,
+            });
             std::thread::sleep(Duration::from_secs(ESPERA_DEPOIS_DE_TROCAR_S));
             if !jogo_aberto(pid) {
-                return Err("O jogo fechou no meio do teste. O plano do Otimiza voltou a ser o ativo.".to_string());
+                return Err(
+                    "O jogo fechou no meio do teste. O plano do Otimiza voltou a ser o ativo."
+                        .to_string(),
+                );
             }
             let rodada = medir(pid, nome, *lado, segundos)?;
             // Fechou durante a rodada: o que foi medido pode ser o menu de saída.
             if !jogo_aberto(pid) {
-                return Err("O jogo fechou no meio do teste. O plano do Otimiza voltou a ser o ativo.".to_string());
+                return Err(
+                    "O jogo fechou no meio do teste. O plano do Otimiza voltou a ser o ativo."
+                        .to_string(),
+                );
             }
             crate::utils::Logger::info(&format!(
                 "prova alternada: rodada {}/{} {:?}: {:.1} FPS do jogo, 1% {:?}, {} quadros",
@@ -446,7 +485,8 @@ mod maquina {
     /// `PowerPlan` no histórico (o OTIMIZA já era o ativo ao aplicar) o desfazer não troca nada, e comparar contra o
     /// Equilibrado deixaria o pior ativo.
     pub fn voltar_ao_de_antes(planos: &Planos, log: &mut ChangeLog) -> Result<(), String> {
-        let pelo_historico = crate::modules::windows::WindowsOptimizer::new().revert("plano_otimiza", log);
+        let pelo_historico =
+            crate::modules::windows::WindowsOptimizer::new().revert("plano_otimiza", log);
         if power::active_scheme().is_ok_and(|a| a.eq_ignore_ascii_case(&planos.sem)) {
             return Ok(());
         }
@@ -469,8 +509,10 @@ mod maquina {
         }
         let _vez = Vez;
 
-        std::fs::create_dir_all(pasta()).map_err(|e| format!("não consegui criar a pasta: {}", e))?;
-        std::fs::write(marcador(), &planos.com).map_err(|e| format!("não consegui marcar o teste: {}", e))?;
+        std::fs::create_dir_all(pasta())
+            .map_err(|e| format!("não consegui criar a pasta: {}", e))?;
+        std::fs::write(marcador(), &planos.com)
+            .map_err(|e| format!("não consegui marcar o teste: {}", e))?;
 
         let segundos = segundos_por_rodada.clamp(SEGUNDOS_POR_RODADA_MIN, SEGUNDOS_POR_RODADA_MAX);
         let resultado = rodadas(pid, nome, segundos, planos, emitir);
@@ -478,7 +520,10 @@ mod maquina {
         let volta = ativar(&planos.com);
         let _ = std::fs::remove_file(marcador());
         if let Err(e) = volta {
-            crate::utils::Logger::warn(&format!("prova alternada: o plano do Otimiza não voltou: {}", e));
+            crate::utils::Logger::warn(&format!(
+                "prova alternada: o plano do Otimiza não voltou: {}",
+                e
+            ));
             return Err(format!(
                 "O teste terminou, mas o Windows não reativou o plano do Otimiza ({}). \
                  Aperte \"Otimizar agora\" de novo.",
@@ -530,20 +575,39 @@ mod tests {
         assert!(sem >= repeticoes::REPETICOES_MINIMAS);
 
         // Soma das posições igual dos dois lados: deriva em linha reta pesa o mesmo em cada um.
-        let posicoes = |lado| ORDEM.iter().enumerate().filter(|(_, l)| **l == lado).map(|(i, _)| i).sum::<usize>();
+        let posicoes = |lado| {
+            ORDEM
+                .iter()
+                .enumerate()
+                .filter(|(_, l)| **l == lado)
+                .map(|(i, _)| i)
+                .sum::<usize>()
+        };
         assert_eq!(posicoes(Lado::SemOtimiza), posicoes(Lado::ComOtimiza));
     }
 
     #[test]
     fn ganho_claro_fica_com_o_otimiza() {
-        let r = decidir("FiveM.exe", 0, 60, todas([70.0, 71.0, 70.5, 70.8], [78.0, 79.0, 78.5, 78.2]), false);
+        let r = decidir(
+            "FiveM.exe",
+            0,
+            60,
+            todas([70.0, 71.0, 70.5, 70.8], [78.0, 79.0, 78.5, 78.2]),
+            false,
+        );
         assert_eq!(r.desfecho, Desfecho::Ganhou);
         assert!(r.ficou_com_otimiza);
     }
 
     #[test]
     fn piora_clara_desfaz() {
-        let r = decidir("FiveM.exe", 0, 60, todas([78.0, 79.0, 78.5, 78.2], [70.0, 71.0, 70.5, 70.8]), false);
+        let r = decidir(
+            "FiveM.exe",
+            0,
+            60,
+            todas([78.0, 79.0, 78.5, 78.2], [70.0, 71.0, 70.5, 70.8]),
+            false,
+        );
         assert_eq!(r.desfecho, Desfecho::Piorou);
         assert!(!r.ficou_com_otimiza);
     }
@@ -560,7 +624,13 @@ mod tests {
 
     #[test]
     fn ruido_nao_vira_ganho_nem_piora() {
-        let r = decidir("FiveM.exe", 0, 60, todas([70.0, 76.0, 72.0, 74.0], [73.0, 69.0, 75.0, 71.0]), false);
+        let r = decidir(
+            "FiveM.exe",
+            0,
+            60,
+            todas([70.0, 76.0, 72.0, 74.0], [73.0, 69.0, 75.0, 71.0]),
+            false,
+        );
         assert_eq!(r.desfecho, Desfecho::Indistinguivel);
         assert!(r.ficou_com_otimiza, "não piorou: o plano fica");
     }
@@ -600,7 +670,13 @@ mod tests {
 
     #[test]
     fn piora_que_nao_desfez_nao_diz_que_desfez() {
-        let mut r = decidir("FiveM.exe", 0, 60, todas([78.0, 79.0, 78.5, 78.2], [70.0, 71.0, 70.5, 70.8]), false);
+        let mut r = decidir(
+            "FiveM.exe",
+            0,
+            60,
+            todas([78.0, 79.0, 78.5, 78.2], [70.0, 71.0, 70.5, 70.8]),
+            false,
+        );
         marcar_falha_ao_desfazer(&mut r, "acesso negado".into());
         assert_eq!(r.desfecho, Desfecho::Piorou);
         assert!(r.ficou_com_otimiza);

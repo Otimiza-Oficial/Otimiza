@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { iniciarV33 } from "./v33/app";
 import { Esfera } from "./esfera";
 import { Pilares } from "./pilares";
 import { ligarBarraDaJanela } from "./janela";
@@ -817,6 +818,14 @@ function primeiroNome(comprador: string | null): string | null {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  // A interface da 3.3 por cima do console, que continua inteiro no "Modo clássico". Antes do portão e sem
+  // `await`: o portão fica por cima de qualquer tela, e a 3.3 não espera a conferência da licença para aparecer.
+  void iniciarV33().catch((erro) => {
+    // Sem a 3.3, o console antigo aparece: nunca uma tela vazia.
+    document.documentElement.classList.remove("v33-cedo");
+    console.error("interface 3.3:", erro);
+  });
+
   // Com `await`: sem ativação, a tela de compra precisa estar de pé antes de o console aparecer por um quadro.
   await montarPortao();
 
@@ -6565,7 +6574,7 @@ function renderConfigJogo(r: ConfigJogoReport) {
           (c) =>
             `<li><strong>${escapeHtml(c.chave)}</strong> em ${escapeHtml(
               c.valor
-            )} · custa ${escapeHtml(c.ganho)} dos quadros</li>`
+            )} · costuma custar ${escapeHtml(c.ganho)} dos quadros <span class="fg-selo" data-origem="Estimado" title="Faixa medida por terceiros, não neste PC">ESTIMADO</span></li>`
         )
         .join("")}</ul>`
     : '<p class="hint">Nada de caro ficou ligado nesta configuração.</p>';

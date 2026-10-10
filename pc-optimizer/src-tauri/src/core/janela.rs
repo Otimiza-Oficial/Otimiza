@@ -32,20 +32,31 @@ pub fn para_telemetria(
     let cpu = med(amostras, |a| a.cpu_total_pct);
     medida(&mut t, "cpu.usage.overall", cpu, Unit::Percent);
     // Índices contíguos: o classificador para no primeiro que faltar.
-    let n = amostras.iter().map(|a| a.nucleos_pct.len()).max().unwrap_or(0);
+    let n = amostras
+        .iter()
+        .map(|a| a.nucleos_pct.len())
+        .max()
+        .unwrap_or(0);
     for i in 0..n {
         let v = med(amostras, |a| a.nucleos_pct.get(i).copied());
         if v.is_none() {
             break;
         }
         if let Some(v) = v {
-            t.set_series(id_do_nucleo(i), Metric::measured(v, Unit::Percent, fonte.clone()));
+            t.set_series(
+                id_do_nucleo(i),
+                Metric::measured(v, Unit::Percent, fonte.clone()),
+            );
         }
     }
     // "Ligada" se ligada na maior parte da janela.
     let flag = |bit: u64| -> Option<f64> {
-        let lidas: Vec<bool> = amostras.iter().filter_map(|a| a.limite_flags.map(|f| f & bit != 0)).collect();
-        (!lidas.is_empty()).then(|| (lidas.iter().filter(|b| **b).count() * 2 > lidas.len()) as u8 as f64)
+        let lidas: Vec<bool> = amostras
+            .iter()
+            .filter_map(|a| a.limite_flags.map(|f| f & bit != 0))
+            .collect();
+        (!lidas.is_empty())
+            .then(|| (lidas.iter().filter(|b| **b).count() * 2 > lidas.len()) as u8 as f64)
     };
     medida(&mut t, "cpu.throttling.thermal", flag(1), Unit::Boolean);
     medida(&mut t, "cpu.throttling.power", flag(2), Unit::Boolean);
@@ -54,39 +65,75 @@ pub fn para_telemetria(
     medida(&mut t, "gpu.usage", gpu, Unit::Percent);
     let vram_usada = med(amostras, |a| a.vram_usada_mb).map(|m| m / 1024.0);
     medida(&mut t, "vram.used", vram_usada, Unit::Gigabytes);
-    medida(&mut t, "vram.total", vram_total_mb.map(|m| m / 1024.0), Unit::Gigabytes);
+    medida(
+        &mut t,
+        "vram.total",
+        vram_total_mb.map(|m| m / 1024.0),
+        Unit::Gigabytes,
+    );
     if let (Some(u), Some(tot)) = (vram_usada, vram_total_mb.map(|m| m / 1024.0)) {
         if tot > 0.0 {
             medida(&mut t, "vram.usage", Some(u / tot * 100.0), Unit::Percent);
         }
     }
-    medida(&mut t, "vram.shared_used", med(amostras, |a| a.vram_compartilhada_mb).map(|m| m / 1024.0), Unit::Gigabytes);
+    medida(
+        &mut t,
+        "vram.shared_used",
+        med(amostras, |a| a.vram_compartilhada_mb).map(|m| m / 1024.0),
+        Unit::Gigabytes,
+    );
     let ram = match ram_total_mb.filter(|t| *t > 0.0) {
-        Some(total) => med(amostras, |a| a.ram_disponivel_mb).map(|livre| (1.0 - livre / total) * 100.0),
+        Some(total) => {
+            med(amostras, |a| a.ram_disponivel_mb).map(|livre| (1.0 - livre / total) * 100.0)
+        }
         None => None,
     };
     medida(&mut t, "ram.usage", ram, Unit::Percent);
-    medida(&mut t, "storage.busy", med(amostras, |a| a.disco_ocupado_pct), Unit::Percent);
+    medida(
+        &mut t,
+        "storage.busy",
+        med(amostras, |a| a.disco_ocupado_pct),
+        Unit::Percent,
+    );
     medida(&mut t, "display.refresh", hz.map(|h| h as f64), Unit::Hertz);
 
     if let Some(s) = saude {
-        t.set("fps.average", Metric::measured(s.fps_medio, Unit::Fps, "etw, na mesma janela"));
+        t.set(
+            "fps.average",
+            Metric::measured(s.fps_medio, Unit::Fps, "etw, na mesma janela"),
+        );
         if let Some(l) = s.low_1pct_fps {
-            t.set("fps.low_1pct", Metric::measured(l, Unit::Fps, "etw, na mesma janela"));
+            t.set(
+                "fps.low_1pct",
+                Metric::measured(l, Unit::Fps, "etw, na mesma janela"),
+            );
         }
         t.set(
             "frametime.stutters_per_minute",
-            Metric::measured(s.engasgos_graves_por_minuto, Unit::Count, "etw, na mesma janela"),
+            Metric::measured(
+                s.engasgos_graves_por_minuto,
+                Unit::Count,
+                "etw, na mesma janela",
+            ),
         );
         // O par CPU e placa DURANTE a partida separa limite fora do hardware de gargalo de peça.
         medida(&mut t, "match.cpu_usage", cpu, Unit::Percent);
         medida(&mut t, "match.gpu_usage", gpu, Unit::Percent);
     }
     if let Some(inv) = travadas.filter(|i| !i.travadas.is_empty()) {
-        let com_disco = inv.pistas.iter().find(|p| p.suspeito == Suspeito::Disco).map(|p| p.travadas).unwrap_or(0);
+        let com_disco = inv
+            .pistas
+            .iter()
+            .find(|p| p.suspeito == Suspeito::Disco)
+            .map(|p| p.travadas)
+            .unwrap_or(0);
         t.set(
             "frametime.stutters_with_disk",
-            Metric::measured(com_disco as f64 / inv.travadas.len() as f64 * 100.0, Unit::Percent, "detetive de travadas"),
+            Metric::measured(
+                com_disco as f64 / inv.travadas.len() as f64 * 100.0,
+                Unit::Percent,
+                "detetive de travadas",
+            ),
         );
     }
     t.finish(0)
@@ -115,10 +162,24 @@ mod testes {
 
     #[test]
     fn um_nucleo_no_talo_vira_cpu_um_nucleo_no_classificador_da_2_8() {
-        let janela: Vec<Amostra> = (0..40).map(|_| amostra(vec![99.0, 20.0, 15.0, 10.0, 12.0, 8.0, 9.0, 11.0], 55.0)).collect();
-        let t = para_telemetria(&janela, Some(16384.0), Some(4096.0), None, None, Some(144), 0);
+        let janela: Vec<Amostra> = (0..40)
+            .map(|_| amostra(vec![99.0, 20.0, 15.0, 10.0, 12.0, 8.0, 9.0, 11.0], 55.0))
+            .collect();
+        let t = para_telemetria(
+            &janela,
+            Some(16384.0),
+            Some(4096.0),
+            None,
+            None,
+            Some(144),
+            0,
+        );
         let d = classificar_com(&t, &crate::modules::vram::avaliar(&t, &Default::default()));
-        assert!(d.achados.iter().any(|a| a.classe == Classe::CpuUmNucleo), "{:?}", d.achados);
+        assert!(
+            d.achados.iter().any(|a| a.classe == Classe::CpuUmNucleo),
+            "{:?}",
+            d.achados
+        );
     }
 
     #[test]
@@ -126,6 +187,10 @@ mod testes {
         let janela: Vec<Amostra> = (0..40).map(|_| amostra(vec![50.0; 8], 99.0)).collect();
         let t = para_telemetria(&janela, Some(16384.0), Some(4096.0), None, None, None, 0);
         let d = classificar_com(&t, &crate::modules::vram::avaliar(&t, &Default::default()));
-        assert!(d.achados.iter().any(|a| a.classe == Classe::Gpu), "{:?}", d.achados);
+        assert!(
+            d.achados.iter().any(|a| a.classe == Classe::Gpu),
+            "{:?}",
+            d.achados
+        );
     }
 }

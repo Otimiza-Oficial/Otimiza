@@ -8,7 +8,9 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use super::motorenergia::{self as motor, AmostraCpu, Candidato, Cpuid, Enumeracao, Impressao, Parametros, Topologia};
+use super::motorenergia::{
+    self as motor, AmostraCpu, Candidato, Cpuid, Enumeracao, Impressao, Parametros, Topologia,
+};
 use super::planoenergia::{self as plano, EQUILIBRADO_GUID, NOME_DO_PLANO};
 use super::{power, registry, shell};
 
@@ -31,7 +33,11 @@ pub fn ler_cpuid() -> Cpuid {
 
         let (hwp, hwp_epp, preferidos) = if maximo >= 6 {
             let seis = __cpuid(6);
-            (seis.eax & (1 << 7) != 0, seis.eax & (1 << 10) != 0, seis.eax & (1 << 14) != 0)
+            (
+                seis.eax & (1 << 7) != 0,
+                seis.eax & (1 << 10) != 0,
+                seis.eax & (1 << 14) != 0,
+            )
         } else {
             (false, false, false)
         };
@@ -41,7 +47,16 @@ pub fn ler_cpuid() -> Cpuid {
         let maximo_estendido = __cpuid(0x8000_0000).eax;
         let cppc = maximo_estendido >= 0x8000_0008 && __cpuid(0x8000_0008).ebx & (1 << 27) != 0;
 
-        Cpuid { fabricante_bruto, familia, modelo, hibrido, hwp, hwp_epp, nucleos_preferidos_intel: preferidos, cppc }
+        Cpuid {
+            fabricante_bruto,
+            familia,
+            modelo,
+            hibrido,
+            hwp,
+            hwp_epp,
+            nucleos_preferidos_intel: preferidos,
+            cppc,
+        }
     }
 }
 
@@ -52,7 +67,9 @@ pub fn ler_cpuid() -> Cpuid {
 
 /// Percorrida pelos deslocamentos documentados de `SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX`.
 pub fn ler_topologia() -> Topologia {
-    use windows_sys::Win32::System::SystemInformation::{GetLogicalProcessorInformationEx, RelationProcessorCore};
+    use windows_sys::Win32::System::SystemInformation::{
+        GetLogicalProcessorInformationEx, RelationProcessorCore,
+    };
 
     let mut tamanho: u32 = 0;
     unsafe {
@@ -64,7 +81,11 @@ pub fn ler_topologia() -> Topologia {
 
     let mut buffer = vec![0u8; tamanho as usize];
     let ok = unsafe {
-        GetLogicalProcessorInformationEx(RelationProcessorCore, buffer.as_mut_ptr() as *mut _, &mut tamanho)
+        GetLogicalProcessorInformationEx(
+            RelationProcessorCore,
+            buffer.as_mut_ptr() as *mut _,
+            &mut tamanho,
+        )
     };
     if ok == 0 {
         return Topologia::default();
@@ -75,7 +96,8 @@ pub fn ler_topologia() -> Topologia {
     let mut pos = 0usize;
 
     while pos + 32 <= tamanho as usize {
-        let tamanho_item = u32::from_le_bytes(buffer[pos + 4..pos + 8].try_into().unwrap()) as usize;
+        let tamanho_item =
+            u32::from_le_bytes(buffer[pos + 4..pos + 8].try_into().unwrap()) as usize;
         if tamanho_item == 0 {
             break;
         }
@@ -121,7 +143,11 @@ pub fn impressao() -> Impressao {
                 controle: motor::controle(&cpuid, arquitetura),
                 cpuid,
                 topologia: ler_topologia(),
-                formato: if maquina.notebook { motor::Formato::Notebook } else { motor::Formato::Desktop },
+                formato: if maquina.notebook {
+                    motor::Formato::Notebook
+                } else {
+                    motor::Formato::Desktop
+                },
                 na_tomada: None,
                 build_do_windows: maquina.build_do_windows,
                 modern_standby: maquina.modern_standby,
@@ -170,21 +196,41 @@ pub struct Bateria {
 
 pub fn bateria_de_candidatos(i: &Impressao, base: &Enumeracao) -> Bateria {
     let autoajuste = motor::candidatos_de_autoajuste(i, base);
-    let sobre = autoajuste.get(2).map(|c| c.parametros).unwrap_or(Parametros::WINDOWS);
+    let sobre = autoajuste
+        .get(2)
+        .map(|c| c.parametros)
+        .unwrap_or(Parametros::WINDOWS);
     let escada_de_epp = motor::escada_de_epp(i, base);
     let dispositivos = motor::variacoes_de_dispositivo(i, base, sobre);
-    let todos: Vec<Candidato> = autoajuste.iter().chain(&escada_de_epp).chain(&dispositivos).cloned().collect();
+    let todos: Vec<Candidato> = autoajuste
+        .iter()
+        .chain(&escada_de_epp)
+        .chain(&dispositivos)
+        .cloned()
+        .collect();
     let mut controlados = motor::apelidos_controlados(&todos);
-    for antigo in [motor::apelidos::PROCTHROTTLEMIN, motor::apelidos::CPMINCORES, motor::apelidos::PERFBOOSTMODE, motor::apelidos::PERFEPP] {
+    for antigo in [
+        motor::apelidos::PROCTHROTTLEMIN,
+        motor::apelidos::CPMINCORES,
+        motor::apelidos::PERFBOOSTMODE,
+        motor::apelidos::PERFEPP,
+    ] {
         if base.por_alias(antigo).is_some() && !controlados.iter().any(|c| c == antigo) {
             controlados.push(antigo.to_string());
         }
     }
-    Bateria { autoajuste, escada_de_epp, dispositivos, controlados }
+    Bateria {
+        autoajuste,
+        escada_de_epp,
+        dispositivos,
+        controlados,
+    }
 }
 
 fn pasta() -> PathBuf {
-    let base = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
+    let base = std::env::var("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
     base.join("pc-optimizer").join("energia")
 }
 
@@ -210,7 +256,9 @@ pub struct Backup {
 /// pode confundir o último com "o motor nunca mexeu".
 pub fn estado_do_backup() -> Result<bool, String> {
     match std::fs::read_to_string(pasta().join("backup.json")) {
-        Ok(t) => serde_json::from_str::<Backup>(&t).map(|_| true).map_err(|e| e.to_string()),
+        Ok(t) => serde_json::from_str::<Backup>(&t)
+            .map(|_| true)
+            .map_err(|e| e.to_string()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(e) => Err(e.to_string()),
     }
@@ -222,7 +270,9 @@ pub fn sobrou_o_plano_otimiza() -> Result<bool, String> {
 }
 
 pub fn ler_backup() -> Option<Backup> {
-    std::fs::read_to_string(pasta().join("backup.json")).ok().and_then(|t| serde_json::from_str(&t).ok())
+    std::fs::read_to_string(pasta().join("backup.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
 }
 
 /// Se o ativo já é o OTIMIZA, vale o backup existente: o "anterior" é o de antes do Otimiza.
@@ -253,9 +303,11 @@ fn garantir_backup(nosso: Option<&str>) -> Result<Backup, String> {
             .collect(),
     };
 
-    std::fs::create_dir_all(pasta()).map_err(|e| format!("Não foi possível criar a pasta do backup: {}", e))?;
+    std::fs::create_dir_all(pasta())
+        .map_err(|e| format!("Não foi possível criar a pasta do backup: {}", e))?;
     let texto = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
-    std::fs::write(pasta().join("backup.json"), texto).map_err(|e| format!("Não foi possível gravar o backup: {}", e))?;
+    std::fs::write(pasta().join("backup.json"), texto)
+        .map_err(|e| format!("Não foi possível gravar o backup: {}", e))?;
     Ok(backup)
 }
 
@@ -282,7 +334,9 @@ pub fn recuperar_teste_interrompido() -> Option<Result<Restauracao, String>> {
     if !registry::is_elevated() {
         return None;
     }
-    let r = restaurar_anterior(crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza"));
+    let r = restaurar_anterior(
+        crate::modules::changelog::ChangeLog::load().is_applied("plano_otimiza"),
+    );
     if r.is_ok() {
         marcar_teste_em_andamento(false);
     }
@@ -309,7 +363,10 @@ fn exigir_admin() -> Result<(), String> {
 }
 
 fn plano_otimiza() -> Result<Option<String>, String> {
-    Ok(plano::achar_na_lista(&plano::listar_planos()?, NOME_DO_PLANO))
+    Ok(plano::achar_na_lista(
+        &plano::listar_planos()?,
+        NOME_DO_PLANO,
+    ))
 }
 
 pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicacao, String> {
@@ -332,15 +389,29 @@ pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicaca
         for (lado, valor) in [("-setacvalueindex", m.ac), ("-setdcvalueindex", m.dc)] {
             let Some(v) = valor else { continue };
             let v = v.to_string();
-            let args = [lado, guid.as_str(), m.subgrupo.as_str(), m.guid.as_str(), v.as_str()];
+            let args = [
+                lado,
+                guid.as_str(),
+                m.subgrupo.as_str(),
+                m.guid.as_str(),
+                v.as_str(),
+            ];
             match shell::run("powercfg", &args) {
                 Ok(s) if s.success => {}
                 Ok(s) => {
-                    crate::utils::Logger::warn(&format!("motor de energia: recusado `powercfg {}`: {}", args.join(" "), s.stderr.trim()));
+                    crate::utils::Logger::warn(&format!(
+                        "motor de energia: recusado `powercfg {}`: {}",
+                        args.join(" "),
+                        s.stderr.trim()
+                    ));
                     recusados.push(m.alias.clone());
                 }
                 Err(e) => {
-                    crate::utils::Logger::warn(&format!("motor de energia: `powercfg {}` falhou: {}", args.join(" "), e));
+                    crate::utils::Logger::warn(&format!(
+                        "motor de energia: `powercfg {}` falhou: {}",
+                        args.join(" "),
+                        e
+                    ));
                     recusados.push(m.alias.clone());
                 }
             }
@@ -350,7 +421,9 @@ pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicaca
 
     // Reativar é o que faz o Windows carregar os valores novos.
     power::set_active_scheme(&guid)?;
-    let ativo = power::active_scheme().map(|a| a.eq_ignore_ascii_case(&guid)).unwrap_or(false);
+    let ativo = power::active_scheme()
+        .map(|a| a.eq_ignore_ascii_case(&guid))
+        .unwrap_or(false);
 
     let relido = enumerar_plano(&guid)?;
     let divergentes: Vec<String> = motor::divergencias(&escrita, &relido)
@@ -368,7 +441,14 @@ pub fn aplicar(candidato: &Candidato, controlados: &[String]) -> Result<Aplicaca
         ativo
     ));
 
-    Ok(Aplicacao { plano: guid, candidato: candidato.id.clone(), escritos: escrita.len(), divergentes, recusados, ativo })
+    Ok(Aplicacao {
+        plano: guid,
+        candidato: candidato.id.clone(),
+        escritos: escrita.len(),
+        divergentes,
+        recusados,
+        ativo,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,7 +469,9 @@ pub fn esquecer_o_plano() {
     marcar_teste_em_andamento(false);
     if dinamico().ligado {
         let _ = definir_dinamico(false);
-        crate::utils::Logger::info("motor de energia: modo dinâmico desligado junto com o plano OTIMIZA");
+        crate::utils::Logger::info(
+            "motor de energia: modo dinâmico desligado junto com o plano OTIMIZA",
+        );
     }
 }
 
@@ -408,7 +490,9 @@ fn refazer_o_otimiza() -> Result<Restauracao, String> {
     };
     let relatorio = plano::montar(false).map_err(no_meio)?;
     if !relatorio.plano_ativo {
-        return Err(no_meio("O plano OTIMIZA foi refeito, mas o Windows não o deixou ativo.".to_string()));
+        return Err(no_meio(
+            "O plano OTIMIZA foi refeito, mas o Windows não o deixou ativo.".to_string(),
+        ));
     }
     esquecer_o_plano();
     Ok(Restauracao {
@@ -432,13 +516,21 @@ pub fn restaurar_anterior(otimiza_no_historico: bool) -> Result<Restauracao, Str
     if otimiza_no_historico {
         return refazer_o_otimiza();
     }
-    let backup = ler_backup().ok_or("Não há backup do plano anterior: o motor nunca mudou o plano nesta máquina.")?;
+    let backup = ler_backup()
+        .ok_or("Não há backup do plano anterior: o motor nunca mudou o plano nesta máquina.")?;
 
-    power::set_active_scheme(&backup.plano_anterior)
-        .map_err(|e| format!("O plano anterior não pôde ser ativado ({}). Use \"Restaurar padrão do Windows\".", e))?;
+    power::set_active_scheme(&backup.plano_anterior).map_err(|e| {
+        format!(
+            "O plano anterior não pôde ser ativado ({}). Use \"Restaurar padrão do Windows\".",
+            e
+        )
+    })?;
     let ativo = power::active_scheme()?;
     if !ativo.eq_ignore_ascii_case(&backup.plano_anterior) {
-        return Err(format!("O Windows aceitou, mas o plano ativo continua {}.", ativo));
+        return Err(format!(
+            "O Windows aceitou, mas o plano ativo continua {}.",
+            ativo
+        ));
     }
 
     let relido = enumerar_plano(&ativo)?;
@@ -446,7 +538,10 @@ pub fn restaurar_anterior(otimiza_no_historico: bool) -> Result<Restauracao, Str
         .valores
         .iter()
         .filter(|v| {
-            let agora = relido.configuracoes.iter().find(|c| c.guid == v.ajuste && c.subgrupo == v.subgrupo);
+            let agora = relido
+                .configuracoes
+                .iter()
+                .find(|c| c.guid == v.ajuste && c.subgrupo == v.subgrupo);
             agora.map(|c| (c.ac, c.dc)) != Some((v.ac, v.dc))
         })
         .map(|v| v.alias.clone().unwrap_or_else(|| v.ajuste.clone()))
@@ -455,7 +550,12 @@ pub fn restaurar_anterior(otimiza_no_historico: bool) -> Result<Restauracao, Str
     let apagado = apagar_plano_otimiza();
     let _ = std::fs::remove_file(pasta().join("backup.json"));
     marcar_teste_em_andamento(false);
-    Ok(Restauracao { plano_ativo: ativo, divergentes, plano_otimiza_apagado: apagado, otimiza_refeito: false })
+    Ok(Restauracao {
+        plano_ativo: ativo,
+        divergentes,
+        plano_otimiza_apagado: apagado,
+        otimiza_refeito: false,
+    })
 }
 
 pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
@@ -463,11 +563,19 @@ pub fn restaurar_padrao_windows() -> Result<Restauracao, String> {
     power::set_active_scheme(EQUILIBRADO_GUID)?;
     let ativo = power::active_scheme()?;
     if !ativo.eq_ignore_ascii_case(EQUILIBRADO_GUID) {
-        return Err(format!("O Windows aceitou, mas o plano ativo continua {}.", ativo));
+        return Err(format!(
+            "O Windows aceitou, mas o plano ativo continua {}.",
+            ativo
+        ));
     }
     let apagado = apagar_plano_otimiza();
     esquecer_o_plano();
-    Ok(Restauracao { plano_ativo: ativo, divergentes: Vec::new(), plano_otimiza_apagado: apagado, otimiza_refeito: false })
+    Ok(Restauracao {
+        plano_ativo: ativo,
+        divergentes: Vec::new(),
+        plano_otimiza_apagado: apagado,
+        otimiza_refeito: false,
+    })
 }
 
 const PDH_OK: u32 = 0;
@@ -492,7 +600,9 @@ unsafe impl Send for Amostrador {}
 
 impl Amostrador {
     pub fn novo() -> Option<Self> {
-        use windows_sys::Win32::System::Performance::{PdhAddEnglishCounterW, PdhCollectQueryData, PdhOpenQueryW};
+        use windows_sys::Win32::System::Performance::{
+            PdhAddEnglishCounterW, PdhCollectQueryData, PdhOpenQueryW,
+        };
 
         let mut consulta: isize = 0;
         if unsafe { PdhOpenQueryW(std::ptr::null(), 0, &mut consulta) } != PDH_OK {
@@ -501,7 +611,11 @@ impl Amostrador {
         let adicionar = |caminho: &str| -> isize {
             let mut h: isize = 0;
             let c = largo(caminho);
-            if unsafe { PdhAddEnglishCounterW(consulta, c.as_ptr(), 0, &mut h) } == PDH_OK { h } else { 0 }
+            if unsafe { PdhAddEnglishCounterW(consulta, c.as_ptr(), 0, &mut h) } == PDH_OK {
+                h
+            } else {
+                0
+            }
         };
         let a = Amostrador {
             consulta,
@@ -518,30 +632,51 @@ impl Amostrador {
     }
 
     fn valor(&self, contador: isize) -> Option<f64> {
-        use windows_sys::Win32::System::Performance::{PdhGetFormattedCounterValue, PDH_FMT_COUNTERVALUE, PDH_FMT_DOUBLE};
+        use windows_sys::Win32::System::Performance::{
+            PdhGetFormattedCounterValue, PDH_FMT_COUNTERVALUE, PDH_FMT_DOUBLE,
+        };
         if contador == 0 {
             return None;
         }
         let mut v: PDH_FMT_COUNTERVALUE = unsafe { std::mem::zeroed() };
-        let r = unsafe { PdhGetFormattedCounterValue(contador, PDH_FMT_DOUBLE, std::ptr::null_mut(), &mut v) };
+        let r = unsafe {
+            PdhGetFormattedCounterValue(contador, PDH_FMT_DOUBLE, std::ptr::null_mut(), &mut v)
+        };
         (r == PDH_OK).then(|| unsafe { v.Anonymous.doubleValue })
     }
 
     fn lista(&self, contador: isize) -> Vec<(String, f64)> {
-        use windows_sys::Win32::System::Performance::{PdhGetFormattedCounterArrayW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_MORE_DATA};
+        use windows_sys::Win32::System::Performance::{
+            PdhGetFormattedCounterArrayW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE,
+            PDH_MORE_DATA,
+        };
         if contador == 0 {
             return Vec::new();
         }
         let mut tamanho: u32 = 0;
         let mut itens: u32 = 0;
-        let r = unsafe { PdhGetFormattedCounterArrayW(contador, PDH_FMT_DOUBLE, &mut tamanho, &mut itens, std::ptr::null_mut()) };
+        let r = unsafe {
+            PdhGetFormattedCounterArrayW(
+                contador,
+                PDH_FMT_DOUBLE,
+                &mut tamanho,
+                &mut itens,
+                std::ptr::null_mut(),
+            )
+        };
         if r != PDH_MORE_DATA || tamanho == 0 {
             return Vec::new();
         }
         let item = std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
         let mut buffer = vec![0u8; tamanho as usize + item];
         let r = unsafe {
-            PdhGetFormattedCounterArrayW(contador, PDH_FMT_DOUBLE, &mut tamanho, &mut itens, buffer.as_mut_ptr() as *mut PDH_FMT_COUNTERVALUE_ITEM_W)
+            PdhGetFormattedCounterArrayW(
+                contador,
+                PDH_FMT_DOUBLE,
+                &mut tamanho,
+                &mut itens,
+                buffer.as_mut_ptr() as *mut PDH_FMT_COUNTERVALUE_ITEM_W,
+            )
         };
         if r != PDH_OK {
             return Vec::new();
@@ -567,7 +702,11 @@ impl Amostrador {
         use windows_sys::Win32::System::Performance::PdhCollectQueryData;
         unsafe { PdhCollectQueryData(self.consulta) };
 
-        let nucleos: Vec<(String, f64)> = self.lista(self.estacionamento).into_iter().filter(|(n, _)| !n.contains("_Total")).collect();
+        let nucleos: Vec<(String, f64)> = self
+            .lista(self.estacionamento)
+            .into_iter()
+            .filter(|(n, _)| !n.contains("_Total"))
+            .collect();
         let temperaturas: Vec<f64> = self
             .lista(self.temperatura)
             .into_iter()
@@ -584,7 +723,8 @@ impl Amostrador {
             uso_pct: self.valor(self.uso),
             limite_pct: self.valor(self.limite),
             flags: self.valor(self.flags).map(|f| f as u64),
-            nucleos_acordados: (!nucleos.is_empty()).then(|| nucleos.iter().filter(|(_, v)| *v == 0.0).count() as u32),
+            nucleos_acordados: (!nucleos.is_empty())
+                .then(|| nucleos.iter().filter(|(_, v)| *v == 0.0).count() as u32),
             nucleos_total: (!nucleos.is_empty()).then_some(nucleos.len() as u32),
             temperatura_c: temperaturas.into_iter().reduce(f64::max),
         }
@@ -598,9 +738,14 @@ impl Drop for Amostrador {
     }
 }
 
-pub fn amostrar_enquanto(parar: std::sync::Arc<std::sync::atomic::AtomicBool>, intervalo: Duration) -> Vec<AmostraCpu> {
+pub fn amostrar_enquanto(
+    parar: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    intervalo: Duration,
+) -> Vec<AmostraCpu> {
     use std::sync::atomic::Ordering;
-    let Some(a) = Amostrador::novo() else { return Vec::new() };
+    let Some(a) = Amostrador::novo() else {
+        return Vec::new();
+    };
     let mut v = Vec::new();
     while !parar.load(Ordering::Relaxed) {
         std::thread::sleep(intervalo);
@@ -655,7 +800,10 @@ pub fn teste_de_rajada() -> (Option<motor::RespostaMedida>, Vec<Vec<f64>>) {
     .join()
     .unwrap_or_default();
 
-    (motor::analisar_rajadas(&rajadas, FATIA.as_millis() as f64), rajadas)
+    (
+        motor::analisar_rajadas(&rajadas, FATIA.as_millis() as f64),
+        rajadas,
+    )
 }
 
 /// Medido uma vez por sessão e igual para todos os candidatos, senão os números não se comparam.
@@ -713,21 +861,33 @@ pub struct MedicaoDoCandidato {
 }
 
 fn curva_media(rajadas: &[Vec<f64>]) -> Vec<f64> {
-    let Some(n) = rajadas.iter().map(|r| r.len()).min() else { return Vec::new() };
+    let Some(n) = rajadas.iter().map(|r| r.len()).min() else {
+        return Vec::new();
+    };
     if n == 0 {
         return Vec::new();
     }
-    let media: Vec<f64> = (0..n).map(|i| rajadas.iter().map(|r| r[i]).sum::<f64>() / rajadas.len() as f64).collect();
+    let media: Vec<f64> = (0..n)
+        .map(|i| rajadas.iter().map(|r| r[i]).sum::<f64>() / rajadas.len() as f64)
+        .collect();
     let mut cauda = media[n * 7 / 10..].to_vec();
     cauda.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let sustentado = cauda[cauda.len() / 2];
     if sustentado <= 0.0 {
         return Vec::new();
     }
-    media.iter().map(|v| ((v / sustentado * 100.0) * 10.0).round() / 10.0).collect()
+    media
+        .iter()
+        .map(|v| ((v / sustentado * 100.0) * 10.0).round() / 10.0)
+        .collect()
 }
 
-pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: u32) -> Result<MedicaoDoCandidato, String> {
+pub fn medir_atual(
+    id: &str,
+    processo: Option<&str>,
+    segundos: u64,
+    repeticoes: u32,
+) -> Result<MedicaoDoCandidato, String> {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -748,8 +908,12 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
     let mut quadros_sinteticos = false;
 
     if let Some(nome) = processo.filter(|p| !p.trim().is_empty()) {
-        let (pid, executavel) = super::frames::encontrar_processo(nome)
-            .ok_or_else(|| format!("Não encontrei `{}` aberto. Abra o jogo para medir com ele.", nome))?;
+        let (pid, executavel) = super::frames::encontrar_processo(nome).ok_or_else(|| {
+            format!(
+                "Não encontrei `{}` aberto. Abra o jogo para medir com ele.",
+                nome
+            )
+        })?;
 
         amostras.clear();
         let mut intervalos_todos = Vec::new();
@@ -757,20 +921,22 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
         for _ in 0..repeticoes.clamp(1, 5) {
             let parar = Arc::new(AtomicBool::new(false));
             let p2 = parar.clone();
-            let amostrador = std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
+            let amostrador =
+                std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
             let gargalo = std::thread::spawn(move || super::bottleneck::analisar(segundos));
             // PresentMon primeiro (só os quadros do próprio jogo, a mesma fonte da medição automática e da prova); o canal
             // antigo fica de reserva, e o log diz qual mediu.
-            let medido = match super::presentmon::medir_como_antes(pid, &executavel, segundos as u32) {
-                Ok((crua, _)) => Ok((crua, None)),
-                Err(erro) => {
-                    crate::utils::Logger::warn(&format!(
+            let medido =
+                match super::presentmon::medir_como_antes(pid, &executavel, segundos as u32) {
+                    Ok((crua, _)) => Ok((crua, None)),
+                    Err(erro) => {
+                        crate::utils::Logger::warn(&format!(
                         "motor de energia: PresentMon não mediu ({}); medindo pelo canal antigo",
                         erro
                     ));
-                    super::frames::medir_par(pid, &executavel, None, segundos)
-                }
-            };
+                        super::frames::medir_par(pid, &executavel, None, segundos)
+                    }
+                };
             parar.store(true, Ordering::Relaxed);
             amostras.extend(amostrador.join().unwrap_or_default());
             if let Ok(g) = gargalo.join() {
@@ -790,7 +956,8 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
         for _ in 0..repeticoes.clamp(1, 5) {
             let parar = Arc::new(AtomicBool::new(false));
             let p2 = parar.clone();
-            let amostrador = std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
+            let amostrador =
+                std::thread::spawn(move || amostrar_enquanto(p2, Duration::from_millis(500)));
             let (fps, intervalos) = teste_de_quadros(segundos.min(15));
             parar.store(true, Ordering::Relaxed);
             amostras.extend(amostrador.join().unwrap_or_default());
@@ -798,7 +965,10 @@ pub fn medir_atual(id: &str, processo: Option<&str>, segundos: u64, repeticoes: 
             fps_soma += fps;
             intervalos_todos.extend(intervalos);
         }
-        quadros = motor::resumir_quadros(fps_soma / fps_repeticoes.len().max(1) as f64, &intervalos_todos);
+        quadros = motor::resumir_quadros(
+            fps_soma / fps_repeticoes.len().max(1) as f64,
+            &intervalos_todos,
+        );
         quadros_sinteticos = quadros.is_some();
     }
 
@@ -832,13 +1002,17 @@ pub struct Dinamico {
 }
 
 fn ler_json<T: for<'a> Deserialize<'a> + Default>(nome: &str) -> T {
-    std::fs::read_to_string(pasta().join(nome)).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    std::fs::read_to_string(pasta().join(nome))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
 }
 
 fn gravar_json<T: Serialize>(nome: &str, valor: &T) -> Result<(), String> {
     std::fs::create_dir_all(pasta()).map_err(|e| e.to_string())?;
     let texto = serde_json::to_string_pretty(valor).map_err(|e| e.to_string())?;
-    std::fs::write(pasta().join(nome), texto).map_err(|e| format!("Não foi possível gravar {}: {}", nome, e))
+    std::fs::write(pasta().join(nome), texto)
+        .map_err(|e| format!("Não foi possível gravar {}: {}", nome, e))
 }
 
 pub fn perfis_de_jogo() -> Vec<PerfilDeJogo> {
@@ -912,9 +1086,15 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
         return None;
     }
 
-    let aberto = perfis.iter().find(|p| super::frames::encontrar_processo(p.executavel.trim_end_matches(".exe")).is_some());
+    let aberto = perfis.iter().find(|p| {
+        super::frames::encontrar_processo(p.executavel.trim_end_matches(".exe")).is_some()
+    });
     let estado = vigia.estado.unwrap_or(motor::EstadoDinamico::Normal);
-    vigia.olhadas_sem_jogo = if aberto.is_some() { 0 } else { vigia.olhadas_sem_jogo + 1 };
+    vigia.olhadas_sem_jogo = if aberto.is_some() {
+        0
+    } else {
+        vigia.olhadas_sem_jogo + 1
+    };
 
     match motor::transicao(estado, aberto.is_some(), vigia.olhadas_sem_jogo) {
         motor::Transicao::Nenhuma => None,
@@ -923,14 +1103,24 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
             let r = aplicar_parametros(&format!("jogo:{}", perfil.executavel), perfil.parametros);
             vigia.estado = Some(motor::EstadoDinamico::Jogo);
             vigia.jogo = Some(perfil.executavel.clone());
-            Some(EventoDinamico { transicao: motor::Transicao::EntrarNoPerfilDeJogo, jogo: vigia.jogo.clone(), erro: r.err() })
+            Some(EventoDinamico {
+                transicao: motor::Transicao::EntrarNoPerfilDeJogo,
+                jogo: vigia.jogo.clone(),
+                erro: r.err(),
+            })
         }
         motor::Transicao::VoltarAoNormal => {
-            let normal = ler_backup().map(|b| b.plano_anterior).unwrap_or_else(|| EQUILIBRADO_GUID.to_string());
+            let normal = ler_backup()
+                .map(|b| b.plano_anterior)
+                .unwrap_or_else(|| EQUILIBRADO_GUID.to_string());
             let r = power::set_active_scheme(&normal);
             vigia.estado = Some(motor::EstadoDinamico::Normal);
             let jogo = vigia.jogo.take();
-            Some(EventoDinamico { transicao: motor::Transicao::VoltarAoNormal, jogo, erro: r.err() })
+            Some(EventoDinamico {
+                transicao: motor::Transicao::VoltarAoNormal,
+                jogo,
+                erro: r.err(),
+            })
         }
     }
 }
@@ -944,7 +1134,12 @@ mod tests {
     #[ignore]
     fn teste_de_quadros_real() {
         let (fps, intervalos) = teste_de_quadros(3);
-        println!("blocos={} fps={:.1} quadros={:?}", blocos_por_quadro(), fps, motor::resumir_quadros(fps, &intervalos));
+        println!(
+            "blocos={} fps={:.1} quadros={:?}",
+            blocos_por_quadro(),
+            fps,
+            motor::resumir_quadros(fps, &intervalos)
+        );
     }
 
     #[test]
@@ -956,7 +1151,16 @@ mod tests {
         println!("ajustes no Equilibrado: {}", base.configuracoes.len());
         let b = bateria_de_candidatos(&i, &base);
         for c in &b.autoajuste {
-            println!("{} {:?}: {:?} | ignorados {:?}", c.id, c.parametros, c.mudancas.iter().map(|m| (&m.alias, m.ac, m.dc)).collect::<Vec<_>>(), c.ignorados);
+            println!(
+                "{} {:?}: {:?} | ignorados {:?}",
+                c.id,
+                c.parametros,
+                c.mudancas
+                    .iter()
+                    .map(|m| (&m.alias, m.ac, m.dc))
+                    .collect::<Vec<_>>(),
+                c.ignorados
+            );
         }
         println!("amostra: {:?}", amostra_agora());
         let (r, _) = teste_de_rajada();

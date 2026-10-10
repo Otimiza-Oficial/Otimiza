@@ -105,7 +105,10 @@ mod tests {
 
     #[test]
     fn severidade_ordena_do_pior_para_o_melhor() {
-        assert!(peso_severidade(FindingSeverity::Critical) < peso_severidade(FindingSeverity::Important));
+        assert!(
+            peso_severidade(FindingSeverity::Critical)
+                < peso_severidade(FindingSeverity::Important)
+        );
         assert!(peso_severidade(FindingSeverity::Important) < peso_severidade(FindingSeverity::Ok));
     }
 

@@ -83,11 +83,7 @@ fn navegadores_conhecidos() -> Vec<(&'static str, &'static str, PathBuf)> {
             base.join(r"BraveSoftware\Brave-Browser\User Data"),
         ),
         ("Vivaldi", "vivaldi.exe", base.join(r"Vivaldi\User Data")),
-        (
-            "Opera",
-            "opera.exe",
-            base.join(r"Programs\Opera\User Data"),
-        ),
+        ("Opera", "opera.exe", base.join(r"Programs\Opera\User Data")),
     ]
 }
 
@@ -307,20 +303,24 @@ pub fn navegador_padrao() -> Option<String> {
     .ok()
     .flatten()?;
 
-    let comando = super::registry::read_text(
-        "HKCR",
-        &format!(r"{}\shell\open\command", progid),
-        "",
-    )
-    .ok()
-    .flatten()?;
+    let comando =
+        super::registry::read_text("HKCR", &format!(r"{}\shell\open\command", progid), "")
+            .ok()
+            .flatten()?;
 
     let minusculo = comando.to_lowercase();
 
-    ["chrome.exe", "msedge.exe", "brave.exe", "vivaldi.exe", "opera.exe", "firefox.exe"]
-        .iter()
-        .find(|exe| minusculo.contains(*exe))
-        .map(|exe| exe.to_string())
+    [
+        "chrome.exe",
+        "msedge.exe",
+        "brave.exe",
+        "vivaldi.exe",
+        "opera.exe",
+        "firefox.exe",
+    ]
+    .iter()
+    .find(|exe| minusculo.contains(*exe))
+    .map(|exe| exe.to_string())
 }
 
 fn mb(bytes: u64) -> f64 {

@@ -17,15 +17,25 @@ pub struct Travada {
 
 /// O instante é a soma dos intervalos até ali (o relógio dos próprios quadros).
 pub fn localizar(intervalos_ms: &[f64]) -> Vec<Travada> {
-    let validos: Vec<f64> = intervalos_ms.iter().copied().filter(|x| x.is_finite() && *x > 0.0).collect();
-    let Some(med) = mediana(&validos) else { return Vec::new() };
+    let validos: Vec<f64> = intervalos_ms
+        .iter()
+        .copied()
+        .filter(|x| x.is_finite() && *x > 0.0)
+        .collect();
+    let Some(med) = mediana(&validos) else {
+        return Vec::new();
+    };
     let mut t = 0.0;
     let mut v = Vec::new();
     for &x in &validos {
         t += x;
         if let Some(g) = gravidade(x, med) {
             if g >= Gravidade::Perceptivel {
-                v.push(Travada { instante_ms: t, duracao_ms: x, gravidade: g });
+                v.push(Travada {
+                    instante_ms: t,
+                    duracao_ms: x,
+                    gravidade: g,
+                });
             }
         }
     }
@@ -82,7 +92,10 @@ fn salto(valor: Option<f64>, normal: Option<f64>, minimo: f64) -> bool {
 
 fn vizinhas(amostras: &[Amostra], inicio_ms: u64, t: f64) -> Vec<&Amostra> {
     let alvo = inicio_ms as f64 + t;
-    let i = amostras.iter().position(|a| a.instante_ms as f64 >= alvo).unwrap_or(amostras.len());
+    let i = amostras
+        .iter()
+        .position(|a| a.instante_ms as f64 >= alvo)
+        .unwrap_or(amostras.len());
     let mut v = Vec::new();
     if i > 0 {
         v.push(&amostras[i - 1]);
@@ -93,9 +106,16 @@ fn vizinhas(amostras: &[Amostra], inicio_ms: u64, t: f64) -> Vec<&Amostra> {
     v
 }
 
-pub fn investigar(intervalos_ms: &[f64], amostras: &[Amostra], inicio_ms: u64, vram_total_mb: Option<f64>) -> Investigacao {
+pub fn investigar(
+    intervalos_ms: &[f64],
+    amostras: &[Amostra],
+    inicio_ms: u64,
+    vram_total_mb: Option<f64>,
+) -> Investigacao {
     let travadas = localizar(intervalos_ms);
-    let med = |f: &dyn Fn(&Amostra) -> Option<f64>| mediana(&amostras.iter().filter_map(f).collect::<Vec<_>>());
+    let med = |f: &dyn Fn(&Amostra) -> Option<f64>| {
+        mediana(&amostras.iter().filter_map(f).collect::<Vec<_>>())
+    };
     let disco_n = med(&|a| a.disco_latencia_ms);
     let pag_n = med(&|a| a.paginas_lidas_s);
     let comp_n = med(&|a| a.vram_compartilhada_mb);
@@ -138,12 +158,16 @@ pub fn investigar(intervalos_ms: &[f64], amostras: &[Amostra], inicio_ms: u64, v
             if cheia || transbordou {
                 suspeitos.insert(Suspeito::Vram);
             }
-            if a.cpu_nucleo_max_pct.is_some_and(|n| n >= NUCLEO_TETO) && nucleo_n.is_some_and(|n| n < NUCLEO_TETO - 10.0) {
+            if a.cpu_nucleo_max_pct.is_some_and(|n| n >= NUCLEO_TETO)
+                && nucleo_n.is_some_and(|n| n < NUCLEO_TETO - 10.0)
+            {
                 suspeitos.insert(Suspeito::ThreadPrincipal);
             }
             for p in &a.processos {
                 if p.cpu >= PROCESSO_MIN && p.cpu >= normal_de(&p.nome).max(0.005) * SALTO {
-                    suspeitos.insert(Suspeito::SegundoPlano { processo: p.nome.clone() });
+                    suspeitos.insert(Suspeito::SegundoPlano {
+                        processo: p.nome.clone(),
+                    });
                 }
             }
         }
@@ -158,10 +182,22 @@ pub fn investigar(intervalos_ms: &[f64], amostras: &[Amostra], inicio_ms: u64, v
     let total = travadas.len().max(1);
     let mut pistas: Vec<Pista> = contagem
         .into_iter()
-        .map(|(suspeito, n)| Pista { suspeito, forca: if n * 2 >= total { Forca::Alta } else { Forca::Media }, travadas: n })
+        .map(|(suspeito, n)| Pista {
+            suspeito,
+            forca: if n * 2 >= total {
+                Forca::Alta
+            } else {
+                Forca::Media
+            },
+            travadas: n,
+        })
         .collect();
     pistas.sort_by(|a, b| b.travadas.cmp(&a.travadas));
-    Investigacao { travadas, pistas, sem_causa_visivel: sem_causa }
+    Investigacao {
+        travadas,
+        pistas,
+        sem_causa_visivel: sem_causa,
+    }
 }
 
 #[cfg(test)]
@@ -233,12 +269,20 @@ mod testes {
             .map(|i| {
                 let ms = i * 500;
                 let mut a = base(ms);
-                a.processos = vec![ProcessoNaAmostra { nome: "OneDrive.exe".into(), cpu: if ms == 8_500 { 0.25 } else { 0.01 } }];
+                a.processos = vec![ProcessoNaAmostra {
+                    nome: "OneDrive.exe".into(),
+                    cpu: if ms == 8_500 { 0.25 } else { 0.01 },
+                }];
                 a
             })
             .collect();
         let inv = investigar(&q, &amostras, 0, None);
-        assert_eq!(inv.pistas[0].suspeito, Suspeito::SegundoPlano { processo: "OneDrive.exe".into() });
+        assert_eq!(
+            inv.pistas[0].suspeito,
+            Suspeito::SegundoPlano {
+                processo: "OneDrive.exe".into()
+            }
+        );
     }
 
     #[test]
@@ -254,7 +298,12 @@ mod testes {
     fn disco_sempre_lento_nao_e_salto() {
         // Um HD que vive a 30 ms não "saltou" na hora da travada.
         let q = quadros_com_travadas(&[5_000.0]);
-        let amostras: Vec<Amostra> = (0..=40).map(|i| Amostra { disco_latencia_ms: Some(30.0), ..base(i * 500) }).collect();
+        let amostras: Vec<Amostra> = (0..=40)
+            .map(|i| Amostra {
+                disco_latencia_ms: Some(30.0),
+                ..base(i * 500)
+            })
+            .collect();
         let inv = investigar(&q, &amostras, 0, None);
         assert!(!inv.pistas.iter().any(|p| p.suspeito == Suspeito::Disco));
     }

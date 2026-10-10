@@ -6,14 +6,26 @@ use serde::Serialize;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "tipo")]
 pub enum Teto {
-    LimiteGlobalNvidia { fps: u32 },
+    LimiteGlobalNvidia {
+        fps: u32,
+    },
     VsyncForcadoNvidia,
     Rtss,
-    LimiteNoJogo { jogo: String, fps: u32, arquivo: String },
-    VsyncNoJogo { jogo: String, arquivo: String },
+    LimiteNoJogo {
+        jogo: String,
+        fps: u32,
+        arquivo: String,
+    },
+    VsyncNoJogo {
+        jogo: String,
+        arquivo: String,
+    },
     /// Padrão de fábrica (60 FPS) ou abaixo do monitor. Visto aqui: Roblox a 59,5 FPS com CPU e placa a ~35% num
     /// monitor de 180 Hz.
-    RobloxLimitado { fps: Option<u32>, arquivo: String },
+    RobloxLimitado {
+        fps: Option<u32>,
+        arquivo: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -32,7 +44,11 @@ pub fn ler_unreal(texto: &str) -> (Option<u32>, bool) {
         if let Some((k, v)) = t.split_once('=') {
             let (k, v) = (k.trim(), v.trim());
             if k.eq_ignore_ascii_case("FrameRateLimit") {
-                limite = v.parse::<f64>().ok().filter(|x| x.is_finite() && *x >= 0.0).map(|x| x.round() as u32);
+                limite = v
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite() && *x >= 0.0)
+                    .map(|x| x.round() as u32);
             } else if k.eq_ignore_ascii_case("bUseVSync") {
                 vsync = v.eq_ignore_ascii_case("true");
             }
@@ -69,11 +85,16 @@ pub fn procurar() -> Relatorio {
     let mut tetos = Vec::new();
     let mut lacunas = Vec::new();
 
-    if matches!(super::nvdriver::estado(), super::nvdriver::Nvapi::Disponivel) {
+    if matches!(
+        super::nvdriver::estado(),
+        super::nvdriver::Nvapi::Disponivel
+    ) {
         match super::nvdriver::tetos_no_perfil_global() {
             Ok(t) => {
                 if prende(t.limite_global_fps, monitor_hz) {
-                    tetos.push(Teto::LimiteGlobalNvidia { fps: t.limite_global_fps });
+                    tetos.push(Teto::LimiteGlobalNvidia {
+                        fps: t.limite_global_fps,
+                    });
                 }
                 if t.vsync_forcado {
                     tetos.push(Teto::VsyncForcadoNvidia);
@@ -89,35 +110,60 @@ pub fn procurar() -> Relatorio {
 
     for j in super::jogos::varrer().jogos {
         let Some(exe) = j.executavel else { continue };
-        let Some(arquivo) = super::unreal::config_do_jogo(&exe) else { continue };
-        let Ok(texto) = std::fs::read_to_string(&arquivo) else { continue };
+        let Some(arquivo) = super::unreal::config_do_jogo(&exe) else {
+            continue;
+        };
+        let Ok(texto) = std::fs::read_to_string(&arquivo) else {
+            continue;
+        };
         let (limite, vsync) = ler_unreal(&texto);
         let arquivo = arquivo.to_string_lossy().to_string();
         if let Some(fps) = limite.filter(|l| prende(*l, monitor_hz)) {
-            tetos.push(Teto::LimiteNoJogo { jogo: j.nome.clone(), fps, arquivo: arquivo.clone() });
+            tetos.push(Teto::LimiteNoJogo {
+                jogo: j.nome.clone(),
+                fps,
+                arquivo: arquivo.clone(),
+            });
         }
         if vsync {
-            tetos.push(Teto::VsyncNoJogo { jogo: j.nome, arquivo });
+            tetos.push(Teto::VsyncNoJogo {
+                jogo: j.nome,
+                arquivo,
+            });
         }
     }
 
     // A do Studio fica de fora: não é o jogo.
-    if let Ok(pasta) = std::env::var("LOCALAPPDATA").map(|l| std::path::PathBuf::from(l).join("Roblox")) {
+    if let Ok(pasta) =
+        std::env::var("LOCALAPPDATA").map(|l| std::path::PathBuf::from(l).join("Roblox"))
+    {
         if let Ok(entradas) = std::fs::read_dir(&pasta) {
             for e in entradas.flatten() {
                 let nome = e.file_name().to_string_lossy().to_lowercase();
-                if !nome.starts_with("globalbasicsettings_") || nome.contains("studio") || !nome.ends_with(".xml") {
+                if !nome.starts_with("globalbasicsettings_")
+                    || nome.contains("studio")
+                    || !nome.ends_with(".xml")
+                {
                     continue;
                 }
-                let Ok(xml) = std::fs::read_to_string(e.path()) else { continue };
+                let Ok(xml) = std::fs::read_to_string(e.path()) else {
+                    continue;
+                };
                 if let Some(fps) = ler_roblox(&xml).and_then(|c| roblox_prende(c, monitor_hz)) {
-                    tetos.push(Teto::RobloxLimitado { fps, arquivo: e.path().to_string_lossy().to_string() });
+                    tetos.push(Teto::RobloxLimitado {
+                        fps,
+                        arquivo: e.path().to_string_lossy().to_string(),
+                    });
                 }
             }
         }
     }
 
-    Relatorio { monitor_hz, tetos, lacunas }
+    Relatorio {
+        monitor_hz,
+        tetos,
+        lacunas,
+    }
 }
 
 #[cfg(test)]
@@ -126,8 +172,14 @@ mod testes {
 
     #[test]
     fn le_o_limite_do_unreal() {
-        assert_eq!(ler_unreal("[x]\nFrameRateLimit=60.000000\nbUseVSync=False\n"), (Some(60), false));
-        assert_eq!(ler_unreal("FrameRateLimit=0.000000\r\nbUseVSync=True\r\n"), (Some(0), true));
+        assert_eq!(
+            ler_unreal("[x]\nFrameRateLimit=60.000000\nbUseVSync=False\n"),
+            (Some(60), false)
+        );
+        assert_eq!(
+            ler_unreal("FrameRateLimit=0.000000\r\nbUseVSync=True\r\n"),
+            (Some(0), true)
+        );
         assert_eq!(ler_unreal("nada aqui"), (None, false));
     }
 
@@ -136,7 +188,11 @@ mod testes {
         let xml = r#"<Item><int name="FramerateCap">-1</int><token name="SavedQualityLevel">0</token></Item>"#;
         assert_eq!(ler_roblox(xml), Some(-1));
         assert_eq!(roblox_prende(-1, Some(180)), Some(None));
-        assert_eq!(roblox_prende(-1, Some(60)), None, "monitor de 60 Hz: o padrão não prende");
+        assert_eq!(
+            roblox_prende(-1, Some(60)),
+            None,
+            "monitor de 60 Hz: o padrão não prende"
+        );
         assert_eq!(roblox_prende(144, Some(144)), None);
         assert_eq!(roblox_prende(120, Some(165)), Some(Some(120)));
         assert_eq!(ler_roblox("<nada/>"), None);
@@ -146,7 +202,10 @@ mod testes {
     fn so_e_teto_abaixo_do_monitor() {
         assert!(prende(60, Some(144)));
         assert!(!prende(144, Some(144)));
-        assert!(!prende(143, Some(144)), "143 num de 144 é o limite recomendado para VRR, não teto");
+        assert!(
+            !prende(143, Some(144)),
+            "143 num de 144 é o limite recomendado para VRR, não teto"
+        );
         assert!(!prende(0, Some(144)));
         assert!(prende(120, None));
     }
@@ -155,7 +214,10 @@ mod testes {
     fn vsync_que_prende() {
         use crate::modules::windows::nvdriver::vsync_prende;
         assert!(vsync_prende(0x4781_4940));
-        assert!(!vsync_prende(0x6092_5292), "controlado pelo aplicativo não prende");
+        assert!(
+            !vsync_prende(0x6092_5292),
+            "controlado pelo aplicativo não prende"
+        );
         assert!(!vsync_prende(0x0841_6747), "desligado não prende");
     }
 

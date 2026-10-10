@@ -91,8 +91,13 @@ fn t_95(graus: usize) -> f64 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Diferenca {
     /// NÃO é "não houve diferença": é não ter medido o suficiente.
-    SemRepeticoes { falta: String },
-    Indistinguivel { delta: f64, sobreposicao: f64 },
+    SemRepeticoes {
+        falta: String,
+    },
+    Indistinguivel {
+        delta: f64,
+        sobreposicao: f64,
+    },
     Real {
         delta: f64,
         pct: Option<f64>,

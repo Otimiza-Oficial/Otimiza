@@ -31,7 +31,8 @@ pub fn e_da_microsoft(caminho: &str) -> bool {
 /// `Get-ScheduledTask` devolve propriedades em inglês em qualquer idioma. `Err` quando o Agendador não
 /// responde: lista vazia diria "nenhuma tarefa de terceiros" com o serviço parado (imagens "lite" do Windows).
 pub fn listar() -> Result<Vec<ScheduledTask>, String> {
-    let script = "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-ScheduledTask -ErrorAction Stop | \
+    let script =
+        "ConvertTo-Json -Compress -Depth 3 -InputObject @(Get-ScheduledTask -ErrorAction Stop | \
                   Select-Object TaskName,TaskPath,Author,@{n='State';e={$_.State.ToString()}})";
 
     let brutas: Vec<RawTask> =
@@ -78,7 +79,11 @@ pub fn definir_estado(path: &str, name: &str, ligar: bool) -> Result<ChangeRecor
         ));
     }
 
-    let comando = if ligar { "Enable-ScheduledTask" } else { "Disable-ScheduledTask" };
+    let comando = if ligar {
+        "Enable-ScheduledTask"
+    } else {
+        "Disable-ScheduledTask"
+    };
     let script = format!(
         "{} -TaskPath '{}' -TaskName '{}' -ErrorAction Stop | Out-Null",
         comando,

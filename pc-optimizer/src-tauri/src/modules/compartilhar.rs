@@ -35,8 +35,16 @@ fn lado(r: &Resumo) -> Option<String> {
     let m = r.margem?;
     // Arredondada para CIMA: mostrar margem menor que a medida é afirmar precisão que não existe. Abaixo de 1 FPS,
     // uma casa (zero casas viraria "± 0").
-    let margem = if m < 1.0 { (m * 10.0).ceil() / 10.0 } else { m.ceil() };
-    Some(format!("{} ± {}", br(r.media, 0), br(margem, if m < 1.0 { 1 } else { 0 })))
+    let margem = if m < 1.0 {
+        (m * 10.0).ceil() / 10.0
+    } else {
+        m.ceil()
+    };
+    Some(format!(
+        "{} ± {}",
+        br(r.media, 0),
+        br(margem, if m < 1.0 { 1 } else { 0 })
+    ))
 }
 
 fn nome_do_jogo(exe: &str) -> String {
@@ -46,20 +54,35 @@ fn nome_do_jogo(exe: &str) -> String {
     } else if e.contains("gta5") {
         "GTA V".into()
     } else {
-        exe.trim_end_matches(".exe").trim_end_matches(".EXE").to_string()
+        exe.trim_end_matches(".exe")
+            .trim_end_matches(".EXE")
+            .to_string()
     }
 }
 
 /// **Pura.** `hardware`: processador e placa, quando lidos. `data`: dd/mm/aaaa da prova.
-pub fn texto(prova: Option<&Resultado>, hardware: (Option<&str>, Option<&str>), data: &str) -> Result<String, Recusa> {
+pub fn texto(
+    prova: Option<&Resultado>,
+    hardware: (Option<&str>, Option<&str>),
+    data: &str,
+) -> Result<String, Recusa> {
     let p = prova.ok_or(Recusa::SemProva)?;
     if p.desfecho == Desfecho::SemComparacaoJusta {
         return Err(Recusa::ProvaSemComparacaoJusta);
     }
-    let (sem, com) = (p.fps_sem.as_ref().ok_or(Recusa::SemMargem)?, p.fps_com.as_ref().ok_or(Recusa::SemMargem)?);
-    let fps = format!("{} → {}", lado(sem).ok_or(Recusa::SemMargem)?, lado(com).ok_or(Recusa::SemMargem)?);
+    let (sem, com) = (
+        p.fps_sem.as_ref().ok_or(Recusa::SemMargem)?,
+        p.fps_com.as_ref().ok_or(Recusa::SemMargem)?,
+    );
+    let fps = format!(
+        "{} → {}",
+        lado(sem).ok_or(Recusa::SemMargem)?,
+        lado(com).ok_or(Recusa::SemMargem)?
+    );
     let pct = match &p.diferenca_fps {
-        Some(Diferenca::Real { pct: Some(x), .. }) => format!(" ({}{}%)", if *x >= 0.0 { "+" } else { "" }, br(*x, 1)),
+        Some(Diferenca::Real { pct: Some(x), .. }) => {
+            format!(" ({}{}%)", if *x >= 0.0 { "+" } else { "" }, br(*x, 1))
+        }
         _ => String::new(),
     };
     let low = match (&p.low_sem, &p.low_com) {
@@ -85,7 +108,11 @@ pub fn texto(prova: Option<&Resultado>, hardware: (Option<&str>, Option<&str>), 
         Desfecho::Indistinguivel => "a diferença ficou dentro da margem de erro: não dá para dizer que mudou.",
         Desfecho::SemComparacaoJusta => unreachable!("recusado acima"),
     };
-    let lado_a = if p.contra_o_equilibrado { "Equilibrado do Windows" } else { "plano de energia de antes" };
+    let lado_a = if p.contra_o_equilibrado {
+        "Equilibrado do Windows"
+    } else {
+        "plano de energia de antes"
+    };
     let rodape = match hardware {
         (Some(c), Some(g)) => format!("PC: {} · {} · {}", c.trim(), g.trim(), data),
         (Some(x), None) | (None, Some(x)) => format!("PC: {} · {}", x.trim(), data),
@@ -109,7 +136,14 @@ mod tests {
     use super::*;
 
     fn resumo(media: f64, margem: Option<f64>) -> Resumo {
-        Resumo { id: "fps".into(), n: 4, media, mediana: media, desvio: Some(1.0), margem }
+        Resumo {
+            id: "fps".into(),
+            n: 4,
+            media,
+            mediana: media,
+            desvio: Some(1.0),
+            margem,
+        }
     }
 
     fn prova(desfecho: Desfecho, margem: Option<f64>) -> Resultado {
@@ -122,7 +156,11 @@ mod tests {
             fps_com: Some(resumo(152.0, margem)),
             low_sem: Some(resumo(70.0, margem)),
             low_com: Some(resumo(76.0, margem)),
-            diferenca_fps: Some(Diferenca::Real { delta: 12.0, pct: Some(8.57), folga: 4.0 }),
+            diferenca_fps: Some(Diferenca::Real {
+                delta: 12.0,
+                pct: Some(8.57),
+                folga: 4.0,
+            }),
             diferenca_low: None,
             desfecho,
             leitura: String::new(),
@@ -134,16 +172,27 @@ mod tests {
 
     #[test]
     fn prova_valida_sai_com_a_margem_e_o_ganho() {
-        let t = texto(Some(&prova(Desfecho::Ganhou, Some(3.0))), (Some("Ryzen 5 5600"), Some("RTX 3060")), "26/09/2026").unwrap();
+        let t = texto(
+            Some(&prova(Desfecho::Ganhou, Some(3.0))),
+            (Some("Ryzen 5 5600"), Some("RTX 3060")),
+            "26/09/2026",
+        )
+        .unwrap();
         assert!(t.contains("140 ± 3 → 152 ± 3 (+8,6%)"), "{t}");
         assert!(t.contains("1% piores quadros: 70 ± 3 → 76 ± 3"), "{t}");
-        assert!(t.contains("FiveM") && t.contains("Ryzen 5 5600 · RTX 3060"), "{t}");
+        assert!(
+            t.contains("FiveM") && t.contains("Ryzen 5 5600 · RTX 3060"),
+            "{t}"
+        );
     }
 
     #[test]
     fn sem_diferenca_nao_vira_ganho() {
         let mut p = prova(Desfecho::Indistinguivel, Some(3.0));
-        p.diferenca_fps = Some(Diferenca::Indistinguivel { delta: 1.0, sobreposicao: 5.0 });
+        p.diferenca_fps = Some(Diferenca::Indistinguivel {
+            delta: 1.0,
+            sobreposicao: 5.0,
+        });
         let t = texto(Some(&p), (None, None), "26/09/2026").unwrap();
         assert!(t.contains("não dá para dizer que mudou"), "{t}");
         assert!(!t.contains("ganho"), "{t}");
@@ -152,14 +201,32 @@ mod tests {
     #[test]
     fn prova_injusta_sem_margem_ou_ausente_e_recusada() {
         assert_eq!(texto(None, (None, None), ""), Err(Recusa::SemProva));
-        assert_eq!(texto(Some(&prova(Desfecho::SemComparacaoJusta, Some(3.0))), (None, None), ""), Err(Recusa::ProvaSemComparacaoJusta));
-        assert_eq!(texto(Some(&prova(Desfecho::Ganhou, None)), (None, None), ""), Err(Recusa::SemMargem));
+        assert_eq!(
+            texto(
+                Some(&prova(Desfecho::SemComparacaoJusta, Some(3.0))),
+                (None, None),
+                ""
+            ),
+            Err(Recusa::ProvaSemComparacaoJusta)
+        );
+        assert_eq!(
+            texto(Some(&prova(Desfecho::Ganhou, None)), (None, None), ""),
+            Err(Recusa::SemMargem)
+        );
     }
 
     #[test]
     fn piora_tambem_se_compartilha_como_piora() {
-        let t = texto(Some(&prova(Desfecho::Piorou, Some(3.0))), (None, None), "26/09/2026").unwrap();
-        assert!(t.contains("piorou este jogo neste PC e foi desfeito"), "{t}");
+        let t = texto(
+            Some(&prova(Desfecho::Piorou, Some(3.0))),
+            (None, None),
+            "26/09/2026",
+        )
+        .unwrap();
+        assert!(
+            t.contains("piorou este jogo neste PC e foi desfeito"),
+            "{t}"
+        );
     }
 
     #[test]
@@ -167,16 +234,29 @@ mod tests {
         let mut p = prova(Desfecho::Piorou, Some(3.0));
         p.falha_ao_desfazer = Some("acesso negado".into());
         let t = texto(Some(&p), (None, None), "26/09/2026").unwrap();
-        assert!(t.contains("ainda está ligado") && !t.contains("foi desfeito"), "{t}");
+        assert!(
+            t.contains("ainda está ligado") && !t.contains("foi desfeito"),
+            "{t}"
+        );
     }
 
     #[test]
     fn ganho_so_no_1_pct_nao_vira_ganho_de_fps() {
         let mut p = prova(Desfecho::Ganhou, Some(3.0));
-        p.diferenca_fps = Some(Diferenca::Indistinguivel { delta: -1.0, sobreposicao: 5.0 });
-        p.diferenca_low = Some(Diferenca::Real { delta: 6.0, pct: Some(8.0), folga: 1.0 });
+        p.diferenca_fps = Some(Diferenca::Indistinguivel {
+            delta: -1.0,
+            sobreposicao: 5.0,
+        });
+        p.diferenca_low = Some(Diferenca::Real {
+            delta: 6.0,
+            pct: Some(8.0),
+            folga: 1.0,
+        });
         let t = texto(Some(&p), (None, None), "26/09/2026").unwrap();
-        assert!(t.contains("ganho no 1% piores") && t.contains("FPS médio ficou dentro da margem"), "{t}");
+        assert!(
+            t.contains("ganho no 1% piores") && t.contains("FPS médio ficou dentro da margem"),
+            "{t}"
+        );
     }
 
     #[test]
@@ -191,6 +271,10 @@ mod tests {
     #[ignore = "laboratório: lê a prova guardada desta máquina"]
     fn compartilhar_real() {
         let p = crate::modules::provaalternada::guardada();
-        println!("{}", texto(p.as_ref(), (Some("processador"), Some("placa")), "data").unwrap_or_else(|r| r.frase().to_string()));
+        println!(
+            "{}",
+            texto(p.as_ref(), (Some("processador"), Some("placa")), "data")
+                .unwrap_or_else(|r| r.frase().to_string())
+        );
     }
 }

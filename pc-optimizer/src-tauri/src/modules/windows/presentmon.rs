@@ -38,7 +38,9 @@ pub struct Quadro {
 }
 
 fn numero(campo: Option<&&str>) -> Option<f64> {
-    campo.and_then(|c| c.trim().parse::<f64>().ok()).filter(|v| v.is_finite())
+    campo
+        .and_then(|c| c.trim().parse::<f64>().ok())
+        .filter(|v| v.is_finite())
 }
 
 /// Lê o CSV `--v2_metrics`. Colunas pelo nome, nunca pela posição. Sem as colunas essenciais, `Err` (versão diferente
@@ -89,8 +91,13 @@ pub fn ler_csv(texto: &str) -> Result<Vec<Quadro>, String> {
             cadeia: campos[c_cadeia].trim().to_string(),
             tipo,
             modo: campos[c_modo].trim().to_string(),
-            runtime: c_runtime.and_then(|c| campos.get(c)).map(|v| v.trim().to_string()).unwrap_or_default(),
-            inicio_qpc: c_qpc.and_then(|c| campos.get(c)).and_then(|v| v.trim().parse::<i64>().ok()),
+            runtime: c_runtime
+                .and_then(|c| campos.get(c))
+                .map(|v| v.trim().to_string())
+                .unwrap_or_default(),
+            inicio_qpc: c_qpc
+                .and_then(|c| campos.get(c))
+                .and_then(|v| v.trim().parse::<i64>().ok()),
             intervalo_ms: numero(campos.get(c_intervalo)).filter(|v| *v > 0.0),
             cpu_ocupada_ms: c_cpu.and_then(|c| numero(campos.get(c))),
             gpu_ocupada_ms: c_gpu.and_then(|c| numero(campos.get(c))),
@@ -223,7 +230,11 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         .ok_or("nenhum quadro capturado: o jogo estava minimizado, pausado ou fechado")?;
     let da_cadeia: Vec<&Quadro> = quadros.iter().filter(|q| q.cadeia == cadeia).collect();
 
-    let do_jogo: Vec<&Quadro> = da_cadeia.iter().copied().filter(|q| q.tipo == TipoDeQuadro::Jogo).collect();
+    let do_jogo: Vec<&Quadro> = da_cadeia
+        .iter()
+        .copied()
+        .filter(|q| q.tipo == TipoDeQuadro::Jogo)
+        .collect();
     let mut intervalos: Vec<f64> = do_jogo.iter().filter_map(|q| q.intervalo_ms).collect();
     if intervalos.len() < 20 {
         return Err(format!(
@@ -238,9 +249,17 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
 
     let quadro_medio = media(&intervalos).unwrap_or(0.0);
     let mediana = percentil(&intervalos, 50.0);
-    let desvio = (intervalos.iter().map(|v| (v - quadro_medio).powi(2)).sum::<f64>() / intervalos.len() as f64).sqrt();
+    let desvio = (intervalos
+        .iter()
+        .map(|v| (v - quadro_medio).powi(2))
+        .sum::<f64>()
+        / intervalos.len() as f64)
+        .sqrt();
     let limite_de_engasgo = (mediana * 2.0).max(50.0);
-    let engasgos = intervalos.iter().filter(|v| **v > limite_de_engasgo).count();
+    let engasgos = intervalos
+        .iter()
+        .filter(|v| **v > limite_de_engasgo)
+        .count();
     let trancos_qpc: Vec<i64> = do_jogo
         .iter()
         .filter(|q| q.intervalo_ms.is_some_and(|v| v > limite_de_engasgo))
@@ -248,7 +267,10 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         .collect();
 
     let exibidos = da_cadeia.iter().filter(|q| q.na_tela_ms.is_some()).count();
-    let gerados: Vec<&&Quadro> = da_cadeia.iter().filter(|q| matches!(q.tipo, TipoDeQuadro::Gerado(_))).collect();
+    let gerados: Vec<&&Quadro> = da_cadeia
+        .iter()
+        .filter(|q| matches!(q.tipo, TipoDeQuadro::Gerado(_)))
+        .collect();
     let mut geradores: Vec<String> = gerados
         .iter()
         .filter_map(|q| match &q.tipo {
@@ -263,15 +285,33 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
     for q in &do_jogo {
         *modos.entry(q.modo.as_str()).or_default() += 1;
     }
-    let modo = modos.into_iter().max_by_key(|(_, n)| *n).map(|(m, _)| m.to_string()).unwrap_or_default();
+    let modo = modos
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(m, _)| m.to_string())
+        .unwrap_or_default();
     let mut runtimes: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for q in &do_jogo {
         *runtimes.entry(q.runtime.as_str()).or_default() += 1;
     }
-    let api = runtimes.into_iter().max_by_key(|(_, n)| *n).map(|(r, _)| classificar_runtime(r)).unwrap_or_default();
+    let api = runtimes
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(r, _)| classificar_runtime(r))
+        .unwrap_or_default();
 
-    let cpu = media(&do_jogo.iter().filter_map(|q| q.cpu_ocupada_ms).collect::<Vec<_>>());
-    let gpu = media(&do_jogo.iter().filter_map(|q| q.gpu_ocupada_ms).collect::<Vec<_>>());
+    let cpu = media(
+        &do_jogo
+            .iter()
+            .filter_map(|q| q.cpu_ocupada_ms)
+            .collect::<Vec<_>>(),
+    );
+    let gpu = media(
+        &do_jogo
+            .iter()
+            .filter_map(|q| q.gpu_ocupada_ms)
+            .collect::<Vec<_>>(),
+    );
     let gargalo = match (cpu, gpu) {
         (_, Some(g)) if g >= 0.9 * quadro_medio => GargaloProvavel::Gpu,
         (Some(c), _) if c >= 0.9 * quadro_medio => GargaloProvavel::Cpu,
@@ -302,7 +342,12 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
         cpu_ocupada_media_ms: cpu,
         gpu_ocupada_media_ms: gpu,
         gargalo,
-        ate_a_tela_media_ms: media(&do_jogo.iter().filter_map(|q| q.ate_a_tela_ms).collect::<Vec<_>>()),
+        ate_a_tela_media_ms: media(
+            &do_jogo
+                .iter()
+                .filter_map(|q| q.ate_a_tela_ms)
+                .collect::<Vec<_>>(),
+        ),
         geradores,
         trancos_qpc,
     })
@@ -311,7 +356,10 @@ pub fn resumir(quadros: &[Quadro]) -> Result<Resumo, String> {
 /// Ao lado do Otimiza no instalado; na pasta `binaries` em desenvolvimento e nos testes.
 #[cfg(target_os = "windows")]
 pub fn executavel() -> Option<std::path::PathBuf> {
-    let junto = std::env::current_exe().ok()?.parent()?.join("PresentMon.exe");
+    let junto = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join("PresentMon.exe");
     if junto.is_file() {
         return Some(junto);
     }
@@ -324,7 +372,11 @@ pub fn executavel() -> Option<std::path::PathBuf> {
 /// No formato da medição antiga, para quem já consome `frames::MedicaoCrua` (medição automática, prova, portão):
 /// os mesmos cálculos sobre os quadros DO JOGO que o PresentMon separou. O resumo novo vem junto.
 #[cfg(target_os = "windows")]
-pub fn medir_como_antes(pid: u32, nome: &str, segundos: u32) -> Result<(super::frames::MedicaoCrua, Resumo), String> {
+pub fn medir_como_antes(
+    pid: u32,
+    nome: &str,
+    segundos: u32,
+) -> Result<(super::frames::MedicaoCrua, Resumo), String> {
     let quadros = capturar(pid, segundos)?;
     let resumo = resumir(&quadros)?;
     let cadeia = cadeia_principal(&quadros).unwrap_or_default();
@@ -333,7 +385,14 @@ pub fn medir_como_antes(pid: u32, nome: &str, segundos: u32) -> Result<(super::f
         .filter(|q| q.cadeia == cadeia && q.tipo == TipoDeQuadro::Jogo)
         .filter_map(|q| q.intervalo_ms)
         .collect();
-    let crua = super::frames::montar(nome, pid, intervalos.len() as u64, resumo.segundos, intervalos, resumo.trancos_qpc.clone());
+    let crua = super::frames::montar(
+        nome,
+        pid,
+        intervalos.len() as u64,
+        resumo.segundos,
+        intervalos,
+        resumo.trancos_qpc.clone(),
+    );
     Ok((crua, resumo))
 }
 
@@ -342,7 +401,10 @@ fn cadeia_principal(quadros: &[Quadro]) -> Option<String> {
     for q in quadros {
         *contagem.entry(q.cadeia.as_str()).or_default() += 1;
     }
-    contagem.into_iter().max_by_key(|(_, n)| *n).map(|(c, _)| c.to_string())
+    contagem
+        .into_iter()
+        .max_by_key(|(_, n)| *n)
+        .map(|(c, _)| c.to_string())
 }
 
 /// Os quadros crus, antes do resumo.
@@ -357,8 +419,10 @@ pub fn capturar(pid: u32, segundos: u32) -> Result<Vec<Quadro>, String> {
     let saida = super::shell::run_com_prazo(
         &exe.to_string_lossy(),
         &[
-            "--process_id", &pid,
-            "--timed", &tempo,
+            "--process_id",
+            &pid,
+            "--timed",
+            &tempo,
             "--terminate_after_timed",
             "--output_stdout",
             "--no_console_stats",
@@ -366,20 +430,27 @@ pub fn capturar(pid: u32, segundos: u32) -> Result<Vec<Quadro>, String> {
             "--track_frame_type",
             "--qpc_time",
             // Nome próprio: não derruba uma captura do PresentMon que a pessoa tenha aberta.
-            "--session_name", "Otimiza",
+            "--session_name",
+            "Otimiza",
             "--stop_existing_session",
         ],
         std::time::Duration::from_secs(segundos as u64 + 20),
     )?;
     if !saida.success && saida.stdout.trim().is_empty() {
-        return Err(format!("o PresentMon não conseguiu medir: {}", saida.stderr.trim()));
+        return Err(format!(
+            "o PresentMon não conseguiu medir: {}",
+            saida.stderr.trim()
+        ));
     }
     ler_csv(&saida.stdout)
 }
 
 /// Quadro do jogo pelo `FrameType` (gerado e repetido não contam). Pura; a mesma regra de `ler_csv`.
 pub fn e_quadro_do_jogo(tipo: Option<&str>) -> bool {
-    matches!(tipo.map(str::trim), None | Some("Application") | Some("NA") | Some("NotSet") | Some("Unspecified") | Some(""))
+    matches!(
+        tipo.map(str::trim),
+        None | Some("Application") | Some("NA") | Some("NotSet") | Some("Unspecified") | Some("")
+    )
 }
 
 /// Pura: o instante (QPC) de uma linha do CSV, quando for quadro do jogo. `colunas`: (CPUStartQPC, FrameType).
@@ -398,25 +469,34 @@ pub fn instante_do_quadro(linha: &str, colunas: (usize, Option<usize>)) -> Optio
 pub struct Vivo {
     filho: std::process::Child,
     quadros: std::sync::mpsc::Receiver<i64>,
+    /// Cada uso tem a sua: com o mesmo nome, `--stop_existing_session` de um derrubaria o outro.
+    sessao: &'static str,
 }
 
 #[cfg(target_os = "windows")]
 impl Vivo {
     pub fn iniciar(pid: u32) -> Result<Vivo, String> {
+        Self::iniciar_na_sessao(pid, "OtimizaGerador")
+    }
+
+    /// O mesmo, com nome de sessão próprio (o FPS por cima do jogo mede junto com o gerador).
+    pub fn iniciar_na_sessao(pid: u32, sessao: &'static str) -> Result<Vivo, String> {
         use std::io::BufRead;
         use std::os::windows::process::CommandExt;
 
         let exe = executavel().ok_or("o PresentMon não está junto do Otimiza")?;
         let mut filho = std::process::Command::new(exe)
             .args([
-                "--process_id", &pid.to_string(),
+                "--process_id",
+                &pid.to_string(),
                 "--output_stdout",
                 "--no_console_stats",
                 "--v2_metrics",
                 "--track_frame_type",
                 "--qpc_time",
                 "--terminate_on_proc_exit",
-                "--session_name", "OtimizaGerador",
+                "--session_name",
+                sessao,
                 "--stop_existing_session",
             ])
             .stdout(std::process::Stdio::piped())
@@ -431,9 +511,13 @@ impl Vivo {
         let (envia, recebe) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let mut linhas = std::io::BufReader::new(saida).lines();
-            let Some(Ok(cabecalho)) = linhas.next() else { return };
+            let Some(Ok(cabecalho)) = linhas.next() else {
+                return;
+            };
             let nomes: Vec<&str> = cabecalho.split(',').map(str::trim).collect();
-            let Some(qpc) = nomes.iter().position(|n| *n == "CPUStartQPC") else { return };
+            let Some(qpc) = nomes.iter().position(|n| *n == "CPUStartQPC") else {
+                return;
+            };
             let tipo = nomes.iter().position(|n| *n == "FrameType");
             for linha in linhas.map_while(Result::ok) {
                 if let Some(t) = instante_do_quadro(&linha, (qpc, tipo)) {
@@ -443,7 +527,11 @@ impl Vivo {
                 }
             }
         });
-        Ok(Vivo { filho, quadros: recebe })
+        Ok(Vivo {
+            filho,
+            quadros: recebe,
+            sessao,
+        })
     }
 
     /// Os instantes que chegaram desde a última chamada. `None`: o PresentMon parou (a contagem não vale mais).
@@ -468,7 +556,11 @@ impl Drop for Vivo {
         if let Some(exe) = executavel() {
             let _ = super::shell::run_com_prazo(
                 &exe.to_string_lossy(),
-                &["--session_name", "OtimizaGerador", "--terminate_existing_session"],
+                &[
+                    "--session_name",
+                    self.sessao,
+                    "--terminate_existing_session",
+                ],
                 std::time::Duration::from_secs(10),
             );
         }
@@ -482,7 +574,14 @@ mod tests {
     /// Cabeçalho real do PresentMon 2.6.0 com `--track_frame_type --qpc_time` (captura do dwm.exe nesta máquina).
     const CABECALHO: &str = "Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,AllowsTearing,PresentMode,FrameType,CPUStartQPC,FrameTime,CPUBusy,CPUWait,GPULatency,GPUTime,GPUBusy,GPUWait,DisplayLatency,DisplayedTime,AnimationError,AnimationTime,MsFlipDelay,AllInputToPhotonLatency,ClickToPhotonLatency";
 
-    fn linha(tipo: &str, inicio: f64, intervalo: f64, cpu: f64, gpu: f64, na_tela: Option<f64>) -> String {
+    fn linha(
+        tipo: &str,
+        inicio: f64,
+        intervalo: f64,
+        cpu: f64,
+        gpu: f64,
+        na_tela: Option<f64>,
+    ) -> String {
         let qpc = (inicio * 10_000.0) as i64;
         format!(
             "jogo.exe,100,0xAAA,DXGI,0,512,1,Hardware: Independent Flip,{tipo},{qpc},{intervalo:.4},{cpu:.4},0.1,0.5,{gpu:.4},{gpu:.4},0.1,12.0,{},NA,{inicio:.4},NA,NA,NA",
@@ -491,7 +590,10 @@ mod tests {
     }
 
     fn csv(linhas: &[String]) -> String {
-        std::iter::once(CABECALHO.to_string()).chain(linhas.iter().cloned()).collect::<Vec<_>>().join("\n")
+        std::iter::once(CABECALHO.to_string())
+            .chain(linhas.iter().cloned())
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     #[test]
@@ -512,12 +614,27 @@ mod tests {
 
     #[test]
     fn o_modo_de_apresentacao_vira_tipo_fixo() {
-        assert_eq!(classificar_modo("Hardware: Independent Flip"), Apresentacao::Direta);
-        assert_eq!(classificar_modo("Hardware: Legacy Flip"), Apresentacao::Direta);
-        assert_eq!(classificar_modo("Hardware Composed: Independent Flip"), Apresentacao::Direta);
+        assert_eq!(
+            classificar_modo("Hardware: Independent Flip"),
+            Apresentacao::Direta
+        );
+        assert_eq!(
+            classificar_modo("Hardware: Legacy Flip"),
+            Apresentacao::Direta
+        );
+        assert_eq!(
+            classificar_modo("Hardware Composed: Independent Flip"),
+            Apresentacao::Direta
+        );
         assert_eq!(classificar_modo("Composed: Flip"), Apresentacao::Composta);
-        assert_eq!(classificar_modo("Composed: Copy with GPU GDI"), Apresentacao::Copiada);
-        assert_eq!(classificar_modo("Composed: Copy with CPU GDI"), Apresentacao::Copiada);
+        assert_eq!(
+            classificar_modo("Composed: Copy with GPU GDI"),
+            Apresentacao::Copiada
+        );
+        assert_eq!(
+            classificar_modo("Composed: Copy with CPU GDI"),
+            Apresentacao::Copiada
+        );
         assert_eq!(classificar_modo("Other"), Apresentacao::Desconhecida);
     }
 
@@ -541,14 +658,20 @@ mod tests {
             total += lote.len();
             // Quanto o quadro mais velho do lote demorou para chegar: é o que `ATRASO_DA_CONTAGEM` precisa cobrir.
             let (agora, freq) = unsafe {
-                use windows::Win32::System::Performance::{QueryPerformanceCounter, QueryPerformanceFrequency};
+                use windows::Win32::System::Performance::{
+                    QueryPerformanceCounter, QueryPerformanceFrequency,
+                };
                 let (mut c, mut f) = (0i64, 0i64);
                 let _ = QueryPerformanceCounter(&mut c);
                 let _ = QueryPerformanceFrequency(&mut f);
                 (c, f.max(1))
             };
             let atraso = lote.iter().min().map(|q| (agora - q) as f64 / freq as f64);
-            println!("{s} s: +{} quadros (total {total}), atraso do mais velho {:?} s", lote.len(), atraso);
+            println!(
+                "{s} s: +{} quadros (total {total}), atraso do mais velho {:?} s",
+                lote.len(),
+                atraso
+            );
         }
         drop(v);
         assert!(total > 0, "nenhum quadro do dwm em 6 s");
@@ -562,7 +685,14 @@ mod tests {
         assert_eq!(classificar_runtime(""), ApiGrafica::Desconhecida);
         let mut linhas = vec![CABECALHO.to_string()];
         for i in 0..120 {
-            linhas.push(linha("Application", i as f64 * 16.6667, 16.6667, 6.0, 15.5, Some(8.33)));
+            linhas.push(linha(
+                "Application",
+                i as f64 * 16.6667,
+                16.6667,
+                6.0,
+                15.5,
+                Some(8.33),
+            ));
         }
         let r = resumir(&ler_csv(&linhas.join("\n")).unwrap()).unwrap();
         assert_eq!(r.api, ApiGrafica::DirectX);
@@ -590,8 +720,16 @@ mod tests {
         let r = resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap();
         assert_eq!(r.quadros_do_jogo, 600);
         assert_eq!(r.quadros_gerados, 600);
-        assert!((r.fps_do_jogo_medio - 60.0).abs() < 0.5, "FPS do jogo: {}", r.fps_do_jogo_medio);
-        assert!((r.fps_exibido - 120.0).abs() < 1.5, "exibido: {}", r.fps_exibido);
+        assert!(
+            (r.fps_do_jogo_medio - 60.0).abs() < 0.5,
+            "FPS do jogo: {}",
+            r.fps_do_jogo_medio
+        );
+        assert!(
+            (r.fps_exibido - 120.0).abs() < 1.5,
+            "exibido: {}",
+            r.fps_exibido
+        );
         assert_eq!(r.geradores, vec!["AMD AFMF".to_string()]);
         assert_eq!(r.gargalo, GargaloProvavel::Gpu);
     }
@@ -599,22 +737,44 @@ mod tests {
     #[test]
     fn o_1pct_pior_e_os_engasgos_saem_do_ritmo() {
         // 1000 quadros a 10 ms e 20 travadas de 80 ms (2% do total: o percentil 99 cai numa travada).
-        let mut linhas: Vec<String> = (0..1000).map(|i| linha("Application", i as f64 * 10.0, 10.0, 9.5, 4.0, Some(10.0))).collect();
+        let mut linhas: Vec<String> = (0..1000)
+            .map(|i| linha("Application", i as f64 * 10.0, 10.0, 9.5, 4.0, Some(10.0)))
+            .collect();
         for k in 0..20 {
-            linhas.push(linha("Application", 10_000.0 + k as f64 * 80.0, 80.0, 79.0, 4.0, Some(80.0)));
+            linhas.push(linha(
+                "Application",
+                10_000.0 + k as f64 * 80.0,
+                80.0,
+                79.0,
+                4.0,
+                Some(80.0),
+            ));
         }
         let r = resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap();
         assert!((r.fps_do_jogo_mediana - 100.0).abs() < 0.01);
-        assert!((r.low_1pct.unwrap() - 12.5).abs() < 0.01, "1% low: {:?}", r.low_1pct);
-        assert_eq!(r.low_01pct, None, "1020 quadros não bastam para o 0,1% pior (regra: dez mil)");
+        assert!(
+            (r.low_1pct.unwrap() - 12.5).abs() < 0.01,
+            "1% low: {:?}",
+            r.low_1pct
+        );
+        assert_eq!(
+            r.low_01pct, None,
+            "1020 quadros não bastam para o 0,1% pior (regra: dez mil)"
+        );
         assert!(r.engasgos_por_minuto > 0.0);
-        assert_eq!(r.trancos_qpc.len(), 20, "cada travada leva o seu instante para o cruzamento com o disco");
+        assert_eq!(
+            r.trancos_qpc.len(),
+            20,
+            "cada travada leva o seu instante para o cruzamento com o disco"
+        );
         assert_eq!(r.gargalo, GargaloProvavel::Cpu);
     }
 
     #[test]
     fn quadro_que_nao_chegou_a_tela_conta_como_descartado() {
-        let mut linhas: Vec<String> = (0..50).map(|i| linha("Application", i as f64 * 5.0, 5.0, 1.0, 1.0, Some(16.7))).collect();
+        let mut linhas: Vec<String> = (0..50)
+            .map(|i| linha("Application", i as f64 * 5.0, 5.0, 1.0, 1.0, Some(16.7)))
+            .collect();
         linhas.extend((50..60).map(|i| linha("Application", i as f64 * 5.0, 5.0, 1.0, 1.0, None)));
         let r = resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap();
         assert_eq!(r.quadros_descartados, 10);
@@ -624,15 +784,22 @@ mod tests {
 
     #[test]
     fn a_cadeia_do_jogo_ganha_da_sobreposicao() {
-        let mut linhas: Vec<String> = (0..200).map(|i| linha("Application", i as f64 * 8.0, 8.0, 3.0, 7.5, Some(8.0))).collect();
-        linhas.extend((0..30).map(|i| linha("Application", i as f64 * 33.0, 33.0, 1.0, 1.0, Some(33.0)).replace("0xAAA", "0xBBB")));
+        let mut linhas: Vec<String> = (0..200)
+            .map(|i| linha("Application", i as f64 * 8.0, 8.0, 3.0, 7.5, Some(8.0)))
+            .collect();
+        linhas.extend((0..30).map(|i| {
+            linha("Application", i as f64 * 33.0, 33.0, 1.0, 1.0, Some(33.0))
+                .replace("0xAAA", "0xBBB")
+        }));
         let r = resumir(&ler_csv(&csv(&linhas)).unwrap()).unwrap();
         assert_eq!(r.quadros_do_jogo, 200);
     }
 
     #[test]
     fn poucos_quadros_e_recusa_e_nao_numero() {
-        let linhas: Vec<String> = (0..5).map(|i| linha("Application", i as f64 * 10.0, 10.0, 1.0, 1.0, Some(10.0))).collect();
+        let linhas: Vec<String> = (0..5)
+            .map(|i| linha("Application", i as f64 * 10.0, 10.0, 1.0, 1.0, Some(10.0)))
+            .collect();
         assert!(resumir(&ler_csv(&csv(&linhas)).unwrap()).is_err());
     }
 
@@ -641,10 +808,16 @@ mod tests {
     #[test]
     #[ignore = "precisa de administrador e lê esta máquina"]
     fn mede_o_compositor_do_windows() {
-        let pid = super::super::frames::encontrar_processo("dwm").expect("o dwm sempre roda").0;
+        let pid = super::super::frames::encontrar_processo("dwm")
+            .expect("o dwm sempre roda")
+            .0;
         // A área de trabalho parada apresenta pouco: aqui vale provar que o executável roda e a leitura casa.
         let q = capturar(pid, 3).expect("o PresentMon roda e a saída é lida");
-        println!("{} quadros do dwm em 3 s; primeiro: {:?}", q.len(), q.first());
+        println!(
+            "{} quadros do dwm em 3 s; primeiro: {:?}",
+            q.len(),
+            q.first()
+        );
         assert!(!q.is_empty());
     }
 }
@@ -668,7 +841,10 @@ mod laboratorio {
     #[ignore = "laboratório: precisa de um jogo aberto"]
     fn dois_medidores_na_mesma_partida() {
         let prefixo = std::env::var("OTIMIZA_LAB_JOGO").unwrap_or_else(|_| "FiveM_".into());
-        let rodadas: usize = std::env::var("OTIMIZA_LAB_RODADAS").ok().and_then(|v| v.parse().ok()).unwrap_or(8);
+        let rodadas: usize = std::env::var("OTIMIZA_LAB_RODADAS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8);
         let (pid, nome) = frames::encontrar_processo(&prefixo).expect("abra o jogo antes");
         println!("{nome} (pid {pid}), {rodadas} rodadas de 20 s");
 
@@ -688,7 +864,11 @@ mod laboratorio {
                     fps_diff.push(a.fps - p.fps);
                     low_diff.push(a.low_1pct - p.low_1pct);
                 }
-                (a, p) => println!("rodada {i} perdida: antigo {:?} · PresentMon {:?}", a.err(), p.err()),
+                (a, p) => println!(
+                    "rodada {i} perdida: antigo {:?} · PresentMon {:?}",
+                    a.err(),
+                    p.err()
+                ),
             }
         }
 
@@ -701,6 +881,9 @@ mod laboratorio {
                 None => println!("{qual}: rodadas insuficientes"),
             }
         }
-        assert!(!fps_diff.is_empty(), "nenhuma rodada teve os dois medidores");
+        assert!(
+            !fps_diff.is_empty(),
+            "nenhuma rodada teve os dois medidores"
+        );
     }
 }

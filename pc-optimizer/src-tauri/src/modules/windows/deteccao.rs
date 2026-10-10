@@ -18,15 +18,24 @@ const SEGUNDOS_MINIMOS: u64 = 20;
 /// Desenham em 3D e ocupam a tela inteira sem ser jogo: ligar o modo jogo porque abriram o OBS mexeria na
 /// energia pelo motivo errado.
 pub const NAO_E_JOGO: &[(&str, &str)] = &[
-    ("obs64.exe", "grava a tela: usa o motor 3D em tela cheia igual a um jogo"),
+    (
+        "obs64.exe",
+        "grava a tela: usa o motor 3D em tela cheia igual a um jogo",
+    ),
     ("obs32.exe", "grava a tela"),
     ("streamlabs obs.exe", "grava a tela"),
     ("xsplit.core.exe", "grava a tela"),
-    ("adobe premiere pro.exe", "a prévia em tela cheia usa o motor 3D"),
+    (
+        "adobe premiere pro.exe",
+        "a prévia em tela cheia usa o motor 3D",
+    ),
     ("afterfx.exe", "a prévia em tela cheia usa o motor 3D"),
     ("resolve.exe", "a prévia em tela cheia usa o motor 3D"),
     ("vegas180.exe", "a prévia em tela cheia usa o motor 3D"),
-    ("blender.exe", "a janela de trabalho em 3D ocupa a tela inteira"),
+    (
+        "blender.exe",
+        "a janela de trabalho em 3D ocupa a tela inteira",
+    ),
     ("unity.exe", "editor de jogo não é jogo"),
     ("unityhub.exe", "editor de jogo não é jogo"),
     ("unrealeditor.exe", "editor de jogo não é jogo"),
@@ -315,7 +324,9 @@ mod tests {
         Observacao {
             pid: 4242,
             executavel: "palworld.exe".to_string(),
-            caminho: Some(PathBuf::from(r"D:\SteamLibrary\steamapps\common\Palworld\Palworld.exe")),
+            caminho: Some(PathBuf::from(
+                r"D:\SteamLibrary\steamapps\common\Palworld\Palworld.exe",
+            )),
             cobertura: Some(1.0),
             uso_3d: Some(78.0),
             segundos_aberto: 600,
@@ -340,7 +351,9 @@ mod tests {
 
         assert_eq!(d.nome, "Counter-Strike 2");
         assert!(d.conhecido);
-        assert!(d.sinais.contains(&Sinal::NomeConhecido("Counter-Strike 2".to_string())));
+        assert!(d
+            .sinais
+            .contains(&Sinal::NomeConhecido("Counter-Strike 2".to_string())));
     }
 
     #[test]
@@ -364,7 +377,12 @@ mod tests {
     #[test]
     fn programa_que_desenha_em_3d_mas_nao_e_jogo_e_recusado_pelo_nome() {
         // O OBS fecha todos os sinais medidos (3D pesado, projetor em tela cheia): só a lista resolve.
-        for exe in ["obs64.exe", "blender.exe", "resolve.exe", "unrealeditor.exe"] {
+        for exe in [
+            "obs64.exe",
+            "blender.exe",
+            "resolve.exe",
+            "unrealeditor.exe",
+        ] {
             let mut obs = jogo_tipico();
             obs.executavel = exe.to_string();
 
@@ -401,7 +419,10 @@ mod tests {
     fn a_decisao_mostra_o_que_a_sustentou() {
         let d = decidir(&jogo_tipico()).expect("é jogo");
 
-        assert!(d.sinais.iter().any(|s| matches!(s, Sinal::JanelaCobrindoMonitor(_))));
+        assert!(d
+            .sinais
+            .iter()
+            .any(|s| matches!(s, Sinal::JanelaCobrindoMonitor(_))));
         assert!(d.sinais.iter().any(|s| matches!(s, Sinal::MotorGrafico(_))));
         assert!(d.sinais.iter().any(|s| matches!(s, Sinal::AbertoHa(_))));
     }
@@ -422,14 +443,21 @@ mod tests {
     fn observa_esta_maquina() {
         match janela_em_primeiro_plano() {
             Some((pid, cobertura)) => {
-                println!("  janela em primeiro plano: pid {} cobrindo {:.0}% do monitor", pid, cobertura * 100.0);
+                println!(
+                    "  janela em primeiro plano: pid {} cobrindo {:.0}% do monitor",
+                    pid,
+                    cobertura * 100.0
+                );
                 assert!((0.0..=1.0).contains(&cobertura));
             }
             None => println!("  nenhuma janela em primeiro plano"),
         }
 
         match procurar() {
-            Some(j) => println!("  jogo detectado: {} ({}) — {:?}", j.nome, j.executavel, j.sinais),
+            Some(j) => println!(
+                "  jogo detectado: {} ({}) — {:?}",
+                j.nome, j.executavel, j.sinais
+            ),
             None => println!("  nenhum jogo rodando agora"),
         }
     }

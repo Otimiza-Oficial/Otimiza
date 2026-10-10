@@ -5,8 +5,8 @@ pub mod fluidez;
 pub mod janela;
 #[cfg(windows)]
 pub mod pdh;
-pub mod sensores;
 pub mod platform;
+pub mod sensores;
 pub mod telemetria;
 pub mod travadas;
 

@@ -19,17 +19,50 @@ pub struct Essencial {
 /// Experience"; `TokenBroker` segue o Manual do Windows 10 e 11. Fora de propósito: o que a imagem "lite" desliga
 /// sem impedir programa de abrir, e o que o Windows não deixa desligar.
 pub const ESSENCIAIS: &[Essencial] = &[
-    Essencial { servico: "PlugPlay", padrao: "demand" },
-    Essencial { servico: "AppXSvc", padrao: "demand" },
-    Essencial { servico: "ClipSVC", padrao: "demand" },
-    Essencial { servico: "LicenseManager", padrao: "demand" },
-    Essencial { servico: "StateRepository", padrao: "demand" },
-    Essencial { servico: "AppReadiness", padrao: "demand" },
-    Essencial { servico: "KeyIso", padrao: "demand" },
-    Essencial { servico: "CryptSvc", padrao: "auto" },
-    Essencial { servico: "SamSs", padrao: "auto" },
-    Essencial { servico: "TimeBrokerSvc", padrao: "demand" },
-    Essencial { servico: "TokenBroker", padrao: "demand" },
+    Essencial {
+        servico: "PlugPlay",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "AppXSvc",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "ClipSVC",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "LicenseManager",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "StateRepository",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "AppReadiness",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "KeyIso",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "CryptSvc",
+        padrao: "auto",
+    },
+    Essencial {
+        servico: "SamSs",
+        padrao: "auto",
+    },
+    Essencial {
+        servico: "TimeBrokerSvc",
+        padrao: "demand",
+    },
+    Essencial {
+        servico: "TokenBroker",
+        padrao: "demand",
+    },
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -152,7 +185,9 @@ mod tests {
             for action in spec.actions {
                 if let Action::DisableService { name } = action {
                     assert!(
-                        !ESSENCIAIS.iter().any(|e| e.servico.eq_ignore_ascii_case(name)),
+                        !ESSENCIAIS
+                            .iter()
+                            .any(|e| e.servico.eq_ignore_ascii_case(name)),
                         "`{}` desliga o essencial `{}`",
                         spec.id,
                         name
@@ -169,7 +204,10 @@ mod tests {
         for servico in &checagem.servicos {
             println!("{:<18} {:?}", servico.servico, servico.inicio);
         }
-        println!("fabricante: {:?} · modelo: {:?}", checagem.fabricante, checagem.modelo);
+        println!(
+            "fabricante: {:?} · modelo: {:?}",
+            checagem.fabricante, checagem.modelo
+        );
 
         assert_eq!(checagem.servicos.len(), ESSENCIAIS.len());
         assert_eq!(

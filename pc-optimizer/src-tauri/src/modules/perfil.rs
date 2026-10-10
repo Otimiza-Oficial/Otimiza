@@ -30,12 +30,23 @@ pub struct Entrada {
 #[serde(tag = "tipo")]
 pub enum Limitacao {
     /// O monitor está abaixo do que aceita: é FPS visível de graça, o Otimiza ajusta (Sistema → Monitor).
-    MonitorAbaixoDoMaximo { atual: u32, maximo: u32 },
+    MonitorAbaixoDoMaximo {
+        atual: u32,
+        maximo: u32,
+    },
     /// Monitor de até 75 Hz: FPS acima disso não aparece na tela.
-    MonitorLimitaATela { hz: u32 },
-    PoucaMemoria { gb: f64 },
-    PoucosNucleos { nucleos: usize },
-    PoucaMemoriaDeVideo { gb: f64 },
+    MonitorLimitaATela {
+        hz: u32,
+    },
+    PoucaMemoria {
+        gb: f64,
+    },
+    PoucosNucleos {
+        nucleos: usize,
+    },
+    PoucaMemoriaDeVideo {
+        gb: f64,
+    },
     /// Só vídeo integrado (menos de 1 GB dedicado): a placa usa a memória do sistema.
     VideoIntegrado,
     SistemaEmHd,
@@ -66,16 +77,22 @@ pub fn montar(e: &Entrada) -> Perfil {
 
     match (e.monitor_hz, e.monitor_hz_maximo) {
         // O mesmo limiar da sugestão de taxa do monitor (`display`): 60 → 75 não vale o aviso.
-        (Some(atual), Some(maximo)) if maximo >= atual + crate::modules::windows::display::DIFERENCA_QUE_IMPORTA => {
+        (Some(atual), Some(maximo))
+            if maximo >= atual + crate::modules::windows::display::DIFERENCA_QUE_IMPORTA =>
+        {
             limitacoes.push(Limitacao::MonitorAbaixoDoMaximo { atual, maximo })
         }
-        (Some(hz), _) if hz <= MONITOR_QUE_LIMITA_HZ => limitacoes.push(Limitacao::MonitorLimitaATela { hz }),
+        (Some(hz), _) if hz <= MONITOR_QUE_LIMITA_HZ => {
+            limitacoes.push(Limitacao::MonitorLimitaATela { hz })
+        }
         (Some(_), _) => {}
         (None, _) => nao_lido.push("monitor".to_string()),
     }
     match e.ram_gb {
         // Arredonda para o que o cliente conhece: 7,9 GB utilizáveis são "8 GB".
-        Some(gb) if gb.round() < MEMORIA_MINIMA_GB => limitacoes.push(Limitacao::PoucaMemoria { gb: gb.round() }),
+        Some(gb) if gb.round() < MEMORIA_MINIMA_GB => {
+            limitacoes.push(Limitacao::PoucaMemoria { gb: gb.round() })
+        }
         Some(_) => {}
         None => nao_lido.push("memória".to_string()),
     }
@@ -87,7 +104,9 @@ pub fn montar(e: &Entrada) -> Perfil {
     match e.vram_gb {
         Some(gb) if gb < VRAM_DE_PLACA_DEDICADA_GB => limitacoes.push(Limitacao::VideoIntegrado),
         // Arredondada: 3,9 GB utilizáveis de uma placa de 4 GB são "4 GB".
-        Some(gb) if gb.round() < VRAM_MINIMA_GB => limitacoes.push(Limitacao::PoucaMemoriaDeVideo { gb: gb.round() }),
+        Some(gb) if gb.round() < VRAM_MINIMA_GB => {
+            limitacoes.push(Limitacao::PoucaMemoriaDeVideo { gb: gb.round() })
+        }
         Some(_) => {}
         None => nao_lido.push("memória de vídeo".to_string()),
     }
@@ -101,7 +120,10 @@ pub fn montar(e: &Entrada) -> Perfil {
         Some(false) => {}
         None => nao_lido.push("tipo de computador".to_string()),
     }
-    Perfil { limitacoes, nao_lido }
+    Perfil {
+        limitacoes,
+        nao_lido,
+    }
 }
 
 /// Lê a máquina: memória, núcleos e disco (já lidos pelo Otimiza), memória de vídeo, bateria e o monitor principal.
@@ -109,7 +131,9 @@ pub fn montar(e: &Entrada) -> Perfil {
 pub fn ler() -> Entrada {
     use crate::modules::windows::{display, hardware};
     let h = hardware::profile();
-    let principal = display::monitores_sem_nomes().into_iter().find(|m| m.principal);
+    let principal = display::monitores_sem_nomes()
+        .into_iter()
+        .find(|m| m.principal);
     Entrada {
         ram_gb: (h.total_ram_gb > 0.0).then_some(h.total_ram_gb),
         nucleos_logicos: (h.logical_cores > 0).then_some(h.logical_cores),
@@ -121,7 +145,10 @@ pub fn ler() -> Entrada {
         },
         notebook: tem_tampa(),
         monitor_hz: principal.as_ref().map(|m| m.hz_atual).filter(|hz| *hz > 1),
-        monitor_hz_maximo: principal.as_ref().map(|m| m.hz_maximo()).filter(|hz| *hz > 1),
+        monitor_hz_maximo: principal
+            .as_ref()
+            .map(|m| m.hz_maximo())
+            .filter(|hz| *hz > 1),
     }
 }
 
@@ -155,25 +182,50 @@ mod tests {
 
     #[test]
     fn pc_bom_nao_tem_limitacao_nem_leitura_faltando() {
-        assert_eq!(montar(&pc_bom()), Perfil { limitacoes: vec![], nao_lido: vec![] });
+        assert_eq!(
+            montar(&pc_bom()),
+            Perfil {
+                limitacoes: vec![],
+                nao_lido: vec![]
+            }
+        );
     }
 
     #[test]
     fn monitor_abaixo_do_que_aceita_vem_primeiro() {
-        let p = montar(&Entrada { monitor_hz: Some(60), monitor_hz_maximo: Some(144), ram_gb: Some(7.9), ..pc_bom() });
-        assert_eq!(p.limitacoes[0], Limitacao::MonitorAbaixoDoMaximo { atual: 60, maximo: 144 });
+        let p = montar(&Entrada {
+            monitor_hz: Some(60),
+            monitor_hz_maximo: Some(144),
+            ram_gb: Some(7.9),
+            ..pc_bom()
+        });
+        assert_eq!(
+            p.limitacoes[0],
+            Limitacao::MonitorAbaixoDoMaximo {
+                atual: 60,
+                maximo: 144
+            }
+        );
         assert_eq!(p.limitacoes[1], Limitacao::PoucaMemoria { gb: 8.0 });
     }
 
     #[test]
     fn diferenca_pequena_de_taxa_nao_vira_aviso() {
-        let p = montar(&Entrada { monitor_hz: Some(165), monitor_hz_maximo: Some(170), ..pc_bom() });
+        let p = montar(&Entrada {
+            monitor_hz: Some(165),
+            monitor_hz_maximo: Some(170),
+            ..pc_bom()
+        });
         assert!(p.limitacoes.is_empty());
     }
 
     #[test]
     fn monitor_de_60_no_maximo_limita_a_tela() {
-        let p = montar(&Entrada { monitor_hz: Some(60), monitor_hz_maximo: Some(60), ..pc_bom() });
+        let p = montar(&Entrada {
+            monitor_hz: Some(60),
+            monitor_hz_maximo: Some(60),
+            ..pc_bom()
+        });
         assert_eq!(p.limitacoes, vec![Limitacao::MonitorLimitaATela { hz: 60 }]);
     }
 
@@ -194,10 +246,19 @@ mod tests {
 
     #[test]
     fn video_integrado_nao_vira_numero_de_memoria() {
-        let p = montar(&Entrada { vram_gb: Some(0.5), ..pc_bom() });
+        let p = montar(&Entrada {
+            vram_gb: Some(0.5),
+            ..pc_bom()
+        });
         assert_eq!(p.limitacoes, vec![Limitacao::VideoIntegrado]);
-        let quase_4 = montar(&Entrada { vram_gb: Some(3.9), ..pc_bom() });
-        assert!(quase_4.limitacoes.is_empty(), "3,9 GB utilizáveis de uma placa de 4 GB não é pouca memória");
+        let quase_4 = montar(&Entrada {
+            vram_gb: Some(3.9),
+            ..pc_bom()
+        });
+        assert!(
+            quase_4.limitacoes.is_empty(),
+            "3,9 GB utilizáveis de uma placa de 4 GB não é pouca memória"
+        );
     }
 
     #[test]

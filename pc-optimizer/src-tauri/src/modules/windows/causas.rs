@@ -100,11 +100,16 @@ pub fn suspeito_das_faixas(faixas: &super::pcie::Faixas) -> Option<Suspeito> {
     })
 }
 
-pub fn suspeito_da_memoria(canal_unico: bool, abaixo_do_nominal: Option<(u32, u32)>) -> Option<Suspeito> {
+pub fn suspeito_da_memoria(
+    canal_unico: bool,
+    abaixo_do_nominal: Option<(u32, u32)>,
+) -> Option<Suspeito> {
     let mut partes = Vec::new();
 
     if let Some((atual, nominal)) = abaixo_do_nominal {
-        partes.push(format!("a memória roda a {atual} MHz e os pentes são de {nominal} MHz"));
+        partes.push(format!(
+            "a memória roda a {atual} MHz e os pentes são de {nominal} MHz"
+        ));
     }
 
     if canal_unico {
@@ -300,7 +305,10 @@ pub fn investigar(regressao: Option<(String, f64)>) -> Investigacao {
         suspeitos.push(s);
     }
 
-    Investigacao { suspeitos: ordenar(suspeitos), lacunas }
+    Investigacao {
+        suspeitos: ordenar(suspeitos),
+        lacunas,
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -426,7 +434,10 @@ mod tests {
         let s = suspeito_do_limite(Some("limite de temperatura")).unwrap();
 
         assert!(s.como_confirmar.contains("NUNCA desliga proteção térmica"));
-        assert!(!s.como_confirmar.to_lowercase().contains("desative o limite"));
+        assert!(!s
+            .como_confirmar
+            .to_lowercase()
+            .contains("desative o limite"));
     }
 
     #[test]
@@ -434,7 +445,10 @@ mod tests {
         let frase = nada_encontrado(0);
 
         assert!(frase.contains("não quer dizer que o FPS esteja bom"));
-        assert!(frase.contains("memória de vídeo"), "precisa dizer o que foi procurado");
+        assert!(
+            frase.contains("memória de vídeo"),
+            "precisa dizer o que foi procurado"
+        );
     }
 
     #[test]
@@ -448,8 +462,11 @@ mod tests {
         let todos = vec![
             suspeito_da_vram(Some(2.0)).unwrap(),
             suspeito_do_disco(&["GTA V".to_string()]).unwrap(),
-            suspeito_das_faixas(&super::super::pcie::Faixas::Estreito { atual: 4, maxima: 16 })
-                .unwrap(),
+            suspeito_das_faixas(&super::super::pcie::Faixas::Estreito {
+                atual: 4,
+                maxima: 16,
+            })
+            .unwrap(),
             suspeito_da_memoria(true, None).unwrap(),
             suspeito_do_limite(Some("limite de energia")).unwrap(),
             suspeito_do_proprio_otimiza(Some(("x.exe", -30.0))).unwrap(),
@@ -462,16 +479,24 @@ mod tests {
                 "`{}` não diz como confirmar",
                 s.id
             );
-            assert!(!s.porque.trim().is_empty(), "`{}` não diz por que custa quadro", s.id);
+            assert!(
+                !s.porque.trim().is_empty(),
+                "`{}` não diz por que custa quadro",
+                s.id
+            );
         }
     }
 
     #[test]
     fn faixas_completas_nao_viram_suspeito() {
-        assert!(suspeito_das_faixas(&super::super::pcie::Faixas::Completo { largura: 16 }).is_none());
-        assert!(suspeito_das_faixas(&super::super::pcie::Faixas::NaoDeuParaLer {
-            motivo: "sem driver".to_string()
-        })
-        .is_none());
+        assert!(
+            suspeito_das_faixas(&super::super::pcie::Faixas::Completo { largura: 16 }).is_none()
+        );
+        assert!(
+            suspeito_das_faixas(&super::super::pcie::Faixas::NaoDeuParaLer {
+                motivo: "sem driver".to_string()
+            })
+            .is_none()
+        );
     }
 }

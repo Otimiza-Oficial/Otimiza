@@ -77,7 +77,12 @@ pub fn ler_edid(b: &[u8]) -> Option<MonitorVrr> {
         }
     };
 
-    Some(MonitorVrr { nome, min_hz: faixa.map(|f| f.0), max_hz: faixa.map(|f| f.1), vrr })
+    Some(MonitorVrr {
+        nome,
+        min_hz: faixa.map(|f| f.0),
+        max_hz: faixa.map(|f| f.1),
+        vrr,
+    })
 }
 
 /// Percorre a coleção de blocos de dados do CTA procurando o bloco do fabricante (tag 3) com o OUI da AMD.
@@ -99,14 +104,21 @@ fn bloco_amd(ext: &[u8]) -> bool {
 /// Pura: o modelo no id de dispositivo do monitor ("MONITOR\AOCB401\{4d36e96e-...}\0003" → "AOCB401").
 pub fn modelo_do_id(id: &str) -> Option<String> {
     let mut partes = id.split('\\');
-    partes.next().filter(|p| p.eq_ignore_ascii_case("MONITOR"))?;
-    partes.next().filter(|m| !m.is_empty()).map(|m| m.to_uppercase())
+    partes
+        .next()
+        .filter(|p| p.eq_ignore_ascii_case("MONITOR"))?;
+    partes
+        .next()
+        .filter(|m| !m.is_empty())
+        .map(|m| m.to_uppercase())
 }
 
 /// Modelos dos monitores ligados à área de trabalho agora, pelo próprio Windows.
 #[cfg(target_os = "windows")]
 fn modelos_ligados() -> Vec<String> {
-    use windows_sys::Win32::Graphics::Gdi::{EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP};
+    use windows_sys::Win32::Graphics::Gdi::{
+        EnumDisplayDevicesW, DISPLAY_DEVICEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
+    };
 
     fn texto(bruto: &[u16]) -> String {
         let fim = bruto.iter().position(|c| *c == 0).unwrap_or(bruto.len());
@@ -148,7 +160,8 @@ pub fn monitores() -> Vec<MonitorVrr> {
     use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
     use winreg::RegKey;
 
-    let Ok(display) = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(r"SYSTEM\CurrentControlSet\Enum\DISPLAY", KEY_READ)
+    let Ok(display) = RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey_with_flags(r"SYSTEM\CurrentControlSet\Enum\DISPLAY", KEY_READ)
     else {
         return Vec::new();
     };
@@ -157,7 +170,9 @@ pub fn monitores() -> Vec<MonitorVrr> {
         .filter_map(|modelo| {
             let chave_modelo = display.open_subkey_with_flags(&modelo, KEY_READ).ok()?;
             chave_modelo.enum_keys().flatten().find_map(|instancia| {
-                let parametros = chave_modelo.open_subkey_with_flags(format!(r"{}\Device Parameters", instancia), KEY_READ).ok()?;
+                let parametros = chave_modelo
+                    .open_subkey_with_flags(format!(r"{}\Device Parameters", instancia), KEY_READ)
+                    .ok()?;
                 ler_edid(&parametros.get_raw_value("EDID").ok()?.bytes)
             })
         })
@@ -177,7 +192,12 @@ mod tests {
             b[78] = max;
         }
         b[90..95].copy_from_slice(&[0, 0, 0, 0xFC, 0]);
-        for (i, c) in nome.bytes().chain(std::iter::once(0x0A)).enumerate().take(13) {
+        for (i, c) in nome
+            .bytes()
+            .chain(std::iter::once(0x0A))
+            .enumerate()
+            .take(13)
+        {
             b[95 + i] = c;
         }
         if amd {
@@ -186,7 +206,17 @@ mod tests {
             ext[0] = 0x02;
             ext[1] = 0x03;
             // Bloco do fabricante: tag 3, tamanho 8, OUI da AMD e o resto da carga do FreeSync.
-            ext[4..13].copy_from_slice(&[(3 << 5) | 8, 0x1A, 0x00, 0x00, 0x01, 0x01, 48, 144, 0x00]);
+            ext[4..13].copy_from_slice(&[
+                (3 << 5) | 8,
+                0x1A,
+                0x00,
+                0x00,
+                0x01,
+                0x01,
+                48,
+                144,
+                0x00,
+            ]);
             ext[2] = 13;
         }
         b
@@ -202,18 +232,30 @@ mod tests {
 
     #[test]
     fn faixa_larga_sem_bloco_amd_e_provavel() {
-        assert_eq!(ler_edid(&edid(Some((48, 144)), "X", false)).unwrap().vrr, Vrr::Provavel);
+        assert_eq!(
+            ler_edid(&edid(Some((48, 144)), "X", false)).unwrap().vrr,
+            Vrr::Provavel
+        );
     }
 
     #[test]
     fn monitor_de_60_fixo_nao_anuncia() {
-        assert_eq!(ler_edid(&edid(Some((56, 76)), "Y", false)).unwrap().vrr, Vrr::NaoAnunciado);
-        assert_eq!(ler_edid(&edid(None, "Z", false)).unwrap().vrr, Vrr::NaoAnunciado);
+        assert_eq!(
+            ler_edid(&edid(Some((56, 76)), "Y", false)).unwrap().vrr,
+            Vrr::NaoAnunciado
+        );
+        assert_eq!(
+            ler_edid(&edid(None, "Z", false)).unwrap().vrr,
+            Vrr::NaoAnunciado
+        );
     }
 
     #[test]
     fn o_modelo_sai_do_id_do_monitor() {
-        assert_eq!(modelo_do_id(r"MONITOR\AOCB401\{4d36e96e-e325-11ce-bfc1-08002be10318}\0003").as_deref(), Some("AOCB401"));
+        assert_eq!(
+            modelo_do_id(r"MONITOR\AOCB401\{4d36e96e-e325-11ce-bfc1-08002be10318}\0003").as_deref(),
+            Some("AOCB401")
+        );
         assert_eq!(modelo_do_id(r"PCI\VEN_10DE"), None);
     }
 

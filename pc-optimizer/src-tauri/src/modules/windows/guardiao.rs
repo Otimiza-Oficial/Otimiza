@@ -64,7 +64,11 @@ pub(super) fn classificar(estados: &[ActionState]) -> Estado {
 
 /// **Pura.** Sem administrador, `inspect_action` devolve `Pending` para o que nem conseguiu ler (serve para a lista
 /// oferecer o item); para a vistoria isso é "não li", não "mudou".
-pub(super) fn leitura_da_vistoria(estado: ActionState, precisa_de_admin_para_ler: bool, elevado: bool) -> ActionState {
+pub(super) fn leitura_da_vistoria(
+    estado: ActionState,
+    precisa_de_admin_para_ler: bool,
+    elevado: bool,
+) -> ActionState {
     if precisa_de_admin_para_ler && !elevado {
         ActionState::Desconhecido
     } else {
@@ -75,13 +79,18 @@ pub(super) fn leitura_da_vistoria(estado: ActionState, precisa_de_admin_para_ler
 fn precisa_de_admin_para_ler(action: &Action) -> bool {
     matches!(
         action,
-        Action::ClearBootLimits | Action::ReservedStorage { .. } | Action::DisableHypervisor | Action::RemoveForcedPlatformClock
+        Action::ClearBootLimits
+            | Action::ReservedStorage { .. }
+            | Action::DisableHypervisor
+            | Action::RemoveForcedPlatformClock
     )
 }
 
 /// O plano OTIMIZA fica de fora: o próprio Otimiza o troca e ele tem vistoria própria.
 fn fora_por_regra(spec: &catalog::OptimizationSpec) -> bool {
-    spec.actions.iter().any(|a| matches!(a, Action::PlanoOtimiza))
+    spec.actions
+        .iter()
+        .any(|a| matches!(a, Action::PlanoOtimiza))
 }
 
 impl WindowsOptimizer {
@@ -96,7 +105,13 @@ impl WindowsOptimizer {
                     let estados: Vec<ActionState> = spec
                         .actions
                         .iter()
-                        .map(|a| leitura_da_vistoria(self.inspect_action(a), precisa_de_admin_para_ler(a), elevado))
+                        .map(|a| {
+                            leitura_da_vistoria(
+                                self.inspect_action(a),
+                                precisa_de_admin_para_ler(a),
+                                elevado,
+                            )
+                        })
                         .collect();
                     itens.push(Item {
                         id: spec.id.to_string(),
@@ -108,11 +123,23 @@ impl WindowsOptimizer {
                 _ => fora_da_vistoria.push(nome.clone()),
             }
         }
-        let mudaram: Vec<&str> = itens.iter().filter(|i| i.estado == Estado::MudouPorFora).map(|i| i.id.as_str()).collect();
+        let mudaram: Vec<&str> = itens
+            .iter()
+            .filter(|i| i.estado == Estado::MudouPorFora)
+            .map(|i| i.id.as_str())
+            .collect();
         if !mudaram.is_empty() {
-            crate::utils::Logger::warn(&format!("guardião: {} ajuste(s) não estão como o Otimiza deixou: {}", mudaram.len(), mudaram.join(", ")));
+            crate::utils::Logger::warn(&format!(
+                "guardião: {} ajuste(s) não estão como o Otimiza deixou: {}",
+                mudaram.len(),
+                mudaram.join(", ")
+            ));
         }
-        Vistoria { itens, fora_da_vistoria, com_politica_de_grupo: super::governanca().com_politica_de_grupo }
+        Vistoria {
+            itens,
+            fora_da_vistoria,
+            com_politica_de_grupo: super::governanca().com_politica_de_grupo,
+        }
     }
 
     /// Desfaz pelo histórico e aplica de novo pelo caminho normal: os dois gravam registro e diário. Se aplicar falhar
@@ -123,7 +150,10 @@ impl WindowsOptimizer {
             return Err(format!("`{}` não está aplicado; use Otimizar.", spec.name));
         }
         if catalog::retirado(id) {
-            return Err(format!("`{}` foi retirado do Otimiza por não mudar o jogo: desfaça em vez de refazer.", spec.name));
+            return Err(format!(
+                "`{}` foi retirado do Otimiza por não mudar o jogo: desfaça em vez de refazer.",
+                spec.name
+            ));
         }
         if fora_por_regra(spec) {
             return Err("O plano OTIMIZA tem conferência própria, na área Sistema.".to_string());
@@ -132,7 +162,10 @@ impl WindowsOptimizer {
             return Err("A prova do Otimizar está rodando. Espere ela terminar.".to_string());
         }
         if spec.requires_admin && !super::registry::is_elevated() {
-            return Err(format!("`{}` exige executar o programa como administrador.", spec.name));
+            return Err(format!(
+                "`{}` exige executar o programa como administrador.",
+                spec.name
+            ));
         }
         // Como a lista: a condição medida agora falsa esconde o item, e refazer o poria de volta sem motivo.
         if let catalog::Classe::Condicional(c) = catalog::classe(id) {
@@ -149,7 +182,10 @@ impl WindowsOptimizer {
         let refeito = self.apply(id, log)?;
         crate::utils::Logger::info(&format!("guardião: refazer `{}`: {}", id, refeito.success));
         if refeito.success {
-            Ok(OptimizationOutcome { message: format!("{} voltou a valer.", spec.name), ..refeito })
+            Ok(OptimizationOutcome {
+                message: format!("{} voltou a valer.", spec.name),
+                ..refeito
+            })
         } else {
             Ok(OptimizationOutcome {
                 message: format!(
@@ -169,7 +205,10 @@ mod tests {
 
     #[test]
     fn escrita_desfeita_vence_leitura_falha() {
-        assert_eq!(classificar(&[Satisfied, Desconhecido, Pending]), Estado::MudouPorFora);
+        assert_eq!(
+            classificar(&[Satisfied, Desconhecido, Pending]),
+            Estado::MudouPorFora
+        );
     }
 
     #[test]
@@ -181,14 +220,21 @@ mod tests {
     fn tudo_no_lugar_e_intacto_e_o_que_sumiu_nao_conta_contra() {
         assert_eq!(classificar(&[Satisfied, Satisfied]), Estado::Intacto);
         assert_eq!(classificar(&[Satisfied, NotApplicable]), Estado::Intacto);
-        assert_eq!(classificar(&[NotApplicable, NotApplicable]), Estado::NaoSeAplicaMais);
+        assert_eq!(
+            classificar(&[NotApplicable, NotApplicable]),
+            Estado::NaoSeAplicaMais
+        );
     }
 
     #[test]
     fn sem_administrador_o_que_nao_se_le_nao_vira_mudou() {
         assert_eq!(leitura_da_vistoria(Pending, true, false), Desconhecido);
         assert_eq!(leitura_da_vistoria(Pending, true, true), Pending);
-        assert_eq!(leitura_da_vistoria(Pending, false, false), Pending, "o que se lê sem admin continua valendo");
+        assert_eq!(
+            leitura_da_vistoria(Pending, false, false),
+            Pending,
+            "o que se lê sem admin continua valendo"
+        );
     }
 
     #[test]

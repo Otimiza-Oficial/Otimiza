@@ -266,7 +266,11 @@ mod tests {
         rotulos.sort();
         rotulos.dedup();
 
-        assert_eq!(rotulos.len(), antes, "dois deles dizem a mesma frase ao cliente");
+        assert_eq!(
+            rotulos.len(),
+            antes,
+            "dois deles dizem a mesma frase ao cliente"
+        );
 
         for o in todos {
             assert!(!o.rotulo().trim().is_empty(), "{o:?} sem rótulo");

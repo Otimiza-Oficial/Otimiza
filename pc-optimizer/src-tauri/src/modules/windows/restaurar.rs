@@ -65,7 +65,13 @@ pub enum Leitura {
 /// **Pura.** O que há para fazer. O motor só entra sem o plano OTIMIZA do botão no histórico: com ele, desfazer o
 /// plano pelo histórico já esquece o motor (`esquecer_o_plano`), e restaurar o motor antes refaria o OTIMIZA só
 /// para apagá-lo. Leitura ilegível ENTRA: a parte falha dizendo por quê, em vez de sumir como "nada a fazer".
-pub fn o_que_fazer(automaticos_ligados: bool, motor: Leitura, otimiza_no_historico: bool, nucleos: Leitura, historico: Leitura) -> Vec<Parte> {
+pub fn o_que_fazer(
+    automaticos_ligados: bool,
+    motor: Leitura,
+    otimiza_no_historico: bool,
+    nucleos: Leitura,
+    historico: Leitura,
+) -> Vec<Parte> {
     let mut partes = Vec::new();
     if automaticos_ligados {
         partes.push(Parte::Automaticos);
@@ -84,7 +90,10 @@ pub fn o_que_fazer(automaticos_ligados: bool, motor: Leitura, otimiza_no_histori
 
 /// **Pura.** Só "voltou" quando nenhuma parte falhou e nenhum item do histórico ficou.
 pub fn tudo_voltou(partes: &[ResultadoDaParte], itens: &[OptimizationOutcome]) -> bool {
-    partes.iter().all(|p| !matches!(p.desfecho, Desfecho::Falhou(_))) && itens.iter().all(|i| i.success)
+    partes
+        .iter()
+        .all(|p| !matches!(p.desfecho, Desfecho::Falhou(_)))
+        && itens.iter().all(|i| i.success)
 }
 
 /// Antes de mexer: com uma operação interrompida, o valor de antes dela está SÓ no diário (`transacao`), e desfazer
@@ -103,7 +112,10 @@ fn impedimento() -> Option<String> {
         Err(e) => return Some(format!("Não consegui ler o diário de mudanças pela metade ({}); nada foi desfeito.", e)),
     }
     if crate::modules::provaalternada::em_andamento() {
-        return Some("A prova do Otimizar está rodando. Espere ela terminar e desfaça tudo depois.".to_string());
+        return Some(
+            "A prova do Otimizar está rodando. Espere ela terminar e desfaça tudo depois."
+                .to_string(),
+        );
     }
     if super::investigacao::em_andamento() {
         return Some("O teste da travada está rodando. Espere ele terminar (ele devolve tudo) e desfaça depois.".to_string());
@@ -148,7 +160,11 @@ where
             Err(_) => Leitura::Ilegivel,
         },
         log.is_applied("plano_otimiza"),
-        if regras.is_empty() { Leitura::Nada } else { Leitura::Algo },
+        if regras.is_empty() {
+            Leitura::Nada
+        } else {
+            Leitura::Algo
+        },
         if historico_ilegivel.is_some() {
             Leitura::Ilegivel
         } else if log.applied().is_empty() {
@@ -162,9 +178,18 @@ where
     let mut partes = Vec::new();
     let mut itens = Vec::new();
     let mut on_step = on_step;
-    for parte in [Parte::Automaticos, Parte::MotorDeEnergia, Parte::NucleosPorJogo, Parte::Historico] {
+    for parte in [
+        Parte::Automaticos,
+        Parte::MotorDeEnergia,
+        Parte::NucleosPorJogo,
+        Parte::Historico,
+    ] {
         if !planejado.contains(&parte) {
-            partes.push(ResultadoDaParte { parte, desfecho: Desfecho::NadaAFazer, feito: Vec::new() });
+            partes.push(ResultadoDaParte {
+                parte,
+                desfecho: Desfecho::NadaAFazer,
+                feito: Vec::new(),
+            });
             continue;
         }
         let mut feito = Vec::new();
@@ -195,6 +220,18 @@ where
                     match motor::definir_dinamico(false) {
                         Ok(_) => feito.push("Modo dinâmico do motor de energia desligado.".to_string()),
                         Err(e) => falhas.push(format!("modo dinâmico: {}", e)),
+                    }
+                }
+                match crate::plataforma::fov_fivem::desfazer() {
+                    Ok(Some(frase)) => feito.push(frase),
+                    Ok(None) => {}
+                    Err(e) => falhas.push(format!("FOV do FiveM: {}", e)),
+                }
+                // Fora da lista de "o que está ligado" de propósito: desligar sem nada ligado não muda nada.
+                if crate::plataforma::energia_jogo::ler().ligado {
+                    match crate::plataforma::energia_jogo::definir(false) {
+                        Ok(_) => feito.push("Energia de jogo desligada; o processador voltou ao ajuste de antes.".to_string()),
+                        Err(e) => falhas.push(format!("energia de jogo: {}", e)),
                     }
                 }
             }
@@ -235,9 +272,17 @@ where
             }
             Parte::PlanoOtimiza => {}
         }
-        let desfecho = if falhas.is_empty() { Desfecho::Voltou } else { Desfecho::Falhou(falhas.join("; ")) };
+        let desfecho = if falhas.is_empty() {
+            Desfecho::Voltou
+        } else {
+            Desfecho::Falhou(falhas.join("; "))
+        };
         Logger::info(&format!("restaurar tudo: {:?} → {:?}", parte, desfecho));
-        partes.push(ResultadoDaParte { parte, desfecho, feito });
+        partes.push(ResultadoDaParte {
+            parte,
+            desfecho,
+            feito,
+        });
     }
 
     // O desfazer do plano só anota no log quando o Windows recusa apagar: aqui a sobra aparece.
@@ -248,11 +293,22 @@ where
         ),
         Err(e) => Desfecho::Falhou(format!("não consegui conferir se o plano OTIMIZA sobrou: {}", e)),
     };
-    Logger::info(&format!("restaurar tudo: conferência do plano OTIMIZA → {:?}", conferencia));
-    partes.push(ResultadoDaParte { parte: Parte::PlanoOtimiza, desfecho: conferencia, feito: Vec::new() });
+    Logger::info(&format!(
+        "restaurar tudo: conferência do plano OTIMIZA → {:?}",
+        conferencia
+    ));
+    partes.push(ResultadoDaParte {
+        parte: Parte::PlanoOtimiza,
+        desfecho: conferencia,
+        feito: Vec::new(),
+    });
 
     let tudo = tudo_voltou(&partes, &itens);
-    Ok(Relatorio { partes, itens, tudo_voltou: tudo })
+    Ok(Relatorio {
+        partes,
+        itens,
+        tudo_voltou: tudo,
+    })
 }
 
 /// O desinstalador chama `pc-optimizer.exe --restaurar-tudo --dados "<APPDATA de quem instalou>"`.
@@ -266,7 +322,9 @@ pub const ARQUIVO_DO_RESULTADO: &str = "restauracao-resultado.txt";
 pub enum Pedido {
     /// Abertura normal do programa.
     Nenhum,
-    Restaurar { dados: Option<std::path::PathBuf> },
+    Restaurar {
+        dados: Option<std::path::PathBuf>,
+    },
     Invalido(String),
 }
 
@@ -278,19 +336,27 @@ pub fn ler_argumentos(argumentos: &[String]) -> Pedido {
         [a, d, pasta] if a == ARGUMENTO && d == ARGUMENTO_DADOS => {
             let caminho = std::path::PathBuf::from(pasta);
             if caminho.is_absolute() {
-                Pedido::Restaurar { dados: Some(caminho) }
+                Pedido::Restaurar {
+                    dados: Some(caminho),
+                }
             } else {
                 Pedido::Invalido(format!("{} precisa de uma pasta absoluta", ARGUMENTO_DADOS))
             }
         }
-        [a, ..] if a == ARGUMENTO => Pedido::Invalido(format!("uso: {} [{} <pasta>]", ARGUMENTO, ARGUMENTO_DADOS)),
+        [a, ..] if a == ARGUMENTO => {
+            Pedido::Invalido(format!("uso: {} [{} <pasta>]", ARGUMENTO, ARGUMENTO_DADOS))
+        }
         _ => Pedido::Nenhum,
     }
 }
 
 /// **Pura.** A mesma pasta de dados, sem diferença de maiúscula nem de barra no fim (NTFS não diferencia).
 pub fn mesma_pasta(a: &std::path::Path, b: &std::path::Path) -> bool {
-    let normal = |p: &std::path::Path| p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase();
+    let normal = |p: &std::path::Path| {
+        p.to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_lowercase()
+    };
     normal(a) == normal(b)
 }
 
@@ -302,7 +368,10 @@ pub fn pela_linha_de_comando(dados: Option<std::path::PathBuf>) -> i32 {
     let codigo = restaurar_pela_linha_de_comando(&dados);
     // Só na pasta de dados de quem pediu, e só quando ela é a nossa (código 4 não escreve na pasta de outra conta).
     if let (Some(pasta), true) = (&dados, codigo != 4) {
-        let _ = std::fs::write(pasta.join("pc-optimizer").join(ARQUIVO_DO_RESULTADO), codigo.to_string());
+        let _ = std::fs::write(
+            pasta.join("pc-optimizer").join(ARQUIVO_DO_RESULTADO),
+            codigo.to_string(),
+        );
     }
     codigo
 }
@@ -339,7 +408,10 @@ fn restaurar_pela_linha_de_comando(dados: &Option<std::path::PathBuf>) -> i32 {
             return 5;
         }
     };
-    Logger::info(&format!("restaurar tudo pela desinstalação: tudo voltou = {}", r.tudo_voltou));
+    Logger::info(&format!(
+        "restaurar tudo pela desinstalação: tudo voltou = {}",
+        r.tudo_voltou
+    ));
     let feito: Vec<String> = r.partes.iter().flat_map(|p| p.feito.clone()).collect();
     let falhas: Vec<String> = r
         .partes
@@ -348,14 +420,26 @@ fn restaurar_pela_linha_de_comando(dados: &Option<std::path::PathBuf>) -> i32 {
             Desfecho::Falhou(m) => Some(m.clone()),
             _ => None,
         })
-        .chain(r.itens.iter().filter(|i| !i.success).map(|i| format!("{}: {}", i.name, i.message)))
+        .chain(
+            r.itens
+                .iter()
+                .filter(|i| !i.success)
+                .map(|i| format!("{}: {}", i.name, i.message)),
+        )
         .collect();
     let texto = if feito.is_empty() && falhas.is_empty() {
         "O Otimiza não tinha nenhuma mudança ativa neste PC.".to_string()
     } else if r.tudo_voltou {
-        format!("Tudo o que o Otimiza mudou voltou ao que era.\n\n{}", feito.join("\n"))
+        format!(
+            "Tudo o que o Otimiza mudou voltou ao que era.\n\n{}",
+            feito.join("\n")
+        )
     } else {
-        format!("Parte não voltou:\n{}\n\nO que voltou:\n{}", falhas.join("\n"), feito.join("\n"))
+        format!(
+            "Parte não voltou:\n{}\n\nO que voltou:\n{}",
+            falhas.join("\n"),
+            feito.join("\n")
+        )
     };
     avisar(&texto);
     if r.tudo_voltou {
@@ -367,22 +451,36 @@ fn restaurar_pela_linha_de_comando(dados: &Option<std::path::PathBuf>) -> i32 {
 
 #[cfg(target_os = "windows")]
 fn outro_otimiza_aberto() -> bool {
-    let Some(nosso) = std::env::current_exe().ok().and_then(|c| c.file_name().map(|n| n.to_owned())) else {
+    let Some(nosso) = std::env::current_exe()
+        .ok()
+        .and_then(|c| c.file_name().map(|n| n.to_owned()))
+    else {
         return false;
     };
     let eu = sysinfo::Pid::from_u32(std::process::id());
     let mut s = sysinfo::System::new();
     s.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-    s.processes().iter().any(|(pid, p)| *pid != eu && p.name().eq_ignore_ascii_case(&nosso))
+    s.processes()
+        .iter()
+        .any(|(pid, p)| *pid != eu && p.name().eq_ignore_ascii_case(&nosso))
 }
 
 #[cfg(target_os = "windows")]
 fn avisar(texto: &str) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
-    let largo = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let largo = |s: &str| {
+        s.encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<u16>>()
+    };
     let (corpo, titulo) = (largo(texto), largo("Otimiza"));
     unsafe {
-        MessageBoxW(std::ptr::null_mut(), corpo.as_ptr(), titulo.as_ptr(), MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(
+            std::ptr::null_mut(),
+            corpo.as_ptr(),
+            titulo.as_ptr(),
+            MB_OK | MB_ICONINFORMATION,
+        );
     }
 }
 
@@ -402,24 +500,45 @@ mod tests {
 
     #[test]
     fn o_desinstalador_pede_com_ou_sem_a_pasta() {
-        assert_eq!(ler_argumentos(&args(&[ARGUMENTO])), Pedido::Restaurar { dados: None });
         assert_eq!(
-            ler_argumentos(&args(&[ARGUMENTO, "--dados", r"C:\Users\x\AppData\Roaming"])),
-            Pedido::Restaurar { dados: Some(r"C:\Users\x\AppData\Roaming".into()) }
+            ler_argumentos(&args(&[ARGUMENTO])),
+            Pedido::Restaurar { dados: None }
+        );
+        assert_eq!(
+            ler_argumentos(&args(&[
+                ARGUMENTO,
+                "--dados",
+                r"C:\Users\x\AppData\Roaming"
+            ])),
+            Pedido::Restaurar {
+                dados: Some(r"C:\Users\x\AppData\Roaming".into())
+            }
         );
     }
 
     #[test]
     fn argumento_a_mais_ou_pasta_relativa_e_recusado() {
-        assert!(matches!(ler_argumentos(&args(&[ARGUMENTO, "--dados", "relativa"])), Pedido::Invalido(_)));
-        assert!(matches!(ler_argumentos(&args(&[ARGUMENTO, "--outra"])), Pedido::Invalido(_)));
+        assert!(matches!(
+            ler_argumentos(&args(&[ARGUMENTO, "--dados", "relativa"])),
+            Pedido::Invalido(_)
+        ));
+        assert!(matches!(
+            ler_argumentos(&args(&[ARGUMENTO, "--outra"])),
+            Pedido::Invalido(_)
+        ));
     }
 
     #[test]
     fn a_pasta_de_dados_compara_sem_maiuscula_nem_barra() {
         use std::path::Path;
-        assert!(mesma_pasta(Path::new(r"C:\Users\X\AppData\Roaming\"), Path::new(r"c:\users\x\appdata\roaming")));
-        assert!(!mesma_pasta(Path::new(r"C:\Users\admin\AppData\Roaming"), Path::new(r"C:\Users\x\AppData\Roaming")));
+        assert!(mesma_pasta(
+            Path::new(r"C:\Users\X\AppData\Roaming\"),
+            Path::new(r"c:\users\x\appdata\roaming")
+        ));
+        assert!(!mesma_pasta(
+            Path::new(r"C:\Users\admin\AppData\Roaming"),
+            Path::new(r"C:\Users\x\AppData\Roaming")
+        ));
     }
 
     #[test]
@@ -431,30 +550,55 @@ mod tests {
     fn cada_peca_com_estado_proprio_entra() {
         assert_eq!(
             o_que_fazer(true, Leitura::Algo, false, Leitura::Algo, Leitura::Algo),
-            vec![Parte::Automaticos, Parte::MotorDeEnergia, Parte::NucleosPorJogo, Parte::Historico]
+            vec![
+                Parte::Automaticos,
+                Parte::MotorDeEnergia,
+                Parte::NucleosPorJogo,
+                Parte::Historico
+            ]
         );
     }
 
     #[test]
     fn com_o_otimiza_no_historico_o_motor_sai_pelo_historico() {
         let partes = o_que_fazer(false, Leitura::Algo, true, Leitura::Nada, Leitura::Algo);
-        assert_eq!(partes, vec![Parte::Historico], "restaurar o motor antes refaria o OTIMIZA só para apagá-lo");
+        assert_eq!(
+            partes,
+            vec![Parte::Historico],
+            "restaurar o motor antes refaria o OTIMIZA só para apagá-lo"
+        );
     }
 
     #[test]
     fn o_que_nao_se_leu_entra_para_falhar_e_nao_some() {
-        let partes = o_que_fazer(false, Leitura::Ilegivel, true, Leitura::Nada, Leitura::Ilegivel);
+        let partes = o_que_fazer(
+            false,
+            Leitura::Ilegivel,
+            true,
+            Leitura::Nada,
+            Leitura::Ilegivel,
+        );
         assert_eq!(partes, vec![Parte::MotorDeEnergia, Parte::Historico]);
     }
 
     fn parte(desfecho: Desfecho) -> ResultadoDaParte {
-        ResultadoDaParte { parte: Parte::Historico, desfecho, feito: Vec::new() }
+        ResultadoDaParte {
+            parte: Parte::Historico,
+            desfecho,
+            feito: Vec::new(),
+        }
     }
 
     #[test]
     fn uma_falha_em_qualquer_parte_nao_e_tudo_voltou() {
-        assert!(tudo_voltou(&[parte(Desfecho::Voltou), parte(Desfecho::NadaAFazer)], &[]));
-        assert!(!tudo_voltou(&[parte(Desfecho::Voltou), parte(Desfecho::Falhou("x".into()))], &[]));
+        assert!(tudo_voltou(
+            &[parte(Desfecho::Voltou), parte(Desfecho::NadaAFazer)],
+            &[]
+        ));
+        assert!(!tudo_voltou(
+            &[parte(Desfecho::Voltou), parte(Desfecho::Falhou("x".into()))],
+            &[]
+        ));
         let falhou = OptimizationOutcome::failed("a", "A", "não voltou".to_string());
         assert!(!tudo_voltou(&[parte(Desfecho::Voltou)], &[falhou]));
     }

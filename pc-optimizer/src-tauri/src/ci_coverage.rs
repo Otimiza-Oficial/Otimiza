@@ -177,7 +177,11 @@ mod tests {
             "tauri.conf.json diz {} e o Cargo.toml diz {} — o instalador sairia com um              número e o binário com outro",
             conf, esperada
         );
-        assert_eq!(pkg, esperada, "package.json diz {} e o Cargo.toml diz {}", pkg, esperada);
+        assert_eq!(
+            pkg, esperada,
+            "package.json diz {} e o Cargo.toml diz {}",
+            pkg, esperada
+        );
         assert_eq!(
             lock, esperada,
             "package-lock.json diz {} e o Cargo.toml diz {}",

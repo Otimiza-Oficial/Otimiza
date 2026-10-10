@@ -46,13 +46,15 @@ impl ProcessMonitor {
         for process in self.system.processes().values() {
             let name = process.name().to_string_lossy().to_string();
 
-            let entry = grouped.entry(name.clone()).or_insert_with(|| ProcessImpact {
-                in_startup: self.startup.contains(&name.to_lowercase()),
-                name,
-                cpu_percent: 0.0,
-                ram_mb: 0.0,
-                instances: 0,
-            });
+            let entry = grouped
+                .entry(name.clone())
+                .or_insert_with(|| ProcessImpact {
+                    in_startup: self.startup.contains(&name.to_lowercase()),
+                    name,
+                    cpu_percent: 0.0,
+                    ram_mb: 0.0,
+                    instances: 0,
+                });
 
             entry.cpu_percent += process.cpu_usage() as f64 / self.cores;
             entry.ram_mb += process.memory() as f64 / 1_048_576.0;

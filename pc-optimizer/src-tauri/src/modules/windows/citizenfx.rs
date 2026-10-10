@@ -21,9 +21,13 @@ pub struct PoolAjustado {
 #[serde(tag = "status")]
 pub enum PoolSizesIncrease {
     Vazio,
-    Configurado { pools: Vec<PoolAjustado> },
+    Configurado {
+        pools: Vec<PoolAjustado>,
+    },
     /// Dito explicitamente: tratar como vazio esconderia um arquivo num formato que não se entende.
-    Invalido { bruto: String },
+    Invalido {
+        bruto: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,7 +141,10 @@ fn explicar_falha(erro: &std::io::ErrorKind) -> &'static str {
     }
 }
 
-fn montar_nota(pool_sizes: &Option<PoolSizesIncrease>, falha: Option<std::io::ErrorKind>) -> String {
+fn montar_nota(
+    pool_sizes: &Option<PoolSizesIncrease>,
+    falha: Option<std::io::ErrorKind>,
+) -> String {
     match pool_sizes {
         None => format!(
             "Não consegui ler o CitizenFX.ini. {} O arquivo não foi tocado.",
@@ -269,7 +276,10 @@ PoolSizesIncrease={"CMoveObject": 600, "FragmentStore": 30000, "PoolQueNaoConhec
                 assert_eq!(cmove.aumento, 600);
                 assert_eq!(cmove.teto_conhecido, Some(600));
 
-                let desconhecido = pools.iter().find(|p| p.nome == "PoolQueNaoConhecemos").unwrap();
+                let desconhecido = pools
+                    .iter()
+                    .find(|p| p.nome == "PoolQueNaoConhecemos")
+                    .unwrap();
                 assert_eq!(desconhecido.aumento, 10);
                 assert_eq!(desconhecido.teto_conhecido, None);
             }

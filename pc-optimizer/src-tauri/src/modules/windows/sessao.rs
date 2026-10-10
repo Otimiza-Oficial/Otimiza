@@ -61,7 +61,12 @@ mod tests {
         let fonte = include_str!("sessao.rs");
         let producao = fonte.split("#[cfg(test)]").next().unwrap();
 
-        for proibido in ["TerminateProcess", "Stop-Process", "taskkill", "ExitProcess"] {
+        for proibido in [
+            "TerminateProcess",
+            "Stop-Process",
+            "taskkill",
+            "ExitProcess",
+        ] {
             assert!(
                 !producao.contains(proibido),
                 "`{}` apareceu no módulo de fim de sessão",

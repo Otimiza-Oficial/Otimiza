@@ -73,13 +73,21 @@ pub fn memoria_instalada() -> MemoriaInstalada {
             .collect(),
         canais: occupied_channels(&modules),
         // A configurada, não a nominal: um pente de 3200 a 2133 é o caso que o cliente não vê.
-        mhz: modules.iter().filter_map(|m| m.configured_clock_speed).max(),
+        mhz: modules
+            .iter()
+            .filter_map(|m| m.configured_clock_speed)
+            .max(),
     }
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn memoria_instalada() -> MemoriaInstalada {
-    MemoriaInstalada { slots: None, pentes_gb: Vec::new(), canais: 0, mhz: None }
+    MemoriaInstalada {
+        slots: None,
+        pentes_gb: Vec::new(),
+        canais: 0,
+        mhz: None,
+    }
 }
 
 fn memory_slots() -> Option<u32> {
@@ -127,9 +135,7 @@ fn occupied_channels(modules: &[MemoryModule]) -> usize {
 
 /// `None` = não consegui perguntar; `Some(vec![])` = perguntei e não há pente. Juntos, a tela calava sobre
 /// memória, e o canal único é o achado mais valioso.
-fn achados_de_memoria(
-    modules: Option<Vec<MemoryModule>>,
-) -> Result<Vec<FirmwareFinding>, String> {
+fn achados_de_memoria(modules: Option<Vec<MemoryModule>>) -> Result<Vec<FirmwareFinding>, String> {
     let Some(modules) = modules else {
         return Err(
             "Não foi possível ler os pentes de memória desta máquina, então não sabemos se ela \
@@ -154,11 +160,8 @@ pub fn analyze_memory_ou_lacuna() -> Result<Vec<FirmwareFinding>, String> {
 fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>) {
     let slots = memory_slots().unwrap_or(0);
     let channels = occupied_channels(&modules);
-    let total_gb: f64 = modules
-        .iter()
-        .filter_map(|m| m.capacity)
-        .sum::<u64>() as f64
-        / 1_073_741_824.0;
+    let total_gb: f64 =
+        modules.iter().filter_map(|m| m.capacity).sum::<u64>() as f64 / 1_073_741_824.0;
 
     if channels < 2 && slots >= 2 {
         findings.push(FirmwareFinding {
@@ -190,7 +193,10 @@ fn analisar_pentes(modules: &[MemoryModule], findings: &mut Vec<FirmwareFinding>
     }
 
     let nominal = modules.iter().filter_map(|m| m.speed).max();
-    let running = modules.iter().filter_map(|m| m.configured_clock_speed).max();
+    let running = modules
+        .iter()
+        .filter_map(|m| m.configured_clock_speed)
+        .max();
 
     if let (Some(nominal), Some(running)) = (nominal, running) {
         // O firmware costuma reportar 2667 para um pente de 2666.
@@ -244,7 +250,9 @@ pub fn parse_boot_limits(output: &str) -> Vec<(String, String)> {
 /// inglês por sorte). `None`: não reconhecido, e o item não é oferecido. Cada elemento tem seu vocabulário: o
 /// `hypervisorlaunchtype` aceita `off`/`auto`/`on` e RECUSA `no` (ver `palavra_chave_do_hipervisor`).
 pub fn palavra_chave_booleana(valor: &str) -> Option<&'static str> {
-    const SIM: &[&str] = &["yes", "true", "on", "1", "sim", "oui", "ja", "si", "sí", "sì"];
+    const SIM: &[&str] = &[
+        "yes", "true", "on", "1", "sim", "oui", "ja", "si", "sí", "sì",
+    ];
     const NAO: &[&str] = &["no", "false", "off", "0", "não", "nao", "non", "nein"];
 
     let v = valor.trim().to_lowercase();
@@ -375,7 +383,10 @@ pub fn vbs_servicos_ativos() -> Option<usize> {
 /// Só a virtualização de segurança, para o Início: duas consultas curtas ao Windows, sem carga nenhuma.
 pub fn achados_do_vbs() -> Result<Vec<FirmwareFinding>, String> {
     if vbs_running().is_none() {
-        return Err("Não foi possível perguntar ao Windows se a Integridade de Memória está ligada.".to_string());
+        return Err(
+            "Não foi possível perguntar ao Windows se a Integridade de Memória está ligada."
+                .to_string(),
+        );
     }
     let mut findings = Vec::new();
     analyze_vbs(&mut findings);
@@ -576,5 +587,4 @@ mod tests {
         let output = "identifier              {current}\ndescription             Windows 11\n";
         assert!(parse_boot_limits(output).is_empty());
     }
-
 }

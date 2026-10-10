@@ -197,7 +197,12 @@ fn powershell_avulso(script: &str, prazo: Duration) -> Result<CommandOutput, Str
     let completo = format!("{} {}", FORCAR_UTF8, script);
     let rotulo = resumir(&format!("powershell: {}", script));
 
-    executar_com_rotulo("powershell", &["-NoProfile", "-Command", &completo], &rotulo, prazo)
+    executar_com_rotulo(
+        "powershell",
+        &["-NoProfile", "-Command", &completo],
+        &rotulo,
+        prazo,
+    )
 }
 
 /// Abrir um `powershell.exe` vazio custa 2,26 s (medido), e a abertura abria dez: um processo vivo paga uma vez,
@@ -455,7 +460,12 @@ pub fn run_checked_com_prazo(
         } else {
             output.stderr.trim().to_string()
         };
-        Err(format!("`{} {}` failed: {}", program, args.join(" "), detail))
+        Err(format!(
+            "`{} {}` failed: {}",
+            program,
+            args.join(" "),
+            detail
+        ))
     }
 }
 
@@ -467,12 +477,14 @@ mod tests {
     #[test]
     fn script_de_varias_linhas_responde_sem_travar() {
         let inicio = std::time::Instant::now();
-        let saida = powershell("$a = 1
+        let saida = powershell(
+            "$a = 1
 $b = 2
 if ($a) {
   Write-Output ($a + $b)
-}")
-            .expect("o PowerShell precisa rodar");
+}",
+        )
+        .expect("o PowerShell precisa rodar");
         assert_eq!(saida.stdout.trim(), "3");
         assert!(
             inicio.elapsed() < std::time::Duration::from_secs(30),
@@ -497,10 +509,9 @@ if ($a) {
 
     #[test]
     fn json_com_acento_sobrevive_a_desserializacao() {
-        let saida = powershell(
-            "ConvertTo-Json -Compress -InputObject @{ nome = 'Ação de Manutenção' }",
-        )
-        .expect("o PowerShell precisa rodar");
+        let saida =
+            powershell("ConvertTo-Json -Compress -InputObject @{ nome = 'Ação de Manutenção' }")
+                .expect("o PowerShell precisa rodar");
 
         let valor: serde_json::Value =
             serde_json::from_str(saida.stdout.trim()).expect("JSON válido");
@@ -520,7 +531,11 @@ if ($a) {
         assert!(super::sessao::executar("Write-Output 'Ação'", PRAZO_DO_POWERSHELL).is_none());
 
         let saida = powershell("Write-Output 'Ação de Manutenção'").unwrap();
-        assert!(saida.stdout.contains("Ação de Manutenção"), "veio: {}", saida.stdout);
+        assert!(
+            saida.stdout.contains("Ação de Manutenção"),
+            "veio: {}",
+            saida.stdout
+        );
     }
 
     #[test]
@@ -566,7 +581,10 @@ if ($a) {
         let esperou = inicio.elapsed();
         viva.encerrar();
 
-        assert!(respondeu, "a sessão própria não respondeu nem ao script simples");
+        assert!(
+            respondeu,
+            "a sessão própria não respondeu nem ao script simples"
+        );
         assert!(
             matches!(travada, super::sessao::Resposta::Estourou),
             "um script de 60 s com prazo de 1,5 s não foi dado como estourado"
@@ -582,8 +600,8 @@ if ($a) {
     fn desistir_de_esperar_mata_o_processo_em_vez_de_deixar_rodando() {
         // O `recv_timeout` devolvia o controle e o `Dism.exe` seguia minutos, empilhando a cada clique. `ping -n 30` faz
         // o papel sem administrador.
-        let mut filho = spawn_capturando("ping", &["-n", "30", "127.0.0.1"])
-            .expect("o ping do Windows sobe");
+        let mut filho =
+            spawn_capturando("ping", &["-n", "30", "127.0.0.1"]).expect("o ping do Windows sobe");
 
         let inicio = Instant::now();
         let saida = esperar_com_prazo(&mut filho, "ping", Duration::from_millis(300));
@@ -625,12 +643,20 @@ if ($a) {
     #[test]
     fn run_com_prazo_encerra_o_programa_que_nao_termina() {
         let inicio = Instant::now();
-        let erro = run_com_prazo("ping", &["-n", "30", "127.0.0.1"], Duration::from_millis(500))
-            .err()
-            .expect("um ping de 30 s com prazo de meio segundo precisa falhar");
+        let erro = run_com_prazo(
+            "ping",
+            &["-n", "30", "127.0.0.1"],
+            Duration::from_millis(500),
+        )
+        .err()
+        .expect("um ping de 30 s com prazo de meio segundo precisa falhar");
 
         assert!(inicio.elapsed() < Duration::from_secs(10));
-        assert!(erro.contains("ping -n 30"), "o erro não diz o comando: {}", erro);
+        assert!(
+            erro.contains("ping -n 30"),
+            "o erro não diz o comando: {}",
+            erro
+        );
     }
 
     #[test]
@@ -658,12 +684,15 @@ if ($a) {
             json_da_saida(Err("não subiu".to_string()), "a lista");
         let saiu_com_erro: Result<Vec<u32>, String> =
             json_da_saida(saida(false, "", "Acesso negado"), "a lista");
-        let sem_resposta: Result<Vec<u32>, String> = json_da_saida(saida(true, "  \n", ""), "a lista");
+        let sem_resposta: Result<Vec<u32>, String> =
+            json_da_saida(saida(true, "  \n", ""), "a lista");
         let formato_errado: Result<Vec<u32>, String> =
             json_da_saida(saida(true, "isto não é json", ""), "a lista");
 
         assert!(nao_rodou.is_err());
-        assert!(saiu_com_erro.as_ref().is_err_and(|e| e.contains("Acesso negado")));
+        assert!(saiu_com_erro
+            .as_ref()
+            .is_err_and(|e| e.contains("Acesso negado")));
         assert!(sem_resposta.is_err());
         assert!(formato_errado.is_err());
     }
@@ -684,8 +713,14 @@ if ($a) {
         let consultas = [
             ("tasks.rs", "Get-ScheduledTask -ErrorAction Stop"),
             ("servicesaudit.rs", "Win32_Service -ErrorAction Stop"),
-            ("bloatware.rs", "-ErrorAction Stop | Select-Object Name,PackageFullName"),
-            ("conflicts.rs", "-ErrorAction Stop | Select-Object displayName,productState"),
+            (
+                "bloatware.rs",
+                "-ErrorAction Stop | Select-Object Name,PackageFullName",
+            ),
+            (
+                "conflicts.rs",
+                "-ErrorAction Stop | Select-Object displayName,productState",
+            ),
         ];
 
         for (arquivo, consulta) in consultas {
@@ -712,7 +747,9 @@ if ($a) {
         let mut infratores = Vec::new();
 
         fn varrer(dir: &std::path::Path, achados: &mut Vec<String>) {
-            let Ok(entradas) = std::fs::read_dir(dir) else { return };
+            let Ok(entradas) = std::fs::read_dir(dir) else {
+                return;
+            };
 
             for entrada in entradas.flatten() {
                 let caminho = entrada.path();
@@ -727,11 +764,15 @@ if ($a) {
                     continue;
                 }
 
-                let Ok(conteudo) = std::fs::read_to_string(&caminho) else { continue };
+                let Ok(conteudo) = std::fs::read_to_string(&caminho) else {
+                    continue;
+                };
 
                 for (numero, linha) in conteudo.lines().enumerate() {
                     // Reabrir como administrador: não lê saída, e precisa de `-WindowStyle Hidden`.
-                    if linha.contains("\"powershell\"") && !conteudo.contains("Start-Process -FilePath") {
+                    if linha.contains("\"powershell\"")
+                        && !conteudo.contains("Start-Process -FilePath")
+                    {
                         achados.push(format!("{}:{}", nome, numero + 1));
                     }
                 }

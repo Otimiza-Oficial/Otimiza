@@ -1,9 +1,10 @@
 mod ci_coverage;
 
+mod commands;
 mod core;
 mod modules;
+mod plataforma;
 mod utils;
-mod commands;
 
 use commands::AppState;
 use modules::changelog::ChangeLog;
@@ -72,6 +73,12 @@ pub fn run() {
     }
 
     utils::diagnostico::instalar_gancho_de_panico();
+
+    // Já aberto (talvez escondido na bandeja durante o jogo): traz aquele para a frente em vez de abrir outro.
+    #[cfg(target_os = "windows")]
+    if plataforma::bandeja::ja_aberto_traz_para_frente() {
+        return;
+    }
     utils::diagnostico::abrir_sessao();
     modules::abertura::marcar_inicio();
     tauri::Builder::default()
@@ -94,7 +101,6 @@ pub fn run() {
             commands::laboratorio_de_streaming,
             #[cfg(target_os = "windows")]
             commands::plano_de_renderizacao,
-            commands::passo_do_autoajuste,
             #[cfg(target_os = "windows")]
             commands::historico_de_desempenho,
             #[cfg(target_os = "windows")]
@@ -241,6 +247,65 @@ pub fn run() {
             commands::set_max_refresh_rate,
             commands::licenca_estado,
             commands::licenca_ativar,
+            commands::feedback_estado,
+            commands::feedback_verificar,
+            commands::flags_ler,
+            commands::flags_gravar,
+            commands::hardware_perfil,
+            commands::hardware_ultimo,
+            commands::compatibilidade,
+            commands::jogo_aberto,
+            commands::catalogo_de_jogos,
+            commands::biblioteca_de_jogos,
+            commands::lab_estado,
+            commands::lab_medir,
+            commands::lab_zerar,
+            commands::capa_do_jogo,
+            commands::capa_larga_do_jogo,
+            commands::jogos_instalados,
+            commands::fundos_listar,
+            commands::limpeza_medir,
+            commands::limpeza_executar,
+            commands::fundos_adicionar,
+            commands::fundos_limpar,
+            commands::anotar_erro_da_tela,
+            commands::mira_ligar,
+            commands::mira_atualizar,
+            commands::mira_desligar,
+            commands::mira_estado,
+            commands::mira_cs2,
+            commands::cores_estado,
+            commands::frame_boost_painel,
+            commands::frame_boost_ligar,
+            commands::jogo_liso_medir,
+            commands::jogo_liso_aplicar,
+            commands::memoria_para_o_jogo,
+            commands::memoria_fechar,
+            commands::energia_de_jogo,
+            commands::energia_de_jogo_definir,
+            commands::frame_boost_desligar,
+            commands::frame_boost_destravar_base,
+            commands::frame_boost_medir,
+            commands::overlay_estado,
+            commands::overlay_gravar,
+            commands::overlay_ligar,
+            commands::contador_fivem_estado,
+            commands::contador_fivem_ligar,
+            commands::contador_fivem_desligar,
+            commands::fov_fivem,
+            commands::fov_fivem_definir,
+            commands::fov_fivem_devolver,
+            commands::cores_aplicar,
+            commands::cores_restaurar,
+            commands::cores_salvar_perfil,
+            #[cfg(target_os = "windows")]
+            commands::driver_amd,
+            #[cfg(target_os = "windows")]
+            commands::aplicar_ajuste_amd,
+            #[cfg(target_os = "windows")]
+            commands::driver_intel,
+            #[cfg(target_os = "windows")]
+            commands::aplicar_ajuste_intel,
             commands::relatorio_de_suporte,
             commands::versao_mais_nova,
         ])
@@ -268,9 +333,139 @@ pub fn run() {
                 utils::webview::vigiar(&janela);
             }
 
+            #[cfg(target_os = "windows")]
+            if let Err(e) = plataforma::bandeja::criar(app) {
+                utils::Logger::warn(&format!("bandeja: {}", e));
+            }
+
             utils::Logger::info("PC Performance Optimizer iniciado");
             if let Some(ms) = modules::abertura::desde_o_inicio() {
                 utils::Logger::info(&format!("abertura: janela pedida em {} ms", ms));
+            }
+
+            // O jogo aberto, para a tela inicial virar a tela do jogo. Quatro segundos: a detecção guarda o uso de 3D por
+            // um minuto, então a volta custa uma leitura de janela. A tela só ouve quando o jogo muda.
+            #[cfg(target_os = "windows")]
+            {
+                let handle = app.handle().clone();
+
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+
+                    let mut pid: Option<u32> = None;
+                    // Sem a trava do modo seguro: aqui só se LÊ qual jogo está aberto, nada age sozinho.
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                        // A troca do cl_drawFPS no fivem.cfg que esperava o FiveM fechar.
+                        let _ = tokio::task::spawn_blocking(plataforma::contador_fivem::cuidar).await;
+                        // O FOV pedido com o FiveM aberto, idem.
+                        let _ = tokio::task::spawn_blocking(plataforma::fov_fivem::cuidar).await;
+                        let anterior = pid;
+                        let Ok(Some(mudou)) =
+                            tokio::task::spawn_blocking(move || plataforma::sessao::volta(anterior)).await
+                        else {
+                            continue;
+                        };
+                        pid = mudou.as_ref().map(|j| j.pid);
+                        match &mudou {
+                            Some(j) => utils::Logger::info(&format!("jogo aberto: {} ({})", j.nome, j.executavel)),
+                            None => utils::Logger::info("jogo fechou"),
+                        }
+                        // As cores do jogo: devolve as do anterior e liga as deste, se a pessoa pediu "só com o jogo
+                        // aberto". Mexe no monitor, então só com licença (e feedback) em dia.
+                        let exe = mudou.as_ref().map(|j| j.executavel.clone());
+                        let _ = tokio::task::spawn_blocking(move || {
+                            if anterior.is_some() {
+                                plataforma::cores::ao_fechar();
+                            }
+                            if let Some(exe) = exe {
+                                if modules::licenca::exigir().is_ok() {
+                                    plataforma::cores::ao_abrir(&plataforma::historico::id_do_jogo(&exe).0);
+                                }
+                            }
+                        })
+                        .await;
+                        // O teto gravado ainda está no perfil que o driver usa, com o jogo já aberto? (O FiveM mexe no
+                        // perfil dele ao abrir: o log diz se o teto sobreviveu.)
+                        if let Some(exe) = mudou.as_ref().map(|j| j.executavel.clone()) {
+                            let _ = tokio::task::spawn_blocking(move || {
+                                if let Some(gravado) = plataforma::jogo_liso::teto_gravado(&exe) {
+                                    utils::Logger::info(&format!(
+                                        "teto do driver em {}: {} gravado, {:?} no perfil que o driver usa",
+                                        exe,
+                                        gravado,
+                                        plataforma::jogo_liso::teto_no_driver(&exe)
+                                    ));
+                                }
+                            })
+                            .await;
+                        }
+                        // O FPS por cima do jogo liga sozinho no jogo que abriu (se a pessoa escolheu um modo e o jogo deixa).
+                        if let Some(j) = mudou.as_ref() {
+                            let h = handle.clone();
+                            let j = j.clone();
+                            let _ = tokio::task::spawn_blocking(move || plataforma::overlay::ao_abrir(&h, &j)).await;
+                        }
+                        let _ = handle.emit("jogo:sessao", &mudou);
+                        // Fechado durante o jogo, ficou só na bandeja: com o jogo fechado, sai de vez.
+                        let escondida = handle
+                            .get_webview_window("main")
+                            .is_some_and(|j| !j.is_visible().unwrap_or(true));
+                        if mudou.is_none() && plataforma::bandeja::fechado_com_jogo() && escondida {
+                            // O que só grava com o FiveM fechado (cl_drawFPS, FOV): o processo do jogo some antes do
+                            // lançador, e sair agora deixaria a troca para a próxima abertura do Otimiza.
+                            let _ = tokio::task::spawn_blocking(|| {
+                                let pendente = || {
+                                    plataforma::contador_fivem::estado().pendente
+                                        || plataforma::fov_fivem::estado().pendente
+                                };
+                                for _ in 0..60 {
+                                    if !pendente() || !plataforma::contador_fivem::fivem_aberto() {
+                                        break;
+                                    }
+                                    std::thread::sleep(std::time::Duration::from_secs(1));
+                                }
+                                plataforma::contador_fivem::cuidar();
+                                plataforma::fov_fivem::cuidar();
+                            })
+                            .await;
+                            utils::Logger::info("o jogo fechou e o Otimiza estava só na bandeja: saindo");
+                            handle.exit(0);
+                        }
+                    }
+                });
+            }
+
+            // O pedido de feedback: confere na abertura (no máximo uma vez por dia) e soma o tempo de uso a cada 30 s.
+            // Avisa a tela só quando a situação muda, para ela abrir ou fechar o pedido sem consultar sem parar.
+            {
+                let handle = app.handle().clone();
+
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Emitter;
+
+                    plataforma::feedback::rechecar_na_abertura().await;
+                    let mut anterior = tokio::task::spawn_blocking(plataforma::feedback::situacao)
+                        .await
+                        .unwrap_or(plataforma::feedback::Situacao::NaoSeAplica);
+                    let _ = handle.emit("feedback:situacao", &anterior);
+
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+
+                        let Ok(Some(agora)) =
+                            tokio::task::spawn_blocking(|| plataforma::feedback::somar_uso(30)).await
+                        else {
+                            continue;
+                        };
+
+                        let mudou = std::mem::discriminant(&agora) != std::mem::discriminant(&anterior);
+                        if mudou {
+                            let _ = handle.emit("feedback:situacao", &agora);
+                        }
+                        anterior = agora;
+                    }
+                });
             }
 
             // Rede da suspensão (versões antigas): fim de sessão. Thread suspensa não responde ao fim de sessão, a colmeia
@@ -363,6 +558,18 @@ pub fn run() {
                 });
             }
 
+            // O Otimiza caiu com as cores de um jogo no monitor: devolve as de antes. Cor aplicada à mão, sem "só com o jogo",
+            // fica, como no painel do driver.
+            #[cfg(windows)]
+            tauri::async_runtime::spawn(async {
+                if let Ok(Err(e)) = tokio::task::spawn_blocking(|| {
+                    if plataforma::cores::perfis().so_com_jogo { plataforma::cores::restaurar() } else { Ok(()) }
+                })
+                .await {
+                    utils::Logger::warn(&format!("cores na abertura: {}", e));
+                }
+            });
+
             // O Otimiza fechou com jogo aberto e programas em modo econômico: devolve antes de tudo.
             #[cfg(windows)]
             tauri::async_runtime::spawn(async {
@@ -398,6 +605,41 @@ pub fn run() {
                     Ok(Ok(None)) => {}
                     Ok(Err(e)) => utils::Logger::warn(&format!("teste da travada, na abertura: {}", e)),
                     Err(e) => utils::Logger::warn(&format!("teste da travada: a devolução na abertura caiu: {}", e)),
+                }
+            });
+
+            // Energia de jogo: devolve o que ficou de uma sessão que caiu e depois acompanha o jogo abrir e fechar. Duas
+            // olhadas sem jogo antes de devolver: a troca de processo da tela de carregamento não derruba o ajuste.
+            #[cfg(target_os = "windows")]
+            tauri::async_runtime::spawn(async {
+                let _ = tokio::task::spawn_blocking(|| {
+                    if crate::plataforma::sessao::atual().is_none() {
+                        if let Err(e) = crate::plataforma::energia_jogo::devolver() {
+                            utils::Logger::warn(&format!("energia de jogo na abertura: {}", e));
+                        }
+                    }
+                })
+                .await;
+                let mut sem_jogo = 0u32;
+                // Só age quando o jogo muda (abriu, fechou, trocou): ler a máquina a cada olhada custaria um powercfg.
+                let mut visto: Option<String> = None;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    let jogo = crate::plataforma::sessao::atual().map(|j| j.nome);
+                    sem_jogo = if jogo.is_some() { 0 } else { sem_jogo + 1 };
+                    if (jogo.is_none() && sem_jogo < 2) || jogo == visto {
+                        continue;
+                    }
+                    visto = jogo.clone();
+                    let frase = tokio::task::spawn_blocking(move || {
+                        crate::plataforma::energia_jogo::passo(jogo.as_deref())
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+                    if let Some(f) = frase {
+                        utils::Logger::info(&f);
+                    }
                 }
             });
 
@@ -735,6 +977,13 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(|janela, evento| {
+            // Com um jogo aberto, fechar esconde na bandeja: o contador e o Frame Boost continuam no jogo.
+            #[cfg(target_os = "windows")]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = evento {
+                plataforma::bandeja::ao_pedir_fechar(janela, api);
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
@@ -780,13 +1029,17 @@ mod tests_da_janela {
             assert!(
                 largura <= largura_tela,
                 "{}x{}: a janela saiu com {} de largura e nao cabe",
-                largura_tela, altura_tela, largura
+                largura_tela,
+                altura_tela,
+                largura
             );
 
             assert!(
                 altura <= altura_tela,
                 "{}x{}: a janela saiu com {} de altura e nao cabe",
-                largura_tela, altura_tela, altura
+                largura_tela,
+                altura_tela,
+                altura
             );
         }
     }
@@ -801,7 +1054,11 @@ mod tests_da_janela {
             largura
         );
 
-        assert!(altura < 1080.0 * 0.85, "altura de {} ainda e quase tudo", altura);
+        assert!(
+            altura < 1080.0 * 0.85,
+            "altura de {} ainda e quase tudo",
+            altura
+        );
     }
 
     #[test]

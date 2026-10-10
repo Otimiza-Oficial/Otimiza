@@ -12,7 +12,10 @@ const PRAZO_DO_PONTO: Duration = Duration::from_secs(180);
 /// Imagens "lite" costumam vir com os dois desativados: pedir o ponto assim só deixa o cliente esperando.
 const SERVICOS_DO_PONTO: [(&str, &str); 2] = [
     ("VSS", "Cópia de Sombra de Volume"),
-    ("swprv", "Provedor de Cópia de Sombra de Software da Microsoft"),
+    (
+        "swprv",
+        "Provedor de Cópia de Sombra de Software da Microsoft",
+    ),
 ];
 
 fn mensagem_de_servicos_desativados(nomes: &[&str]) -> String {
@@ -121,7 +124,10 @@ pub fn create(description: &str) -> Result<String, String> {
     let desativados: Vec<&str> = SERVICOS_DO_PONTO
         .iter()
         .filter(|(servico, _)| {
-            matches!(super::services::query_start_type(servico).as_deref(), Ok("disabled"))
+            matches!(
+                super::services::query_start_type(servico).as_deref(),
+                Ok("disabled")
+            )
         })
         .map(|(_, nome)| *nome)
         .collect();
@@ -160,15 +166,19 @@ pub fn create(description: &str) -> Result<String, String> {
     }
 
     if before.is_empty() {
-        Err("Não foi possível criar: a Proteção do Sistema está desligada neste PC. \
+        Err(
+            "Não foi possível criar: a Proteção do Sistema está desligada neste PC. \
              Ative em \"Criar um ponto de restauração\" nas configurações do Windows, \
              ou use o botão abaixo."
-            .to_string())
+                .to_string(),
+        )
     } else {
-        Err("Não foi possível criar: o Windows só permite um ponto de restauração a \
+        Err(
+            "Não foi possível criar: o Windows só permite um ponto de restauração a \
              cada 24 horas, e já existe um recente. Suas otimizações continuam \
              reversíveis pelo histórico do Otimiza."
-            .to_string())
+                .to_string(),
+        )
     }
 }
 
@@ -180,7 +190,10 @@ pub fn enable_protection() -> Result<String, String> {
 
     let system_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
 
-    shell::powershell_checked(&format!("Enable-ComputerRestore -Drive '{}\\'", system_drive))?;
+    shell::powershell_checked(&format!(
+        "Enable-ComputerRestore -Drive '{}\\'",
+        system_drive
+    ))?;
 
     Ok(format!(
         "Proteção do Sistema ativada em {}. Agora dá para criar pontos de restauração.",
@@ -225,16 +238,27 @@ mod tests {
 
     #[test]
     fn formats_wmi_date() {
-        assert_eq!(format_wmi_date("20260729143005.000000-180"), "29/07/2026 14:30");
+        assert_eq!(
+            format_wmi_date("20260729143005.000000-180"),
+            "29/07/2026 14:30"
+        );
     }
 
     #[test]
     fn servico_desativado_e_dito_pelo_nome_e_no_plural_certo() {
         let um = mensagem_de_servicos_desativados(&["Cópia de Sombra de Volume"]);
-        assert!(um.contains("o serviço \"Cópia de Sombra de Volume\" está desativado"), "{}", um);
+        assert!(
+            um.contains("o serviço \"Cópia de Sombra de Volume\" está desativado"),
+            "{}",
+            um
+        );
 
         let dois = mensagem_de_servicos_desativados(&["A", "B"]);
-        assert!(dois.contains("os serviços \"A\" e \"B\" estão desativados"), "{}", dois);
+        assert!(
+            dois.contains("os serviços \"A\" e \"B\" estão desativados"),
+            "{}",
+            dois
+        );
 
         assert!(um.contains("continuam reversíveis"));
     }
@@ -251,7 +275,10 @@ mod tests {
         println!("disponível: {} — {}", status.available, status.message);
 
         for point in status.points.iter().take(5) {
-            println!("  #{} {} · {}", point.sequence, point.created_at, point.description);
+            println!(
+                "  #{} {} · {}",
+                point.sequence, point.created_at, point.description
+            );
         }
 
         assert_eq!(status.available, !status.points.is_empty());

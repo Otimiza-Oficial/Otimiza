@@ -1,10 +1,10 @@
 // Catálogo de otimizações: o que muda, o ganho REAL esperado e se é reversível. Nada desativa Windows Update,
 // antivírus, firewall ou serviços de núcleo.
 
-use serde::{Deserialize, Serialize};
 use crate::modules::optimizer::{
     Category, ExpectedGain, OQuePodeCustar, OptimizationInfo, OptimizationState, RiscoDeFps,
 };
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub enum RegValue {
@@ -22,7 +22,9 @@ pub enum Action {
         name: &'static str,
         value: RegValue,
     },
-    DisableService { name: &'static str },
+    DisableService {
+        name: &'static str,
+    },
     /// Plano próprio: `HighPerformancePowerPlan` ativava um GUID que não existe em toda máquina, e `PowerSetting`
     /// escrevia DENTRO do plano do cliente. Desfazer é reativar o anterior (ver `planoenergia.rs`).
     PlanoOtimiza,
@@ -30,11 +32,15 @@ pub enum Action {
     DisableNagle,
     DisableHibernation,
     // `ChangeRecord::PowerSetting` continua: há `changes.json` de versões anteriores a desfazer.
-    MemoryCompression { enabled: bool },
+    MemoryCompression {
+        enabled: bool,
+    },
     ClearBootLimits,
     GpuMsiMode,
     NicPowerSaving,
-    ReservedStorage { enabled: bool },
+    ReservedStorage {
+        enabled: bool,
+    },
     RemoveForcedPlatformClock,
     /// Anda com o desligamento do VBS, que roda em cima do hipervisor: sem isto o cliente paga em segurança e não
     /// recebe o desempenho.
@@ -110,6 +116,8 @@ pub const FORA_DO_LOTE: &[&str] = &["windowed_game_optimizations"];
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Condicao {
     GameDvrLigado,
+    /// `AutoGameModeEnabled = 0`: alguém (ou outro otimizador) desligou o Modo de Jogo, que o Windows traz ligado.
+    ModoDeJogoDesligado,
     /// Os ajustes de área de trabalho só são sentidos aqui.
     PcFraco,
     PoucoEspaco,
@@ -122,6 +130,7 @@ impl Condicao {
     pub fn quando(self) -> &'static str {
         match self {
             Condicao::GameDvrLigado => "Aparece porque a gravação em segundo plano do Game Bar está ligada nesta máquina.",
+            Condicao::ModoDeJogoDesligado => "Aparece porque o Modo de Jogo do Windows está desligado nesta máquina — o Windows o traz ligado.",
             Condicao::PcFraco => "Aparece porque esta máquina tem até 8 GB de memória ou até 4 núcleos — é onde a área de trabalho mais pesa.",
             Condicao::PoucoEspaco => "Aparece porque o disco do Windows tem menos de 20 GB livres.",
             Condicao::MemoriaApertada => "Aparece porque esta máquina tem até 16 GB de memória, e processo de fundo disputa memória com o jogo.",
@@ -137,14 +146,15 @@ pub enum Classe {
     Expert,
 }
 
-pub const EXPERT: &[&str] = &[
-    "gpu_hardware_scheduling",
-    "gpu_msi_mode",
-    "disable_vbs",
-];
+pub const EXPERT: &[&str] = &["gpu_hardware_scheduling", "gpu_msi_mode", "disable_vbs"];
 
 pub const CONDICIONAIS: &[(&str, Condicao)] = &[
     ("disable_gamedvr", Condicao::GameDvrLigado),
+    ("windows_game_mode_on", Condicao::ModoDeJogoDesligado),
+    // A pedido, nunca no lote: mexem no que a pessoa sente na mão e no olho, não em FPS.
+    ("visual_effects_performance", Condicao::SoSePedir),
+    ("keyboard_fast_repeat", Condicao::SoSePedir),
+    ("mouse_pointer_1to1", Condicao::SoSePedir),
     // Real quando a placa dorme e perde pacote, e a perda não é medida aqui: não decide sozinho.
     ("nic_power_saving_off", Condicao::SoSePedir),
 ];
@@ -185,7 +195,6 @@ pub const RETIRADOS: &[&str] = &[
     "disable_reserved_storage",
     // Quarta rodada (A3.2, docs/planos/A3.2-ANALISE.md seção 5): conforto, aparência e higiene do Windows sem efeito
     // medido em jogo. O botão "Otimizar" fica só com o que tem causa e medida.
-    "visual_effects_performance",
     "disable_transparency",
     "disable_startup_delay",
     "disable_hibernation",
@@ -306,6 +315,39 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 path: r"SOFTWARE\Policies\Microsoft\Windows\GameDVR",
                 name: "AllowGameDVR",
                 value: RegValue::Dword(0),
+            },
+        ],
+    },
+    // Medido no PC do dono (08/10/2026): `AutoGameModeEnabled = 0`. O Modo de Jogo dá ao jogo a prioridade de
+    // agendamento e segura atualizações do Windows e notificações durante a partida; num processador de 4 núcleos
+    // dividido com navegador e Discord é a diferença entre o jogo esperar ou não. Volta ao padrão do Windows, não
+    // inventa nada: por isso `RiscoDeFps::Nenhum`.
+    OptimizationSpec {
+        id: "windows_game_mode_on",
+        name: "Ligar o Modo de Jogo do Windows",
+        description: "Religa o Modo de Jogo, que o Windows traz ligado e estava desligado neste PC.",
+        honest_effect: "Com o jogo aberto, o Windows dá prioridade a ele sobre os programas de fundo e segura atualizações e notificações. Ajuda mais em processador de 4 núcleos dividido com navegador e Discord; em PC folgado quase não muda nada.",
+        category: Category::Gaming,
+        expected_gain: ExpectedGain::Situational,
+        risco_de_fps: RiscoDeFps::Nenhum,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Software\Microsoft\GameBar",
+                name: "AutoGameModeEnabled",
+                value: RegValue::Dword(1),
+            },
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Software\Microsoft\GameBar",
+                name: "AllowAutoGameMode",
+                value: RegValue::Dword(1),
             },
         ],
     },
@@ -502,6 +544,60 @@ pub static CATALOG: &[OptimizationSpec] = &[
                 path: r"Control Panel\Mouse",
                 name: "MouseThreshold2",
                 value: RegValue::Text("0"),
+            },
+        ],
+    },
+    // A "correção de precisão" (a ideia do MarkC Mouse Fix): com a aceleração desligada (`mouse_precision_off`), a
+    // velocidade 10 de 20 (o 6º risquinho de 11 no Painel) é a única em que o Windows não multiplica nem pula
+    // contagem do sensor — 1 contagem do mouse vira 1 pixel. Acima dela pula pixel; abaixo, joga contagem fora.
+    OptimizationSpec {
+        id: "mouse_pointer_1to1",
+        name: "Ponteiro 1:1 (correção de precisão)",
+        description: "Põe a velocidade do ponteiro do Windows no 6º risquinho, em que cada contagem do sensor vira exatamente um pixel.",
+        honest_effect: "Não muda FPS e não mira por você. Em jogo que lê o mouse direto (CS2, Valorant) não muda nada; no FiveM, no menu e em jogo que usa o ponteiro do Windows, o movimento fica exato, sem pular pixel. Se o ponteiro ficar lento ou rápido demais, ajuste o DPI no programa do mouse em vez da velocidade do Windows.",
+        category: Category::Gaming,
+        expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[Action::Registry {
+            hive: "HKCU",
+            path: r"Control Panel\Mouse",
+            name: "MouseSensitivity",
+            value: RegValue::Text("10"),
+        }],
+    },
+    // Padrão do Windows: atraso 1 (~500 ms) e velocidade 31. O mínimo de atraso faz a tecla segurada repetir logo.
+    OptimizationSpec {
+        id: "keyboard_fast_repeat",
+        name: "Teclado sem demora de repetição",
+        description: "Põe no mínimo a espera antes de a tecla segurada começar a repetir, e no máximo a velocidade da repetição.",
+        honest_effect: "Não muda FPS nem o primeiro toque, que já é imediato. Muda a tecla SEGURADA: no chat, no console e em menus ela repete na hora, sem a pausa de meio segundo. Vale depois de sair e entrar de novo no Windows.",
+        category: Category::System,
+        expected_gain: ExpectedGain::Responsiveness,
+        risco_de_fps: RiscoDeFps::Nenhum,
+        requires_admin: false,
+        requires_restart: false,
+        reversible: true,
+        requirement: None,
+        security_tradeoff: false,
+        highlight_when: &[],
+        actions: &[
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Control Panel\Keyboard",
+                name: "KeyboardDelay",
+                value: RegValue::Text("0"),
+            },
+            Action::Registry {
+                hive: "HKCU",
+                path: r"Control Panel\Keyboard",
+                name: "KeyboardSpeed",
+                value: RegValue::Text("31"),
             },
         ],
     },
@@ -1259,7 +1355,11 @@ mod tests {
     #[test]
     fn catalog_ids_are_unique() {
         let ids: HashSet<&str> = CATALOG.iter().map(|spec| spec.id).collect();
-        assert_eq!(ids.len(), CATALOG.len(), "ids duplicados tornam o rollback ambíguo");
+        assert_eq!(
+            ids.len(),
+            CATALOG.len(),
+            "ids duplicados tornam o rollback ambíguo"
+        );
     }
 
     #[test]
@@ -1302,7 +1402,13 @@ mod tests {
 
     #[test]
     fn no_optimization_touches_windows_update_or_defender() {
-        let forbidden = ["wuauserv", "BITS", "WinDefend", "mpssvc", "SecurityHealthService"];
+        let forbidden = [
+            "wuauserv",
+            "BITS",
+            "WinDefend",
+            "mpssvc",
+            "SecurityHealthService",
+        ];
 
         for spec in CATALOG {
             for action in spec.actions {
@@ -1346,7 +1452,10 @@ mod tests {
     #[test]
     fn quem_nao_promete_ganho_diz_isso_na_cara() {
         // `NoGain` precisa dizer, no texto que o cliente lê, que não muda desempenho.
-        for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
+        for spec in CATALOG
+            .iter()
+            .filter(|s| s.expected_gain == ExpectedGain::NoGain)
+        {
             let texto = spec.honest_effect.to_lowercase();
 
             assert!(
@@ -1362,7 +1471,10 @@ mod tests {
 
     #[test]
     fn nada_que_promete_fps_entra_como_sem_ganho() {
-        for spec in CATALOG.iter().filter(|s| s.expected_gain == ExpectedGain::NoGain) {
+        for spec in CATALOG
+            .iter()
+            .filter(|s| s.expected_gain == ExpectedGain::NoGain)
+        {
             let texto = format!("{} {}", spec.description, spec.honest_effect).to_lowercase();
 
             assert!(
@@ -1424,10 +1536,14 @@ mod tests {
     fn aplicativos_em_segundo_plano_nao_entram_no_lote() {
         let item = find("background_apps_off").expect("o item continua existindo, um a um");
 
-        assert!(!entra_no_lote(item), "`background_apps_off` voltou a entrar no lote");
+        assert!(
+            !entra_no_lote(item),
+            "`background_apps_off` voltou a entrar no lote"
+        );
         assert!(item.reversible);
         assert!(
-            item.honest_effect.contains("não entra no \"Otimizar agora\""),
+            item.honest_effect
+                .contains("não entra no \"Otimizar agora\""),
             "o texto não diz ao cliente que o item fica fora do lote"
         );
     }
@@ -1436,13 +1552,20 @@ mod tests {
     fn todo_id_fora_do_lote_existe_no_catalogo() {
         // Um id errado na lista não exclui nada, em silêncio.
         for id in FORA_DO_LOTE {
-            assert!(find(id).is_some(), "`{}` está em FORA_DO_LOTE e não existe no catálogo", id);
+            assert!(
+                find(id).is_some(),
+                "`{}` está em FORA_DO_LOTE e não existe no catálogo",
+                id
+            );
         }
     }
 
     #[test]
     fn o_lote_continua_sem_irreversivel_e_sem_troca_de_seguranca() {
-        for spec in CATALOG.iter().filter(|s| !s.reversible || s.security_tradeoff) {
+        for spec in CATALOG
+            .iter()
+            .filter(|s| !s.reversible || s.security_tradeoff)
+        {
             assert!(!entra_no_lote(spec), "`{}` entraria no lote", spec.id);
         }
     }
@@ -1451,20 +1574,33 @@ mod tests {
     fn toda_classe_aponta_para_um_item_do_catalogo() {
         for id in EXPERT.iter().chain(CONDICIONAIS.iter().map(|(i, _)| i)) {
             let spec = find(id).unwrap_or_else(|| panic!("`{id}` classificado e fora do catálogo"));
-            assert!(!retirado(id), "`{id}` foi retirado e ainda está classificado");
+            assert!(
+                !retirado(id),
+                "`{id}` foi retirado e ainda está classificado"
+            );
             let _ = spec;
         }
         for id in EXPERT {
-            assert!(!CONDICIONAIS.iter().any(|(i, _)| i == id), "`{id}` em duas classes");
+            assert!(
+                !CONDICIONAIS.iter().any(|(i, _)| i == id),
+                "`{id}` em duas classes"
+            );
         }
     }
 
     #[test]
     fn expert_e_so_se_pedir_nunca_entram_em_lote_nem_com_tudo_atendido() {
         for spec in CATALOG {
-            let nunca = matches!(classe(spec.id), Classe::Expert | Classe::Condicional(Condicao::SoSePedir));
+            let nunca = matches!(
+                classe(spec.id),
+                Classe::Expert | Classe::Condicional(Condicao::SoSePedir)
+            );
             if nunca {
-                assert!(!entra_no_lote_se(spec, |_| true), "`{}` entraria num lote", spec.id);
+                assert!(
+                    !entra_no_lote_se(spec, |_| true),
+                    "`{}` entraria num lote",
+                    spec.id
+                );
             }
         }
     }
