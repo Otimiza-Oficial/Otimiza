@@ -48,7 +48,7 @@ jobs:
 
     steps:
       - name: Baixar o código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ---------------------------------------------------------------------
       # AS NOTAS PRECISAM FALAR DESTA VERSÃO.
