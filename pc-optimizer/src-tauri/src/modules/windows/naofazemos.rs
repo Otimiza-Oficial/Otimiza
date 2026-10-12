@@ -31,42 +31,6 @@ pub struct NaoFazemos {
 
 pub static LISTA: &[NaoFazemos] = &[
     NaoFazemos {
-        id: "network_throttling_index",
-        nome: "NetworkThrottlingIndex, SystemResponsiveness e prioridades MMCSS de \"Games\"",
-        natureza: Natureza::Placebo,
-        porque: "O NetworkThrottlingIndex só limita tráfego de rede ENQUANTO um programa \
-                 multimídia registrado toca áudio ou vídeo; não muda ping nem FPS de jogo. O \
-                 SystemResponsiveness e as prioridades da tarefa \"Games\" só valem para \
-                 programa que se registra no agendador multimídia, o que quase nenhum jogo \
-                 faz. O Otimiza tinha os três e tirou na 2.9: não havia ganho medido.",
-    },
-    NaoFazemos {
-        id: "win32_priority_separation",
-        nome: "Valor \"mágico\" de Win32PrioritySeparation",
-        natureza: Natureza::Placebo,
-        porque: "Os valores que circulam (0x26, 0x28, 0x2A) mudam o tamanho da fatia de tempo e \
-                 o reforço da janela em primeiro plano — e o padrão do Windows para desktop já é \
-                 quase o mesmo 0x26. Nenhuma medição reproduzível mostrou ganho de FPS ou 1% low.",
-    },
-    NaoFazemos {
-        id: "power_throttling_off",
-        nome: "Desligar a limitação de energia (PowerThrottlingOff)",
-        natureza: Natureza::Prejudicial,
-        porque: "Desliga o modo econômico por processo (EcoQoS) no Windows inteiro. É o recurso \
-                 que tira programas de fundo do caminho do jogo — em processador híbrido, é o que \
-                 manda esse trabalho para os núcleos de eficiência. O modo jogo do Otimiza usa \
-                 exatamente isso nos programas que disputam processador durante a partida.",
-    },
-    NaoFazemos {
-        id: "sysmain_compressao",
-        nome: "Desligar SysMain e a compressão de memória",
-        natureza: Natureza::Prejudicial,
-        porque: "Com pouca RAM, a compressão é o que evita ir ao disco: desligar troca memória \
-                 comprimida por paginação, que é travada. Com muita RAM, nenhum dos dois pesa. \
-                 O SysMain pré-carrega o que você usa; desligar deixa programas abrirem mais \
-                 devagar em HD e não dá quadro em lugar nenhum.",
-    },
-    NaoFazemos {
         id: "nagle",
         nome: "Desligar o algoritmo de Nagle para \"baixar o ping\"",
         natureza: Natureza::Placebo,
@@ -77,23 +41,14 @@ pub static LISTA: &[NaoFazemos] = &[
                  que é o que o jogador sente como travada de rede.",
     },
     NaoFazemos {
-        id: "servicos_xbox",
-        nome: "Desativar os serviços do Xbox",
-        natureza: Natureza::Prejudicial,
-        porque: "Esses serviços são sob demanda: ficam parados até um jogo da Microsoft \
-                 pedir. Parados, não gastam processador nem memória, então desativar não \
-                 muda FPS. O que muda é que o Game Pass, as conquistas e o salvamento na \
-                 nuvem de vários jogos param de funcionar.",
-    },
-    NaoFazemos {
         id: "telemetria_por_fps",
         nome: "Desligar a telemetria do Windows para ganhar desempenho",
         natureza: Natureza::Placebo,
         porque: "O serviço de telemetria usa uma fração de processador que nenhum contador \
                  de quadros consegue separar do ruído, e quase sempre fora da partida. É uma \
                  escolha de privacidade, legítima, mas não de desempenho — e o Otimiza é uma \
-                 ferramenta de desempenho. Os ajustes de telemetria, Copilot, busca web do \
-                 Iniciar, mapas, sincronização e assistência remota saíram na 2.9 por isso.",
+                 ferramenta de desempenho. Os ajustes de telemetria continuam no catálogo como \
+                 escolha de privacidade, só se a pessoa pedir, e sem prometer quadro.",
     },
     NaoFazemos {
         id: "dns_para_ping",
@@ -164,9 +119,11 @@ pub static LISTA: &[NaoFazemos] = &[
         porque: "Essas listas circulam há dez anos e não distinguem uma máquina da outra. \
                  Entre os nomes que aparecem nelas estão o Plug and Play, o Agendador de \
                  Tarefas e os serviços de criptografia — sem eles, programa não abre, \
-                 impressora some e o Windows para de atualizar. O Otimiza mexe em dois \
-                 serviços (SysMain e a indexação de busca), nomeados na tela, e se recusa a tocar no Windows Update e \
-                 no BITS por teste do próprio produto.",
+                 impressora some e o Windows para de atualizar. O Otimiza oferece serviços em \
+                 grupos com nome (Bluetooth, impressora, máquina virtual, serviços de empresa), \
+                 cada grupo com o preço escrito e o desfazer, só se a pessoa escolher, e se \
+                 recusa a tocar no Windows Update, no BITS e no antivírus por teste do próprio \
+                 produto.",
     },
     NaoFazemos {
         id: "registry_cleaner",
@@ -212,11 +169,69 @@ pub static LISTA: &[NaoFazemos] = &[
         id: "gpu_tweaks_sem_documentacao",
         nome: "Valores \"secretos\" do driver de vídeo tirados de fórum",
         natureza: Natureza::Placebo,
-        porque: "O Otimiza escreve seis ajustes do driver NVIDIA, e todos os seis estão no \
+        porque: "O Otimiza escreve sete ajustes do driver NVIDIA, e todos os sete estão no \
                  cabeçalho público que a NVIDIA distribui — com o nome conferido no driver \
                  antes de qualquer escrita, e só aceita ajuste que o driver saiba devolver \
                  ao padrão. Valor sem documentação não tem como ser conferido nem revertido, \
                  e um driver que não reconhece o número simplesmente ignora.",
+    },
+    // Dos pacotes do dono (11/10/2026): o resto entrou no catálogo; estes não.
+    NaoFazemos {
+        id: "dep_e_mitigacoes_desligadas",
+        nome: "Desligar o DEP e as mitigações de processo (bcdedit nx AlwaysOff, Set-ProcessMitigation)",
+        natureza: Natureza::Prejudicial,
+        porque: "O DEP e as mitigações (ASLR, CFG, SEHOP) são o que impede um arquivo \
+                 malicioso de virar programa rodando no seu PC. Não pesam no quadro de jogo \
+                 moderno, que já é compilado para conviver com eles, e anticheat pode \
+                 recusar abrir num sistema sem eles. No PC do dono, que sentiu ganho com o \
+                 pacote, o DEP estava ligado: o ganho não veio daqui.",
+    },
+    NaoFazemos {
+        id: "ipv6_desligado",
+        nome: "Desligar o IPv6",
+        natureza: Natureza::Prejudicial,
+        porque: "A própria Microsoft diz para não desligar: partes do Windows dependem dele \
+                 por dentro, e o desligamento por registro faz o boot esperar e quebra \
+                 recursos de rede. Para o jogo não muda nada: o FiveM e quase todo servidor \
+                 conectam por IPv4 de qualquer jeito, e o ping é a distância até o servidor.",
+    },
+    NaoFazemos {
+        id: "dpc_e_latencias_do_kernel",
+        nome: "Chaves de DPC, de tolerância de latência e de quantum no registro do kernel",
+        natureza: Natureza::Placebo,
+        porque: "DpcWatchdogPeriod, DpcTimeout, IdealDpcRate, MaximumDpcQueueDepth, \
+                 LatencyTolerance*, IRQ8Priority, LazyMode, TimeIncrement e QuantumLength \
+                 não estão na documentação do Windows 10 e 11, e a maioria não é lida por \
+                 ele. As do watchdog, quando são lidas, só tiram a rede de segurança que \
+                 transforma driver travado em tela azul com nome, e aí o travamento fica sem \
+                 explicação.",
+    },
+    NaoFazemos {
+        id: "apagar_logs_de_eventos",
+        nome: "Apagar todos os logs de eventos do Windows",
+        natureza: Natureza::Placebo,
+        porque: "O log de eventos é escrito em disco só quando algo acontece e não roda \
+                 durante o jogo. Apagar não libera desempenho nenhum; apaga o histórico que \
+                 diz por que o PC travou, reiniciou sozinho ou o driver de vídeo caiu, que é \
+                 exatamente o que o Otimiza lê para achar a causa de um problema.",
+    },
+    NaoFazemos {
+        id: "navegador_e_antivirus_sem_atualizar",
+        nome: "Desligar a atualização do navegador, o SmartScreen e a central de segurança",
+        natureza: Natureza::Prejudicial,
+        porque: "Navegador desatualizado é a porta de entrada mais comum de vírus, e o \
+                 SmartScreen e a central de segurança são o aviso antes de abrir arquivo \
+                 baixado. Nenhum dos três roda durante a partida. O Otimiza tira o navegador \
+                 do segundo plano e do boot (isso sim pesa), mas deixa ele se atualizar.",
+    },
+    NaoFazemos {
+        id: "ativar_windows_por_script",
+        nome: "Ativar o Windows por script",
+        natureza: Natureza::Prejudicial,
+        porque: "Ativação sem licença é pirataria, e o script baixa e roda código de fora \
+                 com poder de administrador. Não muda nada no desempenho: o Windows não \
+                 ativado roda igual, só com a marca d'água e sem personalização. Quem \
+                 quer o Windows ativado compra a licença; o Otimiza não entra nisso.",
     },
     // Firewall, UAC e as promessas de núcleos saíram do produto. Sair não podia ser sumir: quem vem de outro
     // programa procura aqui e precisa achar o motivo.

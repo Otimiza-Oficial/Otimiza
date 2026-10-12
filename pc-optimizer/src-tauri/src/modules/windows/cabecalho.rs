@@ -9,6 +9,8 @@ pub struct Dados {
     pub windows: String,
     pub build: String,
     pub edicao: String,
+    /// "SnyX OS 11 25H2 v1.4.5 (Team AntiLag)" quando a imagem do Windows é modificada (`essenciais`).
+    pub windows_modificado: Option<String>,
     pub arquitetura_do_windows: String,
     pub arquitetura_do_processo: &'static str,
     pub elevado: bool,
@@ -51,6 +53,10 @@ pub fn montar(d: &Dados) -> String {
     campo("Windows", d.windows.clone());
     campo("Build", d.build.clone());
     campo("Edição", d.edicao.clone());
+    campo(
+        "Windows modificado",
+        d.windows_modificado.clone().unwrap_or_else(|| "não".to_string()),
+    );
     campo("Arquitetura do Windows", d.arquitetura_do_windows.clone());
 
     // As DUAS arquiteturas: processo de 32 bits num Windows de 64 lê o `WOW6432Node` e enxerga outra máquina.
@@ -152,6 +158,10 @@ pub fn coletar() -> Dados {
             _ => maquina.build_do_windows.to_string(),
         },
         edicao: texto("EditionID").unwrap_or_else(|| "(não deu para ler)".to_string()),
+        windows_modificado: super::essenciais::windows_modificado().map(|w| match w.autor {
+            Some(a) => format!("{} ({})", w.nome, a),
+            None => w.nome,
+        }),
         arquitetura_do_windows: std::env::var("PROCESSOR_ARCHITECTURE")
             .unwrap_or_else(|_| "(não deu para ler)".to_string()),
         arquitetura_do_processo: if cfg!(target_pointer_width = "64") {
@@ -193,6 +203,7 @@ mod tests {
             windows: "Windows 10 Pro".to_string(),
             build: "19045.4046".to_string(),
             edicao: "Professional".to_string(),
+            windows_modificado: None,
             arquitetura_do_windows: "AMD64".to_string(),
             arquitetura_do_processo: "64 bits",
             elevado: true,

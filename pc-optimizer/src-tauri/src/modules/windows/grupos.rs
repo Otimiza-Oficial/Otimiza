@@ -63,18 +63,20 @@ impl Grupo {
         match self {
             Grupo::Energia => {
                 "O plano de energia: frequência mínima do processador, preferência entre \
-                 energia e desempenho e estacionamento de núcleos. É o grupo com o maior \
+                 energia e desempenho, estacionamento de núcleos e a limitação de energia por \
+                 processo (EcoQoS), que só vale ao reiniciar. É o grupo com o maior \
                  efeito medido na maioria das máquinas."
             }
             Grupo::Agendamento => {
                 "Como o Windows reparte o processador entre o jogo e o resto: prioridade \
-                 da janela em uso, perfil de multimídia, e a fatia reservada para tarefas \
+                 da janela em uso, perfil de multimídia e a fatia reservada para tarefas \
                  de fundo. Pesa muito mais em processador de poucos núcleos."
             }
             Grupo::Video => {
-                "O caminho até a placa de vídeo: quem gerencia a fila de trabalho dela e \
-                 como ela avisa o processador. É o grupo com mais variação entre máquinas \
-                 — há PC em que rende e PC em que custa quadro."
+                "O caminho até a placa de vídeo: quem gerencia a fila de trabalho dela, \
+                 como ela avisa o processador e se o Windows usa os planos extras da tela \
+                 (MPO), o clock fixo da placa NVIDIA e a tela cheia exclusiva. É o grupo com mais variação entre máquinas — há PC em que rende e \
+                 PC em que custa quadro."
             }
             Grupo::Memoria => {
                 "Compressão de memória. Troca processador por memória, e a troca só vale \
@@ -82,24 +84,30 @@ impl Grupo {
             }
             Grupo::Rede => {
                 "A economia de energia da placa de rede, que faz a placa cochilar e perder \
-                 pacote. Mexe em ping e em variação de ping, não em FPS."
+                 pacote, e o TCP do guia \"Bufferbloat\". Mexe em ping e em variação de \
+                 ping; o Bufferbloat ainda passa trabalho da placa de rede para o processador."
             }
             Grupo::Fundo => {
-                "As teclas de acessibilidade que o Windows liga sozinho por atalho \
-                 (Filtragem de Teclas, Teclas de Aderência). Mexe no teclado responder na \
-                 hora, não em FPS."
+                "O que fica rodando por trás: serviços (SysMain, indexação, Xbox, Bluetooth, \
+                 impressora, máquina virtual e outros), navegadores e aplicativos em segundo \
+                 plano, as teclas de acessibilidade que o Windows liga sozinho e a Manutenção \
+                 Automática. Mexe em engasgo e no começo da partida, quase nunca no FPS médio."
             }
             Grupo::Visual => {
                 "Animação, transparência e sombra das janelas do Windows. Melhora a \
                  sensação de resposta da área de trabalho; dentro do jogo não muda nada."
             }
             Grupo::Boot => {
-                "O que é decidido quando a máquina liga: temporizador, limites de núcleo e \
-                 memória, virtualização de segurança. Exige reiniciar para valer."
+                "O que é decidido quando a máquina liga: temporizador e tick, limites de \
+                 núcleo e memória, Inicialização Rápida, Prefetch, agrupamento dos serviços, \
+                 fila do mouse e do teclado e os parâmetros de TCP do pacote. Exige reiniciar \
+                 para valer."
             }
             Grupo::Higiene => {
-                "A aceleração do mouse. Não promete quadro nenhum: muda a mira, e está separado justamente para poder ser descartado como \
-                 suspeito quando alguma coisa piorar."
+                "A aceleração do mouse, o Windows Update instalando driver sozinho, \
+                 notificações, telemetria, privacidade e os menus sem espera. Não promete \
+                 quadro nenhum: está separado justamente para poder ser descartado \
+                 como suspeito quando alguma coisa piorar."
             }
         }
     }
@@ -122,11 +130,15 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "gpu_msi_mode" => Grupo::Video,
         "disable_gamedvr" => Grupo::Video,
         "windowed_game_optimizations" => Grupo::Video,
+        "mpo_desligado" => Grupo::Video,
+        "placa_no_clock_maximo" => Grupo::Video,
+        "tela_cheia_sem_otimizacao" => Grupo::Video,
 
         "disable_memory_compression" => Grupo::Memoria,
 
         "network_low_latency" => Grupo::Rede,
         "nic_power_saving_off" => Grupo::Rede,
+        "bufferbloat_do_pacote" => Grupo::Rede,
 
         "disable_sysmain" => Grupo::Fundo,
         "disable_xbox_services" => Grupo::Fundo,
@@ -143,12 +155,26 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "accessibility_keys_off" => Grupo::Fundo,
         "edge_background_off" => Grupo::Fundo,
         "error_reporting_off" => Grupo::Fundo,
+        "manutencao_automatica_fora" => Grupo::Fundo,
+        "servicos_bluetooth_fora" => Grupo::Fundo,
+        "servicos_impressora_fora" => Grupo::Fundo,
+        "servicos_hyperv_fora" => Grupo::Fundo,
+        "servicos_pouco_usados" => Grupo::Fundo,
+        "servicos_de_empresa_fora" => Grupo::Fundo,
 
         "visual_effects_performance" => Grupo::Visual,
         "disable_transparency" => Grupo::Visual,
 
         "clear_boot_limits" => Grupo::Boot,
         "remove_forced_hpet" => Grupo::Boot,
+        "timer_global_win11" => Grupo::Boot,
+        "sem_inicializacao_rapida" => Grupo::Boot,
+        "servicos_agrupados" => Grupo::Boot,
+        "tick_do_pacote" => Grupo::Boot,
+        "prefetch_desligado" => Grupo::Boot,
+        "fila_de_entrada_curta" => Grupo::Boot,
+        "tcp_do_pacote" => Grupo::Boot,
+        "compartilhamento_do_pacote" => Grupo::Boot,
         // `disable_vbs` NÃO está aqui: troca segurança por desempenho, e o protocolo aplica grupos INTEIROS.
         "disable_telemetry" => Grupo::Higiene,
         "telemetry_policy" => Grupo::Higiene,
@@ -159,6 +185,9 @@ pub fn grupo_de(id: &str) -> Option<Grupo> {
         "mouse_pointer_1to1" => Grupo::Higiene,
         "keyboard_fast_repeat" => Grupo::Fundo,
         "disable_reserved_storage" => Grupo::Higiene,
+        "drivers_fora_do_windows_update" => Grupo::Higiene,
+        "windows_responde_rapido" => Grupo::Higiene,
+        "privacidade_do_pacote" => Grupo::Higiene,
 
         "disable_vbs" => return None,
 
@@ -210,7 +239,9 @@ mod tests {
 
         assert_eq!(
             cabem,
-            vec!['A', 'E', 'F', 'I'],
+            // O Energia passou a exigir reinício em 11/10: o PowerThrottlingOff voltou ao catálogo e fica no
+            // grupo do plano (`conflitos::plano_e_throttling`). A tela calcula o "sem reiniciar" por grupo.
+            vec!['E', 'F', 'I'],
             "a lista de grupos que dispensam reinício mudou; se foi de propósito, \
              atualize este teste E o texto que explica o protocolo ao cliente"
         );

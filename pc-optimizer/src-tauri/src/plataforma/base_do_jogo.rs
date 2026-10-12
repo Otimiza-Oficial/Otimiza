@@ -293,6 +293,32 @@ mod tests {
         assert_eq!(teto_da_base(20.0, 180), None, "abaixo do jogável");
     }
 
+    /// Reparo no PC do dono (10/10): desfaz, pelo histórico do próprio Otimiza, o teto baixo que a regra antiga travou no
+    /// FiveM (36 fps) e a otimização de janela medida sem efeito, e lê o teto que ficou no perfil que o driver usa.
+    /// Com o Otimiza fechado: `cargo test --lib base_do_jogo::tests::desfaz_o_teto_baixo_do_fivem -- --ignored --nocapture`.
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn desfaz_o_teto_baixo_do_fivem() {
+        use crate::modules::changelog::ChangeLog;
+        use crate::modules::windows::{nvdriver, WindowsOptimizer};
+        let exe = "FiveM_b3258_GTAProcess.exe";
+        let caminho = std::env::var("LOCALAPPDATA").unwrap()
+            + r"\FiveM\FiveM.app\data\cache\subprocess\FiveM_b3258_GTAProcess.exe";
+        let mut log = ChangeLog::load();
+        let id = nvdriver::id_do_limite(exe);
+        println!("teto gravado antes: {:?}", gravado(&log, exe));
+        if log.is_applied(&id) {
+            println!("desfazer teto: {:?}", WindowsOptimizer::new().revert(&id, &mut log).map(|_| "ok"));
+        }
+        println!(
+            "otimização de janela desfeita: {:?}",
+            WindowsOptimizer::new().desfazer_janela_do_jogo(&caminho, &mut log)
+        );
+        println!("teto gravado depois: {:?}", gravado(&ChangeLog::load(), exe));
+        println!("perfil que o driver usa: {:?}", nvdriver::perfil_em_uso(&caminho));
+    }
+
     #[test]
     fn destravar_marca_o_jogo_uma_vez_e_travar_desmarca() {
         let l = com_a_solta(vec![], "FiveM_b3258_GTAProcess.exe", true);

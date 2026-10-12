@@ -24,6 +24,8 @@ export interface Hardware {
   placa: { nome: string; fabricante: Fabricante; familia: string; driver: string | null };
   telas: Tela[];
   windows_build: number | null;
+  /** Windows modificado ("lite", "anti-lag"), quando a imagem se apresenta assim no registro. */
+  windows_modificado?: { nome: string; autor: string | null } | null;
   lido_em: number;
 }
 

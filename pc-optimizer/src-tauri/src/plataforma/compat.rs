@@ -199,9 +199,10 @@ pub fn avaliar(recurso: Recurso, c: &Contexto) -> Suporte {
                 return NaoSuportado(motivo.clone());
             }
             match c.modo_de_tela {
-                // Tela cheia exclusiva não passa pela composição do Windows, e a captura não vê o jogo.
+                // A tela cheia exclusiva antiga não passa pela composição do Windows; a de hoje passa (`geracao`).
                 ModoDeTela::TelaCheia => Parcial(
-                    "Precisa do jogo em janela ou sem bordas. O Otimiza troca o modo e desfaz ao desligar.".to_string(),
+                    "Na tela cheia exclusiva antiga nada fica por cima do jogo: se ele sair da tela cheia, use Sem bordas."
+                        .to_string(),
                 ),
                 _ => match &c.sobreposicao_aviso {
                     Some(aviso) => Parcial(aviso.clone()),

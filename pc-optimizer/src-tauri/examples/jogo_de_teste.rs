@@ -130,6 +130,19 @@ fn main() {
         )
         .unwrap();
         let swap: IDXGISwapChain = swap.unwrap();
+        // `OTIMIZA_TESTE_TELA_CHEIA`: tela cheia "exclusiva" do DXGI, como o FiveM em Tela cheia (o Windows a transforma
+        // em Independent Flip). Para ver se o Frame Boost por cima derruba o jogo do modo.
+        let tela_cheia = std::env::var_os("OTIMIZA_TESTE_TELA_CHEIA").is_some();
+        // Sem estar na frente o Windows recusa a tela cheia: como os jogos, pede a frente e tenta de novo a cada segundo.
+        let pedir_tela_cheia = |swap: &IDXGISwapChain| {
+            let _ = SetForegroundWindow(hwnd);
+            if let Err(e) = swap.SetFullscreenState(true, None) {
+                println!("tela cheia recusada: {:#x}", e.code().0);
+            }
+        };
+        if tela_cheia {
+            pedir_tela_cheia(&swap);
+        }
         let dev: ID3D11Device = dev.unwrap();
         let ctx: ID3D11DeviceContext1 = ctx.unwrap().cast().unwrap();
         let fundo: ID3D11Texture2D = swap.GetBuffer(0).unwrap();
@@ -154,6 +167,14 @@ fn main() {
                 )
             })
             .collect();
+
+        // `OTIMIZA_TESTE_MARCADOR=<arquivo>`: o número de cada quadro em 20 quadradinhos pretos e brancos de 8 px no canto
+        // de cima, à esquerda, e no arquivo "número instante" (QueryPerformanceCounter logo depois do Present). A bancada
+        // de captura lê o número em cada quadro capturado: quadro perdido, repetido e atraso, sem precisar do PresentMon.
+        let mut marcador = std::env::var_os("OTIMIZA_TESTE_MARCADOR")
+            .and_then(|c| std::fs::File::create(c).ok())
+            .map(std::io::BufWriter::new);
+        let mut numero_do_quadro: u32 = 0;
 
         let inicio = Instant::now();
         let quadro = Duration::from_secs_f64(1.0 / fps);
@@ -240,7 +261,25 @@ fn main() {
                 }]),
             );
 
+            if marcador.is_some() {
+                numero_do_quadro += 1;
+                for bit in 0..20 {
+                    let ligado = (numero_do_quadro >> bit) & 1 == 1;
+                    let x = bit * 8;
+                    ctx.ClearView(
+                        &rtv,
+                        &if ligado { [1.0, 1.0, 1.0, 1.0] } else { [0.0, 0.0, 0.0, 1.0] },
+                        Some(&[RECT { left: x, top: 0, right: x + 8, bottom: 8 }]),
+                    );
+                }
+            }
             let _ = swap.Present(0, DXGI_PRESENT(0));
+            if let Some(m) = marcador.as_mut() {
+                let mut qpc = 0i64;
+                let _ = windows::Win32::System::Performance::QueryPerformanceCounter(&mut qpc);
+                use std::io::Write;
+                let _ = writeln!(m, "{} {}", numero_do_quadro, qpc);
+            }
             contagem.1 += 1;
             if contagem.0.elapsed() >= Duration::from_secs(1) {
                 // As estatísticas de apresentação só existem no modelo flip: em janela, o de cópia (o do FiveM) devolve
@@ -250,7 +289,23 @@ fn main() {
                     Ok(()) => format!("flip (apresentações {})", est.PresentCount),
                     Err(e) => format!("cópia ({:#x})", e.code().0),
                 };
-                println!("fps {} · {}", contagem.1, modelo);
+                let mut cheia = windows::core::BOOL(0);
+                let _ = swap.GetFullscreenState(Some(&mut cheia), None);
+                if tela_cheia && !cheia.as_bool() {
+                    pedir_tela_cheia(&swap);
+                }
+                if let Some(m) = marcador.as_mut() {
+                    use std::io::Write;
+                    let _ = m.flush();
+                }
+                println!(
+                    "t={:.0} fps {} · {}{}{}",
+                    inicio.elapsed().as_secs_f64(),
+                    contagem.1,
+                    modelo,
+                    if tela_cheia { if cheia.as_bool() { " · tela cheia" } else { " · FORA da tela cheia" } } else { "" },
+                    if IsIconic(hwnd).as_bool() { " · MINIMIZADO" } else { "" }
+                );
                 use std::io::Write;
                 let _ = std::io::stdout().flush();
                 contagem = (Instant::now(), 0);

@@ -317,6 +317,7 @@ mod tests {
                 vrr: Vrr::Anunciado,
             }],
             windows_build: None,
+            windows_modificado: None,
             lido_em: 0,
         }
     }
@@ -447,6 +448,7 @@ mod tests_json {
             },
             telas: Vec::new(),
             windows_build: None,
+            windows_modificado: None,
             lido_em: 0,
         };
         for exe in ["jogo_de_teste.exe", "FiveM_b3258_GTAProcess.exe"] {

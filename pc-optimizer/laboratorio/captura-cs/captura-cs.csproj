@@ -1,0 +1,14 @@
+<!-- Laboratório E3: a bancada de captura em C# (.NET 9), compilada nativa (NativeAOT: um .exe só, sem pedir .NET
+     instalado no PC de ninguém). Publicar: dotnet publish -c Release -r win-x64 -o bin\publicado -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>bancada_captura</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+</Project>

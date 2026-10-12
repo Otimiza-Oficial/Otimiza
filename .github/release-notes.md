@@ -8,11 +8,62 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_3.3.1_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_3.3.1_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_3.4.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_3.4.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
+
+---
+
+# 3.4 Catálogo completo (3.4.0): a logo nova e tudo dos pacotes de otimização
+
+## Logo nova
+
+O Otimiza ganhou marca nova: no app, no ícone da barra de tarefas, no instalador e no site.
+
+## Tudo dos pacotes de otimização, um por um, com desfazer
+
+Os ajustes dos pacotes de otimização mais usados (.reg e .bat que circulam no Discord e no YouTube) agora estão no
+Otimiza, cada um com o que faz, o preço escrito e o botão de desfazer. Você escolhe item por item: nenhum entra
+sozinho no "Otimizar agora", porque o que ajuda num PC pode atrapalhar no outro.
+
+**Processador e memória:** SystemResponsiveness 0, NetworkThrottlingIndex, Win32PrioritySeparation, perfil de
+multimídia para jogos completo, limitação de energia por processo, SysMain e compressão de memória (com o aviso de
+engasgo em PC de 8 GB).
+
+**Placa de vídeo:** NVIDIA sempre no clock máximo (DisableDynamicPstate), sobreposições MPO desligadas, otimizações de
+tela cheia do Windows desligadas e, no driver NVIDIA, a taxa de atualização "a mais alta disponível".
+
+**Boot e relógio:** timer global do Windows 11, tick fixo (disabledynamictick, useplatformtick, tscsyncpolicy), sem
+Inicialização Rápida, serviços agrupados, Prefetch desligado, fila curta do mouse e do teclado.
+
+**O que roda por trás:** serviços em grupos (Bluetooth, impressora e scanner, máquina virtual, serviços pouco usados,
+serviços de empresa), Xbox, indexação, telemetria, relatório de erros, notificações, Manutenção Automática,
+aplicativos e navegadores em segundo plano (Edge, Chrome e Firefox), Windows Update sem trocar o driver de vídeo.
+
+**Rede:** os parâmetros de TCP dos pacotes e o conjunto "Bufferbloat" completo. O Bufferbloat tira trabalho da placa
+de rede e passa para o processador: em jogo preso no processador ele pode custar quadro, e o item diz isso.
+
+**Troca de segurança, só com aviso:** proteções contra Spectre e Meltdown desligadas, como o Isolamento de Núcleo.
+
+**O que continua fora, e por quê** (tela "O que não fazemos"): ativador do Windows, antivírus, UAC, DEP, SmartScreen e
+IPv6 desligados, chaves de DPC e de latência que o Windows não lê, apagar os logs de eventos. Ou tiram a proteção do
+seu PC sem dar quadro, ou não fazem nada.
+
+**Corrigido:** o ajuste do Edge gravava a política com um nome que o Edge não lê. Agora ele para de verdade de ficar
+aberto por trás.
+
+## Frame Boost na tela cheia
+
+O Frame Boost não recusa mais jogo em tela cheia. A tela cheia dos jogos de hoje passa pela composição do Windows e
+aguenta o Frame Boost por cima sem perder FPS (medido com o jogo de teste). Se o jogo usar a tela cheia exclusiva
+antiga e ficar saindo e voltando, o Frame Boost percebe, desliga e pede Sem bordas.
+
+## Windows modificado
+
+Em **Ajustes**, o Otimiza diz quando o Windows do PC é uma versão modificada (as "ISOs otimizadas") e quem fez. Nelas
+parte do Windows vem cortada, e é bom saber disso antes de culpar o jogo ou o Otimiza.
 
 ---
 

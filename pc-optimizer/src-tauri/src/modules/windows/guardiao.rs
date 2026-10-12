@@ -83,6 +83,7 @@ fn precisa_de_admin_para_ler(action: &Action) -> bool {
             | Action::ReservedStorage { .. }
             | Action::DisableHypervisor
             | Action::RemoveForcedPlatformClock
+            | Action::BootValor { .. }
     )
 }
 

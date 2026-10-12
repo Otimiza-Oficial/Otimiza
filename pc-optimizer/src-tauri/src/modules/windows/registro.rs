@@ -437,8 +437,8 @@ mod tests {
             .iter()
             .map(|a| a.modulo)
             .chain(NAO_ALTERAM_O_WINDOWS.iter().map(|(m, _)| *m))
-            // `windows/mod.rs` é o motor do catálogo.
-            .chain(["windows", "catalog"])
+            // `windows/mod.rs` é o motor do catálogo; `pacote` são as ações dele que não cabem numa chave só.
+            .chain(["windows", "catalog", "pacote"])
             .collect();
 
         let faltando: Vec<String> = quem_escreve()

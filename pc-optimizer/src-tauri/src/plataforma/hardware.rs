@@ -90,6 +90,10 @@ pub struct PerfilDeHardware {
     pub placa: Placa,
     pub telas: Vec<Tela>,
     pub windows_build: Option<u32>,
+    /// Windows modificado ("lite", "anti-lag"): a tela avisa que recurso faltando pode ser do sistema
+    /// (`essenciais::windows_modificado`).
+    #[serde(default)]
+    pub windows_modificado: Option<crate::modules::windows::essenciais::WindowsModificado>,
     /// Segundos desde 1970 da leitura. A tela diz "lido há X" em vez de fingir que é ao vivo.
     pub lido_em: u64,
 }
@@ -231,6 +235,7 @@ fn ler_agora() -> PerfilDeHardware {
         },
         telas,
         windows_build,
+        windows_modificado: crate::modules::windows::essenciais::windows_modificado(),
         lido_em: agora(),
     }
 }
@@ -250,6 +255,7 @@ fn ler_agora() -> PerfilDeHardware {
         },
         telas: Vec::new(),
         windows_build: None,
+        windows_modificado: None,
         lido_em: agora(),
     }
 }
@@ -409,6 +415,7 @@ mod tests {
             },
             telas: vec![tela("x")],
             windows_build: Some(26100),
+            windows_modificado: None,
             lido_em: 1,
         };
         gravar_disco(&c, &p);

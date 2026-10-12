@@ -57,6 +57,7 @@ pub mod naofazemos;
 pub mod niveis;
 pub mod nvdriver;
 pub mod nvml;
+pub mod pacote;
 pub mod pcie;
 pub mod placa;
 pub mod planoenergia;
@@ -407,6 +408,42 @@ impl WindowsOptimizer {
                     ActionState::Satisfied
                 }
             }
+
+            Action::ClockMaximoDaPlaca => match pacote::clock_maximo_ligado() {
+                Ok(None) => ActionState::NotApplicable,
+                Ok(Some(true)) => ActionState::Satisfied,
+                Ok(Some(false)) => ActionState::Pending,
+                Err(_) => ActionState::Desconhecido,
+            },
+
+            Action::BootValor { nome, valor } => {
+                if !registry::is_elevated() {
+                    return ActionState::Pending;
+                }
+                match pacote::ler_boot(nome) {
+                    Some(Some(atual)) if atual == *valor => ActionState::Satisfied,
+                    Some(_) => ActionState::Pending,
+                    None => ActionState::Desconhecido,
+                }
+            }
+
+            Action::RedeTcp { parametro, valor } => match pacote::ler_tcp(parametro) {
+                Some(atual) if atual.eq_ignore_ascii_case(valor) => ActionState::Satisfied,
+                Some(_) => ActionState::Pending,
+                None => ActionState::Desconhecido,
+            },
+
+            Action::RedeOffload { parametro, valor } => match pacote::ler_offload(parametro) {
+                Some(atual) if atual.eq_ignore_ascii_case(valor) => ActionState::Satisfied,
+                Some(_) => ActionState::Pending,
+                None => ActionState::Desconhecido,
+            },
+
+            Action::RedeAdaptador { recurso } => match pacote::placas_com(recurso) {
+                Ok(placas) if placas.is_empty() => ActionState::Satisfied,
+                Ok(_) => ActionState::Pending,
+                Err(_) => ActionState::Desconhecido,
+            },
         }
     }
 
@@ -1913,6 +1950,167 @@ impl WindowsOptimizer {
                 ))
             }
 
+            Action::ClockMaximoDaPlaca => {
+                let mudadas = pacote::ligar_clock_maximo(changes)?;
+                if mudadas == 0 {
+                    detalhe.status = match pacote::clock_maximo_ligado()? {
+                        None => {
+                            detalhe.unsupported_reason =
+                                Some("Não há placa NVIDIA neste PC.".to_string());
+                            ActionStatus::Unsupported
+                        }
+                        Some(_) => ActionStatus::AlreadyOptimized,
+                    };
+                    return Ok(None);
+                }
+                exigir_confirmacao(
+                    conferir(&Some(true), pacote::clock_maximo_ligado().ok()),
+                    "o clock fixo da placa NVIDIA",
+                )?;
+                Ok(Some(format!(
+                    "Clock fixo gravado em {} placa(s) NVIDIA. Vale depois de reiniciar.",
+                    mudadas
+                )))
+            }
+
+            Action::BootValor { nome, valor } => {
+                let Some(anterior) = pacote::ler_boot(nome) else {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message =
+                        "Só dá para ler a configuração de boot como administrador.".to_string();
+                    return Ok(None);
+                };
+                detalhe.before_value =
+                    Some(anterior.clone().unwrap_or_else(|| "padrão".to_string()));
+                detalhe.expected_value = Some(valor.to_string());
+                if anterior.as_deref() == Some(*valor) {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    return Ok(None);
+                }
+                pacote::definir_boot(nome, valor)?;
+                changes.push(ChangeRecord::BootValor {
+                    nome: nome.to_string(),
+                    anterior,
+                });
+                exigir_confirmacao(
+                    conferir(&Some(valor.to_string()), pacote::ler_boot(nome)),
+                    nome,
+                )
+            }
+
+            Action::RedeTcp { parametro, valor } => {
+                let Some(anterior) = pacote::ler_tcp(parametro) else {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message = format!("O Windows não informou o TCP {}.", parametro);
+                    return Ok(None);
+                };
+                detalhe.before_value = Some(anterior.clone());
+                detalhe.expected_value = Some(valor.to_string());
+                if anterior.eq_ignore_ascii_case(valor) {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    return Ok(None);
+                }
+                if !pacote::palavra_segura(&anterior) {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message = format!(
+                        "O valor atual do TCP {} não pode ser guardado para o desfazer.",
+                        parametro
+                    );
+                    return Ok(None);
+                }
+                // Parte dos parâmetros o Windows 11 não deixa mudar no modelo "Internet": isso não derruba o resto.
+                if let Err(erro) = pacote::definir_tcp(parametro, valor) {
+                    detalhe.status = ActionStatus::Unsupported;
+                    detalhe.unsupported_reason =
+                        Some(format!("O Windows recusou mudar o TCP {}: {}", parametro, erro));
+                    return Ok(None);
+                }
+                changes.push(ChangeRecord::RedeTcp {
+                    parametro: parametro.to_string(),
+                    anterior,
+                });
+                let lido = pacote::ler_tcp(parametro).map(|v| v.to_lowercase());
+                exigir_confirmacao(conferir(&valor.to_lowercase(), lido), parametro)
+            }
+
+            Action::RedeOffload { parametro, valor } => {
+                let Some(anterior) = pacote::ler_offload(parametro) else {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message = format!("O Windows não informou o {}.", parametro);
+                    return Ok(None);
+                };
+                detalhe.before_value = Some(anterior.clone());
+                detalhe.expected_value = Some(valor.to_string());
+                if anterior.eq_ignore_ascii_case(valor) {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    return Ok(None);
+                }
+                if !pacote::palavra_segura(&anterior) {
+                    detalhe.status = ActionStatus::Skipped;
+                    detalhe.message = format!(
+                        "O valor atual do {} não pode ser guardado para o desfazer.",
+                        parametro
+                    );
+                    return Ok(None);
+                }
+                if let Err(erro) = pacote::definir_offload(parametro, valor) {
+                    detalhe.status = ActionStatus::Unsupported;
+                    detalhe.unsupported_reason =
+                        Some(format!("O Windows recusou mudar o {}: {}", parametro, erro));
+                    return Ok(None);
+                }
+                changes.push(ChangeRecord::RedeOffload {
+                    parametro: parametro.to_string(),
+                    anterior,
+                });
+                let lido = pacote::ler_offload(parametro).map(|v| v.to_lowercase());
+                exigir_confirmacao(conferir(&valor.to_lowercase(), lido), parametro)
+            }
+
+            Action::RedeAdaptador { recurso } => {
+                let placas = pacote::placas_com(recurso)?;
+                if placas.is_empty() {
+                    detalhe.status = ActionStatus::AlreadyOptimized;
+                    return Ok(None);
+                }
+                let mut mudadas = Vec::new();
+                let mut recusadas = Vec::new();
+                for placa in &placas {
+                    match pacote::mudar_na_placa(recurso, placa, false) {
+                        Ok(()) => mudadas.push(placa.clone()),
+                        Err(_) => recusadas.push(placa.clone()),
+                    }
+                }
+                if !mudadas.is_empty() {
+                    changes.push(ChangeRecord::RedeAdaptador {
+                        recurso: recurso.to_string(),
+                        placas: mudadas.clone(),
+                    });
+                }
+                if mudadas.is_empty() {
+                    detalhe.status = ActionStatus::Unsupported;
+                    detalhe.unsupported_reason = Some(format!(
+                        "Nenhuma placa de rede aceitou desligar o {}.",
+                        recurso
+                    ));
+                    return Ok(None);
+                }
+                Ok(Some(if recusadas.is_empty() {
+                    format!(
+                        "{} desligado em {}. A internet pode ter caído por alguns segundos.",
+                        recurso,
+                        mudadas.join(", ")
+                    )
+                } else {
+                    format!(
+                        "{} desligado em {}; {} recusou.",
+                        recurso,
+                        mudadas.join(", "),
+                        recusadas.join(", ")
+                    )
+                }))
+            }
+
             Action::DisableHypervisor => {
                 let Some(anterior) = power::hypervisor_launch_type() else {
                     // Sem o estado atual não há volta, e marcar aplicada afirmaria o hipervisor desligado sem ler.
@@ -2292,6 +2490,11 @@ pub fn nome_da_acao(action: &Action) -> String {
         Action::JanelasOtimizadas => "otimizações para jogos em janela".to_string(),
         Action::DisableHypervisor => "hipervisor no boot".to_string(),
         Action::RemoveForcedPlatformClock => "relógio de plataforma forçado".to_string(),
+        Action::ClockMaximoDaPlaca => "clock fixo da placa NVIDIA".to_string(),
+        Action::BootValor { nome, .. } => format!("boot {}", nome),
+        Action::RedeTcp { parametro, .. } => format!("TCP {}", parametro),
+        Action::RedeOffload { parametro, .. } => format!("rede {}", parametro),
+        Action::RedeAdaptador { recurso } => format!("{} das placas de rede", recurso),
     }
 }
 
@@ -2707,6 +2910,28 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 opcao,
                 valor_anterior,
             } => amddriver::desfazer(opcao, valor_anterior),
+
+            // `pacote` confere nome e valor contra a lista do que o Otimiza faz: o histórico é arquivo do usuário.
+            ChangeRecord::BootValor { nome, anterior } => {
+                pacote::desfazer_boot(nome, anterior.as_deref())
+            }
+            ChangeRecord::RedeTcp { parametro, anterior } => {
+                pacote::definir_tcp(parametro, anterior)
+            }
+            ChangeRecord::RedeOffload { parametro, anterior } => {
+                pacote::definir_offload(parametro, anterior)
+            }
+            ChangeRecord::RedeAdaptador { recurso, placas } => {
+                let falhas: Vec<String> = placas
+                    .iter()
+                    .filter_map(|placa| pacote::mudar_na_placa(recurso, placa, true).err())
+                    .collect();
+                if falhas.is_empty() {
+                    Ok(())
+                } else {
+                    Err(falhas.join("; "))
+                }
+            }
             ChangeRecord::DriverIntel {
                 opcao,
                 valor_anterior,

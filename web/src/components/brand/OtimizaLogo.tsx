@@ -6,7 +6,7 @@ const MARCA = asset("/brand/otimiza-mark.svg");
 /**
  * A logo do Otimiza.
  *
- * O símbolo é o arquivo enviado pelo dono (círculo com o pássaro vazado),
+ * O símbolo é o arquivo enviado pelo dono em 11/10/2026 (a molécula com o ponto),
  * vetorizado sem redesenho em `public/brand/otimiza-mark.svg`. Ele entra como
  * MÁSCARA, então a cor segue o texto ao redor: preto no claro, branco no escuro.
  */

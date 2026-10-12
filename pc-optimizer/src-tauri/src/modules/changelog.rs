@@ -119,6 +119,27 @@ pub enum ChangeRecord {
         perfil_criado: bool,
         valor_anterior: String,
     },
+
+    /// Elemento do `bcdedit` (`windows::pacote`). `None`: não existia, e o desfazer apaga.
+    BootValor {
+        nome: String,
+        anterior: Option<String>,
+    },
+    /// Parâmetro do `Set-NetTCPSetting` no modelo "Internet".
+    RedeTcp {
+        parametro: String,
+        anterior: String,
+    },
+    /// Parâmetro do `Set-NetOffloadGlobalSetting`.
+    RedeOffload {
+        parametro: String,
+        anterior: String,
+    },
+    /// As placas de rede em que o recurso estava ligado: o desfazer liga de novo só nelas.
+    RedeAdaptador {
+        recurso: String,
+        placas: Vec<String>,
+    },
 }
 
 impl ChangeRecord {
@@ -241,6 +262,20 @@ impl ChangeRecord {
             ),
             ChangeRecord::SmoothMotionNvidia { executavel, .. } => {
                 format!("driver NVIDIA · Smooth Motion ligado em {}", executavel)
+            }
+            ChangeRecord::BootValor { nome, anterior } => format!(
+                "boot · {} (antes: {})",
+                nome,
+                anterior.as_deref().unwrap_or("padrão do Windows")
+            ),
+            ChangeRecord::RedeTcp { parametro, anterior } => {
+                format!("rede · TCP {} (antes: {})", parametro, anterior)
+            }
+            ChangeRecord::RedeOffload { parametro, anterior } => {
+                format!("rede · {} (antes: {})", parametro, anterior)
+            }
+            ChangeRecord::RedeAdaptador { recurso, placas } => {
+                format!("rede · {} desligado em {}", recurso, placas.join(", "))
             }
             ChangeRecord::LimiteNvidia {
                 executavel,

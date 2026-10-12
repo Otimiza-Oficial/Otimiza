@@ -610,6 +610,7 @@ mod tests {
             windows: "Windows 10 Pro".to_string(),
             build: "19045.4170".to_string(),
             edicao: "Professional".to_string(),
+            windows_modificado: None,
             arquitetura_do_windows: "AMD64".to_string(),
             arquitetura_do_processo: "64 bits",
             elevado: true,

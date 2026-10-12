@@ -141,6 +141,21 @@ pub static OPCOES: &[Opcao] = &[
         valor_otimizado: 0xFFFF_FFFF,
         so_por_jogo: false,
     },
+    // Do perfil NVIDIA de um pacote que o dono usou (11/10, `docs/app/ANALISE-PACOTES-DE-OTIMIZACAO.md`): está no
+    // `NvApiDriverSettings.h`, com o mesmo número do pacote. O Ansel do mesmo pacote ficou de fora: o driver 617.14 já
+    // não conhece o 0x1075C972 (a NVIDIA aposentou o Ansel) e `os_numeros_da_tabela_batem_com_o_que_o_driver_chama`
+    // recusou.
+    Opcao {
+        id: "taxa_maxima",
+        titulo: "Taxa de atualização preferida: a mais alta",
+        explicacao: "Em tela cheia, o jogo abre na maior taxa que o monitor aceita, e não numa menor que o jogo escolheu \
+                     sozinho (60 Hz num monitor de 144 ou 180 Hz). Não muda nada na área de trabalho.",
+        id_do_padrao: Some(0x0064_B541),
+        nome_esperado: "preferred refresh rate",
+        // PREFERRED_REFRESH_RATE_HIGHEST_AVAILABLE
+        valor_otimizado: 0x0000_0001,
+        so_por_jogo: false,
+    },
 ];
 
 /// `None` para nome desconhecido: o primeiro portão de toda escrita.
@@ -1362,8 +1377,9 @@ mod tests {
     }
 
     #[test]
-    fn o_catalogo_tem_as_seis_e_nenhuma_repetida() {
-        assert_eq!(OPCOES.len(), 6, "o pilar prometeu seis ajustes");
+    fn o_catalogo_tem_as_sete_e_nenhuma_repetida() {
+        // Seis do pilar da 2.9; a taxa máxima veio do pacote do dono (11/10), documentada.
+        assert_eq!(OPCOES.len(), 7, "seis do pilar mais a taxa máxima");
 
         for opcao in OPCOES {
             assert!(!opcao.id.trim().is_empty());

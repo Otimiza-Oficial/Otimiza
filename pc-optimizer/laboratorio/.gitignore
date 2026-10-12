@@ -1,0 +1,14 @@
+# Ferramentas baixadas para os experimentos (o compilador do Zig) e tudo o que é gerado: só o código-fonte vai para o
+# repositório.
+ferramentas/
+*.exe
+*.obj
+*.pdb
+*.lib
+*.exp
+captura-cs/bin/
+captura-cs/obj/
+captura-zig/.zig-cache/
+captura-zig/zig-out/
+analise-wpr/bin/
+analise-wpr/obj/

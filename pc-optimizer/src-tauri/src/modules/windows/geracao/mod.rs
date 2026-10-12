@@ -1,7 +1,9 @@
 // Gerador de quadros POR FORA do jogo (como o Lossless Scaling, seguro com anticheat): captura pela Duplicação
 // de Área de Trabalho, estima o movimento na GPU e apresenta numa janela por cima, fora de captura. Aumenta os
-// quadros EXIBIDOS, não os que o jogo desenha, e acrescenta atraso. Exige janela ou sem bordas: tela cheia
-// exclusiva não passa pela composição.
+// quadros EXIBIDOS, não os que o jogo desenha, e acrescenta atraso. Funciona em janela, sem bordas e na tela cheia
+// dos jogos de hoje, que o Windows faz por composição (Independent Flip): medido em 10/10 com o jogo de teste em tela
+// cheia a 60 fps, a sobreposição por cima não tirou o jogo do modo nem lhe tirou FPS. Na tela cheia exclusiva antiga
+// (o jogo troca o modo de vídeo do monitor), nada fica por cima: o gerador percebe as trocas e desliga.
 
 pub mod gpu;
 pub mod guarda;
@@ -833,10 +835,11 @@ fn bombear_mensagens() -> bool {
     desligar
 }
 
-/// O que dizer quando o jogo está em tela cheia EXCLUSIVA: nesse modo ele toma o monitor, e qualquer janela por cima
-/// (Frame Boost, FPS, mira) o derruba do modo; ele volta, troca o modo de vídeo e perde FPS. Vale para qualquer
-/// resolução: a saída é o modo Sem bordas, e a resolução esticada vem do Windows.
-pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo está em tela cheia exclusiva, e nesse modo nenhuma janela pode ficar por cima dele: o Frame Boost derruba o jogo do modo e ele perde FPS. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução.";
+/// O que dizer quando o jogo está na tela cheia EXCLUSIVA antiga: nesse modo ele toma o monitor, e qualquer janela por
+/// cima o derruba do modo; ele volta, troca o modo de vídeo e perde FPS (`trocas_demais`). A tela cheia de hoje (do
+/// Windows, por composição) não troca o modo e aguenta o Frame Boost. Vale para qualquer resolução: a saída é o modo Sem
+/// bordas, e a resolução esticada vem do Windows.
+pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo saiu e voltou da tela cheia várias vezes com o Frame Boost por cima: é a tela cheia exclusiva antiga, em que nenhuma janela pode ficar por cima dele. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução.";
 
 /// O aplicativo da frente está em tela cheia Direct3D exclusiva? (`SHQueryUserNotificationState`, documentada.)
 pub(crate) fn tela_cheia_exclusiva() -> bool {
@@ -1300,9 +1303,6 @@ fn sessao(
             ultima_checagem = Instant::now();
             if unsafe { !IsWindow(Some(hwnd)).as_bool() } {
                 return Err("O jogo fechou.".to_string());
-            }
-            if jogo_na_frente(pid) && tela_cheia_exclusiva() {
-                return Err(TELA_CHEIA_EXCLUSIVA.to_string());
             }
             if unsafe { IsIconic(hwnd).as_bool() } {
                 return Ok(Fim::Refazer("o jogo foi minimizado"));

@@ -65,6 +65,88 @@ pub const ESSENCIAIS: &[Essencial] = &[
     },
 ];
 
+/// UM WINDOWS MODIFICADO ("lite", "anti-lag", "gamer OS"): a imagem se apresenta no próprio registro, no dono e na
+/// organização registrados e na ficha do fabricante (`OEMInformation`). No PC do dono (11/10/2026): "SnyX OS 11 25H2
+/// v1.4.5 by Team AntiLag", organização "https://teamantilag.com". Nele a captura nova do Windows
+/// (Windows.Graphics.Capture) é recusada a qualquer programa, com as permissões concedidas: peça removida da imagem.
+/// Dizer isso evita que a culpa de um recurso faltando caia no Otimiza.
+#[derive(Debug, Clone, PartialEq, Serialize, serde::Deserialize)]
+pub struct WindowsModificado {
+    /// Como a imagem se chama ("SnyX OS 11 25H2 v1.4.5").
+    pub nome: String,
+    /// Quem fez, quando ela diz ("Team AntiLag").
+    pub autor: Option<String>,
+}
+
+/// Nomes de imagens modificadas conhecidas, em minúsculas. Lista curta: o nome sozinho já basta para estas.
+const IMAGENS_CONHECIDAS: &[&str] = &[
+    "antilag", "atlasos", "atlas os", "revios", "revi os", "ghost spectre", "ghostspectre", "tiny11", "tiny10",
+    "x-lite", "superlite", "kernelos", "windows lite", "gamer os", "spectre os",
+];
+
+/// Pura: a imagem é um Windows modificado? Pelo dono e organização registrados e pelo fabricante e modelo da ficha.
+/// Um PC de marca também preenche a ficha (Dell, Lenovo), mas nunca com site no nome do dono, nem "… OS … by …".
+pub fn identificar_windows_modificado(
+    dono: Option<&str>,
+    organizacao: Option<&str>,
+    fabricante: Option<&str>,
+    modelo: Option<&str>,
+) -> Option<WindowsModificado> {
+    let campos: Vec<&str> = [dono, organizacao, fabricante, modelo]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .collect();
+    let minusculo = |t: &str| t.to_lowercase();
+    let conhecida = campos
+        .iter()
+        .any(|t| IMAGENS_CONHECIDAS.iter().any(|n| minusculo(t).contains(n)));
+    let site_no_registro = [dono, organizacao]
+        .into_iter()
+        .flatten()
+        .any(|t| { let t = minusculo(t); t.contains("http://") || t.contains("https://") || t.contains("www.") });
+    // "SnyX OS 11 25H2 v1.4.5 by Team AntiLag": um sistema com nome próprio, versão do Windows e assinatura.
+    let assinada = |t: &str| {
+        let t = format!(" {} ", minusculo(t));
+        t.contains(" os ") && t.contains(" by ") && (t.contains(" 10") || t.contains(" 11"))
+    };
+    if !(conhecida || site_no_registro || campos.iter().any(|t| assinada(t))) {
+        return None;
+    }
+    // O nome: o campo que parece um sistema ("… OS …"), senão o modelo, senão o dono.
+    let com_nome = campos
+        .iter()
+        .find(|t| format!(" {} ", minusculo(t)).contains(" os "))
+        .or(modelo.filter(|m| !m.trim().is_empty()).as_ref())
+        .or(dono.as_ref())
+        .map(|t| t.trim().to_string())?;
+    let (nome, autor_no_nome) = match com_nome.to_lowercase().find(" by ") {
+        Some(i) => (com_nome[..i].trim().to_string(), Some(com_nome[i + 4..].trim().to_string())),
+        None => (com_nome.clone(), None),
+    };
+    let autor = autor_no_nome
+        .filter(|a| !a.is_empty())
+        .or_else(|| fabricante.map(|f| f.trim().to_string()).filter(|f| !f.is_empty() && !nome.contains(f.as_str())));
+    Some(WindowsModificado { nome, autor })
+}
+
+/// Lê o registro e identifica.
+pub fn windows_modificado() -> Option<WindowsModificado> {
+    let nt = |nome: &str| {
+        registry::read_text("HKLM", r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", nome)
+            .ok()
+            .flatten()
+    };
+    let oem = |nome: &str| registry::read_text("HKLM", OEM_KEY, nome).ok().flatten();
+    identificar_windows_modificado(
+        nt("RegisteredOwner").as_deref(),
+        nt("RegisteredOrganization").as_deref(),
+        oem("Manufacturer").as_deref(),
+        oem("Model").as_deref(),
+    )
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Inicio {
     Desativado,
@@ -140,6 +222,48 @@ mod tests {
     use super::*;
     use crate::modules::windows::catalog::{Action, CATALOG};
     use std::collections::HashSet;
+
+    /// `cargo test --lib essenciais::tests::mostra_o_windows_deste_pc -- --ignored --nocapture`
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore]
+    fn mostra_o_windows_deste_pc() {
+        println!("windows modificado: {:?}", windows_modificado());
+    }
+
+    #[test]
+    fn reconhece_o_windows_modificado_do_dono() {
+        let w = identificar_windows_modificado(
+            Some("SnyX OS 11 25H2 v1.4.5 by Team AntiLag"),
+            Some("https://teamantilag.com"),
+            Some("Team AntiLag"),
+            Some("SnyX OS 11 25H2 v1.4.5"),
+        )
+        .unwrap();
+        assert_eq!(w.nome, "SnyX OS 11 25H2 v1.4.5");
+        assert_eq!(w.autor.as_deref(), Some("Team AntiLag"));
+    }
+
+    #[test]
+    fn pc_de_marca_e_windows_comum_nao_sao_modificados() {
+        assert_eq!(
+            identificar_windows_modificado(Some("Usuário"), None, Some("Dell Inc."), Some("Inspiron 15 3511")),
+            None
+        );
+        assert_eq!(identificar_windows_modificado(Some("joao"), Some(""), None, None), None);
+        assert_eq!(
+            identificar_windows_modificado(Some("Windows User"), Some("Lenovo"), Some("LENOVO"), Some("82K2")),
+            None
+        );
+    }
+
+    #[test]
+    fn imagens_conhecidas_e_site_no_registro_bastam() {
+        let a = identificar_windows_modificado(Some("user"), None, Some("AtlasOS"), Some("AtlasOS v0.4")).unwrap();
+        assert_eq!(a.nome, "AtlasOS v0.4");
+        let s = identificar_windows_modificado(Some("Gamer"), Some("www.algumaiso.net"), None, Some("Windows Turbo")).unwrap();
+        assert_eq!(s.nome, "Windows Turbo");
+    }
 
     #[test]
     fn so_o_valor_4_e_desativado() {

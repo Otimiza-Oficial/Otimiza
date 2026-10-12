@@ -54,6 +54,7 @@ const estado = {
 
 let enviarMira = 0;
 let logoD = "";
+let logoViewBox = "0 0 512 512";
 
 // ---------------------------------------------------------------- utilidades
 
@@ -168,7 +169,7 @@ const svgDoca = {
 function estrutura(): string {
   return `
   <nav class="trilho" aria-label="Navegação">
-    <div class="logo" aria-label="Otimiza"><svg viewBox="0 0 656 656" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${logoD}"/></svg></div>
+    <div class="logo" aria-label="Otimiza"><svg viewBox="${logoViewBox}" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="${logoD}"/></svg></div>
     ${(["inicio", "jogos", "boost", "mira", "cores", "lab"] as Destino[]).map(botaoDestino).join("")}
     <div class="fim"><span class="sep-trilho"></span>${botaoDestino("ajustes")}</div>
   </nav>
@@ -1801,6 +1802,7 @@ async function telaAjustes() {
       <div class="vidro">
         <div class="linha"><div>Licença<p class="num">${esc(lic?.maquina ?? "")}</p></div><span class="selo ${lic?.ativa ? "medido" : "aviso"}">${lic?.ativa ? (lic.expira ? `até ${esc(lic.expira)}` : "vitalícia") : "não ativada"}</span></div>
         ${textoFb ? `<div class="linha"><div>Feedback<p>${esc(textoFb)}</p></div>${fb?.situacao === "Exigido" ? `<button class="botao" id="a-fb">Enviar feedback</button>` : ""}</div>` : ""}
+        ${estado.hw?.windows_modificado ? `<div class="linha"><div>Windows deste PC<p>${esc(estado.hw.windows_modificado.nome)}${estado.hw.windows_modificado.autor ? `, feito por ${esc(estado.hw.windows_modificado.autor)}` : ""}: uma versão modificada do Windows. Essas versões tiram ou desligam peças do sistema para ficar mais leves, e alguns recursos podem não existir nela. Se algo do Otimiza não funcionar aqui, a causa pode ser o sistema.</p></div><span class="selo aviso">modificado</span></div>` : ""}
         <div class="linha"><div>Modo clássico<p>As telas da 3.2, com cada ajuste do Windows, energia, núcleos e BIOS um por um.</p></div><button class="botao" id="a-classico">Abrir</button></div>
         ${estado.hw?.placa.fabricante === "Nvidia" ? `<div class="linha"><div>Smooth Motion pelo Otimiza (experimental)<p>Liga o Smooth Motion no perfil do jogo no driver, com um ajuste que a NVIDIA não documenta. Só RTX 40 e 50; se desfaz em um clique.</p></div><button class="chave" role="switch" aria-checked="false" id="a-sm" aria-label="Smooth Motion pelo Otimiza"></button></div>` : ""}
         <div class="linha"><div>Interface nova<p>Desligar volta para a 3.2 também na próxima vez que o Otimiza abrir.</p></div><button class="chave" role="switch" aria-checked="true" id="a-shell" aria-label="Interface nova"></button></div>
@@ -2019,6 +2021,8 @@ export async function iniciarV33() {
   }
 
   logoD = marcaSvg.match(/ d="([^"]+)"/)?.[1] ?? "";
+  // Do próprio arquivo: com a logo nova (11/10/2026) o desenho mudou de tamanho, e um número fixo aqui a deslocava.
+  logoViewBox = marcaSvg.match(/viewBox="([^"]+)"/)?.[1] ?? logoViewBox;
 
   raiz.innerHTML = estrutura();
   document.body.classList.add("v33-ativo");

@@ -1,6 +1,6 @@
 [package]
 name = "pc-optimizer"
-version = "3.3.1"
+version = "3.4.0"
 description = "Console de desempenho para Windows"
 authors = ["Otimiza"]
 edition = "2021"
@@ -115,6 +115,16 @@ windows = { version = "0.61", features = [
     "Win32_System_Performance",
     # Rampa de gama do monitor: brilho, contraste e gama sem driver de vídeo compatível (`plataforma::cores`).
     "Win32_UI_ColorSystem",
+    # Laboratório E1: a captura Windows.Graphics.Capture, lado a lado com a Duplicação de Área de Trabalho.
+    "Foundation",
+    "Graphics",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Security_Authorization_AppCapabilityAccess",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_System_WinRT_Direct3D11",
 ] }
 
 # Só para ouvir a falha do processo do WebView2 (`utils::webview`). Mesma versão que o Tauri já traz.
