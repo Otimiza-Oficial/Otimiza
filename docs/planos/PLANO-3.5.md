@@ -81,7 +81,25 @@ ganho que ele não paga.**
    `compor` escreve num alvo intermediário e um passe novo amplia para a swap
    chain.
 5. **Escala também funciona sozinha, sem geração** (multiplicador 1). É o caso
-   de quem não quer atraso nenhum: só o FPS real a mais.
+   de quem não quer atraso nenhum: só o FPS real a mais. O laço de hoje já
+   apresenta só os reais quando cabe 1×; falta permitir o 1. Sem geração, o
+   `receber` pula a pirâmide de luma e o fluxo, e só copia a imagem: a escala
+   sozinha custa a cópia + os dois passes do FSR, nada mais.
+
+### 2.1.1 Quando a sobreposição some (regra nova)
+Hoje a sobreposição **some** com 0,5 s sem quadro novo, na pausa da guarda e
+com o jogo fora da frente: "nunca uma imagem congelada por cima do jogo". Com a
+escala, sumir mostraria o jogo **pequeno** no meio do monitor, e uma tela
+parada do jogo (menu, carregamento) é legítima. Por isso:
+
+| Situação | Sem escala (hoje) | Com escala |
+|---|---|---|
+| 0,5 s sem quadro do jogo | some | **fica**, com o último real ampliado |
+| Pausa da guarda | some, sem captura | **fica**, só com os reais ampliados (sem geração) |
+| Jogo fora da frente | some | some |
+
+A guarda continua medindo o custo da **geração**; na escala ela compara "com
+geração" × "só escala", o que é exatamente a decisão que o cliente precisa.
 
 ### 2.2 Ampliador
 - **FSR 1** (EASU para ampliar + RCAS para nitidez), código aberto da AMD (MIT),
@@ -293,6 +311,21 @@ Cada marco termina **funcionando e medido**, nunca pela metade.
 
 Ordem possível em paralelo: M3 e M5 não dependem de M1/M2 e podem andar ao
 lado deles.
+
+### 10.1 M1 em detalhe (a ordem de implementação)
+
+| # | Arquivo | O quê |
+|---|---|---|
+| 1 | `geracao/escala.rs` | ✅ níveis, encaixe, cursor (puro, 9 testes) |
+| 2 | `geracao/shaders.hlsl` | `Easu` e `Rcas` como passes de pixel, lendo com `Load` (12 e 5 leituras, sem `Gather`): o mesmo kernel do `ffx_fsr1.h`, legível e sem as macros do SDK |
+| 3 | `geracao/gpu.rs` | `passe_na_area` (viewport com deslocamento); `preparar_ampliacao(l, a)` cria o alvo do tamanho do jogo e o ampliado; `compor_ampliado` = `compor` no intermediário **codificado** (no HDR, a `Sair` só roda no fim) → `Easu` → `Rcas` na área do encaixe, barras em preto; `sem_geracao` faz o `receber` só copiar |
+| 4 | `geracao/mod.rs` | `Configuracao.escala: Option<Nivel>`; multiplicador 1 aceito com escala; sobreposição no monitor inteiro; regras de 2.1.1 |
+| 5 | `plataforma/frameboost.rs` + `commands.rs` | a escala chega do comando de ligar (campo opcional: chamadas antigas continuam valendo) |
+| 6 | `gpu.rs` (teste `#[ignore]`) | imagem sintética com bordas finas: renderizada em 960×540 e em 640×360; a 640×360 ampliada pelo FSR fica mais perto da nativa (SSIM) que a ampliada pelo bilinear; as barras saem pretas |
+| 7 | `LICENCAS-DE-TERCEIROS.md` | a licença MIT do FSR 1 |
+
+O teste de GPU é `#[ignore]`, como os outros da placa: a esteira roda em
+máquina sem placa de vídeo. Ele roda à mão no notebook e no PC de casa.
 
 ---
 
