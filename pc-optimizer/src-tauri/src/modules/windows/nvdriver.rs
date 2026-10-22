@@ -156,6 +156,21 @@ pub static OPCOES: &[Opcao] = &[
         valor_otimizado: 0x0000_0001,
         so_por_jogo: false,
     },
+    // 3.5, escala pelo driver: o NVIDIA Image Scaling (`NV_QUALITY_UPSCALING_ID`, "NVIDIA Quality upscaling"). Ligado, o
+    // driver passa a oferecer resoluções menores e amplia com nitidez quando o jogo, em TELA CHEIA, escolhe uma delas: é
+    // a escala para tela cheia exclusiva, onde a sobreposição do Frame Boost não alcança. Não muda a área de trabalho.
+    Opcao {
+        id: "escala_nis",
+        titulo: "Escala do driver (NVIDIA Image Scaling)",
+        explicacao: "Para jogos em tela cheia: escolha no jogo uma resolução menor que a do monitor e o driver amplia com \
+                     nitidez. O jogo desenha menos pixels e ganha FPS de verdade. Em janela sem bordas, use a escala do \
+                     Frame Boost.",
+        id_do_padrao: Some(0x1044_4444),
+        nome_esperado: "quality upscaling",
+        // NV_QUALITY_UPSCALING_ON
+        valor_otimizado: 0x0000_0001,
+        so_por_jogo: false,
+    },
 ];
 
 /// `None` para nome desconhecido: o primeiro portão de toda escrita.
@@ -1377,9 +1392,9 @@ mod tests {
     }
 
     #[test]
-    fn o_catalogo_tem_as_sete_e_nenhuma_repetida() {
-        // Seis do pilar da 2.9; a taxa máxima veio do pacote do dono (11/10), documentada.
-        assert_eq!(OPCOES.len(), 7, "seis do pilar mais a taxa máxima");
+    fn o_catalogo_tem_as_oito_e_nenhuma_repetida() {
+        // Seis do pilar da 2.9; a taxa máxima veio do pacote do dono (11/10), documentada; a escala do driver, da 3.5.
+        assert_eq!(OPCOES.len(), 8, "seis do pilar, a taxa máxima e a escala");
 
         for opcao in OPCOES {
             assert!(!opcao.id.trim().is_empty());
@@ -1527,6 +1542,16 @@ mod tests {
             2,
             "aplicar_limite e desfazer_limite precisam conferir o número do limitador antes de mexer"
         );
+    }
+
+    #[test]
+    fn a_escala_do_driver_e_o_numero_publico_do_nis() {
+        // NvApiDriverSettings.h: NV_QUALITY_UPSCALING_ID = 0x10444444, "NVIDIA Quality upscaling", ON = 1, OFF = padrão.
+        let nis = opcao_por_id("escala_nis").expect("a escala do driver está no catálogo");
+        assert_eq!(nis.id_do_padrao, Some(0x1044_4444));
+        assert_eq!(nis.valor_otimizado, 1);
+        assert!("nvidia quality upscaling".contains(nis.nome_esperado));
+        assert!(!nis.so_por_jogo, "o NIS é do perfil global: é lá que o painel da NVIDIA o liga");
     }
 
     #[test]

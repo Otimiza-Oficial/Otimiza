@@ -1002,7 +1002,7 @@ fn bombear_mensagens() -> bool {
 /// cima o derruba do modo; ele volta, troca o modo de vídeo e perde FPS (`trocas_demais`). A tela cheia de hoje (do
 /// Windows, por composição) não troca o modo e aguenta o Frame Boost. Vale para qualquer resolução: a saída é o modo Sem
 /// bordas, e a resolução esticada vem do Windows.
-pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo saiu e voltou da tela cheia várias vezes com o Frame Boost por cima: é a tela cheia exclusiva antiga, em que nenhuma janela pode ficar por cima dele. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução.";
+pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo saiu e voltou da tela cheia várias vezes com o Frame Boost por cima: é a tela cheia exclusiva antiga, em que nenhuma janela pode ficar por cima dele. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução. Para continuar em tela cheia com mais FPS, ligue a escala do driver no Boost (Driver da placa de vídeo) e escolha uma resolução menor no jogo.";
 
 /// O aplicativo da frente está em tela cheia Direct3D exclusiva? (`SHQueryUserNotificationState`, documentada.)
 pub(crate) fn tela_cheia_exclusiva() -> bool {

@@ -825,6 +825,10 @@ async function driver(fab: string) {
           const porVoce = p.ajustes.afmf && !meu("amd-afmf");
           itens.push(linha("AMD Fluid Motion Frames", "Geração de quadros do driver. Pede tela cheia ou sem bordas.", !!p.ajustes.afmf, meu("amd-afmf") ? "desfazer:amd-afmf" : "amd:amd-afmf", porVoce, porVoce ? " Ligado por você no Adrenalin." : ""));
         }
+        if (p.ajustes.rsr !== null && p.ajustes.rsr !== undefined) {
+          const porVoce = p.ajustes.rsr && !meu("amd-rsr");
+          itens.push(linha("Escala do driver (Radeon Super Resolution)", "Para jogos em tela cheia: escolha no jogo uma resolução menor que a do monitor e o driver amplia com nitidez. Em janela sem bordas, use a escala do Frame Boost.", !!p.ajustes.rsr, meu("amd-rsr") ? "desfazer:amd-rsr" : "amd:amd-rsr", porVoce, porVoce ? " Ligado por você no Adrenalin." : ""));
+        }
         caixa.innerHTML = itens.join("") || `<p class="nota">Este driver não ofereceu ajustes ao Otimiza.</p>`;
       }
     } else if (fab === "Intel") {

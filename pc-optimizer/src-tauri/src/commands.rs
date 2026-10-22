@@ -1231,7 +1231,7 @@ pub async fn driver_amd(state: State<'_, AppState>) -> Result<PainelAmd, String>
     .map_err(|e| format!("Falha ao ler o driver AMD: {}", e))
 }
 
-/// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
+/// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf`, `amd-rsr` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn aplicar_ajuste_amd(

@@ -347,6 +347,16 @@ Risco a confirmar no item 8: se o Otimiza morrer à força com o cursor
 escondido, o Windows precisa devolvê-lo (a Lupa é do processo). Se não
 devolver, entra um vigia que mostra o cursor na abertura seguinte.
 
+### 10.3 M3 em detalhe
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `nvdriver.rs` `escala_nis` | ✅ `NV_QUALITY_UPSCALING_ID = 0x10444444` ("NVIDIA Quality upscaling", ON = 1, OFF = padrão), conferido no `NvApiDriverSettings.h` público. Entra no catálogo global: herda a trava do nome (o driver diz o nome do número antes de qualquer escrita), o valor anterior no histórico e o desfazer pela restauração de padrão da NVIDIA |
+| 2 | `amddriver.rs` `Opcao::Rsr` | ✅ `GetRadeonSuperResolution` na posição 14 dos serviços 3D (global, sem a placa no argumento) e `IsSupported`/`IsEnabled`/`SetEnabled` em 3/4/5, conferidos no `I3DSettings.h` do ADLX; anterior guardado e desfeito como o Anti-Lag |
+| 3 | tela | ✅ a NVIDIA aparece sozinha (o painel vem do catálogo); a AMD ganha a linha "Escala do driver (Radeon Super Resolution)" só quando o driver diz que suporta. A mensagem de tela cheia exclusiva do Frame Boost aponta para a escala do driver |
+| 4 | testes | ✅ o número público do NIS fixado; o RSR vai e volta pelo texto do histórico; a posição 14 entra na guarda das tabelas do ADLX |
+| 5 | PC de casa | **aplicar → reabrir o jogo em tela cheia numa resolução menor → desfazer**, nas duas marcas: o driver amplia, o FPS sobe, e o desfazer devolve o valor de antes. O teste `os_numeros_da_tabela_batem_com_o_que_o_driver_chama` (NVIDIA) confere o 0x10444444 contra o driver de verdade. O notebook só tem Intel |
+
 ---
 
 ## 11. Riscos

@@ -335,7 +335,7 @@ export interface EstadoDoGerador {
 export interface PainelAmd {
   estado: string;
   nota: string;
-  ajustes: { anti_lag: boolean | null; afmf: boolean | null; limite_ligado: boolean | null; limite_fps: number | null } | null;
+  ajustes: { anti_lag: boolean | null; afmf: boolean | null; rsr?: boolean | null; limite_ligado: boolean | null; limite_fps: number | null } | null;
   sensores: { uso_pct: number | null; temperatura_c: number | null } | null;
   aplicados: string[];
 }
