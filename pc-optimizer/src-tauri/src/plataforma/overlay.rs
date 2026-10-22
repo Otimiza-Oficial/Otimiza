@@ -67,9 +67,15 @@ pub struct Leitura {
     pub fps: Option<f64>,
     pub low_1pct: Option<f64>,
     pub quadro_ms: Option<f64>,
-    /// Multiplicador do Frame Boost do Otimiza, quando ligado.
+    /// Multiplicador do Frame Boost do Otimiza, quando ele gera quadros.
     pub boost: Option<u8>,
     pub nota: Option<String>,
+    /// Com a escala do Frame Boost: o nível ("Qualidade").
+    #[serde(default)]
+    pub escala: Option<&'static str>,
+    /// Gerando quadros: o que chegou à tela (medido pelo PresentMon, ou o apresentado pelo gerador).
+    #[serde(default)]
+    pub na_tela: Option<f64>,
 }
 
 pub const MARGEM: i32 = 12;
@@ -203,14 +209,24 @@ pub fn leitura_de(
         let (fps, quadro_ms, low) = jogo.unwrap_or((None, None, None));
         let fps = fps.or((gerador.fps_reais > 0.0).then_some(gerador.fps_reais));
         if fps.is_some() {
+            // Só escala não gera: o que chega à tela é o próprio jogo, e "1×" não diria nada.
+            let gera = gerador.automatico || gerador.multiplicador > 1;
             return Leitura {
                 modo,
                 rotulo: "FPS",
                 fps,
                 low_1pct: low,
                 quadro_ms,
-                boost: Some(gerador.multiplicador),
+                boost: gera.then_some(gerador.multiplicador),
                 nota: None,
+                escala: gerador.escala.map(|n| n.nome()),
+                na_tela: gera
+                    .then(|| {
+                        gerador
+                            .fps_exibidos
+                            .or((gerador.fps_apresentados > 0.0).then_some(gerador.fps_apresentados))
+                    })
+                    .flatten(),
             };
         }
     }
@@ -223,6 +239,8 @@ pub fn leitura_de(
             quadro_ms,
             boost: None,
             nota: None,
+            escala: None,
+            na_tela: None,
         },
         None => Leitura {
             modo,
@@ -232,6 +250,8 @@ pub fn leitura_de(
             quadro_ms: None,
             boost: None,
             nota: Some("Abra o Otimiza como administrador para medir".to_string()),
+            escala: None,
+            na_tela: None,
         },
     }
 }
@@ -717,6 +737,23 @@ mod tests {
     fn sem_quadros_nao_tem_numero() {
         assert_eq!(estatisticas(&[], 5.0), (None, None, None));
         assert_eq!(estatisticas(&[4.5], 5.0).0, None);
+    }
+
+    #[test]
+    fn so_escala_mostra_o_nivel_e_nao_um_multiplicador() {
+        let g = EstadoDoGerador {
+            situacao: Situacao::Gerando,
+            fps_reais: 88.0,
+            fps_apresentados: 88.0,
+            multiplicador: 1,
+            escala: Some(crate::modules::windows::geracao::escala::Nivel::Qualidade),
+            ..Default::default()
+        };
+        let l = leitura_de(Modo::Detalhado, &g, Some((Some(87.0), None, None)));
+        assert_eq!(l.fps, Some(87.0));
+        assert_eq!(l.boost, None, "sem geração não há multiplicador");
+        assert_eq!(l.escala, Some("Qualidade"));
+        assert_eq!(l.na_tela, None, "na tela é o próprio jogo");
     }
 
     #[test]

@@ -5,6 +5,8 @@
 // cheia a 60 fps, a sobreposição por cima não tirou o jogo do modo nem lhe tirou FPS. Na tela cheia exclusiva antiga
 // (o jogo troca o modo de vídeo do monitor), nada fica por cima: o gerador percebe as trocas e desliga.
 
+pub mod cursor;
+pub mod escala;
 pub mod gpu;
 pub mod guarda;
 pub mod resumo;
@@ -23,7 +25,9 @@ use windows::Win32::Graphics::DirectComposition::{
 };
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::Graphics::Dxgi::*;
-use windows::Win32::Graphics::Gdi::{ClientToScreen, MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
+use windows::Win32::Graphics::Gdi::{
+    ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -93,6 +97,14 @@ pub struct Estado {
     /// Desde que ligou, só o tempo gerando e à vista: o "antes × depois" do painel quando desliga.
     #[serde(default)]
     pub sessao: resumo::Acumulado,
+    /// Com escala: o nível pedido e onde a imagem ampliada cai no monitor (a do jogo é `area`).
+    #[serde(default)]
+    pub escala: Option<escala::Nivel>,
+    #[serde(default)]
+    pub ampliada: Option<Retangulo>,
+    /// Com escala e o jogo ainda do tamanho do monitor (ele repôs o tamanho): o que fazer no menu do jogo.
+    #[serde(default)]
+    pub aviso_da_escala: Option<String>,
 }
 
 impl Default for Estado {
@@ -121,6 +133,9 @@ impl Default for Estado {
             leve: false,
             comparacoes: 0,
             sessao: resumo::Acumulado::default(),
+            escala: None,
+            ampliada: None,
+            aviso_da_escala: None,
         }
     }
 }
@@ -141,6 +156,34 @@ fn gravar_bmp(
     textura: &ID3D11Texture2D,
     caminho: &std::path::Path,
 ) -> Result<(), String> {
+    let (l, a, px) = ler_bgra(gpu, textura, false)?;
+    std::fs::write(caminho, bmp(l, a, &px)).map_err(|e| e.to_string())
+}
+
+/// Pura: BGRA de cima para baixo num arquivo BMP de 32 bits (o WebView mostra direto).
+pub fn bmp(l: u32, a: u32, px: &[u8]) -> Vec<u8> {
+    let mut d = Vec::with_capacity(54 + px.len());
+    d.extend_from_slice(b"BM");
+    d.extend_from_slice(&((54 + px.len()) as u32).to_le_bytes());
+    d.extend_from_slice(&[0, 0, 0, 0]);
+    d.extend_from_slice(&54u32.to_le_bytes());
+    d.extend_from_slice(&40u32.to_le_bytes());
+    d.extend_from_slice(&(l as i32).to_le_bytes());
+    d.extend_from_slice(&(-(a as i32)).to_le_bytes());
+    d.extend_from_slice(&1u16.to_le_bytes());
+    d.extend_from_slice(&32u16.to_le_bytes());
+    d.extend_from_slice(&[0u8; 24]);
+    d.extend_from_slice(px);
+    d
+}
+
+/// Uma textura da placa em BGRA de 8 bits. HDR (FP16): `ja_codificado` é a imagem que já está com gama (a do jogo
+/// dentro do gerador); sem isso, é scRGB linear e ganha gama 2,2 (a da swap chain).
+fn ler_bgra(
+    gpu: &Gpu,
+    textura: &ID3D11Texture2D,
+    ja_codificado: bool,
+) -> Result<(u32, u32, Vec<u8>), String> {
     use windows::Win32::Graphics::Direct3D11::*;
     unsafe {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
@@ -165,29 +208,17 @@ fn gravar_bmp(
             .Map(&copia, 0, D3D11_MAP_READ, 0, Some(&mut m))
             .map_err(|e| e.message().to_string())?;
         let (l, a) = (desc.Width as usize, desc.Height as usize);
-        let mut dados = Vec::with_capacity(54 + l * a * 4);
-        let tamanho = (54 + l * a * 4) as u32;
-        dados.extend_from_slice(b"BM");
-        dados.extend_from_slice(&tamanho.to_le_bytes());
-        dados.extend_from_slice(&[0, 0, 0, 0]);
-        dados.extend_from_slice(&54u32.to_le_bytes());
-        dados.extend_from_slice(&40u32.to_le_bytes());
-        dados.extend_from_slice(&(l as i32).to_le_bytes());
-        dados.extend_from_slice(&(-(a as i32)).to_le_bytes());
-        dados.extend_from_slice(&1u16.to_le_bytes());
-        dados.extend_from_slice(&32u16.to_le_bytes());
-        dados.extend_from_slice(&[0u8; 24]);
+        let mut dados = Vec::with_capacity(l * a * 4);
         for y in 0..a {
             let base = (m.pData as *const u8).add(y * m.RowPitch as usize);
             if fp16 {
-                // Tabela: a conversão pixel a pixel atrasava o quadro gerado seguinte e ele nunca era gravado.
-                static TABELA: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
-                let tabela = TABELA.get_or_init(|| {
+                // Tabelas: a conversão pixel a pixel atrasava o quadro gerado seguinte e ele nunca era gravado.
+                static LINEAR: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+                static CODIFICADO: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+                let gama = if ja_codificado { 1.0 } else { 1.0 / 2.2 };
+                let tabela = (if ja_codificado { &CODIFICADO } else { &LINEAR }).get_or_init(|| {
                     (0..=u16::MAX)
-                        .map(|v| {
-                            (gpu::meio_float(v).clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0).round()
-                                as u8
-                        })
+                        .map(|v| (gpu::meio_float(v).clamp(0.0, 1.0).powf(gama) * 255.0).round() as u8)
                         .collect()
                 });
                 let linha = std::slice::from_raw_parts(base as *const u16, l * 4);
@@ -200,8 +231,111 @@ fn gravar_bmp(
             }
         }
         gpu.ctx.Unmap(&copia, 0);
-        std::fs::write(caminho, dados).map_err(|e| e.to_string())
+        Ok((l as u32, a as u32, dados))
     }
+}
+
+/// O comparador da tela: o mesmo pedaço do quadro do jogo (na resolução dele, antes de ampliar) e da imagem ampliada
+/// pelo FSR, em BMP.
+#[derive(Debug, Clone)]
+pub struct Comparacao {
+    pub jogo_bmp: Vec<u8>,
+    pub tela_bmp: Vec<u8>,
+    pub jogo: (u32, u32),
+    pub tela: (u32, u32),
+}
+
+enum PedidoDeComparacao {
+    Nenhum,
+    Pedido,
+    Pronta(Comparacao),
+}
+
+static COMPARACAO: Mutex<PedidoDeComparacao> = Mutex::new(PedidoDeComparacao::Nenhum);
+
+/// O próximo quadro real ampliado vira comparação (`tomar_comparacao`).
+pub fn pedir_comparacao() {
+    if let Ok(mut c) = COMPARACAO.lock() {
+        *c = PedidoDeComparacao::Pedido;
+    }
+}
+
+pub fn tomar_comparacao() -> Option<Comparacao> {
+    let mut c = COMPARACAO.lock().ok()?;
+    match std::mem::replace(&mut *c, PedidoDeComparacao::Nenhum) {
+        PedidoDeComparacao::Pronta(x) => Some(x),
+        outro => {
+            *c = outro;
+            None
+        }
+    }
+}
+
+/// Com um pedido aberto: lê o quadro do jogo (antes de ampliar) e o que foi para a tela, e guarda o mesmo pedaço dos
+/// dois. Só num quadro REAL: o gerado não existe no jogo.
+fn capturar_comparacao(gpu: &Gpu, swap: &IDXGISwapChain1, area: Retangulo) {
+    let pedido = COMPARACAO
+        .lock()
+        .is_ok_and(|c| matches!(*c, PedidoDeComparacao::Pedido));
+    if !pedido {
+        return;
+    }
+    let Some(origem) = gpu.textura_da_origem() else {
+        return;
+    };
+    let Ok(fundo) = (unsafe { swap.GetBuffer::<ID3D11Texture2D>(0) }) else {
+        return;
+    };
+    let (Ok((jl, ja, jogo)), Ok((sl, sa, tela))) =
+        (ler_bgra(gpu, origem, true), ler_bgra(gpu, &fundo, false))
+    else {
+        return;
+    };
+    let (al, aa) = (area.largura as u32, area.altura as u32);
+    let ampliada = recortar(&tela, sl, sa, area);
+    let (rj, rt) = regioes_da_comparacao((jl, ja), (al, aa));
+    let comparacao = Comparacao {
+        jogo_bmp: bmp(rj.largura as u32, rj.altura as u32, &recortar(&jogo, jl, ja, rj)),
+        tela_bmp: bmp(rt.largura as u32, rt.altura as u32, &recortar(&ampliada, al, aa, rt)),
+        jogo: (jl, ja),
+        tela: (al, aa),
+    };
+    if let Ok(mut c) = COMPARACAO.lock() {
+        *c = PedidoDeComparacao::Pronta(comparacao);
+    }
+}
+
+/// Pura: o pedaço central da imagem ampliada (um terço de cada lado) e o mesmo pedaço no quadro do jogo.
+pub fn regioes_da_comparacao(jogo: (u32, u32), ampliada: (u32, u32)) -> (Retangulo, Retangulo) {
+    let (tl, ta) = ((ampliada.0 / 3).max(1), (ampliada.1 / 3).max(1));
+    let tela = Retangulo {
+        x: ((ampliada.0 - tl) / 2) as i32,
+        y: ((ampliada.1 - ta) / 2) as i32,
+        largura: tl as i32,
+        altura: ta as i32,
+    };
+    let (fx, fy) = (jogo.0 as f64 / ampliada.0 as f64, jogo.1 as f64 / ampliada.1 as f64);
+    let do_jogo = Retangulo {
+        x: (tela.x as f64 * fx).round() as i32,
+        y: (tela.y as f64 * fy).round() as i32,
+        largura: ((tl as f64 * fx).round() as i32).max(1),
+        altura: ((ta as f64 * fy).round() as i32).max(1),
+    };
+    (do_jogo, tela)
+}
+
+/// Pura: o retângulo `r` de uma imagem BGRA `l` de largura (presa dentro dela).
+pub fn recortar(px: &[u8], l: u32, a: u32, r: Retangulo) -> Vec<u8> {
+    let x0 = (r.x.max(0) as u32).min(l);
+    let y0 = (r.y.max(0) as u32).min(a);
+    let x1 = (x0 + r.largura.max(0) as u32).min(l);
+    let y1 = (y0 + r.altura.max(0) as u32).min(a);
+    let mut v = Vec::with_capacity(((x1 - x0) * (y1 - y0) * 4) as usize);
+    for y in y0..y1 {
+        let i = ((y * l + x0) * 4) as usize;
+        v.extend_from_slice(&px[i..i + ((x1 - x0) * 4) as usize]);
+    }
+    v
 }
 static EM_EXECUCAO: Mutex<Option<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> =
     Mutex::new(None);
@@ -237,6 +371,16 @@ pub struct Configuracao {
     /// Começa no modo leve (`gpu::NIVEIS_DO_MODO_LEVE`): placa sem folga.
     #[serde(default)]
     pub leve: bool,
+    /// Escala: a sobreposição cobre o monitor e amplia a janela do jogo (FSR 1). Com `multiplicador` 1, só escala.
+    #[serde(default)]
+    pub escala: Option<escala::Nivel>,
+}
+
+impl Configuracao {
+    /// Só escala, sem gerar quadros: o FPS real a mais sem o atraso da geração.
+    pub fn so_escala(&self) -> bool {
+        self.escala.is_some() && self.multiplicador == 1 && !self.automatico
+    }
 }
 
 /// O que fazer quando a guarda vê o jogo perder FPS. Pura.
@@ -270,10 +414,15 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
         *e = Estado {
             situacao: Situacao::ProcurandoJanela,
             processo: config.processo.clone(),
-            multiplicador: config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO),
-            automatico: config.automatico,
+            multiplicador: if config.so_escala() {
+                1
+            } else {
+                config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO)
+            },
+            automatico: config.automatico && !config.so_escala(),
             sem_limite: config.sem_limite,
             leve: config.leve,
+            escala: config.escala,
             ..Estado::default()
         }
     });
@@ -359,6 +508,123 @@ pub(crate) fn area_do_cliente(hwnd: HWND) -> Option<Retangulo> {
             altura: r.bottom - r.top,
         })
     }
+}
+
+/// O monitor onde a janela está, em coordenadas da tela.
+fn monitor_da_janela(hwnd: HWND) -> Option<Retangulo> {
+    unsafe {
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info)
+            .as_bool()
+            .then(|| {
+                let r = info.rcMonitor;
+                Retangulo {
+                    x: r.left,
+                    y: r.top,
+                    largura: r.right - r.left,
+                    altura: r.bottom - r.top,
+                }
+            })
+    }
+}
+
+/// Com escala: a janela do jogo no tamanho do nível, centrada no monitor dela. Devolvida exatamente como estava
+/// (lugar, tamanho e maximizada ou não) quando o gerador sai, por qualquer caminho.
+struct JanelaNoNivel {
+    hwnd: HWND,
+    anterior: RECT,
+    maximizada: bool,
+}
+
+impl JanelaNoNivel {
+    /// `None` quando não precisou mexer (já está no tamanho) ou o Windows recusou.
+    fn ajustar(hwnd: HWND, nivel: escala::Nivel) -> Option<JanelaNoNivel> {
+        unsafe {
+            let maximizada = IsZoomed(hwnd).as_bool();
+            if maximizada {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
+            let mut janela = RECT::default();
+            GetWindowRect(hwnd, &mut janela).ok()?;
+            let mut cliente = RECT::default();
+            GetClientRect(hwnd, &mut cliente).ok()?;
+            let borda = (
+                (janela.right - janela.left) - (cliente.right - cliente.left),
+                (janela.bottom - janela.top) - (cliente.bottom - cliente.top),
+            );
+            let monitor = monitor_da_janela(hwnd)?;
+            let alvo = escala::janela_no_nivel(nivel, monitor, borda);
+            let ja_esta = (cliente.right - cliente.left, cliente.bottom - cliente.top)
+                == (alvo.largura - borda.0, alvo.altura - borda.1);
+            if ja_esta && !maximizada {
+                return None;
+            }
+            SetWindowPos(
+                hwnd,
+                None,
+                alvo.x,
+                alvo.y,
+                alvo.largura,
+                alvo.altura,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            .ok()?;
+            crate::utils::Logger::info(&format!(
+                "gerador: janela do jogo em {}x{} para a escala {:?}",
+                alvo.largura - borda.0,
+                alvo.altura - borda.1,
+                nivel
+            ));
+            Some(JanelaNoNivel {
+                hwnd,
+                anterior: janela,
+                maximizada,
+            })
+        }
+    }
+}
+
+impl Drop for JanelaNoNivel {
+    fn drop(&mut self) {
+        unsafe {
+            if !IsWindow(Some(self.hwnd)).as_bool() {
+                return;
+            }
+            let r = self.anterior;
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            if self.maximizada {
+                let _ = ShowWindow(self.hwnd, SW_MAXIMIZE);
+            }
+        }
+    }
+}
+
+/// A forma nova do cursor, quando a captura avisa que ela mudou (`PointerShapeBufferSize`).
+fn forma_do_cursor(d: &IDXGIOutputDuplication, tamanho: u32) -> Option<cursor::Forma> {
+    let mut dados = vec![0u8; tamanho as usize];
+    let mut usado = 0u32;
+    let mut info = DXGI_OUTDUPL_POINTER_SHAPE_INFO::default();
+    unsafe { d.GetFramePointerShape(tamanho, dados.as_mut_ptr() as *mut _, &mut usado, &mut info) }
+        .ok()?;
+    cursor::forma_em_bgra(
+        info.Type,
+        info.Width,
+        info.Height,
+        info.Pitch,
+        (info.HotSpot.x, info.HotSpot.y),
+        &dados[..(usado as usize).min(dados.len())],
+    )
 }
 
 struct Saida {
@@ -622,6 +888,10 @@ struct Sobreposicao {
     altura: u32,
     /// No ritmo do monitor: o objeto que avisa a vez da tela (latência máxima de 1 quadro) e `Present(1)`.
     vez_da_tela: Option<windows::Win32::Foundation::HANDLE>,
+    /// Com escala: onde a imagem ampliada cai dentro da sobreposição (que cobre o monitor).
+    ampliar: Option<Retangulo>,
+    /// Com escala: onde o cursor ampliado vai, na sobreposição (nenhum = escondido ou fora do jogo).
+    cursor: Option<Retangulo>,
 }
 
 impl Sobreposicao {
@@ -631,6 +901,7 @@ impl Sobreposicao {
         visivel_em_captura: bool,
         hdr: bool,
         pelo_monitor: bool,
+        ampliar: Option<Retangulo>,
     ) -> Result<Sobreposicao, String> {
         unsafe {
             let instancia = GetModuleHandleW(None).map_err(|e| e.message().to_string())?;
@@ -749,6 +1020,8 @@ impl Sobreposicao {
                 largura: area.largura as u32,
                 altura: area.altura as u32,
                 vez_da_tela,
+                ampliar,
+                cursor: None,
             };
             s.criar_rtv(gpu)?;
             Ok(s)
@@ -772,9 +1045,24 @@ impl Sobreposicao {
 
     fn apresentar(&self, gpu: &Gpu, t: Option<f32>, cronometro: Option<&mut gpu::Cronometro>) {
         if let Some(rtv) = &self.rtv {
-            match cronometro {
-                Some(c) => c.medir(gpu, || gpu.compor(rtv, self.largura, self.altura, t)),
+            let compor = || match self.ampliar {
+                Some(area) => {
+                    gpu.compor_ampliado(rtv, area, t);
+                    if let Some(c) = self.cursor {
+                        gpu.desenhar_cursor(rtv, c);
+                    }
+                }
                 None => gpu.compor(rtv, self.largura, self.altura, t),
+            };
+            match cronometro {
+                Some(c) => c.medir(gpu, compor),
+                None => compor(),
+            }
+            // Só com a sobreposição à vista (o jogo na frente): com o Otimiza na frente, a captura seria a dele.
+            if let (Some(area), None) = (self.ampliar, t) {
+                if unsafe { IsWindowVisible(self.hwnd) }.as_bool() {
+                    capturar_comparacao(gpu, &self.swap, area);
+                }
             }
             if let Ok(mut g) = CAPTURA_DE_DIAGNOSTICO.lock() {
                 if let Some((pasta, restantes)) = g.as_mut() {
@@ -839,7 +1127,7 @@ fn bombear_mensagens() -> bool {
 /// cima o derruba do modo; ele volta, troca o modo de vídeo e perde FPS (`trocas_demais`). A tela cheia de hoje (do
 /// Windows, por composição) não troca o modo e aguenta o Frame Boost. Vale para qualquer resolução: a saída é o modo Sem
 /// bordas, e a resolução esticada vem do Windows.
-pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo saiu e voltou da tela cheia várias vezes com o Frame Boost por cima: é a tela cheia exclusiva antiga, em que nenhuma janela pode ficar por cima dele. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução.";
+pub const TELA_CHEIA_EXCLUSIVA: &str = "O jogo saiu e voltou da tela cheia várias vezes com o Frame Boost por cima: é a tela cheia exclusiva antiga, em que nenhuma janela pode ficar por cima dele. No jogo, use Sem bordas. Para jogar esticado (por exemplo 1100x1080): ponha essa resolução no Windows (Configurações → Sistema → Tela) com a escala \"Tela inteira\" no Painel de Controle NVIDIA, e o jogo em Sem bordas usa essa resolução. Para continuar em tela cheia com mais FPS, ligue a escala do driver no Boost (Driver da placa de vídeo) e escolha uma resolução menor no jogo.";
 
 /// O aplicativo da frente está em tela cheia Direct3D exclusiva? (`SHQueryUserNotificationState`, documentada.)
 pub(crate) fn tela_cheia_exclusiva() -> bool {
@@ -899,7 +1187,9 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
 }
 
 fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
-    let multiplicador = if config.automatico {
+    let multiplicador = if config.so_escala() {
+        1
+    } else if config.automatico {
         MAXIMO_DO_AUTOMATICO
     } else if config.sem_limite {
         config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO)
@@ -920,6 +1210,11 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
         }
         std::thread::sleep(Duration::from_millis(500));
     };
+
+    // Escala: o jogo vai para o tamanho do nível e volta como estava quando o gerador sair (a guarda, ao sair daqui).
+    let _janela_no_nivel = config.escala.and_then(|nivel| {
+        janela_do_processo(pid).and_then(|h| JanelaNoNivel::ajustar(h, nivel))
+    });
 
     // Janela redimensionada, movida para outro monitor, minimizada, ou o Windows trocou o modo de vídeo: o gerador se
     // refaz sozinho em vez de desligar. Seis refeitas seguidas que não duram nem 5 s = a janela não para quieta.
@@ -1077,13 +1372,56 @@ fn sessao(
     // O Auto dentro dos Hz anda no ritmo do monitor: um quadro por atualização da tela, cada um feito para o instante em
     // que aparece. Pelo cronômetro (o 2×/3×/4× e o "passar do limite"), às vezes caíam dois quadros na mesma
     // atualização e nenhum na seguinte: o micro-tranco.
-    let pelo_monitor = config.automatico && !config.sem_limite && hz > 0;
-    let sobreposicao = Sobreposicao::nova(
+    let pelo_monitor = config.automatico && multiplicador > 1 && !config.sem_limite && hz > 0;
+    // Escala: a sobreposição cobre o monitor e a imagem do jogo cai ampliada no encaixe (barras quando a proporção é
+    // outra). Sem gerar quadros, o `receber` só copia.
+    let ampliada = config.escala.and_then(|_| {
+        escala::encaixe(
+            recorte.largura,
+            recorte.altura,
+            Retangulo {
+                x: 0,
+                y: 0,
+                largura: saida.monitor.largura,
+                altura: saida.monitor.altura,
+            },
+        )
+    });
+    if let Some(a) = ampliada {
+        gpu.preparar_ampliacao(a.largura as u32, a.altura as u32)?;
+    }
+    // O jogo repôs o tamanho do monitor (alguns jogos fazem isso): a escala não ganha nada, e a tela diz o que fazer.
+    let aviso_da_escala = config.escala.and_then(|nivel| {
+        let (l, a) = escala::resolucao_de_render(nivel, saida.monitor.largura, saida.monitor.altura);
+        let do_monitor = recorte.largura * 100 >= saida.monitor.largura * 95
+            && recorte.altura * 100 >= saida.monitor.altura * 95;
+        do_monitor.then(|| {
+            format!(
+                "O jogo voltou para {}×{} sozinho: escolha {}×{} em janela sem bordas no menu de vídeo dele e a escala passa a ganhar FPS.",
+                recorte.largura, recorte.altura, l, a
+            )
+        })
+    });
+    publicar(|e| e.aviso_da_escala = aviso_da_escala);
+    gpu.sem_geracao = multiplicador <= 1;
+    // Com escala: o mouse preso na janela pequena e o cursor do sistema trocado pelo ampliado (os dois devolvidos ao
+    // esconder a sobreposição e ao sair). Monitor girado fica sem cursor ampliado.
+    let cursor_ampliado = ampliada.is_some() && giro == ritmo::Giro::Nenhum;
+    let mut mouse = cursor::MousePreso::novo();
+    let mut cursor_do_sistema = cursor_ampliado.then(cursor::CursorDoSistema::novo);
+    let mut ponteiro: Option<(i32, i32)> = None;
+    let mut forma: Option<((i32, i32), (i32, i32))> = None;
+    let mut sobreposicao = Sobreposicao::nova(
         &gpu,
-        area_na_tela,
+        if ampliada.is_some() {
+            saida.monitor
+        } else {
+            area_na_tela
+        },
         config.visivel_em_captura,
         hdr,
         pelo_monitor,
+        ampliada,
     )?;
     let periodo_da_tela = if hz > 0 { 1.0 / hz as f64 } else { 0.0 };
     // O par que está sendo mostrado, pelo instante em que cada real apareceu na tela do jogo (`LastPresentTime`), e o
@@ -1097,6 +1435,11 @@ fn sessao(
     publicar(|e| {
         e.situacao = Situacao::Gerando;
         e.area = Some(area_na_tela);
+        e.ampliada = ampliada.map(|a| Retangulo {
+            x: saida.monitor.x + a.x,
+            y: saida.monitor.y + a.y,
+            ..a
+        });
         e.multiplicador = multiplicador;
         e.erro = None;
         e.hz = hz;
@@ -1218,12 +1561,18 @@ fn sessao(
                 troca_de_fonte = Some(agora_do_laco);
             }
         }
-        let pausa_completa = vivo.is_some() && guarda.pausada();
+        // Com escala a sobreposição É a tela do jogo: sumir mostraria o jogo pequeno no meio do monitor. Na pausa da
+        // guarda ela segue com os reais ampliados (sem geração), e um jogo parado (menu, carregamento) fica na tela.
+        let pausa_completa = vivo.is_some() && guarda.pausada() && ampliada.is_none();
 
         // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO: meio segundo sem quadro real e a sobreposição some. Na pausa
         // completa da guarda também: o que aparece é o jogo, sem nada do Otimiza no caminho.
         // E só com o jogo na frente: ligado pelo Otimiza com o jogo atrás, a sobreposição não cobre o próprio Otimiza.
-        let sem_quadro = ultimo_real.elapsed() > Duration::from_millis(500);
+        let sem_quadro = if ampliada.is_some() {
+            gpu.reais == 0
+        } else {
+            ultimo_real.elapsed() > Duration::from_millis(500)
+        };
         let fora_da_frente = !jogo_na_frente(pid);
         let parado = sem_quadro || pausa_completa || fora_da_frente;
         // Por que ficou escondida (para o log de 10 s): o primeiro motivo que vale, nesta ordem.
@@ -1250,6 +1599,16 @@ fn sessao(
                     sobreposicao.hwnd,
                     if parado { SW_HIDE } else { SW_SHOWNOACTIVATE },
                 );
+            }
+            if ampliada.is_some() {
+                if parado {
+                    mouse.soltar();
+                } else {
+                    mouse.prender(area_na_tela);
+                }
+            }
+            if let Some(c) = cursor_do_sistema.as_mut() {
+                c.esconder(!parado);
             }
             escondida = parado;
         }
@@ -1309,6 +1668,10 @@ fn sessao(
             }
             if area_do_cliente(hwnd) != Some(cliente) {
                 return Ok(Fim::Refazer("a janela mudou de tamanho ou de lugar"));
+            }
+            // Trocar de janela no Windows desfaz o recorte do mouse: prende de novo.
+            if ampliada.is_some() && !escondida {
+                mouse.prender(area_na_tela);
             }
             let agora = segundos(inicio);
             let dt = agora - janela_de_contagem.0;
@@ -1557,6 +1920,41 @@ fn sessao(
                         }
                     }
                 }
+                // O cursor ampliado: a forma vem quando muda, a posição quando o mouse anda.
+                if let Some(destino) = ampliada.filter(|_| cursor_ampliado) {
+                    let mut mudou = false;
+                    if info.PointerShapeBufferSize > 0 {
+                        if let Some(f) = forma_do_cursor(&duplicacao, info.PointerShapeBufferSize) {
+                            if gpu.definir_cursor(&f).is_ok() {
+                                forma = Some((f.ponta, (f.largura as i32, f.altura as i32)));
+                                mudou = true;
+                            }
+                        }
+                    }
+                    if info.LastMouseUpdateTime != 0 {
+                        let p = info.PointerPosition;
+                        ponteiro = p.Visible.as_bool().then_some((p.Position.x, p.Position.y));
+                        mudou = true;
+                    }
+                    if mudou {
+                        let onde = match (ponteiro, forma) {
+                            (Some(p), Some((ponta, tamanho))) => {
+                                escala::cursor_na_tela(p, ponta, tamanho, recorte, destino)
+                            }
+                            _ => None,
+                        };
+                        if onde != sobreposicao.cursor {
+                            sobreposicao.cursor = onde;
+                            // Jogo parado (menu) e o mouse andando: mostra o mesmo real com o cursor no lugar novo.
+                            if agenda.is_empty() && gpu.reais > 0 && !pelo_monitor {
+                                agenda.push_back(Apresentacao {
+                                    instante: segundos(inicio),
+                                    fase: Fase::Real,
+                                });
+                            }
+                        }
+                    }
+                }
                 unsafe {
                     let _ = duplicacao.ReleaseFrame();
                 }
@@ -1665,6 +2063,11 @@ mod tests {
             automatico: mult == 0,
             sem_limite: std::env::var_os("OTIMIZA_FG_SEM_LIMITE").is_some(),
             leve: std::env::var_os("OTIMIZA_FG_LEVE").is_some(),
+            // OTIMIZA_FG_ESCALA=Qualidade (ou UltraQualidade, Equilibrado, Desempenho): amplia o jogo para o monitor;
+            // com OTIMIZA_FG_MULT=1, só escala.
+            escala: std::env::var("OTIMIZA_FG_ESCALA")
+                .ok()
+                .and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
         })
         .unwrap();
         println!("inicio: {:?}", e);
@@ -1766,6 +2169,33 @@ mod tests_puros {
             "espaçadas: alt+tab normal"
         );
         assert!(TELA_CHEIA_EXCLUSIVA.contains("Sem bordas"));
+    }
+
+    #[test]
+    fn a_comparacao_pega_o_mesmo_pedaco_nas_duas_imagens() {
+        // Jogo 1280x720 ampliado para 1920x1080: o terço central da tela é 640x360 a partir de (640, 360); no jogo,
+        // o mesmo pedaço é 427x240 a partir de (427, 240).
+        let (jogo, tela) = regioes_da_comparacao((1280, 720), (1920, 1080));
+        assert_eq!(tela, Retangulo { x: 640, y: 360, largura: 640, altura: 360 });
+        assert_eq!(jogo, Retangulo { x: 427, y: 240, largura: 427, altura: 240 });
+    }
+
+    #[test]
+    fn recortar_pega_as_linhas_certas_e_nao_passa_da_borda() {
+        // 3x2: pixels numerados 0..6 (o primeiro byte de cada um).
+        let px: Vec<u8> = (0..6u8).flat_map(|i| [i, 0, 0, 255]).collect();
+        let r = recortar(&px, 3, 2, Retangulo { x: 1, y: 0, largura: 2, altura: 2 });
+        assert_eq!(r.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), [1, 2, 4, 5]);
+        let fora = recortar(&px, 3, 2, Retangulo { x: 2, y: 1, largura: 9, altura: 9 });
+        assert_eq!(fora.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), [5]);
+    }
+
+    #[test]
+    fn o_bmp_tem_o_tamanho_e_a_altura_de_cima_para_baixo() {
+        let b = bmp(2, 3, &[0u8; 24]);
+        assert_eq!(&b[0..2], b"BM");
+        assert_eq!(b.len(), 54 + 24);
+        assert_eq!(i32::from_le_bytes(b[22..26].try_into().unwrap()), -3);
     }
 
     #[test]

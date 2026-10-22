@@ -105,7 +105,7 @@ pub fn jogo_do_manifest(conteudo: &str, raiz: &Path) -> Option<JogoInstalado> {
 }
 
 #[cfg(target_os = "windows")]
-fn pasta_da_steam() -> Option<PathBuf> {
+pub(crate) fn pasta_da_steam() -> Option<PathBuf> {
     use crate::modules::changelog::PreviousValue;
 
     let PreviousValue::Text(caminho) =
@@ -118,7 +118,7 @@ fn pasta_da_steam() -> Option<PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn pasta_da_steam() -> Option<PathBuf> {
+pub(crate) fn pasta_da_steam() -> Option<PathBuf> {
     None
 }
 

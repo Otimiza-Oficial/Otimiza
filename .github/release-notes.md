@@ -8,11 +8,59 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_3.4.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_3.4.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_3.5.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_3.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão.
+
+---
+
+# 3.5 Turbo (3.5.0): o jogo mais leve, com um botão
+
+## Turbo
+
+Um botão novo no topo do Boost. Com o jogo aberto, o Turbo mede por 10 segundos o que está no limite e liga só o que
+ajuda **naquele jogo, naquele PC**:
+
+| O que está no limite | O que o Turbo liga |
+|---|---|
+| Placa de vídeo | A escala (o jogo desenha menos pixels: FPS real a mais) e, se ainda faltar para o monitor, a geração de quadros |
+| Processador | A geração de quadros e a energia de jogo. Diminuir a resolução não ajudaria: a placa já sobra |
+| Memória | Mostra o que ocupa memória para você fechar (nunca fecha sozinho) |
+| Nada | Não liga nada, e diz que o jogo já roda o que o seu PC consegue |
+
+Em jogo competitivo (CS2, Valorant, Fortnite, Call of Duty, Apex, Rocket League) o Turbo não liga a geração de
+quadros: ela acrescenta atraso. A receita fica lembrada para cada jogo: da próxima vez, um clique, sem medir de novo.
+Ao desligar, o cartão mostra o FPS do jogo antes e depois.
+
+## Escala no Frame Boost (FSR 1)
+
+O Frame Boost agora também **amplia**: o jogo roda numa janela menor e o Otimiza amplia para o monitor inteiro com o
+FSR 1 da AMD, nítido e sem halo. Quatro níveis, com os nomes que você já conhece do menu dos jogos (Ultra qualidade,
+Qualidade, Equilibrado, Desempenho). Junto com a geração de quadros, ou sozinha, sem atraso nenhum.
+
+- O Otimiza põe o jogo no tamanho do nível e devolve a janela exatamente como estava ao desligar.
+- O cursor aparece ampliado, no lugar certo, e o mouse fica preso na janela do jogo.
+- Com escala, a imagem nunca some no meio da partida: menu e tela de carregamento ficam na tela.
+- **Comparar a imagem:** um botão no Frame Boost mostra o centro da tela lado a lado, ampliado do jeito comum e pelo
+  FSR do Otimiza, com um divisor para arrastar.
+- O contador por cima do jogo mostra a escala e, com a geração, o que chega à tela.
+
+Tudo por fora do jogo: nada é injetado, como no Frame Boost de sempre.
+
+## Escala do driver, para tela cheia
+
+Para quem joga em tela cheia exclusiva, onde nada fica por cima do jogo: o **NVIDIA Image Scaling** e o **Radeon Super
+Resolution** agora ligam pelo Otimiza, em Driver da placa de vídeo, com o desfazer de sempre. Escolha no jogo uma
+resolução menor que a do monitor e o driver amplia.
+
+## Configuração do jogo: Fortnite, CS2 e Apex
+
+O que custa caro e quase não se vê (sombras, oclusão de ambiente, partículas, pós-processamento) no arquivo que o
+próprio jogo grava. O Otimiza só muda o que já existe no arquivo, nunca com o jogo aberto, e o desfazer devolve o
+arquivo exatamente como estava. No CS2, as sombras dos jogadores ficam como estão: elas mostram onde o inimigo está.
+Valorant e Warzone estão em estudo e ainda não são alterados.
 
 ---
 

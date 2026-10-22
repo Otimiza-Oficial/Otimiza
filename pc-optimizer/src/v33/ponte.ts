@@ -257,6 +257,51 @@ export interface PlanoJogoLiso {
   } | null;
 }
 
+export interface ConfigDoJogo {
+  id: string;
+  nome: string;
+  /** O arquivo de configuração achado; null = jogo não instalado ou nunca aberto. */
+  arquivo: string | null;
+  aberto: boolean;
+  previsao: { chave: string; antes: string; depois: string; por_que: string }[];
+  ficha: string;
+  historico: string;
+  aplicado: boolean;
+}
+
+export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga";
+
+export interface ReceitaDoTurbo {
+  gargalo: Gargalo;
+  escala: NivelDeEscala | null;
+  /** 1 = só escala, 0 = Auto, 2+ = fixo; null = sem Frame Boost. */
+  multiplicador: number | null;
+  energia: boolean;
+  memoria: boolean;
+  explicacao: string;
+}
+
+export interface PainelTurbo {
+  jogo: string | null;
+  competitivo: boolean;
+  perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number } | null;
+  passos: string[];
+  ligado: boolean;
+  /** Desligado: o antes × depois da última vez (comparação simples, não prova A-B). */
+  resultado?: {
+    fps_antes: number;
+    fps_do_jogo: number;
+    ganho_pct: number;
+    fps_na_tela: number | null;
+    na_tela_medido: boolean;
+    minutos: number;
+    escala: NivelDeEscala | null;
+  } | null;
+}
+
+/** Os níveis da escala, com as proporções do FSR (1,3× a 2× por eixo). */
+export type NivelDeEscala = "UltraQualidade" | "Qualidade" | "Equilibrado" | "Desempenho";
+
 export interface PainelFrameBoost {
   jogo: string | null;
   recomendado: RecursoAvaliado | null;
@@ -288,6 +333,10 @@ export interface PainelFrameBoost {
     /** Quanto do FPS o jogo mantém com o gerador (medido pela guarda), em %. */
     manteve_pct: number | null;
     comparacoes: number;
+    /** Com escala: o nível, o tamanho em que o jogo renderiza e o da imagem ampliada. */
+    escala?: NivelDeEscala | null;
+    jogo_px?: [number, number] | null;
+    tela_px?: [number, number] | null;
   } | null;
   aviso: string | null;
   /** O teto do FPS base que o Otimiza gravou para este jogo. */
@@ -306,6 +355,9 @@ export interface PainelFrameBoost {
     comparacoes: number;
     desligou_por_perda: boolean;
   } | null;
+  /** O monitor do jogo e, por nível de escala, a resolução em que o jogo deve rodar. */
+  monitor?: [number, number] | null;
+  escalas?: { nivel: NivelDeEscala; largura: number; altura: number }[];
 }
 
 export interface EstadoDoGerador {
@@ -319,12 +371,13 @@ export interface EstadoDoGerador {
   fps_exibidos?: number | null;
   erro: string | null;
   atraso_ms: number | null;
+  escala?: NivelDeEscala | null;
 }
 
 export interface PainelAmd {
   estado: string;
   nota: string;
-  ajustes: { anti_lag: boolean | null; afmf: boolean | null; limite_ligado: boolean | null; limite_fps: number | null } | null;
+  ajustes: { anti_lag: boolean | null; afmf: boolean | null; rsr?: boolean | null; limite_ligado: boolean | null; limite_fps: number | null } | null;
   sensores: { uso_pct: number | null; temperatura_c: number | null } | null;
   aplicados: string[];
 }
@@ -440,9 +493,21 @@ export const ponte = {
   aplicarItem: (id: string) => invoke<Resultado>("apply_optimization", { id }),
   inicializacao: () => invoke<EntradaDeInicio[]>("list_startup"),
   inicializacaoDefinir: (hive: string, name: string, enabled: boolean) => invoke<Resultado>("set_startup_enabled", { hive, name, enabled }),
+  /** O comparador da escala: pede o próximo quadro real com o jogo na frente e depois busca. */
+  escalaPedirComparacao: () => invoke<void>("escala_pedir_comparacao"),
+  escalaComparacao: () =>
+    invoke<{ jogo: string; tela: string; jogo_px: [number, number]; tela_px: [number, number] } | null>("escala_comparacao"),
+  configDosJogos: () => invoke<ConfigDoJogo[]>("config_motor_painel"),
+  configAplicar: (jogo: string) => invoke<string[]>("config_motor_aplicar", { jogo }),
+  turbo: () => invoke<PainelTurbo>("turbo_painel"),
+  /** Mede o jogo (10 s) e aplica; `lembrado` usa a receita guardada do jogo, sem medir. */
+  turboLigar: (lembrado = false) => invoke<PainelTurbo>("turbo_ligar", { lembrado }),
+  turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
+  turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
   frameBoost: () => invoke<PainelFrameBoost>("frame_boost_painel"),
-  frameBoostLigar: (multiplicador: number, semLimite = false) =>
-    invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite }),
+  /** `escala`: amplia o jogo para o monitor (FSR 1); com `multiplicador` 1, só escala. */
+  frameBoostLigar: (multiplicador: number, semLimite = false, escala: NivelDeEscala | null = null) =>
+    invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite, escala }),
   frameBoostDesligar: () => invoke<PainelFrameBoost>("frame_boost_desligar"),
   frameBoostDestravarBase: () => invoke<PainelFrameBoost>("frame_boost_destravar_base"),
   frameBoostTravarBase: () => invoke<PainelFrameBoost>("frame_boost_travar_base"),

@@ -26,6 +26,7 @@ pub mod overlay;
 pub mod por_cima;
 pub mod ritmo_estavel;
 pub mod sessao;
+pub mod turbo;
 
 use serde::Serialize;
 

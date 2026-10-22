@@ -1231,7 +1231,7 @@ pub async fn driver_amd(state: State<'_, AppState>) -> Result<PainelAmd, String>
     .map_err(|e| format!("Falha ao ler o driver AMD: {}", e))
 }
 
-/// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
+/// `EXIGEM_LICENCA`. `opcao`: `amd-antilag`, `amd-afmf`, `amd-rsr` ou `amd-frtc:<fps>`. O desfazer é o `revert_optimization`.
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn aplicar_ajuste_amd(
@@ -1603,6 +1603,7 @@ pub async fn gerador_ligar(
             automatico: false,
             sem_limite: false,
             leve: false,
+            escala: None,
         })
     })
     .await
@@ -2899,13 +2900,19 @@ pub async fn frame_boost_ligar(
     app: tauri::AppHandle,
     multiplicador: u8,
     sem_limite: Option<bool>,
+    escala: Option<crate::modules::windows::geracao::escala::Nivel>,
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
-            crate::plataforma::frameboost::ligar(&app, multiplicador, sem_limite.unwrap_or(false))
+            crate::plataforma::frameboost::ligar(
+                &app,
+                multiplicador,
+                sem_limite.unwrap_or(false),
+                escala,
+            )
         })
         .await
         .map_err(|e| e.to_string())??;
@@ -2919,6 +2926,144 @@ pub async fn frame_boost_ligar(
         let _ = (app, multiplicador, sem_limite, state);
         Err("O Frame Boost só existe no Windows.".to_string())
     }
+}
+
+/// O mesmo pedaço do quadro do jogo (antes de ampliar) e da imagem ampliada pelo FSR, para a tela comparar.
+#[derive(Debug, Clone, Serialize)]
+pub struct ComparacaoNaTela {
+    /// `data:image/bmp;base64,...`
+    pub jogo: String,
+    pub tela: String,
+    pub jogo_px: [u32; 2],
+    pub tela_px: [u32; 2],
+}
+
+/// Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela.
+#[tauri::command(async)]
+pub fn escala_pedir_comparacao() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::geracao;
+        let e = geracao::estado();
+        if e.escala.is_none() || e.situacao != geracao::Situacao::Gerando {
+            return Err("Ligue o Frame Boost com escala para comparar.".to_string());
+        }
+        geracao::pedir_comparacao();
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("A escala só existe no Windows.".to_string())
+}
+
+/// A comparação pedida, se o gerador já a tirou. `LIVRES`.
+#[tauri::command(async)]
+pub fn escala_comparacao() -> Option<ComparacaoNaTela> {
+    #[cfg(target_os = "windows")]
+    {
+        use base64::Engine;
+        let c = crate::modules::windows::geracao::tomar_comparacao()?;
+        let url = |b: &[u8]| {
+            format!(
+                "data:image/bmp;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(b)
+            )
+        };
+        return Some(ComparacaoNaTela {
+            jogo: url(&c.jogo_bmp),
+            tela: url(&c.tela_bmp),
+            jogo_px: [c.jogo.0, c.jogo.1],
+            tela_px: [c.tela.0, c.tela.1],
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
+    None
+}
+
+/// O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::turbo::painel());
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
+}
+
+/// `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
+/// base é travado como no Frame Boost (o `travar_base` não trava no só escala).
+#[tauri::command]
+pub async fn turbo_ligar(
+    app: tauri::AppHandle,
+    lembrado: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::turbo::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use crate::plataforma::{historico, sessao, turbo};
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
+            let (id, _) = historico::id_do_jogo(&jogo.executavel);
+            let guardado = lembrado.unwrap_or(false).then(|| turbo::perfil(&id)).flatten();
+            let (receita, fps_antes) = match guardado {
+                Some(p) => (p.receita, p.fps_antes),
+                None => turbo::medir()?,
+            };
+            turbo::aplicar(&app, &receita, fps_antes);
+            if matches!(
+                receita.gargalo,
+                turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
+            ) {
+                let perfil = turbo::Perfil {
+                    receita,
+                    fps_antes,
+                    medido_em: crate::modules::changelog::now_timestamp(),
+                };
+                if let Err(e) = turbo::lembrar(&id, perfil) {
+                    crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        let mut log = state.changes.lock().await;
+        crate::plataforma::frameboost::travar_base(&mut log);
+        drop(log);
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, lembrado, state);
+        Err("O Turbo só existe no Windows.".to_string())
+    }
+}
+
+/// Desliga o que o Turbo ligou. `LIVRES`: desfazer nunca depende de licença.
+#[tauri::command]
+pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
+            .await
+            .map_err(|e| e.to_string())??;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
+}
+
+/// Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`.
+#[tauri::command(async)]
+pub fn turbo_esquecer() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        let (id, _) = crate::plataforma::historico::id_do_jogo(&jogo.executavel);
+        crate::plataforma::turbo::esquecer(&id)?;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
 }
 
 /// Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença.
@@ -3932,6 +4077,86 @@ fn perfil_por_nome(nome: &str) -> Result<crate::modules::windows::configjogo::Pe
     }
 }
 
+/// Um jogo da configuração por motor, com o que o Otimiza já aplicou nele.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigDoJogoNaTela {
+    #[serde(flatten)]
+    pub jogo: crate::modules::windows::configmotor::JogoNaTela,
+    pub historico: String,
+    pub aplicado: bool,
+}
+
+/// A configuração por motor (Fortnite, CS2, Apex): o arquivo achado e o que o perfil mudaria. `LIVRES`: só lê.
+#[tauri::command]
+pub async fn config_motor_painel(
+    state: State<'_, AppState>,
+) -> Result<Vec<ConfigDoJogoNaTela>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogos = tokio::task::spawn_blocking(crate::modules::windows::configmotor::painel)
+            .await
+            .map_err(|e| e.to_string())?;
+        let log = state.changes.lock().await;
+        return Ok(jogos
+            .into_iter()
+            .map(|jogo| {
+                let historico = format!("config_motor_{}", jogo.id);
+                ConfigDoJogoNaTela {
+                    aplicado: log.is_applied(&historico),
+                    historico,
+                    jogo,
+                }
+            })
+            .collect());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("A configuração de jogo só existe no Windows.".to_string())
+    }
+}
+
+/// `EXIGEM_LICENCA`: escreve o perfil leve no arquivo de configuração do jogo (fechado). O arquivo inteiro de antes
+/// vai para o histórico: o `revert_optimization` devolve byte a byte.
+#[tauri::command]
+pub async fn config_motor_aplicar(
+    jogo: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
+        let id = jogo.clone();
+        let feito = tokio::task::spawn_blocking(move || {
+            crate::modules::windows::configmotor::aplicar(&id)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        if feito.mudou.is_empty() {
+            return Ok(Vec::new());
+        }
+        let historico = format!("config_motor_{}", jogo);
+        let mut log = state.changes.lock().await;
+        log.record(AppliedOptimization {
+            optimization_id: historico,
+            name: format!("Configuração do {} · perfil leve", feito.jogo),
+            timestamp: now_timestamp(),
+            changes: vec![ChangeRecord::GameConfig {
+                caminho: feito.arquivo.to_string_lossy().to_string(),
+                anterior: Some(feito.anterior),
+                jogo: feito.jogo.to_string(),
+            }],
+        })?;
+        return Ok(feito.mudou);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (jogo, state);
+        Err("A configuração de jogo só existe no Windows.".to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn apply_game_profile(
     perfil: String,
@@ -4536,6 +4761,12 @@ mod tests {
         "cores_estado",
         "frame_boost_painel",
         "frame_boost_desligar",
+        "turbo_painel",
+        "turbo_desligar",
+        "turbo_esquecer",
+        "config_motor_painel",
+        "escala_pedir_comparacao",
+        "escala_comparacao",
         "frame_boost_destravar_base",
         "frame_boost_medir",
         "jogo_liso_medir",
@@ -4707,6 +4938,8 @@ mod tests {
         "mira_ligar",
         "cores_aplicar",
         "frame_boost_ligar",
+        "turbo_ligar",
+        "config_motor_aplicar",
         "frame_boost_travar_base",
         "jogo_liso_aplicar",
         "memoria_fechar",

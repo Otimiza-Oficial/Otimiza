@@ -9,6 +9,10 @@ interface Leitura {
   quadro_ms: number | null;
   boost: number | null;
   nota: string | null;
+  /** Nível da escala do Frame Boost ("Qualidade"). */
+  escala?: string | null;
+  /** Gerando quadros: o que chegou à tela. */
+  na_tela?: number | null;
 }
 
 const n = (v: number | null, casas = 0) => (v === null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: casas, minimumFractionDigits: casas }));
@@ -30,9 +34,11 @@ function desenhar(l: Leitura) {
     c.innerHTML = topo;
     return;
   }
-  const extra = l.boost
-    ? `<div class="mini">Frame Boost do Otimiza</div>`
-    : `<div class="mini">1% low <b>${n(l.low_1pct)}</b></div><div class="mini">quadro <b>${n(l.quadro_ms, 1)} ms</b></div>`;
+  // Com o Frame Boost: o que chegou à tela e a escala, cada um só quando existe.
+  const extra =
+    l.boost || l.escala
+      ? `${l.na_tela ? `<div class="mini">tela <b>${n(l.na_tela)}</b></div>` : ""}<div class="mini">${l.escala ? `escala <b>${l.escala}</b>` : "Frame Boost do Otimiza"}</div>`
+      : `<div class="mini">1% low <b>${n(l.low_1pct)}</b></div><div class="mini">quadro <b>${n(l.quadro_ms, 1)} ms</b></div>`;
   c.innerHTML = topo + extra;
 }
 

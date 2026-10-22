@@ -37,6 +37,8 @@ pub enum Opcao {
     Afmf,
     /// Frame Rate Target Control: limite de FPS global do driver.
     LimiteDeFps(i32),
+    /// Radeon Super Resolution: a escala do driver para jogos em tela cheia numa resolução menor (3.5).
+    Rsr,
 }
 
 impl Opcao {
@@ -45,6 +47,7 @@ impl Opcao {
             Opcao::AntiLag => "amd-antilag".to_string(),
             Opcao::Afmf => "amd-afmf".to_string(),
             Opcao::LimiteDeFps(_) => "amd-frtc".to_string(),
+            Opcao::Rsr => "amd-rsr".to_string(),
         }
     }
 
@@ -53,14 +56,16 @@ impl Opcao {
             Opcao::AntiLag => "Radeon Anti-Lag",
             Opcao::Afmf => "AMD Fluid Motion Frames",
             Opcao::LimiteDeFps(_) => "Frame Rate Target Control",
+            Opcao::Rsr => "Radeon Super Resolution",
         }
     }
 
-    /// `amd-antilag`, `amd-afmf`, `amd-frtc:141`.
+    /// `amd-antilag`, `amd-afmf`, `amd-rsr`, `amd-frtc:141`.
     pub fn ler(texto: &str) -> Option<Opcao> {
         match texto.trim() {
             "amd-antilag" => Some(Opcao::AntiLag),
             "amd-afmf" => Some(Opcao::Afmf),
+            "amd-rsr" => Some(Opcao::Rsr),
             outro => {
                 let fps: i32 = outro.strip_prefix("amd-frtc:")?.parse().ok()?;
                 (20..=1000)
@@ -126,6 +131,8 @@ pub fn escolher_placa(tipos: &[i32]) -> Option<usize> {
 pub struct Ajustes {
     pub anti_lag: Option<bool>,
     pub afmf: Option<bool>,
+    #[serde(default)]
+    pub rsr: Option<bool>,
     pub limite_ligado: Option<bool>,
     pub limite_fps: Option<i32>,
     pub limite_faixa: Option<(i32, i32)>,
@@ -218,9 +225,11 @@ mod ffi {
     // I3DSettings.h, IADLX3DSettingsServicesVtbl; I3DSettings1.h, IADLX3DSettingsServices1Vtbl.
     const SERVICOS3D_GET_ANTI_LAG: usize = 3;
     const SERVICOS3D_GET_FRTC: usize = 9;
+    // GetRadeonSuperResolution: global, SEM a placa no argumento (o único dos serviços 3D assim).
+    const SERVICOS3D_GET_RSR: usize = 14;
     const SERVICOS3D1_GET_AFMF: usize = 17;
 
-    // IADLX3DAntiLag e IADLX3DAMDFluidMotionFrames: IsSupported, IsEnabled, SetEnabled.
+    // IADLX3DAntiLag, IADLX3DAMDFluidMotionFrames e IADLX3DRadeonSuperResolution: IsSupported, IsEnabled, SetEnabled.
     const CHAVE_IS_SUPPORTED: usize = 3;
     const CHAVE_IS_ENABLED: usize = 4;
     const CHAVE_SET_ENABLED: usize = 5;
@@ -453,6 +462,7 @@ mod ffi {
             Opcao::AntiLag => pegar_com_gpu(s.tres_d.0, SERVICOS3D_GET_ANTI_LAG, s.gpu.0),
             Opcao::LimiteDeFps(_) => pegar_com_gpu(s.tres_d.0, SERVICOS3D_GET_FRTC, s.gpu.0),
             Opcao::Afmf => afmf(s),
+            Opcao::Rsr => pegar(s.tres_d.0, SERVICOS3D_GET_RSR),
         }
     }
 
@@ -468,6 +478,9 @@ mod ffi {
             }
             if let Some(i) = interface_da_opcao(s, Opcao::Afmf).filter(|i| suportado(i)) {
                 a.afmf = ler_bool(i.0, CHAVE_IS_ENABLED);
+            }
+            if let Some(i) = interface_da_opcao(s, Opcao::Rsr).filter(|i| suportado(i)) {
+                a.rsr = ler_bool(i.0, CHAVE_IS_ENABLED);
             }
             if let Some(i) = interface_da_opcao(s, Opcao::LimiteDeFps(0)).filter(|i| suportado(i)) {
                 a.limite_ligado = ler_bool(i.0, CHAVE_IS_ENABLED);
@@ -493,7 +506,7 @@ mod ffi {
             })?;
 
             match o {
-                Opcao::AntiLag | Opcao::Afmf => {
+                Opcao::AntiLag | Opcao::Afmf | Opcao::Rsr => {
                     if !deu_certo(chamar!(i.0, CHAVE_SET_ENABLED, (u8) -> i32, 1u8)) {
                         return Err(format!("O driver recusou ligar {}.", o.titulo()));
                     }
@@ -530,6 +543,7 @@ mod ffi {
         let o = match opcao_id {
             "amd-antilag" => Opcao::AntiLag,
             "amd-afmf" => Opcao::Afmf,
+            "amd-rsr" => Opcao::Rsr,
             "amd-frtc" => Opcao::LimiteDeFps(0),
             outro => return Err(format!("não conheço o ajuste AMD \"{}\"", outro)),
         };
@@ -651,7 +665,7 @@ mod tests {
 
     #[test]
     fn opcoes_vao_e_voltam_pelo_texto() {
-        for o in [Opcao::AntiLag, Opcao::Afmf] {
+        for o in [Opcao::AntiLag, Opcao::Afmf, Opcao::Rsr] {
             assert_eq!(Opcao::ler(&o.id()), Some(o));
         }
         assert_eq!(Opcao::ler("amd-frtc:141"), Some(Opcao::LimiteDeFps(141)));
@@ -747,6 +761,7 @@ mod tests {
             ("SISTEMA_GET_GPUS: usize = 1", 1),
             ("SISTEMA_GET_3D_SETTINGS_SERVICES: usize = 7", 7),
             ("SERVICOS3D_GET_FRTC: usize = 9", 9),
+            ("SERVICOS3D_GET_RSR: usize = 14", 14),
             ("SERVICOS3D1_GET_AFMF: usize = 17", 17),
             ("DISPLAYS_GET_CUSTOM_COLOR: usize = 16", 16),
             ("DESEMPENHO_GET_CURRENT_GPU_METRICS: usize = 18", 18),

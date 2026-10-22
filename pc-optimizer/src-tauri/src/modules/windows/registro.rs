@@ -148,6 +148,18 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "O arquivo inteiro fica guardado e volta byte a byte.",
     },
     Alteracao {
+        id: "config_motor",
+        titulo: "Configuração gráfica do Fortnite, CS2 e Apex",
+        modulo: "configmotor",
+        o_que_muda: "Só o valor das chaves caras que já existem no arquivo que o próprio jogo grava, com o jogo \
+                     fechado e prévia antes.",
+        risco: Risco::Medio,
+        escopo: Escopo::Jogo,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "O arquivo inteiro fica guardado e volta byte a byte.",
+    },
+    Alteracao {
         id: "monitor_hz",
         titulo: "Taxa de atualização do monitor",
         modulo: "display",

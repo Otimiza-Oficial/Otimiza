@@ -111,6 +111,8 @@ windows = { version = "0.61", features = [
     "Win32_System_LibraryLoader",
     "Win32_Media",
     "Win32_UI_HiDpi",
+    # Escala: esconder o cursor do sistema enquanto o gerador desenha o cursor ampliado (`geracao::cursor`).
+    "Win32_UI_Magnification",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_Performance",
     # Rampa de gama do monitor: brilho, contraste e gama sem driver de vídeo compatível (`plataforma::cores`).
