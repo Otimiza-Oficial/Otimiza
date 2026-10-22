@@ -3003,13 +3003,25 @@ pub async fn turbo_ligar(
         tokio::task::spawn_blocking(move || -> Result<(), String> {
             let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
             let (id, _) = historico::id_do_jogo(&jogo.executavel);
+            if turbo::em_prova() {
+                return Err("A prova do Turbo está rodando: espere ela terminar.".to_string());
+            }
             let guardado = lembrado.unwrap_or(false).then(|| turbo::perfil(&id)).flatten();
+            if guardado.as_ref().is_some_and(|p| p.prova == Some(turbo::Desfecho::Piorou)) {
+                return Err(
+                    "Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo. Toque em \
+                     Medir de novo para uma receita nova."
+                        .to_string(),
+                );
+            }
+            // Com a receita lembrada, o perfil fica como está (inclusive o desfecho da prova).
+            let lembrada = guardado.is_some();
             let (receita, fps_antes) = match guardado {
                 Some(p) => (p.receita, p.fps_antes),
                 None => turbo::medir()?,
             };
             turbo::aplicar(&app, &receita, fps_antes);
-            if matches!(
+            if !lembrada && matches!(
                 receita.gargalo,
                 turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
             ) {
@@ -3017,6 +3029,7 @@ pub async fn turbo_ligar(
                     receita,
                     fps_antes,
                     medido_em: crate::modules::changelog::now_timestamp(),
+                    prova: None,
                 };
                 if let Err(e) = turbo::lembrar(&id, perfil) {
                     crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
@@ -3038,11 +3051,104 @@ pub async fn turbo_ligar(
     }
 }
 
+/// `EXIGEM_LICENCA`: a prova A-B do Turbo no jogo aberto (uns 5 minutos), com o passo a passo em `turbo:prova`. Piorou:
+/// o Turbo fica desligado e a receita não volta neste jogo. Senão, a receita inteira volta e o FPS base é travado como
+/// no Frame Boost.
+#[tauri::command]
+pub async fn turbo_provar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::modules::provaalternada::Resultado, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use tauri::Emitter;
+        let emissor = app.clone();
+        let r = tokio::task::spawn_blocking(move || {
+            crate::plataforma::turbo::provar(&app, &|passo| {
+                let _ = emissor.emit("turbo:prova", passo);
+            })
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        if r.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
+            let mut log = state.changes.lock().await;
+            crate::plataforma::frameboost::travar_base(&mut log);
+        }
+        return Ok(r);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, state);
+        Err("O Turbo só existe no Windows.".to_string())
+    }
+}
+
+/// A última prova do Turbo. `LIVRES`.
+#[tauri::command(async)]
+pub fn turbo_prova_guardada() -> Option<crate::modules::provaalternada::Resultado> {
+    crate::plataforma::turbo::prova_guardada()
+}
+
+/// O texto da última prova do Turbo para colar no Discord: só de prova com comparação justa e margem. `LIVRES`.
+#[tauri::command]
+pub async fn turbo_compartilhar() -> Result<String, String> {
+    tokio::task::spawn_blocking(|| {
+        let prova = crate::plataforma::turbo::prova_guardada();
+        let receita = crate::plataforma::sessao::atual()
+            .map(|j| crate::plataforma::historico::id_do_jogo(&j.executavel).0)
+            .or_else(|| {
+                prova
+                    .as_ref()
+                    .map(|p| crate::plataforma::historico::id_do_jogo(&p.jogo).0)
+            })
+            .and_then(|id| crate::plataforma::turbo::perfil(&id))
+            .and_then(|p| crate::plataforma::turbo::receita_da_prova(&p.receita))
+            .map(|r| crate::plataforma::turbo::descrever(&r))
+            .unwrap_or_else(|| "Turbo".to_string());
+        let data = prova
+            .as_ref()
+            .and_then(|p| chrono::DateTime::from_timestamp(p.quando as i64, 0))
+            .map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y").to_string())
+            .unwrap_or_default();
+        #[cfg(target_os = "windows")]
+        let (cpu, gpu) = (
+            crate::modules::windows::registry::read_text(
+                "HKLM",
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+                "ProcessorNameString",
+            )
+            .ok()
+            .flatten(),
+            crate::core::telemetria::placa_principal().map(|(nome, _)| nome),
+        );
+        #[cfg(not(target_os = "windows"))]
+        let (cpu, gpu): (Option<String>, Option<String>) = (None, None);
+        crate::modules::compartilhar::texto_do_turbo(
+            prova.as_ref(),
+            &receita,
+            (cpu.as_deref(), gpu.as_deref()),
+            &data,
+        )
+        .map_err(|r| match r {
+            crate::modules::compartilhar::Recusa::SemProva => {
+                "Ainda não há prova do Turbo neste PC. Toque em Provar no cartão do Turbo.".to_string()
+            }
+            outra => outra.frase().to_string(),
+        })
+    })
+    .await
+    .map_err(|e| format!("Falha ao montar o texto: {}", e))?
+}
+
 /// Desliga o que o Turbo ligou. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
 pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     {
+        if crate::plataforma::turbo::em_prova() {
+            return Err("A prova do Turbo está rodando: ela desliga tudo sozinha ao terminar.".to_string());
+        }
         tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
             .await
             .map_err(|e| e.to_string())??;
@@ -4767,6 +4873,8 @@ mod tests {
         "config_motor_painel",
         "escala_pedir_comparacao",
         "escala_comparacao",
+        "turbo_prova_guardada",
+        "turbo_compartilhar",
         "frame_boost_destravar_base",
         "frame_boost_medir",
         "jogo_liso_medir",
@@ -4939,6 +5047,7 @@ mod tests {
         "cores_aplicar",
         "frame_boost_ligar",
         "turbo_ligar",
+        "turbo_provar",
         "config_motor_aplicar",
         "frame_boost_travar_base",
         "jogo_liso_aplicar",

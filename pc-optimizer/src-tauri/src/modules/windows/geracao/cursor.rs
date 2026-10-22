@@ -176,6 +176,14 @@ impl Drop for CursorDoSistema {
     }
 }
 
+/// Na abertura do Otimiza: se a sessão anterior morreu com o cursor escondido, ele volta. Mostrar um cursor que já
+/// está à vista não muda nada.
+pub fn devolver_na_abertura() {
+    let mut c = CursorDoSistema::novo();
+    c.escondido = true;
+    c.esconder(false);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

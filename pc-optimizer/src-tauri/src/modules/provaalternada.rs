@@ -290,6 +290,15 @@ mod maquina {
         }
     }
 
+    /// A vez de uma prova de fora (a do Turbo): enquanto ela existe, tudo o que já espera esta prova (a medição
+    /// automática, o guardião, o motor de energia) espera também. Liberada ao sair de cena.
+    pub struct Reserva(#[allow(dead_code)] Vez);
+
+    /// `None` com outra prova rodando.
+    pub fn reservar() -> Option<Reserva> {
+        (!EM_ANDAMENTO.swap(true, Ordering::SeqCst)).then_some(Reserva(Vez))
+    }
+
     #[derive(Debug, Clone)]
     pub struct Planos {
         pub sem: String,
@@ -385,7 +394,8 @@ mod maquina {
         s.process(sysinfo::Pid::from_u32(pid)).is_some()
     }
 
-    fn medir(pid: u32, nome: &str, lado: Lado, segundos: u64) -> Result<Rodada, String> {
+    /// Uma rodada: o FPS do jogo pelo PresentMon (ou o canal antigo, marcado), o 1% e o contexto para a comparação.
+    pub fn medir(pid: u32, nome: &str, lado: Lado, segundos: u64) -> Result<Rodada, String> {
         let configuracao_do_jogo = configjogo::impressao_da_configuracao(nome);
         match presentmon::medir_como_antes(pid, nome, segundos as u32) {
             Ok((_, r)) => Ok(Rodada {

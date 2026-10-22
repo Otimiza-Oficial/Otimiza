@@ -34,6 +34,13 @@ Em jogo competitivo (CS2, Valorant, Fortnite, Call of Duty, Apex, Rocket League)
 quadros: ela acrescenta atraso. A receita fica lembrada para cada jogo: da próxima vez, um clique, sem medir de novo.
 Ao desligar, o cartão mostra o FPS do jogo antes e depois.
 
+**Provar:** com o Turbo ligado, um botão faz a prova de verdade. Por uns 5 minutos, enquanto você joga, o Turbo liga e
+desliga sozinho em 8 rodadas alternadas e mede o FPS do jogo em cada uma. O resultado sai com margem de erro
+("41 ± 1 → 58 ± 2 fps"), e dá para copiar e colar no Discord. Se o Turbo deixou o jogo pior, ele se desliga sozinho e
+não liga de novo aquela receita naquele jogo: nunca menos FPS.
+
+Com o jogo aberto, o Turbo é o botão principal da tela inicial.
+
 ## Escala no Frame Boost (FSR 1)
 
 O Frame Boost agora também **amplia**: o jogo roda numa janela menor e o Otimiza amplia para o monitor inteiro com o

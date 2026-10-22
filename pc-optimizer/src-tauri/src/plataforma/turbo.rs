@@ -14,6 +14,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub use crate::modules::provaalternada::Desfecho;
+use crate::modules::provaalternada::ORDEM;
 use crate::modules::windows::bottleneck::Limite;
 use crate::modules::windows::geracao::escala::Nivel;
 
@@ -170,6 +172,65 @@ pub struct Perfil {
     /// O FPS do jogo na medida (o "antes").
     pub fps_antes: Option<f64>,
     pub medido_em: u64,
+    /// O desfecho da última prova A-B desta receita. `Piorou`: o Turbo não a liga de novo neste jogo.
+    #[serde(default)]
+    pub prova: Option<Desfecho>,
+}
+
+// ------------------------------------------------------------------------------------------------------------- a prova
+
+/// A prova do Turbo: 8 rodadas alternadas (a ordem da `provaalternada`), com e sem o Turbo, pelo FPS do jogo. Mais
+/// curta que a do plano de energia porque o jogo já está aberto e aquecido quando o Turbo foi ligado; a espera é maior
+/// porque a escala redimensiona a janela a cada troca.
+pub const AQUECIMENTO_DA_PROVA_S: u64 = 30;
+pub const ESPERA_DA_PROVA_S: u64 = 6;
+pub const RODADA_DA_PROVA_S: u64 = 30;
+
+pub fn duracao_da_prova_s() -> u64 {
+    AQUECIMENTO_DA_PROVA_S + ORDEM.len() as u64 * (ESPERA_DA_PROVA_S + RODADA_DA_PROVA_S)
+}
+
+/// Pura: o que entra na prova. Só o que deve subir o FPS DO JOGO: a escala (sem gerar quadros) e a energia de jogo. A
+/// geração aumenta o que chega à tela e custa um pouco do jogo; ela é julgada pela guarda do gerador, não aqui (pelo
+/// FPS do jogo, uma geração boa sairia como "piorou"). `None`: a receita não tem o que provar no FPS do jogo.
+pub fn receita_da_prova(r: &Receita) -> Option<Receita> {
+    if r.escala.is_none() && !r.energia {
+        return None;
+    }
+    Some(Receita {
+        multiplicador: r.escala.map(|_| 1),
+        memoria: false,
+        ..r.clone()
+    })
+}
+
+/// Pura: em palavras, o que a prova ligou ("Turbo: escala Qualidade + energia de jogo").
+pub fn descrever(r: &Receita) -> String {
+    let mut partes = Vec::new();
+    if let Some(n) = r.escala {
+        partes.push(format!("escala {}", n.nome()));
+    }
+    if r.energia {
+        partes.push("energia de jogo".to_string());
+    }
+    format!("Turbo: {}", partes.join(" + "))
+}
+
+/// Pura: a frase da tela para o desfecho, nas palavras do Turbo. Sem comparação justa, a explicação da
+/// `provaalternada` (o que mudou no meio) já serve.
+pub fn leitura_da_prova(d: Desfecho, sem_comparacao: &str) -> String {
+    match d {
+        Desfecho::Ganhou => "Com o Turbo o jogo rodou melhor neste PC, e a diferença passou do ruído nas rodadas \
+                             alternadas. O Turbo fica ligado."
+            .to_string(),
+        Desfecho::Piorou => "Com o Turbo o jogo rodou pior neste PC, além do ruído. O Turbo foi desligado e não liga \
+                             de novo esta receita neste jogo."
+            .to_string(),
+        Desfecho::Indistinguivel => "As rodadas não separaram com e sem o Turbo: a diferença ficou dentro do ruído do \
+                                     jogo. Não piorou, então o Turbo fica; o ganho dele aqui não foi comprovado."
+            .to_string(),
+        Desfecho::SemComparacaoJusta => sem_comparacao.to_string(),
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -270,6 +331,12 @@ pub struct Painel {
     pub ligado: bool,
     /// Desligado: o antes × depois da última vez.
     pub resultado: Option<Resultado>,
+    /// A última prova A-B do Turbo NESTE jogo.
+    pub prova: Option<crate::modules::provaalternada::Resultado>,
+    /// A prova está rodando agora.
+    pub provando: bool,
+    /// Quanto a prova leva, para a tela dizer antes de começar.
+    pub duracao_da_prova_s: u64,
 }
 
 #[cfg(target_os = "windows")]
@@ -301,6 +368,13 @@ pub fn painel() -> Painel {
         resultado: (!LIGADO.load(Ordering::SeqCst))
             .then(|| RESULTADO.lock().ok().and_then(|r| r.clone()))
             .flatten(),
+        prova: jogo.as_ref().and_then(|j| {
+            prova_guardada().filter(|p| {
+                super::historico::id_do_jogo(&p.jogo).0 == super::historico::id_do_jogo(&j.executavel).0
+            })
+        }),
+        provando: em_prova(),
+        duracao_da_prova_s: duracao_da_prova_s(),
     }
 }
 
@@ -396,6 +470,216 @@ pub fn desligar() -> Result<(), String> {
         p.clear();
     }
     Ok(())
+}
+
+/// Um passo da prova, para a tela: 0 é o aquecimento; 1 a 8, as rodadas.
+#[derive(Debug, Clone, Serialize)]
+pub struct PassoDaProva {
+    pub indice: usize,
+    pub total: usize,
+    pub com_turbo: Option<bool>,
+    pub segundos: u64,
+}
+
+/// Em disco durante a prova: se o Otimiza cair no meio, a abertura devolve a energia de jogo como estava.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct ProvaEmAndamento {
+    energia_antes: bool,
+}
+
+fn pasta() -> PathBuf {
+    caminho().parent().map(Path::to_path_buf).unwrap_or_default()
+}
+
+fn marcador_da_prova() -> PathBuf {
+    pasta().join("turbo_prova_em_andamento.json")
+}
+
+/// A última prova do Turbo (para a tela e o compartilhar).
+pub fn prova_guardada() -> Option<crate::modules::provaalternada::Resultado> {
+    fs::read_to_string(pasta().join("turbo_prova.json"))
+        .ok()
+        .and_then(|b| serde_json::from_str(&b).ok())
+}
+
+fn guardar_prova(r: &crate::modules::provaalternada::Resultado) -> Result<(), String> {
+    let texto = serde_json::to_string_pretty(r).map_err(|e| e.to_string())?;
+    fs::create_dir_all(pasta()).map_err(|e| e.to_string())?;
+    fs::write(pasta().join("turbo_prova.json"), texto).map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "windows")]
+static EM_PROVA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "windows")]
+pub fn em_prova() -> bool {
+    EM_PROVA.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// O Otimiza caiu no meio da prova: a energia de jogo volta a como estava antes dela.
+#[cfg(target_os = "windows")]
+pub fn recuperar_na_abertura() -> Option<String> {
+    let texto = fs::read_to_string(marcador_da_prova()).ok()?;
+    let _ = fs::remove_file(marcador_da_prova());
+    let m: ProvaEmAndamento = serde_json::from_str(&texto).ok()?;
+    if !m.energia_antes && super::energia_jogo::ler().ligado {
+        let _ = super::energia_jogo::definir(false);
+        return Some("energia de jogo desligada, como estava antes da prova".to_string());
+    }
+    Some("nada a devolver".to_string())
+}
+
+/// Liga o lado "com o Turbo" da prova (sem geração: `receita_da_prova`).
+#[cfg(target_os = "windows")]
+fn ligar_o_lado(app: &tauri::AppHandle, r: &Receita) -> Result<(), String> {
+    if r.energia && !super::energia_jogo::ler().ligado {
+        super::energia_jogo::definir(true).map(|_| ())?;
+    }
+    if let Some(m) = r.multiplicador {
+        super::frameboost::ligar(app, m, false, r.escala).map(|_| ())?;
+    }
+    Ok(())
+}
+
+/// Volta ao lado "sem o Turbo": o Frame Boost desligado (a janela do jogo volta ao tamanho) e a energia como estava.
+#[cfg(target_os = "windows")]
+fn desligar_o_lado(energia_antes: bool) -> Result<(), String> {
+    super::frameboost::desligar()?;
+    if !energia_antes && super::energia_jogo::ler().ligado {
+        super::energia_jogo::definir(false).map(|_| ())?;
+    }
+    Ok(())
+}
+
+/// Saindo da prova por qualquer caminho: o marcador fora e a vez liberada. Armada (erro, jogo fechou no meio), também
+/// o lado "sem"; desarmada no fim, que já deixou o Turbo como o desfecho manda.
+#[cfg(target_os = "windows")]
+struct FimDaProva {
+    energia_antes: bool,
+    armado: bool,
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for FimDaProva {
+    fn drop(&mut self) {
+        if self.armado {
+            let _ = desligar_o_lado(self.energia_antes);
+        }
+        let _ = fs::remove_file(marcador_da_prova());
+        EM_PROVA.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// A PROVA DO TURBO. Com o jogo aberto, alterna o Turbo (escala e energia, sem geração) em 8 rodadas, mede o FPS do jogo
+/// em cada uma e decide pelo critério único da `provaalternada`. Piorou: o Turbo fica desligado e a receita não volta
+/// neste jogo. Senão: a receita inteira (com a geração, se tiver) é ligada de novo. Bloqueia por uns 5 minutos.
+#[cfg(target_os = "windows")]
+pub fn provar(
+    app: &tauri::AppHandle,
+    emitir: &dyn Fn(PassoDaProva),
+) -> Result<crate::modules::provaalternada::Resultado, String> {
+    use crate::modules::provaalternada as alternada;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    let jogo = super::sessao::atual().ok_or("Abra o jogo primeiro: a prova mede o jogo aberto.")?;
+    let (id, _) = super::historico::id_do_jogo(&jogo.executavel);
+    let mut perfil = perfil(&id)
+        .ok_or("Ligue o Turbo uma vez neste jogo: a prova usa a receita que ele escolheu para ele.")?;
+    let lado_com = receita_da_prova(&perfil.receita).ok_or(
+        "Esta receita não muda o FPS do jogo (só a geração de quadros ou a memória): não há o que provar com o FPS \
+         do jogo. A guarda do Frame Boost já confere a geração.",
+    )?;
+    // A vez da prova alternada: a medição automática e o resto que respeita a prova esperam esta também.
+    let _vez = alternada::reservar().ok_or("Já há uma prova rodando.")?;
+    if EM_PROVA.swap(true, Ordering::SeqCst) {
+        return Err("Já há uma prova rodando.".to_string());
+    }
+    let energia_antes = super::energia_jogo::ler().ligado
+        && !LIGOU_A_ENERGIA.load(Ordering::SeqCst);
+    // A partir daqui, qualquer saída devolve o lado "sem" e libera a vez.
+    let mut fim = FimDaProva {
+        energia_antes,
+        armado: true,
+    };
+    let _ = desligar();
+    if let Ok(t) = serde_json::to_string(&ProvaEmAndamento { energia_antes }) {
+        let _ = fs::create_dir_all(pasta());
+        let _ = fs::write(marcador_da_prova(), t);
+    }
+
+    let pid = jogo.pid;
+    let nome = jogo.executavel.clone();
+    let aberto = || super::sessao::atual().is_some_and(|j| j.pid == pid);
+    let total = ORDEM.len();
+    emitir(PassoDaProva {
+        indice: 0,
+        total,
+        com_turbo: None,
+        segundos: AQUECIMENTO_DA_PROVA_S,
+    });
+    for _ in 0..AQUECIMENTO_DA_PROVA_S {
+        std::thread::sleep(Duration::from_secs(1));
+        if !aberto() {
+            return Err("O jogo fechou durante o aquecimento. Nada foi medido.".to_string());
+        }
+    }
+
+    let mut rodadas = Vec::with_capacity(total);
+    for (i, lado) in ORDEM.iter().enumerate() {
+        let com = *lado == alternada::Lado::ComOtimiza;
+        if com {
+            ligar_o_lado(app, &lado_com)?;
+        } else {
+            desligar_o_lado(energia_antes)?;
+        }
+        emitir(PassoDaProva {
+            indice: i + 1,
+            total,
+            com_turbo: Some(com),
+            segundos: RODADA_DA_PROVA_S,
+        });
+        std::thread::sleep(Duration::from_secs(ESPERA_DA_PROVA_S));
+        if !aberto() {
+            return Err("O jogo fechou no meio da prova. O Turbo ficou desligado.".to_string());
+        }
+        let rodada = alternada::medir(pid, &nome, *lado, RODADA_DA_PROVA_S)?;
+        if !aberto() {
+            return Err("O jogo fechou no meio da prova. O Turbo ficou desligado.".to_string());
+        }
+        crate::utils::Logger::info(&format!(
+            "prova do Turbo: rodada {}/{} {}: {:.1} FPS do jogo, 1% {:?}",
+            i + 1,
+            total,
+            if com { "com" } else { "sem" },
+            rodada.fps_do_jogo,
+            rodada.low_1pct
+        ));
+        rodadas.push(rodada);
+    }
+    desligar_o_lado(energia_antes)?;
+    fim.armado = false;
+
+    let mut r = alternada::decidir(
+        &nome,
+        crate::modules::changelog::now_timestamp(),
+        RODADA_DA_PROVA_S,
+        rodadas,
+        false,
+    );
+    r.leitura = leitura_da_prova(r.desfecho, &r.leitura);
+    if r.desfecho != Desfecho::Piorou {
+        // A receita inteira volta, com a geração se tiver.
+        aplicar(app, &perfil.receita, perfil.fps_antes);
+    }
+    perfil.prova = Some(r.desfecho);
+    if let Err(e) = lembrar(&id, perfil) {
+        crate::utils::Logger::warn(&format!("prova do Turbo: não guardei o desfecho: {}", e));
+    }
+    if let Err(e) = guardar_prova(&r) {
+        crate::utils::Logger::warn(&format!("prova do Turbo: não guardei o resultado: {}", e));
+    }
+    Ok(r)
 }
 
 #[cfg(test)]
@@ -522,6 +806,102 @@ mod tests {
     }
 
     #[test]
+    fn a_prova_tira_a_geracao_e_fica_com_escala_e_energia() {
+        let placa = montar(Gargalo::Placa, Some(40.0), Some(144), false);
+        assert_eq!(placa.multiplicador, Some(0), "a receita tem geração");
+        let p = receita_da_prova(&placa).unwrap();
+        assert_eq!(p.multiplicador, Some(1), "na prova, só escala");
+        assert_eq!(p.escala, placa.escala);
+        assert!(p.energia);
+
+        let cpu = receita_da_prova(&montar(Gargalo::Processador, Some(45.0), Some(144), false)).unwrap();
+        assert_eq!(cpu.multiplicador, None, "processador: a prova é da energia");
+        assert!(cpu.energia);
+
+        assert_eq!(receita_da_prova(&montar(Gargalo::Nenhum, None, None, false)), None);
+    }
+
+    #[test]
+    fn a_descricao_diz_o_que_foi_provado() {
+        let r = montar(Gargalo::Placa, Some(110.0), Some(144), false);
+        let p = receita_da_prova(&r).unwrap();
+        assert_eq!(
+            descrever(&p),
+            format!("Turbo: escala {} + energia de jogo", p.escala.unwrap().nome())
+        );
+    }
+
+    #[test]
+    fn as_frases_da_prova_falam_do_turbo() {
+        assert!(leitura_da_prova(Desfecho::Ganhou, "x").contains("Turbo fica"));
+        assert!(leitura_da_prova(Desfecho::Piorou, "x").contains("desligado"));
+        assert_eq!(leitura_da_prova(Desfecho::SemComparacaoJusta, "o motivo"), "o motivo");
+    }
+
+    fn rodada(lado: crate::modules::provaalternada::Lado, fps: f64) -> crate::modules::provaalternada::Rodada {
+        crate::modules::provaalternada::Rodada {
+            lado,
+            fps_do_jogo: fps,
+            low_1pct: Some(fps * 0.7),
+            fps_exibido: Some(fps),
+            quadros: (fps * 30.0) as usize,
+            geracao: Some(crate::modules::medicoes::GeracaoNaPartida::NenhumaVisivel),
+            configuracao_do_jogo: None,
+            pelo_presentmon: true,
+        }
+    }
+
+    #[test]
+    fn uma_prova_que_ganhou_vira_texto_para_compartilhar() {
+        use crate::modules::provaalternada::{decidir, Lado};
+        let ruido = [0.4, -0.3, 0.2, -0.5, 0.1, 0.3, -0.2, 0.0];
+        let rodadas: Vec<_> = ORDEM
+            .iter()
+            .zip(ruido)
+            .map(|(l, r)| rodada(*l, if *l == Lado::ComOtimiza { 58.0 } else { 41.0 } + r))
+            .collect();
+        let mut prova = decidir("Cyberpunk2077.exe", 0, RODADA_DA_PROVA_S, rodadas, false);
+        prova.leitura = leitura_da_prova(prova.desfecho, &prova.leitura);
+        assert_eq!(prova.desfecho, Desfecho::Ganhou);
+        let receita = receita_da_prova(&montar(Gargalo::Placa, Some(41.0), Some(144), false)).unwrap();
+        let texto = crate::modules::compartilhar::texto_do_turbo(
+            Some(&prova),
+            &descrever(&receita),
+            (Some("i3-10100F"), Some("GTX 1650")),
+            "22/10/2026",
+        )
+        .unwrap();
+        assert!(texto.contains("sem o Turbo × Turbo: escala"), "{}", texto);
+        assert!(texto.contains("8 rodadas de 30 s"), "{}", texto);
+        assert!(texto.contains("ganho no FPS"), "{}", texto);
+    }
+
+    #[test]
+    fn a_prova_dura_uns_cinco_minutos() {
+        assert!((240..=360).contains(&duracao_da_prova_s()), "{}", duracao_da_prova_s());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn so_escala_nao_conta_como_gerador_de_quadros() {
+        use crate::modules::windows::geracao::{Estado, Situacao};
+        let so_escala = Estado {
+            situacao: Situacao::Gerando,
+            multiplicador: 1,
+            ..Default::default()
+        };
+        assert!(!crate::modules::medicoes::gera_quadros(&so_escala));
+        assert!(crate::modules::medicoes::gera_quadros(&Estado {
+            multiplicador: 2,
+            ..so_escala.clone()
+        }));
+        assert!(crate::modules::medicoes::gera_quadros(&Estado {
+            automatico: true,
+            ..so_escala
+        }));
+    }
+
+    #[test]
     fn o_perfil_vai_e_volta_pelo_arquivo() {
         let pasta = std::env::temp_dir().join(format!("otimiza-turbo-{}", std::process::id()));
         let c = pasta.join("turbo.json");
@@ -532,6 +912,7 @@ mod tests {
                 receita: montar(Gargalo::Placa, Some(90.0), Some(144), true),
                 fps_antes: Some(90.0),
                 medido_em: 1,
+                prova: None,
             },
         );
         gravar_em(&c, &p).unwrap();

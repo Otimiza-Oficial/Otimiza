@@ -22,6 +22,7 @@ import {
   type Gargalo,
   type PainelTurbo,
   type ReceitaDoTurbo,
+  type PassoDaProvaDoTurbo,
   type PlanoJogoLiso,
   type FovFivem,
   type MemoriaParaOJogo,
@@ -205,6 +206,7 @@ function estrutura(): string {
             <div class="i-numeros"><span class="num" id="r-num">—</span><small id="r-un"></small><span class="etiquetas" id="r-selos"></span></div>
             <p class="nota" id="r-d">Lendo…</p>
             <div class="i-acoes">
+              <button class="botao prim" id="d-turbo" hidden title="Mede o jogo, liga só o que ajuda nele e lembra"><svg viewBox="0 0 24 24">${svgDoca.boost}</svg><span id="d-turbo-t">Turbo</span></button>
               <button class="botao prim" id="d-otimizar"><svg viewBox="0 0 24 24">${svgDoca.otimizar}</svg><span id="d-otimizar-t">Otimizar agora</span></button>
               <button class="botao" id="d-boost" hidden><svg viewBox="0 0 24 24">${svgDoca.boost}</svg><span>Frame Boost</span></button>
               <button class="botao" id="d-lab"><svg viewBox="0 0 24 24">${svgDoca.lab}</svg><span>Testar FPS</span></button>
@@ -625,7 +627,34 @@ function inicio() {
   // Some sem jogo em vez de ficar cinza: botão que não faz nada é ruído.
   bBoost.hidden = !j || (!fb && !gerando);
   bBoost.classList.toggle("ligado", gerando);
+  // Com o jogo aberto, o Turbo é o botão principal da tela; o "Otimizar agora" fica ao lado.
+  $<HTMLButtonElement>("#d-turbo").hidden = !j;
+  $("#d-otimizar").classList.toggle("prim", !j);
   $<HTMLButtonElement>("#d-otimizar").disabled = estado.otimizando;
+}
+
+/** O Turbo da tela do jogo: com a receita lembrada (e não reprovada), um clique; sem ela, mede 10 s. Depois, o cartão
+ *  do Turbo no Boost mostra o que foi ligado e a prova. Já ligado: vai direto para o cartão. */
+async function turboDaTelaDoJogo() {
+  const botao = $<HTMLButtonElement>("#d-turbo");
+  const rotulo = $("#d-turbo-t");
+  botao.disabled = true;
+  try {
+    const p = await ponte.turbo();
+    if (!p.ligado && !p.provando) {
+      const lembrado = !!p.perfil && p.perfil.prova !== "Piorou";
+      rotulo.textContent = lembrado ? "Ligando…" : "Medindo 10 s… jogue normalmente";
+      await ponte.turboLigar(lembrado);
+      estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
+    }
+    ir("boost");
+  } catch (e) {
+    mostrarPassos([{ texto: String(e) }]);
+  } finally {
+    rotulo.textContent = "Turbo";
+    botao.disabled = false;
+    inicio();
+  }
 }
 
 function mostrarPassos(linhas: { texto: string; classe?: string }[]) {
@@ -899,31 +928,55 @@ async function cartaoTurbo(dado?: PainelTurbo) {
     return;
   }
   const lembrado = p.perfil;
+  const reprovada = lembrado?.prova === "Piorou";
+  const minutos = Math.round((p.duracao_da_prova_s ?? 318) / 60);
   const corpo = !p.jogo
     ? `<p class="nota" style="margin-top:8px">Abra um jogo. O Turbo mede o jogo aberto por 10 segundos, vê o que está no limite (placa, processador ou memória) e liga só o que ajuda nele.</p>`
-    : p.ligado
-      ? `${p.passos.map((t, i) => `<p class="nota" style="margin-top:${i ? 4 : 8}px">${i ? "· " : ""}${esc(t)}</p>`).join("")}
-         <div class="acoes" style="margin-top:14px"><button class="botao" id="tb-desligar">Desligar Turbo</button></div>`
-      : `<p class="nota" style="margin-top:8px">${
-          lembrado
-            ? `Da última vez no ${esc(p.jogo)}: ${esc(NOMES_DO_GARGALO[lembrado.receita.gargalo])}${lembrado.fps_antes ? ` a ${numero(lembrado.fps_antes)} fps` : ""} → ${esc(resumoDaReceita(lembrado.receita))}.`
-            : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele.`
-        }${p.competitivo ? " Jogo competitivo: sem geração de quadros, para não acrescentar atraso." : ""}</p>
-         <div class="acoes" style="margin-top:14px">${
-           lembrado
-             ? `<button class="botao prim" id="tb-lembrado">Turbo</button><button class="botao" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
-             : `<button class="botao prim" id="tb-medir">Turbo</button>`
-         }</div>`;
-  // O antes × depois da última vez: o número que o cliente sente, com a ressalva de que não é prova A-B.
-  const r = !p.ligado ? p.resultado : null;
+    : p.provando
+      ? `<p class="nota" style="margin-top:8px" id="tb-progresso">Provando…</p>
+         <p class="nota" style="margin-top:4px">Jogue normalmente: o Turbo liga e desliga sozinho em 8 rodadas e mede o FPS do jogo em cada uma.</p>`
+      : p.ligado
+        ? `${p.passos.map((t, i) => `<p class="nota" style="margin-top:${i ? 4 : 8}px">${i ? "· " : ""}${esc(t)}</p>`).join("")}
+           <div class="acoes" style="margin-top:14px"><button class="botao prim" id="tb-provar" title="8 rodadas alternadas, com e sem o Turbo, com o jogo aberto">Provar (~${minutos} min)</button><button class="botao" id="tb-desligar">Desligar Turbo</button></div>`
+        : `<p class="nota" style="margin-top:8px">${
+            lembrado
+              ? `Da última vez no ${esc(p.jogo)}: ${esc(NOMES_DO_GARGALO[lembrado.receita.gargalo])}${lembrado.fps_antes ? ` a ${numero(lembrado.fps_antes)} fps` : ""} → ${esc(resumoDaReceita(lembrado.receita))}.${reprovada ? " Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo." : ""}`
+              : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele.`
+          }${p.competitivo ? " Jogo competitivo: sem geração de quadros, para não acrescentar atraso." : ""}</p>
+           <div class="acoes" style="margin-top:14px">${
+             lembrado
+               ? `${reprovada ? "" : `<button class="botao prim" id="tb-lembrado">Turbo</button>`}<button class="botao ${reprovada ? "prim" : ""}" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
+               : `<button class="botao prim" id="tb-medir">Turbo</button>`
+           }</div>`;
+  // A prova A-B: o único número do Turbo que vale como prova (margem de erro, rodadas alternadas) e que se compartilha.
+  const pv = !p.provando ? p.prova : null;
+  const lado = (r: { media: number; margem: number | null } | null) =>
+    r ? `${numero(r.media)}${r.margem !== null ? ` ± ${numero(Math.ceil(r.margem))}` : ""}` : "—";
+  const pct = pv?.diferenca_fps?.Real?.pct ?? null;
+  const selosDaProva: Record<string, string> = {
+    Ganhou: `<span class="selo medido">provado${pct !== null ? `: ${pct > 0 ? "+" : ""}${numero(pct, 1)}%` : ""}</span>`,
+    Piorou: `<span class="selo">piorou: Turbo desligado</span>`,
+    Indistinguivel: `<span class="selo">dentro do ruído</span>`,
+    SemComparacaoJusta: `<span class="selo">sem comparação justa</span>`,
+  };
+  const provaHtml = pv
+    ? `<div class="rotulo" style="margin-top:16px">Prova do Turbo · ${pv.rodadas.length} rodadas alternadas</div>
+       <div class="grande" style="font-size:40px">${lado(pv.fps_sem)} → ${lado(pv.fps_com)}<small style="font-size:16px;color:var(--texto-2)"> fps no jogo</small></div>
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selosDaProva[pv.desfecho] ?? ""}</div>
+       <p class="nota" style="margin-top:8px">${esc(pv.leitura)}</p>
+       ${pv.desfecho !== "SemComparacaoJusta" ? `<div class="acoes" style="margin-top:10px"><button class="botao" id="tb-copiar">Copiar resultado</button></div>` : ""}`
+    : "";
+  // O antes × depois da última vez: o número que o cliente sente, com a ressalva de que não é prova A-B. Com prova,
+  // ela fala por ele.
+  const r = !p.ligado && !pv ? p.resultado : null;
   const resultado = r
     ? `<div class="rotulo" style="margin-top:16px">Da última vez com o Turbo</div>
        <div class="grande" style="font-size:44px">${numero(r.fps_antes)} → ${numero(r.fps_do_jogo)}<small style="font-size:16px;color:var(--texto-2)"> fps no jogo</small></div>
        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="selo ${r.ganho_pct > 0 ? "medido" : ""}">${r.ganho_pct > 0 ? "+" : ""}${numero(r.ganho_pct, 1)}%</span>${r.fps_na_tela ? `<span class="selo ${r.na_tela_medido ? "medido" : "estimado"}">${numero(r.fps_na_tela)} na tela</span>` : ""}${r.escala ? `<span class="selo">escala ${esc(NOMES_DA_ESCALA[r.escala])}</span>` : ""}</div>
        <p class="nota" style="margin-top:8px">Comparação simples: o antes são os 10 s da medida; o depois, a média de ${numero(r.minutos, 1)} min de jogo. Cenas diferentes, então não é prova A-B.</p>`
     : "";
-  caixa.innerHTML = `<div class="titulo-sec"><div class="rotulo">Turbo</div>${p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : ""}</div>
-    ${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
+  caixa.innerHTML = `<div class="titulo-sec"><div class="rotulo">Turbo</div>${p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : ""}</div>
+    ${provaHtml}${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
     $$<HTMLButtonElement>("#b-turbo button").forEach((b) => (b.disabled = true));
@@ -945,6 +998,47 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   document.querySelector<HTMLButtonElement>("#tb-lembrado")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboLigar(true)));
   document.querySelector<HTMLButtonElement>("#tb-esquecer")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboEsquecer()));
   document.querySelector<HTMLButtonElement>("#tb-desligar")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboDesligar()));
+  document.querySelector<HTMLButtonElement>("#tb-provar")?.addEventListener("click", () => void provarTurbo(p));
+  document.querySelector<HTMLButtonElement>("#tb-copiar")?.addEventListener("click", async (e) => {
+    const botao = e.currentTarget as HTMLButtonElement;
+    try {
+      await navigator.clipboard.writeText(await ponte.turboCompartilhar());
+      botao.textContent = "Copiado";
+    } catch (erro) {
+      const s = $("#tb-estado");
+      s.hidden = false;
+      s.textContent = String(erro);
+    }
+  });
+}
+
+/** A prova A-B do Turbo: o cartão mostra a rodada em que está, e o resultado no fim. */
+async function provarTurbo(antes: PainelTurbo) {
+  await cartaoTurbo({ ...antes, provando: true });
+  const progresso = (texto: string) => {
+    const el = document.querySelector<HTMLElement>("#tb-progresso");
+    if (el) el.textContent = texto;
+  };
+  const parar = await ouvir<PassoDaProvaDoTurbo>("turbo:prova", (passo) =>
+    progresso(
+      passo.indice === 0
+        ? `Aquecendo ${passo.segundos} s…`
+        : `Rodada ${passo.indice} de ${passo.total} · ${passo.com_turbo ? "com o Turbo" : "sem o Turbo"} · ${passo.segundos} s`
+    )
+  ).catch(() => () => {});
+  try {
+    await ponte.turboProvar();
+    estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
+    await cartaoTurbo();
+    void painelFrameBoost();
+  } catch (e) {
+    await cartaoTurbo();
+    const s = $("#tb-estado");
+    s.hidden = false;
+    s.textContent = String(e);
+  } finally {
+    parar();
+  }
 }
 
 async function driver(fab: string) {
@@ -2306,6 +2400,7 @@ export async function iniciarV33() {
   $("#v-busca").addEventListener("click", () => document.getElementById("abrir-comandos-topo")?.click());
   $("#d-otimizar").addEventListener("click", () => void otimizar());
   $("#d-boost").addEventListener("click", () => void alternarBoost());
+  $("#d-turbo").addEventListener("click", () => void turboDaTelaDoJogo());
   $("#d-lab").addEventListener("click", () => ir("lab"));
   $("#d-desfazer").addEventListener("click", () => ir("ajustes"));
   ligarFeedback();

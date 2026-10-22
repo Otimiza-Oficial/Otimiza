@@ -60,9 +60,63 @@ fn nome_do_jogo(exe: &str) -> String {
     }
 }
 
-/// **Pura.** `hardware`: processador e placa, quando lidos. `data`: dd/mm/aaaa da prova.
+/// O que foi comparado com o quê, nas palavras do texto (o plano de energia ou o Turbo).
+pub struct Rotulos<'a> {
+    pub lado_a: &'a str,
+    pub lado_b: &'a str,
+    pub piorou: &'a str,
+    /// Piorou e desfazer falhou: o que piorou CONTINUA ligado, e a frase não pode dizer que saiu.
+    pub piorou_sem_desfazer: &'a str,
+}
+
+/// **Pura.** A prova do plano de energia. `hardware`: processador e placa, quando lidos. `data`: dd/mm/aaaa da prova.
 pub fn texto(
     prova: Option<&Resultado>,
+    hardware: (Option<&str>, Option<&str>),
+    data: &str,
+) -> Result<String, Recusa> {
+    let lado_a = if prova.is_some_and(|p| p.contra_o_equilibrado) {
+        "Equilibrado do Windows"
+    } else {
+        "plano de energia de antes"
+    };
+    texto_com(
+        prova,
+        &Rotulos {
+            lado_a,
+            lado_b: "plano OTIMIZA",
+            piorou: "o plano OTIMIZA piorou este jogo neste PC e foi desfeito.",
+            piorou_sem_desfazer:
+                "o plano OTIMIZA piorou este jogo neste PC, e desfazer falhou: ele ainda está ligado.",
+        },
+        hardware,
+        data,
+    )
+}
+
+/// **Pura.** A prova do Turbo. `receita`: o que o Turbo ligou ("Turbo: escala Qualidade + energia de jogo").
+pub fn texto_do_turbo(
+    prova: Option<&Resultado>,
+    receita: &str,
+    hardware: (Option<&str>, Option<&str>),
+    data: &str,
+) -> Result<String, Recusa> {
+    texto_com(
+        prova,
+        &Rotulos {
+            lado_a: "sem o Turbo",
+            lado_b: receita,
+            piorou: "o Turbo piorou este jogo neste PC e foi desligado.",
+            piorou_sem_desfazer: "o Turbo piorou este jogo neste PC, e desligar falhou: ele ainda está ligado.",
+        },
+        hardware,
+        data,
+    )
+}
+
+fn texto_com(
+    prova: Option<&Resultado>,
+    rotulos: &Rotulos,
     hardware: (Option<&str>, Option<&str>),
     data: &str,
 ) -> Result<String, Recusa> {
@@ -101,18 +155,12 @@ pub fn texto(
             _ => "ganho no 1% piores quadros, além da margem de erro (intervalos de 95% sem sobreposição); o FPS médio ficou dentro da margem.",
         },
         // Com o desfazer falho, o plano que piorou CONTINUA na máquina: a frase não pode dizer que saiu.
-        Desfecho::Piorou if p.falha_ao_desfazer.is_some() => {
-            "o plano OTIMIZA piorou este jogo neste PC, e desfazer falhou: ele ainda está ligado."
-        }
-        Desfecho::Piorou => "o plano OTIMIZA piorou este jogo neste PC e foi desfeito.",
+        Desfecho::Piorou if p.falha_ao_desfazer.is_some() => rotulos.piorou_sem_desfazer,
+        Desfecho::Piorou => rotulos.piorou,
         Desfecho::Indistinguivel => "a diferença ficou dentro da margem de erro: não dá para dizer que mudou.",
         Desfecho::SemComparacaoJusta => unreachable!("recusado acima"),
     };
-    let lado_a = if p.contra_o_equilibrado {
-        "Equilibrado do Windows"
-    } else {
-        "plano de energia de antes"
-    };
+    let (lado_a, lado_b) = (rotulos.lado_a, rotulos.lado_b);
     let rodape = match hardware {
         (Some(c), Some(g)) => format!("PC: {} · {} · {}", c.trim(), g.trim(), data),
         (Some(x), None) | (None, Some(x)) => format!("PC: {} · {}", x.trim(), data),
@@ -120,7 +168,7 @@ pub fn texto(
     };
     Ok(format!(
         "Otimiza · prova no jogo — {jogo}\n\
-         {lado_a} × plano OTIMIZA, {rodadas} rodadas de {seg} s alternadas com o jogo aberto.\n\
+         {lado_a} × {lado_b}, {rodadas} rodadas de {seg} s alternadas com o jogo aberto.\n\
          FPS do jogo: {fps}{pct}{low}\n\
          Resultado: {resultado}\n\
          {rodape}\n\

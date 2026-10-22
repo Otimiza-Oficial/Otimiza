@@ -281,10 +281,41 @@ export interface ReceitaDoTurbo {
   explicacao: string;
 }
 
+export type DesfechoDaProva = "Ganhou" | "Piorou" | "Indistinguivel" | "SemComparacaoJusta";
+
+export interface ResumoDaProva {
+  n: number;
+  media: number;
+  margem: number | null;
+}
+
+/** A prova A-B (a mesma forma da prova alternada do plano de energia). */
+export interface ProvaDoTurbo {
+  jogo: string;
+  quando: number;
+  segundos_por_rodada: number;
+  rodadas: unknown[];
+  fps_sem: ResumoDaProva | null;
+  fps_com: ResumoDaProva | null;
+  diferenca_fps: { Real?: { delta: number; pct: number | null; folga: number } } | null;
+  desfecho: DesfechoDaProva;
+  leitura: string;
+}
+
+export interface PassoDaProvaDoTurbo {
+  indice: number;
+  total: number;
+  com_turbo: boolean | null;
+  segundos: number;
+}
+
 export interface PainelTurbo {
   jogo: string | null;
   competitivo: boolean;
-  perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number } | null;
+  perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number; prova?: DesfechoDaProva | null } | null;
+  prova?: ProvaDoTurbo | null;
+  provando?: boolean;
+  duracao_da_prova_s?: number;
   passos: string[];
   ligado: boolean;
   /** Desligado: o antes × depois da última vez (comparação simples, não prova A-B). */
@@ -504,6 +535,9 @@ export const ponte = {
   turboLigar: (lembrado = false) => invoke<PainelTurbo>("turbo_ligar", { lembrado }),
   turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
   turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
+  /** A prova A-B (uns 5 minutos); o passo a passo chega pelo evento `turbo:prova`. */
+  turboProvar: () => invoke<ProvaDoTurbo>("turbo_provar"),
+  turboCompartilhar: () => invoke<string>("turbo_compartilhar"),
   frameBoost: () => invoke<PainelFrameBoost>("frame_boost_painel"),
   /** `escala`: amplia o jogo para o monitor (FSR 1); com `multiplicador` 1, só escala. */
   frameBoostLigar: (multiplicador: number, semLimite = false, escala: NivelDeEscala | null = null) =>

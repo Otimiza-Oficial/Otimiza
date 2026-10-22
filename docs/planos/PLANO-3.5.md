@@ -400,13 +400,27 @@ continua no `configjogo.rs`.
 | 5 | testes | ✅ 3 do resultado, 3 do comparador (regiões, recorte, BMP), 1 do contador; o `escala_na_placa` agora prova na placa que o quadro de origem do comparador é o do jogo |
 | 6 | **PC de casa** | a medida A-B-A-B do laboratório (nativo × escala × escala + geração) e a prova alternada que libera o compartilhar |
 
+### 10.7 Depois do M6: a prova, a rede de segurança e o Turbo na tela do jogo
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `turbo.rs` `provar` | ✅ **a prova A-B do Turbo**: 8 rodadas na ordem da `provaalternada` (A B B A B A A B), 30 s de aquecimento, 6 s de espera (a janela redimensiona) e 30 s de medida pelo PresentMon em cada uma: uns 5 minutos jogando. Decide pelo critério único da `provaalternada` (margem de 95%) |
+| 2 | o que entra | ✅ só o que deve subir o **FPS do jogo**: a escala (sem gerar) e a energia de jogo. A geração aumenta o que chega à tela e custa do jogo; pelo FPS do jogo uma geração boa sairia "piorou", então ela fica com a guarda do gerador |
+| 3 | desfecho | ✅ **Piorou**: o Turbo fica desligado e a receita não volta neste jogo (só "Medir de novo"). Senão, a receita inteira volta, com a geração. A prova reserva a mesma vez da `provaalternada`: a medição automática, o guardião e o motor de energia esperam |
+| 4 | `medicoes::gera_quadros` | ✅ correção: o Frame Boost só com escala não conta mais como gerador de quadros (anularia toda comparação com e sem a escala) |
+| 5 | compartilhar | ✅ `compartilhar.rs` com rótulos; o texto do plano de energia ficou igual, e o do Turbo diz "sem o Turbo × Turbo: escala … + energia de jogo". "Copiar resultado" no cartão |
+| 6 | rede de segurança | ✅ na abertura: o cursor do Windows à vista; a janela do jogo devolvida pelo marcador `escala_janela.json` se o Otimiza caiu com a escala ligada; a energia de jogo devolvida se caiu no meio da prova |
+| 7 | tela do jogo | ✅ com o jogo aberto, **Turbo** é o botão principal da tela inicial (receita lembrada: um clique; sem ela: mede); "Otimizar agora" fica ao lado |
+| 8 | testes | ✅ 7 novos, inclusive uma prova inteira simulada (8 rodadas → Ganhou → texto do Turbo) |
+| 9 | **PC de casa** | a prova de verdade num jogo preso na placa (escala) e num preso no processador (energia) |
+
 ## 11.1 Antes de publicar a 3.5 (tudo o que ficou para o PC de casa)
 
 1. **Escala ao vivo** (10.1 #9, 10.2 #8): jogo de teste e 3 jogos reais; janela redimensionada e devolvida; cursor e
    mouse; o cursor do sistema volta até com o Otimiza fechado à força.
 2. **Driver** (10.3 #5): NIS e RSR aplicados, jogo reaberto em tela cheia menor, desfeitos; o
    `os_numeros_da_tabela_batem_com_o_que_o_driver_chama` numa NVIDIA.
-3. **Turbo** (10.4 #9): um jogo preso na placa e um preso no processador.
+3. **Turbo** (10.4 #9, 10.7 #9): um jogo preso na placa e um preso no processador, com a prova A-B nos dois.
 4. **Configuração** (10.5 #8): as chaves do CS2 e do Apex com o REA; o ganho nos três.
 5. **Laboratório** (10.6 #6): A-B-A-B e as metas da seção 2.6, com os números que derem.
 6. **Ritual**: subir a versão para 3.5.0 nas quatro declarações e rodar o `verificador-de-publicacao`.
