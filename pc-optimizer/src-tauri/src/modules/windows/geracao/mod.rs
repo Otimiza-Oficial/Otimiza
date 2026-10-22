@@ -5,6 +5,7 @@
 // cheia a 60 fps, a sobreposição por cima não tirou o jogo do modo nem lhe tirou FPS. Na tela cheia exclusiva antiga
 // (o jogo troca o modo de vídeo do monitor), nada fica por cima: o gerador percebe as trocas e desliga.
 
+pub mod escala;
 pub mod gpu;
 pub mod guarda;
 pub mod resumo;
