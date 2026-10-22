@@ -165,6 +165,29 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
     }
 }
 
+/// Pura: o aviso quando a receita põe o jogo em janela (a escala) e ele chega à tela POR CÓPIA, o caminho com mais
+/// atraso (medido pelo PresentMon nos 10 s da medida). A otimização de janela do Windows (`SwapEffectUpgradeEnable`) não
+/// tira a cópia, medido na 3.3.1: o que tira é o jogo apresentar pelo modelo novo, o do DirectX 12 e do Vulkan.
+pub fn aviso_de_copia(
+    apresentacao: crate::modules::windows::presentmon::Apresentacao,
+    api: crate::modules::windows::presentmon::ApiGrafica,
+    com_escala: bool,
+) -> Option<&'static str> {
+    use crate::modules::windows::presentmon::{Apresentacao, ApiGrafica};
+    if !com_escala || apresentacao != Apresentacao::Copiada {
+        return None;
+    }
+    Some(match api {
+        ApiGrafica::DirectX | ApiGrafica::DirectX9 => {
+            "O jogo chega à tela por cópia (DirectX 11 ou anterior em janela), o caminho com mais atraso. Se ele tiver \
+             a opção, troque para DirectX 12 ou Vulkan no menu de vídeo: os dois apresentam pelo caminho novo, sem a \
+             cópia."
+        }
+        _ => "O jogo chega à tela por cópia, o caminho com mais atraso. A escala continua dando FPS, mas o clique \
+              demora um pouco mais para aparecer.",
+    })
+}
+
 /// A receita que deu certo num jogo, nesta máquina: na próxima vez, um clique e sem medir de novo.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Perfil {
@@ -440,6 +463,20 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
     }
     if r.memoria {
         passos.push("Memória: veja abaixo o que ocupa e feche o que não precisa.".to_string());
+    }
+    // Com a escala, o jogo foi para janela: o modo de apresentação de agora é o que vale (o da medida era em tela
+    // cheia). Medido em 3 s, depois de a janela se ajustar.
+    if r.escala.is_some() && super::frameboost::ativo_de(&crate::modules::windows::geracao::estado()).is_some() {
+        if let Some(j) = super::sessao::atual() {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            let medido = crate::modules::windows::presentmon::capturar(j.pid, 3)
+                .and_then(|q| crate::modules::windows::presentmon::resumir(&q));
+            if let Ok(resumo) = medido {
+                if let Some(aviso) = aviso_de_copia(resumo.apresentacao, resumo.api, true) {
+                    passos.push(aviso.to_string());
+                }
+            }
+        }
     }
     LIGADO.store(true, Ordering::SeqCst);
     if let Ok(mut p) = PASSOS.lock() {
@@ -874,6 +911,17 @@ mod tests {
         assert!(texto.contains("sem o Turbo × Turbo: escala"), "{}", texto);
         assert!(texto.contains("8 rodadas de 30 s"), "{}", texto);
         assert!(texto.contains("ganho no FPS"), "{}", texto);
+    }
+
+    #[test]
+    fn o_aviso_de_copia_so_vem_com_escala_e_copia_medida() {
+        use crate::modules::windows::presentmon::{ApiGrafica, Apresentacao};
+        let dx11 = aviso_de_copia(Apresentacao::Copiada, ApiGrafica::DirectX, true).unwrap();
+        assert!(dx11.contains("DirectX 12 ou Vulkan"), "{}", dx11);
+        assert!(aviso_de_copia(Apresentacao::Copiada, ApiGrafica::Outra, true).is_some());
+        assert_eq!(aviso_de_copia(Apresentacao::Copiada, ApiGrafica::DirectX, false), None, "sem escala o jogo não foi para janela");
+        assert_eq!(aviso_de_copia(Apresentacao::Composta, ApiGrafica::DirectX, true), None);
+        assert_eq!(aviso_de_copia(Apresentacao::Desconhecida, ApiGrafica::DirectX, true), None, "sem medida, sem aviso");
     }
 
     #[test]

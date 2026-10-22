@@ -341,7 +341,7 @@ máquina sem placa de vídeo. Ele roda à mão no notebook e no PC de casa.
 | 6 | `cursor.rs` `CursorDoSistema` | ✅ o cursor do Windows escondido (API de Lupa, `MagShowSystemCursor`) só enquanto a sobreposição está na tela; devolvido ao esconder e ao sair |
 | 7 | testes | ✅ 9 puros novos (janela, cursor, formas) e `cursor_na_placa` (GPU): o opaco cobre, o transparente deixa a imagem intacta |
 | 8 | PC de casa | **medir com o jogo de teste e 3 jogos reais**: janela redimensionada e devolvida; cursor no lugar em menu; o mouse não escapa; o cursor do sistema volta ao desligar, ao fechar o jogo e com o Otimiza fechado à força (Gerenciador de Tarefas) |
-| 9 | depois | aviso de apresentação por cópia (PresentMon); monitor girado sem cursor ampliado |
+| 9 | depois | ✅ aviso de apresentação por cópia: com a escala ligada pelo Turbo, 3 s de PresentMon depois de a janela se ajustar (o modo da medida era o de tela cheia); por cópia, o passo diz o que fazer (DirectX 12 ou Vulkan no jogo). Fica: monitor girado sem cursor ampliado |
 
 Risco a confirmar no item 8: se o Otimiza morrer à força com o cursor
 escondido, o Windows precisa devolvê-lo (a Lupa é do processo). Se não
