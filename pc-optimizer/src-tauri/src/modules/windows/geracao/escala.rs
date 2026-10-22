@@ -89,6 +89,43 @@ pub fn encaixe(jogo_largura: i32, jogo_altura: i32, tela: Retangulo) -> Option<R
     })
 }
 
+/// Pura: a janela do jogo no nível, centrada no monitor. `borda` é o quanto a janela é maior que a área do cliente
+/// (barra de título e bordas; zero sem bordas). Devolve o retângulo de fora da janela, em coordenadas da tela.
+pub fn janela_no_nivel(nivel: Nivel, monitor: Retangulo, borda: (i32, i32)) -> Retangulo {
+    let (l, a) = resolucao_de_render(nivel, monitor.largura, monitor.altura);
+    let (fl, fa) = (l + borda.0, a + borda.1);
+    Retangulo {
+        x: monitor.x + (monitor.largura - fl) / 2,
+        y: monitor.y + (monitor.altura - fa) / 2,
+        largura: fl,
+        altura: fa,
+    }
+}
+
+/// Pura: onde desenhar o cursor ampliado na sobreposição. `posicao` é o canto da forma na captura (coordenadas do
+/// monitor), `ponta` o ponto quente dentro da forma, `jogo` a área do jogo no monitor e `destino` a imagem ampliada
+/// na sobreposição. `None` com a ponta fora do jogo.
+pub fn cursor_na_tela(
+    posicao: (i32, i32),
+    ponta: (i32, i32),
+    tamanho: (i32, i32),
+    jogo: Retangulo,
+    destino: Retangulo,
+) -> Option<Retangulo> {
+    let (px, py) = (posicao.0 + ponta.0, posicao.1 + ponta.1);
+    if px < jogo.x || py < jogo.y || px >= jogo.x + jogo.largura || py >= jogo.y + jogo.altura {
+        return None;
+    }
+    let fator = destino.largura as f64 / jogo.largura.max(1) as f64;
+    let (tx, ty) = jogo_para_tela(px, py, jogo, destino);
+    Some(Retangulo {
+        x: tx - (ponta.0 as f64 * fator).round() as i32,
+        y: ty - (ponta.1 as f64 * fator).round() as i32,
+        largura: ((tamanho.0 as f64 * fator).round() as i32).max(1),
+        altura: ((tamanho.1 as f64 * fator).round() as i32).max(1),
+    })
+}
+
 /// Pura: um ponto da tela (dentro da imagem ampliada `destino`) no ponto correspondente da janela do jogo. `None` em
 /// cima das barras.
 pub fn tela_para_jogo(x: i32, y: i32, destino: Retangulo, jogo: Retangulo) -> Option<(i32, i32)> {
@@ -214,6 +251,37 @@ mod tests {
         assert_eq!(tela_para_jogo(960, 540, destino, jogo), Some((740, 410)));
         assert_eq!(jogo_para_tela(740, 410, jogo, destino), (960, 540));
         assert_eq!(tela_para_jogo(0, 0, destino, jogo), Some((100, 50)));
+    }
+
+    #[test]
+    fn janela_sem_bordas_fica_no_meio_do_monitor() {
+        let j = janela_no_nivel(Nivel::Qualidade, r(0, 0, 1920, 1080), (0, 0));
+        assert_eq!(j, r(320, 180, 1280, 720));
+    }
+
+    #[test]
+    fn janela_com_bordas_ganha_o_tamanho_delas_e_segue_o_monitor() {
+        let j = janela_no_nivel(Nivel::Desempenho, r(1920, 0, 1920, 1080), (16, 39));
+        assert_eq!((j.largura, j.altura), (976, 579));
+        assert_eq!(j.x, 1920 + (1920 - 976) / 2);
+    }
+
+    #[test]
+    fn cursor_ampliado_com_a_ponta_no_lugar() {
+        // Jogo 1280x720 no meio de um monitor 1920x1080, ampliado para a tela inteira (1,5x).
+        let jogo = r(320, 180, 1280, 720);
+        let destino = r(0, 0, 1920, 1080);
+        // Ponta no centro do jogo: vai para o centro da tela, e a forma 32x32 vira 48x48.
+        let c = cursor_na_tela((960 - 4, 540 - 2), (4, 2), (32, 32), jogo, destino).unwrap();
+        assert_eq!((c.largura, c.altura), (48, 48));
+        assert_eq!((c.x + 6, c.y + 3), (960, 540));
+    }
+
+    #[test]
+    fn cursor_fora_do_jogo_nao_e_desenhado() {
+        let jogo = r(320, 180, 1280, 720);
+        let destino = r(0, 0, 1920, 1080);
+        assert_eq!(cursor_na_tela((10, 10), (0, 0), (32, 32), jogo, destino), None);
     }
 
     #[test]

@@ -329,6 +329,24 @@ lado deles.
 O teste de GPU é `#[ignore]`, como os outros da placa: a esteira roda em
 máquina sem placa de vídeo. Ele roda à mão no notebook e no PC de casa.
 
+### 10.2 M2 em detalhe
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `mod.rs` `JanelaNoNivel` | ✅ com escala, a janela do jogo vai para a resolução do nível, centrada no monitor dela (`escala::janela_no_nivel`, conta a borda da janela). Maximizada sai do maximizado. **Volta exatamente como estava** quando o gerador sai, por qualquer caminho (é uma guarda com `Drop`) |
+| 2 | `mod.rs` `aviso_da_escala` | ✅ jogo que repõe o tamanho do monitor: a tela diz qual resolução escolher no menu dele |
+| 3 | `cursor.rs` `MousePreso` | ✅ `ClipCursor` na área do jogo enquanto a sobreposição está na tela, refeito a cada 0,5 s (trocar de janela desfaz); devolve o recorte que havia antes (o jogo pode ter o dele) |
+| 4 | `cursor.rs` `forma_em_bgra` + `mod.rs` | ✅ a forma e a posição do cursor vêm da própria captura (`GetFramePointerShape`, `PointerPosition`); os três formatos (monocromático, colorido, com máscara) viram BGRA; o que inverte a tela sai branco |
+| 5 | `gpu.rs` + `shaders.hlsl` `Cursor` | ✅ o cursor desenhado ampliado por cima da imagem, alfa pré-multiplicado (sem franja escura); com o jogo parado e o mouse andando, o mesmo real é reapresentado com o cursor no lugar novo |
+| 6 | `cursor.rs` `CursorDoSistema` | ✅ o cursor do Windows escondido (API de Lupa, `MagShowSystemCursor`) só enquanto a sobreposição está na tela; devolvido ao esconder e ao sair |
+| 7 | testes | ✅ 9 puros novos (janela, cursor, formas) e `cursor_na_placa` (GPU): o opaco cobre, o transparente deixa a imagem intacta |
+| 8 | PC de casa | **medir com o jogo de teste e 3 jogos reais**: janela redimensionada e devolvida; cursor no lugar em menu; o mouse não escapa; o cursor do sistema volta ao desligar, ao fechar o jogo e com o Otimiza fechado à força (Gerenciador de Tarefas) |
+| 9 | depois | aviso de apresentação por cópia (PresentMon); monitor girado sem cursor ampliado |
+
+Risco a confirmar no item 8: se o Otimiza morrer à força com o cursor
+escondido, o Windows precisa devolvê-lo (a Lupa é do processo). Se não
+devolver, entra um vigia que mostra o cursor na abertura seguinte.
+
 ---
 
 ## 11. Riscos

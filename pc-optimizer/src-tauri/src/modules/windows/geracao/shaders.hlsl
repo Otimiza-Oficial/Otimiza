@@ -1216,3 +1216,13 @@ float4 Rcas(Saida e) : SV_Target
     float3 cor = (lobe * (b + d + f + h) + c) / (4.0 * lobe + 1.0);
     return float4(Sair(cor), 1);
 }
+
+// O CURSOR AMPLIADO, por cima da imagem do jogo (com mistura pelo alfa). T0 = a forma (BGRA, alfa pré-multiplicado:
+// ampliada com filtro linear, a borda não ganha franja escura); o viewport
+// é o retângulo do cursor na sobreposição, que começa em extra.xy e mede extra.zw.
+float4 Cursor(Saida e) : SV_Target
+{
+    float2 uv = (e.pos.xy - extra.xy) / extra.zw;
+    float4 c = T0.SampleLevel(Linear, uv, 0);
+    return float4(Sair(c.rgb), c.a);
+}

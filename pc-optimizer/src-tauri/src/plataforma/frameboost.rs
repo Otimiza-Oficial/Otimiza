@@ -321,7 +321,10 @@ pub fn painel_de(
         hz,
         estimativas,
         ativo,
-        aviso: aviso_de(gerador),
+        aviso: aviso_de(gerador).or_else(|| {
+            ativo_de(gerador)
+                .and(gerador.aviso_da_escala.clone())
+        }),
         base: None,
         nota_da_base: None,
         base_solta: false,

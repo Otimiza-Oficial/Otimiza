@@ -5,6 +5,7 @@
 // cheia a 60 fps, a sobreposição por cima não tirou o jogo do modo nem lhe tirou FPS. Na tela cheia exclusiva antiga
 // (o jogo troca o modo de vídeo do monitor), nada fica por cima: o gerador percebe as trocas e desliga.
 
+pub mod cursor;
 pub mod escala;
 pub mod gpu;
 pub mod guarda;
@@ -24,7 +25,9 @@ use windows::Win32::Graphics::DirectComposition::{
 };
 use windows::Win32::Graphics::Dxgi::Common::*;
 use windows::Win32::Graphics::Dxgi::*;
-use windows::Win32::Graphics::Gdi::{ClientToScreen, MonitorFromWindow, MONITOR_DEFAULTTONEAREST};
+use windows::Win32::Graphics::Gdi::{
+    ClientToScreen, GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
@@ -99,6 +102,9 @@ pub struct Estado {
     pub escala: Option<escala::Nivel>,
     #[serde(default)]
     pub ampliada: Option<Retangulo>,
+    /// Com escala e o jogo ainda do tamanho do monitor (ele repôs o tamanho): o que fazer no menu do jogo.
+    #[serde(default)]
+    pub aviso_da_escala: Option<String>,
 }
 
 impl Default for Estado {
@@ -129,6 +135,7 @@ impl Default for Estado {
             sessao: resumo::Acumulado::default(),
             escala: None,
             ampliada: None,
+            aviso_da_escala: None,
         }
     }
 }
@@ -382,6 +389,123 @@ pub(crate) fn area_do_cliente(hwnd: HWND) -> Option<Retangulo> {
             altura: r.bottom - r.top,
         })
     }
+}
+
+/// O monitor onde a janela está, em coordenadas da tela.
+fn monitor_da_janela(hwnd: HWND) -> Option<Retangulo> {
+    unsafe {
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info)
+            .as_bool()
+            .then(|| {
+                let r = info.rcMonitor;
+                Retangulo {
+                    x: r.left,
+                    y: r.top,
+                    largura: r.right - r.left,
+                    altura: r.bottom - r.top,
+                }
+            })
+    }
+}
+
+/// Com escala: a janela do jogo no tamanho do nível, centrada no monitor dela. Devolvida exatamente como estava
+/// (lugar, tamanho e maximizada ou não) quando o gerador sai, por qualquer caminho.
+struct JanelaNoNivel {
+    hwnd: HWND,
+    anterior: RECT,
+    maximizada: bool,
+}
+
+impl JanelaNoNivel {
+    /// `None` quando não precisou mexer (já está no tamanho) ou o Windows recusou.
+    fn ajustar(hwnd: HWND, nivel: escala::Nivel) -> Option<JanelaNoNivel> {
+        unsafe {
+            let maximizada = IsZoomed(hwnd).as_bool();
+            if maximizada {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
+            let mut janela = RECT::default();
+            GetWindowRect(hwnd, &mut janela).ok()?;
+            let mut cliente = RECT::default();
+            GetClientRect(hwnd, &mut cliente).ok()?;
+            let borda = (
+                (janela.right - janela.left) - (cliente.right - cliente.left),
+                (janela.bottom - janela.top) - (cliente.bottom - cliente.top),
+            );
+            let monitor = monitor_da_janela(hwnd)?;
+            let alvo = escala::janela_no_nivel(nivel, monitor, borda);
+            let ja_esta = (cliente.right - cliente.left, cliente.bottom - cliente.top)
+                == (alvo.largura - borda.0, alvo.altura - borda.1);
+            if ja_esta && !maximizada {
+                return None;
+            }
+            SetWindowPos(
+                hwnd,
+                None,
+                alvo.x,
+                alvo.y,
+                alvo.largura,
+                alvo.altura,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            .ok()?;
+            crate::utils::Logger::info(&format!(
+                "gerador: janela do jogo em {}x{} para a escala {:?}",
+                alvo.largura - borda.0,
+                alvo.altura - borda.1,
+                nivel
+            ));
+            Some(JanelaNoNivel {
+                hwnd,
+                anterior: janela,
+                maximizada,
+            })
+        }
+    }
+}
+
+impl Drop for JanelaNoNivel {
+    fn drop(&mut self) {
+        unsafe {
+            if !IsWindow(Some(self.hwnd)).as_bool() {
+                return;
+            }
+            let r = self.anterior;
+            let _ = SetWindowPos(
+                self.hwnd,
+                None,
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
+            if self.maximizada {
+                let _ = ShowWindow(self.hwnd, SW_MAXIMIZE);
+            }
+        }
+    }
+}
+
+/// A forma nova do cursor, quando a captura avisa que ela mudou (`PointerShapeBufferSize`).
+fn forma_do_cursor(d: &IDXGIOutputDuplication, tamanho: u32) -> Option<cursor::Forma> {
+    let mut dados = vec![0u8; tamanho as usize];
+    let mut usado = 0u32;
+    let mut info = DXGI_OUTDUPL_POINTER_SHAPE_INFO::default();
+    unsafe { d.GetFramePointerShape(tamanho, dados.as_mut_ptr() as *mut _, &mut usado, &mut info) }
+        .ok()?;
+    cursor::forma_em_bgra(
+        info.Type,
+        info.Width,
+        info.Height,
+        info.Pitch,
+        (info.HotSpot.x, info.HotSpot.y),
+        &dados[..(usado as usize).min(dados.len())],
+    )
 }
 
 struct Saida {
@@ -647,6 +771,8 @@ struct Sobreposicao {
     vez_da_tela: Option<windows::Win32::Foundation::HANDLE>,
     /// Com escala: onde a imagem ampliada cai dentro da sobreposição (que cobre o monitor).
     ampliar: Option<Retangulo>,
+    /// Com escala: onde o cursor ampliado vai, na sobreposição (nenhum = escondido ou fora do jogo).
+    cursor: Option<Retangulo>,
 }
 
 impl Sobreposicao {
@@ -776,6 +902,7 @@ impl Sobreposicao {
                 altura: area.altura as u32,
                 vez_da_tela,
                 ampliar,
+                cursor: None,
             };
             s.criar_rtv(gpu)?;
             Ok(s)
@@ -800,7 +927,12 @@ impl Sobreposicao {
     fn apresentar(&self, gpu: &Gpu, t: Option<f32>, cronometro: Option<&mut gpu::Cronometro>) {
         if let Some(rtv) = &self.rtv {
             let compor = || match self.ampliar {
-                Some(area) => gpu.compor_ampliado(rtv, area, t),
+                Some(area) => {
+                    gpu.compor_ampliado(rtv, area, t);
+                    if let Some(c) = self.cursor {
+                        gpu.desenhar_cursor(rtv, c);
+                    }
+                }
                 None => gpu.compor(rtv, self.largura, self.altura, t),
             };
             match cronometro {
@@ -953,6 +1085,11 @@ fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), Str
         }
         std::thread::sleep(Duration::from_millis(500));
     };
+
+    // Escala: o jogo vai para o tamanho do nível e volta como estava quando o gerador sair (a guarda, ao sair daqui).
+    let _janela_no_nivel = config.escala.and_then(|nivel| {
+        janela_do_processo(pid).and_then(|h| JanelaNoNivel::ajustar(h, nivel))
+    });
 
     // Janela redimensionada, movida para outro monitor, minimizada, ou o Windows trocou o modo de vídeo: o gerador se
     // refaz sozinho em vez de desligar. Seis refeitas seguidas que não duram nem 5 s = a janela não para quieta.
@@ -1128,8 +1265,28 @@ fn sessao(
     if let Some(a) = ampliada {
         gpu.preparar_ampliacao(a.largura as u32, a.altura as u32)?;
     }
+    // O jogo repôs o tamanho do monitor (alguns jogos fazem isso): a escala não ganha nada, e a tela diz o que fazer.
+    let aviso_da_escala = config.escala.and_then(|nivel| {
+        let (l, a) = escala::resolucao_de_render(nivel, saida.monitor.largura, saida.monitor.altura);
+        let do_monitor = recorte.largura * 100 >= saida.monitor.largura * 95
+            && recorte.altura * 100 >= saida.monitor.altura * 95;
+        do_monitor.then(|| {
+            format!(
+                "O jogo voltou para {}×{} sozinho: escolha {}×{} em janela sem bordas no menu de vídeo dele e a escala passa a ganhar FPS.",
+                recorte.largura, recorte.altura, l, a
+            )
+        })
+    });
+    publicar(|e| e.aviso_da_escala = aviso_da_escala);
     gpu.sem_geracao = multiplicador <= 1;
-    let sobreposicao = Sobreposicao::nova(
+    // Com escala: o mouse preso na janela pequena e o cursor do sistema trocado pelo ampliado (os dois devolvidos ao
+    // esconder a sobreposição e ao sair). Monitor girado fica sem cursor ampliado.
+    let cursor_ampliado = ampliada.is_some() && giro == ritmo::Giro::Nenhum;
+    let mut mouse = cursor::MousePreso::novo();
+    let mut cursor_do_sistema = cursor_ampliado.then(cursor::CursorDoSistema::novo);
+    let mut ponteiro: Option<(i32, i32)> = None;
+    let mut forma: Option<((i32, i32), (i32, i32))> = None;
+    let mut sobreposicao = Sobreposicao::nova(
         &gpu,
         if ampliada.is_some() {
             saida.monitor
@@ -1318,6 +1475,16 @@ fn sessao(
                     if parado { SW_HIDE } else { SW_SHOWNOACTIVATE },
                 );
             }
+            if ampliada.is_some() {
+                if parado {
+                    mouse.soltar();
+                } else {
+                    mouse.prender(area_na_tela);
+                }
+            }
+            if let Some(c) = cursor_do_sistema.as_mut() {
+                c.esconder(!parado);
+            }
             escondida = parado;
         }
 
@@ -1376,6 +1543,10 @@ fn sessao(
             }
             if area_do_cliente(hwnd) != Some(cliente) {
                 return Ok(Fim::Refazer("a janela mudou de tamanho ou de lugar"));
+            }
+            // Trocar de janela no Windows desfaz o recorte do mouse: prende de novo.
+            if ampliada.is_some() && !escondida {
+                mouse.prender(area_na_tela);
             }
             let agora = segundos(inicio);
             let dt = agora - janela_de_contagem.0;
@@ -1621,6 +1792,41 @@ fn sessao(
                                 instante: chegada,
                                 fase: Fase::Real,
                             });
+                        }
+                    }
+                }
+                // O cursor ampliado: a forma vem quando muda, a posição quando o mouse anda.
+                if let Some(destino) = ampliada.filter(|_| cursor_ampliado) {
+                    let mut mudou = false;
+                    if info.PointerShapeBufferSize > 0 {
+                        if let Some(f) = forma_do_cursor(&duplicacao, info.PointerShapeBufferSize) {
+                            if gpu.definir_cursor(&f).is_ok() {
+                                forma = Some((f.ponta, (f.largura as i32, f.altura as i32)));
+                                mudou = true;
+                            }
+                        }
+                    }
+                    if info.LastMouseUpdateTime != 0 {
+                        let p = info.PointerPosition;
+                        ponteiro = p.Visible.as_bool().then_some((p.Position.x, p.Position.y));
+                        mudou = true;
+                    }
+                    if mudou {
+                        let onde = match (ponteiro, forma) {
+                            (Some(p), Some((ponta, tamanho))) => {
+                                escala::cursor_na_tela(p, ponta, tamanho, recorte, destino)
+                            }
+                            _ => None,
+                        };
+                        if onde != sobreposicao.cursor {
+                            sobreposicao.cursor = onde;
+                            // Jogo parado (menu) e o mouse andando: mostra o mesmo real com o cursor no lugar novo.
+                            if agenda.is_empty() && gpu.reais > 0 && !pelo_monitor {
+                                agenda.push_back(Apresentacao {
+                                    instante: segundos(inicio),
+                                    fase: Fase::Real,
+                                });
+                            }
                         }
                     }
                 }

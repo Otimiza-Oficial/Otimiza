@@ -910,7 +910,7 @@ const NOMES_DA_ESCALA: Record<NivelDeEscala, string> = {
   Desempenho: "Desempenho",
 };
 
-/** A escala escolhida (FSR 1), ou nenhuma. Desligada é o padrão: ela pede o jogo numa janela menor que o monitor. */
+/** A escala escolhida (FSR 1), ou nenhuma. Desligada é o padrão: ligar muda o tamanho da janela do jogo. */
 function escalaPedida(): NivelDeEscala | null {
   try {
     const v = localStorage.getItem(CHAVE_ESCALA);
@@ -1206,8 +1206,8 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   const dicaDaEscala = !escala
     ? "O jogo renderiza numa resolução menor e o Otimiza amplia para o monitor (FSR 1): é FPS real a mais, não só quadro gerado."
     : opcaoDaEscala && p.monitor
-      ? `No jogo, use janela sem bordas em ${opcaoDaEscala.largura}×${opcaoDaEscala.altura} (ou a mais próxima): o Otimiza amplia para ${p.monitor[0]}×${p.monitor[1]}. Por fora do jogo, sem injetar nada.`
-      : "No jogo, use janela sem bordas numa resolução menor que a do monitor: o Otimiza amplia para a tela inteira.";
+      ? `O Otimiza põe o jogo em ${opcaoDaEscala.largura}×${opcaoDaEscala.altura} e amplia para ${p.monitor[0]}×${p.monitor[1]}, com o cursor no lugar; ao desligar, a janela volta como estava. O jogo precisa estar em janela sem bordas.`
+      : "O Otimiza põe o jogo numa janela menor e amplia para a tela inteira; ao desligar, a janela volta como estava. O jogo precisa estar em janela sem bordas.";
   // Auto: o nativo vezes até 6, nunca acima do monitor (a faixa sai da estimativa de 2×).
   const dois = p.estimativas.find((e) => e.multiplicador === 2);
   // Passando do limite: o teto do Auto é o dobro dos Hz, e o multiplicador fixo não tem teto.

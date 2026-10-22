@@ -78,6 +78,7 @@ struct Passes {
     final_bidirecional: ID3D11PixelShader,
     easu: ID3D11PixelShader,
     rcas: ID3D11PixelShader,
+    cursor: ID3D11PixelShader,
 }
 
 /// Escala: o quadro composto no tamanho do jogo (`origem`, ainda codificado) e ampliado pelo `Easu` (`ampliado`, do
@@ -174,6 +175,9 @@ pub struct Gpu {
     /// Durante a composição no alvo da escala: os passes não passam pela `Sair` (no HDR a imagem segue codificada
     /// até o `Rcas`).
     saida_codificada: std::cell::Cell<bool>,
+    /// A forma do cursor, para desenhar ampliado por cima do jogo na escala, e a mistura pelo alfa dela.
+    forma_do_cursor: Option<Alvo>,
+    mistura: ID3D11BlendState,
 }
 
 /// O modo leve (o "Performance" do Lossless Scaling): a busca principal para em 1/8, sem o passe de 1/4, o mais caro
@@ -387,7 +391,27 @@ impl Gpu {
             final_bidirecional: ps("FinalBidirecional")?,
             easu: ps("Easu")?,
             rcas: ps("Rcas")?,
+            cursor: ps("Cursor")?,
         };
+
+        // Alfa pré-multiplicado: cor + destino × (1 − alfa).
+        let mut mistura = None;
+        unsafe {
+            let mut desc = D3D11_BLEND_DESC::default();
+            desc.RenderTarget[0] = D3D11_RENDER_TARGET_BLEND_DESC {
+                BlendEnable: true.into(),
+                SrcBlend: D3D11_BLEND_ONE,
+                DestBlend: D3D11_BLEND_INV_SRC_ALPHA,
+                BlendOp: D3D11_BLEND_OP_ADD,
+                SrcBlendAlpha: D3D11_BLEND_ONE,
+                DestBlendAlpha: D3D11_BLEND_INV_SRC_ALPHA,
+                BlendOpAlpha: D3D11_BLEND_OP_ADD,
+                RenderTargetWriteMask: D3D11_COLOR_WRITE_ENABLE_ALL.0 as u8,
+            };
+            device
+                .CreateBlendState(&desc, Some(&mut mistura))
+                .map_err(|e| erro("mistura do cursor", e))?;
+        }
 
         let mut amostrador = None;
         unsafe {
@@ -440,6 +464,8 @@ impl Gpu {
             sem_geracao: false,
             ampliacao: None,
             saida_codificada: std::cell::Cell::new(false),
+            forma_do_cursor: None,
+            mistura: mistura.ok_or("mistura")?,
         })
     }
 
@@ -1652,6 +1678,87 @@ impl Gpu {
         );
     }
 
+    /// Troca a forma do cursor (a captura só manda quando ela muda).
+    pub fn definir_cursor(&mut self, forma: &super::cursor::Forma) -> Result<(), String> {
+        // Pré-multiplica: o filtro linear da ampliação não puxa o preto dos pixels transparentes para a borda.
+        let px: Vec<u8> = forma
+            .px
+            .chunks_exact(4)
+            .flat_map(|p| {
+                let a = p[3] as u32;
+                let m = |c: u8| ((c as u32 * a + 127) / 255) as u8;
+                [m(p[0]), m(p[1]), m(p[2]), p[3]]
+            })
+            .collect();
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: forma.largura,
+            Height: forma.altura,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_IMMUTABLE,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            ..Default::default()
+        };
+        let mut textura = None;
+        unsafe {
+            self.device.CreateTexture2D(
+                &desc,
+                Some(&D3D11_SUBRESOURCE_DATA {
+                    pSysMem: px.as_ptr() as *const _,
+                    SysMemPitch: forma.largura * 4,
+                    SysMemSlicePitch: 0,
+                }),
+                Some(&mut textura),
+            )
+        }
+        .map_err(|e| erro("forma do cursor", e))?;
+        let textura: ID3D11Texture2D = textura.ok_or("forma do cursor")?;
+        let mut srv = None;
+        unsafe {
+            self.device
+                .CreateShaderResourceView(&textura, None, Some(&mut srv))
+        }
+        .map_err(|e| erro("srv do cursor", e))?;
+        self.forma_do_cursor = Some(Alvo {
+            textura,
+            rtv: None,
+            srv: srv.ok_or("srv do cursor")?,
+            uav: None,
+            largura: forma.largura,
+            altura: forma.altura,
+        });
+        Ok(())
+    }
+
+    /// O cursor ampliado em `onde` do destino, por cima do que já está lá.
+    pub fn desenhar_cursor(&self, destino: &ID3D11RenderTargetView, onde: Retangulo) {
+        let Some(forma) = self.forma_do_cursor.as_ref() else {
+            return;
+        };
+        unsafe { self.ctx.OMSetBlendState(&self.mistura, None, 0xffff_ffff) };
+        self.passe_na_area(
+            &self.passes.cursor,
+            destino,
+            onde,
+            &[Some(forma.srv.clone())],
+            Parametros {
+                extra: [
+                    onde.x as f32,
+                    onde.y as f32,
+                    onde.largura as f32,
+                    onde.altura as f32,
+                ],
+                ..Default::default()
+            },
+        );
+        unsafe { self.ctx.OMSetBlendState(None, None, 0xffff_ffff) };
+    }
+
     pub fn dxgi_device(&self) -> Result<windows::Win32::Graphics::Dxgi::IDXGIDevice, String> {
         self.device.cast().map_err(|e| erro("dxgi device", e))
     }
@@ -2230,6 +2337,64 @@ mod qualidade {
             .map(|x| fsr[(((la / 2) * nl + x) * 4) as usize])
             .collect();
         assert_eq!(dentro, igual_ao_sem_barra, "a área do encaixe é a mesma imagem");
+    }
+
+    /// O CURSOR AMPLIADO NA PLACA. Uma forma 4×4 (metade de cima vermelha opaca, de baixo transparente) desenhada 8×
+    /// maior por cima da imagem cinza: o vermelho cobre, o transparente deixa a imagem como estava.
+    /// `cargo test --lib -- --ignored cursor_na_placa --nocapture`
+    #[test]
+    #[ignore]
+    fn cursor_na_placa() {
+        let (l, a) = (128u32, 128u32);
+        let cinza = vec![128u8; (l * a * 4) as usize];
+        let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+        let adaptador = unsafe { fabrica.EnumAdapters1(0) }.unwrap();
+        let mut gpu = Gpu::novo(&adaptador).unwrap();
+        gpu.sem_geracao = true;
+        gpu.preparar(l, a, false, Giro::Nenhum).unwrap();
+        gpu.preparar_ampliacao(l, a).unwrap();
+        let entrada = textura(&gpu, l, a, &cinza);
+        let tudo = Retangulo {
+            x: 0,
+            y: 0,
+            largura: l as i32,
+            altura: a as i32,
+        };
+        gpu.receber(&entrada, tudo);
+
+        let mut px = Vec::new();
+        for y in 0..4 {
+            for _ in 0..4 {
+                px.extend_from_slice(if y < 2 { &[0, 0, 255, 255] } else { &[0, 0, 0, 0] });
+            }
+        }
+        gpu.definir_cursor(&super::super::cursor::Forma {
+            largura: 4,
+            altura: 4,
+            px,
+            ponta: (0, 0),
+        })
+        .unwrap();
+
+        let (saida, rtv) = alvo_bgra(&gpu, l, a);
+        gpu.compor_ampliado(&rtv, tudo, None);
+        let onde = Retangulo {
+            x: 40,
+            y: 40,
+            largura: 32,
+            altura: 32,
+        };
+        gpu.desenhar_cursor(&rtv, onde);
+        let v = ler_de_volta(&gpu, &saida, l, a);
+        let em = |x: u32, y: u32| {
+            let i = ((y * l + x) * 4) as usize;
+            [v[i], v[i + 1], v[i + 2]]
+        };
+        assert_eq!(em(50, 45), [0, 0, 255], "metade de cima do cursor: vermelho");
+        let baixo = em(50, 66);
+        assert!(baixo.iter().all(|c| c.abs_diff(128) <= 2), "metade de baixo: a imagem por baixo ({:?})", baixo);
+        let fora = em(10, 10);
+        assert!(fora.iter().all(|c| c.abs_diff(128) <= 2), "fora do cursor: intacta ({:?})", fora);
     }
 
     /// Calibra a troca de cena: pares seguidos do FiveM gravado × o mesmo quadro contra ele espelhado (conteúdo
