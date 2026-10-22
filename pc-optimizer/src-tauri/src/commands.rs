@@ -4026,6 +4026,86 @@ fn perfil_por_nome(nome: &str) -> Result<crate::modules::windows::configjogo::Pe
     }
 }
 
+/// Um jogo da configuração por motor, com o que o Otimiza já aplicou nele.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigDoJogoNaTela {
+    #[serde(flatten)]
+    pub jogo: crate::modules::windows::configmotor::JogoNaTela,
+    pub historico: String,
+    pub aplicado: bool,
+}
+
+/// A configuração por motor (Fortnite, CS2, Apex): o arquivo achado e o que o perfil mudaria. `LIVRES`: só lê.
+#[tauri::command]
+pub async fn config_motor_painel(
+    state: State<'_, AppState>,
+) -> Result<Vec<ConfigDoJogoNaTela>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogos = tokio::task::spawn_blocking(crate::modules::windows::configmotor::painel)
+            .await
+            .map_err(|e| e.to_string())?;
+        let log = state.changes.lock().await;
+        return Ok(jogos
+            .into_iter()
+            .map(|jogo| {
+                let historico = format!("config_motor_{}", jogo.id);
+                ConfigDoJogoNaTela {
+                    aplicado: log.is_applied(&historico),
+                    historico,
+                    jogo,
+                }
+            })
+            .collect());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = state;
+        Err("A configuração de jogo só existe no Windows.".to_string())
+    }
+}
+
+/// `EXIGEM_LICENCA`: escreve o perfil leve no arquivo de configuração do jogo (fechado). O arquivo inteiro de antes
+/// vai para o histórico: o `revert_optimization` devolve byte a byte.
+#[tauri::command]
+pub async fn config_motor_aplicar(
+    jogo: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
+        let id = jogo.clone();
+        let feito = tokio::task::spawn_blocking(move || {
+            crate::modules::windows::configmotor::aplicar(&id)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        if feito.mudou.is_empty() {
+            return Ok(Vec::new());
+        }
+        let historico = format!("config_motor_{}", jogo);
+        let mut log = state.changes.lock().await;
+        log.record(AppliedOptimization {
+            optimization_id: historico,
+            name: format!("Configuração do {} · perfil leve", feito.jogo),
+            timestamp: now_timestamp(),
+            changes: vec![ChangeRecord::GameConfig {
+                caminho: feito.arquivo.to_string_lossy().to_string(),
+                anterior: Some(feito.anterior),
+                jogo: feito.jogo.to_string(),
+            }],
+        })?;
+        return Ok(feito.mudou);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (jogo, state);
+        Err("A configuração de jogo só existe no Windows.".to_string())
+    }
+}
+
 #[tauri::command]
 pub async fn apply_game_profile(
     perfil: String,
@@ -4633,6 +4713,7 @@ mod tests {
         "turbo_painel",
         "turbo_desligar",
         "turbo_esquecer",
+        "config_motor_painel",
         "frame_boost_destravar_base",
         "frame_boost_medir",
         "jogo_liso_medir",
@@ -4805,6 +4886,7 @@ mod tests {
         "cores_aplicar",
         "frame_boost_ligar",
         "turbo_ligar",
+        "config_motor_aplicar",
         "frame_boost_travar_base",
         "jogo_liso_aplicar",
         "memoria_fechar",

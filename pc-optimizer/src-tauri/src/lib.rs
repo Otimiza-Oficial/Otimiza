@@ -291,6 +291,8 @@ pub fn run() {
             commands::turbo_ligar,
             commands::turbo_desligar,
             commands::turbo_esquecer,
+            commands::config_motor_painel,
+            commands::config_motor_aplicar,
             commands::overlay_estado,
             commands::overlay_gravar,
             commands::overlay_ligar,

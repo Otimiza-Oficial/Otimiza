@@ -371,6 +371,24 @@ devolver, entra um vigia que mostra o cursor na abertura seguinte.
 | 8 | **fica para depois** | ligar sozinho ao abrir o jogo (decisão 2 do dono, desligado por padrão); o antes × depois medido no cartão (precisa da medida do depois, pilar E); receita que piorou não volta (memória do `receita.rs`) |
 | 9 | PC de casa | jogo preso na placa e jogo preso no processador recebem receitas diferentes, e as duas provam ganho (ou dizem que não houve) |
 
+### 10.5 M5 em detalhe
+
+Mudança de forma em relação à seção 5.1: em vez de transformar o
+`configjogo.rs` em pasta (um teste dele lê o próprio arquivo), os motores
+novos moram ao lado, em `modules/windows/configmotor.rs`. O GTA V / FiveM
+continua no `configjogo.rs`.
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `configmotor.rs` formatos | ✅ INI da Unreal (`chave=valor` dentro de `[secao]`) e KeyValues da Valve/Respawn (`"chave" "valor"`), puros: trocam só o valor, o resto do arquivo fica byte a byte (inclusive `\r\n`) |
+| 2 | **trava nova** | ✅ só troca chave que **já existe** no arquivo do jogo; chave com nome errado no perfil não escreve nada |
+| 3 | perfis | ✅ Fortnite (sombras, pós-processamento, efeitos, vegetação), CS2 (sombras, oclusão, partículas; **nunca** as sombras dinâmicas, que entregam posição) e Apex (oclusão, luz volumétrica) |
+| 4 | aplicar | ✅ recusa com o jogo aberto; o arquivo inteiro de antes vai para o histórico (`ChangeRecord::GameConfig`) e o `revert_optimization` devolve byte a byte; registrado no `registro.rs` |
+| 5 | fichas | ✅ `docs/jogos/` com as cinco: Fortnite, CS2 e Apex escrevem; **Valorant e Warzone não escrevem** (a Riot sincroniza pela conta; o formato da Activision muda a cada jogo), cada uma com o que confirmar no REA |
+| 6 | tela | ✅ cartão "Configuração do jogo" no Boost: só os jogos achados, a prévia de cada mudança com o porquê, aplicar e desfazer, botão desligado com o jogo aberto |
+| 7 | testes | ✅ 9 (formatos, só o que existe, idempotente, catálogo e fichas, CS2 sem tocar nas sombras dinâmicas); o módulo entra no passo do `release.yml` |
+| 8 | **PC de casa + REA** | confirmar os nomes das chaves do CS2 e do Apex na versão atual; medir o ganho antes × depois nos três; estudar Valorant e Warzone |
+
 ---
 
 ## 11. Riscos

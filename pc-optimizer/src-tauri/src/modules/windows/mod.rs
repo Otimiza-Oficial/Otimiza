@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod causas;
 pub mod citizenfx;
 pub mod configjogo;
+pub mod configmotor;
 pub mod conflicts;
 pub mod conflitos;
 pub mod contadousuario;

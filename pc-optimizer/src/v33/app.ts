@@ -787,7 +787,8 @@ async function telaBoost() {
     <div class="grade g-2">
       <div class="vidro"><div class="titulo-sec"><h2>Driver da placa de vídeo</h2><span class="nota" id="b-drv-nota"></span></div><div id="b-drv"><p class="nota">Lendo o driver…</p></div></div>
       <div class="vidro" id="b-fb"><div class="rotulo">Frame Boost</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
-    </div>`;
+    </div>
+    <div class="vidro" id="b-config" style="margin-top:16px"><div class="rotulo">Configuração do jogo</div><p class="nota" style="margin-top:8px">Procurando…</p></div>`;
 
   $("#b-otimizar").addEventListener("click", () => {
     ir("inicio");
@@ -802,7 +803,71 @@ async function telaBoost() {
   void cartaoJogoLiso();
   void cartaoTurbo();
   void painelFrameBoost();
+  void cartaoConfigDosJogos();
   await driver(fab);
+}
+
+/** O perfil leve no arquivo de configuração de cada jogo achado: o que custa caro e quase não se vê. */
+async function cartaoConfigDosJogos() {
+  const caixa = document.querySelector<HTMLElement>("#b-config");
+  if (!caixa) return;
+  const jogos = await ponte.configDosJogos().catch(() => null);
+  const titulo = `<div class="rotulo">Configuração do jogo</div>`;
+  if (!jogos) {
+    caixa.innerHTML = `${titulo}<p class="nota" style="margin-top:8px">Não consegui ler a configuração dos jogos.</p>`;
+    return;
+  }
+  const achados = jogos.filter((j) => j.arquivo);
+  const linhas = achados.map((j) => {
+    const mudancas = j.previsao.map((m) => `<p>${esc(m.por_que)} <span class="nota">(${esc(m.antes)} → ${esc(m.depois)})</span></p>`).join("");
+    const acao = j.aplicado
+      ? `<button class="botao" data-desfazer="${esc(j.historico)}">Desfazer</button>`
+      : j.previsao.length
+        ? `<button class="botao" data-aplicar="${esc(j.id)}" ${j.aberto ? "disabled" : ""}>Aplicar</button>`
+        : "";
+    const estado = j.aplicado
+      ? "Perfil leve aplicado pelo Otimiza. O desfazer devolve o arquivo exatamente como estava."
+      : j.previsao.length
+        ? j.aberto
+          ? "Feche o jogo para aplicar: ele reescreve a configuração ao sair."
+          : ""
+        : "Já está leve: nada a mudar.";
+    return `<div class="linha"><div>${esc(j.nome)}${estado ? `<p>${esc(estado)}</p>` : ""}${j.aplicado ? "" : mudancas}</div>${acao}</div>`;
+  });
+  caixa.innerHTML = `${titulo}
+    <p class="nota" style="margin-top:8px">O que custa caro e quase não se vê, no arquivo que o próprio jogo grava. Só muda o que já existe nele, nunca com o jogo aberto, e tudo se desfaz byte a byte.</p>
+    ${linhas.join("") || `<p class="nota" style="margin-top:8px">Nenhum dos jogos cobertos (Fortnite, CS2, Apex) foi achado neste PC.</p>`}
+    <p class="nota" style="margin-top:8px">Valorant e Warzone: em estudo. A configuração deles ainda não é escrita.</p>
+    <p class="estado" id="cf-estado" hidden></p>`;
+  const erro = (e: unknown) => {
+    const s = $("#cf-estado");
+    s.hidden = false;
+    s.textContent = String(e);
+  };
+  $$<HTMLButtonElement>("#b-config [data-aplicar]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await ponte.configAplicar(b.dataset.aplicar ?? "");
+        await cartaoConfigDosJogos();
+      } catch (e) {
+        b.disabled = false;
+        erro(e);
+      }
+    })
+  );
+  $$<HTMLButtonElement>("#b-config [data-desfazer]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await ponte.desfazer(b.dataset.desfazer ?? "");
+        await cartaoConfigDosJogos();
+      } catch (e) {
+        b.disabled = false;
+        erro(e);
+      }
+    })
+  );
 }
 
 const NOMES_DO_GARGALO: Record<Gargalo, string> = {

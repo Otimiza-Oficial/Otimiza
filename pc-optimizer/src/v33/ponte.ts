@@ -257,6 +257,18 @@ export interface PlanoJogoLiso {
   } | null;
 }
 
+export interface ConfigDoJogo {
+  id: string;
+  nome: string;
+  /** O arquivo de configuração achado; null = jogo não instalado ou nunca aberto. */
+  arquivo: string | null;
+  aberto: boolean;
+  previsao: { chave: string; antes: string; depois: string; por_que: string }[];
+  ficha: string;
+  historico: string;
+  aplicado: boolean;
+}
+
 export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga";
 
 export interface ReceitaDoTurbo {
@@ -471,6 +483,8 @@ export const ponte = {
   aplicarItem: (id: string) => invoke<Resultado>("apply_optimization", { id }),
   inicializacao: () => invoke<EntradaDeInicio[]>("list_startup"),
   inicializacaoDefinir: (hive: string, name: string, enabled: boolean) => invoke<Resultado>("set_startup_enabled", { hive, name, enabled }),
+  configDosJogos: () => invoke<ConfigDoJogo[]>("config_motor_painel"),
+  configAplicar: (jogo: string) => invoke<string[]>("config_motor_aplicar", { jogo }),
   turbo: () => invoke<PainelTurbo>("turbo_painel"),
   /** Mede o jogo (10 s) e aplica; `lembrado` usa a receita guardada do jogo, sem medir. */
   turboLigar: (lembrado = false) => invoke<PainelTurbo>("turbo_ligar", { lembrado }),
