@@ -999,7 +999,9 @@ async function cartaoTurbo(dado?: PainelTurbo) {
             lembrado
               ? `Da última vez no ${esc(p.jogo)}: ${esc(NOMES_DO_GARGALO[lembrado.receita.gargalo])}${lembrado.fps_antes ? ` a ${numero(lembrado.fps_antes)} fps` : ""} → ${esc(resumoDaReceita(lembrado.receita))}.${reprovada ? " Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo." : ""}`
               : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele.`
-          }${p.competitivo ? " Jogo competitivo: sem geração de quadros, para não acrescentar atraso." : ""}</p>
+          }</p>
+           <div class="seg" id="tb-atraso" style="margin-top:14px" aria-label="O que o Turbo prioriza neste jogo"><button aria-pressed="${p.menor_atraso}" data-menor="1" title="Sem geração de quadros: só o FPS real a mais, sem atraso">Menor atraso</button><button aria-pressed="${!p.menor_atraso}" data-menor="0" title="Pode ligar a geração de quadros para encher o monitor, com um pouco de atraso">Mais FPS</button></div>
+           <p class="nota" style="margin-top:6px">${p.menor_atraso ? "Sem geração de quadros: só o FPS real a mais, para não acrescentar atraso." : "Pode ligar a geração de quadros para encher o monitor, com um pouco de atraso a mais."}</p>
            <div class="acoes" style="margin-top:14px">${
              lembrado
                ? `${reprovada ? "" : `<button class="botao prim" id="tb-lembrado">Ligar o Turbo</button>`}<button class="botao ${reprovada ? "prim" : ""}" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
@@ -1053,6 +1055,12 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   };
   document.querySelector<HTMLButtonElement>("#tb-medir")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboLigar(false), true));
   document.querySelector<HTMLButtonElement>("#tb-lembrado")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboLigar(true)));
+  $$<HTMLButtonElement>("#tb-atraso button").forEach((b) =>
+    b.addEventListener("click", () => {
+      if (b.getAttribute("aria-pressed") === "true") return;
+      void agir(b, () => ponte.turboAtraso(b.dataset.menor === "1"));
+    })
+  );
   document.querySelector<HTMLButtonElement>("#tb-esquecer")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboEsquecer()));
   document.querySelector<HTMLButtonElement>("#tb-desligar")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboDesligar()));
   document.querySelector<HTMLButtonElement>("#tb-provar")?.addEventListener("click", () => void provarTurbo(p));

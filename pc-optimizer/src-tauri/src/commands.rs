@@ -3170,6 +3170,24 @@ pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String
     Err("O Turbo só existe no Windows.".to_string())
 }
 
+/// "Menor atraso" ou "Mais FPS" para o jogo aberto: com o menor atraso, o Turbo não liga geração de quadros. `LIVRES`:
+/// é uma preferência no arquivo do Turbo, não mexe no Windows.
+#[tauri::command(async)]
+pub fn turbo_atraso(menor: bool) -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        let (id, _) = crate::plataforma::historico::id_do_jogo(&jogo.executavel);
+        crate::plataforma::turbo::escolher_atraso(&id, menor)?;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = menor;
+        Err("O Turbo só existe no Windows.".to_string())
+    }
+}
+
 /// Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`.
 #[tauri::command(async)]
 pub fn turbo_esquecer() -> Result<crate::plataforma::turbo::Painel, String> {
@@ -4898,6 +4916,7 @@ mod tests {
         "turbo_painel",
         "turbo_desligar",
         "turbo_esquecer",
+        "turbo_atraso",
         "config_motor_painel",
         "escala_pedir_comparacao",
         "escala_comparacao",

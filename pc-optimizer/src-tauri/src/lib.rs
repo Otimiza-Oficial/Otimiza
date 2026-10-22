@@ -291,6 +291,7 @@ pub fn run() {
             commands::turbo_ligar,
             commands::turbo_desligar,
             commands::turbo_esquecer,
+            commands::turbo_atraso,
             commands::turbo_provar,
             commands::turbo_prova_guardada,
             commands::turbo_compartilhar,
