@@ -34,7 +34,7 @@ body.v33-ativo .janela { background: #050505; border-bottom: 1px solid rgba(255,
   --t-mini: 11px; --t-p: 12.5px; --t-c: 14px; --t-m: 17px; --t-g: 26px;
 
   color-scheme: dark;
-  height: calc(100vh - 34px);
+  height: calc(100vh - 44px);
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
   background: radial-gradient(900px 420px at 72% -12%, rgba(255, 255, 255, 0.06), transparent 60%), var(--janela);
@@ -414,3 +414,136 @@ html[data-tema="claro"] body.v33-ativo .janela .janela-fechar:hover { background
 
 /* Sem número medido no topo, o texto e os botões descem para o pé do cartão. */
 #v33 .i-numeros[hidden] + .nota { margin-top: auto; }
+
+/* ============================================================== 3.5
+ * A barra da janela mais alta, com os medidores em chips e os botões de janela do Windows; o trilho com a marca de
+ * onde se está; cartões com borda de luz e resposta ao ponteiro; o Turbo como herói do Boost; o Boost em seções; e a
+ * entrada das telas em cascata. */
+body.v33-ativo .janela { height: 44px; padding: 0 0 0 16px; gap: 14px; background: linear-gradient(180deg, #0a0a0a, #050505); border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
+body.v33-ativo .janela-marca { width: 20px; height: 20px; }
+body.v33-ativo .busca-topo { position: static; transform: none; flex: 0 1 420px; min-width: 200px; width: auto; margin: 0 auto; height: 30px; padding: 0 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09); font-size: 12.5px; transition: background 0.2s, box-shadow 0.2s, color 0.2s; }
+body.v33-ativo .busca-topo:hover { background: rgba(255, 255, 255, 0.08); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+body.v33-ativo .janela-direita { gap: 8px; align-self: stretch; margin-left: 0; }
+body.v33-ativo .vitals { gap: 6px; }
+body.v33-ativo .janela .vital { padding: 5px 10px; border-radius: 9px; background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); gap: 7px; }
+body.v33-ativo .vitals .vital-label { font-size: 9.5px; letter-spacing: 0.12em; }
+body.v33-ativo .vitals .vital-value { font-family: "GeistMono", ui-monospace, Consolas, monospace; font-size: 11.5px; min-width: 3.4ch; text-align: right; }
+body.v33-ativo .janela .vital-bar { display: block; width: 30px; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(255, 255, 255, 0.1); }
+body.v33-ativo .janela .vital-bar i { display: block; height: 100%; border-radius: 3px; background: #fff; transition: width 0.6s ease; }
+body.v33-ativo .access { height: 26px; padding: 0 10px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+body.v33-ativo .tema-botao { width: 32px; height: 32px; border-radius: 9px; }
+body.v33-ativo .tema-botao:hover { background: rgba(255, 255, 255, 0.06); border-color: transparent; }
+body.v33-ativo .janela-botoes { width: auto; gap: 0; align-self: stretch; margin-left: 4px; }
+body.v33-ativo .janela-botao { --cor-botao: transparent; width: 46px; height: 100%; border-radius: 0; display: grid; place-items: center; color: #9b9b9b; transition: background 0.15s, color 0.15s; }
+body.v33-ativo .janela-botao::after { content: none; }
+body.v33-ativo .janela-botao::before { content: ""; width: 10px; height: 10px; background: currentColor; -webkit-mask: var(--glifo) center / contain no-repeat; mask: var(--glifo) center / contain no-repeat; }
+body.v33-ativo .janela-minimizar { --glifo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M0 5.5h10' stroke='black'/%3E%3C/svg%3E"); }
+body.v33-ativo .janela-maximizar { --glifo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Crect x='.5' y='.5' width='9' height='9' rx='1.5' fill='none' stroke='black'/%3E%3C/svg%3E"); }
+body.v33-ativo .janela-fechar { --glifo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M.6.6l8.8 8.8M9.4.6.6 9.4' stroke='black' stroke-width='1.1'/%3E%3C/svg%3E"); }
+body.v33-ativo .janela-botao:hover { --cor-botao: rgba(255, 255, 255, 0.08); color: #fff; }
+body.v33-ativo .janela-fechar:hover { --cor-botao: #c42b1c; color: #fff; }
+body.v33-ativo:not(.janela-cheia) .janela-fechar { border-top-right-radius: 10px; }
+
+/* Trilho: a barra acesa à esquerda diz onde se está. */
+#v33 .ir { position: relative; }
+#v33 .ir::before { content: ""; position: absolute; left: -10px; top: 50%; width: 3px; height: 0; border-radius: 0 3px 3px 0; background: #fff; box-shadow: 0 0 12px rgba(255, 255, 255, 0.6); transform: translateY(-50%); transition: height 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+#v33 .ir[aria-selected="true"]::before { height: 24px; }
+
+/* Cartões: uma borda de luz vinda de cima e da esquerda, que acende sob o ponteiro. */
+#v33 .vidro, #v33 .i-cartao, #v33 .modo { position: relative; transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s; }
+#v33 .vidro::before, #v33 .i-cartao::before, #v33 .modo::before {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04) 35%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, 0.07));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0.7; transition: opacity 0.25s;
+}
+#v33 .vidro:hover::before, #v33 .i-cartao:hover::before, #v33 .modo:hover::before { opacity: 1; }
+#v33 .vidro:hover, #v33 .i-cartao:hover, #v33 .modo:hover { border-color: rgba(255, 255, 255, 0.11); }
+#v33 .modo:hover { transform: translateY(-2px); box-shadow: 0 28px 70px rgba(0, 0, 0, 0.5); }
+#v33 .modo > svg { width: 40px; height: 40px; padding: 9px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); box-shadow: inset 0 0 0 1px var(--borda); }
+#v33 .modo > span { font-size: 12.5px; }
+#v33 #b-nivel { display: grid; gap: 8px; }
+#v33 #b-nivel .seg { justify-self: start; }
+#v33 #b-nivel .nota { font-size: 12px; line-height: 1.45; }
+
+/* Botões: resposta ao clique e o principal com brilho. */
+#v33 .botao { font-weight: 500; transition: transform 0.15s, border-color 0.2s, box-shadow 0.2s, background 0.2s, color 0.2s; }
+#v33 .botao:active:not(:disabled) { transform: scale(0.97); }
+#v33 .botao.prim { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 8px 26px rgba(255, 255, 255, 0.1); }
+#v33 .botao.prim:hover:not(:disabled) { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.4), 0 10px 34px rgba(255, 255, 255, 0.2); transform: translateY(-1px); }
+#v33 .botao:not(.prim):not(.fantasma):hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)); }
+#v33 .seg button { transition: color 0.2s, background 0.2s, box-shadow 0.2s; }
+#v33 .seg button:hover:not([aria-pressed="true"]) { color: var(--texto-2); }
+#v33 .seg button[aria-pressed="true"] { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+#v33 .chave { transition: background 0.2s; }
+
+/* O Turbo: o cartão herói do Boost. */
+#v33 .vidro.heroi { padding: 28px 30px; overflow: hidden; background: radial-gradient(560px 280px at 0% 0%, rgba(255, 255, 255, 0.1), transparent 70%), radial-gradient(420px 220px at 100% 100%, rgba(255, 255, 255, 0.05), transparent 70%), linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015)); }
+#v33 .heroi::before { background: linear-gradient(160deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.06) 40%, rgba(255, 255, 255, 0) 65%, rgba(255, 255, 255, 0.12)); }
+#v33 .heroi-t { display: flex; align-items: center; gap: 14px; min-width: 0; }
+#v33 .heroi-t svg { width: 46px; height: 46px; flex: none; padding: 10px; border-radius: 14px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: #0a0a0a; background: linear-gradient(180deg, #fff, #cfcfcf); box-shadow: 0 8px 24px rgba(255, 255, 255, 0.18); }
+#v33 .heroi-t h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.1; }
+#v33 .heroi-t .nota { margin-top: 3px; }
+#v33 .heroi > .nota { font-size: 14px; max-width: 74ch; }
+#v33 .heroi .acoes .botao { padding: 12px 20px; font-size: 14.5px; border-radius: 15px; }
+#v33 .heroi + .modos { margin-top: var(--e4); }
+
+/* O Boost em seções. */
+#v33 .secao { display: flex; align-items: baseline; gap: 12px; margin-top: 40px; position: relative; z-index: 2; flex-wrap: wrap; }
+#v33 .cabeca + .secao { margin-top: 28px; }
+#v33 .secao h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--texto); }
+#v33 .secao p { font-size: var(--t-p); color: var(--texto-3); }
+#v33 .secao::after { content: ""; flex: 1 1 60px; height: 1px; align-self: center; background: linear-gradient(90deg, var(--borda-forte), transparent); }
+#v33 .secao + .vidro, #v33 .secao + .grade, #v33 .secao + .modos { margin-top: 14px; }
+#v33 .grade + .grade { margin-top: var(--e4); }
+#v33 #b-comparar:not(:empty) { margin-top: var(--e4); }
+
+/* Início: as ações secundárias leves. */
+#v33 .i-acoes .botao { padding: 11px 18px; }
+#v33 .i-acoes .botao.fantasma { padding-inline: 12px; }
+#v33 .i-topo-c { max-width: 640px; }
+#v33 .i-acoes .botao.fantasma { color: rgba(255, 255, 255, 0.72); }
+#v33 .i-acoes .botao.fantasma:hover:not(:disabled) { color: #fff; background: rgba(255, 255, 255, 0.06); border-color: transparent; }
+
+/* As telas entram em cascata. */
+@keyframes v33-surgir { from { opacity: 0; transform: translateY(10px); } }
+#v33 .tela > * { animation: v33-surgir 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+#v33 .tela > :nth-child(2) { animation-delay: 0.04s; }
+#v33 .tela > :nth-child(3) { animation-delay: 0.08s; }
+#v33 .tela > :nth-child(4) { animation-delay: 0.12s; }
+#v33 .tela > :nth-child(5) { animation-delay: 0.16s; }
+#v33 .tela > :nth-child(n + 6) { animation-delay: 0.2s; }
+#v33 .i-grade > * { animation: v33-surgir 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
+#v33 .i-grade > :nth-child(2) { animation-delay: 0.06s; }
+#v33 .i-grade > :nth-child(3) { animation-delay: 0.12s; }
+#v33 .i-grade > :nth-child(n + 4) { animation-delay: 0.18s; }
+@media (prefers-reduced-motion: reduce) {
+  #v33 .tela > *, #v33 .i-grade > * { animation: none !important; }
+  #v33 .modo:hover, #v33 .botao.prim:hover:not(:disabled) { transform: none; }
+}
+@media (max-width: 1100px) {
+  body.v33-ativo .janela .vital-bar { display: none; }
+}
+
+/* 3.5 no tema claro. */
+html[data-tema="claro"] body.v33-ativo .janela { background: linear-gradient(180deg, #fafaf8, #f4f4f1); border-bottom-color: rgba(0, 0, 0, 0.07); }
+html[data-tema="claro"] body.v33-ativo .busca-topo { background: rgba(0, 0, 0, 0.035); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.09); }
+html[data-tema="claro"] body.v33-ativo .busca-topo:hover { background: rgba(0, 0, 0, 0.055); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.16); }
+html[data-tema="claro"] body.v33-ativo .janela .vital { background: #fff; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04); }
+html[data-tema="claro"] body.v33-ativo .tema-botao:hover { background: rgba(0, 0, 0, 0.05); }
+html[data-tema="claro"] body.v33-ativo .janela .janela-botao { --cor-botao: transparent; background: var(--cor-botao); color: #5c5c5c; }
+html[data-tema="claro"] body.v33-ativo .janela .janela-botao:hover { --cor-botao: rgba(0, 0, 0, 0.06); color: #0e0e0e; }
+html[data-tema="claro"] body.v33-ativo .janela .janela-fechar:hover { --cor-botao: #c42b1c; background: #c42b1c; color: #fff; }
+html[data-tema="claro"] #v33 .ir::before { background: #0e0e0e; box-shadow: none; }
+html[data-tema="claro"] #v33 .vidro::before, html[data-tema="claro"] #v33 .i-cartao::before, html[data-tema="claro"] #v33 .modo::before { background: linear-gradient(160deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.05)); }
+html[data-tema="claro"] #v33 .vidro:hover, html[data-tema="claro"] #v33 .i-cartao:hover, html[data-tema="claro"] #v33 .modo:hover { border-color: rgba(0, 0, 0, 0.12); }
+html[data-tema="claro"] #v33 .modo:hover { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 20px 44px rgba(0, 0, 0, 0.1); }
+html[data-tema="claro"] #v33 .modo > svg { background: rgba(0, 0, 0, 0.035); }
+html[data-tema="claro"] #v33 .botao.prim { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 22px rgba(0, 0, 0, 0.16); }
+html[data-tema="claro"] #v33 .botao.prim:hover:not(:disabled) { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 30px rgba(0, 0, 0, 0.24); }
+html[data-tema="claro"] #v33 .botao:not(.prim):not(.fantasma):hover:not(:disabled) { background: #fafafa; }
+html[data-tema="claro"] #v33 .seg button[aria-pressed="true"] { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
+html[data-tema="claro"] #v33 .vidro.heroi { background: radial-gradient(560px 280px at 0% 0%, rgba(0, 0, 0, 0.045), transparent 70%), #fff; }
+html[data-tema="claro"] #v33 .heroi::before { background: linear-gradient(160deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.03) 45%, rgba(0, 0, 0, 0.08)); }
+html[data-tema="claro"] #v33 .heroi-t svg { color: #fff; background: linear-gradient(180deg, #2a2a2a, #0e0e0e); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2); }
+html[data-tema="claro"] #v33 .i-topo .botao.prim { box-shadow: 0 8px 26px rgba(0, 0, 0, 0.3); }

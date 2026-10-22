@@ -4805,12 +4805,14 @@ mod tests {
     fn o_lote_automatico_nao_tira_mais_o_limite_do_jogo() {
         // Medido no FiveM do dono (preso no processador): tirar o limite de FPS (`SemTeto`) aumenta a oscilação do tempo
         // de quadro, o tranco que o cliente sente. O "Otimizar" não deve mais aplicar nenhum perfil que mexa no jogo.
-        let fonte = include_str!("commands.rs");
-        let corpo = fonte
-            .split("let mut resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(")
+        // Só a produção (`producao`): procurando no arquivo inteiro, o texto procurado achava a si mesmo aqui no teste,
+        // e a trava conferia este bloco em vez do lote.
+        let corpo = producao()
+            .split("let resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(")
             .nth(1)
             .and_then(|c| c.split("Ok(resultados)").next())
             .expect("não achei o corpo do lote automático");
+        assert!(corpo.contains("optimize:step"), "o corpo achado não é o do lote");
         for proibido in [
             "aplicar_teto_do_jogo(&app",
             "Perfil::SemTeto",

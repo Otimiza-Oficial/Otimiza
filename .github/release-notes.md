@@ -46,9 +46,10 @@ Com o jogo aberto, o Turbo é o botão principal da tela inicial.
 O botão aplicava poucos ajustes: quase tudo dos pacotes de otimização estava como "só se pedir". Agora ele tem dois
 níveis, e o **Completo** é o padrão:
 
-- **Completo:** além do de sempre, 21 ajustes do registro e de serviços: o jogo com prioridade no processador e no
+- **Completo:** além do de sempre, 22 ajustes do registro, de serviços e da rede: o jogo com prioridade no processador e no
   agendador de multimídia, o timer fino valendo para o sistema todo, telemetria, aplicativos em segundo plano, Edge,
-  widgets e manutenção automática parados, e o Windows sem as esperas de fábrica no menu e no boot. Nada que possa
+  widgets e manutenção automática parados, a placa de rede sem economia de energia (o pico de ping de quando ela
+  acorda no meio da partida), e o Windows sem as esperas de fábrica no menu e no boot. Nada que possa
   custar quadro, nada que troque segurança e nada que tire uma função do Windows (Bluetooth, impressora e Xbox ficam
   como estão). Parte deles só vale depois de reiniciar, e o resultado diz quantos.
 - **Seguro:** o de antes, para quem quer o mínimo.
