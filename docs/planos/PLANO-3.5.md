@@ -317,12 +317,14 @@ lado deles.
 | # | Arquivo | O quê |
 |---|---|---|
 | 1 | `geracao/escala.rs` | ✅ níveis, encaixe, cursor (puro, 9 testes) |
-| 2 | `geracao/shaders.hlsl` | `Easu` e `Rcas` como passes de pixel, lendo com `Load` (12 e 5 leituras, sem `Gather`): o mesmo kernel do `ffx_fsr1.h`, legível e sem as macros do SDK |
-| 3 | `geracao/gpu.rs` | `passe_na_area` (viewport com deslocamento); `preparar_ampliacao(l, a)` cria o alvo do tamanho do jogo e o ampliado; `compor_ampliado` = `compor` no intermediário **codificado** (no HDR, a `Sair` só roda no fim) → `Easu` → `Rcas` na área do encaixe, barras em preto; `sem_geracao` faz o `receber` só copiar |
-| 4 | `geracao/mod.rs` | `Configuracao.escala: Option<Nivel>`; multiplicador 1 aceito com escala; sobreposição no monitor inteiro; regras de 2.1.1 |
-| 5 | `plataforma/frameboost.rs` + `commands.rs` | a escala chega do comando de ligar (campo opcional: chamadas antigas continuam valendo) |
-| 6 | `gpu.rs` (teste `#[ignore]`) | imagem sintética com bordas finas: renderizada em 960×540 e em 640×360; a 640×360 ampliada pelo FSR fica mais perto da nativa (SSIM) que a ampliada pelo bilinear; as barras saem pretas |
-| 7 | `LICENCAS-DE-TERCEIROS.md` | a licença MIT do FSR 1 |
+| 2 | `geracao/shaders.hlsl` | ✅ `Easu` e `Rcas` como passes de pixel, lendo com `Load` (12 e 5 leituras, sem `Gather`): o mesmo kernel do `ffx_fsr1.h`, legível e sem as macros do SDK |
+| 3 | `geracao/gpu.rs` | ✅ `passe_na_area` (viewport com deslocamento); `preparar_ampliacao(l, a)` cria o alvo do tamanho do jogo e o ampliado; `compor_ampliado` = `compor` no intermediário **codificado** (no HDR, a `Sair` só roda no fim) → `Easu` → `Rcas` na área do encaixe, barras em preto; `sem_geracao` faz o `receber` só copiar |
+| 4 | `geracao/mod.rs` | ✅ `Configuracao.escala: Option<Nivel>`; multiplicador 1 aceito com escala; sobreposição no monitor inteiro; regras de 2.1.1; a sobreposição fica escondida até o primeiro real (senão cobriria o monitor de preto) |
+| 5 | `plataforma/frameboost.rs` + `commands.rs` + `v33/ponte.ts` | ✅ a escala chega do comando de ligar (campo opcional: chamadas antigas continuam valendo); só escala não trava o FPS base (travar tiraria o ganho real) |
+| 6 | `gpu.rs` (teste `#[ignore]`) | ✅ `escala_na_placa`: medido no notebook (21/10), 640×360 → 960×540, **FSR SSIM 0,990 / PSNR 29,1 dB contra bilinear 0,953 / 23,5 dB**; barras pretas e a área do encaixe idêntica |
+| 7 | `LICENCAS-DE-TERCEIROS.md` | ✅ a licença MIT do FSR 1 |
+| 8 | interface | o seletor de nível no Frame Boost e a linha "jogo → tela" |
+| 9 | PC de casa | `sobre_o_jogo_de_teste` com `OTIMIZA_FG_ESCALA=Qualidade OTIMIZA_FG_MULT=1` e com `OTIMIZA_FG_MULT=2`: custo medido na placa e FPS do jogo nativo × escala |
 
 O teste de GPU é `#[ignore]`, como os outros da placa: a esteira roda em
 máquina sem placa de vídeo. Ele roda à mão no notebook e no PC de casa.

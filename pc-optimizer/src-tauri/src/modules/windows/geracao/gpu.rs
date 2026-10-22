@@ -76,7 +76,19 @@ struct Passes {
     final_denso: ID3D11PixelShader,
     consistencia: ID3D11PixelShader,
     final_bidirecional: ID3D11PixelShader,
+    easu: ID3D11PixelShader,
+    rcas: ID3D11PixelShader,
 }
+
+/// Escala: o quadro composto no tamanho do jogo (`origem`, ainda codificado) e ampliado pelo `Easu` (`ampliado`, do
+/// tamanho da área do encaixe), antes do `Rcas` escrever na swap chain.
+struct Ampliacao {
+    origem: Alvo,
+    ampliado: Alvo,
+}
+
+/// Nitidez do `Rcas`, em "stops" do FSR (0 = a máxima). 0,2 é o padrão dos exemplos da AMD.
+const NITIDEZ_DA_ESCALA: f32 = 0.2;
 
 struct Trabalho {
     largura: u32,
@@ -156,6 +168,12 @@ pub struct Gpu {
     /// Até que nível a busca principal desce (3 = 1/4 da imagem; 2 = 1/8, o modo leve). Trocável com o gerador ligado:
     /// cada quadro real refaz o campo inteiro.
     pub niveis_dis: usize,
+    /// Só escala, sem geração: o `receber` só copia a imagem (nem luma nem fluxo).
+    pub sem_geracao: bool,
+    ampliacao: Option<Ampliacao>,
+    /// Durante a composição no alvo da escala: os passes não passam pela `Sair` (no HDR a imagem segue codificada
+    /// até o `Rcas`).
+    saida_codificada: std::cell::Cell<bool>,
 }
 
 /// O modo leve (o "Performance" do Lossless Scaling): a busca principal para em 1/8, sem o passe de 1/4, o mais caro
@@ -367,6 +385,8 @@ impl Gpu {
             final_denso: ps("FinalDenso")?,
             consistencia: ps("Consistencia")?,
             final_bidirecional: ps("FinalBidirecional")?,
+            easu: ps("Easu")?,
+            rcas: ps("Rcas")?,
         };
 
         let mut amostrador = None;
@@ -417,6 +437,9 @@ impl Gpu {
             dis: !std::env::var("OTIMIZA_FG_BUSCA").is_ok_and(|v| v == "antiga" || v == "blocos"),
             oclusao: !std::env::var("OTIMIZA_FG_OCLUSAO").is_ok_and(|v| v == "0"),
             niveis_dis: niveis_do_dis(),
+            sem_geracao: false,
+            ampliacao: None,
+            saida_codificada: std::cell::Cell::new(false),
         })
     }
 
@@ -780,7 +803,7 @@ impl Gpu {
     }
 
     fn parametros(&self, mut p: Parametros) {
-        p.hdr = if self.trabalho.as_ref().is_some_and(|t| t.hdr) {
+        p.hdr = if self.trabalho.as_ref().is_some_and(|t| t.hdr) && !self.saida_codificada.get() {
             1.0
         } else {
             0.0
@@ -811,15 +834,33 @@ impl Gpu {
         entradas: &[Option<ID3D11ShaderResourceView>],
         p: Parametros,
     ) {
+        let area = Retangulo {
+            x: 0,
+            y: 0,
+            largura: largura as i32,
+            altura: altura as i32,
+        };
+        self.passe_na_area(ps, rtv, area, entradas, p);
+    }
+
+    /// Um passe de tela cheia que só desenha em `area` do alvo (o `SV_Position` continua contando do canto do alvo).
+    fn passe_na_area(
+        &self,
+        ps: &ID3D11PixelShader,
+        rtv: &ID3D11RenderTargetView,
+        area: Retangulo,
+        entradas: &[Option<ID3D11ShaderResourceView>],
+        p: Parametros,
+    ) {
         self.parametros(p);
         unsafe {
             self.ctx
                 .OMSetRenderTargets(Some(&[Some(rtv.clone())]), None);
             self.ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
-                TopLeftX: 0.0,
-                TopLeftY: 0.0,
-                Width: largura as f32,
-                Height: altura as f32,
+                TopLeftX: area.x as f32,
+                TopLeftY: area.y as f32,
+                Width: area.largura as f32,
+                Height: area.altura as f32,
                 MinDepth: 0.0,
                 MaxDepth: 1.0,
             }]));
@@ -1020,6 +1061,11 @@ impl Gpu {
         };
         let img = &t.imagem[novo];
         self.copiar(t, img, area_de_trabalho, recorte);
+        if self.sem_geracao {
+            self.atual = novo;
+            self.reais += 1;
+            return;
+        }
         let q = &t.luma_q[novo];
         let s = &t.luma_s[novo];
         self.luma_em(img, q, s);
@@ -1531,6 +1577,81 @@ impl Gpu {
         }
     }
 
+    /// Escala: os alvos do quadro no tamanho do jogo e do quadro ampliado (`largura`×`altura`, a área do encaixe).
+    /// Depois de `preparar`.
+    pub fn preparar_ampliacao(&mut self, largura: u32, altura: u32) -> Result<(), String> {
+        let Some(t) = self.trabalho.as_ref() else {
+            return Err("escala antes de preparar o gerador".to_string());
+        };
+        let formato = if t.hdr {
+            DXGI_FORMAT_R16G16B16A16_FLOAT
+        } else {
+            DXGI_FORMAT_B8G8R8A8_UNORM
+        };
+        let (tl, ta) = (t.largura, t.altura);
+        if self.ampliacao.as_ref().is_some_and(|a| {
+            (a.origem.largura, a.origem.altura, a.ampliado.largura, a.ampliado.altura)
+                == (tl, ta, largura, altura)
+        }) {
+            return Ok(());
+        }
+        self.ampliacao = Some(Ampliacao {
+            origem: self.alvo(tl, ta, formato, true)?,
+            ampliado: self.alvo(largura, altura, formato, true)?,
+        });
+        Ok(())
+    }
+
+    /// `compor`, ampliado pelo FSR 1 para `area` do destino (o resto fica preto: as barras do encaixe). Sem
+    /// `preparar_ampliacao`, compõe direto, como antes.
+    pub fn compor_ampliado(
+        &self,
+        destino: &ID3D11RenderTargetView,
+        area: Retangulo,
+        t_gerado: Option<f32>,
+    ) {
+        let (Some(amp), Some(tr)) = (self.ampliacao.as_ref(), self.trabalho.as_ref()) else {
+            self.compor(destino, area.largura as u32, area.altura as u32, t_gerado);
+            return;
+        };
+        self.saida_codificada.set(true);
+        self.compor(
+            amp.origem.rtv.as_ref().unwrap(),
+            tr.largura,
+            tr.altura,
+            t_gerado,
+        );
+        self.passe(
+            &self.passes.easu,
+            amp.ampliado.rtv.as_ref().unwrap(),
+            amp.ampliado.largura,
+            amp.ampliado.altura,
+            &[Some(amp.origem.srv.clone())],
+            Parametros {
+                texel_destino: [
+                    1.0 / amp.ampliado.largura as f32,
+                    1.0 / amp.ampliado.altura as f32,
+                ],
+                tamanho_origem: [tr.largura as i32, tr.altura as i32],
+                ..Default::default()
+            },
+        );
+        self.saida_codificada.set(false);
+        unsafe { self.ctx.ClearRenderTargetView(destino, &[0.0, 0.0, 0.0, 1.0]) };
+        self.passe_na_area(
+            &self.passes.rcas,
+            destino,
+            area,
+            &[Some(amp.ampliado.srv.clone())],
+            Parametros {
+                tamanho_origem: [amp.ampliado.largura as i32, amp.ampliado.altura as i32],
+                lambda: (-NITIDEZ_DA_ESCALA).exp2(),
+                extra: [area.x as f32, area.y as f32, 0.0, 0.0],
+                ..Default::default()
+            },
+        );
+    }
+
     pub fn dxgi_device(&self) -> Result<windows::Win32::Graphics::Dxgi::IDXGIDevice, String> {
         self.device.cast().map_err(|e| erro("dxgi device", e))
     }
@@ -1934,6 +2055,181 @@ mod qualidade {
                     .collect()
             }
         }
+    }
+
+    /// Uma cena com bordas finas (anéis, listras diagonais, retângulos), em cinza, `l`×`a`, com 4×4 amostras por pixel:
+    /// a mesma cena em qualquer resolução, como o jogo renderizaria.
+    fn cena_sintetica(l: u32, a: u32) -> Vec<u8> {
+        let valor = |u: f64, v: f64| -> f64 {
+            if u < 0.5 {
+                let r = ((u - 0.25).powi(2) + ((v - 0.5) * 9.0 / 16.0).powi(2)).sqrt();
+                if (r * 80.0).fract() < 0.5 { 0.9 } else { 0.1 }
+            } else if v < 0.5 {
+                if ((u + v) * 24.0).fract() < 0.5 { 0.85 } else { 0.15 }
+            } else {
+                let dentro = (u * 10.0).fract() < 0.6 && (v * 7.0).fract() < 0.6;
+                if dentro { 0.8 } else { 0.2 }
+            }
+        };
+        let mut px = Vec::with_capacity((l * a * 4) as usize);
+        for y in 0..a {
+            for x in 0..l {
+                let mut s = 0.0;
+                for sy in 0..4 {
+                    for sx in 0..4 {
+                        let u = (x as f64 + (sx as f64 + 0.5) / 4.0) / l as f64;
+                        let v = (y as f64 + (sy as f64 + 0.5) / 4.0) / a as f64;
+                        s += valor(u, v);
+                    }
+                }
+                let c = (s / 16.0 * 255.0).round() as u8;
+                px.extend_from_slice(&[c, c, c, 255]);
+            }
+        }
+        px
+    }
+
+    /// Ampliação bilinear na CPU, com o mesmo mapeamento de centro de pixel do `Easu`. Pura.
+    fn bilinear(px: &[u8], l: u32, a: u32, nl: u32, na: u32) -> Vec<u8> {
+        let ler = |x: i64, y: i64| -> f64 {
+            let x = x.clamp(0, l as i64 - 1) as usize;
+            let y = y.clamp(0, a as i64 - 1) as usize;
+            px[(y * l as usize + x) * 4] as f64
+        };
+        let mut v = Vec::with_capacity((nl * na * 4) as usize);
+        for y in 0..na {
+            for x in 0..nl {
+                let fx = (x as f64 + 0.5) * l as f64 / nl as f64 - 0.5;
+                let fy = (y as f64 + 0.5) * a as f64 / na as f64 - 0.5;
+                let (x0, y0) = (fx.floor(), fy.floor());
+                let (tx, ty) = (fx - x0, fy - y0);
+                let (x0, y0) = (x0 as i64, y0 as i64);
+                let c = ler(x0, y0) * (1.0 - tx) * (1.0 - ty)
+                    + ler(x0 + 1, y0) * tx * (1.0 - ty)
+                    + ler(x0, y0 + 1) * (1.0 - tx) * ty
+                    + ler(x0 + 1, y0 + 1) * tx * ty;
+                let c = c.round() as u8;
+                v.extend_from_slice(&[c, c, c, 255]);
+            }
+        }
+        v
+    }
+
+    fn alvo_bgra(gpu: &Gpu, l: u32, a: u32) -> (ID3D11Texture2D, ID3D11RenderTargetView) {
+        let mut t = None;
+        let mut rtv = None;
+        unsafe {
+            gpu.device
+                .CreateTexture2D(
+                    &D3D11_TEXTURE2D_DESC {
+                        Width: l,
+                        Height: a,
+                        MipLevels: 1,
+                        ArraySize: 1,
+                        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                        SampleDesc: DXGI_SAMPLE_DESC {
+                            Count: 1,
+                            Quality: 0,
+                        },
+                        Usage: D3D11_USAGE_DEFAULT,
+                        BindFlags: D3D11_BIND_RENDER_TARGET.0 as u32,
+                        ..Default::default()
+                    },
+                    None,
+                    Some(&mut t),
+                )
+                .unwrap();
+            let t: ID3D11Texture2D = t.unwrap();
+            gpu.device
+                .CreateRenderTargetView(&t, None, Some(&mut rtv))
+                .unwrap();
+            (t, rtv.unwrap())
+        }
+    }
+
+    /// A ESCALA NA PLACA. A cena renderizada em 640×360 e ampliada para 960×540 (o nível Qualidade) tem de ficar mais
+    /// perto da mesma cena renderizada em 960×540 pelo FSR 1 do que pelo bilinear; com barras, o que fica fora do
+    /// encaixe sai preto. `OTIMIZA_FG_QUADROS_SAIDA=<pasta>` grava as imagens para olhar.
+    /// `cargo test --lib -- --ignored escala_na_placa --nocapture`
+    #[test]
+    #[ignore]
+    fn escala_na_placa() {
+        let (bl, ba) = (640u32, 360u32);
+        let (nl, na) = (960u32, 540u32);
+        let baixa = cena_sintetica(bl, ba);
+        let nativa = cena_sintetica(nl, na);
+
+        let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+        let adaptador = unsafe { fabrica.EnumAdapters1(0) }.unwrap();
+        let mut gpu = Gpu::novo(&adaptador).unwrap();
+        gpu.sem_geracao = true;
+        gpu.preparar(bl, ba, false, Giro::Nenhum).unwrap();
+        gpu.preparar_ampliacao(nl, na).unwrap();
+        let entrada = textura(&gpu, bl, ba, &baixa);
+        gpu.receber(
+            &entrada,
+            Retangulo {
+                x: 0,
+                y: 0,
+                largura: bl as i32,
+                altura: ba as i32,
+            },
+        );
+
+        let (saida, rtv) = alvo_bgra(&gpu, nl, na);
+        gpu.compor_ampliado(
+            &rtv,
+            Retangulo {
+                x: 0,
+                y: 0,
+                largura: nl as i32,
+                altura: na as i32,
+            },
+            None,
+        );
+        let fsr = ler_de_volta(&gpu, &saida, nl, na);
+        let lin = bilinear(&baixa, bl, ba, nl, na);
+        let (s_fsr, s_lin) = (ssim(&fsr, &nativa, nl, na), ssim(&lin, &nativa, nl, na));
+        let (p_fsr, p_lin) = (psnr(&fsr, &nativa), psnr(&lin, &nativa));
+        println!(
+            "escala 640x360 -> 960x540: FSR SSIM {:.4} PSNR {:.2} dB · bilinear SSIM {:.4} PSNR {:.2} dB",
+            s_fsr, p_fsr, s_lin, p_lin
+        );
+        if let Ok(pasta) = std::env::var("OTIMIZA_FG_QUADROS_SAIDA") {
+            let pasta = std::path::PathBuf::from(pasta);
+            salvar_bmp(&pasta.join("escala_fsr.bmp"), nl, na, &fsr);
+            salvar_bmp(&pasta.join("escala_bilinear.bmp"), nl, na, &lin);
+            salvar_bmp(&pasta.join("escala_nativa.bmp"), nl, na, &nativa);
+        }
+        assert!(s_fsr > s_lin, "o FSR tem de vencer o bilinear");
+
+        // Barras: a mesma imagem num alvo mais largo, encaixada no meio.
+        let (ll, la) = (nl + 140, na);
+        gpu.preparar_ampliacao(nl, na).unwrap();
+        let (larga, rtv_larga) = alvo_bgra(&gpu, ll, la);
+        gpu.compor_ampliado(
+            &rtv_larga,
+            Retangulo {
+                x: 70,
+                y: 0,
+                largura: nl as i32,
+                altura: na as i32,
+            },
+            None,
+        );
+        let px = ler_de_volta(&gpu, &larga, ll, la);
+        let em = |x: u32, y: u32| px[((y * ll + x) * 4) as usize];
+        for y in [0, la / 2, la - 1] {
+            assert_eq!(em(10, y), 0, "barra da esquerda");
+            assert_eq!(em(ll - 10, y), 0, "barra da direita");
+        }
+        let dentro: Vec<u8> = (0..nl)
+            .map(|x| em(70 + x, la / 2))
+            .collect();
+        let igual_ao_sem_barra: Vec<u8> = (0..nl)
+            .map(|x| fsr[(((la / 2) * nl + x) * 4) as usize])
+            .collect();
+        assert_eq!(dentro, igual_ao_sem_barra, "a área do encaixe é a mesma imagem");
     }
 
     /// Calibra a troca de cena: pares seguidos do FiveM gravado × o mesmo quadro contra ele espelhado (conteúdo

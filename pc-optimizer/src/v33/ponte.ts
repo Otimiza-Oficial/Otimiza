@@ -257,6 +257,9 @@ export interface PlanoJogoLiso {
   } | null;
 }
 
+/** Os níveis da escala, com as proporções do FSR (1,3× a 2× por eixo). */
+export type NivelDeEscala = "UltraQualidade" | "Qualidade" | "Equilibrado" | "Desempenho";
+
 export interface PainelFrameBoost {
   jogo: string | null;
   recomendado: RecursoAvaliado | null;
@@ -441,8 +444,9 @@ export const ponte = {
   inicializacao: () => invoke<EntradaDeInicio[]>("list_startup"),
   inicializacaoDefinir: (hive: string, name: string, enabled: boolean) => invoke<Resultado>("set_startup_enabled", { hive, name, enabled }),
   frameBoost: () => invoke<PainelFrameBoost>("frame_boost_painel"),
-  frameBoostLigar: (multiplicador: number, semLimite = false) =>
-    invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite }),
+  /** `escala`: amplia o jogo para o monitor (FSR 1); com `multiplicador` 1, só escala. */
+  frameBoostLigar: (multiplicador: number, semLimite = false, escala: NivelDeEscala | null = null) =>
+    invoke<PainelFrameBoost>("frame_boost_ligar", { multiplicador, semLimite, escala }),
   frameBoostDesligar: () => invoke<PainelFrameBoost>("frame_boost_desligar"),
   frameBoostDestravarBase: () => invoke<PainelFrameBoost>("frame_boost_destravar_base"),
   frameBoostTravarBase: () => invoke<PainelFrameBoost>("frame_boost_travar_base"),

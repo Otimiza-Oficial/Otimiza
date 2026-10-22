@@ -430,7 +430,10 @@ pub fn painel() -> Painel {
 /// Trava o FPS base do jogo aberto para o Frame Boost do Otimiza (só ele: o do driver não tem o ritmo do Otimiza).
 #[cfg(target_os = "windows")]
 pub fn travar_base(log: &mut crate::modules::changelog::ChangeLog) {
-    let gerando = ativo_de(&geracao::estado()).is_some();
+    let e = geracao::estado();
+    // Só escala: travar o FPS do jogo tiraria justamente o FPS real que a escala dá.
+    let so_escala = e.escala.is_some() && !e.automatico && e.multiplicador <= 1;
+    let gerando = ativo_de(&e).is_some() && !so_escala;
     let Some(j) = super::sessao::atual().filter(|_| gerando) else {
         return;
     };
@@ -498,6 +501,7 @@ pub fn ligar(
     app: &tauri::AppHandle,
     multiplicador: u8,
     sem_limite: bool,
+    escala: Option<geracao::escala::Nivel>,
 ) -> Result<Painel, String> {
     let jogo =
         super::sessao::atual().ok_or("Abra o jogo primeiro: o Frame Boost liga no jogo aberto.")?;
@@ -542,8 +546,12 @@ pub fn ligar(
                 compat::multiplicadores(Recurso::FrameBoostOtimiza, nativo, hz)
             };
             // 0 = automático: enche o monitor, quantos quadros couberem.
+            // 1 com escala: só escala, sem gerar quadros.
+            let so_escala = escala.is_some() && multiplicador == 1;
             let automatico = multiplicador == AUTOMATICO;
-            let m = if automatico {
+            let m = if so_escala {
+                1
+            } else if automatico {
                 geracao::MAXIMO_DO_AUTOMATICO
             } else {
                 multiplicador_valido(multiplicador, &cabem).unwrap_or(2)
@@ -568,6 +576,7 @@ pub fn ligar(
                 sem_limite,
                 // Placa já quase cheia com o jogo: começa leve, em vez de esperar a guarda ver o jogo perder FPS.
                 leve: comecar_leve(uso_da_placa_pct()),
+                escala,
             })?;
             // O contador do jogo nunca vê os quadros gerados: o FPS na tela aparece no canto do jogo, pelo Otimiza.
             if let Err(e) = super::overlay::com_frame_boost(app, jogo.pid, jogo.nome.clone()) {

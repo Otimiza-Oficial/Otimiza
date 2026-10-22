@@ -1603,6 +1603,7 @@ pub async fn gerador_ligar(
             automatico: false,
             sem_limite: false,
             leve: false,
+            escala: None,
         })
     })
     .await
@@ -2899,13 +2900,19 @@ pub async fn frame_boost_ligar(
     app: tauri::AppHandle,
     multiplicador: u8,
     sem_limite: Option<bool>,
+    escala: Option<crate::modules::windows::geracao::escala::Nivel>,
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::frameboost::Painel, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
     {
         tokio::task::spawn_blocking(move || {
-            crate::plataforma::frameboost::ligar(&app, multiplicador, sem_limite.unwrap_or(false))
+            crate::plataforma::frameboost::ligar(
+                &app,
+                multiplicador,
+                sem_limite.unwrap_or(false),
+                escala,
+            )
         })
         .await
         .map_err(|e| e.to_string())??;

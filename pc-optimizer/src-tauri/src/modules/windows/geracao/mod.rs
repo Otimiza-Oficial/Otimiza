@@ -94,6 +94,11 @@ pub struct Estado {
     /// Desde que ligou, só o tempo gerando e à vista: o "antes × depois" do painel quando desliga.
     #[serde(default)]
     pub sessao: resumo::Acumulado,
+    /// Com escala: o nível pedido e onde a imagem ampliada cai no monitor (a do jogo é `area`).
+    #[serde(default)]
+    pub escala: Option<escala::Nivel>,
+    #[serde(default)]
+    pub ampliada: Option<Retangulo>,
 }
 
 impl Default for Estado {
@@ -122,6 +127,8 @@ impl Default for Estado {
             leve: false,
             comparacoes: 0,
             sessao: resumo::Acumulado::default(),
+            escala: None,
+            ampliada: None,
         }
     }
 }
@@ -238,6 +245,16 @@ pub struct Configuracao {
     /// Começa no modo leve (`gpu::NIVEIS_DO_MODO_LEVE`): placa sem folga.
     #[serde(default)]
     pub leve: bool,
+    /// Escala: a sobreposição cobre o monitor e amplia a janela do jogo (FSR 1). Com `multiplicador` 1, só escala.
+    #[serde(default)]
+    pub escala: Option<escala::Nivel>,
+}
+
+impl Configuracao {
+    /// Só escala, sem gerar quadros: o FPS real a mais sem o atraso da geração.
+    pub fn so_escala(&self) -> bool {
+        self.escala.is_some() && self.multiplicador == 1 && !self.automatico
+    }
 }
 
 /// O que fazer quando a guarda vê o jogo perder FPS. Pura.
@@ -271,10 +288,15 @@ pub fn ligar(config: Configuracao) -> Result<Estado, String> {
         *e = Estado {
             situacao: Situacao::ProcurandoJanela,
             processo: config.processo.clone(),
-            multiplicador: config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO),
-            automatico: config.automatico,
+            multiplicador: if config.so_escala() {
+                1
+            } else {
+                config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO)
+            },
+            automatico: config.automatico && !config.so_escala(),
             sem_limite: config.sem_limite,
             leve: config.leve,
+            escala: config.escala,
             ..Estado::default()
         }
     });
@@ -623,6 +645,8 @@ struct Sobreposicao {
     altura: u32,
     /// No ritmo do monitor: o objeto que avisa a vez da tela (latência máxima de 1 quadro) e `Present(1)`.
     vez_da_tela: Option<windows::Win32::Foundation::HANDLE>,
+    /// Com escala: onde a imagem ampliada cai dentro da sobreposição (que cobre o monitor).
+    ampliar: Option<Retangulo>,
 }
 
 impl Sobreposicao {
@@ -632,6 +656,7 @@ impl Sobreposicao {
         visivel_em_captura: bool,
         hdr: bool,
         pelo_monitor: bool,
+        ampliar: Option<Retangulo>,
     ) -> Result<Sobreposicao, String> {
         unsafe {
             let instancia = GetModuleHandleW(None).map_err(|e| e.message().to_string())?;
@@ -750,6 +775,7 @@ impl Sobreposicao {
                 largura: area.largura as u32,
                 altura: area.altura as u32,
                 vez_da_tela,
+                ampliar,
             };
             s.criar_rtv(gpu)?;
             Ok(s)
@@ -773,9 +799,13 @@ impl Sobreposicao {
 
     fn apresentar(&self, gpu: &Gpu, t: Option<f32>, cronometro: Option<&mut gpu::Cronometro>) {
         if let Some(rtv) = &self.rtv {
-            match cronometro {
-                Some(c) => c.medir(gpu, || gpu.compor(rtv, self.largura, self.altura, t)),
+            let compor = || match self.ampliar {
+                Some(area) => gpu.compor_ampliado(rtv, area, t),
                 None => gpu.compor(rtv, self.largura, self.altura, t),
+            };
+            match cronometro {
+                Some(c) => c.medir(gpu, compor),
+                None => compor(),
             }
             if let Ok(mut g) = CAPTURA_DE_DIAGNOSTICO.lock() {
                 if let Some((pasta, restantes)) = g.as_mut() {
@@ -900,7 +930,9 @@ fn executar(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
 }
 
 fn executar_interno(config: &Configuracao, parar: &AtomicBool) -> Result<(), String> {
-    let multiplicador = if config.automatico {
+    let multiplicador = if config.so_escala() {
+        1
+    } else if config.automatico {
         MAXIMO_DO_AUTOMATICO
     } else if config.sem_limite {
         config.multiplicador.clamp(2, MAXIMO_DO_AUTOMATICO)
@@ -1078,13 +1110,36 @@ fn sessao(
     // O Auto dentro dos Hz anda no ritmo do monitor: um quadro por atualização da tela, cada um feito para o instante em
     // que aparece. Pelo cronômetro (o 2×/3×/4× e o "passar do limite"), às vezes caíam dois quadros na mesma
     // atualização e nenhum na seguinte: o micro-tranco.
-    let pelo_monitor = config.automatico && !config.sem_limite && hz > 0;
+    let pelo_monitor = config.automatico && multiplicador > 1 && !config.sem_limite && hz > 0;
+    // Escala: a sobreposição cobre o monitor e a imagem do jogo cai ampliada no encaixe (barras quando a proporção é
+    // outra). Sem gerar quadros, o `receber` só copia.
+    let ampliada = config.escala.and_then(|_| {
+        escala::encaixe(
+            recorte.largura,
+            recorte.altura,
+            Retangulo {
+                x: 0,
+                y: 0,
+                largura: saida.monitor.largura,
+                altura: saida.monitor.altura,
+            },
+        )
+    });
+    if let Some(a) = ampliada {
+        gpu.preparar_ampliacao(a.largura as u32, a.altura as u32)?;
+    }
+    gpu.sem_geracao = multiplicador <= 1;
     let sobreposicao = Sobreposicao::nova(
         &gpu,
-        area_na_tela,
+        if ampliada.is_some() {
+            saida.monitor
+        } else {
+            area_na_tela
+        },
         config.visivel_em_captura,
         hdr,
         pelo_monitor,
+        ampliada,
     )?;
     let periodo_da_tela = if hz > 0 { 1.0 / hz as f64 } else { 0.0 };
     // O par que está sendo mostrado, pelo instante em que cada real apareceu na tela do jogo (`LastPresentTime`), e o
@@ -1098,6 +1153,11 @@ fn sessao(
     publicar(|e| {
         e.situacao = Situacao::Gerando;
         e.area = Some(area_na_tela);
+        e.ampliada = ampliada.map(|a| Retangulo {
+            x: saida.monitor.x + a.x,
+            y: saida.monitor.y + a.y,
+            ..a
+        });
         e.multiplicador = multiplicador;
         e.erro = None;
         e.hz = hz;
@@ -1219,12 +1279,18 @@ fn sessao(
                 troca_de_fonte = Some(agora_do_laco);
             }
         }
-        let pausa_completa = vivo.is_some() && guarda.pausada();
+        // Com escala a sobreposição É a tela do jogo: sumir mostraria o jogo pequeno no meio do monitor. Na pausa da
+        // guarda ela segue com os reais ampliados (sem geração), e um jogo parado (menu, carregamento) fica na tela.
+        let pausa_completa = vivo.is_some() && guarda.pausada() && ampliada.is_none();
 
         // NUNCA UMA IMAGEM CONGELADA POR CIMA DO JOGO: meio segundo sem quadro real e a sobreposição some. Na pausa
         // completa da guarda também: o que aparece é o jogo, sem nada do Otimiza no caminho.
         // E só com o jogo na frente: ligado pelo Otimiza com o jogo atrás, a sobreposição não cobre o próprio Otimiza.
-        let sem_quadro = ultimo_real.elapsed() > Duration::from_millis(500);
+        let sem_quadro = if ampliada.is_some() {
+            gpu.reais == 0
+        } else {
+            ultimo_real.elapsed() > Duration::from_millis(500)
+        };
         let fora_da_frente = !jogo_na_frente(pid);
         let parado = sem_quadro || pausa_completa || fora_da_frente;
         // Por que ficou escondida (para o log de 10 s): o primeiro motivo que vale, nesta ordem.
@@ -1666,6 +1732,11 @@ mod tests {
             automatico: mult == 0,
             sem_limite: std::env::var_os("OTIMIZA_FG_SEM_LIMITE").is_some(),
             leve: std::env::var_os("OTIMIZA_FG_LEVE").is_some(),
+            // OTIMIZA_FG_ESCALA=Qualidade (ou UltraQualidade, Equilibrado, Desempenho): amplia o jogo para o monitor;
+            // com OTIMIZA_FG_MULT=1, só escala.
+            escala: std::env::var("OTIMIZA_FG_ESCALA")
+                .ok()
+                .and_then(|v| serde_json::from_value(serde_json::Value::String(v)).ok()),
         })
         .unwrap();
         println!("inicio: {:?}", e);

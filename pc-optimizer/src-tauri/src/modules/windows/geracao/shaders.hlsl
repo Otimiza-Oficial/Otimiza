@@ -1056,3 +1056,163 @@ float4 FinalBidirecional(Saida e) : SV_Target
     float perdido = saturate((erro - (limiarErro + faixaErro)) / faixaErro);
     return float4(Sair(lerp(cor, real, max(perdido, corte))), 1);
 }
+
+// ---------------------------------------------------------------------------
+// ESCALA (FSR 1). O jogo renderiza menor que o monitor e estes dois passes ampliam: `Easu` amplia seguindo a direção
+// das bordas (lanczos2 esticado ao longo delas, com o resultado preso entre o mínimo e o máximo dos 4 vizinhos, sem
+// halo), e `Rcas` devolve a nitidez sem estourar o contraste. Port do `ffx_fsr1.h` (AMD FidelityFX, MIT, ver
+// LICENCAS-DE-TERCEIROS.md): o mesmo kernel, lendo com `Load` em vez de `Gather` e sem as macros do SDK.
+// A entrada chega CODIFICADA (no HDR, com gama): o FSR espera espaço perceptual, e só o `Rcas` passa pela `Sair`.
+// ---------------------------------------------------------------------------
+
+float3 CorEm(int2 p)
+{
+    return T0.Load(int3(clamp(p, int2(0, 0), tamanhoOrigem - 1), 0)).rgb;
+}
+
+// A luma barata do FSR (vezes 2): 0,5 B + 0,5 R + G.
+float LumaFsr(float3 c) { return c.b * 0.5 + (c.r * 0.5 + c.g); }
+
+// Acumula direção e "quanto é borda" em volta de um dos 4 texels do centro, com o peso bilinear dele.
+//    a
+//  b c d
+//    e
+void EasuSomar(inout float2 dir, inout float len, float w, float lA, float lB, float lC, float lD, float lE)
+{
+    float dc = lD - lC;
+    float cb = lC - lB;
+    float lenX = rcp(max(max(abs(dc), abs(cb)), 1.0 / 32768.0));
+    float dirX = lD - lB;
+    dir.x += dirX * w;
+    lenX = saturate(abs(dirX) * lenX);
+    len += lenX * lenX * w;
+
+    float ec = lE - lC;
+    float ca = lC - lA;
+    float lenY = rcp(max(max(abs(ec), abs(ca)), 1.0 / 32768.0));
+    float dirY = lE - lA;
+    dir.y += dirY * w;
+    lenY = saturate(abs(dirY) * lenY);
+    len += lenY * lenY * w;
+}
+
+// Um dos 12 texels: lanczos2 aproximado (sem seno nem raiz), girado pela direção e esticado pela anisotropia.
+void EasuTap(inout float3 aC, inout float aW, float2 off, float2 dir, float2 len2, float lob, float clp, float3 c)
+{
+    float2 v;
+    v.x = off.x * dir.x + off.y * dir.y;
+    v.y = off.x * -dir.y + off.y * dir.x;
+    v *= len2;
+    float d2 = min(v.x * v.x + v.y * v.y, clp);
+    float wB = (2.0 / 5.0) * d2 - 1.0;
+    float wA = lob * d2 - 1.0;
+    wB *= wB;
+    wA *= wA;
+    wB = (25.0 / 16.0) * wB - (25.0 / 16.0 - 1.0);
+    float w = wB * wA;
+    aC += c * w;
+    aW += w;
+}
+
+// T0 = imagem do jogo (tamanhoOrigem); o alvo é a área ampliada (texelDestino = 1 / tamanho dela).
+float4 Easu(Saida e) : SV_Target
+{
+    float2 escala = float2(tamanhoOrigem) * texelDestino;
+    float2 pp = floor(e.pos.xy) * escala + (0.5 * escala - 0.5);
+    float2 fp = floor(pp);
+    pp -= fp;
+    int2 f0 = int2(fp);
+
+    //    b c
+    //  e f g h
+    //  i j k l
+    //    n o
+    float3 b = CorEm(f0 + int2(0, -1));
+    float3 c = CorEm(f0 + int2(1, -1));
+    float3 ce = CorEm(f0 + int2(-1, 0));
+    float3 f = CorEm(f0);
+    float3 g = CorEm(f0 + int2(1, 0));
+    float3 h = CorEm(f0 + int2(2, 0));
+    float3 i = CorEm(f0 + int2(-1, 1));
+    float3 j = CorEm(f0 + int2(0, 1));
+    float3 k = CorEm(f0 + int2(1, 1));
+    float3 l = CorEm(f0 + int2(2, 1));
+    float3 n = CorEm(f0 + int2(0, 2));
+    float3 o = CorEm(f0 + int2(1, 2));
+
+    float bL = LumaFsr(b), cL = LumaFsr(c), eL = LumaFsr(ce), fL = LumaFsr(f), gL = LumaFsr(g), hL = LumaFsr(h);
+    float iL = LumaFsr(i), jL = LumaFsr(j), kL = LumaFsr(k), lL = LumaFsr(l), nL = LumaFsr(n), oL = LumaFsr(o);
+
+    float2 dir = 0.0;
+    float len = 0.0;
+    EasuSomar(dir, len, (1.0 - pp.x) * (1.0 - pp.y), bL, eL, fL, gL, jL);
+    EasuSomar(dir, len, pp.x * (1.0 - pp.y), cL, fL, gL, hL, kL);
+    EasuSomar(dir, len, (1.0 - pp.x) * pp.y, fL, iL, jL, kL, nL);
+    EasuSomar(dir, len, pp.x * pp.y, gL, jL, kL, lL, oL);
+
+    // Direção normalizada; sem direção (área lisa), vale a horizontal.
+    float2 dir2 = dir * dir;
+    float dirR = dir2.x + dir2.y;
+    bool zero = dirR < 1.0 / 32768.0;
+    dirR = zero ? 1.0 : rsqrt(dirR);
+    dir.x = zero ? 1.0 : dir.x;
+    dir *= dirR;
+
+    // "Quanto é borda", de 0 a 1, ao quadrado.
+    len = len * 0.5;
+    len *= len;
+    // Na diagonal o kernel estica até raiz de 2.
+    float estica = (dir.x * dir.x + dir.y * dir.y) * rcp(max(abs(dir.x), abs(dir.y)));
+    float2 len2 = float2(1.0 + (estica - 1.0) * len, 1.0 - 0.5 * len);
+    float lob = 0.5 + ((1.0 / 4.0 - 0.04) - 0.5) * len;
+    float clp = rcp(lob);
+
+    float3 min4 = min(min(f, g), min(j, k));
+    float3 max4 = max(max(f, g), max(j, k));
+
+    float3 aC = 0.0;
+    float aW = 0.0;
+    EasuTap(aC, aW, float2(0.0, -1.0) - pp, dir, len2, lob, clp, b);
+    EasuTap(aC, aW, float2(1.0, -1.0) - pp, dir, len2, lob, clp, c);
+    EasuTap(aC, aW, float2(-1.0, 1.0) - pp, dir, len2, lob, clp, i);
+    EasuTap(aC, aW, float2(0.0, 1.0) - pp, dir, len2, lob, clp, j);
+    EasuTap(aC, aW, float2(0.0, 0.0) - pp, dir, len2, lob, clp, f);
+    EasuTap(aC, aW, float2(-1.0, 0.0) - pp, dir, len2, lob, clp, ce);
+    EasuTap(aC, aW, float2(1.0, 1.0) - pp, dir, len2, lob, clp, k);
+    EasuTap(aC, aW, float2(2.0, 1.0) - pp, dir, len2, lob, clp, l);
+    EasuTap(aC, aW, float2(2.0, 0.0) - pp, dir, len2, lob, clp, h);
+    EasuTap(aC, aW, float2(1.0, 0.0) - pp, dir, len2, lob, clp, g);
+    EasuTap(aC, aW, float2(1.0, 2.0) - pp, dir, len2, lob, clp, o);
+    EasuTap(aC, aW, float2(0.0, 2.0) - pp, dir, len2, lob, clp, n);
+
+    return float4(min(max4, max(min4, aC / aW)), 1);
+}
+
+// O quanto o Rcas pode puxar, no máximo (o mesmo limite do FSR).
+static const float RCAS_LIMITE = 0.25 - 1.0 / 16.0;
+
+// T0 = a imagem ampliada (tamanhoOrigem = tamanho dela); o alvo é a swap chain, com o viewport na área do encaixe.
+// lambda = força (exp2(-nitidez)); extra.xy = onde a área começa no alvo.
+float4 Rcas(Saida e) : SV_Target
+{
+    int2 p = int2(e.pos.xy) - int2(extra.xy);
+    //    b
+    //  d e f
+    //    h
+    float3 b = CorEm(p + int2(0, -1));
+    float3 d = CorEm(p + int2(-1, 0));
+    float3 c = CorEm(p);
+    float3 f = CorEm(p + int2(1, 0));
+    float3 h = CorEm(p + int2(0, 1));
+
+    float3 mn4 = min(min(b, d), min(f, h));
+    float3 mx4 = max(max(b, d), max(f, h));
+    // Até onde o anel pode puxar o centro sem passar de 0 nem de 1.
+    float3 hitMin = min(mn4, c) / max(4.0 * mx4, 1.0 / 32768.0);
+    float3 hitMax = (1.0 - max(mx4, c)) / min(4.0 * mn4 - 4.0, -1.0 / 32768.0);
+    float3 lobeRGB = max(-hitMin, hitMax);
+    float lobe = max(-RCAS_LIMITE, min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * lambda;
+
+    float3 cor = (lobe * (b + d + f + h) + c) / (4.0 * lobe + 1.0);
+    return float4(Sair(cor), 1);
+}
