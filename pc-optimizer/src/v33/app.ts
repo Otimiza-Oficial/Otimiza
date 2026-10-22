@@ -32,7 +32,6 @@ import {
   type JogoDaLoja,
   type ItemDoCatalogo,
   type PassoDoLote,
-  type RecursoAvaliado,
   type ResumoDoJogo,
   type ResultadoDoLab,
   type SituacaoDoFeedback,
@@ -130,10 +129,6 @@ function resumoDoJogoAberto(): ResumoDoJogo | undefined {
   return j ? estado.biblioteca.find((r) => r.id === idDoJogo(j)) : undefined;
 }
 
-function frameBoost(): RecursoAvaliado | null {
-  return estado.jogo?.frame_boost_auto ?? estado.compat?.frame_boost_auto ?? null;
-}
-
 const ANTICHEAT: Record<string, string> = {
   Nenhum: "sem anticheat",
   CfxRe: "anticheat da Cfx.re",
@@ -169,6 +164,7 @@ const svgDoca = {
   boost: `<rect x="7" y="7" width="13" height="10" rx="2"/><path d="M4 14V6a2 2 0 0 1 2-2h10"/>`,
   lab: `<path d="M4 19h16M6 16l3.5-5 3 3L17 7"/>`,
   desfazer: `<path d="M9 7 5 11l4 4"/><path d="M5 11h9a5 5 0 0 1 0 10h-2"/>`,
+  turbo: `<path d="M4.2 17.5a8.5 8.5 0 1 1 15.6 0"/><path d="m12 15 4.2-5"/><circle class="ponto" cx="12" cy="15" r="1.6"/>`,
 };
 
 // ---------------------------------------------------------------- estrutura
@@ -208,10 +204,10 @@ function estrutura(): string {
             <div class="i-numeros"><span class="num" id="r-num">—</span><small id="r-un"></small><span class="etiquetas" id="r-selos"></span></div>
             <p class="nota" id="r-d">Lendo…</p>
             <div class="i-acoes">
-              <button class="botao prim" id="d-turbo" hidden title="Mede o jogo, liga só o que ajuda nele e lembra"><svg viewBox="0 0 24 24">${svgDoca.boost}</svg><span id="d-turbo-t">Turbo</span></button>
+              <button class="botao prim" id="d-turbo" hidden title="Mede o jogo, liga só o que ajuda nele e lembra"><svg viewBox="0 0 24 24">${svgDoca.turbo}</svg><span id="d-turbo-t">Turbo</span></button>
               <button class="botao prim" id="d-otimizar"><svg viewBox="0 0 24 24">${svgDoca.otimizar}</svg><span id="d-otimizar-t">Otimizar agora</span></button>
               <button class="botao" id="d-boost" hidden><svg viewBox="0 0 24 24">${svgDoca.boost}</svg><span>Frame Boost</span></button>
-              <button class="botao" id="d-lab"><svg viewBox="0 0 24 24">${svgDoca.lab}</svg><span>Testar FPS</span></button>
+              <button class="botao fantasma" id="d-lab"><svg viewBox="0 0 24 24">${svgDoca.lab}</svg><span>Testar FPS</span></button>
               <button class="botao fantasma" id="d-desfazer"><svg viewBox="0 0 24 24">${svgDoca.desfazer}</svg><span>Desfazer</span></button>
             </div>
           </div>
@@ -575,7 +571,6 @@ async function amostrar() {
 function inicio() {
   const j = estado.jogo;
   const gerando = estado.gerador?.situacao === "Gerando";
-  const fb = frameBoost();
 
   $("#i-titulo").textContent = saudacao();
   $("#i-sub").textContent = j
@@ -626,8 +621,8 @@ function inicio() {
   $(".i-numeros").hidden = !(gerando || r?.ultima);
 
   const bBoost = $<HTMLButtonElement>("#d-boost");
-  // Some sem jogo em vez de ficar cinza: botão que não faz nada é ruído.
-  bBoost.hidden = !j || (!fb && !gerando);
+  // Só aparece ligado, para desligar: com o jogo aberto quem decide se ele entra é o Turbo, e sem jogo não faz nada.
+  bBoost.hidden = !j || !gerando;
   bBoost.classList.toggle("ligado", gerando);
   // Com o jogo aberto, o Turbo é o botão principal da tela; o "Otimizar agora" fica ao lado.
   $<HTMLButtonElement>("#d-turbo").hidden = !j;
@@ -695,9 +690,9 @@ async function escolhaDoNivel() {
   const desenhar = () => {
     const atual = nivelDoOtimizar();
     const n = niveis.find((x) => x.id === atual);
-    caixa.innerHTML = `<div class="seg" style="margin-top:10px">${(["Seguro", "Competitivo"] as NivelDoOtimizar[])
+    caixa.innerHTML = `<div class="seg">${(["Seguro", "Competitivo"] as NivelDoOtimizar[])
       .map((id) => `<button aria-pressed="${id === atual}" data-nivel="${id}">${NOMES_DO_NIVEL[id]}${niveis.length ? ` · ${niveis.find((x) => x.id === id)?.itens.length ?? 0}` : ""}</button>`)
-      .join("")}</div>${n ? `<span style="display:block;margin-top:8px">${esc(n.promessa)}</span>` : ""}`;
+      .join("")}</div>${n ? `<p class="nota">${esc(n.promessa)}</p>` : ""}`;
     $$<HTMLButtonElement>("#b-nivel [data-nivel]").forEach((b) =>
       b.addEventListener("click", () => {
         gravarNivel(b.dataset.nivel as NivelDoOtimizar);
@@ -849,27 +844,30 @@ async function telaBoost() {
   t.innerHTML = `
     <div class="cabeca"><div><h1><span class="barras"></span>Boost</h1><p>Só entra o que é compatível com o seu PC${estado.jogo ? " e com o " + esc(estado.jogo.nome) : ""}. Tudo se desfaz em um clique.</p></div>
       <span class="pilula">${esc(estado.hw?.placa.nome ?? "Placa de vídeo")}</span></div>
-    <div class="vidro" id="b-turbo" style="margin-bottom:16px"><div class="rotulo">Turbo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
+    <div class="secao"><h2>Um clique</h2><p>O Turbo para o jogo aberto; o Otimizar agora para o Windows.</p></div>
+    <div class="vidro heroi" id="b-turbo">${tituloDoTurbo("")}<p class="nota" style="margin-top:8px">Lendo…</p></div>
     <div class="modos">
-      <div class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Os ajustes do Windows, do registro e do plano de energia, conferidos neste PC. Tudo volta atrás num clique.<span id="b-nivel"></span></span><button class="botao prim" id="b-otimizar">Otimizar agora</button></div>
+      <div class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Os ajustes do Windows, do registro e do plano de energia, conferidos neste PC. Tudo volta atrás num clique.</span><div id="b-nivel"></div><button class="botao prim" id="b-otimizar">Otimizar agora</button></div>
       <div class="modo"><svg viewBox="0 0 24 24"><path d="M4 7.5h9M17.5 7.5H20M4 16.5h2.5M11 16.5h9"/><circle cx="15.2" cy="7.5" r="2.3"/><circle cx="8.8" cy="16.5" r="2.3"/></svg><b>Personalizado</b><span>Cada ajuste, um por um, com o que ele muda e o valor de antes.</span><button class="botao" id="b-classico">Abrir</button></div>
     </div>
+    <div class="secao"><h2>No jogo</h2><p>Imagem, quadros e o arquivo de configuração do jogo.</p></div>
+    <div class="grade g-2">
+      <div class="vidro" id="b-fb"><div class="rotulo">Frame Boost</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
+      <div class="vidro"><div class="titulo-sec"><h2>Driver da placa de vídeo</h2><span class="nota" id="b-drv-nota"></span></div><div id="b-drv"><p class="nota">Lendo o driver…</p></div></div>
+    </div>
+    <div id="b-comparar"></div>
+    <div class="grade g-2-iguais">
+      <div class="vidro" id="b-liso"><div class="rotulo">Jogo liso</div><p class="nota" style="margin-top:8px">Abra o jogo para medir.</p></div>
+      <div class="vidro" id="b-config"><div class="rotulo">Configuração do jogo</div><p class="nota" style="margin-top:8px">Procurando…</p></div>
+    </div>
+    <div class="secao"><h2>Sistema</h2><p>Processador, memória, entrada e o que roda por trás.</p></div>
     <div class="grade g-2-iguais">
       <div class="vidro" id="b-energia"><div class="rotulo">Energia de jogo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
-      <div class="vidro" id="b-liso"><div class="rotulo">Jogo liso</div><p class="nota" style="margin-top:8px">Abra o jogo para medir.</p></div>
-    </div>
-    <div class="vidro" id="b-mem" style="margin-top:16px"><div class="rotulo">Memória para o jogo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
-    <div class="grade g-2-iguais">
+      <div class="vidro" id="b-mem"><div class="rotulo">Memória para o jogo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
       <div class="vidro" id="b-entrada"><div class="rotulo">Mouse e teclado</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
       <div class="vidro" id="b-leve"><div class="rotulo">Windows mais leve</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
     </div>
-    <div class="vidro" id="b-lixo" style="margin-top:16px"><div class="rotulo">Remoção de lixo</div><p class="nota" style="margin-top:8px">Medindo…</p></div>
-    <div class="grade g-2">
-      <div class="vidro"><div class="titulo-sec"><h2>Driver da placa de vídeo</h2><span class="nota" id="b-drv-nota"></span></div><div id="b-drv"><p class="nota">Lendo o driver…</p></div></div>
-      <div class="vidro" id="b-fb"><div class="rotulo">Frame Boost</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
-    </div>
-    <div id="b-comparar"></div>
-    <div class="vidro" id="b-config" style="margin-top:16px"><div class="rotulo">Configuração do jogo</div><p class="nota" style="margin-top:8px">Procurando…</p></div>`;
+    <div class="vidro" id="b-lixo" style="margin-top:16px"><div class="rotulo">Remoção de lixo</div><p class="nota" style="margin-top:8px">Medindo…</p></div>`;
 
   $("#b-otimizar").addEventListener("click", () => {
     ir("inicio");
@@ -971,12 +969,17 @@ function resumoDaReceita(r: ReceitaDoTurbo): string {
 }
 
 /** O botão que mede o jogo, escolhe pelo gargalo e aplica. */
+/** O topo do cartão do Turbo: o ícone, o nome, a promessa em uma linha e, à direita, o estado. */
+function tituloDoTurbo(estadoAgora: string): string {
+  return `<div class="titulo-sec"><div class="heroi-t"><svg viewBox="0 0 24 24" aria-hidden="true">${svgDoca.turbo}</svg><div><h2>Turbo</h2><p class="nota">Mede o jogo, liga só o que ajuda nele e prova o ganho.</p></div></div>${estadoAgora}</div>`;
+}
+
 async function cartaoTurbo(dado?: PainelTurbo) {
   const caixa = document.querySelector<HTMLElement>("#b-turbo");
   if (!caixa) return;
   const p = dado ?? (await ponte.turbo().catch(() => null));
   if (!p) {
-    caixa.innerHTML = `<div class="rotulo">Turbo</div><p class="nota" style="margin-top:8px">Não consegui ler o Turbo.</p>`;
+    caixa.innerHTML = `${tituloDoTurbo("")}<p class="nota" style="margin-top:8px">Não consegui ler o Turbo.</p>`;
     return;
   }
   const lembrado = p.perfil;
@@ -997,8 +1000,8 @@ async function cartaoTurbo(dado?: PainelTurbo) {
           }${p.competitivo ? " Jogo competitivo: sem geração de quadros, para não acrescentar atraso." : ""}</p>
            <div class="acoes" style="margin-top:14px">${
              lembrado
-               ? `${reprovada ? "" : `<button class="botao prim" id="tb-lembrado">Turbo</button>`}<button class="botao ${reprovada ? "prim" : ""}" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
-               : `<button class="botao prim" id="tb-medir">Turbo</button>`
+               ? `${reprovada ? "" : `<button class="botao prim" id="tb-lembrado">Ligar o Turbo</button>`}<button class="botao ${reprovada ? "prim" : ""}" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
+               : `<button class="botao prim" id="tb-medir">Medir e ligar</button>`
            }</div>`;
   // A prova A-B: o único número do Turbo que vale como prova (margem de erro, rodadas alternadas) e que se compartilha.
   const pv = !p.provando ? p.prova : null;
@@ -1027,7 +1030,7 @@ async function cartaoTurbo(dado?: PainelTurbo) {
        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="selo ${r.ganho_pct > 0 ? "medido" : ""}">${r.ganho_pct > 0 ? "+" : ""}${numero(r.ganho_pct, 1)}%</span>${r.fps_na_tela ? `<span class="selo ${r.na_tela_medido ? "medido" : "estimado"}">${numero(r.fps_na_tela)} na tela</span>` : ""}${r.escala ? `<span class="selo">escala ${esc(NOMES_DA_ESCALA[r.escala])}</span>` : ""}</div>
        <p class="nota" style="margin-top:8px">Comparação simples: o antes são os 10 s da medida; o depois, a média de ${numero(r.minutos, 1)} min de jogo. Cenas diferentes, então não é prova A-B.</p>`
     : "";
-  caixa.innerHTML = `<div class="titulo-sec"><div class="rotulo">Turbo</div>${p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : ""}</div>
+  caixa.innerHTML = `${tituloDoTurbo(p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : "")}
     ${provaHtml}${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
@@ -1549,7 +1552,8 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   } else if (doOtimiza && soEscala) {
     linha = "Só escala: o jogo renderiza menor e o Otimiza amplia. O FPS a mais é do próprio jogo, sem o atraso da geração. O número aparece medido ao ligar.";
   } else if (est) {
-    numero_ = `${numero(est.faixa.minimo)}–${numero(est.faixa.maximo)}`;
+    const [de, ate] = [numero(est.faixa.minimo), numero(est.faixa.maximo)];
+    numero_ = de === ate ? de : `${de}–${ate}`;
     rotulo = livre ? (mult === 0 ? "FPS no Auto" : `FPS com ${mult}×`) : mult === 0 ? "FPS na tela no Auto" : `FPS na tela com ${mult}×`;
     selos = `<span class="selo estimado">estimado</span>`;
     linha = "Pelo último FPS nativo medido deste jogo. O número de verdade aparece medido quando ligar.";
