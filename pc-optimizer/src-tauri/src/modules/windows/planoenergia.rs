@@ -336,7 +336,7 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_PROCESSADOR,
         ajuste: PERFEPP,
         classe: Classe::Avancada,
-        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. É este número que comanda a frequência nos processadores modernos, e não o \
+        porque: "Em desktop o plano aplica (na tomada); em notebook, quem decide é o motor da aba Energia, medindo. É este número que comanda a frequência nos processadores modernos, e não o \
                  estado mínimo acima. O Windows o define como \"o quanto o processador deve \
                  favorecer ECONOMIA sobre desempenho\", de 0 a 100 por cento — então 0 é \
                  desempenho total. Na tomada vai a 0; na bateria fica como o fabricante \
@@ -357,7 +357,7 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_PROCESSADOR,
         ajuste: CPMINCORES,
         classe: Classe::Avancada,
-        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. Manter 100% dos núcleos acordados evita o atraso de desestacionar um núcleo \
+        porque: "Em desktop sem núcleos P/E o plano aplica; em notebook e em Intel híbrido, quem decide é o motor da aba Energia. Manter 100% dos núcleos acordados evita o atraso de desestacionar um núcleo \
                  quando a carga chega de repente. Não desativa proteção nenhuma: o núcleo \
                  continua com todos os estados de economia dentro dele.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 100),
@@ -370,7 +370,7 @@ pub static AJUSTES: &[Ajuste] = &[
         // O Windows documenta 2 = Aggressive, "Always select the highest possible target frequency above nominal" (0
         // Disabled, 1 Enabled, 3 Efficient Enabled, 4 Efficient Aggressive, 5 Aggressive At Guaranteed, 6 Efficient
         // Aggressive At Guaranteed). NÃO desliga proteção térmica: muda o que o Windows PEDE.
-        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
+        porque: "Em desktop sem núcleos P/E o plano aplica; em notebook e em Intel híbrido, quem decide é o motor da aba Energia. O Windows chama o valor 2 de \"agressivo\" e o define como sempre escolher a \
                  maior frequência possível acima da nominal. É o que mantém o turbo ligado no \
                  jogo em vez de ele subir e descer. Os limites de temperatura e de potência \
                  do processador continuam valendo por cima disso.",
@@ -381,7 +381,7 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_PCIEXPRESS,
         ajuste: ASPM,
         classe: Classe::Avancada,
-        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. O ASPM adormece a via até a placa de vídeo, e acordá-la custa em cada \
+        porque: "O plano aplica na tomada em toda máquina; num desktop, também no nobreak. O ASPM adormece a via até a placa de vídeo, e acordá-la custa em cada \
                  transferência. Desligado na tomada, o caminho até a GPU fica acordado.",
         alvo: |m| tomada_sempre_bateria_se_desktop(m, 0),
     },
@@ -400,7 +400,7 @@ pub static AJUSTES: &[Ajuste] = &[
         subgrupo: SUB_USB,
         ajuste: USBSELECTIVESUSPEND,
         classe: Classe::Avancada,
-        porque: "Substituído pelo motor de energia adaptativo (aba Energia): este número só é certo quando medido nesta máquina, e o plano não o aplica mais sozinho. É o que faz mouse e teclado perderem o primeiro movimento depois de um tempo \
+        porque: "O plano aplica na tomada em toda máquina. É o que faz mouse e teclado perderem o primeiro movimento depois de um tempo \
                  parados. Na bateria continua ligado, porque ali ele economiza de verdade.",
         alvo: |_| Alvo::so_na_tomada(0),
     },
@@ -449,6 +449,38 @@ pub static AJUSTES: &[Ajuste] = &[
 
 pub fn entra_por_padrao(classe: Classe) -> bool {
     matches!(classe, Classe::Segura | Classe::Recomendada)
+}
+
+/// Pura: o que o plano OTIMIZA grava NESTA máquina (3.5). As seguras sempre. Das avançadas, as que pesam no jogo entram
+/// onde o motivo de terem saído não existe: a lista fixa antiga esquentava Ryzen de notebook e tirava do Windows a
+/// escolha entre núcleos P e E (`motorenergia`). Então:
+/// - desktop sem núcleos P/E: EPP em desempenho total, todos os núcleos acordados, boost agressivo, ASPM e USB;
+/// - Intel híbrido: EPP, ASPM e USB, sem estacionamento nem boost (são eles que decidem P/E);
+/// - notebook: só ASPM e USB, e só na tomada (o alvo deles); o resto fica com o motor, medindo.
+///
+/// O estado mínimo do processador fica sempre com o motor (é o que mais esquenta), e a suspensão por inatividade nunca
+/// entra sozinha (muda o que a pessoa escolheu).
+pub fn entra_no_plano(a: &Ajuste, m: &Maquina, hibrido: bool) -> bool {
+    if entra_por_padrao(a.classe) {
+        return true;
+    }
+    match a.ajuste {
+        ASPM | USBSELECTIVESUSPEND => true,
+        PERFEPP => !m.notebook,
+        CPMINCORES | PERFBOOSTMODE => !m.notebook && !hibrido,
+        _ => false,
+    }
+}
+
+/// Pura: a frase da tela para um ajuste que `entra_no_plano` deixou de fora, com o motivo DESTA máquina.
+pub fn por_que_ficou_de_fora(a: &Ajuste, m: &Maquina, hibrido: bool) -> &'static str {
+    match a.ajuste {
+        PROCTHROTTLEMIN => "Fica com o motor de energia (aba Energia): é o ajuste que mais esquenta, e o número certo sai de medir esta máquina.",
+        STANDBYIDLE => "Fora do conjunto padrão: muda comportamento que a pessoa escolheu.",
+        _ if m.notebook => "Notebook: fica com o motor de energia (aba Energia), que mede antes de mudar. Fixo, ele esquentava notebook e tirava desempenho no calor.",
+        _ if hibrido => "Processador com núcleos P e E: este ajuste decide qual núcleo trabalha, e a escolha fica com o Windows.",
+        _ => "Fora do conjunto padrão: muda comportamento que a pessoa escolheu.",
+    }
 }
 
 /// Só o GUID e o nome entre parênteses são estáveis; o resto é traduzido.
@@ -1020,10 +1052,15 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
         guid, plano_existia
     ));
 
+    // Intel com núcleos P e E: o estacionamento e o boost ficam com o Windows (`entra_no_plano`).
+    let hibrido = super::motorenergia::classificar_arquitetura(&super::motorenergia_maquina::ler_cpuid())
+        == super::motorenergia::Arquitetura::IntelHibrida;
+    crate::utils::Logger::info(&format!("plano OTIMIZA: núcleos P/E={}", hibrido));
+
     let mut ajustes = Vec::new();
 
     for a in AJUSTES {
-        if !entra_por_padrao(a.classe) {
+        if !entra_no_plano(a, &maquina, hibrido) {
             ajustes.push(ResultadoDoAjuste {
                 execucoes: Vec::new(),
                 nome: a.nome.to_string(),
@@ -1039,8 +1076,7 @@ pub fn montar(simulacao: bool) -> Result<RelatorioDoPlano, String> {
                 ac_depois: None,
                 dc_depois: None,
                 status: StatusDoAjuste::Pulado,
-                mensagem: "Fora do conjunto padrão: muda comportamento que a pessoa escolheu."
-                    .to_string(),
+                mensagem: por_que_ficou_de_fora(a, &maquina, hibrido).to_string(),
             });
             continue;
         }
@@ -1552,6 +1588,59 @@ mod tests {
                     a.nome
                 );
             }
+        }
+    }
+
+    fn no_plano(m: &Maquina, hibrido: bool) -> Vec<&'static str> {
+        AJUSTES
+            .iter()
+            .filter(|a| entra_no_plano(a, m, hibrido))
+            .map(|a| a.ajuste)
+            .collect()
+    }
+
+    #[test]
+    fn desktop_sem_nucleos_p_e_leva_o_pacote_que_pesa_no_jogo() {
+        let d = no_plano(&maquina_de_teste(false), false);
+        for ajuste in [PERFEPP, CPMINCORES, PERFBOOSTMODE, ASPM, USBSELECTIVESUSPEND] {
+            assert!(d.contains(&ajuste), "{} ficou de fora num desktop", ajuste);
+        }
+    }
+
+    #[test]
+    fn intel_hibrido_nao_mexe_no_que_decide_p_e() {
+        let h = no_plano(&maquina_de_teste(false), true);
+        assert!(h.contains(&PERFEPP) && h.contains(&ASPM));
+        assert!(!h.contains(&CPMINCORES), "estacionamento decide P/E");
+        assert!(!h.contains(&PERFBOOSTMODE), "boost decide P/E");
+    }
+
+    #[test]
+    fn notebook_so_leva_o_que_e_seguro_na_tomada() {
+        let n = no_plano(&maquina_de_teste(true), false);
+        for ajuste in [PERFEPP, CPMINCORES, PERFBOOSTMODE] {
+            assert!(!n.contains(&ajuste), "{} esquenta notebook: fica com o motor", ajuste);
+        }
+        assert!(n.contains(&ASPM) && n.contains(&USBSELECTIVESUSPEND));
+        for a in AJUSTES.iter().filter(|a| a.ajuste == ASPM || a.ajuste == USBSELECTIVESUSPEND) {
+            assert_eq!((a.alvo)(&maquina_de_teste(true)).dc, None, "{}: na bateria fica como estava", a.nome);
+        }
+    }
+
+    #[test]
+    fn quem_fica_de_fora_diz_o_motivo_desta_maquina() {
+        let epp = AJUSTES.iter().find(|a| a.ajuste == PERFEPP).unwrap();
+        assert!(por_que_ficou_de_fora(epp, &maquina_de_teste(true), false).starts_with("Notebook"));
+        let nucleos = AJUSTES.iter().find(|a| a.ajuste == CPMINCORES).unwrap();
+        assert!(por_que_ficou_de_fora(nucleos, &maquina_de_teste(false), true).contains("núcleos P e E"));
+    }
+
+    #[test]
+    fn o_estado_minimo_e_a_suspensao_nunca_entram_sozinhos() {
+        for (m, hibrido) in [(false, false), (false, true), (true, false)] {
+            let lista = no_plano(&maquina_de_teste(m), hibrido);
+            assert!(!lista.contains(&PROCTHROTTLEMIN), "o mínimo é o que mais esquenta");
+            assert!(!lista.contains(&STANDBYIDLE));
         }
     }
 

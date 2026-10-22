@@ -5289,7 +5289,9 @@ async function runBatch(
   command: string,
   progress: string,
   only?: string[],
-  essenciaisConferidos = false
+  essenciaisConferidos = false,
+  /** O nível escolhido: o lote leva também o que ele acrescenta (o Completo, os "só se pedir" dele). */
+  nivel?: string
 ) {
   // Antes de tudo: senão o que já estava quebrado passa a parecer efeito da otimização.
   if (command === "optimize_now" && !essenciaisConferidos) {
@@ -5317,7 +5319,7 @@ async function runBatch(
   try {
     const outcomes = await invoke<OptimizationOutcome[]>(
       command,
-      only ? { only } : undefined
+      only || nivel ? { only: only ?? null, nivel: nivel ?? null } : undefined
     );
 
     if (outcomes.length === 0) {
@@ -8714,7 +8716,7 @@ function wireControls() {
     // A trava vale nos dois lados: se o botão aparecer por outro caminho no Experimental, recusa.
     if (!nivel || !nivel.aplica_de_uma_vez) return;
 
-    runBatch("optimize_now", `Aplicando o nível ${nivel.nome}…`, nivel.itens);
+    runBatch("optimize_now", `Aplicando o nível ${nivel.nome}…`, nivel.itens, false, nivel.id);
   });
 
   element("profile-chips").addEventListener("click", (event) => {
