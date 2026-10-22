@@ -2355,6 +2355,72 @@ mod qualidade {
         assert_eq!(dentro, igual_ao_sem_barra, "a área do encaixe é a mesma imagem");
     }
 
+    /// O CUSTO DA ESCALA NA PLACA. A escala só vale se o ampliador custar bem menos que o FPS que ela devolve, e em
+    /// placa integrada é onde isso aperta. Tempo de placa (carimbos, `Cronometro`) do quadro composto e ampliado para
+    /// 1920×1080 a partir do nível Qualidade (1280×720) e do Desempenho (960×540), contra o mesmo quadro composto direto
+    /// em 1920×1080. Só mede e imprime: o número depende da placa.
+    /// `cargo test --lib -- --ignored custo_da_escala_na_placa --nocapture`
+    #[test]
+    #[ignore]
+    fn custo_da_escala_na_placa() {
+        const VOLTAS: u64 = 300;
+        let (nl, na) = (1920u32, 1080u32);
+        let fabrica: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.unwrap();
+        let adaptador = unsafe { fabrica.EnumAdapters1(0) }.unwrap();
+        let nome = unsafe { adaptador.GetDesc1() }
+            .map(|d| String::from_utf16_lossy(&d.Description).trim_end_matches('\0').to_string())
+            .unwrap_or_default();
+
+        let medir = |bl: u32, ba: u32, ampliar: bool| -> f64 {
+            let mut gpu = Gpu::novo(&adaptador).unwrap();
+            gpu.sem_geracao = true;
+            gpu.preparar(bl, ba, false, Giro::Nenhum).unwrap();
+            if ampliar {
+                gpu.preparar_ampliacao(nl, na).unwrap();
+            }
+            let entrada = textura(&gpu, bl, ba, &cena_sintetica(bl, ba));
+            let area = Retangulo { x: 0, y: 0, largura: bl as i32, altura: ba as i32 };
+            gpu.receber(&entrada, area);
+            let (_saida, destino) = alvo_bgra(&gpu, nl, na);
+            let tela = Retangulo { x: 0, y: 0, largura: nl as i32, altura: na as i32 };
+            let mut cron = Cronometro::novo(&gpu).expect("a placa tem carimbos de tempo");
+            let (mut soma, mut medidas) = (0.0, 0u64);
+            // Aquece (compila os sombreadores, sobe o relógio da placa) e mede.
+            for volta in 0..VOLTAS + 30 {
+                if volta < 30 {
+                    gpu.compor_ampliado(&destino, tela, None);
+                    continue;
+                }
+                cron.medir(&gpu, || gpu.compor_ampliado(&destino, tela, None));
+                unsafe { gpu.ctx.Flush() };
+                cron.colher(&gpu);
+                let (s, m) = cron.tirar();
+                soma += s;
+                medidas += m;
+            }
+            while medidas < VOLTAS && cron.pendentes.len() > 0 {
+                unsafe { gpu.ctx.Flush() };
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                cron.colher(&gpu);
+                let (s, m) = cron.tirar();
+                soma += s;
+                medidas += m;
+            }
+            assert!(medidas > 0, "nenhuma medida voltou da placa");
+            soma / medidas as f64
+        };
+
+        let direto = medir(nl, na, false);
+        let qualidade = medir(1280, 720, true);
+        let desempenho = medir(960, 540, true);
+        println!(
+            "{}: compor 1920x1080 direto {:.3} ms · ampliado de 1280x720 (Qualidade) {:.3} ms · de 960x540 \
+             (Desempenho) {:.3} ms por quadro",
+            nome, direto, qualidade, desempenho
+        );
+        assert!(qualidade.is_finite() && desempenho.is_finite());
+    }
+
     /// O CURSOR AMPLIADO NA PLACA. Uma forma 4×4 (metade de cima vermelha opaca, de baixo transparente) desenhada 8×
     /// maior por cima da imagem cinza: o vermelho cobre, o transparente deixa a imagem como estava.
     /// `cargo test --lib -- --ignored cursor_na_placa --nocapture`

@@ -441,6 +441,22 @@ tirava do Windows a escolha P/E nos Intel híbridos.
 5. **Laboratório** (10.6 #6): A-B-A-B e as metas da seção 2.6, com os números que derem.
 6. **Ritual**: subir a versão para 3.5.0 nas quatro declarações e rodar o `verificador-de-publicacao`.
 
+## 11.2 Medido no notebook (Intel UHD, i5-1334U, 22/10/2026)
+
+Os testes de placa que não pedem jogo, rodados na placa integrada, a pior para a escala:
+
+| Teste | Resultado |
+|---|---|
+| `escala_na_placa` | ok · 640×360 → 960×540: FSR SSIM 0,990 / PSNR 29,1 dB contra bilinear SSIM 0,953 / PSNR 23,5 dB |
+| `cursor_na_placa` | ok |
+| `custo_da_escala_na_placa` (novo) | compor 1920×1080 direto 0,3–0,5 ms · ampliado de 1280×720 (Qualidade) 2,4–2,7 ms · de 960×540 (Desempenho) 2,4 ms por quadro (duas rodadas) |
+
+Leitura: o custo vem da saída em 1080p (EASU + RCAS), não do nível; na placa integrada são cerca de 2 ms a mais por
+quadro, dividindo a placa com o jogo. Num jogo a 60 fps (16,7 ms), o ganho estimado do Qualidade (expoente 0,7: ~1,8×
+o FPS) ainda sobra depois desses 2 ms, mas é estimativa: o número de verdade é o da prova A-B do Turbo num jogo real,
+que continua no item 3 de 11.1. Numa placa dedicada o custo deve ser uma fração disso (a medir no PC de casa com o
+mesmo teste).
+
 ---
 
 ## 11. Riscos
@@ -449,7 +465,7 @@ tirava do Windows a escolha P/E nos Intel híbridos.
 |---|---|---|
 | Jogo recusa janela pequena | escala não liga nele | orientar a resolução no menu; perfil por jogo lembra |
 | Cursor em jogo de mouse | jogo inutilizável | cursor desenhado é parte do M2, não extra |
-| Custo do ampliador em placa integrada | perde o que ganhou | "Nítido leve" + guarda que já desliga quando o jogo perde FPS |
+| Custo do ampliador em placa integrada | perde o que ganhou | Medido na Intel UHD do i5-1334U (11.2): ~2,4–2,7 ms por quadro para 1080p, igual nos dois níveis; a guarda já desliga quando o jogo perde FPS |
 | Anticheat estranhar a sobreposição | ban | nada novo dentro do jogo; mesma janela de hoje, já medida |
 | Prometer número que não vem | cliente sente-se enganado | metas internas; a tela só mostra medido |
 | Atraso da geração | jogador competitivo reclama | Turbo competitivo = só escala + teto, sem geração |
