@@ -36,7 +36,8 @@ impl Nivel {
                 "Tudo do Seguro, mais os ajustes dos pacotes de otimização que são documentados \
                  e voltam atrás: o jogo com prioridade no processador e no agendador de \
                  multimídia, o timer fino valendo para o sistema todo, telemetria, aplicativos \
-                 em segundo plano, Edge, widgets e manutenção automática parados, e o Windows \
+                 em segundo plano, Edge, widgets e manutenção automática parados, a placa de \
+                 rede sem economia de energia (o pico de ping de quando ela acorda), e o Windows \
                  respondendo sem as esperas de fábrica. Nada que possa custar quadro e nada que \
                  tire uma função do Windows. É o padrão do \"Otimizar agora\"."
             }
@@ -94,6 +95,9 @@ pub const NO_COMPLETO: &[&str] = &[
     "windows_responde_rapido",
     "start_menu_web_search_off",
     "disable_startup_delay",
+    // Rede: a placa sem economia de energia (a placa que dorme atrasa o primeiro pacote: pico de ping no meio da
+    // partida). O resto dos pacotes de rede não muda o ping (TCP), ou pode custar FPS (bufferbloat, no Experimental).
+    "nic_power_saving_off",
     // Estabilidade e o driver que a pessoa escolheu.
     "sem_inicializacao_rapida",
     "drivers_fora_do_windows_update",
