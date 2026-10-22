@@ -4351,6 +4351,7 @@ pub async fn optimize_now(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     only: Option<Vec<String>>,
+    nivel: Option<crate::modules::windows::niveis::Nivel>,
 ) -> Result<Vec<OptimizationOutcome>, String> {
     crate::modules::licenca::exigir()?;
 
@@ -4393,6 +4394,7 @@ pub async fn optimize_now(
         // Cada passo emitido na hora, não uma barra de progresso.
         let resultados = crate::modules::windows::WindowsOptimizer::new().apply_selection(
             only.as_deref(),
+            nivel,
             &mut log,
             |step| {
                 let _ = app.emit("optimize:step", step);

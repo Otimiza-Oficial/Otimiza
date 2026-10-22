@@ -23,6 +23,8 @@ import {
   type PainelTurbo,
   type ReceitaDoTurbo,
   type PassoDaProvaDoTurbo,
+  type NivelDoOtimizar,
+  type NivelNaTela,
   type PlanoJogoLiso,
   type FovFivem,
   type MemoriaParaOJogo,
@@ -664,6 +666,48 @@ function mostrarPassos(linhas: { texto: string; classe?: string }[]) {
   caixa.scrollTop = caixa.scrollHeight;
 }
 
+const CHAVE_NIVEL = "otimiza-nivel";
+
+const NOMES_DO_NIVEL: Record<NivelDoOtimizar, string> = { Seguro: "Seguro", Competitivo: "Completo" };
+
+/** O nível do "Otimizar agora": o Completo é o padrão desde a 3.5; o Seguro é o de antes. */
+function nivelDoOtimizar(): NivelDoOtimizar {
+  try {
+    return localStorage.getItem(CHAVE_NIVEL) === "Seguro" ? "Seguro" : "Competitivo";
+  } catch {
+    return "Competitivo";
+  }
+}
+
+function gravarNivel(n: NivelDoOtimizar) {
+  try {
+    localStorage.setItem(CHAVE_NIVEL, n);
+  } catch {
+    // Vale nesta sessão.
+  }
+}
+
+/** A escolha do nível no cartão "Máximo FPS", com a promessa de cada um vinda do catálogo. */
+async function escolhaDoNivel() {
+  const caixa = document.querySelector<HTMLElement>("#b-nivel");
+  if (!caixa) return;
+  const niveis = await ponte.niveis().catch(() => [] as NivelNaTela[]);
+  const desenhar = () => {
+    const atual = nivelDoOtimizar();
+    const n = niveis.find((x) => x.id === atual);
+    caixa.innerHTML = `<div class="seg" style="margin-top:10px">${(["Seguro", "Competitivo"] as NivelDoOtimizar[])
+      .map((id) => `<button aria-pressed="${id === atual}" data-nivel="${id}">${NOMES_DO_NIVEL[id]}${niveis.length ? ` · ${niveis.find((x) => x.id === id)?.itens.length ?? 0}` : ""}</button>`)
+      .join("")}</div>${n ? `<span style="display:block;margin-top:8px">${esc(n.promessa)}</span>` : ""}`;
+    $$<HTMLButtonElement>("#b-nivel [data-nivel]").forEach((b) =>
+      b.addEventListener("click", () => {
+        gravarNivel(b.dataset.nivel as NivelDoOtimizar);
+        desenhar();
+      })
+    );
+  };
+  desenhar();
+}
+
 async function otimizar() {
   if (estado.otimizando) return;
   estado.otimizando = true;
@@ -677,9 +721,16 @@ async function otimizar() {
     mostrarPassos(linhas.slice(-9));
   });
   try {
-    const r = await ponte.otimizar();
-    const aplicados = r.filter((x) => x.success && x.applied).length;
-    linhas.push({ texto: aplicados ? `${aplicados} ajuste(s) aplicados. Jogue alguns minutos: o Otimiza mede o antes e o depois.` : "Nada a mudar: o que é compatível já estava certo.", classe: "feito" });
+    const nivel = nivelDoOtimizar();
+    const r = await ponte.otimizar(nivel);
+    const aplicados = r.filter((x) => x.success && x.applied);
+    const reiniciar = aplicados.filter((x) => x.requires_restart).length;
+    linhas.push({
+      texto: aplicados.length
+        ? `${aplicados.length} ajuste(s) aplicados no nível ${NOMES_DO_NIVEL[nivel]}.${reiniciar ? ` ${reiniciar} só valem depois de reiniciar o PC.` : ""} Jogue alguns minutos: o Otimiza mede o antes e o depois.`
+        : "Nada a mudar: o que é compatível já estava certo.",
+      classe: "feito",
+    });
   } catch (e) {
     linhas.push({ texto: String(e), classe: "falhou" });
   } finally {
@@ -800,7 +851,7 @@ async function telaBoost() {
       <span class="pilula">${esc(estado.hw?.placa.nome ?? "Placa de vídeo")}</span></div>
     <div class="vidro" id="b-turbo" style="margin-bottom:16px"><div class="rotulo">Turbo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
     <div class="modos">
-      <div class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Os ajustes do Windows e do driver que têm evidência de ganho, verificados neste PC.</span><button class="botao prim" id="b-otimizar">Otimizar agora</button></div>
+      <div class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Os ajustes do Windows, do registro e do plano de energia, conferidos neste PC. Tudo volta atrás num clique.<span id="b-nivel"></span></span><button class="botao prim" id="b-otimizar">Otimizar agora</button></div>
       <div class="modo"><svg viewBox="0 0 24 24"><path d="M4 7.5h9M17.5 7.5H20M4 16.5h2.5M11 16.5h9"/><circle cx="15.2" cy="7.5" r="2.3"/><circle cx="8.8" cy="16.5" r="2.3"/></svg><b>Personalizado</b><span>Cada ajuste, um por um, com o que ele muda e o valor de antes.</span><button class="botao" id="b-classico">Abrir</button></div>
     </div>
     <div class="grade g-2-iguais">
@@ -832,6 +883,7 @@ async function telaBoost() {
   void cartaoLixo();
   void cartaoJogoLiso();
   void cartaoTurbo();
+  void escolhaDoNivel();
   void painelFrameBoost();
   void cartaoConfigDosJogos();
   await driver(fab);

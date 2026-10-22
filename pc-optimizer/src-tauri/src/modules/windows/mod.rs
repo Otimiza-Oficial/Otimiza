@@ -1481,6 +1481,7 @@ impl WindowsOptimizer {
     pub fn apply_selection<F>(
         &self,
         only: Option<&[String]>,
+        nivel: Option<niveis::Nivel>,
         log: &mut ChangeLog,
         mut on_step: F,
     ) -> Vec<OptimizationOutcome>
@@ -1493,7 +1494,11 @@ impl WindowsOptimizer {
                 Some(ids) => ids.iter().any(|id| id == spec.id),
                 None => true,
             })
-            .filter(|spec| catalog::entra_no_lote_se(spec, |c| condicao_atendida(c) == Some(true)))
+            // O que entra sozinho, mais o que o nível pedido acrescenta (o Completo, a partir da 3.5).
+            .filter(|spec| {
+                catalog::entra_no_lote_se(spec, |c| condicao_atendida(c) == Some(true))
+                    || nivel.is_some_and(|n| niveis::acrescenta_ao_lote(spec, n))
+            })
             // SÓ `Available`: o botão que ninguém revisa leva só o que o produto CONFERIU que falta. `Unknown` fica na lista
             // para a pessoa decidir.
             .filter(|spec| self.inspect(spec, log) == OptimizationState::Available)

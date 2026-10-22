@@ -414,6 +414,22 @@ continua no `configjogo.rs`.
 | 8 | testes | ✅ 7 novos, inclusive uma prova inteira simulada (8 rodadas → Ganhou → texto do Turbo) |
 | 9 | **PC de casa** | a prova de verdade num jogo preso na placa (escala) e num preso no processador (energia) |
 
+### 10.8 O "Otimizar agora" e o plano de energia (a pedido do dono: mexiam em quase nada)
+
+**Diagnóstico.** O botão aplicava uns 5 itens: 47 dos 65 do catálogo estavam como "só se pedir", inclusive os dos
+pacotes que deram FPS no FiveM do dono. E o plano OTIMIZA quase não diferia do Equilibrado: EPP, estacionamento,
+boost, ASPM e USB tinham passado para o motor adaptativo, porque a lista fixa antiga esquentava Ryzen de notebook e
+tirava do Windows a escolha P/E nos Intel híbridos.
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `planoenergia::entra_no_plano` | ✅ o plano decide pela máquina. **Desktop sem P/E**: EPP 0, núcleos acordados, boost agressivo, ASPM e USB. **Intel híbrido**: EPP, ASPM e USB (sem estacionamento nem boost). **Notebook**: só ASPM e USB, na tomada. O estado mínimo fica sempre com o motor (é o que mais esquenta) e a suspensão por inatividade nunca entra. Cada ajuste de fora diz o motivo desta máquina (`por_que_ficou_de_fora`) |
+| 2 | simulação no notebook | ✅ i5-1334U (13ª geração, P/E, notebook): núcleos P/E detectados; ASPM e USB "mudariam"; EPP, estacionamento e boost pulados com o motivo certo |
+| 3 | `niveis::NO_COMPLETO` | ✅ o nível do meio vira **Completo** e acrescenta 21 itens dos pacotes: prioridade do jogo (SystemResponsiveness, prioridade de primeiro plano, MMCSS), timer global, telemetria, apps em segundo plano, Edge, widgets, Store, Mapas, relatório de erros, manutenção automática, serviços agrupados, SysMain (só SSD), menu e boot sem esperas, Inicialização Rápida, drivers fora do Windows Update e Assistência Remota. Regra com trava em teste: documentado, volta atrás, sem custo de FPS, sem troca de segurança e **sem tirar função do Windows** (Bluetooth, impressora, Hyper-V, Xbox, notificações e hibernação ficam de fora) |
+| 4 | lote | ✅ `apply_selection` recebe o nível e leva o que ele acrescenta. Conserta também o console clássico: aplicar o nível do meio nunca aplicava o que ele acrescentava |
+| 5 | tela | ✅ "Máximo FPS" com **Seguro · Completo** e a promessa de cada um; o Completo é o padrão; o resultado diz quantos ajustes só valem depois de reiniciar |
+| 6 | **PC de casa** | aplicar o Completo e o plano novo num desktop e rodar a prova do "Otimizar" (`provar_o_otimizar`); conferir que nenhum item pede o que a máquina não tem |
+
 ## 11.1 Antes de publicar a 3.5 (tudo o que ficou para o PC de casa)
 
 1. **Escala ao vivo** (10.1 #9, 10.2 #8): jogo de teste e 3 jogos reais; janela redimensionada e devolvida; cursor e

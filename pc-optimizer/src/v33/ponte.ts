@@ -165,6 +165,20 @@ export interface Resultado {
   success: boolean;
   applied: boolean;
   message: string;
+  requires_restart?: boolean;
+}
+
+/** Os níveis do "Otimizar agora" que vão de uma vez (o Experimental é um grupo por vez, medindo). */
+export type NivelDoOtimizar = "Seguro" | "Competitivo";
+
+export interface NivelNaTela {
+  id: string;
+  nome: string;
+  promessa: string;
+  exigencia: string;
+  itens: string[];
+  acrescenta: string[];
+  aplica_de_uma_vez: boolean;
 }
 
 export type SituacaoDoGerador = "Parado" | "ProcurandoJanela" | "Gerando" | "SemQuadros" | "Erro" | "DesligadoPorPerdaDeFps";
@@ -489,7 +503,9 @@ export const ponte = {
   feedback: () => invoke<EstadoDoFeedback>("feedback_estado"),
   feedbackVerificar: () => invoke<EstadoDoFeedback>("feedback_verificar"),
   licenca: () => invoke<Licenca>("licenca_estado"),
-  otimizar: () => invoke<Resultado[]>("optimize_now", { only: null }),
+  /** O "Otimizar agora" no nível escolhido (o Completo é o padrão desde a 3.5). */
+  otimizar: (nivel: NivelDoOtimizar = "Competitivo") => invoke<Resultado[]>("optimize_now", { only: null, nivel }),
+  niveis: () => invoke<NivelNaTela[]>("niveis_de_otimizacao"),
   driverAmd: () => invoke<PainelAmd>("driver_amd"),
   ajusteAmd: (opcao: string) => invoke<Resultado>("aplicar_ajuste_amd", { opcao }),
   driverIntel: () => invoke<PainelIntel>("driver_intel"),
