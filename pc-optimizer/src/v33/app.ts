@@ -19,6 +19,9 @@ import {
   type ModoDoOverlay,
   type PainelFrameBoost,
   type NivelDeEscala,
+  type Gargalo,
+  type PainelTurbo,
+  type ReceitaDoTurbo,
   type PlanoJogoLiso,
   type FovFivem,
   type MemoriaParaOJogo,
@@ -766,6 +769,7 @@ async function telaBoost() {
   t.innerHTML = `
     <div class="cabeca"><div><h1><span class="barras"></span>Boost</h1><p>Só entra o que é compatível com o seu PC${estado.jogo ? " e com o " + esc(estado.jogo.nome) : ""}. Tudo se desfaz em um clique.</p></div>
       <span class="pilula">${esc(estado.hw?.placa.nome ?? "Placa de vídeo")}</span></div>
+    <div class="vidro" id="b-turbo" style="margin-bottom:16px"><div class="rotulo">Turbo</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
     <div class="modos">
       <div class="modo" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M13.2 3 5.8 13.2h5.4L10.4 21l7.6-10.4h-5.5z"/></svg><b>Máximo FPS</b><span>Os ajustes do Windows e do driver que têm evidência de ganho, verificados neste PC.</span><button class="botao prim" id="b-otimizar">Otimizar agora</button></div>
       <div class="modo"><svg viewBox="0 0 24 24"><path d="M4 7.5h9M17.5 7.5H20M4 16.5h2.5M11 16.5h9"/><circle cx="15.2" cy="7.5" r="2.3"/><circle cx="8.8" cy="16.5" r="2.3"/></svg><b>Personalizado</b><span>Cada ajuste, um por um, com o que ele muda e o valor de antes.</span><button class="botao" id="b-classico">Abrir</button></div>
@@ -796,8 +800,77 @@ async function telaBoost() {
   void cartaoLeve();
   void cartaoLixo();
   void cartaoJogoLiso();
+  void cartaoTurbo();
   void painelFrameBoost();
   await driver(fab);
+}
+
+const NOMES_DO_GARGALO: Record<Gargalo, string> = {
+  Placa: "placa de vídeo no limite",
+  Processador: "processador no limite",
+  Memoria: "memória acabando",
+  Nenhum: "nada no limite",
+  SemCarga: "jogo parado na medida",
+};
+
+/** Em palavras curtas, o que a receita liga. */
+function resumoDaReceita(r: ReceitaDoTurbo): string {
+  const partes: string[] = [];
+  if (r.escala) partes.push(`escala ${NOMES_DA_ESCALA[r.escala]}`);
+  if (r.multiplicador !== null && r.multiplicador !== 1) partes.push(r.multiplicador === 0 ? "geração Auto" : `geração ${r.multiplicador}×`);
+  if (r.energia) partes.push("energia de jogo");
+  if (r.memoria) partes.push("memória");
+  return partes.join(" + ") || "nada";
+}
+
+/** O botão que mede o jogo, escolhe pelo gargalo e aplica. */
+async function cartaoTurbo(dado?: PainelTurbo) {
+  const caixa = document.querySelector<HTMLElement>("#b-turbo");
+  if (!caixa) return;
+  const p = dado ?? (await ponte.turbo().catch(() => null));
+  if (!p) {
+    caixa.innerHTML = `<div class="rotulo">Turbo</div><p class="nota" style="margin-top:8px">Não consegui ler o Turbo.</p>`;
+    return;
+  }
+  const lembrado = p.perfil;
+  const corpo = !p.jogo
+    ? `<p class="nota" style="margin-top:8px">Abra um jogo. O Turbo mede o jogo aberto por 10 segundos, vê o que está no limite (placa, processador ou memória) e liga só o que ajuda nele.</p>`
+    : p.ligado
+      ? `${p.passos.map((t, i) => `<p class="nota" style="margin-top:${i ? 4 : 8}px">${i ? "· " : ""}${esc(t)}</p>`).join("")}
+         <div class="acoes" style="margin-top:14px"><button class="botao" id="tb-desligar">Desligar Turbo</button></div>`
+      : `<p class="nota" style="margin-top:8px">${
+          lembrado
+            ? `Da última vez no ${esc(p.jogo)}: ${esc(NOMES_DO_GARGALO[lembrado.receita.gargalo])}${lembrado.fps_antes ? ` a ${numero(lembrado.fps_antes)} fps` : ""} → ${esc(resumoDaReceita(lembrado.receita))}.`
+            : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele.`
+        }${p.competitivo ? " Jogo competitivo: sem geração de quadros, para não acrescentar atraso." : ""}</p>
+         <div class="acoes" style="margin-top:14px">${
+           lembrado
+             ? `<button class="botao prim" id="tb-lembrado">Turbo</button><button class="botao" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
+             : `<button class="botao prim" id="tb-medir">Turbo</button>`
+         }</div>`;
+  caixa.innerHTML = `<div class="titulo-sec"><div class="rotulo">Turbo</div>${p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : ""}</div>
+    ${corpo}<p class="estado" id="tb-estado" hidden></p>`;
+
+  const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
+    $$<HTMLButtonElement>("#b-turbo button").forEach((b) => (b.disabled = true));
+    if (medindo) botao.textContent = "Medindo 10 s… jogue normalmente";
+    try {
+      const novo = await acao();
+      estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
+      await cartaoTurbo(novo);
+      void painelFrameBoost();
+    } catch (e) {
+      // Redesenha primeiro (os botões voltam) e só então mostra o erro, senão o redesenho o apagaria.
+      await cartaoTurbo();
+      const s = $("#tb-estado");
+      s.hidden = false;
+      s.textContent = String(e);
+    }
+  };
+  document.querySelector<HTMLButtonElement>("#tb-medir")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboLigar(false), true));
+  document.querySelector<HTMLButtonElement>("#tb-lembrado")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboLigar(true)));
+  document.querySelector<HTMLButtonElement>("#tb-esquecer")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboEsquecer()));
+  document.querySelector<HTMLButtonElement>("#tb-desligar")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboDesligar()));
 }
 
 async function driver(fab: string) {

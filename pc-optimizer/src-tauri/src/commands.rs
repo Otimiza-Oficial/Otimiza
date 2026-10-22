@@ -2928,6 +2928,93 @@ pub async fn frame_boost_ligar(
     }
 }
 
+/// O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê.
+#[tauri::command(async)]
+pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    return Ok(crate::plataforma::turbo::painel());
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
+}
+
+/// `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
+/// base é travado como no Frame Boost (o `travar_base` não trava no só escala).
+#[tauri::command]
+pub async fn turbo_ligar(
+    app: tauri::AppHandle,
+    lembrado: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<crate::plataforma::turbo::Painel, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        use crate::plataforma::{historico, sessao, turbo};
+        tokio::task::spawn_blocking(move || -> Result<(), String> {
+            let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
+            let (id, _) = historico::id_do_jogo(&jogo.executavel);
+            let guardado = lembrado.unwrap_or(false).then(|| turbo::perfil(&id)).flatten();
+            let (receita, fps_antes) = match guardado {
+                Some(p) => (p.receita, p.fps_antes),
+                None => turbo::medir()?,
+            };
+            turbo::aplicar(&app, &receita);
+            if matches!(
+                receita.gargalo,
+                turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
+            ) {
+                let perfil = turbo::Perfil {
+                    receita,
+                    fps_antes,
+                    medido_em: crate::modules::changelog::now_timestamp(),
+                };
+                if let Err(e) = turbo::lembrar(&id, perfil) {
+                    crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        let mut log = state.changes.lock().await;
+        crate::plataforma::frameboost::travar_base(&mut log);
+        drop(log);
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, lembrado, state);
+        Err("O Turbo só existe no Windows.".to_string())
+    }
+}
+
+/// Desliga o que o Turbo ligou. `LIVRES`: desfazer nunca depende de licença.
+#[tauri::command]
+pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
+            .await
+            .map_err(|e| e.to_string())??;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
+}
+
+/// Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`.
+#[tauri::command(async)]
+pub fn turbo_esquecer() -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        let (id, _) = crate::plataforma::historico::id_do_jogo(&jogo.executavel);
+        crate::plataforma::turbo::esquecer(&id)?;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("O Turbo só existe no Windows.".to_string())
+}
+
 /// Tira o teto do FPS base do jogo aberto (vale ao reabrir o jogo). `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
 pub async fn frame_boost_destravar_base(
@@ -4543,6 +4630,9 @@ mod tests {
         "cores_estado",
         "frame_boost_painel",
         "frame_boost_desligar",
+        "turbo_painel",
+        "turbo_desligar",
+        "turbo_esquecer",
         "frame_boost_destravar_base",
         "frame_boost_medir",
         "jogo_liso_medir",
@@ -4714,6 +4804,7 @@ mod tests {
         "mira_ligar",
         "cores_aplicar",
         "frame_boost_ligar",
+        "turbo_ligar",
         "frame_boost_travar_base",
         "jogo_liso_aplicar",
         "memoria_fechar",

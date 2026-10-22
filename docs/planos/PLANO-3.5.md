@@ -357,6 +357,20 @@ devolver, entra um vigia que mostra o cursor na abertura seguinte.
 | 4 | testes | ✅ o número público do NIS fixado; o RSR vai e volta pelo texto do histórico; a posição 14 entra na guarda das tabelas do ADLX |
 | 5 | PC de casa | **aplicar → reabrir o jogo em tela cheia numa resolução menor → desfazer**, nas duas marcas: o driver amplia, o FPS sobe, e o desfazer devolve o valor de antes. O teste `os_numeros_da_tabela_batem_com_o_que_o_driver_chama` (NVIDIA) confere o 0x10444444 contra o driver de verdade. O notebook só tem Intel |
 
+### 10.4 M4 em detalhe
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | `plataforma/turbo.rs` (puro) | ✅ `gargalo_de` (o `Limite` do `windows::bottleneck` vira Placa, Processador, Memória, Nenhum ou Sem carga); `montar` (a receita da tabela 4.1); `nivel_automatico` (o nível mais bonito cujo FPS estimado alcança o alvo: o monitor só com escala, metade dele com geração; expoente 0,7 nos pixels, para não prometer demais); `competitivo` (CS2, Valorant, Fortnite, CoD, Apex, Rocket League: sem geração) |
+| 2 | `turbo.rs` medir | ✅ 10 s com os contadores do Windows (`bottleneck::analisar`) e o PresentMon (FPS do jogo) ao mesmo tempo |
+| 3 | `turbo.rs` aplicar/desligar | ✅ energia de jogo e Frame Boost (escala/geração) pelas peças que já existiam; passo que falha (anticheat, sem administrador) vira nota e os outros seguem; desligar devolve só o que o Turbo ligou (a energia, se foi ele) |
+| 4 | perfil por jogo | ✅ `%APPDATA%\pc-optimizer\turbo.json`, pelo id do jogo; na próxima vez, **Turbo** aplica a receita lembrada sem medir, com **Medir de novo** e **Esquecer** ao lado |
+| 5 | comandos | ✅ `turbo_ligar` (exige licença), `turbo_painel`, `turbo_desligar`, `turbo_esquecer` (livres); o FPS base trava como no Frame Boost (e não trava no só escala) |
+| 6 | tela | ✅ cartão Turbo no topo do Boost: o que mediu da última vez, em linguagem de jogador; os passos do que ligou; erro visível sem apagar |
+| 7 | testes | ✅ 12 puros (gargalos, nível, receitas, competitivos no catálogo, perfil pelo arquivo) |
+| 8 | **fica para depois** | ligar sozinho ao abrir o jogo (decisão 2 do dono, desligado por padrão); o antes × depois medido no cartão (precisa da medida do depois, pilar E); receita que piorou não volta (memória do `receita.rs`) |
+| 9 | PC de casa | jogo preso na placa e jogo preso no processador recebem receitas diferentes, e as duas provam ganho (ou dizem que não houve) |
+
 ---
 
 ## 11. Riscos

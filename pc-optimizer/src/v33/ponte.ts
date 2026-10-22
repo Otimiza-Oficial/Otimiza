@@ -257,6 +257,26 @@ export interface PlanoJogoLiso {
   } | null;
 }
 
+export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga";
+
+export interface ReceitaDoTurbo {
+  gargalo: Gargalo;
+  escala: NivelDeEscala | null;
+  /** 1 = só escala, 0 = Auto, 2+ = fixo; null = sem Frame Boost. */
+  multiplicador: number | null;
+  energia: boolean;
+  memoria: boolean;
+  explicacao: string;
+}
+
+export interface PainelTurbo {
+  jogo: string | null;
+  competitivo: boolean;
+  perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number } | null;
+  passos: string[];
+  ligado: boolean;
+}
+
 /** Os níveis da escala, com as proporções do FSR (1,3× a 2× por eixo). */
 export type NivelDeEscala = "UltraQualidade" | "Qualidade" | "Equilibrado" | "Desempenho";
 
@@ -451,6 +471,11 @@ export const ponte = {
   aplicarItem: (id: string) => invoke<Resultado>("apply_optimization", { id }),
   inicializacao: () => invoke<EntradaDeInicio[]>("list_startup"),
   inicializacaoDefinir: (hive: string, name: string, enabled: boolean) => invoke<Resultado>("set_startup_enabled", { hive, name, enabled }),
+  turbo: () => invoke<PainelTurbo>("turbo_painel"),
+  /** Mede o jogo (10 s) e aplica; `lembrado` usa a receita guardada do jogo, sem medir. */
+  turboLigar: (lembrado = false) => invoke<PainelTurbo>("turbo_ligar", { lembrado }),
+  turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
+  turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
   frameBoost: () => invoke<PainelFrameBoost>("frame_boost_painel"),
   /** `escala`: amplia o jogo para o monitor (FSR 1); com `multiplicador` 1, só escala. */
   frameBoostLigar: (multiplicador: number, semLimite = false, escala: NivelDeEscala | null = null) =>
