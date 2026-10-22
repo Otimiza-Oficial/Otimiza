@@ -547,3 +547,16 @@ html[data-tema="claro"] #v33 .vidro.heroi { background: radial-gradient(560px 28
 html[data-tema="claro"] #v33 .heroi::before { background: linear-gradient(160deg, rgba(0, 0, 0, 0.22), rgba(0, 0, 0, 0.03) 45%, rgba(0, 0, 0, 0.08)); }
 html[data-tema="claro"] #v33 .heroi-t svg { color: #fff; background: linear-gradient(180deg, #2a2a2a, #0e0e0e); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2); }
 html[data-tema="claro"] #v33 .i-topo .botao.prim { box-shadow: 0 8px 26px rgba(0, 0, 0, 0.3); }
+
+/* Jogos: o pé do cartão se lê sobre qualquer capa, e o cartão acende sob o ponteiro. */
+#v33 .jogo-card { transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s, box-shadow 0.3s; }
+#v33 .jogo-card:hover { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14); }
+#v33 .jogo-card .sobre { padding-top: 64px; background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.78) 40%, rgba(0, 0, 0, 0.96)); }
+#v33 .jogo-card .sobre .nota { color: rgba(255, 255, 255, 0.62); }
+@media (prefers-reduced-motion: reduce) { #v33 .jogo-card:hover { transform: none; } }
+
+/* O vazio que explica o que fazer: um ícone e o texto no meio, sem cara de erro. */
+#v33 .v-vazio { display: grid; justify-items: center; gap: 12px; padding: 36px 28px; border-color: var(--borda); background: radial-gradient(320px 140px at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%); line-height: 1.55; text-wrap: balance; }
+#v33 .v-vazio::before { content: ""; width: 40px; height: 40px; border-radius: 12px; background: rgba(255, 255, 255, 0.06) center / 20px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23bdbdbd' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19h16M6 16l3.5-5 3 3L17 7'/%3E%3C/svg%3E"); box-shadow: inset 0 0 0 1px var(--borda); }
+html[data-tema="claro"] #v33 .v-vazio { background: radial-gradient(320px 140px at 50% 0%, rgba(0, 0, 0, 0.03), transparent 70%); }
+html[data-tema="claro"] #v33 .v-vazio::before { background-color: rgba(0, 0, 0, 0.04); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c5c5c' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 19h16M6 16l3.5-5 3 3L17 7'/%3E%3C/svg%3E"); }

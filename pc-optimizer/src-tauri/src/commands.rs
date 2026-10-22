@@ -3006,7 +3006,12 @@ pub async fn turbo_ligar(
             if turbo::em_prova() {
                 return Err("A prova do Turbo está rodando: espere ela terminar.".to_string());
             }
-            let guardado = lembrado.unwrap_or(false).then(|| turbo::perfil(&id)).flatten();
+            let anterior = turbo::perfil(&id);
+            let reprovada = anterior
+                .as_ref()
+                .filter(|p| p.prova == Some(turbo::Desfecho::Piorou))
+                .map(|p| p.receita.clone());
+            let guardado = lembrado.unwrap_or(false).then_some(anterior).flatten();
             if guardado.as_ref().is_some_and(|p| p.prova == Some(turbo::Desfecho::Piorou)) {
                 return Err(
                     "Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo. Toque em \
@@ -3020,6 +3025,13 @@ pub async fn turbo_ligar(
                 Some(p) => (p.receita, p.fps_antes),
                 None => turbo::medir()?,
             };
+            // A medida nova deu a mesma receita que a prova reprovou: não liga, e a reprovação fica guardada.
+            if reprovada.as_ref().is_some_and(|r| turbo::mesma_acao(r, &receita)) {
+                return Err(
+                    "A medida de agora deu a mesma receita que a prova reprovou neste PC, então o Turbo não a liga.                      Ela pode mudar com outro trecho do jogo, outra resolução ou outro driver."
+                        .to_string(),
+                );
+            }
             turbo::aplicar(&app, &receita, fps_antes);
             if !lembrada && matches!(
                 receita.gargalo,
@@ -3156,6 +3168,24 @@ pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String
     }
     #[cfg(not(target_os = "windows"))]
     Err("O Turbo só existe no Windows.".to_string())
+}
+
+/// "Menor atraso" ou "Mais FPS" para o jogo aberto: com o menor atraso, o Turbo não liga geração de quadros. `LIVRES`:
+/// é uma preferência no arquivo do Turbo, não mexe no Windows.
+#[tauri::command(async)]
+pub fn turbo_atraso(menor: bool) -> Result<crate::plataforma::turbo::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        let jogo = crate::plataforma::sessao::atual().ok_or("Abra o jogo primeiro.")?;
+        let (id, _) = crate::plataforma::historico::id_do_jogo(&jogo.executavel);
+        crate::plataforma::turbo::escolher_atraso(&id, menor)?;
+        return Ok(crate::plataforma::turbo::painel());
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = menor;
+        Err("O Turbo só existe no Windows.".to_string())
+    }
 }
 
 /// Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`.
@@ -4244,16 +4274,28 @@ pub async fn config_motor_aplicar(
         }
         let historico = format!("config_motor_{}", jogo);
         let mut log = state.changes.lock().await;
-        log.record(AppliedOptimization {
+        let gravado = log.record(AppliedOptimization {
             optimization_id: historico,
             name: format!("Configuração do {} · perfil leve", feito.jogo),
             timestamp: now_timestamp(),
             changes: vec![ChangeRecord::GameConfig {
                 caminho: feito.arquivo.to_string_lossy().to_string(),
-                anterior: Some(feito.anterior),
+                anterior: Some(feito.anterior.clone()),
                 jogo: feito.jogo.to_string(),
             }],
-        })?;
+        });
+        // Sem a cópia no histórico não há desfazer: o arquivo volta como estava antes de devolver o erro.
+        if let Err(e) = gravado {
+            return Err(match std::fs::write(&feito.arquivo, &feito.anterior) {
+                Ok(()) => format!("Não consegui guardar o desfazer ({}); o arquivo do jogo voltou como estava.", e),
+                Err(e2) => format!(
+                    "Não consegui guardar o desfazer ({}) nem devolver o arquivo ({}): {} ficou com o perfil leve e                      sem desfazer pelo Otimiza. Para voltar, apague o arquivo com o jogo fechado: o jogo cria outro                      com o padrão dele.",
+                    e,
+                    e2,
+                    feito.arquivo.display()
+                ),
+            });
+        }
         return Ok(feito.mudou);
     }
     #[cfg(not(target_os = "windows"))]
@@ -4874,6 +4916,7 @@ mod tests {
         "turbo_painel",
         "turbo_desligar",
         "turbo_esquecer",
+        "turbo_atraso",
         "config_motor_painel",
         "escala_pedir_comparacao",
         "escala_comparacao",

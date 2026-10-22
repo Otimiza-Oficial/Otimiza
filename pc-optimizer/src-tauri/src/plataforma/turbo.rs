@@ -6,8 +6,8 @@
 //   memória acabando     → a memória primeiro (oferecer fechar; nunca fecha sozinho) e a energia
 //   nada no limite       → não liga nada e diz que o jogo já está no limite desta máquina
 //
-// Jogo competitivo não ganha geração por padrão: ela acrescenta atraso. O nível da escala sai do FPS medido, como
-// ESTIMATIVA até a medida do depois.
+// "Menor atraso" (escolha da pessoa no cartão; jogo de tiro já vem nela) não ganha geração: ela acrescenta atraso.
+// O nível da escala sai do FPS medido, como ESTIMATIVA até a medida do depois.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -43,11 +43,17 @@ pub fn gargalo_de(l: Limite) -> Gargalo {
     }
 }
 
-/// Jogos de tiro e de reflexo: o atraso da geração pesa mais que a fluidez.
+/// Jogos de tiro e de reflexo: só o ponto de partida da escolha "menor atraso", que a pessoa troca no cartão. Quem
+/// decide se a geração entra é ela, não a lista.
 const COMPETITIVOS: &[&str] = &["cs2", "valorant", "fortnite", "cod", "apex", "rocketleague"];
 
 pub fn competitivo(id_do_jogo: &str) -> bool {
     COMPETITIVOS.contains(&id_do_jogo)
+}
+
+/// Pura: a escolha guardada para o jogo, ou a sugestão (a lista acima) quando a pessoa ainda não escolheu.
+fn menor_atraso_em(p: &Perfis, id_do_jogo: &str) -> bool {
+    p.menor_atraso.get(id_do_jogo).copied().unwrap_or_else(|| competitivo(id_do_jogo))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -61,6 +67,12 @@ pub struct Receita {
     pub memoria: bool,
     /// O que o Turbo vai fazer e por quê, para a tela.
     pub explicacao: String,
+}
+
+/// Pura: as duas receitas ligam a mesma coisa (escala, multiplicador e energia), mesmo com textos e FPS diferentes.
+/// É o que impede o "Medir de novo" de religar uma receita que a prova reprovou.
+pub fn mesma_acao(a: &Receita, b: &Receita) -> bool {
+    a.escala == b.escala && a.multiplicador == b.multiplicador && a.energia == b.energia
 }
 
 /// Pura: o FPS do jogo renderizando no nível, preso na placa. O FPS cresce quase na proporção dos pixels, mas não
@@ -82,8 +94,8 @@ pub fn nivel_automatico(fps: Option<f64>, alvo: f64) -> Nivel {
 }
 
 /// Pura: a receita para o gargalo medido. `fps` é o do jogo na medida (sem ele, o nível padrão); `hz` o do monitor.
-pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: bool) -> Receita {
-    let hz = hz.filter(|h| *h > 0).unwrap_or(60) as f64;
+pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz_lido: Option<u32>, competitivo: bool) -> Receita {
+    let hz = hz_lido.filter(|h| *h > 0).unwrap_or(60) as f64;
     let (escala, multiplicador, energia, memoria, explicacao) = match gargalo {
         Gargalo::Placa => {
             // Só escala tem de encher o monitor sozinha; com geração, metade dele já vira o monitor cheio no 2×.
@@ -96,8 +108,8 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
                     Some(0),
                     true,
                     false,
-                    "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels (FPS real a mais) e a \
-                     geração de quadros completa o monitor."
+                    "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels (FPS real a mais) e, pela \
+                     estimativa, a geração de quadros completa o monitor. O número medido aparece ao ligar."
                         .to_string(),
                 )
             } else {
@@ -107,11 +119,12 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
                     true,
                     false,
                     if competitivo {
-                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels. Jogo competitivo: \
-                         sem geração de quadros, para não acrescentar atraso."
+                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels. Menor atraso \
+                         escolhido: sem geração de quadros, para não acrescentar atraso."
                     } else {
-                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels, e isso já basta \
-                         para o monitor. Sem geração, sem atraso a mais."
+                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels, e pela estimativa \
+                         isso já basta para o monitor. Sem geração, sem atraso a mais. O número medido aparece ao \
+                         ligar."
                     }
                     .to_string(),
                 )
@@ -124,7 +137,7 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
             false,
             if competitivo {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). O processador \
-                 passa a subir de frequência sem hesitar com o jogo aberto. Jogo competitivo: sem geração."
+                 passa a subir de frequência sem hesitar com o jogo aberto. Menor atraso escolhido: sem geração."
             } else {
                 "O processador está no limite: diminuir a resolução não ajudaria (a placa já sobra). A geração de \
                  quadros enche o monitor e o processador passa a subir de frequência sem hesitar."
@@ -155,6 +168,14 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
             "O jogo estava parado durante a medida (menu ou pausa). Jogue e toque em Turbo de novo.".to_string(),
         ),
     };
+    // O que faltou na medida vai junto, em vez de a receita parecer feita com tudo medido.
+    let mut explicacao = explicacao;
+    if fps.is_none() && escala.is_some() {
+        explicacao.push_str(" Sem o FPS do jogo (o PresentMon não mediu): o nível da escala é o padrão, não o calculado.");
+    }
+    if hz_lido.filter(|h| *h > 0).is_none() && multiplicador.is_some() {
+        explicacao.push_str(" Não consegui ler o monitor: contei 60 Hz.");
+    }
     Receita {
         gargalo,
         escala,
@@ -261,6 +282,8 @@ pub fn leitura_da_prova(d: Desfecho, sem_comparacao: &str) -> String {
 struct Perfis {
     /// Pelo id do jogo (`historico::id_do_jogo`).
     jogos: BTreeMap<String, Perfil>,
+    /// "Menor atraso" (sem geração) ou "Mais FPS", escolhido no cartão. Sem escolha, vale a sugestão.
+    menor_atraso: BTreeMap<String, bool>,
 }
 
 fn caminho() -> PathBuf {
@@ -296,6 +319,28 @@ pub fn lembrar(id_do_jogo: &str, perfil: Perfil) -> Result<(), String> {
     let mut p = ler_em(&c);
     p.jogos.insert(id_do_jogo.to_string(), perfil);
     gravar_em(&c, &p)
+}
+
+pub fn menor_atraso(id_do_jogo: &str) -> bool {
+    menor_atraso_em(&ler_em(&caminho()), id_do_jogo)
+}
+
+/// Guarda a escolha. A receita lembrada foi montada com a outra e é esquecida (o próximo Turbo mede de novo); a
+/// reprovada fica, para o "Medir de novo" continuar sem religá-la.
+pub fn escolher_atraso(id_do_jogo: &str, menor: bool) -> Result<(), String> {
+    let c = caminho();
+    let mut p = ler_em(&c);
+    escolher_atraso_em(&mut p, id_do_jogo, menor);
+    gravar_em(&c, &p)
+}
+
+fn escolher_atraso_em(p: &mut Perfis, id_do_jogo: &str, menor: bool) {
+    if menor_atraso_em(p, id_do_jogo) != menor
+        && p.jogos.get(id_do_jogo).is_some_and(|x| x.prova != Some(Desfecho::Piorou))
+    {
+        p.jogos.remove(id_do_jogo);
+    }
+    p.menor_atraso.insert(id_do_jogo.to_string(), menor);
 }
 
 pub fn esquecer(id_do_jogo: &str) -> Result<(), String> {
@@ -346,7 +391,8 @@ pub fn resultado_de(
 #[derive(Debug, Clone, Serialize)]
 pub struct Painel {
     pub jogo: Option<String>,
-    pub competitivo: bool,
+    /// A escolha do cartão para o jogo aberto (ou a sugestão, sem escolha).
+    pub menor_atraso: bool,
     /// O que ficou lembrado para este jogo.
     pub perfil: Option<Perfil>,
     /// O que o Turbo fez da última vez que ligou (nesta abertura do Otimiza).
@@ -364,9 +410,28 @@ pub struct Painel {
 
 #[cfg(target_os = "windows")]
 static PASSOS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-/// O Turbo ligou a energia de jogo (e não a pessoa): desligar o Turbo devolve só o que ele ligou.
+/// O Turbo ligou a energia de jogo (e não a pessoa): desligar o Turbo devolve só o que ele ligou. Em disco, ao lado
+/// do turbo.json: depois de fechar e abrir o Otimiza, o "Desligar Turbo" ainda sabe que a energia foi dele.
 #[cfg(target_os = "windows")]
-static LIGOU_A_ENERGIA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn marca_da_energia() -> PathBuf {
+    caminho().with_file_name("turbo_energia")
+}
+
+#[cfg(target_os = "windows")]
+fn ligou_a_energia() -> bool {
+    marca_da_energia().exists()
+}
+
+#[cfg(target_os = "windows")]
+fn marcar_energia(ligou: bool) {
+    let m = marca_da_energia();
+    let _ = if ligou {
+        m.parent().map(std::fs::create_dir_all);
+        std::fs::write(&m, b"")
+    } else {
+        std::fs::remove_file(&m)
+    };
+}
 #[cfg(target_os = "windows")]
 static LIGADO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// O que o resultado precisa: o FPS de antes e a receita aplicada (ao ligar), e o antes × depois (ao desligar).
@@ -384,7 +449,7 @@ pub fn painel() -> Painel {
         .map(|j| super::historico::id_do_jogo(&j.executavel).0);
     Painel {
         jogo: jogo.as_ref().map(|j| j.nome.clone()),
-        competitivo: id.as_deref().is_some_and(competitivo),
+        menor_atraso: id.as_deref().is_some_and(menor_atraso),
         perfil: id.as_deref().and_then(perfil),
         passos: PASSOS.lock().map(|p| p.clone()).unwrap_or_default(),
         ligado: LIGADO.load(Ordering::SeqCst),
@@ -410,6 +475,7 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
     let fps = std::thread::spawn(move || {
         presentmon::capturar(pid, 10)
             .and_then(|q| presentmon::resumir(&q))
+            .map_err(|e| crate::utils::Logger::warn(&format!("turbo: o PresentMon não mediu o jogo: {}", e)))
             .ok()
             .map(|r| r.fps_do_jogo_medio)
             .filter(|f| *f > 0.0)
@@ -423,7 +489,7 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
         id, relatorio.limite, relatorio.cpu_total, relatorio.cpu_max_core, relatorio.gpu_percent, fps, hz
     ));
     Ok((
-        montar(gargalo_de(relatorio.limite), fps, hz, competitivo(&id)),
+        montar(gargalo_de(relatorio.limite), fps, hz, menor_atraso(&id)),
         fps,
     ))
 }
@@ -444,7 +510,7 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
         } else {
             match super::energia_jogo::definir(true) {
                 Ok(_) => {
-                    LIGOU_A_ENERGIA.store(true, Ordering::SeqCst);
+                    marcar_energia(true);
                     passos.push("Energia de jogo: ligada.".to_string());
                 }
                 Err(e) => passos.push(format!("Energia de jogo: {}", e)),
@@ -499,8 +565,9 @@ pub fn desligar() -> Result<(), String> {
             *r = resultado_de(fps_antes, sessao.as_ref(), receita.escala, gerou);
         }
     }
-    if LIGOU_A_ENERGIA.swap(false, Ordering::SeqCst) {
+    if ligou_a_energia() {
         super::energia_jogo::definir(false)?;
+        marcar_energia(false);
     }
     LIGADO.store(false, Ordering::SeqCst);
     if let Ok(mut p) = PASSOS.lock() {
@@ -633,7 +700,7 @@ pub fn provar(
         return Err("Já há uma prova rodando.".to_string());
     }
     let energia_antes = super::energia_jogo::ler().ligado
-        && !LIGOU_A_ENERGIA.load(Ordering::SeqCst);
+        && !ligou_a_energia();
     // A partir daqui, qualquer saída devolve o lado "sem" e libera a vez.
     let mut fim = FimDaProva {
         energia_antes,
@@ -724,6 +791,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_mesma_acao_ignora_o_texto_e_o_gargalo() {
+        let base = Receita {
+            gargalo: Gargalo::Placa,
+            escala: Some(Nivel::Qualidade),
+            multiplicador: Some(1),
+            energia: true,
+            memoria: false,
+            explicacao: "a 60 fps".into(),
+        };
+        let outra_medida = Receita { explicacao: "a 58 fps".into(), memoria: true, ..base.clone() };
+        assert!(mesma_acao(&base, &outra_medida));
+        assert!(!mesma_acao(&base, &Receita { escala: Some(Nivel::Desempenho), ..base.clone() }));
+        assert!(!mesma_acao(&base, &Receita { energia: false, ..base.clone() }));
+        assert!(!mesma_acao(&base, &Receita { multiplicador: Some(2), ..base.clone() }));
+    }
+
+    #[test]
     fn cada_limite_tem_o_seu_gargalo() {
         assert_eq!(gargalo_de(Limite::Gpu), Gargalo::Placa);
         assert_eq!(gargalo_de(Limite::MemoriaVideo), Gargalo::Placa);
@@ -796,6 +880,38 @@ mod tests {
             assert_eq!((r.escala, r.multiplicador, r.energia, r.memoria), (None, None, false, false));
             assert!(!r.explicacao.is_empty());
         }
+    }
+
+    #[test]
+    fn a_escolha_do_atraso_vence_a_sugestao_e_esquece_a_receita_da_outra() {
+        let receita = montar(Gargalo::Placa, Some(40.0), Some(144), false);
+        let perfil = |prova| Perfil { receita: receita.clone(), fps_antes: Some(40.0), medido_em: 1, prova };
+        let mut p = Perfis::default();
+        assert!(menor_atraso_em(&p, "cs2"), "sem escolha, vale a sugestão");
+        assert!(!menor_atraso_em(&p, "fivem"));
+
+        p.jogos.insert("fivem".into(), perfil(None));
+        escolher_atraso_em(&mut p, "fivem", true);
+        assert!(menor_atraso_em(&p, "fivem"));
+        assert!(!p.jogos.contains_key("fivem"), "a receita era do Mais FPS: o próximo Turbo mede de novo");
+
+        p.jogos.insert("cs2".into(), perfil(Some(Desfecho::Piorou)));
+        escolher_atraso_em(&mut p, "cs2", false);
+        assert!(!menor_atraso_em(&p, "cs2"));
+        assert!(p.jogos.contains_key("cs2"), "a reprovação fica");
+
+        p.jogos.insert("valorant".into(), perfil(None));
+        escolher_atraso_em(&mut p, "valorant", true);
+        assert!(p.jogos.contains_key("valorant"), "escolher o que já valia não muda nada");
+    }
+
+    #[test]
+    fn o_que_faltou_na_medida_aparece_na_receita() {
+        let r = montar(Gargalo::Placa, None, None, false);
+        assert!(r.explicacao.contains("PresentMon não mediu"));
+        assert!(r.explicacao.contains("60 Hz"));
+        let r = montar(Gargalo::Placa, Some(40.0), Some(144), false);
+        assert!(!r.explicacao.contains("PresentMon") && !r.explicacao.contains("60 Hz"));
     }
 
     #[test]

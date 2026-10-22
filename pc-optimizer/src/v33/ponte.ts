@@ -278,6 +278,8 @@ export interface ConfigDoJogo {
   arquivo: string | null;
   aberto: boolean;
   previsao: { chave: string; antes: string; depois: string; por_que: string }[];
+  /** O arquivo existe mas não deu para ler. */
+  ilegivel: string | null;
   ficha: string;
   historico: string;
   aplicado: boolean;
@@ -325,7 +327,8 @@ export interface PassoDaProvaDoTurbo {
 
 export interface PainelTurbo {
   jogo: string | null;
-  competitivo: boolean;
+  /** "Menor atraso": o Turbo não liga geração de quadros neste jogo. Escolha da pessoa; sem ela, jogo de tiro vem assim. */
+  menor_atraso: boolean;
   perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number; prova?: DesfechoDaProva | null } | null;
   prova?: ProvaDoTurbo | null;
   provando?: boolean;
@@ -551,6 +554,7 @@ export const ponte = {
   turboLigar: (lembrado = false) => invoke<PainelTurbo>("turbo_ligar", { lembrado }),
   turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
   turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
+  turboAtraso: (menor: boolean) => invoke<PainelTurbo>("turbo_atraso", { menor }),
   /** A prova A-B (uns 5 minutos); o passo a passo chega pelo evento `turbo:prova`. */
   turboProvar: () => invoke<ProvaDoTurbo>("turbo_provar"),
   turboCompartilhar: () => invoke<string>("turbo_compartilhar"),

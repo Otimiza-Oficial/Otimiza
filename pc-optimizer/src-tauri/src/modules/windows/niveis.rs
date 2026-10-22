@@ -35,14 +35,13 @@ impl Nivel {
             Nivel::Competitivo => {
                 "Tudo do Seguro, mais os ajustes dos pacotes de otimização que são documentados \
                  e voltam atrás: o jogo com prioridade no processador e no agendador de \
-                 multimídia, o timer fino valendo para o sistema todo, telemetria, aplicativos \
-                 em segundo plano, Edge, widgets e manutenção automática parados, a placa de \
-                 rede sem economia de energia (o pico de ping de quando ela acorda), e o Windows \
+                 multimídia, o timer fino valendo para o sistema todo, telemetria, Edge e widgets \
+                 parados, a placa de rede sem economia de energia (o pico de ping de quando ela acorda), e o Windows \
                  respondendo sem as esperas de fábrica. Nada que possa custar quadro e nada que \
                  tire uma função do Windows. É o padrão do \"Otimizar agora\"."
             }
             Nivel::Experimental => {
-                "Tudo do Avançado, mais os ajustes que rendem numa máquina e custam \
+                "Tudo do Completo, mais os ajustes que rendem numa máquina e custam \
                  quadro em outra. Eles não vêm com promessa: vêm com um teste. O jeito de \
                  usar este nível é um grupo de cada vez, medindo antes e depois — e foi \
                  aplicar tudo isso de uma vez que derrubou o FPS de um cliente na 2.1.0."
@@ -69,7 +68,8 @@ impl Nivel {
 /// O que o Completo acrescenta dos "só se pedir" (3.5, a pedido do dono: o "Otimizar agora" mexia em quase nada). A
 /// regra para entrar: documentado, volta atrás, `RiscoDeFps::Nenhum`, sem troca de segurança e SEM tirar função do
 /// Windows. Fica de fora o que custa uma função a alguém (Bluetooth, impressora, Hyper-V, Xbox, notificações,
-/// localização, hibernação), o que só serve em parte das máquinas sem medida aqui (Prefetch e indexação: só em SSD;
+/// localização, hibernação, apps da Store em segundo plano, a manutenção automática com o TRIM, a atualização dos
+/// apps da Store, os drivers pelo Windows Update e o desligamento que fecha trabalho não salvo), o que só serve em parte das máquinas sem medida aqui (Prefetch e indexação: só em SSD;
 /// efeitos visuais e transparência: mudam o que a pessoa vê) e o que pode custar quadro (esses moram no Experimental).
 /// `o_completo_so_acrescenta_o_que_nao_custa_nada` confere a regra contra o catálogo.
 pub const NO_COMPLETO: &[&str] = &[
@@ -81,26 +81,21 @@ pub const NO_COMPLETO: &[&str] = &[
     // O que roda por trás e disputa disco, rede e processador com o jogo.
     "disable_telemetry",
     "telemetry_policy",
-    "background_apps_off",
     "edge_background_off",
     "disable_widgets",
-    "store_auto_download_off",
     "maps_auto_update_off",
     "error_reporting_off",
-    "manutencao_automatica_fora",
     "servicos_agrupados",
     // SysMain só em SSD: a exigência do item (`SsdSystemDrive`) o deixa de fora em HD.
     "disable_sysmain",
     // O Windows sem as esperas de fábrica.
-    "windows_responde_rapido",
     "start_menu_web_search_off",
     "disable_startup_delay",
     // Rede: a placa sem economia de energia (a placa que dorme atrasa o primeiro pacote: pico de ping no meio da
     // partida). O resto dos pacotes de rede não muda o ping (TCP), ou pode custar FPS (bufferbloat, no Experimental).
     "nic_power_saving_off",
-    // Estabilidade e o driver que a pessoa escolheu.
+    // Estabilidade.
     "sem_inicializacao_rapida",
-    "drivers_fora_do_windows_update",
     "remote_assistance_off",
 ];
 
@@ -331,6 +326,14 @@ mod tests {
             "servicos_pouco_usados",
             "disable_hibernation",
             "prefetch_desligado",
+            // Tiradas do Completo antes de publicar a 3.5: o WhatsApp da Store deixa de avisar, o TRIM semanal do SSD
+            // para, os apps da Store ficam sem as correções, driver novo vira tarefa da pessoa, e programa com trabalho
+            // não salvo fecha sem perguntar no desligamento.
+            "background_apps_off",
+            "manutencao_automatica_fora",
+            "store_auto_download_off",
+            "drivers_fora_do_windows_update",
+            "windows_responde_rapido",
         ] {
             assert!(!NO_COMPLETO.contains(&fora), "{fora} tira uma função do Windows de alguém");
         }
