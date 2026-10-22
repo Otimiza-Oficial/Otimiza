@@ -323,7 +323,7 @@ lado deles.
 | 5 | `plataforma/frameboost.rs` + `commands.rs` + `v33/ponte.ts` | ✅ a escala chega do comando de ligar (campo opcional: chamadas antigas continuam valendo); só escala não trava o FPS base (travar tiraria o ganho real) |
 | 6 | `gpu.rs` (teste `#[ignore]`) | ✅ `escala_na_placa`: medido no notebook (21/10), 640×360 → 960×540, **FSR SSIM 0,990 / PSNR 29,1 dB contra bilinear 0,953 / 23,5 dB**; barras pretas e a área do encaixe idêntica |
 | 7 | `LICENCAS-DE-TERCEIROS.md` | ✅ a licença MIT do FSR 1 |
-| 8 | interface | o seletor de nível no Frame Boost e a linha "jogo → tela" |
+| 8 | interface | ✅ seletor **Escala** (desligada é o padrão até o M2 redimensionar a janela sozinho) com a resolução que o jogo deve usar no monitor dele (`escala::opcoes`); "Só escala" no multiplicador; ligado: selo do nível e "jogo 1280×720 → tela 1920×1080"; só escala não mostra a comparação da guarda (não há geração para comparar) |
 | 9 | PC de casa | `sobre_o_jogo_de_teste` com `OTIMIZA_FG_ESCALA=Qualidade OTIMIZA_FG_MULT=1` e com `OTIMIZA_FG_MULT=2`: custo medido na placa e FPS do jogo nativo × escala |
 
 O teste de GPU é `#[ignore]`, como os outros da placa: a esteira roda em

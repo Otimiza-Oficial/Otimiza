@@ -47,6 +47,29 @@ pub fn resolucao_de_render(nivel: Nivel, largura: i32, altura: i32) -> (i32, i32
     )
 }
 
+/// Um nível com a resolução em que o jogo deve rodar nele, para a tela oferecer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Opcao {
+    pub nivel: Nivel,
+    pub largura: i32,
+    pub altura: i32,
+}
+
+/// Pura: os quatro níveis num monitor de `largura`×`altura`, do mais bonito ao mais rápido.
+pub fn opcoes(largura: i32, altura: i32) -> Vec<Opcao> {
+    Nivel::TODOS
+        .iter()
+        .map(|&nivel| {
+            let (l, a) = resolucao_de_render(nivel, largura, altura);
+            Opcao {
+                nivel,
+                largura: l,
+                altura: a,
+            }
+        })
+        .collect()
+}
+
 /// Pura: onde a imagem do jogo ampliada cai dentro de `tela`, mantendo a proporção do jogo e centrada (o que sobra
 /// vira barra). `None` com o jogo pequeno demais para ser jogo.
 pub fn encaixe(jogo_largura: i32, jogo_altura: i32, tela: Retangulo) -> Option<Retangulo> {
@@ -139,6 +162,15 @@ mod tests {
             })
             .collect();
         assert!(pixels.windows(2).all(|p| p[0] > p[1]));
+    }
+
+    #[test]
+    fn opcoes_do_monitor_em_ordem() {
+        let o = opcoes(2560, 1440);
+        assert_eq!(o.len(), 4);
+        assert_eq!(o[0].nivel, Nivel::UltraQualidade);
+        assert_eq!((o[1].largura, o[1].altura), (1707, 960));
+        assert_eq!((o[3].largura, o[3].altura), (1280, 720));
     }
 
     #[test]

@@ -56,6 +56,13 @@ pub struct Ativo {
     pub manteve_pct: Option<f64>,
     #[serde(default)]
     pub comparacoes: u32,
+    /// Com escala: o nível, o tamanho em que o jogo renderiza e o da imagem ampliada na tela.
+    #[serde(default)]
+    pub escala: Option<geracao::escala::Nivel>,
+    #[serde(default)]
+    pub jogo_px: Option<[i32; 2]>,
+    #[serde(default)]
+    pub tela_px: Option<[i32; 2]>,
 }
 
 /// O "antes × depois" da última vez que o gerador do Otimiza ficou ligado (só com 30 s ou mais gerando).
@@ -92,6 +99,11 @@ pub struct Painel {
     pub base_solta: bool,
     /// Gerador desligado: como foi a última vez.
     pub ultima_sessao: Option<UltimaSessao>,
+    /// O monitor onde o jogo está e, para cada nível de escala, a resolução em que o jogo deve rodar.
+    #[serde(default)]
+    pub monitor: Option<[i32; 2]>,
+    #[serde(default)]
+    pub escalas: Vec<geracao::escala::Opcao>,
 }
 
 /// A frase da última vez que o Frame Boost ligou, para o painel repetir enquanto ele estiver ligado.
@@ -176,6 +188,9 @@ pub fn ativo_de(e: &geracao::Estado) -> Option<Ativo> {
         fps_do_jogo: (e.situacao == Situacao::Gerando && e.fps_reais > 0.0).then_some(e.fps_reais.round()),
         manteve_pct: manteve_pct(e),
         comparacoes: e.comparacoes,
+        escala: e.escala,
+        jogo_px: e.escala.and(e.area).map(|a| [a.largura, a.altura]),
+        tela_px: e.ampliada.map(|a| [a.largura, a.altura]),
     })
 }
 
@@ -232,6 +247,9 @@ pub fn ativo_do_driver(recurso: Recurso, medicao: Option<&Medicao>) -> Ativo {
         fps_do_jogo: None,
         manteve_pct: None,
         comparacoes: 0,
+        escala: None,
+        jogo_px: None,
+        tela_px: None,
         geracao_vista: vista,
         nota: Some(match vista {
             None => "Ligado no driver. Toque em \u{201c}Medir agora\u{201d} com o jogo em movimento para ver o FPS na tela.".to_string(),
@@ -308,6 +326,8 @@ pub fn painel_de(
         nota_da_base: None,
         base_solta: false,
         ultima_sessao: ultima_sessao_de(gerador),
+        monitor: None,
+        escalas: Vec::new(),
     }
 }
 
@@ -424,7 +444,31 @@ pub fn painel() -> Painel {
     if p.ativo.is_some() {
         p.nota_da_base = NOTA_DA_BASE.lock().ok().and_then(|n| n.clone());
     }
+    if let Some((l, a)) = jogo.as_ref().and_then(|j| monitor_do_jogo(j.pid)) {
+        p.monitor = Some([l, a]);
+        p.escalas = geracao::escala::opcoes(l, a);
+    }
     p
+}
+
+/// O tamanho, em pixels, do monitor onde a janela do jogo está.
+#[cfg(target_os = "windows")]
+fn monitor_do_jogo(pid: u32) -> Option<(i32, i32)> {
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    let hwnd = geracao::janela_do_processo(pid)?;
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        GetMonitorInfoW(monitor, &mut info).as_bool().then(|| {
+            let r = info.rcMonitor;
+            (r.right - r.left, r.bottom - r.top)
+        })
+    }
 }
 
 /// Trava o FPS base do jogo aberto para o Frame Boost do Otimiza (só ele: o do driver não tem o ritmo do Otimiza).

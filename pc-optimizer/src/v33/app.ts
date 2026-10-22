@@ -18,6 +18,7 @@ import {
   type CantoDoOverlay,
   type ModoDoOverlay,
   type PainelFrameBoost,
+  type NivelDeEscala,
   type PlanoJogoLiso,
   type FovFivem,
   type MemoriaParaOJogo,
@@ -590,7 +591,12 @@ function inicio() {
     const exibidos = estado.gerador.fps_exibidos ?? null;
     contar(num, exibidos !== null && exibidos > 0 ? exibidos : estado.gerador.fps_apresentados, 1300);
     $("#r-un").textContent = "FPS na tela";
-    $("#r-d").textContent = `Frame Boost ${estado.gerador.automatico ? "Auto" : `${estado.gerador.multiplicador}×`} · desligue com Ctrl+Alt+G`;
+    const modo = estado.gerador.automatico
+      ? "Auto"
+      : estado.gerador.escala && estado.gerador.multiplicador <= 1
+        ? "só escala"
+        : `${estado.gerador.multiplicador}×`;
+    $("#r-d").textContent = `Frame Boost ${modo}${estado.gerador.escala && modo !== "só escala" ? " + escala" : ""} · desligue com Ctrl+Alt+G`;
     selos.push(
       exibidos !== null && exibidos > 0
         ? `<span class="selo medido">medido na tela</span>`
@@ -664,7 +670,12 @@ async function alternarBoost() {
     if (p.ativo) {
       await ponte.frameBoostDesligar();
     } else {
-      const novo = await ponte.frameBoostLigar(multiplicadorQueCabe(multiplicadoresOferecidos(p.multiplicadores)), semLimite());
+      const escala = escalaPedida();
+      const novo = await ponte.frameBoostLigar(
+        multiplicadorQueCabe(multiplicadoresOferecidos(p.multiplicadores), escala !== null),
+        semLimite(),
+        escala
+      );
       if (novo.ativo?.pelo_driver) {
         mostrarPassos([{ texto: `${novo.recomendado?.nome ?? "Frame Boost"} ligado no driver. Se o jogo já estava aberto, feche e abra de novo. O FPS na tela aparece medido no Boost.`, classe: "feito" }]);
       } else {
@@ -883,11 +894,39 @@ function multiplicadoresOferecidos(cabem: number[]): number[] {
   return semLimite() ? [2, 3, 4, 5, 6] : cabem;
 }
 
-/** O pedido, se couber no monitor; senão o maior que cabe abaixo dele. */
-function multiplicadorQueCabe(cabem: number[]): number {
+/** O pedido, se couber no monitor; senão o maior que cabe abaixo dele. 1 = só escala, e só vale com a escala ligada. */
+function multiplicadorQueCabe(cabem: number[], comEscala = false): number {
   const pedido = multiplicadorPedido();
-  if (pedido === 0 || cabem.includes(pedido)) return pedido;
+  if (pedido === 0 || cabem.includes(pedido) || (pedido === 1 && comEscala)) return pedido;
   return cabem.filter((m) => m <= pedido).pop() ?? cabem[0] ?? 2;
+}
+
+const CHAVE_ESCALA = "otimiza-fb-escala";
+
+const NOMES_DA_ESCALA: Record<NivelDeEscala, string> = {
+  UltraQualidade: "Ultra qualidade",
+  Qualidade: "Qualidade",
+  Equilibrado: "Equilibrado",
+  Desempenho: "Desempenho",
+};
+
+/** A escala escolhida (FSR 1), ou nenhuma. Desligada é o padrão: ela pede o jogo numa janela menor que o monitor. */
+function escalaPedida(): NivelDeEscala | null {
+  try {
+    const v = localStorage.getItem(CHAVE_ESCALA);
+    return v !== null && v in NOMES_DA_ESCALA ? (v as NivelDeEscala) : null;
+  } catch {
+    return null;
+  }
+}
+
+function gravarEscala(n: NivelDeEscala | null) {
+  try {
+    if (n) localStorage.setItem(CHAVE_ESCALA, n);
+    else localStorage.removeItem(CHAVE_ESCALA);
+  } catch {
+    // Vale nesta sessão.
+  }
 }
 
 let vigiaDoPainel = 0;
@@ -1159,17 +1198,30 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   const liga = doOtimiza || rec?.recurso === "FrameBoostAfmf" || experimental;
   const livre = semLimite();
   const oferecidos = multiplicadoresOferecidos(p.multiplicadores);
-  const mult = multiplicadorQueCabe(oferecidos);
+  // A escala é do gerador do Otimiza: o do jogo e o do driver não ampliam por fora.
+  const escala = doOtimiza ? escalaPedida() : null;
+  const mult = multiplicadorQueCabe(oferecidos, escala !== null);
+  const soEscala = mult === 1;
+  const opcaoDaEscala = escala ? p.escalas?.find((o) => o.nivel === escala) : undefined;
+  const dicaDaEscala = !escala
+    ? "O jogo renderiza numa resolução menor e o Otimiza amplia para o monitor (FSR 1): é FPS real a mais, não só quadro gerado."
+    : opcaoDaEscala && p.monitor
+      ? `No jogo, use janela sem bordas em ${opcaoDaEscala.largura}×${opcaoDaEscala.altura} (ou a mais próxima): o Otimiza amplia para ${p.monitor[0]}×${p.monitor[1]}. Por fora do jogo, sem injetar nada.`
+      : "No jogo, use janela sem bordas numa resolução menor que a do monitor: o Otimiza amplia para a tela inteira.";
   // Auto: o nativo vezes até 6, nunca acima do monitor (a faixa sai da estimativa de 2×).
   const dois = p.estimativas.find((e) => e.multiplicador === 2);
   // Passando do limite: o teto do Auto é o dobro dos Hz, e o multiplicador fixo não tem teto.
   const teto = p.hz ? (livre ? p.hz * 2 : p.hz) : Infinity;
   const vezes = (m: number) =>
     dois ? { multiplicador: m, faixa: { ...dois.faixa, minimo: Math.min(teto, (dois.faixa.minimo / 2) * m), maximo: Math.min(teto, (dois.faixa.maximo / 2) * m) } } : undefined;
-  const est = mult === 0 ? (p.hz ? vezes(6) : undefined) : livre ? vezes(mult) : p.estimativas.find((e) => e.multiplicador === mult);
+  // Só escala não tem estimativa: o ganho depende de quanto a placa limita o jogo, e aparece medido ao ligar.
+  const est = soEscala ? undefined : mult === 0 ? (p.hz ? vezes(6) : undefined) : livre ? vezes(mult) : p.estimativas.find((e) => e.multiplicador === mult);
   // Medido: o que o PresentMon viu chegar à tela. Estimado: o que o gerador apresentou (sem PresentMon, sem administrador).
   const medido = a && (a.fps_na_tela.origem === "Medido" || a.fps_na_tela.origem === "Estimado") ? a.fps_na_tela.valor : null;
   const naTelaEstimado = a?.fps_na_tela.origem === "Estimado";
+
+  // Ligado só com escala: não gera quadros, então não há o que a guarda comparar.
+  const soEscalaLigada = !!a?.escala && !a.automatico && a.multiplicador <= 1;
 
   let numero_ = "—";
   let rotulo = "FPS na tela";
@@ -1185,6 +1237,8 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
           : `<span class="selo medido" title="Quadros que chegaram à tela, pelo PresentMon">medido na tela</span>`;
     if (a.hdr) selos += `<span class="selo">HDR</span>`;
     if (a.leve) selos += `<span class="selo" title="A placa estava sem folga, ou o jogo perdeu FPS: o gerador calcula o movimento numa resolução menor para não tirar quadros do jogo.">modo leve</span>`;
+    if (a.escala) selos += `<span class="selo" title="O jogo renderiza menor e o Otimiza amplia para o monitor (FSR 1)">escala ${esc(NOMES_DA_ESCALA[a.escala])}</span>`;
+    const naTela = a.escala && a.jogo_px && a.tela_px ? `jogo ${a.jogo_px[0]}×${a.jogo_px[1]} → tela ${a.tela_px[0]}×${a.tela_px[1]} · ` : "";
     const atraso =
       (a.atraso_ms.valor !== null ? ` · atraso +${numero(a.atraso_ms.valor, 1)} ms (estimado)` : "") +
       (a.placa_pct !== null && a.placa_pct !== undefined ? ` · usa ${numero(a.placa_pct, 1)}% da placa (medido)` : "");
@@ -1194,7 +1248,9 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
         ? `Ajustando à janela do jogo…${a.refeitas ? ` Ele se refaz sozinho quando a janela muda (${a.refeitas}×).` : ""}`
         : a.situacao === "SemQuadros"
           ? "O jogo parou de desenhar: a sobreposição some até ele voltar."
-          : `${a.automatico ? `Auto (agora ${a.multiplicador}×)` : `${a.multiplicador}×`} · monitor de ${a.hz} Hz${a.sem_limite ? ` · passando do limite: o monitor mostra até ${a.hz} por segundo` : ""}${atraso}${!a.sem_limite && !a.automatico && a.multiplicador < multiplicadorPedido() ? `. ${multiplicadorPedido()}× passaria do monitor agora: o gerador nunca mostra mais quadros que os ${a.hz} Hz.` : ""}`;
+          : `${naTela}${soEscalaLigada ?"só escala, sem gerar quadros" : a.automatico ? `Auto (agora ${a.multiplicador}×)` : `${a.multiplicador}×`} · monitor de ${a.hz} Hz${a.sem_limite ? ` · passando do limite: o monitor mostra até ${a.hz} por segundo` : ""}${atraso}${!a.sem_limite && !a.automatico && a.multiplicador < multiplicadorPedido() ? `. ${multiplicadorPedido()}× passaria do monitor agora: o gerador nunca mostra mais quadros que os ${a.hz} Hz.` : ""}`;
+  } else if (doOtimiza && soEscala) {
+    linha = "Só escala: o jogo renderiza menor e o Otimiza amplia. O FPS a mais é do próprio jogo, sem o atraso da geração. O número aparece medido ao ligar.";
   } else if (est) {
     numero_ = `${numero(est.faixa.minimo)}–${numero(est.faixa.maximo)}`;
     rotulo = livre ? (mult === 0 ? "FPS no Auto" : `FPS com ${mult}×`) : mult === 0 ? "FPS na tela no Auto" : `FPS na tela com ${mult}×`;
@@ -1206,7 +1262,9 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
   // A prova do custo: o FPS do próprio jogo com o gerador ligado e quanto ele manteve (a guarda compara com e sem).
   const prova =
     a && !a.pelo_driver && a.situacao === "Gerando" && a.fps_do_jogo !== null
-      ? `Jogo a ${numero(a.fps_do_jogo)} fps · ${
+      ? soEscalaLigada
+        ? `Jogo a ${numero(a.fps_do_jogo)} fps`
+        : `Jogo a ${numero(a.fps_do_jogo)} fps · ${
           a.manteve_pct !== null
             ? `manteve ${numero(a.manteve_pct, 1)}% do FPS com o Frame Boost (medido em ${a.comparacoes} ${a.comparacoes === 1 ? "comparação" : "comparações"})`
             : "conferindo se o jogo perde FPS com o Frame Boost…"
@@ -1245,7 +1303,8 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selos}</div>
     ${linha ? `<p class="nota" style="margin-top:8px">${esc(linha)}</p>` : ""}
     ${prova ? `<p class="nota" style="margin-top:4px">${esc(prova)}</p>` : ""}` : ""}
-    ${doOtimiza && !a ? `<div class="seg" id="fb-mult" style="margin-top:14px"><button aria-pressed="${mult === 0}" data-m="0" title="Enche o monitor: quantos quadros couberem">Auto</button>${oferecidos.map((m) => `<button aria-pressed="${m === mult}" data-m="${m}">${m}×</button>`).join("")}</div>${mult === 0 && !livre ? `<p class="nota" style="margin-top:6px">Auto enche o monitor: com o jogo a 60 fps num de 180 Hz, a tela recebe 180. Mais liso, mas segura o quadro real por cerca de um quadro do jogo (o 2× segura metade): para jogo competitivo, o 2× tem menos atraso.</p>` : ""}` : ""}
+    ${doOtimiza && !a ? `<div class="rotulo" style="margin-top:16px">Escala</div><div class="seg" id="fb-escala" style="margin-top:8px"><button aria-pressed="${escala === null}" data-e="">Desligada</button>${(Object.keys(NOMES_DA_ESCALA) as NivelDeEscala[]).map((n) => `<button aria-pressed="${escala === n}" data-e="${n}">${NOMES_DA_ESCALA[n]}</button>`).join("")}</div><p class="nota" style="margin-top:6px">${esc(dicaDaEscala)}</p>` : ""}
+    ${doOtimiza && !a ? `<div class="seg" id="fb-mult" style="margin-top:14px">${escala ? `<button aria-pressed="${mult === 1}" data-m="1" title="Sem gerar quadros: só o FPS real a mais, sem atraso">Só escala</button>` : ""}<button aria-pressed="${mult === 0}" data-m="0" title="Enche o monitor: quantos quadros couberem">Auto</button>${oferecidos.map((m) => `<button aria-pressed="${m === mult}" data-m="${m}">${m}×</button>`).join("")}</div>${mult === 0 && !livre ? `<p class="nota" style="margin-top:6px">Auto enche o monitor: com o jogo a 60 fps num de 180 Hz, a tela recebe 180. Mais liso, mas segura o quadro real por cerca de um quadro do jogo (o 2× segura metade): para jogo competitivo, o 2× tem menos atraso.</p>` : ""}` : ""}
     ${rec ? `<div class="acoes" style="margin-top:14px"><button class="botao ${a ? "" : "prim"}" id="fb-ligar">${a ? "Desligar Frame Boost" : experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Como ligar"}</button>${a?.pelo_driver ? `<button class="botao" id="fb-medir">Medir agora</button>` : ""}${doOtimiza ? `<span class="nota" style="align-self:center">Ctrl+Alt+G desliga de dentro do jogo</span>` : ""}</div>` : ""}
     ${doOtimiza && (p.base || p.nota_da_base) ? `<div class="linha" style="margin-top:12px"><div>FPS base${p.base ? ` <b>${p.base.fps}</b> · ${p.base.multiplicador}× fecham o monitor <span class="selo ${p.base.valendo ? "medido" : ""}">${p.base.valendo ? "valendo" : "vale ao reabrir o jogo"}</span>` : ""}<p>${esc(p.nota_da_base ?? "Base travada numa fração do monitor: cada quadro real ganha sempre o mesmo número de gerados.")}</p></div>${p.base ? `<button class="botao" id="fb-destravar">Destravar</button>` : ""}</div>` : ""}
     ${doOtimiza && p.base_solta && !p.base ? `<div class="linha" style="margin-top:12px"><div>FPS base solto<p>Você destravou: o Frame Boost não trava a base deste jogo sozinho.${a && !a.pelo_driver ? "" : " Para travar de novo, ligue o Frame Boost."}</p></div>${a && !a.pelo_driver ? `<button class="botao" id="fb-travar">Travar de novo</button>` : ""}</div>` : ""}
@@ -1269,11 +1328,17 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
       void painelFrameBoost(p);
     })
   );
+  $$<HTMLButtonElement>("#fb-escala button").forEach((b) =>
+    b.addEventListener("click", () => {
+      gravarEscala(b.dataset.e ? (b.dataset.e as NivelDeEscala) : null);
+      void painelFrameBoost(p);
+    })
+  );
   document.querySelector<HTMLButtonElement>("#fb-ligar")?.addEventListener("click", async (e) => {
     const botao = e.currentTarget as HTMLButtonElement;
     botao.disabled = true;
     try {
-      const novo = a ? await ponte.frameBoostDesligar() : await ponte.frameBoostLigar(mult, livre);
+      const novo = a ? await ponte.frameBoostDesligar() : await ponte.frameBoostLigar(mult, livre, escala);
       estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
       await painelFrameBoost(novo);
     } catch (erro) {

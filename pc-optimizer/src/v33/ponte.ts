@@ -291,6 +291,10 @@ export interface PainelFrameBoost {
     /** Quanto do FPS o jogo mantém com o gerador (medido pela guarda), em %. */
     manteve_pct: number | null;
     comparacoes: number;
+    /** Com escala: o nível, o tamanho em que o jogo renderiza e o da imagem ampliada. */
+    escala?: NivelDeEscala | null;
+    jogo_px?: [number, number] | null;
+    tela_px?: [number, number] | null;
   } | null;
   aviso: string | null;
   /** O teto do FPS base que o Otimiza gravou para este jogo. */
@@ -309,6 +313,9 @@ export interface PainelFrameBoost {
     comparacoes: number;
     desligou_por_perda: boolean;
   } | null;
+  /** O monitor do jogo e, por nível de escala, a resolução em que o jogo deve rodar. */
+  monitor?: [number, number] | null;
+  escalas?: { nivel: NivelDeEscala; largura: number; altura: number }[];
 }
 
 export interface EstadoDoGerador {
@@ -322,6 +329,7 @@ export interface EstadoDoGerador {
   fps_exibidos?: number | null;
   erro: string | null;
   atraso_ms: number | null;
+  escala?: NivelDeEscala | null;
 }
 
 export interface PainelAmd {
