@@ -1015,6 +1015,10 @@ pub fn run() {
             // custa nada.
             #[cfg(target_os = "windows")]
             if let tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit = event {
+                // A escala ligada prende o mouse e encolhe a janela do jogo: o fim do gerador devolve os dois (e o
+                // cursor do sistema) antes de o processo acabar. Sem gerador rodando, não faz nada.
+                modules::windows::geracao::desligar();
+
                 let devolvidos = modules::windows::suspend::retomar_tudo().unwrap_or_default();
 
                 if !devolvidos.is_empty() {

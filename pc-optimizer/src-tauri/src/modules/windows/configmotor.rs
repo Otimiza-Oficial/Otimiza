@@ -286,6 +286,8 @@ pub struct JogoNaTela {
     pub arquivo: Option<String>,
     pub aberto: bool,
     pub previsao: Vec<Previsao>,
+    /// O arquivo existe mas não deu para ler: a tela diz isso em vez de "nada a mudar".
+    pub ilegivel: Option<String>,
     pub ficha: &'static str,
 }
 
@@ -295,17 +297,19 @@ pub fn painel() -> Vec<JogoNaTela> {
         .iter()
         .map(|p| {
             let arquivo = arquivos(p.id).into_iter().next();
-            let previsao = arquivo
-                .as_ref()
-                .and_then(|a| std::fs::read_to_string(a).ok())
-                .map(|c| prever(p, &c))
-                .unwrap_or_default();
+            let lido = arquivo.as_ref().map(std::fs::read_to_string);
+            let (previsao, ilegivel) = match lido {
+                Some(Ok(c)) => (prever(p, &c), None),
+                Some(Err(e)) => (Vec::new(), Some(format!("Não consegui ler o arquivo de configuração: {}", e))),
+                None => (Vec::new(), None),
+            };
             JogoNaTela {
                 id: p.id,
                 nome: p.nome,
                 arquivo: arquivo.map(|a| a.to_string_lossy().to_string()),
                 aberto: aberto(p.id),
                 previsao,
+                ilegivel,
                 ficha: p.ficha,
             }
         })

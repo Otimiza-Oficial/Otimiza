@@ -63,6 +63,12 @@ pub struct Receita {
     pub explicacao: String,
 }
 
+/// Pura: as duas receitas ligam a mesma coisa (escala, multiplicador e energia), mesmo com textos e FPS diferentes.
+/// É o que impede o "Medir de novo" de religar uma receita que a prova reprovou.
+pub fn mesma_acao(a: &Receita, b: &Receita) -> bool {
+    a.escala == b.escala && a.multiplicador == b.multiplicador && a.energia == b.energia
+}
+
 /// Pura: o FPS do jogo renderizando no nível, preso na placa. O FPS cresce quase na proporção dos pixels, mas não
 /// inteiro (geometria, processador e pós-processamento não diminuem): expoente 0,7, para não prometer demais.
 pub fn fps_no_nivel(fps: f64, nivel: Nivel) -> f64 {
@@ -96,8 +102,8 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
                     Some(0),
                     true,
                     false,
-                    "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels (FPS real a mais) e a \
-                     geração de quadros completa o monitor."
+                    "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels (FPS real a mais) e, pela \
+                     estimativa, a geração de quadros completa o monitor. O número medido aparece ao ligar."
                         .to_string(),
                 )
             } else {
@@ -110,8 +116,9 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz: Option<u32>, competitivo: 
                         "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels. Jogo competitivo: \
                          sem geração de quadros, para não acrescentar atraso."
                     } else {
-                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels, e isso já basta \
-                         para o monitor. Sem geração, sem atraso a mais."
+                        "A placa de vídeo está no limite: o jogo passa a renderizar menos pixels, e pela estimativa \
+                         isso já basta para o monitor. Sem geração, sem atraso a mais. O número medido aparece ao \
+                         ligar."
                     }
                     .to_string(),
                 )
@@ -364,9 +371,28 @@ pub struct Painel {
 
 #[cfg(target_os = "windows")]
 static PASSOS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
-/// O Turbo ligou a energia de jogo (e não a pessoa): desligar o Turbo devolve só o que ele ligou.
+/// O Turbo ligou a energia de jogo (e não a pessoa): desligar o Turbo devolve só o que ele ligou. Em disco, ao lado
+/// do turbo.json: depois de fechar e abrir o Otimiza, o "Desligar Turbo" ainda sabe que a energia foi dele.
 #[cfg(target_os = "windows")]
-static LIGOU_A_ENERGIA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn marca_da_energia() -> PathBuf {
+    caminho().with_file_name("turbo_energia")
+}
+
+#[cfg(target_os = "windows")]
+fn ligou_a_energia() -> bool {
+    marca_da_energia().exists()
+}
+
+#[cfg(target_os = "windows")]
+fn marcar_energia(ligou: bool) {
+    let m = marca_da_energia();
+    let _ = if ligou {
+        m.parent().map(std::fs::create_dir_all);
+        std::fs::write(&m, b"")
+    } else {
+        std::fs::remove_file(&m)
+    };
+}
 #[cfg(target_os = "windows")]
 static LIGADO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// O que o resultado precisa: o FPS de antes e a receita aplicada (ao ligar), e o antes × depois (ao desligar).
@@ -444,7 +470,7 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> V
         } else {
             match super::energia_jogo::definir(true) {
                 Ok(_) => {
-                    LIGOU_A_ENERGIA.store(true, Ordering::SeqCst);
+                    marcar_energia(true);
                     passos.push("Energia de jogo: ligada.".to_string());
                 }
                 Err(e) => passos.push(format!("Energia de jogo: {}", e)),
@@ -499,8 +525,9 @@ pub fn desligar() -> Result<(), String> {
             *r = resultado_de(fps_antes, sessao.as_ref(), receita.escala, gerou);
         }
     }
-    if LIGOU_A_ENERGIA.swap(false, Ordering::SeqCst) {
+    if ligou_a_energia() {
         super::energia_jogo::definir(false)?;
+        marcar_energia(false);
     }
     LIGADO.store(false, Ordering::SeqCst);
     if let Ok(mut p) = PASSOS.lock() {
@@ -633,7 +660,7 @@ pub fn provar(
         return Err("Já há uma prova rodando.".to_string());
     }
     let energia_antes = super::energia_jogo::ler().ligado
-        && !LIGOU_A_ENERGIA.load(Ordering::SeqCst);
+        && !ligou_a_energia();
     // A partir daqui, qualquer saída devolve o lado "sem" e libera a vez.
     let mut fim = FimDaProva {
         energia_antes,
@@ -722,6 +749,23 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_mesma_acao_ignora_o_texto_e_o_gargalo() {
+        let base = Receita {
+            gargalo: Gargalo::Placa,
+            escala: Some(Nivel::Qualidade),
+            multiplicador: Some(1),
+            energia: true,
+            memoria: false,
+            explicacao: "a 60 fps".into(),
+        };
+        let outra_medida = Receita { explicacao: "a 58 fps".into(), memoria: true, ..base.clone() };
+        assert!(mesma_acao(&base, &outra_medida));
+        assert!(!mesma_acao(&base, &Receita { escala: Some(Nivel::Desempenho), ..base.clone() }));
+        assert!(!mesma_acao(&base, &Receita { energia: false, ..base.clone() }));
+        assert!(!mesma_acao(&base, &Receita { multiplicador: Some(2), ..base.clone() }));
+    }
 
     #[test]
     fn cada_limite_tem_o_seu_gargalo() {

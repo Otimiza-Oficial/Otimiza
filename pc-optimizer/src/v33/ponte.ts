@@ -278,6 +278,8 @@ export interface ConfigDoJogo {
   arquivo: string | null;
   aberto: boolean;
   previsao: { chave: string; antes: string; depois: string; por_que: string }[];
+  /** O arquivo existe mas não deu para ler. */
+  ilegivel: string | null;
   ficha: string;
   historico: string;
   aplicado: boolean;

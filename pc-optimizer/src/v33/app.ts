@@ -907,7 +907,9 @@ async function cartaoConfigDosJogos() {
         : "";
     const estado = j.aplicado
       ? "Perfil leve aplicado pelo Otimiza. O desfazer devolve o arquivo exatamente como estava."
-      : j.previsao.length
+      : j.ilegivel
+        ? j.ilegivel
+        : j.previsao.length
         ? j.aberto
           ? "Feche o jogo para aplicar: ele reescreve a configuração ao sair."
           : ""

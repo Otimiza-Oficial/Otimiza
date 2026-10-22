@@ -583,6 +583,7 @@ impl JanelaNoNivel {
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
             let guardada = JanelaGuardada {
                 pid,
+                executavel: super::gamemode::executavel_do_pid(pid),
                 janela: [janela.left, janela.top, janela.right, janela.bottom],
                 maximizada,
             };
@@ -606,6 +607,9 @@ impl JanelaNoNivel {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct JanelaGuardada {
     pid: u32,
+    /// O executável dono do pid: depois de reiniciar, o pid pode ser de outro programa, e esse não se mexe.
+    #[serde(default)]
+    executavel: Option<String>,
     /// left, top, right, bottom.
     janela: [i32; 4],
     maximizada: bool,
@@ -627,6 +631,13 @@ pub fn devolver_janela_na_abertura() -> Option<String> {
     let texto = std::fs::read_to_string(&c).ok()?;
     let _ = std::fs::remove_file(&c);
     let g: JanelaGuardada = serde_json::from_str(&texto).ok()?;
+    let mesmo_programa = match (&g.executavel, super::gamemode::executavel_do_pid(g.pid)) {
+        (Some(antes), Some(agora)) => antes.eq_ignore_ascii_case(&agora),
+        _ => false,
+    };
+    if !mesmo_programa {
+        return Some("o jogo da escala anterior já fechou".to_string());
+    }
     let Some(hwnd) = janela_do_processo(g.pid) else {
         return Some("o jogo da escala anterior já fechou".to_string());
     };

@@ -42,7 +42,7 @@ impl Nivel {
                  tire uma função do Windows. É o padrão do \"Otimizar agora\"."
             }
             Nivel::Experimental => {
-                "Tudo do Avançado, mais os ajustes que rendem numa máquina e custam \
+                "Tudo do Completo, mais os ajustes que rendem numa máquina e custam \
                  quadro em outra. Eles não vêm com promessa: vêm com um teste. O jeito de \
                  usar este nível é um grupo de cada vez, medindo antes e depois — e foi \
                  aplicar tudo isso de uma vez que derrubou o FPS de um cliente na 2.1.0."

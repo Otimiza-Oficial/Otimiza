@@ -174,7 +174,7 @@ pub fn chave_do_processo(executavel: &str) -> String {
     nome.strip_suffix(".exe").unwrap_or(&nome).to_string()
 }
 
-fn executavel_do_pid(pid: u32) -> Option<String> {
+pub(crate) fn executavel_do_pid(pid: u32) -> Option<String> {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sistema = System::new();
     let alvo = [Pid::from_u32(pid)];
