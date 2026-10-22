@@ -291,6 +291,9 @@ pub fn run() {
             commands::turbo_ligar,
             commands::turbo_desligar,
             commands::turbo_esquecer,
+            commands::turbo_provar,
+            commands::turbo_prova_guardada,
+            commands::turbo_compartilhar,
             commands::config_motor_painel,
             commands::config_motor_aplicar,
             commands::escala_pedir_comparacao,
@@ -607,6 +610,14 @@ pub fn run() {
                 }
                 if let Ok(Some(r)) = tokio::task::spawn_blocking(modules::provaalternada::recuperar_na_abertura).await {
                     utils::Logger::info(&format!("prova alternada interrompida: plano do Otimiza reativado na abertura: {:?}", r));
+                }
+                // Escala: a sessão anterior pode ter caído com o cursor do Windows escondido e a janela do jogo pequena.
+                let _ = tokio::task::spawn_blocking(modules::windows::geracao::cursor::devolver_na_abertura).await;
+                if let Ok(Some(feito)) = tokio::task::spawn_blocking(modules::windows::geracao::devolver_janela_na_abertura).await {
+                    utils::Logger::info(&format!("escala interrompida, na abertura: {}", feito));
+                }
+                if let Ok(Some(r)) = tokio::task::spawn_blocking(crate::plataforma::turbo::recuperar_na_abertura).await {
+                    utils::Logger::info(&format!("prova do Turbo interrompida, na abertura: {}", r));
                 }
                 // Teste da travada interrompido (ou mantido e o Otimiza fechou antes do jogo): devolve a prioridade.
                 match tokio::task::spawn_blocking(modules::windows::investigacao::recuperar_na_abertura).await {

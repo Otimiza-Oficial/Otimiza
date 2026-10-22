@@ -252,13 +252,21 @@ pub fn geracao_agora(
     use crate::modules::windows::{framegen, frames, geracao};
     if presentmon.is_some_and(|r| !r.geradores.is_empty()) {
         GeracaoNaPartida::IdentificadaNosQuadros
-    } else if geracao::estado().situacao == geracao::Situacao::Gerando {
+    } else if gera_quadros(&geracao::estado()) {
         GeracaoNaPartida::OtimizaFg
     } else if frames::encontrar_processo(framegen::PROCESSO_LOSSLESS).is_some() {
         GeracaoNaPartida::LosslessScaling
     } else {
         GeracaoNaPartida::NenhumaVisivel
     }
+}
+
+/// Pura: o Frame Boost do Otimiza está GERANDO quadros. Só escala (multiplicador 1, sem o Auto) não gera: o que chega
+/// à tela é o próprio jogo, e contar como gerador anularia toda comparação com e sem a escala.
+#[cfg(target_os = "windows")]
+pub fn gera_quadros(e: &crate::modules::windows::geracao::Estado) -> bool {
+    e.situacao == crate::modules::windows::geracao::Situacao::Gerando
+        && (e.automatico || e.multiplicador > 1)
 }
 
 /// Para portão, regressão, deriva e protocolo: só o que pode ser comparado.

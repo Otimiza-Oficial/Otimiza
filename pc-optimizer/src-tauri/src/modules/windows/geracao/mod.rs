@@ -578,6 +578,21 @@ impl JanelaNoNivel {
                 alvo.altura - borda.1,
                 nivel
             ));
+            // Se o Otimiza cair com a janela pequena, a abertura seguinte a devolve por este marcador.
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let guardada = JanelaGuardada {
+                pid,
+                janela: [janela.left, janela.top, janela.right, janela.bottom],
+                maximizada,
+            };
+            if let Ok(texto) = serde_json::to_string(&guardada) {
+                let c = marcador_da_janela();
+                if let Some(d) = c.parent() {
+                    let _ = std::fs::create_dir_all(d);
+                }
+                let _ = std::fs::write(c, texto);
+            }
             Some(JanelaNoNivel {
                 hwnd,
                 anterior: janela,
@@ -587,8 +602,47 @@ impl JanelaNoNivel {
     }
 }
 
+/// O tamanho de antes da janela do jogo, em disco enquanto a escala está ligada.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct JanelaGuardada {
+    pid: u32,
+    /// left, top, right, bottom.
+    janela: [i32; 4],
+    maximizada: bool,
+}
+
+fn marcador_da_janela() -> std::path::PathBuf {
+    std::env::var("APPDATA")
+        .or_else(|_| std::env::var("HOME"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("pc-optimizer")
+        .join("escala_janela.json")
+}
+
+/// Na abertura do Otimiza: a sessão anterior caiu com a escala ligada. Com o jogo ainda aberto, a janela dele volta
+/// ao tamanho de antes; e o marcador sai de qualquer jeito. `Some` com o que foi feito, para o log.
+pub fn devolver_janela_na_abertura() -> Option<String> {
+    let c = marcador_da_janela();
+    let texto = std::fs::read_to_string(&c).ok()?;
+    let _ = std::fs::remove_file(&c);
+    let g: JanelaGuardada = serde_json::from_str(&texto).ok()?;
+    let Some(hwnd) = janela_do_processo(g.pid) else {
+        return Some("o jogo da escala anterior já fechou".to_string());
+    };
+    let [l, t, r, b] = g.janela;
+    unsafe {
+        let _ = SetWindowPos(hwnd, None, l, t, r - l, b - t, SWP_NOZORDER | SWP_NOACTIVATE);
+        if g.maximizada {
+            let _ = ShowWindow(hwnd, SW_MAXIMIZE);
+        }
+    }
+    Some(format!("janela do jogo devolvida a {}x{}", r - l, b - t))
+}
+
 impl Drop for JanelaNoNivel {
     fn drop(&mut self) {
+        let _ = std::fs::remove_file(marcador_da_janela());
         unsafe {
             if !IsWindow(Some(self.hwnd)).as_bool() {
                 return;
