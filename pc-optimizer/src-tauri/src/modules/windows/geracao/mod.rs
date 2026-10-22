@@ -156,6 +156,34 @@ fn gravar_bmp(
     textura: &ID3D11Texture2D,
     caminho: &std::path::Path,
 ) -> Result<(), String> {
+    let (l, a, px) = ler_bgra(gpu, textura, false)?;
+    std::fs::write(caminho, bmp(l, a, &px)).map_err(|e| e.to_string())
+}
+
+/// Pura: BGRA de cima para baixo num arquivo BMP de 32 bits (o WebView mostra direto).
+pub fn bmp(l: u32, a: u32, px: &[u8]) -> Vec<u8> {
+    let mut d = Vec::with_capacity(54 + px.len());
+    d.extend_from_slice(b"BM");
+    d.extend_from_slice(&((54 + px.len()) as u32).to_le_bytes());
+    d.extend_from_slice(&[0, 0, 0, 0]);
+    d.extend_from_slice(&54u32.to_le_bytes());
+    d.extend_from_slice(&40u32.to_le_bytes());
+    d.extend_from_slice(&(l as i32).to_le_bytes());
+    d.extend_from_slice(&(-(a as i32)).to_le_bytes());
+    d.extend_from_slice(&1u16.to_le_bytes());
+    d.extend_from_slice(&32u16.to_le_bytes());
+    d.extend_from_slice(&[0u8; 24]);
+    d.extend_from_slice(px);
+    d
+}
+
+/// Uma textura da placa em BGRA de 8 bits. HDR (FP16): `ja_codificado` é a imagem que já está com gama (a do jogo
+/// dentro do gerador); sem isso, é scRGB linear e ganha gama 2,2 (a da swap chain).
+fn ler_bgra(
+    gpu: &Gpu,
+    textura: &ID3D11Texture2D,
+    ja_codificado: bool,
+) -> Result<(u32, u32, Vec<u8>), String> {
     use windows::Win32::Graphics::Direct3D11::*;
     unsafe {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
@@ -180,29 +208,17 @@ fn gravar_bmp(
             .Map(&copia, 0, D3D11_MAP_READ, 0, Some(&mut m))
             .map_err(|e| e.message().to_string())?;
         let (l, a) = (desc.Width as usize, desc.Height as usize);
-        let mut dados = Vec::with_capacity(54 + l * a * 4);
-        let tamanho = (54 + l * a * 4) as u32;
-        dados.extend_from_slice(b"BM");
-        dados.extend_from_slice(&tamanho.to_le_bytes());
-        dados.extend_from_slice(&[0, 0, 0, 0]);
-        dados.extend_from_slice(&54u32.to_le_bytes());
-        dados.extend_from_slice(&40u32.to_le_bytes());
-        dados.extend_from_slice(&(l as i32).to_le_bytes());
-        dados.extend_from_slice(&(-(a as i32)).to_le_bytes());
-        dados.extend_from_slice(&1u16.to_le_bytes());
-        dados.extend_from_slice(&32u16.to_le_bytes());
-        dados.extend_from_slice(&[0u8; 24]);
+        let mut dados = Vec::with_capacity(l * a * 4);
         for y in 0..a {
             let base = (m.pData as *const u8).add(y * m.RowPitch as usize);
             if fp16 {
-                // Tabela: a conversão pixel a pixel atrasava o quadro gerado seguinte e ele nunca era gravado.
-                static TABELA: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
-                let tabela = TABELA.get_or_init(|| {
+                // Tabelas: a conversão pixel a pixel atrasava o quadro gerado seguinte e ele nunca era gravado.
+                static LINEAR: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+                static CODIFICADO: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+                let gama = if ja_codificado { 1.0 } else { 1.0 / 2.2 };
+                let tabela = (if ja_codificado { &CODIFICADO } else { &LINEAR }).get_or_init(|| {
                     (0..=u16::MAX)
-                        .map(|v| {
-                            (gpu::meio_float(v).clamp(0.0, 1.0).powf(1.0 / 2.2) * 255.0).round()
-                                as u8
-                        })
+                        .map(|v| (gpu::meio_float(v).clamp(0.0, 1.0).powf(gama) * 255.0).round() as u8)
                         .collect()
                 });
                 let linha = std::slice::from_raw_parts(base as *const u16, l * 4);
@@ -215,8 +231,111 @@ fn gravar_bmp(
             }
         }
         gpu.ctx.Unmap(&copia, 0);
-        std::fs::write(caminho, dados).map_err(|e| e.to_string())
+        Ok((l as u32, a as u32, dados))
     }
+}
+
+/// O comparador da tela: o mesmo pedaço do quadro do jogo (na resolução dele, antes de ampliar) e da imagem ampliada
+/// pelo FSR, em BMP.
+#[derive(Debug, Clone)]
+pub struct Comparacao {
+    pub jogo_bmp: Vec<u8>,
+    pub tela_bmp: Vec<u8>,
+    pub jogo: (u32, u32),
+    pub tela: (u32, u32),
+}
+
+enum PedidoDeComparacao {
+    Nenhum,
+    Pedido,
+    Pronta(Comparacao),
+}
+
+static COMPARACAO: Mutex<PedidoDeComparacao> = Mutex::new(PedidoDeComparacao::Nenhum);
+
+/// O próximo quadro real ampliado vira comparação (`tomar_comparacao`).
+pub fn pedir_comparacao() {
+    if let Ok(mut c) = COMPARACAO.lock() {
+        *c = PedidoDeComparacao::Pedido;
+    }
+}
+
+pub fn tomar_comparacao() -> Option<Comparacao> {
+    let mut c = COMPARACAO.lock().ok()?;
+    match std::mem::replace(&mut *c, PedidoDeComparacao::Nenhum) {
+        PedidoDeComparacao::Pronta(x) => Some(x),
+        outro => {
+            *c = outro;
+            None
+        }
+    }
+}
+
+/// Com um pedido aberto: lê o quadro do jogo (antes de ampliar) e o que foi para a tela, e guarda o mesmo pedaço dos
+/// dois. Só num quadro REAL: o gerado não existe no jogo.
+fn capturar_comparacao(gpu: &Gpu, swap: &IDXGISwapChain1, area: Retangulo) {
+    let pedido = COMPARACAO
+        .lock()
+        .is_ok_and(|c| matches!(*c, PedidoDeComparacao::Pedido));
+    if !pedido {
+        return;
+    }
+    let Some(origem) = gpu.textura_da_origem() else {
+        return;
+    };
+    let Ok(fundo) = (unsafe { swap.GetBuffer::<ID3D11Texture2D>(0) }) else {
+        return;
+    };
+    let (Ok((jl, ja, jogo)), Ok((sl, sa, tela))) =
+        (ler_bgra(gpu, origem, true), ler_bgra(gpu, &fundo, false))
+    else {
+        return;
+    };
+    let (al, aa) = (area.largura as u32, area.altura as u32);
+    let ampliada = recortar(&tela, sl, sa, area);
+    let (rj, rt) = regioes_da_comparacao((jl, ja), (al, aa));
+    let comparacao = Comparacao {
+        jogo_bmp: bmp(rj.largura as u32, rj.altura as u32, &recortar(&jogo, jl, ja, rj)),
+        tela_bmp: bmp(rt.largura as u32, rt.altura as u32, &recortar(&ampliada, al, aa, rt)),
+        jogo: (jl, ja),
+        tela: (al, aa),
+    };
+    if let Ok(mut c) = COMPARACAO.lock() {
+        *c = PedidoDeComparacao::Pronta(comparacao);
+    }
+}
+
+/// Pura: o pedaço central da imagem ampliada (um terço de cada lado) e o mesmo pedaço no quadro do jogo.
+pub fn regioes_da_comparacao(jogo: (u32, u32), ampliada: (u32, u32)) -> (Retangulo, Retangulo) {
+    let (tl, ta) = ((ampliada.0 / 3).max(1), (ampliada.1 / 3).max(1));
+    let tela = Retangulo {
+        x: ((ampliada.0 - tl) / 2) as i32,
+        y: ((ampliada.1 - ta) / 2) as i32,
+        largura: tl as i32,
+        altura: ta as i32,
+    };
+    let (fx, fy) = (jogo.0 as f64 / ampliada.0 as f64, jogo.1 as f64 / ampliada.1 as f64);
+    let do_jogo = Retangulo {
+        x: (tela.x as f64 * fx).round() as i32,
+        y: (tela.y as f64 * fy).round() as i32,
+        largura: ((tl as f64 * fx).round() as i32).max(1),
+        altura: ((ta as f64 * fy).round() as i32).max(1),
+    };
+    (do_jogo, tela)
+}
+
+/// Pura: o retângulo `r` de uma imagem BGRA `l` de largura (presa dentro dela).
+pub fn recortar(px: &[u8], l: u32, a: u32, r: Retangulo) -> Vec<u8> {
+    let x0 = (r.x.max(0) as u32).min(l);
+    let y0 = (r.y.max(0) as u32).min(a);
+    let x1 = (x0 + r.largura.max(0) as u32).min(l);
+    let y1 = (y0 + r.altura.max(0) as u32).min(a);
+    let mut v = Vec::with_capacity(((x1 - x0) * (y1 - y0) * 4) as usize);
+    for y in y0..y1 {
+        let i = ((y * l + x0) * 4) as usize;
+        v.extend_from_slice(&px[i..i + ((x1 - x0) * 4) as usize]);
+    }
+    v
 }
 static EM_EXECUCAO: Mutex<Option<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>> =
     Mutex::new(None);
@@ -938,6 +1057,12 @@ impl Sobreposicao {
             match cronometro {
                 Some(c) => c.medir(gpu, compor),
                 None => compor(),
+            }
+            // Só com a sobreposição à vista (o jogo na frente): com o Otimiza na frente, a captura seria a dele.
+            if let (Some(area), None) = (self.ampliar, t) {
+                if unsafe { IsWindowVisible(self.hwnd) }.as_bool() {
+                    capturar_comparacao(gpu, &self.swap, area);
+                }
             }
             if let Ok(mut g) = CAPTURA_DE_DIAGNOSTICO.lock() {
                 if let Some((pasta, restantes)) = g.as_mut() {
@@ -2044,6 +2169,33 @@ mod tests_puros {
             "espaçadas: alt+tab normal"
         );
         assert!(TELA_CHEIA_EXCLUSIVA.contains("Sem bordas"));
+    }
+
+    #[test]
+    fn a_comparacao_pega_o_mesmo_pedaco_nas_duas_imagens() {
+        // Jogo 1280x720 ampliado para 1920x1080: o terço central da tela é 640x360 a partir de (640, 360); no jogo,
+        // o mesmo pedaço é 427x240 a partir de (427, 240).
+        let (jogo, tela) = regioes_da_comparacao((1280, 720), (1920, 1080));
+        assert_eq!(tela, Retangulo { x: 640, y: 360, largura: 640, altura: 360 });
+        assert_eq!(jogo, Retangulo { x: 427, y: 240, largura: 427, altura: 240 });
+    }
+
+    #[test]
+    fn recortar_pega_as_linhas_certas_e_nao_passa_da_borda() {
+        // 3x2: pixels numerados 0..6 (o primeiro byte de cada um).
+        let px: Vec<u8> = (0..6u8).flat_map(|i| [i, 0, 0, 255]).collect();
+        let r = recortar(&px, 3, 2, Retangulo { x: 1, y: 0, largura: 2, altura: 2 });
+        assert_eq!(r.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), [1, 2, 4, 5]);
+        let fora = recortar(&px, 3, 2, Retangulo { x: 2, y: 1, largura: 9, altura: 9 });
+        assert_eq!(fora.chunks(4).map(|p| p[0]).collect::<Vec<_>>(), [5]);
+    }
+
+    #[test]
+    fn o_bmp_tem_o_tamanho_e_a_altura_de_cima_para_baixo() {
+        let b = bmp(2, 3, &[0u8; 24]);
+        assert_eq!(&b[0..2], b"BM");
+        assert_eq!(b.len(), 54 + 24);
+        assert_eq!(i32::from_le_bytes(b[22..26].try_into().unwrap()), -3);
     }
 
     #[test]

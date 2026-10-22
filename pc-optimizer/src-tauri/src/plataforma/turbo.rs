@@ -223,6 +223,41 @@ pub fn esquecer(id_do_jogo: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
+/// da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Resultado {
+    pub fps_antes: f64,
+    /// FPS do jogo com o Turbo, média da sessão.
+    pub fps_do_jogo: f64,
+    pub ganho_pct: f64,
+    /// Só com geração: o que chegou à tela.
+    pub fps_na_tela: Option<f64>,
+    pub na_tela_medido: bool,
+    pub minutos: f64,
+    pub escala: Option<Nivel>,
+}
+
+/// Pura. Sem o antes, sem sessão (menos de 30 s gerando) ou sem Frame Boost: nada a mostrar.
+pub fn resultado_de(
+    fps_antes: Option<f64>,
+    sessao: Option<&crate::modules::windows::geracao::resumo::Resumo>,
+    escala: Option<Nivel>,
+    gerou: bool,
+) -> Option<Resultado> {
+    let antes = fps_antes.filter(|f| *f > 0.0)?;
+    let s = sessao.filter(|s| s.fps_do_jogo > 0.0)?;
+    Some(Resultado {
+        fps_antes: antes.round(),
+        fps_do_jogo: s.fps_do_jogo.round(),
+        ganho_pct: ((s.fps_do_jogo / antes - 1.0) * 1000.0).round() / 10.0,
+        fps_na_tela: gerou.then_some(s.fps_na_tela.round()),
+        na_tela_medido: gerou && s.na_tela_medido,
+        minutos: (s.segundos / 6.0).round() / 10.0,
+        escala,
+    })
+}
+
 /// Para a tela.
 #[derive(Debug, Clone, Serialize)]
 pub struct Painel {
@@ -233,6 +268,8 @@ pub struct Painel {
     /// O que o Turbo fez da última vez que ligou (nesta abertura do Otimiza).
     pub passos: Vec<String>,
     pub ligado: bool,
+    /// Desligado: o antes × depois da última vez.
+    pub resultado: Option<Resultado>,
 }
 
 #[cfg(target_os = "windows")]
@@ -242,6 +279,11 @@ static PASSOS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new())
 static LIGOU_A_ENERGIA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 #[cfg(target_os = "windows")]
 static LIGADO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// O que o resultado precisa: o FPS de antes e a receita aplicada (ao ligar), e o antes × depois (ao desligar).
+#[cfg(target_os = "windows")]
+static APLICADA: std::sync::Mutex<Option<(Option<f64>, Receita)>> = std::sync::Mutex::new(None);
+#[cfg(target_os = "windows")]
+static RESULTADO: std::sync::Mutex<Option<Resultado>> = std::sync::Mutex::new(None);
 
 #[cfg(target_os = "windows")]
 pub fn painel() -> Painel {
@@ -256,6 +298,9 @@ pub fn painel() -> Painel {
         perfil: id.as_deref().and_then(perfil),
         passos: PASSOS.lock().map(|p| p.clone()).unwrap_or_default(),
         ligado: LIGADO.load(Ordering::SeqCst),
+        resultado: (!LIGADO.load(Ordering::SeqCst))
+            .then(|| RESULTADO.lock().ok().and_then(|r| r.clone()))
+            .flatten(),
     }
 }
 
@@ -289,8 +334,11 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
 /// Aplica a receita e devolve o que fez, passo a passo. Um passo que falha (anticheat, sem administrador) vira nota e
 /// os outros seguem: o Turbo nunca deixa de fazer o que pode por causa do que não pode.
 #[cfg(target_os = "windows")]
-pub fn aplicar(app: &tauri::AppHandle, r: &Receita) -> Vec<String> {
+pub fn aplicar(app: &tauri::AppHandle, r: &Receita, fps_antes: Option<f64>) -> Vec<String> {
     use std::sync::atomic::Ordering;
+    if let Ok(mut a) = APLICADA.lock() {
+        *a = Some((fps_antes, r.clone()));
+    }
     let mut passos = vec![r.explicacao.clone()];
     if r.energia {
         let ja = super::energia_jogo::ler().ligado;
@@ -331,6 +379,15 @@ pub fn aplicar(app: &tauri::AppHandle, r: &Receita) -> Vec<String> {
 pub fn desligar() -> Result<(), String> {
     use std::sync::atomic::Ordering;
     super::frameboost::desligar()?;
+    // A sessão do gerador continua no estado depois de desligar (só zera ao ligar de novo).
+    let aplicada = APLICADA.lock().ok().and_then(|mut a| a.take());
+    if let Some((fps_antes, receita)) = aplicada.filter(|(_, r)| r.multiplicador.is_some()) {
+        let sessao = crate::modules::windows::geracao::estado().sessao.resumo();
+        let gerou = receita.multiplicador != Some(1);
+        if let Ok(mut r) = RESULTADO.lock() {
+            *r = resultado_de(fps_antes, sessao.as_ref(), receita.escala, gerou);
+        }
+    }
     if LIGOU_A_ENERGIA.swap(false, Ordering::SeqCst) {
         super::energia_jogo::definir(false)?;
     }
@@ -430,6 +487,38 @@ mod tests {
             );
         }
         assert!(!competitivo("fivem"));
+    }
+
+    fn sessao(segundos: f64, jogo: f64, tela: f64) -> crate::modules::windows::geracao::resumo::Resumo {
+        crate::modules::windows::geracao::resumo::Resumo {
+            segundos,
+            fps_do_jogo: jogo,
+            fps_na_tela: tela,
+            na_tela_medido: true,
+        }
+    }
+
+    #[test]
+    fn resultado_com_escala_mostra_o_ganho_do_jogo() {
+        let r = resultado_de(Some(41.0), Some(&sessao(600.0, 58.4, 58.4)), Some(Nivel::Qualidade), false).unwrap();
+        assert_eq!(r.fps_antes, 41.0);
+        assert_eq!(r.fps_do_jogo, 58.0);
+        assert_eq!(r.ganho_pct, 42.4);
+        assert_eq!(r.fps_na_tela, None, "sem geração, na tela é o próprio jogo");
+        assert_eq!(r.minutos, 10.0);
+    }
+
+    #[test]
+    fn resultado_com_geracao_mostra_a_tela() {
+        let r = resultado_de(Some(45.0), Some(&sessao(120.0, 44.0, 132.0)), None, true).unwrap();
+        assert_eq!(r.fps_na_tela, Some(132.0));
+        assert!(r.ganho_pct < 0.0, "a geração custa um pouco do jogo, e isso aparece");
+    }
+
+    #[test]
+    fn sem_antes_ou_sem_sessao_nao_ha_resultado() {
+        assert_eq!(resultado_de(None, Some(&sessao(60.0, 50.0, 50.0)), None, false), None);
+        assert_eq!(resultado_de(Some(40.0), None, None, false), None);
     }
 
     #[test]

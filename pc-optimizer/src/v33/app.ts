@@ -788,6 +788,7 @@ async function telaBoost() {
       <div class="vidro"><div class="titulo-sec"><h2>Driver da placa de vídeo</h2><span class="nota" id="b-drv-nota"></span></div><div id="b-drv"><p class="nota">Lendo o driver…</p></div></div>
       <div class="vidro" id="b-fb"><div class="rotulo">Frame Boost</div><p class="nota" style="margin-top:8px">Lendo…</p></div>
     </div>
+    <div id="b-comparar"></div>
     <div class="vidro" id="b-config" style="margin-top:16px"><div class="rotulo">Configuração do jogo</div><p class="nota" style="margin-top:8px">Procurando…</p></div>`;
 
   $("#b-otimizar").addEventListener("click", () => {
@@ -913,8 +914,16 @@ async function cartaoTurbo(dado?: PainelTurbo) {
              ? `<button class="botao prim" id="tb-lembrado">Turbo</button><button class="botao" id="tb-medir">Medir de novo</button><button class="botao" id="tb-esquecer">Esquecer</button>`
              : `<button class="botao prim" id="tb-medir">Turbo</button>`
          }</div>`;
+  // O antes × depois da última vez: o número que o cliente sente, com a ressalva de que não é prova A-B.
+  const r = !p.ligado ? p.resultado : null;
+  const resultado = r
+    ? `<div class="rotulo" style="margin-top:16px">Da última vez com o Turbo</div>
+       <div class="grande" style="font-size:44px">${numero(r.fps_antes)} → ${numero(r.fps_do_jogo)}<small style="font-size:16px;color:var(--texto-2)"> fps no jogo</small></div>
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="selo ${r.ganho_pct > 0 ? "medido" : ""}">${r.ganho_pct > 0 ? "+" : ""}${numero(r.ganho_pct, 1)}%</span>${r.fps_na_tela ? `<span class="selo ${r.na_tela_medido ? "medido" : "estimado"}">${numero(r.fps_na_tela)} na tela</span>` : ""}${r.escala ? `<span class="selo">escala ${esc(NOMES_DA_ESCALA[r.escala])}</span>` : ""}</div>
+       <p class="nota" style="margin-top:8px">Comparação simples: o antes são os 10 s da medida; o depois, a média de ${numero(r.minutos, 1)} min de jogo. Cenas diferentes, então não é prova A-B.</p>`
+    : "";
   caixa.innerHTML = `<div class="titulo-sec"><div class="rotulo">Turbo</div>${p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : ""}</div>
-    ${corpo}<p class="estado" id="tb-estado" hidden></p>`;
+    ${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
     $$<HTMLButtonElement>("#b-turbo button").forEach((b) => (b.disabled = true));
@@ -1447,7 +1456,7 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
     ${prova ? `<p class="nota" style="margin-top:4px">${esc(prova)}</p>` : ""}` : ""}
     ${doOtimiza && !a ? `<div class="rotulo" style="margin-top:16px">Escala</div><div class="seg" id="fb-escala" style="margin-top:8px"><button aria-pressed="${escala === null}" data-e="">Desligada</button>${(Object.keys(NOMES_DA_ESCALA) as NivelDeEscala[]).map((n) => `<button aria-pressed="${escala === n}" data-e="${n}">${NOMES_DA_ESCALA[n]}</button>`).join("")}</div><p class="nota" style="margin-top:6px">${esc(dicaDaEscala)}</p>` : ""}
     ${doOtimiza && !a ? `<div class="seg" id="fb-mult" style="margin-top:14px">${escala ? `<button aria-pressed="${mult === 1}" data-m="1" title="Sem gerar quadros: só o FPS real a mais, sem atraso">Só escala</button>` : ""}<button aria-pressed="${mult === 0}" data-m="0" title="Enche o monitor: quantos quadros couberem">Auto</button>${oferecidos.map((m) => `<button aria-pressed="${m === mult}" data-m="${m}">${m}×</button>`).join("")}</div>${mult === 0 && !livre ? `<p class="nota" style="margin-top:6px">Auto enche o monitor: com o jogo a 60 fps num de 180 Hz, a tela recebe 180. Mais liso, mas segura o quadro real por cerca de um quadro do jogo (o 2× segura metade): para jogo competitivo, o 2× tem menos atraso.</p>` : ""}` : ""}
-    ${rec ? `<div class="acoes" style="margin-top:14px"><button class="botao ${a ? "" : "prim"}" id="fb-ligar">${a ? "Desligar Frame Boost" : experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Como ligar"}</button>${a?.pelo_driver ? `<button class="botao" id="fb-medir">Medir agora</button>` : ""}${doOtimiza ? `<span class="nota" style="align-self:center">Ctrl+Alt+G desliga de dentro do jogo</span>` : ""}</div>` : ""}
+    ${rec ? `<div class="acoes" style="margin-top:14px"><button class="botao ${a ? "" : "prim"}" id="fb-ligar">${a ? "Desligar Frame Boost" : experimental ? "Ligar (experimental)" : liga ? "Ligar Frame Boost" : "Como ligar"}</button>${a?.pelo_driver ? `<button class="botao" id="fb-medir">Medir agora</button>` : ""}${a?.escala && !a.pelo_driver ? `<button class="botao" id="fb-comparar">Comparar a imagem</button>` : ""}${doOtimiza ? `<span class="nota" style="align-self:center">Ctrl+Alt+G desliga de dentro do jogo</span>` : ""}</div>` : ""}
     ${doOtimiza && (p.base || p.nota_da_base) ? `<div class="linha" style="margin-top:12px"><div>FPS base${p.base ? ` <b>${p.base.fps}</b> · ${p.base.multiplicador}× fecham o monitor <span class="selo ${p.base.valendo ? "medido" : ""}">${p.base.valendo ? "valendo" : "vale ao reabrir o jogo"}</span>` : ""}<p>${esc(p.nota_da_base ?? "Base travada numa fração do monitor: cada quadro real ganha sempre o mesmo número de gerados.")}</p></div>${p.base ? `<button class="botao" id="fb-destravar">Destravar</button>` : ""}</div>` : ""}
     ${doOtimiza && p.base_solta && !p.base ? `<div class="linha" style="margin-top:12px"><div>FPS base solto<p>Você destravou: o Frame Boost não trava a base deste jogo sozinho.${a && !a.pelo_driver ? "" : " Para travar de novo, ligue o Frame Boost."}</p></div>${a && !a.pelo_driver ? `<button class="botao" id="fb-travar">Travar de novo</button>` : ""}</div>` : ""}
     ${ultima}
@@ -1528,8 +1537,65 @@ async function painelFrameBoost(dado?: PainelFrameBoost | null) {
       s.textContent = String(erro);
     }
   });
+  document.querySelector<HTMLButtonElement>("#fb-comparar")?.addEventListener("click", () => void comparadorDaEscala());
   // O número do gerador do Otimiza muda a cada segundo; o do driver só quando alguém mede.
   vigiarPainel(a !== null && !a.pelo_driver);
+}
+
+let vigiaDoComparador = 0;
+
+/** O mesmo pedaço do jogo, ampliado do jogo comum (filtro do navegador, como um monitor faria) e pelo FSR do Otimiza,
+ *  com um divisor arrastável. Fora do `#b-fb`: o painel do Frame Boost se redesenha a cada segundo. */
+async function comparadorDaEscala() {
+  const caixa = document.querySelector<HTMLElement>("#b-comparar");
+  if (!caixa) return;
+  clearInterval(vigiaDoComparador);
+  const moldura = (corpo: string) =>
+    `<div class="vidro" style="margin-top:16px"><div class="titulo-sec"><div class="rotulo">Comparador da escala</div><button class="botao" id="cp-fechar">Fechar</button></div>${corpo}</div>`;
+  const fechar = () =>
+    document.querySelector<HTMLButtonElement>("#cp-fechar")?.addEventListener("click", () => {
+      clearInterval(vigiaDoComparador);
+      caixa.innerHTML = "";
+    });
+  try {
+    await ponte.escalaPedirComparacao();
+  } catch (e) {
+    caixa.innerHTML = moldura(`<p class="nota" style="margin-top:8px">${esc(String(e))}</p>`);
+    fechar();
+    return;
+  }
+  caixa.innerHTML = moldura(`<p class="nota" style="margin-top:8px">Volte ao jogo por um instante: a comparação é tirada no próximo quadro dele, com ele na frente. Depois volte aqui.</p>`);
+  fechar();
+  caixa.scrollIntoView({ behavior: "smooth", block: "center" });
+  let tentativas = 0;
+  vigiaDoComparador = window.setInterval(async () => {
+    tentativas += 1;
+    const c = await ponte.escalaComparacao().catch(() => null);
+    if (!c) {
+      if (tentativas >= 120) {
+        clearInterval(vigiaDoComparador);
+        caixa.innerHTML = moldura(`<p class="nota" style="margin-top:8px">O jogo não voltou para a frente em 2 minutos. Toque em Comparar a imagem de novo.</p>`);
+        fechar();
+      }
+      return;
+    }
+    clearInterval(vigiaDoComparador);
+    caixa.innerHTML = moldura(`
+      <div style="position:relative;margin-top:12px;aspect-ratio:${c.tela_px[0]}/${c.tela_px[1]};overflow:hidden;border-radius:12px">
+        <img src="${c.jogo}" alt="O jogo ampliado do jeito comum" style="position:absolute;inset:0;width:100%;height:100%">
+        <img src="${c.tela}" alt="O mesmo pedaço ampliado pelo FSR do Otimiza" id="cp-tela" style="position:absolute;inset:0;width:100%;height:100%;clip-path:inset(0 0 0 50%)">
+        <div id="cp-linha" style="position:absolute;top:0;bottom:0;left:50%;width:2px;background:#fff;box-shadow:0 0 6px rgba(0,0,0,.6)"></div>
+      </div>
+      <input type="range" id="cp-divisor" min="0" max="100" value="50" aria-label="Divisor entre as duas imagens" style="width:100%;margin-top:10px">
+      <p class="nota" style="margin-top:6px">O centro da tela, de perto. À esquerda, o jogo em ${c.jogo_px[0]}×${c.jogo_px[1]} ampliado do jeito comum, como um monitor faria. À direita, o mesmo pedaço ampliado pelo FSR do Otimiza para ${c.tela_px[0]}×${c.tela_px[1]}.</p>`);
+    fechar();
+    const divisor = $<HTMLInputElement>("#cp-divisor");
+    divisor.addEventListener("input", () => {
+      const v = Number(divisor.value);
+      $("#cp-tela").style.clipPath = `inset(0 0 0 ${v}%)`;
+      $("#cp-linha").style.left = `${v}%`;
+    });
+  }, 1000);
 }
 
 /** Enquanto o Frame Boost está ligado e o Boost aberto, o número se atualiza a cada segundo. */

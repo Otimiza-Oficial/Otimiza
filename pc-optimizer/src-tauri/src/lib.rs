@@ -293,6 +293,8 @@ pub fn run() {
             commands::turbo_esquecer,
             commands::config_motor_painel,
             commands::config_motor_aplicar,
+            commands::escala_pedir_comparacao,
+            commands::escala_comparacao,
             commands::overlay_estado,
             commands::overlay_gravar,
             commands::overlay_ligar,

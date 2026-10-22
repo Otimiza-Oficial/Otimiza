@@ -389,6 +389,28 @@ continua no `configjogo.rs`.
 | 7 | testes | ✅ 9 (formatos, só o que existe, idempotente, catálogo e fichas, CS2 sem tocar nas sombras dinâmicas); o módulo entra no passo do `release.yml` |
 | 8 | **PC de casa + REA** | confirmar os nomes das chaves do CS2 e do Apex na versão atual; medir o ganho antes × depois nos três; estudar Valorant e Warzone |
 
+### 10.6 M6 em detalhe
+
+| # | Onde | O quê |
+|---|---|---|
+| 1 | cartão do resultado (`turbo.rs` + tela) | ✅ ao desligar o Turbo com o Frame Boost: FPS do jogo antes → depois, o ganho em %, o que chegou à tela (com geração) e a escala. **Com a ressalva escrita**: o antes são os 10 s da medida e o depois a média da sessão, cenas diferentes, não é prova A-B. Por isso **não** tem botão de compartilhar: o `compartilhar.rs` só aceita prova alternada com margem |
+| 2 | comparador (`geracao` + tela) | ✅ "Comparar a imagem" no Frame Boost com escala: o próximo quadro real **com o jogo na frente** (com o Otimiza na frente a captura seria a dele) vira o terço central do quadro do jogo e o mesmo pedaço ampliado pelo FSR; a tela mostra os dois com um divisor. O lado do jogo é ampliado do jeito comum (filtro do navegador), não em pixels quadrados: comparar com o pior caso seria propaganda |
+| 3 | contador (`overlay.rs`) | ✅ no Detalhado, "tela N" com geração e "escala Qualidade"; no só escala, nada de "1×" |
+| 4 | notas | ✅ `.github/release-notes.md` com a 3.5 no topo e `.github/release-titulo.txt` = "Otimiza 3.5 Turbo". O número da versão (Cargo, tauri.conf, package.json, site) **não** sobe aqui: é do ritual de publicação |
+| 5 | testes | ✅ 3 do resultado, 3 do comparador (regiões, recorte, BMP), 1 do contador; o `escala_na_placa` agora prova na placa que o quadro de origem do comparador é o do jogo |
+| 6 | **PC de casa** | a medida A-B-A-B do laboratório (nativo × escala × escala + geração) e a prova alternada que libera o compartilhar |
+
+## 11.1 Antes de publicar a 3.5 (tudo o que ficou para o PC de casa)
+
+1. **Escala ao vivo** (10.1 #9, 10.2 #8): jogo de teste e 3 jogos reais; janela redimensionada e devolvida; cursor e
+   mouse; o cursor do sistema volta até com o Otimiza fechado à força.
+2. **Driver** (10.3 #5): NIS e RSR aplicados, jogo reaberto em tela cheia menor, desfeitos; o
+   `os_numeros_da_tabela_batem_com_o_que_o_driver_chama` numa NVIDIA.
+3. **Turbo** (10.4 #9): um jogo preso na placa e um preso no processador.
+4. **Configuração** (10.5 #8): as chaves do CS2 e do Apex com o REA; o ganho nos três.
+5. **Laboratório** (10.6 #6): A-B-A-B e as metas da seção 2.6, com os números que derem.
+6. **Ritual**: subir a versão para 3.5.0 nas quatro declarações e rodar o `verificador-de-publicacao`.
+
 ---
 
 ## 11. Riscos

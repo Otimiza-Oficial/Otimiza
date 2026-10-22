@@ -287,6 +287,16 @@ export interface PainelTurbo {
   perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number } | null;
   passos: string[];
   ligado: boolean;
+  /** Desligado: o antes × depois da última vez (comparação simples, não prova A-B). */
+  resultado?: {
+    fps_antes: number;
+    fps_do_jogo: number;
+    ganho_pct: number;
+    fps_na_tela: number | null;
+    na_tela_medido: boolean;
+    minutos: number;
+    escala: NivelDeEscala | null;
+  } | null;
 }
 
 /** Os níveis da escala, com as proporções do FSR (1,3× a 2× por eixo). */
@@ -483,6 +493,10 @@ export const ponte = {
   aplicarItem: (id: string) => invoke<Resultado>("apply_optimization", { id }),
   inicializacao: () => invoke<EntradaDeInicio[]>("list_startup"),
   inicializacaoDefinir: (hive: string, name: string, enabled: boolean) => invoke<Resultado>("set_startup_enabled", { hive, name, enabled }),
+  /** O comparador da escala: pede o próximo quadro real com o jogo na frente e depois busca. */
+  escalaPedirComparacao: () => invoke<void>("escala_pedir_comparacao"),
+  escalaComparacao: () =>
+    invoke<{ jogo: string; tela: string; jogo_px: [number, number]; tela_px: [number, number] } | null>("escala_comparacao"),
   configDosJogos: () => invoke<ConfigDoJogo[]>("config_motor_painel"),
   configAplicar: (jogo: string) => invoke<string[]>("config_motor_aplicar", { jogo }),
   turbo: () => invoke<PainelTurbo>("turbo_painel"),

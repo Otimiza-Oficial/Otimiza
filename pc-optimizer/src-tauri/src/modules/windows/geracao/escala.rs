@@ -36,6 +36,16 @@ impl Nivel {
             Nivel::Desempenho => 2.0,
         }
     }
+
+    /// O nome que o jogador conhece do menu dos jogos.
+    pub fn nome(self) -> &'static str {
+        match self {
+            Nivel::UltraQualidade => "Ultra qualidade",
+            Nivel::Qualidade => "Qualidade",
+            Nivel::Equilibrado => "Equilibrado",
+            Nivel::Desempenho => "Desempenho",
+        }
+    }
 }
 
 /// Pura: o tamanho em que o jogo deve renderizar para o nível, num destino de `largura`×`altura`.

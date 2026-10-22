@@ -2928,6 +2928,57 @@ pub async fn frame_boost_ligar(
     }
 }
 
+/// O mesmo pedaço do quadro do jogo (antes de ampliar) e da imagem ampliada pelo FSR, para a tela comparar.
+#[derive(Debug, Clone, Serialize)]
+pub struct ComparacaoNaTela {
+    /// `data:image/bmp;base64,...`
+    pub jogo: String,
+    pub tela: String,
+    pub jogo_px: [u32; 2],
+    pub tela_px: [u32; 2],
+}
+
+/// Pede a comparação da escala: o próximo quadro real com o jogo na frente. `LIVRES`: só lê a tela.
+#[tauri::command(async)]
+pub fn escala_pedir_comparacao() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::modules::windows::geracao;
+        let e = geracao::estado();
+        if e.escala.is_none() || e.situacao != geracao::Situacao::Gerando {
+            return Err("Ligue o Frame Boost com escala para comparar.".to_string());
+        }
+        geracao::pedir_comparacao();
+        return Ok(());
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err("A escala só existe no Windows.".to_string())
+}
+
+/// A comparação pedida, se o gerador já a tirou. `LIVRES`.
+#[tauri::command(async)]
+pub fn escala_comparacao() -> Option<ComparacaoNaTela> {
+    #[cfg(target_os = "windows")]
+    {
+        use base64::Engine;
+        let c = crate::modules::windows::geracao::tomar_comparacao()?;
+        let url = |b: &[u8]| {
+            format!(
+                "data:image/bmp;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(b)
+            )
+        };
+        return Some(ComparacaoNaTela {
+            jogo: url(&c.jogo_bmp),
+            tela: url(&c.tela_bmp),
+            jogo_px: [c.jogo.0, c.jogo.1],
+            tela_px: [c.tela.0, c.tela.1],
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
+    None
+}
+
 /// O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê.
 #[tauri::command(async)]
 pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
@@ -2957,7 +3008,7 @@ pub async fn turbo_ligar(
                 Some(p) => (p.receita, p.fps_antes),
                 None => turbo::medir()?,
             };
-            turbo::aplicar(&app, &receita);
+            turbo::aplicar(&app, &receita, fps_antes);
             if matches!(
                 receita.gargalo,
                 turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
@@ -4714,6 +4765,8 @@ mod tests {
         "turbo_desligar",
         "turbo_esquecer",
         "config_motor_painel",
+        "escala_pedir_comparacao",
+        "escala_comparacao",
         "frame_boost_destravar_base",
         "frame_boost_medir",
         "jogo_liso_medir",

@@ -1678,6 +1678,11 @@ impl Gpu {
         );
     }
 
+    /// Escala: o último quadro composto no tamanho do jogo, antes de ampliar (no HDR, ainda codificado com gama).
+    pub fn textura_da_origem(&self) -> Option<&ID3D11Texture2D> {
+        self.ampliacao.as_ref().map(|a| &a.origem.textura)
+    }
+
     /// Troca a forma do cursor (a captura só manda quando ela muda).
     pub fn definir_cursor(&mut self, forma: &super::cursor::Forma) -> Result<(), String> {
         // Pré-multiplica: o filtro linear da ampliação não puxa o preto dos pixels transparentes para a borda.
@@ -2309,6 +2314,17 @@ mod qualidade {
             salvar_bmp(&pasta.join("escala_nativa.bmp"), nl, na, &nativa);
         }
         assert!(s_fsr > s_lin, "o FSR tem de vencer o bilinear");
+
+        // O comparador lê o quadro do jogo antes de ampliar: tem de ser a própria imagem do jogo.
+        let (ol, oa, origem) =
+            super::super::ler_bgra(&gpu, gpu.textura_da_origem().unwrap(), true).unwrap();
+        assert_eq!((ol, oa), (bl, ba));
+        let diferente = origem
+            .iter()
+            .zip(baixa.iter())
+            .filter(|(a, b)| a.abs_diff(**b) > 1)
+            .count();
+        assert_eq!(diferente, 0, "o quadro de origem do comparador é o do jogo");
 
         // Barras: a mesma imagem num alvo mais largo, encaixada no meio.
         let (ll, la) = (nl + 140, na);
