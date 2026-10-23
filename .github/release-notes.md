@@ -34,10 +34,14 @@ Em jogo competitivo (CS2, Valorant, Fortnite, Call of Duty, Apex, Rocket League)
 quadros: ela acrescenta atraso. A receita fica lembrada para cada jogo: da próxima vez, um clique, sem medir de novo.
 Ao desligar, o cartão mostra o FPS do jogo antes e depois.
 
-**Provar:** com o Turbo ligado, um botão faz a prova de verdade. Por uns 5 minutos, enquanto você joga, o Turbo liga e
+**Provar:** na primeira vez que o Turbo liga uma receita num jogo, ele faz a prova sozinho (e depois, quando você quiser,
+pelo botão). Por uns 5 minutos, enquanto você joga, o Turbo liga e
 desliga sozinho em 8 rodadas alternadas e mede o FPS do jogo em cada uma. O resultado sai com margem de erro
 ("41 ± 1 → 58 ± 2 fps"), e dá para copiar e colar no Discord. Se o Turbo deixou o jogo pior, ele se desliga sozinho e
 não liga de novo aquela receita naquele jogo: nunca menos FPS.
+
+**Menor atraso ou mais FPS:** você escolhe por jogo se o Turbo pode ligar a geração de quadros. Jogos de tiro já vêm em
+"Menor atraso".
 
 Com o jogo aberto, o Turbo é o botão principal da tela inicial.
 

@@ -3000,11 +3000,17 @@ pub async fn turbo_ligar(
     #[cfg(target_os = "windows")]
     {
         use crate::plataforma::{historico, sessao, turbo};
-        tokio::task::spawn_blocking(move || -> Result<(), String> {
+        let app_da_prova = app.clone();
+        let (id, aplicada) = tokio::task::spawn_blocking(move || -> Result<(String, turbo::Receita), String> {
             let jogo = sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
             let (id, _) = historico::id_do_jogo(&jogo.executavel);
-            if turbo::em_prova() {
+            if turbo::em_prova() || turbo::prova_sozinha_pendente() {
                 return Err("A prova do Turbo está rodando: espere ela terminar.".to_string());
+            }
+            // Outra prova alternada (a do plano de energia) roda agora: ligar mudaria o lado dela, e a do Turbo não
+            // teria a vez para conferir esta receita.
+            if crate::modules::provaalternada::em_andamento() {
+                return Err("Uma prova está rodando: espere ela terminar para ligar o Turbo.".to_string());
             }
             let anterior = turbo::perfil(&id);
             let reprovada = anterior
@@ -3033,6 +3039,7 @@ pub async fn turbo_ligar(
                 );
             }
             turbo::aplicar(&app, &receita, fps_antes);
+            let aplicada = receita.clone();
             if !lembrada && matches!(
                 receita.gargalo,
                 turbo::Gargalo::Placa | turbo::Gargalo::Processador | turbo::Gargalo::Memoria
@@ -3047,14 +3054,27 @@ pub async fn turbo_ligar(
                     crate::utils::Logger::warn(&format!("turbo: não guardei a receita de {}: {}", id, e));
                 }
             }
-            Ok(())
+            Ok((id, aplicada))
         })
         .await
         .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
         crate::plataforma::frameboost::travar_base(&mut log);
         drop(log);
-        return Ok(crate::plataforma::turbo::painel());
+        // Primeira vez desta receita neste jogo: a prova roda sozinha, e o fim dela avisa a tela (`turbo:prova_fim`).
+        // Só a receita que acabou de ligar: a lembrada de outra medida (esta deu "nada no limite") não é provada nem
+        // religada.
+        let desta_vez = turbo::perfil(&id)
+            .filter(|p| turbo::mesma_acao(&p.receita, &aplicada))
+            .is_some_and(|p| turbo::prova_sozinha(&p));
+        if desta_vez && turbo::reservar_prova_sozinha() {
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = provar_o_turbo(app_da_prova, true).await {
+                    crate::utils::Logger::warn(&format!("turbo: a prova automática não terminou: {}", e));
+                }
+            });
+        }
+        return Ok(turbo::painel());
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -3067,33 +3087,55 @@ pub async fn turbo_ligar(
 /// o Turbo fica desligado e a receita não volta neste jogo. Senão, a receita inteira volta e o FPS base é travado como
 /// no Frame Boost.
 #[tauri::command]
-pub async fn turbo_provar(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<crate::modules::provaalternada::Resultado, String> {
+pub async fn turbo_provar(app: tauri::AppHandle) -> Result<crate::modules::provaalternada::Resultado, String> {
     crate::modules::licenca::exigir()?;
     #[cfg(target_os = "windows")]
-    {
-        use tauri::Emitter;
-        let emissor = app.clone();
-        let r = tokio::task::spawn_blocking(move || {
-            crate::plataforma::turbo::provar(&app, &|passo| {
-                let _ = emissor.emit("turbo:prova", passo);
-            })
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-        if r.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
-            let mut log = state.changes.lock().await;
-            crate::plataforma::frameboost::travar_base(&mut log);
-        }
-        return Ok(r);
-    }
+    return provar_o_turbo(app, false).await;
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, state);
+        let _ = app;
         Err("O Turbo só existe no Windows.".to_string())
     }
+}
+
+/// A prova, pedida no botão ou sozinha na primeira vez: os passos vão em `turbo:prova` e o fim, com o erro se houver,
+/// em `turbo:prova_fim` (a tela que não pediu a prova também redesenha).
+#[cfg(target_os = "windows")]
+async fn provar_o_turbo(
+    app: tauri::AppHandle,
+    sozinha: bool,
+) -> Result<crate::modules::provaalternada::Resultado, String> {
+    use tauri::{Emitter, Manager};
+    let (emissor, na_prova) = (app.clone(), app.clone());
+    let r = tokio::task::spawn_blocking(move || {
+        crate::plataforma::turbo::provar(&na_prova, &|passo| {
+            let _ = emissor.emit("turbo:prova", passo);
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    if let Ok(prova) = &r {
+        let estado = app.state::<AppState>();
+        let mut log = estado.changes.lock().await;
+        if prova.desfecho != crate::modules::provaalternada::Desfecho::Piorou {
+            crate::plataforma::frameboost::travar_base(&mut log);
+        } else {
+            // Piorou: o Turbo saiu, e a trava do FPS base que ele pôs (vale ao reabrir o jogo) sai junto.
+            let trava = crate::modules::windows::nvdriver::id_do_limite(&prova.jogo);
+            if log.is_applied(&trava) {
+                if let Err(e) = crate::modules::windows::WindowsOptimizer::new().revert(&trava, &mut log) {
+                    crate::utils::Logger::warn(&format!("turbo: não soltei o FPS base depois da prova: {}", e));
+                }
+            }
+        }
+    }
+    // A flag sai antes do aviso: a tela que redesenha ao receber o fim já lê o painel sem a prova.
+    if sozinha {
+        crate::plataforma::turbo::liberar_prova_sozinha();
+    }
+    let _ = app.emit("turbo:prova_fim", r.as_ref().err());
+    r
 }
 
 /// A última prova do Turbo. `LIVRES`.
@@ -3158,8 +3200,8 @@ pub async fn turbo_compartilhar() -> Result<String, String> {
 pub async fn turbo_desligar() -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     {
-        if crate::plataforma::turbo::em_prova() {
-            return Err("A prova do Turbo está rodando: ela desliga tudo sozinha ao terminar.".to_string());
+        if crate::plataforma::turbo::em_prova() || crate::plataforma::turbo::prova_sozinha_pendente() {
+            return Err("A prova do Turbo está rodando: espere ela terminar. Se o jogo piorar, ela desliga o Turbo sozinha.".to_string());
         }
         tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
             .await

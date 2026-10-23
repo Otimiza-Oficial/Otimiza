@@ -991,14 +991,18 @@ async function cartaoTurbo(dado?: PainelTurbo) {
     ? `<p class="nota" style="margin-top:8px">Abra um jogo. O Turbo mede o jogo aberto por 10 segundos, vê o que está no limite (placa, processador ou memória) e liga só o que ajuda nele.</p>`
     : p.provando
       ? `<p class="nota" style="margin-top:8px" id="tb-progresso">Provando…</p>
-         <p class="nota" style="margin-top:4px">Jogue normalmente: o Turbo liga e desliga sozinho em 8 rodadas e mede o FPS do jogo em cada uma.</p>`
+         <p class="nota" style="margin-top:4px">${
+           p.prova_sozinha
+             ? `Primeira vez desta receita no ${esc(p.jogo)}: o Turbo está se provando sozinho. Jogue normalmente: ele liga e desliga em 8 rodadas (~${minutos} min) e, se o jogo piorar, desliga de vez.`
+             : "Jogue normalmente: o Turbo liga e desliga sozinho em 8 rodadas e mede o FPS do jogo em cada uma."
+         }</p>`
       : p.ligado
         ? `${p.passos.map((t, i) => `<p class="nota" style="margin-top:${i ? 4 : 8}px">${i ? "· " : ""}${esc(t)}</p>`).join("")}
            <div class="acoes" style="margin-top:14px"><button class="botao prim" id="tb-provar" title="8 rodadas alternadas, com e sem o Turbo, com o jogo aberto">Provar (~${minutos} min)</button><button class="botao" id="tb-desligar">Desligar Turbo</button></div>`
         : `<p class="nota" style="margin-top:8px">${
             lembrado
               ? `Da última vez no ${esc(p.jogo)}: ${esc(NOMES_DO_GARGALO[lembrado.receita.gargalo])}${lembrado.fps_antes ? ` a ${numero(lembrado.fps_antes)} fps` : ""} → ${esc(resumoDaReceita(lembrado.receita))}.${reprovada ? " Na prova, esta receita deixou o jogo pior neste PC: o Turbo não a liga de novo." : ""}`
-              : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele.`
+              : `Mede o ${esc(p.jogo)} por 10 segundos (jogue normalmente enquanto isso), vê o que está no limite e liga só o que ajuda nele. Na primeira vez, ele se prova sozinho (~${minutos} min ligando e desligando) e desliga se o jogo piorar.`
           }</p>
            <div class="seg" id="tb-atraso" style="margin-top:14px" aria-label="O que o Turbo prioriza neste jogo"><button aria-pressed="${p.menor_atraso}" data-menor="1" title="Sem geração de quadros: só o FPS real a mais, sem atraso">Menor atraso</button><button aria-pressed="${!p.menor_atraso}" data-menor="0" title="Pode ligar a geração de quadros para encher o monitor, com um pouco de atraso">Mais FPS</button></div>
            <p class="nota" style="margin-top:6px">${p.menor_atraso ? "Sem geração de quadros: só o FPS real a mais, para não acrescentar atraso." : "Pode ligar a geração de quadros para encher o monitor, com um pouco de atraso a mais."}</p>
@@ -1036,6 +1040,7 @@ async function cartaoTurbo(dado?: PainelTurbo) {
     : "";
   caixa.innerHTML = `${tituloDoTurbo(p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : "")}
     ${provaHtml}${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
+  if (p.provando && !acompanhandoProva) void acompanharProva();
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
     $$<HTMLButtonElement>("#b-turbo button").forEach((b) => (b.disabled = true));
@@ -1078,19 +1083,59 @@ async function cartaoTurbo(dado?: PainelTurbo) {
 }
 
 /** A prova A-B do Turbo: o cartão mostra a rodada em que está, e o resultado no fim. */
-async function provarTurbo(antes: PainelTurbo) {
-  await cartaoTurbo({ ...antes, provando: true });
-  const progresso = (texto: string) => {
-    const el = document.querySelector<HTMLElement>("#tb-progresso");
-    if (el) el.textContent = texto;
-  };
-  const parar = await ouvir<PassoDaProvaDoTurbo>("turbo:prova", (passo) =>
-    progresso(
+/** Uma prova sendo acompanhada pela tela (a do botão ou a automática): o cartão não abre uma segunda escuta. */
+let acompanhandoProva = false;
+
+function mostrarPassoDaProva(passo: PassoDaProvaDoTurbo) {
+  const el = document.querySelector<HTMLElement>("#tb-progresso");
+  if (el)
+    el.textContent =
       passo.indice === 0
         ? `Aquecendo ${passo.segundos} s…`
-        : `Rodada ${passo.indice} de ${passo.total} · ${passo.com_turbo ? "com o Turbo" : "sem o Turbo"} · ${passo.segundos} s`
-    )
-  ).catch(() => () => {});
+        : `Rodada ${passo.indice} de ${passo.total} · ${passo.com_turbo ? "com o Turbo" : "sem o Turbo"} · ${passo.segundos} s`;
+}
+
+/** A prova que a tela não pediu (a automática, ou uma que já rodava ao abrir o Boost): segue os passos e redesenha
+ *  quando o Rust avisa o fim. */
+async function acompanharProva() {
+  acompanhandoProva = true;
+  let acabou = false;
+  let pararFim: () => void = () => {};
+  const pararPassos = await ouvir<PassoDaProvaDoTurbo>("turbo:prova", mostrarPassoDaProva).catch(() => () => {});
+  const terminar = async (erro: string | null) => {
+    if (acabou) return;
+    acabou = true;
+    pararPassos();
+    pararFim();
+    acompanhandoProva = false;
+    estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
+    await cartaoTurbo();
+    void painelFrameBoost();
+    if (erro) {
+      const s = document.querySelector<HTMLElement>("#tb-estado");
+      if (s) {
+        s.hidden = false;
+        s.textContent = erro;
+      }
+    }
+  };
+  try {
+    pararFim = await ouvir<string | null>("turbo:prova_fim", (erro) => void terminar(erro));
+  } catch {
+    pararPassos();
+    acompanhandoProva = false;
+    return;
+  }
+  if (acabou) pararFim();
+  // O fim pode ter saído antes de a escuta existir (a prova falhou logo no começo): o estado de agora decide.
+  const agora = await ponte.turbo().catch(() => null);
+  if (agora && !agora.provando) void terminar(null);
+}
+
+async function provarTurbo(antes: PainelTurbo) {
+  acompanhandoProva = true;
+  await cartaoTurbo({ ...antes, provando: true });
+  const parar = await ouvir<PassoDaProvaDoTurbo>("turbo:prova", mostrarPassoDaProva).catch(() => () => {});
   try {
     await ponte.turboProvar();
     estado.gerador = await ponte.geradorEstado().catch(() => estado.gerador);
@@ -1103,6 +1148,7 @@ async function provarTurbo(antes: PainelTurbo) {
     s.textContent = String(e);
   } finally {
     parar();
+    acompanhandoProva = false;
   }
 }
 

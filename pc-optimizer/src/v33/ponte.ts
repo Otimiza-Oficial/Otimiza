@@ -332,6 +332,8 @@ export interface PainelTurbo {
   perfil: { receita: ReceitaDoTurbo; fps_antes: number | null; medido_em: number; prova?: DesfechoDaProva | null } | null;
   prova?: ProvaDoTurbo | null;
   provando?: boolean;
+  /** A prova que está rodando é a automática, da primeira vez da receita neste jogo. */
+  prova_sozinha?: boolean;
   duracao_da_prova_s?: number;
   passos: string[];
   ligado: boolean;

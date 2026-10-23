@@ -40,7 +40,8 @@ cada resultado na coluna "deu" e, no fim, passe os números para a 11.2 do plano
 | # | Passo | O que tem de acontecer | deu |
 |---|---|---|---|
 | 3.1 | Um jogo preso na **placa**: Turbo → Mais FPS → Medir e ligar | receita com escala (e geração, se faltar para o monitor); FPS do jogo sobe | |
-| 3.2 | Provar (~5 min) | 8 rodadas; anote o desfecho e o "sem → com" com a margem | |
+| 3.2 | Sem tocar em nada, a prova automática (~5 min) | o cartão diz "Primeira vez desta receita… se provando sozinho"; 8 rodadas; anote o desfecho e o "sem → com" com a margem. Ligar pela tela inicial também tem de mostrar a prova no Boost | |
+| 3.2b | Ligar de novo a mesma receita | não prova de novo (já provada); "Provar" no botão continua funcionando | |
 | 3.3 | O mesmo jogo, Menor atraso | receita sem geração | |
 | 3.4 | Um jogo preso no **processador** | sem escala; energia de jogo ligada; prova | |
 | 3.5 | Desligar o Turbo, fechar e abrir o Otimiza, conferir a energia de jogo | se foi o Turbo que ligou, "Desligar Turbo" depois de reabrir a devolve (correção 3533350) | |
