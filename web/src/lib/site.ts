@@ -25,6 +25,7 @@ export const links = {
 } as const;
 
 export const nav = [
+  { label: "Turbo", href: "#turbo" },
   { label: "Recursos", href: "#recursos" },
   { label: "Suporte", href: "#suporte" },
   { label: "Preço", href: "#preco" },
