@@ -78,6 +78,7 @@ jobs:
 
           notas=.github/release-notes.md
           versao="${GITHUB_REF_NAME#v}"
+          versao="${versao%%-*}"
 
           if [ ! -s "$notas" ]; then
             echo "::error::$notas está vazio ou não existe."
@@ -120,6 +121,7 @@ jobs:
           set -euo pipefail
 
           versao="${GITHUB_REF_NAME#v}"
+          versao="${versao%%-*}"
           no_cargo=$(grep -m1 '^version = ' pc-optimizer/src-tauri/Cargo.toml | cut -d'"' -f2)
 
           if [ "$versao" != "$no_cargo" ]; then
@@ -253,6 +255,7 @@ jobs:
         run: |
           set -euo pipefail
           versao="${GITHUB_REF_NAME#v}"
+          versao="${versao%%-*}"
           curta="${versao%.*}"
           nome="Otimiza ${GITHUB_REF_NAME}"
           arquivo=.github/release-titulo.txt
@@ -260,6 +263,10 @@ jobs:
             linha=$(head -n1 "$arquivo" | tr -d '\r')
             if grep -qF "$curta" <<<"$linha"; then
               nome="$linha"
+              # Versão de teste (v3.5.0-beta.1): o título diz que é teste.
+              if [ "$GITHUB_REF_NAME" != "v$versao" ]; then
+                nome="$nome (teste ${GITHUB_REF_NAME#v$versao-})"
+              fi
             else
               echo "::warning::$arquivo não cita $curta; o título fica \"$nome\"."
             fi
@@ -282,7 +289,11 @@ jobs:
           #
           # Para voltar a revisar antes de publicar, trocar para `true`.
           releaseDraft: false
-          prerelease: false
+          # CANAL DE TESTE. Tag com sufixo (`v3.5.0-beta.1`) sai como pré-lançamento: o GitHub não a conta como
+          # "latest", e é o latest que o botão do site, o link do bot (`releases/latest/download/...`) e o aviso de
+          # atualização do app (`atualizacao.rs`) leem. Quem recebe o link da página da versão de teste instala; os
+          # clientes continuam na estável. As conferências acima usam o número sem o sufixo (o do Cargo.toml).
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
       # ---------------------------------------------------------------------
       # UMA CÓPIA COM NOME FIXO, PARA O LINK QUE O BOT MANDA NUNCA ENVELHECER.
