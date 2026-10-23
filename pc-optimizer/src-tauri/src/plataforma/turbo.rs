@@ -237,6 +237,12 @@ pub fn duracao_da_prova_s() -> u64 {
 /// Pura: o que entra na prova. Só o que deve subir o FPS DO JOGO: a escala (sem gerar quadros) e a energia de jogo. A
 /// geração aumenta o que chega à tela e custa um pouco do jogo; ela é julgada pela guarda do gerador, não aqui (pelo
 /// FPS do jogo, uma geração boa sairia como "piorou"). `None`: a receita não tem o que provar no FPS do jogo.
+/// Pura: a receita lembrada liga pela primeira vez sem prova e muda o FPS do jogo. Então o Turbo se prova sozinho e
+/// desliga se piorar: "nunca menos FPS" sem depender de a pessoa lembrar de tocar em Provar.
+pub fn prova_sozinha(p: &Perfil) -> bool {
+    p.prova.is_none() && receita_da_prova(&p.receita).is_some()
+}
+
 pub fn receita_da_prova(r: &Receita) -> Option<Receita> {
     if r.escala.is_none() && !r.energia {
         return None;
@@ -404,6 +410,8 @@ pub struct Painel {
     pub prova: Option<crate::modules::provaalternada::Resultado>,
     /// A prova está rodando agora.
     pub provando: bool,
+    /// A que está rodando é a automática, da primeira vez da receita neste jogo.
+    pub prova_sozinha: bool,
     /// Quanto a prova leva, para a tela dizer antes de começar.
     pub duracao_da_prova_s: u64,
 }
@@ -461,7 +469,8 @@ pub fn painel() -> Painel {
                 super::historico::id_do_jogo(&p.jogo).0 == super::historico::id_do_jogo(&j.executavel).0
             })
         }),
-        provando: em_prova(),
+        provando: em_prova() || PROVA_SOZINHA.load(Ordering::SeqCst),
+        prova_sozinha: PROVA_SOZINHA.load(Ordering::SeqCst),
         duracao_da_prova_s: duracao_da_prova_s(),
     }
 }
@@ -614,6 +623,31 @@ fn guardar_prova(r: &crate::modules::provaalternada::Resultado) -> Result<(), St
 
 #[cfg(target_os = "windows")]
 static EM_PROVA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// A prova automática foi pedida e ainda não acabou (cobre também o instante antes de a `provar` marcar a `EM_PROVA`).
+#[cfg(target_os = "windows")]
+static PROVA_SOZINHA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A vez da prova automática, de uma vez só (dois "ligar" seguidos não abrem duas). `false`: já há prova.
+#[cfg(target_os = "windows")]
+pub fn reservar_prova_sozinha() -> bool {
+    use std::sync::atomic::Ordering;
+    !em_prova()
+        && PROVA_SOZINHA
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+}
+
+/// Só quem reservou libera.
+#[cfg(target_os = "windows")]
+pub fn liberar_prova_sozinha() {
+    PROVA_SOZINHA.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// A prova automática ainda vai começar ou está rodando: o Turbo não se liga nem se desliga por cima dela.
+#[cfg(target_os = "windows")]
+pub fn prova_sozinha_pendente() -> bool {
+    PROVA_SOZINHA.load(std::sync::atomic::Ordering::SeqCst)
+}
 
 #[cfg(target_os = "windows")]
 pub fn em_prova() -> bool {
@@ -789,6 +823,18 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn so_se_prova_sozinha_a_receita_nunca_provada_que_muda_o_fps() {
+        let com_escala = montar(Gargalo::Placa, Some(40.0), Some(144), true);
+        let perfil = |receita: Receita, prova| Perfil { receita, fps_antes: Some(40.0), medido_em: 1, prova };
+        assert!(prova_sozinha(&perfil(com_escala.clone(), None)));
+        for ja in [Desfecho::Ganhou, Desfecho::Piorou, Desfecho::Indistinguivel, Desfecho::SemComparacaoJusta] {
+            assert!(!prova_sozinha(&perfil(com_escala.clone(), Some(ja))), "{ja:?}: já provada");
+        }
+        let nada = montar(Gargalo::Nenhum, Some(200.0), Some(144), false);
+        assert!(!prova_sozinha(&perfil(nada, None)), "não muda o FPS do jogo: não há o que provar");
+    }
 
     #[test]
     fn a_mesma_acao_ignora_o_texto_e_o_gargalo() {
