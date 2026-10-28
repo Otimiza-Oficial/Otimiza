@@ -1016,6 +1016,13 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   const lado = (r: { media: number; margem: number | null } | null) =>
     r ? `${numero(r.media)}${r.margem !== null ? ` ± ${numero(Math.ceil(r.margem))}` : ""}` : "—";
   const pct = pv?.diferenca_fps?.Real?.pct ?? null;
+  // A leveza: o 1% piores quadros, que a prova já mede e usa no desfecho.
+  const lowReal = pv?.diferenca_low?.Real ?? null;
+  const pctLow = lowReal?.pct ?? null;
+  const leveza =
+    pv?.low_sem && pv?.low_com
+      ? `<p class="nota" style="margin-top:6px">1% piores quadros: <b>${lado(pv.low_sem)} → ${lado(pv.low_com)}</b>${pctLow !== null ? ` (${pctLow > 0 ? "+" : ""}${numero(pctLow, 1)}%)` : ""}: ${lowReal && lowReal.delta > 0 ? "o ritmo ficou mais firme, com menos engasgo." : "o ritmo ficou dentro da margem de erro."}</p>`
+      : "";
   const selosDaProva: Record<string, string> = {
     Ganhou: `<span class="selo medido">provado${pct !== null ? `: ${pct > 0 ? "+" : ""}${numero(pct, 1)}%` : ""}</span>`,
     Piorou: `<span class="selo">piorou: Turbo desligado</span>`,
@@ -1025,7 +1032,8 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   const provaHtml = pv
     ? `<div class="rotulo" style="margin-top:16px">Prova do Turbo · ${pv.rodadas.length} rodadas alternadas</div>
        <div class="grande" style="font-size:40px">${lado(pv.fps_sem)} → ${lado(pv.fps_com)}<small style="font-size:16px;color:var(--texto-2)"> fps no jogo</small></div>
-       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selosDaProva[pv.desfecho] ?? ""}</div>
+       ${leveza}
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selosDaProva[pv.desfecho] ?? ""}${lowReal && lowReal.delta > 0 ? `<span class="selo medido">mais liso</span>` : ""}</div>
        <p class="nota" style="margin-top:8px">${esc(pv.leitura)}</p>
        ${pv.desfecho !== "SemComparacaoJusta" ? `<div class="acoes" style="margin-top:10px"><button class="botao" id="tb-copiar">Copiar resultado</button></div>` : ""}`
     : "";

@@ -314,6 +314,10 @@ export interface ProvaDoTurbo {
   fps_sem: ResumoDaProva | null;
   fps_com: ResumoDaProva | null;
   diferenca_fps: { Real?: { delta: number; pct: number | null; folga: number } } | null;
+  /** O 1% piores quadros: é o que a pessoa sente como leveza (engasgo some, ritmo firma). */
+  low_sem?: ResumoDaProva | null;
+  low_com?: ResumoDaProva | null;
+  diferenca_low?: { Real?: { delta: number; pct: number | null; folga: number } } | null;
   desfecho: DesfechoDaProva;
   leitura: string;
 }
