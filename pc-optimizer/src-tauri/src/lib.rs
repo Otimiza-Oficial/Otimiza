@@ -554,7 +554,10 @@ pub fn run() {
 
                         // Roda também no modo seguro: o governador fica parado (sem medição), e é este passo que
                         // devolve o que ficou acalmado quando o jogo fecha.
-                        if !modules::preferences::Preferences::load().auto_game_mode {
+                        // O Turbo também liga o governador (com o processador no limite): o vigia roda para devolvê-lo
+                        // quando o jogo fecha.
+                        let do_turbo = crate::plataforma::turbo::governa();
+                        if !modules::preferences::Preferences::load().auto_game_mode && !do_turbo {
                             continue;
                         }
 
@@ -566,6 +569,11 @@ pub fn run() {
                         {
                             utils::Logger::info(&format!("Modo jogo: {}", mensagem));
                             let _ = handle.emit("gamemode:changed", mensagem);
+                        }
+                        // O passo acima devolveu o segundo plano (o jogo fechou): o governador do Turbo acabou. Pelo estado do
+                        // governador, não por outra leitura dos processos, que podia discordar da do passo.
+                        if do_turbo && !modules::windows::gamemode::governador_ligado(&log) {
+                            crate::plataforma::turbo::marcar_governo(false);
                         }
                     }
                 });

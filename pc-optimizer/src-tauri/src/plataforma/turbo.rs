@@ -418,6 +418,42 @@ pub struct Painel {
 
 #[cfg(target_os = "windows")]
 static PASSOS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Uma linha a mais no que o Turbo fez (os passos que moram fora daqui: governador, núcleos rápidos).
+#[cfg(target_os = "windows")]
+pub fn anotar_passo(texto: String) {
+    if let Ok(mut p) = PASSOS.lock() {
+        p.push(texto);
+    }
+}
+
+/// Pura: com o gargalo no processador ou na memória, o que disputa com o jogo é o segundo plano: o governador do modo
+/// jogo entra (ele tem o próprio portão "nunca menos FPS" e para sozinho se a partida piorar).
+pub fn governador_na_receita(r: &Receita) -> bool {
+    matches!(r.gargalo, Gargalo::Processador | Gargalo::Memoria)
+}
+
+/// Pura: depois de uma prova que não piorou, com o processador no limite e sem regra de núcleos para o jogo, o Turbo
+/// mede os núcleos rápidos (o Auto CPU Set, que só fica se render).
+pub fn testar_nucleos(r: &Receita, desfecho: Desfecho, ja_tem_regra: bool) -> bool {
+    r.gargalo == Gargalo::Processador && desfecho != Desfecho::Piorou && !ja_tem_regra
+}
+
+/// O Turbo ligou o governador (e não a pessoa, com o modo jogo automático): o vigia do modo jogo roda enquanto isto
+/// vale e o devolve quando o jogo fecha; desligar o Turbo também. Em memória: se o Otimiza cair, a abertura seguinte
+/// devolve pelo arquivo do governador (`gamemode::recuperar_na_abertura`).
+#[cfg(target_os = "windows")]
+static GOVERNA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "windows")]
+pub fn governa() -> bool {
+    GOVERNA.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[cfg(target_os = "windows")]
+pub fn marcar_governo(ligado: bool) {
+    GOVERNA.store(ligado, std::sync::atomic::Ordering::SeqCst);
+}
 /// O Turbo ligou a energia de jogo (e não a pessoa): desligar o Turbo devolve só o que ele ligou. Em disco, ao lado
 /// do turbo.json: depois de fechar e abrir o Otimiza, o "Desligar Turbo" ainda sabe que a energia foi dele.
 #[cfg(target_os = "windows")]
@@ -823,6 +859,21 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_governador_e_os_nucleos_so_entram_onde_o_processador_disputa() {
+        let placa = montar(Gargalo::Placa, Some(40.0), Some(144), false);
+        let cpu = montar(Gargalo::Processador, Some(40.0), Some(144), false);
+        let memoria = montar(Gargalo::Memoria, Some(40.0), Some(144), false);
+        assert!(!governador_na_receita(&placa), "a placa no limite: o segundo plano não é o problema");
+        assert!(governador_na_receita(&cpu) && governador_na_receita(&memoria));
+
+        assert!(testar_nucleos(&cpu, Desfecho::Ganhou, false));
+        assert!(testar_nucleos(&cpu, Desfecho::Indistinguivel, false));
+        assert!(!testar_nucleos(&cpu, Desfecho::Piorou, false), "o Turbo saiu: nada mais entra");
+        assert!(!testar_nucleos(&cpu, Desfecho::Ganhou, true), "já medido neste jogo: o vigia reaplica");
+        assert!(!testar_nucleos(&placa, Desfecho::Ganhou, false));
+    }
 
     #[test]
     fn so_se_prova_sozinha_a_receita_nunca_provada_que_muda_o_fps() {

@@ -20,7 +20,7 @@ Hoje cada peça existe, mas solta: o Turbo liga escala, energia e geração. O g
 | # | Fatia | Estado |
 |---|---|---|
 | F1 | **A prova mostra a leveza.** O cartão e o texto do "Copiar resultado" trazem o 1% pior sem → com (a prova já mede; o desfecho já usa). | feita |
-| F2 | **Processador sem disputa.** Com gargalo no processador, o Turbo liga o governador (fundo sem prioridade) e o Auto CPU Set medido; desligar devolve. Entram no lado "com" da prova. | |
+| F2 | **Processador sem disputa.** Com gargalo no processador, o Turbo liga o governador (fundo sem prioridade) e o Auto CPU Set medido; desligar devolve. O governador fica nos dois lados da prova (tem portão próprio, que para sozinho se piorar); os núcleos são medidos depois dela, em ~1 min, e só ficam se renderem. É da pessoa quando ela usa o modo jogo (automático ou à mão): aí o Turbo não liga nem desliga. | feita |
 | F3 | **Base estável.** Quando a medida mostra ritmo irregular (1% pior muito abaixo da média), o Turbo trava a base no que a máquina sustenta, com ou sem geração. | |
 | F4 | **Até o monitor.** "Mais FPS" monta a combinação inteira: base estável + escala se a placa for o limite + geração Auto até os Hz. A meta de "+100 na tela" vem daqui, dito como "na tela". | |
 | F5 | **FiveM.** O perfil gráfico do GTA entra na receita como passo "quando o jogo fechar" (o arquivo só pode ser escrito com ele fechado). | |

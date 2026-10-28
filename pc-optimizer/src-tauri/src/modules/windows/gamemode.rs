@@ -477,6 +477,11 @@ fn modo_ligado(log: &ChangeLog) -> bool {
     trava().is_some() || log.is_applied(ID)
 }
 
+/// O governador está de pé (sessão na memória ou registro antigo no histórico), sem varrer os processos de novo.
+pub fn governador_ligado(log: &ChangeLog) -> bool {
+    modo_ligado(log)
+}
+
 pub fn status(log: &ChangeLog) -> GameModeStatus {
     status_com(log, jogo_aberto())
 }
