@@ -338,6 +338,8 @@ export interface PainelTurbo {
   provando?: boolean;
   /** A prova que está rodando é a automática, da primeira vez da receita neste jogo. */
   prova_sozinha?: boolean;
+  /** O jogo trava muitas vezes por minuto: a oferta do Jogo liso (o Turbo não aplica sozinho). */
+  ritmo?: { fps: number; trancos_por_minuto: number; teto: number } | null;
   duracao_da_prova_s?: number;
   passos: string[];
   ligado: boolean;

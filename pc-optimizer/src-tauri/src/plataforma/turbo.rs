@@ -414,6 +414,8 @@ pub struct Painel {
     pub prova_sozinha: bool,
     /// Quanto a prova leva, para a tela dizer antes de começar.
     pub duracao_da_prova_s: u64,
+    /// O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso.
+    pub ritmo: Option<Ritmo>,
 }
 
 #[cfg(target_os = "windows")]
@@ -425,6 +427,26 @@ pub fn anotar_passo(texto: String) {
     if let Ok(mut p) = PASSOS.lock() {
         p.push(texto);
     }
+}
+
+/// A oferta do Jogo liso no cartão do Turbo: o jogo trava muitas vezes por minuto e um teto estável tira o tranco.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Ritmo {
+    pub fps: f64,
+    pub trancos_por_minuto: f64,
+    pub teto: u32,
+}
+
+/// Pura: o Turbo OFERECE o teto do Jogo liso (não aplica: o teto troca um pouco da média por ritmo, e essa troca é da
+/// pessoa) quando a medida mostra trancos e a receita não mexe no FPS depois da medida. Com escala, o FPS sobe depois
+/// e o teto da medida cortaria o ganho; com geração, a base já é travada pelo Frame Boost (`travar_base`).
+pub fn ritmo_a_oferecer(r: &Receita, mediana: f64, trancos_por_minuto: f64, hz: u32) -> Option<Ritmo> {
+    if r.escala.is_some() || r.multiplicador.is_some() || trancos_por_minuto < super::jogo_liso::JA_LISO_TRANCOS {
+        return None;
+    }
+    super::jogo_liso::planejar(mediana, hz, trancos_por_minuto)
+        .teto
+        .map(|teto| Ritmo { fps: mediana, trancos_por_minuto, teto })
 }
 
 /// Pura: com o gargalo no processador ou na memória, o que disputa com o jogo é o segundo plano: o governador do modo
@@ -508,6 +530,12 @@ pub fn painel() -> Painel {
         provando: em_prova() || PROVA_SOZINHA.load(Ordering::SeqCst),
         prova_sozinha: PROVA_SOZINHA.load(Ordering::SeqCst),
         duracao_da_prova_s: duracao_da_prova_s(),
+        ritmo: RITMO
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .filter(|(jogo, _)| id.as_deref() == Some(jogo.as_str()))
+            .map(|(_, r)| r),
     }
 }
 
@@ -517,27 +545,35 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
     use crate::modules::windows::{bottleneck, presentmon};
     let jogo = super::sessao::atual().ok_or("Abra o jogo primeiro: o Turbo mede o jogo aberto.")?;
     let pid = jogo.pid;
-    let fps = std::thread::spawn(move || {
+    let medida = std::thread::spawn(move || {
         presentmon::capturar(pid, 10)
             .and_then(|q| presentmon::resumir(&q))
             .map_err(|e| crate::utils::Logger::warn(&format!("turbo: o PresentMon não mediu o jogo: {}", e)))
             .ok()
-            .map(|r| r.fps_do_jogo_medio)
-            .filter(|f| *f > 0.0)
+            .filter(|r| r.fps_do_jogo_medio > 0.0)
     });
     let relatorio = bottleneck::analisar(10);
-    let fps = fps.join().ok().flatten();
+    let medida = medida.join().ok().flatten();
+    let fps = medida.as_ref().map(|r| r.fps_do_jogo_medio);
     let (id, _) = super::historico::id_do_jogo(&jogo.executavel);
     let hz = super::frameboost::hz_do_jogo(pid);
     crate::utils::Logger::info(&format!(
         "turbo: {} · {:?} (CPU {:.0}%, núcleo {:.0}%, placa {:.0}%) · {:?} fps · {:?} Hz",
         id, relatorio.limite, relatorio.cpu_total, relatorio.cpu_max_core, relatorio.gpu_percent, fps, hz
     ));
-    Ok((
-        montar(gargalo_de(relatorio.limite), fps, hz, menor_atraso(&id)),
-        fps,
-    ))
+    let receita = montar(gargalo_de(relatorio.limite), fps, hz, menor_atraso(&id));
+    let ritmo = medida.as_ref().and_then(|r| {
+        ritmo_a_oferecer(&receita, r.fps_do_jogo_mediana, r.engasgos_por_minuto, hz.unwrap_or(0))
+    });
+    if let Ok(mut g) = RITMO.lock() {
+        *g = ritmo.map(|r| (id.clone(), r));
+    }
+    Ok((receita, fps))
 }
+
+/// O ritmo irregular da última medida do Turbo, por jogo, para o cartão oferecer o Jogo liso.
+#[cfg(target_os = "windows")]
+static RITMO: std::sync::Mutex<Option<(String, Ritmo)>> = std::sync::Mutex::new(None);
 
 /// Aplica a receita e devolve o que fez, passo a passo. Um passo que falha (anticheat, sem administrador) vira nota e
 /// os outros seguem: o Turbo nunca deixa de fazer o que pode por causa do que não pode.
@@ -859,6 +895,18 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_jogo_liso_so_e_oferecido_com_tranco_e_sem_escala_nem_geracao() {
+        let cpu_menor_atraso = montar(Gargalo::Processador, Some(70.0), Some(144), true);
+        let r = ritmo_a_oferecer(&cpu_menor_atraso, 70.0, 30.0, 144).expect("30 trancos/min sem escala nem geração");
+        assert!(r.teto < 70, "o teto fica abaixo da mediana, com folga para o processador: {}", r.teto);
+        assert!(ritmo_a_oferecer(&cpu_menor_atraso, 70.0, 1.0, 144).is_none(), "já liso");
+        let com_geracao = montar(Gargalo::Processador, Some(70.0), Some(144), false);
+        assert!(ritmo_a_oferecer(&com_geracao, 70.0, 30.0, 144).is_none(), "a geração já trava a base");
+        let com_escala = montar(Gargalo::Placa, Some(70.0), Some(144), true);
+        assert!(ritmo_a_oferecer(&com_escala, 70.0, 30.0, 144).is_none(), "a escala sobe o FPS depois da medida");
+    }
 
     #[test]
     fn o_governador_e_os_nucleos_so_entram_onde_o_processador_disputa() {
