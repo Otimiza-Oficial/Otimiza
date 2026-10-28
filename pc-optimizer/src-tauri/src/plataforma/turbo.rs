@@ -442,6 +442,44 @@ pub fn anotar_passo(texto: String) {
     }
 }
 
+/// O perfil gráfico do GTA (configjogo) pedido no cartão do Turbo: o arquivo só pode ser escrito com o jogo fechado
+/// (ele reescreve a configuração ao sair), então o pedido fica em disco e o laço da sessão aplica quando ele fechar.
+pub const PERFIS_DO_JOGO: [&str; 2] = ["competitivo", "equilibrado"];
+
+/// Pura: o jogo tem o perfil gráfico do GTA (FiveM e GTA V usam o mesmo settings.xml).
+pub fn oferece_perfil_do_jogo(id_do_jogo: &str) -> bool {
+    matches!(id_do_jogo, "fivem" | "gta5")
+}
+
+fn marca_do_perfil_do_jogo() -> PathBuf {
+    caminho().with_file_name("turbo_perfil_do_jogo")
+}
+
+/// `None` cancela o pedido.
+pub fn pedir_perfil_do_jogo(perfil: Option<&str>) -> Result<(), String> {
+    let m = marca_do_perfil_do_jogo();
+    match perfil {
+        Some(p) if PERFIS_DO_JOGO.contains(&p) => {
+            if let Some(d) = m.parent() {
+                fs::create_dir_all(d).map_err(|e| e.to_string())?;
+            }
+            fs::write(&m, p).map_err(|e| e.to_string())
+        }
+        Some(outro) => Err(format!("perfil desconhecido: {}", outro)),
+        None => match fs::remove_file(&m) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.to_string()),
+            _ => Ok(()),
+        },
+    }
+}
+
+pub fn perfil_do_jogo_pendente() -> Option<String> {
+    fs::read_to_string(marca_do_perfil_do_jogo())
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|p| PERFIS_DO_JOGO.contains(&p.as_str()))
+}
+
 /// A oferta do Jogo liso no cartão do Turbo: o jogo trava muitas vezes por minuto e um teto estável tira o tranco.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Ritmo {
@@ -908,6 +946,13 @@ pub fn provar(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn o_perfil_do_gta_so_e_oferecido_no_fivem_e_no_gta() {
+        assert!(oferece_perfil_do_jogo("fivem") && oferece_perfil_do_jogo("gta5"));
+        assert!(!oferece_perfil_do_jogo("cs2"));
+        assert!(PERFIS_DO_JOGO.iter().all(|p| ["competitivo", "equilibrado"].contains(p)));
+    }
 
     #[test]
     fn o_jogo_liso_so_e_oferecido_com_tranco_e_sem_escala_nem_geracao() {

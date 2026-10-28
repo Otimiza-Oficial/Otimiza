@@ -4449,10 +4449,29 @@ pub async fn apply_game_profile(
 
     #[cfg(target_os = "windows")]
     {
+        let mut log = state.changes.lock().await;
+        return aplicar_perfil_do_jogo(&perfil, &mut log);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (perfil, state);
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// O perfil gráfico do GTA/FiveM, com o arquivo inteiro de antes no histórico e o portão "nunca menos FPS". Pelo botão
+/// da tela clássica e pelo pedido do Turbo (aplicado quando o jogo fecha).
+#[cfg(target_os = "windows")]
+fn aplicar_perfil_do_jogo(
+    perfil: &str,
+    log: &mut crate::modules::changelog::ChangeLog,
+) -> Result<Vec<String>, String> {
+    {
         use crate::modules::changelog::{now_timestamp, AppliedOptimization, ChangeRecord};
         use crate::modules::windows::configjogo;
 
-        let escolhido = perfil_por_nome(&perfil)?;
+        let escolhido = perfil_por_nome(perfil)?;
         let feito = configjogo::aplicar_perfil(escolhido)?;
 
         let aviso = feito
@@ -4463,8 +4482,6 @@ pub async fn apply_game_profile(
         if feito.mudou.is_empty() {
             return Ok(aviso.into_iter().collect());
         }
-
-        let mut log = state.changes.lock().await;
 
         // Nunca menos FPS: em observação (`modules::portao`). FiveM é "FiveM_b3258_GTAProcess.exe"; GTA, "GTA5.exe".
         let processo = if feito.jogo.to_lowercase().contains("fivem") {
@@ -4492,12 +4509,71 @@ pub async fn apply_game_profile(
 
         Ok(feito.mudou.into_iter().chain(aviso).collect())
     }
+}
 
+/// O perfil gráfico do jogo pelo cartão do Turbo: se ele é oferecido para o jogo aberto, o pedido pendente e o que o
+/// histórico diz que já está aplicado. `LIVRES`: só lê.
+#[derive(Debug, Clone, Serialize)]
+pub struct PerfilDoJogoNoTurbo {
+    pub oferece: bool,
+    pub pendente: Option<String>,
+    pub aplicado: Option<String>,
+}
+
+#[tauri::command]
+pub async fn turbo_perfil_do_jogo(state: State<'_, AppState>) -> Result<PerfilDoJogoNoTurbo, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::plataforma::{historico, sessao, turbo};
+        let oferece = sessao::atual()
+            .map(|j| historico::id_do_jogo(&j.executavel).0)
+            .is_some_and(|id| turbo::oferece_perfil_do_jogo(&id));
+        let log = state.changes.lock().await;
+        let aplicado = ["competitivo", "equilibrado", "sem_teto"]
+            .into_iter()
+            .find(|p| log.is_applied(&format!("config_jogo_{}", p)))
+            .map(str::to_string);
+        return Ok(PerfilDoJogoNoTurbo { oferece, pendente: turbo::perfil_do_jogo_pendente(), aplicado });
+    }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (perfil, state);
-        Err(UNSUPPORTED_PLATFORM.to_string())
+        let _ = state;
+        Err("O Turbo só existe no Windows.".to_string())
     }
+}
+
+/// `EXIGEM_LICENCA`: pede o perfil gráfico do jogo (aplicado quando ele fechar; `None` cancela o pedido).
+#[tauri::command]
+pub async fn turbo_perfil_do_jogo_pedir(
+    perfil: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<PerfilDoJogoNoTurbo, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    crate::plataforma::turbo::pedir_perfil_do_jogo(perfil.as_deref())?;
+    #[cfg(not(target_os = "windows"))]
+    let _ = &perfil;
+    turbo_perfil_do_jogo(state).await
+}
+
+/// O laço da sessão: com um perfil pedido no Turbo e o jogo fechado, aplica e tira o pedido. `None` sem nada a fazer.
+#[cfg(target_os = "windows")]
+pub async fn aplicar_perfil_pendente(app: &tauri::AppHandle) -> Option<String> {
+    use tauri::Manager;
+    let perfil = crate::plataforma::turbo::perfil_do_jogo_pendente()?;
+    if crate::modules::windows::fivem::processos_abertos().0 {
+        return None;
+    }
+    let estado = app.state::<AppState>();
+    let mut log = estado.changes.lock().await;
+    let frase = match aplicar_perfil_do_jogo(&perfil, &mut log) {
+        Ok(mudou) if mudou.is_empty() => format!("perfil {} do jogo: já estava assim", perfil),
+        Ok(mudou) => format!("perfil {} do jogo aplicado: {}", perfil, mudou.join("; ")),
+        // Sem o arquivo ou com erro de escrita: o pedido sai mesmo assim, para não tentar a cada 4 s para sempre.
+        Err(e) => format!("perfil {} do jogo não aplicado: {}", perfil, e),
+    };
+    let _ = crate::plataforma::turbo::pedir_perfil_do_jogo(None);
+    Some(frase)
 }
 
 #[tauri::command]
@@ -5052,6 +5128,7 @@ mod tests {
         "turbo_desligar",
         "turbo_esquecer",
         "turbo_atraso",
+        "turbo_perfil_do_jogo",
         "config_motor_painel",
         "escala_pedir_comparacao",
         "escala_comparacao",
@@ -5229,6 +5306,7 @@ mod tests {
         "cores_aplicar",
         "frame_boost_ligar",
         "turbo_ligar",
+        "turbo_perfil_do_jogo_pedir",
         "turbo_provar",
         "config_motor_aplicar",
         "frame_boost_travar_base",

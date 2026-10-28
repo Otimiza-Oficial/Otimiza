@@ -329,6 +329,13 @@ export interface PassoDaProvaDoTurbo {
   segundos: number;
 }
 
+/** O perfil gráfico do GTA/FiveM pelo cartão do Turbo (aplicado quando o jogo fecha). */
+export interface PerfilDoJogoNoTurbo {
+  oferece: boolean;
+  pendente: string | null;
+  aplicado: string | null;
+}
+
 export interface PainelTurbo {
   jogo: string | null;
   /** "Menor atraso": o Turbo não liga geração de quadros neste jogo. Escolha da pessoa; sem ela, jogo de tiro vem assim. */
@@ -563,6 +570,8 @@ export const ponte = {
   turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
   turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
   turboAtraso: (menor: boolean) => invoke<PainelTurbo>("turbo_atraso", { menor }),
+  turboPerfilDoJogo: () => invoke<PerfilDoJogoNoTurbo>("turbo_perfil_do_jogo"),
+  turboPerfilDoJogoPedir: (perfil: string | null) => invoke<PerfilDoJogoNoTurbo>("turbo_perfil_do_jogo_pedir", { perfil }),
   /** A prova A-B (uns 5 minutos); o passo a passo chega pelo evento `turbo:prova`. */
   turboProvar: () => invoke<ProvaDoTurbo>("turbo_provar"),
   turboCompartilhar: () => invoke<string>("turbo_compartilhar"),

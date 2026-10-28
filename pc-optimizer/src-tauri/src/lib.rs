@@ -292,6 +292,8 @@ pub fn run() {
             commands::turbo_desligar,
             commands::turbo_esquecer,
             commands::turbo_atraso,
+            commands::turbo_perfil_do_jogo,
+            commands::turbo_perfil_do_jogo_pedir,
             commands::turbo_provar,
             commands::turbo_prova_guardada,
             commands::turbo_compartilhar,
@@ -373,6 +375,12 @@ pub fn run() {
                         let _ = tokio::task::spawn_blocking(plataforma::contador_fivem::cuidar).await;
                         // O FOV pedido com o FiveM aberto, idem.
                         let _ = tokio::task::spawn_blocking(plataforma::fov_fivem::cuidar).await;
+                        // O perfil gráfico pedido no cartão do Turbo, idem. Este escreve: fica parado no modo seguro.
+                        if !utils::diagnostico::modo_seguro() {
+                            if let Some(frase) = commands::aplicar_perfil_pendente(&handle).await {
+                                utils::Logger::info(&format!("turbo: {}", frase));
+                            }
+                        }
                         let anterior = pid;
                         let Ok(Some(mudou)) =
                             tokio::task::spawn_blocking(move || plataforma::sessao::volta(anterior)).await
