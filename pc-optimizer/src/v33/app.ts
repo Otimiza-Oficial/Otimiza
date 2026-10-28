@@ -1016,6 +1016,13 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   const lado = (r: { media: number; margem: number | null } | null) =>
     r ? `${numero(r.media)}${r.margem !== null ? ` ± ${numero(Math.ceil(r.margem))}` : ""}` : "—";
   const pct = pv?.diferenca_fps?.Real?.pct ?? null;
+  // A leveza: o 1% piores quadros, que a prova já mede e usa no desfecho.
+  const lowReal = pv?.diferenca_low?.Real ?? null;
+  const pctLow = lowReal?.pct ?? null;
+  const leveza =
+    pv?.low_sem && pv?.low_com
+      ? `<p class="nota" style="margin-top:6px">1% piores quadros: <b>${lado(pv.low_sem)} → ${lado(pv.low_com)}</b>${pctLow !== null ? ` (${pctLow > 0 ? "+" : ""}${numero(pctLow, 1)}%)` : ""}: ${lowReal && lowReal.delta > 0 ? "o ritmo ficou mais firme, com menos engasgo." : "o ritmo ficou dentro da margem de erro."}</p>`
+      : "";
   const selosDaProva: Record<string, string> = {
     Ganhou: `<span class="selo medido">provado${pct !== null ? `: ${pct > 0 ? "+" : ""}${numero(pct, 1)}%` : ""}</span>`,
     Piorou: `<span class="selo">piorou: Turbo desligado</span>`,
@@ -1025,7 +1032,8 @@ async function cartaoTurbo(dado?: PainelTurbo) {
   const provaHtml = pv
     ? `<div class="rotulo" style="margin-top:16px">Prova do Turbo · ${pv.rodadas.length} rodadas alternadas</div>
        <div class="grande" style="font-size:40px">${lado(pv.fps_sem)} → ${lado(pv.fps_com)}<small style="font-size:16px;color:var(--texto-2)"> fps no jogo</small></div>
-       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selosDaProva[pv.desfecho] ?? ""}</div>
+       ${leveza}
+       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${selosDaProva[pv.desfecho] ?? ""}${lowReal && lowReal.delta > 0 ? `<span class="selo medido">mais liso</span>` : ""}</div>
        <p class="nota" style="margin-top:8px">${esc(pv.leitura)}</p>
        ${pv.desfecho !== "SemComparacaoJusta" ? `<div class="acoes" style="margin-top:10px"><button class="botao" id="tb-copiar">Copiar resultado</button></div>` : ""}`
     : "";
@@ -1038,8 +1046,14 @@ async function cartaoTurbo(dado?: PainelTurbo) {
        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><span class="selo ${r.ganho_pct > 0 ? "medido" : ""}">${r.ganho_pct > 0 ? "+" : ""}${numero(r.ganho_pct, 1)}%</span>${r.fps_na_tela ? `<span class="selo ${r.na_tela_medido ? "medido" : "estimado"}">${numero(r.fps_na_tela)} na tela</span>` : ""}${r.escala ? `<span class="selo">escala ${esc(NOMES_DA_ESCALA[r.escala])}</span>` : ""}</div>
        <p class="nota" style="margin-top:8px">Comparação simples: o antes são os 10 s da medida; o depois, a média de ${numero(r.minutos, 1)} min de jogo. Cenas diferentes, então não é prova A-B.</p>`
     : "";
+  // O ritmo irregular: o Turbo oferece o teto do Jogo liso (troca um pouco da média por ritmo; a escolha é da pessoa).
+  const ritmo =
+    p.ritmo && !p.provando && estado.hw?.placa.fabricante === "Nvidia"
+      ? `<div class="estado aviso" style="margin-top:14px">O ${esc(p.jogo ?? "jogo")} trava ${numero(p.ritmo.trancos_por_minuto)} vezes por minuto a ${numero(p.ritmo.fps)} fps. Travar em ${p.ritmo.teto} fps deixa o ritmo constante, que é o que o olho sente como leve: tira um pouco da média para tirar o tranco. Vale ao reabrir o jogo.</div>
+         <div class="acoes" style="margin-top:10px"><button class="botao" id="tb-ritmo" title="Mede o jogo por 20 s e grava o teto no perfil do driver; desfaz em um clique">Medir 20 s e travar</button></div>`
+      : "";
   caixa.innerHTML = `${tituloDoTurbo(p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : "")}
-    ${provaHtml}${resultado}${corpo}<p class="estado" id="tb-estado" hidden></p>`;
+    ${provaHtml}${resultado}${corpo}${ritmo}<p class="estado" id="tb-estado" hidden></p>`;
   if (p.provando && !acompanhandoProva) void acompanharProva();
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
@@ -1066,6 +1080,22 @@ async function cartaoTurbo(dado?: PainelTurbo) {
       void agir(b, () => ponte.turboAtraso(b.dataset.menor === "1"));
     })
   );
+  document.querySelector<HTMLButtonElement>("#tb-ritmo")?.addEventListener("click", async (e) => {
+    const botao = e.currentTarget as HTMLButtonElement;
+    botao.disabled = true;
+    botao.textContent = "Medindo 20 s… jogue normalmente";
+    const s = $("#tb-estado");
+    try {
+      const plano = await ponte.jogoLisoAplicar();
+      s.className = "estado ok";
+      s.textContent = `${plano.motivo} Reabra o jogo para valer.`;
+    } catch (erro) {
+      s.className = "estado aviso";
+      s.textContent = String(erro);
+    }
+    s.hidden = false;
+    botao.hidden = true;
+  });
   document.querySelector<HTMLButtonElement>("#tb-esquecer")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboEsquecer()));
   document.querySelector<HTMLButtonElement>("#tb-desligar")?.addEventListener("click", (e) => void agir(e.currentTarget as HTMLButtonElement, () => ponte.turboDesligar()));
   document.querySelector<HTMLButtonElement>("#tb-provar")?.addEventListener("click", () => void provarTurbo(p));

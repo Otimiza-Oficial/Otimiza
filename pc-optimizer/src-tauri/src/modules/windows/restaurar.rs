@@ -204,6 +204,9 @@ where
                     }
                 }
                 if modo_jogo {
+                    // O governador do Turbo também sai, senão o vigia o religa na volta seguinte.
+                    #[cfg(target_os = "windows")]
+                    crate::plataforma::turbo::marcar_governo(false);
                     match gamemode::desativar(log) {
                         Ok(frase) => feito.push(frase),
                         Err(e) => falhas.push(e),

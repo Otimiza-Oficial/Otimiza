@@ -53,6 +53,16 @@ fn arquivo() -> PathBuf {
     base.join("pc-optimizer").join("cpuset.json")
 }
 
+/// Como `ler`, mas o arquivo que existe e não se lê é erro: quem vai GRAVAR (o teste do Turbo) não pode tratar isso
+/// como "nenhuma regra" e sobrescrever as dos outros jogos.
+pub fn ler_conferido() -> Result<BTreeMap<String, ResultadoCpuSet>, String> {
+    match std::fs::read_to_string(arquivo()) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(e) => Err(format!("não consegui ler as regras de núcleos: {}", e)),
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("as regras de núcleos estão ilegíveis: {}", e)),
+    }
+}
+
 pub fn ler() -> BTreeMap<String, ResultadoCpuSet> {
     std::fs::read_to_string(arquivo())
         .ok()

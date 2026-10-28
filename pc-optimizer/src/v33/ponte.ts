@@ -314,6 +314,10 @@ export interface ProvaDoTurbo {
   fps_sem: ResumoDaProva | null;
   fps_com: ResumoDaProva | null;
   diferenca_fps: { Real?: { delta: number; pct: number | null; folga: number } } | null;
+  /** O 1% piores quadros: é o que a pessoa sente como leveza (engasgo some, ritmo firma). */
+  low_sem?: ResumoDaProva | null;
+  low_com?: ResumoDaProva | null;
+  diferenca_low?: { Real?: { delta: number; pct: number | null; folga: number } } | null;
   desfecho: DesfechoDaProva;
   leitura: string;
 }
@@ -334,6 +338,8 @@ export interface PainelTurbo {
   provando?: boolean;
   /** A prova que está rodando é a automática, da primeira vez da receita neste jogo. */
   prova_sozinha?: boolean;
+  /** O jogo trava muitas vezes por minuto: a oferta do Jogo liso (o Turbo não aplica sozinho). */
+  ritmo?: { fps: number; trancos_por_minuto: number; teto: number } | null;
   duracao_da_prova_s?: number;
   passos: string[];
   ligado: boolean;
