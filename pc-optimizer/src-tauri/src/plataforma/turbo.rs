@@ -153,6 +153,19 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz_lido: Option<u32>, competit
              abaixo) e meça de novo."
                 .to_string(),
         ),
+        // Nada no limite e o monitor sobrando: o que segura o FPS é o próprio jogo (limite, servidor, motor). Menos pixels
+        // ou processador livre não ajudam; a geração enche o monitor, e a explicação diz que é FPS na tela.
+        Gargalo::Nenhum if !competitivo && fps.is_some_and(|f| f < hz * 0.9) => (
+            None,
+            Some(0),
+            false,
+            false,
+            format!(
+                "Nada está no limite, mas o jogo fica em {:.0} fps num monitor de {:.0} Hz: o que segura é o próprio jogo                  (limite dele, do servidor ou do motor). A geração de quadros enche o monitor: é FPS na tela, não do jogo.",
+                fps.unwrap_or_default(),
+                hz
+            ),
+        ),
         Gargalo::Nenhum => (
             None,
             None,
@@ -1016,6 +1029,20 @@ mod tests {
         let r = montar(Gargalo::Memoria, Some(45.0), Some(60), false);
         assert!(r.memoria);
         assert_eq!(r.multiplicador, None);
+    }
+
+    #[test]
+    fn nada_no_limite_com_o_monitor_sobrando_enche_o_monitor_com_geracao() {
+        let r = montar(Gargalo::Nenhum, Some(70.0), Some(144), false);
+        assert_eq!((r.escala, r.multiplicador, r.energia), (None, Some(0), false));
+        assert!(r.explicacao.contains("FPS na tela"), "a geração nunca é vendida como FPS do jogo");
+        let menor_atraso = montar(Gargalo::Nenhum, Some(70.0), Some(144), true);
+        assert_eq!(menor_atraso.multiplicador, None, "Menor atraso: sem geração");
+        let sem_medida = montar(Gargalo::Nenhum, None, Some(144), false);
+        assert_eq!(sem_medida.multiplicador, None, "sem o FPS medido, não há base para dizer que sobra monitor");
+        let perto = montar(Gargalo::Nenhum, Some(135.0), Some(144), false);
+        assert_eq!(perto.multiplicador, None, "a 94% dos Hz o monitor já está quase cheio");
+        assert!(receita_da_prova(&r).is_none(), "só geração: a guarda do Frame Boost confere, não a prova");
     }
 
     #[test]
