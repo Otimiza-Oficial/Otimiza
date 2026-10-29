@@ -8,13 +8,41 @@ resultado é que não mudou nada.
 |---|---|
 | `Otimiza-instalador.exe` | **Comece por este.** Instalador comum, em português |
 | `Otimiza-instalador.exe.sha256` | A soma do instalador, para conferir que o arquivo chegou inteiro |
-| `Otimiza_3.5.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
-| `Otimiza_3.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
+| `Otimiza_3.6.0_x64-setup.exe` | O mesmo instalador, com o número da versão no nome |
+| `Otimiza_3.6.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
 computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
 licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
 custo.
+
+---
+
+# 3.6 Turbo Máximo (3.6.0): o Turbo junta tudo
+
+## Até o monitor, quando quem segura é o jogo
+
+Quando nada está no limite (nem placa, nem processador, nem memória) e o FPS fica abaixo dos Hz do monitor, quem segura
+é o próprio jogo: limite dele, do servidor ou do motor, comum no FiveM. Diminuir a resolução ou soltar o processador
+não ajuda aí. Agora o Turbo liga a geração de quadros até encher o monitor, e o cartão diz com todas as letras que é FPS
+**na tela**, não FPS do jogo. Com "Menor atraso", sem a medida do FPS ou com o monitor quase cheio, ele continua sem
+ligar nada.
+
+## Perfil gráfico do FiveM pelo Turbo
+
+O perfil da configuração do GTA no FiveM (MSAA, sombras, reflexos, grama), que só existia na tela clássica, agora está
+no cartão do Turbo com o FiveM aberto: **Máximo de FPS** ou **Equilibrado**. Como o jogo reescreve a configuração ao
+sair, o pedido fica guardado e é aplicado quando o FiveM fecha, com o arquivo de antes no histórico para desfazer. O
+cartão mostra o que está pedido (com Cancelar) e o que já está aplicado. No GTA V fora do FiveM, o perfil continua pelo
+botão da tela clássica.
+
+## Mais certinho ao desligar
+
+- O teto de FPS que o Turbo põe na base é tirado quando você desliga o Turbo. O teto que você mesmo pôs pelo Jogo liso
+  fica como está.
+- A oferta de ritmo estável some quando o Turbo desliga.
+
+A 3.6 também traz tudo da 3.5 abaixo, inclusive a licença reforçada.
 
 ---
 
