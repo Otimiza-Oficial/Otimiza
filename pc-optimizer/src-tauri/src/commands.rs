@@ -3041,7 +3041,7 @@ pub async fn turbo_ligar(
             // A medida nova deu a mesma receita que a prova reprovou: não liga, e a reprovação fica guardada.
             if reprovada.as_ref().is_some_and(|r| turbo::mesma_acao(r, &receita)) {
                 return Err(
-                    "A medida de agora deu a mesma receita que a prova reprovou neste PC, então o Turbo não a liga.                      Ela pode mudar com outro trecho do jogo, outra resolução ou outro driver."
+                    "A medida de agora deu a mesma receita que a prova reprovou neste PC, então o Turbo não a liga. Ela pode mudar com outro trecho do jogo, outra resolução ou outro driver."
                         .to_string(),
                 );
             }
@@ -3066,7 +3066,12 @@ pub async fn turbo_ligar(
         .await
         .map_err(|e| e.to_string())??;
         let mut log = state.changes.lock().await;
+        let trava = sessao_do_turbo().map(|exe| (crate::modules::windows::nvdriver::id_do_limite(&exe), exe));
+        let ja_travada = trava.as_ref().is_some_and(|(id, _)| log.is_applied(id));
         crate::plataforma::frameboost::travar_base(&mut log);
+        if let Some((_, exe)) = trava.filter(|(id, _)| !ja_travada && log.is_applied(id)) {
+            turbo::marcar_base(Some(&exe));
+        }
         if turbo::governador_na_receita(&aplicada) {
             ligar_governador_do_turbo(&mut log);
         }
@@ -3139,6 +3144,7 @@ async fn provar_o_turbo(
                     crate::utils::Logger::warn(&format!("turbo: não soltei o FPS base depois da prova: {}", e));
                 }
             }
+            crate::plataforma::turbo::marcar_base(None);
         }
     }
     // A flag sai antes do aviso: a tela que redesenha ao receber o fim já lê o painel sem a prova.
@@ -3227,7 +3233,10 @@ pub async fn turbo_desligar(state: State<'_, AppState>) -> Result<crate::platafo
         tokio::task::spawn_blocking(crate::plataforma::turbo::desligar)
             .await
             .map_err(|e| e.to_string())??;
-        soltar_governador_do_turbo(&mut *state.changes.lock().await);
+        let mut log = state.changes.lock().await;
+        soltar_governador_do_turbo(&mut log);
+        soltar_base_do_turbo(&mut log);
+        drop(log);
         return Ok(crate::plataforma::turbo::painel());
     }
     #[cfg(not(target_os = "windows"))]
@@ -3257,6 +3266,26 @@ fn ligar_governador_do_turbo(log: &mut crate::modules::changelog::ChangeLog) {
         }
         Err(e) => turbo::anotar_passo(format!("Segundo plano: {}", e)),
     }
+}
+
+/// O executável do jogo aberto, para o teto da base.
+#[cfg(target_os = "windows")]
+fn sessao_do_turbo() -> Option<String> {
+    crate::plataforma::sessao::atual().map(|j| j.executavel)
+}
+
+/// O teto do FPS base que o Turbo pôs (`turbo::base_do_turbo`) sai junto com ele.
+#[cfg(target_os = "windows")]
+fn soltar_base_do_turbo(log: &mut crate::modules::changelog::ChangeLog) {
+    let Some(exe) = crate::plataforma::turbo::base_do_turbo() else { return };
+    let id = crate::modules::windows::nvdriver::id_do_limite(&exe);
+    if log.is_applied(&id) {
+        if let Err(e) = crate::modules::windows::WindowsOptimizer::new().revert(&id, log) {
+            crate::utils::Logger::warn(&format!("turbo: não soltei o FPS base: {}", e));
+            return;
+        }
+    }
+    crate::plataforma::turbo::marcar_base(None);
 }
 
 #[cfg(target_os = "windows")]
@@ -4561,7 +4590,10 @@ pub async fn turbo_perfil_do_jogo_pedir(
 pub async fn aplicar_perfil_pendente(app: &tauri::AppHandle) -> Option<String> {
     use tauri::Manager;
     let perfil = crate::plataforma::turbo::perfil_do_jogo_pendente()?;
-    if crate::modules::windows::fivem::processos_abertos().0 {
+    let aberto = tokio::task::spawn_blocking(|| crate::modules::windows::fivem::processos_abertos().0)
+        .await
+        .unwrap_or(true);
+    if aberto {
         return None;
     }
     let estado = app.state::<AppState>();

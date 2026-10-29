@@ -959,6 +959,7 @@ const NOMES_DO_GARGALO: Record<Gargalo, string> = {
   Memoria: "memória acabando",
   Nenhum: "nada no limite",
   SemCarga: "jogo parado na medida",
+  Jogo: "o próprio jogo segurando o FPS",
 };
 
 /** Em palavras curtas, o que a receita liga. */

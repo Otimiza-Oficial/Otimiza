@@ -29,6 +29,8 @@ pub enum Gargalo {
     Nenhum,
     /// O jogo estava parado (menu, pausa) durante a medida.
     SemCarga,
+    /// Placa lida e nada no limite, abaixo dos Hz: quem segura é o próprio jogo (limite dele, do servidor, do motor).
+    Jogo,
 }
 
 /// Pura. VRAM cheia conta como placa (menos pixels também é menos memória de vídeo); disco e "não identificado" não
@@ -40,6 +42,15 @@ pub fn gargalo_de(l: Limite) -> Gargalo {
         Limite::MemoriaRam => Gargalo::Memoria,
         Limite::SemCarga => Gargalo::SemCarga,
         Limite::Disco | Limite::NaoIdentificado => Gargalo::Nenhum,
+    }
+}
+
+/// Pura: "o próprio jogo segura" só com a placa LIDA e nada no limite. Disco no limite ou placa sem leitura também
+/// chegam como "nada no limite", e aí ligar a geração seria agir em cima de uma leitura que faltou.
+pub fn gargalo_da_medida(l: Limite, placa_lida: bool) -> Gargalo {
+    match l {
+        Limite::NaoIdentificado if placa_lida => Gargalo::Jogo,
+        outro => gargalo_de(outro),
     }
 }
 
@@ -155,18 +166,18 @@ pub fn montar(gargalo: Gargalo, fps: Option<f64>, hz_lido: Option<u32>, competit
         ),
         // Nada no limite e o monitor sobrando: o que segura o FPS é o próprio jogo (limite, servidor, motor). Menos pixels
         // ou processador livre não ajudam; a geração enche o monitor, e a explicação diz que é FPS na tela.
-        Gargalo::Nenhum if !competitivo && fps.is_some_and(|f| f < hz * 0.9) => (
+        Gargalo::Jogo if !competitivo && fps.is_some_and(|f| f < hz * 0.9) => (
             None,
             Some(0),
             false,
             false,
             format!(
-                "Nada está no limite, mas o jogo fica em {:.0} fps num monitor de {:.0} Hz: o que segura é o próprio jogo                  (limite dele, do servidor ou do motor). A geração de quadros enche o monitor: é FPS na tela, não do jogo.",
+                "Nada está no limite, mas o jogo fica em {:.0} fps num monitor de {:.0} Hz: o que segura é o próprio jogo (limite dele, do servidor ou do motor). A geração de quadros enche o monitor: é FPS na tela, não do jogo.",
                 fps.unwrap_or_default(),
                 hz
             ),
         ),
-        Gargalo::Nenhum => (
+        Gargalo::Nenhum | Gargalo::Jogo => (
             None,
             None,
             false,
@@ -446,9 +457,10 @@ pub fn anotar_passo(texto: String) {
 /// (ele reescreve a configuração ao sair), então o pedido fica em disco e o laço da sessão aplica quando ele fechar.
 pub const PERFIS_DO_JOGO: [&str; 2] = ["competitivo", "equilibrado"];
 
-/// Pura: o jogo tem o perfil gráfico do GTA (FiveM e GTA V usam o mesmo settings.xml).
+/// Pura: só o FiveM. A trava de "jogo aberto" (`fivem::processos_abertos`) e a escolha do arquivo (`configjogo::caminhos`,
+/// o do FiveM primeiro) são do FiveM: no GTA V o pedido seria aplicado com o jogo aberto, ou no arquivo do FiveM.
 pub fn oferece_perfil_do_jogo(id_do_jogo: &str) -> bool {
-    matches!(id_do_jogo, "fivem" | "gta5")
+    id_do_jogo == "fivem"
 }
 
 fn marca_do_perfil_do_jogo() -> PathBuf {
@@ -534,6 +546,29 @@ fn marca_da_energia() -> PathBuf {
     caminho().with_file_name("turbo_energia")
 }
 
+/// O teto do FPS base que o Turbo pôs (e não a pessoa, pelo Jogo liso): Desligar Turbo o tira. Em disco, com o executável.
+#[cfg(target_os = "windows")]
+fn marca_da_base() -> PathBuf {
+    caminho().with_file_name("turbo_base")
+}
+
+#[cfg(target_os = "windows")]
+pub fn marcar_base(executavel: Option<&str>) {
+    let m = marca_da_base();
+    let _ = match executavel {
+        Some(e) => {
+            m.parent().map(std::fs::create_dir_all);
+            std::fs::write(&m, e)
+        }
+        None => std::fs::remove_file(&m),
+    };
+}
+
+#[cfg(target_os = "windows")]
+pub fn base_do_turbo() -> Option<String> {
+    std::fs::read_to_string(marca_da_base()).ok().map(|t| t.trim().to_string()).filter(|t| !t.is_empty())
+}
+
 #[cfg(target_os = "windows")]
 fn ligou_a_energia() -> bool {
     marca_da_energia().exists()
@@ -612,7 +647,7 @@ pub fn medir() -> Result<(Receita, Option<f64>), String> {
         "turbo: {} · {:?} (CPU {:.0}%, núcleo {:.0}%, placa {:.0}%) · {:?} fps · {:?} Hz",
         id, relatorio.limite, relatorio.cpu_total, relatorio.cpu_max_core, relatorio.gpu_percent, fps, hz
     ));
-    let receita = montar(gargalo_de(relatorio.limite), fps, hz, menor_atraso(&id));
+    let receita = montar(gargalo_da_medida(relatorio.limite, relatorio.gpu_percent > 0.0), fps, hz, menor_atraso(&id));
     let ritmo = medida.as_ref().and_then(|r| {
         ritmo_a_oferecer(&receita, r.fps_do_jogo_mediana, r.engasgos_por_minuto, hz.unwrap_or(0))
     });
@@ -704,6 +739,9 @@ pub fn desligar() -> Result<(), String> {
     LIGADO.store(false, Ordering::SeqCst);
     if let Ok(mut p) = PASSOS.lock() {
         p.clear();
+    }
+    if let Ok(mut r) = RITMO.lock() {
+        *r = None;
     }
     Ok(())
 }
@@ -949,7 +987,8 @@ mod tests {
 
     #[test]
     fn o_perfil_do_gta_so_e_oferecido_no_fivem_e_no_gta() {
-        assert!(oferece_perfil_do_jogo("fivem") && oferece_perfil_do_jogo("gta5"));
+        assert!(oferece_perfil_do_jogo("fivem"));
+        assert!(!oferece_perfil_do_jogo("gta5"), "a trava de jogo aberto e o arquivo são do FiveM");
         assert!(!oferece_perfil_do_jogo("cs2"));
         assert!(PERFIS_DO_JOGO.iter().all(|p| ["competitivo", "equilibrado"].contains(p)));
     }
@@ -1077,15 +1116,25 @@ mod tests {
     }
 
     #[test]
+    fn so_e_o_proprio_jogo_com_a_placa_lida() {
+        assert_eq!(gargalo_da_medida(Limite::NaoIdentificado, true), Gargalo::Jogo);
+        assert_eq!(gargalo_da_medida(Limite::NaoIdentificado, false), Gargalo::Nenhum, "placa sem leitura");
+        assert_eq!(gargalo_da_medida(Limite::Disco, true), Gargalo::Nenhum, "disco no limite não é o jogo");
+        assert_eq!(gargalo_da_medida(Limite::Gpu, true), Gargalo::Placa);
+        let disco = montar(Gargalo::Nenhum, Some(70.0), Some(144), false);
+        assert_eq!(disco.multiplicador, None, "sem a placa lida, nada liga");
+    }
+
+    #[test]
     fn nada_no_limite_com_o_monitor_sobrando_enche_o_monitor_com_geracao() {
-        let r = montar(Gargalo::Nenhum, Some(70.0), Some(144), false);
+        let r = montar(Gargalo::Jogo, Some(70.0), Some(144), false);
         assert_eq!((r.escala, r.multiplicador, r.energia), (None, Some(0), false));
         assert!(r.explicacao.contains("FPS na tela"), "a geração nunca é vendida como FPS do jogo");
-        let menor_atraso = montar(Gargalo::Nenhum, Some(70.0), Some(144), true);
+        let menor_atraso = montar(Gargalo::Jogo, Some(70.0), Some(144), true);
         assert_eq!(menor_atraso.multiplicador, None, "Menor atraso: sem geração");
-        let sem_medida = montar(Gargalo::Nenhum, None, Some(144), false);
+        let sem_medida = montar(Gargalo::Jogo, None, Some(144), false);
         assert_eq!(sem_medida.multiplicador, None, "sem o FPS medido, não há base para dizer que sobra monitor");
-        let perto = montar(Gargalo::Nenhum, Some(135.0), Some(144), false);
+        let perto = montar(Gargalo::Jogo, Some(135.0), Some(144), false);
         assert_eq!(perto.multiplicador, None, "a 94% dos Hz o monitor já está quase cheio");
         assert!(receita_da_prova(&r).is_none(), "só geração: a guarda do Frame Boost confere, não a prova");
     }

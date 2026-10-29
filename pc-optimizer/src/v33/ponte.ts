@@ -285,7 +285,7 @@ export interface ConfigDoJogo {
   aplicado: boolean;
 }
 
-export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga";
+export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga" | "Jogo";
 
 export interface ReceitaDoTurbo {
   gargalo: Gargalo;
