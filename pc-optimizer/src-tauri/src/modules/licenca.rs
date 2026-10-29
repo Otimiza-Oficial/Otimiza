@@ -21,6 +21,16 @@ const CHAVE_PUBLICA: &str = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
 /// era recusada ("Esta chave não foi reconhecida"), achado num cliente que formatou o PC.
 const CHAVE_PUBLICA_ANTERIOR: &str = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
 
+/// A privada da terceira ficou na hospedagem perdida: quem tiver aquele `.env` emite licença que toda versão aceitava,
+/// para qualquer máquina e com qualquer data. Daqui em diante ela só vale para licença emitida até a troca...
+/// O dia 05 entra: o bot carimba a data em UTC, e venda depois das 21 h de Brasília do dia 04 sai com o dia seguinte.
+const FIM_DA_CHAVE_ANTERIOR: &str = "2026-10-05";
+
+/// ...e, preenchida, só para as máquinas que compraram com ela (SHA-256 do código `OTZ-…`, em hexadecimal: a lista
+/// sai do banco do bot, e o código em claro não precisa ficar público). A data sozinha não segura quem tem a privada,
+/// que assina a data que quiser; vazia, vale só a data, para nenhum cliente antigo ficar trancado antes da lista.
+const MAQUINAS_DA_CHAVE_ANTERIOR: &[&str] = &[];
+
 /// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Dados {
@@ -39,6 +49,8 @@ pub enum Recusa {
     OutraMaquina { emitida_para: String },
     Expirada { em: String },
     MaquinaDesconhecida,
+    /// Assinada pela chave anterior, mas fora da trava dela: pode ser compra de verdade que faltou na lista.
+    ChaveAntiga,
 }
 
 impl Recusa {
@@ -64,6 +76,11 @@ impl Recusa {
                  então não dá para conferir a chave. Isso costuma acontecer em máquina \
                  virtual."
                 .to_string(),
+
+            Recusa::ChaveAntiga => "Esta chave é do sistema de licenças antigo e precisa ser \
+                 trocada. Se você comprou, fale no suporte com o código desta máquina: a chave \
+                 nova sai sem custo."
+                .to_string(),
         }
     }
 }
@@ -88,26 +105,68 @@ pub fn desmontar(chave: &str) -> Result<(Vec<u8>, Vec<u8>), Recusa> {
 
 /// **Pura**: a decisão entre pagante e não pagante precisa ser testável sem a máquina nem a data de hoje.
 pub fn conferir(chave: &str, maquina: &str, hoje: &str) -> Result<Dados, Recusa> {
-    let aceitas = [chave_publica()?, decodificar_publica(CHAVE_PUBLICA_ANTERIOR)?];
-    conferir_com_varias(&aceitas, chave, maquina, hoje)
+    conferir_com_as_duas(
+        chave_publica()?,
+        decodificar_publica(CHAVE_PUBLICA_ANTERIOR)?,
+        MAQUINAS_DA_CHAVE_ANTERIOR,
+        chave,
+        maquina,
+        hoje,
+    )
 }
 
-/// A primeira chave pública cuja assinatura confere decide. Só a assinatura passa para a próxima: chave de outra
-/// máquina ou vencida, assinada de verdade, é recusa final.
-pub fn conferir_com_varias(
-    aceitas: &[VerifyingKey],
+/// A atual decide; só a recusa de ASSINATURA passa para a anterior (chave de outra máquina ou vencida, assinada de
+/// verdade, é recusa final). Chaves por parâmetro para o teste gerar os próprios pares.
+pub fn conferir_com_as_duas(
+    atual: VerifyingKey,
+    anterior: VerifyingKey,
+    maquinas_da_anterior: &[&str],
     chave: &str,
     maquina: &str,
     hoje: &str,
 ) -> Result<Dados, Recusa> {
-    let mut ultima = Recusa::AssinaturaInvalida;
-    for publica in aceitas {
-        match conferir_com(*publica, chave, maquina, hoje) {
-            Err(Recusa::AssinaturaInvalida) => ultima = Recusa::AssinaturaInvalida,
-            resultado => return resultado,
+    match conferir_com(atual, chave, maquina, hoje) {
+        Err(Recusa::AssinaturaInvalida) => {
+            conferir_anterior(anterior, maquinas_da_anterior, chave, maquina, hoje)
         }
+        resultado => resultado,
     }
-    Err(ultima)
+}
+
+/// A chave anterior com as duas travas (data da troca e lista de quem comprou). Lista por parâmetro para o teste.
+pub fn conferir_anterior(
+    publica: VerifyingKey,
+    maquinas: &[&str],
+    chave: &str,
+    maquina: &str,
+    hoje: &str,
+) -> Result<Dados, Recusa> {
+    let dados = conferir_com(publica, chave, maquina, hoje)?;
+
+    // A mesma frase para as duas travas: quem comprou e faltou na lista vai ao suporte, e quem forjou não fica sabendo
+    // qual trava pegou.
+    if dados.emitida.as_str() > FIM_DA_CHAVE_ANTERIOR {
+        return Err(Recusa::ChaveAntiga);
+    }
+
+    if !maquinas.is_empty() && !maquinas.contains(&resumo_da_maquina(maquina).as_str()) {
+        return Err(Recusa::ChaveAntiga);
+    }
+
+    Ok(dados)
+}
+
+/// SHA-256 do código da máquina em hexadecimal: é o que a lista da chave anterior guarda.
+pub fn resumo_da_maquina(maquina: &str) -> String {
+    hex_sha256(maquina.trim().to_uppercase().as_bytes())
+}
+
+pub(crate) fn hex_sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 /// Chave por parâmetro para o teste gerar o próprio par e assinar, sem depender da chave de verdade.
@@ -180,6 +239,11 @@ fn decodificar_publica(texto: &str) -> Result<VerifyingKey, Recusa> {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Guardada {
     pub chave: String,
+    /// O último atestado online (`licenca_online`). Ausente nos arquivos de antes dele: `default`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atestado: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revogada: Option<super::licenca_online::Revogacao>,
 }
 
 impl Guardada {
@@ -295,15 +359,38 @@ pub fn estado() -> Estado {
         return base;
     }
 
-    match conferir(&guardada.chave, &quem.id, &hoje()) {
-        Ok(dados) => Estado {
+    let hoje = hoje();
+    let dados = match conferir(&guardada.chave, &quem.id, &hoje) {
+        Ok(dados) => dados,
+        Err(recusa) => {
+            return Estado {
+                motivo: Some(recusa.explicacao()),
+                ..base
+            }
+        }
+    };
+
+    let online = chave_publica().map_err(|_| super::licenca_online::Falta::Invalido).and_then(|publica| {
+        super::licenca_online::politica(
+            publica,
+            super::licenca_online::endereco().is_some(),
+            super::licenca_online::EXIGE_ATESTADO,
+            &guardada,
+            &quem.id,
+            &hoje,
+        )
+    });
+
+    match online {
+        Ok(()) => Estado {
             ativa: true,
             comprador: Some(dados.comprador),
             expira: dados.expira,
             ..base
         },
-        Err(recusa) => Estado {
-            motivo: Some(recusa.explicacao()),
+        Err(falta) => Estado {
+            comprador: Some(dados.comprador),
+            motivo: Some(falta.explicacao()),
             ..base
         },
     }
@@ -315,10 +402,26 @@ pub fn ativar(chave: &str) -> Result<Dados, String> {
 
     let dados = conferir(chave, &quem.id, &hoje()).map_err(|r| r.explicacao())?;
 
+    // O atestado é da chave anterior: a nova pede o dela. A revogação fica se for a MESMA chave colada de novo, ou
+    // colar bastaria para desfazê-la.
+    let revogada = match Guardada::load() {
+        Leitura::Ok(antes) => antes
+            .revogada
+            .filter(|r| r.licenca == super::licenca_online::impressao_da_licenca(chave)),
+        Leitura::Ilegivel(_) => None,
+    };
+
     Guardada {
         chave: chave.trim().to_string(),
+        atestado: None,
+        revogada,
     }
     .save()?;
+
+    // Pede o atestado já: com ele exigido, quem acabou de colar não espera a próxima volta.
+    if super::licenca_online::endereco().is_some() {
+        tauri::async_runtime::spawn(super::licenca_online::renovar_se_preciso());
+    }
 
     Ok(dados)
 }
@@ -378,6 +481,7 @@ mod tests_1_8 {
         let caminho = pasta("ida-e-volta").join("licenca.json");
         let original = Guardada {
             chave: "uma-chave-qualquer".to_string(),
+            ..Guardada::default()
         };
 
         Guardada::gravar(&caminho, &original).unwrap();
@@ -397,6 +501,7 @@ mod tests_1_8 {
             &caminho,
             &Guardada {
                 chave: "x".to_string(),
+                ..Guardada::default()
             },
         )
         .unwrap();

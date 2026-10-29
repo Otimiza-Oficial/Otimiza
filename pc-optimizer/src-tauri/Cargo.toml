@@ -43,6 +43,8 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 # apenas o necessário para conferir.
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 base64 = "0.22"
+# Resumo da licença e da máquina no atestado online. Já vem na árvore pelo `ed25519-dalek`: nomear não baixa nada.
+sha2 = "0.10"
 sysinfo = "0.33"
 
 [target.'cfg(windows)'.dependencies]
@@ -145,3 +147,11 @@ webview2-com = "0.38"
 # porque o produto não precisa de aleatoriedade — conferir assinatura é
 # determinístico.
 getrandom = "0.2"
+
+# O executável que vai para o cliente. `strip` tira os nomes de função que sobravam no binário (`licenca::exigir`
+# era um marcador de onde remendar), e a LTO com uma unidade espalha a conferência pelos comandos que a chamam: o
+# remendo deixa de ser num lugar só. Não impede quem tem tempo; encarece o remendo de cinco minutos.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
