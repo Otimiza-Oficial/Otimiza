@@ -285,7 +285,7 @@ export interface ConfigDoJogo {
   aplicado: boolean;
 }
 
-export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga";
+export type Gargalo = "Placa" | "Processador" | "Memoria" | "Nenhum" | "SemCarga" | "Jogo";
 
 export interface ReceitaDoTurbo {
   gargalo: Gargalo;
@@ -327,6 +327,13 @@ export interface PassoDaProvaDoTurbo {
   total: number;
   com_turbo: boolean | null;
   segundos: number;
+}
+
+/** O perfil gráfico do GTA/FiveM pelo cartão do Turbo (aplicado quando o jogo fecha). */
+export interface PerfilDoJogoNoTurbo {
+  oferece: boolean;
+  pendente: string | null;
+  aplicado: string | null;
 }
 
 export interface PainelTurbo {
@@ -563,6 +570,8 @@ export const ponte = {
   turboDesligar: () => invoke<PainelTurbo>("turbo_desligar"),
   turboEsquecer: () => invoke<PainelTurbo>("turbo_esquecer"),
   turboAtraso: (menor: boolean) => invoke<PainelTurbo>("turbo_atraso", { menor }),
+  turboPerfilDoJogo: () => invoke<PerfilDoJogoNoTurbo>("turbo_perfil_do_jogo"),
+  turboPerfilDoJogoPedir: (perfil: string | null) => invoke<PerfilDoJogoNoTurbo>("turbo_perfil_do_jogo_pedir", { perfil }),
   /** A prova A-B (uns 5 minutos); o passo a passo chega pelo evento `turbo:prova`. */
   turboProvar: () => invoke<ProvaDoTurbo>("turbo_provar"),
   turboCompartilhar: () => invoke<string>("turbo_compartilhar"),
