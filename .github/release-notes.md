@@ -117,7 +117,7 @@ Valorant e Warzone estão em estudo e ainda não são alterados.
   nunca por um arquivo com o mesmo nome em outra pasta.
 - A sobreposição de FPS e o modo dinâmico de energia, quando ligam sozinhos com o jogo, conferem a licença como os
   botões que os ligam. Voltar ao normal continua livre.
-- O Otimiza continua sem conversar com servidor nosso: a licença é conferida no próprio computador.
+- A licença continua sendo conferida no próprio computador, sem precisar de internet.
 
 ---
 
