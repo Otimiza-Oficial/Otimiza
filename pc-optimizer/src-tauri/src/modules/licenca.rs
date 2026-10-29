@@ -29,7 +29,13 @@ const FIM_DA_CHAVE_ANTERIOR: &str = "2026-10-05";
 /// ...e, preenchida, só para as máquinas que compraram com ela (SHA-256 do código `OTZ-…`, em hexadecimal: a lista
 /// sai do banco do bot, e o código em claro não precisa ficar público). A data sozinha não segura quem tem a privada,
 /// que assina a data que quiser; vazia, vale só a data, para nenhum cliente antigo ficar trancado antes da lista.
-const MAQUINAS_DA_CHAVE_ANTERIOR: &[&str] = &[];
+/// As três vendas do Otimiza pagas antes da reemissão com o par novo (04/10/2026 21:23 UTC), tiradas do banco do bot
+/// em 29/10/2026. As outras vendas do período eram booster e pack, sem máquina.
+const MAQUINAS_DA_CHAVE_ANTERIOR: &[&str] = &[
+    "6507a6fb1cd0cb41e53867c65777ca55f863d2668342be6354af98cbcef6d2d2",
+    "6a9086ff684d2accb7605ed1762b7ac78b351f0191d016a71831fce0e24a29c3",
+    "bbdb4724b8686204b84e108ae2c680a64d3d196da74b362f596ad137fdd3ba05",
+];
 
 /// O que a assinatura garante é que ninguém mudou nada, não sigilo.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -551,6 +557,18 @@ mod tests {
                 !producao.contains(proibido),
                 "`{}` sugere chave privada num arquivo que vai para o cliente",
                 proibido
+            );
+        }
+    }
+
+    #[test]
+    fn a_lista_da_chave_anterior_so_tem_resumos() {
+        // Código em claro aqui nunca casaria (a conferência compara o SHA-256) e trancaria quem pagou.
+        for item in MAQUINAS_DA_CHAVE_ANTERIOR {
+            assert!(
+                item.len() == 64 && item.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+                "`{}` não é um SHA-256 em hexadecimal minúsculo",
+                item
             );
         }
     }
