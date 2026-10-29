@@ -449,6 +449,18 @@ pub fn run() {
                 });
             }
 
+            // O atestado online da licença (`licenca_online`): só existe no build com o endereço da API; sem ele, nada sai
+            // para a rede. Na abertura e a cada seis horas, e só pede quando o guardado está perto de vencer.
+            if modules::licenca_online::endereco().is_some() {
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+                    loop {
+                        modules::licenca_online::renovar_se_preciso().await;
+                        tokio::time::sleep(std::time::Duration::from_secs(6 * 3600)).await;
+                    }
+                });
+            }
+
             // O pedido de feedback: confere na abertura (no máximo uma vez por dia) e soma o tempo de uso a cada 30 s.
             // Avisa a tela só quando a situação muda, para ela abrir ou fechar o pedido sem consultar sem parar.
             {

@@ -1100,6 +1100,8 @@ pub fn olhar(vigia: &mut Vigia) -> Option<EventoDinamico> {
         motor::Transicao::Nenhuma => None,
         motor::Transicao::EntrarNoPerfilDeJogo => {
             let perfil = aberto?;
+            // Ligar o dinâmico pede licença, mas o arquivo que o liga se edita à mão; voltar ao normal fica livre.
+            crate::modules::licenca::exigir().ok()?;
             let r = aplicar_parametros(&format!("jogo:{}", perfil.executavel), perfil.parametros);
             vigia.estado = Some(motor::EstadoDinamico::Jogo);
             vigia.jogo = Some(perfil.executavel.clone());

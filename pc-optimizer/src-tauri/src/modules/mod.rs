@@ -14,6 +14,7 @@ pub mod historico;
 pub mod jitter;
 pub mod latencia;
 pub mod licenca;
+pub mod licenca_online;
 pub mod linhadotempo;
 pub mod maquina;
 pub mod medicoes;

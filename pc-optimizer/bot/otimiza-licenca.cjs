@@ -375,8 +375,113 @@ function atestarFeedback({ privada, maquina, ok, mensagemId = null, quando = new
   return atestado;
 }
 
+/** SHA-256 em hexadecimal; igual ao `hex_sha256` de `licenca.rs`. */
+function sha256(texto) {
+  return crypto.createHash("sha256").update(texto, "utf8").digest("hex");
+}
+
+/** A identidade da licença no atestado e na revogação: a chave sem espaço de cópia. */
+function impressaoDaLicenca(chave) {
+  return sha256(String(chave || "").replace(/\s+/g, ""));
+}
+
+/** O que a lista `MAQUINAS_DA_CHAVE_ANTERIOR` de `licenca.rs` guarda: o código não sai em claro. */
+function resumoDaMaquina(maquina) {
+  return sha256(String(maquina || "").trim().toUpperCase());
+}
+
+/**
+ * Atestado online de licença (`licenca_online.rs`), a resposta de `POST /v1/licencas/atestado`.
+ *
+ * O SERVIDOR decide antes de chamar isto: a licença confere (`conferir`) e é de
+ * uma compra paga; não está revogada (se estiver, responda 410 com
+ * `{ revogacao: emitirRevogacao(...) }`); e a mesma licença não vem chegando de
+ * impressões diferentes (`executavel` fora dos SHA-256 publicados, ou `fonte`
+ * "windows" de muitos IPs) — é assim que repasse e binário remendado aparecem.
+ * Resposta boa: 200 com `{ atestado }`.
+ *
+ * @param {object} pedido
+ * @param {string} pedido.privada  A mesma de `emitir` (a pública ATUAL do app confere).
+ * @param {string} pedido.maquina  OTZ-XXXX-XXXX-XXXX que veio no pedido.
+ * @param {string} pedido.chave    A licença que veio no pedido.
+ * @param {number} [pedido.dias]   Validade; o app renova quando faltam menos de 23.
+ * @param {Date}   [pedido.quando] Padrão: agora.
+ * @returns {string}
+ */
+function emitirAtestado({ privada, maquina, chave, dias = 30, quando = new Date(), publica = null }) {
+  const bruta = Buffer.from(String(privada || "").trim(), "base64");
+  if (bruta.length !== 32) {
+    throw new Error("A chave privada precisa ter 32 bytes (a mesma usada em emitir).");
+  }
+
+  const codigo = String(maquina || "").trim().toUpperCase();
+  if (!FORMA_DA_MAQUINA.test(codigo)) {
+    throw new Error(`"${maquina}" não tem a forma OTZ-XXXX-XXXX-XXXX.`);
+  }
+  if (!chave) {
+    throw new Error("Faltou a licença que o atestado confirma.");
+  }
+
+  const dia = (d) => d.toISOString().slice(0, 10);
+  const ate = new Date(quando.getTime() + dias * 24 * 3600 * 1000);
+
+  const corpo = Buffer.from(
+    JSON.stringify({
+      tipo: "licenca-online",
+      maquina: codigo,
+      licenca: impressaoDaLicenca(chave),
+      emitido: dia(quando),
+      valido_ate: dia(ate),
+    }),
+    "utf8"
+  );
+
+  const chavePrivada = crypto.createPrivateKey({
+    key: Buffer.concat([DER_PRIVADA, bruta]),
+    format: "der",
+    type: "pkcs8",
+  });
+
+  const atestado = `${base64url(corpo)}.${base64url(crypto.sign(null, corpo, chavePrivada))}`;
+
+  if (publica && !conferir(atestado, publica).valida) {
+    throw new Error("A chave privada e a pública não são do mesmo par.");
+  }
+
+  return atestado;
+}
+
+/**
+ * Revogação assinada, a resposta de `POST /v1/licencas/atestado` para licença
+ * revogada: `{ revogacao }`. O app só obedece revogação assinada.
+ */
+function emitirRevogacao({ privada, maquina, chave, motivo = "revogada pelo suporte" }) {
+  const bruta = Buffer.from(String(privada || "").trim(), "base64");
+  if (bruta.length !== 32) {
+    throw new Error("A chave privada precisa ter 32 bytes (a mesma usada em emitir).");
+  }
+  const codigo = String(maquina || "").trim().toUpperCase();
+  if (!FORMA_DA_MAQUINA.test(codigo)) {
+    throw new Error(`"${maquina}" não tem a forma OTZ-XXXX-XXXX-XXXX.`);
+  }
+  const corpo = Buffer.from(
+    JSON.stringify({ tipo: "revogacao", maquina: codigo, licenca: impressaoDaLicenca(chave), motivo: String(motivo) }),
+    "utf8"
+  );
+  const chavePrivada = crypto.createPrivateKey({
+    key: Buffer.concat([DER_PRIVADA, bruta]),
+    format: "der",
+    type: "pkcs8",
+  });
+  return `${base64url(corpo)}.${base64url(crypto.sign(null, corpo, chavePrivada))}`;
+}
+
 module.exports = {
   novoPar,
+  emitirAtestado,
+  emitirRevogacao,
+  impressaoDaLicenca,
+  resumoDaMaquina,
   emitir,
   conferir,
   instalar,
@@ -417,6 +522,9 @@ if (require.main === module) {
     } else if (comando === "emitir") {
       const [privada, maquina, comprador, expira] = resto;
       console.log(emitir({ privada, maquina, comprador, expira: expira || null }));
+    } else if (comando === "resumo-da-maquina") {
+      // A lista da chave anterior: um código por argumento, uma linha pronta para `licenca.rs` por código.
+      for (const codigo of resto) console.log(`    "${resumoDaMaquina(codigo)}",`);
     } else if (comando === "atestar") {
       const [privada, maquina, ok] = resto;
       console.log(atestarFeedback({ privada, maquina, ok: ok !== "false" }));
@@ -429,6 +537,7 @@ if (require.main === module) {
           "  node otimiza-licenca.cjs novo-par",
           "  node otimiza-licenca.cjs emitir <PRIVADA> OTZ-XXXX-XXXX-XXXX \"Nome\" [AAAA-MM-DD]",
           "  node otimiza-licenca.cjs atestar <PRIVADA> OTZ-XXXX-XXXX-XXXX [true|false]",
+          "  node otimiza-licenca.cjs resumo-da-maquina OTZ-XXXX-XXXX-XXXX [...]",
         ].join("\n")
       );
       process.exit(2);

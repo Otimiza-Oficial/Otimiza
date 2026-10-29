@@ -624,6 +624,11 @@ pub fn ao_abrir(app: &tauri::AppHandle, jogo: &crate::plataforma::sessao::JogoAb
     if c.modo == Modo::Desligado || !crate::plataforma::flags::Flags::load().overlay {
         return;
     }
+    // O modo se grava sem licença (`overlay_gravar` é preferência), e o arquivo se edita à mão: ligar sozinho é o
+    // `overlay_ligar` sem ninguém clicar, então pede o mesmo que ele.
+    if crate::modules::licenca::exigir().is_err() {
+        return;
+    }
     let barrada = {
         use crate::modules::windows::anticheat;
         anticheat::permite(

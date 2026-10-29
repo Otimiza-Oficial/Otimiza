@@ -5,6 +5,8 @@
 export const CHAVE_PUBLICA = "Fz2AWNqDmj2iLeaEqkfMWgsfVdXuXJn2+eAn006pKSM=";
 /** A pública anterior (a privada se perdeu com a hospedagem do bot em 04/10/2026): só para licença já emitida. */
 export const CHAVE_PUBLICA_ANTERIOR = "sR3nmVzmAtjoDmAWr8McycSq+vhDUCy2YnLDhJfy5LU=";
+/** Quem ficou com a privada perdida assina qualquer data: a anterior só vale para licença emitida até a troca. */
+export const FIM_DA_CHAVE_ANTERIOR = "2026-10-05"; // o bot carimba em UTC: venda da noite de 04/10 sai com 05
 
 export type Dados = {
   maquina: string;
@@ -123,14 +125,20 @@ export const hojeISO = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
-/** Como `licenca::conferir`: a primeira pública cuja assinatura confere decide; só a assinatura passa para a próxima. */
+/**
+ * Como `licenca::conferir`: a atual decide; só a recusa de assinatura passa para a anterior, que vale até a troca.
+ * (A lista de máquinas da anterior mora só no app: o painel não libera nada, só mostra.)
+ */
 export async function conferir(chave: string, maquina: string | null): Promise<Resultado> {
-  let ultimo: Resultado = { ok: false, recusa: { tipo: "assinatura-invalida" } };
-  for (const publica of [CHAVE_PUBLICA, CHAVE_PUBLICA_ANTERIOR]) {
-    ultimo = await conferirCom(bytesDaPublica(publica), chave, maquina, hojeISO());
-    if (ultimo.ok || ultimo.recusa.tipo !== "assinatura-invalida") return ultimo;
+  const hoje = hojeISO();
+  const atual = await conferirCom(bytesDaPublica(CHAVE_PUBLICA), chave, maquina, hoje);
+  if (atual.ok || atual.recusa.tipo !== "assinatura-invalida") return atual;
+
+  const anterior = await conferirCom(bytesDaPublica(CHAVE_PUBLICA_ANTERIOR), chave, maquina, hoje);
+  if (anterior.ok && anterior.dados.emitida > FIM_DA_CHAVE_ANTERIOR) {
+    return { ok: false, recusa: { tipo: "assinatura-invalida" } };
   }
-  return ultimo;
+  return anterior;
 }
 
 export function formatarData(iso: string): string {

@@ -241,15 +241,17 @@ fn chave_de_qualquer_das_publicas_aceitas_abre_e_de_outra_nao() {
     let (atual, publica_atual) = par();
     let (anterior, publica_anterior) = par();
     let (estranha, _) = par();
-    let aceitas = [publica_atual, publica_anterior];
     let m = "OTZ-WPYY-0J4F-77AB";
+    let conferir = |chave: &str| {
+        conferir_com_as_duas(publica_atual, publica_anterior, &[], chave, m, "2026-10-10")
+    };
 
+    // `emitir` carimba 2026-01-01: antes do fim da anterior.
     for privada in [&atual, &anterior] {
-        let chave = emitir(privada, m, None);
-        assert!(conferir_com_varias(&aceitas, &chave, m, "2026-10-10").is_ok());
+        assert!(conferir(&emitir(privada, m, None)).is_ok());
     }
     assert_eq!(
-        conferir_com_varias(&aceitas, &emitir(&estranha, m, None), m, "2026-10-10").unwrap_err(),
+        conferir(&emitir(&estranha, m, None)).unwrap_err(),
         Recusa::AssinaturaInvalida
     );
 }
@@ -261,7 +263,7 @@ fn chave_de_outra_maquina_nao_vira_assinatura_invalida_ao_tentar_a_segunda() {
     let (_, publica_anterior) = par();
     let chave = emitir(&atual, "OTZ-AAAA-BBBB-CCCC", None);
     assert!(matches!(
-        conferir_com_varias(&[publica_atual, publica_anterior], &chave, "OTZ-WPYY-0J4F-77AB", "2026-10-10"),
+        conferir_com_as_duas(publica_atual, publica_anterior, &[], &chave, "OTZ-WPYY-0J4F-77AB", "2026-10-10"),
         Err(Recusa::OutraMaquina { .. })
     ));
 }

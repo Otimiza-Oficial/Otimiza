@@ -64,7 +64,7 @@ impl PlatformDetector {
     fn get_windows_version() -> String {
         use std::process::Command;
 
-        if let Ok(output) = Command::new("cmd").args(&["/C", "ver"]).output() {
+        if let Ok(output) = Command::new(crate::modules::windows::shell::do_sistema("cmd")).args(&["/C", "ver"]).output() {
             if let Ok(version) = String::from_utf8(output.stdout) {
                 return version.trim().to_string();
             }

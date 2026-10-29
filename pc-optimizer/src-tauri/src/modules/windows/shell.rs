@@ -24,6 +24,63 @@ pub struct CommandOutput {
     pub codigo: Option<i32>,
 }
 
+/// Programa do sistema pelo caminho completo. Pelo nome, o Windows procura PRIMEIRO na pasta do próprio Otimiza, que o
+/// instalador por usuário põe em `%LOCALAPPDATA%` (gravável sem administrador): um `powershell.exe` deixado ali rodava
+/// com o administrador do Otimiza e respondia o que quisesse, inclusive a série da placa que vira o código da licença.
+/// A pasta do sistema vem da API, não de `%SystemRoot%`, que o usuário muda.
+pub fn do_sistema(programa: &str) -> String {
+    match pasta_do_sistema() {
+        Some(sistema) => resolver(programa, &sistema, |c| c.is_file()),
+        None => programa.to_string(),
+    }
+}
+
+/// **Pura**: o caminho e a existência por parâmetro, para o teste não depender desta máquina.
+pub fn resolver(
+    programa: &str,
+    sistema: &std::path::Path,
+    existe: impl Fn(&std::path::Path) -> bool,
+) -> String {
+    // Caminho dado por quem chamou (o PresentMon do pacote, o Edge) é escolha dele.
+    if programa.contains(['\\', '/', ':']) {
+        return programa.to_string();
+    }
+
+    let nome = programa.to_ascii_lowercase();
+    let nome = nome.strip_suffix(".exe").unwrap_or(&nome);
+
+    let candidato = if nome == "powershell" {
+        sistema.join("WindowsPowerShell").join("v1.0").join("powershell.exe")
+    } else {
+        sistema.join(format!("{}.exe", nome))
+    };
+
+    if existe(&candidato) {
+        candidato.to_string_lossy().into_owned()
+    } else {
+        // Fora do sistema (o `nvidia-smi` de driver antigo): o nome, como antes.
+        programa.to_string()
+    }
+}
+
+fn pasta_do_sistema() -> Option<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
+
+    static PASTA: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
+
+    PASTA
+        .get_or_init(|| {
+            let mut buf = [0u16; 260];
+            // SAFETY: buffer válido do tamanho informado; a função devolve quantos caracteres escreveu.
+            let n = unsafe { GetSystemDirectoryW(buf.as_mut_ptr(), buf.len() as u32) } as usize;
+            (n > 0 && n < buf.len())
+                .then(|| std::path::PathBuf::from(std::ffi::OsString::from_wide(&buf[..n])))
+        })
+        .clone()
+}
+
 pub fn run(program: &str, args: &[&str]) -> Result<CommandOutput, String> {
     run_com_prazo(program, args, PRAZO_PADRAO)
 }
@@ -48,7 +105,7 @@ fn executar_com_rotulo(
     rotulo: &str,
     prazo: Duration,
 ) -> Result<CommandOutput, String> {
-    let mut filho = Command::new(program)
+    let mut filho = Command::new(do_sistema(program))
         .args(args)
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
@@ -62,7 +119,7 @@ fn executar_com_rotulo(
 
 /// Devolve o processo VIVO, com a saída num cano, para quem precisa dele na mão (a análise do DISM).
 pub fn spawn_capturando(program: &str, args: &[&str]) -> Result<std::process::Child, String> {
-    Command::new(program)
+    Command::new(do_sistema(program))
         .args(args)
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(std::process::Stdio::null())
@@ -244,7 +301,7 @@ mod sessao {
     static DESISTIMOS: AtomicBool = AtomicBool::new(false);
 
     pub(super) fn abrir() -> Option<Viva> {
-        let mut processo = Command::new("powershell")
+        let mut processo = Command::new(super::do_sistema("powershell"))
             .args(["-NoProfile", "-NoLogo", "-NonInteractive", "-Command", "-"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -472,6 +529,51 @@ pub fn run_checked_com_prazo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn programa_do_sistema_sai_da_pasta_do_sistema_e_nao_da_do_otimiza() {
+        let sistema = std::path::Path::new(r"C:\Windows\System32");
+        let tudo_existe = |_: &std::path::Path| true;
+
+        assert_eq!(
+            resolver("powershell", sistema, tudo_existe),
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        );
+        assert_eq!(
+            resolver("powercfg", sistema, tudo_existe),
+            r"C:\Windows\System32\powercfg.exe"
+        );
+        assert_eq!(
+            resolver("BCDEDIT.EXE", sistema, tudo_existe),
+            r"C:\Windows\System32\bcdedit.exe"
+        );
+
+        // Caminho escolhido por quem chamou fica; o que não está no sistema segue pelo nome.
+        assert_eq!(
+            resolver(r"C:\x\PresentMon.exe", sistema, tudo_existe),
+            r"C:\x\PresentMon.exe"
+        );
+        assert_eq!(resolver("nvidia-smi", sistema, |_| false), "nvidia-smi");
+    }
+
+    /// Pelo nome, de novo, é a porta que esta guarda fecha.
+    #[test]
+    fn ninguem_chama_programa_do_sistema_pelo_nome() {
+        let producao = include_str!("shell.rs")
+            .split(concat!("#[cfg(", "test)]"))
+            .next()
+            .unwrap();
+        for proibido in [
+            concat!("Command::new(", "\"powershell\")"),
+            concat!("Command::new(", "program)"),
+        ] {
+            assert!(
+                !producao.contains(proibido),
+                "`{}` voltou: pelo nome, o Windows procura primeiro na pasta do Otimiza",
+                proibido
+            );
+        }
+    }
 
     /// A aba BIOS travava 120 s: script de várias linhas pela entrada padrão da sessão viva nunca terminava.
     #[test]

@@ -232,3 +232,61 @@ Três testes reprovam o build se alguém errar:
 A falha provável deste sistema não é alguém quebrar a assinatura. É você
 acrescentar um comando daqui a seis meses e esquecer a linha da guarda. Agora
 isso não passa.
+
+---
+
+## Depois do vazamento (outubro de 2026)
+
+O que foi conferido e o que mudou. O relatório completo está na descrição do PR
+`seguranca/licenca-endurecida`.
+
+**A privada atual (a quarta, `Fz2A…`) não está no repositório.** Todo o
+histórico do git foi varrido atrás de qualquer texto de 32 bytes em base64 que
+gere uma das cinco públicas que o produto já usou; só apareceu a do par de
+exemplo deste manual (`C0fm…`), que nenhuma versão publicada aceita.
+
+**A terceira (`sR3n…`) é o furo mais provável.** A privada dela ficou na
+hospedagem do bot perdida em 04/10/2026, e até a 3.5 toda versão a aceitava sem
+limite: quem tiver aquele `.env` emite licença para qualquer máquina. A partir
+desta versão ela só vale para licença emitida até 05/10/2026 (o bot carimba em
+UTC: venda da noite de 04/10 sai com 05) e, com a lista
+`MAQUINAS_DA_CHAVE_ANTERIOR` preenchida, só para as máquinas que compraram com
+ela. Para gerar a lista a partir do banco do bot (um código por compra antiga):
+
+```bash
+node pc-optimizer\bot\otimiza-licenca.cjs resumo-da-maquina OTZ-AAAA-BBBB-CCCC OTZ-DDDD-EEEE-FFFF
+```
+
+Cada linha que sai vai para a lista, em `licenca.rs`. Só a data sem a lista não
+segura quem tem a privada (ele assina a data que quiser); a lista sim.
+
+**Atestado online (`licenca_online.rs`).** Em duas etapas, as duas pedem a sua
+decisão:
+
+1. Compilar com `OTIMIZA_API_LICENCA=https://…` (o mesmo endereço da API do
+   site). O programa passa a pedir ao bot, a cada 6 h e só perto de vencer, um
+   atestado de 30 dias, mandando a chave, o código da máquina, a versão e o
+   SHA-256 do executável. O bot responde `{ atestado: emitirAtestado(...) }` ou
+   `{ revogacao: emitirRevogacao(...) }` (só revogação assinada tranca), e a
+   licença revogada para de abrir. Sem rede, nada
+   muda para o cliente.
+2. `EXIGE_ATESTADO = true`: sem atestado em dia, trancado. Só depois de a etapa 1
+   mostrar que os clientes renovam.
+
+O que o bot precisa ganhar para a etapa 1: a rota `POST /v1/licencas/atestado`,
+uma tabela de revogadas, e o registro de quem pede (máquina, SHA-256 do
+executável, IP). A mesma chave vindo de muitas impressões, ou um executável fora
+dos publicados, é repasse ou binário remendado.
+
+### Se for preciso trocar a privada de novo (rotação)
+
+1. `node pc-optimizer\bot\otimiza-licenca.cjs instalar <.env do bot>` gera o par
+   novo direto no `.env`, sem passar pela tela.
+2. A pública que hoje é `CHAVE_PUBLICA` vira a anterior, com a data da troca em
+   `FIM_DA_CHAVE_ANTERIOR` e a lista das máquinas de quem já comprou.
+3. O bot reemite, com a privada nova, a chave de cada compra paga (ele tem o
+   código de máquina de todas) e entrega no painel ou por mensagem. Quem não
+   atualizar segue abrindo com a chave antiga na máquina dele; quem atualizar
+   recebe a nova sem pedir.
+4. A versão com a pública nova só é publicada depois de o bot já estar
+   assinando com a privada nova.
