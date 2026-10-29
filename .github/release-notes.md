@@ -12,7 +12,9 @@ resultado é que não mudou nada.
 | `Otimiza_3.5.0_x64_en-US.msi` | Para instalação em rede ou por política de empresa |
 
 Windows 10 ou 11, 64 bits. A sua chave continua valendo: ela é presa ao
-computador, não à versão.
+computador, não à versão. Se o Otimiza disser que a sua chave é do sistema de
+licenças antigo, fale no suporte com o código da máquina: a chave nova sai sem
+custo.
 
 ---
 
@@ -26,8 +28,8 @@ ajuda **naquele jogo, naquele PC**:
 | O que está no limite | O que o Turbo liga |
 |---|---|
 | Placa de vídeo | A escala (o jogo desenha menos pixels: FPS real a mais) e, se ainda faltar para o monitor, a geração de quadros |
-| Processador | A geração de quadros e a energia de jogo. Diminuir a resolução não ajudaria: a placa já sobra |
-| Memória | Mostra o que ocupa memória para você fechar (nunca fecha sozinho) |
+| Processador | Tira a disputa do processador (programas de fundo em modo econômico enquanto o jogo roda), a geração de quadros e a energia de jogo. Diminuir a resolução não ajudaria: a placa já sobra |
+| Memória | Tira a disputa do processador e mostra o que ocupa memória para você fechar (nunca fecha sozinho) |
 | Nada | Não liga nada, e diz que o jogo já roda o que o seu PC consegue |
 
 Em jogo competitivo (CS2, Valorant, Fortnite, Call of Duty, Apex, Rocket League) o Turbo não liga a geração de
@@ -42,6 +44,18 @@ não liga de novo aquela receita naquele jogo: nunca menos FPS.
 
 **Menor atraso ou mais FPS:** você escolhe por jogo se o Turbo pode ligar a geração de quadros. Jogos de tiro já vêm em
 "Menor atraso".
+
+**Núcleos rápidos:** com o processador no limite, depois de uma prova que não piorou o jogo, o Turbo mede em cerca de
+1 minuto se prender o jogo nos núcleos mais rápidos rende. Só fica se render.
+
+**Leveza:** além do FPS médio, o cartão e o "Copiar resultado" mostram o 1% piores quadros antes e depois, com o selo
+"mais liso" quando o ganho passa da margem de erro.
+
+**Ritmo estável:** quando o jogo trava várias vezes por minuto, o Turbo mostra quantas e oferece travar o FPS no que o
+seu PC sustenta (placa NVIDIA, vale ao reabrir o jogo, desfaz em um clique). É uma oferta: o teto troca um pouco da
+média por um ritmo constante, e quem decide é você.
+
+Se você liga o modo jogo por conta própria, o Turbo não mexe nele.
 
 Com o jogo aberto, o Turbo é o botão principal da tela inicial.
 
@@ -92,6 +106,18 @@ O que custa caro e quase não se vê (sombras, oclusão de ambiente, partículas
 próprio jogo grava. O Otimiza só muda o que já existe no arquivo, nunca com o jogo aberto, e o desfazer devolve o
 arquivo exatamente como estava. No CS2, as sombras dos jogadores ficam como estão: elas mostram onde o inimigo está.
 Valorant e Warzone estão em estudo e ainda não são alterados.
+
+## Licença mais protegida
+
+- A licença foi reforçada contra uso sem compra. Quem comprou não precisa fazer nada: a chave de sempre continua
+  abrindo no mesmo computador.
+- Chaves do sistema de licenças antigo (de antes de 04/10/2026) só abrem nos computadores para os quais foram
+  vendidas. Se a sua for recusada, o suporte troca sem custo.
+- O Otimiza chama os programas do Windows (PowerShell, plano de energia, inicialização) sempre pela pasta do sistema,
+  nunca por um arquivo com o mesmo nome em outra pasta.
+- A sobreposição de FPS e o modo dinâmico de energia, quando ligam sozinhos com o jogo, conferem a licença como os
+  botões que os ligam. Voltar ao normal continua livre.
+- O Otimiza continua sem conversar com servidor nosso: a licença é conferida no próprio computador.
 
 ---
 
