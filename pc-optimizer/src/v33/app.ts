@@ -21,6 +21,7 @@ import {
   type NivelDeEscala,
   type Gargalo,
   type PainelTurbo,
+  type PerfilDoJogoNoTurbo,
   type ReceitaDoTurbo,
   type PassoDaProvaDoTurbo,
   type NivelDoOtimizar,
@@ -958,6 +959,7 @@ const NOMES_DO_GARGALO: Record<Gargalo, string> = {
   Memoria: "memória acabando",
   Nenhum: "nada no limite",
   SemCarga: "jogo parado na medida",
+  Jogo: "o próprio jogo segurando o FPS",
 };
 
 /** Em palavras curtas, o que a receita liga. */
@@ -1053,7 +1055,8 @@ async function cartaoTurbo(dado?: PainelTurbo) {
          <div class="acoes" style="margin-top:10px"><button class="botao" id="tb-ritmo" title="Mede o jogo por 20 s e grava o teto no perfil do driver; desfaz em um clique">Medir 20 s e travar</button></div>`
       : "";
   caixa.innerHTML = `${tituloDoTurbo(p.provando ? `<span class="pilula"><span class="v-vivo"></span>provando</span>` : p.ligado ? `<span class="pilula"><span class="v-vivo"></span>ligado</span>` : "")}
-    ${provaHtml}${resultado}${corpo}${ritmo}<p class="estado" id="tb-estado" hidden></p>`;
+    ${provaHtml}${resultado}${corpo}${ritmo}<div id="tb-perfil"></div><p class="estado" id="tb-estado" hidden></p>`;
+  if (p.jogo && !p.provando) void perfilDoJogoNoTurbo();
   if (p.provando && !acompanhandoProva) void acompanharProva();
 
   const agir = async (botao: HTMLButtonElement, acao: () => Promise<PainelTurbo>, medindo = false) => {
@@ -1113,6 +1116,40 @@ async function cartaoTurbo(dado?: PainelTurbo) {
 }
 
 /** A prova A-B do Turbo: o cartão mostra a rodada em que está, e o resultado no fim. */
+const NOMES_DO_PERFIL: Record<string, string> = { competitivo: "Máximo de FPS", equilibrado: "Equilibrado", sem_teto: "Sem limite de quadros" };
+
+/** O perfil gráfico do GTA/FiveM no cartão do Turbo. O jogo reescreve a configuração ao sair, então o pedido espera ele
+ *  fechar e o Otimiza aplica sozinho (com o arquivo de antes no histórico). */
+async function perfilDoJogoNoTurbo(dado?: PerfilDoJogoNoTurbo) {
+  const caixa = document.querySelector<HTMLElement>("#tb-perfil");
+  if (!caixa) return;
+  const p = dado ?? (await ponte.turboPerfilDoJogo().catch(() => null));
+  if (!p?.oferece) {
+    caixa.innerHTML = "";
+    return;
+  }
+  const nome = (id: string) => NOMES_DO_PERFIL[id] ?? id;
+  caixa.innerHTML = p.pendente
+    ? `<div class="linha" style="margin-top:14px"><div>Perfil gráfico do jogo: ${esc(nome(p.pendente))}<p>Pedido. O Otimiza aplica quando você fechar o jogo, e o desfazer devolve o arquivo exatamente como estava.</p></div><button class="botao" data-perfil="">Cancelar</button></div>`
+    : p.aplicado
+      ? `<div class="linha" style="margin-top:14px"><div>Perfil gráfico do jogo: ${esc(nome(p.aplicado))}<p>Aplicado pelo Otimiza. Desfaz em Ajustes, em Restaurar meu PC.</p></div></div>`
+      : `<div class="linha" style="margin-top:14px"><div>Perfil gráfico do jogo<p>O que mais pesa no FiveM e no GTA: suavização (MSAA), sombras, reflexos e grama. O jogo reescreve a configuração ao sair, então o Otimiza aplica quando você fechar o jogo.</p></div><div class="acoes"><button class="botao" data-perfil="competitivo">Máximo de FPS</button><button class="botao" data-perfil="equilibrado">Equilibrado</button></div></div>`;
+  caixa.querySelectorAll<HTMLButtonElement>("[data-perfil]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await perfilDoJogoNoTurbo(await ponte.turboPerfilDoJogoPedir(b.dataset.perfil || null));
+      } catch (e) {
+        const s = $("#tb-estado");
+        s.hidden = false;
+        s.className = "estado aviso";
+        s.textContent = String(e);
+        b.disabled = false;
+      }
+    })
+  );
+}
+
 /** Uma prova sendo acompanhada pela tela (a do botão ou a automática): o cartão não abre uma segunda escuta. */
 let acompanhandoProva = false;
 
