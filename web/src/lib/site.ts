@@ -13,7 +13,7 @@ export const site = {
    * O número do botão de baixar: primeiro a tag v<versao>, depois este arquivo.
    * links.baixar aponta para releases/latest; subir antes faria o botão prometer uma versão e entregar a anterior.
    */
-  versao: "3.4.0",
+  versao: "3.5.0",
 } as const;
 
 export const links = {
