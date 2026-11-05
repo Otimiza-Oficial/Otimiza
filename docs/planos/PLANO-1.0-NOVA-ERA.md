@@ -495,6 +495,16 @@ portão), opções que pesam no processador × na placa ligadas ao gargalo medid
 
 ## 8. Integrações com empresas — APIs e parcerias
 
+> **Atualizado em 05/11/2026 pela checagem da Onda 0** (`APIS-E-PARCERIAS.md`). Saem ou mudam:
+> - pausar o Windows Update por API (não funciona desde o Windows 10, e não há política no Home);
+> - FrameView SDK (não é público);
+> - "configurações ideais" da NVIDIA e APO da Intel (sem API);
+> - V-Cache da AMD (só Linux);
+> - widget da Game Bar (exige UWP na Store: vai para depois da 1.0);
+> - M-Lab, RIPEstat e IGDB (exigem acordo para uso comercial).
+>
+> As tabelas abaixo são a visão original; quando divergirem, vale `APIS-E-PARCERIAS.md`.
+
 > Regra para todas: **antes de entrar no produto, cada API passa por uma checagem na Onda 0** — licença de
 > redistribuição, termos de uso comercial, se exige conta/chave/aprovação, se funciona sem o programa do fabricante
 > instalado, e se algum anticheat reclama. A coluna "A conferir" diz o que já sabemos que precisa ser checado.
