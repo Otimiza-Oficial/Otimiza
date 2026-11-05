@@ -13,8 +13,8 @@ import type { CSSProperties } from "react";
 export function ShinyText({
   text,
   className = "",
-  color = "#0a0a0a",
-  shineColor = "#a3a3a3",
+  color = "#13254d",
+  shineColor = "#8fa3ea",
   segundos = 3.2,
 }: {
   text: string;

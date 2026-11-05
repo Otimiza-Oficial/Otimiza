@@ -84,7 +84,7 @@ function SidebarItem({ item, ativo, aoNavegar }: { item: Item; ativo: boolean; a
 
   const classe = cn(
     "flex h-[31px] items-center gap-2.5 rounded-[6px] px-2 text-[12.5px] transition-colors duration-150",
-    ativo ? "bg-[#f1f1f0] font-semibold text-fg" : "font-medium text-[#4a4a4a] hover:bg-[#f6f6f5] hover:text-fg",
+    ativo ? "bg-sunken font-semibold text-fg" : "font-medium text-fg hover:bg-card hover:text-fg",
   );
 
   if (item.externo) {

@@ -3,7 +3,7 @@ import { ScrollReveal } from "@/components/reactbits/ScrollReveal";
 import { cn } from "@/lib/cn";
 
 /**
- * Uma seção inteira: fio horizontal no topo, coluna emoldurada e o respiro
+ * Uma seção inteira: coluna centralizada sobre o céu e o respiro
  * vertical do sistema. É isso que mantém gutters e ritmo iguais do hero ao
  * rodapé.
  */
@@ -21,7 +21,7 @@ export function Section({
   labelledBy?: string;
 }) {
   return (
-    <section id={id} aria-labelledby={labelledBy} className={cn("border-t border-line", className)}>
+    <section id={id} aria-labelledby={labelledBy} className={className}>
       <div className="frame">
         <div className={cn("frame-inner py-20 md:py-24", innerClassName)}>{children}</div>
       </div>

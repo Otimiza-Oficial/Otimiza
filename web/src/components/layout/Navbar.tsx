@@ -8,7 +8,7 @@ import { useReducedMotionSafe } from "@/components/motion/useReducedMotionSafe";
 import { ButtonLink } from "@/components/ui/Button";
 import { SmartLink } from "@/components/ui/SmartLink";
 import { cn } from "@/lib/cn";
-import { links, nav } from "@/lib/site";
+import { links, nav, VERSAO_EXIBIDA } from "@/lib/site";
 
 /**
  * A navbar: no topo é uma linha; ao rolar vira uma cápsula, por mola (animar padding e raio refaria o layout a cada quadro).
@@ -85,17 +85,14 @@ export function Navbar() {
         >
           <motion.nav
             aria-label="Principal"
-            animate={{
-              borderRadius: flutuando ? 14 : 0,
-              backgroundColor: flutuando ? "rgb(255 255 255 / 0.85)" : "rgb(250 250 250 / 1)",
-              boxShadow: flutuando
-                ? "0 0 0 1px rgb(10 10 10 / 0.07), 0 10px 30px -12px rgb(0 0 0 / 0.18)"
-                : "0 1px 0 0 rgb(10 10 10 / 0.08)",
-            }}
+            animate={{ borderRadius: flutuando ? 999 : 0 }}
             transition={mola}
             className={cn(
-              "relative flex h-16 items-center justify-between backdrop-blur-md",
-              flutuando ? "px-4 md:px-6" : "frame-inner",
+              // O vidro só aparece quando a barra vira cápsula; no topo ela pousa direto no céu.
+              "relative flex h-16 items-center justify-between border transition-[background-color,border-color,box-shadow] duration-200",
+              flutuando
+                ? "border-[var(--vidro-borda)] bg-surface px-4 shadow-[var(--vidro-sombra)] backdrop-blur-xl md:px-6"
+                : "frame-inner border-transparent",
             )}
           >
             <SmartLink href="/" aria-label="Otimiza — página inicial" className="-my-2 rounded-md py-2">
@@ -112,7 +109,7 @@ export function Navbar() {
                       aria-current={estaAtivo ? "true" : undefined}
                       className={cn(
                         "relative z-10 block rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors",
-                        estaAtivo ? "text-fg" : "text-[#3a3a3a] hover:text-fg",
+                        estaAtivo ? "text-fg" : "text-muted hover:text-fg",
                       )}
                     >
                       {item.label}
@@ -123,7 +120,7 @@ export function Navbar() {
                       ) : (
                         <motion.span
                           layoutId="navbar-ativo"
-                          className="absolute inset-0 rounded-full bg-[rgb(10_10_10/0.06)]"
+                          className="absolute inset-0 rounded-full bg-[rgb(47_95_168/0.1)]"
                           transition={{ type: "spring", stiffness: 500, damping: 40 }}
                           aria-hidden="true"
                         />
@@ -142,12 +139,13 @@ export function Navbar() {
               <span className="hidden min-[430px]:contents">
                 <ButtonLink href={links.baixar}>
                   <Download size={14} strokeWidth={2.25} aria-hidden="true" />
-                  Baixar grátis
+                  <span className="sm:hidden">Baixar</span>
+                  <span className="hidden sm:inline">Baixar o Otimiza {VERSAO_EXIBIDA}</span>
                 </ButtonLink>
               </span>
               <button
                 type="button"
-                className="-mr-2 inline-flex size-11 items-center justify-center rounded-md text-fg lg:hidden"
+                className="-mr-2 inline-flex size-11 items-center justify-center rounded-full text-fg lg:hidden"
                 aria-expanded={aberto}
                 aria-controls="menu-mobile"
                 aria-label={aberto ? "Fechar menu" : "Abrir menu"}
@@ -161,7 +159,7 @@ export function Navbar() {
                 aparece, para não riscar o topo da página inteira. */}
             <motion.div
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-3 bottom-0 h-px origin-left bg-fg/25"
+              className="pointer-events-none absolute inset-x-8 bottom-0 h-px origin-left bg-ceu-500/60"
               style={{ scaleX: progresso }}
               animate={{ opacity: flutuando ? 1 : 0 }}
               transition={{ duration: reduce ? 0 : 0.2 }}
@@ -178,7 +176,7 @@ export function Navbar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: reduce ? 0 : 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-x-0 top-[76px] bottom-0 bg-bg lg:hidden"
+            className="fixed inset-x-0 top-[76px] bottom-0 bg-bg/95 backdrop-blur-xl lg:hidden"
           >
             <ul className="frame-inner flex flex-col pt-4">
               {[...nav, { label: "Entrar", href: links.entrar }].map((item, i) => (
@@ -202,7 +200,7 @@ export function Navbar() {
             <div className="frame-inner pt-6">
               <ButtonLink href={links.baixar} size="md" className="w-full" onClick={() => setAberto(false)}>
                 <Download size={15} strokeWidth={2.25} aria-hidden="true" />
-                Baixar para Windows
+                Baixar o Otimiza {VERSAO_EXIBIDA}
               </ButtonLink>
             </div>
           </motion.div>

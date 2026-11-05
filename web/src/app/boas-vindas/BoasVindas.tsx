@@ -43,8 +43,8 @@ export function BoasVindas() {
 
       <ol className="mt-8 space-y-1">
         {PASSOS.map(({ icone: Icone, titulo, texto }, i) => (
-          <li key={titulo} className="flex items-start gap-3 rounded-[8px] p-2.5 transition-colors hover:bg-[#f6f6f5]">
-            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-[7px] bg-[#f3f3f2]">
+          <li key={titulo} className="flex items-start gap-3 rounded-[8px] p-2.5 transition-colors hover:bg-card">
+            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-[7px] bg-sunken">
               <Icone size={14} strokeWidth={2} aria-hidden="true" />
             </span>
             <div className="min-w-0">
@@ -84,7 +84,7 @@ export function BoasVindas() {
 /** O que aparece enquanto o navegador ainda não disse o que tem guardado. */
 export function TelaDeEspera() {
   return (
-    <div className="grid min-h-dvh place-items-center bg-white">
+    <div className="grid min-h-dvh place-items-center bg-surface">
       <p className="sr-only">Carregando</p>
       <span aria-hidden="true" className="size-5 animate-spin rounded-full border-2 border-line-strong border-t-fg" />
     </div>

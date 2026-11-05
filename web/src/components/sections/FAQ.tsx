@@ -35,8 +35,12 @@ const PERGUNTAS = [
     r: "Não. O código da máquina vem do número de série da placa-mãe, que sobrevive à formatação. Em algumas máquinas o fabricante deixa esse número em branco; nesses casos formatar muda o código, e a reemissão também é gratuita.",
   },
   {
-    p: "Por que o Windows diz “editor desconhecido” quando eu instalo?",
-    r: "Porque o instalador ainda não tem assinatura digital. Na primeira execução, clique em “Mais informações” e depois em “Executar assim mesmo”. Isso está escrito nas notas de cada versão em vez de escondido.",
+    p: "Apareceu “O Windows protegeu o seu PC”. É vírus?",
+    r: "Não. Esse aviso é o SmartScreen do Windows, que aparece para programas de editores novos, que ainda não juntaram reputação com a Microsoft. Confira que o arquivo veio do link desta página (o GitHub oficial do Otimiza), clique em “Mais informações” e depois em “Executar assim mesmo”. Isso está escrito também nas notas de cada versão, em vez de escondido.",
+  },
+  {
+    p: "Eu usava a 3.6. Por que agora é “1.0”?",
+    r: "A 1.0 é a Nova Geração: marca nova, interface nova e áreas novas (Rede, Latência, Tela). A contagem recomeça para marcar a mudança. Quem já tem o Otimiza recebe a 1.0 como atualização, e o Desfazer continua valendo para o que a versão anterior alterou.",
   },
 ];
 
@@ -52,7 +56,7 @@ export function FAQ() {
           <SectionHeading id="perguntas-titulo" title="Antes de pagar." lead="O que todo mundo pergunta." />
         </Reveal>
 
-        <ul className="mt-10">
+        <ul className="card mt-10 px-5 sm:px-8">
             {PERGUNTAS.map((item, i) => {
               const aberto = aberta === i;
               const idBotao = `${base}-botao-${i}`;
@@ -60,7 +64,7 @@ export function FAQ() {
               return (
                 <motion.li
                   key={item.p}
-                  className="group border-b border-line"
+                  className="group border-b border-line last:border-b-0"
                   initial={reduce ? false : { opacity: 0, y: 12 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "0px 0px -8% 0px" }}

@@ -28,7 +28,7 @@ export function CartaoMetrica({
   return (
     // Altura MÍNIMA, e não fixa: num telefone estreito o rótulo quebra em
     // duas linhas, e com altura fixa a nota saía cortada para fora do cartão.
-    <article className="relative flex min-h-[86px] flex-col justify-between gap-2 overflow-hidden rounded-[8px] bg-white px-3.5 py-3 shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]">
+    <article className="relative flex min-h-[86px] flex-col justify-between gap-2 overflow-hidden rounded-[8px] bg-surface px-3.5 py-3 shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(30_60_120/0.04)]">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11.5px] font-medium text-muted">{rotulo}</p>
         {etiqueta}
@@ -58,7 +58,7 @@ export function Selo({ children, tom = "claro" }: { children: ReactNode; tom?: "
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[10px] font-semibold",
-        tom === "escuro" ? "bg-ink text-white" : "bg-[#f1f1f0] text-muted",
+        tom === "escuro" ? "bg-ink text-white" : "bg-sunken text-muted",
       )}
     >
       {children}

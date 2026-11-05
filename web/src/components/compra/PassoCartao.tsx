@@ -39,7 +39,7 @@ const PERSONALIZACAO = {
     hideFormTitle: true,
     style: {
       theme: "default",
-      customVariables: { baseColor: "#111111", borderRadiusMedium: "8px", borderRadiusLarge: "12px" },
+      customVariables: { baseColor: "#2f5fa8", borderRadiusMedium: "10px", borderRadiusLarge: "12px" },
     },
   },
 };

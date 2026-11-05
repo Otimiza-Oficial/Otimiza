@@ -14,7 +14,7 @@ import { links } from "@/lib/site";
  */
 export function Banner() {
   return (
-    <section className="grid min-h-[112px] overflow-hidden rounded-[10px] bg-[#050505] text-white lg:grid-cols-[1fr_auto_1fr]">
+    <section className="grid min-h-[112px] overflow-hidden rounded-[10px] bg-noite text-white lg:grid-cols-[1fr_auto_1fr]">
       {/* esquerda */}
       <div className="flex flex-col justify-center gap-2 px-5 py-4">
         <p className="text-[11.5px] text-white/55">Comece por aqui</p>
@@ -24,7 +24,7 @@ export function Banner() {
         </p>
         <SmartLink
           href={links.baixar}
-          className="mt-1 inline-flex h-[26px] w-fit items-center gap-1.5 rounded-[6px] bg-white px-2.5 text-[11.5px] font-semibold text-fg transition-colors hover:bg-[#ececec]"
+          className="mt-1 inline-flex h-[26px] w-fit items-center gap-1.5 rounded-[6px] bg-surface px-2.5 text-[11.5px] font-semibold text-fg transition-colors hover:bg-ceu-100"
         >
           <Download size={12} strokeWidth={2.5} aria-hidden="true" />
           Baixar o instalador
@@ -40,7 +40,7 @@ export function Banner() {
         <MarcaNoBanner>
           <BrandLogo brand="discord" size={17} decorative />
         </MarcaNoBanner>
-        <span className="relative grid size-[54px] place-items-center rounded-[14px] bg-white text-fg">
+        <span className="relative grid size-[54px] place-items-center rounded-[14px] bg-surface text-fg">
           <OtimizaLogo mark={30} />
         </span>
         <MarcaNoBanner>

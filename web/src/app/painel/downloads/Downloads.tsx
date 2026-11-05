@@ -5,7 +5,7 @@ import { CabecalhoPagina, Cartao } from "@/components/painel/AppShell";
 import { ButtonLink } from "@/components/ui/Button";
 import { CampoCopiavel } from "@/components/ui/CampoCopiavel";
 import { formatarDataHora, formatarTamanho, useUltimaRelease } from "@/lib/release";
-import { links, site } from "@/lib/site";
+import { links, site, VERSAO_EXIBIDA, versaoDeExibicao } from "@/lib/site";
 
 const SMARTSCREEN = [
   { titulo: "“O Windows protegeu o seu PC”", texto: "Aparece na primeira execução. É esperado: o instalador ainda não tem assinatura digital." },
@@ -33,7 +33,7 @@ export function Downloads() {
             <div>
               <p className="font-display text-[18px] font-semibold tracking-[-0.03em]">Otimiza-instalador.exe</p>
               <p className="mt-0.5 text-[13px] text-muted">
-                Versão {r?.versao ?? (release.estado === "falhou" ? release.versaoConhecida : site.versao)}
+                Versão {versaoDeExibicao(r?.versao ?? (release.estado === "falhou" ? release.versaoConhecida : site.versao))}
                 {r?.instalador ? ` · ${formatarTamanho(r.instalador.tamanhoBytes)}` : ""}
                 {r ? ` · ${formatarDataHora(r.publicadaEm)}` : ""}
               </p>
@@ -41,10 +41,10 @@ export function Downloads() {
           </div>
           <ButtonLink href={links.baixar} size="md">
             <Download size={15} strokeWidth={2.25} aria-hidden="true" />
-            Baixar
+            Baixar o Otimiza {VERSAO_EXIBIDA}
           </ButtonLink>
         </div>
-        <div className="border-t border-line bg-[#fafafa] px-5 py-3 text-[12.5px] text-muted sm:px-6">
+        <div className="border-t border-line bg-sunken px-5 py-3 text-[12.5px] text-muted sm:px-6">
           Windows 10 ou 11, 64 bits. Não há versão para macOS ou Linux: o que o Otimiza faz depende do registro e dos
           serviços do Windows.
         </div>
@@ -62,7 +62,7 @@ export function Downloads() {
       {r?.resumo && (
         <Cartao className="mt-2 p-3.5 sm:p-4">
           <p className="eyebrow">O que é esta versão</p>
-          <p className="mt-3 max-w-[760px] text-[14px] leading-[1.65] text-[#2b2b2b]">{r.resumo}</p>
+          <p className="mt-3 max-w-[760px] text-[14px] leading-[1.65] text-fg">{r.resumo}</p>
         </Cartao>
       )}
 

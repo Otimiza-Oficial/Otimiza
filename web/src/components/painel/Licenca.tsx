@@ -51,7 +51,7 @@ export function StatusLicenca({ resultado, className }: { resultado: Resultado |
   ) : (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md bg-[#f1f1f0] px-2 py-1 text-[11.5px] font-semibold text-fg shadow-[inset_0_0_0_1px_rgb(10_10_10/0.1)]",
+        "inline-flex items-center gap-1.5 rounded-md bg-sunken px-2 py-1 text-[11.5px] font-semibold text-fg shadow-[inset_0_0_0_1px_var(--color-line-strong)]",
         className,
       )}
     >
@@ -87,10 +87,10 @@ export function CartaoLicenca({
   const dados = resultado?.ok ? resultado.dados : null;
 
   return (
-    <article className="rounded-[14px] bg-white p-5 shadow-[0_0_0_1px_rgb(10_10_10/0.08),0_1px_2px_rgb(0_0_0/0.04)] sm:p-6">
+    <article className="rounded-[14px] bg-surface p-5 shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(0_0_0/0.04)] sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-[#f1f1f0]">
+          <span className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-sunken">
             <KeyRound size={18} strokeWidth={2} aria-hidden="true" />
           </span>
           <div className="min-w-0">
@@ -113,7 +113,7 @@ export function CartaoLicenca({
       )}
 
       {resultado && !resultado.ok && (
-        <p className="mt-5 border-t border-line pt-5 text-[13px] leading-[1.55] text-[#2b2b2b]">
+        <p className="mt-5 border-t border-line pt-5 text-[13px] leading-[1.55] text-fg">
           {explicar(resultado.recusa)}
         </p>
       )}

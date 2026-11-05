@@ -100,7 +100,7 @@ export function LoginForm() {
           <p
             id={`${idChave}-erro`}
             role="alert"
-            className="mt-2.5 flex gap-2 rounded-[7px] bg-[#f4f4f3] p-2.5 text-[12.5px] leading-[1.5] text-[#2b2b2b] shadow-[inset_0_0_0_1px_rgb(10_10_10/0.08)]"
+            className="mt-2.5 flex gap-2 rounded-[7px] bg-sunken p-2.5 text-[12.5px] leading-[1.5] text-fg shadow-[inset_0_0_0_1px_var(--color-line)]"
           >
             <TriangleAlert size={14} strokeWidth={2} className="mt-0.5 shrink-0" aria-hidden="true" />
             {erro}

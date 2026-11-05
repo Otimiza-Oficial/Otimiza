@@ -6,7 +6,7 @@
  * revendidos). Texto da licença: https://github.com/DavidHDev/react-bits/blob/main/LICENSE.md
  *
  * Mudanças do Otimiza: uma tela só, fixa sobre a página, que escuta os cliques do documento (não embrulha o site);
- * faíscas brancas com `mix-blend-mode: difference`, que ficam pretas no fundo claro e brancas nos blocos pretos;
+ * faíscas lavanda, a cor da borda do mascote, que aparecem no céu claro e na noite;
  * o laço de desenho só roda enquanto há faísca (o original desenhava sempre); menos movimento = nada.
  */
 import { useEffect, useRef } from "react";
@@ -41,7 +41,7 @@ export function ClickSpark({ tamanho = 9, raio = 18, quantidade = 8, duracao = 4
         const e = t * (2 - t);
         const d = e * raio;
         const l = tamanho * (1 - e);
-        ctx.strokeStyle = "#ffffff";
+        ctx.strokeStyle = "#7f97ea";
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.moveTo(f.x + d * Math.cos(f.angulo), f.y + d * Math.sin(f.angulo));
@@ -69,5 +69,5 @@ export function ClickSpark({ tamanho = 9, raio = 18, quantidade = 8, duracao = 4
     };
   }, [reduce, tamanho, raio, quantidade, duracao]);
 
-  return <canvas ref={ref} aria-hidden="true" className="pointer-events-none fixed inset-0 z-[60] h-full w-full mix-blend-difference" />;
+  return <canvas ref={ref} aria-hidden="true" className="pointer-events-none fixed inset-0 z-[60] h-full w-full" />;
 }

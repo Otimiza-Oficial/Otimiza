@@ -90,7 +90,7 @@ export function ChatAoVivo({ falas }: { falas: Fala[] }) {
                   )}
                   <span className="text-[11px] text-subtle">{f.hora}</span>
                 </p>
-                <div className="mt-1 text-[13.5px] leading-[1.55] text-[#2b2b2b]">{f.texto}</div>
+                <div className="mt-1 text-[13.5px] leading-[1.55] text-fg">{f.texto}</div>
               </div>
             </motion.div>
             <AnimatePresence>
