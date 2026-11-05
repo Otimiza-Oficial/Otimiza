@@ -237,6 +237,16 @@ where
                         Err(e) => falhas.push(format!("energia de jogo: {}", e)),
                     }
                 }
+                // Banda de fundo: desliga e remove as políticas "Otimiza-" e o limite do Windows Update.
+                {
+                    let banda = crate::plataforma::banda::ler();
+                    if banda.ligado || banda.aplicado.is_some() {
+                        match crate::plataforma::banda::definir(false) {
+                            Ok(_) => feito.push("Banda de fundo desligada; os programas e o Windows Update voltaram sem limite.".to_string()),
+                            Err(e) => falhas.push(format!("banda de fundo: {}", e)),
+                        }
+                    }
+                }
             }
             Parte::MotorDeEnergia => match &estado_do_motor {
                 Err(e) => falhas.push(format!("backup do motor de energia ilegível ({}); o plano dele pode ter ficado", e)),
