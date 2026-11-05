@@ -82,6 +82,8 @@ type Comparacao = "NaoHaNova" | "HaVersaoNova" | "NaoSei";
 interface AvisoDeVersao {
   comparacao: Comparacao;
   versao_publicada: string | null;
+  /** "1.0" para a tag v4.0.0: é o que a tela escreve. */
+  versao_publicada_exibida: string | null;
   pagina: string | null;
 }
 
@@ -1267,7 +1269,7 @@ async function verificarAtualizacao() {
   const faixa = element("atualizacao-faixa");
   text(
     "atualizacao-texto",
-    `Uma nova versão do Otimiza está disponível (${aviso.versao_publicada}).`
+    `Uma nova versão do Otimiza está disponível (${aviso.versao_publicada_exibida ?? aviso.versao_publicada}).`
   );
 
   const botaoBaixar = element<HTMLButtonElement>("atualizacao-baixar");

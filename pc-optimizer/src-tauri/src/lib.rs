@@ -323,6 +323,7 @@ pub fn run() {
             commands::aplicar_ajuste_intel,
             commands::relatorio_de_suporte,
             commands::versao_mais_nova,
+            commands::versao_do_app,
         ])
         .setup(|app| {
             // `otimiza.log` começa dizendo em que máquina: é o arquivo que o cliente manda. Em thread própria (PowerShell e

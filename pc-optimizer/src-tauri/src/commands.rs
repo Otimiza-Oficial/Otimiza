@@ -4915,6 +4915,8 @@ pub fn relatorio_de_suporte() -> Result<String, String> {
 pub struct AvisoDeVersao {
     pub comparacao: crate::modules::atualizacao::Comparacao,
     pub versao_publicada: Option<String>,
+    /// O que a tela escreve: "1.0" para a tag `v4.0.0`.
+    pub versao_publicada_exibida: Option<String>,
     pub pagina: Option<String>,
 }
 
@@ -4926,6 +4928,7 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
     match crate::modules::atualizacao::consultar_ultima().await {
         Some(ultima) => AvisoDeVersao {
             comparacao: crate::modules::atualizacao::comparar(instalada, &ultima.versao),
+            versao_publicada_exibida: crate::modules::atualizacao::de_exibicao(&ultima.versao),
             versao_publicada: Some(ultima.versao),
             pagina: ultima.pagina,
         },
@@ -4933,8 +4936,26 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
         None => AvisoDeVersao {
             comparacao: crate::modules::atualizacao::Comparacao::NaoSei,
             versao_publicada: None,
+            versao_publicada_exibida: None,
             pagina: None,
         },
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct VersaoDoApp {
+    /// Semver do executável: é o que o atualizador e o instalador comparam.
+    pub interna: String,
+    /// O que o cliente vê ("1.0").
+    pub exibida: String,
+}
+
+/// `LIVRES`: só lê a versão compilada no executável.
+#[tauri::command(async)]
+pub fn versao_do_app() -> VersaoDoApp {
+    VersaoDoApp {
+        interna: env!("CARGO_PKG_VERSION").to_string(),
+        exibida: crate::modules::atualizacao::versao_de_exibicao(),
     }
 }
 
@@ -5273,6 +5294,7 @@ mod tests {
         "licenca_ativar",
         "relatorio_de_suporte",
         "versao_mais_nova",
+        "versao_do_app",
         "checar_essenciais",
         "ajustes_do_driver_nvidia",
         "medicoes_automaticas",

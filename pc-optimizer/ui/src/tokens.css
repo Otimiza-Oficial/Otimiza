@@ -1,0 +1,101 @@
+/* Tokens da Nova Geração (plano 3.2). Um arquivo só para o app e, depois, para o site. */
+
+@font-face {
+  font-family: "Jakarta";
+  src: url("/jakarta-variavel.woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("/geist-variavel.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+:root {
+  --ceu-100: #eaf2fd;
+  --ceu-300: #c9dcf8;
+  --ceu-500: #5b86e5;
+  --ceu-700: #2f5fa8;
+  --lavanda-400: #a9b8f2;
+  --pessego-200: #ffe6cc;
+  --ambar-500: #c97a1e;
+  --ambar-700: #8a4f12;
+  --noite-900: #0e1630;
+
+  --tinta: #13254d;
+  --tinta-suave: #4a5d86;
+  --sucesso: #2f9e8f;
+  --atencao: #c97a1e;
+  --perigo: #d0574a;
+
+  /* Vidro claro: sobre o céu, para o que é de olhar. Vidro denso: para o que é de ler. */
+  --vidro: rgb(255 255 255 / 0.42);
+  --vidro-denso: rgb(255 255 255 / 0.78);
+  --vidro-borda: rgb(255 255 255 / 0.7);
+  --vidro-sombra: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 12px 32px rgb(30 60 120 / 0.16);
+  --desfoque: blur(18px) saturate(1.4);
+
+  --fonte-titulo: "Jakarta", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --fonte-texto: "Geist", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+
+  --raio-bolha: 28px;
+  --raio-cartao: 20px;
+  --raio-botao: 999px;
+
+  color-scheme: light;
+}
+
+:root[data-tema="noite"] {
+  --tinta: #e9eefc;
+  --tinta-suave: #a7b3d6;
+  --vidro: rgb(40 52 100 / 0.45);
+  --vidro-denso: rgb(24 32 70 / 0.85);
+  --vidro-borda: rgb(169 184 242 / 0.28);
+  --vidro-sombra: 0 1px 0 rgb(169 184 242 / 0.18) inset, 0 12px 32px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+/* Com jogo aberto o vidro vira cor chapada: `backdrop-filter` recalcula a cada quadro da janela. */
+:root.jogo-aberto {
+  --desfoque: none;
+  --vidro: rgb(214 228 250 / 0.92);
+}
+:root.jogo-aberto[data-tema="noite"] {
+  --vidro: rgb(26 36 78 / 0.95);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ceu-300);
+  color: var(--tinta);
+  font-family: var(--fonte-texto);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ceu-500);
+  outline-offset: 2px;
+}
+
+.numero {
+  font-family: var(--fonte-titulo);
+  font-variant-numeric: tabular-nums;
+}

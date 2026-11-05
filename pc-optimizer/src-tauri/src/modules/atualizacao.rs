@@ -59,6 +59,37 @@ pub fn comparar(instalada: &str, publicada: &str) -> Comparacao {
     }
 }
 
+/// A Nova Geração recomeça em "1.0" para o cliente, mas o número interno continua subindo (4.0.0): o aviso de
+/// atualização, o instalador e o histórico do desfazer da 3.x dependem de a versão nunca descer.
+const DESLOCAMENTO_DA_NOVA_GERACAO: u32 = 3;
+
+/// "4.0.0" → "1.0", "4.1.2" → "1.1.2". Da 3.x para trás o número é o mesmo que o cliente conheceu. Correção zero sai
+/// da exibição, como em "Otimiza 1.0". Ilegível é `None`, nunca um número inventado.
+pub fn de_exibicao(versao: &str) -> Option<String> {
+    let partes = normalizar(versao)?;
+    let maior = partes[0];
+    let exibida_maior = if maior > DESLOCAMENTO_DA_NOVA_GERACAO {
+        maior - DESLOCAMENTO_DA_NOVA_GERACAO
+    } else {
+        maior
+    };
+
+    let menor = partes.get(1).copied().unwrap_or(0);
+    let correcao = partes.get(2).copied().unwrap_or(0);
+
+    Some(if correcao == 0 {
+        format!("{exibida_maior}.{menor}")
+    } else {
+        format!("{exibida_maior}.{menor}.{correcao}")
+    })
+}
+
+/// A versão deste executável como o cliente a vê.
+pub fn versao_de_exibicao() -> String {
+    let interna = env!("CARGO_PKG_VERSION");
+    de_exibicao(interna).unwrap_or_else(|| interna.to_string())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UltimaVersao {
     pub versao: String,
@@ -116,6 +147,21 @@ mod tests {
         assert_eq!(comparar("1.9.0", "1.10.0"), Comparacao::HaVersaoNova);
 
         assert_eq!(comparar("1.6.0", "1.5.0"), Comparacao::NaoHaNova);
+    }
+
+    #[test]
+    fn a_nova_geracao_aparece_como_1_0_e_o_passado_fica_igual() {
+        assert_eq!(de_exibicao("4.0.0").as_deref(), Some("1.0"));
+        assert_eq!(de_exibicao("v4.1.2").as_deref(), Some("1.1.2"));
+        assert_eq!(de_exibicao("5.3.0").as_deref(), Some("2.3"));
+        assert_eq!(de_exibicao("3.6.0").as_deref(), Some("3.6"));
+        assert_eq!(de_exibicao("sei lá"), None);
+    }
+
+    /// O número interno da Nova Geração tem que ser maior que o da 3.x, senão quem está na 3.6 nunca é avisado.
+    #[test]
+    fn a_nova_geracao_e_atualizacao_para_quem_esta_na_3() {
+        assert_eq!(comparar("3.6.0", "4.0.0"), Comparacao::HaVersaoNova);
     }
 
     #[test]
