@@ -1,6 +1,10 @@
 // Benchmark antes e depois, com veredito que pode ser "nenhuma melhora mensurável". Cada carga roda várias vezes e
 // usa o MELHOR (o que menos sofreu interferência); cada métrica tem limiar de ruído; o baseline fica em disco para
 // medir o que exige reiniciar.
+//
+// Não confundir com `baseline.rs`: aqui o Otimiza RODA uma carga sintética própria (operações por segundo, ocioso,
+// atraso do agendador) e compara dois `BenchmarkSnapshot`; lá se guarda um RETRATO da telemetria do painel
+// (`Telemetry`) com perfil de carga e identidade da máquina. Formatos, arquivos em disco e comandos diferentes.
 
 use serde::{Deserialize, Serialize};
 use std::fs;

@@ -2,8 +2,15 @@
 // início do Present: não sabia se o quadro chegou à tela, se era gerado, nem cobria Vulkan e OpenGL. Aqui cada
 // quadro vem com o tempo até o próximo, o tempo na tela, o tipo (do jogo ou gerado), o modo de apresentação e quanto
 // CPU e GPU trabalharam nele. Quadro gerado nunca entra no FPS do jogo.
+//
+// O medidor preferido; `frames.rs` continua sendo o de reserva por ETW e o dono do formato `MedicaoCrua`
+// (`medir_como_antes` entrega neste formato para quem já o consome). Média e percentis saem de `core::estatistica`,
+// a mesma conta de `frames::percentis`: o P99 do PresentMon e o do canal antigo não podem divergir por arredondamento
+// de posição.
 
 use serde::{Deserialize, Serialize};
+
+use crate::core::estatistica::media;
 
 /// Com o nome da versão testada: outra versão pode mudar coluna, e a leitura procura pelo cabeçalho.
 pub const VERSAO: &str = "2.6.0";
@@ -207,10 +214,11 @@ pub struct Resumo {
     pub trancos_qpc: Vec<i64>,
 }
 
-/// Percentil por posição mais próxima em lista já ordenada.
+/// Posição mais próxima, pela conta única de `core::estatistica::percentil` (a mesma de `frames::percentis`). A cópia
+/// local fazia a mesma conta; duas cópias é o caminho para o P99 do Mapa e o da medição automática divergirem. Só é
+/// chamada com 20 quadros ou mais, então o `None` de lista vazia não acontece aqui.
 fn percentil(ordenados: &[f64], p: f64) -> f64 {
-    let i = ((p / 100.0) * ordenados.len() as f64).ceil() as usize;
-    ordenados[i.clamp(1, ordenados.len()) - 1]
+    crate::core::estatistica::percentil(ordenados, p).unwrap_or(0.0)
 }
 
 /// Média da fração pior (1% → 0.01) de uma lista ordenada, em FPS.
@@ -218,10 +226,6 @@ fn media_dos_piores(ordenados: &[f64], fracao: f64) -> f64 {
     let n = ((ordenados.len() as f64 * fracao) as usize).max(1);
     let piores = &ordenados[ordenados.len() - n..];
     1000.0 / (piores.iter().sum::<f64>() / n as f64)
-}
-
-fn media(v: &[f64]) -> Option<f64> {
-    (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
 }
 
 /// Da cadeia de apresentação com mais quadros (o jogo; um lançador ou sobreposição tem a sua). Pura.

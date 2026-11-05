@@ -1,5 +1,8 @@
 // Registro do Windows. Toda escrita devolve o valor anterior, para o ChangeLog: sem ele a mudança seria
 // irreversível.
+//
+// Não confundir com `registro.rs`, que é o INVENTÁRIO do que o Otimiza altera (risco, reinício, como desfaz) e não
+// toca no registro do Windows. Este é o acesso ao registro do Windows em si.
 
 use crate::modules::changelog::PreviousValue;
 use winreg::enums::{RegType, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE};

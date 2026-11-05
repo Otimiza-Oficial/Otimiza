@@ -1,6 +1,9 @@
 // Dois programas fazendo a mesma coisa: antivírus varrendo um ao outro, sobreposições no mesmo jogo,
 // otimizadores desfazendo um ao outro. Aqui não se desinstala nada: mostra o conflito pelo nome, e a pessoa
 // escolhe.
+//
+// Não confundir com `conflitos.rs`: aqui são PROGRAMAS de terceiros nesta máquina (lidos do registro e dos
+// processos); lá são dois AJUSTES do próprio Otimiza que se atrapalham (lista fixa, sem ler nada).
 
 use super::{registry, shell};
 use serde::{Deserialize, Serialize};
