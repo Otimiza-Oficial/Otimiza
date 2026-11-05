@@ -1,6 +1,12 @@
 // Medidor de quadros pelo rastreamento de eventos do Windows (`Present` do DXGI), de fora, sem tocar no jogo:
 // injeção é o que o anticheat do FiveM procura. Exige administrador; cobre Direct3D 10 em diante. Sem elevação ou
 // em D3D9, "não foi possível medir", nunca zero.
+//
+// Não é código morto ao lado do `presentmon.rs`: é o medidor sem programa externo (só ETW), o caminho quando o
+// PresentMon falha, o único que mede dois processos de uma vez (`medir_par`, jogo + gerador de quadros), e o dono de
+// `MedicaoCrua`/`montar` (que o PresentMon reaproveita), da procura de processo (`encontrar_processo`,
+// `caminho_do_processo`) e do relógio QPC. Juntar mudaria o `FrameMeasurement` que a tela recebe; ficou separado
+// (conferido em 05/11/2026).
 
 #![cfg(target_os = "windows")]
 
