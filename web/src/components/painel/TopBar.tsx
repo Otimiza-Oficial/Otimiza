@@ -8,7 +8,7 @@ import { limparTudo } from "@/lib/armazem";
 import { cn } from "@/lib/cn";
 import { useUltimaRelease } from "@/lib/release";
 import { useLicencaAtiva } from "@/lib/sessao";
-import { links } from "@/lib/site";
+import { links, versaoDeExibicao } from "@/lib/site";
 
 /**
  * A barra preta do topo: 34px, e é ela que separa o produto do site.
@@ -38,10 +38,10 @@ export function TopBar({ aoAbrirMenu, aoAbrirBusca }: { aoAbrirMenu: () => void;
   }, [conta]);
 
   const nome = licenca?.dados.comprador?.trim() || "Minha licença";
-  const versao = release.estado === "ok" ? release.release.versao : null;
+  const versao = release.estado === "ok" ? versaoDeExibicao(release.release.versao) : null;
 
   return (
-    <header className="sticky top-0 z-50 flex h-[34px] items-center gap-3 bg-[#050505] px-2.5 text-white">
+    <header className="sticky top-0 z-50 flex h-[34px] items-center gap-3 bg-noite px-2.5 text-white">
       <button
         type="button"
         onClick={aoAbrirMenu}
@@ -102,7 +102,7 @@ export function TopBar({ aoAbrirMenu, aoAbrirBusca }: { aoAbrirMenu: () => void;
           {conta && (
             <div
               role="menu"
-              className="absolute right-0 top-[30px] w-[210px] origin-top-right animate-[surgir_140ms_ease-out] rounded-[8px] bg-white p-1 text-fg shadow-[0_0_0_1px_rgb(10_10_10/0.1),0_10px_24px_-12px_rgb(10_10_10/0.35)]"
+              className="absolute right-0 top-[30px] w-[210px] origin-top-right animate-[surgir_140ms_ease-out] rounded-[8px] bg-surface p-1 text-fg shadow-[0_0_0_1px_var(--color-line-strong),0_10px_24px_-12px_rgb(30_60_120/0.35)]"
             >
               <p className="px-2.5 py-2 text-[11px] text-subtle">
                 {licenca ? `Licença ${licenca.dados.expira ? "válida" : "vitalícia"}` : "Nenhuma licença conferida"}
@@ -111,7 +111,7 @@ export function TopBar({ aoAbrirMenu, aoAbrirBusca }: { aoAbrirMenu: () => void;
                 href="/painel/conta/"
                 role="menuitem"
                 onClick={() => setConta(false)}
-                className="flex h-8 items-center rounded-[6px] px-2.5 text-[12.5px] hover:bg-[#f4f4f3]"
+                className="flex h-8 items-center rounded-[6px] px-2.5 text-[12.5px] hover:bg-sunken"
               >
                 Preferências
               </Link>
@@ -122,7 +122,7 @@ export function TopBar({ aoAbrirMenu, aoAbrirBusca }: { aoAbrirMenu: () => void;
                   limparTudo();
                   setConta(false);
                 }}
-                className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-left text-[12.5px] hover:bg-[#f4f4f3]"
+                className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-left text-[12.5px] hover:bg-sunken"
               >
                 <LogOut size={13} strokeWidth={2} aria-hidden="true" />
                 Sair deste navegador

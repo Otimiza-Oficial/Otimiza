@@ -65,7 +65,7 @@ export default function ComprarPage() {
               </p>
             </section>
 
-            <section className="rounded-[var(--radius-card)] bg-surface p-5 shadow-[var(--shadow-float)] sm:p-7">
+            <section className="vidro-denso rounded-[var(--radius-card)]! p-5 sm:p-7 lg:self-start">
               {TEM_CHECKOUT ? (
                 <Checkout />
               ) : (

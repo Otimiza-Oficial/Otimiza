@@ -6,23 +6,23 @@ const COLUNAS = [
   {
     titulo: "Conheça o Otimiza",
     itens: [
-      { label: "Recursos", href: "#recursos" },
-      { label: "As telas", href: "#programa" },
-      { label: "Preço", href: "#preco" },
+      { label: "O que faz", href: "/#recursos" },
+      { label: "Prova e método", href: "/#prova" },
+      { label: "Preço", href: "/#preco" },
     ],
   },
   {
     titulo: "Sua licença",
     itens: [
       { label: "Entrar", href: links.entrar },
-      { label: "Como funciona", href: "#licenca" },
+      { label: "Como funciona", href: "/#licenca" },
       { label: "Baixar", href: links.baixar },
     ],
   },
   {
     titulo: "Ajuda",
     itens: [
-      { label: "Perguntas", href: "#perguntas" },
+      { label: "Perguntas", href: "/#perguntas" },
       { label: "Discord", href: links.discord },
     ],
   },
@@ -39,19 +39,19 @@ const COLUNAS = [
 
 export function Footer() {
   return (
-    <footer className="border-t border-line">
+    <footer className="border-t border-line bg-surface/60 backdrop-blur-md">
       <div className="frame">
         <div className="frame-inner py-14 md:py-16">
           <div className="grid gap-12 md:grid-cols-[1.3fr_2fr]">
             <div>
-              <OtimizaLogo mark={30} />
+              <OtimizaLogo mark={30} wordmark />
               <p className="font-display mt-5 text-[22px] leading-[1.2] font-semibold tracking-[-0.035em]">
-                Mede. Otimiza.
+                Mede. Ajusta o que ajuda.
                 <br />
                 Prova com número.
               </p>
               <p className="mt-3 max-w-[340px] text-[13.5px] leading-[1.6] text-muted">
-                Console de desempenho para Windows 10 e 11.
+                Otimizador para quem joga no Windows 10 e 11. Feito no Brasil.
               </p>
             </div>
 

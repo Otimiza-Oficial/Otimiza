@@ -24,8 +24,8 @@ export function AuthLayout({
   larguraForma?: "md" | "lg";
 }) {
   return (
-    <div className={cn("min-h-dvh bg-white lg:grid", visual ? "lg:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]" : "")}>
-      <div className="flex min-h-dvh flex-col px-5 py-6 sm:px-10 lg:px-12 lg:py-8">
+    <div className={cn("min-h-dvh lg:grid", visual ? "lg:grid-cols-[minmax(0,42fr)_minmax(0,58fr)]" : "")}>
+      <div className="flex min-h-dvh flex-col px-4 py-6 sm:px-10 lg:px-12 lg:py-8">
         <Link href="/" aria-label="Otimiza — página inicial" className="inline-flex min-h-10 items-center self-start rounded-md">
           <OtimizaLogo mark={26} wordmark />
         </Link>
@@ -36,11 +36,11 @@ export function AuthLayout({
           </div>
         </div>
 
-        <p className="text-[11.5px] text-subtle">© 2026 Otimiza · Console de desempenho para Windows</p>
+        <p className="text-[11.5px] text-subtle">© 2026 Otimiza · Otimizador para quem joga no Windows</p>
       </div>
 
       {visual && (
-        <div className="relative hidden overflow-hidden border-l border-line bg-[#f4f4f3] lg:block">{visual}</div>
+        <div className="relative hidden overflow-hidden border-l border-[var(--vidro-borda)] bg-card backdrop-blur-xl lg:block">{visual}</div>
       )}
     </div>
   );

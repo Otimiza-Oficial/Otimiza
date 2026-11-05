@@ -103,7 +103,7 @@ export function Suporte() {
               <p className="mt-2 text-[13.5px] leading-[1.6] text-muted">{s.texto}</p>
               {mensagem && (
                 <>
-                  <pre className="mt-4 rounded-[10px] bg-[#f4f4f3] p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-[#2b2b2b]">
+                  <pre className="mt-4 rounded-[10px] bg-sunken p-3 font-mono text-[12px] leading-[1.6] whitespace-pre-wrap text-fg">
                     {mensagem}
                   </pre>
                   <div className="mt-4 flex flex-wrap gap-2">

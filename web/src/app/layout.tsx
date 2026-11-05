@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Ceu } from "@/components/brand/Ceu";
 import { ClickSpark } from "@/components/reactbits/ClickSpark";
 import { asset } from "@/lib/asset";
 import { site } from "@/lib/site";
@@ -50,8 +51,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fafafa",
-  colorScheme: "light",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#eaf2fd" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e1630" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -65,10 +69,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script src={asset("/moldura.js")} />
       </head>
       <body>
+        <Ceu />
         <ClickSpark />
         <a
           href="#conteudo"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-fg focus:px-3 focus:py-2 focus:text-white"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-full focus:bg-ink focus:px-4 focus:py-2 focus:text-white"
         >
           Pular para o conteúdo
         </a>

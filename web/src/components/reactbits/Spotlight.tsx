@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, type CSSProperties } from "react";
 
-export function Spotlight({ cor = "rgb(10 10 10 / 0.06)", raio = 320 }: { cor?: string; raio?: number }) {
+export function Spotlight({ cor = "rgb(91 134 229 / 0.12)", raio = 320 }: { cor?: string; raio?: number }) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

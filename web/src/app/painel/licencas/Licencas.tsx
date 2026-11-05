@@ -99,7 +99,7 @@ export function Licencas() {
                 className={
                   mensagem.tipo === "ok"
                     ? "flex items-start gap-2 rounded-[10px] bg-ink p-3 text-[13px] leading-[1.5] text-white"
-                    : "rounded-[10px] bg-[#f1f1f0] p-3 text-[13px] leading-[1.5] text-[#2b2b2b] shadow-[inset_0_0_0_1px_rgb(10_10_10/0.08)]"
+                    : "rounded-[10px] bg-sunken p-3 text-[13px] leading-[1.5] text-fg shadow-[inset_0_0_0_1px_var(--color-line)]"
                 }
               >
                 {mensagem.tipo === "ok" && <Check size={15} strokeWidth={2.5} className="mt-0.5 shrink-0" aria-hidden="true" />}
@@ -119,7 +119,7 @@ export function Licencas() {
 
           {licencas.length === 0 ? (
             <Cartao className="grid place-items-center px-6 py-14 text-center">
-              <span className="grid size-12 place-items-center rounded-[12px] bg-[#f1f1f0]">
+              <span className="grid size-12 place-items-center rounded-[12px] bg-sunken">
                 <KeyRound size={20} strokeWidth={2} aria-hidden="true" />
               </span>
               <p className="font-display mt-4 text-[16px] font-semibold tracking-[-0.02em]">Nenhuma chave guardada</p>

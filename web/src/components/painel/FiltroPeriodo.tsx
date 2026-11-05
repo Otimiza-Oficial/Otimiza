@@ -38,7 +38,7 @@ export function FiltroPeriodo({ valor, aoEscolher }: { valor: number; aoEscolher
         onClick={() => setAberto((v) => !v)}
         aria-expanded={aberto}
         aria-haspopup="listbox"
-        className="flex h-[26px] items-center gap-1.5 rounded-[6px] bg-white px-2 text-[11.5px] font-medium text-[#3a3a3a] shadow-[0_0_0_1px_rgb(10_10_10/0.1)] transition-colors hover:bg-[#f9f9f8]"
+        className="flex h-[26px] items-center gap-1.5 rounded-[6px] bg-surface px-2 text-[11.5px] font-medium text-fg shadow-[0_0_0_1px_var(--color-line-strong)] transition-colors hover:bg-card"
       >
         <CalendarDays size={12} strokeWidth={2} aria-hidden="true" />
         {atual.label}
@@ -48,7 +48,7 @@ export function FiltroPeriodo({ valor, aoEscolher }: { valor: number; aoEscolher
       {aberto && (
         <ul
           role="listbox"
-          className="absolute right-0 top-[30px] z-20 w-[170px] animate-[surgir_140ms_ease-out] rounded-[8px] bg-white p-1 shadow-[0_0_0_1px_rgb(10_10_10/0.1),0_10px_24px_-12px_rgb(10_10_10/0.35)]"
+          className="absolute right-0 top-[30px] z-20 w-[170px] animate-[surgir_140ms_ease-out] rounded-[8px] bg-surface p-1 shadow-[0_0_0_1px_var(--color-line-strong),0_10px_24px_-12px_rgb(30_60_120/0.35)]"
         >
           {PERIODOS.map((p) => (
             <li key={p.meses}>
@@ -60,7 +60,7 @@ export function FiltroPeriodo({ valor, aoEscolher }: { valor: number; aoEscolher
                   aoEscolher(p.meses);
                   setAberto(false);
                 }}
-                className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[12px] hover:bg-[#f4f4f3]"
+                className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[12px] hover:bg-sunken"
               >
                 <Check size={12} strokeWidth={2.5} className={cn("shrink-0", p.meses !== valor && "opacity-0")} aria-hidden="true" />
                 {p.label}

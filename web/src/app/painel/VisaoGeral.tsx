@@ -16,7 +16,7 @@ import { cn } from "@/lib/cn";
 import { codigoValido, formatarData } from "@/lib/licenca";
 import { formatarDataHora, useUltimaRelease } from "@/lib/release";
 import { useLicencaAtiva, useOnboarding } from "@/lib/sessao";
-import { links, site } from "@/lib/site";
+import { links, VERSAO_EXIBIDA } from "@/lib/site";
 
 /*
  * Dois estados que não se misturam: quem acabou de entrar vê o que falta; quem tem máquina e chave conferida vê o painel.
@@ -65,7 +65,7 @@ export function VisaoGeral() {
             <button
               type="button"
               onClick={atualizar}
-              className="flex h-[26px] items-center gap-1.5 rounded-[6px] bg-white px-2 text-[11.5px] font-medium text-[#3a3a3a] shadow-[0_0_0_1px_rgb(10_10_10/0.1)] transition-colors hover:bg-[#f9f9f8]"
+              className="flex h-[26px] items-center gap-1.5 rounded-[6px] bg-surface px-2 text-[11.5px] font-medium text-fg shadow-[0_0_0_1px_var(--color-line-strong)] transition-colors hover:bg-card"
             >
               <RefreshCw size={12} strokeWidth={2} aria-hidden="true" className={cn(atualizando && "animate-spin")} />
               Atualizar
@@ -185,7 +185,7 @@ export function VisaoGeral() {
           href={links.baixar}
           externo
           icone={<Download size={14} strokeWidth={2} aria-hidden="true" />}
-          titulo={`Baixar o Otimiza ${site.versao}`}
+          titulo={`Baixar o Otimiza ${VERSAO_EXIBIDA}`}
           texto="Instalador para Windows 10 e 11"
         />
         <AcaoRapida
@@ -255,17 +255,17 @@ function EstadoDaLicenca({
       className={cn(
         "flex flex-wrap items-center justify-between gap-3 rounded-[8px] px-4 py-3.5",
         estado.tom === "ok"
-          ? "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)]"
+          ? "bg-surface shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(30_60_120/0.04)]"
           : estado.tom === "atencao"
-            ? "bg-[#fffaf2] shadow-[0_0_0_1px_rgb(180_120_20/0.22)]"
-            : "bg-white shadow-[0_0_0_1px_rgb(10_10_10/0.07)]",
+            ? "bg-aviso shadow-[0_0_0_1px_var(--color-aviso-line)]"
+            : "bg-surface shadow-[0_0_0_1px_var(--color-line)]",
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
         <span
           className={cn(
             "mt-0.5 grid size-8 shrink-0 place-items-center rounded-[7px]",
-            estado.tom === "atencao" ? "bg-[#f6e6c9] text-[#6b4a00]" : "bg-[#f4f4f3] text-fg",
+            estado.tom === "atencao" ? "bg-aviso text-aviso-fg" : "bg-sunken text-fg",
           )}
         >
           <KeyRound size={15} strokeWidth={2} aria-hidden="true" />
@@ -278,7 +278,7 @@ function EstadoDaLicenca({
       {"acao" in estado && estado.acao && (
         <Link
           href={estado.acao.href}
-          className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] bg-ink px-3 text-[12px] font-semibold text-white transition-colors hover:bg-[#262626]"
+          className="inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-[6px] bg-ink px-3 text-[12px] font-semibold text-white transition-colors hover:bg-[var(--botao-hover)]"
         >
           {estado.acao.texto}
           <ArrowRight size={13} strokeWidth={2} aria-hidden="true" />
@@ -303,7 +303,7 @@ function AcaoRapida({
 }) {
   const conteudo = (
     <>
-      <span className="grid size-8 shrink-0 place-items-center rounded-[7px] bg-[#f4f4f3]">{icone}</span>
+      <span className="grid size-8 shrink-0 place-items-center rounded-[7px] bg-sunken">{icone}</span>
       <span className="min-w-0">
         <span className="block truncate text-[12.5px] font-semibold">{titulo}</span>
         <span className="block truncate text-[11.5px] text-subtle">{texto}</span>
@@ -312,7 +312,7 @@ function AcaoRapida({
     </>
   );
   const classe =
-    "flex items-center gap-2.5 rounded-[8px] bg-white px-3 py-2.5 shadow-[0_0_0_1px_rgb(10_10_10/0.07),0_1px_2px_rgb(10_10_10/0.04)] transition-colors hover:bg-[#fbfbfa]";
+    "flex items-center gap-2.5 rounded-[8px] bg-surface px-3 py-2.5 shadow-[0_0_0_1px_var(--color-line),0_1px_2px_rgb(30_60_120/0.04)] transition-colors hover:bg-card-2";
 
   return externo ? (
     <a href={href} target="_blank" rel="noopener noreferrer" className={classe}>

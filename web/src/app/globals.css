@@ -1,61 +1,125 @@
 @import "tailwindcss";
 
 /*
-  Sistema visual do Otimiza — claro, preto e branco.
+  Sistema visual do Otimiza 1.0 — Nova Geração: vidro sobre o céu.
 
-  Da referência de acabamento vem a proporção: coluna emoldurada por fios
-  verticais, controles compactos, títulos com tracking negativo em duas cores,
-  cards levemente gradientes com telas inclinadas saindo pela borda. A cor é
-  só tinta: não existe acento colorido. O contraste vem do preto.
+  Os valores vêm de `pc-optimizer/ui/src/tokens.css`, o mesmo arquivo do app: o site e o programa são o mesmo
+  produto. O claro (céu) é o padrão; quem pede tema escuro no sistema recebe a "noite".
+
+  CONTRASTE. Todo texto passa de 4,5:1 contra o pior fundo em que ele pousa — o fim do degradê do céu (#d3e3fa) —, e
+  o vidro só clareia esse fundo. Os números estão anotados ao lado de cada tinta.
 */
 
 @theme {
-  --color-bg: #fafafa;
-  --color-surface: #ffffff;
-  --color-card: #f4f4f3;
-  --color-card-2: #efefee;
-  --color-sunken: #f1f1f0;
+  --color-ceu-100: #eaf2fd;
+  --color-ceu-300: #c9dcf8;
+  --color-ceu-500: #5b86e5;
+  --color-ceu-700: #2f5fa8;
+  --color-lavanda-400: #a9b8f2;
+  --color-pessego-200: #ffe6cc;
+  --color-ambar-500: #c97a1e;
+  --color-ambar-700: #8a4f12;
+  --color-noite: #0e1630;
 
-  --color-line: rgb(10 10 10 / 0.08);
-  --color-line-soft: rgb(10 10 10 / 0.06);
-  --color-line-strong: rgb(10 10 10 / 0.14);
+  --color-bg: #eaf2fd;
+  /* Vidro denso: o que é de ler. */
+  --color-surface: rgb(255 255 255 / 0.86);
+  /* Vidro claro: o que é de olhar. */
+  --color-card: rgb(255 255 255 / 0.5);
+  --color-card-2: rgb(255 255 255 / 0.62);
+  --color-sunken: rgb(214 228 250 / 0.7);
 
-  --color-fg: #0a0a0a;
-  --color-ink: #111111;
-  /* 5.9:1 sobre #fafafa — o cinza das continuações de título. */
-  --color-muted: #5c5c5c;
-  /* 4.6:1 sobre #ffffff — o menor contraste permitido para texto de apoio. */
-  --color-subtle: #737373;
+  --color-line: rgb(19 37 77 / 0.1);
+  --color-line-soft: rgb(19 37 77 / 0.07);
+  --color-line-strong: rgb(19 37 77 / 0.18);
 
-  --color-aviso: #fffaf2;
-  --color-aviso-fg: #5b4300;
-  --color-aviso-line: rgb(180 120 20 / 0.22);
+  /* Tinta: 10,8:1 sobre ceu-300. */
+  --color-fg: #13254d;
+  /* O azul dos botões: branco por cima dá 6,3:1. */
+  --color-ink: #2f5fa8;
+  /* 6,1:1 sobre ceu-100; 5,3:1 no fim do céu. */
+  --color-muted: #475a82;
+  /* 6,0:1 sobre branco; 4,6:1 no fim do céu. */
+  --color-subtle: #52638a;
 
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-jakarta), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  /* Selo MEDIDO e acento de marca: o âmbar dos olhos do mascote (6,5:1 sobre branco). */
+  --color-medido: #8a4f12;
+  --color-sucesso: #1f7a6e;
+
+  --color-aviso: #fff4e6;
+  --color-aviso-fg: #6b3d0c;
+  --color-aviso-line: rgb(201 122 30 / 0.3);
+
+  --font-sans: var(--font-geist-sans), "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jakarta), "Segoe UI Variable Display", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
 
-  --radius-card: 18px;
-  --radius-inner: 12px;
-  --radius-control: 8px;
+  --radius-card: 22px;
+  --radius-inner: 14px;
+  --radius-control: 999px;
 
-  --shadow-float: 0 1px 1px rgb(0 0 0 / 0.04), 0 12px 28px -10px rgb(0 0 0 / 0.18), 0 32px 64px -32px rgb(0 0 0 / 0.22);
-  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.05), 0 4px 12px -6px rgb(0 0 0 / 0.08);
+  --shadow-float: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 12px 32px rgb(30 60 120 / 0.16);
+  --shadow-soft: 0 1px 2px rgb(30 60 120 / 0.06), 0 6px 16px -8px rgb(30 60 120 / 0.18);
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:root {
+  --vidro: rgb(255 255 255 / 0.5);
+  --vidro-denso: rgb(255 255 255 / 0.86);
+  --vidro-borda: rgb(255 255 255 / 0.75);
+  --vidro-sombra: 0 1px 0 rgb(255 255 255 / 0.6) inset, 0 12px 32px rgb(30 60 120 / 0.14);
+  --desfoque: blur(18px) saturate(1.4);
+  --ceu-fundo: linear-gradient(170deg, #ffe6cc 0%, #f3eefa 24%, #e0ebfc 56%, #d3e3fa 100%);
+  --nuvem-opacidade: 0.75;
+  --botao-hover: #284f8c;
+  color-scheme: light;
+}
+
+/* A noite: o mesmo céu, depois que o sol se põe. Só tinta e vidro mudam; a estrutura é a mesma. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0e1630;
+    --color-surface: rgb(24 32 70 / 0.9);
+    --color-card: rgb(40 52 100 / 0.45);
+    --color-card-2: rgb(48 62 118 / 0.55);
+    --color-sunken: rgb(14 22 48 / 0.6);
+    --color-line: rgb(169 184 242 / 0.16);
+    --color-line-soft: rgb(169 184 242 / 0.1);
+    --color-line-strong: rgb(169 184 242 / 0.28);
+    /* 12,3:1, 6,8:1 e 5,5:1 sobre o vidro da noite. */
+    --color-fg: #e9eefc;
+    --color-ink: #3d6cc9;
+    --color-muted: #a7b3d6;
+    --color-subtle: #93a1c9;
+    --color-medido: #f0b25e;
+    --color-sucesso: #6fd1c2;
+    --color-aviso: rgb(201 122 30 / 0.14);
+    --color-aviso-fg: #f6cf98;
+    --color-aviso-line: rgb(240 178 94 / 0.3);
+
+    --vidro: rgb(40 52 100 / 0.45);
+    --vidro-denso: rgb(24 32 70 / 0.9);
+    --vidro-borda: rgb(169 184 242 / 0.22);
+    --vidro-sombra: 0 1px 0 rgb(169 184 242 / 0.14) inset, 0 12px 32px rgb(0 0 0 / 0.35);
+    --ceu-fundo: radial-gradient(120% 80% at 70% 0%, #2a3a78 0%, #141d45 45%, #0b1130 100%);
+    --nuvem-opacidade: 0.14;
+    --botao-hover: #3462bd;
+    color-scheme: dark;
+  }
 }
 
 @layer base {
   html {
     background: var(--color-bg);
-    color-scheme: light;
     scroll-behavior: smooth;
     scroll-padding-top: 88px;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background: var(--color-bg);
+    /* O céu de verdade mora em <Ceu />, fixo atrás da página; este é o reserva. */
+    background: var(--ceu-fundo);
     color: var(--color-fg);
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
@@ -63,14 +127,19 @@
   }
 
   ::selection {
-    background: #0a0a0a;
+    background: #2f5fa8;
     color: #ffffff;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-fg);
+    outline: 2px solid #2f5fa8;
     outline-offset: 2px;
-    border-radius: 6px;
+    border-radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :focus-visible {
+      outline-color: #a9b8f2;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -88,16 +157,15 @@
 }
 
 @layer components {
-  /* A coluna emoldurada: fios verticais de 6% que atravessam a página inteira. */
+  /* A coluna da página. Sem os fios da versão anterior: sobre o céu, quem separa é o vidro. */
   .frame {
     width: 100%;
     max-width: 1160px;
     margin-inline: auto;
-    border-inline: 1px solid var(--color-line);
   }
 
   .frame-inner {
-    padding-inline: 20px;
+    padding-inline: 16px;
   }
 
   @media (min-width: 768px) {
@@ -116,22 +184,50 @@
     font-family: var(--font-display);
   }
 
-  /* Card de recurso: gradiente quase imperceptível + brilho de 1px no topo. */
-  .card {
+  /* Vidro claro: fundo translúcido, borda mais clara (luz), sombra suave e o céu desfocado atrás. */
+  .card,
+  .vidro {
     position: relative;
     overflow: hidden;
     border-radius: var(--radius-card);
-    border: 1px solid var(--color-line);
-    background: linear-gradient(180deg, #f6f6f5 0%, #efefee 100%);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9);
+    border: 1px solid var(--vidro-borda);
+    background: var(--vidro);
+    box-shadow: var(--vidro-sombra);
+    -webkit-backdrop-filter: var(--desfoque);
+    backdrop-filter: var(--desfoque);
   }
 
-  /* Tela "de verdade" dentro de um card: branca, borda fina, sombra longa. */
-  .sheet {
-    border-radius: 14px;
-    border: 1px solid var(--color-line);
-    background: #ffffff;
-    box-shadow: var(--shadow-float);
+  /* Vidro denso: para leitura longa e para as "telas" dentro de um cartão. */
+  .sheet,
+  .vidro-denso {
+    border-radius: 18px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--vidro-denso);
+    box-shadow: var(--vidro-sombra);
+    -webkit-backdrop-filter: var(--desfoque);
+    backdrop-filter: var(--desfoque);
+  }
+
+  /* Brilho de borda lavanda → pêssego, como a beirada da logo. Só no que é destaque (Cartão de Prova, preço). */
+  .brilho-borda {
+    position: relative;
+  }
+  .brilho-borda::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(135deg, #ffd9b0, #a9b8f2 45%, #7f97ea);
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box exclude,
+      linear-gradient(#000 0 0);
+    pointer-events: none;
   }
 
   .eyebrow {
@@ -142,17 +238,39 @@
     color: var(--color-subtle);
   }
 
-  /* Campo de formulário: borda como sombra de 1px, anel de foco preto. */
+  /* Selo de origem: todo número diz de onde veio (MEDIDO, ESTIMADO, EXEMPLO). */
+  .selo {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    padding: 3px 9px 3px 8px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-medido);
+    background: rgb(255 230 204 / 0.85);
+    box-shadow: inset 0 0 0 1px rgb(201 122 30 / 0.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    .selo {
+      background: rgb(201 122 30 / 0.16);
+    }
+  }
+
+  /* Campo de formulário: vidro denso, anel de foco azul. */
   .campo {
     display: block;
     width: 100%;
     height: 44px;
-    border-radius: var(--radius-control);
-    background: #ffffff;
+    border-radius: 12px;
+    background: var(--color-surface);
     padding-inline: 12px;
     font-size: 14px;
     color: var(--color-fg);
-    box-shadow: 0 0 0 1px rgb(10 10 10 / 0.14);
+    box-shadow: 0 0 0 1px var(--color-line-strong);
     outline: none;
     transition: box-shadow 150ms ease-out;
   }
@@ -161,10 +279,10 @@
     text-transform: none;
   }
   .campo:focus {
-    box-shadow: 0 0 0 1px #0a0a0a, 0 0 0 4px rgb(10 10 10 / 0.08);
+    box-shadow: 0 0 0 1px #5b86e5, 0 0 0 4px rgb(91 134 229 / 0.22);
   }
   .campo[aria-invalid="true"] {
-    box-shadow: 0 0 0 1px #0a0a0a, 0 0 0 4px rgb(10 10 10 / 0.12);
+    box-shadow: 0 0 0 1px #d0574a, 0 0 0 4px rgb(208 87 74 / 0.18);
   }
   @media (min-width: 1024px) {
     .campo {
@@ -176,26 +294,95 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Grão de filme: um ruído fractal de 3%, que tira o aspecto "chapado" de
-     superfícies grandes. SVG em data URI — nenhuma requisição a mais. */
-  .grain::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.06;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  /* Mantido para os blocos que ainda usam a classe: na Nova Geração não há grão de filme. */
+  .grain {
+    position: relative;
+  }
+}
+
+/* O céu fixo atrás da página (componente <Ceu />). Nuvem é gradiente radial, não `filter: blur`. */
+.ceu {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: var(--ceu-fundo);
+  pointer-events: none;
+}
+.ceu-nuvem {
+  position: absolute;
+  aspect-ratio: 2.6;
+  background:
+    radial-gradient(closest-side at 30% 60%, rgb(255 255 255 / 0.9), transparent),
+    radial-gradient(closest-side at 55% 40%, rgb(255 255 255 / 0.95), transparent),
+    radial-gradient(closest-side at 75% 62%, rgb(255 255 255 / 0.85), transparent),
+    radial-gradient(closest-side at 50% 75%, rgb(236 242 252 / 0.9), transparent 90%);
+  opacity: var(--nuvem-opacidade);
+  animation: ceu-deriva 90s linear infinite alternate;
+}
+@keyframes ceu-deriva {
+  from {
+    transform: translateX(-3vw);
+  }
+  to {
+    transform: translateX(4vw);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ceu-nuvem {
+    animation: none;
+  }
+}
+
+/* O mascote: respira e pisca. Com menos movimento pedido, fica parado e de olhos abertos. */
+.mascote-flutua {
+  animation: mascote-respirar 5s ease-in-out infinite;
+  transform-origin: 110px 91px;
+}
+.mascote-olho {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascote-piscar 6s infinite;
+}
+.mascote-olhos {
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes mascote-piscar {
+  0%,
+  94%,
+  100% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes mascote-respirar {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mascote-flutua,
+  .mascote-olho {
+    animation: none;
+  }
+  .mascote-olhos {
+    transition: none;
   }
 }
 
 @keyframes pulse-dot {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgb(10 10 10 / 0.35);
+    box-shadow: 0 0 0 0 rgb(91 134 229 / 0.45);
   }
   60% {
-    box-shadow: 0 0 0 5px rgb(10 10 10 / 0);
+    box-shadow: 0 0 0 5px rgb(91 134 229 / 0);
   }
 }
 
@@ -229,7 +416,7 @@
 }
 
 /*
-  Peças adaptadas do React Bits (src/components/reactbits). Só tinta preta e cinza, como o resto do site.
+  Peças adaptadas do React Bits (src/components/reactbits). Recoloridas para o vidro da Nova Geração.
 */
 @layer components {
   /* ShinyText: o brilho atravessa o texto e some; pausa no fim de cada passada. */
@@ -271,7 +458,7 @@
     transition: opacity 0.45s var(--ease-out-soft);
     background: radial-gradient(
       var(--spot-raio, 320px) circle at var(--spot-x, 50%) var(--spot-y, 50%),
-      var(--spot-cor, rgb(10 10 10 / 0.06)),
+      var(--spot-cor, rgb(91 134 229 / 0.12)),
       transparent 70%
     );
   }
@@ -347,7 +534,7 @@
     padding: 1px;
     background: radial-gradient(
       220px circle at var(--spot-x, 50%) var(--spot-y, 50%),
-      rgb(10 10 10 / 0.45),
+      rgb(91 134 229 / 0.55),
       transparent 70%
     );
     -webkit-mask:
