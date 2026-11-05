@@ -3,6 +3,10 @@
 // mediu). MEASURED: lido agora. ESTIMATED: derivado ou por caminho que não distingue zero de falha, não fecha
 // veredito sozinho. UNKNOWN: sem valor, com o motivo. Uma coleta nasce com todo o `CATALOG` em UNKNOWN, para
 // métrica sem provedor aparecer declarada em vez de sumir.
+//
+// Não confundir com `core::telemetria`: aquele é o COLETOR (contadores PDH, `Amostra` com `Option<f64>`); este é o
+// CONTRATO que a tela recebe (`Telemetry`/`Metric` com origem e qualidade, tipado em `ui/src/lib/tipos.ts`). Juntar
+// os dois mudaria o JSON do painel; por isso ficam separados (conferido em 05/11/2026).
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

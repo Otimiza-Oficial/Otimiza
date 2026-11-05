@@ -10,6 +10,9 @@
 // do cliente; apagar jogaria dado fora sem desfazer nada no Windows.
 //
 // Nunca diz "nada a fazer" sobre o que não conseguiu ler: histórico ou backup ilegível é falha, com o motivo.
+//
+// Não confundir com `restore.rs`, que lista e cria pontos de restauração do Windows; este não cria nem usa ponto
+// de restauração.
 
 use serde::Serialize;
 

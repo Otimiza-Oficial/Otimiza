@@ -2,6 +2,9 @@
 // reinício e COMO SE DESFAZ (a auditoria da 2.9 achou ajustes sem efeito espalhados que ninguém via juntos). Não
 // executa nada. `todo_modulo_que_escreve_esta_no_registro` reprova o build quando um módulo novo escreve sem
 // registro.
+//
+// Não confundir com `registry.rs`, que é o acesso ao registro do Windows (ler e escrever valores). O nome deste
+// ("registro" no sentido de inventário) é o que a trava e a revisão citam; por isso não foi renomeado.
 
 use serde::Serialize;
 

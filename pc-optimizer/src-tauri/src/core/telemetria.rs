@@ -3,6 +3,9 @@
 // efetivo derivado, GPU somada por motor como no Gerenciador de Tarefas, VRAM, RAM, commit, paginação e disco.
 // Temperatura e potência do processador exigem driver de kernel, que o Otimiza não instala: ficam UNKNOWN,
 // nunca zero.
+//
+// Não confundir com `modules::telemetry`, que é o contrato que a tela recebe (cada número com origem e qualidade):
+// este módulo só COLETA; a `Amostra` vira `Metric` no monitor.
 
 use serde::{Deserialize, Serialize};
 

@@ -2,6 +2,9 @@
 // roda a 300 e a rua a 90: comparar os dois fabrica ganho). Recusa: perfil de carga diferente, máquina diferente
 // (placa, driver, Windows, plano) e métrica sem valor dos dois lados. Não decide se a mudança foi boa: entrega a
 // diferença com a ressalva de cada métrica.
+//
+// Não confundir com `benchmark.rs`, que roda uma carga sintética própria; aqui não se roda carga nenhuma, só se
+// guarda e compara o que o painel já mediu.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
