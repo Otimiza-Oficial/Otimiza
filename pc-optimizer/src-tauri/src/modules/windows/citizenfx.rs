@@ -16,7 +16,7 @@ pub struct PoolAjustado {
 }
 
 /// `tag = "status"` para a tela decidir por campo, nunca pela prosa; a guarda
-/// `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands.rs`) cobra isso.
+/// `a_tela_nao_decide_cor_comparando_texto_do_backend` (`commands/mod.rs`) cobra isso.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "status")]
 pub enum PoolSizesIncrease {
