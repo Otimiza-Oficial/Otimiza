@@ -1,6 +1,7 @@
 // A plataforma da 3.3: o que deixa de ser "do FiveM" e passa a valer para qualquer jogo. Orquestra os módulos que já
 // existem (`modules::*`), sem mover a lógica deles: cada peça aqui é a fronteira que a tela nova consome.
 
+pub mod banda;
 pub mod bandeja;
 pub mod base_do_jogo;
 pub mod capas;

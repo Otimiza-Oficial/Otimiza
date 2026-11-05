@@ -659,6 +659,10 @@ pub fn run() {
                 }
             });
 
+            // Banda de fundo: o vigia dela devolve o que ficou e acompanha o jogo (thread própria, dorme 4 s por volta).
+            #[cfg(target_os = "windows")]
+            std::thread::spawn(crate::plataforma::banda::vigiar);
+
             // Energia de jogo: devolve o que ficou de uma sessão que caiu e depois acompanha o jogo abrir e fechar. Duas
             // olhadas sem jogo antes de devolver: a troca de processo da tela de carregamento não derruba o ajuste.
             #[cfg(target_os = "windows")]

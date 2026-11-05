@@ -284,6 +284,17 @@ pub static FORA_DO_CATALOGO: &[Alteracao] = &[
         desfazer: "Não precisa: só acrescenta um ponto de volta.",
     },
     Alteracao {
+        id: "banda_de_fundo",
+        titulo: "Banda dos programas de fundo durante o jogo",
+        modulo: "banda",
+        o_que_muda: "Só ligado pela pessoa, como administrador, e só com o jogo aberto: OneDrive, Google Drive, Dropbox, torrents e lançadores (Epic, Battle.net, EA, Ubisoft) passam a ENVIAR no máximo 2 Mb/s (política QoS \"Otimiza-\" do Windows, que some ao reiniciar), e o Windows Update baixa em segundo plano a até 256 KB/s (política DOMaxBackgroundDownloadBandwidth). O download de outros programas não é limitado. Voz, transmissão, navegador, Steam, anticheat e o jogo não são tocados. Com VPN em túnel, as políticas de programa não são criadas (não pegariam nada).",
+        risco: Risco::Baixo,
+        escopo: Escopo::Windows,
+        precisa_reiniciar: false,
+        refaz_sozinho: false,
+        desfazer: "Volta sozinho quando o jogo fecha, ao desligar, no \"Restaurar meu PC\" e na abertura seguinte do Otimiza: remove só as políticas com o prefixo \"Otimiza-\" e devolve o limite do Update ao valor lido antes (apaga se não havia). Reiniciar o Windows também remove as políticas.",
+    },
+    Alteracao {
         id: "teste_da_travada",
         titulo: "Teste da causa da travada",
         modulo: "investigacao",
