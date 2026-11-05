@@ -387,6 +387,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "toca o Windows desta máquina"]
     fn le_os_programas_instalados_desta_maquina() {
         let programas = programas_instalados()
             .expect("os programas instalados desta máquina precisam ser legíveis");
@@ -400,6 +401,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "toca o Windows desta máquina"]
     fn analisa_conflitos_desta_maquina() {
         let r = analyze();
         println!("{:?} programas examinados", r.programs_scanned);
