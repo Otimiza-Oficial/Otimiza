@@ -41,7 +41,11 @@
   );
   const area = $derived(areas.find((a) => a.id === aberta) ?? areas[0]);
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
-  const memoriaPct = $derived(metricas && metricas.ram.total_gb > 0 ? metricas.ram.used_gb / metricas.ram.total_gb : null);
+  const memoriaPct = $derived.by(() => {
+    const total = metricas?.ram.total_gb ?? null;
+    const usada = metricas?.ram.used_gb ?? null;
+    return total != null && usada != null && total > 0 ? usada / total : null;
+  });
 
   function lerTema(): Tema {
     try {
@@ -71,8 +75,13 @@
     return v == null ? "—" : `${Math.round(v)}%`;
   }
 
-  function decimal(v: number) {
-    return v.toFixed(1).replace(".", ",");
+  /** `null` é "não medido": aparece como travessão, nunca como zero. */
+  function decimal(v: number | null) {
+    return v == null ? "—" : v.toFixed(1).replace(".", ",");
+  }
+
+  function inteiro(v: number | null) {
+    return v == null ? "—" : String(Math.round(v));
   }
 
   async function janela(acao: "minimizar" | "maximizar" | "fechar") {
@@ -250,10 +259,10 @@
       {#if ultimaPartida?.ultima}
         <p class="jogo-nome">{ultimaPartida.nome}</p>
         <div class="tres">
-          <div><span class="numero grande">{Math.round(ultimaPartida.ultima.fps_nativo)}</span><small>FPS</small></div>
-          <div><span class="numero grande">{Math.round(ultimaPartida.ultima.low_1pct)}</span><small>1% pior</small></div>
+          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.fps_nativo)}</span><small>FPS</small></div>
+          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.low_1pct)}</span><small>1% pior</small></div>
         </div>
-        {#if ultimaPartida.ganho_low.estado === "Medido"}
+        {#if ultimaPartida.ganho_low.estado === "Medido" && ultimaPartida.ganho_low.pct != null}
           <p class="ganho">
             {ultimaPartida.ganho_low.pct >= 0 ? "+" : ""}{decimal(ultimaPartida.ganho_low.pct)}% no 1% pior
             <span class="selo">Medido</span>

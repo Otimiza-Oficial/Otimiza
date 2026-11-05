@@ -13,6 +13,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 pub const SEM_PROVEDOR: &str = "sem provedor de medição nesta versão";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Quality {
     Measured,
@@ -22,6 +23,7 @@ pub enum Quality {
 
 /// Tipo, não texto: milissegundo comparado com segundo não dá erro, dá conclusão errada.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(rename_all = "snake_case")]
 pub enum Unit {
     Percent,
@@ -40,6 +42,7 @@ pub enum Unit {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Metric {
     /// `None` sempre que UNKNOWN: é o campo que impede o zero inventado.
     pub value: Option<f64>,
@@ -147,6 +150,7 @@ impl Metric {
 
 /// No contrato, e não recalculado pela tela, para painel e backend não discordarem.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Summary {
     pub measured: usize,
     pub estimated: usize,
@@ -155,6 +159,7 @@ pub struct Summary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Telemetry {
     pub schema_version: u32,
     pub collected_at: u64,

@@ -143,6 +143,14 @@ webview2-com = "0.38"
 #
 # Rodar com:  cargo run --example gerar_chave -- ...
 [dev-dependencies]
+# Tipos da interface nova (`ui/src/lib/tipos.ts`) gerados a partir dos comandos, pelo teste `contrato::tests`. Só em
+# teste: os tipos ganham `cfg_attr(test, derive(specta::Type))`, e o executável do cliente não carrega nada disto.
+# Versões fixas: são candidatas a lançamento, e o tauri-specta exige exatamente esta do specta.
+specta = { version = "=2.0.0-rc.26", features = ["derive"] }
+specta-typescript = "=0.0.13"
+tauri-specta = { version = "=2.0.0-rc.26", features = ["derive", "typescript"] }
+# O runtime de mentira do Tauri (`tauri::test::MockRuntime`), para o teste do contrato não abrir janela nenhuma.
+tauri = { version = "2", features = ["tray-icon", "test"] }
 # Só para sortear a chave privada, uma vez na vida. Fica em dev-dependencies
 # porque o produto não precisa de aleatoriedade — conferir assinatura é
 # determinístico.

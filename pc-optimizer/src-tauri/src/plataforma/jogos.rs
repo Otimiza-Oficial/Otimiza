@@ -11,6 +11,7 @@ use std::path::Path;
 use super::compat::Api;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum AntiCheatDoJogo {
     Nenhum,
     /// O da própria Cfx.re, no FiveM e no RedM.
@@ -43,6 +44,7 @@ impl AntiCheatDoJogo {
 /// Janela por cima do jogo (mira na tela, gerador do Otimiza). `Barrada` nunca abre; `Desaconselhada` abre só se a
 /// pessoa confirmar, com o motivo na tela.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Sobreposicao {
     Segura,
     Desaconselhada(&'static str),
@@ -50,6 +52,7 @@ pub enum Sobreposicao {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Fov {
     /// O jogo não deixa mudar, ou o servidor manda.
     NaoTem,
@@ -60,6 +63,7 @@ pub enum Fov {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PerfilDoJogo {
     pub id: &'static str,
     pub nome: &'static str,

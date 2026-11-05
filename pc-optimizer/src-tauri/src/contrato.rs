@@ -1,0 +1,75 @@
+// O contrato entre o Rust e a interface nova: os tipos de `ui/src/lib/tipos.ts` saem daqui, gerados pelo tauri-specta.
+// Um comando renomeado ou um campo trocado no Rust quebra este teste, e não a tela do cliente. Só existe em teste: o
+// executável continua registrando os comandos pelo `generate_handler!` de `lib.rs`, sem specta nenhum.
+//
+// Cada comando que a interface nova passa a usar entra na lista abaixo (e ganha `#[cfg_attr(test, specta::specta)]`),
+// e os tipos que ele devolve ganham `#[cfg_attr(test, derive(specta::Type))]`. Depois:
+//
+//     OTIMIZA_GERAR_TIPOS=1 cargo test --lib contrato
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use specta_typescript::Typescript;
+    use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
+
+    const DESTINO: &str = "../ui/src/lib/tipos.ts";
+
+    const CABECALHO: &str = "// Gerado por `src-tauri/src/contrato.rs`. Não edite: rode `OTIMIZA_GERAR_TIPOS=1 cargo test --lib contrato`.";
+
+    /// `MockRuntime`, e não `tauri::Wry`: com o runtime de verdade o binário de teste puxa o código da janela, que
+    /// exige o manifesto do comctl32 6 e não abre no Windows (`STATUS_ENTRYPOINT_NOT_FOUND`). O tipo gerado é o mesmo.
+    fn construtor() -> Builder<tauri::test::MockRuntime> {
+        Builder::<tauri::test::MockRuntime>::new()
+            .commands(collect_commands![
+                crate::commands::versao_do_app,
+                crate::commands::hardware_ultimo,
+                crate::commands::hardware_perfil,
+                crate::commands::jogo_aberto,
+                crate::commands::biblioteca_de_jogos,
+                crate::commands::jogos_instalados,
+                crate::commands::capa_do_jogo,
+                crate::commands::start_monitoring,
+                crate::commands::get_performance_metrics,
+            ])
+            // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
+            .error_handling(ErrorHandlingMode::Throw)
+            // Os `u64` que cruzam a ponte são carimbos de tempo e contagens: cabem com folga num `number`.
+            .dangerously_cast_bigints_to_number()
+    }
+
+    fn gerar(caminho: &Path) {
+        construtor()
+            .export(Typescript::default().header(CABECALHO), caminho)
+            .expect("o tauri-specta não conseguiu exportar os tipos");
+    }
+
+    /// Normaliza o fim de linha: o Git do Windows pode trocar LF por CRLF no arquivo guardado.
+    fn ler(caminho: &Path) -> String {
+        std::fs::read_to_string(caminho)
+            .unwrap_or_default()
+            .replace("\r\n", "\n")
+    }
+
+    #[test]
+    fn os_tipos_da_interface_nova_estao_em_dia() {
+        let destino = Path::new(DESTINO);
+
+        if std::env::var_os("OTIMIZA_GERAR_TIPOS").is_some() {
+            gerar(destino);
+            return;
+        }
+
+        let novo = std::env::temp_dir().join(format!("otimiza-tipos-{}.ts", std::process::id()));
+        gerar(&novo);
+        let gerado = ler(&novo);
+        let _ = std::fs::remove_file(&novo);
+
+        assert!(
+            gerado == ler(destino),
+            "ui/src/lib/tipos.ts está desatualizado em relação aos comandos do Rust. Rode \
+             `OTIMIZA_GERAR_TIPOS=1 cargo test --lib contrato` e confira o que mudou na interface."
+        );
+    }
+}

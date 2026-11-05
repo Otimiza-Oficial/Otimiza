@@ -12,6 +12,7 @@ use sysinfo::{Disks, Networks, System};
 use super::telemetry::{id_do_nucleo, Metric, Telemetry, Unit};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct CPUMetrics {
     pub overall: Option<f32>,
     pub per_core: Vec<f32>,
@@ -22,6 +23,7 @@ pub struct CPUMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RAMMetrics {
     pub total_gb: f64,
     pub used_gb: f64,
@@ -31,6 +33,7 @@ pub struct RAMMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct GPUMetrics {
     pub utilization: f32,
     pub memory_used_gb: f64,
@@ -41,6 +44,7 @@ pub struct GPUMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct DiskMetrics {
     /// `None` na primeira leitura e quando os contadores não separam disco parado de leitura que falhou.
     pub read_speed_mbps: Option<f64>,
@@ -49,6 +53,7 @@ pub struct DiskMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NetworkMetrics {
     pub download_speed_mbps: Option<f64>,
     pub upload_speed_mbps: Option<f64>,
@@ -57,6 +62,7 @@ pub struct NetworkMetrics {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct PerformanceMetrics {
     pub timestamp: u64,
     pub cpu: CPUMetrics,

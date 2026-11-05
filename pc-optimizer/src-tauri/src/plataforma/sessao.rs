@@ -9,6 +9,7 @@ use super::jogos::{self, PerfilDoJogo, Sobreposicao};
 use super::RecursoAvaliado;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct JogoAberto {
     pub pid: u32,
     pub executavel: String,

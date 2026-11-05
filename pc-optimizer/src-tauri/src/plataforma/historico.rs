@@ -10,6 +10,7 @@ use crate::modules::medicoes::MedicaoAutomatica;
 use crate::modules::repeticoes::{self, Diferenca};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Partida {
     pub quando: u64,
     pub fps_nativo: f64,
@@ -20,6 +21,7 @@ pub struct Partida {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado")]
 pub enum Ganho {
     /// Diferença real: os intervalos de antes e depois não se encostam.
@@ -36,6 +38,7 @@ pub enum Ganho {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResumoDoJogo {
     pub id: String,
     pub nome: String,

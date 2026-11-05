@@ -93,6 +93,7 @@ pub fn get_platform_info() -> Result<PlatformInfoResponse, String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn get_performance_metrics(
     state: State<'_, AppState>,
 ) -> Result<PerformanceMetrics, String> {
@@ -627,6 +628,7 @@ pub fn descartar_pendencia() -> Result<(), String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn start_monitoring(state: State<'_, AppState>) -> Result<String, String> {
     let mut monitor = state.monitor.lock().await;
     monitor.start_monitoring();
@@ -2592,6 +2594,7 @@ pub async fn feedback_verificar() -> Result<crate::plataforma::feedback::Estado,
 
 /// O retrato do PC. `atualizar` relê tudo (PowerShell e WMI); sem ele vale o cache de 10 minutos. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn hardware_perfil(
     atualizar: bool,
 ) -> Result<crate::plataforma::hardware::PerfilDeHardware, String> {
@@ -2604,6 +2607,7 @@ pub fn hardware_perfil(
 
 /// O último retrato gravado, para a abertura mostrar algo antes da leitura terminar. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn hardware_ultimo() -> Result<Option<crate::plataforma::hardware::PerfilDeHardware>, String> {
     Ok(crate::plataforma::hardware::ultimo_conhecido())
 }
@@ -2632,6 +2636,7 @@ pub fn compatibilidade() -> Result<crate::plataforma::Compatibilidade, String> {
 
 /// O jogo aberto agora, se houver (o evento `jogo:sessao` avisa quando muda). `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn jogo_aberto() -> Result<Option<crate::plataforma::sessao::JogoAberto>, String> {
     Ok(crate::plataforma::sessao::atual())
 }
@@ -2644,12 +2649,14 @@ pub fn catalogo_de_jogos() -> Result<Vec<crate::plataforma::jogos::PerfilDoJogo>
 
 /// Os jogos instalados neste PC (Steam, Epic e instaladores de jogo), para a prateleira da aba Jogos. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn jogos_instalados() -> Vec<crate::modules::windows::jogos::JogoDaLoja> {
     crate::modules::windows::jogos::para_a_tela(&crate::modules::windows::jogos::varrer())
 }
 
 /// A biblioteca: cada jogo já medido, com a última partida e o ganho medido. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn biblioteca_de_jogos() -> Result<Vec<crate::plataforma::historico::ResumoDoJogo>, String> {
     crate::plataforma::historico::biblioteca()
 }
@@ -2693,6 +2700,7 @@ pub fn lab_zerar() -> Result<(), String> {
 
 /// A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn capa_do_jogo(appid: u32) -> Result<Option<String>, String> {
     Ok(crate::plataforma::capas::capa(appid))
 }
@@ -4943,6 +4951,7 @@ pub async fn versao_mais_nova() -> AvisoDeVersao {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct VersaoDoApp {
     /// Semver do executável: é o que o atualizador e o instalador comparam.
     pub interna: String,
@@ -4952,6 +4961,7 @@ pub struct VersaoDoApp {
 
 /// `LIVRES`: só lê a versão compilada no executável.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn versao_do_app() -> VersaoDoApp {
     VersaoDoApp {
         interna: env!("CARGO_PKG_VERSION").to_string(),

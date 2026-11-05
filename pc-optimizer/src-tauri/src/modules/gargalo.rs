@@ -35,6 +35,7 @@ pub const PERDA_QUE_ATRAPALHA: f64 = 2.0;
 pub const IDADE_DE_CAUSA_MS: u64 = 5_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Classe {
     CpuTodosNucleos,
     CpuUmNucleo,
@@ -63,12 +64,14 @@ impl Classe {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Forca {
     Causa,
     Hipotese,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Achado {
     pub classe: Classe,
     pub forca: Forca,
@@ -77,12 +80,14 @@ pub struct Achado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct NaoVerificado {
     pub classe: String,
     pub falta: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Conclusao {
     SemEvidencia,
     SemCarga,
@@ -91,6 +96,7 @@ pub enum Conclusao {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Diagnostico {
     pub conclusao: Conclusao,
     pub achados: Vec<Achado>,

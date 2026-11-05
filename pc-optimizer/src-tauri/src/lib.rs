@@ -1,6 +1,7 @@
 mod ci_coverage;
 
 mod commands;
+mod contrato;
 mod core;
 mod modules;
 mod plataforma;

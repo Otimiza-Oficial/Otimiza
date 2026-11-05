@@ -9,6 +9,7 @@ use super::telemetry::{Quality, Telemetry};
 
 /// Cinco porque é a divisão que o medível permite: o quadro que o Windows anuncia já passou por jogo e placa.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Etapa {
     Entrada,
     JogoEPlaca,
@@ -18,6 +19,7 @@ pub enum Etapa {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Parcela {
     pub etapa: Etapa,
     /// Ausente quando não foi medida. NUNCA zero.
@@ -27,6 +29,7 @@ pub struct Parcela {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Orcamento {
     pub parcelas: Vec<Parcela>,
     /// LIMITE INFERIOR: a latência real é isto mais as etapas não medidas.

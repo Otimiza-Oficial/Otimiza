@@ -31,6 +31,7 @@ pub mod turbo;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RecursoAvaliado {
     pub recurso: compat::Recurso,
     pub nome: &'static str,

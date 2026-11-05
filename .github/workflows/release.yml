@@ -161,6 +161,11 @@ jobs:
         working-directory: pc-optimizer
         run: npx tsc --noEmit
 
+      # A interface nova (`ui/`) confere contra `ui/src/lib/tipos.ts`, gerado do Rust: campo trocado no Rust quebra aqui.
+      - name: Conferir tipos da interface nova
+        working-directory: pc-optimizer
+        run: npx svelte-check --workspace ui --tsconfig ./tsconfig.json --fail-on-warnings
+
       # Os testes rodam antes de empacotar: versão que não passa não vira
       # instalador. E rodam SEPARADOS POR ÁREA de propósito — o log detalhado só
       # é acessível com autenticação, então a divisão em passos faz o próprio
@@ -175,7 +180,7 @@ jobs:
 
       - name: Testes — licença e comandos
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- commands:: modules::licenca:: modules::maquina:: plataforma::"
+        run: "cargo test --lib -- commands:: contrato:: modules::licenca:: modules::maquina:: plataforma::"
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri

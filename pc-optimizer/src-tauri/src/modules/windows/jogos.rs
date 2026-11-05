@@ -307,6 +307,7 @@ fn ler_windows(_biblioteca: &mut Biblioteca) {}
 
 /// O que a aba Jogos mostra de cada jogo instalado. Sem caminho de disco: a tela não precisa dele.
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct JogoDaLoja {
     pub nome: String,
     pub loja: &'static str,

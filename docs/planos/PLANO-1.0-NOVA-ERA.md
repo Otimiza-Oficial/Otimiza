@@ -663,7 +663,9 @@ Cada onda termina com algo **funcionando e medido** no canal beta.
 | Versão 4.0.0 nos quatro arquivos; `atualizacao::de_exibicao` e `versao_de_exibicao` ("1.0"); comando `versao_do_app`; aviso de atualização escreve a versão exibida | feito, testes passando (`a_nova_geracao_aparece_como_1_0_e_o_passado_fica_igual`, `a_nova_geracao_e_atualizacao_para_quem_esta_na_3`) |
 | `DisplayVersion` do instalador | **não mexer** (o instalador do Tauri compara com ele; ver capítulo 0) |
 | Casca da UI nova em `pc-optimizer/ui/` (Svelte 5): céu-diagnóstico, mascote em vetor, barra de menu com controles da janela, trilho de jogos, widgets, dock, temas, congelamento com jogo aberto | feito, `npm run nova:build` sem erro; visto no navegador com dados de demonstração. **Não aberto ainda dentro do Tauri** (`npm run nova`) |
-| tauri-specta, dividir `commands.rs`, juntar duplicatas, checagem das APIs, certificado | a fazer |
+| Contrato tipado (tauri-specta): `src-tauri/src/contrato.rs` gera `ui/src/lib/tipos.ts` dos 9 comandos da casca; teste falha se o arquivo ficar velho; a esteira roda o teste e o `svelte-check`. Specta só em `dev-dependencies` (o executável não muda) | feito. Já pegou 13 lugares em que a interface tratava como sempre presente um número que o Rust pode mandar `null` (`f64` NaN/infinito), e uma família de placa inventada na demonstração |
+| Manifesto do comctl32 6 pelo linker em todos os alvos (`windows/app.manifest`, mesmo conteúdo do tauri-build): sem ele, teste que toca no Tauri não abre no Windows | feito; conferido que o executável leva o manifesto uma vez |
+| Dividir `commands.rs`, juntar duplicatas, checagem das APIs, certificado | a fazer |
 
 ### Onda 1 — Marca e casca
 - Mascote em Rive com todos os estados, 10 objetos 3D, céus, ícones, bandeja, instalador.

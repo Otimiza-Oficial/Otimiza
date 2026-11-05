@@ -41,8 +41,10 @@ export function avisos(hw: Hardware | null, m: MetricasAoVivo | null, jogoAberto
     }
   }
 
-  if (!jogoAberto && m && m.ram.total_gb > 0 && m.ram.used_gb / m.ram.total_gb >= MEMORIA_CHEIA) {
-    const livre = Math.max(0, m.ram.total_gb - m.ram.used_gb);
+  const total = m?.ram.total_gb ?? null;
+  const usada = m?.ram.used_gb ?? null;
+  if (!jogoAberto && total != null && usada != null && total > 0 && usada / total >= MEMORIA_CHEIA) {
+    const livre = Math.max(0, total - usada);
     lista.push({
       id: "memoria",
       titulo: `Só ${livre.toFixed(1).replace(".", ",")} GB de memória livre`,

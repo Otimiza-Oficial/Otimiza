@@ -11,6 +11,13 @@ A interface nova, em Svelte 5, convivendo com a atual (`../index.html` + `../src
 
 O instalador continua saindo com a interface atual: `npm run tauri build` não olha esta pasta.
 
+## Comando novo na interface
+
+1. No Rust, o comando ganha `#[cfg_attr(test, specta::specta)]` e entra na lista de `src-tauri/src/contrato.rs`.
+2. Os tipos que ele devolve ganham `#[cfg_attr(test, derive(specta::Type))]` (o compilador aponta cada um).
+3. Em `src-tauri/`: `OTIMIZA_GERAR_TIPOS=1 cargo test --lib contrato` regrava `src/lib/tipos.ts`.
+4. A interface chama pelo `commands` de `tipos.ts`, através de `lib/ponte.ts`. Nunca `invoke("nome")` solto.
+
 ## Regras
 
 - **Com jogo aberto a interface para:** a classe `jogo-aberto` no `<html>` desliga animação e desfoque, e o laço de

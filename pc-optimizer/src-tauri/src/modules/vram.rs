@@ -22,6 +22,7 @@ pub const AMOSTRAS_PARA_PISO: usize = 5;
 pub const SEM_DEDICADA_ATE_GB: f64 = 0.5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Estado {
     NaoAvaliado,
     PlacaIntegrada,
@@ -34,6 +35,7 @@ pub enum Estado {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Conselho {
     /// O que derramou acima do piso é exatamente o que não coube.
     pub liberar_gb: f64,
@@ -41,6 +43,7 @@ pub struct Conselho {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Analise {
     pub estado: Estado,
     pub dedicada_pct: Option<f64>,
