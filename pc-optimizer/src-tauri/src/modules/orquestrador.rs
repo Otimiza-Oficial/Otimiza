@@ -19,7 +19,7 @@ pub enum Perfil {
 
 impl Perfil {
     /// O plano devolve o nome que o comando de aplicar espera, sem tradução na tela; o teste
-    /// `o_plano_fala_a_lingua_de_quem_aplica` (`commands.rs`) confere os três.
+    /// `o_plano_fala_a_lingua_de_quem_aplica` (`commands/mod.rs`) confere os três.
     pub fn nome(self) -> &'static str {
         match self {
             Perfil::SemTeto => "sem_teto",
