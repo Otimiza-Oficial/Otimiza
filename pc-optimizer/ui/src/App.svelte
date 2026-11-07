@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Ceu from "./componentes/Ceu.svelte";
   import Historico from "./componentes/Historico.svelte";
+  import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import Mascote from "./componentes/Mascote.svelte";
   import { areas, type IdDaArea } from "./lib/areas";
@@ -220,6 +221,8 @@
         </header>
         {#if aberta === "historico"}
           <Historico />
+        {:else if aberta === "rede"}
+          <Rede />
         {:else if aberta === "tela"}
           <Tela />
         {:else}

@@ -8,13 +8,16 @@
 import {
   commands,
   type DiagnosticoDaTela_Serialize,
+  type DiagnosticoDoWifi_Serialize,
   type FimDaTroca,
   type HistoricoNaTela_Serialize,
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
+  type Painel_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
   type ResumoDoJogo_Serialize,
+  type Rota_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
 } from "./tipos";
@@ -29,6 +32,11 @@ export type Desfeito = OptimizationOutcome_Serialize;
 export type RelatorioDeDesfazer = Relatorio_Serialize;
 export type { FimDaTroca, TrocaAplicada } from "./tipos";
 export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize;
+export type { TrechoDaRota } from "./tipos";
+export type Rota = Rota_Serialize;
+export type SaltoDaRota = Rota["saltos"][number];
+export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
+export type PainelDaVarredura = Painel_Serialize;
 
 /** Só o que a casca usa do jogo aberto. */
 export interface JogoAberto {
@@ -180,6 +188,75 @@ function telasDemo(): DiagnosticoDaTela[] {
   ];
 }
 
+/** Rota de demonstração com a variação começando na operadora: o caso que a área Rede existe para apontar. */
+function rotaDemo(destino: string): Rota {
+  const salto = (
+    numero: number,
+    endereco: string | null,
+    mediana: number | null,
+    trecho: SaltoDaRota["trecho"],
+    operadora: string | null,
+    jitter: number | null
+  ): SaltoDaRota => ({
+    numero,
+    endereco,
+    enviados: 10,
+    respondidos: endereco ? 10 : 0,
+    perda_pct: endereco ? 0 : 100,
+    melhor_ms: mediana != null ? mediana - 1 : null,
+    mediana_ms: mediana,
+    pior_ms: mediana != null ? mediana + (jitter ?? 0) * 3 : null,
+    jitter_ms: jitter,
+    trecho,
+    asn: operadora ? 28573 : null,
+    operadora,
+  });
+  return {
+    destino,
+    chegou: true,
+    saltos: [
+      salto(1, "192.168.0.1", 2, "casa", null, 0.4),
+      salto(2, "100.64.0.1", 9, "operadora", "Claro", 1.1),
+      salto(3, null, null, "sem_resposta", null, null),
+      salto(4, "187.16.0.9", 14, "operadora", "Claro", 21.5),
+      salto(5, "172.70.0.1", 18, "caminho", "Cloudflare", 22.8),
+      salto(6, destino, 19, "servidor", "Cloudflare", 23.1),
+    ],
+    veredito: { tipo: "problema", problema: "variacao", trecho: "operadora", salto: 4, tamanho: 23.1, operadora: "Claro" },
+    frase: "A variação começa na operadora (Claro), no salto 4, e vai até o servidor: 23 ms de jitter. Não é a sua casa.",
+    observacao: "Salto 3 não responde ping: é o roteador poupando resposta, não perda.",
+    atribuicao: "IP address data is powered by IPinfo",
+  };
+}
+
+const wifiDemo: DiagnosticoDoWifi = {
+  ligacao: {
+    tipo: "wi_fi",
+    placa: "Intel Wi-Fi 6 AX201",
+    leitura: {
+      estado: "lida",
+      conexao: {
+        ssid: "Casa",
+        banda: "2,4 GHz",
+        canal: 6,
+        rssi_dbm: -67,
+        sinal: "Bom",
+        qualidade: 66,
+        padrao: "Wi-Fi 4 (802.11n)",
+        recepcao_mbps: 72,
+        envio_mbps: 72,
+      },
+      vizinhanca: { mesmo_canal: 4, sobrepostas: 3, total_ouvidas: 14 },
+    },
+  },
+  achados: [
+    { gravidade: "Atencao", frase: "Conectado em 2,4 GHz com 7 redes disputando o canal. Se o roteador tiver 5 GHz, use." },
+    { gravidade: "Info", frase: "Para jogar, o cabo ainda é o que menos varia." },
+  ],
+};
+
+let varreduraDemo: PainelDaVarredura = { ligado: false, agindo_em: null, observacao: null };
+
 let demoTick = 0;
 
 export const ponte = {
@@ -240,6 +317,24 @@ export const ponte = {
     if (noTauri) return commands.telaVoltarTroca(token);
     telaDemoHz = 60;
     return { estado: "Voltou", hz: 60 };
+  },
+  /** A rota leva uns 10 s no Rust; a demonstração espera um pouco para a tela de espera aparecer. */
+  rota: async (destino: string): Promise<Rota> => {
+    if (noTauri) return commands.redeRota(destino);
+    await new Promise((r) => setTimeout(r, 1200));
+    return rotaDemo(destino);
+  },
+  rotaDoJogo: (): Promise<Rota> =>
+    noTauri
+      ? commands.redeRotaDoJogo()
+      : Promise.reject("Não descobri o servidor do jogo: abra o jogo e entre numa partida antes de medir a rota."),
+  wifi: (): Promise<DiagnosticoDoWifi> => (noTauri ? commands.redeWifi() : Promise.resolve(structuredClone(wifiDemo))),
+  varredura: (): Promise<PainelDaVarredura> =>
+    noTauri ? commands.redeVarreduraWifi() : Promise.resolve({ ...varreduraDemo }),
+  definirVarredura: async (ligado: boolean): Promise<PainelDaVarredura> => {
+    if (noTauri) return ligado ? commands.redeVarreduraWifiLigar() : commands.redeVarreduraWifiDesligar();
+    varreduraDemo = { ...varreduraDemo, ligado };
+    return { ...varreduraDemo };
   },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
