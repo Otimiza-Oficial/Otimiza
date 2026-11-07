@@ -184,7 +184,7 @@ jobs:
 
       - name: Testes — medição
         working-directory: pc-optimizer/src-tauri
-        run: "cargo test --lib -- modules::benchmark:: modules::jitter::"
+        run: "cargo test --lib -- modules::benchmark:: modules::jitter:: modules::windows::dpc::"
 
       - name: Testes — catálogo e serviços
         working-directory: pc-optimizer/src-tauri

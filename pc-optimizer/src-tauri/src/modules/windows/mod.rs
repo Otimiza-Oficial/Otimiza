@@ -29,6 +29,7 @@ pub mod devices;
 pub mod discodojogo;
 pub mod diskspace;
 pub mod display;
+pub mod dpc;
 pub mod essenciais;
 pub mod eventoshw;
 pub mod exhaustion;
