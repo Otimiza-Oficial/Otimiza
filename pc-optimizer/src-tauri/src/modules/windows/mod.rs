@@ -2869,6 +2869,11 @@ fn revert_changes(changes: &[ChangeRecord]) -> Result<(), Vec<String>> {
                 previous_hz,
             } => display::aplicar_hz(device, *previous_hz).map(|_| ()),
 
+            ChangeRecord::ModoDeTela {
+                dispositivo,
+                anterior,
+            } => crate::plataforma::hz::restaurar_modo(dispositivo, anterior),
+
             ChangeRecord::BootLimits { removed } => {
                 let mut failures = Vec::new();
 

@@ -16,6 +16,10 @@ pub mod fov_fivem;
 pub mod fundos;
 pub mod hardware;
 pub mod historico;
+// Sem os comandos `tela_*` ainda (moram em `commands/`, outra frente): até lá só o desfazer do histórico chama o
+// módulo. Tirar o `allow` quando os comandos entrarem.
+#[allow(dead_code)]
+pub mod hz;
 pub mod jogo_liso;
 pub mod jogos;
 pub mod lab;

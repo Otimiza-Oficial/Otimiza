@@ -140,6 +140,12 @@ pub enum ChangeRecord {
         recurso: String,
         placas: Vec<String>,
     },
+    /// O modo de vídeo INTEIRO lido antes da troca de taxa (`plataforma::hz`): o desfazer devolve resolução, cor,
+    /// taxa, orientação e posição como estavam, não "a taxa de antes na resolução de agora" (`RefreshRate`).
+    ModoDeTela {
+        dispositivo: String,
+        anterior: crate::plataforma::hz::ModoDeVideo,
+    },
 }
 
 impl ChangeRecord {
@@ -276,6 +282,16 @@ impl ChangeRecord {
             }
             ChangeRecord::RedeAdaptador { recurso, placas } => {
                 format!("rede · {} desligado em {}", recurso, placas.join(", "))
+            }
+            ChangeRecord::ModoDeTela {
+                dispositivo,
+                anterior,
+            } => {
+                let curto = dispositivo.rsplit('\\').next().unwrap_or(dispositivo);
+                format!(
+                    "monitor · {} (antes: {}x{} a {} Hz)",
+                    curto, anterior.largura, anterior.altura, anterior.hz
+                )
             }
             ChangeRecord::LimiteNvidia {
                 executavel,
