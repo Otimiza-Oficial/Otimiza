@@ -7,16 +7,23 @@
 
 import {
   commands,
+  type HistoricoNaTela_Serialize,
   type JogoDaLoja_Serialize,
+  type OptimizationOutcome_Serialize,
   type PerfilDeHardware_Serialize,
+  type Relatorio_Serialize,
   type ResumoDoJogo_Serialize,
   type VersaoDoApp,
 } from "./tipos";
 
-export type { Ganho, Tela, VersaoDoApp } from "./tipos";
+export type { Ganho, Parte, Tela, VersaoDoApp } from "./tipos";
 export type Hardware = PerfilDeHardware_Serialize;
 export type ResumoDoJogo = ResumoDoJogo_Serialize;
 export type JogoDaLoja = JogoDaLoja_Serialize;
+export type Historico = HistoricoNaTela_Serialize;
+export type Mudanca = Historico["mudancas"][number];
+export type Desfeito = OptimizationOutcome_Serialize;
+export type RelatorioDeDesfazer = Relatorio_Serialize;
 
 /** Só o que a casca usa do jogo aberto. */
 export interface JogoAberto {
@@ -81,6 +88,68 @@ const demo: {
   ],
 };
 
+/** No navegador o desfazer só tira da lista de demonstração: nada no PC de quem olha é tocado. */
+const historicoDemo: Historico = {
+  leitura: { estado: "Ok" },
+  mudancas: [
+    {
+      id: "plano_otimiza",
+      nome: "Plano de energia OTIMIZA",
+      quando: Date.now() / 1000 - 600,
+      o_que_mudou: ["energia · plano ativo (antes: Equilibrado)"],
+      precisa_de_admin: null,
+      precisa_reiniciar: null,
+      desfazivel: true,
+    },
+    {
+      id: "game_dvr",
+      nome: "Desligar a gravação em segundo plano do Xbox",
+      quando: Date.now() / 1000 - 86400 - 3000,
+      o_que_mudou: [
+        "registro · HKCU\\System\\GameConfigStore\\GameDVR_Enabled (antes: 1)",
+        "registro · HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR\\AppCaptureEnabled (antes: 1)",
+      ],
+      precisa_de_admin: false,
+      precisa_reiniciar: false,
+      desfazivel: true,
+    },
+    {
+      id: "hags",
+      nome: "Agendamento de GPU acelerado por hardware",
+      quando: Date.now() / 1000 - 3 * 86400,
+      o_que_mudou: ["registro · HKLM\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers\\HwSchMode (antes: 1)"],
+      precisa_de_admin: true,
+      precisa_reiniciar: true,
+      desfazivel: true,
+    },
+    {
+      id: "limpar_temporarios",
+      nome: "Limpar arquivos temporários",
+      quando: Date.now() / 1000 - 5 * 86400,
+      o_que_mudou: ["arquivos · 1,2 GB apagados de %TEMP%"],
+      precisa_de_admin: false,
+      precisa_reiniciar: false,
+      desfazivel: false,
+    },
+  ],
+};
+
+function desfeitoDemo(m: Mudanca): Desfeito {
+  return {
+    id: m.id,
+    name: m.nome,
+    success: true,
+    applied: false,
+    message: "Desfeito (demonstração: nada neste PC foi tocado).",
+    requires_restart: m.precisa_reiniciar === true,
+    requires_logoff: false,
+    duration_ms: 0,
+    changes_count: m.o_que_mudou.length,
+    changes: m.o_que_mudou,
+    actions: [],
+  };
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -98,6 +167,34 @@ export const ponte = {
   iniciarMonitor: async () => {
     if (noTauri) await commands.startMonitoring();
   },
+  historico: (): Promise<Historico> =>
+    noTauri ? commands.historicoDeMudancas() : Promise.resolve(structuredClone(historicoDemo)),
+  desfazer: async (id: string): Promise<Desfeito> => {
+    if (noTauri) return commands.revertOptimization(id);
+    const i = historicoDemo.mudancas.findIndex((m) => m.id === id);
+    if (i < 0) throw new Error("Essa mudança não está mais no histórico.");
+    const [m] = historicoDemo.mudancas.splice(i, 1);
+    return desfeitoDemo(m);
+  },
+  desfazerTudo: async (): Promise<RelatorioDeDesfazer> => {
+    if (noTauri) return commands.restaurarTudo();
+    const itens = historicoDemo.mudancas.filter((m) => m.desfazivel).map(desfeitoDemo);
+    historicoDemo.mudancas = historicoDemo.mudancas.filter((m) => !m.desfazivel);
+    return {
+      partes: [
+        {
+          parte: "Historico",
+          desfecho: itens.length ? { estado: "Voltou" } : { estado: "NadaAFazer" },
+          feito: itens.map((i) => i.name),
+        },
+      ],
+      itens,
+      tudo_voltou: true,
+    };
+  },
+  /** No navegador finge administrador para a demonstração mostrar todos os botões. */
+  administrador: () => (noTauri ? commands.isElevated() : Promise.resolve(true)),
+  abrirComoAdministrador: () => (noTauri ? commands.relaunchAsAdmin() : Promise.resolve("")),
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

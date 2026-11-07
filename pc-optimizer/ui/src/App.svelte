@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Ceu from "./componentes/Ceu.svelte";
+  import Historico from "./componentes/Historico.svelte";
   import Mascote from "./componentes/Mascote.svelte";
   import { areas, type IdDaArea } from "./lib/areas";
   import { avisos as lerAvisos, climaDe, fraseDoMascote, horaDe, type EstadoDoMascote, type Tema } from "./lib/clima";
@@ -216,12 +217,16 @@
           </div>
           <button class="voltar" onclick={() => (aberta = "inicio")}>Voltar ao início</button>
         </header>
-        <p class="chega">Esta área chega na Onda {area.onda} da Nova Geração. Vai ter:</p>
-        <ul>
-          {#each area.vai_ter as item (item)}
-            <li>{item}</li>
-          {/each}
-        </ul>
+        {#if aberta === "historico"}
+          <Historico />
+        {:else}
+          <p class="chega">Esta área chega na Onda {area.onda} da Nova Geração. Vai ter:</p>
+          <ul>
+            {#each area.vai_ter as item (item)}
+              <li>{item}</li>
+            {/each}
+          </ul>
+        {/if}
       </section>
     {/if}
   </main>

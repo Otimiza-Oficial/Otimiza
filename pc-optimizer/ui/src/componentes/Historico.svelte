@@ -1,0 +1,398 @@
+<script lang="ts">
+  // A área Histórico: tudo o que o Otimiza mudou neste PC, com o valor de antes como foi GRAVADO, e o desfazer um por
+  // um ou tudo de uma vez. Lista vazia com histórico ilegível não é "nada mudou": a leitura aparece antes da lista.
+  // Onde o Rust manda `null` (item fora do catálogo), a tela não afirma nem nega admin ou reinício.
+
+  import { onMount } from "svelte";
+  import { ponte, type Historico, type Mudanca, type Parte, type RelatorioDeDesfazer } from "../lib/ponte";
+
+  type Aviso = { tipo: "ok" | "erro" | "atencao"; texto: string };
+
+  const NOME_DA_PARTE: Record<Parte, string> = {
+    Automaticos: "modos automáticos",
+    MotorDeEnergia: "motor de energia",
+    NucleosPorJogo: "regras de núcleos por jogo",
+    Historico: "histórico de mudanças",
+    PlanoOtimiza: "plano de energia OTIMIZA",
+  };
+
+  let historico = $state<Historico | null>(null);
+  let erroDeLeitura = $state<string | null>(null);
+  let admin = $state<boolean | null>(null);
+  /** O id que está sendo desfeito agora, ou "tudo". Um de cada vez: o histórico é um arquivo só. */
+  let ocupado = $state<string | null>(null);
+  let confirmandoTudo = $state(false);
+  let aviso = $state<Aviso | null>(null);
+  let abertos = $state<Record<string, boolean>>({});
+
+  const mudancas = $derived(historico?.mudancas ?? []);
+  const desfaziveis = $derived(mudancas.filter((m) => m.desfazivel).length);
+  const algumPedeAdmin = $derived(mudancas.some((m) => m.desfazivel && m.precisa_de_admin === true));
+
+  async function carregar() {
+    try {
+      historico = await ponte.historico();
+      erroDeLeitura = null;
+    } catch (e) {
+      erroDeLeitura = String(e);
+    }
+  }
+
+  onMount(() => {
+    void carregar();
+    ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
+  });
+
+  function quando(segundos: number) {
+    const data = new Date(segundos * 1000);
+    const passou = (Date.now() - data.getTime()) / 1000;
+    const hora = data.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (passou < 60) return "agora há pouco";
+    if (passou < 3600) return `há ${Math.floor(passou / 60)} min`;
+    const hoje = new Date();
+    const ontem = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1);
+    if (data.toDateString() === hoje.toDateString()) return `hoje, ${hora}`;
+    if (data.toDateString() === ontem.toDateString()) return `ontem, ${hora}`;
+    return `${data.toLocaleDateString("pt-BR", { day: "numeric", month: "short" })}, ${hora}`;
+  }
+
+  /** Sem administrador, item que pede administrador não tem como voltar: o botão diz isso em vez de falhar. */
+  function bloqueado(m: Mudanca) {
+    return m.precisa_de_admin === true && admin === false;
+  }
+
+  async function desfazer(m: Mudanca) {
+    ocupado = m.id;
+    aviso = null;
+    try {
+      const r = await ponte.desfazer(m.id);
+      const reiniciar = r.success && (r.requires_restart || r.requires_logoff);
+      aviso = r.success
+        ? {
+            tipo: reiniciar ? "atencao" : "ok",
+            texto: `${m.nome}: voltou ao que era.${r.requires_restart ? " Reinicie o PC para valer." : r.requires_logoff ? " Saia e entre de novo no Windows para valer." : ""}`,
+          }
+        : { tipo: "erro", texto: `${m.nome}: ${r.message}` };
+    } catch (e) {
+      aviso = { tipo: "erro", texto: `${m.nome}: ${String(e)}` };
+    } finally {
+      ocupado = null;
+      await carregar();
+    }
+  }
+
+  function resumo(r: RelatorioDeDesfazer): Aviso {
+    const voltaram = r.partes.filter((p) => p.desfecho.estado === "Voltou");
+    const falhas = r.partes.flatMap((p) =>
+      p.desfecho.estado === "Falhou" ? [`${NOME_DA_PARTE[p.parte]}: ${p.desfecho.motivo}`] : []
+    );
+    const itensQueFalharam = r.itens.filter((i) => !i.success).map((i) => `${i.name}: ${i.message}`);
+    if (voltaram.length === 0 && falhas.length === 0 && itensQueFalharam.length === 0) {
+      return { tipo: "ok", texto: "Nada a desfazer: o Otimiza não tem nenhuma mudança ativa neste PC." };
+    }
+    if (r.tudo_voltou) {
+      const reiniciar = r.itens.some((i) => i.success && i.requires_restart);
+      return {
+        tipo: reiniciar ? "atencao" : "ok",
+        texto: `Tudo desfeito: ${voltaram.map((p) => NOME_DA_PARTE[p.parte]).join(", ")}.${reiniciar ? " Reinicie o PC para tudo valer." : ""}`,
+      };
+    }
+    return { tipo: "erro", texto: `Desfeito só em parte. ${[...falhas, ...itensQueFalharam].join(" · ")}` };
+  }
+
+  async function desfazerTudo() {
+    if (!confirmandoTudo) {
+      confirmandoTudo = true;
+      return;
+    }
+    confirmandoTudo = false;
+    ocupado = "tudo";
+    aviso = null;
+    try {
+      aviso = resumo(await ponte.desfazerTudo());
+    } catch (e) {
+      aviso = { tipo: "erro", texto: String(e) };
+    } finally {
+      ocupado = null;
+      await carregar();
+    }
+  }
+
+  async function abrirComoAdministrador() {
+    try {
+      const msg = await ponte.abrirComoAdministrador();
+      if (msg) aviso = { tipo: "atencao", texto: msg };
+    } catch (e) {
+      aviso = { tipo: "erro", texto: String(e) };
+    }
+  }
+</script>
+
+<div class="historico">
+  {#if historico?.leitura.estado === "Ilegivel"}
+    <div class="aviso" data-tipo="erro" role="alert">
+      <strong>Não consegui ler o histórico de mudanças.</strong>
+      <span>
+        A lista abaixo pode estar incompleta: o que o Otimiza mudou antes pode continuar no PC.
+        {historico.leitura.motivo}
+      </span>
+      {#if historico.leitura.guardado_em}
+        <span>O arquivo original foi guardado em <code>{historico.leitura.guardado_em}</code>.</span>
+      {/if}
+    </div>
+  {/if}
+
+  {#if erroDeLeitura}
+    <div class="aviso" data-tipo="erro" role="alert">
+      <strong>O histórico não respondeu.</strong>
+      <span>{erroDeLeitura}</span>
+      <button class="secundario" onclick={carregar}>Tentar de novo</button>
+    </div>
+  {/if}
+
+  {#if algumPedeAdmin && admin === false}
+    <div class="aviso" data-tipo="atencao">
+      <strong>Parte disto só volta com o Otimiza aberto como administrador.</strong>
+      <button class="secundario" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+    </div>
+  {/if}
+
+  {#if aviso}
+    <div class="aviso" data-tipo={aviso.tipo} role="status">
+      <span>{aviso.texto}</span>
+    </div>
+  {/if}
+
+  {#if historico === null && !erroDeLeitura}
+    <p class="vazio">Lendo o histórico…</p>
+  {:else if historico && mudancas.length === 0 && historico.leitura.estado === "Ok"}
+    <p class="vazio">O Otimiza não tem nenhuma mudança ativa neste PC.</p>
+  {:else if mudancas.length > 0}
+    <div class="topo">
+      <p>
+        {mudancas.length}
+        {mudancas.length === 1 ? "mudança ativa" : "mudanças ativas"}, da mais nova à mais antiga.
+      </p>
+      {#if desfaziveis > 0}
+        <button
+          class="tudo"
+          class:confirmando={confirmandoTudo}
+          disabled={ocupado !== null}
+          onclick={desfazerTudo}
+          onblur={() => (confirmandoTudo = false)}
+        >
+          {#if ocupado === "tudo"}
+            Desfazendo tudo…
+          {:else if confirmandoTudo}
+            Confirmar: desfazer tudo
+          {:else}
+            Desfazer tudo
+          {/if}
+        </button>
+      {/if}
+    </div>
+
+    <ol class="linha-do-tempo">
+      {#each mudancas as m (m.id)}
+        <li>
+          <div class="cabeca">
+            <div class="titulo">
+              <strong>{m.nome}</strong>
+              <span class="quando">{quando(m.quando)}</span>
+            </div>
+            {#if m.desfazivel}
+              <button
+                class="desfazer"
+                disabled={ocupado !== null || bloqueado(m)}
+                title={bloqueado(m) ? "Precisa do Otimiza aberto como administrador" : undefined}
+                onclick={() => desfazer(m)}
+              >
+                {ocupado === m.id ? "Desfazendo…" : "Desfazer"}
+              </button>
+            {:else}
+              <span class="sem-volta" title="Apagou arquivos de verdade: não há o que devolver">Não tem volta</span>
+            {/if}
+          </div>
+
+          {#if m.precisa_de_admin === true || m.precisa_reiniciar === true}
+            <div class="selos">
+              {#if m.precisa_de_admin === true}<span class="selo">Administrador</span>{/if}
+              {#if m.precisa_reiniciar === true}<span class="selo">Reiniciar para valer</span>{/if}
+            </div>
+          {/if}
+
+          {#if m.o_que_mudou.length > 0}
+            <button
+              class="detalhes"
+              aria-expanded={abertos[m.id] === true}
+              onclick={() => (abertos[m.id] = !abertos[m.id])}
+            >
+              {abertos[m.id] ? "Esconder" : "Ver"} o que mudou ({m.o_que_mudou.length})
+            </button>
+            {#if abertos[m.id]}
+              <ul class="valores">
+                {#each m.o_que_mudou as linha, i (i)}
+                  <li><code>{linha}</code></li>
+                {/each}
+              </ul>
+            {/if}
+          {/if}
+        </li>
+      {/each}
+    </ol>
+  {/if}
+</div>
+
+<style>
+  .historico {
+    display: grid;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .aviso {
+    display: grid;
+    gap: 4px;
+    justify-items: start;
+    padding: 12px 16px 12px 18px;
+    border-radius: 16px;
+    background: var(--vidro);
+    border-left: 4px solid var(--sucesso);
+    font-size: 14px;
+  }
+  .aviso[data-tipo="atencao"] {
+    border-left-color: var(--atencao);
+  }
+  .aviso[data-tipo="erro"] {
+    border-left-color: var(--perigo);
+  }
+  .aviso span {
+    color: var(--tinta-suave);
+  }
+  .aviso code {
+    font-size: 12px;
+    word-break: break-all;
+  }
+  .vazio {
+    margin: 8px 0 0;
+    color: var(--tinta-suave);
+  }
+  .topo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .topo p {
+    margin: 0;
+    flex: 1;
+    color: var(--tinta-suave);
+    font-size: 14px;
+  }
+  button {
+    font: inherit;
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+  .secundario,
+  .desfazer {
+    padding: 6px 14px;
+    border-radius: var(--raio-botao);
+    border: 1px solid var(--vidro-borda);
+    background: var(--vidro);
+    color: var(--tinta);
+    font-size: 13px;
+  }
+  .secundario {
+    margin-top: 6px;
+  }
+  .desfazer:not(:disabled):hover,
+  .secundario:hover {
+    background: rgb(255 255 255 / 0.7);
+  }
+  .tudo {
+    padding: 8px 18px;
+    border: 0;
+    border-radius: var(--raio-botao);
+    font-weight: 600;
+    color: white;
+    background: var(--ceu-700);
+  }
+  .tudo.confirmando {
+    background: var(--perigo);
+  }
+  .linha-do-tempo {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+    max-height: min(52vh, 520px);
+    overflow: auto;
+  }
+  .linha-do-tempo > li {
+    display: grid;
+    gap: 6px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: var(--vidro);
+    border: 1px solid var(--vidro-borda);
+  }
+  .cabeca {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .titulo {
+    flex: 1;
+    display: grid;
+    min-width: 0;
+  }
+  .quando {
+    color: var(--tinta-suave);
+    font-size: 12px;
+  }
+  .sem-volta {
+    color: var(--tinta-suave);
+    font-size: 12px;
+  }
+  .selos {
+    display: flex;
+    gap: 6px;
+  }
+  .selo {
+    padding: 1px 8px;
+    border-radius: var(--raio-botao);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ambar-700);
+    background: rgb(255 230 204 / 0.85);
+  }
+  .detalhes {
+    justify-self: start;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ceu-700);
+    font-size: 13px;
+  }
+  .valores {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+  }
+  .valores code {
+    font-size: 12px;
+    color: var(--tinta-suave);
+    word-break: break-all;
+  }
+  :global(:root[data-tema="noite"]) .detalhes {
+    color: #a9c0f5;
+  }
+  :global(:root[data-tema="noite"]) .desfazer:not(:disabled):hover,
+  :global(:root[data-tema="noite"]) .secundario:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+</style>
