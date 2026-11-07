@@ -7,6 +7,7 @@ use super::*;
 
 /// Para avisar antes de o usuário tentar aplicar e falhar.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn is_elevated() -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -295,7 +296,9 @@ pub async fn set_startup_enabled(
 /// Um processo não se eleva sozinho: abre outro e o Windows pergunta; recusado, nada acontece. Na versão final a
 /// mensagem fica vazia, porque este processo encerra.
 #[tauri::command(async)]
-pub fn relaunch_as_admin(app: tauri::AppHandle) -> Result<String, String> {
+#[cfg_attr(test, specta::specta)]
+/// Genérico no runtime só para o contrato tipado (`contrato.rs`) montar com o `MockRuntime`; no programa é o Wry.
+pub fn relaunch_as_admin<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         if crate::modules::windows::registry::is_elevated() {

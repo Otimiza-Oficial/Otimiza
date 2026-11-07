@@ -20,6 +20,7 @@ use crate::modules::changelog::ChangeLog;
 use crate::modules::optimizer::OptimizationOutcome;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum Parte {
     /// Modo jogo automático, modo jogo ligado e modo dinâmico do motor de energia.
     Automaticos,
@@ -34,6 +35,7 @@ pub enum Parte {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado", content = "motivo")]
 pub enum Desfecho {
     Voltou,
@@ -42,6 +44,7 @@ pub enum Desfecho {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ResultadoDaParte {
     pub parte: Parte,
     pub desfecho: Desfecho,
@@ -50,6 +53,7 @@ pub struct ResultadoDaParte {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Relatorio {
     pub partes: Vec<ResultadoDaParte>,
     /// Item a item do histórico, como o "Desfazer tudo" sempre mostrou.
