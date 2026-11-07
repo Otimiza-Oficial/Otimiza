@@ -95,6 +95,17 @@ windows-sys = { version = "0.59", features = [
     # "quantos núcleos, de qual classe de eficiência": em Intel híbrida, é o
     # que separa núcleo P de núcleo E sem lista de modelos.
     "Win32_System_SystemInformation",
+    # Otimiza Rede (`plataforma::wifi`, `plataforma::rota`). A API nativa do Wi-Fi (wlanapi): sinal, banda, canal,
+    # redes vizinhas e a varredura em segundo plano. Campos, não o texto traduzido do `netsh`.
+    "Win32_NetworkManagement_WiFi",
+    # IP Helper: por qual placa sai a rota (cabo ou Wi-Fi) e o eco ICMP com TTL crescente da rota salto a salto.
+    "Win32_NetworkManagement_IpHelper",
+    # `SOCKADDR_IN6` do eco ICMP em IPv6 (`Icmp6SendEcho2`).
+    "Win32_Networking_WinSock",
+    # `PIO_APC_ROUTINE`, que aparece na assinatura de `IcmpSendEcho2`/`Icmp6SendEcho2` (passado nulo: chamada síncrona).
+    "Win32_System_IO",
+    # `GetAdaptersAddresses` (tipo e velocidade da placa por onde sai a rota) só existe com os tipos do NDIS ligados.
+    "Win32_NetworkManagement_Ndis",
 ] }
 
 # O gerador de quadros do Otimiza fala COM Direct3D 11, DXGI e DirectComposition.

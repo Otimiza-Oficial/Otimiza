@@ -686,13 +686,17 @@ pub fn run() {
                         continue;
                     }
                     visto = jogo.clone();
-                    let frase = tokio::task::spawn_blocking(move || {
-                        crate::plataforma::energia_jogo::passo(jogo.as_deref())
+                    // O Wi-Fi sem varredura anda junto: mesmo vigia, mesmas duas olhadas. Não há o que devolver na
+                    // abertura: o pedido morre com o cliente da wlanapi, que fecha com o processo.
+                    let frases = tokio::task::spawn_blocking(move || {
+                        [
+                            crate::plataforma::energia_jogo::passo(jogo.as_deref()),
+                            crate::plataforma::wifi_varredura::passo(jogo.as_deref()),
+                        ]
                     })
                     .await
-                    .ok()
-                    .flatten();
-                    if let Some(f) = frase {
+                    .unwrap_or_default();
+                    for f in frases.into_iter().flatten() {
                         utils::Logger::info(&f);
                     }
                 }

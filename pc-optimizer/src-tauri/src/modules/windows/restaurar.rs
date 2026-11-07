@@ -250,6 +250,12 @@ where
                         }
                     }
                 }
+                if crate::plataforma::wifi_varredura::ler().ligado {
+                    match crate::plataforma::wifi_varredura::definir(false) {
+                        Ok(_) => feito.push("Wi-Fi sem varredura desligado; a busca de redes voltou ao normal.".to_string()),
+                        Err(e) => falhas.push(format!("Wi-Fi sem varredura: {}", e)),
+                    }
+                }
             }
             Parte::MotorDeEnergia => match &estado_do_motor {
                 Err(e) => falhas.push(format!("backup do motor de energia ilegível ({}); o plano dele pode ter ficado", e)),
