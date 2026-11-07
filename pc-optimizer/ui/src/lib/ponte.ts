@@ -16,6 +16,7 @@ import {
   type Painel_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
+  type ResultadoDaCaptura_Serialize,
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
   type TrocaAplicada,
@@ -37,6 +38,9 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
+export type CapturaDpc = ResultadoDaCaptura_Serialize;
+export type RelatorioDpc = Extract<CapturaDpc, { estado: "Medido" }>["relatorio"];
+export type DriverMedido = RelatorioDpc["drivers"][number];
 
 /** Só o que a casca usa do jogo aberto. */
 export interface JogoAberto {
@@ -257,6 +261,76 @@ const wifiDemo: DiagnosticoDoWifi = {
 
 let varreduraDemo: PainelDaVarredura = { ligado: false, agindo_em: null, observacao: null };
 
+/** Captura de demonstração: o driver de rede com picos, o caso que o Caçador existe para apontar. */
+function capturaDemo(segundos: number): CapturaDpc {
+  const driver = (
+    arquivo: string,
+    nome_amigavel: string,
+    categoria: DriverMedido["categoria"],
+    contagem: number,
+    pct: number,
+    maximo_us: number,
+    p99: number,
+    acima_500us: number,
+    acima_1ms: number,
+    acima_2ms: number,
+    nivel: DriverMedido["nivel"],
+    acao: string | null
+  ): DriverMedido => ({
+    arquivo,
+    nome_amigavel,
+    categoria,
+    atribuicao: "Exata",
+    contagem,
+    contagem_dpc: Math.round(contagem * 0.8),
+    contagem_isr: Math.round(contagem * 0.2),
+    tempo_total_ms: (pct / 100) * segundos * 1000,
+    pct_de_um_nucleo: pct,
+    maximo_us,
+    p99_ate_us: p99,
+    acima_500us,
+    acima_1ms,
+    acima_2ms,
+    abaixo_da_resolucao: 0,
+    nivel,
+    acao,
+  });
+  return {
+    estado: "Medido",
+    relatorio: {
+      origem: "MEDIDO",
+      duracao_s: segundos,
+      nucleos: 8,
+      relogio: "Qpc",
+      resolucao_ns: 100,
+      eventos: 184_220,
+      descartados: 0,
+      eventos_perdidos: 0,
+      buffers_perdidos: 0,
+      modulos_vistos: 212,
+      sessao: "Otimiza-DPC",
+      pct_total_de_um_nucleo: 1.9,
+      pct_total_do_processador: 0.24,
+      drivers: [
+        driver("ndis.sys", "Rede (NDIS)", "Rede", 41_200, 0.9, 2_480, 310, 14, 5, 2, "Pico",
+          "Driver da placa de rede ou Wi-Fi: atualize pelo site do fabricante da placa-mãe ou da placa. Teste jogando por cabo: se o pico some, é o Wi-Fi."),
+        driver("nvlddmkm.sys", "Vídeo NVIDIA", "Video", 88_100, 0.7, 640, 160, 3, 0, 0, "Atencao",
+          "Atualize ou reinstale o driver de vídeo limpo (desinstalar o atual e instalar o mais novo do site do fabricante)."),
+        driver("Wdf01000.sys", "Framework de drivers do Windows", "FrameworkWdf", 30_400, 0.2, 180, 60, 0, 0, 0, "Saudavel", null),
+        driver("ntoskrnl.exe", "Windows", "Windows", 24_520, 0.1, 95, 30, 0, 0, 0, "Saudavel", null),
+      ],
+      picos: [],
+      picos_sem_carimbo: 0,
+      veredito: {
+        tipo: "DriversComPico",
+        culpados: ["ndis.sys"],
+        texto: "Rede (NDIS) segurou o processador por até 2,5 ms, 5 vezes acima de 1 ms. É isso que vira travadinha e áudio picotando.",
+      },
+      avisos: [],
+    },
+  };
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -336,6 +410,13 @@ export const ponte = {
     varreduraDemo = { ...varreduraDemo, ligado };
     return { ...varreduraDemo };
   },
+  /** No navegador a "captura" dura 2 s, qualquer que seja o pedido: é só para ver a tela de espera. */
+  capturarDpc: async (segundos: number): Promise<CapturaDpc> => {
+    if (noTauri) return commands.dpcCapturar(segundos);
+    await new Promise((r) => setTimeout(r, 2000));
+    return capturaDemo(segundos);
+  },
+  cancelarDpc: () => (noTauri ? commands.dpcCancelar() : Promise.resolve()),
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Ceu from "./componentes/Ceu.svelte";
   import Historico from "./componentes/Historico.svelte";
+  import Latencia from "./componentes/Latencia.svelte";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import Mascote from "./componentes/Mascote.svelte";
@@ -223,6 +224,8 @@
           <Historico />
         {:else if aberta === "rede"}
           <Rede />
+        {:else if aberta === "latencia"}
+          <Latencia />
         {:else if aberta === "tela"}
           <Tela />
         {:else}
