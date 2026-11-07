@@ -22,11 +22,15 @@ pub mod limpeza;
 pub mod memoria_jogo;
 pub mod metricas;
 pub mod mira;
+pub mod operadora;
 pub mod overlay;
 pub mod por_cima;
 pub mod ritmo_estavel;
+pub mod rota;
 pub mod sessao;
 pub mod turbo;
+pub mod wifi;
+pub mod wifi_varredura;
 
 use serde::Serialize;
 
