@@ -351,6 +351,7 @@ pub struct AppliedOptimization {
 
 /// Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado")]
 pub enum LeituraDoHistorico {
     #[default]

@@ -21,6 +21,29 @@ export const commands = {
 	capaDoJogo: (appid: number) => __TAURI_INVOKE<string | null>("capa_do_jogo", { appid }),
 	startMonitoring: () => __TAURI_INVOKE<string>("start_monitoring"),
 	getPerformanceMetrics: () => __TAURI_INVOKE<PerformanceMetrics_Serialize>("get_performance_metrics"),
+	/**  Vazio por não haver nada e vazio por não saber são diferentes. `LIVRES`. */
+	estadoDoHistorico: () => __TAURI_INVOKE<LeituraDoHistorico_Serialize>("estado_do_historico"),
+	/**
+	 *  A linha do tempo da área Histórico: cada registro, do mais novo ao mais antigo, com o valor de antes como foi
+	 *  GRAVADO (o `describe` de cada mudança) e quando. A `leitura` vem junto: lista vazia com histórico ilegível não é
+	 *  "nada mudou". `LIVRES`: só lê.
+	 */
+	historicoDeMudancas: () => __TAURI_INVOKE<HistoricoNaTela_Serialize>("historico_de_mudancas"),
+	revertOptimization: (id: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("revert_optimization", { id }),
+	/**
+	 *  "Desfazer tudo": o histórico E o que tem estado próprio (motor de energia, perfis por jogo, regras de núcleos,
+	 *  modos automáticos). Ver `modules::windows::restaurar`. `LIVRES`: desfazer nunca depende de licença.
+	 *  Genérico no runtime só para o contrato tipado (`contrato.rs`) montar com o `MockRuntime`; no programa é o Wry.
+	 */
+	restaurarTudo: () => __TAURI_INVOKE<Relatorio_Serialize>("restaurar_tudo"),
+	/**  Para avisar antes de o usuário tentar aplicar e falhar. */
+	isElevated: () => __TAURI_INVOKE<boolean>("is_elevated"),
+	/**
+	 *  Um processo não se eleva sozinho: abre outro e o Windows pergunta; recusado, nada acontece. Na versão final a
+	 *  mensagem fica vazia, porque este processo encerra.
+	 *  Genérico no runtime só para o contrato tipado (`contrato.rs`) montar com o `MockRuntime`; no programa é o Wry.
+	 */
+	relaunchAsAdmin: () => __TAURI_INVOKE<string>("relaunch_as_admin"),
 };
 
 /* Types */
@@ -39,6 +62,61 @@ export type Achado_Serialize = {
 	evidencia: string,
 	idade_ms: number | null,
 };
+
+/**
+ *  O desfecho de UMA ação, para reproduzir a falha à distância: antes, pedido, depois, saída do comando e duração.
+ *  `Option` onde o dado pode não existir: `0` de código de saída afirmaria que um comando deu certo.
+ */
+export type ActionResult = ActionResult_Serialize | ActionResult_Deserialize;
+
+/**
+ *  O desfecho de UMA ação, para reproduzir a falha à distância: antes, pedido, depois, saída do comando e duração.
+ *  `Option` onde o dado pode não existir: `0` de código de saída afirmaria que um comando deu certo.
+ */
+export type ActionResult_Deserialize = {
+	name: string,
+	status: ActionStatus,
+	message: string,
+	before_value?: string | null,
+	expected_value?: string | null,
+	after_value?: string | null,
+	exit_code?: number | null,
+	stdout: string,
+	stderr: string,
+	duration_ms: number,
+	unsupported_reason?: string | null,
+};
+
+/**
+ *  O desfecho de UMA ação, para reproduzir a falha à distância: antes, pedido, depois, saída do comando e duração.
+ *  `Option` onde o dado pode não existir: `0` de código de saída afirmaria que um comando deu certo.
+ */
+export type ActionResult_Serialize = {
+	name: string,
+	status: ActionStatus,
+	message: string,
+	before_value: string | null,
+	expected_value: string | null,
+	after_value: string | null,
+	exit_code: number | null,
+	stdout: string,
+	stderr: string,
+	duration_ms: number,
+	unsupported_reason: string | null,
+};
+
+/**  Vocabulário do protocolo de compatibilidade, o mesmo das notas de laboratório, para os relatórios se agruparem. */
+export type ActionStatus = 
+/**  Escrito E CONFERIDO relendo do Windows. */
+"Verified" | "AlreadyOptimized" | 
+/**  Este Windows ou hardware não tem isto. NÃO É FALHA. */
+"Unsupported" | "Failed" | 
+/**  Separado de `Failed`: quase sempre é política de domínio ou outro programa reescrevendo. */
+"VerificationFailed" | "NotConfirmed" | 
+/**  Só com GPO de verdade na máquina: acusar política sem política mandaria procurar um administrador que não existe. */
+"BlockedByPolicy" | 
+/**  O Windows tem o recurso e quem montou a imagem tirou (diferente de `Unsupported`). */
+"UserOrOemManaged" | "Skipped";
 
 export type Analise = Analise_Serialize | Analise_Deserialize;
 
@@ -107,6 +185,8 @@ export type Conselho = {
 	liberar_gb: number | null,
 	texto: string,
 };
+
+export type Desfecho = { estado: "Voltou" } | { estado: "NadaAFazer" } | { estado: "Falhou"; motivo: string };
 
 export type Diagnostico = Diagnostico_Serialize | Diagnostico_Deserialize;
 
@@ -183,6 +263,20 @@ export type Ganho =
 /**  Faltam partidas de um dos lados. */
 { estado: "Medindo"; antes: number; depois: number };
 
+export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
+
+export type HistoricoNaTela_Deserialize = {
+	leitura: LeituraDoHistorico_Deserialize,
+	/**  Do mais novo ao mais antigo. */
+	mudancas: MudancaNaTela_Deserialize[],
+};
+
+export type HistoricoNaTela_Serialize = {
+	leitura: LeituraDoHistorico_Serialize,
+	/**  Do mais novo ao mais antigo. */
+	mudancas: MudancaNaTela_Serialize[],
+};
+
 export type JogoAberto = JogoAberto_Serialize | JogoAberto_Deserialize;
 
 export type JogoAberto_Deserialize = {
@@ -230,6 +324,25 @@ export type JogoDaLoja_Serialize = {
 	gb: number | null,
 };
 
+/**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
+export type LeituraDoHistorico = LeituraDoHistorico_Serialize | LeituraDoHistorico_Deserialize;
+
+/**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
+export type LeituraDoHistorico_Deserialize = { estado: "Ok" } | 
+/**
+ *  `guardado_em`: para onde o ilegível foi movido. Não é apagado: pode ser a única cópia, e um humano lê JSON
+ *  truncado.
+ */
+{ estado: "Ilegivel"; motivo: string; guardado_em?: string | null };
+
+/**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
+export type LeituraDoHistorico_Serialize = { estado: "Ok" } | 
+/**
+ *  `guardado_em`: para onde o ilegível foi movido. Não é apagado: pode ser a única cópia, e um humano lê JSON
+ *  truncado.
+ */
+{ estado: "Ilegivel"; motivo: string; guardado_em: string | null };
+
 export type Metric = Metric_Serialize | Metric_Deserialize;
 
 export type Metric_Deserialize = {
@@ -264,6 +377,38 @@ export type Metric_Serialize = {
 	age_ms: number | null,
 };
 
+export type MudancaNaTela = MudancaNaTela_Serialize | MudancaNaTela_Deserialize;
+
+export type MudancaNaTela_Deserialize = {
+	/**  O que o `revert_optimization` recebe. */
+	id: string,
+	nome: string,
+	/**  Segundos desde 1970, como o histórico grava. */
+	quando: number,
+	/**  Uma linha por valor mexido, com o anterior gravado ("registro · Chave\Valor (antes: 1)"). */
+	o_que_mudou: string[],
+	/**  `None`: o item não está no catálogo (energia, jogo, driver) e não dá para afirmar; a tela não chuta. */
+	precisa_de_admin?: boolean | null,
+	precisa_reiniciar?: boolean | null,
+	/**  `false` só para o que apagou arquivo de verdade: o desfazer recusa, e a tela não oferece o botão. */
+	desfazivel: boolean,
+};
+
+export type MudancaNaTela_Serialize = {
+	/**  O que o `revert_optimization` recebe. */
+	id: string,
+	nome: string,
+	/**  Segundos desde 1970, como o histórico grava. */
+	quando: number,
+	/**  Uma linha por valor mexido, com o anterior gravado ("registro · Chave\Valor (antes: 1)"). */
+	o_que_mudou: string[],
+	/**  `None`: o item não está no catálogo (energia, jogo, driver) e não dá para afirmar; a tela não chuta. */
+	precisa_de_admin: boolean | null,
+	precisa_reiniciar: boolean | null,
+	/**  `false` só para o que apagou arquivo de verdade: o desfazer recusa, e a tela não oferece o botão. */
+	desfazivel: boolean,
+};
+
 export type NaoVerificado = {
 	classe: string,
 	falta: string,
@@ -283,6 +428,45 @@ export type NetworkMetrics_Serialize = {
 	upload_speed_mbps: number | null,
 	total_received_gb: number | null,
 	total_transmitted_gb: number | null,
+};
+
+/**  `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade. */
+export type OptimizationOutcome = OptimizationOutcome_Serialize | OptimizationOutcome_Deserialize;
+
+/**  `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade. */
+export type OptimizationOutcome_Deserialize = {
+	id: string,
+	name: string,
+	success: boolean,
+	applied: boolean,
+	message: string,
+	requires_restart: boolean,
+	/**  Campo e não status: aplicada E exige logoff precisam caber juntas. */
+	requires_logoff?: boolean,
+	/**  Separa "falhou" de "ficou pendurada". */
+	duration_ms?: number,
+	changes_count: number,
+	changes: string[],
+	/**  NÃO substitui `changes` (o que o cliente lê ao vivo): esta é a evidência que o atendimento lê. */
+	actions?: ActionResult_Deserialize[],
+};
+
+/**  `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade. */
+export type OptimizationOutcome_Serialize = {
+	id: string,
+	name: string,
+	success: boolean,
+	applied: boolean,
+	message: string,
+	requires_restart: boolean,
+	/**  Campo e não status: aplicada E exige logoff precisam caber juntas. */
+	requires_logoff: boolean,
+	/**  Separa "falhou" de "ficou pendurada". */
+	duration_ms: number,
+	changes_count: number,
+	changes: string[],
+	/**  NÃO substitui `changes` (o que o cliente lê ao vivo): esta é a evidência que o atendimento lê. */
+	actions: ActionResult_Serialize[],
 };
 
 export type Orcamento = Orcamento_Serialize | Orcamento_Deserialize;
@@ -322,6 +506,18 @@ export type Parcela_Serialize = {
 	qualidade: Quality,
 	origem: string,
 };
+
+export type Parte = 
+/**  Modo jogo automático, modo jogo ligado e modo dinâmico do motor de energia. */
+"Automaticos" | 
+/**  O plano que o motor de energia aplicou, com o backup dele. */
+"MotorDeEnergia" | 
+/**  Regras de núcleos por jogo (`cpuset.json`), que se reaplicam a cada partida. */
+"NucleosPorJogo" | 
+/**  Tudo o que está no histórico de mudanças. */
+"Historico" | 
+/**  Conferência final: o plano OTIMIZA não pode ter sobrado. */
+"PlanoOtimiza";
 
 export type Partida = Partida_Serialize | Partida_Deserialize;
 
@@ -497,6 +693,29 @@ export type RecursoAvaliado = {
 	recurso: Recurso,
 	nome: string,
 	suporte: Suporte,
+};
+
+export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
+
+export type Relatorio_Deserialize = {
+	partes: ResultadoDaParte[],
+	/**  Item a item do histórico, como o "Desfazer tudo" sempre mostrou. */
+	itens: OptimizationOutcome_Deserialize[],
+	tudo_voltou: boolean,
+};
+
+export type Relatorio_Serialize = {
+	partes: ResultadoDaParte[],
+	/**  Item a item do histórico, como o "Desfazer tudo" sempre mostrou. */
+	itens: OptimizationOutcome_Serialize[],
+	tudo_voltou: boolean,
+};
+
+export type ResultadoDaParte = {
+	parte: Parte,
+	desfecho: Desfecho,
+	/**  O que foi feito, em frases curtas, para a tela e o log. */
+	feito: string[],
 };
 
 export type ResumoDoJogo = ResumoDoJogo_Serialize | ResumoDoJogo_Deserialize;

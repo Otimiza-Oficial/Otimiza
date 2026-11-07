@@ -305,6 +305,7 @@ mod tests {
         "list_startup",
         "list_optimizations",
         "estado_do_historico",
+        "historico_de_mudancas",
         "convite_do_discord",
         "revert_optimization",
         "restaurar_tudo",
@@ -489,11 +490,19 @@ mod tests {
                 assinatura
                     .split("fn ")
                     .nth(1)
-                    .and_then(|resto| resto.split('(').next())
+                    // `<`: comando genérico no runtime (os que recebem `AppHandle` e entram no contrato tipado).
+                    .and_then(|resto| resto.split(['(', '<']).next())
                     .expect("nome do comando")
                     .trim()
             })
             .collect()
+    }
+
+    /// Onde a assinatura do comando começa, genérico (`fn nome<R: Runtime>(`) ou não.
+    fn inicio_do_comando(fonte: &str, nome: &str) -> Option<usize> {
+        fonte
+            .find(&format!("fn {}(", nome))
+            .or_else(|| fonte.find(&format!("fn {}<", nome)))
     }
 
     /// Chutar pintaria a placa de verde para quem tem Radeon.
@@ -541,8 +550,7 @@ mod tests {
         let fonte = producao();
 
         for nome in EXIGEM_LICENCA {
-            let inicio = fonte
-                .find(&format!("fn {}(", nome))
+            let inicio = inicio_do_comando(fonte, nome)
                 .unwrap_or_else(|| panic!("comando `{}` sumiu do arquivo", nome));
 
             let corpo = &fonte[inicio..];
@@ -570,7 +578,7 @@ mod tests {
         let fonte = producao();
 
         for nome in LIVRES {
-            let Some(inicio) = fonte.find(&format!("fn {}(", nome)) else {
+            let Some(inicio) = inicio_do_comando(fonte, nome) else {
                 continue;
             };
 

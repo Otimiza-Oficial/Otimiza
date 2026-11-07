@@ -303,12 +303,86 @@ pub async fn zerar_modo_jogo(state: State<'_, AppState>) -> Result<String, Strin
 
 /// Vazio por não haver nada e vazio por não saber são diferentes. `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn estado_do_historico(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::changelog::LeituraDoHistorico, String> {
     let log = state.changes.lock().await;
 
     Ok(log.leitura().clone())
+}
+
+/// A linha do tempo da área Histórico: cada registro, do mais novo ao mais antigo, com o valor de antes como foi
+/// GRAVADO (o `describe` de cada mudança) e quando. A `leitura` vem junto: lista vazia com histórico ilegível não é
+/// "nada mudou". `LIVRES`: só lê.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn historico_de_mudancas(state: State<'_, AppState>) -> Result<HistoricoNaTela, String> {
+    let log = state.changes.lock().await;
+
+    Ok(linha_do_tempo(&log))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct HistoricoNaTela {
+    pub leitura: crate::modules::changelog::LeituraDoHistorico,
+    /// Do mais novo ao mais antigo.
+    pub mudancas: Vec<MudancaNaTela>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct MudancaNaTela {
+    /// O que o `revert_optimization` recebe.
+    pub id: String,
+    pub nome: String,
+    /// Segundos desde 1970, como o histórico grava.
+    pub quando: u64,
+    /// Uma linha por valor mexido, com o anterior gravado ("registro · Chave\Valor (antes: 1)").
+    pub o_que_mudou: Vec<String>,
+    /// `None`: o item não está no catálogo (energia, jogo, driver) e não dá para afirmar; a tela não chuta.
+    pub precisa_de_admin: Option<bool>,
+    pub precisa_reiniciar: Option<bool>,
+    /// `false` só para o que apagou arquivo de verdade: o desfazer recusa, e a tela não oferece o botão.
+    pub desfazivel: bool,
+}
+
+/// **Pura**, tirando o catálogo, que é estático.
+fn linha_do_tempo(log: &ChangeLog) -> HistoricoNaTela {
+    let mudancas = log
+        .applied()
+        .iter()
+        .rev()
+        .map(|entrada| {
+            #[cfg(target_os = "windows")]
+            let (admin, reiniciar, desfazivel) = {
+                let spec = crate::modules::windows::catalog::find(&entrada.optimization_id);
+                (
+                    spec.map(|s| s.requires_admin),
+                    spec.map(|s| s.requires_restart),
+                    spec.map(|s| s.reversible).unwrap_or(true),
+                )
+            };
+            #[cfg(not(target_os = "windows"))]
+            let (admin, reiniciar, desfazivel) = (None, None, true);
+
+            MudancaNaTela {
+                id: entrada.optimization_id.clone(),
+                nome: entrada.name.clone(),
+                quando: entrada.timestamp,
+                o_que_mudou: entrada.changes.iter().map(|c| c.describe()).collect(),
+                precisa_de_admin: admin,
+                precisa_reiniciar: reiniciar,
+                desfazivel,
+            }
+        })
+        .collect();
+
+    HistoricoNaTela {
+        leitura: log.leitura().clone(),
+        mudancas,
+    }
 }
 
 #[tauri::command]
@@ -467,6 +541,7 @@ pub async fn conferir_o_proprio_trabalho(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn revert_optimization(
     id: String,
     state: State<'_, AppState>,
@@ -653,8 +728,10 @@ async fn aplicar_teto_do_jogo(
 /// "Desfazer tudo": o histórico E o que tem estado próprio (motor de energia, perfis por jogo, regras de núcleos,
 /// modos automáticos). Ver `modules::windows::restaurar`. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
-pub async fn restaurar_tudo(
-    app: tauri::AppHandle,
+#[cfg_attr(test, specta::specta)]
+/// Genérico no runtime só para o contrato tipado (`contrato.rs`) montar com o `MockRuntime`; no programa é o Wry.
+pub async fn restaurar_tudo<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::restaurar::Relatorio, String> {
     #[cfg(target_os = "windows")]
@@ -723,5 +800,42 @@ pub async fn religar_essenciais(state: State<'_, AppState>) -> Result<Optimizati
     {
         let _ = state;
         Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modules::changelog::{AppliedOptimization, ChangeRecord, LeituraDoHistorico, PreviousValue};
+
+    #[test]
+    fn a_linha_do_tempo_vem_do_mais_novo_com_o_valor_de_antes_gravado() {
+        let mut log = ChangeLog::em_memoria();
+        for (id, quando) in [("ajuste_antigo_de_teste", 100), ("ajuste_novo_de_teste", 200)] {
+            log.record(AppliedOptimization {
+                optimization_id: id.to_string(),
+                name: format!("Ajuste {}", id),
+                timestamp: quando,
+                changes: vec![ChangeRecord::RegistryValue {
+                    hive: "HKCU".into(),
+                    path: r"Software\Teste".into(),
+                    name: "Valor".into(),
+                    previous: PreviousValue::Dword(7),
+                }],
+            })
+            .expect("grava no temporário");
+        }
+
+        let tela = linha_do_tempo(&log);
+
+        assert_eq!(tela.leitura, LeituraDoHistorico::Ok);
+        let ids: Vec<&str> = tela.mudancas.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["ajuste_novo_de_teste", "ajuste_antigo_de_teste"]);
+        assert_eq!(tela.mudancas[0].quando, 200);
+        assert_eq!(tela.mudancas[0].o_que_mudou, [r"registro · Teste\Valor (antes: 7)"]);
+        // Fora do catálogo: a tela não ganha um "precisa de administrador" chutado.
+        assert_eq!(tela.mudancas[0].precisa_de_admin, None);
+        assert_eq!(tela.mudancas[0].precisa_reiniciar, None);
+        assert!(tela.mudancas[0].desfazivel);
     }
 }

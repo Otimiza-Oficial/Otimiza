@@ -32,6 +32,14 @@ mod tests {
                 crate::commands::capa_do_jogo,
                 crate::commands::start_monitoring,
                 crate::commands::get_performance_metrics,
+                // Onda 1: Histórico e desfazer.
+                crate::commands::estado_do_historico,
+                crate::commands::historico_de_mudancas,
+                crate::commands::revert_optimization,
+                // Os que recebem `AppHandle` são genéricos no runtime: aqui, o de teste.
+                crate::commands::restaurar_tudo::<tauri::test::MockRuntime>,
+                crate::commands::is_elevated,
+                crate::commands::relaunch_as_admin::<tauri::test::MockRuntime>,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

@@ -142,6 +142,7 @@ pub struct OptimizationInfo {
 /// O desfecho de UMA ação, para reproduzir a falha à distância: antes, pedido, depois, saída do comando e duração.
 /// `Option` onde o dado pode não existir: `0` de código de saída afirmaria que um comando deu certo.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ActionResult {
     pub name: String,
     pub status: ActionStatus,
@@ -158,6 +159,7 @@ pub struct ActionResult {
 
 /// Vocabulário do protocolo de compatibilidade, o mesmo das notas de laboratório, para os relatórios se agruparem.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum ActionStatus {
     /// Escrito E CONFERIDO relendo do Windows.
     #[default]
@@ -193,6 +195,7 @@ impl ActionStatus {
 
 /// `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct OptimizationOutcome {
     pub id: String,
     pub name: String,
