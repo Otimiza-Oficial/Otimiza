@@ -140,6 +140,7 @@ pub struct Nativa {
 /// O cabo ou a porta segurando a taxa. Só se afirma com temporização da EDID na MESMA resolução.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CaboDaTela"))]
 #[serde(tag = "estado")]
 pub enum Cabo {
     /// O monitor anuncia `hz_anunciado` em `largura`x`altura`, e o Windows só oferece `hz_oferecido` ali.
@@ -160,6 +161,7 @@ pub enum Cabo {
 /// A resposta de cada monitor, um estado nomeado (nada de "sem achado" quando a leitura falhou).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoDaTela"))]
 #[serde(tag = "estado")]
 pub enum Veredito {
     /// Já está no maior degrau desta resolução.

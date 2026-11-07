@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import Ceu from "./componentes/Ceu.svelte";
   import Historico from "./componentes/Historico.svelte";
+  import Tela from "./componentes/Tela.svelte";
   import Mascote from "./componentes/Mascote.svelte";
   import { areas, type IdDaArea } from "./lib/areas";
   import { avisos as lerAvisos, climaDe, fraseDoMascote, horaDe, type EstadoDoMascote, type Tema } from "./lib/clima";
@@ -219,6 +220,8 @@
         </header>
         {#if aberta === "historico"}
           <Historico />
+        {:else if aberta === "tela"}
+          <Tela />
         {:else}
           <p class="chega">Esta área chega na Onda {area.onda} da Nova Geração. Vai ter:</p>
           <ul>

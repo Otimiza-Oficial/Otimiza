@@ -346,6 +346,7 @@ pub fn ler_imagem(dados: &[u8], de_64: bool, versao: u8) -> Option<(u64, u64, St
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "CategoriaDoDriver"))]
 pub enum Categoria {
     Video,
     Rede,
@@ -461,6 +462,7 @@ pub fn acao(c: Categoria) -> &'static str {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelogioDoDpc"))]
 pub enum Relogio {
     /// Contador de alta resolução: o que pedimos.
     Qpc,
@@ -485,6 +487,7 @@ impl Relogio {
 /// Como o endereço virou driver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AtribuicaoDoDpc"))]
 pub enum Atribuicao {
     /// Caiu dentro de base + tamanho de um módulo visto na captura.
     Exata,
@@ -495,6 +498,7 @@ pub enum Atribuicao {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "NivelDoDpc"))]
 pub enum Nivel {
     Saudavel,
     /// Passou de 500 µs, ou um único evento isolado acima de 1 ms.
@@ -553,6 +557,7 @@ pub struct PicoDeDriver {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoDoDpc"))]
 #[serde(tag = "tipo")]
 pub enum Veredito {
     /// Nenhum evento de DPC/ISR chegou: NÃO é "PC saudável", é "não medimos".

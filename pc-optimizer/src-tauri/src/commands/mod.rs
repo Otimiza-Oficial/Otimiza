@@ -82,13 +82,16 @@ mod energia;
 mod frame_boost;
 mod hardware;
 mod jogos;
+mod latencia;
 mod licenca;
 mod monitor;
 mod nucleos;
 mod otimizacoes;
 mod overlay;
 mod prova;
+mod rede;
 mod sistema;
+mod tela;
 mod turbo;
 
 pub use driver::*;
@@ -96,13 +99,16 @@ pub use energia::*;
 pub use frame_boost::*;
 pub use hardware::*;
 pub use jogos::*;
+pub use latencia::*;
 pub use licenca::*;
 pub use monitor::*;
 pub use nucleos::*;
 pub use otimizacoes::*;
 pub use overlay::*;
 pub use prova::*;
+pub use rede::*;
 pub use sistema::*;
+pub use tela::*;
 pub use turbo::*;
 
 /// Comando novo sem classificação REPROVA O BUILD: a falha provável não é quebrar a assinatura, é esquecer a
@@ -338,10 +344,24 @@ mod tests {
         "abertura_pronta",
         "quedas_de_desempenho",
         "reiniciar_na_bios",
+        // Nova Geração, Onda 1: Tela, Rede e Latência.
+        "tela_diagnostico",
+        "tela_troca_pendente",
+        "tela_confirmar_troca",
+        "tela_voltar_troca",
+        "rede_rota",
+        "rede_rota_do_jogo",
+        "rede_wifi",
+        "rede_varredura_wifi",
+        "rede_varredura_wifi_desligar",
+        "dpc_capturar",
+        "dpc_cancelar",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
+        "tela_trocar_hz",
+        "rede_varredura_wifi_ligar",
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",

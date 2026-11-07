@@ -40,6 +40,20 @@ mod tests {
                 crate::commands::restaurar_tudo::<tauri::test::MockRuntime>,
                 crate::commands::is_elevated,
                 crate::commands::relaunch_as_admin::<tauri::test::MockRuntime>,
+                // Onda 1: Tela, Rede e Latência.
+                crate::commands::tela_diagnostico,
+                crate::commands::tela_troca_pendente,
+                crate::commands::tela_trocar_hz,
+                crate::commands::tela_confirmar_troca,
+                crate::commands::tela_voltar_troca,
+                crate::commands::rede_rota,
+                crate::commands::rede_rota_do_jogo,
+                crate::commands::rede_wifi,
+                crate::commands::rede_varredura_wifi,
+                crate::commands::rede_varredura_wifi_ligar,
+                crate::commands::rede_varredura_wifi_desligar,
+                crate::commands::dpc_capturar,
+                crate::commands::dpc_cancelar,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

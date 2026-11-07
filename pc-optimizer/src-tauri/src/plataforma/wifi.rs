@@ -10,6 +10,8 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "BandaDoWifi"))]
 pub enum Banda {
     #[serde(rename = "2,4 GHz")]
     G2_4,
@@ -56,6 +58,7 @@ pub fn disputam(a: (Banda, u32), b: (Banda, u32)) -> bool {
 
 /// Uma rede ouvida pela placa (um ponto de acesso, pelo BSSID).
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Vizinho {
     pub bssid: [u8; 6],
     pub ssid: String,
@@ -64,6 +67,7 @@ pub struct Vizinho {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Vizinhanca {
     /// Outras redes exatamente no seu canal.
     pub mesmo_canal: u32,
@@ -105,6 +109,8 @@ pub fn dbm_pela_qualidade(qualidade: u32) -> i32 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "SinalDoWifi"))]
 pub enum Sinal {
     Forte,
     Bom,
@@ -137,6 +143,7 @@ pub fn padrao(phy: i32, banda: Option<Banda>) -> Option<&'static str> {
 
 /// A conexão Wi-Fi atual, lida da wlanapi.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ConexaoWifi {
     pub ssid: String,
     pub banda: Option<Banda>,
@@ -153,6 +160,7 @@ pub struct ConexaoWifi {
 
 /// O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(tag = "estado", rename_all = "snake_case")]
 pub enum LeituraWifi {
     Lida {
@@ -169,6 +177,7 @@ pub enum LeituraWifi {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum TipoDePlaca {
     Cabo,
     WiFi,
@@ -212,6 +221,8 @@ pub fn tipo_de_placa(if_type: u32, descricao: &str) -> TipoDePlaca {
 
 /// Por onde a rota sai agora.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LigacaoDeRede"))]
 #[serde(tag = "tipo", rename_all = "snake_case")]
 pub enum Ligacao {
     Cabo {
@@ -233,6 +244,8 @@ pub enum Ligacao {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "GravidadeDoWifi"))]
 pub enum Gravidade {
     Bom,
     Info,
@@ -240,6 +253,8 @@ pub enum Gravidade {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "AchadoDoWifi"))]
 pub struct Achado {
     pub gravidade: Gravidade,
     pub frase: String,
@@ -392,6 +407,8 @@ fn maiuscula(s: &str) -> String {
 
 /// Diagnóstico completo: por onde sai e o que dizer.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DiagnosticoDoWifi"))]
 pub struct Diagnostico {
     pub ligacao: Ligacao,
     pub achados: Vec<Achado>,

@@ -18,6 +18,7 @@ pub struct Estado {
 
 /// Para a tela.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Painel {
     pub ligado: bool,
     /// O jogo durante o qual a varredura está desligada agora.

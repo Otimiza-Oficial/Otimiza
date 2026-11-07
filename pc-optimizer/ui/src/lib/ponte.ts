@@ -7,12 +7,15 @@
 
 import {
   commands,
+  type DiagnosticoDaTela_Serialize,
+  type FimDaTroca,
   type HistoricoNaTela_Serialize,
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
   type ResumoDoJogo_Serialize,
+  type TrocaAplicada,
   type VersaoDoApp,
 } from "./tipos";
 
@@ -24,6 +27,8 @@ export type Historico = HistoricoNaTela_Serialize;
 export type Mudanca = Historico["mudancas"][number];
 export type Desfeito = OptimizationOutcome_Serialize;
 export type RelatorioDeDesfazer = Relatorio_Serialize;
+export type { FimDaTroca, TrocaAplicada } from "./tipos";
+export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize;
 
 /** Só o que a casca usa do jogo aberto. */
 export interface JogoAberto {
@@ -150,6 +155,31 @@ function desfeitoDemo(m: Mudanca): Desfeito {
   };
 }
 
+/** Monitor de demonstração: 60 Hz num painel de 180, o caso mais comum que a área Tela resolve. */
+let telaDemoHz = 60;
+let tokenDemo = 0;
+
+function telasDemo(): DiagnosticoDaTela[] {
+  const noMaximo = telaDemoHz >= 180;
+  return [
+    {
+      dispositivo: "\\\\.\\DISPLAY1",
+      nome: "24G4",
+      principal: true,
+      atual: { largura: 1920, altura: 1080, bits: 32, hz: telaDemoHz, flags: 0, orientacao: 0, x: 0, y: 0 },
+      hz_maximo_aqui: 180,
+      nativa: { largura: 1920, altura: 1080, fonte: "Edid" },
+      hz_maximo_na_nativa: 180,
+      cabo: { estado: "NaoLimita" },
+      faixa_max_hz: 180,
+      veredito: noMaximo ? { estado: "NoMaximo", hz_atual: telaDemoHz } : { estado: "UmClique", hz_atual: telaDemoHz, hz_alvo: 180 },
+      texto: noMaximo
+        ? `24G4 já está na maior taxa desta resolução (${telaDemoHz} Hz).`
+        : `24G4 aguenta 180 Hz e está em ${telaDemoHz}. Corrigir leva um clique e se desfaz pelo histórico.`,
+    },
+  ];
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -195,6 +225,22 @@ export const ponte = {
   /** No navegador finge administrador para a demonstração mostrar todos os botões. */
   administrador: () => (noTauri ? commands.isElevated() : Promise.resolve(true)),
   abrirComoAdministrador: () => (noTauri ? commands.relaunchAsAdmin() : Promise.resolve("")),
+  telas: () => (noTauri ? commands.telaDiagnostico() : Promise.resolve(telasDemo())),
+  trocaDeTelaPendente: () => (noTauri ? commands.telaTrocaPendente() : Promise.resolve(false)),
+  /** No navegador nada troca de verdade: só o número do monitor de demonstração. */
+  trocarHz: async (dispositivo: string, hz: number): Promise<TrocaAplicada> => {
+    if (noTauri) return commands.telaTrocarHz(dispositivo, hz);
+    const hz_anterior = telaDemoHz;
+    telaDemoHz = hz;
+    return { token: ++tokenDemo, dispositivo, hz_anterior, hz_novo: hz, prazo_ms: 15000 };
+  },
+  confirmarTroca: (token: number): Promise<FimDaTroca> =>
+    noTauri ? commands.telaConfirmarTroca(token) : Promise.resolve({ estado: "Mantida", id: "tela:demo", hz: telaDemoHz }),
+  voltarTroca: async (token: number): Promise<FimDaTroca> => {
+    if (noTauri) return commands.telaVoltarTroca(token);
+    telaDemoHz = 60;
+    return { estado: "Voltou", hz: 60 };
+  },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

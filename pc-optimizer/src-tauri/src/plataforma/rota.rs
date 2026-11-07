@@ -30,6 +30,7 @@ const PERDA_MINIMA: f64 = 10.0;
 const JITTER_MINIMO_MS: f64 = 15.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum TipoResposta {
     /// Um roteador do meio avisou que o pacote expirou nele.
     Salto,
@@ -51,6 +52,8 @@ pub struct Resposta {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TrechoDaRota"))]
 #[serde(rename_all = "snake_case")]
 pub enum Trecho {
     Casa,
@@ -66,6 +69,8 @@ pub enum Trecho {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "SaltoDaRota"))]
 pub struct Salto {
     pub numero: u8,
     pub endereco: Option<IpAddr>,
@@ -211,6 +216,8 @@ pub fn classificar_via(saltos: &mut [Salto], destino: IpAddr, via_tunel: bool) {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ProblemaDaRota"))]
 #[serde(rename_all = "snake_case")]
 pub enum Problema {
     Perda,
@@ -218,6 +225,8 @@ pub enum Problema {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "VereditoDaRota"))]
 #[serde(tag = "tipo", rename_all = "snake_case")]
 pub enum Veredito {
     /// Chegou ao servidor sem perda nem variação que se sinta.
@@ -399,6 +408,7 @@ pub fn observacao(saltos: &[Salto], v: &Veredito) -> Option<String> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Rota {
     pub destino: IpAddr,
     pub chegou: bool,

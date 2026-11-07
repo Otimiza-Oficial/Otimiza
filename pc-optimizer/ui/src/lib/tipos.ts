@@ -44,10 +44,50 @@ export const commands = {
 	 *  Genérico no runtime só para o contrato tipado (`contrato.rs`) montar com o `MockRuntime`; no programa é o Wry.
 	 */
 	relaunchAsAdmin: () => __TAURI_INVOKE<string>("relaunch_as_admin"),
+	/**  Um diagnóstico por monitor ativo: Hz atual, o máximo na resolução, a nativa, o cabo e o veredito. `LIVRES`. */
+	telaDiagnostico: () => __TAURI_INVOKE<DiagnosticoDaTela_Serialize[]>("tela_diagnostico"),
+	/**  Há troca esperando "Manter?" (a janela pode ter sido recarregada no meio). `LIVRES`. */
+	telaTrocaPendente: () => __TAURI_INVOKE<boolean>("tela_troca_pendente"),
+	/**
+	 *  Aplica SÓ a taxa, sem gravar, e arma a volta automática. A tela chama `tela_confirmar_troca` ou
+	 *  `tela_voltar_troca` com o `token`.
+	 */
+	telaTrocarHz: (dispositivo: string, hz: number) => __TAURI_INVOKE<TrocaAplicada>("tela_trocar_hz", { dispositivo, hz }),
+	/**
+	 *  A pessoa viu a imagem: grava no Windows e no histórico. `LIVRES`: termina uma troca que já passou pela licença
+	 *  em `tela_trocar_hz`; recusar aqui só deixaria a tela voltar sozinha.
+	 */
+	telaConfirmarTroca: (token: number) => __TAURI_INVOKE<FimDaTroca>("tela_confirmar_troca", { token }),
+	/**  Volta antes do prazo. `LIVRES`: é desfazer. */
+	telaVoltarTroca: (token: number) => __TAURI_INVOKE<FimDaTroca>("tela_voltar_troca", { token }),
+	/**  Rota até `destino` (endereço ou nome): 10 rodadas por salto, espalhadas pelo segundo. Leva uns 10 s. `LIVRES`. */
+	redeRota: (destino: string) => __TAURI_INVOKE<Rota_Serialize>("rede_rota", { destino }),
+	/**  Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`. */
+	redeRotaDoJogo: () => __TAURI_INVOKE<Rota_Serialize>("rede_rota_do_jogo"),
+	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
+	redeWifi: () => __TAURI_INVOKE<DiagnosticoDoWifi_Serialize>("rede_wifi"),
+	/**  A escolha "Wi-Fi sem varredura durante o jogo" e se está agindo agora. `LIVRES`. */
+	redeVarreduraWifi: () => __TAURI_INVOKE<Painel_Serialize>("rede_varredura_wifi"),
+	/**  Liga: com o jogo aberto, age na hora. */
+	redeVarreduraWifiLigar: () => __TAURI_INVOKE<Painel_Serialize>("rede_varredura_wifi_ligar"),
+	/**  Desliga e devolve a varredura antes de responder. `LIVRES`: é desfazer. */
+	redeVarreduraWifiDesligar: () => __TAURI_INVOKE<Painel_Serialize>("rede_varredura_wifi_desligar"),
+	/**
+	 *  Captura por `segundos` (5 a 60; sem valor, 30) e devolve o relatório. Sem administrador, o resultado diz isso em
+	 *  vez de falhar. `LIVRES`: medir não depende de licença.
+	 */
+	dpcCapturar: (segundos: number | null) => __TAURI_INVOKE<ResultadoDaCaptura_Serialize>("dpc_capturar", { segundos }),
+	/**  Termina a captura em andamento já, com o que mediu até agora. `LIVRES`. */
+	dpcCancelar: () => __TAURI_INVOKE<void>("dpc_cancelar"),
 };
 
 /* Types */
 export type Achado = Achado_Serialize | Achado_Deserialize;
+
+export type AchadoDoWifi = {
+	gravidade: GravidadeDoWifi,
+	frase: string,
+};
 
 export type Achado_Deserialize = {
 	classe: Classe,
@@ -148,6 +188,15 @@ export type AntiCheatDoJogo = "Nenhum" |
 
 export type Api = "DirectX12" | "DirectX11" | "DirectX9" | "Vulkan" | "OpenGl" | "Desconhecida";
 
+/**  Como o endereço virou driver. */
+export type AtribuicaoDoDpc = 
+/**  Caiu dentro de base + tamanho de um módulo visto na captura. */
+"Exata" | 
+/**  Sem o evento de imagem: o módulo de base mais próxima abaixo, pela lista de drivers do Windows. */
+"Aproximada" | "SemModulo";
+
+export type BandaDoWifi = "2,4 GHz" | "5 GHz" | "6 GHz";
+
 export type CPUMetrics = CPUMetrics_Serialize | CPUMetrics_Deserialize;
 
 export type CPUMetrics_Deserialize = {
@@ -168,6 +217,21 @@ export type CPUMetrics_Serialize = {
 	frequency: number | null,
 };
 
+/**  O cabo ou a porta segurando a taxa. Só se afirma com temporização da EDID na MESMA resolução. */
+export type CaboDaTela = 
+/**  O monitor anuncia `hz_anunciado` em `largura`x`altura`, e o Windows só oferece `hz_oferecido` ali. */
+{ estado: "Limitando"; largura: number; altura: number; hz_oferecido: number; hz_anunciado_mhz: number } | 
+/**  A EDID tem temporização nesta resolução, e o Windows oferece o mesmo degrau (ou mais). */
+{ estado: "NaoLimita" } | 
+/**  A EDID não traz temporização na resolução atual nem na nativa: não há como comparar. */
+{ estado: "SemTemporizacaoNaResolucao" } | { estado: "EdidNaoAchada" } | { estado: "EdidIlegivel"; motivo: string };
+
+export type CategoriaDoDriver = "Video" | "Rede" | "Energia" | "Disco" | "Usb" | "Audio" | 
+/**  Framework de drivers da Microsoft: hospeda a rotina de outro driver, que a captura não nomeia. */
+"FrameworkWdf" | 
+/**  O próprio Windows (relógio, agendador). */
+"Windows" | "Outro" | "SemModulo";
+
 export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | "MemoriaVideo" | "Disco" | "LimiteTermico" | "LimiteEletrico" | "TetoDeQuadros" | 
 /**  A contagem é medida; a causa NÃO está nesta classe. */
 "Engasgo" | 
@@ -180,6 +244,39 @@ export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | 
 
 export type Conclusao = "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
 
+/**  A conexão Wi-Fi atual, lida da wlanapi. */
+export type ConexaoWifi = ConexaoWifi_Serialize | ConexaoWifi_Deserialize;
+
+/**  A conexão Wi-Fi atual, lida da wlanapi. */
+export type ConexaoWifi_Deserialize = {
+	ssid: string,
+	banda?: BandaDoWifi | null,
+	canal?: number | null,
+	rssi_dbm: number,
+	sinal: SinalDoWifi,
+	/**  Qualidade 0–100 que o próprio Windows mostra. */
+	qualidade: number,
+	padrao?: string | null,
+	/**  Velocidade do enlace, em Mb/s (o que o rádio negociou, não a internet). */
+	recepcao_mbps: number,
+	envio_mbps: number,
+};
+
+/**  A conexão Wi-Fi atual, lida da wlanapi. */
+export type ConexaoWifi_Serialize = {
+	ssid: string,
+	banda: BandaDoWifi | null,
+	canal: number | null,
+	rssi_dbm: number,
+	sinal: SinalDoWifi,
+	/**  Qualidade 0–100 que o próprio Windows mostra. */
+	qualidade: number,
+	padrao: string | null,
+	/**  Velocidade do enlace, em Mb/s (o que o rádio negociou, não a internet). */
+	recepcao_mbps: number,
+	envio_mbps: number,
+};
+
 export type Conselho = {
 	/**  O que derramou acima do piso é exatamente o que não coube. */
 	liberar_gb: number | null,
@@ -189,6 +286,55 @@ export type Conselho = {
 export type Desfecho = { estado: "Voltou" } | { estado: "NadaAFazer" } | { estado: "Falhou"; motivo: string };
 
 export type Diagnostico = Diagnostico_Serialize | Diagnostico_Deserialize;
+
+export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize | DiagnosticoDaTela_Deserialize;
+
+export type DiagnosticoDaTela_Deserialize = {
+	dispositivo: string,
+	nome: string,
+	principal: boolean,
+	atual?: ModoDeVideo | null,
+	/**  Maior taxa que o Windows oferece na resolução e profundidade atuais. */
+	hz_maximo_aqui?: number | null,
+	nativa?: Nativa | null,
+	hz_maximo_na_nativa?: number | null,
+	cabo: CaboDaTela,
+	faixa_max_hz?: number | null,
+	veredito: VereditoDaTela,
+	/**  A frase da tela, já com a ressalva de FPS onde cabe. */
+	texto: string,
+};
+
+export type DiagnosticoDaTela_Serialize = {
+	dispositivo: string,
+	nome: string,
+	principal: boolean,
+	atual: ModoDeVideo | null,
+	/**  Maior taxa que o Windows oferece na resolução e profundidade atuais. */
+	hz_maximo_aqui: number | null,
+	nativa: Nativa | null,
+	hz_maximo_na_nativa: number | null,
+	cabo: CaboDaTela,
+	faixa_max_hz: number | null,
+	veredito: VereditoDaTela,
+	/**  A frase da tela, já com a ressalva de FPS onde cabe. */
+	texto: string,
+};
+
+/**  Diagnóstico completo: por onde sai e o que dizer. */
+export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize | DiagnosticoDoWifi_Deserialize;
+
+/**  Diagnóstico completo: por onde sai e o que dizer. */
+export type DiagnosticoDoWifi_Deserialize = {
+	ligacao: LigacaoDeRede_Deserialize,
+	achados: AchadoDoWifi[],
+};
+
+/**  Diagnóstico completo: por onde sai e o que dizer. */
+export type DiagnosticoDoWifi_Serialize = {
+	ligacao: LigacaoDeRede_Serialize,
+	achados: AchadoDoWifi[],
+};
 
 export type Diagnostico_Deserialize = {
 	conclusao: Conclusao,
@@ -224,6 +370,58 @@ export type DiskMetrics_Serialize = {
 	usage_percent: number | null,
 };
 
+export type DriverMedido = DriverMedido_Serialize | DriverMedido_Deserialize;
+
+export type DriverMedido_Deserialize = {
+	/**  Nome do arquivo (`nvlddmkm.sys`), ou vazio quando a rotina não caiu em módulo nenhum. */
+	arquivo: string,
+	nome_amigavel: string,
+	categoria: CategoriaDoDriver,
+	atribuicao: AtribuicaoDoDpc,
+	contagem: number,
+	contagem_dpc: number,
+	contagem_isr: number,
+	tempo_total_ms: number | null,
+	/**  Fração do tempo de UM núcleo (DPC cai quase toda no núcleo 0): o que se compara com o LatencyMon. */
+	pct_de_um_nucleo: number | null,
+	maximo_us: number | null,
+	/**  Teto do balde do histograma onde está o p99 (±9%): "até X µs". */
+	p99_ate_us: number | null,
+	acima_500us: number,
+	acima_1ms: number,
+	acima_2ms: number,
+	/**  Execuções curtas demais para o relógio (0 tique): contadas, não zeradas. */
+	abaixo_da_resolucao: number,
+	nivel: NivelDoDpc,
+	/**  Só com `Atencao` ou `Pico`. */
+	acao?: string | null,
+};
+
+export type DriverMedido_Serialize = {
+	/**  Nome do arquivo (`nvlddmkm.sys`), ou vazio quando a rotina não caiu em módulo nenhum. */
+	arquivo: string,
+	nome_amigavel: string,
+	categoria: CategoriaDoDriver,
+	atribuicao: AtribuicaoDoDpc,
+	contagem: number,
+	contagem_dpc: number,
+	contagem_isr: number,
+	tempo_total_ms: number | null,
+	/**  Fração do tempo de UM núcleo (DPC cai quase toda no núcleo 0): o que se compara com o LatencyMon. */
+	pct_de_um_nucleo: number | null,
+	maximo_us: number | null,
+	/**  Teto do balde do histograma onde está o p99 (±9%): "até X µs". */
+	p99_ate_us: number | null,
+	acima_500us: number,
+	acima_1ms: number,
+	acima_2ms: number,
+	/**  Execuções curtas demais para o relógio (0 tique): contadas, não zeradas. */
+	abaixo_da_resolucao: number,
+	nivel: NivelDoDpc,
+	/**  Só com `Atencao` ou `Pico`. */
+	acao: string | null,
+};
+
 export type Estado = "NaoAvaliado" | "PlacaIntegrada" | "Folgada" | 
 /**  O estado normal depois de um tempo de jogo; dito ao cliente, evita o ajuste desnecessário. */
 "CacheCheio" | "Transbordando" | 
@@ -237,6 +435,18 @@ export type Fabricante = "Nvidia" | "Amd" | "Intel" | "Desconhecido";
 
 /**  A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante). */
 export type Familia = "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior" | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior" | "Arc" | "IntelIntegrada" | "Desconhecida";
+
+export type FimDaTroca = 
+/**  Gravada no registro do Windows e no histórico. */
+{ estado: "Mantida"; id: string; hz: number } | 
+/**  Voltou ao modo anterior (pedido da pessoa). */
+{ estado: "Voltou"; hz: number };
+
+export type FonteDaNativa = 
+/**  Temporização preferida da EDID. */
+"Edid" | 
+/**  Sem EDID: a maior resolução que o Windows lista. Quase sempre é a nativa, mas é dedução. */
+"MaiorModoListado";
 
 export type Forca = "Causa" | "Hipotese";
 
@@ -262,6 +472,8 @@ export type Ganho =
 { estado: "Medido"; pct: number | null; folga_pct: number | null } | { estado: "SemDiferenca" } | 
 /**  Faltam partidas de um dos lados. */
 { estado: "Medindo"; antes: number; depois: number };
+
+export type GravidadeDoWifi = "Bom" | "Info" | "Atencao";
 
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
 
@@ -343,6 +555,44 @@ export type LeituraDoHistorico_Serialize = { estado: "Ok" } |
  */
 { estado: "Ilegivel"; motivo: string; guardado_em: string | null };
 
+/**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
+export type LeituraWifi = LeituraWifi_Serialize | LeituraWifi_Deserialize;
+
+/**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
+export type LeituraWifi_Deserialize = { estado: "lida"; conexao: ConexaoWifi_Deserialize; 
+/**  `None` quando o seu ponto de acesso não apareceu na lista (sem frequência, sem canal para comparar). */
+vizinhanca?: Vizinhanca | null } | 
+/**  Windows 11 24H2: listar redes exige a permissão de localização para apps da área de trabalho. */
+{ estado: "sem_permissao_de_localizacao" } | 
+/**  Conectado, mas a lista de redes veio vazia (placa no meio de uma varredura, driver que não informa). */
+{ estado: "lista_vazia"; conexao?: ConexaoWifi_Deserialize | null } | 
+/**  O serviço do Wi-Fi (WLAN AutoConfig) não está rodando ou a placa não está na wlanapi. */
+{ estado: "nao_li"; motivo: string };
+
+/**  O que deu para ler do Wi-Fi. Cada "não deu" tem nome: a tela explica em vez de mostrar zero. */
+export type LeituraWifi_Serialize = { estado: "lida"; conexao: ConexaoWifi_Serialize; 
+/**  `None` quando o seu ponto de acesso não apareceu na lista (sem frequência, sem canal para comparar). */
+vizinhanca: Vizinhanca | null } | 
+/**  Windows 11 24H2: listar redes exige a permissão de localização para apps da área de trabalho. */
+{ estado: "sem_permissao_de_localizacao" } | 
+/**  Conectado, mas a lista de redes veio vazia (placa no meio de uma varredura, driver que não informa). */
+{ estado: "lista_vazia"; conexao: ConexaoWifi_Serialize | null } | 
+/**  O serviço do Wi-Fi (WLAN AutoConfig) não está rodando ou a placa não está na wlanapi. */
+{ estado: "nao_li"; motivo: string };
+
+/**  Por onde a rota sai agora. */
+export type LigacaoDeRede = LigacaoDeRede_Serialize | LigacaoDeRede_Deserialize;
+
+/**  Por onde a rota sai agora. */
+export type LigacaoDeRede_Deserialize = { tipo: "cabo"; placa: string; velocidade_mbps?: number | null } | { tipo: "wi_fi"; placa: string; leitura: LeituraWifi_Deserialize } | { tipo: "virtual"; placa: string } | { tipo: "outra"; placa: string } | 
+/**  Nenhuma rota para a internet. */
+{ tipo: "sem_rede" };
+
+/**  Por onde a rota sai agora. */
+export type LigacaoDeRede_Serialize = { tipo: "cabo"; placa: string; velocidade_mbps: number | null } | { tipo: "wi_fi"; placa: string; leitura: LeituraWifi_Serialize } | { tipo: "virtual"; placa: string } | { tipo: "outra"; placa: string } | 
+/**  Nenhuma rota para a internet. */
+{ tipo: "sem_rede" };
+
 export type Metric = Metric_Serialize | Metric_Deserialize;
 
 export type Metric_Deserialize = {
@@ -375,6 +625,23 @@ export type Metric_Serialize = {
 	 *  diferentes.
 	 */
 	age_ms: number | null,
+};
+
+/**
+ *  Os campos do `DEVMODEW` que descrevem o modo de um monitor na área de trabalho. É o que o desfazer devolve,
+ *  LIDO antes da troca, nunca montado de cabeça.
+ */
+export type ModoDeVideo = {
+	largura: number,
+	altura: number,
+	bits: number,
+	hz: number,
+	/**  `dmDisplayFlags` (entrelaçado etc.). */
+	flags: number,
+	/**  `dmDisplayOrientation`: 0, 1 (90°), 2 (180°), 3 (270°). */
+	orientacao: number,
+	x: number,
+	y: number,
 };
 
 export type MudancaNaTela = MudancaNaTela_Serialize | MudancaNaTela_Deserialize;
@@ -414,6 +681,12 @@ export type NaoVerificado = {
 	falta: string,
 };
 
+export type Nativa = {
+	largura: number,
+	altura: number,
+	fonte: FonteDaNativa,
+};
+
 export type NetworkMetrics = NetworkMetrics_Serialize | NetworkMetrics_Deserialize;
 
 export type NetworkMetrics_Deserialize = {
@@ -429,6 +702,12 @@ export type NetworkMetrics_Serialize = {
 	total_received_gb: number | null,
 	total_transmitted_gb: number | null,
 };
+
+export type NivelDoDpc = "Saudavel" | 
+/**  Passou de 500 µs, ou um único evento isolado acima de 1 ms. */
+"Atencao" | 
+/**  Dois ou mais eventos acima de 1 ms, ou qualquer um acima de 2 ms. */
+"Pico";
 
 /**  `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade. */
 export type OptimizationOutcome = OptimizationOutcome_Serialize | OptimizationOutcome_Deserialize;
@@ -487,6 +766,27 @@ export type Orcamento_Serialize = {
 	etapas_com_valor: number,
 	etapas_totais: number,
 	observacoes: string[],
+};
+
+/**  Para a tela. */
+export type Painel = Painel_Serialize | Painel_Deserialize;
+
+/**  Para a tela. */
+export type Painel_Deserialize = {
+	ligado: boolean,
+	/**  O jogo durante o qual a varredura está desligada agora. */
+	agindo_em?: string | null,
+	/**  Por que não vai agir aqui (no cabo, por exemplo). Não impede de ligar: vale quando a pessoa estiver no Wi-Fi. */
+	observacao?: string | null,
+};
+
+/**  Para a tela. */
+export type Painel_Serialize = {
+	ligado: boolean,
+	/**  O jogo durante o qual a varredura está desligada agora. */
+	agindo_em: string | null,
+	/**  Por que não vai agir aqui (no cabo, por exemplo). Não impede de ligar: vale quando a pessoa estiver no Wi-Fi. */
+	observacao: string | null,
 };
 
 export type Parcela = Parcela_Serialize | Parcela_Deserialize;
@@ -643,6 +943,15 @@ export type PerformanceMetrics_Serialize = {
 	latencia: Orcamento_Serialize,
 };
 
+/**  Um pico com carimbo, no relógio da sessão (QPC): a causa da travada cruza com os quadros pelo mesmo relógio. */
+export type PicoDeDriver = {
+	inicio_qpc: number,
+	fim_qpc: number,
+	arquivo: string,
+	tipo: TipoDeRotina,
+	duracao_us: number | null,
+};
+
 export type Placa = Placa_Serialize | Placa_Deserialize;
 
 export type Placa_Deserialize = {
@@ -658,6 +967,8 @@ export type Placa_Serialize = {
 	familia: Familia,
 	driver: string | null,
 };
+
+export type ProblemaDaRota = "perda" | "variacao";
 
 export type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
 
@@ -697,6 +1008,60 @@ export type RecursoAvaliado = {
 
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
 
+export type RelatorioDpc = RelatorioDpc_Serialize | RelatorioDpc_Deserialize;
+
+export type RelatorioDpc_Deserialize = {
+	/**  Sempre "MEDIDO": nada aqui é estimado. */
+	origem: string,
+	duracao_s: number | null,
+	nucleos: number,
+	relogio: RelogioDoDpc,
+	resolucao_ns: number | null,
+	eventos: number,
+	/**  Fim antes do início ou duração acima de 1 s: fora da conta. */
+	descartados: number,
+	/**  O que o Windows diz que perdeu (buffer cheio). Com perda, a contagem é piso, e o relatório diz. */
+	eventos_perdidos: number,
+	buffers_perdidos: number,
+	modulos_vistos: number,
+	sessao: string,
+	pct_total_de_um_nucleo: number | null,
+	pct_total_do_processador: number | null,
+	/**  Ordenados do pior para o melhor. */
+	drivers: DriverMedido_Deserialize[],
+	picos: PicoDeDriver[],
+	/**  Picos acima de 500 µs que passaram do teto da lista (contados nos drivers, sem carimbo). */
+	picos_sem_carimbo: number,
+	veredito: VereditoDoDpc_Deserialize,
+	avisos: string[],
+};
+
+export type RelatorioDpc_Serialize = {
+	/**  Sempre "MEDIDO": nada aqui é estimado. */
+	origem: string,
+	duracao_s: number | null,
+	nucleos: number,
+	relogio: RelogioDoDpc,
+	resolucao_ns: number | null,
+	eventos: number,
+	/**  Fim antes do início ou duração acima de 1 s: fora da conta. */
+	descartados: number,
+	/**  O que o Windows diz que perdeu (buffer cheio). Com perda, a contagem é piso, e o relatório diz. */
+	eventos_perdidos: number,
+	buffers_perdidos: number,
+	modulos_vistos: number,
+	sessao: string,
+	pct_total_de_um_nucleo: number | null,
+	pct_total_do_processador: number | null,
+	/**  Ordenados do pior para o melhor. */
+	drivers: DriverMedido_Serialize[],
+	picos: PicoDeDriver[],
+	/**  Picos acima de 500 µs que passaram do teto da lista (contados nos drivers, sem carimbo). */
+	picos_sem_carimbo: number,
+	veredito: VereditoDoDpc_Serialize,
+	avisos: string[],
+};
+
 export type Relatorio_Deserialize = {
 	partes: ResultadoDaParte[],
 	/**  Item a item do histórico, como o "Desfazer tudo" sempre mostrou. */
@@ -710,6 +1075,31 @@ export type Relatorio_Serialize = {
 	itens: OptimizationOutcome_Serialize[],
 	tudo_voltou: boolean,
 };
+
+export type RelogioDoDpc = 
+/**  Contador de alta resolução: o que pedimos. */
+"Qpc" | 
+/**  Hora do sistema: resolução ruim, o relatório avisa. */
+"Sistema" | "Ciclos" | "Desconhecido";
+
+/**  O resultado de pedir uma captura. Cada recusa tem nome: a tela nunca mostra "nenhum pico" sobre algo que não mediu. */
+export type ResultadoDaCaptura = ResultadoDaCaptura_Serialize | ResultadoDaCaptura_Deserialize;
+
+/**  O resultado de pedir uma captura. Cada recusa tem nome: a tela nunca mostra "nenhum pico" sobre algo que não mediu. */
+export type ResultadoDaCaptura_Deserialize = { estado: "Medido"; relatorio: RelatorioDpc_Deserialize } | { estado: "PrecisaDeAdministrador"; texto: string } | 
+/**
+ *  Outra ferramenta (LatencyMon, WPR, xperf) está com a sessão de kernel, ou o Windows já tem o máximo de
+ *  sessões de sistema abertas.
+ */
+{ estado: "SessaoOcupada"; texto: string } | { estado: "JaEmAndamento"; texto: string } | { estado: "NaoSuportado"; texto: string } | { estado: "Falhou"; etapa: string; codigo: number; texto: string };
+
+/**  O resultado de pedir uma captura. Cada recusa tem nome: a tela nunca mostra "nenhum pico" sobre algo que não mediu. */
+export type ResultadoDaCaptura_Serialize = { estado: "Medido"; relatorio: RelatorioDpc_Serialize } | { estado: "PrecisaDeAdministrador"; texto: string } | 
+/**
+ *  Outra ferramenta (LatencyMon, WPR, xperf) está com a sessão de kernel, ou o Windows já tem o máximo de
+ *  sessões de sistema abertas.
+ */
+{ estado: "SessaoOcupada"; texto: string } | { estado: "JaEmAndamento"; texto: string } | { estado: "NaoSuportado"; texto: string } | { estado: "Falhou"; etapa: string; codigo: number; texto: string };
 
 export type ResultadoDaParte = {
 	parte: Parte,
@@ -739,6 +1129,66 @@ export type ResumoDoJogo_Serialize = {
 	ganho_low: Ganho,
 	melhor_fps: number | null,
 };
+
+export type Rota = Rota_Serialize | Rota_Deserialize;
+
+export type Rota_Deserialize = {
+	destino: string,
+	chegou: boolean,
+	saltos: SaltoDaRota_Deserialize[],
+	veredito: VereditoDaRota_Deserialize,
+	frase: string,
+	observacao?: string | null,
+	/**  Presente quando algum nome de operadora veio do IPinfo (a licença pede a atribuição). */
+	atribuicao?: string | null,
+};
+
+export type Rota_Serialize = {
+	destino: string,
+	chegou: boolean,
+	saltos: SaltoDaRota_Serialize[],
+	veredito: VereditoDaRota_Serialize,
+	frase: string,
+	observacao: string | null,
+	/**  Presente quando algum nome de operadora veio do IPinfo (a licença pede a atribuição). */
+	atribuicao: string | null,
+};
+
+export type SaltoDaRota = SaltoDaRota_Serialize | SaltoDaRota_Deserialize;
+
+export type SaltoDaRota_Deserialize = {
+	numero: number,
+	endereco?: string | null,
+	enviados: number,
+	respondidos: number,
+	perda_pct: number | null,
+	melhor_ms?: number | null,
+	mediana_ms?: number | null,
+	pior_ms?: number | null,
+	/**  Média da diferença entre respostas seguidas. */
+	jitter_ms?: number | null,
+	trecho: TrechoDaRota,
+	asn?: number | null,
+	operadora?: string | null,
+};
+
+export type SaltoDaRota_Serialize = {
+	numero: number,
+	endereco: string | null,
+	enviados: number,
+	respondidos: number,
+	perda_pct: number | null,
+	melhor_ms: number | null,
+	mediana_ms: number | null,
+	pior_ms: number | null,
+	/**  Média da diferença entre respostas seguidas. */
+	jitter_ms: number | null,
+	trecho: TrechoDaRota,
+	asn: number | null,
+	operadora: string | null,
+};
+
+export type SinalDoWifi = "Forte" | "Bom" | "Fraco" | "MuitoFraco";
 
 /**
  *  Janela por cima do jogo (mira na tela, gerador do Otimiza). `Barrada` nunca abre; `Desaconselhada` abre só se a
@@ -793,16 +1243,97 @@ export type Telemetry_Serialize = {
 	metrics: { [key in string]: Metric_Serialize },
 };
 
+export type TipoDeRotina = 
+/**  DPC comum, de temporizador ou "threaded". */
+"Dpc" | 
+/**  Rotina de interrupção (ISR), inclusive MSI. */
+"Isr";
+
+export type TrechoDaRota = "casa" | 
+/**  Dentro do túnel da VPN: a VPN ou a conexão por baixo dela, sem como separar daqui. */
+"tunel" | "operadora" | 
+/**  Fora da casa, sem dono conhecido (sem a consulta de operadora): operadora ou caminho. */
+"internet" | "caminho" | "servidor" | 
+/**  O roteador nunca respondeu. */
+"sem_resposta";
+
+/**  A troca aplicada, para a tela mostrar "Manter? 15 s". */
+export type TrocaAplicada = {
+	token: number,
+	dispositivo: string,
+	hz_anterior: number,
+	hz_novo: number,
+	prazo_ms: number,
+};
+
 /**  Tipo, não texto: milissegundo comparado com segundo não dá erro, dá conclusão errada. */
 export type Unit = "percent" | "megahertz" | "hertz" | "celsius" | "gigabytes" | "megabytes_per_second" | "milliseconds" | "fps" | "watts" | "hours" | "count" | 
 /**  Para "está em throttling?" poder ser UNKNOWN: um `bool` obrigaria a responder sem medir. */
 "boolean";
+
+export type VereditoDaRota = VereditoDaRota_Serialize | VereditoDaRota_Deserialize;
+
+export type VereditoDaRota_Deserialize = 
+/**  Chegou ao servidor sem perda nem variação que se sinta. */
+{ tipo: "limpa" } | { tipo: "problema"; problema: ProblemaDaRota; trecho: TrechoDaRota; salto: number; 
+/**  Perda (%) ou jitter (ms) no fim da rota. */
+tamanho: number | null; operadora?: string | null } | 
+/**  O servidor não responde ping e, até o último salto que respondeu, nada aparece. */
+{ tipo: "servidor_nao_responde"; ultimo_salto: number } | 
+/**  Nenhum salto respondeu. */
+{ tipo: "nao_mediu" };
+
+export type VereditoDaRota_Serialize = 
+/**  Chegou ao servidor sem perda nem variação que se sinta. */
+{ tipo: "limpa" } | { tipo: "problema"; problema: ProblemaDaRota; trecho: TrechoDaRota; salto: number; 
+/**  Perda (%) ou jitter (ms) no fim da rota. */
+tamanho: number | null; operadora: string | null } | 
+/**  O servidor não responde ping e, até o último salto que respondeu, nada aparece. */
+{ tipo: "servidor_nao_responde"; ultimo_salto: number } | 
+/**  Nenhum salto respondeu. */
+{ tipo: "nao_mediu" };
+
+/**  A resposta de cada monitor, um estado nomeado (nada de "sem achado" quando a leitura falhou). */
+export type VereditoDaTela = 
+/**  Já está no maior degrau desta resolução. */
+{ estado: "NoMaximo"; hz_atual: number } | 
+/**  (a) Taxa maior na MESMA resolução e profundidade de cor: um clique, reversível. */
+{ estado: "UmClique"; hz_atual: number; hz_alvo: number } | 
+/**  (c) O monitor anuncia mais do que a ligação entrega: troca de cabo ou de porta, não um clique. */
+{ estado: "CaboOuPortaLimitando"; hz_atual: number; hz_oferecido: number; hz_anunciado: number } | 
+/**  (b) Taxa maior só em OUTRA resolução: explica a troca, não oferece sozinho. */
+{ estado: "SoEmOutraResolucao"; hz_atual: number; largura: number; altura: number; hz: number } | 
+/**  O Windows não devolveu o modo atual, ou a lista de modos veio sem o modo atual. */
+{ estado: "ModosIlegiveis" };
+
+export type VereditoDoDpc = VereditoDoDpc_Serialize | VereditoDoDpc_Deserialize;
+
+export type VereditoDoDpc_Deserialize = 
+/**  Nenhum evento de DPC/ISR chegou: NÃO é "PC saudável", é "não medimos". */
+{ tipo: "SemEventos"; texto: string } | 
+/**  Resultado bom e válido. */
+{ tipo: "NenhumPico"; texto: string; observacao?: string | null } | { tipo: "DriversComPico"; culpados: string[]; texto: string };
+
+export type VereditoDoDpc_Serialize = 
+/**  Nenhum evento de DPC/ISR chegou: NÃO é "PC saudável", é "não medimos". */
+{ tipo: "SemEventos"; texto: string } | 
+/**  Resultado bom e válido. */
+{ tipo: "NenhumPico"; texto: string; observacao: string | null } | { tipo: "DriversComPico"; culpados: string[]; texto: string };
 
 export type VersaoDoApp = {
 	/**  Semver do executável: é o que o atualizador e o instalador comparam. */
 	interna: string,
 	/**  O que o cliente vê ("1.0"). */
 	exibida: string,
+};
+
+export type Vizinhanca = {
+	/**  Outras redes exatamente no seu canal. */
+	mesmo_canal: number,
+	/**  Outras redes em canal sobreposto ao seu (só existe em 2,4 GHz). */
+	sobrepostas: number,
+	/**  Tudo que a placa ouviu, em qualquer banda, fora o seu ponto de acesso. */
+	total_ouvidas: number,
 };
 
 export type Vrr = "Anunciado" | "Provavel" | "NaoAnunciado" | "Desconhecido";
