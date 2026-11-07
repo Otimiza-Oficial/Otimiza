@@ -106,6 +106,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_IO",
     # `GetAdaptersAddresses` (tipo e velocidade da placa por onde sai a rota) só existe com os tipos do NDIS ligados.
     "Win32_NetworkManagement_Ndis",
+    # `EnumDeviceDrivers`: nome aproximado do driver no Caçador de DPC (`dpc.rs`) quando o evento de imagem não chega.
+    "Win32_System_ProcessStatus",
 ] }
 
 # O gerador de quadros do Otimiza fala COM Direct3D 11, DXGI e DirectComposition.
