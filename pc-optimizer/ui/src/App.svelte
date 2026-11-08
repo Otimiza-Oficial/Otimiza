@@ -7,6 +7,7 @@
   import { cubicOut } from "svelte/easing";
   import Historico from "./componentes/Historico.svelte";
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
+  import Jogos from "./componentes/Jogos.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
   import Rede from "./componentes/Rede.svelte";
@@ -680,6 +681,8 @@
                 <Latencia />
               {:else if aberta === "tela"}
                 <Tela aoMudarHz={trocouHz} />
+              {:else if aberta === "jogos"}
+                <Jogos />
               {:else}
                 <div class="em-breve">
                   <Oti humor="dormindo" tamanho={90} segueCursor={false} />

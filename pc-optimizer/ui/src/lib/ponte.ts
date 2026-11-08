@@ -103,9 +103,9 @@ const demo: {
     },
   ],
   instalados: [
-    { nome: "FiveM", loja: "Instalado", appid: null, ultima_vez: 3, gb: 12 },
-    { nome: "Counter-Strike 2", loja: "Steam", appid: 730, ultima_vez: 2, gb: 33 },
-    { nome: "Fortnite", loja: "Epic Games", appid: null, ultima_vez: 1, gb: 98 },
+    { nome: "FiveM", loja: "Instalado", appid: null, ultima_vez: Math.floor(Date.now() / 1000) - 3600, gb: 12 },
+    { nome: "Counter-Strike 2", loja: "Steam", appid: 730, ultima_vez: Math.floor(Date.now() / 1000) - 3 * 86400, gb: 33 },
+    { nome: "Fortnite", loja: "Epic Games", appid: null, ultima_vez: 0, gb: 98 },
   ],
 };
 
