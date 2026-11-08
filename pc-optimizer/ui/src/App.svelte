@@ -14,6 +14,7 @@
   import Tela from "./componentes/Tela.svelte";
   import { areas, type IdDaArea } from "./lib/areas";
   import { avisos as lerAvisos } from "./lib/clima";
+  import { capaRemota } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, type Acao, type Fala } from "./lib/conversa";
   import {
     noTauri,
@@ -85,10 +86,20 @@
   const ultima = $derived(
     biblioteca.filter((j) => j.ultima).sort((a, b) => (b.ultima?.quando ?? 0) - (a.ultima?.quando ?? 0))[0] ?? null
   );
+  /** Capas que não carregaram (sem internet, arte retirada): esses jogos ficam com a capa desenhada. */
+  let semFoto = $state(new Set<string>());
   /** O "player": o jogo aberto, se houver; senão a última partida. Os números só aparecem se forem DESSE jogo. */
   const jogoDoPlayer = $derived(jogo?.nome ?? ultima?.nome ?? null);
   const partidaDoPlayer = $derived(ultima && ultima.nome === jogoDoPlayer ? ultima : null);
-  const capaDaUltima = $derived(instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? null);
+  const capaDaUltima = $derived(
+    jogoDoPlayer
+      ? (instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? (semFoto.has(jogoDoPlayer) ? null : capaRemota(jogoDoPlayer, null)))
+      : null
+  );
+  function fotoFalhou(nome: string) {
+    semFoto = new Set(semFoto).add(nome);
+    instalados = instalados.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+  }
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
   const memoriaPct = $derived.by(() => {
     const t = metricas?.ram.total_gb ?? null;
@@ -350,7 +361,8 @@
         .instalados()
         .then(async (l) => {
           const recentes = [...l].sort((a, b) => b.ultima_vez - a.ultima_vez).slice(0, 8);
-          instalados = recentes.map((j) => ({ jogo: j, capa: null }));
+          // Primeiro a arte pela internet (aparece na hora); depois, se houver, a do cache da Steam deste PC.
+          instalados = recentes.map((j) => ({ jogo: j, capa: capaRemota(j.nome, j.appid) }));
           for (const [i, j] of recentes.entries()) {
             if (j.appid == null) continue;
             const capa = await ponte.capa(j.appid).catch(() => null);
@@ -502,7 +514,7 @@
               <div class="tres">
                 {#each jogosFiltrados as { jogo: j, capa } (j.nome)}
                   <button class="mini-bloco" onclick={() => abrir("jogos")} title={j.nome}>
-                    {#if capa}<img src={capa} alt="" />{:else}<span class="ini" style:background={corDoJogo(j.nome)}><Icone nome="controle" tamanho={26} /></span>{/if}
+                    {#if capa}<img src={capa} alt="" onerror={() => fotoFalhou(j.nome)} />{:else}<span class="ini" style:background={corDoJogo(j.nome)}><Icone nome="controle" tamanho={26} /></span>{/if}
                     <span>{j.nome}</span>
                   </button>
                 {:else}
@@ -541,7 +553,7 @@
             <section class="bloco b-jogo" use:brilho>
               <div class="faixa">
                 <span class="capa">
-                  {#if capaDaUltima}<img src={capaDaUltima} alt="" />{:else if jogoDoPlayer}<span class="ini" style:background={corDoJogo(jogoDoPlayer)}><Icone nome="controle" tamanho={20} /></span>{/if}
+                  {#if capaDaUltima}<img src={capaDaUltima} alt="" onerror={() => jogoDoPlayer && fotoFalhou(jogoDoPlayer)} />{:else if jogoDoPlayer}<span class="ini" style:background={corDoJogo(jogoDoPlayer)}><Icone nome="controle" tamanho={20} /></span>{/if}
                 </span>
                 <div class="faixa-texto">
                   <strong>{jogoDoPlayer ?? "Nenhuma partida ainda"}</strong>

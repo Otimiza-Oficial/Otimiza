@@ -4,6 +4,7 @@
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
   import { onMount } from "svelte";
   import Icone from "./Icone.svelte";
+  import { capaRemota } from "../lib/capas";
   import { ponte, type Ganho, type JogoDaLoja, type ResumoDoJogo } from "../lib/ponte";
 
   type Item = { jogo: JogoDaLoja; capa: string | null; medido: ResumoDoJogo | null };
@@ -30,11 +31,19 @@
     try {
       const [instalados, biblioteca] = await Promise.all([ponte.instalados(), ponte.biblioteca().catch(() => [])]);
       const medidos = new Map(biblioteca.map((b) => [chave(b.nome), b]));
-      const lista: Item[] = instalados.map((j) => ({ jogo: j, capa: null, medido: medidos.get(chave(j.nome)) ?? null }));
+      const lista: Item[] = instalados.map((j) => ({
+        jogo: j,
+        capa: capaRemota(j.nome, j.appid),
+        medido: medidos.get(chave(j.nome)) ?? null,
+      }));
       // Medidos que não aparecem como instalados (FiveM pelo instalador próprio, por exemplo) também entram.
       for (const b of biblioteca) {
         if (!lista.some((i) => chave(i.jogo.nome) === chave(b.nome))) {
-          lista.push({ jogo: { nome: b.nome, loja: "Medido pelo Otimiza", appid: null, ultima_vez: b.ultima?.quando ?? 0, gb: null }, capa: null, medido: b });
+          lista.push({
+            jogo: { nome: b.nome, loja: "Medido pelo Otimiza", appid: null, ultima_vez: b.ultima?.quando ?? 0, gb: null },
+            capa: capaRemota(b.nome, null),
+            medido: b,
+          });
         }
       }
       itens = lista;
@@ -48,6 +57,11 @@
       erro = String(e);
     }
   });
+
+  /** A foto não carregou: o jogo fica com a capa desenhada. */
+  function fotoFalhou(nome: string) {
+    if (itens) itens = itens.map((i) => (i.jogo.nome === nome ? { ...i, capa: null } : i));
+  }
 
   function corDoJogo(nome: string) {
     let h = 0;
@@ -99,7 +113,7 @@
     {#if atual}
       <section class="destaque">
         <div class="capa-grande">
-          {#if atual.capa}<img src={atual.capa} alt="" />{:else}<span class="reserva" style:background={corDoJogo(atual.jogo.nome)}><Icone nome="controle" tamanho={40} /></span>{/if}
+          {#if atual.capa}<img src={atual.capa} alt="" onerror={() => fotoFalhou(atual.jogo.nome)} />{:else}<span class="reserva" style:background={corDoJogo(atual.jogo.nome)}><Icone nome="controle" tamanho={40} /></span>{/if}
         </div>
         <div class="info">
           <h3>{atual.jogo.nome}</h3>
@@ -160,7 +174,7 @@
         {#each visiveis as i (i.jogo.nome)}
           <button class="cartao" class:ativo={escolhido === i.jogo.nome} onclick={() => (escolhido = i.jogo.nome)}>
             <span class="capa">
-              {#if i.capa}<img src={i.capa} alt="" />{:else}<span class="reserva" style:background={corDoJogo(i.jogo.nome)}><Icone nome="controle" tamanho={28} /></span>{/if}
+              {#if i.capa}<img src={i.capa} alt="" loading="lazy" onerror={() => fotoFalhou(i.jogo.nome)} />{:else}<span class="reserva" style:background={corDoJogo(i.jogo.nome)}><Icone nome="controle" tamanho={28} /></span>{/if}
               {#if i.medido}<span class="marca-medido" title="Medido pelo Otimiza"><Icone nome="grafico" tamanho={11} /></span>{/if}
             </span>
             <span class="nome">{i.jogo.nome}</span>
