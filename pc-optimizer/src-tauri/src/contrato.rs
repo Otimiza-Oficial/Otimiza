@@ -100,6 +100,8 @@ mod tests {
                 crate::commands::overlay_estado,
                 crate::commands::overlay_gravar,
                 crate::commands::overlay_ligar,
+                // Plano 1.1: o Oti com IA.
+                crate::commands::oti_perguntar,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

@@ -35,6 +35,25 @@
   let ativando = $state(false);
   let recado = $state<{ tom: "ok" | "perigo" | "atencao"; texto: string } | null>(null);
 
+  let ia = $state(lerIa());
+
+  function lerIa() {
+    try {
+      return localStorage.getItem("otimiza.ia") === "ligada";
+    } catch {
+      return false;
+    }
+  }
+
+  function alternarIa() {
+    ia = !ia;
+    try {
+      localStorage.setItem("otimiza.ia", ia ? "ligada" : "desligada");
+    } catch {
+      // Só não lembra na próxima abertura.
+    }
+  }
+
   let epoca = $state(lerEpoca());
   const epocaDeHoje = temporadaDe(new Date());
 
@@ -178,6 +197,21 @@
       </ul>
     </section>
   {/if}
+
+  <!-- Oti com IA -->
+  <section class="secao">
+    <div class="linha">
+      <div class="info">
+        <h2>Oti com IA</h2>
+        <span class="apoio">
+          Quando o Oti não entende uma pergunta, ela vai para a IA, com os números do seu PC (processador, placa,
+          memória, Hz, FPS da última partida e avisos). Nada de arquivo, nome de usuário ou senha. A IA só responde e
+          sugere qual área abrir: quem muda algo no PC é você. Precisa de licença; tem um limite de perguntas por dia.
+        </span>
+      </div>
+      <button class="interruptor" role="switch" aria-checked={ia} aria-label="Oti com IA" onclick={alternarIa}></button>
+    </div>
+  </section>
 
   <!-- Época do ano -->
   <section class="secao">

@@ -181,6 +181,8 @@ export const commands = {
 	 *  ressalva, só com `confirmado` (e o jogo entra na lista dos que ligam sozinhos).
 	 */
 	overlayLigar: (confirmado: boolean) => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_ligar", { confirmado }),
+	/**  `LIVRES`: não muda nada no PC (a licença é conferida no servidor, que recusa quem não tem). */
+	otiPerguntar: (pergunta: string, fatos: string, historico: TrocaComOti[]) => __TAURI_INVOKE<RespostaDoOti_Serialize>("oti_perguntar", { pergunta, fatos, historico }),
 };
 
 /* Types */
@@ -319,6 +321,12 @@ export type AvisoDeVersao_Serialize = {
 };
 
 export type BandaDoWifi = "2,4 GHz" | "5 GHz" | "6 GHz";
+
+export type BotaoDoOti = {
+	rotulo: string,
+	/**  Uma área do app (`turbo`, `rede`…): o servidor só devolve as que existem. */
+	area: string,
+};
 
 export type CPUMetrics = CPUMetrics_Serialize | CPUMetrics_Deserialize;
 
@@ -1742,6 +1750,24 @@ export type RelogioDoDpc =
 /**  Hora do sistema: resolução ruim, o relatório avisa. */
 "Sistema" | "Ciclos" | "Desconhecido";
 
+export type RespostaDoOti = RespostaDoOti_Serialize | RespostaDoOti_Deserialize;
+
+export type RespostaDoOti_Deserialize = {
+	resposta: string,
+	humor: string,
+	acoes: BotaoDoOti[],
+	/**  Perguntas que ainda cabem hoje nesta licença. */
+	restantes?: number | null,
+};
+
+export type RespostaDoOti_Serialize = {
+	resposta: string,
+	humor: string,
+	acoes: BotaoDoOti[],
+	/**  Perguntas que ainda cabem hoje nesta licença. */
+	restantes: number | null,
+};
+
 export type RestorePoint = {
 	sequence: number,
 	description: string,
@@ -2204,6 +2230,12 @@ export type TrocaAplicada = {
 	hz_anterior: number,
 	hz_novo: number,
 	prazo_ms: number,
+};
+
+export type TrocaComOti = {
+	/**  "pessoa" ou "oti". */
+	papel: string,
+	texto: string,
 };
 
 /**  Tipo, não texto: milissegundo comparado com segundo não dá erro, dá conclusão errada. */

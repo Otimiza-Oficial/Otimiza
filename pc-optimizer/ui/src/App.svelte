@@ -34,6 +34,7 @@
     type PainelDaBanda,
     type PainelDaVarredura,
     type ResumoDoJogo,
+    type TrocaComOti,
     type VersaoDoApp,
   } from "./lib/ponte";
 
@@ -215,12 +216,69 @@
     } else dizer(a.fala());
   }
 
+  // O Oti com IA: liga nos Ajustes ("otimiza.ia" = "ligada"). Só entra quando as respostas prontas não entendem.
+  let conversaComIa = $state<TrocaComOti[]>([]);
+
+  function iaLigada() {
+    try {
+      return localStorage.getItem("otimiza.ia") === "ligada";
+    } catch {
+      return false;
+    }
+  }
+
+  /** Só fatos: números medidos, nomes de peças e avisos. Nada de arquivo, usuário ou caminho de disco. */
+  function fatosDoPc() {
+    return {
+      processador: hardware ? nomeCurto(hardware.processador) : null,
+      placa: hardware ? nomeCurto(hardware.placa.nome) : null,
+      memoria_gb: hardware?.memoria_gb ?? null,
+      tela: telaPrincipal ? { hz: telaPrincipal.hz_atual, aguenta: telaPrincipal.hz_maximo } : null,
+      uso_agora: jogo ? null : { processador_pct: metricas?.cpu.overall ?? null, memoria_pct: memoriaPct },
+      jogo_aberto: jogo?.nome ?? null,
+      ultima_partida: partidaDoPlayer?.ultima
+        ? {
+            jogo: partidaDoPlayer.nome,
+            fps: partidaDoPlayer.ultima.fps_nativo,
+            um_por_cento_pior: partidaDoPlayer.ultima.low_1pct,
+            ganho_medido_pct: partidaDoPlayer.ganho_low.estado === "Medido" ? partidaDoPlayer.ganho_low.pct : null,
+          }
+        : null,
+      avisos: lista.map((a) => a.titulo),
+    };
+  }
+
+  async function perguntarComIa(texto: string) {
+    reacao = "pensando";
+    dizer({ texto: "Deixa eu olhar o seu PC…", humor: "pensando", acoes: [] });
+    try {
+      const r = await ponte.perguntarAoOti(texto, fatosDoPc(), conversaComIa);
+      conversaComIa = [...conversaComIa, { papel: "pessoa", texto }, { papel: "oti", texto: r.resposta }].slice(-6);
+      reacao = null;
+      dizer({
+        texto: r.resposta,
+        detalhe: r.restantes != null && r.restantes <= 3 ? `Restam ${r.restantes} perguntas para a IA hoje.` : undefined,
+        humor: (["atento", "feliz", "pensando", "preocupado"].includes(r.humor) ? r.humor : "atento") as Humor,
+        acoes: r.acoes
+          .filter((a) => areas.some((x) => x.id === a.area))
+          .map((a, i) => ({ rotulo: a.rotulo, tipo: "abrir" as const, area: a.area as IdDaArea, principal: i === 0 })),
+      });
+    } catch (e) {
+      reacao = null;
+      dizer({ texto: String(e), humor: "preocupado", acoes: [] });
+    }
+  }
+
   function perguntar(e: SubmitEvent) {
     e.preventDefault();
     const texto = busca.trim();
     if (!texto) return;
     busca = "";
     const r = entender(texto);
+    if (!r.area && iaLigada()) {
+      void perguntarComIa(texto);
+      return;
+    }
     reagir("pensando", 600);
     setTimeout(() => {
       dizer(r.fala, r.area ? 2200 : 0);

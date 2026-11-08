@@ -86,6 +86,7 @@ mod latencia;
 mod licenca;
 mod monitor;
 mod nucleos;
+mod oti;
 mod otimizacoes;
 mod overlay;
 mod prova;
@@ -103,6 +104,7 @@ pub use latencia::*;
 pub use licenca::*;
 pub use monitor::*;
 pub use nucleos::*;
+pub use oti::*;
 pub use otimizacoes::*;
 pub use overlay::*;
 pub use prova::*;
@@ -171,6 +173,7 @@ mod tests {
 
     /// Rodam sem licença: leitura, medição e o desfazer (licença vencida não pode deixar o PC sem volta).
     const LIVRES: &[&str] = &[
+        "oti_perguntar",
         "feedback_estado",
         "feedback_verificar",
         "flags_ler",

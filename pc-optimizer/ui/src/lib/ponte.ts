@@ -27,6 +27,8 @@ import {
   type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
   type ResultadoDoLab_Serialize,
+  type RespostaDoOti_Serialize,
+  type TrocaComOti,
   type Preferences_Serialize,
   type EstadoDaLicenca_Serialize,
   type AvisoDeVersao_Serialize,
@@ -66,6 +68,8 @@ export type PainelDoTurbo = PainelDoTurbo_Serialize;
 export type RelatorioDoPlano = RelatorioDoPlano_Serialize;
 export type AjusteDoCatalogo = OptimizationInfo_Serialize;
 export type ResultadoDoLab = ResultadoDoLab_Serialize;
+export type RespostaDoOti = RespostaDoOti_Serialize;
+export type { TrocaComOti };
 export type Preferencias = Preferences_Serialize;
 export type EstadoDaLicenca = EstadoDaLicenca_Serialize;
 export type AvisoDeVersao = AvisoDeVersao_Serialize;
@@ -855,6 +859,17 @@ export const ponte = {
   },
   mostrarSobreposicao: (confirmado: boolean): Promise<Sobreposicao> =>
     noTauri ? commands.overlayLigar(confirmado) : Promise.reject("Abra o jogo primeiro: o FPS fica no canto da janela dele."),
+  /** O Oti com IA. No navegador, uma resposta de demonstração (nada vai à internet). */
+  perguntarAoOti: async (pergunta: string, fatos: object, historico: TrocaComOti[]): Promise<RespostaDoOti> => {
+    if (noTauri) return commands.otiPerguntar(pergunta, JSON.stringify(fatos), historico);
+    await new Promise((r) => setTimeout(r, 1200));
+    return {
+      resposta: "No seu i3-10100F com a GTX 1650, quem segura o FiveM é o processador. Ligue o Turbo com o jogo aberto e prove na Prova.",
+      humor: "atento",
+      acoes: [{ rotulo: "Abrir o Turbo", area: "turbo" }],
+      restantes: 19,
+    };
+  },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();
