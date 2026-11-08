@@ -13,6 +13,8 @@ pub const IDADE_MINIMA: Duration = Duration::from_secs(2 * 24 * 3600);
 const LIMITE_DE_ARQUIVOS: usize = 200_000;
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ItemDaLimpeza"))]
 pub struct Item {
     pub id: &'static str,
     pub nome: &'static str,
@@ -23,6 +25,8 @@ pub struct Item {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResultadoDaLimpeza"))]
 pub struct Resultado {
     pub bytes_liberados: u64,
     pub apagados: u64,

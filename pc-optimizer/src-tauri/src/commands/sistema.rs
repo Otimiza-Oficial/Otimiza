@@ -201,6 +201,7 @@ pub fn open_apps_settings() -> Result<String, String> {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn restore_status() -> Result<RestoreStatus, String> {
     #[cfg(target_os = "windows")]
     {
@@ -217,6 +218,7 @@ pub async fn restore_status() -> Result<RestoreStatus, String> {
 
 /// Pode levar dezenas de segundos.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn create_restore_point() -> Result<String, String> {
     crate::modules::licenca::exigir()?;
 
@@ -253,6 +255,7 @@ pub async fn enable_system_protection() -> Result<String, String> {
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -267,6 +270,7 @@ pub fn list_startup() -> Result<Vec<StartupEntry>, String> {
 
 /// Escreve onde o Gerenciador de Tarefas escreve, com o anterior no histórico.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn set_startup_enabled(
     hive: String,
     name: String,
@@ -348,6 +352,7 @@ pub fn relaunch_as_admin<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<
 
 /// Quanto cada limpeza libera agora (temporários e relatórios de erro, só arquivo com mais de 2 dias). `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn limpeza_medir() -> Vec<crate::plataforma::limpeza::Item> {
     crate::plataforma::limpeza::medir()
 }
@@ -355,6 +360,7 @@ pub fn limpeza_medir() -> Vec<crate::plataforma::limpeza::Item> {
 /// Apaga os arquivos velhos de um item da limpeza; o que estiver em uso fica. `EXIGEM_LICENCA`. Sem volta: o cartão
 /// mostra o tamanho antes e só limpa pasta temporária ou de relatório (`limpeza::pasta_permitida`).
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn limpeza_executar(id: String) -> Result<crate::plataforma::limpeza::Resultado, String> {
     crate::modules::licenca::exigir()?;
     crate::plataforma::limpeza::limpar(&id)

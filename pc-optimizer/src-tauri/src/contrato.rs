@@ -75,6 +75,15 @@ mod tests {
                 crate::commands::energia_de_jogo_definir,
                 crate::commands::diagnostico_de_energia,
                 crate::commands::tetos_escondidos,
+                // Onda 2: Sistema.
+                crate::commands::list_optimizations,
+                crate::commands::apply_optimization,
+                crate::commands::list_startup,
+                crate::commands::set_startup_enabled,
+                crate::commands::limpeza_medir,
+                crate::commands::limpeza_executar,
+                crate::commands::restore_status,
+                crate::commands::create_restore_point,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

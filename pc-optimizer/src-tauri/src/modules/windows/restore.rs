@@ -45,6 +45,7 @@ fn mensagem_de_servicos_desativados(nomes: &[&str]) -> String {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RestorePoint {
     pub sequence: u32,
     pub description: String,
@@ -52,6 +53,7 @@ pub struct RestorePoint {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct RestoreStatus {
     pub available: bool,
     pub message: String,

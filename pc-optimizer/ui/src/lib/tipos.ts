@@ -129,6 +129,21 @@ export const commands = {
 	/**  `LIVRES`: responde "por que não funcionou?" antes de pagar. */
 	diagnosticoDeEnergia: () => __TAURI_INVOKE<DiagnosticoDeEnergia>("diagnostico_de_energia"),
 	tetosEscondidos: () => __TAURI_INVOKE<RelatorioDeTetos_Serialize>("tetos_escondidos"),
+	listOptimizations: () => __TAURI_INVOKE<OptimizationInfo_Serialize[]>("list_optimizations"),
+	applyOptimization: (id: string) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("apply_optimization", { id }),
+	listStartup: () => __TAURI_INVOKE<StartupEntry[]>("list_startup"),
+	/**  Escreve onde o Gerenciador de Tarefas escreve, com o anterior no histórico. */
+	setStartupEnabled: (hive: string, name: string, enabled: boolean) => __TAURI_INVOKE<OptimizationOutcome_Serialize>("set_startup_enabled", { hive, name, enabled }),
+	/**  Quanto cada limpeza libera agora (temporários e relatórios de erro, só arquivo com mais de 2 dias). `LIVRES`: só lê. */
+	limpezaMedir: () => __TAURI_INVOKE<ItemDaLimpeza[]>("limpeza_medir"),
+	/**
+	 *  Apaga os arquivos velhos de um item da limpeza; o que estiver em uso fica. `EXIGEM_LICENCA`. Sem volta: o cartão
+	 *  mostra o tamanho antes e só limpa pasta temporária ou de relatório (`limpeza::pasta_permitida`).
+	 */
+	limpezaExecutar: (id: string) => __TAURI_INVOKE<ResultadoDaLimpeza>("limpeza_executar", { id }),
+	restoreStatus: () => __TAURI_INVOKE<RestoreStatus>("restore_status"),
+	/**  Pode levar dezenas de segundos. */
+	createRestorePoint: () => __TAURI_INVOKE<string>("create_restore_point"),
 };
 
 /* Types */
@@ -276,6 +291,8 @@ export type CaboDaTela =
 /**  A EDID não traz temporização na resolução atual nem na nativa: não há como comparar. */
 { estado: "SemTemporizacaoNaResolucao" } | { estado: "EdidNaoAchada" } | { estado: "EdidIlegivel"; motivo: string };
 
+export type CategoriaDoAjuste = "System" | "Gaming" | "Network" | "Startup" | "Privacy";
+
 export type CategoriaDoDriver = "Video" | "Rede" | "Energia" | "Disco" | "Usb" | "Audio" | 
 /**  Framework de drivers da Microsoft: hospeda a rotina de outro driver, que a captura não nomeia. */
 "FrameworkWdf" | 
@@ -291,6 +308,8 @@ export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | 
 "StreamingDeAssets" | 
 /**  LATÊNCIA ALTA NÃO ENTRA: ping é distância. Variação e perda têm conserto. */
 "Rede";
+
+export type ClasseDaInicializacao = "Essencial" | "Util" | "Opcional" | "Desconhecido";
 
 /**  Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada. */
 export type ClasseDoAjuste = "Segura" | "Recomendada" | "Avancada";
@@ -551,6 +570,14 @@ export type Estado = "NaoAvaliado" | "PlacaIntegrada" | "Folgada" |
 /**  Outra coisa usando memória compartilhada (captura, navegador): o módulo não atribui ao jogo. */
 "DerramaSemPressao";
 
+/**  `AlreadyOptimal`: quando já está assim, o produto diz isso em vez de fingir que otimizou. */
+export type EstadoDoAjuste = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable" | 
+/**
+ *  NÃO DEU PARA VERIFICAR. Nem `Unavailable` ("não se aplica" seria mentira sobre uma leitura falha) nem
+ *  `AlreadyOptimal` ("já está assim" sem ler faz o cliente parar de procurar).
+ */
+"Unknown";
+
 /**  Cinco porque é a divisão que o medível permite: o quadro que o Windows anuncia já passou por jogo e placa. */
 export type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
 
@@ -598,6 +625,14 @@ export type Ganho =
 /**  Faltam partidas de um dos lados. */
 { estado: "Medindo"; antes: number; depois: number };
 
+/**  Conservador de propósito: prometer menos e entregar o medido. */
+export type GanhoEsperado = "Measurable" | "Situational" | "Responsiveness" | 
+/**
+ *  Não muda desempenho (higiene e privacidade). Separado de `Responsiveness` para o cliente saber, antes de
+ *  clicar, quantos itens nunca prometeram diferença.
+ */
+"NoGain";
+
 /**  Onde o jogo trava, nas palavras do Turbo. */
 export type GargaloDoTurbo = "Placa" | "Processador" | "Memoria" | 
 /**  Nada no limite: o jogo já roda o que esta máquina consegue. */
@@ -634,6 +669,15 @@ export type HistoricoNaTela_Serialize = {
 	leitura: LeituraDoHistorico_Serialize,
 	/**  Do mais novo ao mais antigo. */
 	mudancas: MudancaNaTela_Serialize[],
+};
+
+export type ItemDaLimpeza = {
+	id: string,
+	nome: string,
+	explica: string,
+	bytes: number,
+	arquivos: number,
+	precisa_admin: boolean,
 };
 
 export type JogoAberto = JogoAberto_Serialize | JogoAberto_Deserialize;
@@ -871,6 +915,61 @@ export type NivelDoDpc = "Saudavel" |
 "Atencao" | 
 /**  Dois ou mais eventos acima de 1 ms, ou qualquer um acima de 2 ms. */
 "Pico";
+
+/**  Quatro coisas diferentes: tratá-las como uma só entregou "otimização" que derrubou FPS. */
+export type OQuePodeCustar = "FpsMedio" | 
+/**  Pode cair com a média intacta, e é o que a pessoa SENTE. */
+"UmPorCentoPior" | "Engasgo" | 
+/**  Só aparece em carga longa: o mais difícil de perceber. */
+"Boost";
+
+export type OptimizationInfo = OptimizationInfo_Serialize | OptimizationInfo_Deserialize;
+
+export type OptimizationInfo_Deserialize = {
+	id: string,
+	name: string,
+	description: string,
+	honest_effect: string,
+	category: CategoriaDoAjuste,
+	expected_gain: GanhoEsperado,
+	/**  Quando pode, fica fora do "Otimizar agora" e a tela diz por quê. */
+	risco_de_fps: RiscoNaTela,
+	requires_admin: boolean,
+	requires_restart: boolean,
+	reversible: boolean,
+	/**  Troca segurança por desempenho: aviso em vermelho e fora do lote automático. */
+	security_tradeoff: boolean,
+	recommended: boolean,
+	/**  Retirado na 2.9: só aparece enquanto aplicado, e só se desfaz. Ver `catalog::RETIRADOS`. */
+	retirado?: boolean,
+	expert?: boolean,
+	condicao?: string | null,
+	state: EstadoDoAjuste,
+	detail?: string | null,
+};
+
+export type OptimizationInfo_Serialize = {
+	id: string,
+	name: string,
+	description: string,
+	honest_effect: string,
+	category: CategoriaDoAjuste,
+	expected_gain: GanhoEsperado,
+	/**  Quando pode, fica fora do "Otimizar agora" e a tela diz por quê. */
+	risco_de_fps: RiscoNaTela,
+	requires_admin: boolean,
+	requires_restart: boolean,
+	reversible: boolean,
+	/**  Troca segurança por desempenho: aviso em vermelho e fora do lote automático. */
+	security_tradeoff: boolean,
+	recommended: boolean,
+	/**  Retirado na 2.9: só aparece enquanto aplicado, e só se desfaz. Ver `catalog::RETIRADOS`. */
+	retirado: boolean,
+	expert: boolean,
+	condicao: string | null,
+	state: EstadoDoAjuste,
+	detail: string | null,
+};
 
 /**  `Default` é o estado neutro dos campos novos em cada ponto de construção, não um resultado de verdade. */
 export type OptimizationOutcome = OptimizationOutcome_Serialize | OptimizationOutcome_Deserialize;
@@ -1438,6 +1537,18 @@ export type RelogioDoDpc =
 /**  Hora do sistema: resolução ruim, o relatório avisa. */
 "Sistema" | "Ciclos" | "Desconhecido";
 
+export type RestorePoint = {
+	sequence: number,
+	description: string,
+	created_at: string,
+};
+
+export type RestoreStatus = {
+	available: boolean,
+	message: string,
+	points: RestorePoint[],
+};
+
 export type ResultadoDaBanda = ResultadoDaBanda_Serialize | ResultadoDaBanda_Deserialize;
 
 export type ResultadoDaBanda_Deserialize = { tipo: "Aplicado"; politicas: string[]; update_limitado: boolean; 
@@ -1474,6 +1585,13 @@ export type ResultadoDaCaptura_Serialize = { estado: "Medido"; relatorio: Relato
  *  sessões de sistema abertas.
  */
 { estado: "SessaoOcupada"; texto: string } | { estado: "JaEmAndamento"; texto: string } | { estado: "NaoSuportado"; texto: string } | { estado: "Falhou"; etapa: string; codigo: number; texto: string };
+
+export type ResultadoDaLimpeza = {
+	bytes_liberados: number,
+	apagados: number,
+	/**  Em uso ou protegidos: ficaram. */
+	ficaram: number,
+};
 
 export type ResultadoDaParte = {
 	parte: Parte,
@@ -1650,6 +1768,13 @@ export type ResumoDoJogo_Serialize = {
 	melhor_fps: number | null,
 };
 
+/**
+ *  O rótulo sai do Rust JÁ ESCOLHIDO: montá-lo na tela pelo nome da variante é o que
+ *  `a_tela_nao_decide_cor_comparando_texto_do_backend` impede, e um texto fixo rotularia errado o ajuste que
+ *  ataca o engasgo.
+ */
+export type RiscoNaTela = { risco: "Nenhum" } | { risco: "PodeCustar"; o_que: OQuePodeCustar; rotulo: string; quando: string };
+
 /**  A oferta do Jogo liso no cartão do Turbo: o jogo trava muitas vezes por minuto e um teto estável tira o tranco. */
 export type RitmoDoJogo = {
 	fps: number | null,
@@ -1754,6 +1879,15 @@ export type SinalDoWifi = "Forte" | "Bom" | "Fraco" | "MuitoFraco";
  *  pessoa confirmar, com o motivo na tela.
  */
 export type Sobreposicao = "Segura" | ({ Desaconselhada: string }) & { Barrada?: never } | ({ Barrada: string }) & { Desaconselhada?: never };
+
+export type StartupEntry = {
+	name: string,
+	command: string,
+	executable: string,
+	hive: string,
+	enabled: boolean,
+	classe: ClasseDaInicializacao,
+};
 
 export type StatusDoAjuste = "Aplicado" | "JaEstavaBom" | "NaoSuportado" | "FalhouAoAplicar" | "FalhouNaVerificacao" | 
 /**  Separado de `Pulado`: a tela dizia "não se aplica aqui" sobre o boost que mudaria de 1 para 2. */

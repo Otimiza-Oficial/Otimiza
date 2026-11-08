@@ -386,6 +386,7 @@ fn linha_do_tempo(log: &ChangeLog) -> HistoricoNaTela {
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn list_optimizations(
     state: State<'_, AppState>,
 ) -> Result<Vec<OptimizationInfo>, String> {
@@ -403,6 +404,7 @@ pub async fn list_optimizations(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn apply_optimization(
     id: String,
     state: State<'_, AppState>,
