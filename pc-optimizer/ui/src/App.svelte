@@ -121,6 +121,12 @@
   const lista = $derived(lerAvisos(hardware, metricas, jogo !== null));
   const area = $derived(areas.find((a) => a.id === aberta) ?? areas[0]);
   const humor = $derived<Humor>(reacao ?? (jogo ? "jogando" : digitando ? "falando" : (fala?.humor ?? "atento")));
+  // O ícone da bandeja acompanha o humor; 1,5 s parado antes de trocar (falando/pensando passam rápido).
+  $effect(() => {
+    const h = humor;
+    const t = setTimeout(() => void ponte.bandejaHumor(h), 1500);
+    return () => clearTimeout(t);
+  });
   const ultima = $derived(
     biblioteca.filter((j) => j.ultima).sort((a, b) => (b.ultima?.quando ?? 0) - (a.ultima?.quando ?? 0))[0] ?? null
   );

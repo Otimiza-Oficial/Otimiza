@@ -577,3 +577,18 @@ pub fn diagnostico_na_janela(
         })
     }
 }
+
+/// A tela avisa o humor do Oti; o ícone da bandeja muda junto. `LIVRES`: só a aparência do próprio Otimiza.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn bandeja_humor(humor: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::bandeja::mostrar_humor(&crate::aplicativo()?, &humor)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = humor;
+        Ok(())
+    }
+}

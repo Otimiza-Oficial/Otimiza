@@ -359,6 +359,7 @@ mod tests {
         "rede_historico",
         "energia_calibrar_cancelar",
         "cs2_painel",
+        "bandeja_humor",
         "cs2_desligar",
         "rede_wifi",
         "rede_varredura_wifi",

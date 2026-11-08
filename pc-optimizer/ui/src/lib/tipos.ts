@@ -102,6 +102,8 @@ export const commands = {
 	cs2Ligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_ligar"),
 	/**  Apaga o arquivo da integração. `LIVRES`: é desfazer. */
 	cs2Desligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_desligar"),
+	/**  A tela avisa o humor do Oti; o ícone da bandeja muda junto. `LIVRES`: só a aparência do próprio Otimiza. */
+	bandejaHumor: (humor: string) => __TAURI_INVOKE<null>("bandeja_humor", { humor }),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */

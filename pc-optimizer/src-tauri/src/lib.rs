@@ -251,6 +251,7 @@ pub fn run() {
             commands::cs2_painel,
             commands::cs2_ligar,
             commands::cs2_desligar,
+            commands::bandeja_humor,
             commands::oti_perguntar,
             commands::banda_painel,
             commands::banda_ligar,

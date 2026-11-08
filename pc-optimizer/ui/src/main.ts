@@ -9,12 +9,15 @@ if (!alvo) throw new Error("index.html sem #app");
 // `?galeria` (só em desenvolvimento): o mascote em todos os humores, para conferir o desenho.
 async function iniciar(destino: HTMLElement) {
   const busca = new URLSearchParams(location.search);
-  // `?icone`: o Oti sozinho, em fundo transparente, para gerar o ícone do app (`npm run tauri icon`).
+  // `?icone`: o Oti sozinho, em fundo transparente, para gerar o ícone do app (`npm run tauri icon`) e os da bandeja.
   if (import.meta.env.DEV && busca.has("icone")) {
     const { default: Oti } = await import("./componentes/Oti.svelte");
     document.body.style.background = "transparent";
     destino.classList.add("so-o-icone");
-    return mount(Oti, { target: destino, props: { tamanho: 1024, segueCursor: false } });
+    // `&humor=dormindo&tamanho=64`: os ícones da bandeja, um por humor (`src-tauri/icons/bandeja`).
+    const humor = (busca.get("humor") ?? "atento") as import("./componentes/Oti.svelte").Humor;
+    const tamanho = Number(busca.get("tamanho")) || 1024;
+    return mount(Oti, { target: destino, props: { tamanho, humor, segueCursor: false } });
   }
   if (import.meta.env.DEV && busca.has("galeria")) {
     const { default: Galeria } = await import("./componentes/Galeria.svelte");

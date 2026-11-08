@@ -62,6 +62,7 @@ mod tests {
                 crate::commands::cs2_painel,
                 crate::commands::cs2_ligar,
                 crate::commands::cs2_desligar,
+                crate::commands::bandeja_humor,
                 crate::commands::banda_painel,
                 crate::commands::banda_ligar,
                 crate::commands::banda_desligar,

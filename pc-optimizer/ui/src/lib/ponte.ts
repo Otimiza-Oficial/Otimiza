@@ -766,6 +766,8 @@ export const ponte = {
     cs2Demo = { instalado: true, ligado: false, estado: null };
     return { ...cs2Demo };
   },
+  /** O ícone da bandeja acompanha o humor do Oti (o Rust só troca quando muda). */
+  bandejaHumor: (humor: string) => (noTauri ? commands.bandejaHumor(humor).catch(() => null) : Promise.resolve(null)),
   cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
   aplicarCalibrado: (): Promise<string> =>
     noTauri ? commands.energiaAplicarCalibrado() : Promise.resolve("Pronto: o vencedor está no plano OTIMIZA, conferido relendo do Windows."),
