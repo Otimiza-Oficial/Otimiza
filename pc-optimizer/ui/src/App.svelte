@@ -293,9 +293,11 @@
     return v == null ? "—" : String(Math.round(v));
   }
 
-  function iniciais(nome: string) {
-    const p = nome.split(/[\s:-]+/).filter((x) => /^[A-Za-zÀ-ú0-9]/.test(x));
-    return (p.length > 1 ? p[0][0] + p[1][0] : nome.slice(0, 2)).toUpperCase();
+  /** Sem capa da Steam: um degradê com a cor do nome do jogo (sempre a mesma) e o controle no meio. */
+  function corDoJogo(nome: string) {
+    let h = 0;
+    for (const c of nome) h = (h * 31 + c.charCodeAt(0)) % 360;
+    return `linear-gradient(140deg, hsl(${h} 70% 62%), hsl(${(h + 40) % 360} 65% 45%))`;
   }
 
   function nomeCurto(nome: string) {
@@ -499,7 +501,7 @@
               <div class="tres">
                 {#each jogosFiltrados as { jogo: j, capa } (j.nome)}
                   <button class="mini-bloco" onclick={() => abrir("jogos")} title={j.nome}>
-                    {#if capa}<img src={capa} alt="" />{:else}<span class="ini">{iniciais(j.nome)}</span>{/if}
+                    {#if capa}<img src={capa} alt="" />{:else}<span class="ini" style:background={corDoJogo(j.nome)}><Icone nome="controle" tamanho={26} /></span>{/if}
                     <span>{j.nome}</span>
                   </button>
                 {:else}
@@ -523,10 +525,10 @@
                 ></button>
               </div>
               <div class="apps">
-                <span class="app" style:--c="#0f6cbd">OD</span>
-                <span class="app" style:--c="#1e66f5">DB</span>
-                <span class="app" style:--c="#2f9e44">uT</span>
-                <span class="app" style:--c="#2b2b2b">EG</span>
+                <span class="app" style:--c="#0a84ff" title="Nuvem (OneDrive, Google Drive, Dropbox, MEGA)"><Icone nome="nuvem" tamanho={17} /></span>
+                <span class="app" style:--c="#30d158" title="Torrents"><Icone nome="ima" tamanho={17} /></span>
+                <span class="app" style:--c="#5e5ce6" title="Lojas de jogo (Epic, Battle.net, EA, Ubisoft)"><Icone nome="loja" tamanho={17} /></span>
+                <span class="app" style:--c="#ff9f0a" title="Windows Update em segundo plano"><Icone nome="atualizar" tamanho={17} /></span>
                 <button class="app mais-app" aria-label="Ver na Rede" onclick={() => abrir("rede")}><Icone nome="mais" tamanho={14} /></button>
               </div>
               <p class="sec pequeno">
@@ -538,7 +540,7 @@
             <section class="bloco b-jogo" use:brilho>
               <div class="faixa">
                 <span class="capa">
-                  {#if capaDaUltima}<img src={capaDaUltima} alt="" />{:else if jogoDoPlayer}<span class="ini">{iniciais(jogoDoPlayer)}</span>{/if}
+                  {#if capaDaUltima}<img src={capaDaUltima} alt="" />{:else if jogoDoPlayer}<span class="ini" style:background={corDoJogo(jogoDoPlayer)}><Icone nome="controle" tamanho={20} /></span>{/if}
                 </span>
                 <div class="faixa-texto">
                   <strong>{jogoDoPlayer ?? "Nenhuma partida ainda"}</strong>
@@ -579,7 +581,7 @@
 
             <!-- Anéis (o bloco dos dispositivos) -->
             <section class="bloco b-aneis" use:brilho>
-              {#each [{ n: "Processador", v: metricas?.cpu.overall ?? null, i: "chip" }, { n: "Memória", v: memoriaPct, i: "pilha" }, { n: "Tela", v: telaPrincipal ? (telaPrincipal.hz_atual / Math.max(1, telaPrincipal.hz_maximo)) * 100 : null, i: "monitor" }, { n: "Wi-Fi", v: sinalWifi, i: "wifi" }] as m (m.n)}
+              {#each [{ n: "Processador", v: metricas?.cpu.overall ?? null, i: "chip" }, { n: "Memória", v: memoriaPct, i: "memoria" }, { n: "Tela", v: telaPrincipal ? (telaPrincipal.hz_atual / Math.max(1, telaPrincipal.hz_maximo)) * 100 : null, i: "monitor" }, { n: "Wi-Fi", v: sinalWifi, i: "wifi" }] as m (m.n)}
                 <div class="anel" title={`${m.n}: ${pct(m.v)}`}>
                   <svg viewBox="0 0 40 40" width="46" height="46">
                     <circle cx="20" cy="20" r="17" class="anel-fundo" />
@@ -1362,10 +1364,8 @@
     width: 100%;
     height: 100%;
     border-radius: 9px;
-    background: rgb(0 0 0 / 0.06);
-    font-family: var(--fonte-titulo);
-    font-weight: 700;
-    color: var(--sec);
+    color: rgb(255 255 255 / 0.92);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.3);
   }
   .vazio {
     grid-column: 1 / -1;
