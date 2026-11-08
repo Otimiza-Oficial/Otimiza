@@ -57,6 +57,15 @@ mod tests {
                 crate::commands::banda_painel,
                 crate::commands::banda_ligar,
                 crate::commands::banda_desligar,
+                // Onda 2: Turbo.
+                crate::commands::turbo_painel,
+                crate::commands::turbo_ligar,
+                crate::commands::turbo_provar,
+                crate::commands::turbo_prova_guardada,
+                crate::commands::turbo_compartilhar,
+                crate::commands::turbo_desligar,
+                crate::commands::turbo_atraso,
+                crate::commands::turbo_esquecer,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

@@ -14,6 +14,8 @@ use crate::modules::medicoes::{Fonte, GeracaoNaPartida};
 use crate::modules::repeticoes::{self, Diferenca, Resumo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LadoDaProva"))]
 pub enum Lado {
     SemOtimiza,
     ComOtimiza,
@@ -47,6 +49,8 @@ pub fn duracao_estimada_s(segundos_por_rodada: u64) -> u64 {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RodadaDaProva"))]
 pub struct Rodada {
     pub lado: Lado,
     /// Só os quadros que o jogo desenhou.
@@ -63,6 +67,8 @@ pub struct Rodada {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "DesfechoDaProva"))]
 pub enum Desfecho {
     /// Mais FPS do jogo ou 1% pior mais alto, além do ruído, sem piora no outro.
     Ganhou,
@@ -76,6 +82,8 @@ pub enum Desfecho {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResultadoDaProva"))]
 pub struct Resultado {
     pub jogo: String,
     pub quando: u64,

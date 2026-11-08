@@ -4,6 +4,7 @@ use super::*;
 
 /// O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::turbo::painel());
@@ -14,12 +15,13 @@ pub fn turbo_painel() -> Result<crate::plataforma::turbo::Painel, String> {
 /// `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
 /// base é travado como no Frame Boost (o `travar_base` não trava no só escala).
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn turbo_ligar(
-    app: tauri::AppHandle,
     lembrado: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<crate::plataforma::turbo::Painel, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     {
         use crate::plataforma::{historico, sessao, turbo};
@@ -118,8 +120,10 @@ pub async fn turbo_ligar(
 /// o Turbo fica desligado e a receita não volta neste jogo. Senão, a receita inteira volta e o FPS base é travado como
 /// no Frame Boost.
 #[tauri::command]
-pub async fn turbo_provar(app: tauri::AppHandle) -> Result<crate::modules::provaalternada::Resultado, String> {
+#[cfg_attr(test, specta::specta)]
+pub async fn turbo_provar() -> Result<crate::modules::provaalternada::Resultado, String> {
     crate::modules::licenca::exigir()?;
+    let app = crate::aplicativo()?;
     #[cfg(target_os = "windows")]
     return provar_o_turbo(app, false).await;
     #[cfg(not(target_os = "windows"))]
@@ -178,12 +182,14 @@ async fn provar_o_turbo(
 
 /// A última prova do Turbo. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn turbo_prova_guardada() -> Option<crate::modules::provaalternada::Resultado> {
     crate::plataforma::turbo::prova_guardada()
 }
 
 /// O texto da última prova do Turbo para colar no Discord: só de prova com comparação justa e margem. `LIVRES`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn turbo_compartilhar() -> Result<String, String> {
     tokio::task::spawn_blocking(|| {
         let prova = crate::plataforma::turbo::prova_guardada();
@@ -235,6 +241,7 @@ pub async fn turbo_compartilhar() -> Result<String, String> {
 
 /// Desliga o que o Turbo ligou. `LIVRES`: desfazer nunca depende de licença.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn turbo_desligar(state: State<'_, AppState>) -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     {
@@ -353,6 +360,7 @@ fn testar_nucleos_depois_da_prova(prova: &crate::modules::provaalternada::Result
 /// "Menor atraso" ou "Mais FPS" para o jogo aberto: com o menor atraso, o Turbo não liga geração de quadros. `LIVRES`:
 /// é uma preferência no arquivo do Turbo, não mexe no Windows.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn turbo_atraso(menor: bool) -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     {
@@ -370,6 +378,7 @@ pub fn turbo_atraso(menor: bool) -> Result<crate::plataforma::turbo::Painel, Str
 
 /// Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn turbo_esquecer() -> Result<crate::plataforma::turbo::Painel, String> {
     #[cfg(target_os = "windows")]
     {

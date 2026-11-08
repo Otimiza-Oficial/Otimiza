@@ -12,6 +12,8 @@ use super::ritmo::Retangulo;
 pub const MINIMO_PX: i32 = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "NivelDeEscala"))]
 pub enum Nivel {
     UltraQualidade,
     Qualidade,

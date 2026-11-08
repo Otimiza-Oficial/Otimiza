@@ -223,6 +223,7 @@ impl Fonte {
 /// O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
 /// FPS medido inclui quadro gerado, e a tela diz isso.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum GeracaoNaPartida {
     NenhumaVisivel,
     OtimizaFg,

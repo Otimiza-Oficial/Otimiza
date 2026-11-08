@@ -85,6 +85,32 @@ export const commands = {
 	bandaLigar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_ligar"),
 	/**  Desliga e devolve as políticas e o limite do Update antes de responder. `LIVRES`: é desfazer. */
 	bandaDesligar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_desligar"),
+	/**  O Turbo do jogo aberto: o perfil lembrado, se o jogo é competitivo e o que o Turbo fez. `LIVRES`: só lê. */
+	turboPainel: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_painel"),
+	/**
+	 *  `EXIGEM_LICENCA`: mede o jogo aberto (10 s) ou usa a receita lembrada dele (`lembrado`), aplica e lembra. O FPS
+	 *  base é travado como no Frame Boost (o `travar_base` não trava no só escala).
+	 */
+	turboLigar: (lembrado: boolean | null) => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_ligar", { lembrado }),
+	/**
+	 *  `EXIGEM_LICENCA`: a prova A-B do Turbo no jogo aberto (uns 5 minutos), com o passo a passo em `turbo:prova`. Piorou:
+	 *  o Turbo fica desligado e a receita não volta neste jogo. Senão, a receita inteira volta e o FPS base é travado como
+	 *  no Frame Boost.
+	 */
+	turboProvar: () => __TAURI_INVOKE<ResultadoDaProva_Serialize>("turbo_provar"),
+	/**  A última prova do Turbo. `LIVRES`. */
+	turboProvaGuardada: () => __TAURI_INVOKE<ResultadoDaProva_Serialize | null>("turbo_prova_guardada"),
+	/**  O texto da última prova do Turbo para colar no Discord: só de prova com comparação justa e margem. `LIVRES`. */
+	turboCompartilhar: () => __TAURI_INVOKE<string>("turbo_compartilhar"),
+	/**  Desliga o que o Turbo ligou. `LIVRES`: desfazer nunca depende de licença. */
+	turboDesligar: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_desligar"),
+	/**
+	 *  "Menor atraso" ou "Mais FPS" para o jogo aberto: com o menor atraso, o Turbo não liga geração de quadros. `LIVRES`:
+	 *  é uma preferência no arquivo do Turbo, não mexe no Windows.
+	 */
+	turboAtraso: (menor: boolean) => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_atraso", { menor }),
+	/**  Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`. */
+	turboEsquecer: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_esquecer"),
 };
 
 /* Types */
@@ -295,6 +321,19 @@ export type Conselho = {
 
 export type Desfecho = { estado: "Voltou" } | { estado: "NadaAFazer" } | { estado: "Falhou"; motivo: string };
 
+export type DesfechoDaProva = 
+/**  Mais FPS do jogo ou 1% pior mais alto, além do ruído, sem piora no outro. */
+"Ganhou" | 
+/**  Menos FPS ou 1% pior mais baixo, além do ruído. O plano é desfeito. */
+"Piorou" | 
+/**  As rodadas não distinguem os dois lados. NÃO é "não faz nada": é o que esta medição consegue dizer. */
+"Indistinguivel" | 
+/**
+ *  Configuração gráfica ou gerador de quadros mudou no meio, as rodadas vieram de medidores diferentes, ou faltou
+ *  rodada.
+ */
+"SemComparacaoJusta";
+
 export type Diagnostico = Diagnostico_Serialize | Diagnostico_Deserialize;
 
 export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize | DiagnosticoDaTela_Deserialize;
@@ -363,6 +402,36 @@ export type Diagnostico_Serialize = {
 	classes_avaliadas: number,
 	classes_totais: number,
 };
+
+export type DiferencaMedida = DiferencaMedida_Serialize | DiferencaMedida_Deserialize;
+
+export type DiferencaMedida_Deserialize = 
+/**  NÃO é "não houve diferença": é não ter medido o suficiente. */
+({ SemRepeticoes: {
+	falta: string,
+} }) & { Indistinguivel?: never; Real?: never } | ({ Indistinguivel: {
+	delta: number | null,
+	sobreposicao: number | null,
+} }) & { Real?: never; SemRepeticoes?: never } | ({ Real: {
+	delta: number | null,
+	pct?: number | null,
+	/**  Um ganho de 4% com folga de 3,8% é real e apertado, e quem lê precisa saber. */
+	folga: number | null,
+} }) & { Indistinguivel?: never; SemRepeticoes?: never };
+
+export type DiferencaMedida_Serialize = 
+/**  NÃO é "não houve diferença": é não ter medido o suficiente. */
+({ SemRepeticoes: {
+	falta: string,
+} }) & { Indistinguivel?: never; Real?: never } | ({ Indistinguivel: {
+	delta: number | null,
+	sobreposicao: number | null,
+} }) & { Real?: never; SemRepeticoes?: never } | ({ Real: {
+	delta: number | null,
+	pct: number | null,
+	/**  Um ganho de 4% com folga de 3,8% é real e apertado, e quem lê precisa saber. */
+	folga: number | null,
+} }) & { Indistinguivel?: never; SemRepeticoes?: never };
 
 export type DiskMetrics = DiskMetrics_Serialize | DiskMetrics_Deserialize;
 
@@ -483,6 +552,25 @@ export type Ganho =
 /**  Faltam partidas de um dos lados. */
 { estado: "Medindo"; antes: number; depois: number };
 
+/**  Onde o jogo trava, nas palavras do Turbo. */
+export type GargaloDoTurbo = "Placa" | "Processador" | "Memoria" | 
+/**  Nada no limite: o jogo já roda o que esta máquina consegue. */
+"Nenhum" | 
+/**  O jogo estava parado (menu, pausa) durante a medida. */
+"SemCarga" | 
+/**  Placa lida e nada no limite, abaixo dos Hz: quem segura é o próprio jogo (limite dele, do servidor, do motor). */
+"Jogo";
+
+/**
+ *  O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
+ *  FPS medido inclui quadro gerado, e a tela diz isso.
+ */
+export type GeracaoNaPartida = "NenhumaVisivel" | "OtimizaFg" | 
+/**  O programa estava aberto; não dá para saber se gerando. */
+"LosslessScaling" | 
+/**  Quadros gerados que se identificaram ao PresentMon (AFMF, XeFG). */
+"IdentificadaNosQuadros";
+
 export type GravidadeDoWifi = "Bom" | "Info" | "Atencao";
 
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
@@ -545,6 +633,8 @@ export type JogoDaLoja_Serialize = {
 	ultima_vez: number,
 	gb: number | null,
 };
+
+export type LadoDaProva = "SemOtimiza" | "ComOtimiza";
 
 /**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
 export type LeituraDoHistorico = LeituraDoHistorico_Serialize | LeituraDoHistorico_Deserialize;
@@ -713,6 +803,8 @@ export type NetworkMetrics_Serialize = {
 	total_transmitted_gb: number | null,
 };
 
+export type NivelDeEscala = "UltraQualidade" | "Qualidade" | "Equilibrado" | "Desempenho";
+
 export type NivelDoDpc = "Saudavel" | 
 /**  Passou de 500 µs, ou um único evento isolado acima de 1 ms. */
 "Atencao" | 
@@ -801,6 +893,57 @@ export type PainelDaBanda_Serialize = {
 	impedimento: string | null,
 	/**  O que faz, sem prometer o que não faz. */
 	o_que_faz: string,
+};
+
+/**  Para a tela. */
+export type PainelDoTurbo = PainelDoTurbo_Serialize | PainelDoTurbo_Deserialize;
+
+/**  Para a tela. */
+export type PainelDoTurbo_Deserialize = {
+	jogo?: string | null,
+	/**  A escolha do cartão para o jogo aberto (ou a sugestão, sem escolha). */
+	menor_atraso: boolean,
+	/**  O que ficou lembrado para este jogo. */
+	perfil?: PerfilDoTurbo_Deserialize | null,
+	/**  O que o Turbo fez da última vez que ligou (nesta abertura do Otimiza). */
+	passos: string[],
+	ligado: boolean,
+	/**  Desligado: o antes × depois da última vez. */
+	resultado?: ResultadoDoTurbo_Deserialize | null,
+	/**  A última prova A-B do Turbo NESTE jogo. */
+	prova?: ResultadoDaProva_Deserialize | null,
+	/**  A prova está rodando agora. */
+	provando: boolean,
+	/**  A que está rodando é a automática, da primeira vez da receita neste jogo. */
+	prova_sozinha: boolean,
+	/**  Quanto a prova leva, para a tela dizer antes de começar. */
+	duracao_da_prova_s: number,
+	/**  O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso. */
+	ritmo?: RitmoDoJogo | null,
+};
+
+/**  Para a tela. */
+export type PainelDoTurbo_Serialize = {
+	jogo: string | null,
+	/**  A escolha do cartão para o jogo aberto (ou a sugestão, sem escolha). */
+	menor_atraso: boolean,
+	/**  O que ficou lembrado para este jogo. */
+	perfil: PerfilDoTurbo_Serialize | null,
+	/**  O que o Turbo fez da última vez que ligou (nesta abertura do Otimiza). */
+	passos: string[],
+	ligado: boolean,
+	/**  Desligado: o antes × depois da última vez. */
+	resultado: ResultadoDoTurbo_Serialize | null,
+	/**  A última prova A-B do Turbo NESTE jogo. */
+	prova: ResultadoDaProva_Serialize | null,
+	/**  A prova está rodando agora. */
+	provando: boolean,
+	/**  A que está rodando é a automática, da primeira vez da receita neste jogo. */
+	prova_sozinha: boolean,
+	/**  Quanto a prova leva, para a tela dizer antes de começar. */
+	duracao_da_prova_s: number,
+	/**  O jogo aberto trava muitas vezes por minuto (última medida do Turbo): a oferta do Jogo liso. */
+	ritmo: RitmoDoJogo | null,
 };
 
 /**  Para a tela. */
@@ -939,6 +1082,29 @@ export type PerfilDoJogo_Serialize = {
 	nota: string | null,
 };
 
+/**  A receita que deu certo num jogo, nesta máquina: na próxima vez, um clique e sem medir de novo. */
+export type PerfilDoTurbo = PerfilDoTurbo_Serialize | PerfilDoTurbo_Deserialize;
+
+/**  A receita que deu certo num jogo, nesta máquina: na próxima vez, um clique e sem medir de novo. */
+export type PerfilDoTurbo_Deserialize = {
+	receita: ReceitaDoTurbo_Deserialize,
+	/**  O FPS do jogo na medida (o "antes"). */
+	fps_antes?: number | null,
+	medido_em: number,
+	/**  O desfecho da última prova A-B desta receita. `Piorou`: o Turbo não a liga de novo neste jogo. */
+	prova?: DesfechoDaProva | null,
+};
+
+/**  A receita que deu certo num jogo, nesta máquina: na próxima vez, um clique e sem medir de novo. */
+export type PerfilDoTurbo_Serialize = {
+	receita: ReceitaDoTurbo_Serialize,
+	/**  O FPS do jogo na medida (o "antes"). */
+	fps_antes: number | null,
+	medido_em: number,
+	/**  O desfecho da última prova A-B desta receita. `Piorou`: o Turbo não a liga de novo neste jogo. */
+	prova: DesfechoDaProva | null,
+};
+
 export type PerformanceMetrics = PerformanceMetrics_Serialize | PerformanceMetrics_Deserialize;
 
 export type PerformanceMetrics_Deserialize = {
@@ -1020,6 +1186,32 @@ export type RAMMetrics_Serialize = {
 	available_gb: number | null,
 	cached_gb: number | null,
 	usage_percent: number | null,
+};
+
+export type ReceitaDoTurbo = ReceitaDoTurbo_Serialize | ReceitaDoTurbo_Deserialize;
+
+export type ReceitaDoTurbo_Deserialize = {
+	gargalo: GargaloDoTurbo,
+	/**  O Frame Boost: escala (nível) e multiplicador (1 = só escala, 0 = Auto, 2+ = fixo). `None` = não liga. */
+	escala?: NivelDeEscala | null,
+	multiplicador?: number | null,
+	energia: boolean,
+	/**  Oferecer fechar o que ocupa memória (a tela lista; o Turbo nunca fecha sozinho). */
+	memoria: boolean,
+	/**  O que o Turbo vai fazer e por quê, para a tela. */
+	explicacao: string,
+};
+
+export type ReceitaDoTurbo_Serialize = {
+	gargalo: GargaloDoTurbo,
+	/**  O Frame Boost: escala (nível) e multiplicador (1 = só escala, 0 = Auto, 2+ = fixo). `None` = não liga. */
+	escala: NivelDeEscala | null,
+	multiplicador: number | null,
+	energia: boolean,
+	/**  Oferecer fechar o que ocupa memória (a tela lista; o Turbo nunca fecha sozinho). */
+	memoria: boolean,
+	/**  O que o Turbo vai fazer e por quê, para a tela. */
+	explicacao: string,
 };
 
 export type Recurso = 
@@ -1158,6 +1350,116 @@ export type ResultadoDaParte = {
 	feito: string[],
 };
 
+export type ResultadoDaProva = ResultadoDaProva_Serialize | ResultadoDaProva_Deserialize;
+
+export type ResultadoDaProva_Deserialize = {
+	jogo: string,
+	quando: number,
+	segundos_por_rodada: number,
+	rodadas: RodadaDaProva_Deserialize[],
+	fps_sem?: ResumoDasRepeticoes_Deserialize | null,
+	fps_com?: ResumoDasRepeticoes_Deserialize | null,
+	low_sem?: ResumoDasRepeticoes_Deserialize | null,
+	low_com?: ResumoDasRepeticoes_Deserialize | null,
+	diferenca_fps?: DiferencaMedida_Deserialize | null,
+	diferenca_low?: DiferencaMedida_Deserialize | null,
+	desfecho: DesfechoDaProva,
+	/**  A frase para a tela; a tela escolhe cor e ícone pelo `desfecho`, nunca por este texto. */
+	leitura: string,
+	/**  O lado A foi o Equilibrado do Windows porque o plano de antes não existe mais. */
+	contra_o_equilibrado: boolean,
+	/**  Falso só quando piorou: o plano do Otimiza foi desfeito. */
+	ficou_com_otimiza: boolean,
+	/**  Preenchido quando o desfazer depois de piorar falhou: a pessoa precisa saber que o plano ficou. */
+	falha_ao_desfazer?: string | null,
+};
+
+export type ResultadoDaProva_Serialize = {
+	jogo: string,
+	quando: number,
+	segundos_por_rodada: number,
+	rodadas: RodadaDaProva_Serialize[],
+	fps_sem: ResumoDasRepeticoes_Serialize | null,
+	fps_com: ResumoDasRepeticoes_Serialize | null,
+	low_sem: ResumoDasRepeticoes_Serialize | null,
+	low_com: ResumoDasRepeticoes_Serialize | null,
+	diferenca_fps: DiferencaMedida_Serialize | null,
+	diferenca_low: DiferencaMedida_Serialize | null,
+	desfecho: DesfechoDaProva,
+	/**  A frase para a tela; a tela escolhe cor e ícone pelo `desfecho`, nunca por este texto. */
+	leitura: string,
+	/**  O lado A foi o Equilibrado do Windows porque o plano de antes não existe mais. */
+	contra_o_equilibrado: boolean,
+	/**  Falso só quando piorou: o plano do Otimiza foi desfeito. */
+	ficou_com_otimiza: boolean,
+	/**  Preenchido quando o desfazer depois de piorar falhou: a pessoa precisa saber que o plano ficou. */
+	falha_ao_desfazer: string | null,
+};
+
+/**
+ *  O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
+ *  da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
+ */
+export type ResultadoDoTurbo = ResultadoDoTurbo_Serialize | ResultadoDoTurbo_Deserialize;
+
+/**
+ *  O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
+ *  da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
+ */
+export type ResultadoDoTurbo_Deserialize = {
+	fps_antes: number | null,
+	/**  FPS do jogo com o Turbo, média da sessão. */
+	fps_do_jogo: number | null,
+	ganho_pct: number | null,
+	/**  Só com geração: o que chegou à tela. */
+	fps_na_tela?: number | null,
+	na_tela_medido: boolean,
+	minutos: number | null,
+	escala?: NivelDeEscala | null,
+};
+
+/**
+ *  O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
+ *  da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
+ */
+export type ResultadoDoTurbo_Serialize = {
+	fps_antes: number | null,
+	/**  FPS do jogo com o Turbo, média da sessão. */
+	fps_do_jogo: number | null,
+	ganho_pct: number | null,
+	/**  Só com geração: o que chegou à tela. */
+	fps_na_tela: number | null,
+	na_tela_medido: boolean,
+	minutos: number | null,
+	escala: NivelDeEscala | null,
+};
+
+export type ResumoDasRepeticoes = ResumoDasRepeticoes_Serialize | ResumoDasRepeticoes_Deserialize;
+
+export type ResumoDasRepeticoes_Deserialize = {
+	id: string,
+	/**  Vai junto SEMPRE: margem sem o número de repetições esconde se veio de três ou de trinta. */
+	n: number,
+	media: number | null,
+	/**  O afastamento da média é sinal de que algo aconteceu numa repetição. */
+	mediana: number | null,
+	desvio?: number | null,
+	/**  `None` abaixo de `REPETICOES_MINIMAS`: fingir margem estreita é pior que não ter margem. */
+	margem?: number | null,
+};
+
+export type ResumoDasRepeticoes_Serialize = {
+	id: string,
+	/**  Vai junto SEMPRE: margem sem o número de repetições esconde se veio de três ou de trinta. */
+	n: number,
+	media: number | null,
+	/**  O afastamento da média é sinal de que algo aconteceu numa repetição. */
+	mediana: number | null,
+	desvio: number | null,
+	/**  `None` abaixo de `REPETICOES_MINIMAS`: fingir margem estreita é pior que não ter margem. */
+	margem: number | null,
+};
+
 export type ResumoDoJogo = ResumoDoJogo_Serialize | ResumoDoJogo_Deserialize;
 
 export type ResumoDoJogo_Deserialize = {
@@ -1178,6 +1480,45 @@ export type ResumoDoJogo_Serialize = {
 	ganho_fps: Ganho,
 	ganho_low: Ganho,
 	melhor_fps: number | null,
+};
+
+/**  A oferta do Jogo liso no cartão do Turbo: o jogo trava muitas vezes por minuto e um teto estável tira o tranco. */
+export type RitmoDoJogo = {
+	fps: number | null,
+	trancos_por_minuto: number | null,
+	teto: number,
+};
+
+export type RodadaDaProva = RodadaDaProva_Serialize | RodadaDaProva_Deserialize;
+
+export type RodadaDaProva_Deserialize = {
+	lado: LadoDaProva,
+	/**  Só os quadros que o jogo desenhou. */
+	fps_do_jogo: number | null,
+	/**  `None` abaixo de mil quadros (a regra única do 1%). */
+	low_1pct?: number | null,
+	/**  Pelo PresentMon; `None` pelo canal antigo. */
+	fps_exibido?: number | null,
+	quadros: number,
+	geracao?: GeracaoNaPartida | null,
+	configuracao_do_jogo?: string | null,
+	/**  Falso quando o PresentMon falhou e mediu o canal antigo, que conta tudo o que foi apresentado. */
+	pelo_presentmon: boolean,
+};
+
+export type RodadaDaProva_Serialize = {
+	lado: LadoDaProva,
+	/**  Só os quadros que o jogo desenhou. */
+	fps_do_jogo: number | null,
+	/**  `None` abaixo de mil quadros (a regra única do 1%). */
+	low_1pct: number | null,
+	/**  Pelo PresentMon; `None` pelo canal antigo. */
+	fps_exibido: number | null,
+	quadros: number,
+	geracao: GeracaoNaPartida | null,
+	configuracao_do_jogo: string | null,
+	/**  Falso quando o PresentMon falhou e mediu o canal antigo, que conta tudo o que foi apresentado. */
+	pelo_presentmon: boolean,
 };
 
 export type Rota = Rota_Serialize | Rota_Deserialize;

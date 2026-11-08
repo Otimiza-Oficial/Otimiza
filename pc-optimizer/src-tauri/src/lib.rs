@@ -1,3 +1,14 @@
+/// O aplicativo, guardado na abertura. Comando que recebe `AppHandle` como argumento não entra no contrato tipado
+/// (`contrato.rs` monta com o `MockRuntime`); os que precisam dele e da interface nova o pegam aqui.
+static APLICATIVO: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+pub(crate) fn aplicativo() -> Result<tauri::AppHandle, String> {
+    APLICATIVO
+        .get()
+        .cloned()
+        .ok_or_else(|| "O Otimiza ainda está abrindo: tente de novo em um segundo.".to_string())
+}
+
 mod ci_coverage;
 
 mod commands;
@@ -344,6 +355,9 @@ pub fn run() {
             commands::versao_do_app,
         ])
         .setup(|app| {
+            // Para os comandos que precisam do aplicativo sem recebê-lo como argumento (ver `aplicativo`).
+            let _ = APLICATIVO.set(app.handle().clone());
+
             // `otimiza.log` começa dizendo em que máquina: é o arquivo que o cliente manda. Em thread própria (PowerShell e
             // `powercfg`), fora do orçamento da abertura.
             #[cfg(target_os = "windows")]

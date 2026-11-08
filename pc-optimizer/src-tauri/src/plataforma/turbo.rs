@@ -21,6 +21,8 @@ use crate::modules::windows::geracao::escala::Nivel;
 
 /// Onde o jogo trava, nas palavras do Turbo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "GargaloDoTurbo"))]
 pub enum Gargalo {
     Placa,
     Processador,
@@ -68,6 +70,8 @@ fn menor_atraso_em(p: &Perfis, id_do_jogo: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ReceitaDoTurbo"))]
 pub struct Receita {
     pub gargalo: Gargalo,
     /// O Frame Boost: escala (nível) e multiplicador (1 = só escala, 0 = Auto, 2+ = fixo). `None` = não liga.
@@ -235,6 +239,8 @@ pub fn aviso_de_copia(
 
 /// A receita que deu certo num jogo, nesta máquina: na próxima vez, um clique e sem medir de novo.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PerfilDoTurbo"))]
 pub struct Perfil {
     pub receita: Receita,
     /// O FPS do jogo na medida (o "antes").
@@ -385,6 +391,8 @@ pub fn esquecer(id_do_jogo: &str) -> Result<(), String> {
 /// O antes × depois da última vez que o Turbo ficou ligado com o Frame Boost. NÃO é prova A-B: o "antes" são os 10 s
 /// da medida e o "depois" a média da sessão (cenas diferentes). A tela diz isso; o compartilhar fica para a prova.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResultadoDoTurbo"))]
 pub struct Resultado {
     pub fps_antes: f64,
     /// FPS do jogo com o Turbo, média da sessão.
@@ -419,6 +427,8 @@ pub fn resultado_de(
 
 /// Para a tela.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelDoTurbo"))]
 pub struct Painel {
     pub jogo: Option<String>,
     /// A escolha do cartão para o jogo aberto (ou a sugestão, sem escolha).
@@ -494,6 +504,8 @@ pub fn perfil_do_jogo_pendente() -> Option<String> {
 
 /// A oferta do Jogo liso no cartão do Turbo: o jogo trava muitas vezes por minuto e um teto estável tira o tranco.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RitmoDoJogo"))]
 pub struct Ritmo {
     pub fps: f64,
     pub trancos_por_minuto: f64,
@@ -748,6 +760,8 @@ pub fn desligar() -> Result<(), String> {
 
 /// Um passo da prova, para a tela: 0 é o aquecimento; 1 a 8, as rodadas.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PassoDaProvaDoTurbo"))]
 pub struct PassoDaProva {
     pub indice: usize,
     pub total: usize,
