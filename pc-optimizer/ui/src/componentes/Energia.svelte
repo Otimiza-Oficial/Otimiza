@@ -8,6 +8,8 @@
     ponte,
     type DiagnosticoDeEnergia,
     type EnergiaDeJogo,
+    type PassoDaCalibracao,
+    type ResultadoDaCalibracao,
     type RelatorioDeTetos,
     type RelatorioDoPlano,
     type VistoriaDoPlano,
@@ -33,12 +35,69 @@
   let erro = $state<string | null>(null);
   let aviso = $state<string | null>(null);
 
+  // Calibração por candidatos: o Rust conduz o roteiro inteiro; aqui só o progresso e o resultado.
+  let admin = $state<boolean | null>(null);
+  let calibrando = $state(false);
+  let cancelando = $state(false);
+  let passo = $state<PassoDaCalibracao | null>(null);
+  let calibracao = $state<ResultadoDaCalibracao | null>(null);
+  let erroCalibracao = $state<string | null>(null);
+  let avisoCalibracao = $state<string | null>(null);
+  let aplicandoCalibrado = $state(false);
+
+  async function calibrar() {
+    calibrando = true;
+    cancelando = false;
+    erroCalibracao = null;
+    avisoCalibracao = null;
+    calibracao = null;
+    passo = null;
+    try {
+      calibracao = await ponte.calibrarEnergia((p) => (passo = p));
+    } catch (e) {
+      erroCalibracao = String(e);
+    } finally {
+      calibrando = false;
+      void lerVistoria();
+    }
+  }
+
+  async function cancelarCalibracao() {
+    cancelando = true;
+    await ponte.cancelarCalibracao().catch(() => {});
+  }
+
+  async function aplicarCalibrado() {
+    aplicandoCalibrado = true;
+    try {
+      avisoCalibracao = await ponte.aplicarCalibrado();
+      if (calibracao) calibracao = { ...calibracao, pode_aplicar: false };
+      void lerVistoria();
+    } catch (e) {
+      erroCalibracao = String(e);
+    } finally {
+      aplicandoCalibrado = false;
+    }
+  }
+
+  type Tom = "ok" | "atencao" | "neutro";
+  /** Variação em %: verde quando melhora (no P99, menor é melhor), âmbar quando piora, neutra abaixo de meio ponto. */
+  function sinal(v: number | null, menorEMelhor = false): { texto: string; tom: Tom } {
+    if (v == null) return { texto: "—", tom: "neutro" };
+    const bom = menorEMelhor ? v < 0 : v > 0;
+    return {
+      texto: `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")}%`,
+      tom: Math.abs(v) < 0.5 ? "neutro" : bom ? "ok" : "atencao",
+    };
+  }
+
   async function lerVistoria() {
     vistoria = await ponte.vistoriarPlano().catch(() => ({ estado: "NaoConsegui" }) as VistoriaDoPlano);
   }
 
   onMount(() => {
     void lerVistoria();
+    ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
     ponte.energiaDeJogo().then((j) => (jogo = j)).catch((e) => (erro = String(e)));
     ponte.tetosEscondidos().then((t) => (tetos = t)).catch(() => {});
   });
@@ -196,6 +255,107 @@
     {/if}
   </section>
 
+  <!-- Calibração por candidatos -->
+  <section class="secao">
+    <h2>Calibrar para este PC</h2>
+    <p class="apoio">
+      O Otimiza testa de 4 a 8 combinações de energia no seu processador, mede cada uma e fica com a que der mais FPS e
+      melhor 1% pior, sem esquentar à toa. Leva de 2 a 5 minutos. Com um jogo aberto, mede com ele (fique na mesma cena);
+      sem jogo, deixe o PC parado. No fim, o seu plano volta: o vencedor só entra se você aplicar.
+    </p>
+    {#if admin === false}
+      <p class="impedimento">
+        A calibração troca o plano de energia: precisa do Otimiza aberto como administrador.
+        <button class="btn quieto" onclick={() => ponte.abrirComoAdministrador()}>Abrir como administrador</button>
+      </p>
+    {/if}
+    <div class="acoes">
+      {#if calibrando}
+        <button class="btn" disabled={cancelando} onclick={cancelarCalibracao}>
+          {cancelando ? "Parando no fim do passo…" : "Parar"}
+        </button>
+      {:else}
+        <button class="btn primario" disabled={admin === false} onclick={calibrar}>
+          {calibracao ? "Calibrar de novo" : "Calibrar agora"}
+        </button>
+      {/if}
+    </div>
+
+    {#if calibrando}
+      <div class="calibrando">
+        <div class="progresso" role="progressbar" aria-valuemin={0} aria-valuemax={passo?.total ?? 1} aria-valuenow={passo?.passo ?? 0}>
+          <div style:width={`${passo ? Math.min(100, (passo.passo / passo.total) * 100) : 3}%`}></div>
+        </div>
+        <p class="apoio">{passo?.frase ?? "Preparando…"}</p>
+      </div>
+    {:else if erroCalibracao}
+      <p class="erro">{erroCalibracao}</p>
+    {:else if calibracao}
+      {@const c = calibracao}
+      <div class="veredito-calibracao">
+        <span class="ponto" data-tom={c.pode_aplicar ? "ok" : "neutro"}></span>
+        <div>
+          <p class="destaque">
+            {#if c.fica_o_atual}
+              O plano que você já usa é o melhor neste PC. Nada a trocar.
+            {:else if c.vencedor && c.pode_aplicar}
+              Ganhou: {c.vencedor} (confiança de {Math.round(c.confianca_pct ?? 0)}%).
+            {:else if c.vencedor}
+              Ganhou: {c.vencedor}.
+            {:else}
+              Nenhuma combinação ganhou do padrão do Windows com folga. Fica o padrão.
+            {/if}
+          </p>
+          {#if !c.mediu_com_jogo}<p class="apoio">Medido sem jogo. Para a palavra final, calibre com o jogo aberto.</p>{/if}
+        </div>
+      </div>
+      {#if c.vencedor && !c.fica_o_atual}
+        {@const ganhos = [
+          { rotulo: "FPS", g: sinal(c.fps_pct) },
+          { rotulo: "1% pior", g: sinal(c.low_1_pct) },
+          { rotulo: "pior quadro (P99)", g: sinal(c.p99_pct, true) },
+        ]}
+        <div class="ganhos-calibracao">
+          {#each ganhos as x (x.rotulo)}
+            <div><strong class="numero" data-tom={x.g.tom}>{x.g.texto}</strong><span class="apoio">{x.rotulo}</span></div>
+          {/each}
+          {#if c.temperatura_delta_c != null}
+            <div>
+              <strong class="numero">{c.temperatura_delta_c > 0 ? "+" : ""}{c.temperatura_delta_c.toFixed(1).replace(".", ",")} °C</strong>
+              <span class="apoio">temperatura</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+      <ol class="notas">
+        {#each c.candidatos as n, i (i)}
+          <li class:vencedor={n.vencedor}>
+            <span class="rot">{n.rotulo}</span>
+            <span class="barra-nota" aria-hidden="true"><span style:width={`${Math.max(4, Math.min(100, ((n.nota ?? 100) - 80) * 2.5))}%`}></span></span>
+            <span class="numero">{(n.nota ?? 0).toFixed(1).replace(".", ",")}</span>
+          </li>
+        {/each}
+      </ol>
+      <p class="apoio pequeno">Nota 100 = igual ao padrão do Windows. Pesam mais o 1% pior, o pior quadro e a resposta do processador.</p>
+      {#if c.achados.length > 0}
+        <ul class="achados-calibracao">
+          {#each c.achados as a, i (i)}
+            <li><span class="ponto" data-tom={a.tom}></span><span>{a.texto}</span></li>
+          {/each}
+        </ul>
+      {/if}
+      {#if c.aviso}<p class="impedimento">{c.aviso}</p>{/if}
+      {#if c.pode_aplicar}
+        <div class="acoes">
+          <button class="btn primario" disabled={aplicandoCalibrado} onclick={aplicarCalibrado}>
+            {aplicandoCalibrado ? "Aplicando…" : `Aplicar ${c.vencedor}`}
+          </button>
+        </div>
+      {/if}
+      {#if avisoCalibracao}<p class="apoio">{avisoCalibracao}</p>{/if}
+    {/if}
+  </section>
+
   <!-- Energia de jogo -->
   <section class="secao">
     <div class="linha-opcao">
@@ -270,6 +430,104 @@
     display: grid;
     gap: 4px;
     padding-top: 8px;
+  }
+  .calibrando {
+    display: grid;
+    gap: 8px;
+  }
+  .progresso {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--linha);
+    overflow: hidden;
+  }
+  .progresso div {
+    height: 100%;
+    background: var(--acao);
+    transition: width 600ms ease;
+  }
+  .veredito-calibracao {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .veredito-calibracao p {
+    margin: 0;
+  }
+  .destaque {
+    font-weight: 500;
+  }
+  .erro {
+    color: var(--perigo);
+  }
+  .ganhos-calibracao {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+  }
+  .ganhos-calibracao > div {
+    display: grid;
+    gap: 2px;
+  }
+  .ganhos-calibracao .numero {
+    font-size: 22px;
+  }
+  .ganhos-calibracao [data-tom="ok"] {
+    color: var(--ok);
+  }
+  .ganhos-calibracao [data-tom="atencao"] {
+    color: var(--atencao);
+  }
+  .notas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+  .notas li {
+    display: grid;
+    grid-template-columns: minmax(140px, 220px) 1fr 48px;
+    gap: 12px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .notas li.vencedor .rot {
+    font-weight: 600;
+  }
+  .barra-nota {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--linha);
+    overflow: hidden;
+  }
+  .barra-nota span {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: var(--tinta-3);
+  }
+  .notas li.vencedor .barra-nota span {
+    background: var(--ok);
+  }
+  .notas .numero {
+    text-align: right;
+  }
+  .pequeno {
+    font-size: 11px;
+  }
+  .achados-calibracao {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .achados-calibracao li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
   }
   .linha-opcao {
     display: flex;

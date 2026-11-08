@@ -5,6 +5,7 @@
 // Fora do Tauri (o navegador do `npm run nova:web`) não há backend: a ponte devolve uma máquina de demonstração e a
 // barra de menu diz isso. Dado de demonstração nunca aparece como se fosse do PC de quem está olhando.
 
+import { listen } from "@tauri-apps/api/event";
 import {
   commands,
   type DiagnosticoDaTela_Serialize,
@@ -45,6 +46,7 @@ import {
   type Rota_Serialize,
   type HistoricoDaRede_Serialize,
   type TaxaDoMouse_Serialize,
+  type ResultadoDaCalibracao_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
 } from "./tipos";
@@ -64,6 +66,9 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
+export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
+/** Chega pelo evento `energia:calibracao` (fora do contrato: evento não é comando). Espelha `calibracao::PassoDaCalibracao`. */
+export type PassoDaCalibracao = { passo: number; total: number; frase: string };
 export type NumerosDoPeriodo = HistoricoDaRede["resumo"]["periodos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
@@ -674,6 +679,58 @@ export const ponte = {
   },
   /** No navegador finge administrador para a demonstração mostrar todos os botões. */
   administrador: () => (noTauri ? commands.isElevated() : Promise.resolve(true)),
+  /** A calibração de energia inteira (2 a 5 min). Cada passo chega por `aoPasso`; o executável do jogo aberto, se houver,
+   *  vai junto para medir com ele. */
+  calibrarEnergia: async (aoPasso: (p: PassoDaCalibracao) => void): Promise<ResultadoDaCalibracao> => {
+    if (noTauri) {
+      const deixar = await listen<PassoDaCalibracao>("energia:calibracao", (e) => aoPasso(e.payload));
+      try {
+        const jogo = await commands.jogoAberto().catch(() => null);
+        return await commands.energiaCalibrar(jogo?.executavel ?? null);
+      } finally {
+        deixar();
+      }
+    }
+    const passos = [
+      "Medindo o plano que você usa hoje (Equilibrado) antes de mudar qualquer coisa. Deixe o PC parado.",
+      "Candidato 1 de 3: Padrão do Windows. Deixe o PC parado.",
+      "Candidato 2 de 3: Resposta máxima. Deixe o PC parado.",
+      "Candidato 3 de 3: Adaptativo. Deixe o PC parado.",
+      "Conferindo o padrão uma última vez…",
+      "Ajuste fino 1 do vencedor de 2. Deixe o PC parado.",
+      "Ajuste fino 2 do vencedor de 2. Deixe o PC parado.",
+    ];
+    for (const [i, frase] of passos.entries()) {
+      aoPasso({ passo: i + 1, total: passos.length, frase });
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    return {
+      vencedor: "Resposta máxima",
+      fica_o_atual: false,
+      pode_aplicar: true,
+      confianca_pct: 84,
+      fps_pct: 3.8,
+      low_1_pct: 7.2,
+      p99_pct: -6.1,
+      temperatura_delta_c: 1.4,
+      candidatos: [
+        { rotulo: "Resposta máxima", nota: 108.4, vencedor: true },
+        { rotulo: "Ajuste fino 1 do vencedor", nota: 106.9, vencedor: false },
+        { rotulo: "Adaptativo", nota: 103.2, vencedor: false },
+        { rotulo: "Padrão do Windows", nota: 100, vencedor: false },
+        { rotulo: "O plano que você usa hoje", nota: 99.1, vencedor: false },
+      ],
+      achados: [
+        { texto: "Sem jogo, o FPS veio do teste de quadros do Otimiza (trabalho parecido com o de um jogo).", tom: "neutro" },
+        { texto: "Uma medida por candidato. Com duas, a confiança sobe.", tom: "atencao" },
+      ],
+      mediu_com_jogo: false,
+      aviso: null,
+    };
+  },
+  cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
+  aplicarCalibrado: (): Promise<string> =>
+    noTauri ? commands.energiaAplicarCalibrado() : Promise.resolve("Pronto: o vencedor está no plano OTIMIZA, conferido relendo do Windows."),
   abrirComoAdministrador: () => (noTauri ? commands.relaunchAsAdmin() : Promise.resolve("")),
   telas: () => (noTauri ? commands.telaDiagnostico() : Promise.resolve(telasDemo())),
   trocaDeTelaPendente: () => (noTauri ? commands.telaTrocaPendente() : Promise.resolve(false)),

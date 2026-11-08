@@ -77,6 +77,7 @@ pub struct AppState {
 // Os `pub use` mantêm cada comando em `crate::commands::<nome>`, o caminho que o `generate_handler!` de `lib.rs` e o
 // contrato (`contrato.rs`) já usam: trocar o comando de arquivo não troca o nome que a tela chama. Cada área faz
 // `use super::*` e enxerga daqui os `use` acima, o `AppState` e o `UNSUPPORTED_PLATFORM`.
+mod calibracao;
 mod driver;
 mod energia;
 mod frame_boost;
@@ -95,6 +96,7 @@ mod sistema;
 mod tela;
 mod turbo;
 
+pub use calibracao::*;
 pub use driver::*;
 pub use energia::*;
 pub use frame_boost::*;
@@ -355,6 +357,7 @@ mod tests {
         "rede_rota",
         "rede_rota_do_jogo",
         "rede_historico",
+        "energia_calibrar_cancelar",
         "rede_wifi",
         "rede_varredura_wifi",
         "rede_varredura_wifi_desligar",
@@ -375,6 +378,8 @@ mod tests {
         "cpuset_testar",
         "testar_causa_da_travada",
         "energia_testar_candidato",
+        "energia_calibrar",
+        "energia_aplicar_calibrado",
         "energia_aplicar",
         "energia_modo_dinamico",
         "aplicar_plano_otimiza",

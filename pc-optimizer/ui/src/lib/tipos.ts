@@ -86,6 +86,16 @@ export const commands = {
 	 *  de cada relato, nunca posição ou clique; nada fica ligado depois. `LIVRES`: não muda o PC.
 	 */
 	mouseTaxa: (segundos: number) => __TAURI_INVOKE<TaxaDoMouse_Serialize>("mouse_taxa", { segundos }),
+	/**
+	 *  Roda a calibração inteira (uns 2 a 5 min) e manda cada passo no evento `energia:calibracao`. Exige administrador.
+	 *  `processo`: o executável do jogo aberto, para medir com ele (sem jogo, mede pelo teste de quadros). `EXIGEM_LICENCA`:
+	 *  escreve no plano OTIMIZA durante os testes.
+	 */
+	energiaCalibrar: (processo: string | null) => __TAURI_INVOKE<ResultadoDaCalibracao_Serialize>("energia_calibrar", { processo }),
+	/**  Pede para parar depois do passo em andamento (o plano de antes volta do mesmo jeito). `LIVRES`: é desfazer. */
+	energiaCalibrarCancelar: () => __TAURI_INVOKE<void>("energia_calibrar_cancelar"),
+	/**  Aplica no plano OTIMIZA o vencedor da última calibração, relendo do Windows. `EXIGEM_LICENCA`. */
+	energiaAplicarCalibrado: () => __TAURI_INVOKE<string>("energia_aplicar_calibrado"),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
@@ -194,6 +204,12 @@ export const commands = {
 
 /* Types */
 export type Achado = Achado_Serialize | Achado_Deserialize;
+
+export type AchadoDaCalibracao = {
+	texto: string,
+	/**  `ok`, `atencao`, `perigo` ou `neutro`. */
+	tom: string,
+};
 
 export type AchadoDoWifi = {
 	gravidade: GravidadeDoWifi,
@@ -1132,6 +1148,12 @@ export type NivelDoDpc = "Saudavel" |
 /**  Dois ou mais eventos acima de 1 ms, ou qualquer um acima de 2 ms. */
 "Pico";
 
+export type NotaDoCandidato = {
+	rotulo: string,
+	nota: number | null,
+	vencedor: boolean,
+};
+
 export type NumerosDoPeriodo = NumerosDoPeriodo_Serialize | NumerosDoPeriodo_Deserialize;
 
 export type NumerosDoPeriodo_Deserialize = {
@@ -1894,6 +1916,44 @@ update_confirmado: ConfirmacaoDaBanda; avisos: string[]; ressalva: string | null
 { tipo: "NadaALimitar"; avisos: string[] } | { tipo: "SemAdministrador" } | 
 /**  Sem o módulo de QoS ou o Windows recusou criar a política (edição sem o recurso). */
 { tipo: "IndisponivelNesteWindows"; motivo: string } | { tipo: "Desligado" } | { tipo: "JaAplicado" };
+
+export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize | ResultadoDaCalibracao_Deserialize;
+
+export type ResultadoDaCalibracao_Deserialize = {
+	/**  O rótulo do vencedor; `None` quando nada ganhou com margem. */
+	vencedor?: string | null,
+	/**  Ganhou o plano que a pessoa já usa: não há o que aplicar. */
+	fica_o_atual: boolean,
+	pode_aplicar: boolean,
+	confianca_pct: number | null,
+	fps_pct?: number | null,
+	low_1_pct?: number | null,
+	p99_pct?: number | null,
+	temperatura_delta_c?: number | null,
+	candidatos: NotaDoCandidato[],
+	achados: AchadoDaCalibracao[],
+	mediu_com_jogo: boolean,
+	/**  Falha ao voltar ao plano de antes no fim (o resto deu certo). */
+	aviso?: string | null,
+};
+
+export type ResultadoDaCalibracao_Serialize = {
+	/**  O rótulo do vencedor; `None` quando nada ganhou com margem. */
+	vencedor: string | null,
+	/**  Ganhou o plano que a pessoa já usa: não há o que aplicar. */
+	fica_o_atual: boolean,
+	pode_aplicar: boolean,
+	confianca_pct: number | null,
+	fps_pct: number | null,
+	low_1_pct: number | null,
+	p99_pct: number | null,
+	temperatura_delta_c: number | null,
+	candidatos: NotaDoCandidato[],
+	achados: AchadoDaCalibracao[],
+	mediu_com_jogo: boolean,
+	/**  Falha ao voltar ao plano de antes no fim (o resto deu certo). */
+	aviso: string | null,
+};
 
 /**  O resultado de pedir uma captura. Cada recusa tem nome: a tela nunca mostra "nenhum pico" sobre algo que não mediu. */
 export type ResultadoDaCaptura = ResultadoDaCaptura_Serialize | ResultadoDaCaptura_Deserialize;
