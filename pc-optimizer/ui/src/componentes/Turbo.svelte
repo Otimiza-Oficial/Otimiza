@@ -3,6 +3,7 @@
   // lembra. A prova A-B (uns 5 minutos) é o que diz se ganhou de verdade; o antes × depois de uma sessão NÃO é prova e
   // a tela diz isso. Receita reprovada na prova não volta a ligar neste jogo.
   import { onDestroy, onMount } from "svelte";
+  import DriverDaPlaca from "./DriverDaPlaca.svelte";
   import FrameBoost from "./FrameBoost.svelte";
   import Icone from "./Icone.svelte";
   import { ponte, type PainelDoTurbo, type ProvaDoTurbo } from "../lib/ponte";
@@ -356,6 +357,7 @@
 
   <!-- O Frame Boost à mão (a receita do Turbo também liga ele sozinho). -->
   <FrameBoost />
+  <DriverDaPlaca />
 </div>
 
 <style>
