@@ -345,6 +345,9 @@ let bandaDemo: PainelDaBanda = {
     "Com o jogo aberto, OneDrive, Google Drive, Dropbox, torrents e lançadores (Epic, Battle.net, EA, Ubisoft) enviam no máximo 2 Mb/s, e o Windows Update baixa em segundo plano a até 2 Mb/s. Envio saturado é o que mais faz o ping pular em casa. O Windows não limita o DOWNLOAD de outros programas: quem estiver baixando muito aparece no aviso. Voz, transmissão, navegador, a Steam e o jogo não são tocados. Tudo volta quando o jogo fecha.",
 };
 
+/** No navegador não há jogo de verdade: a barra de menu deixa simular um, para ver a tela com jogo aberto. */
+let jogoDemo: string | null = null;
+
 let demoTick = 0;
 
 export const ponte = {
@@ -352,9 +355,12 @@ export const ponte = {
   hardwareUltimo: () => (noTauri ? commands.hardwareUltimo() : Promise.resolve(demo.hardware)),
   hardware: () => (noTauri ? commands.hardwarePerfil(false) : Promise.resolve(demo.hardware)),
   jogoAberto: async (): Promise<JogoAberto | null> => {
-    if (!noTauri) return null;
+    if (!noTauri) return jogoDemo ? { nome: jogoDemo } : null;
     const jogo = await commands.jogoAberto();
     return jogo ? { nome: jogo.nome } : null;
+  },
+  simularJogo: (nome: string | null) => {
+    if (!noTauri) jogoDemo = nome;
   },
   biblioteca: () => (noTauri ? commands.bibliotecaDeJogos() : Promise.resolve(demo.biblioteca)),
   instalados: () => (noTauri ? commands.jogosInstalados() : Promise.resolve(demo.instalados)),

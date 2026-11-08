@@ -19,7 +19,7 @@
     { x: 86, y: 44, l: 24, a: 9 },
   ];
 
-  const quantas = $derived(clima === "limpo" ? 3 : clima === "nuvens" ? 5 : 7);
+  const quantas = $derived(clima === "limpo" ? 0 : clima === "nuvens" ? 2 : 4);
 </script>
 
 <div class="ceu" data-paleta={paleta} data-clima={clima} aria-hidden="true">
@@ -44,20 +44,23 @@
     transition: background 1.2s ease;
   }
 
-  [data-paleta="manha"] {
-    --ceu-fundo: linear-gradient(180deg, #8fb3ec 0%, #b9d0f4 45%, #e6eefb 80%, #fbefe2 100%);
-  }
+  /* A mesa é o céu de dia, como na referência: azul vivo em cima, clareando para o horizonte. */
+  [data-paleta="manha"],
   [data-paleta="tarde"] {
-    --ceu-fundo: linear-gradient(180deg, #3f78d8 0%, #6d9ae4 40%, #a9c6f1 75%, #dce8fa 100%);
+    --ceu-fundo: radial-gradient(120% 70% at 50% 110%, #c3dcf7 0%, transparent 60%),
+      linear-gradient(180deg, #1d58c0 0%, #3274d6 30%, #5f99e3 62%, #9dc4f0 100%);
   }
   [data-paleta="por-do-sol"] {
-    --ceu-fundo: linear-gradient(180deg, #5d79c9 0%, #9a9ad6 38%, #e3b2b3 70%, #f8d5b4 100%);
+    --ceu-fundo: radial-gradient(120% 70% at 50% 110%, #ffd6b0 0%, transparent 60%),
+      linear-gradient(180deg, #3b4fa8 0%, #6a6fc0 35%, #c48fb0 70%, #f4b98f 100%);
   }
   [data-paleta="lavanda"] {
-    --ceu-fundo: linear-gradient(180deg, #a6b6ee 0%, #c4cdf4 45%, #e4e8fb 85%, #f2eefb 100%);
+    --ceu-fundo: radial-gradient(120% 70% at 50% 110%, #eae4fb 0%, transparent 60%),
+      linear-gradient(180deg, #5b63c9 0%, #7f8ad9 35%, #a9b2ea 70%, #d3d7f6 100%);
   }
   [data-paleta="noite"] {
-    --ceu-fundo: linear-gradient(180deg, #0f1a3f 0%, #1a2a5e 55%, #2b3c78 100%);
+    --ceu-fundo: radial-gradient(120% 70% at 50% 110%, #2c3f86 0%, transparent 60%),
+      linear-gradient(180deg, #070d24 0%, #0e1a42 45%, #1a2b66 100%);
   }
 
   [data-clima="nublado"] {
@@ -75,7 +78,7 @@
       radial-gradient(closest-side at 18% 66%, rgb(250 252 255 / 0.9) 55%, transparent),
       radial-gradient(closest-side at 84% 66%, rgb(250 252 255 / 0.9) 55%, transparent),
       radial-gradient(60% 30% at 50% 82%, rgb(196 210 236 / 0.85), transparent);
-    opacity: 0.9;
+    opacity: 0.35;
     animation: deriva 120s linear infinite alternate;
     will-change: transform;
   }

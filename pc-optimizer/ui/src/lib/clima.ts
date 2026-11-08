@@ -15,7 +15,8 @@ export interface Aviso {
 
 export type Clima = "limpo" | "nuvens" | "nublado" | "tempestade";
 
-export type EstadoDoMascote = "atento" | "focado" | "descansando" | "preocupado";
+/** `feliz` e `surpreso` são reações curtas (clique, objeto chegando perto, jogo fechado); os outros são estados. */
+export type EstadoDoMascote = "atento" | "focado" | "descansando" | "preocupado" | "feliz" | "surpreso";
 
 export type Tema = "auto" | "por-do-sol" | "lavanda" | "noite";
 

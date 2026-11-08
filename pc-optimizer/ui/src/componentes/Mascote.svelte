@@ -67,10 +67,10 @@
   <defs>
     <!-- Corpo: quase transparente, um pouco mais denso na borda, como uma bolha de verdade. -->
     <radialGradient id="{id}-corpo" cx="50%" cy="46%" r="52%">
-      <stop offset="0%" stop-color="#f4f6ff" stop-opacity="0.18" />
-      <stop offset="62%" stop-color="#e3e8ff" stop-opacity="0.26" />
-      <stop offset="88%" stop-color="#c3cdfa" stop-opacity="0.42" />
-      <stop offset="100%" stop-color="#aab6f3" stop-opacity="0.6" />
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.42" />
+      <stop offset="62%" stop-color="#eef1ff" stop-opacity="0.4" />
+      <stop offset="88%" stop-color="#d3daff" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#b9c3f7" stop-opacity="0.7" />
     </radialGradient>
     <!-- Iridescência: pêssego em cima à esquerda, lavanda embaixo à direita. -->
     <radialGradient id="{id}-pessego" cx="30%" cy="22%" r="55%">
@@ -83,10 +83,10 @@
     </radialGradient>
     <!-- Borda grossa de vidro: clara em cima, lavanda nos lados, mais funda embaixo. -->
     <linearGradient id="{id}-aro" x1="0.2" y1="0" x2="0.8" y2="1">
-      <stop offset="0%" stop-color="#f3f1ff" />
-      <stop offset="35%" stop-color="#b9c3f6" />
-      <stop offset="70%" stop-color="#9aa8ef" />
-      <stop offset="100%" stop-color="#c2b6f2" />
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="35%" stop-color="#cdd5fb" />
+      <stop offset="70%" stop-color="#aab6f3" />
+      <stop offset="100%" stop-color="#d2c6f7" />
     </linearGradient>
     <linearGradient id="{id}-orelha" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#f4f5ff" stop-opacity="0.9" />
@@ -175,14 +175,31 @@
       stroke-linecap="round"
     />
 
+    <!-- Bochechas: só na alegria. -->
+    <g class="bochechas">
+      <ellipse cx={CX - 44} cy={CY + 18} rx="11" ry="6" fill="#ff9fb6" opacity="0.45" filter="url(#{id}-suave)" />
+      <ellipse cx={CX + 44} cy={CY + 18} rx="11" ry="6" fill="#ff9fb6" opacity="0.45" filter="url(#{id}-suave)" />
+    </g>
+
     <g class="olhos" style:transform={`translate(${deslocamento.x}px, ${deslocamento.y}px)`}>
       {#each [-1, 1] as lado (lado)}
         {@const ox = CX + lado * 27 - 9}
-        <g class="olho">
-          <rect x={ox} y={CY - 21} width="18" height="31" rx="9" fill="url(#{id}-olho)" />
-          <rect x={ox} y={CY - 21} width="18" height="31" rx="9" fill="url(#{id}-reflexo-olho)" />
-          <rect x={ox + 7.5} y={CY - 17} width="3" height="11" rx="1.5" fill="#ffffff" opacity="0.55" />
-        </g>
+        {#if estado === "feliz"}
+          <!-- Olhos de alegria: dois arcos (^ ^) no lugar das cápsulas. -->
+          <path
+            d="M {ox} {CY - 2} Q {ox + 9} {CY - 18} {ox + 18} {CY - 2}"
+            fill="none"
+            stroke="url(#{id}-olho)"
+            stroke-width="6"
+            stroke-linecap="round"
+          />
+        {:else}
+          <g class="olho">
+            <rect x={ox} y={CY - 21} width="18" height="31" rx="9" fill="url(#{id}-olho)" />
+            <rect x={ox} y={CY - 21} width="18" height="31" rx="9" fill="url(#{id}-reflexo-olho)" />
+            <rect x={ox + 7.5} y={CY - 17} width="3" height="11" rx="1.5" fill="#ffffff" opacity="0.55" />
+          </g>
+        {/if}
       {/each}
     </g>
   </g>
@@ -222,6 +239,19 @@
 
   [data-estado="focado"] .flutua {
     animation: none;
+  }
+
+  .bochechas {
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  [data-estado="feliz"] .bochechas {
+    opacity: 1;
+  }
+
+  [data-estado="surpreso"] .olho {
+    animation: none;
+    transform: scale(1.18, 1.12);
   }
 
   [data-estado="preocupado"] .aura {
