@@ -15,6 +15,13 @@ export default defineConfig({
     outDir: fileURLToPath(new URL("./dist-nova", import.meta.url)),
     emptyOutDir: true,
     target: "es2022",
+    // Duas páginas: a janela do app e a do FPS por cima do jogo (`plataforma::overlay` abre "overlay.html").
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL("./ui/index.html", import.meta.url)),
+        overlay: fileURLToPath(new URL("./ui/overlay.html", import.meta.url)),
+      },
+    },
   },
   clearScreen: false,
   server: {
