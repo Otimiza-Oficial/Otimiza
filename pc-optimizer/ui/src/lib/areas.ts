@@ -12,6 +12,8 @@ export type IdDaArea =
   | "sistema"
   | "prova"
   | "historico"
+  | "mira"
+  | "cores"
   | "ajustes";
 
 export interface Area {
@@ -112,6 +114,22 @@ export const areas: Area[] = [
     traco: "M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5M12 7v5l3 2",
     vai_ter: ["Tudo o que o Otimiza mudou, com o valor de antes", "Desfazer um por um ou tudo de uma vez"],
     onda: 1,
+  },
+  {
+    id: "mira",
+    nome: "Mira",
+    pergunta: "Mira na tela, sensibilidade e FiveM",
+    traco: "M12 3v4M12 17v4M3 12h4M17 12h4M12 12h.01",
+    vai_ter: [],
+    onda: 2,
+  },
+  {
+    id: "cores",
+    nome: "Cores",
+    pergunta: "Cores do monitor, por jogo",
+    traco: "M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.6 0-1-.8-1.4-.8-2.2 0-.9.7-1.6 1.6-1.6H17a4 4 0 0 0 4-4c0-4.7-4-8.6-9-8.6z",
+    vai_ter: [],
+    onda: 2,
   },
   {
     id: "ajustes",

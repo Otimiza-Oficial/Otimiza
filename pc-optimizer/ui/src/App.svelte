@@ -8,6 +8,8 @@
   import Historico from "./componentes/Historico.svelte";
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
   import Ajustes from "./componentes/Ajustes.svelte";
+  import Mira from "./componentes/Mira.svelte";
+  import Cores from "./componentes/Cores.svelte";
   import Energia from "./componentes/Energia.svelte";
   import Jogos from "./componentes/Jogos.svelte";
   import Prova from "./componentes/Prova.svelte";
@@ -71,9 +73,11 @@
     sistema: "chip",
     prova: "grafico",
     historico: "relogio",
+    mira: "mira",
+    cores: "sol",
     ajustes: "engrenagem",
   };
-  const OUTRAS: IdDaArea[] = ["turbo", "jogos", "energia", "sistema", "prova", "ajustes"];
+  const OUTRAS: IdDaArea[] = ["turbo", "jogos", "energia", "mira", "cores", "sistema", "prova", "ajustes"];
 
   let versao = $state<VersaoDoApp | null>(null);
   let hardware = $state<Hardware | null>(null);
@@ -828,6 +832,10 @@
                 <Jogos />
               {:else if aberta === "ajustes"}
                 <Ajustes />
+              {:else if aberta === "mira"}
+                <Mira />
+              {:else if aberta === "cores"}
+                <Cores />
               {:else if aberta === "prova"}
                 <Prova jogo={jogo?.nome ?? null} />
               {:else if aberta === "sistema"}

@@ -348,3 +348,9 @@ h2 {
     animation: none !important;
   }
 }
+
+/* Controles deslizantes (Mira, Cores, FOV, Rede): a cor de ação do app, não o azul do navegador. */
+input[type="range"] {
+  accent-color: var(--acao);
+  width: 100%;
+}
