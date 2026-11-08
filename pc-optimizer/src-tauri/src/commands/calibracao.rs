@@ -395,6 +395,20 @@ pub async fn energia_calibrar(processo: Option<String>) -> Result<ResultadoDaCal
         .map_err(|_| "A calibração parou no meio.".to_string());
         RODANDO.store(false, Ordering::SeqCst);
         let (resultado, parametros) = r??;
+        // Comunidade (só se a pessoa participa): a receita que ganhou, medida COM o jogo.
+        if let (true, true, Some(v), Some(j)) = (
+            resultado.mediu_com_jogo,
+            resultado.pode_aplicar,
+            resultado.vencedor.clone(),
+            crate::plataforma::sessao::atual(),
+        ) {
+            tauri::async_runtime::spawn(crate::plataforma::comunidade::enviar(serde_json::json!({
+                "jogo": j.nome,
+                "receita": format!("energia:{v}"),
+                "ganho_fps_pct": resultado.fps_pct,
+                "ganho_low_pct": resultado.low_1_pct,
+            })));
+        }
         *VENCEDOR.lock().unwrap_or_else(|e| e.into_inner()) = parametros;
         Ok(resultado)
     }

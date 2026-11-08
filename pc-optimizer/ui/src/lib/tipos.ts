@@ -106,6 +106,17 @@ export const commands = {
 	bandejaHumor: (humor: string) => __TAURI_INVOKE<null>("bandeja_humor", { humor }),
 	/**  Esta versão sabe falar com o Discord (o ID da aplicação entrou na compilação). `LIVRES`. */
 	discordDisponivel: () => __TAURI_INVOKE<boolean>("discord_disponivel"),
+	/**  Liga ou desliga a participação. Desligar pede ao servidor para apagar o que esta licença mandou. `LIVRES`. */
+	comunidadeParticipar: (ligado: boolean) => __TAURI_INVOKE<boolean>("comunidade_participar", { ligado }),
+	/**  O que mais ganhou em PCs com o mesmo processador e placa, neste jogo. Público (não precisa participar). `LIVRES`. */
+	comunidadeParecidos: (jogo: string) => __TAURI_INVOKE<PcsParecidos_Serialize>("comunidade_parecidos", { jogo }),
+	/**  Guarda na nuvem o histórico e as preferências desta licença. Devolve a frase do que foi. `LIVRES`. */
+	nuvemGuardar: () => __TAURI_INVOKE<string>("nuvem_guardar"),
+	/**
+	 *  Traz da nuvem o histórico e as preferências; a versão de antes de cada arquivo fica ao lado (`.antes-da-nuvem`).
+	 *  `LIVRES`: só arquivos do próprio Otimiza.
+	 */
+	nuvemRestaurar: () => __TAURI_INVOKE<string>("nuvem_restaurar"),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
@@ -1523,6 +1534,26 @@ export type Partida_Serialize = {
 	clique_ms: number | null,
 };
 
+export type PcsParecidos = PcsParecidos_Serialize | PcsParecidos_Deserialize;
+
+export type PcsParecidos_Deserialize = {
+	processador: string,
+	placa: string,
+	jogo: string,
+	receitas: ReceitaDaComunidade_Deserialize[],
+	/**  Quantos PCs uma receita precisa para aparecer. */
+	minimo: number,
+};
+
+export type PcsParecidos_Serialize = {
+	processador: string,
+	placa: string,
+	jogo: string,
+	receitas: ReceitaDaComunidade_Serialize[],
+	/**  Quantos PCs uma receita precisa para aparecer. */
+	minimo: number,
+};
+
 export type PerfilDeHardware = PerfilDeHardware_Serialize | PerfilDeHardware_Deserialize;
 
 export type PerfilDeHardware_Deserialize = {
@@ -1689,6 +1720,8 @@ export type Preferences_Deserialize = {
 	medir_quadros_sozinho?: boolean,
 	/**  DESLIGADO por padrão: mostrar no Discord o jogo aberto é a pessoa que decide. */
 	discord_presenca?: boolean,
+	/**  DESLIGADO por padrão: mandar números (anônimos) para a comunidade é a pessoa que decide. */
+	comunidade?: boolean,
 };
 
 export type Preferences_Serialize = {
@@ -1701,6 +1734,8 @@ export type Preferences_Serialize = {
 	medir_quadros_sozinho: boolean,
 	/**  DESLIGADO por padrão: mostrar no Discord o jogo aberto é a pessoa que decide. */
 	discord_presenca: boolean,
+	/**  DESLIGADO por padrão: mandar números (anônimos) para a comunidade é a pessoa que decide. */
+	comunidade: boolean,
 };
 
 export type ProblemaDaRota = "perda" | "variacao";
@@ -1723,6 +1758,22 @@ export type RAMMetrics_Serialize = {
 	available_gb: number | null,
 	cached_gb: number | null,
 	usage_percent: number | null,
+};
+
+export type ReceitaDaComunidade = ReceitaDaComunidade_Serialize | ReceitaDaComunidade_Deserialize;
+
+export type ReceitaDaComunidade_Deserialize = {
+	receita: string,
+	pcs: number,
+	ganho_fps_pct?: number | null,
+	ganho_low_pct?: number | null,
+};
+
+export type ReceitaDaComunidade_Serialize = {
+	receita: string,
+	pcs: number,
+	ganho_fps_pct: number | null,
+	ganho_low_pct: number | null,
 };
 
 export type ReceitaDoTurbo = ReceitaDoTurbo_Serialize | ReceitaDoTurbo_Deserialize;

@@ -253,6 +253,10 @@ pub fn run() {
             commands::cs2_desligar,
             commands::bandeja_humor,
             commands::discord_disponivel,
+            commands::comunidade_participar,
+            commands::comunidade_parecidos,
+            commands::nuvem_guardar,
+            commands::nuvem_restaurar,
             commands::oti_perguntar,
             commands::banda_painel,
             commands::banda_ligar,
@@ -1058,6 +1062,14 @@ pub fn run() {
                                             executavel, m.fps, m.low_1pct
                                         ));
                                         let _ = handle.emit("prova:automatica", ());
+
+                                        // Comunidade (só se a pessoa participa; falha calada): a partida confiável.
+                                        if m.detalhe_confiavel {
+                                            let jogo = plataforma::historico::id_do_jogo(&executavel).1;
+                                            tauri::async_runtime::spawn(plataforma::comunidade::enviar(serde_json::json!({
+                                                "jogo": jogo, "fps": m.fps, "low": m.low_1pct
+                                            })));
+                                        }
 
                                         let decididos = {
                                             let estado = handle.state::<commands::AppState>();

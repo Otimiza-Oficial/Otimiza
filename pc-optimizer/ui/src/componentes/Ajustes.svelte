@@ -77,6 +77,35 @@
   }
 
   let discordDisponivel = $state(false);
+  let mudandoComunidade = $state(false);
+  let nuvem = $state<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  let nuvemOcupada = $state(false);
+
+  async function alternarComunidade() {
+    if (!preferencias) return;
+    mudandoComunidade = true;
+    try {
+      const ligado = await ponte.comunidadeParticipar(!preferencias.comunidade);
+      preferencias = { ...preferencias, comunidade: ligado };
+    } catch (e) {
+      nuvem = { tipo: "erro", texto: String(e) };
+    } finally {
+      mudandoComunidade = false;
+    }
+  }
+
+  async function usarNuvem(qual: "guardar" | "restaurar") {
+    if (qual === "restaurar" && !confirm("Trazer da nuvem o histórico e as preferências? O que está aqui hoje fica guardado ao lado.")) return;
+    nuvemOcupada = true;
+    nuvem = null;
+    try {
+      nuvem = { tipo: "ok", texto: qual === "guardar" ? await ponte.nuvemGuardar() : await ponte.nuvemRestaurar() };
+    } catch (e) {
+      nuvem = { tipo: "erro", texto: String(e) };
+    } finally {
+      nuvemOcupada = false;
+    }
+  }
 
   onMount(() => {
     ponte.discordDisponivel().then((d) => (discordDisponivel = d)).catch(() => {});
@@ -225,6 +254,37 @@
       </div>
       <button class="interruptor" role="switch" aria-checked={ia} aria-label="Oti com IA" onclick={alternarIa}></button>
     </div>
+  </section>
+
+  <!-- Comunidade e nuvem -->
+  <section class="secao">
+    {#if preferencias}
+      <div class="linha">
+        <div class="info">
+          <h2>Comunidade do Otimiza</h2>
+          <span class="apoio">
+            Depois de cada partida medida, manda de forma anônima o nome do processador e da placa, o jogo e o FPS; e o
+            plano que ganhou na calibração. Em troca você vê o que mais ganhou em PCs iguais ao seu, e os números entram
+            na bancada pública do site. Nada sai com menos de 3 PCs iguais. Desligar apaga o que você mandou.
+          </span>
+        </div>
+        <button class="interruptor" role="switch" aria-checked={preferencias.comunidade} aria-label="Comunidade do Otimiza" disabled={mudandoComunidade} onclick={alternarComunidade}></button>
+      </div>
+    {/if}
+    <div class="linha">
+      <div class="info">
+        <h2>Backup na nuvem</h2>
+        <span class="apoio">
+          Guarda o histórico de partidas, de rede e as suas preferências na sua licença. Formatou ou trocou de PC? Traga
+          de volta. O estado das mudanças deste PC não vai junto: noutro PC ele não valeria.
+        </span>
+      </div>
+      <div class="botoes-nuvem">
+        <button class="btn" disabled={nuvemOcupada} onclick={() => usarNuvem("guardar")}>Guardar</button>
+        <button class="btn" disabled={nuvemOcupada} onclick={() => usarNuvem("restaurar")}>Restaurar</button>
+      </div>
+    </div>
+    {#if nuvem}<p class="apoio" class:erro-nuvem={nuvem.tipo === "erro"}>{nuvem.texto}</p>{/if}
   </section>
 
   <!-- Época do ano -->
@@ -380,5 +440,13 @@
   }
   a.btn {
     text-decoration: none;
+  }
+  .botoes-nuvem {
+    display: flex;
+    gap: 8px;
+    flex: none;
+  }
+  .erro-nuvem {
+    color: var(--perigo);
   }
 </style>

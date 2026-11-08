@@ -6,6 +6,7 @@ pub mod bandeja;
 pub mod base_do_jogo;
 pub mod capas;
 pub mod compat;
+pub mod comunidade;
 pub mod contador_fivem;
 pub mod cores;
 pub mod cs2;

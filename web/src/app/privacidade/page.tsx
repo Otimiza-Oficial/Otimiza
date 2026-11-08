@@ -5,7 +5,7 @@ import { links, site } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Privacidade",
-  description: "O que o Otimiza coleta (quase nada), o que sai da sua máquina (uma pergunta de versão) e o que acontece com os dados de uma compra.",
+  description: "O que o Otimiza coleta, o que sai da sua máquina (e o que só sai se você ligar) e o que acontece com os dados de uma compra.",
   alternates: { canonical: `${site.url}/privacidade/` },
 };
 
@@ -13,8 +13,8 @@ export default function PrivacidadePage() {
   return (
     <PaginaLegal
       titulo="Privacidade"
-      atualizada="24 de setembro de 2026"
-      resumo="A resposta curta: o programa não manda nada seu para lugar nenhum. Sai uma pergunta de versão, anônima. O resto desta página é o detalhe disso, e o que muda quando você compra."
+      atualizada="8 de novembro de 2026"
+      resumo="A resposta curta: o que o Otimiza mede fica no seu computador. Saem a pergunta de versão, a conferência da licença e o que a área Rede precisa para dizer de quem é cada trecho. A IA do Oti, a comunidade, o backup na nuvem e o Discord só funcionam se você ligar, e vêm desligados. O resto desta página é o detalhe."
     >
       <Secao titulo="Quem responde pelos dados">
         <p>
@@ -31,16 +31,58 @@ export default function PrivacidadePage() {
         </p>
       </Secao>
 
-      <Secao titulo="O que o programa envia para fora">
+      <Secao titulo="O que o programa envia para fora, sempre">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>&quot;Saiu versão nova?&quot;</strong>, à API pública do GitHub. Anônima, não leva nada da sua máquina.
+          </li>
+          <li>
+            <strong>A conferência da licença</strong>, à nossa API, a cada poucas semanas: a chave, o código do
+            computador, a versão e a impressão (SHA-256) do executável, para saber se é o programa que publicamos. Nós
+            guardamos a impressão da chave, não a chave, e uma impressão do endereço IP para notar a mesma chave em
+            muitos lugares.
+          </li>
+          <li>
+            <strong>Na área Rede, quando você mede uma rota:</strong> os endereços públicos dos roteadores do caminho vão
+            ao IPinfo, que diz de qual operadora é cada um. São endereços da internet, não do seu computador.
+          </li>
+          <li>
+            <strong>As capas dos jogos</strong> vêm do servidor de imagens da Steam, pelo número público de cada jogo.
+          </li>
+        </ul>
         <p>
-          <strong>Uma pergunta, e só:</strong> &quot;saiu versão nova?&quot;, feita à API pública do GitHub. Ela é
-          anônima, não leva nada da sua máquina, e sem resposta o programa apenas não avisa e segue funcionando.
+          Tudo o que o Otimiza mede — quadros, temperatura, uso de processador, rotas, o que você aplicou e desfez —{" "}
+          <strong>fica no seu computador</strong>, em arquivos da sua conta de usuário, a não ser que você ligue uma das
+          opções abaixo.
         </p>
-        <p>
-          Não existe telemetria para desligar nas opções porque não existe telemetria. Tudo o que o Otimiza mede —
-          quadros, temperatura, uso de processador, o que você aplicou e desfez — <strong>fica no seu computador</strong>,
-          em arquivos da sua própria conta de usuário. Nós não temos servidor para onde isso iria.
-        </p>
+      </Secao>
+
+      <Secao titulo="O que só sai se você ligar (tudo vem desligado)">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>Oti com IA</strong> — a pergunta que as respostas prontas não entendem vai à nossa API, com os números
+            do seu PC (processador, placa, memória, Hz, FPS da última partida, avisos) e as últimas trocas da conversa. A
+            nossa API repassa à API do Claude, da Anthropic, para responder. Nada de arquivo, nome de usuário ou caminho
+            de pasta. Guardamos só quantas perguntas a licença fez no dia, para o limite.
+          </li>
+          <li>
+            <strong>Comunidade do Otimiza</strong> — depois de cada partida medida: o nome do processador e da placa, o
+            jogo e o FPS; e o plano que ganhou numa calibração. Fica com a impressão da licença, nunca a chave. Nada é
+            mostrado com menos de 3 computadores iguais. Desligar apaga o que você mandou.
+          </li>
+          <li>
+            <strong>Backup na nuvem</strong> — quando você aperta &quot;Guardar&quot;: o histórico de partidas e de rede e as
+            suas preferências, guardados pela impressão da sua licença, até 256 KB.
+          </li>
+          <li>
+            <strong>Mostrar o jogo no Discord</strong> — o nome do jogo aberto vai ao Discord do seu próprio computador,
+            que mostra no seu perfil. Não passa por nós.
+          </li>
+          <li>
+            <strong>Integração com o CS2</strong> — o próprio jogo manda o momento da partida ao Otimiza, dentro do seu
+            computador. Não sai dele.
+          </li>
+        </ul>
       </Secao>
 
       <Secao titulo="O código do computador">
@@ -99,6 +141,13 @@ export default function PrivacidadePage() {
           <li>
             <strong>Mercado Pago</strong> — processa o Pix e o cartão e trata os dados da transação sob a política
             dele, inclusive a prevenção a fraude.
+          </li>
+          <li>
+            <strong>Anthropic</strong> — responde as perguntas do Oti com IA, quando ela está ligada, sob a política
+            dela.
+          </li>
+          <li>
+            <strong>IPinfo</strong> — diz de qual operadora é cada roteador de uma rota medida.
           </li>
         </ul>
       </Secao>

@@ -78,6 +78,7 @@ pub struct AppState {
 // contrato (`contrato.rs`) já usam: trocar o comando de arquivo não troca o nome que a tela chama. Cada área faz
 // `use super::*` e enxerga daqui os `use` acima, o `AppState` e o `UNSUPPORTED_PLATFORM`.
 mod calibracao;
+mod comunidade;
 mod driver;
 mod energia;
 mod frame_boost;
@@ -97,6 +98,7 @@ mod tela;
 mod turbo;
 
 pub use calibracao::*;
+pub use comunidade::*;
 pub use driver::*;
 pub use energia::*;
 pub use frame_boost::*;
@@ -361,6 +363,10 @@ mod tests {
         "cs2_painel",
         "bandeja_humor",
         "discord_disponivel",
+        "comunidade_participar",
+        "comunidade_parecidos",
+        "nuvem_guardar",
+        "nuvem_restaurar",
         "cs2_desligar",
         "rede_wifi",
         "rede_varredura_wifi",

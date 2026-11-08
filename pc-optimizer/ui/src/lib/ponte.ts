@@ -47,6 +47,7 @@ import {
   type HistoricoDaRede_Serialize,
   type TaxaDoMouse_Serialize,
   type PainelDoCs2,
+  type PcsParecidos,
   type ResultadoDaCalibracao_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
@@ -67,7 +68,7 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
-export type { PainelDoCs2 } from "./tipos";
+export type { PainelDoCs2, PcsParecidos } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
 /** Chega pelo evento `energia:calibracao` (fora do contrato: evento não é comando). Espelha `calibracao::PassoDaCalibracao`. */
 export type PassoDaCalibracao = { passo: number; total: number; frase: string };
@@ -635,6 +636,7 @@ let preferenciasDemo: Preferencias = {
   show_unavailable: true,
   medir_quadros_sozinho: true,
   discord_presenca: false,
+  comunidade: false,
 };
 let sobreposicaoDemo: Sobreposicao = {
   config: { modo: "Minimo", canto: "SuperiorEsquerdo", confirmados: [], com_frame_boost: false, versao: 2 },
@@ -770,6 +772,29 @@ export const ponte = {
   /** O ícone da bandeja acompanha o humor do Oti (o Rust só troca quando muda). */
   bandejaHumor: (humor: string) => (noTauri ? commands.bandejaHumor(humor).catch(() => null) : Promise.resolve(null)),
   discordDisponivel: (): Promise<boolean> => (noTauri ? commands.discordDisponivel() : Promise.resolve(true)),
+  comunidadeParticipar: async (ligado: boolean): Promise<boolean> => {
+    if (noTauri) return commands.comunidadeParticipar(ligado);
+    preferenciasDemo = { ...preferenciasDemo, comunidade: ligado };
+    return ligado;
+  },
+  /** O que mais ganhou em PCs com o mesmo processador e placa neste jogo (só com 3 PCs ou mais). */
+  comunidadeParecidos: (jogo: string): Promise<PcsParecidos> =>
+    noTauri
+      ? commands.comunidadeParecidos(jogo)
+      : Promise.resolve({
+          processador: "Intel Core i5-12400F",
+          placa: "NVIDIA GeForce RTX 4060",
+          jogo,
+          receitas: [
+            { receita: "energia:Resposta máxima", pcs: 14, ganho_fps_pct: 3.1, ganho_low_pct: 8.4 },
+            { receita: "energia:Adaptativo", pcs: 9, ganho_fps_pct: 1.2, ganho_low_pct: 4.0 },
+          ],
+          minimo: 3,
+        }),
+  nuvemGuardar: (): Promise<string> =>
+    noTauri ? commands.nuvemGuardar() : Promise.resolve("Guardado na nuvem: 4 arquivos (38 KB)."),
+  nuvemRestaurar: (): Promise<string> =>
+    noTauri ? commands.nuvemRestaurar() : Promise.resolve("Restaurado: 4 arquivos. Abra o Otimiza de novo para tudo aparecer."),
   cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
   aplicarCalibrado: (): Promise<string> =>
     noTauri ? commands.energiaAplicarCalibrado() : Promise.resolve("Pronto: o vencedor está no plano OTIMIZA, conferido relendo do Windows."),
