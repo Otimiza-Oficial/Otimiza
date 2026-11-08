@@ -9,6 +9,7 @@
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
   import Energia from "./componentes/Energia.svelte";
   import Jogos from "./componentes/Jogos.svelte";
+  import Sistema from "./componentes/Sistema.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
@@ -711,6 +712,8 @@
                 <Tela aoMudarHz={trocouHz} />
               {:else if aberta === "jogos"}
                 <Jogos />
+              {:else if aberta === "sistema"}
+                <Sistema />
               {:else if aberta === "energia"}
                 <Energia />
               {:else if aberta === "turbo"}

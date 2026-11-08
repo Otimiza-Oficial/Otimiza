@@ -13,6 +13,11 @@ import {
   type HistoricoNaTela_Serialize,
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
+  type OptimizationInfo_Serialize,
+  type StartupEntry,
+  type ItemDaLimpeza,
+  type ResultadoDaLimpeza,
+  type RestoreStatus,
   type PainelDaBanda_Serialize,
   type PainelDaEnergiaDeJogo_Serialize,
   type PainelDoTurbo_Serialize,
@@ -51,6 +56,8 @@ export type CapturaDpc = ResultadoDaCaptura_Serialize;
 export type PainelDaBanda = PainelDaBanda_Serialize;
 export type PainelDoTurbo = PainelDoTurbo_Serialize;
 export type RelatorioDoPlano = RelatorioDoPlano_Serialize;
+export type AjusteDoCatalogo = OptimizationInfo_Serialize;
+export type { StartupEntry, ItemDaLimpeza, ResultadoDaLimpeza, RestoreStatus };
 export type EnergiaDeJogo = PainelDaEnergiaDeJogo_Serialize;
 export type RelatorioDeTetos = RelatorioDeTetos_Serialize;
 export type { VistoriaDoPlano, DiagnosticoDeEnergia };
@@ -477,6 +484,48 @@ function relatorioDemo(simulacao: boolean): RelatorioDoPlano {
   };
 }
 
+/** O catálogo de demonstração: um de cada estado, para a tela mostrar todos. */
+const catalogoDemo: OptimizationInfo_Serialize[] = (
+  [
+    ["game_dvr", "Desligar a gravação em segundo plano do Xbox", "A Xbox Game Bar grava os últimos minutos o tempo todo: custa placa e disco no jogo.", "Gaming", "Measurable", "Applied", false],
+    ["hags", "Agendamento de GPU acelerado por hardware", "A placa organiza a própria fila de quadros: menos atraso em placas novas.", "Gaming", "Situational", "Available", true],
+    ["nagle", "Desligar o algoritmo de Nagle", "Pacotes pequenos saem na hora em vez de esperar juntar: menos atraso em jogo de tiro.", "Network", "Responsiveness", "Available", false],
+    ["telemetria", "Reduzir a telemetria do Windows", "Menos envio de dados para a Microsoft. Não muda FPS.", "Privacy", "NoGain", "AlreadyOptimal", false],
+    ["sysmain", "Desligar o SysMain (Superfetch)", "Em SSD, para de pré-carregar programas e de mexer no disco no meio do jogo.", "System", "Situational", "Unknown", false],
+  ] as const
+).map(([id, name, honest_effect, category, expected_gain, state, admin]) => ({
+  id,
+  name,
+  description: honest_effect,
+  honest_effect,
+  category,
+  expected_gain,
+  risco_de_fps: { risco: "Nenhum" },
+  requires_admin: admin,
+  requires_restart: id === "hags",
+  reversible: true,
+  security_tradeoff: false,
+  recommended: id !== "telemetria",
+  retirado: false,
+  expert: id === "sysmain",
+  condicao: null,
+  state,
+  detail: state === "Unknown" ? "Não consegui ler o serviço agora." : null,
+}));
+
+const inicializacaoDemo: StartupEntry[] = [
+  { name: "Discord", command: "Discord.exe --start-minimized", executable: "Discord.exe", hive: "HKCU", enabled: true, classe: "Util" },
+  { name: "Steam", command: "steam.exe -silent", executable: "steam.exe", hive: "HKCU", enabled: true, classe: "Opcional" },
+  { name: "Epic Games Launcher", command: "EpicGamesLauncher.exe -silent", executable: "EpicGamesLauncher.exe", hive: "HKCU", enabled: false, classe: "Opcional" },
+  { name: "Realtek Audio", command: "RtkAudUService64.exe", executable: "RtkAudUService64.exe", hive: "HKLM", enabled: true, classe: "Essencial" },
+];
+
+let limpezaDemo: ItemDaLimpeza[] = [
+  { id: "temp_usuario", nome: "Temporários do seu usuário", explica: "Arquivos que programas deixaram para trás há mais de 2 dias.", bytes: 1_840_000_000, arquivos: 4210, precisa_admin: false },
+  { id: "temp_windows", nome: "Temporários do Windows", explica: "A pasta Temp do sistema, só arquivo com mais de 2 dias.", bytes: 312_000_000, arquivos: 380, precisa_admin: true },
+  { id: "relatorios", nome: "Relatórios de erro", explica: "Relatórios de travamento que já foram (ou nunca serão) enviados.", bytes: 96_000_000, arquivos: 41, precisa_admin: false },
+];
+
 let demoTick = 0;
 
 export const ponte = {
@@ -665,6 +714,44 @@ export const ponte = {
     noTauri
       ? commands.tetosEscondidos()
       : Promise.resolve({ monitor_hz: 180, tetos: [{ tipo: "RobloxLimitado", fps: 60, arquivo: "GlobalBasicSettings_13.xml" }], lacunas: [] }),
+  catalogo: (): Promise<AjusteDoCatalogo[]> => (noTauri ? commands.listOptimizations() : Promise.resolve(structuredClone(catalogoDemo))),
+  aplicarAjuste: async (id: string): Promise<Desfeito> => {
+    if (noTauri) return commands.applyOptimization(id);
+    const a = catalogoDemo.find((x) => x.id === id);
+    if (a) a.state = "Applied";
+    return { id, name: a?.name ?? id, success: true, applied: true, message: "Aplicado (demonstração).", requires_restart: !!a?.requires_restart, requires_logoff: false, duration_ms: 0, changes_count: 1, changes: [], actions: [] };
+  },
+  desfazerAjuste: async (id: string): Promise<Desfeito> => {
+    if (noTauri) return commands.revertOptimization(id);
+    const a = catalogoDemo.find((x) => x.id === id);
+    if (a) a.state = "Available";
+    return { id, name: a?.name ?? id, success: true, applied: false, message: "Desfeito (demonstração).", requires_restart: false, requires_logoff: false, duration_ms: 0, changes_count: 1, changes: [], actions: [] };
+  },
+  inicializacao: (): Promise<StartupEntry[]> => (noTauri ? commands.listStartup() : Promise.resolve(structuredClone(inicializacaoDemo))),
+  definirInicializacao: async (e: StartupEntry, ligado: boolean): Promise<Desfeito> => {
+    if (noTauri) return commands.setStartupEnabled(e.hive, e.name, ligado);
+    const x = inicializacaoDemo.find((i) => i.name === e.name);
+    if (x) x.enabled = ligado;
+    return { id: `startup:${e.name}`, name: e.name, success: true, applied: !ligado, message: "", requires_restart: false, requires_logoff: false, duration_ms: 0, changes_count: 1, changes: [], actions: [] };
+  },
+  medirLimpeza: (): Promise<ItemDaLimpeza[]> => (noTauri ? commands.limpezaMedir() : Promise.resolve(structuredClone(limpezaDemo))),
+  limpar: async (id: string): Promise<ResultadoDaLimpeza> => {
+    if (noTauri) return commands.limpezaExecutar(id);
+    await new Promise((r) => setTimeout(r, 800));
+    const item = limpezaDemo.find((i) => i.id === id);
+    const r = { bytes_liberados: Math.round((item?.bytes ?? 0) * 0.92), apagados: Math.round((item?.arquivos ?? 0) * 0.9), ficaram: 12 };
+    limpezaDemo = limpezaDemo.map((i) => (i.id === id ? { ...i, bytes: (item?.bytes ?? 0) - r.bytes_liberados, arquivos: 12 } : i));
+    return r;
+  },
+  restauracao: (): Promise<RestoreStatus> =>
+    noTauri
+      ? commands.restoreStatus()
+      : Promise.resolve({ available: true, message: "A proteção do sistema está ligada no disco C:.", points: [{ sequence: 41, description: "Otimiza - antes de otimizar", created_at: "2026-11-05 14:20" }] }),
+  criarPontoDeRestauracao: async (): Promise<string> => {
+    if (noTauri) return commands.createRestorePoint();
+    await new Promise((r) => setTimeout(r, 1200));
+    return "Ponto de restauração criado (demonstração).";
+  },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();
