@@ -248,6 +248,9 @@ pub fn run() {
             commands::energia_calibrar,
             commands::energia_calibrar_cancelar,
             commands::energia_aplicar_calibrado,
+            commands::cs2_painel,
+            commands::cs2_ligar,
+            commands::cs2_desligar,
             commands::oti_perguntar,
             commands::banda_painel,
             commands::banda_ligar,
@@ -372,6 +375,9 @@ pub fn run() {
             // Guarda térmica: só lê, e só com jogo aberto (`plataforma::guarda_termica`).
             #[cfg(target_os = "windows")]
             plataforma::guarda_termica::vigiar(app.handle().clone());
+            // Recebe o estado da partida do CS2, quando a integração está ligada (`plataforma::cs2`).
+            #[cfg(target_os = "windows")]
+            plataforma::cs2::maquina::escutar();
 
             #[cfg(debug_assertions)]
             {
@@ -839,6 +845,13 @@ pub fn run() {
                         let agora = modules::changelog::now_timestamp();
 
                         if !acompanhamento.observar(jogo.as_ref().map(|j| j.pid), agora) {
+                            continue;
+                        }
+                        // No CS2 com a integração ligada: só mede com a rodada valendo e a pessoa viva (o menu a 400 FPS
+                        // e o espectador não são a partida). Sem marcar a tentativa: a próxima olhada tenta de novo.
+                        if jogo.as_ref().is_some_and(|j| j.executavel.to_ascii_lowercase().ends_with("cs2.exe"))
+                            && plataforma::cs2::vale_medir_agora() == Some(false)
+                        {
                             continue;
                         }
                         acompanhamento.tentado(agora);

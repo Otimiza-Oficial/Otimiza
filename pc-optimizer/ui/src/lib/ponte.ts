@@ -46,6 +46,7 @@ import {
   type Rota_Serialize,
   type HistoricoDaRede_Serialize,
   type TaxaDoMouse_Serialize,
+  type PainelDoCs2,
   type ResultadoDaCalibracao_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
@@ -66,6 +67,7 @@ export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
 export type TaxaDoMouse = TaxaDoMouse_Serialize;
+export type { PainelDoCs2 } from "./tipos";
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
 /** Chega pelo evento `energia:calibracao` (fora do contrato: evento não é comando). Espelha `calibracao::PassoDaCalibracao`. */
 export type PassoDaCalibracao = { passo: number; total: number; frase: string };
@@ -640,6 +642,7 @@ let sobreposicaoDemo: Sobreposicao = {
 };
 
 let demoTick = 0;
+let cs2Demo: PainelDoCs2 = { instalado: true, ligado: false, estado: null };
 
 export const ponte = {
   versao: () => (noTauri ? commands.versaoDoApp() : Promise.resolve(demo.versao)),
@@ -751,6 +754,17 @@ export const ponte = {
       2000,
     );
     return () => clearTimeout(t);
+  },
+  cs2Painel: (): Promise<PainelDoCs2> => (noTauri ? commands.cs2Painel() : Promise.resolve({ ...cs2Demo })),
+  cs2Ligar: async (): Promise<PainelDoCs2> => {
+    if (noTauri) return commands.cs2Ligar();
+    cs2Demo = { instalado: true, ligado: true, estado: { momento: "jogando", mapa: "de_mirage", modo: "competitive", rodada: 7, ha_s: 1 } };
+    return { ...cs2Demo };
+  },
+  cs2Desligar: async (): Promise<PainelDoCs2> => {
+    if (noTauri) return commands.cs2Desligar();
+    cs2Demo = { instalado: true, ligado: false, estado: null };
+    return { ...cs2Demo };
   },
   cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
   aplicarCalibrado: (): Promise<string> =>

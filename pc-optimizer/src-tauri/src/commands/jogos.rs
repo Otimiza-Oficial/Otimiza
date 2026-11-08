@@ -461,3 +461,64 @@ pub async fn aplicar_perfil_pendente(app: &tauri::AppHandle) -> Option<String> {
     let _ = crate::plataforma::turbo::pedir_perfil_do_jogo(None);
     Some(frase)
 }
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct PainelDoCs2 {
+    pub instalado: bool,
+    /// O arquivo da integração está na pasta do CS2.
+    pub ligado: bool,
+    /// O que o CS2 contou nos últimos 30 s (com o jogo aberto e a integração ligada).
+    pub estado: Option<crate::plataforma::cs2::EstadoDoCs2>,
+}
+
+#[cfg(target_os = "windows")]
+fn painel_do_cs2() -> PainelDoCs2 {
+    let (ligado, pasta) = crate::plataforma::cs2::maquina::ligado();
+    PainelDoCs2 { instalado: pasta.is_some(), ligado, estado: crate::plataforma::cs2::estado() }
+}
+
+/// A integração oficial do CS2 (Game State Integration): instalada, ligada e o momento da partida. `LIVRES`: só lê.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_painel() -> Result<PainelDoCs2, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(painel_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Escreve `gamestate_integration_otimiza.cfg` na pasta `cfg` do CS2 (vale ao abrir o jogo de novo). `EXIGEM_LICENCA`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_ligar() -> Result<PainelDoCs2, String> {
+    crate::modules::licenca::exigir()?;
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::cs2::maquina::ligar()?;
+        Ok(painel_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Apaga o arquivo da integração. `LIVRES`: é desfazer.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn cs2_desligar() -> Result<PainelDoCs2, String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::cs2::maquina::desligar()?;
+        Ok(painel_do_cs2())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}

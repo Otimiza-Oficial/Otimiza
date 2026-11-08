@@ -8,6 +8,7 @@ pub mod capas;
 pub mod compat;
 pub mod contador_fivem;
 pub mod cores;
+pub mod cs2;
 pub mod energia_jogo;
 pub mod feedback;
 pub mod flags;

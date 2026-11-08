@@ -96,6 +96,12 @@ export const commands = {
 	energiaCalibrarCancelar: () => __TAURI_INVOKE<void>("energia_calibrar_cancelar"),
 	/**  Aplica no plano OTIMIZA o vencedor da última calibração, relendo do Windows. `EXIGEM_LICENCA`. */
 	energiaAplicarCalibrado: () => __TAURI_INVOKE<string>("energia_aplicar_calibrado"),
+	/**  A integração oficial do CS2 (Game State Integration): instalada, ligada e o momento da partida. `LIVRES`: só lê. */
+	cs2Painel: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_painel"),
+	/**  Escreve `gamestate_integration_otimiza.cfg` na pasta `cfg` do CS2 (vale ao abrir o jogo de novo). `EXIGEM_LICENCA`. */
+	cs2Ligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_ligar"),
+	/**  Apaga o arquivo da integração. `LIVRES`: é desfazer. */
+	cs2Desligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_desligar"),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
@@ -764,6 +770,28 @@ export type EstadoDoAjuste = "Applied" | "AlreadyOptimal" | "Available" | "Unava
  */
 "Unknown";
 
+export type EstadoDoCs2 = EstadoDoCs2_Serialize | EstadoDoCs2_Deserialize;
+
+export type EstadoDoCs2_Deserialize = {
+	momento: MomentoDoCs2,
+	mapa?: string | null,
+	/**  "competitive", "casual", "deathmatch"… */
+	modo?: string | null,
+	rodada?: number | null,
+	/**  Segundos desde o último aviso do CS2. */
+	ha_s: number,
+};
+
+export type EstadoDoCs2_Serialize = {
+	momento: MomentoDoCs2,
+	mapa: string | null,
+	/**  "competitive", "casual", "deathmatch"… */
+	modo: string | null,
+	rodada: number | null,
+	/**  Segundos desde o último aviso do CS2. */
+	ha_s: number,
+};
+
 /**  Cinco porque é a divisão que o medível permite: o quadro que o Windows anuncia já passou por jogo e placa. */
 export type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
 
@@ -1081,6 +1109,16 @@ export type ModoDeVideo = {
 	y: number,
 };
 
+export type MomentoDoCs2 = 
+/**  Menu principal (sem mapa). */
+"menu" | 
+/**  Aquecimento, intervalo, fim de partida ou congelamento do começo da rodada. */
+"pausa" | 
+/**  Rodada valendo e a pessoa viva: o momento que a medida quer. */
+"jogando" | 
+/**  Morto ou assistindo outro jogador. */
+"assistindo";
+
 export type MudancaNaTela = MudancaNaTela_Serialize | MudancaNaTela_Deserialize;
 
 export type MudancaNaTela_Deserialize = {
@@ -1338,6 +1376,24 @@ export type PainelDaEnergiaDeJogo_Serialize = {
 	impedimento: string | null,
 	/**  O que vai mudar, em palavras, medido no plano ativo. */
 	o_que_muda: string | null,
+};
+
+export type PainelDoCs2 = PainelDoCs2_Serialize | PainelDoCs2_Deserialize;
+
+export type PainelDoCs2_Deserialize = {
+	instalado: boolean,
+	/**  O arquivo da integração está na pasta do CS2. */
+	ligado: boolean,
+	/**  O que o CS2 contou nos últimos 30 s (com o jogo aberto e a integração ligada). */
+	estado?: EstadoDoCs2_Deserialize | null,
+};
+
+export type PainelDoCs2_Serialize = {
+	instalado: boolean,
+	/**  O arquivo da integração está na pasta do CS2. */
+	ligado: boolean,
+	/**  O que o CS2 contou nos últimos 30 s (com o jogo aberto e a integração ligada). */
+	estado: EstadoDoCs2_Serialize | null,
 };
 
 /**  Para a tela. */
