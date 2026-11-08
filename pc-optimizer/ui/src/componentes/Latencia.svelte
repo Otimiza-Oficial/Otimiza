@@ -4,6 +4,7 @@
   // devolve isso como resultado, não como erro.
 
   import { onDestroy, onMount } from "svelte";
+  import TesteDeReflexo from "./TesteDeReflexo.svelte";
   import { ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
 
   const DURACOES = [10, 30, 60] as const;
@@ -245,6 +246,14 @@
         </div>
       </div>
     {/if}
+  </section>
+  <section class="secao">
+    <h2>Teste de reflexo</h2>
+    <p class="apoio texto">
+      Do verde ao clique entram o seu reflexo e o atraso do PC (mouse, Windows, tela). Faça antes e depois de otimizar,
+      descansado, e compare.
+    </p>
+    <TesteDeReflexo />
   </section>
 </div>
 
