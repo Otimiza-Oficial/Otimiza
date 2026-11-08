@@ -147,9 +147,10 @@
     dizer(cutucada());
   }
 
-  // A primeira fala sai quando o hardware chega (o aviso de Hz depende dele).
+  // A primeira fala espera a ficha do PC (aviso de Hz) E a primeira leitura de memória (aviso de memória cheia):
+  // falar antes diria "está tudo certo" sobre o que ainda não foi lido.
   $effect(() => {
-    if (primeiraFala || !hardware) return;
+    if (primeiraFala || !hardware || (!metricas && !jogo)) return;
     primeiraFala = true;
     if (!jogo) {
       const f = abertura(lista);
