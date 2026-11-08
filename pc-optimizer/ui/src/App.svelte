@@ -84,7 +84,10 @@
   const ultima = $derived(
     biblioteca.filter((j) => j.ultima).sort((a, b) => (b.ultima?.quando ?? 0) - (a.ultima?.quando ?? 0))[0] ?? null
   );
-  const capaDaUltima = $derived(instalados.find((i) => i.jogo.nome === ultima?.nome)?.capa ?? null);
+  /** O "player": o jogo aberto, se houver; senão a última partida. Os números só aparecem se forem DESSE jogo. */
+  const jogoDoPlayer = $derived(jogo?.nome ?? ultima?.nome ?? null);
+  const partidaDoPlayer = $derived(ultima && ultima.nome === jogoDoPlayer ? ultima : null);
+  const capaDaUltima = $derived(instalados.find((i) => i.jogo.nome === jogoDoPlayer)?.capa ?? null);
   const telaPrincipal = $derived(hardware?.telas.find((t) => t.principal) ?? hardware?.telas[0] ?? null);
   const memoriaPct = $derived.by(() => {
     const t = metricas?.ram.total_gb ?? null;
@@ -535,19 +538,19 @@
             <section class="bloco b-jogo" use:brilho>
               <div class="faixa">
                 <span class="capa">
-                  {#if capaDaUltima}<img src={capaDaUltima} alt="" />{:else if ultima}<span class="ini">{iniciais(ultima.nome)}</span>{/if}
+                  {#if capaDaUltima}<img src={capaDaUltima} alt="" />{:else if jogoDoPlayer}<span class="ini">{iniciais(jogoDoPlayer)}</span>{/if}
                 </span>
                 <div class="faixa-texto">
-                  <strong>{jogo ? jogo.nome : (ultima?.nome ?? "Nenhuma partida ainda")}</strong>
-                  <span class="sec">{jogo ? "Jogando agora" : ultima?.ultima ? "Última partida" : "Jogue com o Otimiza aberto"}</span>
+                  <strong>{jogoDoPlayer ?? "Nenhuma partida ainda"}</strong>
+                  <span class="sec">{jogo ? "Jogando agora" : partidaDoPlayer?.ultima ? "Última partida" : "Jogue com o Otimiza aberto"}</span>
                 </div>
-                {#if ultima?.ganho_low.estado === "Medido" && ultima.ganho_low.pct != null}
-                  <span class="selo-medido">+{inteiro(ultima.ganho_low.pct)}%</span>
+                {#if partidaDoPlayer?.ganho_low.estado === "Medido" && partidaDoPlayer.ganho_low.pct != null}
+                  <span class="selo-medido">{partidaDoPlayer.ganho_low.pct >= 0 ? "+" : ""}{inteiro(partidaDoPlayer.ganho_low.pct)}%</span>
                 {/if}
               </div>
-              {#if ultima?.ultima}
-                {@const fps = ultima.ultima.fps_nativo ?? 0}
-                {@const low = ultima.ultima.low_1pct ?? 0}
+              {#if partidaDoPlayer?.ultima}
+                {@const fps = partidaDoPlayer.ultima.fps_nativo ?? 0}
+                {@const low = partidaDoPlayer.ultima.low_1pct ?? 0}
                 <div class="progresso">
                   <span class="numero sec">{inteiro(low)}</span>
                   <div class="trilha"><div style:width={`${fps > 0 ? Math.min(100, (low / fps) * 100) : 0}%`}></div></div>
