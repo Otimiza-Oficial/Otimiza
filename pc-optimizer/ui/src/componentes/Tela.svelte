@@ -8,6 +8,8 @@
 
   type Aviso = { tipo: "ok" | "erro" | "atencao"; texto: string };
 
+  let { aoMudarHz }: { aoMudarHz?: (dispositivo: string, hz: number) => void } = $props();
+
   let telas = $state<DiagnosticoDaTela[] | null>(null);
   let erro = $state<string | null>(null);
   let ocupado = $state<string | null>(null);
@@ -19,6 +21,7 @@
   async function carregar() {
     try {
       telas = await ponte.telas();
+      for (const t of telas) if (t.atual) aoMudarHz?.(t.dispositivo, t.atual.hz);
       erro = null;
     } catch (e) {
       erro = String(e);

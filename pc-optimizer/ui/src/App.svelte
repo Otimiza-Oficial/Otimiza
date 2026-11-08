@@ -88,6 +88,15 @@
     return v == null ? "—" : String(Math.round(v));
   }
 
+  /** O retrato de hardware é de quando foi lido: depois de uma troca na área Tela, o widget pega o Hz novo dela. */
+  function trocouHz(dispositivo: string, hz: number) {
+    if (!hardware) return;
+    hardware = {
+      ...hardware,
+      telas: hardware.telas.map((t) => (t.dispositivo.toLowerCase() === dispositivo.toLowerCase() ? { ...t, hz_atual: hz } : t)),
+    };
+  }
+
   async function janela(acao: "minimizar" | "maximizar" | "fechar") {
     if (!noTauri) return;
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
@@ -227,7 +236,7 @@
         {:else if aberta === "latencia"}
           <Latencia />
         {:else if aberta === "tela"}
-          <Tela />
+          <Tela aoMudarHz={trocouHz} />
         {:else}
           <p class="chega">Esta área chega na Onda {area.onda} da Nova Geração. Vai ter:</p>
           <ul>
