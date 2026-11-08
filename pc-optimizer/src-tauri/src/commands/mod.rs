@@ -354,6 +354,7 @@ mod tests {
         "tela_voltar_troca",
         "rede_rota",
         "rede_rota_do_jogo",
+        "rede_historico",
         "rede_wifi",
         "rede_varredura_wifi",
         "rede_varredura_wifi_desligar",

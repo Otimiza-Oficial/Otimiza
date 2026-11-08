@@ -32,6 +32,7 @@ pub mod overlay;
 pub mod por_cima;
 pub mod ritmo_estavel;
 pub mod rota;
+pub mod rota_historico;
 pub mod sessao;
 pub mod turbo;
 pub mod wifi;

@@ -43,6 +43,7 @@ import {
   type ResultadoDaProva_Serialize,
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
+  type HistoricoDaRede_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
 } from "./tipos";
@@ -60,6 +61,8 @@ export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize;
 export type { TrechoDaRota } from "./tipos";
 export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
+export type HistoricoDaRede = HistoricoDaRede_Serialize;
+export type NumerosDoPeriodo = HistoricoDaRede["resumo"]["periodos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
 export type CapturaDpc = ResultadoDaCaptura_Serialize;
@@ -233,6 +236,43 @@ function telasDemo(): DiagnosticoDaTela[] {
         : `24G4 aguenta 180 Hz e está em ${telaDemoHz}. Corrigir leva um clique e se desfaz pelo histórico.`,
     },
   ];
+}
+
+function redeHistoricoDemo(): HistoricoDaRede {
+  const agora = Math.floor(Date.now() / 1000);
+  const recentes = [21, 20, 10, 22, 9, 15, 21, 11].map((hora, i) => {
+    const noite = hora >= 18;
+    return {
+      quando: agora - i * 30 * 3600,
+      hora,
+      dia_da_semana: i % 7,
+      destino: "185.40.64.12",
+      do_jogo: true,
+      chegou: true,
+      mediana_ms: noite ? 58 + i : 31 + i,
+      jitter_ms: noite ? 9 : 2,
+      perda_pct: noite ? 20 : 0,
+      veredito: noite ? "perda" : "limpa",
+      trecho: noite ? ("operadora" as const) : null,
+      salto: noite ? 4 : null,
+      operadora: "Vivo",
+    };
+  });
+  return {
+    recentes,
+    resumo: {
+      medidas: 8,
+      periodos: [
+        { periodo: "manha", medidas: 3, ping_ms: 34, perda_pct: 0, com_problema: 0 },
+        { periodo: "tarde", medidas: 1, ping_ms: 36, perda_pct: 0, com_problema: 0 },
+        { periodo: "noite", medidas: 4, ping_ms: 61, perda_pct: 20, com_problema: 4 },
+      ],
+      frase: "À noite a conexão perde mais pacotes: 20% em média, contra 0% de manhã. 4 de 4 medidas desse horário tiveram problema.",
+      na_operadora: 4,
+    },
+    relatorio:
+      "Relatório de rota (medido pelo Otimiza, no estilo do MTR: 10 pacotes por salto)\nOperadora: Vivo\nMedidas com problema dentro da rede da operadora: 4 de 8\n\n- (demonstração) destino 185.40.64.12 · começa no salto 4 · perda de 20% · ping 61 ms\n",
+  };
 }
 
 /** Rota de demonstração com a variação começando na operadora: o caso que a área Rede existe para apontar. */
@@ -655,6 +695,9 @@ export const ponte = {
     await new Promise((r) => setTimeout(r, 1200));
     return rotaDemo(destino);
   },
+  /** Na demonstração: uma semana em que a noite perde pacotes na operadora (o caso que o relatório existe para provar). */
+  historicoDaRede: (): Promise<HistoricoDaRede> =>
+    noTauri ? commands.redeHistorico() : Promise.resolve(redeHistoricoDemo()),
   rotaDoJogo: (): Promise<Rota> =>
     noTauri
       ? commands.redeRotaDoJogo()

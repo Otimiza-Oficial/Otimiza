@@ -6,6 +6,7 @@
   import {
     ponte,
     type DiagnosticoDoWifi,
+    type HistoricoDaRede,
     type PainelDaBanda,
     type PainelDaVarredura,
     type ResultadoDaBanda,
@@ -44,12 +45,39 @@
   let medindo = $state<"destino" | "jogo" | null>(null);
   let erroRota = $state<string | null>(null);
 
+  let historico = $state<HistoricoDaRede | null>(null);
+  let copiado = $state(false);
+
+  const NOME_DO_PERIODO = { madrugada: "Madrugada", manha: "Manhã", tarde: "Tarde", noite: "Noite" } as const;
+  const ORDEM = ["madrugada", "manha", "tarde", "noite"] as const;
+  /** Os quatro períodos sempre na tela: o que não foi medido aparece vazio, para a pessoa ver o que falta medir. */
+  const periodos = $derived(
+    ORDEM.map((p) => ({ periodo: p, n: historico?.resumo.periodos.find((x) => x.periodo === p) ?? null })),
+  );
+  const pingMaximo = $derived(Math.max(1, ...periodos.map((p) => p.n?.ping_ms ?? 0)));
+
+  function carregarHistorico() {
+    ponte.historicoDaRede().then((h) => (historico = h)).catch(() => (historico = null));
+  }
+
+  async function copiarRelatorio() {
+    if (!historico?.relatorio) return;
+    try {
+      await navigator.clipboard.writeText(historico.relatorio);
+      copiado = true;
+      setTimeout(() => (copiado = false), 2500);
+    } catch {
+      copiado = false;
+    }
+  }
+
   const saltoDoProblema = $derived(rota?.veredito.tipo === "problema" ? rota.veredito.salto : null);
 
   onMount(() => {
     ponte.wifi().then((w) => (wifi = w)).catch((e) => (erroWifi = String(e)));
     ponte.varredura().then((v) => (varredura = v)).catch((e) => (erroVarredura = String(e)));
     ponte.banda().then((b) => (banda = b)).catch((e) => (erroBanda = String(e)));
+    carregarHistorico();
   });
 
   /** Cada resultado do Rust tem nome; aqui vira a frase da tela, sem prometer o que o Windows não confirmou. */
@@ -125,6 +153,7 @@
       erroRota = String(e);
     } finally {
       medindo = null;
+      carregarHistorico();
     }
   }
 
@@ -295,6 +324,50 @@
     {/if}
   </section>
 
+  <!-- Quando piora -->
+  <section class="secao" aria-labelledby="rede-quando">
+    <h2 id="rede-quando">Quando piora</h2>
+    {#if !historico || historico.resumo.medidas === 0}
+      <p class="apoio">
+        Cada rota que você mede fica guardada aqui. Meça em horários diferentes (de manhã e à noite, jogando) e o
+        Otimiza mostra se a sua conexão piora em algum horário.
+      </p>
+    {:else}
+      <p class="destaque">
+        {historico.resumo.frase ??
+          `${historico.resumo.medidas} ${historico.resumo.medidas === 1 ? "medida guardada" : "medidas guardadas"}. Meça em outro horário para comparar.`}
+      </p>
+      <div class="periodos" role="list">
+        {#each periodos as p (p.periodo)}
+          <div class="periodo" role="listitem" class:vazio={!p.n} data-tom={p.n && p.n.com_problema > 0 ? "atencao" : "ok"}>
+            <div class="barra" aria-hidden="true">
+              <span style:height={`${p.n?.ping_ms ? Math.max(8, (p.n.ping_ms / pingMaximo) * 100) : 0}%`}></span>
+            </div>
+            <strong class="numero">{p.n?.ping_ms != null ? `${p.n.ping_ms} ms` : "—"}</strong>
+            <span class="apoio">{NOME_DO_PERIODO[p.periodo]}</span>
+            <span class="apoio pequeno">
+              {#if !p.n}sem medida{:else}{p.n.medidas} {p.n.medidas === 1 ? "medida" : "medidas"}{(p.n.perda_pct ?? 0) >= 1
+                  ? ` · ${Math.round(p.n.perda_pct ?? 0)}% perda`
+                  : ""}{/if}
+            </span>
+          </div>
+        {/each}
+      </div>
+      {#if historico.relatorio}
+        <div class="chamado">
+          <p class="apoio">
+            Em {historico.resumo.na_operadora}
+            {historico.resumo.na_operadora === 1 ? "medida" : "medidas"} o problema começou dentro da operadora. O
+            relatório tem data, hora, salto e números: é o que o atendimento pede para abrir chamado.
+          </p>
+          <button class="btn primario" type="button" onclick={copiarRelatorio}>
+            {copiado ? "Copiado" : "Copiar relatório para a operadora"}
+          </button>
+        </div>
+      {/if}
+    {/if}
+  </section>
+
   <!-- Durante o jogo -->
   <section class="secao" aria-labelledby="rede-jogo">
     <h2 id="rede-jogo">Durante o jogo</h2>
@@ -451,6 +524,53 @@
   }
   .saltos tr.problema td {
     background: var(--ambar-fundo);
+  }
+  .periodos {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .periodo {
+    display: grid;
+    justify-items: center;
+    gap: 4px;
+    text-align: center;
+  }
+  .periodo .barra {
+    width: 100%;
+    max-width: 56px;
+    height: 88px;
+    display: flex;
+    align-items: flex-end;
+    border-radius: 12px;
+    background: var(--linha);
+    overflow: hidden;
+  }
+  .periodo .barra span {
+    width: 100%;
+    border-radius: 12px;
+    background: var(--ok);
+    transition: height 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .periodo[data-tom="atencao"] .barra span {
+    background: var(--atencao);
+  }
+  .periodo.vazio strong {
+    color: var(--tinta-3);
+  }
+  .pequeno {
+    font-size: 11px;
+  }
+  .chamado {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .chamado .apoio {
+    flex: 1;
+    min-width: 220px;
   }
   .atribuicao {
     font-size: 11px;

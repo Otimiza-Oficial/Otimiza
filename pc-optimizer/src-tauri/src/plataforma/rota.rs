@@ -51,7 +51,7 @@ pub struct Resposta {
     pub tipo: TipoResposta,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[cfg_attr(test, derive(specta::Type))]
 #[cfg_attr(test, serde(rename = "TrechoDaRota"))]
 #[serde(rename_all = "snake_case")]

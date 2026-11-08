@@ -64,6 +64,8 @@ export const commands = {
 	redeRota: (destino: string) => __TAURI_INVOKE<Rota_Serialize>("rede_rota", { destino }),
 	/**  Rota até o servidor da partida aberta. Sem partida, recusa dizendo o que fazer. `LIVRES`. */
 	redeRotaDoJogo: () => __TAURI_INVOKE<Rota_Serialize>("rede_rota_do_jogo"),
+	/**  As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`. */
+	redeHistorico: () => __TAURI_INVOKE<HistoricoDaRede_Serialize>("rede_historico"),
 	/**  Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`. */
 	redeWifi: () => __TAURI_INVOKE<DiagnosticoDoWifi_Serialize>("rede_wifi"),
 	/**  A escolha "Wi-Fi sem varredura durante o jogo" e se está agindo agora. `LIVRES`. */
@@ -820,6 +822,24 @@ export type GovernoDoProcessador = "OProcessador" | "OWindows" | "NaoDeuParaLer"
 
 export type GravidadeDoWifi = "Bom" | "Info" | "Atencao";
 
+export type HistoricoDaRede = HistoricoDaRede_Serialize | HistoricoDaRede_Deserialize;
+
+export type HistoricoDaRede_Deserialize = {
+	/**  As últimas medidas, a mais recente primeiro. */
+	recentes: RegistroDaRota_Deserialize[],
+	resumo: ResumoDaRede_Deserialize,
+	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
+	relatorio?: string | null,
+};
+
+export type HistoricoDaRede_Serialize = {
+	/**  As últimas medidas, a mais recente primeiro. */
+	recentes: RegistroDaRota_Serialize[],
+	resumo: ResumoDaRede_Serialize,
+	/**  Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela). */
+	relatorio: string | null,
+};
+
 export type HistoricoNaTela = HistoricoNaTela_Serialize | HistoricoNaTela_Deserialize;
 
 export type HistoricoNaTela_Deserialize = {
@@ -1106,6 +1126,30 @@ export type NivelDoDpc = "Saudavel" |
 "Atencao" | 
 /**  Dois ou mais eventos acima de 1 ms, ou qualquer um acima de 2 ms. */
 "Pico";
+
+export type NumerosDoPeriodo = NumerosDoPeriodo_Serialize | NumerosDoPeriodo_Deserialize;
+
+export type NumerosDoPeriodo_Deserialize = {
+	periodo: Periodo,
+	medidas: number,
+	/**  Mediana dos pings (ms) das medidas que chegaram a ter número. */
+	ping_ms?: number | null,
+	/**  Média da perda no fim da rota. */
+	perda_pct: number | null,
+	/**  Medidas em que o veredito apontou perda ou variação. */
+	com_problema: number,
+};
+
+export type NumerosDoPeriodo_Serialize = {
+	periodo: Periodo,
+	medidas: number,
+	/**  Mediana dos pings (ms) das medidas que chegaram a ter número. */
+	ping_ms: number | null,
+	/**  Média da perda no fim da rota. */
+	perda_pct: number | null,
+	/**  Medidas em que o veredito apontou perda ou variação. */
+	com_problema: number,
+};
 
 /**  Quatro coisas diferentes: tratá-las como uma só entregou "otimização" que derrubou FPS. */
 export type OQuePodeCustar = "FpsMedio" | 
@@ -1515,6 +1559,8 @@ export type PerformanceMetrics_Serialize = {
 	latencia: Orcamento_Serialize,
 };
 
+export type Periodo = "madrugada" | "manha" | "tarde" | "noite";
+
 /**  Um pico com carimbo, no relógio da sessão (QPC): a causa da travada cruza com os quadros pelo mesmo relógio. */
 export type PicoDeDriver = {
 	inicio_qpc: number,
@@ -1624,6 +1670,48 @@ export type RecursoAvaliado = {
 	recurso: Recurso,
 	nome: string,
 	suporte: Suporte,
+};
+
+export type RegistroDaRota = RegistroDaRota_Serialize | RegistroDaRota_Deserialize;
+
+export type RegistroDaRota_Deserialize = {
+	/**  Segundos desde 1970 (UTC). */
+	quando: number,
+	/**  Hora local (0–23) e dia da semana (0 = domingo) da medida: o "à noite" é o da pessoa. */
+	hora: number,
+	dia_da_semana: number,
+	destino: string,
+	do_jogo: boolean,
+	chegou: boolean,
+	/**  Ping e perda no último salto que respondeu. */
+	mediana_ms?: number | null,
+	jitter_ms?: number | null,
+	perda_pct: number | null,
+	/**  `limpa`, `perda`, `variacao`, `servidor_nao_responde` ou `nao_mediu`. */
+	veredito: string,
+	trecho?: TrechoDaRota | null,
+	salto?: number | null,
+	operadora?: string | null,
+};
+
+export type RegistroDaRota_Serialize = {
+	/**  Segundos desde 1970 (UTC). */
+	quando: number,
+	/**  Hora local (0–23) e dia da semana (0 = domingo) da medida: o "à noite" é o da pessoa. */
+	hora: number,
+	dia_da_semana: number,
+	destino: string,
+	do_jogo: boolean,
+	chegou: boolean,
+	/**  Ping e perda no último salto que respondeu. */
+	mediana_ms: number | null,
+	jitter_ms: number | null,
+	perda_pct: number | null,
+	/**  `limpa`, `perda`, `variacao`, `servidor_nao_responde` ou `nao_mediu`. */
+	veredito: string,
+	trecho: TrechoDaRota | null,
+	salto: number | null,
+	operadora: string | null,
 };
 
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
@@ -1971,6 +2059,26 @@ export type ResultadoDoTurbo_Serialize = {
 	na_tela_medido: boolean,
 	minutos: number | null,
 	escala: NivelDeEscala | null,
+};
+
+export type ResumoDaRede = ResumoDaRede_Serialize | ResumoDaRede_Deserialize;
+
+export type ResumoDaRede_Deserialize = {
+	medidas: number,
+	periodos: NumerosDoPeriodo_Deserialize[],
+	/**  "À noite o ping sobe…": só quando há medidas bastantes em dois períodos e a diferença é de sentir. */
+	frase?: string | null,
+	/**  Medidas com problema na operadora: o relatório para o chamado sai delas. */
+	na_operadora: number,
+};
+
+export type ResumoDaRede_Serialize = {
+	medidas: number,
+	periodos: NumerosDoPeriodo_Serialize[],
+	/**  "À noite o ping sobe…": só quando há medidas bastantes em dois períodos e a diferença é de sentir. */
+	frase: string | null,
+	/**  Medidas com problema na operadora: o relatório para o chamado sai delas. */
+	na_operadora: number,
 };
 
 export type ResumoDasRepeticoes = ResumoDasRepeticoes_Serialize | ResumoDasRepeticoes_Deserialize;

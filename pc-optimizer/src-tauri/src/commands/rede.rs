@@ -27,7 +27,9 @@ async fn resolver(destino: &str) -> Result<std::net::IpAddr, String> {
 pub async fn rede_rota(destino: String) -> Result<crate::plataforma::rota::Rota, String> {
     #[cfg(target_os = "windows")]
     {
-        Ok(rota::diagnosticar(resolver(&destino).await?).await)
+        let r = rota::diagnosticar(resolver(&destino).await?).await;
+        crate::plataforma::rota_historico::guardar(&r, false);
+        Ok(r)
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -43,13 +45,38 @@ pub async fn rede_rota(destino: String) -> Result<crate::plataforma::rota::Rota,
 pub async fn rede_rota_do_jogo() -> Result<crate::plataforma::rota::Rota, String> {
     #[cfg(target_os = "windows")]
     {
-        rota::diagnosticar_servidor_do_jogo().await
+        let r = rota::diagnosticar_servidor_do_jogo().await?;
+        crate::plataforma::rota_historico::guardar(&r, true);
+        Ok(r)
     }
 
     #[cfg(not(target_os = "windows"))]
     {
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+pub struct HistoricoDaRede {
+    /// As últimas medidas, a mais recente primeiro.
+    pub recentes: Vec<crate::plataforma::rota_historico::RegistroDaRota>,
+    pub resumo: crate::plataforma::rota_historico::ResumoDaRede,
+    /// Texto pronto para o chamado da operadora (só quando o problema esteve dentro da rede dela).
+    pub relatorio: Option<String>,
+}
+
+/// As rotas já medidas: quando a conexão piora e o relatório para a operadora. Só lê. `LIVRES`.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn rede_historico() -> Result<HistoricoDaRede, String> {
+    use crate::plataforma::rota_historico as h;
+    let todos = h::ler()?;
+    Ok(HistoricoDaRede {
+        recentes: todos.iter().rev().take(30).cloned().collect(),
+        resumo: h::resumir(&todos),
+        relatorio: h::relatorio(&todos, h::data_local),
+    })
 }
 
 /// Por onde o PC sai para a internet (cabo, Wi-Fi, VPN) e, no Wi-Fi, sinal, banda, canal e vizinhos. `LIVRES`.
