@@ -298,7 +298,7 @@ h2 {
   transition: transform 140ms ease;
 }
 .interruptor[aria-checked="true"] {
-  background: var(--acao);
+  background: var(--ligado, var(--acao));
 }
 .interruptor[aria-checked="true"]::after {
   transform: translateX(16px);
