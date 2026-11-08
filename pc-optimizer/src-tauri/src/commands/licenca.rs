@@ -48,6 +48,7 @@ pub fn conta_que_esta_rodando() -> ContaDoUsuario {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct ContaDoUsuario {
     #[cfg(target_os = "windows")]
     pub conta: crate::modules::windows::contadousuario::Conta,
@@ -69,6 +70,7 @@ impl Default for ContaDoUsuario {
 /// síncrono: `health::analyze()` e `thermal::analyze()` somam 12 a 15 s, e na thread principal congelariam a
 /// janela.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn relatorio_de_suporte() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
@@ -85,6 +87,7 @@ pub fn relatorio_de_suporte() -> Result<String, String> {
 
 /// A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir).
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct AvisoDeVersao {
     pub comparacao: crate::modules::atualizacao::Comparacao,
     pub versao_publicada: Option<String>,
@@ -95,6 +98,7 @@ pub struct AvisoDeVersao {
 
 /// `LIVRES`: só pergunta ao GitHub; não instala nada. A versão instalada é `CARGO_PKG_VERSION`.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn versao_mais_nova() -> AvisoDeVersao {
     let instalada = env!("CARGO_PKG_VERSION");
 
@@ -136,11 +140,13 @@ pub fn versao_do_app() -> VersaoDoApp {
 
 /// Livre: alimenta a tela de compra.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn licenca_estado() -> crate::modules::licenca::Estado {
     crate::modules::licenca::estado()
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn licenca_ativar(chave: String) -> Result<crate::modules::licenca::Estado, String> {
     crate::modules::licenca::ativar(&chave)?;
     Ok(crate::modules::licenca::estado())

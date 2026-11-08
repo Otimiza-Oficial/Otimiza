@@ -11,6 +11,8 @@ const TIMEOUT_SEGUNDOS: u64 = 10;
 
 /// Três variantes, não um bool: "não sei" (consulta falhou ou ilegível) não pode virar "está tudo em dia".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ComparacaoDeVersao"))]
 pub enum Comparacao {
     /// Instalada igual ou MAIOR (compilação local).
     NaoHaNova,
@@ -91,6 +93,7 @@ pub fn versao_de_exibicao() -> String {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct UltimaVersao {
     pub versao: String,
     pub pagina: Option<String>,

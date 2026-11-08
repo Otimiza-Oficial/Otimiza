@@ -28,6 +28,7 @@ pub fn endereco_de(bruto: Option<&str>) -> Option<&str> {
 
 /// `{"tipo":"licenca-online","maquina","licenca","emitido","valido_ate"}`, assinado como a licença.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
 pub struct Atestado {
     pub tipo: String,
     pub maquina: String,
@@ -147,6 +148,8 @@ pub fn precisa_renovar(
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RevogacaoDaLicenca"))]
 pub struct Revogacao {
     pub licenca: String,
     pub motivo: String,

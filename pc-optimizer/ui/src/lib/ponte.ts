@@ -27,6 +27,12 @@ import {
   type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
   type ResultadoDoLab_Serialize,
+  type Preferences_Serialize,
+  type EstadoDaLicenca_Serialize,
+  type AvisoDeVersao_Serialize,
+  type EstadoDaSobreposicao_Serialize,
+  type ModoDaSobreposicao,
+  type CantoDaSobreposicao,
   type LadoDoLab,
   type RelatorioDoPlano_Serialize,
   type RelatorioDeTetos_Serialize,
@@ -60,6 +66,11 @@ export type PainelDoTurbo = PainelDoTurbo_Serialize;
 export type RelatorioDoPlano = RelatorioDoPlano_Serialize;
 export type AjusteDoCatalogo = OptimizationInfo_Serialize;
 export type ResultadoDoLab = ResultadoDoLab_Serialize;
+export type Preferencias = Preferences_Serialize;
+export type EstadoDaLicenca = EstadoDaLicenca_Serialize;
+export type AvisoDeVersao = AvisoDeVersao_Serialize;
+export type Sobreposicao = EstadoDaSobreposicao_Serialize;
+export type { ModoDaSobreposicao, CantoDaSobreposicao };
 export type { LadoDoLab };
 export type { StartupEntry, ItemDaLimpeza, ResultadoDaLimpeza, RestoreStatus };
 export type EnergiaDeJogo = PainelDaEnergiaDeJogo_Serialize;
@@ -557,6 +568,19 @@ function labResultadoDemo(): ResultadoDoLab {
   };
 }
 
+let preferenciasDemo: Preferencias = {
+  restore_point_before_batch: true,
+  metrics_interval_seconds: 2,
+  auto_game_mode: false,
+  show_unavailable: true,
+  medir_quadros_sozinho: true,
+};
+let sobreposicaoDemo: Sobreposicao = {
+  config: { modo: "Minimo", canto: "SuperiorEsquerdo", confirmados: [], com_frame_boost: false, versao: 2 },
+  ligado: false,
+  jogo: null,
+};
+
 let demoTick = 0;
 
 export const ponte = {
@@ -805,6 +829,32 @@ export const ponte = {
   provaGuardada: (): Promise<ProvaDoTurbo | null> => (noTauri ? commands.provaAlternadaGuardada() : Promise.resolve(null)),
   compartilharProva: (): Promise<string> =>
     noTauri ? commands.resultadoParaCompartilhar() : Promise.reject("Ainda não há prova com comparação justa para compartilhar."),
+  preferencias: (): Promise<Preferencias> => (noTauri ? commands.getPreferences() : Promise.resolve({ ...preferenciasDemo })),
+  gravarPreferencias: async (p: Preferencias): Promise<Preferencias> => {
+    if (noTauri) return commands.setPreferences(p);
+    preferenciasDemo = { ...p };
+    return { ...p };
+  },
+  licenca: (): Promise<EstadoDaLicenca> =>
+    noTauri
+      ? commands.licencaEstado()
+      : Promise.resolve({ ativa: true, maquina: "DEMO-1234", origem: "Licença vitalícia", sobrevive_formatacao: true, comprador: "Demonstração", expira: null, motivo: null }),
+  ativarLicenca: (chave: string): Promise<EstadoDaLicenca> =>
+    noTauri ? commands.licencaAtivar(chave) : Promise.reject("No navegador não dá para ativar: abra o Otimiza."),
+  versaoMaisNova: (): Promise<AvisoDeVersao> =>
+    noTauri
+      ? commands.versaoMaisNova()
+      : Promise.resolve({ comparacao: "NaoHaNova", versao_publicada: "4.0.0", versao_publicada_exibida: "1.0", pagina: null }),
+  relatorioDeSuporte: (): Promise<string> =>
+    noTauri ? commands.relatorioDeSuporte() : Promise.resolve("Relatório de suporte (demonstração)."),
+  sobreposicao: (): Promise<Sobreposicao> => (noTauri ? commands.overlayEstado() : Promise.resolve(structuredClone(sobreposicaoDemo))),
+  gravarSobreposicao: async (modo: ModoDaSobreposicao, canto: CantoDaSobreposicao, comFrameBoost: boolean): Promise<Sobreposicao> => {
+    if (noTauri) return commands.overlayGravar(modo, canto, comFrameBoost);
+    sobreposicaoDemo = { ...sobreposicaoDemo, config: { ...sobreposicaoDemo.config, modo, canto, com_frame_boost: comFrameBoost } };
+    return structuredClone(sobreposicaoDemo);
+  },
+  mostrarSobreposicao: (confirmado: boolean): Promise<Sobreposicao> =>
+    noTauri ? commands.overlayLigar(confirmado) : Promise.reject("Abra o jogo primeiro: o FPS fica no canto da janela dele."),
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

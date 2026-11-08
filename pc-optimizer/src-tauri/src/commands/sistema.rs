@@ -21,11 +21,13 @@ pub fn is_elevated() -> bool {
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn get_preferences() -> Preferences {
     Preferences::load()
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> {
     preferences.save()?;
     // Valores fora da faixa são corrigidos: a interface reflete o gravado, não o pedido.

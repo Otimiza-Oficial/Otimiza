@@ -156,6 +156,31 @@ export const commands = {
 	 *  volta como erro, já com a frase para a tela.
 	 */
 	resultadoParaCompartilhar: () => __TAURI_INVOKE<string>("resultado_para_compartilhar"),
+	getPreferences: () => __TAURI_INVOKE<Preferences_Serialize>("get_preferences"),
+	setPreferences: (preferences: Preferences_Deserialize) => __TAURI_INVOKE<Preferences_Serialize>("set_preferences", { preferences }),
+	/**  Livre: alimenta a tela de compra. */
+	licencaEstado: () => __TAURI_INVOKE<EstadoDaLicenca_Serialize>("licenca_estado"),
+	licencaAtivar: (chave: string) => __TAURI_INVOKE<EstadoDaLicenca_Serialize>("licenca_ativar", { chave }),
+	/**  `LIVRES`: só pergunta ao GitHub; não instala nada. A versão instalada é `CARGO_PKG_VERSION`. */
+	versaoMaisNova: () => __TAURI_INVOKE<AvisoDeVersao_Serialize>("versao_mais_nova"),
+	/**
+	 *  `LIVRES` (faltou quando um cliente precisou de script de PowerShell à mão; ver `modules::windows::suporte`). NÃO
+	 *  síncrono: `health::analyze()` e `thermal::analyze()` somam 12 a 15 s, e na thread principal congelariam a
+	 *  janela.
+	 */
+	relatorioDeSuporte: () => __TAURI_INVOKE<string>("relatorio_de_suporte"),
+	/**  O FPS por cima do jogo: modo, canto e se está na tela agora. `LIVRES`: só lê. */
+	overlayEstado: () => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_estado"),
+	/**
+	 *  Grava o modo e o canto. Desligado tira da tela na hora. `LIVRES`: é preferência do Otimiza; quem põe a janela
+	 *  por cima do jogo é `overlay_ligar` ou a abertura do jogo, que conferem o anticheat.
+	 */
+	overlayGravar: (modo: ModoDaSobreposicao, canto: CantoDaSobreposicao, comFrameBoost: boolean | null) => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_gravar", { modo, canto, comFrameBoost }),
+	/**
+	 *  Mostra agora no jogo aberto. `EXIGEM_LICENCA`: recurso do produto. Anticheat que barra sobreposição recusa; com
+	 *  ressalva, só com `confirmado` (e o jogo entra na lista dos que ligam sozinhos).
+	 */
+	overlayLigar: (confirmado: boolean) => __TAURI_INVOKE<EstadoDaSobreposicao_Serialize>("overlay_ligar", { confirmado }),
 };
 
 /* Types */
@@ -272,6 +297,27 @@ export type AtribuicaoDoDpc =
 /**  Sem o evento de imagem: o módulo de base mais próxima abaixo, pela lista de drivers do Windows. */
 "Aproximada" | "SemModulo";
 
+/**  A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir). */
+export type AvisoDeVersao = AvisoDeVersao_Serialize | AvisoDeVersao_Deserialize;
+
+/**  A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir). */
+export type AvisoDeVersao_Deserialize = {
+	comparacao: ComparacaoDeVersao,
+	versao_publicada?: string | null,
+	/**  O que a tela escreve: "1.0" para a tag `v4.0.0`. */
+	versao_publicada_exibida?: string | null,
+	pagina?: string | null,
+};
+
+/**  A tela decide só por `comparacao`, nunca por `versao_publicada` (texto para exibir). */
+export type AvisoDeVersao_Serialize = {
+	comparacao: ComparacaoDeVersao,
+	versao_publicada: string | null,
+	/**  O que a tela escreve: "1.0" para a tag `v4.0.0`. */
+	versao_publicada_exibida: string | null,
+	pagina: string | null,
+};
+
 export type BandaDoWifi = "2,4 GHz" | "5 GHz" | "6 GHz";
 
 export type CPUMetrics = CPUMetrics_Serialize | CPUMetrics_Deserialize;
@@ -303,6 +349,8 @@ export type CaboDaTela =
 /**  A EDID não traz temporização na resolução atual nem na nativa: não há como comparar. */
 { estado: "SemTemporizacaoNaResolucao" } | { estado: "EdidNaoAchada" } | { estado: "EdidIlegivel"; motivo: string };
 
+export type CantoDaSobreposicao = "SuperiorEsquerdo" | "SuperiorDireito" | "InferiorEsquerdo" | "InferiorDireito";
+
 export type CategoriaDoAjuste = "System" | "Gaming" | "Network" | "Startup" | "Privacy";
 
 export type CategoriaDoDriver = "Video" | "Rede" | "Energia" | "Disco" | "Usb" | "Audio" | 
@@ -325,6 +373,11 @@ export type ClasseDaInicializacao = "Essencial" | "Util" | "Opcional" | "Desconh
 
 /**  Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada. */
 export type ClasseDoAjuste = "Segura" | "Recomendada" | "Avancada";
+
+/**  Três variantes, não um bool: "não sei" (consulta falhou ou ilegível) não pode virar "está tudo em dia". */
+export type ComparacaoDeVersao = 
+/**  Instalada igual ou MAIOR (compilação local). */
+"NaoHaNova" | "HaVersaoNova" | "NaoSei";
 
 export type Conclusao = "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
 
@@ -370,6 +423,48 @@ export type ConfiancaDoLab =
 "SemDiferenca" | 
 /**  Faltam rodadas. */
 "Insuficiente";
+
+export type ConfigDaSobreposicao = ConfigDaSobreposicao_Serialize | ConfigDaSobreposicao_Deserialize;
+
+export type ConfigDaSobreposicao_Deserialize = {
+	modo?: ModoDaSobreposicao,
+	canto?: CantoDaSobreposicao,
+	/**
+	 *  Jogos com ressalva (servidor de RP, anticheat que não documenta) em que a pessoa já disse "mostrar mesmo assim":
+	 *  só nesses o overlay liga sozinho quando o jogo abre.
+	 */
+	confirmados?: string[],
+	/**
+	 *  Abrir o contador junto com o Frame Boost, mesmo com o modo Desligado. Desligado por padrão desde 08/10/2026: o dono
+	 *  não quer contador do Otimiza por cima do jogo com o Frame Boost (o do jogo serve); fica para quem pedir.
+	 */
+	com_frame_boost?: boolean,
+	/**
+	 *  Versão do arquivo: a 2 desliga o `com_frame_boost` que as anteriores gravavam ligado por padrão. Ausente = 0 (o
+	 *  padrão do struct é a versão atual).
+	 */
+	versao?: number,
+};
+
+export type ConfigDaSobreposicao_Serialize = {
+	modo: ModoDaSobreposicao,
+	canto: CantoDaSobreposicao,
+	/**
+	 *  Jogos com ressalva (servidor de RP, anticheat que não documenta) em que a pessoa já disse "mostrar mesmo assim":
+	 *  só nesses o overlay liga sozinho quando o jogo abre.
+	 */
+	confirmados: string[],
+	/**
+	 *  Abrir o contador junto com o Frame Boost, mesmo com o modo Desligado. Desligado por padrão desde 08/10/2026: o dono
+	 *  não quer contador do Otimiza por cima do jogo com o Frame Boost (o do jogo serve); fica para quem pedir.
+	 */
+	com_frame_boost: boolean,
+	/**
+	 *  Versão do arquivo: a 2 desliga o `com_frame_boost` que as anteriores gravavam ligado por padrão. Ausente = 0 (o
+	 *  padrão do struct é a versão atual).
+	 */
+	versao: number,
+};
 
 export type ConfirmacaoDaBanda = "Confirmado" | 
 /**  Leu-se outro valor: o Windows não está usando o nosso (outra política mais forte, por exemplo). */
@@ -591,6 +686,44 @@ export type Estado = "NaoAvaliado" | "PlacaIntegrada" | "Folgada" |
 "CacheCheio" | "Transbordando" | 
 /**  Outra coisa usando memória compartilhada (captura, navegador): o módulo não atribui ao jogo. */
 "DerramaSemPressao";
+
+export type EstadoDaLicenca = EstadoDaLicenca_Serialize | EstadoDaLicenca_Deserialize;
+
+export type EstadoDaLicenca_Deserialize = {
+	ativa: boolean,
+	maquina: string,
+	/**  "OTZ-WPYY-0J4F-77AB" sozinho não explica nada a quem está comprando. */
+	origem: string,
+	sobrevive_formatacao: boolean,
+	comprador?: string | null,
+	expira?: string | null,
+	motivo?: string | null,
+};
+
+export type EstadoDaLicenca_Serialize = {
+	ativa: boolean,
+	maquina: string,
+	/**  "OTZ-WPYY-0J4F-77AB" sozinho não explica nada a quem está comprando. */
+	origem: string,
+	sobrevive_formatacao: boolean,
+	comprador: string | null,
+	expira: string | null,
+	motivo: string | null,
+};
+
+export type EstadoDaSobreposicao = EstadoDaSobreposicao_Serialize | EstadoDaSobreposicao_Deserialize;
+
+export type EstadoDaSobreposicao_Deserialize = {
+	config: ConfigDaSobreposicao_Deserialize,
+	ligado: boolean,
+	jogo?: string | null,
+};
+
+export type EstadoDaSobreposicao_Serialize = {
+	config: ConfigDaSobreposicao_Serialize,
+	ligado: boolean,
+	jogo: string | null,
+};
 
 /**  `AlreadyOptimal`: quando já está assim, o produto diz isso em vez de fingir que otimizou. */
 export type EstadoDoAjuste = "Applied" | "AlreadyOptimal" | "Available" | "Unavailable" | 
@@ -879,6 +1012,8 @@ export type Metric_Serialize = {
 	 */
 	age_ms: number | null,
 };
+
+export type ModoDaSobreposicao = "Desligado" | "Minimo" | "Detalhado";
 
 /**
  *  Os campos do `DEVMODEW` que descrevem o modo de um monitor na área de trabalho. É o que o desfazer devolve,
@@ -1395,6 +1530,28 @@ export type Placa_Serialize = {
 	fabricante: Fabricante,
 	familia: Familia,
 	driver: string | null,
+};
+
+export type Preferences = Preferences_Serialize | Preferences_Deserialize;
+
+export type Preferences_Deserialize = {
+	restore_point_before_batch?: boolean,
+	metrics_interval_seconds?: number,
+	/**  DESLIGADO por padrão: mudar o sistema sem a pessoa pedir é o que este produto critica nos outros. */
+	auto_game_mode?: boolean,
+	show_unavailable?: boolean,
+	/**  LIGADO por padrão, ao contrário do modo jogo: medir só escuta os eventos do Windows e não muda nada. */
+	medir_quadros_sozinho?: boolean,
+};
+
+export type Preferences_Serialize = {
+	restore_point_before_batch: boolean,
+	metrics_interval_seconds: number,
+	/**  DESLIGADO por padrão: mudar o sistema sem a pessoa pedir é o que este produto critica nos outros. */
+	auto_game_mode: boolean,
+	show_unavailable: boolean,
+	/**  LIGADO por padrão, ao contrário do modo jogo: medir só escuta os eventos do Windows e não muda nada. */
+	medir_quadros_sozinho: boolean,
 };
 
 export type ProblemaDaRota = "perda" | "variacao";

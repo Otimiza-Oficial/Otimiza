@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ContaDoWindows"))]
 #[serde(tag = "estado")]
 pub enum Conta {
     Mesma {

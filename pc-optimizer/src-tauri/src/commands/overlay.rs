@@ -157,6 +157,7 @@ pub fn cores_salvar_perfil(
 
 /// O FPS por cima do jogo: modo, canto e se está na tela agora. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn overlay_estado() -> Result<crate::plataforma::overlay::Estado, String> {
     #[cfg(target_os = "windows")]
     return Ok(crate::plataforma::overlay::estado());
@@ -167,8 +168,8 @@ pub fn overlay_estado() -> Result<crate::plataforma::overlay::Estado, String> {
 /// Grava o modo e o canto. Desligado tira da tela na hora. `LIVRES`: é preferência do Otimiza; quem põe a janela
 /// por cima do jogo é `overlay_ligar` ou a abertura do jogo, que conferem o anticheat.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn overlay_gravar(
-    app: tauri::AppHandle,
     modo: crate::plataforma::overlay::Modo,
     canto: crate::plataforma::overlay::Canto,
     com_frame_boost: Option<bool>,
@@ -183,13 +184,12 @@ pub fn overlay_gravar(
     #[cfg(target_os = "windows")]
     {
         if modo == crate::plataforma::overlay::Modo::Desligado {
-            crate::plataforma::overlay::desligar(&app);
+            crate::plataforma::overlay::desligar(&crate::aplicativo()?);
         }
         return Ok(crate::plataforma::overlay::estado());
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = app;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
@@ -197,8 +197,8 @@ pub fn overlay_gravar(
 /// Mostra agora no jogo aberto. `EXIGEM_LICENCA`: recurso do produto. Anticheat que barra sobreposição recusa; com
 /// ressalva, só com `confirmado` (e o jogo entra na lista dos que ligam sozinhos).
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn overlay_ligar(
-    app: tauri::AppHandle,
     confirmado: bool,
 ) -> Result<crate::plataforma::overlay::Estado, String> {
     crate::modules::licenca::exigir()?;
@@ -225,12 +225,12 @@ pub fn overlay_ligar(
             c.confirmados.push(jogo.perfil.id.to_string());
         }
         overlay::gravar(&c)?;
-        overlay::ligar(&app, jogo.pid, jogo.nome.clone())?;
+        overlay::ligar(&crate::aplicativo()?, jogo.pid, jogo.nome.clone())?;
         return Ok(overlay::estado());
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = (app, confirmado);
+        let _ = confirmado;
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }

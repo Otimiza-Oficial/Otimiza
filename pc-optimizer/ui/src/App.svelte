@@ -7,6 +7,7 @@
   import { cubicOut } from "svelte/easing";
   import Historico from "./componentes/Historico.svelte";
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
+  import Ajustes from "./componentes/Ajustes.svelte";
   import Energia from "./componentes/Energia.svelte";
   import Jogos from "./componentes/Jogos.svelte";
   import Prova from "./componentes/Prova.svelte";
@@ -713,6 +714,8 @@
                 <Tela aoMudarHz={trocouHz} />
               {:else if aberta === "jogos"}
                 <Jogos />
+              {:else if aberta === "ajustes"}
+                <Ajustes />
               {:else if aberta === "prova"}
                 <Prova jogo={jogo?.nome ?? null} />
               {:else if aberta === "sistema"}

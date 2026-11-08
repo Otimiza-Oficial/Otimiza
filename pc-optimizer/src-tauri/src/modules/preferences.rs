@@ -6,6 +6,7 @@ use std::path::PathBuf;
 const INTERVALOS_VALIDOS: [u32; 3] = [1, 2, 5];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(default)]
 pub struct Preferences {
     pub restore_point_before_batch: bool,

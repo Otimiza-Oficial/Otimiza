@@ -90,6 +90,16 @@ mod tests {
                 crate::commands::lab_zerar,
                 crate::commands::prova_alternada_guardada,
                 crate::commands::resultado_para_compartilhar,
+                // Onda 2: Ajustes.
+                crate::commands::get_preferences,
+                crate::commands::set_preferences,
+                crate::commands::licenca_estado,
+                crate::commands::licenca_ativar,
+                crate::commands::versao_mais_nova,
+                crate::commands::relatorio_de_suporte,
+                crate::commands::overlay_estado,
+                crate::commands::overlay_gravar,
+                crate::commands::overlay_ligar,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)
