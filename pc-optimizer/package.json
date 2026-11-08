@@ -11,7 +11,9 @@
     "fumaca": "npm run build && node scripts/clicar-todas-as-areas.mjs",
     "nova": "tauri dev --config src-tauri/tauri.nova.conf.json",
     "nova:web": "vite --config vite.nova.config.ts",
-    "nova:build": "svelte-check --workspace ui --tsconfig ./tsconfig.json && vite build --config vite.nova.config.ts"
+    "nova:build": "svelte-check --workspace ui --tsconfig ./tsconfig.json && vite build --config vite.nova.config.ts",
+    "classico:build": "tsc && vite build --base /classico/ --outDir dist-nova/classico --emptyOutDir",
+    "build:app": "npm run nova:build && npm run classico:build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

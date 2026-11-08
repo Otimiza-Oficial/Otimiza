@@ -2331,5 +2331,20 @@
         </p>
       </div>
     </div>
-  </body>
+      <!-- Dentro do app novo esta interface mora em /classico/ ("Ferramentas avançadas"): o botão leva de volta. -->
+    <script>
+      if (location.pathname.indexOf("/classico/") === 0) {
+        var voltar = document.createElement("a");
+        voltar.href = "/";
+        voltar.textContent = "← Interface nova";
+        voltar.setAttribute(
+          "style",
+          "position:fixed;left:100px;bottom:14px;z-index:99999;padding:8px 14px;border-radius:999px;" +
+            "background:#16213f;color:#fff;font:600 12px 'Segoe UI',sans-serif;text-decoration:none;" +
+            "box-shadow:0 6px 18px rgba(0,0,0,.25)"
+        );
+        document.body.appendChild(voltar);
+      }
+    </script>
+</body>
 </html>

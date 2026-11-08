@@ -857,6 +857,9 @@
       {#each OUTRAS as id (id)}
         <button onclick={() => abrir(id)}>{areas.find((a) => a.id === id)?.nome}</button>
       {/each}
+      <!-- A interface clássica, com as ferramentas que ainda não vieram para a nova (Frame Boost, mira, cores, BIOS,
+           drivers…). Só existe no app compilado (`npm run build:app` a põe em /classico/). -->
+      <button class="avancadas" onclick={() => (location.href = "/classico/index.html")}>Ferramentas avançadas</button>
     </div>
   {/if}
 
@@ -1958,6 +1961,11 @@
   .mais button:hover {
     background: var(--ativo);
     color: var(--ativo-texto);
+  }
+  .mais .avancadas {
+    border-left: 1px solid var(--linha, rgb(0 0 0 / 0.1));
+    border-radius: 0 17px 17px 0;
+    color: var(--texto-2, inherit);
   }
 
   /* ---------- Abas ---------- */
