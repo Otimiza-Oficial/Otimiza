@@ -69,6 +69,13 @@ export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type ResultadoDaCalibracao = ResultadoDaCalibracao_Serialize;
 /** Chega pelo evento `energia:calibracao` (fora do contrato: evento não é comando). Espelha `calibracao::PassoDaCalibracao`. */
 export type PassoDaCalibracao = { passo: number; total: number; frase: string };
+/** Chega pelo evento `oti:aviso-termico` da guarda térmica. Espelha `guarda_termica::AvisoTermico`. */
+export type AvisoTermico = {
+  tipo: "processador_freado" | "placa_freada" | "placa_quente";
+  frase: string;
+  tom: "perigo" | "atencao";
+  jogo: string | null;
+};
 export type NumerosDoPeriodo = HistoricoDaRede["resumo"]["periodos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
@@ -727,6 +734,23 @@ export const ponte = {
       mediu_com_jogo: false,
       aviso: null,
     };
+  },
+  /** A guarda térmica avisa durante o jogo. No navegador, `?calor` mostra um aviso de exemplo depois de 2 s. */
+  aoAvisoTermico: async (f: (a: AvisoTermico) => void): Promise<() => void> => {
+    if (noTauri) return listen<AvisoTermico>("oti:aviso-termico", (e) => f(e.payload));
+    if (!new URLSearchParams(location.search).has("calor")) return () => {};
+    const t = setTimeout(
+      () =>
+        f({
+          tipo: "placa_freada",
+          frase:
+            "A placa de vídeo está sendo freada por temperatura no FiveM (87 °C). Limpe a poeira das ventoinhas ou limite o FPS um pouco acima do seu monitor.",
+          tom: "perigo",
+          jogo: "FiveM",
+        }),
+      2000,
+    );
+    return () => clearTimeout(t);
   },
   cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
   aplicarCalibrado: (): Promise<string> =>

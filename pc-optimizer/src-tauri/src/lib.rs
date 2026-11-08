@@ -369,6 +369,10 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             modules::windows::cabecalho::anotar_em_segundo_plano();
 
+            // Guarda térmica: só lê, e só com jogo aberto (`plataforma::guarda_termica`).
+            #[cfg(target_os = "windows")]
+            plataforma::guarda_termica::vigiar(app.handle().clone());
+
             #[cfg(debug_assertions)]
             {
                 let window = app.get_webview_window("main").unwrap();

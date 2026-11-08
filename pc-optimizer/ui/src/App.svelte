@@ -481,10 +481,29 @@
     const aoMudarEpoca = () => (epocaLigada = lerEpoca());
     window.addEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
 
+    // Guarda térmica: o Oti avisa quando o PC começa a ser freado por calor no jogo.
+    let deixarCalor: (() => void) | undefined;
+    void ponte
+      .aoAvisoTermico((a) => {
+        dizer(
+          {
+            texto: a.frase,
+            humor: "preocupado",
+            acoes: [{ rotulo: "Ver energia", tipo: "abrir", area: "energia", principal: true }],
+          },
+          30000,
+        );
+      })
+      .then((d) => {
+        if (vivo) deixarCalor = d;
+        else d();
+      });
+
     const ajustar = () => void medirPilula();
     window.addEventListener("resize", ajustar);
     return () => {
       vivo = false;
+      deixarCalor?.();
       clearTimeout(espera);
       clearInterval(maquina);
       window.removeEventListener("resize", ajustar);

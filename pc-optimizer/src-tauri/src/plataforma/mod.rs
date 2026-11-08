@@ -12,6 +12,7 @@ pub mod energia_jogo;
 pub mod feedback;
 pub mod flags;
 pub mod frameboost;
+pub mod guarda_termica;
 pub mod fov_fivem;
 pub mod fundos;
 pub mod hardware;
