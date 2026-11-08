@@ -477,6 +477,8 @@ fn gravar(e: &Estado) -> Result<(), String> {
 // Resultados com nome.
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResultadoDaBanda"))]
 #[serde(tag = "tipo")]
 pub enum Resultado {
     Aplicado {
@@ -497,6 +499,8 @@ pub enum Resultado {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfirmacaoDaBanda"))]
 pub enum Confirmacao {
     Confirmado,
     /// Leu-se outro valor: o Windows não está usando o nosso (outra política mais forte, por exemplo).
@@ -508,8 +512,9 @@ pub enum Confirmacao {
 pub const SEM_ADMINISTRADOR: &str =
     "Segurar a banda dos programas de fundo exige abrir o Otimiza como administrador.";
 
-#[allow(dead_code)] // fronteira: o comando e o relatório da sessão ligam (proposta no commit)
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "PainelDaBanda"))]
 pub struct Painel {
     pub ligado: bool,
     pub agindo_em: Option<String>,
@@ -520,7 +525,6 @@ pub struct Painel {
     pub o_que_faz: &'static str,
 }
 
-#[allow(dead_code)] // fronteira: o comando e o relatório da sessão ligam (proposta no commit)
 pub const O_QUE_FAZ: &str = "Com o jogo aberto, OneDrive, Google Drive, Dropbox, torrents e lançadores (Epic, Battle.net, EA, Ubisoft) enviam no máximo 2 Mb/s, e o Windows Update baixa em segundo plano a até 2 Mb/s. Envio saturado é o que mais faz o ping pular em casa. O Windows não limita o DOWNLOAD de outros programas: quem estiver baixando muito aparece no aviso. Voz, transmissão, navegador, a Steam e o jogo não são tocados. Tudo volta quando o jogo fecha.";
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -645,7 +649,6 @@ fn impedimento() -> Option<String> {
     (!crate::modules::windows::registry::is_elevated()).then(|| SEM_ADMINISTRADOR.to_string())
 }
 
-#[allow(dead_code)] // fronteira: o comando e o relatório da sessão ligam (proposta no commit)
 #[cfg(windows)]
 pub fn painel() -> Painel {
     let e = ler();

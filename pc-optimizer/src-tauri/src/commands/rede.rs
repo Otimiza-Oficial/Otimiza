@@ -111,3 +111,46 @@ fn definir_varredura(ligado: bool) -> Result<crate::plataforma::wifi_varredura::
         Err(UNSUPPORTED_PLATFORM.to_string())
     }
 }
+
+/// O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn banda_painel() -> Result<crate::plataforma::banda::Painel, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Ok(crate::plataforma::banda::painel())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
+/// Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn banda_ligar() -> Result<crate::plataforma::banda::Resultado, String> {
+    crate::modules::licenca::exigir()?;
+    definir_banda(true)
+}
+
+/// Desliga e devolve as políticas e o limite do Update antes de responder. `LIVRES`: é desfazer.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn banda_desligar() -> Result<crate::plataforma::banda::Resultado, String> {
+    definir_banda(false)
+}
+
+fn definir_banda(ligado: bool) -> Result<crate::plataforma::banda::Resultado, String> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::plataforma::banda::definir(ligado)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = ligado;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}

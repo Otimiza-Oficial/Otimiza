@@ -13,9 +13,11 @@ import {
   type HistoricoNaTela_Serialize,
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
+  type PainelDaBanda_Serialize,
   type Painel_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
+  type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
@@ -39,6 +41,8 @@ export type SaltoDaRota = Rota["saltos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
 export type CapturaDpc = ResultadoDaCaptura_Serialize;
+export type PainelDaBanda = PainelDaBanda_Serialize;
+export type ResultadoDaBanda = ResultadoDaBanda_Serialize;
 export type RelatorioDpc = Extract<CapturaDpc, { estado: "Medido" }>["relatorio"];
 export type DriverMedido = RelatorioDpc["drivers"][number];
 
@@ -331,6 +335,16 @@ function capturaDemo(segundos: number): CapturaDpc {
   };
 }
 
+let bandaDemo: PainelDaBanda = {
+  ligado: false,
+  agindo_em: null,
+  politicas: [],
+  update_limitado: false,
+  impedimento: null,
+  o_que_faz:
+    "Com o jogo aberto, OneDrive, Google Drive, Dropbox, torrents e lançadores (Epic, Battle.net, EA, Ubisoft) enviam no máximo 2 Mb/s, e o Windows Update baixa em segundo plano a até 2 Mb/s. Envio saturado é o que mais faz o ping pular em casa. O Windows não limita o DOWNLOAD de outros programas: quem estiver baixando muito aparece no aviso. Voz, transmissão, navegador, a Steam e o jogo não são tocados. Tudo volta quando o jogo fecha.",
+};
+
 let demoTick = 0;
 
 export const ponte = {
@@ -417,6 +431,13 @@ export const ponte = {
     return capturaDemo(segundos);
   },
   cancelarDpc: () => (noTauri ? commands.dpcCancelar() : Promise.resolve()),
+  banda: (): Promise<PainelDaBanda> => (noTauri ? commands.bandaPainel() : Promise.resolve({ ...bandaDemo })),
+  /** No navegador não há jogo aberto: ligar só grava a escolha, como o Rust faz sem jogo. */
+  definirBanda: async (ligado: boolean): Promise<ResultadoDaBanda> => {
+    if (noTauri) return ligado ? commands.bandaLigar() : commands.bandaDesligar();
+    bandaDemo = { ...bandaDemo, ligado };
+    return ligado ? { tipo: "NadaALimitar", avisos: [] } : { tipo: "Desligado" };
+  },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

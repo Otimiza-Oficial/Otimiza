@@ -79,6 +79,12 @@ export const commands = {
 	dpcCapturar: (segundos: number | null) => __TAURI_INVOKE<ResultadoDaCaptura_Serialize>("dpc_capturar", { segundos }),
 	/**  Termina a captura em andamento já, com o que mediu até agora. `LIVRES`. */
 	dpcCancelar: () => __TAURI_INVOKE<void>("dpc_cancelar"),
+	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
+	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
+	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
+	bandaLigar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_ligar"),
+	/**  Desliga e devolve as políticas e o limite do Update antes de responder. `LIVRES`: é desfazer. */
+	bandaDesligar: () => __TAURI_INVOKE<ResultadoDaBanda_Serialize>("banda_desligar"),
 };
 
 /* Types */
@@ -276,6 +282,10 @@ export type ConexaoWifi_Serialize = {
 	recepcao_mbps: number,
 	envio_mbps: number,
 };
+
+export type ConfirmacaoDaBanda = "Confirmado" | 
+/**  Leu-se outro valor: o Windows não está usando o nosso (outra política mais forte, por exemplo). */
+({ Divergente: number }) & { NaoConsegui?: never } | ({ NaoConsegui: string }) & { Divergente?: never } | "NaoSeAplica";
 
 export type Conselho = {
 	/**  O que derramou acima do piso é exatamente o que não coube. */
@@ -771,6 +781,28 @@ export type Orcamento_Serialize = {
 /**  Para a tela. */
 export type Painel = Painel_Serialize | Painel_Deserialize;
 
+export type PainelDaBanda = PainelDaBanda_Serialize | PainelDaBanda_Deserialize;
+
+export type PainelDaBanda_Deserialize = {
+	ligado: boolean,
+	agindo_em?: string | null,
+	politicas: string[],
+	update_limitado: boolean,
+	impedimento?: string | null,
+	/**  O que faz, sem prometer o que não faz. */
+	o_que_faz: string,
+};
+
+export type PainelDaBanda_Serialize = {
+	ligado: boolean,
+	agindo_em: string | null,
+	politicas: string[],
+	update_limitado: boolean,
+	impedimento: string | null,
+	/**  O que faz, sem prometer o que não faz. */
+	o_que_faz: string,
+};
+
 /**  Para a tela. */
 export type Painel_Deserialize = {
 	ligado: boolean,
@@ -1081,6 +1113,24 @@ export type RelogioDoDpc =
 "Qpc" | 
 /**  Hora do sistema: resolução ruim, o relatório avisa. */
 "Sistema" | "Ciclos" | "Desconhecido";
+
+export type ResultadoDaBanda = ResultadoDaBanda_Serialize | ResultadoDaBanda_Deserialize;
+
+export type ResultadoDaBanda_Deserialize = { tipo: "Aplicado"; politicas: string[]; update_limitado: boolean; 
+/**  O Windows confirmou o limite do Update (`Get-DOConfig`)? */
+update_confirmado: ConfirmacaoDaBanda; avisos: string[]; ressalva?: string | null } | 
+/**  Nada aberto que dê para segurar, e o Update já estava limitado. */
+{ tipo: "NadaALimitar"; avisos: string[] } | { tipo: "SemAdministrador" } | 
+/**  Sem o módulo de QoS ou o Windows recusou criar a política (edição sem o recurso). */
+{ tipo: "IndisponivelNesteWindows"; motivo: string } | { tipo: "Desligado" } | { tipo: "JaAplicado" };
+
+export type ResultadoDaBanda_Serialize = { tipo: "Aplicado"; politicas: string[]; update_limitado: boolean; 
+/**  O Windows confirmou o limite do Update (`Get-DOConfig`)? */
+update_confirmado: ConfirmacaoDaBanda; avisos: string[]; ressalva: string | null } | 
+/**  Nada aberto que dê para segurar, e o Update já estava limitado. */
+{ tipo: "NadaALimitar"; avisos: string[] } | { tipo: "SemAdministrador" } | 
+/**  Sem o módulo de QoS ou o Windows recusou criar a política (edição sem o recurso). */
+{ tipo: "IndisponivelNesteWindows"; motivo: string } | { tipo: "Desligado" } | { tipo: "JaAplicado" };
 
 /**  O resultado de pedir uma captura. Cada recusa tem nome: a tela nunca mostra "nenhum pico" sobre algo que não mediu. */
 export type ResultadoDaCaptura = ResultadoDaCaptura_Serialize | ResultadoDaCaptura_Deserialize;

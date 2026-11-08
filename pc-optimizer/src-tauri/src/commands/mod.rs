@@ -356,12 +356,15 @@ mod tests {
         "rede_varredura_wifi_desligar",
         "dpc_capturar",
         "dpc_cancelar",
+        "banda_painel",
+        "banda_desligar",
     ];
 
     /// Alteram o computador. Sem licença, recusam.
     const EXIGEM_LICENCA: &[&str] = &[
         "tela_trocar_hz",
         "rede_varredura_wifi_ligar",
+        "banda_ligar",
         "prender_jogo_nos_nucleos",
         "gerador_ligar",
         "cpuset_testar",

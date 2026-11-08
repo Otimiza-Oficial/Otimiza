@@ -54,6 +54,9 @@ mod tests {
                 crate::commands::rede_varredura_wifi_desligar,
                 crate::commands::dpc_capturar,
                 crate::commands::dpc_cancelar,
+                crate::commands::banda_painel,
+                crate::commands::banda_ligar,
+                crate::commands::banda_desligar,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

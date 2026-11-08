@@ -6,7 +6,9 @@
   import {
     ponte,
     type DiagnosticoDoWifi,
+    type PainelDaBanda,
     type PainelDaVarredura,
+    type ResultadoDaBanda,
     type Rota,
     type SaltoDaRota,
     type TrechoDaRota,
@@ -30,6 +32,13 @@
   let erroVarredura = $state<string | null>(null);
   let mudandoVarredura = $state(false);
 
+  type Resposta = { tipo: "ok" | "atencao" | "erro"; linhas: string[] };
+
+  let banda = $state<PainelDaBanda | null>(null);
+  let erroBanda = $state<string | null>(null);
+  let mudandoBanda = $state(false);
+  let respostaBanda = $state<Resposta | null>(null);
+
   let destino = $state("1.1.1.1");
   let rota = $state<Rota | null>(null);
   let medindo = $state<"destino" | "jogo" | null>(null);
@@ -40,7 +49,72 @@
   onMount(() => {
     ponte.wifi().then((w) => (wifi = w)).catch((e) => (erroWifi = String(e)));
     ponte.varredura().then((v) => (varredura = v)).catch((e) => (erroVarredura = String(e)));
+    ponte.banda().then((b) => (banda = b)).catch((e) => (erroBanda = String(e)));
   });
+
+  /** Cada resultado do Rust tem nome; aqui vira a frase da tela, sem prometer o que o Windows não confirmou. */
+  function explicar(r: ResultadoDaBanda, agindo: boolean): Resposta {
+    switch (r.tipo) {
+      case "Aplicado": {
+        const n = r.politicas.length;
+        const linhas = [
+          n > 0 ? `Envio limitado agora: ${n} ${n === 1 ? "programa" : "programas"}.` : "Nenhum programa de fundo enviando agora.",
+        ];
+        if (r.update_limitado) {
+          const c = r.update_confirmado;
+          if (c === "Confirmado") linhas.push("Windows Update em segundo plano limitado (o Windows confirmou).");
+          else if (c === "NaoSeAplica") linhas.push("Windows Update em segundo plano limitado.");
+          else if ("Divergente" in c)
+            linhas.push("O limite do Windows Update foi escrito, mas o Windows está usando outro valor (outra política manda mais).");
+          else linhas.push("O limite do Windows Update foi escrito, mas não consegui conferir se o Windows está usando.");
+        }
+        if (r.ressalva) linhas.push(r.ressalva);
+        return { tipo: r.ressalva ? "atencao" : "ok", linhas: [...linhas, ...r.avisos] };
+      }
+      case "NadaALimitar":
+        return {
+          tipo: "ok",
+          linhas: [agindo ? "Nada de fundo para segurar agora." : "Ligado. Age quando um jogo abrir.", ...r.avisos],
+        };
+      case "SemAdministrador":
+        return { tipo: "atencao", linhas: ["Segurar a banda exige abrir o Otimiza como administrador."] };
+      case "IndisponivelNesteWindows":
+        return { tipo: "erro", linhas: [`Este Windows não deixa: ${r.motivo}`] };
+      case "Desligado":
+        return { tipo: "ok", linhas: ["Desligado. O que estava limitado voltou."] };
+      case "JaAplicado":
+        return { tipo: "ok", linhas: ["Já está agindo neste jogo."] };
+    }
+  }
+
+  async function alternarBanda() {
+    if (!banda) return;
+    mudandoBanda = true;
+    erroBanda = null;
+    try {
+      const r = await ponte.definirBanda(!banda.ligado);
+      banda = await ponte.banda();
+      respostaBanda = explicar(r, banda.agindo_em !== null);
+    } catch (e) {
+      erroBanda = String(e);
+    } finally {
+      mudandoBanda = false;
+    }
+  }
+
+  async function abrirComoAdministrador() {
+    try {
+      const msg = await ponte.abrirComoAdministrador();
+      if (msg) erroBanda = msg;
+    } catch (e) {
+      erroBanda = String(e);
+    }
+  }
+
+  /** "Otimiza-onedrive.exe" vira "onedrive.exe": o prefixo só marca quem criou a política. */
+  function programa(politica: string) {
+    return politica.replace(/^otimiza-/i, "");
+  }
 
   async function medir(qual: "destino" | "jogo") {
     medindo = qual;
@@ -195,6 +269,43 @@
       </ol>
       {#if rota.atribuicao}<p class="atribuicao">{rota.atribuicao}</p>{/if}
     {/if}
+  </section>
+
+  <!-- Banda do segundo plano -->
+  <section class="bloco" aria-labelledby="rede-banda">
+    <div class="linha">
+      <div>
+        <h2 id="rede-banda">Segurar a banda do segundo plano durante o jogo</h2>
+        <p class="detalhe">{banda?.o_que_faz ?? "Lendo…"}</p>
+      </div>
+      <button
+        class="interruptor"
+        role="switch"
+        aria-checked={banda?.ligado ?? false}
+        aria-labelledby="rede-banda"
+        disabled={!banda || mudandoBanda || (!banda.ligado && banda.impedimento !== null)}
+        onclick={alternarBanda}
+      ><span></span></button>
+    </div>
+    {#if banda?.impedimento && !banda.ligado}
+      <div class="impedimento">
+        <span>{banda.impedimento}</span>
+        <button class="secundario" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+      </div>
+    {/if}
+    {#if banda?.agindo_em}
+      <p class="detalhe agindo">
+        Agindo agora em {banda.agindo_em}{banda.politicas.length > 0
+          ? `: ${banda.politicas.map(programa).join(", ")}`
+          : ""}{banda.update_limitado ? " · Windows Update limitado" : ""}.
+      </p>
+    {/if}
+    {#if respostaBanda}
+      <ul class="resposta" data-tipo={respostaBanda.tipo}>
+        {#each respostaBanda.linhas as l, i (i)}<li>{l}</li>{/each}
+      </ul>
+    {/if}
+    {#if erroBanda}<p class="erro">{erroBanda}</p>{/if}
   </section>
 
   <!-- Varredura -->
@@ -391,6 +502,36 @@
     margin: 4px 0 0;
     font-size: 11px;
     color: var(--tinta-suave);
+  }
+  .linha {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 16px;
+  }
+  .impedimento {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--atencao);
+  }
+  .resposta {
+    margin: 0;
+    padding: 8px 12px 8px 26px;
+    border-radius: 12px;
+    background: var(--vidro-denso);
+    border-left: 3px solid var(--sucesso);
+    font-size: 13px;
+    display: grid;
+    gap: 2px;
+  }
+  .resposta[data-tipo="atencao"] {
+    border-left-color: var(--atencao);
+  }
+  .resposta[data-tipo="erro"] {
+    border-left-color: var(--perigo);
   }
   .interruptor {
     position: relative;
