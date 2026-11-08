@@ -8,6 +8,7 @@
   import Historico from "./componentes/Historico.svelte";
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
   import Jogos from "./componentes/Jogos.svelte";
+  import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
   import Rede from "./componentes/Rede.svelte";
@@ -695,6 +696,8 @@
                 <Tela aoMudarHz={trocouHz} />
               {:else if aberta === "jogos"}
                 <Jogos />
+              {:else if aberta === "turbo"}
+                <Turbo jogo={jogo?.nome ?? null} />
               {:else}
                 <div class="em-breve">
                   <Oti humor="dormindo" tamanho={90} segueCursor={false} />

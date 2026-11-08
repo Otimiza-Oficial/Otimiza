@@ -14,11 +14,13 @@ import {
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
   type PainelDaBanda_Serialize,
+  type PainelDoTurbo_Serialize,
   type Painel_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
   type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
+  type ResultadoDaProva_Serialize,
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
   type TrocaAplicada,
@@ -42,6 +44,8 @@ export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
 export type CapturaDpc = ResultadoDaCaptura_Serialize;
 export type PainelDaBanda = PainelDaBanda_Serialize;
+export type PainelDoTurbo = PainelDoTurbo_Serialize;
+export type ProvaDoTurbo = ResultadoDaProva_Serialize;
 export type ResultadoDaBanda = ResultadoDaBanda_Serialize;
 export type RelatorioDpc = Extract<CapturaDpc, { estado: "Medido" }>["relatorio"];
 export type DriverMedido = RelatorioDpc["drivers"][number];
@@ -348,6 +352,71 @@ let bandaDemo: PainelDaBanda = {
 /** No navegador não há jogo de verdade: a barra de menu deixa simular um, para ver a tela com jogo aberto. */
 let jogoDemo: string | null = null;
 
+/** O Turbo de demonstração: mede 2 s em vez de 10, prova em 3 s em vez de 5 min, e nada no PC é tocado. */
+const turboDemo: { ligado: boolean; menor: boolean; lembrado: boolean; provou: boolean; provando: boolean } = {
+  ligado: false,
+  menor: false,
+  lembrado: false,
+  provou: false,
+  provando: false,
+};
+
+function provaDemo(): ProvaDoTurbo {
+  const resumo = (m: number) => ({ id: "demo", n: 3, media: m, mediana: m, desvio: 1.8, margem: 2.4 });
+  return {
+    jogo: "FiveM",
+    quando: Math.floor(Date.now() / 1000),
+    segundos_por_rodada: 45,
+    rodadas: [],
+    fps_sem: resumo(85),
+    fps_com: resumo(96),
+    low_sem: resumo(54),
+    low_com: resumo(66),
+    diferenca_fps: { Real: { delta: 11, pct: 12.9, folga: 5.1 } },
+    diferenca_low: { Real: { delta: 12, pct: 22.2, folga: 8.4 } },
+    desfecho: "Ganhou",
+    leitura: "Com o Turbo, o FiveM fez 13% mais FPS e o 1% pior subiu 22%, com folga acima do ruído.",
+    contra_o_equilibrado: false,
+    ficou_com_otimiza: true,
+    falha_ao_desfazer: null,
+  };
+}
+
+function painelDemo(): PainelDoTurbo {
+  const jogo = jogoDemo;
+  return {
+    jogo,
+    menor_atraso: turboDemo.menor,
+    perfil:
+      jogo && turboDemo.lembrado
+        ? {
+            receita: {
+              gargalo: "Processador",
+              escala: "Qualidade",
+              multiplicador: turboDemo.menor ? null : 0,
+              energia: true,
+              memoria: false,
+              explicacao:
+                "O processador segura o FiveM (98% num núcleo, a placa folgada). Escala Qualidade alivia a placa sem custo de processador, o plano de energia segura o clock, e o Frame Boost dobra o que chega à tela.",
+            },
+            fps_antes: 85,
+            medido_em: Math.floor(Date.now() / 1000) - 60,
+            prova: turboDemo.provou ? "Ganhou" : null,
+          }
+        : null,
+    passos: turboDemo.ligado
+      ? ["Plano de energia OTIMIZA ligado", "Escala Qualidade na janela do jogo", "Frame Boost em Auto (até 180 Hz)"]
+      : [],
+    ligado: turboDemo.ligado,
+    resultado: null,
+    prova: turboDemo.provou ? provaDemo() : null,
+    provando: turboDemo.provando,
+    prova_sozinha: false,
+    duracao_da_prova_s: 300,
+    ritmo: jogo ? { fps: 85, trancos_por_minuto: 14, teto: 80 } : null,
+  };
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -443,6 +512,41 @@ export const ponte = {
     if (noTauri) return ligado ? commands.bandaLigar() : commands.bandaDesligar();
     bandaDemo = { ...bandaDemo, ligado };
     return ligado ? { tipo: "NadaALimitar", avisos: [] } : { tipo: "Desligado" };
+  },
+  turbo: (): Promise<PainelDoTurbo> => (noTauri ? commands.turboPainel() : Promise.resolve(painelDemo())),
+  ligarTurbo: async (lembrado: boolean): Promise<PainelDoTurbo> => {
+    if (noTauri) return commands.turboLigar(lembrado);
+    if (!jogoDemo) throw new Error("Abra o jogo primeiro: o Turbo mede o jogo aberto.");
+    await new Promise((r) => setTimeout(r, lembrado ? 400 : 2000));
+    turboDemo.ligado = true;
+    turboDemo.lembrado = true;
+    return painelDemo();
+  },
+  desligarTurbo: async (): Promise<PainelDoTurbo> => {
+    if (noTauri) return commands.turboDesligar();
+    turboDemo.ligado = false;
+    return painelDemo();
+  },
+  provarTurbo: async (): Promise<ProvaDoTurbo> => {
+    if (noTauri) return commands.turboProvar();
+    turboDemo.provando = true;
+    await new Promise((r) => setTimeout(r, 3000));
+    turboDemo.provando = false;
+    turboDemo.provou = true;
+    return provaDemo();
+  },
+  compartilharTurbo: () =>
+    noTauri ? commands.turboCompartilhar() : Promise.resolve("Turbo do Otimiza no FiveM: +13% FPS, +22% no 1% pior (prova A-B)."),
+  atrasoDoTurbo: async (menor: boolean): Promise<PainelDoTurbo> => {
+    if (noTauri) return commands.turboAtraso(menor);
+    turboDemo.menor = menor;
+    return painelDemo();
+  },
+  esquecerTurbo: async (): Promise<PainelDoTurbo> => {
+    if (noTauri) return commands.turboEsquecer();
+    turboDemo.lembrado = false;
+    turboDemo.provou = false;
+    return painelDemo();
   },
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
