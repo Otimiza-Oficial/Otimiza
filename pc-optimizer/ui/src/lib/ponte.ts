@@ -26,6 +26,8 @@ import {
   type Relatorio_Serialize,
   type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
+  type ResultadoDoLab_Serialize,
+  type LadoDoLab,
   type RelatorioDoPlano_Serialize,
   type RelatorioDeTetos_Serialize,
   type VistoriaDoPlano,
@@ -57,6 +59,8 @@ export type PainelDaBanda = PainelDaBanda_Serialize;
 export type PainelDoTurbo = PainelDoTurbo_Serialize;
 export type RelatorioDoPlano = RelatorioDoPlano_Serialize;
 export type AjusteDoCatalogo = OptimizationInfo_Serialize;
+export type ResultadoDoLab = ResultadoDoLab_Serialize;
+export type { LadoDoLab };
 export type { StartupEntry, ItemDaLimpeza, ResultadoDaLimpeza, RestoreStatus };
 export type EnergiaDeJogo = PainelDaEnergiaDeJogo_Serialize;
 export type RelatorioDeTetos = RelatorioDeTetos_Serialize;
@@ -526,6 +530,33 @@ let limpezaDemo: ItemDaLimpeza[] = [
   { id: "relatorios", nome: "Relatórios de erro", explica: "Relatórios de travamento que já foram (ou nunca serão) enviados.", bytes: 96_000_000, arquivos: 41, precisa_admin: false },
 ];
 
+/** O Lab de demonstração: as rodadas variam um pouco, o "depois" é melhor, como numa otimização que funcionou. */
+const labDemo: { antes: number[]; depois: number[] } = { antes: [], depois: [] };
+
+function labResultadoDemo(): ResultadoDoLab {
+  const media = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
+  const n = Math.min(labDemo.antes.length, labDemo.depois.length);
+  const a = media(labDemo.antes);
+  const d = media(labDemo.depois);
+  const conf = n < 3 ? "Insuficiente" : "Alta";
+  const linha = (metrica: string, k: number, menor: boolean) => ({
+    metrica,
+    antes: a == null ? null : a * k,
+    depois: d == null ? null : d * k,
+    diferenca_pct: conf === "Alta" && a && d ? ((d - a) / a) * 100 * (menor ? -1 : 1) : null,
+    confianca: conf as ResultadoDoLab["linhas"][number]["confianca"],
+    menor_e_melhor: menor,
+  });
+  return {
+    nome: jogoDemo ?? "FiveM",
+    rodadas_antes: labDemo.antes.length,
+    rodadas_depois: labDemo.depois.length,
+    minimo_por_lado: 3,
+    linhas: [linha("FPS médio", 1, false), linha("1% pior", 0.62, false), linha("Tempo de quadro (ms)", 1000 / 85 / 85, true)],
+    descartadas: 0,
+  };
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -752,6 +783,28 @@ export const ponte = {
     await new Promise((r) => setTimeout(r, 1200));
     return "Ponto de restauração criado (demonstração).";
   },
+  /** O executável do jogo aberto (o Lab mede um processo), ou `null` sem jogo. */
+  processoDoJogo: async (): Promise<string | null> => {
+    if (!noTauri) return jogoDemo ? "FiveM_GTAProcess.exe" : null;
+    const j = await commands.jogoAberto();
+    return j?.executavel ?? null;
+  },
+  labEstado: (): Promise<ResultadoDoLab> => (noTauri ? commands.labEstado() : Promise.resolve(labResultadoDemo())),
+  labMedir: async (processo: string, lado: LadoDoLab, segundos: number): Promise<ResultadoDoLab> => {
+    if (noTauri) return commands.labMedir(processo, lado, segundos);
+    await new Promise((r) => setTimeout(r, 1500));
+    (lado === "Antes" ? labDemo.antes : labDemo.depois).push((lado === "Antes" ? 85 : 95) + (Math.random() * 4 - 2));
+    return labResultadoDemo();
+  },
+  labZerar: async () => {
+    if (noTauri) return commands.labZerar();
+    labDemo.antes = [];
+    labDemo.depois = [];
+    return null;
+  },
+  provaGuardada: (): Promise<ProvaDoTurbo | null> => (noTauri ? commands.provaAlternadaGuardada() : Promise.resolve(null)),
+  compartilharProva: (): Promise<string> =>
+    noTauri ? commands.resultadoParaCompartilhar() : Promise.reject("Ainda não há prova com comparação justa para compartilhar."),
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

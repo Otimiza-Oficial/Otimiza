@@ -144,6 +144,18 @@ export const commands = {
 	restoreStatus: () => __TAURI_INVOKE<RestoreStatus>("restore_status"),
 	/**  Pode levar dezenas de segundos. */
 	createRestorePoint: () => __TAURI_INVOKE<string>("create_restore_point"),
+	/**  O teste do Lab em andamento e a comparação dele. `LIVRES`. */
+	labEstado: () => __TAURI_INVOKE<ResultadoDoLab_Serialize>("lab_estado"),
+	/**  Uma rodada do Lab. `LIVRES`: medir não muda o computador. */
+	labMedir: (processo: string, lado: LadoDoLab, segundos: number) => __TAURI_INVOKE<ResultadoDoLab_Serialize>("lab_medir", { processo, lado, segundos }),
+	/**  Recomeça o teste do Lab. `LIVRES`: apaga só as rodadas do Lab. */
+	labZerar: () => __TAURI_INVOKE<null>("lab_zerar"),
+	provaAlternadaGuardada: () => __TAURI_INVOKE<ResultadoDaProva_Serialize | null>("prova_alternada_guardada"),
+	/**
+	 *  O texto da última prova no jogo para colar no Discord (`modules::compartilhar`). Só leitura, `LIVRES`; a recusa
+	 *  volta como erro, já com a frase para a tela.
+	 */
+	resultadoParaCompartilhar: () => __TAURI_INVOKE<string>("resultado_para_compartilhar"),
 };
 
 /* Types */
@@ -348,6 +360,16 @@ export type ConexaoWifi_Serialize = {
 	recepcao_mbps: number,
 	envio_mbps: number,
 };
+
+export type ConfiancaDoLab = 
+/**  Separados com folga de 3% ou mais da média. */
+"Alta" | 
+/**  Separados, mas por pouco. */
+"Media" | 
+/**  Os intervalos se encostam: a mudança não foi maior que o ruído. */
+"SemDiferenca" | 
+/**  Faltam rodadas. */
+"Insuficiente";
 
 export type ConfirmacaoDaBanda = "Confirmado" | 
 /**  Leu-se outro valor: o Windows não está usando o nosso (outra política mais forte, por exemplo). */
@@ -729,6 +751,8 @@ export type JogoDaLoja_Serialize = {
 
 export type LadoDaProva = "SemOtimiza" | "ComOtimiza";
 
+export type LadoDoLab = "Antes" | "Depois";
+
 /**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
 export type LeituraDoHistorico = LeituraDoHistorico_Serialize | LeituraDoHistorico_Deserialize;
 
@@ -785,6 +809,30 @@ export type LigacaoDeRede_Deserialize = { tipo: "cabo"; placa: string; velocidad
 export type LigacaoDeRede_Serialize = { tipo: "cabo"; placa: string; velocidade_mbps: number | null } | { tipo: "wi_fi"; placa: string; leitura: LeituraWifi_Serialize } | { tipo: "virtual"; placa: string } | { tipo: "outra"; placa: string } | 
 /**  Nenhuma rota para a internet. */
 { tipo: "sem_rede" };
+
+export type LinhaDoLab = LinhaDoLab_Serialize | LinhaDoLab_Deserialize;
+
+export type LinhaDoLab_Deserialize = {
+	metrica: string,
+	antes?: number | null,
+	depois?: number | null,
+	/**  Só com confiança alta ou média. */
+	diferenca_pct?: number | null,
+	confianca: ConfiancaDoLab,
+	/**  Para frametime, menos é melhor. */
+	menor_e_melhor: boolean,
+};
+
+export type LinhaDoLab_Serialize = {
+	metrica: string,
+	antes: number | null,
+	depois: number | null,
+	/**  Só com confiança alta ou média. */
+	diferenca_pct: number | null,
+	confianca: ConfiancaDoLab,
+	/**  Para frametime, menos é melhor. */
+	menor_e_melhor: boolean,
+};
 
 export type MaquinaDeEnergia = {
 	notebook: boolean,
@@ -1680,6 +1728,28 @@ export type ResultadoDoAjuste_Serialize = {
 	dc_depois: number | null,
 	status: StatusDoAjuste,
 	mensagem: string,
+};
+
+export type ResultadoDoLab = ResultadoDoLab_Serialize | ResultadoDoLab_Deserialize;
+
+export type ResultadoDoLab_Deserialize = {
+	nome: string,
+	rodadas_antes: number,
+	rodadas_depois: number,
+	minimo_por_lado: number,
+	linhas: LinhaDoLab_Deserialize[],
+	/**  Rodadas descartadas por ter geração de quadros no meio. */
+	descartadas: number,
+};
+
+export type ResultadoDoLab_Serialize = {
+	nome: string,
+	rodadas_antes: number,
+	rodadas_depois: number,
+	minimo_por_lado: number,
+	linhas: LinhaDoLab_Serialize[],
+	/**  Rodadas descartadas por ter geração de quadros no meio. */
+	descartadas: number,
 };
 
 /**

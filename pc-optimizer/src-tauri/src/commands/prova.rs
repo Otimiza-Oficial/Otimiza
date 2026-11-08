@@ -159,6 +159,7 @@ pub async fn receita_da_partida(
 /// O texto da última prova no jogo para colar no Discord (`modules::compartilhar`). Só leitura, `LIVRES`; a recusa
 /// volta como erro, já com a frase para a tela.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn resultado_para_compartilhar() -> Result<String, String> {
     tokio::task::spawn_blocking(|| {
         let prova = crate::modules::provaalternada::guardada();
@@ -239,6 +240,7 @@ pub async fn pronto_para_jogar() -> Result<crate::modules::windows::prontojogo::
 
 /// O teste do Lab em andamento e a comparação dele. `LIVRES`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn lab_estado() -> Result<crate::plataforma::lab::Resultado, String> {
     Ok(crate::plataforma::lab::comparar(
         &crate::plataforma::lab::atual(),
@@ -247,6 +249,7 @@ pub fn lab_estado() -> Result<crate::plataforma::lab::Resultado, String> {
 
 /// Uma rodada do Lab. `LIVRES`: medir não muda o computador.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn lab_medir(
     processo: String,
     lado: crate::plataforma::lab::Lado,
@@ -270,6 +273,7 @@ pub async fn lab_medir(
 
 /// Recomeça o teste do Lab. `LIVRES`: apaga só as rodadas do Lab.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn lab_zerar() -> Result<(), String> {
     crate::plataforma::lab::zerar()
 }
@@ -430,6 +434,7 @@ pub async fn provar_o_otimizar(
 }
 
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn prova_alternada_guardada() -> Option<crate::modules::provaalternada::Resultado> {
     crate::modules::provaalternada::guardada()
 }

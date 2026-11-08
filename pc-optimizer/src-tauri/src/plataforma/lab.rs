@@ -11,12 +11,16 @@ use std::path::{Path, PathBuf};
 use crate::modules::repeticoes::{self, Diferenca, REPETICOES_MINIMAS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LadoDoLab"))]
 pub enum Lado {
     Antes,
     Depois,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RodadaDoLab"))]
 pub struct Rodada {
     pub quando: u64,
     pub fps: f64,
@@ -29,6 +33,7 @@ pub struct Rodada {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 #[serde(default)]
 pub struct Teste {
     /// A chave do jogo (`historico::id_do_jogo`): rodada de outro jogo não entra.
@@ -39,6 +44,8 @@ pub struct Teste {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ConfiancaDoLab"))]
 pub enum Confianca {
     /// Separados com folga de 3% ou mais da média.
     Alta,
@@ -51,6 +58,8 @@ pub enum Confianca {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "LinhaDoLab"))]
 pub struct Linha {
     pub metrica: &'static str,
     pub antes: Option<f64>,
@@ -63,6 +72,8 @@ pub struct Linha {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "ResultadoDoLab"))]
 pub struct Resultado {
     pub nome: String,
     pub rodadas_antes: usize,

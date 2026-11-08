@@ -84,6 +84,12 @@ mod tests {
                 crate::commands::limpeza_executar,
                 crate::commands::restore_status,
                 crate::commands::create_restore_point,
+                // Onda 2: Prova.
+                crate::commands::lab_estado,
+                crate::commands::lab_medir,
+                crate::commands::lab_zerar,
+                crate::commands::prova_alternada_guardada,
+                crate::commands::resultado_para_compartilhar,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)
