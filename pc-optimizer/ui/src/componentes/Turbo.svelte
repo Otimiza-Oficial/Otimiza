@@ -6,6 +6,7 @@
   import DriverDaPlaca from "./DriverDaPlaca.svelte";
   import FrameBoost from "./FrameBoost.svelte";
   import Icone from "./Icone.svelte";
+  import NoJogo from "./NoJogo.svelte";
   import { ponte, type PainelDoTurbo, type ProvaDoTurbo } from "../lib/ponte";
 
   const GARGALO: Record<string, string> = {
@@ -358,6 +359,7 @@
   <!-- O Frame Boost à mão (a receita do Turbo também liga ele sozinho). -->
   <FrameBoost />
   <DriverDaPlaca />
+  <NoJogo />
 </div>
 
 <style>

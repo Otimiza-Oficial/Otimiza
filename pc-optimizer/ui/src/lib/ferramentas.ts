@@ -130,6 +130,38 @@ export interface EstadoDasCores {
   nota: string;
 }
 
+export interface ConfigDoJogo {
+  id: string;
+  nome: string;
+  /** O arquivo de configuração achado; null = jogo não instalado ou nunca aberto. */
+  arquivo: string | null;
+  aberto: boolean;
+  previsao: { chave: string; antes: string; depois: string; por_que: string }[];
+  /** O arquivo existe mas não deu para ler. */
+  ilegivel: string | null;
+  ficha: string;
+  historico: string;
+  aplicado: boolean;
+}
+
+export interface PlanoJogoLiso {
+  fps_agora: number;
+  hz: number;
+  teto: number | null;
+  multiplicador_do_boost: number;
+  trancos_por_minuto: number;
+  motivo: string;
+  teto_no_driver: number | null;
+  aviso_do_teto: string | null;
+  tela: { apresentacao: "Direta" | "Composta" | "Copiada" | "Desconhecida"; modo: string; por_cima: string[]; aviso: string | null } | null;
+}
+
+export interface MemoriaParaOJogo {
+  total_gb: number;
+  livre_gb: number;
+  pesados: { nome: string; mb: number; processos: number; aviso: string | null }[];
+}
+
 // ── Demonstração ───────────────────────────────────────────────────────────────────────────────────────────────────
 let fbDemo: PainelFrameBoost = {
   jogo: "FiveM",
@@ -234,6 +266,49 @@ export const ferramentas = {
     const j = await invoke<{ nome: string; executavel: string; no_catalogo: boolean; perfil: { id: string } } | null>("jogo_aberto");
     return j ? { id: j.no_catalogo ? j.perfil.id : j.executavel.toLowerCase(), nome: j.nome } : null;
   },
+  configDosJogos: (): Promise<ConfigDoJogo[]> =>
+    noTauri
+      ? invoke("config_motor_painel")
+      : Promise.resolve([
+          {
+            id: "cs2", nome: "Counter-Strike 2", arquivo: "cs2_video.txt", aberto: false, ilegivel: null, ficha: "", historico: "config:cs2", aplicado: false,
+            previsao: [
+              { chave: "r_csgo_render_dynamic_shadows", antes: "1", depois: "0", por_que: "Sombras dinâmicas custam caro e quase não se veem no meio da troca de tiro." },
+              { chave: "setting.mat_vsync", antes: "1", depois: "0", por_que: "A sincronia vertical segura o quadro e soma atraso." },
+            ],
+          },
+          { id: "fortnite", nome: "Fortnite", arquivo: null, aberto: false, ilegivel: null, ficha: "", historico: "config:fortnite", aplicado: false, previsao: [] },
+        ]),
+  /** Grava o perfil leve no arquivo do jogo (fechado). Desfaz pelo histórico, byte a byte. */
+  configAplicar: (jogo: string): Promise<string[]> => (noTauri ? invoke("config_motor_aplicar", { jogo }) : Promise.resolve([])),
+  jogoLisoMedir: (): Promise<PlanoJogoLiso> =>
+    noTauri
+      ? invoke("jogo_liso_medir")
+      : new Promise((r) =>
+          setTimeout(
+            () =>
+              r({
+                fps_agora: 96, hz: 180, teto: 90, multiplicador_do_boost: 2, trancos_por_minuto: 14,
+                motivo: "O FPS oscila entre 80 e 120: travar em 90 (metade do monitor) dá um ritmo constante, e o Frame Boost 2× completa os 180.",
+                teto_no_driver: 0, aviso_do_teto: null,
+                tela: { apresentacao: "Direta", modo: "Hardware: Independent Flip", por_cima: [], aviso: null },
+              }),
+            900,
+          ),
+        ),
+  jogoLisoAplicar: (): Promise<PlanoJogoLiso> => (noTauri ? invoke("jogo_liso_aplicar") : Promise.reject("Demonstração: nada é gravado.")),
+  memoriaParaOJogo: (): Promise<MemoriaParaOJogo> =>
+    noTauri
+      ? invoke("memoria_para_o_jogo")
+      : Promise.resolve({
+          total_gb: 16, livre_gb: 2.1,
+          pesados: [
+            { nome: "Google Chrome", mb: 2380, processos: 21, aviso: null },
+            { nome: "Discord", mb: 610, processos: 5, aviso: "Fechar tira você da chamada de voz." },
+          ],
+        }),
+  memoriaFechar: (nome: string): Promise<MemoriaParaOJogo> =>
+    noTauri ? invoke("memoria_fechar", { nome }) : Promise.resolve({ total_gb: 16, livre_gb: 4.4, pesados: [] }),
   miraEstado: (): Promise<{ ligada: boolean; jogo: string | null }> =>
     noTauri ? invoke("mira_estado") : Promise.resolve({ ligada: miraDemo, jogo: miraDemo ? "FiveM" : null }),
   /** Recusa com "CONFIRMAR:<motivo>" quando o anticheat pede cuidado (servidor de RP): aí liga com `confirmado`. */
