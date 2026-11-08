@@ -244,6 +244,7 @@ pub fn run() {
             commands::rede_varredura_wifi_desligar,
             commands::dpc_capturar,
             commands::dpc_cancelar,
+            commands::mouse_taxa,
             commands::oti_perguntar,
             commands::banda_painel,
             commands::banda_ligar,

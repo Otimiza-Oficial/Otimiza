@@ -133,6 +133,11 @@
                 <div><span class="numero valor">{inteiro(u.fps_na_tela)}</span><span class="apoio">na tela</span></div>
               {/if}
               <div><span class="numero valor">{inteiro(atual.medido.melhor_fps)}</span><span class="apoio">melhor FPS</span></div>
+              {#if u.clique_ms != null}
+                <div title="Do clique do mouse até a imagem mudar na tela, medido pelo PresentMon na última partida">
+                  <span class="numero valor">{Math.round(u.clique_ms)}<small> ms</small></span><span class="apoio">clique até a tela</span>
+                </div>
+              {/if}
             </div>
             <ul class="lista ganhos">
               <li>

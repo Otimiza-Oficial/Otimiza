@@ -38,3 +38,22 @@ pub fn dpc_cancelar() {
     #[cfg(target_os = "windows")]
     crate::modules::windows::dpc::cancelar();
 }
+
+/// A taxa real do mouse: conta a entrada bruta por `segundos` (2 a 10) enquanto a pessoa mexe o mouse. Só o instante
+/// de cada relato, nunca posição ou clique; nada fica ligado depois. `LIVRES`: não muda o PC.
+#[tauri::command]
+#[cfg_attr(test, specta::specta)]
+pub async fn mouse_taxa(segundos: u32) -> Result<crate::plataforma::mouse_taxa::TaxaDoMouse, String> {
+    #[cfg(target_os = "windows")]
+    {
+        tokio::task::spawn_blocking(move || crate::plataforma::mouse_taxa::maquina::medir(segundos))
+            .await
+            .map_err(|_| "A medida do mouse não terminou.".to_string())?
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = segundos;
+        Err(super::UNSUPPORTED_PLATFORM.to_string())
+    }
+}

@@ -81,6 +81,11 @@ export const commands = {
 	dpcCapturar: (segundos: number | null) => __TAURI_INVOKE<ResultadoDaCaptura_Serialize>("dpc_capturar", { segundos }),
 	/**  Termina a captura em andamento já, com o que mediu até agora. `LIVRES`. */
 	dpcCancelar: () => __TAURI_INVOKE<void>("dpc_cancelar"),
+	/**
+	 *  A taxa real do mouse: conta a entrada bruta por `segundos` (2 a 10) enquanto a pessoa mexe o mouse. Só o instante
+	 *  de cada relato, nunca posição ou clique; nada fica ligado depois. `LIVRES`: não muda o PC.
+	 */
+	mouseTaxa: (segundos: number) => __TAURI_INVOKE<TaxaDoMouse_Serialize>("mouse_taxa", { segundos }),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
@@ -1421,6 +1426,8 @@ export type Partida_Deserialize = {
 	fps_na_tela?: number | null,
 	low_1pct: number | null,
 	frametime_ms?: number | null,
+	/**  Mediana do clique do mouse até a tela, pelo PresentMon (só com cliques bastantes na partida). */
+	clique_ms?: number | null,
 };
 
 export type Partida_Serialize = {
@@ -1430,6 +1437,8 @@ export type Partida_Serialize = {
 	fps_na_tela: number | null,
 	low_1pct: number | null,
 	frametime_ms: number | null,
+	/**  Mediana do clique do mouse até a tela, pelo PresentMon (só com cliques bastantes na partida). */
+	clique_ms: number | null,
 };
 
 export type PerfilDeHardware = PerfilDeHardware_Serialize | PerfilDeHardware_Deserialize;
@@ -2265,6 +2274,30 @@ export type Summary = {
 export type Suporte = { estado: "Suportado" } | 
 /**  Funciona com condição ou ainda sem prova em hardware real; o motivo diz qual. */
 { estado: "Parcial"; motivo: string } | { estado: "NaoSuportado"; motivo: string } | { estado: "PrecisaAtualizar"; motivo: string };
+
+export type TaxaDoMouse = TaxaDoMouse_Serialize | TaxaDoMouse_Deserialize;
+
+export type TaxaDoMouse_Deserialize = {
+	/**  Pela mediana dos intervalos. `None` com relatos de menos (a mão parou, ou não mexeu). */
+	taxa_hz?: number | null,
+	/**  A taxa padrão mais perto (125, 250, 500, 1000…), quando a medida cai a menos de 15% dela. */
+	nominal?: number | null,
+	relatos: number,
+	/**  Intervalos a menos de 25% da mediana: abaixo de ~80%, o mouse (ou o sem-fio) não segura a taxa. */
+	estavel_pct?: number | null,
+	frase: string,
+};
+
+export type TaxaDoMouse_Serialize = {
+	/**  Pela mediana dos intervalos. `None` com relatos de menos (a mão parou, ou não mexeu). */
+	taxa_hz: number | null,
+	/**  A taxa padrão mais perto (125, 250, 500, 1000…), quando a medida cai a menos de 15% dela. */
+	nominal: number | null,
+	relatos: number,
+	/**  Intervalos a menos de 25% da mediana: abaixo de ~80%, o mouse (ou o sem-fio) não segura a taxa. */
+	estavel_pct: number | null,
+	frase: string,
+};
 
 export type Tela = {
 	nome: string,

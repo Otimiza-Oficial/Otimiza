@@ -27,6 +27,7 @@ pub mod limpeza;
 pub mod memoria_jogo;
 pub mod metricas;
 pub mod mira;
+pub mod mouse_taxa;
 pub mod operadora;
 pub mod overlay;
 pub mod por_cima;

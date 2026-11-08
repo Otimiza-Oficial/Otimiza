@@ -360,6 +360,7 @@ mod tests {
         "rede_varredura_wifi_desligar",
         "dpc_capturar",
         "dpc_cancelar",
+        "mouse_taxa",
         "banda_painel",
         "banda_desligar",
     ];

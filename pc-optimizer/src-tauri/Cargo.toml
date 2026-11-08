@@ -66,6 +66,9 @@ windows-sys = { version = "0.59", features = [
     # Descobrir qual janela está em primeiro plano e quanto do monitor ela
     # cobre — metade da detecção de jogo sem lista de nomes.
     "Win32_UI_WindowsAndMessaging",
+    # Entrada bruta (Raw Input) numa janela só de mensagens, só nos segundos em que a pessoa pede a medida da taxa do
+    # mouse (`plataforma::mouse_taxa`). Não é gancho (SetWindowsHookEx): é a mesma entrada que os jogos leem.
+    "Win32_UI_Input",
     # Ler e mudar o modo de vídeo: resolução e taxa de atualização do monitor.
     # É onde moram `DEVMODEW` e `EnumDisplaySettingsExW`.
     "Win32_Graphics_Gdi",

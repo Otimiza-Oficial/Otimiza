@@ -4,7 +4,7 @@
   // devolve isso como resultado, não como erro.
 
   import { onDestroy, onMount } from "svelte";
-  import { ponte, type CapturaDpc, type DriverMedido } from "../lib/ponte";
+  import { ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
 
   const DURACOES = [10, 30, 60] as const;
   const NOME_DO_NIVEL = { Saudavel: "Saudável", Atencao: "Atenção", Pico: "Pico" } as const;
@@ -17,6 +17,23 @@
   let resultado = $state<CapturaDpc | null>(null);
   let erro = $state<string | null>(null);
   let relogio: ReturnType<typeof setInterval> | undefined;
+
+  const SEGUNDOS_DO_MOUSE = 4;
+  let mouse = $state<TaxaDoMouse | null>(null);
+  let medindoMouse = $state(false);
+  let erroMouse = $state<string | null>(null);
+
+  async function medirMouse() {
+    medindoMouse = true;
+    erroMouse = null;
+    try {
+      mouse = await ponte.medirMouse(SEGUNDOS_DO_MOUSE);
+    } catch (e) {
+      erroMouse = String(e);
+    } finally {
+      medindoMouse = false;
+    }
+  }
 
   const relatorio = $derived(resultado?.estado === "Medido" ? resultado.relatorio : null);
   /** Os com problema sempre aparecem; dos saudáveis, só o suficiente para a lista não ficar vazia. */
@@ -198,6 +215,37 @@
       {/if}
     </section>
   {/if}
+  <section class="secao">
+    <h2>Seu mouse</h2>
+    <p class="apoio texto">
+      A caixa diz "1000 Hz", mas o programa do fabricante, a porta USB ou o sem-fio podem deixar o mouse em 125. Clique
+      em medir e mexa o mouse sem parar, em círculos, por {SEGUNDOS_DO_MOUSE} segundos. Só o instante de cada relato é
+      contado: nada de posição nem clique.
+    </p>
+    <div class="controles">
+      <button class="btn primario" disabled={medindoMouse} onclick={medirMouse}>
+        {medindoMouse ? "Mexa o mouse…" : mouse ? "Medir de novo" : "Medir o mouse"}
+      </button>
+    </div>
+    {#if medindoMouse}
+      <div class="mexa" aria-hidden="true"><span></span></div>
+    {:else if erroMouse}
+      <div class="recado" role="alert">
+        <span class="ponto" data-tom="perigo"></span>
+        <div><span>{erroMouse}</span></div>
+      </div>
+    {:else if mouse}
+      <div class="mouse">
+        <strong class="numero">{mouse.nominal ?? (mouse.taxa_hz != null ? Math.round(mouse.taxa_hz) : "—")}<small> Hz</small></strong>
+        <div>
+          <p>{mouse.frase}</p>
+          {#if mouse.estavel_pct != null}
+            <p class="apoio">{mouse.relatos} relatos · {Math.round(mouse.estavel_pct)}% no ritmo</p>
+          {/if}
+        </div>
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -251,6 +299,51 @@
     height: 100%;
     background: var(--acao);
     transition: width 900ms linear;
+  }
+  .mouse {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .mouse .numero {
+    font-size: var(--t-numero);
+    white-space: nowrap;
+  }
+  .mouse small {
+    font-size: 14px;
+    color: var(--tinta-2);
+  }
+  .mouse p {
+    margin: 0;
+  }
+  .mexa {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px dashed var(--linha-forte);
+  }
+  .mexa span {
+    position: absolute;
+    top: -5px;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    border-radius: 50%;
+    background: var(--acao);
+    transform-origin: 5px 33px;
+    animation: girar 0.9s linear infinite;
+  }
+  @keyframes girar {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mexa span {
+      animation: none;
+    }
   }
   .topo {
     display: flex;

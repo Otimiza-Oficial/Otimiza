@@ -18,6 +18,8 @@ pub struct Partida {
     pub fps_na_tela: Option<f64>,
     pub low_1pct: f64,
     pub frametime_ms: Option<f64>,
+    /// Mediana do clique do mouse até a tela, pelo PresentMon (só com cliques bastantes na partida).
+    pub clique_ms: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -76,6 +78,7 @@ fn partida(m: &MedicaoAutomatica) -> Partida {
             .filter(|t| *t > m.fps * 1.15),
         low_1pct: m.low_1pct,
         frametime_ms: m.frametime_medio_ms,
+        clique_ms: m.presentmon.as_ref().and_then(|r| r.clique_ate_a_tela_ms),
     }
 }
 

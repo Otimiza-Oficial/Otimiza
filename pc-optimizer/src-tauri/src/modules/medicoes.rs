@@ -442,6 +442,7 @@ mod tests {
                 gpu_ocupada_ms: Some(9.5),
                 na_tela_ms: Some(1.0),
                 ate_a_tela_ms: Some(12.0),
+                clique_ms: None,
             })
             .collect();
         MedicaoAutomatica {

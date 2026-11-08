@@ -44,6 +44,7 @@ import {
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
   type HistoricoDaRede_Serialize,
+  type TaxaDoMouse_Serialize,
   type TrocaAplicada,
   type VersaoDoApp,
 } from "./tipos";
@@ -62,6 +63,7 @@ export type { TrechoDaRota } from "./tipos";
 export type Rota = Rota_Serialize;
 export type SaltoDaRota = Rota["saltos"][number];
 export type HistoricoDaRede = HistoricoDaRede_Serialize;
+export type TaxaDoMouse = TaxaDoMouse_Serialize;
 export type NumerosDoPeriodo = HistoricoDaRede["resumo"]["periodos"][number];
 export type DiagnosticoDoWifi = DiagnosticoDoWifi_Serialize;
 export type PainelDaVarredura = Painel_Serialize;
@@ -138,7 +140,7 @@ const demo: {
       id: "fivem",
       nome: "FiveM",
       partidas: 12,
-      ultima: { quando: Date.now() / 1000 - 3600, fps_nativo: 85, fps_na_tela: null, low_1pct: 54, frametime_ms: 11.7 },
+      ultima: { quando: Date.now() / 1000 - 3600, fps_nativo: 85, fps_na_tela: null, low_1pct: 54, frametime_ms: 11.7, clique_ms: 31.4 },
       ganho_fps: { estado: "Medido", pct: 9.4, folga_pct: 3.1 },
       ganho_low: { estado: "Medido", pct: 22.0, folga_pct: 6.5 },
       melhor_fps: 92,
@@ -717,6 +719,18 @@ export const ponte = {
     return capturaDemo(segundos);
   },
   cancelarDpc: () => (noTauri ? commands.dpcCancelar() : Promise.resolve()),
+  /** Conta a entrada bruta do mouse por `segundos`; a demonstração espera o mesmo tempo e responde 1000 Hz. */
+  medirMouse: async (segundos: number): Promise<TaxaDoMouse> => {
+    if (noTauri) return commands.mouseTaxa(segundos);
+    await new Promise((r) => setTimeout(r, segundos * 1000));
+    return {
+      taxa_hz: 998.6,
+      nominal: 1000,
+      relatos: 3870,
+      estavel_pct: 96.4,
+      frase: "Seu mouse está mandando 1000 relatos por segundo (1000 Hz). Está bom para jogo.",
+    };
+  },
   banda: (): Promise<PainelDaBanda> => (noTauri ? commands.bandaPainel() : Promise.resolve({ ...bandaDemo })),
   /** No navegador não há jogo aberto: ligar só grava a escolha, como o Rust faz sem jogo. */
   definirBanda: async (ligado: boolean): Promise<ResultadoDaBanda> => {

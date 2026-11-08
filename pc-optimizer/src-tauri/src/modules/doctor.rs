@@ -472,6 +472,8 @@ mod tests {
             gpu_ocupada_media_ms: Some(gpu_ms),
             gargalo,
             ate_a_tela_media_ms: None,
+            clique_ate_a_tela_ms: None,
+            cliques_medidos: 0,
             geradores: Vec::new(),
             trancos_qpc: Vec::new(),
         }

@@ -884,6 +884,7 @@ mod tests {
             gpu_ocupada_ms: Some(4.0),
             na_tela_ms: ms,
             ate_a_tela_ms: None,
+            clique_ms: None,
         }
     }
 
