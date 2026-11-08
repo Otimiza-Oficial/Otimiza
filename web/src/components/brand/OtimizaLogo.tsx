@@ -1,11 +1,9 @@
 import { cn } from "@/lib/cn";
 
 /**
- * A logo do Otimiza 1.0: o mascote de vidro, parado, em tamanho de marca.
- *
- * Em 16–30 px degradê e reflexo viram ruído, então o símbolo é chapado: bolha lavanda, borda azul, "orelhas" e os
- * dois olhos âmbar, que são o que o torna reconhecível. As cores são fixas (a bolha não troca de cor com o texto):
- * funciona igual sobre o céu, sobre o vidro e sobre a noite. A versão grande e viva é `<Mascote />`.
+ * A logo do Otimiza 1.0: o Oti, disco branco com dois olhos em cápsula inclinados (o mesmo do app e do ícone do
+ * programa), em tamanho de marca. Em 16–30 px o reflexo vira ruído, então aqui só ficam o disco com um aro fino e os
+ * olhos. Cores fixas: funciona sobre fundo claro e escuro. A versão grande e viva é `<Mascote />`.
  */
 export function MarcaMascote({ tamanho = 24, className }: { tamanho?: number; className?: string }) {
   return (
@@ -16,12 +14,9 @@ export function MarcaMascote({ tamanho = 24, className }: { tamanho?: number; cl
       height={tamanho}
       viewBox="0 0 64 64"
     >
-      <path d="M12.5 23.5 Q2 32 12.5 40.5 Z" fill="#dbe4fb" stroke="#8fa3ea" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M51.5 23.5 Q62 32 51.5 40.5 Z" fill="#dbe4fb" stroke="#8fa3ea" strokeWidth="1.6" strokeLinejoin="round" />
-      <circle cx="32" cy="32" r="22" fill="#eef2fe" stroke="#7f97ea" strokeWidth="2.4" />
-      <path d="M17 26 Q20 17 29 14" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" opacity="0.9" />
-      <rect x="23.5" y="25" width="6" height="13" rx="3" fill="#a8621c" />
-      <rect x="34.5" y="25" width="6" height="13" rx="3" fill="#a8621c" />
+      <circle cx="32" cy="32" r="29.5" fill="#f4f4f5" stroke="#c9c9cc" strokeWidth="1.5" />
+      <rect x="22" y="26" width="10.5" height="19" rx="5.25" fill="#111113" transform="rotate(-33 27.25 35.5)" />
+      <rect x="36" y="18.5" width="10.5" height="19" rx="5.25" fill="#111113" transform="rotate(-33 41.25 28)" />
     </svg>
   );
 }

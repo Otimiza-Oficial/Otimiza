@@ -4,8 +4,8 @@ import { useEffect, useId, useRef } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * O mascote do Otimiza — a bolha de vidro com olhos âmbar. Porte do `Mascote.svelte` do app, no estado "atento":
- * os olhos seguem o cursor.
+ * O mascote do Otimiza, o Oti: um disco branco liso, de cabeça meio de lado, com dois olhos em cápsula inclinados
+ * (o mesmo desenho de `Oti.svelte` no app e do ícone do programa). No estado "atento", os olhos seguem o cursor.
  *
  * O olhar é escrito direto no elemento (um `transform` por quadro, no máximo), sem estado do React: mexer o mouse
  * não renderiza nada. Com menos movimento pedido, ele não segue, não pisca e não respira.
@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
 export function Mascote({
   tamanho = 220,
   className,
-  rotulo = "Mascote do Otimiza: uma bolha de vidro com dois olhos âmbar",
+  rotulo = "Oti, o mascote do Otimiza: um disco branco com dois olhos",
 }: {
   tamanho?: number;
   className?: string;
@@ -61,53 +61,45 @@ export function Mascote({
   return (
     <svg
       ref={raiz}
-      className={cn("block overflow-visible drop-shadow-[0_18px_30px_rgb(47_95_168/0.25)]", className)}
+      className={cn("block overflow-visible drop-shadow-[0_18px_28px_rgb(40_30_20/0.22)]", className)}
       width={tamanho}
-      height={tamanho * 0.82}
-      viewBox="0 0 220 180"
+      height={tamanho}
+      viewBox="0 0 200 200"
       role="img"
       aria-label={rotulo}
     >
       <defs>
-        <radialGradient id={g("corpo")} cx="38%" cy="30%" r="75%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-          <stop offset="45%" stopColor="#e3ebfd" stopOpacity="0.85" />
-          <stop offset="85%" stopColor="#b9c8f6" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#9fb2f0" stopOpacity="0.9" />
+        <radialGradient id={g("corpo")} cx="36%" cy="30%" r="78%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="55%" stopColor="#f0f0f1" />
+          <stop offset="85%" stopColor="#dcdcde" />
+          <stop offset="100%" stopColor="#c9c9cc" />
         </radialGradient>
-        <linearGradient id={g("borda")} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#ffe2c2" />
-          <stop offset="50%" stopColor="#a9b8f2" />
-          <stop offset="100%" stopColor="#7f97ea" />
-        </linearGradient>
-        <linearGradient id={g("orelha")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="#b3c3f5" stopOpacity="0.75" />
-        </linearGradient>
         <linearGradient id={g("olho")} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#e8a24a" />
-          <stop offset="55%" stopColor="#9a5418" />
-          <stop offset="100%" stopColor="#4a2a10" />
+          <stop offset="0%" stopColor="#050505" />
+          <stop offset="100%" stopColor="#1c1c1e" />
         </linearGradient>
       </defs>
 
       <g className="mascote-flutua">
-        <path d="M44 62 Q0 91 44 120 Z" fill={`url(#${g("orelha")})`} stroke={`url(#${g("borda")})`} strokeWidth="1.5" />
-        <path d="M176 62 Q220 91 176 120 Z" fill={`url(#${g("orelha")})`} stroke={`url(#${g("borda")})`} strokeWidth="1.5" />
-
-        <circle cx="110" cy="91" r="76" fill={`url(#${g("corpo")})`} stroke={`url(#${g("borda")})`} strokeWidth="3" />
-        <circle cx="110" cy="91" r="70" fill="none" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.2" />
-        <ellipse cx="80" cy="46" rx="26" ry="11" fill="#ffffff" opacity="0.55" transform="rotate(-24 80 46)" />
+        <circle cx="100" cy="100" r="92" fill={`url(#${g("corpo")})`} />
+        <ellipse cx="70" cy="52" rx="40" ry="20" fill="#ffffff" opacity="0.6" transform="rotate(-28 70 52)" />
+        <circle cx="100" cy="100" r="91" fill="none" stroke="#ffffff" strokeWidth="1.6" opacity="0.95" />
+        <circle cx="100" cy="100" r="92.5" fill="none" stroke="#000000" strokeWidth="1" opacity="0.08" />
 
         <g ref={olhos} className="mascote-olhos">
-          <g className="mascote-olho">
-            <rect x="83" y="72" width="17" height="34" rx="8.5" fill={`url(#${g("olho")})`} />
-            <rect x="87" y="76" width="4" height="10" rx="2" fill="#ffffff" opacity="0.7" />
-          </g>
-          <g className="mascote-olho">
-            <rect x="120" y="72" width="17" height="34" rx="8.5" fill={`url(#${g("olho")})`} />
-            <rect x="124" y="76" width="4" height="10" rx="2" fill="#ffffff" opacity="0.7" />
-          </g>
+          {[
+            [86, 112],
+            [130, 88],
+          ].map(([cx, cy]) => (
+            <g key={cx} transform={`rotate(-33 ${cx} ${cy})`}>
+              <g className="mascote-olho">
+                <rect x={cx - 17} y={cy - 30} width="34" height="60" rx="17" fill="#ffffff" />
+                <rect x={cx - 17} y={cy - 30} width="34" height="60" rx="17" fill="none" stroke="#000000" strokeOpacity="0.1" />
+                <rect x={cx - 13} y={cy - 26} width="26" height="52" rx="13" fill={`url(#${g("olho")})`} />
+              </g>
+            </g>
+          ))}
         </g>
       </g>
     </svg>
