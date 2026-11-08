@@ -4,6 +4,8 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "TetoEscondido"))]
 #[serde(tag = "tipo")]
 pub enum Teto {
     LimiteGlobalNvidia {
@@ -29,6 +31,8 @@ pub enum Teto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioDeTetos"))]
 pub struct Relatorio {
     pub monitor_hz: Option<u32>,
     pub tetos: Vec<Teto>,

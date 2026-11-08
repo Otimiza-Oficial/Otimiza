@@ -14,12 +14,17 @@ import {
   type JogoDaLoja_Serialize,
   type OptimizationOutcome_Serialize,
   type PainelDaBanda_Serialize,
+  type PainelDaEnergiaDeJogo_Serialize,
   type PainelDoTurbo_Serialize,
   type Painel_Serialize,
   type PerfilDeHardware_Serialize,
   type Relatorio_Serialize,
   type ResultadoDaBanda_Serialize,
   type ResultadoDaCaptura_Serialize,
+  type RelatorioDoPlano_Serialize,
+  type RelatorioDeTetos_Serialize,
+  type VistoriaDoPlano,
+  type DiagnosticoDeEnergia,
   type ResultadoDaProva_Serialize,
   type ResumoDoJogo_Serialize,
   type Rota_Serialize,
@@ -45,6 +50,10 @@ export type PainelDaVarredura = Painel_Serialize;
 export type CapturaDpc = ResultadoDaCaptura_Serialize;
 export type PainelDaBanda = PainelDaBanda_Serialize;
 export type PainelDoTurbo = PainelDoTurbo_Serialize;
+export type RelatorioDoPlano = RelatorioDoPlano_Serialize;
+export type EnergiaDeJogo = PainelDaEnergiaDeJogo_Serialize;
+export type RelatorioDeTetos = RelatorioDeTetos_Serialize;
+export type { VistoriaDoPlano, DiagnosticoDeEnergia };
 export type ProvaDoTurbo = ResultadoDaProva_Serialize;
 export type ResultadoDaBanda = ResultadoDaBanda_Serialize;
 export type RelatorioDpc = Extract<CapturaDpc, { estado: "Medido" }>["relatorio"];
@@ -417,6 +426,57 @@ function painelDemo(): PainelDoTurbo {
   };
 }
 
+/** Energia de demonstração: o plano OTIMIZA ainda não existe, a energia de jogo está desligada. */
+const energiaDemo = { plano: false, jogo: false };
+const maquinaDemo = {
+  notebook: false,
+  tem_bateria: false,
+  fabricante_da_cpu: "Intel" as const,
+  cpu: "Intel Core i3-10100F",
+  nucleos_logicos: 8,
+  modern_standby: false,
+  build_do_windows: 26200,
+  windows11: true,
+};
+
+function relatorioDemo(simulacao: boolean): RelatorioDoPlano {
+  const ajuste = (nome: string, porque: string, antes: number, alvo: number, unidade = "") => ({
+    nome,
+    subgrupo: "Processador",
+    ajuste: nome,
+    classe: "Recomendada" as const,
+    porque: porque + unidade,
+    suportado: true,
+    ac_antes: antes,
+    dc_antes: antes,
+    ac_alvo: alvo,
+    dc_alvo: alvo,
+    ac_depois: simulacao ? null : alvo,
+    dc_depois: simulacao ? null : alvo,
+    status: (simulacao ? "Mudaria" : "Aplicado") as "Mudaria" | "Aplicado",
+    mensagem: "",
+  });
+  return {
+    maquina: maquinaDemo,
+    simulacao,
+    plano_existia: energiaDemo.plano,
+    guid_do_plano: null,
+    guid_anterior: null,
+    plano_ativo: !simulacao,
+    ajustes: [
+      ajuste("Estado mínimo do processador", "Núcleo que dorme a 5% demora a acordar no meio da partida.", 5, 100),
+      ajuste("Estacionamento de núcleos", "Núcleos estacionados atrasam o primeiro quadro de cada pico.", 10, 100),
+      ajuste("Modo de boost", "O turbo do processador sobe mais cedo e fica mais tempo.", 1, 2),
+      ajuste("Suspensão seletiva USB", "Mouse e headset sem dormir no meio do jogo.", 1, 0),
+    ],
+    aplicados: simulacao ? 0 : 4,
+    ja_estavam_bons: 6,
+    nao_suportados: 1,
+    falhas: 0,
+    desfecho: "Sucesso",
+  };
+}
+
 let demoTick = 0;
 
 export const ponte = {
@@ -548,6 +608,63 @@ export const ponte = {
     turboDemo.provou = false;
     return painelDemo();
   },
+  vistoriarPlano: (): Promise<VistoriaDoPlano> =>
+    noTauri ? commands.vistoriarPlanoOtimiza() : Promise.resolve(energiaDemo.plano ? { estado: "Integro" } : { estado: "NaoExiste" }),
+  simularPlano: async (): Promise<RelatorioDoPlano> => {
+    if (noTauri) return commands.simularPlanoOtimiza();
+    await new Promise((r) => setTimeout(r, 700));
+    return relatorioDemo(true);
+  },
+  aplicarPlano: async (): Promise<RelatorioDoPlano> => {
+    if (noTauri) return commands.aplicarPlanoOtimiza();
+    await new Promise((r) => setTimeout(r, 900));
+    energiaDemo.plano = true;
+    return relatorioDemo(false);
+  },
+  repararPlano: (): Promise<RelatorioDoPlano> =>
+    noTauri ? commands.repararPlanoOtimiza() : Promise.resolve(relatorioDemo(false)),
+  desfazerPlano: async () => {
+    if (noTauri) return commands.revertOptimization("plano_otimiza");
+    energiaDemo.plano = false;
+    return null;
+  },
+  energiaDeJogo: (): Promise<EnergiaDeJogo> =>
+    noTauri
+      ? commands.energiaDeJogo()
+      : Promise.resolve({
+          ligado: energiaDemo.jogo,
+          agindo_em: energiaDemo.jogo && jogoDemo ? jogoDemo : null,
+          impedimento: null,
+          o_que_muda: "Com o jogo aberto, o processador não dorme abaixo de 100% e o boost fica agressivo. Fechou o jogo, volta tudo.",
+        }),
+  definirEnergiaDeJogo: async (ligado: boolean): Promise<EnergiaDeJogo> => {
+    if (noTauri) return commands.energiaDeJogoDefinir(ligado);
+    energiaDemo.jogo = ligado;
+    return ponte.energiaDeJogo();
+  },
+  diagnosticoDeEnergia: (): Promise<DiagnosticoDeEnergia> =>
+    noTauri
+      ? commands.diagnosticoDeEnergia()
+      : Promise.resolve({
+          maquina: maquinaDemo,
+          elevado: true,
+          powercfg_responde: true,
+          planos_legiveis: true,
+          planos: [["381b4222-f694-41f0-9685-ff5bb260df2e", "Equilibrado"]],
+          plano_otimiza_existe: energiaDemo.plano,
+          registro_de_energia_legivel: true,
+          ajustes_suportados: 11,
+          ajustes_totais: 12,
+          ajustes_ausentes: ["Escalonamento heterogêneo (só em processador com núcleos P e E)"],
+          processo_64_bits: true,
+          governo_do_processador: "OWindows",
+          explicacao_do_governo: "Quem decide o clock é o Windows, pelo plano de energia: os ajustes do Otimiza valem aqui.",
+          avisos: [],
+        }),
+  tetosEscondidos: (): Promise<RelatorioDeTetos> =>
+    noTauri
+      ? commands.tetosEscondidos()
+      : Promise.resolve({ monitor_hz: 180, tetos: [{ tipo: "RobloxLimitado", fps: 60, arquivo: "GlobalBasicSettings_13.xml" }], lacunas: [] }),
   metricas: async (): Promise<MetricasAoVivo> => {
     if (noTauri) {
       const m = await commands.getPerformanceMetrics();

@@ -66,6 +66,15 @@ mod tests {
                 crate::commands::turbo_desligar,
                 crate::commands::turbo_atraso,
                 crate::commands::turbo_esquecer,
+                // Onda 2: Energia.
+                crate::commands::simular_plano_otimiza,
+                crate::commands::aplicar_plano_otimiza,
+                crate::commands::vistoriar_plano_otimiza,
+                crate::commands::reparar_plano_otimiza,
+                crate::commands::energia_de_jogo,
+                crate::commands::energia_de_jogo_definir,
+                crate::commands::diagnostico_de_energia,
+                crate::commands::tetos_escondidos,
             ])
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)

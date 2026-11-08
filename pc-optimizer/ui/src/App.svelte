@@ -7,6 +7,7 @@
   import { cubicOut } from "svelte/easing";
   import Historico from "./componentes/Historico.svelte";
   import Icone, { type NomeDoIcone } from "./componentes/Icone.svelte";
+  import Energia from "./componentes/Energia.svelte";
   import Jogos from "./componentes/Jogos.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
@@ -52,6 +53,20 @@
     { id: "tela", nome: "Tela" },
     { id: "historico", nome: "Histórico" },
   ];
+  /** O ícone de cada área no cabeçalho do painel (inclusive as que só abrem pelo "+"). */
+  const ICONE_DA_AREA: Record<IdDaArea, NomeDoIcone> = {
+    inicio: "casa",
+    turbo: "raio",
+    jogos: "pilha",
+    rede: "wifi",
+    latencia: "cronometro",
+    energia: "bateria",
+    tela: "monitor",
+    sistema: "chip",
+    prova: "grafico",
+    historico: "relogio",
+    ajustes: "engrenagem",
+  };
   const OUTRAS: IdDaArea[] = ["turbo", "jogos", "energia", "sistema", "prova", "ajustes"];
 
   let versao = $state<VersaoDoApp | null>(null);
@@ -679,7 +694,7 @@
         {:else}
           <div class="area-aberta">
             <header class="area-topo">
-              <span class="area-icone"><Icone nome={TRILHO.find((t) => t.id === aberta)?.icone ?? "grafico"} tamanho={18} /></span>
+              <span class="area-icone"><Icone nome={ICONE_DA_AREA[aberta]} tamanho={18} /></span>
               <div>
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
@@ -696,6 +711,8 @@
                 <Tela aoMudarHz={trocouHz} />
               {:else if aberta === "jogos"}
                 <Jogos />
+              {:else if aberta === "energia"}
+                <Energia />
               {:else if aberta === "turbo"}
                 <Turbo jogo={jogo?.nome ?? null} />
               {:else}

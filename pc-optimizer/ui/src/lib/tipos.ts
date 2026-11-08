@@ -111,6 +111,24 @@ export const commands = {
 	turboAtraso: (menor: boolean) => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_atraso", { menor }),
 	/**  Esquece a receita lembrada do jogo aberto: o próximo Turbo mede de novo. `LIVRES`. */
 	turboEsquecer: () => __TAURI_INVOKE<PainelDoTurbo_Serialize>("turbo_esquecer"),
+	/**  `LIVRES`: quem não comprou é quem precisa ver. */
+	simularPlanoOtimiza: () => __TAURI_INVOKE<RelatorioDoPlano_Serialize>("simular_plano_otimiza"),
+	/**  `EXIGEM_LICENCA`. UMA linha no histórico: o plano do cliente não é tocado, desfazer é reativar o anterior. */
+	aplicarPlanoOtimiza: () => __TAURI_INVOKE<RelatorioDoPlano_Serialize>("aplicar_plano_otimiza"),
+	/**  `LIVRES`: a pergunta de quem "aplicou e depois voltou tudo". */
+	vistoriarPlanoOtimiza: () => __TAURI_INVOKE<VistoriaDoPlano>("vistoriar_plano_otimiza"),
+	/**
+	 *  `EXIGEM_LICENCA`. NÃO mexe no histórico: o anterior guardado continua certo, e uma linha nova daria dois
+	 *  "desfazer" para uma troca só.
+	 */
+	repararPlanoOtimiza: () => __TAURI_INVOKE<RelatorioDoPlano_Serialize>("reparar_plano_otimiza"),
+	/**  Energia de jogo: o que muda no processador com o jogo aberto e se está ligada. `LIVRES`: só lê. */
+	energiaDeJogo: () => __TAURI_INVOKE<PainelDaEnergiaDeJogo_Serialize>("energia_de_jogo"),
+	/**  Liga ou desliga a energia de jogo. Desligar devolve na hora o que estava escrito. `EXIGEM_LICENCA`. */
+	energiaDeJogoDefinir: (ligado: boolean) => __TAURI_INVOKE<PainelDaEnergiaDeJogo_Serialize>("energia_de_jogo_definir", { ligado }),
+	/**  `LIVRES`: responde "por que não funcionou?" antes de pagar. */
+	diagnosticoDeEnergia: () => __TAURI_INVOKE<DiagnosticoDeEnergia>("diagnostico_de_energia"),
+	tetosEscondidos: () => __TAURI_INVOKE<RelatorioDeTetos_Serialize>("tetos_escondidos"),
 };
 
 /* Types */
@@ -274,6 +292,9 @@ export type Classe = "CpuTodosNucleos" | "CpuUmNucleo" | "Gpu" | "MemoriaRam" | 
 /**  LATÊNCIA ALTA NÃO ENTRA: ping é distância. Variação e perda têm conserto. */
 "Rede";
 
+/**  Por padrão só `Segura` e `Recomendada`. `Avancada` existe para o relatório dizer que não foi aplicada. */
+export type ClasseDoAjuste = "Segura" | "Recomendada" | "Avancada";
+
 export type Conclusao = "SemEvidencia" | "SemCarga" | "NadaNoLimite" | "Encontrado";
 
 /**  A conexão Wi-Fi atual, lida da wlanapi. */
@@ -334,6 +355,8 @@ export type DesfechoDaProva =
  */
 "SemComparacaoJusta";
 
+export type DesfechoDoPlano = "Sucesso" | "EmParte" | "Falhou";
+
 export type Diagnostico = Diagnostico_Serialize | Diagnostico_Deserialize;
 
 export type DiagnosticoDaTela = DiagnosticoDaTela_Serialize | DiagnosticoDaTela_Deserialize;
@@ -368,6 +391,27 @@ export type DiagnosticoDaTela_Serialize = {
 	veredito: VereditoDaTela,
 	/**  A frase da tela, já com a ressalva de FPS onde cabe. */
 	texto: string,
+};
+
+/**  Nada escreve: responde "por que não funcionou no seu PC?" com causas conferidas. */
+export type DiagnosticoDeEnergia = {
+	maquina: MaquinaDeEnergia,
+	/**  O PROCESSO elevado, não o usuário no grupo Administradores. */
+	elevado: boolean,
+	powercfg_responde: boolean,
+	planos_legiveis: boolean,
+	planos: ([string, string])[],
+	plano_otimiza_existe: boolean,
+	/**  Sem ela todo ajuste apareceria como "não suportado", e seria mentira. */
+	registro_de_energia_legivel: boolean,
+	ajustes_suportados: number,
+	ajustes_totais: number,
+	ajustes_ausentes: string[],
+	/**  Num processo de 32 bits o registro cai no `WOW6432Node` e sai errado. */
+	processo_64_bits: boolean,
+	governo_do_processador: GovernoDoProcessador,
+	explicacao_do_governo: string,
+	avisos: string[],
 };
 
 /**  Diagnóstico completo: por onde sai e o que dizer. */
@@ -512,6 +556,8 @@ export type Etapa = "Entrada" | "JogoEPlaca" | "Fila" | "Apresentacao" | "Tela";
 
 export type Fabricante = "Nvidia" | "Amd" | "Intel" | "Desconhecido";
 
+export type FabricanteDaCpu = "Intel" | "Amd" | "Outro";
+
 /**  A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante). */
 export type Familia = "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior" | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior" | "Arc" | "IntelIntegrada" | "Desconhecida";
 
@@ -570,6 +616,9 @@ export type GeracaoNaPartida = "NenhumaVisivel" | "OtimizaFg" |
 "LosslessScaling" | 
 /**  Quadros gerados que se identificaram ao PresentMon (AFMF, XeFG). */
 "IdentificadaNosQuadros";
+
+/**  Três estados: com o processador autônomo o "estado mínimo" é quase decorativo e governa o EPP. Só LÊ. */
+export type GovernoDoProcessador = "OProcessador" | "OWindows" | "NaoDeuParaLer";
 
 export type GravidadeDoWifi = "Bom" | "Info" | "Atencao";
 
@@ -692,6 +741,18 @@ export type LigacaoDeRede_Deserialize = { tipo: "cabo"; placa: string; velocidad
 export type LigacaoDeRede_Serialize = { tipo: "cabo"; placa: string; velocidade_mbps: number | null } | { tipo: "wi_fi"; placa: string; leitura: LeituraWifi_Serialize } | { tipo: "virtual"; placa: string } | { tipo: "outra"; placa: string } | 
 /**  Nenhuma rota para a internet. */
 { tipo: "sem_rede" };
+
+export type MaquinaDeEnergia = {
+	notebook: boolean,
+	tem_bateria: boolean,
+	fabricante_da_cpu: FabricanteDaCpu,
+	cpu: string,
+	nucleos_logicos: number,
+	/**  Do registro, não do `powercfg /a`, que é traduzido. */
+	modern_standby: boolean,
+	build_do_windows: number,
+	windows11: boolean,
+};
 
 export type Metric = Metric_Serialize | Metric_Deserialize;
 
@@ -893,6 +954,29 @@ export type PainelDaBanda_Serialize = {
 	impedimento: string | null,
 	/**  O que faz, sem prometer o que não faz. */
 	o_que_faz: string,
+};
+
+/**  Para a tela. */
+export type PainelDaEnergiaDeJogo = PainelDaEnergiaDeJogo_Serialize | PainelDaEnergiaDeJogo_Deserialize;
+
+/**  Para a tela. */
+export type PainelDaEnergiaDeJogo_Deserialize = {
+	ligado: boolean,
+	agindo_em?: string | null,
+	/**  Por que não dá para ligar aqui (sem administrador, por exemplo). */
+	impedimento?: string | null,
+	/**  O que vai mudar, em palavras, medido no plano ativo. */
+	o_que_muda?: string | null,
+};
+
+/**  Para a tela. */
+export type PainelDaEnergiaDeJogo_Serialize = {
+	ligado: boolean,
+	agindo_em: string | null,
+	/**  Por que não dá para ligar aqui (sem administrador, por exemplo). */
+	impedimento: string | null,
+	/**  O que vai mudar, em palavras, medido no plano ativo. */
+	o_que_muda: string | null,
 };
 
 /**  Para a tela. */
@@ -1232,6 +1316,54 @@ export type RecursoAvaliado = {
 
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
 
+export type RelatorioDeTetos = RelatorioDeTetos_Serialize | RelatorioDeTetos_Deserialize;
+
+export type RelatorioDeTetos_Deserialize = {
+	monitor_hz?: number | null,
+	tetos: TetoEscondido_Deserialize[],
+	/**  Sem placa NVIDIA não entra aqui; entra quando havia o que ler e a leitura falhou. */
+	lacunas: string[],
+};
+
+export type RelatorioDeTetos_Serialize = {
+	monitor_hz: number | null,
+	tetos: TetoEscondido_Serialize[],
+	/**  Sem placa NVIDIA não entra aqui; entra quando havia o que ler e a leitura falhou. */
+	lacunas: string[],
+};
+
+export type RelatorioDoPlano = RelatorioDoPlano_Serialize | RelatorioDoPlano_Deserialize;
+
+export type RelatorioDoPlano_Deserialize = {
+	maquina: MaquinaDeEnergia,
+	simulacao: boolean,
+	plano_existia: boolean,
+	guid_do_plano?: string | null,
+	guid_anterior?: string | null,
+	plano_ativo: boolean,
+	ajustes: ResultadoDoAjuste_Deserialize[],
+	aplicados: number,
+	ja_estavam_bons: number,
+	nao_suportados: number,
+	falhas: number,
+	desfecho: DesfechoDoPlano,
+};
+
+export type RelatorioDoPlano_Serialize = {
+	maquina: MaquinaDeEnergia,
+	simulacao: boolean,
+	plano_existia: boolean,
+	guid_do_plano: string | null,
+	guid_anterior: string | null,
+	plano_ativo: boolean,
+	ajustes: ResultadoDoAjuste_Serialize[],
+	aplicados: number,
+	ja_estavam_bons: number,
+	nao_suportados: number,
+	falhas: number,
+	desfecho: DesfechoDoPlano,
+};
+
 export type RelatorioDpc = RelatorioDpc_Serialize | RelatorioDpc_Deserialize;
 
 export type RelatorioDpc_Deserialize = {
@@ -1394,6 +1526,42 @@ export type ResultadoDaProva_Serialize = {
 	ficou_com_otimiza: boolean,
 	/**  Preenchido quando o desfazer depois de piorar falhou: a pessoa precisa saber que o plano ficou. */
 	falha_ao_desfazer: string | null,
+};
+
+export type ResultadoDoAjuste = ResultadoDoAjuste_Serialize | ResultadoDoAjuste_Deserialize;
+
+export type ResultadoDoAjuste_Deserialize = {
+	nome: string,
+	subgrupo: string,
+	ajuste: string,
+	classe: ClasseDoAjuste,
+	porque: string,
+	suportado: boolean,
+	ac_antes?: number | null,
+	dc_antes?: number | null,
+	ac_alvo?: number | null,
+	dc_alvo?: number | null,
+	ac_depois?: number | null,
+	dc_depois?: number | null,
+	status: StatusDoAjuste,
+	mensagem: string,
+};
+
+export type ResultadoDoAjuste_Serialize = {
+	nome: string,
+	subgrupo: string,
+	ajuste: string,
+	classe: ClasseDoAjuste,
+	porque: string,
+	suportado: boolean,
+	ac_antes: number | null,
+	dc_antes: number | null,
+	ac_alvo: number | null,
+	dc_alvo: number | null,
+	ac_depois: number | null,
+	dc_depois: number | null,
+	status: StatusDoAjuste,
+	mensagem: string,
 };
 
 /**
@@ -1587,6 +1755,10 @@ export type SinalDoWifi = "Forte" | "Bom" | "Fraco" | "MuitoFraco";
  */
 export type Sobreposicao = "Segura" | ({ Desaconselhada: string }) & { Barrada?: never } | ({ Barrada: string }) & { Desaconselhada?: never };
 
+export type StatusDoAjuste = "Aplicado" | "JaEstavaBom" | "NaoSuportado" | "FalhouAoAplicar" | "FalhouNaVerificacao" | 
+/**  Separado de `Pulado`: a tela dizia "não se aplica aqui" sobre o boost que mudaria de 1 para 2. */
+"Mudaria" | "Pulado";
+
 /**  No contrato, e não recalculado pela tela, para painel e backend não discordarem. */
 export type Summary = {
 	measured: number,
@@ -1633,6 +1805,22 @@ export type Telemetry_Serialize = {
 	summary: Summary,
 	metrics: { [key in string]: Metric_Serialize },
 };
+
+export type TetoEscondido = TetoEscondido_Serialize | TetoEscondido_Deserialize;
+
+export type TetoEscondido_Deserialize = { tipo: "LimiteGlobalNvidia"; fps: number } | { tipo: "VsyncForcadoNvidia" } | { tipo: "Rtss" } | { tipo: "LimiteNoJogo"; jogo: string; fps: number; arquivo: string } | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string } | 
+/**
+ *  Padrão de fábrica (60 FPS) ou abaixo do monitor. Visto aqui: Roblox a 59,5 FPS com CPU e placa a ~35% num
+ *  monitor de 180 Hz.
+ */
+{ tipo: "RobloxLimitado"; fps?: number | null; arquivo: string };
+
+export type TetoEscondido_Serialize = { tipo: "LimiteGlobalNvidia"; fps: number } | { tipo: "VsyncForcadoNvidia" } | { tipo: "Rtss" } | { tipo: "LimiteNoJogo"; jogo: string; fps: number; arquivo: string } | { tipo: "VsyncNoJogo"; jogo: string; arquivo: string } | 
+/**
+ *  Padrão de fábrica (60 FPS) ou abaixo do monitor. Visto aqui: Roblox a 59,5 FPS com CPU e placa a ~35% num
+ *  monitor de 180 Hz.
+ */
+{ tipo: "RobloxLimitado"; fps: number | null; arquivo: string };
 
 export type TipoDeRotina = 
 /**  DPC comum, de temporizador ou "threaded". */
@@ -1717,6 +1905,13 @@ export type VersaoDoApp = {
 	/**  O que o cliente vê ("1.0"). */
 	exibida: string,
 };
+
+/**  LEITURA PURA. */
+export type VistoriaDoPlano = { estado: "NaoExiste" } | { estado: "Integro" } | 
+/**  Instalador de driver, utilitário do fabricante e concorrentes trocam o plano ativo sem avisar. */
+{ estado: "DesativadoPorFora" } | { estado: "Desviado"; ativo: boolean; 
+/**  O nome do ajuste é o que o cliente consegue conferir. */
+ajustes: string[] } | { estado: "NaoConsegui" };
 
 export type Vizinhanca = {
 	/**  Outras redes exatamente no seu canal. */

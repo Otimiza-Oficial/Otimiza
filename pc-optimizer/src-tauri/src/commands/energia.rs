@@ -126,6 +126,7 @@ pub async fn energia_medir_atual(
 }
 
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn tetos_escondidos() -> Result<crate::modules::windows::tetos::Relatorio, String> {
     tokio::task::spawn_blocking(crate::modules::windows::tetos::procurar)
         .await
@@ -253,6 +254,7 @@ pub fn energia_modo_dinamico(ligado: bool) -> Result<bool, String> {
 
 /// Energia de jogo: o que muda no processador com o jogo aberto e se está ligada. `LIVRES`: só lê.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn energia_de_jogo() -> Result<crate::plataforma::energia_jogo::Painel, String> {
     #[cfg(target_os = "windows")]
     {
@@ -264,6 +266,7 @@ pub fn energia_de_jogo() -> Result<crate::plataforma::energia_jogo::Painel, Stri
 
 /// Liga ou desliga a energia de jogo. Desligar devolve na hora o que estava escrito. `EXIGEM_LICENCA`.
 #[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
 pub fn energia_de_jogo_definir(
     ligado: bool,
 ) -> Result<crate::plataforma::energia_jogo::Painel, String> {
@@ -281,6 +284,7 @@ pub fn energia_de_jogo_definir(
 
 /// `LIVRES`: responde "por que não funcionou?" antes de pagar.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn diagnostico_de_energia(
 ) -> Result<crate::modules::windows::planoenergia::Diagnostico, String> {
     #[cfg(target_os = "windows")]
@@ -296,6 +300,7 @@ pub async fn diagnostico_de_energia(
 
 /// `LIVRES`: quem não comprou é quem precisa ver.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn simular_plano_otimiza(
 ) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     #[cfg(target_os = "windows")]
@@ -311,6 +316,7 @@ pub async fn simular_plano_otimiza(
 
 /// `EXIGEM_LICENCA`. UMA linha no histórico: o plano do cliente não é tocado, desfazer é reativar o anterior.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn aplicar_plano_otimiza(
     state: State<'_, AppState>,
 ) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
@@ -350,6 +356,7 @@ pub async fn aplicar_plano_otimiza(
 
 /// `LIVRES`: a pergunta de quem "aplicou e depois voltou tudo".
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn vistoriar_plano_otimiza(
 ) -> Result<crate::modules::windows::planoenergia::Vistoria, String> {
     #[cfg(target_os = "windows")]
@@ -366,6 +373,7 @@ pub async fn vistoriar_plano_otimiza(
 /// `EXIGEM_LICENCA`. NÃO mexe no histórico: o anterior guardado continua certo, e uma linha nova daria dois
 /// "desfazer" para uma troca só.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn reparar_plano_otimiza(
 ) -> Result<crate::modules::windows::planoenergia::RelatorioDoPlano, String> {
     crate::modules::licenca::exigir()?;
