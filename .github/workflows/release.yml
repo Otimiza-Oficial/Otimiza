@@ -282,6 +282,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # O atestado online da licença (modules/licenca_online.rs). Vazia (a variável do repositório não criada), o
+          # programa não fala com servidor nenhum; só `https://` liga. Não é segredo: é o endereço público da API do bot.
+          OTIMIZA_API_LICENCA: ${{ vars.OTIMIZA_API_LICENCA }}
         with:
           projectPath: pc-optimizer
           tagName: ${{ github.ref_name }}

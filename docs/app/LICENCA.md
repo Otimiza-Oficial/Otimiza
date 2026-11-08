@@ -278,6 +278,31 @@ uma tabela de revogadas, e o registro de quem pede (máquina, SHA-256 do
 executável, IP). A mesma chave vindo de muitas impressões, ou um executável fora
 dos publicados, é repasse ou binário remendado.
 
+### Atestado online — o lado do bot está pronto (08/11/2026)
+
+O que foi feito no bot (pasta do bot, fora deste repositório):
+
+- `otimiza-licenca.cjs` ganhou `emitirAtestado` e `emitirRevogacao`, no formato que `licenca_online.rs` confere. O
+  teste `o_atestado_e_a_revogacao_do_bot_conferem_aqui` (em `licenca_online_prova.rs`) prova isso com um atestado
+  gerado pelo bot.
+- A rota `POST /v1/licencas/atestado` na API do bot: só responde a licença assinada por nós e para a máquina dela;
+  revogada devolve a revogação assinada; registra cada pedido só com impressões (SHA-256 da chave, do IP) e avisa no
+  log e na auditoria quando a mesma licença aparece em muitos IPs ou com um executável fora dos publicados
+  (`OTIMIZA_EXECUTAVEIS_PUBLICADOS`). Nunca revoga sozinho. Provada por `npm run teste-atestado` (7 casos).
+- `/licenca revogar` e `/licenca reativar` no Discord.
+- `npm run empacotar` monta o pacote da Square Cloud e se recusa a montar se qualquer segredo do `.env` (ou um token
+  do Discord, chave PEM, token do Mercado Pago) estiver em algum arquivo. **Suba só o `bot-pacote.zip` que ele gera.**
+- A chave pública de reserva do bot deixou de ser a `sR3n…` (a que vazou) e passou a ser a atual.
+
+Para ligar (decisões do dono, nesta ordem):
+
+1. Subir o `bot-pacote.zip` novo na Square Cloud. A rota de saúde deve responder `2026-11-08.1-atestado`.
+2. Na Square Cloud, conferir `OTIMIZA_CHAVE_PUBLICA` (a `Fz2A…`) e, para as compras antigas,
+   `OTIMIZA_CHAVE_PUBLICA_ANTERIOR` com a `sR3n…`.
+3. No GitHub do app, criar a variável de repositório `OTIMIZA_API_LICENCA` com o endereço `https://` da API do bot.
+   O próximo lançamento já sai pedindo atestado (sem trancar ninguém: `EXIGE_ATESTADO` continua `false`).
+4. Depois de algumas semanas vendo os clientes renovarem, ligar `EXIGE_ATESTADO`.
+
 ### Se for preciso trocar a privada de novo (rotação)
 
 1. `node pc-optimizer\bot\otimiza-licenca.cjs instalar <.env do bot>` gera o par
