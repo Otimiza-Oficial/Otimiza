@@ -634,6 +634,7 @@ let preferenciasDemo: Preferencias = {
   auto_game_mode: false,
   show_unavailable: true,
   medir_quadros_sozinho: true,
+  discord_presenca: false,
 };
 let sobreposicaoDemo: Sobreposicao = {
   config: { modo: "Minimo", canto: "SuperiorEsquerdo", confirmados: [], com_frame_boost: false, versao: 2 },
@@ -768,6 +769,7 @@ export const ponte = {
   },
   /** O ícone da bandeja acompanha o humor do Oti (o Rust só troca quando muda). */
   bandejaHumor: (humor: string) => (noTauri ? commands.bandejaHumor(humor).catch(() => null) : Promise.resolve(null)),
+  discordDisponivel: (): Promise<boolean> => (noTauri ? commands.discordDisponivel() : Promise.resolve(true)),
   cancelarCalibracao: () => (noTauri ? commands.energiaCalibrarCancelar() : Promise.resolve()),
   aplicarCalibrado: (): Promise<string> =>
     noTauri ? commands.energiaAplicarCalibrado() : Promise.resolve("Pronto: o vencedor está no plano OTIMIZA, conferido relendo do Windows."),

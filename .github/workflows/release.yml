@@ -285,6 +285,8 @@ jobs:
           # O atestado online da licença (modules/licenca_online.rs). Vazia (a variável do repositório não criada), o
           # programa não fala com servidor nenhum; só `https://` liga. Não é segredo: é o endereço público da API do bot.
           OTIMIZA_API_LICENCA: ${{ vars.OTIMIZA_API_LICENCA }}
+          # ID público da aplicação do Discord (o mesmo CLIENT_ID do bot): liga o "Jogando … com o Otimiza".
+          OTIMIZA_DISCORD_APP_ID: ${{ vars.OTIMIZA_DISCORD_APP_ID }}
         with:
           projectPath: pc-optimizer
           tagName: ${{ github.ref_name }}

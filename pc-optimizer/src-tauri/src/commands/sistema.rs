@@ -30,8 +30,18 @@ pub fn get_preferences() -> Preferences {
 #[cfg_attr(test, specta::specta)]
 pub fn set_preferences(preferences: Preferences) -> Result<Preferences, String> {
     preferences.save()?;
+    let gravado = Preferences::load();
+    #[cfg(target_os = "windows")]
+    crate::plataforma::discord::maquina::definir(gravado.discord_presenca);
     // Valores fora da faixa são corrigidos: a interface reflete o gravado, não o pedido.
-    Ok(Preferences::load())
+    Ok(gravado)
+}
+
+/// Esta versão sabe falar com o Discord (o ID da aplicação entrou na compilação). `LIVRES`.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn discord_disponivel() -> bool {
+    crate::plataforma::discord::id_da_aplicacao().is_some()
 }
 
 // A Lixeira saiu do liberador na 2.9: é item da Limpeza do sistema, desmarcado.

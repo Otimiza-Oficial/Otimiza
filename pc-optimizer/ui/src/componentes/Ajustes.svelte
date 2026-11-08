@@ -76,7 +76,10 @@
     window.dispatchEvent(new Event("otimiza.epoca"));
   }
 
+  let discordDisponivel = $state(false);
+
   onMount(() => {
+    ponte.discordDisponivel().then((d) => (discordDisponivel = d)).catch(() => {});
     ponte.sobreposicao().then((s) => (sobreposicao = s)).catch(() => {});
     ponte.preferencias().then((p) => (preferencias = p)).catch(() => {});
     ponte.licenca().then((l) => (licenca = l)).catch(() => {});
@@ -181,6 +184,17 @@
         <li>
           <div class="info"><span>Medir o FPS dos jogos sozinho</span><span class="apoio">Só escuta o Windows; não muda nada. É o que enche o Último jogo e a área Jogos.</span></div>
           <button class="interruptor" role="switch" aria-checked={preferencias.medir_quadros_sozinho} aria-label="Medir o FPS dos jogos sozinho" onclick={() => mudar("medir_quadros_sozinho", !preferencias!.medir_quadros_sozinho)}></button>
+        </li>
+        <li>
+          <div class="info">
+            <span>Mostrar o jogo no Discord</span>
+            <span class="apoio">
+              {discordDisponivel
+                ? "Seu perfil mostra \"Jogando <jogo> · com o Otimiza\" com o Oti, pelo Discord aberto neste PC. Só o nome do jogo sai daqui."
+                : "Não disponível nesta versão."}
+            </span>
+          </div>
+          <button class="interruptor" role="switch" aria-checked={preferencias.discord_presenca} aria-label="Mostrar o jogo no Discord" disabled={!discordDisponivel} onclick={() => mudar("discord_presenca", !preferencias!.discord_presenca)}></button>
         </li>
         <li>
           <div class="info"><span>Modo jogo automático</span><span class="apoio">Muda o sistema quando um jogo abre. Vem desligado: nada muda sem você pedir.</span></div>

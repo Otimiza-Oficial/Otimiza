@@ -252,6 +252,7 @@ pub fn run() {
             commands::cs2_ligar,
             commands::cs2_desligar,
             commands::bandeja_humor,
+            commands::discord_disponivel,
             commands::oti_perguntar,
             commands::banda_painel,
             commands::banda_ligar,
@@ -379,6 +380,9 @@ pub fn run() {
             // Recebe o estado da partida do CS2, quando a integração está ligada (`plataforma::cs2`).
             #[cfg(target_os = "windows")]
             plataforma::cs2::maquina::escutar();
+            // "Jogando <jogo> · com o Otimiza" no Discord, se a pessoa ligar (`plataforma::discord`).
+            #[cfg(target_os = "windows")]
+            plataforma::discord::maquina::vigiar();
 
             #[cfg(debug_assertions)]
             {

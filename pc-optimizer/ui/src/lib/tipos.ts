@@ -104,6 +104,8 @@ export const commands = {
 	cs2Desligar: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_desligar"),
 	/**  A tela avisa o humor do Oti; o ícone da bandeja muda junto. `LIVRES`: só a aparência do próprio Otimiza. */
 	bandejaHumor: (humor: string) => __TAURI_INVOKE<null>("bandeja_humor", { humor }),
+	/**  Esta versão sabe falar com o Discord (o ID da aplicação entrou na compilação). `LIVRES`. */
+	discordDisponivel: () => __TAURI_INVOKE<boolean>("discord_disponivel"),
 	/**  O controle de banda do segundo plano: se está ligado, em que jogo está agindo e o que o impede. `LIVRES`. */
 	bandaPainel: () => __TAURI_INVOKE<PainelDaBanda_Serialize>("banda_painel"),
 	/**  Liga. Com o jogo aberto, limita na hora; sem administrador, o resultado diz isso em vez de falhar. */
@@ -1685,6 +1687,8 @@ export type Preferences_Deserialize = {
 	show_unavailable?: boolean,
 	/**  LIGADO por padrão, ao contrário do modo jogo: medir só escuta os eventos do Windows e não muda nada. */
 	medir_quadros_sozinho?: boolean,
+	/**  DESLIGADO por padrão: mostrar no Discord o jogo aberto é a pessoa que decide. */
+	discord_presenca?: boolean,
 };
 
 export type Preferences_Serialize = {
@@ -1695,6 +1699,8 @@ export type Preferences_Serialize = {
 	show_unavailable: boolean,
 	/**  LIGADO por padrão, ao contrário do modo jogo: medir só escuta os eventos do Windows e não muda nada. */
 	medir_quadros_sozinho: boolean,
+	/**  DESLIGADO por padrão: mostrar no Discord o jogo aberto é a pessoa que decide. */
+	discord_presenca: boolean,
 };
 
 export type ProblemaDaRota = "perda" | "variacao";
