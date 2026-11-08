@@ -4,6 +4,7 @@
   // ajuste que não deu para verificar diz isso, em vez de fingir "já está bom".
   import { onMount } from "svelte";
   import Bios from "./Bios.svelte";
+  import SistemaAvancado from "./SistemaAvancado.svelte";
   import {
     ponte,
     type AjusteDoCatalogo,
@@ -12,7 +13,7 @@
     type StartupEntry,
   } from "../lib/ponte";
 
-  type Aba = "ajustes" | "inicializacao" | "limpeza" | "restauracao" | "bios";
+  type Aba = "ajustes" | "inicializacao" | "limpeza" | "restauracao" | "bios" | "avancado";
 
   const GRUPO: Record<string, string> = {
     Gaming: "Jogos",
@@ -150,7 +151,7 @@
 
 <div class="sistema">
   <div class="abas-internas" role="tablist" aria-label="Partes do Sistema">
-    {#each [["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"]] as [id, nome] (id)}
+    {#each [["ajustes", "Ajustes"], ["inicializacao", "Inicialização"], ["limpeza", "Limpeza"], ["restauracao", "Restauração"], ["bios", "BIOS"], ["avancado", "Avançado"]] as [id, nome] (id)}
       <button role="tab" aria-selected={aba === id} onclick={() => (aba = id as Aba)}>{nome}</button>
     {/each}
   </div>
@@ -260,6 +261,8 @@
     {/if}
   {:else if aba === "bios"}
     <Bios />
+  {:else if aba === "avancado"}
+    <SistemaAvancado />
   {:else}
     {#if restauracao === null}
       <p class="vazio">Lendo a proteção do sistema…</p>
