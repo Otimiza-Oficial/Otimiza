@@ -80,39 +80,33 @@
 </script>
 
 <div class="area-latencia">
-  <section class="bloco">
-    <h2>Caçador de DPC</h2>
-    <p class="detalhe">
-      Mede qual driver segura o processador por tempo demais, o que vira travadinha, áudio picotando e clique
-      atrasado. Use o PC como de costume (ou jogue) enquanto mede. Nada é alterado.
+  <section class="secao">
+    <h2>Qual driver segura o processador</h2>
+    <p class="apoio texto">
+      Driver que segura o processador por tempo demais vira travadinha, áudio picotando e clique atrasado. Use o PC
+      como de costume, ou jogue, enquanto mede. Nada é alterado.
     </p>
 
     {#if admin === false}
-      <div class="aviso" data-tipo="atencao">
-        <strong>A medição precisa do Otimiza aberto como administrador.</strong>
-        <span>O Windows só entrega esses eventos do sistema a quem é administrador.</span>
-        <button class="secundario" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+      <div class="recado">
+        <span class="ponto" data-tom="atencao"></span>
+        <div>
+          <span>A medição precisa do Otimiza aberto como administrador: o Windows só entrega esses eventos a ele.</span>
+          <button class="btn" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+        </div>
       </div>
     {/if}
 
     <div class="controles">
       <div class="duracoes" role="radiogroup" aria-label="Duração">
         {#each DURACOES as d (d)}
-          <button
-            role="radio"
-            aria-checked={segundos === d}
-            class="chip"
-            disabled={medindo}
-            onclick={() => (segundos = d)}>{d} s</button
-          >
+          <button role="radio" aria-checked={segundos === d} disabled={medindo} onclick={() => (segundos = d)}>{d} s</button>
         {/each}
       </div>
       {#if medindo}
-        <button class="secundario" disabled={parando} onclick={parar}>
-          {parando ? "Parando…" : "Parar agora"}
-        </button>
+        <button class="btn" disabled={parando} onclick={parar}>{parando ? "Parando…" : "Parar agora"}</button>
       {:else}
-        <button class="principal" disabled={admin === false} onclick={medir}>
+        <button class="btn primario" disabled={admin === false} onclick={medir}>
           {resultado ? "Medir de novo" : "Começar a medir"}
         </button>
       {/if}
@@ -122,170 +116,141 @@
       <div class="progresso" role="progressbar" aria-valuemin={0} aria-valuemax={segundos} aria-valuenow={passou}>
         <div style:width={`${(passou / segundos) * 100}%`}></div>
       </div>
-      <p class="detalhe">Medindo… {passou} de {segundos} s</p>
+      <p class="apoio">Medindo… {passou} de {segundos} s</p>
+    {/if}
+
+    {#if erro}
+      <div class="recado" role="alert">
+        <span class="ponto" data-tom="perigo"></span>
+        <div><span>{erro}</span></div>
+      </div>
+    {/if}
+
+    {#if resultado && resultado.estado !== "Medido"}
+      <div class="recado" role="status">
+        <span class="ponto" data-tom={resultado.estado === "Falhou" ? "perigo" : "atencao"}></span>
+        <div>
+          <span>{resultado.texto}</span>
+          {#if resultado.estado === "PrecisaDeAdministrador"}
+            <button class="btn" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+          {/if}
+        </div>
+      </div>
     {/if}
   </section>
 
-  {#if erro}
-    <div class="aviso" data-tipo="erro" role="alert"><span>{erro}</span></div>
-  {/if}
-
-  {#if resultado && resultado.estado !== "Medido"}
-    <div class="aviso" data-tipo={resultado.estado === "Falhou" ? "erro" : "atencao"} role="status">
-      <span>{resultado.texto}</span>
-      {#if resultado.estado === "PrecisaDeAdministrador"}
-        <button class="secundario" onclick={abrirComoAdministrador}>Abrir como administrador</button>
-      {/if}
-    </div>
-  {/if}
-
   {#if relatorio}
-    <section class="bloco">
+    <section class="secao">
       <div class="topo">
         <h2>Resultado</h2>
-        <span class="selo">Medido</span>
-        <span class="detalhe">
-          {relatorio.duracao_s != null ? `${Math.round(relatorio.duracao_s)} s` : ""} ·
-          {relatorio.eventos.toLocaleString("pt-BR")} eventos · {pct(relatorio.pct_total_de_um_nucleo)} de um núcleo
+        <span class="selo-medido">Medido</span>
+        <span class="apoio">
+          {relatorio.duracao_s != null ? `${Math.round(relatorio.duracao_s)} s · ` : ""}{relatorio.eventos.toLocaleString("pt-BR")}
+          eventos · {pct(relatorio.pct_total_de_um_nucleo)} de um núcleo
         </span>
       </div>
-      <p class="frase" data-tipo={relatorio.veredito.tipo}>{relatorio.veredito.texto}</p>
-      {#if relatorio.veredito.tipo === "NenhumPico" && relatorio.veredito.observacao}
-        <p class="detalhe">{relatorio.veredito.observacao}</p>
-      {/if}
-      {#each relatorio.avisos as a, i (i)}
-        <p class="detalhe aviso-linha">{a}</p>
-      {/each}
+      <div class="veredito">
+        <span
+          class="ponto"
+          data-tom={relatorio.veredito.tipo === "NenhumPico" ? "ok" : relatorio.veredito.tipo === "DriversComPico" ? "perigo" : "atencao"}
+        ></span>
+        <div>
+          <p class="destaque">{relatorio.veredito.texto}</p>
+          {#if relatorio.veredito.tipo === "NenhumPico" && relatorio.veredito.observacao}
+            <p class="apoio">{relatorio.veredito.observacao}</p>
+          {/if}
+          {#each relatorio.avisos as a, i (i)}
+            <p class="apoio">{a}</p>
+          {/each}
+        </div>
+      </div>
 
       {#if drivers.length > 0}
-        <ul class="drivers">
-          {#each drivers as d (d.arquivo + d.nome_amigavel)}
-            <li data-nivel={d.nivel}>
-              <div class="cabeca">
-                <strong title={d.atribuicao === "Aproximada" ? "Atribuição aproximada: o módulo de endereço mais próximo" : undefined}>
-                  {nome(d)}{d.atribuicao === "Aproximada" ? " (aprox.)" : ""}
-                </strong>
-                <span class="nivel">{NOME_DO_NIVEL[d.nivel]}</span>
-              </div>
-              <div class="numeros">
-                <span><b>{us(d.maximo_us)}</b> pior</span>
-                <span><b>{d.p99_ate_us == null ? "—" : `até ${us(d.p99_ate_us)}`}</b> em 99%</span>
-                <span><b>{d.acima_1ms}</b> acima de 1 ms</span>
-                <span><b>{pct(d.pct_de_um_nucleo)}</b> de um núcleo</span>
-              </div>
-              {#if d.acao}<p class="acao">{d.acao}</p>{/if}
-            </li>
-          {/each}
-        </ul>
+        <table class="drivers">
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th class="n">Pior</th>
+              <th class="n">Em 99%</th>
+              <th class="n">Acima de 1 ms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each drivers as d (d.arquivo + d.nome_amigavel)}
+              <tr>
+                <td>
+                  <span class="nome">
+                    <span class="ponto" data-tom={d.nivel === "Pico" ? "perigo" : d.nivel === "Atencao" ? "atencao" : "ok"}></span>
+                    <span>
+                      {nome(d)}{d.atribuicao === "Aproximada" ? " (aprox.)" : ""}
+                      <span class="apoio">· {NOME_DO_NIVEL[d.nivel]}</span>
+                    </span>
+                  </span>
+                  {#if d.acao}<p class="acao apoio">{d.acao}</p>{/if}
+                </td>
+                <td class="n numero">{us(d.maximo_us)}</td>
+                <td class="n numero">{d.p99_ate_us == null ? "—" : `até ${us(d.p99_ate_us)}`}</td>
+                <td class="n numero">{d.acima_1ms}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {/if}
     </section>
   {/if}
 </div>
 
 <style>
-  .area-latencia {
-    display: grid;
-    gap: 12px;
-    margin-top: 20px;
-    max-height: min(62vh, 640px);
-    overflow: auto;
-    padding-right: 4px;
+  .texto {
+    font-size: var(--t-corpo);
+    max-width: 62ch;
   }
-  .bloco {
-    display: grid;
-    gap: 8px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: var(--vidro);
-    border: 1px solid var(--vidro-borda);
-  }
-  h2 {
-    margin: 0;
-    font-size: 12px;
+  .destaque {
     font-weight: 500;
-    color: var(--tinta-suave);
-  }
-  .detalhe {
-    margin: 0;
-    font-size: 13px;
-    color: var(--tinta-suave);
-  }
-  .aviso {
-    display: grid;
-    gap: 4px;
-    justify-items: start;
-    padding: 12px 16px 12px 18px;
-    border-radius: 16px;
-    background: var(--vidro-denso);
-    border-left: 4px solid var(--atencao);
-    font-size: 14px;
-  }
-  .aviso[data-tipo="erro"] {
-    border-left-color: var(--perigo);
-  }
-  .aviso span {
-    color: var(--tinta-suave);
-  }
-  button {
-    font: inherit;
-    cursor: pointer;
-  }
-  button:disabled {
-    cursor: default;
-    opacity: 0.55;
   }
   .controles {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
   }
+  /* Controle segmentado: três durações, uma escolhida. */
   .duracoes {
-    display: flex;
-    gap: 6px;
-    flex: 1;
+    display: inline-flex;
+    padding: 3px;
+    border-radius: var(--raio-1);
+    background: var(--superficie-2);
+    border: 1px solid var(--linha);
   }
-  .chip {
-    padding: 6px 14px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro);
-    color: var(--tinta);
-    font-size: 13px;
-  }
-  .chip[aria-checked="true"] {
-    background: var(--ceu-500);
-    border-color: transparent;
-    color: white;
-  }
-  .principal {
-    padding: 8px 18px;
+  .duracoes button {
+    min-width: 56px;
+    height: 30px;
     border: 0;
-    border-radius: var(--raio-botao);
-    font-weight: 600;
-    color: white;
-    background: var(--ceu-700);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--tinta-2);
+    cursor: pointer;
   }
-  .secundario {
-    padding: 7px 14px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro);
+  .duracoes button[aria-checked="true"] {
+    background: var(--superficie);
     color: var(--tinta);
+    box-shadow: var(--sombra-1);
+    font-weight: 500;
+  }
+  .duracoes button:disabled {
+    cursor: default;
   }
   .progresso {
-    height: 6px;
-    border-radius: 3px;
-    background: rgb(120 130 160 / 0.25);
+    height: 4px;
+    border-radius: 2px;
+    background: var(--linha);
     overflow: hidden;
   }
   .progresso div {
     height: 100%;
-    background: var(--ceu-500);
+    background: var(--acao);
     transition: width 900ms linear;
-  }
-  :global(.jogo-aberto) .progresso div {
-    transition: none;
   }
   .topo {
     display: flex;
@@ -293,80 +258,61 @@
     gap: 8px;
     flex-wrap: wrap;
   }
-  .selo {
-    padding: 1px 8px;
-    border-radius: var(--raio-botao);
-    font-size: 11px;
+  .topo h2 {
+    font-size: var(--t-corpo);
     font-weight: 600;
-    color: var(--ambar-700);
-    background: rgb(255 230 204 / 0.85);
   }
-  .frase {
-    margin: 0;
-    font-weight: 600;
-    padding-left: 10px;
-    border-left: 3px solid var(--sucesso);
+  .veredito {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
   }
-  .frase[data-tipo="DriversComPico"] {
-    border-left-color: var(--perigo);
+  .veredito .ponto {
+    transform: translateY(-1px);
   }
-  .frase[data-tipo="SemEventos"] {
-    border-left-color: var(--atencao);
-  }
-  .aviso-linha {
-    color: var(--atencao);
+  .veredito > div {
+    display: grid;
+    gap: 4px;
   }
   .drivers {
-    list-style: none;
-    margin: 4px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 6px;
+    width: 100%;
+    border-collapse: collapse;
   }
-  .drivers li {
-    display: grid;
-    gap: 6px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background: var(--vidro-denso);
-    border-left: 3px solid var(--sucesso);
+  .drivers th {
+    padding: 0 8px 6px;
+    text-align: left;
+    font-weight: 500;
+    font-size: var(--t-apoio);
+    color: var(--tinta-2);
+    border-bottom: 1px solid var(--linha);
   }
-  .drivers li[data-nivel="Atencao"] {
-    border-left-color: var(--atencao);
+  .drivers td {
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--linha);
+    vertical-align: top;
   }
-  .drivers li[data-nivel="Pico"] {
-    border-left-color: var(--perigo);
+  .drivers th:first-child,
+  .drivers td:first-child {
+    padding-left: 0;
   }
-  .cabeca {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .drivers tr:last-child td {
+    border-bottom: 0;
   }
-  .cabeca strong {
-    flex: 1;
-    font-size: 14px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .drivers .n {
+    text-align: right;
     white-space: nowrap;
   }
-  .nivel {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--tinta-suave);
-  }
-  .numeros {
+  .nome {
     display: flex;
-    gap: 14px;
-    flex-wrap: wrap;
-    font-size: 12px;
-    color: var(--tinta-suave);
+    gap: 10px;
+    align-items: baseline;
   }
-  .numeros b {
-    color: var(--tinta);
-    font-variant-numeric: tabular-nums;
+  .nome .ponto {
+    transform: translateY(-1px);
   }
   .acao {
-    margin: 0;
+    margin: 4px 0 0 18px;
     font-size: 13px;
+    max-width: 52ch;
   }
 </style>

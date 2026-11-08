@@ -108,56 +108,66 @@
 
 <div class="area-tela">
   {#if troca}
-    <div class="aviso manter" data-tipo="atencao" role="alertdialog" aria-labelledby="manter-titulo">
-      <strong id="manter-titulo">A imagem está boa em {troca.hz_novo} Hz?</strong>
-      <span>Sem resposta, volta para {troca.hz_anterior} Hz em {restam} s.</span>
-      <div class="botoes">
-        <button class="principal" onclick={manter}>Manter</button>
-        <button class="secundario" onclick={voltar}>Voltar</button>
+    <div class="manter" role="alertdialog" aria-labelledby="manter-titulo">
+      <div>
+        <strong id="manter-titulo">A imagem está boa em {troca.hz_novo} Hz?</strong>
+        <span class="apoio">Sem resposta, volta para {troca.hz_anterior} Hz em {restam} s.</span>
       </div>
+      <button class="btn" onclick={voltar}>Voltar</button>
+      <button class="btn primario" onclick={manter}>Manter</button>
     </div>
   {/if}
 
   {#if aviso}
-    <div class="aviso" data-tipo={aviso.tipo} role="status"><span>{aviso.texto}</span></div>
+    <div class="recado" role="status">
+      <span class="ponto" data-tom={aviso.tipo === "ok" ? "ok" : aviso.tipo === "erro" ? "perigo" : "atencao"}></span>
+      <div><span>{aviso.texto}</span></div>
+    </div>
   {/if}
 
   {#if erro}
-    <div class="aviso" data-tipo="erro" role="alert">
-      <strong>Não consegui ler os monitores.</strong>
-      <span>{erro}</span>
-      <button class="secundario" onclick={carregar}>Tentar de novo</button>
+    <div class="recado" role="alert">
+      <span class="ponto" data-tom="perigo"></span>
+      <div>
+        <strong>Não consegui ler os monitores.</strong>
+        <span class="apoio">{erro}</span>
+        <button class="btn" onclick={carregar}>Tentar de novo</button>
+      </div>
     </div>
   {:else if telas === null}
     <p class="vazio">Lendo os monitores…</p>
   {:else if telas.length === 0}
     <p class="vazio">Nenhum monitor ativo foi encontrado.</p>
   {:else}
-    <ul class="monitores">
-      {#each telas as t (t.dispositivo)}
-        <li>
-          <div class="cabeca">
-            <div class="titulo">
-              <strong>{t.nome || t.dispositivo}</strong>
-              <span>{resolucao(t)}{t.principal ? " · principal" : ""}</span>
-            </div>
-            <div class="hz">
-              <span class="numero">{t.atual ? t.atual.hz : "—"}</span><small>Hz agora</small>
-            </div>
+    {#each telas as t (t.dispositivo)}
+      <section class="secao monitor">
+        <div class="cabeca">
+          <div>
+            <h2>{t.nome || t.dispositivo}</h2>
+            <span class="apoio">{resolucao(t)}{t.principal ? " · principal" : ""}</span>
           </div>
-          <p class="texto">{t.texto}</p>
-          {#if t.veredito.estado === "UmClique"}
+          <div class="hz">
+            <span class="numero">{t.atual ? t.atual.hz : "—"}</span>
+            <span class="apoio">Hz agora</span>
+          </div>
+        </div>
+        <p class="texto">
+          <span class="ponto" data-tom={t.veredito.estado === "NoMaximo" ? "ok" : t.veredito.estado === "ModosIlegiveis" ? "neutro" : "atencao"}></span>
+          {t.texto}
+        </p>
+        {#if t.veredito.estado === "UmClique"}
+          <div>
             <button
-              class="principal"
+              class="btn primario"
               disabled={ocupado !== null || troca !== null}
               onclick={() => t.veredito.estado === "UmClique" && trocar(t, t.veredito.hz_alvo)}
             >
               {ocupado === t.dispositivo ? "Trocando…" : `Usar ${t.veredito.hz_alvo} Hz`}
             </button>
-          {/if}
-        </li>
-      {/each}
-    </ul>
+          </div>
+        {/if}
+      </section>
+    {/each}
   {/if}
 </div>
 
@@ -165,108 +175,54 @@
   .area-tela {
     display: grid;
     gap: 12px;
-    margin-top: 20px;
-  }
-  .aviso {
-    display: grid;
-    gap: 4px;
-    justify-items: start;
-    padding: 12px 16px 12px 18px;
-    border-radius: 16px;
-    background: var(--vidro);
-    border-left: 4px solid var(--sucesso);
-    font-size: 14px;
-  }
-  .aviso[data-tipo="atencao"] {
-    border-left-color: var(--atencao);
-  }
-  .aviso[data-tipo="erro"] {
-    border-left-color: var(--perigo);
-  }
-  .aviso span {
-    color: var(--tinta-suave);
-  }
-  .manter {
-    background: var(--vidro-denso);
-    box-shadow: var(--vidro-sombra);
-  }
-  .botoes {
-    display: flex;
-    gap: 8px;
-    margin-top: 6px;
+    padding-top: 12px;
   }
   .vazio {
-    margin: 8px 0 0;
-    color: var(--tinta-suave);
+    padding: 24px 0;
+    color: var(--tinta-2);
   }
-  button {
-    font: inherit;
-    cursor: pointer;
-  }
-  button:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-  .principal {
-    justify-self: start;
-    padding: 8px 18px;
-    border: 0;
-    border-radius: var(--raio-botao);
-    font-weight: 600;
-    color: white;
-    background: var(--ceu-700);
-  }
-  .secundario {
-    padding: 8px 16px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro);
-    color: var(--tinta);
-  }
-  .monitores {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
-  }
-  .monitores > li {
-    display: grid;
-    gap: 8px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: var(--vidro);
-    border: 1px solid var(--vidro-borda);
-  }
-  .cabeca {
+  .manter {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    padding: 12px 12px 12px 16px;
+    border-radius: var(--raio-2);
+    background: var(--acao-suave);
   }
-  .titulo {
+  .manter > div {
     flex: 1;
     display: grid;
   }
-  .titulo span {
-    color: var(--tinta-suave);
-    font-size: 12px;
+  .manter strong {
+    font-weight: 500;
+  }
+  .monitor:first-of-type {
+    border-top: 0;
+  }
+  .cabeca {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
   }
   .hz {
-    display: grid;
-    justify-items: end;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
   .hz .numero {
-    font-size: 28px;
-    font-weight: 700;
+    font-size: var(--t-numero);
+    font-weight: 600;
     line-height: 1;
   }
-  .hz small {
-    color: var(--tinta-suave);
-    font-size: 11px;
-  }
   .texto {
-    margin: 0;
-    font-size: 14px;
-    color: var(--tinta-suave);
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    color: var(--tinta-2);
+    max-width: 62ch;
+  }
+  .texto .ponto {
+    transform: translateY(-1px);
   }
 </style>

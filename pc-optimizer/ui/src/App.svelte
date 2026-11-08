@@ -84,6 +84,22 @@
     return v == null ? "—" : v.toFixed(1).replace(".", ",");
   }
 
+  /** "Intel(R) Core(TM) i3-10100F CPU @ 3.60GHz" vira "Intel Core i3-10100F": a ficha cabe numa linha. */
+  function nomeCurto(nome: string) {
+    return nome
+      .replace(/\((R|TM)\)/gi, "")
+      .replace(/\s+CPU\s*@.*$/i, "")
+      .replace(/^NVIDIA\s+/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /** Sem capa: as iniciais do nome ("Counter-Strike 2" → "CS"), não uma letra solta. */
+  function iniciais(nome: string) {
+    const palavras = nome.split(/[\s:-]+/).filter((p) => /^[A-Za-zÀ-ú]/.test(p));
+    return (palavras.length > 1 ? palavras[0][0] + palavras[1][0] : nome.slice(0, 2)).toUpperCase();
+  }
+
   function inteiro(v: number | null) {
     return v == null ? "—" : String(Math.round(v));
   }
@@ -155,17 +171,19 @@
 <div class="casca">
   <header class="menu" data-tauri-drag-region>
     <div class="marca" data-tauri-drag-region>
-      <img src="/mascote-logo.png" alt="" width="22" height="22" />
+      <Mascote estado={jogo ? "focado" : "atento"} tamanho={26} />
       <strong>Otimiza</strong>
       {#if versao}<span class="versao">{versao.exibida}</span>{/if}
     </div>
 
+    <span class="onde" data-tauri-drag-region>{aberta === "inicio" ? "" : area.nome}</span>
+
     <div class="situacao" data-tauri-drag-region>
       {#if !noTauri}
-        <span class="pilula demo">Dados de demonstração</span>
+        <span class="demo">Dados de demonstração</span>
       {/if}
       {#if jogo}
-        <span class="pilula jogo">{jogo.nome} aberto</span>
+        <span class="jogo"><span class="ponto" data-tom="ok"></span>{jogo.nome} aberto</span>
       {/if}
       <span class="hora numero">{agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
     </div>
@@ -185,11 +203,11 @@
 
   <nav class="trilho" aria-label="Seus jogos">
     {#each trilho as { jogo: j, capa } (j.nome)}
-      <button class="espaco" title={j.nome} aria-label={j.nome} onclick={() => (aberta = "jogos")}>
+      <button class="capa" title={j.nome} aria-label={j.nome} onclick={() => (aberta = "jogos")}>
         {#if capa}
           <img src={capa} alt="" />
         {:else}
-          <span>{j.nome.slice(0, 1)}</span>
+          <span>{iniciais(j.nome)}</span>
         {/if}
       </button>
     {/each}
@@ -197,60 +215,88 @@
 
   <main class="mesa">
     {#if aberta === "inicio"}
-      <section class="saudacao">
-        <Mascote {estado} tamanho={200} />
-        <p class="frase">{fraseDoMascote(clima, jogo?.nome ?? null, lista)}</p>
+      <section class="inicio">
+        <div class="saudacao">
+          <Mascote {estado} tamanho={176} />
+          <div class="texto">
+            <h1>{fraseDoMascote(clima, jogo?.nome ?? null, lista)}</h1>
+            <p class="apoio-grande">
+              {#if jogo}
+                Com o jogo aberto eu só confiro, a cada 5 segundos, se ele continua lá.
+              {:else if lista.length === 0}
+                Olhei a tela e a memória. Rede, temperatura e disco entram nas próximas ondas.
+              {:else}
+                Cada item abaixo veio de um número lido agora neste PC.
+              {/if}
+            </p>
+          </div>
+        </div>
 
         {#if lista.length > 0}
-          <ul class="avisos">
+          <ul class="lista avisos">
             {#each lista as a (a.id)}
-              <li data-gravidade={a.gravidade}>
-                <strong>{a.titulo}</strong>
-                <span>{a.detalhe}</span>
+              <li>
+                <span class="ponto" data-tom={a.gravidade === "serio" ? "perigo" : "atencao"}></span>
+                <div class="aviso-texto">
+                  <strong>{a.titulo}</strong>
+                  <span class="apoio">{a.detalhe}</span>
+                </div>
+                {#if a.id.startsWith("hz-")}
+                  <button class="btn" onclick={() => (aberta = "tela")}>Corrigir</button>
+                {/if}
               </li>
             {/each}
           </ul>
         {/if}
 
-        <button class="turbo" onclick={() => (aberta = "turbo")}>
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M13 2 5 14h6l-1 8 8-12h-6z" /></svg>
-          Ligar o Turbo
-        </button>
+        <div class="acoes">
+          <button class="btn primario" onclick={() => (aberta = "turbo")}>Ligar o Turbo</button>
+          <button class="btn" onclick={() => (aberta = "historico")}>Ver o que foi mudado</button>
+        </div>
       </section>
     {:else}
       <section class="janela" aria-labelledby="titulo-da-area">
-        <header>
-          <span class="objeto grande" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="30" height="30"><path d={area.traco} /></svg>
+        <header class="janela-topo">
+          <span class="icone" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path d={area.traco} /></svg>
           </span>
           <div>
             <h1 id="titulo-da-area">{area.nome}</h1>
-            {#if area.pergunta}<p>{area.pergunta}</p>{/if}
+            {#if area.pergunta}<p class="apoio">{area.pergunta}</p>{/if}
           </div>
-          <button class="voltar" onclick={() => (aberta = "inicio")}>Voltar ao início</button>
+          <button class="fechar-janela" aria-label="Fechar e voltar ao início" title="Voltar ao início" onclick={() => (aberta = "inicio")}>
+            <svg viewBox="0 0 12 12" width="12" height="12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+          </button>
         </header>
-        {#if aberta === "historico"}
-          <Historico />
-        {:else if aberta === "rede"}
-          <Rede />
-        {:else if aberta === "latencia"}
-          <Latencia />
-        {:else if aberta === "tela"}
-          <Tela aoMudarHz={trocouHz} />
-        {:else}
-          <p class="chega">Esta área chega na Onda {area.onda} da Nova Geração. Vai ter:</p>
-          <ul>
-            {#each area.vai_ter as item (item)}
-              <li>{item}</li>
-            {/each}
-          </ul>
-        {/if}
+        <div class="janela-corpo">
+          {#if aberta === "historico"}
+            <Historico />
+          {:else if aberta === "rede"}
+            <Rede />
+          {:else if aberta === "latencia"}
+            <Latencia />
+          {:else if aberta === "tela"}
+            <Tela aoMudarHz={trocouHz} />
+          {:else}
+            <div class="em-breve">
+              <Mascote estado="descansando" tamanho={96} />
+              <p>{area.nome} chega na Onda {area.onda}. Por enquanto ela continua na interface atual do Otimiza.</p>
+              {#if area.vai_ter.length > 0}
+                <ul class="lista">
+                  {#each area.vai_ter as item (item)}
+                    <li>{item}</li>
+                  {/each}
+                </ul>
+              {/if}
+            </div>
+          {/if}
+        </div>
       </section>
     {/if}
   </main>
 
-  <aside class="widgets" aria-label="Agora">
-    <div class="temas" role="radiogroup" aria-label="Tema">
+  <aside class="lateral" aria-label="Agora">
+    <div class="temas" role="radiogroup" aria-label="Céu">
       {#each [["auto", "Céu da hora"], ["por-do-sol", "Pôr do sol"], ["lavanda", "Lavanda"], ["noite", "Noite"]] as [id, nome] (id)}
         <button
           role="radio"
@@ -264,65 +310,71 @@
       {/each}
     </div>
 
-    <div class="dupla">
-      <article class="widget">
-        <h2>Processador</h2>
-        <p class="valor numero">{jogo ? "—" : pct(metricas?.cpu.overall)}</p>
-        <div class="bolha-medidor" style:--nivel={`${Math.min(100, metricas?.cpu.overall ?? 0)}%`}></div>
-      </article>
-      <article class="widget">
-        <h2>Memória</h2>
-        <p class="valor numero">{jogo || memoriaPct == null ? "—" : pct(memoriaPct * 100)}</p>
-        <div class="bolha-medidor" style:--nivel={`${Math.min(100, (memoriaPct ?? 0) * 100)}%`}></div>
-      </article>
-    </div>
+    <section class="painel">
+      <h2>Agora</h2>
+      {#if jogo}
+        <p class="apoio">Pausado enquanto {jogo.nome} está aberto, para não pesar no jogo.</p>
+      {:else}
+        <div class="medidor">
+          <div class="medidor-linha"><span>Processador</span><span class="numero">{pct(metricas?.cpu.overall)}</span></div>
+          <div class="barra"><div style:width={`${Math.min(100, metricas?.cpu.overall ?? 0)}%`}></div></div>
+        </div>
+        <div class="medidor">
+          <div class="medidor-linha">
+            <span>Memória</span>
+            <span class="numero">{memoriaPct == null ? "—" : pct(memoriaPct * 100)}</span>
+          </div>
+          <div class="barra"><div style:width={`${Math.min(100, (memoriaPct ?? 0) * 100)}%`}></div></div>
+        </div>
+      {/if}
+    </section>
 
-    <article class="widget">
+    <section class="painel">
       <h2>Último jogo</h2>
       {#if ultimaPartida?.ultima}
         <p class="jogo-nome">{ultimaPartida.nome}</p>
-        <div class="tres">
-          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.fps_nativo)}</span><small>FPS</small></div>
-          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.low_1pct)}</span><small>1% pior</small></div>
+        <div class="dois">
+          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.fps_nativo)}</span><span class="apoio">FPS</span></div>
+          <div><span class="numero grande">{inteiro(ultimaPartida.ultima.low_1pct)}</span><span class="apoio">1% pior</span></div>
         </div>
         {#if ultimaPartida.ganho_low.estado === "Medido" && ultimaPartida.ganho_low.pct != null}
           <p class="ganho">
             {ultimaPartida.ganho_low.pct >= 0 ? "+" : ""}{decimal(ultimaPartida.ganho_low.pct)}% no 1% pior
-            <span class="selo">Medido</span>
+            <span class="selo-medido">Medido</span>
           </p>
         {:else if ultimaPartida.ganho_low.estado === "SemDiferenca"}
-          <p class="ganho neutro">Sem diferença medida <span class="selo">Medido</span></p>
+          <p class="apoio">Sem diferença medida no 1% pior.</p>
         {/if}
       {:else}
-        <p class="vazio">Jogue uma partida com o Otimiza aberto e o resultado aparece aqui.</p>
+        <p class="apoio">Jogue uma partida com o Otimiza aberto e o resultado aparece aqui.</p>
       {/if}
-    </article>
-
-    {#if telaPrincipal}
-      <article class="widget">
-        <h2>Tela</h2>
-        <p class="valor numero">{telaPrincipal.hz_atual} Hz</p>
-        <p class="detalhe">
-          {telaPrincipal.hz_maximo > telaPrincipal.hz_atual
-            ? `aguenta ${telaPrincipal.hz_maximo} Hz`
-            : "no máximo do monitor"}
-        </p>
-      </article>
-    {/if}
+    </section>
 
     {#if hardware}
-      <article class="widget maquina">
+      <section class="painel">
         <h2>Este PC</h2>
-        <p>{hardware.processador}</p>
-        <p>{hardware.placa.nome}</p>
-        <p>{decimal(hardware.memoria_gb)} GB de memória</p>
-      </article>
+        <dl class="ficha">
+          <dt>Processador</dt>
+          <dd>{nomeCurto(hardware.processador)}</dd>
+          <dt>Placa</dt>
+          <dd>{nomeCurto(hardware.placa.nome)}</dd>
+          <dt>Memória</dt>
+          <dd>{decimal(hardware.memoria_gb)} GB</dd>
+          {#if telaPrincipal}
+            <dt>Tela</dt>
+            <dd>
+              {telaPrincipal.hz_atual} Hz{#if telaPrincipal.hz_maximo > telaPrincipal.hz_atual}
+                <span class="apoio">&nbsp;· aguenta {telaPrincipal.hz_maximo}</span>{/if}
+            </dd>
+          {/if}
+        </dl>
+      </section>
     {/if}
   </aside>
 
   <nav class="dock" aria-label="Áreas">
     {#each areas as a (a.id)}
-      <button class="objeto" class:ativo={aberta === a.id} aria-label={a.nome} title={a.nome} onclick={() => (aberta = a.id)}>
+      <button class="area" class:ativa={aberta === a.id} aria-label={a.nome} title={a.nome} onclick={() => (aberta = a.id)}>
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d={a.traco} /></svg>
       </button>
     {/each}
@@ -335,12 +387,12 @@
     z-index: 1;
     height: 100vh;
     display: grid;
-    grid-template-columns: 72px 1fr 300px;
-    grid-template-rows: 44px 1fr 92px;
+    grid-template-columns: 64px minmax(0, 1fr) 288px;
+    grid-template-rows: 40px minmax(0, 1fr) 80px;
     grid-template-areas:
       "menu menu menu"
-      "trilho mesa widgets"
-      "trilho dock widgets";
+      "trilho mesa lateral"
+      "trilho dock lateral";
   }
 
   /* Barra de menu */
@@ -349,51 +401,42 @@
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 0 0 0 16px;
-    background: var(--vidro);
+    padding-left: 12px;
+    background: var(--superficie-menu);
     backdrop-filter: var(--desfoque);
-    border-bottom: 1px solid var(--vidro-borda);
+    border-bottom: 1px solid var(--linha);
+    font-size: 13px;
   }
   .marca {
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+  .marca strong {
     font-family: var(--fonte-titulo);
+    font-weight: 600;
   }
-  .marca img {
-    border-radius: 50%;
-  }
-  .versao {
-    color: var(--tinta-suave);
-    font-size: 12px;
+  .versao,
+  .onde {
+    color: var(--tinta-2);
   }
   .situacao {
     flex: 1;
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 10px;
+    gap: 16px;
     height: 100%;
+    color: var(--tinta-2);
   }
-  .pilula {
-    padding: 3px 10px;
-    border-radius: var(--raio-botao);
-    font-size: 12px;
-    background: var(--vidro-denso);
+  .demo {
+    color: var(--ambar);
   }
-  .pilula.demo {
-    color: var(--ambar-700);
-  }
-  :global(:root[data-tema="noite"]) .pilula.demo {
-    color: #ffd2a0;
-  }
-  .pilula.jogo {
-    background: var(--ceu-500);
-    color: white;
-  }
-  .hora {
-    color: var(--tinta-suave);
-    font-size: 13px;
+  .jogo {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--tinta);
   }
   .controles {
     display: flex;
@@ -405,17 +448,18 @@
     background: transparent;
     cursor: pointer;
   }
-  .controles svg {
+  .controles svg,
+  .fechar-janela svg {
     fill: none;
     stroke: currentColor;
     stroke-width: 1.3;
   }
   .controles button:hover {
-    background: rgb(255 255 255 / 0.4);
+    background: var(--linha);
   }
   .controles .fechar:hover {
-    background: var(--perigo);
-    color: white;
+    background: #c42b1c;
+    color: #fff;
   }
 
   /* Trilho de jogos */
@@ -425,26 +469,32 @@
     flex-direction: column;
     align-items: center;
     gap: 12px;
-    padding: 18px 0;
+    padding: 16px 0;
   }
-  .espaco {
-    width: 44px;
-    height: 44px;
+  .capa {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
     padding: 0;
-    border-radius: 50%;
-    border: 2px solid var(--vidro-borda);
-    background: var(--vidro);
-    backdrop-filter: var(--desfoque);
+    border: 0;
+    border-radius: var(--raio-2);
+    background: var(--superficie);
+    box-shadow: var(--sombra-2);
     overflow: hidden;
     cursor: pointer;
-    box-shadow: var(--vidro-sombra);
     font-family: var(--fonte-titulo);
-    font-weight: 700;
+    font-size: var(--t-apoio);
+    font-weight: 600;
+    color: var(--tinta-2);
   }
-  .espaco img {
+  .capa img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+  .capa:hover {
+    outline: 2px solid var(--superficie);
   }
 
   /* Mesa */
@@ -452,241 +502,254 @@
     grid-area: mesa;
     display: grid;
     place-items: center;
-    padding: 24px;
+    padding: 24px 32px 8px;
     min-height: 0;
-    overflow: auto;
+  }
+
+  .inicio {
+    width: min(640px, 100%);
+    display: grid;
+    gap: 24px;
   }
   .saudacao {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 18px;
-    max-width: 520px;
-    text-align: center;
+    gap: 24px;
   }
-  .frase {
-    margin: 0;
+  .saudacao .texto {
+    flex: 1;
+    display: grid;
+    gap: 8px;
+  }
+  .saudacao h1 {
     font-family: var(--fonte-titulo);
     font-size: 26px;
     font-weight: 600;
     line-height: 1.2;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
     text-wrap: balance;
   }
-  .avisos {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    display: grid;
-    gap: 8px;
-    text-align: left;
+  .apoio-grande {
+    color: var(--tinta-2);
+    text-wrap: pretty;
   }
-  .avisos li {
+  .avisos {
+    padding: 4px 16px;
+    border-radius: var(--raio-3);
+    background: var(--superficie);
+    box-shadow: var(--sombra-2);
+  }
+  .avisos .ponto {
+    align-self: flex-start;
+    margin-top: 7px;
+  }
+  .aviso-texto {
+    flex: 1;
     display: grid;
     gap: 2px;
-    padding: 12px 16px 12px 18px;
-    border-radius: 16px;
-    background: var(--vidro-denso);
-    box-shadow: var(--vidro-sombra);
-    border-left: 4px solid var(--atencao);
   }
-  .avisos li[data-gravidade="serio"] {
-    border-left-color: var(--perigo);
+  .aviso-texto strong {
+    font-weight: 500;
   }
-  .avisos span {
-    color: var(--tinta-suave);
-    font-size: 13px;
-  }
-  .turbo {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 30px;
-    border: 0;
-    border-radius: var(--raio-botao);
-    font-family: var(--fonte-titulo);
-    font-size: 17px;
-    font-weight: 700;
-    color: white;
-    cursor: pointer;
-    background: linear-gradient(180deg, #6f97ec, var(--ceu-700));
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.45) inset,
-      0 0 0 3px rgb(255 230 204 / 0.55),
-      0 14px 30px rgb(47 95 168 / 0.4);
-  }
-  .turbo svg {
-    fill: var(--pessego-200);
-  }
-  .turbo:active {
-    transform: translateY(1px);
+  .acoes {
+    display: flex;
+    gap: 8px;
   }
 
   /* Janela de uma área */
   .janela {
-    width: min(620px, 100%);
-    padding: 26px 30px 30px;
-    border-radius: var(--raio-bolha);
-    background: var(--vidro-denso);
-    border: 1px solid var(--vidro-borda);
-    box-shadow: var(--vidro-sombra);
+    width: min(720px, 100%);
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--raio-3);
+    background: var(--superficie);
+    backdrop-filter: var(--desfoque);
+    box-shadow: var(--sombra-3);
+    overflow: hidden;
   }
-  .janela header {
+  .janela-topo {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
+    padding: 16px 16px 16px 24px;
+    border-bottom: 1px solid var(--linha);
   }
-  .janela h1 {
-    margin: 0;
+  .janela-topo > div {
+    flex: 1;
+  }
+  .janela-topo h1 {
     font-family: var(--fonte-titulo);
-    font-size: 26px;
+    font-size: var(--t-titulo);
+    font-weight: 600;
+    line-height: 1.2;
   }
-  .janela header p {
-    margin: 2px 0 0;
-    color: var(--tinta-suave);
+  .icone {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--raio-2);
+    background: var(--acao-suave);
   }
-  .voltar {
-    margin-left: auto;
-    padding: 8px 14px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro);
+  .icone svg,
+  .area svg {
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .icone svg {
+    stroke: var(--acao);
+  }
+  .fechar-janela {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: var(--raio-1);
+    background: transparent;
+    color: var(--tinta-2);
     cursor: pointer;
   }
-  .chega {
-    margin: 22px 0 8px;
-    color: var(--tinta-suave);
+  .fechar-janela:hover {
+    background: var(--linha);
+    color: var(--tinta);
   }
-  .janela ul {
-    margin: 0;
-    padding-left: 20px;
+  .janela-corpo {
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 24px 24px;
+  }
+  .em-breve {
     display: grid;
-    gap: 6px;
+    justify-items: start;
+    gap: 16px;
+    padding: 16px 0 4px;
+  }
+  .em-breve p {
+    max-width: 52ch;
+  }
+  .em-breve .lista {
+    width: 100%;
+    color: var(--tinta-2);
   }
 
-  /* Widgets */
-  .widgets {
-    grid-area: widgets;
+  /* Lateral */
+  .lateral {
+    grid-area: lateral;
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 18px 18px 18px 0;
+    padding: 16px 16px 16px 0;
     overflow: auto;
   }
   .temas {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    padding: 6px 4px;
+    padding: 0 4px 4px;
   }
   .bolinha {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 2px solid white;
-    cursor: pointer;
+    width: 18px;
+    height: 18px;
     padding: 0;
-    box-shadow: 0 2px 6px rgb(30 60 120 / 0.25);
+    border-radius: 50%;
+    border: 2px solid rgb(255 255 255 / 0.9);
+    cursor: pointer;
+    box-shadow: var(--sombra-1);
   }
   .bolinha[aria-checked="true"] {
-    outline: 2px solid var(--ceu-700);
+    outline: 2px solid var(--acao);
     outline-offset: 2px;
   }
   .bolinha[data-cor="auto"] {
-    background: linear-gradient(135deg, #ffe6cc, #79a2e6);
+    background: linear-gradient(180deg, #6d9ae4, #dce8fa);
   }
   .bolinha[data-cor="por-do-sol"] {
-    background: linear-gradient(135deg, #b59bd8, #f3b7a0);
+    background: linear-gradient(180deg, #9a9ad6, #f8d5b4);
   }
   .bolinha[data-cor="lavanda"] {
-    background: #b4c3f3;
+    background: #c4cdf4;
   }
   .bolinha[data-cor="noite"] {
-    background: #141d45;
+    background: #1a2a5e;
   }
-  .dupla {
+  .painel {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 12px;
-  }
-  .widget {
-    position: relative;
-    padding: 14px 16px;
-    border-radius: var(--raio-cartao);
-    background: var(--vidro);
+    padding: 16px;
+    border-radius: var(--raio-3);
+    background: var(--superficie);
     backdrop-filter: var(--desfoque);
-    border: 1px solid var(--vidro-borda);
-    box-shadow: var(--vidro-sombra);
+    box-shadow: var(--sombra-2);
+  }
+  .painel h2 {
+    font-size: var(--t-apoio);
+    font-weight: 500;
+    color: var(--tinta-2);
+  }
+  .medidor {
+    display: grid;
+    gap: 6px;
+  }
+  .medidor-linha {
+    display: flex;
+    justify-content: space-between;
+  }
+  .barra {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--linha);
     overflow: hidden;
   }
-  .widget h2 {
-    margin: 0 0 4px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--tinta-suave);
-  }
-  .valor {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 700;
-  }
-  .detalhe,
-  .vazio,
-  .maquina p {
-    margin: 0;
-    color: var(--tinta-suave);
-    font-size: 13px;
-  }
-  .maquina p:first-of-type {
-    color: var(--tinta);
-  }
-  .bolha-medidor {
-    position: absolute;
-    inset: auto 0 0 0;
-    height: var(--nivel);
-    background: linear-gradient(180deg, rgb(91 134 229 / 0.18), rgb(91 134 229 / 0.32));
-    transition: height 600ms ease;
-    pointer-events: none;
+  .barra div {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--acao);
+    transition: width 600ms ease;
   }
   .jogo-nome {
-    margin: 0 0 6px;
-    font-family: var(--fonte-titulo);
-    font-weight: 600;
+    font-weight: 500;
+    margin-bottom: -4px;
   }
-  .tres {
+  .dois {
     display: flex;
-    gap: 22px;
+    gap: 24px;
   }
-  .tres div {
-    display: grid;
+  .dois div {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
-  .tres .grande {
-    font-size: 30px;
-    font-weight: 700;
+  .grande {
+    font-size: var(--t-numero);
+    font-weight: 600;
     line-height: 1;
   }
-  .tres small {
-    color: var(--tinta-suave);
-  }
   .ganho {
-    margin: 10px 0 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    font-weight: 600;
-    color: var(--sucesso);
+    color: var(--ok);
+    font-weight: 500;
   }
-  .ganho.neutro {
-    color: var(--tinta-suave);
+  .ficha {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    margin: 0;
   }
-  .selo {
-    padding: 1px 8px;
-    border-radius: var(--raio-botao);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ambar-700);
-    background: rgb(255 230 204 / 0.85);
+  .ficha dt {
+    color: var(--tinta-2);
+  }
+  .ficha dd {
+    margin: 0;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Dock */
@@ -695,75 +758,74 @@
     justify-self: center;
     align-self: center;
     display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-radius: 24px;
-    background: var(--vidro);
+    gap: 4px;
+    padding: 6px;
+    border-radius: var(--raio-3);
+    background: var(--superficie-menu);
     backdrop-filter: var(--desfoque);
-    border: 1px solid var(--vidro-borda);
-    box-shadow: var(--vidro-sombra);
+    box-shadow: var(--sombra-2);
+    border: 1px solid rgb(255 255 255 / 0.5);
   }
-  .objeto {
+  :global(:root[data-tema="noite"]) .dock {
+    border-color: var(--linha);
+  }
+  .area {
+    position: relative;
     display: grid;
     place-items: center;
-    width: 46px;
-    height: 46px;
+    width: 44px;
+    height: 44px;
     border: 0;
-    border-radius: 14px;
+    border-radius: var(--raio-2);
+    background: transparent;
     cursor: pointer;
-    background: linear-gradient(180deg, rgb(255 255 255 / 0.75), rgb(201 220 248 / 0.6));
-    box-shadow:
-      0 1px 0 white inset,
-      0 4px 10px rgb(30 60 120 / 0.15);
-    transition: transform 160ms ease;
   }
-  .objeto svg {
-    fill: none;
-    stroke: var(--ceu-700);
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  .area svg {
+    stroke: var(--tinta-2);
   }
-  .objeto:hover {
-    transform: translateY(-3px);
+  .area:hover {
+    background: var(--superficie);
   }
-  .objeto.ativo {
-    background: linear-gradient(180deg, #8fb0f0, var(--ceu-500));
+  .area:hover svg {
+    stroke: var(--tinta);
   }
-  .objeto.ativo svg {
-    stroke: white;
+  .area.ativa {
+    background: var(--superficie);
+    box-shadow: var(--sombra-1);
   }
-  .objeto.grande {
-    width: 58px;
-    height: 58px;
-    border-radius: 18px;
+  .area.ativa svg {
+    stroke: var(--acao);
   }
-  :global(:root[data-tema="noite"]) .objeto:not(.ativo) {
-    background: linear-gradient(180deg, rgb(80 96 160 / 0.7), rgb(40 52 100 / 0.7));
-  }
-  :global(:root[data-tema="noite"]) .objeto:not(.ativo) svg {
-    stroke: #c9d6fb;
+  .area.ativa::after {
+    content: "";
+    position: absolute;
+    bottom: 3px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--acao);
   }
 
-  :global(.jogo-aberto) .objeto,
-  :global(.jogo-aberto) .bolha-medidor {
-    transition: none;
-  }
-
-  @media (max-width: 980px) {
+  @media (max-width: 1080px) {
     .casca {
-      grid-template-columns: 64px 1fr;
-      grid-template-rows: 44px 1fr auto 92px;
+      grid-template-columns: 56px minmax(0, 1fr);
+      grid-template-rows: 40px minmax(0, 1fr) auto 80px;
       grid-template-areas:
         "menu menu"
         "trilho mesa"
-        "trilho widgets"
+        "trilho lateral"
         "dock dock";
     }
-    .widgets {
-      padding: 0 18px 12px 0;
+    .lateral {
+      padding: 0 16px 8px 0;
       flex-direction: row;
       flex-wrap: wrap;
+    }
+    .lateral .painel {
+      flex: 1 1 200px;
+    }
+    .temas {
+      display: none;
     }
   }
 </style>

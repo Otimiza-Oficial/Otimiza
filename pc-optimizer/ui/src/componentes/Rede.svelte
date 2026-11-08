@@ -159,63 +159,70 @@
 
 <div class="area-rede">
   <!-- Ligação -->
-  <section class="bloco" aria-labelledby="rede-ligacao">
+  <section class="secao" aria-labelledby="rede-ligacao">
     <h2 id="rede-ligacao">Sua ligação</h2>
     {#if erroWifi}
       <p class="erro">{erroWifi}</p>
     {:else if !wifi}
-      <p class="vazio">Lendo a placa de rede…</p>
+      <p class="apoio">Lendo a placa de rede…</p>
     {:else}
       {@const l = wifi.ligacao}
-      {#if l.tipo === "sem_rede"}
-        <p class="destaque">Sem rota para a internet agora.</p>
-      {:else if l.tipo === "cabo"}
-        <p class="destaque">
-          Cabo{l.velocidade_mbps != null ? ` · ${l.velocidade_mbps} Mb/s` : ""}
-        </p>
-        <p class="detalhe">{l.placa}</p>
-      {:else if l.tipo === "virtual"}
-        <p class="destaque">VPN ou placa virtual</p>
-        <p class="detalhe">{l.placa}</p>
-      {:else if l.tipo === "outra"}
-        <p class="destaque">{l.placa}</p>
-      {:else}
-        {@const leitura = l.leitura}
-        {#if leitura.estado === "lida" || (leitura.estado === "lista_vazia" && leitura.conexao)}
-          {@const c = leitura.conexao!}
-          <p class="destaque">Wi-Fi “{c.ssid}” · sinal {NOME_DO_SINAL[c.sinal]} ({c.rssi_dbm} dBm)</p>
-          <p class="detalhe">
-            {[c.banda, c.canal != null ? `canal ${c.canal}` : null, c.padrao, `enlace ${c.recepcao_mbps} Mb/s`]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {#if leitura.estado === "lida" && leitura.vizinhanca}
-            <p class="detalhe">
-              {leitura.vizinhanca.mesmo_canal} redes no mesmo canal{leitura.vizinhanca.sobrepostas > 0
-                ? `, ${leitura.vizinhanca.sobrepostas} em canal sobreposto`
-                : ""} · {leitura.vizinhanca.total_ouvidas} ouvidas no total
-            </p>
-          {/if}
-        {:else if leitura.estado === "sem_permissao_de_localizacao"}
-          <p class="destaque">Wi-Fi</p>
-          <p class="detalhe">
-            O Windows só deixa ler as redes por perto com a localização ligada para apps da área de trabalho
-            (Configurações › Privacidade › Localização).
-          </p>
-        {:else if leitura.estado === "nao_li"}
-          <p class="destaque">Wi-Fi</p>
-          <p class="detalhe">Não consegui ler o Wi-Fi: {leitura.motivo}</p>
+      <div class="ligacao">
+        {#if l.tipo === "sem_rede"}
+          <p class="destaque">Sem rota para a internet agora.</p>
+        {:else if l.tipo === "cabo"}
+          <p class="destaque">Cabo{l.velocidade_mbps != null ? ` · ${l.velocidade_mbps} Mb/s` : ""}</p>
+          <p class="apoio">{l.placa}</p>
+        {:else if l.tipo === "virtual"}
+          <p class="destaque">VPN ou placa virtual</p>
+          <p class="apoio">{l.placa}</p>
+        {:else if l.tipo === "outra"}
+          <p class="destaque">{l.placa}</p>
         {:else}
-          <p class="destaque">Wi-Fi</p>
-          <p class="detalhe">A placa não informou a rede agora.</p>
+          {@const leitura = l.leitura}
+          {#if leitura.estado === "lida" || (leitura.estado === "lista_vazia" && leitura.conexao)}
+            {@const c = leitura.conexao!}
+            <p class="destaque">Wi-Fi “{c.ssid}”, sinal {NOME_DO_SINAL[c.sinal]}</p>
+            <dl class="ficha">
+              <dt>Sinal</dt>
+              <dd>{c.rssi_dbm} dBm</dd>
+              {#if c.banda}<dt>Faixa</dt><dd>{c.banda}{c.canal != null ? `, canal ${c.canal}` : ""}</dd>{/if}
+              {#if c.padrao}<dt>Padrão</dt><dd>{c.padrao}</dd>{/if}
+              <dt>Com o roteador</dt>
+              <dd>{c.recepcao_mbps} Mb/s</dd>
+              {#if leitura.estado === "lida" && leitura.vizinhanca}
+                <dt>Vizinhos</dt>
+                <dd>
+                  {leitura.vizinhanca.mesmo_canal} no mesmo canal{leitura.vizinhanca.sobrepostas > 0
+                    ? `, ${leitura.vizinhanca.sobrepostas} sobrepostos`
+                    : ""}
+                </dd>
+              {/if}
+            </dl>
+          {:else if leitura.estado === "sem_permissao_de_localizacao"}
+            <p class="destaque">Wi-Fi</p>
+            <p class="apoio">
+              O Windows só deixa ler as redes por perto com a localização ligada para apps da área de trabalho
+              (Configurações › Privacidade › Localização).
+            </p>
+          {:else if leitura.estado === "nao_li"}
+            <p class="destaque">Wi-Fi</p>
+            <p class="apoio">Não consegui ler o Wi-Fi: {leitura.motivo}</p>
+          {:else}
+            <p class="destaque">Wi-Fi</p>
+            <p class="apoio">A placa não informou a rede agora.</p>
+          {/if}
+          <p class="apoio">{l.placa}</p>
         {/if}
-        <p class="detalhe">{l.placa}</p>
-      {/if}
+      </div>
 
       {#if wifi.achados.length > 0}
         <ul class="achados">
           {#each wifi.achados as a, i (i)}
-            <li data-gravidade={a.gravidade}>{a.frase}</li>
+            <li>
+              <span class="ponto" data-tom={a.gravidade === "Atencao" ? "atencao" : a.gravidade === "Bom" ? "ok" : "neutro"}></span>
+              <span>{a.frase}</span>
+            </li>
           {/each}
         </ul>
       {/if}
@@ -223,7 +230,7 @@
   </section>
 
   <!-- Rota -->
-  <section class="bloco" aria-labelledby="rede-rota">
+  <section class="secao" aria-labelledby="rede-rota">
     <h2 id="rede-rota">Onde está o problema</h2>
     <form
       class="medir"
@@ -232,336 +239,250 @@
         void medir("destino");
       }}
     >
-      <label class="campo">
-        <span>Medir até</span>
-        <input bind:value={destino} placeholder="endereço ou nome" disabled={medindo !== null} />
-      </label>
-      <button class="principal" type="submit" disabled={medindo !== null || destino.trim() === ""}>
+      <input
+        class="campo"
+        bind:value={destino}
+        aria-label="Endereço ou nome para medir"
+        placeholder="endereço ou nome"
+        disabled={medindo !== null}
+      />
+      <button class="btn primario" type="submit" disabled={medindo !== null || destino.trim() === ""}>
         {medindo === "destino" ? "Medindo…" : "Medir rota"}
       </button>
-      <button class="secundario" type="button" disabled={medindo !== null} onclick={() => medir("jogo")}>
+      <button class="btn" type="button" disabled={medindo !== null} onclick={() => medir("jogo")}>
         {medindo === "jogo" ? "Medindo…" : "Servidor do jogo"}
       </button>
     </form>
 
     {#if medindo}
-      <p class="vazio">Mandando 10 pacotes por salto, espalhados pelo segundo. Leva uns 10 s.</p>
+      <p class="apoio">Mandando 10 pacotes por salto, espalhados pelo segundo. Leva uns 10 s.</p>
     {:else if erroRota}
       <p class="erro">{erroRota}</p>
     {:else if rota}
-      <p class="frase" data-limpa={rota.veredito.tipo === "limpa"}>{rota.frase}</p>
-      {#if rota.observacao}<p class="detalhe">{rota.observacao}</p>{/if}
+      <div class="veredito">
+        <span class="ponto" data-tom={rota.veredito.tipo === "limpa" ? "ok" : rota.veredito.tipo === "problema" ? "atencao" : "neutro"}></span>
+        <div>
+          <p class="destaque">{rota.frase}</p>
+          {#if rota.observacao}<p class="apoio">{rota.observacao}</p>{/if}
+        </div>
+      </div>
 
-      <ol class="saltos">
-        <li class="titulos" aria-hidden="true">
-          <span>#</span><span>Trecho</span><span>Quem</span><span>Tempo</span><span>Variação</span><span>Perda</span>
-        </li>
-        {#each rota.saltos as s (s.numero)}
-          <li class:problema={s.numero === saltoDoProblema} data-trecho={s.trecho}>
-            <span class="numero">{s.numero}</span>
-            <span class="trecho">{NOME_DO_TRECHO[s.trecho]}</span>
-            <span class="quem" title={s.endereco ?? undefined}>{quem(s)}</span>
-            <span class="numero">{ms(s.mediana_ms)}</span>
-            <span class="numero">{ms(s.jitter_ms)}</span>
-            <span class="numero">{perda(s)}</span>
-          </li>
-        {/each}
-      </ol>
-      {#if rota.atribuicao}<p class="atribuicao">{rota.atribuicao}</p>{/if}
+      <table class="saltos">
+        <thead>
+          <tr>
+            <th class="n">#</th>
+            <th>Trecho</th>
+            <th>Quem</th>
+            <th class="n">Tempo</th>
+            <th class="n">Variação</th>
+            <th class="n">Perda</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each rota.saltos as s (s.numero)}
+            <tr class:problema={s.numero === saltoDoProblema} class:mudo={s.trecho === "sem_resposta"}>
+              <td class="n numero">{s.numero}</td>
+              <td>{NOME_DO_TRECHO[s.trecho]}</td>
+              <td class="quem" title={s.endereco ?? undefined}>{quem(s)}</td>
+              <td class="n numero">{ms(s.mediana_ms)}</td>
+              <td class="n numero">{ms(s.jitter_ms)}</td>
+              <td class="n numero">{perda(s)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if rota.atribuicao}<p class="apoio atribuicao">{rota.atribuicao}</p>{/if}
     {/if}
   </section>
 
-  <!-- Banda do segundo plano -->
-  <section class="bloco" aria-labelledby="rede-banda">
-    <div class="linha">
-      <div>
-        <h2 id="rede-banda">Segurar a banda do segundo plano durante o jogo</h2>
-        <p class="detalhe">{banda?.o_que_faz ?? "Lendo…"}</p>
-      </div>
-      <button
-        class="interruptor"
-        role="switch"
-        aria-checked={banda?.ligado ?? false}
-        aria-labelledby="rede-banda"
-        disabled={!banda || mudandoBanda || (!banda.ligado && banda.impedimento !== null)}
-        onclick={alternarBanda}
-      ><span></span></button>
-    </div>
-    {#if banda?.impedimento && !banda.ligado}
-      <div class="impedimento">
-        <span>{banda.impedimento}</span>
-        <button class="secundario" onclick={abrirComoAdministrador}>Abrir como administrador</button>
-      </div>
-    {/if}
-    {#if banda?.agindo_em}
-      <p class="detalhe agindo">
-        Agindo agora em {banda.agindo_em}{banda.politicas.length > 0
-          ? `: ${banda.politicas.map(programa).join(", ")}`
-          : ""}{banda.update_limitado ? " · Windows Update limitado" : ""}.
-      </p>
-    {/if}
-    {#if respostaBanda}
-      <ul class="resposta" data-tipo={respostaBanda.tipo}>
-        {#each respostaBanda.linhas as l, i (i)}<li>{l}</li>{/each}
-      </ul>
-    {/if}
-    {#if erroBanda}<p class="erro">{erroBanda}</p>{/if}
-  </section>
-
-  <!-- Varredura -->
-  <section class="bloco linha" aria-labelledby="rede-varredura">
-    <div>
-      <h2 id="rede-varredura">Wi-Fi sem varredura durante o jogo</h2>
-      <p class="detalhe">
-        O Windows procura redes de tempos em tempos, e isso pode dar picos de ping no Wi-Fi. Com isto ligado, a procura
-        para enquanto o jogo está aberto e volta quando ele fecha.
-      </p>
-      {#if varredura?.agindo_em}
-        <p class="detalhe agindo">Agindo agora em {varredura.agindo_em}.</p>
-      {:else if varredura?.observacao}
-        <p class="detalhe">{varredura.observacao}</p>
-      {/if}
-      {#if erroVarredura}<p class="erro">{erroVarredura}</p>{/if}
-    </div>
-    <button
-      class="interruptor"
-      role="switch"
-      aria-checked={varredura?.ligado ?? false}
-      aria-labelledby="rede-varredura"
-      disabled={!varredura || mudandoVarredura}
-      onclick={alternarVarredura}
-    ><span></span></button>
+  <!-- Durante o jogo -->
+  <section class="secao" aria-labelledby="rede-jogo">
+    <h2 id="rede-jogo">Durante o jogo</h2>
+    <ul class="lista">
+      <li>
+        <div class="opcao">
+          <span id="rede-banda">Segurar a banda do segundo plano</span>
+          <span class="apoio">{banda?.o_que_faz ?? "Lendo…"}</span>
+          {#if banda?.impedimento && !banda.ligado}
+            <span class="impedimento">
+              <span class="ponto" data-tom="atencao"></span>{banda.impedimento}
+              <button class="btn quieto" onclick={abrirComoAdministrador}>Abrir como administrador</button>
+            </span>
+          {/if}
+          {#if banda?.agindo_em}
+            <span class="agindo">
+              <span class="ponto" data-tom="ok"></span>Agindo em {banda.agindo_em}{banda.politicas.length > 0
+                ? `: ${banda.politicas.map(programa).join(", ")}`
+                : ""}{banda.update_limitado ? " · Windows Update limitado" : ""}
+            </span>
+          {/if}
+          {#if respostaBanda}
+            {#each respostaBanda.linhas as l, i (i)}
+              <span class="resposta" data-tipo={respostaBanda.tipo}>{l}</span>
+            {/each}
+          {/if}
+          {#if erroBanda}<span class="erro">{erroBanda}</span>{/if}
+        </div>
+        <button
+          class="interruptor"
+          role="switch"
+          aria-checked={banda?.ligado ?? false}
+          aria-labelledby="rede-banda"
+          disabled={!banda || mudandoBanda || (!banda.ligado && banda.impedimento !== null)}
+          onclick={alternarBanda}
+        ></button>
+      </li>
+      <li>
+        <div class="opcao">
+          <span id="rede-varredura">Wi-Fi sem procurar redes</span>
+          <span class="apoio">
+            O Windows procura redes de tempos em tempos, e isso pode dar picos de ping no Wi-Fi. Ligado, a procura
+            para enquanto o jogo está aberto e volta quando ele fecha.
+          </span>
+          {#if varredura?.agindo_em}
+            <span class="agindo"><span class="ponto" data-tom="ok"></span>Agindo em {varredura.agindo_em}</span>
+          {:else if varredura?.observacao}
+            <span class="apoio">{varredura.observacao}</span>
+          {/if}
+          {#if erroVarredura}<span class="erro">{erroVarredura}</span>{/if}
+        </div>
+        <button
+          class="interruptor"
+          role="switch"
+          aria-checked={varredura?.ligado ?? false}
+          aria-labelledby="rede-varredura"
+          disabled={!varredura || mudandoVarredura}
+          onclick={alternarVarredura}
+        ></button>
+      </li>
+    </ul>
   </section>
 </div>
 
 <style>
-  .area-rede {
-    display: grid;
-    gap: 12px;
-    margin-top: 20px;
-    max-height: min(62vh, 640px);
-    overflow: auto;
-    padding-right: 4px;
-  }
-  .bloco {
-    display: grid;
-    gap: 6px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: var(--vidro);
-    border: 1px solid var(--vidro-borda);
-  }
-  .bloco.linha {
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 16px;
-  }
-  h2 {
-    margin: 0 0 2px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--tinta-suave);
-  }
   .destaque {
-    margin: 0;
-    font-weight: 600;
-  }
-  .detalhe,
-  .vazio {
-    margin: 0;
-    font-size: 13px;
-    color: var(--tinta-suave);
-  }
-  .agindo {
-    color: var(--sucesso);
-    font-weight: 600;
+    font-weight: 500;
   }
   .erro {
-    margin: 0;
-    font-size: 13px;
     color: var(--perigo);
+  }
+  .ligacao {
+    display: grid;
+    gap: 6px;
+  }
+  .ficha {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 24px;
+    margin: 4px 0;
+  }
+  .ficha dt {
+    color: var(--tinta-2);
+  }
+  .ficha dd {
+    margin: 0;
   }
   .achados {
     list-style: none;
-    margin: 6px 0 0;
+    margin: 0;
     padding: 0;
     display: grid;
-    gap: 6px;
+    gap: 8px;
   }
-  .achados li {
-    padding: 8px 12px;
-    border-radius: 12px;
-    font-size: 13px;
-    background: var(--vidro-denso);
-    border-left: 3px solid var(--ceu-500);
+  .achados li,
+  .veredito {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
   }
-  .achados li[data-gravidade="Atencao"] {
-    border-left-color: var(--atencao);
+  .achados .ponto,
+  .veredito .ponto {
+    transform: translateY(-1px);
   }
-  .achados li[data-gravidade="Bom"] {
-    border-left-color: var(--sucesso);
-  }
-  button,
-  input {
-    font: inherit;
-  }
-  button {
-    cursor: pointer;
-  }
-  button:disabled {
-    cursor: default;
-    opacity: 0.55;
+  .veredito > div {
+    display: grid;
+    gap: 2px;
   }
   .medir {
     display: flex;
-    align-items: end;
     gap: 8px;
-    flex-wrap: wrap;
   }
-  .campo {
+  .medir .campo {
     flex: 1;
-    min-width: 160px;
-    display: grid;
-    gap: 2px;
-    font-size: 12px;
-    color: var(--tinta-suave);
-  }
-  .campo input {
-    padding: 7px 12px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro-denso);
-    color: var(--tinta);
-    font-size: 14px;
-  }
-  .principal {
-    padding: 8px 18px;
-    border: 0;
-    border-radius: var(--raio-botao);
-    font-weight: 600;
-    color: white;
-    background: var(--ceu-700);
-  }
-  .secundario {
-    padding: 7px 14px;
-    border-radius: var(--raio-botao);
-    border: 1px solid var(--vidro-borda);
-    background: var(--vidro);
-    color: var(--tinta);
-  }
-  .frase {
-    margin: 8px 0 0;
-    font-weight: 600;
-    padding-left: 10px;
-    border-left: 3px solid var(--atencao);
-  }
-  .frase[data-limpa="true"] {
-    border-left-color: var(--sucesso);
+    min-width: 0;
   }
   .saltos {
-    list-style: none;
-    margin: 6px 0 0;
-    padding: 0;
-    display: grid;
-    gap: 2px;
+    width: 100%;
+    border-collapse: collapse;
     font-size: 13px;
   }
-  .saltos li {
-    display: grid;
-    grid-template-columns: 22px 84px minmax(0, 1fr) 54px 60px 44px;
-    gap: 8px;
-    align-items: center;
-    padding: 5px 8px;
-    border-radius: 8px;
-  }
-  .saltos .titulos {
-    font-size: 11px;
-    color: var(--tinta-suave);
-  }
-  .saltos li[data-trecho="sem_resposta"] {
-    color: var(--tinta-suave);
-  }
-  .saltos li.problema {
-    background: rgb(255 230 204 / 0.55);
-  }
-  :global(:root[data-tema="noite"]) .saltos li.problema {
-    background: rgb(255 190 120 / 0.16);
-  }
-  .saltos .numero {
-    text-align: right;
-  }
-  .saltos li > span:first-child {
+  .saltos th {
+    padding: 0 8px 6px;
     text-align: left;
+    font-weight: 500;
+    font-size: var(--t-apoio);
+    color: var(--tinta-2);
+    border-bottom: 1px solid var(--linha);
   }
-  .quem {
+  .saltos td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--linha);
+  }
+  .saltos .n {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .saltos th:first-child,
+  .saltos td:first-child {
+    padding-left: 0;
+    width: 24px;
+  }
+  .saltos tr:last-child td {
+    border-bottom: 0;
+  }
+  .saltos .quem {
+    max-width: 220px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .saltos tr.mudo td {
+    color: var(--tinta-3);
+  }
+  .saltos tr.problema td {
+    background: var(--ambar-fundo);
+  }
   .atribuicao {
-    margin: 4px 0 0;
     font-size: 11px;
-    color: var(--tinta-suave);
   }
-  .linha {
+  .lista > li {
+    align-items: flex-start;
+    gap: 24px;
+  }
+  .opcao {
+    flex: 1;
     display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 16px;
+    gap: 4px;
   }
-  .impedimento {
+  .opcao > span:first-child {
+    font-weight: 500;
+  }
+  .opcao .apoio {
+    max-width: 60ch;
+  }
+  .impedimento,
+  .agindo {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
     font-size: 13px;
-    color: var(--atencao);
   }
   .resposta {
-    margin: 0;
-    padding: 8px 12px 8px 26px;
-    border-radius: 12px;
-    background: var(--vidro-denso);
-    border-left: 3px solid var(--sucesso);
     font-size: 13px;
-    display: grid;
-    gap: 2px;
-  }
-  .resposta[data-tipo="atencao"] {
-    border-left-color: var(--atencao);
+    color: var(--tinta-2);
   }
   .resposta[data-tipo="erro"] {
-    border-left-color: var(--perigo);
-  }
-  .interruptor {
-    position: relative;
-    width: 46px;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: 13px;
-    background: rgb(120 130 160 / 0.45);
-    transition: background 160ms ease;
-  }
-  .interruptor span {
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: white;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-    transition: transform 160ms ease;
-  }
-  .interruptor[aria-checked="true"] {
-    background: var(--ceu-500);
-  }
-  .interruptor[aria-checked="true"] span {
-    transform: translateX(20px);
-  }
-  :global(.jogo-aberto) .interruptor,
-  :global(.jogo-aberto) .interruptor span {
-    transition: none;
+    color: var(--perigo);
   }
 </style>
