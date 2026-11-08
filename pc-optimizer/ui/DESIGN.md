@@ -1,33 +1,37 @@
 # Direção visual da interface nova
 
-Lido antes de qualquer tela nova. Código é a fonte da verdade: os valores moram em `src/tokens.css` e `src/App.svelte`.
+Lido antes de qualquer tela nova. Código é a fonte da verdade: `src/tokens.css`, `src/App.svelte`,
+`src/componentes/Oti.svelte` e `src/lib/conversa.ts`.
 
 ## Do que se trata
-O Otimiza diz como o PC de um jogador brasileiro está, conserta o que dá e **prova** com número medido. A interface
-é uma **área de trabalho no céu**, como `brand/nova-geracao/referencia-interface.png` (escolhida pelo dono):
+O Otimiza diz como o PC de um jogador brasileiro está, conserta o que dá e **prova** com número medido. A interface é
+o **Oti no centro, conversando** (escolha do dono, 07/11/2026): ele diz o que leu do PC e oferece respostas; quase não
+há menus.
 
-- **Mesa** azul viva, clareando para o horizonte. Nuvem só aparece quando há aviso (o céu é o diagnóstico).
-- **Bloco de perfil** no alto: o mascote no lugar da foto, um rótulo pequeno em maiúsculas, uma frase e um link.
-- **Objetos 3D** soltos na mesa, um por área, com legenda pequena. Arrastáveis; soltos no mascote, ele os engole e
-  abre a área. Vêm do Fluent Emoji da Microsoft (licença MIT, `public/objetos/LICENCA-fluentui-emoji.txt`).
-- **Widgets de vidro** compactos à direita, com rótulo em maiúsculas; dá para puxar um para a mesa e devolver.
-- **Dock** com os mesmos objetos em ícones claros, com lupa sob o ponteiro e ponto na área aberta.
-- **Janela de verdade** para cada área, que cresce a partir do objeto que a abriu. Dentro dela, o texto escuro e as
-  peças comuns do `tokens.css` (seção com linha fina, botão, interruptor, ponto de estado).
+- **Cena escura** (`#0b0c1f`) com um único enfeite: o brilho que respira atrás do Oti. Tema claro opcional.
+- **A fala** aparece letra a letra, com a boca dele mexendo. Embaixo, o detalhe e as **respostas** em pílulas (uma
+  principal em roxo).
+- **Pergunte ao Oti**: a barra de baixo entende por palavra-chave (`entender` em `conversa.ts`). Não é IA, e quando
+  não entende ele diz isso e mostra os assuntos que conhece.
+- **Áreas**: ícones de traço próprios (`lib/areas.ts`), sempre embaixo. Uma área abre num painel à direita; o Oti vai
+  para a esquerda e narra o que ela faz.
+- **Barra de cima**: só a marca, processador, memória e Hz, e o jogo aberto.
 
-## O mascote
-Bolha de vidro **transparente e clara**: aro grosso de vidro, reflexo pêssego em cima e lavanda embaixo, brilho
-especular, orelhas em gota nos lados. Olhos em cápsula, âmbar indo a marrom, reflexo azul só na ponta. Os olhos são a
-expressão inteira: atento (segue o cursor), focado, descansando, preocupado (brilho âmbar), surpreso (objeto chegando),
-feliz (olhos em arco e bochechas).
+## O Oti
+Bichinho de vidro roxo-azulado (`#b3ccff` → `#7d8dff` → `#8b5ff0`), olhos grandes azul-noite com **reflexo âmbar**
+(a cor da marca) e brilhos brancos, antena com lâmpada âmbar, bochechas rosadas, duas mãozinhas que flutuam.
 
-Cenas: clique = pulo amassado e uma dica; objeto solto nele = engole; **jogo abriu** = pula, gira e voa para a barra de
-menu (e só então a interface congela); **jogo fechou** = volta da barra comemorando.
+- Humores: atento (segue o cursor), falando, feliz (olhos em arco), pensando (sobrancelha, lâmpada pulsando),
+  preocupado (sobrancelhas, gota de suor), surpreso, jogando (headset e controle), dormindo.
+- Gestos: acenar, apontar, comemorar.
+- Cenas: clique = pulo e uma dica; **jogo abriu** = bota o headset e segura o controle, diz "bom jogo", vai para a
+  barra de cima e só então a interface congela; **jogo fechou** = volta comemorando e pergunta como foi.
+- O ícone do app sai dele: `brand/nova-geracao/oti-icone.png` → `npx tauri icon`.
+- Para conferir o desenho: `npm run nova:web` e abrir `/?galeria` (todos os humores) ou `/?icone`.
 
 ## Regras
-- Texto da mesa é branco com sombra leve; dentro das janelas, `--tinta`.
-- Rótulo em maiúsculas espaçadas só nos rótulos de widget e do perfil (como na referência), nunca como enfeite solto.
-- Uma cor de ação (`--acao`). Verde, âmbar e vermelho só como estado, num ponto de 8 px ao lado do texto.
+- Uma cor de ação: o roxo do Oti (`--acao`). Verde, âmbar e vermelho só como estado, num ponto ao lado do texto.
+- Dentro dos painéis: seção com linha fina, tabela, ponto de estado. Cartão dentro de cartão, nunca.
 - **Nunca**: borda colorida na lateral, pílula com ícone, número decorativo, texto em degradê, botão com brilho.
 - **Estados são parte da tela**: lendo, vazio, erro e sem administrador sempre desenhados, com o que fazer.
-- **Jogo aberto**: nada anima, nada desfoca (classe `jogo-aberto`), depois da cena de saída do mascote.
+- **Jogo aberto**: nada anima, nada desfoca (classe `jogo-aberto`), depois da cena do headset.
