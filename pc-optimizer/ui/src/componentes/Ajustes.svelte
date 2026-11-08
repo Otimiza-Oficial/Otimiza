@@ -12,6 +12,7 @@
     type Sobreposicao,
     type VersaoDoApp,
   } from "../lib/ponte";
+  import { temporadaDe } from "../lib/temporadas";
 
   const MODOS: [ModoDaSobreposicao, string][] = [
     ["Desligado", "Desligado"],
@@ -33,6 +34,28 @@
   let chave = $state("");
   let ativando = $state(false);
   let recado = $state<{ tom: "ok" | "perigo" | "atencao"; texto: string } | null>(null);
+
+  let epoca = $state(lerEpoca());
+  const epocaDeHoje = temporadaDe(new Date());
+
+  function lerEpoca() {
+    try {
+      return localStorage.getItem("otimiza.epoca") !== "desligada";
+    } catch {
+      return true;
+    }
+  }
+
+  function alternarEpoca() {
+    epoca = !epoca;
+    try {
+      localStorage.setItem("otimiza.epoca", epoca ? "ligada" : "desligada");
+    } catch {
+      // Só não lembra na próxima abertura.
+    }
+    // A casca escuta e troca na hora.
+    window.dispatchEvent(new Event("otimiza.epoca"));
+  }
 
   onMount(() => {
     ponte.sobreposicao().then((s) => (sobreposicao = s)).catch(() => {});
@@ -155,6 +178,21 @@
       </ul>
     </section>
   {/if}
+
+  <!-- Época do ano -->
+  <section class="secao">
+    <div class="linha">
+      <div class="info">
+        <h2>Temas de época</h2>
+        <span class="apoio">
+          O painel muda sozinho no Natal, Ano Novo, Carnaval, Páscoa, Festa Junina, Dia das Crianças e Halloween: o Oti
+          ganha um enfeite e o fundo, um clima. Para de animar com jogo aberto.
+          {#if epocaDeHoje}Agora: <b>{epocaDeHoje.nome}</b>.{/if}
+        </span>
+      </div>
+      <button class="interruptor" role="switch" aria-checked={epoca} aria-label="Temas de época" onclick={alternarEpoca}></button>
+    </div>
+  </section>
 
   <!-- Licença -->
   <section class="secao">

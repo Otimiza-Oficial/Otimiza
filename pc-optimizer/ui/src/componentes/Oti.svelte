@@ -19,13 +19,22 @@
   // chanfro claro na borda (referência do dono). Não tem boca nem mãos: os olhos são a expressão inteira. Eles seguem o
   // cursor, piscam, e cada humor muda o desenho deles. Com jogo aberto a casca congela as animações (`jogo-aberto`).
   import { onMount } from "svelte";
+  import type { Acessorio } from "../lib/temporadas";
 
   let {
     humor = "atento",
     gesto = "nenhum",
     tamanho = 200,
     segueCursor = true,
-  }: { humor?: Humor; gesto?: Gesto; tamanho?: number; segueCursor?: boolean } = $props();
+    acessorio = null,
+  }: {
+    humor?: Humor;
+    gesto?: Gesto;
+    tamanho?: number;
+    segueCursor?: boolean;
+    /** O enfeite da época (lib/temporadas.ts): gorro no Natal, orelhas na Páscoa… */
+    acessorio?: Acessorio | null;
+  } = $props();
 
   const id = `oti${Math.random().toString(36).slice(2, 8)}`;
 
@@ -120,6 +129,16 @@
     <circle cx="100" cy="100" r="91" fill="none" stroke="#fff" stroke-width="1.6" opacity="0.95" />
     <circle cx="100" cy="100" r="92.5" fill="none" stroke="#000" stroke-width="1" opacity="0.08" />
 
+    {#if acessorio === "mascara"}
+      <!-- Carnaval: a máscara ao longo da linha dos olhos, com plumas. -->
+      <g class="acessorio">
+        <path d="M54 136 L162 64" stroke="#7a2bd6" stroke-width="64" stroke-linecap="round" />
+        <path d="M50 142 L166 60" stroke="#f4c430" stroke-width="4" stroke-dasharray="2 9" stroke-linecap="round" opacity="0.9" />
+        <path d="M164 60 Q190 20 176 -6 Q196 28 182 62 Z" fill="#ff4f9a" />
+        <path d="M170 64 Q206 40 212 8 Q214 46 184 70 Z" fill="#2ec4b6" />
+      </g>
+    {/if}
+
     <g class="olhos" style:transform={`translate(${desvio.x}px, ${desvio.y}px)`}>
       {#each OLHOS as o, i (i)}
         <g transform={`rotate(${o.giro} ${o.cx} ${o.cy})`}>
@@ -144,6 +163,51 @@
         </g>
       {/each}
     </g>
+
+    {#if acessorio && acessorio !== "mascara"}
+      <g class="acessorio" transform="rotate(-10 100 100)">
+        {#if acessorio === "gorro"}
+          <!-- Natal: gorro vermelho com a ponta caída e o pompom. -->
+          <path d="M22 78 Q34 2 112 -6 Q170 -10 202 44 Q172 26 152 38 Q122 28 22 78 Z" fill="#d62f3a" />
+          <path d="M52 40 Q96 6 150 6" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity="0.25" fill="none" />
+          <path d="M18 80 Q100 30 176 52" stroke="#ffffff" stroke-width="22" stroke-linecap="round" fill="none" />
+          <circle cx="204" cy="48" r="14" fill="#ffffff" />
+        {:else if acessorio === "cartola"}
+          <!-- Ano Novo: cartola com a fita dourada. -->
+          <ellipse cx="104" cy="22" rx="62" ry="12" fill="#1d1d1f" />
+          <rect x="70" y="-52" width="68" height="74" rx="8" fill="#1d1d1f" />
+          <rect x="70" y="4" width="68" height="12" fill="#e6b422" />
+          <rect x="78" y="-46" width="8" height="48" rx="4" fill="#fff" opacity="0.15" />
+        {:else if acessorio === "orelhas"}
+          <!-- Páscoa: orelhas de coelho. -->
+          <g>
+            <ellipse cx="72" cy="-14" rx="19" ry="50" transform="rotate(-14 72 -14)" fill="#f7f7f8" stroke="#d9d9de" stroke-width="2" />
+            <ellipse cx="72" cy="-10" rx="9" ry="36" transform="rotate(-14 72 -10)" fill="#ffb6c8" />
+            <ellipse cx="128" cy="-18" rx="19" ry="50" transform="rotate(12 128 -18)" fill="#f7f7f8" stroke="#d9d9de" stroke-width="2" />
+            <ellipse cx="128" cy="-14" rx="9" ry="36" transform="rotate(12 128 -14)" fill="#ffb6c8" />
+          </g>
+        {:else if acessorio === "chapeu-de-palha"}
+          <!-- Festa Junina: chapéu de palha com remendo. -->
+          <ellipse cx="100" cy="30" rx="90" ry="18" fill="#e3b85c" />
+          <path d="M52 30 Q58 -28 100 -30 Q142 -28 148 30 Z" fill="#edc773" />
+          <path d="M54 22 Q100 8 146 22" stroke="#c0392b" stroke-width="10" fill="none" />
+          <path d="M60 0 L80 -2 M70 -14 L92 -16 M110 -16 L132 -12 M116 2 L138 4" stroke="#b8893a" stroke-width="3" stroke-linecap="round" />
+          <rect x="112" y="-14" width="18" height="16" fill="#3b7dd8" transform="rotate(8 121 -6)" />
+        {:else if acessorio === "bone"}
+          <!-- Dia das Crianças: boné colorido de aba para o lado. -->
+          <path d="M34 60 Q40 -6 104 -8 Q164 -6 166 56 Z" fill="#3b82f6" />
+          <path d="M100 -8 Q104 26 100 56" stroke="#facc15" stroke-width="10" fill="none" />
+          <ellipse cx="190" cy="56" rx="36" ry="10" fill="#ef4444" transform="rotate(10 190 56)" />
+          <circle cx="104" cy="-8" r="7" fill="#ef4444" />
+        {:else if acessorio === "chapeu-de-bruxa"}
+          <!-- Halloween: chapéu de bruxa com a ponta torta. -->
+          <ellipse cx="100" cy="30" rx="86" ry="15" fill="#2b2240" />
+          <path d="M56 28 Q80 -30 118 -58 Q150 -84 176 -70 Q140 -60 136 -20 Q132 6 146 28 Z" fill="#3a2d57" />
+          <path d="M60 18 Q100 2 142 16" stroke="#f97316" stroke-width="11" fill="none" />
+          <rect x="92" y="4" width="14" height="14" rx="2" fill="none" stroke="#facc15" stroke-width="3" />
+        {/if}
+      </g>
+    {/if}
   </g>
 </svg>
 

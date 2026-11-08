@@ -1,9 +1,11 @@
 <script lang="ts">
   // Só em desenvolvimento (`?galeria`): o Oti em todos os humores e gestos, para conferir o desenho de uma vez.
   import Oti, { type Gesto, type Humor } from "./Oti.svelte";
+  import type { Acessorio } from "../lib/temporadas";
 
   const humores: Humor[] = ["atento", "falando", "feliz", "pensando", "preocupado", "surpreso", "jogando", "dormindo"];
   const gestos: Gesto[] = ["acenar", "apontar", "comemorar"];
+  const acessorios: Acessorio[] = ["gorro", "cartola", "mascara", "orelhas", "chapeu-de-palha", "bone", "chapeu-de-bruxa"];
 </script>
 
 <main>
@@ -12,6 +14,9 @@
   {/each}
   {#each gestos as g (g)}
     <figure><Oti gesto={g} humor="feliz" tamanho={180} segueCursor={false} /><figcaption>{g}</figcaption></figure>
+  {/each}
+  {#each acessorios as a (a)}
+    <figure class="claro"><Oti acessorio={a} tamanho={150} segueCursor={false} /><figcaption>{a}</figcaption></figure>
   {/each}
   <figure class="claro"><Oti tamanho={180} segueCursor={false} /><figcaption>fundo claro</figcaption></figure>
 </main>

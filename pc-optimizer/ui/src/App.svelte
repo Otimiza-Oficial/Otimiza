@@ -15,6 +15,8 @@
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
+  import EfeitoDeEpoca from "./componentes/EfeitoDeEpoca.svelte";
+  import { porId, temporadaDe } from "./lib/temporadas";
   import Rede from "./componentes/Rede.svelte";
   import Tela from "./componentes/Tela.svelte";
   import { areas, type IdDaArea } from "./lib/areas";
@@ -98,6 +100,22 @@
   let reacao = $state<Humor | null>(null);
 
   let jogoNaTela = $state(false);
+
+  // A época do ano (Natal, Páscoa…): muda sozinha pela data; desliga nos Ajustes ("otimiza.epoca" = "desligada").
+  // `?temporada=natal` na URL mostra uma época fora da data, para conferir o visual.
+  const CHAVE_DA_EPOCA = "otimiza.epoca";
+  const previa = porId(new URLSearchParams(location.search).get("temporada"));
+  let hoje = $state(new Date());
+  let epocaLigada = $state(lerEpoca());
+  const temporada = $derived(epocaLigada ? (previa ?? temporadaDe(hoje)) : null);
+
+  function lerEpoca() {
+    try {
+      return localStorage.getItem("otimiza.epoca") !== "desligada";
+    } catch {
+      return true;
+    }
+  }
 
   const lista = $derived(lerAvisos(hardware, metricas, jogo !== null));
   const area = $derived(areas.find((a) => a.id === aberta) ?? areas[0]);
@@ -400,6 +418,11 @@
     };
     void laco();
 
+    // A data muda à meia-noite (e a época junto); conferir de hora em hora basta.
+    const relogioDaEpoca = setInterval(() => (hoje = new Date()), 60 * 60 * 1000);
+    const aoMudarEpoca = () => (epocaLigada = lerEpoca());
+    window.addEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+
     const ajustar = () => void medirPilula();
     window.addEventListener("resize", ajustar);
     return () => {
@@ -407,12 +430,14 @@
       clearTimeout(espera);
       clearInterval(maquina);
       window.removeEventListener("resize", ajustar);
+      window.removeEventListener(CHAVE_DA_EPOCA, aoMudarEpoca);
+      clearInterval(relogioDaEpoca);
     };
   });
 </script>
 
 <!-- O cômodo desfocado atrás do vidro. Feito em CSS: parede, janela com luz, chão, sofá e luminária. -->
-<div class="comodo" aria-hidden="true">
+<div class="comodo" data-epoca={temporada?.id ?? null} aria-hidden="true">
   <div class="parede"></div>
   <div class="janela-luz"></div>
   <div class="chao"></div>
@@ -421,13 +446,17 @@
   <div class="mesa"></div>
 </div>
 
+{#if temporada}
+  <EfeitoDeEpoca efeito={temporada.efeito} />
+{/if}
+
 <div class="casca">
   <!-- Barra de cima -->
   <header class="topo vidro" data-tauri-drag-region>
     <div class="boas-vindas" data-tauri-drag-region>
-      <span class="avatar"><Oti humor={humor} tamanho={30} segueCursor={false} /></span>
+      <span class="avatar"><Oti acessorio={temporada?.acessorio ?? null} humor={humor} tamanho={30} segueCursor={false} /></span>
       <div class="ola">
-        <strong>Bem-vindo de volta</strong>
+        <strong>{temporada?.saudacao ?? "Bem-vindo de volta"}</strong>
         <span class="sec">Otimiza {versao?.exibida ?? ""}{hardware ? ` · ${nomeCurto(hardware.processador)}` : ""}</span>
       </div>
     </div>
@@ -465,7 +494,7 @@
   <!-- O balão do Oti -->
   {#if fala}
     <div class="balao vidro-forte" role="status" in:entrar>
-      <span class="balao-oti"><Oti {humor} tamanho={44} /></span>
+      <span class="balao-oti"><Oti acessorio={temporada?.acessorio ?? null} {humor} tamanho={44} /></span>
       <div class="balao-texto">
         <p class="balao-fala">{digitado}</p>
         {#if fala.detalhe && !digitando}<p class="balao-detalhe">{fala.detalhe}</p>{/if}
@@ -726,7 +755,7 @@
                 <Turbo jogo={jogo?.nome ?? null} />
               {:else}
                 <div class="em-breve">
-                  <Oti humor="dormindo" tamanho={90} segueCursor={false} />
+                  <Oti acessorio={temporada?.acessorio ?? null} humor="dormindo" tamanho={90} segueCursor={false} />
                   <p>{area.nome} chega na Onda {area.onda}. Até lá, ela continua no Otimiza de sempre.</p>
                   <ul class="lista">
                     {#each area.vai_ter as item (item)}<li>{item}</li>{/each}
@@ -770,6 +799,54 @@
     z-index: 0;
     filter: blur(16px) saturate(1.05);
     background: #c9c3bb;
+  }
+  /* A cor da época no cômodo, por baixo do desfoque: luz ambiente, não papel de parede. */
+  .comodo::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+  }
+  .comodo[data-epoca]::after {
+    opacity: 1;
+  }
+  .comodo[data-epoca="natal"]::after {
+    background:
+      radial-gradient(ellipse 40% 50% at 12% 70%, rgb(214 47 58 / 0.35), transparent 70%),
+      radial-gradient(ellipse 35% 45% at 88% 30%, rgb(34 139 84 / 0.3), transparent 70%),
+      radial-gradient(ellipse 30% 30% at 60% 85%, rgb(255 210 120 / 0.35), transparent 70%);
+  }
+  .comodo[data-epoca="ano-novo"]::after {
+    background:
+      radial-gradient(ellipse 45% 50% at 80% 25%, rgb(230 180 34 / 0.35), transparent 70%),
+      radial-gradient(ellipse 40% 40% at 20% 80%, rgb(255 255 255 / 0.35), transparent 70%);
+  }
+  .comodo[data-epoca="carnaval"]::after {
+    background:
+      radial-gradient(ellipse 40% 45% at 15% 30%, rgb(122 43 214 / 0.3), transparent 70%),
+      radial-gradient(ellipse 40% 45% at 85% 70%, rgb(255 79 154 / 0.3), transparent 70%),
+      radial-gradient(ellipse 30% 35% at 55% 20%, rgb(46 196 182 / 0.25), transparent 70%);
+  }
+  .comodo[data-epoca="pascoa"]::after {
+    background:
+      radial-gradient(ellipse 45% 50% at 20% 30%, rgb(255 182 200 / 0.4), transparent 70%),
+      radial-gradient(ellipse 45% 50% at 80% 75%, rgb(190 230 200 / 0.4), transparent 70%);
+  }
+  .comodo[data-epoca="festa-junina"]::after {
+    background:
+      radial-gradient(ellipse 50% 45% at 50% 95%, rgb(255 140 40 / 0.4), transparent 70%),
+      radial-gradient(ellipse 35% 35% at 15% 20%, rgb(250 204 21 / 0.3), transparent 70%);
+  }
+  .comodo[data-epoca="dia-das-criancas"]::after {
+    background:
+      radial-gradient(ellipse 40% 45% at 20% 25%, rgb(59 130 246 / 0.3), transparent 70%),
+      radial-gradient(ellipse 40% 45% at 80% 75%, rgb(250 204 21 / 0.3), transparent 70%);
+  }
+  .comodo[data-epoca="halloween"]::after {
+    background:
+      radial-gradient(ellipse 45% 50% at 20% 75%, rgb(249 115 22 / 0.4), transparent 70%),
+      radial-gradient(ellipse 45% 45% at 85% 25%, rgb(88 28 135 / 0.4), transparent 70%);
   }
   :global(:root[data-tema="noite"]) .comodo {
     filter: blur(16px) brightness(0.38) saturate(0.9);
