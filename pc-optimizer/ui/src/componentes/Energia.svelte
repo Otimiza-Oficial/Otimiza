@@ -4,6 +4,7 @@
   // "por que não funcionou?". O plano do cliente nunca é tocado: o OTIMIZA é um plano à parte e desfazer reativa o
   // anterior. Desfazer nunca depende de licença.
   import { onMount } from "svelte";
+  import EnergiaPorJogo from "./EnergiaPorJogo.svelte";
   import Processador from "./Processador.svelte";
   import {
     ponte,
@@ -424,6 +425,7 @@
       {/if}
     {/if}
   </section>
+  <EnergiaPorJogo />
   <Processador />
 </div>
 

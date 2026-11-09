@@ -360,6 +360,7 @@ mod tests {
         "rede_rota_do_jogo",
         "rede_historico",
         "energia_calibrar_cancelar",
+        "energia_salvar_calibrado_para_o_jogo",
         "cs2_painel",
         "bandeja_humor",
         "discord_disponivel",

@@ -96,6 +96,11 @@ export const commands = {
 	energiaCalibrarCancelar: () => __TAURI_INVOKE<void>("energia_calibrar_cancelar"),
 	/**  Aplica no plano OTIMIZA o vencedor da última calibração, relendo do Windows. `EXIGEM_LICENCA`. */
 	energiaAplicarCalibrado: () => __TAURI_INVOKE<string>("energia_aplicar_calibrado"),
+	/**
+	 *  Guarda o vencedor da última calibração como o perfil de energia de `executavel`: com o modo dinâmico ligado, o
+	 *  Otimiza troca para ele quando esse jogo abre. Só grava no arquivo do Otimiza. `LIVRES`. Devolve os executáveis com perfil.
+	 */
+	energiaSalvarCalibradoParaOJogo: (executavel: string) => __TAURI_INVOKE<string[]>("energia_salvar_calibrado_para_o_jogo", { executavel }),
 	/**  A integração oficial do CS2 (Game State Integration): instalada, ligada e o momento da partida. `LIVRES`: só lê. */
 	cs2Painel: () => __TAURI_INVOKE<PainelDoCs2_Serialize>("cs2_painel"),
 	/**  Escreve `gamestate_integration_otimiza.cfg` na pasta `cfg` do CS2 (vale ao abrir o jogo de novo). `EXIGEM_LICENCA`. */

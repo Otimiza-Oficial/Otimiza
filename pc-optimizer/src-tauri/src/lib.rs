@@ -248,6 +248,7 @@ pub fn run() {
             commands::energia_calibrar,
             commands::energia_calibrar_cancelar,
             commands::energia_aplicar_calibrado,
+            commands::energia_salvar_calibrado_para_o_jogo,
             commands::cs2_painel,
             commands::cs2_ligar,
             commands::cs2_desligar,

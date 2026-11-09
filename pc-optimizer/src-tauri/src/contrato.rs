@@ -59,6 +59,7 @@ mod tests {
                 crate::commands::energia_calibrar,
                 crate::commands::energia_calibrar_cancelar,
                 crate::commands::energia_aplicar_calibrado,
+                crate::commands::energia_salvar_calibrado_para_o_jogo,
                 crate::commands::cs2_painel,
                 crate::commands::cs2_ligar,
                 crate::commands::cs2_desligar,

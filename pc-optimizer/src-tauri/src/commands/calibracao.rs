@@ -454,6 +454,28 @@ pub async fn energia_aplicar_calibrado() -> Result<String, String> {
     .map_err(|_| "A aplicação parou no meio.".to_string())?
 }
 
+/// Guarda o vencedor da última calibração como o perfil de energia de `executavel`: com o modo dinâmico ligado, o
+/// Otimiza troca para ele quando esse jogo abre. Só grava no arquivo do Otimiza. `LIVRES`. Devolve os executáveis com perfil.
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn energia_salvar_calibrado_para_o_jogo(executavel: String) -> Result<Vec<String>, String> {
+    let executavel = executavel.trim().to_string();
+    if executavel.is_empty() {
+        return Err("Abra o jogo para guardar o perfil dele.".to_string());
+    }
+    let Some(parametros) = *VENCEDOR.lock().unwrap_or_else(|e| e.into_inner()) else {
+        return Err("Não há vencedor para guardar: calibre de novo, com o jogo aberto.".to_string());
+    };
+    use crate::modules::windows::motorenergia_maquina as maquina;
+    maquina::salvar_perfil_de_jogo(maquina::PerfilDeJogo {
+        executavel,
+        parametros,
+        escolha: None,
+        quando: crate::modules::changelog::now_timestamp(),
+    })
+    .map(|l| l.into_iter().map(|p| p.executavel).collect())
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
