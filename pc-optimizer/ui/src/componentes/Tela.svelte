@@ -4,6 +4,7 @@
   // quem decide a volta é o Rust, então o fim da contagem só relê o diagnóstico.
 
   import { onDestroy, onMount } from "svelte";
+  import VrrDosMonitores from "./VrrDosMonitores.svelte";
   import { ponte, type DiagnosticoDaTela, type TrocaAplicada } from "../lib/ponte";
 
   type Aviso = { tipo: "ok" | "erro" | "atencao"; texto: string };
@@ -169,6 +170,7 @@
       </section>
     {/each}
   {/if}
+  <VrrDosMonitores />
 </div>
 
 <style>

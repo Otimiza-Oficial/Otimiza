@@ -3,6 +3,7 @@
   // Otimiza já mediu, a última partida e o ganho. O ganho só aparece como número quando é MEDIDO (os intervalos de
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
   import { onMount } from "svelte";
+  import OndeOsJogosMoram from "./OndeOsJogosMoram.svelte";
   import Cs2Integracao from "./Cs2Integracao.svelte";
   import FivemPainel from "./FivemPainel.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
@@ -199,6 +200,7 @@
       </div>
     {/if}
   {/if}
+  <OndeOsJogosMoram />
 </div>
 
 <style>
