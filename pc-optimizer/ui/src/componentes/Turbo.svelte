@@ -7,6 +7,7 @@
   import FrameBoost from "./FrameBoost.svelte";
   import Icone from "./Icone.svelte";
   import NoJogo from "./NoJogo.svelte";
+  import OtimizarAgora from "./OtimizarAgora.svelte";
   import { ponte, type PainelDoTurbo, type ProvaDoTurbo } from "../lib/ponte";
 
   const GARGALO: Record<string, string> = {
@@ -173,6 +174,7 @@
 </script>
 
 <div class="turbo">
+  <OtimizarAgora />
   {#if erro}
     <div class="recado" role="alert">
       <span class="ponto" data-tom="perigo"></span>

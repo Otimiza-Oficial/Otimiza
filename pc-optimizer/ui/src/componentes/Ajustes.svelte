@@ -2,6 +2,7 @@
   // A área Ajustes: o FPS por cima do jogo (sobreposição), o que o Otimiza faz sozinho, a licença, a versão e o
   // relatório de suporte. O tema (claro/escuro) mora na barra de cima, onde a referência põe.
   import { onMount } from "svelte";
+  import Transparencia from "./Transparencia.svelte";
   import {
     ponte,
     type AvisoDeVersao,
@@ -355,6 +356,7 @@
       </li>
     </ul>
   </section>
+  <Transparencia />
 </div>
 
 <style>

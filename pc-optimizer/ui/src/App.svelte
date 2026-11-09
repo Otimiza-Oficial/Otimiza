@@ -750,10 +750,11 @@
                   </button>
                 {/each}
               </div>
-              <button class="linha-acao destaque" onclick={() => abrir("rede")}>
-                <span>Medir a rota até o jogo</span><Icone nome="rota" tamanho={16} />
+              <button class="linha-acao destaque" onclick={() => abrir("turbo")}>
+                <span>Otimizar agora</span><Icone nome="raio" tamanho={16} />
               </button>
               <div class="grupo">
+                <button class="linha-acao" onclick={() => abrir("rede")}><span>Medir a rota até o jogo</span><Icone nome="rota" tamanho={16} /></button>
                 <button class="linha-acao" onclick={() => abrir("historico")}><span>Ver o que foi mudado{mudancas ? ` (${mudancas})` : ""}</span><Icone nome="lista" tamanho={16} /></button>
                 <button class="linha-acao" onclick={() => abrir("historico")}><span>Desfazer tudo</span><Icone nome="desfazer" tamanho={16} /></button>
                 <button class="linha-acao" onclick={() => abrir("latencia")}><span>Achar o driver que trava</span><Icone nome="escudo" tamanho={16} /></button>
