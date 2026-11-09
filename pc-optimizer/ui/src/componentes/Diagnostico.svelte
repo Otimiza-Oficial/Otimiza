@@ -26,6 +26,32 @@
   let travadas = $state<Travadas | null>(null);
   let ocupado = $state<string | null>(null);
   let erro = $state<string | null>(null);
+  let teste = $state<{ processo: string; mantido: boolean; aviso: string | null } | null>(null);
+
+  async function testarCausa() {
+    if (!travadas?.teste_possivel) return;
+    ocupado = "teste";
+    erro = null;
+    try {
+      teste = noTauri
+        ? await invoke("testar_causa_da_travada", { processo: travadas.teste_possivel })
+        : { processo: travadas.teste_possivel, mantido: true, aviso: null };
+    } catch (e) {
+      erro = String(e);
+    } finally {
+      ocupado = null;
+    }
+  }
+
+  async function devolver() {
+    try {
+      const r = noTauri ? await invoke<string | null>("devolver_teste_da_travada") : null;
+      teste = null;
+      erro = r;
+    } catch (e) {
+      erro = String(e);
+    }
+  }
 
   onMount(async () => {
     if (!noTauri) {
@@ -142,7 +168,17 @@
         </div>
       {/each}
       {#if travadas.motivo_sem_teste}<p class="apoio pequeno">{travadas.motivo_sem_teste}</p>{/if}
-      {#if travadas.teste_possivel}<p class="apoio pequeno">O teste que acalma {travadas.teste_possivel} durante o jogo fica em "Ferramentas avançadas".</p>{/if}
+      {#if travadas.teste_possivel}
+        <div class="linha">
+          <p class="apoio pequeno">Dá para provar: o Otimiza acalma <b>{travadas.teste_possivel}</b> em janelas alternadas e compara as travadas. Só fica acalmado se for a causa, e até o jogo fechar.</p>
+          <button class="btn" disabled={ocupado !== null} onclick={testarCausa}>{ocupado === "teste" ? "Testando…" : "Testar"}</button>
+        </div>
+      {/if}
+      {#if teste}
+        <p class="apoio">{teste.mantido ? `${teste.processo} era a causa: fica acalmado até o jogo fechar.` : `${teste.processo} não mudou as travadas: foi devolvido.`}</p>
+        {#if teste.aviso}<p class="aviso">{teste.aviso}</p>{/if}
+        {#if teste.mantido}<button class="btn quieto" onclick={devolver}>Devolver agora</button>{/if}
+      {/if}
     {/if}
   </div>
   {#if erro}<p class="aviso">{erro}</p>{/if}

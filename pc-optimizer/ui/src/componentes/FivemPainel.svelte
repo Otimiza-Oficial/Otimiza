@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { noTauri } from "../lib/ponte";
+  import GraficosGta from "./GraficosGta.svelte";
 
   type Pasta = { id: string; name: string; path: string; bytes: number; formatted: string; cleanable: boolean; explanation: string; tradeoff: string | null };
   type Relatorio = { installed: boolean; running: boolean; game_running: boolean; folders: Pasta[]; cleanable_bytes: number; protected_bytes: number; note: string };
@@ -118,6 +119,7 @@
       </div>
     {/if}
 
+    <GraficosGta />
     {#if cfx?.existe}<p class="apoio pequeno">{cfx.note}</p>{/if}
     {#if recado}<p class="recado">{recado}</p>{/if}
   </div>
