@@ -3,6 +3,7 @@
   // DEPOIS; o Lab compara com a margem de cada lado e só diz "melhorou" quando os intervalos não se encostam. Com
   // poucas rodadas, diz quantas faltam. Abaixo, a última prova alternada do "Otimizar" e o texto para o Discord.
   import { onMount } from "svelte";
+  import Diagnostico from "./Diagnostico.svelte";
   import { ponte, type LadoDoLab, type ProvaDoTurbo, type ResultadoDoLab } from "../lib/ponte";
 
   const SEGUNDOS = 30;
@@ -76,6 +77,7 @@
 </script>
 
 <div class="prova">
+  <Diagnostico />
   {#if erro}
     <div class="recado" role="alert"><span class="ponto" data-tom="perigo"></span><div><span>{erro}</span></div></div>
   {/if}
