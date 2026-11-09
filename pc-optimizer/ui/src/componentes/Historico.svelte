@@ -4,6 +4,7 @@
   // Onde o Rust manda `null` (item fora do catálogo), a tela não afirma nem nega admin ou reinício.
 
   import { onMount } from "svelte";
+  import SaudeDoHistorico from "./SaudeDoHistorico.svelte";
   import { ponte, type Historico, type Mudanca, type Parte, type RelatorioDeDesfazer } from "../lib/ponte";
 
   type Aviso = { tipo: "ok" | "erro" | "atencao"; texto: string };
@@ -129,6 +130,7 @@
 </script>
 
 <div class="historico">
+  <SaudeDoHistorico />
   {#if historico?.leitura.estado === "Ilegivel"}
     <div class="recado" role="alert">
       <span class="ponto" data-tom="perigo"></span>
