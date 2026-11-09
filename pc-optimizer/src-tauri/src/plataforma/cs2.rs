@@ -164,10 +164,25 @@ pub mod maquina {
             .map(|j| j.pasta)
     }
 
+    /// 32 hex. Sem crate de aleatoriedade no produto: as chaves da `RandomState` do Rust vêm do gerador do sistema
+    /// operacional; duas delas, com o relógio e o processo, passam pelo SHA-256. É um código só para o servidor local
+    /// aceitar o POST do CS2 deste PC, não um segredo de criptografia.
     fn novo_token() -> Result<String, String> {
-        let mut b = [0u8; 16];
-        getrandom::getrandom(&mut b).map_err(|_| "Não consegui gerar o código da integração.".to_string())?;
-        Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+        use sha2::{Digest, Sha256};
+        use std::hash::{BuildHasher, Hasher};
+        let mut h = Sha256::new();
+        for _ in 0..2 {
+            let mut x = std::collections::hash_map::RandomState::new().build_hasher();
+            x.write_u128(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0),
+            );
+            h.update(x.finish().to_le_bytes());
+        }
+        h.update(std::process::id().to_le_bytes());
+        Ok(h.finalize()[..16].iter().map(|x| format!("{x:02x}")).collect())
     }
 
     /// Lê o código do arquivo já escrito (o servidor sobe antes de a pessoa ligar de novo).
