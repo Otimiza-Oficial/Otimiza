@@ -5,7 +5,8 @@
 
   import { onDestroy, onMount } from "svelte";
   import TesteDeReflexo from "./TesteDeReflexo.svelte";
-  import { ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { noTauri, ponte, type CapturaDpc, type DriverMedido, type TaxaDoMouse } from "../lib/ponte";
 
   const DURACOES = [10, 30, 60] as const;
   const NOME_DO_NIVEL = { Saudavel: "Saudável", Atencao: "Atenção", Pico: "Pico" } as const;
@@ -20,6 +21,9 @@
   let relogio: ReturnType<typeof setInterval> | undefined;
 
   const SEGUNDOS_DO_MOUSE = 4;
+  // A precisão do ponteiro (aceleração e barra de velocidade fora do meio), de `caminho_do_mouse`.
+  type AchadoDoMouse = { titulo: string; explicacao: string; onde_mexer: string };
+  let ponteiro = $state<AchadoDoMouse[] | null>(null);
   let mouse = $state<TaxaDoMouse | null>(null);
   let medindoMouse = $state(false);
   let erroMouse = $state<string | null>(null);
@@ -46,6 +50,11 @@
 
   onMount(() => {
     ponte.administrador().then((a) => (admin = a)).catch(() => (admin = null));
+    if (noTauri)
+      invoke<{ achados: AchadoDoMouse[] }>("caminho_do_mouse", { intervalosUs: [] })
+        .then((c) => (ponteiro = c.achados))
+        .catch(() => (ponteiro = null));
+    else ponteiro = [];
   });
 
   onDestroy(() => clearInterval(relogio));
@@ -228,6 +237,16 @@
         {medindoMouse ? "Mexa o mouse…" : mouse ? "Medir de novo" : "Medir o mouse"}
       </button>
     </div>
+    {#if ponteiro && ponteiro.length}
+      {#each ponteiro as p (p.titulo)}
+        <div class="recado">
+          <span class="ponto" data-tom="atencao"></span>
+          <div><span><b>{p.titulo}.</b> {p.explicacao} {p.onde_mexer}</span></div>
+        </div>
+      {/each}
+    {:else if ponteiro}
+      <p class="apoio">Ponteiro sem aceleração e com a barra de velocidade no meio: cada contagem do mouse vira um passo.</p>
+    {/if}
     {#if medindoMouse}
       <div class="mexa" aria-hidden="true"><span></span></div>
     {:else if erroMouse}
