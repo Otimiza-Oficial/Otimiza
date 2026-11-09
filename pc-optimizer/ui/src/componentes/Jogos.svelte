@@ -4,6 +4,7 @@
   // antes e depois não se encostam); senão a tela diz que não houve diferença ou quantas partidas faltam.
   import { onMount } from "svelte";
   import Cs2Integracao from "./Cs2Integracao.svelte";
+  import FivemPainel from "./FivemPainel.svelte";
   import PcsParecidos from "./PcsParecidos.svelte";
   import Icone from "./Icone.svelte";
   import { capaRemota } from "../lib/capas";
@@ -158,6 +159,9 @@
             <p class="sem-medida">Ainda não medi este jogo. Jogue uma partida com o Otimiza aberto e os números aparecem aqui.</p>
           {/if}
           <PcsParecidos jogo={atual.jogo.nome} />
+          {#if /fivem/i.test(atual.jogo.nome)}
+            <FivemPainel />
+          {/if}
           {#if atual.jogo.appid === 730 || /counter-strike 2|^cs2$/i.test(atual.jogo.nome)}
             <Cs2Integracao />
           {/if}
