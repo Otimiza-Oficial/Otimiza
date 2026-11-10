@@ -10,7 +10,8 @@
   type Vistoria = { itens: { id: string; nome: string; estado: Estado; retirado: boolean }[]; fora_da_vistoria: string[]; com_politica_de_grupo: boolean };
   type Conflito = { id: string; um: string; outro: string; tipo: string; mecanismo: string; conselho: string };
   type Desfecho = "SemAmostra" | "Igual" | "Melhorou" | "Piorou" | "PiorouMuito";
-  type Veredito = { jogo: string; desfecho: Desfecho; variacao_fps_pct: number | null; variacao_low_pct: number | null };
+  /** `regressao::Desfecho` tem `#[serde(tag = "desfecho")]`: chega como `{ desfecho: "Igual" }`, não como texto. */
+  type Veredito = { jogo: string; desfecho: { desfecho: Desfecho }; variacao_fps_pct: number | null; variacao_low_pct: number | null };
 
   const DESFECHO: Record<Desfecho, { texto: string; tom: string }> = {
     SemAmostra: { texto: "ainda não dá para dizer", tom: "neutro" },
@@ -30,7 +31,7 @@
     if (!noTauri) {
       vistoria = { itens: [{ id: "nagle", nome: "Rede de baixa latência", estado: "MudouPorFora", retirado: false }, { id: "plano", nome: "Plano de energia OTIMIZA", estado: "Intacto", retirado: false }], fora_da_vistoria: [], com_politica_de_grupo: false };
       conflitos = [];
-      vereditos = [{ jogo: "FiveM", desfecho: "Melhorou", variacao_fps_pct: 6.2, variacao_low_pct: 11.4 }];
+      vereditos = [{ jogo: "FiveM", desfecho: { desfecho: "Melhorou" }, variacao_fps_pct: 6.2, variacao_low_pct: 11.4 }];
       return;
     }
     const [v, c, r] = await Promise.allSettled([
@@ -98,10 +99,11 @@
       <div class="bloco">
         <span class="sub">FPS de cada jogo antes × depois do Otimiza</span>
         {#each vereditos as v (v.jogo)}
+          {@const d = DESFECHO[v.desfecho.desfecho] ?? { texto: String(v.desfecho.desfecho), tom: "neutro" }}
           <div class="linha">
             <span>{v.jogo}</span>
-            <span data-tom={DESFECHO[v.desfecho].tom} class="desfecho">
-              {DESFECHO[v.desfecho].texto}{v.desfecho !== "SemAmostra" ? ` · FPS ${pct(v.variacao_fps_pct)} · 1% pior ${pct(v.variacao_low_pct)}` : ""}
+            <span data-tom={d.tom} class="desfecho">
+              {d.texto}{v.desfecho.desfecho !== "SemAmostra" ? ` · FPS ${pct(v.variacao_fps_pct)} · 1% pior ${pct(v.variacao_low_pct)}` : ""}
             </span>
           </div>
         {/each}
