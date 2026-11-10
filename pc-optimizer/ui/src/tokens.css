@@ -119,6 +119,10 @@ body {
 body {
   background: #cddcf6;
 }
+:root.janela-transparente,
+:root.janela-transparente body {
+  background: transparent;
+}
 
 button,
 input {

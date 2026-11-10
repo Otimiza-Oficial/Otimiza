@@ -45,6 +45,7 @@
 
   type Tema = "claro" | "escuro";
   const CHAVE_DO_TEMA = "otimiza.tema";
+  const CHAVE_DO_FUNDO = "otimiza.fundo";
 
   // O trilho da esquerda e as abas de baixo: os mesmos destinos, como na referência.
   const TRILHO: { id: IdDaArea; icone: NomeDoIcone }[] = [
@@ -77,6 +78,8 @@
   let wifi = $state<DiagnosticoDoWifi | null>(null);
   let mudancas = $state<number | null>(null);
   let tema = $state<Tema>(lerTema());
+  /** Sem fundo: o cômodo some e a área de trabalho aparece entre os cards (a janela é transparente). A pessoa escolhe. */
+  let semFundo = $state(lerFundo());
   let aberta = $state<IdDaArea>("inicio");
   /** O "Ver o sistema" do bloco Agora abre o Sistema já na aba Agora; o resto entra pelos Ajustes. */
   let abaDoSistema = $state<"agora" | "ajustes">("ajustes");
@@ -194,6 +197,23 @@
     }
   }
 
+  function lerFundo(): boolean {
+    try {
+      return localStorage.getItem(CHAVE_DO_FUNDO) === "sem";
+    } catch {
+      return false;
+    }
+  }
+
+  function alternarFundo() {
+    semFundo = !semFundo;
+    try {
+      localStorage.setItem(CHAVE_DO_FUNDO, semFundo ? "sem" : "com");
+    } catch {
+      // Só não lembra na próxima abertura.
+    }
+  }
+
   function escolherTema(t: Tema) {
     tema = t;
     try {
@@ -206,6 +226,7 @@
   $effect(() => {
     document.documentElement.classList.toggle("jogo-aberto", jogoNaTela);
     document.documentElement.dataset.tema = tema === "escuro" ? "noite" : "dia";
+    document.documentElement.classList.toggle("janela-transparente", semFundo);
   });
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -584,6 +605,9 @@
           <Icone nome="lua" tamanho={14} /> Escuro
         </button>
       </div>
+      <button class="fundo-botao" aria-pressed={semFundo} title={semFundo ? "Voltar o fundo" : "Tirar o fundo e ver a área de trabalho"} onclick={alternarFundo}>
+        Sem fundo
+      </button>
       <button class="redondo" aria-label="Avisos" onclick={() => (mostrarAvisos = !mostrarAvisos)}>
         <Icone nome="sino" tamanho={18} />
         {#if lista.length > 0}<span class="contador">{lista.length}</span>{/if}
@@ -1043,6 +1067,26 @@
     --laranja: #ffa53a;
     --contra: #1d1d1f;
   }
+  /* Janela transparente: o cômodo some e a área de trabalho aparece entre os cards. O desfoque não alcança o que
+     está fora da janela, então o vidro fica mais firme (e sem desfoque, que ali só gastaria placa). */
+  :global(:root.janela-transparente) .comodo {
+    display: none;
+  }
+  :global(:root.janela-transparente) .casca {
+    --vidro-fundo: rgb(246 244 241 / 0.9);
+    --vidro-borda: rgb(255 255 255 / 0.75);
+    --bloco-solto: rgb(250 249 247 / 0.92);
+  }
+  :global(:root.janela-transparente[data-tema="noite"]) .casca {
+    --vidro-fundo: rgb(34 34 38 / 0.92);
+    --vidro-borda: rgb(255 255 255 / 0.12);
+    --bloco-solto: rgb(38 38 42 / 0.94);
+  }
+  :global(:root.janela-transparente) .vidro,
+  :global(:root.janela-transparente) .vidro-forte,
+  :global(:root.janela-transparente) .painel.solto .bloco {
+    backdrop-filter: none;
+  }
   .vidro,
   .vidro-forte {
     background: var(--vidro-fundo);
@@ -1158,6 +1202,23 @@
     color: var(--sec);
     font-size: 12px;
     cursor: pointer;
+  }
+  /* Liga e desliga o fundo: apertado, o fundo sumiu. */
+  .fundo-botao {
+    height: 36px;
+    padding: 0 13px;
+    border-radius: 18px;
+    border: 1px solid var(--vidro-borda);
+    background: var(--bloco);
+    color: var(--texto);
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .fundo-botao[aria-pressed="true"] {
+    background: var(--texto);
+    color: var(--contra, #fff);
+    border-color: transparent;
   }
   .segmento {
     display: flex;
