@@ -171,6 +171,7 @@ pub fn classificar_modo(modo: &str) -> Apresentacao {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(specta::Type))]
 pub enum GargaloProvavel {
     /// A GPU trabalhou quase o quadro inteiro.
     Gpu,

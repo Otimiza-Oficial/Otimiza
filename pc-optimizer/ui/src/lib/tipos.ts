@@ -17,6 +17,14 @@ export const commands = {
 	bibliotecaDeJogos: () => __TAURI_INVOKE<ResumoDoJogo_Serialize[]>("biblioteca_de_jogos"),
 	/**  Os jogos instalados neste PC (Steam, Epic e instaladores de jogo), para a prateleira da aba Jogos. `LIVRES`: só lê. */
 	jogosInstalados: () => __TAURI_INVOKE<JogoDaLoja_Serialize[]>("jogos_instalados"),
+	/**
+	 *  "Jogar": abre o jogo pelo Explorer (sem herdar o administrador do Otimiza) e guarda o pedido; quando ele abrir, o
+	 *  vigia de sessão liga a receita que o Turbo lembra. `LIVRES`: abrir um jogo não muda nada no PC (a receita, que muda,
+	 *  passa pela licença no vigia).
+	 */
+	jogar: (nome: string) => __TAURI_INVOKE<Lancamento>("jogar", { nome }),
+	/**  A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura. */
+	relatorioDaUltimaPartida: () => __TAURI_INVOKE<RelatorioDaPartida_Serialize | null>("relatorio_da_ultima_partida"),
 	/**  A capa do jogo pela Steam deste PC (`data:` URL). `None`: sem Steam ou sem arte; a tela desenha uma. `LIVRES`. */
 	capaDoJogo: (appid: number) => __TAURI_INVOKE<string | null>("capa_do_jogo", { appid }),
 	startMonitoring: () => __TAURI_INVOKE<string>("start_monitoring"),
@@ -405,6 +413,12 @@ export type CaboDaTela =
 { estado: "NaoLimita" } | 
 /**  A EDID não traz temporização na resolução atual nem na nativa: não há como comparar. */
 { estado: "SemTemporizacaoNaResolucao" } | { estado: "EdidNaoAchada" } | { estado: "EdidIlegivel"; motivo: string };
+
+export type Caminho = 
+/**  `steam://rungameid/<appid>`: a Steam abre com as opções de lançamento da pessoa. */
+"Steam" | 
+/**  O executável que a loja registrou. */
+"Executavel";
 
 export type CantoDaSobreposicao = "SuperiorEsquerdo" | "SuperiorDireito" | "InferiorEsquerdo" | "InferiorDireito";
 
@@ -819,6 +833,13 @@ export type Fabricante = "Nvidia" | "Amd" | "Intel" | "Desconhecido";
 
 export type FabricanteDaCpu = "Intel" | "Amd" | "Outro";
 
+export type FaixaDasPartidas = {
+	partidas: number,
+	mediana_fps: number | null,
+	menor_fps: number | null,
+	maior_fps: number | null,
+};
+
 /**  A família decide o que o driver oferece (Smooth Motion só em RTX 40/50, AFMF só em RX 6000 em diante). */
 export type Familia = "Rtx50" | "Rtx40" | "Rtx30" | "Rtx20" | "GtxOuAnterior" | "Rx9000" | "Rx7000" | "Rx6000" | "RxAnterior" | "Arc" | "IntelIntegrada" | "Desconhecida";
 
@@ -875,6 +896,14 @@ export type GargaloDoTurbo = "Placa" | "Processador" | "Memoria" |
 "SemCarga" | 
 /**  Placa lida e nada no limite, abaixo dos Hz: quem segura é o próprio jogo (limite dele, do servidor, do motor). */
 "Jogo";
+
+export type GargaloProvavel = 
+/**  A GPU trabalhou quase o quadro inteiro. */
+"Gpu" | 
+/**  A CPU (a thread que monta o quadro) trabalhou quase o quadro inteiro. */
+"Cpu" | 
+/**  Nenhum dos dois: limite de FPS, V-Sync, espera do jogo ou do disco. */
+"Espera" | "NaoDeuParaSaber";
 
 /**
  *  O que dá para ver. AFMF e XeFG se identificam ao PresentMon; DLSS FG, FSR FG e Smooth Motion ainda não: com eles o
@@ -982,6 +1011,11 @@ export type JogoDaLoja_Serialize = {
 export type LadoDaProva = "SemOtimiza" | "ComOtimiza";
 
 export type LadoDoLab = "Antes" | "Depois";
+
+export type Lancamento = {
+	jogo: string,
+	caminho: Caminho,
+};
 
 /**  Vazio pode ser "nada aplicado" ou "não sei o que foi aplicado"; o segundo PRECISA aparecer na tela. */
 export type LeituraDoHistorico = LeituraDoHistorico_Serialize | LeituraDoHistorico_Deserialize;
@@ -1743,6 +1777,31 @@ export type Preferences_Serialize = {
 	comunidade: boolean,
 };
 
+/**  O que o vigia conta para a tela quando o jogo que o "Jogar" abriu aparece (`partida:preparada`). */
+export type Preparada = Preparada_Serialize | Preparada_Deserialize;
+
+/**  O que o vigia conta para a tela quando o jogo que o "Jogar" abriu aparece (`partida:preparada`). */
+export type Preparada_Deserialize = {
+	jogo: string,
+	/**  Os passos que o Turbo aplicou, como ele mesmo descreve. */
+	passos: string[],
+	/**  Sem receita guardada para este jogo: o Turbo ainda não mediu ele. */
+	sem_receita: boolean,
+	/**  O Turbo não ligou (prova rodando, receita reprovada, sem licença): a frase dele. */
+	recusa?: string | null,
+};
+
+/**  O que o vigia conta para a tela quando o jogo que o "Jogar" abriu aparece (`partida:preparada`). */
+export type Preparada_Serialize = {
+	jogo: string,
+	/**  Os passos que o Turbo aplicou, como ele mesmo descreve. */
+	passos: string[],
+	/**  Sem receita guardada para este jogo: o Turbo ainda não mediu ele. */
+	sem_receita: boolean,
+	/**  O Turbo não ligou (prova rodando, receita reprovada, sem licença): a frase dele. */
+	recusa: string | null,
+};
+
 export type ProblemaDaRota = "perda" | "variacao";
 
 export type Quality = "MEASURED" | "ESTIMATED" | "UNKNOWN";
@@ -1866,6 +1925,80 @@ export type RegistroDaRota_Serialize = {
 };
 
 export type Relatorio = Relatorio_Serialize | Relatorio_Deserialize;
+
+export type RelatorioDaPartida = RelatorioDaPartida_Serialize | RelatorioDaPartida_Deserialize;
+
+export type RelatorioDaPartida_Deserialize = {
+	jogo: string,
+	inicio: number,
+	fim: number,
+	/**  Janelas medidas nesta partida, e quantas entram na conta (sem gerador de quadros). */
+	janelas: number,
+	janelas_comparaveis: number,
+	/**  Média do FPS das janelas comparáveis. `None` sem nenhuma comparável. */
+	fps_medio?: number | null,
+	/**
+	 *  O pior 1% entre as janelas comparáveis e com amostra suficiente (`confiavel`): um mínimo sobre janela curta
+	 *  seria ruído virando o número da partida.
+	 */
+	pior_low_1pct?: number | null,
+	/**  O gargalo da maioria das janelas medidas pelo PresentMon; empate não afirma nenhum. */
+	gargalo?: GargaloProvavel | null,
+	/**  Trancos com instante, somados nas `janelas_com_trancos` que os leram. `None`: nenhuma leu. */
+	trancos?: number | null,
+	janelas_com_trancos: number,
+	/**
+	 *  Com o disco ocupado em volta, pela conta da própria medição (antes do corte da lista de eventos). `None` quando
+	 *  alguma dessas janelas não cruzou com o disco.
+	 */
+	trancos_com_disco?: number | null,
+	/**
+	 *  Freios da placa que começaram, somados nas `janelas_com_freio_lido`. `None`: a NVML não leu em nenhuma (AMD,
+	 *  Intel).
+	 */
+	freios?: number | null,
+	janelas_com_freio_lido: number,
+	/**  Alguma janela já começou com a placa freando: "não freou" seria mentira. */
+	ja_freava: boolean,
+	/**  As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas. */
+	anteriores?: FaixaDasPartidas | null,
+};
+
+export type RelatorioDaPartida_Serialize = {
+	jogo: string,
+	inicio: number,
+	fim: number,
+	/**  Janelas medidas nesta partida, e quantas entram na conta (sem gerador de quadros). */
+	janelas: number,
+	janelas_comparaveis: number,
+	/**  Média do FPS das janelas comparáveis. `None` sem nenhuma comparável. */
+	fps_medio: number | null,
+	/**
+	 *  O pior 1% entre as janelas comparáveis e com amostra suficiente (`confiavel`): um mínimo sobre janela curta
+	 *  seria ruído virando o número da partida.
+	 */
+	pior_low_1pct: number | null,
+	/**  O gargalo da maioria das janelas medidas pelo PresentMon; empate não afirma nenhum. */
+	gargalo: GargaloProvavel | null,
+	/**  Trancos com instante, somados nas `janelas_com_trancos` que os leram. `None`: nenhuma leu. */
+	trancos: number | null,
+	janelas_com_trancos: number,
+	/**
+	 *  Com o disco ocupado em volta, pela conta da própria medição (antes do corte da lista de eventos). `None` quando
+	 *  alguma dessas janelas não cruzou com o disco.
+	 */
+	trancos_com_disco: number | null,
+	/**
+	 *  Freios da placa que começaram, somados nas `janelas_com_freio_lido`. `None`: a NVML não leu em nenhuma (AMD,
+	 *  Intel).
+	 */
+	freios: number | null,
+	janelas_com_freio_lido: number,
+	/**  Alguma janela já começou com a placa freando: "não freou" seria mentira. */
+	ja_freava: boolean,
+	/**  As partidas anteriores deste jogo, só janelas comparáveis. `None` com menos de duas. */
+	anteriores: FaixaDasPartidas | null,
+};
 
 export type RelatorioDeTetos = RelatorioDeTetos_Serialize | RelatorioDeTetos_Deserialize;
 
@@ -2512,6 +2645,15 @@ export type Telemetry_Serialize = {
 	collection_duration_ms: number,
 	summary: Summary,
 	metrics: { [key in string]: Metric_Serialize },
+};
+
+/**  O que o vigia conta quando o jogo fecha (`partida:terminou`): a tela monta o cartão da partida com o relatório. */
+export type Terminada = {
+	jogo: string,
+	executavel: string,
+	/**  Do jogo aberto ao fechado, como o vigia viu (a cada 4 s). */
+	segundos: number,
+	pelo_jogar: boolean,
 };
 
 export type TetoEscondido = TetoEscondido_Serialize | TetoEscondido_Deserialize;

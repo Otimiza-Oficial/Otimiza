@@ -225,6 +225,14 @@ preocupado quando uma guarda disparou, dormindo sem jogo. Um olhar na bandeja di
 | **7** | Experimentos medidos: MPO, flip em janela, shader cache (B4, B7, B8) | Médio, varia por máquina | Baixo cada | Cada um só fica ligado onde a prova mostrou ganho |
 | **8** | Overlay e widget novos (5.6) | Médio | Médio | Overlay abaixo de 0,2% de um núcleo, medido |
 
+**Estado (10/11/2026):** fases 1 e 2 feitas, ainda sem teste com jogo de verdade.
+- Cartão da partida ao fechar o jogo (`partida:terminou` + `relatorio_da_ultima_partida`, `ui/src/lib/partida.ts`).
+- "Jogar" nas capas e na área Jogos (`jogar`, `plataforma/partida.rs`): abre pela Steam ou pelo executável, via
+  Explorer, e o vigia liga a receita lembrada do Turbo quando o jogo aparece (`partida:preparada`).
+- Tipos gerados para o relatório, o "Jogar" e os eventos; os 115 comandos ainda com `invoke` solto estão em
+  `ui/testes/invoke-solto.json`, e o teste só deixa a lista diminuir.
+- Fica para depois: a primeira vez sem receita só oferece o Turbo (não mede sozinho); Epic sem executável não abre.
+
 As fases 1 e 2 mudam a experiência sozinhas: o cliente passa a sentir o Otimiza toda vez que joga, não só quando abre
 o app.
 

@@ -29,6 +29,8 @@ mod tests {
                 crate::commands::jogo_aberto,
                 crate::commands::biblioteca_de_jogos,
                 crate::commands::jogos_instalados,
+                crate::commands::jogar,
+                crate::commands::relatorio_da_ultima_partida,
                 crate::commands::capa_do_jogo,
                 crate::commands::start_monitoring,
                 crate::commands::get_performance_metrics,
@@ -118,6 +120,9 @@ mod tests {
                 // Plano 1.1: o Oti com IA.
                 crate::commands::oti_perguntar,
             ])
+            // Os eventos que a tela ouve (`listen`): o tipo vem daqui, como o dos comandos.
+            .typ::<crate::plataforma::partida::Preparada>()
+            .typ::<crate::plataforma::partida::Terminada>()
             // `invoke` rejeita com o texto do erro, como a interface atual espera; nada de `{ status, data }`.
             .error_handling(ErrorHandlingMode::Throw)
             // Os `u64` que cruzam a ponte são carimbos de tempo e contagens: cabem com folga num `number`.

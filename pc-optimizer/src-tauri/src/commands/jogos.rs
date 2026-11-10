@@ -88,6 +88,21 @@ pub fn jogos_instalados() -> Vec<crate::modules::windows::jogos::JogoDaLoja> {
     crate::modules::windows::jogos::para_a_tela(&crate::modules::windows::jogos::varrer())
 }
 
+/// "Jogar": abre o jogo pelo Explorer (sem herdar o administrador do Otimiza) e guarda o pedido; quando ele abrir, o
+/// vigia de sessão liga a receita que o Turbo lembra. `LIVRES`: abrir um jogo não muda nada no PC (a receita, que muda,
+/// passa pela licença no vigia).
+#[tauri::command(async)]
+#[cfg_attr(test, specta::specta)]
+pub fn jogar(nome: String) -> Result<crate::plataforma::partida::Lancamento, String> {
+    #[cfg(target_os = "windows")]
+    return crate::plataforma::partida::lancar(&nome);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = nome;
+        Err(UNSUPPORTED_PLATFORM.to_string())
+    }
+}
+
 /// A biblioteca: cada jogo já medido, com a última partida e o ganho medido. `LIVRES`.
 #[tauri::command(async)]
 #[cfg_attr(test, specta::specta)]

@@ -25,7 +25,8 @@
   import { areas, type IdDaArea } from "./lib/areas";
   import { avisos as lerAvisos } from "./lib/clima";
   import { capaRemota, iniciais } from "./lib/capas";
-  import { abertura, entender, jogoAbriu, jogoFechou, type Acao, type Fala } from "./lib/conversa";
+  import { abertura, entender, jogoAbriu, jogoFechou, partidaPreparada, partidaTerminou, type Acao, type Fala } from "./lib/conversa";
+  import { fraseDaComparacao, JOGAR, montarCartao, textoParaCompartilhar, type Cartao } from "./lib/partida";
   import {
     contaQueRoda,
     noTauri,
@@ -92,6 +93,10 @@
 
   // O Oti fala num balão que desce da busca.
   let fala = $state<Fala | null>(null);
+  /** O cartão da partida que acabou de fechar (nesta abertura do Otimiza). */
+  let cartao = $state<Cartao | null>(null);
+  let cartaoEm = 0;
+  let cartaoCopiado = $state(false);
   let digitado = $state("");
   let digitando = $state(false);
   let reacao = $state<Humor | null>(null);
@@ -262,6 +267,36 @@
     setTimeout(() => (reacao = null), ms);
   }
 
+  /** "Jogar": o Rust abre o jogo e liga a receita lembrada quando ele aparecer (`partida:preparada`). */
+  async function jogarJogo(nome: string) {
+    try {
+      const l = await ponte.jogar(nome);
+      dizer(
+        {
+          texto: `Abrindo o ${l.jogo}${l.caminho === "Steam" ? " pela Steam" : ""}…`,
+          detalhe: "Quando ele aparecer, eu ligo a receita dele.",
+          humor: "jogando",
+          acoes: [],
+        },
+        5000,
+      );
+      if (!noTauri) jogo = await ponte.jogoAberto();
+    } catch (e) {
+      dizer({ texto: `Não consegui abrir o ${nome}.`, detalhe: String(e), humor: "preocupado", acoes: [] });
+    }
+  }
+
+  async function copiarCartao() {
+    if (!cartao?.medido) return;
+    try {
+      await navigator.clipboard.writeText(textoParaCompartilhar(cartao));
+      cartaoCopiado = true;
+      setTimeout(() => (cartaoCopiado = false), 1600);
+    } catch {
+      // Sem área de transferência: o número continua na tela.
+    }
+  }
+
   function executar(a: Acao) {
     if (a.tipo === "abrir") {
       fala = null;
@@ -365,7 +400,10 @@
       setTimeout(() => (jogoNaTela = true), 2800);
     } else if (!nome && antes) {
       jogoNaTela = false;
-      setTimeout(() => dizer(jogoFechou(antes)), 400);
+      // O cartão da partida (`partida:terminou`) diz mais; a frase genérica só se ele não vier.
+      setTimeout(() => {
+        if (Date.now() - cartaoEm > 10000) dizer(jogoFechou(antes));
+      }, 2500);
     }
   });
 
@@ -533,6 +571,21 @@
 
     // Guarda térmica: o Oti avisa quando o PC começa a ser freado por calor no jogo.
     let deixarCalor: (() => void) | undefined;
+    let deixarPartida: (() => void)[] = [];
+    const pediuJogar = (e: Event) => void jogarJogo(String((e as CustomEvent).detail));
+    window.addEventListener(JOGAR, pediuJogar);
+    void Promise.all([
+      ponte.aoPrepararPartida((p) => dizer(partidaPreparada(p), p.recusa || p.sem_receita ? 0 : 8000)),
+      ponte.aoTerminarPartida(async (t) => {
+        const r = await ponte.relatorioDaPartida().catch(() => null);
+        cartao = montarCartao(t, r, Date.now() / 1000);
+        cartaoEm = Date.now();
+        dizer(partidaTerminou(cartao));
+      }),
+    ]).then((d) => {
+      if (vivo) deixarPartida = d;
+      else d.forEach((f) => f());
+    });
     void ponte
       .aoAvisoTermico((a) => {
         dizer(
@@ -554,6 +607,8 @@
     return () => {
       vivo = false;
       deixarCalor?.();
+      deixarPartida.forEach((f) => f());
+      window.removeEventListener(JOGAR, pediuJogar);
       clearTimeout(espera);
       clearInterval(maquina);
       window.removeEventListener("resize", ajustar);
@@ -689,10 +744,15 @@
               </label>
               <div class="tres">
                 {#each jogosFiltrados as { jogo: j, capa } (j.nome)}
-                  <button class="capa-jogo" onclick={() => abrir("jogos")} title={j.nome}>
-                    {#if capa}<img src={capa} alt="" onerror={() => fotoFalhou(j.nome)} />{:else}<span class="ini">{iniciais(j.nome)}</span>{/if}
-                    <span class="capa-nome">{j.nome}</span>
-                  </button>
+                  <div class="capa-jogo">
+                    <button class="capa-abrir" onclick={() => abrir("jogos")} title={j.nome} aria-label={`${j.nome}: ver partidas`}>
+                      {#if capa}<img src={capa} alt="" onerror={() => fotoFalhou(j.nome)} />{:else}<span class="ini">{iniciais(j.nome)}</span>{/if}
+                    </button>
+                    <div class="capa-pe">
+                      <span class="capa-nome">{j.nome}</span>
+                      {#if !jogo}<button class="jogar" onclick={() => jogarJogo(j.nome)} aria-label={`Jogar ${j.nome}`}>Jogar</button>{/if}
+                    </div>
+                  </div>
                 {:else}
                   <p class="sec vazio">{instalados.length ? "Nenhum jogo com esse nome." : "Lendo seus jogos…"}</p>
                 {/each}
@@ -701,6 +761,32 @@
 
             <!-- A última partida: só número medido, com nome -->
             <section class="bloco b-partida" use:brilho>
+              {#if cartao && !jogo}
+                <h3>A partida que acabou</h3>
+                <p class="cartao-jogo"><strong>{cartao.jogo}</strong> <span class="sec">· {cartao.duracao}</span></p>
+                {#if cartao.medido}
+                  <dl class="numeros">
+                    <div><dt>FPS médio</dt><dd class="numero">{cartao.fps != null ? inteiro(cartao.fps) : "—"}</dd></div>
+                    <div><dt>1% pior</dt><dd class="numero">{cartao.low != null ? inteiro(cartao.low) : "—"}</dd></div>
+                    {#if cartao.trancosPorMinuto != null}
+                      <div><dt>Trancos/min</dt><dd class="numero">{cartao.trancosPorMinuto.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</dd></div>
+                    {/if}
+                  </dl>
+                  <p class="sec pequeno">
+                    {#if cartao.comparacao}{fraseDaComparacao(cartao.comparacao)}{:else}Com mais partidas medidas, aparece a faixa das anteriores.{/if}
+                  </p>
+                  <div class="acoes-cartao">
+                    <button class="link" onclick={() => abrir("prova")}>Ver a partida <Icone nome="seta_direita" tamanho={14} /></button>
+                    <button class="link" onclick={copiarCartao}>{cartaoCopiado ? "Copiado" : "Copiar para o Discord"}</button>
+                  </div>
+                {:else}
+                  <p class="sec pequeno">
+                    {cartao.porque === "curta"
+                      ? "Curta demais para medir: a primeira medição sai três minutos depois de o jogo abrir."
+                      : "Esta partida não foi medida. Com o Otimiza como administrador, a medição usa o PresentMon."}
+                  </p>
+                {/if}
+              {:else}
               <h3>{jogo ? "Jogando agora" : "Última partida"}</h3>
               <div class="faixa">
                 <span class="capa">
@@ -720,6 +806,7 @@
                 <p class="sec pequeno">Jogue com o Otimiza aberto: ele mede o FPS sozinho, sem nada por cima do jogo.</p>
               {/if}
               <button class="link" onclick={() => abrir("jogos")}>Ver partidas <Icone nome="seta_direita" tamanho={14} /></button>
+              {/if}
             </section>
 
             <!-- Otimizar: a ação principal da tela e os atalhos que respondem uma pergunta -->
@@ -1693,6 +1780,64 @@
     cursor: pointer;
     overflow: hidden;
   }
+  /* A capa abre o jogo na área Jogos; o "Jogar" no pé abre o jogo de verdade. */
+  .capa-abrir {
+    grid-area: 1 / 1;
+    display: grid;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .capa-pe {
+    grid-area: 1 / 1;
+    align-self: end;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 18px 8px 8px 10px;
+    background: linear-gradient(transparent, rgb(0 0 0 / 0.62));
+    pointer-events: none;
+  }
+  .capa-pe .capa-nome {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    background: none;
+  }
+  .jogar {
+    pointer-events: auto;
+    flex: none;
+    height: 26px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 13px;
+    background: #fff;
+    color: #1d1d1f;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.25);
+    transition: transform 160ms ease;
+  }
+  .jogar:hover {
+    transform: scale(1.05);
+  }
+  .cartao-jogo {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.3;
+  }
+  .acoes-cartao {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: auto;
+  }
   .capa-jogo img,
   .capa-jogo .ini {
     grid-area: 1 / 1;
@@ -1702,7 +1847,7 @@
     object-fit: cover;
     transition: transform 300ms ease;
   }
-  .capa-jogo:hover img {
+  .capa-abrir:hover img {
     transform: scale(1.03);
   }
   /* O nome por cima do pé da capa: a arte fica inteira e o nome não briga com um rodapé claro. */

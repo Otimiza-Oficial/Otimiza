@@ -10,6 +10,10 @@
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
   import Icone from "./Icone.svelte";
   import { capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
+  import { JOGAR } from "../lib/partida";
+
+  /** A "loja" de um jogo que o Otimiza mediu mas não achou instalado: sem caminho para o "Jogar". */
+  const SO_MEDIDO = "Medido pelo Otimiza";
   import { ponte, type Ganho, type JogoDaLoja, type ResumoDoJogo } from "../lib/ponte";
 
   type Item = { jogo: JogoDaLoja; capa: string | null; medido: ResumoDoJogo | null };
@@ -43,7 +47,7 @@
       for (const b of biblioteca) {
         if (!lista.some((i) => chave(i.jogo.nome) === chave(b.nome))) {
           lista.push({
-            jogo: { nome: b.nome, loja: "Medido pelo Otimiza", appid: null, ultima_vez: b.ultima?.quando ?? 0, gb: null },
+            jogo: { nome: b.nome, loja: SO_MEDIDO, appid: null, ultima_vez: b.ultima?.quando ?? 0, gb: null },
             capa: capaRemota(b.nome, null),
             medido: b,
           });
@@ -113,7 +117,12 @@
           {#if atual.capa}<img src={atual.capa} alt="" onerror={() => fotoFalhou(atual.jogo.nome)} />{:else}<span class="reserva grande">{iniciais(atual.jogo.nome)}</span>{/if}
         </div>
         <div class="info">
-          <h3>{atual.jogo.nome}</h3>
+          <div class="titulo-jogo">
+            <h3>{atual.jogo.nome}</h3>
+            {#if atual.jogo.loja !== SO_MEDIDO}
+              <button class="btn primario" onclick={() => window.dispatchEvent(new CustomEvent(JOGAR, { detail: atual.jogo.nome }))}>Jogar</button>
+            {/if}
+          </div>
           <p class="apoio">
             {[atual.jogo.loja, gb(atual.jogo.gb), quando(atual.jogo.ultima_vez) && `jogado ${quando(atual.jogo.ultima_vez)}`]
               .filter(Boolean)
@@ -198,6 +207,12 @@
 </div>
 
 <style>
+  .titulo-jogo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
   .jogos {
     display: grid;
     gap: 18px;

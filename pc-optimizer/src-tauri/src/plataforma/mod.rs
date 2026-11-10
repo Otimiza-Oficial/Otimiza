@@ -34,6 +34,7 @@ pub mod mira;
 pub mod mouse_taxa;
 pub mod operadora;
 pub mod overlay;
+pub mod partida;
 pub mod por_cima;
 pub mod ritmo_estavel;
 pub mod rota;

@@ -308,6 +308,7 @@ pub fn run() {
             commands::capa_do_jogo,
             commands::capa_larga_do_jogo,
             commands::jogos_instalados,
+            commands::jogar,
             commands::fundos_listar,
             commands::limpeza_medir,
             commands::limpeza_executar,
@@ -427,6 +428,8 @@ pub fn run() {
                     use tauri::Emitter;
 
                     let mut pid: Option<u32> = None;
+                    // O jogo aberto agora, desde quando, e se veio do "Jogar": para o cartão da partida ao fechar.
+                    let mut em_jogo: Option<(String, String, std::time::Instant, bool)> = None;
                     // Sem a trava do modo seguro: aqui só se LÊ qual jogo está aberto, nada age sozinho.
                     loop {
                         tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -487,6 +490,31 @@ pub fn run() {
                             let _ = tokio::task::spawn_blocking(move || plataforma::overlay::ao_abrir(&h, &j)).await;
                         }
                         let _ = handle.emit("jogo:sessao", &mudou);
+                        // A partida (Plano "Partida de respeito"): ao fechar, a tela monta o cartão; ao abrir pelo
+                        // "Jogar", a receita lembrada liga sozinha.
+                        if let Some((jogo, executavel, desde, pelo_jogar)) = em_jogo.take() {
+                            let _ = handle.emit(
+                                "partida:terminou",
+                                plataforma::partida::Terminada {
+                                    jogo,
+                                    executavel,
+                                    segundos: desde.elapsed().as_secs(),
+                                    pelo_jogar,
+                                },
+                            );
+                        }
+                        if let Some(j) = mudou.as_ref() {
+                            let pelo_jogar = plataforma::partida::tomar_se_for(&j.nome, &j.executavel);
+                            em_jogo = Some((j.nome.clone(), j.executavel.clone(), std::time::Instant::now(), pelo_jogar));
+                            if pelo_jogar {
+                                let h = handle.clone();
+                                let (nome, exe) = (j.nome.clone(), j.executavel.clone());
+                                tauri::async_runtime::spawn(async move {
+                                    let preparada = preparar_partida(&h, nome, &exe).await;
+                                    let _ = h.emit("partida:preparada", preparada);
+                                });
+                            }
+                        }
                         // Fechado durante o jogo, ficou só na bandeja: com o jogo fechado, sai de vez.
                         let escondida = handle
                             .get_webview_window("main")
@@ -1211,5 +1239,34 @@ mod tests_da_janela {
 
         assert_eq!(largura, 800.0);
         assert_eq!(altura, 600.0);
+    }
+}
+
+/// O jogo que o "Jogar" abriu apareceu: liga a receita que o Turbo lembra dele, a mesma do toque em "Ligar" no cartão.
+/// Sem receita guardada, não mede nada sozinho (medir leva 10 s com o jogo na frente): a tela oferece o Turbo.
+#[cfg(target_os = "windows")]
+async fn preparar_partida(app: &tauri::AppHandle, jogo: String, executavel: &str) -> plataforma::partida::Preparada {
+    let id = plataforma::historico::id_do_jogo(executavel).0;
+    let sem_receita = plataforma::turbo::perfil(&id).is_none();
+    if sem_receita {
+        return plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: None };
+    }
+    if utils::diagnostico::modo_seguro() {
+        return plataforma::partida::Preparada {
+            jogo,
+            passos: Vec::new(),
+            sem_receita,
+            recusa: Some("O modo seguro está ligado: o Otimiza não aplica nada sozinho.".to_string()),
+        };
+    }
+    match commands::turbo_ligar(Some(true), app.state::<AppState>()).await {
+        Ok(painel) => {
+            utils::Logger::info(&format!("jogar: receita do Turbo ligada em {} ({} passos)", jogo, painel.passos.len()));
+            plataforma::partida::Preparada { jogo, passos: painel.passos, sem_receita, recusa: None }
+        }
+        Err(e) => {
+            utils::Logger::warn(&format!("jogar: o Turbo não ligou em {}: {}", jogo, e));
+            plataforma::partida::Preparada { jogo, passos: Vec::new(), sem_receita, recusa: Some(e) }
+        }
     }
 }

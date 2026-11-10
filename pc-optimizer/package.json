@@ -10,7 +10,7 @@
     "nova:build": "svelte-check --workspace ui --tsconfig ./tsconfig.json && vite build --config vite.nova.config.ts",
     "build:app": "npm run nova:build",
     "fumaca:nova": "npm run nova:build && node scripts/fumaca-nova.mjs",
-    "testes:ui": "node --test ui/testes/queda.test.ts ui/testes/temporadas.test.ts"
+    "testes:ui": "node --test ui/testes/queda.test.ts ui/testes/temporadas.test.ts ui/testes/partida.test.ts ui/testes/invoke-solto.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

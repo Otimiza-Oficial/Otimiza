@@ -19,6 +19,8 @@ pub const INTERVALO_ENTRE_PARTIDAS_S: u64 = 2 * SEGUNDOS_ENTRE_MEDICOES + 5 * 60
 pub const PARTIDAS_NA_FAIXA: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "FaixaDasPartidas"))]
 pub struct Faixa {
     pub partidas: usize,
     pub mediana_fps: f64,
@@ -27,6 +29,8 @@ pub struct Faixa {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(test, derive(specta::Type))]
+#[cfg_attr(test, serde(rename = "RelatorioDaPartida"))]
 pub struct Relatorio {
     pub jogo: String,
     pub inicio: u64,

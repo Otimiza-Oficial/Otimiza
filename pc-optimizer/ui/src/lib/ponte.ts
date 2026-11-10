@@ -40,6 +40,10 @@ import {
   type LadoDoLab,
   type RelatorioDoPlano_Serialize,
   type RelatorioDeTetos_Serialize,
+  type Lancamento as LancamentoGerado,
+  type RelatorioDaPartida_Serialize,
+  type Preparada_Serialize,
+  type Terminada as TerminadaGerada,
   type VistoriaDoPlano,
   type DiagnosticoDeEnergia,
   type ResultadoDaProva_Serialize,
@@ -56,6 +60,10 @@ import {
 
 export type { Ganho, Parte, Tela, VersaoDoApp } from "./tipos";
 export type Hardware = PerfilDeHardware_Serialize;
+export type Lancamento = LancamentoGerado;
+export type RelatorioDaPartida = RelatorioDaPartida_Serialize;
+export type Preparada = Preparada_Serialize;
+export type Terminada = TerminadaGerada;
 export type ResumoDoJogo = ResumoDoJogo_Serialize;
 export type JogoDaLoja = JogoDaLoja_Serialize;
 export type Historico = HistoricoNaTela_Serialize;
@@ -659,6 +667,13 @@ let sobreposicaoDemo: Sobreposicao = {
 };
 
 let demoTick = 0;
+/** A partida de demonstração: quando começou, se veio do "Jogar" e quem ouve o começo e o fim. */
+const partidaDemo: {
+  desde: number;
+  pelo_jogar: boolean;
+  aoPreparar: ((p: Preparada) => void)[];
+  aoTerminar: ((t: Terminada) => void)[];
+} = { desde: 0, pelo_jogar: false, aoPreparar: [], aoTerminar: [] };
 let cs2Demo: PainelDoCs2 = { instalado: true, ligado: false, estado: null };
 
 export const ponte = {
@@ -671,7 +686,64 @@ export const ponte = {
     return jogo ? { nome: jogo.nome } : null;
   },
   simularJogo: (nome: string | null) => {
-    if (!noTauri) jogoDemo = nome;
+    if (noTauri) return;
+    // Na demonstração, fechar o jogo de teste conta como o fim de uma partida (o cartão aparece).
+    if (jogoDemo && !nome) {
+      const fim: Terminada = { jogo: jogoDemo, executavel: "", segundos: Math.max(240, Math.round((Date.now() - partidaDemo.desde) / 1000)), pelo_jogar: partidaDemo.pelo_jogar };
+      setTimeout(() => partidaDemo.aoTerminar.forEach((f) => f(fim)), 300);
+    }
+    if (nome && !jogoDemo) partidaDemo.desde = Date.now();
+    if (!nome) partidaDemo.pelo_jogar = false;
+    jogoDemo = nome;
+  },
+  /** "Jogar": o Rust abre o jogo (Steam ou executável) e liga a receita lembrada quando ele aparecer. */
+  jogar: async (nome: string): Promise<Lancamento> => {
+    if (noTauri) return commands.jogar(nome);
+    partidaDemo.pelo_jogar = true;
+    partidaDemo.desde = Date.now();
+    jogoDemo = nome;
+    setTimeout(
+      () =>
+        partidaDemo.aoPreparar.forEach((f) =>
+          f({ jogo: nome, passos: ["Teto de 60 FPS no driver (o que o jogo segura)", "Downloads de fundo segurados", "Processador sem hesitar"], sem_receita: false, recusa: null }),
+        ),
+      2500,
+    );
+    return { jogo: nome, caminho: "Executavel" };
+  },
+  /** A última partida inteira, das janelas que a medição automática gravou. */
+  relatorioDaPartida: async (): Promise<RelatorioDaPartida | null> => {
+    if (noTauri) return commands.relatorioDaUltimaPartida();
+    const agora = Math.floor(Date.now() / 1000);
+    return {
+      jogo: jogoDemo ?? "FiveM",
+      inicio: agora - 3600,
+      fim: agora - 60,
+      janelas: 4,
+      janelas_comparaveis: 4,
+      fps_medio: 88,
+      pior_low_1pct: 57,
+      gargalo: "Cpu",
+      trancos: 6,
+      janelas_com_trancos: 4,
+      trancos_com_disco: 1,
+      freios: 0,
+      janelas_com_freio_lido: 4,
+      ja_freava: false,
+      anteriores: { partidas: 5, mediana_fps: 79, menor_fps: 71, maior_fps: 84 },
+    };
+  },
+  /** `partida:preparada`: o jogo que o "Jogar" abriu apareceu e a receita ligou (ou não, e por quê). */
+  aoPrepararPartida: async (f: (p: Preparada) => void): Promise<() => void> => {
+    if (noTauri) return listen<Preparada>("partida:preparada", (e) => f(e.payload));
+    partidaDemo.aoPreparar.push(f);
+    return () => (partidaDemo.aoPreparar = partidaDemo.aoPreparar.filter((x) => x !== f));
+  },
+  /** `partida:terminou`: o jogo fechou; a tela monta o cartão da partida. */
+  aoTerminarPartida: async (f: (t: Terminada) => void): Promise<() => void> => {
+    if (noTauri) return listen<Terminada>("partida:terminou", (e) => f(e.payload));
+    partidaDemo.aoTerminar.push(f);
+    return () => (partidaDemo.aoTerminar = partidaDemo.aoTerminar.filter((x) => x !== f));
   },
   biblioteca: () => (noTauri ? commands.bibliotecaDeJogos() : Promise.resolve(demo.biblioteca)),
   instalados: () => (noTauri ? commands.jogosInstalados() : Promise.resolve(demo.instalados)),

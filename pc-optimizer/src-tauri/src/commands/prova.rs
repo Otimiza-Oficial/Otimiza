@@ -213,6 +213,7 @@ pub async fn perfil_do_pc() -> Result<crate::modules::perfil::Perfil, String> {
 
 /// A última partida inteira (`modules::relatoriodapartida`), das janelas já medidas. Só leitura.
 #[tauri::command]
+#[cfg_attr(test, specta::specta)]
 pub async fn relatorio_da_ultima_partida(
 ) -> Result<Option<crate::modules::relatoriodapartida::Relatorio>, String> {
     tokio::task::spawn_blocking(|| {

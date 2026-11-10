@@ -4,6 +4,7 @@
 import type { Gesto, Humor } from "../componentes/Oti.svelte";
 import type { IdDaArea } from "./areas";
 import type { Aviso } from "./clima";
+import { fraseDaComparacao, type Cartao } from "./partida";
 
 export type Acao =
   | { rotulo: string; tipo: "abrir"; area: IdDaArea; principal?: boolean }
@@ -162,5 +163,47 @@ export function jogoFechou(nome: string): Fala {
       { rotulo: "Ver a partida", tipo: "abrir", area: "jogos", principal: true },
       { rotulo: "Depois", tipo: "falar", fala: ociosa },
     ],
+  };
+}
+
+/** O jogo que o "Jogar" abriu apareceu: o que o Turbo ligou, ou por que não ligou. */
+export function partidaPreparada(p: { jogo: string; passos: string[]; sem_receita: boolean; recusa: string | null }): Fala {
+  if (p.recusa) return { texto: `Abri o ${p.jogo}, mas não liguei a receita.`, detalhe: p.recusa, humor: "preocupado", acoes: [] };
+  if (p.sem_receita)
+    return {
+      texto: `Abri o ${p.jogo}. Ainda não tenho a receita dele.`,
+      detalhe: "Com o jogo na frente, o Turbo mede 10 s e monta a receita. Da próxima vez, o Jogar liga ela sozinho.",
+      humor: "atento",
+      acoes: [{ rotulo: "Abrir o Turbo", tipo: "abrir", area: "turbo", principal: true }],
+    };
+  return {
+    texto: `${p.jogo} pronto. Liguei a receita dele.`,
+    detalhe: p.passos.length ? p.passos.join(" · ") : "A receita lembrada não precisou mudar nada agora.",
+    humor: "jogando",
+    acoes: [],
+  };
+}
+
+/** O jogo fechou: o cartão da partida no balão. Só número medido; partida curta é dita como curta. */
+export function partidaTerminou(c: Cartao): Fala {
+  const ver = { rotulo: "Ver a partida", tipo: "abrir" as const, area: "prova" as const, principal: true };
+  if (!c.medido)
+    return {
+      texto: `${c.jogo}: ${c.duracao} de partida.`,
+      detalhe:
+        c.porque === "curta"
+          ? "Foi curta demais para medir: a primeira medição sai três minutos depois de o jogo abrir."
+          : "Não consegui medir esta partida. Com o Otimiza aberto como administrador, a medição usa o PresentMon.",
+      humor: "atento",
+      acoes: [],
+    };
+  const n = (v: number | null) => (v == null ? "—" : Math.round(v).toLocaleString("pt-BR"));
+  const trancos = c.trancosPorMinuto != null ? ` · ${c.trancosPorMinuto.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} trancos/min` : "";
+  return {
+    texto: `${c.jogo}: ${n(c.fps)} FPS médio, 1% pior ${n(c.low)}${trancos}.`,
+    detalhe: `${c.duracao} de partida.${c.comparacao ? ` ${fraseDaComparacao(c.comparacao)}` : ""}`,
+    humor: c.comparacao?.sentido === "abaixo" ? "preocupado" : "feliz",
+    gesto: c.comparacao?.sentido === "acima" ? "comemorar" : undefined,
+    acoes: [ver],
   };
 }

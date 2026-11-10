@@ -196,6 +196,7 @@ mod tests {
         "capa_do_jogo",
         "capa_larga_do_jogo",
         "jogos_instalados",
+        "jogar",
         "fundos_listar",
         "limpeza_medir",
         "fundos_adicionar",
