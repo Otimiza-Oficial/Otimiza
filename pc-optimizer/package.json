@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "fumaca": "npm run build && node scripts/clicar-todas-as-areas.mjs",
+    "fumaca:nova": "npm run nova:build && node scripts/fumaca-nova.mjs",
     "nova": "tauri dev --config src-tauri/tauri.nova.conf.json",
     "nova:web": "vite --config vite.nova.config.ts",
     "nova:build": "svelte-check --workspace ui --tsconfig ./tsconfig.json && vite build --config vite.nova.config.ts",

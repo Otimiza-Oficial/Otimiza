@@ -1,13 +1,13 @@
 /// <reference types="vite/client" />
 import { mount } from "svelte";
+import { invoke } from "@tauri-apps/api/core";
 import "./tokens.css";
 import App from "./App.svelte";
 
 // Erro de JavaScript vai para o `otimiza.log` (`anotar_erro_da_tela`): é o arquivo que o cliente manda ao suporte, e
 // sem isso uma tela quebrada no PC dele não deixa rastro nenhum.
 if ("__TAURI_INTERNALS__" in window) {
-  const anotar = (texto: string) =>
-    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("anotar_erro_da_tela", { texto }).catch(() => {}));
+  const anotar = (texto: string) => void invoke("anotar_erro_da_tela", { texto }).catch(() => {});
   window.addEventListener("error", (e) => anotar(`${e.message} (${e.filename}:${e.lineno}:${e.colno})`));
   window.addEventListener("unhandledrejection", (e) => anotar(`promessa: ${e.reason instanceof Error ? (e.reason.stack ?? e.reason.message) : String(e.reason)}`));
 }
@@ -42,7 +42,7 @@ const app = iniciar(alvo);
 if ("__TAURI_INTERNALS__" in window)
   void app.then(() =>
     requestAnimationFrame(() =>
-      setTimeout(() => void import("@tauri-apps/api/core").then(({ invoke }) => invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {})), 0)
+      setTimeout(() => void invoke("abertura_pronta", { paginaMs: performance.now() }).catch(() => {}), 0)
     )
   );
 
