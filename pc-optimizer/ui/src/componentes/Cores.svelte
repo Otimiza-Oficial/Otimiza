@@ -1,12 +1,14 @@
 <script lang="ts">
   // A área Cores (trazida da 3.3, `src/v33/app.ts`, `telaCores`): saturação (vibração digital na NVIDIA), brilho,
-  // contraste, gama e matiz do monitor, pelo driver da placa ou pela gama do Windows, com perfil por jogo. A prévia é
-  // uma cena processada pixel a pixel, metade antes e metade depois. "Voltar ao normal" devolve o que era antes.
+  // contraste, gama e matiz do monitor, pelo driver da placa ou pela gama do Windows, com perfil por jogo. A cena é
+  // processada pixel a pixel, antes e depois com o divisor em cima da própria imagem. "Voltar ao normal" devolve o
+  // que era antes.
   import { onMount } from "svelte";
   import { ferramentas, type CaminhoDasCores, type EstadoDasCores } from "../lib/ferramentas";
   import { NORMAL, PREDEFINICOES, previa, type Ajuste } from "../lib/cores";
 
   const CAMINHO: Record<CaminhoDasCores, string> = { Amd: "driver AMD", Nvidia: "driver NVIDIA", Gama: "Windows" };
+  const NOME_DA_PREDEFINICAO: Record<string, string> = { natural: "Natural", vivo: "Vivo", competitivo: "Competitivo", cinema: "Cinema" };
 
   let st = $state<EstadoDasCores | null>(null);
   let jogo = $state<{ id: string; nome: string } | null>(null);
@@ -42,8 +44,14 @@
     if (canvas) previa(canvas, ajuste, corte / 100);
   });
 
+  /** A miniatura de cada predefinição: a mesma cena, inteira com o ajuste dela. */
+  function miniatura(no: HTMLCanvasElement, ajuste: Ajuste) {
+    previa(no, ajuste, 0);
+  }
+
   const vale = (k: keyof Ajuste) => st?.suporta[k] ?? false;
   const igual = (x: Ajuste, y: Ajuste) => (Object.keys(x) as (keyof Ajuste)[]).every((k) => x[k] === y[k]);
+  const pct = (v: number, min: number, max: number) => `${((v - min) / (max - min)) * 100}%`;
 
   function valor(k: keyof Ajuste) {
     const v = a[k];
@@ -106,117 +114,258 @@
   }
 </script>
 
-<div class="area-cores">
-  <section class="secao duas">
-    <div class="lado-previa">
-      <div class="previa"><canvas bind:this={canvas}></canvas></div>
-      <input type="range" min="0" max="100" bind:value={corte} aria-label="Comparar antes e depois" />
-      <p class="apoio pequeno">À esquerda como está, à direita com o ajuste. Arraste para comparar.</p>
+<div class="estudio">
+  <!-- A cena: antes à esquerda do divisor, depois à direita. O divisor é a própria imagem. -->
+  <div class="palco">
+    <canvas bind:this={canvas}></canvas>
+    <span class="canto esquerda">Antes</span>
+    <span class="canto direita">Depois</span>
+    <span class="estado" class:vivo={aoVivo}><span class="luz"></span>{aoVivo ? "No monitor agora" : "Só na prévia"}</span>
+    <div class="divisor" style:left="{corte}%" aria-hidden="true"><span class="pega"><span></span><span></span></span></div>
+    <input class="arrastar" type="range" min="0" max="100" bind:value={corte} aria-label="Divisor entre antes e depois" />
+  </div>
+
+  <div class="predefinicoes" role="radiogroup" aria-label="Predefinições">
+    {#each Object.keys(PREDEFINICOES) as nome (nome)}
+      <button class="predef" role="radio" aria-checked={igual(a, PREDEFINICOES[nome])} onclick={() => predefinir(nome)}>
+        <canvas use:miniatura={PREDEFINICOES[nome]}></canvas>
+        <span>{NOME_DA_PREDEFINICAO[nome] ?? nome}</span>
+      </button>
+    {/each}
+  </div>
+
+  <div class="ajustes">
+    {#each controles as [k, nome, min, max] (k)}
+      <label class="ajuste" class:apagado={!vale(k)}>
+        <span class="cabeca"><span>{nome}</span><b class="numero">{valor(k)}</b></span>
+        <input class="deslizante" type="range" {min} {max} bind:value={a[k]} disabled={!vale(k)} oninput={mudou} style:--pct={pct(a[k], min, max)} />
+        {#if lido && !vale(k)}<span class="porque">O {CAMINHO[st?.caminho ?? "Gama"]} não muda isto.</span>{/if}
+      </label>
+    {/each}
+  </div>
+
+  <div class="barra">
+    <div class="so-jogo">
+      <button class="interruptor" role="switch" aria-checked={soComJogo} aria-label="Só com o jogo aberto" disabled={!jogo} onclick={alternarSoComJogo}></button>
+      <div>
+        <span>Só com {jogo ? `o ${jogo.nome}` : "o jogo"} aberto</span>
+        <p class="apoio">{jogo ? "Liga quando ele abre e devolve quando ele fecha." : "Abra um jogo para salvar o ajuste dele."}</p>
+      </div>
     </div>
-    <div class="controles">
-      <div class="segmento" role="radiogroup" aria-label="Predefinições">
-        {#each Object.keys(PREDEFINICOES) as nome (nome)}
-          <button role="radio" aria-checked={igual(a, PREDEFINICOES[nome])} onclick={() => predefinir(nome)}>
-            {nome[0].toUpperCase() + nome.slice(1)}
-          </button>
-        {/each}
-      </div>
-      {#each controles as [k, nome, min, max] (k)}
-        <label class="controle" class:apagado={!vale(k)} title={vale(k) ? undefined : `Pelo ${CAMINHO[st?.caminho ?? "Gama"]} isso não muda`}>
-          <span>{nome}<b>{valor(k)}</b></span>
-          <input type="range" {min} {max} bind:value={a[k]} disabled={!vale(k)} oninput={mudou} />
-        </label>
-      {/each}
-      <div class="linha-opcao">
-        <div>
-          <span>Só com o jogo aberto</span>
-          <p class="apoio pequeno">{jogo ? `Liga quando o ${jogo.nome} abre e devolve quando ele fecha.` : "Abra um jogo para salvar o ajuste dele."}</p>
-        </div>
-        <button class="interruptor" role="switch" aria-checked={soComJogo} aria-label="Só com o jogo aberto" disabled={!jogo} onclick={alternarSoComJogo}></button>
-      </div>
-      <div class="acoes">
-        <button class="btn primario" disabled={!st} onclick={aplicar}>Aplicar no monitor</button>
-        <button class="btn" onclick={normal}>Voltar ao normal</button>
-      </div>
-      {#if lido}<p class="apoio pequeno">{st ? st.nota : "O Otimiza não conseguiu ler as cores deste monitor."}</p>{/if}
-      {#if recado}<p class="recado" data-tom={recado.tom}>{recado.texto}</p>{/if}
+    <div class="acoes">
+      <button class="btn" onclick={normal}>Voltar ao normal</button>
+      <button class="btn primario" disabled={!st} onclick={aplicar}>Aplicar no monitor</button>
     </div>
-  </section>
+  </div>
+  {#if recado}<p class="recado" data-tom={recado.tom}>{recado.texto}</p>{/if}
+  {#if lido}<p class="apoio nota">{st ? st.nota : "O Otimiza não conseguiu ler as cores deste monitor."}</p>{/if}
 </div>
 
 <style>
-  .duas {
+  .estudio {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-    gap: 24px;
+    gap: 16px;
+    padding: 8px 0 4px;
   }
-  @media (max-width: 760px) {
-    .duas {
-      grid-template-columns: 1fr;
-    }
-  }
-  .lado-previa {
-    display: grid;
-    gap: 8px;
-    align-content: start;
-  }
-  .previa {
+  .palco {
     position: relative;
-    aspect-ratio: 16 / 9;
-    border-radius: var(--raio-3);
+    aspect-ratio: 16 / 7;
+    border-radius: 20px;
     overflow: hidden;
     background: #111;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.18);
   }
-  .previa canvas {
+  .palco canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
   }
-  .controles {
+  .canto,
+  .estado {
+    position: absolute;
+    top: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.45);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  .canto.esquerda {
+    left: 12px;
+  }
+  .canto.direita {
+    right: 12px;
+  }
+  .estado {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .luz {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.5);
+  }
+  .estado.vivo .luz {
+    background: #34c759;
+    box-shadow: 0 0 0 3px rgb(52 199 89 / 0.3);
+  }
+  .divisor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    margin-left: -1px;
+    background: #fff;
+    box-shadow: 0 0 8px rgb(0 0 0 / 0.5);
+    pointer-events: none;
+  }
+  .pega {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin: -17px 0 0 -17px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+  }
+  .pega span {
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+  }
+  .pega span:first-child {
+    border-right: 6px solid #1d1d1f;
+  }
+  .pega span:last-child {
+    border-left: 6px solid #1d1d1f;
+  }
+  /* O controle de verdade cobre a cena inteira, invisível: arrastar em qualquer ponto move o divisor. */
+  .arrastar {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: ew-resize;
+  }
+  .predefinicoes {
     display: grid;
+    grid-template-columns: repeat(4, 1fr);
     gap: 10px;
-    align-content: start;
   }
-  .controle {
+  .predef {
+    display: grid;
+    gap: 6px;
+    padding: 6px 6px 8px;
+    border-radius: 14px;
+    border: 2px solid transparent;
+    background: var(--superficie-2);
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      border-color 160ms,
+      transform 160ms cubic-bezier(0.3, 1.5, 0.5, 1);
+  }
+  .predef:hover {
+    transform: translateY(-2px);
+  }
+  .predef[aria-checked="true"] {
+    border-color: var(--tinta);
+  }
+  .predef canvas {
+    width: 100%;
+    object-fit: cover;
+    aspect-ratio: 16 / 7;
+    border-radius: 9px;
+  }
+  .ajustes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 28px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: var(--superficie);
+    border: 1px solid var(--linha);
+  }
+  .ajuste {
     display: grid;
     gap: 4px;
     font-size: 13px;
   }
-  .controle span {
+  .cabeca {
     display: flex;
     justify-content: space-between;
+    align-items: baseline;
   }
-  .apagado {
-    opacity: 0.4;
+  .cabeca b {
+    font-weight: 600;
   }
-  .linha-opcao {
+  .apagado .cabeca {
+    opacity: 0.5;
+  }
+  .porque {
+    font-size: 11.5px;
+    color: var(--tinta-2);
+  }
+  .barra {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
     gap: 16px;
+    flex-wrap: wrap;
+  }
+  .so-jogo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     font-size: 13px;
   }
-  .linha-opcao p,
-  .lado-previa p {
-    margin: 2px 0 0;
+  .so-jogo p {
+    margin: 1px 0 0;
+    font-size: 12px;
   }
   .acoes {
     display: flex;
     gap: 10px;
-    flex-wrap: wrap;
   }
-  .pequeno {
-    font-size: 12px;
-  }
-  .recado {
+  .recado,
+  .nota {
     margin: 0;
-    font-size: 13px;
+    font-size: 12.5px;
   }
   .recado[data-tom="ok"] {
     color: var(--ok);
   }
   .recado[data-tom="atencao"] {
     color: var(--atencao);
+  }
+  @media (max-width: 760px) {
+    .predefinicoes {
+      grid-template-columns: 1fr 1fr;
+    }
+    .ajustes {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

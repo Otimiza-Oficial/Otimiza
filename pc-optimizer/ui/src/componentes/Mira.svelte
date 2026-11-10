@@ -125,69 +125,133 @@
 
   const n = (v: number | null, casas = 0) =>
     v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: casas, minimumFractionDigits: casas });
+  const pct = (v: number, min: number, max: number) => `${((v - min) / (max - min)) * 100}%`;
+
+  /** O fundo da prévia: a mira precisa aparecer no céu claro e na sombra do mapa. */
+  const FUNDOS = [
+    ["mapa", "Mapa"],
+    ["claro", "Céu claro"],
+    ["escuro", "Sombra"],
+  ] as const;
+  let fundo = $state<(typeof FUNDOS)[number][0]>("mapa");
 </script>
 
 <div class="area-mira">
-  <section class="secao duas">
-    <div class="previa">
-      <svg viewBox="-60 -60 120 120" width="160" height="160" aria-label="Prévia da mira">{@html desenharMira(mira, 1.6)}</svg>
-    </div>
-    <div class="controles">
-      <span class="rotulo">Estilo</span>
-      <div class="estilos">
-        {#each ESTILOS as [id, nome] (id)}
-          <button aria-pressed={mira.estilo === id} title={nome} aria-label={nome} onclick={() => (mira.estilo = id)}>
-            <svg viewBox="-14 -14 28 28">{@html desenharMira({ ...mira, estilo: id, tamanho: 6, espessura: 1.6, abertura: 2.5, contorno: false, opacidade: 1, cor: "#fff" })}</svg>
-          </button>
+  <section class="estudio">
+    <!-- A mira em cima de um jogo: troque o fundo para ver se ela aparece no claro e no escuro. -->
+    <div class="palco" data-fundo={fundo}>
+      {#if fundo === "mapa"}
+        <svg class="cena" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <defs>
+            <linearGradient id="ceu-mira" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#7fb2e0" />
+              <stop offset="1" stop-color="#e9d3b4" />
+            </linearGradient>
+            <linearGradient id="chao-mira" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#8a7a63" />
+              <stop offset="1" stop-color="#4f4436" />
+            </linearGradient>
+          </defs>
+          <rect width="400" height="300" fill="url(#ceu-mira)" />
+          <path d="M0 175 L40 120 L70 150 L110 95 L150 140 L185 110 L230 150 L270 105 L310 145 L350 115 L400 160 L400 300 L0 300Z" fill="#8a9bb0" opacity="0.55" />
+          <rect x="30" y="120" width="70" height="80" fill="#5c5348" />
+          <rect x="44" y="134" width="12" height="16" fill="#2e2a25" />
+          <rect x="70" y="134" width="12" height="16" fill="#2e2a25" />
+          <rect x="285" y="105" width="90" height="95" fill="#665b4d" />
+          <rect x="300" y="122" width="14" height="20" fill="#2e2a25" />
+          <rect x="330" y="122" width="14" height="20" fill="#2e2a25" />
+          <rect x="0" y="195" width="400" height="105" fill="url(#chao-mira)" />
+          <rect x="170" y="165" width="60" height="34" rx="2" fill="#3e372e" />
+        </svg>
+      {/if}
+      <svg class="mira" viewBox="-60 -60 120 120" aria-label="Prévia da mira">{@html desenharMira(mira, 1.6)}</svg>
+      <div class="fundos" role="radiogroup" aria-label="Fundo da prévia">
+        {#each FUNDOS as [id, nome] (id)}
+          <button role="radio" aria-checked={fundo === id} onclick={() => (fundo = id)}>{nome}</button>
         {/each}
       </div>
-      <span class="rotulo">Cor</span>
-      <div class="cores">
-        {#each CORES as c (c)}
-          <button aria-pressed={mira.cor === c} style:background={c} aria-label={`Cor ${c}`} onclick={() => (mira.cor = c)}></button>
+      <span class="estado" class:vivo={ligada}><span class="luz"></span>{ligada ? "No jogo agora" : "Só na prévia"}</span>
+    </div>
+
+    <div class="painel">
+      <div class="grupo">
+        <span class="rotulo">Estilo</span>
+        <div class="estilos">
+          {#each ESTILOS as [id, nome] (id)}
+            <button aria-pressed={mira.estilo === id} onclick={() => (mira.estilo = id)}>
+              <svg viewBox="-14 -14 28 28" aria-hidden="true">{@html desenharMira({ ...mira, estilo: id, tamanho: 6, espessura: 1.6, abertura: 2.5, contorno: false, opacidade: 1, cor: "currentColor" })}</svg>
+              <span>{nome}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="grupo">
+        <span class="rotulo">Cor</span>
+        <div class="cores">
+          {#each CORES as c (c)}
+            <button aria-pressed={mira.cor === c} style:--cor={c} aria-label={`Cor ${c}`} onclick={() => (mira.cor = c)}></button>
+          {/each}
+          <label class="livre" class:escolhida={!CORES.includes(mira.cor)} style:--cor={mira.cor} title="Outra cor">
+            <input type="color" bind:value={mira.cor} aria-label="Outra cor" />
+          </label>
+        </div>
+      </div>
+
+      <div class="medidas">
+        {#each CONTROLES as [k, nome, min, max, passo] (k)}
+          <label class="medida">
+            <span class="cabeca"><span>{nome}</span><b class="numero">{k === "opacidade" ? `${Math.round(mira[k] * 100)}%` : mira[k]}</b></span>
+            <input class="deslizante" type="range" {min} {max} step={passo} bind:value={mira[k]} style:--pct={pct(mira[k], min, max)} />
+          </label>
         {/each}
       </div>
-      {#each CONTROLES as [k, nome, min, max, passo] (k)}
-        <label class="controle">
-          <span>{nome}<b>{k === "opacidade" ? `${Math.round(mira[k] * 100)}%` : mira[k]}</b></span>
-          <input type="range" {min} {max} step={passo} bind:value={mira[k]} />
-        </label>
-      {/each}
-      <div class="linha-opcao">
-        <span>Contorno preto</span>
-        <button class="interruptor" role="switch" aria-checked={mira.contorno} aria-label="Contorno preto" onclick={() => (mira.contorno = !mira.contorno)}></button>
+
+      <div class="opcoes">
+        <div class="linha-opcao">
+          <span>Contorno preto</span>
+          <button class="interruptor" role="switch" aria-checked={mira.contorno} aria-label="Contorno preto" onclick={() => (mira.contorno = !mira.contorno)}></button>
+        </div>
+        <div class="linha-opcao">
+          <span>Some ao mirar com o botão direito</span>
+          <button class="interruptor" role="switch" aria-checked={!!mira.esconder_ao_mirar} aria-label="Esconder ao mirar" onclick={() => (mira.esconder_ao_mirar = !mira.esconder_ao_mirar)}></button>
+        </div>
       </div>
-      <div class="linha-opcao">
-        <span>Esconder ao mirar com o botão direito</span>
-        <button class="interruptor" role="switch" aria-checked={!!mira.esconder_ao_mirar} aria-label="Esconder ao mirar" onclick={() => (mira.esconder_ao_mirar = !mira.esconder_ao_mirar)}></button>
+
+      <div class="acoes">
+        <button class="btn" class:primario={!ligada} onclick={alternar}>{ligada ? "Tirar do jogo" : "Mostrar no jogo"}</button>
+        <button class="btn" onclick={copiarCs2}>Copiar para o CS2</button>
       </div>
+      {#if recado}
+        <p class="recado" data-tom={recado.tom}>
+          {recado.texto}
+          {#if recado.confirmar}<button class="btn quieto" onclick={() => ligar(true)}>Ligar mesmo assim</button>{/if}
+        </p>
+      {/if}
     </div>
   </section>
+  <p class="apoio pequeno nota">
+    A mira fica numa janela do Otimiza por cima do jogo, sem tocar nele. Aparece com o jogo em janela ou sem bordas; em tela
+    cheia exclusiva o Windows não deixa nada por cima. "Copiar para o CS2" leva a mesma mira para o console do jogo.
+  </p>
 
-  <section class="secao">
-    <div class="acoes">
-      <button class="btn" class:primario={!ligada} onclick={alternar}>{ligada ? "Tirar do jogo" : "Mostrar no jogo"}</button>
-      <button class="btn" onclick={copiarCs2}>Copiar para o console do CS2</button>
-    </div>
-    {#if recado}
-      <p class="recado" data-tom={recado.tom}>
-        {recado.texto}
-        {#if recado.confirmar}<button class="btn quieto" onclick={() => ligar(true)}>Ligar mesmo assim</button>{/if}
-      </p>
-    {/if}
-    <p class="apoio">A mira fica numa janela do Otimiza por cima do jogo. Aparece com o jogo em janela ou sem bordas; em tela cheia exclusiva o Windows não deixa nada por cima.</p>
-  </section>
-
-  <section class="secao duas">
-    <div>
+  <section class="dupla">
+    <div class="cartao">
       <h2>Sensibilidade</h2>
-      <label class="campo-linha">DPI do mouse <input class="campo" type="number" min="100" max="32000" bind:value={dpi} /></label>
-      <label class="campo-linha">Sensibilidade no CS2 <input class="campo" type="number" min="0.05" step="0.05" bind:value={sens} /></label>
-      <div class="campo-linha">Volta completa <b class="numero">{cm ? `${n(cm, 1)} cm` : "—"}</b></div>
-      <div class="campo-linha">A mesma mira no Valorant <b class="numero">{n(val, 3)}</b></div>
-      <p class="apoio pequeno">CS2, Apex e Valorant giram 0,022° por contagem do mouse. Mesma volta em centímetros, mesma memória muscular.</p>
+      <div class="volta">
+        <span class="numero grande">{cm ? n(cm, 1) : "—"}</span>
+        <span class="apoio">cm por volta completa</span>
+      </div>
+      <div class="entradas">
+        <label>DPI do mouse <input class="campo" type="number" min="100" max="32000" bind:value={dpi} /></label>
+        <label>Sensibilidade no CS2 <input class="campo" type="number" min="0.05" step="0.05" bind:value={sens} /></label>
+      </div>
+      <p class="apoio pequeno">
+        No Valorant, a mesma volta é <b class="numero">{n(val, 3)}</b>. CS2, Apex e Valorant giram 0,022° por contagem do mouse:
+        mesma volta em centímetros, mesma memória muscular.
+      </p>
     </div>
-    <div>
+    <div class="cartao">
       <h2>Treino de tracking {#if recorde}<span class="apoio pequeno">recorde {recorde}%</span>{/if}</h2>
       <div class="treino">
         <canvas bind:this={canvas}></canvas>
@@ -199,7 +263,7 @@
     </div>
   </section>
 
-  <section class="secao">
+  <section class="cartao">
     <h2>FiveM</h2>
     {#if contador}
       <div class="linha-opcao">
@@ -213,9 +277,9 @@
       </div>
     {/if}
     {#if fov}
-      <label class="controle">
-        <span>Campo de visão em primeira pessoa (posição no menu)<b>{fovPosicao}</b></span>
-        <input type="range" min="0" max={fov.maximo} step="1" bind:value={fovPosicao} />
+      <label class="medida">
+        <span class="cabeca"><span>Campo de visão em primeira pessoa (posição no menu)</span><b class="numero">{fovPosicao} de {fov.maximo}</b></span>
+        <input class="deslizante" type="range" min="0" max={fov.maximo} step="1" bind:value={fovPosicao} style:--pct={pct(fovPosicao, 0, fov.maximo || 1)} />
       </label>
       <p class="apoio pequeno">
         {#if fov.pendente}
@@ -241,66 +305,195 @@
   .area-mira {
     display: grid;
     gap: 16px;
+    padding: 8px 0 4px;
   }
-  .duas {
+  .estudio {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 24px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
   }
-  @media (max-width: 760px) {
-    .duas {
-      grid-template-columns: 1fr;
-    }
-  }
-  .previa {
+  .palco {
+    position: relative;
     display: grid;
     place-items: center;
-    min-height: 220px;
-    border-radius: var(--raio-3);
-    background: radial-gradient(circle at 50% 40%, #3b4a5e, #11161f);
+    aspect-ratio: 4 / 3;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.18);
   }
-  .controles {
+  .palco[data-fundo="claro"] {
+    background: linear-gradient(180deg, #dceaf7, #f6efe2);
+  }
+  .palco[data-fundo="escuro"] {
+    background: radial-gradient(circle at 50% 45%, #2a3242, #0c0f15);
+  }
+  .cena {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .mira {
+    position: relative;
+    width: 46%;
+    max-width: 220px;
+    aspect-ratio: 1;
+  }
+  .fundos {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.4);
+    backdrop-filter: blur(6px);
+  }
+  .fundos button {
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .fundos button[aria-checked="true"] {
+    background: #fff;
+    color: #1d1d1f;
+  }
+  .estado {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgb(0 0 0 / 0.45);
+    color: #fff;
+    font-size: 12px;
+    backdrop-filter: blur(6px);
+  }
+  .luz {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.5);
+  }
+  .estado.vivo .luz {
+    background: #34c759;
+    box-shadow: 0 0 0 3px rgb(52 199 89 / 0.3);
+  }
+  .painel {
     display: grid;
-    gap: 8px;
+    gap: 14px;
+  }
+  .grupo {
+    display: grid;
+    gap: 6px;
   }
   .rotulo {
-    font-size: var(--t-apoio);
+    font-size: 12px;
     color: var(--tinta-2);
   }
-  .estilos,
-  .cores {
-    display: flex;
+  .estilos {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
     gap: 6px;
-    flex-wrap: wrap;
   }
   .estilos button {
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    padding: 8px 2px 6px;
+    border-radius: 12px;
     border: 1px solid var(--linha);
-    background: #1a2230;
+    background: var(--superficie-2);
+    color: var(--tinta);
+    font: inherit;
+    font-size: 10.5px;
     cursor: pointer;
   }
-  .estilos button[aria-pressed="true"],
-  .cores button[aria-pressed="true"] {
-    outline: 2px solid var(--acao);
-    outline-offset: 2px;
-  }
-  .cores button {
+  .estilos svg {
     width: 26px;
     height: 26px;
+  }
+  .estilos button[aria-pressed="true"] {
+    background: var(--tinta);
+    color: var(--contra, #fff);
+    border-color: transparent;
+  }
+  .cores {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .cores button,
+  .livre {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     border-radius: 50%;
-    border: 1px solid var(--linha-forte);
+    border: 0;
+    background: var(--cor);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+    cursor: pointer;
+    transition: transform 140ms cubic-bezier(0.3, 1.5, 0.5, 1);
+  }
+  .cores button:hover,
+  .livre:hover {
+    transform: scale(1.1);
+  }
+  .cores button[aria-pressed="true"],
+  .livre.escolhida {
+    box-shadow:
+      inset 0 0 0 1px rgb(0 0 0 / 0.15),
+      0 0 0 2px var(--superficie, #fff),
+      0 0 0 4px var(--tinta);
+  }
+  /* A cor livre: um disco com o espectro, e o seletor do Windows por baixo. */
+  .livre {
+    background: conic-gradient(#ff4a4a, #ffe14a, #7cff4f, #00e5ff, #4a6bff, #ff4fd8, #ff4a4a);
+  }
+  .livre.escolhida {
+    background: var(--cor);
+  }
+  .livre input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
     cursor: pointer;
   }
-  .controle {
+  .medidas {
     display: grid;
-    gap: 4px;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 18px;
+  }
+  .medida {
+    display: grid;
+    gap: 3px;
     font-size: 13px;
   }
-  .controle span {
+  .cabeca {
     display: flex;
     justify-content: space-between;
+    gap: 10px;
+  }
+  .cabeca b {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .opcoes {
+    display: grid;
+    gap: 8px;
   }
   .linha-opcao {
     display: flex;
@@ -318,8 +511,8 @@
     flex-wrap: wrap;
   }
   .recado {
-    font-size: 13px;
     margin: 0;
+    font-size: 13px;
   }
   .recado[data-tom="ok"] {
     color: var(--ok);
@@ -327,24 +520,62 @@
   .recado[data-tom="atencao"] {
     color: var(--atencao);
   }
-  .campo-linha {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 0;
-    font-size: 13px;
+  .nota {
+    margin: -6px 0 0;
   }
-  .campo-linha .campo {
-    width: 110px;
+  .dupla {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .cartao {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: var(--superficie);
+    border: 1px solid var(--linha);
+  }
+  .cartao h2 {
+    margin: 0;
+  }
+  .volta {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .numero.grande {
+    font-size: 40px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .entradas {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .entradas label {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--tinta-2);
+  }
+  .entradas .campo {
+    width: 100%;
+    box-sizing: border-box;
   }
   .pequeno {
     font-size: 12px;
   }
+  .cartao p {
+    margin: 0;
+  }
   .treino {
     position: relative;
-    height: 170px;
-    border-radius: var(--raio-2);
+    height: 160px;
+    border-radius: 14px;
     background: #11161f;
     overflow: hidden;
   }
@@ -358,5 +589,11 @@
     inset: 0;
     display: grid;
     place-items: center;
+  }
+  @media (max-width: 860px) {
+    .estudio,
+    .dupla {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
