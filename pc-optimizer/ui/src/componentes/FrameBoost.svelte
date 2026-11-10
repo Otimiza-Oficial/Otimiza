@@ -12,6 +12,7 @@
     type PainelFrameBoost,
     type Suporte,
   } from "../lib/ferramentas";
+  import ComparadorDaEscala from "./ComparadorDaEscala.svelte";
 
   const CHAVE_MULT = "otimiza-fb-mult";
   const CHAVE_ESCALA = "otimiza-fb-escala";
@@ -260,6 +261,8 @@
         {#if doOtimiza}<span class="apoio pequeno">Ctrl+Alt+G desliga de dentro do jogo</span>{/if}
       </div>
     {/if}
+
+    {#if a?.escala && !a.pelo_driver && a.situacao === "Gerando"}<ComparadorDaEscala />{/if}
 
     {#if doOtimiza && (p.base || p.nota_da_base)}
       <div class="linha">

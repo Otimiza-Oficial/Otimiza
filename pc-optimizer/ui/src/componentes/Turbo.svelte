@@ -7,6 +7,7 @@
   import FrameBoost from "./FrameBoost.svelte";
   import NoJogo from "./NoJogo.svelte";
   import OtimizarAgora from "./OtimizarAgora.svelte";
+  import PerfilDoJogoNoTurbo from "./PerfilDoJogoNoTurbo.svelte";
   import PlacaExtras from "./PlacaExtras.svelte";
   import { ponte, type PainelDoTurbo, type ProvaDoTurbo } from "../lib/ponte";
 
@@ -285,6 +286,8 @@
         {/if}
       </section>
     {/if}
+
+    <PerfilDoJogoNoTurbo jogo={painel.jogo} />
 
     <!-- O que fez -->
     {#if painel.ligado && painel.passos.length > 0}

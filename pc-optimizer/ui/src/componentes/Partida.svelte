@@ -60,6 +60,10 @@
     | { tipo: "SistemaEmHd" }
     | { tipo: "Notebook" };
   type PerfilDoPc = { limitacoes: Limitacao[]; nao_lido: string[] };
+  /** A nota da última medição confiável (`nota_do_jogo`): 60% do 1% pior e 40% da média. */
+  type Nota =
+    | { estado: "Calculada"; nota: number; fps_medio: number; low_1pct: number; pontos_do_um_por_cento: number; pontos_da_media: number }
+    | { estado: "SemAmostra" };
 
   const GARGALO: Record<Gargalo, string> = {
     Cpu: "o processador",
@@ -101,6 +105,7 @@
   let diagnostico = $state<Diagnostico | null>(null);
   let erroDoDiagnostico = $state<string | null>(null);
   let perfil = $state<PerfilDoPc | null>(null);
+  let nota = $state<Extract<Nota, { estado: "Calculada" }> | null>(null);
 
   onMount(async () => {
     if (!noTauri) {
@@ -108,13 +113,17 @@
       receita = DEMO_RECEITA;
       diagnostico = DEMO_RECEITA.diagnostico;
       perfil = { limitacoes: [{ tipo: "MonitorAbaixoDoMaximo", atual: 60, maximo: 180 }, { tipo: "PoucaMemoria", gb: 8 }], nao_lido: [] };
+      nota = { estado: "Calculada", nota: 59, fps_medio: 85, low_1pct: 41, pontos_do_um_por_cento: 35, pontos_da_media: 24 };
       return;
     }
-    const [p, r, f] = await Promise.allSettled([
+    const [p, r, f, k] = await Promise.allSettled([
       invoke<RelatorioDaPartida | null>("relatorio_da_ultima_partida"),
       invoke<Receita>("receita_da_partida"),
       invoke<PerfilDoPc>("perfil_do_pc"),
+      invoke<Nota>("nota_do_jogo"),
     ]);
+    // Sem amostra confiável não há nota: zero afirmaria algo sobre uma máquina que não foi medida.
+    nota = k.status === "fulfilled" && k.value.estado === "Calculada" ? k.value : null;
     partida = p.status === "fulfilled" ? p.value : null;
     perfil = f.status === "fulfilled" ? f.value : null;
     if (r.status === "fulfilled") {
@@ -300,6 +309,16 @@
         Com mais partidas medidas, aparece aqui a faixa das anteriores para comparar.
       {/if}
     </p>
+    {#if nota}
+      <p class="nota">
+        <strong>Nota {nota.nota} de 100</strong>
+        <span class="apoio">
+          na última medição confiável: {n(nota.pontos_do_um_por_cento)} pontos do 1% pior ({n(nota.low_1pct)} FPS) e
+          {n(nota.pontos_da_media)} da média ({n(nota.fps_medio)} FPS). O 1% pior pesa mais porque é ele que você sente. Serve
+          para comparar este PC antes e depois, não com o PC de outra pessoa.
+        </span>
+      </p>
+    {/if}
   </section>
 {:else if partida === null}
   <section class="secao">
@@ -447,5 +466,10 @@
   }
   .pequeno {
     font-size: 12px;
+  }
+  .nota {
+    padding-top: 10px;
+    border-top: 1px solid var(--linha);
+    font-size: 13px;
   }
 </style>

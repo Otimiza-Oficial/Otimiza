@@ -6,6 +6,7 @@
   import Diagnostico from "./Diagnostico.svelte";
   import Partida from "./Partida.svelte";
   import EsperandoODisco from "./EsperandoODisco.svelte";
+  import MapaDeDesempenho from "./MapaDeDesempenho.svelte";
   import TestarGrupos from "./TestarGrupos.svelte";
   import { ponte, type LadoDoLab, type ProvaDoTurbo, type ResultadoDoLab } from "../lib/ponte";
 
@@ -83,6 +84,7 @@
   <Diagnostico />
   <Partida />
   <EsperandoODisco />
+  <MapaDeDesempenho />
   {#if erro}
     <div class="recado" role="alert"><span class="ponto" data-tom="perigo"></span><div><span>{erro}</span></div></div>
   {/if}
