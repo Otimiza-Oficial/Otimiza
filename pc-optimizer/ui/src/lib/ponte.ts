@@ -121,6 +121,20 @@ export interface MetricasAoVivo {
 
 export const noTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/** Quem está rodando o Otimiza (`conta_que_esta_rodando`). Elevado por outra conta, os ajustes por usuário iriam para um
+ *  perfil que ninguém usa. Tipo escrito à mão, o mesmo da interface 3.6. */
+export type ContaQueRoda = {
+  conta: { estado: "Mesma"; usuario: string } | { estado: "Diferente"; processo: string; shell: string } | { estado: "NaoDeuParaLer"; motivo: string };
+  ajustes_por_conta: number;
+  explicacao: string;
+};
+
+export async function contaQueRoda(): Promise<ContaQueRoda | null> {
+  if (!noTauri) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ContaQueRoda>("conta_que_esta_rodando").catch(() => null);
+}
+
 const demo: {
   versao: VersaoDoApp;
   hardware: Hardware;

@@ -53,6 +53,33 @@
     }
   }
 
+  // O relatório de compatibilidade: como este PC respondeu a cada ajuste de energia (já certo, mudaria, não existe
+  // aqui). Só lê. É o dado das máquinas que o projeto não tem: notebook, AMD, Windows de outra edição.
+  let compat = $state<string | null>(null);
+  let gerandoCompat = $state(false);
+  async function compatibilidade() {
+    gerandoCompat = true;
+    recado = null;
+    try {
+      compat = noTauri
+        ? await invoke<string>("relatorio_de_compatibilidade")
+        : "Relatório de compatibilidade (demonstração)\nPlano de energia: 12 já certos, 3 mudariam, 1 não existe neste Windows.";
+    } catch (e) {
+      recado = String(e);
+    } finally {
+      gerandoCompat = false;
+    }
+  }
+  async function copiarCompat() {
+    if (!compat) return;
+    try {
+      await navigator.clipboard.writeText(compat);
+      recado = "Relatório de compatibilidade copiado. Cole no atendimento junto da sua dúvida.";
+    } catch {
+      recado = "Não deu para copiar. Selecione o texto e copie à mão.";
+    }
+  }
+
   async function planilha() {
     try {
       recado = `Planilha salva em ${noTauri ? await invoke<string>("exportar_alteracoes") : "Documentos\\Otimiza-alteracoes.csv"}.`;
@@ -76,8 +103,18 @@
   <div class="acoes">
     <button class="btn" disabled={gerando} onclick={relatorio}>{gerando ? "Gerando…" : "Gerar relatório para o suporte"}</button>
     <button class="btn" onclick={planilha}>Exportar o que foi alterado (planilha)</button>
+    <button class="btn" disabled={gerandoCompat} onclick={compatibilidade}>{gerandoCompat ? "Lendo…" : "Relatório de compatibilidade"}</button>
   </div>
   {#if recado}<p class="apoio">{recado}</p>{/if}
+  {#if compat}
+    <div class="compat">
+      <div class="compat-topo">
+        <span class="apoio">Como este PC respondeu aos ajustes de energia. Nada foi alterado para gerar.</span>
+        <button class="btn quieto" onclick={copiarCompat}>Copiar</button>
+      </div>
+      <pre>{compat}</pre>
+    </div>
+  {/if}
 
   {#if altera}
     <details>
@@ -109,6 +146,30 @@
   }
   .alerta {
     border: 1px solid color-mix(in srgb, var(--atencao) 50%, transparent);
+  }
+  .compat {
+    display: grid;
+    gap: 6px;
+  }
+  .compat-topo {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  pre {
+    max-height: 260px;
+    margin: 0;
+    padding: 12px;
+    overflow: auto;
+    border: 1px solid var(--linha);
+    border-radius: var(--raio-1);
+    background: var(--superficie);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    user-select: text;
   }
   details {
     font-size: 13px;

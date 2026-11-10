@@ -26,8 +26,10 @@
   import { capaRemota, iniciais } from "./lib/capas";
   import { abertura, entender, jogoAbriu, jogoFechou, type Acao, type Fala } from "./lib/conversa";
   import {
+    contaQueRoda,
     noTauri,
     ponte,
+    type ContaQueRoda,
     type DiagnosticoDoWifi,
     type Hardware,
     type JogoAberto,
@@ -122,7 +124,14 @@
     }
   }
 
-  const lista = $derived(lerAvisos(hardware, metricas, jogo !== null));
+  let conta = $state<ContaQueRoda | null>(null);
+  /** Os avisos do PC e, por cima, o da conta: aberto como outro usuário, metade dos ajustes cairia no perfil errado. */
+  const lista = $derived([
+    ...(conta?.conta.estado === "Diferente"
+      ? [{ id: "conta", titulo: "O Otimiza está aberto por outra conta do Windows", detalhe: conta.explicacao.split(/\n\n/)[0], gravidade: "serio" as const }]
+      : []),
+    ...lerAvisos(hardware, metricas, jogo !== null),
+  ]);
   const area = $derived(areas.find((a) => a.id === aberta) ?? areas[0]);
   const humor = $derived<Humor>(reacao ?? (jogo ? "jogando" : digitando ? "falando" : (fala?.humor ?? "atento")));
   // O ícone da bandeja acompanha o humor; 1,5 s parado antes de trocar (falando/pensando passam rápido).
@@ -440,6 +449,7 @@
   function areaDoAviso(id: string): IdDaArea {
     if (id.startsWith("hz-")) return "tela";
     if (id === "memoria") return "sistema";
+    if (id === "conta") return "ajustes";
     return "inicio";
   }
 
@@ -481,6 +491,7 @@
       ponte.banda().then((b) => (banda = b)).catch(() => {});
       ponte.varredura().then((v) => (varredura = v)).catch(() => {});
       ponte.wifi().then((w) => (wifi = w)).catch(() => {});
+      contaQueRoda().then((c) => (conta = c));
       ponte.historico().then((h) => (mudancas = h.mudancas.length)).catch(() => {});
       ponte
         .instalados()
