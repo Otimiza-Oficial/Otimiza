@@ -8,6 +8,7 @@ A interface nova, em Svelte 5, convivendo com a atual (`../index.html` + `../src
 | `npm run nova` | Abre o Otimiza com a interface nova (`tauri dev` + `src-tauri/tauri.nova.conf.json`) |
 | `npm run nova:web` | Só a interface, no navegador, com dados de demonstração (a barra de menu avisa) |
 | `npm run nova:build` | Confere os tipos (`svelte-check`) e gera `dist-nova/` |
+| `npm run fumaca:nova` | Gera `dist-nova/` e clica em todas as áreas com todo comando do Windows recusado (`scripts/fumaca-nova.mjs`) |
 
 O instalador continua saindo com a interface atual: `npm run tauri build` não olha esta pasta.
 
