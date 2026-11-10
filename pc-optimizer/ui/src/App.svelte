@@ -64,22 +64,6 @@
     { id: "tela", nome: "Tela" },
     { id: "historico", nome: "Histórico" },
   ];
-  /** O ícone de cada área no cabeçalho do painel (inclusive as que só abrem pelo "+"). */
-  const ICONE_DA_AREA: Record<IdDaArea, NomeDoIcone> = {
-    inicio: "casa",
-    turbo: "raio",
-    jogos: "controle",
-    rede: "wifi",
-    latencia: "cronometro",
-    energia: "energia",
-    tela: "monitor",
-    sistema: "chip",
-    prova: "grafico",
-    historico: "relogio",
-    mira: "mira",
-    cores: "gota",
-    ajustes: "ajustes",
-  };
   const OUTRAS: IdDaArea[] = ["turbo", "jogos", "energia", "mira", "cores", "sistema", "prova", "ajustes"];
 
   let versao = $state<VersaoDoApp | null>(null);
@@ -832,7 +816,6 @@
         {:else}
           <div class="area-aberta">
             <header class="area-topo">
-              <span class="area-icone"><Icone nome={ICONE_DA_AREA[aberta]} tamanho={18} /></span>
               <div>
                 <h2>{area.nome}</h2>
                 {#if area.pergunta}<p class="sec">{area.pergunta}</p>{/if}
@@ -1381,10 +1364,14 @@
   .trilho-botao:hover {
     background: var(--bloco-2);
   }
+  /* O lugar onde você está: cheio e escuro, para achar de relance sobre o vidro claro. */
   .trilho-botao.ativo {
-    background: var(--ativo);
-    color: var(--ativo-texto);
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+    background: var(--texto);
+    color: var(--contra, #fff);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+  }
+  .trilho-botao:focus-visible {
+    outline-offset: 0;
   }
 
   /* ---------- Painel e grade ---------- */
@@ -1908,16 +1895,6 @@
     font-family: var(--fonte-titulo);
     font-size: 20px;
     font-weight: 600;
-  }
-  .area-icone {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    border: 1px solid var(--vidro-borda);
-    background: var(--bloco-2);
-    color: var(--texto);
   }
   .area-corpo {
     padding: 4px 18px 18px;

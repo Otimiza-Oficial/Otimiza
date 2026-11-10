@@ -9,7 +9,7 @@
   import PcsParecidos from "./PcsParecidos.svelte";
   import LinhaDoTempo from "./LinhaDoTempo.svelte";
   import Icone from "./Icone.svelte";
-  import { capaRemota, iniciais } from "../lib/capas";
+  import { capaRemota, chaveDoJogo, iniciais } from "../lib/capas";
   import { ponte, type Ganho, type JogoDaLoja, type ResumoDoJogo } from "../lib/ponte";
 
   type Item = { jogo: JogoDaLoja; capa: string | null; medido: ResumoDoJogo | null };
@@ -27,10 +27,8 @@
   );
   const atual = $derived(itens?.find((i) => i.jogo.nome === escolhido) ?? null);
 
-  /** Mesmo nome, mesmo jogo: a biblioteca medida e a lista de instalados vêm de fontes diferentes. */
-  function chave(nome: string) {
-    return nome.toLowerCase().replace(/[^a-z0-9]/g, "");
-  }
+  /** Mesmo jogo, mesma chave: a biblioteca medida e a lista de instalados vêm de fontes com nomes diferentes. */
+  const chave = chaveDoJogo;
 
   onMount(async () => {
     try {

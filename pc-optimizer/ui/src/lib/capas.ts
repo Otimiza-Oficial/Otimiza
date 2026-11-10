@@ -7,8 +7,9 @@ const steam = (appid: number) => `https://cdn.cloudflare.steamstatic.com/steam/a
 
 /** Jogos conhecidos pelo nome, para quando a loja do PC não deu o número da Steam. */
 const CONHECIDOS: Record<string, number | string> = {
-  // FiveM e RedM rodam sobre os jogos da Rockstar: a capa é a do jogo base.
-  fivem: 271590,
+  // O FiveM tem marca própria: a capa leva o logo dele, não a arte do GTA V (que fica para o GTA V).
+  fivem: "/capas/fivem.svg",
+  // O RedM roda sobre o Red Dead Redemption 2: a capa é a do jogo base.
   grandtheftautov: 271590,
   grandtheftautovlegacy: 271590,
   grandtheftautovenhanced: 3240220,
@@ -40,13 +41,22 @@ const CONHECIDOS: Record<string, number | string> = {
   roblox: "https://images.rbxcdn.com/5348266ea6c5e67b19d6a814cbbb70f6.jpg",
 };
 
-/** O mesmo jogo escrito de jeitos diferentes ("Grand Theft Auto V", "GTA V Legacy") vira a mesma chave. */
+/** O mesmo jogo com nome de outra fonte: o instalador chama de "Roblox Player" o que o Otimiza mede como "Roblox". */
+const APELIDOS: Record<string, string> = {
+  robloxplayer: "roblox",
+  robloxplayerbeta: "roblox",
+  fivemclient: "fivem",
+  citizenfxfivem: "fivem",
+};
+
+/** O mesmo jogo escrito de jeitos diferentes ("Grand Theft Auto V", "GTA V Legacy", "Roblox Player") vira a mesma chave. */
 export function chaveDoJogo(nome: string): string {
-  return nome
+  const chave = nome
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+  return APELIDOS[chave] ?? chave;
 }
 
 /** A capa pela internet, ou `null` quando não há arte conhecida (a tela desenha uma). */
