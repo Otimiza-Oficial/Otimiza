@@ -1140,13 +1140,21 @@ pub fn run() {
             // Com um jogo aberto, fechar esconde na bandeja: o contador e o Frame Boost continuam no jogo.
             #[cfg(target_os = "windows")]
             if let tauri::WindowEvent::CloseRequested { api, .. } = evento {
+                utils::Logger::info(&format!("fechando: a janela {} pediu para fechar", janela.label()));
                 plataforma::bandeja::ao_pedir_fechar(janela, api);
+            }
+            if let tauri::WindowEvent::Destroyed = evento {
+                utils::Logger::info(&format!("fechando: a janela {} foi destruída", janela.label()));
             }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { code, .. } = &event {
+                utils::Logger::info(&format!("fechando: saída pedida (código {:?})", code));
+            }
             if let tauri::RunEvent::Exit = event {
+                utils::Logger::info("fechando: o laço da janela terminou, gravando a sessão");
                 utils::diagnostico::fechar_sessao();
             }
 
@@ -1157,8 +1165,10 @@ pub fn run() {
                 // A escala ligada prende o mouse e encolhe a janela do jogo: o fim do gerador devolve os dois (e o
                 // cursor do sistema) antes de o processo acabar. Sem gerador rodando, não faz nada.
                 modules::windows::geracao::desligar();
+                utils::Logger::info("fechando: gerador de quadros desligado");
 
                 let devolvidos = modules::windows::suspend::retomar_tudo().unwrap_or_default();
+                utils::Logger::info("fechando: programas suspensos conferidos");
 
                 if !devolvidos.is_empty() {
                     let nomes: Vec<&str> =
