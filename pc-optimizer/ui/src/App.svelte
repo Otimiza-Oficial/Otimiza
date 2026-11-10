@@ -652,7 +652,7 @@
   </nav>
 
   <!-- Painel -->
-  <main class="painel vidro">
+  <main class="painel vidro" class:solto={aberta === "inicio"}>
     {#key aberta}
       <div class="conteudo" in:entrar>
         {#if aberta === "inicio"}
@@ -1011,6 +1011,7 @@
     --vidro-fundo: rgb(255 255 255 / 0.26);
     --vidro-borda: rgb(255 255 255 / 0.5);
     --bloco: rgb(255 255 255 / 0.36);
+    --bloco-solto: rgb(255 255 255 / 0.5);
     --bloco-2: rgb(255 255 255 / 0.55);
     --texto: #1d1d1f;
     --sec: #5d5d63;
@@ -1033,6 +1034,7 @@
     --vidro-fundo: rgb(40 40 44 / 0.42);
     --vidro-borda: rgb(255 255 255 / 0.14);
     --bloco: rgb(255 255 255 / 0.08);
+    --bloco-solto: rgb(38 38 42 / 0.62);
     --bloco-2: rgb(255 255 255 / 0.14);
     --texto: #f5f5f7;
     --sec: #a1a1a8;
@@ -1383,6 +1385,32 @@
     bottom: 84px;
     border-radius: 32px;
     overflow: hidden;
+  }
+  /* Na tela inicial o painel some e só os cards ficam sobre o céu: cada um leva o próprio vidro. */
+  .painel.solto {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .painel.solto .bloco {
+    background:
+      radial-gradient(260px circle at var(--mx) var(--my), rgb(255 255 255 / 0.22), transparent 60%),
+      var(--bloco-solto);
+    backdrop-filter: blur(30px) saturate(1.5);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.35) inset,
+      0 10px 30px rgb(40 30 20 / 0.14);
+  }
+  :global(:root.jogo-aberto) .painel.solto {
+    background: transparent;
+  }
+  :global(:root.jogo-aberto) .painel.solto .bloco {
+    backdrop-filter: none;
+    background: rgb(232 227 220 / 0.97);
+  }
+  :global(:root.jogo-aberto[data-tema="noite"]) .painel.solto .bloco {
+    background: rgb(40 40 44 / 0.98);
   }
   .conteudo {
     height: 100%;

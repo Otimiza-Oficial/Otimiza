@@ -31,4 +31,9 @@
   .icone {
     flex: none;
   }
+  /* O corpo do ícone: um véu da cor do traço. No botão ativo (fundo escuro, ícone claro) ele continua legível. */
+  .icone :global(.c) {
+    fill: currentColor;
+    fill-opacity: 0.24;
+  }
 </style>
