@@ -14,6 +14,7 @@
   import Jogos from "./componentes/Jogos.svelte";
   import Prova from "./componentes/Prova.svelte";
   import Sistema from "./componentes/Sistema.svelte";
+  import PedidoDeFeedback from "./componentes/PedidoDeFeedback.svelte";
   import Turbo from "./componentes/Turbo.svelte";
   import Latencia from "./componentes/Latencia.svelte";
   import Oti, { type Humor } from "./componentes/Oti.svelte";
@@ -897,6 +898,8 @@
     {/each}
     <button class="aba-mais" aria-label="Mais áreas" onclick={() => (mostrarMais = !mostrarMais)}><Icone nome="mais" tamanho={16} /></button>
   </nav>
+
+  <PedidoDeFeedback />
 
   {#if jogoNaTela && jogo}
     <p class="pausado">{jogo.nome} aberto · interface pausada para não pesar no jogo</p>

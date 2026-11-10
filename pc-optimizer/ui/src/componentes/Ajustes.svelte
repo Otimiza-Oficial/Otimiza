@@ -3,6 +3,9 @@
   // relatório de suporte. O tema (claro/escuro) mora na barra de cima, onde a referência põe.
   import { onMount } from "svelte";
   import Transparencia from "./Transparencia.svelte";
+  import { ABRIR_FEEDBACK } from "./PedidoDeFeedback.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { noTauri } from "../lib/ponte";
   import {
     ponte,
     type AvisoDeVersao,
@@ -30,6 +33,10 @@
   let sobreposicao = $state<Sobreposicao | null>(null);
   let preferencias = $state<Preferencias | null>(null);
   let licenca = $state<EstadoDaLicenca | null>(null);
+  /** Só a situação do pedido de feedback (a folha que resolve mora em `PedidoDeFeedback`). */
+  let feedback = $state<
+    { situacao: "NaoSeAplica" } | { situacao: "Contando"; restante_segundos: number } | { situacao: "Liberado"; verificado_em: string } | { situacao: "Exigido"; apagado: boolean } | null
+  >(null);
   let aviso = $state<AvisoDeVersao | null>(null);
   let versao = $state<VersaoDoApp | null>(null);
   let chave = $state("");
@@ -113,6 +120,7 @@
     ponte.sobreposicao().then((s) => (sobreposicao = s)).catch(() => {});
     ponte.preferencias().then((p) => (preferencias = p)).catch(() => {});
     ponte.licenca().then((l) => (licenca = l)).catch(() => {});
+    if (noTauri) invoke<NonNullable<typeof feedback>>("feedback_estado").then((f) => (feedback = f)).catch(() => {});
     ponte.versao().then((v) => (versao = v)).catch(() => {});
     ponte.versaoMaisNova().then((a) => (aviso = a)).catch(() => {});
   });
@@ -315,6 +323,21 @@
         <li>
           <span class="info">Esta máquina</span><span class="numero">{licenca.maquina}</span>
         </li>
+        {#if feedback && feedback.situacao !== "NaoSeAplica"}
+          <li>
+            <span class="info" class:atencao={feedback.situacao === "Exigido"}>
+              Feedback
+              <span class="apoio">
+                {feedback.situacao === "Liberado"
+                  ? "Recebido. Obrigado."
+                  : feedback.situacao === "Exigido"
+                    ? "As correções estão pausadas até chegar o seu feedback."
+                    : `O pedido aparece em ${Math.max(1, Math.ceil(feedback.restante_segundos / 60))} min.`}
+              </span>
+            </span>
+            {#if feedback.situacao === "Exigido"}<button class="btn" onclick={() => window.dispatchEvent(new Event(ABRIR_FEEDBACK))}>Enviar feedback</button>{/if}
+          </li>
+        {/if}
         <li>
           <span class="info" class:atencao={!licenca.sobrevive_formatacao}>{licenca.sobrevive_formatacao ? "Continua valendo se você formatar o PC" : "Formatar o PC pede ativar de novo"}</span>
         </li>
