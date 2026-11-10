@@ -5,6 +5,7 @@
 
   import { onMount } from "svelte";
   import SaudeDoHistorico from "./SaudeDoHistorico.svelte";
+  import QuandoPiorou from "./QuandoPiorou.svelte";
   import { ponte, type Historico, type Mudanca, type Parte, type RelatorioDeDesfazer } from "../lib/ponte";
 
   type Aviso = { tipo: "ok" | "erro" | "atencao"; texto: string };
@@ -131,6 +132,7 @@
 
 <div class="historico">
   <SaudeDoHistorico />
+  <QuandoPiorou />
   {#if historico?.leitura.estado === "Ilegivel"}
     <div class="recado" role="alert">
       <span class="ponto" data-tom="perigo"></span>

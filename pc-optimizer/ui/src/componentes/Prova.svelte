@@ -5,6 +5,8 @@
   import { onMount } from "svelte";
   import Diagnostico from "./Diagnostico.svelte";
   import Partida from "./Partida.svelte";
+  import EsperandoODisco from "./EsperandoODisco.svelte";
+  import TestarGrupos from "./TestarGrupos.svelte";
   import { ponte, type LadoDoLab, type ProvaDoTurbo, type ResultadoDoLab } from "../lib/ponte";
 
   const SEGUNDOS = 30;
@@ -80,6 +82,7 @@
 <div class="prova">
   <Diagnostico />
   <Partida />
+  <EsperandoODisco />
   {#if erro}
     <div class="recado" role="alert"><span class="ponto" data-tom="perigo"></span><div><span>{erro}</span></div></div>
   {/if}
@@ -166,6 +169,7 @@
       {#if copiado}<span class="apoio">{copiado}</span>{/if}
     </div>
   </section>
+  <TestarGrupos />
 </div>
 
 <style>
